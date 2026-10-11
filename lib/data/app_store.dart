@@ -18,17 +18,21 @@ import 'repositories.dart';
 /// (`tool/import_kml.py`), both subject to moderation.
 const communitySpotSources = {'community', 'import'};
 
-/// Favorites are stored as snapshots; drop community and imported spots that
-/// moderation has since hidden or deleted (no longer readable). TDX and
-/// official spots come from their own sources and stay as saved.
+/// Official spot ids are `official:<official_heavy_spots.id>`.
+const officialIdPrefix = 'official:';
+
+/// Favorites are stored as snapshots; drop community, imported and official
+/// spots that are no longer readable (hidden, deleted, or not yet effective).
+/// TDX spots come from their own source and stay as saved.
 List<ParkingSpot> visibleFavorites(
   List<ParkingSpot> favorites,
-  Set<String> visibleCommunityIds,
+  Set<String> visibleIds,
 ) => favorites
     .where(
       (s) =>
-          !communitySpotSources.contains(s.source) ||
-          visibleCommunityIds.contains(s.id),
+          !(communitySpotSources.contains(s.source) ||
+              s.source == 'official') ||
+          visibleIds.contains(s.id),
     )
     .toList();
 
@@ -236,17 +240,33 @@ class AppStore extends ChangeNotifier {
       for (final s in favorites)
         if (communitySpotSources.contains(s.source)) s.id,
     ];
-    if (client != null && community.isNotEmpty) {
+    final official = [
+      for (final s in favorites)
+        if (s.source == 'official' && s.id.startsWith(officialIdPrefix))
+          s.id.substring(officialIdPrefix.length),
+    ];
+    if (client != null && (community.isNotEmpty || official.isNotEmpty)) {
       try {
-        // RLS hides moderated spots, so only still-visible ids come back.
-        final rows = await client!
-            .from('community_spots')
-            .select('id')
-            .inFilter('id', community);
+        // RLS hides moderated and not-yet-effective rows, so only
+        // still-visible ids come back.
+        final visible = <String>{
+          if (community.isNotEmpty)
+            for (final r
+                in await client!
+                    .from('community_spots')
+                    .select('id')
+                    .inFilter('id', community))
+              r['id'] as String,
+          if (official.isNotEmpty)
+            for (final r
+                in await client!
+                    .from('official_heavy_spots')
+                    .select('id')
+                    .inFilter('id', official))
+              '$officialIdPrefix${r['id']}',
+        };
         if (key != favoritesKey) return;
-        favorites = visibleFavorites(favorites, {
-          for (final r in rows) r['id'] as String,
-        });
+        favorites = visibleFavorites(favorites, visible);
       } catch (_) {
         // Keep the saved snapshots when the check itself fails.
       }
