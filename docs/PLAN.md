@@ -56,7 +56,7 @@ Flutter App ──► Supabase Edge Function `tdx-parking` ──► TDX API（�
 
 ### Auth（本機）
 - `config.toml` 開啟匿名登入；CAPTCHA 在本機關閉（staging／production 在 Supabase Dashboard 開啟 Turnstile）。
-- **Google 登入**：本機使用另一組開發用 Google OAuth client（redirect URI 為 `http://127.0.0.1:54321/auth/v1/callback`），client secret 放 `supabase/.env`（不進版控，附 `.env.example`），`config.toml` 以 `env()` 引用。
+- **Google 登入**：本機使用另一組開發用 Google OAuth client（redirect URI 為 `http://127.0.0.1:54321/auth/v1/callback`），client secret 放 **repo 根目錄**的 `.env`（不進版控，根目錄附 `.env.example`），`config.toml` 以 `env()` 引用；Supabase CLI 的 `env()` 讀取專案根目錄（`supabase/` 的上一層）的 `.env`，不是 `supabase/.env`（[說明](https://supabase.com/docs/guides/local-development/managing-config#using-secrets-inside-configtoml)）。
 - **Apple 登入**需要 HTTPS 網域，本機不設定，只在 staging 驗證。
 - 需要多個帳號的情境（兩位合格使用者確認、新帳號權重低、每帳號／每 IP 限流）以 pgTAP 與 Edge Function 測試搭配 seed 帳號覆蓋，不靠手動登入多個帳號。
 
@@ -104,6 +104,7 @@ lib/
     report/     # 長按地圖新增停車點、回報「還在/已不存在」
 assets/rules/parking_rules.json       # 內建縣市規則（含 sourceUrl、effectiveDate）
 config/local.example.json             # 本機後端的 --dart-define-from-file 範本（實際 local.json 不進版控）
+.env.example                          # 本機 config.toml 以 env() 引用的 secrets 範本（例如開發用 Google OAuth secret；實際 .env 不進版控）
 supabase/
   config.toml                         # 本機堆疊設定（匿名登入、本機 Google OAuth、關閉 CAPTCHA），只影響本機
   seed.sql                            # 本機與 CI 用的種子資料（不推到雲端）
