@@ -317,6 +317,44 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pumpAndSettle();
   });
+  testWidgets('個人中心與貢獻面板滑動至底部時關閉並回到探索', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(430, 932);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final store = (await tester.runAsync(testStore))!;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [storeProvider.overrideWith((ref) => store)],
+        child: const ParkingApp(),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+    final search = find.byKey(const ValueKey('parking-search'));
+    for (final (tab, content) in [('個人中心', '已儲存的停車點'), ('貢獻', '目前地圖範圍')]) {
+      await tester.tap(find.text(tab).last);
+      await tester.pumpAndSettle();
+      expect(search, findsNothing);
+      // A short drag snaps to half height and keeps the panel open.
+      await tester.drag(find.text(content), const Offset(0, 250));
+      await tester.pumpAndSettle();
+      expect(find.text(content).hitTestable(), findsOneWidget);
+      expect(search, findsNothing);
+      await tester.drag(find.text(content), const Offset(0, 600));
+      await tester.pumpAndSettle();
+      expect(search, findsOneWidget);
+      expect(find.text(content).hitTestable(), findsNothing);
+      // Reopening restores the initial height instead of an empty panel.
+      await tester.tap(find.text(tab).last);
+      await tester.pumpAndSettle();
+      expect(find.text(content).hitTestable(), findsOneWidget);
+      await tester.tap(find.text('探索').last);
+      await tester.pumpAndSettle();
+    }
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('本機收藏與停車紀錄在重啟後保留', (tester) async {
     await tester.runAsync(() async {
       final store = await testStore();
