@@ -9,6 +9,28 @@ concurrency:
   group: ios-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  release:
+    name: iOS Release 建置
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - id: changes
+        run: python3 tool/ci_changes.py ios >> "$GITHUB_OUTPUT"
+      - id: versions
+        if: steps.changes.outputs.run == 'true'
+        run: echo "flutter=$(cat .flutter-version)" >> "$GITHUB_OUTPUT"
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        if: steps.changes.outputs.run == 'true'
+        with:
+          flutter-version: ${{ steps.versions.outputs.flutter }}
+          cache: true
+      - if: steps.changes.outputs.run == 'true'
+        run: flutter pub get --enforce-lockfile
+      - if: steps.changes.outputs.run == 'true'
+        run: flutter build ios --release --no-codesign
   app:
     name: iOS 模擬器 App 建置
     runs-on: macos-26
@@ -97,9 +119,10 @@ jobs:
     name: iOS 全部通過
     runs-on: ubuntu-24.04
     if: always()
-    needs: [app, simulator]
+    needs: [release, app, simulator]
     steps:
       - env:
+          RELEASE: ${{ needs.release.result }}
           APP: ${{ needs.app.result }}
           SIMULATOR: ${{ needs.simulator.result }}
-        run: test "$APP" = success && test "$SIMULATOR" = success
+        run: test "$RELEASE" = success && test "$APP" = success && test "$SIMULATOR" = success

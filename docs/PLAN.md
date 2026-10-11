@@ -224,11 +224,12 @@ UI：`material_ui`、`cupertino_ui`（Flutter 官方設計套件，取代框架�
 - Golden 截圖測試：每個主要畫面 × iOS / Android × 淺色 / 深色。
 - iOS 必測情境：在地圖頁開啟車位詳情與回報表單 sheet，確認分頁列與玻璃按鈕不會蓋住 sheet、輸入框可見可輸入、關閉後原生元件正常復原。
 - 此開發容器無 macOS，iOS 原生 Liquid Glass 元件改由 **GitHub Actions macOS runner** 驗證（已獲同意；公開 repo 使用 GitHub 提供的標準 runner 不另收費）：
-  - `ios.yml`：在 `macos-26` 以 `flutter build ios --simulator --debug --no-codesign --target=integration_test/ui_test.dart --dart-define=OFFLINE_MAP=true` 建置一次模擬器測試 App，不需要簽章或 Apple 開發者帳號；將 `.app` 封裝成 tar 上傳，保留執行權限與符號連結。CI 不另建真機 Release。
+  - `ios.yml`：在 `macos-26` 以 `flutter build ios --release --no-codesign` 建置一次真機 Release，驗證 Release 設定與 AOT；另以 `flutter build ios --simulator --debug --no-codesign --target=integration_test/ui_test.dart --dart-define=OFFLINE_MAP=true` 建置一次模擬器測試 App。不需要簽章或 Apple 開發者帳號；測試 `.app` 封裝成 tar 上傳，保留執行權限與符號連結。
   - iOS 26 與 iOS 27 模擬器下載同一份 App，以 `flutter drive --use-application-binary` 執行 `integration_test` 截圖情境，不重新編譯：地圖頁、車種切換、車位詳情與回報 sheet（含上述疊放測試）、深淺色模式；截圖上傳為 workflow artifact，供 PR 審查時查看。
   - 執行條件：PR 變更 `lib/`、`ios/`、`integration_test/`、`pubspec.*` 或 `.github/workflows/ios.yml` 本身時才實際建置與截圖；只改文件時所有 job 直接回報成功，以節省排隊時間。
   - 穩定後將 iOS 建置列為 main ruleset 的必要檢查。注意：設為必要檢查的 workflow 不能用 workflow 層級的路徑過濾（只改文件的 PR 會一直等不到檢查結果而無法合併）；改為 workflow 每次都觸發，在 job 內判斷變更路徑，不需要時直接回報成功。
 - Android 同樣由 CI 在**真實模擬器**上截圖（`android.yml`，GitHub Linux runner 支援 Android 模擬器硬體加速）。golden 測試由 Flutter 在測試程序內繪製，看不到下列系統層行為，所以必須在模擬器上確認：
+  - 以一般 App 入口執行一次 `flutter build apk --release`，驗證 Release 設定與 AOT。
   - 以 `integration_test/ui_test.dart` 與 `OFFLINE_MAP=true` 建置一次 x86_64 Debug APK；兩個模擬器下載同一份 artifact，以 `flutter drive --use-application-binary` 執行，不重新編譯。
   - 模擬器：Android 16（API 36）與 Android 11（API 30），各跑淺色與深色。
   - Android 16：桌布動態配色、edge-to-edge 下系統列與內容不重疊、預測式返回手勢動畫（以 UI 自動化觸發返回手勢，截取動畫中途畫面）。

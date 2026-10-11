@@ -31,8 +31,8 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
 | 檔案 | 觸發 | Runner | 內容 |
 |---|---|---|---|
 | `ci.yml` | PR、push 到 `main` | Linux | 跨平台檢查：Flutter 檢查與測試、Web 建置、Supabase 檢查 |
-| `android.yml` | PR、push 到 `main` | Linux（模擬器硬體加速） | 建置一次測試 APK，Android 11／16 模擬器共用產物執行測試與截圖 |
-| `ios.yml` | PR、push 到 `main` | macOS | 建置一次模擬器測試 App，iOS 26／27 共用產物執行測試與截圖（見 PLAN.md「UI 設計規範 › 驗證」） |
+| `android.yml` | PR、push 到 `main` | Linux（模擬器硬體加速） | 一次 Release APK 建置＋一次測試 APK 建置，Android 11／16 模擬器共用測試產物執行與截圖 |
+| `ios.yml` | PR、push 到 `main` | macOS | 一次真機 Release 建置＋一次模擬器測試 App 建置，iOS 26／27 共用測試產物執行與截圖（見 PLAN.md「UI 設計規範 › 驗證」） |
 | `cd-staging.yml` | `main` 上的三條 CI 都成功後（`workflow_run`） | Linux + macOS | 部署 staging 後端、產生 Android 測試 APK 與 iOS 測試 IPA（不上傳商店） |
 | `release.yml` | 推送 tag `v*` | Linux + macOS | 部署 production 後端、上架兩平台、建立 GitHub Release |
 
@@ -61,14 +61,18 @@ Workflow 依平台分工：跨平台檢查放 `ci.yml`，各平台的建置與�
 5. **版本號檢查**：`pubspec.yaml` 的 `version` 必須**大於**最新的 release tag（見下方「版本號規則」）。
 
 ### `ios.yml`（macOS）
-- CI 每次只建置一次：`iOS 模擬器 App 建置` 在 `macos-26` 執行 `flutter build ios --simulator --debug --no-codesign --target=integration_test/ui_test.dart --dart-define=OFFLINE_MAP=true`，不需要簽章。
+- CI 每次各建置一次真機 Release 與模擬器測試 App，兩者使用獨立 job。
+- `iOS Release 建置` 在 `macos-26` 執行 `flutter build ios --release --no-codesign`，以一般 App 入口驗證真機 Release 設定與 AOT；不簽章、不匯出 IPA。
+- `iOS 模擬器 App 建置` 在 `macos-26` 執行 `flutter build ios --simulator --debug --no-codesign --target=integration_test/ui_test.dart --dart-define=OFFLINE_MAP=true`，不需要簽章。
 - 將 `Runner.app` 封裝成 tar 後上傳為 `ios-test-app` artifact，保留執行權限與符號連結。
 - iOS 26／27 模擬器 job 以 `needs: [app]` 等待建置，各自下載與解開同一份 App，再以 `flutter drive --use-application-binary=artifacts/ios-app/Runner.app` 執行測試與截圖，不重新編譯。
-- CI 涵蓋 Debug 模擬器建置與執行；真機 Release、AOT 與簽章驗證由後續 CD staging／release 流程處理，目前 CI 不另建真機 Release。
-- 路徑判斷只在建置 job 執行，再將 `run` output 傳給模擬器 job：只改文件時所有 job 直接回報成功，不下載產物；改到 `ios.yml` 本身時照常實際建置。
+- 真機 Release 與 Debug 模擬器 App 是不同平台產物，不能共用；簽章與 IPA 匯出由後續 CD staging／release 流程處理。
+- Release 與測試建置 job 各自執行同一套路徑判斷，測試建置再將 `run` output 傳給模擬器 job：只改文件時所有 job 直接回報成功，不下載產物；改到 `ios.yml` 本身時照常實際建置。
 
 ### `android.yml`（Linux，Android 模擬器）
-- CI 每次只建置一次：`Android 測試 APK 建置` 執行 `flutter build apk --debug --target=integration_test/ui_test.dart --target-platform=android-x64 --dart-define=OFFLINE_MAP=true`，建置包含整合測試入口的 x86_64 APK，上傳為 `android-test-apk` artifact。
+- CI 每次各建置一次 Release APK 與測試 APK，兩者使用獨立 job。
+- `Android Release APK 建置` 執行 `flutter build apk --release`，以一般 App 入口驗證 Release 設定與 AOT；目前不使用正式簽章金鑰。
+- `Android 測試 APK 建置` 執行 `flutter build apk --debug --target=integration_test/ui_test.dart --target-platform=android-x64 --dart-define=OFFLINE_MAP=true`，建置包含整合測試入口的 x86_64 APK，上傳為 `android-test-apk` artifact。
 - Android 模擬器 job 以 `needs: [apk]` 等待建置，各自下載同一份 APK；在 Linux runner 啟用 KVM，以 `flutter drive --use-application-binary=artifacts/android-app/app-debug.apk` 執行 `integration_test/` 截圖情境，不重新編譯，與 iOS 共用同一組情境。
 - 模擬器：Android 16（API 36）與 Android 11（API 30），各跑淺色與深色；映像版本實作時確認。
 - 重點檢查：桌布動態配色（API 36）與品牌種子色後備（API 30）、edge-to-edge、預測式返回手勢、繁中字型。
@@ -77,7 +81,7 @@ Workflow 依平台分工：跨平台檢查放 `ci.yml`，各平台的建置與�
 - 模擬器測試較慢且偶有不穩：開機逾時算基礎設施失敗，可重跑一次；測試本身失敗一律視為真實失敗，不得略過。
 
 ### 必要檢查（main ruleset）
-- 每個 workflow 有一個彙總 job：`CI 全部通過`（`ci-ok`）、`Android 全部通過`（`android-ok`）、`iOS 全部通過`（`ios-ok`）。`needs` 該 workflow 所有 job，`if: always()`，任何一個失敗或被取消就失敗。
+- 每個 workflow 有一個彙總 job：`CI 全部通過`（`ci-ok`）、`Android 全部通過`（`android-ok`）、`iOS 全部通過`（`ios-ok`）。`needs` 該 workflow 所有 job，包含各平台的 Release、測試建置與模擬器測試，`if: always()`，任何一個失敗或被取消就失敗。
 - ruleset 只把這三個彙總 job 的顯示名稱（check 名稱）設為必要檢查。這樣新增或拆分 job 時不必改 ruleset，被路徑判斷略過的 job 也不會卡住合併。
 - 這與 CLAUDE.md 的「全綠」定義一致：CI 通過才算全綠。
 
