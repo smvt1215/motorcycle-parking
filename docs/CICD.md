@@ -129,7 +129,12 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
    - tag 必須在 `main` 最新 commit 上，所以每次發版的 commit 數都大於上一次，建置號單調遞增。
    - 遠低於 Android `versionCode` 上限 2,100,000,000（commit 數需少於約 2.1 億）。
    - **每個平台各自冪等**：上傳前先向商店查詢，已有落在 `commit 數 × 10 + 1～9` 範圍內的建置號，就代表這個版本已上傳過，**略過上傳這一步**（後續步驟見下方 Android、iOS 各自的規則）。查詢必須涵蓋**完整範圍**：
-     - **iOS**：不用 `latest_testflight_build_number`，它只回傳最新的一個建置。改在 fastlane lane 中用 App Store Connect API（Spaceship `ConnectAPI::Build`，或 `GET /v1/builds` 以建置號篩選），逐一查詢範圍內的 9 個號碼。
+     - **iOS**：不用 `latest_testflight_build_number`，它只回傳最新的一個建置。改在 fastlane lane 中用 App Store Connect API（Spaceship `ConnectAPI::Build`，或 `GET /v1/builds`）查詢範圍內的 9 個號碼：
+       - **限定範圍**：一律加上 `filter[app]`（本 APP 的 Apple ID）與 `filter[preReleaseVersion.version]`（本次版本號，例如 `1.2.0`），避免同帳號下其他 APP 剛好用到相同的建置號。
+       - **只認處理成功的建置**：
+         - `processingState` 為 `VALID` 才算「已上傳」，可以略過上傳並用於送審。
+         - `PROCESSING` 就輪詢等待結果（最多 60 分鐘）。
+         - `FAILED`／`INVALID` 不算，照常上傳新建置；重跑時嘗試次數已增加，會用新的建置號。
      - **Android**：`google_play_track_version_codes` 只回傳單一軌道，所以要查詢所有軌道（internal、alpha、beta、production）後取聯集再比對。
      - 部分失敗時（例如 Android 成功、iOS 失敗）重跑，只會補傳失敗的平台。
 5. **Android**：
@@ -141,7 +146,7 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
    - **上傳**：以 production 設定建置 IPA，上傳 App Store Connect；範圍內已有建置就略過，沿用既有建置。
    - **送審**：每次執行都要檢查，不因上傳被略過而跳過。
      - 以 App Store Connect API 查詢該版本的狀態，已在「等待審查」或之後的狀態（審查中、待發布、已上架等）才視為完成。
-     - 否則用 fastlane `deliver` 指定範圍內已有的建置號，更新商店文字並送審，啟用**分階段發布**（7 天）。
+     - 否則用 fastlane `deliver` 指定範圍內 `VALID` 的建置號，更新商店文字並送審，啟用**分階段發布**（7 天）。
      - 這樣即使上傳成功、送審失敗，重跑也會補完送審。
    - 商店文字與截圖放在 `fastlane/metadata`，一併版本控管。
 7. **GitHub Release**：
