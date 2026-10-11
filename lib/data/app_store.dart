@@ -14,14 +14,22 @@ import '../domain/map_viewport.dart';
 import '../models/parking.dart';
 import 'repositories.dart';
 
-/// Favorites are stored as snapshots; drop community spots that moderation
-/// has since hidden or deleted (no longer readable). TDX and official spots
-/// come from their own sources and stay as saved.
+/// Sources stored in `community_spots`: user reports and authorized imports
+/// (`tool/import_kml.py`), both subject to moderation.
+const communitySpotSources = {'community', 'import'};
+
+/// Favorites are stored as snapshots; drop community and imported spots that
+/// moderation has since hidden or deleted (no longer readable). TDX and
+/// official spots come from their own sources and stay as saved.
 List<ParkingSpot> visibleFavorites(
   List<ParkingSpot> favorites,
   Set<String> visibleCommunityIds,
 ) => favorites
-    .where((s) => s.source != 'community' || visibleCommunityIds.contains(s.id))
+    .where(
+      (s) =>
+          !communitySpotSources.contains(s.source) ||
+          visibleCommunityIds.contains(s.id),
+    )
     .toList();
 
 final storeProvider = ChangeNotifierProvider<AppStore>(
@@ -226,7 +234,7 @@ class AppStore extends ChangeNotifier {
     }
     final community = [
       for (final s in favorites)
-        if (s.source == 'community') s.id,
+        if (communitySpotSources.contains(s.source)) s.id,
     ];
     if (client != null && community.isNotEmpty) {
       try {
