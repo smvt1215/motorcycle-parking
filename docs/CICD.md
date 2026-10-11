@@ -112,11 +112,16 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
      - 和正式版的發布憑證分開，`staging` Environment 也不放 App Store Connect API key，所以 staging 流程無法上傳或送審。
    - 建置：`flutter build ipa --release --flavor staging --export-options-plist=ios/ExportOptions-staging.plist`。
      - `ExportOptions-staging.plist` 納入版本控管：`method` 為 Ad Hoc（Xcode 15.3 起新名稱為 `release-testing`，舊名 `ad-hoc` 仍可用，實作時依 runner 的 Xcode 版本確認）、`signingStyle` 為 `manual`，並以 `provisioningProfiles` 指定 `.staging` bundle id 對應的 profile 名稱；不使用 `flutter build ipa` 的預設匯出（App Store）。
-     - 建置號 `--build-number` 用 `git rev-list --count HEAD`（checkout 設定 `fetch-depth: 0`，並檢查不是 shallow），讓每次 staging 建置單調遞增，覆蓋安裝時分得出新舊。
-   - IPA 上傳為 workflow artifact（保留 30 天，與 APK 相同）。
-     - 公開 repo 的 artifact 任何登入 GitHub 的人都能下載，但 Ad Hoc IPA 只能裝在 profile 內註冊的裝置上；IPA 內只有 staging 的 anon key，本來就會出現在 APP 內。
+     - 建置號 `--build-number` 為 `<commit 數>.<github.run_number>.<github.run_attempt>`（`CFBundleVersion` 可用最多三段以點分隔的整數）：
+       - commit 數 = `git rev-list --count HEAD`（checkout 設定 `fetch-depth: 0`，並檢查不是 shallow）。
+       - 只用 commit 數不夠：同一個 commit 重跑（例如簽章失敗後重試）時數字不變，測試者分不出新舊。加上 `run_number`（每次新執行遞增）與 `run_attempt`（重跑遞增）後，每次建置的號碼都不同且單調遞增。
+   - **IPA 加密後才上傳為 workflow artifact**（保留 30 天，與 APK 相同）：
+     - 原因：公開 repo 的 artifact 任何登入 GitHub 的人都能下載，而 Ad Hoc IPA 內嵌的 provisioning profile（`embedded.mobileprovision`）的 `ProvisionedDevices` 列出**所有測試裝置的 UDID**（[Apple TN3125](https://developer.apple.com/documentation/technotes/tn3125-inside-code-signing-provisioning-profiles)）。直接上傳原始 IPA 會公開測試者的裝置識別碼。
+     - 做法：以 [`age`](https://github.com/FiloSottile/age) 加密給測試者的公鑰（`age -R recipients.txt -o app-staging.ipa.age app-staging.ipa`），只上傳 `.age` 檔；原始 IPA 不上傳、不放進快取，job 結束即隨 runner 銷毀。
+     - 測試者各自持有 age 私鑰；公鑰清單放在 `staging` Environment variable `IOS_STAGING_AGE_RECIPIENTS`（公鑰不是秘密，但只讓 staging 流程使用）。新增或移除測試者時更新這份清單，不需要共用密碼。
+     - `age` 在 runner 上以 Homebrew 安裝並固定版本。
    - **安裝方式**：
-     - 下載 artifact 解壓縮後，用 Mac 的 Apple Configurator 或 Xcode（Devices and Simulators）安裝到已註冊的 iPhone。
+     - 下載 artifact 解壓縮後，在 Mac 上以自己的私鑰解密（`age -d -i <私鑰檔> -o app-staging.ipa app-staging.ipa.age`），再用 Apple Configurator 或 Xcode（Devices and Simulators）安裝到已註冊的 iPhone。
      - iOS 16 以上可能需在「設定 › 隱私權與安全性」開啟「開發者模式」（第三方文件指出 Ad Hoc 建置需要，Apple 文件未明列；實作時以實機確認，並寫進 README）。
      - 不需要 Mac 的 OTA 安裝（`itms-services` + HTTPS 上的 manifest）第一版不做，有需要再評估。
    - **測試裝置管理**：
@@ -180,6 +185,7 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
 | Android 上傳金鑰（upload keystore，base64）與密碼 | Environment secrets（只在 `production`） | 簽 AAB；Google Play App Signing 保管真正的發布金鑰 |
 | Android staging 簽章金鑰（base64）與密碼 | Environment secrets（`staging`） | 簽 staging 測試 APK，和正式版金鑰分開 |
 | iOS staging 發布憑證 `.p12`（base64）與密碼、Ad Hoc provisioning profile（base64） | Environment secrets（`staging`） | 簽 staging 測試 IPA；匯入暫時 keychain，建置後刪除；和正式版憑證分開 |
+| 測試者的 age 公鑰清單 | Environment variables（`staging`） | 加密 staging IPA 後才上傳 artifact（IPA 內含測試裝置 UDID） |
 | Google Play 服務帳號 JSON | Environment secrets（只在 `production`） | fastlane 上傳 |
 | App Store Connect API key（`.p8`、Key ID、Issuer ID） | Environment secrets（只在 `production`） | fastlane 上傳／送審 |
 | iOS 發布憑證 `.p12`（base64）與密碼、provisioning profile | Environment secrets（只在 `production`） | 匯入 runner 的暫時 keychain，建置後刪除 |
@@ -244,6 +250,7 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
 - **Apple Developer（staging 測試 IPA）**：
   - 註冊 staging bundle id（正式 bundle id 加 `.staging`）。
   - 註冊測試者 iPhone 的 UDID。
+  - 每位測試者產生 age 金鑰（`age-keygen`），把公鑰加入 `staging` Environment variable `IOS_STAGING_AGE_RECIPIENTS`。
   - 建立 staging 專用的 Apple Distribution 憑證，以及包含上述裝置的 Ad Hoc provisioning profile。
 - **App Store Connect**：
   - 建立 APP 與 bundle id。
