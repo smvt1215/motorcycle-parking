@@ -46,10 +46,7 @@ void main() {
     await binding.takeScreenshot('spot-sheet-full');
     await binding.handlePopRoute();
     await tester.pumpAndSettle();
-    // Native tab items render outside Flutter's text tree; tap their actual frame.
-    final scaffold = tester.getRect(find.byType(AdaptiveScaffold));
-    await tester.tapAt(Offset(scaffold.center.dx, scaffold.bottom - 50));
-    await tester.pumpAndSettle();
+    await selectTab(tester, 2, (rect) => rect.center.dx);
     await binding.takeScreenshot('personal-light');
     await tester.tap(find.text('停車規則'));
     await tester.pumpAndSettle();
@@ -65,10 +62,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     await binding.takeScreenshot('map-dark');
-    await tester.tapAt(
-      Offset(scaffold.right - scaffold.width / 6, scaffold.bottom - 50),
-    );
-    await tester.pumpAndSettle();
+    await selectTab(tester, 4, (rect) => rect.right - rect.width / 6);
     expect(find.text('新增停車點'), findsOneWidget);
     await binding.takeScreenshot('contribute-dark');
     await tester.tap(find.byTooltip('新增停車點'));
@@ -76,4 +70,22 @@ void main() {
     await binding.takeScreenshot('report-dark');
     expect(tester.takeException(), isNull);
   });
+}
+
+/// Switches to shell [branch]. The iOS 26+ tab bar is a UIKit platform view,
+/// and test pointer events never reach it, so invoke its callback there;
+/// other platforms tap the Flutter tab item at [dx] of the scaffold.
+Future<void> selectTab(
+  WidgetTester tester,
+  int branch,
+  double Function(Rect rect) dx,
+) async {
+  final scaffold = find.byType(AdaptiveScaffold);
+  if (nativeGlass) {
+    tester.widget<AdaptiveScaffold>(scaffold).onTab(branch);
+  } else {
+    final rect = tester.getRect(scaffold);
+    await tester.tapAt(Offset(dx(rect), rect.bottom - 50));
+  }
+  await tester.pumpAndSettle();
 }
