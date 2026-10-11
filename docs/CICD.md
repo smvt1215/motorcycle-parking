@@ -128,17 +128,21 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
    - 嘗試次數 = `github.run_attempt`，上限 9，超過就讓流程失敗並提示人工處理。重跑時嘗試次數增加，會拿到新號碼。
    - tag 必須在 `main` 最新 commit 上，所以每次發版的 commit 數都大於上一次，建置號單調遞增。
    - 遠低於 Android `versionCode` 上限 2,100,000,000（commit 數需少於約 2.1 億）。
-   - **每個平台各自冪等**：上傳前先向商店查詢，已有落在 `commit 數 × 10 + 1～9` 範圍內的建置號，就代表這個版本已上傳過，略過該平台。查詢必須涵蓋**完整範圍**：
+   - **每個平台各自冪等**：上傳前先向商店查詢，已有落在 `commit 數 × 10 + 1～9` 範圍內的建置號，就代表這個版本已上傳過，**略過上傳這一步**（後續步驟見下方 Android、iOS 各自的規則）。查詢必須涵蓋**完整範圍**：
      - **iOS**：不用 `latest_testflight_build_number`，它只回傳最新的一個建置。改在 fastlane lane 中用 App Store Connect API（Spaceship `ConnectAPI::Build`，或 `GET /v1/builds` 以建置號篩選），逐一查詢範圍內的 9 個號碼。
      - **Android**：`google_play_track_version_codes` 只回傳單一軌道，所以要查詢所有軌道（internal、alpha、beta、production）後取聯集再比對。
      - 部分失敗時（例如 Android 成功、iOS 失敗）重跑，只會補傳失敗的平台。
 5. **Android**：
    - 以 production 設定建置 AAB。
+   - fastlane `upload_to_play_store` 的上傳與指定軌道在同一個 Play edit 內一起提交，任一步失敗整個 edit 不會生效。所以範圍內已有版本碼、而且已在 production 軌道上，才視為完成；版本碼存在但不在 production 軌道（例如人工操作留下的），就改為把既有版本碼推進 production 軌道，不重新上傳。
    - 上傳 **正式版（production）軌道**，**分階段推出 10%**。
    - 觀察後在 Play Console 調高比例，有問題可暫停。
-6. **iOS**：
-   - 以 production 設定建置 IPA，上傳 App Store Connect。
-   - fastlane `deliver` 送審並啟用**分階段發布**（7 天）。
+6. **iOS**：上傳與送審分成兩個獨立步驟。Apple 的上傳、選擇建置、送審是不同階段，上傳成功不代表已送審。
+   - **上傳**：以 production 設定建置 IPA，上傳 App Store Connect；範圍內已有建置就略過，沿用既有建置。
+   - **送審**：每次執行都要檢查，不因上傳被略過而跳過。
+     - 以 App Store Connect API 查詢該版本的狀態，已在「等待審查」或之後的狀態（審查中、待發布、已上架等）才視為完成。
+     - 否則用 fastlane `deliver` 指定範圍內已有的建置號，更新商店文字並送審，啟用**分階段發布**（7 天）。
+     - 這樣即使上傳成功、送審失敗，重跑也會補完送審。
    - 商店文字與截圖放在 `fastlane/metadata`，一併版本控管。
 7. **GitHub Release**：
    - 依兩個 tag 之間的 commit 產生更新說明。
