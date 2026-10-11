@@ -88,7 +88,7 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
    - `supabase db push` 套用新 migration
    - `supabase functions deploy` 部署 Edge Function
 2. **建置號**：`commit 數 × 100 + 通道 × 10 + 嘗試次數`。
-   - commit 數 = `git rev-list --count HEAD`；通道：staging 為 0、正式版為 1；嘗試次數 = `github.run_attempt`，上限 9，超過就讓流程失敗並提示人工處理。
+   - commit 數 = `git rev-list --count HEAD`，checkout 必須設定 `fetch-depth: 0` 取得完整歷史（`actions/checkout` 預設只抓 1 個 commit，計數會永遠是 1）；計算前檢查 `git rev-parse --is-shallow-repository` 為 `false`，否則讓流程失敗。通道：staging 為 0、正式版為 1；嘗試次數 = `github.run_attempt`，上限 9，超過就讓流程失敗並提示人工處理。
    - 單調遞增；staging 與正式版通道不同，不會撞號；重跑同一個 workflow 時嘗試次數會增加，所以會拿到新號碼。
    - 遠低於 Android `versionCode` 上限 2,100,000,000（commit 數需少於約 2,100 萬）。
    - **每個平台各自冪等**：上傳前先向商店查詢（fastlane `google_play_track_version_codes`／`latest_testflight_build_number`），商店裡已有落在 `commit 數 × 100 + 通道 × 10 + 1～9` 範圍內的建置號，就代表這個 commit、這個通道已上傳過，略過該平台。
@@ -106,7 +106,10 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
 ## CD：正式發版（推送 tag `vX.Y.Z`）
 `release.yml`：
 1. **前置檢查**（Linux）：
-   - tag 指向的 commit 必須在 `main` 上。
+   - tag 指向的 commit 必須**就是 `main` 目前最新的 commit**，不能只是 `main` 的祖先。若 tag 打在較舊的 commit，正式版建置號會小於已上傳的較新 staging 建置，違反建置號遞增。
+     - 這個檢查在流程開始時與人工核准之後**各做一次**，因為等待核准期間 `main` 可能已前進。
+     - 不符合時流程失敗，並提示刪除 tag、在最新的 `main` 上重新打 tag。
+     - 發版期間（從打 tag 到核准完成）暫停合併其他 PR。
    - `pubspec.yaml` 的 `version` 必須等於 tag 的版本號（例如 `1.2.0`）。
    - 該 commit 的 CI 必須全綠。
 2. **人工核准**：
