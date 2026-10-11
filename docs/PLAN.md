@@ -62,7 +62,7 @@ README.md                             # 安裝、Supabase 建置、TDX 金鑰申
 ## 主要套件
 `flutter_map`, `latlong2`, `flutter_map_marker_cluster`, `geolocator`, `flutter_riverpod`, `go_router`,
 `supabase_flutter`, `shared_preferences`, `url_launcher`（跳 Google/Apple 地圖導航）, `flutter_local_notifications`（計時提醒）。
-UI：`material_ui`、`cupertino_ui`（Flutter 官方設計套件，取代框架內建的 `flutter/material.dart`、`flutter/cupertino.dart`）、`cupertino_native_better`（iOS 原生 Liquid Glass 元件）、`material_3_expressive`（補官方尚未提供的 M3 Expressive 元件）、`dynamic_color`（Android 動態配色）。需 Flutter ≥ 3.47（`material_ui` 的下限）。
+UI：`material_ui`、`cupertino_ui`（Flutter 官方設計套件，取代框架內建的 `flutter/material.dart`、`flutter/cupertino.dart`）、`cupertino_native_better`（iOS 原生 Liquid Glass 元件）、`material_3_expressive`（Android M3 Expressive 主題與元件，`M3ETheme` + `M3E*`）、`dynamic_color`（Android 動態配色）。需 Flutter ≥ 3.47（`material_ui` 的下限）。
 
 ## UI 設計規範（雙平台）
 目標：iOS 看起來像 iOS、Android 看起來像 Android，各自符合最新設計規範；內容、資訊架構與品牌一致。
@@ -71,24 +71,24 @@ UI：`material_ui`、`cupertino_ui`（Flutter 官方設計套件，取代框架�
 | 平台 | 最新規範 | Flutter 官方支援 | 對策 |
 |---|---|---|---|
 | iOS | **Liquid Glass**（iOS 26 推出；iOS 27 調整：預設透明度降低、系統設定可調玻璃強度） | 無。官方 [`cupertino_ui`](https://pub.dev/packages/cupertino_ui) 套件已發布（2026-10，1.1.2），但尚未包含 Liquid Glass；Flutter 自繪畫面，不會自動套用（[flutter#170310](https://github.com/flutter/flutter/issues/170310)） | 導覽與控制元件以 `cupertino_native_better` 嵌入**原生** UIKit 元件 |
-| Android | **Material 3 Expressive**（形狀、彈簧動態、浮動工具列、強調字級） | 部分。官方 [`material_ui`](https://pub.dev/packages/material_ui) 套件已發布（2026-10，1.6.0，取代框架內建 Material），提供 `StyleVariant.material3Expressive`，官方標示仍在開發中、會陸續加入 Expressive 功能（[flutter#168813](https://github.com/flutter/flutter/issues/168813)） | 以 `material_ui` 為基礎並採用 `material3Expressive` 樣式；官方尚未提供的 Expressive 元件才用 `material_3_expressive` 補（該套件本身也建立在 `material_ui` 上） |
+| Android | **Material 3 Expressive**（形狀、彈簧動態、浮動工具列、強調字級） | 部分。官方 [`material_ui`](https://pub.dev/packages/material_ui) 套件已發布（2026-10，1.6.0，取代框架內建 Material），提供 `StyleVariant.material3Expressive` 列舉，但**只有個別元件支援**（1.5.0 起為 `IconButton`），`ThemeData` 沒有全域切換，官方標示仍在開發中（[flutter#168813](https://github.com/flutter/flutter/issues/168813)） | 以 `material_3_expressive` 的 `M3ETheme` + `M3E*` 元件實作（該套件建立在 `material_ui` 上）；官方元件陸續支援 Expressive 後逐一替換 |
 
 ### 自適應元件層 `lib/ui/adaptive/`
 畫面只使用這一層的元件，不直接呼叫平台套件；官方支援補齊後只需替換這一層。
 - **一律使用官方獨立套件**：全專案只 import `package:material_ui/material_ui.dart` 與 `package:cupertino_ui/cupertino_ui.dart`，**禁止** import `package:flutter/material.dart`、`package:flutter/cupertino.dart`，避免同時存在兩套主題與在地化設定（`material_3_expressive` 也明文要求）。在地化改用 `material_ui` 提供的 `GlobalMaterialLocalizations`（繁體中文）。CI 加一道檢查（只掃描本專案的 `lib/`、`test/`、`integration_test/`，不含第三方套件），發現禁止的 import 即失敗。
 - **舊版相依的相容橋接（必要）**：`cupertino_native_better` 仍 import 框架內建的 `flutter/cupertino.dart` 與 `flutter/material.dart`（例如 `CNBottomSheet` 內部呼叫舊版 `showCupertinoSheet`），其主題與在地化型別和官方新套件不同。依 [`cupertino_ui`](https://pub.dev/packages/cupertino_ui#migrating-existing-code-to-this-package)／[`material_ui`](https://pub.dev/packages/material_ui#migrating-existing-code-to-this-package) 遷移指南第 3 步，在根 App 的 `builder` 同時包上 `MaterialUiCompatibilityBridge` 與 `CupertinoUiCompatibilityBridge`，讓舊版元件取得正確的 `ThemeData`／`CupertinoThemeData` 與 `MaterialLocalizations`／`CupertinoLocalizations`。`builder` 包住整個 Navigator，因此經路由開啟的 sheet 也在橋接範圍內。
 - **實作前的相容性驗證**：開始實作時先做最小雛形，在橋接下確認 `CNTabBar`、`CNBottomSheet` 的主題、深淺色與繁中在地化正確（並納入 iOS 截圖測試）。原生元件的顏色仍以設計 token 明確傳入作為額外保險，但不取代橋接。
-- **缺口清單**：實作時列出 `material_ui` 的 `material3Expressive` 尚未涵蓋、需由 `material_3_expressive` 補的元件；每次升級 `material_ui`／`cupertino_ui` 時重新檢查，官方已提供就移除第三方套件（`cupertino_ui` 加入 Liquid Glass 後同理替換 `cupertino_native_better`）。
+- **元件對照表**：實作時記錄每個 Android 元件目前用 `M3E*` 還是官方元件；每次升級 `material_ui`／`cupertino_ui` 時重新檢查，官方已提供就移除第三方套件（`cupertino_ui` 加入 Liquid Glass 後同理替換 `cupertino_native_better`）。
 - APP 最低支援 iOS 15（`cupertino_native_better` 的下限），iOS 26 以上才使用原生 Liquid Glass。
 
 | 元件 | iOS 26+ | iOS 15–18 | Android |
 |---|---|---|---|
-| `AdaptiveTabScaffold`（地圖/規則/我的車/收藏） | 原生 Liquid Glass 分頁列（`CNTabBar`） | `CupertinoTabBar` | M3 `NavigationBar` |
-| `AdaptiveNavBar` | 透明 `CupertinoNavigationBar` + 原生玻璃圖示按鈕（`CNButton.icon`） | `CupertinoNavigationBar` | M3 top app bar（`AppBar`／`SliverAppBar`） |
-| `AdaptiveSegmented`（普通機車／大型重機） | 原生 segmented control（`CNSegmentedControl`） | `CupertinoSlidingSegmentedControl` | M3 Expressive button group |
-| `AdaptiveButton`、`AdaptiveSwitch`、`AdaptiveSlider` | `CNButton`、`CNSwitch`、`CNSlider` | Cupertino 元件 | M3 Expressive 元件 |
-| `AdaptiveSheet` | 車位詳情：自訂可停於半高／全高的 sheet（見下方 iOS 規則）；回報表單等一般 sheet：`CNBottomSheet.showCupertino` | 同左 | M3 modal bottom sheet（車位詳情同樣可停於半高／全高） |
-| 地圖動作（定位、篩選、記錄停車） | 原生玻璃按鈕群（`CNGlassButtonGroup`） | Cupertino 按鈕 | M3 Expressive 浮動工具列 + FAB「記錄停車」 |
+| `AdaptiveTabScaffold`（地圖/規則/我的車/收藏） | 原生 Liquid Glass 分頁列（`CNTabBar`） | `CupertinoTabBar` | `M3ENavigationBar` |
+| `AdaptiveNavBar` | 透明 `CupertinoNavigationBar` + 原生玻璃圖示按鈕（`CNButton.icon`） | `CupertinoNavigationBar` | `M3EAppBar` |
+| `AdaptiveSegmented`（普通機車／大型重機） | 原生 segmented control（`CNSegmentedControl`） | `CupertinoSlidingSegmentedControl` | `M3EButtonGroup` |
+| `AdaptiveButton`、`AdaptiveSwitch`、`AdaptiveSlider` | `CNButton`、`CNSwitch`、`CNSlider` | Cupertino 元件 | `M3EButton`、`M3ESwitch`、`M3ESlider` |
+| `AdaptiveSheet` | 車位詳情：自訂可停於半高／全高的 sheet（見下方 iOS 規則）；回報表單等一般 sheet：`CNBottomSheet.showCupertino` | 同左 | `M3EBottomSheet`（車位詳情同樣可停於半高／全高；實作時確認其支援，不支援則用 `showModalBottomSheet` + `DraggableScrollableSheet`） |
+| 地圖動作（定位、篩選、記錄停車） | 原生玻璃按鈕群（`CNGlassButtonGroup`） | Cupertino 按鈕 | `M3EToolbar`（浮動工具列）+ `M3EFab`「記錄停車」 |
 
 ### iOS 規則（HIG）
 - **玻璃只用在導覽／控制層**，不用在內容上；地圖滿版延伸到分頁列與導覽列下方。
@@ -104,7 +104,8 @@ UI：`material_ui`、`cupertino_ui`（Flutter 官方設計套件，取代框架�
   - 不使用不經路由的彈出層（例如 `Scaffold.showBottomSheet`）：`markAnyModalActive()`／`markAnyModalInactive()` 只增減 `anyModalDepth`（處理玻璃按鈕光暈與搜尋型分頁列），一般 `CNTabBar` 監聽的是只由 `*Sheet*` 路由觸發的 `modalDepth`，手動呼叫無法讓分頁列隱藏。若日後確有需要，除了呼叫上述方法處理光暈，彈出層也不得與分頁列重疊。
 
 ### Android 規則（Material 3 Expressive）
-- 以 `material_ui` 的 `StyleVariant.material3Expressive` 為主題樣式；Android 12+ 使用桌布動態配色（`dynamic_color`），其餘使用品牌種子色。
+- 以 `M3ETheme`（`M3EThemeData`）提供 Expressive 主題，畫面一律使用上表的 `M3E*` 元件；`StyleVariant.material3Expressive` 只用在官方已支援的個別元件（目前為 `IconButton`），不當成全域設定。
+- Android 12+ 使用桌布動態配色（`dynamic_color`），其餘使用品牌種子色。
 - Edge-to-edge（Android 15+ 強制）；支援預測式返回手勢。
 - Material Symbols 圖示、Expressive 形狀與彈簧動態；點擊區域 ≥ 48dp。
 
