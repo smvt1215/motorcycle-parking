@@ -53,8 +53,8 @@ supabase/
   migrations/0001_init.sql            # 資料表、PostGIS、RLS、nearby_spots RPC、每日回報上限 trigger
   functions/tdx-parking/index.ts      # Deno：OAuth client_credentials 取 token（快取）、抓路外/路邊車位+即時剩餘、正規化
 test/                                 # eligibility、rules 解析、TDX 正規化、車種切換 widget test、雙平台 golden 截圖測試
-.github/workflows/flutter.yml         # analyze + test（Linux）
-.github/workflows/ios.yml             # iOS 模擬器建置 + 截圖（macOS runner，見「UI 設計規範 › 驗證」）
+.github/workflows/                    # ci.yml、ios.yml、cd-staging.yml、release.yml（見 docs/CICD.md）
+fastlane/                             # 兩平台簽章、上傳設定與商店文字（見 docs/CICD.md）
 integration_test/                     # iOS 截圖情境（地圖、sheet、車種切換、深淺色）
 README.md                             # 安裝、Supabase 建置、TDX 金鑰申請步驟（中文）
 ```
@@ -191,10 +191,11 @@ UI：`material_ui`、`cupertino_ui`（Flutter 官方設計套件，取代框架�
 ## 驗證方式
 1. 容器內安裝 Flutter SDK（目前未安裝），執行 `flutter pub get`、`flutter analyze`、`flutter test`（含 eligibility 各縣市×車種案例、JSON 解析、TDX 正規化 fixture）。
 2. `flutter build web` 後用預裝 Chromium + Playwright 開啟，模擬台北定位，截圖確認：車種切換改變標記顏色、規則頁、記錄停車位置、收藏、新增回報（demo 模式）。Web 版走 Material 路徑，iOS 原生元件需另依「UI 設計規範 › 驗證」確認。
-3. Edge Function 的正規化邏輯抽成純函式並用 TDX 範例 JSON 做測試；SQL migration 若容器無 Postgres 則以人工審閱 + README 說明 `supabase db push` 步驟（會明確告知哪些未實際執行）。
+3. Edge Function 的正規化邏輯抽成純函式並用 TDX 範例 JSON 做測試；SQL migration 與 RLS 由 CI 的 `supabase start` + `supabase test db`（pgTAP）實際驗證（見 [CICD.md](CICD.md)）。
 4. Commit 並 push 到 `claude/motorcycle-parking-guide-app-kk6f9x`，開 draft PR 並追蹤 CI。
 
 ## 待準備事項
+- CI／CD 所需的商店、Supabase 與 GitHub 設定，見 [CICD.md](CICD.md)「待準備事項」
 - Supabase 專案（URL、anon key），開啟 Google / Apple 登入與 Turnstile CAPTCHA（Cloudflare 免費帳號取得 site key / secret）
 - TDX 會員 Client ID / Secret
 - 雲端環境網路設定放行 `tdx.transportdata.tw`（以及若要接第 2 層：`data.taipei`、`data.gov.tw`、`datacenter.taichung.gov.tw`、`parkweb.tainan.gov.tw`），才能執行 Phase 0 稽核
