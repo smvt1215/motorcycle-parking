@@ -112,7 +112,7 @@ UI：`cupertino_native_better`（iOS 原生 Liquid Glass 元件）、`material_3
 - 此開發容器無 macOS，iOS 原生 Liquid Glass 元件改由 **GitHub Actions macOS runner** 驗證（已獲同意；公開 repo 使用 GitHub 提供的標準 runner 不另收費）：
   - `ios.yml`：選用含 iOS 26 / 27 模擬器的 Xcode 映像（實作時確認 runner 映像版本），`flutter build ios --simulator --no-codesign`，不需要簽章或 Apple 開發者帳號。
   - 於 iOS 26 與 iOS 27 模擬器執行 `integration_test` 截圖情境：地圖頁、車種切換、車位詳情與回報 sheet（含上述疊放測試）、深淺色模式；截圖上傳為 workflow artifact，供 PR 審查時查看。
-  - 執行條件：PR 變更 `lib/`、`ios/`、`integration_test/`、`pubspec.*` 時才實際建置與截圖，另可手動觸發；只改文件時略過，以節省排隊時間。
+  - 執行條件：PR 變更 `lib/`、`ios/`、`integration_test/`、`pubspec.*` 或 `.github/workflows/ios.yml` 本身時才實際建置與截圖，另可手動觸發；只改文件時略過，以節省排隊時間。
   - 穩定後將 iOS 建置列為 main ruleset 的必要檢查。注意：設為必要檢查的 workflow 不能用 workflow 層級的路徑過濾（只改文件的 PR 會一直等不到檢查結果而無法合併）；改為 workflow 每次都觸發，在 job 內判斷變更路徑，不需要時直接回報成功。
 - Android 以 Android 16 模擬器確認 Expressive 元件、動態配色、edge-to-edge 與預測式返回。
 
