@@ -87,7 +87,7 @@ UI：`material_ui`、`cupertino_ui`（Flutter 官方設計套件，取代框架�
 | `AdaptiveNavBar` | 透明 `CupertinoNavigationBar` + 原生玻璃圖示按鈕（`CNButton.icon`） | `CupertinoNavigationBar` | M3 top app bar（`AppBar`／`SliverAppBar`） |
 | `AdaptiveSegmented`（普通機車／大型重機） | 原生 segmented control（`CNSegmentedControl`） | `CupertinoSlidingSegmentedControl` | M3 Expressive button group |
 | `AdaptiveButton`、`AdaptiveSwitch`、`AdaptiveSlider` | `CNButton`、`CNSwitch`、`CNSlider` | Cupertino 元件 | M3 Expressive 元件 |
-| `AdaptiveSheet`（車位詳情） | Cupertino 風格 sheet（可拖曳於半高／全高） | 同左 | M3 modal bottom sheet |
+| `AdaptiveSheet` | 車位詳情：自訂可停於半高／全高的 sheet（見下方 iOS 規則）；回報表單等一般 sheet：`CNBottomSheet.showCupertino` | 同左 | M3 modal bottom sheet（車位詳情同樣可停於半高／全高） |
 | 地圖動作（定位、篩選、記錄停車） | 原生玻璃按鈕群（`CNGlassButtonGroup`） | Cupertino 按鈕 | M3 Expressive 浮動工具列 + FAB「記錄停車」 |
 
 ### iOS 規則（HIG）
@@ -97,7 +97,9 @@ UI：`material_ui`、`cupertino_ui`（Flutter 官方設計套件，取代框架�
 - 原生元件以 platform view 疊在地圖上有效能成本：數量控制在分頁列與少數按鈕，實作時量測捲動與縮放幀率。
 - **原生元件與彈出層的疊放協調**（套件[必要設定](https://pub.dev/packages/cupertino_native_better#required-setup-register-cntabbarrouteobserver)）：原生元件疊在 Flutter 畫面下方合成，若不協調，分頁列等原生元件會蓋在 sheet 上（例如遮住回報表單的輸入框），玻璃光暈也會透出。
   - 在根 `GoRouter` 的 `observers` 註冊 `CNTabBarRouteObserver`。
-  - `AdaptiveSheet` 在 iOS 一律以 `CNBottomSheet.showCupertino` 開啟（自動加上 `CNSheetGeometryProbe`）；需直接使用 Flutter 原生 sheet API 時，以 `CNSheetGeometryProbe` 包住 sheet 內容。
+  - iOS 的 sheet 一律要讓套件知道它的位置：
+    - 一般 sheet（回報表單等）以 `CNBottomSheet.showCupertino` 開啟（自動加上 `CNSheetGeometryProbe`）。
+    - 車位詳情需要停在半高／全高，但 `showCupertinoSheet`（`CNBottomSheet.showCupertino` 的底層）只有固定 `topGap` 與拖曳關閉，沒有可停高度（[API](https://pub.dev/documentation/cupertino_ui/latest/cupertino_ui/showCupertinoSheet.html)）。因此改以 modal 路由搭配 `DraggableScrollableSheet`（`snap: true`，停點 0.5／1.0），並以 `CNSheetGeometryProbe` 包住 sheet 內容，維持疊放協調。
   - 不經路由的自訂彈出層，開啟／關閉時呼叫 `CNTabBarRouteObserver.markAnyModalActive()`／`markAnyModalInactive()`。
 
 ### Android 規則（Material 3 Expressive）
