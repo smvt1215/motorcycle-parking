@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:motorcycle_parking/data/app_store.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
 import 'package:motorcycle_parking/features/map/spot_sheet.dart';
+import 'package:motorcycle_parking/features/report/report_sheet.dart';
 import 'package:motorcycle_parking/models/parking.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
 
@@ -86,8 +87,12 @@ void main() {
     await tester.ensureVisible(find.text('修改建議'));
     await tester.tap(find.text('修改建議'));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('點位已不存在'),
+      120,
+      scrollable: find.byType(Scrollable).last,
+    );
     expect(find.text('點位已不存在'), findsOneWidget);
-    await tester.ensureVisible(find.text('點位已不存在'));
     await tester.tap(find.text('點位已不存在'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('送出回報'));
@@ -116,6 +121,95 @@ void main() {
     expect(store.submissions.any((body) => body['action'] == 'vote'), isFalse);
     expect(store.spots, contains(spot));
     expect(find.text('範例建議已送出，僅供本次功能測試。'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('修改建議顯示目前值，格位類型以選項送出', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final store = (await tester.runAsync(createStore))!;
+    addTearDown(store.dispose);
+    await openDetails(tester, store);
+    await tester.ensureVisible(find.text('修改建議'));
+    await tester.tap(find.text('修改建議'));
+    await tester.pumpAndSettle();
+    expect(find.text('目前：${SpaceType.freeMotorcycle.label}'), findsOneWidget);
+    await tester.tap(find.text('格位類型'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('送出建議'));
+    await tester.pumpAndSettle();
+    expect(find.text('請選擇與目前不同的格位類型'), findsOneWidget);
+    await tester.tap(find.text('正確的格位類型'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(SpaceType.heavyOnly.label).last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('送出建議'));
+    await tester.pumpAndSettle();
+    expect(store.submissions.single, {
+      'action': 'flag',
+      'source_id': spot.id,
+      'reason': '格位類型：建議「${SpaceType.heavyOnly.label}」',
+    });
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('新增停車點分區填寫，重機專用格自動帶入車種', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final store = (await tester.runAsync(createStore))!;
+    addTearDown(store.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showReport(
+                context,
+                store,
+                spot.lat,
+                spot.lng,
+                mapCenter: true,
+              ),
+              child: const Text('新增'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('新增'));
+    await tester.pumpAndSettle();
+    expect(find.text('位置：目前地圖中心'), findsOneWidget);
+    expect(find.text('取消').hitTestable(), findsOneWidget);
+    expect(find.text('0/100'), findsNothing);
+    await tester.enterText(
+      find.widgetWithText(TextFormField, '停車點名稱'),
+      '松仁路重機格',
+    );
+    await tester.tap(find.text('格位類型'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(SpaceType.heavyOnly.label).last);
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('送出回報'),
+      200,
+      scrollable: find
+          .ancestor(of: find.text('基本資訊'), matching: find.byType(Scrollable))
+          .first,
+    );
+    await tester.tap(find.text('送出回報'));
+    await tester.pumpAndSettle();
+    final created = store.submissions.single['spot'] as Map<String, dynamic>;
+    expect(created['name'], '松仁路重機格');
+    expect(created['city'], '臺北市');
+    expect(created['space_type'], 'heavyOnly');
+    expect(created['scooter_allowed'], isFalse);
+    expect(created['heavy_allowed'], isTrue);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });

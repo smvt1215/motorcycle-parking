@@ -107,11 +107,111 @@ Future<void> showReport(
   BuildContext context,
   AppStore store,
   double lat,
-  double lng,
-) => showAdaptiveSheet<void>(
+  double lng, {
+  bool mapCenter = false,
+}) => showAdaptiveSheet<void>(
   context,
-  (ctx) => ReportForm(store: store, lat: lat, lng: lng),
+  (ctx) => ReportForm(store: store, lat: lat, lng: lng, mapCenter: mapCenter),
 );
+
+/// A titled group of form fields.
+class FormSection extends StatelessWidget {
+  const FormSection({super.key, required this.title, required this.children});
+  final String title;
+  final List<Widget> children;
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 24),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          title,
+          style: Theme.of(context).textTheme.titleMedium
+              ?.copyWith(fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 12),
+        ...children,
+      ],
+    ),
+  );
+}
+
+/// Labeled single choice; segments are easier to scan than a dropdown.
+class ChoiceField<T> extends StatelessWidget {
+  const ChoiceField({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.options,
+    required this.onChanged,
+  });
+  final String label;
+  final T value;
+  final List<(T, String)> options;
+  final ValueChanged<T> onChanged;
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 16),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(label, style: Theme.of(context).textTheme.bodyLarge),
+        const SizedBox(height: 8),
+        SegmentedButton<T>(
+          showSelectedIcon: false,
+          segments: [
+            for (final (value, text) in options)
+              ButtonSegment(value: value, label: Text(text)),
+          ],
+          selected: {value},
+          onSelectionChanged: (v) => onChanged(v.single),
+        ),
+      ],
+    ),
+  );
+}
+
+/// Shown above a form when the reporter still has to sign in.
+class SignInPrompt extends StatelessWidget {
+  const SignInPrompt({super.key, required this.store, required this.message});
+  final AppStore store;
+  final String message;
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Material(
+      color: colors.secondaryContainer,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.lock_outline, color: colors.onSecondaryContainer),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    message,
+                    style: TextStyle(color: colors.onSecondaryContainer),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            AdaptiveButton(
+              label: '登入帳號',
+              secondary: true,
+              onPressed: () => showSettings(context, store),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class ReportForm extends StatefulWidget {
   const ReportForm({
@@ -119,9 +219,13 @@ class ReportForm extends StatefulWidget {
     required this.store,
     required this.lat,
     required this.lng,
+    this.mapCenter = false,
   });
   final AppStore store;
   final double lat, lng;
+
+  /// Whether the point is the map center rather than a long-pressed spot.
+  final bool mapCenter;
   @override
   State<ReportForm> createState() => _ReportFormState();
 }
@@ -144,124 +248,186 @@ class _ReportFormState extends State<ReportForm> {
     super.dispose();
   }
 
+  void setType(SpaceType value) => setState(() {
+    type = value;
+    // Dedicated heavy bays imply the vehicle answers; reporters can still edit.
+    if (value == SpaceType.heavyOnly) {
+      scooter = false;
+      heavy = true;
+    }
+  });
+
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-    child: Form(
-      key: form,
-      child: ContentPage(
-        children: [
-          Text('新增停車點', style: Theme.of(context).textTheme.headlineSmall),
-          const SizedBox(height: 8),
-          Text(
-            '位置 ${widget.lat.toStringAsFixed(5)}, ${widget.lng.toStringAsFixed(5)}',
-          ),
-          const SizedBox(height: 16),
-          if (!widget.store.canReport) ...[
-            const Text('請先使用 Google 或 Apple 登入，才能新增或確認社群資訊。'),
-            TextButton(
-              onPressed: () => showSettings(context, widget.store),
-              child: const Text('登入帳號'),
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: Form(
+        key: form,
+        child: ContentPage(
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '新增停車點',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                ),
+                // Long form: keep cancel reachable without scrolling.
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('取消'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '回報會先標示「待確認」，其他騎士確認後才成為已確認資訊。',
+              style: TextStyle(color: colors.onSurfaceVariant),
+            ),
+            const SizedBox(height: 16),
+            Material(
+              color: colors.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(16),
+              child: ListTile(
+                leading: Icon(Icons.place_outlined, color: colors.primary),
+                title: Text(widget.mapCenter ? '位置：目前地圖中心' : '位置：長按的地圖位置'),
+                subtitle: Text(
+                  '${widget.lat.toStringAsFixed(5)}, '
+                  '${widget.lng.toStringAsFixed(5)}'
+                  '${widget.mapCenter ? '\n位置不對時，關閉後移動地圖再回報。' : ''}',
+                ),
+              ),
+            ),
+            if (!widget.store.canReport) ...[
+              const SizedBox(height: 16),
+              SignInPrompt(
+                store: widget.store,
+                message: '使用 Google 或 Apple 登入後才能送出回報。',
+              ),
+            ],
+            FormSection(
+              title: '基本資訊',
+              children: [
+                TextFormField(
+                  controller: name,
+                  maxLength: 100,
+                  textInputAction: TextInputAction.next,
+                  decoration: const InputDecoration(
+                    labelText: '停車點名稱',
+                    hintText: '例：信義路五段收費機車格',
+                    counterText: '',
+                  ),
+                  validator: (v) =>
+                      (v?.trim().isEmpty ?? true) ? '請填寫名稱' : null,
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  initialValue: city,
+                  decoration: InputDecoration(
+                    labelText: '縣市',
+                    helperText: city == null ? null : '依附近停車點自動帶入，請確認',
+                  ),
+                  items: taiwanCities
+                      .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                      .toList(),
+                  validator: (v) => v == null ? '請選擇停車點所在縣市' : null,
+                  onChanged: (v) => setState(() => city = v),
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<SpaceType>(
+                  initialValue: type,
+                  decoration: const InputDecoration(labelText: '格位類型'),
+                  items: SpaceType.values
+                      .map(
+                        (s) => DropdownMenuItem(value: s, child: Text(s.label)),
+                      )
+                      .toList(),
+                  onChanged: (v) => setType(v!),
+                ),
+              ],
+            ),
+            FormSection(
+              title: '可停車種',
+              children: [
+                ChoiceField<bool>(
+                  label: '普通機車',
+                  value: scooter,
+                  options: const [(true, '可停'), (false, '不可停')],
+                  onChanged: (v) => setState(() => scooter = v),
+                ),
+                ChoiceField<bool?>(
+                  label: '大型重機（依現場標示）',
+                  value: heavy,
+                  options: const [(null, '未確認'), (true, '可停'), (false, '不可停')],
+                  onChanged: (v) => setState(() => heavy = v),
+                ),
+              ],
+            ),
+            FormSection(
+              title: '補充資訊（選填）',
+              children: [
+                TextFormField(
+                  controller: fee,
+                  maxLength: 200,
+                  textInputAction: TextInputAction.next,
+                  decoration: const InputDecoration(
+                    labelText: '收費資訊',
+                    hintText: '例：每小時 20 元，或免費',
+                    counterText: '',
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: note,
+                  maxLength: 500,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: '入口、樓層或其他備註',
+                    hintText: '例：B2 入口在松仁路側',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            AdaptiveButton(
+              label: sending ? '送出中…' : '送出回報',
+              onPressed: sending || !widget.store.canReport
+                  ? null
+                  : () async {
+                      if (!form.currentState!.validate()) return;
+                      setState(() => sending = true);
+                      await runAction(context, () async {
+                        final result = await widget.store.submit({
+                          'action': 'create',
+                          'spot': {
+                            'name': name.text.trim(),
+                            'lat': widget.lat,
+                            'lng': widget.lng,
+                            'city': city,
+                            'space_type': type.name,
+                            'fee_note': fee.text.trim().isEmpty
+                                ? '請依現場公告'
+                                : fee.text.trim(),
+                            'note': note.text.trim(),
+                            'scooter_allowed': scooter,
+                            'heavy_allowed': heavy,
+                          },
+                        });
+                        if (context.mounted) {
+                          Navigator.pop(context);
+                          showMessage(context, result);
+                        }
+                      });
+                      if (mounted) setState(() => sending = false);
+                    },
             ),
           ],
-          TextFormField(
-            controller: name,
-            maxLength: 100,
-            decoration: const InputDecoration(labelText: '停車點名稱'),
-            validator: (v) => (v?.trim().isEmpty ?? true) ? '請填寫名稱' : null,
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            initialValue: city,
-            decoration: const InputDecoration(labelText: '縣市'),
-            items: taiwanCities
-                .map((s) => DropdownMenuItem(value: s, child: Text(s)))
-                .toList(),
-            validator: (v) => v == null ? '請選擇停車點所在縣市' : null,
-            onChanged: (v) => setState(() => city = v),
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<SpaceType>(
-            initialValue: type,
-            decoration: const InputDecoration(labelText: '格位類型'),
-            items: SpaceType.values
-                .map((s) => DropdownMenuItem(value: s, child: Text(s.label)))
-                .toList(),
-            onChanged: (v) => setState(() => type = v!),
-          ),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('普通機車可停'),
-            value: scooter,
-            onChanged: (v) => setState(() => scooter = v),
-          ),
-          DropdownButtonFormField<String>(
-            initialValue: heavy == null
-                ? 'unknown'
-                : heavy!
-                ? 'yes'
-                : 'no',
-            decoration: const InputDecoration(labelText: '大型重機'),
-            items: const [
-              DropdownMenuItem(value: 'unknown', child: Text('尚未確認')),
-              DropdownMenuItem(value: 'yes', child: Text('現場標示可停')),
-              DropdownMenuItem(value: 'no', child: Text('現場標示不可停')),
-            ],
-            onChanged: (v) =>
-                setState(() => heavy = v == 'unknown' ? null : v == 'yes'),
-          ),
-          TextFormField(
-            controller: fee,
-            maxLength: 200,
-            decoration: const InputDecoration(labelText: '收費資訊（選填）'),
-          ),
-          TextFormField(
-            controller: note,
-            maxLength: 500,
-            maxLines: 3,
-            decoration: const InputDecoration(labelText: '入口、樓層或其他備註（選填）'),
-          ),
-          const SizedBox(height: 20),
-          AdaptiveButton(
-            label: sending ? '送出中…' : '送出回報',
-            onPressed: sending || !widget.store.canReport
-                ? null
-                : () async {
-                    if (!form.currentState!.validate()) return;
-                    setState(() => sending = true);
-                    await runAction(context, () async {
-                      final result = await widget.store.submit({
-                        'action': 'create',
-                        'spot': {
-                          'name': name.text.trim(),
-                          'lat': widget.lat,
-                          'lng': widget.lng,
-                          'city': city,
-                          'space_type': type.name,
-                          'fee_note': fee.text.trim().isEmpty
-                              ? '請依現場公告'
-                              : fee.text.trim(),
-                          'note': note.text.trim(),
-                          'scooter_allowed': scooter,
-                          'heavy_allowed': heavy,
-                        },
-                      });
-                      if (context.mounted) {
-                        Navigator.pop(context);
-                        showMessage(context, result);
-                      }
-                    });
-                    if (mounted) setState(() => sending = false);
-                  },
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-        ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 Future<void> showParkingForm(BuildContext context, AppStore store) =>

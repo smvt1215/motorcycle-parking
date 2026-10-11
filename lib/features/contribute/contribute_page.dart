@@ -108,8 +108,13 @@ class ContributePage extends ConsumerWidget {
             _ContributionAction(
               label: '新增停車點',
               icon: Icons.add_location_alt_outlined,
-              onTap: () =>
-                  showReport(context, store, store.mapLat, store.mapLng),
+              onTap: () => showReport(
+                context,
+                store,
+                store.mapLat,
+                store.mapLng,
+                mapCenter: true,
+              ),
             ),
             _ContributionAction(
               label: '修改資訊',
