@@ -10,9 +10,11 @@ concurrency:
   cancel-in-progress: true
 jobs:
   apk:
-    name: Android APK 建置
+    name: Android 測試 APK 建置
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    outputs:
+      run: ${{ steps.changes.outputs.run }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -35,9 +37,18 @@ jobs:
       - if: steps.changes.outputs.run == 'true'
         run: flutter pub get --enforce-lockfile
       - if: steps.changes.outputs.run == 'true'
-        run: flutter build apk --debug
+        run: flutter build apk --debug --target=integration_test/ui_test.dart --target-platform=android-x64 --dart-define=OFFLINE_MAP=true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: steps.changes.outputs.run == 'true'
+        with:
+          name: android-test-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          compression-level: 0
+          overwrite: true
   emulator:
     name: Android ${{ matrix.version }} 模擬器
+    needs: [apk]
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     strategy:
@@ -52,31 +63,34 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
-      - id: changes
-        run: python3 tool/ci_changes.py android >> "$GITHUB_OUTPUT"
       - id: versions
-        if: steps.changes.outputs.run == 'true'
+        if: needs.apk.outputs.run == 'true'
         run: echo "flutter=$(cat .flutter-version)" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
-        if: steps.changes.outputs.run == 'true'
+        if: needs.apk.outputs.run == 'true'
         with:
           distribution: temurin
           java-version: '17'
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
-        if: steps.changes.outputs.run == 'true'
+        if: needs.apk.outputs.run == 'true'
         with:
           flutter-version: ${{ steps.versions.outputs.flutter }}
           cache: true
-      - if: steps.changes.outputs.run == 'true'
+      - if: needs.apk.outputs.run == 'true'
         run: flutter pub get --enforce-lockfile
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        if: needs.apk.outputs.run == 'true'
+        with:
+          name: android-test-apk
+          path: artifacts/android-app
       - name: Enable KVM
-        if: steps.changes.outputs.run == 'true'
+        if: needs.apk.outputs.run == 'true'
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
-        if: steps.changes.outputs.run == 'true'
+        if: needs.apk.outputs.run == 'true'
         with:
           api-level: ${{ matrix.api }}
           target: google_apis
@@ -84,9 +98,9 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-boot-timeout: 180
-          script: flutter drive --driver=test_driver/integration_test.dart --target=integration_test/ui_test.dart --dart-define=OFFLINE_MAP=true -d emulator-5554
+          script: flutter drive --debug --driver=test_driver/integration_test.dart --target=integration_test/ui_test.dart --use-application-binary=artifacts/android-app/app-debug.apk -d emulator-5554
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        if: always() && steps.changes.outputs.run == 'true'
+        if: always() && needs.apk.outputs.run == 'true'
         with:
           name: android-${{ matrix.api }}-screenshots
           path: artifacts/screenshots
