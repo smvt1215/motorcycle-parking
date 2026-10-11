@@ -61,10 +61,22 @@ create table public.moderation_queue (
   reason text not null, resolved_at timestamptz, created_at timestamptz not null default now()
 );
 create unique index moderation_unresolved_idx on public.moderation_queue(source_id,reason) where resolved_at is null;
+-- Admin-maintained bays from municipal notices (Dashboard/service role only).
+-- Typed columns so every row parses as a map spot.
 create table public.official_heavy_spots (
-  id uuid primary key default gen_random_uuid(), spot jsonb not null,
-  source_url text not null, effective_date date not null, updated_at timestamptz not null default now()
+  id uuid primary key default gen_random_uuid(),
+  name text not null check (char_length(name) between 1 and 100),
+  lat double precision not null check (lat between 20 and 27),
+  lng double precision not null check (lng between 118 and 123),
+  city text not null check (char_length(city) between 1 and 30), district text not null default '',
+  space_type text not null default 'heavyOnly' check (space_type in ('paidMotorcycle','freeMotorcycle','heavyOnly','car','offStreet')),
+  fee_note text not null default '請依現場公告' check (char_length(fee_note)<=200),
+  note text not null default '' check (char_length(note)<=500),
+  heavy_allowed boolean not null default true, scooter_allowed boolean,
+  source_url text not null check (source_url ~ '^https://'), effective_date date not null,
+  updated_at timestamptz not null default now()
 );
+create index official_heavy_location_idx on public.official_heavy_spots(lat,lng);
 create table public.rate_limit_events (
   id bigint generated always as identity primary key, user_id uuid not null references auth.users(id),
   ip_hash text not null, created_at timestamptz not null default now()

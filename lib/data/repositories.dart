@@ -71,6 +71,20 @@ class ParkingRepository {
     final community = raw
         .map((e) => ParkingSpot.fromJson(e as Map<String, dynamic>))
         .toList();
+    // Admin-maintained municipal bays; a failure only drops this layer.
+    var official = const <ParkingSpot>[];
+    String? officialWarning;
+    try {
+      final rows = await client!.rpc<List<dynamic>>(
+        'official_viewport_spots',
+        params: bounds.toJson(),
+      );
+      official = rows
+          .map((e) => ParkingSpot.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } catch (_) {
+      officialWarning = '縣市公告的重機專用格暫時無法讀取';
+    }
     try {
       final response = await client!.functions.invoke(
         'tdx-parking',
@@ -99,17 +113,23 @@ class ParkingRepository {
       });
       return ParkingResult(
         [
+          ...official.take(500),
           ...community.take(500),
           ...tdx,
         ].where((s) => bounds.contains(s.lat, s.lng)).toList(),
-        warning: warning,
-        truncated: community.length > 500 || body['truncated'] == true,
+        warning: warning ?? officialWarning,
+        truncated:
+            official.length > 500 ||
+            community.length > 500 ||
+            body['truncated'] == true,
       );
     } catch (_) {
       return ParkingResult(
-        community.take(500).toList(),
-        warning: '官方停車資料暫時無法讀取，目前僅顯示社群回報',
-        truncated: community.length > 500,
+        [...official.take(500), ...community.take(500)],
+        warning: officialWarning == null
+            ? 'TDX 停車資料暫時無法讀取，目前僅顯示社群回報與縣市公告'
+            : '官方停車資料暫時無法讀取，目前僅顯示社群回報',
+        truncated: official.length > 500 || community.length > 500,
       );
     }
   }

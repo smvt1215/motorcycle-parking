@@ -270,6 +270,8 @@ class _SpotSheetState extends State<_SpotSheet> {
                           ? '範例資料'
                           : spot.source == 'tdx'
                           ? 'TDX 官方資料'
+                          : spot.source == 'official'
+                          ? '縣市公告（管理者整理）'
                           : spot.source == 'import'
                           ? '授權匯入：${spot.sourceName}'
                           : '社群回報'}',
