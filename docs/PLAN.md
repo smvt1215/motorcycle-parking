@@ -62,7 +62,7 @@ README.md                             # 安裝、Supabase 建置、TDX 金鑰申
 ## 主要套件
 `flutter_map`, `latlong2`, `flutter_map_marker_cluster`, `geolocator`, `flutter_riverpod`, `go_router`,
 `supabase_flutter`, `shared_preferences`, `url_launcher`（跳 Google/Apple 地圖導航）, `flutter_local_notifications`（計時提醒）。
-UI：`cupertino_native_better`（iOS 原生 Liquid Glass 元件）、`material_3_expressive`（M3 Expressive 元件）、`dynamic_color`（Android 動態配色）。
+UI：`material_ui`、`cupertino_ui`（Flutter 官方設計套件，取代框架內建的 `flutter/material.dart`、`flutter/cupertino.dart`）、`cupertino_native_better`（iOS 原生 Liquid Glass 元件）、`material_3_expressive`（補官方尚未提供的 M3 Expressive 元件）、`dynamic_color`（Android 動態配色）。需 Flutter ≥ 3.47（`material_ui` 的下限）。
 
 ## UI 設計規範（雙平台）
 目標：iOS 看起來像 iOS、Android 看起來像 Android，各自符合最新設計規範；內容、資訊架構與品牌一致。
@@ -70,11 +70,15 @@ UI：`cupertino_native_better`（iOS 原生 Liquid Glass 元件）、`material_3
 ### 現況限制（2026-10 查證）
 | 平台 | 最新規範 | Flutter 官方支援 | 對策 |
 |---|---|---|---|
-| iOS | **Liquid Glass**（iOS 26 推出；iOS 27 調整：預設透明度降低、系統設定可調玻璃強度） | 無。Flutter 自繪畫面，不會自動套用；官方表示開發中但無時程（[flutter#170310](https://github.com/flutter/flutter/issues/170310)） | 導覽與控制元件以 `cupertino_native_better` 嵌入**原生** UIKit 元件 |
-| Android | **Material 3 Expressive**（形狀、彈簧動態、浮動工具列、強調字級） | 尚未提供。官方 2026-06 表示將在 Material 從核心框架拆出、成為 `flutter/packages` 中的獨立套件後逐步推出，尚無時程（[flutter#168813](https://github.com/flutter/flutter/issues/168813)） | 先用 Material 3 主題 + `material_3_expressive` 元件；官方套件推出後改用 |
+| iOS | **Liquid Glass**（iOS 26 推出；iOS 27 調整：預設透明度降低、系統設定可調玻璃強度） | 無。官方 [`cupertino_ui`](https://pub.dev/packages/cupertino_ui) 套件已發布（2026-10，1.1.2），但尚未包含 Liquid Glass；Flutter 自繪畫面，不會自動套用（[flutter#170310](https://github.com/flutter/flutter/issues/170310)） | 導覽與控制元件以 `cupertino_native_better` 嵌入**原生** UIKit 元件 |
+| Android | **Material 3 Expressive**（形狀、彈簧動態、浮動工具列、強調字級） | 部分。官方 [`material_ui`](https://pub.dev/packages/material_ui) 套件已發布（2026-10，1.6.0，取代框架內建 Material），提供 `StyleVariant.material3Expressive`，官方標示仍在開發中、會陸續加入 Expressive 功能（[flutter#168813](https://github.com/flutter/flutter/issues/168813)） | 以 `material_ui` 為基礎並採用 `material3Expressive` 樣式；官方尚未提供的 Expressive 元件才用 `material_3_expressive` 補（該套件本身也建立在 `material_ui` 上） |
 
 ### 自適應元件層 `lib/ui/adaptive/`
-畫面只使用這一層的元件，不直接呼叫平台套件；Flutter 官方支援推出後只需替換這一層。開始實作時以及之後每次升級 Flutter 時，重新確認官方 Material（M3 Expressive）與 Cupertino（Liquid Glass）套件的進度，已可用就改用官方實作、移除第三方套件。APP 最低支援 iOS 15（`cupertino_native_better` 的下限），iOS 26 以上才使用原生 Liquid Glass。
+畫面只使用這一層的元件，不直接呼叫平台套件；官方支援補齊後只需替換這一層。
+- **一律使用官方獨立套件**：全專案只 import `package:material_ui/material_ui.dart` 與 `package:cupertino_ui/cupertino_ui.dart`，**禁止** import `package:flutter/material.dart`、`package:flutter/cupertino.dart`，避免同時存在兩套主題與在地化設定（`material_3_expressive` 也明文要求）。在地化改用 `material_ui` 提供的 `GlobalMaterialLocalizations`（繁體中文）。CI 加一道檢查（只掃描本專案的 `lib/`、`test/`、`integration_test/`，不含第三方套件），發現禁止的 import 即失敗。
+- **實作前的相容性驗證**：`cupertino_native_better` 只依賴 Flutter SDK，可能仍使用框架內建的 Cupertino；開始實作時先做最小雛形，確認它與 `cupertino_ui` 並用時主題、型別、在地化正常。若不相容，原生元件的顏色等參數改由設計 token 明確傳入，不依賴繼承的主題。
+- **缺口清單**：實作時列出 `material_ui` 的 `material3Expressive` 尚未涵蓋、需由 `material_3_expressive` 補的元件；每次升級 `material_ui`／`cupertino_ui` 時重新檢查，官方已提供就移除第三方套件（`cupertino_ui` 加入 Liquid Glass 後同理替換 `cupertino_native_better`）。
+- APP 最低支援 iOS 15（`cupertino_native_better` 的下限），iOS 26 以上才使用原生 Liquid Glass。
 
 | 元件 | iOS 26+ | iOS 15–18 | Android |
 |---|---|---|---|
@@ -96,7 +100,7 @@ UI：`cupertino_native_better`（iOS 原生 Liquid Glass 元件）、`material_3
   - 不經路由的自訂彈出層，開啟／關閉時呼叫 `CNTabBarRouteObserver.markAnyModalActive()`／`markAnyModalInactive()`。
 
 ### Android 規則（Material 3 Expressive）
-- `useMaterial3`；Android 12+ 使用桌布動態配色（`dynamic_color`），其餘使用品牌種子色。
+- 以 `material_ui` 的 `StyleVariant.material3Expressive` 為主題樣式；Android 12+ 使用桌布動態配色（`dynamic_color`），其餘使用品牌種子色。
 - Edge-to-edge（Android 15+ 強制）；支援預測式返回手勢。
 - Material Symbols 圖示、Expressive 形狀與彈簧動態；點擊區域 ≥ 48dp。
 
@@ -207,3 +211,5 @@ UI：`cupertino_native_better`（iOS 原生 Liquid Glass 元件）、`material_3
 - [Flutter：Material 3 Expressive 追蹤 issue](https://github.com/flutter/flutter/issues/168813)
 - [cupertino_native_better（pub.dev）](https://pub.dev/packages/cupertino_native_better)
 - [material_3_expressive（pub.dev）](https://pub.dev/packages/material_3_expressive)
+- [material_ui（Flutter 官方，pub.dev）](https://pub.dev/packages/material_ui)
+- [cupertino_ui（Flutter 官方，pub.dev）](https://pub.dev/packages/cupertino_ui)
