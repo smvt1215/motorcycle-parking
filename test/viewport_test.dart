@@ -39,6 +39,26 @@ class FailingRules extends RulesRepository {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test('收藏只保留仍可見的社群點位，官方點位不受影響', () {
+    ParkingSpot fav(String id, String source) => ParkingSpot.fromJson({
+      'id': id,
+      'name': id,
+      'city': '臺北市',
+      'lat': 25.03,
+      'lng': 121.56,
+      'space_type': 'paidMotorcycle',
+      'source': source,
+    });
+    final kept = visibleFavorites(
+      [
+        fav('visible', 'community'),
+        fav('hidden', 'community'),
+        fav('tdx:1', 'tdx'),
+      ],
+      {'visible'},
+    );
+    expect(kept.map((s) => s.id), ['visible', 'tdx:1']);
+  });
   test('雲端收藏同步失敗的提示在停車資料更新後仍保留', () async {
     SharedPreferences.setMockInitialValues({});
     final store = AppStore(

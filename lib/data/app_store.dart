@@ -14,6 +14,16 @@ import '../domain/map_viewport.dart';
 import '../models/parking.dart';
 import 'repositories.dart';
 
+/// Favorites are stored as snapshots; drop community spots that moderation
+/// has since hidden or deleted (no longer readable). TDX and official spots
+/// come from their own sources and stay as saved.
+List<ParkingSpot> visibleFavorites(
+  List<ParkingSpot> favorites,
+  Set<String> visibleCommunityIds,
+) => favorites
+    .where((s) => s.source != 'community' || visibleCommunityIds.contains(s.id))
+    .toList();
+
 final storeProvider = ChangeNotifierProvider<AppStore>(
   (ref) => throw StateError('AppStore 尚未初始化'),
 );
@@ -212,6 +222,25 @@ class AppStore extends ChangeNotifier {
       } catch (_) {
         if (key != favoritesKey) return;
         error = favoritesWarning = '雲端收藏同步失敗，顯示本機收藏';
+      }
+    }
+    final community = [
+      for (final s in favorites)
+        if (s.source == 'community') s.id,
+    ];
+    if (client != null && community.isNotEmpty) {
+      try {
+        // RLS hides moderated spots, so only still-visible ids come back.
+        final rows = await client!
+            .from('community_spots')
+            .select('id')
+            .inFilter('id', community);
+        if (key != favoritesKey) return;
+        favorites = visibleFavorites(favorites, {
+          for (final r in rows) r['id'] as String,
+        });
+      } catch (_) {
+        // Keep the saved snapshots when the check itself fails.
       }
     }
     notifyListeners();
