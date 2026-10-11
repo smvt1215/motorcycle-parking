@@ -17,16 +17,20 @@ const allowedColor = Color(0xff186348);
 const conditionalColor = Color(0xff865500);
 const deniedColor = Color(0xffa13042);
 
+/// The view's most likely action is prominent (HIG prominent style, M3
+/// filled); pass [secondary] for alternatives shown beside it.
 class AdaptiveButton extends StatelessWidget {
   const AdaptiveButton({
     super.key,
     required this.label,
     required this.onPressed,
     this.icon,
+    this.secondary = false,
   });
   final String label;
   final VoidCallback? onPressed;
   final IconData? icon;
+  final bool secondary;
   @override
   Widget build(BuildContext context) {
     final child = Row(
@@ -44,10 +48,21 @@ class AdaptiveButton extends StatelessWidget {
               onPressed: onPressed,
               enabled: onPressed != null,
               tint: Theme.of(context).colorScheme.primary,
+              config: CNButtonConfig(
+                style: secondary
+                    ? CNButtonStyle.glass
+                    : CNButtonStyle.prominentGlass,
+              ),
             )
           : isCupertino
-          ? cu.CupertinoButton.filled(onPressed: onPressed, child: child)
-          : M3EButton(onPressed: onPressed, child: child),
+          ? secondary
+                ? cu.CupertinoButton.tinted(onPressed: onPressed, child: child)
+                : cu.CupertinoButton.filled(onPressed: onPressed, child: child)
+          : M3EButton(
+              onPressed: onPressed,
+              style: secondary ? M3EButtonStyle.tonal : M3EButtonStyle.filled,
+              child: child,
+            ),
     );
   }
 }

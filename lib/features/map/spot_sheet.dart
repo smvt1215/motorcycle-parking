@@ -396,6 +396,7 @@ class _DetailActions extends StatelessWidget {
               width: width,
               child: AdaptiveButton(
                 label: '修改建議',
+                secondary: true,
                 icon: Icons.edit_outlined,
                 onPressed: onSuggest,
               ),

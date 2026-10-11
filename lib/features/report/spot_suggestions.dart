@@ -105,6 +105,7 @@ Future<void> showSpotSuggestions(
               width: double.infinity,
               child: AdaptiveButton(
                 label: '取消',
+                secondary: true,
                 onPressed: () => Navigator.pop(ctx),
               ),
             ),
