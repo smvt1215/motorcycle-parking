@@ -30,11 +30,13 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
 ## Workflow 一覽
 | 檔案 | 觸發 | Runner | 內容 |
 |---|---|---|---|
-| `ci.yml` | PR、push 到 `main` | Linux | Flutter 檢查與測試、Supabase 檢查、Android 建置 |
-| `ios.yml` | PR、push 到 `main`、手動 | macOS | iOS 模擬器建置與截圖（見 PLAN.md「UI 設計規範 › 驗證」） |
-| `android.yml` | PR、push 到 `main`、手動 | Linux（模擬器硬體加速） | Android 模擬器截圖（API 36 與 API 30） |
+| `ci.yml` | PR、push 到 `main` | Linux | 跨平台檢查：Flutter 檢查與測試、Web 建置、Supabase 檢查 |
+| `android.yml` | PR、push 到 `main`、手動 | Linux（模擬器硬體加速） | Android APK 建置、Android 11／16 模擬器截圖 |
+| `ios.yml` | PR、push 到 `main`、手動 | macOS | iOS Release 建置（不簽章）、iOS 26／27 模擬器建置與截圖（見 PLAN.md「UI 設計規範 › 驗證」） |
 | `cd-staging.yml` | `main` 上的三條 CI 都成功後（`workflow_run`） | Linux + macOS | 部署 staging 後端、產生 Android 測試 APK 與 iOS 測試 IPA（不上傳商店） |
 | `release.yml` | 推送 tag `v*` | Linux + macOS | 部署 production 後端、上架兩平台、建立 GitHub Release |
+
+Workflow 依平台分工：跨平台檢查放 `ci.yml`，各平台的建置與模擬器測試放各自的 workflow，並共用同一套路徑判斷（只改文件時略過）。
 
 ## CI（每個 PR）
 ### `ci.yml`（Linux）
@@ -56,16 +58,17 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
      - 每日回報上限
      - 隱藏待審的門檻
    - Edge Function：`deno fmt --check`、`deno lint`、`deno test`（TDX 正規化與 `submit-report` 限流邏輯，用固定的範例 JSON）。
-5. **Android 建置**：`flutter build apk --debug`，確認 Gradle 設定沒壞。
-6. **版本號檢查**：`pubspec.yaml` 的 `version` 必須**大於**最新的 release tag（見下方「版本號規則」）。
+5. **版本號檢查**：`pubspec.yaml` 的 `version` 必須**大於**最新的 release tag（見下方「版本號規則」）。
 
 ### `ios.yml`（macOS）
 沿用 PLAN.md 已定的設計：
+- `iOS Release 建置`：`flutter build ios --release --no-codesign`，驗證 Release 設定（`Info.plist`、AOT）；模擬器只涵蓋 Debug。不需要簽章。
 - 模擬器建置，不需要簽章。
 - iOS 26／27 模擬器截圖。
 - 路徑判斷寫在 job 內：只改文件時直接回報成功；改到 `ios.yml` 本身時照常實際建置。
 
 ### `android.yml`（Linux，Android 模擬器）
+- `Android APK 建置`：`flutter build apk --debug`，確認 Gradle 設定沒壞。
 - 在 Linux runner 啟用 KVM，以 Android 模擬器執行 `integration_test/` 截圖情境，與 iOS 共用同一組情境。
 - 模擬器：Android 16（API 36）與 Android 11（API 30），各跑淺色與深色；映像版本實作時確認。
 - 重點檢查：桌布動態配色（API 36）與品牌種子色後備（API 30）、edge-to-edge、預測式返回手勢、繁中字型。
@@ -74,8 +77,8 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
 - 模擬器測試較慢且偶有不穩：開機逾時算基礎設施失敗，可重跑一次；測試本身失敗一律視為真實失敗，不得略過。
 
 ### 必要檢查（main ruleset）
-- 新增一個彙總 job `ci-ok`：`needs` 所有 CI job，`if: always()`，任何一個失敗或被取消就失敗。
-- ruleset 只把 `ci-ok`（以及 `ios.yml`、`android.yml` 的對應彙總 job）設為必要檢查。這樣新增或拆分 job 時不必改 ruleset，被路徑判斷略過的 job 也不會卡住合併。
+- 每個 workflow 有一個彙總 job：`CI 全部通過`（`ci-ok`）、`Android 全部通過`（`android-ok`）、`iOS 全部通過`（`ios-ok`）。`needs` 該 workflow 所有 job，`if: always()`，任何一個失敗或被取消就失敗。
+- ruleset 只把這三個彙總 job 的顯示名稱（check 名稱）設為必要檢查。這樣新增或拆分 job 時不必改 ruleset，被路徑判斷略過的 job 也不會卡住合併。
 - 這與 CLAUDE.md 的「全綠」定義一致：CI 通過才算全綠。
 
 ## CD：staging（每次合併到 main）

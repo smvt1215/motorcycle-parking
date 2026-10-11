@@ -10,6 +10,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   quality:
+    name: Flutter 檢查（格式／分析／測試／Web）
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -44,6 +45,7 @@ jobs:
           path: coverage/lcov.info
           if-no-files-found: error
   backend:
+    name: 後端（Edge Functions／資料庫 RLS）
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -79,27 +81,11 @@ jobs:
       - name: Stop local stack
         if: always() && steps.changes.outputs.run == 'true'
         run: supabase stop
-  android-build:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - id: versions
-        run: echo "flutter=$(cat .flutter-version)" >> "$GITHUB_OUTPUT"
-      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
-        with:
-          distribution: temurin
-          java-version: '17'
-      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
-        with:
-          flutter-version: ${{ steps.versions.outputs.flutter }}
-          cache: true
-      - run: flutter pub get --enforce-lockfile
-      - run: flutter build apk --debug
   ci-ok:
+    name: CI 全部通過
     runs-on: ubuntu-24.04
     if: always()
-    needs: [quality, backend, android-build]
+    needs: [quality, backend]
     steps:
       - env:
           RESULTS: ${{ toJSON(needs) }}

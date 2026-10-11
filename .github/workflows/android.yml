@@ -9,13 +9,45 @@ concurrency:
   group: android-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  apk:
+    name: Android APK 建置
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - id: changes
+        run: python3 tool/ci_changes.py android >> "$GITHUB_OUTPUT"
+      - id: versions
+        if: steps.changes.outputs.run == 'true'
+        run: echo "flutter=$(cat .flutter-version)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        if: steps.changes.outputs.run == 'true'
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        if: steps.changes.outputs.run == 'true'
+        with:
+          flutter-version: ${{ steps.versions.outputs.flutter }}
+          cache: true
+      - if: steps.changes.outputs.run == 'true'
+        run: flutter pub get --enforce-lockfile
+      - if: steps.changes.outputs.run == 'true'
+        run: flutter build apk --debug
   emulator:
+    name: Android ${{ matrix.version }} 模擬器
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
-        api: [30, 36]
+        include:
+          - api: 30
+            version: '11'
+          - api: 36
+            version: '16'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -60,10 +92,12 @@ jobs:
           path: artifacts/screenshots
           if-no-files-found: error
   android-ok:
+    name: Android 全部通過
     runs-on: ubuntu-24.04
     if: always()
-    needs: [emulator]
+    needs: [apk, emulator]
     steps:
       - env:
-          RESULT: ${{ needs.emulator.result }}
-        run: test "$RESULT" = success
+          APK: ${{ needs.apk.result }}
+          EMULATOR: ${{ needs.emulator.result }}
+        run: test "$APK" = success && test "$EMULATOR" = success
