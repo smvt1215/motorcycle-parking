@@ -99,9 +99,9 @@ UI：`material_ui`、`cupertino_ui`（Flutter 官方設計套件，取代框架�
   - 在根 `GoRouter` 的 `observers` 註冊 `CNTabBarRouteObserver`。
   - iOS 的 sheet 一律要讓套件知道它的位置：
     - 一般 sheet（回報表單等）以 `CNBottomSheet.showCupertino` 開啟（自動加上 `CNSheetGeometryProbe`）。
-    - 車位詳情需要停在半高／全高，但 `showCupertinoSheet`（`CNBottomSheet.showCupertino` 的底層）只有固定 `topGap` 與拖曳關閉，沒有可停高度（[API](https://pub.dev/documentation/cupertino_ui/latest/cupertino_ui/showCupertinoSheet.html)）。因此改用 `CNBottomSheet.show(isScrollControlled: true, ...)`（底層為 `showModalBottomSheet`，路由型別 `ModalBottomSheetRoute`，並自動加上 `CNSheetGeometryProbe`），內容使用 `DraggableScrollableSheet`（`snap: true`，停點 0.5／1.0），外觀依 iOS 規範調整（圓角、拖曳把手、背景材質）。
-    - `CNTabBarRouteObserver` 只把**型別名稱含 `Sheet`** 的路由視為 modal 並隱藏分頁列（[原始碼](https://github.com/gunumdogdu/cupertino_native_better/blob/main/lib/components/tab_bar.dart)），`CNSheetGeometryProbe` 只回報位置、不會觸發隱藏。因此不得用 `PageRouteBuilder` 等一般路由開 sheet；若真的需要自訂路由，路由類別名稱須含 `Sheet`，或在開啟／關閉時呼叫 `markAnyModalActive()`／`markAnyModalInactive()`。
-  - 不經路由的自訂彈出層，開啟／關閉時呼叫 `CNTabBarRouteObserver.markAnyModalActive()`／`markAnyModalInactive()`。
+    - 車位詳情需要停在半高／全高，但 `showCupertinoSheet`（`CNBottomSheet.showCupertino` 的底層）只有固定 `topGap` 與拖曳關閉，沒有可停高度（[API](https://pub.dev/documentation/cupertino_ui/latest/cupertino_ui/showCupertinoSheet.html)）。因此改用 `CNBottomSheet.show(isScrollControlled: true, ...)`（底層為 `showModalBottomSheet`，路由型別 `ModalBottomSheetRoute`，並自動加上 `CNSheetGeometryProbe`），內容使用 `DraggableScrollableSheet`，設定 `initialChildSize: 0.5`、`minChildSize: 0.5`、`maxChildSize: 1.0`、`snap: true`（最小與最大值會自動成為停點，不另列 `snapSizes`；預設 `minChildSize` 為 0.25，不設定會多出四分之一高的停點），外觀依 iOS 規範調整（圓角、拖曳把手、背景材質）。
+    - `CNTabBarRouteObserver` 只把**型別名稱含 `Sheet`** 的路由視為 modal 並隱藏分頁列（[原始碼](https://github.com/gunumdogdu/cupertino_native_better/blob/main/lib/components/tab_bar.dart)），`CNSheetGeometryProbe` 只回報位置、不會觸發隱藏。因此不得用 `PageRouteBuilder` 等一般路由開 sheet；若真的需要自訂路由，路由類別名稱必須含 `Sheet`。
+  - 不使用不經路由的彈出層（例如 `Scaffold.showBottomSheet`）：`markAnyModalActive()`／`markAnyModalInactive()` 只增減 `anyModalDepth`（處理玻璃按鈕光暈與搜尋型分頁列），一般 `CNTabBar` 監聽的是只由 `*Sheet*` 路由觸發的 `modalDepth`，手動呼叫無法讓分頁列隱藏。若日後確有需要，除了呼叫上述方法處理光暈，彈出層也不得與分頁列重疊。
 
 ### Android 規則（Material 3 Expressive）
 - 以 `material_ui` 的 `StyleVariant.material3Expressive` 為主題樣式；Android 12+ 使用桌布動態配色（`dynamic_color`），其餘使用品牌種子色。
