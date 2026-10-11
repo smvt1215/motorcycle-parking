@@ -76,7 +76,8 @@ UI：`material_ui`、`cupertino_ui`（Flutter 官方設計套件，取代框架�
 ### 自適應元件層 `lib/ui/adaptive/`
 畫面只使用這一層的元件，不直接呼叫平台套件；官方支援補齊後只需替換這一層。
 - **一律使用官方獨立套件**：全專案只 import `package:material_ui/material_ui.dart` 與 `package:cupertino_ui/cupertino_ui.dart`，**禁止** import `package:flutter/material.dart`、`package:flutter/cupertino.dart`，避免同時存在兩套主題與在地化設定（`material_3_expressive` 也明文要求）。在地化改用 `material_ui` 提供的 `GlobalMaterialLocalizations`（繁體中文）。CI 加一道檢查（只掃描本專案的 `lib/`、`test/`、`integration_test/`，不含第三方套件），發現禁止的 import 即失敗。
-- **實作前的相容性驗證**：`cupertino_native_better` 只依賴 Flutter SDK，可能仍使用框架內建的 Cupertino；開始實作時先做最小雛形，確認它與 `cupertino_ui` 並用時主題、型別、在地化正常。若不相容，原生元件的顏色等參數改由設計 token 明確傳入，不依賴繼承的主題。
+- **舊版相依的相容橋接（必要）**：`cupertino_native_better` 仍 import 框架內建的 `flutter/cupertino.dart` 與 `flutter/material.dart`（例如 `CNBottomSheet` 內部呼叫舊版 `showCupertinoSheet`），其主題與在地化型別和官方新套件不同。依 [`cupertino_ui`](https://pub.dev/packages/cupertino_ui#migrating-existing-code-to-this-package)／[`material_ui`](https://pub.dev/packages/material_ui#migrating-existing-code-to-this-package) 遷移指南第 3 步，在根 App 的 `builder` 同時包上 `MaterialUiCompatibilityBridge` 與 `CupertinoUiCompatibilityBridge`，讓舊版元件取得正確的 `ThemeData`／`CupertinoThemeData` 與 `MaterialLocalizations`／`CupertinoLocalizations`。`builder` 包住整個 Navigator，因此經路由開啟的 sheet 也在橋接範圍內。
+- **實作前的相容性驗證**：開始實作時先做最小雛形，在橋接下確認 `CNTabBar`、`CNBottomSheet` 的主題、深淺色與繁中在地化正確（並納入 iOS 截圖測試）。原生元件的顏色仍以設計 token 明確傳入作為額外保險，但不取代橋接。
 - **缺口清單**：實作時列出 `material_ui` 的 `material3Expressive` 尚未涵蓋、需由 `material_3_expressive` 補的元件；每次升級 `material_ui`／`cupertino_ui` 時重新檢查，官方已提供就移除第三方套件（`cupertino_ui` 加入 Liquid Glass 後同理替換 `cupertino_native_better`）。
 - APP 最低支援 iOS 15（`cupertino_native_better` 的下限），iOS 26 以上才使用原生 Liquid Glass。
 
