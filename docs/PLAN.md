@@ -88,6 +88,10 @@ UI：`cupertino_native_better`（iOS 原生 Liquid Glass 元件）、`material_3
 - 原生元件會自動跟隨系統的玻璃強度（iOS 27）、「減少透明度」「增加對比」設定；Flutter 自繪的部分讀取無障礙設定（`MediaQuery` 的 high contrast、disable animations 等），必要時改用不透明背景與無動態效果。
 - 使用 SF Symbols；支援動態字級（Dynamic Type）；點擊區域 ≥ 44pt。
 - 原生元件以 platform view 疊在地圖上有效能成本：數量控制在分頁列與少數按鈕，實作時量測捲動與縮放幀率。
+- **原生元件與彈出層的疊放協調**（套件[必要設定](https://pub.dev/packages/cupertino_native_better#required-setup-register-cntabbarrouteobserver)）：原生元件疊在 Flutter 畫面下方合成，若不協調，分頁列等原生元件會蓋在 sheet 上（例如遮住回報表單的輸入框），玻璃光暈也會透出。
+  - 在根 `GoRouter` 的 `observers` 註冊 `CNTabBarRouteObserver`。
+  - `AdaptiveSheet` 在 iOS 一律以 `CNBottomSheet.showCupertino` 開啟（自動加上 `CNSheetGeometryProbe`）；需直接使用 Flutter 原生 sheet API 時，以 `CNSheetGeometryProbe` 包住 sheet 內容。
+  - 不經路由的自訂彈出層，開啟／關閉時呼叫 `CNTabBarRouteObserver.markAnyModalActive()`／`markAnyModalInactive()`。
 
 ### Android 規則（Material 3 Expressive）
 - `useMaterial3`；Android 12+ 使用桌布動態配色（`dynamic_color`），其餘使用品牌種子色。
@@ -102,6 +106,7 @@ UI：`cupertino_native_better`（iOS 原生 Liquid Glass 元件）、`material_3
 
 ### 驗證
 - Golden 截圖測試：每個主要畫面 × iOS / Android × 淺色 / 深色。
+- iOS 必測情境：在地圖頁開啟車位詳情與回報表單 sheet，確認分頁列與玻璃按鈕不會蓋住 sheet、輸入框可見可輸入、關閉後原生元件正常復原。
 - 此開發容器無 macOS，**無法在 iOS 模擬器驗證原生 Liquid Glass 元件**；需在 Mac 上以 iOS 26 / 27 模擬器或實機確認，或由 CI 的 macOS runner 執行 iOS 建置與截圖。
 - Android 以 Android 16 模擬器確認 Expressive 元件、動態配色、edge-to-edge 與預測式返回。
 
