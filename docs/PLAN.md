@@ -57,6 +57,10 @@ Flutter App ──► Supabase Edge Function `tdx-parking` ──► TDX API（�
 ### Auth（本機）
 - `config.toml` 開啟匿名登入；CAPTCHA 在本機關閉（staging／production 在 Supabase Dashboard 開啟 Turnstile）。
 - **Google 登入**：本機使用另一組開發用 Google OAuth client（redirect URI 為 `http://127.0.0.1:54321/auth/v1/callback`），client secret 放 **repo 根目錄**的 `.env`（不進版控，根目錄附 `.env.example`），`config.toml` 以 `env()` 引用；Supabase CLI 的 `env()` 讀取專案根目錄（`supabase/` 的上一層）的 `.env`，不是 `supabase/.env`（[說明](https://supabase.com/docs/guides/local-development/managing-config#using-secrets-inside-configtoml)）。
+  - OAuth 完成後，瀏覽器會被導向 `127.0.0.1:54321` 的 callback，再回到 App 的 deep link（`config.toml` 的 `additional_redirect_urls` 要列入 App 的 callback scheme）。在手機上 `127.0.0.1` 指的是手機本身，所以裝置必須能以 `127.0.0.1:54321` 連到電腦：
+    - iOS 模擬器、Web：與電腦共用網路，直接可用。
+    - Android 模擬器與 USB 連接的 Android 實機：`adb reverse tcp:54321 tcp:54321`，讓裝置上的 `127.0.0.1:54321` 轉到電腦。
+    - iPhone 實機：沒有對應的轉接方式，Google 也不接受區網 IP 的明文 HTTP redirect；iPhone 實機的 Google 登入改在 staging 測試（真的需要本機測試時，用 HTTPS tunnel 並把 redirect URI 與 `config.toml` 改成 tunnel 網址）。
 - **Apple 登入**需要 HTTPS 網域，本機不設定，只在 staging 驗證。
 - 需要多個帳號的情境（兩位合格使用者確認、新帳號權重低、每帳號／每 IP 限流）以 pgTAP 與 Edge Function 測試搭配 seed 帳號覆蓋，不靠手動登入多個帳號。
 
@@ -70,8 +74,8 @@ Flutter App ──► Supabase Edge Function `tdx-parking` ──► TDX API（�
 - 以 `--dart-define-from-file=config/local.json` 帶入 `SUPABASE_URL`／`SUPABASE_ANON_KEY`；repo 只放 `config/local.example.json`，實際檔案不進版控。
 - 位址依執行環境而不同：
   - iOS 模擬器、Web（`flutter run -d chrome`）：`http://127.0.0.1:54321`
-  - Android 模擬器：`http://10.0.2.2:54321`（模擬器內指向電腦本機）
-  - 實機：電腦的區網 IP（同一個 Wi-Fi，電腦防火牆放行 54321）
+  - Android 模擬器、USB 連接的 Android 實機：先執行 `adb reverse tcp:54321 tcp:54321`，再用 `http://127.0.0.1:54321`（與 Google 登入的 callback 一致）；不需要登入時也可用模擬器的 `http://10.0.2.2:54321`
+  - iPhone 實機：電腦的區網 IP（同一個 Wi-Fi，電腦防火牆放行 54321）；Google 登入見上方「Auth（本機）」的限制
 - 本機後端是明文 HTTP，**只在 Debug 建置允許**：
   - Android：`network_security_config` 只放在 `debug` source set。
   - iOS：只在 Debug 設定的 Info.plist 加 ATS 例外（`NSAllowsLocalNetworking`）；實機連區網需要 `NSLocalNetworkUsageDescription`（iOS 14 起的區域網路權限）。實作時確認實際需要的鍵值。
