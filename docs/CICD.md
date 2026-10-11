@@ -6,7 +6,8 @@
 - 平台：**GitHub Actions**（公開 repo 使用 GitHub 標準 runner 不收費，含 macOS）。
 - 簽章與上架工具：**fastlane**（iOS 用 App Store Connect API key，Android 用 Google Play 服務帳號）。
 - 後端環境：**Supabase staging + production** 兩個專案。
-- 發版觸發：推送版本 tag `vX.Y.Z`；合併到 `main` 只發測試版。
+- 發版觸發：推送版本 tag `vX.Y.Z`；合併到 `main` 只更新 staging 後端並產生測試用 APK。
+- **商店只上架正式版**：staging 建置一律不上傳 Google Play 或 TestFlight，測試者不會被商店替換版本，也不會誤連到另一個後端。
 - 已具備：Apple Developer Program、Google Play Console。
 
 ## 整體流程
@@ -15,7 +16,7 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
                                          │
                                          ▼
                          CD staging：Supabase staging 部署
-                                   + TestFlight 內部測試 / Play 內部測試（連 staging 後端）
+                                   + 連 staging 的 Android 測試 APK（workflow artifact，直接安裝）
                                          │
                        推送 tag vX.Y.Z ──┘
                                          ▼
@@ -30,7 +31,7 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
 | `ci.yml` | PR、push 到 `main` | Linux | Flutter 檢查與測試、Supabase 檢查、Android 建置 |
 | `ios.yml` | PR、push 到 `main`、手動 | macOS | iOS 模擬器建置與截圖（見 PLAN.md「UI 設計規範 › 驗證」） |
 | `android.yml` | PR、push 到 `main`、手動 | Linux（模擬器硬體加速） | Android 模擬器截圖（API 36 與 API 30） |
-| `cd-staging.yml` | `main` 上的三條 CI 都成功後（`workflow_run`） | Linux + macOS | 部署 staging 後端、上傳兩平台內部測試版 |
+| `cd-staging.yml` | `main` 上的三條 CI 都成功後（`workflow_run`） | Linux | 部署 staging 後端、產生 Android 測試 APK（不上傳商店） |
 | `release.yml` | 推送 tag `v*` | Linux + macOS | 部署 production 後端、上架兩平台、建立 GitHub Release |
 
 ## CI（每個 PR）
@@ -87,41 +88,33 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
    - **只部署 `main` 最新的 commit**：檢查 `workflow_run.head_sha` 是否為 `main` 最新的 commit，做兩次：
      - 第一次在不排隊的檢查 job 裡，與上面的 CI 結果查詢一起做，不是最新就直接結束，不進佇列。否則較舊 commit 晚到的重複觸發，可能取代佇列中最新 commit 的執行。
      - 第二次在部署 job 取得執行權後再確認一次。
-     - 只要不是最新就略過部署，因為之後的 commit 會帶著更新的程式碼部署。如此 staging 不會被舊程式碼覆蓋，也不會上傳比已上傳更小的建置號。
+     - 只要不是最新就略過部署，因為之後的 commit 會帶著更新的程式碼部署。如此 staging 不會被舊程式碼覆蓋。
    - 部署 job 的成功或略過要分得清楚：只有實際完成部署才算「已部署」，供正式發版檢查。
 1. **後端**：
    - `supabase link --project-ref $STAGING_REF`
    - `supabase db push` 套用新 migration
    - `supabase functions deploy` 部署 Edge Function
-2. **建置號**：`commit 數 × 100 + 通道 × 10 + 嘗試次數`。
-   - commit 數 = `git rev-list --count HEAD`，checkout 必須設定 `fetch-depth: 0` 取得完整歷史（`actions/checkout` 預設只抓 1 個 commit，計數會永遠是 1）；計算前檢查 `git rev-parse --is-shallow-repository` 為 `false`，否則讓流程失敗。通道：staging 為 0、正式版為 1；嘗試次數 = `github.run_attempt`，上限 9，超過就讓流程失敗並提示人工處理。
-   - 單調遞增；staging 與正式版通道不同，不會撞號；重跑同一個 workflow 時嘗試次數會增加，所以會拿到新號碼。
-   - 遠低於 Android `versionCode` 上限 2,100,000,000（commit 數需少於約 2,100 萬）。
-   - **每個平台各自冪等**：上傳前先向商店查詢，商店裡已有落在 `commit 數 × 100 + 通道 × 10 + 1～9` 範圍內的建置號，就代表這個 commit、這個通道已上傳過，略過該平台。查詢必須涵蓋**完整範圍**，不能只看「最新」的建置：
-     - **iOS**：不用 `latest_testflight_build_number`，它只回傳最新的一個建置，例如正式版上傳後就只看得到正式版的號碼，會漏掉同版本較早的 staging 建置。改在 fastlane lane 中用 App Store Connect API（Spaceship `ConnectAPI::Build`，或 `GET /v1/builds` 以建置號篩選），逐一查詢範圍內的 9 個號碼。
-     - **Android**：`google_play_track_version_codes` 只回傳單一軌道，所以要查詢所有軌道（internal、alpha、beta、production）後取聯集再比對範圍。
-     - 部分失敗時（例如 Android 成功、iOS 失敗）重跑，只會補傳失敗的平台。
-     - 不同 CI 觸發的多次執行也不會重複上傳。
-3. **Android**：
-   - 以 `--dart-define` 帶入 staging 的 Supabase URL／anon key。
-   - `flutter build appbundle --release`。
-   - fastlane `upload_to_play_store` 上傳到 **內部測試（internal）** 軌道。
-4. **iOS**：
-   - 同樣帶入 staging 設定，`flutter build ipa`。
-   - fastlane `upload_to_testflight`，只開給**內部測試人員**，不送外部審查。
-5. 後端部署（`db push`、`functions deploy`）本身可重複執行，重跑時再套用一次也不會出錯。
+   - 這些步驟可重複執行，重跑時再套用一次也不會出錯。
+2. **Android 測試 APK**（不上傳商店）：
+   - 以 `--dart-define` 帶入 staging 的 Supabase URL／anon key，`flutter build apk --release`。
+   - 使用獨立的 applicationId 後綴 `.staging`、APP 名稱加上「β」、圖示加上測試標記，可以和商店版並存，一眼分得出來。
+   - 以專用的 staging 簽章金鑰簽署，和正式版上傳金鑰分開。
+   - 上傳為 workflow artifact（保留 30 天），下載後直接安裝到手機測試。
+3. **iOS**：
+   - iOS 不經商店或 TestFlight 無法安裝到一般手機，所以 staging 階段不產生 iOS 安裝檔。
+   - iOS 的 staging 驗證靠 `ios.yml` 的模擬器截圖，以及開發者在自己的 Mac 上連 staging 執行。
 
 ## CD：正式發版（推送 tag `vX.Y.Z`）
 `release.yml`：
 1. **前置檢查**（Linux）：
-   - tag 指向的 commit 必須**就是 `main` 目前最新的 commit**，不能只是 `main` 的祖先。若 tag 打在較舊的 commit，正式版建置號會小於已上傳的較新 staging 建置，違反建置號遞增。
+   - tag 指向的 commit 必須**就是 `main` 目前最新的 commit**，不能只是 `main` 的祖先。staging 只部署 `main` 最新的 commit，打在較舊 commit 的 tag 可能從未在 staging 驗證過；同時也確保建置號大於前一次發版。
      - 這個檢查在流程開始時與人工核准之後**各做一次**，因為等待核准期間 `main` 可能已前進。
      - 不符合時流程失敗，並提示刪除 tag、在最新的 `main` 上重新打 tag。
      - 發版期間（從打 tag 到核准完成）暫停合併其他 PR。
    - `pubspec.yaml` 的 `version` 必須等於 tag 的版本號（例如 `1.2.0`）。
    - 該 commit 的 CI 必須全綠。
    - **該 commit 必須已成功部署到 staging**：查詢 `cd-staging.yml` 針對同一個 SHA 的執行，部署 job 必須實際成功，被略過不算。
-     - staging 還在跑：等它完成，最多 60 分鐘；逾時就失敗。這也確保 staging 較小的建置號會先上傳完，不會在正式版之後才上傳。
+     - staging 還在跑：等它完成，最多 60 分鐘；逾時就失敗。
      - staging 失敗或被略過：正式發版失敗，並提示先修好 staging。
 2. **人工核准**：
    - 綁定 GitHub Environment `production`，設定必須由你核准才會繼續。
@@ -130,7 +123,15 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
 3. **後端先行**：
    - production `supabase db push` 與 `functions deploy`。
    - 先部署後端，再上架 APP。
-4. **建置號**：同上公式，通道為 1；同樣先查詢商店，已上傳過的平台略過，部分失敗時可安全重跑。
+4. **建置號**：`commit 數 × 10 + 嘗試次數`（只有正式版會上傳商店，不需要通道位數）。
+   - commit 數 = `git rev-list --count HEAD`。checkout 必須設定 `fetch-depth: 0` 取得完整歷史，因為 `actions/checkout` 預設只抓 1 個 commit，計數會永遠是 1。計算前檢查 `git rev-parse --is-shallow-repository` 為 `false`，否則讓流程失敗。
+   - 嘗試次數 = `github.run_attempt`，上限 9，超過就讓流程失敗並提示人工處理。重跑時嘗試次數增加，會拿到新號碼。
+   - tag 必須在 `main` 最新 commit 上，所以每次發版的 commit 數都大於上一次，建置號單調遞增。
+   - 遠低於 Android `versionCode` 上限 2,100,000,000（commit 數需少於約 2.1 億）。
+   - **每個平台各自冪等**：上傳前先向商店查詢，已有落在 `commit 數 × 10 + 1～9` 範圍內的建置號，就代表這個版本已上傳過，略過該平台。查詢必須涵蓋**完整範圍**：
+     - **iOS**：不用 `latest_testflight_build_number`，它只回傳最新的一個建置。改在 fastlane lane 中用 App Store Connect API（Spaceship `ConnectAPI::Build`，或 `GET /v1/builds` 以建置號篩選），逐一查詢範圍內的 9 個號碼。
+     - **Android**：`google_play_track_version_codes` 只回傳單一軌道，所以要查詢所有軌道（internal、alpha、beta、production）後取聯集再比對。
+     - 部分失敗時（例如 Android 成功、iOS 失敗）重跑，只會補傳失敗的平台。
 5. **Android**：
    - 以 production 設定建置 AAB。
    - 上傳 **正式版（production）軌道**，**分階段推出 10%**。
@@ -146,10 +147,11 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
 ## 簽章與金鑰
 | 項目 | 存放 | 用途 |
 |---|---|---|
-| Android 上傳金鑰（upload keystore，base64）與密碼 | Environment secrets（`staging`、`production`） | 簽 AAB；Google Play App Signing 保管真正的發布金鑰 |
-| Google Play 服務帳號 JSON | Environment secrets | fastlane 上傳 |
-| App Store Connect API key（`.p8`、Key ID、Issuer ID） | Environment secrets | fastlane 上傳 TestFlight／送審 |
-| iOS 發布憑證 `.p12`（base64）與密碼、provisioning profile | Environment secrets | 匯入 runner 的暫時 keychain，建置後刪除 |
+| Android 上傳金鑰（upload keystore，base64）與密碼 | Environment secrets（只在 `production`） | 簽 AAB；Google Play App Signing 保管真正的發布金鑰 |
+| Android staging 簽章金鑰（base64）與密碼 | Environment secrets（`staging`） | 簽 staging 測試 APK，和正式版金鑰分開 |
+| Google Play 服務帳號 JSON | Environment secrets（只在 `production`） | fastlane 上傳 |
+| App Store Connect API key（`.p8`、Key ID、Issuer ID） | Environment secrets（只在 `production`） | fastlane 上傳／送審 |
+| iOS 發布憑證 `.p12`（base64）與密碼、provisioning profile | Environment secrets（只在 `production`） | 匯入 runner 的暫時 keychain，建置後刪除 |
 | Supabase access token、各環境 project ref、DB 密碼 | Environment secrets（各自環境） | `supabase link`／`db push`／`functions deploy` |
 | Supabase URL、anon key | Environment variables | 以 `--dart-define` 帶入 APP（anon key 本來就會出現在 APP 內） |
 | TDX Client ID／Secret、Turnstile secret | **只放 Supabase secrets**，不放 GitHub | Edge Function 使用；`supabase secrets set` 由人工設定，CI 不經手 |
@@ -166,11 +168,11 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
 - `pubspec.lock` 納入版本控管，CI 使用鎖定版本。
 
 ## 版本號規則
-- `pubspec.yaml` 的 `version` 名稱部分（例如 `1.2.0`）就是商店顯示的版本號；建置號由 CD 依上述公式產生，`pubspec.yaml` 的 `+N` 不使用。
+- `pubspec.yaml` 的 `version` 名稱部分（例如 `1.2.0`）就是商店顯示的版本號；建置號由 `release.yml` 依上述公式產生，`pubspec.yaml` 的 `+N` 不使用。
 - 發版流程：
   1. 開一個 PR 把版本改成要發的版本，例如 `1.2.0`。
   2. 合併後在該 commit 打 tag `v1.2.0`。
-- 發版之後，**下一個合併到 `main` 的 PR 必須先升版**（例如 `1.2.1`）。原因是 App Store Connect 不接受已上架版本號的新建置，沒有升版的話，staging 上傳 TestFlight 會失敗。
+- 發版之後，**下一個合併到 `main` 的 PR 必須先升版**（例如 `1.2.1`）。原因是 App Store Connect 不接受已上架版本號的新建置，沒有升版的話，下一次發版會被拒收。
 - CI 的版本號檢查負責把關：版本不大於最新 tag 時，PR 無法合併。
 
 ## 資料庫 migration 規則
@@ -197,16 +199,17 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
 ## 實作順序
 1. **第一個實作 PR**：`ci.yml`、`ios.yml`、`android.yml` 與各自的彙總 job；跑過一次後到 ruleset 設定必要檢查。
 2. **建立 Supabase 兩個專案與 GitHub Environments**：設定 secrets；`production` 設定必須核准。
-3. **`cd-staging.yml`**：
+3. **`cd-staging.yml`**：只需要 Supabase staging 與 staging 簽章金鑰，不需要商店設定。
+4. **`release.yml`**：
    - 先手動在兩個商店建立 APP。
    - Play 需要先手動上傳第一個版本，之後才能用 API 上傳。
-4. **`release.yml`**：準備商店文字與截圖後，第一次正式發版。
+   - 準備商店文字與截圖後，第一次正式發版。
 
 ## 待準備事項（CI／CD 專屬）
 - **Google Play Console**：
   - 建立 APP 並啟用 Play App Signing。
   - 建立服務帳號並授權發布。
-  - 手動上傳第一個版本到內部測試。
+  - 手動上傳第一個正式版建置，之後才能由 CD 以 API 上傳。
 - **App Store Connect**：
   - 建立 APP 與 bundle id。
   - 建立 API key（App Manager 權限）。
