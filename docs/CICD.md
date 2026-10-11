@@ -97,7 +97,9 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
    - commit 數 = `git rev-list --count HEAD`，checkout 必須設定 `fetch-depth: 0` 取得完整歷史（`actions/checkout` 預設只抓 1 個 commit，計數會永遠是 1）；計算前檢查 `git rev-parse --is-shallow-repository` 為 `false`，否則讓流程失敗。通道：staging 為 0、正式版為 1；嘗試次數 = `github.run_attempt`，上限 9，超過就讓流程失敗並提示人工處理。
    - 單調遞增；staging 與正式版通道不同，不會撞號；重跑同一個 workflow 時嘗試次數會增加，所以會拿到新號碼。
    - 遠低於 Android `versionCode` 上限 2,100,000,000（commit 數需少於約 2,100 萬）。
-   - **每個平台各自冪等**：上傳前先向商店查詢（fastlane `google_play_track_version_codes`／`latest_testflight_build_number`），商店裡已有落在 `commit 數 × 100 + 通道 × 10 + 1～9` 範圍內的建置號，就代表這個 commit、這個通道已上傳過，略過該平台。
+   - **每個平台各自冪等**：上傳前先向商店查詢，商店裡已有落在 `commit 數 × 100 + 通道 × 10 + 1～9` 範圍內的建置號，就代表這個 commit、這個通道已上傳過，略過該平台。查詢必須涵蓋**完整範圍**，不能只看「最新」的建置：
+     - **iOS**：不用 `latest_testflight_build_number`，它只回傳最新的一個建置，例如正式版上傳後就只看得到正式版的號碼，會漏掉同版本較早的 staging 建置。改在 fastlane lane 中用 App Store Connect API（Spaceship `ConnectAPI::Build`，或 `GET /v1/builds` 以建置號篩選），逐一查詢範圍內的 9 個號碼。
+     - **Android**：`google_play_track_version_codes` 只回傳單一軌道，所以要查詢所有軌道（internal、alpha、beta、production）後取聯集再比對範圍。
      - 部分失敗時（例如 Android 成功、iOS 失敗）重跑，只會補傳失敗的平台。
      - 不同 CI 觸發的多次執行也不會重複上傳。
 3. **Android**：
