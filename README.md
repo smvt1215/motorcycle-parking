@@ -7,6 +7,17 @@
 - 記住我停哪裡（位置、備註、計時提醒、導航回車旁）
 - 社群回報與收藏停車點
 
-技術：Flutter + Supabase + flutter_map（OpenStreetMap），資料來源為 TDX 政府開放資料與社群回報。
+技術：Flutter + Supabase + Google Maps；未設定地圖金鑰時使用 OpenStreetMap 預覽。停車資料來源為 TDX 政府開放資料與社群回報。
 
-目前為規劃階段，完整實作計畫見 [docs/PLAN.md](docs/PLAN.md)。
+MVP 實作中，已提供地圖範圍搜尋、車種規則、收藏、停車紀錄與社群回報介面。未設定後端時使用明確標示的範例點位；正式 TDX 資料、OAuth 與雲端部署仍需設定金鑰並驗證。完整計畫見 [docs/PLAN.md](docs/PLAN.md)，介面與驗證說明見 [docs/DESIGN.md](docs/DESIGN.md)。
+
+使用 `.flutter-version` 指定的 Flutter 版本，執行 `flutter pub get`，再以 `flutter run -d chrome --web-port=3000` 預覽。無網路測試可加 `--dart-define=OFFLINE_MAP=true`。
+
+Google Maps Platform 已啟用，尚待設定 API Key。建立 Android／iOS／Web 各自限制用途的金鑰，將 `config/maps.local.example.json` 複製為 `config/maps.local.json`，填入要驗證平台的金鑰，再執行：
+
+```bash
+python3 tool/configure_maps.py
+flutter run -d chrome --web-port=3000 --dart-define-from-file=config/maps.generated.json
+```
+
+本機設定及產生的原生設定均不進版控。Android／iOS 建置也帶入同一份 `config/maps.generated.json`。完整切換範圍與待驗證事項見 [Google Maps 計畫](docs/PLAN.md#google-maps-底圖切換2026-10-11-更新)。

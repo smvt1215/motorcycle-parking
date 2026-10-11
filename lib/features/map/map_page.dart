@@ -1,0 +1,784 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:pointer_interceptor/pointer_interceptor.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../../core/config.dart';
+import '../../data/app_store.dart';
+import '../../domain/eligibility.dart';
+import '../../domain/map_viewport.dart';
+import '../../models/parking.dart';
+import '../../ui/adaptive/adaptive.dart';
+import '../report/report_sheet.dart';
+import 'spot_sheet.dart';
+import 'google_parking_map.dart';
+
+class MapPage extends ConsumerStatefulWidget {
+  const MapPage({super.key, this.showControls = true});
+  final bool showControls;
+  @override
+  ConsumerState<MapPage> createState() => _MapPageState();
+}
+
+class _MapPageState extends ConsumerState<MapPage> {
+  final controller = MapController();
+  final googleMap = GlobalKey<GoogleParkingMapState>();
+  final searchController = TextEditingController();
+  final searchFocus = FocusNode();
+  bool availableOnly = false, located = false;
+  bool searchResultsSuppressed = false;
+  SpaceType? type;
+
+  @override
+  void initState() {
+    super.initState();
+    searchFocus.addListener(_searchChanged);
+    searchController.addListener(_searchChanged);
+  }
+
+  void _searchChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _updateViewport(AppStore store, MapCamera camera) {
+    store.mapLat = camera.center.latitude;
+    store.mapLng = camera.center.longitude;
+    final b = camera.visibleBounds;
+    store.queueViewport(
+      MapViewport(south: b.south, west: b.west, north: b.north, east: b.east),
+    );
+  }
+
+  void _selectSpot(AppStore store, ParkingSpot spot) {
+    searchResultsSuppressed = true;
+    searchController.text = spot.name;
+    searchFocus.unfocus();
+    unawaited(
+      runAction(context, () => _moveCamera(LatLng(spot.lat, spot.lng), 17)),
+    );
+    showSpot(context, store, spot);
+  }
+
+  void _submitSearch(AppStore store, List<ParkingSpot> matches) {
+    if (searchController.text.trim().isEmpty) return;
+    if (matches.length == 1) {
+      _selectSpot(store, matches.single);
+    } else {
+      setState(() => searchResultsSuppressed = false);
+      searchFocus.requestFocus();
+    }
+  }
+
+  void _clearFilters() => setState(() {
+    type = null;
+    availableOnly = false;
+  });
+
+  void _openSpaceSelector() {
+    showAdaptiveSheet<void>(
+      context,
+      (ctx) => ContentPage(
+        children: [
+          Text('格位類型', style: Theme.of(ctx).textTheme.headlineSmall),
+          const SizedBox(height: 12),
+          for (final option in <SpaceType?>[null, ...SpaceType.values])
+            ListTile(
+              title: Text(option?.label ?? '全部格位'),
+              trailing: type == option ? const Icon(Icons.check) : null,
+              onTap: () {
+                setState(() => type = option);
+                Navigator.pop(ctx);
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _moveCamera(LatLng point, double zoom) async {
+    if (AppConfig.useGoogleMaps) {
+      await googleMap.currentState?.moveTo(point, zoom);
+    } else {
+      controller.move(point, zoom);
+    }
+  }
+
+  Widget _interceptOverlay(Widget overlay) {
+    if (!kIsWeb || !AppConfig.useGoogleMaps) return overlay;
+    if (overlay is Positioned) {
+      return Positioned(
+        left: overlay.left,
+        top: overlay.top,
+        right: overlay.right,
+        bottom: overlay.bottom,
+        width: overlay.width,
+        height: overlay.height,
+        child: PointerInterceptor(child: overlay.child),
+      );
+    }
+    return PointerInterceptor(child: overlay);
+  }
+
+  @override
+  void dispose() {
+    controller.dispose();
+    searchFocus.removeListener(_searchChanged);
+    searchController.removeListener(_searchChanged);
+    searchFocus.dispose();
+    searchController.dispose();
+    super.dispose();
+  }
+
+  void openVehicleSelector(AppStore store) {
+    showAdaptiveSheet<void>(
+      context,
+      (ctx) => ContentPage(
+        children: [
+          Text('選擇車種', style: Theme.of(ctx).textTheme.headlineSmall),
+          const SizedBox(height: 20),
+          VehicleSelector(
+            value: store.vehicle,
+            onChanged: (v) {
+              store.setVehicle(v);
+              Navigator.pop(ctx);
+            },
+          ),
+          const Divider(height: 32),
+          const Text('深綠圓形：可停　琥珀方形：有條件\n紅色方形：不可停　灰色：待確認'),
+          const SizedBox(height: 16),
+          const Text('社群資訊與剩餘車位可能有延遲，停車前請確認現場標示。'),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final store = ref.watch(storeProvider);
+    final colors = Theme.of(context).colorScheme;
+    final darkMap = colors.brightness == Brightness.dark;
+    final query = searchController.text.trim().toLowerCase();
+    final visible = store.spots.where(
+      (s) => store.viewport.contains(s.lat, s.lng),
+    );
+    final spots = visible
+        .where(
+          (s) =>
+              (type == null || s.spaceType == type) &&
+              (!availableOnly || (s.available ?? 0) > 0),
+        )
+        .toList();
+    final matches = spots
+        .where(
+          (s) => '${s.name} ${s.city} ${s.district} ${s.note}'
+              .toLowerCase()
+              .contains(query),
+        )
+        .toList();
+    final filtered = type != null || availableOnly;
+    final searchHeight = 44 + MediaQuery.textScalerOf(context).scale(20);
+    final filterHeight = (24 + MediaQuery.textScalerOf(context).scale(15))
+        .clamp(48.0, double.infinity);
+    return Stack(
+      children: [
+        if (AppConfig.useGoogleMaps)
+          GoogleParkingMap(
+            key: googleMap,
+            center: LatLng(store.lat, store.lng),
+            spots: spots,
+            eligibility: store.eligible,
+            interactive:
+                widget.showControls &&
+                (ModalRoute.of(context)?.isCurrent ?? true),
+            panelVisible: !widget.showControls,
+            location: located ? LatLng(store.lat, store.lng) : null,
+            onViewport: (bounds, center) {
+              store.mapLat = center.latitude;
+              store.mapLng = center.longitude;
+              store.queueViewport(bounds);
+            },
+            onSpotTap: (spot) => showSpot(context, store, spot),
+            onLongPress: (point) =>
+                showReport(context, store, point.latitude, point.longitude),
+          )
+        else
+          FlutterMap(
+            mapController: controller,
+            options: MapOptions(
+              initialCenter: LatLng(store.lat, store.lng),
+              initialZoom: 16,
+              backgroundColor: darkMap
+                  ? const Color(0xff142130)
+                  : const Color(0xffe6eee9),
+              onMapReady: () => _updateViewport(store, controller.camera),
+              onMapEvent: (event) {
+                if (event is MapEventNonRotatedSizeChange) {
+                  _updateViewport(store, event.camera);
+                }
+              },
+              onPositionChanged: (camera, hasGesture) {
+                _updateViewport(store, camera);
+              },
+              onLongPress: widget.showControls
+                  ? (tap, point) => showReport(
+                      context,
+                      store,
+                      point.latitude,
+                      point.longitude,
+                    )
+                  : null,
+            ),
+            children: [
+              if (!AppConfig.offlineMap)
+                ColorFiltered(
+                  colorFilter: ColorFilter.matrix(
+                    darkMap
+                        ? const [
+                            -.72,
+                            0,
+                            0,
+                            0,
+                            210,
+                            0,
+                            -.64,
+                            0,
+                            0,
+                            224,
+                            0,
+                            0,
+                            -.5,
+                            0,
+                            238,
+                            0,
+                            0,
+                            0,
+                            1,
+                            0,
+                          ]
+                        : const [
+                            1,
+                            0,
+                            0,
+                            0,
+                            0,
+                            0,
+                            1,
+                            0,
+                            0,
+                            0,
+                            0,
+                            0,
+                            1,
+                            0,
+                            0,
+                            0,
+                            0,
+                            0,
+                            1,
+                            0,
+                          ],
+                  ),
+                  child: TileLayer(
+                    urlTemplate:
+                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    userAgentPackageName: 'tw.motopark.motorcycle_parking',
+                  ),
+                ),
+              MarkerClusterLayerWidget(
+                options: MarkerClusterLayerOptions(
+                  maxClusterRadius: 45,
+                  size: const Size(46, 46),
+                  markers: [
+                    for (final s in spots)
+                      Marker(
+                        point: LatLng(s.lat, s.lng),
+                        width: 48,
+                        height: 48,
+                        child: Semantics(
+                          label: '${s.name} ${store.eligible(s).label}',
+                          button: true,
+                          child: GestureDetector(
+                            onTap: () => showSpot(context, store, s),
+                            child: _SpotMarker(
+                              status: store.eligible(s).status,
+                              pending: s.status == TrustStatus.pending,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                  builder: (context, markers) => Container(
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: colors.primary,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: colors.surface, width: 3),
+                      boxShadow: const [
+                        BoxShadow(color: Color(0x26000000), blurRadius: 8),
+                      ],
+                    ),
+                    child: Text(
+                      '${markers.length}',
+                      style: TextStyle(
+                        color: colors.onPrimary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              if (located)
+                MarkerLayer(
+                  markers: [
+                    Marker(
+                      point: LatLng(store.lat, store.lng),
+                      width: 30,
+                      height: 30,
+                      child: Semantics(
+                        label: '我的位置',
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xff2879ef),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 3),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x442879ef),
+                                blurRadius: 16,
+                                spreadRadius: 8,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        if (widget.showControls) ...[
+          for (final overlay in <Widget>[
+            SafeArea(
+              bottom: false,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                    child: Material(
+                      color: colors.surface,
+                      elevation: 4,
+                      shadowColor: const Color(0x44000000),
+                      borderRadius: BorderRadius.circular(34),
+                      child: SizedBox(
+                        height: searchHeight,
+                        child: Row(
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.only(
+                                left: 18,
+                                right: 12,
+                              ),
+                              child: Icon(
+                                Icons.local_parking_rounded,
+                                color: colors.primary,
+                                size: 30,
+                              ),
+                            ),
+                            Expanded(
+                              child: TextField(
+                                key: const ValueKey('parking-search'),
+                                controller: searchController,
+                                focusNode: searchFocus,
+                                textInputAction: TextInputAction.search,
+                                style: const TextStyle(fontSize: 18),
+                                onTap: () => setState(
+                                  () => searchResultsSuppressed = false,
+                                ),
+                                onChanged: (_) => setState(
+                                  () => searchResultsSuppressed = false,
+                                ),
+                                onTapOutside: (_) => searchFocus.unfocus(),
+                                onSubmitted: (_) =>
+                                    _submitSearch(store, matches),
+                                decoration: InputDecoration(
+                                  hintText: '搜尋此範圍停車點',
+                                  border: InputBorder.none,
+                                  isDense: true,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    vertical: 16,
+                                  ),
+                                  suffixIcon: searchController.text.isEmpty
+                                      ? null
+                                      : IconButton(
+                                          tooltip: '清除搜尋',
+                                          onPressed: searchController.clear,
+                                          icon: const Icon(
+                                            Icons.close,
+                                            size: 20,
+                                          ),
+                                        ),
+                                ),
+                              ),
+                            ),
+                            TextFieldTapRegion(
+                              child: Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: IconButton.filledTonal(
+                                  tooltip: '搜尋停車點',
+                                  onPressed: query.isEmpty
+                                      ? null
+                                      : () => _submitSearch(store, matches),
+                                  icon: const Icon(Icons.search),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    height: filterHeight,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      children: [
+                        _MapPill(
+                          label: store.vehicle.label,
+                          showChevron: true,
+                          icon: store.vehicle == VehicleType.heavy
+                              ? Icons.sports_motorsports_outlined
+                              : Icons.two_wheeler,
+                          onTap: () => openVehicleSelector(store),
+                        ),
+                        _MapPill(
+                          label: type?.label ?? '全部格位',
+                          icon: Icons.local_parking_outlined,
+                          showChevron: true,
+                          selected: type != null,
+                          onTap: _openSpaceSelector,
+                        ),
+                        _MapPill(
+                          label: '有剩餘車位',
+                          icon: Icons.check_circle_outline,
+                          selected: availableOnly,
+                          onTap: () =>
+                              setState(() => availableOnly = !availableOnly),
+                        ),
+                        if (filtered)
+                          _MapPill(
+                            label: '清除篩選',
+                            icon: Icons.filter_alt_off_outlined,
+                            onTap: _clearFilters,
+                          ),
+                      ],
+                    ),
+                  ),
+                  if (store.loading)
+                    const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: LinearProgressIndicator(),
+                    ),
+                  if (store.error != null)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: Material(
+                        color: colors.errorContainer,
+                        borderRadius: BorderRadius.circular(16),
+                        child: ListTile(
+                          title: Text(store.error!),
+                          trailing: IconButton(
+                            tooltip: '重新整理',
+                            onPressed: store.refresh,
+                            icon: const Icon(Icons.refresh),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            if (store.mapNotice != null)
+              Positioned(
+                top:
+                    MediaQuery.paddingOf(context).top +
+                    searchHeight +
+                    filterHeight +
+                    32,
+                left: 16,
+                right: 16,
+                child: Center(
+                  child: Material(
+                    color: colors.surface,
+                    elevation: 2,
+                    borderRadius: BorderRadius.circular(16),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      child: Text(
+                        store.mapNotice!,
+                        key: const ValueKey('map-notice'),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            Positioned(
+              right: 16,
+              bottom: AppConfig.useGoogleMaps ? 118 : 102,
+              child: MapAction(
+                label: '定位到我',
+                icon: Icons.my_location,
+                onPressed: () => runAction(context, () async {
+                  await store.locate();
+                  if (mounted) {
+                    setState(
+                      () => located = !(store.demo && AppConfig.offlineMap),
+                    );
+                  }
+                  await _moveCamera(LatLng(store.lat, store.lng), 16);
+                }),
+              ),
+            ),
+            Positioned(
+              right: 16,
+              bottom: AppConfig.useGoogleMaps ? 46 : 30,
+              child: MapAction(
+                label: '我停這裡',
+                icon: Icons.turn_right,
+                primary: true,
+                onPressed: () => showParkingForm(context, store),
+              ),
+            ),
+            Positioned(
+              left: 16,
+              right: 88,
+              bottom: AppConfig.useGoogleMaps ? 76 : 44,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Material(
+                  color: colors.surface.withValues(alpha: .96),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    child: Text(
+                      store.demo ? '範例資料 · 行駛中請勿操作' : '停車前請確認現場標示',
+                      style: Theme.of(context).textTheme.labelSmall,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            if (!AppConfig.useGoogleMaps)
+              Positioned(
+                left: 8,
+                bottom: 0,
+                child: TextButton(
+                  onPressed: () => launchUrl(
+                    Uri.parse('https://www.openstreetmap.org/copyright'),
+                  ),
+                  style: TextButton.styleFrom(
+                    backgroundColor: colors.surface.withValues(alpha: .9),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: const Size(0, 28),
+                  ),
+                  child: Text(
+                    '© OpenStreetMap contributors',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ),
+            if (searchFocus.hasFocus && !searchResultsSuppressed)
+              Positioned(
+                top: MediaQuery.paddingOf(context).top + searchHeight + 20,
+                left: 16,
+                right: 16,
+                child: TextFieldTapRegion(
+                  child: Material(
+                    color: colors.surface,
+                    elevation: 6,
+                    borderRadius: BorderRadius.circular(20),
+                    clipBehavior: Clip.antiAlias,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxHeight:
+                            (MediaQuery.sizeOf(context).height -
+                                    MediaQuery.viewInsetsOf(context).bottom -
+                                    MediaQuery.paddingOf(context).top -
+                                    searchHeight -
+                                    108)
+                                .clamp(72.0, 320.0),
+                      ),
+                      child: ListView(
+                        key: const ValueKey('parking-search-results'),
+                        shrinkWrap: true,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                            child: Text(
+                              filtered
+                                  ? '目前地圖範圍 · 已套用篩選（${matches.length} 筆）'
+                                  : '目前地圖範圍內的停車點（${matches.length} 筆）',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ),
+                          if (matches.isEmpty)
+                            const Padding(
+                              padding: EdgeInsets.all(16),
+                              child: Text('沒有符合的停車點。請換個關鍵字，或移動地圖查看其他範圍。'),
+                            ),
+                          if (matches.isEmpty && filtered)
+                            TextButton(
+                              onPressed: _clearFilters,
+                              child: const Text('清除篩選查看結果'),
+                            ),
+                          for (final spot in matches)
+                            ListTile(
+                              leading: const Icon(Icons.local_parking_outlined),
+                              title: Text(spot.name),
+                              subtitle: Text(
+                                '${spot.city} · ${store.eligible(spot).label}',
+                              ),
+                              trailing: const Icon(Icons.north_west, size: 18),
+                              onTap: () => _selectSpot(store, spot),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ])
+            _interceptOverlay(overlay),
+        ],
+      ],
+    );
+  }
+}
+
+class _MapPill extends StatelessWidget {
+  const _MapPill({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+    this.selected = false,
+    this.showChevron = false,
+  });
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+  final bool selected;
+  final bool showChevron;
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: Material(
+        elevation: 2,
+        shadowColor: const Color(0x33000000),
+        color: selected ? colors.primaryContainer : colors.surface,
+        borderRadius: BorderRadius.circular(24),
+        child: Semantics(
+          button: true,
+          selected: selected,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(24),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    icon,
+                    size: 20,
+                    color: selected
+                        ? colors.onPrimaryContainer
+                        : colors.onSurface,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      color: selected
+                          ? colors.onPrimaryContainer
+                          : colors.onSurface,
+                    ),
+                  ),
+                  if (showChevron) const Icon(Icons.expand_more, size: 20),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SpotMarker extends StatelessWidget {
+  const _SpotMarker({required this.status, required this.pending});
+  final EligibilityStatus status;
+  final bool pending;
+  @override
+  Widget build(BuildContext context) {
+    final color = pending
+        ? const Color(0xff59646c)
+        : switch (status) {
+            EligibilityStatus.allowed => allowedColor,
+            EligibilityStatus.conditional => conditionalColor,
+            EligibilityStatus.notAllowed => deniedColor,
+          };
+    return Center(
+      child: Container(
+        width: 38,
+        height: 38,
+        decoration: BoxDecoration(
+          color: color,
+          border: Border.all(color: Colors.white, width: 3),
+          borderRadius: BorderRadius.circular(
+            status == EligibilityStatus.allowed
+                ? 20
+                : status == EligibilityStatus.conditional
+                ? 10
+                : 4,
+          ),
+          boxShadow: const [
+            BoxShadow(
+              blurRadius: 6,
+              color: Color(0x44000000),
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Icon(
+          switch (status) {
+            EligibilityStatus.allowed => Icons.local_parking,
+            EligibilityStatus.conditional => Icons.priority_high,
+            EligibilityStatus.notAllowed => Icons.close,
+          },
+          color: Colors.white,
+          size: 22,
+        ),
+      ),
+    );
+  }
+}

@@ -1,0 +1,69 @@
+name: Android
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  emulator:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [30, 36]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - id: changes
+        run: python3 tool/ci_changes.py android >> "$GITHUB_OUTPUT"
+      - id: versions
+        if: steps.changes.outputs.run == 'true'
+        run: echo "flutter=$(cat .flutter-version)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        if: steps.changes.outputs.run == 'true'
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        if: steps.changes.outputs.run == 'true'
+        with:
+          flutter-version: ${{ steps.versions.outputs.flutter }}
+          cache: true
+      - if: steps.changes.outputs.run == 'true'
+        run: flutter pub get --enforce-lockfile
+      - name: Enable KVM
+        if: steps.changes.outputs.run == 'true'
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        if: steps.changes.outputs.run == 'true'
+        with:
+          api-level: ${{ matrix.api }}
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-boot-timeout: 180
+          script: flutter drive --driver=test_driver/integration_test.dart --target=integration_test/ui_test.dart --dart-define=OFFLINE_MAP=true -d emulator-5554
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always() && steps.changes.outputs.run == 'true'
+        with:
+          name: android-${{ matrix.api }}-screenshots
+          path: artifacts/screenshots
+          if-no-files-found: error
+  android-ok:
+    runs-on: ubuntu-24.04
+    if: always()
+    needs: [emulator]
+    steps:
+      - env:
+          RESULT: ${{ needs.emulator.result }}
+        run: test "$RESULT" = success

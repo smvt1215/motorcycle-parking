@@ -24,3 +24,17 @@
   6. 刪除本機分支：`git branch -D <branch>`（Squash merge 後 `-d` 會判定未合併而失敗；第 1、3 步都通過後才可用 `-D`）。
   7. `git worktree prune`
 - 遠端分支由 GitHub「Automatically delete head branches」在合併時自動刪除。
+
+## 程式碼解析與搜尋
+- 優先使用 Graphify 與 LSP 解析、搜尋程式碼。
+- 以 Graphify 查架構、檔案關聯與呼叫路徑，以 LSP 查符號、定義、參照與診斷。
+- 修改既有程式碼前先以 LSP 評估影響範圍；修改後檢查診斷。
+- 索引需與程式碼同步。工具不支援該語言或不可用時，才以 `rg`／直接讀檔補充，並說明限制。
+- Graphify 索引以本機 AST 為主（`graphify extract . --code-only`）；索引產物不進版控。
+
+## 文件查核（Context7）
+使用 Context7 MCP 取得函式庫、框架、SDK、API、CLI、雲端服務的最新文件，即使已熟悉也要查核。一般重構、商業邏輯除錯、程式碼審查與通用程式概念不必查。
+1. 先用 `resolve-library-id`，除非使用者提供 `/org/project` 格式的確切 ID。
+2. 依名稱、相關性、來源信譽、範例數量與評分選最符合的 ID；指定版本時優先使用版本 ID。
+3. 用 `query-docs` 查單一具體概念；多個獨立概念分開查詢。
+4. 依查得文件實作與回答；Context7 未收錄時查官方文件或套件原始碼。

@@ -1,0 +1,59 @@
+name: iOS
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  simulator:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-26
+            ios: '26'
+          - runner: xcode-27
+            ios: '27'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - id: changes
+        run: python3 tool/ci_changes.py ios >> "$GITHUB_OUTPUT"
+      - id: versions
+        if: steps.changes.outputs.run == 'true'
+        run: echo "flutter=$(cat .flutter-version)" >> "$GITHUB_OUTPUT"
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        if: steps.changes.outputs.run == 'true'
+        with:
+          flutter-version: ${{ steps.versions.outputs.flutter }}
+          cache: true
+      - if: steps.changes.outputs.run == 'true'
+        run: flutter pub get --enforce-lockfile
+      - id: device
+        if: steps.changes.outputs.run == 'true'
+        run: python3 tool/boot_ios_simulator.py '${{ matrix.ios }}'
+      - name: Native navigation and sheet screenshots
+        if: steps.changes.outputs.run == 'true'
+        run: |
+          flutter drive --driver=test_driver/integration_test.dart --target=integration_test/ui_test.dart --dart-define=OFFLINE_MAP=true -d '${{ steps.device.outputs.udid }}'
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always() && steps.changes.outputs.run == 'true'
+        with:
+          name: ios-${{ matrix.ios }}-screenshots
+          path: artifacts/screenshots
+          if-no-files-found: error
+  ios-ok:
+    runs-on: ubuntu-24.04
+    if: always()
+    needs: [simulator]
+    steps:
+      - env:
+          RESULT: ${{ needs.simulator.result }}
+        run: test "$RESULT" = success
