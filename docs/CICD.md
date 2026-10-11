@@ -110,7 +110,8 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
    - tag 指向的 commit 必須**就是 `main` 目前最新的 commit**，不能只是 `main` 的祖先。staging 只部署 `main` 最新的 commit，打在較舊 commit 的 tag 可能從未在 staging 驗證過；同時也確保建置號大於前一次發版。
      - 這個檢查在流程開始時與人工核准之後**各做一次**，因為等待核准期間 `main` 可能已前進。
      - 不符合時流程失敗，並提示刪除 tag、在最新的 `main` 上重新打 tag。
-     - 發版期間（從打 tag 到核准完成）暫停合併其他 PR。
+     - **發版期間（從打 tag 到 `release.yml` 成功結束）暫停合併其他 PR**，不是只到核准完成為止。核准後的部署、上傳或送審若失敗，重跑時 tag 仍是 `main` 最新的 commit，才能通過檢查安全重試。
+   - **同時只跑一個正式發版**：`release.yml` 使用固定的 `concurrency` 群組 `release`，不取消進行中的執行，避免兩個 tag 的發版重疊。同一個 tag 的重跑照常排隊執行。
    - `pubspec.yaml` 的 `version` 必須等於 tag 的版本號（例如 `1.2.0`）。
    - 該 commit 的 CI 必須全綠。
    - **該 commit 必須已成功部署到 staging**：查詢 `cd-staging.yml` 針對同一個 SHA 的執行，部署 job 必須實際成功，被略過不算。
@@ -133,7 +134,7 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
        - **限定範圍**：一律加上 `filter[app]`（本 APP 的 Apple ID）與 `filter[preReleaseVersion.version]`（本次版本號，例如 `1.2.0`），避免同帳號下其他 APP 剛好用到相同的建置號。
        - **只認處理成功的建置**：
          - `processingState` 為 `VALID` 才算「已上傳」，可以略過上傳並用於送審。
-         - `PROCESSING` 就輪詢等待結果（最多 60 分鐘）。
+         - `PROCESSING` 就輪詢等待結果，最多 60 分鐘。逾時後不再等這個舊建置，改用本次執行自己的建置號（嘗試次數不同，不會撞號）照常上傳。之後若有多個 `VALID` 建置，送審時用號碼最大的那個。
          - `FAILED`／`INVALID` 不算，照常上傳新建置；重跑時嘗試次數已增加，會用新的建置號。
      - **Android**：`google_play_track_version_codes` 只回傳單一軌道，所以要查詢所有軌道（internal、alpha、beta、production）後取聯集再比對。
      - 部分失敗時（例如 Android 成功、iOS 失敗）重跑，只會補傳失敗的平台。
