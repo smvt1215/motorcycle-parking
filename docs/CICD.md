@@ -8,7 +8,7 @@
 - 後端環境：**Supabase staging + production** 兩個專案。
 - 發版觸發：推送版本 tag `vX.Y.Z`；合併到 `main` 只更新 staging 後端並產生測試用 APK 與 IPA。
 - **商店只上架正式版**：staging 建置一律不上傳 Google Play 或 TestFlight，測試者不會被商店替換版本，也不會誤連到另一個後端。
-- **iOS 測試安裝檔用 Ad Hoc 簽章**：staging IPA 只能安裝在事先註冊 UDID 的 iPhone 上，不經 TestFlight。
+- **iOS 測試安裝檔用 Ad Hoc 簽章 + Firebase App Distribution OTA 安裝**：staging IPA 只能安裝在事先註冊 UDID 的 iPhone 上，測試者在 iPhone 上直接安裝，不經 TestFlight、不需要 Mac。
 - 已具備：Apple Developer Program、Google Play Console。
 
 ## 整體流程
@@ -18,7 +18,7 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
                                          ▼
                          CD staging：Supabase staging 部署
                                    + 連 staging 的 Android 測試 APK（workflow artifact，直接安裝）
-                                   + 連 staging 的 iOS 測試 IPA（Ad Hoc，workflow artifact，裝到已註冊的 iPhone）
+                                   + 連 staging 的 iOS 測試 IPA（Ad Hoc，經 Firebase App Distribution 在 iPhone 上 OTA 安裝）
                                          │
                        推送 tag vX.Y.Z ──┘
                                          ▼
@@ -102,10 +102,11 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
    - 使用獨立的 applicationId 後綴 `.staging`、APP 名稱加上「β」、圖示加上測試標記，可以和商店版並存，一眼分得出來。
    - 以專用的 staging 簽章金鑰簽署，和正式版上傳金鑰分開。
    - 上傳為 workflow artifact（保留 30 天），下載後直接安裝到手機測試。
-3. **iOS 測試 IPA**（Ad Hoc，不上傳 TestFlight）：
+3. **iOS 測試 IPA**（Ad Hoc 簽章，經 Firebase App Distribution OTA 安裝，不上傳 TestFlight）：
    - 獨立的 job `ios-ipa`（macOS runner），`needs` 部署 job，且只在部署 job 回報**實際完成部署**時執行；部署被略過（不是 `main` 最新的 commit）就不建置，避免產生連到舊後端狀態的安裝檔。
-     - 不加入 `cd-staging` 佇列：IPA 只是 artifact，不會覆蓋任何共用環境，各次執行可以並行。
-     - 正式發版的「已部署到 staging」檢查只看部署 job；IPA 建置失敗會讓這次執行顯示失敗並需要修正，但不影響後端已部署的判斷。
+     - 使用自己的 `concurrency` 群組 `cd-staging-ios`（不取消進行中的執行），不和後端部署共用佇列，建置 IPA 不會擋住下一次後端部署。
+     - 發佈到 Firebase 前再確認一次 `workflow_run.head_sha` 仍是 `main` 最新的 commit，不是就略過發佈（較新的 commit 會發佈自己的版本），避免較舊的建置晚完成而成為測試者看到的最新版。
+     - 正式發版的「已部署到 staging」檢查只看部署 job；IPA 建置或發佈失敗會讓這次執行顯示失敗並需要修正，但不影響後端已部署的判斷。
    - 與 Android 相同的 staging 外觀：Flutter flavor `staging`（Xcode 的 `staging` scheme 與 build configuration），bundle id 加上 `.staging` 後綴、APP 名稱加上「β」、圖示加上測試標記，可以和商店版並存。
    - checkout `workflow_run.head_sha`，以 `--dart-define` 帶入 staging 的 Supabase URL／anon key。
    - 簽章：從 `staging` Environment 取出 staging 專用的 Apple Distribution 憑證（`.p12`）與 Ad Hoc provisioning profile，匯入 runner 的暫時 keychain，建置後刪除。
@@ -114,19 +115,26 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
      - `ExportOptions-staging.plist` 納入版本控管：`method` 為 Ad Hoc（Xcode 15.3 起新名稱為 `release-testing`，舊名 `ad-hoc` 仍可用，實作時依 runner 的 Xcode 版本確認）、`signingStyle` 為 `manual`，並以 `provisioningProfiles` 指定 `.staging` bundle id 對應的 profile 名稱；不使用 `flutter build ipa` 的預設匯出（App Store）。
      - 建置號 `--build-number` 為 `<commit 數>.<github.run_number>.<github.run_attempt>`（`CFBundleVersion` 可用最多三段以點分隔的整數）：
        - commit 數 = `git rev-list --count HEAD`（checkout 設定 `fetch-depth: 0`，並檢查不是 shallow）。
-       - 只用 commit 數不夠：同一個 commit 重跑（例如簽章失敗後重試）時數字不變，測試者分不出新舊。加上 `run_number`（每次新執行遞增）與 `run_attempt`（重跑遞增）後，每次建置的號碼都不同且單調遞增。
-   - **IPA 加密後才上傳為 workflow artifact**（保留 30 天，與 APK 相同）：
-     - 原因：公開 repo 的 artifact 任何登入 GitHub 的人都能下載，而 Ad Hoc IPA 內嵌的 provisioning profile（`embedded.mobileprovision`）的 `ProvisionedDevices` 列出**所有測試裝置的 UDID**（[Apple TN3125](https://developer.apple.com/documentation/technotes/tn3125-inside-code-signing-provisioning-profiles)）。直接上傳原始 IPA 會公開測試者的裝置識別碼。
-     - 做法：以 [`age`](https://github.com/FiloSottile/age) 加密給測試者的公鑰（`age -R recipients.txt -o app-staging.ipa.age app-staging.ipa`），只上傳 `.age` 檔；原始 IPA 不上傳、不放進快取，job 結束即隨 runner 銷毀。
-     - 測試者各自持有 age 私鑰；公鑰清單放在 `staging` Environment variable `IOS_STAGING_AGE_RECIPIENTS`（公鑰不是秘密，但只讓 staging 流程使用）。新增或移除測試者時更新這份清單，不需要共用密碼。
-     - `age` 在 runner 上以 Homebrew 安裝並固定版本。
-   - **安裝方式**：
-     - 下載 artifact 解壓縮後，在 Mac 上以自己的私鑰解密（`age -d -i <私鑰檔> -o app-staging.ipa app-staging.ipa.age`），再用 Apple Configurator 或 Xcode（Devices and Simulators）安裝到已註冊的 iPhone。
+       - 只用 commit 數不夠：同一個 commit 重跑（例如簽章失敗後重試）時數字不變，測試者分不出新舊。加上 `run_number`（每次新執行遞增）與 `run_attempt`（重跑遞增）後，每次建置的號碼都不同且單調遞增，Firebase 也會把每次建置視為新版本並通知測試者。
+   - **發佈：Firebase App Distribution**（[說明](https://firebase.google.com/docs/app-distribution)）：
+     - 以 Firebase CLI（`firebase-tools`，固定版本）執行 `firebase appdistribution:distribute <ipa> --app <Firebase iOS App ID> --groups staging-ios --release-notes "<commit SHA 與標題>"`。
+     - 認證優先用 **Workload Identity Federation**（`google-github-actions/auth`，釘選 SHA；job 加 `id-token: write`），不存放長期金鑰：
+       - Google Cloud 的 provider 以 attribute condition 限定 `sub` 為 `repo:smvt1215/motorcycle-parking:environment:staging`，只有綁定 `staging` Environment 的 job 能換到憑證。
+       - 對應的服務帳號只給 **Firebase App Distribution Admin** 角色。
+       - 實作時確認 Firebase CLI 能使用這種外部帳號憑證；不行才改用服務帳號 JSON 金鑰（存 `staging` Environment secret）。
+     - **IPA 不上傳為 GitHub artifact**：Ad Hoc IPA 內嵌的 provisioning profile（`embedded.mobileprovision`）的 `ProvisionedDevices` 列出**所有測試裝置的 UDID**（[Apple TN3125](https://developer.apple.com/documentation/technotes/tn3125-inside-code-signing-provisioning-profiles)），公開 repo 的 artifact 任何登入 GitHub 的人都能下載。Firebase 上的版本只有受邀的測試者看得到；原始 IPA 不放進快取，job 結束即隨 runner 銷毀。
+     - Firebase 上的版本保留 150 天後過期；APP 不需要整合 Firebase SDK。
+   - **測試者 OTA 安裝**（在 iPhone 上完成，不需要 Mac）：
+     1. 第一次：在 iPhone 的 Safari 開啟 Firebase 的邀請 email（邀請 30 天內有效），以 Google 帳號登入並接受邀請。
+     2. 依頁面指示「註冊裝置」，安裝 Firebase 的描述檔；描述檔會把該 iPhone 的 UDID 回報給 Firebase，並以 email 通知專案擁有者。
+     3. 擁有者把 UDID 加入 Apple Developer、重新產生 Ad Hoc profile、更新 `staging` Environment 的 profile secret（見下方「測試裝置管理」）；之後的 staging 建置就能裝在這台 iPhone 上。
+     4. 之後每次有新建置，測試者會收到通知，在 iPhone 上（Firebase 加到主畫面的 App Tester 網頁）點選安裝即可。
      - iOS 16 以上可能需在「設定 › 隱私權與安全性」開啟「開發者模式」（第三方文件指出 Ad Hoc 建置需要，Apple 文件未明列；實作時以實機確認，並寫進 README）。
-     - 不需要 Mac 的 OTA 安裝（`itms-services` + HTTPS 上的 manifest）第一版不做，有需要再評估。
    - **測試裝置管理**：
-     - 新增測試者時，在 Apple Developer 網站註冊該 iPhone 的 UDID，重新產生 Ad Hoc profile，再更新 `staging` Environment 的 profile secret；未註冊的裝置無法安裝。
+     - 新裝置的 UDID 由上述 Firebase 描述檔收集（也可在 Firebase 主控台匯出 UDID CSV，於 Apple Developer 網站以「Register Multiple Devices」匯入）。
+     - 註冊後要重新產生 Ad Hoc profile 並更新 `staging` Environment 的 profile secret；下一次 staging 建置（新的合併，或重跑最新 commit 的 `ios-ipa` job）才會包含新裝置。未註冊的裝置無法安裝。
      - 每個會員年度每種裝置類型（iPhone）最多註冊 100 台，年度更新時才能移除名額。
+     - 移除測試者：從 Firebase 的 `staging-ios` 群組移除即無法再取得新版本。
    - iOS 的 UI 驗證仍以 `ios.yml` 的模擬器截圖為主；IPA 用來在實機確認定位、通知、原生 Liquid Glass 元件與 staging 後端的整體行為。
 
 ## CD：正式發版（推送 tag `vX.Y.Z`）
@@ -185,7 +193,7 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
 | Android 上傳金鑰（upload keystore，base64）與密碼 | Environment secrets（只在 `production`） | 簽 AAB；Google Play App Signing 保管真正的發布金鑰 |
 | Android staging 簽章金鑰（base64）與密碼 | Environment secrets（`staging`） | 簽 staging 測試 APK，和正式版金鑰分開 |
 | iOS staging 發布憑證 `.p12`（base64）與密碼、Ad Hoc provisioning profile（base64） | Environment secrets（`staging`） | 簽 staging 測試 IPA；匯入暫時 keychain，建置後刪除；和正式版憑證分開 |
-| 測試者的 age 公鑰清單 | Environment variables（`staging`） | 加密 staging IPA 後才上傳 artifact（IPA 內含測試裝置 UDID） |
+| Firebase iOS App ID、Workload Identity provider 與服務帳號名稱 | Environment variables（`staging`） | 發佈 staging IPA 到 Firebase App Distribution；以 OIDC 換取短期憑證，不存長期金鑰（服務帳號只有 App Distribution Admin 角色） |
 | Google Play 服務帳號 JSON | Environment secrets（只在 `production`） | fastlane 上傳 |
 | App Store Connect API key（`.p8`、Key ID、Issuer ID） | Environment secrets（只在 `production`） | fastlane 上傳／送審 |
 | iOS 發布憑證 `.p12`（base64）與密碼、provisioning profile | Environment secrets（只在 `production`） | 匯入 runner 的暫時 keychain，建置後刪除 |
@@ -232,11 +240,12 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
   - 免費專案閒置一週會暫停，staging 可能需要手動喚醒。
   - production 正式上線後評估是否升級付費方案。
 - Apple Developer Program（年費）與 Google Play（一次性）已具備。
+- Firebase App Distribution：免費。
 
 ## 實作順序
 1. **第一個實作 PR**：`ci.yml`、`ios.yml`、`android.yml` 與各自的彙總 job；跑過一次後到 ruleset 設定必要檢查。
 2. **建立 Supabase 兩個專案與 GitHub Environments**：設定 secrets；`production` 設定必須核准。
-3. **`cd-staging.yml`**：只需要 Supabase staging、Android staging 簽章金鑰，以及 iOS staging 憑證與 Ad Hoc profile，不需要商店（Play Console、App Store Connect APP）設定。
+3. **`cd-staging.yml`**：只需要 Supabase staging、Android staging 簽章金鑰、iOS staging 憑證與 Ad Hoc profile，以及 Firebase App Distribution，不需要商店（Play Console、App Store Connect APP）設定。
 4. **`release.yml`**：
    - 先手動在兩個商店建立 APP。
    - Play 需要先手動上傳第一個版本，之後才能用 API 上傳。
@@ -249,9 +258,12 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
   - 手動上傳第一個正式版建置，之後才能由 CD 以 API 上傳。
 - **Apple Developer（staging 測試 IPA）**：
   - 註冊 staging bundle id（正式 bundle id 加 `.staging`）。
-  - 註冊測試者 iPhone 的 UDID。
-  - 每位測試者產生 age 金鑰（`age-keygen`），把公鑰加入 `staging` Environment variable `IOS_STAGING_AGE_RECIPIENTS`。
+  - 註冊測試者 iPhone 的 UDID（可由 Firebase 收集，見上方「測試者 OTA 安裝」）。
   - 建立 staging 專用的 Apple Distribution 憑證，以及包含上述裝置的 Ad Hoc provisioning profile。
+- **Firebase（staging 測試 IPA 的 OTA 發佈）**：
+  - 建立 Firebase 專案（同時是一個 Google Cloud 專案，下方的 Workload Identity Federation 也設在這裡），新增 iOS APP，bundle id 填 staging 的 `.staging` bundle id，記下 App ID。
+  - 啟用 App Distribution，建立測試者群組 `staging-ios` 並邀請測試者。
+  - 在 Google Cloud 設定 Workload Identity Federation（GitHub OIDC provider，限定 `staging` Environment）與只有 Firebase App Distribution Admin 角色的服務帳號。
 - **App Store Connect**：
   - 建立 APP 與 bundle id。
   - 建立 API key（App Manager 權限）。
