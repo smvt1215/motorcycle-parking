@@ -53,7 +53,9 @@ supabase/
   migrations/0001_init.sql            # 資料表、PostGIS、RLS、nearby_spots RPC、每日回報上限 trigger
   functions/tdx-parking/index.ts      # Deno：OAuth client_credentials 取 token（快取）、抓路外/路邊車位+即時剩餘、正規化
 test/                                 # eligibility、rules 解析、TDX 正規化、車種切換 widget test、雙平台 golden 截圖測試
-.github/workflows/flutter.yml         # analyze + test
+.github/workflows/flutter.yml         # analyze + test（Linux）
+.github/workflows/ios.yml             # iOS 模擬器建置 + 截圖（macOS runner，見「UI 設計規範 › 驗證」）
+integration_test/                     # iOS 截圖情境（地圖、sheet、車種切換、深淺色）
 README.md                             # 安裝、Supabase 建置、TDX 金鑰申請步驟（中文）
 ```
 
@@ -107,7 +109,11 @@ UI：`cupertino_native_better`（iOS 原生 Liquid Glass 元件）、`material_3
 ### 驗證
 - Golden 截圖測試：每個主要畫面 × iOS / Android × 淺色 / 深色。
 - iOS 必測情境：在地圖頁開啟車位詳情與回報表單 sheet，確認分頁列與玻璃按鈕不會蓋住 sheet、輸入框可見可輸入、關閉後原生元件正常復原。
-- 此開發容器無 macOS，**無法在 iOS 模擬器驗證原生 Liquid Glass 元件**；需在 Mac 上以 iOS 26 / 27 模擬器或實機確認，或由 CI 的 macOS runner 執行 iOS 建置與截圖。
+- 此開發容器無 macOS，iOS 原生 Liquid Glass 元件改由 **GitHub Actions macOS runner** 驗證（已獲同意；公開 repo 使用 GitHub 提供的標準 runner 不另收費）：
+  - `ios.yml`：選用含 iOS 26 / 27 模擬器的 Xcode 映像（實作時確認 runner 映像版本），`flutter build ios --simulator --no-codesign`，不需要簽章或 Apple 開發者帳號。
+  - 於 iOS 26 與 iOS 27 模擬器執行 `integration_test` 截圖情境：地圖頁、車種切換、車位詳情與回報 sheet（含上述疊放測試）、深淺色模式；截圖上傳為 workflow artifact，供 PR 審查時查看。
+  - 執行條件：PR 變更 `lib/`、`ios/`、`integration_test/`、`pubspec.*` 時才實際建置與截圖，另可手動觸發；只改文件時略過，以節省排隊時間。
+  - 穩定後將 iOS 建置列為 main ruleset 的必要檢查。注意：設為必要檢查的 workflow 不能用 workflow 層級的路徑過濾（只改文件的 PR 會一直等不到檢查結果而無法合併）；改為 workflow 每次都觸發，在 job 內判斷變更路徑，不需要時直接回報成功。
 - Android 以 Android 16 模擬器確認 Expressive 元件、動態配色、edge-to-edge 與預測式返回。
 
 ## 核心資料模型
@@ -185,7 +191,6 @@ UI：`cupertino_native_better`（iOS 原生 Liquid Glass 元件）、`material_3
 - 雲端環境網路設定放行 `tdx.transportdata.tw`（以及若要接第 2 層：`data.taipei`、`data.gov.tw`、`datacenter.taichung.gov.tw`、`parkweb.tainan.gov.tw`），才能執行 Phase 0 稽核
 - 執行順序：未放行前，先完成 App 本體（demo 資料）、Supabase schema、社群回報；放行後再做 Phase 0 與 TDX 介接
 - 上架用的 App 名稱、圖示、bundle id（第一版先用 placeholder）
-- iOS 驗證環境：Mac + Xcode（iOS 26/27 模擬器），或允許 CI 使用 macOS runner
 
 ## 參考資料
 - [台北市 10/6 起開放 6.3 萬個路邊收費機車格給重機（TVBS）](https://news.tvbs.com.tw/life/4023234)
