@@ -29,6 +29,7 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
 |---|---|---|---|
 | `ci.yml` | PR、push 到 `main` | Linux | Flutter 檢查與測試、Supabase 檢查、Android 建置 |
 | `ios.yml` | PR、push 到 `main`、手動 | macOS | iOS 模擬器建置與截圖（見 PLAN.md「UI 設計規範 › 驗證」） |
+| `android.yml` | PR、push 到 `main`、手動 | Linux（模擬器硬體加速） | Android 模擬器截圖（API 36 與 API 30） |
 | `cd-staging.yml` | push 到 `main`（CI 通過後） | Linux + macOS | 部署 staging 後端、上傳兩平台內部測試版 |
 | `release.yml` | 推送 tag `v*` | Linux + macOS | 部署 production 後端、上架兩平台、建立 GitHub Release |
 
@@ -42,7 +43,7 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
 3. **測試**：`flutter test --coverage`，涵蓋：
    - 單元測試：可停判斷 `eligibility`、規則 JSON 解析、TDX 正規化
    - widget 測試
-   - golden 截圖測試（Android／Material 路徑，淺色與深色）
+   - golden 截圖測試（Material 路徑，淺色與深色）：快速抓版面回歸，但由 Flutter 在測試程序內繪製，不含動態配色、系統列等系統層行為，這些由 `android.yml` 補
    - 覆蓋率報告上傳為 artifact；先不設門檻，穩定後再訂
 4. **Supabase**（`supabase/` 有變更時才實際執行）：
    - `supabase start` 在 runner 內起本機堆疊（Docker），從零套用全部 migration，確認可重建。
@@ -61,9 +62,17 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
 - iOS 26／27 模擬器截圖。
 - 路徑判斷寫在 job 內：只改文件時直接回報成功；改到 `ios.yml` 本身時照常實際建置。
 
+### `android.yml`（Linux，Android 模擬器）
+- 在 Linux runner 啟用 KVM，以 Android 模擬器執行 `integration_test/` 截圖情境，與 iOS 共用同一組情境。
+- 模擬器：Android 16（API 36）與 Android 11（API 30），各跑淺色與深色；映像版本實作時確認。
+- 重點檢查：桌布動態配色（API 36）與品牌種子色後備（API 30）、edge-to-edge、預測式返回手勢、繁中字型。
+- 截圖上傳為 workflow artifact。
+- 路徑判斷同 iOS：變更 `lib/`、`android/`、`integration_test/`、`pubspec.*` 或 `android.yml` 本身時才實際執行。
+- 模擬器測試較慢且偶有不穩：開機逾時算基礎設施失敗，可重跑一次；測試本身失敗一律視為真實失敗，不得略過。
+
 ### 必要檢查（main ruleset）
 - 新增一個彙總 job `ci-ok`：`needs` 所有 CI job，`if: always()`，任何一個失敗或被取消就失敗。
-- ruleset 只把 `ci-ok`（以及 `ios.yml` 的對應彙總 job）設為必要檢查。這樣新增或拆分 job 時不必改 ruleset，被路徑判斷略過的 job 也不會卡住合併。
+- ruleset 只把 `ci-ok`（以及 `ios.yml`、`android.yml` 的對應彙總 job）設為必要檢查。這樣新增或拆分 job 時不必改 ruleset，被路徑判斷略過的 job 也不會卡住合併。
 - 這與 CLAUDE.md 的「全綠」定義一致：CI 通過才算全綠。
 
 ## CD：staging（每次合併到 main）
@@ -162,7 +171,7 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
 - Apple Developer Program（年費）與 Google Play（一次性）已具備。
 
 ## 實作順序
-1. **第一個實作 PR**：`ci.yml`、`ios.yml` 與 `ci-ok` 彙總 job；跑過一次後到 ruleset 設定必要檢查。
+1. **第一個實作 PR**：`ci.yml`、`ios.yml`、`android.yml` 與各自的彙總 job；跑過一次後到 ruleset 設定必要檢查。
 2. **建立 Supabase 兩個專案與 GitHub Environments**：設定 secrets；`production` 設定必須核准。
 3. **`cd-staging.yml`**：
    - 先手動在兩個商店建立 APP。
