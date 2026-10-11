@@ -113,9 +113,11 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
      - 和正式版的發布憑證分開，`staging` Environment 也不放 App Store Connect API key，所以 staging 流程無法上傳或送審。
    - 建置：`flutter build ipa --release --flavor staging --export-options-plist=ios/ExportOptions-staging.plist`。
      - `ExportOptions-staging.plist` 納入版本控管：`method` 為 Ad Hoc（Xcode 15.3 起新名稱為 `release-testing`，舊名 `ad-hoc` 仍可用，實作時依 runner 的 Xcode 版本確認）、`signingStyle` 為 `manual`，並以 `provisioningProfiles` 指定 `.staging` bundle id 對應的 profile 名稱；不使用 `flutter build ipa` 的預設匯出（App Store）。
-     - 建置號 `--build-number` 為 `<commit 數>.<github.run_number>.<github.run_attempt>`（`CFBundleVersion` 可用最多三段以點分隔的整數）：
+     - 建置號 `--build-number` 為 `<commit 數>.<job 開始時的 UTC Unix 秒數>`（`CFBundleVersion` 可用最多三段以點分隔的整數）：
        - commit 數 = `git rev-list --count HEAD`（checkout 設定 `fetch-depth: 0`，並檢查不是 shallow）。
-       - 只用 commit 數不夠：同一個 commit 重跑（例如簽章失敗後重試）時數字不變，測試者分不出新舊。加上 `run_number`（每次新執行遞增）與 `run_attempt`（重跑遞增）後，每次建置的號碼都不同且單調遞增，Firebase 也會把每次建置視為新版本並通知測試者。
+       - 只用 commit 數不夠：同一個 commit 重跑（例如簽章失敗後重試）時數字不變，測試者分不出新舊。
+       - 不用 `run_number`／`run_attempt`：重跑時 `run_number` 不變，若同一個 commit 有兩次執行（例如兩條 CI 幾乎同時完成都觸發部署），舊執行在新執行之後重跑會得到較小的號碼（`C.50.2` < `C.51.1`）。
+       - 時間戳記對所有執行與重跑全域遞增；`ios-ipa` 在 `cd-staging-ios` 群組內一次只跑一個，較晚開始的 job 一定拿到較大的號碼，Firebase 也會把每次建置視為新版本並通知測試者。
    - **發佈：Firebase App Distribution**（[說明](https://firebase.google.com/docs/app-distribution)）：
      - 以 Firebase CLI（`firebase-tools`，固定版本）執行 `firebase appdistribution:distribute <ipa> --app <Firebase iOS App ID> --groups staging-ios --release-notes "<commit SHA 與標題>"`。
      - 認證優先用 **Workload Identity Federation**（`google-github-actions/auth`，釘選 SHA；job 加 `id-token: write`），不存放長期金鑰：
