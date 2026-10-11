@@ -71,10 +71,10 @@ UI：`cupertino_native_better`（iOS 原生 Liquid Glass 元件）、`material_3
 | 平台 | 最新規範 | Flutter 官方支援 | 對策 |
 |---|---|---|---|
 | iOS | **Liquid Glass**（iOS 26 推出；iOS 27 調整：預設透明度降低、系統設定可調玻璃強度） | 無。Flutter 自繪畫面，不會自動套用；官方表示開發中但無時程（[flutter#170310](https://github.com/flutter/flutter/issues/170310)） | 導覽與控制元件以 `cupertino_native_better` 嵌入**原生** UIKit 元件 |
-| Android | **Material 3 Expressive**（形狀、彈簧動態、浮動工具列、強調字級） | 核心函式庫未支援，官方暫不開發（[flutter#168813](https://github.com/flutter/flutter/issues/168813)） | Material 3 主題 + `material_3_expressive` 元件 |
+| Android | **Material 3 Expressive**（形狀、彈簧動態、浮動工具列、強調字級） | 尚未提供。官方 2026-06 表示將在 Material 從核心框架拆出、成為 `flutter/packages` 中的獨立套件後逐步推出，尚無時程（[flutter#168813](https://github.com/flutter/flutter/issues/168813)） | 先用 Material 3 主題 + `material_3_expressive` 元件；官方套件推出後改用 |
 
 ### 自適應元件層 `lib/ui/adaptive/`
-畫面只使用這一層的元件，不直接呼叫平台套件；Flutter 官方支援推出後只需替換這一層。APP 最低支援 iOS 15（`cupertino_native_better` 的下限），iOS 26 以上才使用原生 Liquid Glass。
+畫面只使用這一層的元件，不直接呼叫平台套件；Flutter 官方支援推出後只需替換這一層。開始實作時以及之後每次升級 Flutter 時，重新確認官方 Material（M3 Expressive）與 Cupertino（Liquid Glass）套件的進度，已可用就改用官方實作、移除第三方套件。APP 最低支援 iOS 15（`cupertino_native_better` 的下限），iOS 26 以上才使用原生 Liquid Glass。
 
 | 元件 | iOS 26+ | iOS 15–18 | Android |
 |---|---|---|---|
