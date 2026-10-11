@@ -49,6 +49,30 @@ void main() {
       EligibilityStatus.notAllowed,
     );
   });
+  test('待確認或過時的社群「不可停」不能蓋過規則', () {
+    final heavy = rule('臺北市', VehicleType.heavy);
+    for (final claim in [
+      spot(SpaceType.paidMotorcycle, status: TrustStatus.pending, heavy: false),
+      spot(
+        SpaceType.paidMotorcycle,
+        heavy: false,
+        last: DateTime.now().subtract(const Duration(days: 200)),
+      ),
+    ]) {
+      expect(
+        eligibility(claim, VehicleType.heavy, heavy).status,
+        EligibilityStatus.conditional,
+      );
+    }
+    expect(
+      eligibility(
+        spot(SpaceType.paidMotorcycle, heavy: false),
+        VehicleType.heavy,
+        heavy,
+      ).status,
+      EligibilityStatus.notAllowed,
+    );
+  });
   test('尚未生效的規則不套用', () {
     expect(
       eligibility(

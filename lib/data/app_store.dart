@@ -48,8 +48,9 @@ class AppStore extends ChangeNotifier {
   String city = 'Taipei';
   String? error;
 
-  /// Kept apart from [error] so a parking refresh cannot hide stale rules.
-  String? rulesWarning;
+  /// Kept apart from [error] so a parking refresh cannot hide stale rules
+  /// or a failed cloud favorites sync.
+  String? rulesWarning, favoritesWarning;
   bool loading = false;
   bool truncated = false;
   MapViewport viewport = const MapViewport(
@@ -108,7 +109,7 @@ class AppStore extends ChangeNotifier {
       final result = await parking.inViewport(bounds);
       if (_disposed || request != _request) return;
       spots = result.spots;
-      error = result.warning ?? rulesWarning;
+      error = result.warning ?? rulesWarning ?? favoritesWarning;
       truncated = result.truncated;
     } catch (_) {
       if (_disposed || request != _request) return;
@@ -206,10 +207,11 @@ class AppStore extends ChangeNotifier {
             .toList();
         if (key != favoritesKey) return;
         favorites = loaded;
+        favoritesWarning = null;
         await local.setFavorites(key, loaded);
       } catch (_) {
         if (key != favoritesKey) return;
-        error = '雲端收藏同步失敗，顯示本機收藏';
+        error = favoritesWarning = '雲端收藏同步失敗，顯示本機收藏';
       }
     }
     notifyListeners();

@@ -39,6 +39,19 @@ class FailingRules extends RulesRepository {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test('雲端收藏同步失敗的提示在停車資料更新後仍保留', () async {
+    SharedPreferences.setMockInitialValues({});
+    final store = AppStore(
+      LocalRepository(await SharedPreferences.getInstance()),
+      null,
+    );
+    addTearDown(store.dispose);
+    await store.init();
+    store.favoritesWarning = '雲端收藏同步失敗，顯示本機收藏';
+    await store.refresh();
+    expect(store.spots, isNotEmpty);
+    expect(store.error, '雲端收藏同步失敗，顯示本機收藏');
+  });
   test('遠端規則失敗時，停車資料更新後仍保留內建規則提示', () async {
     SharedPreferences.setMockInitialValues({});
     final store = AppStore(

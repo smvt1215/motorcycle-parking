@@ -26,7 +26,13 @@ Eligibility eligibility(
   final explicit = vehicle == VehicleType.heavy
       ? spot.heavyAllowed
       : spot.scooterAllowed;
-  if (explicit == false) {
+  // Only trusted data may deny outright; a pending or stale community claim
+  // falls through to the rules below, which keep it conditional.
+  final trusted =
+      spot.source == 'tdx' ||
+      spot.source == 'official' ||
+      (spot.status == TrustStatus.confirmed && !spot.stale);
+  if (explicit == false && trusted) {
     return const Eligibility(EligibilityStatus.notAllowed, '此點位標示不開放目前車種');
   }
   if (spot.spaceType == SpaceType.heavyOnly && vehicle == VehicleType.scooter) {
