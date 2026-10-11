@@ -19,9 +19,13 @@ final storeProvider = ChangeNotifierProvider<AppStore>(
 );
 
 class AppStore extends ChangeNotifier {
-  AppStore(this.local, this.client, {ParkingRepository? parkingRepository})
-    : parking = parkingRepository ?? ParkingRepository(client),
-      rulesRepository = RulesRepository(client) {
+  AppStore(
+    this.local,
+    this.client, {
+    ParkingRepository? parkingRepository,
+    RulesRepository? rulesRepository,
+  }) : parking = parkingRepository ?? ParkingRepository(client),
+       rulesRepository = rulesRepository ?? RulesRepository(client) {
     vehicle = local.vehicle;
     parked = local.parked;
     _auth = client?.auth.onAuthStateChange.listen((_) {
@@ -43,6 +47,9 @@ class AppStore extends ChangeNotifier {
   double mapLat = 25.0339, mapLng = 121.5623;
   String city = 'Taipei';
   String? error;
+
+  /// Kept apart from [error] so a parking refresh cannot hide stale rules.
+  String? rulesWarning;
   bool loading = false;
   bool truncated = false;
   MapViewport viewport = const MapViewport(
@@ -86,7 +93,7 @@ class AppStore extends ChangeNotifier {
       rules = await rulesRepository.load();
     } catch (_) {
       rules = await RulesRepository(null).load();
-      error = '遠端規則讀取失敗，顯示內建規則';
+      error = rulesWarning = '遠端規則讀取失敗，顯示內建規則';
     }
     await refresh();
   }
@@ -101,7 +108,7 @@ class AppStore extends ChangeNotifier {
       final result = await parking.inViewport(bounds);
       if (_disposed || request != _request) return;
       spots = result.spots;
-      error = result.warning;
+      error = result.warning ?? rulesWarning;
       truncated = result.truncated;
     } catch (_) {
       if (_disposed || request != _request) return;

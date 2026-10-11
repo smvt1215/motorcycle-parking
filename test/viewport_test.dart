@@ -31,8 +31,29 @@ class ControlledParking extends ParkingRepository {
   }
 }
 
+class FailingRules extends RulesRepository {
+  FailingRules() : super(null);
+  @override
+  Future<List<CityRule>> load() => Future.error(StateError('offline'));
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test('遠端規則失敗時，停車資料更新後仍保留內建規則提示', () async {
+    SharedPreferences.setMockInitialValues({});
+    final store = AppStore(
+      LocalRepository(await SharedPreferences.getInstance()),
+      null,
+      rulesRepository: FailingRules(),
+    );
+    addTearDown(store.dispose);
+    await store.init();
+    expect(store.rules, isNotEmpty);
+    expect(store.spots, isNotEmpty);
+    expect(store.error, '遠端規則讀取失敗，顯示內建規則');
+    await store.refresh();
+    expect(store.error, '遠端規則讀取失敗，顯示內建規則');
+  });
   test('範例資料只回傳畫面範圍內的點位，移至別處後不沿用臺北資料', () async {
     final repo = ParkingRepository(null);
     final local = await repo.inViewport(taipei);

@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/geo.dart';
 import '../../data/app_store.dart';
 import '../../models/parking.dart';
 import '../../ui/adaptive/adaptive.dart';
@@ -60,6 +61,48 @@ Future<void> showSettings(BuildContext context, AppStore store) =>
         ],
       ),
     );
+
+/// All 22 municipalities, so a report is never forced into a nearby city.
+const taiwanCities = [
+  '臺北市',
+  '新北市',
+  '基隆市',
+  '桃園市',
+  '新竹市',
+  '新竹縣',
+  '苗栗縣',
+  '臺中市',
+  '彰化縣',
+  '南投縣',
+  '雲林縣',
+  '嘉義市',
+  '嘉義縣',
+  '臺南市',
+  '高雄市',
+  '屏東縣',
+  '宜蘭縣',
+  '花蓮縣',
+  '臺東縣',
+  '澎湖縣',
+  '金門縣',
+  '連江縣',
+];
+
+/// The city of a known spot within 1 km of the report, or null when the
+/// reporter has to choose; a wrong city would apply the wrong parking rules.
+String? nearbyCity(Iterable<ParkingSpot> spots, double lat, double lng) {
+  String? city;
+  var best = 1000.0;
+  for (final spot in spots) {
+    final meters = distanceMeters(lat, lng, spot.lat, spot.lng);
+    if (meters <= best && taiwanCities.contains(spot.city)) {
+      best = meters;
+      city = spot.city;
+    }
+  }
+  return city;
+}
+
 Future<void> showReport(
   BuildContext context,
   AppStore store,
@@ -91,7 +134,7 @@ class _ReportFormState extends State<ReportForm> {
   SpaceType type = SpaceType.paidMotorcycle;
   bool scooter = true;
   bool? heavy;
-  String city = '臺北市';
+  late String? city = nearbyCity(widget.store.spots, widget.lat, widget.lng);
   bool sending = false;
   @override
   void dispose() {
@@ -131,14 +174,11 @@ class _ReportFormState extends State<ReportForm> {
           DropdownButtonFormField<String>(
             initialValue: city,
             decoration: const InputDecoration(labelText: '縣市'),
-            items: const [
-              '臺北市',
-              '新北市',
-              '桃園市',
-              '臺中市',
-              '高雄市',
-            ].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-            onChanged: (v) => setState(() => city = v!),
+            items: taiwanCities
+                .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                .toList(),
+            validator: (v) => v == null ? '請選擇停車點所在縣市' : null,
+            onChanged: (v) => setState(() => city = v),
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<SpaceType>(
