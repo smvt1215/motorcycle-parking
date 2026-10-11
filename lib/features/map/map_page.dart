@@ -162,6 +162,9 @@ class _MapPageState extends ConsumerState<MapPage> {
     final store = ref.watch(storeProvider);
     final colors = Theme.of(context).colorScheme;
     final darkMap = colors.brightness == Brightness.dark;
+    // iOS extends the map behind the floating tab bar; Scaffold reports its
+    // height here (0 on Android, where the body already ends above the bar).
+    final tabBarInset = MediaQuery.paddingOf(context).bottom;
     final query = searchController.text.trim().toLowerCase();
     final visible = store.spots.where(
       (s) => store.viewport.contains(s.lat, s.lng),
@@ -533,7 +536,7 @@ class _MapPageState extends ConsumerState<MapPage> {
               ),
             Positioned(
               right: 16,
-              bottom: AppConfig.useGoogleMaps ? 118 : 102,
+              bottom: tabBarInset + (AppConfig.useGoogleMaps ? 118 : 102),
               child: MapAction(
                 label: '定位到我',
                 icon: Icons.my_location,
@@ -550,7 +553,7 @@ class _MapPageState extends ConsumerState<MapPage> {
             ),
             Positioned(
               right: 16,
-              bottom: AppConfig.useGoogleMaps ? 46 : 30,
+              bottom: tabBarInset + (AppConfig.useGoogleMaps ? 46 : 30),
               child: MapAction(
                 label: '我停這裡',
                 icon: Icons.turn_right,
@@ -558,50 +561,55 @@ class _MapPageState extends ConsumerState<MapPage> {
                 onPressed: () => showParkingForm(context, store),
               ),
             ),
+            // Notice and OSM credit share one column so they never overlap,
+            // and stay clear of the record button and the iOS tab bar.
             Positioned(
               left: 16,
               right: 88,
-              bottom: AppConfig.useGoogleMaps ? 76 : 44,
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Material(
-                  color: colors.surface.withValues(alpha: .96),
-                  borderRadius: BorderRadius.circular(12),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
-                    child: Text(
-                      store.demo ? '範例資料 · 行駛中請勿操作' : '停車前請確認現場標示',
-                      style: Theme.of(context).textTheme.labelSmall,
+              bottom: tabBarInset + (AppConfig.useGoogleMaps ? 76 : 8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Material(
+                    color: colors.surface.withValues(alpha: .96),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      child: Text(
+                        store.demo ? '範例資料 · 行駛中請勿操作' : '停車前請確認現場標示',
+                        style: Theme.of(context).textTheme.labelSmall,
+                      ),
                     ),
                   ),
-                ),
+                  if (!AppConfig.useGoogleMaps) ...[
+                    const SizedBox(height: 4),
+                    TextButton(
+                      onPressed: () => launchUrl(
+                        Uri.parse('https://www.openstreetmap.org/copyright'),
+                      ),
+                      style: TextButton.styleFrom(
+                        backgroundColor: colors.surface.withValues(alpha: .96),
+                        foregroundColor: colors.onSurfaceVariant,
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        minimumSize: const Size(0, 44),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Text(
+                        '© OpenStreetMap contributors',
+                        style: Theme.of(context).textTheme.labelSmall
+                            ?.copyWith(color: colors.onSurfaceVariant),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
-            if (!AppConfig.useGoogleMaps)
-              Positioned(
-                left: 8,
-                bottom: 0,
-                child: TextButton(
-                  onPressed: () => launchUrl(
-                    Uri.parse('https://www.openstreetmap.org/copyright'),
-                  ),
-                  style: TextButton.styleFrom(
-                    backgroundColor: colors.surface.withValues(alpha: .9),
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    minimumSize: const Size(0, 28),
-                  ),
-                  child: Text(
-                    '© OpenStreetMap contributors',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: colors.onSurfaceVariant,
-                    ),
-                  ),
-                ),
-              ),
             if (searchFocus.hasFocus && !searchResultsSuppressed)
               Positioned(
                 top: MediaQuery.paddingOf(context).top + searchHeight + 20,

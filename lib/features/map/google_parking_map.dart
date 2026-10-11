@@ -154,7 +154,8 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
                   bottom: widget.panelVisible
                       ? size.height * .92
                       : widget.interactive
-                      ? 8
+                      // Lift the Google logo above the iOS floating tab bar.
+                      ? 8 + MediaQuery.paddingOf(context).bottom
                       : size.height * .55,
                 ),
                 onMapCreated: (value) => unawaited(_onCreated(value)),

@@ -30,28 +30,28 @@ void main() {
       await binding.convertFlutterSurfaceToImage();
       await tester.pump();
     }
-    await binding.takeScreenshot('map-light');
+    await shoot(binding, tester, 'map-light');
     await tester.tap(find.byKey(const ValueKey('parking-search')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const ValueKey('parking-search')), '地下');
     await tester.pumpAndSettle();
     await tester.tap(find.text('[範例] 信義地下停車場'));
     await tester.pumpAndSettle();
-    await binding.takeScreenshot('spot-sheet-half');
+    await shoot(binding, tester, 'spot-sheet-half');
     await tester.drag(
       find.byType(DraggableScrollableSheet),
       const Offset(0, -420),
     );
     await tester.pumpAndSettle();
-    await binding.takeScreenshot('spot-sheet-full');
+    await shoot(binding, tester, 'spot-sheet-full');
     await binding.handlePopRoute();
     await tester.pumpAndSettle();
     await selectTab(tester, 2, (rect) => rect.center.dx);
-    await binding.takeScreenshot('personal-light');
+    await shoot(binding, tester, 'personal-light');
     await tester.tap(find.text('停車規則'));
     await tester.pumpAndSettle();
     expect(find.text('停之前，先看規則'), findsOneWidget);
-    await binding.takeScreenshot('rules-light');
+    await shoot(binding, tester, 'rules-light');
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
     await tester.pumpWidget(
@@ -61,13 +61,13 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await binding.takeScreenshot('map-dark');
+    await shoot(binding, tester, 'map-dark');
     await selectTab(tester, 4, (rect) => rect.right - rect.width / 6);
     expect(find.text('新增停車點'), findsOneWidget);
-    await binding.takeScreenshot('contribute-dark');
+    await shoot(binding, tester, 'contribute-dark');
     await tester.tap(find.byTooltip('新增停車點'));
     await tester.pumpAndSettle();
-    await binding.takeScreenshot('report-dark');
+    await shoot(binding, tester, 'report-dark');
     expect(tester.takeException(), isNull);
   });
 }
@@ -88,4 +88,18 @@ Future<void> selectTab(
     await tester.tapAt(Offset(dx(rect), rect.bottom - 50));
   }
   await tester.pumpAndSettle();
+}
+
+/// Native iOS platform views (tab bar, glass buttons) draw after Flutter
+/// settles; wait briefly so screenshots show them instead of placeholders.
+Future<void> shoot(
+  IntegrationTestWidgetsFlutterBinding binding,
+  WidgetTester tester,
+  String name,
+) async {
+  if (isCupertino) {
+    await Future<void>.delayed(const Duration(seconds: 1));
+    await tester.pump();
+  }
+  await binding.takeScreenshot(name);
 }

@@ -370,6 +370,52 @@ void main() {
       second.dispose();
     });
   });
+  testWidgets('iOS 地圖控制、提示與署名避開懸浮分頁列且互不重疊', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(430, 932);
+    tester.view.padding = const FakeViewPadding(top: 59, bottom: 34);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPadding);
+    final store = (await tester.runAsync(testStore))!;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [storeProvider.overrideWith((ref) => store)],
+        child: const ParkingApp(),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+    final tabBar = tester.getRect(
+      find.ancestor(
+        of: find.text('探索').last,
+        matching: find.byWidgetPredicate(
+          (w) => w.runtimeType.toString() == 'CupertinoTabBar',
+        ),
+      ),
+    );
+    final notice = tester.getRect(find.text('範例資料 · 行駛中請勿操作'));
+    final credit = tester.getRect(
+      find.widgetWithText(TextButton, '© OpenStreetMap contributors'),
+    );
+    for (final rect in [
+      notice,
+      credit,
+      ...find
+          .byType(MapAction)
+          .evaluate()
+          .map((e) => tester.getRect(find.byWidget(e.widget))),
+    ]) {
+      expect(rect.bottom, lessThanOrEqualTo(tabBar.top));
+    }
+    expect(notice.overlaps(credit), isFalse);
+    expect(credit.height, greaterThanOrEqualTo(44));
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    debugDefaultTargetPlatformOverride = null;
+  });
   for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
     for (final dark in [false, true]) {
       testWidgets('${platform.name} ${dark ? '深色' : '淺色'} 規則畫面 golden', (

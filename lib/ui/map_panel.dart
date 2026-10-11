@@ -67,7 +67,13 @@ class _MapPanelState extends State<MapPanel> {
           clipBehavior: Clip.antiAlias,
           child: ListView(
             controller: scroll,
-            padding: const EdgeInsets.fromLTRB(24, 12, 24, 120),
+            // Keep the last rows above the iOS floating tab bar.
+            padding: EdgeInsets.fromLTRB(
+              24,
+              12,
+              24,
+              120 + MediaQuery.paddingOf(context).bottom,
+            ),
             children: [
               Center(
                 child: Container(

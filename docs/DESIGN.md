@@ -12,7 +12,7 @@
 
 使用者提供的地圖介面參考於 2026-10-11 優先套用：滿版地圖、上方圓角搜尋列、橫向篩選 pill、右下定位／記錄停車動作。底部改為「探索／個人中心／貢獻」；規則與收藏保留各自路由，入口集中在個人中心。「個人中心」與「貢獻」使用地圖背景上的可上拉面板，保留底部分頁與原地圖位置；面板可停在半高、九成與全高，往下滑到底部即關閉並回到探索，再次開啟時恢復九成高度。貢獻面板提供新增停車點、修改資訊、补充重機資訊與檢舉入口。搜尋直接輸入並顯示下拉結果，僅比對目前地圖範圍內的停車點；空白與純空格不能送出。車種切換只保留篩選列的一個入口，移除搜尋列車種圖示與重複的圖層按鈕。瀏覽不需選擇縣市；拖曳或縮放停止 450 毫秒後，自動查詢可見範圍。跨市界時合併各縣市 TDX 資料，資格仍依各點所在縣市判斷。範圍過大或結果超過上限時提示放大；過時回應不能覆蓋新範圍。
 
-範例提示移至左下角，避免遮住搜尋与停車標記。2026-10-11 改採 Google Maps：設定對應平台金鑰後使用官方 SDK，沿用現有控制與停車資料；未設定金鑰／離線測試時保留 OpenStreetMap 預覽，顯示實際來源署名。Google Maps 標誌與版權由 SDK 顯示，定位與記錄按鈕避開署名位置。Web 的浮動控制與面板需攔截 HTML 地圖事件；開啟面板或根 Navigator 的彈出層時，暫停底圖互動。Google Maps Platform 已啟用，實際載圖仍等待 API Key。
+範例提示移至左下角，避免遮住搜尋与停車標記；OpenStreetMap 署名與提示同一欄上下排列，不互相重疊，署名點擊區至少 44。iOS 的地圖延伸到懸浮分頁列下方，定位、記錄停車、提示、署名與 Google 標誌都依 Scaffold 回報的分頁列高度上移，不被分頁列遮住；面板清單底部同樣加上分頁列高度。2026-10-11 改採 Google Maps：設定對應平台金鑰後使用官方 SDK，沿用現有控制與停車資料；未設定金鑰／離線測試時保留 OpenStreetMap 預覽，顯示實際來源署名。Google Maps 標誌與版權由 SDK 顯示，定位與記錄按鈕避開署名位置。Web 的浮動控制與面板需攔截 HTML 地圖事件；開啟面板或根 Navigator 的彈出層時，暫停底圖互動。Google Maps Platform 已啟用，實際載圖仍等待 API Key。
 
 | 元件 | iOS 26+ | 舊版 iOS | Android / Web |
 |---|---|---|---|
@@ -20,6 +20,7 @@
 | 導覽 | CupertinoNavigationBar + CNButton | CupertinoNavigationBar | M3EAppBar |
 | 車種 | CNSegmentedControl | CupertinoSlidingSegmentedControl | M3EButtonGroup |
 | 主要按鈕 | CNButton | CupertinoButton | M3EButton |
+| 地圖動作（定位、記錄停車） | 原生 CNButton：定位為 glass、記錄停車為 prominentGlass，不加 Flutter 底色或陰影 | CupertinoButton | IconButton（待換 M3EToolbar／M3EFab） |
 | 詳情 sheet | CNBottomSheet + DraggableScrollableSheet | 同左 | 官方 showModalBottomSheet + DraggableScrollableSheet |
 | 表單 sheet | CNBottomSheet.showCupertino | 同左 | 官方 showModalBottomSheet |
 | 輸入、清單與篩選 | 官方 Material 表單（待 Cupertino 完整適配） | 同左 | 官方元件 |

@@ -250,6 +250,29 @@ class MapAction extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    if (nativeGlass) {
+      // Map controls are native Liquid Glass: no Flutter fill or shadow, so
+      // the glass samples the map and follows system transparency settings.
+      return SizedBox.square(
+        dimension: 56,
+        child: CNButton.icon(
+          icon: CNSymbol(
+            primary
+                ? 'arrow.turn.up.right'
+                : tonal
+                ? 'square.3.layers.3d'
+                : 'location',
+          ),
+          tint: colors.primary,
+          config: CNButtonConfig(
+            style: primary ? CNButtonStyle.prominentGlass : CNButtonStyle.glass,
+            width: 56,
+            minHeight: 56,
+          ),
+          onPressed: onPressed,
+        ),
+      );
+    }
     final color = primary
         ? colors.primary
         : tonal
@@ -268,19 +291,7 @@ class MapAction extends StatelessWidget {
       child: SizedBox(
         width: 56,
         height: 56,
-        child: nativeGlass
-            ? CNButton.icon(
-                icon: CNSymbol(
-                  primary
-                      ? 'arrow.turn.up.right'
-                      : tonal
-                      ? 'square.3.layers.3d'
-                      : 'location',
-                ),
-                tint: foreground,
-                onPressed: onPressed,
-              )
-            : isCupertino
+        child: isCupertino
             ? cu.CupertinoButton(
                 padding: EdgeInsets.zero,
                 onPressed: onPressed,
