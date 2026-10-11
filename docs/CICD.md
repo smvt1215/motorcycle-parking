@@ -82,7 +82,13 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
    - 改用 `workflow_run` 監聽 `ci.yml`、`ios.yml`、`android.yml` 在 `main` 上完成。
    - 第一個 job 以 GitHub API 查詢該 commit（`workflow_run.head_sha`）三個彙總檢查的結果：全部成功才繼續；仍有未完成的就結束，交給最後完成的那條 CI 觸發的執行；任何一個失敗就停止。
    - 部署的程式碼一律 checkout `workflow_run.head_sha`，不用當下 `main` 的最新 commit。
-   - `concurrency` 以 commit SHA 分組、不取消進行中的執行，所以同一 commit 不會同時部署兩次。
+   - **所有 staging 部署排成一列**：部署 job 的 `concurrency` 使用固定群組 `cd-staging`（設在 job 層級，檢查 job 不排隊），不取消進行中的執行，所以任何時刻最多只有一個 staging 部署在跑。
+     - 依 GitHub 的行為，排隊中的執行只保留最新一個，中間的 commit 會被略過，這是預期行為。
+   - **只部署 `main` 最新的 commit**：檢查 `workflow_run.head_sha` 是否為 `main` 最新的 commit，做兩次：
+     - 第一次在不排隊的檢查 job 裡，與上面的 CI 結果查詢一起做，不是最新就直接結束，不進佇列。否則較舊 commit 晚到的重複觸發，可能取代佇列中最新 commit 的執行。
+     - 第二次在部署 job 取得執行權後再確認一次。
+     - 只要不是最新就略過部署，因為之後的 commit 會帶著更新的程式碼部署。如此 staging 不會被舊程式碼覆蓋，也不會上傳比已上傳更小的建置號。
+   - 部署 job 的成功或略過要分得清楚：只有實際完成部署才算「已部署」，供正式發版檢查。
 1. **後端**：
    - `supabase link --project-ref $STAGING_REF`
    - `supabase db push` 套用新 migration
@@ -112,6 +118,9 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
      - 發版期間（從打 tag 到核准完成）暫停合併其他 PR。
    - `pubspec.yaml` 的 `version` 必須等於 tag 的版本號（例如 `1.2.0`）。
    - 該 commit 的 CI 必須全綠。
+   - **該 commit 必須已成功部署到 staging**：查詢 `cd-staging.yml` 針對同一個 SHA 的執行，部署 job 必須實際成功，被略過不算。
+     - staging 還在跑：等它完成，最多 60 分鐘；逾時就失敗。這也確保 staging 較小的建置號會先上傳完，不會在正式版之後才上傳。
+     - staging 失敗或被略過：正式發版失敗，並提示先修好 staging。
 2. **人工核准**：
    - 綁定 GitHub Environment `production`，設定必須由你核准才會繼續。
    - 公開 repo 免費可用。
