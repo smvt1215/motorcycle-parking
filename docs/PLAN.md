@@ -99,7 +99,8 @@ UI：`material_ui`、`cupertino_ui`（Flutter 官方設計套件，取代框架�
   - 在根 `GoRouter` 的 `observers` 註冊 `CNTabBarRouteObserver`。
   - iOS 的 sheet 一律要讓套件知道它的位置：
     - 一般 sheet（回報表單等）以 `CNBottomSheet.showCupertino` 開啟（自動加上 `CNSheetGeometryProbe`）。
-    - 車位詳情需要停在半高／全高，但 `showCupertinoSheet`（`CNBottomSheet.showCupertino` 的底層）只有固定 `topGap` 與拖曳關閉，沒有可停高度（[API](https://pub.dev/documentation/cupertino_ui/latest/cupertino_ui/showCupertinoSheet.html)）。因此改以 modal 路由搭配 `DraggableScrollableSheet`（`snap: true`，停點 0.5／1.0），並以 `CNSheetGeometryProbe` 包住 sheet 內容，維持疊放協調。
+    - 車位詳情需要停在半高／全高，但 `showCupertinoSheet`（`CNBottomSheet.showCupertino` 的底層）只有固定 `topGap` 與拖曳關閉，沒有可停高度（[API](https://pub.dev/documentation/cupertino_ui/latest/cupertino_ui/showCupertinoSheet.html)）。因此改用 `CNBottomSheet.show(isScrollControlled: true, ...)`（底層為 `showModalBottomSheet`，路由型別 `ModalBottomSheetRoute`，並自動加上 `CNSheetGeometryProbe`），內容使用 `DraggableScrollableSheet`（`snap: true`，停點 0.5／1.0），外觀依 iOS 規範調整（圓角、拖曳把手、背景材質）。
+    - `CNTabBarRouteObserver` 只把**型別名稱含 `Sheet`** 的路由視為 modal 並隱藏分頁列（[原始碼](https://github.com/gunumdogdu/cupertino_native_better/blob/main/lib/components/tab_bar.dart)），`CNSheetGeometryProbe` 只回報位置、不會觸發隱藏。因此不得用 `PageRouteBuilder` 等一般路由開 sheet；若真的需要自訂路由，路由類別名稱須含 `Sheet`，或在開啟／關閉時呼叫 `markAnyModalActive()`／`markAnyModalInactive()`。
   - 不經路由的自訂彈出層，開啟／關閉時呼叫 `CNTabBarRouteObserver.markAnyModalActive()`／`markAnyModalInactive()`。
 
 ### Android 規則（Material 3 Expressive）
