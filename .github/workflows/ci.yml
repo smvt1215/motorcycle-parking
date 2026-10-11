@@ -74,7 +74,7 @@ jobs:
       - name: Rebuild local database and check RLS
         if: steps.changes.outputs.run == 'true'
         run: |
-          supabase start > /tmp/supabase-start.log 2>&1
+          supabase start > /tmp/supabase-start.log 2>&1 || { cat /tmp/supabase-start.log; exit 1; }
           supabase test db
       - name: Stop local stack
         if: always() && steps.changes.outputs.run == 'true'
