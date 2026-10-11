@@ -6,8 +6,9 @@
 - 平台：**GitHub Actions**（公開 repo 使用 GitHub 標準 runner 不收費，含 macOS）。
 - 簽章與上架工具：**fastlane**（iOS 用 App Store Connect API key，Android 用 Google Play 服務帳號）。
 - 後端環境：**Supabase staging + production** 兩個專案。
-- 發版觸發：推送版本 tag `vX.Y.Z`；合併到 `main` 只更新 staging 後端並產生測試用 APK。
+- 發版觸發：推送版本 tag `vX.Y.Z`；合併到 `main` 只更新 staging 後端並產生測試用 APK 與 IPA。
 - **商店只上架正式版**：staging 建置一律不上傳 Google Play 或 TestFlight，測試者不會被商店替換版本，也不會誤連到另一個後端。
+- **iOS 測試安裝檔用 Ad Hoc 簽章**：staging IPA 只能安裝在事先註冊 UDID 的 iPhone 上，不經 TestFlight。
 - 已具備：Apple Developer Program、Google Play Console。
 
 ## 整體流程
@@ -17,6 +18,7 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
                                          ▼
                          CD staging：Supabase staging 部署
                                    + 連 staging 的 Android 測試 APK（workflow artifact，直接安裝）
+                                   + 連 staging 的 iOS 測試 IPA（Ad Hoc，workflow artifact，裝到已註冊的 iPhone）
                                          │
                        推送 tag vX.Y.Z ──┘
                                          ▼
@@ -31,7 +33,7 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
 | `ci.yml` | PR、push 到 `main` | Linux | Flutter 檢查與測試、Supabase 檢查、Android 建置 |
 | `ios.yml` | PR、push 到 `main`、手動 | macOS | iOS 模擬器建置與截圖（見 PLAN.md「UI 設計規範 › 驗證」） |
 | `android.yml` | PR、push 到 `main`、手動 | Linux（模擬器硬體加速） | Android 模擬器截圖（API 36 與 API 30） |
-| `cd-staging.yml` | `main` 上的三條 CI 都成功後（`workflow_run`） | Linux | 部署 staging 後端、產生 Android 測試 APK（不上傳商店） |
+| `cd-staging.yml` | `main` 上的三條 CI 都成功後（`workflow_run`） | Linux + macOS | 部署 staging 後端、產生 Android 測試 APK 與 iOS 測試 IPA（不上傳商店） |
 | `release.yml` | 推送 tag `v*` | Linux + macOS | 部署 production 後端、上架兩平台、建立 GitHub Release |
 
 ## CI（每個 PR）
@@ -100,9 +102,27 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
    - 使用獨立的 applicationId 後綴 `.staging`、APP 名稱加上「β」、圖示加上測試標記，可以和商店版並存，一眼分得出來。
    - 以專用的 staging 簽章金鑰簽署，和正式版上傳金鑰分開。
    - 上傳為 workflow artifact（保留 30 天），下載後直接安裝到手機測試。
-3. **iOS**：
-   - iOS 不經商店或 TestFlight 無法安裝到一般手機，所以 staging 階段不產生 iOS 安裝檔。
-   - iOS 的 staging 驗證靠 `ios.yml` 的模擬器截圖，以及開發者在自己的 Mac 上連 staging 執行。
+3. **iOS 測試 IPA**（Ad Hoc，不上傳 TestFlight）：
+   - 獨立的 job `ios-ipa`（macOS runner），`needs` 部署 job，且只在部署 job 回報**實際完成部署**時執行；部署被略過（不是 `main` 最新的 commit）就不建置，避免產生連到舊後端狀態的安裝檔。
+     - 不加入 `cd-staging` 佇列：IPA 只是 artifact，不會覆蓋任何共用環境，各次執行可以並行。
+     - 正式發版的「已部署到 staging」檢查只看部署 job；IPA 建置失敗會讓這次執行顯示失敗並需要修正，但不影響後端已部署的判斷。
+   - 與 Android 相同的 staging 外觀：Flutter flavor `staging`（Xcode 的 `staging` scheme 與 build configuration），bundle id 加上 `.staging` 後綴、APP 名稱加上「β」、圖示加上測試標記，可以和商店版並存。
+   - checkout `workflow_run.head_sha`，以 `--dart-define` 帶入 staging 的 Supabase URL／anon key。
+   - 簽章：從 `staging` Environment 取出 staging 專用的 Apple Distribution 憑證（`.p12`）與 Ad Hoc provisioning profile，匯入 runner 的暫時 keychain，建置後刪除。
+     - 和正式版的發布憑證分開，`staging` Environment 也不放 App Store Connect API key，所以 staging 流程無法上傳或送審。
+   - 建置：`flutter build ipa --release --flavor staging --export-options-plist=ios/ExportOptions-staging.plist`。
+     - `ExportOptions-staging.plist` 納入版本控管：`method` 為 Ad Hoc（Xcode 15.3 起新名稱為 `release-testing`，舊名 `ad-hoc` 仍可用，實作時依 runner 的 Xcode 版本確認）、`signingStyle` 為 `manual`，並以 `provisioningProfiles` 指定 `.staging` bundle id 對應的 profile 名稱；不使用 `flutter build ipa` 的預設匯出（App Store）。
+     - 建置號 `--build-number` 用 `git rev-list --count HEAD`（checkout 設定 `fetch-depth: 0`，並檢查不是 shallow），讓每次 staging 建置單調遞增，覆蓋安裝時分得出新舊。
+   - IPA 上傳為 workflow artifact（保留 30 天，與 APK 相同）。
+     - 公開 repo 的 artifact 任何登入 GitHub 的人都能下載，但 Ad Hoc IPA 只能裝在 profile 內註冊的裝置上；IPA 內只有 staging 的 anon key，本來就會出現在 APP 內。
+   - **安裝方式**：
+     - 下載 artifact 解壓縮後，用 Mac 的 Apple Configurator 或 Xcode（Devices and Simulators）安裝到已註冊的 iPhone。
+     - iOS 16 以上可能需在「設定 › 隱私權與安全性」開啟「開發者模式」（第三方文件指出 Ad Hoc 建置需要，Apple 文件未明列；實作時以實機確認，並寫進 README）。
+     - 不需要 Mac 的 OTA 安裝（`itms-services` + HTTPS 上的 manifest）第一版不做，有需要再評估。
+   - **測試裝置管理**：
+     - 新增測試者時，在 Apple Developer 網站註冊該 iPhone 的 UDID，重新產生 Ad Hoc profile，再更新 `staging` Environment 的 profile secret；未註冊的裝置無法安裝。
+     - 每個會員年度每種裝置類型（iPhone）最多註冊 100 台，年度更新時才能移除名額。
+   - iOS 的 UI 驗證仍以 `ios.yml` 的模擬器截圖為主；IPA 用來在實機確認定位、通知、原生 Liquid Glass 元件與 staging 後端的整體行為。
 
 ## CD：正式發版（推送 tag `vX.Y.Z`）
 `release.yml`：
@@ -159,6 +179,7 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
 |---|---|---|
 | Android 上傳金鑰（upload keystore，base64）與密碼 | Environment secrets（只在 `production`） | 簽 AAB；Google Play App Signing 保管真正的發布金鑰 |
 | Android staging 簽章金鑰（base64）與密碼 | Environment secrets（`staging`） | 簽 staging 測試 APK，和正式版金鑰分開 |
+| iOS staging 發布憑證 `.p12`（base64）與密碼、Ad Hoc provisioning profile（base64） | Environment secrets（`staging`） | 簽 staging 測試 IPA；匯入暫時 keychain，建置後刪除；和正式版憑證分開 |
 | Google Play 服務帳號 JSON | Environment secrets（只在 `production`） | fastlane 上傳 |
 | App Store Connect API key（`.p8`、Key ID、Issuer ID） | Environment secrets（只在 `production`） | fastlane 上傳／送審 |
 | iOS 發布憑證 `.p12`（base64）與密碼、provisioning profile | Environment secrets（只在 `production`） | 匯入 runner 的暫時 keychain，建置後刪除 |
@@ -209,7 +230,7 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
 ## 實作順序
 1. **第一個實作 PR**：`ci.yml`、`ios.yml`、`android.yml` 與各自的彙總 job；跑過一次後到 ruleset 設定必要檢查。
 2. **建立 Supabase 兩個專案與 GitHub Environments**：設定 secrets；`production` 設定必須核准。
-3. **`cd-staging.yml`**：只需要 Supabase staging 與 staging 簽章金鑰，不需要商店設定。
+3. **`cd-staging.yml`**：只需要 Supabase staging、Android staging 簽章金鑰，以及 iOS staging 憑證與 Ad Hoc profile，不需要商店（Play Console、App Store Connect APP）設定。
 4. **`release.yml`**：
    - 先手動在兩個商店建立 APP。
    - Play 需要先手動上傳第一個版本，之後才能用 API 上傳。
@@ -220,6 +241,10 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
   - 建立 APP 並啟用 Play App Signing。
   - 建立服務帳號並授權發布。
   - 手動上傳第一個正式版建置，之後才能由 CD 以 API 上傳。
+- **Apple Developer（staging 測試 IPA）**：
+  - 註冊 staging bundle id（正式 bundle id 加 `.staging`）。
+  - 註冊測試者 iPhone 的 UDID。
+  - 建立 staging 專用的 Apple Distribution 憑證，以及包含上述裝置的 Ad Hoc provisioning profile。
 - **App Store Connect**：
   - 建立 APP 與 bundle id。
   - 建立 API key（App Manager 權限）。
