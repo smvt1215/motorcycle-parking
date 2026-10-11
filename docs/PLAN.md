@@ -12,6 +12,7 @@
 - 資料：**TDX 政府開放資料 + 社群回報**
 - 後端：**Supabase**（Postgres + PostGIS、Auth、Edge Function 代理 TDX 金鑰與社群寫入）
 - 地圖：**flutter_map + OpenStreetMap**（免金鑰；地圖層抽象化，日後可換 Google Maps）
+- UI：**雙平台自適應**，iOS 依 Liquid Glass（HIG，iOS 26/27）、Android 依 Material 3 Expressive；iOS 關鍵導覽元件嵌入原生 Liquid Glass 元件（見「UI 設計規範」）
 - 第一版功能：地圖找附近停車位、停車規則指南、記住我停哪裡、使用者回報/收藏停車點
 
 ## 架構總覽
@@ -27,7 +28,9 @@ Flutter App ──► Supabase Edge Function `tdx-parking` ──► TDX API（�
 ```
 pubspec.yaml
 lib/
-  main.dart, app.dart                 # go_router（底部分頁：地圖/規則/我的車/收藏）、主題
+  main.dart, app.dart                 # go_router（底部分頁：地圖/規則/我的車/收藏）
+  ui/theme/                           # 設計 token（色彩、字級、圓角、間距）、Material 與 Cupertino 主題
+  ui/adaptive/                        # 自適應元件層：依平台與 iOS 版本選擇實作（見「UI 設計規範」）
   core/config.dart                    # SUPABASE_URL / SUPABASE_ANON_KEY（--dart-define）
   core/geo.dart                       # 距離計算、bbox
   models/                             # vehicle_type, parking_spot, city_rule, parked_record
@@ -49,7 +52,7 @@ assets/rules/parking_rules.json       # 內建縣市規則（含 sourceUrl、eff
 supabase/
   migrations/0001_init.sql            # 資料表、PostGIS、RLS、nearby_spots RPC、每日回報上限 trigger
   functions/tdx-parking/index.ts      # Deno：OAuth client_credentials 取 token（快取）、抓路外/路邊車位+即時剩餘、正規化
-test/                                 # eligibility、rules 解析、TDX 正規化、車種切換 widget test
+test/                                 # eligibility、rules 解析、TDX 正規化、車種切換 widget test、雙平台 golden 截圖測試
 .github/workflows/flutter.yml         # analyze + test
 README.md                             # 安裝、Supabase 建置、TDX 金鑰申請步驟（中文）
 ```
@@ -57,6 +60,50 @@ README.md                             # 安裝、Supabase 建置、TDX 金鑰申
 ## 主要套件
 `flutter_map`, `latlong2`, `flutter_map_marker_cluster`, `geolocator`, `flutter_riverpod`, `go_router`,
 `supabase_flutter`, `shared_preferences`, `url_launcher`（跳 Google/Apple 地圖導航）, `flutter_local_notifications`（計時提醒）。
+UI：`cupertino_native_better`（iOS 原生 Liquid Glass 元件）、`material_3_expressive`（M3 Expressive 元件）、`dynamic_color`（Android 動態配色）。
+
+## UI 設計規範（雙平台）
+目標：iOS 看起來像 iOS、Android 看起來像 Android，各自符合最新設計規範；內容、資訊架構與品牌一致。
+
+### 現況限制（2026-10 查證）
+| 平台 | 最新規範 | Flutter 官方支援 | 對策 |
+|---|---|---|---|
+| iOS | **Liquid Glass**（iOS 26 推出；iOS 27 調整：預設透明度降低、系統設定可調玻璃強度） | 無。Flutter 自繪畫面，不會自動套用；官方表示開發中但無時程（[flutter#170310](https://github.com/flutter/flutter/issues/170310)） | 導覽與控制元件以 `cupertino_native_better` 嵌入**原生** UIKit 元件 |
+| Android | **Material 3 Expressive**（形狀、彈簧動態、浮動工具列、強調字級） | 核心函式庫未支援，官方暫不開發（[flutter#168813](https://github.com/flutter/flutter/issues/168813)） | Material 3 主題 + `material_3_expressive` 元件 |
+
+### 自適應元件層 `lib/ui/adaptive/`
+畫面只使用這一層的元件，不直接呼叫平台套件；Flutter 官方支援推出後只需替換這一層。APP 最低支援 iOS 15（`cupertino_native_better` 的下限），iOS 26 以上才使用原生 Liquid Glass。
+
+| 元件 | iOS 26+ | iOS 15–18 | Android |
+|---|---|---|---|
+| `AdaptiveTabScaffold`（地圖/規則/我的車/收藏） | 原生 Liquid Glass 分頁列（`CNTabBar`） | `CupertinoTabBar` | M3 `NavigationBar` |
+| `AdaptiveNavBar` | 透明 `CupertinoNavigationBar` + 原生玻璃圖示按鈕（`CNButton.icon`） | `CupertinoNavigationBar` | M3 top app bar（`AppBar`／`SliverAppBar`） |
+| `AdaptiveSegmented`（普通機車／大型重機） | 原生 segmented control（`CNSegmentedControl`） | `CupertinoSlidingSegmentedControl` | M3 Expressive button group |
+| `AdaptiveButton`、`AdaptiveSwitch`、`AdaptiveSlider` | `CNButton`、`CNSwitch`、`CNSlider` | Cupertino 元件 | M3 Expressive 元件 |
+| `AdaptiveSheet`（車位詳情） | Cupertino 風格 sheet（可拖曳於半高／全高） | 同左 | M3 modal bottom sheet |
+| 地圖動作（定位、篩選、記錄停車） | 原生玻璃按鈕群（`CNGlassButtonGroup`） | Cupertino 按鈕 | M3 Expressive 浮動工具列 + FAB「記錄停車」 |
+
+### iOS 規則（HIG）
+- **玻璃只用在導覽／控制層**，不用在內容上；地圖滿版延伸到分頁列與導覽列下方。
+- 原生元件會自動跟隨系統的玻璃強度（iOS 27）、「減少透明度」「增加對比」設定；Flutter 自繪的部分讀取無障礙設定（`MediaQuery` 的 high contrast、disable animations 等），必要時改用不透明背景與無動態效果。
+- 使用 SF Symbols；支援動態字級（Dynamic Type）；點擊區域 ≥ 44pt。
+- 原生元件以 platform view 疊在地圖上有效能成本：數量控制在分頁列與少數按鈕，實作時量測捲動與縮放幀率。
+
+### Android 規則（Material 3 Expressive）
+- `useMaterial3`；Android 12+ 使用桌布動態配色（`dynamic_color`），其餘使用品牌種子色。
+- Edge-to-edge（Android 15+ 強制）；支援預測式返回手勢。
+- Material Symbols 圖示、Expressive 形狀與彈簧動態；點擊區域 ≥ 48dp。
+
+### 共用規則
+- **深淺色模式**皆支援；字型用系統預設（PingFang TC／Noto Sans CJK TC）。
+- **可停／有條件／不可停**三種狀態：除了顏色，還要用不同圖示或形狀區分（色盲友善），淺色與深色模式都要通過 WCAG AA 對比。
+- **騎士情境**：常戴手套操作，「記錄停車」「導航回車旁」等主要動作放大、放在拇指可及處；地圖頁顯示「行駛中請勿操作」提示，不提供行駛中互動功能。
+- 地圖標記、插圖等品牌元素兩平台一致。
+
+### 驗證
+- Golden 截圖測試：每個主要畫面 × iOS / Android × 淺色 / 深色。
+- 此開發容器無 macOS，**無法在 iOS 模擬器驗證原生 Liquid Glass 元件**；需在 Mac 上以 iOS 26 / 27 模擬器或實機確認，或由 CI 的 macOS runner 執行 iOS 建置與截圖。
+- Android 以 Android 16 模擬器確認 Expressive 元件、動態配色、edge-to-edge 與預測式返回。
 
 ## 核心資料模型
 - `VehicleType`：`scooter`（普通機車，白/綠牌 ≤250cc）、`heavy`（大型重機，黃牌 250–550cc / 紅牌 >550cc，可在設定選牌色供顯示）。AppBar 切換，持久化。
@@ -123,7 +170,7 @@ README.md                             # 安裝、Supabase 建置、TDX 金鑰申
 
 ## 驗證方式
 1. 容器內安裝 Flutter SDK（目前未安裝），執行 `flutter pub get`、`flutter analyze`、`flutter test`（含 eligibility 各縣市×車種案例、JSON 解析、TDX 正規化 fixture）。
-2. `flutter build web` 後用預裝 Chromium + Playwright 開啟，模擬台北定位，截圖確認：車種切換改變標記顏色、規則頁、記錄停車位置、收藏、新增回報（demo 模式）。
+2. `flutter build web` 後用預裝 Chromium + Playwright 開啟，模擬台北定位，截圖確認：車種切換改變標記顏色、規則頁、記錄停車位置、收藏、新增回報（demo 模式）。Web 版走 Material 路徑，iOS 原生元件需另依「UI 設計規範 › 驗證」確認。
 3. Edge Function 的正規化邏輯抽成純函式並用 TDX 範例 JSON 做測試；SQL migration 若容器無 Postgres 則以人工審閱 + README 說明 `supabase db push` 步驟（會明確告知哪些未實際執行）。
 4. Commit 並 push 到 `claude/motorcycle-parking-guide-app-kk6f9x`，開 draft PR 並追蹤 CI。
 
@@ -133,6 +180,7 @@ README.md                             # 安裝、Supabase 建置、TDX 金鑰申
 - 雲端環境網路設定放行 `tdx.transportdata.tw`（以及若要接第 2 層：`data.taipei`、`data.gov.tw`、`datacenter.taichung.gov.tw`、`parkweb.tainan.gov.tw`），才能執行 Phase 0 稽核
 - 執行順序：未放行前，先完成 App 本體（demo 資料）、Supabase schema、社群回報；放行後再做 Phase 0 與 TDX 介接
 - 上架用的 App 名稱、圖示、bundle id（第一版先用 placeholder）
+- iOS 驗證環境：Mac + Xcode（iOS 26/27 模擬器），或允許 CI 使用 macOS runner
 
 ## 參考資料
 - [台北市 10/6 起開放 6.3 萬個路邊收費機車格給重機（TVBS）](https://news.tvbs.com.tw/life/4023234)
@@ -144,3 +192,8 @@ README.md                             # 安裝、Supabase 建置、TDX 金鑰申
 - [臺中市路外剩餘車位](https://data.gov.tw/dataset/83931)
 - [臺北市路邊停車格位資料](https://data.gov.tw/dataset/157491)
 - [臺南市 Parkweb 匯出 API](https://parkweb.tainan.gov.tw/doc/Parkweb_export_API_.pdf)
+- [Liquid Glass（Wikipedia，含 iOS 27 調整）](https://en.wikipedia.org/wiki/Liquid_Glass)
+- [Flutter：Cupertino 支援 Liquid Glass 追蹤 issue](https://github.com/flutter/flutter/issues/170310)
+- [Flutter：Material 3 Expressive 追蹤 issue](https://github.com/flutter/flutter/issues/168813)
+- [cupertino_native_better（pub.dev）](https://pub.dev/packages/cupertino_native_better)
+- [material_3_expressive（pub.dev）](https://pub.dev/packages/material_3_expressive)
