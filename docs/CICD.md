@@ -30,7 +30,7 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
 | `ci.yml` | PR、push 到 `main` | Linux | Flutter 檢查與測試、Supabase 檢查、Android 建置 |
 | `ios.yml` | PR、push 到 `main`、手動 | macOS | iOS 模擬器建置與截圖（見 PLAN.md「UI 設計規範 › 驗證」） |
 | `android.yml` | PR、push 到 `main`、手動 | Linux（模擬器硬體加速） | Android 模擬器截圖（API 36 與 API 30） |
-| `cd-staging.yml` | push 到 `main`（CI 通過後） | Linux + macOS | 部署 staging 後端、上傳兩平台內部測試版 |
+| `cd-staging.yml` | `main` 上的三條 CI 都成功後（`workflow_run`） | Linux + macOS | 部署 staging 後端、上傳兩平台內部測試版 |
 | `release.yml` | 推送 tag `v*` | Linux + macOS | 部署 production 後端、上架兩平台、建立 GitHub Release |
 
 ## CI（每個 PR）
@@ -77,13 +77,23 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
 
 ## CD：staging（每次合併到 main）
 `cd-staging.yml`，綁定 GitHub Environment `staging`：
+0. **等 CI 全部成功才開始**：
+   - 不用 `push` 觸發，因為那會和 CI 同時跑，CI 失敗前就可能已部署。
+   - 改用 `workflow_run` 監聽 `ci.yml`、`ios.yml`、`android.yml` 在 `main` 上完成。
+   - 第一個 job 以 GitHub API 查詢該 commit（`workflow_run.head_sha`）三個彙總檢查的結果：全部成功才繼續；仍有未完成的就結束，交給最後完成的那條 CI 觸發的執行；任何一個失敗就停止。
+   - 部署的程式碼一律 checkout `workflow_run.head_sha`，不用當下 `main` 的最新 commit。
+   - `concurrency` 以 commit SHA 分組、不取消進行中的執行，所以同一 commit 不會同時部署兩次。
 1. **後端**：
    - `supabase link --project-ref $STAGING_REF`
    - `supabase db push` 套用新 migration
    - `supabase functions deploy` 部署 Edge Function
-2. **建置號**：`git rev-list --count HEAD` × 10 + 0。
-   - 單調遞增，同一 commit 的正式版用 +1，所以兩條流程不會撞號。
-   - 遠低於 Android `versionCode` 上限 2,100,000,000。
+2. **建置號**：`commit 數 × 100 + 通道 × 10 + 嘗試次數`。
+   - commit 數 = `git rev-list --count HEAD`；通道：staging 為 0、正式版為 1；嘗試次數 = `github.run_attempt`，上限 9，超過就讓流程失敗並提示人工處理。
+   - 單調遞增；staging 與正式版通道不同，不會撞號；重跑同一個 workflow 時嘗試次數會增加，所以會拿到新號碼。
+   - 遠低於 Android `versionCode` 上限 2,100,000,000（commit 數需少於約 2,100 萬）。
+   - **每個平台各自冪等**：上傳前先向商店查詢（fastlane `google_play_track_version_codes`／`latest_testflight_build_number`），商店裡已有落在 `commit 數 × 100 + 通道 × 10 + 1～9` 範圍內的建置號，就代表這個 commit、這個通道已上傳過，略過該平台。
+     - 部分失敗時（例如 Android 成功、iOS 失敗）重跑，只會補傳失敗的平台。
+     - 不同 CI 觸發的多次執行也不會重複上傳。
 3. **Android**：
    - 以 `--dart-define` 帶入 staging 的 Supabase URL／anon key。
    - `flutter build appbundle --release`。
@@ -91,7 +101,7 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
 4. **iOS**：
    - 同樣帶入 staging 設定，`flutter build ipa`。
    - fastlane `upload_to_testflight`，只開給**內部測試人員**，不送外部審查。
-5. 同一個 commit 再次觸發時用 `concurrency` 取消舊的執行，避免重複上傳。
+5. 後端部署（`db push`、`functions deploy`）本身可重複執行，重跑時再套用一次也不會出錯。
 
 ## CD：正式發版（推送 tag `vX.Y.Z`）
 `release.yml`：
@@ -106,7 +116,7 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
 3. **後端先行**：
    - production `supabase db push` 與 `functions deploy`。
    - 先部署後端，再上架 APP。
-4. **建置號**：`git rev-list --count HEAD` × 10 + 1。
+4. **建置號**：同上公式，通道為 1；同樣先查詢商店，已上傳過的平台略過，部分失敗時可安全重跑。
 5. **Android**：
    - 以 production 設定建置 AAB。
    - 上傳 **正式版（production）軌道**，**分階段推出 10%**。
