@@ -49,6 +49,9 @@ select ok(not has_table_privilege('anon','public.spot_votes','SELECT'),'vote ide
 insert into favorites(user_id,spot_id,spot) values(pg_temp.uid(1),'fav-one','{"id":"fav-one","name":"私有收藏"}');
 set local role anon;
 select is((select count(*)::integer from community_spots where status='hidden'),0,'hidden spots invisible to anon');
+select throws_ok($$select user_id from community_spots$$,'42501',null,'contributor ids hidden from anon');
+select ok(not exists(select 1 from information_schema.columns where table_schema='public' and table_name='public_spots' and column_name='user_id'),'public view omits contributor ids');
+select ok((select count(*)>0 from viewport_spots(25.0,121.5,25.1,121.6)),'viewport RPC works without user_id privilege');
 select is((select count(*)::integer from nearby_spots(25.034,121.56,1000) where status='hidden'),0,'nearby RPC respects hidden RLS');
 select is((select count(*)::integer from nearby_spots(0,0,1000)),0,'nearby rejects invalid query coordinates');
 select throws_ok($$insert into community_spots(user_id,name,lat,lng,city,space_type) values('10000000-0000-4000-8000-000000000001','bad',25,121,'臺北市','car')$$,'42501','new row violates row-level security policy for table "community_spots"','anon cannot insert directly');

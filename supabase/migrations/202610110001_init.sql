@@ -90,14 +90,23 @@ create policy official_read on public.official_heavy_spots for select to anon,au
 revoke all on public.report_identities,public.spot_votes,public.moderation_queue,public.rate_limit_events,public.spot_annotations from anon,authenticated;
 -- spot_annotations stays private: contributor ids and unreviewed notes are
 -- read only through confirmed_annotations().
-grant select on public.community_spots,public.city_rules,public.official_heavy_spots to anon,authenticated;
+grant select on public.city_rules,public.official_heavy_spots to anon,authenticated;
+-- Contributor ids stay private: clients read every public column but user_id,
+-- so nobody can correlate one person's reports and locations.
+revoke select on public.community_spots from anon,authenticated;
+grant select (id,source,source_name,source_url,license_note,name,lat,lng,location,city,district,space_type,fee_note,note,scooter_total,available,scooter_allowed,heavy_allowed,status,updated_at,last_confirmed_at,created_at)
+  on public.community_spots to anon,authenticated;
+create view public.public_spots with (security_invoker=true) as
+  select id,source,source_name,source_url,license_note,name,lat,lng,city,district,space_type,fee_note,note,scooter_total,available,scooter_allowed,heavy_allowed,status,updated_at,last_confirmed_at,created_at
+  from public.community_spots;
+grant select on public.public_spots to anon,authenticated;
 grant select,insert,update,delete on public.favorites to authenticated;
 grant insert,update,delete on public.city_rules to authenticated;
 
 create function public.nearby_spots(lat double precision,lng double precision,radius_m double precision default 3000)
-returns setof public.community_spots language sql stable security invoker
+returns setof public.public_spots language sql stable security invoker
 set search_path=public,extensions as $$
-  select * from public.community_spots s
+  select p.* from public.community_spots s join public.public_spots p on p.id=s.id
   where $3 between 1 and 20000 and $1 between 20 and 27 and $2 between 118 and 123
   and extensions.st_dwithin(s.location,extensions.st_setsrid(extensions.st_makepoint($2,$1),4326)::extensions.geography,$3)
   order by extensions.st_distance(s.location,extensions.st_setsrid(extensions.st_makepoint($2,$1),4326)::extensions.geography)
