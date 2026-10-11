@@ -24,6 +24,60 @@ Flutter App ──► Supabase Edge Function `tdx-parking` ──► TDX API（�
 ```
 未設定 Supabase 時（`--dart-define` 未給），App 自動改用內建範例資料，方便開發與測試。
 
+## 本機開發環境（Supabase local）
+開發時在自己的電腦用 Supabase CLI 的本機堆疊（Docker）跑完整後端，不必連雲端專案；staging 與 production 仍用雲端（見 [CICD.md](CICD.md)）。
+
+| 環境 | 後端 | 用途 |
+|---|---|---|
+| demo | 無（App 內建範例資料） | 只做 UI、沒有 Docker 時 |
+| **local** | `supabase start`（本機 Docker） | 日常開發：schema、RLS、Edge Function、社群回報流程 |
+| staging | Supabase 雲端 staging 專案 | 合併到 `main` 後自動部署，測試機安裝的 APK／IPA 連這裡 |
+| production | Supabase 雲端 production 專案 | 正式版 |
+
+### 工具與啟動
+- 需要 Docker（Docker Desktop、OrbStack 或 Colima 皆可）與 Supabase CLI；CLI 版本固定，和 CI 使用同一版，升級時兩邊一起改。
+- `supabase/config.toml`（`supabase init` 產生）納入版本控管，只影響本機堆疊，不會套用到雲端專案。
+- `supabase start` 啟動 Postgres（含 PostGIS）、Auth、PostgREST、Storage、Studio 等；預設位址：API `http://127.0.0.1:54321`、資料庫 `54322`、Studio `http://127.0.0.1:54323`、測試信箱 `54324`。`supabase status` 顯示本機 URL 與 anon key。
+- `supabase stop` 保留資料；`supabase stop --no-backup` 連資料一起清除。
+
+### Schema 開發流程
+1. `supabase migration new <名稱>` 建立 migration，寫 SQL。
+2. `supabase db reset`：清空本機資料庫、從零套用全部 migration、再執行 `supabase/seed.sql`（等同 CI 的「可從零重建」檢查）。
+3. `supabase test db` 執行 pgTAP 測試（與 CI 相同）。
+- 在 Studio 介面改表時，要用 `supabase db diff -f <名稱>` 轉成 migration 檔，不能只改本機資料庫；migration 規則（向下相容、只能往前）見 [CICD.md](CICD.md)「資料庫 migration 規則」。
+
+### 種子資料 `supabase/seed.sql`
+- 只用於本機與 CI；`supabase db push` 預設不執行 seed，staging／production 不會被寫入測試資料。
+- 內容：
+  - 台北周邊的 `community_spots`，涵蓋各種格位類型與「待確認／已確認／隱藏待審／資訊可能過時」狀態，以及對應的 `spot_votes`。
+  - `city_rules`（與 `assets/rules/parking_rules.json` 相同的初始規則）。
+  - 測試帳號：合格帳號、建立未滿 7 天的新帳號、匿名帳號、管理者，供 pgTAP 與 Edge Function 測試模擬多人確認、加權計分與限流。
+- 範例停車點與 `lib/data/demo_data.dart` 使用同一份來源（例如 `tool/` 下的 JSON，以腳本產生 `seed.sql` 與 demo 資料），避免兩邊不一致。
+
+### Auth（本機）
+- `config.toml` 開啟匿名登入；CAPTCHA 在本機關閉（staging／production 在 Supabase Dashboard 開啟 Turnstile）。
+- **Google 登入**：本機使用另一組開發用 Google OAuth client（redirect URI 為 `http://127.0.0.1:54321/auth/v1/callback`），client secret 放 `supabase/.env`（不進版控，附 `.env.example`），`config.toml` 以 `env()` 引用。
+- **Apple 登入**需要 HTTPS 網域，本機不設定，只在 staging 驗證。
+- 需要多個帳號的情境（兩位合格使用者確認、新帳號權重低、每帳號／每 IP 限流）以 pgTAP 與 Edge Function 測試搭配 seed 帳號覆蓋，不靠手動登入多個帳號。
+
+### Edge Function（本機）
+- `supabase functions serve`：本機執行全部 Edge Function，修改後自動重載。
+- 本機 secrets 放 `supabase/functions/.env`（不進版控，附 `.env.example`）。
+- **TDX 範例模式**：本機 `.env` 設 `TDX_MODE=fixture` 時，`tdx-parking` 改回傳 `supabase/functions/tdx-parking/fixtures/` 的 TDX 範例回應，沒有 TDX 金鑰或網路被擋時也能開發。只有明確設定這個值才會啟用；其他環境缺少 TDX 金鑰時直接回報錯誤，不會悄悄改用範例資料。
+- 限流依 IP 計算，本機所有請求來自同一個 IP；手動測試達到上限時以 `supabase db reset` 重置。
+
+### App 連本機後端
+- 以 `--dart-define-from-file=config/local.json` 帶入 `SUPABASE_URL`／`SUPABASE_ANON_KEY`；repo 只放 `config/local.example.json`，實際檔案不進版控。
+- 位址依執行環境而不同：
+  - iOS 模擬器、Web（`flutter run -d chrome`）：`http://127.0.0.1:54321`
+  - Android 模擬器：`http://10.0.2.2:54321`（模擬器內指向電腦本機）
+  - 實機：電腦的區網 IP（同一個 Wi-Fi，電腦防火牆放行 54321）
+- 本機後端是明文 HTTP，**只在 Debug 建置允許**：
+  - Android：`network_security_config` 只放在 `debug` source set。
+  - iOS：只在 Debug 設定的 Info.plist 加 ATS 例外（`NSAllowsLocalNetworking`）；實機連區網需要 `NSLocalNetworkUsageDescription`（iOS 14 起的區域網路權限）。實作時確認實際需要的鍵值。
+  - staging／release 建置不含這些例外。
+- 此雲端開發容器有 Docker CLI，但 Docker daemon 沒有啟動；實作時先嘗試在容器內啟動 daemon 跑本機堆疊，不行就改由 CI 的 `supabase start` 驗證。
+
 ## 專案結構（Flutter 專案放 repo 根目錄）
 ```
 pubspec.yaml
@@ -49,9 +103,14 @@ lib/
     favorites/  # 收藏清單
     report/     # 長按地圖新增停車點、回報「還在/已不存在」
 assets/rules/parking_rules.json       # 內建縣市規則（含 sourceUrl、effectiveDate）
+config/local.example.json             # 本機後端的 --dart-define-from-file 範本（實際 local.json 不進版控）
 supabase/
+  config.toml                         # 本機堆疊設定（匿名登入、本機 Google OAuth、關閉 CAPTCHA），只影響本機
+  seed.sql                            # 本機與 CI 用的種子資料（不推到雲端）
   migrations/0001_init.sql            # 資料表、PostGIS、RLS、nearby_spots RPC、每日回報上限 trigger
   functions/tdx-parking/index.ts      # Deno：OAuth client_credentials 取 token（快取）、抓路外/路邊車位+即時剩餘、正規化
+  functions/tdx-parking/fixtures/     # TDX 範例回應（測試與本機 TDX_MODE=fixture 共用）
+  functions/.env.example              # 本機 Edge Function secrets 範本
 test/                                 # eligibility、rules 解析、TDX 正規化、車種切換 widget test、雙平台 golden 截圖測試
 .github/workflows/                    # ci.yml、ios.yml、android.yml、cd-staging.yml、release.yml（見 docs/CICD.md）
 fastlane/                             # 兩平台簽章、上傳設定與商店文字（見 docs/CICD.md）
@@ -196,7 +255,7 @@ UI：`material_ui`、`cupertino_ui`（Flutter 官方設計套件，取代框架�
 ## 驗證方式
 1. 容器內安裝 Flutter SDK（目前未安裝），執行 `flutter pub get`、`flutter analyze`、`flutter test`（含 eligibility 各縣市×車種案例、JSON 解析、TDX 正規化 fixture）。
 2. `flutter build web` 後用預裝 Chromium + Playwright 開啟，模擬台北定位，截圖確認：車種切換改變標記顏色、規則頁、記錄停車位置、收藏、新增回報（demo 模式）。Web 版走 Material 路徑，iOS 原生元件需另依「UI 設計規範 › 驗證」確認。
-3. Edge Function 的正規化邏輯抽成純函式並用 TDX 範例 JSON 做測試；SQL migration 與 RLS 由 CI 的 `supabase start` + `supabase test db`（pgTAP）實際驗證（見 [CICD.md](CICD.md)）。
+3. Edge Function 的正規化邏輯抽成純函式並用 TDX 範例 JSON 做測試；SQL migration 與 RLS 在本機以 `supabase db reset` + `supabase test db`（pgTAP）開發驗證，CI 以同樣指令從零驗證（見「本機開發環境」與 [CICD.md](CICD.md)）。
 4. Commit 並 push 到 `claude/motorcycle-parking-guide-app-kk6f9x`，開 draft PR 並追蹤 CI。
 
 ## 待準備事項
@@ -204,7 +263,8 @@ UI：`material_ui`、`cupertino_ui`（Flutter 官方設計套件，取代框架�
 - Supabase 專案（URL、anon key），開啟 Google / Apple 登入與 Turnstile CAPTCHA（Cloudflare 免費帳號取得 site key / secret）
 - TDX 會員 Client ID / Secret
 - 雲端環境網路設定放行 `tdx.transportdata.tw`（以及若要接第 2 層：`data.taipei`、`data.gov.tw`、`datacenter.taichung.gov.tw`、`parkweb.tainan.gov.tw`），才能執行 Phase 0 稽核
-- 執行順序：未放行前，先完成 App 本體（demo 資料）、Supabase schema、社群回報；放行後再做 Phase 0 與 TDX 介接
+- 執行順序：未放行前，先完成 App 本體（demo 資料）、Supabase schema、社群回報（在本機 Supabase 開發，TDX 用範例模式）；放行後再做 Phase 0 與 TDX 介接
+- 本機開發：Docker 與 Supabase CLI；開發用 Google OAuth client（redirect 到本機 Auth）
 - 上架用的 App 名稱、圖示、bundle id（第一版先用 placeholder）
 
 ## 參考資料
