@@ -237,7 +237,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                   : null,
             ),
             children: [
-              if (!AppConfig.offlineMap)
+              if (AppConfig.showsOsmTiles)
                 ColorFiltered(
                   colorFilter: ColorFilter.matrix(
                     darkMap
@@ -536,11 +536,9 @@ class _MapPageState extends ConsumerState<MapPage> {
               ),
             Positioned(
               right: 16,
-              bottom: tabBarInset + (AppConfig.useGoogleMaps ? 118 : 102),
-              child: MapAction(
-                label: '定位到我',
-                icon: Icons.my_location,
-                onPressed: () => runAction(context, () async {
+              bottom: tabBarInset + (AppConfig.useGoogleMaps ? 46 : 30),
+              child: MapActions(
+                onLocate: () => runAction(context, () async {
                   await store.locate();
                   if (mounted) {
                     setState(
@@ -549,23 +547,14 @@ class _MapPageState extends ConsumerState<MapPage> {
                   }
                   await _moveCamera(LatLng(store.lat, store.lng), 16);
                 }),
-              ),
-            ),
-            Positioned(
-              right: 16,
-              bottom: tabBarInset + (AppConfig.useGoogleMaps ? 46 : 30),
-              child: MapAction(
-                label: '我停這裡',
-                icon: Icons.turn_right,
-                primary: true,
-                onPressed: () => showParkingForm(context, store),
+                onRecord: () => showParkingForm(context, store),
               ),
             ),
             // Notice and OSM credit share one column so they never overlap,
             // and stay clear of the record button and the iOS tab bar.
             Positioned(
               left: 16,
-              right: 88,
+              right: 32 + MapActions.width,
               bottom: tabBarInset + (AppConfig.useGoogleMaps ? 76 : 8),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -585,7 +574,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                       ),
                     ),
                   ),
-                  if (!AppConfig.useGoogleMaps) ...[
+                  if (AppConfig.showsOsmTiles) ...[
                     const SizedBox(height: 4),
                     TextButton(
                       onPressed: () => launchUrl(

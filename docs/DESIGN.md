@@ -20,7 +20,7 @@
 | 導覽 | CupertinoNavigationBar + CNButton | CupertinoNavigationBar | M3EAppBar |
 | 車種 | CNSegmentedControl | CupertinoSlidingSegmentedControl | M3EButtonGroup |
 | 主要按鈕 | CNButton | CupertinoButton | M3EButton |
-| 地圖動作（定位、記錄停車） | 原生 CNButton：定位為 glass、記錄停車為 prominentGlass，不加 Flutter 底色或陰影 | CupertinoButton | IconButton（待換 M3EToolbar／M3EFab） |
+| 地圖動作（定位、記錄停車） | 原生 CNButton：定位為 glass、記錄停車為 prominentGlass，同尺寸、不加 Flutter 底色或陰影 | CupertinoButton | M3EToolbar.floating（定位）+ 80dp M3EFab（記錄停車） |
 | 詳情 sheet | CNBottomSheet + DraggableScrollableSheet | 同左 | 官方 showModalBottomSheet + DraggableScrollableSheet |
 | 表單 sheet | CNBottomSheet.showCupertino | 同左 | 官方 showModalBottomSheet |
 | 輸入、清單與篩選 | 官方 Material 表單（待 Cupertino 完整適配） | 同左 | 官方元件 |

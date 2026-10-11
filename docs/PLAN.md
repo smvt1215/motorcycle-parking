@@ -193,7 +193,7 @@ UI：`material_ui`、`cupertino_ui`（Flutter 官方設計套件，取代框架�
 | `AdaptiveSegmented`（普通機車／大型重機） | 原生 segmented control（`CNSegmentedControl`） | `CupertinoSlidingSegmentedControl` | `M3EButtonGroup` |
 | `AdaptiveButton`、`AdaptiveSwitch`、`AdaptiveSlider` | `CNButton`、`CNSwitch`、`CNSlider` | Cupertino 元件 | `M3EButton`、`M3ESwitch`、`M3ESlider` |
 | `AdaptiveSheet` | 車位詳情：`CNBottomSheet.show` + `DraggableScrollableSheet`；一般表單：`CNBottomSheet.showCupertino` | 同左 | 官方 `showModalBottomSheet`，詳情內容使用 `DraggableScrollableSheet` |
-| 地圖動作（定位、篩選、記錄停車） | 原生玻璃按鈕群（`CNGlassButtonGroup`） | Cupertino 按鈕 | `M3EToolbar`（浮動工具列）+ `M3EFab`「記錄停車」 |
+| 地圖動作（定位、記錄停車；篩選在上方篩選列） | 原生玻璃按鈕（`CNButton`）：定位用 glass，「記錄停車」用 prominentGlass。依 HIG，同尺寸選項以樣式而非大小區分主要動作，且主要動作獨立成焦點、每畫面只一個；日後新增圖層、指北等相關控制時，再以 `CNGlassButtonGroup` 群組 | Cupertino 按鈕（記錄停車用主色底） | `M3EToolbar.floating`（垂直，定位）+ 80dp `M3EFab`「記錄停車」 |
 
 ### iOS 規則（HIG）
 - **玻璃只用在導覽／控制層**，不用在內容上；地圖滿版延伸到分頁列與導覽列下方。

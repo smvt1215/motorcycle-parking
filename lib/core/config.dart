@@ -26,6 +26,10 @@ class AppConfig {
               TargetPlatform.iOS => googleMapsIosEnabled,
               _ => false,
             });
+
+  /// OpenStreetMap tiles load only for the no-key preview, never offline;
+  /// its credit must not appear over Google Maps or an empty test map.
+  static bool get showsOsmTiles => !useGoogleMaps && !offlineMap;
   static bool get demo => supabaseUrl.isEmpty && supabaseKey.isEmpty;
   static void validate() {
     if (supabaseUrl.isEmpty != supabaseKey.isEmpty) {

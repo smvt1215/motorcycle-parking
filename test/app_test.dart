@@ -4,8 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:motorcycle_parking/app.dart';
+import 'package:motorcycle_parking/core/config.dart';
 import 'package:motorcycle_parking/data/app_store.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
 import 'package:motorcycle_parking/models/parking.dart';
@@ -370,7 +372,43 @@ void main() {
       second.dispose();
     });
   });
-  testWidgets('iOS 地圖控制、提示與署名避開懸浮分頁列且互不重疊', (tester) async {
+  testWidgets('Android 地圖動作使用 M3E 浮動工具列與 FAB，提示不重疊', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(412, 915);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final store = (await tester.runAsync(testStore))!;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [storeProvider.overrideWith((ref) => store)],
+        child: const ParkingApp(),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+    final toolbar = tester.getRect(find.byType(M3EToolbar));
+    final fab = tester.getRect(find.byType(M3EFab));
+    final notice = tester.getRect(find.text('範例資料 · 行駛中請勿操作'));
+    final nav = tester.getRect(find.byType(M3ENavigationBar));
+    expect(fab.width, greaterThanOrEqualTo(80));
+    expect(toolbar.bottom, lessThanOrEqualTo(fab.top));
+    expect(fab.bottom, lessThanOrEqualTo(nav.top));
+    expect(notice.right, lessThan(fab.left));
+    final locate = find.ancestor(
+      of: find.byIcon(Icons.my_location),
+      matching: find.byType(M3EIconButton),
+    );
+    expect(tester.getSize(locate).width, greaterThanOrEqualTo(48));
+    await tester.tap(find.byType(M3EFab));
+    await tester.pumpAndSettle();
+    expect(find.text('記錄停車'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    debugDefaultTargetPlatformOverride = null;
+  });
+  testWidgets('iOS 地圖控制與提示避開懸浮分頁列，離線不顯示 OSM 署名', (tester) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
     addTearDown(() => debugDefaultTargetPlatformOverride = null);
     tester.view.devicePixelRatio = 1;
@@ -397,12 +435,8 @@ void main() {
       ),
     );
     final notice = tester.getRect(find.text('範例資料 · 行駛中請勿操作'));
-    final credit = tester.getRect(
-      find.widgetWithText(TextButton, '© OpenStreetMap contributors'),
-    );
     for (final rect in [
       notice,
-      credit,
       ...find
           .byType(MapAction)
           .evaluate()
@@ -410,8 +444,11 @@ void main() {
     ]) {
       expect(rect.bottom, lessThanOrEqualTo(tabBar.top));
     }
-    expect(notice.overlaps(credit), isFalse);
-    expect(credit.height, greaterThanOrEqualTo(44));
+    // The OSM credit appears only when OpenStreetMap tiles actually load.
+    expect(
+      find.text('© OpenStreetMap contributors'),
+      AppConfig.showsOsmTiles ? findsOneWidget : findsNothing,
+    );
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
     debugDefaultTargetPlatformOverride = null;

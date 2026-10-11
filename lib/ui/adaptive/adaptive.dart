@@ -234,6 +234,65 @@ class AdaptiveScaffold extends StatelessWidget {
   }
 }
 
+/// Map actions: locate and record parking, bottom-trailing in thumb reach.
+/// iOS: equal-size buttons, the record action prominent (HIG: style, not size).
+/// Android: M3E floating toolbar for locate, the 80dp M3E FAB to record.
+class MapActions extends StatelessWidget {
+  const MapActions({super.key, required this.onLocate, required this.onRecord});
+  final VoidCallback onLocate, onRecord;
+
+  /// Horizontal space the actions take, so neighbors can stay clear of them.
+  static double get width => isCupertino ? 56 : 80;
+
+  @override
+  Widget build(BuildContext context) {
+    if (isCupertino) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          MapAction(
+            label: '定位到我',
+            icon: Icons.my_location,
+            onPressed: onLocate,
+          ),
+          const SizedBox(height: 16),
+          MapAction(
+            label: '我停這裡',
+            icon: Icons.turn_right,
+            primary: true,
+            onPressed: onRecord,
+          ),
+        ],
+      );
+    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        M3EToolbar.floating(
+          axis: Axis.vertical,
+          screenOffset: 0,
+          semanticLabel: '地圖工具',
+          actions: [
+            M3EToolbarAction(
+              icon: Icons.my_location,
+              tooltip: '定位到我',
+              onPressed: onLocate,
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        M3EFab(
+          icon: const Icon(Icons.turn_right),
+          tooltip: '我停這裡',
+          onPressed: onRecord,
+        ),
+      ],
+    );
+  }
+}
+
+/// One iOS map action; Android uses the M3E toolbar and FAB in [MapActions].
 class MapAction extends StatelessWidget {
   const MapAction({
     super.key,
@@ -241,12 +300,11 @@ class MapAction extends StatelessWidget {
     required this.icon,
     required this.onPressed,
     this.primary = false,
-    this.tonal = false,
   });
   final String label;
   final IconData icon;
   final VoidCallback onPressed;
-  final bool primary, tonal;
+  final bool primary;
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -256,13 +314,7 @@ class MapAction extends StatelessWidget {
       return SizedBox.square(
         dimension: 56,
         child: CNButton.icon(
-          icon: CNSymbol(
-            primary
-                ? 'arrow.turn.up.right'
-                : tonal
-                ? 'square.3.layers.3d'
-                : 'location',
-          ),
+          icon: CNSymbol(primary ? 'arrow.turn.up.right' : 'location'),
           tint: colors.primary,
           config: CNButtonConfig(
             style: primary ? CNButtonStyle.prominentGlass : CNButtonStyle.glass,
@@ -273,35 +325,22 @@ class MapAction extends StatelessWidget {
         ),
       );
     }
-    final color = primary
-        ? colors.primary
-        : tonal
-        ? colors.primaryContainer
-        : colors.surface;
-    final foreground = primary
-        ? colors.onPrimary
-        : tonal
-        ? colors.onPrimaryContainer
-        : colors.onSurface;
     return Material(
-      color: color,
+      color: primary ? colors.primary : colors.surface,
       elevation: 3,
       shadowColor: const Color(0x55000000),
       borderRadius: BorderRadius.circular(20),
-      child: SizedBox(
-        width: 56,
-        height: 56,
-        child: isCupertino
-            ? cu.CupertinoButton(
-                padding: EdgeInsets.zero,
-                onPressed: onPressed,
-                child: Icon(icon, color: foreground, semanticLabel: label),
-              )
-            : IconButton(
-                tooltip: label,
-                onPressed: onPressed,
-                icon: Icon(icon, color: foreground, size: 26),
-              ),
+      child: SizedBox.square(
+        dimension: 56,
+        child: cu.CupertinoButton(
+          padding: EdgeInsets.zero,
+          onPressed: onPressed,
+          child: Icon(
+            icon,
+            color: primary ? colors.onPrimary : colors.onSurface,
+            semanticLabel: label,
+          ),
+        ),
       ),
     );
   }
