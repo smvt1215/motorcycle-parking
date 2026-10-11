@@ -53,9 +53,9 @@ supabase/
   migrations/0001_init.sql            # 資料表、PostGIS、RLS、nearby_spots RPC、每日回報上限 trigger
   functions/tdx-parking/index.ts      # Deno：OAuth client_credentials 取 token（快取）、抓路外/路邊車位+即時剩餘、正規化
 test/                                 # eligibility、rules 解析、TDX 正規化、車種切換 widget test、雙平台 golden 截圖測試
-.github/workflows/flutter.yml         # analyze + test（Linux）
-.github/workflows/ios.yml             # iOS 模擬器建置 + 截圖（macOS runner，見「UI 設計規範 › 驗證」）
-integration_test/                     # iOS 截圖情境（地圖、sheet、車種切換、深淺色）
+.github/workflows/                    # ci.yml、ios.yml、android.yml、cd-staging.yml、release.yml（見 docs/CICD.md）
+fastlane/                             # 兩平台簽章、上傳設定與商店文字（見 docs/CICD.md）
+integration_test/                     # 雙平台截圖情境（地圖、sheet、車種切換、深淺色），iOS 模擬器與 Android 模擬器共用
 README.md                             # 安裝、Supabase 建置、TDX 金鑰申請步驟（中文）
 ```
 
@@ -123,7 +123,12 @@ UI：`material_ui`、`cupertino_ui`（Flutter 官方設計套件，取代框架�
   - 於 iOS 26 與 iOS 27 模擬器執行 `integration_test` 截圖情境：地圖頁、車種切換、車位詳情與回報 sheet（含上述疊放測試）、深淺色模式；截圖上傳為 workflow artifact，供 PR 審查時查看。
   - 執行條件：PR 變更 `lib/`、`ios/`、`integration_test/`、`pubspec.*` 或 `.github/workflows/ios.yml` 本身時才實際建置與截圖，另可手動觸發；只改文件時略過，以節省排隊時間。
   - 穩定後將 iOS 建置列為 main ruleset 的必要檢查。注意：設為必要檢查的 workflow 不能用 workflow 層級的路徑過濾（只改文件的 PR 會一直等不到檢查結果而無法合併）；改為 workflow 每次都觸發，在 job 內判斷變更路徑，不需要時直接回報成功。
-- Android 以 Android 16 模擬器確認 Expressive 元件、動態配色、edge-to-edge 與預測式返回。
+- Android 同樣由 CI 在**真實模擬器**上截圖（`android.yml`，GitHub Linux runner 支援 Android 模擬器硬體加速）。golden 測試由 Flutter 在測試程序內繪製，看不到下列系統層行為，所以必須在模擬器上確認：
+  - 模擬器：Android 16（API 36）與 Android 11（API 30），各跑淺色與深色。
+  - Android 16：桌布動態配色、edge-to-edge 下系統列與內容不重疊、預測式返回手勢動畫（以 UI 自動化觸發返回手勢，截取動畫中途畫面）。
+  - Android 11：沒有動態配色時改用品牌種子色。
+  - 共用 `integration_test/` 的截圖情境：地圖頁、車種切換、車位詳情半高／全高、回報表單、深淺色；另檢查繁中字型。
+  - 截圖上傳為 workflow artifact；執行條件比照 iOS：變更 `lib/`、`android/`、`integration_test/`、`pubspec.*` 或 `android.yml` 本身時才實際執行，路徑判斷寫在 job 內。
 
 ## 核心資料模型
 - `VehicleType`：`scooter`（普通機車，白/綠牌 ≤250cc）、`heavy`（大型重機，黃牌 250–550cc / 紅牌 >550cc，可在設定選牌色供顯示）。AppBar 切換，持久化。
@@ -191,10 +196,11 @@ UI：`material_ui`、`cupertino_ui`（Flutter 官方設計套件，取代框架�
 ## 驗證方式
 1. 容器內安裝 Flutter SDK（目前未安裝），執行 `flutter pub get`、`flutter analyze`、`flutter test`（含 eligibility 各縣市×車種案例、JSON 解析、TDX 正規化 fixture）。
 2. `flutter build web` 後用預裝 Chromium + Playwright 開啟，模擬台北定位，截圖確認：車種切換改變標記顏色、規則頁、記錄停車位置、收藏、新增回報（demo 模式）。Web 版走 Material 路徑，iOS 原生元件需另依「UI 設計規範 › 驗證」確認。
-3. Edge Function 的正規化邏輯抽成純函式並用 TDX 範例 JSON 做測試；SQL migration 若容器無 Postgres 則以人工審閱 + README 說明 `supabase db push` 步驟（會明確告知哪些未實際執行）。
+3. Edge Function 的正規化邏輯抽成純函式並用 TDX 範例 JSON 做測試；SQL migration 與 RLS 由 CI 的 `supabase start` + `supabase test db`（pgTAP）實際驗證（見 [CICD.md](CICD.md)）。
 4. Commit 並 push 到 `claude/motorcycle-parking-guide-app-kk6f9x`，開 draft PR 並追蹤 CI。
 
 ## 待準備事項
+- CI／CD 所需的商店、Supabase 與 GitHub 設定，見 [CICD.md](CICD.md)「待準備事項」
 - Supabase 專案（URL、anon key），開啟 Google / Apple 登入與 Turnstile CAPTCHA（Cloudflare 免費帳號取得 site key / secret）
 - TDX 會員 Client ID / Secret
 - 雲端環境網路設定放行 `tdx.transportdata.tw`（以及若要接第 2 層：`data.taipei`、`data.gov.tw`、`datacenter.taichung.gov.tw`、`parkweb.tainan.gov.tw`），才能執行 Phase 0 稽核
