@@ -1,5 +1,10 @@
+import {
+  createClient,
+  type SupabaseClient,
+} from 'npm:@supabase/supabase-js@2.108.1';
 import { cors, readBody, response } from '../_shared/http.ts';
 import { cities, fetchRows, type Row } from '../_shared/tdx.ts';
+import { type Annotation, applyAnnotations } from './annotations.ts';
 import { normalize, type Spot } from './normalize.ts';
 import { citiesInBounds, contains, parseBounds } from '../_shared/viewport.ts';
 const cache = new Map<string, { expires: number; spots: Spot[] }>();
@@ -56,6 +61,31 @@ export async function parking(city: string): Promise<Spot[]> {
     pending.delete(city);
   }
 }
+let db: SupabaseClient | undefined;
+/** Merges confirmed heavy-motorcycle annotations; lookup failures keep TDX data. */
+async function annotate(spots: Spot[]): Promise<Spot[]> {
+  const url = Deno.env.get('SUPABASE_URL'),
+    key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!url || !key || spots.length === 0) return spots;
+  db ??= createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  try {
+    const annotations: Annotation[] = [];
+    for (let i = 0; i < spots.length; i += 500) {
+      const { data, error } = await db.rpc('confirmed_annotations', {
+        p_ids: spots.slice(i, i + 500).map((s) => s.id),
+      });
+      if (error) throw error;
+      annotations.push(...(data ?? []) as Annotation[]);
+    }
+    return applyAnnotations(spots, annotations);
+  } catch (error) {
+    // Unknown heavy access stays conditional instead of failing the map.
+    console.error('confirmed_annotations failed', error);
+    return spots;
+  }
+}
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') {
@@ -77,7 +107,7 @@ Deno.serve(async (req) => {
       )
         .filter((s) => contains(bounds, s));
       return response({
-        spots: spots.slice(0, 500),
+        spots: await annotate(spots.slice(0, 500)),
         truncated: spots.length > 500,
         partial: failed > 0,
         fixture: Deno.env.get('TDX_MODE') === 'fixture',
@@ -89,7 +119,7 @@ Deno.serve(async (req) => {
       !cities.includes(city as typeof cities[number])
     ) return response({ error: 'unsupported city' }, 400);
     return response({
-      spots: await parking(city),
+      spots: await annotate(await parking(city)),
       fixture: Deno.env.get('TDX_MODE') === 'fixture',
     });
   } catch {

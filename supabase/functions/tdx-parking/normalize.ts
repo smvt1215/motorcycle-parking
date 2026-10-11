@@ -10,7 +10,7 @@ export interface Spot {
   fee_note: string;
   scooter_total: number | null;
   available: number | null;
-  heavy_allowed: null;
+  heavy_allowed: boolean | null;
   scooter_allowed: boolean;
   status: 'confirmed';
   updated_at: string | null;
