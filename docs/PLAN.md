@@ -10,7 +10,7 @@
 已確認的決策：
 - 平台：**Flutter**（iOS / Android，另可建 Web 方便測試）
 - 資料：**TDX 政府開放資料 + 社群回報**
-- 後端：**Supabase**（Postgres + PostGIS、匿名登入、Edge Function 代理 TDX 金鑰）
+- 後端：**Supabase**（Postgres + PostGIS、Auth、Edge Function 代理 TDX 金鑰與社群寫入）
 - 地圖：**flutter_map + OpenStreetMap**（免金鑰；地圖層抽象化，日後可換 Google Maps）
 - 第一版功能：地圖找附近停車位、停車規則指南、記住我停哪裡、使用者回報/收藏停車點
 
@@ -65,7 +65,7 @@ README.md                             # 安裝、Supabase 建置、TDX 金鑰申
 - `eligibility(spot, vehicle, rule)` → `allowed / conditional(附說明) / notAllowed`，地圖標記顏色據此呈現。
 
 ## Supabase 資料表（RLS）
-- `community_spots`：geography(Point) + 欄位同上；所有人可讀 `status='active'`；登入（含匿名）可新增；只能改/刪自己的；trigger 限制每人每日回報數。
+- `community_spots`：geography(Point) + 欄位同上；所有人可讀 `status='active'`；**RLS 禁止客戶端直接寫入**，新增/投票一律經 Edge Function `submit-report`（見「防濫用」）；只能改/刪自己的。
 - `spot_votes`：(spot_id, user_id) 唯一，vote = still_there / gone；累積「已不存在」達門檻自動隱藏。
 - `favorites`：user_id 私有。
 - `city_rules`：公開唯讀，僅管理者可寫（讓規則改變時不必發版）。
@@ -102,8 +102,13 @@ README.md                             # 安裝、Supabase 建置、TDX 金鑰申
    - 新增停車點：長按地圖 → 表單（格位類型、普通機車可停、重機可停、收費、樓層/入口備註、選填照片）。
    - **官方點位註記**：在 TDX 停車場上回報「重機可停 / 不可停 / 須停汽車格」「入口限高/坡道陡」等，TDX 本身沒有這些欄位。
 2. **去重**：送出前查 15 公尺內同類型點，有的話引導改成「確認既有點」而非新增。
-3. **可信度狀態**：新回報為「待確認」（灰色標記），經 2 位不同使用者確認「還在」→「已確認」；累積「已不存在/資訊錯誤」達門檻 → 自動隱藏待審。每個點顯示「最後確認日期」，超過 180 天未確認標示「資訊可能過時」。
-4. **防濫用**：匿名登入（綁裝置）、每人每日回報上限（DB trigger）、不能確認自己的回報、檢舉按鈕 → `moderation_queue`；照片存 Supabase Storage，上傳前移除 EXIF。
+3. **可信度狀態**：新回報為「待確認」（灰色標記），經 2 位**合格**使用者（非匿名、帳號建立滿 7 天、且非同一 IP/裝置）確認「還在」→「已確認」；「已不存在/資訊錯誤」改為**加權計分**（新帳號權重低），達門檻只「隱藏待審」進 `moderation_queue`，不自動刪除。每個點顯示「最後確認日期」，超過 180 天未確認標示「資訊可能過時」。
+4. **防濫用**：匿名身分可被任意重建（`signInAnonymously()` 每次都產生新 user id，[Supabase 官方文件](https://supabase.com/docs/guides/auth/auth-anonymous)亦建議搭配 CAPTCHA），因此**不能把匿名帳號當成一個人**：
+   - **權限分級**：匿名或未登入只能瀏覽、收藏、記錄停車位置（收藏與停車紀錄不影響他人）；**回報、確認、投票、檢舉**需以 Google / Apple 帳號登入。
+   - **CAPTCHA**：Supabase Auth 啟用 Cloudflare Turnstile（或 hCaptcha），登入時驗證。
+   - **伺服器端限流**：所有寫入經 Edge Function `submit-report`，依 user id **與** IP 雙重限流（如每帳號每日 10 筆、每 IP 每日 30 筆），並記錄於 `rate_limit_events`；Supabase Auth 本身的註冊/登入速率限制同時開啟。
+   - **裝置驗證（第二階段）**：上架後加入 Android Play Integrity / iOS App Attest，由 Edge Function 驗證後才接受寫入。
+   - 不能確認自己的回報；檢舉按鈕 → `moderation_queue`；照片存 Supabase Storage，上傳前移除 EXIF。
 5. **管理**：第一版用 Supabase Dashboard 審核 `moderation_queue` 與維護 `city_rules`，不另做後台。
 
 ### 外部社群地圖（Google 我的地圖）
@@ -114,7 +119,7 @@ README.md                             # 安裝、Supabase 建置、TDX 金鑰申
 - README 附「向地圖作者徵求授權」的建議文字範本。
 - 目前環境無法連到 `www.google.com`，若要讀取該地圖需手動匯出 KML 上傳，或放行網域。
 
-資料表在原本的 `community_spots` / `spot_votes` 之外新增：`spot_annotations`（對 TDX 點位的註記，以 `source + source_id` 關聯）、`moderation_queue`、`official_heavy_spots`。
+資料表在原本的 `community_spots` / `spot_votes` 之外新增：`spot_annotations`（對 TDX 點位的註記，以 `source + source_id` 關聯）、`moderation_queue`、`official_heavy_spots`、`rate_limit_events`。
 
 ## 驗證方式
 1. 容器內安裝 Flutter SDK（目前未安裝），執行 `flutter pub get`、`flutter analyze`、`flutter test`（含 eligibility 各縣市×車種案例、JSON 解析、TDX 正規化 fixture）。
@@ -123,7 +128,7 @@ README.md                             # 安裝、Supabase 建置、TDX 金鑰申
 4. Commit 並 push 到 `claude/motorcycle-parking-guide-app-kk6f9x`，開 draft PR 並追蹤 CI。
 
 ## 待準備事項
-- Supabase 專案（URL、anon key）並開啟 Anonymous sign-in
+- Supabase 專案（URL、anon key），開啟 Google / Apple 登入與 Turnstile CAPTCHA（Cloudflare 免費帳號取得 site key / secret）
 - TDX 會員 Client ID / Secret
 - 雲端環境網路設定放行 `tdx.transportdata.tw`（以及若要接第 2 層：`data.taipei`、`data.gov.tw`、`datacenter.taichung.gov.tw`、`parkweb.tainan.gov.tw`），才能執行 Phase 0 稽核
 - 執行順序：未放行前，先完成 App 本體（demo 資料）、Supabase schema、社群回報；放行後再做 Phase 0 與 TDX 介接
