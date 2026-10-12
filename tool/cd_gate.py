@@ -61,7 +61,7 @@ class GitHub:
                 raise ValueError(f"Required aggregate check {check} did not pass")
         return True
 
-    def staging_deployed(self, sha):
+    def staging_deployed(self, sha, fail_if_missing=True):
         # A workflow_run workflow uses main's SHA. The staging gate checks that
         # it equals the source SHA before and after queuing; require a real step,
         # since an outdated deployment can have a successful job with skipped steps.
@@ -83,9 +83,17 @@ class GitHub:
                     return True
                 pending |= job["status"] != "completed"
             pending |= run["status"] != "completed"
-        if found and not pending:
+        if fail_if_missing and found and not pending:
             raise ValueError("No successful staging backend deployment for this SHA; fix or rerun staging")
         return False
+
+    def staging_ready(self, sha):
+        if not self.ci_ready(sha):
+            return False
+        if self.staging_deployed(sha, fail_if_missing=False):
+            print("Skipped: this SHA already has a successful staging backend deployment")
+            return False
+        return True
 
     def production_protected(self):
         environment = self.get("environments/production")
@@ -148,7 +156,8 @@ def main():
             output("deploy", "false")
             print("Skipped: source SHA is no longer the latest main")
             return
-        ready = args.mode == "latest" or api.ci_ready(args.sha)
+        ready = (args.mode == "latest" or
+                 (api.staging_ready(args.sha) if args.mode == "staging" else api.ci_ready(args.sha)))
         if ready and args.mode == "release":
             ready = api.staging_deployed(args.sha)
         if ready:

@@ -79,6 +79,21 @@ class DeploymentGateTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.staging("success", job_conclusion="failure").staging_deployed("sha")
 
+    def test_second_queued_event_is_deduplicated_after_first_backend_finishes(self):
+        api = self.staging("skipped", run_status="in_progress")
+        api.responses.update(ci_responses())
+        self.assertTrue(api.staging_ready("sha"))
+        self.assertTrue(api.staging_ready("sha"))
+        # Both events passed before queuing. The first completes while owning
+        # the fixed cd-staging lock; the second must recheck after acquiring it.
+        api.responses["actions/runs/4/jobs"]["jobs"][0]["steps"][0]["conclusion"] = "success"
+        self.assertFalse(api.staging_ready("sha"))
+
+    def test_failed_deployment_can_retry_without_being_claimed_as_done(self):
+        api = self.staging("skipped", job_conclusion="failure")
+        api.responses.update(ci_responses())
+        self.assertTrue(api.staging_ready("sha"))
+
     def test_missing_staging_run_waits_for_scheduling(self):
         api = FakeGitHub({"actions/workflows/cd-staging.yml/runs": {"workflow_runs": []}})
         self.assertFalse(api.staging_deployed("sha"))
