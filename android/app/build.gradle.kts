@@ -12,6 +12,9 @@ if (mapsPropertiesFile.exists()) {
     mapsPropertiesFile.inputStream().use { mapsProperties.load(it) }
 }
 
+val cdEnvironment = System.getenv("CD_ENVIRONMENT")
+val cdKeystore = System.getenv("ANDROID_KEYSTORE_PATH")
+
 android {
     namespace = "tw.motopark.motorcycle_parking"
     compileSdk = flutter.compileSdkVersion
@@ -25,6 +28,9 @@ android {
 
     defaultConfig {
         applicationId = "tw.motopark.motorcycle_parking"
+        manifestPlaceholders["appLabel"] = "機車停車指南"
+        manifestPlaceholders["appIcon"] = "@mipmap/ic_launcher"
+        manifestPlaceholders["oauthScheme"] = "tw.motopark.motorcycleparking"
         manifestPlaceholders["googleMapsApiKey"] = mapsProperties.getProperty("apiKey", "")
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
@@ -38,10 +44,35 @@ android {
         versionName = flutter.versionName
     }
 
-    buildTypes {
-        release {
-            // Configure the production upload key when release automation is enabled.
-            signingConfig = null
+    signingConfigs {
+        if (cdKeystore != null) {
+            require(cdEnvironment in listOf("staging", "production"))
+            create("cd") {
+                storeFile = file(cdKeystore)
+                storePassword = System.getenv("ANDROID_STORE_PASSWORD")
+                keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+            }
+        }
+    }
+
+    flavorDimensions += "environment"
+    productFlavors {
+        create("production") {
+            dimension = "environment"
+            if (cdEnvironment == "production" && cdKeystore != null) {
+                signingConfig = signingConfigs.getByName("cd")
+            }
+        }
+        create("staging") {
+            dimension = "environment"
+            applicationIdSuffix = ".staging"
+            manifestPlaceholders["appLabel"] = "機車停車指南 β"
+            manifestPlaceholders["appIcon"] = "@drawable/ic_launcher_staging"
+            manifestPlaceholders["oauthScheme"] = "tw.motopark.motorcycleparking.staging"
+            if (cdEnvironment == "staging" && cdKeystore != null) {
+                signingConfig = signingConfigs.getByName("cd")
+            }
         }
     }
 }

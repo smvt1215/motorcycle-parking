@@ -1,0 +1,24 @@
+name: Deploy Supabase backend
+description: Apply forward migrations and deploy configured Edge Functions.
+inputs:
+  environment:
+    description: Deployment environment (staging or production)
+    required: true
+runs:
+  using: composite
+  steps:
+    - id: version
+      shell: bash
+      run: echo "supabase=$(cat .supabase-version)" >> "$GITHUB_OUTPUT"
+    - uses: supabase/setup-cli@1dedf2c611547ede7232d26866dd3c56ab903bbb
+      with:
+        version: ${{ steps.version.outputs.supabase }}
+    - shell: bash
+      run: |
+        : "${SUPABASE_ACCESS_TOKEN:?Missing Supabase access token}"
+        : "${SUPABASE_PROJECT_REF:?Missing Supabase project ref}"
+        : "${SUPABASE_DB_PASSWORD:?Missing Supabase database password}"
+        python3 tool/cd_config.py '${{ inputs.environment }}' backend
+        supabase link --project-ref "$SUPABASE_PROJECT_REF"
+        supabase db push --yes
+        supabase functions deploy --project-ref "$SUPABASE_PROJECT_REF" --use-api
