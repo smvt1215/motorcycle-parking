@@ -39,21 +39,24 @@ platform :android do
                                                        package_name: package, json_key_data: credentials)
     client = Supply::Client.make_from_config
     tracks = {}
+    production_releases = []
     begin
       client.begin_edit(package_name: package)
       client.tracks.each do |track|
         tracks[track.track] = Array(track.releases).flat_map { |release| Array(release.version_codes) }.map(&:to_i)
+        production_releases = Array(track.releases) if track.track == "production"
       end
     ensure
       client.abort_current_edit
     end
-    existing = ReleasePolicy.play_candidate(tracks.to_a, base)
+    released_codes = ReleasePolicy.published_play_codes(production_releases)
+    existing = ReleasePolicy.play_candidate(tracks.to_a, base, released_codes: released_codes)
     common = {package_name: package, json_key_data: credentials,
               skip_upload_metadata: true, skip_upload_images: true,
               skip_upload_screenshots: true, skip_upload_changelogs: true,
               rescue_changes_not_sent_for_review: false}
-    if existing && Array(tracks["production"]).include?(existing)
-      UI.success("This commit is already on the production track")
+    if existing && released_codes.include?(existing)
+      UI.success("This commit has already been published on the production track")
       selected_build(existing)
     elsif existing
       source = tracks.find { |_, codes| codes.include?(existing) }.first

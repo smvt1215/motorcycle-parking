@@ -12,8 +12,15 @@ module ReleasePolicy
     ((base + 1)..(base + 9))
   end
 
-  def self.play_candidate(tracks, base)
-    production = tracks.to_h.fetch("production", []).map(&:to_i).select { |code| range(base).cover?(code) }
+  def self.published_play_codes(releases)
+    # A deliberately halted rollout has already been published; preserve the
+    # operator's pause. A draft has never been published and must be advanced.
+    releases.select { |release| %w[inProgress completed halted].include?(release.status) }
+            .flat_map { |release| Array(release.version_codes) }.map(&:to_i)
+  end
+
+  def self.play_candidate(tracks, base, released_codes: [])
+    production = released_codes.map(&:to_i).select { |code| range(base).cover?(code) }
     return production.max unless production.empty?
 
     candidates = tracks.flat_map { |_, codes| codes }.map(&:to_i).select { |code| range(base).cover?(code) }

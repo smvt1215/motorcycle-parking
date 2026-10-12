@@ -96,7 +96,7 @@ Android 的安裝檔在該 CD workflow 的 `staging-android-SHA` artifact，保�
 
 建置號為 `commit 數 × 10 + run_attempt`，attempt 只能為 1–9，完整整數不能超過 9999。超出限制要先修改號碼規則與查詢範圍，不讓 CD 默默重用號碼。
 
-Android 查詢所有軌道（含自訂軌道），同一 commit 的 9 個號碼已在 production 時略過上傳；在其他軌道時推進既有版本，沒有既有版本才建置與上傳。iOS 只查本 APP、本版本與同一 commit 的範圍，等待 PROCESSING 最多 60 分鐘，只重用 VALID；FAILED／INVALID 改用重跑的新號碼。上傳成功但送審失敗時，重跑仍會補送審；已等待審查或後續狀態則保留原送審建置。
+Android 查詢所有軌道（含自訂軌道），同一 commit 的 9 個號碼已在 production 且狀態是 `inProgress`／`completed` 時略過上傳；人工暫停的 `halted` 也保留原暫停。production 的 `draft` 不算已發佈，會將既有建置推進 10% rollout；其他軌道的既有版本亦推進 production，沒有既有版本才建置與上傳。iOS 只查本 APP、本版本與同一 commit 的範圍，等待 PROCESSING 最多 60 分鐘，只重用 VALID；FAILED／INVALID 改用重跑的新號碼。上傳成功但送審失敗時，重跑仍會補送審；已等待審查或後續狀態則保留原送審建置。
 
 上傳前先把原始 AAB／IPA 的 SHA-256 存成 draft Release 的文字資產，因此上傳成功後 runner 中斷仍能恢復原雜湊。重跑會把實際商店建置的紀錄加入 Release 說明，不以重新簽署的不同檔案冒充。若手動上傳的建置恰好在本 commit 範圍內，需先將其原始雜湊紀錄補入 draft Release（檔名 `sha256-android-建置號.txt` 或 `sha256-ios-建置號.txt`；內容格式為 SHA-256、兩個空格、`android-建置號.aab` 或 `ios-建置號.ipa`）。
 

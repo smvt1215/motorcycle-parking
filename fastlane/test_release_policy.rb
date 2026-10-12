@@ -1,10 +1,19 @@
 require_relative "release_policy"
 
 Build = Struct.new(:version, :processing_state)
+PlayRelease = Struct.new(:status, :version_codes)
 raise "Range boundaries" unless ReleasePolicy.range(100).to_a == (101..109).to_a
 raise "All tracks are searched" unless ReleasePolicy.play_candidate([["internal", [103]], ["production", [95]], ["custom", [109, 111]]], 100) == 109
 raise "Other commits excluded" unless ReleasePolicy.play_candidate([["production", [100, 110]]], 100).nil?
-raise "Completed production rollout is preserved" unless ReleasePolicy.play_candidate([["production", [103]], ["internal", [109]]], 100) == 103
+raise "Completed production rollout is preserved" unless ReleasePolicy.play_candidate([["production", [103]], ["internal", [109]]], 100, released_codes: [103]) == 103
+draft = PlayRelease.new("draft", ["109"])
+active = PlayRelease.new("inProgress", ["103"])
+completed = PlayRelease.new("completed", ["104"])
+halted = PlayRelease.new("halted", ["105"])
+raise "Draft is not a completed rollout" unless ReleasePolicy.published_play_codes([draft]).empty?
+raise "Published states retained" unless ReleasePolicy.published_play_codes([active, completed, halted, draft]) == [103, 104, 105]
+raise "Draft is reused for promotion rather than uploaded again" unless ReleasePolicy.play_candidate([["production", [109]]], 100, released_codes: []) == 109
+raise "Published build takes precedence over newer draft" unless ReleasePolicy.play_candidate([["production", [103, 109]]], 100, released_codes: [103]) == 103
 builds = [Build.new("103", "VALID"), Build.new("109", "PROCESSING"), Build.new("108", "FAILED"), Build.new("110", "VALID")]
 raise "Only valid current builds reused" unless ReleasePolicy.valid_build(builds, 100).version == "103"
 raise "Processing builds wait" unless ReleasePolicy.processing?(builds, 100)
