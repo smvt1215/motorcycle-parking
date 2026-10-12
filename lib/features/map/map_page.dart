@@ -498,7 +498,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                           title: Text(store.error!),
                           trailing: IconButton(
                             tooltip: '重新整理',
-                            onPressed: store.refresh,
+                            onPressed: store.reload,
                             icon: const Icon(Icons.refresh),
                           ),
                         ),

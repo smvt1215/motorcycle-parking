@@ -110,10 +110,15 @@ class AppStore extends ChangeNotifier {
       (client!.auth.currentUser != null &&
           !client!.auth.currentUser!.isAnonymous);
   String get favoritesKey => client?.auth.currentUser?.id ?? 'guest';
-  Future<void> init() async {
+  Future<void> init() => reload();
+
+  /// Retries every data source, including startup failures shown by the banner.
+  /// Camera movement still calls [refresh] to load only viewport data.
+  Future<void> reload() async {
     await loadFavorites();
     try {
       rules = await rulesRepository.load();
+      rulesWarning = null;
     } catch (_) {
       rules = await RulesRepository(null).load();
       error = rulesWarning = '遠端規則讀取失敗，顯示內建規則';
@@ -331,7 +336,7 @@ class AppStore extends ChangeNotifier {
     await refresh();
     return result['duplicate_id'] != null
         ? '附近已有相同類型點位，請確認既有點'
-        : '回報已送出，等待社群確認';
+        : '回報已送出，等待管理者確認';
   }
 
   Future<void> signIn(OAuthProvider provider) async {
