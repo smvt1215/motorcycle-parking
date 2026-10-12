@@ -9,7 +9,11 @@ builds = [Build.new("103", "VALID"), Build.new("109", "PROCESSING"), Build.new("
 raise "Only valid current builds reused" unless ReleasePolicy.valid_build(builds, 100).version == "103"
 raise "Processing builds wait" unless ReleasePolicy.processing?(builds, 100)
 raise "Invalid builds never reused" unless ReleasePolicy.valid_build([Build.new("109", "INVALID")], 100).nil?
-%w[WAITING_FOR_REVIEW IN_REVIEW READY_FOR_DISTRIBUTION PENDING_DEVELOPER_RELEASE].each do |state|
+%w[
+  WAITING_FOR_REVIEW IN_REVIEW READY_FOR_DISTRIBUTION PENDING_DEVELOPER_RELEASE
+  PROCESSING_FOR_DISTRIBUTION PROCESSING_FOR_APP_STORE ACCEPTED PENDING_CONTRACT
+  REPLACED_WITH_NEW_VERSION DEVELOPER_REMOVED_FROM_SALE REMOVED_FROM_SALE
+].each do |state|
   raise "Completed submission #{state}" unless ReleasePolicy.submitted?(state)
 end
 %w[PREPARE_FOR_SUBMISSION READY_FOR_REVIEW REJECTED DEVELOPER_REJECTED WAITING_FOR_EXPORT_COMPLIANCE].each do |state|
