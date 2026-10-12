@@ -18,6 +18,11 @@ config/maps.local.json
 config/maps.generated.json
 android/maps.properties
 ios/Flutter/Maps.xcconfig
+ios/Flutter/Signing.xcconfig
+gha-creds-*.json
+vendor/bundle/
+fastlane/report.xml
+fastlane/README.md
 supabase/.temp/
 supabase/.branches/
 supabase/functions/.env

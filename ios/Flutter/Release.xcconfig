@@ -1,2 +1,3 @@
 #include "Generated.xcconfig"
 #include? "Maps.xcconfig"
+#include? "Signing.xcconfig"
