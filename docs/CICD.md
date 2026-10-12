@@ -1,6 +1,6 @@
 # CI／CD 規劃
 
-> 狀態：CI workflow 已建立；CD staging／release 尚在規劃中。最後更新：2026-10-12。整體計畫見 [PLAN.md](PLAN.md)。
+> 狀態：CI 與 CD staging／release workflows 已實作；外部服務、Environment 憑證與第一次實際部署依 [CD_SETUP.md](CD_SETUP.md) 完成。最後更新：2026-10-12。整體計畫見 [PLAN.md](PLAN.md)。
 
 ## 決策摘要
 - 平台：**GitHub Actions**（公開 repo 使用 GitHub 標準 runner 不收費，含 macOS）。
@@ -31,8 +31,8 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
 | 檔案 | 觸發 | Runner | 內容 |
 |---|---|---|---|
 | `ci.yml` | PR、push 到 `main` | Linux | 跨平台檢查：Flutter 檢查與測試、Web 建置、Supabase 檢查 |
-| `android.yml` | PR、push 到 `main` | Linux（模擬器硬體加速） | 一次 Release APK 建置＋一次測試 APK 建置，Android 11／16 模擬器共用測試產物執行與截圖 |
-| `ios.yml` | PR、push 到 `main` | macOS | 一次真機 Release 建置＋一次模擬器測試 App 建置，iOS 26／27 共用測試產物執行與截圖（見 PLAN.md「UI 設計規範 › 驗證」） |
+| `android.yml` | PR、push 到 `main` | Linux（模擬器硬體加速） | production／staging Release APK 設定檢查＋一次測試 APK 建置，Android 11／16 模擬器共用測試產物執行與截圖 |
+| `ios.yml` | PR、push 到 `main` | macOS | production／staging 真機 Release 設定檢查＋一次模擬器測試 App 建置，iOS 26／27 共用測試產物執行與截圖（見 PLAN.md「UI 設計規範 › 驗證」） |
 | `cd-staging.yml` | `main` 上的三條 CI 都成功後（`workflow_run`） | Linux + macOS | 部署 staging 後端、產生 Android 測試 APK 與 iOS 測試 IPA（不上傳商店） |
 | `release.yml` | 推送 tag `v*` | Linux + macOS | 部署 production 後端、上架兩平台、建立 GitHub Release |
 
@@ -61,7 +61,7 @@ Workflow 依平台分工：跨平台檢查放 `ci.yml`，各平台的建置與�
 5. **版本號檢查**：`pubspec.yaml` 的 `version` 必須**大於**最新的 release tag（見下方「版本號規則」）。
 
 ### `ios.yml`（macOS）
-- CI 每次各建置一次真機 Release 與模擬器測試 App，兩者使用獨立 job。
+- CI 在真機 Release job 各建置 production 與 staging，兩者皆不簽章；模擬器測試 App 使用獨立 job，只建置一次。
 - `iOS Release 建置` 在 `macos-26` 執行 `flutter build ios --release --no-codesign`，以一般 App 入口驗證真機 Release 設定與 AOT；不簽章、不匯出 IPA。
 - `iOS 模擬器 App 建置` 在 `macos-26` 執行 `flutter build ios --simulator --debug --no-codesign --target=integration_test/ui_test.dart --dart-define=OFFLINE_MAP=true`，不需要簽章。
 - 將 `Runner.app` 封裝成 tar 後上傳為 `ios-test-app` artifact，保留執行權限與符號連結。
@@ -70,7 +70,7 @@ Workflow 依平台分工：跨平台檢查放 `ci.yml`，各平台的建置與�
 - Release 與測試建置 job 各自執行同一套路徑判斷，測試建置再將 `run` output 傳給模擬器 job：只改文件時所有 job 直接回報成功，不下載產物；改到 `ios.yml` 本身時照常實際建置。
 
 ### `android.yml`（Linux，Android 模擬器）
-- CI 每次各建置一次 Release APK 與測試 APK，兩者使用獨立 job。
+- CI 在 Release job 各建置 production 與 staging APK，皆不使用正式憑證；測試 APK 使用獨立 job，只建置一次。
 - `Android Release APK 建置` 執行 `flutter build apk --release`，以一般 App 入口驗證 Release 設定與 AOT；目前不使用正式簽章金鑰。
 - `Android 測試 APK 建置` 執行 `flutter build apk --debug --target=integration_test/ui_test.dart --target-platform=android-x64 --dart-define=OFFLINE_MAP=true`，建置包含整合測試入口的 x86_64 APK，上傳為 `android-test-apk` artifact。
 - Android 模擬器 job 以 `needs: [apk]` 等待建置，各自下載同一份 APK；在 Linux runner 啟用 KVM，以 `flutter drive --use-application-binary=artifacts/android-app/app-debug.apk` 執行 `integration_test/` 截圖情境，不重新編譯，與 iOS 共用同一組情境。
@@ -105,6 +105,7 @@ Workflow 依平台分工：跨平台檢查放 `ci.yml`，各平台的建置與�
    - `supabase functions deploy` 部署 Edge Function
    - 這些步驟可重複執行，重跑時再套用一次也不會出錯。
 2. **Android 測試 APK**（不上傳商店）：
+   - `android-apk` 為獨立 job，等待後端實際完成部署，使用 `cd-staging-android` 佇列，不阻擋下一次後端部署。正式發版的 staging 成功判定只看後端 job 的實際部署紀錄。
    - 以 `--dart-define` 帶入 staging 的 Supabase URL／anon key，`flutter build apk --release`。
    - 使用獨立的 applicationId 後綴 `.staging`、APP 名稱加上「β」、圖示加上測試標記，可以和商店版並存，一眼分得出來。
    - 以專用的 staging 簽章金鑰簽署，和正式版上傳金鑰分開。
@@ -120,11 +121,10 @@ Workflow 依平台分工：跨平台檢查放 `ci.yml`，各平台的建置與�
      - 和正式版的發布憑證分開，`staging` Environment 也不放 App Store Connect API key，所以 staging 流程無法上傳或送審。
    - 建置：`flutter build ipa --release --flavor staging --export-options-plist=ios/ExportOptions-staging.plist`。
      - `ExportOptions-staging.plist` 納入版本控管：`method` 為 Ad Hoc（Xcode 15.3 起新名稱為 `release-testing`，舊名 `ad-hoc` 仍可用，實作時依 runner 的 Xcode 版本確認）、`signingStyle` 為 `manual`，並以 `provisioningProfiles` 指定 `.staging` bundle id 對應的 profile 名稱；不使用 `flutter build ipa` 的預設匯出（App Store）。
-     - 建置號 `--build-number` 為 `<commit 數>.<job 開始時的 UTC Unix 秒數>`（`CFBundleVersion` 可用最多三段以點分隔的整數）：
-       - commit 數 = `git rev-list --count HEAD`（checkout 設定 `fetch-depth: 0`，並檢查不是 shallow）。
-       - 只用 commit 數不夠：同一個 commit 重跑（例如簽章失敗後重試）時數字不變，測試者分不出新舊。
-       - 不用 `run_number`／`run_attempt`：重跑時 `run_number` 不變，若同一個 commit 有兩次執行（例如兩條 CI 幾乎同時完成都觸發部署），舊執行在新執行之後重跑會得到較小的號碼（`C.50.2` < `C.51.1`）。
-       - 時間戳記對所有執行與重跑全域遞增；`ios-ipa` 在 `cd-staging-ios` 群組內一次只跑一個，較晚開始的 job 一定拿到較大的號碼，Firebase 也會把每次建置視為新版本並通知測試者。
+     - 建置號改為 `<2020-01-01 起算的 UTC 日序（從 1 起）>.<當日十秒序號除以 100 的商>.<餘數>`。
+       - 原規劃的 Unix 秒數超過 [Apple CFBundleVersion](https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html) 第二段最多兩位的限制；新格式第一段最多四位、後兩段最多兩位。
+       - job 在簽章準備後等待下一個 UTC 十秒邊界（最多十秒）再分配號碼。`ios-ipa` 的固定佇列確保不同 job 與重跑拿到遞增號碼；午夜跨日仍遞增。
+       - 日序超過 9999 時明確失敗，需調整基準日；不悄悄回繞。commit SHA 與標題記錄在 Firebase release notes，版本仍可追溯。
    - **發佈：Firebase App Distribution**（[說明](https://firebase.google.com/docs/app-distribution)）：
      - 以 Firebase CLI（`firebase-tools`，固定版本）執行 `firebase appdistribution:distribute <ipa> --app <Firebase iOS App ID> --groups staging-ios --release-notes "<commit SHA 與標題>"`。
      - 認證優先用 **Workload Identity Federation**（`google-github-actions/auth`，釘選 SHA；job 加 `id-token: write`），不存放長期金鑰：
@@ -170,7 +170,7 @@ Workflow 依平台分工：跨平台檢查放 `ci.yml`，各平台的建置與�
    - commit 數 = `git rev-list --count HEAD`。checkout 必須設定 `fetch-depth: 0` 取得完整歷史，因為 `actions/checkout` 預設只抓 1 個 commit，計數會永遠是 1。計算前檢查 `git rev-parse --is-shallow-repository` 為 `false`，否則讓流程失敗。
    - 嘗試次數 = `github.run_attempt`，上限 9，超過就讓流程失敗並提示人工處理。重跑時嘗試次數增加，會拿到新號碼。
    - tag 必須在 `main` 最新 commit 上，所以每次發版的 commit 數都大於上一次，建置號單調遞增。
-   - 遠低於 Android `versionCode` 上限 2,100,000,000（commit 數需少於約 2.1 億）。
+   - Android `versionCode` 上限為 2,100,000,000；目前兩平台共用單一整數號碼，另採 Apple 第一段最多四位的限制，因此號碼大於 9999 時先阻止發版，需調整 iOS 編碼與商店範圍查詢後再繼續。
    - **每個平台各自冪等**：上傳前先向商店查詢，已有落在 `commit 數 × 10 + 1～9` 範圍內的建置號，就代表這個版本已上傳過，**略過上傳這一步**（後續步驟見下方 Android、iOS 各自的規則）。查詢必須涵蓋**完整範圍**：
      - **iOS**：不用 `latest_testflight_build_number`，它只回傳最新的一個建置。改在 fastlane lane 中用 App Store Connect API（Spaceship `ConnectAPI::Build`，或 `GET /v1/builds`）查詢範圍內的 9 個號碼：
        - **限定範圍**：一律加上 `filter[app]`（本 APP 的 Apple ID）與 `filter[preReleaseVersion.version]`（本次版本號，例如 `1.2.0`），避免同帳號下其他 APP 剛好用到相同的建置號。
@@ -195,6 +195,8 @@ Workflow 依平台分工：跨平台檢查放 `ci.yml`，各平台的建置與�
 7. **GitHub Release**：
    - 依兩個 tag 之間的 commit 產生更新說明。
    - 附上 AAB／IPA 的檔案雜湊值（不附檔案本身）。
+   - 核准後先建立 draft Release，每次商店上傳前先附上該平台／建置號的 SHA-256 文字紀錄。重跑沿用舊建置時，取回原檔雜湊，不用重新建置的不同二進位檔替代。
+   - 兩平台完成後才公開 Release；只將實際選用的兩個商店建置的雜湊加入說明。若人工上傳的建置缺少原始雜湊紀錄，Release 發佈失敗，需先補上原檔的紀錄。
 
 ## 簽章與金鑰
 | 項目 | 存放 | 用途 |

@@ -9,6 +9,19 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  automation:
+    name: CD 閘門與發版重跑測試
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - run: python3 -m unittest discover -s tool -p 'test_*.py'
+      - uses: ruby/setup-ruby@651ff0d62c5c79bed6d53ec518387aae20e72c1a
+        with:
+          ruby-version: '3.3'
+      - run: |
+          ruby -c fastlane/Fastfile
+          ruby fastlane/test_release_policy.rb
   quality:
     name: Flutter 檢查（格式／分析／測試／Web）
     runs-on: ubuntu-24.04
@@ -85,7 +98,7 @@ jobs:
     name: CI 全部通過
     runs-on: ubuntu-24.04
     if: always()
-    needs: [quality, backend]
+    needs: [quality, backend, automation]
     steps:
       - env:
           RESULTS: ${{ toJSON(needs) }}

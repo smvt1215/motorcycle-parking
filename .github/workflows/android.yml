@@ -35,7 +35,10 @@ jobs:
       - if: steps.changes.outputs.run == 'true'
         run: flutter pub get --enforce-lockfile
       - if: steps.changes.outputs.run == 'true'
-        run: flutter build apk --release
+        run: flutter build apk --release --flavor production
+      - name: Validate staging release configuration without secrets
+        if: steps.changes.outputs.run == 'true'
+        run: flutter build apk --release --flavor staging
   apk:
     name: Android 測試 APK 建置
     runs-on: ubuntu-24.04
@@ -64,12 +67,12 @@ jobs:
       - if: steps.changes.outputs.run == 'true'
         run: flutter pub get --enforce-lockfile
       - if: steps.changes.outputs.run == 'true'
-        run: flutter build apk --debug --target=integration_test/ui_test.dart --target-platform=android-x64 --dart-define=OFFLINE_MAP=true
+        run: flutter build apk --debug --flavor production --target=integration_test/ui_test.dart --target-platform=android-x64 --dart-define=OFFLINE_MAP=true
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: steps.changes.outputs.run == 'true'
         with:
           name: android-test-apk
-          path: build/app/outputs/flutter-apk/app-debug.apk
+          path: build/app/outputs/flutter-apk/app-production-debug.apk
           if-no-files-found: error
           compression-level: 0
           overwrite: true
@@ -125,7 +128,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-boot-timeout: 180
-          script: flutter drive --debug --driver=test_driver/integration_test.dart --target=integration_test/ui_test.dart --use-application-binary=artifacts/android-app/app-debug.apk -d emulator-5554
+          script: flutter drive --debug --flavor production --driver=test_driver/integration_test.dart --target=integration_test/ui_test.dart --use-application-binary=artifacts/android-app/app-production-debug.apk -d emulator-5554
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always() && needs.apk.outputs.run == 'true'
         with:

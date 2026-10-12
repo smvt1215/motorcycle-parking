@@ -1,0 +1,5 @@
+# This label is available in this repository's hosted runner pool and has
+# completed the iOS 27 job successfully (run 38267749316).
+self-hosted-runner:
+  labels:
+    - xcode-27
