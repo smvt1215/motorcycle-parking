@@ -283,7 +283,7 @@ class _ReportFormState extends State<ReportForm> {
             ),
             const SizedBox(height: 8),
             Text(
-              '回報會先標示「待確認」，其他騎士確認後才成為已確認資訊。',
+              '新增點位會顯示於地圖，回報資訊待管理者確認；停放資格請依現場標示。',
               style: TextStyle(color: colors.onSurfaceVariant),
             ),
             const SizedBox(height: 16),
