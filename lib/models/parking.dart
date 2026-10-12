@@ -1,0 +1,171 @@
+enum VehicleType { scooter, heavy }
+
+enum SpaceType { paidMotorcycle, freeMotorcycle, heavyOnly, car, offStreet }
+
+enum TrustStatus { pending, confirmed, hidden }
+
+extension VehicleLabel on VehicleType {
+  String get label => this == VehicleType.scooter ? '普通機車' : '大型重機';
+}
+
+extension SpaceLabel on SpaceType {
+  String get label => switch (this) {
+    SpaceType.paidMotorcycle => '路邊收費機車格',
+    SpaceType.freeMotorcycle => '免費機車格',
+    SpaceType.heavyOnly => '重機專用格',
+    SpaceType.car => '汽車格',
+    SpaceType.offStreet => '路外停車場',
+  };
+}
+
+class ParkingSpot {
+  const ParkingSpot({
+    required this.id,
+    required this.name,
+    required this.lat,
+    required this.lng,
+    required this.city,
+    required this.spaceType,
+    this.source = 'community',
+    this.feeNote = '請依現場公告',
+    this.scooterTotal,
+    this.available,
+    this.heavyAllowed,
+    this.scooterAllowed,
+    this.status = TrustStatus.pending,
+    this.updatedAt,
+    this.lastConfirmedAt,
+    this.note = '',
+    this.district = '',
+    this.sourceUrl = '',
+    this.sourceName = '',
+    this.licenseNote = '',
+  });
+  final String id, name, city, source, feeNote, note, district, sourceUrl;
+  final String sourceName, licenseNote;
+  final double lat, lng;
+  final SpaceType spaceType;
+  final int? scooterTotal, available;
+  final bool? heavyAllowed, scooterAllowed;
+  final TrustStatus status;
+  final DateTime? updatedAt, lastConfirmedAt;
+  bool get stale =>
+      lastConfirmedAt != null &&
+      DateTime.now().difference(lastConfirmedAt!).inDays > 180;
+  factory ParkingSpot.fromJson(Map<String, dynamic> j) => ParkingSpot(
+    id: j['id'] as String,
+    name: j['name'] as String,
+    lat: (j['lat'] as num).toDouble(),
+    lng: (j['lng'] as num).toDouble(),
+    city: j['city'] as String,
+    source: j['source'] as String? ?? 'community',
+    spaceType: SpaceType.values.byName(j['space_type'] as String),
+    feeNote: j['fee_note'] as String? ?? '請依現場公告',
+    scooterTotal: j['scooter_total'] as int?,
+    available: j['available'] as int?,
+    heavyAllowed: j['heavy_allowed'] as bool?,
+    scooterAllowed: j['scooter_allowed'] as bool?,
+    status: TrustStatus.values.byName(j['status'] as String? ?? 'pending'),
+    updatedAt: DateTime.tryParse(j['updated_at'] as String? ?? ''),
+    lastConfirmedAt: DateTime.tryParse(j['last_confirmed_at'] as String? ?? ''),
+    note: j['note'] as String? ?? '',
+    district: j['district'] as String? ?? '',
+    sourceUrl: j['source_url'] as String? ?? '',
+    sourceName: j['source_name'] as String? ?? '',
+    licenseNote: j['license_note'] as String? ?? '',
+  );
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'lat': lat,
+    'lng': lng,
+    'city': city,
+    'source': source,
+    'space_type': spaceType.name,
+    'fee_note': feeNote,
+    'scooter_total': scooterTotal,
+    'available': available,
+    'heavy_allowed': heavyAllowed,
+    'scooter_allowed': scooterAllowed,
+    'status': status.name,
+    'updated_at': updatedAt?.toIso8601String(),
+    'last_confirmed_at': lastConfirmedAt?.toIso8601String(),
+    'note': note,
+    'district': district,
+    'source_url': sourceUrl,
+    'source_name': sourceName,
+    'license_note': licenseNote,
+  };
+}
+
+class CityRule {
+  const CityRule({
+    required this.city,
+    required this.vehicle,
+    required this.allowedSpaceTypes,
+    required this.feeNote,
+    required this.exceptions,
+    required this.sourceUrl,
+    required this.version,
+    required this.effectiveDate,
+    this.canUseTwoSpaces = false,
+    this.conditionalSpaceTypes = const [],
+    this.districts = const [],
+  });
+  final String city, feeNote, exceptions, sourceUrl;
+  final VehicleType vehicle;
+  final List<SpaceType> allowedSpaceTypes, conditionalSpaceTypes;
+  final List<String> districts;
+  final int version;
+  final DateTime effectiveDate;
+  final bool canUseTwoSpaces;
+  factory CityRule.fromJson(Map<String, dynamic> j) => CityRule(
+    city: j['city'] as String,
+    vehicle: VehicleType.values.byName(j['vehicle'] as String),
+    allowedSpaceTypes: (j['allowed_space_types'] as List<dynamic>)
+        .map((e) => SpaceType.values.byName(e as String))
+        .toList(),
+    conditionalSpaceTypes:
+        (j['conditional_space_types'] as List<dynamic>? ?? [])
+            .map((e) => SpaceType.values.byName(e as String))
+            .toList(),
+    districts: (j['districts'] as List<dynamic>? ?? []).cast<String>(),
+    feeNote: j['fee_note'] as String,
+    exceptions: j['exceptions'] as String,
+    sourceUrl: j['source_url'] as String,
+    version: j['version'] as int,
+    effectiveDate: DateTime.parse(j['effective_date'] as String),
+    canUseTwoSpaces: j['can_use_two_spaces'] as bool? ?? false,
+  );
+}
+
+class ParkedRecord {
+  const ParkedRecord({
+    required this.lat,
+    required this.lng,
+    required this.at,
+    this.note = '',
+    this.floor = '',
+    this.remindAt,
+  });
+  final double lat, lng;
+  final DateTime at;
+  final DateTime? remindAt;
+  final String note, floor;
+  Map<String, dynamic> toJson() => {
+    'lat': lat,
+    'lng': lng,
+    'at': at.toIso8601String(),
+    'note': note,
+    'floor': floor,
+    'remind_at': remindAt?.toIso8601String(),
+  };
+  factory ParkedRecord.fromJson(Map<String, dynamic> j) => ParkedRecord(
+    lat: (j['lat'] as num).toDouble(),
+    lng: (j['lng'] as num).toDouble(),
+    at: DateTime.parse(j['at'] as String),
+    note: j['note'] as String? ?? '',
+    floor: j['floor'] as String? ?? '',
+    remindAt: DateTime.tryParse(j['remind_at'] as String? ?? ''),
+  );
+}

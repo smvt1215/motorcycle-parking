@@ -1,0 +1,76 @@
+begin;
+create extension if not exists pgtap with schema extensions;
+set search_path=public,extensions;
+select no_plan();
+
+create function pg_temp.uid(n integer) returns uuid language sql immutable as $$
+select ('10000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid;
+$$;
+create function pg_temp.report(n integer,body jsonb,ip text default 'b',device text default 'b') returns jsonb language sql as $$
+select public.apply_report(pg_temp.uid(n),repeat(ip,64),repeat(device,64),body);
+$$;
+create temporary table target as select (pg_temp.report(1,'{"action":"create","spot":{"name":"測試點","lat":25.01,"lng":121.51,"city":"臺北市","space_type":"paidMotorcycle"}}','a','a')->>'id')::uuid as id;
+select is((select status from community_spots where id=(select id from target)),'pending','new report is pending');
+select is(pg_temp.report(2,'{"action":"create","spot":{"name":"重複點","lat":25.01001,"lng":121.51,"city":"臺北市","space_type":"paidMotorcycle"}}')->>'duplicate_id',(select id::text from target),'15m same-type duplicate prevented');
+select throws_ok($$select pg_temp.report(4,'{"action":"create","spot":{"name":"匿名","lat":25.02,"lng":121.5,"city":"臺北市","space_type":"car"}}')$$,'42501','Google or Apple sign-in required','anonymous cannot report');
+select throws_ok($$select pg_temp.report(1,jsonb_build_object('action','vote','spot_id',(select id from target),'vote','still_there'),'a','a')$$,'42501','cannot confirm own report','owner cannot confirm own report');
+select pg_temp.report(3,jsonb_build_object('action','vote','spot_id',(select id from target),'vote','still_there'),'e','e');
+select is((select qualified from spot_votes where user_id=pg_temp.uid(3) and spot_id=(select id from target)),false,'account younger than seven days is not qualified');
+select pg_temp.report(2,jsonb_build_object('action','vote','spot_id',(select id from target),'vote','still_there'),'b','b');
+select pg_temp.report(6,jsonb_build_object('action','vote','spot_id',(select id from target),'vote','still_there'),'b','c');
+select is((select status from community_spots where id=(select id from target)),'pending','same IP cannot supply two confirmations');
+select pg_temp.report(6,jsonb_build_object('action','vote','spot_id',(select id from target),'vote','still_there'),'c','b');
+select is((select status from community_spots where id=(select id from target)),'pending','same device cannot supply two confirmations');
+select pg_temp.report(6,jsonb_build_object('action','vote','spot_id',(select id from target),'vote','still_there'),'c','c');
+select is((select status from community_spots where id=(select id from target)),'confirmed','two qualified independent confirmations');
+select ok((select last_confirmed_at is not null from community_spots where id=(select id from target)),'confirmation timestamp saved');
+select pg_temp.report(2,jsonb_build_object('action','vote','spot_id',(select id from target),'vote','gone'),'b','b');
+select pg_temp.report(6,jsonb_build_object('action','vote','spot_id',(select id from target),'vote','gone'),'c','c');
+select pg_temp.report(7,jsonb_build_object('action','vote','spot_id',(select id from target),'vote','gone'),'d','d');
+select is((select status from community_spots where id=(select id from target)),'hidden','weighted negative threshold hides rather than deletes');
+select is((select count(*)::integer from moderation_queue where source_id=(select id::text from target)),1,'hidden point queued for moderation');
+select throws_ok($$select pg_temp.report(2,jsonb_build_object('action','delete','spot_id',(select id from target)))$$,'42501','only owner can edit','other user cannot delete');
+select lives_ok($$select pg_temp.report(1,jsonb_build_object('action','update','spot_id',(select id from target),'spot',jsonb_build_object('name','更正點位')))$$,'owner can update via service RPC');
+select is((select status from community_spots where id=(select id from target)),'pending','edits require new confirmation');
+select is((select count(*)::integer from spot_votes where spot_id=(select id from target)),0,'old votes cleared after edit');
+
+-- Limits count every accepted action, including repeated annotation updates.
+delete from rate_limit_events;
+do $$begin for n in 1..10 loop perform pg_temp.report(3,jsonb_build_object('action','annotation','source_id','tdx:Taipei:park:1','heavy_access','allowed'),'f','f');end loop;end$$;
+select throws_ok($$select pg_temp.report(3,'{"action":"annotation","source_id":"tdx:Taipei:park:1","heavy_access":"denied"}','g','g')$$,'P0001','daily report limit reached','ten actions per account per UTC day');
+delete from rate_limit_events;
+insert into rate_limit_events(user_id,ip_hash) select pg_temp.uid(case when n<=10 then 1 when n<=20 then 2 else 6 end),repeat('z',64) from generate_series(1,30) n;
+select throws_ok($$select pg_temp.report(3,'{"action":"annotation","source_id":"tdx:Taipei:park:1","heavy_access":"allowed"}','z','f')$$,'P0001','daily report limit reached','thirty actions per trusted IP per UTC day');
+
+select ok(not has_function_privilege('anon','public.apply_report(uuid,text,text,jsonb)','EXECUTE'),'anon cannot call privileged report RPC');
+select ok(not has_function_privilege('authenticated','public.apply_report(uuid,text,text,jsonb)','EXECUTE'),'authenticated cannot call privileged report RPC');
+select ok(not has_table_privilege('authenticated','public.rate_limit_events','SELECT'),'rate identity hashes are private');
+select ok(not has_table_privilege('anon','public.spot_votes','SELECT'),'vote identity hashes are private');
+insert into favorites(user_id,spot_id,spot) values(pg_temp.uid(1),'fav-one','{"id":"fav-one","name":"私有收藏"}');
+set local role anon;
+select is((select count(*)::integer from community_spots where status='hidden'),0,'hidden spots invisible to anon');
+select throws_ok($$select user_id from community_spots$$,'42501',null,'contributor ids hidden from anon');
+select ok(not exists(select 1 from information_schema.columns where table_schema='public' and table_name='public_spots' and column_name='user_id'),'public view omits contributor ids');
+select ok((select count(*)>0 from viewport_spots(25.0,121.5,25.1,121.6)),'viewport RPC works without user_id privilege');
+select is((select count(*)::integer from nearby_spots(25.034,121.56,1000) where status='hidden'),0,'nearby RPC respects hidden RLS');
+select is((select count(*)::integer from nearby_spots(0,0,1000)),0,'nearby rejects invalid query coordinates');
+select throws_ok($$insert into community_spots(user_id,name,lat,lng,city,space_type) values('10000000-0000-4000-8000-000000000001','bad',25,121,'臺北市','car')$$,'42501','new row violates row-level security policy for table "community_spots"','anon cannot insert directly');
+reset role;
+select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-000000000002","role":"authenticated","app_metadata":{"role":"user"}}',true);
+set local role authenticated;
+select is((select count(*)::integer from favorites),0,'other users cannot read private favorites');
+select throws_ok($$insert into favorites(user_id,spot_id,spot) values('10000000-0000-4000-8000-000000000001','fav-two','{"id":"fav-two"}')$$,'42501','new row violates row-level security policy for table "favorites"','cannot write another user favorite');
+select throws_ok($$insert into city_rules(city,vehicle,allowed_space_types,fee_note,exceptions,effective_date,source_url,version) values('測試','heavy','[]','a','a',current_date,'https://example.test',1)$$,'42501','new row violates row-level security policy for table "city_rules"','ordinary users cannot insert rules');
+reset role;
+select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+set local role authenticated;
+select is((select count(*)::integer from favorites),1,'owner can read own favorites');
+select lives_ok($$delete from favorites where spot_id='fav-one'$$,'owner can remove favorite');
+reset role;
+select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-000000000005","role":"authenticated","app_metadata":{"role":"admin"}}',true);
+set local role authenticated;
+select lives_ok($$update city_rules set version=version+1 where city='臺北市' and vehicle='heavy'$$,'admin can maintain rules');
+select is((select version from city_rules where city='臺北市' and vehicle='heavy'),2,'admin update takes effect');
+reset role;
+select * from finish();
+rollback;

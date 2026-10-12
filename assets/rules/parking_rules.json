@@ -1,0 +1,226 @@
+[
+  {
+    "city": "全國",
+    "vehicle": "scooter",
+    "allowed_space_types": [
+      "paidMotorcycle",
+      "freeMotorcycle"
+    ],
+    "conditional_space_types": [
+      "offStreet"
+    ],
+    "fee_note": "請依現場收費公告",
+    "exceptions": "請以現場標誌標線及場站規定為準；試辦路段須確認公告範圍。",
+    "effective_date": "2026-10-11",
+    "source_url": "https://tad.tycg.gov.tw/Law/Detail/bbc4c496-ca04-4f15-a3cf-a76600dcdb6f",
+    "version": 1,
+    "can_use_two_spaces": false,
+    "districts": []
+  },
+  {
+    "city": "全國",
+    "vehicle": "heavy",
+    "allowed_space_types": [
+      "heavyOnly",
+      "car"
+    ],
+    "conditional_space_types": [
+      "offStreet"
+    ],
+    "fee_note": "請依現場收費公告",
+    "exceptions": "請以現場標誌標線及場站規定為準；試辦路段須確認公告範圍。",
+    "effective_date": "2026-10-11",
+    "source_url": "https://tad.tycg.gov.tw/Law/Detail/bbc4c496-ca04-4f15-a3cf-a76600dcdb6f",
+    "version": 1,
+    "can_use_two_spaces": false,
+    "districts": []
+  },
+  {
+    "city": "臺北市",
+    "vehicle": "scooter",
+    "allowed_space_types": [
+      "paidMotorcycle",
+      "freeMotorcycle"
+    ],
+    "conditional_space_types": [
+      "offStreet"
+    ],
+    "fee_note": "請依現場收費公告",
+    "exceptions": "請以現場標誌標線及場站規定為準；試辦路段須確認公告範圍。",
+    "effective_date": "2026-10-11",
+    "source_url": "https://www.gov.taipei/News_Content.aspx?n=D0042A87C2F0270A&s=1190C312983454BA&sms=78D644F2755ACCAA",
+    "version": 1,
+    "can_use_two_spaces": false,
+    "districts": []
+  },
+  {
+    "city": "臺北市",
+    "vehicle": "heavy",
+    "allowed_space_types": [
+      "paidMotorcycle",
+      "heavyOnly",
+      "car"
+    ],
+    "conditional_space_types": [
+      "offStreet"
+    ],
+    "fee_note": "一般計次每次 40 元；一般計時每小時 20 元，當日上限 100 元；特殊路段另依公告。",
+    "exceptions": "僅公有路邊收費機車格；免費巷弄格不適用。可斜停兩格，勿阻礙通行。",
+    "effective_date": "2026-10-06",
+    "source_url": "https://www.gov.taipei/News_Content.aspx?n=D0042A87C2F0270A&s=1190C312983454BA&sms=78D644F2755ACCAA",
+    "version": 1,
+    "can_use_two_spaces": true,
+    "districts": []
+  },
+  {
+    "city": "新北市",
+    "vehicle": "scooter",
+    "allowed_space_types": [
+      "paidMotorcycle",
+      "freeMotorcycle"
+    ],
+    "conditional_space_types": [
+      "offStreet"
+    ],
+    "fee_note": "請依現場收費公告",
+    "exceptions": "請以現場標誌標線及場站規定為準；試辦路段須確認公告範圍。",
+    "effective_date": "2026-10-11",
+    "source_url": "https://www.traffic.ntpc.gov.tw/home.jsp?act=be4f48068b2b0031&dataserno=99345bcf365b8f6ed7a6315705335638&id=54fa46e9e522dde4&mserno=39e5192ff77897e0ae099c1886ca9b09",
+    "version": 1,
+    "can_use_two_spaces": false,
+    "districts": []
+  },
+  {
+    "city": "新北市",
+    "vehicle": "heavy",
+    "allowed_space_types": [
+      "heavyOnly",
+      "car"
+    ],
+    "conditional_space_types": [
+      "offStreet",
+      "paidMotorcycle",
+      "freeMotorcycle"
+    ],
+    "fee_note": "請依現場收費公告",
+    "exceptions": "板橋、新店及其他公告行政區／收費路段試辦開放；不得推論全市機車格均開放。",
+    "effective_date": "2026-07-01",
+    "source_url": "https://www.traffic.ntpc.gov.tw/home.jsp?act=be4f48068b2b0031&dataserno=99345bcf365b8f6ed7a6315705335638&id=54fa46e9e522dde4&mserno=39e5192ff77897e0ae099c1886ca9b09",
+    "version": 1,
+    "can_use_two_spaces": false,
+    "districts": []
+  },
+  {
+    "city": "桃園市",
+    "vehicle": "scooter",
+    "allowed_space_types": [
+      "paidMotorcycle",
+      "freeMotorcycle"
+    ],
+    "conditional_space_types": [
+      "offStreet"
+    ],
+    "fee_note": "請依現場收費公告",
+    "exceptions": "請以現場標誌標線及場站規定為準；試辦路段須確認公告範圍。",
+    "effective_date": "2026-10-11",
+    "source_url": "https://www.tycg.gov.tw/NewsPage_Content.aspx?n=7&s=1612945&sms=7882",
+    "version": 1,
+    "can_use_two_spaces": false,
+    "districts": []
+  },
+  {
+    "city": "桃園市",
+    "vehicle": "heavy",
+    "allowed_space_types": [
+      "heavyOnly",
+      "car"
+    ],
+    "conditional_space_types": [
+      "offStreet",
+      "paidMotorcycle",
+      "freeMotorcycle"
+    ],
+    "fee_note": "請依現場收費公告",
+    "exceptions": "115 年 4 月起試辦路邊機車格開放；請確認格線、車身尺寸與現場公告。",
+    "effective_date": "2026-04-01",
+    "source_url": "https://www.tycg.gov.tw/NewsPage_Content.aspx?n=7&s=1612945&sms=7882",
+    "version": 1,
+    "can_use_two_spaces": false,
+    "districts": []
+  },
+  {
+    "city": "臺中市",
+    "vehicle": "scooter",
+    "allowed_space_types": [
+      "paidMotorcycle",
+      "freeMotorcycle"
+    ],
+    "conditional_space_types": [
+      "offStreet"
+    ],
+    "fee_note": "請依現場收費公告",
+    "exceptions": "請以現場標誌標線及場站規定為準；試辦路段須確認公告範圍。",
+    "effective_date": "2026-10-11",
+    "source_url": "https://tcparking.taichung.gov.tw/ParkWebStage/Pages/PublicService/Heavybike",
+    "version": 1,
+    "can_use_two_spaces": false,
+    "districts": []
+  },
+  {
+    "city": "臺中市",
+    "vehicle": "heavy",
+    "allowed_space_types": [
+      "heavyOnly",
+      "car"
+    ],
+    "conditional_space_types": [
+      "offStreet",
+      "paidMotorcycle"
+    ],
+    "fee_note": "請依現場收費公告",
+    "exceptions": "限公告試辦路段與停車場，路邊辨識「大重機共用」標字；一格一車，不得超出格線。",
+    "effective_date": "2025-07-11",
+    "source_url": "https://tcparking.taichung.gov.tw/ParkWebStage/Pages/PublicService/Heavybike",
+    "version": 1,
+    "can_use_two_spaces": false,
+    "districts": []
+  },
+  {
+    "city": "高雄市",
+    "vehicle": "scooter",
+    "allowed_space_types": [
+      "paidMotorcycle",
+      "freeMotorcycle"
+    ],
+    "conditional_space_types": [
+      "offStreet"
+    ],
+    "fee_note": "請依現場收費公告",
+    "exceptions": "請以現場標誌標線及場站規定為準；試辦路段須確認公告範圍。",
+    "effective_date": "2026-10-11",
+    "source_url": "https://www.tbkc.gov.tw/Service/ParkingAndTowing",
+    "version": 1,
+    "can_use_two_spaces": false,
+    "districts": []
+  },
+  {
+    "city": "高雄市",
+    "vehicle": "heavy",
+    "allowed_space_types": [
+      "heavyOnly",
+      "car"
+    ],
+    "conditional_space_types": [
+      "offStreet",
+      "paidMotorcycle",
+      "freeMotorcycle"
+    ],
+    "fee_note": "請依現場收費公告",
+    "exceptions": "尚未核實全市最新機車格開放規則。請以現場標誌標線為準，不以舊公告推定可停。",
+    "effective_date": "2026-10-11",
+    "source_url": "https://www.tbkc.gov.tw/Service/ParkingAndTowing",
+    "version": 1,
+    "can_use_two_spaces": false,
+    "districts": []
+  }
+]

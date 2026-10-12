@@ -1,0 +1,6 @@
+{
+  "compilerOptions": { "strict": true },
+  "lint": { "rules": { "exclude": ["no-import-prefix"] } },
+  "fmt": { "singleQuote": true },
+  "nodeModulesDir": "auto"
+}

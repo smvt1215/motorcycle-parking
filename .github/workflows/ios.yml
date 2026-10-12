@@ -1,0 +1,128 @@
+name: iOS
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  release:
+    name: iOS Release 建置
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - id: changes
+        run: python3 tool/ci_changes.py ios >> "$GITHUB_OUTPUT"
+      - id: versions
+        if: steps.changes.outputs.run == 'true'
+        run: echo "flutter=$(cat .flutter-version)" >> "$GITHUB_OUTPUT"
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        if: steps.changes.outputs.run == 'true'
+        with:
+          flutter-version: ${{ steps.versions.outputs.flutter }}
+          cache: true
+      - if: steps.changes.outputs.run == 'true'
+        run: flutter pub get --enforce-lockfile
+      - if: steps.changes.outputs.run == 'true'
+        run: flutter build ios --release --no-codesign
+  app:
+    name: iOS 模擬器 App 建置
+    runs-on: macos-26
+    timeout-minutes: 40
+    outputs:
+      run: ${{ steps.changes.outputs.run }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - id: changes
+        run: python3 tool/ci_changes.py ios >> "$GITHUB_OUTPUT"
+      - id: versions
+        if: steps.changes.outputs.run == 'true'
+        run: echo "flutter=$(cat .flutter-version)" >> "$GITHUB_OUTPUT"
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        if: steps.changes.outputs.run == 'true'
+        with:
+          flutter-version: ${{ steps.versions.outputs.flutter }}
+          cache: true
+      - if: steps.changes.outputs.run == 'true'
+        run: flutter pub get --enforce-lockfile
+      - if: steps.changes.outputs.run == 'true'
+        run: flutter build ios --simulator --debug --no-codesign --target=integration_test/ui_test.dart --dart-define=OFFLINE_MAP=true
+      - name: Archive simulator App with file permissions and symlinks
+        if: steps.changes.outputs.run == 'true'
+        run: |
+          mkdir -p artifacts
+          tar -C build/ios/iphonesimulator -cf artifacts/ios-test-app.tar Runner.app
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: steps.changes.outputs.run == 'true'
+        with:
+          name: ios-test-app
+          path: artifacts/ios-test-app.tar
+          if-no-files-found: error
+          overwrite: true
+  simulator:
+    name: iOS ${{ matrix.ios }} 模擬器
+    needs: [app]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-26
+            ios: '26'
+          - runner: xcode-27
+            ios: '27'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - id: versions
+        if: needs.app.outputs.run == 'true'
+        run: echo "flutter=$(cat .flutter-version)" >> "$GITHUB_OUTPUT"
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        if: needs.app.outputs.run == 'true'
+        with:
+          flutter-version: ${{ steps.versions.outputs.flutter }}
+          cache: true
+      - if: needs.app.outputs.run == 'true'
+        run: flutter pub get --enforce-lockfile
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        if: needs.app.outputs.run == 'true'
+        with:
+          name: ios-test-app
+          path: artifacts/ios-app
+      - name: Extract prebuilt simulator App
+        if: needs.app.outputs.run == 'true'
+        run: tar -xf artifacts/ios-app/ios-test-app.tar -C artifacts/ios-app
+      - id: device
+        if: needs.app.outputs.run == 'true'
+        run: python3 tool/boot_ios_simulator.py '${{ matrix.ios }}'
+      - name: Native navigation and sheet screenshots
+        if: needs.app.outputs.run == 'true'
+        run: |
+          flutter drive --debug --driver=test_driver/integration_test.dart --target=integration_test/ui_test.dart --use-application-binary=artifacts/ios-app/Runner.app -d '${{ steps.device.outputs.udid }}'
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always() && needs.app.outputs.run == 'true'
+        with:
+          name: ios-${{ matrix.ios }}-screenshots
+          path: artifacts/screenshots
+          if-no-files-found: error
+  ios-ok:
+    name: iOS 全部通過
+    runs-on: ubuntu-24.04
+    if: always()
+    needs: [release, app, simulator]
+    steps:
+      - env:
+          RELEASE: ${{ needs.release.result }}
+          APP: ${{ needs.app.result }}
+          SIMULATOR: ${{ needs.simulator.result }}
+        run: test "$RELEASE" = success && test "$APP" = success && test "$SIMULATOR" = success
