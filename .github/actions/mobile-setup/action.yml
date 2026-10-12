@@ -1,0 +1,14 @@
+name: Mobile build setup
+description: Install the pinned Flutter SDK and locked application dependencies.
+runs:
+  using: composite
+  steps:
+    - id: version
+      shell: bash
+      run: echo "flutter=$(cat .flutter-version)" >> "$GITHUB_OUTPUT"
+    - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+      with:
+        flutter-version: ${{ steps.version.outputs.flutter }}
+        cache: true
+    - shell: bash
+      run: flutter pub get --enforce-lockfile

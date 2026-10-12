@@ -20,4 +20,6 @@ python3 tool/configure_maps.py
 flutter run -d chrome --web-port=3000 --dart-define-from-file=config/maps.generated.json
 ```
 
-本機設定及產生的原生設定均不進版控。Android／iOS 建置也帶入同一份 `config/maps.generated.json`。完整切換範圍與待驗證事項見 [Google Maps 計畫](docs/PLAN.md#google-maps-底圖切換2026-10-11-更新)。
+本機設定及產生的原生設定均不進版控。Android／iOS 建置也帶入同一份 `config/maps.generated.json`。Android 本機執行與建置指定 `--flavor production`；測試環境使用 `--flavor staging`，並帶入 staging 的後端設定。完整切換範圍與待驗證事項見 [Google Maps 計畫](docs/PLAN.md#google-maps-底圖切換2026-10-11-更新)。
+
+CD 已提供 staging 部署、Android 測試 APK、Firebase iOS Ad Hoc 安裝，以及經人工核准的雙平台正式發版。啟用前請依 [CD 設定與操作](docs/CD_SETUP.md) 建立部署環境、設定簽章與服務憑證。流程設計見 [CI／CD](docs/CICD.md)。

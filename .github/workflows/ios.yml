@@ -31,6 +31,9 @@ jobs:
         run: flutter pub get --enforce-lockfile
       - if: steps.changes.outputs.run == 'true'
         run: flutter build ios --release --no-codesign
+      - name: Validate staging release configuration without signing
+        if: steps.changes.outputs.run == 'true'
+        run: flutter build ios --release --no-codesign --flavor staging
   app:
     name: iOS 模擬器 App 建置
     runs-on: macos-26
