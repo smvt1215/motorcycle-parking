@@ -15,6 +15,7 @@
      - 涉及設計取捨或超出 PR 範圍 → 先詢問使用者再決定。
   5. 「全綠」＝ CI 全部通過、無合併衝突、所有審查 thread 已 resolve、最新一輪自動審查沒有未處理的意見。
   6. 達到全綠後通知使用者可以合併；**合併由使用者執行**（Squash and merge），不自行合併。
+- **Review 只限 PR 範圍**：所有手動與自動審查都以該 PR 的 base → head diff 為範圍，不進行全專案審查。每次發出 review prompt 必須明確寫出此限制；只可為判斷 PR 變更的影響查看必要的相依程式碼，只回報本 PR 引入或直接影響的問題，不將未修改的既有問題列為本 PR 的審查意見或阻擋條件。
 - **PR 合併後必須清理本機 worktree 與分支**：
   1. 先確認 PR 狀態為 merged（不是 closed），並記下 PR 最後的 head commit SHA。
   2. `git fetch --prune origin`
