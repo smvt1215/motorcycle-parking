@@ -97,8 +97,7 @@ create policy public_spots on public.community_spots for select to anon,authenti
 create policy own_favorites on public.favorites for all to authenticated using(user_id=(select auth.uid())) with check(user_id=(select auth.uid()));
 create policy public_rules on public.city_rules for select to anon,authenticated using(true);
 create policy admin_rules on public.city_rules for all to authenticated using((select auth.jwt())->'app_metadata'->>'role'='admin') with check((select auth.jwt())->'app_metadata'->>'role'='admin');
--- Rows stay invisible to clients until their effective date.
-create policy official_read on public.official_heavy_spots for select to anon,authenticated using(effective_date<=current_date);
+create policy official_read on public.official_heavy_spots for select to anon,authenticated using(true);
 -- No client write policies on community_spots/votes. Private identities, moderation and rate events have no public policy.
 revoke all on public.report_identities,public.spot_votes,public.moderation_queue,public.rate_limit_events,public.spot_annotations from anon,authenticated;
 -- spot_annotations stays private: contributor ids and unreviewed notes are
