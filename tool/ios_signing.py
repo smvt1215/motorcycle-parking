@@ -17,6 +17,25 @@ def security(*args):
     return subprocess.check_output(["security", *args], stderr=subprocess.PIPE)
 
 
+def validate_profile(profile, environment):
+    bundle = "tw.motopark.motorcycleParking" + (".staging" if environment == "staging" else "")
+    team = profile["TeamIdentifier"][0]
+    # Legacy accounts can have an App ID prefix different from their Team ID.
+    prefix = profile["ApplicationIdentifierPrefix"][0]
+    if profile["Entitlements"]["application-identifier"] != f"{prefix}.{bundle}":
+        raise ValueError("Provisioning profile does not match the bundle ID")
+    if profile["ExpirationDate"].replace(tzinfo=timezone.utc) <= datetime.now(timezone.utc):
+        raise ValueError("Provisioning profile expired")
+    if profile["Entitlements"].get("get-task-allow") or profile.get("ProvisionsAllDevices"):
+        raise ValueError("A distribution profile is required")
+    if bool(profile.get("ProvisionedDevices")) != (environment == "staging"):
+        raise ValueError("Staging requires Ad Hoc; production requires App Store profile")
+    name = profile["Name"]
+    if any(character in name for character in '\n\r"'):
+        raise ValueError("Profile name cannot be represented safely in xcconfig")
+    return bundle, team, name
+
+
 def prepare(environment):
     temp = Path(os.environ["RUNNER_TEMP"])
     keychain = temp / "cd-signing.keychain-db"
@@ -29,19 +48,7 @@ def prepare(environment):
     private_file(p12, base64.b64decode(required("IOS_CERTIFICATE_BASE64"), validate=True))
     private_file(profile_file, base64.b64decode(required("IOS_PROFILE_BASE64"), validate=True))
     profile = plistlib.loads(security("cms", "-D", "-i", str(profile_file)))
-    bundle = "tw.motopark.motorcycleParking" + (".staging" if environment == "staging" else "")
-    team = profile["TeamIdentifier"][0]
-    if profile["Entitlements"]["application-identifier"] != f"{team}.{bundle}":
-        raise ValueError("Provisioning profile does not match the bundle ID")
-    if profile["ExpirationDate"].replace(tzinfo=timezone.utc) <= datetime.now(timezone.utc):
-        raise ValueError("Provisioning profile expired")
-    if profile["Entitlements"].get("get-task-allow") or profile.get("ProvisionsAllDevices"):
-        raise ValueError("A distribution profile is required")
-    if bool(profile.get("ProvisionedDevices")) != (environment == "staging"):
-        raise ValueError("Staging requires Ad Hoc; production requires App Store profile")
-    name = profile["Name"]
-    if any(character in name for character in '\n\r"'):
-        raise ValueError("Profile name cannot be represented safely in xcconfig")
+    bundle, team, name = validate_profile(profile, environment)
     destination = Path.home() / "Library/MobileDevice/Provisioning Profiles" / f"{profile['UUID']}.mobileprovision"
     private_file(destination, profile_file.read_bytes())
     private_file(temp / "cd-profile-path", str(destination))

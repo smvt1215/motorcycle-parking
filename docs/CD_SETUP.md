@@ -49,6 +49,8 @@ APP 識別碼：
 
 staging profile 必須是 Ad Hoc，包含受邀 iPhone 的 UDID；production profile 必須是 App Store，不能包含 `ProvisionedDevices`。
 
+簽章 Team ID 與 profile 的 App ID Prefix 分別使用原始欄位，不假設相同，以支援既有 Apple 帳號；參考 [Apple QA1879](https://developer.apple.com/library/archive/qa/qa1879/_index.html)。archive 與 export 使用同一份 profile，保留一致的 App ID Prefix。
+
 | Variable | 內容 |
 |---|---|
 | `FIREBASE_IOS_APP_ID` | Firebase 中 staging iOS APP 的 App ID |
