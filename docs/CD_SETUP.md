@@ -106,6 +106,7 @@ Android 查詢所有軌道（含自訂軌道），同一 commit 的 9 個號碼�
 python3 -m unittest discover -s tool -p 'test_*.py'
 ruby -c fastlane/Fastfile
 ruby fastlane/test_release_policy.rb
+bundle exec fastlane lanes
 actionlint
 ```
 
