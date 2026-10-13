@@ -65,6 +65,7 @@ class _SpotSheetState extends State<_SpotSheet> {
   @override
   Widget build(BuildContext context) {
     final store = widget.store, spot = widget.spot;
+    final sourceUri = sourceLinkUri(spot.sourceUrl);
     final colors = Theme.of(context).colorScheme;
     return DraggableScrollableSheet(
       key: const ValueKey('parking-spot-sheet'),
@@ -334,10 +335,10 @@ class _SpotSheetState extends State<_SpotSheet> {
                         ),
                       if (spot.licenseNote.trim().isNotEmpty)
                         _DetailField(label: '授權說明', value: spot.licenseNote),
-                      if (spot.sourceUrl.isNotEmpty)
+                      if (sourceUri != null)
                         TextButton(
                           onPressed: () => runAction(ctx, () async {
-                            if (!await launchUrl(Uri.parse(spot.sourceUrl))) {
+                            if (!await launchUrl(sourceUri)) {
                               throw StateError('無法開啟資料來源');
                             }
                           }),

@@ -124,6 +124,67 @@ Future<void> showField(WidgetTester tester, String text) async {
 }
 
 void main() {
+  test('資料來源連結只接受含主機的完整 HTTP(S) 網址', () {
+    for (final url in [
+      'https://example.com/parking',
+      'http://example.com/parking',
+      ' HTTPS://example.com/parking ',
+    ]) {
+      final uri = sourceLinkUri(url);
+      expect(uri, Uri.tryParse(url.trim()));
+      expect(uri!.host, 'example.com');
+    }
+    for (final url in [
+      '',
+      ' ',
+      'javascript:alert(1)',
+      'data:text/html,<script>alert(1)</script>',
+      'intent://parking#Intent;scheme=app;end',
+      'file:///tmp/parking.html',
+      'mailto:parking@example.com',
+      '/parking',
+      '//example.com/parking',
+      'https:parking',
+      'https:///parking',
+      'https://[invalid',
+    ]) {
+      expect(sourceLinkUri(url), isNull, reason: url);
+    }
+  });
+
+  testWidgets('詳情隱藏不安全資料來源連結，保留正常網站連結', (tester) async {
+    usePhone(tester);
+    final store = (await tester.runAsync(createStore))!;
+    addTearDown(store.dispose);
+    for (final url in [
+      'javascript:alert(1)',
+      'data:text/html,<script>alert(1)</script>',
+      'intent://parking#Intent;scheme=app;end',
+      'https:///parking',
+      'https://example.com/parking',
+      'http://example.com/parking',
+    ]) {
+      final spot = ParkingSpot.fromJson({
+        ...facility().toJson(),
+        'source_url': url,
+      });
+      await openDetails(tester, store, spot);
+      await showField(tester, '資料資訊');
+      await tester.drag(detailScroll, const Offset(0, -800));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('查看點位資料來源'),
+        url.startsWith('https://example.com') ||
+                url.startsWith('http://example.com')
+            ? findsOneWidget
+            : findsNothing,
+        reason: url,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    }
+  });
+
   test('收藏重新讀取後保留場地、分區、入口與照片等新增資料', () async {
     final store = await createStore();
     addTearDown(store.dispose);

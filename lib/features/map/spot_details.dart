@@ -1,5 +1,16 @@
 import '../../models/parking.dart';
 
+Uri? sourceLinkUri(String value) {
+  final uri = Uri.tryParse(value.trim());
+  if (uri == null ||
+      !uri.isAbsolute ||
+      (uri.scheme != 'https' && uri.scheme != 'http') ||
+      uri.host.isEmpty) {
+    return null;
+  }
+  return uri;
+}
+
 String facilitySummary(ParkingSpot spot) =>
     spot.facilityType?.label ?? (spot.isFacility ? '路外停車場（型式未提供）' : '路邊停車格');
 
