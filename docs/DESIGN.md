@@ -56,4 +56,6 @@ Flutter golden 無法證明 native platform view 正確。iOS 截圖與 sheet �
 
 缺欄位顯示「未提供」，未知資格顯示「未確認」，沒有照片顯示「尚無照片」。照片支援點選放大與縮放，載入失敗顯示可讀提示；只有真實資料提供的照片連結才載入。路邊格隱藏停車場入口與即時車位欄，停車指引仍保留。停車場沒有車位數時顯示「暫無即時資訊」，零格仍明確顯示零；車位資料時間獨立於點位更新時間，未提供時明示。
 
+舊 TDX 路外停車場回應只有通過即時時間驗證才提供剩餘格數，因此有格數且缺少獨立車位時間時，可使用其 `updated_at` 作相容顯示；其他來源不套用此回退，新車位時間欄位優先。
+
 資料模型新增選填的 `facility_type`、`parking_access`、`address`、`road_segment`、`entrance_note`、`parking_guide`、`special_rules`、`photo_urls`、`parking_zones`、`availability_updated_at`，舊 JSON 與收藏可繼續讀取，新欄位亦隨收藏保存。空白選填欄位不加入既有寫入內容。本輪處理詳情顯示與資料相容性；正式後端欄位、照片上傳與回報表單的擴充仍依後續計畫安排，來源尚未提供的欄位使用上述缺漏顯示。

@@ -46,7 +46,13 @@ String availabilitySummary(ParkingSpot spot) {
   if (available == null || available < 0) return '暫無即時資訊';
   final total = spot.scooterTotal;
   final capacity = total != null && total >= available ? ' / $total 格' : '';
-  final at = spot.availabilityUpdatedAt;
+  // Legacy TDX normalize() emits a count only with a valid live timestamp,
+  // stored in updated_at. Other sources' point updates are not live times.
+  final at =
+      spot.availabilityUpdatedAt ??
+      (spot.source == 'tdx' && spot.spaceType == SpaceType.offStreet
+          ? spot.updatedAt
+          : null);
   return '機車剩餘 $available 格$capacity\n'
       '${at == null ? '車位資料時間未提供' : '車位資料時間：${formatSpotTime(at)}'}';
 }

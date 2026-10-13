@@ -164,6 +164,36 @@ void main() {
     expect(reportedAccess(roadside), ParkingAccess.scooterHeavy);
   });
 
+  test('舊 TDX 停車場回應保留車位時間，新時間優先且不套用其他來源', () {
+    final liveTime = DateTime.utc(2026, 10, 12, 1);
+    final explicitTime = liveTime.add(const Duration(minutes: 1));
+    final payload = {
+      ...facility(available: 0).toJson(),
+      'id': 'tdx:Taipei:park:TEST',
+      'source': 'tdx',
+      'updated_at': liveTime.toIso8601String(),
+    };
+    final legacy = ParkingSpot.fromJson(payload);
+    expect(availabilitySummary(legacy), contains(formatSpotTime(liveTime)));
+    expect(availabilitySummary(legacy), contains('機車剩餘 0 格'));
+    final explicit = ParkingSpot.fromJson({
+      ...payload,
+      'availability_updated_at': explicitTime.toIso8601String(),
+    });
+    expect(
+      availabilitySummary(explicit),
+      contains(formatSpotTime(explicitTime)),
+    );
+    for (final source in ['official', 'community', 'import']) {
+      final other = ParkingSpot.fromJson({...payload, 'source': source});
+      expect(availabilitySummary(other), contains('車位資料時間未提供'));
+    }
+    final unknown = ParkingSpot.fromJson({...payload, 'available': null});
+    expect(availabilitySummary(unknown), '暫無即時資訊');
+    final untimed = ParkingSpot.fromJson({...payload, 'updated_at': null});
+    expect(availabilitySummary(untimed), contains('車位資料時間未提供'));
+  });
+
   testWidgets('停車場依四組顯示欄位、分區與未知車位，深色大字不溢出', (tester) async {
     usePhone(tester, width: 320);
     final store = (await tester.runAsync(createStore))!;
