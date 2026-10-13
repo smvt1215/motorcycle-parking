@@ -11,9 +11,7 @@ class SpotPhotos extends StatelessWidget {
         .map((url) => url.trim())
         .where((url) {
           final uri = Uri.tryParse(url);
-          return uri != null &&
-              (uri.scheme == 'https' || uri.scheme == 'http') &&
-              uri.host.isNotEmpty;
+          return uri != null && uri.scheme == 'https' && uri.host.isNotEmpty;
         })
         .toSet()
         .toList();

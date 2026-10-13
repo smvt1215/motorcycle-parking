@@ -277,7 +277,11 @@ void main() {
     usePhone(tester);
     await tester.pumpWidget(
       const MaterialApp(
-        home: Scaffold(body: SpotPhotos(urls: ['not-a-photo-url'])),
+        home: Scaffold(
+          body: SpotPhotos(
+            urls: ['not-a-photo-url', 'http://photos.invalid/entry.jpg'],
+          ),
+        ),
       ),
     );
     expect(find.text('照片連結無法使用'), findsOneWidget);
