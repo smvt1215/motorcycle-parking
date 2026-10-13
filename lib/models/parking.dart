@@ -4,6 +4,74 @@ enum SpaceType { paidMotorcycle, freeMotorcycle, heavyOnly, car, offStreet }
 
 enum TrustStatus { pending, confirmed, hidden }
 
+enum FacilityType { multiStorey, underground, surface, roadside }
+
+enum ParkingAccess {
+  scooterOnly,
+  scooterHeavy,
+  heavyCar,
+  noMotorcycle,
+  heavyOnly,
+}
+
+extension FacilityLabel on FacilityType {
+  String get label => switch (this) {
+    FacilityType.multiStorey => '立體停車場',
+    FacilityType.underground => '地下停車場',
+    FacilityType.surface => '路外平面停車場',
+    FacilityType.roadside => '路邊停車格',
+  };
+}
+
+extension ParkingAccessLabel on ParkingAccess {
+  String get label => switch (this) {
+    ParkingAccess.scooterOnly => '普機專用',
+    ParkingAccess.scooterHeavy => '普大共用',
+    ParkingAccess.heavyCar => '大汽共用',
+    ParkingAccess.noMotorcycle => '機車不可停',
+    ParkingAccess.heavyOnly => '大重專用',
+  };
+
+  String get description => switch (this) {
+    ParkingAccess.scooterOnly => '普通機車專用',
+    ParkingAccess.scooterHeavy => '普通機車與大型重機共用',
+    ParkingAccess.heavyCar => '大型重機與汽車共用',
+    ParkingAccess.noMotorcycle => '普通機車與大型重機皆不可停',
+    ParkingAccess.heavyOnly => '大型重機專用',
+  };
+}
+
+T? _optionalEnum<T extends Enum>(List<T> values, Object? name) =>
+    values.where((value) => value.name == name).firstOrNull;
+
+/// A facility may have different access rules and fees in each area.
+/// These describe the source's information, not a legal eligibility decision.
+class ParkingZone {
+  const ParkingZone({
+    required this.name,
+    this.access,
+    this.feeNote = '',
+    this.guide = '',
+  });
+
+  final String name, feeNote, guide;
+  final ParkingAccess? access;
+
+  factory ParkingZone.fromJson(Map<String, dynamic> json) => ParkingZone(
+    name: json['name'] as String? ?? '',
+    access: _optionalEnum(ParkingAccess.values, json['access']),
+    feeNote: json['fee_note'] as String? ?? '',
+    guide: json['guide'] as String? ?? '',
+  );
+
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    if (access != null) 'access': access!.name,
+    if (feeNote.isNotEmpty) 'fee_note': feeNote,
+    if (guide.isNotEmpty) 'guide': guide,
+  };
+}
+
 extension VehicleLabel on VehicleType {
   String get label => this == VehicleType.scooter ? '普通機車' : '大型重機';
 }
@@ -40,6 +108,16 @@ class ParkingSpot {
     this.sourceUrl = '',
     this.sourceName = '',
     this.licenseNote = '',
+    this.facilityType,
+    this.access,
+    this.address = '',
+    this.roadSegment = '',
+    this.entranceNote = '',
+    this.parkingGuide = '',
+    this.specialRules = '',
+    this.photoUrls = const [],
+    this.zones = const [],
+    this.availabilityUpdatedAt,
   });
   final String id, name, city, source, feeNote, note, district, sourceUrl;
   final String sourceName, licenseNote;
@@ -49,6 +127,16 @@ class ParkingSpot {
   final bool? heavyAllowed, scooterAllowed;
   final TrustStatus status;
   final DateTime? updatedAt, lastConfirmedAt;
+  final FacilityType? facilityType;
+  final ParkingAccess? access;
+  final String address, roadSegment, entranceNote, parkingGuide, specialRules;
+  final List<String> photoUrls;
+  final List<ParkingZone> zones;
+  final DateTime? availabilityUpdatedAt;
+
+  bool get isFacility => facilityType != null
+      ? facilityType != FacilityType.roadside
+      : spaceType == SpaceType.offStreet;
   bool get stale =>
       lastConfirmedAt != null &&
       DateTime.now().difference(lastConfirmedAt!).inDays > 180;
@@ -73,6 +161,20 @@ class ParkingSpot {
     sourceUrl: j['source_url'] as String? ?? '',
     sourceName: j['source_name'] as String? ?? '',
     licenseNote: j['license_note'] as String? ?? '',
+    facilityType: _optionalEnum(FacilityType.values, j['facility_type']),
+    access: _optionalEnum(ParkingAccess.values, j['parking_access']),
+    address: j['address'] as String? ?? '',
+    roadSegment: j['road_segment'] as String? ?? '',
+    entranceNote: j['entrance_note'] as String? ?? '',
+    parkingGuide: j['parking_guide'] as String? ?? '',
+    specialRules: j['special_rules'] as String? ?? '',
+    photoUrls: (j['photo_urls'] as List<dynamic>? ?? []).cast<String>(),
+    zones: (j['parking_zones'] as List<dynamic>? ?? [])
+        .map((zone) => ParkingZone.fromJson(zone as Map<String, dynamic>))
+        .toList(),
+    availabilityUpdatedAt: DateTime.tryParse(
+      j['availability_updated_at'] as String? ?? '',
+    ),
   );
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -95,6 +197,18 @@ class ParkingSpot {
     'source_url': sourceUrl,
     'source_name': sourceName,
     'license_note': licenseNote,
+    if (facilityType != null) 'facility_type': facilityType!.name,
+    if (access != null) 'parking_access': access!.name,
+    if (address.isNotEmpty) 'address': address,
+    if (roadSegment.isNotEmpty) 'road_segment': roadSegment,
+    if (entranceNote.isNotEmpty) 'entrance_note': entranceNote,
+    if (parkingGuide.isNotEmpty) 'parking_guide': parkingGuide,
+    if (specialRules.isNotEmpty) 'special_rules': specialRules,
+    if (photoUrls.isNotEmpty) 'photo_urls': photoUrls,
+    if (zones.isNotEmpty)
+      'parking_zones': zones.map((zone) => zone.toJson()).toList(),
+    if (availabilityUpdatedAt != null)
+      'availability_updated_at': availabilityUpdatedAt!.toIso8601String(),
   };
 }
 
