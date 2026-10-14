@@ -32,29 +32,42 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+      - id: changes
+        run: python3 tool/ci_changes.py quality >> "$GITHUB_OUTPUT"
       - id: versions
+        if: steps.changes.outputs.run == 'true'
         run: echo "flutter=$(cat .flutter-version)" >> "$GITHUB_OUTPUT"
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        if: steps.changes.outputs.run == 'true'
         with:
           flutter-version: ${{ steps.versions.outputs.flutter }}
           cache: true
-      - run: flutter pub get --enforce-lockfile
-      - run: dart format --output=none --set-exit-if-changed lib test integration_test test_driver
+      - if: steps.changes.outputs.run == 'true'
+        run: flutter pub get --enforce-lockfile
+      - if: steps.changes.outputs.run == 'true'
+        run: dart format --output=none --set-exit-if-changed lib test integration_test test_driver
       - name: Enforce official UI package imports
+        if: steps.changes.outputs.run == 'true'
         run: |
           if rg 'package:flutter/(material|cupertino)\.dart' lib test integration_test; then
             echo 'Import material_ui or cupertino_ui through the adaptive layer.'
             exit 1
           fi
-      - run: flutter analyze --fatal-infos
+      - if: steps.changes.outputs.run == 'true'
+        run: flutter analyze --fatal-infos
+      # Version policy still applies to documentation-only PRs.
       - run: python3 tool/check_version.py
       - name: Check generated seed
+        if: steps.changes.outputs.run == 'true'
         run: |
           python3 tool/generate_seed.py
           git diff --exit-code -- supabase/seed.sql
-      - run: flutter test --coverage --dart-define=OFFLINE_MAP=true
-      - run: flutter build web --no-web-resources-cdn --no-wasm-dry-run
+      - if: steps.changes.outputs.run == 'true'
+        run: flutter test --coverage --dart-define=OFFLINE_MAP=true
+      - if: steps.changes.outputs.run == 'true'
+        run: flutter build web --no-web-resources-cdn --no-wasm-dry-run
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: steps.changes.outputs.run == 'true'
         with:
           name: coverage
           path: coverage/lcov.info
