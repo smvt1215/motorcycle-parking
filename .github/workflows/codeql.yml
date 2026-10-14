@@ -1,0 +1,134 @@
+name: CodeQL
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '23 18 * * 1'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  scripts:
+    name: CodeQL ${{ matrix.language }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [actions, javascript-typescript, python]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+      - uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d
+        with:
+          category: /language:${{ matrix.language }}
+  kotlin:
+    name: CodeQL java-kotlin
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - id: changes
+        # Always scan main, scheduled and manual runs; only gate PR native work.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" = pull_request ]; then
+            python3 tool/ci_changes.py android >> "$GITHUB_OUTPUT"
+          else
+            echo 'run=true' >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6
+        if: steps.changes.outputs.run == 'true'
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: ./.github/actions/mobile-setup
+        if: steps.changes.outputs.run == 'true'
+      - uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d
+        if: steps.changes.outputs.run == 'true'
+        with:
+          languages: java-kotlin
+          build-mode: manual
+      - name: Build Kotlin through Flutter (generates android/local.properties)
+        if: steps.changes.outputs.run == 'true'
+        env:
+          JAVA_TOOL_OPTIONS: -Dorg.gradle.daemon=false -Dorg.gradle.caching=false
+        run: flutter build apk --debug --flavor production --target-platform=android-x64 --dart-define=OFFLINE_MAP=true
+      - uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d
+        if: steps.changes.outputs.run == 'true'
+        with:
+          category: /language:java-kotlin
+  swift:
+    name: CodeQL swift
+    runs-on: macos-26
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - id: changes
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" = pull_request ]; then
+            python3 tool/ci_changes.py ios >> "$GITHUB_OUTPUT"
+          else
+            echo 'run=true' >> "$GITHUB_OUTPUT"
+          fi
+      - uses: ./.github/actions/mobile-setup
+        if: steps.changes.outputs.run == 'true'
+      - name: Generate Flutter configuration and plugin Swift package
+        if: steps.changes.outputs.run == 'true'
+        run: flutter build ios --config-only --simulator --debug --no-codesign --dart-define=OFFLINE_MAP=true
+      - uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d
+        if: steps.changes.outputs.run == 'true'
+        with:
+          languages: swift
+          build-mode: manual
+      - name: Trace a clean unsigned simulator build without compiler caching
+        if: steps.changes.outputs.run == 'true'
+        run: |
+          xcodebuild build -workspace ios/Runner.xcworkspace -scheme Runner \
+            -configuration Debug -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/codeql-swift-build" \
+            CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
+            COMPILATION_CACHE_ENABLE_CACHING=NO SWIFT_ENABLE_COMPILE_CACHE=NO \
+            SWIFT_USE_INTEGRATED_DRIVER=NO
+      - uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d
+        if: steps.changes.outputs.run == 'true'
+        with:
+          category: /language:swift
+  codeql-ok:
+    name: CodeQL 全部通過
+    runs-on: ubuntu-24.04
+    if: always()
+    needs: [scripts, kotlin, swift]
+    steps:
+      - env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          jobs = json.loads(os.environ['RESULTS'])
+          assert all(job['result'] == 'success' for job in jobs.values()), jobs
+          PY

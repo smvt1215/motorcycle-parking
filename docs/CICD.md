@@ -1,6 +1,6 @@
 # CI／CD 規劃
 
-> 狀態：CI 與 CD staging／release workflows 已實作；外部服務、Environment 憑證與第一次實際部署依 [CD_SETUP.md](CD_SETUP.md) 完成。最後更新：2026-10-12。整體計畫見 [PLAN.md](PLAN.md)。
+> 狀態：CI 與 CD staging／release workflows 已實作；**CD staging 目前停用**，待 Environment 與部署憑證就緒後再啟用。CodeQL 改採五類語言 Advanced Setup，AI Scan 維持停用。外部服務、Environment 憑證與第一次實際部署依 [CD_SETUP.md](CD_SETUP.md) 完成。最後更新：2026-10-14。整體計畫見 [PLAN.md](PLAN.md)。
 
 ## 決策摘要
 - 平台：**GitHub Actions**（公開 repo 使用 GitHub 標準 runner 不收費，含 macOS）。
@@ -33,10 +33,30 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
 | `ci.yml` | PR、push 到 `main` | Linux | 跨平台檢查：Flutter 檢查與測試、Web 建置、Supabase 檢查 |
 | `android.yml` | PR、push 到 `main` | Linux（模擬器硬體加速） | production／staging Release APK 設定檢查＋一次測試 APK 建置，Android 11／16 模擬器共用測試產物執行與截圖 |
 | `ios.yml` | PR、push 到 `main` | macOS | production／staging 真機 Release 設定檢查＋一次模擬器測試 App 建置，iOS 26／27 共用測試產物執行與截圖（見 PLAN.md「UI 設計規範 › 驗證」） |
+| `codeql.yml` | PR、push 到 `main`、每週、手動 | Linux + macOS | Actions、JavaScript／TypeScript、Python、Java／Kotlin、Swift 安全分析；原生 PR 掃描依相關路徑執行 |
 | `cd-staging.yml` | `main` 上的三條 CI 都成功後（`workflow_run`） | Linux + macOS | 部署 staging 後端、產生 Android 測試 APK 與 iOS 測試 IPA（不上傳商店） |
 | `release.yml` | 推送 tag `v*` | Linux + macOS | 部署 production 後端、上架兩平台、建立 GitHub Release |
 
 Workflow 依平台分工：跨平台檢查放 `ci.yml`，各平台的建置與模擬器測試放各自的 workflow，並共用同一套路徑判斷（只改文件時略過）。
+
+### 路徑分流與合併門檻
+
+- `tool/ci_changes.py` 只控制昂貴的 steps，不用 workflow 層級 paths filter，避免必要 checks 留在 Pending。Git diff 出錯會直接失敗；刪除與跨目錄搬移仍涵蓋舊路徑。
+- 文件與發版工具變更：保留 Python／fastlane 自動化測試及版本政策；略過 Flutter、Web、平台建置、模擬器及本機 Supabase。
+- Flutter 共用程式、測試、assets、SDK 與 pub 相依變更：執行品質與雙平台驗證；`web/`、analysis options 只觸發品質，`android/`／`ios/` 只觸發對應平台，`supabase/` 觸發後端。
+- `tool/boot_ios_simulator.py` 只觸發 iOS；seed 產生器、seed.sql 與 demo／rules 資料來源會驗證生成結果與資料庫。路徑判斷與其測試、CodeQL workflow 變更會重新驗證全部目標。
+- `tool/` 的 Python 測試仍一律執行，不因不觸發平台建置而略過工具回歸測試。
+- 三個既有必要彙總 checks 仍要求所有前置 jobs 成功；取消／失敗不得偽裝為通過。嚴格同步 main、簽章、線性歷史、Squash 與審查 thread 結案規則不變。
+
+### CodeQL Advanced Setup
+
+- Actions、JavaScript／TypeScript、Python 採 `build-mode: none`；Java／Kotlin、Swift 採 `manual`，先準備鎖定版本 Flutter 與 plugins，不能直接 autobuild 裸 Gradle／Xcode 專案。
+- Kotlin 由 Flutter 建置 production Debug APK，產生 `android/local.properties`；禁用 Gradle daemon／build cache，確保編譯能被追蹤。
+- Swift 先以 Flutter `--config-only` 產生 plugin Swift package，再在 CodeQL init 後以 xcodebuild 建置無簽章模擬器 App；關閉編譯快取及 integrated driver，不修改一般 UI 測試的編譯旗標。
+- PR 原生掃描僅在相關路徑或 CodeQL／mobile setup 改動時執行；main、每週與手動執行完整掃描五類。腳本三類在每個 PR 都執行。
+- 切換前必須停用 Default Setup，否則 Advanced Setup 的 SARIF 上傳會被拒絕。五類實際分析穩定且 main 有基準後，再確認 CodeQL 合併門檻；本次保留三個既有必要 checks，不提前要求尚未驗證的安全 check。
+- `CodeQL 全部通過` 代表分析 jobs 成功，不等於沒有安全警示。安全警示仍在 Security／Code scanning 審查，不以全專案既有警示阻擋未修改範圍的 PR。
+- 設計與驗收記錄見 [PR checks 設計](designs/2026-10-14-pr-checks-design.md)。
 
 ## CI（每個 PR）
 ### `ci.yml`（Linux）
@@ -221,7 +241,7 @@ Workflow 依平台分工：跨平台檢查放 `ci.yml`，各平台的建置與�
 
 ## 供應鏈安全
 - 第三方 GitHub Action 一律**釘選到 commit SHA**（不用 `@v4` 這類可變標籤）。
-- Dependabot 每週檢查 `github-actions` 與 `pub` 相依，更新一樣走 PR 與 CI。
+- Dependabot 每週檢查 `github-actions` 與 `pub` 相依；每個 ecosystem 的 minor／patch 版本更新分組，major 仍獨立審查，不忽略更新也不改變安全修補政策。更新一樣走 PR 與 CI。
 - 每個 workflow 預設 `permissions: contents: read`，需要時才在 job 層級加權限（例如建立 Release 需要 `contents: write`）。
 - `pubspec.lock` 納入版本控管，CI 使用鎖定版本。
 
