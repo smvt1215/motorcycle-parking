@@ -176,6 +176,8 @@ class _MapPageState extends ConsumerState<MapPage> {
           (s) =>
               (type == null || s.spaceType == type) &&
               (!availableOnly || (s.available ?? 0) > 0) &&
+              // Pending reports reach notAllowed only through legal rules
+              // (see eligibility()), so hiding them here is intended.
               (!hideDenied ||
                   store.eligible(s).status != EligibilityStatus.notAllowed),
         )
