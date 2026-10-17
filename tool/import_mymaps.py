@@ -618,6 +618,29 @@ def apply_taipei_rules(spot, official_name=""):
     return pilot, changes
 
 
+def facility_key(spot, seen):
+    """An unmatched off-street placemark joins a nearby unmatched one with the same facility name,
+    so a facility's car-area and motorcycle-area pins become one spot with both zones."""
+    if spot["space_type"] != "offStreet":
+        return None
+    for key, (kept, entry) in seen.items():
+        if (not entry.get("official_id") and not entry.get("pilot") and kept["space_type"] == "offStreet"
+                and distance(spot["lat"], spot["lng"], kept["lat"], kept["lng"]) <= 200
+                and similarity(spot["name"], kept["name"]) >= 0.9 and qualifiers(spot["name"]) == qualifiers(kept["name"])):
+            return key
+    return None
+
+
+def qualifiers(name):
+    """Words that tell sibling lots apart (東側／西側, 一館／二館, 一期…); the name core drops them."""
+    return set(re.findall(r"[東西南北]側|[一二三四五六七八九十\d]+[館期區站號]|[東西南北]區", name))
+
+
+def cell(value):
+    """Markdown table cell: source names carry fee separators such as `|`."""
+    return str(value).replace("|", "\\|").replace("\n", " ")
+
+
 def merge(kept, spot):
     """Placemarks for one facility (car area, motorcycle area…) become zones of one spot."""
     names = {zone["name"] for zone in kept["parking_zones"]}
@@ -676,7 +699,7 @@ def build(kml, mid, cache, imported_on, refresh=False, tdx_env=None):
                 entry["pilot"] = pilot
         # A pilot site is one facility however its placemarks were matched.
         key = (("pilot", entry["pilot"]) if entry.get("pilot") else entry.get("official_id")) \
-            or (round(spot["lat"], 4), round(spot["lng"], 4), spot["name"])
+            or facility_key(spot, seen) or (round(spot["lat"], 4), round(spot["lng"], 4), spot["name"])
         if key in seen:
             kept, kept_entry = seen[key]
             if entry.get("official_id") and not kept_entry.get("official_id"):
@@ -757,13 +780,14 @@ def summary_markdown(spots, report, skipped, imported_on, failed=(), sources=Non
     for city, count in Counter(s["city"] for s in spots).most_common():
         off = sum(s["city"] == city and s["space_type"] == "offStreet" for s in spots)
         source = "、".join((sources or {}).get(city, [])) or "無可用路外停車場資料，僅驗證行政區"
-        lines.append(f"| {city} | {count} | {off} | {sum(r['city'] == city for r in matched)} | {source} |")
+        lines.append(f"| {city} | {count} | {off} | {sum(r['city'] == city for r in matched)} | {cell(source)} |")
     lines += ["", "## 類型分布", ""]
     lines += [f"- {kind}：{count}" for kind, count in Counter(s["space_type"] for s in spots).most_common()]
     lines += ["", "## 需人工確認", ""]
     lines += [f"- {r['name']}（{r['city']}{r['district']}）：{c}" for r in report for c in r.get("changes", []) if c.startswith(("待人工確認", "座標"))] or ["- 無"]
     lines += ["", "## 官方比對修正", "", "| 點位 | 官方編號 | 距離 | 修正 |", "| --- | --- | --- | --- |"]
-    lines += [f"| {r['source_name']} | {r['official_id']} | {'—' if r['distance_m'] is None else f"{r['distance_m']} m"} | {'；'.join(c for c in r['changes'] if not c.startswith('地址'))} |" for r in matched]
+    lines += [f"| {cell(r['source_name'])} | {cell(r['official_id'])} | {'—' if r['distance_m'] is None else f"{r['distance_m']} m"} | "
+              f"{cell('；'.join(c for c in r['changes'] if not c.startswith('地址')))} |" for r in matched]
     lines += ["", "## 略過或合併", ""] + [f"- {s}" for s in skipped]
     return "\n".join(lines) + "\n"
 

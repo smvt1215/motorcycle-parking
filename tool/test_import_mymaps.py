@@ -10,7 +10,7 @@ import import_mymaps
 from unittest.mock import patch
 
 from import_mymaps import (
-    PILOT_RULES, TAIPEI_PILOT, TAIPEI_ROADSIDE, apply_official, apply_taipei_rules, clean_text, lot, match_lot, merge,
+    PILOT_RULES, TAIPEI_PILOT, cell, facility_key, TAIPEI_ROADSIDE, apply_official, apply_taipei_rules, clean_text, lot, match_lot, merge,
     hccg_context, kaohsiung, normalize, official_lots, parse_fee, split_name, tdx_credentials, tdx_lots, tm2_to_wgs84,
 )
 
@@ -198,6 +198,24 @@ class OfficialSourceTest(unittest.TestCase):
             [private] = kaohsiung(Path(directory), False)
         self.assertEqual((private["id"], private["name"], private["district"], private["fee"], private["motor"]),
                          ("KHH-停2554", "義大大昌醫院停車場", "三民區", "每半小時15元", 12))
+
+
+class FacilityMergeTest(unittest.TestCase):
+    def test_unmatched_zone_pins_of_one_facility_share_a_key(self):
+        def pin(name, lat, kind="offStreet"):
+            return {"name": name, "lat": lat, "lng": 121.5, "space_type": kind}
+        seen = {"k": (pin("大魯閣新時代購物中心", 25.0), {"layer": "汽車費率"})}
+        self.assertEqual(facility_key(pin("大魯閣新時代購物中心", 25.0003), seen), "k")  # about 33 m apart
+        self.assertIsNone(facility_key(pin("大魯閣新時代購物中心", 25.01), seen))  # about 1.1 km apart
+        self.assertIsNone(facility_key(pin("另一間購物中心", 25.0003), seen))
+        seen["w"] = (pin("天母西側停車場", 25.2), {"layer": "汽車費率"})
+        self.assertIsNone(facility_key(pin("天母東側停車場", 25.2003), seen))  # sibling lots stay apart
+        self.assertIsNone(facility_key(pin("大魯閣新時代購物中心", 25.0003, "paidMotorcycle"), seen))
+        seen["k"][1]["official_id"] = "TPE1"  # matched facilities merge by their official id instead
+        self.assertIsNone(facility_key(pin("大魯閣新時代購物中心", 25.0003), seen))
+
+    def test_report_cells_escape_pipes(self):
+        self.assertEqual(cell("(平40/h | 假50/h)松山\n車站"), "(平40/h \\| 假50/h)松山 車站")
 
 
 class TdxCredentialTest(unittest.TestCase):
