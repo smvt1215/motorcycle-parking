@@ -166,6 +166,10 @@ class OfficialTest(unittest.TestCase):
         self.assertIsNone(kept["heavy_allowed"])
         self.assertEqual(merge(kept, spot(True, "重機專用格")), "")  # a later report cannot clear the conflict
         self.assertIsNone(kept["heavy_allowed"])
+        promoted = spot(True, "汽車區")  # an official placemark promoted over the conflicted record keeps the conflict
+        self.assertEqual(merge(promoted, kept), "")
+        self.assertIsNone(promoted["heavy_allowed"])
+        self.assertTrue(promoted["heavy_conflict"])
 
 
 class OfficialSourceTest(unittest.TestCase):

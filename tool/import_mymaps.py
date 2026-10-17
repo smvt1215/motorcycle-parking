@@ -31,7 +31,7 @@ OFFICIAL = {
     "臺中市": ("臺中市路外剩餘車位（臺中市政府交通局）", "https://newdatacenter.taichung.gov.tw/api/v1/no-auth/resource.download?rid=4f9c4d26-d826-4277-8f8a-6d2469fe9653"),
     "桃園市": ("桃園市停車率（路外、路邊）", "https://opendata.tycg.gov.tw/api/dataset/d8a0dbc5-42fc-49ba-a280-1700ff78427a/resource/552ed03e-8daf-4b5f-8c6a-b466d378833b/download"),
     "高雄市": ("高雄市公有／民營路外停車場一覽表（高雄市政府交通局）", "https://openapi.kcg.gov.tw/Api/Service/Get/30c58c88-4f53-45a0-8393-e655feaaa65b"),
-    "臺南市": ("臺南市路外停車場動態資訊（臺南市政府交通局）", "http://parkweb.tainan.gov.tw:2968/api/parking.php?mode=0"),
+    "臺南市": ("臺南市路外停車場動態資訊（臺南市政府交通局）", "https://parkweb.tainan.gov.tw/api/parking.php?mode=0"),
     "新竹市": ("新竹市公有停車場相關資訊（新竹市政府交通處）", "https://odws.hccg.gov.tw/001/Upload/25/opendataback/9059/27/385f68c2-95e6-48cd-a9f8-0d3ffa35554b.json"),
 }
 KAOHSIUNG_PRIVATE = "https://openapi.kcg.gov.tw/Api/Service/Get/aeb8ba3c-8eec-49f6-8768-91218c819909"
@@ -381,7 +381,7 @@ def kaohsiung(cache, refresh):
 def tainan(cache, refresh):
     rows = json.loads(fetch(OFFICIAL["臺南市"][1], cache / "tnn.json", refresh).read_text())
     return [lot(r["code"], r["name"], *r["lnglat"].split(","), r["address"], r["chargeFee"], r["typeName"], r["moto_total"])
-            for r in rows if r["typeId"] != 4 and "," in (r["lnglat"] or "")]
+            for r in rows if str(r["typeId"]) != "4" and "," in (r["lnglat"] or "")]  # 4: roadside concessions
 
 
 def hsinchu(cache, refresh):
@@ -648,6 +648,9 @@ def merge(kept, spot):
     for key in ("entrance_note", "parking_guide", "note", "special_rules"):
         lines = kept[key].splitlines()
         kept[key] = "\n".join(lines + [line for line in spot[key].splitlines() if line not in lines])
+    if spot.get("heavy_conflict"):  # a conflict found earlier survives whichever record is kept
+        kept.update(heavy_allowed=None, heavy_conflict=True)
+        return ""
     if None not in (kept["heavy_allowed"], spot["heavy_allowed"]) and kept["heavy_allowed"] != spot["heavy_allowed"]:
         kept.update(heavy_allowed=None, heavy_conflict=True)
         return "待人工確認：來源對同一場站的重機可停回報不一致"
