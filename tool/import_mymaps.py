@@ -103,6 +103,19 @@ RETAIL_ALIAS = {"家福": "家樂福", "costco": "好市多", "宜家": "ikea"}
 
 def retail(name):
     return {RETAIL_ALIAS.get(brand.lower(), brand.lower()) for brand in RETAIL.findall(name)}
+
+
+# Parking operators. A name without one may still be an operator's lot, but two
+# different operators mean two facilities (城市車旅士林福德一站 is not Times士林福德路第3).
+OPERATOR = re.compile(r"(?i)嘟嘟房|city ?parking|城市車旅|times|168 ?parking|168停車聯盟|正好停|俥亭|uspace|台灣聯通|富山停車|歐特儀|"
+                      r"康達盛通|吉拾|日月亭|辰淵|utaggo")
+OPERATOR_ALIAS = {"city parking": "城市車旅", "cityparking": "城市車旅", "168parking": "168", "168 parking": "168", "168停車聯盟": "168"}
+
+
+def operators(name):
+    return {OPERATOR_ALIAS.get(found.lower(), found.lower()) for found in OPERATOR.findall(name)}
+
+
 # Operator brands and parking words say nothing about which lot a name means.
 GENERIC = re.compile(
     r"(?i)嘟嘟房|city ?parking|城市車旅|times|168 ?parking|168停車聯盟|正好停|俥亭|uspace|台灣聯通|富山停車|歐特儀|康達盛通|吉拾|"
@@ -465,8 +478,8 @@ def official_lots(cache, refresh=False, tdx_env=None):
     for city, load in LOADERS.items():
         try:
             lots[city] = [lot | {"source": OFFICIAL[city][0]} for lot in load(cache, refresh)]
-        except (OSError, ValueError, KeyError) as error:
-            failed.append(f"{city}：{error}")
+        except (OSError, ValueError, KeyError, StopIteration) as error:  # StopIteration: a header row not found
+            failed.append(f"{city}：{type(error).__name__} {error}".strip())
             lots[city] = []
     credentials = tdx_credentials(tdx_env)
     if not credentials:
@@ -496,6 +509,9 @@ def match_lot(spot, lots):
             if meters > 600:
                 continue
         if retail(lot["name"]) - retail(spot["name"]):
+            continue
+        ours, theirs = operators(spot["name"]), operators(lot["name"])
+        if ours and theirs and not ours & theirs:
             continue
         # A lot named for motorcycles cannot be one the official data lists without any.
         if "機車" in spot["name"] and lot["motor"] == 0 and "機車" not in lot["name"]:
@@ -658,12 +674,24 @@ def build(kml, mid, cache, imported_on, refresh=False, tdx_env=None):
             entry.setdefault("changes", []).extend(changes)
             if pilot:
                 entry["pilot"] = pilot
-        key = entry.get("official_id") or (round(spot["lat"], 4), round(spot["lng"], 4), spot["name"])
+        # A pilot site is one facility however its placemarks were matched.
+        key = (("pilot", entry["pilot"]) if entry.get("pilot") else entry.get("official_id")) \
+            or (round(spot["lat"], 4), round(spot["lng"], 4), spot["name"])
         if key in seen:
-            conflict = merge(seen[key][0], spot)
-            seen[key][1].setdefault("changes", []).extend(filter(None, [conflict]))
-            seen[key][1].setdefault("merged", []).append(mark["name"])
-            clip(seen[key][0])
+            kept, kept_entry = seen[key]
+            if entry.get("official_id") and not kept_entry.get("official_id"):
+                # The officially matched placemark carries the facility's official facts, so it
+                # becomes the kept record (in place, keeping the earlier id and list position).
+                identity = {k: kept[k] for k in ("id", "source_name", "source_url", "license_note", "updated_at", "last_confirmed_at")}
+                conflict = merge(spot, kept)
+                kept.clear()
+                kept.update(spot, **identity)
+                kept_entry.update({k: v for k, v in entry.items() if k not in ("layer", "source_name")}, name=kept["name"])
+            else:
+                conflict = merge(kept, spot)
+            kept_entry.setdefault("changes", []).extend(filter(None, [conflict]))
+            kept_entry.setdefault("merged", []).append(mark["name"])
+            clip(kept)
             skipped.append(f"{mark['layer']}｜{mark['name']}（與同一場站合併）")
             continue
         clip(spot)

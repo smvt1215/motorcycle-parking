@@ -5,11 +5,13 @@ from pathlib import Path
 import tempfile
 import unittest
 import unittest.mock
+
+import import_mymaps
 from unittest.mock import patch
 
 from import_mymaps import (
     PILOT_RULES, TAIPEI_PILOT, TAIPEI_ROADSIDE, apply_official, apply_taipei_rules, clean_text, lot, match_lot, merge,
-    hccg_context, kaohsiung, normalize, parse_fee, split_name, tdx_credentials, tdx_lots, tm2_to_wgs84,
+    hccg_context, kaohsiung, normalize, official_lots, parse_fee, split_name, tdx_credentials, tdx_lots, tm2_to_wgs84,
 )
 
 DATA = Path(__file__).resolve().parent.parent / "data/imports/google-mymaps/spots.json"
@@ -109,6 +111,10 @@ class OfficialTest(unittest.TestCase):
         self.assertIsNone(match_lot(spot, [{"name": "臺中勤美洲際酒店停車場", "lat": 25.0005, "lng": 121.5, "motor": 0}]))
         spot["name"] = "新莊幸福立體停車場"  # a retail chain's lot is another business's facility
         self.assertIsNone(match_lot(spot, [{"name": "Times全聯新莊幸福東店停車場", "lat": 25.0005, "lng": 121.5, "motor": 0}]))
+        spot["name"] = "城市車旅士林福德一站"  # two operators are two facilities
+        self.assertIsNone(match_lot(spot, [{"name": "Times士林福德路第3", "lat": 25.0003, "lng": 121.5, "motor": 0}]))
+        spot["name"] = "CITY PARKING 城市車旅停車場 大慶站"  # aliases of one operator still match
+        self.assertEqual(match_lot(spot, [{"name": "城市車旅大慶停車場", "lat": 25.0001, "lng": 121.5, "motor": 0}])[1]["name"], "城市車旅大慶停車場")
         spot["name"] = "中山運動中心地下停車場"  # stated structures differ
         self.assertIsNone(match_lot(spot, [{"name": "中山運動中心旁臨時平面停車場", "lat": 25.0005, "lng": 121.5, "motor": 0}]))
 
@@ -168,6 +174,15 @@ class OfficialSourceTest(unittest.TestCase):
             Path(directory, "twca_ssl_2023.crt").write_bytes(b"not the pinned certificate")
             with self.assertRaises(ValueError):
                 hccg_context(Path(directory))
+
+    def test_a_source_without_its_header_row_fails_alone(self):
+        with tempfile.TemporaryDirectory() as directory, patch.dict("import_mymaps.LOADERS", {}, clear=True):
+            import_mymaps.LOADERS["高雄市"] = lambda cache, refresh: next(iter([]))
+            import_mymaps.LOADERS["新竹市"] = lambda cache, refresh: [lot("HSZ001", "府後地下停車場", 24.8, 120.97)]
+            lots, failed = official_lots(Path(directory), tdx_env=Path(directory) / "missing.env")
+        self.assertEqual(lots["高雄市"], [])
+        self.assertEqual(len(lots["新竹市"]), 1)
+        self.assertTrue(failed[0].startswith("高雄市：StopIteration"))
 
     def test_kaohsiung_private_register_is_read_by_header_names(self):
         title = "高雄市合格登記路外民營停車場一覽表"

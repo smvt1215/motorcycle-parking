@@ -2005,23 +2005,22 @@
   },
   {
     "id": "3fa8e1c8-0c37-5701-a971-908e2b3f7b45",
-    "name": "富山停車中正區南門市場停車場",
+    "name": "Times 南門市場停車場",
     "lat": 25.0321045,
     "lng": 121.5183946,
     "city": "臺北市",
     "district": "中正區",
     "source": "import",
     "space_type": "offStreet",
-    "fee_note": "計時：小型車80元/時，機車10元/時，當日單次停車最高收費上限20元/次，隔日另計，以00時為基準，停車全程以半小時計。月租：小型車全日10,000元/月，機車全日300元/月。",
+    "fee_note": "每小時 60 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
     "status": "pending",
-    "scooter_total": 260,
+    "scooter_total": null,
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：Times 南門市場停車場\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0188）",
-    "address": "臺北市中正區羅斯福路1段8號地下1至5層",
+    "note": "",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -2969,34 +2968,42 @@
   },
   {
     "id": "d5fa7eef-f178-5218-8f70-91a0f17e0c72",
-    "name": "大安森林公園地下停車場信義路出入口",
-    "lat": 25.0332664,
-    "lng": 121.5358493,
+    "name": "大安森林公園地下停車場",
+    "lat": 25.0320604,
+    "lng": 121.5373288,
     "city": "臺北市",
     "district": "大安區",
     "source": "import",
     "space_type": "offStreet",
     "facility_type": "underground",
-    "fee_note": "平日每小時 20 元；假日每小時 40 元（大型重機比照汽車費率）",
+    "fee_note": "小型車：計時 週一~週五20元/時(08時~23時)，10元/時(23時~08時)，週六、週日、行政機關放假之紀念日與民俗日40元/時(08時~23時)，10元/時(23時~08時)，全程以半小時計；月租 全日4,200元，日間2,800元(07時~19時)，夜間2,000元(18時~08時)。機車：10元/時，當日單次停車最高收費上限20元/次，隔日另計；月租300元/月。",
     "heavy_allowed": true,
     "scooter_allowed": null,
     "status": "pending",
-    "scooter_total": null,
+    "scooter_total": 344,
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "",
+    "note": "來源原名稱：大安森林公園地下停車場 (信義路出入口)\n115年7月6日起擴大實施大重機共用格位\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0095）",
+    "address": "臺北市大安區建國南路2段2號地下",
+    "parking_guide": "依現場標誌指示，得斜向停放且以最多2格機車格位為限",
     "special_rules": "臺北市路外停車場試辦大型重機停放機車區（各期 6 個月）：依現場標誌斜停，最多 2 格機車格；停汽車區依小型車費率。試辦是否延續請以現場公告為準",
     "parking_zones": [
       {
-        "name": "汽車區",
-        "access": "heavyCar",
-        "fee_note": "平日每小時 20 元；假日每小時 40 元"
+        "name": "重機專用格",
+        "access": "heavyOnly",
+        "fee_note": "每小時 20 元；每日 40 元",
+        "guide": "官方資料：大型重機格 2 格"
       },
       {
         "name": "機車區",
         "access": "scooterHeavy",
         "fee_note": "大型重機計時20元（當日當次上限40元）"
+      },
+      {
+        "name": "汽車區",
+        "access": "heavyCar",
+        "fee_note": "平日每小時 20 元；假日每小時 40 元"
       }
     ],
     "source_name": "Alan大重停車記事（Google 我的地圖）",
@@ -3531,6 +3538,11 @@
         "name": "機車區",
         "access": "scooterHeavy",
         "fee_note": "大型重機計時20元（當日當次上限40元）"
+      },
+      {
+        "name": "重機專用格",
+        "access": "heavyOnly",
+        "fee_note": "每小時 20 元；每日 40 元"
       }
     ],
     "source_name": "Alan大重停車記事（Google 我的地圖）",
@@ -9584,14 +9596,14 @@
   },
   {
     "id": "e09e975a-8929-54b0-8a1b-260f529f99ec",
-    "name": "Times士林福德路第3",
+    "name": "城市車旅士林福德一站",
     "lat": 25.0919955,
     "lng": 121.5230236,
     "city": "臺北市",
     "district": "士林區",
     "source": "import",
     "space_type": "offStreet",
-    "fee_note": "計時：小型車200元/時，停車全程以半小時計。月租：小型車全日10,000元/月。",
+    "fee_note": "每小時 70 元；需管理員協助（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
     "status": "pending",
@@ -9599,8 +9611,7 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：城市車旅士林福德一站\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE1500）",
-    "address": "臺北市士林區福德路48巷6號斜對面",
+    "note": "",
     "entrance_note": "來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）",
     "parking_zones": [
       {
@@ -9826,15 +9837,14 @@
   },
   {
     "id": "36dbac80-4a4f-5198-9887-c76642e79df5",
-    "name": "嘟嘟房新店民權站停車場",
+    "name": "俥亭新店民權場",
     "lat": 24.9833673,
     "lng": 121.5379933,
     "city": "新北市",
     "district": "新店區",
     "source": "import",
     "space_type": "offStreet",
-    "facility_type": "multiStorey",
-    "fee_note": "小型車計時80元;小型車月租8000元;",
+    "fee_note": "每小時 20 元；B每次 2 元限悠遊卡（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
     "status": "pending",
@@ -9842,8 +9852,7 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：俥亭新店民權場\n來源標示為特殊收費或管理方式\n已比對新北市路外公共停車場資訊（新北市政府交通局）（060137）",
-    "address": "新北市新店區民權路78號B2",
+    "note": "來源標示為特殊收費或管理方式",
     "parking_guide": "致電詢問 B2 限定悠遊卡",
     "parking_zones": [
       {
@@ -15583,42 +15592,6 @@
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
   },
   {
-    "id": "3416ba8d-c08c-51e7-a3ee-d48ef24b9cb2",
-    "name": "uTagGo 力揚行善社會住宅地下停車場",
-    "lat": 25.0610715,
-    "lng": 121.5820526,
-    "city": "臺北市",
-    "district": "內湖區",
-    "source": "import",
-    "space_type": "offStreet",
-    "facility_type": "underground",
-    "fee_note": "每小時 20 元；每日 40 元（大型重機另訂費率）",
-    "heavy_allowed": true,
-    "scooter_allowed": null,
-    "status": "pending",
-    "scooter_total": null,
-    "available": null,
-    "updated_at": "2026-10-17T00:00:00Z",
-    "last_confirmed_at": null,
-    "note": "",
-    "special_rules": "臺北市路外停車場試辦大型重機停放機車區（各期 6 個月）：依現場標誌斜停，最多 2 格機車格；停汽車區依小型車費率。試辦是否延續請以現場公告為準",
-    "parking_zones": [
-      {
-        "name": "重機專用格",
-        "access": "heavyOnly",
-        "fee_note": "每小時 20 元；每日 40 元"
-      },
-      {
-        "name": "機車區",
-        "access": "scooterHeavy",
-        "fee_note": "大型重機計時20元（當日當次上限40元）"
-      }
-    ],
-    "source_name": "Alan大重停車記事（Google 我的地圖）",
-    "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
-    "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
-  },
-  {
     "id": "dcbef79f-2986-5660-a4a7-9cdebd40303f",
     "name": "東湖國小地下停車場",
     "lat": 25.0684371,
@@ -16963,45 +16936,6 @@
         "name": "重機專用格",
         "access": "heavyOnly",
         "fee_note": "平日每小時 20 元；假日每小時 30 元"
-      }
-    ],
-    "source_name": "Alan大重停車記事（Google 我的地圖）",
-    "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
-    "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
-  },
-  {
-    "id": "5c8a141b-a440-50e2-b418-f9a7b0a34197",
-    "name": "大安森林公園地下停車場",
-    "lat": 25.0320604,
-    "lng": 121.5373288,
-    "city": "臺北市",
-    "district": "大安區",
-    "source": "import",
-    "space_type": "offStreet",
-    "facility_type": "underground",
-    "fee_note": "小型車：計時 週一~週五20元/時(08時~23時)，10元/時(23時~08時)，週六、週日、行政機關放假之紀念日與民俗日40元/時(08時~23時)，10元/時(23時~08時)，全程以半小時計；月租 全日4,200元，日間2,800元(07時~19時)，夜間2,000元(18時~08時)。機車：10元/時，當日單次停車最高收費上限20元/次，隔日另計；月租300元/月。",
-    "heavy_allowed": true,
-    "scooter_allowed": null,
-    "status": "pending",
-    "scooter_total": 344,
-    "available": null,
-    "updated_at": "2026-10-17T00:00:00Z",
-    "last_confirmed_at": null,
-    "note": "來源原名稱：大安森林公園地下停車場 (信義路出入口)\n115年7月6日起擴大實施大重機共用格位\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0095）",
-    "address": "臺北市大安區建國南路2段2號地下",
-    "parking_guide": "依現場標誌指示，得斜向停放且以最多2格機車格位為限",
-    "special_rules": "臺北市路外停車場試辦大型重機停放機車區（各期 6 個月）：依現場標誌斜停，最多 2 格機車格；停汽車區依小型車費率。試辦是否延續請以現場公告為準",
-    "parking_zones": [
-      {
-        "name": "重機專用格",
-        "access": "heavyOnly",
-        "fee_note": "每小時 20 元；每日 40 元",
-        "guide": "官方資料：大型重機格 2 格"
-      },
-      {
-        "name": "機車區",
-        "access": "scooterHeavy",
-        "fee_note": "大型重機計時20元（當日當次上限40元）"
       }
     ],
     "source_name": "Alan大重停車記事（Google 我的地圖）",
