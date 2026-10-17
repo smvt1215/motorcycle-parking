@@ -10,11 +10,14 @@ import import_mymaps
 from unittest.mock import patch
 
 from import_mymaps import (
-    PILOT_RULES, TAIPEI_PILOT, cell, facility_key, TAIPEI_ROADSIDE, apply_official, apply_taipei_rules, clean_text, lot, match_lot, merge,
-    hccg_context, kaohsiung, normalize, official_lots, parse_fee, split_name, tdx_credentials, tdx_lots, tm2_to_wgs84,
+    DETAIL_COLUMNS, PILOT_RULES, TAIPEI_PILOT, TDX_SOURCE, TAIPEI_ROADSIDE, apply_official, apply_taipei_rules, cell, clean_text,
+    facility_key, lot, match_lot, merge, hccg_context, kaohsiung, normalize, official_additions, official_lots, official_spot,
+    official_sql, parse_fee, split_name, sql, tdx_credentials, tdx_lots, tm2_to_wgs84,
 )
 
-DATA = Path(__file__).resolve().parent.parent / "data/imports/google-mymaps/spots.json"
+ROOT = Path(__file__).resolve().parent.parent
+DATA = ROOT / "data/imports/google-mymaps/spots.json"
+OFFICIAL_DATA = ROOT / "data/imports/official/spots.json"
 
 
 def mark(layer, name, icon="1538", color="7CB342", description="", line=False):
@@ -252,29 +255,100 @@ class TdxFailureTest(unittest.TestCase):
         self.assertNotIn("臺北市", lots)
 
 
+class OfficialSpotTest(unittest.TestCase):
+    LOT = {"id": "HSZ001", "name": "府後地下停車場", "lat": 24.80726, "lng": 120.969783, "address": "新竹市北區府後街42號",
+           "fee": "汽車：20元/H", "summary": "", "motor": 12, "heavy": 0, "city": "新竹市", "district": "北區",
+           "source": "新竹市公有停車場相關資訊", "url": "https://data.gov.tw/dataset/67771"}
+
+    def test_community_heavy_claims_never_become_official_access(self):
+        spot = {"city": "新竹市", "district": "北區", "lat": 24.8073, "lng": 120.9698, "heavy_allowed": True, "note": "週末人多",
+                "address": "", "entrance_note": "機車道入場", "parking_guide": "", "facility_type": None,
+                "parking_zones": [{"name": "汽車區", "access": "heavyCar", "fee_note": "每小時 20 元"}]}
+        official = official_spot(self.LOT, spot, None, {}, "2026-10-17")
+        self.assertEqual((official["source"], official["status"], official["source_name"]), ("official", "confirmed", "新竹市政府"))
+        self.assertIsNone(official["heavy_allowed"])
+        self.assertIs(official["scooter_allowed"], True)
+        self.assertEqual(official["parking_zones"], [])
+        self.assertIn("社群補充（未經官方查核）：大型重機可停；停放區域：汽車區（每小時 20 元）", official["note"])
+        self.assertTrue(official["entrance_note"].startswith("社群補充（未經官方查核）"))
+        self.assertEqual((official["lat"], official["lng"]), (24.8073, 120.9698))
+
+    def test_official_heavy_evidence_sets_access(self):
+        lot = self.LOT | {"city": "臺北市", "heavy": 4, "source": "臺北市停車場資訊（臺北市停車管理工程處）"}
+        official = official_spot(lot, None, "樂活公園地下停車場", {}, "2026-10-17")
+        self.assertIs(official["heavy_allowed"], True)
+        self.assertEqual([z["access"] for z in official["parking_zones"]], ["heavyOnly", "scooterHeavy"])
+        self.assertEqual(official["source_name"], "臺北市政府")
+
+    def test_additions_need_motorcycle_bays_or_heavy_evidence_and_skip_tdx_repeats(self):
+        own = self.LOT | {"id": "A", "source": "臺南市路外停車場動態資訊（臺南市政府交通局）"}
+        cars = own | {"id": "B", "motor": 0, "name": "汽車場", "lat": 25.0}
+        repeat = own | {"id": "TDX-A", "source": TDX_SOURCE}
+        tdx_only = own | {"id": "TDX-C", "source": TDX_SOURCE, "name": "另一停車場", "lat": 23.0}
+        added = [lot["id"] for lot, _ in official_additions({"臺南市": [own, cars, repeat, tdx_only]}, set())]
+        self.assertEqual(added, ["A", "TDX-C"])
+        placed = [{"name": "另一停車場", "lat": 23.0, "lng": self.LOT["lng"], "city": "臺南市", "scooter_total": 3}]
+        self.assertEqual([lot["id"] for lot, _ in official_additions({"臺南市": [tdx_only]}, set(), placed)], [])
+
+
+class SqlTest(unittest.TestCase):
+    def test_both_tables_receive_every_detail_column_with_table_defaults(self):
+        spot = {"id": "00000000-0000-4000-8000-000000000009", "name": "x'y", "city": "臺北市", "district": "大安區",
+                "space_type": "offStreet", "fee_note": "請依現場公告", "note": "", "heavy_allowed": None, "scooter_allowed": True,
+                "scooter_total": None, "lat": 25.0, "lng": 121.5, "source_name": "社群回報整理", "source_url": "https://a",
+                "license_note": "", "parking_zones": [{"name": "機車區"}]}
+        community = sql([spot], "10000000-0000-4000-8000-000000000001")
+        for column in DETAIL_COLUMNS:
+            self.assertIn(column, community)
+        self.assertIn("'x''y'", community)
+        self.assertIn("null,null,'','','','','',", community)  # unknown enums null, text defaults empty
+        self.assertIn('\'[{"name": "機車區"}]\'::jsonb', community)
+        official = official_sql([spot | {"id": "official:00000000-0000-4000-8000-000000000009", "source_id": "TPE1"}], "2026-10-17")
+        self.assertIn("on conflict(id) do update set", official)
+        self.assertIn("facility_type=excluded.facility_type", official)
+
+
 class ImportedDataTest(unittest.TestCase):
-    def test_committed_spots_fit_project_schema(self):
+    ENUMS = {
+        "space_type": {"paidMotorcycle", "freeMotorcycle", "heavyOnly", "car", "offStreet"},
+        "facility_type": {"multiStorey", "underground", "surface", "roadside"},
+        "parking_access": {"scooterOnly", "scooterHeavy", "heavyCar", "noMotorcycle", "heavyOnly"},
+    }
+
+    def check_common(self, s):
+        self.assertTrue(1 <= len(s["name"]) <= 100 and len(s["fee_note"]) <= 200 and len(s["note"]) <= 500)
+        self.assertTrue(20 <= s["lat"] <= 27 and 118 <= s["lng"] <= 123 and s["city"] and s["district"])
+        self.assertTrue(s["source_url"].startswith("https://"))
+        for key, values in self.ENUMS.items():
+            if key in s:
+                self.assertIn(s[key], values)
+        for zone in s.get("parking_zones", []):
+            self.assertTrue(zone["name"])
+            if "access" in zone:
+                self.assertIn(zone["access"], self.ENUMS["parking_access"])
+
+    def test_community_spots_are_pending_community_compilations(self):
         spots = json.loads(DATA.read_text())
-        self.assertGreater(len(spots), 1000)
+        self.assertGreater(len(spots), 300)
         self.assertEqual(len({s["id"] for s in spots}), len(spots))
-        enums = {
-            "space_type": {"paidMotorcycle", "freeMotorcycle", "heavyOnly", "car", "offStreet"},
-            "facility_type": {"multiStorey", "underground", "surface", "roadside"},
-            "parking_access": {"scooterOnly", "scooterHeavy", "heavyCar", "noMotorcycle", "heavyOnly"},
-        }
         for s in spots:
             with self.subTest(spot=s["name"]):
-                self.assertEqual((s["source"], s["status"]), ("import", "pending"))
-                self.assertTrue(1 <= len(s["name"]) <= 100 and len(s["fee_note"]) <= 200 and len(s["note"]) <= 500)
-                self.assertTrue(20 <= s["lat"] <= 27 and 118 <= s["lng"] <= 123 and s["city"] and s["district"])
-                self.assertTrue(s["source_url"].startswith("https://"))
-                for key, values in enums.items():
-                    if key in s:
-                        self.assertIn(s[key], values)
-                for zone in s.get("parking_zones", []):
-                    self.assertTrue(zone["name"])
-                    if "access" in zone:
-                        self.assertIn(zone["access"], enums["parking_access"])
+                self.assertEqual((s["source"], s["status"], s["source_name"]), ("import", "pending", "社群回報整理"))
+                self.check_common(s)
+
+    def test_official_spots_fit_the_official_table(self):
+        spots = json.loads(OFFICIAL_DATA.read_text())
+        self.assertGreater(len(spots), 1000)
+        self.assertEqual(len({s["id"] for s in spots}), len(spots))
+        self.assertEqual(len({s["source_id"] for s in spots}), len(spots))
+        for s in spots:
+            with self.subTest(spot=s["name"]):
+                self.assertEqual((s["source"], s["status"]), ("official", "confirmed"))
+                self.assertTrue(s["id"].startswith("official:") and s["source_name"].endswith("政府"))
+                self.assertIn(s["heavy_allowed"], (True, None))  # official data never states a ban here
+                self.assertTrue(s["scooter_allowed"] or s["heavy_allowed"] or s["note"])
+                self.assertLessEqual(len(s.get("address", "")), 200)
+                self.check_common(s)
 
 
 if __name__ == "__main__":

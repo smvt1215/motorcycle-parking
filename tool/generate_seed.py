@@ -19,10 +19,12 @@ for n, (days, anon, admin) in enumerate([(30, False, False), (30, False, False),
         lines.append(f"insert into auth.identities(id,user_id,provider_id,provider,identity_data,created_at,updated_at) values(gen_random_uuid(),{literal(uid)},{literal(uid)},'google',jsonb_build_object('sub',{literal(uid)},'email','fixture{n}@example.test'),now(),now()) on conflict(provider_id,provider) do nothing;")
 for spot in json.loads(Path('assets/demo/spots.json').read_text()):
     keys = ['id', 'name', 'lat', 'lng', 'city', 'district', 'source', 'space_type', 'fee_note', 'note', 'scooter_total', 'available', 'scooter_allowed', 'heavy_allowed', 'status', 'updated_at', 'last_confirmed_at']
+    # Detail fields are optional in the demo JSON; absent ones keep the column defaults.
+    keys += [k for k in ('facility_type', 'parking_access', 'address', 'road_segment', 'entrance_note', 'parking_guide', 'special_rules', 'photo_urls', 'parking_zones') if k in spot]
     vals = []
     for key in keys:
         v = spot.get(key)
-        vals.append('null' if v is None else str(v).lower() if isinstance(v, (bool, int, float)) else literal(v))
+        vals.append('null' if v is None else literal(json.dumps(v, ensure_ascii=False)) + '::jsonb' if isinstance(v, list) else str(v).lower() if isinstance(v, (bool, int, float)) else literal(v))
     lines.append(f"insert into public.community_spots(user_id,{','.join(keys)}) values('10000000-0000-4000-8000-000000000001',{','.join(vals)}) on conflict(id) do nothing;")
     lines.append(f"insert into public.report_identities values({literal(spot['id'])},repeat('a',64),repeat('a',64)) on conflict do nothing;")
 for rule in json.loads(Path('assets/rules/parking_rules.json').read_text()):
