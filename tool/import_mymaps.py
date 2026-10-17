@@ -77,6 +77,7 @@ ENTRY = re.compile(r"入場|出場|進場|離場|辨識|辨析|按鈴|按鈕|取
 # Operator brands and parking words say nothing about which lot a name means.
 GENERIC = re.compile(
     r"(?i)嘟嘟房|city ?parking|城市車旅|times|168 ?parking|168停車聯盟|正好停|俥亭|uspace|台灣聯通|富山停車|歐特儀|康達盛通|吉拾|"
+    r"[臺新][北中南東]市|桃園市|高雄市|基隆市|新竹[市縣]|嘉義[市縣]|苗栗縣|彰化縣|南投縣|雲林縣|屏東縣|宜蘭縣|花蓮縣|臺東縣|澎湖縣|金門縣|連江縣|"
     r"停車場|停車|地下|立體|平面|公有|附設|機車|汽車|重機|專用|大樓|股份有限公司|市立|[東西南北]側|[區店站格]|"
     r"[()（）\s\-‧・·|｜/、,，.。:&⇦\[\]]"
 )
@@ -234,13 +235,15 @@ def core(name):
     return GENERIC.sub("", name.replace("台", "臺").replace("國民中學", "國中").replace("國民小學", "國小"))
 
 
+def dice(a, b):
+    """Dice coefficient on character bigrams."""
+    x, y = ({v[i:i + 2] for i in range(len(v) - 1)} or {v} for v in (a.replace("台", "臺"), b.replace("台", "臺")))
+    return 2 * len(x & y) / (len(x) + len(y)) if a and b else 0.0
+
+
 def similarity(a, b):
-    """Dice coefficient on character bigrams of the name cores."""
-    def grams(value):
-        value = core(value)
-        return {value[i:i + 2] for i in range(len(value) - 1)} or {value}
-    x, y = grams(a), grams(b)
-    return 2 * len(x & y) / (len(x) + len(y)) if x and y and x != {""} and y != {""} else 0.0
+    """Dice coefficient of the name cores."""
+    return dice(core(a), core(b))
 
 
 def facility_type(text):
@@ -285,7 +288,8 @@ def match_lot(spot, lots):
             continue
         score = similarity(spot["name"], lot["name"])
         if (meters <= 80 and score >= 0.45) or (meters <= 200 and score >= 0.6) or score >= 0.8:
-            rank = score - meters / 1000
+            # Equal cores (洲子站, 洲子立體停車場) are told apart by the full names before distance.
+            rank = (round(score - meters / 1000, 1), dice(spot["name"], lot["name"]), -meters)
             if best is None or rank > best[0]:
                 best = (rank, lot, meters, score)
     return best

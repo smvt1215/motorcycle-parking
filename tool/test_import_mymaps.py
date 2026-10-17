@@ -90,6 +90,9 @@ class OfficialTest(unittest.TestCase):
         spot["name"] = "嘟嘟房僑安站"
         lots = [{"name": "僑安地下停車場", "lat": 25.0003, "lng": 121.5}]
         self.assertEqual(match_lot(spot, lots)[1]["name"], "僑安地下停車場")
+        spot["name"] = "臺北市洲子立體停車場"  # a city prefix is not part of the lot's name
+        lots = [{"name": "洲子站", "lat": 25.0001, "lng": 121.5}, {"name": "洲子立體停車場", "lat": 25.0002, "lng": 121.5}]
+        self.assertEqual(match_lot(spot, lots)[1]["name"], "洲子立體停車場")
 
     def test_taipei_pilot_adds_scooter_area_and_flags_conflicting_ban(self):
         spot = {"name": "忠信廣場地下停車場", "space_type": "offStreet", "heavy_allowed": False, "parking_zones": [], "special_rules": ""}
