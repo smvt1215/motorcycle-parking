@@ -195,8 +195,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "2024/04更新\n不確定是否有重機專用格 但是大型停車場 我都直接停汽車格 位置也很夠",
+    "note": "2024/04更新",
     "entrance_note": "離場前需至1F服務台請服務員手動輸入車牌及完成消費折抵 如無需繳費即可直接離場 需繳費則需另尋自動繳費機\n入場辨識 重機靠右道進場 雖只有前牌掃描但偵測到重機會自動開閘 無需掃牌可進場 免費 出場靠左道也無需繳費、掃牌即可出場",
+    "parking_guide": "不確定是否有重機專用格 但是大型停車場 我都直接停汽車格 位置也很夠",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -246,6 +247,7 @@
     "district": "信義鄉",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "免費（大型重機停汽車區）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -805,7 +807,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "試營運期間去\n指揮停機車區免費\n需注意的是非機車格而是停車區\n所以可能跟一般機車擠在一起",
+    "note": "試營運期間去\n所以可能跟一般機車擠在一起",
+    "parking_guide": "指揮停機車區免費\n需注意的是非機車格而是停車區",
     "parking_zones": [
       {
         "name": "機車區",
@@ -864,9 +867,10 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：好市多 新北新莊店\n2026/09/22\n可停免費汽車格\n已比對新北市路外公共停車場資訊（新北市政府交通局）（050126）",
+    "note": "來源原名稱：好市多 新北新莊店\n2026/09/22\n已比對新北市路外公共停車場資訊（新北市政府交通局）（050126）",
     "address": "新北市新莊區建國一路138號1樓至頂樓",
     "entrance_note": "好市多員工引導閘門旁邊騎進去不用辨識車牌",
+    "parking_guide": "可停免費汽車格",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -896,9 +900,10 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0852）\n來源原名稱：福林公園地下停車場士林\n115年7月6日起擴大實施大重機共用格位\n依現場標誌指示，得斜向停放且以最多2格機車格位為限",
+    "note": "已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0852）\n來源原名稱：福林公園地下停車場士林\n115年7月6日起擴大實施大重機共用格位",
     "address": "臺北市士林區中正路17號地下",
     "entrance_note": "走汽車道的話，30/H 室內 管理員, 3個專用格",
+    "parking_guide": "依現場標誌指示，得斜向停放且以最多2格機車格位為限",
     "special_rules": "臺北市路外停車場試辦大型重機停放機車區（各期 6 個月）：依現場標誌斜停，最多 2 格機車格；停汽車區依小型車費率。試辦是否延續請以現場公告為準",
     "parking_zones": [
       {
@@ -938,8 +943,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：台北美福大飯店 停車場\n來源標示為未確認資訊\n經詢問警衛\n可停放地下室\n用餐住宿比照汽車折抵\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0997）",
+    "note": "來源原名稱：台北美福大飯店 停車場\n來源標示為未確認資訊\n經詢問警衛\n用餐住宿比照汽車折抵\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0997）",
     "address": "臺北市中山區樂群二路55號地下4、5層",
+    "parking_guide": "可停放地下室",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -968,7 +974,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "在路邊停車費查詢可以看到包含這個停車場\n應該算道路範圍\n勇者可以挑戰機車區",
+    "note": "在路邊停車費查詢可以看到包含這個停車場\n應該算道路範圍",
+    "parking_guide": "勇者可以挑戰機車區",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -1028,7 +1035,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為未確認資訊\n沒有機車格\n有Google 評論說可以停",
+    "note": "來源標示為未確認資訊\n有Google 評論說可以停",
+    "parking_guide": "沒有機車格",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -1124,6 +1132,7 @@
     "district": "新竹市",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 20 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -1184,6 +1193,7 @@
     "district": "信義區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "每小時 120 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -1192,7 +1202,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "機車格汽車格都可停\n都收汽車費率",
+    "note": "都收汽車費率",
+    "parking_guide": "機車格汽車格都可停",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -1311,7 +1322,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "無論停汽機車格都收汽車費率",
+    "note": "",
+    "parking_guide": "無論停汽機車格都收汽車費率",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -1364,6 +1376,7 @@
     "district": "三峽區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "surface",
     "fee_note": "每小時 30 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -1464,7 +1477,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "凱比吉公園 汽/機車費率 及 汽/機車停放位置, 收費 （費率不符 或 免費變收費) 無管制\n揭停車場自113年4月1日起實施停車計時收費，收費時間為每日8時至20時，例假日照常收費；停車場非收費時段仍開放使用。\n二、收費方式及停車費率：\n（一）小型車及重型機車：收費方式以計時收費，停車費率每小時收費新臺幣20元整。",
+    "note": "揭停車場自113年4月1日起實施停車計時收費，收費時間為每日8時至20時，例假日照常收費；停車場非收費時段仍開放使用。\n二、收費方式及停車費率：\n（一）小型車及重型機車：收費方式以計時收費，停車費率每小時收費新臺幣20元整。",
+    "parking_guide": "凱比吉公園 汽/機車費率 及 汽/機車停放位置, 收費 （費率不符 或 免費變收費) 無管制",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -1651,9 +1665,10 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：爭議中- 大稻埕公園地下停車場\n40/H, 夜間19-8 10/H (節日除外)\n大型重機依規定可停，會督促業者按照規定\n不得拒絕大型重機停放\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0122）",
+    "note": "來源原名稱：爭議中- 大稻埕公園地下停車場\n40/H, 夜間19-8 10/H (節日除外)\n大型重機依規定可停，會督促業者按照規定\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0122）",
     "address": "臺北市大同區歸綏街243號地下",
     "entrance_note": "來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）",
+    "parking_guide": "不得拒絕大型重機停放",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -1924,8 +1939,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：松山工農地下停車場站\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0848）\n115年7月6日起擴大實施大重機共用格位\n依現場標誌指示，得斜向停放且以最多2格機車格位為限",
+    "note": "來源原名稱：松山工農地下停車場站\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0848）\n115年7月6日起擴大實施大重機共用格位",
     "address": "臺北市信義區忠孝東路5段236巷15號地下",
+    "parking_guide": "依現場標誌指示，得斜向停放且以最多2格機車格位為限",
     "special_rules": "臺北市路外停車場試辦大型重機停放機車區（各期 6 個月）：依現場標誌斜停，最多 2 格機車格；停汽車區依小型車費率。試辦是否延續請以現場公告為準",
     "parking_zones": [
       {
@@ -2177,6 +2193,7 @@
     "district": "文山區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "計時：小型車週一至週五10元/時，週六至週日及政府行政機關放假之紀念日、民俗節日60元/時(06-22)、10元/時(22-06)，停車全程以半小時計。計次：機車20元/次，隔日另計，以00時為基準。",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -2297,6 +2314,7 @@
     "district": "文山區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 20 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -2521,9 +2539,10 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：國家考場大樓汽車地下停車場\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0544）\n來源原名稱：考選部國家考場機車停車場\n重機可停機車 機車格標準大小",
+    "note": "來源原名稱：國家考場大樓汽車地下停車場\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0544）\n來源原名稱：考選部國家考場機車停車場",
     "address": "臺北市文山區木柵路1段72號地下1-2層",
     "entrance_note": "來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）\n按鈴停車30/H",
+    "parking_guide": "重機可停機車 機車格標準大小",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -2694,9 +2713,10 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：中正運動中心停車場 - 注意部份為機械位\n來源標示為特殊收費或管理方式\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0529）\n來源原名稱：[仁愛路進入]中正運動中心機車停車場(平面)\n由仁愛路側進入，可與一般機車免費停放（平面，非地下停車場）",
+    "note": "來源原名稱：中正運動中心停車場 - 注意部份為機械位\n來源標示為特殊收費或管理方式\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0529）\n來源原名稱：[仁愛路進入]中正運動中心機車停車場(平面)",
     "address": "臺北市中正區信義路1段1號地下3層",
     "entrance_note": "無出入口管制",
+    "parking_guide": "由仁愛路側進入，可與一般機車免費停放（平面，非地下停車場）",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -2957,6 +2977,7 @@
     "district": "大安區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "平日每小時 20 元；假日每小時 40 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -3207,6 +3228,7 @@
     "district": "新竹市",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "每小時 20 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -3268,6 +3290,7 @@
     "district": "竹北市",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 20 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -3298,6 +3321,7 @@
     "district": "中區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "每小時 40 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -3388,6 +3412,7 @@
     "district": "新竹市",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "surface",
     "fee_note": "每小時 20 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -3418,6 +3443,7 @@
     "district": "北投區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "每小時 40 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -3680,6 +3706,7 @@
     "district": "中壢區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "平日每小時 30 元；假日每小時 40 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -3688,7 +3715,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "停汽車格, 樓層坡道有點陡",
+    "note": "",
+    "parking_guide": "停汽車格, 樓層坡道有點陡",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -3843,8 +3871,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "臨停區域7-10F, 9F可找到工作人員登記車牌號碼\n但9F為機械位 請停其它樓層",
+    "note": "",
     "entrance_note": "來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）\n僅有前牌辨識",
+    "parking_guide": "臨停區域7-10F, 9F可找到工作人員登記車牌號碼\n但9F為機械位 請停其它樓層",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -3996,6 +4025,7 @@
     "district": "東區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 20 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -4058,6 +4088,7 @@
     "district": "三峽區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 20 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -4183,6 +4214,7 @@
     "district": "桃園區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "平日每小時 40 元；假日每小時 50 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -4305,6 +4337,7 @@
     "district": "三重區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 30 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -4398,6 +4431,7 @@
     "district": "南區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 30 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -4428,6 +4462,7 @@
     "district": "新市區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 20 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -4607,6 +4642,7 @@
     "district": "中山區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "每小時 60 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -4615,8 +4651,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "汽車費率 每小時$60\n重機進入後到B1登記車號，停汽車車位",
+    "note": "汽車費率 每小時$60",
     "entrance_note": "來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）\n管理員協助 / 按鈴",
+    "parking_guide": "重機進入後到B1登記車號，停汽車車位",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -4731,6 +4768,7 @@
     "district": "潭子區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "每小時 30 元；後牌（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -4793,6 +4831,7 @@
     "district": "中壢區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 30 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -4915,6 +4954,7 @@
     "district": "北屯區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 40 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -4944,6 +4984,7 @@
     "district": "北區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 30 元；倒退掃牌（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -4974,6 +5015,7 @@
     "district": "桃園區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "平日每小時 40 元；假日每小時 50 元；後牌（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -5032,6 +5074,7 @@
     "district": "中西區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "平日每小時 20 元；假日每小時 30 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -5187,6 +5230,7 @@
     "district": "沙鹿區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "每小時 30 元；需管理員協助（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -5380,6 +5424,7 @@
     "district": "南港區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "計時：小型車30元/時，假日/活動期間60元/時，停車全程以半小時計。計次：機車20元/次，隔日另計，以00時為基準，假日/活動期間30元/次，隔日另計，以00時為基準。月租：小型車全日3,000元/月，機車全日400元/月。",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -5388,8 +5433,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：後牌-台北流行音樂中心 地下停車場\n小客車/大型重機收費標準\n平日優惠價（非活動日)\n09:00-24:00 每小時 30 元\n00:00-09:00 每小時 10 元\n當日單次上限 120 元。\n例假日及活動日\n09:00-24:00 每小時 60 元\n00:00-09:00 每小時 10 元\n當日單次上限 300 元。\n每30分鐘計費一次，停放未滿 30 分鐘以 30 分鐘計費。\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE1291）\n來源原名稱：台北流行音樂中心 機車停車場\n停放機車停車場，被收汽車費率$60/h\n建議直接停旁邊汽車停車場",
+    "note": "來源原名稱：後牌-台北流行音樂中心 地下停車場\n小客車/大型重機收費標準\n平日優惠價（非活動日)\n09:00-24:00 每小時 30 元\n00:00-09:00 每小時 10 元\n當日單次上限 120 元。\n例假日及活動日\n09:00-24:00 每小時 60 元\n00:00-09:00 每小時 10 元\n當日單次上限 300 元。\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE1291）\n來源原名稱：台北流行音樂中心 機車停車場\n建議直接停旁邊汽車停車場",
     "address": "臺北市南港區市民大道8段99號",
+    "parking_guide": "每30分鐘計費一次，停放未滿 30 分鐘以 30 分鐘計費。\n停放機車停車場，被收汽車費率$60/h",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -5535,6 +5581,7 @@
     "district": "南港區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "每小時 60 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -5565,6 +5612,7 @@
     "district": "西區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 20 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -5595,6 +5643,7 @@
     "district": "西區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 30 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -5685,6 +5734,7 @@
     "district": "東區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "每小時 20 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -5714,6 +5764,7 @@
     "district": "西屯區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "每小時 60 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -5803,6 +5854,7 @@
     "district": "太平區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "每小時 20 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -5891,6 +5943,7 @@
     "district": "大甲區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 20 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -5949,6 +6002,7 @@
     "district": "東勢區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "每小時 30 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -5978,6 +6032,7 @@
     "district": "桃園區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "平日每小時 40 元；假日每小時 50 元；後牌（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -6007,6 +6062,7 @@
     "district": "桃園區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 30 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -6015,8 +6071,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "可停機車區&汽車區\n但重機2024/07開始已經比照汽車收費",
+    "note": "但重機2024/07開始已經比照汽車收費",
     "entrance_note": "建議不要走機車道",
+    "parking_guide": "可停機車區&汽車區",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -6075,9 +6132,10 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：新北宏匯停車場\n2024/5/1起，重機比照汽車停車\n專用格一排，可折抵消費\n另 B2設置有大型重型機車專用停放區，可由「新北大道」進入，停至專用停車格。\n已比對新北市路外公共停車場資訊（新北市政府交通局）（050189）",
+    "note": "來源原名稱：新北宏匯停車場\n2024/5/1起，重機比照汽車停車\n已比對新北市路外公共停車場資訊（新北市政府交通局）（050189）",
     "address": "新北市新莊區新北大道4段3號B2~B3及B4/731~736、811~979號(856號現場無劃設)車格",
     "entrance_note": "大型重型機車(紅牌、黃牌)停車，可比照汽車停車，由汽車道入口「中央路」或「新北大道」，皆可進入。",
+    "parking_guide": "專用格一排，可折抵消費\n另 B2設置有大型重型機車專用停放區，可由「新北大道」進入，停至專用停車格。",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -6871,6 +6929,7 @@
     "district": "中正區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "每小時 50 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -6998,7 +7057,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "有重機專用格，是把汽車格對半切只能停一半",
+    "note": "",
+    "parking_guide": "有重機專用格，是把汽車格對半切只能停一半",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -7058,8 +7118,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：遠東百貨 板橋中山店\n繁忙時間會被引導至機車區\n收費統一為汽車費率\n已比對新北市路外公共停車場資訊（新北市政府交通局）（010056）",
+    "note": "來源原名稱：遠東百貨 板橋中山店\n收費統一為汽車費率\n已比對新北市路外公共停車場資訊（新北市政府交通局）（010056）",
     "address": "新北市板橋區中山路一段152號",
+    "parking_guide": "繁忙時間會被引導至機車區",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -7110,6 +7171,7 @@
     "district": "苓雅區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 50 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -7139,6 +7201,7 @@
     "district": "新竹市",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "每小時 30 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -7208,9 +7271,10 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：信義微風置地\n車大台者自行考慮\n機車格機車費率\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0981）",
+    "note": "來源原名稱：信義微風置地\n車大台者自行考慮\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0981）",
     "address": "臺北市信義區忠孝東路5段68號地下3層",
     "entrance_note": "出入口都要 180迴轉",
+    "parking_guide": "機車格機車費率",
     "parking_zones": [
       {
         "name": "機車區",
@@ -7411,6 +7475,7 @@
     "district": "前金區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 30 元；每日 300 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -7449,8 +7514,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "2 格以上專用格",
+    "note": "",
     "entrance_note": "來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）\n按鈴",
+    "parking_guide": "2 格以上專用格",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -7874,6 +7940,7 @@
     "district": "歸仁區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "surface",
     "fee_note": "每小時 50 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -7965,6 +8032,7 @@
     "district": "新莊區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 30 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -8085,6 +8153,7 @@
     "district": "竹北市",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "每小時 60 元；每日 260 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -8272,8 +8341,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "汽車格07-22: 40h 22-07: 20h\n需由文化一路進入\nND@google",
+    "note": "需由文化一路進入\nND@google",
     "entrance_note": "汽車格直接後排辨識過柵欄\n停汽車格可由文化一路或湖邊路離場",
+    "parking_guide": "汽車格07-22: 40h 22-07: 20h",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -8386,6 +8456,7 @@
     "district": "板橋區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "平日每小時 30 元；假日每小時 60 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -8476,6 +8547,7 @@
     "district": "宜蘭市",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "平日每小時 40 元；假日每小時 60 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -8607,8 +8679,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為未確認資訊\n汽車費率 30 h/d 目前尚未確認 官網公告須停放汽車區\n已比對新北市路外公共停車場資訊（新北市政府交通局）（140028）",
+    "note": "來源標示為未確認資訊\n已比對新北市路外公共停車場資訊（新北市政府交通局）（140028）",
     "address": "新北市蘆洲區長樂路235-1號B1",
+    "parking_guide": "汽車費率 30 h/d 目前尚未確認 官網公告須停放汽車區",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -8927,6 +9000,7 @@
     "district": "東區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "平日每小時 30 元；假日每小時 50 元；需按鈴（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -9268,6 +9342,7 @@
     "district": "龜山區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "每小時 30 元；每日 150 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -9701,8 +9776,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：俥亭新店民權場\n來源標示為特殊收費或管理方式\n致電詢問 B2 限定悠遊卡\n已比對新北市路外公共停車場資訊（新北市政府交通局）（060137）",
+    "note": "來源原名稱：俥亭新店民權場\n來源標示為特殊收費或管理方式\n已比對新北市路外公共停車場資訊（新北市政府交通局）（060137）",
     "address": "新北市新店區民權路78號B2",
+    "parking_guide": "致電詢問 B2 限定悠遊卡",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -9928,7 +10004,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "5~6 重機專用格",
+    "note": "",
+    "parking_guide": "5~6 重機專用格",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -9978,6 +10055,7 @@
     "district": "豐原區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "每小時 20 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -10007,6 +10085,7 @@
     "district": "西區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "每小時 20 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -10065,6 +10144,7 @@
     "district": "南屯區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 20 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -10191,7 +10271,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "也可以停機車區",
+    "note": "",
+    "parking_guide": "也可以停機車區",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -10249,7 +10330,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為未確認資訊\n一～四 40/h, 五六日 50/h\n機車格可進但一樣汽車費率",
+    "note": "來源標示為未確認資訊\n一～四 40/h, 五六日 50/h",
+    "parking_guide": "機車格可進但一樣汽車費率",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -10270,6 +10352,7 @@
     "district": "中正區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 50 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -10360,6 +10443,7 @@
     "district": "中正區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "計時：小型車60元/時，機車20元/時，停車全程以半小時計。月租：小型車全日6,000元/月，機車全日1,000元/月。",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -10429,7 +10513,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為未確認資訊\n汽車 > 500cc 可停\n推測機車區應該是 < 500cc 可停",
+    "note": "來源標示為未確認資訊\n汽車 > 500cc 可停",
+    "parking_guide": "推測機車區應該是 < 500cc 可停",
     "parking_zones": [
       {
         "name": "機車區",
@@ -10558,8 +10643,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：正好停台北車站東區地下停車場\n15分鐘免費\n接送人很好用\n機車區禁停\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0047）",
+    "note": "來源原名稱：正好停台北車站東區地下停車場\n15分鐘免費\n接送人很好用\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0047）",
     "address": "臺北市中正區北平西路3號地下1層（東區）",
+    "parking_guide": "機車區禁停",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -10619,7 +10705,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為未確認資訊\n可停汽車區但不知道怎麼收費\n附屬的機車格飛道路範圍非道路範圍\n理論上也可以停",
+    "note": "來源標示為未確認資訊\n理論上也可以停",
+    "parking_guide": "可停汽車區但不知道怎麼收費\n附屬的機車格飛道路範圍非道路範圍",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -10640,6 +10727,7 @@
     "district": "龜山區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "日間每小時 40 元；夜間每小時 20 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -10677,9 +10765,10 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為未確認資訊\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE1042）\n來源原名稱：冷水坑2號機車停車場\n悠遊卡進出，門口有掛重機請停汽車格",
+    "note": "來源標示為未確認資訊\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE1042）\n來源原名稱：冷水坑2號機車停車場",
     "address": "臺北市士林區菁山路101巷與中湖戰備道路交叉口",
     "entrance_note": "來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）",
+    "parking_guide": "悠遊卡進出，門口有掛重機請停汽車格",
     "special_rules": "來源回報禁止大型重機停放",
     "parking_zones": [
       {
@@ -10709,8 +10798,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "機車區悠遊卡進出，有標示請停汽車區\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE1039）",
+    "note": "已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE1039）",
     "address": "臺北市北投區七星山東麓海拔860公尺",
+    "parking_guide": "機車區悠遊卡進出，有標示請停汽車區",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -10768,7 +10858,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為未確認資訊\n會貼依規定需停汽車格",
+    "note": "來源標示為未確認資訊",
+    "parking_guide": "會貼依規定需停汽車格",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -10797,7 +10888,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為未確認資訊\n設有室內停車格，有開放給重機停放(每車格可停2-3台)，平日30分鐘30元，假日30分鐘40元，可臨停",
+    "note": "來源標示為未確認資訊",
+    "parking_guide": "設有室內停車格，有開放給重機停放(每車格可停2-3台)，平日30分鐘30元，假日30分鐘40元，可臨停",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -10936,6 +11028,7 @@
     "district": "永和區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 30 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -10995,6 +11088,7 @@
     "district": "林口區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "surface",
     "fee_note": "平日每小時 20 元；假日每小時 30 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -11063,9 +11157,10 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0305）\n115年7月6日起擴大實施大重機共用格位\n依現場標誌指示，得斜向停放且以最多2格機車格位為限",
+    "note": "已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0305）\n115年7月6日起擴大實施大重機共用格位",
     "address": "臺北市萬華區國興路5號地下共2層",
     "entrance_note": "來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）\n汽車道按鈴請人員協助進入",
+    "parking_guide": "依現場標誌指示，得斜向停放且以最多2格機車格位為限",
     "special_rules": "臺北市路外停車場試辦大型重機停放機車區（各期 6 個月）：依現場標誌斜停，最多 2 格機車格；停汽車區依小型車費率。試辦是否延續請以現場公告為準",
     "parking_zones": [
       {
@@ -11097,6 +11192,7 @@
     "district": "南港區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "每小時 40 元；每日 200 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -11126,6 +11222,7 @@
     "district": "八德區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "surface",
     "fee_note": "每小時 30 元；每日 150 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -11134,7 +11231,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "工作人員引導至停放區",
+    "note": "",
+    "parking_guide": "工作人員引導至停放區",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -11194,9 +11292,10 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "汽車格, 警衛室前方空地也可以停，之前是警衛把三角錐拿走讓我停\n已比對新北市路外公共停車場資訊（新北市政府交通局）（020073）",
+    "note": "已比對新北市路外公共停車場資訊（新北市政府交通局）（020073）",
     "address": "新北市三重區永福街66號B1、B2",
     "entrance_note": "來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）\n因為沒有車牌辨識，是手動登記，所以要自己記錄幾點進去幾點出去",
+    "parking_guide": "汽車格, 警衛室前方空地也可以停，之前是警衛把三角錐拿走讓我停",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -11249,6 +11348,7 @@
     "district": "中壢區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 40 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -11257,7 +11357,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "也可停機車格",
+    "note": "",
+    "parking_guide": "也可停機車格",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -11287,9 +11388,10 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：家樂福 新店店\n有重機專用格\n汽車費率\n已比對新北市路外公共停車場資訊（新北市政府交通局）（060038）",
+    "note": "來源原名稱：家樂福 新店店\n汽車費率\n已比對新北市路外公共停車場資訊（新北市政府交通局）（060038）",
     "address": "新北市新店區中興路三段1號B1、B2",
     "entrance_note": "來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）\n機車道入場",
+    "parking_guide": "有重機專用格",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -11357,8 +11459,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "專用格四格\n１、星期一至五：10時至22時每小時收費新臺幣（下同）50元；22時至翌日10時每小時收費10元。\n２、星期六、日及政府行政機關放假之紀念日及民俗節日：10時至24時每小時收費60元；0時至10時每小時收費10元。\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE1726）",
+    "note": "１、星期一至五：10時至22時每小時收費新臺幣（下同）50元；22時至翌日10時每小時收費10元。\n２、星期六、日及政府行政機關放假之紀念日及民俗節日：10時至24時每小時收費60元；0時至10時每小時收費10元。\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE1726）",
     "address": "臺北市萬華區開封街2段37號地下1至4層",
+    "parking_guide": "專用格四格",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -11515,8 +11618,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "教士2016貼文下回覆 3樓有重機專用停車位",
+    "note": "",
     "entrance_note": "來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）\n入場停車30分鐘內離場免費，不滿1小時以1小時計；第2小時起，每半小時新台幣25元，不足半小時以半小時計。經自動繳費機計價後須於30分鐘內離場，逾時須補繳差額。\n大型重機停車:重機停放汽車停車場，依汽車入場方式進場，按對講機進入；離場時至繳費機辦理停車折抵，由B1F及3F出口汽車道左側「重機及汽車共用車道」辨識出場。",
+    "parking_guide": "教士2016貼文下回覆 3樓有重機專用停車位",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -11640,9 +11744,10 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：華東公有平面停車場\n板橋華東公有平面停車場 專用格 1 格\n已比對新北市路外公共停車場資訊（新北市政府交通局）（010024）",
+    "note": "來源原名稱：華東公有平面停車場\n已比對新北市路外公共停車場資訊（新北市政府交通局）（010024）",
     "address": "新北市板橋區南雅南路2段144巷88號對面空地",
     "entrance_note": "來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）",
+    "parking_guide": "板橋華東公有平面停車場 專用格 1 格",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -11693,6 +11798,7 @@
     "district": "中壢區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 40 元；需管理員協助（重機專用格比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -11731,7 +11837,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "露天重機專用格",
+    "note": "",
+    "parking_guide": "露天重機專用格",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -11790,8 +11897,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n目前對外說不開放臨停，僅供住宿與用餐客人停放。費用沒有公開，根據個人繳費經驗推估約 80h。\n官網寫說「本飯店提供機車/汽車地下停車場(B2-B5) ，共220個車位。※B2停放機車（可供重型機車停靠，但如需要更大空間可改停靠汽車停車格）」但實際沒有機車格，而是只有大重停車格（為汽車格畫線切出）。",
+    "note": "來源標示為特殊收費或管理方式\n官網寫說「本飯店提供機車/汽車地下停車場(B2-B5) ，共220個車位。※B2停放機車（可供重型機車停靠，但如需要更大空間可改停靠汽車停車格）」但實際沒有機車格，而是只有大重停車格（為汽車格畫線切出）。",
     "entrance_note": "汽車費率 80h 按鈕取票 2 格 或以上",
+    "parking_guide": "目前對外說不開放臨停，僅供住宿與用餐客人停放。費用沒有公開，根據個人繳費經驗推估約 80h。",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -11820,8 +11928,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "汽車費率 30/1H\n有重車專用格\n廣場目前 商場歇業，停車場正常營運 使用。",
+    "note": "汽車費率 30/1H\n廣場目前 商場歇業，停車場正常營運 使用。",
     "entrance_note": "來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）",
+    "parking_guide": "有重車專用格",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -11911,8 +12020,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "重機只能停 B3 汽車區，不可停機車區\n可折抵消費",
+    "note": "可折抵消費",
     "entrance_note": "來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）",
+    "parking_guide": "重機只能停 B3 汽車區，不可停機車區",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -11941,8 +12051,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "但數量不多\n建議普通尺寸的車友可以直接停機車區",
+    "note": "但數量不多",
     "entrance_note": "進入收費柵欄前有大格的重機專用格免費",
+    "parking_guide": "建議普通尺寸的車友可以直接停機車區",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -12029,9 +12140,10 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "重機專用格汽車, 警衛引導\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0284）",
+    "note": "已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0284）",
     "address": "臺北市大安區忠孝東路4段191號地下1層",
     "entrance_note": "來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）",
+    "parking_guide": "重機專用格汽車, 警衛引導",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -12082,6 +12194,7 @@
     "district": "仁愛區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 30 元（重機專用格比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -12112,6 +12225,7 @@
     "district": "龍潭區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "每小時 30 元；後牌（重機專用格比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -12142,6 +12256,7 @@
     "district": "信義區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "計時：小型車50元/時，停車未滿1小時以1小時計，逾1小時以上，未滿半小時以半小時計，進場未滿15分鐘免費。計次：機車30元/次，隔日另計，以00時為基準。月租：小型車景勤/雙和里民2,500元/月(週一至週五下午18時至隔日上午9時及週六下午14時入至週一上午9時出。",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -12173,6 +12288,7 @@
     "district": "平鎮區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "日間每小時 30 元；夜間每小時 10 元；後牌&管理室繳費（重機專用格比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -12273,9 +12389,10 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：中山運動中心地下停車場\n機車格收汽車費率 每小時$40\n專用格不大\n專用2 格 或以上\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0441）",
+    "note": "來源原名稱：中山運動中心地下停車場\n專用2 格 或以上\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0441）",
     "address": "臺北市中山區中山北路2段46巷與44巷間（台新銀行、中山運動中心及捷運公司旁）",
     "entrance_note": "來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）\n管理員協助 / 按鈴\n設計不良，按鈕處在斜坡上，有倒車的危險",
+    "parking_guide": "機車格收汽車費率 每小時$40\n專用格不大",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -12296,6 +12413,7 @@
     "district": "新莊區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "每小時 30 元（重機專用格比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -12304,7 +12422,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "B2 重機專用5格",
+    "note": "",
+    "parking_guide": "B2 重機專用5格",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -12396,8 +12515,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "週一-四 40/H, 週五-日及假日50/H, 上限300/日\n有重機專用格2格以上\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0851）",
+    "note": "週一-四 40/H, 週五-日及假日50/H, 上限300/日\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0851）",
     "address": "臺北市信義區松山路11號(南廣場B1)",
+    "parking_guide": "有重機專用格2格以上",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -12481,6 +12601,7 @@
     "district": "中山區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 30 元（重機專用格比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -12510,6 +12631,7 @@
     "district": "中壢區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 30 元；後牌（重機專用格比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -12518,7 +12640,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "汽車, 重機格 感謝PTT車友",
+    "note": "",
+    "parking_guide": "汽車, 重機格 感謝PTT車友",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -12548,9 +12671,10 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "30/H, 5個專用格\n專用格散佈在B1及B2樑柱旁，有明顯標示\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0421）",
+    "note": "已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0421）",
     "address": "臺北市信義區忠孝東路5段666號地下1至3層",
     "entrance_note": "來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）\n雖有後牌辨析，但要管理員操作，宜先提醒再出場",
+    "parking_guide": "30/H, 5個專用格\n專用格散佈在B1及B2樑柱旁，有明顯標示",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -12610,8 +12734,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：嘟嘟房僑安站\n8-22 40/H, 22-8 30/H, 兩輪誌,1個專用格\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0645）",
+    "note": "來源原名稱：嘟嘟房僑安站\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0645）",
     "address": "臺北市大安區忠孝東路4段306號地下1至3層",
+    "parking_guide": "8-22 40/H, 22-8 30/H, 兩輪誌,1個專用格",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -12642,8 +12767,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "不算友善 有2個專用格(市政府資料)\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0450）\n來源原名稱：正好停-艋舺公園地下停車場",
+    "note": "已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0450）\n來源原名稱：正好停-艋舺公園地下停車場",
     "address": "臺北市萬華區西園路1段145號地下室",
+    "parking_guide": "不算友善 有2個專用格(市政府資料)",
     "special_rules": "臺北市路外停車場試辦大型重機停放機車區（各期 6 個月）：依現場標誌斜停，最多 2 格機車格；停汽車區依小型車費率。試辦是否延續請以現場公告為準",
     "parking_zones": [
       {
@@ -12711,9 +12837,10 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "日間40/h, 晚間30/h, 1個專用格\n911@m01\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0606）\n115年7月6日起擴大實施大重機共用格位\n依現場標誌指示，得斜向停放且以最多2格機車格位為限",
+    "note": "911@m01\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0606）\n115年7月6日起擴大實施大重機共用格位",
     "address": "臺北市中山區松江路90巷14號地下",
     "entrance_note": "汽車道\n入場辨識 後牌",
+    "parking_guide": "日間40/h, 晚間30/h, 1個專用格\n依現場標誌指示，得斜向停放且以最多2格機車格位為限",
     "special_rules": "臺北市路外停車場試辦大型重機停放機車區（各期 6 個月）：依現場標誌斜停，最多 2 格機車格；停汽車區依小型車費率。試辦是否延續請以現場公告為準",
     "parking_zones": [
       {
@@ -12818,8 +12945,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "日間30/h, 晚間20/h, 4個專用格\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0722）\n來源原名稱：嘟嘟房玉成國小地下停車場\n容易滿場",
+    "note": "已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0722）\n來源原名稱：嘟嘟房玉成國小地下停車場\n容易滿場",
     "address": "臺北市南港區昆陽街23號地下(地下共2層)",
+    "parking_guide": "日間30/h, 晚間20/h, 4個專用格",
     "special_rules": "臺北市路外停車場試辦大型重機停放機車區（各期 6 個月）：依現場標誌斜停，最多 2 格機車格；停汽車區依小型車費率。試辦是否延續請以現場公告為準",
     "parking_zones": [
       {
@@ -12888,9 +13016,10 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0930）\n115年7月6日起擴大實施大重機共用格位\n依現場標誌指示，得斜向停放且以最多2格機車格位為限",
+    "note": "已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0930）\n115年7月6日起擴大實施大重機共用格位",
     "address": "臺北市大同區延平北路4段205號地下1層",
     "entrance_note": "汽車道，30/H 有專用格",
+    "parking_guide": "依現場標誌指示，得斜向停放且以最多2格機車格位為限",
     "special_rules": "臺北市路外停車場試辦大型重機停放機車區（各期 6 個月）：依現場標誌斜停，最多 2 格機車格；停汽車區依小型車費率。試辦是否延續請以現場公告為準",
     "parking_zones": [
       {
@@ -12926,9 +13055,10 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "平日40/H, 假日50/H, 2個專用格\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0334）",
+    "note": "已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0334）",
     "address": "臺北市信義區信義路5段11號地下(地下共2層)",
     "entrance_note": "有後車牌辨識",
+    "parking_guide": "平日40/H, 假日50/H, 2個專用格",
     "special_rules": "臺北市路外停車場試辦大型重機停放機車區（各期 6 個月）：依現場標誌斜停，最多 2 格機車格；停汽車區依小型車費率。試辦是否延續請以現場公告為準",
     "parking_zones": [
       {
@@ -12965,9 +13095,10 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "(沒誤植, 假日真的比較便宜)\n大港墘公園地下停車場 汽車費率 40h 假日20h\n專用格 2 格 或以上 正好停代管\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE1388）",
+    "note": "(沒誤植, 假日真的比較便宜)\n大港墘公園地下停車場 汽車費率 40h 假日20h\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE1388）",
     "address": "臺北市內湖區洲子街18號地下1至2層",
     "entrance_note": "後牌辨析",
+    "parking_guide": "專用格 2 格 或以上 正好停代管",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -12998,8 +13129,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "平日30/H, 假日40/H, 2個專用格\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0828）",
+    "note": "已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0828）",
     "address": "臺北市大同區哈密街47號地下1層",
+    "parking_guide": "平日30/H, 假日40/H, 2個專用格",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -13029,8 +13161,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "平日40/H, 假日50/H, 上限200, 1個專用格\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0714）",
+    "note": "已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0714）",
     "address": "臺北市信義區松隆路123巷7號地下(地下共3層)",
+    "parking_guide": "平日40/H, 假日50/H, 上限200, 1個專用格",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -13061,8 +13194,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "有6格專用格 1小時20元\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0690）",
+    "note": "已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0690）",
     "address": "臺北市萬華區西藏路201號地下",
+    "parking_guide": "有6格專用格 1小時20元",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -13092,8 +13226,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n汽車費率 B4 621-626 重機專用格\n60元/小時, 500元折抵一小時",
+    "note": "來源標示為特殊收費或管理方式\n60元/小時, 500元折抵一小時",
     "entrance_note": "按鈕入場",
+    "parking_guide": "汽車費率 B4 621-626 重機專用格",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -13122,7 +13257,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "汽車, 後牌, 6-7F, 專用格20格，可停汽車格\n2026/03/27 更新專用格數量",
+    "note": "",
+    "parking_guide": "汽車, 後牌, 6-7F, 專用格20格，可停汽車格\n2026/03/27 更新專用格數量",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -13152,8 +13288,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：後牌-承德公園地下停車場\n平日40. 假日50, 有1個專用格\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0742）",
+    "note": "來源原名稱：後牌-承德公園地下停車場\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0742）",
     "address": "臺北市士林區基河路150號地下（地下共2層）",
+    "parking_guide": "平日40. 假日50, 有1個專用格",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -13214,8 +13351,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "有2個專用格(政府資料)\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0680）\n來源原名稱：嘟嘟房停車場-七星公園站\n115年7月6日起擴大實施大重機共用格位\n依現場標誌指示，得斜向停放且以最多2格機車格位為限",
+    "note": "已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0680）\n來源原名稱：嘟嘟房停車場-七星公園站\n115年7月6日起擴大實施大重機共用格位",
     "address": "臺北市北投區七星街3號地下(地下共2層)",
+    "parking_guide": "有2個專用格(政府資料)\n依現場標誌指示，得斜向停放且以最多2格機車格位為限",
     "special_rules": "臺北市路外停車場試辦大型重機停放機車區（各期 6 個月）：依現場標誌斜停，最多 2 格機車格；停汽車區依小型車費率。試辦是否延續請以現場公告為準",
     "parking_zones": [
       {
@@ -13243,6 +13381,7 @@
     "district": "板橋區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "平日每小時 30 元；假日每小時 40 元；汽車道進（重機專用格比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -13282,8 +13421,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "20/H 大重專用格*2 兩輪誌\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0121）",
+    "note": "已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0121）",
     "address": "臺北市文山區景文街90巷內廣場停車場",
+    "parking_guide": "20/H 大重專用格*2 兩輪誌",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -13304,6 +13444,7 @@
     "district": "仁愛區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 30 元（重機專用格比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -13372,6 +13513,7 @@
     "district": "大安區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 40 元（重機專用格比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -13512,8 +13654,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "後牌, 汽車, 重機格\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0505）",
+    "note": "已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0505）",
     "address": "臺北市信義區松平路81號地下室(地下共3層)",
+    "parking_guide": "後牌, 汽車, 重機格",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -13577,8 +13720,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "30/H 寧夏夜市最佳, 有專用格\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0758）",
+    "note": "已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0758）",
     "address": "臺北市大同區寧夏路35號地下(地下共2層)",
+    "parking_guide": "30/H 寧夏夜市最佳, 有專用格",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -13608,8 +13752,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為未確認資訊\n全日40/h, 2個專用格\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0230）\n115年7月6日起擴大實施大重機共用格位\n依現場標誌指示，得斜向停放且以最多2格機車格位為限",
+    "note": "來源標示為未確認資訊\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0230）\n115年7月6日起擴大實施大重機共用格位",
     "address": "臺北市信義區松仁路2號地下",
+    "parking_guide": "全日40/h, 2個專用格\n依現場標誌指示，得斜向停放且以最多2格機車格位為限",
     "special_rules": "臺北市路外停車場試辦大型重機停放機車區（各期 6 個月）：依現場標誌斜停，最多 2 格機車格；停汽車區依小型車費率。試辦是否延續請以現場公告為準",
     "parking_zones": [
       {
@@ -13637,6 +13782,7 @@
     "district": "萬華區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "每小時 50 元（重機專用格比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -13770,8 +13916,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：民生立體收費停車場\n30/H 2樓A區專用格\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0003）",
+    "note": "來源原名稱：民生立體收費停車場\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0003）",
     "address": "臺北市松山區民生東路5段84號",
+    "parking_guide": "30/H 2樓A區專用格",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -13802,9 +13949,10 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "專用格三格, 專人引導 @兩輪誌\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0355）",
+    "note": "已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0355）",
     "address": "臺北市松山區八德路4段101號地下室（地下2層）",
     "entrance_note": "入場不需走車道辨識，大型重機可以直接鑽車道右側小縫進入停車場，找到專用格停放之後到管理室報備車號即可，有大型重機專用停車格",
+    "parking_guide": "專用格三格, 專人引導 @兩輪誌",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -14096,8 +14244,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n專用格2格以上",
+    "note": "來源標示為特殊收費或管理方式",
     "entrance_note": "按鈕取票\n入場為前牌辨識 待辨識失敗後即可按鈕取票",
+    "parking_guide": "專用格2格以上",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -14126,8 +14275,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "專用格2格或以上，比照汽車收費",
+    "note": "",
     "entrance_note": "來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）\n(2023/3)變更為前牌辨識，需找管理員",
+    "parking_guide": "專用格2格或以上，比照汽車收費",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -14148,6 +14298,7 @@
     "district": "中壢區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 30 元（重機專用格比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -14178,6 +14329,7 @@
     "district": "中西區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "平日每小時 30 元；假日每小時 40 元（重機專用格比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -14247,8 +14399,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：新北市頂溪國小地下停車場\n重機月租1500, 專用格6格\n已比對新北市路外公共停車場資訊（新北市政府交通局）（040056）",
+    "note": "來源原名稱：新北市頂溪國小地下停車場\n已比對新北市路外公共停車場資訊（新北市政府交通局）（040056）",
     "address": "新北市永和區文化路133號B1~B3",
+    "parking_guide": "重機月租1500, 專用格6格",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -14301,6 +14454,7 @@
     "district": "桃園區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 20 元；每日 100 元（重機專用格比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -14309,8 +14463,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "重機專用格停滿，則停放一般汽車格",
+    "note": "",
     "entrance_note": "汽車費率 20元/H (每日最高上限100元） 後牌辨析 專用格2 格 或以上",
+    "parking_guide": "重機專用格停滿，則停放一般汽車格",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -14364,6 +14519,7 @@
     "district": "永和區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 30 元（重機專用格比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -14434,9 +14590,10 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：機車道進-中和國小地下停車場\n汽車費率 專用格4格以上\n可停專用格或汽車格\n已比對新北市路外公共停車場資訊（新北市政府交通局）（030004）",
+    "note": "來源原名稱：機車道進-中和國小地下停車場\n已比對新北市路外公共停車場資訊（新北市政府交通局）（030004）",
     "address": "新北市中和區景平路632-8號B1-B2",
     "entrance_note": "機車道進入 會自動調整為汽車費率",
+    "parking_guide": "汽車費率 專用格4格以上\n可停專用格或汽車格",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -14521,6 +14678,7 @@
     "district": "桃園區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 40 元；後牌（重機專用格比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -14584,6 +14742,7 @@
     "district": "鳳山區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 30 元（重機專用格比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -14643,6 +14802,7 @@
     "district": "新興區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 30 元；每日 300 元；後牌（重機專用格比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -14745,8 +14905,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "重機專用格1格\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0177）",
+    "note": "已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0177）",
     "address": "臺北市松山區延壽街168號地下層［地下2層］",
+    "parking_guide": "重機專用格1格",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -14768,6 +14929,7 @@
     "district": "西屯區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 20 元（重機專用格比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -14776,8 +14938,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "2025/10/15 更新\n臨時停車無論停汽機車格一率收汽車費率(20/h)\n建議直接停汽車區",
+    "note": "2025/10/15 更新",
     "entrance_note": "紅黃牌可自由選擇停機車或汽車 機車20d 汽車20h 後牌辨析 2 格 或以上\n從機車道進場可停機車格或大型重機專用車格\n從汽車道進場可停汽車格或大型重機專用車格\n停車入口有兩邊可從文心路或惠中路進出，若大重從汽車道進請靠左側後車牌辨識才能準確，不建議從汽車道右邊辨識",
+    "parking_guide": "臨時停車無論停汽機車格一率收汽車費率(20/h)\n建議直接停汽車區",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -14839,8 +15002,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：塔城公園停車場\n汽車費率 有重機專用格\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0056）",
+    "note": "來源原名稱：塔城公園停車場\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0056）",
     "address": "臺北市大同區塔城街11號地下共2層",
+    "parking_guide": "汽車費率 有重機專用格",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -14871,8 +15035,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：八里龍米公有停車場\n來源標示為未確認資訊\n四格專用格\n已比對新北市路外公共停車場資訊（新北市政府交通局）（230018）",
+    "note": "來源原名稱：八里龍米公有停車場\n來源標示為未確認資訊\n已比對新北市路外公共停車場資訊（新北市政府交通局）（230018）",
     "address": "新北市八里區龍米路2段150號旁",
+    "parking_guide": "四格專用格",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -14893,6 +15058,7 @@
     "district": "三芝區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "每小時 10 元（重機專用格比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -14901,7 +15067,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為未確認資訊\n三格專用格",
+    "note": "來源標示為未確認資訊",
+    "parking_guide": "三格專用格",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -15031,7 +15198,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "汽車格 汽車費率, 30/h",
+    "note": "",
+    "parking_guide": "汽車格 汽車費率, 30/h",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -15052,6 +15220,7 @@
     "district": "彰化市",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "請依現場公告（重機專用格比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -15060,7 +15229,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "機車格 機車費率, 10/h",
+    "note": "",
+    "parking_guide": "機車格 機車費率, 10/h",
     "parking_zones": [
       {
         "name": "機車區",
@@ -15090,9 +15260,10 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：辰淵-綠湖公園地下停車場\n汽車區內有重機專用格\n倒車掃牌\n已比對新北市路外公共停車場資訊（新北市政府交通局）（060147）",
+    "note": "來源原名稱：辰淵-綠湖公園地下停車場\n倒車掃牌\n已比對新北市路外公共停車場資訊（新北市政府交通局）（060147）",
     "address": "新北市新店區寶中路36號B1~B3",
     "entrance_note": "來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）",
+    "parking_guide": "汽車區內有重機專用格",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -15121,8 +15292,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "機車格\n汽車費率",
+    "note": "汽車費率",
     "entrance_note": "機車道",
+    "parking_guide": "機車格",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -15151,7 +15323,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "機車平面停車場附設重機專用格",
+    "note": "",
+    "parking_guide": "機車平面停車場附設重機專用格",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -15246,6 +15419,7 @@
     "district": "大同區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "surface",
     "fee_note": "每小時 20 元；每日 60 元（大型重機另訂費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -15355,6 +15529,7 @@
     "district": "內湖區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 20 元；每日 40 元（大型重機另訂費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -15621,6 +15796,7 @@
     "district": "大安區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "surface",
     "fee_note": "每小時 30 元（大型重機另訂費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -15651,6 +15827,7 @@
     "district": "新莊區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "surface",
     "fee_note": "每小時 25 元（大型重機另訂費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -15659,7 +15836,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "有重機格，有人實測可停機車格，但一樣收重機費率",
+    "note": "",
+    "parking_guide": "有重機格，有人實測可停機車格，但一樣收重機費率",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -15746,7 +15924,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "中庭露天重機專用格",
+    "note": "",
+    "parking_guide": "中庭露天重機專用格",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -15797,6 +15976,7 @@
     "district": "中壢區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "免費（大型重機另訂費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -15835,8 +16015,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "地下二樓有收費機車專用格2格、\n專用2 格 或以上 親身經驗 或 車友/朋友/親人經驗",
+    "note": "專用2 格 或以上 親身經驗 或 車友/朋友/親人經驗",
     "entrance_note": "也可以選機車停車場不收費 50h 停汽車格需按鈕聯繫管理員，機車停車場可直接下去",
+    "parking_guide": "地下二樓有收費機車專用格2格、",
     "parking_zones": [
       {
         "name": "機車區",
@@ -15865,7 +16046,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "專用格10格",
+    "note": "",
+    "parking_guide": "專用格10格",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -15894,7 +16076,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n購物專用 有重機專用格",
+    "note": "來源標示為特殊收費或管理方式",
+    "parking_guide": "購物專用 有重機專用格",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -15983,8 +16166,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "在B1停車場斜坡下去的右邊 共有5格車位",
+    "note": "",
     "entrance_note": "無出入口管制",
+    "parking_guide": "在B1停車場斜坡下去的右邊 共有5格車位",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -16094,6 +16278,7 @@
     "district": "中壢區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "每日 60 元；機車停車場進（大型重機另訂費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -16154,6 +16339,7 @@
     "district": "新竹市",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 20 元（大型重機另訂費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -16402,9 +16588,10 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：南港LaLaport P3入口停車場\n機車每小時10\n大重每小時20 可至大重停車區斜停兩格\n騎重機的朋友，以下注意囉📢📢\n✅停車費為每小時20元，平/假日皆相同\n停放至「#大型重機停放區」，一台車停放兩格\n✅重機亦享有與普通機車相同之停車折抵優惠\n單筆消費滿200元可折抵1小時停車費\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE1813）",
+    "note": "來源原名稱：南港LaLaport P3入口停車場\n機車每小時10\n騎重機的朋友，以下注意囉📢📢\n✅停車費為每小時20元，平/假日皆相同\n✅重機亦享有與普通機車相同之停車折抵優惠\n單筆消費滿200元可折抵1小時停車費\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE1813）",
     "address": "臺北市南港區經貿二路111、121、131、135號地下2至5層",
     "entrance_note": "✅請由P3入口進入（#詳見留言處）",
+    "parking_guide": "大重每小時20 可至大重停車區斜停兩格\n停放至「#大型重機停放區」，一台車停放兩格",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -16580,7 +16767,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n應該是機車格\n機車 50 重機 80 汽車 150\n都計次",
+    "note": "來源標示為特殊收費或管理方式\n機車 50 重機 80 汽車 150\n都計次",
+    "parking_guide": "應該是機車格",
     "parking_zones": [
       {
         "name": "機車區",
@@ -16733,8 +16921,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：大安森林公園地下停車場 (信義路出入口)\n115年7月6日起擴大實施大重機共用格位\n依現場標誌指示，得斜向停放且以最多2格機車格位為限\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0095）",
+    "note": "來源原名稱：大安森林公園地下停車場 (信義路出入口)\n115年7月6日起擴大實施大重機共用格位\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0095）",
     "address": "臺北市大安區建國南路2段2號地下",
+    "parking_guide": "依現場標誌指示，得斜向停放且以最多2格機車格位為限",
     "special_rules": "臺北市路外停車場試辦大型重機停放機車區（各期 6 個月）：依現場標誌斜停，最多 2 格機車格；停汽車區依小型車費率。試辦是否延續請以現場公告為準",
     "parking_zones": [
       {
@@ -16771,8 +16960,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "115年7月6日起擴大實施大重機共用格位\n依現場標誌指示，得斜向停放且以最多2格機車格位為限\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0835）\n來源原名稱：臺北市文山區萬興國民小學\n來源標示為未確認資訊\n20/H, 2個專用格",
+    "note": "115年7月6日起擴大實施大重機共用格位\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0835）\n來源原名稱：臺北市文山區萬興國民小學\n來源標示為未確認資訊",
     "address": "臺北市文山區秀明路2段116號地下",
+    "parking_guide": "依現場標誌指示，得斜向停放且以最多2格機車格位為限\n20/H, 2個專用格",
     "special_rules": "臺北市路外停車場試辦大型重機停放機車區（各期 6 個月）：依現場標誌斜停，最多 2 格機車格；停汽車區依小型車費率。試辦是否延續請以現場公告為準",
     "parking_zones": [
       {
@@ -16813,8 +17003,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "115年7月6日起擴大實施大重機共用格位\n依現場標誌指示，得斜向停放且以最多2格機車格位為限\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0775）",
+    "note": "115年7月6日起擴大實施大重機共用格位\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0775）",
     "address": "臺北市南港區成福路118號地下",
+    "parking_guide": "依現場標誌指示，得斜向停放且以最多2格機車格位為限",
     "special_rules": "臺北市路外停車場試辦大型重機停放機車區（各期 6 個月）：依現場標誌斜停，最多 2 格機車格；停汽車區依小型車費率。試辦是否延續請以現場公告為準",
     "parking_zones": [
       {
@@ -16850,8 +17041,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：捷運南港機廠社會住宅停車場\n115年7月6日起擴大實施大重機共用格位\n依現場標誌指示，得斜向停放且以最多2格機車格位為限\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE1898）",
+    "note": "來源原名稱：捷運南港機廠社會住宅停車場\n115年7月6日起擴大實施大重機共用格位\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE1898）",
     "address": "臺北市南港區忠孝東路7段10、12號地上2至地上5層",
+    "parking_guide": "依現場標誌指示，得斜向停放且以最多2格機車格位為限",
     "special_rules": "臺北市路外停車場試辦大型重機停放機車區（各期 6 個月）：依現場標誌斜停，最多 2 格機車格；停汽車區依小型車費率。試辦是否延續請以現場公告為準",
     "parking_zones": [
       {
@@ -16978,8 +17170,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：家樂福B1 重新店\n機車, B1有大重專用格6格\n家樂福B1 重新店 收費 （費率不符 或 免費變收費) 30/d;有消費當日即免費;停放隔夜1200/d\n已比對新北市路外公共停車場資訊（新北市政府交通局）（020053）",
+    "note": "來源原名稱：家樂福B1 重新店\n已比對新北市路外公共停車場資訊（新北市政府交通局）（020053）",
     "address": "新北市三重區重新路五段654號/B1、B2、5F及6F(均部分使用)",
+    "parking_guide": "機車, B1有大重專用格6格\n家樂福B1 重新店 收費 （費率不符 或 免費變收費) 30/d;有消費當日即免費;停放隔夜1200/d",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -17032,6 +17225,7 @@
     "district": "西屯區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 20 元（大型重機比照機車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -17040,8 +17234,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "2025/10/15 更新\n臨時停車無論停汽機車格一率收汽車費率(20/h)\n建議直接停汽車區\n台中市交通局試辦機車格停放大型重機區域",
+    "note": "2025/10/15 更新",
     "entrance_note": "機車費率 20/d 後牌辨析\n紅黃牌可自由選擇停機車或汽車 機車20d 汽車20h 後牌辨析 2 格 或以上\n從機車道進場可停機車格或大型重機專用車格\n從汽車道進場可停汽車格或大型重機專用車格\n停車入口有兩邊可從文心路或惠中路進出，若大重從汽車道進請靠左側後車牌辨識才能準確，不建議從汽車道右邊辨識",
+    "parking_guide": "臨時停車無論停汽機車格一率收汽車費率(20/h)\n建議直接停汽車區\n台中市交通局試辦機車格停放大型重機區域",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -17070,7 +17265,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "得來速裡面有設幾個機車＆汽車格\n數量都不多",
+    "note": "數量都不多",
+    "parking_guide": "得來速裡面有設幾個機車＆汽車格",
     "parking_zones": [
       {
         "name": "機車區",
@@ -17129,8 +17325,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "重機比照機車收費\n機車格沒畫分隔線\n不用擔心佔太大格",
+    "note": "重機比照機車收費\n不用擔心佔太大格",
     "entrance_note": "樂園入口有工作人員收費",
+    "parking_guide": "機車格沒畫分隔線",
     "parking_zones": [
       {
         "name": "機車區",
@@ -17159,7 +17356,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n有重機專用格6格，滿大的，應該是2.5格左右大小",
+    "note": "來源標示為特殊收費或管理方式",
+    "parking_guide": "有重機專用格6格，滿大的，應該是2.5格左右大小",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -17180,6 +17378,7 @@
     "district": "北區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "每日 40 元（大型重機比照機車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -17276,9 +17475,10 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "2025/10/24 開始試辦停至 B2 重機停車區\n*原B3/B4重機停車區將於114年10月24日起調整至B2樓層-重機區。試營運期間將比照機車收費標準，如有停車相關問題，請洽B3管理室或致電02-2351-1084。\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0910）",
+    "note": "*原B3/B4重機停車區將於114年10月24日起調整至B2樓層-重機區。試營運期間將比照機車收費標準，如有停車相關問題，請洽B3管理室或致電02-2351-1084。\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0910）",
     "address": "臺北市中正區市民大道3段2號地下1至6層",
     "entrance_note": "機車道入口進入停車",
+    "parking_guide": "2025/10/24 開始試辦停至 B2 重機停車區",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -17307,8 +17507,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：Times 重慶南路一段停車場\n來源標示為特殊收費或管理方式\n機車費率，悠遊卡進出\n刷卡地方剛好是斜坡有點尷尬\n汽車區禁停重機\n平日上限 100 (附近很多上班族，平日下午很難有位置)\n假日上限 60\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE1558）",
+    "note": "來源原名稱：Times 重慶南路一段停車場\n來源標示為特殊收費或管理方式\n機車費率，悠遊卡進出\n刷卡地方剛好是斜坡有點尷尬\n平日上限 100 (附近很多上班族，平日下午很難有位置)\n假日上限 60\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE1558）",
     "address": "臺北市中正區重慶南路1段35號旁",
+    "parking_guide": "汽車區禁停重機",
     "parking_zones": [
       {
         "name": "機車區",
@@ -17417,6 +17618,7 @@
     "district": "大同區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "surface",
     "fee_note": "計時：小型車200元/時，停車全程以半小時計。月租：小型車全日8,000元/月。",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -17507,6 +17709,7 @@
     "district": "中壢區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每日 30 元（大型重機比照機車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -17574,8 +17777,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "台中市交通局試辦機車格停放大型重機區域",
+    "note": "",
     "entrance_note": "機車費率 20/d 後牌辨析\n紅黃牌可自由選擇停機車或汽車 機車20d 汽車20h 後牌辨析 2 格 或以上\n從機車道進場可停機車格或大型重機專用車格\n從汽車道進場可停汽車格或大型重機專用車格\n停車入口有兩邊可從文心路或惠中路進出，若大重從汽車道進請靠左側後車牌辨識才能準確，不建議從汽車道右邊辨識",
+    "parking_guide": "台中市交通局試辦機車格停放大型重機區域",
     "parking_zones": [
       {
         "name": "機車區",
@@ -17656,6 +17860,7 @@
     "district": "北屯區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "機車區每日 20 元；汽車區每小時 40 元（大型重機比照機車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -17746,6 +17951,7 @@
     "district": "北區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "機車區每日 20 元；汽車區每小時 40 元（大型重機比照機車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -17806,6 +18012,7 @@
     "district": "平鎮區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每日 30 元（大型重機比照機車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -17814,8 +18021,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "直接停汽車格\n2024年4月更新",
+    "note": "2024年4月更新",
     "entrance_note": "按鈴進入\n入場辨識 大重可以直接下機車車道停機車區，收費比照機車，僅需注意機車車道為單車道雙向通行",
+    "parking_guide": "直接停汽車格",
     "parking_zones": [
       {
         "name": "機車區",
@@ -18232,8 +18440,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "汽車 平30/h | 假50/h\n自由選擇\n汽機車停車場均可停放",
+    "note": "汽車 平30/h | 假50/h\n自由選擇",
     "entrance_note": "汽車停車場按鈴\n機車停車場後牌辨識",
+    "parking_guide": "汽機車停車場均可停放",
     "parking_zones": [
       {
         "name": "機車區",
@@ -18262,7 +18471,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "先前已問過嘟嘟房客服人員，文心崇德站機車停車場是可以停放重機的。\n場內也有不少重機車友停放，顯示是可以正常停放的。",
+    "note": "",
+    "parking_guide": "先前已問過嘟嘟房客服人員，文心崇德站機車停車場是可以停放重機的。\n場內也有不少重機車友停放，顯示是可以正常停放的。",
     "parking_zones": [
       {
         "name": "機車區",
@@ -18291,7 +18501,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\nB1M機車停車區/免費（格子稍小請斟酌）\n大台可以停汽車格\n低調，門口會貼比照汽車停車\n但還是可以下去",
+    "note": "來源標示為特殊收費或管理方式\n低調，門口會貼比照汽車停車\n但還是可以下去",
+    "parking_guide": "B1M機車停車區/免費（格子稍小請斟酌）\n大台可以停汽車格",
     "parking_zones": [
       {
         "name": "機車區",
@@ -18312,6 +18523,7 @@
     "district": "苓雅區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每日 30 元（大型重機比照機車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -18378,7 +18590,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "室外機車格免費停\n劃設停車區非停車格\n不用擔心大台超出格子",
+    "note": "劃設停車區非停車格\n不用擔心大台超出格子",
+    "parking_guide": "室外機車格免費停",
     "parking_zones": [
       {
         "name": "機車區",
@@ -18437,8 +18650,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "台中勤美機車停車場\n可以停放大型重機，單次收費30元",
+    "note": "台中勤美機車停車場",
     "entrance_note": "入口大概在這個位置",
+    "parking_guide": "可以停放大型重機，單次收費30元",
     "parking_zones": [
       {
         "name": "機車區",
@@ -18607,6 +18821,7 @@
     "district": "桃園區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "每日 50 元（大型重機比照機車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -18666,6 +18881,7 @@
     "district": "內湖區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "每小時 10 元（大型重機比照機車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -19048,6 +19264,7 @@
     "district": "蘆竹區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "機車區每小時 10 元；汽車區每小時 30 元（大型重機比照機車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -19116,8 +19333,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：家樂福 蘆洲店\n有重機區, 在GOGORO換電站旁\n已比對新北市路外公共停車場資訊（新北市政府交通局）（140027）",
+    "note": "來源原名稱：家樂福 蘆洲店\n已比對新北市路外公共停車場資訊（新北市政府交通局）（140027）",
     "address": "新北市三重區五華街282號5樓、6樓、頂樓",
+    "parking_guide": "有重機區, 在GOGORO換電站旁",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -19266,8 +19484,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "進門前警衛會依照重機體型決定\n該停汽車或機車格",
+    "note": "進門前警衛會依照重機體型決定",
     "entrance_note": "機車停車場後牌辨識",
+    "parking_guide": "該停汽車或機車格",
     "parking_zones": [
       {
         "name": "機車區",
@@ -19596,7 +19815,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "免費停放 自由選擇汽車或機車格",
+    "note": "",
+    "parking_guide": "免費停放 自由選擇汽車或機車格",
     "parking_zones": [
       {
         "name": "機車區",
@@ -19706,6 +19926,7 @@
     "district": "東區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "surface",
     "fee_note": "免費（大型重機比照機車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -19744,8 +19965,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "愛買水湳店大型重機限停機車區，停車格長度目測只有 1.5-1.8 m，建議找兩排的地方停 2 格。",
+    "note": "",
     "entrance_note": "進出在同一個地方，車道狹窄，轉彎半徑小，進出停車場時小心會車。",
+    "parking_guide": "愛買水湳店大型重機限停機車區，停車格長度目測只有 1.5-1.8 m，建議找兩排的地方停 2 格。",
     "parking_zones": [
       {
         "name": "機車區",
@@ -19796,6 +20018,7 @@
     "district": "板橋區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 10 元（大型重機比照機車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -19804,8 +20027,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "B1走路上來剛好是TPKA 研發辦公大樓 1F大廳，24H可停",
+    "note": "",
     "entrance_note": "2023/12/9更新-後牌辨識",
+    "parking_guide": "B1走路上來剛好是TPKA 研發辦公大樓 1F大廳，24H可停",
     "parking_zones": [
       {
         "name": "機車區",
@@ -19834,8 +20058,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "2023.12.22 詢問保全，於當日停進南館機車區。費率會取決於停放場域（機/汽車）。\n南館機車區雖有標示大型重機專用格，但依照現場標線看起來比較像共用車格。",
+    "note": "",
     "entrance_note": "南館機車區大重專用位進閘門後繼續直行，將與左側看到。",
+    "parking_guide": "2023.12.22 詢問保全，於當日停進南館機車區。費率會取決於停放場域（機/汽車）。\n南館機車區雖有標示大型重機專用格，但依照現場標線看起來比較像共用車格。",
     "parking_zones": [
       {
         "name": "機車區",
@@ -19977,6 +20202,7 @@
     "district": "板橋區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "每日 40 元（大型重機比照機車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -20100,6 +20326,7 @@
     "district": "彰化市",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "每小時 10 元；每日 40 元（大型重機比照機車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -20258,9 +20485,10 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：亞東停車場\n不是亞東醫院停車場，是亞東停車場 亞東科大學生在停的 也開放民眾停車 b1有圍重機專用停車區\n已比對新北市路外公共停車場資訊（新北市政府交通局）（010082）",
+    "note": "來源原名稱：亞東停車場\n已比對新北市路外公共停車場資訊（新北市政府交通局）（010082）",
     "address": "新北市板橋區南雅南路2段25號B1、B2",
     "entrance_note": "汽車費率 30h 後牌辨析 專用2 格 或以上",
+    "parking_guide": "不是亞東醫院停車場，是亞東停車場 亞東科大學生在停的 也開放民眾停車 b1有圍重機專用停車區",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -20319,8 +20547,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "請沿指示至運動中心後方機車格",
+    "note": "",
     "entrance_note": "不收費 0 無出入口管制",
+    "parking_guide": "請沿指示至運動中心後方機車格",
     "parking_zones": [
       {
         "name": "機車區",
@@ -20702,6 +20931,7 @@
     "district": "烏日區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每日 30 元（大型重機比照機車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -20852,6 +21082,7 @@
     "district": "屏東市",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "每日 20 元（大型重機比照機車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -20890,8 +21121,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：新光三越 台北天母店二館\n可停機車格 免費\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0400）",
+    "note": "來源原名稱：新光三越 台北天母店二館\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0400）",
     "address": "臺北市士林區忠誠路2段206號地下1至4層",
+    "parking_guide": "可停機車格 免費",
     "parking_zones": [
       {
         "name": "機車區",
@@ -20920,8 +21152,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：新光三越 台北天母店一館\n可停機車格 免費\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0411）",
+    "note": "來源原名稱：新光三越 台北天母店一館\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0411）",
     "address": "臺北市士林區天母東路68號地下1至4層",
+    "parking_guide": "可停機車格 免費",
     "parking_zones": [
       {
         "name": "機車區",
@@ -21443,6 +21676,7 @@
     "district": "板橋區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "surface",
     "fee_note": "免費（大型重機比照機車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -21532,6 +21766,7 @@
     "district": "大里區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "免費（大型重機比照機車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -21561,6 +21796,7 @@
     "district": "斗六市",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "平日每小時 10 元；假日每小時 20 元（大型重機比照機車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -21651,6 +21887,7 @@
     "district": "桃園區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "每日 20 元；機車試辦（大型重機比照機車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -21799,6 +22036,7 @@
     "district": "松山區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每日 30 元；機車（大型重機比照機車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -21837,7 +22075,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "和機車一起停在廣場停車區",
+    "note": "",
+    "parking_guide": "和機車一起停在廣場停車區",
     "parking_zones": [
       {
         "name": "機車區",
@@ -22159,7 +22398,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "無專用格，機車費率，折抵規則跟白牌一樣",
+    "note": "",
+    "parking_guide": "無專用格，機車費率，折抵規則跟白牌一樣",
     "parking_zones": [
       {
         "name": "機車區",
@@ -22454,7 +22694,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "依據苗栗縣人行空間機車慢車停車秩序實施要點\n重機可停放於人行道、騎樓之機車停車格",
+    "note": "依據苗栗縣人行空間機車慢車停車秩序實施要點",
+    "parking_guide": "重機可停放於人行道、騎樓之機車停車格",
     "parking_zones": [
       {
         "name": "機車區",
@@ -22512,7 +22753,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "跟一般機車一起停無專用格",
+    "note": "",
+    "parking_guide": "跟一般機車一起停無專用格",
     "parking_zones": [
       {
         "name": "機車區",
@@ -22542,8 +22784,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：宜家家居 新店店\n來源標示為特殊收費或管理方式\n2025/9\n目前大重機有規劃一個迷你的停放區，在下坡道處右邊死角處，估計最多16台\n停一般機車區也行，我看外送黃牌的也是停入一般機車區，但他說出去時...要再按對講機和服務人員說明\n就會放行。\n已比對新北市路外公共停車場資訊（新北市政府交通局）（060104）",
+    "note": "來源原名稱：宜家家居 新店店\n來源標示為特殊收費或管理方式\n2025/9\n就會放行。\n已比對新北市路外公共停車場資訊（新北市政府交通局）（060104）",
     "address": "新北市新店區中央路157、159號B1及2F、3F",
+    "parking_guide": "目前大重機有規劃一個迷你的停放區，在下坡道處右邊死角處，估計最多16台\n停一般機車區也行，我看外送黃牌的也是停入一般機車區，但他說出去時...要再按對講機和服務人員說明",
     "parking_zones": [
       {
         "name": "機車區",
@@ -22601,7 +22844,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "跟白牌機車一起停，無專用格",
+    "note": "",
+    "parking_guide": "跟白牌機車一起停，無專用格",
     "parking_zones": [
       {
         "name": "機車區",
@@ -22827,6 +23071,7 @@
     "district": "豐原區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每日 20 元（大型重機比照機車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -22983,7 +23228,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "也可以停汽車區",
+    "note": "",
+    "parking_guide": "也可以停汽車區",
     "parking_zones": [
       {
         "name": "機車區",
@@ -23013,9 +23259,10 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：ViVi PARK敬業二路停車場\n可以跟一般機車停在外圍\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE1692）",
+    "note": "來源原名稱：ViVi PARK敬業二路停車場\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE1692）",
     "address": "臺北市中山區敬業二路2號左側空地",
     "entrance_note": "沒有柵欄",
+    "parking_guide": "可以跟一般機車停在外圍",
     "parking_zones": [
       {
         "name": "機車區",
@@ -23214,6 +23461,7 @@
     "district": "宜蘭市",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "請依現場公告（大型重機比照機車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -23222,7 +23470,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "通道較窄，大台請考慮汽車格",
+    "note": "",
+    "parking_guide": "通道較窄，大台請考慮汽車格",
     "parking_zones": [
       {
         "name": "機車區",
@@ -23251,7 +23500,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "重機專用格很大格",
+    "note": "",
+    "parking_guide": "重機專用格很大格",
     "parking_zones": [
       {
         "name": "機車區",
@@ -23309,7 +23559,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "機車區有重機專用格",
+    "note": "",
+    "parking_guide": "機車區有重機專用格",
     "parking_zones": [
       {
         "name": "機車區",
@@ -23368,8 +23619,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：陽光PARK收費停車場\n機車區二樓以上有公告禁停\n已比對新北市路外公共停車場資訊（新北市政府交通局）（060139）",
+    "note": "來源原名稱：陽光PARK收費停車場\n已比對新北市路外公共停車場資訊（新北市政府交通局）（060139）",
     "address": "新北市新店區安興路105號1樓/2~25號車格位",
+    "parking_guide": "機車區二樓以上有公告禁停",
     "parking_zones": [
       {
         "name": "機車區",
@@ -23399,9 +23651,10 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：嘟嘟房(富邦遼寧大樓站)\n但有車友在 GOOGLE 評論可停機車區\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE1366）",
+    "note": "來源原名稱：嘟嘟房(富邦遼寧大樓站)\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE1366）",
     "address": "臺北市中山區遼寧街177號地下1至6層",
     "entrance_note": "入口寫禁止進入",
+    "parking_guide": "但有車友在 GOOGLE 評論可停機車區",
     "parking_zones": [
       {
         "name": "機車區",
@@ -23430,7 +23683,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "有車友評論在可走機車區\n有重機專用格",
+    "note": "",
+    "parking_guide": "有車友評論在可走機車區\n有重機專用格",
     "parking_zones": [
       {
         "name": "機車區",
@@ -23492,8 +23746,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "機車格子不多\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE1724）",
+    "note": "已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE1724）",
     "address": "臺北市大安區溫州街52巷1、3號",
+    "parking_guide": "機車格子不多",
     "parking_zones": [
       {
         "name": "機車區",
@@ -23583,9 +23838,10 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "與一般機車共用\n無專用格\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0167）",
+    "note": "與一般機車共用\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0167）",
     "address": "臺北市南港區研究院路2段84巷",
     "entrance_note": "無柵欄可能屬於道路範圍，請低調",
+    "parking_guide": "無專用格",
     "parking_zones": [
       {
         "name": "機車區",
@@ -23614,8 +23870,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "一般機車格大小",
+    "note": "",
     "entrance_note": "無柵欄可能屬於道路範圍，請低調",
+    "parking_guide": "一般機車格大小",
     "parking_zones": [
       {
         "name": "機車區",
@@ -23644,7 +23901,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "機車格免費\n格子少位置不多",
+    "note": "格子少位置不多",
+    "parking_guide": "機車格免費",
     "parking_zones": [
       {
         "name": "機車區",
@@ -23733,7 +23991,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "一般機車格",
+    "note": "",
+    "parking_guide": "一般機車格",
     "parking_zones": [
       {
         "name": "機車區",
@@ -23822,7 +24081,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "可停機車區",
+    "note": "",
+    "parking_guide": "可停機車區",
     "parking_zones": [
       {
         "name": "機車區",
@@ -23901,6 +24161,7 @@
     "district": "桃園區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "surface",
     "fee_note": "請依現場公告（大型重機比照機車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -23909,7 +24170,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為未確認資訊\n有看到車有停機車區",
+    "note": "來源標示為未確認資訊",
+    "parking_guide": "有看到車有停機車區",
     "parking_zones": [
       {
         "name": "機車區",
@@ -23930,6 +24192,7 @@
     "district": "桃園區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "surface",
     "fee_note": "免費（大型重機比照機車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -23996,8 +24259,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "一般機車格",
+    "note": "",
     "entrance_note": "無柵欄直接進出",
+    "parking_guide": "一般機車格",
     "parking_zones": [
       {
         "name": "機車區",
@@ -24088,8 +24352,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：俥亭-萬板高架橋下停車場\n就算比照道路\n板橋也可以停機車格\n已比對新北市路外公共停車場資訊（新北市政府交通局）（010020）",
+    "note": "來源原名稱：俥亭-萬板高架橋下停車場\n就算比照道路\n已比對新北市路外公共停車場資訊（新北市政府交通局）（010020）",
     "address": "新北市板橋區萬板路558號對面高架橋下停車場",
+    "parking_guide": "板橋也可以停機車格",
     "parking_zones": [
       {
         "name": "機車區",
@@ -24119,8 +24384,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：八里渡船頭老街(機車停車場)\n要騎上一個鐵板爬坡\n自行考慮風險\n已比對新北市路外公共停車場資訊（新北市政府交通局）（230008）\n來源原名稱：渡船頭平面停車場(八里區公有停車場)\n來源標示為未確認資訊\n有六格重機專用格\n但不知道從哪進怎麼收費",
+    "note": "來源原名稱：八里渡船頭老街(機車停車場)\n要騎上一個鐵板爬坡\n自行考慮風險\n已比對新北市路外公共停車場資訊（新北市政府交通局）（230008）\n來源原名稱：渡船頭平面停車場(八里區公有停車場)\n來源標示為未確認資訊\n但不知道從哪進怎麼收費",
     "address": "新北市八里區龍米路2段156號對面",
+    "parking_guide": "有六格重機專用格",
     "parking_zones": [
       {
         "name": "機車區",
@@ -24154,9 +24420,10 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "低調\n屬於停車場應可停機車格\n有看過停汽車格的車友\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE1459）",
+    "note": "低調\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE1459）",
     "address": "臺北市北投區捷運忠義站2號出口旁",
     "entrance_note": "無柵欄機車區免費",
+    "parking_guide": "屬於停車場應可停機車格\n有看過停汽車格的車友",
     "parking_zones": [
       {
         "name": "機車區",
@@ -24244,7 +24511,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "2026/8/1 試辦比照機車費率\n可斜停兩格",
+    "note": "2026/8/1 試辦比照機車費率",
+    "parking_guide": "可斜停兩格",
     "parking_zones": [
       {
         "name": "機車區",
@@ -24265,6 +24533,7 @@
     "district": "三民區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "每日 15 元（大型重機比照機車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -24273,7 +24542,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "2026/8/1 試辦比照機車費率\n可斜停兩格",
+    "note": "2026/8/1 試辦比照機車費率",
+    "parking_guide": "可斜停兩格",
     "parking_zones": [
       {
         "name": "機車區",
@@ -24302,7 +24572,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "2026/8/1 試辦比照機車費率\n可斜停兩格",
+    "note": "2026/8/1 試辦比照機車費率",
+    "parking_guide": "可斜停兩格",
     "parking_zones": [
       {
         "name": "機車區",
@@ -24331,7 +24602,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "2026/8/1 試辦比照機車費率\n可斜停兩格",
+    "note": "2026/8/1 試辦比照機車費率",
+    "parking_guide": "可斜停兩格",
     "parking_zones": [
       {
         "name": "機車區",
@@ -24360,7 +24632,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "2026/8/1 試辦比照機車費率\n可斜停兩格",
+    "note": "2026/8/1 試辦比照機車費率",
+    "parking_guide": "可斜停兩格",
     "parking_zones": [
       {
         "name": "機車區",
@@ -24501,6 +24774,7 @@
     "district": "中壢區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每日 30 元（大型重機比照機車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
@@ -24509,7 +24783,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "也可停汽車格",
+    "note": "",
+    "parking_guide": "也可停汽車格",
     "parking_zones": [
       {
         "name": "機車區",
@@ -24647,7 +24922,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "這是舊版台北市重機格，費率比照小型車",
+    "note": "",
+    "parking_guide": "這是舊版台北市重機格，費率比照小型車",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -24959,7 +25235,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "2026/04/10\n重機專用格三格",
+    "note": "2026/04/10",
+    "parking_guide": "重機專用格三格",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -25480,7 +25757,7 @@
   },
   {
     "id": "b383071d-4956-531f-98d9-61f8c032b462",
-    "name": "仁愛路4段 普大共用機車格",
+    "name": "普通大型共用機車格",
     "lat": 25.037735,
     "lng": 121.560326,
     "city": "臺北市",
@@ -25497,8 +25774,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n信義區 仁愛路4段（北側），停車格在靠近逸仙路與仁愛路四段路口這一段，並非仁愛路四段整排都可以停放。",
-    "road_segment": "仁愛路4段（北側）靠近逸仙路與仁愛路四段路口這一段",
+    "note": "來源標示為特殊收費或管理方式",
+    "parking_guide": "信義區 仁愛路4段（北側），停車格在靠近逸仙路與仁愛路四段路口這一段，並非仁愛路四段整排都可以停放。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -26076,8 +26353,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
+    "note": "來源標示為特殊收費或管理方式",
     "road_segment": "新知八路",
+    "parking_guide": "開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -26101,8 +26379,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n新莊路214巷(中正路至景德路)\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
+    "note": "來源標示為特殊收費或管理方式\n新莊路214巷(中正路至景德路)",
     "road_segment": "新莊路214巷(中正路至景德路)",
+    "parking_guide": "開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -26126,8 +26405,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/03 新北試辦重機停收費機車格\n中華路1段(中正路至中華路1段63巷)\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
+    "note": "來源標示為特殊收費或管理方式\n中華路1段(中正路至中華路1段63巷)",
     "road_segment": "中華路一段",
+    "parking_guide": "2026/03 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -26151,8 +26431,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/03 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
+    "note": "來源標示為特殊收費或管理方式",
     "road_segment": "民權路61巷",
+    "parking_guide": "2026/03 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -26176,8 +26457,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/03 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
+    "note": "來源標示為特殊收費或管理方式",
     "road_segment": "三民路98巷",
+    "parking_guide": "2026/03 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -26201,8 +26483,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/03 新北試辦重機停收費機車格\n長樂路237巷(長興路至長樂路)\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
+    "note": "來源標示為特殊收費或管理方式\n長樂路237巷(長興路至長樂路)",
     "road_segment": "長樂路237巷",
+    "parking_guide": "2026/03 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -26226,8 +26509,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/03 新北試辦重機停收費機車格\n長樂路(三民路至長樂路237巷)\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
+    "note": "來源標示為特殊收費或管理方式\n長樂路(三民路至長樂路237巷)",
     "road_segment": "長樂路",
+    "parking_guide": "2026/03 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -26251,8 +26535,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/03 新北試辦重機停收費機車格\n三民路\n(單號側：民族路548巷至長興路\n雙號側：三民路300巷至長興路)\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
+    "note": "來源標示為特殊收費或管理方式\n三民路\n(單號側：民族路548巷至長興路\n雙號側：三民路300巷至長興路)",
     "road_segment": "三民路",
+    "parking_guide": "2026/03 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -26276,8 +26561,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/03 新北試辦重機停收費機車格\n中正路\n(單號側：中正路439號至三民路\n雙號側：中正路410號至三民路)\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
+    "note": "來源標示為特殊收費或管理方式\n中正路\n(單號側：中正路439號至三民路\n雙號側：中正路410號至三民路)",
     "road_segment": "中正路",
+    "parking_guide": "2026/03 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -26301,8 +26587,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/03 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
+    "note": "來源標示為特殊收費或管理方式",
     "road_segment": "復興路",
+    "parking_guide": "2026/03 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -26326,8 +26613,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/03 新北試辦重機停收費機車格\n三泰路(莊泰路至貴子路)\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
+    "note": "來源標示為特殊收費或管理方式\n三泰路(莊泰路至貴子路)",
     "road_segment": "三泰路(莊泰路至貴子路)",
+    "parking_guide": "2026/03 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -26351,8 +26639,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/03 新北試辦重機停收費機車格\n思源路單號側(中正路至思源路61巷)\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
+    "note": "來源標示為特殊收費或管理方式\n思源路單號側(中正路至思源路61巷)",
     "road_segment": "思源路單號側(中正路至思源路61巷)",
+    "parking_guide": "2026/03 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -26376,8 +26665,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/03 新北試辦重機停收費機車格\n中正路(化成路至思源路)\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
+    "note": "來源標示為特殊收費或管理方式\n中正路(化成路至思源路)\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
     "road_segment": "中正路(化成路至思源路)",
+    "parking_guide": "2026/03 新北試辦重機停收費機車格",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -26401,8 +26691,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/03 新北試辦重機停收費機車格\n貴子路67巷\n貴子路67巷對面新闢道路\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
+    "note": "來源標示為特殊收費或管理方式\n貴子路67巷\n貴子路67巷對面新闢道路\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
     "road_segment": "貴子路67巷",
+    "parking_guide": "2026/03 新北試辦重機停收費機車格",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -26426,8 +26717,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/03 新北試辦重機停收費機車格\n泰林路2段2號對面空地\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
+    "note": "來源標示為特殊收費或管理方式\n泰林路2段2號對面空地\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
     "road_segment": "泰林路二段2號",
+    "parking_guide": "2026/03 新北試辦重機停收費機車格",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -26451,8 +26743,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/03 新北試辦重機停收費機車格\n新北大道4段437號旁空地\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
+    "note": "來源標示為特殊收費或管理方式\n新北大道4段437號旁空地\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
     "road_segment": "新北大道四段437號",
+    "parking_guide": "2026/03 新北試辦重機停收費機車格",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -26476,8 +26769,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/03 新北試辦重機停收費機車格\n八德路(文化三路1段至文化二路1段)\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
+    "note": "來源標示為特殊收費或管理方式\n八德路(文化三路1段至文化二路1段)\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
     "road_segment": "八德路",
+    "parking_guide": "2026/03 新北試辦重機停收費機車格",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -26501,8 +26795,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/03 新北試辦重機停收費機車格\n三民路(保和街至得勝街)\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
+    "note": "來源標示為特殊收費或管理方式\n三民路(保和街至得勝街)\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
     "road_segment": "三民路(保和街至得勝街)",
+    "parking_guide": "2026/03 新北試辦重機停收費機車格",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -26526,8 +26821,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
+    "note": "來源標示為特殊收費或管理方式\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
     "road_segment": "忠承路(忠義路至承天路)起",
+    "parking_guide": "2026/05 新北試辦重機停收費機車格",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -26551,8 +26847,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
+    "note": "來源標示為特殊收費或管理方式\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
     "road_segment": "忠承路(忠義路至承天路)訖",
+    "parking_guide": "2026/05 新北試辦重機停收費機車格",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -26576,8 +26873,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
+    "note": "來源標示為特殊收費或管理方式\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
     "road_segment": "承天路(中央路3段至承天路43巷)起",
+    "parking_guide": "2026/05 新北試辦重機停收費機車格",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -26601,8 +26899,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
+    "note": "來源標示為特殊收費或管理方式\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
     "road_segment": "承天路(中央路3段至承天路43巷)訖",
+    "parking_guide": "2026/05 新北試辦重機停收費機車格",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -26626,8 +26925,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
+    "note": "來源標示為特殊收費或管理方式\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
     "road_segment": "中央路3段(中華路至大安路)起",
+    "parking_guide": "2026/05 新北試辦重機停收費機車格",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -26651,8 +26951,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
+    "note": "來源標示為特殊收費或管理方式\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
     "road_segment": "中央路3段(中華路至大安路)訖",
+    "parking_guide": "2026/05 新北試辦重機停收費機車格",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -26676,8 +26977,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
+    "note": "來源標示為特殊收費或管理方式\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
     "road_segment": "海山路",
+    "parking_guide": "2026/05 新北試辦重機停收費機車格",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -26701,7 +27003,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
+    "note": "來源標示為特殊收費或管理方式\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
+    "parking_guide": "2026/05 新北試辦重機停收費機車格",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -26725,8 +27028,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
+    "note": "來源標示為特殊收費或管理方式\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
     "road_segment": "中央路4段53號周邊道路",
+    "parking_guide": "2026/05 新北試辦重機停收費機車格",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -26750,8 +27054,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
+    "note": "來源標示為特殊收費或管理方式\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
     "road_segment": "中央路4段(大暖路至中央路4段136巷)訖",
+    "parking_guide": "2026/05 新北試辦重機停收費機車格",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -26775,8 +27080,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
+    "note": "來源標示為特殊收費或管理方式\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
     "road_segment": "科技路",
+    "parking_guide": "2026/05 新北試辦重機停收費機車格",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -26800,8 +27106,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
+    "note": "來源標示為特殊收費或管理方式\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
     "road_segment": "大暖路",
+    "parking_guide": "2026/05 新北試辦重機停收費機車格",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -26825,8 +27132,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
+    "note": "來源標示為特殊收費或管理方式\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
     "road_segment": "中和路(雙號側：永貞路至宜安路)起",
+    "parking_guide": "2026/05 新北試辦重機停收費機車格",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -26875,8 +27183,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
+    "note": "來源標示為特殊收費或管理方式",
     "road_segment": "四維街",
+    "parking_guide": "2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -26925,8 +27234,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
+    "note": "來源標示為特殊收費或管理方式",
     "road_segment": "永和路2段(文化路、竹林路口至中山路1段、中正路口)訖",
+    "parking_guide": "2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -26950,8 +27260,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
+    "note": "來源標示為特殊收費或管理方式",
     "road_segment": "新市三路一段",
+    "parking_guide": "2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -26975,8 +27286,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
+    "note": "來源標示為特殊收費或管理方式",
     "road_segment": "崁頂三路",
+    "parking_guide": "2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -27000,8 +27312,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
+    "note": "來源標示為特殊收費或管理方式",
     "road_segment": "崁頂五路279巷",
+    "parking_guide": "2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -27025,8 +27338,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
+    "note": "來源標示為特殊收費或管理方式",
     "road_segment": "崁頂五路",
+    "parking_guide": "2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -27050,8 +27364,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
+    "note": "來源標示為特殊收費或管理方式",
     "road_segment": "濱海路一段",
+    "parking_guide": "2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -27075,8 +27390,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
+    "note": "來源標示為特殊收費或管理方式",
     "road_segment": "新市一路三段101巷",
+    "parking_guide": "2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -27100,8 +27416,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
+    "note": "來源標示為特殊收費或管理方式",
     "road_segment": "中山北路二段381巷",
+    "parking_guide": "2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -27125,8 +27442,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
+    "note": "來源標示為特殊收費或管理方式",
     "road_segment": "中山北路二段",
+    "parking_guide": "2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -27150,8 +27468,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
+    "note": "來源標示為特殊收費或管理方式",
     "road_segment": "中正東路2段71號旁道路",
+    "parking_guide": "2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -27175,8 +27494,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
+    "note": "來源標示為特殊收費或管理方式",
     "road_segment": "義山路二段",
+    "parking_guide": "2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -27200,8 +27520,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
+    "note": "來源標示為特殊收費或管理方式",
     "road_segment": "新市三路二段",
+    "parking_guide": "2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -27225,7 +27546,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/05 新北試辦重機停收費機車格\n***非停車場內，是路邊收費停車格***\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
+    "note": "來源標示為特殊收費或管理方式\n***非停車場內，是路邊收費停車格***",
+    "parking_guide": "2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -27249,8 +27571,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n2026/05 新北試辦重機停收費機車格\n中正路(含財政部國稅局淡水稽徵所第二辦公室旁土地及淡水區紅毛城段976地號)\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
+    "note": "來源標示為特殊收費或管理方式\n中正路(含財政部國稅局淡水稽徵所第二辦公室旁土地及淡水區紅毛城段976地號)",
     "road_segment": "中正路",
+    "parking_guide": "2026/05 新北試辦重機停收費機車格\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -28449,8 +28772,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
+    "note": "來源標示為特殊收費或管理方式",
     "road_segment": "貴陽街(新北大道6段至明志路3段)",
+    "parking_guide": "開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -28474,8 +28798,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
+    "note": "來源標示為特殊收費或管理方式",
     "road_segment": "貴陽街(新北大道6段至明志路3段)",
+    "parking_guide": "開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -28499,8 +28824,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
+    "note": "來源標示為特殊收費或管理方式",
     "road_segment": "明志路三段(明志路3段352巷至432巷)",
+    "parking_guide": "開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -28524,8 +28850,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
+    "note": "來源標示為特殊收費或管理方式",
     "road_segment": "明志路三段(明志路3段352巷至432巷)",
+    "parking_guide": "開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -28549,8 +28876,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
+    "note": "來源標示為特殊收費或管理方式",
     "road_segment": "景平路單號側(景安路至景平路241巷)",
+    "parking_guide": "開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -28574,8 +28902,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
+    "note": "來源標示為特殊收費或管理方式",
     "road_segment": "景平路單號側(景安路至景平路241巷)",
+    "parking_guide": "開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -28599,8 +28928,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
+    "note": "來源標示為特殊收費或管理方式",
     "road_segment": "景安路(景平路至安和路)",
+    "parking_guide": "開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -28624,8 +28954,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
+    "note": "來源標示為特殊收費或管理方式",
     "road_segment": "景安路(景平路至安和路)",
+    "parking_guide": "開放大型重機停放路邊收費機車格，停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -28649,7 +28980,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "這是舊版台北市重機格，費率比照小型車",
+    "note": "",
+    "parking_guide": "這是舊版台北市重機格，費率比照小型車",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -28673,8 +29005,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
+    "note": "來源標示為特殊收費或管理方式",
     "road_segment": "中信街(中央路至新北大道)",
+    "parking_guide": "停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -28698,8 +29031,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
+    "note": "來源標示為特殊收費或管理方式",
     "road_segment": "中信街(中央路至新北大道)",
+    "parking_guide": "停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -28723,8 +29057,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
+    "note": "來源標示為特殊收費或管理方式",
     "road_segment": "中央路",
+    "parking_guide": "停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -28748,8 +29083,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
+    "note": "來源標示為特殊收費或管理方式",
     "road_segment": "中央路",
+    "parking_guide": "停放機車格時車身均不得超出格線，若車身太長，可採跨2格停放，但仍須停妥於格線內，避免影響其他車輛停放與行車安全。",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準"
@@ -31268,9 +31604,10 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：嘟嘟房(西門漢口站)\n2024年9月起禁止大型重機停放\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE1527）",
+    "note": "來源原名稱：嘟嘟房(西門漢口站)\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE1527）",
     "address": "臺北市萬華區中華路1段88號地下1至5層",
     "entrance_note": "來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）",
+    "parking_guide": "2024年9月起禁止大型重機停放",
     "special_rules": "來源回報禁止大型重機停放",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
@@ -31337,6 +31674,7 @@
     "district": "淡水區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "請依現場公告",
     "heavy_allowed": false,
     "scooter_allowed": null,
@@ -31369,8 +31707,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "機械車位因安全理由禁止停放，請至123巷機車停車場",
+    "note": "",
     "entrance_note": "來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）",
+    "parking_guide": "機械車位因安全理由禁止停放，請至123巷機車停車場",
     "special_rules": "來源回報禁止大型重機停放",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
@@ -31385,6 +31724,7 @@
     "district": "新竹市",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "每次 2023 元起禁止停機車場",
     "heavy_allowed": false,
     "scooter_allowed": null,
@@ -31409,6 +31749,7 @@
     "district": "大同區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "請依現場公告",
     "heavy_allowed": false,
     "scooter_allowed": null,
@@ -31433,6 +31774,7 @@
     "district": "中正區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "請依現場公告",
     "heavy_allowed": false,
     "scooter_allowed": null,
@@ -31465,9 +31807,10 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：宏泰交易(二號)廣場\n請至對面一號廣場停放\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE1054）",
+    "note": "來源原名稱：宏泰交易(二號)廣場\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE1054）",
     "address": "臺北市信義區松仁路97號地下3至5層",
     "entrance_note": "來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）",
+    "parking_guide": "請至對面一號廣場停放",
     "special_rules": "來源回報禁止大型重機停放",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
@@ -31482,6 +31825,7 @@
     "district": "中山區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "請依現場公告",
     "heavy_allowed": false,
     "scooter_allowed": null,
@@ -31506,6 +31850,7 @@
     "district": "中山區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "請依現場公告",
     "heavy_allowed": false,
     "scooter_allowed": null,
@@ -31562,8 +31907,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "臺北市內湖運動中心 停車場 禁止停放",
+    "note": "",
     "entrance_note": "來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）",
+    "parking_guide": "臺北市內湖運動中心 停車場 禁止停放",
     "special_rules": "來源回報禁止大型重機停放",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
@@ -31578,6 +31924,7 @@
     "district": "永康區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "請依現場公告",
     "heavy_allowed": false,
     "scooter_allowed": null,
@@ -31586,8 +31933,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "禁止停放 門口立牌表明不給重機停",
+    "note": "",
     "entrance_note": "來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）",
+    "parking_guide": "禁止停放 門口立牌表明不給重機停",
     "special_rules": "來源回報禁止大型重機停放",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
@@ -31626,6 +31974,7 @@
     "district": "北區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "請依現場公告",
     "heavy_allowed": false,
     "scooter_allowed": null,
@@ -31650,6 +31999,7 @@
     "district": "中區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "請依現場公告",
     "heavy_allowed": false,
     "scooter_allowed": null,
@@ -31682,9 +32032,10 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：嘟嘟房停車場捷運南港展覽館站（機車）\n雙北捷運系統不允許重機停機車格\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0791）",
+    "note": "來源原名稱：嘟嘟房停車場捷運南港展覽館站（機車）\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0791）",
     "address": "臺北市南港區研究院路1段1號地下1層",
     "entrance_note": "來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）",
+    "parking_guide": "雙北捷運系統不允許重機停機車格",
     "special_rules": "來源回報禁止大型重機停放",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
@@ -31755,8 +32106,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "機車區可進但會被貼警告單",
+    "note": "",
     "entrance_note": "來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）",
+    "parking_guide": "機車區可進但會被貼警告單",
     "special_rules": "來源回報禁止大型重機停放",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
@@ -31870,6 +32222,7 @@
     "district": "板橋區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "請依現場公告",
     "heavy_allowed": false,
     "scooter_allowed": null,
@@ -31903,9 +32256,10 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：富邦金融中心停車場\n24年6月起禁止停放\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0468）",
+    "note": "來源原名稱：富邦金融中心停車場\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0468）",
     "address": "臺北市大安區仁愛路4段169號地下2至6層",
     "entrance_note": "來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）\n重機獨立費率 80/h 後牌辨析",
+    "parking_guide": "24年6月起禁止停放",
     "special_rules": "來源回報禁止大型重機停放",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
@@ -32173,8 +32527,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "機車格 機車費率\n以上只是歷史現在禁止停重機",
+    "note": "以上只是歷史現在禁止停重機",
     "entrance_note": "來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）",
+    "parking_guide": "機車格 機車費率",
     "special_rules": "來源回報禁止大型重機停放",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
@@ -32239,6 +32594,7 @@
     "district": "大安區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "請依現場公告",
     "heavy_allowed": false,
     "scooter_allowed": null,
@@ -32311,6 +32667,7 @@
     "district": "大同區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "請依現場公告",
     "heavy_allowed": false,
     "scooter_allowed": null,
@@ -32488,9 +32845,10 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源原名稱：辛亥路一段100號機車停車場\n紅牌原本停放於此停車場，已於115/8/22被開違規停車單\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE1765）",
+    "note": "來源原名稱：辛亥路一段100號機車停車場\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE1765）",
     "address": "臺北市大安區辛亥路1段100號對面",
     "entrance_note": "來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）",
+    "parking_guide": "紅牌原本停放於此停車場，已於115/8/22被開違規停車單",
     "special_rules": "來源回報禁止大型重機停放",
     "source_name": "Alan大重停車記事（Google 我的地圖）",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
@@ -32690,6 +33048,7 @@
     "district": "南港區",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "underground",
     "fee_note": "每小時 30 元",
     "heavy_allowed": null,
     "scooter_allowed": null,
@@ -33139,8 +33498,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為未確認資訊\n應該是停機車格+機車費率",
+    "note": "來源標示為未確認資訊",
     "entrance_note": "走機車道進場，汽車道無後牌辨識",
+    "parking_guide": "應該是停機車格+機車費率",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -33160,6 +33520,7 @@
     "district": "恆春鎮",
     "source": "import",
     "space_type": "offStreet",
+    "facility_type": "multiStorey",
     "fee_note": "請依現場公告",
     "heavy_allowed": null,
     "scooter_allowed": null,
@@ -33313,8 +33674,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為未確認資訊\n應該可以免費停機車區，未發現禁止重機\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE1040）",
+    "note": "來源標示為未確認資訊\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE1040）",
     "address": "臺北市北投區竹子湖路座標25.17933,121.54440",
+    "parking_guide": "應該可以免費停機車區，未發現禁止重機",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -33342,7 +33704,8 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為未確認資訊\n疑似停機車格會收汽車費率\n請各位車友有機會的話再回報",
+    "note": "來源標示為未確認資訊\n請各位車友有機會的話再回報",
+    "parking_guide": "疑似停機車格會收汽車費率",
     "parking_zones": [
       {
         "name": "汽車區",

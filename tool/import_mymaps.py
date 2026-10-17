@@ -74,6 +74,8 @@ FEE_BASIS = {
 CREDIT = re.compile(r"(感謝|謝謝).*|.*(@ptt|@PTT).*|.*熱心回報.*|.*網友.*(回報|分享).*")
 URL = re.compile(r"https?://\S+")
 ENTRY = re.compile(r"入場|出場|進場|離場|辨識|辨析|按鈴|按鈕|取票|柵欄|閘門|車道|入口|出入口|倒退嚕|管理員")
+# Where to put the bike once inside: floors, areas, bay types, how to fit the bays.
+GUIDE = re.compile(r"停(放|在|於)|專用格|重機格|重機區|機車區|汽車區|汽車格|機車格|[BbＢ]\d|\d\s*[FＦ樓]|斜停|跨.?格|格線")
 # Operator brands and parking words say nothing about which lot a name means.
 GENERIC = re.compile(
     r"(?i)嘟嘟房|city ?parking|城市車旅|times|168 ?parking|168停車聯盟|正好停|俥亭|uspace|台灣聯通|富山停車|歐特儀|康達盛通|吉拾|"
@@ -164,7 +166,10 @@ def normalize(mark):
         "entrance_note": "", "parking_guide": "", "special_rules": "", "parking_zones": [],
     }
     entries = [line for line in lines if ENTRY.search(line)]
-    others = [line for line in lines if line not in entries]
+    # Long lines are policy paragraphs, not on-site directions.
+    guides = [line for line in lines if line not in entries and GUIDE.search(line) and len(line) <= 60]
+    others = [line for line in lines if line not in entries + guides]
+    spot["parking_guide"] = "\n".join(guides)
     if layer == "路邊友善車格":
         spot["facility_type"] = "roadside"
         if mark["line"]:
@@ -182,9 +187,9 @@ def normalize(mark):
                 spot.update(name=f"{road[1]} 普大共用機車格", road_segment=f"{road[1]}（{road[2]}）{road[3]}")
             elif name != "普通大型共用機車格" and re.search(r"[路街巷段]", name):
                 spot.update(road_segment=name, name=f"{re.split(r'[(（]', name)[0]} 普大共用機車格")
-        spot["note"] = "\n".join(lines)
+        spot["note"] = "\n".join(entries + others)
     else:
-        spot.update(space_type="offStreet")
+        spot.update(space_type="offStreet", facility_type=facility_type(name))
         if layer == "禁停重機" or icon == "1898":
             spot.update(heavy_allowed=False, special_rules="來源回報禁止大型重機停放")
         elif layer == "未確定":
@@ -247,7 +252,7 @@ def similarity(a, b):
 
 
 def facility_type(text):
-    for pattern, kind in (("地下", "underground"), ("立體|塔|大樓|機械|建築", "multiStorey"), ("平面|橋下|露天|廣場", "surface")):
+    for pattern, kind in (("地下", "underground"), ("立體|塔|大樓|機械|建築", "multiStorey"), ("平面|橋下|露天", "surface")):
         if re.search(pattern, text):
             return kind
     return None
@@ -381,7 +386,7 @@ def merge(kept, spot):
     """Placemarks for one facility (car area, motorcycle area…) become zones of one spot."""
     names = {zone["name"] for zone in kept["parking_zones"]}
     kept["parking_zones"] += [zone for zone in spot["parking_zones"] if zone["name"] not in names]
-    for key in ("entrance_note", "note", "special_rules"):
+    for key in ("entrance_note", "parking_guide", "note", "special_rules"):
         lines = kept[key].splitlines()
         kept[key] = "\n".join(lines + [line for line in spot[key].splitlines() if line not in lines])
     if None not in (kept["heavy_allowed"], spot["heavy_allowed"]) and kept["heavy_allowed"] != spot["heavy_allowed"]:
@@ -396,7 +401,7 @@ def merge(kept, spot):
 def clip(spot):
     """Database limits: name 1–100, fee_note ≤200, note ≤500 characters."""
     spot["name"] = re.sub(r"〔.*?〕|\s+", " ", spot["name"]).strip()[:100] or "匯入停車點"
-    for key, limit in (("fee_note", 200), ("note", 500), ("entrance_note", 500), ("special_rules", 500)):
+    for key, limit in (("fee_note", 200), ("note", 500), ("entrance_note", 500), ("parking_guide", 500), ("special_rules", 500)):
         if len(spot[key]) > limit:
             spot[key] = spot[key][:limit - 1] + "…"
 
@@ -478,7 +483,8 @@ def build(kml, mid, cache, imported_on, refresh=False):
              "fee_note", "heavy_allowed", "scooter_allowed", "status", "scooter_total", "available", "updated_at",
              "last_confirmed_at", "note", "address", "road_segment", "entrance_note", "parking_guide", "special_rules",
              "parking_zones", "source_name", "source_url", "license_note"]
-    spots = [{k: s[k] for k in order if k in s and (s[k] not in ("", []) or k == "note")} for s in spots]
+    nullable = {"heavy_allowed", "scooter_allowed", "scooter_total", "available", "last_confirmed_at", "note"}
+    spots = [{k: s[k] for k in order if k in s and (s[k] not in ("", [], None) or k in nullable)} for s in spots]
     return spots, report, skipped
 
 

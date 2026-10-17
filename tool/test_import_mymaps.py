@@ -43,11 +43,14 @@ class NormalizeTest(unittest.TestCase):
         self.assertEqual(clean_text(text), ["機車道入場", "有重機專用格"])
 
     def test_off_street_layers_map_icons_to_zones(self):
-        spot = normalize(mark("重機格/汽車費率", "(40/h)樂活公園地下停車場", icon="1633", description="汽車道入場"))
+        spot = normalize(mark("重機格/汽車費率", "(40/h)樂活公園地下停車場", icon="1633", description="汽車道入場<br>B2 有重機專用格三格<br>週末人多"))
         self.assertEqual(spot["space_type"], "offStreet")
         self.assertEqual(spot["parking_zones"], [{"name": "重機專用格", "access": "heavyOnly", "fee_note": "每小時 40 元"}])
         self.assertEqual(spot["fee_note"], "每小時 40 元（重機專用格比照汽車費率）")
         self.assertEqual(spot["entrance_note"], "汽車道入場")
+        self.assertEqual(spot["parking_guide"], "B2 有重機專用格三格")
+        self.assertEqual(spot["note"], "週末人多")
+        self.assertEqual(spot["facility_type"], "underground")
         self.assertIs(spot["heavy_allowed"], True)
 
     def test_banned_and_unverified_layers_do_not_claim_access(self):
@@ -108,7 +111,7 @@ class OfficialTest(unittest.TestCase):
 
     def test_merge_treats_unknown_as_missing_not_conflict(self):
         def spot(heavy, zone):
-            return {"heavy_allowed": heavy, "parking_zones": [{"name": zone}], "entrance_note": "", "note": "", "special_rules": ""}
+            return {"heavy_allowed": heavy, "parking_zones": [{"name": zone}], "entrance_note": "", "parking_guide": "", "note": "", "special_rules": ""}
         kept = spot(None, "汽車區")
         self.assertEqual(merge(kept, spot(True, "機車區")), "")
         self.assertIs(kept["heavy_allowed"], True)
