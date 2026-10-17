@@ -1,11 +1,14 @@
 """Check My Maps normalization rules and the committed import against database limits."""
 import json
+import os
 from pathlib import Path
+import tempfile
 import unittest
+from unittest.mock import patch
 
 from import_mymaps import (
     PILOT_RULES, TAIPEI_PILOT, TAIPEI_ROADSIDE, apply_official, apply_taipei_rules, clean_text, lot, match_lot, merge,
-    normalize, parse_fee, split_name, tm2_to_wgs84,
+    normalize, parse_fee, split_name, tdx_credentials, tm2_to_wgs84,
 )
 
 DATA = Path(__file__).resolve().parent.parent / "data/imports/google-mymaps/spots.json"
@@ -148,6 +151,21 @@ class OfficialTest(unittest.TestCase):
         self.assertEqual([z["name"] for z in kept["parking_zones"]], ["汽車區", "機車區"])
         self.assertTrue(merge(kept, spot(False, "機車區")).startswith("待人工確認"))
         self.assertIsNone(kept["heavy_allowed"])
+
+
+class TdxCredentialTest(unittest.TestCase):
+    def test_environment_overrides_env_file_and_missing_values_skip_tdx(self):
+        with tempfile.TemporaryDirectory() as directory:
+            env = Path(directory) / ".env"
+            env.write_text("TDX_MODE=fixture\nTDX_CLIENT_ID=file-id\nTDX_CLIENT_SECRET=file-secret\n")
+            with patch.dict(os.environ, {}, clear=True):
+                self.assertEqual(tdx_credentials(env), ("file-id", "file-secret"))
+            with patch.dict(os.environ, {"TDX_CLIENT_ID": "env-id", "TDX_CLIENT_SECRET": "env-secret"}, clear=True):
+                self.assertEqual(tdx_credentials(env), ("env-id", "env-secret"))
+            env.write_text("TDX_CLIENT_ID=\nTDX_CLIENT_SECRET=\n")
+            with patch.dict(os.environ, {}, clear=True):
+                self.assertIsNone(tdx_credentials(env))
+                self.assertIsNone(tdx_credentials(Path(directory) / "missing.env"))
 
 
 class ImportedDataTest(unittest.TestCase):

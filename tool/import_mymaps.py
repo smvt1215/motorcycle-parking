@@ -10,9 +10,13 @@ from datetime import date
 import html
 import json
 import math
+import os
 from pathlib import Path
 import re
 import ssl
+import time
+import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 import xml.etree.ElementTree as ET
@@ -364,18 +368,104 @@ def hsinchu(cache, refresh):
                 motor=number(r["機車總車位數"])) for n, r in enumerate(rows) if r["緯度"] and r["經度"]]
 
 
+TDX_TOKEN = "https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token"
+TDX_API = "https://tdx.transportdata.tw/api/basic/v1/Parking/OffStreet/{kind}/City/{city}?$format=JSON&$top=1000&$skip={skip}"
+TDX_INTERVAL = 13  # seconds; TDX allows 5 requests per minute per key
+TDX_SOURCE = "TDX 路外停車場（交通部運輸資料流通服務平臺）"
+TDX_CITIES = {
+    "臺北市": "Taipei", "新北市": "NewTaipei", "桃園市": "Taoyuan", "臺中市": "Taichung", "臺南市": "Tainan", "高雄市": "Kaohsiung",
+    "基隆市": "Keelung", "新竹市": "Hsinchu", "新竹縣": "HsinchuCounty", "苗栗縣": "MiaoliCounty", "彰化縣": "ChanghuaCounty",
+    "南投縣": "NantouCounty", "雲林縣": "YunlinCounty", "嘉義市": "Chiayi", "嘉義縣": "ChiayiCounty", "屏東縣": "PingtungCounty",
+    "宜蘭縣": "YilanCounty", "花蓮縣": "HualienCounty", "臺東縣": "TaitungCounty", "金門縣": "KinmenCounty",
+    "澎湖縣": "PenghuCounty", "連江縣": "LienchiangCounty",
+}
+
+
+def tdx_credentials(env_file):
+    """Environment first, then the gitignored Edge Function env file; values are never printed."""
+    values = {}
+    if env_file and env_file.exists():
+        for line in env_file.read_text().splitlines():
+            key, _, value = line.partition("=")
+            values[key.strip()] = value.strip().strip('"')
+    pick = lambda key: os.environ.get(key) or values.get(key)
+    return (pick("TDX_CLIENT_ID"), pick("TDX_CLIENT_SECRET")) if pick("TDX_CLIENT_ID") and pick("TDX_CLIENT_SECRET") else None
+
+
+def tdx_rows(token, kind, city, path, refresh):
+    if refresh or not path.exists():
+        rows, skip = [], 0
+        while True:
+            request = urllib.request.Request(TDX_API.format(kind=kind, city=city, skip=skip), headers={"Authorization": f"Bearer {token}"})
+            for attempt in range(4):
+                time.sleep(TDX_INTERVAL)
+                try:
+                    with urllib.request.urlopen(request, timeout=60) as response:
+                        page = json.loads(response.read())
+                    break
+                except urllib.error.HTTPError as error:
+                    if error.code != 429 or attempt == 3:
+                        raise
+                    time.sleep(int(error.headers.get("Retry-After") or 60))
+            # v1 wraps rows with update metadata: {"UpdateTime": …, "CarParks": [...]}.
+            page = page if isinstance(page, list) else next(v for v in page.values() if isinstance(v, list))
+            rows += page
+            if len(page) < 1000:
+                break
+            skip += 1000
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(rows, ensure_ascii=False))
+    return json.loads(path.read_text())
+
+
+def tdx_lots(cache, refresh, credentials):
+    """Every city's TDX off-street lots and per-city failures; one bearer token covers the whole run."""
+    body = urllib.parse.urlencode({"grant_type": "client_credentials", "client_id": credentials[0], "client_secret": credentials[1]}).encode()
+    with urllib.request.urlopen(urllib.request.Request(TDX_TOKEN, data=body), timeout=30) as response:
+        token = json.loads(response.read())["access_token"]
+    lots, failed = {}, []
+    for name, city in TDX_CITIES.items():
+        try:
+            parks = tdx_rows(token, "CarPark", city, cache / "tdx" / f"{city}_CarPark.json", refresh)
+            spaces = {row["CarParkID"]: row.get("Spaces") or [] for row in
+                      tdx_rows(token, "ParkingSpace", city, cache / "tdx" / f"{city}_ParkingSpace.json", refresh)}
+        except urllib.error.HTTPError as error:
+            failed.append(f"TDX {name}：HTTP {error.code}")  # the URL is safe, but keep reports minimal
+            continue
+        lots[name] = [
+            lot(f"TDX-{row['CarParkID']}", (row.get("CarParkName") or {}).get("Zh_tw", ""),
+                (row.get("CarParkPosition") or {}).get("PositionLat"), (row.get("CarParkPosition") or {}).get("PositionLon"),
+                row.get("Address") or "", row.get("FareDescription") or "",
+                motor=sum(int(s.get("NumberOfSpaces") or 0) for s in spaces.get(row["CarParkID"], []) if int(s.get("SpaceType") or 0) == 2))
+            | {"source": TDX_SOURCE}
+            for row in parks if (row.get("CarParkPosition") or {}).get("PositionLat")
+        ]
+    return lots, failed
+
+
 LOADERS = {"臺北市": taipei, "新北市": new_taipei, "臺中市": taichung, "桃園市": taoyuan, "高雄市": kaohsiung, "臺南市": tainan, "新竹市": hsinchu}
 
 
-def official_lots(cache, refresh=False):
+def official_lots(cache, refresh=False, tdx_env=None):
     """City → official lots with WGS84 coordinates; a source that fails is reported, not fatal."""
     lots, failed = {}, []
     for city, load in LOADERS.items():
         try:
-            lots[city] = load(cache, refresh)
+            lots[city] = [lot | {"source": OFFICIAL[city][0]} for lot in load(cache, refresh)]
         except (OSError, ValueError, KeyError) as error:
             failed.append(f"{city}：{error}")
             lots[city] = []
+    credentials = tdx_credentials(tdx_env)
+    if not credentials:
+        failed.append("TDX：未設定 TDX_CLIENT_ID／TDX_CLIENT_SECRET，略過")
+        return lots, failed
+    try:
+        tdx, tdx_failed = tdx_lots(cache, refresh, credentials)
+        failed += tdx_failed
+        for city, rows in tdx.items():
+            lots.setdefault(city, []).extend(rows)
+    except (OSError, ValueError, KeyError) as error:
+        failed.append(f"TDX：{type(error).__name__}")  # never echo a request that carried credentials
     return lots, failed
 
 
@@ -521,8 +611,8 @@ def clip(spot):
             spot[key] = spot[key][:limit - 1] + "…"
 
 
-def build(kml, mid, cache, imported_on, refresh=False):
-    lots, failed = official_lots(cache, refresh)
+def build(kml, mid, cache, imported_on, refresh=False, tdx_env=None):
+    lots, failed = official_lots(cache, refresh, tdx_env)
     geo_file = cache / "nlsc.json"
     geo = json.loads(geo_file.read_text()) if geo_file.exists() else {}
     spots, report, skipped, seen = [], [], [], {}
@@ -539,9 +629,15 @@ def build(kml, mid, cache, imported_on, refresh=False):
         if re.fullmatch(r"[\d.,\s]+", spot["name"]):
             spot["name"] = f"{district}{'重機專用格' if spot['parking_zones'] else '停車點'}"
         entry = {"layer": mark["layer"], "source_name": mark["name"]}
-        best = match_lot(spot, lots.get(city, [])) if spot["space_type"] == "offStreet" else None
+        # The city's own dataset first: TDX repeats many of its lots under other ids,
+        # and one id per facility is what merges a facility's placemarks.
+        best = None
+        if spot["space_type"] == "offStreet":
+            city_lots = lots.get(city, [])
+            best = (match_lot(spot, [lot for lot in city_lots if lot["source"] != TDX_SOURCE])
+                    or match_lot(spot, [lot for lot in city_lots if lot["source"] == TDX_SOURCE]))
         if best:
-            entry.update(apply_official(spot, best[1], best[2], best[3], OFFICIAL[city][0]))
+            entry.update(apply_official(spot, best[1], best[2], best[3], best[1]["source"]))
         if city == "臺北市":
             pilot, changes = apply_taipei_rules(spot, entry.get("official_name", ""))
             entry.setdefault("changes", []).extend(changes)
@@ -567,7 +663,8 @@ def build(kml, mid, cache, imported_on, refresh=False):
         spots.append(spot)
         report.append(entry)
     found = {entry.get("pilot") for _, entry in seen.values()}
-    taipei = lots.get("臺北市", [])  # empty when the Taipei dataset failed; the report records why
+    # Pilot sites come from 停管處 data; empty when it failed, and the report records why.
+    taipei = [lot for lot in lots.get("臺北市", []) if lot["source"] == OFFICIAL["臺北市"][0]]
     for pilot, fee in TAIPEI_PILOT.items() if taipei else ():
         lot = max(taipei, key=lambda lot: similarity(pilot, lot["name"]))
         if pilot in found or similarity(pilot, lot["name"]) < 0.8:
@@ -586,7 +683,7 @@ def build(kml, mid, cache, imported_on, refresh=False):
             "space_type": "offStreet", "facility_type": facility_type(lot["name"] + lot["summary"]), "fee_note": lot["fee"][:200],
             "heavy_allowed": True, "scooter_allowed": True, "status": "pending", "scooter_total": lot["motor"] or None,
             "available": None, "updated_at": f"{imported_on}T00:00:00Z", "last_confirmed_at": None,
-            "note": f"官方試辦清單補入，來源地圖未收錄；已比對{OFFICIAL['臺北市'][0]}（{lot['id']}）",
+            "note": f"官方試辦清單補入，來源地圖未收錄；已比對{lot['source']}（{lot['id']}）",
             "address": lot["address"], "special_rules": PILOT_RULES,
             "parking_zones": [{"name": "機車區", "access": "scooterHeavy", "fee_note": f"大型重機{fee}"}],
             "source_name": "臺北市停車管理工程處新聞稿", "source_url": TAIPEI_PILOT_URLS[1], "license_note": "政府資料開放授權條款第 1 版",
@@ -601,10 +698,11 @@ def build(kml, mid, cache, imported_on, refresh=False):
              "parking_zones", "source_name", "source_url", "license_note"]
     nullable = {"heavy_allowed", "scooter_allowed", "scooter_total", "available", "last_confirmed_at", "note"}
     spots = [{k: s[k] for k in order if k in s and (s[k] not in ("", [], None) or k in nullable)} for s in spots]
-    return spots, report, skipped, failed
+    sources = {city: sorted({lot["source"] for lot in rows}) for city, rows in lots.items() if rows}
+    return spots, report, skipped, failed, sources
 
 
-def summary_markdown(spots, report, skipped, imported_on, failed=()):
+def summary_markdown(spots, report, skipped, imported_on, failed=(), sources=None):
     from collections import Counter
     matched = [r for r in report if "official_id" in r]
     lines = [f"# Google 我的地圖匯入查核報告（{imported_on}）", "",
@@ -615,7 +713,7 @@ def summary_markdown(spots, report, skipped, imported_on, failed=()):
     lines += ["", "## 縣市分布與官方比對", "", "| 縣市 | 匯入 | 路外 | 比對成功 | 官方資料 |", "| --- | --- | --- | --- | --- |"]
     for city, count in Counter(s["city"] for s in spots).most_common():
         off = sum(s["city"] == city and s["space_type"] == "offStreet" for s in spots)
-        source = OFFICIAL[city][0] if city in OFFICIAL else "無免金鑰路外停車場資料，僅驗證行政區"
+        source = "、".join((sources or {}).get(city, [])) or "無可用路外停車場資料，僅驗證行政區"
         lines.append(f"| {city} | {count} | {off} | {sum(r['city'] == city for r in matched)} | {source} |")
     lines += ["", "## 類型分布", ""]
     lines += [f"- {kind}：{count}" for kind, count in Counter(s["space_type"] for s in spots).most_common()]
@@ -654,13 +752,15 @@ def main():
     parser.add_argument("--date", default=date.today().isoformat(), help="import date written to updated_at")
     parser.add_argument("--sql-owner", help="also write import.sql owned by this auth user id")
     parser.add_argument("--refresh", action="store_true", help="re-download KML and official datasets")
+    parser.add_argument("--tdx-env", type=Path, default=Path("supabase/functions/.env"),
+                        help="env file with TDX_CLIENT_ID/TDX_CLIENT_SECRET (environment variables take precedence)")
     args = parser.parse_args()
     kml = args.kml or fetch(KML_URL.format(mid=args.mid), args.cache / f"{args.mid}.kml", args.refresh)
-    spots, report, skipped, failed = build(kml, args.mid, args.cache, args.date, args.refresh)
+    spots, report, skipped, failed, sources = build(kml, args.mid, args.cache, args.date, args.refresh, args.tdx_env)
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / "spots.json").write_text(json.dumps(spots, ensure_ascii=False, indent=2) + "\n")
     (args.output / "verification.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
-    (args.output / "REPORT.md").write_text(summary_markdown(spots, report, skipped, args.date, failed))
+    (args.output / "REPORT.md").write_text(summary_markdown(spots, report, skipped, args.date, failed, sources))
     if args.sql_owner:
         (args.cache / "import.sql").write_text(sql(spots, args.sql_owner))
     print(f"Prepared {len(spots)} spots in {args.output}; no database writes performed")
