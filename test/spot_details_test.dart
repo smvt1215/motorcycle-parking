@@ -124,6 +124,40 @@ Future<void> showField(WidgetTester tester, String text) async {
 }
 
 void main() {
+  test('點位只分官方與社群：官方以政府為來源，未核驗匯入為社群回報整理', () {
+    ParkingSpot spot(
+      String source, {
+      String sourceName = '',
+      String city = '新竹市',
+    }) => ParkingSpot(
+      id: '$source-1',
+      name: '測試點',
+      lat: 24.8,
+      lng: 120.97,
+      city: city,
+      spaceType: SpaceType.offStreet,
+      source: source,
+      sourceName: sourceName,
+    );
+    expect(spot('official', sourceName: '新竹市政府').isOfficial, isTrue);
+    expect(spot('tdx').isOfficial, isTrue);
+    expect(spot('import').isOfficial, isFalse);
+    expect(spot('community').isOfficial, isFalse);
+    expect(
+      sourceSummary(spot('official', sourceName: '新竹市政府'), demo: false),
+      '新竹市政府',
+    );
+    expect(sourceSummary(spot('official'), demo: false), '新竹市政府');
+    expect(sourceSummary(spot('tdx'), demo: false), '新竹市政府');
+    expect(sourceSummary(spot('tdx', city: ''), demo: false), '政府公開資料');
+    expect(
+      sourceSummary(spot('import', sourceName: '社群回報整理'), demo: false),
+      '社群回報整理',
+    );
+    expect(sourceSummary(spot('community'), demo: false), '社群回報');
+    expect(trustSummary(spot('import'), demo: false), '待確認');
+  });
+
   test('資料來源連結只接受含主機的完整 HTTP(S) 網址', () {
     for (final url in [
       'https://example.com/parking',

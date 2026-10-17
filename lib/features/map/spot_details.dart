@@ -71,19 +71,22 @@ String availabilitySummary(ParkingSpot spot) {
 String sourceSummary(ParkingSpot spot, {required bool demo}) =>
     demo || spot.source == 'fixture'
     ? '範例資料'
-    : switch (spot.source) {
-        'tdx' => 'TDX 官方資料',
-        'official' => '縣市公告（管理者整理）',
-        'import' =>
-          spot.sourceName.isEmpty ? '授權匯入' : '授權匯入：${spot.sourceName}',
-        _ => '社群回報',
-      };
+    : spot.isOfficial
+    // Official data is credited to the government that publishes it.
+    ? (spot.source == 'official' && spot.sourceName.isNotEmpty
+          ? spot.sourceName
+          : spot.city.isEmpty
+          ? '政府公開資料'
+          : '${spot.city}政府')
+    : spot.source == 'import'
+    ? '社群回報整理'
+    : '社群回報';
 
 String trustSummary(ParkingSpot spot, {required bool demo}) =>
     demo || spot.source == 'fixture'
     ? '範例，僅供功能預覽'
     : switch (spot.status) {
-        TrustStatus.pending => '待查核',
+        TrustStatus.pending => '待確認',
         TrustStatus.confirmed => spot.stale ? '已確認，資訊可能過時' : '已確認',
         TrustStatus.hidden => '已隱藏',
       };

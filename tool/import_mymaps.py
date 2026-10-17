@@ -69,6 +69,7 @@ PILOT_RULES = "臺北市路外停車場試辦大型重機停放機車區（各�
 TAIPEI_ROADSIDE = ("大型重機依路段收費方式：計次每次 40 元；計時每小時 20 元、當日上限 100 元；限時格首 20 分鐘 0 元"
                    "（臺北市 115/10/6 起，可斜停 2 格）",
                    "https://www.gov.taipei/News_Content.aspx?n=D0042A87C2F0270A&s=1190C312983454BA&sms=78D644F2755ACCAA")
+COMMUNITY_SOURCE = "社群回報整理"
 # Press-release boilerplate copied into descriptions; the structured fields above replace it.
 BOILERPLATE = re.compile(r"停管處|以下簡稱|試辦期程|^停放於(汽車|機車)區")
 
@@ -280,6 +281,8 @@ def normalize(mark):
                 spot["fee_note"] = f"{spot['fee_note']}（{FEE_BASIS[layer]}）"
         spot["entrance_note"] = "\n".join(filter(None, [direction, *entries]))
         spot["note"] = "\n".join(others)
+    # The source's own grey icons and 未確定 layer mark facts it has not confirmed.
+    spot["unconfirmed"] = color == "757575" or layer == "未確定"
     caveat = COLOR_NOTES.get(color)
     if caveat:
         key = "entrance_note" if color == "E65100" else "note"
@@ -418,6 +421,17 @@ def hsinchu(cache, refresh):
                 motor=number(r["機車總車位數"])) for n, r in enumerate(rows) if r["緯度"] and r["經度"]]
 
 
+# Public pages for each official source, linked from official spots (source_url must be https).
+SOURCE_PAGES = {
+    "臺北市": "https://tcgbusfs.blob.core.windows.net/blobtcmsv/TCMSV_alldesc.json",
+    "新北市": "https://data.ntpc.gov.tw/datasets/B1464EF0-9C7C-4A6F-ABF7-6BDF32847E68",
+    "臺中市": "https://data.gov.tw/dataset/83931",
+    "桃園市": "https://data.gov.tw/dataset/173678",
+    "高雄市": "https://data.gov.tw/dataset/46944",
+    "臺南市": "https://parkweb.tainan.gov.tw/doc/Parkweb_export_API_.pdf",
+    "新竹市": "https://data.gov.tw/dataset/67771",
+}
+TDX_PAGE = "https://tdx.transportdata.tw/"
 TDX_TOKEN = "https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token"
 TDX_API = "https://tdx.transportdata.tw/api/basic/v1/Parking/OffStreet/{kind}/City/{city}?$format=JSON&$top=1000&$skip={skip}"
 TDX_INTERVAL = 13  # seconds; TDX allows 5 requests per minute per key
@@ -490,7 +504,7 @@ def tdx_lots(cache, refresh, credentials):
                 (row.get("CarParkPosition") or {}).get("PositionLat"), (row.get("CarParkPosition") or {}).get("PositionLon"),
                 row.get("Address") or "", row.get("FareDescription") or "",
                 motor=sum(int(s.get("NumberOfSpaces") or 0) for s in spaces.get(row["CarParkID"], []) if int(s.get("SpaceType") or 0) == 2))
-            | {"source": TDX_SOURCE}
+            | {"source": TDX_SOURCE, "url": TDX_PAGE}
             for row in parks if (row.get("CarParkPosition") or {}).get("PositionLat")
         ]
     return lots, failed
@@ -504,7 +518,7 @@ def official_lots(cache, refresh=False, tdx_env=None):
     lots, failed = {}, []
     for city, load in LOADERS.items():
         try:
-            lots[city] = [lot | {"source": OFFICIAL[city][0]} for lot in load(cache, refresh)]
+            lots[city] = [lot | {"source": OFFICIAL[city][0], "url": SOURCE_PAGES[city]} for lot in load(cache, refresh)]
         except (OSError, ValueError, KeyError, StopIteration) as error:  # StopIteration: a header row not found
             failed.append(f"{city}：{type(error).__name__} {error}".strip())
             lots[city] = []
@@ -575,6 +589,15 @@ def locate(spot, cache_file, cache, attempts=3):
     return cache[key]
 
 
+def full_address(city, district, address):
+    # Drop a leading postal code and the city/county itself (台 or 臺); a 縣轄市 such as 竹北市 stays.
+    address = re.sub(r"^\d{3,6}\s*", "", address.strip())
+    address = re.sub("^" + city.replace("臺", "[臺台]"), "", address)
+    # Add the district only when the address lacks it anywhere (新竹市's district is the city itself).
+    named = district in address or district == city or re.match(r"\S{1,3}區", address)
+    return city + ("" if named else district) + address
+
+
 def apply_official(spot, lot, meters, score, source_name):
     """Official lot fields replace community guesses; returns the change log."""
     changes = []
@@ -584,12 +607,7 @@ def apply_official(spot, lot, meters, score, source_name):
             spot["note"] = "\n".join(filter(None, [f"來源原名稱：{spot['name']}", spot["note"]]))
         spot["name"] = lot["name"]
     if lot["address"]:
-        # Drop a leading postal code and the spot's own county/city (台 or 臺); a 縣轄市 such as 竹北市 stays.
-        address = re.sub(r"^\d{3,6}\s*", "", lot["address"])
-        address = re.sub("^" + spot["city"].replace("臺", "[臺台]"), "", address)
-        # Add the district only when the address lacks it anywhere (新竹市's district is the city itself).
-        named = spot["district"] in address or spot["district"] == spot["city"] or re.match(r"\S{1,3}區", address)
-        spot["address"] = spot["city"] + ("" if named else spot["district"]) + address
+        spot["address"] = full_address(spot["city"], spot["district"], lot["address"])
         changes.append(f"地址：{spot['address']}")
     kind = facility_type(lot["name"] + lot["summary"])
     if kind:
@@ -683,6 +701,7 @@ def merge(kept, spot):
     for key in ("entrance_note", "parking_guide", "note", "special_rules"):
         lines = kept[key].splitlines()
         kept[key] = "\n".join(lines + [line for line in spot[key].splitlines() if line not in lines])
+    kept["unconfirmed"] = kept.get("unconfirmed") and spot.get("unconfirmed")
     if spot.get("heavy_conflict"):  # a conflict found earlier survives whichever record is kept
         kept.update(heavy_allowed=None, heavy_conflict=True)
         return ""
@@ -734,6 +753,7 @@ def build(kml, mid, cache, imported_on, refresh=False, tdx_env=None):
                     or match_lot(spot, [lot for lot in city_lots if lot["source"] == TDX_SOURCE]))
         if best:
             entry.update(apply_official(spot, best[1], best[2], best[3], best[1]["source"]))
+            spot["lot"] = best[1]
         if city == "臺北市":
             pilot, changes = apply_taipei_rules(spot, entry.get("official_name", ""))
             entry.setdefault("changes", []).extend(changes)
@@ -773,7 +793,7 @@ def build(kml, mid, cache, imported_on, refresh=False, tdx_env=None):
     found = {entry.get("pilot") for _, entry in seen.values()}
     # Pilot sites come from 停管處 data; empty when it failed, and the report records why.
     taipei = [lot for lot in lots.get("臺北市", []) if lot["source"] == OFFICIAL["臺北市"][0]]
-    for pilot, fee in TAIPEI_PILOT.items() if taipei else ():
+    for pilot in TAIPEI_PILOT if taipei else ():
         lot = max(taipei, key=lambda lot: similarity(pilot, lot["name"]))
         if pilot in found or similarity(pilot, lot["name"]) < 0.8:
             continue
@@ -783,58 +803,149 @@ def build(kml, mid, cache, imported_on, refresh=False, tdx_env=None):
             entry = next(e for kept, e in seen.values() if kept is nearby[0])
             entry.setdefault("changes", []).extend(apply_taipei_rules(nearby[0], pilot)[1])
             entry["pilot"] = pilot
+            nearby[0].setdefault("lot", lot)
+    official, community = [], []
+    entries = {entry["id"]: entry for entry in report}
+    for spot in spots:
+        entry = entries[spot["id"]]
+        if spot.get("lot"):
+            official.append(official_spot(spot["lot"], spot, entry.get("pilot"), lots, imported_on))
+            entry["result"] = "官方點"
+        elif spot["unconfirmed"]:
+            entry["result"] = "不錄入：來源標示未確認且未通過官方核驗"
+        else:
+            community.append(spot | {"source_name": COMMUNITY_SOURCE,
+                                     "license_note": "整理自 Alan大重停車記事（Google 我的地圖）；未通過官方核驗，請以現場公告為準"})
+            entry["result"] = "社群點（待確認）"
+    used = {spot["lot"]["id"] for spot in spots if spot.get("lot")}
+    for lot, pilot in official_additions(lots, used, official):
+        city, district = locate(lot, geo_file, geo)
+        if not city:
             continue
-        city, district = locate({"lat": lot["lat"], "lng": lot["lng"]}, geo_file, geo)
-        spot = {
-            "id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"{TAIPEI_PILOT_URLS[0]}|{lot['id']}")), "name": lot["name"],
-            "lat": round(lot["lat"], 7), "lng": round(lot["lng"], 7), "city": city, "district": district, "source": "import",
-            "space_type": "offStreet", "facility_type": facility_type(lot["name"] + lot["summary"]), "fee_note": lot["fee"][:200],
-            "heavy_allowed": True, "scooter_allowed": True, "status": "pending", "scooter_total": lot["motor"] or None,
-            "available": None, "updated_at": f"{imported_on}T00:00:00Z", "last_confirmed_at": None,
-            "note": f"官方試辦清單補入，來源地圖未收錄；已比對{lot['source']}（{lot['id']}）",
-            "address": lot["address"], "special_rules": PILOT_RULES,
-            "parking_zones": [{"name": "機車區", "access": "scooterHeavy", "fee_note": f"大型重機{fee}"}],
-            "source_name": "臺北市停車管理工程處新聞稿", "source_url": TAIPEI_PILOT_URLS[1], "license_note": "政府資料開放授權條款第 1 版",
-        }
-        spots.append(spot)
-        report.append({"id": spot["id"], "name": lot["name"], "city": city, "district": district, "layer": "官方補入",
-                       "source_name": pilot, "official_id": lot["id"], "official_name": lot["name"], "distance_m": 0,
-                       "name_score": round(similarity(pilot, lot["name"]), 2), "changes": ["官方試辦場域：來源地圖未收錄，依官方資料補入"]})
-    order = ["id", "name", "lat", "lng", "city", "district", "source", "space_type", "facility_type", "parking_access",
-             "fee_note", "heavy_allowed", "scooter_allowed", "status", "scooter_total", "available", "updated_at",
-             "last_confirmed_at", "note", "address", "road_segment", "entrance_note", "parking_guide", "special_rules",
-             "parking_zones", "source_name", "source_url", "license_note"]
-    nullable = {"heavy_allowed", "scooter_allowed", "scooter_total", "available", "last_confirmed_at", "note"}
-    spots = [{k: s[k] for k in order if k in s and (s[k] not in ("", [], None) or k in nullable)} for s in spots]
+        addition = official_spot(lot | {"city": city, "district": district}, None, pilot, lots, imported_on)
+        official.append(addition)
+        report.append({"id": addition["id"], "name": lot["name"], "city": city, "district": district, "layer": "官方補入",
+                       "source_name": lot["name"], "official_id": lot["id"], "official_name": lot["name"], "distance_m": 0,
+                       "name_score": 1.0, "result": "官方點（官方補入）", "changes": []})
     sources = {city: sorted({lot["source"] for lot in rows}) for city, rows in lots.items() if rows}
-    return spots, report, skipped, failed, sources
+    return [output(s) for s in official], [output(s) for s in community], report, skipped, failed, sources
 
 
-def summary_markdown(spots, report, skipped, imported_on, failed=(), sources=None):
+OUTPUT_ORDER = ["id", "name", "lat", "lng", "city", "district", "source", "space_type", "facility_type", "parking_access",
+                "fee_note", "heavy_allowed", "scooter_allowed", "status", "scooter_total", "available", "updated_at",
+                "last_confirmed_at", "note", "address", "road_segment", "entrance_note", "parking_guide", "special_rules",
+                "parking_zones", "source_name", "source_url", "license_note", "source_id"]
+NULLABLE = {"heavy_allowed", "scooter_allowed", "scooter_total", "available", "last_confirmed_at", "note"}
+
+
+def output(spot):
+    return {k: spot[k] for k in OUTPUT_ORDER if k in spot and (spot[k] not in ("", [], None) or k in NULLABLE)}
+
+
+def government(city):
+    return f"{city}政府"
+
+
+def official_spot(lot, spot, pilot, lots, imported_on):
+    """An official spot states only what official sources state; community facts become labelled notes."""
+    city = spot["city"] if spot else lot["city"]
+    heavy = bool(lot["heavy"]) or bool(pilot)
+    zones = []
+    if lot["heavy"]:
+        zones.append({"name": "重機專用格", "access": "heavyOnly", "guide": f"官方資料：大型重機格 {lot['heavy']} 格"})
+    if pilot:
+        zones.append({"name": "機車區", "access": "scooterHeavy", "fee_note": f"大型重機{TAIPEI_PILOT[pilot]}"})
+    notes = []
+    if spot:
+        claim = {True: "大型重機可停", False: "大型重機禁停", None: ""}[spot["heavy_allowed"]]
+        areas = "、".join(f"{z['name']}（{z['fee_note']}）" if z.get("fee_note") else z["name"] for z in spot["parking_zones"]
+                         if z["name"] != "機車區" or not pilot)
+        community = "；".join(filter(None, [claim, areas and f"停放區域：{areas}"]))
+        notes += [f"社群補充（未經官方查核）：{community}" if community else "", spot["note"]]
+    fee = re.sub(r"\s+", " ", lot["fee"]).strip()
+    official = {
+        "id": "official:" + str(uuid.uuid5(uuid.NAMESPACE_URL, f"{lot['url']}|{lot['id']}")),
+        "name": lot["name"][:100], "lat": spot["lat"] if spot else round(lot["lat"], 7), "lng": spot["lng"] if spot else round(lot["lng"], 7),
+        "city": city, "district": spot["district"] if spot else lot["district"], "source": "official", "space_type": "offStreet",
+        "facility_type": facility_type(lot["name"] + lot.get("summary", "")) or (spot or {}).get("facility_type"),
+        "fee_note": (fee if len(fee) <= 200 else fee[:190].rstrip("，、；;") + "…（詳見現場公告）") or "請依現場公告",
+        "heavy_allowed": True if heavy else None, "scooter_allowed": True if lot["motor"] else None,
+        "status": "confirmed", "scooter_total": lot["motor"] or None, "available": None,
+        "updated_at": f"{imported_on}T00:00:00Z", "last_confirmed_at": f"{imported_on}T00:00:00Z",
+        "note": "\n".join(filter(None, notes)),
+        "address": (spot or {}).get("address") or (full_address(city, lot["district"], lot["address"]) if lot["address"] else ""),
+        "entrance_note": (spot or {}).get("entrance_note", ""), "parking_guide": (spot or {}).get("parking_guide", ""),
+        "special_rules": PILOT_RULES if pilot else "", "parking_zones": zones,
+        "source_name": government(city), "source_url": lot["url"],
+        "license_note": "政府資料開放授權條款第 1 版" + ("；社群補充整理自 Alan大重停車記事（Google 我的地圖）" if spot else ""),
+        "source_id": lot["id"],
+    }
+    for key in ("entrance_note", "parking_guide"):
+        if official[key]:
+            official[key] = "社群補充（未經官方查核）：\n" + official[key]
+    clip(official)
+    official["address"] = official["address"][:200]
+    return official
+
+
+def official_additions(lots, used, placed=()):
+    """Government lots missing from the map that matter to a mode: motorcycle bays (一般機車) or heavy evidence (重機).
+    TDX lots are static data here; one that repeats a city dataset lot or an already placed official spot is skipped."""
+    for city, rows in lots.items():
+        own = [lot for lot in rows if lot["source"] != TDX_SOURCE and lot["lat"] is not None]
+        own += [{"name": spot["name"], "lat": spot["lat"], "lng": spot["lng"], "motor": spot.get("scooter_total") or 0}
+                for spot in placed if spot["city"] == city]
+        for lot in rows:
+            if lot["id"] in used or lot["lat"] is None:
+                continue
+            pilot = pilot_name(lot["name"]) if lot["source"] == OFFICIAL.get("臺北市", ("",))[0] else None
+            if not (lot["motor"] or lot["heavy"] or pilot):
+                continue
+            if lot["source"] == TDX_SOURCE and match_lot({"name": lot["name"], "lat": lot["lat"], "lng": lot["lng"]}, own):
+                continue
+            used.add(lot["id"])
+            yield lot | {"city": city}, pilot
+
+
+
+
+
+def summary_markdown(official, community, report, skipped, imported_on, failed=(), sources=None):
     from collections import Counter
-    matched = [r for r in report if "official_id" in r]
-    lines = [f"# Google 我的地圖匯入查核報告（{imported_on}）", "",
-             f"- 匯入點位：{len(spots)}（全部 `status=pending`，待社群或管理者確認）",
-             f"- 官方路外停車場比對成功：{len(matched)}",
+    verified = [r for r in report if r.get("result") == "官方點"]
+    added = [r for r in report if r.get("result") == "官方點（官方補入）"]
+    dropped = [r for r in report if r.get("result", "").startswith("不錄入")]
+    lines = [f"# Google 我的地圖匯入與官方核驗報告（{imported_on}）", "",
+             f"- 官方點：{len(official)}（我的地圖核驗通過 {len(verified)}、官方資料補入 {len(added)}）；資料來源為各縣市政府，`status=confirmed`",
+             f"- 社群點：{len(community)}（未通過官方核驗，`status=pending`，資料來源「{COMMUNITY_SOURCE}」）",
+             f"- 不錄入：{len(dropped)}（來源地圖自己標示未確認，且未通過官方核驗）",
              f"- 略過或合併：{len(skipped)}"]
     lines += [f"- 官方資料取得失敗：{reason}" for reason in failed]
-    lines += ["", "## 縣市分布與官方比對", "", "| 縣市 | 匯入 | 路外 | 比對成功 | 官方資料 |", "| --- | --- | --- | --- | --- |"]
-    for city, count in Counter(s["city"] for s in spots).most_common():
-        off = sum(s["city"] == city and s["space_type"] == "offStreet" for s in spots)
+    lines += ["", "## 縣市分布", "", "| 縣市 | 官方點（核驗） | 官方點（補入） | 社群點 | 官方資料 |", "| --- | --- | --- | --- | --- |"]
+    cities = Counter(s["city"] for s in official + community)
+    for city, _ in cities.most_common():
         source = "、".join((sources or {}).get(city, [])) or "無可用路外停車場資料，僅驗證行政區"
-        lines.append(f"| {city} | {count} | {off} | {sum(r['city'] == city for r in matched)} | {cell(source)} |")
-    lines += ["", "## 類型分布", ""]
-    lines += [f"- {kind}：{count}" for kind, count in Counter(s["space_type"] for s in spots).most_common()]
-    lines += ["", "## 需人工確認", ""]
+        lines.append(f"| {city} | {sum(r['city'] == city for r in verified)} | {sum(r['city'] == city for r in added)} | "
+                     f"{sum(s['city'] == city for s in community)} | {cell(source)} |")
+    lines += ["", "## 官方點重機資格", "",
+              f"- 官方明載可停：{sum(s['heavy_allowed'] is True for s in official)}（臺北市大型重機格與 36 處路外試辦場域）",
+              f"- 未記載（App 顯示有條件）：{sum(s['heavy_allowed'] is None for s in official)}；我的地圖的重機回報列於備註「社群補充」",
+              "", "## 需人工確認", ""]
     lines += [f"- {r['name']}（{r['city']}{r['district']}）：{c}" for r in report for c in r.get("changes", []) if c.startswith(("待人工確認", "座標"))] or ["- 無"]
-    lines += ["", "## 官方比對修正", "", "| 點位 | 官方編號 | 距離 | 修正 |", "| --- | --- | --- | --- |"]
-    lines += [f"| {cell(r['source_name'])} | {cell(r['official_id'])} | {'—' if r['distance_m'] is None else f"{r['distance_m']} m"} | "
-              f"{cell('；'.join(c for c in r['changes'] if not c.startswith('地址')))} |" for r in matched]
+    lines += ["", "## 核驗修正", "", "| 點位 | 官方編號 | 距離 | 修正 |", "| --- | --- | --- | --- |"]
+    distance_text = lambda r: "—" if r.get("distance_m") is None else f"{r['distance_m']} m"
+    lines += [f"| {cell(r['source_name'])} | {cell(r.get('official_id') or r.get('pilot', ''))} | {distance_text(r)} | "
+              f"{cell('；'.join(c for c in r.get('changes', []) if not c.startswith('地址')))} |" for r in verified]
+    lines += ["", "## 不錄入", ""] + [f"- {r['layer']}｜{r['source_name']}" for r in dropped] or ["- 無"]
     lines += ["", "## 略過或合併", ""] + [f"- {s}" for s in skipped]
     return "\n".join(lines) + "\n"
 
 
 def literal(value):
+    if isinstance(value, (list, dict)):
+        return literal(json.dumps(value, ensure_ascii=False)) + "::jsonb"
+    if isinstance(value, bool):
+        return str(value).lower()
     return "null" if value is None else "'" + str(value).replace("'", "''") + "'"
 
 
@@ -852,27 +963,50 @@ def sql(spots, owner):
     return "\n".join(rows) + "\n"
 
 
+OFFICIAL_COLUMNS = ["name", "lat", "lng", "city", "district", "space_type", "fee_note", "note", "heavy_allowed", "scooter_allowed",
+                    "source_url", "source_name", "source_id", "address", "facility_type", "scooter_total",
+                    "entrance_note", "parking_guide", "special_rules", "parking_zones"]
+
+
+def official_sql(spots, effective_date):
+    """Service-role upsert into official_heavy_spots; ids are stable per official lot, so reruns update in place."""
+    rows = ["-- Generated by tool/import_mymaps.py. Run with the service role after review.", "begin;"]
+    for s in spots:
+        values = [s["id"].removeprefix("official:")] + [s.get(k, [] if k == "parking_zones" else "" if k not in NULLABLE | {"facility_type"} else None)
+                                                        for k in OFFICIAL_COLUMNS]
+        values = [None if v == "" and k == "facility_type" else v for k, v in zip(["id"] + OFFICIAL_COLUMNS, values)]
+        rows.append(f"insert into public.official_heavy_spots(id,{','.join(OFFICIAL_COLUMNS)},effective_date) values("
+                    + ",".join(literal(v) for v in values) + f",{literal(effective_date)}) on conflict(id) do update set "
+                    + ",".join(f"{k}=excluded.{k}" for k in OFFICIAL_COLUMNS) + ",updated_at=now();")
+    rows.append("commit;")
+    return "\n".join(rows) + "\n"
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--mid", required=True, help="My Maps id (the `mid` query parameter)")
     parser.add_argument("--kml", type=Path, help="local KML export; downloaded from My Maps when omitted")
     parser.add_argument("--cache", type=Path, default=Path("artifacts/mymaps-cache"))
-    parser.add_argument("--output", type=Path, required=True, help="directory for spots.json and REPORT.md")
+    parser.add_argument("--output", type=Path, required=True, help="directory for community spots.json, verification.json and REPORT.md")
+    parser.add_argument("--official-output", type=Path, default=Path("data/imports/official"), help="directory for official spots.json")
     parser.add_argument("--date", default=date.today().isoformat(), help="import date written to updated_at")
-    parser.add_argument("--sql-owner", help="also write import.sql owned by this auth user id")
+    parser.add_argument("--sql-owner", help="also write import.sql (community) and official.sql; community rows are owned by this auth user id")
     parser.add_argument("--refresh", action="store_true", help="re-download KML and official datasets")
     parser.add_argument("--tdx-env", type=Path, default=Path("supabase/functions/.env"),
                         help="env file with TDX_CLIENT_ID/TDX_CLIENT_SECRET (environment variables take precedence)")
     args = parser.parse_args()
     kml = args.kml or fetch(KML_URL.format(mid=args.mid), args.cache / f"{args.mid}.kml", args.refresh)
-    spots, report, skipped, failed, sources = build(kml, args.mid, args.cache, args.date, args.refresh, args.tdx_env)
-    args.output.mkdir(parents=True, exist_ok=True)
-    (args.output / "spots.json").write_text(json.dumps(spots, ensure_ascii=False, indent=2) + "\n")
+    official, community, report, skipped, failed, sources = build(kml, args.mid, args.cache, args.date, args.refresh, args.tdx_env)
+    for directory in (args.output, args.official_output):
+        directory.mkdir(parents=True, exist_ok=True)
+    (args.official_output / "spots.json").write_text(json.dumps(official, ensure_ascii=False, indent=2) + "\n")
+    (args.output / "spots.json").write_text(json.dumps(community, ensure_ascii=False, indent=2) + "\n")
     (args.output / "verification.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
-    (args.output / "REPORT.md").write_text(summary_markdown(spots, report, skipped, args.date, failed, sources))
+    (args.output / "REPORT.md").write_text(summary_markdown(official, community, report, skipped, args.date, failed, sources))
     if args.sql_owner:
-        (args.cache / "import.sql").write_text(sql(spots, args.sql_owner))
-    print(f"Prepared {len(spots)} spots in {args.output}; no database writes performed")
+        (args.cache / "import.sql").write_text(sql(community, args.sql_owner))
+        (args.cache / "official.sql").write_text(official_sql(official, args.date))
+    print(f"Prepared {len(official)} official and {len(community)} community spots; no database writes performed")
 
 
 if __name__ == "__main__":

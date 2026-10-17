@@ -319,7 +319,14 @@ UI：`material_ui`、`cupertino_ui`（Flutter 官方設計套件，取代框架�
   - 臺北市路邊收費機車格：依 115/10/6 起的新制（115/9/30 公告），大型重機依路段收費方式計費：計次路段每次 40 元；計時路段每小時 20 元、當日上限 100 元；限時格首 20 分鐘 0 元；皆可斜停 2 格。來源格點無法判定收費方式，因此三種都列出。
   - 同一官方場站的多個來源標點（例如汽車區、機車區）合併為一個點位、多個 zones；來源回報彼此矛盾時改為 `null` 並列入待人工確認。
 - 詳情十二欄（見 [DESIGN.md](DESIGN.md)「點位詳情十二欄分組版」）：名稱、費率、停放車種（`parking_access`／`parking_zones`）、GPS、來源、狀態與更新時間全數填入；類型取自官方資料或名稱中的地下／立體／平面；說明依內容分入「入口」「停車指引」「備註」；官方地址或路段填入位置；試辦規則與限時開放填入特殊規則。照片不匯入（屬來源作者的著作）；即時車位不屬於匯入資料。`community_spots` 尚無這些延伸欄位，`--sql-owner` 產生的 SQL 只含既有欄位；延伸欄位保留在 JSON，待後端加上對應欄位後再寫入。
-- 結果：`data/imports/google-mymaps/spots.json`（`ParkingSpot` JSON）、`verification.json`（每點的官方比對紀錄）與 `REPORT.md`（統計、修正與待人工確認清單）。全部為 `source='import'`、`status='pending'`，App 的資格判斷因此一律維持「有條件」。
+- 點位只分兩種（2026-10-17 決定）：
+  - **官方點**：我的地圖點位通過官方核驗，或官方資料有、我的地圖沒有且記載機車格／重機證據的場站（含 TDX 獨有的停車場，作為靜態資料補入；與縣市資料或既有官方點重複者略過）。資料來源顯示該縣市政府（如「臺北市政府」），`status=confirmed`，寫入 `official_heavy_spots`。
+  - **社群點**：我的地圖有但未通過核驗，`source='import'`、`status='pending'`，資料來源顯示「社群回報整理」，詳情顯示「待確認」。
+  - 來源地圖自己標示未確認（灰色圖示、「未確定」圖層），且未通過核驗的點不錄入。
+  - TDX 即時點在 App 中也歸為官方點，來源顯示該縣市政府。
+- 官方點的重機資格只採官方明載（臺北市大型重機格數、36 處路外試辦場域），其餘維持「有條件」；我的地圖的重機回報、分區、入口與停車指引以「社群補充（未經官方查核）」標示。一般機車資格依官方記載的機車格數。
+- 本階段只做靜態點：TDX 只用於核驗與補入靜態停車場，不串接即時車位。
+- 結果：官方點 `data/imports/official/spots.json`；社群點 `data/imports/google-mymaps/spots.json`；`verification.json`（每點的核驗紀錄與處理結果）與 `REPORT.md`（統計、修正、待人工確認與不錄入清單）。`--sql-owner` 另產生 `import.sql`（社群點）與 `official.sql`（以 service role 執行的官方點 upsert），都不直接寫入資料庫。
 - 限制：其餘縣市自有資料不是缺座標（基隆、屏東）就是查無資料集，改由 TDX 比對；觀光景點、量販店等未登記為路外停車場的地點仍無官方資料可比對。臺中與桃園的市府資料沒有費率。
 
 資料表在原本的 `community_spots` / `spot_votes` 之外新增：`spot_annotations`（對 TDX 點位的註記，以 `source + source_id` 關聯）、`moderation_queue`、`official_heavy_spots`、`rate_limit_events`。
