@@ -113,6 +113,11 @@
         "name": "汽車區",
         "access": "heavyCar",
         "fee_note": "免費；需管理員協助"
+      },
+      {
+        "name": "機車區",
+        "access": "scooterHeavy",
+        "fee_note": "免費"
       }
     ],
     "source_name": "社群回報整理",
@@ -1461,7 +1466,7 @@
     "space_type": "offStreet",
     "facility_type": "multiStorey",
     "fee_note": "每小時 40 元（大型重機比照汽車費率）",
-    "heavy_allowed": true,
+    "heavy_allowed": null,
     "scooter_allowed": null,
     "status": "pending",
     "scooter_total": null,
@@ -1470,6 +1475,7 @@
     "last_confirmed_at": null,
     "note": "",
     "entrance_note": "來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）",
+    "special_rules": "來源回報禁止大型重機停放",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -1954,12 +1960,17 @@
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
     "note": "台中新時代",
-    "entrance_note": "汽車費率 平日40/h 假日50/h 後牌辨析",
+    "entrance_note": "汽車費率 平日40/h 假日50/h 後牌辨析\n機車道可進",
     "parking_zones": [
       {
         "name": "汽車區",
         "access": "heavyCar",
         "fee_note": "平日每小時 40 元；假日每小時 50 元"
+      },
+      {
+        "name": "機車區",
+        "access": "scooterHeavy",
+        "fee_note": "每小時 10 元"
       }
     ],
     "source_name": "社群回報整理",
@@ -2192,13 +2203,19 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "",
+    "note": "劃設停車區非停車格\n不用擔心大台超出格子",
     "entrance_note": "來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）\n前牌辨識",
+    "parking_guide": "室外機車格免費停",
     "parking_zones": [
       {
         "name": "汽車區",
         "access": "heavyCar",
         "fee_note": "每小時 30 元"
+      },
+      {
+        "name": "機車區",
+        "access": "scooterHeavy",
+        "fee_note": "免費"
       }
     ],
     "source_name": "社群回報整理",
@@ -2253,12 +2270,17 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式",
+    "note": "來源標示為特殊收費或管理方式\n露天機車停車區經詢問警衛可停，均為人工收費，30/d",
     "parking_zones": [
       {
         "name": "汽車區",
         "access": "heavyCar",
         "fee_note": "每小時 50 元"
+      },
+      {
+        "name": "機車區",
+        "access": "scooterHeavy",
+        "fee_note": "每日 30 元"
       }
     ],
     "source_name": "社群回報整理",
@@ -2830,6 +2852,41 @@
         "name": "汽車區",
         "access": "heavyCar",
         "fee_note": "每小時 60 元；每日 260 元"
+      }
+    ],
+    "source_name": "社群回報整理",
+    "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
+    "license_note": "整理自 Alan大重停車記事（Google 我的地圖）；未通過官方核驗，請以現場公告為準"
+  },
+  {
+    "id": "ed728c1e-8d39-55a6-a816-821c13b3ba1b",
+    "name": "168parking(明倫社宅室內停車場)",
+    "lat": 25.0729329,
+    "lng": 121.519944,
+    "city": "臺北市",
+    "district": "大同區",
+    "source": "import",
+    "space_type": "offStreet",
+    "fee_note": "平日每小時 30 元；假日每小時 40 元（大型重機比照汽車費率）",
+    "heavy_allowed": true,
+    "scooter_allowed": null,
+    "status": "pending",
+    "scooter_total": null,
+    "available": null,
+    "updated_at": "2026-10-17T00:00:00Z",
+    "last_confirmed_at": null,
+    "note": "來源標示為未確認資訊\n汽車費率 平日30h（上限140元）;假日40h（無上限）\n2026/03/30\n機車費率20元/次",
+    "entrance_note": "機車出入口與汽車共用一車道 小心駕駛",
+    "parking_zones": [
+      {
+        "name": "汽車區",
+        "access": "heavyCar",
+        "fee_note": "平日每小時 30 元；假日每小時 40 元"
+      },
+      {
+        "name": "機車區",
+        "access": "scooterHeavy",
+        "fee_note": "每日 20 元"
       }
     ],
     "source_name": "社群回報整理",
@@ -3810,12 +3867,17 @@
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
     "note": "",
-    "parking_guide": "也可以停機車區",
+    "parking_guide": "也可以停機車區\n也可以停汽車區",
     "parking_zones": [
       {
         "name": "汽車區",
         "access": "heavyCar",
         "fee_note": "每小時 40 元；每日 200 元"
+      },
+      {
+        "name": "機車區",
+        "access": "scooterHeavy",
+        "fee_note": "每日 30 元"
       }
     ],
     "source_name": "社群回報整理",
@@ -4080,14 +4142,19 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "",
+    "note": "來源標示為特殊收費或管理方式\n低調，門口會貼比照汽車停車\n但還是可以下去",
     "entrance_note": "來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）\n入場停車30分鐘內離場免費，不滿1小時以1小時計；第2小時起，每半小時新台幣25元，不足半小時以半小時計。經自動繳費機計價後須於30分鐘內離場，逾時須補繳差額。\n大型重機停車:重機停放汽車停車場，依汽車入場方式進場，按對講機進入；離場時至繳費機辦理停車折抵，由B1F及3F出口汽車道左側「重機及汽車共用車道」辨識出場。",
-    "parking_guide": "教士2016貼文下回覆 3樓有重機專用停車位",
+    "parking_guide": "教士2016貼文下回覆 3樓有重機專用停車位\nB1M機車停車區/免費（格子稍小請斟酌）\n大台可以停汽車格",
     "parking_zones": [
       {
         "name": "重機專用格",
         "access": "heavyOnly",
         "fee_note": "每小時 50 元"
+      },
+      {
+        "name": "機車區",
+        "access": "scooterHeavy",
+        "fee_note": "免費"
       }
     ],
     "source_name": "社群回報整理",
@@ -4353,13 +4420,18 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "但數量不多",
-    "entrance_note": "進入收費柵欄前有大格的重機專用格免費",
-    "parking_guide": "建議普通尺寸的車友可以直接停機車區",
+    "note": "但數量不多\n專用2 格 或以上 親身經驗 或 車友/朋友/親人經驗",
+    "entrance_note": "進入收費柵欄前有大格的重機專用格免費\n也可以選機車停車場不收費 50h 停汽車格需按鈕聯繫管理員，機車停車場可直接下去",
+    "parking_guide": "建議普通尺寸的車友可以直接停機車區\n地下二樓有收費機車專用格2格、",
     "parking_zones": [
       {
         "name": "重機專用格",
         "access": "heavyOnly",
+        "fee_note": "免費"
+      },
+      {
+        "name": "機車區",
+        "access": "scooterHeavy",
         "fee_note": "免費"
       }
     ],
@@ -4384,12 +4456,17 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "汽車停車場 後牌；40/h;重機",
+    "note": "汽車停車場 後牌；40/h;重機\n後牌;20/h;機車;無專用\"",
     "parking_zones": [
       {
         "name": "重機專用格",
         "access": "heavyOnly",
         "fee_note": "每小時 40 元"
+      },
+      {
+        "name": "機車區",
+        "access": "scooterHeavy",
+        "fee_note": "每小時 20 元"
       }
     ],
     "source_name": "社群回報整理",
@@ -4451,6 +4528,41 @@
         "name": "重機專用格",
         "access": "heavyOnly",
         "fee_note": "每小時 30 元"
+      }
+    ],
+    "source_name": "社群回報整理",
+    "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
+    "license_note": "整理自 Alan大重停車記事（Google 我的地圖）；未通過官方核驗，請以現場公告為準"
+  },
+  {
+    "id": "6eecca45-e46e-5215-bf0a-420e4fce88bb",
+    "name": "合作金庫總行停車場",
+    "lat": 25.0494003,
+    "lng": 121.5458942,
+    "city": "臺北市",
+    "district": "松山區",
+    "source": "import",
+    "space_type": "offStreet",
+    "fee_note": "每小時 100 元（重機專用格比照汽車費率）",
+    "heavy_allowed": true,
+    "scooter_allowed": null,
+    "status": "pending",
+    "scooter_total": null,
+    "available": null,
+    "updated_at": "2026-10-17T00:00:00Z",
+    "last_confirmed_at": null,
+    "note": "來源標示為未確認資訊",
+    "parking_guide": "有車友評論在可走機車區\n有重機專用格",
+    "parking_zones": [
+      {
+        "name": "重機專用格",
+        "access": "heavyOnly",
+        "fee_note": "每小時 100 元"
+      },
+      {
+        "name": "機車區",
+        "access": "scooterHeavy",
+        "fee_note": "每日 30 元"
       }
     ],
     "source_name": "社群回報整理",
@@ -5340,37 +5452,6 @@
     "license_note": "整理自 Alan大重停車記事（Google 我的地圖）；未通過官方核驗，請以現場公告為準"
   },
   {
-    "id": "17fe2c76-b05c-5976-9373-00d30468cb1c",
-    "name": "漢神巨蛋購物廣場-機車",
-    "lat": 22.6697936,
-    "lng": 120.3029326,
-    "city": "高雄市",
-    "district": "左營區",
-    "source": "import",
-    "space_type": "offStreet",
-    "fee_note": "免費（大型重機另訂費率）",
-    "heavy_allowed": true,
-    "scooter_allowed": null,
-    "status": "pending",
-    "scooter_total": null,
-    "available": null,
-    "updated_at": "2026-10-17T00:00:00Z",
-    "last_confirmed_at": null,
-    "note": "專用2 格 或以上 親身經驗 或 車友/朋友/親人經驗",
-    "entrance_note": "也可以選機車停車場不收費 50h 停汽車格需按鈕聯繫管理員，機車停車場可直接下去",
-    "parking_guide": "地下二樓有收費機車專用格2格、",
-    "parking_zones": [
-      {
-        "name": "機車區",
-        "access": "scooterHeavy",
-        "fee_note": "免費"
-      }
-    ],
-    "source_name": "社群回報整理",
-    "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
-    "license_note": "整理自 Alan大重停車記事（Google 我的地圖）；未通過官方核驗，請以現場公告為準"
-  },
-  {
     "id": "a48c2ce3-f65d-5e12-9ac9-86a3d31bc25f",
     "name": "北橫遊客中心/停車場/北橫之驛",
     "lat": 24.8491295,
@@ -6025,36 +6106,6 @@
     "license_note": "整理自 Alan大重停車記事（Google 我的地圖）；未通過官方核驗，請以現場公告為準"
   },
   {
-    "id": "59e55baf-130d-526c-8f36-3ce3a976552c",
-    "name": "168parking(明倫社宅室內停車場)",
-    "lat": 25.0728151,
-    "lng": 121.5199158,
-    "city": "臺北市",
-    "district": "大同區",
-    "source": "import",
-    "space_type": "offStreet",
-    "fee_note": "每日 20 元（大型重機比照機車費率）",
-    "heavy_allowed": true,
-    "scooter_allowed": null,
-    "status": "pending",
-    "scooter_total": null,
-    "available": null,
-    "updated_at": "2026-10-17T00:00:00Z",
-    "last_confirmed_at": null,
-    "note": "2026/03/30\n機車費率20元/次",
-    "entrance_note": "機車出入口與汽車共用一車道 小心駕駛",
-    "parking_zones": [
-      {
-        "name": "機車區",
-        "access": "scooterHeavy",
-        "fee_note": "每日 20 元"
-      }
-    ],
-    "source_name": "社群回報整理",
-    "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
-    "license_note": "整理自 Alan大重停車記事（Google 我的地圖）；未通過官方核驗，請以現場公告為準"
-  },
-  {
     "id": "2de37011-71fd-5306-8988-5dc0e05e3038",
     "name": "麥當勞-台北舊宗餐廳－設有得來速",
     "lat": 25.0607116,
@@ -6199,36 +6250,6 @@
         "name": "機車區",
         "access": "scooterHeavy",
         "fee_note": "每日 40 元"
-      }
-    ],
-    "source_name": "社群回報整理",
-    "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
-    "license_note": "整理自 Alan大重停車記事（Google 我的地圖）；未通過官方核驗，請以現場公告為準"
-  },
-  {
-    "id": "775bcb00-5979-5b7d-9e11-c6c1ae3b54b0",
-    "name": "大魯閣新時代購物中心",
-    "lat": 24.1357088,
-    "lng": 120.6877091,
-    "city": "臺中市",
-    "district": "東區",
-    "source": "import",
-    "space_type": "offStreet",
-    "fee_note": "每小時 10 元（大型重機比照機車費率）",
-    "heavy_allowed": true,
-    "scooter_allowed": null,
-    "status": "pending",
-    "scooter_total": null,
-    "available": null,
-    "updated_at": "2026-10-17T00:00:00Z",
-    "last_confirmed_at": null,
-    "note": "",
-    "entrance_note": "機車道可進",
-    "parking_zones": [
-      {
-        "name": "機車區",
-        "access": "scooterHeavy",
-        "fee_note": "每小時 10 元"
       }
     ],
     "source_name": "社群回報整理",
@@ -6803,66 +6824,6 @@
     "license_note": "整理自 Alan大重停車記事（Google 我的地圖）；未通過官方核驗，請以現場公告為準"
   },
   {
-    "id": "8443765f-6316-5e27-854c-5c67139d5866",
-    "name": "夢時代購物中心",
-    "lat": 22.5950161,
-    "lng": 120.3087101,
-    "city": "高雄市",
-    "district": "前鎮區",
-    "source": "import",
-    "space_type": "offStreet",
-    "fee_note": "免費（大型重機比照機車費率）",
-    "heavy_allowed": true,
-    "scooter_allowed": null,
-    "status": "pending",
-    "scooter_total": null,
-    "available": null,
-    "updated_at": "2026-10-17T00:00:00Z",
-    "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n低調，門口會貼比照汽車停車\n但還是可以下去",
-    "parking_guide": "B1M機車停車區/免費（格子稍小請斟酌）\n大台可以停汽車格",
-    "parking_zones": [
-      {
-        "name": "機車區",
-        "access": "scooterHeavy",
-        "fee_note": "免費"
-      }
-    ],
-    "source_name": "社群回報整理",
-    "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
-    "license_note": "整理自 Alan大重停車記事（Google 我的地圖）；未通過官方核驗，請以現場公告為準"
-  },
-  {
-    "id": "fdecbc1e-049a-5e1b-94e3-e6eaac4042b9",
-    "name": "高雄大遠百地下停車場",
-    "lat": 22.6125404,
-    "lng": 120.3045661,
-    "city": "高雄市",
-    "district": "苓雅區",
-    "source": "import",
-    "space_type": "offStreet",
-    "facility_type": "underground",
-    "fee_note": "每日 30 元（大型重機比照機車費率）",
-    "heavy_allowed": true,
-    "scooter_allowed": null,
-    "status": "pending",
-    "scooter_total": null,
-    "available": null,
-    "updated_at": "2026-10-17T00:00:00Z",
-    "last_confirmed_at": null,
-    "note": "來源標示為特殊收費或管理方式\n露天機車停車區經詢問警衛可停，均為人工收費，30/d",
-    "parking_zones": [
-      {
-        "name": "機車區",
-        "access": "scooterHeavy",
-        "fee_note": "每日 30 元"
-      }
-    ],
-    "source_name": "社群回報整理",
-    "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
-    "license_note": "整理自 Alan大重停車記事（Google 我的地圖）；未通過官方核驗，請以現場公告為準"
-  },
-  {
     "id": "8abbc1aa-f730-5e0e-909e-c0487167bf1a",
     "name": "陽明黃帝神宮",
     "lat": 25.1340104,
@@ -6885,36 +6846,6 @@
         "name": "機車區",
         "access": "scooterHeavy",
         "fee_note": "請依現場公告"
-      }
-    ],
-    "source_name": "社群回報整理",
-    "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
-    "license_note": "整理自 Alan大重停車記事（Google 我的地圖）；未通過官方核驗，請以現場公告為準"
-  },
-  {
-    "id": "9040d814-6a34-5cbe-808f-ab09d2c9543a",
-    "name": "愛買 三重店",
-    "lat": 25.0714937,
-    "lng": 121.4765439,
-    "city": "新北市",
-    "district": "三重區",
-    "source": "import",
-    "space_type": "offStreet",
-    "fee_note": "免費（大型重機比照機車費率）",
-    "heavy_allowed": true,
-    "scooter_allowed": null,
-    "status": "pending",
-    "scooter_total": null,
-    "available": null,
-    "updated_at": "2026-10-17T00:00:00Z",
-    "last_confirmed_at": null,
-    "note": "劃設停車區非停車格\n不用擔心大台超出格子",
-    "parking_guide": "室外機車格免費停",
-    "parking_zones": [
-      {
-        "name": "機車區",
-        "access": "scooterHeavy",
-        "fee_note": "免費"
       }
     ],
     "source_name": "社群回報整理",
@@ -7628,35 +7559,6 @@
     "license_note": "整理自 Alan大重停車記事（Google 我的地圖）；未通過官方核驗，請以現場公告為準"
   },
   {
-    "id": "3ad07abc-ea4b-5fc4-b99b-f39083db6160",
-    "name": "義享時尚廣場-機車",
-    "lat": 22.6561484,
-    "lng": 120.3062965,
-    "city": "高雄市",
-    "district": "鼓山區",
-    "source": "import",
-    "space_type": "offStreet",
-    "fee_note": "免費（大型重機比照機車費率）",
-    "heavy_allowed": true,
-    "scooter_allowed": null,
-    "status": "pending",
-    "scooter_total": null,
-    "available": null,
-    "updated_at": "2026-10-17T00:00:00Z",
-    "last_confirmed_at": null,
-    "note": "",
-    "parking_zones": [
-      {
-        "name": "機車區",
-        "access": "scooterHeavy",
-        "fee_note": "免費"
-      }
-    ],
-    "source_name": "社群回報整理",
-    "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
-    "license_note": "整理自 Alan大重停車記事（Google 我的地圖）；未通過官方核驗，請以現場公告為準"
-  },
-  {
     "id": "2f9784e3-9fb6-55ca-86eb-cf85a6ba560c",
     "name": "愛買 台南店",
     "lat": 23.0345864,
@@ -7705,35 +7607,6 @@
     "last_confirmed_at": null,
     "note": "",
     "entrance_note": "機車費率 20H 後牌辨析 FOCUS汽車停車場旁",
-    "parking_zones": [
-      {
-        "name": "機車區",
-        "access": "scooterHeavy",
-        "fee_note": "每小時 20 元"
-      }
-    ],
-    "source_name": "社群回報整理",
-    "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
-    "license_note": "整理自 Alan大重停車記事（Google 我的地圖）；未通過官方核驗，請以現場公告為準"
-  },
-  {
-    "id": "8014449a-b0d6-5028-a0a0-8cab871c8a51",
-    "name": "環球購物中心機車 屏東市",
-    "lat": 22.6732077,
-    "lng": 120.4935469,
-    "city": "屏東縣",
-    "district": "屏東市",
-    "source": "import",
-    "space_type": "offStreet",
-    "fee_note": "每小時 20 元（大型重機比照機車費率）",
-    "heavy_allowed": true,
-    "scooter_allowed": null,
-    "status": "pending",
-    "scooter_total": null,
-    "available": null,
-    "updated_at": "2026-10-17T00:00:00Z",
-    "last_confirmed_at": null,
-    "note": "後牌;20/h;機車;無專用\"",
     "parking_zones": [
       {
         "name": "機車區",
@@ -9469,36 +9342,6 @@
     "license_note": "整理自 Alan大重停車記事（Google 我的地圖）；未通過官方核驗，請以現場公告為準"
   },
   {
-    "id": "8a60ea65-3146-53b1-95a9-c0444dba3c23",
-    "name": "新光三越 台南小北門店",
-    "lat": 23.0095155,
-    "lng": 120.2070843,
-    "city": "臺南市",
-    "district": "北區",
-    "source": "import",
-    "space_type": "offStreet",
-    "fee_note": "每日 30 元（大型重機比照機車費率）",
-    "heavy_allowed": true,
-    "scooter_allowed": null,
-    "status": "pending",
-    "scooter_total": null,
-    "available": null,
-    "updated_at": "2026-10-17T00:00:00Z",
-    "last_confirmed_at": null,
-    "note": "",
-    "parking_guide": "也可以停汽車區",
-    "parking_zones": [
-      {
-        "name": "機車區",
-        "access": "scooterHeavy",
-        "fee_note": "每日 30 元"
-      }
-    ],
-    "source_name": "社群回報整理",
-    "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
-    "license_note": "整理自 Alan大重停車記事（Google 我的地圖）；未通過官方核驗，請以現場公告為準"
-  },
-  {
     "id": "39d064c9-6063-5d79-a439-6b0d21ac7e1f",
     "name": "內湖宜家家居停車場",
     "lat": 25.0600021,
@@ -9758,36 +9601,6 @@
         "name": "機車區",
         "access": "scooterHeavy",
         "fee_note": "每小時 10 元；每日 30 元"
-      }
-    ],
-    "source_name": "社群回報整理",
-    "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
-    "license_note": "整理自 Alan大重停車記事（Google 我的地圖）；未通過官方核驗，請以現場公告為準"
-  },
-  {
-    "id": "3dd08163-0745-544d-9a5b-e3ea7fe20d16",
-    "name": "合作金庫總行停車場",
-    "lat": 25.048302,
-    "lng": 121.5450788,
-    "city": "臺北市",
-    "district": "松山區",
-    "source": "import",
-    "space_type": "offStreet",
-    "fee_note": "每日 30 元（大型重機比照機車費率）",
-    "heavy_allowed": true,
-    "scooter_allowed": null,
-    "status": "pending",
-    "scooter_total": null,
-    "available": null,
-    "updated_at": "2026-10-17T00:00:00Z",
-    "last_confirmed_at": null,
-    "note": "",
-    "parking_guide": "有車友評論在可走機車區\n有重機專用格",
-    "parking_zones": [
-      {
-        "name": "機車區",
-        "access": "scooterHeavy",
-        "fee_note": "每日 30 元"
       }
     ],
     "source_name": "社群回報整理",
@@ -17409,30 +17222,6 @@
     "lng": 121.5550552,
     "city": "臺北市",
     "district": "中山區",
-    "source": "import",
-    "space_type": "offStreet",
-    "fee_note": "請依現場公告",
-    "heavy_allowed": false,
-    "scooter_allowed": null,
-    "status": "pending",
-    "scooter_total": null,
-    "available": null,
-    "updated_at": "2026-10-17T00:00:00Z",
-    "last_confirmed_at": null,
-    "note": "",
-    "entrance_note": "來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）",
-    "special_rules": "來源回報禁止大型重機停放",
-    "source_name": "社群回報整理",
-    "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
-    "license_note": "整理自 Alan大重停車記事（Google 我的地圖）；未通過官方核驗，請以現場公告為準"
-  },
-  {
-    "id": "7f5209a1-e427-54f7-89d1-e6d30d085ad1",
-    "name": "台北榮總停車場",
-    "lat": 25.1192228,
-    "lng": 121.520312,
-    "city": "臺北市",
-    "district": "北投區",
     "source": "import",
     "space_type": "offStreet",
     "fee_note": "請依現場公告",

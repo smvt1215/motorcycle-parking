@@ -33,6 +33,10 @@
     "district": "鼓山區",
     "layer": "免費汽車停車場",
     "source_name": "(Free - 管理員)義享時尚廣場-汽車",
+    "changes": [],
+    "merged": [
+      "(Free)義享時尚廣場-機車"
+    ],
     "result": "社群點（待確認）"
   },
   {
@@ -1572,7 +1576,12 @@
     "district": "北投區",
     "layer": "汽車費率",
     "source_name": "(40/h)台北榮總立體停車場",
-    "changes": [],
+    "changes": [
+      "待人工確認：來源對同一場站的重機可停回報不一致"
+    ],
+    "merged": [
+      "(禁止)台北榮總停車場"
+    ],
     "result": "社群點（待確認）"
   },
   {
@@ -3061,6 +3070,10 @@
     "district": "東區",
     "layer": "汽車費率",
     "source_name": "(平40/h | 假50/h)大魯閣新時代購物中心",
+    "changes": [],
+    "merged": [
+      "(10/h)大魯閣新時代購物中心"
+    ],
     "result": "社群點（待確認）"
   },
   {
@@ -3404,6 +3417,10 @@
     "district": "三重區",
     "layer": "汽車費率",
     "source_name": "(30/h)愛買 三重店",
+    "changes": [],
+    "merged": [
+      "(Free)愛買 三重店"
+    ],
     "result": "社群點（待確認）"
   },
   {
@@ -3478,6 +3495,10 @@
     "district": "苓雅區",
     "layer": "汽車費率",
     "source_name": "(50/h)高雄大遠百地下停車場",
+    "changes": [],
+    "merged": [
+      "(30/d)高雄大遠百地下停車場"
+    ],
     "result": "社群點（待確認）"
   },
   {
@@ -3914,7 +3935,10 @@
     "layer": "汽車費率",
     "source_name": "(平30/h | 假40/h)168parking(明倫社宅室內停車場)",
     "changes": [],
-    "result": "不錄入：來源標示未確認且未通過官方核驗"
+    "merged": [
+      "(20/d)168parking(明倫社宅室內停車場)"
+    ],
+    "result": "社群點（待確認）"
   },
   {
     "id": "42f3a6f9-6368-5f3a-90a8-6245fbf62dd3",
@@ -4820,6 +4844,10 @@
     "district": "北區",
     "layer": "汽車費率",
     "source_name": "(40/h|200/d)新光三越 台南小北門店",
+    "changes": [],
+    "merged": [
+      "(30/d)新光三越 台南小北門店"
+    ],
     "result": "社群點（待確認）"
   },
   {
@@ -4906,16 +4934,9 @@
     "layer": "汽車費率",
     "source_name": "(平100/h|假120/h)Porsche Destination Charging",
     "changes": [],
-    "result": "不錄入：來源標示未確認且未通過官方核驗"
-  },
-  {
-    "id": "82159cbd-2833-59be-8bf9-fd51fd796a54",
-    "name": "Porsche Destination Charging",
-    "city": "臺北市",
-    "district": "松山區",
-    "layer": "汽車費率",
-    "source_name": "(20/h)Porsche Destination Charging",
-    "changes": [],
+    "merged": [
+      "(20/h)Porsche Destination Charging"
+    ],
     "result": "不錄入：來源標示未確認且未通過官方核驗"
   },
   {
@@ -5448,6 +5469,10 @@
     "district": "前鎮區",
     "layer": "重機格/汽車費率",
     "source_name": "(50/h)夢時代購物中心 汽車停車場",
+    "changes": [],
+    "merged": [
+      "(Free)夢時代購物中心"
+    ],
     "result": "社群點（待確認）"
   },
   {
@@ -5621,6 +5646,10 @@
     "district": "左營區",
     "layer": "重機格/汽車費率",
     "source_name": "(Free)漢神巨蛋購物廣場-汽車",
+    "changes": [],
+    "merged": [
+      "(Free)漢神巨蛋購物廣場-機車"
+    ],
     "result": "社群點（待確認）"
   },
   {
@@ -5630,6 +5659,10 @@
     "district": "屏東市",
     "layer": "重機格/汽車費率",
     "source_name": "(40/h)環球購物中心汽車 屏東市",
+    "changes": [],
+    "merged": [
+      "(20/h)環球購物中心機車 屏東市"
+    ],
     "result": "社群點（待確認）"
   },
   {
@@ -5743,7 +5776,10 @@
     "layer": "重機格/汽車費率",
     "source_name": "(100/h)合作金庫總行停車場",
     "changes": [],
-    "result": "不錄入：來源標示未確認且未通過官方核驗"
+    "merged": [
+      "(30/d)合作金庫總行停車場"
+    ],
+    "result": "社群點（待確認）"
   },
   {
     "id": "9f25f7b0-cdfc-5cfb-973a-9e29982fd886",
@@ -7575,15 +7611,6 @@
     "result": "社群點（待確認）"
   },
   {
-    "id": "17fe2c76-b05c-5976-9373-00d30468cb1c",
-    "name": "漢神巨蛋購物廣場-機車",
-    "city": "高雄市",
-    "district": "左營區",
-    "layer": "重機格/個別費率",
-    "source_name": "(Free)漢神巨蛋購物廣場-機車",
-    "result": "社群點（待確認）"
-  },
-  {
     "id": "a48c2ce3-f65d-5e12-9ac9-86a3d31bc25f",
     "name": "北橫遊客中心/停車場/北橫之驛",
     "city": "桃園市",
@@ -8013,16 +8040,6 @@
     "result": "社群點（待確認）"
   },
   {
-    "id": "59e55baf-130d-526c-8f36-3ce3a976552c",
-    "name": "168parking(明倫社宅室內停車場)",
-    "city": "臺北市",
-    "district": "大同區",
-    "layer": "機車費率",
-    "source_name": "(20/d)168parking(明倫社宅室內停車場)",
-    "changes": [],
-    "result": "社群點（待確認）"
-  },
-  {
     "id": "034ff9ce-2dff-5071-8d1a-04892ae2ff11",
     "name": "家樂福重新店停車場",
     "city": "新北市",
@@ -8105,15 +8122,6 @@
     "district": "北區",
     "layer": "機車費率",
     "source_name": "(40/d)五權立體停車場",
-    "result": "社群點（待確認）"
-  },
-  {
-    "id": "775bcb00-5979-5b7d-9e11-c6c1ae3b54b0",
-    "name": "大魯閣新時代購物中心",
-    "city": "臺中市",
-    "district": "東區",
-    "layer": "機車費率",
-    "source_name": "(10/h)大魯閣新時代購物中心",
     "result": "社群點（待確認）"
   },
   {
@@ -8522,24 +8530,6 @@
     "result": "社群點（待確認）"
   },
   {
-    "id": "8443765f-6316-5e27-854c-5c67139d5866",
-    "name": "夢時代購物中心",
-    "city": "高雄市",
-    "district": "前鎮區",
-    "layer": "機車費率",
-    "source_name": "(Free)夢時代購物中心",
-    "result": "社群點（待確認）"
-  },
-  {
-    "id": "fdecbc1e-049a-5e1b-94e3-e6eaac4042b9",
-    "name": "高雄大遠百地下停車場",
-    "city": "高雄市",
-    "district": "苓雅區",
-    "layer": "機車費率",
-    "source_name": "(30/d)高雄大遠百地下停車場",
-    "result": "社群點（待確認）"
-  },
-  {
     "id": "8abbc1aa-f730-5e0e-909e-c0487167bf1a",
     "name": "陽明黃帝神宮",
     "city": "臺北市",
@@ -8547,15 +8537,6 @@
     "layer": "機車費率",
     "source_name": "(自由樂捐)陽明黃帝神宮",
     "changes": [],
-    "result": "社群點（待確認）"
-  },
-  {
-    "id": "9040d814-6a34-5cbe-808f-ab09d2c9543a",
-    "name": "愛買 三重店",
-    "city": "新北市",
-    "district": "三重區",
-    "layer": "機車費率",
-    "source_name": "(Free)愛買 三重店",
     "result": "社群點（待確認）"
   },
   {
@@ -9029,15 +9010,6 @@
     "result": "官方點"
   },
   {
-    "id": "3ad07abc-ea4b-5fc4-b99b-f39083db6160",
-    "name": "義享時尚廣場-機車",
-    "city": "高雄市",
-    "district": "鼓山區",
-    "layer": "機車費率",
-    "source_name": "(Free)義享時尚廣場-機車",
-    "result": "社群點（待確認）"
-  },
-  {
     "id": "7f701eeb-d75b-5c28-b3f2-5065917af9ff",
     "name": "裕隆城停車場",
     "city": "新北市",
@@ -9094,15 +9066,6 @@
     "district": "中西區",
     "layer": "機車費率",
     "source_name": "(20/h)阿卡停車場",
-    "result": "社群點（待確認）"
-  },
-  {
-    "id": "8014449a-b0d6-5028-a0a0-8cab871c8a51",
-    "name": "環球購物中心機車 屏東市",
-    "city": "屏東縣",
-    "district": "屏東市",
-    "layer": "機車費率",
-    "source_name": "(20/h)環球購物中心機車 屏東市",
     "result": "社群點（待確認）"
   },
   {
@@ -10503,15 +10466,6 @@
     "result": "官方點"
   },
   {
-    "id": "8a60ea65-3146-53b1-95a9-c0444dba3c23",
-    "name": "新光三越 台南小北門店",
-    "city": "臺南市",
-    "district": "北區",
-    "layer": "機車費率",
-    "source_name": "(30/d)新光三越 台南小北門店",
-    "result": "社群點（待確認）"
-  },
-  {
     "id": "a8c9e98a-f0af-552c-a8a1-edbbaf605aaa",
     "name": "敬業二路平面停車場",
     "city": "臺北市",
@@ -10686,16 +10640,6 @@
       "機車格數：680"
     ],
     "result": "官方點"
-  },
-  {
-    "id": "3dd08163-0745-544d-9a5b-e3ea7fe20d16",
-    "name": "合作金庫總行停車場",
-    "city": "臺北市",
-    "district": "松山區",
-    "layer": "機車費率",
-    "source_name": "(30/d)合作金庫總行停車場",
-    "changes": [],
-    "result": "社群點（待確認）"
   },
   {
     "id": "1ecd797e-c5ea-5079-8ef2-90aab29c5330",
@@ -14122,16 +14066,6 @@
       "費率：改用官方公告"
     ],
     "result": "官方點"
-  },
-  {
-    "id": "7f5209a1-e427-54f7-89d1-e6d30d085ad1",
-    "name": "台北榮總停車場",
-    "city": "臺北市",
-    "district": "北投區",
-    "layer": "禁停重機",
-    "source_name": "(禁止)台北榮總停車場",
-    "changes": [],
-    "result": "社群點（待確認）"
   },
   {
     "id": "bc679662-5dcf-5983-90e4-3497785bbe42",
