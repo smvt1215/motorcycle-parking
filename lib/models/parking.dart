@@ -134,7 +134,8 @@ class ParkingSpot {
   final List<ParkingZone> zones;
   final DateTime? availabilityUpdatedAt;
 
-  /// Points are either official (government data, including live TDX) or
+  /// Points are either official (government data, including TDX spots kept in
+  /// older favorites) or
   /// community (user reports and unverified imports).
   bool get isOfficial => source == 'official' || source == 'tdx';
 

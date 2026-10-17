@@ -24,7 +24,7 @@ Deno.test('valid reports pass, wrong coordinates and oversized notes fail', () =
     if (validate(body) === null) throw new Error('invalid report accepted');
   }
 });
-Deno.test('arbitrary actions, malformed votes and annotation options fail', () => {
+Deno.test('arbitrary actions, malformed votes and removed annotations fail', () => {
   for (
     const body of [{ ...base, action: 'admin' }, {
       ...base,
@@ -35,7 +35,7 @@ Deno.test('arbitrary actions, malformed votes and annotation options fail', () =
       ...base,
       action: 'annotation',
       source_id: 'tdx:Taipei:1',
-      heavy_access: 'maybe',
+      heavy_access: 'allowed',
     }]
   ) if (validate(body) === null) throw new Error('invalid action accepted');
 });
