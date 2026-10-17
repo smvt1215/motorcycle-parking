@@ -57,9 +57,10 @@ TAIPEI_PILOT = {
     "玉成公園地下停車場": PER_ENTRY, "南港機廠1區社會住宅地下停車場": PER_ENTRY, "青年公園高爾夫球場地下停車場": PER_ENTRY,
 }
 PILOT_RULES = "臺北市路外停車場試辦大型重機停放機車區（各期 6 個月）：依現場標誌斜停，最多 2 格機車格；停汽車區依小型車費率。試辦是否延續請以現場公告為準"
-# 115/10/6 起臺北市公有路邊收費機車格全面開放大型重機停放。
-TAIPEI_ROADSIDE = ("大型重機每次 40 元，可斜停 2 格（臺北市 115/10/6 起）",
-                   "https://www.gov.taipei/News_Content.aspx?n=F0DDAF49B89E9413&sms=72544237BBE4C5F6&s=8BC5F23730A95E42")
+# 115/10/6 起臺北市公有路邊收費機車格全面開放大型重機停放；費率依路段收費方式而不同。
+TAIPEI_ROADSIDE = ("大型重機依路段收費方式：計次每次 40 元；計時每小時 20 元、當日上限 100 元；限時格首 20 分鐘 0 元"
+                   "（臺北市 115/10/6 起，可斜停 2 格）",
+                   "https://www.gov.taipei/News_Content.aspx?n=D0042A87C2F0270A&s=1190C312983454BA&sms=78D644F2755ACCAA")
 # Press-release boilerplate copied into descriptions; the structured fields above replace it.
 BOILERPLATE = re.compile(r"停管處|以下簡稱|試辦期程|^停放於(汽車|機車)區")
 
@@ -87,6 +88,13 @@ URL = re.compile(r"https?://\S+")
 ENTRY = re.compile(r"入場|出場|進場|離場|辨識|辨析|按鈴|按鈕|取票|柵欄|閘門|車道|入口|出入口|倒退嚕|管理員")
 # Where to put the bike once inside: floors, areas, bay types, how to fit the bays.
 GUIDE = re.compile(r"停(放|在|於)|專用格|重機格|重機區|機車區|汽車區|汽車格|機車格|[BbＢ]\d|\d\s*[FＦ樓]|斜停|跨.?格|格線")
+# A retail brand only the official name carries means another business's lot.
+RETAIL = re.compile(r"(?i)全聯|家樂福|家福|好市多|costco|大潤發|愛買|ikea|宜家|麥當勞|新光三越|遠東百貨|sogo|微風")
+RETAIL_ALIAS = {"家福": "家樂福", "costco": "好市多", "宜家": "ikea"}
+
+
+def retail(name):
+    return {RETAIL_ALIAS.get(brand.lower(), brand.lower()) for brand in RETAIL.findall(name)}
 # Operator brands and parking words say nothing about which lot a name means.
 GENERIC = re.compile(
     r"(?i)嘟嘟房|city ?parking|城市車旅|times|168 ?parking|168停車聯盟|正好停|俥亭|uspace|台灣聯通|富山停車|歐特儀|康達盛通|吉拾|"
@@ -384,6 +392,8 @@ def match_lot(spot, lots):
             meters = distance(spot["lat"], spot["lng"], lot["lat"], lot["lng"])
             if meters > 600:
                 continue
+        if retail(lot["name"]) - retail(spot["name"]):
+            continue
         # A lot named for motorcycles cannot be one the official data lists without any.
         if "機車" in spot["name"] and lot["motor"] == 0 and "機車" not in lot["name"]:
             continue

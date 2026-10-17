@@ -100,6 +100,8 @@ class OfficialTest(unittest.TestCase):
         self.assertIsNone(match_lot(spot, [{"name": "華泰名品城", "lat": 25.0045, "lng": 121.5, "motor": 100}]))
         spot["name"] = "台中勤美機車停車場"  # a motorcycle lot is not one with no motorcycle bays
         self.assertIsNone(match_lot(spot, [{"name": "臺中勤美洲際酒店停車場", "lat": 25.0005, "lng": 121.5, "motor": 0}]))
+        spot["name"] = "新莊幸福立體停車場"  # a retail chain's lot is another business's facility
+        self.assertIsNone(match_lot(spot, [{"name": "Times全聯新莊幸福東店停車場", "lat": 25.0005, "lng": 121.5, "motor": 0}]))
         spot["name"] = "中山運動中心地下停車場"  # stated structures differ
         self.assertIsNone(match_lot(spot, [{"name": "中山運動中心旁臨時平面停車場", "lat": 25.0005, "lng": 121.5, "motor": 0}]))
 
