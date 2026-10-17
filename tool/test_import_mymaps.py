@@ -10,9 +10,9 @@ import import_mymaps
 from unittest.mock import patch
 
 from import_mymaps import (
-    PILOT_RULES, TAIPEI_PILOT, TDX_SOURCE, TAIPEI_ROADSIDE, apply_official, apply_taipei_rules, cell, clean_text, facility_key,
-    entry_direction, lot, locate, match_lot, merge, hccg_context, kaohsiung, midpoint, normalize, official_additions, official_lots, official_spot,
-    parse_fee, split_name, tdx_credentials, tdx_lots, tm2_to_wgs84,
+    DETAIL_COLUMNS, PILOT_RULES, TAIPEI_PILOT, TDX_SOURCE, TAIPEI_ROADSIDE, apply_official, apply_taipei_rules, cell, clean_text,
+    entry_direction, facility_key, lot, locate, match_lot, merge, hccg_context, kaohsiung, midpoint, normalize, official_additions, official_lots,
+    official_spot, official_sql, parse_fee, split_name, sql, tdx_credentials, tdx_lots, tm2_to_wgs84,
 )
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -332,6 +332,23 @@ class OfficialSpotTest(unittest.TestCase):
         self.assertEqual(added, ["A", "TDX-C"])
         placed = [{"name": "另一停車場", "lat": 23.0, "lng": self.LOT["lng"], "city": "臺南市", "scooter_total": 3}]
         self.assertEqual([lot["id"] for lot, _ in official_additions({"臺南市": [tdx_only]}, set(), placed)], [])
+
+
+class SqlTest(unittest.TestCase):
+    def test_both_tables_receive_every_detail_column_with_table_defaults(self):
+        spot = {"id": "00000000-0000-4000-8000-000000000009", "name": "x'y", "city": "臺北市", "district": "大安區",
+                "space_type": "offStreet", "fee_note": "請依現場公告", "note": "", "heavy_allowed": None, "scooter_allowed": True,
+                "scooter_total": None, "lat": 25.0, "lng": 121.5, "source_name": "社群回報整理", "source_url": "https://a",
+                "license_note": "", "parking_zones": [{"name": "機車區"}]}
+        community = sql([spot], "10000000-0000-4000-8000-000000000001")
+        for column in DETAIL_COLUMNS:
+            self.assertIn(column, community)
+        self.assertIn("'x''y'", community)
+        self.assertIn("null,null,'','','','','',", community)  # unknown enums null, text defaults empty
+        self.assertIn('\'[{"name": "機車區"}]\'::jsonb', community)
+        official = official_sql([spot | {"id": "official:00000000-0000-4000-8000-000000000009", "source_id": "TPE1"}], "2026-10-17")
+        self.assertIn("on conflict(id) do update set", official)
+        self.assertIn("facility_type=excluded.facility_type", official)
 
 
 class ImportedDataTest(unittest.TestCase):
