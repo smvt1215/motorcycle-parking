@@ -8147,7 +8147,7 @@
     "district": "北埔鄉",
     "source": "import",
     "space_type": "offStreet",
-    "fee_note": "每次 50 元半天（大型重機比照汽車費率）",
+    "fee_note": "每半天 50 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
     "status": "pending",
@@ -8161,7 +8161,7 @@
       {
         "name": "汽車區",
         "access": "heavyCar",
-        "fee_note": "每次 50 元半天"
+        "fee_note": "每半天 50 元"
       }
     ],
     "source_name": "Alan大重停車記事（Google 我的地圖）",
@@ -9872,7 +9872,7 @@
     "district": "新店區",
     "source": "import",
     "space_type": "offStreet",
-    "fee_note": "每小時 20 元；B每次 2 元限悠遊卡（大型重機比照汽車費率）",
+    "fee_note": "每小時 20 元；B2限悠遊卡（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
     "status": "pending",
@@ -9886,7 +9886,7 @@
       {
         "name": "汽車區",
         "access": "heavyCar",
-        "fee_note": "每小時 20 元；B每次 2 元限悠遊卡"
+        "fee_note": "每小時 20 元；B2限悠遊卡"
       }
     ],
     "source_name": "Alan大重停車記事（Google 我的地圖）",
@@ -16558,7 +16558,7 @@
     "district": "淡水區",
     "source": "import",
     "space_type": "offStreet",
-    "fee_note": "每日 40 元；後牌停每次 5 元F（大型重機另訂費率）",
+    "fee_note": "每日 40 元；後牌停5/F（大型重機另訂費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
     "status": "pending",
@@ -16572,7 +16572,7 @@
       {
         "name": "重機專用格",
         "access": "heavyOnly",
-        "fee_note": "每日 40 元；後牌停每次 5 元F"
+        "fee_note": "每日 40 元；後牌停5/F"
       }
     ],
     "source_name": "Alan大重停車記事（Google 我的地圖）",
@@ -23276,7 +23276,7 @@
     "district": "中正區",
     "source": "import",
     "space_type": "offStreet",
-    "fee_note": "每日 30 元；每次 600 元月（大型重機比照機車費率）",
+    "fee_note": "每日 30 元；每月 600 元（大型重機比照機車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
     "status": "pending",
@@ -23289,7 +23289,7 @@
       {
         "name": "機車區",
         "access": "scooterHeavy",
-        "fee_note": "每日 30 元；每次 600 元月"
+        "fee_note": "每日 30 元；每月 600 元"
       }
     ],
     "source_name": "Alan大重停車記事（Google 我的地圖）",
@@ -30869,8 +30869,8 @@
   {
     "id": "005a00ed-023c-51af-a9f0-429e2f9d2151",
     "name": "新北大道1段5巷2弄 普大共用機車格",
-    "lat": 25.0605866,
-    "lng": 121.4887081,
+    "lat": 25.0605868,
+    "lng": 121.4886987,
     "city": "新北市",
     "district": "三重區",
     "source": "import",
@@ -30894,8 +30894,8 @@
   {
     "id": "13286a3a-c602-5041-a150-66b076bf13b4",
     "name": "過圳街31巷 普大共用機車格",
-    "lat": 25.0605975,
-    "lng": 121.4894444,
+    "lat": 25.0603246,
+    "lng": 121.4891356,
     "city": "新北市",
     "district": "三重區",
     "source": "import",
@@ -30919,8 +30919,8 @@
   {
     "id": "5086e928-5690-59cf-ab09-309f94aa44cc",
     "name": "重新路3段115巷 普大共用機車格",
-    "lat": 25.0604249,
-    "lng": 121.4902395,
+    "lat": 25.0603847,
+    "lng": 121.4902751,
     "city": "新北市",
     "district": "三重區",
     "source": "import",
@@ -30944,8 +30944,8 @@
   {
     "id": "bc10e61d-e32a-5c25-a9a5-64151bc148a7",
     "name": "過圳街7巷 普大共用機車格",
-    "lat": 25.0599918,
-    "lng": 121.4906191,
+    "lat": 25.0597785,
+    "lng": 121.4903066,
     "city": "新北市",
     "district": "三重區",
     "source": "import",
@@ -30969,8 +30969,8 @@
   {
     "id": "7cf52c21-9e0a-511b-abc0-a16db396b736",
     "name": "新北大道1段15巷 普大共用機車格",
-    "lat": 25.0605879,
-    "lng": 121.4879507,
+    "lat": 25.0608188,
+    "lng": 121.4879592,
     "city": "新北市",
     "district": "三重區",
     "source": "import",
@@ -30994,8 +30994,8 @@
   {
     "id": "d44154cf-2d84-5952-8eeb-e79f19a1b58d",
     "name": "重新路3段115巷1弄 普大共用機車格",
-    "lat": 25.0600521,
-    "lng": 121.490874,
+    "lat": 25.0602136,
+    "lng": 121.4911561,
     "city": "新北市",
     "district": "三重區",
     "source": "import",
@@ -31019,8 +31019,8 @@
   {
     "id": "6c3c29b7-f248-526e-8820-2dddac42cd25",
     "name": "重新路3段 普大共用機車格",
-    "lat": 25.0595116,
-    "lng": 121.4909362,
+    "lat": 25.0595927,
+    "lng": 121.4910567,
     "city": "新北市",
     "district": "三重區",
     "source": "import",
@@ -31044,8 +31044,8 @@
   {
     "id": "f3440752-fcc7-585a-99a0-92500b896e8a",
     "name": "新北大道1段 普大共用機車格",
-    "lat": 25.0614002,
-    "lng": 121.4918701,
+    "lat": 25.0614131,
+    "lng": 121.4896755,
     "city": "新北市",
     "district": "三重區",
     "source": "import",

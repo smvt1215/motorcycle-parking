@@ -165,10 +165,13 @@ def parse_fee(text):
     text = re.sub(r"(\d)\s*\|\s*d\b", r"\1/d", text.strip()).replace("管理員", "需管理員協助").replace("按鈴", "需按鈴")
     for raw in re.split(r"\s*[|｜;；]\s*|\s+-\s+|(?<=\d):(?=\D)", text):
         # A short label (平, 黃, 室內, 機車…) may precede the amount; known abbreviations are expanded.
-        match = re.fullmatch(r"([^\d:：/]{0,4}?)\s*[:：]?\s*(\d+)\s*/?\s*(\d*)\s*([hHdD]|次|隔夜)?(.*)", raw)
-        if match:
+        match = re.fullmatch(r"([^\d:：/]{0,4}?)\s*[:：]?\s*(\d+)\s*/?\s*(\d*)\s*([hHdD]|次|隔夜|半天|月)?(.*)", raw)
+        # A number counts as a price only with a unit, or alone after a known prefix (平40);
+        # otherwise digits are part of a note (B2限悠遊卡, 後牌停5/F) and the text stays as written.
+        priced = match and (match[4] or (not match[5].strip(" :") and match[1].strip() in ("", *prefixes)))
+        if priced:
             hours = f"每 {match[3]} 小時" if match[3] else "每小時"
-            unit = {"h": hours, "d": "每日", "隔夜": "隔夜"}.get((match[4] or "").lower(), "每次")
+            unit = {"h": hours, "d": "每日", "隔夜": "隔夜", "半天": "每半天", "月": "每月"}.get((match[4] or "").lower(), "每次")
             label = match[1].strip()
             parts.append(f"{prefixes.get(label, label)}{unit} {match[2]} 元{match[5].strip(' :')}")
         elif raw:
@@ -202,6 +205,18 @@ def placemarks(path):
             }
 
 
+def midpoint(points):
+    """(lng, lat) halfway along a polyline's length; a single point is itself."""
+    lengths = [distance(a[1], a[0], b[1], b[0]) for a, b in zip(points, points[1:])]
+    remaining = sum(lengths) / 2
+    for (a, b), length in zip(zip(points, points[1:]), lengths):
+        if length and remaining <= length:
+            t = remaining / length
+            return a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t
+        remaining -= length
+    return points[0]
+
+
 def normalize(mark):
     """One placemark → project spot fields (city/district filled later), or None when not a parking point."""
     layer, icon, color = mark["layer"], mark["icon"], mark["color"]
@@ -209,7 +224,7 @@ def normalize(mark):
         return None  # shops, and district-level policy notes that belong to city rules
     name, fee_text = split_name(mark["name"])
     lines = clean_text(mark["description"])
-    lng, lat = mark["points"][len(mark["points"]) // 2]
+    lng, lat = midpoint(mark["points"])
     spot = {
         "name": name, "lat": round(lat, 7), "lng": round(lng, 7), "source": "import", "status": "pending",
         "fee_note": parse_fee(fee_text), "heavy_allowed": True, "scooter_allowed": None,

@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 from import_mymaps import (
     PILOT_RULES, TAIPEI_PILOT, cell, facility_key, TAIPEI_ROADSIDE, apply_official, apply_taipei_rules, clean_text, lot, match_lot, merge,
-    hccg_context, kaohsiung, normalize, official_lots, parse_fee, split_name, tdx_credentials, tdx_lots, tm2_to_wgs84,
+    hccg_context, kaohsiung, midpoint, normalize, official_lots, parse_fee, split_name, tdx_credentials, tdx_lots, tm2_to_wgs84,
 )
 
 DATA = Path(__file__).resolve().parent.parent / "data/imports/google-mymaps/spots.json"
@@ -33,6 +33,9 @@ class FeeTest(unittest.TestCase):
             "20/h|60|d": "每小時 20 元；每日 60 元",
             "40/h - 管理員": "每小時 40 元；需管理員協助",
             "平30/h;200/d | 假40/h": "平日每小時 30 元；每日 200 元；假日每小時 40 元",
+            "20/h - B2限悠遊卡": "每小時 20 元；B2限悠遊卡",
+            "50/半天": "每半天 50 元", "30/d | 600/月": "每日 30 元；每月 600 元",
+            "40/d - 後牌停5/F": "每日 40 元；後牌停5/F",
             "free": "免費", "30/H": "每小時 30 元", "機車30/d": "機車每日 30 元",
             "室內30/h | 室外20/h": "室內每小時 30 元；室外每小時 20 元",
         }
@@ -79,10 +82,18 @@ class NormalizeTest(unittest.TestCase):
         self.assertEqual(shared["name"], "三重路 普大共用機車格")
         self.assertEqual(shared["road_segment"], "三重路（西側）經貿二路106巷至新民街西側")
         segment = normalize(mark("路邊友善車格", "過圳街31巷", icon="line", color="01579B", line=True))
-        self.assertEqual((segment["space_type"], segment["road_segment"], segment["lat"]), ("paidMotorcycle", "過圳街31巷", 25.001))
+        self.assertEqual((segment["space_type"], segment["road_segment"]), ("paidMotorcycle", "過圳街31巷"))
+        self.assertAlmostEqual(segment["lat"], 25.001, places=5)
         timed = normalize(mark("路邊友善車格", "(Free - 平日夜間20-7 / 假日限定) 敦化北路199巷2弄 汽機車共用停車格", icon="1644", color="9C27B0"))
         self.assertEqual((timed["space_type"], timed["fee_note"]), ("car", "免費"))
         self.assertIn("平日夜間20-7", timed["special_rules"])
+
+    def test_line_midpoint_is_halfway_along_its_length(self):
+        self.assertEqual(midpoint([(121.5, 25.0)]), (121.5, 25.0))
+        lng, lat = midpoint([(121.5, 25.0), (121.5, 25.002)])  # two vertices: not an endpoint
+        self.assertAlmostEqual(lat, 25.001)
+        lng, lat = midpoint([(121.5, 25.0), (121.5, 25.0001), (121.5, 25.0002), (121.5, 25.004)])  # uneven sampling
+        self.assertAlmostEqual(lat, 25.002)
 
     def test_shops_and_district_policy_notes_are_not_spots(self):
         self.assertIsNone(normalize(mark("重機友善店家", "嵐天咖啡館", icon="1684")))
