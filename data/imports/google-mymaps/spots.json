@@ -1700,7 +1700,7 @@
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
     "note": "來源原名稱：遠東百貨 竹北店\n汽車停車區可停重機@蟑螂頭PTT\n已比對TDX 路外停車場（交通部運輸資料流通服務平臺）（TDX-HSC020）",
-    "address": "新竹縣新竹縣竹北市勝利二路2號",
+    "address": "新竹縣竹北市勝利二路2號",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -2057,7 +2057,7 @@
       {
         "name": "汽車區",
         "access": "heavyCar",
-        "fee_note": "每次 50 元H"
+        "fee_note": "每小時 50 元"
       }
     ],
     "source_name": "Alan大重停車記事（Google 我的地圖）",
@@ -3755,7 +3755,7 @@
       {
         "name": "汽車區",
         "access": "heavyCar",
-        "fee_note": "平日每小時 30 元;200/d；假日每小時 40 元"
+        "fee_note": "平日每小時 30 元；每日 200 元；假日每小時 40 元"
       }
     ],
     "source_name": "Alan大重停車記事（Google 我的地圖）",
@@ -4509,7 +4509,7 @@
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
     "note": "來源原名稱：新竹火車站後站(一)汽車停車場\n新竹市公有停車位，\n已比對TDX 路外停車場（交通部運輸資料流通服務平臺）（TDX-57）",
-    "address": "新竹市300新竹市東區公竹路",
+    "address": "新竹市東區公竹路",
     "entrance_note": "汽車費率 20h 後牌辨析\n慢慢都開始改成後牌辨識系統",
     "parking_zones": [
       {
@@ -4884,7 +4884,7 @@
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
     "note": "來源標示為特殊收費或管理方式\n彰新路一段上的蜀都串串火鍋右轉進去到底就會看到,\n路口也會看到停車場的牌子,只有現金繳費\n已比對TDX 路外停車場（交通部運輸資料流通服務平臺）（TDX-B500099）",
-    "address": "彰化縣彰化縣彰化市彰新路一段30號",
+    "address": "彰化縣彰化市彰新路一段30號",
     "entrance_note": "汽車費率 平日30h/假日40h 按鈕取票",
     "parking_zones": [
       {
@@ -6006,7 +6006,7 @@
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
     "note": "來源原名稱：歐特儀昆陽停車場\n已比對TDX 路外停車場（交通部運輸資料流通服務平臺）（TDX-NAN_013）",
-    "address": "南投縣南投縣仁愛鄉仁和路",
+    "address": "南投縣仁愛鄉仁和路",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -6130,7 +6130,7 @@
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
     "note": "來源原名稱：屏東公園仁愛路停車場\n已比對TDX 路外停車場（交通部運輸資料流通服務平臺）（TDX-PT0011）",
-    "address": "屏東縣屏東縣屏東市仁愛路77號",
+    "address": "屏東縣屏東市仁愛路77號",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -7263,7 +7263,7 @@
     "district": "東區",
     "source": "import",
     "space_type": "offStreet",
-    "fee_note": "室內30/h；室外20/h（大型重機比照汽車費率）",
+    "fee_note": "室內每小時 30 元；室外每小時 20 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
     "status": "pending",
@@ -7277,7 +7277,7 @@
       {
         "name": "汽車區",
         "access": "heavyCar",
-        "fee_note": "室內30/h；室外20/h"
+        "fee_note": "室內每小時 30 元；室外每小時 20 元"
       }
     ],
     "source_name": "Alan大重停車記事（Google 我的地圖）",
@@ -8822,7 +8822,7 @@
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
     "note": "來源原名稱：苗栗高鐵站停車場\n已比對TDX 路外停車場（交通部運輸資料流通服務平臺）（TDX-MIA092）",
-    "address": "苗栗縣苗栗縣後龍鎮高鐵三路268號",
+    "address": "苗栗縣後龍鎮高鐵三路268號",
     "entrance_note": "來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）\n汽車費率 前30分鐘免費 每小時30元 當日最高180元 管理員協助 / 按鈴",
     "parking_zones": [
       {
@@ -9127,7 +9127,7 @@
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
     "note": "來源原名稱：寶雅彰化民族店停車場\n來源標示為特殊收費或管理方式\n已比對TDX 路外停車場（交通部運輸資料流通服務平臺）（TDX-B500051）",
-    "address": "彰化縣彰化縣彰化市民族路221號",
+    "address": "彰化縣彰化市民族路221號",
     "entrance_note": "汽車費率 40h 按鈕取票 寶雅消費折抵",
     "parking_zones": [
       {
@@ -9849,7 +9849,7 @@
       {
         "name": "汽車區",
         "access": "heavyCar",
-        "fee_note": "每小時 20 元；B2限悠遊卡"
+        "fee_note": "每小時 20 元；B每次 2 元限悠遊卡"
       }
     ],
     "source_name": "Alan大重停車記事（Google 我的地圖）",
@@ -11324,7 +11324,7 @@
     "district": "林口區",
     "source": "import",
     "space_type": "offStreet",
-    "fee_note": "每次 30 元H（大型重機比照汽車費率）",
+    "fee_note": "每小時 30 元（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
     "status": "pending",
@@ -11338,7 +11338,7 @@
       {
         "name": "汽車區",
         "access": "heavyCar",
-        "fee_note": "每次 30 元H"
+        "fee_note": "每小時 30 元"
       }
     ],
     "source_name": "Alan大重停車記事（Google 我的地圖）",
@@ -15286,7 +15286,7 @@
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
     "note": "來源原名稱：財團法人彰化基督教醫院第四停車場\n已比對TDX 路外停車場（交通部運輸資料流通服務平臺）（TDX-B500059）\n來源原名稱：彰化基督教醫院 教學研究大樓",
-    "address": "彰化縣彰化縣彰化市旭光路235號3樓",
+    "address": "彰化縣彰化市旭光路235號3樓",
     "parking_guide": "汽車格 汽車費率, 30/h\n機車格 機車費率, 10/h",
     "parking_zones": [
       {
@@ -16169,7 +16169,7 @@
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
     "note": "來源原名稱：家樂福 南投店\n已比對TDX 路外停車場（交通部運輸資料流通服務平臺）（TDX-NAN_031）",
-    "address": "南投縣南投縣南投市三和三路21號",
+    "address": "南投縣南投市三和三路21號",
     "entrance_note": "目前2F設立專用格, 按鈴進入後免費停放",
     "parking_zones": [
       {
@@ -16586,7 +16586,7 @@
     "district": "淡水區",
     "source": "import",
     "space_type": "offStreet",
-    "fee_note": "每日 40 元；後牌停5/F（大型重機另訂費率）",
+    "fee_note": "每日 40 元；後牌停每次 5 元F（大型重機另訂費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
     "status": "pending",
@@ -16600,7 +16600,7 @@
       {
         "name": "重機專用格",
         "access": "heavyOnly",
-        "fee_note": "每日 40 元；後牌停5/F"
+        "fee_note": "每日 40 元；後牌停每次 5 元F"
       }
     ],
     "source_name": "Alan大重停車記事（Google 我的地圖）",
@@ -17638,7 +17638,7 @@
       {
         "name": "機車區",
         "access": "scooterHeavy",
-        "fee_note": "free"
+        "fee_note": "免費"
       }
     ],
     "source_name": "Alan大重停車記事（Google 我的地圖）",
@@ -18114,7 +18114,7 @@
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
     "note": "來源原名稱：武嶺停車場\n來源標示為特殊收費或管理方式\n已比對TDX 路外停車場（交通部運輸資料流通服務平臺）（TDX-NAN_017）",
-    "address": "南投縣南投縣仁愛鄉仁和路",
+    "address": "南投縣仁愛鄉仁和路",
     "entrance_note": "機車費率 20d 閘門投幣式\n機車車道進入，停放機車格\n走汽車道的話有重機格15格（汽車費率）",
     "parking_zones": [
       {
@@ -18347,7 +18347,7 @@
     "district": "岡山區",
     "source": "import",
     "space_type": "offStreet",
-    "fee_note": "機車30/d（大型重機比照機車費率）",
+    "fee_note": "機車每日 30 元（大型重機比照機車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
     "status": "pending",
@@ -18362,7 +18362,7 @@
       {
         "name": "機車區",
         "access": "scooterHeavy",
-        "fee_note": "機車30/d"
+        "fee_note": "機車每日 30 元"
       }
     ],
     "source_name": "Alan大重停車記事（Google 我的地圖）",
@@ -20582,7 +20582,7 @@
     "district": "蘆竹區",
     "source": "import",
     "space_type": "offStreet",
-    "fee_note": "每日 30 元；電子票證 20/d（大型重機比照機車費率）",
+    "fee_note": "每日 30 元；電子票證每日 20 元（大型重機比照機車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
     "status": "pending",
@@ -20596,7 +20596,7 @@
       {
         "name": "機車區",
         "access": "scooterHeavy",
-        "fee_note": "每日 30 元；電子票證 20/d"
+        "fee_note": "每日 30 元；電子票證每日 20 元"
       }
     ],
     "source_name": "Alan大重停車記事（Google 我的地圖）",
@@ -21080,7 +21080,7 @@
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
     "note": "來源原名稱：俥亭停車屏東中華停車場\n已比對TDX 路外停車場（交通部運輸資料流通服務平臺）（TDX-PT0002）",
-    "address": "屏東縣屏東縣屏東市中華路91號",
+    "address": "屏東縣屏東市中華路91號",
     "entrance_note": "機車費率 30d 後牌辨析",
     "parking_zones": [
       {
@@ -21765,7 +21765,7 @@
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
     "note": "來源原名稱：竹北市立-竹仁停十三停車場\n已比對TDX 路外停車場（交通部運輸資料流通服務平臺）（TDX-HSC013）",
-    "address": "新竹縣新竹縣竹北市中正東路321號",
+    "address": "新竹縣竹北市中正東路321號",
     "parking_zones": [
       {
         "name": "機車區",
@@ -24073,7 +24073,7 @@
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
     "note": "來源原名稱：台灣聯通(日月潭中興場)\n已比對TDX 路外停車場（交通部運輸資料流通服務平臺）（TDX-NAN_006）",
-    "address": "南投縣南投縣魚池鄉水社村中興路12巷",
+    "address": "南投縣魚池鄉水社村中興路12巷",
     "parking_zones": [
       {
         "name": "機車區",

@@ -4,11 +4,12 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+import unittest.mock
 from unittest.mock import patch
 
 from import_mymaps import (
     PILOT_RULES, TAIPEI_PILOT, TAIPEI_ROADSIDE, apply_official, apply_taipei_rules, clean_text, lot, match_lot, merge,
-    normalize, parse_fee, split_name, tdx_credentials, tm2_to_wgs84,
+    normalize, parse_fee, split_name, tdx_credentials, tdx_lots, tm2_to_wgs84,
 )
 
 DATA = Path(__file__).resolve().parent.parent / "data/imports/google-mymaps/spots.json"
@@ -29,6 +30,9 @@ class FeeTest(unittest.TestCase):
             "30/d | 1200/隔夜": "每日 30 元；隔夜 1200 元",
             "20/h|60|d": "每小時 20 元；每日 60 元",
             "40/h - 管理員": "每小時 40 元；需管理員協助",
+            "平30/h;200/d | 假40/h": "平日每小時 30 元；每日 200 元；假日每小時 40 元",
+            "free": "免費", "30/H": "每小時 30 元", "機車30/d": "機車每日 30 元",
+            "室內30/h | 室外20/h": "室內每小時 30 元；室外每小時 20 元",
         }
         for raw, expected in cases.items():
             with self.subTest(raw=raw):
@@ -129,6 +133,9 @@ class OfficialTest(unittest.TestCase):
         self.assertEqual(address("新竹市", "新竹市", "新竹市中央路229號"), "新竹市中央路229號")
         self.assertEqual(address("臺南市", "南區", "廣州里南區夏林路2號"), "臺南市廣州里南區夏林路2號")
         self.assertEqual(address("臺北市", "大安區", "嘉興街373號"), "臺北市大安區嘉興街373號")
+        self.assertEqual(address("新竹縣", "竹北市", "新竹縣竹北市勝利二路2號"), "新竹縣竹北市勝利二路2號")
+        self.assertEqual(address("新竹市", "東區", "300新竹市東區公竹路"), "新竹市東區公竹路")
+        self.assertEqual(address("臺北市", "中正區", "台北市中正區信義路1段1號"), "臺北市中正區信義路1段1號")
 
     def test_taipei_pilot_adds_scooter_area_and_flags_conflicting_ban(self):
         spot = {"name": "忠信廣場地下停車場", "space_type": "offStreet", "heavy_allowed": False, "parking_zones": [], "special_rules": ""}
@@ -166,6 +173,25 @@ class TdxCredentialTest(unittest.TestCase):
             with patch.dict(os.environ, {}, clear=True):
                 self.assertIsNone(tdx_credentials(env))
                 self.assertIsNone(tdx_credentials(Path(directory) / "missing.env"))
+
+
+class TdxFailureTest(unittest.TestCase):
+    def test_one_city_failure_does_not_drop_later_cities(self):
+        token = unittest.mock.MagicMock()
+        token.__enter__.return_value.read.return_value = b'{"access_token": "t"}'
+
+        def rows(_, kind, city, *__):
+            if city == "Taipei":
+                raise TimeoutError("timed out")
+            if kind == "CarPark":
+                return [{"CarParkID": "1", "CarParkName": {"Zh_tw": "某停車場"}, "CarParkPosition": {"PositionLat": 24.8, "PositionLon": 120.9}}]
+            return [{"CarParkID": "1", "Spaces": [{"SpaceType": 2, "NumberOfSpaces": 5}]}]
+
+        with patch("import_mymaps.urllib.request.urlopen", return_value=token), patch("import_mymaps.tdx_rows", side_effect=rows):
+            lots, failed = tdx_lots(Path("unused"), False, ("id", "secret"))
+        self.assertEqual(failed, ["TDX 臺北市：TimeoutError"])
+        self.assertEqual(lots["新竹市"][0]["motor"], 5)
+        self.assertNotIn("臺北市", lots)
 
 
 class ImportedDataTest(unittest.TestCase):

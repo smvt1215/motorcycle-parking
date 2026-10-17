@@ -144,14 +144,16 @@ def parse_fee(text):
                 "機": "機車區", "汽": "汽車區", "展期": "展期", "無展": "無展期"}
     parts = []
     text = re.sub(r"(\d)\s*\|\s*d\b", r"\1/d", text.strip()).replace("管理員", "需管理員協助").replace("按鈴", "需按鈴")
-    for raw in re.split(r"\s*[|｜]\s*|\s+-\s+|(?<=\d):(?=\D)", text):
-        match = re.fullmatch(r"(假日限定|展期|無展|[平假黃紅日夜機汽])?\s*:?\s*(\d+)\s*/?\s*(\d*)\s*(h|d|次|隔夜)?(.*)", raw)
+    for raw in re.split(r"\s*[|｜;；]\s*|\s+-\s+|(?<=\d):(?=\D)", text):
+        # A short label (平, 黃, 室內, 機車…) may precede the amount; known abbreviations are expanded.
+        match = re.fullmatch(r"([^\d:：/]{0,4}?)\s*[:：]?\s*(\d+)\s*/?\s*(\d*)\s*([hHdD]|次|隔夜)?(.*)", raw)
         if match:
             hours = f"每 {match[3]} 小時" if match[3] else "每小時"
-            unit = {"h": hours, "d": "每日", "隔夜": "隔夜"}.get(match[4] or "", "每次")
-            parts.append(f"{prefixes.get(match[1] or '', '')}{unit} {match[2]} 元{match[5].strip(' :')}")
+            unit = {"h": hours, "d": "每日", "隔夜": "隔夜"}.get((match[4] or "").lower(), "每次")
+            label = match[1].strip()
+            parts.append(f"{prefixes.get(label, label)}{unit} {match[2]} 元{match[5].strip(' :')}")
         elif raw:
-            parts.append(re.sub(r"(?i)free\s*/\s*(\d+)h", r"免費 \1 小時", raw).replace("Free", "免費"))
+            parts.append(re.sub(r"(?i)free", "免費", re.sub(r"(?i)free\s*/\s*(\d+)h", r"免費 \1 小時", raw)))
     return "；".join(parts) or "請依現場公告"
 
 
@@ -432,6 +434,9 @@ def tdx_lots(cache, refresh, credentials):
         except urllib.error.HTTPError as error:
             failed.append(f"TDX {name}：HTTP {error.code}")  # the URL is safe, but keep reports minimal
             continue
+        except (OSError, ValueError, KeyError, StopIteration) as error:  # timeouts, malformed or unexpected JSON
+            failed.append(f"TDX {name}：{type(error).__name__}")
+            continue
         lots[name] = [
             lot(f"TDX-{row['CarParkID']}", (row.get("CarParkName") or {}).get("Zh_tw", ""),
                 (row.get("CarParkPosition") or {}).get("PositionLat"), (row.get("CarParkPosition") or {}).get("PositionLon"),
@@ -520,7 +525,9 @@ def apply_official(spot, lot, meters, score, source_name):
             spot["note"] = "\n".join(filter(None, [f"來源原名稱：{spot['name']}", spot["note"]]))
         spot["name"] = lot["name"]
     if lot["address"]:
-        address = re.sub(r"^([臺台][北中南東]|新北|桃園|高雄|新竹|嘉義|基隆)市", "", lot["address"])
+        # Drop a leading postal code and the spot's own county/city (台 or 臺); a 縣轄市 such as 竹北市 stays.
+        address = re.sub(r"^\d{3,6}\s*", "", lot["address"])
+        address = re.sub("^" + spot["city"].replace("臺", "[臺台]"), "", address)
         # Add the district only when the address lacks it anywhere (新竹市's district is the city itself).
         named = spot["district"] in address or spot["district"] == spot["city"] or re.match(r"\S{1,3}區", address)
         spot["address"] = spot["city"] + ("" if named else spot["district"]) + address
