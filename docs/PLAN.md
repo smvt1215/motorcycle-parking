@@ -301,13 +301,26 @@ UI：`material_ui`、`cupertino_ui`（Flutter 官方設計套件，取代框架�
    - 不能確認自己的回報；檢舉按鈕 → `moderation_queue`；照片存 Supabase Storage，上傳前移除 EXIF。
 5. **管理**：第一版用 Supabase Dashboard 審核 `moderation_queue` 與維護 `city_rules`，不另做後台。
 
-### 外部社群地圖（Google 我的地圖）
-有一份他人公開分享的大台北 Google 我的地圖可作為**參考資料**（作者尚未同意匯入）：
-- 地圖連結：https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc
-- 第一版**不匯入**其點位資料；只參考其分類方式與呈現。
-- 做一個通用匯入工具 `tool/import_kml.dart`（KML/GeoJSON → `community_spots`，`source='import'`、記錄 `source_name`/`source_url`/授權說明，狀態預設「待確認」），之後取得作者同意或有其他授權資料時可直接用。
-- README 附「向地圖作者徵求授權」的建議文字範本。
-- 目前環境無法連到 `www.google.com`，若要讀取該地圖需手動匯出 KML 上傳，或放行網域。
+### 外部社群地圖（Google 我的地圖）（2026-10-17 更新）
+「Alan大重停車記事」Google 我的地圖（https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc）列為資料來源之一。只取地點、類型、費率等事實資訊並重新整理為專案格式，不沿用原說明全文、連結、照片與回報者署名。
+- 工具：`python3 tool/import_mymaps.py --mid <mid> --output data/imports/google-mymaps [--refresh] [--sql-owner <auth uid>]`。KML、官方資料與國土測繪中心查詢結果快取在 `artifacts/mymaps-cache/`（不進版控）；`--sql-owner` 另產生待審的 `community_spots` SQL，不直接寫入資料庫。
+- 圖層：匯入 7 個停車相關圖層；「重機友善店家」不是停車點，「路邊友善車格」中的行政區政策說明點屬於城市規則，皆不建點。三重的路段線段以線段中點建點並保留 `road_segment`。
+- 圖示對應：汽車區 → `heavyCar`、機車區 → `scooterHeavy`、重機專用格 → `heavyOnly`，以 `parking_zones` 表示；禁停圖層為 `heavy_allowed=false`，未確定圖層為 `null`。來源圖例的灰色（未確認）、橘色（進出場需注意）、藍色（特殊收費）轉為備註或入口說明。
+- 官方驗證與修正：
+  - 縣市／行政區：內政部國土測繪中心 `TownVillagePointQuery` 逐點反查。
+  - 路外停車場：比對各縣市官方開放資料，有官方資料的欄位才改用官方值（名稱、地址、費率、機車格數；臺北另有大型重機格數）。
+    - 臺北市停車場資訊（停管處 `TCMSV_alldesc`）、新北市路外公共停車場資訊、臺中市路外剩餘車位、桃園市停車率、高雄市公有路外停車場一覽表、臺南市路外停車場動態資訊、新竹市公有停車場相關資訊。
+    - 高雄市民營路外停車場一覽表沒有座標，只在同一行政區內以名稱比對（相似度 ≥ 0.9），並保留來源座標。
+    - 比對規則：去除營運商品牌、通用字與縣市前綴後比較名稱；80 公尺內相似度 ≥ 0.45、200 公尺內 ≥ 0.6，超過 200 公尺須名稱幾乎一致。來源名稱寫明「機車停車場」但官方資料的機車格為 0，或兩邊名稱標示不同型式（地下／立體／平面）時，視為不同場站。
+    - 座標偏差超過 150 公尺時保留來源座標並列為待人工確認；偏差超過 400 公尺且名稱幾乎一致時才改用官方座標。
+    - TDX 路外停車場（`CarPark`、`ParkingSpace`，22 縣市）：先比對縣市自有資料，配不到才用 TDX，避免同一場站因兩邊編號不同而無法合併。憑證取自環境變數或 `--tdx-env`（預設 `supabase/functions/.env`）；TDX 每把金鑰每分鐘限 5 次，工具每次請求間隔 13 秒、遇 429 依 `Retry-After` 重試，結果快取在 `artifacts/mymaps-cache/tdx/`。單一縣市失敗只記入報告。截至 2026-10-17，TDX 的新北市與基隆市路外資料為 0 筆。
+    - 新竹市主機缺少 TLS 中繼憑證，工具從憑證的 AIA 網址取得 TWCA 中繼憑證後照常驗證，不關閉驗證。
+  - 臺北市路外 36 處試辦重機停機車區（115/4/6 首波 24 處、115/7/6 新增 12 處）：依停管處新聞稿附件補上「機車區」與機車費率 2 倍的重機費率；試辦期限已屆，是否延續須以現場公告為準。
+  - 臺北市路邊收費機車格：依 115/10/6 起的新制改為每次 40 元、可斜停 2 格。
+  - 同一官方場站的多個來源標點（例如汽車區、機車區）合併為一個點位、多個 zones；來源回報彼此矛盾時改為 `null` 並列入待人工確認。
+- 詳情十二欄（見 [DESIGN.md](DESIGN.md)「點位詳情十二欄分組版」）：名稱、費率、停放車種（`parking_access`／`parking_zones`）、GPS、來源、狀態與更新時間全數填入；類型取自官方資料或名稱中的地下／立體／平面；說明依內容分入「入口」「停車指引」「備註」；官方地址或路段填入位置；試辦規則與限時開放填入特殊規則。照片不匯入（屬來源作者的著作）；即時車位不屬於匯入資料。`community_spots` 尚無這些延伸欄位，`--sql-owner` 產生的 SQL 只含既有欄位；延伸欄位保留在 JSON，待後端加上對應欄位後再寫入。
+- 結果：`data/imports/google-mymaps/spots.json`（`ParkingSpot` JSON）、`verification.json`（每點的官方比對紀錄）與 `REPORT.md`（統計、修正與待人工確認清單）。全部為 `source='import'`、`status='pending'`，App 的資格判斷因此一律維持「有條件」。
+- 限制：其餘縣市自有資料不是缺座標（基隆、屏東）就是查無資料集，改由 TDX 比對；觀光景點、量販店等未登記為路外停車場的地點仍無官方資料可比對。臺中與桃園的市府資料沒有費率。
 
 資料表在原本的 `community_spots` / `spot_votes` 之外新增：`spot_annotations`（對 TDX 點位的註記，以 `source + source_id` 關聯）、`moderation_queue`、`official_heavy_spots`、`rate_limit_events`。
 
