@@ -431,7 +431,9 @@ def apply_official(spot, lot, meters, score, source_name):
         spot["name"] = lot["name"]
     if lot["address"]:
         address = re.sub(r"^([臺台][北中南東]|新北|桃園|高雄|新竹|嘉義|基隆)市", "", lot["address"])
-        spot["address"] = spot["city"] + ("" if re.match(r"\S{1,3}區", address) else spot["district"]) + address
+        # Add the district only when the address lacks it anywhere (新竹市's district is the city itself).
+        named = spot["district"] in address or spot["district"] == spot["city"] or re.match(r"\S{1,3}區", address)
+        spot["address"] = spot["city"] + ("" if named else spot["district"]) + address
         changes.append(f"地址：{spot['address']}")
     kind = facility_type(lot["name"] + lot["summary"])
     if kind:
@@ -565,8 +567,9 @@ def build(kml, mid, cache, imported_on, refresh=False):
         spots.append(spot)
         report.append(entry)
     found = {entry.get("pilot") for _, entry in seen.values()}
-    for pilot, fee in TAIPEI_PILOT.items():
-        lot = max(lots["臺北市"], key=lambda lot: similarity(pilot, lot["name"]))
+    taipei = lots.get("臺北市", [])  # empty when the Taipei dataset failed; the report records why
+    for pilot, fee in TAIPEI_PILOT.items() if taipei else ():
+        lot = max(taipei, key=lambda lot: similarity(pilot, lot["name"]))
         if pilot in found or similarity(pilot, lot["name"]) < 0.8:
             continue
         nearby = [s for s in spots if s["city"] == "臺北市" and s["space_type"] == "offStreet"

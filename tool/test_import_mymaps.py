@@ -117,6 +117,16 @@ class OfficialTest(unittest.TestCase):
         spot["district"] = "三民區"
         self.assertIsNone(match_lot(spot, register))
 
+    def test_official_address_gets_district_only_when_missing(self):
+        def address(city, district, official):
+            spot = {"name": "x", "city": city, "district": district, "note": "", "address": "", "fee_note": "",
+                    "parking_zones": [], "heavy_allowed": True, "lat": 24.8, "lng": 120.9}
+            apply_official(spot, lot("1", "x", 24.8, 120.9, official), 0, 1.0, "官方")
+            return spot["address"]
+        self.assertEqual(address("新竹市", "新竹市", "新竹市中央路229號"), "新竹市中央路229號")
+        self.assertEqual(address("臺南市", "南區", "廣州里南區夏林路2號"), "臺南市廣州里南區夏林路2號")
+        self.assertEqual(address("臺北市", "大安區", "嘉興街373號"), "臺北市大安區嘉興街373號")
+
     def test_taipei_pilot_adds_scooter_area_and_flags_conflicting_ban(self):
         spot = {"name": "忠信廣場地下停車場", "space_type": "offStreet", "heavy_allowed": False, "parking_zones": [], "special_rules": ""}
         pilot, changes = apply_taipei_rules(spot)
