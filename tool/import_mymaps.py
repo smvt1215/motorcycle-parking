@@ -7,6 +7,7 @@ Every imported spot stays `pending`; the report lists each official correction.
 import argparse
 import csv
 from datetime import date
+import hashlib
 import html
 import json
 import math
@@ -35,8 +36,11 @@ OFFICIAL = {
 }
 KAOHSIUNG_PRIVATE = "https://openapi.kcg.gov.tw/Api/Service/Get/aeb8ba3c-8eec-49f6-8768-91218c819909"
 # odws.hccg.gov.tw omits its intermediate certificate; fetch it from the
-# certificate's AIA URL instead of turning verification off.
+# certificate's AIA URL instead of turning verification off. The AIA URL is
+# plain HTTP, so only the pinned certificate (TWCA SSL Certification Authority,
+# issued by TWCA CYBER Root CA, valid to 2033-02-23) is ever trusted.
 HCCG_INTERMEDIATE = "http://sslserver.twca.com.tw/cacert/Cyber_SSL_2023.crt"
+HCCG_INTERMEDIATE_SHA256 = "01af2324d098098f5e0cdf6faabada430b21cce777f47eacb26248b2fda3e531"
 NS = "{http://www.opengis.net/kml/2.2}"
 
 # 臺北市停管處公告之路外停車場試辦大重機停放機車區場域（115/4/6 首波 24 處、115/7/6 新增 12 處），
@@ -118,6 +122,8 @@ def fetch(url, path, refresh=False, context=None):
 
 def hccg_context(cache, refresh=False):
     der = fetch(HCCG_INTERMEDIATE, cache / "twca_ssl_2023.crt", refresh).read_bytes()
+    if hashlib.sha256(der).hexdigest() != HCCG_INTERMEDIATE_SHA256:
+        raise ValueError("TWCA intermediate certificate does not match the pinned fingerprint")
     context = ssl.create_default_context()
     context.load_verify_locations(cadata=der)
     return context
@@ -346,14 +352,16 @@ def kaohsiung(cache, refresh):
         if last and r["緯度"] not in ("", "-"):
             lots.append(lot(f"KHH{n + 1:04d}", last["場名"] + ("" if "停車場" in last["場名"] else "停車場"), r["緯度"], r["經度"],
                             re.sub(r"^[A-Z]區[:：]", "", r["位置"]), last["收費標準"].replace("-", ""), last["型式"], number(last["機車"])))
-    # The private-lot register has no coordinates; its first rows are a title and a header.
+    # The private-lot register has no coordinates. Its keys are generic (Column1…);
+    # the real field names are the values of a header row, so map by those names.
     rows = json.loads(fetch(KAOHSIUNG_PRIVATE, cache / "kcg_private.json", refresh).read_text())["data"]
-    for r in rows:
-        values = list(r.values())
-        # 登記證號, 經營型態, 型式, 停車場名稱, 行政區, 停車場位置, 大型車, 小型車, 機車, 收費標準, …
-        if values[3] and values[3] != "停車場名稱":
-            lots.append(lot(f"KHH-{values[0]}", values[3], None, None, values[5], values[9], values[2], number(values[8]),
-                            district=values[4]))
+    header = next(n for n, r in enumerate(rows) if "停車場名稱" in r.values())
+    column = lambda title: next(key for key, value in rows[header].items() if value.startswith(title))
+    keys = {title: column(title) for title in ("登記證號", "型式", "停車場名稱", "行政區", "停車場位置", "機車", "收費標準")}
+    for r in rows[header + 1:]:
+        if r[keys["停車場名稱"]]:
+            lots.append(lot(f"KHH-{r[keys['登記證號']]}", r[keys["停車場名稱"]], None, None, r[keys["停車場位置"]],
+                            r[keys["收費標準"]], r[keys["型式"]], number(r[keys["機車"]]), district=r[keys["行政區"]]))
     return lots
 
 
@@ -589,7 +597,7 @@ def apply_taipei_rules(spot, official_name=""):
         spot["special_rules"] = PILOT_RULES
         if spot["heavy_allowed"] is False:
             changes.append("待人工確認：列於臺北市路外試辦場域，但來源回報禁停")
-            spot["heavy_allowed"] = None
+            spot.update(heavy_allowed=None, heavy_conflict=True)
         changes.append(f"官方試辦場域：{pilot}，機車區重機費率 {TAIPEI_PILOT[pilot]}")
     return pilot, changes
 
@@ -602,10 +610,10 @@ def merge(kept, spot):
         lines = kept[key].splitlines()
         kept[key] = "\n".join(lines + [line for line in spot[key].splitlines() if line not in lines])
     if None not in (kept["heavy_allowed"], spot["heavy_allowed"]) and kept["heavy_allowed"] != spot["heavy_allowed"]:
-        kept["heavy_allowed"] = None
+        kept.update(heavy_allowed=None, heavy_conflict=True)
         return "待人工確認：來源對同一場站的重機可停回報不一致"
-    # A pilot lot reset to None by a conflicting ban stays None for review.
-    if kept["heavy_allowed"] is None and kept.get("special_rules") != PILOT_RULES:
+    # None from a conflict stays None for review; only an unknown value is filled in.
+    if kept["heavy_allowed"] is None and not kept.get("heavy_conflict"):
         kept["heavy_allowed"] = spot["heavy_allowed"]
     return ""
 

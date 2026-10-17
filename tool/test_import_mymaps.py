@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 from import_mymaps import (
     PILOT_RULES, TAIPEI_PILOT, TAIPEI_ROADSIDE, apply_official, apply_taipei_rules, clean_text, lot, match_lot, merge,
-    normalize, parse_fee, split_name, tdx_credentials, tdx_lots, tm2_to_wgs84,
+    hccg_context, kaohsiung, normalize, parse_fee, split_name, tdx_credentials, tdx_lots, tm2_to_wgs84,
 )
 
 DATA = Path(__file__).resolve().parent.parent / "data/imports/google-mymaps/spots.json"
@@ -158,6 +158,31 @@ class OfficialTest(unittest.TestCase):
         self.assertEqual([z["name"] for z in kept["parking_zones"]], ["汽車區", "機車區"])
         self.assertTrue(merge(kept, spot(False, "機車區")).startswith("待人工確認"))
         self.assertIsNone(kept["heavy_allowed"])
+        self.assertEqual(merge(kept, spot(True, "重機專用格")), "")  # a later report cannot clear the conflict
+        self.assertIsNone(kept["heavy_allowed"])
+
+
+class OfficialSourceTest(unittest.TestCase):
+    def test_hsinchu_intermediate_must_match_pinned_fingerprint(self):
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "twca_ssl_2023.crt").write_bytes(b"not the pinned certificate")
+            with self.assertRaises(ValueError):
+                hccg_context(Path(directory))
+
+    def test_kaohsiung_private_register_is_read_by_header_names(self):
+        title = "高雄市合格登記路外民營停車場一覽表"
+        header = {"登記證號": "Column9", "停車場名稱": "Column1", "行政區": "Column2", "停車場位置": "Column3", "型式": "Column4",
+                  "機車": "Column5", "收費標準\n(僅供參考實際以現場公告為主)": "Column6"}
+        rows = [{title: "三民區", **{v: "" for v in header.values()}},
+                {title: "", **{v: k for k, v in header.items()}},
+                {title: "", "Column9": "停2554", "Column1": "義大大昌醫院停車場", "Column2": "三民區", "Column3": "大昌一路305號",
+                 "Column4": "建物立體", "Column5": "12", "Column6": "每半小時15元"}]
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "kcg.json").write_text(json.dumps({"data": []}))
+            Path(directory, "kcg_private.json").write_text(json.dumps({"data": rows}, ensure_ascii=False))
+            [private] = kaohsiung(Path(directory), False)
+        self.assertEqual((private["id"], private["name"], private["district"], private["fee"], private["motor"]),
+                         ("KHH-停2554", "義大大昌醫院停車場", "三民區", "每半小時15元", 12))
 
 
 class TdxCredentialTest(unittest.TestCase):
