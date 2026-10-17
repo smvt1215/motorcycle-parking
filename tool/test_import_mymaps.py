@@ -4,8 +4,8 @@ from pathlib import Path
 import unittest
 
 from import_mymaps import (
-    PILOT_RULES, TAIPEI_PILOT, TAIPEI_ROADSIDE, apply_taipei_rules, clean_text, match_lot, merge, normalize,
-    parse_fee, split_name, tm2_to_wgs84,
+    PILOT_RULES, TAIPEI_PILOT, TAIPEI_ROADSIDE, apply_official, apply_taipei_rules, clean_text, lot, match_lot, merge,
+    normalize, parse_fee, split_name, tm2_to_wgs84,
 )
 
 DATA = Path(__file__).resolve().parent.parent / "data/imports/google-mymaps/spots.json"
@@ -88,14 +88,32 @@ class OfficialTest(unittest.TestCase):
 
     def test_matching_requires_name_evidence_not_only_proximity(self):
         spot = {"name": "大潤發中和店機車停車場", "lat": 25.0, "lng": 121.5}
-        lots = [{"name": "迪卡儂中和停車場", "lat": 25.0001, "lng": 121.5}]
+        lots = [{"name": "迪卡儂中和停車場", "lat": 25.0001, "lng": 121.5, "motor": 10}]
         self.assertIsNone(match_lot(spot, lots))
         spot["name"] = "嘟嘟房僑安站"
-        lots = [{"name": "僑安地下停車場", "lat": 25.0003, "lng": 121.5}]
+        lots = [{"name": "僑安地下停車場", "lat": 25.0003, "lng": 121.5, "motor": 0}]
         self.assertEqual(match_lot(spot, lots)[1]["name"], "僑安地下停車場")
         spot["name"] = "臺北市洲子立體停車場"  # a city prefix is not part of the lot's name
-        lots = [{"name": "洲子站", "lat": 25.0001, "lng": 121.5}, {"name": "洲子立體停車場", "lat": 25.0002, "lng": 121.5}]
+        lots = [{"name": "洲子站", "lat": 25.0001, "lng": 121.5, "motor": 0}, {"name": "洲子立體停車場", "lat": 25.0002, "lng": 121.5, "motor": 0}]
         self.assertEqual(match_lot(spot, lots)[1]["name"], "洲子立體停車場")
+        spot["name"] = "華泰名品城機車停車場（三期）"  # a generic official name far away is not the same lot
+        self.assertIsNone(match_lot(spot, [{"name": "華泰名品城", "lat": 25.0045, "lng": 121.5, "motor": 100}]))
+        spot["name"] = "台中勤美機車停車場"  # a motorcycle lot is not one with no motorcycle bays
+        self.assertIsNone(match_lot(spot, [{"name": "臺中勤美洲際酒店停車場", "lat": 25.0005, "lng": 121.5, "motor": 0}]))
+        spot["name"] = "中山運動中心地下停車場"  # stated structures differ
+        self.assertIsNone(match_lot(spot, [{"name": "中山運動中心旁臨時平面停車場", "lat": 25.0005, "lng": 121.5, "motor": 0}]))
+
+    def test_lots_without_coordinates_match_by_name_within_district_only(self):
+        register = [lot("KHH-停1", "嘟嘟房高雄美術館停車場", None, None, "美術館路", "每小時 20 元", district="鼓山區")]
+        spot = {"name": "嘟嘟房停車場（高雄美術館站）", "lat": 22.65, "lng": 120.28, "district": "鼓山區",
+                "note": "", "address": "", "fee_note": "", "parking_zones": [], "heavy_allowed": True, "city": "高雄市"}
+        best = match_lot(spot, register)
+        self.assertIsNone(best[2])
+        entry = apply_official(spot, best[1], best[2], best[3], "高雄市一覽表")
+        self.assertEqual((spot["lat"], spot["lng"]), (22.65, 120.28))
+        self.assertIsNone(entry["distance_m"])
+        spot["district"] = "三民區"
+        self.assertIsNone(match_lot(spot, register))
 
     def test_taipei_pilot_adds_scooter_area_and_flags_conflicting_ban(self):
         spot = {"name": "忠信廣場地下停車場", "space_type": "offStreet", "heavy_allowed": False, "parking_zones": [], "special_rules": ""}

@@ -365,19 +365,35 @@
   },
   {
     "id": "8c576ddf-5e29-5206-804d-4f8396241a8d",
-    "name": "俥亭停車府後地下停車場",
+    "name": "府後地下停車場",
     "city": "新竹市",
     "district": "新竹市",
     "layer": "汽車費率",
-    "source_name": "(20/h) 俥亭停車府後地下停車場"
+    "source_name": "(20/h) 俥亭停車府後地下停車場",
+    "official_id": "HSZ001",
+    "official_name": "府後地下停車場",
+    "distance_m": 47,
+    "name_score": 1.0,
+    "changes": [
+      "名稱：俥亭停車府後地下停車場 → 府後地下停車場",
+      "地址：新竹市北區府後街42號",
+      "費率：改用官方公告"
+    ]
   },
   {
     "id": "2480ded9-b87b-5856-a04e-4f109c94b801",
-    "name": "家樂福 豐原店",
+    "name": "家樂福豐原店停車場",
     "city": "臺中市",
     "district": "豐原區",
     "layer": "汽車費率",
-    "source_name": "(40/h)家樂福 豐原店"
+    "source_name": "(40/h)家樂福 豐原店",
+    "official_id": "TXG1824",
+    "official_name": "家樂福豐原店停車場",
+    "distance_m": 9,
+    "name_score": 1.0,
+    "changes": [
+      "名稱：家樂福 豐原店 → 家樂福豐原店停車場"
+    ]
   },
   {
     "id": "fcf8dcf9-b28c-5258-a7bd-6a7d6a828334",
@@ -424,11 +440,19 @@
   },
   {
     "id": "42872fbc-d757-54b2-b722-e6a5bd68ccd9",
-    "name": "臺中市南屯區文山停車場",
+    "name": "文山立體停車場",
     "city": "臺中市",
     "district": "南屯區",
     "layer": "汽車費率",
-    "source_name": "(30/h)臺中市南屯區文山停車場"
+    "source_name": "(30/h)臺中市南屯區文山停車場",
+    "official_id": "TXG1943",
+    "official_name": "文山立體停車場",
+    "distance_m": 4,
+    "name_score": 0.5,
+    "changes": [
+      "名稱：臺中市南屯區文山停車場 → 文山立體停車場",
+      "機車格數：590"
+    ]
   },
   {
     "id": "38bb512a-1310-5785-b904-5b41c6ef2bc1",
@@ -555,11 +579,18 @@
   },
   {
     "id": "c1912480-b854-56a0-8179-eff5248e2377",
-    "name": "陽明公園停車場",
+    "name": "桃園市陽明公園停車場",
     "city": "桃園市",
     "district": "桃園區",
     "layer": "汽車費率",
-    "source_name": "(30/h)陽明公園停車場"
+    "source_name": "(30/h)陽明公園停車場",
+    "official_id": "TYC0148",
+    "official_name": "桃園市陽明公園停車場",
+    "distance_m": 1,
+    "name_score": 1.0,
+    "changes": [
+      "名稱：陽明公園停車場 → 桃園市陽明公園停車場"
+    ]
   },
   {
     "id": "ff82c313-b2cf-584e-9706-c02fd98b6e67",
@@ -845,11 +876,20 @@
   },
   {
     "id": "2c80f16c-1c6c-55ea-a262-e6465d656911",
-    "name": "鹽埕停車場",
+    "name": "鹽埕(地上)停車場",
     "city": "高雄市",
     "district": "鹽埕區",
     "layer": "汽車費率",
-    "source_name": "(30/h - 管理員)鹽埕停車場"
+    "source_name": "(30/h - 管理員)鹽埕停車場",
+    "official_id": "KHH0144",
+    "official_name": "鹽埕(地上)停車場",
+    "distance_m": 28,
+    "name_score": 0.5,
+    "changes": [
+      "名稱：鹽埕停車場 → 鹽埕(地上)停車場",
+      "地址：高雄市鹽埕區大仁路10號",
+      "費率：改用官方公告"
+    ]
   },
   {
     "id": "1e342de6-1fc9-5484-81e5-9693a678c744",
@@ -1068,9 +1108,6 @@
       "名稱：中正運動中心停車場 - 注意部份為機械位 → 臺北市中正運動中心地下停車場",
       "地址：臺北市中正區信義路1段1號地下3層",
       "費率：改用官方公告"
-    ],
-    "merged": [
-      "(Free)[仁愛路進入]中正運動中心機車停車場(平面)"
     ]
   },
   {
@@ -1297,11 +1334,20 @@
   },
   {
     "id": "400cbb2a-9c3c-5115-ac11-4bb705e3242e",
-    "name": "新竹稅務大樓停車場",
+    "name": "稅務大樓地下停車場",
     "city": "新竹市",
     "district": "新竹市",
     "layer": "汽車費率",
-    "source_name": "(20/h)新竹稅務大樓停車場"
+    "source_name": "(20/h)新竹稅務大樓停車場",
+    "official_id": "HSZ020",
+    "official_name": "稅務大樓地下停車場",
+    "distance_m": 0,
+    "name_score": 0.5,
+    "changes": [
+      "名稱：新竹稅務大樓停車場 → 稅務大樓地下停車場",
+      "地址：新竹市東區中央路112號",
+      "費率：改用官方公告"
+    ]
   },
   {
     "id": "6b730798-e069-56aa-9c92-069bdf86336a",
@@ -1339,11 +1385,20 @@
   },
   {
     "id": "542b5f1a-1b94-5197-99bd-81a99b602c36",
-    "name": "港區第一停車場",
+    "name": "新竹漁港第一",
     "city": "新竹市",
     "district": "新竹市",
     "layer": "汽車費率",
-    "source_name": "(30/h)港區第一停車場"
+    "source_name": "(30/h)港區第一停車場",
+    "official_id": "HSZ049",
+    "official_name": "新竹漁港第一",
+    "distance_m": 4,
+    "name_score": 0.57,
+    "changes": [
+      "名稱：港區第一停車場 → 新竹漁港第一",
+      "地址：新竹市北區新港三路3號對面",
+      "費率：改用官方公告"
+    ]
   },
   {
     "id": "9a43a460-4e79-541b-9539-0dbc6e922de9",
@@ -1355,11 +1410,20 @@
   },
   {
     "id": "4f9638af-12e8-5e44-a205-b771254ba436",
-    "name": "東大陸橋下停車場-中華站",
+    "name": "東大陸橋下(中華站)停車場",
     "city": "新竹市",
     "district": "新竹市",
     "layer": "汽車費率",
-    "source_name": "(20/h)東大陸橋下停車場-中華站"
+    "source_name": "(20/h)東大陸橋下停車場-中華站",
+    "official_id": "HSZ017",
+    "official_name": "東大陸橋下(中華站)停車場",
+    "distance_m": 2,
+    "name_score": 1.0,
+    "changes": [
+      "名稱：東大陸橋下停車場-中華站 → 東大陸橋下(中華站)停車場",
+      "地址：新竹市新竹市東大陸橋下(中華路-民族路)",
+      "費率：改用官方公告"
+    ]
   },
   {
     "id": "187cdd94-1ccc-5b95-9fe2-ea78f832ec0e",
@@ -1495,11 +1559,18 @@
   },
   {
     "id": "763fb08f-bdb7-5d8b-92d5-fef92fcfd261",
-    "name": "延平路立體停車場",
+    "name": "延平立體停車場",
     "city": "桃園市",
     "district": "中壢區",
     "layer": "汽車費率",
-    "source_name": "(平30/h | 假40/h)延平路立體停車場"
+    "source_name": "(平30/h | 假40/h)延平路立體停車場",
+    "official_id": "TYC0159",
+    "official_name": "延平立體停車場",
+    "distance_m": 23,
+    "name_score": 0.67,
+    "changes": [
+      "名稱：延平路立體停車場 → 延平立體停車場"
+    ]
   },
   {
     "id": "dde12f12-88d5-55bb-baeb-48a7526c2a3c",
@@ -1633,11 +1704,19 @@
   },
   {
     "id": "6aa2d7d5-a08b-51d6-bc8a-780803e40ca3",
-    "name": "右車道進-平實公園地下停車場",
+    "name": "平實公園地下停車場",
     "city": "臺南市",
     "district": "東區",
     "layer": "汽車費率",
-    "source_name": "(20/h)右車道進-平實公園地下停車場"
+    "source_name": "(20/h)右車道進-平實公園地下停車場",
+    "official_id": "A01721",
+    "official_name": "平實公園地下停車場",
+    "distance_m": 14,
+    "name_score": 0.6,
+    "changes": [
+      "名稱：右車道進-平實公園地下停車場 → 平實公園地下停車場",
+      "地址：臺南市東區平實路101號"
+    ]
   },
   {
     "id": "8fff289e-6dfd-5b3e-aacf-0c3a7a67fa8a",
@@ -1722,11 +1801,18 @@
   },
   {
     "id": "aa5ad670-18c0-5917-9a8b-cdaa1d282ae3",
-    "name": "藝文園區地下停車場(南區)",
+    "name": "桃園藝文園區地下停車場",
     "city": "桃園市",
     "district": "桃園區",
     "layer": "汽車費率",
-    "source_name": "(平40/h | 假50/h)藝文園區地下停車場(南區) "
+    "source_name": "(平40/h | 假50/h)藝文園區地下停車場(南區) ",
+    "official_id": "TYC0163",
+    "official_name": "桃園藝文園區地下停車場",
+    "distance_m": 32,
+    "name_score": 0.57,
+    "changes": [
+      "名稱：藝文園區地下停車場(南區) → 桃園藝文園區地下停車場"
+    ]
   },
   {
     "id": "017f7387-aac3-5fb7-a962-db4fe61a3646",
@@ -1748,11 +1834,19 @@
   },
   {
     "id": "5b1e7ed5-c611-58b3-9f8d-67ed929b1a40",
-    "name": "城市車旅停車場 海安站",
+    "name": "海安路地下停車場",
     "city": "臺南市",
     "district": "中西區",
     "layer": "汽車費率",
-    "source_name": "(平20/h | 假30/h)城市車旅停車場 海安站"
+    "source_name": "(平20/h | 假30/h)城市車旅停車場 海安站",
+    "official_id": "B00001",
+    "official_name": "海安路地下停車場",
+    "distance_m": 29,
+    "name_score": 0.67,
+    "changes": [
+      "名稱：城市車旅停車場 海安站 → 海安路地下停車場",
+      "地址：臺南市中西區海安路188號B1"
+    ]
   },
   {
     "id": "1ac6d32e-3d37-55bd-b729-4fcd99a0796c",
@@ -1810,15 +1904,30 @@
     "city": "臺南市",
     "district": "南區",
     "layer": "汽車費率",
-    "source_name": "(30/h)水萍塭公園地下停車場"
+    "source_name": "(30/h)水萍塭公園地下停車場",
+    "official_id": "A02041",
+    "official_name": "水萍塭公園地下停車場",
+    "distance_m": 3,
+    "name_score": 1.0,
+    "changes": [
+      "地址：臺南市南區廣州里南區夏林路2號"
+    ]
   },
   {
     "id": "efad6e56-5d82-529b-b79b-0368a8cf01e8",
-    "name": "新市國小地下停車場",
+    "name": "臺南市新市國小地下停車場",
     "city": "臺南市",
     "district": "新市區",
     "layer": "汽車費率",
-    "source_name": "(20/h)新市國小地下停車場"
+    "source_name": "(20/h)新市國小地下停車場",
+    "official_id": "A02191",
+    "official_name": "臺南市新市國小地下停車場",
+    "distance_m": 25,
+    "name_score": 1.0,
+    "changes": [
+      "名稱：新市國小地下停車場 → 臺南市新市國小地下停車場",
+      "地址：臺南市新市區中興街1號B1"
+    ]
   },
   {
     "id": "69679d94-0b6f-52b6-a37f-f3031ad367ca",
@@ -1830,19 +1939,37 @@
   },
   {
     "id": "124056a2-f9d5-5458-80dd-110ce98f5c7a",
-    "name": "新竹火車站後站(四)汽車停車場",
+    "name": "火車站後站汽車停車場-4",
     "city": "新竹市",
     "district": "新竹市",
     "layer": "汽車費率",
-    "source_name": "(20/h)新竹火車站後站(四)汽車停車場"
+    "source_name": "(20/h)新竹火車站後站(四)汽車停車場",
+    "official_id": "HSZ024",
+    "official_name": "火車站後站汽車停車場-4",
+    "distance_m": 5,
+    "name_score": 0.5,
+    "changes": [
+      "名稱：新竹火車站後站(四)汽車停車場 → 火車站後站汽車停車場-4",
+      "地址：新竹市東區南大路140巷",
+      "費率：改用官方公告"
+    ]
   },
   {
     "id": "b9253169-5d8d-5c86-8755-f46d94efae1c",
-    "name": "新竹火車站後站(二)汽車停車場",
+    "name": "火車站後站汽車停車場-2",
     "city": "新竹市",
     "district": "新竹市",
     "layer": "汽車費率",
-    "source_name": "(20/h)新竹火車站後站(二)汽車停車場"
+    "source_name": "(20/h)新竹火車站後站(二)汽車停車場",
+    "official_id": "HSZ022",
+    "official_name": "火車站後站汽車停車場-2",
+    "distance_m": 10,
+    "name_score": 0.5,
+    "changes": [
+      "名稱：新竹火車站後站(二)汽車停車場 → 火車站後站汽車停車場-2",
+      "地址：新竹市東區公竹路",
+      "費率：改用官方公告"
+    ]
   },
   {
     "id": "d4a26294-5eae-5bf9-8e19-7f1785d633b5",
@@ -1850,15 +1977,32 @@
     "city": "新竹市",
     "district": "新竹市",
     "layer": "汽車費率",
-    "source_name": "(20/h)北大路停車場"
+    "source_name": "(20/h)北大路停車場",
+    "official_id": "HSZ025",
+    "official_name": "北大路停車場",
+    "distance_m": 41,
+    "name_score": 1.0,
+    "changes": [
+      "地址：新竹市北區中正路136巷4弄8號",
+      "費率：改用官方公告"
+    ]
   },
   {
     "id": "984bbfed-869a-5167-b245-b2816d97fdab",
-    "name": "新竹火車站後站(三)汽車停車場",
+    "name": "火車站後站汽車停車場-3",
     "city": "新竹市",
     "district": "新竹市",
     "layer": "汽車費率",
-    "source_name": "(20/h)新竹火車站後站(三)汽車停車場"
+    "source_name": "(20/h)新竹火車站後站(三)汽車停車場",
+    "official_id": "HSZ023",
+    "official_name": "火車站後站汽車停車場-3",
+    "distance_m": 7,
+    "name_score": 0.5,
+    "changes": [
+      "名稱：新竹火車站後站(三)汽車停車場 → 火車站後站汽車停車場-3",
+      "地址：新竹市東區南大路140巷",
+      "費率：改用官方公告"
+    ]
   },
   {
     "id": "4df39aa7-c898-596f-a175-31f682765d0e",
@@ -1927,7 +2071,14 @@
     "city": "臺中市",
     "district": "潭子區",
     "layer": "汽車費率",
-    "source_name": "(30/h - 後牌)潭興立體停車場"
+    "source_name": "(30/h - 後牌)潭興立體停車場",
+    "official_id": "TXG1800",
+    "official_name": "潭興立體停車場",
+    "distance_m": 15,
+    "name_score": 1.0,
+    "changes": [
+      "機車格數：111"
+    ]
   },
   {
     "id": "ffc532d4-9a72-5ca8-8091-f9459398c6b7",
@@ -1963,11 +2114,22 @@
   },
   {
     "id": "a3237294-c0da-5417-89d5-9c538b19b99d",
-    "name": "高雄流行音樂中心汽車停車場",
+    "name": "俥亭高雄流行音樂中心停車場",
     "city": "高雄市",
     "district": "鹽埕區",
     "layer": "汽車費率",
-    "source_name": "(平40/h | 假60/h - 有後牌)高雄流行音樂中心汽車停車場"
+    "source_name": "(平40/h | 假60/h - 有後牌)高雄流行音樂中心汽車停車場",
+    "official_id": "KHH-停7051",
+    "official_name": "俥亭高雄流行音樂中心停車場",
+    "distance_m": null,
+    "name_score": 1.0,
+    "changes": [
+      "名稱：高雄流行音樂中心汽車停車場 → 俥亭高雄流行音樂中心停車場",
+      "地址：高雄市鹽埕區真愛路1號室外地面層及地下第一層、苓雅區海邊路110號室外地面層",
+      "費率：改用官方公告",
+      "機車格數：401",
+      "座標：官方資料無座標，依同行政區名稱比對，保留來源座標"
+    ]
   },
   {
     "id": "96281b43-9531-54fa-9b94-8317fc09547c",
@@ -1996,19 +2158,37 @@
   },
   {
     "id": "3296ac5a-8945-51f3-9e2e-f344b9e75877",
-    "name": "台中市台中公園地下停車場",
+    "name": "臺中公園地下停車場",
     "city": "臺中市",
     "district": "北區",
     "layer": "汽車費率",
-    "source_name": "(30/h - 倒退掃牌)台中市台中公園地下停車場"
+    "source_name": "(30/h - 倒退掃牌)台中市台中公園地下停車場",
+    "official_id": "TXG1359",
+    "official_name": "臺中公園地下停車場",
+    "distance_m": 4,
+    "name_score": 1.0,
+    "changes": [
+      "名稱：台中市台中公園地下停車場 → 臺中公園地下停車場",
+      "機車格數：76"
+    ],
+    "merged": [
+      "(Free)台中公園機車停車場"
+    ]
   },
   {
     "id": "50edb449-a8b5-58b5-ba0e-782a1a7c5607",
-    "name": "展演中心地下停車場",
+    "name": "桃園展演中心地下停車場",
     "city": "桃園市",
     "district": "桃園區",
     "layer": "汽車費率",
-    "source_name": "(平40/h | 假50/h - 後牌)展演中心地下停車場"
+    "source_name": "(平40/h | 假50/h - 後牌)展演中心地下停車場",
+    "official_id": "TYC0062",
+    "official_name": "桃園展演中心地下停車場",
+    "distance_m": 34,
+    "name_score": 0.75,
+    "changes": [
+      "名稱：展演中心地下停車場 → 桃園展演中心地下停車場"
+    ]
   },
   {
     "id": "4cbd2c09-03ac-50c4-8cb1-5a2130a0d361",
@@ -2100,7 +2280,14 @@
     "city": "臺中市",
     "district": "沙鹿區",
     "layer": "汽車費率",
-    "source_name": "(30/h - 管理員)沙田立體停車場"
+    "source_name": "(30/h - 管理員)沙田立體停車場",
+    "official_id": "TXG1692",
+    "official_name": "沙田立體停車場",
+    "distance_m": 5,
+    "name_score": 1.0,
+    "changes": [
+      "機車格數：92"
+    ]
   },
   {
     "id": "e6368a4c-d2fd-5c59-af5c-3b4abbab62ed",
@@ -2280,15 +2467,27 @@
     "city": "臺中市",
     "district": "西區",
     "layer": "汽車費率",
-    "source_name": "(20/h)府後街地下停車場"
+    "source_name": "(20/h)府後街地下停車場",
+    "official_id": "TXG544",
+    "official_name": "府後街地下停車場",
+    "distance_m": 1,
+    "name_score": 1.0,
+    "changes": []
   },
   {
     "id": "74d1bc61-8a8f-5f18-8db5-0fb0c07e0064",
-    "name": "萬壽棒球場附地下停車場",
+    "name": "萬壽棒球場附屬地下停車場",
     "city": "臺中市",
     "district": "西區",
     "layer": "汽車費率",
-    "source_name": "(30/h)萬壽棒球場附地下停車場"
+    "source_name": "(30/h)萬壽棒球場附地下停車場",
+    "official_id": "TXG936",
+    "official_name": "萬壽棒球場附屬地下停車場",
+    "distance_m": 11,
+    "name_score": 0.91,
+    "changes": [
+      "名稱：萬壽棒球場附地下停車場 → 萬壽棒球場附屬地下停車場"
+    ]
   },
   {
     "id": "ddc0f62b-d01c-5583-95c8-ca3cf5daf515",
@@ -2310,19 +2509,33 @@
   },
   {
     "id": "3b3ac7d9-a061-5d9c-b5c1-faa4b6201482",
-    "name": "干城停車場",
+    "name": "干城立體停車場",
     "city": "臺中市",
     "district": "東區",
     "layer": "汽車費率",
-    "source_name": "(20/h)干城停車場"
+    "source_name": "(20/h)干城停車場",
+    "official_id": "TXG592",
+    "official_name": "干城立體停車場",
+    "distance_m": 45,
+    "name_score": 1.0,
+    "changes": [
+      "名稱：干城停車場 → 干城立體停車場"
+    ]
   },
   {
     "id": "43c26129-056a-5716-a051-5abbd60fccbe",
-    "name": "台中市南京路立體停車場",
+    "name": "南京立體停車場",
     "city": "臺中市",
     "district": "東區",
     "layer": "汽車費率",
-    "source_name": "(20/h)台中市南京路立體停車場"
+    "source_name": "(20/h)台中市南京路立體停車場",
+    "official_id": "TXG593",
+    "official_name": "南京立體停車場",
+    "distance_m": 13,
+    "name_score": 0.67,
+    "changes": [
+      "名稱：台中市南京路立體停車場 → 南京立體停車場"
+    ]
   },
   {
     "id": "b6363eb9-e06e-583b-8eff-30a076f718c8",
@@ -2330,15 +2543,30 @@
     "city": "臺中市",
     "district": "西屯區",
     "layer": "汽車費率",
-    "source_name": "(60/h)福星立體停車場"
+    "source_name": "(60/h)福星立體停車場",
+    "official_id": "TXG760",
+    "official_name": "福星立體停車場",
+    "distance_m": 5,
+    "name_score": 1.0,
+    "changes": [
+      "機車格數：73"
+    ]
   },
   {
     "id": "4523b0ff-41af-5aab-adb4-3288c1448622",
-    "name": "逢甲夜市-星享道公有停車場",
+    "name": "星享道停車場",
     "city": "臺中市",
     "district": "西屯區",
     "layer": "汽車費率",
-    "source_name": "(平30/h|假70/h)逢甲夜市-星享道公有停車場"
+    "source_name": "(平30/h|假70/h)逢甲夜市-星享道公有停車場",
+    "official_id": "TXG679",
+    "official_name": "星享道停車場",
+    "distance_m": 54,
+    "name_score": 0.5,
+    "changes": [
+      "名稱：逢甲夜市-星享道公有停車場 → 星享道停車場",
+      "機車格數：75"
+    ]
   },
   {
     "id": "656beafb-da24-5167-9722-3c241d729398",
@@ -2350,19 +2578,33 @@
   },
   {
     "id": "1ced5187-fe3b-5eb5-ba40-1eddc8079473",
-    "name": "太平區中興立體停車場",
+    "name": "中興立體停車場",
     "city": "臺中市",
     "district": "太平區",
     "layer": "汽車費率",
-    "source_name": "(20/h)太平區中興立體停車場"
+    "source_name": "(20/h)太平區中興立體停車場",
+    "official_id": "TXG1382",
+    "official_name": "中興立體停車場",
+    "distance_m": 48,
+    "name_score": 0.5,
+    "changes": [
+      "名稱：太平區中興立體停車場 → 中興立體停車場"
+    ]
   },
   {
     "id": "34610eb3-910f-581d-9bd8-6e639f22441b",
-    "name": "大雅公有停一停車場",
+    "name": "停一立體停車場",
     "city": "臺中市",
     "district": "大雅區",
     "layer": "汽車費率",
-    "source_name": "(--)大雅公有停一停車場"
+    "source_name": "(--)大雅公有停一停車場",
+    "official_id": "TXG1515",
+    "official_name": "停一立體停車場",
+    "distance_m": 35,
+    "name_score": 0.5,
+    "changes": [
+      "名稱：大雅公有停一停車場 → 停一立體停車場"
+    ]
   },
   {
     "id": "3f93e26a-7071-5f1d-a404-51c830ee6224",
@@ -2378,7 +2620,12 @@
     "city": "臺中市",
     "district": "大甲區",
     "layer": "汽車費率",
-    "source_name": "(20/h)文昌國小地下停車場"
+    "source_name": "(20/h)文昌國小地下停車場",
+    "official_id": "TXG479",
+    "official_name": "文昌國小地下停車場",
+    "distance_m": 52,
+    "name_score": 1.0,
+    "changes": []
   },
   {
     "id": "44c15812-21a3-56e5-b0d1-a980fa809a09",
@@ -2398,11 +2645,18 @@
   },
   {
     "id": "2475696a-4108-5de3-999d-4a07aa29fe73",
-    "name": "桃園市立圖書館總館地下停車場",
+    "name": "桃園市立圖書館總館停車場",
     "city": "桃園市",
     "district": "桃園區",
     "layer": "汽車費率",
-    "source_name": "(平40/h | 假50/h - 後牌)桃園市立圖書館總館地下停車場"
+    "source_name": "(平40/h | 假50/h - 後牌)桃園市立圖書館總館地下停車場",
+    "official_id": "TYC0041",
+    "official_name": "桃園市立圖書館總館停車場",
+    "distance_m": 89,
+    "name_score": 1.0,
+    "changes": [
+      "名稱：桃園市立圖書館總館地下停車場 → 桃園市立圖書館總館停車場"
+    ]
   },
   {
     "id": "2fc45d63-7cd6-5857-bfe0-bc3506c794e4",
@@ -2538,17 +2792,17 @@
   },
   {
     "id": "df252a22-e7ae-5ecf-a9bb-111f7d3d0a97",
-    "name": "CITYLINK 內湖店停車場",
+    "name": "CITYLINK內湖店停車場",
     "city": "臺北市",
     "district": "內湖區",
     "layer": "汽車費率",
     "source_name": "(40/h | 120/d)CITYLINK 內湖店停車場 3F(含)以上可停",
     "official_id": "TPE1032",
-    "official_name": "CITYLINK 內湖店停車場",
+    "official_name": "CITYLINK內湖店停車場",
     "distance_m": 1,
     "name_score": 0.72,
     "changes": [
-      "名稱：CITYLINK 內湖店停車場 3F(含)以上可停 → CITYLINK 內湖店停車場",
+      "名稱：CITYLINK 內湖店停車場 3F(含)以上可停 → CITYLINK內湖店停車場",
       "地址：臺北市內湖區成功路4段188號地上2至7層",
       "費率：改用官方公告"
     ]
@@ -2749,19 +3003,34 @@
   },
   {
     "id": "01cfdabb-0c2f-5e6d-9b55-1f17a9c6c2db",
-    "name": "廣三SOGO",
+    "name": "廣三SOGO停車場",
     "city": "臺中市",
     "district": "西區",
     "layer": "汽車費率",
-    "source_name": "(平30/h | 假60/h)廣三SOGO"
+    "source_name": "(平30/h | 假60/h)廣三SOGO",
+    "official_id": "TXG1563",
+    "official_name": "廣三SOGO停車場",
+    "distance_m": 41,
+    "name_score": 1.0,
+    "changes": [
+      "名稱：廣三SOGO → 廣三SOGO停車場"
+    ]
   },
   {
     "id": "1ebc70d1-338a-5a58-a18c-ca87790e2abe",
-    "name": "台中文心秀泰影城",
+    "name": "文心秀泰停車場",
     "city": "臺中市",
     "district": "南屯區",
     "layer": "汽車費率",
-    "source_name": "(45/h)台中文心秀泰影城"
+    "source_name": "(45/h)台中文心秀泰影城",
+    "official_id": "TXG1323",
+    "official_name": "文心秀泰停車場",
+    "distance_m": 64,
+    "name_score": 0.6,
+    "changes": [
+      "名稱：台中文心秀泰影城 → 文心秀泰停車場",
+      "機車格數：597"
+    ]
   },
   {
     "id": "39902681-1593-5169-9e76-da96ea233c90",
@@ -2878,11 +3147,25 @@
   },
   {
     "id": "cc3af4c7-7de2-50e0-8eff-e761e16b2206",
-    "name": "明志書院立體停車場(汽車)",
+    "name": "新竹明志書院停車場",
     "city": "新竹市",
     "district": "新竹市",
     "layer": "汽車費率",
-    "source_name": "(30/h)明志書院立體停車場(汽車)"
+    "source_name": "(30/h)明志書院立體停車場(汽車)",
+    "official_id": "HSZ037",
+    "official_name": "新竹明志書院停車場",
+    "distance_m": 15,
+    "name_score": 0.75,
+    "changes": [
+      "名稱：明志書院立體停車場(汽車) → 新竹明志書院停車場",
+      "地址：新竹市東區西大路317號1樓~7樓停車場",
+      "費率：改用官方公告",
+      "機車格數：688",
+      "待人工確認：來源對同一場站的重機可停回報不一致"
+    ],
+    "merged": [
+      "(2023起禁止停機車場)明志書院立體停車場（機車)"
+    ]
   },
   {
     "id": "9372a650-0704-5d40-8c47-0bc194ff2180",
@@ -2911,19 +3194,40 @@
   },
   {
     "id": "7b9de3fc-21d9-5c8e-9a0b-d26ea3b10a8a",
-    "name": "IKEA宜家家居 台中店",
+    "name": "宜家家居台中店停車場",
     "city": "臺中市",
     "district": "南屯區",
     "layer": "汽車費率",
-    "source_name": "(40/h)IKEA宜家家居 台中店"
+    "source_name": "(40/h)IKEA宜家家居 台中店",
+    "official_id": "TXG1024",
+    "official_name": "宜家家居台中店停車場",
+    "distance_m": 88,
+    "name_score": 0.71,
+    "changes": [
+      "名稱：IKEA宜家家居 台中店 → 宜家家居台中店停車場",
+      "機車格數：369"
+    ],
+    "merged": [
+      "(--)IKEA宜家家居 台中店 機車停車場"
+    ]
   },
   {
     "id": "4df30d47-6fa7-5c1a-89c8-1a9dc0f89285",
-    "name": "銀河廣場",
+    "name": "銀河廣場地下停車場",
     "city": "桃園市",
     "district": "中壢區",
     "layer": "汽車費率",
-    "source_name": "(40/h)銀河廣場"
+    "source_name": "(40/h)銀河廣場",
+    "official_id": "TYC0191",
+    "official_name": "銀河廣場地下停車場",
+    "distance_m": 9,
+    "name_score": 1.0,
+    "changes": [
+      "名稱：銀河廣場 → 銀河廣場地下停車場"
+    ],
+    "merged": [
+      "(30/d)國雲停車-銀河廣場地下停車場(附設充電樁)"
+    ]
   },
   {
     "id": "4130adc8-e4e8-5b8a-86e3-28685aaed3ab",
@@ -2969,11 +3273,20 @@
   },
   {
     "id": "d16f1c40-43a5-5aca-bec0-c99caf4ad67a",
-    "name": "歐特儀-自強地下停車場",
+    "name": "自強(地下)停車場",
     "city": "高雄市",
     "district": "前金區",
     "layer": "汽車費率",
-    "source_name": "(30/h | 300/d)歐特儀-自強地下停車場"
+    "source_name": "(30/h | 300/d)歐特儀-自強地下停車場",
+    "official_id": "KHH0140",
+    "official_name": "自強(地下)停車場",
+    "distance_m": 35,
+    "name_score": 1.0,
+    "changes": [
+      "名稱：歐特儀-自強地下停車場 → 自強(地下)停車場",
+      "地址：高雄市前金區文武一街65號",
+      "費率：改用官方公告"
+    ]
   },
   {
     "id": "2681ec4a-4310-5091-8fdc-83a5ba16b5e8",
@@ -3118,11 +3431,22 @@
   },
   {
     "id": "c56d9d4f-a0b5-535c-8e53-e7d9b6976212",
-    "name": "LaLaport 台中 南館汽車停車場",
+    "name": "Lalaport(南館)停車場",
     "city": "臺中市",
     "district": "東區",
     "layer": "汽車費率",
-    "source_name": "(平50/h|假100/h) LaLaport 台中 南館汽車停車場"
+    "source_name": "(平50/h|假100/h) LaLaport 台中 南館汽車停車場",
+    "official_id": "TXG1717",
+    "official_name": "Lalaport(南館)停車場",
+    "distance_m": 19,
+    "name_score": 0.63,
+    "changes": [
+      "名稱：LaLaport 台中 南館汽車停車場 → Lalaport(南館)停車場",
+      "機車格數：585"
+    ],
+    "merged": [
+      "(10/h)LaLaport 台中 南館機車停車場"
+    ]
   },
   {
     "id": "67d50bd8-fbd2-5e6e-acbb-f10d56ccd7c1",
@@ -3267,11 +3591,18 @@
   },
   {
     "id": "6ee81802-ef74-5e91-83c6-b6488bd231bc",
-    "name": "桃園長庚轉運站停車場-汽車",
+    "name": "長庚轉運站停車場",
     "city": "桃園市",
     "district": "龜山區",
     "layer": "汽車費率",
-    "source_name": "(日40/h | 夜20/h - 後牌)桃園長庚轉運站停車場-汽車"
+    "source_name": "(日40/h | 夜20/h - 後牌)桃園長庚轉運站停車場-汽車",
+    "official_id": "TYC0005",
+    "official_name": "長庚轉運站停車場",
+    "distance_m": 92,
+    "name_score": 0.75,
+    "changes": [
+      "名稱：桃園長庚轉運站停車場-汽車 → 長庚轉運站停車場"
+    ]
   },
   {
     "id": "78f8798b-cd9e-5516-bfc6-029443c6d902",
@@ -3375,7 +3706,15 @@
     "city": "新竹市",
     "district": "新竹市",
     "layer": "汽車費率",
-    "source_name": "(20/h)慈雲路停車場"
+    "source_name": "(20/h)慈雲路停車場",
+    "official_id": "HSZ033",
+    "official_name": "慈雲路停車場",
+    "distance_m": 19,
+    "name_score": 1.0,
+    "changes": [
+      "地址：新竹市東區龍山西路與慈雲路交叉口",
+      "費率：改用官方公告"
+    ]
   },
   {
     "id": "8b36dc36-5396-5153-aea1-479429362369",
@@ -3438,19 +3777,36 @@
   },
   {
     "id": "d38e3aa9-68ca-58a6-a7da-e64c6df6c46e",
-    "name": "國立臺灣美術館美術園區CITYPARKING",
+    "name": "國美館美術園區停車場",
     "city": "臺中市",
     "district": "西區",
     "layer": "汽車費率",
-    "source_name": "(平20/h | 假30/h - 按鈴)國立臺灣美術館美術園區CITYPARKING"
+    "source_name": "(平20/h | 假30/h - 按鈴)國立臺灣美術館美術園區CITYPARKING",
+    "official_id": "TXG1093",
+    "official_name": "國美館美術園區停車場",
+    "distance_m": 52,
+    "name_score": 0.46,
+    "changes": [
+      "名稱：國立臺灣美術館美術園區CITYPARKING → 國美館美術園區停車場"
+    ]
   },
   {
     "id": "d87dd7a1-a54d-5ad0-a318-2b0948f27e28",
-    "name": "大買家 北屯店",
+    "name": "大買家北屯停車場",
     "city": "臺中市",
     "district": "北屯區",
     "layer": "汽車費率",
-    "source_name": "(40/h - 按鈴)大買家 北屯店"
+    "source_name": "(40/h - 按鈴)大買家 北屯店",
+    "official_id": "TXG1314",
+    "official_name": "大買家北屯停車場",
+    "distance_m": 85,
+    "name_score": 1.0,
+    "changes": [
+      "名稱：大買家 北屯店 → 大買家北屯停車場"
+    ],
+    "merged": [
+      "(Free)大買家 北屯店"
+    ]
   },
   {
     "id": "7f00d318-884f-50ab-a5d0-aa06a04ce115",
@@ -3490,7 +3846,14 @@
     "city": "臺中市",
     "district": "東區",
     "layer": "汽車費率",
-    "source_name": "(平30/h | 假50/h - 倒退掃牌)和雲台中復興路四段二站停車場"
+    "source_name": "(平30/h | 假50/h - 倒退掃牌)和雲台中復興路四段二站停車場",
+    "official_id": "TXG2047",
+    "official_name": "和雲台中復興路四段二站停車場",
+    "distance_m": 38,
+    "name_score": 1.0,
+    "changes": [
+      "機車格數：125"
+    ]
   },
   {
     "id": "00d6c6ed-cc38-5928-b737-6da4c7e166dd",
@@ -3634,19 +3997,37 @@
   },
   {
     "id": "ab390a5d-c699-58c5-b885-406078fedda2",
-    "name": "臺中洲際棒球場附屬停車場",
+    "name": "臺中洲際棒球場立體停車場",
     "city": "臺中市",
     "district": "北屯區",
     "layer": "汽車費率",
-    "source_name": "(平30/h | 假40/h - 管理員)臺中洲際棒球場附屬停車場"
+    "source_name": "(平30/h | 假40/h - 管理員)臺中洲際棒球場附屬停車場",
+    "official_id": "TXG1020",
+    "official_name": "臺中洲際棒球場立體停車場",
+    "distance_m": 43,
+    "name_score": 0.86,
+    "changes": [
+      "名稱：臺中洲際棒球場附屬停車場 → 臺中洲際棒球場立體停車場",
+      "機車格數：2735"
+    ],
+    "merged": [
+      "(10/d - 投幣)臺中洲際棒球場附屬停車場"
+    ]
   },
   {
     "id": "782685b7-3f19-5e15-b24b-c9e785c331ca",
-    "name": "城市車旅龜山停四站",
+    "name": "龜山停四停車場",
     "city": "桃園市",
     "district": "龜山區",
     "layer": "汽車費率",
-    "source_name": "(20/h - 悠遊卡)城市車旅龜山停四站"
+    "source_name": "(20/h - 悠遊卡)城市車旅龜山停四站",
+    "official_id": "TYC0197",
+    "official_name": "龜山停四停車場",
+    "distance_m": 54,
+    "name_score": 1.0,
+    "changes": [
+      "名稱：城市車旅龜山停四站 → 龜山停四停車場"
+    ]
   },
   {
     "id": "814742a1-8789-5902-862e-6f8a81e728c1",
@@ -3683,11 +4064,18 @@
   },
   {
     "id": "9a09f747-95fa-5055-aa40-e2677de9c22e",
-    "name": "長庚醫院A8站停車場",
+    "name": "機場捷運長庚醫院A8站共開大樓停車場",
     "city": "桃園市",
     "district": "龜山區",
     "layer": "汽車費率",
-    "source_name": "(30/h-按鈕)長庚醫院A8站停車場"
+    "source_name": "(30/h-按鈕)長庚醫院A8站停車場",
+    "official_id": "TYC0135",
+    "official_name": "機場捷運長庚醫院A8站共開大樓停車場",
+    "distance_m": 44,
+    "name_score": 0.62,
+    "changes": [
+      "名稱：長庚醫院A8站停車場 → 機場捷運長庚醫院A8站共開大樓停車場"
+    ]
   },
   {
     "id": "33968d5e-cf56-58bd-b635-1ca7865f3ab1",
@@ -3729,7 +4117,12 @@
     "city": "臺中市",
     "district": "西屯區",
     "layer": "汽車費率",
-    "source_name": "(20/h - 無閘門)文修停車場"
+    "source_name": "(20/h - 無閘門)文修停車場",
+    "official_id": "TXG577",
+    "official_name": "文修停車場",
+    "distance_m": 44,
+    "name_score": 1.0,
+    "changes": []
   },
   {
     "id": "497f8203-378c-53a8-8889-3fa2a212339e",
@@ -3897,27 +4290,49 @@
   },
   {
     "id": "a4eb434f-469e-5473-8961-62d7344a7a3d",
-    "name": "台中健康公園停車場",
+    "name": "健康公園地下停車場",
     "city": "臺中市",
     "district": "南區",
     "layer": "汽車費率",
-    "source_name": "(30/h)台中健康公園停車場"
+    "source_name": "(30/h)台中健康公園停車場",
+    "official_id": "TXG615",
+    "official_name": "健康公園地下停車場",
+    "distance_m": 13,
+    "name_score": 0.75,
+    "changes": [
+      "名稱：台中健康公園停車場 → 健康公園地下停車場"
+    ]
   },
   {
     "id": "cd91cce9-be98-5d8f-a5d3-1c4494c49e87",
-    "name": "歐特儀 停車場(大墩國中地下停車場)",
+    "name": "大墩國中地下停車場",
     "city": "臺中市",
     "district": "南屯區",
     "layer": "汽車費率",
-    "source_name": "(20/h)歐特儀 停車場(大墩國中地下停車場)"
+    "source_name": "(20/h)歐特儀 停車場(大墩國中地下停車場)",
+    "official_id": "TXG626",
+    "official_name": "大墩國中地下停車場",
+    "distance_m": 62,
+    "name_score": 1.0,
+    "changes": [
+      "名稱：歐特儀 停車場(大墩國中地下停車場) → 大墩國中地下停車場",
+      "機車格數：82"
+    ]
   },
   {
     "id": "4a25414a-b981-54e5-88f5-a87b6c491e6c",
-    "name": "CITY PARKING 城市車旅停車場 本堂公園站",
+    "name": "本堂公園地下停車場",
     "city": "臺中市",
     "district": "霧峰區",
     "layer": "汽車費率",
-    "source_name": "(20/h)CITY PARKING 城市車旅停車場 本堂公園站"
+    "source_name": "(20/h)CITY PARKING 城市車旅停車場 本堂公園站",
+    "official_id": "TXG1516",
+    "official_name": "本堂公園地下停車場",
+    "distance_m": 132,
+    "name_score": 1.0,
+    "changes": [
+      "名稱：CITY PARKING 城市車旅停車場 本堂公園站 → 本堂公園地下停車場"
+    ]
   },
   {
     "id": "d33dbcb4-641b-5047-a64e-fcabec257fe8",
@@ -4136,11 +4551,18 @@
   },
   {
     "id": "d3adc50d-93e4-51f7-b2b0-563a8c6082a3",
-    "name": "林口長庚醫院復健立體停車場",
+    "name": "長庚醫院復健停車場",
     "city": "桃園市",
     "district": "龜山區",
     "layer": "汽車費率",
-    "source_name": "(日40/h | 夜20/h)林口長庚醫院復健立體停車場"
+    "source_name": "(日40/h | 夜20/h)林口長庚醫院復健立體停車場",
+    "official_id": "TYC0136",
+    "official_name": "長庚醫院復健停車場",
+    "distance_m": 42,
+    "name_score": 0.83,
+    "changes": [
+      "名稱：林口長庚醫院復健立體停車場 → 長庚醫院復健停車場"
+    ]
   },
   {
     "id": "07affbc3-be96-530f-bcd8-9a057a96c8d3",
@@ -4367,11 +4789,21 @@
   },
   {
     "id": "411a199d-e4eb-578c-954d-6268272a0c16",
-    "name": "中壢國小地下停車場",
+    "name": "中壢國小地下停車場(一期)",
     "city": "桃園市",
     "district": "中壢區",
     "layer": "汽車費率",
-    "source_name": "(40/h)中壢國小地下停車場"
+    "source_name": "(40/h)中壢國小地下停車場",
+    "official_id": "TYC0170",
+    "official_name": "中壢國小地下停車場(一期)",
+    "distance_m": 36,
+    "name_score": 0.75,
+    "changes": [
+      "名稱：中壢國小地下停車場 → 中壢國小地下停車場(一期)"
+    ],
+    "merged": [
+      "(30/d)中壢國小地下停車場"
+    ]
   },
   {
     "id": "cc227610-c1a1-5039-9c84-02eb45342caf",
@@ -4580,7 +5012,12 @@
     "city": "桃園市",
     "district": "中壢區",
     "layer": "重機格/汽車費率",
-    "source_name": "(40/h - 管理員)新明國小地下停車場"
+    "source_name": "(40/h - 管理員)新明國小地下停車場",
+    "official_id": "TYC0036",
+    "official_name": "新明國小地下停車場",
+    "distance_m": 2,
+    "name_score": 1.0,
+    "changes": []
   },
   {
     "id": "24fc2577-5587-5fd1-a5b9-026b86f82468",
@@ -4668,11 +5105,18 @@
   },
   {
     "id": "e0db5695-b729-5bb9-bd64-4f2fc0cfe703",
-    "name": "家樂福 青海店",
+    "name": "家樂福青海站停車場",
     "city": "臺中市",
     "district": "西屯區",
     "layer": "重機格/汽車費率",
-    "source_name": "(30/h)家樂福 青海店"
+    "source_name": "(30/h)家樂福 青海店",
+    "official_id": "TXG1989",
+    "official_name": "家樂福青海站停車場",
+    "distance_m": 141,
+    "name_score": 1.0,
+    "changes": [
+      "名稱：家樂福 青海店 → 家樂福青海站停車場"
+    ]
   },
   {
     "id": "d45df191-ffb6-5884-a05d-900f0a2e010a",
@@ -4709,11 +5153,18 @@
   },
   {
     "id": "82e31951-59f7-59a0-883d-78c435c847f0",
-    "name": "城市車旅運動公園立體站",
+    "name": "龍潭運動公園立體停車場",
     "city": "桃園市",
     "district": "龍潭區",
     "layer": "重機格/汽車費率",
-    "source_name": "(30/h - 後牌)城市車旅運動公園立體站"
+    "source_name": "(30/h - 後牌)城市車旅運動公園立體站",
+    "official_id": "TYC0105",
+    "official_name": "龍潭運動公園立體停車場",
+    "distance_m": 31,
+    "name_score": 0.75,
+    "changes": [
+      "名稱：城市車旅運動公園立體站 → 龍潭運動公園立體停車場"
+    ]
   },
   {
     "id": "4b593b4c-fcff-5507-a136-742b508a4df2",
@@ -4735,11 +5186,18 @@
   },
   {
     "id": "309d18c3-ed0d-512c-8a43-4df95e698e43",
-    "name": "平鎮文化公園地下停車場",
+    "name": "平鎮區文化公園地下停車場",
     "city": "桃園市",
     "district": "平鎮區",
     "layer": "重機格/汽車費率",
-    "source_name": "(日30/h | 夜10/h - 後牌&管理室繳費)平鎮文化公園地下停車場"
+    "source_name": "(日30/h | 夜10/h - 後牌&管理室繳費)平鎮文化公園地下停車場",
+    "official_id": "TYC0150",
+    "official_name": "平鎮區文化公園地下停車場",
+    "distance_m": 30,
+    "name_score": 1.0,
+    "changes": [
+      "名稱：平鎮文化公園地下停車場 → 平鎮區文化公園地下停車場"
+    ]
   },
   {
     "id": "6eecca45-e46e-5215-bf0a-420e4fce88bb",
@@ -4770,20 +5228,12 @@
   },
   {
     "id": "893340eb-032d-5027-ab3e-9826500b64c5",
-    "name": "中山運動中心旁臨時平面停車場",
+    "name": "中山運動中心地下停車場",
     "city": "臺北市",
     "district": "中山區",
     "layer": "重機格/汽車費率",
     "source_name": "(40/h)中山運動中心地下停車場",
-    "official_id": "TPE0441",
-    "official_name": "中山運動中心旁臨時平面停車場",
-    "distance_m": 60,
-    "name_score": 0.77,
-    "changes": [
-      "名稱：中山運動中心地下停車場 → 中山運動中心旁臨時平面停車場",
-      "地址：臺北市中山區中山北路2段46巷與44巷間（台新銀行、中山運動中心及捷運公司旁）",
-      "費率：改用官方公告"
-    ]
+    "changes": []
   },
   {
     "id": "92c704e6-96d2-56af-9172-93d70face320",
@@ -4893,7 +5343,12 @@
     "city": "桃園市",
     "district": "中壢區",
     "layer": "重機格/汽車費率",
-    "source_name": "(30/h - 後牌)中央地下停車場"
+    "source_name": "(30/h - 後牌)中央地下停車場",
+    "official_id": "TYC0176",
+    "official_name": "中央地下停車場",
+    "distance_m": 20,
+    "name_score": 1.0,
+    "changes": []
   },
   {
     "id": "b6db6755-504a-5f78-add7-97d7f5f307a6",
@@ -5327,19 +5782,19 @@
   },
   {
     "id": "67fc6102-99ad-500a-aace-93a6bf4704d2",
-    "name": "永和國小平面停車場",
+    "name": "永和國小地下停車場",
     "city": "新北市",
     "district": "永和區",
     "layer": "重機格/汽車費率",
     "source_name": "(30/h | 200/d)永和國小地下停車場",
-    "official_id": "040050",
-    "official_name": "永和國小平面停車場",
-    "distance_m": 89,
+    "official_id": "040003",
+    "official_name": "永和國小地下停車場",
+    "distance_m": 161,
     "name_score": 1.0,
     "changes": [
-      "名稱：永和國小地下停車場 → 永和國小平面停車場",
-      "地址：新北市永和區秀朗路1段120號(1樓)",
-      "費率：改用官方公告"
+      "地址：新北市永和區中正路299號B1、B2",
+      "費率：改用官方公告",
+      "待人工確認：距官方位置 161 公尺，保留來源座標"
     ]
   },
   {
@@ -5695,7 +6150,12 @@
     "city": "桃園市",
     "district": "中壢區",
     "layer": "重機格/汽車費率",
-    "source_name": "(30/h)中原國小地下停車場"
+    "source_name": "(30/h)中原國小地下停車場",
+    "official_id": "TYC0175",
+    "official_name": "中原國小地下停車場",
+    "distance_m": 48,
+    "name_score": 1.0,
+    "changes": []
   },
   {
     "id": "a385a5dd-acbe-507b-aa2c-21fed32b709a",
@@ -5857,11 +6317,18 @@
   },
   {
     "id": "d19024f5-5d40-5a39-8554-8d7af0a83115",
-    "name": "城市車旅文昌公園地下停車場2",
+    "name": "桃園文昌公園地下停車場",
     "city": "桃園市",
     "district": "桃園區",
     "layer": "重機格/汽車費率",
-    "source_name": "(40/h - 後牌)城市車旅文昌公園地下停車場2"
+    "source_name": "(40/h - 後牌)城市車旅文昌公園地下停車場2",
+    "official_id": "TYC0143",
+    "official_name": "桃園文昌公園地下停車場",
+    "distance_m": 13,
+    "name_score": 0.67,
+    "changes": [
+      "名稱：城市車旅文昌公園地下停車場2 → 桃園文昌公園地下停車場"
+    ]
   },
   {
     "id": "faec3a70-a875-58cb-b640-d44d604c7ccb",
@@ -5891,19 +6358,35 @@
   },
   {
     "id": "a52ad0e9-8121-5070-b9ea-0bf5cc5baa2e",
-    "name": "中路四號社會住宅",
+    "name": "中路四號地下停車場",
     "city": "桃園市",
     "district": "桃園區",
     "layer": "重機格/汽車費率",
-    "source_name": "(20/h | 100/d - 進場靠左)中路四號社會住宅"
+    "source_name": "(20/h | 100/d - 進場靠左)中路四號社會住宅",
+    "official_id": "TYC0145",
+    "official_name": "中路四號地下停車場",
+    "distance_m": 28,
+    "name_score": 0.6,
+    "changes": [
+      "名稱：中路四號社會住宅 → 中路四號地下停車場"
+    ]
   },
   {
     "id": "5dd4a9e6-0024-58ae-9810-b68736866199",
-    "name": "財稅大樓地下停車場",
+    "name": "財稅大樓(地下)停車場",
     "city": "高雄市",
     "district": "新興區",
     "layer": "重機格/汽車費率",
-    "source_name": "(30/h | 300/d - 後牌)財稅大樓地下停車場"
+    "source_name": "(30/h | 300/d - 後牌)財稅大樓地下停車場",
+    "official_id": "KHH0137",
+    "official_name": "財稅大樓(地下)停車場",
+    "distance_m": 34,
+    "name_score": 1.0,
+    "changes": [
+      "名稱：財稅大樓地下停車場 → 財稅大樓(地下)停車場",
+      "地址：高雄市新興區中正三路25號",
+      "費率：改用官方公告"
+    ]
   },
   {
     "id": "e7c54f58-d179-53e0-970c-dcb5d1c6a6aa",
@@ -5959,11 +6442,23 @@
   },
   {
     "id": "55a52d6a-aed3-5084-9cd9-5ad3cd0b5ae3",
-    "name": "靠左側-市政公園地下停車場-汽車",
+    "name": "市政公園地下停車場",
     "city": "臺中市",
     "district": "西屯區",
     "layer": "重機格/汽車費率",
-    "source_name": "(20/h)靠左側-市政公園地下停車場-汽車"
+    "source_name": "(20/h)靠左側-市政公園地下停車場-汽車",
+    "official_id": "TXG691",
+    "official_name": "市政公園地下停車場",
+    "distance_m": 3,
+    "name_score": 0.67,
+    "changes": [
+      "名稱：靠左側-市政公園地下停車場-汽車 → 市政公園地下停車場",
+      "機車格數：800"
+    ],
+    "merged": [
+      "(20/h)市政公園地下停車場-機車",
+      "(20/d)市政公園停車場-機車"
+    ]
   },
   {
     "id": "871b12a8-4ec2-5869-b40b-9c8f337d1943",
@@ -6491,11 +6986,19 @@
   },
   {
     "id": "1f99d958-1fdb-584f-9abe-c1f2d44ca67a",
-    "name": "家樂福 新仁店",
+    "name": "城市車旅家樂福新仁店停車場",
     "city": "臺南市",
     "district": "仁德區",
     "layer": "重機格/個別費率",
-    "source_name": "(Free)家樂福 新仁店"
+    "source_name": "(Free)家樂福 新仁店",
+    "official_id": "B00022",
+    "official_name": "城市車旅家樂福新仁店停車場",
+    "distance_m": 144,
+    "name_score": 1.0,
+    "changes": [
+      "名稱：家樂福 新仁店 → 城市車旅家樂福新仁店停車場",
+      "地址：臺南市仁德區大同路三段755號"
+    ]
   },
   {
     "id": "54ac6177-ffd6-554f-be44-d10632e343cb",
@@ -6507,11 +7010,18 @@
   },
   {
     "id": "7b7539a3-e81b-521d-8b2b-acf8cd8d83c4",
-    "name": "城市車旅中壢自強立體停車場站",
+    "name": "中壢自強立體停車場",
     "city": "桃園市",
     "district": "中壢區",
     "layer": "重機格/個別費率",
-    "source_name": "(60/d - 機車停車場進)城市車旅中壢自強立體停車場站"
+    "source_name": "(60/d - 機車停車場進)城市車旅中壢自強立體停車場站",
+    "official_id": "TYC0074",
+    "official_name": "中壢自強立體停車場",
+    "distance_m": 81,
+    "name_score": 1.0,
+    "changes": [
+      "名稱：城市車旅中壢自強立體停車場站 → 中壢自強立體停車場"
+    ]
   },
   {
     "id": "5b50458d-722d-5962-bbea-4e9418d91d40",
@@ -6523,11 +7033,21 @@
   },
   {
     "id": "674e0bd6-c49a-5166-a352-b8f283db6fa3",
-    "name": "機車道進-赤土崎公園地下停車場",
+    "name": "赤土崎地下停車場",
     "city": "新竹市",
     "district": "新竹市",
     "layer": "重機格/個別費率",
-    "source_name": "(20/h)機車道進-赤土崎公園地下停車場"
+    "source_name": "(20/h)機車道進-赤土崎公園地下停車場",
+    "official_id": "HSZ002",
+    "official_name": "赤土崎地下停車場",
+    "distance_m": 14,
+    "name_score": 0.5,
+    "changes": [
+      "名稱：機車道進-赤土崎公園地下停車場 → 赤土崎地下停車場",
+      "地址：新竹市東區建中路2號",
+      "費率：改用官方公告",
+      "機車格數：210"
+    ]
   },
   {
     "id": "e5c4619c-919e-569d-99f5-205f63548c93",
@@ -6869,14 +7389,6 @@
     ]
   },
   {
-    "id": "bd14e572-66d0-57e7-a2da-89948cf082c1",
-    "name": "市政公園地下停車場-機車",
-    "city": "臺中市",
-    "district": "西屯區",
-    "layer": "機車費率",
-    "source_name": "(20/h)市政公園地下停車場-機車"
-  },
-  {
     "id": "2de37011-71fd-5306-8988-5dc0e05e3038",
     "name": "麥當勞-台北舊宗餐廳－設有得來速",
     "city": "臺北市",
@@ -6917,14 +7429,6 @@
     "district": "北區",
     "layer": "機車費率",
     "source_name": "(40/d)五權立體停車場"
-  },
-  {
-    "id": "116d951e-7bd4-58da-a4de-8eb60129fea4",
-    "name": "台中公園機車停車場",
-    "city": "臺中市",
-    "district": "北區",
-    "layer": "機車費率",
-    "source_name": "(Free)台中公園機車停車場"
   },
   {
     "id": "775bcb00-5979-5b7d-9e11-c6c1ae3b54b0",
@@ -7011,11 +7515,19 @@
   },
   {
     "id": "931aebb8-c69c-52fa-a844-905c1a65332f",
-    "name": "第二市場停車場",
+    "name": "第二市場P(興中)",
     "city": "臺中市",
     "district": "中區",
     "layer": "機車費率",
-    "source_name": "(20/d)第二市場停車場"
+    "source_name": "(20/d)第二市場停車場",
+    "official_id": "TXG3034",
+    "official_name": "第二市場P(興中)",
+    "distance_m": 47,
+    "name_score": 0.67,
+    "changes": [
+      "名稱：第二市場停車場 → 第二市場P(興中)",
+      "機車格數：632"
+    ]
   },
   {
     "id": "2601935e-3a86-577d-9c86-dd44765edb3a",
@@ -7026,28 +7538,12 @@
     "source_name": "(Free)SKM PARK機車停車場"
   },
   {
-    "id": "e8d83834-2ea2-57d3-8776-9ab1a57eadef",
-    "name": "國雲停車-銀河廣場地下停車場(附設充電樁)",
-    "city": "桃園市",
-    "district": "中壢區",
-    "layer": "機車費率",
-    "source_name": "(30/d)國雲停車-銀河廣場地下停車場(附設充電樁)"
-  },
-  {
     "id": "0b8d8666-1b7e-58af-929b-e3ca7ca61c14",
     "name": "家樂福 斗六店",
     "city": "雲林縣",
     "district": "斗六市",
     "layer": "機車費率",
     "source_name": "(Free)家樂福 斗六店"
-  },
-  {
-    "id": "45d8298f-79b7-5e38-875c-1f088c8fdd92",
-    "name": "市政公園停車場-機車",
-    "city": "臺中市",
-    "district": "西屯區",
-    "layer": "機車費率",
-    "source_name": "(20/d)市政公園停車場-機車"
   },
   {
     "id": "5c29e518-ec9a-5dc9-b064-2b62d52a58a9",
@@ -7102,11 +7598,19 @@
   },
   {
     "id": "739dcf35-56da-51f8-a6ca-653f9a9b6b25",
-    "name": "後牌-中正公園地下停車場",
+    "name": "中正公園地下停車場",
     "city": "臺中市",
     "district": "北區",
     "layer": "機車費率",
-    "source_name": "(機20/d | 汽40/h)後牌-中正公園地下停車場"
+    "source_name": "(機20/d | 汽40/h)後牌-中正公園地下停車場",
+    "official_id": "TXG1602",
+    "official_name": "中正公園地下停車場",
+    "distance_m": 14,
+    "name_score": 0.75,
+    "changes": [
+      "名稱：後牌-中正公園地下停車場 → 中正公園地下停車場",
+      "機車格數：302"
+    ]
   },
   {
     "id": "c7a9a85b-02e3-5bd7-87cb-53e0ca1451a5",
@@ -7118,11 +7622,18 @@
   },
   {
     "id": "f232b10c-a6f0-5f7c-8d5e-2e6d4c173bde",
-    "name": "乙未紀念公園地下停車場",
+    "name": "1895乙未保臺紀念公園地下停車場",
     "city": "桃園市",
     "district": "平鎮區",
     "layer": "機車費率",
-    "source_name": "(30/d)乙未紀念公園地下停車場"
+    "source_name": "(30/d)乙未紀念公園地下停車場",
+    "official_id": "TYC0165",
+    "official_name": "1895乙未保臺紀念公園地下停車場",
+    "distance_m": 51,
+    "name_score": 0.5,
+    "changes": [
+      "名稱：乙未紀念公園地下停車場 → 1895乙未保臺紀念公園地下停車場"
+    ]
   },
   {
     "id": "399cde12-efb9-559b-bc62-1d196c585898",
@@ -7134,11 +7645,19 @@
   },
   {
     "id": "29aca976-10c7-50b5-9977-820ea1fc6162",
-    "name": "捷運水安宮站(文心路)",
+    "name": "捷運水安宮站轉乘機車停車場",
     "city": "臺中市",
     "district": "南屯區",
     "layer": "機車費率",
-    "source_name": "(20/d)捷運水安宮站(文心路)"
+    "source_name": "(20/d)捷運水安宮站(文心路)",
+    "official_id": "TXG1408",
+    "official_name": "捷運水安宮站轉乘機車停車場",
+    "distance_m": 119,
+    "name_score": 0.62,
+    "changes": [
+      "名稱：捷運水安宮站(文心路) → 捷運水安宮站轉乘機車停車場",
+      "機車格數：288"
+    ]
   },
   {
     "id": "1d8f697b-79f1-57d7-b06a-2a35694d21f2",
@@ -7146,7 +7665,19 @@
     "city": "新竹市",
     "district": "新竹市",
     "layer": "機車費率",
-    "source_name": "(Free)遠東巨城購物中心停車場"
+    "source_name": "(Free)遠東巨城購物中心停車場",
+    "official_id": "HSZ005",
+    "official_name": "遠東巨城購物中心停車場",
+    "distance_m": 69,
+    "name_score": 1.0,
+    "changes": [
+      "地址：新竹市新竹市中央路229號",
+      "費率：改用官方公告",
+      "機車格數：3000"
+    ],
+    "merged": [
+      "(Free)遠東巨城購物中心停車場 (機車)"
+    ]
   },
   {
     "id": "70f1ef6d-7b98-54f3-85f7-33f7233a0c76",
@@ -7155,14 +7686,6 @@
     "district": "竹北市",
     "layer": "機車費率",
     "source_name": "(50/d)城市車旅新竹高鐵二站"
-  },
-  {
-    "id": "349291fd-563a-5b2a-88c3-7469550ac17f",
-    "name": "臺中洲際棒球場附屬停車場",
-    "city": "臺中市",
-    "district": "北屯區",
-    "layer": "機車費率",
-    "source_name": "(10/d - 投幣)臺中洲際棒球場附屬停車場"
   },
   {
     "id": "650c3f40-0053-511f-ba0e-0f45fbd56634",
@@ -7224,11 +7747,18 @@
   },
   {
     "id": "3fab8166-cfab-5695-a2e1-47c6e808e1a0",
-    "name": "歐特儀A19體育園區站室內停車場",
+    "name": "A19桃園體育園區站",
     "city": "桃園市",
     "district": "中壢區",
     "layer": "機車費率",
-    "source_name": "(30/d)歐特儀A19體育園區站室內停車場"
+    "source_name": "(30/d)歐特儀A19體育園區站室內停車場",
+    "official_id": "TYC0078",
+    "official_name": "A19桃園體育園區站",
+    "distance_m": 79,
+    "name_score": 0.57,
+    "changes": [
+      "名稱：歐特儀A19體育園區站室內停車場 → A19桃園體育園區站"
+    ]
   },
   {
     "id": "3dedc28f-4901-5b2c-878f-c8e6366373dd",
@@ -7249,11 +7779,28 @@
   },
   {
     "id": "d810f0c0-e265-52e7-8761-03ff168296e3",
-    "name": "捷運文心崇德站機車停車場",
+    "name": "捷運文心崇德站轉乘機車停車場",
     "city": "臺中市",
     "district": "北屯區",
     "layer": "機車費率",
-    "source_name": "(20/h)捷運文心崇德站機車停車場"
+    "source_name": "(20/h)捷運文心崇德站機車停車場",
+    "official_id": "TXG1417",
+    "official_name": "捷運文心崇德站轉乘機車停車場",
+    "distance_m": 10,
+    "name_score": 0.83,
+    "changes": [
+      "名稱：捷運文心崇德站機車停車場 → 捷運文心崇德站轉乘機車停車場",
+      "機車格數：117"
+    ]
+  },
+  {
+    "id": "ecd18f14-6bec-5ddd-91af-7236c2874df1",
+    "name": "[仁愛路進入]中正運動中心機車停車場(平面)",
+    "city": "臺北市",
+    "district": "中正區",
+    "layer": "機車費率",
+    "source_name": "(Free)[仁愛路進入]中正運動中心機車停車場(平面)",
+    "changes": []
   },
   {
     "id": "8443765f-6316-5e27-854c-5c67139d5866",
@@ -7377,11 +7924,20 @@
   },
   {
     "id": "33d72e7f-ccbf-5c1b-b638-200748de01b6",
-    "name": "新光三越 台中中港店",
+    "name": "新光三越(股)台中中港分公司停車場",
     "city": "臺中市",
     "district": "西屯區",
     "layer": "機車費率",
-    "source_name": "(Free)新光三越 台中中港店"
+    "source_name": "(Free)新光三越 台中中港店",
+    "official_id": "TXG1026",
+    "official_name": "新光三越(股)台中中港分公司停車場",
+    "distance_m": 175,
+    "name_score": 0.67,
+    "changes": [
+      "名稱：新光三越 台中中港店 → 新光三越(股)台中中港分公司停車場",
+      "機車格數：1050",
+      "待人工確認：距官方位置 175 公尺，保留來源座標"
+    ]
   },
   {
     "id": "32d9c1b5-236f-5377-85af-3ea7b7d2ba8e",
@@ -7579,14 +8135,6 @@
     "source_name": "(30/d)高雄橋頭火車(捷運)站 站前街停車場"
   },
   {
-    "id": "daa82fe2-9ab5-5f22-88c7-f751d676e4e9",
-    "name": "遠東巨城購物中心停車場 (機車)",
-    "city": "新竹市",
-    "district": "新竹市",
-    "layer": "機車費率",
-    "source_name": "(Free)遠東巨城購物中心停車場 (機車)"
-  },
-  {
     "id": "2c06ba22-4607-5142-8f39-221f7fcb212e",
     "name": "新光三越 高雄左營店",
     "city": "高雄市",
@@ -7622,11 +8170,21 @@
   },
   {
     "id": "67c11131-5f85-5856-95c2-884025d45d16",
-    "name": "嘟嘟房停車場（高雄美術館站）",
+    "name": "嘟嘟房高雄美術館停車場",
     "city": "高雄市",
     "district": "鼓山區",
     "layer": "機車費率",
-    "source_name": "(20/h | 50/d)嘟嘟房停車場（高雄美術館站）"
+    "source_name": "(20/h | 50/d)嘟嘟房停車場（高雄美術館站）",
+    "official_id": "KHH-停7081",
+    "official_name": "嘟嘟房高雄美術館停車場",
+    "distance_m": null,
+    "name_score": 1.0,
+    "changes": [
+      "名稱：嘟嘟房停車場（高雄美術館站） → 嘟嘟房高雄美術館停車場",
+      "地址：高雄市鼓山區美術館路80號室外地面層（美術館路、美術東二路口）青海段241、711、713、714及715地號共5筆土地",
+      "費率：改用官方公告",
+      "座標：官方資料無座標，依同行政區名稱比對，保留來源座標"
+    ]
   },
   {
     "id": "c9c1e845-4659-5240-9a8d-642b53755d35",
@@ -7736,11 +8294,24 @@
   },
   {
     "id": "8c0d7dbc-272e-5a50-964c-a4bf3e3ca5e6",
-    "name": "CITY PARKING 城市車旅停車場 Focus中山站 機車停車場",
+    "name": "城市車旅focus停車場",
     "city": "臺南市",
     "district": "中西區",
     "layer": "機車費率",
-    "source_name": "(50/d)CITY PARKING 城市車旅停車場 Focus中山站 機車停車場"
+    "source_name": "(50/d)CITY PARKING 城市車旅停車場 Focus中山站 機車停車場",
+    "official_id": "B00019",
+    "official_name": "城市車旅focus停車場",
+    "distance_m": 100,
+    "name_score": 0.6,
+    "changes": [
+      "名稱：CITY PARKING 城市車旅停車場 Focus中山站 機車停車場 → 城市車旅focus停車場",
+      "地址：臺南市中西區中山路166號",
+      "機車格數：108",
+      "待人工確認：來源對同一場站的重機可停回報不一致"
+    ],
+    "merged": [
+      "(禁止)Focus 時尚流行館汽車停車場"
+    ]
   },
   {
     "id": "bc676246-d8a3-53f9-8a7e-6b6c9c020d36",
@@ -7768,11 +8339,18 @@
   },
   {
     "id": "ff9d6e06-ba59-5ef2-9c8d-75ee9307cce0",
-    "name": "愛買 水湳店",
+    "name": "愛買水湳停車場",
     "city": "臺中市",
     "district": "西屯區",
     "layer": "機車費率",
-    "source_name": "(Free)愛買 水湳店"
+    "source_name": "(Free)愛買 水湳店",
+    "official_id": "TXG1432",
+    "official_name": "愛買水湳停車場",
+    "distance_m": 111,
+    "name_score": 1.0,
+    "changes": [
+      "名稱：愛買 水湳店 → 愛買水湳停車場"
+    ]
   },
   {
     "id": "d6878bfa-956e-5ceb-a4c8-ac6aadca178c",
@@ -7789,14 +8367,6 @@
     "district": "板橋區",
     "layer": "機車費率",
     "source_name": "(10/h)台北遠東通訊園區地下停車場"
-  },
-  {
-    "id": "16cc3102-3057-553a-b0af-930454bc342f",
-    "name": "LaLaport 台中 南館機車停車場",
-    "city": "臺中市",
-    "district": "東區",
-    "layer": "機車費率",
-    "source_name": "(10/h)LaLaport 台中 南館機車停車場"
   },
   {
     "id": "9abe7041-6531-5ab0-a9f0-c08a7120bc1b",
@@ -7902,25 +8472,34 @@
   },
   {
     "id": "47e2ad30-4cf3-547e-bd56-f5ef288acfca",
-    "name": "台南國泰置地機車停車場",
+    "name": "城市車旅國泰置地",
     "city": "臺南市",
     "district": "中西區",
     "layer": "機車費率",
-    "source_name": "(30/d)台南國泰置地機車停車場"
+    "source_name": "(30/d)台南國泰置地機車停車場",
+    "official_id": "B00023",
+    "official_name": "城市車旅國泰置地",
+    "distance_m": 20,
+    "name_score": 0.75,
+    "changes": [
+      "名稱：台南國泰置地機車停車場 → 城市車旅國泰置地",
+      "地址：臺南市中西區永福路一段189號",
+      "機車格數：908"
+    ]
   },
   {
     "id": "f6e7c4fe-8905-55c2-923d-5f4a470a839a",
-    "name": "Times 太原路【機車】",
+    "name": "Times太原路【機車】",
     "city": "臺北市",
     "district": "大同區",
     "layer": "機車費率",
     "source_name": "(40/d)Times 太原路【機車】停車場",
     "official_id": "TPE1395",
-    "official_name": "Times 太原路【機車】",
+    "official_name": "Times太原路【機車】",
     "distance_m": 11,
     "name_score": 1.0,
     "changes": [
-      "名稱：Times 太原路【機車】停車場 → Times 太原路【機車】",
+      "名稱：Times 太原路【機車】停車場 → Times太原路【機車】",
       "地址：臺北市大同區太原路79巷11號旁空地",
       "費率：改用官方公告",
       "機車格數：21"
@@ -7978,11 +8557,19 @@
   },
   {
     "id": "5eacf17b-a0d8-54bf-8eb5-ea8918867e6c",
-    "name": "城市車旅停車場 秋紅谷A",
+    "name": "秋紅谷停車場",
     "city": "臺中市",
     "district": "西屯區",
     "layer": "機車費率",
-    "source_name": "(20/h)城市車旅停車場 秋紅谷A"
+    "source_name": "(20/h)城市車旅停車場 秋紅谷A",
+    "official_id": "TXG580",
+    "official_name": "秋紅谷停車場",
+    "distance_m": 23,
+    "name_score": 0.8,
+    "changes": [
+      "名稱：城市車旅停車場 秋紅谷A → 秋紅谷停車場",
+      "機車格數：1177"
+    ]
   },
   {
     "id": "ee6c5a1b-46dd-588e-8bb4-307bbb4bfefe",
@@ -7990,15 +8577,29 @@
     "city": "臺中市",
     "district": "西屯區",
     "layer": "機車費率",
-    "source_name": "(30/d)逢甲大學凱旋停車場"
+    "source_name": "(30/d)逢甲大學凱旋停車場",
+    "official_id": "TXG1720",
+    "official_name": "逢甲大學凱旋停車場",
+    "distance_m": 5,
+    "name_score": 1.0,
+    "changes": [
+      "機車格數：585"
+    ]
   },
   {
     "id": "30782c00-a565-5379-b976-277b1d10083e",
-    "name": "全聯平鎮新富停車場",
+    "name": "全聯平鎮新富店停車場",
     "city": "桃園市",
     "district": "平鎮區",
     "layer": "機車費率",
-    "source_name": "(20/d)全聯平鎮新富停車場"
+    "source_name": "(20/d)全聯平鎮新富停車場",
+    "official_id": "TYC0059",
+    "official_name": "全聯平鎮新富店停車場",
+    "distance_m": 2,
+    "name_score": 1.0,
+    "changes": [
+      "名稱：全聯平鎮新富停車場 → 全聯平鎮新富店停車場"
+    ]
   },
   {
     "id": "66e6547e-82b0-53bf-babb-226a9c56d361",
@@ -8010,19 +8611,35 @@
   },
   {
     "id": "f94fe54f-1732-5e30-8272-a27d5a15ff03",
-    "name": "桃捷 A11 坑口站",
+    "name": "168停車聯盟A11坑口站",
     "city": "桃園市",
     "district": "蘆竹區",
     "layer": "機車費率",
-    "source_name": "(30/d | 電子票證 20/d)桃捷 A11 坑口站"
+    "source_name": "(30/d | 電子票證 20/d)桃捷 A11 坑口站",
+    "official_id": "TYC0192",
+    "official_name": "168停車聯盟A11坑口站",
+    "distance_m": 161,
+    "name_score": 0.8,
+    "changes": [
+      "名稱：桃捷 A11 坑口站 → 168停車聯盟A11坑口站",
+      "待人工確認：距官方位置 161 公尺，保留來源座標"
+    ]
   },
   {
     "id": "b7c9cfb6-a259-5176-99b7-ac1f60294f76",
-    "name": "大安休息站",
+    "name": "台61線大安休息站",
     "city": "臺中市",
     "district": "大安區",
     "layer": "機車費率",
-    "source_name": "(Free)大安休息站"
+    "source_name": "(Free)大安休息站",
+    "official_id": "TXG3235",
+    "official_name": "台61線大安休息站",
+    "distance_m": 76,
+    "name_score": 0.6,
+    "changes": [
+      "名稱：大安休息站 → 台61線大安休息站",
+      "機車格數：40"
+    ]
   },
   {
     "id": "dc71d9e6-3405-55d7-9e22-30ebdb82e7a7",
@@ -8038,7 +8655,14 @@
     "city": "臺中市",
     "district": "西屯區",
     "layer": "機車費率",
-    "source_name": "(20/d)惠新停車場"
+    "source_name": "(20/d)惠新停車場",
+    "official_id": "TXG561",
+    "official_name": "惠新停車場",
+    "distance_m": 10,
+    "name_score": 1.0,
+    "changes": [
+      "機車格數：559"
+    ]
   },
   {
     "id": "dea279fc-5058-57eb-b807-27963192df9d",
@@ -8076,11 +8700,18 @@
   },
   {
     "id": "ad5856b1-9f0f-5efd-9089-76f6ae24992b",
-    "name": "城市車旅 正德醫院站",
+    "name": "正德醫院停車場",
     "city": "臺中市",
     "district": "南屯區",
     "layer": "機車費率",
-    "source_name": "(20/d)城市車旅 正德醫院站"
+    "source_name": "(20/d)城市車旅 正德醫院站",
+    "official_id": "TXG1881",
+    "official_name": "正德醫院停車場",
+    "distance_m": 31,
+    "name_score": 1.0,
+    "changes": [
+      "名稱：城市車旅 正德醫院站 → 正德醫院停車場"
+    ]
   },
   {
     "id": "93a0e65d-b8c7-5163-bfde-1ae8a0d93691",
@@ -8109,11 +8740,18 @@
   },
   {
     "id": "3061a131-ebe8-5d22-96ca-fa79bf341e7b",
-    "name": "IKEA宜家家居 桃園店",
+    "name": "宜家家居股份有限公司桃園分公司",
     "city": "桃園市",
     "district": "中壢區",
     "layer": "機車費率",
-    "source_name": "(20/h)IKEA宜家家居 桃園店"
+    "source_name": "(20/h)IKEA宜家家居 桃園店",
+    "official_id": "TYC0021",
+    "official_name": "宜家家居股份有限公司桃園分公司",
+    "distance_m": 72,
+    "name_score": 0.59,
+    "changes": [
+      "名稱：IKEA宜家家居 桃園店 → 宜家家居股份有限公司桃園分公司"
+    ]
   },
   {
     "id": "4913979d-fcd8-5dfb-99d0-3ee4ee0f2578",
@@ -8176,35 +8814,51 @@
   },
   {
     "id": "944d2114-c535-58fc-9e4e-69b0be00f1e9",
-    "name": "A21環北站轉乘停車場",
+    "name": "A21環北站",
     "city": "桃園市",
     "district": "中壢區",
     "layer": "機車費率",
-    "source_name": "(30/d)A21環北站轉乘停車場"
+    "source_name": "(30/d)A21環北站轉乘停車場",
+    "official_id": "TYC0047",
+    "official_name": "A21環北站",
+    "distance_m": 13,
+    "name_score": 0.8,
+    "changes": [
+      "名稱：A21環北站轉乘停車場 → A21環北站"
+    ]
   },
   {
     "id": "720daacc-7296-591f-94d2-71cd5eef9044",
-    "name": "城市車旅-北屯總站轉乘停車場",
+    "name": "捷運北屯總站轉乘機車停車場",
     "city": "臺中市",
     "district": "北屯區",
     "layer": "機車費率",
-    "source_name": "(20/d)城市車旅-北屯總站轉乘停車場"
-  },
-  {
-    "id": "5dd3efde-0f50-544d-b97a-e1562d7ffe68",
-    "name": "大買家 北屯店",
-    "city": "臺中市",
-    "district": "北屯區",
-    "layer": "機車費率",
-    "source_name": "(Free)大買家 北屯店"
+    "source_name": "(20/d)城市車旅-北屯總站轉乘停車場",
+    "official_id": "TXG1406",
+    "official_name": "捷運北屯總站轉乘機車停車場",
+    "distance_m": 113,
+    "name_score": 0.8,
+    "changes": [
+      "名稱：城市車旅-北屯總站轉乘停車場 → 捷運北屯總站轉乘機車停車場",
+      "機車格數：150"
+    ]
   },
   {
     "id": "1329d701-3519-5a42-af73-ffc38c663ce5",
-    "name": "麗寶樂園機車停車場",
+    "name": "麗寶樂園第一停車場",
     "city": "臺中市",
     "district": "后里區",
     "layer": "機車費率",
-    "source_name": "(Free)麗寶樂園機車停車場"
+    "source_name": "(Free)麗寶樂園機車停車場",
+    "official_id": "TXG1557",
+    "official_name": "麗寶樂園第一停車場",
+    "distance_m": 185,
+    "name_score": 0.75,
+    "changes": [
+      "名稱：麗寶樂園機車停車場 → 麗寶樂園第一停車場",
+      "機車格數：743",
+      "待人工確認：距官方位置 185 公尺，保留來源座標"
+    ]
   },
   {
     "id": "080e7b6d-8305-5c2b-9965-32211ceae849",
@@ -8221,14 +8875,6 @@
     "district": "潭子區",
     "layer": "機車費率",
     "source_name": "(Free)大新路口機車停車場"
-  },
-  {
-    "id": "b0d5e569-4dd0-5ac3-931b-ef641d0ca76f",
-    "name": "IKEA宜家家居 台中店 機車停車場",
-    "city": "臺中市",
-    "district": "南屯區",
-    "layer": "機車費率",
-    "source_name": "(--)IKEA宜家家居 台中店 機車停車場"
   },
   {
     "id": "7a7a79c8-c233-5a4d-814e-a02ef5268918",
@@ -8293,7 +8939,14 @@
     "city": "臺中市",
     "district": "西屯區",
     "layer": "機車費率",
-    "source_name": "(30/d)逢甲停車場"
+    "source_name": "(30/d)逢甲停車場",
+    "official_id": "TXG1635",
+    "official_name": "逢甲停車場",
+    "distance_m": 23,
+    "name_score": 1.0,
+    "changes": [
+      "機車格數：84"
+    ]
   },
   {
     "id": "4ad3c4cb-198e-5ff3-b7f9-d6f3bad34bf6",
@@ -8352,7 +9005,12 @@
     "city": "臺中市",
     "district": "大里區",
     "layer": "機車費率",
-    "source_name": "(Free)大里運動公園地下停車場"
+    "source_name": "(Free)大里運動公園地下停車場",
+    "official_id": "TXG499",
+    "official_name": "大里運動公園地下停車場",
+    "distance_m": 44,
+    "name_score": 1.0,
+    "changes": []
   },
   {
     "id": "f3c5fe3e-a3a4-5a06-a163-c9caa6fe5f42",
@@ -8380,11 +9038,18 @@
   },
   {
     "id": "0daf779e-3827-5127-9eeb-984570d371a1",
-    "name": "桃園區大有立體暨殯葬園區平面公有停車場",
+    "name": "桃園區大有立體公有停車場",
     "city": "桃園市",
     "district": "桃園區",
     "layer": "機車費率",
-    "source_name": "(20/d - 機車試辦) 桃園區大有立體暨殯葬園區平面公有停車場"
+    "source_name": "(20/d - 機車試辦) 桃園區大有立體暨殯葬園區平面公有停車場",
+    "official_id": "TYC0069",
+    "official_name": "桃園區大有立體公有停車場",
+    "distance_m": 132,
+    "name_score": 0.6,
+    "changes": [
+      "名稱：桃園區大有立體暨殯葬園區平面公有停車場 → 桃園區大有立體公有停車場"
+    ]
   },
   {
     "id": "c5f75875-6554-5cb7-8cf0-de6435059dcb",
@@ -8400,7 +9065,14 @@
     "city": "臺中市",
     "district": "北區",
     "layer": "機車費率",
-    "source_name": "(平20/4h | 假30/4h)玉雪機車停車場"
+    "source_name": "(平20/4h | 假30/4h)玉雪機車停車場",
+    "official_id": "TXG1726",
+    "official_name": "玉雪機車停車場",
+    "distance_m": 14,
+    "name_score": 1.0,
+    "changes": [
+      "機車格數：414"
+    ]
   },
   {
     "id": "67ece833-af68-5577-918f-a599860d23e5",
@@ -8456,11 +9128,19 @@
   },
   {
     "id": "c3f4955f-c9e0-5515-80cc-0c6d8091c65b",
-    "name": "city parking市政北二站",
+    "name": "市政北二站停車場",
     "city": "臺中市",
     "district": "西屯區",
     "layer": "機車費率",
-    "source_name": "(50/d)city parking市政北二站"
+    "source_name": "(50/d)city parking市政北二站",
+    "official_id": "TXG1583",
+    "official_name": "市政北二站停車場",
+    "distance_m": 11,
+    "name_score": 1.0,
+    "changes": [
+      "名稱：city parking市政北二站 → 市政北二站停車場",
+      "機車格數：284"
+    ]
   },
   {
     "id": "0eb999eb-491e-5091-9060-722770dc041c",
@@ -8593,17 +9273,17 @@
   },
   {
     "id": "35c95e35-b0cb-5f6d-a403-8c7f10581814",
-    "name": "Times 赤峰街【機車】",
+    "name": "Times赤峰街【機車】",
     "city": "臺北市",
     "district": "大同區",
     "layer": "機車費率",
     "source_name": "(平50/d|假70/d)Times 赤峰街【機車】停車場",
     "official_id": "TPE1451",
-    "official_name": "Times 赤峰街【機車】",
+    "official_name": "Times赤峰街【機車】",
     "distance_m": 3,
     "name_score": 1.0,
     "changes": [
-      "名稱：Times 赤峰街【機車】停車場 → Times 赤峰街【機車】",
+      "名稱：Times 赤峰街【機車】停車場 → Times赤峰街【機車】",
       "地址：臺北市大同區赤峰街8巷8號旁",
       "費率：改用官方公告",
       "機車格數：30"
@@ -8718,7 +9398,14 @@
     "city": "臺中市",
     "district": "北區",
     "layer": "機車費率",
-    "source_name": "(20/d)建成停車場"
+    "source_name": "(20/d)建成停車場",
+    "official_id": "TXG516",
+    "official_name": "建成停車場",
+    "distance_m": 23,
+    "name_score": 1.0,
+    "changes": [
+      "機車格數：37"
+    ]
   },
   {
     "id": "3a0d48a8-0329-5885-b695-9f7aa45e69fc",
@@ -8726,15 +9413,30 @@
     "city": "臺中市",
     "district": "北屯區",
     "layer": "機車費率",
-    "source_name": "(?)太和停車場"
+    "source_name": "(?)太和停車場",
+    "official_id": "TXG706",
+    "official_name": "太和停車場",
+    "distance_m": 6,
+    "name_score": 1.0,
+    "changes": [
+      "機車格數：76"
+    ]
   },
   {
     "id": "6a582272-29d1-5425-9c27-20a8f91c6efd",
-    "name": "CITY PARKING 城市車旅停車場 大慶站",
+    "name": "大慶停車場",
     "city": "臺中市",
     "district": "南區",
     "layer": "機車費率",
-    "source_name": "(20/d)CITY PARKING 城市車旅停車場 大慶站"
+    "source_name": "(20/d)CITY PARKING 城市車旅停車場 大慶站",
+    "official_id": "TXG772",
+    "official_name": "大慶停車場",
+    "distance_m": 6,
+    "name_score": 1.0,
+    "changes": [
+      "名稱：CITY PARKING 城市車旅停車場 大慶站 → 大慶停車場",
+      "機車格數：247"
+    ]
   },
   {
     "id": "7f4627b5-3cfe-5397-b8f5-9cb755946541",
@@ -8766,15 +9468,30 @@
     "city": "臺中市",
     "district": "西屯區",
     "layer": "機車費率",
-    "source_name": "(20/d)馬龍潭停車場"
+    "source_name": "(20/d)馬龍潭停車場",
+    "official_id": "TXG695",
+    "official_name": "馬龍潭停車場",
+    "distance_m": 44,
+    "name_score": 1.0,
+    "changes": [
+      "機車格數：164"
+    ]
   },
   {
     "id": "c918728c-7770-57d8-9604-aeff35e9f832",
-    "name": "豐原轉運中心 機車地下停車場",
+    "name": "豐原轉運中心停車場",
     "city": "臺中市",
     "district": "豐原區",
     "layer": "機車費率",
-    "source_name": "(20/d)豐原轉運中心 機車地下停車場"
+    "source_name": "(20/d)豐原轉運中心 機車地下停車場",
+    "official_id": "TXG1657",
+    "official_name": "豐原轉運中心停車場",
+    "distance_m": 25,
+    "name_score": 1.0,
+    "changes": [
+      "名稱：豐原轉運中心 機車地下停車場 → 豐原轉運中心停車場",
+      "機車格數：849"
+    ]
   },
   {
     "id": "6e2402b4-1199-5f06-9476-b866f29631fb",
@@ -8821,11 +9538,18 @@
   },
   {
     "id": "54097da6-cd9f-5efe-b943-c20bb2e2b2a4",
-    "name": "好市多 北臺中店",
+    "name": "好市多北台中店停車場",
     "city": "臺中市",
     "district": "北屯區",
     "layer": "機車費率",
-    "source_name": "(?)好市多 北臺中店"
+    "source_name": "(?)好市多 北臺中店",
+    "official_id": "TXG1454",
+    "official_name": "好市多北台中店停車場",
+    "distance_m": 82,
+    "name_score": 1.0,
+    "changes": [
+      "名稱：好市多 北臺中店 → 好市多北台中店停車場"
+    ]
   },
   {
     "id": "8a60ea65-3146-53b1-95a9-c0444dba3c23",
@@ -9128,11 +9852,19 @@
   },
   {
     "id": "129db574-de69-5c63-b407-b190a464907d",
-    "name": "嘟嘟房停車場-捷運文心中清(機車)站",
+    "name": "捷運文心中清站轉乘機車停車場",
     "city": "臺中市",
     "district": "北區",
     "layer": "機車費率",
-    "source_name": "(20/d)嘟嘟房停車場-捷運文心中清(機車)站"
+    "source_name": "(20/d)嘟嘟房停車場-捷運文心中清(機車)站",
+    "official_id": "TXG1407",
+    "official_name": "捷運文心中清站轉乘機車停車場",
+    "distance_m": 86,
+    "name_score": 0.83,
+    "changes": [
+      "名稱：嘟嘟房停車場-捷運文心中清(機車)站 → 捷運文心中清站轉乘機車停車場",
+      "機車格數：340"
+    ]
   },
   {
     "id": "cf49a89f-f1f3-5704-9f15-82b1ea5211d8",
@@ -9171,11 +9903,20 @@
   },
   {
     "id": "2ea051b3-59c5-5eb3-89ad-fd1f7f8efa8e",
-    "name": "漢神洲際購物廣場",
+    "name": "漢神洲際購物廣場停車場",
     "city": "臺中市",
     "district": "北屯區",
     "layer": "機車費率",
-    "source_name": "(Free)漢神洲際購物廣場"
+    "source_name": "(Free)漢神洲際購物廣場",
+    "official_id": "TXG3175",
+    "official_name": "漢神洲際購物廣場停車場",
+    "distance_m": 302,
+    "name_score": 1.0,
+    "changes": [
+      "名稱：漢神洲際購物廣場 → 漢神洲際購物廣場停車場",
+      "機車格數：1394",
+      "待人工確認：距官方位置 302 公尺，保留來源座標"
+    ]
   },
   {
     "id": "44f02017-f160-55c8-b474-a09e89bc9934",
@@ -9211,11 +9952,21 @@
   },
   {
     "id": "2bbb5589-e082-590d-b649-f1da1d0691da",
-    "name": "義大世界購物廣場 汽車停車場",
+    "name": "義大世界購物廣場",
     "city": "高雄市",
     "district": "大樹區",
     "layer": "機車費率",
-    "source_name": "(100/d)義大世界購物廣場 汽車停車場"
+    "source_name": "(100/d)義大世界購物廣場 汽車停車場",
+    "official_id": "KHH-停3354",
+    "official_name": "義大世界購物廣場",
+    "distance_m": null,
+    "name_score": 1.0,
+    "changes": [
+      "名稱：義大世界購物廣場 汽車停車場 → 義大世界購物廣場",
+      "地址：高雄市大樹區姑婆寮段26-7、26-90、26-91等8筆。大樹區學城路一段12號地下三層〜地下七層（義大世界）",
+      "費率：改用官方公告",
+      "座標：官方資料無座標，依同行政區名稱比對，保留來源座標"
+    ]
   },
   {
     "id": "b2756ed8-d422-5007-af11-1dce3c2570c9",
@@ -9257,25 +10008,11 @@
   },
   {
     "id": "46c1ef22-c9df-5e33-addc-9d3904a7cd04",
-    "name": "八里區渡船頭平面停車場",
+    "name": "八里渡船頭老街(機車停車場)",
     "city": "新北市",
     "district": "八里區",
     "layer": "機車費率",
-    "source_name": "(Free)八里渡船頭老街(機車停車場)",
-    "official_id": "230008",
-    "official_name": "八里區渡船頭平面停車場",
-    "distance_m": 278,
-    "name_score": 0.8,
-    "changes": [
-      "名稱：八里渡船頭老街(機車停車場) → 八里區渡船頭平面停車場",
-      "地址：新北市八里區龍米路2段156號對面",
-      "費率：改用官方公告",
-      "機車格數：10",
-      "待人工確認：距官方位置 278 公尺，保留來源座標"
-    ],
-    "merged": [
-      "(?)渡船頭平面停車場(八里區公有停車場)"
-    ]
+    "source_name": "(Free)八里渡船頭老街(機車停車場)"
   },
   {
     "id": "dd5a2ab5-1c07-5c3f-ac07-76e85de34944",
@@ -9328,27 +10065,57 @@
   },
   {
     "id": "db4675ac-a824-5a2b-a747-d515aadc2119",
-    "name": "鳳山捷運站機車停車場",
+    "name": "鳳山捷運機車停車場",
     "city": "高雄市",
     "district": "鳳山區",
     "layer": "機車費率",
-    "source_name": "(15/d)鳳山捷運站機車停車場"
+    "source_name": "(15/d)鳳山捷運站機車停車場",
+    "official_id": "KHH0192",
+    "official_name": "鳳山捷運機車停車場",
+    "distance_m": 16,
+    "name_score": 1.0,
+    "changes": [
+      "名稱：鳳山捷運站機車停車場 → 鳳山捷運機車停車場",
+      "地址：高雄市鳳山區捷運鳳山站1號出",
+      "費率：改用官方公告",
+      "機車格數：166"
+    ]
   },
   {
     "id": "774b7cf0-a821-57aa-8591-5902d768fd52",
-    "name": "鳳山國中站機車停車場",
+    "name": "鳳山國中機車停車場",
     "city": "高雄市",
     "district": "鳳山區",
     "layer": "機車費率",
-    "source_name": "(15/d)鳳山國中站機車停車場"
+    "source_name": "(15/d)鳳山國中站機車停車場",
+    "official_id": "KHH0193",
+    "official_name": "鳳山國中機車停車場",
+    "distance_m": 25,
+    "name_score": 1.0,
+    "changes": [
+      "名稱：鳳山國中站機車停車場 → 鳳山國中機車停車場",
+      "地址：高雄市鳳山區捷運鳳山國中站1號出",
+      "費率：改用官方公告",
+      "機車格數：363"
+    ]
   },
   {
     "id": "ddc18c82-264c-5c2c-90af-6f0e06a84c9a",
-    "name": "前鎮高中捷運站機車停車場",
+    "name": "前鎮高中機車停車場",
     "city": "高雄市",
     "district": "前鎮區",
     "layer": "機車費率",
-    "source_name": "(15/d)前鎮高中捷運站機車停車場"
+    "source_name": "(15/d)前鎮高中捷運站機車停車場",
+    "official_id": "KHH0237",
+    "official_name": "前鎮高中機車停車場",
+    "distance_m": 91,
+    "name_score": 0.75,
+    "changes": [
+      "名稱：前鎮高中捷運站機車停車場 → 前鎮高中機車停車場",
+      "地址：高雄市前鎮區捷運前鎮高中站1號出",
+      "費率：改用官方公告",
+      "機車格數：164"
+    ]
   },
   {
     "id": "c4f0bb91-b75f-55e9-8f31-b2741d9da422",
@@ -9410,14 +10177,6 @@
       "地址：臺北市內湖區舊宗路1段268號地上1層及地下1至3層",
       "費率：改用官方公告"
     ]
-  },
-  {
-    "id": "fafd7593-5cb9-58cd-8c72-1149924ce386",
-    "name": "中壢國小地下停車場",
-    "city": "桃園市",
-    "district": "中壢區",
-    "layer": "機車費率",
-    "source_name": "(30/d)中壢國小地下停車場"
   },
   {
     "id": "0b56fec4-671f-5d8c-9cc0-49dbb3c5bd76",
@@ -11721,22 +12480,6 @@
     "source_name": "(禁止)中山市場立體機車停車場"
   },
   {
-    "id": "181fc779-ac27-58df-96cb-89c98aa2db65",
-    "name": "Focus 時尚流行館汽車停車場",
-    "city": "臺南市",
-    "district": "中西區",
-    "layer": "禁停重機",
-    "source_name": "(禁止)Focus 時尚流行館汽車停車場"
-  },
-  {
-    "id": "0104a333-ba9f-535e-b001-7a4376da6923",
-    "name": "明志書院立體停車場（機車)",
-    "city": "新竹市",
-    "district": "新竹市",
-    "layer": "禁停重機",
-    "source_name": "(2023起禁止停機車場)明志書院立體停車場（機車)"
-  },
-  {
     "id": "9b4ac32c-15ce-5c3e-a392-8137c4d5b191",
     "name": "Times 台北地下街停車場 西出入口",
     "city": "臺北市",
@@ -12174,7 +12917,12 @@
     "city": "臺中市",
     "district": "北區",
     "layer": "禁停重機",
-    "source_name": "辰淵雙十停車場"
+    "source_name": "辰淵雙十停車場",
+    "official_id": "TXG1783",
+    "official_name": "辰淵雙十停車場",
+    "distance_m": 13,
+    "name_score": 1.0,
+    "changes": []
   },
   {
     "id": "79a2cacb-2d61-586b-b51d-c0cf44c71c13",
@@ -12555,6 +13303,24 @@
       "名稱：嘟嘟房世貿站 → 嘟嘟房世貿站停車場",
       "地址：臺北市信義區信義路5段1號地下1至地下2層",
       "費率：改用官方公告"
+    ]
+  },
+  {
+    "id": "eeb80937-1116-55aa-bdc3-fb56d78801be",
+    "name": "八里區渡船頭平面停車場",
+    "city": "新北市",
+    "district": "八里區",
+    "layer": "未確定",
+    "source_name": "(?)渡船頭平面停車場(八里區公有停車場)",
+    "official_id": "230008",
+    "official_name": "八里區渡船頭平面停車場",
+    "distance_m": 36,
+    "name_score": 0.75,
+    "changes": [
+      "名稱：渡船頭平面停車場(八里區公有停車場) → 八里區渡船頭平面停車場",
+      "地址：新北市八里區龍米路2段156號對面",
+      "費率：改用官方公告",
+      "機車格數：10"
     ]
   },
   {

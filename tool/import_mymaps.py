@@ -5,12 +5,14 @@ Taipei/New Taipei off-street lot matching → `ParkingSpot` JSON + review report
 Every imported spot stays `pending`; the report lists each official correction.
 """
 import argparse
+import csv
 from datetime import date
 import html
 import json
 import math
 from pathlib import Path
 import re
+import ssl
 import urllib.request
 import uuid
 import xml.etree.ElementTree as ET
@@ -21,7 +23,16 @@ NLSC_URL = "https://api.nlsc.gov.tw/other/TownVillagePointQuery/{lng}/{lat}/4326
 OFFICIAL = {
     "臺北市": ("臺北市停車場資訊（臺北市停車管理工程處）", "https://tcgbusfs.blob.core.windows.net/blobtcmsv/TCMSV_alldesc.json"),
     "新北市": ("新北市路外公共停車場資訊（新北市政府交通局）", "https://data.ntpc.gov.tw/api/datasets/B1464EF0-9C7C-4A6F-ABF7-6BDF32847E68/json?page={page}&size=1000"),
+    "臺中市": ("臺中市路外剩餘車位（臺中市政府交通局）", "https://newdatacenter.taichung.gov.tw/api/v1/no-auth/resource.download?rid=4f9c4d26-d826-4277-8f8a-6d2469fe9653"),
+    "桃園市": ("桃園市停車率（路外、路邊）", "https://opendata.tycg.gov.tw/api/dataset/d8a0dbc5-42fc-49ba-a280-1700ff78427a/resource/552ed03e-8daf-4b5f-8c6a-b466d378833b/download"),
+    "高雄市": ("高雄市公有／民營路外停車場一覽表（高雄市政府交通局）", "https://openapi.kcg.gov.tw/Api/Service/Get/30c58c88-4f53-45a0-8393-e655feaaa65b"),
+    "臺南市": ("臺南市路外停車場動態資訊（臺南市政府交通局）", "http://parkweb.tainan.gov.tw:2968/api/parking.php?mode=0"),
+    "新竹市": ("新竹市公有停車場相關資訊（新竹市政府交通處）", "https://odws.hccg.gov.tw/001/Upload/25/opendataback/9059/27/385f68c2-95e6-48cd-a9f8-0d3ffa35554b.json"),
 }
+KAOHSIUNG_PRIVATE = "https://openapi.kcg.gov.tw/Api/Service/Get/aeb8ba3c-8eec-49f6-8768-91218c819909"
+# odws.hccg.gov.tw omits its intermediate certificate; fetch it from the
+# certificate's AIA URL instead of turning verification off.
+HCCG_INTERMEDIATE = "http://sslserver.twca.com.tw/cacert/Cyber_SSL_2023.crt"
 NS = "{http://www.opengis.net/kml/2.2}"
 
 # 臺北市停管處公告之路外停車場試辦大重機停放機車區場域（115/4/6 首波 24 處、115/7/6 新增 12 處），
@@ -85,12 +96,19 @@ GENERIC = re.compile(
 )
 
 
-def fetch(url, path, refresh=False):
+def fetch(url, path, refresh=False, context=None):
     if refresh or not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
-        with urllib.request.urlopen(url, timeout=60) as response:
+        with urllib.request.urlopen(url, timeout=60, context=context) as response:
             path.write_bytes(response.read())
     return path
+
+
+def hccg_context(cache, refresh=False):
+    der = fetch(HCCG_INTERMEDIATE, cache / "twca_ssl_2023.crt", refresh).read_bytes()
+    context = ssl.create_default_context()
+    context.load_verify_locations(cadata=der)
+    return context
 
 
 def clean_text(value):
@@ -252,49 +270,132 @@ def similarity(a, b):
 
 
 def facility_type(text):
-    for pattern, kind in (("地下", "underground"), ("立體|塔|大樓|機械|建築", "multiStorey"), ("平面|橋下|露天", "surface")):
+    for pattern, kind in (("地下", "underground"), ("立體|停車塔|大樓|建築", "multiStorey"), ("平面|橋下|露天", "surface")):
         if re.search(pattern, text):
             return kind
     return None
 
 
-def official_lots(cache, refresh=False):
-    """City → list of normalized official lots with WGS84 coordinates."""
-    lots = {"臺北市": [], "新北市": []}
-    tpe = json.loads(fetch(OFFICIAL["臺北市"][1], cache / "tpe_alldesc.json", refresh).read_text(encoding="utf-8-sig"))
-    for row in tpe["data"]["park"]:
-        lat, lng = tm2_to_wgs84(float(row["tw97x"]), float(row["tw97y"]))
-        lots["臺北市"].append({
-            "id": row["id"], "name": row["name"], "address": row["address"], "fee": row["payex"], "summary": row["summary"],
-            "motor": int(row["totalmotor"] or 0), "heavy": int(row.get("totallargemotor") or 0), "lat": lat, "lng": lng,
-        })
-    page = 0
+def lot(id, name, lat, lng, address="", fee="", summary="", motor=0, heavy=0, district=""):
+    """Lots without coordinates (lat None) can only be matched by name within their district."""
+    return {"id": id, "name": re.sub(r"\s+", "", name), "lat": float(lat) if lat else None, "lng": float(lng) if lng else None,
+            "address": address.strip(), "fee": fee.strip(), "summary": summary, "motor": int(motor or 0),
+            "heavy": int(heavy or 0), "district": district}
+
+
+def number(value):
+    return value if str(value).isdigit() else 0
+
+
+def taipei(cache, refresh):
+    rows = json.loads(fetch(OFFICIAL["臺北市"][1], cache / "tpe_alldesc.json", refresh).read_text(encoding="utf-8-sig"))
+    return [lot(r["id"], r["name"], *tm2_to_wgs84(float(r["tw97x"]), float(r["tw97y"])), r["address"], r["payex"],
+                r["summary"], r["totalmotor"], r.get("totallargemotor")) for r in rows["data"]["park"]]
+
+
+def new_taipei(cache, refresh):
+    lots, page = [], 0
     while True:
         rows = json.loads(fetch(OFFICIAL["新北市"][1].format(page=page), cache / f"ntpc_{page}.json", refresh).read_text())
-        for row in rows:
-            if not row["TW97X"] or not row["TW97Y"]:
-                continue
-            lat, lng = tm2_to_wgs84(float(row["TW97X"]), float(row["TW97Y"]))
-            lots["新北市"].append({
-                "id": row["ID"], "name": row["NAME"], "address": row["ADDRESS"], "fee": row["PAYEX"], "summary": row["SUMMARY"],
-                "motor": int(row["TOTALMOTOR"] or 0), "heavy": 0, "lat": lat, "lng": lng,
-            })
+        lots += [lot(r["ID"], r["NAME"], *tm2_to_wgs84(float(r["TW97X"]), float(r["TW97Y"])), r["ADDRESS"], r["PAYEX"],
+                     r["SUMMARY"], r["TOTALMOTOR"]) for r in rows if r["TW97X"] and r["TW97Y"]]
         if len(rows) < 1000:
             return lots
         page += 1
+
+
+def taichung(cache, refresh):
+    """`西屯區-民營-城市車旅-玉門站P`: district, operator class, operator…, lot name with a trailing P."""
+    rows = json.loads(fetch(OFFICIAL["臺中市"][1], cache / "txg.json", refresh).read_text(encoding="utf-8-sig"))
+    return [lot(f"TXG{r['ID']}", re.sub(r"P$", "停車場", r["Position"].split("-")[-1]), r["Lat"], r["Lng"],
+                motor=number(r["TotalMotor"])) for r in rows if r["Lat"] and r["Lng"]]
+
+
+def taoyuan(cache, refresh):
+    """A rolling occupancy log; one row per lot is enough."""
+    rows = csv.DictReader(fetch(OFFICIAL["桃園市"][1], cache / "tyc.csv", refresh).read_text(encoding="utf-8-sig").splitlines())
+    lots = {}
+    for r in rows:
+        if r["類別"] == "路外停車" and r["場域名稱"] not in lots:
+            name = re.sub(r"[(（](桃交|.{0,6}公司)[)）]$", "", r["場域名稱"])
+            lots[r["場域名稱"]] = lot(f"TYC{len(lots) + 1:04d}", name, r["緯度"], r["經度"])
+    return list(lots.values())
+
+
+def kaohsiung(cache, refresh):
+    """Rows of `-` are further entrances of the lot above them."""
+    rows = json.loads(fetch(OFFICIAL["高雄市"][1], cache / "kcg.json", refresh).read_text())["data"]
+    lots, last = [], None
+    for n, r in enumerate(rows):
+        if r["場名"] != "-":
+            last = r
+        if last and r["緯度"] not in ("", "-"):
+            lots.append(lot(f"KHH{n + 1:04d}", last["場名"] + ("" if "停車場" in last["場名"] else "停車場"), r["緯度"], r["經度"],
+                            re.sub(r"^[A-Z]區[:：]", "", r["位置"]), last["收費標準"].replace("-", ""), last["型式"], number(last["機車"])))
+    # The private-lot register has no coordinates; its first rows are a title and a header.
+    rows = json.loads(fetch(KAOHSIUNG_PRIVATE, cache / "kcg_private.json", refresh).read_text())["data"]
+    for r in rows:
+        values = list(r.values())
+        # 登記證號, 經營型態, 型式, 停車場名稱, 行政區, 停車場位置, 大型車, 小型車, 機車, 收費標準, …
+        if values[3] and values[3] != "停車場名稱":
+            lots.append(lot(f"KHH-{values[0]}", values[3], None, None, values[5], values[9], values[2], number(values[8]),
+                            district=values[4]))
+    return lots
+
+
+def tainan(cache, refresh):
+    rows = json.loads(fetch(OFFICIAL["臺南市"][1], cache / "tnn.json", refresh).read_text())
+    return [lot(r["code"], r["name"], *r["lnglat"].split(","), r["address"], r["chargeFee"], r["typeName"], r["moto_total"])
+            for r in rows if r["typeId"] != 4 and "," in (r["lnglat"] or "")]
+
+
+def hsinchu(cache, refresh):
+    rows = json.loads(fetch(OFFICIAL["新竹市"][1], cache / "hsz.json", refresh, hccg_context(cache, refresh)).read_text())
+    return [lot(f"HSZ{n + 1:03d}", r["停車場名稱"], r["緯度"], r["經度"], r["地址"],
+                "；".join(filter(None, [f"平日 {r['平日收費方式']}", f"假日 {r['假日收費方式']}"])).split("充電設備")[0],
+                motor=number(r["機車總車位數"])) for n, r in enumerate(rows) if r["緯度"] and r["經度"]]
+
+
+LOADERS = {"臺北市": taipei, "新北市": new_taipei, "臺中市": taichung, "桃園市": taoyuan, "高雄市": kaohsiung, "臺南市": tainan, "新竹市": hsinchu}
+
+
+def official_lots(cache, refresh=False):
+    """City → official lots with WGS84 coordinates; a source that fails is reported, not fatal."""
+    lots, failed = {}, []
+    for city, load in LOADERS.items():
+        try:
+            lots[city] = load(cache, refresh)
+        except (OSError, ValueError, KeyError) as error:
+            failed.append(f"{city}：{error}")
+            lots[city] = []
+    return lots, failed
 
 
 def match_lot(spot, lots):
     """Best official lot: distance alone is not evidence, so closer lots need less name similarity."""
     best = None
     for lot in lots:
-        meters = distance(spot["lat"], spot["lng"], lot["lat"], lot["lng"])
-        if meters > 600:
-            continue
         score = similarity(spot["name"], lot["name"])
-        if (meters <= 80 and score >= 0.45) or (meters <= 200 and score >= 0.6) or score >= 0.8:
+        if lot["lat"] is None:
+            if lot["district"] != spot.get("district") or score < 0.9:
+                continue
+            meters = None
+        else:
+            meters = distance(spot["lat"], spot["lng"], lot["lat"], lot["lng"])
+            if meters > 600:
+                continue
+        # A lot named for motorcycles cannot be one the official data lists without any.
+        if "機車" in spot["name"] and lot["motor"] == 0 and "機車" not in lot["name"]:
+            continue
+        # Names that state different structures (地下 vs 平面) are different lots.
+        stated = [set(re.findall("地下|立體|平面", name)) for name in (spot["name"], lot["name"])]
+        if all(stated) and not stated[0] & stated[1]:
+            continue
+        # Beyond 200 m only a near-identical name counts: a generic official name
+        # (華泰名品城) must not absorb a specific community lot (…機車停車場（三期）).
+        if meters is None or (meters <= 80 and score >= 0.45) or (meters <= 200 and score >= 0.6) or score >= 0.95:
             # Equal cores (洲子站, 洲子立體停車場) are told apart by the full names before distance.
-            rank = (round(score - meters / 1000, 1), dice(spot["name"], lot["name"]), -meters)
+            rank = (round(score - (meters or 0) / 1000, 1), dice(spot["name"], lot["name"]), -(meters or 0))
             if best is None or rank > best[0]:
                 best = (rank, lot, meters, score)
     return best
@@ -319,7 +420,7 @@ def apply_official(spot, lot, meters, score, source_name):
             spot["note"] = "\n".join(filter(None, [f"來源原名稱：{spot['name']}", spot["note"]]))
         spot["name"] = lot["name"]
     if lot["address"]:
-        address = re.sub(r"^(新北市|臺北市|台北市)", "", lot["address"])
+        address = re.sub(r"^([臺台][北中南東]|新北|桃園|高雄|新竹|嘉義|基隆)市", "", lot["address"])
         spot["address"] = spot["city"] + ("" if re.match(r"\S{1,3}區", address) else spot["district"]) + address
         changes.append(f"地址：{spot['address']}")
     kind = facility_type(lot["name"] + lot["summary"])
@@ -345,13 +446,15 @@ def apply_official(spot, lot, meters, score, source_name):
             changes.append(f"重機格數：{lot['heavy']}")
     # Official points are often lot centroids while community pins mark the
     # motorcycle entrance, so only a clearly misplaced pin is moved.
-    if meters > 400 and score >= 0.8:
+    if meters is None:
+        changes.append("座標：官方資料無座標，依同行政區名稱比對，保留來源座標")
+    elif meters > 400:
         changes.append(f"座標：距官方位置 {meters:.0f} 公尺，改用官方座標")
         spot["lat"], spot["lng"] = round(lot["lat"], 7), round(lot["lng"], 7)
     elif meters > 150:
         changes.append(f"待人工確認：距官方位置 {meters:.0f} 公尺，保留來源座標")
     spot["note"] = "\n".join(filter(None, [spot["note"], f"已比對{source_name}（{lot['id']}）"]))
-    return {"official_id": lot["id"], "official_name": lot["name"], "distance_m": round(meters), "name_score": round(score, 2), "changes": changes}
+    return {"official_id": lot["id"], "official_name": lot["name"], "distance_m": None if meters is None else round(meters), "name_score": round(score, 2), "changes": changes}
 
 
 def pilot_name(*names):
@@ -407,7 +510,7 @@ def clip(spot):
 
 
 def build(kml, mid, cache, imported_on, refresh=False):
-    lots = official_lots(cache, refresh)
+    lots, failed = official_lots(cache, refresh)
     geo_file = cache / "nlsc.json"
     geo = json.loads(geo_file.read_text()) if geo_file.exists() else {}
     spots, report, skipped, seen = [], [], [], {}
@@ -485,23 +588,28 @@ def build(kml, mid, cache, imported_on, refresh=False):
              "parking_zones", "source_name", "source_url", "license_note"]
     nullable = {"heavy_allowed", "scooter_allowed", "scooter_total", "available", "last_confirmed_at", "note"}
     spots = [{k: s[k] for k in order if k in s and (s[k] not in ("", [], None) or k in nullable)} for s in spots]
-    return spots, report, skipped
+    return spots, report, skipped, failed
 
 
-def summary_markdown(spots, report, skipped, imported_on):
+def summary_markdown(spots, report, skipped, imported_on, failed=()):
     from collections import Counter
     matched = [r for r in report if "official_id" in r]
     lines = [f"# Google 我的地圖匯入查核報告（{imported_on}）", "",
              f"- 匯入點位：{len(spots)}（全部 `status=pending`，待社群或管理者確認）",
-             f"- 官方路外停車場比對成功：{len(matched)}（臺北市 {sum(r['city'] == '臺北市' for r in matched)}、新北市 {sum(r['city'] == '新北市' for r in matched)}）",
-             f"- 略過或合併：{len(skipped)}", "", "## 縣市分布", ""]
-    lines += [f"- {city}：{count}" for city, count in Counter(s["city"] for s in spots).most_common()]
+             f"- 官方路外停車場比對成功：{len(matched)}",
+             f"- 略過或合併：{len(skipped)}"]
+    lines += [f"- 官方資料取得失敗：{reason}" for reason in failed]
+    lines += ["", "## 縣市分布與官方比對", "", "| 縣市 | 匯入 | 路外 | 比對成功 | 官方資料 |", "| --- | --- | --- | --- | --- |"]
+    for city, count in Counter(s["city"] for s in spots).most_common():
+        off = sum(s["city"] == city and s["space_type"] == "offStreet" for s in spots)
+        source = OFFICIAL[city][0] if city in OFFICIAL else "無免金鑰路外停車場資料，僅驗證行政區"
+        lines.append(f"| {city} | {count} | {off} | {sum(r['city'] == city for r in matched)} | {source} |")
     lines += ["", "## 類型分布", ""]
     lines += [f"- {kind}：{count}" for kind, count in Counter(s["space_type"] for s in spots).most_common()]
     lines += ["", "## 需人工確認", ""]
     lines += [f"- {r['name']}（{r['city']}{r['district']}）：{c}" for r in report for c in r.get("changes", []) if c.startswith(("待人工確認", "座標"))] or ["- 無"]
     lines += ["", "## 官方比對修正", "", "| 點位 | 官方編號 | 距離 | 修正 |", "| --- | --- | --- | --- |"]
-    lines += [f"| {r['source_name']} | {r['official_id']} | {r['distance_m']} m | {'；'.join(c for c in r['changes'] if not c.startswith('地址'))} |" for r in matched]
+    lines += [f"| {r['source_name']} | {r['official_id']} | {'—' if r['distance_m'] is None else f"{r['distance_m']} m"} | {'；'.join(c for c in r['changes'] if not c.startswith('地址'))} |" for r in matched]
     lines += ["", "## 略過或合併", ""] + [f"- {s}" for s in skipped]
     return "\n".join(lines) + "\n"
 
@@ -535,11 +643,11 @@ def main():
     parser.add_argument("--refresh", action="store_true", help="re-download KML and official datasets")
     args = parser.parse_args()
     kml = args.kml or fetch(KML_URL.format(mid=args.mid), args.cache / f"{args.mid}.kml", args.refresh)
-    spots, report, skipped = build(kml, args.mid, args.cache, args.date, args.refresh)
+    spots, report, skipped, failed = build(kml, args.mid, args.cache, args.date, args.refresh)
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / "spots.json").write_text(json.dumps(spots, ensure_ascii=False, indent=2) + "\n")
     (args.output / "verification.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
-    (args.output / "REPORT.md").write_text(summary_markdown(spots, report, skipped, args.date))
+    (args.output / "REPORT.md").write_text(summary_markdown(spots, report, skipped, args.date, failed))
     if args.sql_owner:
         (args.cache / "import.sql").write_text(sql(spots, args.sql_owner))
     print(f"Prepared {len(spots)} spots in {args.output}; no database writes performed")
