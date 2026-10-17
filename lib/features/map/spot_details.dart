@@ -68,8 +68,7 @@ String availabilitySummary(ParkingSpot spot) {
       '${at == null ? '車位資料時間未提供' : '車位資料時間：${formatSpotTime(at)}'}';
 }
 
-String sourceSummary(ParkingSpot spot, {required bool demo}) =>
-    demo || spot.source == 'fixture'
+String sourceSummary(ParkingSpot spot, {required bool demo}) => demo
     ? '範例資料'
     : spot.isOfficial
     // Official data is credited to the government that publishes it.
@@ -82,8 +81,7 @@ String sourceSummary(ParkingSpot spot, {required bool demo}) =>
     ? '社群回報整理'
     : '社群回報';
 
-String trustSummary(ParkingSpot spot, {required bool demo}) =>
-    demo || spot.source == 'fixture'
+String trustSummary(ParkingSpot spot, {required bool demo}) => demo
     ? '範例，僅供功能預覽'
     : switch (spot.status) {
         TrustStatus.pending => '待確認',

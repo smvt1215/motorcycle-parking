@@ -17,6 +17,10 @@
 
 ## 架構總覽
 ```
+Flutter App ──► Supabase Postgres（官方點 official_heavy_spots／社群點 community_spots，RPC 依地圖範圍讀取）
+     │
+     └────────► Supabase Edge Function `submit-report`（社群寫入）
+（2026-10-17 起移除 TDX 即時層；TDX 只在 `tool/import_mymaps.py` 用於靜態核驗與補入。原架構：）
 Flutter App ──► Supabase Edge Function `tdx-parking` ──► TDX API（金鑰只存在伺服器）
      │
      └────────► Supabase Postgres（community_spots / spot_votes / favorites / city_rules，RLS 保護）
@@ -107,7 +111,7 @@ Flutter App ──► Supabase Edge Function `tdx-parking` ──► TDX API（�
 ### Edge Function（本機）
 - `supabase functions serve`：本機執行全部 Edge Function，修改後自動重載。
 - 本機 secrets 放 `supabase/functions/.env`（不進版控，附 `.env.example`）。
-- **TDX 範例模式**：本機 `.env` 設 `TDX_MODE=fixture` 時，`tdx-parking` 改回傳 `supabase/functions/tdx-parking/fixtures/` 的 TDX 範例回應，沒有 TDX 金鑰或網路被擋時也能開發。只有明確設定這個值才會啟用；其他環境缺少 TDX 金鑰時直接回報錯誤，不會悄悄改用範例資料。
+- ~~**TDX 範例模式**~~（2026-10-17 隨 TDX 即時層移除）：本機 `.env` 設 `TDX_MODE=fixture` 時，`tdx-parking` 改回傳 `supabase/functions/tdx-parking/fixtures/` 的 TDX 範例回應，沒有 TDX 金鑰或網路被擋時也能開發。只有明確設定這個值才會啟用；其他環境缺少 TDX 金鑰時直接回報錯誤，不會悄悄改用範例資料。
 - 限流依 IP 計算，本機所有請求來自同一個 IP；手動測試達到上限時以 `supabase db reset` 重置。
 
 ### App 連本機後端
@@ -272,6 +276,7 @@ UI：`material_ui`、`cupertino_ui`（Flutter 官方設計套件，取代框架�
 - 依結果決定：哪些縣市 TDX 足夠、哪些需接第 2 層 adapter、哪些只能靠社群回報。地圖上每個點都標示資料來源與更新時間。
 
 ## TDX 介接（Edge Function）
+> 2026-10-17：本階段只做靜態點，`tdx-parking` Edge Function、App 的 TDX 即時層與 TDX 點位註記介面已移除。TDX 憑證只供 `tool/import_mymaps.py` 核驗與補入靜態停車場；`spot_annotations`、`confirmed_annotations` 與 `submit-report` 的 annotation 動作仍留在後端，是否刪除另行決定。以下為原設計。
 - 憑證 `TDX_CLIENT_ID` / `TDX_CLIENT_SECRET` 存於 Supabase secrets，App 內不含金鑰。
 - 端點（以 Phase 0 稽核與 TDX Swagger 確認路徑與欄位）；只取機車相關車位類型並正規化為 `ParkingSpot`。
 - 回應加快取（基本資料長、即時剩餘 1–2 分鐘），避免打爆配額。
@@ -323,7 +328,7 @@ UI：`material_ui`、`cupertino_ui`（Flutter 官方設計套件，取代框架�
   - **官方點**：我的地圖點位通過官方核驗，或官方資料有、我的地圖沒有且記載機車格／重機證據的場站（含 TDX 獨有的停車場，作為靜態資料補入；與縣市資料或既有官方點重複者略過）。資料來源顯示該縣市政府（如「臺北市政府」），`status=confirmed`，寫入 `official_heavy_spots`。
   - **社群點**：我的地圖有但未通過核驗，`source='import'`、`status='pending'`，資料來源顯示「社群回報整理」，詳情顯示「待確認」。
   - 來源地圖自己標示未確認（灰色圖示、「未確定」圖層），且未通過核驗的點不錄入。
-  - TDX 即時點在 App 中也歸為官方點，來源顯示該縣市政府。
+  - App 已無 TDX 即時點；使用者舊收藏中的 TDX 點仍歸為官方點，來源顯示該縣市政府。
 - 官方點的重機資格只採官方明載（臺北市大型重機格數、36 處路外試辦場域），其餘維持「有條件」；我的地圖的重機回報、分區、入口與停車指引以「社群補充（未經官方查核）」標示。一般機車資格依官方記載的機車格數。
 - 本階段只做靜態點：TDX 只用於核驗與補入靜態停車場，不串接即時車位。
 - 結果：官方點 `data/imports/official/spots.json`；社群點 `data/imports/google-mymaps/spots.json`；`verification.json`（每點的核驗紀錄與處理結果）與 `REPORT.md`（統計、修正、待人工確認與不錄入清單）。`--sql-owner` 另產生 `import.sql`（社群點）與 `official.sql`（以 service role 執行的官方點 upsert），都不直接寫入資料庫。

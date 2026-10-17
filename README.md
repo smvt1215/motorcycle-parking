@@ -7,9 +7,9 @@
 - 記住我停哪裡（位置、備註、計時提醒、導航回車旁）
 - 社群回報與收藏停車點
 
-技術：Flutter + Supabase + Google Maps；未設定地圖金鑰時使用 OpenStreetMap 預覽。停車資料來源為 TDX 政府開放資料與社群回報。
+技術：Flutter + Supabase + Google Maps；未設定地圖金鑰時使用 OpenStreetMap 預覽。停車資料分為官方點（各縣市政府開放資料，以 TDX 輔助核驗）與社群點；目前只提供靜態點，不含即時車位。
 
-MVP 實作中，已提供地圖範圍搜尋、車種規則、收藏、停車紀錄與社群回報介面。未設定後端時使用明確標示的範例點位；正式 TDX 資料、OAuth 與雲端部署仍需設定金鑰並驗證。完整計畫見 [docs/PLAN.md](docs/PLAN.md)，介面與驗證說明見 [docs/DESIGN.md](docs/DESIGN.md)。
+MVP 實作中，已提供地圖範圍搜尋、車種規則、收藏、停車紀錄與社群回報介面。未設定後端時使用明確標示的範例點位；OAuth 與雲端部署仍需設定金鑰並驗證。完整計畫見 [docs/PLAN.md](docs/PLAN.md)，介面與驗證說明見 [docs/DESIGN.md](docs/DESIGN.md)。
 
 使用 `.flutter-version` 指定的 Flutter 版本，執行 `flutter pub get`，再以 `flutter run -d chrome --web-port=3000` 預覽。無網路測試可加 `--dart-define=OFFLINE_MAP=true`。
 
