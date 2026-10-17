@@ -276,7 +276,7 @@ UI：`material_ui`、`cupertino_ui`（Flutter 官方設計套件，取代框架�
 - 依結果決定：哪些縣市 TDX 足夠、哪些需接第 2 層 adapter、哪些只能靠社群回報。地圖上每個點都標示資料來源與更新時間。
 
 ## TDX 介接（Edge Function）
-> 2026-10-17：本階段只做靜態點，`tdx-parking` Edge Function、App 的 TDX 即時層與 TDX 點位註記介面已移除。TDX 憑證只供 `tool/import_mymaps.py` 核驗與補入靜態停車場；`spot_annotations`、`confirmed_annotations` 與 `submit-report` 的 annotation 動作仍留在後端，是否刪除另行決定。以下為原設計。
+> 2026-10-17：本階段只做靜態點，`tdx-parking` Edge Function、App 的 TDX 即時層與 TDX 點位註記介面已移除。TDX 憑證只供 `tool/import_mymaps.py` 核驗與補入靜態停車場；`spot_annotations`、`confirmed_annotations` 與 `submit-report` 的 annotation 動作已一併移除（migration `202610170003_drop_annotations.sql`）。以下為原設計。
 - 憑證 `TDX_CLIENT_ID` / `TDX_CLIENT_SECRET` 存於 Supabase secrets，App 內不含金鑰。
 - 端點（以 Phase 0 稽核與 TDX Swagger 確認路徑與欄位）；只取機車相關車位類型並正規化為 `ParkingSpot`。
 - 回應加快取（基本資料長、即時剩餘 1–2 分鐘），避免打爆配額。
@@ -294,7 +294,7 @@ UI：`material_ui`、`cupertino_ui`（Flutter 官方設計套件，取代框架�
 ### 回報與可信度規則
 1. **兩種回報**
    - 新增停車點：長按地圖 → 表單（格位類型、普通機車可停、重機可停、收費、樓層/入口備註、選填照片）。
-   - **官方點位註記**：在 TDX 停車場上回報「重機可停 / 不可停 / 須停汽車格」「入口限高/坡道陡」等，TDX 本身沒有這些欄位。
+   - ~~**官方點位註記**~~（2026-10-17 隨 TDX 即時層移除）：在 TDX 停車場上回報「重機可停 / 不可停 / 須停汽車格」「入口限高/坡道陡」等，TDX 本身沒有這些欄位。
      - 註記先以 `pending` 存入 `spot_annotations`，管理者改為 `confirmed` 後才生效：`tdx-parking` 回傳停車點時以 RPC `confirmed_annotations` 取每個點最新一筆已確認註記，設定 `heavy_allowed`（須停汽車格視為可停）並在備註標示「社群回報經審核」。查詢失敗時維持 TDX 原資料，重機資格保持「有條件」。
 2. **去重**：送出前查 15 公尺內同類型點，有的話引導查看既有點並提出修改建議，而非重複新增。
 3. **存在與可信度分開處理**：新增點位的 `pending` 資料也正常可見；未知資格保留「有條件／請確認現場標示」。歷史投票的合格帳號與加權隱藏門檻保留於後端，但不是新版介面的存在確認流程。不存在／資訊錯誤建議進入 `moderation_queue` 待審；管理者判定後處理，資料超過 180 天未確認仍可提示可能過時。
