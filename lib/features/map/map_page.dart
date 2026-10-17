@@ -15,6 +15,7 @@ import '../../domain/map_viewport.dart';
 import '../../models/parking.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../report/report_sheet.dart';
+import 'map_legend.dart';
 import 'spot_sheet.dart';
 import 'google_parking_map.dart';
 
@@ -30,7 +31,7 @@ class _MapPageState extends ConsumerState<MapPage> {
   final googleMap = GlobalKey<GoogleParkingMapState>();
   final searchController = TextEditingController();
   final searchFocus = FocusNode();
-  bool availableOnly = false, located = false;
+  bool availableOnly = false, hideDenied = false, located = false;
   bool searchResultsSuppressed = false;
   SpaceType? type;
 
@@ -77,6 +78,7 @@ class _MapPageState extends ConsumerState<MapPage> {
   void _clearFilters() => setState(() {
     type = null;
     availableOnly = false;
+    hideDenied = false;
   });
 
   void _openSpaceSelector() {
@@ -149,8 +151,8 @@ class _MapPageState extends ConsumerState<MapPage> {
             },
           ),
           const Divider(height: 32),
-          const Text('深綠圓形：可停　琥珀方形：有條件\n紅色方形：不可停　灰色：待確認'),
-          const SizedBox(height: 16),
+          MapLegend(vehicle: store.vehicle),
+          const SizedBox(height: 4),
           const Text('社群資訊與剩餘車位可能有延遲，停車前請確認現場標示。'),
         ],
       ),
@@ -173,17 +175,23 @@ class _MapPageState extends ConsumerState<MapPage> {
         .where(
           (s) =>
               (type == null || s.spaceType == type) &&
-              (!availableOnly || (s.available ?? 0) > 0),
+              (!availableOnly || (s.available ?? 0) > 0) &&
+              // Pending reports reach notAllowed only through legal rules
+              // (see eligibility()), so hiding them here is intended.
+              (!hideDenied ||
+                  store.eligible(s).status != EligibilityStatus.notAllowed),
         )
         .toList();
-    final matches = spots
-        .where(
-          (s) => '${s.name} ${s.city} ${s.district} ${s.note}'
-              .toLowerCase()
-              .contains(query),
-        )
-        .toList();
-    final filtered = type != null || availableOnly;
+    // Most parkable first; List.sort is not stable, so tie-break by input order.
+    final ranked = [
+      for (final (i, s) in spots.indexed)
+        if ('${s.name} ${s.city} ${s.district} ${s.note}'
+            .toLowerCase()
+            .contains(query))
+          (store.eligible(s).status.index, i, s),
+    ]..sort((a, b) => a.$1 != b.$1 ? a.$1 - b.$1 : a.$2 - b.$2);
+    final matches = [for (final (_, _, s) in ranked) s];
+    final filtered = type != null || availableOnly || hideDenied;
     final searchHeight = 44 + MediaQuery.textScalerOf(context).scale(20);
     final filterHeight = (24 + MediaQuery.textScalerOf(context).scale(15))
         .clamp(48.0, double.infinity);
@@ -307,7 +315,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                           button: true,
                           child: GestureDetector(
                             onTap: () => showSpot(context, store, s),
-                            child: _SpotMarker(
+                            child: SpotMarker(
                               status: store.eligible(s).status,
                               pending: s.status == TrustStatus.pending,
                             ),
@@ -448,39 +456,55 @@ class _MapPageState extends ConsumerState<MapPage> {
                   ),
                   SizedBox(
                     height: filterHeight,
-                    child: ListView(
+                    // Few pills: build all of them so none is skipped lazily.
+                    child: SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(horizontal: 16),
-                      children: [
-                        _MapPill(
-                          label: store.vehicle.label,
-                          showChevron: true,
-                          icon: store.vehicle == VehicleType.heavy
-                              ? Icons.sports_motorsports_outlined
-                              : Icons.two_wheeler,
-                          onTap: () => openVehicleSelector(store),
-                        ),
-                        _MapPill(
-                          label: type?.label ?? '全部格位',
-                          icon: Icons.local_parking_outlined,
-                          showChevron: true,
-                          selected: type != null,
-                          onTap: _openSpaceSelector,
-                        ),
-                        _MapPill(
-                          label: '有剩餘車位',
-                          icon: Icons.check_circle_outline,
-                          selected: availableOnly,
-                          onTap: () =>
-                              setState(() => availableOnly = !availableOnly),
-                        ),
-                        if (filtered)
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
                           _MapPill(
-                            label: '清除篩選',
-                            icon: Icons.filter_alt_off_outlined,
-                            onTap: _clearFilters,
+                            label: store.vehicle.label,
+                            showChevron: true,
+                            icon: store.vehicle == VehicleType.heavy
+                                ? Icons.sports_motorsports_outlined
+                                : Icons.two_wheeler,
+                            onTap: () => openVehicleSelector(store),
                           ),
-                      ],
+                          _MapIconPill(
+                            tooltip: '地圖怎麼看',
+                            icon: Icons.help_outline,
+                            onTap: () => showMapLegend(context, store.vehicle),
+                          ),
+                          _MapPill(
+                            label: type?.label ?? '全部格位',
+                            icon: Icons.local_parking_outlined,
+                            showChevron: true,
+                            selected: type != null,
+                            onTap: _openSpaceSelector,
+                          ),
+                          _MapPill(
+                            label: '隱藏不可停',
+                            icon: Icons.block,
+                            selected: hideDenied,
+                            onTap: () =>
+                                setState(() => hideDenied = !hideDenied),
+                          ),
+                          _MapPill(
+                            label: '有剩餘車位',
+                            icon: Icons.check_circle_outline,
+                            selected: availableOnly,
+                            onTap: () =>
+                                setState(() => availableOnly = !availableOnly),
+                          ),
+                          if (filtered)
+                            _MapPill(
+                              label: '清除篩選',
+                              icon: Icons.filter_alt_off_outlined,
+                              onTap: _clearFilters,
+                            ),
+                        ],
+                      ),
                     ),
                   ),
                   if (store.loading)
@@ -646,10 +670,28 @@ class _MapPageState extends ConsumerState<MapPage> {
                             ),
                           for (final spot in matches)
                             ListTile(
-                              leading: const Icon(Icons.local_parking_outlined),
+                              leading: ExcludeSemantics(
+                                child: SizedBox.square(
+                                  dimension: 32,
+                                  child: SpotMarker(
+                                    status: store.eligible(spot).status,
+                                    pending: spot.status == TrustStatus.pending,
+                                    size: 28,
+                                  ),
+                                ),
+                              ),
                               title: Text(spot.name),
                               subtitle: Text(
-                                '${spot.city} · ${store.eligible(spot).label}',
+                                [
+                                  '${spot.city}${spot.district}',
+                                  store.eligible(spot).label,
+                                  spot.spaceType.label,
+                                  if (spot.feeNote.trim().isNotEmpty &&
+                                      spot.feeNote != '請依現場公告')
+                                    spot.feeNote,
+                                ].join(' · '),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
                               ),
                               trailing: const Icon(Icons.north_west, size: 18),
                               onTap: () => _selectSpot(store, spot),
@@ -666,6 +708,45 @@ class _MapPageState extends ConsumerState<MapPage> {
       ],
     );
   }
+}
+
+class _MapIconPill extends StatelessWidget {
+  const _MapIconPill({
+    required this.tooltip,
+    required this.icon,
+    required this.onTap,
+  });
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(right: 8),
+    child: Material(
+      elevation: 2,
+      shadowColor: const Color(0x33000000),
+      color: Theme.of(context).colorScheme.surface,
+      shape: const CircleBorder(),
+      child: Semantics(
+        button: true,
+        child: Tooltip(
+          message: tooltip,
+          child: InkWell(
+            onTap: onTap,
+            customBorder: const CircleBorder(),
+            child: AspectRatio(
+              aspectRatio: 1,
+              child: Icon(
+                icon,
+                size: 20,
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 class _MapPill extends StatelessWidget {
@@ -725,55 +806,6 @@ class _MapPill extends StatelessWidget {
               ),
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SpotMarker extends StatelessWidget {
-  const _SpotMarker({required this.status, required this.pending});
-  final EligibilityStatus status;
-  final bool pending;
-  @override
-  Widget build(BuildContext context) {
-    final color = pending
-        ? const Color(0xff59646c)
-        : switch (status) {
-            EligibilityStatus.allowed => allowedColor,
-            EligibilityStatus.conditional => conditionalColor,
-            EligibilityStatus.notAllowed => deniedColor,
-          };
-    return Center(
-      child: Container(
-        width: 38,
-        height: 38,
-        decoration: BoxDecoration(
-          color: color,
-          border: Border.all(color: Colors.white, width: 3),
-          borderRadius: BorderRadius.circular(
-            status == EligibilityStatus.allowed
-                ? 20
-                : status == EligibilityStatus.conditional
-                ? 10
-                : 4,
-          ),
-          boxShadow: const [
-            BoxShadow(
-              blurRadius: 6,
-              color: Color(0x44000000),
-              offset: Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Icon(
-          switch (status) {
-            EligibilityStatus.allowed => Icons.local_parking,
-            EligibilityStatus.conditional => Icons.priority_high,
-            EligibilityStatus.notAllowed => Icons.close,
-          },
-          color: Colors.white,
-          size: 22,
         ),
       ),
     );

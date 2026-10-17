@@ -208,6 +208,54 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
+  testWidgets('隱藏不可停篩選、搜尋依可停程度排序，並可開啟地圖圖例', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final store = (await tester.runAsync(testStore))!;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [storeProvider.overrideWith((ref) => store)],
+        child: const ParkingApp(),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+    final input = find.byKey(const ValueKey('parking-search'));
+    // Only two in-viewport spots match, so the capped list builds both.
+    await tester.enterText(input, '路');
+    await tester.pumpAndSettle();
+    final denied = find.text('[範例] 松高路汽車格');
+    expect(denied, findsOneWidget);
+    // Not-allowed spots sort below every allowed or conditional result.
+    expect(
+      tester.getTopLeft(denied).dy,
+      greaterThan(tester.getTopLeft(find.text('[範例] 信義路收費機車格')).dy),
+    );
+    expect(find.textContaining('不可停 · 汽車格'), findsOneWidget);
+    await tester.tapAt(const Offset(30, 550));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('隱藏不可停'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('隱藏不可停'));
+    await tester.pumpAndSettle();
+    await tester.tap(input);
+    await tester.pumpAndSettle();
+    expect(find.text('[範例] 松高路汽車格'), findsNothing);
+    expect(find.text('[範例] 信義路收費機車格'), findsOneWidget);
+    expect(find.textContaining('已套用篩選'), findsOneWidget);
+    await tester.tapAt(const Offset(30, 550));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byTooltip('地圖怎麼看'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('地圖怎麼看'));
+    await tester.pumpAndSettle();
+    expect(find.text('方形・不可停'), findsOneWidget);
+    expect(find.textContaining('目前車種「普通機車」'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
   testWidgets('地圖移至其他範圍後清除原點位並顯示空範圍提示', (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(430, 932);

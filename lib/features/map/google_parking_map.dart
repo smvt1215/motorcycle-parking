@@ -10,6 +10,7 @@ import '../../domain/eligibility.dart';
 import '../../domain/map_viewport.dart';
 import '../../models/parking.dart';
 import '../../ui/adaptive/adaptive.dart';
+import 'map_legend.dart';
 import 'maps_sdk.dart';
 
 class GoogleParkingMap extends StatefulWidget {
@@ -256,13 +257,7 @@ Future<gm.BitmapDescriptor> _markerIcon(
 ) async {
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder);
-  final color = pending
-      ? const Color(0xff59646c)
-      : switch (status) {
-          EligibilityStatus.allowed => allowedColor,
-          EligibilityStatus.conditional => conditionalColor,
-          EligibilityStatus.notAllowed => deniedColor,
-        };
+  final color = spotMarkerColor(status, pending: pending);
   final radius = switch (status) {
     EligibilityStatus.allowed => 40.0,
     EligibilityStatus.conditional => 20.0,
@@ -280,11 +275,7 @@ Future<gm.BitmapDescriptor> _markerIcon(
       ..style = PaintingStyle.stroke
       ..strokeWidth = 6,
   );
-  final icon = switch (status) {
-    EligibilityStatus.allowed => Icons.local_parking,
-    EligibilityStatus.conditional => Icons.priority_high,
-    EligibilityStatus.notAllowed => Icons.close,
-  };
+  final icon = spotMarkerIcon(status);
   final painter = TextPainter(
     text: TextSpan(
       text: String.fromCharCode(icon.codePoint),
