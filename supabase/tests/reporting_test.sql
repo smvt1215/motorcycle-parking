@@ -34,13 +34,16 @@ select lives_ok($$select pg_temp.report(1,jsonb_build_object('action','update','
 select is((select status from community_spots where id=(select id from target)),'pending','edits require new confirmation');
 select is((select count(*)::integer from spot_votes where spot_id=(select id from target)),0,'old votes cleared after edit');
 
--- Limits count every accepted action, including repeated annotation updates.
+-- Limits count every accepted action, including repeated flags.
 delete from rate_limit_events;
-do $$begin for n in 1..10 loop perform pg_temp.report(3,jsonb_build_object('action','annotation','source_id','tdx:Taipei:park:1','heavy_access','allowed'),'f','f');end loop;end$$;
-select throws_ok($$select pg_temp.report(3,'{"action":"annotation","source_id":"tdx:Taipei:park:1","heavy_access":"denied"}','g','g')$$,'P0001','daily report limit reached','ten actions per account per UTC day');
+do $$begin for n in 1..10 loop perform pg_temp.report(3,jsonb_build_object('action','flag','source_id','official:x','reason','測試'),'f','f');end loop;end$$;
+select throws_ok($$select pg_temp.report(3,'{"action":"flag","source_id":"official:x","reason":"測試"}','g','g')$$,'P0001','daily report limit reached','ten actions per account per UTC day');
 delete from rate_limit_events;
 insert into rate_limit_events(user_id,ip_hash) select pg_temp.uid(case when n<=10 then 1 when n<=20 then 2 else 6 end),repeat('z',64) from generate_series(1,30) n;
-select throws_ok($$select pg_temp.report(3,'{"action":"annotation","source_id":"tdx:Taipei:park:1","heavy_access":"allowed"}','z','f')$$,'P0001','daily report limit reached','thirty actions per trusted IP per UTC day');
+select throws_ok($$select pg_temp.report(3,'{"action":"flag","source_id":"official:x","reason":"測試"}','z','f')$$,'P0001','daily report limit reached','thirty actions per trusted IP per UTC day');
+delete from rate_limit_events;
+select throws_ok($$select pg_temp.report(3,'{"action":"annotation","source_id":"tdx:Taipei:park:1","heavy_access":"allowed"}','y','y')$$,'22023','invalid report action','removed annotation action is rejected');
+select ok(to_regclass('public.spot_annotations') is null and to_regprocedure('public.confirmed_annotations(text[])') is null,'annotation table and RPC are gone');
 
 select ok(not has_function_privilege('anon','public.apply_report(uuid,text,text,jsonb)','EXECUTE'),'anon cannot call privileged report RPC');
 select ok(not has_function_privilege('authenticated','public.apply_report(uuid,text,text,jsonb)','EXECUTE'),'authenticated cannot call privileged report RPC');
