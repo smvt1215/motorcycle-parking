@@ -1,5 +1,5 @@
 name: Deploy Supabase backend
-description: Apply forward migrations and deploy configured Edge Functions.
+description: Apply forward migrations, deploy configured Edge Functions and delete remote ones no longer in the repo.
 inputs:
   environment:
     description: Deployment environment (staging or production)
@@ -21,4 +21,4 @@ runs:
         python3 tool/cd_config.py '${{ inputs.environment }}' backend
         supabase link --project-ref "$SUPABASE_PROJECT_REF"
         supabase db push --yes
-        supabase functions deploy --project-ref "$SUPABASE_PROJECT_REF" --use-api
+        supabase functions deploy --project-ref "$SUPABASE_PROJECT_REF" --use-api --prune --yes

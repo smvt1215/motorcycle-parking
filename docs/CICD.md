@@ -103,7 +103,7 @@ Workflow 依平台分工：跨平台檢查放 `ci.yml`，各平台的建置與�
 1. **後端**：
    - `supabase link --project-ref $STAGING_REF`
    - `supabase db push` 套用新 migration
-   - `supabase functions deploy` 部署 Edge Function
+   - `supabase functions deploy --prune --yes` 部署 Edge Function，並刪除遠端已不在 repo 的函式（例如已移除的 `tdx-parking`）
    - 這些步驟可重複執行，重跑時再套用一次也不會出錯。
 2. **Android 測試 APK**（不上傳商店）：
    - `android-apk` 為獨立 job，等待後端實際完成部署，使用 `cd-staging-android` 佇列，不阻擋下一次後端部署。正式發版的 staging 成功判定只看後端 job 的實際部署紀錄。
