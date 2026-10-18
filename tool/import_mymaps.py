@@ -545,11 +545,19 @@ def match_lot(spot, lots):
     return best
 
 
-def locate(spot, cache_file, cache):
+def locate(spot, cache_file, cache, attempts=3):
+    """[city, district] from NLSC, or None when every attempt fails; failures are not cached."""
     key = f"{spot['lng']:.6f},{spot['lat']:.6f}"
     if key not in cache:
-        with urllib.request.urlopen(NLSC_URL.format(lng=spot["lng"], lat=spot["lat"]), timeout=30) as response:
-            root = ET.fromstring(response.read())
+        for attempt in range(attempts):
+            try:
+                with urllib.request.urlopen(NLSC_URL.format(lng=spot["lng"], lat=spot["lat"]), timeout=30) as response:
+                    root = ET.fromstring(response.read())
+                break
+            except (OSError, ET.ParseError):  # OSError covers timeouts, URLError and HTTPError
+                if attempt == attempts - 1:
+                    return None
+                time.sleep(2 ** attempt)
         cache[key] = [root.findtext("ctyName") or "", root.findtext("townName") or ""]
         cache_file.write_text(json.dumps(cache, ensure_ascii=False, indent=0))
     return cache[key]
@@ -693,7 +701,11 @@ def build(kml, mid, cache, imported_on, refresh=False, tdx_env=None):
         if spot is None:
             skipped.append(f"{mark['layer']}｜{mark['name']}")
             continue
-        city, district = locate(spot, geo_file, geo)
+        located = locate(spot, geo_file, geo)
+        if located is None:
+            skipped.append(f"{mark['layer']}｜{mark['name']}（行政區查詢失敗，未匯入；重跑會再查詢）")
+            continue
+        city, district = located
         if not city:
             skipped.append(f"{mark['layer']}｜{mark['name']}（座標不在臺灣行政區內）")
             continue

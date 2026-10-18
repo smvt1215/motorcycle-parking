@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 from import_mymaps import (
     PILOT_RULES, TAIPEI_PILOT, cell, facility_key, TAIPEI_ROADSIDE, apply_official, apply_taipei_rules, clean_text, lot, match_lot, merge,
-    hccg_context, kaohsiung, midpoint, normalize, official_lots, parse_fee, split_name, tdx_credentials, tdx_lots, tm2_to_wgs84,
+    hccg_context, kaohsiung, locate, midpoint, normalize, official_lots, parse_fee, split_name, tdx_credentials, tdx_lots, tm2_to_wgs84,
 )
 
 DATA = Path(__file__).resolve().parent.parent / "data/imports/google-mymaps/spots.json"
@@ -231,6 +231,25 @@ class FacilityMergeTest(unittest.TestCase):
 
     def test_report_cells_escape_pipes(self):
         self.assertEqual(cell("(平40/h | 假50/h)松山\n車站"), "(平40/h \\| 假50/h)松山 車站")
+
+
+class LocateTest(unittest.TestCase):
+    def test_lookup_retries_then_reports_failure_without_caching_it(self):
+        with tempfile.TemporaryDirectory() as directory, patch("import_mymaps.time.sleep"), \
+                patch("import_mymaps.urllib.request.urlopen", side_effect=TimeoutError("timed out")) as urlopen:
+            cache, cache_file = {}, Path(directory) / "nlsc.json"
+            self.assertIsNone(locate({"lat": 25.0, "lng": 121.5}, cache_file, cache))
+        self.assertEqual(urlopen.call_count, 3)
+        self.assertEqual(cache, {})
+
+    def test_a_transient_failure_is_retried(self):
+        ok = unittest.mock.MagicMock()
+        ok.__enter__.return_value.read.return_value = "<r><ctyName>臺北市</ctyName><townName>大安區</townName></r>".encode()
+        with tempfile.TemporaryDirectory() as directory, patch("import_mymaps.time.sleep"), \
+                patch("import_mymaps.urllib.request.urlopen", side_effect=[TimeoutError("timed out"), ok]):
+            cache = {}
+            self.assertEqual(locate({"lat": 25.0, "lng": 121.5}, Path(directory) / "nlsc.json", cache), ["臺北市", "大安區"])
+        self.assertEqual(len(cache), 1)
 
 
 class TdxCredentialTest(unittest.TestCase):
