@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 from import_mymaps import (
     PILOT_RULES, TAIPEI_PILOT, cell, facility_key, TAIPEI_ROADSIDE, apply_official, apply_taipei_rules, clean_text, lot, match_lot, merge,
-    hccg_context, kaohsiung, locate, midpoint, normalize, official_lots, parse_fee, split_name, tdx_credentials, tdx_lots, tm2_to_wgs84,
+    entry_direction, hccg_context, kaohsiung, locate, midpoint, normalize, official_lots, parse_fee, split_name, tdx_credentials, tdx_lots, tm2_to_wgs84,
 )
 
 DATA = Path(__file__).resolve().parent.parent / "data/imports/google-mymaps/spots.json"
@@ -47,6 +47,15 @@ class FeeTest(unittest.TestCase):
         self.assertEqual(split_name("(平50/h|假60/h)福星社會住宅地下停車場"), ("福星社會住宅地下停車場", "平50/h|假60/h"))
         self.assertEqual(split_name("(禁止)嘟嘟房(西門漢口站)"), ("嘟嘟房(西門漢口站)", ""))
         self.assertEqual(split_name("松河街238號 重機專用格"), ("松河街238號 重機專用格", ""))
+
+    def test_direction_arrows_do_not_hide_fee_prefix(self):
+        mark = {"layer": "汽車費率", "name": "⇦⇨(30/h | 200/d)中林站 市民大道停車場", "description": "",
+                "icon": "1538", "color": "7CB342", "line": False, "points": [(121.52, 25.04)]}
+        spot = normalize(mark)
+        self.assertEqual(spot["name"], "中林站 市民大道停車場")
+        self.assertTrue(spot["fee_note"].startswith("每小時 30 元；每日 200 元"))
+        self.assertIn("東西向皆可進入", spot["entrance_note"])
+        self.assertEqual(entry_direction("⇦ (禁止)Times 台北地下街停車場"), ("(禁止)Times 台北地下街停車場", "來源標示：往西方向進入（⇦）"))
 
 
 class NormalizeTest(unittest.TestCase):

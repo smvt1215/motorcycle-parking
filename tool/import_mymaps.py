@@ -179,6 +179,17 @@ def parse_fee(text):
     return "；".join(parts) or "請依現場公告"
 
 
+ARROWS = {"⇦⇨": "東西向皆可進入", "⇦": "往西方向進入", "⇨": "往東方向進入"}
+
+
+def entry_direction(name):
+    """Leading ⇦/⇨ markers give the lane an entrance is reached from; returns (name without them, note)."""
+    match = re.match(r"\s*([⇦⇨]+)\s*(.*)", name)
+    if not match:
+        return name, ""
+    return match[2], f"來源標示：{ARROWS.get(match[1], match[1])}（{match[1]}）"
+
+
 def split_name(name):
     """Leading `(fee)` prefix carries the fee; `(禁止)` carries no fee."""
     match = re.match(r"\s*[(（]([^)）]*)[)）]\s*(.*)", name)
@@ -222,7 +233,8 @@ def normalize(mark):
     layer, icon, color = mark["layer"], mark["icon"], mark["color"]
     if layer not in FEE_BASIS or icon == "1502":
         return None  # shops, and district-level policy notes that belong to city rules
-    name, fee_text = split_name(mark["name"])
+    bare, direction = entry_direction(mark["name"])
+    name, fee_text = split_name(bare)
     lines = clean_text(mark["description"])
     lng, lat = midpoint(mark["points"])
     spot = {
@@ -266,7 +278,7 @@ def normalize(mark):
             spot["parking_zones"] = [{"name": zone, **({"access": access} if access else {}), "fee_note": spot["fee_note"]}]
             if FEE_BASIS[layer]:
                 spot["fee_note"] = f"{spot['fee_note']}（{FEE_BASIS[layer]}）"
-        spot["entrance_note"] = "\n".join(entries)
+        spot["entrance_note"] = "\n".join(filter(None, [direction, *entries]))
         spot["note"] = "\n".join(others)
     caveat = COLOR_NOTES.get(color)
     if caveat:
