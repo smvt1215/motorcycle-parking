@@ -819,7 +819,11 @@ def build(kml, mid, cache, imported_on, refresh=False, tdx_env=None):
             entry["result"] = "社群點（待確認）"
     used = {spot["lot"]["id"] for spot in spots if spot.get("lot")}
     for lot, pilot in official_additions(lots, used, official):
-        city, district = locate(lot, geo_file, geo)
+        located = locate(lot, geo_file, geo)
+        if located is None:
+            skipped.append(f"官方補入｜{lot['name']}（行政區查詢失敗，未匯入；重跑會再查詢）")
+            continue
+        city, district = located
         if not city:
             continue
         addition = official_spot(lot | {"city": city, "district": district}, None, pilot, lots, imported_on)
