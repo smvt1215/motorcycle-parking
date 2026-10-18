@@ -1044,9 +1044,8 @@
     "official_id": "TPE0164",
     "official_name": "市民大道延吉段停車場",
     "distance_m": 147,
-    "name_score": 0.75,
+    "name_score": 1.0,
     "changes": [
-      "名稱：⇨(50/h)市民大道延吉段停車場 → 市民大道延吉段停車場",
       "地址：臺北市大安區市民大道4段(延吉街兩側)地下(地下共1層)",
       "費率：改用官方公告"
     ],
@@ -1082,9 +1081,9 @@
     "official_id": "TPE0155",
     "official_name": "市民大道復敦段停車場",
     "distance_m": 63,
-    "name_score": 0.62,
+    "name_score": 0.83,
     "changes": [
-      "名稱：⇨(40/h)復敦段 市民大道停車場 → 市民大道復敦段停車場",
+      "名稱：復敦段 市民大道停車場 → 市民大道復敦段停車場",
       "地址：臺北市大安區市民大道4段(復興南路至敦化南路)地下(地下共2層)",
       "費率：改用官方公告"
     ],
@@ -1370,13 +1369,22 @@
   },
   {
     "id": "9471bed5-6a15-5c33-8aca-e465dce19771",
-    "name": "⇦⇨(30/h | 200/d)中林站 市民大道停車場",
+    "name": "市民大道中林段停車場",
     "city": "臺北市",
     "district": "中正區",
     "layer": "汽車費率",
     "source_name": "⇦⇨(30/h | 200/d)中林站 市民大道停車場",
-    "changes": [],
-    "result": "社群點（待確認）"
+    "official_id": "TPE0100",
+    "official_name": "市民大道中林段停車場",
+    "distance_m": 45,
+    "name_score": 0.73,
+    "changes": [
+      "名稱：中林站 市民大道停車場 → 市民大道中林段停車場",
+      "地址：臺北市中正區市民大道2段(中山北路至林森北路)地下1-2層",
+      "費率：改用官方公告",
+      "重機格數：1"
+    ],
+    "result": "官方點"
   },
   {
     "id": "f420b590-47c0-58db-afb0-83bf6d5dfe05",
@@ -6683,7 +6691,7 @@
   },
   {
     "id": "7cf4b265-47e7-5f2a-a426-a596e7f08eeb",
-    "name": "⇦(30/h | 160/d)林森-金山 市民大道停車場",
+    "name": "林森-金山 市民大道停車場",
     "city": "臺北市",
     "district": "中正區",
     "layer": "重機格/汽車費率",
@@ -6693,13 +6701,22 @@
   },
   {
     "id": "88facad6-e6ad-5229-89fb-94c7bce56a91",
-    "name": "⇨(40/h | 220/d)公中站 市民大道停車場",
+    "name": "市民大道公中段停車場",
     "city": "臺北市",
     "district": "中正區",
     "layer": "重機格/汽車費率",
     "source_name": "⇨(40/h | 220/d)公中站 市民大道停車場",
-    "changes": [],
-    "result": "社群點（待確認）"
+    "official_id": "TPE0099",
+    "official_name": "市民大道公中段停車場",
+    "distance_m": 17,
+    "name_score": 0.73,
+    "changes": [
+      "名稱：公中站 市民大道停車場 → 市民大道公中段停車場",
+      "地址：臺北市中正區公園路至中山北路地下室",
+      "費率：改用官方公告",
+      "重機格數：2"
+    ],
+    "result": "官方點"
   },
   {
     "id": "d390d93f-84ab-53ab-aaaa-95759ef4c258",
@@ -13731,13 +13748,21 @@
   },
   {
     "id": "846a692f-0a61-5154-9a72-781f918c6688",
-    "name": "⇦ (禁止)Times 台北地下街停車場 東出入口",
+    "name": "台北地下街停車場",
     "city": "臺北市",
     "district": "中正區",
     "layer": "禁停重機",
     "source_name": "⇦ (禁止)Times 台北地下街停車場 東出入口",
-    "changes": [],
-    "result": "社群點（待確認）"
+    "official_id": "TPE0220",
+    "official_name": "台北地下街停車場",
+    "distance_m": 19,
+    "name_score": 0.5,
+    "changes": [
+      "名稱：Times 台北地下街停車場 東出入口 → 台北地下街停車場",
+      "地址：臺北市中正區市民大道1段100號地下2層",
+      "費率：改用官方公告"
+    ],
+    "result": "官方點"
   },
   {
     "id": "1510465a-bfdd-5027-8e6d-3b78835fdefb",
@@ -14801,34 +14826,6 @@
     "source_name": "古亭國中地下停車場",
     "official_id": "TPE0092",
     "official_name": "古亭國中地下停車場",
-    "distance_m": 0,
-    "name_score": 1.0,
-    "result": "官方點（官方補入）",
-    "changes": []
-  },
-  {
-    "id": "official:d76fb871-8949-57bc-98d8-bfd1128fb9a9",
-    "name": "市民大道公中段停車場",
-    "city": "臺北市",
-    "district": "中山區",
-    "layer": "官方補入",
-    "source_name": "市民大道公中段停車場",
-    "official_id": "TPE0099",
-    "official_name": "市民大道公中段停車場",
-    "distance_m": 0,
-    "name_score": 1.0,
-    "result": "官方點（官方補入）",
-    "changes": []
-  },
-  {
-    "id": "official:6a427be7-8918-5036-8ef7-dc0fdb35bcc2",
-    "name": "市民大道中林段停車場",
-    "city": "臺北市",
-    "district": "中正區",
-    "layer": "官方補入",
-    "source_name": "市民大道中林段停車場",
-    "official_id": "TPE0100",
-    "official_name": "市民大道中林段停車場",
     "distance_m": 0,
     "name_score": 1.0,
     "result": "官方點（官方補入）",

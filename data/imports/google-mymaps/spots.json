@@ -1304,36 +1304,6 @@
     "license_note": "整理自 Alan大重停車記事（Google 我的地圖）；未通過官方核驗，請以現場公告為準"
   },
   {
-    "id": "9471bed5-6a15-5c33-8aca-e465dce19771",
-    "name": "⇦⇨(30/h | 200/d)中林站 市民大道停車場",
-    "lat": 25.047956,
-    "lng": 121.5222903,
-    "city": "臺北市",
-    "district": "中正區",
-    "source": "import",
-    "space_type": "offStreet",
-    "fee_note": "請依現場公告（大型重機比照汽車費率）",
-    "heavy_allowed": true,
-    "scooter_allowed": null,
-    "status": "pending",
-    "scooter_total": null,
-    "available": null,
-    "updated_at": "2026-10-17T00:00:00Z",
-    "last_confirmed_at": null,
-    "note": "",
-    "entrance_note": "有後牌辨析",
-    "parking_zones": [
-      {
-        "name": "汽車區",
-        "access": "heavyCar",
-        "fee_note": "請依現場公告"
-      }
-    ],
-    "source_name": "社群回報整理",
-    "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
-    "license_note": "整理自 Alan大重停車記事（Google 我的地圖）；未通過官方核驗，請以現場公告為準"
-  },
-  {
     "id": "2307a370-6c89-577f-b969-03969a3c9553",
     "name": "青島國宅停車場",
     "lat": 25.04368,
@@ -4904,14 +4874,14 @@
   },
   {
     "id": "7cf4b265-47e7-5f2a-a426-a596e7f08eeb",
-    "name": "⇦(30/h | 160/d)林森-金山 市民大道停車場",
+    "name": "林森-金山 市民大道停車場",
     "lat": 25.0476593,
     "lng": 121.5255722,
     "city": "臺北市",
     "district": "中正區",
     "source": "import",
     "space_type": "offStreet",
-    "fee_note": "請依現場公告（重機專用格比照汽車費率）",
+    "fee_note": "每小時 30 元；每日 160 元（重機專用格比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
     "status": "pending",
@@ -4920,42 +4890,12 @@
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
     "note": "優先>４格",
-    "entrance_note": "後牌辨識、專用２格",
+    "entrance_note": "來源標示：往西方向進入（⇦）\n後牌辨識、專用２格",
     "parking_zones": [
       {
         "name": "重機專用格",
         "access": "heavyOnly",
-        "fee_note": "請依現場公告"
-      }
-    ],
-    "source_name": "社群回報整理",
-    "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
-    "license_note": "整理自 Alan大重停車記事（Google 我的地圖）；未通過官方核驗，請以現場公告為準"
-  },
-  {
-    "id": "88facad6-e6ad-5229-89fb-94c7bce56a91",
-    "name": "⇨(40/h | 220/d)公中站 市民大道停車場",
-    "lat": 25.0482003,
-    "lng": 121.5192315,
-    "city": "臺北市",
-    "district": "中正區",
-    "source": "import",
-    "space_type": "offStreet",
-    "fee_note": "請依現場公告（重機專用格比照汽車費率）",
-    "heavy_allowed": true,
-    "scooter_allowed": null,
-    "status": "pending",
-    "scooter_total": null,
-    "available": null,
-    "updated_at": "2026-10-17T00:00:00Z",
-    "last_confirmed_at": null,
-    "note": "",
-    "entrance_note": "B1有重機位 後牌辨析(站主親訪)",
-    "parking_zones": [
-      {
-        "name": "重機專用格",
-        "access": "heavyOnly",
-        "fee_note": "請依現場公告"
+        "fee_note": "每小時 30 元；每日 160 元"
       }
     ],
     "source_name": "社群回報整理",
@@ -16733,31 +16673,6 @@
     "lng": 121.5110668,
     "city": "臺北市",
     "district": "大同區",
-    "source": "import",
-    "space_type": "offStreet",
-    "facility_type": "underground",
-    "fee_note": "請依現場公告",
-    "heavy_allowed": false,
-    "scooter_allowed": null,
-    "status": "pending",
-    "scooter_total": null,
-    "available": null,
-    "updated_at": "2026-10-17T00:00:00Z",
-    "last_confirmed_at": null,
-    "note": "",
-    "entrance_note": "來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）\n禁停重機，不開閘門，要自行迴轉",
-    "special_rules": "來源回報禁止大型重機停放",
-    "source_name": "社群回報整理",
-    "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
-    "license_note": "整理自 Alan大重停車記事（Google 我的地圖）；未通過官方核驗，請以現場公告為準"
-  },
-  {
-    "id": "846a692f-0a61-5154-9a72-781f918c6688",
-    "name": "⇦ (禁止)Times 台北地下街停車場 東出入口",
-    "lat": 25.0486126,
-    "lng": 121.5181686,
-    "city": "臺北市",
-    "district": "中正區",
     "source": "import",
     "space_type": "offStreet",
     "facility_type": "underground",

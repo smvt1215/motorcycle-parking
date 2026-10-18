@@ -925,9 +925,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": "2026-10-17T00:00:00Z",
-    "note": "社群補充（未經官方查核）：大型重機可停；停放區域：汽車區（請依現場公告）\n來源原名稱：⇨(50/h)市民大道延吉段停車場\n收費會按照時間不同, 50/H為最高收費\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0164）",
+    "note": "社群補充（未經官方查核）：大型重機可停；停放區域：汽車區（每小時 50 元）\n收費會按照時間不同, 50/H為最高收費\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0164）",
     "address": "臺北市大安區市民大道4段(延吉街兩側)地下(地下共1層)",
-    "entrance_note": "社群補充（未經官方查核）：\n來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）",
+    "entrance_note": "社群補充（未經官方查核）：\n來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）\n來源標示：往東方向進入（⇨）",
     "source_name": "臺北市政府",
     "source_url": "https://tcgbusfs.blob.core.windows.net/blobtcmsv/TCMSV_alldesc.json",
     "license_note": "政府資料開放授權條款第 1 版；社群補充整理自 Alan大重停車記事（Google 我的地圖）",
@@ -950,9 +950,9 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": "2026-10-17T00:00:00Z",
-    "note": "社群補充（未經官方查核）：大型重機可停；停放區域：汽車區（請依現場公告）\n來源原名稱：⇨(40/h)復敦段 市民大道停車場\n收費會按照時間不同, 40/H為最高收費\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0155）",
+    "note": "社群補充（未經官方查核）：大型重機可停；停放區域：汽車區（每小時 40 元）\n來源原名稱：復敦段 市民大道停車場\n收費會按照時間不同, 40/H為最高收費\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0155）",
     "address": "臺北市大安區市民大道4段(復興南路至敦化南路)地下(地下共2層)",
-    "entrance_note": "社群補充（未經官方查核）：\n來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）\n按鈕請管理員協助",
+    "entrance_note": "社群補充（未經官方查核）：\n來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）\n來源標示：往東方向進入（⇨）\n按鈕請管理員協助",
     "source_name": "臺北市政府",
     "source_url": "https://tcgbusfs.blob.core.windows.net/blobtcmsv/TCMSV_alldesc.json",
     "license_note": "政府資料開放授權條款第 1 版；社群補充整理自 Alan大重停車記事（Google 我的地圖）",
@@ -1365,6 +1365,38 @@
     "source_url": "https://tcgbusfs.blob.core.windows.net/blobtcmsv/TCMSV_alldesc.json",
     "license_note": "政府資料開放授權條款第 1 版；社群補充整理自 Alan大重停車記事（Google 我的地圖）",
     "source_id": "TPE0095"
+  },
+  {
+    "id": "official:6a427be7-8918-5036-8ef7-dc0fdb35bcc2",
+    "name": "市民大道中林段停車場",
+    "lat": 25.047956,
+    "lng": 121.5222903,
+    "city": "臺北市",
+    "district": "中正區",
+    "source": "official",
+    "space_type": "offStreet",
+    "fee_note": "小型車(含大型重型機車)：計時 週一至週五30元/時(09-18)，20元/時(18-09)，週六、週日、行政機關放假之紀念日與民俗日20元/時，全程以半小時計;月租 全日3,600元，日間2,400元(07-19)，夜間1,200元(週一至週五19-08，週六、日及政府行政機關放假之紀念日、民俗節日之全日)，大型重機1,800元/月",
+    "heavy_allowed": true,
+    "scooter_allowed": null,
+    "status": "confirmed",
+    "scooter_total": null,
+    "available": null,
+    "updated_at": "2026-10-17T00:00:00Z",
+    "last_confirmed_at": "2026-10-17T00:00:00Z",
+    "note": "社群補充（未經官方查核）：大型重機可停；停放區域：汽車區（每小時 30 元；每日 200 元）、重機專用格\n來源原名稱：中林站 市民大道停車場\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0100）",
+    "address": "臺北市中正區市民大道2段(中山北路至林森北路)地下1-2層",
+    "entrance_note": "社群補充（未經官方查核）：\n來源標示：東西向皆可進入（⇦⇨）\n有後牌辨析",
+    "parking_zones": [
+      {
+        "name": "重機專用格",
+        "access": "heavyOnly",
+        "guide": "官方資料：大型重機格 1 格"
+      }
+    ],
+    "source_name": "臺北市政府",
+    "source_url": "https://tcgbusfs.blob.core.windows.net/blobtcmsv/TCMSV_alldesc.json",
+    "license_note": "政府資料開放授權條款第 1 版；社群補充整理自 Alan大重停車記事（Google 我的地圖）",
+    "source_id": "TPE0100"
   },
   {
     "id": "official:fac1fb88-5284-5a72-b15f-1956a1be987c",
@@ -7160,6 +7192,38 @@
     "source_id": "TPE0051"
   },
   {
+    "id": "official:d76fb871-8949-57bc-98d8-bfd1128fb9a9",
+    "name": "市民大道公中段停車場",
+    "lat": 25.0482003,
+    "lng": 121.5192315,
+    "city": "臺北市",
+    "district": "中正區",
+    "source": "official",
+    "space_type": "offStreet",
+    "fee_note": "計時：小型車(含大型重型機車)40元/時(08-18)、10元/時(18-08)，停車全程以半小時計。月租：小型車全日4,800元/月，日間(07-19)3,200元/月，夜間(20-08)1,200元/月。",
+    "heavy_allowed": true,
+    "scooter_allowed": null,
+    "status": "confirmed",
+    "scooter_total": null,
+    "available": null,
+    "updated_at": "2026-10-17T00:00:00Z",
+    "last_confirmed_at": "2026-10-17T00:00:00Z",
+    "note": "社群補充（未經官方查核）：大型重機可停；停放區域：重機專用格（每小時 40 元；每日 220 元）\n來源原名稱：公中站 市民大道停車場\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0099）",
+    "address": "臺北市中正區公園路至中山北路地下室",
+    "entrance_note": "社群補充（未經官方查核）：\n來源標示：往東方向進入（⇨）\nB1有重機位 後牌辨析(站主親訪)",
+    "parking_zones": [
+      {
+        "name": "重機專用格",
+        "access": "heavyOnly",
+        "guide": "官方資料：大型重機格 2 格"
+      }
+    ],
+    "source_name": "臺北市政府",
+    "source_url": "https://tcgbusfs.blob.core.windows.net/blobtcmsv/TCMSV_alldesc.json",
+    "license_note": "政府資料開放授權條款第 1 版；社群補充整理自 Alan大重停車記事（Google 我的地圖）",
+    "source_id": "TPE0099"
+  },
+  {
     "id": "official:a5652637-ee67-55ca-af6d-6f340ebf37ce",
     "name": "福林路平面停車場",
     "lat": 25.0959795,
@@ -11300,6 +11364,32 @@
     "source_id": "100022"
   },
   {
+    "id": "official:a8d6658d-4104-578f-9c41-cdec6caa1f6c",
+    "name": "台北地下街停車場",
+    "lat": 25.0486126,
+    "lng": 121.5181686,
+    "city": "臺北市",
+    "district": "中正區",
+    "source": "official",
+    "space_type": "offStreet",
+    "facility_type": "underground",
+    "fee_note": "計時：小型車50元/時，停車全程以半小時計。月租：小型車全日5,500元/月。",
+    "heavy_allowed": null,
+    "scooter_allowed": null,
+    "status": "confirmed",
+    "scooter_total": null,
+    "available": null,
+    "updated_at": "2026-10-17T00:00:00Z",
+    "last_confirmed_at": "2026-10-17T00:00:00Z",
+    "note": "社群補充（未經官方查核）：大型重機禁停\n來源原名稱：Times 台北地下街停車場 東出入口\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0220）",
+    "address": "臺北市中正區市民大道1段100號地下2層",
+    "entrance_note": "社群補充（未經官方查核）：\n來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）\n來源標示：往西方向進入（⇦）\n禁停重機，不開閘門，要自行迴轉",
+    "source_name": "臺北市政府",
+    "source_url": "https://tcgbusfs.blob.core.windows.net/blobtcmsv/TCMSV_alldesc.json",
+    "license_note": "政府資料開放授權條款第 1 版；社群補充整理自 Alan大重停車記事（Google 我的地圖）",
+    "source_id": "TPE0220"
+  },
+  {
     "id": "official:4cf3faf1-88e7-552b-a427-6671e3e83f19",
     "name": "USPACE交易二號停車場",
     "lat": 25.0365248,
@@ -12368,68 +12458,6 @@
     "source_url": "https://tcgbusfs.blob.core.windows.net/blobtcmsv/TCMSV_alldesc.json",
     "license_note": "政府資料開放授權條款第 1 版",
     "source_id": "TPE0092"
-  },
-  {
-    "id": "official:d76fb871-8949-57bc-98d8-bfd1128fb9a9",
-    "name": "市民大道公中段停車場",
-    "lat": 25.0483458,
-    "lng": 121.5191726,
-    "city": "臺北市",
-    "district": "中山區",
-    "source": "official",
-    "space_type": "offStreet",
-    "fee_note": "計時：小型車(含大型重型機車)40元/時(08-18)、10元/時(18-08)，停車全程以半小時計。月租：小型車全日4,800元/月，日間(07-19)3,200元/月，夜間(20-08)1,200元/月。",
-    "heavy_allowed": true,
-    "scooter_allowed": null,
-    "status": "confirmed",
-    "scooter_total": null,
-    "available": null,
-    "updated_at": "2026-10-17T00:00:00Z",
-    "last_confirmed_at": "2026-10-17T00:00:00Z",
-    "note": "",
-    "address": "臺北市中山區公園路至中山北路地下室",
-    "parking_zones": [
-      {
-        "name": "重機專用格",
-        "access": "heavyOnly",
-        "guide": "官方資料：大型重機格 2 格"
-      }
-    ],
-    "source_name": "臺北市政府",
-    "source_url": "https://tcgbusfs.blob.core.windows.net/blobtcmsv/TCMSV_alldesc.json",
-    "license_note": "政府資料開放授權條款第 1 版",
-    "source_id": "TPE0099"
-  },
-  {
-    "id": "official:6a427be7-8918-5036-8ef7-dc0fdb35bcc2",
-    "name": "市民大道中林段停車場",
-    "lat": 25.0479022,
-    "lng": 121.5227372,
-    "city": "臺北市",
-    "district": "中正區",
-    "source": "official",
-    "space_type": "offStreet",
-    "fee_note": "小型車(含大型重型機車)：計時 週一至週五30元/時(09-18)，20元/時(18-09)，週六、週日、行政機關放假之紀念日與民俗日20元/時，全程以半小時計;月租 全日3,600元，日間2,400元(07-19)，夜間1,200元(週一至週五19-08，週六、日及政府行政機關放假之紀念日、民俗節日之全日)，大型重機1,800元/月",
-    "heavy_allowed": true,
-    "scooter_allowed": null,
-    "status": "confirmed",
-    "scooter_total": null,
-    "available": null,
-    "updated_at": "2026-10-17T00:00:00Z",
-    "last_confirmed_at": "2026-10-17T00:00:00Z",
-    "note": "",
-    "address": "臺北市中正區市民大道2段(中山北路至林森北路)地下1-2層",
-    "parking_zones": [
-      {
-        "name": "重機專用格",
-        "access": "heavyOnly",
-        "guide": "官方資料：大型重機格 1 格"
-      }
-    ],
-    "source_name": "臺北市政府",
-    "source_url": "https://tcgbusfs.blob.core.windows.net/blobtcmsv/TCMSV_alldesc.json",
-    "license_note": "政府資料開放授權條款第 1 版",
-    "source_id": "TPE0100"
   },
   {
     "id": "official:77e69621-a088-5d77-86d2-11e536742d08",
