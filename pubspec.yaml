@@ -16,7 +16,7 @@ dependencies:
   cupertino_native_better: 1.6.0
   material_3_expressive: 1.1.6
   dynamic_color: ^2.1.0
-  google_maps_flutter: 2.18.2
+  google_maps_flutter: 2.19.0
   google_maps_flutter_ios_sdk9: 2.19.0
   pointer_interceptor: 0.10.1+3
   flutter_map: ^8.2.2
