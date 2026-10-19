@@ -10,9 +10,9 @@ import import_mymaps
 from unittest.mock import patch
 
 from import_mymaps import (
-    DETAIL_COLUMNS, PILOT_RULES, TAIPEI_PILOT, TDX_SOURCE, TAIPEI_ROADSIDE, apply_official, apply_taipei_rules, cell, clean_text,
+    DETAIL_COLUMNS, PILOT_RULES, TAIPEI_PILOT, TDX_SOURCE, TAIPEI_ROADSIDE, apply_official, apply_taipei_rules, cell, clean_text, display_name,
     entry_direction, facility_key, lot, locate, match_lot, merge, hccg_context, kaohsiung, midpoint, normalize, official_additions, official_lots,
-    official_spot, official_sql, parse_fee, split_name, sql, tdx_credentials, tdx_lots, tm2_to_wgs84,
+    official_spot, official_sql, parse_fee, split_name, sql, taichung_name, tdx_credentials, tdx_lots, tm2_to_wgs84,
 )
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -330,8 +330,33 @@ class OfficialSpotTest(unittest.TestCase):
         tdx_only = own | {"id": "TDX-C", "source": TDX_SOURCE, "name": "另一停車場", "lat": 23.0}
         added = [lot["id"] for lot, _ in official_additions({"臺南市": [own, cars, repeat, tdx_only]}, set())]
         self.assertEqual(added, ["A", "TDX-C"])
-        placed = [{"name": "另一停車場", "lat": 23.0, "lng": self.LOT["lng"], "city": "臺南市", "scooter_total": 3}]
+        placed = [{"name": "另一停車場", "lat": 23.0, "lng": self.LOT["lng"], "city": "臺南市", "scooter_total": 3,
+                   "source_id": "A"}]
         self.assertEqual([lot["id"] for lot, _ in official_additions({"臺南市": [tdx_only]}, set(), placed)], [])
+
+    def test_tdx_repeat_named_differently_is_skipped_by_place_and_bays(self):
+        own = self.LOT | {"id": "A", "motor": 315, "name": "柳川機車停車場", "source": "臺中市路外剩餘車位（臺中市政府交通局）"}
+        repeat = own | {"id": "TDX-A", "name": "交通局柳川P", "motor": 312, "source": TDX_SOURCE}
+        other = repeat | {"id": "TDX-B", "motor": 40}
+        added = [lot["id"] for lot, _ in official_additions({"臺中市": [own, repeat, other]}, set())]
+        self.assertEqual(added, ["A", "TDX-B"])
+        # Taichung TDX names match the city lot once district and agency are dropped, bay counts aside.
+        named = own | {"id": "TDX-D", "name": "西區-交通局-柳川機車P", "motor": 200, "source": TDX_SOURCE}
+        self.assertEqual([lot["id"] for lot, _ in official_additions({"臺中市": [own, named]}, set())], ["A"])
+        self.assertEqual(display_name(named, "臺中市"), "柳川機車停車場")
+        self.assertEqual(display_name(named, "臺南市"), "西區-交通局-柳川機車P")
+        # A map spot verified against TDX already stands for the city lot at the same place.
+        via_tdx = [{"name": "柳川機車停車場", "lat": own["lat"], "lng": own["lng"], "city": "臺中市", "scooter_total": 312,
+                    "source_id": "TDX-A"}]
+        self.assertEqual([lot["id"] for lot, _ in official_additions({"臺中市": [own]}, set(), via_tdx)], [])
+        via_city = [via_tdx[0] | {"source_id": "TXG1"}]
+        self.assertEqual([lot["id"] for lot, _ in official_additions({"臺中市": [own]}, set(), via_city)], ["A"])
+
+    def test_taichung_names_drop_district_and_agency_but_keep_floor_note(self):
+        self.assertEqual(taichung_name("西區-交通局-柳川機車P"), "柳川機車停車場")
+        self.assertEqual(taichung_name("西屯區-民營-城市車旅-玉門站P"), "玉門站停車場")
+        self.assertEqual(taichung_name("中區-交通局-自由一期立體P(B1F-6F)"), "自由一期立體停車場(B1F-6F)")
+        self.assertEqual(taichung_name("Times萬華運動中心"), "Times萬華運動中心")
 
 
 class SqlTest(unittest.TestCase):

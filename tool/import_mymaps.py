@@ -367,10 +367,16 @@ def new_taipei(cache, refresh):
         page += 1
 
 
+def taichung_name(position):
+    """`西屯區-民營-城市車旅-玉門站P` → 玉門站停車場; a trailing `(B1F-6F)` stays with the name, not split on."""
+    base, note = re.fullmatch(r"(.*?)(\([^()]*\))?", position).groups()
+    return re.sub(r"P$", "停車場", base.split("-")[-1]) + (note or "")
+
+
 def taichung(cache, refresh):
     """`西屯區-民營-城市車旅-玉門站P`: district, operator class, operator…, lot name with a trailing P."""
     rows = json.loads(fetch(OFFICIAL["臺中市"][1], cache / "txg.json", refresh).read_text(encoding="utf-8-sig"))
-    return [lot(f"TXG{r['ID']}", re.sub(r"P$", "停車場", r["Position"].split("-")[-1]), r["Lat"], r["Lng"],
+    return [lot(f"TXG{r['ID']}", taichung_name(r["Position"]), r["Lat"], r["Lng"],
                 motor=number(r["TotalMotor"])) for r in rows if r["Lat"] and r["Lng"]]
 
 
@@ -869,7 +875,7 @@ def official_spot(lot, spot, pilot, lots, imported_on):
     fee = re.sub(r"\s+", " ", lot["fee"]).strip()
     official = {
         "id": "official:" + str(uuid.uuid5(uuid.NAMESPACE_URL, f"{lot['url']}|{lot['id']}")),
-        "name": lot["name"][:100], "lat": spot["lat"] if spot else round(lot["lat"], 7), "lng": spot["lng"] if spot else round(lot["lng"], 7),
+        "name": display_name(lot, city)[:100], "lat": spot["lat"] if spot else round(lot["lat"], 7), "lng": spot["lng"] if spot else round(lot["lng"], 7),
         "city": city, "district": spot["district"] if spot else lot["district"], "source": "official", "space_type": "offStreet",
         "facility_type": facility_type(lot["name"] + lot.get("summary", "")) or (spot or {}).get("facility_type"),
         "fee_note": (fee if len(fee) <= 200 else fee[:190].rstrip("，、；;") + "…（詳見現場公告）") or "請依現場公告",
@@ -892,20 +898,38 @@ def official_spot(lot, spot, pilot, lots, imported_on):
     return official
 
 
+def display_name(lot, city):
+    """Taichung's TDX names keep the city dataset's `district-agency-nameP` form, which matching uses but riders need not read."""
+    return taichung_name(lot["name"]) if lot["source"] == TDX_SOURCE and city == "臺中市" else lot["name"]
+
+
+def same_bays(a, b):
+    """Within 30 m with (nearly) the same motorcycle bay count: one lot, even when TDX names it differently."""
+    if not (a["motor"] and b["motor"]) or distance(a["lat"], a["lng"], b["lat"], b["lng"]) > 30:
+        return False
+    return abs(a["motor"] - b["motor"]) <= max(3, 0.03 * max(a["motor"], b["motor"]))
+
+
 def official_additions(lots, used, placed=()):
     """Government lots missing from the map that matter to a mode: motorcycle bays (一般機車) or heavy evidence (重機).
-    TDX lots are static data here; one that repeats a city dataset lot or an already placed official spot is skipped."""
+    TDX lots are static data here; one that repeats a city dataset lot or an already placed official spot is skipped,
+    and so is a city dataset lot repeating a spot placed from TDX (a map spot that matched TDX rather than the city lot)."""
+    def repeats(lot, others):
+        probe = {"name": display_name(lot, city), "lat": lot["lat"], "lng": lot["lng"]}
+        return match_lot(probe, others) or any(same_bays(lot, other) for other in others)
+
     for city, rows in lots.items():
-        own = [lot for lot in rows if lot["source"] != TDX_SOURCE and lot["lat"] is not None]
-        own += [{"name": spot["name"], "lat": spot["lat"], "lng": spot["lng"], "motor": spot.get("scooter_total") or 0}
-                for spot in placed if spot["city"] == city]
+        placed_here = [{"name": spot["name"], "lat": spot["lat"], "lng": spot["lng"], "motor": spot.get("scooter_total") or 0,
+                        "tdx": spot["source_id"].startswith("TDX-")} for spot in placed if spot["city"] == city]
+        own = [lot for lot in rows if lot["source"] != TDX_SOURCE and lot["lat"] is not None] + placed_here
+        from_tdx = [spot for spot in placed_here if spot["tdx"]]
         for lot in rows:
             if lot["id"] in used or lot["lat"] is None:
                 continue
             pilot = pilot_name(lot["name"]) if lot["source"] == OFFICIAL.get("臺北市", ("",))[0] else None
             if not (lot["motor"] or lot["heavy"] or pilot):
                 continue
-            if lot["source"] == TDX_SOURCE and match_lot({"name": lot["name"], "lat": lot["lat"], "lng": lot["lng"]}, own):
+            if repeats(lot, own if lot["source"] == TDX_SOURCE else from_tdx):
                 continue
             used.add(lot["id"])
             yield lot | {"city": city}, pilot
