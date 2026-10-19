@@ -186,19 +186,13 @@ void main() {
     expect(find.text('[範例] 市府周邊免費機車格'), findsOneWidget);
     expect(find.text('[範例] 信義地下停車場'), findsNothing);
     expect(find.textContaining('已套用篩選'), findsOneWidget);
-    await tester.tapAt(const Offset(30, 550));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('有剩餘車位'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('有剩餘車位'));
-    await tester.pumpAndSettle();
-    await tester.tap(input);
+    // The off-street lot exists but the free-bay filter hides it.
+    await tester.enterText(input, '[範例] 信義');
     await tester.pumpAndSettle();
     expect(find.textContaining('沒有符合的停車點'), findsOneWidget);
     await tester.tap(find.text('清除篩選查看結果'));
     await tester.pumpAndSettle();
     expect(find.text('全部格位'), findsOneWidget);
-    expect(find.text('[範例] 市府周邊免費機車格'), findsOneWidget);
     expect(find.text('[範例] 信義地下停車場'), findsOneWidget);
     await tester.enterText(input, '地下');
     await tester.pumpAndSettle();

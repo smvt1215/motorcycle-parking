@@ -138,7 +138,7 @@ Future<void> showMapLegend(BuildContext context, VehicleType vehicle) =>
           const SizedBox(height: 8),
           const Text('長按地圖：在該位置回報新的停車點。'),
           const SizedBox(height: 16),
-          const Text('社群資訊與剩餘車位可能有延遲，停車前請確認現場標示。'),
+          const Text('社群資訊可能有延遲，停車前請確認現場標示。'),
         ],
       ),
     );
