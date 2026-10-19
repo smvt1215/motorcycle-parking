@@ -134,6 +134,10 @@ class ParkingSpot {
   final List<ParkingZone> zones;
   final DateTime? availabilityUpdatedAt;
 
+  /// Points are either official (government data, including live TDX) or
+  /// community (user reports and unverified imports).
+  bool get isOfficial => source == 'official' || source == 'tdx';
+
   bool get isFacility => facilityType != null
       ? facilityType != FacilityType.roadside
       : spaceType == SpaceType.offStreet;
