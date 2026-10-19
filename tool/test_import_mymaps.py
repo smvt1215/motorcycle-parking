@@ -354,7 +354,8 @@ class OfficialSpotTest(unittest.TestCase):
 
     def test_taichung_names_drop_district_and_agency_but_keep_floor_note(self):
         self.assertEqual(taichung_name("西區-交通局-柳川機車P"), "柳川機車停車場")
-        self.assertEqual(taichung_name("西屯區-民營-城市車旅-玉門站P"), "玉門站停車場")
+        self.assertEqual(taichung_name("西屯區-民營-城市車旅-玉門站P"), "城市車旅 玉門站停車場")
+        self.assertEqual(taichung_name("烏日區-臺鐵-大車河台鐵新烏日-地下P"), "大車河台鐵新烏日 地下停車場")
         self.assertEqual(taichung_name("中區-交通局-自由一期立體P(B1F-6F)"), "自由一期立體停車場(B1F-6F)")
         self.assertEqual(taichung_name("Times萬華運動中心"), "Times萬華運動中心")
 

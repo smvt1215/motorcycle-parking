@@ -368,9 +368,12 @@ def new_taipei(cache, refresh):
 
 
 def taichung_name(position):
-    """`西屯區-民營-城市車旅-玉門站P` → 玉門站停車場; a trailing `(B1F-6F)` stays with the name, not split on."""
+    """`西屯區-民營-城市車旅-玉門站P` → 城市車旅 玉門站停車場: only the district and agency segments go, since an
+    operator or place (大車河台鐵新烏日-地下P) is part of the name; a trailing `(B1F-6F)` is not split on."""
     base, note = re.fullmatch(r"(.*?)(\([^()]*\))?", position).groups()
-    return re.sub(r"P$", "停車場", base.split("-")[-1]) + (note or "")
+    parts = base.split("-")
+    name = " ".join(parts[2:]) if len(parts) > 2 and parts[0].endswith("區") else parts[-1]
+    return re.sub(r"P$", "停車場", name) + (note or "")
 
 
 def taichung(cache, refresh):

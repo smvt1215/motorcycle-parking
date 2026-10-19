@@ -209,7 +209,7 @@
   },
   {
     "id": "official:af560277-2719-59ac-9f7b-32758a36e998",
-    "name": "家樂福豐原店停車場",
+    "name": "城市車旅家樂福豐原店停車場",
     "lat": 24.2521761,
     "lng": 120.7063822,
     "city": "臺中市",
@@ -5812,7 +5812,7 @@
   },
   {
     "id": "official:38fd5dab-06c1-550c-9b61-59697ce94464",
-    "name": "家樂福青海站停車場",
+    "name": "城市車旅家樂福青海站停車場",
     "lat": 24.170162,
     "lng": 120.644814,
     "city": "臺中市",
@@ -9876,8 +9876,8 @@
     "source_id": "TXG1881"
   },
   {
-    "id": "official:9bbdec30-6a53-51ba-80d8-864a6e259e11",
-    "name": "地下停車場",
+    "id": "official:fe67e035-f59a-5cb0-96dd-89d2019481d7",
+    "name": "大車河台鐵新烏日地下停車場",
     "lat": 24.1087935,
     "lng": 120.614151,
     "city": "臺中市",
@@ -9885,7 +9885,7 @@
     "source": "official",
     "space_type": "offStreet",
     "facility_type": "underground",
-    "fee_note": "汽車：30元/時，平日當日最高120元 機車：機車每次收費30元。",
+    "fee_note": "請依現場公告",
     "heavy_allowed": null,
     "scooter_allowed": true,
     "status": "confirmed",
@@ -9893,13 +9893,12 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": "2026-10-17T00:00:00Z",
-    "note": "社群補充（未經官方查核）：大型重機可停；停放區域：機車區（每日 30 元）\n來源原名稱：大車河新烏日站-地下停車場\n已比對TDX 路外停車場（交通部運輸資料流通服務平臺）（TDX-23P1C0029A）",
-    "address": "臺中市烏日區高鐵東一路26號1F、B1F、B2F",
+    "note": "社群補充（未經官方查核）：大型重機可停；停放區域：機車區（每日 30 元）\n來源原名稱：大車河新烏日站-地下停車場\n已比對臺中市路外剩餘車位（臺中市政府交通局）（TXG1241）",
     "entrance_note": "社群補充（未經官方查核）：\n機車費率 30/d 後牌辨析",
     "source_name": "臺中市政府",
-    "source_url": "https://tdx.transportdata.tw/",
+    "source_url": "https://data.gov.tw/dataset/83931",
     "license_note": "政府資料開放授權條款第 1 版；社群補充整理自 Alan大重停車記事（Google 我的地圖）",
-    "source_id": "TDX-23P1C0029A"
+    "source_id": "TXG1241"
   },
   {
     "id": "official:a3db59f4-ab4b-5ec6-8a9f-188f7ce37852",
@@ -10268,7 +10267,7 @@
   },
   {
     "id": "official:16d51d05-ad19-5eab-bda1-b6324c7ce815",
-    "name": "市政北二站停車場",
+    "name": "城市車旅市政北二站停車場",
     "lat": 24.1595777,
     "lng": 120.6410056,
     "city": "臺中市",
@@ -27625,30 +27624,6 @@
     "source_id": "TXG1216"
   },
   {
-    "id": "official:fe67e035-f59a-5cb0-96dd-89d2019481d7",
-    "name": "地下停車場",
-    "lat": 24.10911,
-    "lng": 120.6146,
-    "city": "臺中市",
-    "district": "烏日區",
-    "source": "official",
-    "space_type": "offStreet",
-    "facility_type": "underground",
-    "fee_note": "請依現場公告",
-    "heavy_allowed": null,
-    "scooter_allowed": true,
-    "status": "confirmed",
-    "scooter_total": 352,
-    "available": null,
-    "updated_at": "2026-10-17T00:00:00Z",
-    "last_confirmed_at": "2026-10-17T00:00:00Z",
-    "note": "",
-    "source_name": "臺中市政府",
-    "source_url": "https://data.gov.tw/dataset/83931",
-    "license_note": "政府資料開放授權條款第 1 版",
-    "source_id": "TXG1241"
-  },
-  {
     "id": "official:c83ab1c8-ab17-586f-83ed-23da71d91586",
     "name": "捷運豐樂公園站轉乘機車停車場",
     "lat": 24.1325417,
@@ -28878,7 +28853,7 @@
   },
   {
     "id": "official:c2c20f7a-d390-5992-b3b1-10481b91f0e5",
-    "name": "龍門黎明機車站停車場",
+    "name": "城市車旅龍門黎明機車站停車場",
     "lat": 24.1620045,
     "lng": 120.634491,
     "city": "臺中市",
@@ -29317,7 +29292,7 @@
   },
   {
     "id": "official:15206fd1-7ccb-5cf4-ab16-3a1e1d8c713d",
-    "name": "沙鹿中正機車停車場",
+    "name": "城市車旅沙鹿中正機車停車場",
     "lat": 24.23639,
     "lng": 120.558891,
     "city": "臺中市",
@@ -29411,7 +29386,7 @@
   },
   {
     "id": "official:aea64c9b-d565-5f2e-8cca-2da8c8cfcfbe",
-    "name": "光田醫院向上分院A棟停車場",
+    "name": "城市車旅光田醫院向上分院A棟停車場",
     "lat": 24.20651,
     "lng": 120.56292,
     "city": "臺中市",
@@ -29434,7 +29409,7 @@
   },
   {
     "id": "official:232ec399-16cf-5d32-91fe-b26ef012be81",
-    "name": "光田醫院向上分院B棟停車場",
+    "name": "城市車旅光田醫院向上分院B棟停車場",
     "lat": 24.20574,
     "lng": 120.563919,
     "city": "臺中市",
@@ -29595,7 +29570,7 @@
   },
   {
     "id": "official:e936bb92-01ce-5a91-8026-714869013512",
-    "name": "新菩提醫院站停車場",
+    "name": "城市車旅新菩提醫院站停車場",
     "lat": 24.10809,
     "lng": 120.690193,
     "city": "臺中市",
@@ -29618,7 +29593,7 @@
   },
   {
     "id": "official:934efb2e-8029-53ae-8581-82959995afce",
-    "name": "逢甲至善站機車停車場",
+    "name": "城市車旅逢甲至善站機車停車場",
     "lat": 24.17782,
     "lng": 120.644157,
     "city": "臺中市",
@@ -30451,7 +30426,7 @@
   },
   {
     "id": "official:8f59ba5b-56ee-50f2-9ed5-347cfb16485f",
-    "name": "停167機車停車場",
+    "name": "東欣停167機車停車場",
     "lat": 24.15305,
     "lng": 120.677979,
     "city": "臺中市",
