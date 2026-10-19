@@ -27836,20 +27836,6 @@
     "changes": []
   },
   {
-    "id": "official:cd99a07e-976b-5b82-a2d8-68df069176fd",
-    "name": "前鎮新光停車場",
-    "city": "高雄市",
-    "district": "前鎮區",
-    "layer": "官方補入",
-    "source_name": "前鎮新光停車場",
-    "official_id": "TDX-KHA00115",
-    "official_name": "前鎮新光停車場",
-    "distance_m": 0,
-    "name_score": 1.0,
-    "result": "官方點（官方補入）",
-    "changes": []
-  },
-  {
     "id": "official:e9b3575a-0329-5e8a-88bb-081fb8b4945f",
     "name": "俥亭左營高鐵機車停車場",
     "city": "高雄市",
@@ -28326,20 +28312,6 @@
     "changes": []
   },
   {
-    "id": "official:4aff6917-2564-5d96-b328-8e46101f1fbb",
-    "name": "南科東側停車場",
-    "city": "臺南市",
-    "district": "善化區",
-    "layer": "官方補入",
-    "source_name": "南科東側停車場",
-    "official_id": "TDX-85766482-1",
-    "official_name": "南科東側停車場",
-    "distance_m": 0,
-    "name_score": 1.0,
-    "result": "官方點（官方補入）",
-    "changes": []
-  },
-  {
     "id": "official:403803f8-fc9f-565f-a915-9f4e3acc9b27",
     "name": "林默娘停車場",
     "city": "臺南市",
@@ -28348,20 +28320,6 @@
     "source_name": "林默娘停車場",
     "official_id": "TDX-47940406",
     "official_name": "林默娘停車場",
-    "distance_m": 0,
-    "name_score": 1.0,
-    "result": "官方點（官方補入）",
-    "changes": []
-  },
-  {
-    "id": "official:2bde2d0e-ac47-5d8a-92c0-76cc78d05419",
-    "name": "南科西側停車場",
-    "city": "臺南市",
-    "district": "善化區",
-    "layer": "官方補入",
-    "source_name": "南科西側停車場",
-    "official_id": "TDX-85766482-2",
-    "official_name": "南科西側停車場",
     "distance_m": 0,
     "name_score": 1.0,
     "result": "官方點（官方補入）",

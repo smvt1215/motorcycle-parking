@@ -340,6 +340,11 @@ class OfficialSpotTest(unittest.TestCase):
         other = repeat | {"id": "TDX-B", "motor": 40}
         added = [lot["id"] for lot, _ in official_additions({"臺中市": [own, repeat, other]}, set())]
         self.assertEqual(added, ["A", "TDX-B"])
+        # About 50 m apart: only an exact, sizeable bay count still identifies the lot.
+        shifted = repeat | {"id": "TDX-E", "lat": own["lat"] + 0.00045, "motor": 315}
+        nearly = shifted | {"id": "TDX-F", "motor": 312}
+        added = [lot["id"] for lot, _ in official_additions({"臺中市": [own, shifted, nearly]}, set())]
+        self.assertEqual(added, ["A", "TDX-F"])
         # Taichung TDX names match the city lot once district and agency are dropped, bay counts aside.
         named = own | {"id": "TDX-D", "name": "西區-交通局-柳川機車P", "motor": 200, "source": TDX_SOURCE}
         self.assertEqual([lot["id"] for lot, _ in official_additions({"臺中市": [own, named]}, set())], ["A"])

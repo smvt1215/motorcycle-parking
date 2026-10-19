@@ -907,10 +907,14 @@ def display_name(lot, city):
 
 
 def same_bays(a, b):
-    """Within 30 m with (nearly) the same motorcycle bay count: one lot, even when TDX names it differently."""
-    if not (a["motor"] and b["motor"]) or distance(a["lat"], a["lng"], b["lat"], b["lng"]) > 30:
+    """One lot, even when TDX names it differently: within 30 m with nearly the same motorcycle bay count, or within
+    150 m with exactly the same sizeable count (sources place 南科車站東側 47 m apart, both with 236 bays)."""
+    if not (a["motor"] and b["motor"]):
         return False
-    return abs(a["motor"] - b["motor"]) <= max(3, 0.03 * max(a["motor"], b["motor"]))
+    meters = distance(a["lat"], a["lng"], b["lat"], b["lng"])
+    if meters <= 30:
+        return abs(a["motor"] - b["motor"]) <= max(3, 0.03 * max(a["motor"], b["motor"]))
+    return meters <= 150 and a["motor"] == b["motor"] >= 20
 
 
 def official_additions(lots, used, placed=()):
