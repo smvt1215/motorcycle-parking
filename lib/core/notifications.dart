@@ -10,7 +10,7 @@ class ParkingNotifications {
     if (!_ready) {
       tzdata.initializeTimeZones();
       await _plugin.initialize(
-        const InitializationSettings(
+        settings: const InitializationSettings(
           android: AndroidInitializationSettings('@mipmap/ic_launcher'),
           iOS: DarwinInitializationSettings(
             requestAlertPermission: false,
@@ -43,11 +43,11 @@ class ParkingNotifications {
       return false;
     }
     await _plugin.zonedSchedule(
-      1,
-      '停車計時提醒',
-      '記得確認停車費與停車時間',
-      tz.TZDateTime.from(at, tz.UTC),
-      const NotificationDetails(
+      id: 1,
+      title: '停車計時提醒',
+      body: '記得確認停車費與停車時間',
+      scheduledDate: tz.TZDateTime.from(at, tz.UTC),
+      notificationDetails: const NotificationDetails(
         android: AndroidNotificationDetails(
           'parking',
           '停車提醒',
@@ -63,6 +63,6 @@ class ParkingNotifications {
   Future<void> cancel() async {
     if (kIsWeb) return;
     await _initialize();
-    await _plugin.cancel(1);
+    await _plugin.cancel(id: 1);
   }
 }

@@ -10,7 +10,7 @@ dependencies:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
-  material_ui: 1.8.0
+  material_ui: 1.7.0
   cupertino_ui: 1.1.2
   cupertino_icons: ^2.0.0
   cupertino_native_better: 1.6.0
