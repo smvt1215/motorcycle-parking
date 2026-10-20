@@ -85,8 +85,12 @@ void main() {
       fav('tdx:1', 'tdx'),
     ]);
     final store = AppStore(local, null);
-    await store.loadFavorites();
+    final loading = store.loadFavorites();
+    // Dropped before the first await, so no rebuild can show them.
     expect(store.favorites.map((s) => s.id), ['tdx:1']);
+    await loading;
+    expect(store.favorites.map((s) => s.id), ['tdx:1']);
+    expect(local.favorites('guest').map((s) => s.id), ['tdx:1']);
   });
   test('雲端收藏同步失敗的提示在停車資料更新後仍保留', () async {
     SharedPreferences.setMockInitialValues({});
