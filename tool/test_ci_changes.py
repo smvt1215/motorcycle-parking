@@ -27,6 +27,7 @@ class ChangeRoutingTest(unittest.TestCase):
         self.assertEqual(self.targets("tool/boot_ios_simulator.py"), {"ios"})
         self.assertEqual(self.targets("web/maps_loader.js"), {"quality"})
         self.assertEqual(self.targets("analysis_options.yaml"), {"quality"})
+        self.assertEqual(self.targets("data/imports/official/spots.json"), {"quality"})
         self.assertEqual(self.targets("supabase/functions/submit-report/index.ts"), {"backend"})
         self.assertEqual(self.targets(".github/actions/mobile-setup/action.yml"), {"android", "ios"})
 

@@ -1,6 +1,6 @@
 # CI／CD 規劃
 
-> 狀態：CI 與 CD staging／release workflows 已實作；**CD staging 目前停用**，待 Environment 與部署憑證就緒後再啟用。CodeQL 改採五類語言 Advanced Setup，AI Scan 維持停用。外部服務、Environment 憑證與第一次實際部署依 [CD_SETUP.md](CD_SETUP.md) 完成。最後更新：2026-10-14。整體計畫見 [PLAN.md](PLAN.md)。
+> 狀態：CI 與 CD staging／release workflows 已實作；**CD staging 尚未就緒**：staging Environment 尚未設定部署憑證，部署 job 會在缺少憑證時直接失敗、不會實際部署；憑證就緒後才會真正部署。CodeQL 改採五類語言 Advanced Setup，AI Scan 維持停用。外部服務、Environment 憑證與第一次實際部署依 [CD_SETUP.md](CD_SETUP.md) 完成。最後更新：2026-10-14。整體計畫見 [PLAN.md](PLAN.md)。
 
 ## 決策摘要
 - 平台：**GitHub Actions**（公開 repo 使用 GitHub 標準 runner 不收費，含 macOS）。
@@ -44,6 +44,7 @@ Workflow 依平台分工：跨平台檢查放 `ci.yml`，各平台的建置與�
 - `tool/ci_changes.py` 只控制昂貴的 steps，不用 workflow 層級 paths filter，避免必要 checks 留在 Pending。Git diff 出錯會直接失敗；刪除與跨目錄搬移仍涵蓋舊路徑。
 - 文件與發版工具變更：保留 Python／fastlane 自動化測試及版本政策；略過 Flutter、Web、平台建置、模擬器及本機 Supabase。
 - Flutter 共用程式、測試、assets、SDK 與 pub 相依變更：執行品質與雙平台驗證；`web/`、analysis options 只觸發品質，`android/`／`ios/` 只觸發對應平台，`supabase/` 觸發後端。
+- `data/imports/` 只觸發品質（`test/imported_spots_test.dart` 驗證匯入資料）。
 - `tool/boot_ios_simulator.py` 只觸發 iOS；seed 產生器、seed.sql 與 demo／rules 資料來源會驗證生成結果與資料庫。路徑判斷與其測試、CodeQL workflow 變更會重新驗證全部目標。
 - `tool/` 的 Python 測試仍一律執行，不因不觸發平台建置而略過工具回歸測試。
 - 三個既有必要彙總 checks 仍要求所有前置 jobs 成功；取消／失敗不得偽裝為通過。嚴格同步 main、簽章、線性歷史、Squash 與審查 thread 結案規則不變。

@@ -11,7 +11,7 @@
 - Dependabot 依 ecosystem 合併 minor／patch 版本更新；major 與安全性修補維持既有獨立政策，不忽略任何版本。
 - CodeQL 改採 Advanced Setup：Actions、JavaScript／TypeScript、Python 使用免建置掃描；Java／Kotlin 與 Swift 先準備 Flutter，再以 manual build 掃描。
 - 原生掃描採獨立 jobs，避免改變既有模擬器產物與編譯旗標。PR 只跑相關原生掃描；main、週排程、手動執行一律完整掃描。代價是 App PR 會增加一次原生安全建置，但文件 PR 不會。
-- 不啟用 CD staging 與 AI Scan，不變更憑證或正式部署政策。
+- 不變更 CD staging（staging 憑證未設定前部署 job 不會實際部署）與 AI Scan，不變更憑證或正式部署政策。
 
 ## 啟用與驗收
 

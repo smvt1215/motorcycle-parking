@@ -21,6 +21,8 @@ PATHS = {
     "quality": APP_PATHS + ROUTING_PATHS + (
         "web/", "analysis_options.yaml", ".github/workflows/ci.yml",
         "tool/check_version.py", "tool/generate_seed.py", "supabase/seed.sql",
+        # test/imported_spots_test.dart checks the generated import data.
+        "data/imports/",
     ),
     "android": APP_PATHS + ROUTING_PATHS + (
         "android/", ".github/workflows/android.yml", ".github/actions/mobile-setup/",
