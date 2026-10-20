@@ -36,6 +36,13 @@ List<ParkingSpot> visibleFavorites(
     )
     .toList();
 
+/// TDX fixture points were sample data from the removed live layer; saved
+/// copies cannot be shown or reported any more.
+List<ParkingSpot> withoutRetiredFavorites(List<ParkingSpot> favorites) => [
+  for (final s in favorites)
+    if (s.source != 'fixture') s,
+];
+
 final storeProvider = ChangeNotifierProvider<AppStore>(
   (ref) => throw StateError('AppStore 尚未初始化'),
 );
@@ -241,6 +248,7 @@ class AppStore extends ChangeNotifier {
         error = favoritesWarning = '雲端收藏同步失敗，顯示本機收藏';
       }
     }
+    favorites = withoutRetiredFavorites(favorites);
     final community = [
       for (final s in favorites)
         if (communitySpotSources.contains(s.source)) s.id,
