@@ -271,34 +271,42 @@ packages:
     dependency: "direct main"
     description:
       name: flutter_local_notifications
-      sha256: "19ffb0a8bb7407875555e5e98d7343a633bb73707bae6c6a5f37c90014077875"
+      sha256: "9ee28742343dd13df758bb4185e8ded37ac2d1aeca6648c3ba7862c99797517e"
       url: "https://pub.dev"
     source: hosted
-    version: "19.5.0"
+    version: "22.3.2"
   flutter_local_notifications_linux:
     dependency: transitive
     description:
       name: flutter_local_notifications_linux
-      sha256: e3c277b2daab8e36ac5a6820536668d07e83851aeeb79c446e525a70710770a5
+      sha256: "3b89a4bf095fa5f8a99beeabf982c5bd506c3ad25e7b9e61da945e994dc5b615"
       url: "https://pub.dev"
     source: hosted
-    version: "6.0.0"
+    version: "8.0.2"
   flutter_local_notifications_platform_interface:
     dependency: transitive
     description:
       name: flutter_local_notifications_platform_interface
-      sha256: "277d25d960c15674ce78ca97f57d0bae2ee401c844b6ac80fcd972a9c99d09fe"
+      sha256: "43c3761d916c9bd3d5c7ebbc44d82f4990329840c0c5d62ad5260cc1b5d399bd"
       url: "https://pub.dev"
     source: hosted
-    version: "9.1.0"
+    version: "12.2.0"
+  flutter_local_notifications_web:
+    dependency: transitive
+    description:
+      name: flutter_local_notifications_web
+      sha256: "516afaf97a2d1e67a036c6617321b00d205d72f7a67b6eccf936cd565f985878"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.0"
   flutter_local_notifications_windows:
     dependency: transitive
     description:
       name: flutter_local_notifications_windows
-      sha256: "8d658f0d367c48bd420e7cf2d26655e2d1130147bca1eea917e576ca76668aaf"
+      sha256: "6f43bdd03b171b7a90f22647506fea33e2bb12294b7c7c7a3d690e960a382945"
       url: "https://pub.dev"
     source: hosted
-    version: "1.0.3"
+    version: "3.1.1"
   flutter_localizations:
     dependency: "direct main"
     description: flutter
@@ -451,10 +459,10 @@ packages:
     dependency: "direct main"
     description:
       name: google_maps_flutter
-      sha256: "92b73931215d03057bb76c2207373851081c41bd1562f909a8bb14a98f9d7baa"
+      sha256: fc084ddabc22645bebbe9df51baeec4949e5d14fc37492dce80501863425a82e
       url: "https://pub.dev"
     source: hosted
-    version: "2.18.2"
+    version: "2.19.0"
   google_maps_flutter_android:
     dependency: transitive
     description:
@@ -656,10 +664,10 @@ packages:
     dependency: "direct main"
     description:
       name: material_3_expressive
-      sha256: "34dc1f23ab47d6cd3f1b3627b8e8533652564fddb229e6c908d9790076781c5e"
+      sha256: "091a6d4bd157983e4a525dd89f60290ca80f98d17e44303a24b0d7393d92d93e"
       url: "https://pub.dev"
     source: hosted
-    version: "1.1.6"
+    version: "1.1.7"
   material_color_utilities:
     dependency: transitive
     description:
@@ -680,10 +688,10 @@ packages:
     dependency: "direct main"
     description:
       name: material_ui
-      sha256: "98ab9eda579ecae623e4b376c603035c5def78ce706f735f30bd632af5814695"
+      sha256: e4031746f96c8316864d9b92bce375f1320a36ed56e166307e1e1bda9d90b4ab
       url: "https://pub.dev"
     source: hosted
-    version: "1.6.0"
+    version: "1.8.0"
   meta:
     dependency: transitive
     description:
@@ -936,10 +944,10 @@ packages:
     dependency: transitive
     description:
       name: realtime_client
-      sha256: "847211b3b6b24b4c2b2e6e8bb8ea0f1e1568e76684196a3e4ab2759025c622a1"
+      sha256: "2ef680d83ba2c0f76019d16194ca7067fa2458b2d4091b52323a9ca4a964fd40"
       url: "https://pub.dev"
     source: hosted
-    version: "2.13.1"
+    version: "2.13.2"
   record_use:
     dependency: transitive
     description:
@@ -1109,10 +1117,10 @@ packages:
     dependency: transitive
     description:
       name: supabase
-      sha256: f127a5838db931a61a9f2f82e67698c43a18a5478f0c908709ecb12e4bbe82f0
+      sha256: "123fe08792b24e5e7c4b9a01145de8e95ebaa9183cd5f3c9d48dd2ff890f28a6"
       url: "https://pub.dev"
     source: hosted
-    version: "2.16.4"
+    version: "2.16.5"
   supabase_common:
     dependency: transitive
     description:
@@ -1125,10 +1133,10 @@ packages:
     dependency: "direct main"
     description:
       name: supabase_flutter
-      sha256: "78aff193bd44db529937cd1cb121ae3fcc2479a266b14e4818d68f9cd1ce03fe"
+      sha256: "48bbde226e68bdb293020859a1bfa42d0f3bd2239992fba0ec4f9194cbb842e6"
       url: "https://pub.dev"
     source: hosted
-    version: "2.18.2"
+    version: "2.18.3"
   sync_http:
     dependency: transitive
     description:
@@ -1157,10 +1165,10 @@ packages:
     dependency: "direct main"
     description:
       name: timezone
-      sha256: dd14a3b83cfd7cb19e7888f1cbc20f258b8d71b54c06f79ac585f14093a287d1
+      sha256: "9f4e5a1a0e4fef7dd3424842c0575db01bfb7a11730e8d55753fcd5c5c98767b"
       url: "https://pub.dev"
     source: hosted
-    version: "0.10.1"
+    version: "0.11.2"
   typed_data:
     dependency: transitive
     description:
