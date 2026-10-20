@@ -22,7 +22,7 @@ jobs:
       - id: versions
         if: steps.changes.outputs.run == 'true'
         run: echo "flutter=$(cat .flutter-version)" >> "$GITHUB_OUTPUT"
-      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad
         if: steps.changes.outputs.run == 'true'
         with:
           distribution: temurin
@@ -54,7 +54,7 @@ jobs:
       - id: versions
         if: steps.changes.outputs.run == 'true'
         run: echo "flutter=$(cat .flutter-version)" >> "$GITHUB_OUTPUT"
-      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad
         if: steps.changes.outputs.run == 'true'
         with:
           distribution: temurin
@@ -96,7 +96,7 @@ jobs:
       - id: versions
         if: needs.apk.outputs.run == 'true'
         run: echo "flutter=$(cat .flutter-version)" >> "$GITHUB_OUTPUT"
-      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad
         if: needs.apk.outputs.run == 'true'
         with:
           distribution: temurin
