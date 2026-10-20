@@ -231,18 +231,16 @@ class _SpotSheetState extends State<_SpotSheet> {
                   _DetailActions(
                     onNavigate: () =>
                         runAction(ctx, () => navigateTo(spot.lat, spot.lng)),
-                    onSuggest: spot.source == 'fixture'
-                        ? null
-                        : () => runAction(ctx, () async {
-                            await extent.animateTo(
-                              1,
-                              duration: const Duration(milliseconds: 220),
-                              curve: Curves.easeOutCubic,
-                            );
-                            if (ctx.mounted) {
-                              await showSpotSuggestions(ctx, store, spot);
-                            }
-                          }),
+                    onSuggest: () => runAction(ctx, () async {
+                      await extent.animateTo(
+                        1,
+                        duration: const Duration(milliseconds: 220),
+                        curve: Curves.easeOutCubic,
+                      );
+                      if (ctx.mounted) {
+                        await showSpotSuggestions(ctx, store, spot);
+                      }
+                    }),
                   ),
                   if (feedback != null)
                     Padding(
@@ -351,41 +349,9 @@ class _SpotSheetState extends State<_SpotSheet> {
                           text: '停放資訊可能過時，請確認現場公告。',
                         ),
                       ],
-                      if (spot.source == 'fixture')
-                        const Padding(
-                          padding: EdgeInsets.only(top: 16),
-                          child: Text('此點為 TDX 範例，僅供預覽。'),
-                        ),
                     ],
                   ),
-                  if (spot.source == 'tdx') ...[
-                    const Divider(height: 32),
-                    Text('補充重機停放資訊', style: Theme.of(ctx).textTheme.titleSmall),
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        for (final choice in ['allowed', 'denied', 'car_space'])
-                          TextButton(
-                            onPressed: () => runAction(ctx, () async {
-                              final result = await store.submit({
-                                'action': 'annotation',
-                                'source_id': spot.id,
-                                'heavy_access': choice,
-                              });
-                              if (ctx.mounted) showMessage(ctx, result);
-                            }),
-                            child: Text(
-                              choice == 'allowed'
-                                  ? '重機可停'
-                                  : choice == 'denied'
-                                  ? '重機不可停'
-                                  : '須停汽車格',
-                            ),
-                          ),
-                      ],
-                    ),
-                  ],
-                  if (!store.canReport && spot.source != 'fixture')
+                  if (!store.canReport)
                     TextButton(
                       onPressed: () => showSettings(ctx, store),
                       child: const Text('登入後提出修改建議'),

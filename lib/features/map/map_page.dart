@@ -31,7 +31,7 @@ class _MapPageState extends ConsumerState<MapPage> {
   final googleMap = GlobalKey<GoogleParkingMapState>();
   final searchController = TextEditingController();
   final searchFocus = FocusNode();
-  bool availableOnly = false, hideDenied = false, located = false;
+  bool hideDenied = false, located = false;
   bool searchResultsSuppressed = false;
   SpaceType? type;
 
@@ -77,7 +77,6 @@ class _MapPageState extends ConsumerState<MapPage> {
 
   void _clearFilters() => setState(() {
     type = null;
-    availableOnly = false;
     hideDenied = false;
   });
 
@@ -153,7 +152,7 @@ class _MapPageState extends ConsumerState<MapPage> {
           const Divider(height: 32),
           MapLegend(vehicle: store.vehicle),
           const SizedBox(height: 4),
-          const Text('社群資訊與剩餘車位可能有延遲，停車前請確認現場標示。'),
+          const Text('社群資訊可能有延遲，停車前請確認現場標示。'),
         ],
       ),
     );
@@ -175,7 +174,6 @@ class _MapPageState extends ConsumerState<MapPage> {
         .where(
           (s) =>
               (type == null || s.spaceType == type) &&
-              (!availableOnly || (s.available ?? 0) > 0) &&
               // Pending reports reach notAllowed only through legal rules
               // (see eligibility()), so hiding them here is intended.
               (!hideDenied ||
@@ -191,7 +189,7 @@ class _MapPageState extends ConsumerState<MapPage> {
           (store.eligible(s).status.index, i, s),
     ]..sort((a, b) => a.$1 != b.$1 ? a.$1 - b.$1 : a.$2 - b.$2);
     final matches = [for (final (_, _, s) in ranked) s];
-    final filtered = type != null || availableOnly || hideDenied;
+    final filtered = type != null || hideDenied;
     final searchHeight = 44 + MediaQuery.textScalerOf(context).scale(20);
     final filterHeight = (24 + MediaQuery.textScalerOf(context).scale(15))
         .clamp(48.0, double.infinity);
@@ -489,13 +487,6 @@ class _MapPageState extends ConsumerState<MapPage> {
                             selected: hideDenied,
                             onTap: () =>
                                 setState(() => hideDenied = !hideDenied),
-                          ),
-                          _MapPill(
-                            label: '有剩餘車位',
-                            icon: Icons.check_circle_outline,
-                            selected: availableOnly,
-                            onTap: () =>
-                                setState(() => availableOnly = !availableOnly),
                           ),
                           if (filtered)
                             _MapPill(

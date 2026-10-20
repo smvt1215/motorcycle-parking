@@ -85,53 +85,14 @@ class ParkingRepository {
     } catch (_) {
       officialWarning = '官方停車點暫時無法讀取';
     }
-    try {
-      final response = await client!.functions.invoke(
-        'tdx-parking',
-        body: {'bounds': bounds.toJson()},
-      );
-      final body = response.data as Map<String, dynamic>;
-      final fixture = body['fixture'] == true;
-      final warning = fixture
-          ? 'TDX 使用範例資料，請勿依範例點位停車'
-          : body['partial'] == true
-          ? '部分官方資料暫時無法讀取，請稍後重試'
-          : null;
-      final tdx = (body['spots'] as List<dynamic>).map((e) {
-        final row = e as Map<String, dynamic>;
-        return ParkingSpot.fromJson(
-          fixture
-              ? {
-                  ...row,
-                  'name': '[TDX 範例] ${row['name']}',
-                  'source': 'fixture',
-                  'status': 'pending',
-                  'available': null,
-                }
-              : row,
-        );
-      });
-      return ParkingResult(
-        [
-          ...official.take(500),
-          ...community.take(500),
-          ...tdx,
-        ].where((s) => bounds.contains(s.lat, s.lng)).toList(),
-        warning: warning ?? officialWarning,
-        truncated:
-            official.length > 500 ||
-            community.length > 500 ||
-            body['truncated'] == true,
-      );
-    } catch (_) {
-      return ParkingResult(
-        [...official.take(500), ...community.take(500)],
-        warning: officialWarning == null
-            ? 'TDX 停車資料暫時無法讀取，目前僅顯示社群點與官方停車點'
-            : '官方停車資料暫時無法讀取，目前僅顯示社群點',
-        truncated: official.length > 500 || community.length > 500,
-      );
-    }
+    return ParkingResult(
+      [
+        ...official.take(500),
+        ...community.take(500),
+      ].where((s) => bounds.contains(s.lat, s.lng)).toList(),
+      warning: officialWarning,
+      truncated: official.length > 500 || community.length > 500,
+    );
   }
 
   void addDemo(ParkingSpot spot) => (_demoSpots ??= []).add(spot);

@@ -68,6 +68,30 @@ void main() {
       'tdx:1',
     ]);
   });
+  test('已移除的 TDX 範例點不再出現在收藏中', () async {
+    SharedPreferences.setMockInitialValues({});
+    final local = LocalRepository(await SharedPreferences.getInstance());
+    ParkingSpot fav(String id, String source) => ParkingSpot.fromJson({
+      'id': id,
+      'name': id,
+      'city': '臺北市',
+      'lat': 25.03,
+      'lng': 121.56,
+      'space_type': 'offStreet',
+      'source': source,
+    });
+    await local.setFavorites('guest', [
+      fav('fixture:1', 'fixture'),
+      fav('tdx:1', 'tdx'),
+    ]);
+    final store = AppStore(local, null);
+    final loading = store.loadFavorites();
+    // Dropped before the first await, so no rebuild can show them.
+    expect(store.favorites.map((s) => s.id), ['tdx:1']);
+    await loading;
+    expect(store.favorites.map((s) => s.id), ['tdx:1']);
+    expect(local.favorites('guest').map((s) => s.id), ['tdx:1']);
+  });
   test('雲端收藏同步失敗的提示在停車資料更新後仍保留', () async {
     SharedPreferences.setMockInitialValues({});
     final store = AppStore(

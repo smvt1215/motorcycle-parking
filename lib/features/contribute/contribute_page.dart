@@ -10,15 +10,8 @@ import '../report/report_sheet.dart';
 class ContributePage extends ConsumerWidget {
   const ContributePage({super.key});
 
-  void _pickSpot(
-    BuildContext context,
-    AppStore store,
-    String title, {
-    bool officialOnly = false,
-  }) {
-    final spots = store.spots
-        .where((s) => !officialOnly || s.source == 'tdx')
-        .toList();
+  void _pickSpot(BuildContext context, AppStore store, String title) {
+    final spots = store.spots;
     showAdaptiveSheet<void>(
       context,
       (ctx) => ContentPage(
@@ -27,10 +20,7 @@ class ContributePage extends ConsumerWidget {
           const SizedBox(height: 8),
           const Text('選擇目前地圖範圍內的停車點，再依現場狀況補充資訊。'),
           const SizedBox(height: 16),
-          if (spots.isEmpty)
-            Text(
-              officialOnly ? '目前範圍沒有官方停車點，請移動地圖後再試。' : '目前範圍尚無停車點，請移動地圖或新增回報。',
-            ),
+          if (spots.isEmpty) const Text('目前範圍尚無停車點，請移動地圖或新增回報。'),
           for (final spot in spots)
             ListTile(
               contentPadding: EdgeInsets.zero,
@@ -120,12 +110,6 @@ class ContributePage extends ConsumerWidget {
               label: '修改資訊',
               icon: Icons.fact_check_outlined,
               onTap: () => _pickSpot(context, store, '修改停車資訊'),
-            ),
-            _ContributionAction(
-              label: '補充重機',
-              icon: Icons.sports_motorsports_outlined,
-              onTap: () =>
-                  _pickSpot(context, store, '補充重機停車資訊', officialOnly: true),
             ),
             _ContributionAction(
               label: '檢舉錯誤',

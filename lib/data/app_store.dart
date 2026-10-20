@@ -36,6 +36,13 @@ List<ParkingSpot> visibleFavorites(
     )
     .toList();
 
+/// TDX fixture points were sample data from the removed live layer; saved
+/// copies cannot be shown or reported any more.
+List<ParkingSpot> withoutRetiredFavorites(List<ParkingSpot> favorites) => [
+  for (final s in favorites)
+    if (s.source != 'fixture') s,
+];
+
 final storeProvider = ChangeNotifierProvider<AppStore>(
   (ref) => throw StateError('AppStore 尚未初始化'),
 );
@@ -225,17 +232,37 @@ class AppStore extends ChangeNotifier {
 
   Future<void> loadFavorites() async {
     final key = favoritesKey;
-    favorites = local.favorites(key);
+    // Retired snapshots are dropped before anything is shown or awaited.
+    final saved = local.favorites(key);
+    favorites = withoutRetiredFavorites(saved);
+    if (favorites.length != saved.length) {
+      await local.setFavorites(key, favorites);
+    }
     if (client?.auth.currentUser != null) {
       try {
         final rows = await client!.from('favorites').select('spot');
-        final loaded = rows
+        final all = rows
             .map((r) => ParkingSpot.fromJson(r['spot'] as Map<String, dynamic>))
             .toList();
+        final loaded = withoutRetiredFavorites(all);
         if (key != favoritesKey) return;
         favorites = loaded;
         favoritesWarning = null;
         await local.setFavorites(key, loaded);
+        final retired = [
+          for (final s in all)
+            if (!loaded.contains(s)) s.id,
+        ];
+        if (retired.isNotEmpty) {
+          // Best effort: the snapshots are already hidden locally.
+          unawaited(
+            client!
+                .from('favorites')
+                .delete()
+                .inFilter('spot_id', retired)
+                .then((_) {}, onError: (_) {}),
+          );
+        }
       } catch (_) {
         if (key != favoritesKey) return;
         error = favoritesWarning = '雲端收藏同步失敗，顯示本機收藏';

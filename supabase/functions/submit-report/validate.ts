@@ -12,7 +12,7 @@ export function validate(body: Record<string, unknown>): string | null {
     return 'invalid device id';
   }
   if (
-    !['create', 'vote', 'annotation', 'flag', 'update', 'delete'].includes(
+    !['create', 'vote', 'flag', 'update', 'delete'].includes(
       String(body.action),
     )
   ) return 'invalid action';
@@ -25,14 +25,10 @@ export function validate(body: Record<string, unknown>): string | null {
     !['still_there', 'gone'].includes(String(body.vote))
   ) return 'invalid vote';
   if (
-    ['annotation', 'flag'].includes(String(body.action)) &&
+    body.action === 'flag' &&
     (typeof body.source_id !== 'string' || body.source_id.length < 1 ||
       body.source_id.length > 160)
   ) return 'invalid source id';
-  if (
-    body.action === 'annotation' &&
-    !['allowed', 'denied', 'car_space'].includes(String(body.heavy_access))
-  ) return 'invalid annotation';
   if (
     body.action === 'flag' &&
     (typeof body.reason !== 'string' || body.reason.trim().length < 1 ||

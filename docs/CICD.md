@@ -46,7 +46,7 @@ Workflow 依平台分工：跨平台檢查放 `ci.yml`，各平台的建置與�
    - `flutter analyze`（`analysis_options.yaml` 開嚴格模式，警告視為錯誤）
    - 禁用 import 檢查：`lib/`、`test/`、`integration_test/` 不得出現 `package:flutter/material.dart`、`package:flutter/cupertino.dart`（見 PLAN.md）
 3. **測試**：`flutter test --coverage`，涵蓋：
-   - 單元測試：可停判斷 `eligibility`、規則 JSON 解析、TDX 正規化
+   - 單元測試：可停判斷 `eligibility`、規則 JSON 解析、來源標示
    - widget 測試
    - golden 截圖測試（Material 路徑，淺色與深色）：快速抓版面回歸，但由 Flutter 在測試程序內繪製，不含動態配色、系統列等系統層行為，這些由 `android.yml` 補
    - 覆蓋率報告上傳為 artifact；先不設門檻，穩定後再訂
@@ -57,7 +57,7 @@ Workflow 依平台分工：跨平台檢查放 `ci.yml`，各平台的建置與�
      - 只能改自己的資料
      - 每日回報上限
      - 隱藏待審的門檻
-   - Edge Function：`deno fmt --check`、`deno lint`、`deno test`（TDX 正規化與 `submit-report` 限流邏輯，用固定的範例 JSON）。
+   - Edge Function：`deno fmt --check`、`deno lint`、`deno check`、`deno test`（`submit-report` 驗證邏輯）。
 5. **版本號檢查**：`pubspec.yaml` 的 `version` 必須**大於**最新的 release tag（見下方「版本號規則」）。
 
 ### `ios.yml`（macOS）
@@ -103,7 +103,7 @@ Workflow 依平台分工：跨平台檢查放 `ci.yml`，各平台的建置與�
 1. **後端**：
    - `supabase link --project-ref $STAGING_REF`
    - `supabase db push` 套用新 migration
-   - `supabase functions deploy` 部署 Edge Function
+   - `supabase functions deploy --prune --yes` 部署 Edge Function，並刪除遠端已不在 repo 的函式（例如已移除的 `tdx-parking`）
    - 這些步驟可重複執行，重跑時再套用一次也不會出錯。
 2. **Android 測試 APK**（不上傳商店）：
    - `android-apk` 為獨立 job，等待後端實際完成部署，使用 `cd-staging-android` 佇列，不阻擋下一次後端部署。正式發版的 staging 成功判定只看後端 job 的實際部署紀錄。
@@ -211,7 +211,8 @@ Workflow 依平台分工：跨平台檢查放 `ci.yml`，各平台的建置與�
 | iOS 發布憑證 `.p12`（base64）與密碼、provisioning profile | Environment secrets（只在 `production`） | 匯入 runner 的暫時 keychain，建置後刪除 |
 | Supabase access token、各環境 project ref、DB 密碼 | Environment secrets（各自環境） | `supabase link`／`db push`／`functions deploy` |
 | Supabase URL、anon key | Environment variables | 以 `--dart-define` 帶入 APP（anon key 本來就會出現在 APP 內） |
-| TDX Client ID／Secret、Turnstile secret | **只放 Supabase secrets**，不放 GitHub | Edge Function 使用；`supabase secrets set` 由人工設定，CI 不經手 |
+| Turnstile secret | **只放 Supabase secrets**，不放 GitHub | Edge Function 使用；`supabase secrets set` 由人工設定，CI 不經手 |
+| TDX Client ID／Secret | 只放開發者本機 `supabase/functions/.env`（不進版控） | 僅供 `tool/import_mymaps.py` 靜態核驗；App 與 Edge Function 不再使用 |
 
 原則：
 - 任何金鑰都不進 repo。
