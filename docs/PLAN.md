@@ -160,8 +160,8 @@ supabase/
   seed.sql                            # 本機與 CI 用的種子資料（不推到雲端）
   migrations/0001_init.sql            # 資料表、PostGIS、RLS、nearby_spots RPC、每日回報上限 trigger
   functions/submit-report/            # Deno：社群寫入（驗證、限流、IP 雜湊）
-tool/import_mymaps.py                 # Google 我的地圖匯入、官方資料（含 TDX 靜態）核驗與正規化，輸出 data/imports/
   functions/.env.example              # 本機 Edge Function secrets 範本
+tool/import_mymaps.py                 # Google 我的地圖匯入、官方資料（含 TDX 靜態）核驗與正規化，輸出 data/imports/
 test/                                 # eligibility、rules 解析、匯入資料、車種切換 widget test、雙平台 golden 截圖測試
 .github/workflows/                    # ci.yml、ios.yml、android.yml、codeql.yml、cd-staging.yml、release.yml（見 docs/CICD.md）
 fastlane/                             # 兩平台簽章、上傳設定與商店文字（見 docs/CICD.md）
