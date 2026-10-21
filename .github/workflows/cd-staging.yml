@@ -55,6 +55,7 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          FIREBASE_ANDROID_APP_ID: ${{ vars.FIREBASE_ANDROID_APP_ID }}
           GOOGLE_MAPS_IOS_API_KEY: ${{ secrets.GOOGLE_MAPS_IOS_API_KEY }}
           IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
           IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
@@ -86,6 +87,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     environment: staging
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
     concurrency:
       group: cd-staging-android
       cancel-in-progress: false
@@ -122,6 +127,34 @@ jobs:
           retention-days: 30
           if-no-files-found: error
           overwrite: true
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      - run: npm install --global firebase-tools@15.33.0
+      - id: current
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: python3 tool/cd_gate.py latest --sha "$SOURCE_SHA"
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        if: steps.current.outputs.deploy == 'true'
+        with:
+          workload_identity_provider: ${{ vars.FIREBASE_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.FIREBASE_SERVICE_ACCOUNT }}
+          create_credentials_file: true
+      - name: Distribute APK to invited testers
+        if: steps.current.outputs.deploy == 'true'
+        env:
+          FIREBASE_APP_ID: ${{ vars.FIREBASE_ANDROID_APP_ID }}
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          : "${FIREBASE_APP_ID:?Missing Firebase Android App ID}"
+          # Recheck after OIDC exchange, immediately before the external write.
+          python3 tool/cd_gate.py latest --sha "$SOURCE_SHA" > "$RUNNER_TEMP/latest.log"
+          if rg -q 'Skipped:' "$RUNNER_TEMP/latest.log"; then exit 0; fi
+          git log -1 --format='%H%n%s' > "$RUNNER_TEMP/release-notes.txt"
+          firebase appdistribution:distribute build/app/outputs/flutter-apk/app-staging-release.apk --app "$FIREBASE_APP_ID" --groups staging-android --release-notes-file "$RUNNER_TEMP/release-notes.txt" --non-interactive
       - name: Remove signing material
         if: always()
         run: rm -f "$RUNNER_TEMP/upload.jks" config/staging.json config/maps.local.json config/maps.generated.json android/maps.properties

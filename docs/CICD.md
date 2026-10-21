@@ -137,6 +137,7 @@ Workflow 依平台分工：跨平台檢查放 `ci.yml`，各平台的建置與�
 2. **Android 測試 APK**（不上傳商店）：
    - `android-apk` 為獨立 job，等待後端實際完成部署，使用 `cd-staging-android` 佇列，不阻擋下一次後端部署。正式發版的 staging 成功判定只看後端 job 的實際部署紀錄。
    - 以 `--dart-define` 帶入 staging 的 Supabase URL／anon key，`flutter build apk --release`。
+   - APK 同時保留為 workflow artifact，並以 `firebase appdistribution:distribute --app <Firebase Android App ID> --groups staging-android` 發佈；與 iOS 共用同一個 OIDC provider 與服務帳號，發佈前再次確認仍是 main 最新 commit。測試者可透過 Firebase 邀請連結自行加入 `staging-android` 群組，不需註冊裝置。
    - 使用獨立的 applicationId 後綴 `.staging`、APP 名稱加上「β」、圖示加上測試標記，可以和商店版並存，一眼分得出來。
    - 以專用的 staging 簽章金鑰簽署，和正式版上傳金鑰分開。
    - 上傳為 workflow artifact（保留 30 天），下載後直接安裝到手機測試。
@@ -234,7 +235,7 @@ Workflow 依平台分工：跨平台檢查放 `ci.yml`，各平台的建置與�
 | Android 上傳金鑰（upload keystore，base64）與密碼 | Environment secrets（只在 `production`） | 簽 AAB；Google Play App Signing 保管真正的發布金鑰 |
 | Android staging 簽章金鑰（base64）與密碼 | Environment secrets（`staging`） | 簽 staging 測試 APK，和正式版金鑰分開 |
 | iOS staging 發布憑證 `.p12`（base64）與密碼、Ad Hoc provisioning profile（base64） | Environment secrets（`staging`） | 簽 staging 測試 IPA；匯入暫時 keychain，建置後刪除；和正式版憑證分開 |
-| Firebase iOS App ID、Workload Identity provider 與服務帳號名稱 | Environment variables（`staging`） | 發佈 staging IPA 到 Firebase App Distribution；以 OIDC 換取短期憑證，不存長期金鑰（服務帳號只有 App Distribution Admin 角色） |
+| Firebase iOS／Android App ID、Workload Identity provider 與服務帳號名稱 | Environment variables（`staging`） | 發佈 staging IPA 到 Firebase App Distribution；以 OIDC 換取短期憑證，不存長期金鑰（服務帳號只有 App Distribution Admin 角色） |
 | Google Play 服務帳號 JSON | Environment secrets（只在 `production`） | fastlane 上傳 |
 | App Store Connect API key（`.p8`、Key ID、Issuer ID） | Environment secrets（只在 `production`） | fastlane 上傳／送審 |
 | iOS 發布憑證 `.p12`（base64）與密碼、provisioning profile | Environment secrets（只在 `production`） | 匯入 runner 的暫時 keychain，建置後刪除 |
