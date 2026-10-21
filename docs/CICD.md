@@ -161,7 +161,7 @@ Workflow 依平台分工：跨平台檢查放 `ci.yml`，各平台的建置與�
    - **發佈：Firebase App Distribution**（[說明](https://firebase.google.com/docs/app-distribution)）：
      - 以 Firebase CLI（`firebase-tools`，固定版本）執行 `firebase appdistribution:distribute <ipa> --app <Firebase iOS App ID> --groups staging-ios --release-notes "<commit SHA 與標題>"`。
      - 認證優先用 **Workload Identity Federation**（`google-github-actions/auth`，釘選 SHA；job 加 `id-token: write`），不存放長期金鑰：
-       - Google Cloud 的 provider 以 attribute condition 限定 `sub` 為 `repo:smvt1215/motorcycle-parking:environment:staging`，只有綁定 `staging` Environment 的 job 能換到憑證。
+       - Google Cloud 的 provider 以 attribute condition 限定 `sub` 為 `repo:smvt1215@25175632/motorcycle-parking@1413881483:environment:staging`（本 repo 啟用 GitHub immutable subject，`sub` 含帳號與 repo 的數字 ID；可用 `gh api repos/smvt1215/motorcycle-parking/actions/oidc/customization/sub` 確認前綴），只有綁定 `staging` Environment 的 job 能換到憑證。
        - 對應的服務帳號只給 **Firebase App Distribution Admin** 角色。
        - 實作時確認 Firebase CLI 能使用這種外部帳號憑證；不行才改用服務帳號 JSON 金鑰（存 `staging` Environment secret）。
      - **IPA 不上傳為 GitHub artifact**：Ad Hoc IPA 內嵌的 provisioning profile（`embedded.mobileprovision`）的 `ProvisionedDevices` 列出**所有測試裝置的 UDID**（[Apple TN3125](https://developer.apple.com/documentation/technotes/tn3125-inside-code-signing-provisioning-profiles)），公開 repo 的 artifact 任何登入 GitHub 的人都能下載。Firebase 上的版本只有受邀的測試者看得到；原始 IPA 不放進快取，job 結束即隨 runner 銷毀。
