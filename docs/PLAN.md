@@ -1,6 +1,6 @@
 # 機車停車指南 APP（普通機車 + 大型重機）— 實作計畫
 
-> 狀態：MVP 實作與 UI 驗證中；正在切換 Google Maps 底圖。Google Maps Platform 已啟用，API Key 尚未設定；原生模擬器、CI、正式 TDX 與雲端部署仍待驗證。最後更新：2026-10-11
+> 狀態：MVP 實作與 UI 驗證中。本階段只提供靜態點（官方點＋社群點），不串接即時車位。CI（含 Android／iOS 模擬器與 CodeQL）已運作；staging 後端已部署到 Supabase 官方託管（2026-10-21，停車點資料待匯入），手機測試版建置待設定 Maps 金鑰與簽章。Google Maps Platform 已啟用，API Key 尚未設定。最後更新：2026-10-21
 
 ## 背景
 目標是做一個台灣用的機車停車指南 APP，同時服務「普通機車」與「大型重機（黃牌/紅牌）」騎士。
@@ -9,9 +9,9 @@
 
 已確認的決策：
 - 平台：**Flutter**（iOS / Android，另可建 Web 方便測試）
-- 資料：**TDX 政府開放資料 + 社群回報**
-- 後端：**Supabase**（Postgres + PostGIS、Auth、Edge Function 代理 TDX 金鑰與社群寫入）
-- 地圖：**Google Maps + 官方 `google_maps_flutter`**，支援 Android、iOS 與 Web；本機尚未設定金鑰或離線測試時保留 OpenStreetMap 預覽底圖。停車資料來源仍為 TDX 與社群回報。
+- 資料：**各縣市政府開放資料與 TDX（靜態匯入）＋社群回報**；Google 我的地圖「Alan大重停車記事」經官方核驗後匯入
+- 後端：**Supabase 官方託管**（Postgres + PostGIS、Auth、Edge Function `submit-report` 處理社群寫入）。2026-10-21 評估 GCP 自架後決定採官方託管：官方託管只在 AWS，初期成本約每月 0–25 美元，自架約 40–150 美元且需自行維運。
+- 地圖：**Google Maps + 官方 `google_maps_flutter`**，支援 Android、iOS 與 Web；本機尚未設定金鑰或離線測試時保留 OpenStreetMap 預覽底圖。停車資料來源為官方靜態點與社群回報。
 - UI：**雙平台自適應**，iOS 依 Liquid Glass（HIG，iOS 26/27）、Android 依 Material 3 Expressive；iOS 關鍵導覽元件嵌入原生 Liquid Glass 元件（見「UI 設計規範」）
 - 第一版功能：地圖找附近停車位、停車規則指南、記住我停哪裡、使用者回報/收藏停車點
 
@@ -145,7 +145,7 @@ lib/
     parked_repository.dart            # 本機 shared_preferences
     demo_data.dart                    # 無後端時的範例資料
   features/
-    map/        # 地圖、群聚標記、篩選（車種、空間類型、有即時車位）、車位詳情 bottom sheet、導航
+    map/        # 地圖、群聚標記、篩選（車種、空間類型、隱藏不可停）、車位詳情 bottom sheet、導航
     rules/      # 依縣市 × 車種顯示規則、生效日期、來源連結、免責聲明
     my_parking/ # 一鍵記錄位置/備註/樓層、計時提醒（本機通知）、導航回車旁
     favorites/  # 收藏清單
@@ -159,14 +159,14 @@ supabase/
   config.toml                         # 本機堆疊設定（匿名登入、本機 Google OAuth、關閉 CAPTCHA），只影響本機
   seed.sql                            # 本機與 CI 用的種子資料（不推到雲端）
   migrations/0001_init.sql            # 資料表、PostGIS、RLS、nearby_spots RPC、每日回報上限 trigger
-  functions/tdx-parking/index.ts      # Deno：OAuth client_credentials 取 token（快取）、抓路外/路邊車位+即時剩餘、正規化
-  functions/tdx-parking/fixtures/     # TDX 範例回應（測試與本機 TDX_MODE=fixture 共用）
+  functions/submit-report/            # Deno：社群寫入（驗證、限流、IP 雜湊）
   functions/.env.example              # 本機 Edge Function secrets 範本
-test/                                 # eligibility、rules 解析、TDX 正規化、車種切換 widget test、雙平台 golden 截圖測試
-.github/workflows/                    # ci.yml、ios.yml、android.yml、cd-staging.yml、release.yml（見 docs/CICD.md）
+tool/import_mymaps.py                 # Google 我的地圖匯入、官方資料（含 TDX 靜態）核驗與正規化，輸出 data/imports/
+test/                                 # eligibility、rules 解析、匯入資料、車種切換 widget test、雙平台 golden 截圖測試
+.github/workflows/                    # ci.yml、ios.yml、android.yml、codeql.yml、cd-staging.yml、release.yml（見 docs/CICD.md）
 fastlane/                             # 兩平台簽章、上傳設定與商店文字（見 docs/CICD.md）
 integration_test/                     # 雙平台截圖情境（地圖、sheet、車種切換、深淺色），iOS 模擬器與 Android 模擬器共用
-README.md                             # 安裝、Supabase 建置、TDX 金鑰申請步驟（中文）
+README.md                             # 安裝、Supabase 建置（中文）
 ```
 
 ## 主要套件
@@ -266,6 +266,7 @@ UI：`material_ui`、`cupertino_ui`（Flutter 官方設計套件，取代框架�
 | 3 | **縣市公告（人工整理）** | 重機開放規則、重機專用格位置（如新北 17 格專用格的路段） | 多半只有新聞稿/公告，無開放資料 → 進 `city_rules` 與 `official_heavy_spots` 表，由管理者維護；地圖以 `official_viewport_spots` 讀取已生效（`effective_date` 已到）的點位，與社群、TDX 資料合併顯示 |
 
 ### Phase 0：TDX 資料完整性稽核（實作前先做）
+> 2026-10-17：改以 `tool/import_mymaps.py` 逐縣市比對官方資料（各縣市自有資料優先，TDX 補缺），結果見 `data/imports/google-mymaps/REPORT.md`；以下為原規劃。
 在開發用的雲端環境實測時，`tdx.transportdata.tw`、`data.taipei`、`data.gov.tw` 都被網路政策擋下（403），所以**目前無法親自確認完整性**，稽核要在放行網域並取得 TDX 金鑰後執行：
 - 寫 `tool/tdx_audit.dart`（或 Deno script），逐一跑 22 縣市，輸出 `docs/tdx-coverage.md`：
   - 路外停車場數、其中有機車車位數（`ParkingSpace` 機車類型）的比例
@@ -289,7 +290,7 @@ UI：`material_ui`、`cupertino_ui`（Flutter 官方設計套件，取代框架�
 - 移除獨立「還在／已不存在」按鈕。詳情以「導航到這裡／修改建議」為主要動作；小螢幕或放大字級時改為上下排列。標題與關閉獨占首列，收藏／分享放在次列。
 - 「修改建議 → 點位已不存在」提供獨立項目與現場說明表單；描述撤除、施工或封閉狀況，必填內容送出 `flag`，供管理者審核，不因一次回報直接刪除或隱藏。
 - 「存在」只代表仍列於地圖，不等同合法可停、剩餘車位或停放資格已驗證。既有可信度欄位仍供資格判斷與歷史相容，不再於詳情顯示「尚未確認／最後確認」等需要例行操作的提示。
-- 正式回報需登入；範例模式只供本次功能測試。TDX 官方點可提出建議及補充重機資格；fixture 不接受正式回報。
+- 正式回報需登入；範例模式只供本次功能測試。官方點與社群點都可提出修改建議；已移除的 TDX 範例（fixture）點會在收藏載入時清除。
 
 ### 回報與可信度規則
 1. **兩種回報**
@@ -304,7 +305,14 @@ UI：`material_ui`、`cupertino_ui`（Flutter 官方設計套件，取代框架�
    - **伺服器端限流**：所有寫入經 Edge Function `submit-report`，依 user id **與** IP 雙重限流（如每帳號每日 10 筆、每 IP 每日 30 筆），並記錄於 `rate_limit_events`；Supabase Auth 本身的註冊/登入速率限制同時開啟。
    - **裝置驗證（第二階段）**：上架後加入 Android Play Integrity / iOS App Attest，由 Edge Function 驗證後才接受寫入。
    - 不能確認自己的回報；檢舉按鈕 → `moderation_queue`；照片存 Supabase Storage，上傳前移除 EXIF。
-5. **管理**：第一版用 Supabase Dashboard 審核 `moderation_queue` 與維護 `city_rules`，不另做後台。
+5. **管理**：第一版用 Supabase Dashboard，不另做後台。審核量變大時再評估管理者角色（RLS）與審核畫面。
+   | 工作 | Dashboard 位置 |
+   |---|---|
+   | 建立、停用使用者（含匯入用帳號） | Authentication → Users |
+   | 審核修改建議、不存在回報 | Table Editor → `moderation_queue` |
+   | 維護縣市規則 | Table Editor → `city_rules` |
+   | 維護官方點 | Table Editor → `official_heavy_spots` |
+   | 匯入資料（`official.sql`／`import.sql`）、批次修改 | SQL Editor |
 
 ### 外部社群地圖（Google 我的地圖）（2026-10-17 更新）
 「Alan大重停車記事」Google 我的地圖（https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc）列為資料來源之一。只取地點、類型、費率等事實資訊並重新整理為專案格式，不沿用原說明全文、連結、照片與回報者署名。
@@ -334,21 +342,21 @@ UI：`material_ui`、`cupertino_ui`（Flutter 官方設計套件，取代框架�
 - 結果：官方點 `data/imports/official/spots.json`；社群點 `data/imports/google-mymaps/spots.json`；`verification.json`（每點的核驗紀錄與處理結果）與 `REPORT.md`（統計、修正、待人工確認與不錄入清單）。`--sql-owner` 另產生 `import.sql`（社群點）與 `official.sql`（以 service role 執行的官方點 upsert），都不直接寫入資料庫。
 - 限制：其餘縣市自有資料不是缺座標（基隆、屏東）就是查無資料集，改由 TDX 比對；觀光景點、量販店等未登記為路外停車場的地點仍無官方資料可比對。臺中與桃園的市府資料沒有費率。
 
-資料表在原本的 `community_spots` / `spot_votes` 之外新增：`spot_annotations`（對 TDX 點位的註記，以 `source + source_id` 關聯）、`moderation_queue`、`official_heavy_spots`、`rate_limit_events`。
+資料表在原本的 `community_spots` / `spot_votes` 之外新增：`moderation_queue`、`official_heavy_spots`（官方點，含詳情十二欄）、`rate_limit_events`。`spot_annotations` 已於 2026-10-17 移除。
 
 ## 驗證方式
-1. 使用 `.flutter-version` 指定的 Flutter SDK，執行程式分析與 Flutter 測試，包含資格判斷、搜尋、抽屜互動及 Google 地圖橋接；TDX 正規化 fixture 另以 Edge Function 測試驗證。
+1. 使用 `.flutter-version` 指定的 Flutter SDK，執行程式分析與 Flutter 測試，包含資格判斷、搜尋、抽屜互動、Google 地圖橋接及匯入資料檢查；`tool/` 的 Python 測試涵蓋匯入工具與 CI 路徑分流。
 2. `flutter build web` 後用預裝 Chromium + Playwright 開啟，模擬台北定位，截圖確認：車種切換改變標記顏色、規則頁、記錄停車位置、收藏、新增回報（demo 模式）。Web 版走 Material 路徑，iOS 原生元件需另依「UI 設計規範 › 驗證」確認。
-3. Edge Function 的正規化邏輯抽成純函式並用 TDX 範例 JSON 做測試；SQL migration 與 RLS 在本機以 `supabase db reset` + `supabase test db`（pgTAP）開發驗證，CI 以同樣指令從零驗證（見「本機開發環境」與 [CICD.md](CICD.md)）。
-4. Commit 並 push 到 `claude/motorcycle-parking-guide-app-kk6f9x`，開 draft PR 並追蹤 CI。
+3. Edge Function `submit-report` 的驗證邏輯抽成純函式並以 `deno test` 測試；SQL migration 與 RLS 在本機以 `supabase db reset` + `supabase test db`（pgTAP）開發驗證，CI 以同樣指令從零驗證（見「本機開發環境」與 [CICD.md](CICD.md)）。
+4. 依 CLAUDE.md 的 PR 流程：draft PR → 自我審查 → Ready for review → 處理 CI 與 Codex 意見到全綠。
 
 ## 待準備事項
 - Google Maps 平台 API Key：Android／iOS／Web 各自限制用途與應用程式，存於不進版控的本機設定；平台已啟用，金鑰尚未設定。
 - CI／CD 所需的商店、Supabase 與 GitHub 設定，見 [CICD.md](CICD.md)「待準備事項」
-- Supabase 專案（URL、anon key），開啟 Google / Apple 登入與 Turnstile CAPTCHA（Cloudflare 免費帳號取得 site key / secret）
-- TDX 會員 Client ID / Secret
-- 雲端環境網路設定放行 `tdx.transportdata.tw`（以及若要接第 2 層：`data.taipei`、`data.gov.tw`、`datacenter.taichung.gov.tw`、`parkweb.tainan.gov.tw`），才能執行 Phase 0 稽核
-- 執行順序：未放行前，先完成 App 本體（demo 資料）、Supabase schema、社群回報（在本機 Supabase 開發，TDX 用範例模式）；放行後再做 Phase 0 與 TDX 介接
+- Supabase：staging 專案已建立並部署（2026-10-21；GitHub `staging` Environment 已設定 Supabase 的 3 個 secret 與 2 個 variable，CI 用 Scoped token 只限 staging 專案）。待辦：匯入停車點（`official.sql`／`import.sql`，需匯入用帳號 UUID）、開啟 Google／Apple 登入與 Turnstile CAPTCHA；production 專案（Pro）於上線前另建。
+- TDX 會員 Client ID / Secret（已取得；只在本機 `supabase/functions/.env` 供匯入核驗使用）
+- ~~雲端環境網路放行 TDX 與縣市開放資料網域~~：已改在本機執行 `tool/import_mymaps.py` 取得官方資料並核驗（2026-10-17），不再需要。
+- ~~執行順序（先 demo／本機開發，放行後再做 Phase 0 與 TDX 介接）~~：App 本體、schema、社群回報與靜態官方點匯入已完成；TDX 即時介接本階段不做。
 - 本機開發：Docker 與 Supabase CLI；開發用 Google OAuth client（redirect 到本機 Auth）
 - 上架用的 App 名稱、圖示、bundle id（第一版先用 placeholder）
 
