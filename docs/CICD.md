@@ -100,6 +100,7 @@ Workflow 依平台分工：跨平台檢查放 `ci.yml`，各平台的建置與�
 - 截圖上傳為 workflow artifact。
 - 路徑判斷同 iOS，由建置 job 將 `run` output 傳給模擬器 job；變更 `lib/`、`android/`、`integration_test/`、`pubspec.*` 或 `android.yml` 本身時才實際執行。
 - 模擬器測試較慢且偶有不穩：開機逾時算基礎設施失敗，可重跑一次；測試本身失敗一律視為真實失敗，不得略過。
+- iOS／Android 的 `flutter drive` 經 `tool/retry_command.py` 執行：每次嘗試有獨立逾時（iOS 12 分鐘、Android 8 分鐘，正常約 3–8 分鐘），卡住時結束整個程序群組；失敗或逾時自動再試一次（Android 先 `adb reconnect`），並在執行紀錄留下 warning。兩次都失敗才算失敗，所以真正失敗的測試仍會擋下 PR；重試成功的 warning 代表模擬器或測試不穩，需追查。
 
 ### 必要檢查（main ruleset）
 - 每個 workflow 有一個彙總 job：`CI 全部通過`（`ci-ok`）、`Android 全部通過`（`android-ok`）、`iOS 全部通過`（`ios-ok`）。`needs` 該 workflow 所有 job，包含各平台的 Release、測試建置與模擬器測試，`if: always()`，任何一個失敗或被取消就失敗。

@@ -26,10 +26,11 @@ PATHS = {
     ),
     "android": APP_PATHS + ROUTING_PATHS + (
         "android/", ".github/workflows/android.yml", ".github/actions/mobile-setup/",
+        "tool/retry_command.py",
     ),
     "ios": APP_PATHS + ROUTING_PATHS + (
         "ios/", ".github/workflows/ios.yml", "tool/boot_ios_simulator.py",
-        ".github/actions/mobile-setup/",
+        ".github/actions/mobile-setup/", "tool/retry_command.py",
     ),
     "backend": ROUTING_PATHS + (
         "supabase/", ".supabase-version", ".github/workflows/ci.yml",

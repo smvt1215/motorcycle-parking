@@ -110,8 +110,10 @@ jobs:
         run: python3 tool/boot_ios_simulator.py '${{ matrix.ios }}'
       - name: Native navigation and sheet screenshots
         if: needs.app.outputs.run == 'true'
+        # A normal run takes under 8 minutes; a hung `flutter drive` is retried once instead of using up the job timeout.
         run: |
-          flutter drive --debug --driver=test_driver/integration_test.dart --target=integration_test/ui_test.dart --use-application-binary=artifacts/ios-app/Runner.app -d '${{ steps.device.outputs.udid }}'
+          python3 tool/retry_command.py --attempts 2 --timeout-minutes 12 -- \
+            flutter drive --debug --driver=test_driver/integration_test.dart --target=integration_test/ui_test.dart --use-application-binary=artifacts/ios-app/Runner.app -d '${{ steps.device.outputs.udid }}'
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always() && needs.app.outputs.run == 'true'
         with:
