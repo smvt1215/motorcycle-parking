@@ -54,18 +54,19 @@ staging profile 必須是 Ad Hoc，包含受邀 iPhone 的 UDID；production pro
 | Variable | 內容 |
 |---|---|
 | `FIREBASE_IOS_APP_ID` | Firebase 中 staging iOS APP 的 App ID |
+| `FIREBASE_ANDROID_APP_ID` | Firebase 中 staging Android APP 的 App ID（套件名稱 `tw.motopark.motorcycle_parking.staging`） |
 | `FIREBASE_WORKLOAD_IDENTITY_PROVIDER` | Google Cloud Workload Identity Provider 的完整 resource name |
 | `FIREBASE_SERVICE_ACCOUNT` | 有 Firebase App Distribution Admin 角色的服務帳號 email |
 
-建立 Firebase iOS APP 時 bundle ID 必須是 `tw.motopark.motorcycleParking.staging`。建立測試群組 `staging-ios`，邀請測試者。
+建立 Firebase iOS APP 時 bundle ID 必須是 `tw.motopark.motorcycleParking.staging`。建立測試群組 `staging-ios` 與 `staging-android`，邀請測試者；也可在 App Distribution 建立邀請連結讓測試者自行加入（iOS 測試者仍需註冊 UDID 並更新 Ad Hoc profile）。
 
 Google Cloud 的 OIDC provider 信任 GitHub，attribute condition 限定 subject 為 `repo:smvt1215/motorcycle-parking:environment:staging`，並將該 principal 授權為目標服務帳號的 Workload Identity User。服務帳號只給 Firebase App Distribution Admin，啟用必要 API。認證 action 產生 external-account ADC 設定，Firebase CLI 使用該檔換取短期 token；不需服務帳號長期私鑰。依 [Firebase 官方 CI 說明](https://firebase.google.com/docs/app-distribution/best-practices-distributing-android-apps-to-qa-testers-with-ci-cd)，Workload Identity Federation 可使用 credential configuration file。
 
 每次 main 的 CI、Android、iOS 都成功後，staging 後端才開始部署。進入佇列前與取得固定部署鎖後，都查核最新 SHA、CI 及該 SHA 的既有部署紀錄；已實際成功部署過就略過重複事件，避免重複建置與 Firebase 通知。失敗的部署沒有成功紀錄，可以重試。較舊 SHA 的 job 即使流程成功結束，也沒有 `Record staging deployment` 步驟成功紀錄，因此不會誤認為已部署。後端成功後，手機建置失敗時重跑失敗的手機 job，不用重新部署後端。
 
-手機測試版是選用的：某平台的簽章與地圖設定一項都沒填時（Android：Maps 金鑰與 keystore 四項；iOS：Maps 金鑰、憑證、profile 與 `FIREBASE_IOS_APP_ID`），後端部署後該平台的 job 會略過並留下 notice；只要填了其中一項就照常建置，缺的項目由設定檢查報錯，避免設定一半被當成略過。
+手機測試版是選用的：某平台的簽章與地圖設定一項都沒填時（Android：Maps 金鑰、keystore 四項與 `FIREBASE_ANDROID_APP_ID`；iOS：Maps 金鑰、憑證、profile 與 `FIREBASE_IOS_APP_ID`），後端部署後該平台的 job 會略過並留下 notice；只要填了其中一項就照常建置，缺的項目由設定檢查報錯，避免設定一半被當成略過。
 
-Android 的安裝檔在該 CD workflow 的 `staging-android-SHA` artifact，保留 30 天。iOS IPA 只送 Firebase，不放 GitHub artifact 或快取。若 iOS job 完成時 main 已前進，就略過 Firebase 發佈，避免舊版成為最新通知。
+Android 的安裝檔送到 Firebase 的 `staging-android` 群組，也保留在該 CD workflow 的 `staging-android-SHA` artifact 30 天。iOS IPA 只送 Firebase，不放 GitHub artifact 或快取。若 iOS job 完成時 main 已前進，就略過 Firebase 發佈，避免舊版成為最新通知。
 
 測試者第一次以 iPhone Safari 接受 Firebase 邀請並註冊裝置。擁有者在 Apple Developer 加入 UDID，重新產生 Ad Hoc profile，更新 `IOS_PROFILE_BASE64`，再重跑最新 SHA 的 staging iOS job。安裝時依 iPhone 系統提示處理描述檔與開發者模式；這部分須以實機驗證。之後從 Firebase App Tester 安裝新版本。
 
