@@ -34,6 +34,7 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
 | `android.yml` | PR、push 到 `main` | Linux（模擬器硬體加速） | production／staging Release APK 設定檢查＋一次測試 APK 建置，Android 11／16 模擬器共用測試產物執行與截圖 |
 | `ios.yml` | PR、push 到 `main` | macOS | production／staging 真機 Release 設定檢查＋一次模擬器測試 App 建置，iOS 26／27 共用測試產物執行與截圖（見 PLAN.md「UI 設計規範 › 驗證」） |
 | `codeql.yml` | PR、push 到 `main`、每週、手動 | Linux + macOS | Actions、JavaScript／TypeScript、Python、Java／Kotlin、Swift 安全分析；原生 PR 掃描依相關路徑執行 |
+| `actions-cleanup.yml` | 每週日（UTC 19:17）、手動（可選 dry-run） | Linux | 清理 Actions 執行紀錄與快取（規則見下方「Actions 清理」） |
 | `cd-staging.yml` | `main` 上的三條 CI 都成功後（`workflow_run`） | Linux + macOS | 部署 staging 後端、產生 Android 測試 APK 與 iOS 測試 IPA（不上傳商店） |
 | `release.yml` | 推送 tag `v*` | Linux + macOS | 部署 production 後端、上架兩平台、建立 GitHub Release |
 
@@ -48,6 +49,12 @@ Workflow 依平台分工：跨平台檢查放 `ci.yml`，各平台的建置與�
 - `tool/boot_ios_simulator.py` 只觸發 iOS；seed 產生器、seed.sql 與 demo／rules 資料來源會驗證生成結果與資料庫。路徑判斷與其測試、CodeQL workflow 變更會重新驗證全部目標。
 - `tool/` 的 Python 測試仍一律執行，不因不觸發平台建置而略過工具回歸測試。
 - 三個既有必要彙總 checks 仍要求所有前置 jobs 成功；取消／失敗不得偽裝為通過。嚴格同步 main、簽章、線性歷史、Squash 與審查 thread 結案規則不變。
+
+### Actions 清理
+
+- `tool/actions_cleanup.py` 刪除已完成且超過 7 天的執行紀錄，以及已關閉 PR、已刪除分支的快取。
+- 一律保留：`main` 最新 commit 的所有執行紀錄（`cd_gate.py` 部署前要讀 CI 與 staging 部署紀錄）、執行中的紀錄、所有 `Release` 紀錄（正式發版稽核）、`main` 與 tag 的快取。
+- 手動執行時可勾選 dry-run，只列出會刪除的項目。刪除無法復原。
 
 ### CodeQL Advanced Setup
 
