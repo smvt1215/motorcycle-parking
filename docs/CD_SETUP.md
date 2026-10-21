@@ -68,7 +68,17 @@ Google Cloud 的 OIDC provider 信任 GitHub，attribute condition 限定 subjec
 
 Android 的安裝檔送到 Firebase 的 `staging-android` 群組，也保留在該 CD workflow 的 `staging-android-SHA` artifact 30 天。iOS IPA 只送 Firebase，不放 GitHub artifact 或快取。若 iOS job 完成時 main 已前進，就略過 Firebase 發佈，避免舊版成為最新通知。
 
-測試者第一次以 iPhone Safari 接受 Firebase 邀請並註冊裝置。擁有者在 Apple Developer 加入 UDID，重新產生 Ad Hoc profile，更新 `IOS_PROFILE_BASE64`，再重跑最新 SHA 的 staging iOS job。安裝時依 iPhone 系統提示處理描述檔與開發者模式；這部分須以實機驗證。之後從 Firebase App Tester 安裝新版本。
+### iOS 測試裝置自動同步（選用）
+
+設定 staging 的 App Store Connect API key（`APP_STORE_KEY_ID`、`APP_STORE_ISSUER_ID`、`APP_STORE_KEY_BASE64`，角色至少 App Manager）後：
+
+- `staging-ios-devices.yml` 每天 UTC 01:41（台灣 09:41）與手動執行：取得 Firebase `staging-ios` 測試者註冊的 iPhone，透過 App Store Connect API 登記 Apple 尚未有的裝置，再以所有啟用中的裝置重新產生 Ad Hoc profile（沿用原名稱與憑證）。
+- 只有 profile 實際變更、且 main 最新 commit 已完成 staging 後端部署時，才以該 commit 重建並發佈 IPA；沒有新裝置不建置、不通知。
+- 裝置上限預設 75 台（Environment variable `IOS_DEVICE_LIMIT` 可調），計入帳號所有已登記 iPhone；超過時不再登記並在執行紀錄警告。Apple 每個會員年度上限 100 台，移除裝置只能在續約時進行。
+- iOS 建置（CD staging 與裝置同步共用 `staging-ios-build.yml`）有 API key 時改用 API 下載目前的 Ad Hoc profile，`IOS_PROFILE_BASE64` 只在未設定 API key 時使用。
+- 第一個 Ad Hoc profile 仍由擁有者手動建立，自動化只負責更新；Apple Distribution 憑證（`.p12`）每年手動更新。
+
+測試者第一次以 iPhone Safari 接受 Firebase 邀請並註冊裝置。未設定 App Store Connect API key 時，擁有者在 Apple Developer 加入 UDID，重新產生 Ad Hoc profile，更新 `IOS_PROFILE_BASE64`，再重跑最新 SHA 的 staging iOS job；設定後由上方的裝置同步自動處理。安裝時依 iPhone 系統提示處理描述檔與開發者模式；這部分須以實機驗證。之後從 Firebase App Tester 安裝新版本。
 
 ## production：商店準備
 

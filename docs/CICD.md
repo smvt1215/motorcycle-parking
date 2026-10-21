@@ -34,6 +34,8 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
 | `android.yml` | PR、push 到 `main` | Linux（模擬器硬體加速） | production／staging Release APK 設定檢查＋一次測試 APK 建置，Android 11／16 模擬器共用測試產物執行與截圖 |
 | `ios.yml` | PR、push 到 `main` | macOS | production／staging 真機 Release 設定檢查＋一次模擬器測試 App 建置，iOS 26／27 共用測試產物執行與截圖（見 PLAN.md「UI 設計規範 › 驗證」） |
 | `codeql.yml` | PR、push 到 `main`、每週、手動 | Linux + macOS | Actions、JavaScript／TypeScript、Python、Java／Kotlin、Swift 安全分析；原生 PR 掃描依相關路徑執行 |
+| `staging-ios-devices.yml` | 每天（UTC 01:41）、手動 | Linux（+ macOS 重建） | 登記 Firebase 測試者的新 iPhone、更新 Ad Hoc profile，有變更才重建 staging IPA（見 CD_SETUP.md） |
+| `staging-ios-build.yml` | 由 `cd-staging.yml` 與 `staging-ios-devices.yml` 呼叫 | macOS | 建置並發佈 staging IPA（可重複使用的 workflow） |
 | `actions-cleanup.yml` | 每週日（UTC 19:17）、手動（可選 dry-run） | Linux | 清理 Actions 執行紀錄與快取（規則見下方「Actions 清理」） |
 | `cd-staging.yml` | `main` 上的三條 CI 都成功後（`workflow_run`） | Linux + macOS | 部署 staging 後端、產生 Android 測試 APK 與 iOS 測試 IPA（不上傳商店） |
 | `release.yml` | 推送 tag `v*` | Linux + macOS | 部署 production 後端、上架兩平台、建立 GitHub Release |

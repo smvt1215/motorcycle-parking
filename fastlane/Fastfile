@@ -1,7 +1,11 @@
+require "base64"
 require "digest"
 require "fileutils"
 require "json"
 require_relative "release_policy"
+require_relative "device_policy"
+
+STAGING_BUNDLE = "tw.motopark.motorcycleParking.staging"
 
 def root_path(path)
   File.expand_path("../#{path}", __dir__)
@@ -9,7 +13,7 @@ end
 
 def required_setting(name)
   value = ENV.fetch(name, "")
-  UI.user_error!("Missing production setting: #{name}") if value.empty?
+  UI.user_error!("Missing Environment setting: #{name}") if value.empty?
   value
 end
 
@@ -24,6 +28,22 @@ end
 
 def selected_build(number)
   File.open(ENV.fetch("GITHUB_OUTPUT"), "a") { |file| file.puts("build=#{number}") }
+end
+
+def connect_api_key
+  app_store_connect_api_key(key_id: required_setting("APP_STORE_KEY_ID"),
+                            issuer_id: required_setting("APP_STORE_ISSUER_ID"),
+                            key_content: required_setting("APP_STORE_KEY_BASE64"),
+                            is_key_content_base64: true, duration: 1200)
+end
+
+# The owner creates the first Ad Hoc profile by hand; automation only refreshes it.
+def find_staging_profile
+  profiles = Spaceship::ConnectAPI::Profile.all(filter: {profileType: "IOS_APP_ADHOC"},
+                                                includes: "bundleId,certificates,devices")
+  matching = profiles.select { |profile| profile.bundle_id&.identifier == STAGING_BUNDLE }
+  UI.user_error!("Create one Ad Hoc profile for #{STAGING_BUNDLE} first") unless matching.size == 1
+  matching.first
 end
 
 platform :android do
@@ -81,12 +101,50 @@ platform :android do
 end
 
 platform :ios do
+  desc "Register new Firebase testers' iPhones and refresh the staging Ad Hoc profile"
+  lane :staging_devices do
+    connect_api_key
+    testers = JSON.parse(File.read(ENV.fetch("TESTER_UDIDS_FILE")))
+    limit = Integer(ENV.fetch("IOS_DEVICE_LIMIT", "").then { |value| value.empty? ? DevicePolicy::DEFAULT_LIMIT.to_s : value })
+    registered = Spaceship::ConnectAPI::Device.all(filter: {platform: "IOS"})
+    add, over = DevicePolicy.to_register(testers, registered.map(&:udid), limit)
+    UI.important("#{over.size} tester iPhone(s) not registered: staging limit of #{limit} reached") unless over.empty?
+    add.each do |device|
+      Spaceship::ConnectAPI::Device.create(name: DevicePolicy.device_name(device), platform: "IOS", udid: device["udid"])
+    end
+    UI.message("Registered #{add.size} new iPhone(s)")
+    # Rebuild only when the profile misses an enabled device, whether just
+    # registered here or added by hand in the developer portal.
+    enabled = Spaceship::ConnectAPI::Device.all(filter: {platform: "IOS", status: "ENABLED"})
+    profile = find_staging_profile
+    missing = enabled.map(&:id) - profile.devices.map(&:id)
+    if missing.any?
+      name = profile.name
+      certificates = profile.certificates.map(&:id)
+      bundle_id = profile.bundle_id.id
+      # Profile names are unique, so the old one goes first; Signing.xcconfig keeps using the name.
+      profile.delete!
+      Spaceship::ConnectAPI::Profile.create(name: name, profile_type: "IOS_APP_ADHOC", bundle_id_id: bundle_id,
+                                            certificate_ids: certificates, device_ids: enabled.map(&:id))
+      UI.success("Refreshed #{name} with #{enabled.size} device(s)")
+    end
+    File.open(ENV.fetch("GITHUB_OUTPUT"), "a") { |file| file.puts("rebuild=#{missing.any?}") }
+  end
+
+  desc "Download the current staging Ad Hoc profile for this build"
+  lane :staging_profile do
+    connect_api_key
+    profile = find_staging_profile
+    UI.user_error!("Staging Ad Hoc profile is #{profile.profile_state}") unless profile.profile_state == "ACTIVE"
+    path = File.join(ENV.fetch("RUNNER_TEMP"), "staging-adhoc.mobileprovision")
+    File.binwrite(path, Base64.decode64(profile.profile_content))
+    File.chmod(0o600, path)
+    File.open(ENV.fetch("GITHUB_ENV"), "a") { |file| file.puts("IOS_PROFILE_PATH=#{path}") }
+  end
+
   desc "Reuse a valid build, then independently ensure App Store review submission"
   lane :release do
-    api_key = app_store_connect_api_key(key_id: required_setting("APP_STORE_KEY_ID"),
-                                        issuer_id: required_setting("APP_STORE_ISSUER_ID"),
-                                        key_content: required_setting("APP_STORE_KEY_BASE64"),
-                                        is_key_content_base64: true, duration: 1200)
+    api_key = connect_api_key
     app_id = required_setting("APP_STORE_APP_ID")
     version = ENV.fetch("RELEASE_VERSION")
     base = Integer(ENV.fetch("BUILD_BASE"))

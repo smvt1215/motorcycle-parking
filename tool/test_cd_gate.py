@@ -1,6 +1,11 @@
 """Regression tests for CI/staging deployment proof and release numbering."""
+import os
+import sys
+import tempfile
 import unittest
+from unittest.mock import patch
 
+import cd_gate
 from cd_gate import CI, DEPLOY_JOB, DEPLOY_PROOF, GitHub, build_number, release_version
 
 
@@ -133,6 +138,34 @@ class DeploymentGateTest(unittest.TestCase):
         api.get = get
         self.assertEqual(len(list(api.pages("jobs", "jobs"))), 101)
         self.assertEqual(calls, [1, 2])
+
+
+class DeployedModeTest(unittest.TestCase):
+    """Out-of-band rebuilds use the latest main only after its backend is deployed."""
+
+    def run_gate(self, responses):
+        with tempfile.NamedTemporaryFile("r", suffix=".out") as out, \
+                patch.object(cd_gate, "GitHub", lambda: FakeGitHub(responses)), \
+                patch.dict(os.environ, {"GITHUB_OUTPUT": out.name}), \
+                patch.object(sys, "argv", ["cd_gate.py", "deployed", "--sha", "sha"]):
+            cd_gate.main()
+            return out.read()
+
+    def staging(self, step):
+        return {"commits/main": {"sha": "sha"},
+                "actions/workflows/cd-staging.yml/runs": {"workflow_runs": [{"id": 4, "status": "completed"}]},
+                "actions/runs/4/jobs": {"jobs": [{"name": DEPLOY_JOB, "status": "completed", "conclusion": "success",
+                                                 "steps": [{"name": DEPLOY_PROOF, "conclusion": step}]}]}}
+
+    def test_deployed_latest_main_is_ready(self):
+        self.assertEqual(self.run_gate(self.staging("success")), "deploy=true\n")
+
+    def test_undeployed_main_waits_without_failing(self):
+        self.assertEqual(self.run_gate(self.staging("skipped")), "deploy=false\n")
+
+    def test_outdated_sha_is_skipped(self):
+        responses = self.staging("success") | {"commits/main": {"sha": "newer"}}
+        self.assertEqual(self.run_gate(responses), "deploy=false\n")
 
 
 if __name__ == "__main__":

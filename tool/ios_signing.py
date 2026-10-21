@@ -46,7 +46,11 @@ def prepare(environment):
     p12 = temp / "cd-certificate.p12"
     profile_file = temp / "cd-profile.mobileprovision"
     private_file(p12, base64.b64decode(required("IOS_CERTIFICATE_BASE64"), validate=True))
-    private_file(profile_file, base64.b64decode(required("IOS_PROFILE_BASE64"), validate=True))
+    # The device sync workflow downloads the current Ad Hoc profile from App Store
+    # Connect; without it, the Environment secret holds a manually exported one.
+    downloaded = os.environ.get("IOS_PROFILE_PATH")
+    private_file(profile_file, Path(downloaded).read_bytes() if downloaded
+                 else base64.b64decode(required("IOS_PROFILE_BASE64"), validate=True))
     profile = plistlib.loads(security("cms", "-D", "-i", str(profile_file)))
     bundle, team, name = validate_profile(profile, environment)
     destination = Path.home() / "Library/MobileDevice/Provisioning Profiles" / f"{profile['UUID']}.mobileprovision"

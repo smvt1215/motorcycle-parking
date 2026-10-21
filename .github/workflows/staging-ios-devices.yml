@@ -1,0 +1,91 @@
+name: Staging iOS devices
+# Registers iPhones that new Firebase testers signed up with and, only when the Ad Hoc
+# profile changed, rebuilds the latest main so they can install without waiting for a merge.
+on:
+  schedule:
+    - cron: '41 1 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: staging-ios-devices
+  cancel-in-progress: false
+jobs:
+  sync:
+    name: Register new tester iPhones
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: staging
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    outputs:
+      rebuild: ${{ steps.sync.outputs.rebuild == 'true' && steps.deployed.outputs.deploy == 'true' }}
+      sha: ${{ steps.head.outputs.sha }}
+    env:
+      APP_STORE_KEY_ID: ${{ secrets.APP_STORE_KEY_ID }}
+      APP_STORE_ISSUER_ID: ${{ secrets.APP_STORE_ISSUER_ID }}
+      APP_STORE_KEY_BASE64: ${{ secrets.APP_STORE_KEY_BASE64 }}
+      FIREBASE_IOS_APP_ID: ${{ vars.FIREBASE_IOS_APP_ID }}
+      IOS_DEVICE_LIMIT: ${{ vars.IOS_DEVICE_LIMIT }}
+    steps:
+      - id: ready
+        run: |
+          if [ -n "$APP_STORE_KEY_ID" ] && [ -n "$FIREBASE_IOS_APP_ID" ]; then
+            echo 'configured=true' >> "$GITHUB_OUTPUT"
+          else
+            echo '::notice::Device sync skipped: set the App Store Connect key and FIREBASE_IOS_APP_ID (see docs/CD_SETUP.md)'
+            echo 'configured=false' >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        if: steps.ready.outputs.configured == 'true'
+        with:
+          ref: main
+          persist-credentials: false
+      - id: head
+        if: steps.ready.outputs.configured == 'true'
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      # A merge whose backend is still deploying gets its IPA from CD staging, which
+      # downloads the refreshed profile anyway; only a deployed main is rebuilt here.
+      - id: deployed
+        if: steps.ready.outputs.configured == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ steps.head.outputs.sha }}
+        run: python3 tool/cd_gate.py deployed --sha "$SOURCE_SHA"
+      - id: auth
+        if: steps.ready.outputs.configured == 'true'
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ vars.FIREBASE_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.FIREBASE_SERVICE_ACCOUNT }}
+          token_format: access_token
+          create_credentials_file: false
+      - name: List testers' iPhones
+        if: steps.ready.outputs.configured == 'true'
+        env:
+          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+        run: python3 tool/firebase_udids.py "$RUNNER_TEMP/testers.json"
+      - uses: ruby/setup-ruby@651ff0d62c5c79bed6d53ec518387aae20e72c1a
+        if: steps.ready.outputs.configured == 'true'
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+      - id: sync
+        if: steps.ready.outputs.configured == 'true'
+        env:
+          TESTER_UDIDS_FILE: ${{ runner.temp }}/testers.json
+        run: bundle exec fastlane ios staging_devices
+  build:
+    name: Rebuild staging IPA
+    needs: sync
+    if: needs.sync.outputs.rebuild == 'true'
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    uses: ./.github/workflows/staging-ios-build.yml
+    with:
+      sha: ${{ needs.sync.outputs.sha }}
+    secrets: inherit

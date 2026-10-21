@@ -1,0 +1,93 @@
+name: Staging iOS build
+# Shared by CD staging (after each main deployment) and the device sync (new tester iPhones).
+on:
+  workflow_call:
+    inputs:
+      sha:
+        description: main commit to build; distribution is skipped once main moves on
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  ios-ipa:
+    name: Staging iOS IPA
+    runs-on: macos-26
+    timeout-minutes: 60
+    environment: staging
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    concurrency:
+      group: cd-staging-ios
+      cancel-in-progress: false
+    env:
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+      GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_IOS_API_KEY }}
+      IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+      IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+      IOS_PROFILE_BASE64: ${{ secrets.IOS_PROFILE_BASE64 }}
+      APP_STORE_KEY_ID: ${{ secrets.APP_STORE_KEY_ID }}
+      APP_STORE_ISSUER_ID: ${{ secrets.APP_STORE_ISSUER_ID }}
+      APP_STORE_KEY_BASE64: ${{ secrets.APP_STORE_KEY_BASE64 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/mobile-setup
+      - run: python3 tool/cd_config.py staging ios
+      # With an App Store Connect key, sign with the current Ad Hoc profile so devices
+      # registered by the device sync are included; otherwise use IOS_PROFILE_BASE64.
+      - uses: ruby/setup-ruby@651ff0d62c5c79bed6d53ec518387aae20e72c1a
+        if: env.APP_STORE_KEY_ID != ''
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+      - name: Download current Ad Hoc profile
+        if: env.APP_STORE_KEY_ID != ''
+        run: bundle exec fastlane ios staging_profile
+      - run: python3 tool/ios_signing.py staging
+      - name: Build Ad Hoc IPA
+        run: flutter build ipa --release --flavor staging --build-number="$IOS_BUILD_NUMBER" --dart-define-from-file=config/staging.json --export-options-plist="$RUNNER_TEMP/ExportOptions.plist"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      - run: npm install --global firebase-tools@15.33.0
+      - id: current
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ inputs.sha }}
+        run: python3 tool/cd_gate.py latest --sha "$SOURCE_SHA"
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        if: steps.current.outputs.deploy == 'true'
+        with:
+          workload_identity_provider: ${{ vars.FIREBASE_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.FIREBASE_SERVICE_ACCOUNT }}
+          create_credentials_file: true
+      - name: Distribute IPA to invited testers
+        if: steps.current.outputs.deploy == 'true'
+        env:
+          FIREBASE_APP_ID: ${{ vars.FIREBASE_IOS_APP_ID }}
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ inputs.sha }}
+        run: |
+          : "${FIREBASE_APP_ID:?Missing Firebase iOS App ID}"
+          # Recheck after OIDC exchange, immediately before the external write.
+          python3 tool/cd_gate.py latest --sha "$SOURCE_SHA" > "$RUNNER_TEMP/latest.log"
+          if rg -q 'Skipped:' "$RUNNER_TEMP/latest.log"; then exit 0; fi
+          git log -1 --format='%H%n%s' > "$RUNNER_TEMP/release-notes.txt"
+          shopt -s nullglob
+          ipa=(build/ios/ipa/*.ipa)
+          test "${#ipa[@]}" = 1
+          firebase appdistribution:distribute "${ipa[0]}" --app "$FIREBASE_APP_ID" --groups staging-ios --release-notes-file "$RUNNER_TEMP/release-notes.txt" --non-interactive
+      - name: Remove signing material and private IPA
+        if: always()
+        run: |
+          python3 tool/ios_signing.py cleanup
+          rm -rf build/ios/ipa build/ios/archive
+          rm -f config/staging.json config/maps.local.json config/maps.generated.json ios/Flutter/Maps.xcconfig

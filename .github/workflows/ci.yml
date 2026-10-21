@@ -23,6 +23,7 @@ jobs:
       - run: |
           ruby -c fastlane/Fastfile
           ruby fastlane/test_release_policy.rb
+          ruby fastlane/test_device_policy.rb
           bundle exec fastlane lanes
   quality:
     name: Flutter 檢查（格式／分析／測試／Web）

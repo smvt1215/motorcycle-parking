@@ -126,7 +126,7 @@ def build_number(count, attempt):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=["staging", "latest", "release"])
+    parser.add_argument("mode", choices=["staging", "latest", "deployed", "release"])
     parser.add_argument("--sha", required=True)
     parser.add_argument("--wait", type=int, default=0)
     args = parser.parse_args()
@@ -156,8 +156,15 @@ def main():
             output("deploy", "false")
             print("Skipped: source SHA is no longer the latest main")
             return
-        ready = (args.mode == "latest" or
-                 (api.staging_ready(args.sha) if args.mode == "staging" else api.ci_ready(args.sha)))
+        if args.mode == "latest":
+            ready = True
+        elif args.mode == "staging":
+            ready = api.staging_ready(args.sha)
+        elif args.mode == "deployed":
+            # Out-of-band rebuilds (new tester devices) wait for this SHA's backend.
+            ready = api.staging_deployed(args.sha, fail_if_missing=False)
+        else:
+            ready = api.ci_ready(args.sha)
         if ready and args.mode == "release":
             ready = api.staging_deployed(args.sha)
         if ready:
