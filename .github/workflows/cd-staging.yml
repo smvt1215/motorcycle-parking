@@ -39,11 +39,28 @@ jobs:
       cancel-in-progress: false
     outputs:
       deployed: ${{ steps.deployed.outputs.deployed }}
+      android: ${{ steps.mobile.outputs.android }}
+      ios: ${{ steps.mobile.outputs.ios }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
           persist-credentials: false
+      # Test builds are optional until signing is set up: a platform with none of its settings is skipped,
+      # while a partly configured one still runs and fails on the missing values.
+      - id: mobile
+        env:
+          GOOGLE_MAPS_ANDROID_API_KEY: ${{ secrets.GOOGLE_MAPS_ANDROID_API_KEY }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          GOOGLE_MAPS_IOS_API_KEY: ${{ secrets.GOOGLE_MAPS_IOS_API_KEY }}
+          IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          IOS_PROFILE_BASE64: ${{ secrets.IOS_PROFILE_BASE64 }}
+          FIREBASE_IOS_APP_ID: ${{ vars.FIREBASE_IOS_APP_ID }}
+        run: python3 tool/cd_mobile_setup.py >> "$GITHUB_OUTPUT"
       - id: current
         env:
           GH_TOKEN: ${{ github.token }}
@@ -65,7 +82,7 @@ jobs:
   android-apk:
     name: Staging Android APK
     needs: deploy
-    if: needs.deploy.outputs.deployed == 'true'
+    if: needs.deploy.outputs.deployed == 'true' && needs.deploy.outputs.android == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     environment: staging
@@ -111,7 +128,7 @@ jobs:
   ios-ipa:
     name: Staging iOS IPA
     needs: deploy
-    if: needs.deploy.outputs.deployed == 'true'
+    if: needs.deploy.outputs.deployed == 'true' && needs.deploy.outputs.ios == 'true'
     runs-on: macos-26
     timeout-minutes: 60
     environment: staging

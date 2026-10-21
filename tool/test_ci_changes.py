@@ -25,6 +25,7 @@ class ChangeRoutingTest(unittest.TestCase):
         self.assertEqual(self.targets("android/app/build.gradle.kts"), {"android"})
         self.assertEqual(self.targets("ios/Runner/AppDelegate.swift"), {"ios"})
         self.assertEqual(self.targets("tool/boot_ios_simulator.py"), {"ios"})
+        self.assertEqual(self.targets("tool/retry_command.py"), {"android", "ios"})
         self.assertEqual(self.targets("web/maps_loader.js"), {"quality"})
         self.assertEqual(self.targets("analysis_options.yaml"), {"quality"})
         self.assertEqual(self.targets("data/imports/official/spots.json"), {"quality"})

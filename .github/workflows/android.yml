@@ -128,7 +128,9 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-boot-timeout: 180
-          script: flutter drive --debug --flavor production --driver=test_driver/integration_test.dart --target=integration_test/ui_test.dart --use-application-binary=artifacts/android-app/app-production-debug.apk -d emulator-5554
+          # A normal run takes about 3 minutes. The emulator sometimes goes offline after the tests finish, so the
+          # driver loses the results; reconnect and retry once instead of failing the job.
+          script: python3 tool/retry_command.py --attempts 2 --timeout-minutes 8 --before-retry 'adb reconnect offline; adb wait-for-device' -- flutter drive --debug --flavor production --driver=test_driver/integration_test.dart --target=integration_test/ui_test.dart --use-application-binary=artifacts/android-app/app-production-debug.apk -d emulator-5554
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always() && needs.apk.outputs.run == 'true'
         with:

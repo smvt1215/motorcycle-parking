@@ -63,6 +63,8 @@ Google Cloud 的 OIDC provider 信任 GitHub，attribute condition 限定 subjec
 
 每次 main 的 CI、Android、iOS 都成功後，staging 後端才開始部署。進入佇列前與取得固定部署鎖後，都查核最新 SHA、CI 及該 SHA 的既有部署紀錄；已實際成功部署過就略過重複事件，避免重複建置與 Firebase 通知。失敗的部署沒有成功紀錄，可以重試。較舊 SHA 的 job 即使流程成功結束，也沒有 `Record staging deployment` 步驟成功紀錄，因此不會誤認為已部署。後端成功後，手機建置失敗時重跑失敗的手機 job，不用重新部署後端。
 
+手機測試版是選用的：某平台的簽章與地圖設定一項都沒填時（Android：Maps 金鑰與 keystore 四項；iOS：Maps 金鑰、憑證、profile 與 `FIREBASE_IOS_APP_ID`），後端部署後該平台的 job 會略過並留下 notice；只要填了其中一項就照常建置，缺的項目由設定檢查報錯，避免設定一半被當成略過。
+
 Android 的安裝檔在該 CD workflow 的 `staging-android-SHA` artifact，保留 30 天。iOS IPA 只送 Firebase，不放 GitHub artifact 或快取。若 iOS job 完成時 main 已前進，就略過 Firebase 發佈，避免舊版成為最新通知。
 
 測試者第一次以 iPhone Safari 接受 Firebase 邀請並註冊裝置。擁有者在 Apple Developer 加入 UDID，重新產生 Ad Hoc profile，更新 `IOS_PROFILE_BASE64`，再重跑最新 SHA 的 staging iOS job。安裝時依 iPhone 系統提示處理描述檔與開發者模式；這部分須以實機驗證。之後從 Firebase App Tester 安裝新版本。
