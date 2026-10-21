@@ -1,0 +1,37 @@
+name: Actions cleanup
+on:
+  schedule:
+    - cron: '17 19 * * 0'
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: List what would be deleted without deleting
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: actions-cleanup
+  cancel-in-progress: false
+jobs:
+  cleanup:
+    name: Delete old runs and stale caches
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: write
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          if [ "$DRY_RUN" = true ]; then
+            python3 tool/actions_cleanup.py --days 7 --dry-run
+          else
+            python3 tool/actions_cleanup.py --days 7
+          fi
