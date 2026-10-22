@@ -107,6 +107,23 @@ void main() {
     expect(mapCenter(tester).latitude, closeTo(23, 1e-6));
   });
 
+  test('定位等待與資料載入同時計時，不疊加', () async {
+    SharedPreferences.setMockInitialValues({});
+    final load = Completer<void>();
+    final store = _SlowStore(
+      LocalRepository(await SharedPreferences.getInstance()),
+      load.future,
+    );
+    final started = store.start(
+      locator: () => Completer<bool>().future,
+      locationWait: const Duration(milliseconds: 50),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    load.complete();
+    await started.timeout(const Duration(milliseconds: 20));
+    expect(store.starting, isFalse);
+  });
+
   testWidgets('定位失敗時維持預設中心並進入地圖', (tester) async {
     final store = (await tester.runAsync(freshStore))!;
     final started = await startReal(
@@ -120,4 +137,12 @@ void main() {
     expect(store.located, isFalse);
     expect(mapCenter(tester).latitude, closeTo(25.0339, 1e-6));
   });
+}
+
+/// Holds [init] until the test releases it, standing in for slow data.
+class _SlowStore extends AppStore {
+  _SlowStore(LocalRepository local, this.load) : super(local, null);
+  final Future<void> load;
+  @override
+  Future<void> init() => load;
 }

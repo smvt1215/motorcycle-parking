@@ -147,9 +147,11 @@ class AppStore extends ChangeNotifier {
         if (!_disposed) notifyListeners();
       }),
     );
+    // Armed before loading so the wait overlaps data, not adds to it.
+    final settled = location.timeout(locationWait, onTimeout: () => false);
     try {
       await init();
-      await location.timeout(locationWait, onTimeout: () => false);
+      await settled;
     } finally {
       starting = false;
       if (!_disposed) notifyListeners();
