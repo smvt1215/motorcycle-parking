@@ -19,9 +19,10 @@ def ios_devices(response):
 
 
 def fetch(app_id, token):
-    # App IDs look like 1:<project number>:ios:<hash>.
+    # App IDs look like 1:<project number>:ios:<hash>. The endpoint is per project;
+    # also passing mobilesdkAppId is rejected ("identifying_id is already set").
     project = app_id.split(":")[1]
-    request = Request(f"{API}/projects/{project}/apps/{app_id}/testerUdids",
+    request = Request(f"{API}/projects/{project}/testers:udids",
                       headers={"Authorization": f"Bearer {token}"})
     with urlopen(request, timeout=30) as response:
         return json.load(response)
