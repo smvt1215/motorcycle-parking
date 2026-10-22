@@ -33,6 +33,9 @@ class _MapPageState extends ConsumerState<MapPage> {
   final searchFocus = FocusNode();
   bool hideDenied = false;
   bool searchResultsSuppressed = false;
+
+  /// Kept for dispose, where `ref` can no longer be read.
+  late final launchStore = ref.read(storeProvider);
   SpaceType? type;
 
   @override
@@ -40,7 +43,20 @@ class _MapPageState extends ConsumerState<MapPage> {
     super.initState();
     searchFocus.addListener(_searchChanged);
     searchController.addListener(_searchChanged);
-    unawaited(_followLaunchLocation(ref.read(storeProvider)));
+    unawaited(_followLaunchLocation(launchStore));
+    launchStore.addListener(_introduceLegend);
+  }
+
+  /// Opens the legend once on first launch, after the launch screen lifts.
+  void _introduceLegend() {
+    final store = launchStore;
+    if (store.starting || !store.introduceLegend || !widget.showControls) {
+      return;
+    }
+    unawaited(store.markLegendSeen());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(showMapLegend(context, store.vehicle));
+    });
   }
 
   /// Centers on the launch fix unless the user already panned the map,
@@ -100,7 +116,7 @@ class _MapPageState extends ConsumerState<MapPage> {
       context,
       (ctx) => ContentPage(
         children: [
-          Text('格位類型', style: Theme.of(ctx).textTheme.headlineSmall),
+          SheetTitle('格位類型'),
           const SizedBox(height: 12),
           for (final option in <SpaceType?>[null, ...SpaceType.values])
             ListTile(
@@ -142,6 +158,7 @@ class _MapPageState extends ConsumerState<MapPage> {
 
   @override
   void dispose() {
+    launchStore.removeListener(_introduceLegend);
     controller.dispose();
     searchFocus.removeListener(_searchChanged);
     searchController.removeListener(_searchChanged);
@@ -155,7 +172,7 @@ class _MapPageState extends ConsumerState<MapPage> {
       context,
       (ctx) => ContentPage(
         children: [
-          Text('選擇車種', style: Theme.of(ctx).textTheme.headlineSmall),
+          SheetTitle('選擇車種'),
           const SizedBox(height: 20),
           VehicleSelector(
             value: store.vehicle,
@@ -205,9 +222,9 @@ class _MapPageState extends ConsumerState<MapPage> {
     ]..sort((a, b) => a.$1 != b.$1 ? a.$1 - b.$1 : a.$2 - b.$2);
     final matches = [for (final (_, _, s) in ranked) s];
     final filtered = type != null || hideDenied;
-    final searchHeight = 44 + MediaQuery.textScalerOf(context).scale(20);
-    final filterHeight = (24 + MediaQuery.textScalerOf(context).scale(15))
-        .clamp(48.0, double.infinity);
+    final searchHeight = 32 + MediaQuery.textScalerOf(context).scale(20);
+    final filterHeight = (16 + MediaQuery.textScalerOf(context).scale(15))
+        .clamp(40.0, double.infinity);
     return Stack(
       children: [
         if (AppConfig.useGoogleMaps)
@@ -393,7 +410,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
                     child: Material(
                       color: colors.surface,
                       elevation: 4,
@@ -405,13 +422,13 @@ class _MapPageState extends ConsumerState<MapPage> {
                           children: [
                             Padding(
                               padding: const EdgeInsets.only(
-                                left: 18,
-                                right: 12,
+                                left: 16,
+                                right: 10,
                               ),
                               child: Icon(
                                 Icons.local_parking_rounded,
                                 color: colors.primary,
-                                size: 30,
+                                size: 26,
                               ),
                             ),
                             Expanded(
@@ -435,7 +452,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                                   border: InputBorder.none,
                                   isDense: true,
                                   contentPadding: const EdgeInsets.symmetric(
-                                    vertical: 16,
+                                    vertical: 10,
                                   ),
                                   suffixIcon: searchController.text.isEmpty
                                       ? null
@@ -452,8 +469,9 @@ class _MapPageState extends ConsumerState<MapPage> {
                             ),
                             TextFieldTapRegion(
                               child: Padding(
-                                padding: const EdgeInsets.only(right: 8),
+                                padding: const EdgeInsets.only(right: 6),
                                 child: IconButton.filledTonal(
+                                  visualDensity: VisualDensity.compact,
                                   tooltip: '搜尋停車點',
                                   onPressed: query.isEmpty
                                       ? null
@@ -484,11 +502,6 @@ class _MapPageState extends ConsumerState<MapPage> {
                                 : Icons.two_wheeler,
                             onTap: () => openVehicleSelector(store),
                           ),
-                          _MapIconPill(
-                            tooltip: '地圖怎麼看',
-                            icon: Icons.help_outline,
-                            onTap: () => showMapLegend(context, store.vehicle),
-                          ),
                           _MapPill(
                             label: type?.label ?? '全部格位',
                             icon: Icons.local_parking_outlined,
@@ -513,11 +526,26 @@ class _MapPageState extends ConsumerState<MapPage> {
                       ),
                     ),
                   ),
-                  if (store.loading)
-                    const Padding(
-                      padding: EdgeInsets.all(16),
-                      child: LinearProgressIndicator(),
+                  // Reference, not a filter: a small corner button, the way
+                  // map apps place their layer and legend controls.
+                  Align(
+                    alignment: AlignmentDirectional.centerEnd,
+                    child: Padding(
+                      padding: const EdgeInsetsDirectional.only(
+                        top: 8,
+                        end: 16,
+                      ),
+                      child: SizedBox.square(
+                        dimension: 44,
+                        child: _MapIconPill(
+                          key: const ValueKey('map-legend-button'),
+                          tooltip: '地圖怎麼看',
+                          icon: Icons.help_outline,
+                          onTap: () => showMapLegend(context, store.vehicle),
+                        ),
+                      ),
                     ),
+                  ),
                   if (store.error != null)
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -543,9 +571,10 @@ class _MapPageState extends ConsumerState<MapPage> {
                     MediaQuery.paddingOf(context).top +
                     searchHeight +
                     filterHeight +
-                    32,
-                left: 16,
-                right: 16,
+                    22,
+                // Clear of the legend button on the trailing edge.
+                left: 68,
+                right: 68,
                 child: Center(
                   child: Material(
                     color: colors.surface,
@@ -566,7 +595,7 @@ class _MapPageState extends ConsumerState<MapPage> {
               ),
             Positioned(
               right: 16,
-              bottom: tabBarInset + (AppConfig.useGoogleMaps ? 46 : 30),
+              bottom: tabBarInset + 16,
               child: MapActions(
                 onLocate: () => runAction(context, () async {
                   await store.locate();
@@ -585,22 +614,25 @@ class _MapPageState extends ConsumerState<MapPage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Material(
-                    color: colors.surface.withValues(alpha: .96),
-                    borderRadius: BorderRadius.circular(12),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      child: Text(
-                        store.demo ? '範例資料 · 行駛中請勿操作' : '停車前請確認現場標示',
-                        style: Theme.of(context).textTheme.labelSmall,
+                  // Only sample data keeps a standing notice; the reminder to
+                  // check site signs lives in the legend and vehicle sheet.
+                  if (store.demo)
+                    Material(
+                      color: colors.surface.withValues(alpha: .96),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        child: Text(
+                          '範例資料 · 行駛中請勿操作',
+                          style: Theme.of(context).textTheme.labelSmall,
+                        ),
                       ),
                     ),
-                  ),
                   if (AppConfig.showsOsmTiles) ...[
-                    const SizedBox(height: 4),
+                    if (store.demo) const SizedBox(height: 4),
                     TextButton(
                       onPressed: () => launchUrl(
                         Uri.parse('https://www.openstreetmap.org/copyright'),
@@ -626,7 +658,7 @@ class _MapPageState extends ConsumerState<MapPage> {
             ),
             if (searchFocus.hasFocus && !searchResultsSuppressed)
               Positioned(
-                top: MediaQuery.paddingOf(context).top + searchHeight + 20,
+                top: MediaQuery.paddingOf(context).top + searchHeight + 12,
                 left: 16,
                 right: 16,
                 child: TextFieldTapRegion(
@@ -713,6 +745,7 @@ class _MapPageState extends ConsumerState<MapPage> {
 
 class _MapIconPill extends StatelessWidget {
   const _MapIconPill({
+    super.key,
     required this.tooltip,
     required this.icon,
     required this.onTap,
@@ -721,27 +754,24 @@ class _MapIconPill extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(right: 8),
-    child: Material(
-      elevation: 2,
-      shadowColor: const Color(0x33000000),
-      color: Theme.of(context).colorScheme.surface,
-      shape: const CircleBorder(),
-      child: Semantics(
-        button: true,
-        child: Tooltip(
-          message: tooltip,
-          child: InkWell(
-            onTap: onTap,
-            customBorder: const CircleBorder(),
-            child: AspectRatio(
-              aspectRatio: 1,
-              child: Icon(
-                icon,
-                size: 20,
-                color: Theme.of(context).colorScheme.onSurface,
-              ),
+  Widget build(BuildContext context) => Material(
+    elevation: 2,
+    shadowColor: const Color(0x33000000),
+    color: Theme.of(context).colorScheme.surface,
+    shape: const CircleBorder(),
+    child: Semantics(
+      button: true,
+      child: Tooltip(
+        message: tooltip,
+        child: InkWell(
+          onTap: onTap,
+          customBorder: const CircleBorder(),
+          child: AspectRatio(
+            aspectRatio: 1,
+            child: Icon(
+              icon,
+              size: 20,
+              color: Theme.of(context).colorScheme.onSurface,
             ),
           ),
         ),

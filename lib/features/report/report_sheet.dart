@@ -10,7 +10,7 @@ Future<void> showSettings(BuildContext context, AppStore store) =>
       context,
       (ctx) => ContentPage(
         children: [
-          Text('車種與帳號', style: Theme.of(ctx).textTheme.headlineSmall),
+          SheetTitle('車種與帳號'),
           const SizedBox(height: 16),
           VehicleSelector(
             value: store.vehicle,
@@ -456,7 +456,7 @@ class _ParkingFormState extends State<ParkingForm> {
     padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
     child: ContentPage(
       children: [
-        Text('記錄停車', style: Theme.of(context).textTheme.headlineSmall),
+        SheetTitle('記錄停車'),
         const SizedBox(height: 12),
         const Text('以目前裝置定位記錄位置。'),
         TextField(

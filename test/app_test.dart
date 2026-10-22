@@ -247,6 +247,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('方形・不可停'), findsOneWidget);
     expect(find.textContaining('目前車種「普通機車」'), findsOneWidget);
+    await tester.tap(find.byTooltip('關閉'));
+    await tester.pumpAndSettle();
+    expect(find.text('方形・不可停'), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });

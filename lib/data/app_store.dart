@@ -94,6 +94,9 @@ class AppStore extends ChangeNotifier {
 
   /// The launch location attempt; the map follows it when it succeeds.
   Future<bool>? launchLocation;
+
+  /// First launch only: the map opens the legend once [starting] ends.
+  bool introduceLegend = false;
   MapViewport viewport = const MapViewport(
     south: 25.01,
     west: 121.54,
@@ -142,6 +145,7 @@ class AppStore extends ChangeNotifier {
     Duration settleLimit = const Duration(seconds: 4),
   }) async {
     starting = locatingAtLaunch = true;
+    introduceLegend = !local.legendSeen;
     final location = launchLocation = (locator ?? locateOnLaunch)();
     notifyListeners();
     unawaited(
@@ -226,6 +230,11 @@ class AppStore extends ChangeNotifier {
 
   Eligibility eligible(ParkingSpot spot) =>
       eligibility(spot, vehicle, ruleFor(spot));
+  Future<void> markLegendSeen() {
+    introduceLegend = false;
+    return local.setLegendSeen();
+  }
+
   Future<void> setVehicle(VehicleType value) async {
     vehicle = value;
     notifyListeners();

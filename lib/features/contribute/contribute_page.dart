@@ -16,7 +16,7 @@ class ContributePage extends ConsumerWidget {
       context,
       (ctx) => ContentPage(
         children: [
-          Text(title, style: Theme.of(ctx).textTheme.headlineSmall),
+          SheetTitle(title),
           const SizedBox(height: 8),
           const Text('選擇目前地圖範圍內的停車點，再依現場狀況補充資訊。'),
           const SizedBox(height: 16),

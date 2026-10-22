@@ -125,7 +125,7 @@ Future<void> showMapLegend(BuildContext context, VehicleType vehicle) =>
       context,
       (ctx) => ContentPage(
         children: [
-          Text('地圖怎麼看', style: Theme.of(ctx).textTheme.headlineSmall),
+          SheetTitle('地圖怎麼看'),
           const SizedBox(height: 4),
           Text(
             '標記依目前車種「${vehicle.label}」判斷，切換車種會即時更新。',

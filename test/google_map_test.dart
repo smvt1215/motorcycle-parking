@@ -117,6 +117,8 @@ void main() {
       () => Future<void>.delayed(const Duration(milliseconds: 150)),
     );
     await tester.pumpAndSettle();
+    // Taps on the Google logo stay in the app.
+    expect(find.byKey(const ValueKey('google-logo-shield')), findsOneWidget);
     final map = tester.widget<gm.GoogleMap>(find.byType(gm.GoogleMap));
     expect(map.markers, hasLength(spots.length));
     map.markers.first.onTap!();
@@ -126,6 +128,7 @@ void main() {
     final before = platform.created;
     rebuild(() => interactive = false);
     await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('google-logo-shield')), findsNothing);
     final paused = tester.widget<gm.GoogleMap>(find.byType(gm.GoogleMap));
     expect(paused.scrollGesturesEnabled, isFalse);
     expect(paused.markers.every((marker) => marker.onTap == null), isTrue);

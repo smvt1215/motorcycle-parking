@@ -151,7 +151,7 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
                 initialCameraPosition: camera,
                 style: dark ? _darkMapStyle : null,
                 padding: EdgeInsets.only(
-                  top: widget.panelVisible ? 0 : 132,
+                  top: widget.panelVisible ? 0 : 108,
                   bottom: widget.panelVisible
                       ? size.height * .92
                       : widget.interactive
@@ -230,6 +230,24 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
                     ),
                 },
               ),
+              // The Google logo stays visible but must not leave the app for
+              // Google Maps when tapped; this shield swallows those taps.
+              if (widget.interactive && !widget.panelVisible)
+                Positioned(
+                  left: 0,
+                  bottom: MediaQuery.paddingOf(context).bottom,
+                  width: 96,
+                  height: 44,
+                  child: PointerInterceptor(
+                    child: ExcludeSemantics(
+                      child: GestureDetector(
+                        key: const ValueKey('google-logo-shield'),
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () {},
+                      ),
+                    ),
+                  ),
+                ),
               if (kIsWeb && !widget.interactive)
                 Positioned.fill(
                   child: PointerInterceptor(child: const SizedBox.expand()),
