@@ -75,6 +75,38 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('目前位置以固定大小的標記顯示，不隨縮放變小', (tester) async {
+    final platform = FakeMapsPlatform();
+    final previous = pi.GoogleMapsFlutterPlatform.instance;
+    pi.GoogleMapsFlutterPlatform.instance = platform;
+    addTearDown(() => pi.GoogleMapsFlutterPlatform.instance = previous);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GoogleParkingMap(
+          center: const LatLng(25.03, 121.56),
+          location: const LatLng(25.031, 121.561),
+          spots: const [],
+          eligibility: (_) => const Eligibility(EligibilityStatus.allowed, ''),
+          interactive: true,
+          onSpotTap: (_) {},
+          onViewport: (_, _) {},
+        ),
+      ),
+    );
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 150)),
+    );
+    await tester.pumpAndSettle();
+    final map = tester.widget<gm.GoogleMap>(find.byType(gm.GoogleMap));
+    final dot = map.markers.singleWhere(
+      (marker) => marker.markerId.value == 'my-location',
+    );
+    expect(dot.position, const gm.LatLng(25.031, 121.561));
+    expect(dot.clusterManagerId, isNull);
+    expect(map.circles, isEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('Google 停車標記可開啟詳情，面板開啟時停用底圖互動且保留相機', (tester) async {
     final platform = FakeMapsPlatform();
     final previous = pi.GoogleMapsFlutterPlatform.instance;
