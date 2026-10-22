@@ -31,7 +31,7 @@ class _MapPageState extends ConsumerState<MapPage> {
   final googleMap = GlobalKey<GoogleParkingMapState>();
   final searchController = TextEditingController();
   final searchFocus = FocusNode();
-  bool hideDenied = false, located = false;
+  bool hideDenied = false;
   bool searchResultsSuppressed = false;
   SpaceType? type;
 
@@ -40,6 +40,21 @@ class _MapPageState extends ConsumerState<MapPage> {
     super.initState();
     searchFocus.addListener(_searchChanged);
     searchController.addListener(_searchChanged);
+    unawaited(_followLaunchLocation(ref.read(storeProvider)));
+  }
+
+  /// Centers on the launch fix unless the user already panned the map,
+  /// which can happen when the fix arrives after the launch screen.
+  Future<void> _followLaunchLocation(AppStore store) async {
+    final start = LatLng(store.mapLat, store.mapLng);
+    if (!(await store.launchLocation ?? false)) return;
+    // FlutterMap's controller can only move once the map has laid out.
+    await WidgetsBinding.instance.endOfFrame;
+    const distance = Distance();
+    if (!mounted || distance(start, LatLng(store.mapLat, store.mapLng)) > 50) {
+      return;
+    }
+    await _moveCamera(LatLng(store.lat, store.lng), 16);
   }
 
   void _searchChanged() {
@@ -205,7 +220,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                 widget.showControls &&
                 (ModalRoute.of(context)?.isCurrent ?? true),
             panelVisible: !widget.showControls,
-            location: located ? LatLng(store.lat, store.lng) : null,
+            location: store.located ? LatLng(store.lat, store.lng) : null,
             onViewport: (bounds, center) {
               store.mapLat = center.latitude;
               store.mapLng = center.longitude;
@@ -341,7 +356,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                   ),
                 ),
               ),
-              if (located)
+              if (store.located)
                 MarkerLayer(
                   markers: [
                     Marker(
@@ -555,11 +570,6 @@ class _MapPageState extends ConsumerState<MapPage> {
               child: MapActions(
                 onLocate: () => runAction(context, () async {
                   await store.locate();
-                  if (mounted) {
-                    setState(
-                      () => located = !(store.demo && AppConfig.offlineMap),
-                    );
-                  }
                   await _moveCamera(LatLng(store.lat, store.lng), 16);
                 }),
                 onRecord: () => showParkingForm(context, store),

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -23,7 +25,8 @@ Future<void> main() async {
     LocalRepository(await SharedPreferences.getInstance()),
     client,
   );
-  await store.init();
+  // The launch screen covers the app until data and location are ready.
+  unawaited(store.start());
   runApp(
     ProviderScope(
       overrides: [storeProvider.overrideWith((ref) => store)],
