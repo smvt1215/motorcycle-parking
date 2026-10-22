@@ -200,6 +200,10 @@ class AdaptiveScaffold extends StatelessWidget {
     final back = index == 1 || index == 3;
     return Scaffold(
       extendBody: isCupertino,
+      // The keyboard overlays the map instead of resizing it: a resized
+      // native map view lags behind and shows blank bands while it catches
+      // up. Search results size themselves to the keyboard (MapPage).
+      resizeToAvoidBottomInset: false,
       appBar: !back
           ? null
           : isCupertino

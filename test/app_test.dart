@@ -39,6 +39,14 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pumpAndSettle();
     final input = find.byKey(const ValueKey('parking-search'));
+    final mapSize = tester.getSize(find.byType(FlutterMap));
+    tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+    addTearDown(tester.view.resetViewInsets);
+    await tester.pump();
+    // The keyboard overlays the map; resizing a native map shows blank bands.
+    expect(tester.getSize(find.byType(FlutterMap)), mapSize);
+    tester.view.resetViewInsets();
+    await tester.pump();
     expect(find.byTooltip('車種與地圖'), findsNothing);
     expect(find.byTooltip('圖例與篩選'), findsNothing);
     expect(find.byKey(const ValueKey('city-selector')), findsNothing);
