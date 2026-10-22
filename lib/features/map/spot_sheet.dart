@@ -176,10 +176,13 @@ class _SpotSheetState extends State<_SpotSheet> {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Title size as in map apps, so typical names stay on
+                      // one line beside the three round buttons.
                       Expanded(
                         child: Text(
                           spot.name,
-                          style: Theme.of(ctx).textTheme.headlineSmall,
+                          style: Theme.of(ctx).textTheme.titleLarge
+                              ?.copyWith(fontWeight: FontWeight.w600),
                         ),
                       ),
                       const SizedBox(width: 8),

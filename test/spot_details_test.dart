@@ -378,6 +378,8 @@ void main() {
       ..located = true;
     await openDetails(tester, store, facility());
     final title = tester.getRect(find.text('測試地下停車場'));
+    // Typical names fit on one line beside the buttons.
+    expect(title.height, lessThan(40));
     for (final tooltip in ['收藏停車點', '分享停車點', '關閉詳情']) {
       expect(
         tester.getCenter(find.byTooltip(tooltip)).dy,
