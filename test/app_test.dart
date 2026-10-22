@@ -114,7 +114,15 @@ void main() {
     expect(find.byKey(const ValueKey('parking-spot-sheet')), findsOneWidget);
     expect(
       tester.getRect(find.byKey(const ValueKey('parking-spot-sheet'))).height,
-      closeTo(tester.view.physicalSize.height / 2, 1),
+      closeTo(tester.view.physicalSize.height * .42, 1),
+    );
+    // The map above stays undimmed, as in map apps.
+    expect(
+      tester
+          .widgetList<ModalBarrier>(find.byType(ModalBarrier))
+          .map((barrier) => barrier.color)
+          .where((color) => color != null && color.a > 0),
+      isEmpty,
     );
     await tester.drag(
       find.byKey(const ValueKey('parking-spot-sheet')),

@@ -368,6 +368,26 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('詳情標題列並排收藏、分享、關閉，副標顯示類型、地區與距離', (tester) async {
+    usePhone(tester);
+    final store = (await tester.runAsync(createStore))!;
+    addTearDown(store.dispose);
+    store
+      ..lat = 25.077
+      ..lng = 121.56
+      ..located = true;
+    await openDetails(tester, store, facility());
+    final title = tester.getRect(find.text('測試地下停車場'));
+    for (final tooltip in ['收藏停車點', '分享停車點', '關閉詳情']) {
+      expect(
+        tester.getCenter(find.byTooltip(tooltip)).dy,
+        closeTo(title.center.dy, 24),
+      );
+    }
+    expect(find.text('地下停車場 · 臺北市 · 內湖區 · 330 公尺'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('照片可放大並關閉，失敗或無效連結有可讀提示', (tester) async {
     usePhone(tester);
     await tester.pumpWidget(
@@ -387,6 +407,9 @@ void main() {
       store,
       facility(photos: ['https://photos.invalid/entry.jpg']),
     );
+    // Usable photos lead the sheet as a strip, not under 現場補充.
+    expect(find.byKey(const ValueKey('spot-photo-strip')), findsOneWidget);
+    expect(find.text('尚無照片'), findsNothing);
     await tester.scrollUntilVisible(
       find.byTooltip('放大照片 1').hitTestable(),
       160,

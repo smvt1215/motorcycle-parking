@@ -383,6 +383,9 @@ Future<T?> showAdaptiveSheet<T>(
     return CNBottomSheet.show<T>(
       context: context,
       useRootNavigator: true,
+      // Details keep the map undimmed above them, as map apps do; tapping
+      // the map still closes the sheet.
+      barrierColor: Colors.transparent,
       enableDrag: false,
       isScrollControlled: true,
       useSafeArea: true,
@@ -393,6 +396,7 @@ Future<T?> showAdaptiveSheet<T>(
   return showModalBottomSheet<T>(
     context: context,
     useRootNavigator: true,
+    barrierColor: detail ? Colors.transparent : null,
     enableDrag: !detail,
     isScrollControlled: true,
     useSafeArea: true,

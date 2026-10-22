@@ -1,3 +1,4 @@
+import '../../core/geo.dart';
 import '../../data/app_store.dart';
 import '../../models/parking.dart';
 import '../../domain/eligibility.dart';
@@ -12,6 +13,14 @@ import 'package:share_plus/share_plus.dart';
 import '../report/spot_suggestions.dart';
 import 'spot_details.dart';
 import 'spot_photos.dart';
+
+/// Peek height: header, eligibility and actions, with the map left visible
+/// above, the way map apps open a place.
+const _peek = .42;
+
+String _distanceLabel(double meters) => meters < 1000
+    ? '${(meters / 10).round() * 10} 公尺'
+    : '${(meters / 1000).toStringAsFixed(1)} 公里';
 
 Future<void> showSpot(BuildContext context, AppStore store, ParkingSpot spot) =>
     showAdaptiveSheet<void>(
@@ -67,11 +76,30 @@ class _SpotSheetState extends State<_SpotSheet> {
     final store = widget.store, spot = widget.spot;
     final sourceUri = sourceLinkUri(spot.sourceUrl);
     final colors = Theme.of(context).colorScheme;
+    final photos = SpotPhotos.usable(spot.photoUrls);
+    // Tablets keep a phone-width sheet instead of spanning the screen.
+    return Align(
+      alignment: Alignment.bottomCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 640),
+        child: _sheet(context, store, spot, sourceUri, colors, photos),
+      ),
+    );
+  }
+
+  Widget _sheet(
+    BuildContext context,
+    AppStore store,
+    ParkingSpot spot,
+    Uri? sourceUri,
+    ColorScheme colors,
+    List<String> photos,
+  ) {
     return DraggableScrollableSheet(
       key: const ValueKey('parking-spot-sheet'),
       controller: extent,
-      initialChildSize: .5,
-      minChildSize: .5,
+      initialChildSize: _peek,
+      minChildSize: _peek,
       maxChildSize: 1,
       snap: true,
       shouldCloseOnMinExtent: false,
@@ -81,7 +109,7 @@ class _SpotSheetState extends State<_SpotSheet> {
           start = event.position;
           dismissGesture =
               extent.isAttached &&
-              extent.size <= .501 &&
+              extent.size <= _peek + .001 &&
               scroll.hasClients &&
               scroll.offset <= 0;
         },
@@ -146,6 +174,7 @@ class _SpotSheetState extends State<_SpotSheet> {
                     ),
                   ),
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
                         child: Text(
@@ -153,26 +182,8 @@ class _SpotSheetState extends State<_SpotSheet> {
                           style: Theme.of(ctx).textTheme.headlineSmall,
                         ),
                       ),
-                      IconButton(
-                        tooltip: '關閉詳情',
-                        onPressed: () => Navigator.pop(ctx),
-                        icon: const Icon(Icons.close),
-                      ),
-                    ],
-                  ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          [
-                            spot.city,
-                            spot.district,
-                          ].where((value) => value.isNotEmpty).join(' · '),
-                          style: Theme.of(ctx).textTheme.bodyMedium
-                              ?.copyWith(color: colors.onSurfaceVariant),
-                        ),
-                      ),
-                      IconButton(
+                      const SizedBox(width: 8),
+                      IconButton.filledTonal(
                         tooltip: store.favorites.any((s) => s.id == spot.id)
                             ? '取消收藏'
                             : '收藏停車點',
@@ -185,14 +196,39 @@ class _SpotSheetState extends State<_SpotSheet> {
                         ),
                       ),
                       Builder(
-                        builder: (buttonContext) => IconButton(
+                        builder: (buttonContext) => IconButton.filledTonal(
                           tooltip: '分享停車點',
                           onPressed: () =>
                               runAction(ctx, () => share(buttonContext)),
                           icon: const Icon(Icons.ios_share),
                         ),
                       ),
+                      IconButton.filledTonal(
+                        tooltip: '關閉詳情',
+                        onPressed: () => Navigator.pop(ctx),
+                        icon: const Icon(Icons.close),
+                      ),
                     ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    [
+                      facilitySummary(spot),
+                      spot.city,
+                      spot.district,
+                      if (store.located)
+                        _distanceLabel(
+                          distanceMeters(
+                            store.lat,
+                            store.lng,
+                            spot.lat,
+                            spot.lng,
+                          ),
+                        ),
+                    ].where((value) => value.isNotEmpty).join(' · '),
+                    key: const ValueKey('spot-subtitle'),
+                    style: Theme.of(ctx).textTheme.bodyMedium
+                        ?.copyWith(color: colors.onSurfaceVariant),
                   ),
                   const SizedBox(height: 8),
                   Container(
@@ -247,6 +283,10 @@ class _SpotSheetState extends State<_SpotSheet> {
                       padding: const EdgeInsets.only(top: 12),
                       child: Text(feedback!),
                     ),
+                  if (photos.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    SpotPhotos(urls: spot.photoUrls, strip: true),
+                  ],
                   _DetailSection(
                     title: '基本資訊',
                     children: [
@@ -302,10 +342,14 @@ class _SpotSheetState extends State<_SpotSheet> {
                   _DetailSection(
                     title: '現場補充',
                     children: [
-                      Text('照片', style: Theme.of(ctx).textTheme.labelLarge),
-                      const SizedBox(height: 10),
-                      SpotPhotos(urls: spot.photoUrls),
-                      const SizedBox(height: 16),
+                      // Usable photos already lead the sheet; here only
+                      // the reason there are none.
+                      if (photos.isEmpty) ...[
+                        Text('照片', style: Theme.of(ctx).textTheme.labelLarge),
+                        const SizedBox(height: 10),
+                        SpotPhotos(urls: spot.photoUrls),
+                        const SizedBox(height: 16),
+                      ],
                       _DetailField(label: '備註', value: spot.note),
                     ],
                   ),
