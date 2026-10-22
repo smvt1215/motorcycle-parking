@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:motorcycle_parking/app.dart';
+import 'package:motorcycle_parking/core/location_access.dart';
 import 'package:motorcycle_parking/data/app_store.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
 import 'package:motorcycle_parking/domain/map_viewport.dart';
@@ -187,6 +188,81 @@ void main() {
     await tester.pumpAndSettle();
     expect(store.introduceLegend, isFalse);
     expect(find.text('地圖怎麼看'), findsNothing);
+  });
+
+  testWidgets('定位未授權時，啟動後先提醒前往設定，再顯示第一次的圖例', (tester) async {
+    final store = (await tester.runAsync(freshStore))!;
+    final started = await startReal(
+      tester,
+      () => store.start(
+        locator: () async {
+          store.locationIssue = LocationIssue.denied;
+          return false;
+        },
+        settleLimit: Duration.zero,
+      ),
+    );
+    await pumpApp(tester, store);
+    await tester.runAsync(() => started.done);
+    await tester.pumpAndSettle();
+    expect(find.text('尚未允許使用位置'), findsOneWidget);
+    expect(find.text('前往設定'), findsOneWidget);
+    expect(find.text('地圖怎麼看'), findsNothing);
+    await tester.tap(find.text('前往設定'));
+    await tester.pumpAndSettle();
+    expect(find.text('尚未允許使用位置'), findsNothing);
+    expect(find.text('地圖怎麼看'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('啟動畫面收起後才知道定位失敗，看完圖例再提醒', (tester) async {
+    final store = (await tester.runAsync(freshStore))!;
+    final fix = Completer<bool>();
+    final started = await startReal(
+      tester,
+      () => store.start(
+        locator: () => fix.future,
+        locationWait: const Duration(milliseconds: 10),
+        settleLimit: Duration.zero,
+      ),
+    );
+    await pumpApp(tester, store);
+    await tester.runAsync(() => started.done);
+    await tester.pumpAndSettle();
+    expect(find.text('地圖怎麼看'), findsOneWidget);
+    store.locationIssue = LocationIssue.serviceOff;
+    fix.complete(false);
+    await tester.pumpAndSettle();
+    expect(find.text('定位服務未開啟'), findsNothing);
+    await tester.tap(find.byTooltip('關閉'));
+    await tester.pumpAndSettle();
+    expect(find.text('定位服務未開啟'), findsOneWidget);
+    expect(find.text('開啟定位設定'), findsOneWidget);
+    await tester.tap(find.text('稍後'));
+    await tester.pumpAndSettle();
+    expect(find.text('定位服務未開啟'), findsNothing);
+  });
+
+  testWidgets('定位鈕等動作遇到未授權時跳出設定提醒，而非一般訊息', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => runAction(
+                context,
+                () async => throw LocationAccessError(LocationIssue.denied),
+              ),
+              child: const Text('定位'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('定位'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('location-prompt')), findsOneWidget);
+    expect(find.byType(SnackBar), findsNothing);
   });
 
   testWidgets('定位失敗時維持預設中心並進入地圖', (tester) async {

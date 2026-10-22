@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../core/config.dart';
 import '../core/notifications.dart';
 import '../core/geo.dart';
+import '../core/location_access.dart';
 import '../domain/eligibility.dart';
 import '../domain/map_viewport.dart';
 import '../models/parking.dart';
@@ -91,6 +92,9 @@ class AppStore extends ChangeNotifier {
 
   /// True once a device fix is in [lat]/[lng], so the map can mark it.
   bool located = false;
+
+  /// Why the last location attempt failed; cleared once access works.
+  LocationIssue? locationIssue;
 
   /// The launch location attempt; the map follows it when it succeeds.
   Future<bool>? launchLocation;
@@ -241,18 +245,26 @@ class AppStore extends ChangeNotifier {
     await local.setVehicle(value);
   }
 
-  /// Throws a readable [StateError] when location is off or not permitted.
-  Future<void> _ensureLocationAccess() async {
-    if (!await Geolocator.isLocationServiceEnabled()) {
-      throw StateError('請開啟裝置定位服務');
-    }
-    var permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
-    if (permission == LocationPermission.denied ||
-        permission == LocationPermission.deniedForever) {
-      throw StateError('定位未授權，請在設定中開啟定位權限');
+  /// Throws a [LocationAccessError] when location is off or not permitted
+  /// and keeps the reason in [locationIssue]. Asks for permission only when
+  /// [request] is set.
+  Future<void> _ensureLocationAccess({bool request = true}) async {
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        throw LocationAccessError(LocationIssue.serviceOff);
+      }
+      var permission = await Geolocator.checkPermission();
+      if (request && permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        throw LocationAccessError(LocationIssue.denied);
+      }
+      locationIssue = null;
+    } on LocationAccessError catch (e) {
+      locationIssue = e.issue;
+      rethrow;
     }
   }
 
@@ -276,12 +288,13 @@ class AppStore extends ChangeNotifier {
     _setLocation(await _currentPosition());
   }
 
-  /// Best effort: asks for permission once and stays silent on failure, so
-  /// the map keeps its default center. A recent cached fix answers first.
-  Future<bool> locateOnLaunch() async {
+  /// Best effort: asks for permission once and never throws, so the map
+  /// keeps its default center; the map prompts for [locationIssue]. A recent
+  /// cached fix answers first.
+  Future<bool> locateOnLaunch({bool request = true}) async {
     if (demo && AppConfig.offlineMap) return false;
     try {
-      await _ensureLocationAccess();
+      await _ensureLocationAccess(request: request);
       final last = kIsWeb ? null : await Geolocator.getLastKnownPosition();
       final fresh =
           last != null &&
