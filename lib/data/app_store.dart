@@ -133,10 +133,13 @@ class AppStore extends ChangeNotifier {
 
   /// Loads data and locates the device behind the launch screen. Waits at
   /// most [locationWait] for a fix so a slow GPS never holds the app; a later
-  /// fix still reaches the map through [launchLocation].
+  /// fix still reaches the map through [launchLocation]. The map replaces the
+  /// first load as it lays out and follows the fix, so the screen also waits
+  /// up to [settleLimit] for those loads to finish.
   Future<void> start({
     Future<bool> Function()? locator,
     Duration locationWait = const Duration(seconds: 6),
+    Duration settleLimit = const Duration(seconds: 4),
   }) async {
     starting = locatingAtLaunch = true;
     final location = launchLocation = (locator ?? locateOnLaunch)();
@@ -152,9 +155,23 @@ class AppStore extends ChangeNotifier {
     try {
       await init();
       await settled;
+      await _viewportSettled(settleLimit);
     } finally {
       starting = false;
       if (!_disposed) notifyListeners();
+    }
+  }
+
+  /// Resolves once no viewport load has been queued or running for a short
+  /// quiet spell (a camera move queues its load only after it settles), or
+  /// when [limit] runs out.
+  Future<void> _viewportSettled(Duration limit) async {
+    const step = Duration(milliseconds: 100);
+    final deadline = DateTime.now().add(limit);
+    var quiet = 0;
+    while (quiet < 5 && DateTime.now().isBefore(deadline) && !_disposed) {
+      await Future<void>.delayed(step);
+      quiet = loading || (_viewportTimer?.isActive ?? false) ? 0 : quiet + 1;
     }
   }
 

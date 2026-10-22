@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +9,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:motorcycle_parking/app.dart';
 import 'package:motorcycle_parking/data/app_store.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
+import 'package:motorcycle_parking/domain/map_viewport.dart';
+import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
 
 Future<AppStore> freshStore() async {
   SharedPreferences.setMockInitialValues({});
@@ -55,7 +56,7 @@ void main() {
     final fix = Completer<bool>();
     final started = await startReal(
       tester,
-      () => store.start(locator: () => fix.future),
+      () => store.start(locator: () => fix.future, settleLimit: Duration.zero),
     );
     await pumpApp(tester, store);
     await tester.pump();
@@ -93,6 +94,7 @@ void main() {
       () => store.start(
         locator: () => fix.future,
         locationWait: const Duration(milliseconds: 10),
+        settleLimit: Duration.zero,
       ),
     );
     await pumpApp(tester, store);
@@ -127,6 +129,7 @@ void main() {
     final started = store.start(
       locator: () => Completer<bool>().future,
       locationWait: const Duration(milliseconds: 50),
+      settleLimit: Duration.zero,
     );
     await Future<void>.delayed(const Duration(milliseconds: 100));
     load.complete();
@@ -134,11 +137,36 @@ void main() {
     expect(store.starting, isFalse);
   });
 
+  test('地圖接手的範圍查詢完成前，啟動畫面不收起', () async {
+    SharedPreferences.setMockInitialValues({});
+    final parking = _ControlledParking();
+    final store = AppStore(
+      LocalRepository(await SharedPreferences.getInstance()),
+      null,
+      parkingRepository: parking,
+    );
+    final started = store.start(locator: () async => false);
+    while (parking.requests.isEmpty) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    // The map lays out and replaces the first load, which is now stale.
+    store.queueViewport(
+      const MapViewport(south: 25.02, west: 121.55, north: 25.05, east: 121.58),
+    );
+    parking.requests.first.complete(const ParkingResult([]));
+    await Future<void>.delayed(const Duration(milliseconds: 900));
+    expect(store.starting, isTrue);
+    expect(parking.requests, hasLength(2));
+    parking.requests.last.complete(const ParkingResult([]));
+    await started.timeout(const Duration(seconds: 2));
+    expect(store.starting, isFalse);
+  });
+
   testWidgets('定位失敗時維持預設中心並進入地圖', (tester) async {
     final store = (await tester.runAsync(freshStore))!;
     final started = await startReal(
       tester,
-      () => store.start(locator: () async => false),
+      () => store.start(locator: () async => false, settleLimit: Duration.zero),
     );
     await pumpApp(tester, store);
     await tester.runAsync(() => started.done);
@@ -155,4 +183,16 @@ class _SlowStore extends AppStore {
   final Future<void> load;
   @override
   Future<void> init() => load;
+}
+
+/// Answers viewport loads only when the test completes them.
+class _ControlledParking extends ParkingRepository {
+  _ControlledParking() : super(null);
+  final requests = <Completer<ParkingResult>>[];
+  @override
+  Future<ParkingResult> inViewport(MapViewport bounds) {
+    final result = Completer<ParkingResult>();
+    requests.add(result);
+    return result.future;
+  }
 }
