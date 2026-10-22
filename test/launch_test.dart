@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -70,6 +71,15 @@ void main() {
     await tester.pumpAndSettle();
     expect(store.starting, isFalse);
     expect(find.byKey(const ValueKey('launch-screen')), findsNothing);
+    // Light theme: dark status bar icons return once the brand screen is gone.
+    expect(
+      tester
+          .widget<AnnotatedRegion<SystemUiOverlayStyle>>(
+            find.byType(AnnotatedRegion<SystemUiOverlayStyle>).first,
+          )
+          .value,
+      SystemUiOverlayStyle.dark,
+    );
     final center = mapCenter(tester);
     expect(center.latitude, closeTo(24.15, 1e-6));
     expect(center.longitude, closeTo(120.67, 1e-6));

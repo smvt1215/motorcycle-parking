@@ -31,7 +31,14 @@ class _LaunchCurtainState extends State<LaunchCurtain> {
   @override
   Widget build(BuildContext context) => Stack(
     children: [
-      widget.child,
+      // The map has no app bar to set system bar icons, so the app restores
+      // a theme-matched style once the brand-colored screen is gone.
+      AnnotatedRegion<SystemUiOverlayStyle>(
+        value: Theme.of(context).brightness == Brightness.dark
+            ? SystemUiOverlayStyle.light
+            : SystemUiOverlayStyle.dark,
+        child: widget.child,
+      ),
       if (painted)
         Positioned.fill(
           child: IgnorePointer(
