@@ -82,6 +82,18 @@ class AppStore extends ChangeNotifier {
   String? rulesWarning, favoritesWarning;
   bool loading = false;
   bool truncated = false;
+
+  /// True while the launch screen covers the app (see [start]).
+  bool starting = false;
+
+  /// True until the launch location attempt settles.
+  bool locatingAtLaunch = false;
+
+  /// True once a device fix is in [lat]/[lng], so the map can mark it.
+  bool located = false;
+
+  /// The launch location attempt; the map follows it when it succeeds.
+  Future<bool>? launchLocation;
   MapViewport viewport = const MapViewport(
     south: 25.01,
     west: 121.54,
@@ -118,6 +130,31 @@ class AppStore extends ChangeNotifier {
           !client!.auth.currentUser!.isAnonymous);
   String get favoritesKey => client?.auth.currentUser?.id ?? 'guest';
   Future<void> init() => reload();
+
+  /// Loads data and locates the device behind the launch screen. Waits at
+  /// most [locationWait] for a fix so a slow GPS never holds the app; a later
+  /// fix still reaches the map through [launchLocation].
+  Future<void> start({
+    Future<bool> Function()? locator,
+    Duration locationWait = const Duration(seconds: 6),
+  }) async {
+    starting = locatingAtLaunch = true;
+    final location = launchLocation = (locator ?? locateOnLaunch)();
+    notifyListeners();
+    unawaited(
+      location.whenComplete(() {
+        locatingAtLaunch = false;
+        if (!_disposed) notifyListeners();
+      }),
+    );
+    try {
+      await init();
+      await location.timeout(locationWait, onTimeout: () => false);
+    } finally {
+      starting = false;
+      if (!_disposed) notifyListeners();
+    }
+  }
 
   /// Retries every data source, including startup failures shown by the banner.
   /// Camera movement still calls [refresh] to load only viewport data.
@@ -176,8 +213,8 @@ class AppStore extends ChangeNotifier {
     await local.setVehicle(value);
   }
 
-  Future<void> locate() async {
-    if (demo && AppConfig.offlineMap) return;
+  /// Throws a readable [StateError] when location is off or not permitted.
+  Future<void> _ensureLocationAccess() async {
     if (!await Geolocator.isLocationServiceEnabled()) {
       throw StateError('請開啟裝置定位服務');
     }
@@ -189,15 +226,44 @@ class AppStore extends ChangeNotifier {
         permission == LocationPermission.deniedForever) {
       throw StateError('定位未授權，請在設定中開啟定位權限');
     }
-    final p = await Geolocator.getCurrentPosition(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-        timeLimit: Duration(seconds: 20),
-      ),
-    );
+  }
+
+  Future<Position> _currentPosition() => Geolocator.getCurrentPosition(
+    locationSettings: const LocationSettings(
+      accuracy: LocationAccuracy.high,
+      timeLimit: Duration(seconds: 20),
+    ),
+  );
+
+  void _setLocation(Position p) {
     lat = p.latitude;
     lng = p.longitude;
+    located = true;
     notifyListeners();
+  }
+
+  Future<void> locate() async {
+    if (demo && AppConfig.offlineMap) return;
+    await _ensureLocationAccess();
+    _setLocation(await _currentPosition());
+  }
+
+  /// Best effort: asks for permission once and stays silent on failure, so
+  /// the map keeps its default center. A recent cached fix answers first.
+  Future<bool> locateOnLaunch() async {
+    if (demo && AppConfig.offlineMap) return false;
+    try {
+      await _ensureLocationAccess();
+      final last = kIsWeb ? null : await Geolocator.getLastKnownPosition();
+      final fresh =
+          last != null &&
+          DateTime.now().difference(last.timestamp) <
+              const Duration(minutes: 5);
+      _setLocation(fresh ? last : await _currentPosition());
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<bool> recordParking(String note, String floor, int? minutes) async {

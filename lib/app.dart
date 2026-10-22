@@ -14,6 +14,7 @@ import 'features/my_parking/parking_page.dart';
 import 'features/favorites/favorites_page.dart';
 import 'features/report/report_sheet.dart';
 import 'features/contribute/contribute_page.dart';
+import 'features/launch/launch_screen.dart';
 
 class ParkingApp extends ConsumerStatefulWidget {
   const ParkingApp({super.key, this.themeMode = ThemeMode.system});
@@ -145,7 +146,20 @@ class _ParkingAppState extends ConsumerState<ParkingApp> {
           // ignore: deprecated_member_use
           child: MaterialUiCompatibilityBridge(
             // ignore: deprecated_member_use
-            child: cu.CupertinoUiCompatibilityBridge(child: child!),
+            child: cu.CupertinoUiCompatibilityBridge(
+              child: ListenableBuilder(
+                listenable: ref.read(storeProvider),
+                builder: (context, child) {
+                  final store = ref.read(storeProvider);
+                  return LaunchCurtain(
+                    visible: store.starting,
+                    locating: store.locatingAtLaunch,
+                    child: child!,
+                  );
+                },
+                child: child,
+              ),
+            ),
           ),
         ),
       ),
