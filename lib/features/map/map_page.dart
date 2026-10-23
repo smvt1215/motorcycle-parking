@@ -37,6 +37,9 @@ class _MapPageState extends ConsumerState<MapPage> {
   /// Kept for dispose, where `ref` can no longer be read.
   late final launchStore = ref.read(storeProvider);
   SpaceType? type;
+  bool greeted = false;
+  bool promptDeferred = false;
+  late final AppLifecycleListener lifecycle;
 
   @override
   void initState() {
@@ -44,19 +47,80 @@ class _MapPageState extends ConsumerState<MapPage> {
     searchFocus.addListener(_searchChanged);
     searchController.addListener(_searchChanged);
     unawaited(_followLaunchLocation(launchStore));
-    launchStore.addListener(_introduceLegend);
+    launchStore.addListener(_afterLaunch);
+    lifecycle = AppLifecycleListener(
+      onResume: () => unawaited(_relocateAfterSettings()),
+    );
   }
 
-  /// Opens the legend once on first launch, after the launch screen lifts.
-  void _introduceLegend() {
+  /// Runs once the launch screen lifts: the location prompt and, on first
+  /// launch, the legend, one after the other.
+  void _afterLaunch() {
     final store = launchStore;
-    if (store.starting || !store.introduceLegend || !widget.showControls) {
+    if (greeted ||
+        store.starting ||
+        store.launchLocation == null ||
+        !widget.showControls) {
       return;
     }
-    unawaited(store.markLegendSeen());
+    greeted = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) unawaited(showMapLegend(context, store.vehicle));
+      if (mounted) unawaited(_greet(store));
     });
+  }
+
+  @override
+  void didUpdateWidget(MapPage old) {
+    super.didUpdateWidget(old);
+    if (!widget.showControls || old.showControls) return;
+    // Launched into another tab: greet once the map is first shown.
+    _afterLaunch();
+    if (promptDeferred) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => unawaited(_promptLocation(launchStore)),
+      );
+    }
+  }
+
+  /// A settled failure is prompted before the legend; a fix still pending
+  /// (slow GPS, or the system permission dialog) is prompted after it.
+  Future<void> _greet(AppStore store) async {
+    // Read once: the fix may settle while the legend is open.
+    final pending = store.locatingAtLaunch;
+    if (!pending) await _promptLocation(store);
+    if (store.introduceLegend && mounted) {
+      unawaited(store.markLegendSeen());
+      await showMapLegend(context, store.vehicle);
+    }
+    if (pending) {
+      await store.launchLocation;
+      await _promptLocation(store);
+    }
+  }
+
+  /// A failure that settles while another tab covers the map waits until
+  /// the map is shown again.
+  Future<void> _promptLocation(AppStore store) async {
+    if (!mounted) return;
+    promptDeferred = !widget.showControls;
+    if (promptDeferred) return;
+    if (store.locationIssue case final issue?) {
+      await showLocationPrompt(context, issue);
+    }
+  }
+
+  /// Back from the settings the prompt opened: locate if access now works,
+  /// without asking for permission again. Fixing one blocker can reveal the
+  /// next (services on, permission still denied), which is prompted in turn.
+  Future<void> _relocateAfterSettings() async {
+    final store = launchStore;
+    final before = store.locationIssue;
+    if (before == null) return;
+    if (await store.locateOnLaunch(request: false)) {
+      if (mounted) await _moveCamera(LatLng(store.lat, store.lng), 16);
+    } else if (store.locationIssue != before) {
+      await _promptLocation(store);
+    }
   }
 
   /// Centers on the launch fix unless the user already panned the map,
@@ -158,7 +222,8 @@ class _MapPageState extends ConsumerState<MapPage> {
 
   @override
   void dispose() {
-    launchStore.removeListener(_introduceLegend);
+    launchStore.removeListener(_afterLaunch);
+    lifecycle.dispose();
     controller.dispose();
     searchFocus.removeListener(_searchChanged);
     searchController.removeListener(_searchChanged);

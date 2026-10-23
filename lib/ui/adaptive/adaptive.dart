@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:cupertino_ui/cupertino_ui.dart' as cu;
 import 'package:cupertino_native_better/cupertino_native_better.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 
+import '../../core/location_access.dart';
 import '../../models/parking.dart';
 
 export 'package:material_ui/material_ui.dart';
@@ -415,6 +418,8 @@ Future<void> runAction(
 ) async {
   try {
     await action();
+  } on LocationAccessError catch (e) {
+    if (context.mounted) await showLocationPrompt(context, e.issue);
   } catch (e) {
     if (context.mounted) {
       showMessage(
@@ -424,6 +429,51 @@ Future<void> runAction(
     }
   }
 }
+
+/// Explains why location is unavailable and opens the settings page that
+/// fixes it.
+Future<void> showLocationPrompt(BuildContext context, LocationIssue issue) =>
+    showAdaptiveDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog.adaptive(
+        key: const ValueKey('location-prompt'),
+        title: Text(issue.title),
+        content: Text(issue.message),
+        actions: [
+          adaptiveDialogAction(
+            ctx,
+            label: issue.canOpenSettings ? '稍後' : '知道了',
+            onPressed: () => Navigator.pop(ctx),
+          ),
+          if (issue.canOpenSettings)
+            adaptiveDialogAction(
+              ctx,
+              label: issue.action,
+              primary: true,
+              onPressed: () {
+                Navigator.pop(ctx);
+                // Nothing more to offer if the page cannot open.
+                unawaited(issue.openSettings().catchError((_) => false));
+              },
+            ),
+        ],
+      ),
+    );
+
+/// A dialog button in the platform's style: Cupertino on iOS, text button
+/// elsewhere.
+Widget adaptiveDialogAction(
+  BuildContext context, {
+  required String label,
+  required VoidCallback onPressed,
+  bool primary = false,
+}) => isCupertino
+    ? cu.CupertinoDialogAction(
+        isDefaultAction: primary,
+        onPressed: onPressed,
+        child: Text(label),
+      )
+    : TextButton(onPressed: onPressed, child: Text(label));
 
 /// Sheet heading with a close button, so every sheet can be dismissed
 /// without relying on drag or tapping outside.
