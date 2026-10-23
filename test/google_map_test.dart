@@ -161,6 +161,13 @@ void main() {
     await tester.pumpAndSettle();
     final paused = tester.widget<gm.GoogleMap>(find.byType(gm.GoogleMap));
     expect(paused.scrollGesturesEnabled, isFalse);
+    // The Google logo stays clear of the modal sheet.
+    expect(
+      paused.padding.bottom,
+      greaterThanOrEqualTo(
+        tester.getSize(find.byType(gm.GoogleMap)).height * .5,
+      ),
+    );
     expect(paused.markers.every((marker) => marker.onTap == null), isTrue);
     expect(platform.created, before);
     rebuild(() => interactive = true);

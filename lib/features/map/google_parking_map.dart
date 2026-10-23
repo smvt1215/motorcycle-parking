@@ -118,6 +118,7 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
     // uncovers: back from a tab panel, the map would keep only the spots in
     // the strip the panel left open.
     if (oldWidget.panelVisible != widget.panelVisible ||
+        oldWidget.interactive != widget.interactive ||
         oldWidget.sheetInset != widget.sheetInset) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) unawaited(_publishViewport());
@@ -127,8 +128,9 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
 
   Future<void> _publishViewport() async {
     final active = controller;
-    // Under a tab panel only a strip of the map shows; keep the last region.
-    if (active == null || widget.panelVisible) return;
+    // Under a tab panel or a modal sheet only part of the map shows; keep
+    // the last full region.
+    if (active == null || widget.panelVisible || !widget.interactive) return;
     final generation = ++viewportGeneration;
     final target = camera.target;
     try {
@@ -204,6 +206,10 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
                       // and camera center sit just above it.
                       : widget.sheetInset > 0
                       ? widget.sheetInset
+                      // A modal sheet (legend, vehicle, report) would cover
+                      // the logo.
+                      : !widget.interactive
+                      ? size.height * .55
                       // Lift the Google logo above the iOS floating tab bar.
                       : 8 + MediaQuery.paddingOf(context).bottom,
                 ),
