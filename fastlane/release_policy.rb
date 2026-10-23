@@ -25,6 +25,13 @@ module ReleasePolicy
     EXTERNAL_DISTRIBUTED_STATES.include?(state)
   end
 
+  # Only this state means external testers can install the build. Beta App
+  # Review states merely stop a rerun from submitting again; promoting one
+  # would ship an RC nobody outside could test yet.
+  def self.testflight_available?(state)
+    state == "IN_BETA_TESTING"
+  end
+
   # The gate's build range for this channel (BUILD_FIRST..BUILD_LAST): beta
   # and RC use disjoint digits of the commit's numbers, so a lookup never
   # finds the other channel's binary, which targets a different backend.
@@ -58,10 +65,10 @@ module ReleasePolicy
     rc_track.map(&:to_i).select { |code| numbers.cover?(code) }.max
   end
 
-  # The VALID build the RC sent to the public TestFlight group; a build that
-  # never reached external testers is not a release candidate.
+  # The VALID build external testers can already install from the public
+  # TestFlight group; one still in Beta App Review is not a tested RC.
   def self.distributed_build(builds, numbers)
-    distributed = builds.select { |build| testflight_distributed?(build.build_beta_detail&.external_build_state) }
+    distributed = builds.select { |build| testflight_available?(build.build_beta_detail&.external_build_state) }
     valid_build(distributed, numbers)
   end
 

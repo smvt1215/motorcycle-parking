@@ -56,6 +56,12 @@ unshipped = TestBuild.new("106", "VALID", BetaDetail.new("READY_FOR_BETA_SUBMISS
 no_detail = TestBuild.new("107", "VALID", nil)
 raise "Distributed RC build chosen" unless ReleasePolicy.distributed_build([shipped, unshipped, no_detail], ALL).version == "104"
 raise "Undistributed build never submitted" unless ReleasePolicy.distributed_build([unshipped, no_detail], ALL).nil?
+%w[WAITING_FOR_BETA_REVIEW IN_BETA_REVIEW BETA_APPROVED].each do |state|
+  pending = TestBuild.new("108", "VALID", BetaDetail.new(state))
+  raise "Build still in Beta App Review is never promoted (#{state})" unless ReleasePolicy.distributed_build([pending], ALL).nil?
+  raise "Review state still deduplicates reruns (#{state})" unless ReleasePolicy.testflight_distributed?(state)
+end
+raise "Only installable state is available" unless ReleasePolicy.testflight_available?("IN_BETA_TESTING") && !ReleasePolicy.testflight_available?("WAITING_FOR_BETA_REVIEW")
 # A beta binary (staging backend) is never reused, promoted or submitted as an RC.
 beta_build = TestBuild.new("102", "VALID", BetaDetail.new("IN_BETA_TESTING"))
 raise "RC never sees beta builds" unless ReleasePolicy.valid_build([beta_build], RC).nil?
