@@ -122,6 +122,8 @@ class LocalRepository {
       VehicleType.values.byName(prefs.getString('vehicle') ?? 'scooter');
   Future<void> setVehicle(VehicleType value) =>
       prefs.setString('vehicle', value.name);
+  bool get legendSeen => prefs.getBool('legendSeen') ?? false;
+  Future<void> setLegendSeen() => prefs.setBool('legendSeen', true);
   ParkedRecord? get parked {
     final s = prefs.getString('parked');
     return s == null

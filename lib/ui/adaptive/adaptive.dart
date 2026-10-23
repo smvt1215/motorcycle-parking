@@ -200,6 +200,10 @@ class AdaptiveScaffold extends StatelessWidget {
     final back = index == 1 || index == 3;
     return Scaffold(
       extendBody: isCupertino,
+      // The keyboard overlays the map instead of resizing it: a resized
+      // native map view lags behind and shows blank bands while it catches
+      // up. Search results size themselves to the keyboard (MapPage).
+      resizeToAvoidBottomInset: false,
       appBar: !back
           ? null
           : isCupertino
@@ -273,7 +277,7 @@ class MapActions extends StatelessWidget {
           const SizedBox(height: 16),
           MapAction(
             label: '我停這裡',
-            icon: Icons.turn_right,
+            icon: Icons.local_parking,
             primary: true,
             onPressed: onRecord,
           ),
@@ -298,7 +302,7 @@ class MapActions extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         M3EFab(
-          icon: const Icon(Icons.turn_right),
+          icon: const Icon(Icons.local_parking),
           tooltip: '我停這裡',
           onPressed: onRecord,
         ),
@@ -329,7 +333,7 @@ class MapAction extends StatelessWidget {
       return SizedBox.square(
         dimension: 56,
         child: CNButton.icon(
-          icon: CNSymbol(primary ? 'arrow.turn.up.right' : 'location'),
+          icon: CNSymbol(primary ? 'parkingsign' : 'location'),
           tint: colors.primary,
           config: CNButtonConfig(
             style: primary ? CNButtonStyle.prominentGlass : CNButtonStyle.glass,
@@ -415,6 +419,26 @@ Future<void> runAction(
       );
     }
   }
+}
+
+/// Sheet heading with a close button, so every sheet can be dismissed
+/// without relying on drag or tapping outside.
+class SheetTitle extends StatelessWidget {
+  const SheetTitle(this.title, {super.key});
+  final String title;
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Expanded(
+        child: Text(title, style: Theme.of(context).textTheme.headlineSmall),
+      ),
+      IconButton(
+        tooltip: '關閉',
+        onPressed: () => Navigator.pop(context),
+        icon: const Icon(Icons.close),
+      ),
+    ],
+  );
 }
 
 class ContentPage extends StatelessWidget {

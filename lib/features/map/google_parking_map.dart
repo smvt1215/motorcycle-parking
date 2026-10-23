@@ -151,7 +151,7 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
                 initialCameraPosition: camera,
                 style: dark ? _darkMapStyle : null,
                 padding: EdgeInsets.only(
-                  top: widget.panelVisible ? 0 : 132,
+                  top: widget.panelVisible ? 0 : 108,
                   bottom: widget.panelVisible
                       ? size.height * .92
                       : widget.interactive

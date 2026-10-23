@@ -162,6 +162,33 @@ void main() {
     expect(store.starting, isFalse);
   });
 
+  testWidgets('第一次開啟在啟動畫面後顯示圖例，之後不再自動顯示', (tester) async {
+    final store = (await tester.runAsync(freshStore))!;
+    var started = await startReal(
+      tester,
+      () => store.start(locator: () async => false, settleLimit: Duration.zero),
+    );
+    await pumpApp(tester, store);
+    await tester.pump();
+    expect(find.text('地圖怎麼看'), findsNothing);
+    await tester.runAsync(() => started.done);
+    await tester.pumpAndSettle();
+    expect(find.text('地圖怎麼看'), findsOneWidget);
+    expect(store.local.legendSeen, isTrue);
+    await tester.tap(find.byTooltip('關閉'));
+    await tester.pumpAndSettle();
+    expect(find.text('地圖怎麼看'), findsNothing);
+
+    started = await startReal(
+      tester,
+      () => store.start(locator: () async => false, settleLimit: Duration.zero),
+    );
+    await tester.runAsync(() => started.done);
+    await tester.pumpAndSettle();
+    expect(store.introduceLegend, isFalse);
+    expect(find.text('地圖怎麼看'), findsNothing);
+  });
+
   testWidgets('定位失敗時維持預設中心並進入地圖', (tester) async {
     final store = (await tester.runAsync(freshStore))!;
     final started = await startReal(

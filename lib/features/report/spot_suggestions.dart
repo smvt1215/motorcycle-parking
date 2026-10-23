@@ -217,7 +217,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
       key: form,
       child: ContentPage(
         children: [
-          Text(widget.field, style: Theme.of(context).textTheme.headlineSmall),
+          SheetTitle(widget.field),
           const SizedBox(height: 8),
           Text(
             widget.spot.name,
