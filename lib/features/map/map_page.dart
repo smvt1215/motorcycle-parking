@@ -576,10 +576,16 @@ class _MapPageState extends ConsumerState<MapPage> {
                       height: 56,
                       child: Semantics(
                         label: '${open.name} ${store.eligible(open).label}，已選取',
-                        child: SpotMarker(
-                          key: const ValueKey('selected-spot-marker'),
-                          look: markerLook(store.eligible(open)),
-                          selected: true,
+                        button: true,
+                        // Its own tap, as on the Google map: never a tap on
+                        // the empty map, which would close the details.
+                        child: GestureDetector(
+                          onTap: () => _showSpot(open),
+                          child: SpotMarker(
+                            key: const ValueKey('selected-spot-marker'),
+                            look: markerLook(store.eligible(open)),
+                            selected: true,
+                          ),
                         ),
                       ),
                     ),

@@ -316,6 +316,11 @@ void main() {
       tester.getSize(find.byKey(const ValueKey('selected-spot-marker'))).width,
       greaterThan(38),
     );
+    // Tapping the selected marker itself keeps its details open.
+    await tester.tap(find.byKey(const ValueKey('selected-spot-marker')));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+    expect(sheetTitle(), first.name);
     // The map above the sheet still pans.
     final before = map.mapController!.camera.center;
     await tester.drag(find.byType(FlutterMap), const Offset(-60, 80));
