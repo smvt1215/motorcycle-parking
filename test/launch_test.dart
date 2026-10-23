@@ -10,6 +10,7 @@ import 'package:motorcycle_parking/app.dart';
 import 'package:motorcycle_parking/core/location_access.dart';
 import 'package:motorcycle_parking/data/app_store.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
+import 'package:motorcycle_parking/features/map/map_page.dart';
 import 'package:motorcycle_parking/domain/map_viewport.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
 
@@ -241,6 +242,58 @@ void main() {
     await tester.tap(find.text('稍後'));
     await tester.pumpAndSettle();
     expect(find.text('定位服務未開啟'), findsNothing);
+  });
+
+  testWidgets('從其他分頁啟動時，切到地圖才顯示定位提醒與圖例', (tester) async {
+    final store = (await tester.runAsync(freshStore))!;
+    final started = await startReal(
+      tester,
+      () => store.start(
+        locator: () async {
+          store.locationIssue = LocationIssue.denied;
+          return false;
+        },
+        settleLimit: Duration.zero,
+      ),
+    );
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    var showControls = false;
+    late StateSetter rebuild;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [storeProvider.overrideWith((ref) => store)],
+        child: MaterialApp(
+          home: StatefulBuilder(
+            builder: (context, setState) {
+              rebuild = setState;
+              return Scaffold(body: MapPage(showControls: showControls));
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.runAsync(() => started.done);
+    await tester.pumpAndSettle();
+    // Another tab covers the map: nothing pops up over it.
+    expect(find.text('尚未允許使用位置'), findsNothing);
+    rebuild(() => showControls = true);
+    await tester.pumpAndSettle();
+    expect(find.text('尚未允許使用位置'), findsOneWidget);
+    await tester.tap(find.text('稍後'));
+    await tester.pumpAndSettle();
+    expect(find.text('地圖怎麼看'), findsOneWidget);
+    await tester.tap(find.byTooltip('關閉'));
+    await tester.pumpAndSettle();
+    // Greeted once: hiding and showing the map again does not repeat it.
+    rebuild(() => showControls = false);
+    await tester.pumpAndSettle();
+    rebuild(() => showControls = true);
+    await tester.pumpAndSettle();
+    expect(find.text('尚未允許使用位置'), findsNothing);
+    expect(find.text('地圖怎麼看'), findsNothing);
   });
 
   testWidgets('定位鈕等動作遇到未授權時跳出設定提醒，而非一般訊息', (tester) async {

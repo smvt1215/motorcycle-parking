@@ -68,6 +68,13 @@ class _MapPageState extends ConsumerState<MapPage> {
     });
   }
 
+  @override
+  void didUpdateWidget(MapPage old) {
+    super.didUpdateWidget(old);
+    // Launched into another tab: greet once the map is first shown.
+    if (widget.showControls && !old.showControls) _afterLaunch();
+  }
+
   /// A settled failure is prompted before the legend; a fix still pending
   /// (slow GPS, or the system permission dialog) is prompted after it.
   Future<void> _greet(AppStore store) async {
