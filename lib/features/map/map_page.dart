@@ -38,6 +38,7 @@ class _MapPageState extends ConsumerState<MapPage> {
   late final launchStore = ref.read(storeProvider);
   SpaceType? type;
   bool greeted = false;
+  bool promptDeferred = false;
   late final AppLifecycleListener lifecycle;
 
   @override
@@ -71,8 +72,14 @@ class _MapPageState extends ConsumerState<MapPage> {
   @override
   void didUpdateWidget(MapPage old) {
     super.didUpdateWidget(old);
+    if (!widget.showControls || old.showControls) return;
     // Launched into another tab: greet once the map is first shown.
-    if (widget.showControls && !old.showControls) _afterLaunch();
+    _afterLaunch();
+    if (promptDeferred) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => unawaited(_promptLocation(launchStore)),
+      );
+    }
   }
 
   /// A settled failure is prompted before the legend; a fix still pending
@@ -91,8 +98,12 @@ class _MapPageState extends ConsumerState<MapPage> {
     }
   }
 
+  /// A failure that settles while another tab covers the map waits until
+  /// the map is shown again.
   Future<void> _promptLocation(AppStore store) async {
     if (!mounted) return;
+    promptDeferred = !widget.showControls;
+    if (promptDeferred) return;
     if (store.locationIssue case final issue?) {
       await showLocationPrompt(context, issue);
     }

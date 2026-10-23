@@ -297,23 +297,11 @@ void main() {
   });
 
   testWidgets('從設定返回後若換成另一個定位問題，接著提醒該問題', (tester) async {
-    var serviceOn = false;
-    const channel = MethodChannel('flutter.baseflow.com/geolocator');
-    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-      channel,
-      (call) async => switch (call.method) {
-        'isLocationServiceEnabled' => serviceOn,
-        'checkPermission' => 0, // LocationPermission.denied
-        _ => null,
-      },
-    );
-    addTearDown(
-      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-        channel,
-        null,
-      ),
-    );
-    final store = (await tester.runAsync(freshStore))!;
+    SharedPreferences.setMockInitialValues({});
+    final prefs = (await tester.runAsync(SharedPreferences.getInstance))!;
+    // Each return from settings reports the next issue, without platform
+    // location (CI runs with OFFLINE_MAP, which skips it).
+    final store = _SettingsStore(LocalRepository(prefs));
     final started = await startReal(
       tester,
       () => store.start(
@@ -333,21 +321,75 @@ void main() {
     await tester.tap(find.byTooltip('關閉'));
     await tester.pumpAndSettle();
 
-    Future<void> returnFromSettings() async {
+    Future<void> returnFromSettings(LocationIssue issue) async {
+      store.nextIssue = issue;
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       await tester.pumpAndSettle();
     }
 
     // Nothing changed in settings: no repeated prompt.
-    await returnFromSettings();
-    expect(store.locationIssue, LocationIssue.serviceOff);
+    await returnFromSettings(LocationIssue.serviceOff);
+    expect(store.retries, 1);
     expect(find.text('定位服務未開啟'), findsNothing);
     // Services on, permission still denied: the next blocker is prompted.
-    serviceOn = true;
-    await returnFromSettings();
-    expect(store.locationIssue, LocationIssue.denied);
+    await returnFromSettings(LocationIssue.denied);
+    expect(store.retries, 2);
     expect(find.text('尚未允許使用位置'), findsOneWidget);
+  });
+
+  testWidgets('定位結果在其他分頁時才失敗，等回到地圖再提醒', (tester) async {
+    final store = (await tester.runAsync(freshStore))!;
+    final fix = Completer<bool>();
+    final started = await startReal(
+      tester,
+      () => store.start(
+        locator: () => fix.future,
+        locationWait: const Duration(milliseconds: 10),
+        settleLimit: Duration.zero,
+      ),
+    );
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    var showControls = true;
+    late StateSetter rebuild;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [storeProvider.overrideWith((ref) => store)],
+        child: MaterialApp(
+          home: StatefulBuilder(
+            builder: (context, setState) {
+              rebuild = setState;
+              return Scaffold(body: MapPage(showControls: showControls));
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.runAsync(() => started.done);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('關閉'));
+    await tester.pumpAndSettle();
+    rebuild(() => showControls = false);
+    await tester.pumpAndSettle();
+    store.locationIssue = LocationIssue.denied;
+    fix.complete(false);
+    await tester.pumpAndSettle();
+    // Another tab covers the map: nothing pops up over it.
+    expect(find.text('尚未允許使用位置'), findsNothing);
+    rebuild(() => showControls = true);
+    await tester.pumpAndSettle();
+    expect(find.text('尚未允許使用位置'), findsOneWidget);
+    await tester.tap(find.text('稍後'));
+    await tester.pumpAndSettle();
+    // Prompted once: hiding and showing the map again does not repeat it.
+    rebuild(() => showControls = false);
+    await tester.pumpAndSettle();
+    rebuild(() => showControls = true);
+    await tester.pumpAndSettle();
+    expect(find.text('尚未允許使用位置'), findsNothing);
   });
 
   testWidgets('定位鈕等動作遇到未授權時跳出設定提醒，而非一般訊息', (tester) async {
@@ -404,5 +446,19 @@ class _ControlledParking extends ParkingRepository {
     final result = Completer<ParkingResult>();
     requests.add(result);
     return result.future;
+  }
+}
+
+class _SettingsStore extends AppStore {
+  _SettingsStore(LocalRepository local) : super(local, null);
+
+  LocationIssue? nextIssue;
+  int retries = 0;
+
+  @override
+  Future<bool> locateOnLaunch({bool request = true}) async {
+    retries++;
+    locationIssue = nextIssue;
+    return nextIssue == null;
   }
 }
