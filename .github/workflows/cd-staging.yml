@@ -153,7 +153,7 @@ jobs:
           # Recheck after OIDC exchange, immediately before the external write.
           python3 tool/cd_gate.py latest --sha "$SOURCE_SHA" > "$RUNNER_TEMP/latest.log"
           if grep -q 'Skipped:' "$RUNNER_TEMP/latest.log"; then exit 0; fi
-          git log -1 --format='%H%n%s' > "$RUNNER_TEMP/release-notes.txt"
+          git log -1 --format='Alpha（內部預覽）%n%H%n%s' > "$RUNNER_TEMP/release-notes.txt"
           firebase appdistribution:distribute build/app/outputs/flutter-apk/app-staging-release.apk --app "$FIREBASE_APP_ID" --groups staging-android --release-notes-file "$RUNNER_TEMP/release-notes.txt" --non-interactive
       - name: Remove signing material
         if: always()
@@ -217,7 +217,7 @@ jobs:
           # Recheck after OIDC exchange, immediately before the external write.
           python3 tool/cd_gate.py latest --sha "$SOURCE_SHA" > "$RUNNER_TEMP/latest.log"
           if grep -q 'Skipped:' "$RUNNER_TEMP/latest.log"; then exit 0; fi
-          git log -1 --format='%H%n%s' > "$RUNNER_TEMP/release-notes.txt"
+          git log -1 --format='Alpha（內部預覽）%n%H%n%s' > "$RUNNER_TEMP/release-notes.txt"
           shopt -s nullglob
           ipa=(build/ios/ipa/*.ipa)
           test "${#ipa[@]}" = 1

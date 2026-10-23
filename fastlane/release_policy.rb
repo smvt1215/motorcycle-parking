@@ -8,8 +8,35 @@ module ReleasePolicy
     DEVELOPER_REMOVED_FROM_SALE REMOVED_FROM_SALE
   ].freeze
 
-  def self.range(base)
-    ((base + 1)..(base + 9))
+  # Google Play API track names: closed testing is "alpha", open testing "beta".
+  PLAY_TRACKS = {"beta" => "alpha", "rc" => "beta"}.freeze
+
+  # External TestFlight states in which the build already reached (or is
+  # waiting on review for) the public group; a rerun must not submit again.
+  EXTERNAL_DISTRIBUTED_STATES = %w[
+    WAITING_FOR_BETA_REVIEW IN_BETA_REVIEW BETA_APPROVED IN_BETA_TESTING
+  ].freeze
+
+  def self.play_track(channel)
+    PLAY_TRACKS.fetch(channel) { raise ArgumentError, "No Play testing track for #{channel}" }
+  end
+
+  def self.testflight_distributed?(state)
+    EXTERNAL_DISTRIBUTED_STATES.include?(state)
+  end
+
+  # Only this state means external testers can install the build. Beta App
+  # Review states merely stop a rerun from submitting again; promoting one
+  # would ship an RC nobody outside could test yet.
+  def self.testflight_available?(state)
+    state == "IN_BETA_TESTING"
+  end
+
+  # The gate's build range for this channel (BUILD_FIRST..BUILD_LAST): beta
+  # and RC use disjoint digits of the commit's numbers, so a lookup never
+  # finds the other channel's binary, which targets a different backend.
+  def self.range(first, last)
+    (Integer(first)..Integer(last))
   end
 
   def self.published_play_codes(releases)
@@ -19,21 +46,47 @@ module ReleasePolicy
             .flat_map { |release| Array(release.version_codes) }.map(&:to_i)
   end
 
-  def self.play_candidate(tracks, base, released_codes: [])
-    production = released_codes.map(&:to_i).select { |code| range(base).cover?(code) }
+  # Codes testers can install from a testing track: a draft or a partial
+  # rollout there never reached every tester.
+  def self.completed_play_codes(releases)
+    releases.select { |release| release.status == "completed" }
+            .flat_map { |release| Array(release.version_codes) }.map(&:to_i)
+  end
+
+  def self.play_candidate(tracks, numbers, released_codes: [])
+    production = released_codes.map(&:to_i).select { |code| numbers.cover?(code) }
     return production.max unless production.empty?
 
-    candidates = tracks.flat_map { |_, codes| codes }.map(&:to_i).select { |code| range(base).cover?(code) }
+    candidates = tracks.flat_map { |_, codes| codes }.map(&:to_i).select { |code| numbers.cover?(code) }
     candidates.max
   end
 
-  def self.valid_build(builds, base)
-    builds.select { |build| range(base).cover?(build.version.to_i) && build.processing_state == "VALID" }
+  # A store release promotes only what the RC actually shipped: a version
+  # code already published on production, else one in a completed release on
+  # the RC's open testing track (tracks hold completed codes only). A
+  # beta-only (closed testing) build is never promoted.
+  def self.promotable_play_code(tracks, numbers, released_codes: [])
+    production = released_codes.map(&:to_i).select { |code| numbers.cover?(code) }
+    return production.max unless production.empty?
+
+    rc_track = tracks.to_h.fetch(play_track("rc"), [])
+    rc_track.map(&:to_i).select { |code| numbers.cover?(code) }.max
+  end
+
+  # The VALID build external testers can already install from the public
+  # TestFlight group; one still in Beta App Review is not a tested RC.
+  def self.distributed_build(builds, numbers)
+    distributed = builds.select { |build| testflight_available?(build.build_beta_detail&.external_build_state) }
+    valid_build(distributed, numbers)
+  end
+
+  def self.valid_build(builds, numbers)
+    builds.select { |build| numbers.cover?(build.version.to_i) && build.processing_state == "VALID" }
           .max_by { |build| build.version.to_i }
   end
 
-  def self.processing?(builds, base)
-    builds.any? { |build| range(base).cover?(build.version.to_i) && build.processing_state == "PROCESSING" }
+  def self.processing?(builds, numbers)
+    builds.any? { |build| numbers.cover?(build.version.to_i) && build.processing_state == "PROCESSING" }
   end
 
   def self.submitted?(state)

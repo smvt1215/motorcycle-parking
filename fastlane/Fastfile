@@ -26,45 +26,138 @@ def selected_build(number)
   File.open(ENV.fetch("GITHUB_OUTPUT"), "a") { |file| file.puts("build=#{number}") }
 end
 
-platform :android do
-  desc "Publish or resume a 10% production rollout without uploading twice"
-  lane :release do
-    require "supply"
-    package = "tw.motopark.motorcycle_parking"
-    credentials = required_setting("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON")
-    base = Integer(ENV.fetch("BUILD_BASE"))
-    number = Integer(ENV.fetch("BUILD_NUMBER"))
-    # List every track, including any custom tracks, in a read-only edit.
-    Supply.config = FastlaneCore::Configuration.create(Supply::Options.available_options,
-                                                       package_name: package, json_key_data: credentials)
-    client = Supply::Client.make_from_config
-    tracks = {}
-    production_releases = []
-    begin
-      client.begin_edit(package_name: package)
-      client.tracks.each do |track|
-        tracks[track.track] = Array(track.releases).flat_map { |release| Array(release.version_codes) }.map(&:to_i)
-        production_releases = Array(track.releases) if track.track == "production"
-      end
-    ensure
-      client.abort_current_edit
+def channel
+  ENV.fetch("RELEASE_CHANNEL")
+end
+
+# A reused store build keeps the hash recorded when it was uploaded: under
+# this tag on a retry, or under another tag on the same commit (the RC a store
+# release promotes). Copy it so this release lists it.
+def carry_hash(platform, number)
+  tag = ENV.fetch("GITHUB_REF_NAME")
+  name = "sha256-#{platform}-#{number}.txt"
+  directory = ENV.fetch("RUNNER_TEMP")
+  source = [tag, *ENV.fetch("HASH_SOURCES", "").split].find do |candidate|
+    system("gh", "release", "download", candidate, "--pattern", name, "--dir", directory, "--clobber")
+  end
+  UI.user_error!("No SHA-256 receipt for #{platform} build #{number}; record the original binary's hash first") unless source
+  sh("gh", "release", "upload", tag, File.join(directory, name), "--clobber") unless source == tag
+end
+
+def testing_changelog
+  "#{ENV.fetch('GITHUB_REF_NAME')}\n#{`git log -1 --format=%s`.strip}"
+end
+
+def play_package
+  "tw.motopark.motorcycle_parking"
+end
+
+# Version codes per track (any status), those in completed releases per track,
+# and the published production releases, read in a read-only edit that is
+# always aborted.
+def play_tracks(credentials)
+  require "supply"
+  Supply.config = FastlaneCore::Configuration.create(Supply::Options.available_options,
+                                                     package_name: play_package, json_key_data: credentials)
+  client = Supply::Client.make_from_config
+  tracks = {}
+  completed = {}
+  production_releases = []
+  begin
+    client.begin_edit(package_name: play_package)
+    client.tracks.each do |track|
+      tracks[track.track] = Array(track.releases).flat_map { |release| Array(release.version_codes) }.map(&:to_i)
+      completed[track.track] = ReleasePolicy.completed_play_codes(Array(track.releases))
+      production_releases = Array(track.releases) if track.track == "production"
     end
-    released_codes = ReleasePolicy.published_play_codes(production_releases)
-    existing = ReleasePolicy.play_candidate(tracks.to_a, base, released_codes: released_codes)
-    common = {package_name: package, json_key_data: credentials,
-              skip_upload_metadata: true, skip_upload_images: true,
-              skip_upload_screenshots: true, skip_upload_changelogs: true,
-              rescue_changes_not_sent_for_review: false}
-    if existing && released_codes.include?(existing)
-      UI.success("This commit has already been published on the production track")
+  ensure
+    client.abort_current_edit
+  end
+  [tracks, completed, ReleasePolicy.published_play_codes(production_releases)]
+end
+
+def play_options(credentials)
+  {package_name: play_package, json_key_data: credentials,
+   skip_upload_metadata: true, skip_upload_images: true,
+   skip_upload_screenshots: true, skip_upload_changelogs: true,
+   rescue_changes_not_sent_for_review: false}
+end
+
+def app_store_api_key
+  app_store_connect_api_key(key_id: required_setting("APP_STORE_KEY_ID"),
+                            issuer_id: required_setting("APP_STORE_ISSUER_ID"),
+                            key_content: required_setting("APP_STORE_KEY_BASE64"),
+                            is_key_content_base64: true, duration: 1200)
+end
+
+def store_app
+  app = Spaceship::ConnectAPI::App.get(app_id: required_setting("APP_STORE_APP_ID"))
+  UI.user_error!("Wrong App Store app ID") unless app.bundle_id == "tw.motopark.motorcycleParking"
+  app
+end
+
+def find_ios_builds(app, numbers)
+  Spaceship::ConnectAPI::Build.all(app_id: app.id, version: ENV.fetch("RELEASE_VERSION"), platform: "IOS",
+                                   build_number: numbers.to_a.join(","))
+end
+
+# This commit's builds in the configured public TestFlight group. A build's
+# external state is global: it may be IN_BETA_TESTING through another group.
+def group_ios_builds(app, numbers)
+  name = required_setting("TESTFLIGHT_GROUP")
+  group = Spaceship::ConnectAPI.get_beta_groups(filter: {app: app.id, name: name}).all_pages
+                               .flat_map(&:to_models).find { |item| item.name == name && !item.is_internal_group }
+  UI.user_error!("No external TestFlight group named #{name}") unless group
+  Spaceship::ConnectAPI.get_builds(filter: {app: app.id, betaGroups: group.id,
+                                            "preReleaseVersion.version" => ENV.fetch("RELEASE_VERSION"),
+                                            version: numbers.to_a.join(",")},
+                                   includes: "buildBetaDetail", limit: 200).all_pages.flat_map(&:to_models)
+end
+
+# This channel's build numbers on this commit (see tool/cd_gate.py).
+def build_numbers
+  ReleasePolicy.range(ENV.fetch("BUILD_FIRST"), ENV.fetch("BUILD_LAST"))
+end
+
+# A beta tests against staging: the gate requires this SHA's staging deploy,
+# so production never receives beta migrations. The binary keeps the
+# production app id; only its backend settings change, and missing staging
+# settings fail the build instead of silently falling back to production.
+def use_channel_backend
+  return unless channel == "beta"
+
+  ENV["SUPABASE_PROJECT_REF"] = required_setting("STAGING_SUPABASE_PROJECT_REF")
+  ENV["SUPABASE_URL"] = required_setting("STAGING_SUPABASE_URL")
+  ENV["SUPABASE_ANON_KEY"] = required_setting("STAGING_SUPABASE_ANON_KEY")
+end
+
+def monotonic
+  Process.clock_gettime(Process::CLOCK_MONOTONIC)
+end
+
+platform :android do
+  desc "Beta to closed testing, RC to open testing; reuse this commit's build when it exists"
+  lane :testing do
+    credentials = required_setting("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON")
+    numbers = build_numbers
+    number = Integer(ENV.fetch("BUILD_NUMBER"))
+    target = ReleasePolicy.play_track(channel)
+    tracks, completed, = play_tracks(credentials)
+    existing = ReleasePolicy.play_candidate(tracks.to_a, numbers)
+    # A draft on the target track has not reached testers: advance it below.
+    if existing && Array(completed[target]).include?(existing)
+      UI.success("This commit's build is already on the #{target} track")
+      carry_hash("android", existing)
       selected_build(existing)
     elsif existing
+      carry_hash("android", existing)
       source = tracks.find { |_, codes| codes.include?(existing) }.first
-      upload_to_play_store(**common, track: source, track_promote_to: "production",
-                           version_code: existing, track_promote_release_status: "inProgress", rollout: 0.1,
+      upload_to_play_store(**play_options(credentials), track: source, track_promote_to: target,
+                           version_code: existing, track_promote_release_status: "completed",
                            skip_upload_apk: true, skip_upload_aab: true)
       selected_build(existing)
     else
+      use_channel_backend
       sh("python3", root_path("tool/cd_config.py"), "production", "android")
       # GITHUB_ENV affects the next step; this build runs in the same step.
       ENV["ANDROID_KEYSTORE_PATH"] = File.join(ENV.fetch("RUNNER_TEMP"), "upload.jks")
@@ -73,50 +166,54 @@ platform :android do
          "--dart-define-from-file=#{root_path('config/production.json')}")
       binary = root_path("build/app/outputs/bundle/productionRelease/app-production-release.aab")
       record_hash("android", number, binary)
-      upload_to_play_store(**common, aab: binary, track: "production", release_status: "inProgress", rollout: 0.1,
+      upload_to_play_store(**play_options(credentials), aab: binary, track: target, release_status: "completed",
                            version_name: ENV.fetch("RELEASE_VERSION"))
       selected_build(number)
     end
   end
+
+  desc "Promote the RC's build to a 10% production rollout; never builds"
+  lane :release do
+    credentials = required_setting("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON")
+    numbers = build_numbers
+    _, completed, released_codes = play_tracks(credentials)
+    existing = ReleasePolicy.promotable_play_code(completed.to_a, numbers, released_codes: released_codes)
+    UI.user_error!("No open-testing build for this RC commit; the RC must reach open testing first") unless existing
+    carry_hash("android", existing)
+    if released_codes.include?(existing)
+      UI.success("This commit has already been published on the production track")
+    else
+      upload_to_play_store(**play_options(credentials), track: ReleasePolicy.play_track("rc"), track_promote_to: "production",
+                           version_code: existing, track_promote_release_status: "inProgress", rollout: 0.1,
+                           skip_upload_apk: true, skip_upload_aab: true)
+    end
+    selected_build(existing)
+  end
 end
 
 platform :ios do
-  desc "Reuse a valid build, then independently ensure App Store review submission"
-  lane :release do
-    api_key = app_store_connect_api_key(key_id: required_setting("APP_STORE_KEY_ID"),
-                                        issuer_id: required_setting("APP_STORE_ISSUER_ID"),
-                                        key_content: required_setting("APP_STORE_KEY_BASE64"),
-                                        is_key_content_base64: true, duration: 1200)
-    app_id = required_setting("APP_STORE_APP_ID")
+  desc "Upload or reuse this commit's build, then send it to the public TestFlight group"
+  lane :testing do
+    api_key = app_store_api_key
+    app = store_app
     version = ENV.fetch("RELEASE_VERSION")
-    base = Integer(ENV.fetch("BUILD_BASE"))
+    numbers = build_numbers
     number = Integer(ENV.fetch("BUILD_NUMBER"))
-    app = Spaceship::ConnectAPI::App.get(app_id: app_id)
-    UI.user_error!("Wrong App Store app ID") unless app.bundle_id == "tw.motopark.motorcycleParking"
-    store_version = app.get_app_store_versions(filter: {versionString: version, platform: "IOS"}).first
-    state = store_version&.app_version_state || store_version&.app_store_state
-    if ReleasePolicy.submitted?(state)
-      selected = store_version.get_build
-      UI.user_error!("Submitted store version uses a build outside this commit's range") unless selected && ReleasePolicy.range(base).cover?(selected.version.to_i)
-      selected_build(selected.version)
-      next
-    end
-    find_builds = lambda do
-      Spaceship::ConnectAPI::Build.all(app_id: app_id, version: version, platform: "IOS",
-                                      build_number: ReleasePolicy.range(base).to_a.join(","))
-    end
-    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 3600
-    builds = find_builds.call
-    while ReleasePolicy.processing?(builds, base) && Process.clock_gettime(Process::CLOCK_MONOTONIC) < deadline
+    deadline = monotonic + 3600
+    builds = find_ios_builds(app, numbers)
+    while ReleasePolicy.processing?(builds, numbers) && monotonic < deadline
       sleep(30)
-      builds = find_builds.call
+      builds = find_ios_builds(app, numbers)
     end
-    build = ReleasePolicy.valid_build(builds, base)
-    unless build
+    build = ReleasePolicy.valid_build(builds, numbers)
+    if build
+      carry_hash("ios", build.version)
+    else
       # A retry's attempt number is different; never overwrite an unresolved upload.
       if builds.any? { |item| item.version.to_i == number && item.processing_state == "PROCESSING" }
         UI.user_error!("This attempt's build is still processing; rerun the workflow for a new number")
       end
+      use_channel_backend
       sh("python3", root_path("tool/cd_config.py"), "production", "ios")
       sh("python3", root_path("tool/ios_signing.py"), "production")
       sh("flutter", "build", "ipa", "--release", "--build-name=#{version}", "--build-number=#{number}",
@@ -125,39 +222,63 @@ platform :ios do
       binaries = Dir[root_path("build/ios/ipa/*.ipa")]
       UI.user_error!("Expected one IPA") unless binaries.length == 1
       record_hash("ios", number, binaries.first)
-      upload_to_testflight(api_key: api_key, app_identifier: app.bundle_id, apple_id: app_id,
+      upload_to_testflight(api_key: api_key, app_identifier: app.bundle_id, apple_id: app.id,
                            ipa: binaries.first, distribute_external: false,
                            skip_waiting_for_build_processing: true)
-      # Upload does not mean VALID. Wait before selecting a build for review.
-      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 3600
+      # Upload does not mean VALID. Wait before distributing.
+      deadline = monotonic + 3600
       loop do
-        builds = find_builds.call
-        build = ReleasePolicy.valid_build(builds, base)
+        builds = find_ios_builds(app, numbers)
+        build = ReleasePolicy.valid_build(builds, numbers)
         break if build
         failed = builds.any? { |item| item.version.to_i == number && %w[FAILED INVALID].include?(item.processing_state) }
         UI.user_error!("App Store rejected processing; fix the binary before retrying") if failed
-        UI.user_error!("App Store processing timed out; rerun to check the uploaded build") if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+        UI.user_error!("App Store processing timed out; rerun to check the uploaded build") if monotonic >= deadline
         sleep(30)
       end
     end
+    in_group = group_ios_builds(app, numbers).find { |item| item.id == build.id }
+    if in_group && ReleasePolicy.testflight_distributed?(in_group.build_beta_detail&.external_build_state)
+      UI.success("Build #{build.version} is already with the public TestFlight group")
+    else
+      # The first build of each version waits for Beta App Review; later ones
+      # usually go out at once.
+      upload_to_testflight(api_key: api_key, app_identifier: app.bundle_id, apple_id: app.id,
+                           distribute_only: true, app_platform: "ios",
+                           app_version: version, build_number: build.version,
+                           distribute_external: true, groups: [required_setting("TESTFLIGHT_GROUP")],
+                           notify_external_testers: true, changelog: testing_changelog)
+    end
+    selected_build(build.version)
+  end
+
+  desc "Submit the RC's build for App Store review; never builds"
+  lane :release do
+    api_key = app_store_api_key
+    app = store_app
+    version = ENV.fetch("RELEASE_VERSION")
+    numbers = build_numbers
     store_version = app.get_app_store_versions(filter: {versionString: version, platform: "IOS"}).first
     state = store_version&.app_version_state || store_version&.app_store_state
     if ReleasePolicy.submitted?(state)
       selected = store_version.get_build
-      UI.user_error!("Submitted store version uses a build outside this commit's range") unless selected && ReleasePolicy.range(base).cover?(selected.version.to_i)
+      UI.user_error!("Submitted store version uses a build outside this commit's range") unless selected && numbers.cover?(selected.version.to_i)
+      carry_hash("ios", selected.version)
       selected_build(selected.version)
-    else
-      # Submission runs even when an earlier attempt already uploaded the IPA.
-      upload_to_app_store(api_key: api_key, app_identifier: app.bundle_id, app_version: version,
-                          build_number: build.version, skip_binary_upload: true,
-                          metadata_path: root_path("fastlane/metadata/ios"),
-                          skip_screenshots: Dir[root_path("fastlane/metadata/ios/*/screenshots/*")].empty?,
-                          submit_for_review: true, automatic_release: true, phased_release: true, force: true,
-                          copyright: required_setting("APP_STORE_COPYRIGHT"),
-                          support_url: {"zh-Hant" => required_setting("APP_STORE_SUPPORT_URL")},
-                          privacy_url: {"zh-Hant" => required_setting("APP_STORE_PRIVACY_URL")},
-                          submission_information: JSON.parse(required_setting("APP_STORE_SUBMISSION_INFORMATION")))
-      selected_build(build.version)
+      next
     end
+    build = ReleasePolicy.distributed_build(group_ios_builds(app, numbers), numbers)
+    UI.user_error!("No build of this RC commit reached the public TestFlight group; the RC must finish first") unless build
+    carry_hash("ios", build.version)
+    upload_to_app_store(api_key: api_key, app_identifier: app.bundle_id, app_version: version,
+                        build_number: build.version, skip_binary_upload: true,
+                        metadata_path: root_path("fastlane/metadata/ios"),
+                        skip_screenshots: Dir[root_path("fastlane/metadata/ios/*/screenshots/*")].empty?,
+                        submit_for_review: true, automatic_release: true, phased_release: true, force: true,
+                        copyright: required_setting("APP_STORE_COPYRIGHT"),
+                        support_url: {"zh-Hant" => required_setting("APP_STORE_SUPPORT_URL")},
+                        privacy_url: {"zh-Hant" => required_setting("APP_STORE_PRIVACY_URL")},
+                        submission_information: JSON.parse(required_setting("APP_STORE_SUBMISSION_INFORMATION")))
+    selected_build(build.version)
   end
 end

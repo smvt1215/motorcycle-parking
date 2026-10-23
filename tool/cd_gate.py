@@ -95,6 +95,19 @@ class GitHub:
             return False
         return True
 
+    def release_succeeded(self, tag, sha):
+        """The tag's own release.yml run (its latest attempt) must have
+        succeeded, so a store release only promotes a distributed RC."""
+        runs = [run for run in self.pages("actions/workflows/release.yml/runs", "workflow_runs",
+                                          head_sha=sha, event="push")
+                if run["head_branch"] == tag]
+        if not runs:
+            raise ValueError(f"No release workflow ran for {tag}; push the RC tag and let it finish")
+        run = max(runs, key=lambda item: item["id"])
+        if run["status"] != "completed" or run["conclusion"] != "success":
+            raise ValueError(f"The {tag} release workflow has not succeeded; finish or rerun the RC first")
+        return True
+
     def production_protected(self):
         environment = self.get("environments/production")
         return any(rule["type"] == "required_reviewers" and rule.get("reviewers")
@@ -106,19 +119,64 @@ def output(key, value):
         stream.write(f"{key}={value}\n")
 
 
+RELEASE_TAG = re.compile(r"v((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))(?:-(beta|rc)\.([1-9]\d*))?")
+
+
+def release_tag(tag):
+    """Split vX.Y.Z, vX.Y.Z-beta.N or vX.Y.Z-rc.N into (version, channel, N)."""
+    match = RELEASE_TAG.fullmatch(tag)
+    if not match:
+        raise ValueError("Release tag must be vX.Y.Z, vX.Y.Z-beta.N or vX.Y.Z-rc.N")
+    version, channel, sequence = match.groups()
+    return version, channel or "release", int(sequence or 0)
+
+
 def release_version(tag, text):
-    if not re.fullmatch(r"v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)", tag):
-        raise ValueError("Release tag must be vX.Y.Z")
+    version = release_tag(tag)[0]
     match = re.search(r"^version:\s*(\S+)", text, re.M)
-    if not match or match[1].split("+")[0] != tag[1:]:
+    if not match or match[1].split("+")[0] != version:
         raise ValueError("Release tag must match pubspec.yaml version")
-    return tag[1:]
+    return version
 
 
-def build_number(count, attempt):
-    if count < 1 or not 1 <= attempt <= 9:
-        raise ValueError("Release attempt must be 1–9; handle further retries manually")
-    number = count * 10 + attempt
+def promoted_candidate(version, tags, at_head):
+    """A store release promotes the newest RC's build, never a new binary,
+    so vX.Y.Z must sit on the commit of that version's latest RC tag."""
+    candidates = []
+    for tag in tags:
+        match = RELEASE_TAG.fullmatch(tag)
+        if match and match[1] == version and match[2] == "rc":
+            candidates.append((int(match[3]), tag))
+    if not candidates:
+        raise ValueError(f"v{version} needs an RC first; push v{version}-rc.1 and test it")
+    latest = max(candidates)[1]
+    if latest not in at_head:
+        raise ValueError(f"v{version} must be tagged on the latest RC commit ({latest})")
+    return latest
+
+
+def hash_sources(tag, at_head):
+    """Other release tags on this commit, whose releases may already hold the
+    SHA-256 receipt of a store build this run reuses."""
+    return sorted(other for other in at_head if other != tag and RELEASE_TAG.fullmatch(other))
+
+
+# Each commit owns build numbers count×10+1..9. Beta and RC builds connect to
+# different backends, so they never share a number: beta takes digits 1–4 and
+# RC 5–9 (a store release promotes from the RC digits).
+CHANNEL_DIGITS = {"beta": range(1, 5), "rc": range(5, 10), "release": range(5, 10)}
+
+
+def build_range(count, channel):
+    digits = CHANNEL_DIGITS[channel]
+    return count * 10 + digits[0], count * 10 + digits[-1]
+
+
+def build_number(count, attempt, channel="rc"):
+    digits = CHANNEL_DIGITS[channel]
+    if count < 1 or not 1 <= attempt <= len(digits):
+        raise ValueError(f"{channel} attempt must be 1–{len(digits)}; handle further retries manually")
+    number = count * 10 + digits[attempt - 1]
     if number > 9999:
         raise ValueError("Build number exceeds the iOS four-digit limit; revise numbering before release")
     return number
@@ -140,14 +198,33 @@ def main():
                 or run["head_repository"]["full_name"] != api.repo or run["head_sha"] != args.sha):
             raise ValueError("Staging requires a trusted main push workflow")
     if args.mode == "release":
-        version = release_version(os.environ["GITHUB_REF_NAME"], Path("pubspec.yaml").read_text())
+        tag = os.environ["GITHUB_REF_NAME"]
+        version = release_version(tag, Path("pubspec.yaml").read_text())
+        channel = release_tag(tag)[1]
         if subprocess.check_output(["git", "rev-parse", "--is-shallow-repository"], text=True).strip() != "false":
             raise ValueError("Full Git history is required for build numbering")
         count = int(subprocess.check_output(["git", "rev-list", "--count", "HEAD"], text=True))
-        number = build_number(count, int(os.environ["GITHUB_RUN_ATTEMPT"]))
+        # A store release builds nothing, so its attempt count is irrelevant.
+        attempt = 1 if channel == "release" else int(os.environ["GITHUB_RUN_ATTEMPT"])
+        number = build_number(count, attempt, channel)
+        first, last = build_range(count, channel)
         if not api.production_protected():
             raise ValueError("Configure required reviewers on the production Environment before release")
-        release_outputs = {"version": version, "build_number": number, "build_base": count * 10}
+        at_head = subprocess.check_output(["git", "tag", "--points-at", "HEAD"], text=True).split()
+        release_outputs = {"version": version, "channel": channel, "build_number": number,
+                           "build_first": first, "build_last": last,
+                           "hash_sources": " ".join(hash_sources(tag, at_head))}
+        if channel == "release":
+            # The RC already passed the main, CI and staging checks; main may
+            # have moved on since, and no new binary is built.
+            tags = subprocess.check_output(["git", "tag", "--list", "v*"], text=True).split()
+            candidate = promoted_candidate(version, tags, at_head)
+            api.release_succeeded(candidate, args.sha)
+            print(f"Promoting {candidate}")
+            output("deploy", "true")
+            for key, value in release_outputs.items():
+                output(key, value)
+            return
     while True:
         current = api.latest_main(args.sha)
         if not current:

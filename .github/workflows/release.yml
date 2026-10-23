@@ -15,8 +15,11 @@ jobs:
     timeout-minutes: 65
     outputs:
       version: ${{ steps.gate.outputs.version }}
+      channel: ${{ steps.gate.outputs.channel }}
       build_number: ${{ steps.gate.outputs.build_number }}
-      build_base: ${{ steps.gate.outputs.build_base }}
+      build_first: ${{ steps.gate.outputs.build_first }}
+      build_last: ${{ steps.gate.outputs.build_last }}
+      hash_sources: ${{ steps.gate.outputs.hash_sources }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -44,7 +47,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 tool/cd_gate.py release --sha "$(git rev-parse HEAD)"
+      # Only an RC deploys production: a beta tests against staging, which
+      # the gate already requires for this SHA, so beta migrations never
+      # reach production. A store release ships the RC's build, whose backend
+      # is already live; redeploying that older commit could roll back
+      # functions a later RC shipped.
       - uses: ./.github/actions/backend-deploy
+        if: needs.gate.outputs.channel == 'rc'
         with:
           environment: production
         env:
@@ -58,7 +67,7 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: python3 tool/release_notes.py prepare "$RELEASE_TAG"
   android:
-    name: Publish Android production rollout
+    name: Publish Android (Play testing track or production rollout)
     needs: [gate, backend]
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -72,11 +81,18 @@ jobs:
       CD_ENVIRONMENT: production
       GH_TOKEN: ${{ github.token }}
       RELEASE_VERSION: ${{ needs.gate.outputs.version }}
+      RELEASE_CHANNEL: ${{ needs.gate.outputs.channel }}
+      HASH_SOURCES: ${{ needs.gate.outputs.hash_sources }}
       BUILD_NUMBER: ${{ needs.gate.outputs.build_number }}
-      BUILD_BASE: ${{ needs.gate.outputs.build_base }}
+      BUILD_FIRST: ${{ needs.gate.outputs.build_first }}
+      BUILD_LAST: ${{ needs.gate.outputs.build_last }}
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
       SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+      # Beta builds connect to staging (see the testing lanes).
+      STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
+      STAGING_SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
+      STAGING_SUPABASE_ANON_KEY: ${{ vars.STAGING_SUPABASE_ANON_KEY }}
       GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_ANDROID_API_KEY }}
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -101,14 +117,14 @@ jobs:
         with:
           ruby-version: '3.3'
           bundler-cache: true
-      - name: Upload or promote the selected production build
+      - name: Upload to a testing track or promote the RC build
         id: store
-        run: bundle exec fastlane android release
+        run: bundle exec fastlane android ${{ needs.gate.outputs.channel == 'release' && 'release' || 'testing' }}
       - name: Remove signing material
         if: always()
         run: rm -f "$RUNNER_TEMP/upload.jks" config/production.json config/maps.local.json config/maps.generated.json android/maps.properties
   ios:
-    name: Upload iOS and submit App Store review
+    name: Publish iOS (TestFlight or App Store review)
     needs: [gate, backend]
     runs-on: macos-26
     timeout-minutes: 180
@@ -121,16 +137,24 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_VERSION: ${{ needs.gate.outputs.version }}
+      RELEASE_CHANNEL: ${{ needs.gate.outputs.channel }}
+      HASH_SOURCES: ${{ needs.gate.outputs.hash_sources }}
       BUILD_NUMBER: ${{ needs.gate.outputs.build_number }}
-      BUILD_BASE: ${{ needs.gate.outputs.build_base }}
+      BUILD_FIRST: ${{ needs.gate.outputs.build_first }}
+      BUILD_LAST: ${{ needs.gate.outputs.build_last }}
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
       SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+      # Beta builds connect to staging (see the testing lanes).
+      STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
+      STAGING_SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
+      STAGING_SUPABASE_ANON_KEY: ${{ vars.STAGING_SUPABASE_ANON_KEY }}
       GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_IOS_API_KEY }}
       IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
       IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
       IOS_PROFILE_BASE64: ${{ secrets.IOS_PROFILE_BASE64 }}
       APP_STORE_APP_ID: ${{ vars.APP_STORE_APP_ID }}
+      TESTFLIGHT_GROUP: ${{ vars.TESTFLIGHT_GROUP }}
       APP_STORE_KEY_ID: ${{ secrets.APP_STORE_KEY_ID }}
       APP_STORE_ISSUER_ID: ${{ secrets.APP_STORE_ISSUER_ID }}
       APP_STORE_KEY_BASE64: ${{ secrets.APP_STORE_KEY_BASE64 }}
@@ -152,9 +176,9 @@ jobs:
         with:
           ruby-version: '3.3'
           bundler-cache: true
-      - name: Upload or reuse IPA and ensure review submission
+      - name: Upload to TestFlight or submit the RC build for review
         id: store
-        run: bundle exec fastlane ios release
+        run: bundle exec fastlane ios ${{ needs.gate.outputs.channel == 'release' && 'release' || 'testing' }}
       - name: Remove signing material and private IPA
         if: always()
         run: |
