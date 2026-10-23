@@ -296,6 +296,60 @@ void main() {
     expect(find.text('地圖怎麼看'), findsNothing);
   });
 
+  testWidgets('從設定返回後若換成另一個定位問題，接著提醒該問題', (tester) async {
+    var serviceOn = false;
+    const channel = MethodChannel('flutter.baseflow.com/geolocator');
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      channel,
+      (call) async => switch (call.method) {
+        'isLocationServiceEnabled' => serviceOn,
+        'checkPermission' => 0, // LocationPermission.denied
+        _ => null,
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        channel,
+        null,
+      ),
+    );
+    final store = (await tester.runAsync(freshStore))!;
+    final started = await startReal(
+      tester,
+      () => store.start(
+        locator: () async {
+          store.locationIssue = LocationIssue.serviceOff;
+          return false;
+        },
+        settleLimit: Duration.zero,
+      ),
+    );
+    await pumpApp(tester, store);
+    await tester.runAsync(() => started.done);
+    await tester.pumpAndSettle();
+    expect(find.text('定位服務未開啟'), findsOneWidget);
+    await tester.tap(find.text('稍後'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('關閉'));
+    await tester.pumpAndSettle();
+
+    Future<void> returnFromSettings() async {
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+    }
+
+    // Nothing changed in settings: no repeated prompt.
+    await returnFromSettings();
+    expect(store.locationIssue, LocationIssue.serviceOff);
+    expect(find.text('定位服務未開啟'), findsNothing);
+    // Services on, permission still denied: the next blocker is prompted.
+    serviceOn = true;
+    await returnFromSettings();
+    expect(store.locationIssue, LocationIssue.denied);
+    expect(find.text('尚未允許使用位置'), findsOneWidget);
+  });
+
   testWidgets('定位鈕等動作遇到未授權時跳出設定提醒，而非一般訊息', (tester) async {
     await tester.pumpWidget(
       MaterialApp(

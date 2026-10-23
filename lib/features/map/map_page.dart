@@ -99,12 +99,16 @@ class _MapPageState extends ConsumerState<MapPage> {
   }
 
   /// Back from the settings the prompt opened: locate if access now works,
-  /// without asking for permission again.
+  /// without asking for permission again. Fixing one blocker can reveal the
+  /// next (services on, permission still denied), which is prompted in turn.
   Future<void> _relocateAfterSettings() async {
     final store = launchStore;
-    if (store.locationIssue == null) return;
-    if (await store.locateOnLaunch(request: false) && mounted) {
-      await _moveCamera(LatLng(store.lat, store.lng), 16);
+    final before = store.locationIssue;
+    if (before == null) return;
+    if (await store.locateOnLaunch(request: false)) {
+      if (mounted) await _moveCamera(LatLng(store.lat, store.lng), 16);
+    } else if (store.locationIssue != before) {
+      await _promptLocation(store);
     }
   }
 
