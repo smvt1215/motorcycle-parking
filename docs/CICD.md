@@ -74,7 +74,8 @@ Workflow 依平台分工：跨平台檢查放 `ci.yml`，各平台的建置與�
 - Actions、JavaScript／TypeScript、Python 採 `build-mode: none`；Java／Kotlin、Swift 採 `manual`，先準備鎖定版本 Flutter 與 plugins，不能直接 autobuild 裸 Gradle／Xcode 專案。
 - Kotlin 由 Flutter 建置 production Debug APK，產生 `android/local.properties`；禁用 Gradle daemon／build cache，確保編譯能被追蹤。
 - Swift 先以 Flutter `--config-only` 產生 plugin Swift package，再在 CodeQL init 後以 xcodebuild 建置無簽章模擬器 App；關閉編譯快取及 integrated driver，不修改一般 UI 測試的編譯旗標。
-- PR 原生掃描僅在相關路徑或 CodeQL／mobile setup 改動時執行；main、每週與手動執行完整掃描五類。腳本三類在每個 PR 都執行。
+- PR 的 Kotlin 掃描僅在相關路徑或 CodeQL／mobile setup 改動時執行；**Swift 不在 PR 上掃描**（job 層級略過，不佔用 macOS runner），只在 push 到 main、每週與手動執行。main、每週與手動執行完整掃描五類。腳本三類在每個 PR 都執行。
+- macOS runner 在 Enterprise 以下的方案（含 Pro）同時最多 5 個 job，而每個 PR 的 iOS CI 本身就要用到 macOS；Swift 原生程式碼很少，改在 main 上掃描，換取 PR 不必排隊。
 - 切換前必須停用 Default Setup，否則 Advanced Setup 的 SARIF 上傳會被拒絕。五類實際分析穩定且 main 有基準後，再確認 CodeQL 合併門檻；本次保留三個既有必要 checks，不提前要求尚未驗證的安全 check。
 - `CodeQL 全部通過` 代表分析 jobs 成功，不等於沒有安全警示。安全警示仍在 Security／Code scanning 審查，不以全專案既有警示阻擋未修改範圍的 PR。
 - 設計與驗收記錄見 [PR checks 設計](designs/2026-10-14-pr-checks-design.md)。
@@ -106,7 +107,7 @@ Workflow 依平台分工：跨平台檢查放 `ci.yml`，各平台的建置與�
 - `iOS Release 建置` 在 `macos-26` 執行 `flutter build ios --release --no-codesign`，以一般 App 入口驗證真機 Release 設定與 AOT；不簽章、不匯出 IPA。
 - `iOS 模擬器 App 建置` 在 `macos-26` 執行 `flutter build ios --simulator --debug --no-codesign --target=integration_test/ui_test.dart --dart-define=OFFLINE_MAP=true`，不需要簽章。
 - 將 `Runner.app` 封裝成 tar 後上傳為 `ios-test-app` artifact，保留執行權限與符號連結。
-- iOS 26／27 模擬器 job 以 `needs: [app]` 等待建置，各自下載與解開同一份 App，再以 `flutter drive --use-application-binary=artifacts/ios-app/Runner.app` 執行測試與截圖，不重新編譯。
+- iOS 26／27 模擬器 job 以 `needs: [app]` 等待建置，以 `max-parallel: 1` **依序**執行（兩個版本需要不同的 runner 映像，沒有映像同時具備 iOS 26 與 27 runtime，無法合併成一個 job；依序執行讓每個 PR 同時最多只佔一台 macOS 跑模擬器），各自下載與解開同一份 App，再以 `flutter drive --use-application-binary=artifacts/ios-app/Runner.app` 執行測試與截圖，不重新編譯。
 - 真機 Release 與 Debug 模擬器 App 是不同平台產物，不能共用；簽章與 IPA 匯出由後續 CD staging／release 流程處理。
 - Release 與測試建置 job 各自執行同一套路徑判斷，測試建置再將 `run` output 傳給模擬器 job：只改文件時所有 job 直接回報成功，不下載產物；改到 `ios.yml` 本身時照常實際建置。
 

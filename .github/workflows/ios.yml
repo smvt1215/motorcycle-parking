@@ -75,6 +75,10 @@ jobs:
     needs: [app]
     strategy:
       fail-fast: false
+      # Each iOS version needs its own runner image (no image ships both
+      # runtimes), so run them one after the other: a PR then holds at most
+      # one macOS runner for simulators under the 5-job macOS cap.
+      max-parallel: 1
       matrix:
         include:
           - runner: macos-26
