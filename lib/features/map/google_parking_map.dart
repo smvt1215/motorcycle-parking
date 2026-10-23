@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -202,16 +203,20 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
                   top: widget.panelVisible ? 0 : 108,
                   bottom: widget.panelVisible
                       ? size.height * .92
-                      // The open spot sheet covers the tab bar; the logo
-                      // and camera center sit just above it.
-                      : widget.sheetInset > 0
-                      ? widget.sheetInset
-                      // A modal sheet (legend, vehicle, report) would cover
-                      // the logo.
-                      : !widget.interactive
-                      ? size.height * .55
-                      // Lift the Google logo above the iOS floating tab bar.
-                      : 8 + MediaQuery.paddingOf(context).bottom,
+                      : math.max(
+                          // The open spot sheet covers the tab bar; the logo
+                          // and camera center sit just above it.
+                          widget.sheetInset,
+                          // A modal sheet (legend, vehicle, report), even
+                          // over open details, would cover the logo.
+                          !widget.interactive
+                              ? size.height * .55
+                              : widget.sheetInset > 0
+                              ? 0
+                              // Lift the Google logo above the iOS floating
+                              // tab bar.
+                              : 8 + MediaQuery.paddingOf(context).bottom,
+                        ),
                 ),
                 onTap: widget.onMapTap == null
                     ? null

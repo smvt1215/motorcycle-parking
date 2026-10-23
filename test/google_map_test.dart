@@ -239,6 +239,26 @@ void addSelectionTests() {
     expect(map.padding.bottom, greaterThanOrEqualTo(300));
     map.onTap!(const gm.LatLng(25.03, 121.56));
     expect(taps, 1);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GoogleParkingMap(
+          center: const LatLng(25.03, 121.56),
+          spots: spots.skip(1).toList(),
+          selected: spots.first,
+          sheetInset: 100,
+          eligibility: (_) => const Eligibility(EligibilityStatus.allowed, ''),
+          // A modal sheet opened over the details.
+          interactive: false,
+          onSpotTap: (_) {},
+          onViewport: (_, _) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<gm.GoogleMap>(find.byType(gm.GoogleMap)).padding.bottom,
+      closeTo(tester.getSize(find.byType(gm.GoogleMap)).height * .55, 1),
+    );
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
