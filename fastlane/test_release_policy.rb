@@ -28,4 +28,17 @@ end
 %w[PREPARE_FOR_SUBMISSION READY_FOR_REVIEW REJECTED DEVELOPER_REJECTED WAITING_FOR_EXPORT_COMPLIANCE].each do |state|
   raise "Submission still required #{state}" if ReleasePolicy.submitted?(state)
 end
+raise "Beta goes to closed testing" unless ReleasePolicy.play_track("beta") == "alpha"
+raise "RC goes to open testing" unless ReleasePolicy.play_track("rc") == "beta"
+begin
+  ReleasePolicy.play_track("release")
+  raise "Store release has no testing track"
+rescue ArgumentError
+end
+%w[WAITING_FOR_BETA_REVIEW IN_BETA_REVIEW BETA_APPROVED IN_BETA_TESTING].each do |state|
+  raise "External distribution done #{state}" unless ReleasePolicy.testflight_distributed?(state)
+end
+[nil, "READY_FOR_BETA_SUBMISSION", "BETA_REJECTED", "MISSING_EXPORT_COMPLIANCE", "EXPIRED"].each do |state|
+  raise "External distribution still required #{state.inspect}" if ReleasePolicy.testflight_distributed?(state)
+end
 puts "Release retry policy passed"

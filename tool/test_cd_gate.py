@@ -1,7 +1,8 @@
 """Regression tests for CI/staging deployment proof and release numbering."""
 import unittest
 
-from cd_gate import CI, DEPLOY_JOB, DEPLOY_PROOF, GitHub, build_number, release_version
+from cd_gate import (CI, DEPLOY_JOB, DEPLOY_PROOF, GitHub, build_number, hash_sources,
+                     promoted_candidate, release_tag, release_version)
 
 
 class FakeGitHub(GitHub):
@@ -111,9 +112,33 @@ class DeploymentGateTest(unittest.TestCase):
 
     def test_stable_tag_matches_pubspec(self):
         self.assertEqual(release_version("v1.2.3", "version: 1.2.3+1\n"), "1.2.3")
-        for tag in ("v1.2.2", "v01.2.3", "v1.2.3-beta", "other"):
+        for tag in ("v1.2.2", "v01.2.3", "v1.2.3-beta", "v1.2.3-beta.0", "v1.2.3-alpha.1", "v1.2.3-rc1", "other"):
             with self.subTest(tag=tag), self.assertRaises(ValueError):
                 release_version(tag, "version: 1.2.3+1\n")
+
+    def test_channel_tags_share_the_store_version(self):
+        self.assertEqual(release_tag("v1.2.3"), ("1.2.3", "release", 0))
+        self.assertEqual(release_tag("v1.2.3-beta.2"), ("1.2.3", "beta", 2))
+        self.assertEqual(release_tag("v1.2.3-rc.10"), ("1.2.3", "rc", 10))
+        # Stores only accept X.Y.Z, so every channel builds the pubspec version.
+        self.assertEqual(release_version("v1.2.3-rc.1", "version: 1.2.3+1\n"), "1.2.3")
+
+    def test_store_release_promotes_only_the_latest_rc_commit(self):
+        tags = ["v1.2.3-beta.1", "v1.2.3-rc.1", "v1.2.3-rc.2", "v1.2.2", "v1.3.0-rc.9"]
+        self.assertEqual(promoted_candidate("1.2.3", tags, ["v1.2.3-rc.2", "v1.2.3"]), "v1.2.3-rc.2")
+        # Numeric, not lexical: rc.10 is newer than rc.9.
+        self.assertEqual(promoted_candidate("1.2.3", ["v1.2.3-rc.9", "v1.2.3-rc.10"], ["v1.2.3-rc.10"]),
+                         "v1.2.3-rc.10")
+        with self.assertRaisesRegex(ValueError, "latest RC"):
+            promoted_candidate("1.2.3", tags, ["v1.2.3-rc.1"])
+        with self.assertRaisesRegex(ValueError, "needs an RC"):
+            promoted_candidate("1.2.3", ["v1.2.3-beta.1"], ["v1.2.3-beta.1"])
+        with self.assertRaisesRegex(ValueError, "needs an RC"):
+            promoted_candidate("1.2.3", ["v1.3.0-rc.1"], ["v1.3.0-rc.1"])
+
+    def test_hash_receipts_come_from_other_release_tags_on_the_commit(self):
+        self.assertEqual(hash_sources("v1.2.3", ["v1.2.3", "v1.2.3-rc.1", "v1.2.3-beta.2", "note"]),
+                         ["v1.2.3-beta.2", "v1.2.3-rc.1"])
 
     def test_retry_numbers_increase_and_next_commit_always_wins(self):
         self.assertLess(build_number(10, 1), build_number(10, 9))

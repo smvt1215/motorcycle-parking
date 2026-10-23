@@ -67,7 +67,7 @@ android {
         create("staging") {
             dimension = "environment"
             applicationIdSuffix = ".staging"
-            manifestPlaceholders["appLabel"] = "機車停車指南 β"
+            manifestPlaceholders["appLabel"] = "機車停車指南 α"
             manifestPlaceholders["appIcon"] = "@drawable/ic_launcher_staging"
             manifestPlaceholders["oauthScheme"] = "tw.motopark.motorcycleparking.staging"
             if (cdEnvironment == "staging" && cdKeystore != null) {

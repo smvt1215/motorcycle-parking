@@ -5,7 +5,7 @@ from pathlib import Path
 import unittest
 from unittest.mock import patch
 
-from release_notes import publish, validate_receipt
+from release_notes import prepare, publish, validate_receipt
 
 
 class ReleaseReceiptTest(unittest.TestCase):
@@ -41,6 +41,25 @@ class ReleaseReceiptTest(unittest.TestCase):
         self.assertIn("android-101.aab", notes[0])
         self.assertIn("ios-103.ipa", notes[0])
         self.assertNotIn("old hashes", notes[0])
+
+    def test_testing_channels_are_drafted_as_prereleases(self):
+        created = {}
+
+        def gh(*args):
+            if args[0] == "api":
+                return json.dumps([[{"tag_name": "v1.2.2"}]])
+            if args[:2] == ("release", "create"):
+                created[args[2]] = args
+                return ""
+            self.fail(f"Unexpected GitHub operation: {args}")
+
+        with patch.dict(os.environ, {"GITHUB_REPOSITORY": "o/r"}), patch("release_notes.gh", gh):
+            for tag in ("v1.2.3-beta.1", "v1.2.3-rc.1", "v1.2.3"):
+                prepare(tag)
+        self.assertIn("--prerelease", created["v1.2.3-beta.1"])
+        self.assertIn("--prerelease", created["v1.2.3-rc.1"])
+        self.assertNotIn("--prerelease", created["v1.2.3"])
+        self.assertTrue(all("--draft" in args for args in created.values()))
 
 
 if __name__ == "__main__":

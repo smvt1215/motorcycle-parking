@@ -8,6 +8,23 @@ module ReleasePolicy
     DEVELOPER_REMOVED_FROM_SALE REMOVED_FROM_SALE
   ].freeze
 
+  # Google Play API track names: closed testing is "alpha", open testing "beta".
+  PLAY_TRACKS = {"beta" => "alpha", "rc" => "beta"}.freeze
+
+  # External TestFlight states in which the build already reached (or is
+  # waiting on review for) the public group; a rerun must not submit again.
+  EXTERNAL_DISTRIBUTED_STATES = %w[
+    WAITING_FOR_BETA_REVIEW IN_BETA_REVIEW BETA_APPROVED IN_BETA_TESTING
+  ].freeze
+
+  def self.play_track(channel)
+    PLAY_TRACKS.fetch(channel) { raise ArgumentError, "No Play testing track for #{channel}" }
+  end
+
+  def self.testflight_distributed?(state)
+    EXTERNAL_DISTRIBUTED_STATES.include?(state)
+  end
+
   def self.range(base)
     ((base + 1)..(base + 9))
   end

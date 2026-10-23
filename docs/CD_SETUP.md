@@ -39,7 +39,7 @@ APP 識別碼：
 | Android applicationId | `tw.motopark.motorcycle_parking` | `tw.motopark.motorcycle_parking.staging` |
 | iOS bundle ID | `tw.motopark.motorcycleParking` | `tw.motopark.motorcycleParking.staging` |
 | OAuth callback | `tw.motopark.motorcycleparking://login-callback` | `tw.motopark.motorcycleparking.staging://login-callback` |
-| 手機 APP 名稱 | 機車停車指南 | 機車停車指南 β |
+| 手機 APP 名稱 | 機車停車指南 | 機車停車指南 α |
 
 在各自 Supabase Auth 的 Redirect URLs 加入對應的 callback。兩個 APP 的 callback 分開，避免同時安裝時登入回到另一環境。production 的 Google Maps Android 限制使用 **Google Play App Signing 發布憑證**指紋；直接測試已簽署的 AAB／APK 時另加入 upload key 指紋。staging 使用 staging keystore 指紋。
 
@@ -79,6 +79,7 @@ Android 的安裝檔送到 Firebase 的 `staging-android` 群組，也保留在�
 | Secret | `APP_STORE_ISSUER_ID` | API key issuer ID |
 | Secret | `APP_STORE_KEY_BASE64` | `.p8` 私鑰的 base64 單行編碼 |
 | Variable | `APP_STORE_APP_ID` | 本 APP 在 App Store Connect 的數字 Apple ID |
+| Variable | `TESTFLIGHT_GROUP` | TestFlight 外部測試群組名稱（beta／RC 發給此群組） |
 | Variable | `APP_STORE_COPYRIGHT` | 正式商店使用的 copyright 文字 |
 | Variable | `APP_STORE_SUPPORT_URL` | 已公開且可用的支援頁網址 |
 | Variable | `APP_STORE_PRIVACY_URL` | 已公開且可用的隱私權政策網址 |
@@ -86,20 +87,23 @@ Android 的安裝檔送到 Firebase 的 `staging-android` 群組，也保留在�
 
 先在兩個商店建立 APP。Google Play 啟用 App Signing、完成權限與商店資訊，並依商店要求手動上傳第一個建置。App Store Connect 完成 App Privacy、分級、審查聯絡與登入測試資料、出口合規，以及首次版本的必要截圖。API key 使用有上傳及送審權限的角色。
 
+**TestFlight（beta／RC）**：在 App Store Connect 的 TestFlight 建立外部測試群組（名稱填入 `TESTFLIGHT_GROUP`），開啟公開連結並設定人數上限；填好「測試資訊」（Beta App 說明、意見回饋 email、Beta App Review 聯絡資訊與登入測試資料）。每個版本的第一個外部建置會送 Beta App Review，通過後同版本的後續建置通常不必再審。`Info.plist` 已宣告 `ITSAppUsesNonExemptEncryption = false`（只使用系統 HTTPS），建置不會停在出口合規。
+
+**Google Play 測試軌道（beta／RC）**：在 Play Console 啟用封閉測試（預設軌道，API 名稱 `alpha`）與開放測試（API 名稱 `beta`），設定測試者名單或開放人數，並完成各軌道要求的商店資訊。beta 上傳到封閉測試、RC 上傳到開放測試，狀態為 `completed`；正式版把 RC 的版本碼推進 production 10%。
+
 繁體中文文字在 `fastlane/metadata/ios/zh-Hant/`，發版前一起審核與更新。若要由 repo 更新截圖，放在該語系的 `screenshots/` 子資料夾；資料夾沒有截圖時保留 App Store Connect 已設定的截圖。Android workflow 保留 Play Console 的商店文字與截圖，僅發布建置。
 
-## 正式發版與重跑
+## beta／RC／正式發版與重跑
 
-1. 在 PR 將 `pubspec.yaml` 升到正式版本，完成 CI 並合併。
-2. 等同一 SHA 的 staging 後端實際成功，並完成測試。發版期間暫停合併其他 PR。
-3. 在 main 最新 commit 推送 `vX.Y.Z` tag，版本必須與 pubspec 名稱部分相同。
-4. workflow 檢查版本、完整 Git 歷史、三個 CI 彙總 job、staging 的實際部署步驟及 production 核准設定。staging／CI 還在跑時最多等待 60 分鐘。
-5. 核准 production 部署，核准後再次檢查最新 main。後端先部署，再執行 Android 與 iOS 商店工作。
-6. Android 以 10% production rollout 發布；iOS 上傳後獨立送審並啟用七天 phased release。兩平台成功後公開 GitHub Release。
+1. 在 PR 將 `pubspec.yaml` 升到要發的版本，完成 CI 並合併。
+2. 等同一 SHA 的 staging 後端實際成功（alpha 已發給內部成員），完成內部測試。
+3. **beta／RC**：在 main 最新 commit 推送 `vX.Y.Z-beta.N` 或 `vX.Y.Z-rc.N`，版本必須與 pubspec 名稱部分相同。workflow 檢查版本、完整 Git 歷史、三個 CI 彙總 job、staging 的實際部署步驟及 production 核准設定，staging／CI 還在跑時最多等待 60 分鐘。從打 tag 到 workflow 成功結束暫停合併其他 PR。
+4. 核准 production 部署，核准後再次檢查最新 main。後端先部署，再上傳 TestFlight（外部公開群組）與 Play 測試軌道，最後公開 GitHub prerelease。
+5. **正式版**：最後一個 RC 驗證完成後，在**該 RC 的 commit** 推送 `vX.Y.Z`。不重新建置也不重新部署後端；核准後 iOS 將 RC 建置送審並啟用七天 phased release，Android 將同一版本碼以 10% production rollout 推出，兩平台成功後公開 GitHub Release。
 
 建置號為 `commit 數 × 10 + run_attempt`，attempt 只能為 1–9，完整整數不能超過 9999。超出限制要先修改號碼規則與查詢範圍，不讓 CD 默默重用號碼。
 
-Android 查詢所有軌道（含自訂軌道），同一 commit 的 9 個號碼已在 production 且狀態是 `inProgress`／`completed` 時略過上傳；人工暫停的 `halted` 也保留原暫停。production 的 `draft` 不算已發佈，會將既有建置推進 10% rollout；其他軌道的既有版本亦推進 production，沒有既有版本才建置與上傳。iOS 只查本 APP、本版本與同一 commit 的範圍，等待 PROCESSING 最多 60 分鐘，只重用 VALID；FAILED／INVALID 改用重跑的新號碼。上傳成功但送審失敗時，重跑仍會補送審；已等待審查或後續狀態則保留原送審建置。
+Android 查詢所有軌道（含自訂軌道），同一 commit 的 9 個號碼已在 production 且狀態是 `inProgress`／`completed` 時略過上傳；人工暫停的 `halted` 也保留原暫停。production 的 `draft` 不算已發佈，會將既有建置推進 10% rollout；其他軌道的既有版本亦推進 production；正式版找不到 RC 的既有版本就失敗，不建置。beta／RC 若同一 commit 已有版本（例如在其他測試軌道），推進到目標軌道，沒有才建置與上傳。iOS 只查本 APP、本版本與同一 commit 的範圍，等待 PROCESSING 最多 60 分鐘，只重用 VALID；FAILED／INVALID 改用重跑的新號碼。beta／RC 已在外部群組（等待 Beta 審查或之後的狀態）就不再重送；正式版找不到 VALID 的 RC 建置就失敗。上傳成功但送審失敗時，重跑仍會補送審；已等待審查或後續狀態則保留原送審建置。
 
 上傳前先把原始 AAB／IPA 的 SHA-256 存成 draft Release 的文字資產，因此上傳成功後 runner 中斷仍能恢復原雜湊。重跑會把實際商店建置的紀錄加入 Release 說明，不以重新簽署的不同檔案冒充。若手動上傳的建置恰好在本 commit 範圍內，需先將其原始雜湊紀錄補入 draft Release（檔名 `sha256-android-建置號.txt` 或 `sha256-ios-建置號.txt`；內容格式為 SHA-256、兩個空格、`android-建置號.aab` 或 `ios-建置號.ipa`）。
 

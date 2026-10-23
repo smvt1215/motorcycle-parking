@@ -26,7 +26,10 @@ def prepare(tag):
     releases = json.loads(gh("api", "--paginate", "--slurp", f"repos/{repo}/releases?per_page=100"))
     if any(release["tag_name"] == tag for page in releases for release in page):
         return
-    gh("release", "create", tag, "--draft", "--verify-tag", "--generate-notes", "--title", tag)
+    # TestFlight and Play testing builds are prereleases; only vX.Y.Z is the
+    # store release GitHub marks as latest.
+    channel = ["--prerelease"] if "-" in tag else []
+    gh("release", "create", tag, "--draft", "--verify-tag", "--generate-notes", "--title", tag, *channel)
 
 
 def publish(tag):
@@ -55,8 +58,8 @@ if __name__ == "__main__":
     parser.add_argument("mode", choices=["prepare", "publish"])
     parser.add_argument("tag")
     args = parser.parse_args()
-    if not re.fullmatch(r"v\d+\.\d+\.\d+", args.tag):
-        raise SystemExit("Expected a stable version tag")
+    if not re.fullmatch(r"v\d+\.\d+\.\d+(-(beta|rc)\.[1-9]\d*)?", args.tag):
+        raise SystemExit("Expected a vX.Y.Z, vX.Y.Z-beta.N or vX.Y.Z-rc.N tag")
     try:
         prepare(args.tag) if args.mode == "prepare" else publish(args.tag)
     except (ValueError, OSError, subprocess.CalledProcessError) as error:

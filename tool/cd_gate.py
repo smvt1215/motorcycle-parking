@@ -106,13 +106,46 @@ def output(key, value):
         stream.write(f"{key}={value}\n")
 
 
+RELEASE_TAG = re.compile(r"v((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))(?:-(beta|rc)\.([1-9]\d*))?")
+
+
+def release_tag(tag):
+    """Split vX.Y.Z, vX.Y.Z-beta.N or vX.Y.Z-rc.N into (version, channel, N)."""
+    match = RELEASE_TAG.fullmatch(tag)
+    if not match:
+        raise ValueError("Release tag must be vX.Y.Z, vX.Y.Z-beta.N or vX.Y.Z-rc.N")
+    version, channel, sequence = match.groups()
+    return version, channel or "release", int(sequence or 0)
+
+
 def release_version(tag, text):
-    if not re.fullmatch(r"v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)", tag):
-        raise ValueError("Release tag must be vX.Y.Z")
+    version = release_tag(tag)[0]
     match = re.search(r"^version:\s*(\S+)", text, re.M)
-    if not match or match[1].split("+")[0] != tag[1:]:
+    if not match or match[1].split("+")[0] != version:
         raise ValueError("Release tag must match pubspec.yaml version")
-    return tag[1:]
+    return version
+
+
+def promoted_candidate(version, tags, at_head):
+    """A store release promotes the newest RC's build, never a new binary,
+    so vX.Y.Z must sit on the commit of that version's latest RC tag."""
+    candidates = []
+    for tag in tags:
+        match = RELEASE_TAG.fullmatch(tag)
+        if match and match[1] == version and match[2] == "rc":
+            candidates.append((int(match[3]), tag))
+    if not candidates:
+        raise ValueError(f"v{version} needs an RC first; push v{version}-rc.1 and test it")
+    latest = max(candidates)[1]
+    if latest not in at_head:
+        raise ValueError(f"v{version} must be tagged on the latest RC commit ({latest})")
+    return latest
+
+
+def hash_sources(tag, at_head):
+    """Other release tags on this commit, whose releases may already hold the
+    SHA-256 receipt of a store build this run reuses."""
+    return sorted(other for other in at_head if other != tag and RELEASE_TAG.fullmatch(other))
 
 
 def build_number(count, attempt):
@@ -140,14 +173,27 @@ def main():
                 or run["head_repository"]["full_name"] != api.repo or run["head_sha"] != args.sha):
             raise ValueError("Staging requires a trusted main push workflow")
     if args.mode == "release":
-        version = release_version(os.environ["GITHUB_REF_NAME"], Path("pubspec.yaml").read_text())
+        tag = os.environ["GITHUB_REF_NAME"]
+        version = release_version(tag, Path("pubspec.yaml").read_text())
+        channel = release_tag(tag)[1]
         if subprocess.check_output(["git", "rev-parse", "--is-shallow-repository"], text=True).strip() != "false":
             raise ValueError("Full Git history is required for build numbering")
         count = int(subprocess.check_output(["git", "rev-list", "--count", "HEAD"], text=True))
         number = build_number(count, int(os.environ["GITHUB_RUN_ATTEMPT"]))
         if not api.production_protected():
             raise ValueError("Configure required reviewers on the production Environment before release")
-        release_outputs = {"version": version, "build_number": number, "build_base": count * 10}
+        at_head = subprocess.check_output(["git", "tag", "--points-at", "HEAD"], text=True).split()
+        release_outputs = {"version": version, "channel": channel, "build_number": number,
+                           "build_base": count * 10, "hash_sources": " ".join(hash_sources(tag, at_head))}
+        if channel == "release":
+            # The RC already passed the main, CI and staging checks; main may
+            # have moved on since, and no new binary is built.
+            tags = subprocess.check_output(["git", "tag", "--list", "v*"], text=True).split()
+            print(f"Promoting {promoted_candidate(version, tags, at_head)}")
+            output("deploy", "true")
+            for key, value in release_outputs.items():
+                output(key, value)
+            return
     while True:
         current = api.latest_main(args.sha)
         if not current:
