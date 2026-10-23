@@ -2,66 +2,88 @@ import '../../domain/eligibility.dart';
 import '../../models/parking.dart';
 import '../../ui/adaptive/adaptive.dart';
 
-const pendingColor = Color(0xff59646c);
+const unverifiedColor = Color(0xff59646c);
 
-/// Shared by the Flutter and Google map markers so the legend matches both.
-Color spotMarkerColor(EligibilityStatus status, {bool pending = false}) =>
-    pending
-    ? pendingColor
-    : switch (status) {
-        EligibilityStatus.allowed => allowedColor,
-        EligibilityStatus.conditional => conditionalColor,
-        EligibilityStatus.notAllowed => deniedColor,
-      };
+/// What a marker shows: its status and, for a conditional spot, the kind of
+/// limit. Shared by the Flutter and Google maps so the legend matches both.
+typedef MarkerLook = (EligibilityStatus, RuleRestriction?);
 
-IconData spotMarkerIcon(EligibilityStatus status) => switch (status) {
-  EligibilityStatus.allowed => Icons.local_parking,
-  EligibilityStatus.conditional => Icons.priority_high,
-  EligibilityStatus.notAllowed => Icons.close,
+MarkerLook markerLook(Eligibility e) => (
+  e.status,
+  e.status == EligibilityStatus.conditional ? e.restriction : null,
+);
+
+Color spotMarkerColor(EligibilityStatus status) => switch (status) {
+  EligibilityStatus.allowed => allowedColor,
+  EligibilityStatus.conditional => conditionalColor,
+  EligibilityStatus.unverified => unverifiedColor,
+  EligibilityStatus.notAllowed => deniedColor,
 };
+
+IconData spotMarkerIcon(MarkerLook look) => switch (look) {
+  (EligibilityStatus.allowed, _) => Icons.local_parking,
+  (EligibilityStatus.conditional, RuleRestriction.pilotArea) => Icons.alt_route,
+  (EligibilityStatus.conditional, RuleRestriction.signage) => Icons.signpost,
+  (EligibilityStatus.conditional, _) => Icons.rule,
+  (EligibilityStatus.unverified, _) => Icons.question_mark,
+  (EligibilityStatus.notAllowed, _) => Icons.close,
+};
+
+/// Corner radius per 38dp marker: the shape repeats the meaning so the map
+/// does not rely on colour alone.
+double spotMarkerRadius(EligibilityStatus status) => switch (status) {
+  EligibilityStatus.allowed => 19,
+  EligibilityStatus.conditional => 10,
+  EligibilityStatus.unverified => 10,
+  EligibilityStatus.notAllowed => 4,
+};
+
+/// Ring and scale that mark the spot whose details are open.
+const selectedRingColor = Color(0xff1a73e8);
+const selectedScale = 1.35;
 
 class SpotMarker extends StatelessWidget {
   const SpotMarker({
     super.key,
-    required this.status,
-    required this.pending,
+    required this.look,
     this.size = 38,
+    this.selected = false,
   });
-  final EligibilityStatus status;
-  final bool pending;
+  final MarkerLook look;
   final double size;
+  final bool selected;
   @override
-  Widget build(BuildContext context) => Center(
-    child: Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: spotMarkerColor(status, pending: pending),
-        border: Border.all(color: Colors.white, width: size * 3 / 38),
-        borderRadius: BorderRadius.circular(
-          size *
-              switch (status) {
-                EligibilityStatus.allowed => 20,
-                EligibilityStatus.conditional => 10,
-                EligibilityStatus.notAllowed => 4,
-              } /
-              38,
-        ),
-        boxShadow: const [
-          BoxShadow(
-            blurRadius: 6,
-            color: Color(0x44000000),
-            offset: Offset(0, 2),
+  Widget build(BuildContext context) {
+    final size = selected ? this.size * selectedScale : this.size;
+    return Center(
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: spotMarkerColor(look.$1),
+          border: Border.all(
+            color: selected ? selectedRingColor : Colors.white,
+            width: size * (selected ? 4 : 3) / 38,
           ),
-        ],
+          borderRadius: BorderRadius.circular(
+            size * spotMarkerRadius(look.$1) / 38,
+          ),
+          boxShadow: const [
+            BoxShadow(
+              blurRadius: 6,
+              color: Color(0x44000000),
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Icon(
+          spotMarkerIcon(look),
+          color: Colors.white,
+          size: size * 22 / 38,
+        ),
       ),
-      child: Icon(
-        spotMarkerIcon(status),
-        color: Colors.white,
-        size: size * 22 / 38,
-      ),
-    ),
-  );
+    );
+  }
 }
 
 /// Marker meanings for the selected vehicle; shape repeats the colour so the
@@ -71,21 +93,38 @@ class MapLegend extends StatelessWidget {
   final VehicleType vehicle;
   @override
   Widget build(BuildContext context) {
-    final entries = [
+    final entries = <(MarkerLook, String, String)>[
       (
-        EligibilityStatus.allowed,
-        false,
-        '圓形・可停',
-        '依法規或場站資料，${vehicle.label}可停放',
+        (EligibilityStatus.allowed, null),
+        '可停',
+        '法規或已查核資料確認${vehicle.label}可停放',
       ),
-      (EligibilityStatus.conditional, false, '圓角方形・有條件', '限時段、區域或需確認現場公告'),
-      (EligibilityStatus.notAllowed, false, '方形・不可停', '${vehicle.label}不可停放'),
-      (EligibilityStatus.conditional, true, '灰色・待確認', '社群回報尚未查核，形狀仍代表可停程度'),
+      (
+        (EligibilityStatus.conditional, RuleRestriction.pilotArea),
+        '有條件・限試辦路段',
+        '僅公告的試辦行政區或路段開放，範圍外不可停',
+      ),
+      (
+        (EligibilityStatus.conditional, RuleRestriction.signage),
+        '有條件・限標示車格',
+        '僅地面或標牌標示開放${vehicle.label}的車格可停',
+      ),
+      ((EligibilityStatus.conditional, null), '有條件・其他限制', '法規開放但另有限制，詳見停車點說明'),
+      (
+        (EligibilityStatus.unverified, null),
+        '待確認',
+        '資料不足以判斷：社群回報未查核或過時、場站未標示、尚無生效規則',
+      ),
+      (
+        (EligibilityStatus.notAllowed, null),
+        '不可停',
+        '法規或已查核資料不開放${vehicle.label}停放',
+      ),
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (final (status, pending, title, detail) in entries)
+        for (final (look, title, detail) in entries)
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: Row(
@@ -93,7 +132,7 @@ class MapLegend extends StatelessWidget {
                 ExcludeSemantics(
                   child: SizedBox.square(
                     dimension: 44,
-                    child: SpotMarker(status: status, pending: pending),
+                    child: SpotMarker(look: look),
                   ),
                 ),
                 const SizedBox(width: 12),

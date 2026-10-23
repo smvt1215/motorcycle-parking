@@ -108,7 +108,8 @@
     "source_url": "https://www.traffic.ntpc.gov.tw/home.jsp?act=be4f48068b2b0031&dataserno=99345bcf365b8f6ed7a6315705335638&id=54fa46e9e522dde4&mserno=39e5192ff77897e0ae099c1886ca9b09",
     "version": 1,
     "can_use_two_spaces": false,
-    "districts": []
+    "districts": [],
+    "restriction": "pilot_area"
   },
   {
     "city": "桃園市",
@@ -146,7 +147,8 @@
     "source_url": "https://www.tycg.gov.tw/NewsPage_Content.aspx?n=7&s=1612945&sms=7882",
     "version": 1,
     "can_use_two_spaces": false,
-    "districts": []
+    "districts": [],
+    "restriction": "pilot_area"
   },
   {
     "city": "臺中市",
@@ -183,7 +185,8 @@
     "source_url": "https://tcparking.taichung.gov.tw/ParkWebStage/Pages/PublicService/Heavybike",
     "version": 1,
     "can_use_two_spaces": false,
-    "districts": []
+    "districts": [],
+    "restriction": "signage"
   },
   {
     "city": "高雄市",
@@ -221,6 +224,7 @@
     "source_url": "https://www.tbkc.gov.tw/Service/ParkingAndTowing",
     "version": 1,
     "can_use_two_spaces": false,
-    "districts": []
+    "districts": [],
+    "restriction": "unverified"
   }
 ]

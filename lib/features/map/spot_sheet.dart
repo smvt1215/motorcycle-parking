@@ -8,36 +8,52 @@ import '../report/report_sheet.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
+import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../report/spot_suggestions.dart';
+import 'map_legend.dart';
 import 'spot_details.dart';
 import 'spot_photos.dart';
 
 /// Peek height: header, eligibility and actions, with the map left visible
 /// above, the way map apps open a place.
-const _peek = .42;
+/// The sheet's resting height, as a fraction of the space it opens in.
+const spotSheetPeek = .42;
 
 String _distanceLabel(double meters) => meters < 1000
     ? '${(meters / 10).round() * 10} 公尺'
     : '${(meters / 1000).toStringAsFixed(1)} 公里';
 
+/// Opens a spot's details over another page. The map embeds [SpotSheet]
+/// instead, so it stays movable and other spots stay tappable.
 Future<void> showSpot(BuildContext context, AppStore store, ParkingSpot spot) =>
     showAdaptiveSheet<void>(
       context,
-      (ctx) => _SpotSheet(store: store, spot: spot),
+      (ctx) => SpotSheet(store: store, spot: spot),
       detail: true,
     );
 
-class _SpotSheet extends StatefulWidget {
-  const _SpotSheet({required this.store, required this.spot});
+class SpotSheet extends StatefulWidget {
+  const SpotSheet({
+    super.key,
+    required this.store,
+    required this.spot,
+    this.onClose,
+  });
   final AppStore store;
   final ParkingSpot spot;
+
+  /// Closes an embedded sheet; a modal sheet pops its route by default.
+  final VoidCallback? onClose;
   @override
-  State<_SpotSheet> createState() => _SpotSheetState();
+  State<SpotSheet> createState() => _SpotSheetState();
 }
 
-class _SpotSheetState extends State<_SpotSheet> {
+class _SpotSheetState extends State<SpotSheet> {
+  void close(BuildContext context) =>
+      (widget.onClose ?? () => Navigator.pop(context))();
+
   final extent = DraggableScrollableController();
   Offset? start;
   bool dismissGesture = false;
@@ -82,7 +98,11 @@ class _SpotSheetState extends State<_SpotSheet> {
       alignment: Alignment.bottomCenter,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 640),
-        child: _sheet(context, store, spot, sourceUri, colors, photos),
+        // Over a Google map on the web, the sheet must take its own clicks.
+        child: PointerInterceptor(
+          intercepting: kIsWeb,
+          child: _sheet(context, store, spot, sourceUri, colors, photos),
+        ),
       ),
     );
   }
@@ -98,8 +118,8 @@ class _SpotSheetState extends State<_SpotSheet> {
     return DraggableScrollableSheet(
       key: const ValueKey('parking-spot-sheet'),
       controller: extent,
-      initialChildSize: _peek,
-      minChildSize: _peek,
+      initialChildSize: spotSheetPeek,
+      minChildSize: spotSheetPeek,
       maxChildSize: 1,
       snap: true,
       shouldCloseOnMinExtent: false,
@@ -109,7 +129,7 @@ class _SpotSheetState extends State<_SpotSheet> {
           start = event.position;
           dismissGesture =
               extent.isAttached &&
-              extent.size <= _peek + .001 &&
+              extent.size <= spotSheetPeek + .001 &&
               scroll.hasClients &&
               scroll.offset <= 0;
         },
@@ -118,7 +138,7 @@ class _SpotSheetState extends State<_SpotSheet> {
           final delta = event.position - start!;
           if (delta.dy > 80 && delta.dy > delta.dx.abs() * 1.2) {
             closing = true;
-            Navigator.pop(ctx);
+            close(ctx);
           }
         },
         onPointerUp: (_) {
@@ -137,23 +157,25 @@ class _SpotSheetState extends State<_SpotSheet> {
             animation: store,
             builder: (ctx, _) {
               final eligibility = store.eligible(spot);
+              // The same icon as the marker, so the limit kind reads alike.
+              final statusIcon = spotMarkerIcon(markerLook(eligibility));
               final (
-                statusIcon,
                 statusBackground,
                 statusForeground,
               ) = switch (eligibility.status) {
                 EligibilityStatus.allowed => (
-                  Icons.check_circle_outline,
                   colors.primaryContainer,
                   colors.onPrimaryContainer,
                 ),
                 EligibilityStatus.conditional => (
-                  Icons.info_outline,
                   colors.secondaryContainer,
                   colors.onSecondaryContainer,
                 ),
+                EligibilityStatus.unverified => (
+                  colors.surfaceContainerHighest,
+                  colors.onSurfaceVariant,
+                ),
                 EligibilityStatus.notAllowed => (
-                  Icons.block,
                   colors.errorContainer,
                   colors.onErrorContainer,
                 ),
@@ -208,7 +230,7 @@ class _SpotSheetState extends State<_SpotSheet> {
                       ),
                       IconButton.filledTonal(
                         tooltip: '關閉詳情',
-                        onPressed: () => Navigator.pop(ctx),
+                        onPressed: () => close(ctx),
                         icon: const Icon(Icons.close),
                       ),
                     ],

@@ -2,6 +2,28 @@ enum VehicleType { scooter, heavy }
 
 enum SpaceType { paidMotorcycle, freeMotorcycle, heavyOnly, car, offStreet }
 
+/// How a rule limits its conditional space types; the map picks the marker
+/// icon from it.
+/// - [pilotArea]: only announced pilot districts or road sections.
+/// - [signage]: only spaces marked for the vehicle on site.
+/// - [unverified]: the rule itself is not verified yet, so nothing it opens
+///   counts as parkable.
+enum RuleRestriction {
+  pilotArea('pilot_area'),
+  signage('signage'),
+  unverified('unverified');
+
+  const RuleRestriction(this.key);
+  final String key;
+  String get label => switch (this) {
+    pilotArea => '限試辦路段',
+    signage => '限標示車格',
+    unverified => '規則未核實',
+  };
+  static RuleRestriction? parse(Object? value) =>
+      values.where((r) => r.key == value).firstOrNull;
+}
+
 enum TrustStatus { pending, confirmed, hidden }
 
 enum FacilityType { multiStorey, underground, surface, roadside }
@@ -230,6 +252,7 @@ class CityRule {
     this.canUseTwoSpaces = false,
     this.conditionalSpaceTypes = const [],
     this.districts = const [],
+    this.restriction,
   });
   final String city, feeNote, exceptions, sourceUrl;
   final VehicleType vehicle;
@@ -238,6 +261,7 @@ class CityRule {
   final int version;
   final DateTime effectiveDate;
   final bool canUseTwoSpaces;
+  final RuleRestriction? restriction;
   factory CityRule.fromJson(Map<String, dynamic> j) => CityRule(
     city: j['city'] as String,
     vehicle: VehicleType.values.byName(j['vehicle'] as String),
@@ -255,6 +279,7 @@ class CityRule {
     version: j['version'] as int,
     effectiveDate: DateTime.parse(j['effective_date'] as String),
     canUseTwoSpaces: j['can_use_two_spaces'] as bool? ?? false,
+    restriction: RuleRestriction.parse(j['restriction']),
   );
 }
 

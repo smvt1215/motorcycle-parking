@@ -61,7 +61,7 @@ void main() {
     ]) {
       expect(
         eligibility(claim, VehicleType.heavy, heavy).status,
-        EligibilityStatus.conditional,
+        EligibilityStatus.unverified,
       );
     }
     expect(
@@ -81,20 +81,32 @@ void main() {
         rule('臺北市', VehicleType.heavy),
         now: DateTime(2026, 10, 5),
       ).status,
-      EligibilityStatus.conditional,
+      EligibilityStatus.unverified,
     );
   });
-  test('新北與台中試辦範圍不能擴大為全市開放', () {
-    for (final city in ['新北市', '桃園市', '臺中市', '高雄市']) {
-      expect(
-        eligibility(
-          spot(SpaceType.paidMotorcycle, city: city),
-          VehicleType.heavy,
-          rule(city, VehicleType.heavy),
-        ).status,
-        EligibilityStatus.conditional,
+  test('新北與台中試辦範圍不能擴大為全市開放，並標出限制類型', () {
+    for (final (city, restriction) in [
+      ('新北市', RuleRestriction.pilotArea),
+      ('桃園市', RuleRestriction.pilotArea),
+      ('臺中市', RuleRestriction.signage),
+    ]) {
+      final result = eligibility(
+        spot(SpaceType.paidMotorcycle, city: city),
+        VehicleType.heavy,
+        rule(city, VehicleType.heavy),
       );
+      expect(result.status, EligibilityStatus.conditional, reason: city);
+      expect(result.restriction, restriction, reason: city);
     }
+    // Kaohsiung's rule is not verified yet: nothing it opens is certain.
+    expect(
+      eligibility(
+        spot(SpaceType.paidMotorcycle, city: '高雄市'),
+        VehicleType.heavy,
+        rule('高雄市', VehicleType.heavy),
+      ).status,
+      EligibilityStatus.unverified,
+    );
   });
   test('路外未知重機資格與普通機車專用限制', () {
     expect(
@@ -103,7 +115,7 @@ void main() {
         VehicleType.heavy,
         rule('臺北市', VehicleType.heavy),
       ).status,
-      EligibilityStatus.conditional,
+      EligibilityStatus.unverified,
     );
     expect(
       eligibility(
@@ -129,7 +141,7 @@ void main() {
         VehicleType.heavy,
         rule('臺北市', VehicleType.heavy),
       ).status,
-      EligibilityStatus.conditional,
+      EligibilityStatus.unverified,
     );
     expect(
       eligibility(
@@ -137,7 +149,55 @@ void main() {
         VehicleType.heavy,
         rule('臺北市', VehicleType.heavy),
       ).status,
-      EligibilityStatus.conditional,
+      EligibilityStatus.unverified,
+    );
+  });
+  test('有條件只用於法規已知的限制；資料不足一律待確認', () {
+    final heavy = rule('新北市', VehicleType.heavy);
+    final pilot = eligibility(
+      spot(SpaceType.paidMotorcycle, city: '新北市'),
+      VehicleType.heavy,
+      heavy,
+    );
+    expect(pilot.status, EligibilityStatus.conditional);
+    expect(pilot.reason, heavy.exceptions);
+    // An unchecked report inside a pilot city is still unverified.
+    expect(
+      eligibility(
+        spot(
+          SpaceType.paidMotorcycle,
+          city: '新北市',
+          status: TrustStatus.pending,
+        ),
+        VehicleType.heavy,
+        heavy,
+      ).status,
+      EligibilityStatus.unverified,
+    );
+    // Law closes the space even to unchecked reports.
+    expect(
+      eligibility(
+        spot(SpaceType.freeMotorcycle, status: TrustStatus.pending),
+        VehicleType.heavy,
+        rule('臺北市', VehicleType.heavy),
+      ).status,
+      EligibilityStatus.notAllowed,
+    );
+    expect(
+      eligibility(
+        spot(SpaceType.car),
+        VehicleType.scooter,
+        rule('臺北市', VehicleType.scooter),
+      ).status,
+      EligibilityStatus.unverified,
+    );
+    expect(
+      eligibility(
+        spot(SpaceType.paidMotorcycle),
+        VehicleType.scooter,
+        null,
+      ).status,
+      EligibilityStatus.unverified,
     );
   });
   test('六地區 × 兩車種規則可解析且具官方來源', () {

@@ -34,6 +34,22 @@ class _MapPageState extends ConsumerState<MapPage> {
   bool hideDenied = false;
   bool searchResultsSuppressed = false;
 
+  /// The spot whose details are open over the map. The sheet is part of this
+  /// page, not a route, so the map stays movable and other spots tappable.
+  ParkingSpot? selected;
+
+  /// The spot sheet sits on the root overlay, over the tab bar as in map
+  /// apps, while the rest of the map still takes gestures.
+  final sheetPortal = OverlayPortalController()..show();
+
+  /// Screen height below the status bar, which the spot sheet's extents are
+  /// fractions of.
+  double sheetSpace = 0;
+
+  /// Screen space below this page (the Android navigation bar); the iOS map
+  /// already extends behind its floating tab bar.
+  double mapBottomGap = 0;
+
   /// Kept for dispose, where `ref` can no longer be read.
   late final launchStore = ref.read(storeProvider);
   SpaceType? type;
@@ -72,6 +88,8 @@ class _MapPageState extends ConsumerState<MapPage> {
   @override
   void didUpdateWidget(MapPage old) {
     super.didUpdateWidget(old);
+    // Another tab covers the map: its details close with it.
+    if (!widget.showControls) selected = null;
     if (!widget.showControls || old.showControls) return;
     // Launched into another tab: greet once the map is first shown.
     _afterLaunch();
@@ -150,14 +168,33 @@ class _MapPageState extends ConsumerState<MapPage> {
     );
   }
 
+  /// From search: zooms in on the spot as well.
   void _selectSpot(AppStore store, ParkingSpot spot) {
     searchResultsSuppressed = true;
     searchController.text = spot.name;
     searchFocus.unfocus();
-    unawaited(
-      runAction(context, () => _moveCamera(LatLng(spot.lat, spot.lng), 17)),
-    );
-    showSpot(context, store, spot);
+    _showSpot(spot, zoom: 17);
+  }
+
+  /// Opens [spot]'s details, or switches to it from another spot, and
+  /// centers it above the sheet.
+  void _showSpot(ParkingSpot spot, {double? zoom}) {
+    setState(() => selected = spot);
+    // After the frame: the Google map centers above the sheet once its new
+    // bottom padding applies.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(
+        runAction(
+          context,
+          () => _moveCamera(LatLng(spot.lat, spot.lng), zoom, above: true),
+        ),
+      );
+    });
+  }
+
+  void _closeSpot() {
+    if (selected != null) setState(() => selected = null);
   }
 
   void _submitSearch(AppStore store, List<ParkingSpot> matches) {
@@ -196,12 +233,37 @@ class _MapPageState extends ConsumerState<MapPage> {
     );
   }
 
-  Future<void> _moveCamera(LatLng point, double zoom) async {
+  /// Keeps the current zoom when [zoom] is null. With [above], the point
+  /// lands centered over the open spot sheet rather than behind it.
+  Future<void> _moveCamera(
+    LatLng point,
+    double? zoom, {
+    bool above = false,
+  }) async {
     if (AppConfig.useGoogleMaps) {
+      // The Google map centers within its padding, which clears the sheet.
       await googleMap.currentState?.moveTo(point, zoom);
     } else {
-      controller.move(point, zoom);
+      controller.move(
+        point,
+        zoom ?? controller.camera.zoom,
+        offset: Offset(0, above ? -_sheetInset / 2 : 0),
+      );
     }
+  }
+
+  /// How far the resting sheet reaches up from the map's bottom edge.
+  double get _sheetInset => selected == null
+      ? 0
+      : (sheetSpace * spotSheetPeek - mapBottomGap).clamp(0, double.infinity);
+
+  void _measureMap() {
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+    final gap =
+        MediaQuery.sizeOf(context).height -
+        box.localToGlobal(Offset(0, box.size.height)).dy;
+    if ((gap - mapBottomGap).abs() > .5) setState(() => mapBottomGap = gap);
   }
 
   Widget _interceptOverlay(Widget overlay) {
@@ -246,10 +308,6 @@ class _MapPageState extends ConsumerState<MapPage> {
               Navigator.pop(ctx);
             },
           ),
-          const Divider(height: 32),
-          MapLegend(vehicle: store.vehicle),
-          const SizedBox(height: 4),
-          const Text('社群資訊可能有延遲，停車前請確認現場標示。'),
         ],
       ),
     );
@@ -290,6 +348,72 @@ class _MapPageState extends ConsumerState<MapPage> {
     final searchHeight = 32 + MediaQuery.textScalerOf(context).scale(20);
     final filterHeight = (16 + MediaQuery.textScalerOf(context).scale(15))
         .clamp(40.0, double.infinity);
+    final open = widget.showControls ? selected : null;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        sheetSpace =
+            MediaQuery.sizeOf(context).height -
+            MediaQuery.paddingOf(context).top;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _measureMap();
+        });
+        return PopScope(
+          // Back closes the details before leaving the map.
+          canPop: open == null,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop) _closeSpot();
+          },
+          child: OverlayPortal(
+            controller: sheetPortal,
+            overlayLocation: OverlayChildLocation.rootOverlay,
+            overlayChildBuilder: (overlay) => open == null
+                ? const SizedBox.shrink()
+                : Positioned(
+                    left: 0,
+                    right: 0,
+                    top: MediaQuery.paddingOf(overlay).top,
+                    bottom: 0,
+                    child: SpotSheet(
+                      key: ValueKey(open.id),
+                      store: store,
+                      spot: open,
+                      onClose: _closeSpot,
+                    ),
+                  ),
+            child: _layers(
+              context,
+              store,
+              colors,
+              darkMap: darkMap,
+              tabBarInset: tabBarInset,
+              spots: spots,
+              matches: matches,
+              query: query,
+              filtered: filtered,
+              searchHeight: searchHeight,
+              filterHeight: filterHeight,
+              open: open,
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _layers(
+    BuildContext context,
+    AppStore store,
+    ColorScheme colors, {
+    required bool darkMap,
+    required double tabBarInset,
+    required List<ParkingSpot> spots,
+    required List<ParkingSpot> matches,
+    required String query,
+    required bool filtered,
+    required double searchHeight,
+    required double filterHeight,
+    required ParkingSpot? open,
+  }) {
     return Stack(
       children: [
         if (AppConfig.useGoogleMaps)
@@ -302,13 +426,16 @@ class _MapPageState extends ConsumerState<MapPage> {
                 widget.showControls &&
                 (ModalRoute.of(context)?.isCurrent ?? true),
             panelVisible: !widget.showControls,
+            selected: open,
+            sheetInset: _sheetInset,
+            onMapTap: _closeSpot,
             location: store.located ? LatLng(store.lat, store.lng) : null,
             onViewport: (bounds, center) {
               store.mapLat = center.latitude;
               store.mapLng = center.longitude;
               store.queueViewport(bounds);
             },
-            onSpotTap: (spot) => showSpot(context, store, spot),
+            onSpotTap: _showSpot,
             onLongPress: (point) =>
                 showReport(context, store, point.latitude, point.longitude),
           )
@@ -330,6 +457,7 @@ class _MapPageState extends ConsumerState<MapPage> {
               onPositionChanged: (camera, hasGesture) {
                 _updateViewport(store, camera);
               },
+              onTap: (_, _) => _closeSpot(),
               onLongPress: widget.showControls
                   ? (tap, point) => showReport(
                       context,
@@ -401,22 +529,22 @@ class _MapPageState extends ConsumerState<MapPage> {
                   size: const Size(46, 46),
                   markers: [
                     for (final s in spots)
-                      Marker(
-                        point: LatLng(s.lat, s.lng),
-                        width: 48,
-                        height: 48,
-                        child: Semantics(
-                          label: '${s.name} ${store.eligible(s).label}',
-                          button: true,
-                          child: GestureDetector(
-                            onTap: () => showSpot(context, store, s),
-                            child: SpotMarker(
-                              status: store.eligible(s).status,
-                              pending: s.status == TrustStatus.pending,
+                      if (s.id != open?.id)
+                        Marker(
+                          point: LatLng(s.lat, s.lng),
+                          width: 48,
+                          height: 48,
+                          child: Semantics(
+                            label: '${s.name} ${store.eligible(s).label}',
+                            button: true,
+                            child: GestureDetector(
+                              onTap: () => _showSpot(s),
+                              child: SpotMarker(
+                                look: markerLook(store.eligible(s)),
+                              ),
                             ),
                           ),
                         ),
-                      ),
                   ],
                   builder: (context, markers) => Container(
                     alignment: Alignment.center,
@@ -438,6 +566,25 @@ class _MapPageState extends ConsumerState<MapPage> {
                   ),
                 ),
               ),
+              // Outside the clusters, so the open spot never folds away.
+              if (open != null)
+                MarkerLayer(
+                  markers: [
+                    Marker(
+                      point: LatLng(open.lat, open.lng),
+                      width: 56,
+                      height: 56,
+                      child: Semantics(
+                        label: '${open.name} ${store.eligible(open).label}，已選取',
+                        child: SpotMarker(
+                          key: const ValueKey('selected-spot-marker'),
+                          look: markerLook(store.eligible(open)),
+                          selected: true,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               if (store.located)
                 MarkerLayer(
                   markers: [
@@ -658,17 +805,18 @@ class _MapPageState extends ConsumerState<MapPage> {
                   ),
                 ),
               ),
-            Positioned(
-              right: 16,
-              bottom: tabBarInset + 16,
-              child: MapActions(
-                onLocate: () => runAction(context, () async {
-                  await store.locate();
-                  await _moveCamera(LatLng(store.lat, store.lng), 16);
-                }),
-                onRecord: () => showParkingForm(context, store),
+            if (open == null)
+              Positioned(
+                right: 16,
+                bottom: tabBarInset + 16,
+                child: MapActions(
+                  onLocate: () => runAction(context, () async {
+                    await store.locate();
+                    await _moveCamera(LatLng(store.lat, store.lng), 16);
+                  }),
+                  onRecord: () => showParkingForm(context, store),
+                ),
               ),
-            ),
             // Notice and OSM credit share one column so they never overlap,
             // and stay clear of the record button and the iOS tab bar.
             Positioned(
@@ -772,8 +920,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                                 child: SizedBox.square(
                                   dimension: 32,
                                   child: SpotMarker(
-                                    status: store.eligible(spot).status,
-                                    pending: spot.status == TrustStatus.pending,
+                                    look: markerLook(store.eligible(spot)),
                                     size: 28,
                                   ),
                                 ),
