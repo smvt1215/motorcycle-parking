@@ -161,10 +161,22 @@ def hash_sources(tag, at_head):
     return sorted(other for other in at_head if other != tag and RELEASE_TAG.fullmatch(other))
 
 
-def build_number(count, attempt):
-    if count < 1 or not 1 <= attempt <= 9:
-        raise ValueError("Release attempt must be 1–9; handle further retries manually")
-    number = count * 10 + attempt
+# Each commit owns build numbers count×10+1..9. Beta and RC builds connect to
+# different backends, so they never share a number: beta takes digits 1–4 and
+# RC 5–9 (a store release promotes from the RC digits).
+CHANNEL_DIGITS = {"beta": range(1, 5), "rc": range(5, 10), "release": range(5, 10)}
+
+
+def build_range(count, channel):
+    digits = CHANNEL_DIGITS[channel]
+    return count * 10 + digits[0], count * 10 + digits[-1]
+
+
+def build_number(count, attempt, channel="rc"):
+    digits = CHANNEL_DIGITS[channel]
+    if count < 1 or not 1 <= attempt <= len(digits):
+        raise ValueError(f"{channel} attempt must be 1–{len(digits)}; handle further retries manually")
+    number = count * 10 + digits[attempt - 1]
     if number > 9999:
         raise ValueError("Build number exceeds the iOS four-digit limit; revise numbering before release")
     return number
@@ -192,12 +204,16 @@ def main():
         if subprocess.check_output(["git", "rev-parse", "--is-shallow-repository"], text=True).strip() != "false":
             raise ValueError("Full Git history is required for build numbering")
         count = int(subprocess.check_output(["git", "rev-list", "--count", "HEAD"], text=True))
-        number = build_number(count, int(os.environ["GITHUB_RUN_ATTEMPT"]))
+        # A store release builds nothing, so its attempt count is irrelevant.
+        attempt = 1 if channel == "release" else int(os.environ["GITHUB_RUN_ATTEMPT"])
+        number = build_number(count, attempt, channel)
+        first, last = build_range(count, channel)
         if not api.production_protected():
             raise ValueError("Configure required reviewers on the production Environment before release")
         at_head = subprocess.check_output(["git", "tag", "--points-at", "HEAD"], text=True).split()
         release_outputs = {"version": version, "channel": channel, "build_number": number,
-                           "build_base": count * 10, "hash_sources": " ".join(hash_sources(tag, at_head))}
+                           "build_first": first, "build_last": last,
+                           "hash_sources": " ".join(hash_sources(tag, at_head))}
         if channel == "release":
             # The RC already passed the main, CI and staging checks; main may
             # have moved on since, and no new binary is built.

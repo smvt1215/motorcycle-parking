@@ -17,7 +17,8 @@ jobs:
       version: ${{ steps.gate.outputs.version }}
       channel: ${{ steps.gate.outputs.channel }}
       build_number: ${{ steps.gate.outputs.build_number }}
-      build_base: ${{ steps.gate.outputs.build_base }}
+      build_first: ${{ steps.gate.outputs.build_first }}
+      build_last: ${{ steps.gate.outputs.build_last }}
       hash_sources: ${{ steps.gate.outputs.hash_sources }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -46,11 +47,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 tool/cd_gate.py release --sha "$(git rev-parse HEAD)"
-      # Beta and RC deploy the backend they test against. A store release
-      # ships the RC's build, whose backend is already live; redeploying that
-      # older commit could roll back functions a later beta shipped.
+      # Only an RC deploys production: a beta tests against staging, which
+      # the gate already requires for this SHA, so beta migrations never
+      # reach production. A store release ships the RC's build, whose backend
+      # is already live; redeploying that older commit could roll back
+      # functions a later RC shipped.
       - uses: ./.github/actions/backend-deploy
-        if: needs.gate.outputs.channel != 'release'
+        if: needs.gate.outputs.channel == 'rc'
         with:
           environment: production
         env:
@@ -81,10 +84,15 @@ jobs:
       RELEASE_CHANNEL: ${{ needs.gate.outputs.channel }}
       HASH_SOURCES: ${{ needs.gate.outputs.hash_sources }}
       BUILD_NUMBER: ${{ needs.gate.outputs.build_number }}
-      BUILD_BASE: ${{ needs.gate.outputs.build_base }}
+      BUILD_FIRST: ${{ needs.gate.outputs.build_first }}
+      BUILD_LAST: ${{ needs.gate.outputs.build_last }}
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
       SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+      # Beta builds connect to staging (see the testing lanes).
+      STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
+      STAGING_SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
+      STAGING_SUPABASE_ANON_KEY: ${{ vars.STAGING_SUPABASE_ANON_KEY }}
       GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_ANDROID_API_KEY }}
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -132,10 +140,15 @@ jobs:
       RELEASE_CHANNEL: ${{ needs.gate.outputs.channel }}
       HASH_SOURCES: ${{ needs.gate.outputs.hash_sources }}
       BUILD_NUMBER: ${{ needs.gate.outputs.build_number }}
-      BUILD_BASE: ${{ needs.gate.outputs.build_base }}
+      BUILD_FIRST: ${{ needs.gate.outputs.build_first }}
+      BUILD_LAST: ${{ needs.gate.outputs.build_last }}
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
       SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+      # Beta builds connect to staging (see the testing lanes).
+      STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
+      STAGING_SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
+      STAGING_SUPABASE_ANON_KEY: ${{ vars.STAGING_SUPABASE_ANON_KEY }}
       GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_IOS_API_KEY }}
       IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
       IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}

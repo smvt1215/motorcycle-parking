@@ -32,7 +32,7 @@ end
 
 # A reused store build keeps the hash recorded when it was uploaded: under
 # this tag on a retry, or under another tag on the same commit (the RC a store
-# release promotes, or a beta an RC reuses). Copy it so this release lists it.
+# release promotes). Copy it so this release lists it.
 def carry_hash(platform, number)
   tag = ENV.fetch("GITHUB_REF_NAME")
   name = "sha256-#{platform}-#{number}.txt"
@@ -93,9 +93,26 @@ def store_app
   app
 end
 
-def find_ios_builds(app, base)
+def find_ios_builds(app, numbers)
   Spaceship::ConnectAPI::Build.all(app_id: app.id, version: ENV.fetch("RELEASE_VERSION"), platform: "IOS",
-                                   build_number: ReleasePolicy.range(base).to_a.join(","))
+                                   build_number: numbers.to_a.join(","))
+end
+
+# This channel's build numbers on this commit (see tool/cd_gate.py).
+def build_numbers
+  ReleasePolicy.range(ENV.fetch("BUILD_FIRST"), ENV.fetch("BUILD_LAST"))
+end
+
+# A beta tests against staging: the gate requires this SHA's staging deploy,
+# so production never receives beta migrations. The binary keeps the
+# production app id; only its backend settings change, and missing staging
+# settings fail the build instead of silently falling back to production.
+def use_channel_backend
+  return unless channel == "beta"
+
+  ENV["SUPABASE_PROJECT_REF"] = required_setting("STAGING_SUPABASE_PROJECT_REF")
+  ENV["SUPABASE_URL"] = required_setting("STAGING_SUPABASE_URL")
+  ENV["SUPABASE_ANON_KEY"] = required_setting("STAGING_SUPABASE_ANON_KEY")
 end
 
 def monotonic
@@ -106,11 +123,11 @@ platform :android do
   desc "Beta to closed testing, RC to open testing; reuse this commit's build when it exists"
   lane :testing do
     credentials = required_setting("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON")
-    base = Integer(ENV.fetch("BUILD_BASE"))
+    numbers = build_numbers
     number = Integer(ENV.fetch("BUILD_NUMBER"))
     target = ReleasePolicy.play_track(channel)
     tracks, = play_tracks(credentials)
-    existing = ReleasePolicy.play_candidate(tracks.to_a, base)
+    existing = ReleasePolicy.play_candidate(tracks.to_a, numbers)
     if existing && Array(tracks[target]).include?(existing)
       UI.success("This commit's build is already on the #{target} track")
       carry_hash("android", existing)
@@ -123,6 +140,7 @@ platform :android do
                            skip_upload_apk: true, skip_upload_aab: true)
       selected_build(existing)
     else
+      use_channel_backend
       sh("python3", root_path("tool/cd_config.py"), "production", "android")
       # GITHUB_ENV affects the next step; this build runs in the same step.
       ENV["ANDROID_KEYSTORE_PATH"] = File.join(ENV.fetch("RUNNER_TEMP"), "upload.jks")
@@ -140,9 +158,9 @@ platform :android do
   desc "Promote the RC's build to a 10% production rollout; never builds"
   lane :release do
     credentials = required_setting("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON")
-    base = Integer(ENV.fetch("BUILD_BASE"))
+    numbers = build_numbers
     tracks, released_codes = play_tracks(credentials)
-    existing = ReleasePolicy.promotable_play_code(tracks.to_a, base, released_codes: released_codes)
+    existing = ReleasePolicy.promotable_play_code(tracks.to_a, numbers, released_codes: released_codes)
     UI.user_error!("No open-testing build for this RC commit; the RC must reach open testing first") unless existing
     carry_hash("android", existing)
     if released_codes.include?(existing)
@@ -163,15 +181,15 @@ platform :ios do
     api_key = app_store_api_key
     app = store_app
     version = ENV.fetch("RELEASE_VERSION")
-    base = Integer(ENV.fetch("BUILD_BASE"))
+    numbers = build_numbers
     number = Integer(ENV.fetch("BUILD_NUMBER"))
     deadline = monotonic + 3600
-    builds = find_ios_builds(app, base)
-    while ReleasePolicy.processing?(builds, base) && monotonic < deadline
+    builds = find_ios_builds(app, numbers)
+    while ReleasePolicy.processing?(builds, numbers) && monotonic < deadline
       sleep(30)
-      builds = find_ios_builds(app, base)
+      builds = find_ios_builds(app, numbers)
     end
-    build = ReleasePolicy.valid_build(builds, base)
+    build = ReleasePolicy.valid_build(builds, numbers)
     if build
       carry_hash("ios", build.version)
     else
@@ -179,6 +197,7 @@ platform :ios do
       if builds.any? { |item| item.version.to_i == number && item.processing_state == "PROCESSING" }
         UI.user_error!("This attempt's build is still processing; rerun the workflow for a new number")
       end
+      use_channel_backend
       sh("python3", root_path("tool/cd_config.py"), "production", "ios")
       sh("python3", root_path("tool/ios_signing.py"), "production")
       sh("flutter", "build", "ipa", "--release", "--build-name=#{version}", "--build-number=#{number}",
@@ -193,8 +212,8 @@ platform :ios do
       # Upload does not mean VALID. Wait before distributing.
       deadline = monotonic + 3600
       loop do
-        builds = find_ios_builds(app, base)
-        build = ReleasePolicy.valid_build(builds, base)
+        builds = find_ios_builds(app, numbers)
+        build = ReleasePolicy.valid_build(builds, numbers)
         break if build
         failed = builds.any? { |item| item.version.to_i == number && %w[FAILED INVALID].include?(item.processing_state) }
         UI.user_error!("App Store rejected processing; fix the binary before retrying") if failed
@@ -221,17 +240,17 @@ platform :ios do
     api_key = app_store_api_key
     app = store_app
     version = ENV.fetch("RELEASE_VERSION")
-    base = Integer(ENV.fetch("BUILD_BASE"))
+    numbers = build_numbers
     store_version = app.get_app_store_versions(filter: {versionString: version, platform: "IOS"}).first
     state = store_version&.app_version_state || store_version&.app_store_state
     if ReleasePolicy.submitted?(state)
       selected = store_version.get_build
-      UI.user_error!("Submitted store version uses a build outside this commit's range") unless selected && ReleasePolicy.range(base).cover?(selected.version.to_i)
+      UI.user_error!("Submitted store version uses a build outside this commit's range") unless selected && numbers.cover?(selected.version.to_i)
       carry_hash("ios", selected.version)
       selected_build(selected.version)
       next
     end
-    build = ReleasePolicy.distributed_build(find_ios_builds(app, base), base)
+    build = ReleasePolicy.distributed_build(find_ios_builds(app, numbers), numbers)
     UI.user_error!("No build of this RC commit reached the public TestFlight group; the RC must finish first") unless build
     carry_hash("ios", build.version)
     upload_to_app_store(api_key: api_key, app_identifier: app.bundle_id, app_version: version,

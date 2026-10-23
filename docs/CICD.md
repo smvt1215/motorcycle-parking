@@ -11,11 +11,11 @@
   | 通道 | 觸發 | iOS | Android | 後端 |
   |---|---|---|---|---|
   | alpha（內部預覽） | 合併到 `main` | Firebase App Distribution（Ad Hoc） | Firebase App Distribution | staging |
-  | beta | tag `vX.Y.Z-beta.N` | TestFlight 外部公開連結 | Play 封閉測試 | production |
+  | beta | tag `vX.Y.Z-beta.N` | TestFlight 外部公開連結 | Play 封閉測試 | staging（不部署 production） |
   | RC | tag `vX.Y.Z-rc.N` | TestFlight 外部公開連結 | Play 開放測試 | production |
   | 正式版 | tag `vX.Y.Z` | 最後一個 RC 的同一個建置送 App Store 審核 | 同一個版本碼推進 production | production（沿用 RC 時已部署的版本） |
 - **alpha 只給內部**：`.staging` App（名稱加「α」）連 staging 後端，只經 Firebase 發給受邀成員，不上傳商店；iOS 為 Ad Hoc 簽章，需先登記 UDID。
-- **beta／RC／正式版是同一個正式 App**：同一個 bundle id 與 applicationId，連 production 後端；正式版不重新建置，商店上架的就是測試者驗證過的 RC 二進位檔。
+- **beta／RC／正式版是同一個正式 App**：同一個 bundle id 與 applicationId。**beta 連 staging 後端**，正式資料庫不會收到 beta 的 migration，beta 測試者的資料也留在 staging；RC 起連 production 後端，測試者從 beta 升到 RC 需重新登入；正式版不重新建置，商店上架的就是測試者驗證過的 RC 二進位檔。
 - 已具備：Apple Developer Program、Google Play Console。
 
 ## 整體流程
@@ -49,7 +49,7 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
 | `codeql.yml` | PR、push 到 `main`、每週、手動 | Linux + macOS | Actions、JavaScript／TypeScript、Python、Java／Kotlin、Swift 安全分析；原生 PR 掃描依相關路徑執行 |
 | `actions-cleanup.yml` | 每週日（UTC 19:17）、手動（可選 dry-run） | Linux | 清理 Actions 執行紀錄與快取（規則見下方「Actions 清理」） |
 | `cd-staging.yml` | `main` 上的三條 CI 都成功後（`workflow_run`） | Linux + macOS | 部署 staging 後端、產生 Android 測試 APK 與 iOS 測試 IPA（不上傳商店） |
-| `release.yml` | 推送 tag `v*` | Linux + macOS | beta／RC：部署 production 後端、上傳 TestFlight 與 Play 測試軌道、建立 GitHub prerelease；正式版：把 RC 建置推上 App Store 與 Play production、建立 GitHub Release |
+| `release.yml` | 推送 tag `v*` | Linux + macOS | beta：以 staging 後端設定建置；RC：部署 production 後端並建置；兩者上傳 TestFlight 與 Play 測試軌道、建立 GitHub prerelease；正式版：把 RC 建置推上 App Store 與 Play production、建立 GitHub Release |
 
 Workflow 依平台分工：跨平台檢查放 `ci.yml`，各平台的建置與模擬器測試放各自的 workflow，並共用同一套路徑判斷（只改文件時略過）。
 
@@ -193,8 +193,8 @@ Workflow 依平台分工：跨平台檢查放 `ci.yml`，各平台的建置與�
 ## CD：beta／RC／正式版（推送版本 tag）
 `release.yml` 依 tag 判斷通道（`tool/cd_gate.py` 的 `release_tag`）：
 
-- **`vX.Y.Z-beta.N`、`vX.Y.Z-rc.N`**：做完下方全部檢查與後端部署後，iOS 以 fastlane `ios testing` 上傳 TestFlight 並發給外部公開群組（`TESTFLIGHT_GROUP`），Android 以 `android testing` 上傳 Play 封閉測試（beta，API 軌道名 `alpha`）或開放測試（RC，API 軌道名 `beta`）。同一個 commit 已有建置（例如 RC 打在 beta 的 commit 上）就沿用並推進軌道，不重新建置。每個版本的第一個 TestFlight 外部建置要等 Apple 的 Beta App Review。
-- **`vX.Y.Z`**：必須打在**同版本最後一個 RC 的 commit**（`promoted_candidate`），且該 RC tag 自己的 `release.yml` 最新一次執行必須成功（`release_succeeded`）；不要求是 `main` 最新，也不再等待 CI／staging（RC 時已通過）。`ios release` 與 `android release` 只尋找該 commit 範圍內、RC 實際發出的建置（iOS 已在 TestFlight 外部群組、Android 在開放測試軌道或已在 production）並送審／推進 production，找不到就失敗，**絕不重新建置**，只在封閉測試的 beta 建置不會被推上商店；後端也不重新部署，避免較舊的 commit 覆蓋之後 beta 已部署的 Edge Functions。
+- **`vX.Y.Z-beta.N`、`vX.Y.Z-rc.N`**：做完下方全部檢查後（**只有 RC 部署 production 後端**；beta 不部署，以 `STAGING_SUPABASE_*` 建置連 staging 的 App，閘門已確認該 SHA 的 staging 部署成功），iOS 以 fastlane `ios testing` 上傳 TestFlight 並發給外部公開群組（`TESTFLIGHT_GROUP`），Android 以 `android testing` 上傳 Play 封閉測試（beta，API 軌道名 `alpha`）或開放測試（RC，API 軌道名 `beta`）。beta 與 RC 連不同後端，所以**建置號範圍分開**（見下方「建置號」），RC 絕不沿用 beta 的建置；同一通道重跑時，該 commit 範圍內已有建置就沿用並推進軌道，不重新建置。每個版本的第一個 TestFlight 外部建置要等 Apple 的 Beta App Review。
+- **`vX.Y.Z`**：必須打在**同版本最後一個 RC 的 commit**（`promoted_candidate`），且該 RC tag 自己的 `release.yml` 最新一次執行必須成功（`release_succeeded`）；不要求是 `main` 最新，也不再等待 CI／staging（RC 時已通過）。`ios release` 與 `android release` 只尋找該 commit 範圍內、RC 實際發出的建置（iOS 已在 TestFlight 外部群組、Android 在開放測試軌道或已在 production）並送審／推進 production，找不到就失敗，**絕不重新建置**，只在封閉測試的 beta 建置不會被推上商店；後端也不重新部署，避免較舊的 commit 覆蓋之後 RC 已部署的 Edge Functions。
 - 同一個 commit 上其他版本 tag 的 Release 若已有建置的 SHA-256 紀錄，沿用時會複製到本次 Release（`HASH_SOURCES`），讓正式版的 Release 列出商店實際使用的建置雜湊。
 
 以下為 beta／RC 的檢查；正式版只做版本號、完整歷史、production 核准設定與 RC commit 檢查。
@@ -217,12 +217,12 @@ Workflow 依平台分工：跨平台檢查放 `ci.yml`，各平台的建置與�
 3. **後端先行**：
    - production `supabase db push` 與 `functions deploy`。
    - 先部署後端，再上架 APP。
-4. **建置號**：`commit 數 × 10 + 嘗試次數`（只有正式版會上傳商店，不需要通道位數）。
+4. **建置號**：`commit 數 × 10 + 個位數`。個位數依通道分開：**beta 用 1～4、RC 用 5～9**（正式版沿用 RC 的範圍，不建置）。beta 與 RC 連不同後端，分開範圍讓同一個 commit 的兩種建置不會撞號，也不會被對方沿用（`tool/cd_gate.py` 的 `build_range`、`fastlane/release_policy.rb` 的 `range`）。
    - commit 數 = `git rev-list --count HEAD`。checkout 必須設定 `fetch-depth: 0` 取得完整歷史，因為 `actions/checkout` 預設只抓 1 個 commit，計數會永遠是 1。計算前檢查 `git rev-parse --is-shallow-repository` 為 `false`，否則讓流程失敗。
-   - 嘗試次數 = `github.run_attempt`，上限 9，超過就讓流程失敗並提示人工處理。重跑時嘗試次數增加，會拿到新號碼。
+   - 個位數由 `github.run_attempt` 決定：beta 第 1～4 次嘗試對應 1～4，RC 第 1～5 次對應 5～9；超過就讓流程失敗並提示人工處理。重跑時嘗試次數增加，會拿到新號碼。
    - tag 必須在 `main` 最新 commit 上，所以每次發版的 commit 數都大於上一次，建置號單調遞增。
    - Android `versionCode` 上限為 2,100,000,000；目前兩平台共用單一整數號碼，另採 Apple 第一段最多四位的限制，因此號碼大於 9999 時先阻止發版，需調整 iOS 編碼與商店範圍查詢後再繼續。
-   - **每個平台各自冪等**：上傳前先向商店查詢，已有落在 `commit 數 × 10 + 1～9` 範圍內的建置號，就代表這個版本已上傳過，**略過上傳這一步**（後續步驟見下方 Android、iOS 各自的規則）。查詢必須涵蓋**完整範圍**：
+   - **每個平台各自冪等**：上傳前先向商店查詢，已有落在本通道範圍（beta：`commit 數 × 10 + 1～4`；RC：`+ 5～9`）內的建置號，就代表這個版本已上傳過，**略過上傳這一步**（後續步驟見下方 Android、iOS 各自的規則）。查詢必須涵蓋**完整範圍**：
      - **iOS**：不用 `latest_testflight_build_number`，它只回傳最新的一個建置。改在 fastlane lane 中用 App Store Connect API（Spaceship `ConnectAPI::Build`，或 `GET /v1/builds`）查詢範圍內的 9 個號碼：
        - **限定範圍**：一律加上 `filter[app]`（本 APP 的 Apple ID）與 `filter[preReleaseVersion.version]`（本次版本號，例如 `1.2.0`），避免同帳號下其他 APP 剛好用到相同的建置號。
        - **只認處理成功的建置**：
@@ -287,6 +287,7 @@ Workflow 依平台分工：跨平台檢查放 `ci.yml`，各平台的建置與�
 - CI 的版本號檢查負責把關：版本不大於最新 tag 時，PR 無法合併。
 
 ## 資料庫 migration 規則
+- migration 只在 **RC tag** 時套用到 production（beta 只到 staging），且無法撤回：RC 之後即使不上架，正式資料庫也已變更。
 - 舊版 APP 會在使用者手機上留存一段時間，所以 production migration 必須**向下相容**（先擴充、後收斂）：
   - 新增欄位要有預設值。
   - 刪除或改名欄位分兩次發版，等舊版 APP 不再使用後才移除。

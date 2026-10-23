@@ -25,8 +25,11 @@ module ReleasePolicy
     EXTERNAL_DISTRIBUTED_STATES.include?(state)
   end
 
-  def self.range(base)
-    ((base + 1)..(base + 9))
+  # The gate's build range for this channel (BUILD_FIRST..BUILD_LAST): beta
+  # and RC use disjoint digits of the commit's numbers, so a lookup never
+  # finds the other channel's binary, which targets a different backend.
+  def self.range(first, last)
+    (Integer(first)..Integer(last))
   end
 
   def self.published_play_codes(releases)
@@ -36,39 +39,39 @@ module ReleasePolicy
             .flat_map { |release| Array(release.version_codes) }.map(&:to_i)
   end
 
-  def self.play_candidate(tracks, base, released_codes: [])
-    production = released_codes.map(&:to_i).select { |code| range(base).cover?(code) }
+  def self.play_candidate(tracks, numbers, released_codes: [])
+    production = released_codes.map(&:to_i).select { |code| numbers.cover?(code) }
     return production.max unless production.empty?
 
-    candidates = tracks.flat_map { |_, codes| codes }.map(&:to_i).select { |code| range(base).cover?(code) }
+    candidates = tracks.flat_map { |_, codes| codes }.map(&:to_i).select { |code| numbers.cover?(code) }
     candidates.max
   end
 
   # A store release promotes only what the RC actually shipped: a version
   # code already published on production, else one on the RC's open testing
   # track. A beta-only (closed testing) build is never promoted.
-  def self.promotable_play_code(tracks, base, released_codes: [])
-    production = released_codes.map(&:to_i).select { |code| range(base).cover?(code) }
+  def self.promotable_play_code(tracks, numbers, released_codes: [])
+    production = released_codes.map(&:to_i).select { |code| numbers.cover?(code) }
     return production.max unless production.empty?
 
     rc_track = tracks.to_h.fetch(play_track("rc"), [])
-    rc_track.map(&:to_i).select { |code| range(base).cover?(code) }.max
+    rc_track.map(&:to_i).select { |code| numbers.cover?(code) }.max
   end
 
   # The VALID build the RC sent to the public TestFlight group; a build that
   # never reached external testers is not a release candidate.
-  def self.distributed_build(builds, base)
+  def self.distributed_build(builds, numbers)
     distributed = builds.select { |build| testflight_distributed?(build.build_beta_detail&.external_build_state) }
-    valid_build(distributed, base)
+    valid_build(distributed, numbers)
   end
 
-  def self.valid_build(builds, base)
-    builds.select { |build| range(base).cover?(build.version.to_i) && build.processing_state == "VALID" }
+  def self.valid_build(builds, numbers)
+    builds.select { |build| numbers.cover?(build.version.to_i) && build.processing_state == "VALID" }
           .max_by { |build| build.version.to_i }
   end
 
-  def self.processing?(builds, base)
-    builds.any? { |build| range(base).cover?(build.version.to_i) && build.processing_state == "PROCESSING" }
+  def self.processing?(builds, numbers)
+    builds.any? { |build| numbers.cover?(build.version.to_i) && build.processing_state == "PROCESSING" }
   end
 
   def self.submitted?(state)

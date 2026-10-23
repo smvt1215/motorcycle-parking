@@ -1,7 +1,7 @@
 """Regression tests for CI/staging deployment proof and release numbering."""
 import unittest
 
-from cd_gate import (CI, DEPLOY_JOB, DEPLOY_PROOF, GitHub, build_number, hash_sources,
+from cd_gate import (CI, DEPLOY_JOB, DEPLOY_PROOF, GitHub, build_number, build_range, hash_sources,
                      promoted_candidate, release_tag, release_version)
 
 
@@ -162,11 +162,21 @@ class DeploymentGateTest(unittest.TestCase):
                          ["v1.2.3-beta.2", "v1.2.3-rc.1"])
 
     def test_retry_numbers_increase_and_next_commit_always_wins(self):
-        self.assertLess(build_number(10, 1), build_number(10, 9))
-        self.assertLess(build_number(10, 9), build_number(11, 1))
-        for count, attempt in ((10, 0), (10, 10), (0, 1), (1000, 1)):
-            with self.subTest(count=count, attempt=attempt), self.assertRaises(ValueError):
-                build_number(count, attempt)
+        self.assertLess(build_number(10, 1, "rc"), build_number(10, 5, "rc"))
+        self.assertLess(build_number(10, 5, "rc"), build_number(11, 1, "beta"))
+        for count, attempt, channel in ((10, 0, "rc"), (10, 6, "rc"), (10, 5, "beta"), (0, 1, "beta"), (1000, 1, "rc")):
+            with self.subTest(count=count, attempt=attempt, channel=channel), self.assertRaises(ValueError):
+                build_number(count, attempt, channel)
+
+    def test_beta_and_rc_never_share_a_build_number(self):
+        # They connect to different backends, so an RC must never reuse a beta binary.
+        self.assertEqual(build_range(10, "beta"), (101, 104))
+        self.assertEqual(build_range(10, "rc"), (105, 109))
+        self.assertEqual(build_range(10, "release"), build_range(10, "rc"))
+        beta = {build_number(10, attempt, "beta") for attempt in range(1, 5)}
+        rc = {build_number(10, attempt, "rc") for attempt in range(1, 6)}
+        self.assertEqual(beta, set(range(101, 105)))
+        self.assertEqual(rc, set(range(105, 110)))
 
     def test_pagination_does_not_silently_drop_later_jobs(self):
         api = FakeGitHub({})
