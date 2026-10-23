@@ -41,4 +41,15 @@ end
 [nil, "READY_FOR_BETA_SUBMISSION", "BETA_REJECTED", "MISSING_EXPORT_COMPLIANCE", "EXPIRED"].each do |state|
   raise "External distribution still required #{state.inspect}" if ReleasePolicy.testflight_distributed?(state)
 end
+raise "Production release kept" unless ReleasePolicy.promotable_play_code([["beta", [109]]], 100, released_codes: [103]) == 103
+raise "RC open-testing build promoted" unless ReleasePolicy.promotable_play_code([["alpha", [108]], ["beta", [105]]], 100) == 105
+raise "Beta-only build never promoted" unless ReleasePolicy.promotable_play_code([["alpha", [108]], ["internal", [109]]], 100).nil?
+raise "Other commits on the RC track ignored" unless ReleasePolicy.promotable_play_code([["beta", [95, 110]]], 100).nil?
+BetaDetail = Struct.new(:external_build_state)
+TestBuild = Struct.new(:version, :processing_state, :build_beta_detail)
+shipped = TestBuild.new("104", "VALID", BetaDetail.new("IN_BETA_TESTING"))
+unshipped = TestBuild.new("106", "VALID", BetaDetail.new("READY_FOR_BETA_SUBMISSION"))
+no_detail = TestBuild.new("107", "VALID", nil)
+raise "Distributed RC build chosen" unless ReleasePolicy.distributed_build([shipped, unshipped, no_detail], 100).version == "104"
+raise "Undistributed build never submitted" unless ReleasePolicy.distributed_build([unshipped, no_detail], 100).nil?
 puts "Release retry policy passed"

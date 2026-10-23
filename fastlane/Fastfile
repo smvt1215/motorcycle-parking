@@ -142,8 +142,8 @@ platform :android do
     credentials = required_setting("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON")
     base = Integer(ENV.fetch("BUILD_BASE"))
     tracks, released_codes = play_tracks(credentials)
-    existing = ReleasePolicy.play_candidate(tracks.to_a, base, released_codes: released_codes)
-    UI.user_error!("No Play build for this RC commit; the RC must reach open testing first") unless existing
+    existing = ReleasePolicy.promotable_play_code(tracks.to_a, base, released_codes: released_codes)
+    UI.user_error!("No open-testing build for this RC commit; the RC must reach open testing first") unless existing
     carry_hash("android", existing)
     if released_codes.include?(existing)
       UI.success("This commit has already been published on the production track")
@@ -231,8 +231,8 @@ platform :ios do
       selected_build(selected.version)
       next
     end
-    build = ReleasePolicy.valid_build(find_ios_builds(app, base), base)
-    UI.user_error!("No valid TestFlight build for this RC commit; the RC must finish first") unless build
+    build = ReleasePolicy.distributed_build(find_ios_builds(app, base), base)
+    UI.user_error!("No build of this RC commit reached the public TestFlight group; the RC must finish first") unless build
     carry_hash("ios", build.version)
     upload_to_app_store(api_key: api_key, app_identifier: app.bundle_id, app_version: version,
                         build_number: build.version, skip_binary_upload: true,

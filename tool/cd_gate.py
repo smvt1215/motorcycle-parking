@@ -95,6 +95,19 @@ class GitHub:
             return False
         return True
 
+    def release_succeeded(self, tag, sha):
+        """The tag's own release.yml run (its latest attempt) must have
+        succeeded, so a store release only promotes a distributed RC."""
+        runs = [run for run in self.pages("actions/workflows/release.yml/runs", "workflow_runs",
+                                          head_sha=sha, event="push")
+                if run["head_branch"] == tag]
+        if not runs:
+            raise ValueError(f"No release workflow ran for {tag}; push the RC tag and let it finish")
+        run = max(runs, key=lambda item: item["id"])
+        if run["status"] != "completed" or run["conclusion"] != "success":
+            raise ValueError(f"The {tag} release workflow has not succeeded; finish or rerun the RC first")
+        return True
+
     def production_protected(self):
         environment = self.get("environments/production")
         return any(rule["type"] == "required_reviewers" and rule.get("reviewers")
@@ -189,7 +202,9 @@ def main():
             # The RC already passed the main, CI and staging checks; main may
             # have moved on since, and no new binary is built.
             tags = subprocess.check_output(["git", "tag", "--list", "v*"], text=True).split()
-            print(f"Promoting {promoted_candidate(version, tags, at_head)}")
+            candidate = promoted_candidate(version, tags, at_head)
+            api.release_succeeded(candidate, args.sha)
+            print(f"Promoting {candidate}")
             output("deploy", "true")
             for key, value in release_outputs.items():
                 output(key, value)

@@ -136,6 +136,27 @@ class DeploymentGateTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "needs an RC"):
             promoted_candidate("1.2.3", ["v1.3.0-rc.1"], ["v1.3.0-rc.1"])
 
+    def test_store_release_requires_the_rc_workflow_to_have_succeeded(self):
+        def runs(*items):
+            return FakeGitHub({"actions/workflows/release.yml/runs": {"workflow_runs": list(items)}})
+
+        ok = {"id": 7, "head_branch": "v1.2.3-rc.2", "status": "completed", "conclusion": "success"}
+        self.assertTrue(runs(ok).release_succeeded("v1.2.3-rc.2", "sha"))
+        # Another tag's success on the same commit (a beta) does not count.
+        beta = dict(ok, id=8, head_branch="v1.2.3-beta.1")
+        with self.assertRaisesRegex(ValueError, "No release workflow"):
+            runs(beta).release_succeeded("v1.2.3-rc.2", "sha")
+        for status, conclusion in (("completed", "failure"), ("in_progress", None), ("completed", "cancelled")):
+            with self.subTest(status=status, conclusion=conclusion), self.assertRaisesRegex(ValueError, "not succeeded"):
+                runs(dict(ok, status=status, conclusion=conclusion)).release_succeeded("v1.2.3-rc.2", "sha")
+        # The newest run decides: a later failed run outranks an older success.
+        with self.assertRaisesRegex(ValueError, "not succeeded"):
+            runs(ok, dict(ok, id=9, conclusion="failure")).release_succeeded("v1.2.3-rc.2", "sha")
+        api = runs(ok)
+        api.release_succeeded("v1.2.3-rc.2", "sha")
+        self.assertEqual(api.queries[0][1]["head_sha"], "sha")
+        self.assertEqual(api.queries[0][1]["event"], "push")
+
     def test_hash_receipts_come_from_other_release_tags_on_the_commit(self):
         self.assertEqual(hash_sources("v1.2.3", ["v1.2.3", "v1.2.3-rc.1", "v1.2.3-beta.2", "note"]),
                          ["v1.2.3-beta.2", "v1.2.3-rc.1"])

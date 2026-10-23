@@ -44,6 +44,24 @@ module ReleasePolicy
     candidates.max
   end
 
+  # A store release promotes only what the RC actually shipped: a version
+  # code already published on production, else one on the RC's open testing
+  # track. A beta-only (closed testing) build is never promoted.
+  def self.promotable_play_code(tracks, base, released_codes: [])
+    production = released_codes.map(&:to_i).select { |code| range(base).cover?(code) }
+    return production.max unless production.empty?
+
+    rc_track = tracks.to_h.fetch(play_track("rc"), [])
+    rc_track.map(&:to_i).select { |code| range(base).cover?(code) }.max
+  end
+
+  # The VALID build the RC sent to the public TestFlight group; a build that
+  # never reached external testers is not a release candidate.
+  def self.distributed_build(builds, base)
+    distributed = builds.select { |build| testflight_distributed?(build.build_beta_detail&.external_build_state) }
+    valid_build(distributed, base)
+  end
+
   def self.valid_build(builds, base)
     builds.select { |build| range(base).cover?(build.version.to_i) && build.processing_state == "VALID" }
           .max_by { |build| build.version.to_i }
