@@ -45,6 +45,9 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
   gm.GoogleMapController? controller;
   late gm.CameraPosition camera;
   late Future<Map<(EligibilityStatus, bool), gm.BitmapDescriptor>> ready;
+
+  /// A fixed-size dot: a ground circle in meters vanishes at street zoom.
+  gm.BitmapDescriptor? locationIcon;
   int viewportGeneration = 0;
   Size? lastSize;
   (LatLng, double)? pendingMove;
@@ -55,6 +58,11 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
     super.initState();
     camera = gm.CameraPosition(target: _googlePoint(widget.center), zoom: 16);
     ready = _prepare();
+    unawaited(
+      _locationIcon().then((icon) {
+        if (mounted) setState(() => locationIcon = icon);
+      }),
+    );
   }
 
   Future<Map<(EligibilityStatus, bool), gm.BitmapDescriptor>> _prepare() async {
@@ -198,6 +206,18 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
                   ),
                 },
                 markers: {
+                  if ((widget.location, locationIcon) case (
+                    final point?,
+                    final icon?,
+                  ))
+                    gm.Marker(
+                      markerId: const gm.MarkerId('my-location'),
+                      position: _googlePoint(point),
+                      icon: icon,
+                      anchor: const Offset(.5, .5),
+                      zIndexInt: 1000,
+                      consumeTapEvents: true,
+                    ),
                   for (final spot in widget.spots)
                     gm.Marker(
                       markerId: gm.MarkerId(spot.id),
@@ -216,17 +236,6 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
                       onTap: widget.interactive
                           ? () => widget.onSpotTap(spot)
                           : null,
-                    ),
-                },
-                circles: {
-                  if (widget.location case final point?)
-                    gm.Circle(
-                      circleId: const gm.CircleId('my-location'),
-                      center: _googlePoint(point),
-                      radius: 7,
-                      fillColor: const Color(0xff2879ef),
-                      strokeColor: Colors.white,
-                      strokeWidth: 3,
                     ),
                 },
               ),
@@ -303,6 +312,28 @@ Future<gm.BitmapDescriptor> _markerIcon(
     imagePixelRatio: 2,
     width: 48,
     height: 48,
+  );
+}
+
+/// Blue location dot with a white ring and soft halo, 40dp across, matching
+/// the dot drawn on the OpenStreetMap preview.
+Future<gm.BitmapDescriptor> _locationIcon() async {
+  final recorder = ui.PictureRecorder();
+  final canvas = Canvas(recorder);
+  const center = Offset(40, 40);
+  canvas.drawCircle(center, 40, Paint()..color = const Color(0x332879ef));
+  canvas.drawCircle(center, 22, Paint()..color = Colors.white);
+  canvas.drawCircle(center, 16, Paint()..color = const Color(0xff2879ef));
+  final picture = recorder.endRecording();
+  final image = await picture.toImage(80, 80);
+  picture.dispose();
+  final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+  image.dispose();
+  return gm.BitmapDescriptor.bytes(
+    bytes!.buffer.asUint8List(),
+    imagePixelRatio: 2,
+    width: 40,
+    height: 40,
   );
 }
 
