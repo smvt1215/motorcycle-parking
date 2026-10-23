@@ -35,8 +35,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const ValueKey('parking-search')), '地下');
     await tester.pumpAndSettle();
-    await tester.tap(find.text('[範例] 信義地下停車場'));
-    await tester.pumpAndSettle();
+    await tapReachable(tester, find.text('[範例] 信義地下停車場'));
     await shoot(binding, tester, 'spot-sheet-half');
     await tester.drag(
       find.byType(DraggableScrollableSheet),
@@ -48,8 +47,7 @@ void main() {
     await tester.pumpAndSettle();
     await selectTab(tester, 2, (rect) => rect.center.dx);
     await shoot(binding, tester, 'personal-light');
-    await tester.tap(find.text('停車規則'));
-    await tester.pumpAndSettle();
+    await tapReachable(tester, find.text('停車規則'));
     expect(find.text('停之前，先看規則'), findsOneWidget);
     await shoot(binding, tester, 'rules-light');
     await tester.pumpWidget(const SizedBox.shrink());
@@ -65,8 +63,7 @@ void main() {
     await selectTab(tester, 4, (rect) => rect.right - rect.width / 6);
     expect(find.text('新增停車點'), findsOneWidget);
     await shoot(binding, tester, 'contribute-dark');
-    await tester.tap(find.byTooltip('新增停車點'));
-    await tester.pumpAndSettle();
+    await tapReachable(tester, find.byTooltip('新增停車點'));
     await shoot(binding, tester, 'report-dark');
     expect(tester.takeException(), isNull);
   });
@@ -87,6 +84,24 @@ Future<void> selectTab(
     final rect = tester.getRect(scaffold);
     await tester.tapAt(Offset(dx(rect), rect.bottom - 50));
   }
+  await tester.pumpAndSettle();
+}
+
+/// Taps [finder] once nothing covers it. On small screens a list row can sit
+/// under the floating iOS tab bar (a platform view that wins the hit test),
+/// so scroll its list until the row is reachable; holds on any device size.
+Future<void> tapReachable(WidgetTester tester, Finder finder) async {
+  final reachable = finder.hitTestable();
+  if (reachable.evaluate().isEmpty) {
+    await tester.scrollUntilVisible(
+      reachable,
+      80,
+      scrollable: find
+          .ancestor(of: finder.first, matching: find.byType(Scrollable))
+          .first,
+    );
+  }
+  await tester.tap(reachable.first);
   await tester.pumpAndSettle();
 }
 
