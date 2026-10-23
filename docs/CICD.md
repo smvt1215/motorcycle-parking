@@ -194,7 +194,7 @@ Workflow 依平台分工：跨平台檢查放 `ci.yml`，各平台的建置與�
 `release.yml` 依 tag 判斷通道（`tool/cd_gate.py` 的 `release_tag`）：
 
 - **`vX.Y.Z-beta.N`、`vX.Y.Z-rc.N`**：做完下方全部檢查後（**只有 RC 部署 production 後端**；beta 不部署，以 `STAGING_SUPABASE_*` 建置連 staging 的 App，閘門已確認該 SHA 的 staging 部署成功），iOS 以 fastlane `ios testing` 上傳 TestFlight 並發給外部公開群組（`TESTFLIGHT_GROUP`），Android 以 `android testing` 上傳 Play 封閉測試（beta，API 軌道名 `alpha`）或開放測試（RC，API 軌道名 `beta`）。beta 與 RC 連不同後端，所以**建置號範圍分開**（見下方「建置號」），RC 絕不沿用 beta 的建置；同一通道重跑時，該 commit 範圍內已有建置就沿用並推進軌道，不重新建置。每個版本的第一個 TestFlight 外部建置要等 Apple 的 Beta App Review。
-- **`vX.Y.Z`**：必須打在**同版本最後一個 RC 的 commit**（`promoted_candidate`），且該 RC tag 自己的 `release.yml` 最新一次執行必須成功（`release_succeeded`）；不要求是 `main` 最新，也不再等待 CI／staging（RC 時已通過）。`ios release` 與 `android release` 只尋找該 commit 範圍內、RC 實際發出的建置（iOS 已可由外部測試者安裝，即 `IN_BETA_TESTING`；仍在 Beta App Review 的建置不算，Android 在開放測試軌道或已在 production）並送審／推進 production，找不到就失敗，**絕不重新建置**，只在封閉測試的 beta 建置不會被推上商店；後端也不重新部署，避免較舊的 commit 覆蓋之後 RC 已部署的 Edge Functions。
+- **`vX.Y.Z`**：必須打在**同版本最後一個 RC 的 commit**（`promoted_candidate`），且該 RC tag 自己的 `release.yml` 最新一次執行必須成功（`release_succeeded`）；不要求是 `main` 最新，也不再等待 CI／staging（RC 時已通過）。`ios release` 與 `android release` 只尋找該 commit 範圍內、RC 實際發出的建置（iOS 須在 `TESTFLIGHT_GROUP` 群組內且已可由外部測試者安裝，即 `IN_BETA_TESTING`；仍在 Beta App Review 或只在其他群組的建置不算。Android 須在開放測試軌道的 `completed` 發佈中，或已在 production；草稿或分階段發佈都不算）並送審／推進 production，找不到就失敗，**絕不重新建置**，只在封閉測試的 beta 建置不會被推上商店；後端也不重新部署，避免較舊的 commit 覆蓋之後 RC 已部署的 Edge Functions。
 - 同一個 commit 上其他版本 tag 的 Release 若已有建置的 SHA-256 紀錄，沿用時會複製到本次 Release（`HASH_SOURCES`），讓正式版的 Release 列出商店實際使用的建置雜湊。
 
 以下為 beta／RC 的檢查；正式版只做版本號、完整歷史、production 核准設定與 RC commit 檢查。

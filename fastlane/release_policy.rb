@@ -46,6 +46,13 @@ module ReleasePolicy
             .flat_map { |release| Array(release.version_codes) }.map(&:to_i)
   end
 
+  # Codes testers can install from a testing track: a draft or a partial
+  # rollout there never reached every tester.
+  def self.completed_play_codes(releases)
+    releases.select { |release| release.status == "completed" }
+            .flat_map { |release| Array(release.version_codes) }.map(&:to_i)
+  end
+
   def self.play_candidate(tracks, numbers, released_codes: [])
     production = released_codes.map(&:to_i).select { |code| numbers.cover?(code) }
     return production.max unless production.empty?
@@ -55,8 +62,9 @@ module ReleasePolicy
   end
 
   # A store release promotes only what the RC actually shipped: a version
-  # code already published on production, else one on the RC's open testing
-  # track. A beta-only (closed testing) build is never promoted.
+  # code already published on production, else one in a completed release on
+  # the RC's open testing track (tracks hold completed codes only). A
+  # beta-only (closed testing) build is never promoted.
   def self.promotable_play_code(tracks, numbers, released_codes: [])
     production = released_codes.map(&:to_i).select { |code| numbers.cover?(code) }
     return production.max unless production.empty?

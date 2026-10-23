@@ -52,25 +52,28 @@ def play_package
   "tw.motopark.motorcycle_parking"
 end
 
-# Version codes per track, and the published production releases, read in a
-# read-only edit that is always aborted.
+# Version codes per track (any status), those in completed releases per track,
+# and the published production releases, read in a read-only edit that is
+# always aborted.
 def play_tracks(credentials)
   require "supply"
   Supply.config = FastlaneCore::Configuration.create(Supply::Options.available_options,
                                                      package_name: play_package, json_key_data: credentials)
   client = Supply::Client.make_from_config
   tracks = {}
+  completed = {}
   production_releases = []
   begin
     client.begin_edit(package_name: play_package)
     client.tracks.each do |track|
       tracks[track.track] = Array(track.releases).flat_map { |release| Array(release.version_codes) }.map(&:to_i)
+      completed[track.track] = ReleasePolicy.completed_play_codes(Array(track.releases))
       production_releases = Array(track.releases) if track.track == "production"
     end
   ensure
     client.abort_current_edit
   end
-  [tracks, ReleasePolicy.published_play_codes(production_releases)]
+  [tracks, completed, ReleasePolicy.published_play_codes(production_releases)]
 end
 
 def play_options(credentials)
@@ -96,6 +99,19 @@ end
 def find_ios_builds(app, numbers)
   Spaceship::ConnectAPI::Build.all(app_id: app.id, version: ENV.fetch("RELEASE_VERSION"), platform: "IOS",
                                    build_number: numbers.to_a.join(","))
+end
+
+# This commit's builds in the configured public TestFlight group. A build's
+# external state is global: it may be IN_BETA_TESTING through another group.
+def group_ios_builds(app, numbers)
+  name = required_setting("TESTFLIGHT_GROUP")
+  group = Spaceship::ConnectAPI.get_beta_groups(filter: {app: app.id, name: name}).all_pages
+                               .flat_map(&:to_models).find { |item| item.name == name && !item.is_internal_group }
+  UI.user_error!("No external TestFlight group named #{name}") unless group
+  Spaceship::ConnectAPI.get_builds(filter: {app: app.id, betaGroups: group.id,
+                                            "preReleaseVersion.version" => ENV.fetch("RELEASE_VERSION"),
+                                            version: numbers.to_a.join(",")},
+                                   includes: "buildBetaDetail", limit: 200).all_pages.flat_map(&:to_models)
 end
 
 # This channel's build numbers on this commit (see tool/cd_gate.py).
@@ -126,9 +142,10 @@ platform :android do
     numbers = build_numbers
     number = Integer(ENV.fetch("BUILD_NUMBER"))
     target = ReleasePolicy.play_track(channel)
-    tracks, = play_tracks(credentials)
+    tracks, completed, = play_tracks(credentials)
     existing = ReleasePolicy.play_candidate(tracks.to_a, numbers)
-    if existing && Array(tracks[target]).include?(existing)
+    # A draft on the target track has not reached testers: advance it below.
+    if existing && Array(completed[target]).include?(existing)
       UI.success("This commit's build is already on the #{target} track")
       carry_hash("android", existing)
       selected_build(existing)
@@ -159,15 +176,14 @@ platform :android do
   lane :release do
     credentials = required_setting("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON")
     numbers = build_numbers
-    tracks, released_codes = play_tracks(credentials)
-    existing = ReleasePolicy.promotable_play_code(tracks.to_a, numbers, released_codes: released_codes)
+    _, completed, released_codes = play_tracks(credentials)
+    existing = ReleasePolicy.promotable_play_code(completed.to_a, numbers, released_codes: released_codes)
     UI.user_error!("No open-testing build for this RC commit; the RC must reach open testing first") unless existing
     carry_hash("android", existing)
     if released_codes.include?(existing)
       UI.success("This commit has already been published on the production track")
     else
-      source = tracks.find { |_, codes| codes.include?(existing) }.first
-      upload_to_play_store(**play_options(credentials), track: source, track_promote_to: "production",
+      upload_to_play_store(**play_options(credentials), track: ReleasePolicy.play_track("rc"), track_promote_to: "production",
                            version_code: existing, track_promote_release_status: "inProgress", rollout: 0.1,
                            skip_upload_apk: true, skip_upload_aab: true)
     end
@@ -221,7 +237,8 @@ platform :ios do
         sleep(30)
       end
     end
-    if ReleasePolicy.testflight_distributed?(build.build_beta_detail&.external_build_state)
+    in_group = group_ios_builds(app, numbers).find { |item| item.id == build.id }
+    if in_group && ReleasePolicy.testflight_distributed?(in_group.build_beta_detail&.external_build_state)
       UI.success("Build #{build.version} is already with the public TestFlight group")
     else
       # The first build of each version waits for Beta App Review; later ones
@@ -250,7 +267,7 @@ platform :ios do
       selected_build(selected.version)
       next
     end
-    build = ReleasePolicy.distributed_build(find_ios_builds(app, numbers), numbers)
+    build = ReleasePolicy.distributed_build(group_ios_builds(app, numbers), numbers)
     UI.user_error!("No build of this RC commit reached the public TestFlight group; the RC must finish first") unless build
     carry_hash("ios", build.version)
     upload_to_app_store(api_key: api_key, app_identifier: app.bundle_id, app_version: version,

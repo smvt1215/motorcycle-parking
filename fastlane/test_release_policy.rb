@@ -16,6 +16,7 @@ completed = PlayRelease.new("completed", ["104"])
 halted = PlayRelease.new("halted", ["105"])
 raise "Draft is not a completed rollout" unless ReleasePolicy.published_play_codes([draft]).empty?
 raise "Published states retained" unless ReleasePolicy.published_play_codes([active, completed, halted, draft]) == [103, 104, 105]
+raise "Only completed testing releases reached every tester" unless ReleasePolicy.completed_play_codes([active, completed, halted, draft]) == [104]
 raise "Draft is reused for promotion rather than uploaded again" unless ReleasePolicy.play_candidate([["production", [109]]], ALL, released_codes: []) == 109
 raise "Published build takes precedence over newer draft" unless ReleasePolicy.play_candidate([["production", [103, 109]]], ALL, released_codes: [103]) == 103
 builds = [Build.new("103", "VALID"), Build.new("109", "PROCESSING"), Build.new("108", "FAILED"), Build.new("110", "VALID")]
