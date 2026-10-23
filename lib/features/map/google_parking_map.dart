@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -23,7 +24,10 @@ class GoogleParkingMap extends StatefulWidget {
     required this.onSpotTap,
     required this.interactive,
     this.onLongPress,
+    this.onMapTap,
     this.location,
+    this.selected,
+    this.sheetInset = 0,
     this.panelVisible = false,
   });
 
@@ -33,8 +37,17 @@ class GoogleParkingMap extends StatefulWidget {
   final void Function(MapViewport, LatLng) onViewport;
   final ValueChanged<ParkingSpot> onSpotTap;
   final ValueChanged<LatLng>? onLongPress;
+  final VoidCallback? onMapTap;
   final LatLng? location;
   final bool interactive, panelVisible;
+
+  /// The spot whose details are open: drawn enlarged, outside any cluster,
+  /// even when it is no longer in [spots].
+  final ParkingSpot? selected;
+
+  /// Height of the spot sheet over the map's bottom edge; the camera centers
+  /// above it.
+  final double sheetInset;
 
   @override
   State<GoogleParkingMap> createState() => GoogleParkingMapState();
@@ -44,13 +57,13 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
   static const clusterId = gm.ClusterManagerId('parking');
   gm.GoogleMapController? controller;
   late gm.CameraPosition camera;
-  late Future<Map<(EligibilityStatus, bool), gm.BitmapDescriptor>> ready;
+  late Future<Map<(MarkerLook, bool), gm.BitmapDescriptor>> ready;
 
   /// A fixed-size dot: a ground circle in meters vanishes at street zoom.
   gm.BitmapDescriptor? locationIcon;
   int viewportGeneration = 0;
   Size? lastSize;
-  (LatLng, double)? pendingMove;
+  (LatLng, double?)? pendingMove;
   bool viewportFailed = false;
 
   @override
@@ -65,11 +78,19 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
     );
   }
 
-  Future<Map<(EligibilityStatus, bool), gm.BitmapDescriptor>> _prepare() async {
+  Future<Map<(MarkerLook, bool), gm.BitmapDescriptor>> _prepare() async {
     await initializeMapsSdk();
     final variants = [
       for (final status in EligibilityStatus.values)
-        for (final pending in [false, true]) (status, pending),
+        for (final restriction in [
+          null,
+          if (status == EligibilityStatus.conditional) ...[
+            RuleRestriction.pilotArea,
+            RuleRestriction.signage,
+          ],
+        ])
+          for (final selected in [false, true])
+            ((status, restriction), selected),
     ];
     final icons = await Future.wait(
       variants.map((variant) => _markerIcon(variant.$1, variant.$2)),
@@ -77,20 +98,40 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
     return Map.fromIterables(variants, icons);
   }
 
-  Future<void> moveTo(LatLng point, double zoom) async {
+  /// Keeps the current zoom when [zoom] is null.
+  Future<void> moveTo(LatLng point, double? zoom) async {
     final active = controller;
     if (active == null) {
       pendingMove = (point, zoom);
       return;
     }
     await active.animateCamera(
-      gm.CameraUpdate.newLatLngZoom(_googlePoint(point), zoom),
+      zoom == null
+          ? gm.CameraUpdate.newLatLng(_googlePoint(point))
+          : gm.CameraUpdate.newLatLngZoom(_googlePoint(point), zoom),
     );
+  }
+
+  @override
+  void didUpdateWidget(GoogleParkingMap oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Padding changes move no camera, so no idle event reports the region it
+    // uncovers: back from a tab panel, the map would keep only the spots in
+    // the strip the panel left open.
+    if (oldWidget.panelVisible != widget.panelVisible ||
+        oldWidget.interactive != widget.interactive ||
+        oldWidget.sheetInset != widget.sheetInset) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_publishViewport());
+      });
+    }
   }
 
   Future<void> _publishViewport() async {
     final active = controller;
-    if (active == null) return;
+    // Under a tab panel or a modal sheet only part of the map shows; keep
+    // the last full region.
+    if (active == null || widget.panelVisible || !widget.interactive) return;
     final generation = ++viewportGeneration;
     final target = camera.target;
     try {
@@ -162,11 +203,24 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
                   top: widget.panelVisible ? 0 : 108,
                   bottom: widget.panelVisible
                       ? size.height * .92
-                      : widget.interactive
-                      // Lift the Google logo above the iOS floating tab bar.
-                      ? 8 + MediaQuery.paddingOf(context).bottom
-                      : size.height * .55,
+                      : math.max(
+                          // The open spot sheet covers the tab bar; the logo
+                          // and camera center sit just above it.
+                          widget.sheetInset,
+                          // A modal sheet (legend, vehicle, report), even
+                          // over open details, would cover the logo.
+                          !widget.interactive
+                              ? size.height * .55
+                              : widget.sheetInset > 0
+                              ? 0
+                              // Lift the Google logo above the iOS floating
+                              // tab bar.
+                              : 8 + MediaQuery.paddingOf(context).bottom,
+                        ),
                 ),
+                onTap: widget.onMapTap == null
+                    ? null
+                    : (_) => widget.onMapTap!(),
                 onMapCreated: (value) => unawaited(_onCreated(value)),
                 onCameraMoveStarted: () => viewportGeneration++,
                 onCameraMove: (position) {
@@ -218,25 +272,11 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
                       zIndexInt: 1000,
                       consumeTapEvents: true,
                     ),
-                  for (final spot in widget.spots)
-                    gm.Marker(
-                      markerId: gm.MarkerId(spot.id),
-                      position: gm.LatLng(spot.lat, spot.lng),
-                      icon:
-                          icons[(
-                            widget.eligibility(spot).status,
-                            spot.status == TrustStatus.pending,
-                          )]!,
-                      anchor: const Offset(.5, .5),
-                      clusterManagerId: clusterId,
-                      infoWindow: gm.InfoWindow(
-                        title: spot.name,
-                        snippet: widget.eligibility(spot).label,
-                      ),
-                      onTap: widget.interactive
-                          ? () => widget.onSpotTap(spot)
-                          : null,
-                    ),
+                  for (final spot in [
+                    ...widget.spots.where((s) => s.id != widget.selected?.id),
+                    ?widget.selected,
+                  ])
+                    _marker(icons, spot, selected: spot == widget.selected),
                 },
               ),
               if (kIsWeb && !widget.interactive)
@@ -257,34 +297,48 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
   );
 }
 
+extension on GoogleParkingMapState {
+  /// No info window: the spot sheet carries the name and status for every
+  /// spot alike. The selected spot leaves its cluster so it never hides.
+  gm.Marker _marker(
+    Map<(MarkerLook, bool), gm.BitmapDescriptor> icons,
+    ParkingSpot spot, {
+    required bool selected,
+  }) => gm.Marker(
+    markerId: gm.MarkerId(spot.id),
+    position: gm.LatLng(spot.lat, spot.lng),
+    icon: icons[(markerLook(widget.eligibility(spot)), selected)]!,
+    anchor: const Offset(.5, .5),
+    clusterManagerId: selected ? null : GoogleParkingMapState.clusterId,
+    zIndexInt: selected ? 500 : 0,
+    consumeTapEvents: true,
+    onTap: widget.interactive ? () => widget.onSpotTap(spot) : null,
+  );
+}
+
 gm.LatLng _googlePoint(LatLng point) =>
     gm.LatLng(point.latitude, point.longitude);
 
-Future<gm.BitmapDescriptor> _markerIcon(
-  EligibilityStatus status,
-  bool pending,
-) async {
+/// Drawn at 2x like [SpotMarker]; a selected marker is [selectedScale]
+/// larger with a blue ring.
+Future<gm.BitmapDescriptor> _markerIcon(MarkerLook look, bool selected) async {
+  final scale = selected ? selectedScale : 1.0;
+  final side = (96 * scale).roundToDouble();
   final recorder = ui.PictureRecorder();
-  final canvas = Canvas(recorder);
-  final color = spotMarkerColor(status, pending: pending);
-  final radius = switch (status) {
-    EligibilityStatus.allowed => 40.0,
-    EligibilityStatus.conditional => 20.0,
-    EligibilityStatus.notAllowed => 8.0,
-  };
+  final canvas = Canvas(recorder)..scale(side / 96);
   final shape = RRect.fromRectAndRadius(
     const Rect.fromLTWH(8, 8, 80, 80),
-    Radius.circular(radius),
+    Radius.circular(spotMarkerRadius(look.$1) * 80 / 38),
   );
-  canvas.drawRRect(shape, Paint()..color = color);
+  canvas.drawRRect(shape, Paint()..color = spotMarkerColor(look.$1));
   canvas.drawRRect(
     shape,
     Paint()
-      ..color = Colors.white
+      ..color = selected ? selectedRingColor : Colors.white
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 6,
+      ..strokeWidth = selected ? 8 : 6,
   );
-  final icon = spotMarkerIcon(status);
+  final icon = spotMarkerIcon(look);
   final painter = TextPainter(
     text: TextSpan(
       text: String.fromCharCode(icon.codePoint),
@@ -303,15 +357,15 @@ Future<gm.BitmapDescriptor> _markerIcon(
   );
   painter.dispose();
   final picture = recorder.endRecording();
-  final image = await picture.toImage(96, 96);
+  final image = await picture.toImage(side.toInt(), side.toInt());
   picture.dispose();
   final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
   image.dispose();
   return gm.BitmapDescriptor.bytes(
     bytes!.buffer.asUint8List(),
     imagePixelRatio: 2,
-    width: 48,
-    height: 48,
+    width: side / 2,
+    height: side / 2,
   );
 }
 

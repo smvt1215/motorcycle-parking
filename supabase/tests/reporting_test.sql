@@ -74,6 +74,8 @@ select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-00000000
 set local role authenticated;
 select lives_ok($$update city_rules set version=version+1 where city='臺北市' and vehicle='heavy'$$,'admin can maintain rules');
 select is((select version from city_rules where city='臺北市' and vehicle='heavy'),2,'admin update takes effect');
+select throws_ok($$update city_rules set restriction=null,version=version+1 where city='新北市' and vehicle='heavy'$$,'23514',null,'conditional street spaces keep their restriction kind');
+select lives_ok($$update city_rules set restriction='signage',version=version+1 where city='新北市' and vehicle='heavy'$$,'admin can change the restriction kind');
 reset role;
 select * from finish();
 rollback;

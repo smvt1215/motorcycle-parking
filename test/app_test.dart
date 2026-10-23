@@ -261,11 +261,95 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('地圖怎麼看'));
     await tester.pumpAndSettle();
-    expect(find.text('方形・不可停'), findsOneWidget);
+    expect(find.text('有條件・限試辦路段'), findsOneWidget);
     expect(find.textContaining('目前車種「普通機車」'), findsOneWidget);
     await tester.tap(find.byTooltip('關閉'));
     await tester.pumpAndSettle();
-    expect(find.text('方形・不可停'), findsNothing);
+    expect(find.text('有條件・限試辦路段'), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+  testWidgets('詳情開啟時地圖仍可拖動、可直接改選其他停車點，選取點放大標示', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(430, 932);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final store = (await tester.runAsync(testStore))!;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [storeProvider.overrideWith((ref) => store)],
+        child: const ParkingApp(),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+    Finder marker(String name) => find.descendant(
+      of: find.byType(FlutterMap),
+      matching: find.byWidgetPredicate(
+        (w) =>
+            w is Semantics && (w.properties.label ?? '').startsWith('$name '),
+      ),
+    );
+    String sheetTitle() => tester
+        .widget<Text>(
+          find
+              .descendant(
+                of: find.byKey(const ValueKey('parking-spot-sheet')),
+                matching: find.byType(Text),
+              )
+              .first,
+        )
+        .data!;
+    final first = store.spots.first, second = store.spots[1];
+    final map = tester.widget<FlutterMap>(find.byType(FlutterMap));
+    // Close enough to separate the two markers from any cluster.
+    map.mapController!.move(LatLng(first.lat, first.lng), 18);
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('selected-spot-marker')), findsNothing);
+    await tester.tap(marker(first.name).hitTestable().first);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('parking-spot-sheet')), findsOneWidget);
+    expect(sheetTitle(), first.name);
+    expect(find.byKey(const ValueKey('selected-spot-marker')), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(const ValueKey('selected-spot-marker'))).width,
+      greaterThan(38),
+    );
+    // Tapping the selected marker itself keeps its details open.
+    await tester.tap(find.byKey(const ValueKey('selected-spot-marker')));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+    expect(sheetTitle(), first.name);
+    // The map above the sheet still pans.
+    final before = map.mapController!.camera.center;
+    await tester.drag(find.byType(FlutterMap), const Offset(-60, 80));
+    await tester.pumpAndSettle();
+    expect(map.mapController!.camera.center, isNot(before));
+    expect(find.byKey(const ValueKey('parking-spot-sheet')), findsOneWidget);
+    // Another spot switches the open details directly.
+    map.mapController!.move(LatLng(second.lat, second.lng), 18);
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+    await tester.tap(marker(second.name).hitTestable().first);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('parking-spot-sheet')), findsOneWidget);
+    expect(sheetTitle(), second.name);
+    // Tapping the map away from markers closes the details.
+    await tester.tapAt(const Offset(30, 300));
+    // The map waits out the double-tap window before reporting a tap.
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('parking-spot-sheet')), findsNothing);
+    expect(find.byKey(const ValueKey('selected-spot-marker')), findsNothing);
+    // Back closes the details and stays on the map.
+    await tester.tap(marker(second.name).hitTestable().first);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('parking-spot-sheet')), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('parking-spot-sheet')), findsNothing);
+    expect(find.byType(FlutterMap), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -312,6 +396,8 @@ void main() {
     expect(find.text('範例資料 · 行駛中請勿操作'), findsOneWidget);
     await tester.tap(find.text('普通機車').first);
     await tester.pumpAndSettle();
+    // The legend lives behind the map's help button only.
+    expect(find.text('有條件・限試辦路段'), findsNothing);
     await tester.tap(find.text('大型重機').first);
     await tester.pumpAndSettle();
     expect(store.vehicle, VehicleType.heavy);
@@ -433,7 +519,7 @@ void main() {
       second.dispose();
     });
   });
-  testWidgets('Android 地圖動作使用 M3E 浮動工具列與 FAB，提示不重疊', (tester) async {
+  testWidgets('Android 地圖動作使用精簡 M3E FAB，提示不重疊', (tester) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
     addTearDown(() => debugDefaultTargetPlatformOverride = null);
     tester.view.devicePixelRatio = 1;
@@ -449,20 +535,18 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pumpAndSettle();
-    final toolbar = tester.getRect(find.byType(M3EToolbar));
-    final fab = tester.getRect(find.byType(M3EFab));
+    final locate = tester.getRect(find.byKey(const ValueKey('locate-fab')));
+    final fab = tester.getRect(find.byKey(const ValueKey('record-fab')));
     final notice = tester.getRect(find.text('範例資料 · 行駛中請勿操作'));
     final nav = tester.getRect(find.byType(M3ENavigationBar));
-    expect(fab.width, greaterThanOrEqualTo(80));
-    expect(toolbar.bottom, lessThanOrEqualTo(fab.top));
+    // Compact map actions, still large touch targets.
+    for (final action in [locate, fab]) {
+      expect(action.width, inInclusiveRange(48, 56));
+    }
+    expect(locate.bottom, lessThanOrEqualTo(fab.top));
     expect(fab.bottom, lessThanOrEqualTo(nav.top));
     expect(notice.right, lessThan(fab.left));
-    final locate = find.ancestor(
-      of: find.byIcon(Icons.my_location),
-      matching: find.byType(M3EIconButton),
-    );
-    expect(tester.getSize(locate).width, greaterThanOrEqualTo(48));
-    await tester.tap(find.byType(M3EFab));
+    await tester.tap(find.byKey(const ValueKey('record-fab')));
     await tester.pumpAndSettle();
     expect(find.text('記錄停車'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -504,6 +588,12 @@ void main() {
           .map((e) => tester.getRect(find.byWidget(e.widget))),
     ]) {
       expect(rect.bottom, lessThanOrEqualTo(tabBar.top));
+    }
+    for (final action in find.byType(MapAction).evaluate()) {
+      expect(
+        tester.getSize(find.byWidget(action.widget)).width,
+        MapAction.size,
+      );
     }
     // The OSM credit appears only when OpenStreetMap tiles actually load.
     expect(

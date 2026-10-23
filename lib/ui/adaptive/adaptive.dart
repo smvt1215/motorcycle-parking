@@ -264,7 +264,8 @@ class MapActions extends StatelessWidget {
   final VoidCallback onLocate, onRecord;
 
   /// Horizontal space the actions take, so neighbors can stay clear of them.
-  static double get width => isCupertino ? 56 : 80;
+  /// Compact, as in map apps: the map stays the focus.
+  static double get width => isCupertino ? MapAction.size : 56;
 
   @override
   Widget build(BuildContext context) {
@@ -277,7 +278,7 @@ class MapActions extends StatelessWidget {
             icon: Icons.my_location,
             onPressed: onLocate,
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           MapAction(
             label: '我停這裡',
             icon: Icons.local_parking,
@@ -291,20 +292,18 @@ class MapActions extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        M3EToolbar.floating(
-          axis: Axis.vertical,
-          screenOffset: 0,
-          semanticLabel: '地圖工具',
-          actions: [
-            M3EToolbarAction(
-              icon: Icons.my_location,
-              tooltip: '定位到我',
-              onPressed: onLocate,
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
         M3EFab(
+          key: const ValueKey('locate-fab'),
+          size: M3EFabSize.regular,
+          color: M3EFabColor.secondary,
+          icon: const Icon(Icons.my_location),
+          tooltip: '定位到我',
+          onPressed: onLocate,
+        ),
+        const SizedBox(height: 12),
+        M3EFab(
+          key: const ValueKey('record-fab'),
+          size: M3EFabSize.regular,
           icon: const Icon(Icons.local_parking),
           tooltip: '我停這裡',
           onPressed: onRecord,
@@ -327,6 +326,9 @@ class MapAction extends StatelessWidget {
   final IconData icon;
   final VoidCallback onPressed;
   final bool primary;
+
+  /// Still above the 44pt minimum touch target.
+  static const size = 48.0;
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -334,14 +336,14 @@ class MapAction extends StatelessWidget {
       // Map controls are native Liquid Glass: no Flutter fill or shadow, so
       // the glass samples the map and follows system transparency settings.
       return SizedBox.square(
-        dimension: 56,
+        dimension: size,
         child: CNButton.icon(
           icon: CNSymbol(primary ? 'parkingsign' : 'location'),
           tint: colors.primary,
           config: CNButtonConfig(
             style: primary ? CNButtonStyle.prominentGlass : CNButtonStyle.glass,
-            width: 56,
-            minHeight: 56,
+            width: size,
+            minHeight: size,
           ),
           onPressed: onPressed,
         ),
@@ -351,9 +353,9 @@ class MapAction extends StatelessWidget {
       color: primary ? colors.primary : colors.surface,
       elevation: 3,
       shadowColor: const Color(0x55000000),
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(16),
       child: SizedBox.square(
-        dimension: 56,
+        dimension: size,
         child: cu.CupertinoButton(
           padding: EdgeInsets.zero,
           onPressed: onPressed,

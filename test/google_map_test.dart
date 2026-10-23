@@ -14,6 +14,7 @@ import 'package:motorcycle_parking/models/parking.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
 
 void main() {
+  addSelectionTests();
   testWidgets('Google 地圖移動後發布正確範圍，忽略較晚返回的舊範圍', (tester) async {
     final platform = FakeMapsPlatform();
     final previous = pi.GoogleMapsFlutterPlatform.instance;
@@ -160,6 +161,13 @@ void main() {
     await tester.pumpAndSettle();
     final paused = tester.widget<gm.GoogleMap>(find.byType(gm.GoogleMap));
     expect(paused.scrollGesturesEnabled, isFalse);
+    // The Google logo stays clear of the modal sheet.
+    expect(
+      paused.padding.bottom,
+      greaterThanOrEqualTo(
+        tester.getSize(find.byType(gm.GoogleMap)).height * .5,
+      ),
+    );
     expect(paused.markers.every((marker) => marker.onTap == null), isTrue);
     expect(platform.created, before);
     rebuild(() => interactive = true);
@@ -174,6 +182,145 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+  });
+}
+
+void addSelectionTests() {
+  testWidgets('選取的停車點放大、移出叢集，所有標記都不顯示資訊視窗', (tester) async {
+    final platform = FakeMapsPlatform();
+    final previous = pi.GoogleMapsFlutterPlatform.instance;
+    pi.GoogleMapsFlutterPlatform.instance = platform;
+    addTearDown(() => pi.GoogleMapsFlutterPlatform.instance = previous);
+    final spots = (await tester.runAsync(
+      () => ParkingRepository(null).inViewport(
+        const MapViewport(
+          south: 25.01,
+          west: 121.54,
+          north: 25.06,
+          east: 121.59,
+        ),
+      ),
+    ))!.spots;
+    var taps = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GoogleParkingMap(
+          center: const LatLng(25.03, 121.56),
+          // The selected spot stays drawn even when filtered out.
+          spots: spots.skip(1).toList(),
+          selected: spots.first,
+          sheetInset: 300,
+          eligibility: (_) => const Eligibility(EligibilityStatus.allowed, ''),
+          interactive: true,
+          onSpotTap: (_) {},
+          onMapTap: () => taps++,
+          onViewport: (_, _) {},
+        ),
+      ),
+    );
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 150)),
+    );
+    await tester.pumpAndSettle();
+    final map = tester.widget<gm.GoogleMap>(find.byType(gm.GoogleMap));
+    expect(map.markers, hasLength(spots.length));
+    final chosen = map.markers.singleWhere(
+      (m) => m.markerId.value == spots.first.id,
+    );
+    expect(chosen.clusterManagerId, isNull);
+    expect(chosen.zIndexInt, greaterThan(0));
+    final others = map.markers.where((m) => m != chosen);
+    expect(others.every((m) => m.clusterManagerId != null), isTrue);
+    expect(
+      map.markers.every((m) => m.infoWindow == gm.InfoWindow.noText),
+      isTrue,
+    );
+    // The camera centers above the sheet.
+    expect(map.padding.bottom, greaterThanOrEqualTo(300));
+    map.onTap!(const gm.LatLng(25.03, 121.56));
+    expect(taps, 1);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GoogleParkingMap(
+          center: const LatLng(25.03, 121.56),
+          spots: spots.skip(1).toList(),
+          selected: spots.first,
+          sheetInset: 100,
+          eligibility: (_) => const Eligibility(EligibilityStatus.allowed, ''),
+          // A modal sheet opened over the details.
+          interactive: false,
+          onSpotTap: (_) {},
+          onViewport: (_, _) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<gm.GoogleMap>(find.byType(gm.GoogleMap)).padding.bottom,
+      closeTo(tester.getSize(find.byType(gm.GoogleMap)).height * .55, 1),
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('分頁面板蓋住地圖時不更新範圍，回到地圖立即重新發布', (tester) async {
+    final platform = FakeMapsPlatform();
+    final previous = pi.GoogleMapsFlutterPlatform.instance;
+    pi.GoogleMapsFlutterPlatform.instance = platform;
+    addTearDown(() => pi.GoogleMapsFlutterPlatform.instance = previous);
+    final updates = <MapViewport>[];
+    var panel = false;
+    late StateSetter rebuild;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StatefulBuilder(
+          builder: (context, setState) {
+            rebuild = setState;
+            return GoogleParkingMap(
+              center: const LatLng(25.03, 121.56),
+              spots: const [],
+              eligibility: (_) =>
+                  const Eligibility(EligibilityStatus.allowed, ''),
+              interactive: !panel,
+              panelVisible: panel,
+              onSpotTap: (_) {},
+              onViewport: (bounds, _) => updates.add(bounds),
+            );
+          },
+        ),
+      ),
+    );
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 150)),
+    );
+    await tester.pumpAndSettle();
+    updates.clear();
+    rebuild(() => panel = true);
+    await tester.pumpAndSettle();
+    // Under the panel the map reports only the strip left open.
+    platform.bounds = pi.LatLngBounds(
+      southwest: const pi.LatLng(25.039, 121.55),
+      northeast: const pi.LatLng(25.04, 121.57),
+    );
+    platform.idle.add(pi.CameraIdleEvent(platform.id));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    await tester.pumpAndSettle();
+    expect(updates, isEmpty);
+    // Back on the map, with no camera move to report it.
+    platform.bounds = pi.LatLngBounds(
+      southwest: const pi.LatLng(25.02, 121.55),
+      northeast: const pi.LatLng(25.04, 121.57),
+    );
+    rebuild(() => panel = false);
+    await tester.pumpAndSettle();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    await tester.pumpAndSettle();
+    expect(updates, hasLength(1));
+    expect(updates.single.south, 25.02);
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 }
 

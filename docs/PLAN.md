@@ -310,9 +310,15 @@ UI：`material_ui`、`cupertino_ui`（Flutter 官方設計套件，取代框架�
    |---|---|
    | 建立、停用使用者（含匯入用帳號） | Authentication → Users |
    | 審核修改建議、不存在回報 | Table Editor → `moderation_queue` |
-   | 維護縣市規則 | Table Editor → `city_rules` |
+   | 維護縣市規則（見下方 `restriction` 說明） | Table Editor → `city_rules` |
    | 維護官方點 | Table Editor → `official_heavy_spots` |
    | 匯入資料（`official.sql`／`import.sql`）、批次修改 | SQL Editor |
+
+   改 `city_rules` 並調高 `version` 時（App 只在資料庫版本較大時改用資料庫那份），`restriction` 要一起確認：
+   - `pilot_area`：限公告的試辦行政區或路段。
+   - `signage`：限現場標示開放的車格。
+   - `unverified`：規則本身尚未核實，條件車格一律顯示「待確認」。
+   - `conditional_space_types` 含路外以外的格位時必填，資料庫約束 `city_rules_restriction_required` 會擋下漏填；同時更新 `assets/rules/parking_rules.json`。
 
 ### 外部社群地圖（Google 我的地圖）（2026-10-17 更新）
 「Alan大重停車記事」Google 我的地圖（https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc）列為資料來源之一。只取地點、類型、費率等事實資訊並重新整理為專案格式，不沿用原說明全文、連結、照片與回報者署名。

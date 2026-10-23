@@ -1,14 +1,28 @@
 import '../models/parking.dart';
 
-enum EligibilityStatus { allowed, conditional, notAllowed }
+/// Ordered from most to least parkable; the map ranks search results by it.
+/// - [allowed]: law or verified data opens this space to the vehicle.
+/// - [conditional]: law opens it with limits (pilot sections, how to park),
+///   so the posted signs decide.
+/// - [unverified]: the data cannot tell (unchecked or stale community
+///   reports, unlabelled lots, no rule in force here).
+/// - [notAllowed]: law or verified data closes it to the vehicle.
+enum EligibilityStatus { allowed, conditional, unverified, notAllowed }
 
 class Eligibility {
-  const Eligibility(this.status, this.reason);
+  const Eligibility(this.status, this.reason, {this.restriction});
   final EligibilityStatus status;
   final String reason;
+
+  /// The kind of limit behind a [EligibilityStatus.conditional] result.
+  final RuleRestriction? restriction;
   String get label => switch (status) {
     EligibilityStatus.allowed => '可停',
-    EligibilityStatus.conditional => '有條件',
+    EligibilityStatus.conditional => switch (restriction) {
+      final kind? => '有條件・${kind.label}',
+      null => '有條件',
+    },
+    EligibilityStatus.unverified => '待確認',
     EligibilityStatus.notAllowed => '不可停',
   };
 }
@@ -19,15 +33,15 @@ Eligibility eligibility(
   CityRule? rule, {
   DateTime? now,
 }) {
-  const conditional = Eligibility(
-    EligibilityStatus.conditional,
-    '請以現場標誌標線及場站規定為準',
+  const noRule = Eligibility(
+    EligibilityStatus.unverified,
+    '此地區尚無已生效的停車規則資料，請以現場標誌標線為準',
   );
   final explicit = vehicle == VehicleType.heavy
       ? spot.heavyAllowed
       : spot.scooterAllowed;
   // Only trusted data may deny outright; a pending or stale community claim
-  // falls through to the rules below, which keep it conditional.
+  // falls through to the rules below, which keep it unverified.
   final trusted =
       spot.source == 'tdx' ||
       spot.source == 'official' ||
@@ -39,39 +53,58 @@ Eligibility eligibility(
     return const Eligibility(EligibilityStatus.notAllowed, '大型重機專用格');
   }
   if (spot.spaceType == SpaceType.car && vehicle == VehicleType.scooter) {
-    return conditional;
+    return const Eligibility(
+      EligibilityStatus.unverified,
+      '汽車格是否開放機車依各地規定，請以現場標誌標線為準',
+    );
   }
-  // Community claims never override legal rules; pending/stale claims remain conditional.
+  // Community claims never override legal rules; pending/stale claims remain unverified.
   if (spot.spaceType == SpaceType.offStreet) {
     if (explicit == true &&
         (spot.source == 'tdx' || spot.status == TrustStatus.confirmed) &&
         !spot.stale) {
       return const Eligibility(EligibilityStatus.allowed, '場站資料標示可停，請確認現場公告');
     }
-    return conditional;
+    return const Eligibility(
+      EligibilityStatus.unverified,
+      '場站資料未確認開放目前車種，請以入口公告為準',
+    );
   }
   if (rule == null || rule.effectiveDate.isAfter(now ?? DateTime.now())) {
-    return conditional;
+    return noRule;
   }
   if (rule.vehicle != vehicle ||
       (rule.city != '全國' && rule.city != spot.city)) {
-    return conditional;
+    return noRule;
   }
-  if (rule.conditionalSpaceTypes.contains(spot.spaceType)) {
-    return Eligibility(EligibilityStatus.conditional, rule.exceptions);
+  final limited = rule.conditionalSpaceTypes.contains(spot.spaceType);
+  // A rule not verified yet opens nothing for certain.
+  if (limited && rule.restriction == RuleRestriction.unverified) {
+    return Eligibility(EligibilityStatus.unverified, rule.exceptions);
   }
-  if (!rule.allowedSpaceTypes.contains(spot.spaceType)) {
+  if (!limited && !rule.allowedSpaceTypes.contains(spot.spaceType)) {
     return Eligibility(EligibilityStatus.notAllowed, rule.exceptions);
   }
   if (rule.districts.isNotEmpty && !rule.districts.contains(spot.district)) {
-    return conditional;
+    return const Eligibility(
+      EligibilityStatus.unverified,
+      '不在規則公告的開放行政區內，請以現場標誌標線為準',
+    );
   }
   if (spot.source != 'tdx' &&
       spot.source != 'official' &&
       (spot.status != TrustStatus.confirmed || spot.stale)) {
     return const Eligibility(
+      EligibilityStatus.unverified,
+      '社群資訊尚未查核或可能過時，請確認現場',
+    );
+  }
+  // Known limits only once the spot itself is trusted.
+  if (limited) {
+    return Eligibility(
       EligibilityStatus.conditional,
-      '社群資訊待確認或可能過時，請確認現場',
+      rule.exceptions,
+      restriction: rule.restriction,
     );
   }
   return Eligibility(
