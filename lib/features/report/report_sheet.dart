@@ -7,69 +7,173 @@ import '../../models/parking.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../../ui/version_text.dart';
 
-Future<void> showSettings(
-  BuildContext context,
-  AppStore store,
-) => showAdaptiveSheet<void>(
-  context,
-  (ctx) => ContentPage(
-    children: [
-      // The vehicle is switched beside what it changes: the map's
-      // vehicle pill (and the rules page filter), not here.
-      SheetTitle('帳號與設定'),
-      const SizedBox(height: 16),
-      if (store.demo)
-        const Text('目前使用範例資料。回報只用於功能測試，請勿依範例點位停車。')
-      else if (store.client!.auth.currentUser == null ||
-          store.client!.auth.currentUser!.isAnonymous) ...[
-        const Text('登入後可回報停車點與同步收藏。瀏覽與記錄停車位置不需登入。'),
-        const SizedBox(height: 16),
-        AdaptiveButton(
-          label: '使用 Google 登入',
-          onPressed: () =>
-              runAction(ctx, () => store.signIn(OAuthProvider.google)),
-        ),
-        const SizedBox(height: 12),
-        if (isCupertino)
-          AdaptiveButton(
-            label: '使用 Apple 登入',
-            onPressed: () =>
-                runAction(ctx, () => store.signIn(OAuthProvider.apple)),
+Future<void> showSettings(BuildContext context, AppStore store) =>
+    showAdaptiveSheet<void>(
+      context,
+      (ctx) => ContentPage(
+        children: [
+          // The vehicle is switched beside what it changes: the map's
+          // vehicle pill (and the rules page filter), not here.
+          SheetTitle('帳號與設定'),
+          const SizedBox(height: 16),
+          AnimatedBuilder(
+            animation: store,
+            builder: (ctx, _) => _AccountCard(store: store),
           ),
-      ] else ...[
-        Text(store.client!.auth.currentUser!.email ?? '已登入'),
-        TextButton(
-          onPressed: () => runAction(ctx, () async {
-            await store.signOut();
-            if (ctx.mounted) Navigator.pop(ctx);
-          }),
-          child: const Text('登出'),
-        ),
-      ],
-      const SizedBox(height: 24),
-      TextButton(
-        onPressed: () => runAction(ctx, () async {
-          final version = await AppVersion.current;
-          if (!ctx.mounted) return;
-          showLicensePage(
-            context: ctx,
-            applicationName: '機車停車指南',
-            applicationVersion: version.label,
+          const SizedBox(height: 28),
+          Text(
+            '關於',
+            style: Theme.of(ctx).textTheme.titleSmall
+                ?.copyWith(color: Theme.of(ctx).colorScheme.primary),
+          ),
+          const SizedBox(height: 4),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.description_outlined),
+            title: const Text('授權資訊'),
+            subtitle: const Text('App 使用的開放原始碼套件'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => runAction(ctx, () async {
+              final version = await AppVersion.current;
+              if (!ctx.mounted) return;
+              showLicensePage(
+                context: ctx,
+                applicationName: '機車停車指南',
+                applicationVersion: version.label,
+              );
+            }),
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.info_outline),
+            title: const Text('版本'),
+            // Selectable, so testers can paste the exact build into feedback.
+            subtitle: VersionText(
+              selectable: true,
+              textAlign: TextAlign.start,
+              style: Theme.of(ctx).textTheme.bodyMedium
+                  ?.copyWith(color: Theme.of(ctx).colorScheme.onSurfaceVariant),
+            ),
+          ),
+        ],
+      ),
+    );
+
+/// Who is signed in and what that unlocks: sample data, signed out, or the
+/// signed-in account with sign-out.
+class _AccountCard extends StatelessWidget {
+  const _AccountCard({required this.store});
+  final AppStore store;
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final user = store.client?.auth.currentUser;
+    final signedIn = user != null && !user.isAnonymous;
+    final name =
+        user?.userMetadata?['full_name'] as String? ??
+        user?.userMetadata?['name'] as String?;
+    final email = user?.email;
+    final (title, detail) = store.demo
+        ? ('範例模式', '目前使用範例資料。回報只用於功能測試，請勿依範例點位停車。')
+        : !signedIn
+        ? ('尚未登入', '登入後可回報停車點與同步收藏。瀏覽與記錄停車位置不需登入。')
+        // A name heads the card with the email under it; else the email.
+        : (
+            name ?? email ?? '已登入',
+            (name != null ? email : null) ?? '回報與收藏已同步到帳號',
           );
-        }),
-        child: const Text('授權資訊'),
+    final initial = (name ?? email ?? '').characters.firstOrNull;
+    return Material(
+      color: colors.surfaceContainerHigh,
+      borderRadius: BorderRadius.circular(24),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 24,
+                  backgroundColor: signedIn
+                      ? colors.primary
+                      : colors.surfaceContainerHighest,
+                  foregroundColor: signedIn
+                      ? colors.onPrimary
+                      : colors.onSurfaceVariant,
+                  child: signedIn && initial != null
+                      ? Text(
+                          initial.toUpperCase(),
+                          style: text.titleLarge?.copyWith(
+                            color: colors.onPrimary,
+                          ),
+                        )
+                      : Icon(
+                          store.demo
+                              ? Icons.science_outlined
+                              : Icons.person_outline,
+                        ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    title,
+                    key: const ValueKey('account-title'),
+                    style: text.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              detail,
+              style: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
+            ),
+            if (!store.demo && !signedIn) ...[
+              const SizedBox(height: 16),
+              AdaptiveButton(
+                label: '使用 Google 登入',
+                onPressed: () => runAction(
+                  context,
+                  () => store.signIn(OAuthProvider.google),
+                ),
+              ),
+              if (isCupertino) ...[
+                const SizedBox(height: 12),
+                AdaptiveButton(
+                  label: '使用 Apple 登入',
+                  secondary: true,
+                  onPressed: () => runAction(
+                    context,
+                    () => store.signIn(OAuthProvider.apple),
+                  ),
+                ),
+              ],
+            ],
+            if (signedIn) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: TextButton(
+                  onPressed: () => runAction(context, () async {
+                    await store.signOut();
+                    if (context.mounted) Navigator.pop(context);
+                  }),
+                  child: const Text('登出'),
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
-      TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('關閉')),
-      const SizedBox(height: 8),
-      // Selectable, so testers can paste the exact build into feedback.
-      VersionText(
-        selectable: true,
-        style: Theme.of(ctx).textTheme.bodySmall
-            ?.copyWith(color: Theme.of(ctx).colorScheme.onSurfaceVariant),
-      ),
-    ],
-  ),
-);
+    );
+  }
+}
 
 /// All 22 municipalities, so a report is never forced into a nearby city.
 const taiwanCities = [
@@ -275,21 +379,8 @@ class _ReportFormState extends State<ReportForm> {
         key: form,
         child: ContentPage(
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '新增停車點',
-                    style: Theme.of(context).textTheme.headlineSmall,
-                  ),
-                ),
-                // Long form: keep cancel reachable without scrolling.
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('取消'),
-                ),
-              ],
-            ),
+            // The same close as every sheet, at the top of a long form.
+            SheetTitle('新增停車點'),
             const SizedBox(height: 8),
             Text(
               '新增點位會顯示於地圖，回報資訊待管理者確認；停放資格請依現場標示。',

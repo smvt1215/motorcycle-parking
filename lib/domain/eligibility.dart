@@ -2,7 +2,7 @@ import '../models/parking.dart';
 
 /// Ordered from most to least parkable; the map ranks search results by it.
 /// - [allowed]: law or verified data opens this space to the vehicle.
-/// - [conditional]: law opens it with limits (pilot sections, how to park),
+/// - [conditional]: law opens it with limits (marked bays, how to park),
 ///   so the posted signs decide.
 /// - [unverified]: the data cannot tell (unchecked or stale community
 ///   reports, unlabelled lots, no rule in force here).
@@ -33,6 +33,33 @@ Eligibility eligibility(
   CityRule? rule, {
   DateTime? now,
 }) {
+  final result = _judge(spot, vehicle, rule, now: now);
+  // A timed bay is a motorcycle bay with a clock: where the bay is open, the
+  // posted hours still limit it.
+  if (spot.spaceType == SpaceType.timedMotorcycle &&
+      result.status == EligibilityStatus.allowed) {
+    return const Eligibility(
+      EligibilityStatus.conditional,
+      '限時停車：請依現場牌面的時段與時限停放，超時須移車',
+      restriction: RuleRestriction.timeLimited,
+    );
+  }
+  return result;
+}
+
+/// The kind a city rule judges [type] as: rules list the original kinds,
+/// and a timed bay follows the paid bay it is painted like.
+SpaceType ruleSpaceType(SpaceType type) => switch (type) {
+  SpaceType.timedMotorcycle => SpaceType.paidMotorcycle,
+  final type => type,
+};
+
+Eligibility _judge(
+  ParkingSpot spot,
+  VehicleType vehicle,
+  CityRule? rule, {
+  DateTime? now,
+}) {
   const noRule = Eligibility(
     EligibilityStatus.unverified,
     '此地區尚無已生效的停車規則資料，請以現場標誌標線為準',
@@ -49,13 +76,50 @@ Eligibility eligibility(
   if (explicit == false && trusted) {
     return const Eligibility(EligibilityStatus.notAllowed, '此點位標示不開放目前車種');
   }
+  // Bays reserved by law or by vehicle, whatever the city rule says.
+  switch (spot.spaceType) {
+    case SpaceType.disabledMotorcycle ||
+            SpaceType.evMotorcycle ||
+            SpaceType.flexShared
+        when !trusted:
+      return const Eligibility(
+        EligibilityStatus.unverified,
+        '社群資訊尚未查核或可能過時，請確認現場',
+      );
+    // Open to permit holders, who may be the rider using the app.
+    case SpaceType.disabledMotorcycle:
+      return const Eligibility(
+        EligibilityStatus.conditional,
+        '身心障礙者專用，須持有效停車識別證明才可停放',
+      );
+    case SpaceType.evMotorcycle:
+      return const Eligibility(
+        EligibilityStatus.conditional,
+        '限電動機車停放或充換電，燃油機車不可停',
+        restriction: RuleRestriction.evOnly,
+      );
+    case SpaceType.flexShared:
+      return const Eligibility(
+        EligibilityStatus.conditional,
+        '汽機車依時段輪替使用，請看現場牌面的機車開放時段',
+        restriction: RuleRestriction.timeLimited,
+      );
+    default:
+  }
+  final type = ruleSpaceType(spot.spaceType);
   if (spot.spaceType == SpaceType.heavyOnly && vehicle == VehicleType.scooter) {
     return const Eligibility(EligibilityStatus.notAllowed, '大型重機專用格');
   }
-  if (spot.spaceType == SpaceType.car && vehicle == VehicleType.scooter) {
+  // Car bays are painted for small cars and heavy bikes (標誌標線號誌設置規則
+  // §190); an ordinary scooter there is the wrong vehicle class unless a
+  // city rule opens them (道路交通安全規則 §112, last paragraph).
+  if (spot.spaceType == SpaceType.car &&
+      vehicle == VehicleType.scooter &&
+      !(rule?.allowedSpaceTypes.contains(SpaceType.car) ?? false) &&
+      !(rule?.conditionalSpaceTypes.contains(SpaceType.car) ?? false)) {
     return const Eligibility(
-      EligibilityStatus.unverified,
-      '汽車格是否開放機車依各地規定，請以現場標誌標線為準',
+      EligibilityStatus.notAllowed,
+      '汽車格為小型車及大型重機停放線，普通機車停放屬車種不依規定',
     );
   }
   // Community claims never override legal rules; pending/stale claims remain unverified.
@@ -77,12 +141,29 @@ Eligibility eligibility(
       (rule.city != '全國' && rule.city != spot.city)) {
     return noRule;
   }
-  final limited = rule.conditionalSpaceTypes.contains(spot.spaceType);
+  // Open by whole district: parkable inside, closed outside, unknown when
+  // the spot's district is.
+  final openIn = rule.districtSpaceTypes[type];
+  if (openIn != null) {
+    if (spot.district.isEmpty) {
+      return Eligibility(
+        EligibilityStatus.unverified,
+        '僅${openIn.join('、')}開放，無法判斷此點位所在行政區',
+      );
+    }
+    if (!openIn.contains(spot.district)) {
+      return Eligibility(
+        EligibilityStatus.notAllowed,
+        '僅${openIn.join('、')}開放，${spot.district}不開放',
+      );
+    }
+  }
+  final limited = rule.conditionalSpaceTypes.contains(type);
   // A rule not verified yet opens nothing for certain.
   if (limited && rule.restriction == RuleRestriction.unverified) {
     return Eligibility(EligibilityStatus.unverified, rule.exceptions);
   }
-  if (!limited && !rule.allowedSpaceTypes.contains(spot.spaceType)) {
+  if (!limited && openIn == null && !rule.allowedSpaceTypes.contains(type)) {
     return Eligibility(EligibilityStatus.notAllowed, rule.exceptions);
   }
   if (rule.districts.isNotEmpty && !rule.districts.contains(spot.district)) {

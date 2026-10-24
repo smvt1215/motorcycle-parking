@@ -279,9 +279,10 @@ class MapActions extends StatelessWidget {
             onPressed: onLocate,
           ),
           const SizedBox(height: 12),
+          // Not a P: that is the map's "parkable" marker.
           MapAction(
             label: '我停這裡',
-            icon: Icons.local_parking,
+            icon: Icons.add_location_alt_outlined,
             primary: true,
             onPressed: onRecord,
           ),
@@ -304,7 +305,7 @@ class MapActions extends StatelessWidget {
         M3EFab(
           key: const ValueKey('record-fab'),
           size: M3EFabSize.regular,
-          icon: const Icon(Icons.local_parking),
+          icon: const Icon(Icons.add_location_alt_outlined),
           tooltip: '我停這裡',
           onPressed: onRecord,
         ),
@@ -338,7 +339,7 @@ class MapAction extends StatelessWidget {
       return SizedBox.square(
         dimension: size,
         child: CNButton.icon(
-          icon: CNSymbol(primary ? 'parkingsign' : 'location'),
+          icon: CNSymbol(primary ? 'mappin.and.ellipse' : 'location'),
           tint: colors.primary,
           config: CNButtonConfig(
             style: primary ? CNButtonStyle.prominentGlass : CNButtonStyle.glass,
@@ -502,7 +503,10 @@ class ContentPage extends StatelessWidget {
   final List<Widget> children;
   @override
   Widget build(BuildContext context) => SafeArea(
+    // Sized to its content: a short sheet does not fill the screen with
+    // empty space, and a long one still scrolls at full height.
     child: ListView(
+      shrinkWrap: true,
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 110),
       children: children,
     ),

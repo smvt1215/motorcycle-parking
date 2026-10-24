@@ -62,6 +62,7 @@ class ParkingPage extends ConsumerWidget {
                 dimension: 40,
                 child: SpotMarker(
                   look: markerLook(store.eligible(spot)),
+                  badge: spaceBadge(spot),
                   size: 32,
                 ),
               ),

@@ -48,50 +48,39 @@ class ContributePage extends ConsumerWidget {
     final store = ref.watch(storeProvider);
     final colors = Theme.of(context).colorScheme;
     final user = store.client?.auth.currentUser;
-    final displayName =
-        user?.userMetadata?['full_name'] as String? ??
-        user?.userMetadata?['name'] as String? ??
-        '一起讓停車資訊更準確';
+    final signedIn = user != null && !user.isAnonymous;
     return MapPanel(
       title: '貢獻',
       children: [
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                colors.surfaceContainerLow,
-                colors.primaryContainer.withValues(alpha: .55),
-              ],
-            ),
-          ),
-          child: ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: CircleAvatar(
-              backgroundColor: colors.primaryContainer,
-              child: Icon(
-                Icons.person_outline,
-                color: colors.onPrimaryContainer,
+        // The account itself lives in the personal center; here only what
+        // it means for contributing, when it limits anything.
+        if (store.demo || !signedIn)
+          Material(
+            color: colors.surfaceContainerHigh,
+            borderRadius: BorderRadius.circular(16),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+              child: Row(
+                children: [
+                  Icon(
+                    store.demo ? Icons.science_outlined : Icons.lock_outline,
+                    color: colors.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      store.demo ? '範例模式：回報只用於功能測試。' : '登入後才能新增與修正停車資訊。',
+                    ),
+                  ),
+                  if (!store.demo)
+                    TextButton(
+                      onPressed: () => showSettings(context, store),
+                      child: const Text('登入'),
+                    ),
+                ],
               ),
             ),
-            title: Text(
-              displayName,
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            subtitle: Text(
-              store.demo
-                  ? '範例模式 · 可試用回報流程'
-                  : user == null || user.isAnonymous
-                  ? '登入後可新增點位與提出修改建議'
-                  : '分享現場資訊，幫助下一位騎士',
-            ),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => showSettings(context, store),
           ),
-        ),
         const SizedBox(height: 20),
         // One way in for each kind of contribution. Editing a spot and
         // reporting it gone share the suggestion sheet, so they share the
@@ -198,7 +187,11 @@ class _SpotRow extends StatelessWidget {
       leading: ExcludeSemantics(
         child: SizedBox.square(
           dimension: 40,
-          child: SpotMarker(look: markerLook(eligibility), size: 32),
+          child: SpotMarker(
+            look: markerLook(eligibility),
+            badge: spaceBadge(spot),
+            size: 32,
+          ),
         ),
       ),
       title: Text(spot.name, maxLines: 2, overflow: TextOverflow.ellipsis),

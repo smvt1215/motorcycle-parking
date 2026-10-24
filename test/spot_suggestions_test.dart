@@ -185,7 +185,8 @@ void main() {
     await tester.tap(find.text('新增'));
     await tester.pumpAndSettle();
     expect(find.text('位置：目前地圖中心'), findsOneWidget);
-    expect(find.text('取消').hitTestable(), findsOneWidget);
+    // Closing stays reachable at the top of the long form.
+    expect(find.byTooltip('關閉').hitTestable(), findsOneWidget);
     expect(find.text('0/100'), findsNothing);
     await tester.enterText(
       find.widgetWithText(TextFormField, '停車點名稱'),
