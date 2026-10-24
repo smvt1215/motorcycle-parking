@@ -93,6 +93,30 @@ void main() {
     expect(spaceBadge(spot(SpaceType.disabledMotorcycle)), SpaceBadge.disabled);
   });
 
+  test('收藏快照寫入舊版看得懂的種類，新版仍還原實際種類', () {
+    const original = {
+      'paidMotorcycle',
+      'freeMotorcycle',
+      'heavyOnly',
+      'car',
+      'offStreet',
+    };
+    for (final type in SpaceType.values) {
+      final json = spot(type).toJson();
+      // Older builds parse space_type alone.
+      expect(original, contains(json['space_type']), reason: type.name);
+      expect(ParkingSpot.fromJson(json).spaceType, type, reason: type.name);
+      expect(json.containsKey('space_kind'), !original.contains(type.name));
+    }
+    // A reserved bay reads as a lot to older builds: unverified, never
+    // parkable.
+    expect(spot(SpaceType.evMotorcycle).toJson()['space_type'], 'offStreet');
+    expect(
+      spot(SpaceType.timedMotorcycle).toJson()['space_type'],
+      'paidMotorcycle',
+    );
+  });
+
   test('不認得的格位種類只略過該筆，不讓整批資料失敗', () {
     Map<String, dynamic> row(String type) => {
       'id': type,

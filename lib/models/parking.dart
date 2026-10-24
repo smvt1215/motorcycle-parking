@@ -202,11 +202,27 @@ class ParkingSpot {
   /// build: one unknown row must not fail the whole map.
   static Iterable<ParkingSpot> known(Object? row) {
     final j = row as Map<String, dynamic>;
-    if (!SpaceType.values.asNameMap().containsKey(j['space_type'])) {
-      return const [];
-    }
+    if (_kind(j) == null) return const [];
     return [ParkingSpot.fromJson(j)];
   }
+
+  /// A snapshot's exact kind ([toJson] writes `space_kind` for kinds older
+  /// builds lack), else its `space_type`; null when this build knows neither.
+  static SpaceType? _kind(Map<String, dynamic> j) {
+    final names = SpaceType.values.asNameMap();
+    return names[j['space_kind']] ?? names[j['space_type']];
+  }
+
+  /// The original kind an older build reads in a snapshot of [type]: a timed
+  /// bay is a paid motorcycle bay; reserved bays become a lot, which those
+  /// builds show as unverified rather than parkable.
+  static SpaceType _legacyKind(SpaceType type) => switch (type) {
+    SpaceType.timedMotorcycle => SpaceType.paidMotorcycle,
+    SpaceType.disabledMotorcycle ||
+    SpaceType.flexShared ||
+    SpaceType.evMotorcycle => SpaceType.offStreet,
+    final type => type,
+  };
 
   factory ParkingSpot.fromJson(Map<String, dynamic> j) => ParkingSpot(
     id: j['id'] as String,
@@ -215,7 +231,7 @@ class ParkingSpot {
     lng: (j['lng'] as num).toDouble(),
     city: j['city'] as String,
     source: j['source'] as String? ?? 'community',
-    spaceType: SpaceType.values.byName(j['space_type'] as String),
+    spaceType: _kind(j) ?? SpaceType.values.byName(j['space_type'] as String),
     feeNote: j['fee_note'] as String? ?? '請依現場公告',
     scooterTotal: j['scooter_total'] as int?,
     available: j['available'] as int?,
@@ -251,7 +267,10 @@ class ParkingSpot {
     'lng': lng,
     'city': city,
     'source': source,
-    'space_type': spaceType.name,
+    // Favorites sync this snapshot to every signed-in device, including
+    // builds that predate newer kinds: they read the original kind.
+    'space_type': _legacyKind(spaceType).name,
+    if (_legacyKind(spaceType) != spaceType) 'space_kind': spaceType.name,
     'fee_note': feeNote,
     'scooter_total': scooterTotal,
     'available': available,
