@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import '../../core/geo.dart';
 import '../../data/app_store.dart';
 import '../../models/parking.dart';
@@ -159,209 +161,232 @@ class _SpotSheetState extends State<SpotSheet> {
             builder: (ctx, _) {
               final eligibility = store.eligible(spot);
               final extraFee = _additionalFeeNote(spot);
-              return Column(
-                children: [
-                  Expanded(
-                    child: ListView(
-                      controller: scroll,
-                      padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
-                      children: [
-                        Center(
-                          child: Container(
-                            width: 40,
-                            height: 4,
-                            margin: const EdgeInsets.only(bottom: 16),
-                            decoration: BoxDecoration(
-                              color: Theme.of(ctx).colorScheme.outline,
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                          ),
-                        ),
-                        _SpotHeading(
-                          name: spot.name,
-                          subtitle: [
-                            facilitySummary(spot),
-                            spot.city,
-                            spot.district,
-                            if (store.located)
-                              _distanceLabel(
-                                distanceMeters(
-                                  store.lat,
-                                  store.lng,
-                                  spot.lat,
-                                  spot.lng,
+              final actions = _DetailActions(
+                onNavigate: () =>
+                    runAction(ctx, () => navigateTo(spot.lat, spot.lng)),
+                onSuggest: () =>
+                    runAction(ctx, () => showSpotSuggestions(ctx, store, spot)),
+              );
+              return LayoutBuilder(
+                builder: (ctx, constraints) {
+                  // A short sheet (landscape, large text) keeps the actions
+                  // in the scrolling list so the header is never squeezed out.
+                  final pinned =
+                      constraints.maxHeight -
+                          _footerHeight(ctx, constraints.maxWidth - 40) >=
+                      _minDetailHeight;
+                  return Column(
+                    children: [
+                      Expanded(
+                        child: ListView(
+                          controller: scroll,
+                          padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+                          children: [
+                            Center(
+                              child: Container(
+                                width: 40,
+                                height: 4,
+                                margin: const EdgeInsets.only(bottom: 16),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(ctx).colorScheme.outline,
+                                  borderRadius: BorderRadius.circular(2),
                                 ),
                               ),
-                          ].where((value) => value.isNotEmpty).join(' · '),
-                          favorite: store.favorites.any((s) => s.id == spot.id),
-                          onFavorite: () =>
-                              runAction(ctx, () => store.toggleFavorite(spot)),
-                          onShare: share,
-                          onClose: () => close(ctx),
-                        ),
-                        const SizedBox(height: 14),
-                        _SpotDecision(
-                          vehicle: store.vehicle.label,
-                          eligibility: eligibility,
-                        ),
-                        const SizedBox(height: 16),
-                        _SpotSummary(spot: spot, vehicle: store.vehicle),
-                        if (feedback != null)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 12),
-                            child: Text(feedback!),
-                          ),
-                        _DetailSection(
-                          title: '停車資訊',
-                          icon: Icons.local_parking_outlined,
-                          children: [
-                            _DetailField(
-                              label: '類型',
-                              value: facilitySummary(spot),
                             ),
-                            Text(
-                              spot.zones.isEmpty ? '停放車種' : '分區',
-                              style: Theme.of(ctx).textTheme.bodySmall
-                                  ?.copyWith(color: colors.onSurfaceVariant),
-                            ),
-                            const SizedBox(height: 10),
-                            ParkingAccessView(spot: spot),
-                            if (extraFee.isNotEmpty) ...[
-                              const SizedBox(height: 14),
-                              _DetailField(label: '收費說明', value: extraFee),
-                            ],
-                          ],
-                        ),
-                        _DetailSection(
-                          title: '位置與指引',
-                          icon: Icons.near_me_outlined,
-                          children: [
-                            if (spot.isFacility &&
-                                spot.entranceNote.trim().isNotEmpty)
-                              _DetailField(
-                                label: '入口',
-                                value: spot.entranceNote,
+                            _SpotHeading(
+                              name: spot.name,
+                              subtitle: [
+                                facilitySummary(spot),
+                                spot.city,
+                                spot.district,
+                                if (store.located)
+                                  _distanceLabel(
+                                    distanceMeters(
+                                      store.lat,
+                                      store.lng,
+                                      spot.lat,
+                                      spot.lng,
+                                    ),
+                                  ),
+                              ].where((value) => value.isNotEmpty).join(' · '),
+                              favorite: store.favorites.any(
+                                (s) => s.id == spot.id,
                               ),
-                            if (spot.parkingGuide.trim().isNotEmpty)
-                              _DetailField(
-                                label: '停車指引',
-                                value: spot.parkingGuide,
+                              onFavorite: () => runAction(
+                                ctx,
+                                () => store.toggleFavorite(spot),
                               ),
-                            _DetailField(
-                              label: '位置',
-                              value: [
-                                if (spot.address.trim().isNotEmpty)
-                                  spot.address,
-                                if (spot.roadSegment.trim().isNotEmpty)
-                                  spot.roadSegment,
-                              ].join('\n'),
-                              secondary:
-                                  'GPS ${spot.lat.toStringAsFixed(6)}, ${spot.lng.toStringAsFixed(6)}',
-                            ),
-                            if (spot.specialRules.trim().isNotEmpty)
-                              _DetailField(
-                                label: '特殊規則',
-                                value: spot.specialRules,
-                              ),
-                          ],
-                        ),
-                        _DetailSection(
-                          title: '現場補充',
-                          icon: Icons.photo_camera_outlined,
-                          children: [
-                            Text(
-                              '照片',
-                              style: Theme.of(ctx).textTheme.labelLarge,
-                            ),
-                            const SizedBox(height: 8),
-                            SpotPhotos(
-                              urls: spot.photoUrls,
-                              strip: photos.isNotEmpty,
+                              onShare: share,
+                              onClose: () => close(ctx),
                             ),
                             const SizedBox(height: 14),
-                            if (spot.note.trim().isNotEmpty)
-                              _DetailField(label: '備註', value: spot.note),
-                          ],
-                        ),
-                        _DetailSection(
-                          title: '資料與查核',
-                          icon: Icons.verified_outlined,
-                          children: [
-                            _DetailField(
-                              label: '資料來源',
-                              value: sourceSummary(spot, demo: store.demo),
+                            _SpotDecision(
+                              vehicle: store.vehicle.label,
+                              eligibility: eligibility,
                             ),
-                            _DetailField(
-                              label: '查核狀態',
-                              value: trustSummary(spot, demo: store.demo),
-                            ),
-                            _DetailField(
-                              label: '更新時間',
-                              value: spot.updatedAt == null
-                                  ? '未提供'
-                                  : formatSpotTime(spot.updatedAt!),
-                            ),
-                            if (spot.isFacility)
-                              _DetailField(
-                                label: '即時車位狀態',
-                                value: availabilitySummary(spot),
+                            const SizedBox(height: 16),
+                            _SpotSummary(spot: spot, vehicle: store.vehicle),
+                            if (feedback != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 12),
+                                child: Text(feedback!),
                               ),
-                            if (spot.licenseNote.trim().isNotEmpty)
-                              _DetailField(
-                                label: '授權說明',
-                                value: spot.licenseNote,
-                              ),
-                            if (sourceUri != null)
+                            _DetailSection(
+                              title: '停車資訊',
+                              icon: Icons.local_parking_outlined,
+                              children: [
+                                _DetailField(
+                                  label: '類型',
+                                  value: facilitySummary(spot),
+                                ),
+                                Text(
+                                  spot.zones.isEmpty ? '停放車種' : '分區',
+                                  style: Theme.of(ctx).textTheme.bodySmall
+                                      ?.copyWith(
+                                        color: colors.onSurfaceVariant,
+                                      ),
+                                ),
+                                const SizedBox(height: 10),
+                                ParkingAccessView(spot: spot),
+                                if (extraFee.isNotEmpty) ...[
+                                  const SizedBox(height: 14),
+                                  _DetailField(label: '收費說明', value: extraFee),
+                                ],
+                              ],
+                            ),
+                            _DetailSection(
+                              title: '位置與指引',
+                              icon: Icons.near_me_outlined,
+                              children: [
+                                if (spot.isFacility &&
+                                    spot.entranceNote.trim().isNotEmpty)
+                                  _DetailField(
+                                    label: '入口',
+                                    value: spot.entranceNote,
+                                  ),
+                                if (spot.parkingGuide.trim().isNotEmpty)
+                                  _DetailField(
+                                    label: '停車指引',
+                                    value: spot.parkingGuide,
+                                  ),
+                                _DetailField(
+                                  label: '位置',
+                                  value: [
+                                    if (spot.address.trim().isNotEmpty)
+                                      spot.address,
+                                    if (spot.roadSegment.trim().isNotEmpty)
+                                      spot.roadSegment,
+                                  ].join('\n'),
+                                  secondary:
+                                      'GPS ${spot.lat.toStringAsFixed(6)}, ${spot.lng.toStringAsFixed(6)}',
+                                ),
+                                if (spot.specialRules.trim().isNotEmpty)
+                                  _DetailField(
+                                    label: '特殊規則',
+                                    value: spot.specialRules,
+                                  ),
+                              ],
+                            ),
+                            _DetailSection(
+                              title: '現場補充',
+                              icon: Icons.photo_camera_outlined,
+                              children: [
+                                Text(
+                                  '照片',
+                                  style: Theme.of(ctx).textTheme.labelLarge,
+                                ),
+                                const SizedBox(height: 8),
+                                SpotPhotos(
+                                  urls: spot.photoUrls,
+                                  strip: photos.isNotEmpty,
+                                ),
+                                const SizedBox(height: 14),
+                                if (spot.note.trim().isNotEmpty)
+                                  _DetailField(label: '備註', value: spot.note),
+                              ],
+                            ),
+                            _DetailSection(
+                              title: '資料與查核',
+                              icon: Icons.verified_outlined,
+                              children: [
+                                _DetailField(
+                                  label: '資料來源',
+                                  value: sourceSummary(spot, demo: store.demo),
+                                ),
+                                _DetailField(
+                                  label: '查核狀態',
+                                  value: trustSummary(spot, demo: store.demo),
+                                ),
+                                _DetailField(
+                                  label: '更新時間',
+                                  value: spot.updatedAt == null
+                                      ? '未提供'
+                                      : formatSpotTime(spot.updatedAt!),
+                                ),
+                                if (spot.isFacility)
+                                  _DetailField(
+                                    label: '即時車位狀態',
+                                    value: availabilitySummary(spot),
+                                  ),
+                                if (spot.licenseNote.trim().isNotEmpty)
+                                  _DetailField(
+                                    label: '授權說明',
+                                    value: spot.licenseNote,
+                                  ),
+                                if (sourceUri != null)
+                                  TextButton(
+                                    onPressed: () => runAction(ctx, () async {
+                                      if (!await launchUrl(sourceUri)) {
+                                        throw StateError('無法開啟資料來源');
+                                      }
+                                    }),
+                                    child: const Text('查看停車點資料來源'),
+                                  ),
+                                if (spot.stale) ...[
+                                  const SizedBox(height: 8),
+                                  const _DetailRow(
+                                    icon: Icons.info_outline,
+                                    text: '停放資訊可能過時，請確認現場公告。',
+                                  ),
+                                ],
+                              ],
+                            ),
+                            if (!store.canReport)
                               TextButton(
-                                onPressed: () => runAction(ctx, () async {
-                                  if (!await launchUrl(sourceUri)) {
-                                    throw StateError('無法開啟資料來源');
-                                  }
-                                }),
-                                child: const Text('查看停車點資料來源'),
+                                onPressed: () => showSettings(ctx, store),
+                                child: const Text('登入後提出修改建議'),
                               ),
-                            if (spot.stale) ...[
-                              const SizedBox(height: 8),
-                              const _DetailRow(
-                                icon: Icons.info_outline,
-                                text: '停放資訊可能過時，請確認現場公告。',
-                              ),
+                            if (!pinned) ...[
+                              const SizedBox(height: 16),
+                              actions,
                             ],
                           ],
                         ),
-                        if (!store.canReport)
-                          TextButton(
-                            onPressed: () => showSettings(ctx, store),
-                            child: const Text('登入後提出修改建議'),
-                          ),
-                      ],
-                    ),
-                  ),
-                  DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: colors.surface,
-                      border: Border(
-                        top: BorderSide(color: colors.outlineVariant),
                       ),
-                    ),
-                    child: SafeArea(
-                      top: false,
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-                        child: _DetailActions(
-                          onNavigate: () => runAction(
-                            ctx,
-                            () => navigateTo(spot.lat, spot.lng),
+                      if (pinned)
+                        DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: colors.surface,
+                            border: Border(
+                              top: BorderSide(color: colors.outlineVariant),
+                            ),
                           ),
-                          onSuggest: () => runAction(
-                            ctx,
-                            () => showSpotSuggestions(ctx, store, spot),
+                          child: SafeArea(
+                            top: false,
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(
+                                20,
+                                12,
+                                20,
+                                12,
+                              ),
+                              child: actions,
+                            ),
                           ),
                         ),
-                      ),
-                    ),
-                  ),
-                ],
+                    ],
+                  );
+                },
               );
             },
           ),
@@ -805,6 +830,25 @@ class _DetailRow extends StatelessWidget {
   );
 }
 
+/// Room the scrolling details keep above a pinned action footer: the drag
+/// handle, the name and the start of the eligibility summary.
+const _minDetailHeight = 160.0;
+
+bool _stackedActions(BuildContext context, double width) =>
+    width < 320 || MediaQuery.textScalerOf(context).scale(14) > 18;
+
+/// Upper estimate of the pinned footer: border, 24 padding, the safe area and
+/// one or two rows of buttons at the current text size.
+double _footerHeight(BuildContext context, double width) {
+  final button = math.max(
+    48.0,
+    MediaQuery.textScalerOf(context).scale(20) + 28,
+  );
+  return 25 +
+      MediaQuery.paddingOf(context).bottom +
+      (_stackedActions(context, width) ? button * 2 + 12 : button);
+}
+
 class _DetailActions extends StatelessWidget {
   const _DetailActions({required this.onNavigate, this.onSuggest});
   final VoidCallback onNavigate;
@@ -813,9 +857,7 @@ class _DetailActions extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      final stacked =
-          constraints.maxWidth < 320 ||
-          MediaQuery.textScalerOf(context).scale(14) > 18;
+      final stacked = _stackedActions(context, constraints.maxWidth);
       final width = stacked || onSuggest == null
           ? constraints.maxWidth
           : (constraints.maxWidth - 12) / 2;

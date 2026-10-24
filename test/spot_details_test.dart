@@ -411,6 +411,45 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('橫向矮畫面加大字級時，操作列改放清單末端，標題不被擠掉', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(640, 320);
+    tester.view.padding = const FakeViewPadding(top: 24);
+    addTearDown(tester.view.reset);
+    final store = (await tester.runAsync(createStore))!;
+    addTearDown(store.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: const TextScaler.linear(1.6)),
+          child: child!,
+        ),
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showSpot(context, store, roadside),
+              child: const Text('開啟詳情'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('開啟詳情'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text(roadside.name).hitTestable(), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('導航到這裡'),
+      80,
+      scrollable: detailScroll,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('導航到這裡').hitTestable(), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('共用格的摘要跟隨目前車種，缺少大型重機費率不沿用普通機車價格', (tester) async {
     usePhone(tester);
     final store = (await tester.runAsync(createStore))!;
