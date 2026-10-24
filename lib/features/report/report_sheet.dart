@@ -6,6 +6,8 @@ import '../../data/app_store.dart';
 import '../../models/parking.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../../ui/version_text.dart';
+import '../map/space_type_sheet.dart';
+import '../map/vehicle_sheet.dart';
 
 Future<void> showSettings(BuildContext context, AppStore store) =>
     showAdaptiveSheet<void>(
@@ -258,18 +260,41 @@ class ChoiceField<T> extends StatelessWidget {
     required this.value,
     required this.options,
     required this.onChanged,
+    this.vehicle,
   });
   final String label;
   final T value;
   final List<(T, String)> options;
   final ValueChanged<T> onChanged;
+
+  /// Shows the class's plate colours beside the label, as on the map's
+  /// vehicle choice, so riders find their class by plate.
+  final VehicleType? vehicle;
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(bottom: 16),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(label, style: Theme.of(context).textTheme.bodyLarge),
+        Row(
+          children: [
+            if (vehicle case final vehicle?) ...[
+              ExcludeSemantics(
+                child: SizedBox(
+                  width: 38,
+                  height: 30,
+                  child: FittedBox(
+                    child: PlateStack(plates: platesOf(vehicle)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+            ],
+            Expanded(
+              child: Text(label, style: Theme.of(context).textTheme.bodyLarge),
+            ),
+          ],
+        ),
         const SizedBox(height: 8),
         SegmentedButton<T>(
           showSelectedIcon: false,
@@ -283,6 +308,111 @@ class ChoiceField<T> extends StatelessWidget {
       ],
     ),
   );
+}
+
+/// What a bay's markings say about each vehicle before the reporter looks
+/// further: motorcycle bays take scooters, heavy-only bays take heavy bikes
+/// only, and car bays are not for scooters (道路交通安全規則 §112). Anything
+/// the markings cannot settle stays unconfirmed.
+({bool? scooter, bool? heavy}) markedEligibility(SpaceType type) =>
+    switch (type) {
+      SpaceType.paidMotorcycle ||
+      SpaceType.freeMotorcycle ||
+      SpaceType.timedMotorcycle => (scooter: true, heavy: null),
+      SpaceType.heavyOnly => (scooter: false, heavy: true),
+      SpaceType.car => (scooter: false, heavy: null),
+      _ => (scooter: null, heavy: null),
+    };
+
+/// Bay kinds as their painted markings, so reporters match what is on the
+/// ground instead of a list of names.
+class SpaceTypePicker extends StatelessWidget {
+  const SpaceTypePicker({
+    super.key,
+    required this.value,
+    required this.onChanged,
+  });
+  final SpaceType value;
+  final ValueChanged<SpaceType> onChanged;
+  @override
+  Widget build(BuildContext context) {
+    // Three across on phones; two when large text needs the width.
+    final columns = MediaQuery.textScalerOf(context).scale(1) > 1.3 ? 2 : 3;
+    const types = SpaceType.values;
+    return Column(
+      children: [
+        for (var row = 0; row < types.length; row += columns)
+          Padding(
+            padding: EdgeInsets.only(top: row == 0 ? 0 : 8),
+            // Tiles in a row share one height, however their labels wrap.
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var i = row; i < row + columns; i++) ...[
+                    if (i > row) const SizedBox(width: 8),
+                    Expanded(
+                      child: i < types.length
+                          ? _tile(context, types[i])
+                          : const SizedBox.shrink(),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _tile(BuildContext context, SpaceType type) {
+    final colors = Theme.of(context).colorScheme;
+    final selected = type == value;
+    return Semantics(
+      button: true,
+      selected: selected,
+      inMutuallyExclusiveGroup: true,
+      label: type.label,
+      // The child's tap is excluded with its semantics; screen readers need
+      // it here.
+      onTap: () => onChanged(type),
+      excludeSemantics: true,
+      child: Material(
+        color: selected ? colors.primaryContainer : colors.surfaceContainerLow,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: selected ? colors.primary : colors.outlineVariant,
+            width: selected ? 2 : 1,
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          key: ValueKey('report-space-${type.name}'),
+          onTap: () => onChanged(type),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 12, 8, 10),
+            child: Column(
+              children: [
+                GroundMarking(type: type),
+                const SizedBox(height: 8),
+                Text(
+                  type.label,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontWeight: selected ? FontWeight.w600 : null,
+                    color: selected
+                        ? colors.onPrimaryContainer
+                        : colors.onSurface,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// Shown above a form when the reporter still has to sign in.
@@ -349,8 +479,11 @@ class _ReportFormState extends State<ReportForm> {
       fee = TextEditingController(),
       note = TextEditingController();
   SpaceType type = SpaceType.paidMotorcycle;
-  bool scooter = true;
-  bool? heavy;
+  late bool? scooter = markedEligibility(type).scooter;
+  late bool? heavy = markedEligibility(type).heavy;
+
+  /// Once the reporter sets the vehicles, a new bay kind no longer resets them.
+  bool vehiclesEdited = false;
   late String? city = nearbyCity(widget.store.spots, widget.lat, widget.lng);
   bool sending = false;
   @override
@@ -363,10 +496,10 @@ class _ReportFormState extends State<ReportForm> {
 
   void setType(SpaceType value) => setState(() {
     type = value;
-    // Dedicated heavy bays imply the vehicle answers; reporters can still edit.
-    if (value == SpaceType.heavyOnly) {
-      scooter = false;
-      heavy = true;
+    if (!vehiclesEdited) {
+      final marked = markedEligibility(value);
+      scooter = marked.scooter;
+      heavy = marked.heavy;
     }
   });
 
@@ -435,33 +568,47 @@ class _ReportFormState extends State<ReportForm> {
                   validator: (v) => v == null ? '請選擇停車點所在縣市' : null,
                   onChanged: (v) => setState(() => city = v),
                 ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<SpaceType>(
-                  initialValue: type,
-                  decoration: const InputDecoration(labelText: '格位類型'),
-                  items: SpaceType.values
-                      .map(
-                        (s) => DropdownMenuItem(value: s, child: Text(s.label)),
-                      )
-                      .toList(),
-                  onChanged: (v) => setType(v!),
+                const SizedBox(height: 20),
+                Text(
+                  '地面畫的是哪一種格位？',
+                  style: Theme.of(context).textTheme.bodyLarge,
                 ),
+                const SizedBox(height: 10),
+                SpaceTypePicker(value: type, onChanged: setType),
               ],
             ),
             FormSection(
               title: '可停車種',
               children: [
-                ChoiceField<bool>(
-                  label: '普通機車',
-                  value: scooter,
-                  options: const [(true, '可停'), (false, '不可停')],
-                  onChanged: (v) => setState(() => scooter = v),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: Text(
+                    vehiclesEdited
+                        ? '現場有告示牌或地面標字時，才選「可停」。'
+                        : '已依「${type.label}」帶入，可以修改。'
+                              '現場有告示牌或地面標字時，才選「可停」。',
+                    style: TextStyle(color: colors.onSurfaceVariant),
+                  ),
                 ),
                 ChoiceField<bool?>(
-                  label: '大型重機（依現場標示）',
+                  label: '普通機車',
+                  vehicle: VehicleType.scooter,
+                  value: scooter,
+                  options: const [(null, '未確認'), (true, '可停'), (false, '不可停')],
+                  onChanged: (v) => setState(() {
+                    scooter = v;
+                    vehiclesEdited = true;
+                  }),
+                ),
+                ChoiceField<bool?>(
+                  label: '大型重機',
+                  vehicle: VehicleType.heavy,
                   value: heavy,
                   options: const [(null, '未確認'), (true, '可停'), (false, '不可停')],
-                  onChanged: (v) => setState(() => heavy = v),
+                  onChanged: (v) => setState(() {
+                    heavy = v;
+                    vehiclesEdited = true;
+                  }),
                 ),
               ],
             ),
