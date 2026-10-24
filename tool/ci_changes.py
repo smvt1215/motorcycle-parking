@@ -14,15 +14,19 @@ APP_PATHS = (
     "lib/", "test/", "integration_test/", "test_driver/", "assets/",
     "pubspec.yaml", "pubspec.lock", ".flutter-version", ".metadata",
 )
+ADMIN_PATHS = (
+    "lib/admin/", "lib/main_admin.dart", "test/admin/", "admin_web/",
+    "firebase.json", ".firebaserc", "tool/prepare_admin_web.py", "tool/admin_smoke.cjs",
+)
 ROUTING_PATHS = (
     "tool/ci_changes.py", "tool/test_ci_changes.py", ".github/workflows/codeql.yml",
 )
 PATHS = {
-    "quality": APP_PATHS + ROUTING_PATHS + (
+    "quality": APP_PATHS + ADMIN_PATHS + ROUTING_PATHS + (
         "web/", "analysis_options.yaml", ".github/workflows/ci.yml",
         "tool/check_version.py", "tool/generate_seed.py", "supabase/seed.sql",
         # test/imported_spots_test.dart checks the generated import data.
-        "data/imports/",
+        "data/imports/", ".github/workflows/cd-staging.yml",
     ),
     "android": APP_PATHS + ROUTING_PATHS + (
         "android/", ".github/workflows/android.yml", ".github/actions/mobile-setup/",
@@ -42,6 +46,12 @@ PATHS = {
 def needs_run(target, changed):
     """Directory prefixes end in /; other inputs are exact file names."""
     patterns = PATHS[target]
+    if target in ("android", "ios"):
+        # The admin entrypoint and tests cannot be reached from the mobile app.
+        changed = [path for path in changed if not any(
+            path.startswith(pattern) if pattern.endswith("/") else path == pattern
+            for pattern in ADMIN_PATHS
+        )]
     return any(
         path.startswith(pattern) if pattern.endswith("/") else path == pattern
         for path in changed for pattern in patterns

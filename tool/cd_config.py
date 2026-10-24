@@ -1,4 +1,4 @@
-"""Prepare private mobile build configuration from Environment secrets."""
+"""Prepare private application build configuration from Environment settings."""
 import argparse
 import base64
 import json
@@ -35,6 +35,12 @@ def configure_build(environment, platform):
     values = {"SUPABASE_URL": url, "SUPABASE_ANON_KEY": required("SUPABASE_ANON_KEY"),
               "OAUTH_REDIRECT_URL": "tw.motopark.motorcycleparking"
               + (".staging" if environment == "staging" else "") + "://login-callback"}
+    if platform == "web":
+        # Admin OAuth always returns to the current web URL, never a mobile scheme.
+        values.pop("OAUTH_REDIRECT_URL")
+        values["GOOGLE_MAPS_WEB_API_KEY"] = required("GOOGLE_MAPS_API_KEY")
+        private_file(ROOT / f"config/{environment}.json", json.dumps(values))
+        return
     maps = ROOT / "config/maps.local.json"
     private_file(maps, json.dumps({platform: required("GOOGLE_MAPS_API_KEY")}))
     configure(maps, ROOT)
@@ -54,7 +60,7 @@ def configure_build(environment, platform):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("environment", choices=["staging", "production"])
-    parser.add_argument("platform", choices=["android", "ios", "backend"])
+    parser.add_argument("platform", choices=["android", "ios", "web", "backend"])
     args = parser.parse_args()
     configure_build(args.environment, args.platform)
     print(f"Prepared {args.environment} {args.platform} configuration")

@@ -1,0 +1,21 @@
+{
+  "hosting": {
+    "target": "admin-staging",
+    "public": "build/admin",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [{"source": "**", "destination": "/index.html"}],
+    "headers": [
+      {
+        "source": "**",
+        "headers": [
+          {"key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://maps.googleapis.com https://maps.gstatic.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.googleapis.com https://*.gstatic.com https://*.google.com; img-src 'self' data: blob: https://*.googleapis.com https://*.gstatic.com https://*.google.com https://*.googleusercontent.com https://*.ggpht.com; worker-src 'self' blob:; frame-src https://accounts.google.com; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self' https://accounts.google.com; upgrade-insecure-requests"},
+          {"key": "X-Frame-Options", "value": "DENY"},
+          {"key": "X-Robots-Tag", "value": "noindex, nofollow"},
+          {"key": "X-Content-Type-Options", "value": "nosniff"},
+          {"key": "Referrer-Policy", "value": "strict-origin-when-cross-origin"},
+          {"key": "Cache-Control", "value": "no-cache"}
+        ]
+      }
+    ]
+  }
+}

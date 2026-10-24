@@ -80,6 +80,81 @@ jobs:
         id: deployed
         if: steps.current.outputs.deploy == 'true'
         run: echo 'deployed=true' >> "$GITHUB_OUTPUT"
+  admin-web:
+    name: Staging admin Hosting
+    needs: deploy
+    if: needs.deploy.outputs.deployed == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: staging
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    concurrency:
+      group: cd-staging-admin
+      cancel-in-progress: false
+    env:
+      FIREBASE_HOSTING_SITE: ${{ vars.FIREBASE_HOSTING_SITE }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+      GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_WEB_API_KEY }}
+    steps:
+      - name: Check Hosting setup
+        id: setup
+        run: |
+          if [ -z "$FIREBASE_HOSTING_SITE" ]; then
+            echo 'Hosting is not enabled: set staging FIREBASE_HOSTING_SITE after creating the site and granting Hosting permissions.' >> "$GITHUB_STEP_SUMMARY"
+            echo 'enabled=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'enabled=true' >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        if: steps.setup.outputs.enabled == 'true'
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/mobile-setup
+        if: steps.setup.outputs.enabled == 'true'
+      - name: Build admin site
+        if: steps.setup.outputs.enabled == 'true'
+        run: |
+          python3 tool/cd_config.py staging web
+          flutter build web -t lib/main_admin.dart -o build/admin --no-web-resources-cdn --no-wasm-dry-run --dart-define-from-file=config/staging.json
+          python3 tool/prepare_admin_web.py
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        if: steps.setup.outputs.enabled == 'true'
+        with:
+          node-version: '22'
+      - if: steps.setup.outputs.enabled == 'true'
+        run: npm install --global firebase-tools@15.33.0
+      - id: current
+        if: steps.setup.outputs.enabled == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: python3 tool/cd_gate.py latest --sha "$SOURCE_SHA"
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        if: steps.current.outputs.deploy == 'true'
+        with:
+          workload_identity_provider: ${{ vars.FIREBASE_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.FIREBASE_SERVICE_ACCOUNT }}
+          create_credentials_file: true
+      - name: Deploy admin Hosting
+        if: steps.current.outputs.deploy == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          firebase target:apply hosting admin-staging "$FIREBASE_HOSTING_SITE" --project staging --non-interactive
+          # Check again after exchanging OIDC credentials and preparing the target.
+          python3 tool/cd_gate.py latest --sha "$SOURCE_SHA" > "$RUNNER_TEMP/latest.log"
+          if grep -q 'Skipped:' "$RUNNER_TEMP/latest.log"; then exit 0; fi
+          firebase deploy --only hosting:admin-staging --project staging --non-interactive
+      - name: Remove generated configuration
+        if: always() && steps.setup.outputs.enabled == 'true'
+        run: rm -f config/staging.json
   android-apk:
     name: Staging Android APK
     needs: deploy
