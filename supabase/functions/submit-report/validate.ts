@@ -28,8 +28,9 @@ const suggestionFields = [
 ];
 const text = (max: number, min = 0) => (v: unknown) =>
   typeof v === 'string' && v.trim().length >= min && v.length <= max;
+// A real string, not one coerced from an array: ['x'] must not pass as 'x'.
 const oneOf = (values: string[]) => (v: unknown) =>
-  v === null || values.includes(String(v));
+  v === null || (typeof v === 'string' && values.includes(v));
 const flag = (v: unknown) => v === null || typeof v === 'boolean';
 const coordinate = (v: unknown) => typeof v === 'number' && Number.isFinite(v);
 // Mirrors the columns admin_resolve_report may patch, plus how riders ask to
@@ -40,7 +41,7 @@ const proposedChecks: Record<string, (v: unknown) => boolean> = {
   lng: coordinate,
   city: text(30, 1),
   district: text(30),
-  space_type: (v) => spaceTypes.includes(String(v)),
+  space_type: (v) => typeof v === 'string' && spaceTypes.includes(v),
   fee_note: text(200),
   note: text(500),
   scooter_allowed: flag,

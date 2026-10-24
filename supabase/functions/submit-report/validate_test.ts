@@ -105,6 +105,9 @@ Deno.test('flags may carry a structured suggestion', () => {
       { ...flag, proposed: { space_type: null } },
       { ...flag, proposed: { heavy_allowed: 'true' } },
       { ...flag, proposed: { facility_type: 'tower' } },
+      { ...flag, proposed: { facility_type: ['underground'] } },
+      { ...flag, proposed: { parking_access: ['heavyOnly'] } },
+      { ...flag, proposed: { space_type: ['car'] } },
       { ...flag, proposed: { lat: 0, lng: 121 } },
       { ...flag, proposed: { lng: '121' } },
       // Each source hides its own way, and riders may only ask to hide.
