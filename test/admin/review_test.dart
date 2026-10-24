@@ -51,6 +51,21 @@ void main() {
       ]);
     });
 
+    test('型別不符的建議值不進入修改內容', () {
+      final community = spots[communityId]!;
+      final odd = ReviewReport(
+        id: 'odd',
+        sourceId: communityId,
+        reason: '格位類型',
+        field: 'space_type',
+        proposed: const {'space_type': true, 'name': 3, 'fee_note': '每次 5 元'},
+        createdAt: reportTime,
+      );
+      final proposal = initialProposal(odd, community);
+      expect(applicablePatch(proposal, community), {'fee_note': '每次 5 元'});
+      expect(ignoredKeys(proposal, community), ['space_type', 'name']);
+    });
+
     test('驗證與資料表約束一致', () {
       final official = spots[officialId]!;
       expect(validatePatch({'name': ' '}, official), '停車點名稱不可空白');
@@ -159,6 +174,21 @@ void main() {
       await review.flush();
       expect(gateway.resolved.single.$1, first.id);
       expect(gateway.forced.single, isTrue);
+    });
+
+    test('衝突後目前值載入失敗時不可強制，重新載入後才可', () async {
+      gateway.changedSpots.add('r-type');
+      gateway.failSpots = true;
+      final first = review.queue.first;
+      await review.decide(first, ReviewDecision.accept, '');
+      await review.flush();
+      expect(review.conflicts, contains(first.id));
+      expect(review.canForce(first.id), isFalse);
+      expect(await review.refreshSpot(first), isFalse);
+      expect(review.canForce(first.id), isFalse);
+      gateway.failSpots = false;
+      expect(await review.refreshSpot(first), isTrue);
+      expect(review.canForce(first.id), isTrue);
     });
 
     test('找不到點位只能駁回', () async {
@@ -294,6 +324,24 @@ void main() {
       await tester.pumpAndSettle();
       expect(gateway.forced.single, isTrue);
       expect(gateway.resolved.single.$1, 'r-type');
+    });
+
+    testWidgets('衝突後目前值載入失敗只能重新載入或駁回', (tester) async {
+      gateway.changedSpots.add('r-type');
+      await show(tester);
+      gateway.failSpots = true;
+      await tester.tap(find.text('套用建議'));
+      await tester.pump(const Duration(seconds: 7));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('report-r-type')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('目前值尚未重新載入'), findsOneWidget);
+      expect(find.text('仍要套用建議'), findsNothing);
+      expect(find.text('修改後套用'), findsNothing);
+      gateway.failSpots = false;
+      await tester.tap(find.text('重新載入目前值'));
+      await tester.pumpAndSettle();
+      expect(find.text('仍要套用建議'), findsOneWidget);
     });
 
     testWidgets('舊版回報沒有建議值時可結案或修改', (tester) async {

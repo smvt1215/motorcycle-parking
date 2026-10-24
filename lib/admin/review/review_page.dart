@@ -91,7 +91,7 @@ class _ReviewPageState extends State<ReviewPage> {
       report,
       decision,
       note,
-      force: review.conflicts.contains(report.id),
+      force: review.canForce(report.id),
     );
     if (!mounted || identical(review.pending, before)) return;
     messenger
@@ -560,6 +560,7 @@ class _ReviewDetail extends StatelessWidget {
     final spot = review.spots[report.sourceId];
     final editing = review.editing(report.id);
     final conflict = review.conflicts.contains(report.id);
+    final stale = review.unrefreshed.contains(report.id);
     final proposal = spot == null
         ? <String, dynamic>{}
         : initialProposal(report, spot);
@@ -663,7 +664,13 @@ class _ReviewDetail extends StatelessWidget {
                 else if (rows.isEmpty && !editing)
                   const AdminNotice('這筆回報沒有可直接套用的建議。請依騎士的說明「修改後套用」，或結案、駁回。')
                 else ...[
-                  if (conflict) ...[
+                  if (conflict && stale) ...[
+                    const AdminNotice(
+                      '騎士送出後，這個點位已被修改，但目前值尚未重新載入，無法比對。請重新載入後再決定。',
+                      error: true,
+                    ),
+                    const SizedBox(height: 10),
+                  ] else if (conflict) ...[
                     const AdminNotice(
                       '騎士送出後，這個點位已被修改。比對「送出時」與「目前」後再決定；仍要套用會記錄在稽核紀錄。',
                       error: true,
@@ -734,6 +741,8 @@ class _ReviewDetail extends StatelessWidget {
             hasPatch: patch.isNotEmpty,
             busy: review.writing,
             conflict: conflict,
+            stale: conflict && stale,
+            onRefresh: () => review.refreshSpot(report),
             error: review.error,
             onDecide: onDecide,
             onEdit: () => review.startEdit(report),
@@ -1077,7 +1086,8 @@ class _FieldEditor extends StatelessWidget {
       onChanged: onChanged,
     ),
     FieldInput.coordinate => TextFormField(
-      initialValue: (value as num?)?.toString() ?? '',
+      // While typing, the draft may hold the unparsed text.
+      initialValue: value?.toString() ?? '',
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       decoration: _decoration(context),
       onChanged: (v) => onChanged(double.tryParse(v.trim()) ?? v),
@@ -1144,12 +1154,18 @@ class _ActionBar extends StatelessWidget {
     required this.hasPatch,
     required this.busy,
     required this.conflict,
+    required this.stale,
+    required this.onRefresh,
     required this.error,
     required this.onDecide,
     required this.onEdit,
     required this.onCancelEdit,
   });
   final bool compact, editing, hasSpot, hasPatch, busy, conflict;
+
+  /// A conflict whose current values failed to reload: only retry or reject.
+  final bool stale;
+  final VoidCallback onRefresh;
   final String? error;
   final ValueChanged<ReviewDecision> onDecide;
   final VoidCallback onEdit, onCancelEdit;
@@ -1159,6 +1175,8 @@ class _ActionBar extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final primary = !hasSpot
         ? null
+        : stale
+        ? FilledButton(onPressed: onRefresh, child: const Text('重新載入目前值'))
         : editing
         ? FilledButton(
             onPressed: busy
@@ -1175,8 +1193,11 @@ class _ActionBar extends StatelessWidget {
             onPressed: busy ? null : onEdit,
             child: const Text('修改後套用'),
           );
-    final secondary = [
-      if (hasSpot && editing)
+    final secondary = <Widget>[
+      if (stale)
+        // Nothing else until the current values are back.
+        ...const <Widget>[]
+      else if (hasSpot && editing)
         OutlinedButton(onPressed: onCancelEdit, child: const Text('取消修改'))
       else if (hasSpot && hasPatch)
         OutlinedButton(

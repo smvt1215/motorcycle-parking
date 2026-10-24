@@ -198,12 +198,32 @@ Map<String, dynamic> applicablePatch(
   ReviewSpot spot,
 ) => {
   for (final e in proposal.entries)
-    if (spot.allows(e.key)) e.key: e.value,
+    if (_applicable(e.key, e.value, spot)) e.key: e.value,
 };
 
 /// Proposal keys that cannot be applied here, shown so they are not missed.
-List<String> ignoredKeys(Map<String, dynamic> proposal, ReviewSpot spot) =>
-    proposal.keys.where((k) => !spot.allows(k)).toList();
+List<String> ignoredKeys(Map<String, dynamic> proposal, ReviewSpot spot) => [
+  for (final e in proposal.entries)
+    if (!_applicable(e.key, e.value, spot)) e.key,
+];
+
+bool _applicable(String key, Object? value, ReviewSpot spot) =>
+    spot.allows(key) && fitsField(reviewField(key)!, value);
+
+/// Whether [value] has the shape [field]'s editor expects. Proposals come
+/// from riders, so a wrong type is set aside instead of reaching an editor.
+bool fitsField(ReviewField field, Object? value) => switch (field.input) {
+  FieldInput.text => value is String,
+  FieldInput.spaceType => SpaceType.values.asNameMap().containsKey(value),
+  FieldInput.triState => value == null || value is bool,
+  FieldInput.visibility => const {
+    'pending',
+    'confirmed',
+    'hidden',
+  }.contains(value),
+  FieldInput.hiddenFlag => value is bool,
+  FieldInput.coordinate => value is num,
+};
 
 String formatValue(String key, Object? value) {
   final field = reviewField(key);

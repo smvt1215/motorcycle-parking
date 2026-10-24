@@ -124,6 +124,7 @@ class FakeAdminGateway implements AdminGateway {
   final List<(String, String, Map<String, dynamic>, String)> resolved = [];
   int reportRequests = 0;
   bool failReports = false;
+  bool failSpots = false;
   Object? resolveError;
   final List<(String, bool)> hiddenChanges = [];
 
@@ -224,10 +225,13 @@ class FakeAdminGateway implements AdminGateway {
   @override
   Future<Map<String, ReviewSpot>> reviewSpots(
     Iterable<String> sourceIds,
-  ) async => {
-    for (final id in sourceIds)
-      if (spots[id] != null) id: spots[id]!,
-  };
+  ) async {
+    if (failSpots) throw StateError('offline');
+    return {
+      for (final id in sourceIds)
+        if (spots[id] != null) id: spots[id]!,
+    };
+  }
 
   @override
   Future<void> resolveReport(

@@ -76,6 +76,13 @@ class ReviewController extends ChangeNotifier {
   /// shown the newer values and may force the decision.
   final Set<String> conflicts = {};
 
+  /// Conflicts whose current values could not be reloaded. Forcing stays off
+  /// for them: the admin must never overwrite values they have not seen.
+  final Set<String> unrefreshed = {};
+
+  bool canForce(String id) =>
+      conflicts.contains(id) && !unrefreshed.contains(id);
+
   /// Spots being hidden or restored from the hidden list.
   final Set<String> changing = {};
 
@@ -112,6 +119,7 @@ class ReviewController extends ChangeNotifier {
       if (generation != _generation) return;
       reports = rows;
       spots = found;
+      unrefreshed.clear();
       loaded = true;
     } catch (_) {
       if (generation == _generation) {
@@ -143,6 +151,7 @@ class ReviewController extends ChangeNotifier {
     hiddenError = null;
     changing.clear();
     conflicts.clear();
+    unrefreshed.clear();
     _notify();
   }
 
@@ -281,6 +290,26 @@ class ReviewController extends ChangeNotifier {
     return held.report.id;
   }
 
+  /// Reloads [report]'s spot after a conflict; forcing is allowed only once
+  /// this has succeeded.
+  Future<bool> refreshSpot(ReviewReport report) async {
+    if (gateway == null) return false;
+    final generation = _generation;
+    try {
+      final fresh = await gateway!.reviewSpots([report.sourceId]);
+      if (generation != _generation || !fresh.containsKey(report.sourceId)) {
+        return false;
+      }
+      spots = {...spots, ...fresh};
+      unrefreshed.remove(report.id);
+      return true;
+    } catch (_) {
+      return false;
+    } finally {
+      _notify();
+    }
+  }
+
   /// Writes the held-back decision now (sign-out, a second decision).
   Future<void> flush() async {
     final held = pending;
@@ -306,12 +335,8 @@ class ReviewController extends ChangeNotifier {
       if (message.contains('changed since the report')) {
         // The queue item and its detail say so; no separate error banner.
         conflicts.add(held.report.id);
-        try {
-          final fresh = await gateway!.reviewSpots([held.report.sourceId]);
-          if (generation == _generation) spots = {...spots, ...fresh};
-        } catch (_) {
-          // The notice still stands; the next reload refreshes the values.
-        }
+        unrefreshed.add(held.report.id);
+        await refreshSpot(held.report);
       } else if (message.contains('already resolved')) {
         reports = reports.where((r) => r.id != held.report.id).toList();
         error = '「${held.report.title}」已由其他人處理，已從佇列移除。';
