@@ -223,6 +223,43 @@ void main() {
     expect(controller.pendingCount, 7);
   });
 
+  testWidgets('重新整理後能取消未完成登記，再以相同名稱登記', (tester) async {
+    gateway.access = adminAal1;
+    gateway.factors = [factor('手機', status: FactorStatus.unverified)];
+    await show(tester);
+    expect(find.text('未完成的登記'), findsOneWidget);
+    final name = find.byType(TextFormField).first;
+    await tester.ensureVisible(name);
+    await tester.enterText(name, '手機');
+    await tester.ensureVisible(find.text('開始登記'));
+    await tester.tap(find.text('開始登記'));
+    await tester.pumpAndSettle();
+    expect(controller.enrollment, isNull);
+    expect(controller.error, isNotNull);
+    final cancel = find.byKey(const ValueKey('discard/手機'));
+    await tester.ensureVisible(cancel);
+    await tester.tap(cancel);
+    await tester.pumpAndSettle();
+    expect(gateway.cancelled, ['手機']);
+    expect(find.text('未完成的登記'), findsNothing);
+    await tester.ensureVisible(find.text('開始登記'));
+    await tester.tap(find.text('開始登記'));
+    await tester.pumpAndSettle();
+    expect(controller.enrollment, isNotNull);
+  });
+
+  test('取消前重新確認狀態，不移除已在另一分頁驗證完成的方式', () async {
+    gateway.access = adminAal1;
+    gateway.factors = [factor('手機', status: FactorStatus.unverified)];
+    await controller.refresh();
+    gateway.factors = [factor('手機')];
+    await controller.discardUnfinished('手機');
+    expect(gateway.cancelled, isEmpty);
+    expect(controller.verifiedFactors.single.id, '手機');
+    expect(controller.unfinishedFactors, isEmpty);
+    expect(controller.error, contains('已完成或已移除'));
+  });
+
   testWidgets('未設定後端不提供管理示範模式', (tester) async {
     final unconfigured = AdminController(null);
     addTearDown(unconfigured.dispose);

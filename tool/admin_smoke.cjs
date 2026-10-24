@@ -48,13 +48,13 @@ function session(role, aal, factors = [factor]) {
   try {
     browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
     for (const mobile of [false, true]) {
-      for (const scenario of ['login', 'denied', 'mfa', 'shell']) {
+      for (const scenario of ['login', 'denied', 'mfa', 'unfinished', 'shell']) {
         const name = `${scenario}-${mobile ? 'mobile-dark' : 'desktop'}`;
         const context = await browser.newContext({
           viewport: mobile ? { width: 390, height: 844 } : { width: 1440, height: 960 },
           colorScheme: mobile ? 'dark' : 'light', reducedMotion: 'reduce',
         });
-        let current = scenario === 'login' ? null : session(scenario === 'denied' ? 'rider' : 'admin', scenario === 'mfa' ? 'aal1' : 'aal2');
+        let current = scenario === 'login' ? null : session(scenario === 'denied' ? 'rider' : 'admin', scenario === 'mfa' || scenario === 'unfinished' ? 'aal1' : 'aal2', scenario === 'unfinished' ? [{ ...factor, status: 'unverified' }] : [factor]);
         if (current) await context.addInitScript(value => {
           localStorage.setItem('sb-admin-smoke-auth-token', JSON.stringify(value));
         }, current);
@@ -78,7 +78,11 @@ function session(role, aal, factors = [factor]) {
               secret: 'JBSWY3DPEHPK3PXP', uri: 'otpauth://totp/smoke?secret=JBSWY3DPEHPK3PXP',
             } }, headers: cors,
           });
-          if (url.pathname === '/auth/v1/factors/22222222-2222-4222-8222-222222222222' && route.request().method() === 'DELETE') return route.fulfill({ json: { id: '22222222-2222-4222-8222-222222222222' }, headers: cors });
+          if (url.pathname.startsWith('/auth/v1/factors/') && route.request().method() === 'DELETE') {
+            const id = url.pathname.split('/').at(-1);
+            current.user.factors = current.user.factors.filter(value => value.id !== id);
+            return route.fulfill({ json: { id }, headers: cors });
+          }
           if (url.pathname.endsWith('/challenge')) return route.fulfill({ json: { id: 'smoke-challenge', expires_at: Math.floor(Date.now() / 1000) + 300 }, headers: cors });
           if (url.pathname.endsWith('/verify')) {
             current = session('admin', 'aal2');
@@ -117,7 +121,7 @@ function session(role, aal, factors = [factor]) {
         await page.goto(base, { waitUntil: 'networkidle' });
         await page.locator('flt-semantics-placeholder').waitFor({ state: 'attached' });
         await page.evaluate(() => document.querySelector('flt-semantics-placeholder')?.click());
-        const heading = scenario === 'login' ? '登入管理介面' : scenario === 'denied' ? '這個帳號沒有管理權限' : scenario === 'mfa' ? '請先完成第二步驗證' : '待審回報';
+        const heading = scenario === 'login' ? '登入管理介面' : scenario === 'denied' ? '這個帳號沒有管理權限' : scenario === 'mfa' || scenario === 'unfinished' ? '請先完成第二步驗證' : '待審回報';
         await waitText(heading);
         assert.equal(await page.title(), '停車指南管理');
         assert.match(await page.locator('meta[name=robots]').getAttribute('content'), /noindex/);
@@ -129,10 +133,18 @@ function session(role, aal, factors = [factor]) {
             await waitText(title);
           }
         }
-        if (scenario === 'denied' || scenario === 'login' || scenario === 'mfa') {
+        if (scenario !== 'shell') {
           assert(!requests.some(value => value.includes('/rest/v1/')), `${name} must not query admin data`);
         }
         await page.screenshot({ path: path.join(output, `${name}.png`) });
+        if (scenario === 'unfinished') {
+          await waitText('未完成的登記');
+          await page.getByRole('button', { name: '取消登記', exact: true }).click();
+          await page.getByText('未完成的登記', { exact: true }).waitFor({ state: 'hidden' });
+          await enterText('手機驗證器');
+          await page.getByRole('button', { name: '開始登記', exact: true }).click();
+          await waitText('驗證新登記的方式');
+        }
         if (scenario === 'mfa') {
           await enterText('123456');
           await page.getByRole('button', { name: '確認驗證碼', exact: true }).click();

@@ -74,6 +74,41 @@ class _AdminMfaPageState extends State<AdminMfaPage> {
           const AdminNotice('請至少登記兩個驗證器 App，例如手機與密碼管理器，互為備援。每個驗證器請分別登記。'),
           const SizedBox(height: 24),
         ],
+        if (!c.refreshing && !enrolling && c.unfinishedFactors.isNotEmpty) ...[
+          Semantics(
+            header: true,
+            child: Text('未完成的登記', style: text.titleMedium),
+          ),
+          const SizedBox(height: 8),
+          const Text('若曾中斷設定，可先取消尚未驗證的登記，再使用相同名稱重新登記。'),
+          for (final factor in c.unfinishedFactors)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 12,
+                runSpacing: 4,
+                children: [
+                  Text(
+                    factor.friendlyName ??
+                        (factor.factorType == FactorType.phone
+                            ? '手機簡訊'
+                            : '驗證器 App'),
+                  ),
+                  TextButton.icon(
+                    key: ValueKey('discard/${factor.id}'),
+                    onPressed: c.busy
+                        ? null
+                        : () => c.discardUnfinished(factor.id),
+                    icon: const Icon(Icons.close),
+                    label: const Text('取消登記'),
+                  ),
+                ],
+              ),
+            ),
+          const Divider(),
+          const SizedBox(height: 24),
+        ],
         if (c.refreshing) ...[
           const LinearProgressIndicator(semanticsLabel: '讀取驗證方式'),
           const SizedBox(height: 16),

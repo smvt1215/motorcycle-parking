@@ -77,6 +77,9 @@ class FakeAdminGateway implements AdminGateway {
     String? phone,
   }) async {
     if (failEnroll) throw StateError('provider disabled');
+    if (factors.any((f) => f.friendlyName == name)) {
+      throw StateError('duplicate name');
+    }
     return AuthMFAEnrollResponse(
       id: 'new-factor',
       type: type,
@@ -112,8 +115,10 @@ class FakeAdminGateway implements AdminGateway {
   }
 
   @override
-  Future<void> cancelEnrollment(String factorId) async =>
-      cancelled.add(factorId);
+  Future<void> cancelEnrollment(String factorId) async {
+    cancelled.add(factorId);
+    factors = factors.where((f) => f.id != factorId).toList();
+  }
 
   @override
   Future<int> pendingCount() async {

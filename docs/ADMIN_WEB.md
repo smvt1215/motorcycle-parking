@@ -106,7 +106,7 @@
 ### P2 實作與待驗收事項
 
 - 獨立入口 `lib/main_admin.dart`，UI、登入狀態、Supabase 存取皆位於 `lib/admin/`。App 的 import graph 不會到達 admin；由工具測試持續檢查此邊界。沒有後端設定時只顯示登入服務未設定，不開放示範管理權限。
-- Google OAuth 回到目前網站；非 admin 顯示拒絕原因與登出。admin 的 session 尚未通過第二步驗證時，先登記或選擇已登記的 TOTP／簡訊方式。TOTP 提供 QR code 與可顯示的手動密鑰，簡訊需主動傳送驗證碼；切換方式會清除前一個 challenge。帳號安全頁可加登記備援方式，提醒至少兩個驗證器 App。
+- Google OAuth 回到目前網站；非 admin 顯示拒絕原因與登出。admin 的 session 尚未通過第二步驗證時，先登記或選擇已登記的 TOTP／簡訊方式。TOTP 提供 QR code 與可顯示的手動密鑰，簡訊需主動傳送驗證碼；切換方式會清除前一個 challenge。中斷設定後可取消未完成的登記，再以原名稱重試；取消前重新確認仍未驗證。帳號安全頁可加登記備援方式，提醒至少兩個驗證器 App。
 - 五個分頁先提供準備中／空狀態；只有 admin 且 `aal2` 才讀取 `moderation_queue` 中 `pending` 的精確筆數。失敗顯示未知與重試，不以零筆代替；失去權限或登出後清除管理資料。
 - Noto Sans TC 位於 `web/admin/fonts/`，由 admin 入口載入，字型與授權不加入手機資產。深淺色跟隨系統、手機分頁可換行、按鈕至少 44 px、鍵盤焦點可見。
 - `admin_web/` 提供管理站專用 metadata 與圖示；建置後執行 `python3 tool/prepare_admin_web.py`，只覆蓋 `build/admin`，不修改 App 的 `web/index.html` 或 `build/web`。

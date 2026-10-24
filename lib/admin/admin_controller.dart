@@ -45,6 +45,14 @@ class AdminController extends ChangeNotifier {
       .toList();
   int get authenticatorCount =>
       verifiedFactors.where((f) => f.factorType == FactorType.totp).length;
+  List<Factor> get unfinishedFactors => factors
+      .where(
+        (f) =>
+            f.status == FactorStatus.unverified &&
+            (f.factorType == FactorType.totp ||
+                f.factorType == FactorType.phone),
+      )
+      .toList();
   String? get activeFactorId => enrollment?.id ?? selectedFactorId;
   FactorType? get activeFactorType {
     if (enrollment != null) return enrollment!.type;
@@ -266,6 +274,28 @@ class AdminController extends ChangeNotifier {
     challenge = null;
     await refresh();
   }, '無法取消登記，請重試。');
+
+  Future<void> discardUnfinished(String id) => _run(() async {
+    if (!access.isAdmin ||
+        enrollment != null ||
+        !unfinishedFactors.any((f) => f.id == id)) {
+      return;
+    }
+    final generation = _generation;
+    final userId = access.userId;
+    // A different tab may have completed the factor since this page loaded.
+    final current = await gateway!.listFactors();
+    if (!_isCurrent(generation, userId)) return;
+    if (!current.any(
+      (f) => f.id == id && f.status == FactorStatus.unverified,
+    )) {
+      await refresh();
+      error = '這筆登記已完成或已移除，請確認目前的驗證方式。';
+      return;
+    }
+    await gateway!.cancelEnrollment(id);
+    if (_isCurrent(generation, userId)) await refresh();
+  }, '無法取消這筆未完成的登記，請檢查連線後重試。');
 
   @override
   void dispose() {
