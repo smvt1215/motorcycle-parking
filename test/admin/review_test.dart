@@ -227,6 +227,37 @@ void main() {
       expect(gateway.resolved.map((r) => r.$1), isNot(contains(reports[1].id)));
     });
 
+    test('修改後套用寫入失敗時保留修改值，重試送出同一份內容', () async {
+      final first = review.queue.first;
+      review.startEdit(first);
+      review.setDraft('fee_note', '每次 10 元');
+      gateway.changedSpots.add(first.id);
+      await review.decide(first, ReviewDecision.acceptEdited, '');
+      await review.flush();
+      expect(review.editing(first.id), isTrue);
+      expect(review.draft['fee_note'], '每次 10 元');
+      review.cancelEdit();
+      review.startEdit(first);
+      expect(review.draft['fee_note'], '每次 10 元');
+      await review.decide(
+        first,
+        ReviewDecision.acceptEdited,
+        '',
+        force: review.canForce(first.id),
+      );
+      await review.flush();
+      expect(gateway.resolved.single.$3['fee_note'], '每次 10 元');
+      expect(gateway.forced.single, isTrue);
+    });
+
+    test('已載入後重新載入失敗，保留列表並說明', () async {
+      gateway.failReports = true;
+      await review.load();
+      expect(review.loaded, isTrue);
+      expect(review.queue, isNotEmpty);
+      expect(review.loadError, contains('重新載入失敗'));
+    });
+
     test('找不到點位只能駁回', () async {
       gateway.spots.remove(officialId);
       await review.load();
@@ -551,6 +582,15 @@ void main() {
       ];
       await show(tester);
       expect(find.text('map 25.0581 → 25.0583,121.5226'), findsOneWidget);
+    });
+
+    testWidgets('重新載入失敗時列表上方顯示原因', (tester) async {
+      await show(tester);
+      gateway.failReports = true;
+      await tester.tap(find.byTooltip('重新載入佇列'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('重新載入失敗'), findsOneWidget);
+      expect(find.byKey(const ValueKey('report-r-type')), findsOneWidget);
     });
 
     testWidgets('不存在的回報網址顯示說明', (tester) async {

@@ -72,6 +72,9 @@ class ReviewController extends ChangeNotifier {
   bool hiddenLoaded = false;
   String? hiddenError;
 
+  /// Edited values of decisions that failed to write, by report id.
+  final Map<String, Map<String, dynamic>> savedDrafts = {};
+
   /// Reports whose spot changed after they were sent; the admin has been
   /// shown the newer values and may force the decision.
   final Set<String> conflicts = {};
@@ -123,7 +126,9 @@ class ReviewController extends ChangeNotifier {
       loaded = true;
     } catch (_) {
       if (generation == _generation) {
-        loadError = '待審回報載入失敗，請檢查連線後重試。';
+        loadError = loaded
+            ? '重新載入失敗，目前顯示的可能不是最新資料。請檢查連線後重試。'
+            : '待審回報載入失敗，請檢查連線後重試。';
       }
     } finally {
       if (generation == _generation) loading = false;
@@ -151,6 +156,7 @@ class ReviewController extends ChangeNotifier {
     hiddenError = null;
     changing.clear();
     conflicts.clear();
+    savedDrafts.clear();
     unrefreshed.clear();
     _notify();
   }
@@ -213,9 +219,11 @@ class ReviewController extends ChangeNotifier {
   void startEdit(ReviewReport report) {
     final spot = spots[report.sourceId];
     editingId = report.id;
-    draft = spot == null
-        ? {}
-        : applicablePatch(initialProposal(report, spot), spot);
+    draft =
+        savedDrafts[report.id] ??
+        (spot == null
+            ? {}
+            : applicablePatch(initialProposal(report, spot), spot));
     _notify();
   }
 
@@ -334,9 +342,19 @@ class ReviewController extends ChangeNotifier {
       );
       if (generation != _generation) return;
       reports = reports.where((r) => r.id != held.report.id).toList();
+      savedDrafts.remove(held.report.id);
       onResolved?.call();
     } catch (e) {
       if (generation != _generation) return;
+      // An edited decision that did not land keeps its values, so a retry
+      // (or a forced one after a conflict) sends what the admin wrote.
+      if (held.decision == ReviewDecision.acceptEdited) {
+        savedDrafts[held.report.id] = held.patch;
+        if (editingId == null) {
+          editingId = held.report.id;
+          draft = held.patch;
+        }
+      }
       final message = e is PostgrestException ? e.message : '';
       if (message.contains('changed since the report')) {
         // The queue item and its detail say so; no separate error banner.

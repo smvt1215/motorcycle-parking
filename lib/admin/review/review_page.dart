@@ -274,6 +274,12 @@ class _QueuePane extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
               child: AdminNotice(admin.countError!, error: true),
             ),
+          // A reload that fails keeps the list it had; say it is not current.
+          if (review.loaded && review.loadError != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
+              child: AdminNotice(review.loadError!, error: true),
+            ),
           // A deferred write can fail after the detail is gone (phone list,
           // or the last report); the action bar is then not there to say so.
           if (review.error != null && (compact || visible.isEmpty))
