@@ -46,7 +46,6 @@ update public.city_rules set
   source_url='https://www.traffic.taichung.gov.tw/news/index-1.asp?Parser=9%2C4%2C20%2C%2C%2C%2C21267',
   restriction='signage', version=2
 where city='臺中市' and vehicle='heavy' and version<2;
--- Whole districts are now district_space_types; nothing uses pilot_area.
-alter table public.city_rules drop constraint city_rules_restriction_check;
-alter table public.city_rules add constraint city_rules_restriction_check
-  check (restriction in ('signage','unverified'));
+-- pilot_area stays a permitted value: an admin may have kept it on a rule
+-- already past version 1, which the updates above leave alone. The app reads
+-- it as a generic condition.

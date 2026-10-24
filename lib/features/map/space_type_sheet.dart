@@ -73,6 +73,8 @@ class SpaceTypeOption extends StatelessWidget {
         button: true,
         selected: selected,
         label: '$label，目前範圍 $count 個',
+        // The child's tap is excluded with its semantics; screen readers need it here.
+        onTap: onTap,
         excludeSemantics: true,
         child: Material(
           color: selected ? colors.primaryContainer : Colors.transparent,

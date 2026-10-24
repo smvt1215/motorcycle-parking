@@ -47,6 +47,23 @@ class ParkingRepository {
   ParkingRepository(this.client);
   final SupabaseClient? client;
   List<ParkingSpot>? _demoSpots;
+
+  /// Reads [name]'s _v2 variant, which returns every space kind; the
+  /// original keeps to the five kinds older builds can parse. A backend not
+  /// yet migrated has only the original, so fall back to it.
+  Future<List<dynamic>> _viewport(String name, MapViewport bounds) async {
+    try {
+      return await client!.rpc<List<dynamic>>(
+        '${name}_v2',
+        params: bounds.toJson(),
+      );
+    } on PostgrestException catch (e) {
+      // PostgREST: no function with this name.
+      if (e.code != 'PGRST202') rethrow;
+      return client!.rpc<List<dynamic>>(name, params: bounds.toJson());
+    }
+  }
+
   Future<ParkingResult> inViewport(MapViewport bounds) async {
     if (!bounds.canQuery || !bounds.intersectsTaiwan) {
       return const ParkingResult([]);
@@ -62,19 +79,13 @@ class ParkingRepository {
         _demoSpots!.where((s) => bounds.contains(s.lat, s.lng)).toList(),
       );
     }
-    final raw = await client!.rpc<List<dynamic>>(
-      'viewport_spots',
-      params: bounds.toJson(),
-    );
+    final raw = await _viewport('viewport_spots', bounds);
     final community = raw.expand(ParkingSpot.known).toList();
     // Admin-maintained municipal bays; a failure only drops this layer.
     var official = const <ParkingSpot>[];
     String? officialWarning;
     try {
-      final rows = await client!.rpc<List<dynamic>>(
-        'official_viewport_spots',
-        params: bounds.toJson(),
-      );
+      final rows = await _viewport('official_viewport_spots', bounds);
       official = rows.expand(ParkingSpot.known).toList();
     } catch (_) {
       officialWarning = '官方停車點暫時無法讀取';

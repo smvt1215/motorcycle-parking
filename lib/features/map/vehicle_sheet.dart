@@ -75,6 +75,8 @@ class VehicleChoice extends StatelessWidget {
       button: true,
       selected: selected,
       label: '${vehicle.label}，${_plates(vehicle)}',
+      // The child's tap is excluded with its semantics; screen readers need it here.
+      onTap: onTap,
       excludeSemantics: true,
       child: Material(
         color: selected ? colors.primaryContainer : colors.surfaceContainerLow,

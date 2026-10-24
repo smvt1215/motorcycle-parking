@@ -84,6 +84,11 @@ void main() {
     }
   });
 
+  test('資料庫裡舊的 pilot_area 讀成一般條件，不讓規則解析失敗', () {
+    expect(RuleRestriction.parse('pilot_area'), isNull);
+    expect(RuleRestriction.parse('signage'), RuleRestriction.signage);
+  });
+
   test('身障機車格帶角落圖示', () {
     expect(spaceBadge(spot(SpaceType.disabledMotorcycle)), SpaceBadge.disabled);
   });
