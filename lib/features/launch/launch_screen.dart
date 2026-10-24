@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 
 import '../../ui/adaptive/adaptive.dart';
+import '../../ui/version_text.dart';
 
 /// Covers the app while [AppStore.start] runs. Its brand background matches
 /// the native splash so launch reads as one continuous screen.
@@ -135,6 +136,12 @@ class LaunchScreen extends StatelessWidget {
                 const SizedBox(height: 40),
                 Text(
                   '停車前請確認現場標示',
+                  style: text.labelSmall?.copyWith(
+                    color: Colors.white.withValues(alpha: .6),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                VersionText(
                   style: text.labelSmall?.copyWith(
                     color: Colors.white.withValues(alpha: .6),
                   ),

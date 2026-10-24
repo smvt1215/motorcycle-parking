@@ -1,66 +1,81 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/app_version.dart';
 import '../../core/geo.dart';
 import '../../data/app_store.dart';
 import '../../models/parking.dart';
 import '../../ui/adaptive/adaptive.dart';
+import '../../ui/version_text.dart';
 
-Future<void> showSettings(BuildContext context, AppStore store) =>
-    showAdaptiveSheet<void>(
-      context,
-      (ctx) => ContentPage(
-        children: [
-          SheetTitle('車種與帳號'),
-          const SizedBox(height: 16),
-          VehicleSelector(
-            value: store.vehicle,
-            onChanged: (v) {
-              store.setVehicle(v);
-              Navigator.pop(ctx);
-            },
-          ),
-          const SizedBox(height: 24),
-          if (store.demo)
-            const Text('目前使用範例資料。回報只用於功能測試，請勿依範例點位停車。')
-          else if (store.client!.auth.currentUser == null ||
-              store.client!.auth.currentUser!.isAnonymous) ...[
-            const Text('登入後可回報停車點與同步收藏。瀏覽與記錄停車位置不需登入。'),
-            const SizedBox(height: 16),
-            AdaptiveButton(
-              label: '使用 Google 登入',
-              onPressed: () =>
-                  runAction(ctx, () => store.signIn(OAuthProvider.google)),
-            ),
-            const SizedBox(height: 12),
-            if (isCupertino)
-              AdaptiveButton(
-                label: '使用 Apple 登入',
-                onPressed: () =>
-                    runAction(ctx, () => store.signIn(OAuthProvider.apple)),
-              ),
-          ] else ...[
-            Text(store.client!.auth.currentUser!.email ?? '已登入'),
-            TextButton(
-              onPressed: () => runAction(ctx, () async {
-                await store.signOut();
-                if (ctx.mounted) Navigator.pop(ctx);
-              }),
-              child: const Text('登出'),
-            ),
-          ],
-          const SizedBox(height: 24),
-          TextButton(
-            onPressed: () =>
-                showLicensePage(context: ctx, applicationName: '機車停車指南'),
-            child: const Text('授權資訊'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('關閉'),
-          ),
-        ],
+Future<void> showSettings(
+  BuildContext context,
+  AppStore store,
+) => showAdaptiveSheet<void>(
+  context,
+  (ctx) => ContentPage(
+    children: [
+      SheetTitle('車種與帳號'),
+      const SizedBox(height: 16),
+      VehicleSelector(
+        value: store.vehicle,
+        onChanged: (v) {
+          store.setVehicle(v);
+          Navigator.pop(ctx);
+        },
       ),
-    );
+      const SizedBox(height: 24),
+      if (store.demo)
+        const Text('目前使用範例資料。回報只用於功能測試，請勿依範例點位停車。')
+      else if (store.client!.auth.currentUser == null ||
+          store.client!.auth.currentUser!.isAnonymous) ...[
+        const Text('登入後可回報停車點與同步收藏。瀏覽與記錄停車位置不需登入。'),
+        const SizedBox(height: 16),
+        AdaptiveButton(
+          label: '使用 Google 登入',
+          onPressed: () =>
+              runAction(ctx, () => store.signIn(OAuthProvider.google)),
+        ),
+        const SizedBox(height: 12),
+        if (isCupertino)
+          AdaptiveButton(
+            label: '使用 Apple 登入',
+            onPressed: () =>
+                runAction(ctx, () => store.signIn(OAuthProvider.apple)),
+          ),
+      ] else ...[
+        Text(store.client!.auth.currentUser!.email ?? '已登入'),
+        TextButton(
+          onPressed: () => runAction(ctx, () async {
+            await store.signOut();
+            if (ctx.mounted) Navigator.pop(ctx);
+          }),
+          child: const Text('登出'),
+        ),
+      ],
+      const SizedBox(height: 24),
+      TextButton(
+        onPressed: () => runAction(ctx, () async {
+          final version = await AppVersion.current;
+          if (!ctx.mounted) return;
+          showLicensePage(
+            context: ctx,
+            applicationName: '機車停車指南',
+            applicationVersion: version.label,
+          );
+        }),
+        child: const Text('授權資訊'),
+      ),
+      TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('關閉')),
+      const SizedBox(height: 8),
+      // Selectable, so testers can paste the exact build into feedback.
+      VersionText(
+        selectable: true,
+        style: Theme.of(ctx).textTheme.bodySmall
+            ?.copyWith(color: Theme.of(ctx).colorScheme.onSurfaceVariant),
+      ),
+    ],
+  ),
+);
 
 /// All 22 municipalities, so a report is never forced into a nearby city.
 const taiwanCities = [
