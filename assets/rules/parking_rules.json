@@ -174,13 +174,14 @@
     ],
     "conditional_space_types": [
       "offStreet",
-      "paidMotorcycle"
+      "paidMotorcycle",
+      "freeMotorcycle"
     ],
-    "fee_note": "請依現場收費公告",
-    "exceptions": "限公告試辦路段與停車場，路邊辨識「大重機共用」標字；一格一車，不得超出格線。",
-    "effective_date": "2025-07-11",
-    "source_url": "https://tcparking.taichung.gov.tw/ParkWebStage/Pages/PublicService/Heavybike",
-    "version": 1,
+    "fee_note": "比照一般機車費率，依區域與路段計收",
+    "exceptions": "2026/5/1 起於逢甲、勤美、文心秀泰及台中火車站周邊試辦，僅限地面標示「大重機共用」的路邊機車格與機慢車停放區。須依格線停放、不得出線；車身過大請改停汽車格。",
+    "effective_date": "2026-05-01",
+    "source_url": "https://www.traffic.taichung.gov.tw/news/index-1.asp?Parser=9%2C4%2C20%2C%2C%2C%2C21267",
+    "version": 2,
     "can_use_two_spaces": false,
     "districts": [],
     "restriction": "signage"
@@ -216,7 +217,7 @@
     "fee_note": "請依現場收費公告",
     "exceptions": "路邊機車格未開放大型重機，請停汽車格或重機專用格。2026/8/1 起僅於 5 處捷運周邊公有停車場試辦停放普通機車格，請依場站公告。",
     "effective_date": "2026-08-01",
-    "source_url": "https://www.tbkc.gov.tw/Service/ParkingAndTowing",
+    "source_url": "https://www.facebook.com/tbkcdream/posts/1370509398601080/",
     "version": 2,
     "can_use_two_spaces": false,
     "districts": []

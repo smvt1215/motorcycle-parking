@@ -104,9 +104,12 @@ void main() {
       // Kaohsiung only trials five lots; its street bays are closed.
       expect(judge('高雄市', type).status, EligibilityStatus.notAllowed);
     }
-    final taichung = judge('臺中市', SpaceType.paidMotorcycle);
-    expect(taichung.status, EligibilityStatus.conditional);
-    expect(taichung.restriction, RuleRestriction.signage);
+    // Taichung: only bays marked 大重機共用, paid or free.
+    for (final type in [SpaceType.paidMotorcycle, SpaceType.freeMotorcycle]) {
+      final taichung = judge('臺中市', type);
+      expect(taichung.status, EligibilityStatus.conditional);
+      expect(taichung.restriction, RuleRestriction.signage);
+    }
   });
   test('路外未知重機資格與普通機車專用限制', () {
     expect(
