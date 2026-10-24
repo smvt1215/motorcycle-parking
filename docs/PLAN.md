@@ -250,7 +250,7 @@ UI：`material_ui`、`cupertino_ui`（Flutter 官方設計套件，取代框架�
 
 ## Supabase 資料表（RLS）
 - `community_spots`：geography(Point) + 欄位同上；所有人可讀非 `hidden` 點位（`pending`／`confirmed` 均可見）；**RLS 禁止客戶端直接寫入**，新增與建議一律經 Edge Function `submit-report`（見「防濫用」）。
-- `spot_votes`：保留既有 `(spot_id, user_id)` 唯一、`still_there / gone` 與加權門檻，供歷史資料及舊版 API 相容；新版 UI 不再送出存在狀態投票。不存在回報使用 `flag`，送入 `moderation_queue` 待審。
+- `spot_votes`：保留既有 `(spot_id, user_id)` 唯一、`still_there / gone` 與加權門檻，供歷史資料及舊版 API 相容；新版 UI 不再送出存在狀態投票。`gone` 加權達門檻時點位退回 `pending` 並送審，不再自動隱藏；只有合格的 `still_there` 會更新 `last_confirmed_at`。不存在回報使用 `flag`，送入 `moderation_queue` 待審。
 - `favorites`：user_id 私有。
 - `city_rules`：公開唯讀，僅管理者可寫（讓規則改變時不必發版）。
 - RPC `nearby_spots(lat, lng, radius_m)` 用 `ST_DWithin`。
@@ -298,7 +298,7 @@ UI：`material_ui`、`cupertino_ui`（Flutter 官方設計套件，取代框架�
    - ~~**官方點位註記**~~（2026-10-17 隨 TDX 即時層移除）：在 TDX 停車場上回報「重機可停 / 不可停 / 須停汽車格」「入口限高/坡道陡」等，TDX 本身沒有這些欄位。
      - 註記先以 `pending` 存入 `spot_annotations`，管理者改為 `confirmed` 後才生效：`tdx-parking` 回傳停車點時以 RPC `confirmed_annotations` 取每個點最新一筆已確認註記，設定 `heavy_allowed`（須停汽車格視為可停）並在備註標示「社群回報經審核」。查詢失敗時維持 TDX 原資料，重機資格保持「有條件」。
 2. **去重**：送出前查 15 公尺內同類型點，有的話引導查看既有點並提出修改建議，而非重複新增。
-3. **存在與可信度分開處理**：新增點位的 `pending` 資料也正常可見；未知資格保留「有條件／請確認現場標示」。歷史投票的合格帳號與加權隱藏門檻保留於後端，但不是新版介面的存在確認流程。不存在／資訊錯誤建議進入 `moderation_queue` 待審；管理者判定後處理，資料超過 180 天未確認仍可提示可能過時。
+3. **存在與可信度分開處理**：新增點位的 `pending` 資料也正常可見；未知資格保留「有條件／請確認現場標示」。歷史投票的合格帳號與加權門檻保留於後端，但不是新版介面的存在確認流程；`confirmed` 只代表點位存在，不代表社群填寫的車種資格已核實（場站「可停」只採官方資料），沒有確認時間的 `confirmed` 視為新鮮度未知。不存在／資訊錯誤建議進入 `moderation_queue` 待審；管理者判定後處理，資料超過 180 天未確認仍可提示可能過時。
 4. **防濫用**：匿名身分可被任意重建（`signInAnonymously()` 每次都產生新 user id，[Supabase 官方文件](https://supabase.com/docs/guides/auth/auth-anonymous)亦建議搭配 CAPTCHA），因此**不能把匿名帳號當成一個人**：
    - **權限分級**：匿名或未登入只能瀏覽、收藏、記錄停車位置（收藏與停車紀錄不影響他人）；**回報、確認、投票、檢舉**需以 Google / Apple 帳號登入。
    - **CAPTCHA**：Supabase Auth 啟用 Cloudflare Turnstile（或 hCaptcha），登入時驗證。
