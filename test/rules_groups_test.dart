@@ -68,12 +68,13 @@ void main() {
       SpaceType.paidMotorcycle,
       SpaceType.freeMotorcycle,
     ]);
+    // Car bays are for small cars and heavy bikes, not scooters.
     expect(scooter[(EligibilityStatus.notAllowed, null)], [
       SpaceType.heavyOnly,
+      SpaceType.car,
       SpaceType.disabledMotorcycle,
     ]);
     expect(scooter[(EligibilityStatus.unverified, null)], [
-      SpaceType.car,
       SpaceType.offStreet,
     ]);
   });

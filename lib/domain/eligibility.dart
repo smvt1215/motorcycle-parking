@@ -106,10 +106,16 @@ Eligibility _judge(
   if (spot.spaceType == SpaceType.heavyOnly && vehicle == VehicleType.scooter) {
     return const Eligibility(EligibilityStatus.notAllowed, '大型重機專用格');
   }
-  if (spot.spaceType == SpaceType.car && vehicle == VehicleType.scooter) {
+  // Car bays are painted for small cars and heavy bikes (標誌標線號誌設置規則
+  // §190); an ordinary scooter there is the wrong vehicle class unless a
+  // city rule opens them (道路交通安全規則 §112, last paragraph).
+  if (spot.spaceType == SpaceType.car &&
+      vehicle == VehicleType.scooter &&
+      !(rule?.allowedSpaceTypes.contains(SpaceType.car) ?? false) &&
+      !(rule?.conditionalSpaceTypes.contains(SpaceType.car) ?? false)) {
     return const Eligibility(
-      EligibilityStatus.unverified,
-      '汽車格是否開放機車依各地規定，請以現場標誌標線為準',
+      EligibilityStatus.notAllowed,
+      '汽車格為小型車及大型重機停放線，普通機車停放屬車種不依規定',
     );
   }
   // Community claims never override legal rules; pending/stale claims remain unverified.

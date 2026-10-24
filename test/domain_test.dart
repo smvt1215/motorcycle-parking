@@ -217,19 +217,56 @@ void main() {
     );
     expect(
       eligibility(
-        spot(SpaceType.car),
-        VehicleType.scooter,
-        rule('臺北市', VehicleType.scooter),
-      ).status,
-      EligibilityStatus.unverified,
-    );
-    expect(
-      eligibility(
         spot(SpaceType.paidMotorcycle),
         VehicleType.scooter,
         null,
       ).status,
       EligibilityStatus.unverified,
+    );
+  });
+  test('普通機車停汽車格屬車種不依規定，除非城市規則開放', () {
+    // Car bays are painted for small cars and heavy bikes (§190).
+    for (final rule in [rule('臺北市', VehicleType.scooter), null]) {
+      final result = eligibility(
+        spot(SpaceType.car),
+        VehicleType.scooter,
+        rule,
+      );
+      expect(result.status, EligibilityStatus.notAllowed);
+      expect(result.reason, contains('車種不依規定'));
+    }
+    // Even a report claiming scooters may park there cannot open it.
+    expect(
+      eligibility(
+        ParkingSpot(
+          id: 'claim',
+          name: 'claim',
+          lat: 25,
+          lng: 121,
+          city: '臺北市',
+          spaceType: SpaceType.car,
+          status: TrustStatus.confirmed,
+          scooterAllowed: true,
+        ),
+        VehicleType.scooter,
+        rule('臺北市', VehicleType.scooter),
+      ).status,
+      EligibilityStatus.notAllowed,
+    );
+    // A city's special rule (§112, last paragraph) can open them.
+    final opened = CityRule(
+      city: '臺北市',
+      vehicle: VehicleType.scooter,
+      allowedSpaceTypes: const [SpaceType.paidMotorcycle, SpaceType.car],
+      feeNote: '依汽車費率',
+      exceptions: '試辦開放',
+      sourceUrl: 'https://example.test',
+      version: 9,
+      effectiveDate: DateTime(2026),
+    );
+    expect(
+      eligibility(spot(SpaceType.car), VehicleType.scooter, opened).status,
+      EligibilityStatus.allowed,
     );
   });
   test('六地區 × 兩車種規則可解析且具官方來源', () {
