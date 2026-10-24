@@ -71,6 +71,11 @@ jobs:
         run: flutter test --coverage --dart-define=OFFLINE_MAP=true
       - if: steps.changes.outputs.run == 'true'
         run: flutter build web --no-web-resources-cdn --no-wasm-dry-run
+      - name: Build admin web entrypoint
+        if: steps.changes.outputs.run == 'true'
+        run: |
+          flutter build web -t lib/main_admin.dart -o build/admin --no-web-resources-cdn --no-wasm-dry-run
+          python3 tool/prepare_admin_web.py
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: steps.changes.outputs.run == 'true'
         with:

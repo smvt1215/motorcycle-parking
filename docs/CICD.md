@@ -62,6 +62,43 @@ Workflow 依平台分工：跨平台檢查放 `ci.yml`，各平台的建置與�
 - `tool/boot_ios_simulator.py` 只觸發 iOS；seed 產生器、seed.sql 與 demo／rules 資料來源會驗證生成結果與資料庫。路徑判斷與其測試、CodeQL workflow 變更會重新驗證全部目標。
 - `tool/` 的 Python 測試仍一律執行，不因不觸發平台建置而略過工具回歸測試。
 - 三個既有必要彙總 checks 仍要求所有前置 jobs 成功；取消／失敗不得偽裝為通過。嚴格同步 main、簽章、線性歷史、Squash 與審查 thread 結案規則不變。
+- 管理介面的 `lib/admin/`、`lib/main_admin.dart`、`test/admin/`、`admin_web/`、`firebase.json`、`.firebaserc` 與 Hosting 整理工具只觸發品質，不觸發 Android／iOS 模擬器；與共用程式一起修改時仍跑平台驗證。`web/admin/` 沿用 Web 的品質路徑；新增共用套件仍由 `pubspec` 觸發所有平台。
+- 品質 job 另建置 `lib/main_admin.dart` 到 `build/admin`，套用管理站 metadata；原 App Web 仍獨立建置到 `build/web`。
+
+### 管理介面 staging Hosting
+
+`cd-staging.yml` 在 staging 後端部署成功後，執行 `Staging admin Hosting`。本階段只部署 staging；production Hosting 與 RC 流程尚未加入。
+
+| staging Environment 設定 | 用途 |
+|---|---|
+| variable `FIREBASE_HOSTING_SITE` | 已建立的管理站 site ID；未設定時明確略過 Hosting 並在 Actions 摘要說明 |
+| variables `FIREBASE_WORKLOAD_IDENTITY_PROVIDER`、`FIREBASE_SERVICE_ACCOUNT` | 沿用 `github-staging` OIDC 與 staging 服務帳號，無長期 JSON 金鑰 |
+| variables `SUPABASE_URL`、`SUPABASE_ANON_KEY` | 管理站使用的 staging 後端公開設定 |
+| secret `SUPABASE_PROJECT_REF` | 由 `cd_config.py staging web` 檢查 URL 與 staging 專案一致 |
+| secret `GOOGLE_MAPS_WEB_API_KEY` | 受管理站 referrer 限制的 Maps Web 金鑰 |
+
+`.firebaserc` 的 `staging` alias 指向 `motocycle-parking-guide`。CI 以 `firebase target:apply hosting admin-staging "$FIREBASE_HOSTING_SITE" --project staging` 建立目標對應，再只部署 `hosting:admin-staging`。部署前重新檢查 main SHA，避免排隊中的舊版本覆蓋新站。設定了 site 後，缺少憑證、金鑰或 Hosting 權限會讓 job 失敗，不會偽裝部署成功。
+
+建置沿用鎖定 Flutter，執行：
+
+```bash
+python3 tool/cd_config.py staging web
+flutter build web -t lib/main_admin.dart -o build/admin --no-web-resources-cdn --no-wasm-dry-run --dart-define-from-file=config/staging.json
+python3 tool/prepare_admin_web.py
+firebase deploy --only hosting:admin-staging --project staging --non-interactive
+```
+
+`firebase.json` 僅服務 `build/admin`，設定 SPA rewrite、CSP、`X-Frame-Options: DENY`、`X-Robots-Tag: noindex, nofollow`、`nosniff` 與重新驗證快取。CanvasKit 從同站載入；CSP 允許 Supabase HTTPS／WebSocket 與 Maps／Fonts 所需來源。管理站的 `index.html` 也含 `noindex`，不引用 App 的 manifest。
+
+擁有者需完成後才能宣告 staging 登入驗收通過：
+
+1. 在 Firebase 專案建立獨立 staging Hosting site，設定 `FIREBASE_HOSTING_SITE`；確定使用 `web.app` 或自訂網域。
+2. 為 `github-staging-distribution@motocycle-parking-guide.iam.gserviceaccount.com` 增加 Firebase Hosting Admin（`roles/firebasehosting.admin`），並依 [Firebase CLI 的角色要求](https://firebase.google.com/docs/projects/iam/roles-predefined-product)確認具備 API Keys Viewer（`roles/serviceusage.apiKeysViewer`）。目前交接記錄只有 App Distribution Admin；本 PR 不修改 IAM。
+3. Supabase staging 的 Auth Redirect URLs 加入管理站回呼網址，啟用 TOTP；若使用簡訊，另設定簡訊供應商。
+4. 由 Dashboard／後端以 service role 將管理帳號的 `app_metadata.role` 設為 `admin`，再登入登記至少兩個驗證器 App。service role 不放到網站。
+5. Maps Web 金鑰加入實際管理站網域的 referrer 限制，設定 `GOOGLE_MAPS_WEB_API_KEY`。
+
+程式與本機測試完成不代表上述外部設定已完成；真實 Google 登入、MFA 與 Hosting 部署仍需於 staging 驗收。
 
 ### Actions 清理
 

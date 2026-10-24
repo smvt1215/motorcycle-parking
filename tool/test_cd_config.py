@@ -41,6 +41,23 @@ class BuildConfigurationTest(unittest.TestCase):
                 configure_build("staging", "ios")
             self.assertEqual(list(root.iterdir()), [])
 
+    def test_admin_web_uses_public_settings_without_mobile_signing_material(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            ref = "a" * 20
+            env = {"SUPABASE_PROJECT_REF": ref, "SUPABASE_URL": f"https://{ref}.supabase.co",
+                   "SUPABASE_ANON_KEY": "public-anon-test", "GOOGLE_MAPS_API_KEY": "web-key"}
+            with patch.dict(os.environ, env, clear=True), patch("cd_config.ROOT", root):
+                configure_build("staging", "web")
+            config = root / "config/staging.json"
+            self.assertEqual(json.loads(config.read_text()), {
+                "SUPABASE_URL": env["SUPABASE_URL"],
+                "SUPABASE_ANON_KEY": "public-anon-test", "GOOGLE_MAPS_WEB_API_KEY": "web-key",
+            })
+            self.assertEqual(config.stat().st_mode & 0o777, 0o600)
+            self.assertFalse((root / "android").exists())
+            self.assertFalse((root / "ios").exists())
+
     def test_missing_map_key_cannot_publish_preview_map(self):
         with tempfile.TemporaryDirectory() as directory:
             ref = "a" * 20

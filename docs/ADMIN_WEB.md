@@ -1,6 +1,6 @@
 # Web 管理介面 — 開發計畫
 
-> 狀態：UI 原型已確認（2026-10-24），尚未實作。取代 [PLAN.md](PLAN.md)「社群回報機制 › 5. 管理」原本「第一版用 Supabase Dashboard」的做法；實作完成前仍以 Dashboard 操作。最後更新：2026-10-24
+> 狀態：P1 後端與 P2 外殼程式已實作；P2 的 staging 登入驗收仍待 Hosting site、部署權限與 Auth 設定。取代 [PLAN.md](PLAN.md)「社群回報機制 › 5. 管理」原本「第一版用 Supabase Dashboard」的做法；審核操作上線前仍以 Dashboard 操作。最後更新：2026-10-24
 
 ## 背景
 目前審核與資料維護都在 Supabase Dashboard 完成，有幾個問題：
@@ -102,6 +102,35 @@
 | P6 匯入 | 上傳 `import_mymaps.py` 的 JSON → 差異試算 → 套用 | — |
 | P7 使用者 | 檢視 `rate_limit_events`、停權（`admin-users`） | — |
 | App | 位置選擇元件用於新增停車點與「位置不正確」建議 | 可與 P4 同步 |
+
+### P2 實作與待驗收事項
+
+- 獨立入口 `lib/main_admin.dart`，UI、登入狀態、Supabase 存取皆位於 `lib/admin/`。App 的 import graph 不會到達 admin；由工具測試持續檢查此邊界。沒有後端設定時只顯示登入服務未設定，不開放示範管理權限。
+- Google OAuth 回到目前網站；非 admin 顯示拒絕原因與登出。admin 的 session 尚未通過第二步驗證時，先登記或選擇已登記的 TOTP／簡訊方式。TOTP 提供 QR code 與可顯示的手動密鑰，簡訊需主動傳送驗證碼；切換方式會清除前一個 challenge。中斷設定後可取消未完成的登記，再以原名稱重試；取消前重新確認仍未驗證。帳號安全頁可加登記備援方式，提醒至少兩個驗證器 App。
+- 五個分頁先提供準備中／空狀態；只有 admin 且 `aal2` 才讀取 `moderation_queue` 中 `pending` 的精確筆數。失敗顯示未知與重試，不以零筆代替；失去權限或登出後清除管理資料。
+- Noto Sans TC 位於 `web/admin/fonts/`，由 admin 入口載入，字型與授權不加入手機資產。深淺色跟隨系統、手機分頁可換行、按鈕至少 44 px、鍵盤焦點可見。
+- `admin_web/` 提供管理站專用 metadata 與圖示；建置後執行 `python3 tool/prepare_admin_web.py`，只覆蓋 `build/admin`，不修改 App 的 `web/index.html` 或 `build/web`。
+
+本機預覽與建置：
+
+```bash
+flutter run -d chrome -t lib/main_admin.dart --dart-define-from-file=config/staging.json
+flutter build web -t lib/main_admin.dart -o build/admin --no-web-resources-cdn --no-wasm-dry-run --dart-define-from-file=config/staging.json
+python3 tool/prepare_admin_web.py
+```
+
+`config/staging.json` 沿用 `SUPABASE_URL`、`SUPABASE_ANON_KEY`、`GOOGLE_MAPS_WEB_API_KEY`。admin 不使用手機的 `OAUTH_REDIRECT_URL`。Hosting 與擁有者設定見 [CICD.md](CICD.md#管理介面-staging-hosting)。
+
+Chromium smoke test 使用虛構後端並攔截 Auth／資料回應，不代表真實 Google OAuth、TOTP 或簡訊供應商已驗收：
+
+```bash
+flutter build web -t lib/main_admin.dart -o build/admin --no-web-resources-cdn --no-wasm-dry-run --dart-define=SUPABASE_URL=https://admin-smoke.supabase.co --dart-define=SUPABASE_ANON_KEY=public-smoke-key
+python3 tool/prepare_admin_web.py
+# 已安裝 playwright 與 Chromium 時執行；也可用 PLAYWRIGHT_MODULE 指定套件位置。
+node tool/admin_smoke.cjs
+```
+
+此測試套用 `firebase.json` 的回應標頭，檢查桌面淺色／手機深色的登入、拒絕、第二步驗證與分頁外殼、MFA 後進入管理頁、console error 與 metadata，截圖存於 `artifacts/admin-smoke/`（不進版控）。測試版本不可部署到 staging；CD 會使用 staging Environment 重新建置。
 
 ## CI／CD
 - `tool/ci_changes.py` 將 `lib/admin/` 歸入品質檢查與 admin web 建置（`flutter build web -t lib/main_admin.dart -o build/admin`），不觸發模擬器。
