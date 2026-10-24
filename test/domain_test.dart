@@ -15,6 +15,7 @@ void main() {
   ParkingSpot spot(
     SpaceType type, {
     String city = '臺北市',
+    String district = '',
     TrustStatus status = TrustStatus.confirmed,
     bool? heavy,
     DateTime? last,
@@ -24,6 +25,7 @@ void main() {
     lat: 25,
     lng: 121,
     city: city,
+    district: district,
     spaceType: type,
     status: status,
     heavyAllowed: heavy,
@@ -84,29 +86,59 @@ void main() {
       EligibilityStatus.unverified,
     );
   });
-  test('新北與台中試辦範圍不能擴大為全市開放，並標出限制類型', () {
-    for (final (city, restriction) in [
-      ('新北市', RuleRestriction.pilotArea),
-      ('桃園市', RuleRestriction.pilotArea),
-      ('臺中市', RuleRestriction.signage),
-    ]) {
-      final result = eligibility(
-        spot(SpaceType.paidMotorcycle, city: city),
-        VehicleType.heavy,
-        rule(city, VehicleType.heavy),
+  test('2026 重機規則：新北收費格與板橋新店免費格可停，桃園全部開放，台中限標示，高雄路邊不開放', () {
+    Eligibility judge(String city, SpaceType type) => eligibility(
+      spot(type, city: city),
+      VehicleType.heavy,
+      rule(city, VehicleType.heavy),
+    );
+    expect(
+      judge('新北市', SpaceType.paidMotorcycle).status,
+      EligibilityStatus.allowed,
+    );
+    // New Taipei opens free bays by whole district: Banqiao and Xindian
+    // only.
+    Eligibility free(String district) => eligibility(
+      spot(SpaceType.freeMotorcycle, city: '新北市', district: district),
+      VehicleType.heavy,
+      rule('新北市', VehicleType.heavy),
+    );
+    for (final district in ['板橋區', '新店區']) {
+      expect(
+        free(district).status,
+        EligibilityStatus.allowed,
+        reason: district,
       );
-      expect(result.status, EligibilityStatus.conditional, reason: city);
-      expect(result.restriction, restriction, reason: city);
     }
-    // Kaohsiung's rule is not verified yet: nothing it opens is certain.
+    expect(free('中和區').status, EligibilityStatus.notAllowed);
+    expect(free('中和區').reason, contains('板橋區、新店區'));
+    // Without a district the app cannot tell.
+    expect(free('').status, EligibilityStatus.unverified);
+    // A pending report in an open district is still unverified.
     expect(
       eligibility(
-        spot(SpaceType.paidMotorcycle, city: '高雄市'),
+        spot(
+          SpaceType.freeMotorcycle,
+          city: '新北市',
+          district: '板橋區',
+          status: TrustStatus.pending,
+        ),
         VehicleType.heavy,
-        rule('高雄市', VehicleType.heavy),
+        rule('新北市', VehicleType.heavy),
       ).status,
       EligibilityStatus.unverified,
     );
+    for (final type in [SpaceType.paidMotorcycle, SpaceType.freeMotorcycle]) {
+      expect(judge('桃園市', type).status, EligibilityStatus.allowed);
+      // Kaohsiung only trials five lots; its street bays are closed.
+      expect(judge('高雄市', type).status, EligibilityStatus.notAllowed);
+    }
+    // Taichung: only bays marked 大重機共用, paid or free.
+    for (final type in [SpaceType.paidMotorcycle, SpaceType.freeMotorcycle]) {
+      final taichung = judge('臺中市', type);
+      expect(taichung.status, EligibilityStatus.conditional);
+      expect(taichung.restriction, RuleRestriction.signage);
+    }
   });
   test('路外未知重機資格與普通機車專用限制', () {
     expect(
@@ -153,20 +185,20 @@ void main() {
     );
   });
   test('有條件只用於法規已知的限制；資料不足一律待確認', () {
-    final heavy = rule('新北市', VehicleType.heavy);
-    final pilot = eligibility(
-      spot(SpaceType.paidMotorcycle, city: '新北市'),
+    final heavy = rule('臺中市', VehicleType.heavy);
+    final marked = eligibility(
+      spot(SpaceType.paidMotorcycle, city: '臺中市'),
       VehicleType.heavy,
       heavy,
     );
-    expect(pilot.status, EligibilityStatus.conditional);
-    expect(pilot.reason, heavy.exceptions);
-    // An unchecked report inside a pilot city is still unverified.
+    expect(marked.status, EligibilityStatus.conditional);
+    expect(marked.reason, heavy.exceptions);
+    // An unchecked report inside a city with marked bays is still unverified.
     expect(
       eligibility(
         spot(
           SpaceType.paidMotorcycle,
-          city: '新北市',
+          city: '臺中市',
           status: TrustStatus.pending,
         ),
         VehicleType.heavy,
@@ -185,19 +217,56 @@ void main() {
     );
     expect(
       eligibility(
-        spot(SpaceType.car),
-        VehicleType.scooter,
-        rule('臺北市', VehicleType.scooter),
-      ).status,
-      EligibilityStatus.unverified,
-    );
-    expect(
-      eligibility(
         spot(SpaceType.paidMotorcycle),
         VehicleType.scooter,
         null,
       ).status,
       EligibilityStatus.unverified,
+    );
+  });
+  test('普通機車停汽車格屬車種不依規定，除非城市規則開放', () {
+    // Car bays are painted for small cars and heavy bikes (§190).
+    for (final rule in [rule('臺北市', VehicleType.scooter), null]) {
+      final result = eligibility(
+        spot(SpaceType.car),
+        VehicleType.scooter,
+        rule,
+      );
+      expect(result.status, EligibilityStatus.notAllowed);
+      expect(result.reason, contains('車種不依規定'));
+    }
+    // Even a report claiming scooters may park there cannot open it.
+    expect(
+      eligibility(
+        ParkingSpot(
+          id: 'claim',
+          name: 'claim',
+          lat: 25,
+          lng: 121,
+          city: '臺北市',
+          spaceType: SpaceType.car,
+          status: TrustStatus.confirmed,
+          scooterAllowed: true,
+        ),
+        VehicleType.scooter,
+        rule('臺北市', VehicleType.scooter),
+      ).status,
+      EligibilityStatus.notAllowed,
+    );
+    // A city's special rule (§112, last paragraph) can open them.
+    final opened = CityRule(
+      city: '臺北市',
+      vehicle: VehicleType.scooter,
+      allowedSpaceTypes: const [SpaceType.paidMotorcycle, SpaceType.car],
+      feeNote: '依汽車費率',
+      exceptions: '試辦開放',
+      sourceUrl: 'https://example.test',
+      version: 9,
+      effectiveDate: DateTime(2026),
+    );
+    expect(
+      eligibility(spot(SpaceType.car), VehicleType.scooter, opened).status,
+      EligibilityStatus.allowed,
     );
   });
   test('六地區 × 兩車種規則可解析且具官方來源', () {

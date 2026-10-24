@@ -57,7 +57,7 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
   static const clusterId = gm.ClusterManagerId('parking');
   gm.GoogleMapController? controller;
   late gm.CameraPosition camera;
-  late Future<Map<(MarkerLook, bool), gm.BitmapDescriptor>> ready;
+  late Future<Map<(MarkerLook, SpaceBadge?, bool), gm.BitmapDescriptor>> ready;
 
   /// A fixed-size dot: a ground circle in meters vanishes at street zoom.
   gm.BitmapDescriptor? locationIcon;
@@ -79,22 +79,25 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
     );
   }
 
-  Future<Map<(MarkerLook, bool), gm.BitmapDescriptor>> _prepare() async {
+  Future<Map<(MarkerLook, SpaceBadge?, bool), gm.BitmapDescriptor>>
+  _prepare() async {
     await initializeMapsSdk();
     final variants = [
       for (final status in EligibilityStatus.values)
         for (final restriction in [
           null,
           if (status == EligibilityStatus.conditional) ...[
-            RuleRestriction.pilotArea,
             RuleRestriction.signage,
+            RuleRestriction.timeLimited,
+            RuleRestriction.evOnly,
           ],
         ])
-          for (final selected in [false, true])
-            ((status, restriction), selected),
+          for (final badge in [null, ...SpaceBadge.values])
+            for (final selected in [false, true])
+              ((status, restriction), badge, selected),
     ];
     final icons = await Future.wait(
-      variants.map((variant) => _markerIcon(variant.$1, variant.$2)),
+      variants.map((v) => _markerIcon(v.$1, v.$2, v.$3)),
     );
     return Map.fromIterables(variants, icons);
   }
@@ -320,13 +323,18 @@ extension on GoogleParkingMapState {
   /// under its own id: the iOS plugin drops a marker whose cluster id is
   /// removed in place instead of putting it back on the map.
   gm.Marker _marker(
-    Map<(MarkerLook, bool), gm.BitmapDescriptor> icons,
+    Map<(MarkerLook, SpaceBadge?, bool), gm.BitmapDescriptor> icons,
     ParkingSpot spot, {
     required bool selected,
   }) => gm.Marker(
     markerId: gm.MarkerId(selected ? 'selected:${spot.id}' : spot.id),
     position: gm.LatLng(spot.lat, spot.lng),
-    icon: icons[(markerLook(widget.eligibility(spot)), selected)]!,
+    icon:
+        icons[(
+          markerLook(widget.eligibility(spot)),
+          spaceBadge(spot),
+          selected,
+        )]!,
     anchor: const Offset(.5, .5),
     clusterManagerId: selected ? null : GoogleParkingMapState.clusterId,
     zIndexInt: selected ? 500 : 0,
@@ -340,7 +348,11 @@ gm.LatLng _googlePoint(LatLng point) =>
 
 /// Drawn at 2x like [SpotMarker]; a selected marker is [selectedScale]
 /// larger with a blue ring.
-Future<gm.BitmapDescriptor> _markerIcon(MarkerLook look, bool selected) async {
+Future<gm.BitmapDescriptor> _markerIcon(
+  MarkerLook look,
+  SpaceBadge? badge,
+  bool selected,
+) async {
   final scale = selected ? selectedScale : 1.0;
   final side = (96 * scale).roundToDouble();
   final recorder = ui.PictureRecorder();
@@ -375,6 +387,7 @@ Future<gm.BitmapDescriptor> _markerIcon(MarkerLook look, bool selected) async {
     Offset((96 - painter.width) / 2, (96 - painter.height) / 2),
   );
   painter.dispose();
+  if (badge != null) _paintBadge(canvas, badge);
   final picture = recorder.endRecording();
   final image = await picture.toImage(side.toInt(), side.toInt());
   picture.dispose();
@@ -386,6 +399,37 @@ Future<gm.BitmapDescriptor> _markerIcon(MarkerLook look, bool selected) async {
     width: side / 2,
     height: side / 2,
   );
+}
+
+/// The corner badge of [SpaceBadgeDot], at the marker's bottom right.
+void _paintBadge(Canvas canvas, SpaceBadge badge) {
+  const center = Offset(78, 78), radius = 17.0;
+  canvas.drawCircle(center, radius, Paint()..color = Colors.white);
+  canvas.drawCircle(
+    center,
+    radius,
+    Paint()
+      ..color = badgeInk
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5,
+  );
+  final icon = spaceBadgeIcon(badge);
+  final painter = TextPainter(
+    text: TextSpan(
+      text: icon != null ? String.fromCharCode(icon.codePoint) : '共',
+      style: TextStyle(
+        color: badgeInk,
+        fontSize: icon != null ? 22 : 19,
+        fontWeight: FontWeight.w800,
+        height: 1,
+        fontFamily: icon?.fontFamily,
+        package: icon?.fontPackage,
+      ),
+    ),
+    textDirection: TextDirection.ltr,
+  )..layout();
+  painter.paint(canvas, center - Offset(painter.width / 2, painter.height / 2));
+  painter.dispose();
 }
 
 /// Blue location dot with a white ring and soft halo, 40dp across, matching

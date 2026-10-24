@@ -27,7 +27,10 @@ class RulesRepository {
         );
         if (i < 0) {
           rules.add(r);
-        } else if (r.version > rules[i].version) {
+          // Admins maintain the remote rows; the bundled copy is the fallback,
+          // so a tie keeps the admin's edit (a migration leaves such a row
+          // alone rather than overwrite it).
+        } else if (r.version >= rules[i].version) {
           rules[i] = r;
         }
       }
@@ -47,6 +50,23 @@ class ParkingRepository {
   ParkingRepository(this.client);
   final SupabaseClient? client;
   List<ParkingSpot>? _demoSpots;
+
+  /// Reads [name]'s _v2 variant, which returns every space kind; the
+  /// original keeps to the five kinds older builds can parse. A backend not
+  /// yet migrated has only the original, so fall back to it.
+  Future<List<dynamic>> _viewport(String name, MapViewport bounds) async {
+    try {
+      return await client!.rpc<List<dynamic>>(
+        '${name}_v2',
+        params: bounds.toJson(),
+      );
+    } on PostgrestException catch (e) {
+      // PostgREST: no function with this name.
+      if (e.code != 'PGRST202') rethrow;
+      return client!.rpc<List<dynamic>>(name, params: bounds.toJson());
+    }
+  }
+
   Future<ParkingResult> inViewport(MapViewport bounds) async {
     if (!bounds.canQuery || !bounds.intersectsTaiwan) {
       return const ParkingResult([]);
@@ -56,32 +76,20 @@ class ParkingRepository {
         final raw = jsonDecode(
           await rootBundle.loadString('assets/demo/spots.json'),
         ) as List<dynamic>;
-        _demoSpots = raw
-            .map((e) => ParkingSpot.fromJson(e as Map<String, dynamic>))
-            .toList();
+        _demoSpots = raw.expand(ParkingSpot.known).toList();
       }
       return ParkingResult(
         _demoSpots!.where((s) => bounds.contains(s.lat, s.lng)).toList(),
       );
     }
-    final raw = await client!.rpc<List<dynamic>>(
-      'viewport_spots',
-      params: bounds.toJson(),
-    );
-    final community = raw
-        .map((e) => ParkingSpot.fromJson(e as Map<String, dynamic>))
-        .toList();
+    final raw = await _viewport('viewport_spots', bounds);
+    final community = raw.expand(ParkingSpot.known).toList();
     // Admin-maintained municipal bays; a failure only drops this layer.
     var official = const <ParkingSpot>[];
     String? officialWarning;
     try {
-      final rows = await client!.rpc<List<dynamic>>(
-        'official_viewport_spots',
-        params: bounds.toJson(),
-      );
-      official = rows
-          .map((e) => ParkingSpot.fromJson(e as Map<String, dynamic>))
-          .toList();
+      final rows = await _viewport('official_viewport_spots', bounds);
+      official = rows.expand(ParkingSpot.known).toList();
     } catch (_) {
       officialWarning = '官方停車點暫時無法讀取';
     }
@@ -141,7 +149,7 @@ class LocalRepository {
 
   List<ParkingSpot> favorites(String key) =>
       (jsonDecode(prefs.getString('favorites:$key') ?? '[]') as List<dynamic>)
-          .map((e) => ParkingSpot.fromJson(e as Map<String, dynamic>))
+          .expand(ParkingSpot.known)
           .toList();
   Future<void> setFavorites(String key, List<ParkingSpot> spots) =>
       prefs.setString(

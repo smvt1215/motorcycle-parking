@@ -155,7 +155,7 @@ void main() {
     expect(find.text('範例建議已送出，僅供本次功能測試。'), findsOneWidget);
     await tester.tap(find.text('完成'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('取消'));
+    await tester.tap(find.byTooltip('關閉').last);
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('parking-spot-sheet')), findsOneWidget);
     await tester.tap(find.byTooltip('關閉詳情'));
@@ -261,11 +261,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('地圖怎麼看'));
     await tester.pumpAndSettle();
-    expect(find.text('有條件・限試辦路段'), findsOneWidget);
+    expect(find.text('有條件・限標示車格'), findsOneWidget);
     expect(find.textContaining('目前車種「普通機車」'), findsOneWidget);
     await tester.tap(find.byTooltip('關閉'));
     await tester.pumpAndSettle();
-    expect(find.text('有條件・限試辦路段'), findsNothing);
+    expect(find.text('有條件・限標示車格'), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -397,7 +397,7 @@ void main() {
     await tester.tap(find.text('普通機車').first);
     await tester.pumpAndSettle();
     // The legend lives behind the map's help button only.
-    expect(find.text('有條件・限試辦路段'), findsNothing);
+    expect(find.text('有條件・限標示車格'), findsNothing);
     await tester.tap(find.text('大型重機').first);
     await tester.pumpAndSettle();
     expect(store.vehicle, VehicleType.heavy);
@@ -407,6 +407,12 @@ void main() {
     await tester.tap(find.text('停車規則').last);
     await tester.pumpAndSettle();
     expect(find.text('停之前，先看規則'), findsOneWidget);
+    // The fee sits below the space-type groups.
+    await tester.scrollUntilVisible(
+      find.textContaining('40 元'),
+      200,
+      scrollable: find.byType(Scrollable).last,
+    );
     expect(find.textContaining('40 元'), findsOneWidget);
     await store.toggleFavorite(store.spots.first);
     await tester.pumpAndSettle();
@@ -419,7 +425,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('帳號與設定'), findsOneWidget);
     expect(find.text('大型重機'), findsNothing);
-    await tester.tap(find.text('關閉'));
+    expect(find.text('範例模式'), findsOneWidget);
+    await tester.tap(find.byTooltip('關閉').last);
     await tester.pumpAndSettle();
     expect(find.text('已儲存的停車點'), findsNothing);
     expect(find.text(store.spots.first.name), findsOneWidget);
@@ -461,7 +468,7 @@ void main() {
     await tester.tap(find.byTooltip('新增停車點'));
     await tester.pumpAndSettle();
     expect(find.text('停車點名稱'), findsOneWidget);
-    await tester.tap(find.text('取消'));
+    await tester.tap(find.byTooltip('關閉').last);
     await tester.pumpAndSettle();
     // A spot in the list goes straight to the edit and "gone" reports.
     await tester.tap(find.text(store.spots.first.name));
@@ -472,7 +479,7 @@ void main() {
     expect(find.text('探索').hitTestable(), findsNothing);
     final ctx = tester.element(suggestions);
     expect(Navigator.of(ctx), same(Navigator.of(ctx, rootNavigator: true)));
-    await tester.tap(find.text('取消').last);
+    await tester.tap(find.byTooltip('關閉').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('探索').last);
     await tester.pumpAndSettle();
