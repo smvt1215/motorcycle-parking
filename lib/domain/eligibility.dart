@@ -78,15 +78,19 @@ Eligibility _judge(
   }
   // Bays reserved by law or by vehicle, whatever the city rule says.
   switch (spot.spaceType) {
-    case SpaceType.disabledMotorcycle:
-      return const Eligibility(
-        EligibilityStatus.notAllowed,
-        '身心障礙者專用，須持有效停車識別證明',
-      );
-    case SpaceType.evMotorcycle || SpaceType.flexShared when !trusted:
+    case SpaceType.disabledMotorcycle ||
+            SpaceType.evMotorcycle ||
+            SpaceType.flexShared
+        when !trusted:
       return const Eligibility(
         EligibilityStatus.unverified,
         '社群資訊尚未查核或可能過時，請確認現場',
+      );
+    // Open to permit holders, who may be the rider using the app.
+    case SpaceType.disabledMotorcycle:
+      return const Eligibility(
+        EligibilityStatus.conditional,
+        '身心障礙者專用，須持有效停車識別證明才可停放',
       );
     case SpaceType.evMotorcycle:
       return const Eligibility(

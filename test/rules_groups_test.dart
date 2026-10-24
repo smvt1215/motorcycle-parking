@@ -29,16 +29,18 @@ void main() {
       SpaceType.heavyOnly,
       SpaceType.car,
     ]);
-    // Reserved bays are closed whatever the rule.
     expect(taipei[(EligibilityStatus.notAllowed, null)], [
       SpaceType.freeMotorcycle,
-      SpaceType.disabledMotorcycle,
     ]);
     // Timed bays follow paid ones, then the clock limits them.
     expect(
       taipei[(EligibilityStatus.conditional, RuleRestriction.timeLimited)],
       [SpaceType.timedMotorcycle, SpaceType.flexShared],
     );
+    // Permit holders may park in disabled bays whatever the rule.
+    expect(taipei[(EligibilityStatus.conditional, null)], [
+      SpaceType.disabledMotorcycle,
+    ]);
     expect(taipei[(EligibilityStatus.conditional, RuleRestriction.evOnly)], [
       SpaceType.evMotorcycle,
     ]);
@@ -72,7 +74,6 @@ void main() {
     expect(scooter[(EligibilityStatus.notAllowed, null)], [
       SpaceType.heavyOnly,
       SpaceType.car,
-      SpaceType.disabledMotorcycle,
     ]);
     expect(scooter[(EligibilityStatus.unverified, null)], [
       SpaceType.offStreet,

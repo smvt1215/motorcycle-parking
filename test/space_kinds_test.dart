@@ -36,12 +36,21 @@ void main() {
     rule('臺北市', vehicle),
   );
 
-  test('身障機車專用格對一般騎士一律不可停', () {
+  test('身障機車專用格為有條件・其他限制，限持識別證明者', () {
     for (final vehicle in VehicleType.values) {
       final result = judge(SpaceType.disabledMotorcycle, vehicle);
-      expect(result.status, EligibilityStatus.notAllowed);
+      expect(result.status, EligibilityStatus.conditional);
+      expect(result.restriction, isNull);
       expect(result.reason, contains('識別證明'));
     }
+    expect(
+      judge(
+        SpaceType.disabledMotorcycle,
+        VehicleType.scooter,
+        status: TrustStatus.pending,
+      ).status,
+      EligibilityStatus.unverified,
+    );
   });
 
   test('限時機車格在可停處改為有條件・限時段，不可停處維持不可停', () {

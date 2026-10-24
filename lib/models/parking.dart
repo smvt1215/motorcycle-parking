@@ -10,7 +10,7 @@ enum SpaceType {
   car,
   offStreet,
 
-  /// 身心障礙專用機車格 (pktype 04, 18): permit holders only.
+  /// 身心障礙專用機車格 (pktype 04, 18): conditional, for permit holders.
   disabledMotorcycle,
 
   /// 限時停車機車格 (pktype 20): a motorcycle bay with a time limit.
