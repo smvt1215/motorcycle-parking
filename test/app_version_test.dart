@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:motorcycle_parking/app.dart';
 import 'package:motorcycle_parking/core/app_version.dart';
 import 'package:motorcycle_parking/features/launch/launch_screen.dart';
+import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
 
 void main() {
   test('通道依 flavor 與建置號判斷，與 cd_gate 的建置號規則一致', () {
@@ -72,8 +72,7 @@ void main() {
     await tester.pumpAndSettle();
     final version = find.byKey(const ValueKey('app-version'));
     expect(
-      // The app's SelectableText comes from material_ui, not this import.
-      (tester.widget(version) as dynamic).data,
+      tester.widget<SelectableText>(version).data,
       'v0.2.0 · Build 1234 · Debug',
     );
   });
