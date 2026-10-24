@@ -1,6 +1,6 @@
 # Web 管理介面 — 開發計畫
 
-> 狀態：P1 後端與 P2 外殼已完成，P2 已於 2026-10-24 通過 staging 登入驗收（https://motopark-admin-staging.web.app ）。P0 仍差第二個備援驗證器 App。取代 [PLAN.md](PLAN.md)「社群回報機制 › 5. 管理」原本「第一版用 Supabase Dashboard」的做法；審核操作上線前仍以 Dashboard 操作。最後更新：2026-10-24
+> 狀態：P1 後端與 P2 外殼已完成，P2 已於 2026-10-24 通過 staging 登入驗收（https://motopark-admin-staging.web.app ）。P3 審核佇列已實作，待 staging 部署後驗收。P0 仍差第二個備援驗證器 App。取代 [PLAN.md](PLAN.md)「社群回報機制 › 5. 管理」原本「第一版用 Supabase Dashboard」的做法；P3 驗收前審核仍以 Dashboard 操作。最後更新：2026-10-24
 
 ## 背景
 目前審核與資料維護都在 Supabase Dashboard 完成，有幾個問題：
@@ -83,7 +83,7 @@
 4. `admin_audit_log`：只能新增；記錄操作者、動作、目標、修改前後（jsonb）。
 5. Admin RPC（皆先檢查 `is_admin()`，並在同一 transaction 寫稽核紀錄）：
    - `admin_resolve_report(id, decision, patch, note)`：依 `source_id` 前綴（`official:` 或社群點 uuid）更新對應資料表並結案。
-   - `admin_upsert_spot`、`admin_set_spot_status`（隱藏／恢復）、`admin_promote_spot`（社群點改為官方點）。
+   - `admin_upsert_spot`、`admin_set_spot_hidden`（隱藏／恢復，P3 已實作）、`admin_promote_spot`（社群點改為官方點）。
    - `admin_upsert_city_rule`：伺服器遞增 `version`，檢查 `restriction`。
    - `admin_import_preview`／`admin_import_apply`：接收 `spots.json`，先試算差異再套用，取代 SQL Editor。
 6. 停權使用者需 Auth Admin API：Edge Function `admin-users` 先驗證呼叫者為 admin 且 `aal2`，再用 service role 執行。
@@ -131,6 +131,20 @@ node tool/admin_smoke.cjs
 ```
 
 此測試套用 `firebase.json` 的回應標頭，檢查桌面淺色／手機深色的登入、拒絕、第二步驗證與分頁外殼、MFA 後進入管理頁、console error 與 metadata，截圖存於 `artifacts/admin-smoke/`（不進版控）。測試版本不可部署到 staging；CD 會使用 staging Environment 重新建置。
+
+### P3 實作
+
+- 路徑 `/review`、`/review/<回報 id>`、`/review/hidden`；程式位於 `lib/admin/review/`。佇列依建立時間由舊到新，最多 200 筆；篩選依 `field`／`proposed` 分為停放資格、已不存在、點位資訊，舊版 App 的回報以 `reason` 冒號前文字當標題。
+- 版面：寬度 ≥ 1040 px 佇列 360 px＋詳情；680–1039 px 佇列 300 px；< 680 px 先列表、點選後進詳情（返回鍵顯示剩餘筆數），差異表改為每個欄位上下排列，動作列固定在底部。網址帶回報 id，重新整理或瀏覽器返回不會掉位置。
+- 差異表只列 `admin_resolve_report` 可改的欄位，建議值以黃色斜角色帶標示；不在可改清單的建議另外列出，不會被默默略過。編輯值的驗證與資料表約束一致（名稱 1–100 字、收費 200 字、備註 500 字、緯度 20–27、經度 118–123、官方點大型重機只能可停或不可停）。
+- 動作：有建議值時「套用建議」「修改後套用」；沒有建議值時「修改後套用」「結案不修改」；找不到點位只能「駁回」。處理說明寫入 `resolution_note` 與稽核紀錄。
+- 復原：後端沒有重新開啟回報的 RPC，所以處理後先從佇列移除、6 秒後才寫入；提示列可「復原」。做下一個決定、重新載入或登出時立即寫入；關閉分頁則不寫入，回報留在佇列。寫入失敗會放回佇列；已由他人處理則移出並說明。
+- 小地圖以 Maps JavaScript API 顯示點位與 15 m 去重範圍；載入失敗時顯示座標與重試，不阻擋審核。
+- **官方點隱藏**（2026-10-24 確認）：騎士不能單方面下架官方資料，只有管理者審核「已不存在」時立即隱藏。`official_heavy_spots.hidden` 由 `official_read` 政策過濾，直接讀取、收藏驗證與兩個 viewport 函式都不再回傳；admin（`aal2`）另有讀取政策。匯入不寫 `hidden`，重新匯入不會讓隱藏的點重新出現。
+- **已隱藏的點位**：列出隱藏的社群點與官方點，可逐筆「恢復顯示」（`admin_set_spot_hidden`，寫稽核紀錄，提示列可復原＝重新隱藏）。社群點恢復後回到「待確認」並清除「已不存在」票；P4 點位頁的已隱藏圖層沿用同一個 RPC。
+- **版本衝突**（2026-10-24 併入 P3）：`moderation_queue` 入列時由 trigger 記下點位的 `base_updated_at` 與快照 `base_spot`（不改 `apply_report`，舊版 App 送的建議也有）。`admin_resolve_report` 採納時，只要這次寫入的欄位在送出後被改過，就以 `40001`（`spot changed since the report`）拒絕，點位與案件不變；只比對寫入的欄位，投票或其他欄位的變動不算衝突，避免管理者習慣性強制。後台把案件放回佇列並標示「資料已更新，需重新檢視」，差異表多一欄「送出時」，按「仍要套用」才以 `p_force` 寫入，稽核紀錄 `after.forced=true`。入列早於此功能的案件沒有快照，照常審核。
+- `field` 改用穩定 key：`name`、`space_type`、`fee_note`、`eligibility`、`note`、`gone`，中文只做顯示；舊版 App 送的中文名稱仍可審核。`submit-report` 的白名單見 #61。
+- App 的修改建議改送 `field`（上述 key）、`proposed`、`note`，`reason` 照送給舊伺服器與 Dashboard：格位類型、停放資格送選擇值；名稱與收費送填寫內容（未超過欄位上限時）；點位已不存在時社群點送 `status=hidden`、官方點送 `hidden=true`；「位置或其他備註」只送說明。
 
 ## CI／CD
 - `tool/ci_changes.py` 將 `lib/admin/` 歸入品質檢查與 admin web 建置（`flutter build web -t lib/main_admin.dart -o build/admin`），不觸發模擬器。

@@ -150,6 +150,17 @@ class _SuggestionFormState extends State<_SuggestionForm> {
   late SpaceType type = widget.spot.spaceType;
   late bool? scooter = widget.spot.scooterAllowed;
   late bool? heavy = widget.spot.heavyAllowed;
+
+  /// The stable key sent as `field`; the label is only for display.
+  String get fieldKey => switch (widget.field) {
+    '停車點名稱' => 'name',
+    '格位類型' => 'space_type',
+    '收費資訊' => 'fee_note',
+    '機車停放資格' => 'eligibility',
+    '點位已不存在' => 'gone',
+    _ => 'note',
+  };
+
   bool get unavailable => widget.field == '點位已不存在';
   bool get typeField => widget.field == '格位類型';
   bool get eligibilityField => widget.field == '機車停放資格';
@@ -166,6 +177,34 @@ class _SuggestionFormState extends State<_SuggestionForm> {
     return '${widget.field}：建議「$value」${text.isEmpty ? '' : '；說明：$text'}';
   }
 
+  /// The value the admin applies, keyed by spot column (docs/ADMIN_WEB.md);
+  /// null when the suggestion is only free text. Columns follow the table
+  /// limits so an applied value never fails them.
+  Map<String, Object?>? proposed() {
+    final text = note.text.trim();
+    final spot = widget.spot;
+    if (typeField) return {'space_type': type.name};
+    if (eligibilityField) {
+      return {
+        if (scooter != spot.scooterAllowed) 'scooter_allowed': scooter,
+        if (heavy != spot.heavyAllowed) 'heavy_allowed': heavy,
+      };
+    }
+    if (unavailable) {
+      // Official spots hide through their own flag; TDX spots cannot be hidden.
+      if (spot.source == 'official') return {'hidden': true};
+      if (communitySpotSources.contains(spot.source)) {
+        return {'status': 'hidden'};
+      }
+      return null;
+    }
+    return switch (fieldKey) {
+      'name' when text.length <= 100 => {'name': text},
+      'fee_note' when text.length <= 200 => {'fee_note': text},
+      _ => null,
+    };
+  }
+
   @override
   void dispose() {
     note.dispose();
@@ -179,10 +218,17 @@ class _SuggestionFormState extends State<_SuggestionForm> {
       error = null;
     });
     try {
+      final value = proposed();
       await widget.store.submit({
         'action': 'flag',
         'source_id': widget.spot.id,
+        // Older servers and Dashboard reviews read only the summary.
         'reason': reason(),
+        'field': fieldKey,
+        'proposed': ?value,
+        // The text is the value itself for name and fee suggestions.
+        if (value == null || structured || unavailable)
+          'note': note.text.trim(),
       });
       if (mounted) setState(() => sent = true);
     } catch (e) {
