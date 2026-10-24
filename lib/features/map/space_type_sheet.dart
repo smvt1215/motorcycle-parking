@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import '../../models/parking.dart';
 import '../../ui/adaptive/adaptive.dart';
+import 'map_legend.dart';
 
 /// Filters the map by space type. Each option shows its ground marking and
 /// how many spots of that type the current map view holds.
@@ -206,14 +207,19 @@ class _MarkingPainter extends CustomPainter {
           Rect.fromLTWH(w * .22, h * .16, w * .56, h * .68),
           line,
         );
-        // A single bar across the bay, as the painted lettering reads.
-        canvas.drawRect(
-          Rect.fromLTWH(w * .34, h * .44, w * .32, h * .1),
-          Paint()..color = yellow,
+        // The helmet of the map's heavy-only badge, painted in the bay.
+        _paintGlyph(
+          canvas,
+          size,
+          spaceBadgeIcon(SpaceBadge.heavyOnly)!,
+          yellow,
+          .42,
         );
       case SpaceType.car:
         line.color = white;
         canvas.drawRect(Rect.fromLTWH(w * .1, h * .26, w * .8, h * .48), line);
+        // The car of the map's car badge.
+        _paintGlyph(canvas, size, spaceBadgeIcon(SpaceBadge.car)!, white, .42);
       case SpaceType.offStreet:
         final sign = RRect.fromRectAndRadius(
           Rect.fromLTWH(w * .2, h * .2, w * .6, h * .6),
@@ -239,6 +245,37 @@ class _MarkingPainter extends CustomPainter {
         );
         painter.dispose();
     }
+  }
+
+  /// [icon] centred in the bay at [fraction] of its height.
+  void _paintGlyph(
+    Canvas canvas,
+    Size size,
+    IconData icon,
+    Color color,
+    double fraction,
+  ) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: String.fromCharCode(icon.codePoint),
+        style: TextStyle(
+          color: color,
+          fontSize: size.height * fraction,
+          fontFamily: icon.fontFamily,
+          package: icon.fontPackage,
+          height: 1,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    painter.paint(
+      canvas,
+      Offset(
+        (size.width - painter.width) / 2,
+        (size.height - painter.height) / 2,
+      ),
+    );
+    painter.dispose();
   }
 
   @override
