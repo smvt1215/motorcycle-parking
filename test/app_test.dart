@@ -407,6 +407,12 @@ void main() {
     await tester.tap(find.text('停車規則').last);
     await tester.pumpAndSettle();
     expect(find.text('停之前，先看規則'), findsOneWidget);
+    // The fee sits below the space-type groups.
+    await tester.scrollUntilVisible(
+      find.textContaining('40 元'),
+      200,
+      scrollable: find.byType(Scrollable).last,
+    );
     expect(find.textContaining('40 元'), findsOneWidget);
     await store.toggleFavorite(store.spots.first);
     await tester.pumpAndSettle();

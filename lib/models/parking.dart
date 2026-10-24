@@ -1,6 +1,30 @@
 enum VehicleType { scooter, heavy }
 
-enum SpaceType { paidMotorcycle, freeMotorcycle, heavyOnly, car, offStreet }
+/// Space kinds a rider meets, from Taipei's official street-space codes
+/// (pktype) and the national special-bay rules. Added kinds sit after the
+/// original five so stored names never shift.
+enum SpaceType {
+  paidMotorcycle,
+  freeMotorcycle,
+  heavyOnly,
+  car,
+  offStreet,
+
+  /// 機慢車停放區 (pktype 11): one painted area, no individual bays.
+  scooterArea,
+
+  /// 身心障礙專用機車格 (pktype 04, 18): permit holders only.
+  disabledMotorcycle,
+
+  /// 限時停車機車格 (pktype 20): a motorcycle bay with a time limit.
+  timedMotorcycle,
+
+  /// 汽機車彈性共用 (pktype 22): cars and motorcycles by posted hours.
+  flexShared,
+
+  /// 電動機車停車／充換電格: electric motorcycles only.
+  evMotorcycle,
+}
 
 /// How a rule limits its conditional space types; the map picks the marker
 /// icon from it.
@@ -11,7 +35,13 @@ enum SpaceType { paidMotorcycle, freeMotorcycle, heavyOnly, car, offStreet }
 enum RuleRestriction {
   pilotArea('pilot_area'),
   signage('signage'),
-  unverified('unverified');
+  unverified('unverified'),
+
+  /// Set by the space itself, never by a rule: posted time limits.
+  timeLimited('time_limited'),
+
+  /// Set by the space itself: electric motorcycles only.
+  evOnly('ev_only');
 
   const RuleRestriction(this.key);
   final String key;
@@ -19,6 +49,8 @@ enum RuleRestriction {
     pilotArea => '限試辦路段',
     signage => '限標示車格',
     unverified => '規則未核實',
+    timeLimited => '限時段',
+    evOnly => '限電動機車',
   };
   static RuleRestriction? parse(Object? value) =>
       values.where((r) => r.key == value).firstOrNull;
@@ -105,6 +137,11 @@ extension SpaceLabel on SpaceType {
     SpaceType.heavyOnly => '重機專用格',
     SpaceType.car => '汽車格',
     SpaceType.offStreet => '路外停車場',
+    SpaceType.scooterArea => '機慢車停放區',
+    SpaceType.disabledMotorcycle => '身障機車專用格',
+    SpaceType.timedMotorcycle => '限時停車機車格',
+    SpaceType.flexShared => '汽機車彈性共用格',
+    SpaceType.evMotorcycle => '電動機車充換電格',
   };
 }
 
@@ -167,6 +204,17 @@ class ParkingSpot {
   bool get stale =>
       lastConfirmedAt != null &&
       DateTime.now().difference(lastConfirmedAt!).inDays > 180;
+
+  /// [row] as a spot, or nothing when its space kind is newer than this
+  /// build: one unknown row must not fail the whole map.
+  static Iterable<ParkingSpot> known(Object? row) {
+    final j = row as Map<String, dynamic>;
+    if (!SpaceType.values.asNameMap().containsKey(j['space_type'])) {
+      return const [];
+    }
+    return [ParkingSpot.fromJson(j)];
+  }
+
   factory ParkingSpot.fromJson(Map<String, dynamic> j) => ParkingSpot(
     id: j['id'] as String,
     name: j['name'] as String,

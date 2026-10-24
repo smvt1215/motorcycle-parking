@@ -44,6 +44,11 @@ String _detail(SpaceType? type) => switch (type) {
   SpaceType.heavyOnly => '標示大型重機專用的格位',
   SpaceType.car => '依規定可停放機車的汽車格',
   SpaceType.offStreet => '停車場內的機車或重機區',
+  SpaceType.scooterArea => '整片劃設、不分格的機車停放區',
+  SpaceType.disabledMotorcycle => '身心障礙者專用，須持識別證明',
+  SpaceType.timedMotorcycle => '黃色內框機車格，依牌面時段限時停放',
+  SpaceType.flexShared => '汽車與機車依時段輪替使用的格位',
+  SpaceType.evMotorcycle => '限電動機車停放或充換電',
 };
 
 class SpaceTypeOption extends StatelessWidget {
@@ -151,6 +156,8 @@ class _MarkingPainter extends CustomPainter {
   static const asphalt = Color(0xff3d4247);
   static const white = Color(0xfff2f2ee);
   static const yellow = Color(0xfff2c200);
+  static const disabledBlue = Color(0xff2f6fd6);
+  static const evGreen = Color(0xff3fb56b);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -220,6 +227,64 @@ class _MarkingPainter extends CustomPainter {
         canvas.drawRect(Rect.fromLTWH(w * .1, h * .26, w * .8, h * .48), line);
         // The car of the map's car badge.
         _paintGlyph(canvas, size, spaceBadgeIcon(SpaceBadge.car)!, white, .42);
+      case SpaceType.scooterArea:
+        // One long area, no bays: an outline with the kerb-side hatching.
+        line.color = white;
+        canvas.drawRect(
+          Rect.fromLTWH(w * .12, h * .28, w * .76, h * .44),
+          line,
+        );
+        for (var i = 0; i < 3; i++) {
+          final x = w * (.24 + i * .2);
+          canvas.drawLine(
+            Offset(x, h * .64),
+            Offset(x + w * .1, h * .36),
+            line..strokeWidth = math.max(1, 1.6 * scale),
+          );
+        }
+      case SpaceType.disabledMotorcycle:
+        line.color = disabledBlue;
+        canvas.drawRect(
+          Rect.fromLTWH(w * .22, h * .16, w * .56, h * .68),
+          line,
+        );
+        _paintGlyph(canvas, size, Icons.accessible, white, .44);
+      case SpaceType.timedMotorcycle:
+        line.color = white;
+        canvas.drawRect(
+          Rect.fromLTWH(w * .22, h * .16, w * .56, h * .68),
+          line,
+        );
+        canvas.drawRect(
+          Rect.fromLTWH(w * .3, h * .26, w * .4, h * .48),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = math.max(1, 1.8 * scale)
+            ..color = yellow,
+        );
+        _paintGlyph(canvas, size, Icons.schedule, yellow, .3);
+      case SpaceType.flexShared:
+        // A car bay whose left half is split into motorcycle bays.
+        line.color = white;
+        canvas.drawRect(Rect.fromLTWH(w * .1, h * .26, w * .8, h * .48), line);
+        for (final x in [w * .26, w * .42]) {
+          canvas.drawLine(Offset(x, h * .26), Offset(x, h * .74), line);
+        }
+        _paintGlyph(
+          canvas,
+          // Centred on the car half (a canvas twice as wide as that half).
+          Size(w * 1.36, h),
+          spaceBadgeIcon(SpaceBadge.car)!,
+          white,
+          .3,
+        );
+      case SpaceType.evMotorcycle:
+        line.color = evGreen;
+        canvas.drawRect(
+          Rect.fromLTWH(w * .22, h * .16, w * .56, h * .68),
+          line,
+        );
+        _paintGlyph(canvas, size, Icons.bolt, evGreen, .46);
       case SpaceType.offStreet:
         final sign = RRect.fromRectAndRadius(
           Rect.fromLTWH(w * .2, h * .2, w * .6, h * .6),

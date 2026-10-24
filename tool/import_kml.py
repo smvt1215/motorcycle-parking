@@ -38,7 +38,9 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     for name in ("owner", "city", "source-name", "source-url", "license-note"):
         parser.add_argument(f"--{name}", required=True)
-    parser.add_argument("--space-type", choices=["paidMotorcycle", "freeMotorcycle", "heavyOnly", "car", "offStreet"], required=True)
+    parser.add_argument("--space-type", choices=["paidMotorcycle", "freeMotorcycle", "heavyOnly", "car", "offStreet",
+                                                     "scooterArea", "disabledMotorcycle", "timedMotorcycle", "flexShared",
+                                                     "evMotorcycle"], required=True)
     args = parser.parse_args()
     owner = str(uuid.UUID(args.owner))
     entries = list(points(args.input))

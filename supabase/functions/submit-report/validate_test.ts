@@ -47,3 +47,19 @@ Deno.test('identity hashes are deterministic, namespaced and keyed', async () =>
     a === await identityHash('secret', 'device:127.0.0.1')
   ) throw new Error('incorrect HMAC');
 });
+Deno.test('every app space kind is accepted; unknown kinds fail', () => {
+  for (
+    const kind of [
+      'scooterArea',
+      'disabledMotorcycle',
+      'timedMotorcycle',
+      'flexShared',
+      'evMotorcycle',
+    ]
+  ) {
+    const body = { ...base, spot: { ...base.spot, space_type: kind } };
+    if (validate(body) !== null) throw new Error(`${kind} rejected`);
+  }
+  const unknown = { ...base, spot: { ...base.spot, space_type: 'bus' } };
+  if (validate(unknown) === null) throw new Error('unknown kind accepted');
+});

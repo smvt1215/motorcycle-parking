@@ -33,6 +33,26 @@ Eligibility eligibility(
   CityRule? rule, {
   DateTime? now,
 }) {
+  final result = _judge(spot, vehicle, rule, now: now);
+  // A timed bay is a motorcycle bay with a clock: where the bay is open, the
+  // posted hours still limit it.
+  if (spot.spaceType == SpaceType.timedMotorcycle &&
+      result.status == EligibilityStatus.allowed) {
+    return const Eligibility(
+      EligibilityStatus.conditional,
+      '限時停車：請依現場牌面的時段與時限停放，超時須移車',
+      restriction: RuleRestriction.timeLimited,
+    );
+  }
+  return result;
+}
+
+Eligibility _judge(
+  ParkingSpot spot,
+  VehicleType vehicle,
+  CityRule? rule, {
+  DateTime? now,
+}) {
   const noRule = Eligibility(
     EligibilityStatus.unverified,
     '此地區尚無已生效的停車規則資料，請以現場標誌標線為準',
@@ -49,6 +69,39 @@ Eligibility eligibility(
   if (explicit == false && trusted) {
     return const Eligibility(EligibilityStatus.notAllowed, '此點位標示不開放目前車種');
   }
+  // Bays reserved by law or by vehicle, whatever the city rule says.
+  switch (spot.spaceType) {
+    case SpaceType.disabledMotorcycle:
+      return const Eligibility(
+        EligibilityStatus.notAllowed,
+        '身心障礙者專用，須持有效停車識別證明',
+      );
+    case SpaceType.evMotorcycle || SpaceType.flexShared when !trusted:
+      return const Eligibility(
+        EligibilityStatus.unverified,
+        '社群資訊尚未查核或可能過時，請確認現場',
+      );
+    case SpaceType.evMotorcycle:
+      return const Eligibility(
+        EligibilityStatus.conditional,
+        '限電動機車停放或充換電，燃油機車不可停',
+        restriction: RuleRestriction.evOnly,
+      );
+    case SpaceType.flexShared:
+      return const Eligibility(
+        EligibilityStatus.conditional,
+        '汽機車依時段輪替使用，請看現場牌面的機車開放時段',
+        restriction: RuleRestriction.timeLimited,
+      );
+    default:
+  }
+  // Rules list the original kinds; an area or a timed bay follows the bay
+  // it is painted like.
+  final type = switch (spot.spaceType) {
+    SpaceType.scooterArea => SpaceType.freeMotorcycle,
+    SpaceType.timedMotorcycle => SpaceType.paidMotorcycle,
+    final type => type,
+  };
   if (spot.spaceType == SpaceType.heavyOnly && vehicle == VehicleType.scooter) {
     return const Eligibility(EligibilityStatus.notAllowed, '大型重機專用格');
   }
@@ -77,12 +130,12 @@ Eligibility eligibility(
       (rule.city != '全國' && rule.city != spot.city)) {
     return noRule;
   }
-  final limited = rule.conditionalSpaceTypes.contains(spot.spaceType);
+  final limited = rule.conditionalSpaceTypes.contains(type);
   // A rule not verified yet opens nothing for certain.
   if (limited && rule.restriction == RuleRestriction.unverified) {
     return Eligibility(EligibilityStatus.unverified, rule.exceptions);
   }
-  if (!limited && !rule.allowedSpaceTypes.contains(spot.spaceType)) {
+  if (!limited && !rule.allowedSpaceTypes.contains(type)) {
     return Eligibility(EligibilityStatus.notAllowed, rule.exceptions);
   }
   if (rule.districts.isNotEmpty && !rule.districts.contains(spot.district)) {

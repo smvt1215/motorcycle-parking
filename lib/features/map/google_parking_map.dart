@@ -89,6 +89,8 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
           if (status == EligibilityStatus.conditional) ...[
             RuleRestriction.pilotArea,
             RuleRestriction.signage,
+            RuleRestriction.timeLimited,
+            RuleRestriction.evOnly,
           ],
         ])
           for (final badge in [null, ...SpaceBadge.values])

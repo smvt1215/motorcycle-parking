@@ -25,6 +25,9 @@ IconData spotMarkerIcon(MarkerLook look) => switch (look) {
   (EligibilityStatus.allowed, _) => Icons.local_parking,
   (EligibilityStatus.conditional, RuleRestriction.pilotArea) => Icons.alt_route,
   (EligibilityStatus.conditional, RuleRestriction.signage) => Icons.signpost,
+  (EligibilityStatus.conditional, RuleRestriction.timeLimited) =>
+    Icons.schedule,
+  (EligibilityStatus.conditional, RuleRestriction.evOnly) => Icons.bolt,
   (EligibilityStatus.conditional, _) => Icons.rule,
   (EligibilityStatus.unverified, _) => Icons.question_mark,
   (EligibilityStatus.notAllowed, _) => Icons.close,
@@ -42,7 +45,7 @@ double spotMarkerRadius(EligibilityStatus status) => switch (status) {
 /// A space's kind beyond whether it is parkable, shown as a corner badge:
 /// car bays (including heavy-and-car shared ones), heavy-only bays, and bays
 /// shared by scooters and heavy bikes.
-enum SpaceBadge { car, heavyOnly, shared }
+enum SpaceBadge { car, heavyOnly, shared, disabled }
 
 SpaceBadge? spaceBadge(ParkingSpot spot) {
   final access = reportedAccess(spot);
@@ -52,6 +55,9 @@ SpaceBadge? spaceBadge(ParkingSpot spot) {
   }
   if (spot.spaceType == SpaceType.car || access == ParkingAccess.heavyCar) {
     return SpaceBadge.car;
+  }
+  if (spot.spaceType == SpaceType.disabledMotorcycle) {
+    return SpaceBadge.disabled;
   }
   if (access == ParkingAccess.scooterHeavy) return SpaceBadge.shared;
   return null;
@@ -63,12 +69,14 @@ IconData? spaceBadgeIcon(SpaceBadge badge) => switch (badge) {
   SpaceBadge.car => Icons.directions_car,
   SpaceBadge.heavyOnly => Icons.sports_motorsports,
   SpaceBadge.shared => null,
+  SpaceBadge.disabled => Icons.accessible,
 };
 
 String spaceBadgeLabel(SpaceBadge badge) => switch (badge) {
   SpaceBadge.car => '汽車格',
   SpaceBadge.heavyOnly => '重機專用格',
   SpaceBadge.shared => '普大共用格',
+  SpaceBadge.disabled => '身障機車專用格',
 };
 
 /// Ring and scale that mark the spot whose details are open.
@@ -194,6 +202,16 @@ class MapLegend extends StatelessWidget {
         '有條件・限標示車格',
         '僅地面或標牌標示開放${vehicle.label}的車格可停',
       ),
+      (
+        (EligibilityStatus.conditional, RuleRestriction.timeLimited),
+        '有條件・限時段',
+        '限時停車或汽機車彈性共用格，依牌面時段停放',
+      ),
+      (
+        (EligibilityStatus.conditional, RuleRestriction.evOnly),
+        '有條件・限電動機車',
+        '電動機車停車或充換電格，燃油機車不可停',
+      ),
       ((EligibilityStatus.conditional, null), '有條件・其他限制', '法規開放但另有限制，詳見停車點說明'),
       (
         (EligibilityStatus.unverified, null),
@@ -264,6 +282,7 @@ Future<void> showMapLegend(BuildContext context, VehicleType vehicle) =>
             (SpaceBadge.car, '汽車格，或大型重機與汽車共用的格位'),
             (SpaceBadge.heavyOnly, '標示大型重機專用的格位'),
             (SpaceBadge.shared, '普通機車與大型重機共用的格位'),
+            (SpaceBadge.disabled, '身心障礙者專用，須持識別證明'),
           ])
             Padding(
               padding: const EdgeInsets.only(bottom: 12),

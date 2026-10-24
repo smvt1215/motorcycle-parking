@@ -56,9 +56,7 @@ class ParkingRepository {
         final raw = jsonDecode(
           await rootBundle.loadString('assets/demo/spots.json'),
         ) as List<dynamic>;
-        _demoSpots = raw
-            .map((e) => ParkingSpot.fromJson(e as Map<String, dynamic>))
-            .toList();
+        _demoSpots = raw.expand(ParkingSpot.known).toList();
       }
       return ParkingResult(
         _demoSpots!.where((s) => bounds.contains(s.lat, s.lng)).toList(),
@@ -68,9 +66,7 @@ class ParkingRepository {
       'viewport_spots',
       params: bounds.toJson(),
     );
-    final community = raw
-        .map((e) => ParkingSpot.fromJson(e as Map<String, dynamic>))
-        .toList();
+    final community = raw.expand(ParkingSpot.known).toList();
     // Admin-maintained municipal bays; a failure only drops this layer.
     var official = const <ParkingSpot>[];
     String? officialWarning;
@@ -79,9 +75,7 @@ class ParkingRepository {
         'official_viewport_spots',
         params: bounds.toJson(),
       );
-      official = rows
-          .map((e) => ParkingSpot.fromJson(e as Map<String, dynamic>))
-          .toList();
+      official = rows.expand(ParkingSpot.known).toList();
     } catch (_) {
       officialWarning = '官方停車點暫時無法讀取';
     }
@@ -141,7 +135,7 @@ class LocalRepository {
 
   List<ParkingSpot> favorites(String key) =>
       (jsonDecode(prefs.getString('favorites:$key') ?? '[]') as List<dynamic>)
-          .map((e) => ParkingSpot.fromJson(e as Map<String, dynamic>))
+          .expand(ParkingSpot.known)
           .toList();
   Future<void> setFavorites(String key, List<ParkingSpot> spots) =>
       prefs.setString(
