@@ -220,10 +220,13 @@ class _ParkedCard extends StatelessWidget {
 
 /// e.g. `5 分鐘`, `2 小時 5 分鐘`, `1 天 3 小時`.
 String parkedDuration(Duration elapsed) {
+  // A clock set back never shows a negative time; clamp before splitting,
+  // since Dart's % turns -1 hour into 23.
+  if (elapsed.isNegative) elapsed = Duration.zero;
   final days = elapsed.inDays,
       hours = elapsed.inHours % 24,
       minutes = elapsed.inMinutes % 60;
   if (days > 0) return hours > 0 ? '$days 天 $hours 小時' : '$days 天';
   if (hours > 0) return minutes > 0 ? '$hours 小時 $minutes 分鐘' : '$hours 小時';
-  return '${elapsed.inMinutes < 0 ? 0 : minutes} 分鐘';
+  return '$minutes 分鐘';
 }

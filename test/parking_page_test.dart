@@ -11,5 +11,7 @@ void main() {
     expect(parkedDuration(const Duration(days: 1, hours: 3)), '1 天 3 小時');
     // A clock set back never shows a negative time.
     expect(parkedDuration(const Duration(minutes: -3)), '0 分鐘');
+    expect(parkedDuration(const Duration(hours: -1)), '0 分鐘');
+    expect(parkedDuration(const Duration(days: -2, hours: -5)), '0 分鐘');
   });
 }
