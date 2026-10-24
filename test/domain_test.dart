@@ -15,6 +15,7 @@ void main() {
   ParkingSpot spot(
     SpaceType type, {
     String city = '臺北市',
+    String district = '',
     TrustStatus status = TrustStatus.confirmed,
     bool? heavy,
     DateTime? last,
@@ -24,6 +25,7 @@ void main() {
     lat: 25,
     lng: 121,
     city: city,
+    district: district,
     spaceType: type,
     status: status,
     heavyAllowed: heavy,
@@ -84,7 +86,7 @@ void main() {
       EligibilityStatus.unverified,
     );
   });
-  test('2026 重機規則：新北收費格開放、免費格限試辦區，桃園全部開放，台中限標示，高雄路邊不開放', () {
+  test('2026 重機規則：新北收費格與板橋新店免費格可停，桃園全部開放，台中限標示，高雄路邊不開放', () {
     Eligibility judge(String city, SpaceType type) => eligibility(
       spot(type, city: city),
       VehicleType.heavy,
@@ -94,11 +96,38 @@ void main() {
       judge('新北市', SpaceType.paidMotorcycle).status,
       EligibilityStatus.allowed,
     );
-    // New Taipei's free street bays stay open only in the Banqiao and
-    // Xindian pilot.
-    final free = judge('新北市', SpaceType.freeMotorcycle);
-    expect(free.status, EligibilityStatus.conditional);
-    expect(free.restriction, RuleRestriction.pilotArea);
+    // New Taipei opens free bays by whole district: Banqiao and Xindian
+    // only.
+    Eligibility free(String district) => eligibility(
+      spot(SpaceType.freeMotorcycle, city: '新北市', district: district),
+      VehicleType.heavy,
+      rule('新北市', VehicleType.heavy),
+    );
+    for (final district in ['板橋區', '新店區']) {
+      expect(
+        free(district).status,
+        EligibilityStatus.allowed,
+        reason: district,
+      );
+    }
+    expect(free('中和區').status, EligibilityStatus.notAllowed);
+    expect(free('中和區').reason, contains('板橋區、新店區'));
+    // Without a district the app cannot tell.
+    expect(free('').status, EligibilityStatus.unverified);
+    // A pending report in an open district is still unverified.
+    expect(
+      eligibility(
+        spot(
+          SpaceType.freeMotorcycle,
+          city: '新北市',
+          district: '板橋區',
+          status: TrustStatus.pending,
+        ),
+        VehicleType.heavy,
+        rule('新北市', VehicleType.heavy),
+      ).status,
+      EligibilityStatus.unverified,
+    );
     for (final type in [SpaceType.paidMotorcycle, SpaceType.freeMotorcycle]) {
       expect(judge('桃園市', type).status, EligibilityStatus.allowed);
       // Kaohsiung only trials five lots; its street bays are closed.

@@ -23,7 +23,6 @@ Color spotMarkerColor(EligibilityStatus status) => switch (status) {
 
 IconData spotMarkerIcon(MarkerLook look) => switch (look) {
   (EligibilityStatus.allowed, _) => Icons.local_parking,
-  (EligibilityStatus.conditional, RuleRestriction.pilotArea) => Icons.alt_route,
   (EligibilityStatus.conditional, RuleRestriction.signage) => Icons.signpost,
   (EligibilityStatus.conditional, RuleRestriction.timeLimited) =>
     Icons.schedule,
@@ -191,11 +190,6 @@ class MapLegend extends StatelessWidget {
         (EligibilityStatus.allowed, null),
         '可停',
         '法規或已查核資料確認${vehicle.label}可停放',
-      ),
-      (
-        (EligibilityStatus.conditional, RuleRestriction.pilotArea),
-        '有條件・限試辦路段',
-        '僅公告的試辦行政區或路段開放，範圍外不可停',
       ),
       (
         (EligibilityStatus.conditional, RuleRestriction.signage),

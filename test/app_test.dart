@@ -261,11 +261,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('地圖怎麼看'));
     await tester.pumpAndSettle();
-    expect(find.text('有條件・限試辦路段'), findsOneWidget);
+    expect(find.text('有條件・限標示車格'), findsOneWidget);
     expect(find.textContaining('目前車種「普通機車」'), findsOneWidget);
     await tester.tap(find.byTooltip('關閉'));
     await tester.pumpAndSettle();
-    expect(find.text('有條件・限試辦路段'), findsNothing);
+    expect(find.text('有條件・限標示車格'), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -397,7 +397,7 @@ void main() {
     await tester.tap(find.text('普通機車').first);
     await tester.pumpAndSettle();
     // The legend lives behind the map's help button only.
-    expect(find.text('有條件・限試辦路段'), findsNothing);
+    expect(find.text('有條件・限標示車格'), findsNothing);
     await tester.tap(find.text('大型重機').first);
     await tester.pumpAndSettle();
     expect(store.vehicle, VehicleType.heavy);

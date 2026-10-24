@@ -1,16 +1,21 @@
 -- Heavy-bike rules verified against 2026 announcements (assets/rules has the
 -- same rows). Only rows still at version 1 change, so an admin's newer edit
 -- is never overwritten.
+-- Space types a rule opens in named districts only: parkable there, closed
+-- elsewhere (an app reading an older row sees no such map and is unchanged).
+alter table public.city_rules add column district_space_types jsonb not null default '{}'
+  check (jsonb_typeof(district_space_types)='object');
 -- New Taipei: citywide paid street bays from 2026-07-01; free bays stay open
--- only in the Banqiao and Xindian pilot, which opened every street bay.
+-- only in Banqiao and Xindian, whose pilot opened every street bay.
 update public.city_rules set
   allowed_space_types='["heavyOnly","car","paidMotorcycle"]'::jsonb,
-  conditional_space_types='["offStreet","freeMotorcycle"]'::jsonb,
+  conditional_space_types='["offStreet"]'::jsonb,
+  district_space_types='{"freeMotorcycle":["板橋區","新店區"]}'::jsonb,
   fee_note='收費機車格比照大型重機專用格，計次每 4 小時 30 元',
-  exceptions='2026/7/1 起全市路邊收費機車格開放大型重機。板橋、新店原試辦區的路邊機車格（含未收費格）維持開放；其他行政區的免費機車格不開放。車身不得超出格線，車身較長可跨 2 格停放。',
+  exceptions='2026/7/1 起全市路邊收費機車格開放大型重機。免費機車格僅板橋區、新店區（原試辦區）開放，其他行政區不開放。車身不得超出格線，車身較長可跨 2 格停放。',
   effective_date='2026-07-01',
   source_url='https://www.traffic.ntpc.gov.tw/home.jsp?act=be4f48068b2b0031&dataserno=99345bcf365b8f6ed7a6315705335638&id=54fa46e9e522dde4',
-  can_use_two_spaces=true, restriction='pilot_area', version=2
+  can_use_two_spaces=true, restriction=null, version=2
 where city='新北市' and vehicle='heavy' and version<2;
 -- Taoyuan: trial opens every street motorcycle bay, paid and free, from 2026-04-01.
 update public.city_rules set
@@ -41,3 +46,7 @@ update public.city_rules set
   source_url='https://www.traffic.taichung.gov.tw/news/index-1.asp?Parser=9%2C4%2C20%2C%2C%2C%2C21267',
   restriction='signage', version=2
 where city='臺中市' and vehicle='heavy' and version<2;
+-- Whole districts are now district_space_types; nothing uses pilot_area.
+alter table public.city_rules drop constraint city_rules_restriction_check;
+alter table public.city_rules add constraint city_rules_restriction_check
+  check (restriction in ('signage','unverified'));

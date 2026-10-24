@@ -315,9 +315,9 @@ UI：`material_ui`、`cupertino_ui`（Flutter 官方設計套件，取代框架�
    | 匯入資料（`official.sql`／`import.sql`）、批次修改 | SQL Editor |
 
    改 `city_rules` 並調高 `version` 時（App 只在資料庫版本較大時改用資料庫那份），`restriction` 要一起確認：
-   - `pilot_area`：限公告的試辦行政區或路段。
    - `signage`：限現場標示開放的車格。
    - `unverified`：規則本身尚未核實，條件車格一律顯示「待確認」。
+   - 整個行政區開放的格位不用 `restriction`：填 `district_space_types`（例：`{"freeMotorcycle":["板橋區","新店區"]}`），名單內行政區顯示可停、其他行政區顯示不可停。
    - `conditional_space_types` 含路外以外的格位時必填，資料庫約束 `city_rules_restriction_required` 會擋下漏填；同時更新 `assets/rules/parking_rules.json`。
 
 ### 外部社群地圖（Google 我的地圖）（2026-10-17 更新）

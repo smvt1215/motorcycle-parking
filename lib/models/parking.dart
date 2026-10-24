@@ -28,12 +28,10 @@ enum SpaceType {
 
 /// How a rule limits its conditional space types; the map picks the marker
 /// icon from it.
-/// - [pilotArea]: only announced pilot districts or road sections.
 /// - [signage]: only spaces marked for the vehicle on site.
 /// - [unverified]: the rule itself is not verified yet, so nothing it opens
 ///   counts as parkable.
 enum RuleRestriction {
-  pilotArea('pilot_area'),
   signage('signage'),
   unverified('unverified'),
 
@@ -46,7 +44,6 @@ enum RuleRestriction {
   const RuleRestriction(this.key);
   final String key;
   String get label => switch (this) {
-    pilotArea => '限試辦路段',
     signage => '限標示車格',
     unverified => '規則未核實',
     timeLimited => '限時段',
@@ -300,12 +297,17 @@ class CityRule {
     this.canUseTwoSpaces = false,
     this.conditionalSpaceTypes = const [],
     this.districts = const [],
+    this.districtSpaceTypes = const {},
     this.restriction,
   });
   final String city, feeNote, exceptions, sourceUrl;
   final VehicleType vehicle;
   final List<SpaceType> allowedSpaceTypes, conditionalSpaceTypes;
   final List<String> districts;
+
+  /// Space types the rule opens in named districts only, e.g. New Taipei's
+  /// free bays in Banqiao and Xindian: parkable there, closed elsewhere.
+  final Map<SpaceType, List<String>> districtSpaceTypes;
   final int version;
   final DateTime effectiveDate;
   final bool canUseTwoSpaces;
@@ -321,6 +323,11 @@ class CityRule {
             .map((e) => SpaceType.values.byName(e as String))
             .toList(),
     districts: (j['districts'] as List<dynamic>? ?? []).cast<String>(),
+    districtSpaceTypes: {
+      for (final MapEntry(:key, :value)
+          in (j['district_space_types'] as Map<String, dynamic>? ?? {}).entries)
+        SpaceType.values.byName(key): (value as List<dynamic>).cast<String>(),
+    },
     feeNote: j['fee_note'] as String,
     exceptions: j['exceptions'] as String,
     sourceUrl: j['source_url'] as String,

@@ -2,7 +2,7 @@ import '../models/parking.dart';
 
 /// Ordered from most to least parkable; the map ranks search results by it.
 /// - [allowed]: law or verified data opens this space to the vehicle.
-/// - [conditional]: law opens it with limits (pilot sections, how to park),
+/// - [conditional]: law opens it with limits (marked bays, how to park),
 ///   so the posted signs decide.
 /// - [unverified]: the data cannot tell (unchecked or stale community
 ///   reports, unlabelled lots, no rule in force here).
@@ -130,12 +130,29 @@ Eligibility _judge(
       (rule.city != '全國' && rule.city != spot.city)) {
     return noRule;
   }
+  // Open by whole district: parkable inside, closed outside, unknown when
+  // the spot's district is.
+  final openIn = rule.districtSpaceTypes[type];
+  if (openIn != null) {
+    if (spot.district.isEmpty) {
+      return Eligibility(
+        EligibilityStatus.unverified,
+        '僅${openIn.join('、')}開放，無法判斷此點位所在行政區',
+      );
+    }
+    if (!openIn.contains(spot.district)) {
+      return Eligibility(
+        EligibilityStatus.notAllowed,
+        '僅${openIn.join('、')}開放，${spot.district}不開放',
+      );
+    }
+  }
   final limited = rule.conditionalSpaceTypes.contains(type);
   // A rule not verified yet opens nothing for certain.
   if (limited && rule.restriction == RuleRestriction.unverified) {
     return Eligibility(EligibilityStatus.unverified, rule.exceptions);
   }
-  if (!limited && !rule.allowedSpaceTypes.contains(type)) {
+  if (!limited && openIn == null && !rule.allowedSpaceTypes.contains(type)) {
     return Eligibility(EligibilityStatus.notAllowed, rule.exceptions);
   }
   if (rule.districts.isNotEmpty && !rule.districts.contains(spot.district)) {

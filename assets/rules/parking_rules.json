@@ -99,17 +99,21 @@
       "paidMotorcycle"
     ],
     "conditional_space_types": [
-      "offStreet",
-      "freeMotorcycle"
+      "offStreet"
     ],
     "fee_note": "收費機車格比照大型重機專用格，計次每 4 小時 30 元",
-    "exceptions": "2026/7/1 起全市路邊收費機車格開放大型重機。板橋、新店原試辦區的路邊機車格（含未收費格）維持開放；其他行政區的免費機車格不開放。車身不得超出格線，車身較長可跨 2 格停放。",
+    "exceptions": "2026/7/1 起全市路邊收費機車格開放大型重機。免費機車格僅板橋區、新店區（原試辦區）開放，其他行政區不開放。車身不得超出格線，車身較長可跨 2 格停放。",
     "effective_date": "2026-07-01",
     "source_url": "https://www.traffic.ntpc.gov.tw/home.jsp?act=be4f48068b2b0031&dataserno=99345bcf365b8f6ed7a6315705335638&id=54fa46e9e522dde4",
     "version": 2,
     "can_use_two_spaces": true,
     "districts": [],
-    "restriction": "pilot_area"
+    "district_space_types": {
+      "freeMotorcycle": [
+        "板橋區",
+        "新店區"
+      ]
+    }
   },
   {
     "city": "桃園市",
