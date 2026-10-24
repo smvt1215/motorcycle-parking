@@ -312,14 +312,18 @@ void addSelectionTests() {
       southwest: const pi.LatLng(25.02, 121.55),
       northeast: const pi.LatLng(25.04, 121.57),
     );
+    final reads = platform.regionPaddings.length;
     rebuild(() => panel = false);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
     await tester.pumpAndSettle();
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 50)),
-    );
-    await tester.pumpAndSettle();
-    expect(updates, hasLength(1));
-    expect(updates.single.south, 25.02);
+    expect(updates, isNotEmpty);
+    expect(updates.every((bounds) => bounds.south == 25.02), isTrue);
+    // Every read on the way back sees the map's own padding, never the
+    // panel's 92%, which would leave only the strip's spots.
+    final back = platform.regionPaddings.skip(reads);
+    expect(back, isNotEmpty);
+    expect(back.every((padding) => padding < 100), isTrue);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 }
@@ -336,6 +340,12 @@ class FakeMapsPlatform extends pi.GoogleMapsFlutterPlatform {
   );
   Future<pi.LatLngBounds>? nextBounds;
 
+  /// Bottom padding the native map currently has, and the one each visible
+  /// region was read under: a read before the padding update sees the old
+  /// layout.
+  double padding = 0;
+  final regionPaddings = <double>[];
+
   @override
   Widget buildViewWithConfiguration(
     int creationId,
@@ -345,6 +355,7 @@ class FakeMapsPlatform extends pi.GoogleMapsFlutterPlatform {
     pi.MapObjects mapObjects = const pi.MapObjects(),
   }) {
     id = creationId;
+    padding = mapConfiguration.padding?.bottom ?? padding;
     if (createdIds.add(id)) {
       created++;
       WidgetsBinding.instance.addPostFrameCallback(
@@ -358,6 +369,7 @@ class FakeMapsPlatform extends pi.GoogleMapsFlutterPlatform {
   Future<void> init(int mapId) async {}
   @override
   Future<pi.LatLngBounds> getVisibleRegion({required int mapId}) {
+    regionPaddings.add(padding);
     final pending = nextBounds;
     nextBounds = null;
     return pending ?? Future.value(bounds);
@@ -457,5 +469,7 @@ class FakeMapsPlatform extends pi.GoogleMapsFlutterPlatform {
   Future<void> updateMapConfiguration(
     pi.MapConfiguration configuration, {
     required int mapId,
-  }) async {}
+  }) async {
+    if (configuration.padding case final value?) padding = value.bottom;
+  }
 }

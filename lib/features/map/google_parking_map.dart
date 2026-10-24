@@ -65,6 +65,7 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
   Size? lastSize;
   (LatLng, double?)? pendingMove;
   bool viewportFailed = false;
+  List<Timer> paddingReads = [];
 
   @override
   void initState() {
@@ -121,10 +122,23 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
     if (oldWidget.panelVisible != widget.panelVisible ||
         oldWidget.interactive != widget.interactive ||
         oldWidget.sheetInset != widget.sheetInset) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) unawaited(_publishViewport());
-      });
+      _publishAfterPadding();
     }
+  }
+
+  /// GoogleMap sends new padding in a microtask after this frame, so a read
+  /// at the end of the frame would still see the old layout. Read once the
+  /// update is out, then again once the native map has laid it out.
+  void _publishAfterPadding() {
+    for (final timer in paddingReads) {
+      timer.cancel();
+    }
+    paddingReads = [
+      for (final delay in const [Duration.zero, Duration(milliseconds: 300)])
+        Timer(delay, () {
+          if (mounted) unawaited(_publishViewport());
+        }),
+    ];
   }
 
   Future<void> _publishViewport() async {
@@ -165,6 +179,9 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
 
   @override
   void dispose() {
+    for (final timer in paddingReads) {
+      timer.cancel();
+    }
     viewportGeneration++;
     // GoogleMap owns and disposes its platform controller.
     controller = null;
