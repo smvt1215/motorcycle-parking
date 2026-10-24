@@ -24,11 +24,34 @@ select is((select status from community_spots where id=(select id from target)),
 select pg_temp.report(6,jsonb_build_object('action','vote','spot_id',(select id from target),'vote','still_there'),'c','c');
 select is((select status from community_spots where id=(select id from target)),'confirmed','two qualified independent confirmations');
 select ok((select last_confirmed_at is not null from community_spots where id=(select id from target)),'confirmation timestamp saved');
+-- now() is fixed inside this transaction, so backdate to see whether a vote renews it.
+update community_spots set last_confirmed_at='2026-01-01T00:00:00Z' where id=(select id from target);
+select pg_temp.report(7,jsonb_build_object('action','vote','spot_id',(select id from target),'vote','gone'),'d','d');
+select is((select status from community_spots where id=(select id from target)),'confirmed','one gone vote under the threshold keeps the confirmation');
+select is((select last_confirmed_at from community_spots where id=(select id from target)),'2026-01-01T00:00:00Z'::timestamptz,'a gone vote does not renew the confirmation time');
 select pg_temp.report(2,jsonb_build_object('action','vote','spot_id',(select id from target),'vote','gone'),'b','b');
 select pg_temp.report(6,jsonb_build_object('action','vote','spot_id',(select id from target),'vote','gone'),'c','c');
 select pg_temp.report(7,jsonb_build_object('action','vote','spot_id',(select id from target),'vote','gone'),'d','d');
-select is((select status from community_spots where id=(select id from target)),'hidden','weighted negative threshold hides rather than deletes');
-select is((select count(*)::integer from moderation_queue where source_id=(select id::text from target)),1,'hidden point queued for moderation');
+select is((select status from community_spots where id=(select id from target)),'pending','weighted negative threshold drops trust but never hides on votes alone');
+select is((select count(*)::integer from moderation_queue where source_id=(select id::text from target)),1,'disputed point queued for moderation');
+select is((select last_confirmed_at from community_spots where id=(select id from target)),'2026-01-01T00:00:00Z'::timestamptz,'disputing keeps the last confirmation time');
+-- Becoming confirmed by any path, such as an admin patch, records when.
+update community_spots set last_confirmed_at=null where id=(select id from target);
+update community_spots set status='confirmed' where id=(select id from target);
+select ok((select last_confirmed_at is not null from community_spots where id=(select id from target)),'a confirmation without a time gets one');
+update community_spots set status='pending' where id=(select id from target);
+-- An admin keeping a disputed spot spends the votes behind the dispute.
+update spot_votes set created_at=now()-interval '2 days' where spot_id=(select id from target);
+update moderation_queue set status='rejected',resolved_at=now()-interval '1 day' where source_id=(select id::text from target);
+update community_spots set status='confirmed' where id=(select id from target);
+select pg_temp.report(3,jsonb_build_object('action','vote','spot_id',(select id from target),'vote','gone'),'e','e');
+select is((select status from community_spots where id=(select id from target)),'confirmed','a vote after an admin kept the spot does not recount the old dispute');
+select is((select count(*)::integer from moderation_queue where source_id=(select id::text from target) and status='pending'),0,'the decided dispute is not reopened');
+update spot_votes set created_at=now() where spot_id=(select id from target) and user_id in (pg_temp.uid(2),pg_temp.uid(6),pg_temp.uid(7));
+select pg_temp.report(3,jsonb_build_object('action','vote','spot_id',(select id from target),'vote','gone'),'e','e');
+select is((select status from community_spots where id=(select id from target)),'pending','new gone votes after the decision can dispute it again');
+select is((select count(*)::integer from moderation_queue where source_id=(select id::text from target) and status='pending'),1,'a new dispute opens a new case');
+update community_spots set status='pending' where id=(select id from target);
 select throws_ok($$select pg_temp.report(2,jsonb_build_object('action','delete','spot_id',(select id from target)))$$,'42501','only owner can edit','other user cannot delete');
 select lives_ok($$select pg_temp.report(1,jsonb_build_object('action','update','spot_id',(select id from target),'spot',jsonb_build_object('name','更正點位')))$$,'owner can update via service RPC');
 select is((select status from community_spots where id=(select id from target)),'pending','edits require new confirmation');

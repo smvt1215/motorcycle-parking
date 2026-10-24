@@ -19,6 +19,7 @@ void main() {
     TrustStatus status = TrustStatus.confirmed,
     bool? heavy,
     DateTime? last,
+    bool dated = true,
   }) => ParkingSpot(
     id: 'test',
     name: 'test',
@@ -29,7 +30,9 @@ void main() {
     spaceType: type,
     status: status,
     heavyAllowed: heavy,
-    lastConfirmedAt: last,
+    lastConfirmedAt:
+        last ??
+        (dated ? DateTime.now().subtract(const Duration(days: 1)) : null),
   );
   CityRule rule(String city, VehicleType vehicle) =>
       rules.firstWhere((r) => r.city == city && r.vehicle == vehicle);
@@ -267,6 +270,83 @@ void main() {
     expect(
       eligibility(spot(SpaceType.car), VehicleType.scooter, opened).status,
       EligibilityStatus.allowed,
+    );
+  });
+  test('確認存在不等於社群填寫的車種資格已核實', () {
+    // Two riders confirming the lot exists do not verify "heavy bikes OK".
+    expect(
+      eligibility(
+        spot(SpaceType.offStreet, heavy: true),
+        VehicleType.heavy,
+        rule('臺北市', VehicleType.heavy),
+      ).status,
+      EligibilityStatus.unverified,
+    );
+    // Official lot data still opens it.
+    expect(
+      eligibility(
+        ParkingSpot(
+          id: 'official:lot',
+          name: 'lot',
+          lat: 25,
+          lng: 121,
+          city: '臺北市',
+          spaceType: SpaceType.offStreet,
+          source: 'official',
+          status: TrustStatus.confirmed,
+          heavyAllowed: true,
+        ),
+        VehicleType.heavy,
+        rule('臺北市', VehicleType.heavy),
+      ).status,
+      EligibilityStatus.allowed,
+    );
+    // A confirmed community "不可停" stays the cautious answer.
+    expect(
+      eligibility(
+        spot(SpaceType.offStreet, heavy: false),
+        VehicleType.heavy,
+        null,
+      ).status,
+      EligibilityStatus.notAllowed,
+    );
+  });
+  test('沒有確認時間的社群資料視為未知，不當成新鮮證據', () {
+    final heavy = rule('臺北市', VehicleType.heavy);
+    expect(
+      eligibility(
+        spot(SpaceType.paidMotorcycle, dated: false),
+        VehicleType.heavy,
+        heavy,
+      ).status,
+      EligibilityStatus.unverified,
+    );
+    expect(
+      eligibility(
+        spot(SpaceType.paidMotorcycle, heavy: false, dated: false),
+        VehicleType.heavy,
+        heavy,
+      ).status,
+      EligibilityStatus.unverified,
+    );
+    // Freshness is judged against the given clock, not the device's.
+    final today = DateTime.now();
+    final recent = spot(
+      SpaceType.paidMotorcycle,
+      last: today.subtract(const Duration(days: 30)),
+    );
+    expect(
+      eligibility(recent, VehicleType.heavy, heavy, now: today).status,
+      EligibilityStatus.allowed,
+    );
+    expect(
+      eligibility(
+        recent,
+        VehicleType.heavy,
+        heavy,
+        now: today.add(const Duration(days: 200)),
+      ).status,
+      EligibilityStatus.unverified,
     );
   });
   test('六地區 × 兩車種規則可解析且具官方來源', () {

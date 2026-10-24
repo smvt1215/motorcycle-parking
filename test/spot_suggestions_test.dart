@@ -192,9 +192,9 @@ void main() {
       find.widgetWithText(TextFormField, '停車點名稱'),
       '松仁路重機格',
     );
-    await tester.tap(find.text('格位類型'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text(SpaceType.heavyOnly.label).last);
+    final heavyOnly = find.byKey(const ValueKey('report-space-heavyOnly'));
+    await tester.ensureVisible(heavyOnly);
+    await tester.tap(heavyOnly);
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.text('送出回報'),
