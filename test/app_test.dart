@@ -412,12 +412,23 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('個人中心').last);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('我的收藏').last);
+    // Favorites appear once: one section, no separate shortcut to them.
+    expect(find.text('我的收藏'), findsOneWidget);
+    // One vehicle switch: the map's pill, not the account sheet.
+    await tester.tap(find.byTooltip('設定與登入'));
+    await tester.pumpAndSettle();
+    expect(find.text('帳號與設定'), findsOneWidget);
+    expect(find.text('大型重機'), findsNothing);
+    await tester.tap(find.text('關閉'));
+    await tester.pumpAndSettle();
+    expect(find.text('已儲存的停車點'), findsNothing);
+    expect(find.text(store.spots.first.name), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('all-favorites')));
     await tester.pumpAndSettle();
     expect(find.text(store.spots.first.name), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
-  testWidgets('個人中心與貢獻是地圖上可收展的面板，詳情覆蓋面板', (tester) async {
+  testWidgets('個人中心與貢獻是地圖上可收展的面板，修改建議覆蓋面板', (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(430, 932);
     addTearDown(tester.view.resetPhysicalSize);
@@ -443,20 +454,25 @@ void main() {
     expect(find.text('貢獻').hitTestable(), findsOneWidget);
     await tester.tap(find.text('貢獻').last);
     await tester.pumpAndSettle();
-    expect(find.text('目前地圖範圍'), findsOneWidget);
+    expect(find.text('修正現有資訊'), findsOneWidget);
+    // Editing and reporting share one list: no duplicate action buttons.
+    expect(find.byTooltip('修改資訊'), findsNothing);
+    expect(find.byTooltip('檢舉錯誤'), findsNothing);
     await tester.tap(find.byTooltip('新增停車點'));
     await tester.pumpAndSettle();
     expect(find.text('停車點名稱'), findsOneWidget);
     await tester.tap(find.text('取消'));
     await tester.pumpAndSettle();
+    // A spot in the list goes straight to the edit and "gone" reports.
     await tester.tap(find.text(store.spots.first.name));
     await tester.pumpAndSettle();
-    final detail = find.byKey(const ValueKey('parking-spot-sheet'));
-    expect(detail, findsOneWidget);
+    final suggestions = find.text('提出修改建議');
+    expect(suggestions, findsOneWidget);
+    expect(find.text('點位已不存在'), findsOneWidget);
     expect(find.text('探索').hitTestable(), findsNothing);
-    final ctx = tester.element(detail);
+    final ctx = tester.element(suggestions);
     expect(Navigator.of(ctx), same(Navigator.of(ctx, rootNavigator: true)));
-    await tester.tap(find.byTooltip('關閉詳情'));
+    await tester.tap(find.text('取消').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('探索').last);
     await tester.pumpAndSettle();
@@ -481,7 +497,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pumpAndSettle();
     final search = find.byKey(const ValueKey('parking-search'));
-    for (final (tab, content) in [('個人中心', '已儲存的停車點'), ('貢獻', '目前地圖範圍')]) {
+    for (final (tab, content) in [('個人中心', '我停哪裡'), ('貢獻', '修正現有資訊')]) {
       await tester.tap(find.text(tab).last);
       await tester.pumpAndSettle();
       expect(search, findsNothing);
