@@ -148,14 +148,14 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('送出建議'));
     await tester.pumpAndSettle();
-    expect(find.text('請填寫建議內容'), findsOneWidget);
+    expect(find.text('請填寫正確的停車點名稱'), findsOneWidget);
     await tester.enterText(
       find.byKey(const ValueKey('suggestion-input')),
       '建議的新名稱',
     );
     await tester.tap(find.text('送出建議'));
     await tester.pumpAndSettle();
-    expect(find.text('範例建議已送出，僅供本次功能測試。'), findsOneWidget);
+    expect(find.text('範例模式：建議沒有實際送出，只用來測試流程。'), findsOneWidget);
     await tester.tap(find.text('完成'));
     await tester.pumpAndSettle();
     expect(find.text('提出修改建議'), findsNothing);
@@ -485,7 +485,7 @@ void main() {
     await tester.pumpAndSettle();
     final suggestions = find.text('提出修改建議');
     expect(suggestions, findsOneWidget);
-    expect(find.text('點位已不存在'), findsOneWidget);
+    expect(find.text('這裡已經不能停車'), findsOneWidget);
     expect(find.text('探索').hitTestable(), findsNothing);
     final ctx = tester.element(suggestions);
     expect(Navigator.of(ctx), same(Navigator.of(ctx, rootNavigator: true)));
