@@ -137,6 +137,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('[範例] 信義地下停車場'));
     await tester.pumpAndSettle();
+    final detailsBeforeSuggest = tester.getRect(
+      find.byKey(const ValueKey('parking-spot-sheet')),
+    );
     await tester.tap(find.text('修改建議'));
     await tester.pumpAndSettle();
     expect(find.text('提出修改建議'), findsOneWidget);
@@ -156,6 +159,10 @@ void main() {
     await tester.tap(find.text('完成'));
     await tester.pumpAndSettle();
     expect(find.text('提出修改建議'), findsNothing);
+    expect(
+      tester.getRect(find.byKey(const ValueKey('parking-spot-sheet'))),
+      detailsBeforeSuggest,
+    );
     expect(find.byKey(const ValueKey('parking-spot-sheet')), findsOneWidget);
     await tester.tap(find.byTooltip('關閉詳情'));
     await tester.pumpAndSettle();
