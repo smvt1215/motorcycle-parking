@@ -81,6 +81,24 @@ set local role anon;
 select is((select count(*)::integer from community_spots where id=(select id from fx where name='spot')),0,'the public no longer sees a hidden spot');
 reset role;
 
+-- Restoring a spot hidden by votes discards the votes that hid it.
+insert into spot_votes(spot_id,user_id,vote,qualified,weight,ip_hash,device_hash)
+select (select id from fx where name='spot'),u::uuid,v,true,1,repeat(h,64),repeat(h,64)
+from (values('10000000-0000-4000-8000-000000000002','gone','m'),('10000000-0000-4000-8000-000000000003','gone','n'),
+  ('10000000-0000-4000-8000-000000000006','gone','o'),('10000000-0000-4000-8000-000000000007','still_there','p')) x(u,v,h);
+with s as (insert into moderation_queue(source_id,reason) values((select id::text from fx where name='spot'),'恢復顯示：格位仍在') returning id)
+insert into fx select 'q_restore',id from s;
+select pg_temp.act('admin');
+set local role authenticated;
+select is(admin_resolve_report((select id from fx where name='q_restore'),'accepted','{"status":"pending"}')->'spot'->>'status','pending','admin restores a hidden spot');
+reset role;
+select is((select count(*)::integer from spot_votes where spot_id=(select id from fx where name='spot') and vote='gone'),0,'restoring clears the gone votes');
+select is((select count(*)::integer from spot_votes where spot_id=(select id from fx where name='spot') and vote='still_there'),1,'restoring keeps still-there votes');
+delete from rate_limit_events;
+select public.apply_report('10000000-0000-4000-8000-000000000002',repeat('q',64),repeat('q',64),
+  jsonb_build_object('action','vote','spot_id',(select id from fx where name='spot'),'vote','still_there'));
+select isnt((select status from community_spots where id=(select id from fx where name='spot')),'hidden','a later vote does not hide the restored spot again');
+
 -- The audit log is append-only, even for the table owner.
 select throws_ok($$update admin_audit_log set note='x'$$,'42501','audit log entries cannot be changed','audit entries cannot be edited');
 select throws_ok($$delete from admin_audit_log$$,'42501','audit log entries cannot be changed','audit entries cannot be deleted');

@@ -129,6 +129,11 @@ begin
           r.facility_type,r.parking_access,r.address,r.road_segment,r.entrance_note,r.parking_guide,r.special_rules,r.status,now()
           from jsonb_populate_record(c,v_patch) r)
         where c.id=v_target returning to_jsonb(c)-'user_id'-'location' into v_after;
+      -- Restoring a hidden spot supersedes the "gone" votes that hid it;
+      -- otherwise the next vote recounts them and hides it again.
+      if v_before->>'status'='hidden' and v_after->>'status'<>'hidden' then
+        delete from spot_votes where spot_id=v_target and vote='gone';
+      end if;
     else
       select to_jsonb(o) into v_before from official_heavy_spots o where o.id=v_target for update;
       if v_before is null then raise exception 'spot not found' using errcode='22023'; end if;
