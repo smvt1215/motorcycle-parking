@@ -67,12 +67,11 @@ Eligibility _judge(
   final explicit = vehicle == VehicleType.heavy
       ? spot.heavyAllowed
       : spot.scooterAllowed;
-  // Only trusted data may deny outright; a pending or stale community claim
-  // falls through to the rules below, which keep it unverified.
-  final trusted =
-      spot.source == 'tdx' ||
-      spot.source == 'official' ||
-      (spot.status == TrustStatus.confirmed && !spot.stale);
+  // Only trusted data may deny outright; a pending, stale or undated
+  // community claim falls through to the rules below, which keep it
+  // unverified. Confirming a community spot shows the bay exists, not that
+  // its reported vehicle fields are right.
+  final trusted = spot.isOfficial || _recentlyConfirmed(spot, now);
   if (explicit == false && trusted) {
     return const Eligibility(EligibilityStatus.notAllowed, '此點位標示不開放目前車種');
   }
@@ -122,11 +121,10 @@ Eligibility _judge(
       '汽車格為小型車及大型重機停放線，普通機車停放屬車種不依規定',
     );
   }
-  // Community claims never override legal rules; pending/stale claims remain unverified.
+  // Community claims never override legal rules, and only official data may
+  // open a lot: confirmed existence never verifies a community "可停".
   if (spot.spaceType == SpaceType.offStreet) {
-    if (explicit == true &&
-        (spot.source == 'tdx' || spot.status == TrustStatus.confirmed) &&
-        !spot.stale) {
+    if (explicit == true && spot.isOfficial && !spot.stale) {
       return const Eligibility(EligibilityStatus.allowed, '場站資料標示可停，請確認現場公告');
     }
     return const Eligibility(
@@ -172,9 +170,7 @@ Eligibility _judge(
       '不在規則公告的開放行政區內，請以現場標誌標線為準',
     );
   }
-  if (spot.source != 'tdx' &&
-      spot.source != 'official' &&
-      (spot.status != TrustStatus.confirmed || spot.stale)) {
+  if (!trusted) {
     return const Eligibility(
       EligibilityStatus.unverified,
       '社群資訊尚未查核或可能過時，請確認現場',
@@ -192,4 +188,13 @@ Eligibility _judge(
     EligibilityStatus.allowed,
     rule.canUseTwoSpaces ? '可斜停兩格，請依公告停放' : '依地方規則開放，請勿超出格線',
   );
+}
+
+/// A community spot confirmed on the ground within the last 180 days. With
+/// no confirmation time its freshness is unknown, never assumed.
+bool _recentlyConfirmed(ParkingSpot spot, DateTime? now) {
+  final at = spot.lastConfirmedAt;
+  return spot.status == TrustStatus.confirmed &&
+      at != null &&
+      (now ?? DateTime.now()).difference(at).inDays <= 180;
 }
