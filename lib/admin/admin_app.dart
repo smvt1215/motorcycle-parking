@@ -12,6 +12,8 @@ import 'review/hidden_page.dart';
 import 'review/review_controller.dart';
 import 'review/review_map.dart';
 import 'review/review_page.dart';
+import 'spots/spots_controller.dart';
+import 'spots/spots_page.dart';
 
 const _tabs = [
   (
@@ -79,6 +81,9 @@ class _AdminAppState extends State<AdminApp> {
         widget.controller.gateway,
         onResolved: () => widget.controller.refreshCount(),
       );
+  late final SpotsController _spots = SpotsController(
+    widget.controller.gateway,
+  );
   String? _reviewUser;
 
   @override
@@ -98,6 +103,7 @@ class _AdminAppState extends State<AdminApp> {
     if (user != _reviewUser) {
       _reviewUser = user;
       _review.reset();
+      _spots.reset();
     }
   }
 
@@ -154,7 +160,15 @@ class _AdminAppState extends State<AdminApp> {
                 mapBuilder: widget.reviewMapBuilder,
               ),
             ),
-          for (final tab in _tabs.skip(1))
+          for (final path in ['/spots', '/spots/:id'])
+            GoRoute(
+              path: path,
+              builder: (context, state) => SpotsPage(
+                spots: _spots,
+                selectedId: state.pathParameters['id'],
+              ),
+            ),
+          for (final tab in _tabs.skip(2))
             GoRoute(
               path: tab.path,
               builder: (context, state) => _watch(
@@ -196,6 +210,7 @@ class _AdminAppState extends State<AdminApp> {
   void dispose() {
     widget.controller.removeListener(_accessChanged);
     if (widget.review == null) _review.dispose();
+    _spots.dispose();
     _router.dispose();
     super.dispose();
   }

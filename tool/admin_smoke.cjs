@@ -22,9 +22,11 @@ const reports = [
   { id: '55555555-5555-4555-8555-555555555552', source_id: `official:${officialId}`, reason: '機車停放資格：建議「普通機車可停 · 大型重機不可停」', field: 'eligibility', proposed: { heavy_allowed: false }, note: '', created_at: '2026-10-24T07:00:00Z' },
   { id: '55555555-5555-4555-8555-555555555553', source_id: `official:${officialId}`, reason: '點位已不存在：入口封閉', field: 'gone', proposed: { hidden: true }, note: '入口已封閉施工，現場無法進入。', created_at: '2026-10-24T08:00:00Z' },
 ];
-const spot = { lat: 25.0581, lng: 121.5226, city: '臺北市', district: '中山區', fee_note: '每小時 20 元', note: '', scooter_allowed: true, heavy_allowed: null, source_name: '', updated_at: '2026-10-23T00:00:00Z' };
+const spot = { lat: 25.0581, lng: 121.5226, city: '臺北市', district: '中山區', fee_note: '每小時 20 元', note: '', scooter_allowed: true, heavy_allowed: null, source_name: '', updated_at: '2026-10-23T00:00:00Z',
+  address: '', road_segment: '', entrance_note: '', parking_guide: '', special_rules: '', facility_type: null, parking_access: null, scooter_total: null };
 const communitySpot = { ...spot, id: communityId, name: '中山北路二段路邊機車格', space_type: 'paidMotorcycle', status: 'pending' };
-const officialSpot = { ...spot, id: officialId, name: '新北市政府行政大樓地下停車場', city: '新北市', district: '板橋區', lat: 25.0124, lng: 121.4651, space_type: 'offStreet', heavy_allowed: true, source_name: '新北市政府', hidden: false };
+const officialSpot = { ...spot, id: officialId, name: '新北市政府行政大樓地下停車場', city: '新北市', district: '板橋區', lat: 25.0124, lng: 121.4651, space_type: 'offStreet', heavy_allowed: true, source_name: '新北市政府', hidden: false,
+  address: '新北市板橋區中山路一段 161 號', facility_type: 'underground', parking_access: 'scooterHeavy', source_url: 'https://example.test/notice', source_id: 'ntpc-001', effective_date: '2026-01-01', license_note: '' };
 const hiddenSpot = { ...spot, id: '66666666-6666-4666-8666-666666666666', name: '三重正義北路機車格', city: '新北市', district: '三重區', space_type: 'freeMotorcycle', status: 'hidden' };
 
 function session(role, aal, factors = [factor]) {
@@ -112,7 +114,16 @@ function session(role, aal, factors = [factor]) {
             return route.fulfill({ json: url.searchParams.get('status') === 'eq.hidden' ? [hiddenSpot] : [communitySpot], headers: cors });
           }
           if (url.pathname === '/rest/v1/official_heavy_spots') {
+            // maybeSingle() asks for one object instead of an array.
+            if ((route.request().headers().accept || '').includes('vnd.pgrst.object')) return route.fulfill({ json: officialSpot, headers: cors });
             return route.fulfill({ json: url.searchParams.get('hidden') === 'eq.true' ? [] : [officialSpot], headers: cors });
+          }
+          if (url.pathname === '/rest/v1/rpc/admin_spots') {
+            return route.fulfill({ json: [communitySpot, officialSpot].map(spot => ({
+              source_id: spot === officialSpot ? `official:${spot.id}` : spot.id, kind: spot === officialSpot ? 'official' : 'community',
+              name: spot.name, city: spot.city, district: spot.district, address: spot.address, space_type: spot.space_type,
+              state: spot === officialSpot ? 'visible' : spot.status, lat: spot.lat, lng: spot.lng, updated_at: spot.updated_at,
+            })), headers: cors });
           }
           if (url.pathname === '/rest/v1/rpc/admin_resolve_report' && !route.request().postDataJSON().p_force) {
             // The spot changed after the report: the admin must review and force.
@@ -192,6 +203,15 @@ function session(role, aal, factors = [factor]) {
           await page.getByRole('button', { name: '仍要套用建議', exact: true }).click();
           await waitText('已套用建議：中山北路二段路邊機車格');
           if (mobile) await page.getByRole('button', { name: /^返回佇列/ }).click();
+          // Spots page: list, then the official spot's form.
+          await page.getByRole('button', { name: '點位', exact: true }).click();
+          await page.getByRole('button', { name: /^新北市政府行政大樓地下停車場/ }).waitFor({ timeout: 15000 });
+          await page.screenshot({ path: path.join(output, `${name}-spots.png`) });
+          await page.getByRole('button', { name: /^新北市政府行政大樓地下停車場/ }).click();
+          await waitText('官方點（新北市政府）');
+          await page.screenshot({ path: path.join(output, `${name}-spot-form.png`) });
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} spot form scrolls sideways`);
+          await page.getByRole('button', { name: '審核', exact: false }).first().click();
           await page.screenshot({ path: path.join(output, `${name}.png`) });
           for (const [label, title] of [['點位', '停車點位'], ['規則', '各縣市停車規則'], ['匯入', '匯入停車資料'], ['使用者', '使用者管理'], ['審核', '待審回報']]) {
             await page.getByRole('button', { name: label === '審核' ? /^審核/ : label, exact: true }).click();
