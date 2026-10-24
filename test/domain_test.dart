@@ -84,29 +84,29 @@ void main() {
       EligibilityStatus.unverified,
     );
   });
-  test('新北與台中試辦範圍不能擴大為全市開放，並標出限制類型', () {
-    for (final (city, restriction) in [
-      ('新北市', RuleRestriction.pilotArea),
-      ('桃園市', RuleRestriction.pilotArea),
-      ('臺中市', RuleRestriction.signage),
-    ]) {
-      final result = eligibility(
-        spot(SpaceType.paidMotorcycle, city: city),
-        VehicleType.heavy,
-        rule(city, VehicleType.heavy),
-      );
-      expect(result.status, EligibilityStatus.conditional, reason: city);
-      expect(result.restriction, restriction, reason: city);
-    }
-    // Kaohsiung's rule is not verified yet: nothing it opens is certain.
-    expect(
-      eligibility(
-        spot(SpaceType.paidMotorcycle, city: '高雄市'),
-        VehicleType.heavy,
-        rule('高雄市', VehicleType.heavy),
-      ).status,
-      EligibilityStatus.unverified,
+  test('2026 重機規則：新北收費格、桃園全部機車格開放，台中限標示，高雄路邊不開放', () {
+    Eligibility judge(String city, SpaceType type) => eligibility(
+      spot(type, city: city),
+      VehicleType.heavy,
+      rule(city, VehicleType.heavy),
     );
+    expect(
+      judge('新北市', SpaceType.paidMotorcycle).status,
+      EligibilityStatus.allowed,
+    );
+    // New Taipei's free street bays stay closed.
+    expect(
+      judge('新北市', SpaceType.freeMotorcycle).status,
+      EligibilityStatus.notAllowed,
+    );
+    for (final type in [SpaceType.paidMotorcycle, SpaceType.freeMotorcycle]) {
+      expect(judge('桃園市', type).status, EligibilityStatus.allowed);
+      // Kaohsiung only trials five lots; its street bays are closed.
+      expect(judge('高雄市', type).status, EligibilityStatus.notAllowed);
+    }
+    final taichung = judge('臺中市', SpaceType.paidMotorcycle);
+    expect(taichung.status, EligibilityStatus.conditional);
+    expect(taichung.restriction, RuleRestriction.signage);
   });
   test('路外未知重機資格與普通機車專用限制', () {
     expect(
@@ -153,20 +153,20 @@ void main() {
     );
   });
   test('有條件只用於法規已知的限制；資料不足一律待確認', () {
-    final heavy = rule('新北市', VehicleType.heavy);
-    final pilot = eligibility(
-      spot(SpaceType.paidMotorcycle, city: '新北市'),
+    final heavy = rule('臺中市', VehicleType.heavy);
+    final marked = eligibility(
+      spot(SpaceType.paidMotorcycle, city: '臺中市'),
       VehicleType.heavy,
       heavy,
     );
-    expect(pilot.status, EligibilityStatus.conditional);
-    expect(pilot.reason, heavy.exceptions);
-    // An unchecked report inside a pilot city is still unverified.
+    expect(marked.status, EligibilityStatus.conditional);
+    expect(marked.reason, heavy.exceptions);
+    // An unchecked report inside a city with marked bays is still unverified.
     expect(
       eligibility(
         spot(
           SpaceType.paidMotorcycle,
-          city: '新北市',
+          city: '臺中市',
           status: TrustStatus.pending,
         ),
         VehicleType.heavy,
