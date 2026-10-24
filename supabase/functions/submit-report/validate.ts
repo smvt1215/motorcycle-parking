@@ -9,9 +9,16 @@ const spaceTypes = [
   'flexShared',
   'evMotorcycle',
 ];
-// Suggestion categories the app sends as `field`; the readable summary
-// stays in `reason` for older app versions.
+// Suggestion categories the app sends as `field`: stable keys, plus the
+// Chinese labels sent before the keys existed. The readable summary stays in
+// `reason` for older app versions.
 const suggestionFields = [
+  'name',
+  'space_type',
+  'fee_note',
+  'eligibility',
+  'note',
+  'gone',
   '停車點名稱',
   '格位類型',
   '收費資訊',

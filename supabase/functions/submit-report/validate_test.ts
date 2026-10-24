@@ -71,6 +71,13 @@ Deno.test('flags may carry a structured suggestion', () => {
       { ...flag, field: '點位已不存在', proposed: { hidden: true } },
       { ...community, field: '點位已不存在', proposed: { status: 'hidden' } },
       { ...flag, proposed: { facility_type: 'underground', address: '' } },
+      // Stable keys, which replace the Chinese labels above.
+      { ...flag, field: 'name', proposed: { name: '市府轉運站' } },
+      { ...flag, field: 'space_type', proposed: { space_type: 'car' } },
+      { ...flag, field: 'fee_note', proposed: { fee_note: '免費' } },
+      { ...flag, field: 'eligibility', proposed: { heavy_allowed: false } },
+      { ...flag, field: 'note', note: '入口在後巷' },
+      { ...community, field: 'gone', proposed: { status: 'hidden' } },
     ]
   ) {
     if (validate(body) !== null) {
@@ -82,6 +89,7 @@ Deno.test('flags may carry a structured suggestion', () => {
       { ...flag, field: '' },
       { ...flag, field: '位置' },
       { ...flag, field: 'heavy_allowed' },
+      { ...flag, field: 'Name' },
       { ...flag, proposed: [] },
       { ...flag, proposed: {} },
       { ...flag, proposed: { nested: { a: 1 } } },
