@@ -72,6 +72,9 @@ class ReviewController extends ChangeNotifier {
   bool hiddenLoaded = false;
   String? hiddenError;
 
+  /// Reports resolved this session; a slower load must not list them again.
+  final Set<String> _resolved = {};
+
   /// Edited values of decisions that failed to write, by report id.
   final Map<String, Map<String, dynamic>> savedDrafts = {};
 
@@ -120,7 +123,9 @@ class ReviewController extends ChangeNotifier {
       final rows = await gateway!.pendingReports();
       final found = await gateway!.reviewSpots(rows.map((r) => r.sourceId));
       if (generation != _generation) return;
-      reports = rows;
+      // A write that finished while this load was in flight already took its
+      // report off the queue; the older rows must not bring it back.
+      reports = rows.where((r) => !_resolved.contains(r.id)).toList();
       spots = found;
       unrefreshed.clear();
       loaded = true;
@@ -157,6 +162,7 @@ class ReviewController extends ChangeNotifier {
     changing.clear();
     conflicts.clear();
     savedDrafts.clear();
+    _resolved.clear();
     unrefreshed.clear();
     _notify();
   }
@@ -300,6 +306,12 @@ class ReviewController extends ChangeNotifier {
     if (held == null || writing) return null;
     _timer?.cancel();
     pending = null;
+    // Undoing an edited decision returns to the edit, values intact.
+    if (held.decision == ReviewDecision.acceptEdited) {
+      savedDrafts[held.report.id] = held.patch;
+      editingId = held.report.id;
+      draft = held.patch;
+    }
     _notify();
     return held.report.id;
   }
@@ -342,6 +354,7 @@ class ReviewController extends ChangeNotifier {
       );
       if (generation != _generation) return;
       reports = reports.where((r) => r.id != held.report.id).toList();
+      _resolved.add(held.report.id);
       savedDrafts.remove(held.report.id);
       onResolved?.call();
     } catch (e) {
@@ -363,6 +376,7 @@ class ReviewController extends ChangeNotifier {
         await refreshSpot(held.report);
       } else if (message.contains('already resolved')) {
         reports = reports.where((r) => r.id != held.report.id).toList();
+        _resolved.add(held.report.id);
         error = '「${held.report.title}」已由其他人處理，已從佇列移除。';
         onResolved?.call();
       } else {

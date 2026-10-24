@@ -125,6 +125,9 @@ class FakeAdminGateway implements AdminGateway {
   int reportRequests = 0;
   bool failReports = false;
   bool failSpots = false;
+
+  /// Holds reviewSpots open, to race a load against a write.
+  Completer<void>? delayedSpots;
   Object? resolveError;
 
   /// Holds resolveReport open until completed, to race it against sign-out.
@@ -229,6 +232,7 @@ class FakeAdminGateway implements AdminGateway {
   Future<Map<String, ReviewSpot>> reviewSpots(
     Iterable<String> sourceIds,
   ) async {
+    await delayedSpots?.future;
     if (failSpots) throw StateError('offline');
     return {
       for (final id in sourceIds)

@@ -258,6 +258,29 @@ void main() {
       expect(review.loadError, contains('重新載入失敗'));
     });
 
+    test('復原修改後套用時回到編輯並保留修改值', () async {
+      final first = review.queue.first;
+      review.startEdit(first);
+      review.setDraft('fee_note', '每次 10 元');
+      await review.decide(first, ReviewDecision.acceptEdited, '');
+      expect(review.editing(first.id), isFalse);
+      expect(review.undo(), first.id);
+      expect(review.editing(first.id), isTrue);
+      expect(review.draft['fee_note'], '每次 10 元');
+      expect(gateway.resolved, isEmpty);
+    });
+
+    test('重新載入期間寫入成功的案件不會被舊結果加回', () async {
+      final first = review.queue.first;
+      await review.decide(first, ReviewDecision.reject, '');
+      gateway.delayedSpots = Completer<void>();
+      final reload = review.load();
+      await review.flush();
+      gateway.delayedSpots!.complete();
+      await reload;
+      expect(review.byId(first.id), isNull);
+    });
+
     test('找不到點位只能駁回', () async {
       gateway.spots.remove(officialId);
       await review.load();
