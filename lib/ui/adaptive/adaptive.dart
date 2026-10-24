@@ -502,7 +502,10 @@ class ContentPage extends StatelessWidget {
   final List<Widget> children;
   @override
   Widget build(BuildContext context) => SafeArea(
+    // Sized to its content: a short sheet does not fill the screen with
+    // empty space, and a long one still scrolls at full height.
     child: ListView(
+      shrinkWrap: true,
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 110),
       children: children,
     ),

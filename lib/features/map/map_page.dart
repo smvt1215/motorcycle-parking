@@ -16,7 +16,9 @@ import '../../models/parking.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../report/report_sheet.dart';
 import 'map_legend.dart';
+import 'space_type_sheet.dart';
 import 'spot_sheet.dart';
+import 'vehicle_sheet.dart';
 import 'google_parking_map.dart';
 
 class MapPage extends ConsumerStatefulWidget {
@@ -212,24 +214,19 @@ class _MapPageState extends ConsumerState<MapPage> {
     hideDenied = false;
   });
 
-  void _openSpaceSelector() {
-    showAdaptiveSheet<void>(
+  void _openSpaceSelector(AppStore store) {
+    final inView = store.spots
+        .where((s) => store.viewport.contains(s.lat, s.lng))
+        .toList();
+    showSpaceTypeSheet(
       context,
-      (ctx) => ContentPage(
-        children: [
-          SheetTitle('格位類型'),
-          const SizedBox(height: 12),
-          for (final option in <SpaceType?>[null, ...SpaceType.values])
-            ListTile(
-              title: Text(option?.label ?? '全部格位'),
-              trailing: type == option ? const Icon(Icons.check) : null,
-              onTap: () {
-                setState(() => type = option);
-                Navigator.pop(ctx);
-              },
-            ),
-        ],
-      ),
+      value: type,
+      counts: {
+        null: inView.length,
+        for (final option in SpaceType.values)
+          option: inView.where((s) => s.spaceType == option).length,
+      },
+      onChanged: (option) => setState(() => type = option),
     );
   }
 
@@ -294,24 +291,11 @@ class _MapPageState extends ConsumerState<MapPage> {
     super.dispose();
   }
 
-  void openVehicleSelector(AppStore store) {
-    showAdaptiveSheet<void>(
-      context,
-      (ctx) => ContentPage(
-        children: [
-          SheetTitle('選擇車種'),
-          const SizedBox(height: 20),
-          VehicleSelector(
-            value: store.vehicle,
-            onChanged: (v) {
-              store.setVehicle(v);
-              Navigator.pop(ctx);
-            },
-          ),
-        ],
-      ),
-    );
-  }
+  void openVehicleSelector(AppStore store) => showVehicleSheet(
+    context,
+    value: store.vehicle,
+    onChanged: store.setVehicle,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -725,7 +709,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                             icon: Icons.local_parking_outlined,
                             showChevron: true,
                             selected: type != null,
-                            onTap: _openSpaceSelector,
+                            onTap: () => _openSpaceSelector(store),
                           ),
                           _MapPill(
                             label: '隱藏不可停',

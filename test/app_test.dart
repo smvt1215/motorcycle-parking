@@ -419,7 +419,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('帳號與設定'), findsOneWidget);
     expect(find.text('大型重機'), findsNothing);
-    await tester.tap(find.text('關閉'));
+    expect(find.text('範例模式'), findsOneWidget);
+    await tester.tap(find.byTooltip('關閉').last);
     await tester.pumpAndSettle();
     expect(find.text('已儲存的停車點'), findsNothing);
     expect(find.text(store.spots.first.name), findsOneWidget);
