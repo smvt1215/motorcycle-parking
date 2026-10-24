@@ -90,15 +90,17 @@ firebase deploy --only hosting:admin-staging --project staging --non-interactive
 
 `firebase.json` 僅服務 `build/admin`，設定 SPA rewrite、CSP、`X-Frame-Options: DENY`、`X-Robots-Tag: noindex, nofollow`、`nosniff` 與重新驗證快取。CanvasKit 從同站載入；CSP 允許 Supabase HTTPS／WebSocket 與 Maps／Fonts 所需來源。管理站的 `index.html` 也含 `noindex`，不引用 App 的 manifest。
 
-擁有者需完成後才能宣告 staging 登入驗收通過：
+staging 設定已於 2026-10-24 完成，並以真實 Google 登入＋TOTP 取得 `aal2` 驗收：
 
-1. 在 Firebase 專案建立獨立 staging Hosting site，設定 `FIREBASE_HOSTING_SITE`；確定使用 `web.app` 或自訂網域。
-2. 為 `github-staging-distribution@motocycle-parking-guide.iam.gserviceaccount.com` 增加 Firebase Hosting Admin（`roles/firebasehosting.admin`），並依 [Firebase CLI 的角色要求](https://firebase.google.com/docs/projects/iam/roles-predefined-product)確認具備 API Keys Viewer（`roles/serviceusage.apiKeysViewer`）。目前交接記錄只有 App Distribution Admin；本 PR 不修改 IAM。
-3. Supabase staging 的 Auth Redirect URLs 加入管理站回呼網址，啟用 TOTP；若使用簡訊，另設定簡訊供應商。
-4. 由 Dashboard／後端以 service role 將管理帳號的 `app_metadata.role` 設為 `admin`，再登入登記至少兩個驗證器 App。service role 不放到網站。
-5. Maps Web 金鑰加入實際管理站網域的 referrer 限制，設定 `GOOGLE_MAPS_WEB_API_KEY`。
+| 項目 | 設定 |
+|---|---|
+| Hosting site | `motopark-admin-staging`（https://motopark-admin-staging.web.app ），staging Environment variable `FIREBASE_HOSTING_SITE` |
+| 部署權限 | `github-staging-distribution@motocycle-parking-guide.iam.gserviceaccount.com` 具 App Distribution Admin、Firebase Hosting Admin（`roles/firebasehosting.admin`）、API Keys Viewer（`roles/serviceusage.apiKeysViewer`，[Firebase CLI 的角色要求](https://firebase.google.com/docs/projects/iam/roles-predefined-product)） |
+| Maps Web 金鑰 | GCP 金鑰「Motopark staging admin web」：只允許 Maps JavaScript API，referrer 限 `https://motopark-admin-staging.web.app/*`、`https://motopark-admin-staging.firebaseapp.com/*`；存於 secret `GOOGLE_MAPS_WEB_API_KEY` |
+| Supabase Auth | Redirect URLs 加入 `https://motopark-admin-staging.web.app/**`，啟用 TOTP；簡訊驗證尚未驗收 |
+| 管理帳號 | 以 service role 將 `app_metadata.role` 設為 `admin`（service role 不放到網站）；需登記至少兩個驗證器 App |
 
-程式與本機測試完成不代表上述外部設定已完成；真實 Google 登入、MFA 與 Hosting 部署仍需於 staging 驗收。
+`cd-staging.yml` 只由 `workflow_run` 觸發；只需重新部署管理站時，重跑最新 main 的 CD staging 中「Staging admin Hosting」單一 job，避免重新發送 APK／IPA。改用自訂網域時，需同步更新 Maps 金鑰 referrer 與 Supabase Redirect URLs。
 
 ### Actions 清理
 
