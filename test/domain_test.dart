@@ -84,7 +84,7 @@ void main() {
       EligibilityStatus.unverified,
     );
   });
-  test('2026 重機規則：新北收費格、桃園全部機車格開放，台中限標示，高雄路邊不開放', () {
+  test('2026 重機規則：新北收費格開放、免費格限試辦區，桃園全部開放，台中限標示，高雄路邊不開放', () {
     Eligibility judge(String city, SpaceType type) => eligibility(
       spot(type, city: city),
       VehicleType.heavy,
@@ -94,11 +94,11 @@ void main() {
       judge('新北市', SpaceType.paidMotorcycle).status,
       EligibilityStatus.allowed,
     );
-    // New Taipei's free street bays stay closed.
-    expect(
-      judge('新北市', SpaceType.freeMotorcycle).status,
-      EligibilityStatus.notAllowed,
-    );
+    // New Taipei's free street bays stay open only in the Banqiao and
+    // Xindian pilot.
+    final free = judge('新北市', SpaceType.freeMotorcycle);
+    expect(free.status, EligibilityStatus.conditional);
+    expect(free.restriction, RuleRestriction.pilotArea);
     for (final type in [SpaceType.paidMotorcycle, SpaceType.freeMotorcycle]) {
       expect(judge('桃園市', type).status, EligibilityStatus.allowed);
       // Kaohsiung only trials five lots; its street bays are closed.
