@@ -84,6 +84,29 @@ void main() {
       Rate.fromJson({'mode': 'daily', 'amount': 20.5}, heavy: false),
       isNull,
     );
+    // Optional values and extra keys follow the column's rules too.
+    expect(
+      Rate.fromJson({
+        'mode': 'hourly',
+        'amount': 20,
+        'per_minutes': 60,
+        'daily_cap': -1,
+      }, heavy: false),
+      isNull,
+    );
+    expect(
+      Rate.fromJson({
+        'mode': 'per_visit',
+        'amount': 20,
+        'max_minutes': '360',
+      }, heavy: false),
+      isNull,
+    );
+    expect(Rate.fromJson({'mode': 'free', 'amount': 20}, heavy: false), isNull);
+    expect(
+      Rate.fromJson({'mode': 'daily', 'amount': 20, 'note': 'x'}, heavy: false),
+      isNull,
+    );
     expect(Fee.fromJson(null).isEmpty, isTrue);
     expect(Fee.fromJson('free').isEmpty, isTrue);
   });

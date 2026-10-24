@@ -35,26 +35,48 @@ class Rate {
   final FeeMode mode;
   final int? amount, perMinutes, dailyCap, maxMinutes;
 
-  /// The rate in [json], or null when it is not one the column accepts.
+  /// The rate in [json], or null when it is not one the column accepts:
+  /// an unknown mode or key, or any value out of range, optional or not.
   static Rate? fromJson(Object? json, {required bool heavy}) {
     if (json is! Map) return null;
     final mode = FeeMode.values
         .where((m) => m.wire == json['mode'])
         .firstOrNull;
     if (mode == null || (mode.follows && !heavy)) return null;
-    int? whole(String key, int min, int max) => switch (json[key]) {
-      final int v when v >= min && v <= max => v,
-      _ => null,
+    const ranges = {
+      'amount': (0, 10000),
+      'per_minutes': (1, 1440),
+      'daily_cap': (0, 10000),
+      'max_minutes': (1, 1440),
     };
+    final values = <String, int>{};
+    for (final MapEntry(:key, :value) in json.entries) {
+      if (key == 'mode') continue;
+      if (!_keys[mode]!.contains(key)) return null;
+      final (min, max) = ranges[key]!;
+      if (value is! int || value < min || value > max) return null;
+      values[key as String] = value;
+    }
     final rate = Rate(
       mode,
-      amount: whole('amount', 0, 10000),
-      perMinutes: whole('per_minutes', 1, 1440),
-      dailyCap: whole('daily_cap', 0, 10000),
-      maxMinutes: whole('max_minutes', 1, 1440),
+      amount: values['amount'],
+      perMinutes: values['per_minutes'],
+      dailyCap: values['daily_cap'],
+      maxMinutes: values['max_minutes'],
     );
     return rate.complete ? rate : null;
   }
+
+  /// The keys besides `mode` each mode may carry, as the column allows.
+  static const _keys = {
+    FeeMode.free: <String>{},
+    FeeMode.posted: <String>{},
+    FeeMode.sameAsScooter: <String>{},
+    FeeMode.sameAsCar: <String>{},
+    FeeMode.hourly: {'amount', 'per_minutes', 'daily_cap'},
+    FeeMode.perVisit: {'amount', 'max_minutes'},
+    FeeMode.daily: {'amount'},
+  };
 
   /// Whether the mode has every value it needs to be shown or stored.
   bool get complete => switch (mode) {
