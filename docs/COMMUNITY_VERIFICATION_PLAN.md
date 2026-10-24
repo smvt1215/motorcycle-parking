@@ -3,7 +3,7 @@
 > 狀態：設計提案，尚未實作／尚未驗收  
 > 盤點日期：2026-10-24（Asia/Taipei）  
 > 專案：[`smvt1215/motorcycle-parking`](https://github.com/smvt1215/motorcycle-parking)  
-> 盤點基準：`main` commit `ee4a1f3c034a1237eb14b18c1f35c1b692cc4bb7`（含 #55、#56）  
+> 盤點基準：`main` commit `800520e`（含 #55、#56 與 #58 的 P2 驗收文件）  
 > 適用端：Flutter iOS／Android、Supabase Postgres／PostGIS／Auth／Edge Functions、Flutter Admin Web  
 > 性質：增量設計。本文不代表已完成的功能，也不更改既有程式碼。
 
@@ -56,11 +56,18 @@
 
 **R1（P0）存在確認會間接提升車種資格可信度。** 舊 `apply_report` 在兩個合格且獨立的 `still_there` 投票後，把整筆社群點設成 `confirmed`；`eligibility.dart` 又以 `status == confirmed && !stale` 作為部分停放資格判斷的可信條件。此狀態不能證明「重機可停／普機可停」欄位已獲證據核實。
 
+具體分支：
+- **需修正**：`offStreet` 場站在 `explicit == true` 且社群點 `confirmed` 時直接回傳「可停」，只靠存在投票就把社群填寫的車種欄位當成已核實。
+- **保守方向，可保留**：`explicit == false` 且可信時回傳「不可停」；錯誤的結果只會讓騎士少停，不會違規。
+- **依法規推導，可保留**：路邊格位的「可停／有條件」來自有效的縣市規則，社群點的 `confirmed` 只用來確認格位存在，並未信任社群填寫的車種欄位。
+
 **R2（P0）回報 UI 尚未使用已建成的結構化審核後端。** `_SuggestionForm.submit()` 目前只送 `action/source_id/reason`；未送 `field/proposed/note`，後台無法直接呈現機器可辨的欄位差異。
 
 **R3（P1）相同理由可能吞掉獨立證據。** `moderation_queue` 有待審案件的 `(source_id, reason)` 唯一索引；`flag` 採 `ON CONFLICT DO NOTHING`。相同文字的不同騎士回報可能不另留可核實的個別觀察。
 
-**R4（P1）資料過期語意與時間更新。** `lastConfirmedAt == null` 不會觸發 `stale`；舊投票達門檻後，後續投票可能再次更新確認時間，即使沒有重新查核特定欄位。
+**R4（P1）資料過期語意與時間更新。** `lastConfirmedAt == null` 不會觸發 `stale`；舊投票達門檻後，後續投票可能再次更新確認時間，即使沒有重新查核特定欄位。具體案例：
+- `apply_report` 在 `still_there` 合格數 ≥ 2 時，任何一票（包含未達隱藏門檻的 `gone`）都會把 `last_confirmed_at` 刷新為 `now()`。
+- `admin_resolve_report` 的 patch 白名單允許 `status`，管理員把社群點改為 `confirmed` 時不會寫入 `last_confirmed_at`，該點就會成為永遠不過期的 `confirmed`。
 
 **R5（P1）舊投票仍可使點位隱藏。** 新 UI 已移除單獨的存在投票，但 `submit-report/validate.ts` 與 RPC 仍接受 `vote`；加權負向分數達 3 時會隱藏社群點並進審核。舊版客戶端或直接呼叫的風險需另行控制。
 
@@ -174,7 +181,11 @@ RLS：只開放本人查自己的提案；管理員 `is_admin()` 才能檢視全
 }
 ~~~
 
-說明：`source_id` 的值應是**實際點位 ID**：官方 `official:<uuid>`，社群則為純 UUID；上方字串只代表兩種可能形式，不能逐字送出。新增欄位的具體命名與白名單應與 `admin_resolve_report` 的欄位鍵相同。
+說明：`source_id` 的值應是**實際點位 ID**：官方 `official:<uuid>`，社群則為純 UUID；上方字串只代表兩種可能形式，不能逐字送出。
+
+`field` 與 `proposed` 的鍵語意不同：
+- `proposed` 的每個鍵必須是 `admin_resolve_report` 白名單中的資料欄位（例如 `heavy_allowed`、`scooter_allowed`、`space_type`），讓管理員可直接作為 patch 採納。
+- `field` 是建議類別的穩定鍵；一則建議可能同時修改多個欄位（例如停放資格表單會同時帶 `scooter_allowed` 與 `heavy_allowed`），因此 `field` 不一定等於單一欄位名稱。白名單應在 `validate.ts` 與 Flutter 共用同一份定義。
 
 實作項目：
 - UI 以穩定的 `field_key` 傳值，繁體中文僅供畫面顯示。
@@ -250,6 +261,8 @@ RLS：只開放本人查自己的提案；管理員 `is_admin()` 才能檢視全
 - [ ] 官方有效限制與不同車種的既有安全判定不回歸。
 
 ### P1 — 結構化共筆與審核串接
+
+> 與 [`ADMIN_WEB.md`](ADMIN_WEB.md#階段) P3「審核佇列」為同一份交付：P3 已包含「App 改送結構化建議」與差異表審核。本階段不另開重複工作，只補充本文的欄位白名單、相容性與版本衝突要求。
 
 **範圍：**
 - `lib/features/report/spot_suggestions.dart`：填入 `field/proposed/note`，保留原 `reason`。
