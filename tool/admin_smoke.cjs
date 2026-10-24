@@ -157,8 +157,9 @@ function session(role, aal, factors = [factor]) {
           await enterText('備援驗證器');
           await page.getByRole('button', { name: '開始登記', exact: true }).click();
           await waitText('驗證新登記的方式');
-          await page.getByRole('button', { name: '顯示密鑰', exact: true }).click();
-          await page.getByRole('button', { name: '隱藏密鑰', exact: true }).click();
+          // A hovered tooltip may repeat its text in the accessible name.
+          await page.getByRole('button', { name: /^顯示密鑰/ }).click();
+          await page.getByRole('button', { name: /^隱藏密鑰/ }).click();
           await page.getByRole('button', { name: '取消這次登記', exact: true }).click();
           await waitText('已登記的驗證方式');
           await page.getByRole('button', { name: '登出', exact: true }).click();
