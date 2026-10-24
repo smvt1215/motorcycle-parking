@@ -11,20 +11,56 @@ String _yesNo(bool? value) => switch (value) {
 
 /// Eligibility as reported on the spot, shown so people know what they fix.
 String eligibilitySummary(ParkingSpot spot) =>
-    '普通機車${_yesNo(spot.scooterAllowed)} · 大型重機${_yesNo(spot.heavyAllowed)}';
+    _eligibility(spot.scooterAllowed, spot.heavyAllowed);
+
+String _eligibility(bool? scooter, bool? heavy) =>
+    '普通機車${_yesNo(scooter)} · 大型重機${_yesNo(heavy)}';
+
+/// A correctable field: the stable key sent as `field` (docs/ADMIN_WEB.md),
+/// the label people read, and the value shown today.
+typedef SuggestionField = ({
+  String key,
+  String label,
+  IconData icon,
+  String current,
+});
 
 /// The fields a suggestion can correct, with the value currently shown.
-List<(String, IconData, String)> suggestionFields(ParkingSpot spot) => [
-  ('停車點名稱', Icons.storefront_outlined, spot.name),
-  ('格位類型', Icons.category_outlined, spot.spaceType.label),
-  ('收費資訊', Icons.payments_outlined, spot.feeNote),
-  ('機車停放資格', Icons.two_wheeler, eligibilitySummary(spot)),
+List<SuggestionField> suggestionFields(ParkingSpot spot) => [
   (
-    '位置或其他備註',
-    Icons.location_on_outlined,
-    spot.note.isEmpty ? '未提供' : spot.note,
+    key: 'name',
+    label: '停車點名稱',
+    icon: Icons.storefront_outlined,
+    current: spot.name,
+  ),
+  (
+    key: 'space_type',
+    label: '格位類型',
+    icon: Icons.category_outlined,
+    current: spot.spaceType.label,
+  ),
+  (
+    key: 'fee_note',
+    label: '收費資訊',
+    icon: Icons.payments_outlined,
+    current: spot.feeNote,
+  ),
+  (
+    key: 'eligibility',
+    label: '機車停放資格',
+    icon: Icons.two_wheeler,
+    current: eligibilitySummary(spot),
+  ),
+  (
+    key: 'note',
+    label: '位置或其他備註',
+    icon: Icons.location_on_outlined,
+    current: spot.note.isEmpty ? '未提供' : spot.note,
   ),
 ];
+
+/// The report that the spot can no longer be parked at.
+const goneLabel = '這裡已經不能停車';
 
 Future<void> showSpotSuggestions(
   BuildContext context,
@@ -48,26 +84,30 @@ Future<void> showSpotSuggestions(
                   color: Theme.of(ctx).colorScheme.onSurfaceVariant,
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 12),
+              const Text('選一項你在現場看到不一樣的資訊。審核通過後才會更新地圖。'),
+              const SizedBox(height: 20),
               Material(
                 color: Theme.of(ctx).colorScheme.surfaceContainerLow,
                 borderRadius: BorderRadius.circular(24),
                 clipBehavior: Clip.antiAlias,
                 child: Column(
                   children: [
-                    for (final item in suggestionFields(spot)) ...[
+                    for (final (i, item) in suggestionFields(spot).indexed) ...[
+                      if (i > 0)
+                        const Divider(height: 1, indent: 20, endIndent: 20),
                       ListTile(
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 20,
                           vertical: 8,
                         ),
                         leading: Icon(
-                          item.$2,
+                          item.icon,
                           color: Theme.of(ctx).colorScheme.primary,
                         ),
-                        title: Text(item.$1),
+                        title: Text(item.label),
                         subtitle: Text(
-                          '目前：${item.$3}',
+                          '目前：${item.current}',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -76,12 +116,11 @@ Future<void> showSpotSuggestions(
                           ctx,
                           store,
                           spot,
-                          field: item.$1,
-                          current: item.$3,
+                          fieldKey: item.key,
+                          label: item.label,
+                          current: item.current,
                         ),
                       ),
-                      if (item.$1 != '位置或其他備註')
-                        const Divider(height: 1, indent: 20, endIndent: 20),
                     ],
                   ],
                 ),
@@ -100,15 +139,18 @@ Future<void> showSpotSuggestions(
                     Icons.location_off_outlined,
                     color: Theme.of(ctx).colorScheme.primary,
                   ),
-                  title: const Text('點位已不存在'),
-                  subtitle: const Text('格位已撤除，或此處已無法停車'),
+                  title: const Text(goneLabel),
+                  subtitle: const Text('格線撤除、施工或封閉'),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () =>
-                      _showSuggestionForm(ctx, store, spot, field: '點位已不存在'),
+                  onTap: () => _showSuggestionForm(
+                    ctx,
+                    store,
+                    spot,
+                    fieldKey: 'gone',
+                    label: goneLabel,
+                  ),
                 ),
               ),
-              const SizedBox(height: 20),
-              const Text('建議會送交審核，通過後再更新停車資訊。'),
             ],
           ),
         ),
@@ -121,7 +163,8 @@ Future<void> _showSuggestionForm(
   BuildContext context,
   AppStore store,
   ParkingSpot spot, {
-  required String field,
+  required String fieldKey,
+  required String label,
   String? current,
 }) async {
   var submitted = false;
@@ -130,7 +173,8 @@ Future<void> _showSuggestionForm(
     (_) => _SuggestionForm(
       store: store,
       spot: spot,
-      field: field,
+      fieldKey: fieldKey,
+      label: label,
       current: current,
       onSubmitted: () => submitted = true,
     ),
@@ -144,16 +188,20 @@ class _SuggestionForm extends StatefulWidget {
   const _SuggestionForm({
     required this.store,
     required this.spot,
-    required this.field,
+    required this.fieldKey,
+    required this.label,
     required this.onSubmitted,
     this.current,
   });
   final AppStore store;
   final ParkingSpot spot;
-  final String field;
+
+  /// The stable key sent as `field`; [label] is only for display.
+  final String fieldKey;
+  final String label;
   final VoidCallback onSubmitted;
 
-  /// The value shown today; null for the "no longer exists" report.
+  /// The value shown today; null for the "can no longer park here" report.
   final String? current;
   @override
   State<_SuggestionForm> createState() => _SuggestionFormState();
@@ -168,30 +216,26 @@ class _SuggestionFormState extends State<_SuggestionForm> {
   late bool? scooter = widget.spot.scooterAllowed;
   late bool? heavy = widget.spot.heavyAllowed;
 
-  /// The stable key sent as `field`; the label is only for display.
-  String get fieldKey => switch (widget.field) {
-    '停車點名稱' => 'name',
-    '格位類型' => 'space_type',
-    '收費資訊' => 'fee_note',
-    '機車停放資格' => 'eligibility',
-    '點位已不存在' => 'gone',
-    _ => 'note',
-  };
-
-  bool get unavailable => widget.field == '點位已不存在';
-  bool get typeField => widget.field == '格位類型';
-  bool get eligibilityField => widget.field == '機車停放資格';
+  String get fieldKey => widget.fieldKey;
+  bool get unavailable => fieldKey == 'gone';
+  bool get typeField => fieldKey == 'space_type';
+  bool get eligibilityField => fieldKey == 'eligibility';
 
   /// Structured fields submit the chosen value; the note becomes optional.
   bool get structured => typeField || eligibilityField;
 
+  /// The longest text the spot column takes, so an applied value fits.
+  int get maxLength => switch (fieldKey) {
+    'name' => 100,
+    'fee_note' => 200,
+    _ => 450,
+  };
+
   String reason() {
     final text = note.text.trim();
-    if (!structured) return '${widget.field}：$text';
-    final value = typeField
-        ? type.label
-        : '普通機車${_yesNo(scooter)} · 大型重機${_yesNo(heavy)}';
-    return '${widget.field}：建議「$value」${text.isEmpty ? '' : '；說明：$text'}';
+    if (!structured) return '${widget.label}：$text';
+    final value = typeField ? type.label : _eligibility(scooter, heavy);
+    return '${widget.label}：建議「$value」${text.isEmpty ? '' : '；說明：$text'}';
   }
 
   /// The value the admin applies, keyed by spot column (docs/ADMIN_WEB.md);
@@ -220,6 +264,32 @@ class _SuggestionFormState extends State<_SuggestionForm> {
       'fee_note' when text.length <= 200 => {'fee_note': text},
       _ => null,
     };
+  }
+
+  /// What changes, one line per changed value from today's to the
+  /// suggested one; empty until the suggestion differs from the map.
+  List<String> changes() {
+    final spot = widget.spot;
+    final text = note.text.trim();
+    String line(String label, String from, String to) =>
+        '$label從「$from」改成「$to」';
+    if (typeField) {
+      return [
+        if (type != spot.spaceType)
+          line(widget.label, spot.spaceType.label, type.label),
+      ];
+    }
+    // Only the vehicles that change, so riders need not compare two lists.
+    if (eligibilityField) {
+      return [
+        if (scooter != spot.scooterAllowed)
+          line('普通機車', _yesNo(spot.scooterAllowed), _yesNo(scooter)),
+        if (heavy != spot.heavyAllowed)
+          line('大型重機', _yesNo(spot.heavyAllowed), _yesNo(heavy)),
+      ];
+    }
+    if (unavailable || text.isEmpty) return const [];
+    return [line(widget.label, widget.current ?? '', text)];
   }
 
   @override
@@ -254,7 +324,9 @@ class _SuggestionFormState extends State<_SuggestionForm> {
     } catch (e) {
       if (mounted) {
         setState(
-          () => error = e is StateError ? e.message.toString() : '建議尚未送出，請稍後重試',
+          () => error = e is StateError
+              ? e.message.toString()
+              : '建議沒有送出，內容還在，請確認網路後再送一次。',
         );
       }
     } finally {
@@ -262,145 +334,236 @@ class _SuggestionFormState extends State<_SuggestionForm> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-    child: Form(
-      key: form,
-      child: ContentPage(
-        children: [
-          SheetTitle(widget.field),
-          const SizedBox(height: 8),
-          Text(
-            widget.spot.name,
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
+  Widget fieldError(BuildContext context, String? text) => text == null
+      ? const SizedBox.shrink()
+      : Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(
+            text,
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
           ),
-          const SizedBox(height: 16),
-          if (widget.current != null && !sent) ...[
-            Material(
-              color: Theme.of(context).colorScheme.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(16),
-              child: ListTile(
-                leading: const Icon(Icons.info_outline),
-                title: const Text('目前顯示'),
-                subtitle: Text(widget.current!),
-              ),
-            ),
-            const SizedBox(height: 20),
-          ],
-          if (sent) ...[
-            const Icon(Icons.check_circle_outline, size: 48),
-            const SizedBox(height: 12),
+        );
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final changed = changes();
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: Form(
+        key: form,
+        child: ContentPage(
+          children: [
+            SheetTitle(widget.label),
+            const SizedBox(height: 8),
             Text(
-              widget.store.demo
-                  ? '範例建議已送出，僅供本次功能測試。'
-                  : unavailable
-                  ? '不存在回報已送出，等待審核。'
-                  : '建議已送出，等待審核。',
+              widget.spot.name,
+              style: TextStyle(color: colors.onSurfaceVariant),
             ),
-            const SizedBox(height: 20),
-            AdaptiveButton(
-              label: '完成',
-              onPressed: () => Navigator.pop(context),
-            ),
-          ] else ...[
-            if (!widget.store.canReport) ...[
-              SignInPrompt(
-                store: widget.store,
-                message: '使用 Google 或 Apple 登入後才能送出建議。',
-              ),
-              const SizedBox(height: 20),
-            ],
-            if (typeField) ...[
-              DropdownButtonFormField<SpaceType>(
-                initialValue: type,
-                decoration: const InputDecoration(labelText: '正確的格位類型'),
-                items: SpaceType.values
-                    .map(
-                      (s) => DropdownMenuItem(value: s, child: Text(s.label)),
-                    )
-                    .toList(),
-                validator: (v) =>
-                    v == widget.spot.spaceType ? '請選擇與目前不同的格位類型' : null,
-                onChanged: (v) => setState(() => type = v!),
-              ),
-              const SizedBox(height: 20),
-            ],
-            if (eligibilityField) ...[
-              ChoiceField<bool?>(
-                label: '普通機車',
-                value: scooter,
-                options: const [(null, '未確認'), (true, '可停'), (false, '不可停')],
-                onChanged: (v) => setState(() => scooter = v),
-              ),
-              ChoiceField<bool?>(
-                label: '大型重機（依現場標示）',
-                value: heavy,
-                options: const [(null, '未確認'), (true, '可停'), (false, '不可停')],
-                onChanged: (v) => setState(() => heavy = v),
-              ),
-              const SizedBox(height: 4),
-            ],
-            if (unavailable) ...[
-              const Text('請描述格位撤除、施工或封閉等現場狀況，審核後更新點位。'),
-              const SizedBox(height: 16),
-            ],
-            TextFormField(
-              key: const ValueKey('suggestion-input'),
-              controller: note,
-              maxLength: 450,
-              maxLines: 4,
-              decoration: InputDecoration(
-                labelText: unavailable
-                    ? '請說明現場狀況'
-                    : structured
-                    ? '補充說明（選填）'
-                    : '建議的正確資訊',
-                hintText: unavailable
-                    ? '例：格線已撤除，改為人行道'
-                    : structured
-                    ? '例：入口處有重機可停的告示'
-                    : '請填寫現場看到的正確內容',
-              ),
-              validator: (v) {
-                if (eligibilityField &&
-                    scooter == widget.spot.scooterAllowed &&
-                    heavy == widget.spot.heavyAllowed) {
-                  return '請至少修改一項停放資格';
-                }
-                if (!structured && (v == null || v.trim().isEmpty)) {
-                  return '請填寫建議內容';
-                }
-                if ((v?.length ?? 0) > 450) return '建議內容請縮短至 450 個字元以內';
-                return null;
-              },
-            ),
-            if (error != null)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Text(
-                  error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+            const SizedBox(height: 16),
+            if (widget.current != null && !sent) ...[
+              Material(
+                color: colors.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(16),
+                child: ListTile(
+                  leading: const Icon(Icons.info_outline),
+                  title: const Text('地圖上目前寫的是'),
+                  subtitle: Text(widget.current!),
                 ),
               ),
-            const SizedBox(height: 20),
-            AdaptiveButton(
-              label: sending
-                  ? '送出中…'
-                  : unavailable
-                  ? '送出回報'
-                  : '送出建議',
-              onPressed: sending || !widget.store.canReport ? null : submit,
-            ),
-            TextButton(
-              onPressed: sending ? null : () => Navigator.pop(context),
-              child: const Text('取消'),
-            ),
+              const SizedBox(height: 20),
+            ],
+            if (sent) ...[
+              const Icon(Icons.check_circle_outline, size: 48),
+              const SizedBox(height: 12),
+              Text(
+                widget.store.demo
+                    ? '範例模式：建議沒有實際送出，只用來測試流程。'
+                    : unavailable
+                    ? '回報已送出。確認後，這個停車點會從地圖移除。'
+                    : '建議已送出。管理員審核通過後會更新地圖。',
+              ),
+              const SizedBox(height: 20),
+              AdaptiveButton(
+                label: '完成',
+                onPressed: () => Navigator.pop(context),
+              ),
+            ] else ...[
+              if (!widget.store.canReport) ...[
+                SignInPrompt(
+                  store: widget.store,
+                  message: '登入 Google 或 Apple 帳號後，才能送出建議。',
+                ),
+                const SizedBox(height: 20),
+              ],
+              if (typeField) ...[
+                FormField<SpaceType>(
+                  initialValue: type,
+                  // A new pick clears the error at once.
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  validator: (v) =>
+                      v == widget.spot.spaceType ? '這和目前的格位類型相同，請選擇另一種' : null,
+                  builder: (state) => Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text('地面畫的是哪一種格位？', style: text.bodyLarge),
+                      const SizedBox(height: 10),
+                      SpaceTypePicker(
+                        value: type,
+                        onChanged: (v) {
+                          state.didChange(v);
+                          setState(() => type = v);
+                        },
+                      ),
+                      fieldError(context, state.errorText),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+              ],
+              if (eligibilityField) ...[
+                FormField<(bool?, bool?)>(
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  validator: (_) =>
+                      scooter == widget.spot.scooterAllowed &&
+                          heavy == widget.spot.heavyAllowed
+                      ? '請至少改一個車種，和目前不同才能送出'
+                      : null,
+                  builder: (state) => Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: Text(
+                          '現場有告示牌或地面標字時，才選「可停」。',
+                          style: TextStyle(color: colors.onSurfaceVariant),
+                        ),
+                      ),
+                      ChoiceField<bool?>(
+                        label: '普通機車',
+                        vehicle: VehicleType.scooter,
+                        value: scooter,
+                        options: const [
+                          (null, '未確認'),
+                          (true, '可停'),
+                          (false, '不可停'),
+                        ],
+                        onChanged: (v) {
+                          setState(() => scooter = v);
+                          state.didChange((scooter, heavy));
+                        },
+                      ),
+                      ChoiceField<bool?>(
+                        label: '大型重機',
+                        vehicle: VehicleType.heavy,
+                        value: heavy,
+                        options: const [
+                          (null, '未確認'),
+                          (true, '可停'),
+                          (false, '不可停'),
+                        ],
+                        onChanged: (v) {
+                          setState(() => heavy = v);
+                          state.didChange((scooter, heavy));
+                        },
+                      ),
+                      fieldError(context, state.errorText),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+              ],
+              if (unavailable) ...[
+                const Text('說明你看到的狀況。如果只是暫時封閉，請寫出原因或預計恢復時間。'),
+                const SizedBox(height: 16),
+              ],
+              TextFormField(
+                key: const ValueKey('suggestion-input'),
+                controller: note,
+                maxLength: maxLength,
+                maxLines: 4,
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  // At the top of the four lines, not floating mid-field.
+                  alignLabelWithHint: true,
+                  labelText: unavailable
+                      ? '現場狀況'
+                      : structured
+                      ? '你在現場看到什麼？（選填）'
+                      : '正確的${widget.label}',
+                  hintText: switch (fieldKey) {
+                    'gone' => '例：格線已塗銷，改成人行道',
+                    'space_type' || 'eligibility' => '例：入口告示寫「大型重機可停」',
+                    'name' => '例：信義路五段收費機車格',
+                    'fee_note' => '例：每小時 20 元，或免費',
+                    _ => '例：入口在松仁路側，B2',
+                  },
+                ),
+                validator: (v) {
+                  final empty = v == null || v.trim().isEmpty;
+                  if (unavailable && empty) return '請填寫現場狀況';
+                  if (!structured && !unavailable && empty) {
+                    return '請填寫正確的${widget.label}';
+                  }
+                  if ((v?.length ?? 0) > maxLength) {
+                    return '最多 $maxLength 字，請刪減後再送出';
+                  }
+                  return null;
+                },
+              ),
+              if (changed.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Material(
+                  key: const ValueKey('suggestion-change'),
+                  color: colors.secondaryContainer,
+                  borderRadius: BorderRadius.circular(16),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '你要改的內容',
+                          style: text.titleSmall?.copyWith(
+                            color: colors.onSecondaryContainer,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        for (final change in changed)
+                          Text(
+                            change,
+                            style: TextStyle(
+                              color: colors.onSecondaryContainer,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+              if (error != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Text(error!, style: TextStyle(color: colors.error)),
+                ),
+              const SizedBox(height: 20),
+              AdaptiveButton(
+                label: sending
+                    ? '送出中…'
+                    : unavailable
+                    ? '送出回報'
+                    : '送出建議',
+                onPressed: sending || !widget.store.canReport ? null : submit,
+              ),
+              TextButton(
+                onPressed: sending ? null : () => Navigator.pop(context),
+                child: const Text('取消'),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
