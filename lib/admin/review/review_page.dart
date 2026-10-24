@@ -586,10 +586,16 @@ class _ReviewDetail extends StatelessWidget {
     final rows = editing ? review.draft : patch;
     final muted = TextStyle(color: colors.onSurfaceVariant, fontSize: 14);
     final pad = compact ? 16.0 : 24.0;
-    // A coordinate being typed is text until it parses; the map skips it.
+    // One axis may change alone; the other stays where the spot is. Text
+    // still being typed is not a position yet, so the map skips it.
     final lat = rows['lat'], lng = rows['lng'];
-    final proposedLat = lat is num ? lat.toDouble() : null;
-    final proposedLng = lng is num ? lng.toDouble() : null;
+    final moved =
+        spot != null &&
+        (lat != null || lng != null) &&
+        (lat == null || lat is num) &&
+        (lng == null || lng is num);
+    final proposedLat = moved ? (lat as num?)?.toDouble() ?? spot.lat : null;
+    final proposedLng = moved ? (lng as num?)?.toDouble() ?? spot.lng : null;
 
     return Material(
       color: colors.surface,

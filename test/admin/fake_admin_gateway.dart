@@ -126,6 +126,9 @@ class FakeAdminGateway implements AdminGateway {
   bool failReports = false;
   bool failSpots = false;
   Object? resolveError;
+
+  /// Holds resolveReport open until completed, to race it against sign-out.
+  Completer<void>? delayedResolve;
   final List<(String, bool)> hiddenChanges = [];
 
   /// Report ids whose spot changed after they were sent.
@@ -241,6 +244,7 @@ class FakeAdminGateway implements AdminGateway {
     String note, {
     bool force = false,
   }) async {
+    await delayedResolve?.future;
     if (resolveError != null) throw resolveError!;
     if (changedSpots.contains(id) && patch.isNotEmpty && !force) {
       throw const PostgrestException(message: 'spot changed since the report');

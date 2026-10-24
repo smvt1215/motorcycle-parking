@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:motorcycle_parking/admin/admin_app.dart';
@@ -202,6 +204,29 @@ void main() {
       expect(review.canForce(first.id), isTrue);
     });
 
+    test('下一個決定觸發的寫入失敗時保留錯誤', () async {
+      final reports = review.queue;
+      await review.decide(reports[0], ReviewDecision.accept, '');
+      gateway.resolveError = const PostgrestException(message: 'offline');
+      await review.decide(reports[1], ReviewDecision.reject, '');
+      expect(review.error, contains('尚未處理成功'));
+      expect(review.byId(reports[0].id), isNotNull);
+      expect(review.pending?.report.id, reports[1].id);
+    });
+
+    test('等待前一筆寫入時登出，不建立也不送出下一筆', () async {
+      final reports = review.queue;
+      await review.decide(reports[0], ReviewDecision.accept, '');
+      gateway.delayedResolve = Completer<void>();
+      final next = review.decide(reports[1], ReviewDecision.reject, '');
+      review.reset();
+      gateway.delayedResolve!.complete();
+      await next;
+      expect(review.pending, isNull);
+      await review.flush();
+      expect(gateway.resolved.map((r) => r.$1), isNot(contains(reports[1].id)));
+    });
+
     test('找不到點位只能駁回', () async {
       gateway.spots.remove(officialId);
       await review.load();
@@ -250,7 +275,9 @@ void main() {
           controller: controller,
           initialLocation: path,
           themeMode: mode,
-          reviewMapBuilder: (_, data) => Text('map ${data.lat}'),
+          reviewMapBuilder: (_, data) => Text(
+            'map ${data.lat}${data.moved ? ' → ${data.proposedLat},${data.proposedLng}' : ''}',
+          ),
         ),
       );
       await tester.pumpAndSettle();
@@ -510,6 +537,20 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.textContaining('尚未處理成功，已放回佇列'), findsOneWidget);
       expect(find.byKey(const ValueKey('report-r-type')), findsOneWidget);
+    });
+
+    testWidgets('只改一個座標軸時，另一軸沿用目前位置', (tester) async {
+      gateway.reports = [
+        ReviewReport(
+          id: 'r-lat',
+          sourceId: communityId,
+          reason: '位置',
+          proposed: const {'lat': 25.0583},
+          createdAt: reportTime,
+        ),
+      ];
+      await show(tester);
+      expect(find.text('map 25.0581 → 25.0583,121.5226'), findsOneWidget);
     });
 
     testWidgets('不存在的回報網址顯示說明', (tester) async {

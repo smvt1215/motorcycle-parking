@@ -266,11 +266,17 @@ class ReviewController extends ChangeNotifier {
       _notify();
       return report.id;
     }
+    // Clear the old message first: a failed write of the previous decision
+    // below must stay on screen, not be wiped by this one.
+    error = null;
+    final generation = _generation;
     await flush();
+    // Signed out or access changed meanwhile: this decision belongs to a
+    // session that no longer exists and must never be sent.
+    if (_disposed || generation != _generation) return null;
     final before = visible;
     final index = before.indexWhere((r) => r.id == report.id);
     pending = PendingDecision(report, decision, patch, note, force: force);
-    error = null;
     editingId = null;
     draft = {};
     _timer = Timer(undoWindow, () => unawaited(flush()));
