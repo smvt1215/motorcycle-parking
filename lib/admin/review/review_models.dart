@@ -111,13 +111,19 @@ class ReviewReport {
   String get title {
     if (field != null) return suggestionFieldLabels[field] ?? field!;
     if (autoHidden) return '多位騎士回報已不存在';
+    return _reasonPrefix ?? '其他回報';
+  }
+
+  /// What builds before structured fields wrote before "：" in [reason].
+  String? get _reasonPrefix {
     final cut = reason.indexOf('：');
-    return cut > 0 && cut <= 12 ? reason.substring(0, cut) : '其他回報';
+    return cut > 0 && cut <= 12 ? reason.substring(0, cut) : null;
   }
 
   ReviewKind get kind {
     final keys = proposed?.keys ?? const <String>[];
-    final key = suggestionKey(field);
+    // Older builds sent only the reason; its prefix names the field.
+    final key = suggestionKey(field ?? _reasonPrefix);
     if (key == 'gone' ||
         autoHidden ||
         proposed?['status'] == 'hidden' ||

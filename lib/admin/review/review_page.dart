@@ -291,7 +291,15 @@ class _QueuePane extends StatelessWidget {
           Divider(height: 1, color: colors.outlineVariant),
           Expanded(
             child: !review.loaded
-                ? const SizedBox()
+                // Wide layouts show this in the detail pane; on a phone the
+                // list is the whole screen, so loading and failure live here.
+                ? compact
+                      ? _Status(
+                          loading: review.loading,
+                          error: review.loadError,
+                          onRetry: onReload,
+                        )
+                      : const SizedBox()
                 : visible.isEmpty
                 ? Padding(
                     padding: const EdgeInsets.fromLTRB(18, 28, 18, 28),
@@ -571,8 +579,10 @@ class _ReviewDetail extends StatelessWidget {
     final rows = editing ? review.draft : patch;
     final muted = TextStyle(color: colors.onSurfaceVariant, fontSize: 14);
     final pad = compact ? 16.0 : 24.0;
-    final proposedLat = (rows['lat'] as num?)?.toDouble();
-    final proposedLng = (rows['lng'] as num?)?.toDouble();
+    // A coordinate being typed is text until it parses; the map skips it.
+    final lat = rows['lat'], lng = rows['lng'];
+    final proposedLat = lat is num ? lat.toDouble() : null;
+    final proposedLng = lng is num ? lng.toDouble() : null;
 
     return Material(
       color: colors.surface,

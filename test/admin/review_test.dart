@@ -24,6 +24,17 @@ void main() {
       expect(reports['r-type']!.title, '格位類型');
       expect(suggestionKey('點位已不存在'), 'gone');
       expect(suggestionKey('gone'), 'gone');
+      ReviewReport legacy(String reason) => ReviewReport(
+        id: reason,
+        sourceId: communityId,
+        reason: reason,
+        createdAt: reportTime,
+      );
+      expect(legacy('點位已不存在：格線撤除').kind, ReviewKind.gone);
+      expect(legacy('機車停放資格：建議「可停」').kind, ReviewKind.access);
+      expect(initialProposal(legacy('點位已不存在：格線撤除'), spots[communityId]), {
+        'status': 'hidden',
+      });
       expect(reports['r-legacy']!.title, '收費資訊');
       expect(reports['r-legacy']!.riderText, '收費資訊：改為每次 30 元');
       expect(reports['r-type']!.riderText, '地面有「大型重機」字樣');
@@ -388,6 +399,33 @@ void main() {
         find.byKey(const ValueKey('restore-$communityId')),
         findsOneWidget,
       );
+    });
+
+    testWidgets('手機版首次載入失敗顯示原因與重試', (tester) async {
+      gateway.failReports = true;
+      await show(tester, size: const Size(390, 844));
+      expect(find.text('待審回報載入失敗，請檢查連線後重試。'), findsOneWidget);
+      gateway.failReports = false;
+      await tester.tap(find.text('重新載入'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('report-r-type')), findsOneWidget);
+    });
+
+    testWidgets('座標輸入到一半不會讓詳情崩潰', (tester) async {
+      await show(tester);
+      await tester.tap(find.text('修改後套用'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('加入要修改的欄位'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('緯度').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('edit-r-type-lat')).first,
+        '.',
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.text('套用修改'), findsOneWidget);
     });
 
     testWidgets('不存在的回報網址顯示說明', (tester) async {
