@@ -92,7 +92,9 @@ extension ParkingAccessLabel on ParkingAccess {
 T? _optionalEnum<T extends Enum>(List<T> values, Object? name) =>
     values.where((value) => value.name == name).firstOrNull;
 
-/// A facility may have different access rules and fees in each area.
+String _feeNoteText(Object? value) => value is String ? value : '';
+
+/// A parking location may have different access rules and fees in each area.
 /// These describe the source's information, not a legal eligibility decision.
 class ParkingZone {
   const ParkingZone({
@@ -100,9 +102,16 @@ class ParkingZone {
     this.access,
     this.feeNote = '',
     this.guide = '',
+    this.scooterFeeNote = '',
+    this.heavyFeeNote = '',
+    this.carFeeNote = '',
   });
 
   final String name, feeNote, guide;
+
+  /// Rates belong to vehicles independently of whether their bays are shared.
+  /// Empty means unprovided; a generic fee note is never copied into a rate.
+  final String scooterFeeNote, heavyFeeNote, carFeeNote;
   final ParkingAccess? access;
 
   factory ParkingZone.fromJson(Map<String, dynamic> json) => ParkingZone(
@@ -110,6 +119,9 @@ class ParkingZone {
     access: _optionalEnum(ParkingAccess.values, json['access']),
     feeNote: json['fee_note'] as String? ?? '',
     guide: json['guide'] as String? ?? '',
+    scooterFeeNote: _feeNoteText(json['scooter_fee_note']),
+    heavyFeeNote: _feeNoteText(json['heavy_fee_note']),
+    carFeeNote: _feeNoteText(json['car_fee_note']),
   );
 
   Map<String, dynamic> toJson() => {
@@ -117,6 +129,9 @@ class ParkingZone {
     if (access != null) 'access': access!.name,
     if (feeNote.isNotEmpty) 'fee_note': feeNote,
     if (guide.isNotEmpty) 'guide': guide,
+    if (scooterFeeNote.isNotEmpty) 'scooter_fee_note': scooterFeeNote,
+    if (heavyFeeNote.isNotEmpty) 'heavy_fee_note': heavyFeeNote,
+    if (carFeeNote.isNotEmpty) 'car_fee_note': carFeeNote,
   };
 }
 

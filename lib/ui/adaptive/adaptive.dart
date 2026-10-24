@@ -377,26 +377,23 @@ Future<T?> showAdaptiveSheet<T>(
   bool detail = false,
 }) {
   if (isCupertino) {
-    if (!detail) {
-      return CNBottomSheet.showCupertino<T>(
-        context: context,
-        pageBuilder: (ctx) => Material(
-          color: Theme.of(ctx).colorScheme.surface,
-          child: SafeArea(child: builder(ctx)),
-        ),
-      );
-    }
+    // Overlay the map: Cupertino's stacked-card route scales the page below.
     return CNBottomSheet.show<T>(
       context: context,
       useRootNavigator: true,
       // Details keep the map undimmed above them, as map apps do; tapping
       // the map still closes the sheet.
-      barrierColor: Colors.transparent,
-      enableDrag: false,
+      barrierColor: detail ? Colors.transparent : null,
+      enableDrag: !detail,
       isScrollControlled: true,
       useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      builder: builder,
+      backgroundColor: detail ? Colors.transparent : null,
+      builder: (ctx) => detail
+          ? builder(ctx)
+          : Material(
+              color: Theme.of(ctx).colorScheme.surface,
+              child: SafeArea(child: builder(ctx)),
+            ),
     );
   }
   return showModalBottomSheet<T>(

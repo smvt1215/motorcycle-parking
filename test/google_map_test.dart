@@ -9,11 +9,88 @@ import 'package:latlong2/latlong.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
 import 'package:motorcycle_parking/domain/eligibility.dart';
 import 'package:motorcycle_parking/domain/map_viewport.dart';
+import 'package:motorcycle_parking/domain/spot_clusters.dart';
 import 'package:motorcycle_parking/features/map/google_parking_map.dart';
 import 'package:motorcycle_parking/models/parking.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
 
+Future<void> pumpMap(WidgetTester tester) async {
+  // Image rasterization uses the real engine, even when tests use fake time.
+  for (var frame = 0; frame < 100; frame++) {
+    await tester.pump();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 20)),
+    );
+    if (find.byType(gm.GoogleMap).evaluate().isNotEmpty) break;
+  }
+  expect(find.byType(gm.GoogleMap), findsOneWidget);
+  await tester.pumpAndSettle();
+}
+
 void main() {
+  testWidgets('數字6群聚圈為56dp，點擊放大，20級展開為六個單點', (tester) async {
+    final platform = FakeMapsPlatform();
+    final previous = pi.GoogleMapsFlutterPlatform.instance;
+    pi.GoogleMapsFlutterPlatform.instance = platform;
+    addTearDown(() => pi.GoogleMapsFlutterPlatform.instance = previous);
+    final spots = [
+      for (var i = 0; i < 6; i++)
+        ParkingSpot(
+          id: '$i',
+          name: '停車點$i',
+          lat: 25.03 + i * .00002,
+          lng: 121.56,
+          city: '臺北市',
+          spaceType: SpaceType.freeMotorcycle,
+        ),
+    ];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GoogleParkingMap(
+          center: const LatLng(25.03, 121.56),
+          spots: spots,
+          eligibility: (_) => const Eligibility(EligibilityStatus.allowed, ''),
+          interactive: true,
+          onSpotTap: (_) {},
+          onViewport: (_, _) {},
+        ),
+      ),
+    );
+    // Bitmap rasterization completes on the real engine, outside fake time.
+    for (var frame = 0; frame < 50; frame++) {
+      await tester.pump();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      if (find.byType(gm.GoogleMap).evaluate().isNotEmpty) break;
+    }
+    await tester.pumpAndSettle();
+    final map = tester.widget<gm.GoogleMap>(find.byType(gm.GoogleMap));
+    final cluster = map.markers.single;
+    expect(cluster.markerId.value, startsWith('cluster:'));
+    expect(map.clusterManagers, isEmpty);
+    final icon = cluster.icon as gm.BytesMapBitmap;
+    expect(icon.width, 56);
+    expect(icon.height, 56);
+    cluster.onTap!();
+    await tester.pump();
+    expect(platform.moves, hasLength(1));
+    platform.move.add(
+      pi.CameraMoveEvent(
+        platform.id,
+        const pi.CameraPosition(target: pi.LatLng(25.03, 121.56), zoom: 20),
+      ),
+    );
+    platform.idle.add(pi.CameraIdleEvent(platform.id));
+    await tester.pumpAndSettle();
+    final expanded = tester.widget<gm.GoogleMap>(find.byType(gm.GoogleMap));
+    expect(expanded.markers, hasLength(6));
+    expect(
+      expanded.markers.any((m) => m.markerId.value.startsWith('cluster:')),
+      isFalse,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
   addSelectionTests();
   testWidgets('Google 地圖移動後發布正確範圍，忽略較晚返回的舊範圍', (tester) async {
     final platform = FakeMapsPlatform();
@@ -33,10 +110,7 @@ void main() {
         ),
       ),
     );
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 150)),
-    );
-    await tester.pumpAndSettle();
+    await pumpMap(tester);
     expect(updates, isNotEmpty);
     updates.clear();
     final old = Completer<pi.LatLngBounds>();
@@ -94,10 +168,7 @@ void main() {
         ),
       ),
     );
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 150)),
-    );
-    await tester.pumpAndSettle();
+    await pumpMap(tester);
     final map = tester.widget<gm.GoogleMap>(find.byType(gm.GoogleMap));
     final dot = map.markers.singleWhere(
       (marker) => marker.markerId.value == 'my-location',
@@ -146,14 +217,13 @@ void main() {
         ),
       ),
     );
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 150)),
-    );
-    await tester.pumpAndSettle();
+    await pumpMap(tester);
     final map = tester.widget<gm.GoogleMap>(find.byType(gm.GoogleMap));
-    expect(map.markers, hasLength(spots.length));
-    map.markers.first.onTap!();
-    expect(selected?.id, map.markers.first.markerId.value);
+    final single = map.markers.firstWhere(
+      (marker) => !marker.markerId.value.startsWith('cluster:'),
+    );
+    single.onTap!();
+    expect(selected?.id, single.markerId.value);
     await key.currentState!.moveTo(const LatLng(24.15, 120.67), 17);
     expect(platform.moves, hasLength(1));
     final before = platform.created;
@@ -161,13 +231,8 @@ void main() {
     await tester.pumpAndSettle();
     final paused = tester.widget<gm.GoogleMap>(find.byType(gm.GoogleMap));
     expect(paused.scrollGesturesEnabled, isFalse);
-    // The Google logo stays clear of the modal sheet.
-    expect(
-      paused.padding.bottom,
-      greaterThanOrEqualTo(
-        tester.getSize(find.byType(gm.GoogleMap)).height * .5,
-      ),
-    );
+    // A modal overlays the same map viewport without shifting its center.
+    expect(paused.padding, map.padding);
     expect(paused.markers.every((marker) => marker.onTap == null), isTrue);
     expect(platform.created, before);
     rebuild(() => interactive = true);
@@ -209,7 +274,6 @@ void addSelectionTests() {
           // The selected spot stays drawn even when filtered out.
           spots: spots.skip(1).toList(),
           selected: spots.first,
-          sheetInset: 300,
           eligibility: (_) => const Eligibility(EligibilityStatus.allowed, ''),
           interactive: true,
           onSpotTap: (_) {},
@@ -218,12 +282,12 @@ void addSelectionTests() {
         ),
       ),
     );
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 150)),
-    );
-    await tester.pumpAndSettle();
+    await pumpMap(tester);
     final map = tester.widget<gm.GoogleMap>(find.byType(gm.GoogleMap));
-    expect(map.markers, hasLength(spots.length));
+    expect(
+      map.markers,
+      hasLength(clusterSpots(spots.skip(1).toList(), 16).length + 1),
+    );
     // Its own id: never the clustered marker changed in place.
     expect(
       map.markers.where((m) => m.markerId.value == spots.first.id),
@@ -235,13 +299,12 @@ void addSelectionTests() {
     expect(chosen.clusterManagerId, isNull);
     expect(chosen.zIndexInt, greaterThan(0));
     final others = map.markers.where((m) => m != chosen);
-    expect(others.every((m) => m.clusterManagerId != null), isTrue);
+    expect(others.every((m) => m.clusterManagerId == null), isTrue);
     expect(
       map.markers.every((m) => m.infoWindow == gm.InfoWindow.noText),
       isTrue,
     );
-    // The camera centers above the sheet.
-    expect(map.padding.bottom, greaterThanOrEqualTo(300));
+    expect(map.padding.bottom, 8);
     map.onTap!(const gm.LatLng(25.03, 121.56));
     expect(taps, 1);
     await tester.pumpWidget(
@@ -250,7 +313,6 @@ void addSelectionTests() {
           center: const LatLng(25.03, 121.56),
           spots: spots.skip(1).toList(),
           selected: spots.first,
-          sheetInset: 100,
           eligibility: (_) => const Eligibility(EligibilityStatus.allowed, ''),
           // A modal sheet opened over the details.
           interactive: false,
@@ -261,8 +323,8 @@ void addSelectionTests() {
     );
     await tester.pumpAndSettle();
     expect(
-      tester.widget<gm.GoogleMap>(find.byType(gm.GoogleMap)).padding.bottom,
-      closeTo(tester.getSize(find.byType(gm.GoogleMap)).height * .55, 1),
+      tester.widget<gm.GoogleMap>(find.byType(gm.GoogleMap)).padding,
+      map.padding,
     );
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -294,14 +356,17 @@ void addSelectionTests() {
         ),
       ),
     );
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 150)),
-    );
-    await tester.pumpAndSettle();
+    await pumpMap(tester);
     updates.clear();
+    final map = tester.widget<gm.GoogleMap>(find.byType(gm.GoogleMap));
+    final mapSize = tester.getSize(find.byType(gm.GoogleMap));
     rebuild(() => panel = true);
     await tester.pumpAndSettle();
-    // Under the panel the map reports only the strip left open.
+    final covered = tester.widget<gm.GoogleMap>(find.byType(gm.GoogleMap));
+    expect(covered.padding, map.padding);
+    expect(tester.getSize(find.byType(gm.GoogleMap)), mapSize);
+    expect(platform.moves, isEmpty);
+    // While covered, unsolicited camera events must not update the store.
     platform.bounds = pi.LatLngBounds(
       southwest: const pi.LatLng(25.039, 121.55),
       northeast: const pi.LatLng(25.04, 121.57),
@@ -324,11 +389,10 @@ void addSelectionTests() {
     await tester.pumpAndSettle();
     expect(updates, isNotEmpty);
     expect(updates.every((bounds) => bounds.south == 25.02), isTrue);
-    // Every read on the way back sees the map's own padding, never the
-    // panel's 92%, which would leave only the strip's spots.
+    // Every read uses the same map projection as before opening the panel.
     final back = platform.regionPaddings.skip(reads);
     expect(back, isNotEmpty);
-    expect(back.every((padding) => padding < 100), isTrue);
+    expect(back.every((padding) => padding == map.padding.bottom), isTrue);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 }
