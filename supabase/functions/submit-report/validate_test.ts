@@ -39,6 +39,38 @@ Deno.test('arbitrary actions, malformed votes and removed annotations fail', () 
     }]
   ) if (validate(body) === null) throw new Error('invalid action accepted');
 });
+Deno.test('flags may carry a structured suggestion', () => {
+  const flag = {
+    device_id: base.device_id,
+    action: 'flag',
+    source_id: 'official:10000000-0000-4000-8000-000000000001',
+    reason: '格位類型：建議「重機專用格」',
+  };
+  for (
+    const body of [
+      flag,
+      { ...flag, field: '格位類型', proposed: { space_type: 'heavyOnly' } },
+      { ...flag, field: '位置', proposed: { lat: 25.01, lng: 121.46 } },
+      { ...flag, proposed: { heavy_allowed: null } },
+    ]
+  ) {
+    if (validate(body) !== null) throw new Error('valid suggestion rejected');
+  }
+  for (
+    const body of [
+      { ...flag, field: '' },
+      { ...flag, field: 'a'.repeat(41) },
+      { ...flag, proposed: [] },
+      { ...flag, proposed: {} },
+      { ...flag, proposed: { nested: { a: 1 } } },
+      { ...flag, proposed: { note: 'a'.repeat(501) } },
+      { ...flag, proposed: { lat: 0, lng: 121 } },
+      { ...flag, proposed: { lng: '121' } },
+    ]
+  ) {
+    if (validate(body) === null) throw new Error('bad suggestion accepted');
+  }
+});
 Deno.test('identity hashes are deterministic, namespaced and keyed', async () => {
   const a = await identityHash('secret', 'ip:127.0.0.1');
   if (

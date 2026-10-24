@@ -70,7 +70,7 @@ set local role authenticated;
 select is((select count(*)::integer from favorites),1,'owner can read own favorites');
 select lives_ok($$delete from favorites where spot_id='fav-one'$$,'owner can remove favorite');
 reset role;
-select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-000000000005","role":"authenticated","app_metadata":{"role":"admin"}}',true);
+select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-000000000005","role":"authenticated","aal":"aal2","app_metadata":{"role":"admin"}}',true);
 set local role authenticated;
 select lives_ok($$update city_rules set version=version+1 where city='臺北市' and vehicle='heavy'$$,'admin can maintain rules');
 select is((select version from city_rules where city='臺北市' and vehicle='heavy'),2,'admin update takes effect');
