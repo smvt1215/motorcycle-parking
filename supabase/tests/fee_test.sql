@@ -48,6 +48,12 @@ select is(public.admin_resolve_report((select id from report),'accepted',
   'same_as_scooter','admin applies the suggested fee');
 select is((select fee_note from community_spots where id=(select id from target)),'每日 30 元（大型重機比照機車費率）',
   'the fee text changes with it');
+-- Promoting the spot to an official one keeps the fee beside its text.
+select is(public.admin_promote_spot((select id::text from target),
+    '{"source_name":"臺北市政府","source_url":"https://example.test/lot","effective_date":"2026-10-25"}',
+    (select updated_at from community_spots where id=(select id from target)))->'fee',
+  '{"scooter":{"mode":"daily","amount":30},"heavy":{"mode":"same_as_scooter"}}'::jsonb,
+  'promotion keeps the structured fee');
 reset role;
 select set_config('request.jwt.claims','',true);
 set local role anon;

@@ -241,3 +241,62 @@ begin
   return jsonb_build_object('id',p_id,'status',p_decision,'spot',v_after);
 end;
 $$;
+
+-- Promoting a community spot keeps its fee beside the fee_note it already
+-- copies; the rest is the function from 202610250001_admin_spots.sql unchanged.
+create or replace function public.admin_promote_spot(p_source_id text,p_values jsonb,p_base_updated_at timestamptz,p_note text default '')
+returns jsonb language plpgsql security definer set search_path=public,extensions,pg_temp as $$
+declare
+  v_values jsonb:=coalesce(p_values,'{}'::jsonb);
+  v_note text:=coalesce(p_note,'');
+  v_community community_spots; v_bad text; v_after jsonb;
+begin
+  if not public.is_admin() then
+    raise exception 'admin with a second factor required' using errcode='42501';
+  end if;
+  if p_source_id is null or p_source_id !~* '^[0-9a-f-]{36}$' or jsonb_typeof(v_values)<>'object' or char_length(v_note)>500 then
+    raise exception 'invalid promotion' using errcode='22023';
+  end if;
+  select k into v_bad from jsonb_object_keys(v_values) k where k<>all(public.admin_spot_fields(true)) limit 1;
+  if v_bad is not null then raise exception 'field % cannot be set here',v_bad using errcode='22023'; end if;
+  if coalesce(v_values->>'source_url','') !~ '^https://' or btrim(coalesce(v_values->>'source_name',''))=''
+     or v_values->>'effective_date' is null then
+    raise exception 'promotion needs source_name, an https source_url and effective_date' using errcode='22023';
+  end if;
+  select * into v_community from community_spots where id=p_source_id::uuid for update;
+  if not found then raise exception 'spot not found' using errcode='22023'; end if;
+  if v_community.updated_at<>p_base_updated_at then
+    raise exception 'spot changed since it was opened' using errcode='40001';
+  end if;
+  if v_community.status='hidden' then
+    raise exception 'restore the spot before promoting it' using errcode='22023';
+  end if;
+
+  insert into official_heavy_spots(name,lat,lng,city,district,space_type,fee_note,note,scooter_allowed,heavy_allowed,
+      facility_type,parking_access,address,road_segment,entrance_note,parking_guide,special_rules,scooter_total,parking_zones,
+      source_name,source_url,effective_date,license_note,fee)
+    select r.name,r.lat,r.lng,r.city,r.district,r.space_type,r.fee_note,r.note,
+      -- Only what the admin states in this call; never the rider's values.
+      case when v_values ? 'scooter_allowed' then (v_values->>'scooter_allowed')::boolean end,
+      case when v_values ? 'heavy_allowed' then (v_values->>'heavy_allowed')::boolean end,
+      r.facility_type,r.parking_access,r.address,r.road_segment,r.entrance_note,r.parking_guide,r.special_rules,r.scooter_total,
+      v_community.parking_zones,r.source_name,r.source_url,r.effective_date,coalesce(r.license_note,''),
+      -- The fee moves with its fee_note text, so the two stay in step.
+      r.fee
+    from jsonb_populate_record(
+      null::official_heavy_spots,
+      (to_jsonb(v_community)-'id'-'user_id'-'location'-'source'-'source_name'-'source_url'-'license_note'
+        -'status'-'last_confirmed_at'-'created_at'-'available'-'photo_urls'-'updated_at')||v_values) r
+    returning to_jsonb(official_heavy_spots.*) into v_after;
+
+  update community_spots set status='hidden',updated_at=now() where id=v_community.id;
+  -- Open reports follow the spot; their snapshots still flag changed fields.
+  update moderation_queue set source_id='official:'||(v_after->>'id')
+   where source_id=v_community.id::text and status='pending';
+
+  insert into admin_audit_log(actor,action,target_table,target_id,before,after,note)
+  values(auth.uid(),'promote_spot','community_spots',v_community.id::text,
+    to_jsonb(v_community)-'location',jsonb_build_object('official',v_after),v_note);
+  return v_after||jsonb_build_object('source_id','official:'||(v_after->>'id'));
+end;
+$$;
