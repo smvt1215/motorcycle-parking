@@ -11,6 +11,10 @@ concurrency:
 jobs:
   release:
     name: iOS Release 建置
+    # Compile check only: a pull request already ran it on the same tree
+    # (squash merges keep it), and CD staging builds the signed release on
+    # main anyway.
+    if: github.event_name == 'pull_request'
     runs-on: macos-26
     timeout-minutes: 40
     steps:
@@ -134,4 +138,11 @@ jobs:
           RELEASE: ${{ needs.release.result }}
           APP: ${{ needs.app.result }}
           SIMULATOR: ${{ needs.simulator.result }}
-        run: test "$RELEASE" = success && test "$APP" = success && test "$SIMULATOR" = success
+          EVENT_NAME: ${{ github.event_name }}
+        # The release compile runs on pull requests only (see the job).
+        run: |
+          case "$EVENT_NAME:$RELEASE" in
+            *:success | push:skipped) ;;
+            *) exit 1 ;;
+          esac
+          test "$APP" = success && test "$SIMULATOR" = success

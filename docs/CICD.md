@@ -44,8 +44,8 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
 | 檔案 | 觸發 | Runner | 內容 |
 |---|---|---|---|
 | `ci.yml` | PR、push 到 `main` | Linux | 跨平台檢查：Flutter 檢查與測試、Web 建置、Supabase 檢查 |
-| `android.yml` | PR、push 到 `main` | Linux（模擬器硬體加速） | production／staging Release APK 設定檢查＋一次測試 APK 建置，Android 11／16 模擬器共用測試產物執行與截圖 |
-| `ios.yml` | PR、push 到 `main` | macOS | production／staging 真機 Release 設定檢查＋一次模擬器測試 App 建置，iOS 26／27 共用測試產物執行與截圖（見 PLAN.md「UI 設計規範 › 驗證」） |
+| `android.yml` | PR、push 到 `main` | Linux（模擬器硬體加速） | production／staging Release APK 設定檢查（僅 PR）＋一次測試 APK 建置，Android 11／16 模擬器共用測試產物執行與截圖 |
+| `ios.yml` | PR、push 到 `main` | macOS | production／staging 真機 Release 設定檢查（僅 PR）＋一次模擬器測試 App 建置，iOS 26／27 共用測試產物執行與截圖（見 PLAN.md「UI 設計規範 › 驗證」） |
 | `codeql.yml` | PR、push 到 `main`、每週、手動 | Linux + macOS | Actions、JavaScript／TypeScript、Python、Java／Kotlin、Swift 安全分析；原生 PR 掃描依相關路徑執行 |
 | `actions-cleanup.yml` | 每週日（UTC 19:17）、手動（可選 dry-run） | Linux | 清理 Actions 執行紀錄與快取（規則見下方「Actions 清理」） |
 | `cd-staging.yml` | `main` 上的三條 CI 都成功後（`workflow_run`） | Linux + macOS | 部署 staging 後端、產生 Android 測試 APK 與 iOS 測試 IPA（不上傳商店） |
@@ -104,7 +104,7 @@ Workflow 依平台分工：跨平台檢查放 `ci.yml`，各平台的建置與�
 
 ### `ios.yml`（macOS）
 - CI 在真機 Release job 各建置 production 與 staging，兩者皆不簽章；模擬器測試 App 使用獨立 job，只建置一次。
-- `iOS Release 建置` 在 `macos-26` 執行 `flutter build ios --release --no-codesign`，以一般 App 入口驗證真機 Release 設定與 AOT；不簽章、不匯出 IPA。
+- `iOS Release 建置` 在 `macos-26` 執行 `flutter build ios --release --no-codesign`，以一般 App 入口驗證真機 Release 設定與 AOT；不簽章、不匯出 IPA。**只在 PR 執行**：PR 必須與 `main` 同步才能合併，squash 後 `main` 的程式碼與 PR 相同，push 到 `main` 時重跑沒有新資訊，而且 CD staging 會再以正式設定與簽章建置；`iOS 全部通過` 在 push 時接受此 job 為 skipped，CD 閘門仍檢查該彙總結果。
 - `iOS 模擬器 App 建置` 在 `macos-26` 執行 `flutter build ios --simulator --debug --no-codesign --target=integration_test/ui_test.dart --dart-define=OFFLINE_MAP=true`，不需要簽章。
 - 將 `Runner.app` 封裝成 tar 後上傳為 `ios-test-app` artifact，保留執行權限與符號連結。
 - iOS 26／27 模擬器 job 以 `needs: [app]` 等待建置，以 `max-parallel: 1` **依序**執行（兩個版本需要不同的 runner 映像，沒有映像同時具備 iOS 26 與 27 runtime，無法合併成一個 job；依序執行讓每個 PR 同時最多只佔一台 macOS 跑模擬器），各自下載與解開同一份 App，再以 `flutter drive --use-application-binary=artifacts/ios-app/Runner.app` 執行測試與截圖，不重新編譯。
@@ -113,7 +113,7 @@ Workflow 依平台分工：跨平台檢查放 `ci.yml`，各平台的建置與�
 
 ### `android.yml`（Linux，Android 模擬器）
 - CI 在 Release job 各建置 production 與 staging APK，皆不使用正式憑證；測試 APK 使用獨立 job，只建置一次。
-- `Android Release APK 建置` 執行 `flutter build apk --release`，以一般 App 入口驗證 Release 設定與 AOT；目前不使用正式簽章金鑰。
+- `Android Release APK 建置` 執行 `flutter build apk --release`，以一般 App 入口驗證 Release 設定與 AOT；目前不使用正式簽章金鑰。與 iOS 相同，**只在 PR 執行**，`Android 全部通過` 在 push 到 `main` 時接受它為 skipped。
 - `Android 測試 APK 建置` 執行 `flutter build apk --debug --target=integration_test/ui_test.dart --target-platform=android-x64 --dart-define=OFFLINE_MAP=true`，建置包含整合測試入口的 x86_64 APK，上傳為 `android-test-apk` artifact。
 - Android 模擬器 job 以 `needs: [apk]` 等待建置，各自下載同一份 APK；在 Linux runner 啟用 KVM，以 `flutter drive --use-application-binary=artifacts/android-app/app-debug.apk` 執行 `integration_test/` 截圖情境，不重新編譯，與 iOS 共用同一組情境。
 - 模擬器：Android 16（API 36）與 Android 11（API 30），各跑淺色與深色；映像版本實作時確認。

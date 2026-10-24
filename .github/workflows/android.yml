@@ -11,6 +11,10 @@ concurrency:
 jobs:
   release:
     name: Android Release APK 建置
+    # Compile check only: a pull request already ran it on the same tree
+    # (squash merges keep it), and CD staging builds the signed release on
+    # main anyway.
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -147,4 +151,11 @@ jobs:
           RELEASE: ${{ needs.release.result }}
           APK: ${{ needs.apk.result }}
           EMULATOR: ${{ needs.emulator.result }}
-        run: test "$RELEASE" = success && test "$APK" = success && test "$EMULATOR" = success
+          EVENT_NAME: ${{ github.event_name }}
+        # The release compile runs on pull requests only (see the job).
+        run: |
+          case "$EVENT_NAME:$RELEASE" in
+            *:success | push:skipped) ;;
+            *) exit 1 ;;
+          esac
+          test "$APK" = success && test "$EMULATOR" = success
