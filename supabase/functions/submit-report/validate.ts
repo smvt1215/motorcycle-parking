@@ -38,6 +38,40 @@ export function validate(body: Record<string, unknown>): string | null {
     (typeof body.reason !== 'string' || body.reason.trim().length < 1 ||
       body.reason.length > 500)
   ) return 'invalid reason';
+  if (body.action === 'flag' && body.field !== undefined) {
+    if (
+      typeof body.field !== 'string' || body.field.trim().length < 1 ||
+      body.field.length > 40
+    ) return 'invalid field';
+  }
+  // A suggested value set: flat, small, and coordinates inside Taiwan.
+  if (body.action === 'flag' && body.proposed !== undefined) {
+    const p = body.proposed as Record<string, unknown>;
+    if (!p || typeof p !== 'object' || Array.isArray(p)) {
+      return 'invalid proposed';
+    }
+    const entries = Object.entries(p);
+    if (entries.length < 1 || entries.length > 20) return 'invalid proposed';
+    for (const [key, value] of entries) {
+      if (key.length > 40) return 'invalid proposed';
+      if (
+        value !== null &&
+        !['string', 'number', 'boolean'].includes(typeof value)
+      ) return 'invalid proposed';
+      if (typeof value === 'string' && value.length > 500) {
+        return 'invalid proposed';
+      }
+      if (typeof value === 'number' && !Number.isFinite(value)) {
+        return 'invalid proposed';
+      }
+    }
+    if (
+      ('lat' in p &&
+        (typeof p.lat !== 'number' || p.lat < 20 || p.lat > 27)) ||
+      ('lng' in p &&
+        (typeof p.lng !== 'number' || p.lng < 118 || p.lng > 123))
+    ) return 'invalid coordinates';
+  }
   if (
     body.note !== undefined &&
     (typeof body.note !== 'string' || body.note.length > 500)
