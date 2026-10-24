@@ -20,6 +20,7 @@ import 'space_type_sheet.dart';
 import 'spot_sheet.dart';
 import 'vehicle_sheet.dart';
 import 'google_parking_map.dart';
+import 'cluster_badge.dart';
 
 class MapPage extends ConsumerStatefulWidget {
   const MapPage({super.key, this.showControls = true});
@@ -43,14 +44,6 @@ class _MapPageState extends ConsumerState<MapPage> {
   /// The spot sheet sits on the root overlay, over the tab bar as in map
   /// apps, while the rest of the map still takes gestures.
   final sheetPortal = OverlayPortalController()..show();
-
-  /// Screen height below the status bar, which the spot sheet's extents are
-  /// fractions of.
-  double sheetSpace = 0;
-
-  /// Screen space below this page (the Android navigation bar); the iOS map
-  /// already extends behind its floating tab bar.
-  double mapBottomGap = 0;
 
   /// Kept for dispose, where `ref` can no longer be read.
   late final launchStore = ref.read(storeProvider);
@@ -178,21 +171,16 @@ class _MapPageState extends ConsumerState<MapPage> {
     _showSpot(spot, zoom: 17);
   }
 
-  /// Opens [spot]'s details, or switches to it from another spot, and
-  /// centers it above the sheet.
+  /// Centers the selected point above the panel once. Closing the panel
+  /// preserves the resulting camera position, as in Google Maps.
   void _showSpot(ParkingSpot spot, {double? zoom}) {
     setState(() => selected = spot);
-    // After the frame: the Google map centers above the sheet once its new
-    // bottom padding applies.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      unawaited(
-        runAction(
-          context,
-          () => _moveCamera(LatLng(spot.lat, spot.lng), zoom, above: true),
-        ),
-      );
-    });
+    unawaited(
+      runAction(
+        context,
+        () => _moveCamera(LatLng(spot.lat, spot.lng), zoom, above: true),
+      ),
+    );
   }
 
   void _closeSpot() {
@@ -230,37 +218,34 @@ class _MapPageState extends ConsumerState<MapPage> {
     );
   }
 
-  /// Keeps the current zoom when [zoom] is null. With [above], the point
-  /// lands centered over the open spot sheet rather than behind it.
+  /// Keeps the current zoom when [zoom] is null.
   Future<void> _moveCamera(
     LatLng point,
     double? zoom, {
     bool above = false,
   }) async {
+    var inset = 0.0;
+    if (above) {
+      final screen = MediaQuery.sizeOf(context);
+      final box = context.findRenderObject() as RenderBox;
+      final gap =
+          screen.height - box.localToGlobal(Offset(0, box.size.height)).dy;
+      final panel =
+          (screen.height - MediaQuery.paddingOf(context).top) * spotSheetPeek;
+      final mapPadding = AppConfig.useGoogleMaps
+          ? 8 + MediaQuery.paddingOf(context).bottom
+          : 0;
+      inset = (panel - gap - mapPadding).clamp(0, double.infinity) / 2;
+    }
     if (AppConfig.useGoogleMaps) {
-      // The Google map centers within its padding, which clears the sheet.
-      await googleMap.currentState?.moveTo(point, zoom);
+      await googleMap.currentState?.moveTo(point, zoom, abovePanel: inset);
     } else {
       controller.move(
         point,
         zoom ?? controller.camera.zoom,
-        offset: Offset(0, above ? -_sheetInset / 2 : 0),
+        offset: Offset(0, -inset),
       );
     }
-  }
-
-  /// How far the resting sheet reaches up from the map's bottom edge.
-  double get _sheetInset => selected == null
-      ? 0
-      : (sheetSpace * spotSheetPeek - mapBottomGap).clamp(0, double.infinity);
-
-  void _measureMap() {
-    final box = context.findRenderObject() as RenderBox?;
-    if (box == null || !box.hasSize) return;
-    final gap =
-        MediaQuery.sizeOf(context).height -
-        box.localToGlobal(Offset(0, box.size.height)).dy;
-    if ((gap - mapBottomGap).abs() > .5) setState(() => mapBottomGap = gap);
   }
 
   Widget _interceptOverlay(Widget overlay) {
@@ -333,54 +318,44 @@ class _MapPageState extends ConsumerState<MapPage> {
     final filterHeight = (16 + MediaQuery.textScalerOf(context).scale(15))
         .clamp(40.0, double.infinity);
     final open = widget.showControls ? selected : null;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        sheetSpace =
-            MediaQuery.sizeOf(context).height -
-            MediaQuery.paddingOf(context).top;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _measureMap();
-        });
-        return PopScope(
-          // Back closes the details before leaving the map.
-          canPop: open == null,
-          onPopInvokedWithResult: (didPop, _) {
-            if (!didPop) _closeSpot();
-          },
-          child: OverlayPortal(
-            controller: sheetPortal,
-            overlayLocation: OverlayChildLocation.rootOverlay,
-            overlayChildBuilder: (overlay) => open == null
-                ? const SizedBox.shrink()
-                : Positioned(
-                    left: 0,
-                    right: 0,
-                    top: MediaQuery.paddingOf(overlay).top,
-                    bottom: 0,
-                    child: SpotSheet(
-                      key: ValueKey(open.id),
-                      store: store,
-                      spot: open,
-                      onClose: _closeSpot,
-                    ),
-                  ),
-            child: _layers(
-              context,
-              store,
-              colors,
-              darkMap: darkMap,
-              tabBarInset: tabBarInset,
-              spots: spots,
-              matches: matches,
-              query: query,
-              filtered: filtered,
-              searchHeight: searchHeight,
-              filterHeight: filterHeight,
-              open: open,
-            ),
-          ),
-        );
+    return PopScope(
+      // Back closes the details before leaving the map.
+      canPop: open == null,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _closeSpot();
       },
+      child: OverlayPortal(
+        controller: sheetPortal,
+        overlayLocation: OverlayChildLocation.rootOverlay,
+        overlayChildBuilder: (overlay) => open == null
+            ? const SizedBox.shrink()
+            : Positioned(
+                left: 0,
+                right: 0,
+                top: MediaQuery.paddingOf(overlay).top,
+                bottom: 0,
+                child: SpotSheet(
+                  key: ValueKey(open.id),
+                  store: store,
+                  spot: open,
+                  onClose: _closeSpot,
+                ),
+              ),
+        child: _layers(
+          context,
+          store,
+          colors,
+          darkMap: darkMap,
+          tabBarInset: tabBarInset,
+          spots: spots,
+          matches: matches,
+          query: query,
+          filtered: filtered,
+          searchHeight: searchHeight,
+          filterHeight: filterHeight,
+          open: open,
+        ),
+      ),
     );
   }
 
@@ -411,7 +386,6 @@ class _MapPageState extends ConsumerState<MapPage> {
                 (ModalRoute.of(context)?.isCurrent ?? true),
             panelVisible: !widget.showControls,
             selected: open,
-            sheetInset: _sheetInset,
             onMapTap: _closeSpot,
             location: store.located ? LatLng(store.lat, store.lng) : null,
             onViewport: (bounds, center) {
@@ -510,7 +484,7 @@ class _MapPageState extends ConsumerState<MapPage> {
               MarkerClusterLayerWidget(
                 options: MarkerClusterLayerOptions(
                   maxClusterRadius: 45,
-                  size: const Size(46, 46),
+                  size: const Size.square(clusterBadgeSize),
                   markers: [
                     for (final s in spots)
                       if (s.id != open?.id)
@@ -531,24 +505,8 @@ class _MapPageState extends ConsumerState<MapPage> {
                           ),
                         ),
                   ],
-                  builder: (context, markers) => Container(
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: colors.primary,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: colors.surface, width: 3),
-                      boxShadow: const [
-                        BoxShadow(color: Color(0x26000000), blurRadius: 8),
-                      ],
-                    ),
-                    child: Text(
-                      '${markers.length}',
-                      style: TextStyle(
-                        color: colors.onPrimary,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
+                  builder: (context, markers) =>
+                      ClusterBadge(count: markers.length),
                 ),
               ),
               // Outside the clusters, so the open spot never folds away.

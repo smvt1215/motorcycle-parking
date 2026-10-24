@@ -72,14 +72,12 @@ Future<void> showSpotSuggestions(
                           overflow: TextOverflow.ellipsis,
                         ),
                         trailing: const Icon(Icons.chevron_right),
-                        onTap: () => showAdaptiveSheet<void>(
+                        onTap: () => _showSuggestionForm(
                           ctx,
-                          (formContext) => _SuggestionForm(
-                            store: store,
-                            spot: spot,
-                            field: item.$1,
-                            current: item.$3,
-                          ),
+                          store,
+                          spot,
+                          field: item.$1,
+                          current: item.$3,
                         ),
                       ),
                       if (item.$1 != '位置或其他備註')
@@ -105,14 +103,8 @@ Future<void> showSpotSuggestions(
                   title: const Text('點位已不存在'),
                   subtitle: const Text('格位已撤除，或此處已無法停車'),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => showAdaptiveSheet<void>(
-                    ctx,
-                    (formContext) => _SuggestionForm(
-                      store: store,
-                      spot: spot,
-                      field: '點位已不存在',
-                    ),
-                  ),
+                  onTap: () =>
+                      _showSuggestionForm(ctx, store, spot, field: '點位已不存在'),
                 ),
               ),
               const SizedBox(height: 20),
@@ -125,16 +117,41 @@ Future<void> showSpotSuggestions(
   ),
 );
 
+Future<void> _showSuggestionForm(
+  BuildContext context,
+  AppStore store,
+  ParkingSpot spot, {
+  required String field,
+  String? current,
+}) async {
+  var submitted = false;
+  await showAdaptiveSheet<void>(
+    context,
+    (_) => _SuggestionForm(
+      store: store,
+      spot: spot,
+      field: field,
+      current: current,
+      onSubmitted: () => submitted = true,
+    ),
+  );
+  // Any dismissal after success (Done, close, back or drag) closes the picker
+  // too. Cancelling or a failed request keeps it available for another edit.
+  if (submitted && context.mounted) Navigator.pop(context);
+}
+
 class _SuggestionForm extends StatefulWidget {
   const _SuggestionForm({
     required this.store,
     required this.spot,
     required this.field,
+    required this.onSubmitted,
     this.current,
   });
   final AppStore store;
   final ParkingSpot spot;
   final String field;
+  final VoidCallback onSubmitted;
 
   /// The value shown today; null for the "no longer exists" report.
   final String? current;
@@ -184,7 +201,10 @@ class _SuggestionFormState extends State<_SuggestionForm> {
         'source_id': widget.spot.id,
         'reason': reason(),
       });
-      if (mounted) setState(() => sent = true);
+      if (mounted) {
+        widget.onSubmitted();
+        setState(() => sent = true);
+      }
     } catch (e) {
       if (mounted) {
         setState(

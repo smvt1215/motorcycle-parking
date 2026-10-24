@@ -203,7 +203,7 @@ void main() {
         'source_url': url,
       });
       await openDetails(tester, store, spot);
-      await showField(tester, '資料資訊');
+      await showField(tester, '資料與查核');
       await tester.drag(detailScroll, const Offset(0, -800));
       await tester.pumpAndSettle();
       expect(
@@ -302,11 +302,10 @@ void main() {
     );
     expect(find.text('測試地下停車場'), findsOneWidget);
     for (final field in [
-      '基本資訊',
+      '停車資訊',
       '類型',
-      '費率',
-      '停放車種',
-      '位置與停放',
+      '分區',
+      '位置與指引',
       '入口',
       '停車指引',
       '位置',
@@ -314,7 +313,7 @@ void main() {
       '現場補充',
       '照片',
       '備註',
-      '資料資訊',
+      '資料與查核',
       '資料來源',
       '查核狀態',
       '更新時間',
@@ -332,13 +331,13 @@ void main() {
     final store = (await tester.runAsync(createStore))!;
     addTearDown(store.dispose);
     await openDetails(tester, store, roadside);
-    await showField(tester, '位置與停放');
+    await showField(tester, '位置與指引');
     expect(find.text('入口'), findsNothing);
     expect(find.textContaining('測試路：甲路口'), findsOneWidget);
-    await showField(tester, '資料資訊');
+    await showField(tester, '資料與查核');
     expect(find.text('即時車位狀態'), findsNothing);
     expect(find.textContaining('機車剩餘'), findsNothing);
-    expect(find.text('更新時間'), findsOneWidget);
+    expect(find.textContaining('更新時間'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -347,6 +346,7 @@ void main() {
     final store = (await tester.runAsync(createStore))!;
     addTearDown(store.dispose);
     await openDetails(tester, store, facility(available: 0));
+    expect(find.text('車位時間未提供'), findsOneWidget);
     await showField(tester, '即時車位狀態');
     expect(find.textContaining('機車剩餘 0 格 / 20 格'), findsOneWidget);
     expect(find.textContaining('車位資料時間未提供'), findsOneWidget);
@@ -368,7 +368,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('詳情標題列並排收藏、分享、關閉，副標顯示類型、地區與距離', (tester) async {
+  testWidgets('詳情名稱保留完整寬度，收藏分享移到副標操作列', (tester) async {
     usePhone(tester);
     final store = (await tester.runAsync(createStore))!;
     addTearDown(store.dispose);
@@ -378,15 +378,111 @@ void main() {
       ..located = true;
     await openDetails(tester, store, facility());
     final title = tester.getRect(find.text('測試地下停車場'));
-    // Typical names fit on one line beside the buttons.
     expect(title.height, lessThan(40));
-    for (final tooltip in ['收藏停車點', '分享停車點', '關閉詳情']) {
+    expect(title.width, greaterThan(240));
+    expect(
+      tester.getCenter(find.byTooltip('關閉詳情')).dy,
+      closeTo(title.center.dy, 24),
+    );
+    for (final tooltip in ['收藏停車點', '分享停車點']) {
       expect(
         tester.getCenter(find.byTooltip(tooltip)).dy,
-        closeTo(title.center.dy, 24),
+        greaterThan(title.bottom),
       );
     }
     expect(find.text('地下停車場 · 臺北市 · 內湖區 · 330 公尺'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('捲到資料查核仍可直接導航或修改建議，空白指引省略', (tester) async {
+    usePhone(tester);
+    final store = (await tester.runAsync(createStore))!;
+    addTearDown(store.dispose);
+    await openDetails(tester, store, roadside);
+    final action = tester.getRect(find.text('導航到這裡'));
+    await showField(tester, '位置與指引');
+    expect(find.textContaining('尚未提供：停車指引'), findsNothing);
+    expect(find.text('停車指引'), findsNothing);
+    expect(find.text('特殊規則'), findsNothing);
+    await showField(tester, '資料與查核');
+    expect(tester.getRect(find.text('導航到這裡')), action);
+    expect(find.text('修改建議').hitTestable(), findsOneWidget);
+    expect(find.text('未提供'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('橫向矮畫面加大字級時，操作列改放清單末端，標題不被擠掉', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(640, 320);
+    tester.view.padding = const FakeViewPadding(top: 24);
+    addTearDown(tester.view.reset);
+    final store = (await tester.runAsync(createStore))!;
+    addTearDown(store.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: const TextScaler.linear(1.6)),
+          child: child!,
+        ),
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showSpot(context, store, roadside),
+              child: const Text('開啟詳情'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('開啟詳情'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text(roadside.name).hitTestable(), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('導航到這裡'),
+      80,
+      scrollable: detailScroll,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('導航到這裡').hitTestable(), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('共用格的摘要跟隨目前車種，缺少大型重機費率不沿用普通機車價格', (tester) async {
+    usePhone(tester);
+    final store = (await tester.runAsync(createStore))!;
+    addTearDown(store.dispose);
+    final spot = ParkingSpot.fromJson({
+      ...roadside.toJson(),
+      'parking_zones': [
+        {
+          'name': '共用機車格',
+          'access': 'scooterHeavy',
+          'scooter_fee_note': '20 元／次',
+        },
+      ],
+    });
+    await openDetails(tester, store, spot);
+    expect(find.text('普通機車費率'), findsOneWidget);
+    expect(find.text('費率'), findsNothing);
+    expect(find.text('分區'), findsOneWidget);
+    expect(find.text('20 元／次'), findsOneWidget);
+    store.vehicle = VehicleType.heavy;
+    store.notifyListeners();
+    await tester.pumpAndSettle();
+    final summary = find
+        .ancestor(of: find.text('大型重機費率'), matching: find.byType(Column))
+        .first;
+    expect(
+      find.descendant(of: summary, matching: find.text('尚未提供')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: summary, matching: find.text('20 元／次')),
+      findsNothing,
+    );
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -409,7 +505,8 @@ void main() {
       store,
       facility(photos: ['https://photos.invalid/entry.jpg']),
     );
-    // Usable photos lead the sheet as a strip, not under 現場補充.
+    // Photos follow the parking and arrival information under 現場補充.
+    await showField(tester, '現場補充');
     expect(find.byKey(const ValueKey('spot-photo-strip')), findsOneWidget);
     expect(find.text('尚無照片'), findsNothing);
     await tester.scrollUntilVisible(

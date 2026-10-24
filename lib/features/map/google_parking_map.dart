@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -9,8 +8,11 @@ import 'package:pointer_interceptor/pointer_interceptor.dart';
 
 import '../../domain/eligibility.dart';
 import '../../domain/map_viewport.dart';
+import '../../domain/map_camera.dart';
+import '../../domain/spot_clusters.dart';
 import '../../models/parking.dart';
 import '../../ui/adaptive/adaptive.dart';
+import 'cluster_badge.dart';
 import 'map_legend.dart';
 import 'maps_sdk.dart';
 
@@ -27,7 +29,6 @@ class GoogleParkingMap extends StatefulWidget {
     this.onMapTap,
     this.location,
     this.selected,
-    this.sheetInset = 0,
     this.panelVisible = false,
   });
 
@@ -45,16 +46,13 @@ class GoogleParkingMap extends StatefulWidget {
   /// even when it is no longer in [spots].
   final ParkingSpot? selected;
 
-  /// Height of the spot sheet over the map's bottom edge; the camera centers
-  /// above it.
-  final double sheetInset;
-
   @override
   State<GoogleParkingMap> createState() => GoogleParkingMapState();
 }
 
 class GoogleParkingMapState extends State<GoogleParkingMap> {
-  static const clusterId = gm.ClusterManagerId('parking');
+  final clusterIcons = <int, gm.BitmapDescriptor>{};
+  final clusterLoads = <int, Future<void>>{};
   gm.GoogleMapController? controller;
   late gm.CameraPosition camera;
   late Future<Map<(MarkerLook, SpaceBadge?, bool), gm.BitmapDescriptor>> ready;
@@ -63,14 +61,14 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
   gm.BitmapDescriptor? locationIcon;
   int viewportGeneration = 0;
   Size? lastSize;
-  (LatLng, double?)? pendingMove;
+  (LatLng, double?, double)? pendingMove;
   bool viewportFailed = false;
-  List<Timer> paddingReads = [];
 
   @override
   void initState() {
     super.initState();
     camera = gm.CameraPosition(target: _googlePoint(widget.center), zoom: 16);
+    _loadClusterIcons();
     ready = _prepare();
     unawaited(
       _locationIcon().then((icon) {
@@ -82,6 +80,7 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
   Future<Map<(MarkerLook, SpaceBadge?, bool), gm.BitmapDescriptor>>
   _prepare() async {
     await initializeMapsSdk();
+    await Future.wait(clusterLoads.values);
     final variants = [
       for (final status in EligibilityStatus.values)
         for (final restriction in [
@@ -103,57 +102,84 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
   }
 
   /// Keeps the current zoom when [zoom] is null.
-  Future<void> moveTo(LatLng point, double? zoom) async {
+  Future<void> moveTo(
+    LatLng point,
+    double? zoom, {
+    double abovePanel = 0,
+  }) async {
     final active = controller;
     if (active == null) {
-      pendingMove = (point, zoom);
+      pendingMove = (point, zoom, abovePanel);
       return;
     }
+    final target = centerAbovePanel(point, zoom ?? camera.zoom, abovePanel);
     await active.animateCamera(
       zoom == null
-          ? gm.CameraUpdate.newLatLng(_googlePoint(point))
-          : gm.CameraUpdate.newLatLngZoom(_googlePoint(point), zoom),
+          ? gm.CameraUpdate.newLatLng(_googlePoint(target))
+          : gm.CameraUpdate.newLatLngZoom(_googlePoint(target), zoom),
     );
   }
 
   @override
   void didUpdateWidget(GoogleParkingMap oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Padding changes move no camera, so no idle event reports the region it
-    // uncovers: back from a tab panel, the map would keep only the spots in
-    // the strip the panel left open.
-    if (oldWidget.panelVisible != widget.panelVisible ||
-        oldWidget.interactive != widget.interactive ||
-        oldWidget.sheetInset != widget.sheetInset) {
-      _publishAfterPadding();
+    _loadClusterIcons();
+    // Resume viewport queries after a modal/tab panel closes, even when the
+    // user did not move the map (so no camera-idle event will arrive).
+    if ((oldWidget.panelVisible || !oldWidget.interactive) &&
+        !widget.panelVisible &&
+        widget.interactive) {
+      unawaited(_publishViewport());
     }
   }
 
-  /// GoogleMap sends new padding in a microtask after this frame, so a read
-  /// at the end of the frame would still see the old layout. Read once the
-  /// update is out, then again once the native map has laid it out.
-  void _publishAfterPadding() {
-    for (final timer in paddingReads) {
-      timer.cancel();
+  List<SpotCluster> get _clusters => clusterSpots(
+    widget.spots.where((spot) => spot.id != widget.selected?.id).toList(),
+    camera.zoom,
+  );
+  void _loadClusterIcons() {
+    for (final group in _clusters) {
+      final count = group.spots.length;
+      if (count < 2) continue;
+      clusterLoads.putIfAbsent(count, () => _loadClusterIcon(count));
     }
-    paddingReads = [
-      for (final delay in const [Duration.zero, Duration(milliseconds: 300)])
-        Timer(delay, () {
-          if (mounted) unawaited(_publishViewport());
-        }),
-    ];
+  }
+
+  Future<void> _loadClusterIcon(int count) async {
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder)..scale(2);
+    ClusterBadgePainter(count)
+        .paint(canvas, const Size.square(clusterBadgeSize));
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(112, 112);
+    picture.dispose();
+    final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+    image.dispose();
+    if (!mounted) return;
+    setState(
+      () => clusterIcons[count] = gm.BitmapDescriptor.bytes(
+        bytes!.buffer.asUint8List(),
+        imagePixelRatio: 2,
+        width: clusterBadgeSize,
+        height: clusterBadgeSize,
+      ),
+    );
   }
 
   Future<void> _publishViewport() async {
     final active = controller;
-    // Under a tab panel or a modal sheet only part of the map shows; keep
-    // the last full region.
+    // Covered maps keep the last full region until they become interactive.
     if (active == null || widget.panelVisible || !widget.interactive) return;
     final generation = ++viewportGeneration;
     final target = camera.target;
     try {
       final bounds = await active.getVisibleRegion();
-      if (!mounted || generation != viewportGeneration) return;
+      if (!mounted ||
+          generation != viewportGeneration ||
+          widget.panelVisible ||
+          !widget.interactive) {
+        return;
+      }
       widget.onViewport(
         MapViewport(
           south: bounds.southwest.latitude,
@@ -175,16 +201,13 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
     controller = value;
     if (pendingMove case final move?) {
       pendingMove = null;
-      await moveTo(move.$1, move.$2);
+      await moveTo(move.$1, move.$2, abovePanel: move.$3);
     }
     await _publishViewport();
   }
 
   @override
   void dispose() {
-    for (final timer in paddingReads) {
-      timer.cancel();
-    }
     viewportGeneration++;
     // GoogleMap owns and disposes its platform controller.
     controller = null;
@@ -220,23 +243,9 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
                 initialCameraPosition: camera,
                 style: dark ? _darkMapStyle : null,
                 padding: EdgeInsets.only(
-                  top: widget.panelVisible ? 0 : 108,
-                  bottom: widget.panelVisible
-                      ? size.height * .92
-                      : math.max(
-                          // The open spot sheet covers the tab bar; the logo
-                          // and camera center sit just above it.
-                          widget.sheetInset,
-                          // A modal sheet (legend, vehicle, report), even
-                          // over open details, would cover the logo.
-                          !widget.interactive
-                              ? size.height * .55
-                              : widget.sheetInset > 0
-                              ? 0
-                              // Lift the Google logo above the iOS floating
-                              // tab bar.
-                              : 8 + MediaQuery.paddingOf(context).bottom,
-                        ),
+                  // Sheet transitions must not change the map's projection.
+                  top: 108,
+                  bottom: 8 + MediaQuery.paddingOf(context).bottom,
                 ),
                 onTap: widget.onMapTap == null
                     ? null
@@ -247,7 +256,11 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
                   camera = position;
                   viewportGeneration++;
                 },
-                onCameraIdle: () => unawaited(_publishViewport()),
+                onCameraIdle: () {
+                  _loadClusterIcons();
+                  setState(() {});
+                  unawaited(_publishViewport());
+                },
                 scrollGesturesEnabled: widget.interactive,
                 zoomGesturesEnabled: widget.interactive,
                 rotateGesturesEnabled: false,
@@ -263,22 +276,6 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
                     : (point) => widget.onLongPress!(
                         LatLng(point.latitude, point.longitude),
                       ),
-                clusterManagers: {
-                  gm.ClusterManager(
-                    clusterManagerId: clusterId,
-                    onClusterTap: !widget.interactive
-                        ? null
-                        : (cluster) => unawaited(
-                            moveTo(
-                              LatLng(
-                                cluster.position.latitude,
-                                cluster.position.longitude,
-                              ),
-                              (camera.zoom + 2).clamp(0, 20).toDouble(),
-                            ),
-                          ),
-                  ),
-                },
                 markers: {
                   if ((widget.location, locationIcon) case (
                     final point?,
@@ -292,11 +289,31 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
                       zIndexInt: 1000,
                       consumeTapEvents: true,
                     ),
-                  for (final spot in [
-                    ...widget.spots.where((s) => s.id != widget.selected?.id),
-                    ?widget.selected,
-                  ])
-                    _marker(icons, spot, selected: spot == widget.selected),
+                  for (final group in _clusters)
+                    if (group.spots.length > 1 &&
+                        clusterIcons.containsKey(group.spots.length))
+                      gm.Marker(
+                        markerId: gm.MarkerId(
+                          'cluster:${group.spots.first.id}',
+                        ),
+                        position: _googlePoint(group.center),
+                        icon: clusterIcons[group.spots.length]!,
+                        anchor: const Offset(.5, .5),
+                        consumeTapEvents: true,
+                        onTap: !widget.interactive
+                            ? null
+                            : () => unawaited(
+                                moveTo(
+                                  group.center,
+                                  (camera.zoom + 2).clamp(0, 20).toDouble(),
+                                ),
+                              ),
+                      )
+                    else
+                      for (final spot in group.spots)
+                        _marker(icons, spot, selected: false),
+                  if (widget.selected case final spot?)
+                    _marker(icons, spot, selected: true),
                 },
               ),
               if (kIsWeb && !widget.interactive)
@@ -319,9 +336,8 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
 
 extension on GoogleParkingMapState {
   /// No info window: the spot sheet carries the name and status for every
-  /// spot alike. The selected spot leaves its cluster so it never hides,
-  /// under its own id: the iOS plugin drops a marker whose cluster id is
-  /// removed in place instead of putting it back on the map.
+  /// spot alike. Selected spots remain separate from count markers and keep
+  /// a distinct id while their appearance changes.
   gm.Marker _marker(
     Map<(MarkerLook, SpaceBadge?, bool), gm.BitmapDescriptor> icons,
     ParkingSpot spot, {
@@ -336,7 +352,6 @@ extension on GoogleParkingMapState {
           selected,
         )]!,
     anchor: const Offset(.5, .5),
-    clusterManagerId: selected ? null : GoogleParkingMapState.clusterId,
     zIndexInt: selected ? 500 : 0,
     consumeTapEvents: true,
     onTap: widget.interactive ? () => widget.onSpotTap(spot) : null,
