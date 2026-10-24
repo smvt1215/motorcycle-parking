@@ -454,7 +454,7 @@ class AppStore extends ChangeNotifier {
                       15,
             )
             .firstOrNull;
-        if (existing != null) return '15 公尺內已有「${existing.name}」，請確認既有點位';
+        if (existing != null) return '15 公尺內已有「${existing.name}」，請確認既有停車點';
         final spot = ParkingSpot.fromJson({
           ...data,
           'id': 'demo-${DateTime.now().microsecondsSinceEpoch}',
@@ -470,7 +470,7 @@ class AppStore extends ChangeNotifier {
     final result = await parking.report(body);
     await refresh();
     return result['duplicate_id'] != null
-        ? '附近已有相同類型點位，請確認既有點'
+        ? '附近已有相同類型的停車點，請確認既有停車點'
         : '回報已送出，等待管理者確認';
   }
 

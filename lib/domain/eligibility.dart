@@ -73,7 +73,7 @@ Eligibility _judge(
   // its reported vehicle fields are right.
   final trusted = spot.isOfficial || _recentlyConfirmed(spot, now);
   if (explicit == false && trusted) {
-    return const Eligibility(EligibilityStatus.notAllowed, '此點位標示不開放目前車種');
+    return const Eligibility(EligibilityStatus.notAllowed, '此停車點標示不開放目前車種');
   }
   // Bays reserved by law or by vehicle, whatever the city rule says.
   switch (spot.spaceType) {
@@ -146,7 +146,7 @@ Eligibility _judge(
     if (spot.district.isEmpty) {
       return Eligibility(
         EligibilityStatus.unverified,
-        '僅${openIn.join('、')}開放，無法判斷此點位所在行政區',
+        '僅${openIn.join('、')}開放，無法判斷此停車點所在行政區',
       );
     }
     if (!openIn.contains(spot.district)) {
