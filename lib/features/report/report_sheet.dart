@@ -77,7 +77,7 @@ class _AccountCard extends StatelessWidget {
         user?.userMetadata?['name'] as String?;
     final email = user?.email;
     final (title, detail) = store.demo
-        ? ('範例模式', '目前使用範例資料。回報只用於功能測試，請勿依範例點位停車。')
+        ? ('範例模式', '目前使用範例資料。回報只用於功能測試，請勿依範例資料停車。')
         : !signedIn
         ? ('尚未登入', '登入後可回報停車點與同步收藏。瀏覽與記錄停車位置不需登入。')
         // A name heads the card with the email under it; else the email.
@@ -516,7 +516,7 @@ class _ReportFormState extends State<ReportForm> {
             SheetTitle('新增停車點'),
             const SizedBox(height: 8),
             Text(
-              '新增點位會顯示於地圖，回報資訊待管理者確認；停放資格請依現場標示。',
+              '新增的停車點會顯示於地圖，回報資訊待管理者確認；停放資格請依現場標示。',
               style: TextStyle(color: colors.onSurfaceVariant),
             ),
             const SizedBox(height: 16),

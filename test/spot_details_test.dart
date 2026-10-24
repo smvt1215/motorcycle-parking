@@ -207,7 +207,7 @@ void main() {
       await tester.drag(detailScroll, const Offset(0, -800));
       await tester.pumpAndSettle();
       expect(
-        find.text('查看點位資料來源'),
+        find.text('查看停車點資料來源'),
         url.startsWith('https://example.com') ||
                 url.startsWith('http://example.com')
             ? findsOneWidget
