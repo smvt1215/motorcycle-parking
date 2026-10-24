@@ -25,6 +25,7 @@ void main() {
     city: '臺北市',
     spaceType: type,
     status: status,
+    lastConfirmedAt: DateTime.now().subtract(const Duration(days: 1)),
   );
   Eligibility judge(
     SpaceType type,

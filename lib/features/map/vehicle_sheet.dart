@@ -95,7 +95,7 @@ class VehicleChoice extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                _PlateStack(plates: platesOf(vehicle)),
+                PlateStack(plates: platesOf(vehicle)),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(
@@ -134,8 +134,8 @@ class VehicleChoice extends StatelessWidget {
 }
 
 /// The class's two plate colours, overlapping like bikes parked in a row.
-class _PlateStack extends StatelessWidget {
-  const _PlateStack({required this.plates});
+class PlateStack extends StatelessWidget {
+  const PlateStack({super.key, required this.plates});
   final List<(Color, Color)> plates;
   @override
   Widget build(BuildContext context) => SizedBox(

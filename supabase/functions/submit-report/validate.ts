@@ -9,6 +9,60 @@ const spaceTypes = [
   'flexShared',
   'evMotorcycle',
 ];
+// Suggestion categories the app sends as `field`: stable keys, plus the
+// Chinese labels sent before the keys existed. The readable summary stays in
+// `reason` for older app versions.
+const suggestionFields = [
+  'name',
+  'space_type',
+  'fee_note',
+  'eligibility',
+  'note',
+  'gone',
+  '停車點名稱',
+  '格位類型',
+  '收費資訊',
+  '機車停放資格',
+  '位置或其他備註',
+  '點位已不存在',
+];
+const text = (max: number, min = 0) => (v: unknown) =>
+  typeof v === 'string' && v.trim().length >= min && v.length <= max;
+// A real string, not one coerced from an array: ['x'] must not pass as 'x'.
+const oneOf = (values: string[]) => (v: unknown) =>
+  v === null || (typeof v === 'string' && values.includes(v));
+const flag = (v: unknown) => v === null || typeof v === 'boolean';
+const coordinate = (v: unknown) => typeof v === 'number' && Number.isFinite(v);
+// Mirrors the columns admin_resolve_report may patch, plus how riders ask to
+// take a spot down: status for community spots, hidden for official ones.
+const proposedChecks: Record<string, (v: unknown) => boolean> = {
+  name: text(100, 1),
+  lat: coordinate,
+  lng: coordinate,
+  city: text(30, 1),
+  district: text(30),
+  space_type: (v) => typeof v === 'string' && spaceTypes.includes(v),
+  fee_note: text(200),
+  note: text(500),
+  scooter_allowed: flag,
+  heavy_allowed: flag,
+  facility_type: oneOf(['multiStorey', 'underground', 'surface', 'roadside']),
+  parking_access: oneOf([
+    'scooterOnly',
+    'scooterHeavy',
+    'heavyCar',
+    'noMotorcycle',
+    'heavyOnly',
+  ]),
+  address: text(200),
+  road_segment: text(200),
+  entrance_note: text(500),
+  parking_guide: text(500),
+  special_rules: text(500),
+  status: (v) => v === 'hidden',
+  // Riders ask to take a spot down; restoring one is an admin decision.
+  hidden: (v) => v === true,
+};
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export function validate(body: Record<string, unknown>): string | null {
@@ -38,13 +92,12 @@ export function validate(body: Record<string, unknown>): string | null {
     (typeof body.reason !== 'string' || body.reason.trim().length < 1 ||
       body.reason.length > 500)
   ) return 'invalid reason';
-  if (body.action === 'flag' && body.field !== undefined) {
-    if (
-      typeof body.field !== 'string' || body.field.trim().length < 1 ||
-      body.field.length > 40
-    ) return 'invalid field';
-  }
-  // A suggested value set: flat, small, and coordinates inside Taiwan.
+  if (
+    body.action === 'flag' && body.field !== undefined &&
+    (typeof body.field !== 'string' || !suggestionFields.includes(body.field))
+  ) return 'invalid field';
+  // A suggested value set: only columns an admin can apply as a patch, each
+  // with the type and length its table allows.
   if (body.action === 'flag' && body.proposed !== undefined) {
     const p = body.proposed as Record<string, unknown>;
     if (!p || typeof p !== 'object' || Array.isArray(p)) {
@@ -52,18 +105,17 @@ export function validate(body: Record<string, unknown>): string | null {
     }
     const entries = Object.entries(p);
     if (entries.length < 1 || entries.length > 20) return 'invalid proposed';
+    const official = String(body.source_id).startsWith('official:');
     for (const [key, value] of entries) {
-      if (key.length > 40) return 'invalid proposed';
+      // Own keys only: `toString` or `__proto__` must not find a prototype member.
+      const check = Object.hasOwn(proposedChecks, key)
+        ? proposedChecks[key]
+        : undefined;
+      // Community spots are hidden by status, official spots by a flag.
       if (
-        value !== null &&
-        !['string', 'number', 'boolean'].includes(typeof value)
+        !check || (key === 'status' && official) ||
+        (key === 'hidden' && !official) || !check(value)
       ) return 'invalid proposed';
-      if (typeof value === 'string' && value.length > 500) {
-        return 'invalid proposed';
-      }
-      if (typeof value === 'number' && !Number.isFinite(value)) {
-        return 'invalid proposed';
-      }
     }
     if (
       ('lat' in p &&
