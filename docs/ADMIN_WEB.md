@@ -96,7 +96,7 @@
 | P0 | staging 設定 admin 帳號、兩個以上驗證器 App 與（選用）簡訊供應商 | 能取得 `aal2` JWT |
 | P1 後端基礎 | 後端變更 1、2、4、5（`admin_resolve_report`）與 pgTAP | `supabase test db` 通過 |
 | P2 外殼 | `main_admin.dart`、登入、驗證方式登記與選擇（驗證器 App、簡訊）、go_router 版面、非 admin 拒絕畫面、Firebase Hosting（CSP、`X-Frame-Options: DENY`、`noindex`） | staging 可登入 |
-| P3 審核佇列 | 篩選、差異表、小地圖、套用／修改後套用／駁回；App 改送結構化建議 | 不用 Dashboard 也能審核 |
+| P3 審核佇列 | 篩選、差異表、小地圖、套用／修改後套用／駁回；App 改送結構化建議；採納前比對點位版本（[社群核實計畫](COMMUNITY_VERIFICATION_PLAN.md) §5.2） | 不用 Dashboard 也能審核；建議送出後點位已改版時，採納會提示衝突而不直接覆蓋（pgTAP 覆蓋） |
 | P4 點位 | 地圖圖層、清單、編輯表單、來源、改為官方點、新增停車點、位置選擇元件 | — |
 | P5 規則 | 規則表單、預覽、版本遞增；`tool/export_rules.py` 從 DB 匯出規則避免與 `parking_rules.json` 不一致 | — |
 | P6 匯入 | 上傳 `import_mymaps.py` 的 JSON → 差異試算 → 套用 | — |

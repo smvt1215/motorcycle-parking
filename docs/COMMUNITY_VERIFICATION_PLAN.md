@@ -262,7 +262,7 @@ RLS：只開放本人查自己的提案；管理員 `is_admin()` 才能檢視全
 
 ### P1 — 結構化共筆與審核串接
 
-> 與 [`ADMIN_WEB.md`](ADMIN_WEB.md#階段) P3「審核佇列」為同一份交付：P3 已包含「App 改送結構化建議」與差異表審核。本階段不另開重複工作，只補充本文的欄位白名單、相容性與版本衝突要求。
+> 與 [`ADMIN_WEB.md`](ADMIN_WEB.md#階段) P3「審核佇列」為同一份交付：P3 已包含「App 改送結構化建議」與差異表審核。本階段不另開重複工作，只補充本文的欄位白名單與相容性要求。**版本衝突檢查已決定併入 P3**：建議送出時記錄點位的基礎版本，`admin_resolve_report` 採納時比對，不一致就拒絕套用並要求重新檢視。
 
 **範圍：**
 - `lib/features/report/spot_suggestions.dart`：填入 `field/proposed/note`，保留原 `reason`。
