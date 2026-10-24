@@ -14,16 +14,10 @@ Future<void> showSettings(
   context,
   (ctx) => ContentPage(
     children: [
-      SheetTitle('車種與帳號'),
+      // The vehicle is switched beside what it changes: the map's
+      // vehicle pill (and the rules page filter), not here.
+      SheetTitle('帳號與設定'),
       const SizedBox(height: 16),
-      VehicleSelector(
-        value: store.vehicle,
-        onChanged: (v) {
-          store.setVehicle(v);
-          Navigator.pop(ctx);
-        },
-      ),
-      const SizedBox(height: 24),
       if (store.demo)
         const Text('目前使用範例資料。回報只用於功能測試，請勿依範例點位停車。')
       else if (store.client!.auth.currentUser == null ||

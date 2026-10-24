@@ -4,33 +4,34 @@ import '../../data/app_store.dart';
 import '../../models/parking.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../../ui/map_panel.dart';
-import '../map/spot_sheet.dart';
+import '../map/map_legend.dart';
 import '../report/report_sheet.dart';
+import '../report/spot_suggestions.dart';
+
+/// Spots listed in the panel before "show all".
+const _listed = 8;
 
 class ContributePage extends ConsumerWidget {
   const ContributePage({super.key});
 
-  void _pickSpot(BuildContext context, AppStore store, String title) {
+  /// Every spot in view, for when the panel's short list is not enough.
+  void _pickSpot(BuildContext context, AppStore store) {
     final spots = store.spots;
     showAdaptiveSheet<void>(
       context,
       (ctx) => ContentPage(
         children: [
-          SheetTitle(title),
+          SheetTitle('修正現有資訊'),
           const SizedBox(height: 8),
-          const Text('選擇目前地圖範圍內的停車點，再依現場狀況補充資訊。'),
+          const Text('選擇目前地圖範圍內的停車點，修改資訊或回報已不存在。'),
           const SizedBox(height: 16),
-          if (spots.isEmpty) const Text('目前範圍尚無停車點，請移動地圖或新增回報。'),
           for (final spot in spots)
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.local_parking_outlined),
-              title: Text(spot.name),
-              subtitle: Text('${spot.city} · ${spot.spaceType.label}'),
-              trailing: const Icon(Icons.chevron_right),
+            _SpotRow(
+              store: store,
+              spot: spot,
               onTap: () {
                 Navigator.pop(ctx);
-                showSpot(context, store, spot);
+                showSpotSuggestions(context, store, spot);
               },
             ),
           TextButton(
@@ -91,13 +92,17 @@ class ContributePage extends ConsumerWidget {
             onTap: () => showSettings(context, store),
           ),
         ),
-        const SizedBox(height: 24),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _ContributionAction(
-              label: '新增停車點',
-              icon: Icons.add_location_alt_outlined,
+        const SizedBox(height: 20),
+        // One way in for each kind of contribution. Editing a spot and
+        // reporting it gone share the suggestion sheet, so they share the
+        // list below rather than two buttons that did the same thing.
+        Material(
+          color: colors.primaryContainer,
+          borderRadius: BorderRadius.circular(20),
+          clipBehavior: Clip.antiAlias,
+          child: Tooltip(
+            message: '新增停車點',
+            child: InkWell(
               onTap: () => showReport(
                 context,
                 store,
@@ -105,56 +110,66 @@ class ContributePage extends ConsumerWidget {
                 store.mapLng,
                 mapCenter: true,
               ),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.add_location_alt_outlined,
+                      size: 28,
+                      color: colors.onPrimaryContainer,
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '新增停車點',
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(color: colors.onPrimaryContainer),
+                          ),
+                          Text(
+                            '回報地圖上還沒有的停車點',
+                            style: TextStyle(color: colors.onPrimaryContainer),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(Icons.chevron_right, color: colors.onPrimaryContainer),
+                  ],
+                ),
+              ),
             ),
-            _ContributionAction(
-              label: '修改資訊',
-              icon: Icons.fact_check_outlined,
-              onTap: () => _pickSpot(context, store, '修改停車資訊'),
-            ),
-            _ContributionAction(
-              label: '檢舉錯誤',
-              icon: Icons.flag_outlined,
-              onTap: () => _pickSpot(context, store, '檢舉停車資訊錯誤'),
-            ),
-          ],
+          ),
         ),
-        const SizedBox(height: 36),
+        const SizedBox(height: 32),
         Text(
-          '目前地圖範圍',
+          '修正現有資訊',
           style: Theme.of(context).textTheme.titleLarge
               ?.copyWith(fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 8),
         Text(
-          '選擇停車點，提出修改建議或回報點位已不存在。',
+          '選擇目前地圖範圍內的停車點，修改資訊或回報已不存在。',
           style: TextStyle(color: colors.onSurfaceVariant),
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 12),
         if (store.spots.isEmpty)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 20),
             child: Text('還沒有停車資料。回到探索移動地圖，或新增你找到的停車點。'),
           ),
-        for (final spot in store.spots.take(8))
-          ListTile(
-            contentPadding: const EdgeInsets.symmetric(vertical: 6),
-            leading: Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                color: colors.surfaceContainerHigh,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: const Icon(Icons.local_parking, size: 28),
-            ),
-            title: Text(
-              spot.name,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            subtitle: Text('${spot.city} · ${store.eligible(spot).label}'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => showSpot(context, store, spot),
+        for (final spot in store.spots.take(_listed))
+          _SpotRow(
+            store: store,
+            spot: spot,
+            onTap: () => showSpotSuggestions(context, store, spot),
+          ),
+        if (store.spots.length > _listed)
+          TextButton(
+            onPressed: () => _pickSpot(context, store),
+            child: Text('查看全部 ${store.spots.length} 個停車點'),
           ),
         const SizedBox(height: 24),
         Text(
@@ -166,32 +181,30 @@ class ContributePage extends ConsumerWidget {
   }
 }
 
-class _ContributionAction extends StatelessWidget {
-  const _ContributionAction({
-    required this.label,
-    required this.icon,
+class _SpotRow extends StatelessWidget {
+  const _SpotRow({
+    required this.store,
+    required this.spot,
     required this.onTap,
   });
-  final String label;
-  final IconData icon;
+  final AppStore store;
+  final ParkingSpot spot;
   final VoidCallback onTap;
   @override
-  Widget build(BuildContext context) => Expanded(
-    child: Column(
-      children: [
-        IconButton.filledTonal(
-          tooltip: label,
-          onPressed: onTap,
-          icon: Icon(icon, size: 28),
-          style: IconButton.styleFrom(minimumSize: const Size(60, 60)),
+  Widget build(BuildContext context) {
+    final eligibility = store.eligible(spot);
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: ExcludeSemantics(
+        child: SizedBox.square(
+          dimension: 40,
+          child: SpotMarker(look: markerLook(eligibility), size: 32),
         ),
-        const SizedBox(height: 8),
-        Text(
-          label,
-          textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-        ),
-      ],
-    ),
-  );
+      ),
+      title: Text(spot.name, maxLines: 2, overflow: TextOverflow.ellipsis),
+      subtitle: Text('${spot.city}${spot.district} · ${eligibility.label}'),
+      trailing: const Icon(Icons.edit_outlined),
+      onTap: onTap,
+    );
+  }
 }
