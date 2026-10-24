@@ -46,29 +46,86 @@ Deno.test('flags may carry a structured suggestion', () => {
     source_id: 'official:10000000-0000-4000-8000-000000000001',
     reason: '格位類型：建議「重機專用格」',
   };
+  const community = {
+    ...flag,
+    source_id: '10000000-0000-4000-8000-000000000002',
+  };
+  // What the app sends for each suggestion form.
   for (
     const body of [
       flag,
+      { ...flag, field: '停車點名稱', proposed: { name: '市府轉運站' } },
       { ...flag, field: '格位類型', proposed: { space_type: 'heavyOnly' } },
-      { ...flag, field: '位置', proposed: { lat: 25.01, lng: 121.46 } },
-      { ...flag, proposed: { heavy_allowed: null } },
+      { ...flag, field: '收費資訊', proposed: { fee_note: '每小時 20 元' } },
+      {
+        ...flag,
+        field: '機車停放資格',
+        proposed: { heavy_allowed: true, scooter_allowed: null },
+      },
+      { ...flag, field: '位置或其他備註', note: '入口在後巷' },
+      {
+        ...flag,
+        field: '位置或其他備註',
+        proposed: { lat: 25.01, lng: 121.46 },
+      },
+      { ...flag, field: '點位已不存在', proposed: { hidden: true } },
+      { ...community, field: '點位已不存在', proposed: { status: 'hidden' } },
+      { ...flag, proposed: { facility_type: 'underground', address: '' } },
+      // Stable keys, which replace the Chinese labels above.
+      { ...flag, field: 'name', proposed: { name: '市府轉運站' } },
+      { ...flag, field: 'space_type', proposed: { space_type: 'car' } },
+      { ...flag, field: 'fee_note', proposed: { fee_note: '免費' } },
+      { ...flag, field: 'eligibility', proposed: { heavy_allowed: false } },
+      { ...flag, field: 'note', note: '入口在後巷' },
+      { ...community, field: 'gone', proposed: { status: 'hidden' } },
     ]
   ) {
-    if (validate(body) !== null) throw new Error('valid suggestion rejected');
+    if (validate(body) !== null) {
+      throw new Error(`valid suggestion rejected: ${JSON.stringify(body)}`);
+    }
   }
   for (
     const body of [
       { ...flag, field: '' },
-      { ...flag, field: 'a'.repeat(41) },
+      { ...flag, field: '位置' },
+      { ...flag, field: 'heavy_allowed' },
+      { ...flag, field: 'Name' },
+      { ...flag, field: ['name'] },
+      { ...flag, field: ['格位類型'] },
+      { ...flag, field: null },
+      { ...flag, field: true },
+      { ...flag, field: 1 },
       { ...flag, proposed: [] },
       { ...flag, proposed: {} },
       { ...flag, proposed: { nested: { a: 1 } } },
+      { ...flag, proposed: { user_id: 'someone' } },
+      { ...flag, proposed: { last_confirmed_at: '2026-01-01' } },
+      { ...flag, proposed: JSON.parse('{"toString":"x"}') },
+      { ...flag, proposed: JSON.parse('{"__proto__":"x"}') },
       { ...flag, proposed: { note: 'a'.repeat(501) } },
+      { ...flag, proposed: { name: ' ' } },
+      { ...flag, proposed: { name: 'a'.repeat(101) } },
+      { ...flag, proposed: { fee_note: 'a'.repeat(201) } },
+      { ...flag, proposed: { space_type: 'bus' } },
+      { ...flag, proposed: { space_type: null } },
+      { ...flag, proposed: { heavy_allowed: 'true' } },
+      { ...flag, proposed: { facility_type: 'tower' } },
+      { ...flag, proposed: { facility_type: ['underground'] } },
+      { ...flag, proposed: { parking_access: ['heavyOnly'] } },
+      { ...flag, proposed: { space_type: ['car'] } },
       { ...flag, proposed: { lat: 0, lng: 121 } },
       { ...flag, proposed: { lng: '121' } },
+      // Each source hides its own way, and riders may only ask to hide.
+      { ...flag, proposed: { status: 'hidden' } },
+      { ...community, proposed: { hidden: true } },
+      { ...community, proposed: { status: 'confirmed' } },
+      { ...flag, proposed: { hidden: 'yes' } },
+      { ...flag, proposed: { hidden: false } },
     ]
   ) {
-    if (validate(body) === null) throw new Error('bad suggestion accepted');
+    if (validate(body) === null) {
+      throw new Error(`bad suggestion accepted: ${JSON.stringify(body)}`);
+    }
   }
 });
 Deno.test('identity hashes are deterministic, namespaced and keyed', async () => {
