@@ -33,6 +33,48 @@ const oneOf = (values: string[]) => (v: unknown) =>
   v === null || (typeof v === 'string' && values.includes(v));
 const flag = (v: unknown) => v === null || typeof v === 'boolean';
 const coordinate = (v: unknown) => typeof v === 'number' && Number.isFinite(v);
+// Whole yuan or minutes in range; never a string or a fraction.
+const whole = (v: unknown, min: number, max: number) =>
+  typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max;
+// The keys each fee mode uses (202610250010_spot_fee.sql holds the same).
+const rateKeys: Record<string, string[]> = {
+  free: [],
+  posted: [],
+  same_as_scooter: [],
+  same_as_car: [],
+  hourly: ['amount', 'per_minutes', 'daily_cap'],
+  per_visit: ['amount', 'max_minutes'],
+  daily: ['amount'],
+};
+function validRate(v: unknown, heavy: boolean): boolean {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return false;
+  const r = v as Record<string, unknown>;
+  const mode = r.mode;
+  if (typeof mode !== 'string' || !Object.hasOwn(rateKeys, mode)) return false;
+  // Only heavy bikes may follow another vehicle's rate.
+  if (mode.startsWith('same_as_') && !heavy) return false;
+  if (Object.keys(r).some((k) => k !== 'mode' && !rateKeys[mode].includes(k))) {
+    return false;
+  }
+  const optional = (key: string, min: number, max: number) =>
+    !(key in r) || whole(r[key], min, max);
+  return mode === 'hourly'
+    ? whole(r.amount, 0, 10000) && whole(r.per_minutes, 1, 1440) &&
+      optional('daily_cap', 0, 10000)
+    : mode === 'per_visit'
+    ? whole(r.amount, 0, 10000) && optional('max_minutes', 1, 1440)
+    : mode === 'daily'
+    ? whole(r.amount, 0, 10000)
+    : true;
+}
+/** A rate per vehicle; a missing vehicle is unconfirmed. */
+export function validFee(v: unknown): boolean {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return false;
+  const f = v as Record<string, unknown>;
+  return Object.keys(f).every((k) => k === 'scooter' || k === 'heavy') &&
+    (!('scooter' in f) || validRate(f.scooter, false)) &&
+    (!('heavy' in f) || validRate(f.heavy, true));
+}
 // Mirrors the columns admin_resolve_report may patch, plus how riders ask to
 // take a spot down: status for community spots, hidden for official ones.
 const proposedChecks: Record<string, (v: unknown) => boolean> = {
@@ -59,6 +101,7 @@ const proposedChecks: Record<string, (v: unknown) => boolean> = {
   entrance_note: text(500),
   parking_guide: text(500),
   special_rules: text(500),
+  fee: validFee,
   status: (v) => v === 'hidden',
   // Riders ask to take a spot down; restoring one is an admin decision.
   hidden: (v) => v === true,
@@ -162,6 +205,9 @@ export function validate(body: Record<string, unknown>): string | null {
         if (
           s[key] !== undefined && s[key] !== null && typeof s[key] !== 'boolean'
         ) return `invalid ${key}`;
+      }
+      if (s.fee !== undefined && s.fee !== null && !validFee(s.fee)) {
+        return 'invalid fee';
       }
     }
   }
