@@ -36,18 +36,6 @@ void main() {
     rule('臺北市', vehicle),
   );
 
-  test('機慢車停放區比照免費機車格', () {
-    expect(
-      judge(SpaceType.scooterArea, VehicleType.scooter).status,
-      EligibilityStatus.allowed,
-    );
-    // Taipei opens paid bays to heavy bikes, not free ones.
-    expect(
-      judge(SpaceType.scooterArea, VehicleType.heavy).status,
-      EligibilityStatus.notAllowed,
-    );
-  });
-
   test('身障機車專用格對一般騎士一律不可停', () {
     for (final vehicle in VehicleType.values) {
       final result = judge(SpaceType.disabledMotorcycle, vehicle);

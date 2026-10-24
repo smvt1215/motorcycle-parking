@@ -53,7 +53,7 @@ class _RulesPageState extends ConsumerState<RulesPage> {
           ),
           const SizedBox(height: 12),
           for (final (look, types) in ruleGroups(rule, store.vehicle))
-            _RuleGroup(look: look, types: types),
+            _RuleGroup(look: look, types: types, rule: rule),
           const SizedBox(height: 8),
           Text(rule.exceptions),
           const SizedBox(height: 16),
@@ -97,6 +97,9 @@ List<(MarkerLook, List<SpaceType>)> ruleGroups(
       lat: 0,
       lng: 0,
       city: rule.city,
+      // A kind open in named districts is shown as it is there; its chip
+      // names them.
+      district: rule.districtSpaceTypes[ruleSpaceType(type)]?.first ?? '',
       spaceType: type,
       status: TrustStatus.confirmed,
       // A lot's own data decides; the rule alone never opens it.
@@ -110,9 +113,14 @@ List<(MarkerLook, List<SpaceType>)> ruleGroups(
 }
 
 class _RuleGroup extends StatelessWidget {
-  const _RuleGroup({required this.look, required this.types});
+  const _RuleGroup({
+    required this.look,
+    required this.types,
+    required this.rule,
+  });
   final MarkerLook look;
   final List<SpaceType> types;
+  final CityRule rule;
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
@@ -153,7 +161,13 @@ class _RuleGroup extends StatelessWidget {
                         child: GroundMarking(type: type, size: 28),
                       ),
                       const SizedBox(width: 8),
-                      Text(type.label, style: text.bodyMedium),
+                      Text(switch (rule.districtSpaceTypes[ruleSpaceType(
+                        type,
+                      )]) {
+                        final districts? =>
+                          '${type.label}（僅${districts.join('、')}）',
+                        null => type.label,
+                      }, style: text.bodyMedium),
                     ],
                   ),
                 ),

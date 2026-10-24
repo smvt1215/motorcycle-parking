@@ -29,10 +29,9 @@ void main() {
       SpaceType.heavyOnly,
       SpaceType.car,
     ]);
-    // Areas follow free bays; reserved bays are closed whatever the rule.
+    // Reserved bays are closed whatever the rule.
     expect(taipei[(EligibilityStatus.notAllowed, null)], [
       SpaceType.freeMotorcycle,
-      SpaceType.scooterArea,
       SpaceType.disabledMotorcycle,
     ]);
     // Timed bays follow paid ones, then the clock limits them.
@@ -55,13 +54,19 @@ void main() {
     // A timed bay that is only conditionally open keeps that condition.
     expect(taichung[(EligibilityStatus.conditional, RuleRestriction.signage)], [
       SpaceType.paidMotorcycle,
+      SpaceType.freeMotorcycle,
       SpaceType.timedMotorcycle,
     ]);
+    // Kinds open in named districts are grouped as they are there.
+    final newTaipei = groups('新北市', VehicleType.heavy);
+    expect(
+      newTaipei[(EligibilityStatus.allowed, null)],
+      contains(SpaceType.freeMotorcycle),
+    );
     final scooter = groups('臺北市', VehicleType.scooter);
     expect(scooter[(EligibilityStatus.allowed, null)], [
       SpaceType.paidMotorcycle,
       SpaceType.freeMotorcycle,
-      SpaceType.scooterArea,
     ]);
     expect(scooter[(EligibilityStatus.notAllowed, null)], [
       SpaceType.heavyOnly,

@@ -44,7 +44,6 @@ String _detail(SpaceType? type) => switch (type) {
   SpaceType.heavyOnly => '標示大型重機專用的格位',
   SpaceType.car => '依規定可停放機車的汽車格',
   SpaceType.offStreet => '停車場內的機車或重機區',
-  SpaceType.scooterArea => '整片劃設、不分格的機車停放區',
   SpaceType.disabledMotorcycle => '身心障礙者專用，須持識別證明',
   SpaceType.timedMotorcycle => '黃色內框機車格，依牌面時段限時停放',
   SpaceType.flexShared => '汽車與機車依時段輪替使用的格位',
@@ -227,21 +226,6 @@ class _MarkingPainter extends CustomPainter {
         canvas.drawRect(Rect.fromLTWH(w * .1, h * .26, w * .8, h * .48), line);
         // The car of the map's car badge.
         _paintGlyph(canvas, size, spaceBadgeIcon(SpaceBadge.car)!, white, .42);
-      case SpaceType.scooterArea:
-        // One long area, no bays: an outline with the kerb-side hatching.
-        line.color = white;
-        canvas.drawRect(
-          Rect.fromLTWH(w * .12, h * .28, w * .76, h * .44),
-          line,
-        );
-        for (var i = 0; i < 3; i++) {
-          final x = w * (.24 + i * .2);
-          canvas.drawLine(
-            Offset(x, h * .64),
-            Offset(x + w * .1, h * .36),
-            line..strokeWidth = math.max(1, 1.6 * scale),
-          );
-        }
       case SpaceType.disabledMotorcycle:
         line.color = disabledBlue;
         canvas.drawRect(

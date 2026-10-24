@@ -10,9 +10,6 @@ enum SpaceType {
   car,
   offStreet,
 
-  /// 機慢車停放區 (pktype 11): one painted area, no individual bays.
-  scooterArea,
-
   /// 身心障礙專用機車格 (pktype 04, 18): permit holders only.
   disabledMotorcycle,
 
@@ -134,7 +131,6 @@ extension SpaceLabel on SpaceType {
     SpaceType.heavyOnly => '重機專用格',
     SpaceType.car => '汽車格',
     SpaceType.offStreet => '路外停車場',
-    SpaceType.scooterArea => '機慢車停放區',
     SpaceType.disabledMotorcycle => '身障機車專用格',
     SpaceType.timedMotorcycle => '限時停車機車格',
     SpaceType.flexShared => '汽機車彈性共用格',

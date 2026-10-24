@@ -50,7 +50,6 @@ Deno.test('identity hashes are deterministic, namespaced and keyed', async () =>
 Deno.test('every app space kind is accepted; unknown kinds fail', () => {
   for (
     const kind of [
-      'scooterArea',
       'disabledMotorcycle',
       'timedMotorcycle',
       'flexShared',

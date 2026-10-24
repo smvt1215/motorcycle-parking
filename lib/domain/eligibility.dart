@@ -47,6 +47,13 @@ Eligibility eligibility(
   return result;
 }
 
+/// The kind a city rule judges [type] as: rules list the original kinds,
+/// and a timed bay follows the paid bay it is painted like.
+SpaceType ruleSpaceType(SpaceType type) => switch (type) {
+  SpaceType.timedMotorcycle => SpaceType.paidMotorcycle,
+  final type => type,
+};
+
 Eligibility _judge(
   ParkingSpot spot,
   VehicleType vehicle,
@@ -95,13 +102,7 @@ Eligibility _judge(
       );
     default:
   }
-  // Rules list the original kinds; an area or a timed bay follows the bay
-  // it is painted like.
-  final type = switch (spot.spaceType) {
-    SpaceType.scooterArea => SpaceType.freeMotorcycle,
-    SpaceType.timedMotorcycle => SpaceType.paidMotorcycle,
-    final type => type,
-  };
+  final type = ruleSpaceType(spot.spaceType);
   if (spot.spaceType == SpaceType.heavyOnly && vehicle == VehicleType.scooter) {
     return const Eligibility(EligibilityStatus.notAllowed, '大型重機專用格');
   }

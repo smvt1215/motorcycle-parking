@@ -4,7 +4,6 @@ const spaceTypes = [
   'heavyOnly',
   'car',
   'offStreet',
-  'scooterArea',
   'disabledMotorcycle',
   'timedMotorcycle',
   'flexShared',
