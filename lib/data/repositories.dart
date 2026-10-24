@@ -27,7 +27,10 @@ class RulesRepository {
         );
         if (i < 0) {
           rules.add(r);
-        } else if (r.version > rules[i].version) {
+          // Admins maintain the remote rows; the bundled copy is the fallback,
+          // so a tie keeps the admin's edit (a migration leaves such a row
+          // alone rather than overwrite it).
+        } else if (r.version >= rules[i].version) {
           rules[i] = r;
         }
       }
