@@ -6,7 +6,7 @@ create or replace function public.apply_report(p_user uuid,p_ip text,p_device te
 returns jsonb language plpgsql security definer set search_path=public,extensions,pg_temp as $$
 declare
   v_action text:=p_payload->>'action'; v_spot jsonb:=p_payload->'spot';
-  v_id uuid; v_existing uuid; v_owner uuid; v_qualified boolean; v_score numeric; v_count integer;
+  v_id uuid; v_existing uuid; v_owner uuid; v_qualified boolean; v_score numeric; v_count integer; v_decided timestamptz;
   v_day timestamptz:=date_trunc('day',now() at time zone 'UTC') at time zone 'UTC';
 begin
   if p_ip is null or char_length(p_ip)<>64 or p_device is null or char_length(p_device)<>64 then
@@ -45,7 +45,12 @@ begin
       on conflict(spot_id,user_id) do update set vote=excluded.vote,qualified=excluded.qualified,weight=excluded.weight,ip_hash=excluded.ip_hash,device_hash=excluded.device_hash,created_at=now();
     -- Distinct IP AND device, and two qualified users. Network/device sameness cannot inflate confirmations.
     select least(count(distinct ip_hash),count(distinct device_hash)) into v_count from spot_votes where spot_id=v_id and vote='still_there' and qualified;
-    select coalesce(sum(weight),0) into v_score from(select max(weight) as weight from spot_votes where spot_id=v_id and vote='gone' group by ip_hash) x;
+    -- Once an admin has decided a dispute, the "gone" votes before that
+    -- decision are spent: only later ones can reopen it.
+    select max(resolved_at) into v_decided from moderation_queue
+      where source_id=v_id::text and reason='加權負向回報達門檻' and status<>'pending';
+    select coalesce(sum(weight),0) into v_score from(select max(weight) as weight from spot_votes where spot_id=v_id and vote='gone'
+      and created_at>coalesce(v_decided,'-infinity') group by ip_hash) x;
     if v_score>=3 then
       -- Votes alone never take a spot off the map: it drops back to pending
       -- (unverified everywhere) and waits for an admin to hide or keep it.
@@ -54,7 +59,9 @@ begin
     else
       -- Only a qualified "still there" is a fresh sighting; other votes keep
       -- the last confirmation time.
-      update community_spots set status=case when v_count>=2 then 'confirmed' else 'pending' end,
+      -- A spot an admin kept after a dispute stays confirmed; only a new
+      -- dispute can demote it.
+      update community_spots set status=case when v_count>=2 or (status='confirmed' and v_decided is not null) then 'confirmed' else 'pending' end,
         last_confirmed_at=case when v_count>=2 and p_payload->>'vote'='still_there' and v_qualified then now() else last_confirmed_at end,
         updated_at=now() where id=v_id;
     end if;
