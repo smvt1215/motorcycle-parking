@@ -94,7 +94,7 @@ export function validate(body: Record<string, unknown>): string | null {
   ) return 'invalid reason';
   if (
     body.action === 'flag' && body.field !== undefined &&
-    !suggestionFields.includes(String(body.field))
+    (typeof body.field !== 'string' || !suggestionFields.includes(body.field))
   ) return 'invalid field';
   // A suggested value set: only columns an admin can apply as a patch, each
   // with the type and length its table allows.
