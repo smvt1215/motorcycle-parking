@@ -95,21 +95,19 @@
     "vehicle": "heavy",
     "allowed_space_types": [
       "heavyOnly",
-      "car"
+      "car",
+      "paidMotorcycle"
     ],
     "conditional_space_types": [
-      "offStreet",
-      "paidMotorcycle",
-      "freeMotorcycle"
+      "offStreet"
     ],
-    "fee_note": "請依現場收費公告",
-    "exceptions": "板橋、新店及其他公告行政區／收費路段試辦開放；不得推論全市機車格均開放。",
+    "fee_note": "收費機車格比照大型重機專用格，計次每 4 小時 30 元",
+    "exceptions": "2026/7/1 起全市路邊收費機車格開放大型重機；路邊免費機車格不開放。車身不得超出格線，車身較長可跨 2 格停放，仍須完全位於格線內。",
     "effective_date": "2026-07-01",
-    "source_url": "https://www.traffic.ntpc.gov.tw/home.jsp?act=be4f48068b2b0031&dataserno=99345bcf365b8f6ed7a6315705335638&id=54fa46e9e522dde4&mserno=39e5192ff77897e0ae099c1886ca9b09",
-    "version": 1,
-    "can_use_two_spaces": false,
-    "districts": [],
-    "restriction": "pilot_area"
+    "source_url": "https://www.ntpc.gov.tw/ch/home.jsp?id=28&dataserno=202601150009",
+    "version": 2,
+    "can_use_two_spaces": true,
+    "districts": []
   },
   {
     "city": "桃園市",
@@ -134,21 +132,20 @@
     "vehicle": "heavy",
     "allowed_space_types": [
       "heavyOnly",
-      "car"
-    ],
-    "conditional_space_types": [
-      "offStreet",
+      "car",
       "paidMotorcycle",
       "freeMotorcycle"
     ],
-    "fee_note": "請依現場收費公告",
-    "exceptions": "115 年 4 月起試辦路邊機車格開放；請確認格線、車身尺寸與現場公告。",
+    "conditional_space_types": [
+      "offStreet"
+    ],
+    "fee_note": "比照普通機車，依各路段費率與時段",
+    "exceptions": "2026/4/1 起試辦全市路邊機車格（收費與不收費）開放大型重機。以一車一格為原則，車身較長可斜停最多 2 格，車體須完全位於格線內。",
     "effective_date": "2026-04-01",
     "source_url": "https://www.tycg.gov.tw/NewsPage_Content.aspx?n=7&s=1612945&sms=7882",
-    "version": 1,
-    "can_use_two_spaces": false,
-    "districts": [],
-    "restriction": "pilot_area"
+    "version": 2,
+    "can_use_two_spaces": true,
+    "districts": []
   },
   {
     "city": "臺中市",
@@ -214,17 +211,14 @@
       "car"
     ],
     "conditional_space_types": [
-      "offStreet",
-      "paidMotorcycle",
-      "freeMotorcycle"
+      "offStreet"
     ],
     "fee_note": "請依現場收費公告",
-    "exceptions": "尚未核實全市最新機車格開放規則。請以現場標誌標線為準，不以舊公告推定可停。",
-    "effective_date": "2026-10-11",
+    "exceptions": "路邊機車格未開放大型重機，請停汽車格或重機專用格。2026/8/1 起僅於 5 處捷運周邊公有停車場試辦停放普通機車格，請依場站公告。",
+    "effective_date": "2026-08-01",
     "source_url": "https://www.tbkc.gov.tw/Service/ParkingAndTowing",
-    "version": 1,
+    "version": 2,
     "can_use_two_spaces": false,
-    "districts": [],
-    "restriction": "unverified"
+    "districts": []
   }
 ]
