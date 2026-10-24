@@ -409,7 +409,7 @@ class _SpotSheetState extends State<SpotSheet> {
                               throw StateError('無法開啟資料來源');
                             }
                           }),
-                          child: const Text('查看點位資料來源'),
+                          child: const Text('查看停車點資料來源'),
                         ),
                       if (spot.stale) ...[
                         const SizedBox(height: 8),
