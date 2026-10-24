@@ -155,8 +155,7 @@ void main() {
     expect(find.text('範例建議已送出，僅供本次功能測試。'), findsOneWidget);
     await tester.tap(find.text('完成'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('關閉').last);
-    await tester.pumpAndSettle();
+    expect(find.text('提出修改建議'), findsNothing);
     expect(find.byKey(const ValueKey('parking-spot-sheet')), findsOneWidget);
     await tester.tap(find.byTooltip('關閉詳情'));
     await tester.pumpAndSettle();
@@ -317,10 +316,12 @@ void main() {
       greaterThan(38),
     );
     // Tapping the selected marker itself keeps its details open.
+    final selectedCenter = map.mapController!.camera.center;
     await tester.tap(find.byKey(const ValueKey('selected-spot-marker')));
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pumpAndSettle();
     expect(sheetTitle(), first.name);
+    expect(map.mapController!.camera.center, selectedCenter);
     // The map above the sheet still pans.
     final before = map.mapController!.camera.center;
     await tester.drag(find.byType(FlutterMap), const Offset(-60, 80));
@@ -335,6 +336,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('parking-spot-sheet')), findsOneWidget);
     expect(sheetTitle(), second.name);
+    final centerBeforeClosing = map.mapController!.camera.center;
     // Tapping the map away from markers closes the details.
     await tester.tapAt(const Offset(30, 300));
     // The map waits out the double-tap window before reporting a tap.
@@ -343,6 +345,7 @@ void main() {
     expect(find.byKey(const ValueKey('parking-spot-sheet')), findsNothing);
     expect(find.byKey(const ValueKey('selected-spot-marker')), findsNothing);
     // Back closes the details and stays on the map.
+    expect(map.mapController!.camera.center, centerBeforeClosing);
     await tester.tap(marker(second.name).hitTestable().first);
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('parking-spot-sheet')), findsOneWidget);

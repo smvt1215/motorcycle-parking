@@ -480,6 +480,10 @@ class AppStore extends ChangeNotifier {
       redirectTo: kIsWeb
           ? Uri.base.replace(fragment: '', query: '').toString()
           : AppConfig.redirectUrl,
+      // An in-app Safari view can remain blank above the app after callback.
+      authScreenLaunchMode: kIsWeb
+          ? LaunchMode.platformDefault
+          : LaunchMode.externalApplication,
     );
   }
 

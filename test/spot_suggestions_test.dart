@@ -71,6 +71,81 @@ Future<void> openDetails(
 }
 
 void main() {
+  for (final dismissal in ['完成', '關閉', '返回', '下滑']) {
+    testWidgets('建議成功後以$dismissal離開，同時關閉父面板', (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(390, 844);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final store = (await tester.runAsync(createStore))!;
+      addTearDown(store.dispose);
+      await openDetails(tester, store);
+      await tester.ensureVisible(find.text('修改建議'));
+      await tester.tap(find.text('修改建議'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('停車點名稱'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('suggestion-input')),
+        '市府路機車格',
+      );
+      await tester.tap(find.text('送出建議'));
+      await tester.pumpAndSettle();
+      expect(find.text('完成'), findsOneWidget);
+      switch (dismissal) {
+        case '完成':
+          await tester.tap(find.text('完成'));
+        case '關閉':
+          await tester.tap(find.byTooltip('關閉').last);
+        case '返回':
+          await tester.binding.handlePopRoute();
+        case '下滑':
+          final sheet = tester.getRect(find.byType(BottomSheet).last);
+          await tester.flingFrom(
+            Offset(sheet.center.dx, sheet.top + 20),
+            const Offset(0, 700),
+            2000,
+          );
+      }
+      await tester.pumpAndSettle();
+      expect(find.text('提出修改建議'), findsNothing);
+      expect(find.text('完成'), findsNothing);
+      // Return to the spot details, without accidentally popping that route.
+      expect(find.byKey(const ValueKey('parking-spot-sheet')), findsOneWidget);
+      expect(store.submissions, hasLength(1));
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
+  testWidgets('取消或送出失敗後關閉表單，保留修改建議父面板', (tester) async {
+    final store = (await tester.runAsync(createStore))!;
+    addTearDown(store.dispose);
+    await openDetails(tester, store);
+    await tester.ensureVisible(find.text('修改建議'));
+    await tester.tap(find.text('修改建議'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('停車點名稱'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(find.text('提出修改建議'), findsOneWidget);
+    await tester.tap(find.text('停車點名稱'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('suggestion-input')),
+      '市府路機車格',
+    );
+    store.failNext = true;
+    await tester.tap(find.text('送出建議'));
+    await tester.pumpAndSettle();
+    expect(find.text('連線失敗，請重試'), findsOneWidget);
+    await tester.tap(find.byTooltip('關閉').last);
+    await tester.pumpAndSettle();
+    expect(find.text('提出修改建議'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('未回報點位維持顯示，不存在只能由修改建議送交審核', (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(390, 844);
