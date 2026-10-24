@@ -40,11 +40,10 @@ void main() {
     ).map((g) => g.$1.$1.index).toList();
     expect(order, [...order]..sort());
 
-    final newTaipei = groups('新北市', VehicleType.heavy);
-    expect(
-      newTaipei[(EligibilityStatus.conditional, RuleRestriction.pilotArea)],
-      [SpaceType.paidMotorcycle, SpaceType.freeMotorcycle],
-    );
+    final taichung = groups('臺中市', VehicleType.heavy);
+    expect(taichung[(EligibilityStatus.conditional, RuleRestriction.signage)], [
+      SpaceType.paidMotorcycle,
+    ]);
     final scooter = groups('臺北市', VehicleType.scooter);
     expect(scooter[(EligibilityStatus.notAllowed, null)], [
       SpaceType.heavyOnly,
