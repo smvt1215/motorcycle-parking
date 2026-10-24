@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'review/review_models.dart';
+import 'spots/spot_models.dart';
 
 class AdminAccess {
   const AdminAccess({
@@ -55,7 +56,39 @@ abstract class AdminGateway {
 
   /// `admin_set_spot_hidden`: hide or restore one spot, audited.
   Future<void> setSpotHidden(String sourceId, bool hidden, String note);
+
+  /// `admin_spots`: both tables, newest first.
+  Future<List<SpotSummary>> searchSpots(
+    String query, {
+    SpotKind? kind,
+    String? state,
+  });
+
+  /// Every editable column of one spot, with the version to edit against.
+  Future<SpotRecord?> spot(String sourceId);
+
+  /// `admin_upsert_spot`: edits [values] on the version [baseUpdatedAt].
+  Future<SpotRecord> updateSpot(
+    String sourceId,
+    Map<String, dynamic> values,
+    String baseUpdatedAt,
+    String note,
+  );
+
+  /// `admin_promote_spot`: a community spot becomes an official one.
+  Future<String> promoteSpot(
+    String sourceId,
+    Map<String, dynamic> values,
+    String baseUpdatedAt,
+    String note,
+  );
 }
+
+/// Community columns readable by clients; `user_id` is never granted.
+const _communityColumns =
+    'id,source,source_name,source_url,license_note,name,lat,lng,city,district,space_type,fee_note,note,'
+    'scooter_total,scooter_allowed,heavy_allowed,status,updated_at,last_confirmed_at,created_at,'
+    'facility_type,parking_access,address,road_segment,entrance_note,parking_guide,special_rules';
 
 const _spotColumns =
     'id,name,lat,lng,city,district,space_type,fee_note,note,scooter_allowed,heavy_allowed,source_name,updated_at';
@@ -246,4 +279,70 @@ class SupabaseAdminGateway implements AdminGateway {
         'admin_set_spot_hidden',
         params: {'p_source_id': sourceId, 'p_hidden': hidden, 'p_note': note},
       );
+
+  @override
+  Future<List<SpotSummary>> searchSpots(
+    String query, {
+    SpotKind? kind,
+    String? state,
+  }) async {
+    final rows = await client.rpc<List<dynamic>>(
+      'admin_spots',
+      params: {'p_query': query, 'p_kind': kind?.name, 'p_state': state},
+    );
+    return rows
+        .map((r) => SpotSummary.fromJson(r as Map<String, dynamic>))
+        .toList();
+  }
+
+  @override
+  Future<SpotRecord?> spot(String sourceId) async {
+    final official = sourceId.startsWith('official:');
+    final id = official ? sourceId.substring('official:'.length) : sourceId;
+    if (!_uuid.hasMatch(id)) return null;
+    final row = await client
+        .from(official ? 'official_heavy_spots' : 'community_spots')
+        .select(official ? '*' : _communityColumns)
+        .eq('id', id)
+        .maybeSingle();
+    return row == null ? null : SpotRecord(sourceId: sourceId, values: row);
+  }
+
+  @override
+  Future<SpotRecord> updateSpot(
+    String sourceId,
+    Map<String, dynamic> values,
+    String baseUpdatedAt,
+    String note,
+  ) async {
+    final row = await client.rpc<Map<String, dynamic>>(
+      'admin_upsert_spot',
+      params: {
+        'p_source_id': sourceId,
+        'p_values': values,
+        'p_base_updated_at': baseUpdatedAt,
+        'p_note': note,
+      },
+    );
+    return SpotRecord(sourceId: sourceId, values: row);
+  }
+
+  @override
+  Future<String> promoteSpot(
+    String sourceId,
+    Map<String, dynamic> values,
+    String baseUpdatedAt,
+    String note,
+  ) async {
+    final row = await client.rpc<Map<String, dynamic>>(
+      'admin_promote_spot',
+      params: {
+        'p_source_id': sourceId,
+        'p_values': values,
+        'p_base_updated_at': baseUpdatedAt,
+        'p_note': note,
+      },
+    );
+    return row['source_id'] as String;
+  }
 }

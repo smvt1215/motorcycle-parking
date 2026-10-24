@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:motorcycle_parking/admin/admin_gateway.dart';
 import 'package:motorcycle_parking/admin/review/review_models.dart';
+import 'package:motorcycle_parking/admin/spots/spot_models.dart';
 
 Factor factor(
   String id, {
@@ -268,6 +269,16 @@ class FakeAdminGateway implements AdminGateway {
   @override
   Future<void> setSpotHidden(String sourceId, bool hidden, String note) async {
     hiddenChanges.add((sourceId, hidden));
+    if (spotRows[sourceId] case final row?) {
+      spotRows[sourceId] = {
+        ...row,
+        if (sourceId.startsWith('official:'))
+          'hidden': hidden
+        else
+          'status': hidden ? 'hidden' : 'pending',
+        'updated_at': _bump(),
+      };
+    }
     final spot = spots[sourceId]!;
     spots[sourceId] = ReviewSpot(
       sourceId: sourceId,
@@ -280,6 +291,134 @@ class FakeAdminGateway implements AdminGateway {
           'status': hidden ? 'hidden' : 'pending',
       },
     );
+  }
+
+  /// Spots page data: full rows by source id, as the tables return them.
+  Map<String, Map<String, dynamic>> spotRows = {
+    communityId: {
+      ...sampleSpots()[communityId]!.values,
+      'id': communityId,
+      'source': 'community',
+      'status': 'pending',
+      'facility_type': null,
+      'parking_access': null,
+      'address': '中山北路二段 1 號',
+      'road_segment': '',
+      'entrance_note': '',
+      'parking_guide': '',
+      'special_rules': '',
+      'scooter_total': null,
+      'updated_at': '2026-10-24T09:00:00.000001+00:00',
+    },
+    officialId: {
+      ...sampleSpots()[officialId]!.values,
+      'id': officialId.substring('official:'.length),
+      'hidden': false,
+      'source_url': 'https://example.test/notice',
+      'source_id': 'ntpc-001',
+      'effective_date': '2026-01-01',
+      'license_note': '',
+      'facility_type': 'underground',
+      'parking_access': 'scooterHeavy',
+      'address': '新北市板橋區中山路一段 161 號',
+      'road_segment': '',
+      'entrance_note': '',
+      'parking_guide': '',
+      'special_rules': '',
+      'scooter_total': 300,
+      'updated_at': '2026-10-24T09:00:00.000002+00:00',
+    },
+  };
+  final List<(String, Map<String, dynamic>, String, String)> spotUpdates = [];
+  final List<(String, Map<String, dynamic>, String)> promotions = [];
+  bool failSearch = false;
+  int _version = 10;
+
+  @override
+  Future<List<SpotSummary>> searchSpots(
+    String query, {
+    SpotKind? kind,
+    String? state,
+  }) async {
+    if (failSearch) throw StateError('offline');
+    return [
+      for (final MapEntry(key: id, value: v) in spotRows.entries)
+        if ((v['name'] as String).contains(query) &&
+            (kind == null ||
+                (id.startsWith('official:')) == (kind == SpotKind.official)))
+          SpotSummary(
+            sourceId: id,
+            kind: id.startsWith('official:')
+                ? SpotKind.official
+                : SpotKind.community,
+            name: v['name'] as String,
+            city: v['city'] as String,
+            district: v['district'] as String,
+            address: v['address'] as String,
+            spaceType: v['space_type'] as String,
+            state: id.startsWith('official:')
+                ? (v['hidden'] == true ? 'hidden' : 'visible')
+                : v['status'] as String,
+            updatedAt: DateTime.parse(v['updated_at'] as String),
+          ),
+    ];
+  }
+
+  @override
+  Future<SpotRecord?> spot(String sourceId) async {
+    final v = spotRows[sourceId];
+    return v == null ? null : SpotRecord(sourceId: sourceId, values: {...v});
+  }
+
+  String _bump() =>
+      '2026-10-25T00:00:${(_version++).toString().padLeft(2, '0')}.000000+00:00';
+
+  @override
+  Future<SpotRecord> updateSpot(
+    String sourceId,
+    Map<String, dynamic> values,
+    String baseUpdatedAt,
+    String note,
+  ) async {
+    final row = spotRows[sourceId]!;
+    if (row['updated_at'] != baseUpdatedAt) {
+      throw const PostgrestException(
+        message: 'spot changed since it was opened',
+      );
+    }
+    spotUpdates.add((sourceId, values, baseUpdatedAt, note));
+    spotRows[sourceId] = {...row, ...values, 'updated_at': _bump()};
+    return SpotRecord(sourceId: sourceId, values: {...spotRows[sourceId]!});
+  }
+
+  @override
+  Future<String> promoteSpot(
+    String sourceId,
+    Map<String, dynamic> values,
+    String baseUpdatedAt,
+    String note,
+  ) async {
+    final row = spotRows[sourceId]!;
+    if (row['updated_at'] != baseUpdatedAt) {
+      throw const PostgrestException(
+        message: 'spot changed since it was opened',
+      );
+    }
+    promotions.add((sourceId, values, note));
+    const id = 'official:99999999-9999-4999-8999-999999999999';
+    spotRows[id] = {
+      ...row,
+      'id': id.substring('official:'.length),
+      'scooter_allowed': values['scooter_allowed'],
+      'heavy_allowed': values['heavy_allowed'],
+      ...values,
+      'hidden': false,
+      'source_id': null,
+      'license_note': '',
+      'updated_at': _bump(),
+    };
+    spotRows[sourceId] = {...row, 'status': 'hidden', 'updated_at': _bump()};
+    return id;
   }
 
   Future<void> dispose() => events.close();
