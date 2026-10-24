@@ -1,6 +1,6 @@
 # Web 管理介面 — 開發計畫
 
-> 狀態：P1 後端與 P2 外殼程式已實作；P2 的 staging 登入驗收仍待 Hosting site、部署權限與 Auth 設定。取代 [PLAN.md](PLAN.md)「社群回報機制 › 5. 管理」原本「第一版用 Supabase Dashboard」的做法；審核操作上線前仍以 Dashboard 操作。最後更新：2026-10-24
+> 狀態：P1 後端與 P2 外殼已完成，P2 已於 2026-10-24 通過 staging 登入驗收（https://motopark-admin-staging.web.app ）。P0 仍差第二個備援驗證器 App。取代 [PLAN.md](PLAN.md)「社群回報機制 › 5. 管理」原本「第一版用 Supabase Dashboard」的做法；審核操作上線前仍以 Dashboard 操作。最後更新：2026-10-24
 
 ## 背景
 目前審核與資料維護都在 Supabase Dashboard 完成，有幾個問題：
@@ -26,9 +26,9 @@
 | 驗證 | Google 登入後強制第二步驗證（`aal2`），使用 Supabase Auth 內建的多種方式 | 管理者能改公開資料，需比一般回報更強的驗證 |
 
 第二步驗證的做法：
-- Supabase Auth MFA 目前只支援驗證器 App（TOTP）與手機簡訊驗證碼，每個帳號最多登記 10 個驗證方式，沒有復原碼（2026-10-24 查官方文件，未支援 passkey／WebAuthn）。
+- Supabase Auth MFA 目前只支援驗證器 App（TOTP）與手機簡訊驗證碼，每個帳號最多登記 10 個驗證方式，沒有復原碼（2026-10-24 查官方文件）。
 - 管理者至少登記兩個驗證器 App（例如手機與密碼管理器）互為備援，並可再加手機簡訊。簡訊需在 Supabase 設定簡訊供應商（如 Twilio），依則計費。
-- passkey 用在第一步：管理者的 Google 帳號以 passkey 登入。Supabase 日後支援 passkey 作為第二步驗證時，只需調整 `is_admin()` 與登入畫面。
+- passkey 用在第一步：管理者的 Google 帳號以 passkey 登入。Supabase Auth 已有實驗性 passkey（WebAuthn）登入，但它是第一步登入方式，不是 MFA 驗證方式，官方文件也沒說它會產生 `aal2`；API 可能變動，且 passkey 綁定網域（RP ID），staging／production 要各自登記。因此不採用，等 Supabase 支援 passkey 作為第二步驗證或脫離實驗階段後再評估，屆時只需調整 `is_admin()` 與登入畫面。
 - 所有驗證方式都遺失時，由專案擁有者以 Auth Admin API 的 `auth.admin.mfa.deleteFactor`（service role，在後端執行）移除該帳號的驗證方式後重新登記。
 
 瀏覽器不放 service role key；所有寫入經 `security definer` 的 `admin_*` RPC，或需要 Auth Admin API 時經 Edge Function。
