@@ -274,6 +274,13 @@ class _QueuePane extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
               child: AdminNotice(admin.countError!, error: true),
             ),
+          // A deferred write can fail after the detail is gone (phone list,
+          // or the last report); the action bar is then not there to say so.
+          if (review.error != null && (compact || visible.isEmpty))
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
+              child: AdminNotice(review.error!, error: true),
+            ),
           Semantics(
             label: '依回報類型篩選',
             container: true,
@@ -744,19 +751,23 @@ class _ReviewDetail extends StatelessWidget {
               ],
             ),
           ),
-          _ActionBar(
-            compact: compact,
-            editing: editing,
-            hasSpot: spot != null,
-            hasPatch: patch.isNotEmpty,
-            busy: review.writing,
-            conflict: conflict,
-            stale: conflict && stale,
-            onRefresh: () => review.refreshSpot(report),
-            error: review.error,
-            onDecide: onDecide,
-            onEdit: () => review.startEdit(report),
-            onCancelEdit: review.cancelEdit,
+          // Stack the buttons by the pane's own width: two columns at
+          // 680–720 px leave the detail too narrow for one row.
+          LayoutBuilder(
+            builder: (context, box) => _ActionBar(
+              compact: compact || box.maxWidth < 560,
+              editing: editing,
+              hasSpot: spot != null,
+              hasPatch: patch.isNotEmpty,
+              busy: review.writing,
+              conflict: conflict,
+              stale: conflict && stale,
+              onRefresh: () => review.refreshSpot(report),
+              error: review.error,
+              onDecide: onDecide,
+              onEdit: () => review.startEdit(report),
+              onCancelEdit: review.cancelEdit,
+            ),
           ),
         ],
       ),

@@ -482,6 +482,36 @@ void main() {
       expect(find.text('套用修改'), findsOneWidget);
     });
 
+    testWidgets('雙欄窄寬度的動作列改為堆疊，不裁切按鈕', (tester) async {
+      await show(tester, size: const Size(700, 900));
+      expect(find.byKey(const ValueKey('report-r-type')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      for (final label in ['套用建議', '修改後套用', '駁回']) {
+        expect(find.text(label).hitTestable(), findsOneWidget, reason: label);
+      }
+      final pane = tester.getRect(find.text('格位類型的修改建議'));
+      expect(
+        tester.getRect(find.text('駁回')).right,
+        lessThanOrEqualTo(700 - 20),
+        reason: 'stays inside the detail pane starting at ${pane.left}',
+      );
+    });
+
+    testWidgets('手機處理最後一筆後寫入失敗，列表顯示原因', (tester) async {
+      gateway.reports = [sampleReports().first];
+      await show(tester, size: const Size(390, 844));
+      await tester.tap(find.byKey(const ValueKey('report-r-type')));
+      await tester.pumpAndSettle();
+      gateway.resolveError = const PostgrestException(message: 'offline');
+      await tester.tap(find.text('套用建議'));
+      await tester.pumpAndSettle();
+      expect(find.text('待審回報'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 7));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('尚未處理成功，已放回佇列'), findsOneWidget);
+      expect(find.byKey(const ValueKey('report-r-type')), findsOneWidget);
+    });
+
     testWidgets('不存在的回報網址顯示說明', (tester) async {
       await show(tester, path: '/review/nope');
       expect(find.text('這筆回報已處理或不存在'), findsOneWidget);
