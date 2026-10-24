@@ -38,7 +38,12 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await controller.refresh();
     await tester.pumpWidget(
-      AdminApp(controller: controller, initialLocation: path, themeMode: mode),
+      AdminApp(
+        controller: controller,
+        initialLocation: path,
+        themeMode: mode,
+        reviewMapBuilder: (_, _) => const SizedBox(),
+      ),
     );
     await tester.pumpAndSettle();
   }
@@ -80,7 +85,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(gateway.verifiedWith.single, startsWith('備援驗證器/'));
     expect(find.text('待審回報'), findsOneWidget);
-    expect(find.text('有 7 筆回報等待確認'), findsOneWidget);
+    expect(find.text('7'), findsOneWidget);
+    expect(find.text('中山北路二段路邊機車格'), findsWidgets);
     expect(
       gateway.factorRequests,
       2,
@@ -110,7 +116,7 @@ void main() {
     expect(find.text('待審數載入失敗，請重試。'), findsOneWidget);
     expect(find.text('目前沒有待審回報'), findsNothing);
     gateway.failCount = false;
-    await tester.tap(find.text('更新待審數'));
+    await tester.tap(find.byTooltip('重新載入佇列'));
     await tester.pumpAndSettle();
     expect(find.text('7'), findsOneWidget);
     for (final entry in {

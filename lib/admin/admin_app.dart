@@ -8,6 +8,10 @@ import 'admin_auth_page.dart';
 import 'admin_controller.dart';
 import 'admin_mfa_page.dart';
 import 'admin_theme.dart';
+import 'review/hidden_page.dart';
+import 'review/review_controller.dart';
+import 'review/review_map.dart';
+import 'review/review_page.dart';
 
 const _tabs = [
   (
@@ -53,16 +57,56 @@ class AdminApp extends StatefulWidget {
     required this.controller,
     this.initialLocation,
     this.themeMode = ThemeMode.system,
+    this.reviewMapBuilder = googleReviewMap,
+    this.review,
   });
   final AdminController controller;
   final String? initialLocation;
   final ThemeMode themeMode;
+  final ReviewMapBuilder reviewMapBuilder;
+
+  /// Injected by tests; otherwise created over the controller's gateway.
+  final ReviewController? review;
 
   @override
   State<AdminApp> createState() => _AdminAppState();
 }
 
 class _AdminAppState extends State<AdminApp> {
+  late final ReviewController _review =
+      widget.review ??
+      ReviewController(
+        widget.controller.gateway,
+        onResolved: () => widget.controller.refreshCount(),
+      );
+  String? _reviewUser;
+
+  @override
+  void initState() {
+    super.initState();
+    _reviewUser = _readyUser();
+    widget.controller.addListener(_accessChanged);
+  }
+
+  /// Queue data is private: drop it as soon as access is lost or changes.
+  String? _readyUser() => widget.controller.stage == AdminStage.ready
+      ? widget.controller.access.userId
+      : null;
+
+  void _accessChanged() {
+    final user = _readyUser();
+    if (user != _reviewUser) {
+      _reviewUser = user;
+      _review.reset();
+    }
+  }
+
+  /// A decision still in its undo window is written before signing out.
+  Future<void> _signOut() async {
+    await _review.flush();
+    await widget.controller.signOut();
+  }
+
   Widget _watch(Widget Function() build) => ListenableBuilder(
     listenable: widget.controller,
     builder: (context, _) => build(),
@@ -90,11 +134,27 @@ class _AdminAppState extends State<AdminApp> {
           () => _AdminShell(
             controller: widget.controller,
             path: state.uri.path,
+            onSignOut: _signOut,
             child: child,
           ),
         ),
         routes: [
-          for (final tab in _tabs)
+          // Declared before /review/:id so "hidden" is never read as an id.
+          GoRoute(
+            path: '/review/hidden',
+            builder: (context, state) => HiddenSpotsPage(review: _review),
+          ),
+          for (final path in ['/review', '/review/:id'])
+            GoRoute(
+              path: path,
+              builder: (context, state) => ReviewPage(
+                admin: widget.controller,
+                review: _review,
+                selectedId: state.pathParameters['id'],
+                mapBuilder: widget.reviewMapBuilder,
+              ),
+            ),
+          for (final tab in _tabs.skip(1))
             GoRoute(
               path: tab.path,
               builder: (context, state) => _watch(
@@ -134,6 +194,8 @@ class _AdminAppState extends State<AdminApp> {
 
   @override
   void dispose() {
+    widget.controller.removeListener(_accessChanged);
+    if (widget.review == null) _review.dispose();
     _router.dispose();
     super.dispose();
   }
@@ -165,10 +227,12 @@ class _AdminShell extends StatelessWidget {
   const _AdminShell({
     required this.controller,
     required this.path,
+    required this.onSignOut,
     required this.child,
   });
   final AdminController controller;
   final String path;
+  final VoidCallback onSignOut;
   final Widget child;
 
   @override
@@ -203,15 +267,15 @@ class _AdminShell extends StatelessWidget {
                         children: [
                           for (final tab in _tabs)
                             Semantics(
-                              selected: path == tab.path,
+                              selected: _section(path) == tab.path,
                               child: TextButton(
                                 key: ValueKey('nav${tab.path}'),
                                 onPressed: () => context.go(tab.path),
                                 style: TextButton.styleFrom(
-                                  foregroundColor: path == tab.path
+                                  foregroundColor: _section(path) == tab.path
                                       ? colors.onSurface
                                       : colors.onSurfaceVariant,
-                                  backgroundColor: path == tab.path
+                                  backgroundColor: _section(path) == tab.path
                                       ? colors.primary.withValues(alpha: .1)
                                       : null,
                                   padding: const EdgeInsets.symmetric(
@@ -225,7 +289,7 @@ class _AdminShell extends StatelessWidget {
                                     Text(
                                       tab.label,
                                       style: TextStyle(
-                                        fontWeight: path == tab.path
+                                        fontWeight: _section(path) == tab.path
                                             ? FontWeight.w700
                                             : FontWeight.w400,
                                       ),
@@ -300,9 +364,7 @@ class _AdminShell extends StatelessWidget {
                         ),
                         IconButton(
                           tooltip: '登出',
-                          onPressed: controller.busy
-                              ? null
-                              : controller.signOut,
+                          onPressed: controller.busy ? null : onSignOut,
                           icon: const Icon(Icons.logout),
                         ),
                       ],
@@ -391,32 +453,14 @@ class _WorkspacePage extends StatelessWidget {
   Widget build(BuildContext context) {
     final tab = _tabs.firstWhere((t) => t.path == path);
     final text = Theme.of(context).textTheme;
-    final review = path == '/review';
-    final count = controller.pendingCount;
     return AdminPanel(
       width: 1400,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 24,
-            runSpacing: 12,
-            children: [
-              Semantics(
-                header: true,
-                child: Text(tab.title, style: text.headlineMedium),
-              ),
-              if (review)
-                OutlinedButton.icon(
-                  onPressed: controller.refreshing
-                      ? null
-                      : controller.refreshCount,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('更新待審數'),
-                ),
-            ],
+          Semantics(
+            header: true,
+            child: Text(tab.title, style: text.headlineMedium),
           ),
           const SizedBox(height: 24),
           const Divider(),
@@ -434,11 +478,7 @@ class _WorkspacePage extends StatelessWidget {
                     ),
                     const SizedBox(height: 20),
                     Text(
-                      review && count == 0
-                          ? '目前沒有待審回報'
-                          : review && count != null
-                          ? '有 $count 筆回報等待確認'
-                          : '${tab.label}工作區準備中',
+                      '${tab.label}工作區準備中',
                       style: text.titleLarge,
                       textAlign: TextAlign.center,
                     ),
@@ -461,10 +501,12 @@ class _WorkspacePage extends StatelessWidget {
               ),
             ),
           ),
-          if (review && controller.countError != null)
-            AdminNotice(controller.countError!, error: true),
         ],
       ),
     );
   }
 }
+
+/// `/review/<id>` belongs to the review tab.
+String _section(String path) =>
+    '/${path.split('/').where((p) => p.isNotEmpty).firstOrNull ?? ''}';

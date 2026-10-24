@@ -1,5 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'review/review_models.dart';
+
 class AdminAccess {
   const AdminAccess({
     this.userId,
@@ -31,7 +33,36 @@ abstract class AdminGateway {
   Future<void> verify(String factorId, String challengeId, String code);
   Future<void> cancelEnrollment(String factorId);
   Future<int> pendingCount();
+
+  /// Oldest first, so the queue is worked in the order riders reported.
+  Future<List<ReviewReport>> pendingReports();
+
+  /// Current values of the reported spots, keyed by `source_id`.
+  Future<Map<String, ReviewSpot>> reviewSpots(Iterable<String> sourceIds);
+
+  /// `admin_resolve_report`: applies [patch] and closes the report atomically.
+  /// It refuses a spot changed since the report unless [force] is set.
+  Future<void> resolveReport(
+    String id,
+    String decision,
+    Map<String, dynamic> patch,
+    String note, {
+    bool force = false,
+  });
+
+  /// Hidden community and official spots, most recently changed first.
+  Future<List<ReviewSpot>> hiddenSpots();
+
+  /// `admin_set_spot_hidden`: hide or restore one spot, audited.
+  Future<void> setSpotHidden(String sourceId, bool hidden, String note);
 }
+
+const _spotColumns =
+    'id,name,lat,lng,city,district,space_type,fee_note,note,scooter_allowed,heavy_allowed,source_name,updated_at';
+final _uuid = RegExp(
+  r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+  caseSensitive: false,
+);
 
 class SupabaseAdminGateway implements AdminGateway {
   SupabaseAdminGateway(this.client);
@@ -110,4 +141,109 @@ class SupabaseAdminGateway implements AdminGateway {
       .from('moderation_queue')
       .count(CountOption.exact)
       .eq('status', 'pending');
+
+  @override
+  Future<List<ReviewReport>> pendingReports() async {
+    final rows = await client
+        .from('moderation_queue')
+        .select('id,source_id,reason,field,proposed,note,created_at,base_spot')
+        .eq('status', 'pending')
+        .order('created_at')
+        .limit(200);
+    return rows.map(ReviewReport.fromJson).toList();
+  }
+
+  @override
+  Future<Map<String, ReviewSpot>> reviewSpots(
+    Iterable<String> sourceIds,
+  ) async {
+    final official = <String>{}, community = <String>{};
+    for (final id in sourceIds) {
+      if (id.startsWith('official:')) {
+        final raw = id.substring('official:'.length);
+        if (_uuid.hasMatch(raw)) official.add(raw);
+      } else if (_uuid.hasMatch(id)) {
+        community.add(id);
+      }
+    }
+    final result = <String, ReviewSpot>{};
+    if (community.isNotEmpty) {
+      final rows = await client
+          .from('community_spots')
+          .select('$_spotColumns,status')
+          .inFilter('id', community.toList());
+      for (final row in rows) {
+        result[row['id'] as String] = ReviewSpot(
+          sourceId: row['id'] as String,
+          official: false,
+          values: row,
+        );
+      }
+    }
+    if (official.isNotEmpty) {
+      final rows = await client
+          .from('official_heavy_spots')
+          .select('$_spotColumns,hidden')
+          .inFilter('id', official.toList());
+      for (final row in rows) {
+        final id = 'official:${row['id']}';
+        result[id] = ReviewSpot(sourceId: id, official: true, values: row);
+      }
+    }
+    return result;
+  }
+
+  @override
+  Future<void> resolveReport(
+    String id,
+    String decision,
+    Map<String, dynamic> patch,
+    String note, {
+    bool force = false,
+  }) => client.rpc(
+    'admin_resolve_report',
+    params: {
+      'p_id': id,
+      'p_decision': decision,
+      'p_patch': patch,
+      'p_note': note,
+      'p_force': force,
+    },
+  );
+
+  @override
+  Future<List<ReviewSpot>> hiddenSpots() async {
+    final community = await client
+        .from('community_spots')
+        .select('$_spotColumns,status')
+        .eq('status', 'hidden')
+        .order('updated_at', ascending: false)
+        .limit(200);
+    final official = await client
+        .from('official_heavy_spots')
+        .select('$_spotColumns,hidden')
+        .eq('hidden', true)
+        .order('updated_at', ascending: false)
+        .limit(200);
+    final spots = [
+      for (final row in community)
+        ReviewSpot(sourceId: row['id'] as String, official: false, values: row),
+      for (final row in official)
+        ReviewSpot(
+          sourceId: 'official:${row['id']}',
+          official: true,
+          values: row,
+        ),
+    ];
+    final epoch = DateTime.utc(2000);
+    return spots
+      ..sort((a, b) => (b.updatedAt ?? epoch).compareTo(a.updatedAt ?? epoch));
+  }
+
+  @override
+  Future<void> setSpotHidden(String sourceId, bool hidden, String note) =>
+      client.rpc(
+        'admin_set_spot_hidden',
+        params: {'p_source_id': sourceId, 'p_hidden': hidden, 'p_note': note},
+      );
 }

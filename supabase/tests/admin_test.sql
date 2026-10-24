@@ -48,7 +48,7 @@ select throws_ok($$select admin_resolve_report((select id from fx where name='q_
 select is((select count(*)::integer from moderation_queue),0,'ordinary user cannot read the queue');
 select is((select count(*)::integer from admin_audit_log),0,'ordinary user cannot read the audit log');
 reset role;
-select ok(not has_function_privilege('anon','public.admin_resolve_report(uuid,text,jsonb,text)','EXECUTE'),'anon cannot call the resolve RPC');
+select ok(not has_function_privilege('anon','public.admin_resolve_report(uuid,text,jsonb,text,boolean)','EXECUTE'),'anon cannot call the resolve RPC');
 
 -- Accepting applies the patch and closes the report together.
 select pg_temp.act('admin');

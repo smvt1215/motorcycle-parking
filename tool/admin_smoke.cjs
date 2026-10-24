@@ -15,6 +15,18 @@ const factor = {
   created_at: '2026-10-24T00:00:00Z', updated_at: '2026-10-24T00:00:00Z',
 };
 
+const communityId = '33333333-3333-4333-8333-333333333333';
+const officialId = '44444444-4444-4444-8444-444444444444';
+const reports = [
+  { id: '55555555-5555-4555-8555-555555555551', source_id: communityId, reason: '格位類型：建議「重機專用格」', field: 'space_type', proposed: { space_type: 'heavyOnly' }, note: '現場已改漆重機專用格標線，地面有「大型重機」字樣。', created_at: '2026-10-24T06:00:00Z', base_spot: { space_type: 'freeMotorcycle' } },
+  { id: '55555555-5555-4555-8555-555555555552', source_id: `official:${officialId}`, reason: '機車停放資格：建議「普通機車可停 · 大型重機不可停」', field: 'eligibility', proposed: { heavy_allowed: false }, note: '', created_at: '2026-10-24T07:00:00Z' },
+  { id: '55555555-5555-4555-8555-555555555553', source_id: `official:${officialId}`, reason: '點位已不存在：入口封閉', field: 'gone', proposed: { hidden: true }, note: '入口已封閉施工，現場無法進入。', created_at: '2026-10-24T08:00:00Z' },
+];
+const spot = { lat: 25.0581, lng: 121.5226, city: '臺北市', district: '中山區', fee_note: '每小時 20 元', note: '', scooter_allowed: true, heavy_allowed: null, source_name: '', updated_at: '2026-10-23T00:00:00Z' };
+const communitySpot = { ...spot, id: communityId, name: '中山北路二段路邊機車格', space_type: 'paidMotorcycle', status: 'pending' };
+const officialSpot = { ...spot, id: officialId, name: '新北市政府行政大樓地下停車場', city: '新北市', district: '板橋區', lat: 25.0124, lng: 121.4651, space_type: 'offStreet', heavy_allowed: true, source_name: '新北市政府', hidden: false };
+const hiddenSpot = { ...spot, id: '66666666-6666-4666-8666-666666666666', name: '三重正義北路機車格', city: '新北市', district: '三重區', space_type: 'freeMotorcycle', status: 'hidden' };
+
 function session(role, aal, factors = [factor]) {
   const exp = Math.floor(Date.now() / 1000) + 3600;
   const payload = { sub: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', aal, exp, app_metadata: { role } };
@@ -53,6 +65,8 @@ function session(role, aal, factors = [factor]) {
         const context = await browser.newContext({
           viewport: mobile ? { width: 390, height: 844 } : { width: 1440, height: 960 },
           colorScheme: mobile ? 'dark' : 'light', reducedMotion: 'reduce',
+          // A shell locale such as C.UTF-8 gives Chromium an invalid language tag.
+          locale: 'zh-TW',
         });
         let current = scenario === 'login' ? null : session(scenario === 'denied' ? 'rider' : 'admin', scenario === 'mfa' || scenario === 'unfinished' ? 'aal1' : 'aal2', scenario === 'unfinished' ? [{ ...factor, status: 'unverified' }] : [factor]);
         if (current) await context.addInitScript(value => {
@@ -60,6 +74,7 @@ function session(role, aal, factors = [factor]) {
         }, current);
         const errors = [];
         const requests = [];
+        let conflicts = 0;
         await context.route('https://admin-smoke.supabase.co/**', async route => {
           const url = new URL(route.request().url());
           requests.push(`${route.request().method()} ${url.pathname}`);
@@ -90,7 +105,22 @@ function session(role, aal, factors = [factor]) {
           }
           if (url.pathname === '/rest/v1/moderation_queue') {
             assert.equal(url.searchParams.get('status'), 'eq.pending');
-            return route.fulfill({ body: '', headers: { ...cors, 'content-range': '0-6/7' } });
+            if (url.searchParams.get('select')?.includes('source_id')) return route.fulfill({ json: reports, headers: cors });
+            return route.fulfill({ body: '', headers: { ...cors, 'content-range': '0-2/3' } });
+          }
+          if (url.pathname === '/rest/v1/community_spots') {
+            return route.fulfill({ json: url.searchParams.get('status') === 'eq.hidden' ? [hiddenSpot] : [communitySpot], headers: cors });
+          }
+          if (url.pathname === '/rest/v1/official_heavy_spots') {
+            return route.fulfill({ json: url.searchParams.get('hidden') === 'eq.true' ? [] : [officialSpot], headers: cors });
+          }
+          if (url.pathname === '/rest/v1/rpc/admin_resolve_report' && !route.request().postDataJSON().p_force) {
+            // The spot changed after the report: the admin must review and force.
+            conflicts++;
+            return route.fulfill({ status: 400, json: { code: '40001', message: 'spot changed since the report' }, headers: cors });
+          }
+          if (url.pathname === '/rest/v1/rpc/admin_resolve_report' || url.pathname === '/rest/v1/rpc/admin_set_spot_hidden') {
+            return route.fulfill({ json: {}, headers: cors });
           }
           errors.push(`Unexpected API request: ${url.pathname}`);
           return route.fulfill({ status: 400, json: { message: 'Unexpected smoke request' }, headers: cors });
@@ -126,7 +156,42 @@ function session(role, aal, factors = [factor]) {
         assert.equal(await page.title(), '停車指南管理');
         assert.match(await page.locator('meta[name=robots]').getAttribute('content'), /noindex/);
         if (scenario === 'shell') {
-          await waitText('有 7 筆回報等待確認');
+          if (mobile) {
+            await page.getByRole('button', { name: /^格位類型/ }).waitFor({ timeout: 15000 });
+            await page.screenshot({ path: path.join(output, `${name}-queue.png`) });
+            await page.getByRole('button', { name: /^格位類型/ }).click();
+          }
+          await waitText('格位類型的修改建議');
+          await waitText('建議變更');
+          await page.screenshot({ path: path.join(output, `${name}-review.png`), fullPage: true });
+          await page.getByRole('button', { name: '修改後套用', exact: true }).click();
+          await waitText('套用修改');
+          await page.screenshot({ path: path.join(output, `${name}-edit.png`) });
+          await page.getByRole('button', { name: '取消修改', exact: true }).click();
+          await page.getByRole('button', { name: '套用建議', exact: true }).click();
+          await waitText('已套用建議：中山北路二段路邊機車格');
+          await waitText('機車停放資格的修改建議');
+          await page.screenshot({ path: path.join(output, `${name}-next.png`) });
+          await page.getByRole('button', { name: '復原', exact: true }).click();
+          await waitText('格位類型的修改建議');
+          if (mobile) await page.getByRole('button', { name: /^返回佇列/ }).click();
+          await page.getByRole('button', { name: '已隱藏的點位', exact: true }).click();
+          await page.getByRole('button', { name: '恢復顯示', exact: true }).waitFor({ timeout: 15000 });
+          await page.screenshot({ path: path.join(output, `${name}-hidden.png`) });
+          await page.getByRole('button', { name: '返回待審回報', exact: true }).click();
+          if (mobile) await page.getByRole('button', { name: /^格位類型/ }).click();
+          await page.getByRole('button', { name: '套用建議', exact: true }).click();
+          await waitText('機車停放資格的修改建議');
+          // Past the undo window the write is sent and refused as a conflict.
+          if (mobile) await page.getByRole('button', { name: /^返回佇列/ }).click({ delay: 6500 });
+          else await page.waitForTimeout(6500);
+          await page.getByRole('button', { name: /^格位類型/ }).click();
+          await page.getByRole('button', { name: '仍要套用建議', exact: true }).waitFor({ timeout: 15000 });
+          await page.screenshot({ path: path.join(output, `${name}-conflict.png`) });
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} conflict view scrolls sideways`);
+          await page.getByRole('button', { name: '仍要套用建議', exact: true }).click();
+          await waitText('已套用建議：中山北路二段路邊機車格');
+          if (mobile) await page.getByRole('button', { name: /^返回佇列/ }).click();
           await page.screenshot({ path: path.join(output, `${name}.png`) });
           for (const [label, title] of [['點位', '停車點位'], ['規則', '各縣市停車規則'], ['匯入', '匯入停車資料'], ['使用者', '使用者管理'], ['審核', '待審回報']]) {
             await page.getByRole('button', { name: label === '審核' ? /^審核/ : label, exact: true }).click();
@@ -168,7 +233,10 @@ function session(role, aal, factors = [factor]) {
         }
         await page.keyboard.press('Tab');
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-        assert.deepEqual(errors, [], `${name} console errors`);
+        // Chromium logs each refused write; only the mocked conflicts may appear.
+        const unexpected = errors.filter(e => !e.includes('status of 400'));
+        assert.deepEqual(unexpected, [], `${name} console errors`);
+        assert.equal(errors.length - unexpected.length, conflicts, `${name} 400 responses`);
         if (scenario === 'login') {
           await page.getByRole('button', { name: /使用 Google 帳號登入/ }).click();
           await page.getByText('Google OAuth smoke callback', { exact: true }).waitFor();

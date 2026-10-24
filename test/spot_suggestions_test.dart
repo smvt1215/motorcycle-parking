@@ -192,6 +192,9 @@ void main() {
       'action': 'flag',
       'source_id': spot.id,
       'reason': '點位已不存在：現場格線已撤除，改為人行道',
+      'field': 'gone',
+      'proposed': {'status': 'hidden'},
+      'note': '現場格線已撤除，改為人行道',
     });
     expect(store.submissions.any((body) => body['action'] == 'vote'), isFalse);
     expect(store.spots, contains(spot));
@@ -227,8 +230,40 @@ void main() {
       'action': 'flag',
       'source_id': spot.id,
       'reason': '格位類型：建議「${SpaceType.heavyOnly.label}」',
+      'field': 'space_type',
+      'proposed': {'space_type': 'heavyOnly'},
+      'note': '',
     });
     expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('名稱建議以填寫內容作為建議值送出', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final store = (await tester.runAsync(createStore))!;
+    addTearDown(store.dispose);
+    await openDetails(tester, store);
+    await tester.ensureVisible(find.text('修改建議'));
+    await tester.tap(find.text('修改建議'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('停車點名稱'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('suggestion-input')),
+      '市府路機車格',
+    );
+    await tester.tap(find.text('送出建議'));
+    await tester.pumpAndSettle();
+    expect(store.submissions.single, {
+      'action': 'flag',
+      'source_id': spot.id,
+      'reason': '停車點名稱：市府路機車格',
+      'field': 'name',
+      'proposed': {'name': '市府路機車格'},
+    });
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
