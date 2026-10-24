@@ -224,8 +224,13 @@ void addSelectionTests() {
     await tester.pumpAndSettle();
     final map = tester.widget<gm.GoogleMap>(find.byType(gm.GoogleMap));
     expect(map.markers, hasLength(spots.length));
+    // Its own id: never the clustered marker changed in place.
+    expect(
+      map.markers.where((m) => m.markerId.value == spots.first.id),
+      isEmpty,
+    );
     final chosen = map.markers.singleWhere(
-      (m) => m.markerId.value == spots.first.id,
+      (m) => m.markerId.value == 'selected:${spots.first.id}',
     );
     expect(chosen.clusterManagerId, isNull);
     expect(chosen.zIndexInt, greaterThan(0));

@@ -316,13 +316,15 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
 
 extension on GoogleParkingMapState {
   /// No info window: the spot sheet carries the name and status for every
-  /// spot alike. The selected spot leaves its cluster so it never hides.
+  /// spot alike. The selected spot leaves its cluster so it never hides,
+  /// under its own id: the iOS plugin drops a marker whose cluster id is
+  /// removed in place instead of putting it back on the map.
   gm.Marker _marker(
     Map<(MarkerLook, bool), gm.BitmapDescriptor> icons,
     ParkingSpot spot, {
     required bool selected,
   }) => gm.Marker(
-    markerId: gm.MarkerId(spot.id),
+    markerId: gm.MarkerId(selected ? 'selected:${spot.id}' : spot.id),
     position: gm.LatLng(spot.lat, spot.lng),
     icon: icons[(markerLook(widget.eligibility(spot)), selected)]!,
     anchor: const Offset(.5, .5),
