@@ -305,7 +305,7 @@ UI：`material_ui`、`cupertino_ui`（Flutter 官方設計套件，取代框架�
    - **伺服器端限流**：所有寫入經 Edge Function `submit-report`，依 user id **與** IP 雙重限流（如每帳號每日 10 筆、每 IP 每日 30 筆），並記錄於 `rate_limit_events`；Supabase Auth 本身的註冊/登入速率限制同時開啟。
    - **裝置驗證（第二階段）**：上架後加入 Android Play Integrity / iOS App Attest，由 Edge Function 驗證後才接受寫入。
    - 不能確認自己的回報；檢舉按鈕 → `moderation_queue`；照片存 Supabase Storage，上傳前移除 EXIF。
-5. **管理**：第一版用 Supabase Dashboard，不另做後台。審核量變大時再評估管理者角色（RLS）與審核畫面。
+5. **管理**：Web 管理介面完成前用 Supabase Dashboard；管理介面的範圍、管理者角色與審核畫面見 [ADMIN_WEB.md](ADMIN_WEB.md)。
    | 工作 | Dashboard 位置 |
    |---|---|
    | 建立、停用使用者（含匯入用帳號） | Authentication → Users |
