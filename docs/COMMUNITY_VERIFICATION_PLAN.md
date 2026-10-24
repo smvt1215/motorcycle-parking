@@ -2,8 +2,8 @@
 
 > 狀態：設計提案，尚未實作／尚未驗收  
 > 盤點日期：2026-10-24（Asia/Taipei）  
-> 專案：[\`smvt1215/motorcycle-parking\`](https://github.com/smvt1215/motorcycle-parking)  
-> 盤點基準：\`main\` commit \`ee4a1f3c034a1237eb14b18c1f35c1b692cc4bb7\`（含 #55、#56）  
+> 專案：[`smvt1215/motorcycle-parking`](https://github.com/smvt1215/motorcycle-parking)  
+> 盤點基準：`main` commit `ee4a1f3c034a1237eb14b18c1f35c1b692cc4bb7`（含 #55、#56）  
 > 適用端：Flutter iOS／Android、Supabase Postgres／PostGIS／Auth／Edge Functions、Flutter Admin Web  
 > 性質：增量設計。本文不代表已完成的功能，也不更改既有程式碼。
 
@@ -27,21 +27,21 @@
 - 全自動認定交通法規、取代主管機關解釋。
 - 公開使用者排行榜、可交換點數等遊戲化機制。
 - 以照片或 GPS 單獨證明停車合法。
-- 重建獨立的審核後台；優先沿用 \`docs/ADMIN_WEB.md\`。
+- 重建獨立的審核後台；優先沿用 `docs/ADMIN_WEB.md`。
 
 ## 2. 已有能力與未完成事項
 
 | 模組 | 已有實作／設計 | 後續工作 |
 | --- | --- | --- |
-| 新增停車點 | \`ReportForm\` + \`submit-report\` + \`community_spots\` | 補證據、位置品質、修訂溯源 |
-| 修改建議 | \`spot_suggestions.dart\` 的 \`flag\` 流程 | 送出結構化 \`field\`／\`proposed\`／\`note\` |
+| 新增停車點 | `ReportForm` + `submit-report` + `community_spots` | 補證據、位置品質、修訂溯源 |
+| 修改建議 | `spot_suggestions.dart` 的 `flag` 流程 | 送出結構化 `field`／`proposed`／`note` |
 | 防濫用 | Google／Apple 登入、帳號年齡、IP／裝置 HMAC、帳號／IP 限流 | 將裝置/IP 僅作風險訊號；加抗重放與可觀測性 |
-| 歷史投票 | \`spot_votes\`、\`apply_report\` 支援 \`still_there\`／\`gone\` | 與停放資格解耦；檢查舊 API 的自動隱藏 |
-| 資料可信度 | \`TrustStatus.pending/confirmed/hidden\`、\`EligibilityStatus.unverified\` | 由點位級改為存在／欄位／合法性分層 |
-| 資料過期 | \`ParkingSpot.stale\`：\`lastConfirmedAt\` 有值且超過 180 天 | 空值視為未知；依欄位不同效期 |
-| 管理審核後端 | #55 已合併 \`moderation_queue\` 結構化欄位、\`admin_resolve_report\`、\`admin_audit_log\`、MFA 權限 | 提案與審核欄位一致化、衝突檢查 |
+| 歷史投票 | `spot_votes`、`apply_report` 支援 `still_there`／`gone` | 與停放資格解耦；檢查舊 API 的自動隱藏 |
+| 資料可信度 | `TrustStatus.pending/confirmed/hidden`、`EligibilityStatus.unverified` | 由點位級改為存在／欄位／合法性分層 |
+| 資料過期 | `ParkingSpot.stale`：`lastConfirmedAt` 有值且超過 180 天 | 空值視為未知；依欄位不同效期 |
+| 管理審核後端 | #55 已合併 `moderation_queue` 結構化欄位、`admin_resolve_report`、`admin_audit_log`、MFA 權限 | 提案與審核欄位一致化、衝突檢查 |
 | 管理後台 | #56 已合併 Admin Web 外殼（登入、MFA、頁籤、待審數） | 實際審核／點位維護操作尚需實作 |
-| 照片 | 點位有 \`photo_urls\` 顯示與儲存欄位 | Storage 上傳、審核、去識別、權限及保留期 |
+| 照片 | 點位有 `photo_urls` 顯示與儲存欄位 | Storage 上傳、審核、去識別、權限及保留期 |
 
 相關來源：
 - [專案總計畫](PLAN.md)
@@ -54,17 +54,17 @@
 
 ### 2.1 目前必須處理的風險
 
-**R1（P0）存在確認會間接提升車種資格可信度。** 舊 \`apply_report\` 在兩個合格且獨立的 \`still_there\` 投票後，把整筆社群點設成 \`confirmed\`；\`eligibility.dart\` 又以 \`status == confirmed && !stale\` 作為部分停放資格判斷的可信條件。此狀態不能證明「重機可停／普機可停」欄位已獲證據核實。
+**R1（P0）存在確認會間接提升車種資格可信度。** 舊 `apply_report` 在兩個合格且獨立的 `still_there` 投票後，把整筆社群點設成 `confirmed`；`eligibility.dart` 又以 `status == confirmed && !stale` 作為部分停放資格判斷的可信條件。此狀態不能證明「重機可停／普機可停」欄位已獲證據核實。
 
-**R2（P0）回報 UI 尚未使用已建成的結構化審核後端。** \`_SuggestionForm.submit()\` 目前只送 \`action/source_id/reason\`；未送 \`field/proposed/note\`，後台無法直接呈現機器可辨的欄位差異。
+**R2（P0）回報 UI 尚未使用已建成的結構化審核後端。** `_SuggestionForm.submit()` 目前只送 `action/source_id/reason`；未送 `field/proposed/note`，後台無法直接呈現機器可辨的欄位差異。
 
-**R3（P1）相同理由可能吞掉獨立證據。** \`moderation_queue\` 有待審案件的 \`(source_id, reason)\` 唯一索引；\`flag\` 採 \`ON CONFLICT DO NOTHING\`。相同文字的不同騎士回報可能不另留可核實的個別觀察。
+**R3（P1）相同理由可能吞掉獨立證據。** `moderation_queue` 有待審案件的 `(source_id, reason)` 唯一索引；`flag` 採 `ON CONFLICT DO NOTHING`。相同文字的不同騎士回報可能不另留可核實的個別觀察。
 
-**R4（P1）資料過期語意與時間更新。** \`lastConfirmedAt == null\` 不會觸發 \`stale\`；舊投票達門檻後，後續投票可能再次更新確認時間，即使沒有重新查核特定欄位。
+**R4（P1）資料過期語意與時間更新。** `lastConfirmedAt == null` 不會觸發 `stale`；舊投票達門檻後，後續投票可能再次更新確認時間，即使沒有重新查核特定欄位。
 
-**R5（P1）舊投票仍可使點位隱藏。** 新 UI 已移除單獨的存在投票，但 \`submit-report/validate.ts\` 與 RPC 仍接受 \`vote\`；加權負向分數達 3 時會隱藏社群點並進審核。舊版客戶端或直接呼叫的風險需另行控制。
+**R5（P1）舊投票仍可使點位隱藏。** 新 UI 已移除單獨的存在投票，但 `submit-report/validate.ts` 與 RPC 仍接受 `vote`；加權負向分數達 3 時會隱藏社群點並進審核。舊版客戶端或直接呼叫的風險需另行控制。
 
-**R6（P1）15 公尺同類型去重過於簡化。** 目前以「15 m 內且相同 \`space_type\`」判斷重複；同一位置可能有不同入口／分區，也可能有兩個獨立場站。第一版保留防重複提示，不能自動合併。
+**R6（P1）15 公尺同類型去重過於簡化。** 目前以「15 m 內且相同 `space_type`」判斷重複；同一位置可能有不同入口／分區，也可能有兩個獨立場站。第一版保留防重複提示，不能自動合併。
 
 ## 3. 產品流程與可見狀態
 
@@ -74,9 +74,9 @@
 
 修改建議的每個提案至少記錄：
 
-- 點位 ID（包含 \`official:<uuid>\` 與社群 UUID 的識別方式）。
+- 點位 ID（包含 `official:<uuid>` 與社群 UUID 的識別方式）。
 - 受影響欄位鍵（不可只使用繁中文字串）、目前值、建議值。
-- 回報類型：\`create\`、\`correct\`、\`exists\`、\`removed\`、\`temporary_closure\`、\`dispute\`。
+- 回報類型：`create`、`correct`、`exists`、`removed`、`temporary_closure`、`dispute`。
 - 騎士說明、實際觀察時間、送出時間、可選證據。
 - 送出當時的點位版本；資料在審核前若已變更，必須提示衝突。
 - 提案狀態：待審、待補證據、已採納、已駁回、已撤回／過期。
@@ -85,12 +85,12 @@
 
 | 面向 | 建議狀態 | 意義 |
 | --- | --- | --- |
-| 存在狀態 \`existence\` | \`observed / unverified / disputed / removed\` | 車格或場站是否仍存在 |
-| 欄位核實 \`field_verification\` | \`unverified / verified / stale / disputed\` | 單一欄位是否有有效證據 |
-| 停放資格 \`eligibility\` | 既有 \`allowed / conditional / unverified / notAllowed\` | 對指定車種的停車判斷，由規則與已核實事實計算 |
-| 地圖公開 \`visibility\` | \`visible / hidden\` | 是否顯示，不代表存在或可停 |
+| 存在狀態 `existence` | `observed / unverified / disputed / removed` | 車格或場站是否仍存在 |
+| 欄位核實 `field_verification` | `unverified / verified / stale / disputed` | 單一欄位是否有有效證據 |
+| 停放資格 `eligibility` | 既有 `allowed / conditional / unverified / notAllowed` | 對指定車種的停車判斷，由規則與已核實事實計算 |
+| 地圖公開 `visibility` | `visible / hidden` | 是否顯示，不代表存在或可停 |
 
-相容期保留 \`community_spots.status\`，但**不得再把它作為所有欄位可信度的代理**。新 UI 可見舊的待確認社群點，但不得因「存在已確認」便把高風險資格改成「可停」。
+相容期保留 `community_spots.status`，但**不得再把它作為所有欄位可信度的代理**。新 UI 可見舊的待確認社群點，但不得因「存在已確認」便把高風險資格改成「可停」。
 
 ### 3.3 內容型態與審核策略
 
@@ -105,32 +105,32 @@
 
 ## 4. 資料模型與最小遷移
 
-原則：**保留既有 \`moderation_queue\` 作為審核案件、\`admin_audit_log\` 作為管理操作稽核；新增觀察與欄位核實，而不是另造完整第二套審核系統。**
+原則：**保留既有 `moderation_queue` 作為審核案件、`admin_audit_log` 作為管理操作稽核；新增觀察與欄位核實，而不是另造完整第二套審核系統。**
 
-### 4.1 \`spot_observations\`（新增）
+### 4.1 `spot_observations`（新增）
 
 每次獨立的現場觀察都新增一列，不因文字相同而丟棄。
 
 建議欄位：
-- \`id uuid PK\`、\`source_id text\`、\`reporter_id uuid\`（不對外公開）。
-- \`case_id uuid nullable\` → \`moderation_queue.id\`。
-- \`kind text\`、\`field_key text nullable\`（固定白名單鍵）。
-- \`proposed jsonb\`、\`observed_at timestamptz\`、\`created_at timestamptz\`。
-- \`comment text\`、\`evidence_ids uuid[]\`（或關聯表）。
-- \`account_age_bucket\`、\`independence_result\`、\`risk_flags jsonb\`（不公開；勿保存可逆原始 IP）。
-- \`idempotency_key text\`（同帳號同操作重送不產生重複觀察）。
+- `id uuid PK`、`source_id text`、`reporter_id uuid`（不對外公開）。
+- `case_id uuid nullable` → `moderation_queue.id`。
+- `kind text`、`field_key text nullable`（固定白名單鍵）。
+- `proposed jsonb`、`observed_at timestamptz`、`created_at timestamptz`。
+- `comment text`、`evidence_ids uuid[]`（或關聯表）。
+- `account_age_bucket`、`independence_result`、`risk_flags jsonb`（不公開；勿保存可逆原始 IP）。
+- `idempotency_key text`（同帳號同操作重送不產生重複觀察）。
 
-RLS：只開放本人查自己的提案；管理員 \`is_admin()\` 才能檢視全部；**一般地圖 API 絕不直接回傳 \`reporter_id\`、IP／裝置雜湊、風險欄位。**
+RLS：只開放本人查自己的提案；管理員 `is_admin()` 才能檢視全部；**一般地圖 API 絕不直接回傳 `reporter_id`、IP／裝置雜湊、風險欄位。**
 
-### 4.2 \`spot_field_verifications\`（新增）
+### 4.2 `spot_field_verifications`（新增）
 
-以 \`(source_id, field_key)\` 為唯一鍵；存在核實可用特殊 \`field_key = 'existence'\`。
+以 `(source_id, field_key)` 為唯一鍵；存在核實可用特殊 `field_key = 'existence'`。
 
-建議欄位：\`state\`、\`verified_value\`、\`evidence_policy\`、\`source_kind\`、\`verified_at\`、\`valid_until\`、\`reviewed_by\`、\`revision\`、\`updated_at\`。
+建議欄位：`state`、`verified_value`、`evidence_policy`、`source_kind`、`verified_at`、`valid_until`、`reviewed_by`、`revision`、`updated_at`。
 
-需保留證據／提案關聯（另設 join table），避免只有最後一個驗證者的結果。對同一點位的 \`heavy_allowed\` 和 \`scooter_allowed\` 分開存狀態；場站 \`parking_zones\` 則考慮 \`field_key + zone_id\`。
+需保留證據／提案關聯（另設 join table），避免只有最後一個驗證者的結果。對同一點位的 `heavy_allowed` 和 `scooter_allowed` 分開存狀態；場站 `parking_zones` 則考慮 `field_key + zone_id`。
 
-### 4.3 \`spot_evidence\`（新增，照片階段）
+### 4.3 `spot_evidence`（新增，照片階段）
 
 記錄 Storage object key、擁有者、提交時間、證據類型、審核狀態、可公開與否；**不直接信任客戶端傳入任意公開 URL**。
 
@@ -141,27 +141,27 @@ RLS：只開放本人查自己的提案；管理員 \`is_admin()\` 才能檢視�
 
 ### 4.4 既有表調整
 
-- \`moderation_queue\`：保留 \`field/proposed/note/status/resolved_by/resolution_note\`，增加版本比較與提案聚合鍵；同一提案可以關聯多份獨立 \`spot_observations\`。**不要再以相同 \`reason\` 代表完整證據已儲存。**
-- \`community_spots\`：暫保留 \`status/last_confirmed_at\` 為相容欄位，新增必要的版本號或透過核實表衍生；逐步移除 \`eligibility\` 對點位級 \`confirmed\` 的信賴。
-- \`official_heavy_spots\`：主資料仍由官方匯入／管理員維護。社群證據只能形成修改提案，不可自行改寫官方來源與 \`source_url\`。
-- \`admin_audit_log\`：繼續記錄管理端 before／after，若需所有發佈歷史，再增加通用 \`spot_revisions\`，以避免與管理稽核重複。
-- 既有 \`spot_votes\`：保留歷史相容，不要再把舊票數用於自動授權車種資格；評估移除其自動隱藏副作用。
+- `moderation_queue`：保留 `field/proposed/note/status/resolved_by/resolution_note`，增加版本比較與提案聚合鍵；同一提案可以關聯多份獨立 `spot_observations`。**不要再以相同 `reason` 代表完整證據已儲存。**
+- `community_spots`：暫保留 `status/last_confirmed_at` 為相容欄位，新增必要的版本號或透過核實表衍生；逐步移除 `eligibility` 對點位級 `confirmed` 的信賴。
+- `official_heavy_spots`：主資料仍由官方匯入／管理員維護。社群證據只能形成修改提案，不可自行改寫官方來源與 `source_url`。
+- `admin_audit_log`：繼續記錄管理端 before／after，若需所有發佈歷史，再增加通用 `spot_revisions`，以避免與管理稽核重複。
+- 既有 `spot_votes`：保留歷史相容，不要再把舊票數用於自動授權車種資格；評估移除其自動隱藏副作用。
 
 ### 4.5 資料遷移與相容
 
 1. 使用**新增 migration**，不修改已部署的舊 migration。
-2. 先加新表與 view／RPC，再改讀取端，最後處理舊 \`confirmed\` 衍生邏輯。
-3. 舊版 App 的 \`flag\`（純 \`reason\`）照常接受並列入待審，結構化欄位可為 null；新版本不依賴字串解析。
-4. 舊 \`confirmed\` 點位的欄位核實初始設為 \`unverified\`，除非具備可回溯來源，**不能批次直接當成合法性已核實**。
-5. 遷移前後確保收藏 JSON 舊版可解析；\`EligibilityStatus\` 的外部語意保持一致。
+2. 先加新表與 view／RPC，再改讀取端，最後處理舊 `confirmed` 衍生邏輯。
+3. 舊版 App 的 `flag`（純 `reason`）照常接受並列入待審，結構化欄位可為 null；新版本不依賴字串解析。
+4. 舊 `confirmed` 點位的欄位核實初始設為 `unverified`，除非具備可回溯來源，**不能批次直接當成合法性已核實**。
+5. 遷移前後確保收藏 JSON 舊版可解析；`EligibilityStatus` 的外部語意保持一致。
 6. 以功能旗標與 staged rollout 控制核實規則；確保既有客戶端不會因 schema 更新而崩潰。
-7. 既有 \`moderation_queue\` 唯一索引要先規劃替代聚合方式，並在同一 transaction 維持觀察紀錄與案件一致性。
+7. 既有 `moderation_queue` 唯一索引要先規劃替代聚合方式，並在同一 transaction 維持觀察紀錄與案件一致性。
 
 ## 5. API、業務規則與核實演算法
 
 ### 5.1 近期先接通結構化修改建議
 
-新版 Flutter \`flag\` payload 示意：
+新版 Flutter `flag` payload 示意：
 
 ~~~json
 {
@@ -174,14 +174,14 @@ RLS：只開放本人查自己的提案；管理員 \`is_admin()\` 才能檢視�
 }
 ~~~
 
-說明：\`source_id\` 的值應是**實際點位 ID**：官方 \`official:<uuid>\`，社群則為純 UUID；上方字串只代表兩種可能形式，不能逐字送出。新增欄位的具體命名與白名單應與 \`admin_resolve_report\` 的欄位鍵相同。
+說明：`source_id` 的值應是**實際點位 ID**：官方 `official:<uuid>`，社群則為純 UUID；上方字串只代表兩種可能形式，不能逐字送出。新增欄位的具體命名與白名單應與 `admin_resolve_report` 的欄位鍵相同。
 
 實作項目：
-- UI 以穩定的 \`field_key\` 傳值，繁體中文僅供畫面顯示。
-- \`space_type\`、\`heavy_allowed\`、\`scooter_allowed\` 等使用結構化欄位；名稱、費率、位置等逐步補齊。
+- UI 以穩定的 `field_key` 傳值，繁體中文僅供畫面顯示。
+- `space_type`、`heavy_allowed`、`scooter_allowed` 等使用結構化欄位；名稱、費率、位置等逐步補齊。
 - Edge Function 在信任邊界檢查欄位白名單、值型別、座標、大小與權限；不可只信任 Dart 表單。
-- 管理員審核時顯示「目前／建議／證據／基礎版本」；採納以既有 \`admin_resolve_report\` 或擴充版在單一 transaction 寫入。
-- 舊版文字 \`reason\` 繼續保留，避免舊 App 相容問題。
+- 管理員審核時顯示「目前／建議／證據／基礎版本」；採納以既有 `admin_resolve_report` 或擴充版在單一 transaction 寫入。
+- 舊版文字 `reason` 繼續保留，避免舊 App 相容問題。
 
 ### 5.2 交叉核實的判定
 
@@ -190,8 +190,8 @@ RLS：只開放本人查自己的提案；管理員 \`is_admin()\` 才能檢視�
 - 同 IP／同裝置／建立很新的帳號只增加風險，不把 IP 視為真實身分證明；行動網路 NAT 可能使兩名真實騎士同 IP。
 - 建議初期最低門檻：**兩名已登入、帳號超過 7 天且獨立性風險低的使用者**可核實「存在」；此數值須經真實資料調整。
 - 任何影響**合法性／限制**的修改，均需可驗證公告或管理員人工確認；即使超過交叉觀察門檻也不能只靠多票自動變「可停」。
-- 同一欄位有明顯矛盾的可靠觀察時，先標 \`disputed\`，保留前一個安全狀態，交由人工審核；不得採單純最新覆蓋。
-- 任何提案的 \`base_revision\` 落後目前版本時，不可直接套用，需重新比對（防止失效提案覆蓋更新的資料）。
+- 同一欄位有明顯矛盾的可靠觀察時，先標 `disputed`，保留前一個安全狀態，交由人工審核；不得採單純最新覆蓋。
+- 任何提案的 `base_revision` 落後目前版本時，不可直接套用，需重新比對（防止失效提案覆蓋更新的資料）。
 
 ### 5.3 過期與再次核實
 
@@ -206,41 +206,41 @@ RLS：只開放本人查自己的提案；管理員 \`is_admin()\` 才能檢視�
 | 重機停放資格 | 90 天或公告／場站規則變更時 |
 | 法規與公告 | 依有效日期、廢止日期及官方來源變動 |
 
-以伺服器儲存的 \`verified_at\`、\`valid_until\` 判定，而非只有 Flutter \`DateTime.now()\`。**沒有查核時間必須是未知，不可視為永久新鮮。**
+以伺服器儲存的 `verified_at`、`valid_until` 判定，而非只有 Flutter `DateTime.now()`。**沒有查核時間必須是未知，不可視為永久新鮮。**
 
 定期作業只改核實狀態，不應自動刪除點位。法規與現場事實的優先順序：有效的官方規則／公告約束可停條件；現場標誌與營運方公告是重要佐證，與官方資料衝突則標爭議送審，不能由社群覆蓋法律。
 
 ## 6. 權限、防濫用與安全
 
-沿用現行 \`submit-report\` Edge Function + service role RPC 寫入、公開只讀 view 與 RLS 的架構。
+沿用現行 `submit-report` Edge Function + service role RPC 寫入、公開只讀 view 與 RLS 的架構。
 
-- 回報：Google／Apple 登入；管理員操作維持 \`is_admin()\`（需 \`aal2\`）。
+- 回報：Google／Apple 登入；管理員操作維持 `is_admin()`（需 `aal2`）。
 - 限流：保留每帳號每日 10 筆、每受信任 IP 每日 30 筆作起始值，並評估分操作類型限流／冷卻時間；必須伺服器執行。
-- 防重放：\`idempotency_key\`、重試唯一索引、交易內原子更新；由後端決定信任分數，不信任客戶端傳入 \`qualified\`。
-- 裝置：目前 \`device_id\` 是 SharedPreferences UUID，容易重設。未來可整合 App Attest／Play Integrity，但這只能提供應用程式完整性訊號，不能證明一機一人。
+- 防重放：`idempotency_key`、重試唯一索引、交易內原子更新；由後端決定信任分數，不信任客戶端傳入 `qualified`。
+- 裝置：目前 `device_id` 是 SharedPreferences UUID，容易重設。未來可整合 App Attest／Play Integrity，但這只能提供應用程式完整性訊號，不能證明一機一人。
 - IP：只讀可信反向代理覆寫的 header；維持 HMAC 雜湊、secret 輪替及保留期；不顯示給前端。
 - 來源與隱私：避免在公開查詢中回傳單筆回報者身分及敏感位置歷史。使用者刪除帳號／撤銷照片同意需有處理程序。
 - 照片：上傳限制、內容審核、去 EXIF、臉／車牌遮蔽；高風險證據預設不公開。
-- 滥用／撤除：不要讓單一使用者或幾個可疑舊版投票在未審核時直接永久隱藏大型公共場站。
+- 濫用／撤除：不要讓單一使用者或幾個可疑舊版投票在未審核時直接永久隱藏大型公共場站。
 
 ## 7. Admin Web 接軌
 
-接續 \`docs/ADMIN_WEB.md\` 的既有待審清單／差異表，不另外建立第二個網站：
+接續 `docs/ADMIN_WEB.md` 的既有待審清單／差異表，不另外建立第二個網站：
 
 1. 待審案件中顯示結構化目前值與提案值、照片／公告、觀察數、風險訊號、提案版本。
 2. 同一欄位的多筆觀察合併展示，但保留各自的時間與證據來源。
 3. 管理動作：採納、修改後採納、駁回、要求補充、標爭議。
 4. 管理員採納時，以資料庫 transaction 比對版本 → 寫欄位 → 更新核實紀錄 → 結案 → 留下稽核。
 5. 提供歷史版本／還原；當來源官方公告變更時，能重新標註需要人工複查的欄位。
-6. 延續 PR #56 的登入／MFA／外殼與 #55 的 \`admin_resolve_report\`；實際登入、Hosting、SMS 等環境驗收仍依原後台計畫執行。
+6. 延續 PR #56 的登入／MFA／外殼與 #55 的 `admin_resolve_report`；實際登入、Hosting、SMS 等環境驗收仍依原後台計畫執行。
 
 ## 8. 開發階段與驗收標準
 
 ### P0 — 可信度語意與安全止血（最高優先）
 
 **範圍：**
-- \`lib/domain/eligibility.dart\`：讓存在確認不能直接使 \`heavy_allowed\`／\`scooter_allowed\` 變可信；修正未核實、無時間、過期資料的降級行為。
-- 後端：檢視舊 \`vote\` 路徑，停止未審判定的合法性提升，並讓負向票自動隱藏受安全策略管控；保留必要相容。
+- `lib/domain/eligibility.dart`：讓存在確認不能直接使 `heavy_allowed`／`scooter_allowed` 變可信；修正未核實、無時間、過期資料的降級行為。
+- 後端：檢視舊 `vote` 路徑，停止未審判定的合法性提升，並讓負向票自動隱藏受安全策略管控；保留必要相容。
 - 新增針對不同車種／官方與社群／待確認／過期／衝突的單元測試。
 
 **完成標準：**
@@ -252,20 +252,20 @@ RLS：只開放本人查自己的提案；管理員 \`is_admin()\` 才能檢視�
 ### P1 — 結構化共筆與審核串接
 
 **範圍：**
-- \`lib/features/report/spot_suggestions.dart\`：填入 \`field/proposed/note\`，保留原 \`reason\`。
-- \`supabase/functions/submit-report/validate.ts\`：欄位白名單、型別與衝突值驗證。
+- `lib/features/report/spot_suggestions.dart`：填入 `field/proposed/note`，保留原 `reason`。
+- `supabase/functions/submit-report/validate.ts`：欄位白名單、型別與衝突值驗證。
 - Admin Web：完成現有規劃中的待審案件比較、採納／駁回與錯誤處理。
 
 **完成標準：**
 - [ ] 類型、車種資格、名稱、費率修改以機器可辨的欄位值送審。
-- [ ] \`admin_resolve_report\` 能一次採納並保留 before／after 稽核。
-- [ ] 舊 App 只送 \`reason\` 仍能成功送審。
+- [ ] `admin_resolve_report` 能一次採納並保留 before／after 稽核。
+- [ ] 舊 App 只送 `reason` 仍能成功送審。
 - [ ] 管理員在提案送出後遇到點位資料變更會看到衝突，不盲目覆蓋。
 
 ### P2 — 獨立觀察、證據與版本
 
 **範圍：**
-- 新增 \`spot_observations\`、\`spot_evidence\`、提案關聯與去重／重放控制。
+- 新增 `spot_observations`、`spot_evidence`、提案關聯與去重／重放控制。
 - Supabase Storage 私有上傳、照片處理、隱私與審核。
 - Admin Web 顯示證據及單獨觀察；設計可追溯的版本／回退。
 
@@ -278,7 +278,7 @@ RLS：只開放本人查自己的提案；管理員 \`is_admin()\` 才能檢視�
 ### P3 — 分層核實與爭議管理
 
 **範圍：**
-- 新增 \`spot_field_verifications\` 與查詢 view／RPC。
+- 新增 `spot_field_verifications` 與查詢 view／RPC。
 - 低風險存在觀察的交叉核實規則、分歧標示及人工仲裁。
 - 接入車種資格計算（僅採具備正確證據等級及有效期的欄位）。
 
@@ -292,7 +292,7 @@ RLS：只開放本人查自己的提案；管理員 \`is_admin()\` 才能檢視�
 ### P4 — 資料新鮮度與維運
 
 **範圍：**
-- 欄位級 \`valid_until\`、定期重驗隊列、來源差異通知。
+- 欄位級 `valid_until`、定期重驗隊列、來源差異通知。
 - Admin Web 過期／爭議篩選；必要時可通知有貢獻的使用者補充。
 - 驗證門檻、異常回報率、審核工作量與誤判率儀表指標。
 
@@ -306,22 +306,22 @@ RLS：只開放本人查自己的提案；管理員 \`is_admin()\` 才能檢視�
 
 | 情境 | 預期 |
 | --- | --- |
-| 兩名合格騎士回報「仍存在」，\`heavy_allowed\` 未核實 | 點位存在可確認；重機資格仍待確認 |
-| 已確認的社群欄位缺 \`verified_at\` | 不被當成有有效時效的證據 |
+| 兩名合格騎士回報「仍存在」，`heavy_allowed` 未核實 | 點位存在可確認；重機資格仍待確認 |
+| 已確認的社群欄位缺 `verified_at` | 不被當成有有效時效的證據 |
 | 兩人同 IP、不同帳號／裝置 | 記錄兩個觀察與風險訊號，不以 IP 直接推導真實身分 |
 | 同一帳號快速重送完全相同請求 | 回傳既有結果，不重複計票 |
-| 多名使用者相同 \`reason\` | 全部獨立觀察可查，審核案件可聚合 |
+| 多名使用者相同 `reason` | 全部獨立觀察可查，審核案件可聚合 |
 | 不同人回報同欄位相反建議 | 顯示爭議，不自動更新可停資格 |
 | 證據不支援合法停放，但多票聲稱可停 | 不得自動升級成可停 |
 | 管理員採納前資料已改版 | 觸發版本衝突，需重新檢視 |
-| 一次移除／大量負向票、舊 \`vote\` API | 不會在缺乏足夠可信證據時不可逆地下架點位 |
+| 一次移除／大量負向票、舊 `vote` API | 不會在缺乏足夠可信證據時不可逆地下架點位 |
 | 官方點提出修改建議 | 官方來源欄位維持原貌，走人工審核 |
 | 非管理員嘗試呼叫管理 RPC | RLS／MFA 權限拒絕 |
 | 未審照片、EXIF、個資 | 非法存取失敗；公開只顯示通過隱私審核的衍生檔 |
 | 間歇性網路／重試／重放 | 資料與案件關聯一致，無半完成狀態 |
 | 來源時間到期 | 僅相關欄位變 stale，不隱藏完整點位 |
 
-CI 至少納入 \`flutter analyze\`、\`flutter test\`、Deno \`validate_test.ts\`、\`supabase test db\`（pgTAP），以及 Admin Web 的 widget／Chromium smoke test。涉及遷移的 PR 必須在乾淨資料庫及含舊資料的升級路徑都驗證。
+CI 至少納入 `flutter analyze`、`flutter test`、Deno `validate_test.ts`、`supabase test db`（pgTAP），以及 Admin Web 的 widget／Chromium smoke test。涉及遷移的 PR 必須在乾淨資料庫及含舊資料的升級路徑都驗證。
 
 ## 10. 推進順序與依賴
 
@@ -337,11 +337,11 @@ CI 至少納入 \`flutter analyze\`、\`flutter test\`、Deno \`validate_test.ts
 **交付原則：** 每期獨立 PR，附 migration、測試、相容說明及回退方案；需後端先於／配合新版 App 部署。尚未經端到端驗收前不開啟可自動改變高風險可停資格的規則。
 
 **建議首批工作切分：**
-1. \`fix(trust): separate existence from parking eligibility\`
-2. \`feat(report): send structured spot suggestions\`
-3. \`feat(admin): review structured suggestions and version conflicts\`
-4. \`feat(community): store independent observations and evidence\`
-5. \`feat(verification): field-level verification and expiry\`
+1. `fix(trust): separate existence from parking eligibility`
+2. `feat(report): send structured spot suggestions`
+3. `feat(admin): review structured suggestions and version conflicts`
+4. `feat(community): store independent observations and evidence`
+5. `feat(verification): field-level verification and expiry`
 
 ## 11. 開發前需拍板的設計決策
 
@@ -349,7 +349,7 @@ CI 至少納入 \`flutter analyze\`、\`flutter test\`、Deno \`validate_test.ts
 
 1. **核實門檻：** 首期存在核實採兩名合格帳號、低風險獨立觀察；上線後依誤判資料調整，**不將 IP 唯一性當硬性一人一票條件**。
 2. **照片政策：** P2 上線私有證據上傳，公開展示需分離審核；未完成安全流程時先允許提供官方來源網址，不急於公開照片。
-3. **舊版 \`vote\`：** 預設保留資料相容、限制自動發布與隱藏副作用，最終依實際使用者版本占比決定淘汰時間。
+3. **舊版 `vote`：** 預設保留資料相容、限制自動發布與隱藏副作用，最終依實際使用者版本占比決定淘汰時間。
 4. **官方資料優先級：** 官方有效法規決定政策邊界；現場公告若與官方資料衝突，先維持待確認並送管理員處理。
 5. **核實結果呈現：** 地圖主要四態維持現有 UI；在詳情內另外呈現「來源／已查核欄位／最近核實時間」，避免標記視覺過載。
 
@@ -357,9 +357,9 @@ CI 至少納入 \`flutter analyze\`、\`flutter test\`、Deno \`validate_test.ts
 
 ### 參考文件與變更紀錄
 
-- [\`docs/PLAN.md\`：社群回報機制](PLAN.md#社群回報機制)
-- [\`docs/ADMIN_WEB.md\`：審核後台與已排開發階段](ADMIN_WEB.md)
+- [`docs/PLAN.md`：社群回報機制](PLAN.md#社群回報機制)
+- [`docs/ADMIN_WEB.md`：審核後台與已排開發階段](ADMIN_WEB.md)
 - [PR #55：管理權限、結構化建議、審核 RPC](https://github.com/smvt1215/motorcycle-parking/pull/55)（已合併）
 - [PR #56：MFA Admin Web 外殼](https://github.com/smvt1215/motorcycle-parking/pull/56)（已合併）
 
-> 註：本文根據 2026-10-24 儲存庫程式碼與文件的靜態檢視形成，尚未執行正式／staging 系統測試。正式實作時，應重新核對 \`main\` 最新 schema、後台功能進度、地方法規來源與遷移依賴。
+> 註：本文根據 2026-10-24 儲存庫程式碼與文件的靜態檢視形成，尚未執行正式／staging 系統測試。正式實作時，應重新核對 `main` 最新 schema、後台功能進度、地方法規來源與遷移依賴。
