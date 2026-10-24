@@ -379,21 +379,8 @@ class _ReportFormState extends State<ReportForm> {
         key: form,
         child: ContentPage(
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '新增停車點',
-                    style: Theme.of(context).textTheme.headlineSmall,
-                  ),
-                ),
-                // Long form: keep cancel reachable without scrolling.
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('取消'),
-                ),
-              ],
-            ),
+            // The same close as every sheet, at the top of a long form.
+            SheetTitle('新增停車點'),
             const SizedBox(height: 8),
             Text(
               '新增點位會顯示於地圖，回報資訊待管理者確認；停放資格請依現場標示。',

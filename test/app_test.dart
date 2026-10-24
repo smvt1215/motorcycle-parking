@@ -155,7 +155,7 @@ void main() {
     expect(find.text('範例建議已送出，僅供本次功能測試。'), findsOneWidget);
     await tester.tap(find.text('完成'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('取消'));
+    await tester.tap(find.byTooltip('關閉').last);
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('parking-spot-sheet')), findsOneWidget);
     await tester.tap(find.byTooltip('關閉詳情'));
@@ -462,7 +462,7 @@ void main() {
     await tester.tap(find.byTooltip('新增停車點'));
     await tester.pumpAndSettle();
     expect(find.text('停車點名稱'), findsOneWidget);
-    await tester.tap(find.text('取消'));
+    await tester.tap(find.byTooltip('關閉').last);
     await tester.pumpAndSettle();
     // A spot in the list goes straight to the edit and "gone" reports.
     await tester.tap(find.text(store.spots.first.name));
@@ -473,7 +473,7 @@ void main() {
     expect(find.text('探索').hitTestable(), findsNothing);
     final ctx = tester.element(suggestions);
     expect(Navigator.of(ctx), same(Navigator.of(ctx, rootNavigator: true)));
-    await tester.tap(find.text('取消').last);
+    await tester.tap(find.byTooltip('關閉').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('探索').last);
     await tester.pumpAndSettle();

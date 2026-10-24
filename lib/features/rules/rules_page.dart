@@ -3,7 +3,10 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../data/app_store.dart';
 import '../../models/parking.dart';
+import '../../domain/eligibility.dart';
 import '../../ui/adaptive/adaptive.dart';
+import '../map/map_legend.dart';
+import '../map/space_type_sheet.dart';
 
 class RulesPage extends ConsumerStatefulWidget {
   const RulesPage({super.key});
@@ -48,23 +51,13 @@ class _RulesPageState extends ConsumerState<RulesPage> {
             '${rule.city} · ${store.vehicle.label}',
             style: Theme.of(context).textTheme.titleLarge,
           ),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: rule.allowedSpaceTypes
-                .map(
-                  (t) => Chip(
-                    avatar: const Icon(Icons.check_circle_outline, size: 18),
-                    label: Text(t.label),
-                  ),
-                )
-                .toList(),
-          ),
-          const SizedBox(height: 16),
-          Text(rule.feeNote, style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 12),
+          for (final (look, types) in ruleGroups(rule, store.vehicle))
+            _RuleGroup(look: look, types: types),
+          const SizedBox(height: 8),
           Text(rule.exceptions),
+          const SizedBox(height: 16),
+          _RuleField(label: '收費', value: rule.feeNote),
           const SizedBox(height: 16),
           Text(
             '規則生效／核對日期：${rule.effectiveDate.toIso8601String().substring(0, 10)} · 版本 ${rule.version}',
@@ -87,4 +80,108 @@ class _RulesPageState extends ConsumerState<RulesPage> {
       ],
     );
   }
+}
+
+/// Space types grouped as the map judges them: each type is run through
+/// [eligibility] as a verified spot in the rule's city, so this page and the
+/// markers never disagree.
+List<(MarkerLook, List<SpaceType>)> ruleGroups(
+  CityRule rule,
+  VehicleType vehicle,
+) {
+  final groups = <MarkerLook, List<SpaceType>>{};
+  for (final type in SpaceType.values) {
+    final spot = ParkingSpot(
+      id: 'rule',
+      name: 'rule',
+      lat: 0,
+      lng: 0,
+      city: rule.city,
+      spaceType: type,
+      status: TrustStatus.confirmed,
+      // A lot's own data decides; the rule alone never opens it.
+      source: 'official',
+    );
+    final look = markerLook(eligibility(spot, vehicle, rule));
+    (groups[look] ??= []).add(type);
+  }
+  return groups.entries.map((e) => (e.key, e.value)).toList()
+    ..sort((a, b) => a.$1.$1.index - b.$1.$1.index);
+}
+
+class _RuleGroup extends StatelessWidget {
+  const _RuleGroup({required this.look, required this.types});
+  final MarkerLook look;
+  final List<SpaceType> types;
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final label = Eligibility(look.$1, '', restriction: look.$2).label;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              ExcludeSemantics(
+                child: SizedBox.square(
+                  dimension: 26,
+                  child: SpotMarker(look: look, size: 22),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(label, style: text.titleSmall),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final type in types)
+                Container(
+                  padding: const EdgeInsets.fromLTRB(4, 4, 12, 4),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ExcludeSemantics(
+                        child: GroundMarking(type: type, size: 28),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(type.label, style: text.bodyMedium),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RuleField extends StatelessWidget {
+  const _RuleField({required this.label, required this.value});
+  final String label, value;
+  @override
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      SizedBox(
+        width: 48,
+        child: Text(
+          label,
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ),
+      Expanded(child: Text(value)),
+    ],
+  );
 }

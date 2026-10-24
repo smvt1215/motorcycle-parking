@@ -1,6 +1,7 @@
 import '../../domain/eligibility.dart';
 import '../../models/parking.dart';
 import '../../ui/adaptive/adaptive.dart';
+import 'spot_details.dart';
 
 const unverifiedColor = Color(0xff59646c);
 
@@ -38,6 +39,38 @@ double spotMarkerRadius(EligibilityStatus status) => switch (status) {
   EligibilityStatus.notAllowed => 4,
 };
 
+/// A space's kind beyond whether it is parkable, shown as a corner badge:
+/// car bays (including heavy-and-car shared ones), heavy-only bays, and bays
+/// shared by scooters and heavy bikes.
+enum SpaceBadge { car, heavyOnly, shared }
+
+SpaceBadge? spaceBadge(ParkingSpot spot) {
+  final access = reportedAccess(spot);
+  if (spot.spaceType == SpaceType.heavyOnly ||
+      access == ParkingAccess.heavyOnly) {
+    return SpaceBadge.heavyOnly;
+  }
+  if (spot.spaceType == SpaceType.car || access == ParkingAccess.heavyCar) {
+    return SpaceBadge.car;
+  }
+  if (access == ParkingAccess.scooterHeavy) return SpaceBadge.shared;
+  return null;
+}
+
+/// The car and the helmet (as on the heavy-bike vehicle pill) are icons;
+/// shared bays read 共, as painted on the ground.
+IconData? spaceBadgeIcon(SpaceBadge badge) => switch (badge) {
+  SpaceBadge.car => Icons.directions_car,
+  SpaceBadge.heavyOnly => Icons.sports_motorsports,
+  SpaceBadge.shared => null,
+};
+
+String spaceBadgeLabel(SpaceBadge badge) => switch (badge) {
+  SpaceBadge.car => '汽車格',
+  SpaceBadge.heavyOnly => '重機專用格',
+  SpaceBadge.shared => '普大共用格',
+};
+
 /// Ring and scale that mark the spot whose details are open.
 const selectedRingColor = Color(0xff1a73e8);
 const selectedScale = 1.35;
@@ -48,43 +81,95 @@ class SpotMarker extends StatelessWidget {
     required this.look,
     this.size = 38,
     this.selected = false,
+    this.badge,
   });
   final MarkerLook look;
   final double size;
   final bool selected;
+  final SpaceBadge? badge;
   @override
   Widget build(BuildContext context) {
     final size = selected ? this.size * selectedScale : this.size;
+    final marker = Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: spotMarkerColor(look.$1),
+        border: Border.all(
+          color: selected ? selectedRingColor : Colors.white,
+          width: size * (selected ? 4 : 3) / 38,
+        ),
+        borderRadius: BorderRadius.circular(
+          size * spotMarkerRadius(look.$1) / 38,
+        ),
+        boxShadow: const [
+          BoxShadow(
+            blurRadius: 6,
+            color: Color(0x44000000),
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Icon(
+        spotMarkerIcon(look),
+        color: Colors.white,
+        size: size * 22 / 38,
+      ),
+    );
+    final badge = this.badge;
+    if (badge == null) return Center(child: marker);
+    final dot = size * .5;
     return Center(
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          color: spotMarkerColor(look.$1),
-          border: Border.all(
-            color: selected ? selectedRingColor : Colors.white,
-            width: size * (selected ? 4 : 3) / 38,
-          ),
-          borderRadius: BorderRadius.circular(
-            size * spotMarkerRadius(look.$1) / 38,
-          ),
-          boxShadow: const [
-            BoxShadow(
-              blurRadius: 6,
-              color: Color(0x44000000),
-              offset: Offset(0, 2),
+      child: SizedBox.square(
+        dimension: size + dot * .3,
+        child: Stack(
+          children: [
+            marker,
+            Positioned(
+              right: 0,
+              bottom: 0,
+              child: SpaceBadgeDot(badge: badge, size: dot),
             ),
           ],
-        ),
-        child: Icon(
-          spotMarkerIcon(look),
-          color: Colors.white,
-          size: size * 22 / 38,
         ),
       ),
     );
   }
 }
+
+class SpaceBadgeDot extends StatelessWidget {
+  const SpaceBadgeDot({super.key, required this.badge, this.size = 19});
+  final SpaceBadge badge;
+  final double size;
+  @override
+  Widget build(BuildContext context) {
+    final icon = spaceBadgeIcon(badge);
+    return Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+        border: Border.all(color: badgeInk, width: size * .08),
+      ),
+      child: icon != null
+          ? Icon(icon, size: size * .66, color: badgeInk)
+          : Text(
+              '共',
+              textScaler: TextScaler.noScaling,
+              style: TextStyle(
+                color: badgeInk,
+                fontSize: size * .6,
+                fontWeight: FontWeight.w800,
+                height: 1,
+              ),
+            ),
+    );
+  }
+}
+
+const badgeInk = Color(0xff22282d);
 
 /// Marker meanings for the selected vehicle; shape repeats the colour so the
 /// legend does not rely on colour alone.
@@ -172,6 +257,42 @@ Future<void> showMapLegend(BuildContext context, VehicleType vehicle) =>
           ),
           const SizedBox(height: 20),
           MapLegend(vehicle: vehicle),
+          const SizedBox(height: 8),
+          Text('角落小圖示', style: Theme.of(ctx).textTheme.titleSmall),
+          const SizedBox(height: 12),
+          for (final (badge, detail) in const [
+            (SpaceBadge.car, '汽車格，或大型重機與汽車共用的格位'),
+            (SpaceBadge.heavyOnly, '標示大型重機專用的格位'),
+            (SpaceBadge.shared, '普通機車與大型重機共用的格位'),
+          ])
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                children: [
+                  SizedBox.square(
+                    dimension: 44,
+                    child: Center(
+                      child: ExcludeSemantics(
+                        child: SpaceBadgeDot(badge: badge, size: 26),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          spaceBadgeLabel(badge),
+                          style: Theme.of(ctx).textTheme.titleSmall,
+                        ),
+                        Text(detail, style: Theme.of(ctx).textTheme.bodySmall),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
           const Divider(height: 32),
           const Text('數字圓圈：附近有多個停車點，放大地圖即可展開。'),
           const SizedBox(height: 8),

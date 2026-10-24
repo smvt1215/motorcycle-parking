@@ -525,6 +525,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                               onTap: () => _showSpot(s),
                               child: SpotMarker(
                                 look: markerLook(store.eligible(s)),
+                                badge: spaceBadge(s),
                               ),
                             ),
                           ),
@@ -568,6 +569,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                           child: SpotMarker(
                             key: const ValueKey('selected-spot-marker'),
                             look: markerLook(store.eligible(open)),
+                            badge: spaceBadge(open),
                             selected: true,
                           ),
                         ),
@@ -911,21 +913,16 @@ class _MapPageState extends ConsumerState<MapPage> {
                                   dimension: 32,
                                   child: SpotMarker(
                                     look: markerLook(store.eligible(spot)),
+                                    badge: spaceBadge(spot),
                                     size: 28,
                                   ),
                                 ),
                               ),
                               title: Text(spot.name),
+                              // Fees live in the details; one line here.
                               subtitle: Text(
-                                [
-                                  '${spot.city}${spot.district}',
-                                  store.eligible(spot).label,
-                                  spot.spaceType.label,
-                                  if (spot.feeNote.trim().isNotEmpty &&
-                                      spot.feeNote != '請依現場公告')
-                                    spot.feeNote,
-                                ].join(' · '),
-                                maxLines: 2,
+                                '${spot.city}${spot.district} · ${store.eligible(spot).label} · ${spot.spaceType.label}',
+                                maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
                               trailing: const Icon(Icons.north_west, size: 18),

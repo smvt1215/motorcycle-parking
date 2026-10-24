@@ -40,7 +40,7 @@ Future<void> showSpotSuggestions(
           child: ListView(
             padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
             children: [
-              Text('提出修改建議', style: Theme.of(ctx).textTheme.headlineSmall),
+              SheetTitle('提出修改建議'),
               const SizedBox(height: 8),
               Text(
                 spot.name,
@@ -118,20 +118,6 @@ Future<void> showSpotSuggestions(
               const SizedBox(height: 20),
               const Text('建議會送交審核，通過後再更新停車資訊。'),
             ],
-          ),
-        ),
-        SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
-            child: SizedBox(
-              width: double.infinity,
-              child: AdaptiveButton(
-                label: '取消',
-                secondary: true,
-                onPressed: () => Navigator.pop(ctx),
-              ),
-            ),
           ),
         ),
       ],
