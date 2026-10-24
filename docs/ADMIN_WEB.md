@@ -16,14 +16,20 @@
 `city_rules` 已有 `app_metadata.role='admin'` 的寫入 policy（`202610110001_init.sql`），管理者角色從這裡延伸。
 
 ## 決策
-以下四項依建議值採用，實作前可再調整：
+以下四項已於 2026-10-24 確認：
 
 | 項目 | 採用 | 理由 |
 |---|---|---|
 | 前端 | Flutter Web，獨立入口 `lib/main_admin.dart`，程式放 `lib/admin/` | 沿用 `lib/models/parking.dart`、`lib/domain/eligibility.dart`、Supabase client 與 `google_maps_flutter` web；App 的 `main.dart` 不 import admin，不會打包進 App |
 | 託管 | Firebase Hosting，staging／production 各一個 site | 已有 Firebase 專案與 GitHub OIDC |
 | 角色 | 第一版只有 `admin` | 目前一人維護；權限判斷集中在 `is_admin()`，之後可擴充審核者角色 |
-| 驗證 | Google 登入＋Supabase Auth TOTP MFA，強制 `aal2` | 管理者能改公開資料，需比一般回報更強的驗證；實作前以 Context7 查核 Supabase MFA 文件 |
+| 驗證 | Google 登入後強制第二步驗證（`aal2`），使用 Supabase Auth 內建的多種方式 | 管理者能改公開資料，需比一般回報更強的驗證 |
+
+第二步驗證的做法：
+- Supabase Auth MFA 目前只支援驗證器 App（TOTP）與手機簡訊驗證碼，每個帳號最多登記 10 個驗證方式，沒有復原碼（2026-10-24 查官方文件，未支援 passkey／WebAuthn）。
+- 管理者至少登記兩個驗證器 App（例如手機與密碼管理器）互為備援，並可再加手機簡訊。簡訊需在 Supabase 設定簡訊供應商（如 Twilio），依則計費。
+- passkey 用在第一步：管理者的 Google 帳號以 passkey 登入。Supabase 日後支援 passkey 作為第二步驗證時，只需調整 `is_admin()` 與登入畫面。
+- 所有驗證方式都遺失時，由專案擁有者以 Auth Admin API 的 `auth.admin.mfa.deleteFactor`（service role，在後端執行）移除該帳號的驗證方式後重新登記。
 
 瀏覽器不放 service role key；所有寫入經 `security definer` 的 `admin_*` RPC，或需要 Auth Admin API 時經 Edge Function。
 
@@ -87,9 +93,9 @@
 ## 階段
 | 階段 | 範圍 | 完成條件 |
 |---|---|---|
-| P0 | staging 設定 admin 帳號與 TOTP | 能取得 `aal2` JWT |
+| P0 | staging 設定 admin 帳號、兩個以上驗證器 App 與（選用）簡訊供應商 | 能取得 `aal2` JWT |
 | P1 後端基礎 | 後端變更 1、2、4、5（`admin_resolve_report`）與 pgTAP | `supabase test db` 通過 |
-| P2 外殼 | `main_admin.dart`、登入與 MFA、go_router 版面、非 admin 拒絕畫面、Firebase Hosting（CSP、`X-Frame-Options: DENY`、`noindex`） | staging 可登入 |
+| P2 外殼 | `main_admin.dart`、登入、驗證方式登記與選擇（驗證器 App、簡訊）、go_router 版面、非 admin 拒絕畫面、Firebase Hosting（CSP、`X-Frame-Options: DENY`、`noindex`） | staging 可登入 |
 | P3 審核佇列 | 篩選、差異表、小地圖、套用／修改後套用／駁回；App 改送結構化建議 | 不用 Dashboard 也能審核 |
 | P4 點位 | 地圖圖層、清單、編輯表單、來源、改為官方點、新增停車點、位置選擇元件 | — |
 | P5 規則 | 規則表單、預覽、版本遞增；`tool/export_rules.py` 從 DB 匯出規則避免與 `parking_rules.json` 不一致 | — |
