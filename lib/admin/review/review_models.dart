@@ -272,9 +272,6 @@ String? validatePatch(Map<String, dynamic> patch, ReviewSpot spot) {
         }
       case FieldInput.triState:
         if (value != null && value is! bool) return '${field.label}的值無效';
-        if (spot.official && key == 'heavy_allowed' && value == null) {
-          return '官方點的大型重機只能設為可停或不可停';
-        }
       case FieldInput.visibility:
         if (!const {'pending', 'confirmed', 'hidden'}.contains(value)) {
           return '請選擇地圖顯示方式';

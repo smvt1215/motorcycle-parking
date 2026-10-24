@@ -81,7 +81,7 @@ void main() {
       final official = spots[officialId]!;
       expect(validatePatch({'name': ' '}, official), '停車點名稱不可空白');
       expect(validatePatch({'name': 'a' * 101}, official), contains('100'));
-      expect(validatePatch({'heavy_allowed': null}, official), contains('官方點'));
+      expect(validatePatch({'heavy_allowed': null}, official), isNull);
       expect(validatePatch({'lat': 30}, official), contains('緯度'));
       expect(validatePatch({'space_type': 'rocket'}, official), isNotNull);
       expect(
@@ -315,6 +315,60 @@ void main() {
         'space_type': 'heavyOnly',
         'fee_note': '每次 10 元',
       });
+    });
+
+    testWidgets('官方點加入大型重機欄位可保留未確認', (tester) async {
+      final spot = gateway.spots[officialId]!;
+      gateway.spots[officialId] = ReviewSpot(
+        sourceId: officialId,
+        official: true,
+        values: {...spot.values, 'heavy_allowed': null},
+      );
+      await show(tester, path: '/review/r-legacy');
+      await tester.tap(find.text('修改後套用'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('加入要修改的欄位'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('大型重機').last);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      final editor = find.descendant(
+        of: find.byKey(const ValueKey('edit-r-legacy-heavy_allowed')),
+        matching: find.byType(DropdownButtonFormField<int>),
+      );
+      await tester.tap(editor);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('可停').last);
+      await tester.pumpAndSettle();
+      await tester.tap(editor);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('未確認').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('套用修改'));
+      await tester.pump(const Duration(seconds: 7));
+      await tester.pumpAndSettle();
+      expect(gateway.resolved.single.$3, {'heavy_allowed': null});
+    });
+
+    testWidgets('官方點未確認資格建議可編輯並套用', (tester) async {
+      gateway.reports = [
+        ReviewReport(
+          id: 'r-unknown',
+          sourceId: officialId,
+          reason: '機車停放資格：大型重機未確認',
+          field: 'eligibility',
+          proposed: const {'heavy_allowed': null},
+          createdAt: reportTime,
+        ),
+      ];
+      await show(tester, path: '/review/r-unknown');
+      await tester.tap(find.text('修改後套用'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.text('套用修改'));
+      await tester.pump(const Duration(seconds: 7));
+      await tester.pumpAndSettle();
+      expect(gateway.resolved.single.$3, {'heavy_allowed': null});
     });
 
     testWidgets('版本衝突顯示送出時的值，按仍要套用才強制', (tester) async {

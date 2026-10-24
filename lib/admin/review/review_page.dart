@@ -870,7 +870,6 @@ class _DiffTable extends StatelessWidget {
                 key: ValueKey('edit-${report.id}-$key'),
                 field: reviewField(key)!,
                 value: value,
-                official: spot.official,
                 onChanged: (v) => review.setDraft(key, v),
               ),
             ),
@@ -1069,12 +1068,10 @@ class _FieldEditor extends StatelessWidget {
     super.key,
     required this.field,
     required this.value,
-    required this.official,
     required this.onChanged,
   });
   final ReviewField field;
   final Object? value;
-  final bool official;
   final ValueChanged<Object?> onChanged;
 
   InputDecoration _decoration(BuildContext context) => InputDecoration(
@@ -1120,11 +1117,10 @@ class _FieldEditor extends StatelessWidget {
       },
       isExpanded: true,
       decoration: _decoration(context),
-      items: [
-        const DropdownMenuItem(value: 1, child: Text('可停')),
-        const DropdownMenuItem(value: 0, child: Text('不可停')),
-        if (!(official && field.key == 'heavy_allowed'))
-          const DropdownMenuItem(value: -1, child: Text('未確認')),
+      items: const [
+        DropdownMenuItem(value: 1, child: Text('可停')),
+        DropdownMenuItem(value: 0, child: Text('不可停')),
+        DropdownMenuItem(value: -1, child: Text('未確認')),
       ],
       onChanged: (v) => onChanged(switch (v) {
         1 => true,
