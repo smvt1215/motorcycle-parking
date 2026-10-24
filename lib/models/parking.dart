@@ -206,97 +206,114 @@ class ParkingSpot {
     return [ParkingSpot.fromJson(j)];
   }
 
-  /// A snapshot's exact kind ([toJson] writes `space_kind` for kinds older
-  /// builds lack), else its `space_type`; null when this build knows neither.
+  /// A snapshot's exact kind (see [toJson]), else its `space_type`; null
+  /// when this build knows neither.
   static SpaceType? _kind(Map<String, dynamic> j) {
     final names = SpaceType.values.asNameMap();
-    return names[j['space_kind']] ?? names[j['space_type']];
+    return names[(j['exact'] as Map<String, dynamic>?)?['space_type']] ??
+        names[j['space_type']];
   }
 
-  /// The original kind an older build reads in a snapshot of [type]: a timed
-  /// bay is a paid motorcycle bay; reserved bays become a lot, which those
-  /// builds show as unverified rather than parkable.
-  static SpaceType _legacyKind(SpaceType type) => switch (type) {
-    SpaceType.timedMotorcycle => SpaceType.paidMotorcycle,
-    SpaceType.disabledMotorcycle ||
-    SpaceType.flexShared ||
-    SpaceType.evMotorcycle => SpaceType.offStreet,
-    final type => type,
+  /// Kinds older builds lack. Their snapshots read there as a lot with no
+  /// access flags and a pending status, which those builds always judge
+  /// unverified, whatever the source: never parkable without the kind's
+  /// limit (permit, electric only, posted hours).
+  static const _newKinds = {
+    SpaceType.disabledMotorcycle,
+    SpaceType.timedMotorcycle,
+    SpaceType.flexShared,
+    SpaceType.evMotorcycle,
   };
 
-  factory ParkingSpot.fromJson(Map<String, dynamic> j) => ParkingSpot(
-    id: j['id'] as String,
-    name: j['name'] as String,
-    lat: (j['lat'] as num).toDouble(),
-    lng: (j['lng'] as num).toDouble(),
-    city: j['city'] as String,
-    source: j['source'] as String? ?? 'community',
-    spaceType: _kind(j) ?? SpaceType.values.byName(j['space_type'] as String),
-    feeNote: j['fee_note'] as String? ?? '請依現場公告',
-    scooterTotal: j['scooter_total'] as int?,
-    available: j['available'] as int?,
-    heavyAllowed: j['heavy_allowed'] as bool?,
-    scooterAllowed: j['scooter_allowed'] as bool?,
-    status: TrustStatus.values.byName(j['status'] as String? ?? 'pending'),
-    updatedAt: DateTime.tryParse(j['updated_at'] as String? ?? ''),
-    lastConfirmedAt: DateTime.tryParse(j['last_confirmed_at'] as String? ?? ''),
-    note: j['note'] as String? ?? '',
-    district: j['district'] as String? ?? '',
-    sourceUrl: j['source_url'] as String? ?? '',
-    sourceName: j['source_name'] as String? ?? '',
-    licenseNote: j['license_note'] as String? ?? '',
-    facilityType: _optionalEnum(FacilityType.values, j['facility_type']),
-    access: _optionalEnum(ParkingAccess.values, j['parking_access']),
-    address: j['address'] as String? ?? '',
-    roadSegment: j['road_segment'] as String? ?? '',
-    entranceNote: j['entrance_note'] as String? ?? '',
-    parkingGuide: j['parking_guide'] as String? ?? '',
-    specialRules: j['special_rules'] as String? ?? '',
-    photoUrls: (j['photo_urls'] as List<dynamic>? ?? []).cast<String>(),
-    zones: (j['parking_zones'] as List<dynamic>? ?? [])
-        .map((zone) => ParkingZone.fromJson(zone as Map<String, dynamic>))
-        .toList(),
-    availabilityUpdatedAt: DateTime.tryParse(
-      j['availability_updated_at'] as String? ?? '',
-    ),
-  );
-  Map<String, dynamic> toJson() => {
-    'id': id,
-    'name': name,
-    'lat': lat,
-    'lng': lng,
-    'city': city,
-    'source': source,
-    // Favorites sync this snapshot to every signed-in device, including
-    // builds that predate newer kinds: they read the original kind.
-    'space_type': _legacyKind(spaceType).name,
-    if (_legacyKind(spaceType) != spaceType) 'space_kind': spaceType.name,
-    'fee_note': feeNote,
-    'scooter_total': scooterTotal,
-    'available': available,
-    'heavy_allowed': heavyAllowed,
-    'scooter_allowed': scooterAllowed,
-    'status': status.name,
-    'updated_at': updatedAt?.toIso8601String(),
-    'last_confirmed_at': lastConfirmedAt?.toIso8601String(),
-    'note': note,
-    'district': district,
-    'source_url': sourceUrl,
-    'source_name': sourceName,
-    'license_note': licenseNote,
-    if (facilityType != null) 'facility_type': facilityType!.name,
-    if (access != null) 'parking_access': access!.name,
-    if (address.isNotEmpty) 'address': address,
-    if (roadSegment.isNotEmpty) 'road_segment': roadSegment,
-    if (entranceNote.isNotEmpty) 'entrance_note': entranceNote,
-    if (parkingGuide.isNotEmpty) 'parking_guide': parkingGuide,
-    if (specialRules.isNotEmpty) 'special_rules': specialRules,
-    if (photoUrls.isNotEmpty) 'photo_urls': photoUrls,
-    if (zones.isNotEmpty)
-      'parking_zones': zones.map((zone) => zone.toJson()).toList(),
-    if (availabilityUpdatedAt != null)
-      'availability_updated_at': availabilityUpdatedAt!.toIso8601String(),
-  };
+  factory ParkingSpot.fromJson(Map<String, dynamic> raw) {
+    // The exact fields of a new kind override the conservative ones.
+    final j = {...raw, ...?raw['exact'] as Map<String, dynamic>?};
+    return ParkingSpot(
+      id: j['id'] as String,
+      name: j['name'] as String,
+      lat: (j['lat'] as num).toDouble(),
+      lng: (j['lng'] as num).toDouble(),
+      city: j['city'] as String,
+      source: j['source'] as String? ?? 'community',
+      spaceType: _kind(j) ?? SpaceType.values.byName(j['space_type'] as String),
+      feeNote: j['fee_note'] as String? ?? '請依現場公告',
+      scooterTotal: j['scooter_total'] as int?,
+      available: j['available'] as int?,
+      heavyAllowed: j['heavy_allowed'] as bool?,
+      scooterAllowed: j['scooter_allowed'] as bool?,
+      status: TrustStatus.values.byName(j['status'] as String? ?? 'pending'),
+      updatedAt: DateTime.tryParse(j['updated_at'] as String? ?? ''),
+      lastConfirmedAt: DateTime.tryParse(
+        j['last_confirmed_at'] as String? ?? '',
+      ),
+      note: j['note'] as String? ?? '',
+      district: j['district'] as String? ?? '',
+      sourceUrl: j['source_url'] as String? ?? '',
+      sourceName: j['source_name'] as String? ?? '',
+      licenseNote: j['license_note'] as String? ?? '',
+      facilityType: _optionalEnum(FacilityType.values, j['facility_type']),
+      access: _optionalEnum(ParkingAccess.values, j['parking_access']),
+      address: j['address'] as String? ?? '',
+      roadSegment: j['road_segment'] as String? ?? '',
+      entranceNote: j['entrance_note'] as String? ?? '',
+      parkingGuide: j['parking_guide'] as String? ?? '',
+      specialRules: j['special_rules'] as String? ?? '',
+      photoUrls: (j['photo_urls'] as List<dynamic>? ?? []).cast<String>(),
+      zones: (j['parking_zones'] as List<dynamic>? ?? [])
+          .map((zone) => ParkingZone.fromJson(zone as Map<String, dynamic>))
+          .toList(),
+      availabilityUpdatedAt: DateTime.tryParse(
+        j['availability_updated_at'] as String? ?? '',
+      ),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    final legacy = _newKinds.contains(spaceType);
+    return {
+      'id': id,
+      'name': name,
+      'lat': lat,
+      'lng': lng,
+      'city': city,
+      'source': source,
+      // Favorites sync this snapshot to every signed-in device, including
+      // builds that predate newer kinds (see [_newKinds]); `exact` restores it.
+      'space_type': legacy ? SpaceType.offStreet.name : spaceType.name,
+      'fee_note': feeNote,
+      'scooter_total': scooterTotal,
+      'available': available,
+      'heavy_allowed': legacy ? null : heavyAllowed,
+      'scooter_allowed': legacy ? null : scooterAllowed,
+      'status': legacy ? TrustStatus.pending.name : status.name,
+      if (legacy)
+        'exact': {
+          'space_type': spaceType.name,
+          'heavy_allowed': heavyAllowed,
+          'scooter_allowed': scooterAllowed,
+          'status': status.name,
+        },
+      'updated_at': updatedAt?.toIso8601String(),
+      'last_confirmed_at': lastConfirmedAt?.toIso8601String(),
+      'note': note,
+      'district': district,
+      'source_url': sourceUrl,
+      'source_name': sourceName,
+      'license_note': licenseNote,
+      if (facilityType != null) 'facility_type': facilityType!.name,
+      if (access != null) 'parking_access': access!.name,
+      if (address.isNotEmpty) 'address': address,
+      if (roadSegment.isNotEmpty) 'road_segment': roadSegment,
+      if (entranceNote.isNotEmpty) 'entrance_note': entranceNote,
+      if (parkingGuide.isNotEmpty) 'parking_guide': parkingGuide,
+      if (specialRules.isNotEmpty) 'special_rules': specialRules,
+      if (photoUrls.isNotEmpty) 'photo_urls': photoUrls,
+      if (zones.isNotEmpty)
+        'parking_zones': zones.map((zone) => zone.toJson()).toList(),
+      if (availabilityUpdatedAt != null)
+        'availability_updated_at': availabilityUpdatedAt!.toIso8601String(),
+    };
+  }
 }
 
 class CityRule {

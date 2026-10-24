@@ -93,7 +93,7 @@ void main() {
     expect(spaceBadge(spot(SpaceType.disabledMotorcycle)), SpaceBadge.disabled);
   });
 
-  test('收藏快照寫入舊版看得懂的種類，新版仍還原實際種類', () {
+  test('收藏快照對舊版保守：新格位降為路外停車場且無可停旗標，新版完整還原', () {
     const original = {
       'paidMotorcycle',
       'freeMotorcycle',
@@ -102,19 +102,40 @@ void main() {
       'offStreet',
     };
     for (final type in SpaceType.values) {
-      final json = spot(type).toJson();
-      // Older builds parse space_type alone.
-      expect(original, contains(json['space_type']), reason: type.name);
-      expect(ParkingSpot.fromJson(json).spaceType, type, reason: type.name);
-      expect(json.containsKey('space_kind'), !original.contains(type.name));
+      for (final source in ['community', 'official', 'tdx']) {
+        final exact = ParkingSpot(
+          id: 'fav',
+          name: 'fav',
+          lat: 25,
+          lng: 121,
+          city: '臺北市',
+          source: source,
+          spaceType: type,
+          status: TrustStatus.confirmed,
+          scooterAllowed: true,
+          heavyAllowed: true,
+        );
+        final json = exact.toJson();
+        final reason = '${type.name}/$source';
+        expect(original, contains(json['space_type']), reason: reason);
+        // This build restores the exact kind, flags and status.
+        final restored = ParkingSpot.fromJson(json);
+        expect(restored.spaceType, type, reason: reason);
+        expect(restored.scooterAllowed, isTrue, reason: reason);
+        expect(restored.status, TrustStatus.confirmed, reason: reason);
+        if (original.contains(type.name)) continue;
+        // An older build ignores `exact`; the lot branch it then takes is
+        // the same as here, and never says parkable.
+        final asOld = ParkingSpot.fromJson({...json}..remove('exact'));
+        for (final vehicle in VehicleType.values) {
+          expect(
+            eligibility(asOld, vehicle, rule('臺北市', vehicle)).status,
+            EligibilityStatus.unverified,
+            reason: '$reason/${vehicle.name}',
+          );
+        }
+      }
     }
-    // A reserved bay reads as a lot to older builds: unverified, never
-    // parkable.
-    expect(spot(SpaceType.evMotorcycle).toJson()['space_type'], 'offStreet');
-    expect(
-      spot(SpaceType.timedMotorcycle).toJson()['space_type'],
-      'paidMotorcycle',
-    );
   });
 
   test('不認得的格位種類只略過該筆，不讓整批資料失敗', () {
