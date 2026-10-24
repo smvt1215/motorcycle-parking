@@ -4,8 +4,14 @@ import 'adaptive/adaptive.dart';
 /// The installed version and build, e.g. `v0.2.0 · Build 1234 · Beta`.
 /// Empty until the platform answers, so it never shifts the layout.
 class VersionText extends StatelessWidget {
-  const VersionText({super.key, this.style, this.selectable = false});
+  const VersionText({
+    super.key,
+    this.style,
+    this.selectable = false,
+    this.textAlign = TextAlign.center,
+  });
   final TextStyle? style;
+  final TextAlign textAlign;
 
   /// Selectable where testers copy it into feedback.
   final bool selectable;
@@ -20,13 +26,13 @@ class VersionText extends StatelessWidget {
               label,
               key: const ValueKey('app-version'),
               style: style,
-              textAlign: TextAlign.center,
+              textAlign: textAlign,
             )
           : Text(
               label,
               key: const ValueKey('app-version'),
               style: style,
-              textAlign: TextAlign.center,
+              textAlign: textAlign,
             );
     },
   );
