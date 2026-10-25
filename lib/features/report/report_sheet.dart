@@ -427,6 +427,7 @@ class ZoneDraft {
   final name = TextEditingController();
   final guide = TextEditingController();
   ParkingAccess? access;
+  Fee fee = const Fee();
 
   void dispose() {
     name.dispose();
@@ -437,6 +438,7 @@ class ZoneDraft {
     'name': name.text.trim(),
     if (access case final access?) 'access': access.name,
     if (guide.text.trim().isNotEmpty) 'guide': guide.text.trim(),
+    if (!fee.isEmpty) 'fee': fee.toJson(),
   };
 }
 
@@ -467,7 +469,7 @@ class ZoneEditor extends StatelessWidget {
         Text('分區（如適用）', style: Theme.of(context).textTheme.bodyLarge),
         const SizedBox(height: 4),
         Text(
-          '例如 B2 機車區、1F 汽車區；各區可停車種不同時再分開填。',
+          '例如 B2 機車區、1F 汽車區；各區可停車種或收費不同時分開填。',
           style: TextStyle(color: colors.onSurfaceVariant),
         ),
         for (final (i, zone) in zones.indexed) ...[
@@ -535,6 +537,20 @@ class ZoneEditor extends StatelessWidget {
                             hintText: '例：靠電梯，重機停最後一排',
                             counterText: '',
                           ),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          '這區的費率（選填）',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                        const SizedBox(height: 8),
+                        FeeEditor(
+                          key: ObjectKey(zone),
+                          value: zone.fee,
+                          onChanged: (value) {
+                            zone.fee = value;
+                            onChanged();
+                          },
                         ),
                       ],
                     ),

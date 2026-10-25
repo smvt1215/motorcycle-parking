@@ -402,16 +402,18 @@ class _SpotSheetState extends State<SpotSheet> {
 }
 
 String _additionalFeeNote(ParkingSpot spot) {
+  if (!spot.fee.isEmpty) return '';
   final rates = [
     for (final zone in spot.zones) ...[
       zone.feeNote,
-      zone.scooterFeeNote,
-      zone.heavyFeeNote,
+      zone.scooterFeeText,
+      zone.heavyFeeText,
       zone.carFeeNote,
     ],
   ];
   if (!rates.any((rate) => rate.trim().isNotEmpty)) return '';
   final note = spot.feeNote.trim();
+  if (note == '0' && rates.any((rate) => rate.trim() == '免費')) return '';
   if ([
         '',
         '請依現場公告',
@@ -574,32 +576,16 @@ class _SpotSummary extends StatelessWidget {
   final VehicleType vehicle;
   @override
   Widget build(BuildContext context) {
-    final perVehicle = spot.zones.any(
-      (zone) => [
-        zone.scooterFeeNote,
-        zone.heavyFeeNote,
-        zone.carFeeNote,
-      ].any((note) => note.trim().isNotEmpty),
-    );
+    final perVehicle = spot.zones.any((zone) => zone.hasVehicleFees);
     final perZone = spot.zones.any((zone) => zone.feeNote.trim().isNotEmpty);
     final singleZone = perVehicle && spot.zones.length == 1
         ? spot.zones.single
         : null;
-    final selectedFee = singleZone == null
-        ? ''
-        : vehicle == VehicleType.scooter
-        ? singleZone.scooterFeeNote
-        : singleZone.heavyFeeNote;
-    final feeLabel = singleZone == null ? '收費資訊' : '${vehicle.label}費率';
-    final feeValue = singleZone != null
-        ? (selectedFee.trim().isEmpty ? '尚未提供' : selectedFee)
-        : perVehicle
-        ? '依車種與分區計費'
-        : perZone
-        ? '依分區計費'
-        : spot.feeNote.trim().isEmpty
-        ? '依現場公告'
-        : spot.feeNote;
+    final feeLabel =
+        singleZone != null || (!spot.fee.isEmpty && !perVehicle && !perZone)
+        ? '${vehicle.label}費率'
+        : '收費資訊';
+    final feeValue = spotFeeSummary(spot, vehicle);
     final available = spot.available;
     final availabilityTime =
         spot.availabilityUpdatedAt ??
@@ -620,13 +606,9 @@ class _SpotSummary extends StatelessWidget {
         final stacked =
             constraints.maxWidth < 300 ||
             MediaQuery.textScalerOf(context).scale(14) > 18 ||
-            (!perVehicle && !perZone && feeValue.length > 48);
+            feeValue.length > 48;
         final facts = [
-          _SummaryFact(
-            label: feeLabel,
-            value: feeValue,
-            maxLines: perVehicle || perZone ? 2 : null,
-          ),
+          _SummaryFact(label: feeLabel, value: feeValue, maxLines: null),
           _SummaryFact(
             label: spot.isFacility ? '機車剩餘' : '地面格位',
             value: second,

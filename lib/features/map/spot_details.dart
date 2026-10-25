@@ -1,5 +1,34 @@
 import '../../models/parking.dart';
 
+/// A single zone can show its actual price in the preview. A zone never
+/// inherits the lot's fee or another vehicle's price.
+String zoneFeeSummary(ParkingZone zone, VehicleType vehicle) {
+  if (zone.hasVehicleFees) {
+    final value = vehicle == VehicleType.scooter
+        ? zone.scooterFeeText
+        : zone.heavyFeeText;
+    return value.trim().isEmpty ? '費率未確認' : value;
+  }
+  return zone.feeNote.trim();
+}
+
+String spotFeeSummary(ParkingSpot spot, VehicleType vehicle) {
+  if (spot.zones.length == 1) {
+    final value = zoneFeeSummary(spot.zones.single, vehicle);
+    if (value.isNotEmpty) return value;
+  }
+  if (spot.zones.any((z) => z.hasVehicleFees || z.feeNote.trim().isNotEmpty)) {
+    return '依分區計費';
+  }
+  if (!spot.fee.isEmpty) {
+    final rate = vehicle == VehicleType.scooter
+        ? spot.fee.scooter
+        : spot.fee.heavy;
+    return rate?.text ?? '費率未確認';
+  }
+  return spot.feeNote.trim().isEmpty ? '依現場公告' : spot.feeNote;
+}
+
 Uri? sourceLinkUri(String value) {
   final uri = Uri.tryParse(value.trim());
   if (uri == null ||

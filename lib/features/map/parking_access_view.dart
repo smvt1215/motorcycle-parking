@@ -15,6 +15,9 @@ class ParkingAccessView extends StatelessWidget {
         access: reportedAccess(spot),
         scooter: spot.scooterAllowed,
         heavy: spot.heavyAllowed,
+        scooterFee: spot.fee.scooter?.text ?? '',
+        heavyFee: spot.fee.heavy?.text ?? '',
+        showFees: !spot.fee.isEmpty,
       );
     }
     return Column(
@@ -49,11 +52,12 @@ class ParkingAccessView extends StatelessWidget {
           const SizedBox(height: 10),
           _AccessGroup(
             access: zone.access,
-            scooterFee: zone.scooterFeeNote,
-            heavyFee: zone.heavyFeeNote,
+            scooterFee: zone.scooterFeeText,
+            heavyFee: zone.heavyFeeText,
             carFee: zone.carFeeNote,
+            showFees: zone.hasVehicleFees,
           ),
-          if (zone.feeNote.trim().isNotEmpty) ...[
+          if (zone.fee.isEmpty && zone.feeNote.trim().isNotEmpty) ...[
             const SizedBox(height: 10),
             _ZoneNote(
               icon: Icons.payments_outlined,
@@ -83,10 +87,12 @@ class _AccessGroup extends StatelessWidget {
     this.scooterFee = '',
     this.heavyFee = '',
     this.carFee = '',
+    this.showFees = false,
   });
   final ParkingAccess? access;
   final bool? scooter, heavy;
   final String scooterFee, heavyFee, carFee;
+  final bool showFees;
 
   @override
   Widget build(BuildContext context) {
@@ -115,7 +121,8 @@ class _AccessGroup extends StatelessWidget {
         (Icons.two_wheeler, '大型重機', heavy, heavyFee),
       ],
     };
-    final hasRates = vehicles.any((vehicle) => vehicle.$4.trim().isNotEmpty);
+    final hasRates =
+        showFees || vehicles.any((vehicle) => vehicle.$4.trim().isNotEmpty);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

@@ -476,13 +476,33 @@ void main() {
         .ancestor(of: find.text('大型重機費率'), matching: find.byType(Column))
         .first;
     expect(
-      find.descendant(of: summary, matching: find.text('尚未提供')),
+      find.descendant(of: summary, matching: find.text('費率未確認')),
       findsOneWidget,
     );
     expect(
       find.descendant(of: summary, matching: find.text('20 元／次')),
       findsNothing,
     );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('只有一區的舊費率直接顯示免費，移除重複的零元說明', (tester) async {
+    usePhone(tester);
+    final store = (await tester.runAsync(createStore))!;
+    addTearDown(store.dispose);
+    final spot = ParkingSpot.fromJson({
+      ...facility().toJson(),
+      'fee_note': '0',
+      'parking_zones': [
+        {'name': '機車區', 'access': 'scooterHeavy', 'fee_note': '免費'},
+      ],
+    });
+    await openDetails(tester, store, spot);
+    expect(find.text('免費'), findsOneWidget);
+    expect(find.text('依分區計費'), findsNothing);
+    await showField(tester, '位置與指引');
+    expect(find.text('收費說明'), findsNothing);
+    expect(find.text('0'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
