@@ -344,7 +344,11 @@ validate.ts（結構）→ 預檢（組合／內容／行為）→ 法規預審 
 | `pii_plate` | reject | `ABC-1234`、`MXY-123`、`123-ABC`、`AB-1234`、`1234-AB` | `B2-12`、`1F-A`、小寫 `abc-1234`、`AB-12`、`ABCD-1234` | 只認帶連字號的大寫現行格式 |
 | `ad_url` | reject | `https://…`、`www.…`、`line.me` | `1.5 km`、`No.5`、`B2.機車區` | 研究歸在「個資與廣告」 |
 
-檢查的文字欄位：新增／更新的名稱、`note`、`fee_note`、入口、指引、分區名稱與指引；修改建議 `proposed` 的文字欄位、`note`、`reason`；任何動作的 `note`。官方來源欄位（`source_url` 等）由 `validate.ts` 白名單擋下，`precheck_results` 紀錄隨階段 1。資格宣稱 reroute、表情符號比例、行為異常與「每日 3 次 reject」都不在階段 0。
+檢查的文字欄位：新增／更新的名稱、`note`、`fee_note`、入口、指引、分區名稱與指引；修改建議 `proposed` 的文字欄位、`note`、`reason`；任何動作的 `note`。官方來源欄位（`source_url` 等）由 `validate.ts` 白名單擋下，`precheck_results` 紀錄隨階段 1。
+
+階段 0 拍板（2026-10-25）：網址維持 `reject`（階段 0 的 reject 不計次，回報者刪掉網址即可重送，體驗與 fix 相同）；電話攔截範圍如上表（含停車場客服與括號／連字號市話，不含 0800 與裸 10 碼市話）；占位詞含整段的「停車場」「停車格」「停車位」，不含「機車格」。
+
+**階段 1 候選規則**（階段 0 不做）：同一帳號每日 reject 達 3 次封鎖當日後續提案（§10 第 15 點，屬行為異常，需計數表）；備註資格宣稱 reroute 至資格表單；全形重複字元與表情符號比例；`parking_access='heavyCar'` 卻 `scooter_allowed=true`；計次或每日 0 元（應選免費）。
 
 ## 6. 資料模型與 API（建議，實作時再定版號）
 
