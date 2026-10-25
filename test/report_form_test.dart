@@ -290,6 +290,22 @@ void main() {
     expect(spot.containsKey('facility_type'), isFalse);
   });
 
+  testWidgets('先改一個車種再換格位，另一個規則帶入的車種仍送未確認', (tester) async {
+    final store = await openForm(tester, rules: cityRules);
+    final scooterUnconfirmed = find.descendant(
+      of: find.byType(SegmentedButton<bool?>).first,
+      matching: find.text('未確認'),
+    );
+    await tester.scrollUntilVisible(scooterUnconfirmed, 200, scrollable: form);
+    await tester.pumpAndSettle();
+    await tester.tap(scooterUnconfirmed);
+    await tester.pumpAndSettle();
+    await pickType(tester, SpaceType.freeMotorcycle);
+    final spot = await send(tester, store);
+    expect(spot['scooter_allowed'], isNull);
+    expect(spot['heavy_allowed'], isNull);
+  });
+
   testWidgets('手動設定車種後，換格位不再覆蓋', (tester) async {
     final store = await openForm(tester);
     await pickType(tester, SpaceType.heavyOnly);
