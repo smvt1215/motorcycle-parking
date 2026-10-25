@@ -97,7 +97,7 @@ A 類（法規）與 B 類（資料穩定性）依 §0 第 3 點只能由管理�
 ### 3.2 現在缺的
 
 - **社群沒有結案路徑。** 只有 `admin_resolve_report` 能把案件從 `pending` 改掉。
-- **使用者看不到自己的貢獻。** `moderation_queue` 只有 `admin_read_moderation` 一條讀取政策；貢獻頁（`lib/features/contribute/`）只列目前地圖範圍內的停車點。
+- **使用者看不到自己的貢獻。** `moderation_queue` 只有 `admin_read_moderation` 一條讀取政策；貢獻頁（`lib/features/contribute/`）只列目前地圖範圍內的停車點。（階段 0 已補：`my_contributions()`，`202610260030_my_contributions.sql`；貢獻頁「我送出的建議」，見 §7。）
 - **駁回沒有分類。** `rejected` 只有自由文字 `resolution_note`，分不出「判斷錯誤」「重複」「濫用」。
 - **沒有使用者資料表。** #83 把顯示名稱與頭像放在 `raw_user_meta_data`（使用者可自改）；#81 把名稱快照到 `community_spots.contributor_name`。等級、點數屬伺服器判定的資料，**不能放 `raw_user_meta_data`**。
 - **沒有中間角色。** `is_admin()` 是布林；#84 的核驗 trigger 與所有管理 RPC 都以它為唯一閘門。
@@ -393,6 +393,7 @@ validate.ts（結構）→ 預檢（組合／內容／行為）→ 法規預審 
 - `next_review_tasks(p_city, p_limit)`：依等級、獨立性、縣市派任務；黃金任務混入。
 - `submit_review_vote(p_task, p_vote, p_evidence)`：經 `submit-report` Edge Function 進入（沿用 IP／裝置雜湊；限流改為審核票獨立計數）；投票後檢查共識並在同一 transaction 結案、發點數、寫核實與稽核；高風險型式／位置結案時一併把該點的社群車種核實設為失效。
 - `my_contributions()`：本人的建議、狀態、等級、點數、徽章、距下一級差距。
+  - 階段 0 版本（`202610260030_my_contributions.sql`）：security definer、`search_path=''`，只回 `auth.uid()` 本人的修改建議／已不能停車回報（`moderation_queue.reporter_id`）與新增停車點（`community_spots.user_id`）；anon 無執行權。欄位：`id`、`kind`（`report`／`new_spot`）、`spot_id`、`spot_name`、`field`、`summary`（回報者自己送出的摘要 `reason`）、`status`、`created_at`、`resolved_at`、`spot_visible`、`lat`／`lng`（只在點位公開時）。點位已隱藏時名稱用回報當時的 `base_spot`，不洩漏之後的管理員修改。不回傳 `reporter_id`、`resolved_by`、IP／裝置雜湊與 `resolution_note`（使用者 2026-10-25 決定：處理說明不回給回報者，駁回時只依 `resolution_kind` 分類顯示固定文案）。分頁以 `(created_at, id)` 為游標，每頁最多 50 筆。等級、點數、徽章等階段 1 再加。
 - `leaderboard(p_city, p_month)`：只回選擇加入者的 `display_name`、等級、名次；security definer 內部過濾。
 - `confirm_evidence(p_evidence, p_supports, p_note)`：L3＋；寫 `spot_evidence.content_confirmed_by/at` 與稽核。
 - `guardian_resolve_dispute(p_case, p_decision, p_note)`：L4；只能在 `disputed` 案件上做「維持前一安全狀態」或「送管理員」，不能直接採納高風險值。
@@ -405,6 +406,7 @@ validate.ts（結構）→ 預檢（組合／內容／行為）→ 法規預審 
 ## 7. 使用者介面
 
 - **App「貢獻」頁**改為三區：我的等級與點數（含距下一級差距）、待我審核的任務（依目前地圖縣市）、我送出的建議與狀態。
+  - 階段 0 先上「我送出的建議」：每筆以點位名稱、送出內容（新增停車點／建議修改某欄位／回報這裡已經不能停車）、送出日期與狀態牌呈現；狀態牌是每列唯一醒目的元素，結果（已採納、未採納、已結案、車友已確認、已從地圖移除）用實心色牌＋圖示＋文字，等待中（審核中、在地圖上，待車友確認）用外框牌，不只靠顏色。點位仍在地圖上可開啟詳情；已不在地圖上時說明原因、不開啟。未登入只說明登入後可查看（登入按鈕沿用頁首提示卡）；空狀態引導新增停車點；讀取失敗可重試；「載入更早的紀錄」分頁。窄欄與手機狀態牌在上，寬度 ≥ 520 且字級 ≤ 1.3 倍時狀態牌在右欄。
 - **審核任務頁**：目前值／建議值／證據並排，三個按鈕，附照片入口；L0 看到「訓練模式，答案不計票」。
 - **詳情頁**沿用 #81「由車友 XXX 回報」，另在「資料與查核」區顯示「由 N 位車友確認・YYYY-MM-DD」；資格橫幅依 #85 §3.4 分層，不顯示等級。官方點有覆蓋層的欄位並列顯示「官方：X」「現場回報：Y（N 位車友確認・日期）」；`reported_gone` 顯示「車友回報已撤除，請先確認」橫幅。
 - **排行榜**在貢獻頁內，預設顯示本縣市本月；首次進入詢問是否加入顯示。
