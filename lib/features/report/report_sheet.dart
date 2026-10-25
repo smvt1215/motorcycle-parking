@@ -2,6 +2,7 @@ import '../../core/app_version.dart';
 import '../auth/sign_in.dart';
 import '../../core/geo.dart';
 import '../../data/app_store.dart';
+import '../../domain/eligibility.dart';
 import '../../models/fee.dart';
 import '../../models/parking.dart';
 import '../../ui/adaptive/adaptive.dart';
@@ -308,6 +309,250 @@ class ChoiceField<T> extends StatelessWidget {
       _ => (scooter: null, heavy: null),
     };
 
+/// What the city's rule decides for a bay of [type] before anything on the
+/// ground: open is 可停, closed is 不可停, and anything conditional or
+/// unknown stays unconfirmed.
+({bool? scooter, bool? heavy}) ruledEligibility(
+  List<CityRule> rules,
+  SpaceType type,
+  String? city,
+) {
+  bool? decide(VehicleType vehicle) {
+    if (city == null) return null;
+    final rule =
+        rules
+            .where((r) => r.vehicle == vehicle && r.city == city)
+            .firstOrNull ??
+        rules.where((r) => r.vehicle == vehicle && r.city == '全國').firstOrNull;
+    // Judged as data with no claims of its own, so only the law speaks.
+    final draft = ParkingSpot(
+      id: 'draft',
+      name: '',
+      lat: 0,
+      lng: 0,
+      city: city,
+      spaceType: type,
+      source: 'official',
+    );
+    return switch (eligibility(draft, vehicle, rule).status) {
+      EligibilityStatus.allowed => true,
+      EligibilityStatus.notAllowed => false,
+      _ => null,
+    };
+  }
+
+  return (
+    scooter: decide(VehicleType.scooter),
+    heavy: decide(VehicleType.heavy),
+  );
+}
+
+/// The vehicles a new report starts with: what the markings say, and the
+/// city's rule where the markings cannot tell.
+({bool? scooter, bool? heavy}) defaultEligibility(
+  List<CityRule> rules,
+  SpaceType type,
+  String? city,
+) {
+  final marked = markedEligibility(type);
+  final ruled = ruledEligibility(rules, type, city);
+  return (
+    scooter: marked.scooter ?? ruled.scooter,
+    heavy: marked.heavy ?? ruled.heavy,
+  );
+}
+
+/// Lot types a rider can tell from outside; roadside bays are not lots.
+const lotFacilities = [
+  FacilityType.multiStorey,
+  FacilityType.underground,
+  FacilityType.surface,
+];
+
+String _shortFacility(FacilityType type) => switch (type) {
+  FacilityType.multiStorey => '立體',
+  FacilityType.underground => '地下',
+  FacilityType.surface => '平面',
+  FacilityType.roadside => '路邊',
+};
+
+/// A lot's facility type, as a short single choice.
+class FacilityField extends StatelessWidget {
+  const FacilityField({
+    super.key,
+    required this.value,
+    required this.onChanged,
+  });
+  final FacilityType? value;
+  final ValueChanged<FacilityType?> onChanged;
+  @override
+  Widget build(BuildContext context) => ChoiceField<FacilityType?>(
+    label: '場站型式',
+    value: value,
+    options: [
+      (null, '未確認'),
+      for (final type in lotFacilities) (type, _shortFacility(type)),
+    ],
+    onChanged: onChanged,
+  );
+}
+
+/// Who may park in a lot or zone, by the posted vehicle classes.
+class AccessField extends StatelessWidget {
+  const AccessField({
+    super.key,
+    required this.value,
+    required this.onChanged,
+    this.label = '停放分類',
+  });
+  final ParkingAccess? value;
+  final ValueChanged<ParkingAccess?> onChanged;
+  final String label;
+  @override
+  Widget build(BuildContext context) => DropdownButtonFormField<ParkingAccess?>(
+    initialValue: value,
+    isExpanded: true,
+    decoration: InputDecoration(labelText: label),
+    items: [
+      const DropdownMenuItem(child: Text('未確認')),
+      for (final access in ParkingAccess.values)
+        DropdownMenuItem(value: access, child: Text(access.description)),
+    ],
+    onChanged: onChanged,
+  );
+}
+
+/// One zone of a lot while it is being reported.
+class ZoneDraft {
+  final name = TextEditingController();
+  final guide = TextEditingController();
+  ParkingAccess? access;
+
+  void dispose() {
+    name.dispose();
+    guide.dispose();
+  }
+
+  Map<String, Object> toJson() => {
+    'name': name.text.trim(),
+    if (access case final access?) 'access': access.name,
+    if (guide.text.trim().isNotEmpty) 'guide': guide.text.trim(),
+  };
+}
+
+/// Up to ten named zones of a lot, each with its access and a guide.
+class ZoneEditor extends StatelessWidget {
+  const ZoneEditor({
+    super.key,
+    required this.zones,
+    required this.onAdd,
+    required this.onRemove,
+    required this.onChanged,
+  });
+  final List<ZoneDraft> zones;
+  final VoidCallback onAdd;
+  final ValueChanged<ZoneDraft> onRemove;
+
+  /// Called after a zone's access changes so the form can rebuild.
+  final VoidCallback onChanged;
+
+  static const max = 10;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('分區（如適用）', style: Theme.of(context).textTheme.bodyLarge),
+        const SizedBox(height: 4),
+        Text(
+          '例如 B2 機車區、1F 汽車區；各區可停車種不同時再分開填。',
+          style: TextStyle(color: colors.onSurfaceVariant),
+        ),
+        for (final (i, zone) in zones.indexed) ...[
+          const SizedBox(height: 12),
+          Material(
+            key: ObjectKey(zone),
+            color: colors.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(16),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 8, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '分區 ${i + 1}',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: '刪除分區 ${i + 1}',
+                        icon: const Icon(Icons.delete_outline),
+                        onPressed: () => onRemove(zone),
+                      ),
+                    ],
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        TextFormField(
+                          controller: zone.name,
+                          maxLength: 40,
+                          decoration: const InputDecoration(
+                            labelText: '分區名稱',
+                            hintText: '例：B2 機車區',
+                            counterText: '',
+                          ),
+                          validator: (v) => (v?.trim().isEmpty ?? true)
+                              ? '請填寫分區名稱，或刪除此分區'
+                              : null,
+                        ),
+                        const SizedBox(height: 12),
+                        AccessField(
+                          value: zone.access,
+                          onChanged: (v) {
+                            zone.access = v;
+                            onChanged();
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: zone.guide,
+                          maxLength: 200,
+                          decoration: const InputDecoration(
+                            labelText: '這區怎麼停（選填）',
+                            hintText: '例：靠電梯，重機停最後一排',
+                            counterText: '',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(height: 8),
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: TextButton.icon(
+            onPressed: zones.length >= max ? null : onAdd,
+            icon: const Icon(Icons.add),
+            label: Text(zones.length >= max ? '最多 $max 個分區' : '新增分區'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 /// Bay kinds as their painted markings, so reporters match what is on the
 /// ground instead of a list of names.
 class SpaceTypePicker extends StatelessWidget {
@@ -455,11 +700,30 @@ class ReportForm extends StatefulWidget {
 
 class _ReportFormState extends State<ReportForm> {
   final form = GlobalKey<FormState>();
-  final name = TextEditingController(), note = TextEditingController();
+  final name = TextEditingController(),
+      note = TextEditingController(),
+      entrance = TextEditingController(),
+      guide = TextEditingController();
   Fee fee = const Fee();
   SpaceType type = SpaceType.paidMotorcycle;
-  late bool? scooter = markedEligibility(type).scooter;
-  late bool? heavy = markedEligibility(type).heavy;
+  late bool? scooter = defaults.scooter;
+  late bool? heavy = defaults.heavy;
+  FacilityType? facility;
+  ParkingAccess? access;
+  final zones = <ZoneDraft>[];
+
+  bool get lot => type == SpaceType.offStreet;
+
+  ({bool? scooter, bool? heavy}) get defaults =>
+      defaultEligibility(widget.store.rules, type, city);
+
+  /// Whether the city's rule, not only the markings, set a vehicle.
+  bool get ruled {
+    final marked = markedEligibility(type);
+    final rule = ruledEligibility(widget.store.rules, type, city);
+    return (marked.scooter == null && rule.scooter != null) ||
+        (marked.heavy == null && rule.heavy != null);
+  }
 
   /// Once the reporter sets the vehicles, a new bay kind no longer resets them.
   bool vehiclesEdited = false;
@@ -469,17 +733,26 @@ class _ReportFormState extends State<ReportForm> {
   void dispose() {
     name.dispose();
     note.dispose();
+    entrance.dispose();
+    guide.dispose();
+    for (final zone in zones) {
+      zone.dispose();
+    }
     super.dispose();
   }
 
   void setType(SpaceType value) => setState(() {
     type = value;
-    if (!vehiclesEdited) {
-      final marked = markedEligibility(value);
-      scooter = marked.scooter;
-      heavy = marked.heavy;
-    }
+    applyDefaults();
   });
+
+  /// Refills the vehicles from the markings and city rule until the
+  /// reporter sets them.
+  void applyDefaults() {
+    if (vehiclesEdited) return;
+    scooter = defaults.scooter;
+    heavy = defaults.heavy;
+  }
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -549,7 +822,11 @@ class _ReportFormState extends State<ReportForm> {
                       .map((s) => DropdownMenuItem(value: s, child: Text(s)))
                       .toList(),
                   validator: (v) => v == null ? '請選擇停車點所在縣市' : null,
-                  onChanged: (v) => setState(() => city = v),
+                  onChanged: (v) => setState(() {
+                    city = v;
+                    // The city's rule may open or close bays for a vehicle.
+                    applyDefaults();
+                  }),
                 ),
                 const SizedBox(height: 20),
                 Text(
@@ -568,7 +845,8 @@ class _ReportFormState extends State<ReportForm> {
                   child: Text(
                     vehiclesEdited
                         ? '現場有告示牌或地面標字時，才選「可停」。'
-                        : '已依「${type.label}」帶入，可以修改。'
+                        : '已依「${type.label}」'
+                              '${ruled ? '與$city的停車規則' : ''}帶入，可以修改。'
                               '現場有告示牌或地面標字時，才選「可停」。',
                     style: TextStyle(color: colors.onSurfaceVariant),
                   ),
@@ -595,6 +873,41 @@ class _ReportFormState extends State<ReportForm> {
                 ),
               ],
             ),
+            if (lot)
+              FormSection(
+                title: '停車場（選填）',
+                children: [
+                  FacilityField(
+                    value: facility,
+                    onChanged: (v) => setState(() => facility = v),
+                  ),
+                  AccessField(
+                    value: access,
+                    onChanged: (v) => setState(() => access = v),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: entrance,
+                    maxLength: 500,
+                    maxLines: 2,
+                    decoration: const InputDecoration(
+                      labelText: '入口在哪裡',
+                      hintText: '例：入口在松仁路側，機車走右側坡道',
+                      alignLabelWithHint: true,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  ZoneEditor(
+                    zones: zones,
+                    onAdd: () => setState(() => zones.add(ZoneDraft())),
+                    onRemove: (zone) => setState(() {
+                      zones.remove(zone);
+                      zone.dispose();
+                    }),
+                    onChanged: () => setState(() {}),
+                  ),
+                ],
+              ),
             FormSection(
               title: '補充資訊（選填）',
               children: [
@@ -606,12 +919,24 @@ class _ReportFormState extends State<ReportForm> {
                 ),
                 const SizedBox(height: 20),
                 TextFormField(
+                  controller: guide,
+                  maxLength: 500,
+                  maxLines: 2,
+                  decoration: InputDecoration(
+                    labelText: '停車指引',
+                    hintText: lot ? '例：B2 機車區靠電梯，重機停最後一排' : '例：格位在便利商店前，靠路口一側',
+                    alignLabelWithHint: true,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
                   controller: note,
                   maxLength: 500,
                   maxLines: 3,
                   decoration: const InputDecoration(
-                    labelText: '入口、樓層或其他備註',
-                    hintText: '例：B2 入口在松仁路側',
+                    labelText: '其他備註',
+                    hintText: '例：夜間有管理員，假日常客滿',
+                    alignLabelWithHint: true,
                   ),
                 ),
               ],
@@ -636,6 +961,20 @@ class _ReportFormState extends State<ReportForm> {
                             'fee_note': feeNoteOf(fee),
                             if (!fee.isEmpty) 'fee': fee.toJson(),
                             'note': note.text.trim(),
+                            if (guide.text.trim().isNotEmpty)
+                              'parking_guide': guide.text.trim(),
+                            // Lot details only for lots, whatever was typed
+                            // before the bay kind changed.
+                            if (lot) ...{
+                              'facility_type': ?facility?.name,
+                              'parking_access': ?access?.name,
+                              if (entrance.text.trim().isNotEmpty)
+                                'entrance_note': entrance.text.trim(),
+                              if (zones.isNotEmpty)
+                                'parking_zones': [
+                                  for (final zone in zones) zone.toJson(),
+                                ],
+                            },
                             'scooter_allowed': scooter,
                             'heavy_allowed': heavy,
                           },

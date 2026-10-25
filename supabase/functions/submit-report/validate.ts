@@ -18,6 +18,7 @@ const suggestionFields = [
   'fee_note',
   'eligibility',
   'note',
+  'guide',
   'gone',
   '停車點名稱',
   '格位類型',

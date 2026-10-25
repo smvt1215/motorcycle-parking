@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -19,7 +22,16 @@ class RecordingStore extends AppStore {
 }
 
 void main() {
-  Future<RecordingStore> openForm(WidgetTester tester) async {
+  final cityRules =
+      (jsonDecode(File('assets/rules/parking_rules.json').readAsStringSync())
+              as List<dynamic>)
+          .map((j) => CityRule.fromJson(j as Map<String, dynamic>))
+          .toList();
+
+  Future<RecordingStore> openForm(
+    WidgetTester tester, {
+    List<CityRule> rules = const [],
+  }) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(390, 844);
     addTearDown(tester.view.resetPhysicalSize);
@@ -39,7 +51,8 @@ void main() {
             city: '臺北市',
             spaceType: SpaceType.paidMotorcycle,
           ),
-        ];
+        ]
+        ..rules = rules;
     }))!;
     addTearDown(store.dispose);
     await tester.pumpWidget(
@@ -168,6 +181,101 @@ void main() {
     final spot = await send(tester, store);
     expect(spot.containsKey('fee'), isFalse);
     expect(spot['fee_note'], '請依現場公告');
+  });
+
+  test('資格先看標線，標線無法判斷時依縣市規則', () {
+    // Taipei opens paid bays to heavy bikes and keeps free bays closed.
+    expect(defaultEligibility(cityRules, SpaceType.paidMotorcycle, '臺北市'), (
+      scooter: true,
+      heavy: true,
+    ));
+    expect(defaultEligibility(cityRules, SpaceType.freeMotorcycle, '臺北市'), (
+      scooter: true,
+      heavy: false,
+    ));
+    // Markings win where they speak; no city means no rule.
+    expect(defaultEligibility(cityRules, SpaceType.heavyOnly, '臺北市'), (
+      scooter: false,
+      heavy: true,
+    ));
+    expect(defaultEligibility(cityRules, SpaceType.paidMotorcycle, null), (
+      scooter: true,
+      heavy: null,
+    ));
+    // A lot has no rule of its own to read.
+    expect(defaultEligibility(cityRules, SpaceType.offStreet, '臺北市'), (
+      scooter: null,
+      heavy: null,
+    ));
+  });
+
+  testWidgets('資格依縣市規則帶入並說明來源', (tester) async {
+    final store = await openForm(tester, rules: cityRules);
+    expect(find.textContaining('與臺北市的停車規則帶入'), findsOneWidget);
+    await pickType(tester, SpaceType.freeMotorcycle);
+    final spot = await send(tester, store);
+    expect(spot['scooter_allowed'], true);
+    expect(spot['heavy_allowed'], false);
+  });
+
+  testWidgets('路外停車場填型式、分類、入口與分區；路邊格只有指引', (tester) async {
+    final store = await openForm(tester);
+    expect(find.text('入口在哪裡'), findsNothing);
+    await pickType(tester, SpaceType.offStreet);
+    final underground = find.descendant(
+      of: find.byType(SegmentedButton<FacilityType?>),
+      matching: find.text('地下'),
+    );
+    await tester.scrollUntilVisible(underground, 200, scrollable: form);
+    await tester.ensureVisible(underground);
+    await tester.pumpAndSettle();
+    await tester.tap(underground);
+    await tester.pumpAndSettle();
+    final access = find.byType(DropdownButtonFormField<ParkingAccess?>).first;
+    await tester.ensureVisible(access);
+    await tester.tap(access);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('普通機車與大型重機共用').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextFormField, '入口在哪裡'),
+      '入口在松仁路側',
+    );
+    final add = find.text('新增分區');
+    await tester.ensureVisible(add);
+    await tester.tap(add);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextFormField, '分區名稱'),
+      'B2 機車區',
+    );
+    final guide = find.widgetWithText(TextFormField, '停車指引');
+    await tester.scrollUntilVisible(guide, 200, scrollable: form);
+    await tester.ensureVisible(guide);
+    await tester.enterText(guide, '靠電梯');
+    final spot = await send(tester, store);
+    expect(spot['facility_type'], 'underground');
+    expect(spot['parking_access'], 'scooterHeavy');
+    expect(spot['entrance_note'], '入口在松仁路側');
+    expect(spot['parking_zones'], [
+      {'name': 'B2 機車區'},
+    ]);
+    expect(spot['parking_guide'], '靠電梯');
+    expect(spot['note'], '');
+  });
+
+  testWidgets('分區名稱必填；切回路邊格後不送路外資料', (tester) async {
+    final store = await openForm(tester);
+    await pickType(tester, SpaceType.offStreet);
+    final add = find.text('新增分區');
+    await tester.scrollUntilVisible(add, 200, scrollable: form);
+    await tester.ensureVisible(add);
+    await tester.tap(add);
+    await tester.pumpAndSettle();
+    await pickType(tester, SpaceType.paidMotorcycle);
+    final spot = await send(tester, store);
+    expect(spot.containsKey('parking_zones'), isFalse);
+    expect(spot.containsKey('facility_type'), isFalse);
   });
 
   testWidgets('手動設定車種後，換格位不再覆蓋', (tester) async {

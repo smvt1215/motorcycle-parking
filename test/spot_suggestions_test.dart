@@ -173,8 +173,13 @@ void main() {
     await tester.ensureVisible(find.text('送出回報'));
     await tester.tap(find.text('送出回報'));
     await tester.pumpAndSettle();
-    expect(find.text('請填寫現場狀況'), findsOneWidget);
+    expect(find.text('請選擇原因'), findsOneWidget);
     expect(store.submissions, isEmpty);
+    // A lasting cause: the bay is gone, so hiding is suggested.
+    await tester.tap(find.byKey(const ValueKey('gone-removed')));
+    await tester.pumpAndSettle();
+    expect(find.text('請選擇原因'), findsNothing);
+    expect(find.byKey(const ValueKey('gone-until')), findsNothing);
     await tester.enterText(
       find.byKey(const ValueKey('suggestion-input')),
       '現場格線已撤除，改為人行道',
@@ -191,7 +196,7 @@ void main() {
     expect(store.submissions.last, {
       'action': 'flag',
       'source_id': spot.id,
-      'reason': '這裡已經不能停車：現場格線已撤除，改為人行道',
+      'reason': '這裡已經不能停車：格線已撤除；說明：現場格線已撤除，改為人行道',
       'field': 'gone',
       'proposed': {'status': 'hidden'},
       'note': '現場格線已撤除，改為人行道',
@@ -307,6 +312,116 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  Future<RecordingStore> openSuggestion(
+    WidgetTester tester,
+    String item,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final store = (await tester.runAsync(createStore))!;
+    addTearDown(store.dispose);
+    await openDetails(tester, store);
+    await tester.ensureVisible(find.text('修改建議'));
+    await tester.tap(find.text('修改建議'));
+    await tester.pumpAndSettle();
+    // The suggestion list, kept by element because its title scrolls away.
+    final listElement = tester.element(
+      find
+          .ancestor(of: find.text('提出修改建議'), matching: find.byType(Scrollable))
+          .first,
+    );
+    // .last only once built: on an empty match it throws instead of waiting.
+    await tester.scrollUntilVisible(
+      find.text(item),
+      150,
+      scrollable: find.byElementPredicate((e) => e == listElement),
+    );
+    final entry = find.text(item).last;
+    await tester.ensureVisible(entry);
+    await tester.pumpAndSettle();
+    await tester.tap(entry);
+    await tester.pumpAndSettle();
+    return store;
+  }
+
+  Future<void> submitSuggestion(WidgetTester tester, String label) async {
+    final button = find.text(label);
+    await tester.scrollUntilVisible(
+      button,
+      200,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.ensureVisible(button);
+    await tester.pumpAndSettle();
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('暫時施工只送審、不建議隱藏，可填預計恢復時間', (tester) async {
+    final store = await openSuggestion(tester, '這裡已經不能停車');
+    await tester.tap(find.byKey(const ValueKey('gone-works')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('gone-until')),
+      '公告寫 11 月 30 日完工',
+    );
+    await submitSuggestion(tester, '送出回報');
+    final body = store.submissions.single;
+    expect(body['field'], 'gone');
+    expect(body.containsKey('proposed'), isFalse);
+    expect(body['reason'], '這裡已經不能停車：施工中；預計恢復：公告寫 11 月 30 日完工');
+  });
+
+  testWidgets('「其他」原因需要說明', (tester) async {
+    final store = await openSuggestion(tester, '這裡已經不能停車');
+    await tester.tap(find.byKey(const ValueKey('gone-other')));
+    await tester.pumpAndSettle();
+    await submitSuggestion(tester, '送出回報');
+    expect(find.text('請填寫現場狀況'), findsOneWidget);
+    expect(store.submissions, isEmpty);
+  });
+
+  testWidgets('入口與停車指引只送有變更的欄位', (tester) async {
+    final store = await openSuggestion(tester, '入口與停車指引');
+    // A street bay has no entrance to fix.
+    expect(find.byKey(const ValueKey('suggestion-entrance')), findsNothing);
+    await submitSuggestion(tester, '送出建議');
+    expect(find.text('請至少修改一項，和目前不同才能送出'), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const ValueKey('suggestion-guide')),
+      '格位在便利商店前',
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('停車指引從「未提供」改成「格位在便利商店前」'), findsOneWidget);
+    await submitSuggestion(tester, '送出建議');
+    final body = store.submissions.single;
+    expect(body['field'], 'guide');
+    expect(body['proposed'], {'parking_guide': '格位在便利商店前'});
+  });
+
+  testWidgets('格位建議改為路外停車場時追問型式與分類', (tester) async {
+    final store = await openSuggestion(tester, '格位類型');
+    final lot = find.byKey(const ValueKey('report-space-offStreet'));
+    await tester.ensureVisible(lot);
+    await tester.tap(lot);
+    await tester.pumpAndSettle();
+    final surface = find.descendant(
+      of: find.byType(SegmentedButton<FacilityType?>),
+      matching: find.text('平面'),
+    );
+    await tester.ensureVisible(surface);
+    await tester.tap(surface);
+    await tester.pumpAndSettle();
+    expect(find.text('場站型式從「未提供」改成「路外平面停車場」'), findsOneWidget);
+    await submitSuggestion(tester, '送出建議');
+    expect(store.submissions.single['proposed'], {
+      'space_type': 'offStreet',
+      'facility_type': 'surface',
+    });
+  });
+
   testWidgets('名稱建議以填寫內容作為建議值送出', (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(390, 844);
@@ -410,13 +525,19 @@ void main() {
     await tester.ensureVisible(heavyOnly);
     await tester.tap(heavyOnly);
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.text('送出回報'),
-      200,
-      scrollable: find
+    // Kept by element: the heading used to find the list scrolls away.
+    final listElement = tester.element(
+      find
           .ancestor(of: find.text('基本資訊'), matching: find.byType(Scrollable))
           .first,
     );
+    await tester.scrollUntilVisible(
+      find.text('送出回報'),
+      200,
+      scrollable: find.byElementPredicate((e) => e == listElement),
+    );
+    await tester.ensureVisible(find.text('送出回報'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('送出回報'));
     await tester.pumpAndSettle();
     final created = store.submissions.single['spot'] as Map<String, dynamic>;
@@ -463,7 +584,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('這裡已經不能停車'));
     await tester.pumpAndSettle();
-    expect(find.text('現場狀況'), findsOneWidget);
+    expect(find.text('這裡為什麼不能停車？'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
