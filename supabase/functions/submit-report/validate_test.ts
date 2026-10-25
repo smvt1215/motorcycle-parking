@@ -1,4 +1,4 @@
-import { identityHash, validate } from './validate.ts';
+import { identityHash, validate, validFee } from './validate.ts';
 const base = {
   device_id: '10000000-0000-4000-8000-000000000001',
   action: 'create',
@@ -127,6 +127,82 @@ Deno.test('flags may carry a structured suggestion', () => {
       throw new Error(`bad suggestion accepted: ${JSON.stringify(body)}`);
     }
   }
+});
+Deno.test('fees are a rate per vehicle with known modes only', () => {
+  for (
+    const fee of [
+      {},
+      {
+        scooter: {
+          mode: 'hourly',
+          amount: 20,
+          per_minutes: 60,
+          daily_cap: 100,
+        },
+        heavy: { mode: 'same_as_car' },
+      },
+      {
+        scooter: { mode: 'per_visit', amount: 30, max_minutes: 360 },
+        heavy: { mode: 'daily', amount: 50 },
+      },
+      { scooter: { mode: 'free' }, heavy: { mode: 'posted' } },
+      { heavy: { mode: 'same_as_scooter' } },
+    ]
+  ) {
+    if (!validFee(fee)) {
+      throw new Error(`valid fee refused: ${JSON.stringify(fee)}`);
+    }
+  }
+  for (
+    const fee of [
+      null,
+      [],
+      'free',
+      { scooter: 'free' },
+      { car: { mode: 'free' } },
+      { scooter: { mode: 'monthly', amount: 300 } },
+      { scooter: { mode: 'same_as_car' } },
+      { scooter: { mode: 'hourly', amount: 20 } },
+      { scooter: { mode: 'hourly', amount: '20', per_minutes: 60 } },
+      { scooter: { mode: 'daily', amount: 20.5 } },
+      { scooter: { mode: 'daily', amount: 10001 } },
+      { scooter: { mode: 'hourly', amount: 20, per_minutes: 0 } },
+      { scooter: { mode: 'free', amount: 0 } },
+      { scooter: { mode: 'toString' } },
+      { scooter: { mode: ['daily'], amount: 20 } },
+    ]
+  ) {
+    if (validFee(fee)) {
+      throw new Error(`bad fee accepted: ${JSON.stringify(fee)}`);
+    }
+  }
+  const fee = { scooter: { mode: 'daily', amount: 30 } };
+  if (validate({ ...base, spot: { ...base.spot, fee } }) !== null) {
+    throw new Error('create with a fee refused');
+  }
+  if (
+    validate({
+      ...base,
+      spot: { ...base.spot, fee: { scooter: { mode: 'weekly' } } },
+    }) !== 'invalid fee'
+  ) throw new Error('create with a bad fee accepted');
+  const flag = {
+    device_id: base.device_id,
+    action: 'flag',
+    source_id: '10000000-0000-4000-8000-000000000002',
+    reason: '收費資訊：每日 30 元',
+    field: 'fee_note',
+  };
+  if (
+    validate({ ...flag, proposed: { fee, fee_note: '每日 30 元' } }) !== null
+  ) throw new Error('suggested fee refused');
+  if (
+    validate({
+      ...flag,
+      proposed: { fee: { scooter: { mode: 'weekly' } } },
+    }) ===
+      null
+  ) throw new Error('suggested bad fee accepted');
 });
 Deno.test('identity hashes are deterministic, namespaced and keyed', async () => {
   const a = await identityHash('secret', 'ip:127.0.0.1');
