@@ -86,8 +86,8 @@ UI 修正（2026-10-24）：Google 登入在行動裝置使用系統瀏覽器，
 
 ## App 圖示與啟動畫面（2026-10-25）
 
-圖示以 `assets/branding/app_icon.svg` 為唯一原始檔，`tool/render_brand_icons.py` 轉出所有點陣圖，再由 flutter_launcher_icons（Android／iOS）與 flutter_native_splash（原生啟動畫面）產生平台檔案；Web 圖示由轉檔腳本直接輸出（maskable 需要另外的裁切）。兩個產生器會改寫 `AndroidManifest.xml` 的 `${appIcon}`、`project.pbxproj` 的 staging 圖示設定與 `Info.plist` 格式，重新產生後要還原這三個檔案。
+圖示直接使用使用者提供的插畫（藍底、白色速克達、紅色定位針＋藍色 P、地面停車格標線）。`assets/branding/app_icon_source.png` 是去掉白邊、四角以相鄰藍色補滿的滿版 1024 px 版本（無透明通道），由 `tool/render_brand_icons.py --from-original` 從原圖產生；同一支腳本再轉出 adaptive 圖層、啟動畫面標誌、Web 圖示與 staging 圖示，之後由 flutter_launcher_icons（Android／iOS）與 flutter_native_splash（原生啟動畫面）產生平台檔案。兩個產生器會改寫 `AndroidManifest.xml` 的 `${appIcon}`、`project.pbxproj` 的 staging 圖示設定與 `Info.plist` 格式，重新產生後要還原這三個檔案。
 
-圖形取自騎士在現場看得到的東西：停車標誌藍底、白色地面標線圍出的停車格、標線機車圖示畫法的白色側視速克達，以及紅色定位針與藍色 P。主體（機車、定位針）放在中心半徑 469/1024 的圓內，即 Android adaptive icon 的 66dp 安全區；標線只在背景層。定位針外圈有一道與底色相同的間隙，與機車重疊時仍分得開，主題化（monochrome）圖示也依此挖空。
+插畫是單張點陣圖，無法拆成前景與背景：Android adaptive icon 把整張圖放在背景層，縮到定位針與機車落在 66dp 安全區內，外圍延伸原圖邊緣的顏色，前景留空。主題化（monochrome）圖示需要另外畫單色剪影，因此不提供，Android 13+ 開啟主題化圖示時仍顯示彩色圖示。Staging 圖示是同一張圖加上黃底「TEST」色帶，Android 的色帶位於安全區內，也不提供 monochrome，主題化時仍看得到 TEST。
 
-啟動畫面不放文字或動畫：淺色為停車標誌藍底，深色為柏油底加藍色圓底，標誌尺寸依 Android 12 規格（無圖示底 288dp／可見圓 192dp；有圖示底 240dp／可見圓 160dp）。Flutter 載入畫面延續同一個底色與同尺寸、同位置的標誌，只在底部顯示載入狀態、提醒與版本；螢幕太矮時標誌縮小，不壓到文字。
+啟動畫面不放文字或動畫：淺色為停車標誌藍 `#1F5FA8` 底，深色為柏油 `#1C2126` 底，中央是 150dp 的圓角圖示（288dp 畫布），Android 12+ 的 192dp 圓形遮罩內完整可見。Flutter 載入畫面延續同一個底色與同尺寸、同位置的圖示，只在底部顯示載入狀態、提醒與版本；螢幕太矮時圖示縮小，不壓到文字。

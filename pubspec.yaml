@@ -55,4 +55,3 @@ flutter:
     - assets/rules/parking_rules.json
     - assets/demo/spots.json
     - assets/branding/png/splash_mark.png
-    - assets/branding/png/splash_mark_dark.png

@@ -62,7 +62,7 @@ class _LaunchCurtainState extends State<LaunchCurtain> {
 }
 
 /// Native splash colors (flutter_native_splash.yaml): parking-sign blue in
-/// light mode, asphalt with a blue disc behind the mark in dark mode.
+/// light mode, asphalt in dark mode; the same icon on both.
 const launchBlue = Color(0xff1f5fa8);
 const launchAsphalt = Color(0xff1c2126);
 
@@ -90,9 +90,7 @@ class LaunchScreen extends StatelessWidget {
             LayoutId(
               id: _LaunchSlot.mark,
               child: Image.asset(
-                dark
-                    ? 'assets/branding/png/splash_mark_dark.png'
-                    : 'assets/branding/png/splash_mark.png',
+                'assets/branding/png/splash_mark.png',
                 key: const ValueKey('launch-mark'),
                 excludeFromSemantics: true,
                 filterQuality: FilterQuality.medium,
@@ -144,11 +142,14 @@ class LaunchScreen extends StatelessWidget {
 
 enum _LaunchSlot { mark, status }
 
-/// Centers the mark on the whole screen like the native splash (288 logical
-/// px, the drawing inside a circle two thirds as wide). On short screens the
-/// mark shrinks so it never runs into the status text.
+/// Centers the mark on the whole screen like the native splash: a 288 logical
+/// px image with the 150 px rounded icon in its middle. On short screens the
+/// mark shrinks so the icon never runs into the status text.
 class _LaunchLayout extends MultiChildLayoutDelegate {
   static const nativeSize = 288.0;
+
+  /// The icon's share of the image side.
+  static const iconShare = 150 / nativeSize;
 
   @override
   void performLayout(Size size) {
@@ -157,8 +158,7 @@ class _LaunchLayout extends MultiChildLayoutDelegate {
       _LaunchSlot.status,
       Offset((size.width - status.width) / 2, size.height - status.height),
     );
-    // The drawing reaches a third of the image size below the center.
-    final room = 3 * (size.height / 2 - status.height - 8);
+    final room = 2 * (size.height / 2 - status.height - 8) / iconShare;
     final side = room.clamp(0.0, nativeSize).clamp(0.0, size.width);
     layoutChild(_LaunchSlot.mark, BoxConstraints.tight(Size.square(side)));
     positionChild(

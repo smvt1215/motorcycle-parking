@@ -49,13 +49,13 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('深色模式用柏油底與藍色圓底標誌，和原生深色啟動畫面一致', (tester) async {
+  testWidgets('深色模式用柏油底，和原生深色啟動畫面一致', (tester) async {
     await pumpLaunch(
       tester,
       size: const Size(390, 844),
       brightness: Brightness.dark,
     );
-    expect(markAsset(tester), 'assets/branding/png/splash_mark_dark.png');
+    expect(markAsset(tester), 'assets/branding/png/splash_mark.png');
     final screen = tester.widget<Material>(
       find.byKey(const ValueKey('launch-screen')),
     );
@@ -73,8 +73,8 @@ void main() {
       await pumpLaunch(tester, size: size, textScale: scale);
       expect(tester.takeException(), isNull);
       final mark = markRect(tester);
-      // The drawing reaches a third of the image size below its center.
-      final drawingBottom = mark.center.dy + mark.height / 3;
+      // The icon is the middle 150 of the 288 px image.
+      final drawingBottom = mark.center.dy + mark.height * 150 / 288 / 2;
       final progress = tester.getRect(find.byType(CircularProgressIndicator));
       expect(drawingBottom, lessThanOrEqualTo(progress.top));
       expect(mark.center.dx, closeTo(size.width / 2, .01));
