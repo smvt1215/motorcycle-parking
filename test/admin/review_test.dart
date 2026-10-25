@@ -34,20 +34,25 @@ void main() {
       );
       expect(legacy('點位已不存在：格線撤除').kind, ReviewKind.gone);
       expect(legacy('機車停放資格：建議「可停」').kind, ReviewKind.access);
-      expect(initialProposal(legacy('點位已不存在：格線撤除'), spots[communityId]), {
-        'status': 'hidden',
-      });
+      expect(
+        initialProposal(legacy('點位已不存在：格線撤除'), spots[communityId]),
+        isEmpty,
+      );
+      expect(legacy('位置或其他備註：入口在巷內').title, '位置或其他備註');
+      expect(suggestionKey('位置或其他備註'), 'note');
+      expect(suggestionFieldLabels['guide'], '入口與停車指引');
+      expect(suggestionFieldLabels['location'], '位置不正確');
       expect(reports['r-legacy']!.title, '收費資訊');
       expect(reports['r-legacy']!.riderText, '收費資訊：改為每次 30 元');
       expect(reports['r-type']!.riderText, '地面有「大型重機」字樣');
     });
 
-    test('不存在回報：社群點改 status，官方點改 hidden', () {
+    test('不存在回報：沒附建議值時不預設隱藏；社群點用 status，官方點用 hidden', () {
       final community = spots[communityId]!;
       final official = spots[officialId]!;
-      expect(initialProposal(reports['r-gone']!, community), {
-        'status': 'hidden',
-      });
+      expect(initialProposal(reports['r-gone']!, community), isEmpty);
+      expect(visibilityKey(community), 'status');
+      expect(visibilityKey(official), 'hidden');
       final officialGone = ReviewReport(
         id: 'x',
         sourceId: officialId,
@@ -55,7 +60,16 @@ void main() {
         field: 'gone',
         createdAt: reportTime,
       );
-      expect(initialProposal(officialGone, official), {'hidden': true});
+      expect(initialProposal(officialGone, official), isEmpty);
+      final removed = ReviewReport(
+        id: 'y',
+        sourceId: officialId,
+        reason: '點位已不存在：格線已撤除',
+        field: 'gone',
+        proposed: const {'hidden': true},
+        createdAt: reportTime,
+      );
+      expect(initialProposal(removed, official), {'hidden': true});
       expect(official.allows('status'), isFalse);
       expect(community.allows('hidden'), isFalse);
       expect(ignoredKeys({'status': 'hidden', 'user_id': 'x'}, official), [
@@ -281,6 +295,40 @@ void main() {
       expect(review.byId(first.id), isNull);
     });
 
+    test('沒附建議值的不存在回報：修改後套用從目前的顯示狀態開始', () async {
+      final gone = review.byId('r-gone')!;
+      review.startEdit(gone);
+      expect(review.draft, {'status': 'hidden'});
+      review.setDraft('status', 'pending');
+      await review.decide(gone, ReviewDecision.acceptEdited, '格線仍在');
+      await review.flush();
+      expect(gateway.resolved.single.$3, {'status': 'pending'});
+    });
+
+    test('入口指引與場站型式的建議可直接套用', () async {
+      final guide = ReviewReport(
+        id: 'r-guide',
+        sourceId: officialId,
+        reason: '入口與停車指引：入口在巷內',
+        field: 'guide',
+        proposed: const {
+          'entrance_note': '從中山路一段巷口進入',
+          'parking_guide': 'B2 黃牌專區',
+          'facility_type': 'underground',
+        },
+        createdAt: reportTime,
+      );
+      final spot = gateway.spots[officialId]!;
+      expect(guide.title, '入口與停車指引');
+      expect(applicablePatch(initialProposal(guide, spot), spot).keys, [
+        'entrance_note',
+        'parking_guide',
+        'facility_type',
+      ]);
+      expect(formatValue('facility_type', 'underground'), '地下停車場');
+      expect(validatePatch({'facility_type': 'rooftop'}, spot), isNotNull);
+    });
+
     test('找不到點位只能駁回', () async {
       gateway.spots.remove(officialId);
       await review.load();
@@ -501,9 +549,9 @@ void main() {
     testWidgets('手機版先列表，點選後進詳情並可返回', (tester) async {
       await show(tester, size: const Size(390, 844), mode: ThemeMode.dark);
       expect(find.text('格位類型的修改建議'), findsNothing);
-      await tester.tap(find.byKey(const ValueKey('report-r-gone')));
+      await tester.tap(find.byKey(const ValueKey('report-r-type')));
       await tester.pumpAndSettle();
-      expect(find.text('多位騎士回報已不存在'), findsOneWidget);
+      expect(find.text('格位類型的修改建議'), findsOneWidget);
       expect(find.text('返回佇列（4）'), findsOneWidget);
       // The diff stacks: current and proposed sit under the field name.
       expect(find.text('目前'), findsOneWidget);
@@ -511,10 +559,10 @@ void main() {
       expect(tester.takeException(), isNull);
       await tester.tap(find.text('套用建議'));
       await tester.pumpAndSettle();
-      expect(find.text('收費資訊的修改建議'), findsOneWidget);
+      expect(find.text('機車停放資格的修改建議'), findsOneWidget);
       await tester.tap(find.text('返回佇列（3）'));
       await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('report-r-type')), findsOneWidget);
+      expect(find.byKey(const ValueKey('report-r-gone')), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 

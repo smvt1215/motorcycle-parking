@@ -90,8 +90,11 @@ const _communityColumns =
     'scooter_total,scooter_allowed,heavy_allowed,status,updated_at,last_confirmed_at,created_at,'
     'facility_type,parking_access,address,road_segment,entrance_note,parking_guide,special_rules';
 
+/// Every column the review page shows or edits; a conflict refresh must
+/// show the admin each current value before a forced write.
 const _spotColumns =
-    'id,name,lat,lng,city,district,space_type,fee_note,note,scooter_allowed,heavy_allowed,source_name,updated_at';
+    'id,name,lat,lng,city,district,space_type,fee_note,note,scooter_allowed,heavy_allowed,source_name,updated_at,'
+    'facility_type,parking_access,entrance_note,parking_guide';
 final _uuid = RegExp(
   r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
   caseSensitive: false,
