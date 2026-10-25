@@ -507,7 +507,12 @@ void main() {
       expect(gateway.spotUpdates.single.$2.keys, containsAll(['lat']));
     });
 
-    for (final size in const [Size(390, 844), Size(700, 900)]) {
+    for (final size in const [
+      Size(320, 640),
+      Size(390, 844),
+      Size(700, 900),
+      Size(1280, 900),
+    ]) {
       testWidgets('新增點位的位置區塊在 ${size.width.round()} px 不溢出', (tester) async {
         await show(tester, path: '/spots/new?kind=official', size: size);
         expect(find.text('新增官方點'), findsOneWidget);
