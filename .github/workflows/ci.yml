@@ -69,6 +69,9 @@ jobs:
           git diff --exit-code -- supabase/seed.sql
       - if: steps.changes.outputs.run == 'true'
         run: flutter test --coverage --dart-define=OFFLINE_MAP=true
+      - name: OAuth flow with default map configuration
+        if: steps.changes.outputs.run == 'true'
+        run: flutter test --no-pub test/auth_flow_test.dart
       - if: steps.changes.outputs.run == 'true'
         run: flutter build web --no-web-resources-cdn --no-wasm-dry-run
       - name: Build admin web entrypoint
