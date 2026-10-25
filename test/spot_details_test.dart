@@ -157,7 +157,7 @@ void main() {
     expect(sourceSummary(spot('tdx', city: ''), demo: false), '政府公開資料');
     expect(
       sourceSummary(spot('import', sourceName: '社群回報整理'), demo: false),
-      '由管理員匯入整理',
+      '由管理員自其他社群統整後匯入',
     );
     expect(sourceSummary(spot('community'), demo: false), '由車友回報');
     expect(
@@ -365,23 +365,29 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('未確認的匯入點保留查核狀態，已確認點不顯示', (tester) async {
-    usePhone(tester, width: 320);
-    final store = (await tester.runAsync(createStore))!;
-    addTearDown(store.dispose);
-    final spot = ParkingSpot.fromJson({
-      ...facility().toJson(),
-      'source': 'import',
-      'status': 'pending',
-      'contributor_role': 'import',
-    });
-    await openDetails(tester, store, spot);
-    await showField(tester, '查核狀態');
-    expect(trustSummary(spot, demo: false), '待確認');
-    expect(sourceSummary(spot, demo: false), '由管理員匯入整理');
-    expect(tester.takeException(), isNull);
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
+  for (final width in [320.0, 390.0]) {
+    for (final status in ['pending', 'confirmed']) {
+      testWidgets('寬 $width 的 $status 匯入點不顯示查核狀態', (tester) async {
+        usePhone(tester, width: width);
+        final store = (await tester.runAsync(createStore))!;
+        addTearDown(store.dispose);
+        final spot = ParkingSpot.fromJson({
+          ...facility().toJson(),
+          'source': 'import',
+          'status': status,
+          'contributor_role': 'import',
+        });
+        expect(sourceSummary(spot, demo: false), '由管理員自其他社群統整後匯入');
+        await openDetails(tester, store, spot);
+        await showField(tester, '更新時間');
+        expect(find.text('資料來源'), findsOneWidget);
+        expect(find.text('查核狀態'), findsNothing);
+        expect(find.text('導航到這裡').hitTestable(), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      });
+    }
+  }
 
   testWidgets('社群點已確認存在仍清楚提示車種開放待查核', (tester) async {
     usePhone(tester);

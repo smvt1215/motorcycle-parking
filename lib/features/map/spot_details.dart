@@ -115,7 +115,7 @@ String sourceSummary(ParkingSpot spot, {required bool demo}) => demo
 String contributorSummary(ParkingSpot spot) {
   if (spot.contributorRole == 'admin') return '由管理員新增';
   if (spot.contributorRole == 'import' || spot.source == 'import') {
-    return '由管理員匯入整理';
+    return '由管理員自其他社群統整後匯入';
   }
   final name = spot.contributorName.trim();
   // Email is an account identifier, not a public reporter name.
