@@ -17,25 +17,52 @@ enum FieldInput {
   visibility,
   hiddenFlag,
   coordinate,
+
+  /// One of [ReviewField.choices], or unset.
+  choice,
 }
 
 /// A spot column `admin_resolve_report` may change, as the admin sees it.
 class ReviewField {
-  const ReviewField(this.key, this.label, this.input, {this.maxLength});
+  const ReviewField(
+    this.key,
+    this.label,
+    this.input, {
+    this.maxLength,
+    this.choices = const {},
+  });
   final String key;
   final String label;
   final FieldInput input;
   final int? maxLength;
+
+  /// Stored value -> label, for [FieldInput.choice].
+  final Map<String, String> choices;
 }
 
 /// Display order of the diff table; limits match the table constraints.
-const reviewFields = [
-  ReviewField('name', '停車點名稱', FieldInput.text, maxLength: 100),
-  ReviewField('space_type', '格位類型', FieldInput.spaceType),
+final reviewFields = [
+  const ReviewField('name', '停車點名稱', FieldInput.text, maxLength: 100),
+  const ReviewField('space_type', '格位類型', FieldInput.spaceType),
+  // An off-street space type may come with what kind of lot it is.
+  ReviewField(
+    'facility_type',
+    '場站類型',
+    FieldInput.choice,
+    choices: {for (final f in FacilityType.values) f.name: f.label},
+  ),
+  ReviewField(
+    'parking_access',
+    '車種開放',
+    FieldInput.choice,
+    choices: {for (final a in ParkingAccess.values) a.name: a.label},
+  ),
   ReviewField('scooter_allowed', '普通機車', FieldInput.triState),
   ReviewField('heavy_allowed', '大型重機', FieldInput.triState),
   ReviewField('fee_note', '收費資訊', FieldInput.text, maxLength: 200),
-  ReviewField('note', '備註', FieldInput.text, maxLength: 500),
+  const ReviewField('note', '備註', FieldInput.text, maxLength: 500),
+  const ReviewField('entrance_note', '入口說明', FieldInput.text, maxLength: 500),
+  const ReviewField('parking_guide', '停放方式', FieldInput.text, maxLength: 500),
   ReviewField('status', '地圖顯示', FieldInput.visibility),
   ReviewField('hidden', '地圖顯示', FieldInput.hiddenFlag),
   ReviewField('lat', '緯度', FieldInput.coordinate),
@@ -55,17 +82,23 @@ const suggestionFieldLabels = {
   'space_type': '格位類型',
   'fee_note': '收費資訊',
   'eligibility': '機車停放資格',
-  'note': '位置或其他備註',
+  'guide': '入口與停車指引',
+  'note': '其他備註',
+  'location': '位置不正確',
   'gone': '點位已不存在',
 };
+
+/// Labels older builds sent instead of a key.
+const _legacyFieldLabels = {'位置或其他備註': 'note'};
 
 /// The key for [field], whether it arrived as a key or as an older label.
 String? suggestionKey(String? field) => suggestionFieldLabels.containsKey(field)
     ? field
-    : suggestionFieldLabels.entries
-          .where((e) => e.value == field)
-          .firstOrNull
-          ?.key;
+    : _legacyFieldLabels[field] ??
+          suggestionFieldLabels.entries
+              .where((e) => e.value == field)
+              .firstOrNull
+              ?.key;
 
 class ReviewReport {
   const ReviewReport({
@@ -183,20 +216,16 @@ class ReviewSpot {
       reviewField(key) != null && key != (official ? 'status' : 'hidden');
 }
 
-/// The proposal the admin starts from. A gone report without a structured
-/// value hides the spot; auto-hidden ones are hidden already, so accepting
-/// keeps them hidden.
-Map<String, dynamic> initialProposal(ReviewReport report, ReviewSpot? spot) {
-  final proposed = {...?report.proposed};
-  if (proposed.isEmpty && report.kind == ReviewKind.gone && spot != null) {
-    if (spot.official) {
-      proposed['hidden'] = true;
-    } else {
-      proposed['status'] = 'hidden';
-    }
-  }
-  return proposed;
-}
+/// The proposal the admin starts from: only what the rider sent. A gone
+/// report without a value (works, a temporary closure, older builds, votes)
+/// is never turned into hiding; the admin decides, see [visibilityKey].
+Map<String, dynamic> initialProposal(ReviewReport report, ReviewSpot? spot) => {
+  ...?report.proposed,
+};
+
+/// The column that hides [spot]: `hidden` for official spots, `status` for
+/// community ones.
+String visibilityKey(ReviewSpot spot) => spot.official ? 'hidden' : 'status';
 
 /// Only keys the RPC accepts for this spot become the patch.
 Map<String, dynamic> applicablePatch(
@@ -229,6 +258,7 @@ bool fitsField(ReviewField field, Object? value) => switch (field.input) {
   }.contains(value),
   FieldInput.hiddenFlag => value is bool,
   FieldInput.coordinate => value is num,
+  FieldInput.choice => value == null || field.choices.containsKey(value),
 };
 
 String formatValue(String key, Object? value) {
@@ -251,6 +281,7 @@ String formatValue(String key, Object? value) {
     FieldInput.coordinate => value is num ? value.toStringAsFixed(6) : '未填寫',
     FieldInput.text =>
       value is String && value.trim().isNotEmpty ? value : '未填寫',
+    FieldInput.choice => field.choices[value] ?? '未設定',
   };
 }
 
@@ -275,6 +306,10 @@ String? validatePatch(Map<String, dynamic> patch, ReviewSpot spot) {
       case FieldInput.visibility:
         if (!const {'pending', 'confirmed', 'hidden'}.contains(value)) {
           return '請選擇地圖顯示方式';
+        }
+      case FieldInput.choice:
+        if (value != null && !field.choices.containsKey(value)) {
+          return '請選擇${field.label}';
         }
       case FieldInput.hiddenFlag:
         if (value is! bool) return '請選擇地圖顯示方式';
