@@ -84,6 +84,25 @@ void main() {
     expect(spotFeeSummary(lot(fee: const Fee()), VehicleType.scooter), '費率未確認');
   });
 
+  test('點位有結構化費率而分區只有舊文字時，以點位費率為準', () {
+    const fee = Fee(scooter: Rate(FeeMode.free));
+    const legacy = ParkingZone(name: 'B2', feeNote: '舊：每次 10 元');
+    final single = lot(fee: fee, zones: [legacy]);
+    expect(spotFeeSummary(single, VehicleType.scooter), '免費');
+    expect(spotFeeSummary(single, VehicleType.heavy), '費率未確認');
+    expect(spotFeeIsVehicleRate(single), isTrue);
+    expect(lotWideFee(single), fee);
+    final multi = lot(fee: fee, zones: [legacy, legacy]);
+    expect(spotFeeSummary(multi, VehicleType.scooter), '免費');
+    // A zone's own structured rate still wins over the lot's.
+    const own = ParkingZone(name: 'B1', fee: Fee());
+    expect(lotWideFee(lot(fee: fee, zones: [own, legacy])), isNull);
+    expect(
+      spotFeeSummary(lot(fee: fee, zones: [own]), VehicleType.scooter),
+      '費率未確認',
+    );
+  });
+
   test('單一分區顯示實際費率，多分區逐區計費，未知車種不繼承其他費率', () {
     const partial = ParkingZone(
       name: 'B2',

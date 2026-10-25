@@ -383,6 +383,26 @@ void main() {
     expect(body['reason'], '這裡已經不能停車：施工中；預計恢復：公告寫 11 月 30 日完工');
   });
 
+  testWidgets('改選長期原因後不再帶預計恢復時間', (tester) async {
+    final store = await openSuggestion(tester, '這裡已經不能停車');
+    await tester.tap(find.byKey(const ValueKey('gone-works')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('gone-until')),
+      '公告寫 11 月 30 日完工',
+    );
+    await tester.tap(find.byKey(const ValueKey('gone-removed')));
+    await tester.pumpAndSettle();
+    await submitSuggestion(tester, '送出回報');
+    expect(store.submissions.single['reason'], '這裡已經不能停車：格線已撤除');
+  });
+
+  test('長度依伺服器的 UTF-16 計算', () {
+    expect(fitsServer('機' * 40, 40), isNull);
+    expect(fitsServer('🛵' * 21, 40), isNotNull);
+    expect(fitsServer(null, 40), isNull);
+  });
+
   testWidgets('「其他」原因需要說明', (tester) async {
     final store = await openSuggestion(tester, '這裡已經不能停車');
     await tester.tap(find.byKey(const ValueKey('gone-other')));
