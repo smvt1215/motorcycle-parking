@@ -163,9 +163,9 @@ RLS：只開放本人查自己的提案；管理員 `is_admin()` 才能檢視全
 
 建議欄位：`state`、`verified_value`、`evidence_policy`、`source_kind`、`verified_at`、`valid_until`、`reviewed_by`、`revision`、`updated_at`。
 
-需保留證據／提案關聯（另設 join table），避免只有最後一個驗證者的結果。
+需保留證據／提案關聯（另設 join table），避免只有最後一個驗證者的結果。對同一點位的 `heavy_allowed` 和 `scooter_allowed` 分開存狀態；場站 `parking_zones` 則考慮 `field_key + zone_id`。
 
-**過渡實作（#84）：** 先在 `community_spots` 加 `scooter_verified_at`、`heavy_verified_at`，只記錄管理員核驗時間，由觸發器在管理員路徑寫入、在非管理員修改相關欄位時失效。正式建立本表時，這兩欄轉成 `field_key = 'scooter_allowed'／'heavy_allowed'`、`source_kind = 'admin'` 的列，`verified_at` 沿用原值、`valid_until` 依 §5.3 計算，之後移除兩欄。對同一點位的 `heavy_allowed` 和 `scooter_allowed` 分開存狀態；場站 `parking_zones` 則考慮 `field_key + zone_id`。
+**過渡實作（#84）：** 先在 `community_spots` 加 `scooter_verified_at`、`heavy_verified_at`，只記錄管理員核驗時間，由觸發器在管理員路徑寫入、在非管理員修改相關欄位時失效。正式建立本表時，這兩欄轉成 `field_key = 'scooter_allowed'／'heavy_allowed'`、`source_kind = 'admin'` 的列，`verified_at` 沿用原值、`valid_until` 依 §5.3 計算，之後移除兩欄。
 
 ### 4.3 `spot_evidence`（新增，照片階段）
 
