@@ -149,7 +149,7 @@ class LocalRepository {
 
   List<ParkingSpot> favorites(String key) =>
       (jsonDecode(prefs.getString('favorites:$key') ?? '[]') as List<dynamic>)
-          .expand(ParkingSpot.known)
+          .expand(ParkingSpot.favorite)
           .toList();
   Future<void> setFavorites(String key, List<ParkingSpot> spots) =>
       prefs.setString(

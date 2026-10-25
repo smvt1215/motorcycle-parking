@@ -33,6 +33,14 @@ select is((select contributor_role from community_spots where id='75000000-0000-
 select is((select contributor_name from community_spots where id='75000000-0000-4000-8000-000000000002'),'王小明','wrong metadata type falls back to provider full name');
 select is((select char_length(contributor_name) from community_spots where id='75000000-0000-4000-8000-000000000003'),40,'names are bounded by Unicode characters');
 select is((select contributor_name from community_spots where id='75000000-0000-4000-8000-000000000004'),'','missing names never fall back to email');
+update auth.users set raw_user_meta_data=jsonb_build_object('display_name',E'\u202E官方\u200B管理員\u2066\uFEFF\U000E0041')
+  where id='10000000-0000-4000-8000-000000000004';
+select is((select contributor_name from community_spots where id='75000000-0000-4000-8000-000000000004'),'官方管理員','format characters cannot reorder or hide parts of a name');
+update auth.users set raw_user_meta_data=jsonb_build_object('display_name',E'\u200B\u200D\u2060 \u00AD','full_name','備援姓名')
+  where id='10000000-0000-4000-8000-000000000004';
+select is((select contributor_name from community_spots where id='75000000-0000-4000-8000-000000000004'),'備援姓名','an invisible custom name falls back to the provider name');
+update auth.users set raw_user_meta_data='{}' where id='10000000-0000-4000-8000-000000000004';
+select is((select contributor_name from community_spots where id='75000000-0000-4000-8000-000000000004'),'','removing every name clears the public name');
 select is((select contributor_role||'|'||contributor_name from community_spots where id='75000000-0000-4000-8000-000000000005'),'admin|','trusted admin identity needs no public personal name');
 select is((select contributor_role||'|'||contributor_name||'|'||source_name from community_spots where id='75000000-0000-4000-8000-000000000006'),'import||社群回報整理','imports preserve source credits and expose no owner name');
 

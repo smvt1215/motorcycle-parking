@@ -1,4 +1,9 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:motorcycle_parking/data/repositories.dart';
 
 import 'package:motorcycle_parking/models/parking.dart';
 
@@ -12,7 +17,7 @@ const spot = ParkingSpot(
 );
 
 void main() {
-  test('公開回報者快照隨收藏完整往返，沒有加入帳號識別欄位', () {
+  test('即時資料可讀取回報者名稱，收藏不保存名稱也不加入帳號識別欄位', () {
     final row = {
       ...spot.toJson(),
       'contributor_name': '小哲',
@@ -21,11 +26,26 @@ void main() {
     final parsed = ParkingSpot.fromJson(row);
     expect(parsed.contributorName, '小哲');
     expect(parsed.contributorRole, 'rider');
-    final restored = ParkingSpot.fromJson(parsed.toJson());
-    expect(restored.contributorName, parsed.contributorName);
-    expect(restored.contributorRole, parsed.contributorRole);
-    expect(restored.toJson().containsKey('user_id'), isFalse);
-    expect(restored.toJson().containsKey('email'), isFalse);
+    final saved = parsed.toJson();
+    expect(saved.containsKey('contributor_name'), isFalse);
+    expect(saved['contributor_role'], 'rider');
+    expect(saved.containsKey('user_id'), isFalse);
+    expect(saved.containsKey('email'), isFalse);
+    final restored = ParkingSpot.favorite(saved).single;
+    expect(restored.contributorName, '');
+    expect(restored.contributorRole, 'rider');
+  });
+
+  test('舊版收藏裡已存的回報者名稱在讀取時忽略', () {
+    final legacy = {
+      ...spot.toJson(),
+      'contributor_name': '已清除的名稱',
+      'contributor_role': 'rider',
+    };
+    final restored = ParkingSpot.favorite(legacy).single;
+    expect(restored.contributorName, '');
+    expect(restored.contributorRole, 'rider');
+    expect(legacy['contributor_name'], '已清除的名稱', reason: '不改動傳入的資料');
   });
 
   test('管理員與匯入角色可讀取，未知角色與錯誤型別維持空值', () {
@@ -54,5 +74,34 @@ void main() {
     expect(legacy.contributorRole, '');
     expect(legacy.toJson().containsKey('contributor_name'), isFalse);
     expect(legacy.toJson().containsKey('contributor_role'), isFalse);
+  });
+
+  test('本機收藏不寫入回報者名稱，舊資料讀回時也忽略', () async {
+    SharedPreferences.setMockInitialValues({
+      'favorites:guest': jsonEncode([
+        {
+          ...spot.toJson(),
+          'contributor_name': '舊快照',
+          'contributor_role': 'rider',
+        },
+      ]),
+    });
+    final prefs = await SharedPreferences.getInstance();
+    final local = LocalRepository(prefs);
+    final loaded = local.favorites('guest').single;
+    expect(loaded.contributorName, '');
+    expect(loaded.contributorRole, 'rider');
+    await local.setFavorites('guest', [
+      ParkingSpot.fromJson({
+        ...spot.toJson(),
+        'contributor_name': '小哲',
+        'contributor_role': 'rider',
+      }),
+    ]);
+    expect(prefs.getString('favorites:guest'), isNot(contains('小哲')));
+    expect(
+      prefs.getString('favorites:guest'),
+      isNot(contains('contributor_name')),
+    );
   });
 }
