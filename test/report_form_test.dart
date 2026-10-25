@@ -298,7 +298,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(scooterUnconfirmed);
     await tester.pumpAndSettle();
-    await pickType(tester, SpaceType.freeMotorcycle);
+    // The rule decides heavy bikes here only before the switch, so a flag
+    // computed at submit time would wrongly send the shown value.
+    await pickType(tester, SpaceType.evMotorcycle);
+    expect(find.textContaining('大型重機依規則帶入，只當預設'), findsOneWidget);
     final spot = await send(tester, store);
     expect(spot['scooter_allowed'], isNull);
     expect(spot['heavy_allowed'], isNull);
