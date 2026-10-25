@@ -128,5 +128,68 @@ select ok((select scooter_verified_at is not null from community_spots where id=
   'the restated flag is verified');
 select is(current_setting('app.admin_vehicle_fields',true),'','the stated fields are cleared after the call');
 
+-- Adopting a report keeps the same rule.
+with s as (insert into community_spots(user_id,name,lat,lng,city,district,space_type,scooter_allowed,fee,fee_note)
+  values('10000000-0000-4000-8000-000000000001','審核費率點',25.053,121.573,'臺北市','松山區','paidMotorcycle',true,
+    '{"scooter":{"mode":"daily","amount":30}}','每日 30 元（大型重機費率未確認）') returning id,updated_at)
+  insert into fx select 'reviewed',id,updated_at from s;
+with s as (insert into community_spots(user_id,name,lat,lng,city,district,space_type,fee_note)
+  values('10000000-0000-4000-8000-000000000001','審核舊文字點',25.054,121.574,'臺北市','松山區','paidMotorcycle','每小時20元') returning id,updated_at)
+  insert into fx select 'legacy',id,updated_at from s;
+insert into moderation_queue(source_id,reason,field,proposed) values
+  ((select id::text from fx where name='reviewed'),'收費資訊：每次 30 元','fee_note','{"fee_note":"每次 30 元"}'),
+  ((select id::text from fx where name='reviewed'),'收費資訊：不一致','fee_note','{"fee":{"scooter":{"mode":"free"}},"fee_note":"免費"}'),
+  ((select id::text from fx where name='reviewed'),'收費資訊：一致','fee_note',
+    '{"fee":{"scooter":{"mode":"free"}},"fee_note":"免費（大型重機費率未確認）","scooter_allowed":true}'),
+  ((select id::text from fx where name='legacy'),'收費資訊：舊文字','fee_note','{"fee_note":"每次 15 元"}');
+create temporary table q as select id,reason from moderation_queue where reason like '收費資訊：%' and source_id in
+  (select id::text from fx where name in ('reviewed','legacy'));
+grant select on q to authenticated;
+select pg_temp.act('user');
+set local role authenticated;
+select throws_ok($$select admin_resolve_report((select id from q where reason='收費資訊：一致'),'accepted',
+  (select proposed from moderation_queue where id=(select id from q where reason='收費資訊：一致')))$$,
+  '42501',null,'an ordinary user cannot adopt a fee');
+reset role;
+select pg_temp.act('admin');
+set local role authenticated;
+select throws_ok($$select admin_resolve_report((select id from q where reason='收費資訊：每次 30 元'),'accepted','{"fee_note":"每次 30 元"}')$$,
+  '22023','fee_note must be the text of fee','a text-only suggestion cannot drift from a stored fee');
+select throws_ok($$select admin_resolve_report((select id from q where reason='收費資訊：不一致'),'accepted',
+  '{"fee":{"scooter":{"mode":"free"}},"fee_note":"免費"}')$$,
+  '22023','fee_note must be the text of fee','a fee adopted with other text is refused');
+select throws_ok($$select admin_resolve_report((select id from q where reason='收費資訊：不一致'),'accepted',
+  '{"fee":{"scooter":{"mode":"free"}}}')$$,
+  '22023','fee_note must be the text of fee','a fee adopted without its text is refused');
+select is(admin_resolve_report((select id from q where reason='收費資訊：一致'),'accepted',
+    (select proposed from moderation_queue where id=(select id from q where reason='收費資訊：一致')),'比對公告')->'spot'->>'fee_note',
+  '免費（大型重機費率未確認）','a fee adopted with its own text');
+-- Sent before the fee above was adopted: forced once the admin has seen it.
+select is(admin_resolve_report((select id from q where reason='收費資訊：每次 30 元'),'accepted','{"fee":null,"fee_note":"每次 30 元"}','',true)->'spot'->'fee',
+  'null'::jsonb,'clearing the fee frees the text');
+select is(admin_resolve_report((select id from q where reason='收費資訊：舊文字'),'accepted','{"fee_note":"每次 15 元"}')->'spot'->>'fee_note',
+  '每次 15 元','a spot without a fee takes text as before');
+reset role;
+select is((select status from moderation_queue where id=(select id from q where reason='收費資訊：不一致')),'pending',
+  'a refused adoption leaves the report pending');
+select ok((select scooter_verified_at is not null from community_spots where id=(select id from fx where name='reviewed')),
+  'a restated flag adopted with a fee is still verified');
+select is((select after->'spot'->'fee' from admin_audit_log where action='resolve_report' and note='比對公告'),
+  '{"scooter":{"mode":"free"}}'::jsonb,'the audit keeps the adopted fee');
+select is((select before->'spot'->'fee' from admin_audit_log where action='resolve_report' and note='比對公告'),
+  '{"scooter":{"mode":"daily","amount":30}}'::jsonb,'and the fee before');
+-- A stale report is still reported as a conflict, not as a fee problem.
+insert into moderation_queue(source_id,reason,field,proposed) values
+  ((select id::text from fx where name='reviewed'),'收費資訊：舊版本','fee_note','{"fee_note":"免費"}');
+update community_spots set fee='{"scooter":{"mode":"daily","amount":40}}',fee_note='每日 40 元（大型重機費率未確認）'
+  where id=(select id from fx where name='reviewed');
+select pg_temp.act('admin');
+set local role authenticated;
+select throws_ok($$select admin_resolve_report((select id from moderation_queue where reason='收費資訊：舊版本'),'accepted','{"fee_note":"免費"}')$$,
+  '40001',null,'version conflicts come first');
+select throws_ok($$select admin_resolve_report((select id from moderation_queue where reason='收費資訊：舊版本'),'accepted','{"fee_note":"免費"}','',true)$$,
+  '22023','fee_note must be the text of fee','forcing does not skip the fee rule');
+reset role;
+
 select * from finish();
 rollback;

@@ -182,3 +182,114 @@ begin
   return v_after||jsonb_build_object('source_id',case when v_official then 'official:' else '' end||(v_after->>'id'));
 end;
 $$;
+
+-- 202610250080_admin_verified_eligibility.sql's body (its set_config calls
+-- and version conflict check unchanged) plus the same rule on adopting a
+-- report: when the patch touches fee or fee_note, the spot as it will be
+-- must keep fee_note as the text of its fee. This also refuses a text-only
+-- suggestion on a spot that has a fee (riders would never see it). Checked
+-- after the conflict check, so a stale report is still reported as one.
+create or replace function public.admin_resolve_report(p_id uuid,p_decision text,p_patch jsonb default '{}',p_note text default '',p_force boolean default false)
+returns jsonb language plpgsql security definer set search_path=public,extensions,pg_temp as $$
+declare
+  v_report moderation_queue;
+  v_patch jsonb:=coalesce(p_patch,'{}'::jsonb);
+  v_note text:=coalesce(p_note,'');
+  v_fields text[]:=array['name','lat','lng','city','district','space_type','fee_note','note',
+    'scooter_allowed','heavy_allowed','facility_type','parking_access','address','road_segment',
+    'entrance_note','parking_guide','special_rules','fee'];
+  v_table text; v_target uuid; v_bad text; v_before jsonb; v_after jsonb;
+  v_conflict boolean:=false;
+begin
+  if not public.is_admin() then
+    raise exception 'admin with a second factor required' using errcode='42501';
+  end if;
+  if p_decision is null or p_decision not in ('accepted','rejected') then
+    raise exception 'invalid decision' using errcode='22023';
+  end if;
+  if jsonb_typeof(v_patch)<>'object' or char_length(v_note)>500 then
+    raise exception 'invalid resolution' using errcode='22023';
+  end if;
+  select * into v_report from moderation_queue where id=p_id for update;
+  if not found then raise exception 'report not found' using errcode='22023'; end if;
+  if v_report.status<>'pending' then raise exception 'report already resolved' using errcode='22023'; end if;
+  if p_decision='rejected' and v_patch<>'{}'::jsonb then
+    raise exception 'a rejected report changes no spot' using errcode='22023';
+  end if;
+
+  if v_patch<>'{}'::jsonb then
+    if v_report.source_id like 'official:%' then
+      v_table:='official_heavy_spots';
+      v_fields:=v_fields||'hidden'::text;
+      v_target:=case when substr(v_report.source_id,10) ~* '^[0-9a-f-]{36}$' then substr(v_report.source_id,10)::uuid end;
+    else
+      v_table:='community_spots';
+      -- Community spots are hidden or restored through status, official ones through hidden.
+      v_fields:=v_fields||'status'::text;
+      v_target:=case when v_report.source_id ~* '^[0-9a-f-]{36}$' then v_report.source_id::uuid end;
+    end if;
+    select k into v_bad from jsonb_object_keys(v_patch) k where k<>all(v_fields) limit 1;
+    if v_bad is not null then raise exception 'field % cannot be changed here',v_bad using errcode='22023'; end if;
+    -- Adopting a vehicle field verifies it even when the value is unchanged.
+    perform set_config('app.admin_vehicle_fields',(select coalesce(string_agg(k,','),'') from jsonb_object_keys(v_patch) k
+      where k in ('scooter_allowed','heavy_allowed','parking_access')),true);
+
+    if v_table='community_spots' then
+      select to_jsonb(c)-'user_id'-'location' into v_before from community_spots c where c.id=v_target for update;
+      if v_before is null then raise exception 'spot not found' using errcode='22023'; end if;
+      -- Only the fields this patch writes count: votes or other edits that
+      -- leave them alone must not train admins to force every decision.
+      v_conflict:=v_report.base_spot is not null and exists(
+        select 1 from jsonb_object_keys(v_patch) k where (v_report.base_spot->k) is distinct from (v_before->k));
+      if v_conflict and not coalesce(p_force,false) then
+        raise exception 'spot changed since the report' using errcode='40001',
+          hint='Review the current values, then apply again with p_force.';
+      end if;
+      if (v_patch ? 'fee' or v_patch ? 'fee_note') and not public.fee_note_matches(v_before||v_patch) then
+        raise exception 'fee_note must be the text of fee' using errcode='22023';
+      end if;
+      update community_spots c set (name,lat,lng,city,district,space_type,fee_note,note,scooter_allowed,heavy_allowed,
+          facility_type,parking_access,address,road_segment,entrance_note,parking_guide,special_rules,fee,status,updated_at)
+        =(select r.name,r.lat,r.lng,r.city,r.district,r.space_type,r.fee_note,r.note,r.scooter_allowed,r.heavy_allowed,
+          r.facility_type,r.parking_access,r.address,r.road_segment,r.entrance_note,r.parking_guide,r.special_rules,r.fee,r.status,now()
+          from jsonb_populate_record(c,v_patch) r)
+        where c.id=v_target returning to_jsonb(c)-'user_id'-'location' into v_after;
+      -- Restoring a hidden spot supersedes the "gone" votes that hid it;
+      -- otherwise the next vote recounts them and hides it again.
+      if v_before->>'status'='hidden' and v_after->>'status'<>'hidden' then
+        delete from spot_votes where spot_id=v_target and vote='gone';
+      end if;
+    else
+      select to_jsonb(o) into v_before from official_heavy_spots o where o.id=v_target for update;
+      if v_before is null then raise exception 'spot not found' using errcode='22023'; end if;
+      -- Only the fields this patch writes count: votes or other edits that
+      -- leave them alone must not train admins to force every decision.
+      v_conflict:=v_report.base_spot is not null and exists(
+        select 1 from jsonb_object_keys(v_patch) k where (v_report.base_spot->k) is distinct from (v_before->k));
+      if v_conflict and not coalesce(p_force,false) then
+        raise exception 'spot changed since the report' using errcode='40001',
+          hint='Review the current values, then apply again with p_force.';
+      end if;
+      if (v_patch ? 'fee' or v_patch ? 'fee_note') and not public.fee_note_matches(v_before||v_patch) then
+        raise exception 'fee_note must be the text of fee' using errcode='22023';
+      end if;
+      update official_heavy_spots o set (name,lat,lng,city,district,space_type,fee_note,note,scooter_allowed,heavy_allowed,
+          facility_type,parking_access,address,road_segment,entrance_note,parking_guide,special_rules,fee,hidden,updated_at)
+        =(select r.name,r.lat,r.lng,r.city,r.district,r.space_type,r.fee_note,r.note,r.scooter_allowed,r.heavy_allowed,
+          r.facility_type,r.parking_access,r.address,r.road_segment,r.entrance_note,r.parking_guide,r.special_rules,r.fee,r.hidden,now()
+          from jsonb_populate_record(o,v_patch) r)
+        where o.id=v_target returning to_jsonb(o) into v_after;
+    end if;
+  end if;
+
+  perform set_config('app.admin_vehicle_fields','',true);
+  update moderation_queue set status=p_decision,resolved_at=now(),resolved_by=auth.uid(),resolution_note=v_note
+    where id=p_id;
+  insert into admin_audit_log(actor,action,target_table,target_id,before,after,note)
+  values(auth.uid(),'resolve_report','moderation_queue',p_id::text,
+    jsonb_build_object('report',to_jsonb(v_report),'spot',v_before),
+    jsonb_build_object('status',p_decision,'spot_table',v_table,'spot',v_after,'forced',v_conflict),
+    v_note);
+  return jsonb_build_object('id',p_id,'status',p_decision,'spot',v_after);
+end;
+$$;
