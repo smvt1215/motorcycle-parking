@@ -77,10 +77,16 @@ void main() {
     WidgetTester tester,
     RecordingStore store,
   ) async {
+    // Back to the top, where the name is the first field in the list.
+    await tester.fling(form, const Offset(0, 3000), 3000);
+    await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextFormField).first, '測試點');
     await tester.pumpAndSettle();
     // The button sits below the fold of a lazily built list.
     await tester.scrollUntilVisible(find.text('送出回報'), 200, scrollable: form);
+    // scrollUntilVisible stops once the button is built, maybe below the fold.
+    await tester.ensureVisible(find.text('送出回報'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('送出回報'));
     await tester.pumpAndSettle();
     return store.submissions.single['spot'] as Map<String, dynamic>;
@@ -132,13 +138,49 @@ void main() {
     expect(spot['heavy_allowed'], isNull);
   });
 
+  testWidgets('收費以結構化選項填寫，送出費率與組成的文字', (tester) async {
+    final store = await openForm(tester);
+    final menu = find.byKey(const ValueKey('fee-mode-scooter'));
+    await tester.scrollUntilVisible(menu, 200, scrollable: form);
+    await tester.ensureVisible(menu);
+    await tester.pumpAndSettle();
+    await tester.tap(menu);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('每日').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextFormField, '每日金額'), '30');
+    final heavy = find.byKey(const ValueKey('fee-mode-heavy'));
+    await tester.ensureVisible(heavy);
+    await tester.tap(heavy);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('比照機車費率').last);
+    await tester.pumpAndSettle();
+    final spot = await send(tester, store);
+    expect(spot['fee'], {
+      'scooter': {'mode': 'daily', 'amount': 30},
+      'heavy': {'mode': 'same_as_scooter'},
+    });
+    expect(spot['fee_note'], '每日 30 元（大型重機比照機車費率）');
+  });
+
+  testWidgets('沒有填收費時不送 fee，文字維持請依現場公告', (tester) async {
+    final store = await openForm(tester);
+    final spot = await send(tester, store);
+    expect(spot.containsKey('fee'), isFalse);
+    expect(spot['fee_note'], '請依現場公告');
+  });
+
   testWidgets('手動設定車種後，換格位不再覆蓋', (tester) async {
     final store = await openForm(tester);
     await pickType(tester, SpaceType.heavyOnly);
-    final heavyAllowed = find.text('可停').last;
-    await tester.ensureVisible(heavyAllowed);
+    // The heavy-bike segments, not the fee menus that also read 未確認.
+    final heavyUnconfirmed = find.descendant(
+      of: find.byType(SegmentedButton<bool?>).last,
+      matching: find.text('未確認'),
+    );
+    await tester.ensureVisible(heavyUnconfirmed);
     // Heavy-only bays already read "heavy: allowed"; the reporter overrides it.
-    await tester.tap(find.text('未確認').last);
+    await tester.tap(heavyUnconfirmed);
     await tester.pumpAndSettle();
     expect(find.textContaining('已依'), findsNothing);
     await pickType(tester, SpaceType.paidMotorcycle);

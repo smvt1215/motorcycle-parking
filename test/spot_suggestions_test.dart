@@ -5,6 +5,7 @@ import 'package:motorcycle_parking/data/app_store.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
 import 'package:motorcycle_parking/features/map/spot_sheet.dart';
 import 'package:motorcycle_parking/features/report/report_sheet.dart';
+import 'package:motorcycle_parking/features/report/spot_suggestions.dart';
 import 'package:motorcycle_parking/models/parking.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
 
@@ -247,6 +248,129 @@ void main() {
       'note': '',
     });
     expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('收費建議以結構化費率送出，沒有選收費方式時提示', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final store = (await tester.runAsync(createStore))!;
+    addTearDown(store.dispose);
+    await openDetails(tester, store);
+    await tester.ensureVisible(find.text('修改建議'));
+    await tester.tap(find.text('修改建議'));
+    await tester.pumpAndSettle();
+    // The suggestion list's item, not the details row behind it.
+    await tester.tap(find.text('收費資訊').last);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('送出建議'));
+    await tester.tap(find.text('送出建議'));
+    await tester.pumpAndSettle();
+    expect(find.text('請至少選一個車種的收費方式'), findsOneWidget);
+    expect(store.submissions, isEmpty);
+    final menu = find.byKey(const ValueKey('fee-mode-scooter'));
+    await tester.ensureVisible(menu);
+    await tester.tap(menu);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('計次').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextFormField, '每次金額'), '20');
+    await tester.pumpAndSettle();
+    expect(find.text('請至少選一個車種的收費方式'), findsNothing);
+    expect(
+      find.text('收費資訊從「${spot.feeNote}」改成「每次 20 元（大型重機費率未確認）」'),
+      findsOneWidget,
+    );
+    // The form grew with the amount fields; scroll its own list to the button.
+    await tester.scrollUntilVisible(
+      find.text('送出建議'),
+      200,
+      scrollable: find
+          .ancestor(of: menu, matching: find.byType(Scrollable))
+          .first,
+    );
+    await tester.ensureVisible(find.text('送出建議'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('送出建議'));
+    await tester.pumpAndSettle();
+    final body = store.submissions.single;
+    expect(body['field'], 'fee_note');
+    expect(body['proposed'], {
+      'fee': {
+        'scooter': {'mode': 'per_visit', 'amount': 20},
+      },
+      'fee_note': '每次 20 元（大型重機費率未確認）',
+    });
+    expect(body['reason'], '收費資訊：建議「每次 20 元（大型重機費率未確認）」');
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  test('摘要依伺服器的 UTF-16 長度截斷，不切開 emoji', () {
+    final emoji = '🛵' * 300;
+    expect(emoji.length, 600);
+    final cut = reportSummary(emoji);
+    expect(cut.length, lessThanOrEqualTo(500));
+    expect(cut, endsWith('…'));
+    // Whole scooters only: an odd unit count would mean a split pair.
+    expect((cut.length - 1).isEven, isTrue);
+    expect(reportSummary('短'), '短');
+  });
+
+  testWidgets('詳細費率加上最長說明時，摘要截在伺服器上限內，說明完整保留', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final store = (await tester.runAsync(createStore))!;
+    addTearDown(store.dispose);
+    await openDetails(tester, store);
+    await tester.ensureVisible(find.text('修改建議'));
+    await tester.tap(find.text('修改建議'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('收費資訊').last);
+    await tester.pumpAndSettle();
+    for (final (menu, field) in [
+      ('fee-mode-scooter', 0),
+      ('fee-mode-heavy', 1),
+    ]) {
+      final mode = find.byKey(ValueKey(menu));
+      await tester.ensureVisible(mode);
+      await tester.tap(mode);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('計時').last);
+      await tester.pumpAndSettle();
+      final amount = find.widgetWithText(TextFormField, '金額').at(field);
+      await tester.ensureVisible(amount);
+      await tester.enterText(amount, '20');
+      final cap = find.widgetWithText(TextFormField, '當日上限（選填）').at(field);
+      await tester.ensureVisible(cap);
+      await tester.enterText(cap, '100');
+      await tester.pumpAndSettle();
+    }
+    final explanation = '說' * 450;
+    final input = find.byKey(const ValueKey('suggestion-input'));
+    await tester.ensureVisible(input);
+    await tester.enterText(input, explanation);
+    await tester.pumpAndSettle();
+    final button = find.text('送出建議');
+    await tester.scrollUntilVisible(
+      button,
+      200,
+      scrollable: find
+          .ancestor(of: input, matching: find.byType(Scrollable))
+          .first,
+    );
+    await tester.ensureVisible(button);
+    await tester.pumpAndSettle();
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+    final body = store.submissions.single;
+    expect((body['reason'] as String).length, lessThanOrEqualTo(500));
+    expect(body['reason'] as String, endsWith('…'));
+    expect(body['note'], explanation);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

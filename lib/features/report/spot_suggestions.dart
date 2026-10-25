@@ -1,6 +1,8 @@
 import '../../data/app_store.dart';
+import '../../models/fee.dart';
 import '../../models/parking.dart';
 import '../../ui/adaptive/adaptive.dart';
+import '../../ui/fee_editor.dart';
 import 'report_sheet.dart';
 
 String _yesNo(bool? value) => switch (value) {
@@ -58,6 +60,19 @@ List<SuggestionField> suggestionFields(ParkingSpot spot) => [
     current: spot.note.isEmpty ? '未提供' : spot.note,
   ),
 ];
+
+/// [reason] within the server's 500 UTF-16 units (its `length`), cut
+/// between whole characters so an emoji never splits. The full explanation
+/// still goes in `note`, so cutting the summary loses nothing.
+String reportSummary(String reason) {
+  if (reason.length <= 500) return reason;
+  final kept = StringBuffer();
+  for (final char in reason.characters) {
+    if (kept.length + char.length > 499) break;
+    kept.write(char);
+  }
+  return '$kept…';
+}
 
 /// The report that the spot can no longer be parked at.
 const goneLabel = '這裡已經不能停車';
@@ -216,25 +231,29 @@ class _SuggestionFormState extends State<_SuggestionForm> {
   late bool? scooter = widget.spot.scooterAllowed;
   late bool? heavy = widget.spot.heavyAllowed;
 
+  /// The suggested fee; starts unconfirmed because the map only has text.
+  Fee fee = const Fee();
+
   String get fieldKey => widget.fieldKey;
   bool get unavailable => fieldKey == 'gone';
   bool get typeField => fieldKey == 'space_type';
   bool get eligibilityField => fieldKey == 'eligibility';
+  bool get feeField => fieldKey == 'fee_note';
 
   /// Structured fields submit the chosen value; the note becomes optional.
-  bool get structured => typeField || eligibilityField;
+  bool get structured => typeField || eligibilityField || feeField;
 
   /// The longest text the spot column takes, so an applied value fits.
-  int get maxLength => switch (fieldKey) {
-    'name' => 100,
-    'fee_note' => 200,
-    _ => 450,
-  };
+  int get maxLength => fieldKey == 'name' ? 100 : 450;
 
   String reason() {
     final text = note.text.trim();
     if (!structured) return '${widget.label}：$text';
-    final value = typeField ? type.label : _eligibility(scooter, heavy);
+    final value = typeField
+        ? type.label
+        : feeField
+        ? feeNoteOf(fee)
+        : _eligibility(scooter, heavy);
     return '${widget.label}：建議「$value」${text.isEmpty ? '' : '；說明：$text'}';
   }
 
@@ -245,6 +264,8 @@ class _SuggestionFormState extends State<_SuggestionForm> {
     final text = note.text.trim();
     final spot = widget.spot;
     if (typeField) return {'space_type': type.name};
+    // The text beside the fee is built from it, so the two never disagree.
+    if (feeField) return {'fee': fee.toJson(), 'fee_note': feeNoteOf(fee)};
     if (eligibilityField) {
       return {
         if (scooter != spot.scooterAllowed) 'scooter_allowed': scooter,
@@ -261,7 +282,6 @@ class _SuggestionFormState extends State<_SuggestionForm> {
     }
     return switch (fieldKey) {
       'name' when text.length <= 100 => {'name': text},
-      'fee_note' when text.length <= 200 => {'fee_note': text},
       _ => null,
     };
   }
@@ -288,6 +308,15 @@ class _SuggestionFormState extends State<_SuggestionForm> {
           line('大型重機', _yesNo(spot.heavyAllowed), _yesNo(heavy)),
       ];
     }
+    if (feeField) {
+      final complete = [
+        fee.scooter,
+        fee.heavy,
+      ].every((rate) => rate == null || rate.complete);
+      return fee.isEmpty || !complete
+          ? const []
+          : [line(widget.label, widget.current ?? '', feeNoteOf(fee))];
+    }
     if (unavailable || text.isEmpty) return const [];
     return [line(widget.label, widget.current ?? '', text)];
   }
@@ -310,7 +339,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
         'action': 'flag',
         'source_id': widget.spot.id,
         // Older servers and Dashboard reviews read only the summary.
-        'reason': reason(),
+        'reason': reportSummary(reason()),
         'field': fieldKey,
         'proposed': ?value,
         // The text is the value itself for name and fee suggestions.
@@ -479,6 +508,31 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                 ),
                 const SizedBox(height: 20),
               ],
+              if (feeField) ...[
+                FormField<Fee>(
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  validator: (_) => fee.isEmpty ? '請至少選一個車種的收費方式' : null,
+                  builder: (state) => Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        '現場收費牌怎麼寫？不確定的車種維持「未確認」。',
+                        style: TextStyle(color: colors.onSurfaceVariant),
+                      ),
+                      const SizedBox(height: 12),
+                      FeeEditor(
+                        value: fee,
+                        errorText: state.errorText,
+                        onChanged: (v) {
+                          setState(() => fee = v);
+                          state.didChange(v);
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+              ],
               if (unavailable) ...[
                 const Text('說明你看到的狀況。如果只是暫時封閉，請寫出原因或預計恢復時間。'),
                 const SizedBox(height: 16),
@@ -501,7 +555,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                     'gone' => '例：格線已塗銷，改成人行道',
                     'space_type' || 'eligibility' => '例：入口告示寫「大型重機可停」',
                     'name' => '例：信義路五段收費機車格',
-                    'fee_note' => '例：每小時 20 元，或免費',
+                    'fee_note' => '例：入口收費牌寫「機車每次 20 元」',
                     _ => '例：入口在松仁路側，B2',
                   },
                 ),

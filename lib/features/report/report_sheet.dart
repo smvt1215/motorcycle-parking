@@ -2,8 +2,10 @@ import '../../core/app_version.dart';
 import '../auth/sign_in.dart';
 import '../../core/geo.dart';
 import '../../data/app_store.dart';
+import '../../models/fee.dart';
 import '../../models/parking.dart';
 import '../../ui/adaptive/adaptive.dart';
+import '../../ui/fee_editor.dart';
 import '../../ui/version_text.dart';
 import '../map/space_type_sheet.dart';
 import '../map/vehicle_sheet.dart';
@@ -453,9 +455,8 @@ class ReportForm extends StatefulWidget {
 
 class _ReportFormState extends State<ReportForm> {
   final form = GlobalKey<FormState>();
-  final name = TextEditingController(),
-      fee = TextEditingController(),
-      note = TextEditingController();
+  final name = TextEditingController(), note = TextEditingController();
+  Fee fee = const Fee();
   SpaceType type = SpaceType.paidMotorcycle;
   late bool? scooter = markedEligibility(type).scooter;
   late bool? heavy = markedEligibility(type).heavy;
@@ -467,7 +468,6 @@ class _ReportFormState extends State<ReportForm> {
   @override
   void dispose() {
     name.dispose();
-    fee.dispose();
     note.dispose();
     super.dispose();
   }
@@ -598,17 +598,13 @@ class _ReportFormState extends State<ReportForm> {
             FormSection(
               title: '補充資訊（選填）',
               children: [
-                TextFormField(
-                  controller: fee,
-                  maxLength: 200,
-                  textInputAction: TextInputAction.next,
-                  decoration: const InputDecoration(
-                    labelText: '收費資訊',
-                    hintText: '例：每小時 20 元，或免費',
-                    counterText: '',
-                  ),
+                Text('收費', style: Theme.of(context).textTheme.bodyLarge),
+                const SizedBox(height: 8),
+                FeeEditor(
+                  value: fee,
+                  onChanged: (v) => setState(() => fee = v),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 20),
                 TextFormField(
                   controller: note,
                   maxLength: 500,
@@ -637,9 +633,8 @@ class _ReportFormState extends State<ReportForm> {
                             'lng': widget.lng,
                             'city': city,
                             'space_type': type.name,
-                            'fee_note': fee.text.trim().isEmpty
-                                ? '請依現場公告'
-                                : fee.text.trim(),
+                            'fee_note': feeNoteOf(fee),
+                            if (!fee.isEmpty) 'fee': fee.toJson(),
                             'note': note.text.trim(),
                             'scooter_allowed': scooter,
                             'heavy_allowed': heavy,
