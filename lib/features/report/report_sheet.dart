@@ -111,12 +111,8 @@ class _AccountCard extends StatelessWidget {
                 else
                   CircleAvatar(
                     radius: 24,
-                    backgroundColor: signedIn
-                        ? colors.primary
-                        : colors.surfaceContainerHighest,
-                    foregroundColor: signedIn
-                        ? colors.onPrimary
-                        : colors.onSurfaceVariant,
+                    backgroundColor: colors.surfaceContainerHighest,
+                    foregroundColor: colors.onSurfaceVariant,
                     child: Icon(
                       store.demo
                           ? Icons.science_outlined
