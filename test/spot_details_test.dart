@@ -486,25 +486,27 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('只有一區的舊費率直接顯示免費，移除重複的零元說明', (tester) async {
-    usePhone(tester);
-    final store = (await tester.runAsync(createStore))!;
-    addTearDown(store.dispose);
-    final spot = ParkingSpot.fromJson({
-      ...facility().toJson(),
-      'fee_note': '0',
-      'parking_zones': [
-        {'name': '機車區', 'access': 'scooterHeavy', 'fee_note': '免費'},
-      ],
+  for (final width in [320.0, 390.0, 700.0, 1280.0]) {
+    testWidgets('寬 $width：只有一區的舊費率直接顯示免費，移除重複的零元說明', (tester) async {
+      usePhone(tester, width: width);
+      final store = (await tester.runAsync(createStore))!;
+      addTearDown(store.dispose);
+      final spot = ParkingSpot.fromJson({
+        ...facility().toJson(),
+        'fee_note': '0',
+        'parking_zones': [
+          {'name': '機車區', 'access': 'scooterHeavy', 'fee_note': '免費'},
+        ],
+      });
+      await openDetails(tester, store, spot);
+      expect(find.text('免費'), findsOneWidget);
+      expect(find.text('依分區計費'), findsNothing);
+      await showField(tester, '位置與指引');
+      expect(find.text('收費說明'), findsNothing);
+      expect(find.text('0'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
     });
-    await openDetails(tester, store, spot);
-    expect(find.text('免費'), findsOneWidget);
-    expect(find.text('依分區計費'), findsNothing);
-    await showField(tester, '位置與指引');
-    expect(find.text('收費說明'), findsNothing);
-    expect(find.text('0'), findsNothing);
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
+  }
 
   testWidgets('照片可放大並關閉，失敗或無效連結有可讀提示', (tester) async {
     usePhone(tester);

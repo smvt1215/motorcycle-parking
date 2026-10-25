@@ -140,7 +140,7 @@ void main() {
     );
   });
 
-  for (final width in [390.0, 700.0]) {
+  for (final width in [320.0, 360.0, 390.0, 700.0, 1280.0]) {
     testWidgets('分區費率在寬 $width、深色放大字級下完整顯示', (tester) async {
       tester.view.devicePixelRatio = 1;
       tester.view.physicalSize = Size(width, 1100);
@@ -190,46 +190,57 @@ void main() {
     });
   }
 
-  testWidgets('分區編輯器驗證金額並把各車種費率保存在該區', (tester) async {
-    final zone = ZoneDraft()..name.text = 'B2';
-    addTearDown(zone.dispose);
-    final form = GlobalKey<FormState>();
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Form(
-            key: form,
-            child: SingleChildScrollView(
-              child: StatefulBuilder(
-                builder: (context, setState) => ZoneEditor(
-                  zones: [zone],
-                  onAdd: () {},
-                  onRemove: (_) {},
-                  onChanged: () => setState(() {}),
+  for (final width in [320.0, 360.0, 390.0, 1280.0]) {
+    testWidgets('分區編輯器在寬 $width 驗證金額並把各車種費率保存在該區', (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = Size(width, 900);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final zone = ZoneDraft()..name.text = 'B2';
+      addTearDown(zone.dispose);
+      final form = GlobalKey<FormState>();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Form(
+              key: form,
+              child: SingleChildScrollView(
+                child: StatefulBuilder(
+                  builder: (context, setState) => ZoneEditor(
+                    zones: [zone],
+                    onAdd: () {},
+                    onRemove: (_) {},
+                    onChanged: () => setState(() {}),
+                  ),
                 ),
               ),
             ),
           ),
         ),
-      ),
-    );
-    await tester.ensureVisible(find.byKey(const ValueKey('fee-mode-heavy')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('fee-mode-heavy')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('計時').last);
-    await tester.pumpAndSettle();
-    expect(form.currentState!.validate(), isFalse);
-    await tester.pumpAndSettle();
-    await tester.enterText(find.widgetWithText(TextFormField, '金額'), '25');
-    await tester.pumpAndSettle();
-    expect(form.currentState!.validate(), isTrue);
-    expect(zone.toJson(), {
-      'name': 'B2',
-      'fee': {
-        'heavy': {'mode': 'hourly', 'amount': 25, 'per_minutes': 60},
-      },
+      );
+      await tester.ensureVisible(find.byKey(const ValueKey('fee-mode-heavy')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('fee-mode-heavy')).hitTestable(),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey('fee-mode-heavy')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('計時').last);
+      await tester.pumpAndSettle();
+      expect(form.currentState!.validate(), isFalse);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.widgetWithText(TextFormField, '金額'), '25');
+      await tester.pumpAndSettle();
+      expect(form.currentState!.validate(), isTrue);
+      expect(zone.toJson(), {
+        'name': 'B2',
+        'fee': {
+          'heavy': {'mode': 'hourly', 'amount': 25, 'per_minutes': 60},
+        },
+      });
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
     });
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
+  }
 }
