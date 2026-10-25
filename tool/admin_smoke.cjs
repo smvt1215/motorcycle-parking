@@ -136,6 +136,12 @@ function session(role, aal, factors = [factor]) {
           errors.push(`Unexpected API request: ${url.pathname}`);
           return route.fulfill({ status: 400, json: { message: 'Unexpected smoke request' }, headers: cors });
         });
+        // The land-survey reverse lookup the location picker calls.
+        await context.route('https://api.nlsc.gov.tw/**', route => route.fulfill({
+          contentType: 'application/xml; charset=utf-8',
+          headers: { 'access-control-allow-origin': '*' },
+          body: '<?xml version="1.0" encoding="UTF-8"?><townVillageItem><ctyName>臺北市</ctyName><townName>中山區</townName></townVillageItem>',
+        }));
         const page = await context.newPage();
         page.on('pageerror', error => errors.push(error.stack || error.message));
         page.on('requestfailed', request => errors.push(`${request.url()}: ${request.failure()?.errorText}`));
@@ -211,6 +217,20 @@ function session(role, aal, factors = [factor]) {
           await waitText('官方點（新北市政府）');
           await page.screenshot({ path: path.join(output, `${name}-spot-form.png`) });
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} spot form scrolls sideways`);
+          // New spot: kind, then a form whose county follows the position.
+          if (mobile) await page.getByRole('button', { name: '返回點位清單', exact: true }).click();
+          await page.getByRole('button', { name: '新增停車點', exact: true }).click();
+          await page.getByRole('button', { name: /現場確認、尚無官方資料的停車點/ }).click();
+          await waitText('新增社群點');
+          await page.getByRole('button', { name: '建立停車點', exact: true }).waitFor({ timeout: 15000 });
+          await page.screenshot({ path: path.join(output, `${name}-spot-new.png`) });
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} new spot form scrolls sideways`);
+          // Scroll the form down to the picker and its notes.
+          const viewport = page.viewportSize();
+          await page.mouse.move(viewport.width * (mobile ? 0.5 : 0.65), viewport.height * 0.5);
+          for (let i = 0; i < 12; i++) await page.mouse.wheel(0, 150);
+          await page.waitForTimeout(500);
+          await page.screenshot({ path: path.join(output, `${name}-spot-location.png`) });
           await page.getByRole('button', { name: '審核', exact: false }).first().click();
           await page.screenshot({ path: path.join(output, `${name}.png`) });
           for (const [label, title] of [['點位', '停車點位'], ['規則', '各縣市停車規則'], ['匯入', '匯入停車資料'], ['使用者', '使用者管理'], ['審核', '待審回報']]) {

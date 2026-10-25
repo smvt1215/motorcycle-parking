@@ -47,18 +47,28 @@ class SpotSummary {
 
 /// The spot as loaded for editing; [values] holds its columns.
 class SpotRecord {
-  const SpotRecord({required this.sourceId, required this.values});
+  const SpotRecord({required this.sourceId, required this.values})
+    : newKind = null;
+
+  /// A spot being created; it has no id or version yet.
+  const SpotRecord.create(SpotKind kind, this.values)
+    : sourceId = 'new',
+      newKind = kind;
+
   final String sourceId;
   final Map<String, dynamic> values;
+  final SpotKind? newKind;
 
-  bool get official => sourceId.startsWith('official:');
+  bool get isNew => newKind != null;
+  bool get official =>
+      newKind == SpotKind.official || sourceId.startsWith('official:');
   SpotKind get kind => official ? SpotKind.official : SpotKind.community;
   String get name => values['name'] as String? ?? '';
   bool get hidden =>
       official ? values['hidden'] == true : values['status'] == 'hidden';
 
   /// The version the form was opened with, sent back with every write.
-  String get updatedAt => values['updated_at'] as String;
+  String get updatedAt => values['updated_at'] as String? ?? '';
 
   /// How the community spot came to be: imports are marked by `source`.
   String get origin =>

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../models/parking.dart';
+import '../../ui/location_picker.dart';
 import '../admin_theme.dart';
 import '../review/review_page.dart' show ChangeBand, reviewCompactWidth;
 import 'spot_models.dart';
@@ -13,9 +14,21 @@ const _wideWidth = 1040.0;
 
 /// `/spots` and `/spots/<source id>`: search both tables and edit one spot.
 class SpotsPage extends StatefulWidget {
-  const SpotsPage({super.key, required this.spots, required this.selectedId});
+  const SpotsPage({
+    super.key,
+    required this.spots,
+    required this.selectedId,
+    this.newKind,
+    this.locationMapBuilder,
+  });
   final SpotsController spots;
+
+  /// A source id, `new` for a spot being created, or null for the list.
   final String? selectedId;
+
+  /// The kind of a new spot, from `/spots/new?kind=`.
+  final SpotKind? newKind;
+  final LocationMapBuilder? locationMapBuilder;
 
   @override
   State<SpotsPage> createState() => _SpotsPageState();
@@ -25,6 +38,13 @@ class _SpotsPageState extends State<SpotsPage> {
   final query = TextEditingController();
   final note = TextEditingController();
   Timer? _debounce;
+  Timer? _locate;
+
+  /// Bumped when the picker moves the spot, so the coordinate fields show it.
+  int _moves = 0;
+
+  /// Where a new spot starts: the last spot opened, else Taipei Main Station.
+  (double, double) _center = (25.0478, 121.5170);
 
   SpotsController get spots => widget.spots;
 
@@ -42,7 +62,7 @@ class _SpotsPageState extends State<SpotsPage> {
   @override
   void didUpdateWidget(covariant SpotsPage old) {
     super.didUpdateWidget(old);
-    if (old.selectedId != widget.selectedId) {
+    if (old.selectedId != widget.selectedId || old.newKind != widget.newKind) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _follow());
     }
   }
@@ -51,9 +71,20 @@ class _SpotsPageState extends State<SpotsPage> {
   void _follow() {
     final id = widget.selectedId;
     if (!mounted) return;
-    if (id == null) {
-      if (spots.record != null) spots.close();
-    } else if (spots.record?.sourceId != id && !spots.opening) {
+    final current = spots.record;
+    final lat = current?.values['lat'], lng = current?.values['lng'];
+    if (current != null && !current.isNew && lat is num && lng is num) {
+      _center = (lat.toDouble(), lng.toDouble());
+    }
+    if (id == 'new') {
+      final kind = widget.newKind ?? SpotKind.community;
+      if (current == null || !current.isNew || current.newKind != kind) {
+        note.clear();
+        spots.startNew(kind, _center.$1, _center.$2);
+      }
+    } else if (id == null) {
+      if (current != null) spots.close();
+    } else if (current?.sourceId != id && !spots.opening) {
       note.clear();
       spots.open(id);
     }
@@ -62,6 +93,7 @@ class _SpotsPageState extends State<SpotsPage> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _locate?.cancel();
     query.dispose();
     note.dispose();
     super.dispose();
@@ -105,15 +137,80 @@ class _SpotsPageState extends State<SpotsPage> {
     });
   }
 
+  /// A position change from the picker or the coordinate fields; the county,
+  /// district and duplicates follow once the admin stops moving it.
+  void _move(double lat, double lng, {bool fromPicker = true}) {
+    spots.set('lat', lat);
+    spots.set('lng', lng);
+    if (fromPicker) setState(() => _moves++);
+    _locate?.cancel();
+    _locate = Timer(const Duration(milliseconds: 600), spots.locate);
+  }
+
   Future<void> _save() async {
     final router = GoRouter.of(context);
     final messenger = ScaffoldMessenger.of(context);
     final name = spots.draft['name'] as String? ?? '';
+    final creating = spots.record?.isNew == true;
+    // The save runs the lookup itself; a pending debounce would only repeat it.
+    _locate?.cancel();
+    final notes = spots.notes;
+    if (notes.far) {
+      final same = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('移動超過 150 m'),
+          content: Text(
+            '新位置距原位置約 ${notes.moved!.round()} m。確認這仍是同一個點位？'
+            '若是另一個停車點，請改用「新增停車點」。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('回去調整'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('是同一個點位，儲存'),
+            ),
+          ],
+        ),
+      );
+      if (same != true || !mounted) return;
+    }
     if (await spots.save(note.text.trim())) {
       note.clear();
-      messenger.showSnackBar(SnackBar(content: Text('已儲存：$name')));
-      router.go('/spots');
+      messenger.showSnackBar(
+        SnackBar(content: Text('${creating ? '已建立' : '已儲存'}：$name')),
+      );
+      router.go(creating ? '/spots/${spots.record!.sourceId}' : '/spots');
     }
+  }
+
+  Future<void> _create() async {
+    final kind = await showDialog<SpotKind>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('新增停車點'),
+        children: [
+          // Tappable tiles expose one button each to screen readers.
+          ListTile(
+            onTap: () => Navigator.pop(context, SpotKind.community),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+            title: const Text('社群點'),
+            subtitle: const Text('現場確認、尚無官方資料的停車點'),
+          ),
+          ListTile(
+            onTap: () => Navigator.pop(context, SpotKind.official),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+            title: const Text('官方點'),
+            subtitle: const Text('有縣市政府公告或場站資料，需填官方來源'),
+          ),
+        ],
+      ),
+    );
+    if (kind == null || !mounted || !await _mayLeave() || !mounted) return;
+    context.go('/spots/new?kind=${kind.name}');
   }
 
   Future<void> _setHidden(bool hide) async {
@@ -164,6 +261,7 @@ class _SpotsPageState extends State<SpotsPage> {
           compact: compact,
           onQuery: _search,
           onPick: _go,
+          onCreate: _create,
         );
         final form = _FormPane(
           spots: spots,
@@ -174,6 +272,9 @@ class _SpotsPageState extends State<SpotsPage> {
           onSave: _save,
           onHide: _setHidden,
           onPromote: _promote,
+          onMove: _move,
+          moves: _moves,
+          mapBuilder: widget.locationMapBuilder,
           onReload: () {
             final id = widget.selectedId;
             if (id != null) spots.open(id);
@@ -233,8 +334,10 @@ class _ListPane extends StatelessWidget {
     required this.compact,
     required this.onQuery,
     required this.onPick,
+    required this.onCreate,
   });
   final SpotsController spots;
+  final VoidCallback onCreate;
   final TextEditingController query;
   final String? selectedId;
   final bool compact;
@@ -268,6 +371,11 @@ class _ListPane extends StatelessWidget {
                     header: true,
                     child: Text('停車點位', style: text.titleLarge),
                   ),
+                ),
+                TextButton.icon(
+                  onPressed: onCreate,
+                  icon: const Icon(Icons.add_location_alt_outlined),
+                  label: const Text('新增停車點'),
                 ),
                 IconButton(
                   tooltip: '重新搜尋',
@@ -490,6 +598,9 @@ class _FormPane extends StatelessWidget {
     required this.onHide,
     required this.onPromote,
     required this.onReload,
+    required this.onMove,
+    required this.moves,
+    required this.mapBuilder,
   });
   final SpotsController spots;
   final TextEditingController note;
@@ -497,6 +608,9 @@ class _FormPane extends StatelessWidget {
   final String? selectedId;
   final VoidCallback onBack, onSave, onPromote, onReload;
   final ValueChanged<bool> onHide;
+  final void Function(double lat, double lng, {bool fromPicker}) onMove;
+  final int moves;
+  final LocationMapBuilder? mapBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -554,7 +668,7 @@ class _FormPane extends StatelessWidget {
         ),
       );
     }
-    final errors = spots.errors;
+    final errors = spots.shownErrors;
     final fields = spots.fields;
     return Material(
       color: colors.surface,
@@ -563,11 +677,15 @@ class _FormPane extends StatelessWidget {
         children: [
           Expanded(
             child: ListView(
+              // Another spot starts at the top, not where the last one was.
+              key: ValueKey('spot-form-${record.sourceId}-${spots.formSeq}'),
               padding: EdgeInsets.fromLTRB(pad, compact ? 8 : 22, pad, 24),
               children: [
                 ?back,
                 Text(
-                  record.official
+                  record.isNew
+                      ? '新增${record.kind.label}'
+                      : record.official
                       ? '官方點（${(record.values['source_name'] as String?)?.isNotEmpty == true ? record.values['source_name'] : '未填來源'}）'
                       : '社群點（社群回報整理）',
                   style: TextStyle(
@@ -580,7 +698,7 @@ class _FormPane extends StatelessWidget {
                 Semantics(
                   header: true,
                   child: Text(
-                    record.name,
+                    record.isNew && record.name.isEmpty ? '新的停車點' : record.name,
                     style: text.headlineMedium?.copyWith(
                       fontSize: compact ? 22 : 26,
                       height: 1.3,
@@ -619,26 +737,41 @@ class _FormPane extends StatelessWidget {
                   const SizedBox(height: 4),
                   if (group == SpotGroup.source) _SourceFacts(record: record),
                   if (group == SpotGroup.location)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: Text(
-                        '地圖選位與門牌反查將在位置選擇元件上線後提供；目前可直接輸入座標。',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: colors.onSurfaceVariant,
-                        ),
-                      ),
+                    _LocationSection(
+                      spots: spots,
+                      onMove: onMove,
+                      mapBuilder: mapBuilder,
                     ),
                   for (final f in fields.where((f) => f.group == group))
                     _FieldRow(
+                      // Coordinates follow the picker and the county
+                      // follows the lookup; their fields must show it.
                       key: ValueKey(
-                        '${record.sourceId}-${record.updatedAt}-${f.key}',
+                        '${record.sourceId}-${spots.formSeq}-${f.key}'
+                        '${switch (f.key) {
+                          'lat' || 'lng' => '-$moves',
+                          'city' || 'district' => '-${spots.filled}',
+                          _ => '',
+                        }}',
                       ),
                       field: f,
                       value: spots.draft[f.key],
                       changed: spots.changed(f.key),
                       error: errors[f.key],
-                      onChanged: (v) => spots.set(f.key, v),
+                      onChanged: (v) {
+                        spots.set(f.key, v);
+                        final lat = spots.draft['lat'];
+                        final lng = spots.draft['lng'];
+                        if ((f.key == 'lat' || f.key == 'lng') &&
+                            lat is num &&
+                            lng is num) {
+                          onMove(
+                            lat.toDouble(),
+                            lng.toDouble(),
+                            fromPicker: false,
+                          );
+                        }
+                      },
                     ),
                 ],
                 const SizedBox(height: 24),
@@ -661,6 +794,7 @@ class _FormPane extends StatelessWidget {
           ),
           _SpotActions(
             compact: compact,
+            creating: record.isNew,
             official: record.official,
             hidden: record.hidden,
             dirty: spots.dirty,
@@ -848,6 +982,7 @@ class _FieldRow extends StatelessWidget {
 class _SpotActions extends StatelessWidget {
   const _SpotActions({
     required this.compact,
+    required this.creating,
     required this.official,
     required this.hidden,
     required this.dirty,
@@ -857,7 +992,7 @@ class _SpotActions extends StatelessWidget {
     required this.onHide,
     required this.onPromote,
   });
-  final bool compact, official, hidden, dirty, busy;
+  final bool compact, creating, official, hidden, dirty, busy;
   final VoidCallback onSave, onDiscard, onPromote;
   final ValueChanged<bool> onHide;
 
@@ -866,15 +1001,15 @@ class _SpotActions extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final save = FilledButton(
       onPressed: busy || !dirty ? null : onSave,
-      child: const Text('儲存並關閉'),
+      child: Text(creating ? '建立停車點' : '儲存並關閉'),
     );
     final others = <Widget>[
-      if (dirty)
+      if (dirty && !creating)
         OutlinedButton(
           onPressed: busy ? null : onDiscard,
           child: const Text('放棄修改'),
         ),
-      if (!official && !hidden)
+      if (!official && !hidden && !creating)
         OutlinedButton(
           onPressed: busy ? null : onPromote,
           child: const Text('改為官方點'),
@@ -914,7 +1049,7 @@ class _SpotActions extends StatelessWidget {
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: [...others, hide],
+                      children: [...others, if (!creating) hide],
                     ),
                   ],
                 )
@@ -923,7 +1058,7 @@ class _SpotActions extends StatelessWidget {
                     save,
                     for (final b in others) ...[const SizedBox(width: 10), b],
                     const Spacer(),
-                    hide,
+                    if (!creating) hide,
                   ],
                 ),
         );
@@ -1066,4 +1201,102 @@ class _PromoteDialogState extends State<_PromoteDialog> {
       FilledButton(onPressed: _submit, child: const Text('改為官方點')),
     ],
   );
+}
+
+/// The picker with what the admin should know about the position.
+class _LocationSection extends StatelessWidget {
+  const _LocationSection({
+    required this.spots,
+    required this.onMove,
+    required this.mapBuilder,
+  });
+  final SpotsController spots;
+  final void Function(double lat, double lng, {bool fromPicker}) onMove;
+  final LocationMapBuilder? mapBuilder;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final record = spots.record!;
+    final lat = spots.draft['lat'], lng = spots.draft['lng'];
+    final origin = record.isNew ? null : record.values;
+    final notes = spots.notes;
+    final muted = TextStyle(fontSize: 13, color: colors.onSurfaceVariant);
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 4),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 720),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (lat is num && lng is num)
+              LocationPicker(
+                lat: lat.toDouble(),
+                lng: lng.toDouble(),
+                originLat: (origin?['lat'] as num?)?.toDouble(),
+                originLng: (origin?['lng'] as num?)?.toDouble(),
+                nudgeButtons: true,
+                mapBuilder: mapBuilder,
+                onChanged: (a, b) => onMove(a, b),
+              )
+            else
+              const AdminNotice('座標格式不正確，修正後地圖才會顯示。', error: true),
+            const SizedBox(height: 4),
+            Text('拖曳標記或點地圖選位置；縣市與行政區會依位置自動帶入。', style: muted),
+            if (spots.locating) ...[
+              const SizedBox(height: 8),
+              const LinearProgressIndicator(),
+            ],
+            if (spots.locateError != null) ...[
+              const SizedBox(height: 8),
+              AdminNotice(spots.locateError!, error: true),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton(
+                    onPressed: spots.locating ? null : spots.locate,
+                    child: const Text('重新查詢'),
+                  ),
+                  // The service may be down; the admin can still vouch for
+                  // the county and district typed below.
+                  OutlinedButton(
+                    onPressed: () {
+                      if (!spots.confirmManualTown()) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('請先在下方填寫縣市。')),
+                        );
+                      }
+                    },
+                    child: const Text('使用手動填寫的縣市與行政區'),
+                  ),
+                ],
+              ),
+            ],
+            if (notes.cityChanged) ...[
+              const SizedBox(height: 8),
+              AdminNotice(
+                '新位置在${spots.draft['city']}，和原本的${origin?['city']}不同，適用的停車規則會改變。',
+              ),
+            ],
+            if (notes.far) ...[
+              const SizedBox(height: 8),
+              AdminNotice(
+                '距原位置約 ${notes.moved!.round()} m，超過 150 m；儲存前會再確認是否仍是同一個點位。',
+              ),
+            ],
+            if (notes.duplicates.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              AdminNotice(
+                '15 m 內已有同類型的停車點，可能重複：'
+                '${notes.duplicates.map((d) => d.name).join('、')}',
+                error: true,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
