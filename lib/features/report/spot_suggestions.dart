@@ -61,6 +61,19 @@ List<SuggestionField> suggestionFields(ParkingSpot spot) => [
   ),
 ];
 
+/// [reason] within the server's 500 UTF-16 units (its `length`), cut
+/// between whole characters so an emoji never splits. The full explanation
+/// still goes in `note`, so cutting the summary loses nothing.
+String reportSummary(String reason) {
+  if (reason.length <= 500) return reason;
+  final kept = StringBuffer();
+  for (final char in reason.characters) {
+    if (kept.length + char.length > 499) break;
+    kept.write(char);
+  }
+  return '$kept…';
+}
+
 /// The report that the spot can no longer be parked at.
 const goneLabel = '這裡已經不能停車';
 
@@ -326,7 +339,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
         'action': 'flag',
         'source_id': widget.spot.id,
         // Older servers and Dashboard reviews read only the summary.
-        'reason': reason(),
+        'reason': reportSummary(reason()),
         'field': fieldKey,
         'proposed': ?value,
         // The text is the value itself for name and fee suggestions.
