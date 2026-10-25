@@ -213,9 +213,19 @@ void main() {
     final store = await openForm(tester, rules: cityRules);
     expect(find.textContaining('與臺北市的停車規則帶入'), findsOneWidget);
     await pickType(tester, SpaceType.freeMotorcycle);
+    // Shown as the rule decides, but only the markings are stored, so the
+    // spot follows the rule if it changes.
+    expect(
+      tester
+          .widget<ChoiceField<bool?>>(
+            find.widgetWithText(ChoiceField<bool?>, '大型重機'),
+          )
+          .value,
+      false,
+    );
     final spot = await send(tester, store);
     expect(spot['scooter_allowed'], true);
-    expect(spot['heavy_allowed'], false);
+    expect(spot['heavy_allowed'], isNull);
   });
 
   testWidgets('路外停車場填型式、分類、入口與分區；路邊格只有指引', (tester) async {
