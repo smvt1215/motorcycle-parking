@@ -248,6 +248,27 @@ UI：`material_ui`、`cupertino_ui`（Flutter 官方設計套件，取代框架�
 - `CityRule`：city, vehicle, allowedSpaceTypes, feeNote, canUseTwoSpaces, exceptions（如台北免費巷弄格不開放）, effectiveDate, sourceUrl, version。
 - `eligibility(spot, vehicle, rule)` → `allowed / conditional(附說明) / notAllowed`，地圖標記顏色據此呈現。
 
+### 費率結構（2026-10-25）
+`community_spots` 與 `official_heavy_spots` 的 `fee`（jsonb，可為 null）以普通機車、大型重機分開記錄費率；`fee_note` 保留為顯示文字，由 `lib/models/fee.dart` 的 `feeNoteOf` 依 `fee` 組成，App 與管理站共用同一份純 Dart 函式。地圖與詳情目前仍顯示 `fee_note`；依價格篩選與比較之後再接 `fee`。
+
+```text
+fee = {"scooter": rate, "heavy": rate | {"mode":"same_as_scooter"} | {"mode":"same_as_car"}}
+rate = {"mode":"free"} | {"mode":"posted"}
+     | {"mode":"hourly","amount":元,"per_minutes":分[,"daily_cap":元]}
+     | {"mode":"per_visit","amount":元[,"max_minutes":分]}
+     | {"mode":"daily","amount":元}
+```
+
+- 缺少的車種代表「未確認」；只有大型重機可「比照機車／汽車費率」。
+- 金額與上限為 0–10000 的整數元，時間為 1–1440 的整數分鐘；每種收費方式只能帶自己使用的鍵。
+- 同一套規則由三處把關：資料表 check（`valid_fee()`）、`submit-report/validate.ts` 的 `validFee`、Dart 的 `Fee.fromJson`（不合規則的車種讀成未確認）。
+- 顯示文字沿用匯入資料的寫法，例如「每日 30 元（大型重機比照機車費率）」「機車免費；大型重機每小時 20 元，當日上限 100 元」；只有機車費率時標示「（大型重機費率未確認）」，兩者皆無時為「請依現場公告」。
+- **既有資料尚未轉換**：#68 只新增欄位，既有停車點的 `fee` 都是 null，只有 `fee_note` 文字（2026-10-25 staging：社群點 630 筆、138 種寫法；官方點 1,497 筆、943 種寫法，其中約 520 筆為「請依現場公告」或「未知」）。使用者決定**併入 Admin Web P6「匯入」一起做**（見 [ADMIN_WEB.md](ADMIN_WEB.md#階段)）：
+  - 匯入工具（`tool/import_mymaps.py` 與後台匯入）解析費率文字時一併產生 `fee`，避免重新匯入後又只剩文字。
+  - 只轉換能確定的寫法；「請依現場公告」「未知」等維持 null（未確認），不當成已知費率。混有汽車、月租、身障費率的停車場說明，無法確定時留給人工判斷。
+  - 先以差異試算列出「可轉換／無法判斷／需人工確認」，確認後才寫入 staging 與 production。
+  - 在完成轉換前，不開放依價格篩選，避免大部分停車點因沒有資料而被篩掉。
+
 ## Supabase 資料表（RLS）
 - `community_spots`：geography(Point) + 欄位同上；所有人可讀非 `hidden` 點位（`pending`／`confirmed` 均可見）；**RLS 禁止客戶端直接寫入**，新增與建議一律經 Edge Function `submit-report`（見「防濫用」）。
 - `spot_votes`：保留既有 `(spot_id, user_id)` 唯一、`still_there / gone` 與加權門檻，供歷史資料及舊版 API 相容；新版 UI 不再送出存在狀態投票。`gone` 加權達門檻時點位退回 `pending` 並送審，不再自動隱藏；只有合格的 `still_there` 會更新 `last_confirmed_at`。不存在回報使用 `flag`，送入 `moderation_queue` 待審。
