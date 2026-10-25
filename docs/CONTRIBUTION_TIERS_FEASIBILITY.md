@@ -2,7 +2,7 @@
 
 > 狀態：研究結論與設計提案，尚未實作  
 > 日期：2026-10-25（Asia/Taipei）  
-> 盤點基準：`main` commit `40d96db`（含 #76）；另參考 #85（已合併）與審核中的 #81、#83、#84  
+> 盤點基準：`main` commit `40d96db`（含 #76）；另參考 #81、#83、#84、#85（均已合併，#84 的核驗欄位已在 `main`）  
 > 依據：[社群共筆與停車資訊核實機制](COMMUNITY_VERIFICATION_PLAN.md)（以下稱「核實計畫」）、[Admin Web 計畫](ADMIN_WEB.md)、[專案總計畫「社群回報機制」](PLAN.md#社群回報機制)  
 > 目標（2026-10-25 使用者決定）：**加入遊戲化機制，使 95% 的審查由社群完成**，管理員只處理剩下的 5%。  
 > 性質：本文不更改程式。採用本方案時，核實計畫 §1「不在本計畫範圍」中的「公開使用者排行榜、可交換點數等遊戲化機制」一句，以及 §3.3「收費／時段優先人工確認」（依 §0 第 3 點費率已開放為中風險），需另開 PR 修訂（#85 已合併；為使本 PR 只新增文件，修訂另開 PR）。
@@ -112,9 +112,9 @@ A 類（法規）與 B 類（資料穩定性）依 §0 第 3 點只能由管理�
 | 核實計畫 §4.1、§4.2 | `spot_observations`、`spot_field_verifications`（`source_kind`、`valid_until`） | 社群結案寫入的核實為 `source_kind='community'`；觀察表是點數與準確率的原始資料 |
 | #59（已合併） | 存在確認與車種資格解耦；舊投票只回到待確認 | 共識結案不得改變資格判斷的安全語意 |
 | #85（已合併） | §2.2 管理員只處理爭議、熱門場站、申訴；§5.2 例外：3 名獨立車友＋1 張經「管理員或經授權的審核角色」確認的照片；§11 第 7 點把「照片內容確認由誰負責」列為待確認 | 本文回答：由 L3 以上的社群成員確認，管理員抽查 |
-| #84（審核中） | 車種核驗 trigger 是 `community_spots` 的 row trigger，只在 `is_admin()` 路徑記錄核驗，非管理員路徑改型式、位置或車種欄位會清除核驗；#85 §4.2 規劃遷入 `spot_field_verifications` 為 `source_kind='admin'` | 社群結案以系統身分寫欄位時會走失效分支、不會記錄管理員核驗；型式或位置的社群結案會清除該點的管理員核驗，社群核實也應同時失效（§5.1 B 類預審列） |
-| #81（審核中） | `contributor_role`（`rider/admin/import`）由 `app_metadata.role` 判定、建立時固定 | 排行榜與詳情頁的「由車友 XXX 回報」沿用其名稱政策；等級標示另存 |
-| #83（審核中） | 自訂名稱、頭像在 user metadata | 排行榜顯示名稱用這裡的 `display_name`，但顯示與否需使用者選擇加入 |
+| #84（已合併） | 車種核驗 trigger 是 `community_spots` 的 row trigger，只在 `is_admin()` 路徑記錄核驗，非管理員路徑改型式、位置或車種欄位會清除核驗；#85 §4.2 規劃遷入 `spot_field_verifications` 為 `source_kind='admin'` | 社群結案以系統身分寫欄位時會走失效分支、不會記錄管理員核驗；型式或位置的社群結案會清除該點的管理員核驗，社群核實也應同時失效（§5.1 B 類預審列） |
+| #81（已合併） | `contributor_role`（`rider/admin/import`）由 `app_metadata.role` 判定、建立時固定 | 排行榜與詳情頁的「由車友 XXX 回報」沿用其名稱政策；等級標示另存 |
+| #83（已合併） | 自訂名稱、頭像在 user metadata | 排行榜顯示名稱用這裡的 `display_name`，但顯示與否需使用者選擇加入 |
 | ADMIN_WEB.md P7、「不在範圍內」 | 使用者頁：`rate_limit_events`、停權；多層級角色不在範圍 | 採用本方案需修訂：P7 加等級、點數、角色撤銷、抽查佇列 |
 | LEAN_UX_CANVAS.md | 「取消例行存在確認後，騎士是否願意回報異常、管理者能否及時審核，需另測貢獻意願與維護成本。」 | 遊戲化是提高貢獻意願的假設，尚未驗證；§9 階段 0 應先量測基線 |
 
@@ -530,9 +530,9 @@ validate.ts（結構）→ 預檢（組合／內容／行為）→ 法規預審 
 
 - [核實計畫 §5.2 交叉核實的判定](COMMUNITY_VERIFICATION_PLAN.md)、§4.1 `spot_observations`、§10 交付原則、§11 待拍板決策
 - [PR #85：核實規模分工與資格顯示分層](https://github.com/smvt1215/motorcycle-parking/pull/85)（已合併）
-- [PR #84：管理員核驗社群點車種欄位](https://github.com/smvt1215/motorcycle-parking/pull/84)（審核中）
-- [PR #81：回報者來源快照](https://github.com/smvt1215/motorcycle-parking/pull/81)（審核中）
-- [PR #83：顯示名稱與頭像](https://github.com/smvt1215/motorcycle-parking/pull/83)（審核中）
+- [PR #84：管理員核驗社群點車種欄位](https://github.com/smvt1215/motorcycle-parking/pull/84)（已合併）
+- [PR #81：回報者來源快照](https://github.com/smvt1215/motorcycle-parking/pull/81)（已合併）
+- [PR #83：顯示名稱與頭像](https://github.com/smvt1215/motorcycle-parking/pull/83)（已合併）
 - [PR #59：存在確認與車種資格解耦](https://github.com/smvt1215/motorcycle-parking/pull/59)（已合併）
 - `supabase/migrations/202610110001_init.sql`（`qualified`／權重／限流的規則來源）、`202610240010_vote_safety.sql`（#59 調整隱藏行為）、`202610250030_report_details.sql`（`apply_report` 最新定義）、`202610240003_admin_backend.sql`（`is_admin()`、`moderation_queue` 結構）、`202610240011_admin_review.sql`（`base_spot` 欄位級衝突檢查）、`tool/import_mymaps.py`（`official_sql()` 的覆寫範圍）
 - 外部先例（依各平台公開說明的一般印象，未逐一查證）：維基百科以社群完成絕大多數審核，管理員只處理封鎖與刪除；Stack Overflow 以聲望解鎖審核佇列、含已知答案的「審核測驗」；iNaturalist 以三分之二社群同意達到「研究等級」；Google 地圖以「這是否正確」的輕量確認任務收集在地人確認。共通點是社群能結案、含品質校準、管理員只做例外。
