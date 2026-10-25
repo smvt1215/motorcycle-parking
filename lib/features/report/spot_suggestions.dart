@@ -299,7 +299,8 @@ class _SuggestionFormState extends State<_SuggestionForm> {
   String reason() {
     final text = note.text.trim();
     if (unavailable) {
-      final when = until.text.trim();
+      // A field hidden after switching to a lasting cause says nothing.
+      final when = cause?.temporary ?? false ? until.text.trim() : '';
       return '${widget.label}：${cause?.label ?? ''}'
           '${when.isEmpty ? '' : '；預計恢復：$when'}'
           '${text.isEmpty ? '' : '；說明：$text'}';
@@ -607,6 +608,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                             hintText: '例：入口在松仁路側，機車走右側坡道',
                             alignLabelWithHint: true,
                           ),
+                          validator: (v) => fitsServer(v, 500),
                         ),
                         const SizedBox(height: 16),
                       ],
@@ -623,6 +625,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                               : '例：格位在便利商店前，靠路口一側',
                           alignLabelWithHint: true,
                         ),
+                        validator: (v) => fitsServer(v, 500),
                       ),
                       fieldError(context, state.errorText),
                     ],

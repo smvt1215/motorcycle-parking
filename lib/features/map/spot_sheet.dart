@@ -576,15 +576,7 @@ class _SpotSummary extends StatelessWidget {
   final VehicleType vehicle;
   @override
   Widget build(BuildContext context) {
-    final perVehicle = spot.zones.any((zone) => zone.hasVehicleFees);
-    final perZone = spot.zones.any((zone) => zone.feeNote.trim().isNotEmpty);
-    final singleZone = perVehicle && spot.zones.length == 1
-        ? spot.zones.single
-        : null;
-    final feeLabel =
-        singleZone != null || (spot.fee != null && !perVehicle && !perZone)
-        ? '${vehicle.label}費率'
-        : '收費資訊';
+    final feeLabel = spotFeeIsVehicleRate(spot) ? '${vehicle.label}費率' : '收費資訊';
     final feeValue = spotFeeSummary(spot, vehicle);
     final available = spot.available;
     final availabilityTime =
