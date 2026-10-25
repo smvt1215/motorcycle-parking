@@ -476,7 +476,7 @@ void main() {
         .ancestor(of: find.text('大型重機費率'), matching: find.byType(Column))
         .first;
     expect(
-      find.descendant(of: summary, matching: find.text('尚未提供')),
+      find.descendant(of: summary, matching: find.text('費率未確認')),
       findsOneWidget,
     );
     expect(
@@ -485,6 +485,57 @@ void main() {
     );
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  for (final width in [320.0, 390.0]) {
+    testWidgets('寬 $width：點位結構化費率取代分區舊文字，摘要與正文都看得到', (tester) async {
+      usePhone(tester, width: width);
+      final store = (await tester.runAsync(createStore))!;
+      addTearDown(store.dispose);
+      final spot = ParkingSpot.fromJson({
+        ...facility().toJson(),
+        'fee_note': '舊場站說明',
+        'fee': {
+          'scooter': {'mode': 'per_visit', 'amount': 20},
+        },
+        'parking_zones': [
+          {'name': 'B1', 'access': 'scooterOnly', 'fee_note': '舊 B1 免費'},
+          {'name': 'B2', 'access': 'scooterHeavy', 'fee_note': '舊 B2 每次 10 元'},
+        ],
+      });
+      await openDetails(tester, store, spot);
+      expect(find.text('普通機車費率'), findsOneWidget);
+      expect(find.text('依分區計費'), findsNothing);
+      await showField(tester, '全場費率');
+      expect(find.text('普通機車：每次 20 元'), findsOneWidget);
+      expect(find.text('大型重機：費率未確認'), findsOneWidget);
+      expect(find.textContaining('舊 B'), findsNothing);
+      expect(find.text('收費說明'), findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
+  for (final width in [320.0, 390.0, 700.0, 1280.0]) {
+    testWidgets('寬 $width：只有一區的舊費率直接顯示免費，移除重複的零元說明', (tester) async {
+      usePhone(tester, width: width);
+      final store = (await tester.runAsync(createStore))!;
+      addTearDown(store.dispose);
+      final spot = ParkingSpot.fromJson({
+        ...facility().toJson(),
+        'fee_note': '0',
+        'parking_zones': [
+          {'name': '機車區', 'access': 'scooterHeavy', 'fee_note': '免費'},
+        ],
+      });
+      await openDetails(tester, store, spot);
+      expect(find.text('免費'), findsOneWidget);
+      expect(find.text('依分區計費'), findsNothing);
+      await showField(tester, '位置與指引');
+      expect(find.text('收費說明'), findsNothing);
+      expect(find.text('0'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
 
   testWidgets('照片可放大並關閉，失敗或無效連結有可讀提示', (tester) async {
     usePhone(tester);

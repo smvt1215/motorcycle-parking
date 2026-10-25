@@ -1,4 +1,34 @@
 import { identityHash, validate, validFee, validZones } from './validate.ts';
+
+Deno.test('zones carry the same structured fee contract without car prices', () => {
+  const zone = {
+    name: 'B2',
+    access: 'scooterHeavy',
+    fee: {
+      scooter: { mode: 'free' },
+      heavy: { mode: 'hourly', amount: 20, per_minutes: 30, daily_cap: 100 },
+    },
+  };
+  if (!validZones([zone])) throw new Error('valid zone fee rejected');
+  for (
+    const fee of [
+      null,
+      20,
+      { car: { mode: 'free' } },
+      { scooter: { mode: 'same_as_car' } },
+      { heavy: { mode: 'hourly', amount: 20 } },
+      { heavy: { mode: 'daily', amount: -1 } },
+      { heavy: { mode: 'daily', amount: 2.5 } },
+    ]
+  ) {
+    if (validZones([{ ...zone, fee }])) {
+      throw new Error('invalid zone fee accepted');
+    }
+  }
+  if (!validZones([{ name: '舊分區' }])) {
+    throw new Error('legacy zone rejected');
+  }
+});
 const base = {
   device_id: '10000000-0000-4000-8000-000000000001',
   action: 'create',

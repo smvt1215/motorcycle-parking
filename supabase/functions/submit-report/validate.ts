@@ -83,11 +83,12 @@ export function validZones(v: unknown): boolean {
     if (!z || typeof z !== 'object' || Array.isArray(z)) return false;
     const zone = z as Record<string, unknown>;
     return Object.keys(zone).every((k) =>
-      ['name', 'access', 'guide'].includes(k)
+      ['name', 'access', 'guide', 'fee'].includes(k)
     ) &&
       text(40, 1)(zone.name) &&
       (!('access' in zone) || oneOf(accessKinds)(zone.access)) &&
-      (!('guide' in zone) || text(200)(zone.guide));
+      (!('guide' in zone) || text(200)(zone.guide)) &&
+      (!('fee' in zone) || validFee(zone.fee));
   });
 }
 /** A rate per vehicle; a missing vehicle is unconfirmed. */

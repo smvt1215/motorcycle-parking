@@ -1,4 +1,52 @@
+import '../../models/fee.dart';
 import '../../models/parking.dart';
+
+/// A single zone can show its actual price in the preview. A zone never
+/// inherits the lot's fee or another vehicle's price.
+String zoneFeeSummary(ParkingZone zone, VehicleType vehicle) {
+  if (zone.hasVehicleFees) {
+    final value = vehicle == VehicleType.scooter
+        ? zone.scooterFeeText
+        : zone.heavyFeeText;
+    return value.trim().isEmpty ? '費率未確認' : value;
+  }
+  return zone.feeNote.trim();
+}
+
+/// Whether any zone carries its own structured rates.
+bool hasZoneFees(ParkingSpot spot) => spot.zones.any((z) => z.fee != null);
+
+/// The lot's structured rates when no zone has its own; they then supersede
+/// every legacy zone text, so a newer lot rate is never hidden by them.
+Fee? lotWideFee(ParkingSpot spot) => hasZoneFees(spot) ? null : spot.fee;
+
+/// Structured rates come first (a zone's own, then the lot's); legacy text
+/// is used only when neither exists.
+String spotFeeSummary(ParkingSpot spot, VehicleType vehicle) {
+  if (hasZoneFees(spot)) {
+    return spot.zones.length == 1
+        ? zoneFeeSummary(spot.zones.single, vehicle)
+        : '依分區計費';
+  }
+  if (spot.fee case final fee?) {
+    final rate = vehicle == VehicleType.scooter ? fee.scooter : fee.heavy;
+    return rate?.text ?? '費率未確認';
+  }
+  if (spot.zones.length == 1) {
+    final value = zoneFeeSummary(spot.zones.single, vehicle);
+    if (value.isNotEmpty) return value;
+  }
+  if (spot.zones.any((z) => z.hasVehicleFees || z.feeNote.trim().isNotEmpty)) {
+    return '依分區計費';
+  }
+  return spot.feeNote.trim().isEmpty ? '依現場公告' : spot.feeNote;
+}
+
+/// Whether [spotFeeSummary] gives the selected vehicle's own rate.
+bool spotFeeIsVehicleRate(ParkingSpot spot) => hasZoneFees(spot)
+    ? spot.zones.length == 1
+    : spot.fee != null ||
+          (spot.zones.length == 1 && spot.zones.single.hasVehicleFees);
 
 Uri? sourceLinkUri(String value) {
   final uri = Uri.tryParse(value.trim());

@@ -263,8 +263,8 @@ class _SuggestionFormState extends State<_SuggestionForm> {
   late bool? scooter = widget.spot.scooterAllowed;
   late bool? heavy = widget.spot.heavyAllowed;
 
-  /// The suggested fee; starts unconfirmed because the map only has text.
-  Fee fee = const Fee();
+  /// Preserve known rates when the rider corrects only one vehicle.
+  late Fee fee = widget.spot.fee ?? const Fee();
 
   /// A lot's details when the suggested kind is a lot.
   late FacilityType? facility = widget.spot.facilityType;
@@ -414,7 +414,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
         fee.scooter,
         fee.heavy,
       ].every((rate) => rate == null || rate.complete);
-      return fee.isEmpty || !complete
+      return fee.isEmpty || !complete || fee == widget.spot.fee
           ? const []
           : [line(widget.label, widget.current ?? '', feeNoteOf(fee))];
     }
@@ -688,7 +688,11 @@ class _SuggestionFormState extends State<_SuggestionForm> {
               if (feeField) ...[
                 FormField<Fee>(
                   autovalidateMode: AutovalidateMode.onUserInteraction,
-                  validator: (_) => fee.isEmpty ? '請至少選一個車種的收費方式' : null,
+                  validator: (_) => fee.isEmpty
+                      ? '請至少選一個車種的收費方式'
+                      : fee == widget.spot.fee
+                      ? '請先修改費率，和目前不同才能送出'
+                      : null,
                   builder: (state) => Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [

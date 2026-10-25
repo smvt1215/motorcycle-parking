@@ -280,8 +280,10 @@ void main() {
     final add = find.text('新增分區');
     await tester.scrollUntilVisible(add, 200, scrollable: form);
     await tester.ensureVisible(add);
+    await tester.pumpAndSettle();
     await tester.tap(add);
     await tester.pumpAndSettle();
+    expect(find.widgetWithText(TextFormField, '分區名稱'), findsOneWidget);
     await pickType(tester, SpaceType.paidMotorcycle);
     final spot = await send(tester, store);
     expect(spot.containsKey('parking_zones'), isFalse);

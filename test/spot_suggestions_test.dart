@@ -7,6 +7,7 @@ import 'package:motorcycle_parking/features/map/spot_sheet.dart';
 import 'package:motorcycle_parking/features/report/report_sheet.dart';
 import 'package:motorcycle_parking/features/report/spot_suggestions.dart';
 import 'package:motorcycle_parking/models/parking.dart';
+import 'package:motorcycle_parking/models/fee.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
 
 const spot = ParkingSpot(
@@ -506,6 +507,46 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     });
   }
+
+  testWidgets('結構化收費建議保留既有車種費率，未變更不能送出', (tester) async {
+    final current = ParkingSpot.fromJson({
+      ...spot.toJson(),
+      'fee': const Fee(
+        scooter: Rate(FeeMode.daily, amount: 30),
+        heavy: Rate(FeeMode.sameAsScooter),
+      ).toJson(),
+    });
+    final store = await openSuggestion(tester, '收費資訊', selectedSpot: current);
+    await submitSuggestion(tester, '送出建議');
+    expect(find.text('請先修改費率，和目前不同才能送出'), findsOneWidget);
+    expect(store.submissions, isEmpty);
+    final menu = find.byKey(const ValueKey('fee-mode-heavy'));
+    await tester.scrollUntilVisible(
+      menu,
+      -150,
+      scrollable: find
+          .descendant(
+            of: find.byType(Form).last,
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.ensureVisible(menu);
+    await tester.pumpAndSettle();
+    await tester.tap(menu);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('免費').last);
+    await tester.pumpAndSettle();
+    await submitSuggestion(tester, '送出建議');
+    expect(store.submissions.single['proposed'], {
+      'fee': {
+        'scooter': {'mode': 'daily', 'amount': 30},
+        'heavy': {'mode': 'free'},
+      },
+      'fee_note': '機車每日 30 元；大型重機免費',
+    });
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   test('摘要依伺服器的 UTF-16 長度截斷，不切開 emoji', () {
     final emoji = '🛵' * 300;
