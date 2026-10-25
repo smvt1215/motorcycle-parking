@@ -58,7 +58,7 @@ String regionSummary(ParkingSpot spot) =>
 
 String decisionExplanation(ParkingSpot spot, Eligibility eligibility) =>
     eligibility.status == EligibilityStatus.unverified &&
-        spot.spaceType == SpaceType.offStreet &&
+        spot.isFacility &&
         !spot.isOfficial &&
         spot.status == TrustStatus.confirmed &&
         !spot.stale

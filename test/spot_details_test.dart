@@ -689,4 +689,25 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  test('場站型式不是路外格位時，說明與橫幅一樣依 isFacility 判斷', () {
+    final lot = ParkingSpot(
+      id: 'lot',
+      name: '地下停車場',
+      lat: 25.08,
+      lng: 121.55,
+      city: '臺北市',
+      spaceType: SpaceType.paidMotorcycle,
+      facilityType: FacilityType.underground,
+      status: TrustStatus.confirmed,
+      source: 'community',
+    );
+    expect(
+      decisionExplanation(
+        lot,
+        const Eligibility(EligibilityStatus.unverified, '規則說明'),
+      ),
+      '已確認此停車點存在；目前車種是否開放仍待查核，請以入口公告為準。',
+    );
+  });
 }
