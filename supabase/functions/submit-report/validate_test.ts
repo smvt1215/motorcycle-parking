@@ -77,6 +77,11 @@ Deno.test('flags may carry a structured suggestion', () => {
       { ...flag, field: 'fee_note', proposed: { fee_note: '免費' } },
       { ...flag, field: 'eligibility', proposed: { heavy_allowed: false } },
       { ...flag, field: 'note', note: '入口在後巷' },
+      {
+        ...flag,
+        field: 'guide',
+        proposed: { entrance_note: '松仁路側', parking_guide: 'B2 靠電梯' },
+      },
       { ...community, field: 'gone', proposed: { status: 'hidden' } },
     ]
   ) {

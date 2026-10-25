@@ -54,12 +54,44 @@ List<SuggestionField> suggestionFields(ParkingSpot spot) => [
     current: eligibilitySummary(spot),
   ),
   (
+    key: 'guide',
+    label: '入口與停車指引',
+    icon: Icons.signpost_outlined,
+    current: guideSummary(spot),
+  ),
+  (
     key: 'note',
-    label: '位置或其他備註',
-    icon: Icons.location_on_outlined,
+    label: '其他備註',
+    icon: Icons.notes_outlined,
     current: spot.note.isEmpty ? '未提供' : spot.note,
   ),
 ];
+
+/// The entrance and parking guide as shown today, or 未提供.
+String guideSummary(ParkingSpot spot) {
+  final parts = [
+    if (spot.entranceNote.isNotEmpty) '入口：${spot.entranceNote}',
+    if (spot.parkingGuide.isNotEmpty) '指引：${spot.parkingGuide}',
+  ];
+  return parts.isEmpty ? '未提供' : parts.join('；');
+}
+
+/// Why a spot can no longer be parked at. Only lasting causes suggest
+/// hiding it; temporary ones go to review without that suggestion.
+enum GoneCause {
+  removed('格線已撤除', lasting: true),
+  repurposed('改為其他用途', lasting: true),
+  works('施工中', lasting: false),
+  closed('暫時封閉', lasting: false),
+  other('其他', lasting: false);
+
+  const GoneCause(this.label, {required this.lasting});
+  final String label;
+  final bool lasting;
+
+  /// Works and closures end; riders may say when.
+  bool get temporary => this == works || this == closed;
+}
 
 /// [reason] within the server's 500 UTF-16 units (its `length`), cut
 /// between whole characters so an emoji never splits. The full explanation
@@ -234,20 +266,50 @@ class _SuggestionFormState extends State<_SuggestionForm> {
   /// The suggested fee; starts unconfirmed because the map only has text.
   Fee fee = const Fee();
 
+  /// A lot's details when the suggested kind is a lot.
+  late FacilityType? facility = widget.spot.facilityType;
+  late ParkingAccess? access = widget.spot.access;
+  late final entrance = TextEditingController(text: widget.spot.entranceNote);
+  late final guide = TextEditingController(text: widget.spot.parkingGuide);
+  GoneCause? cause;
+  final until = TextEditingController();
+
   String get fieldKey => widget.fieldKey;
   bool get unavailable => fieldKey == 'gone';
   bool get typeField => fieldKey == 'space_type';
   bool get eligibilityField => fieldKey == 'eligibility';
   bool get feeField => fieldKey == 'fee_note';
+  bool get guideField => fieldKey == 'guide';
+
+  /// Lots also say how they are built and who parks there.
+  bool get lotType => typeField && type == SpaceType.offStreet;
+
+  /// Entrances belong to lots; a street bay only has a guide.
+  bool get showsEntrance =>
+      widget.spot.spaceType == SpaceType.offStreet ||
+      widget.spot.entranceNote.isNotEmpty;
 
   /// Structured fields submit the chosen value; the note becomes optional.
-  bool get structured => typeField || eligibilityField || feeField;
+  bool get structured =>
+      typeField || eligibilityField || feeField || guideField;
 
   /// The longest text the spot column takes, so an applied value fits.
   int get maxLength => fieldKey == 'name' ? 100 : 450;
 
   String reason() {
     final text = note.text.trim();
+    if (unavailable) {
+      // A field hidden after switching to a lasting cause says nothing.
+      final when = cause?.temporary ?? false ? until.text.trim() : '';
+      return '${widget.label}：${cause?.label ?? ''}'
+          '${when.isEmpty ? '' : '；預計恢復：$when'}'
+          '${text.isEmpty ? '' : '；說明：$text'}';
+    }
+    if (guideField) {
+      return '${widget.label}：'
+          '${[if (entrance.text.trim().isNotEmpty) '入口「${entrance.text.trim()}」', if (guide.text.trim().isNotEmpty) '指引「${guide.text.trim()}」'].join('；')}'
+          '${text.isEmpty ? '' : '；說明：$text'}';
+    }
     if (!structured) return '${widget.label}：$text';
     final value = typeField
         ? type.label
@@ -263,7 +325,23 @@ class _SuggestionFormState extends State<_SuggestionForm> {
   Map<String, Object?>? proposed() {
     final text = note.text.trim();
     final spot = widget.spot;
-    if (typeField) return {'space_type': type.name};
+    if (typeField) {
+      return {
+        'space_type': type.name,
+        if (lotType) ...{
+          if (facility != spot.facilityType) 'facility_type': facility?.name,
+          if (access != spot.access) 'parking_access': access?.name,
+        },
+      };
+    }
+    if (guideField) {
+      return {
+        if (entrance.text.trim() != spot.entranceNote)
+          'entrance_note': entrance.text.trim(),
+        if (guide.text.trim() != spot.parkingGuide)
+          'parking_guide': guide.text.trim(),
+      };
+    }
     // The text beside the fee is built from it, so the two never disagree.
     if (feeField) return {'fee': fee.toJson(), 'fee_note': feeNoteOf(fee)};
     if (eligibilityField) {
@@ -273,6 +351,8 @@ class _SuggestionFormState extends State<_SuggestionForm> {
       };
     }
     if (unavailable) {
+      // Only a lasting cause suggests hiding; works and closures end.
+      if (cause?.lasting != true) return null;
       // Official spots hide through their own flag; TDX spots cannot be hidden.
       if (spot.source == 'official') return {'hidden': true};
       if (communitySpotSources.contains(spot.source)) {
@@ -297,6 +377,27 @@ class _SuggestionFormState extends State<_SuggestionForm> {
       return [
         if (type != spot.spaceType)
           line(widget.label, spot.spaceType.label, type.label),
+        if (lotType && facility != spot.facilityType)
+          line(
+            '場站型式',
+            spot.facilityType?.label ?? '未提供',
+            facility?.label ?? '未確認',
+          ),
+        if (lotType && access != spot.access)
+          line(
+            '停放分類',
+            spot.access?.description ?? '未提供',
+            access?.description ?? '未確認',
+          ),
+      ];
+    }
+    if (guideField) {
+      String shown(String value) => value.isEmpty ? '未提供' : value;
+      return [
+        if (entrance.text.trim() != spot.entranceNote)
+          line('入口', shown(spot.entranceNote), shown(entrance.text.trim())),
+        if (guide.text.trim() != spot.parkingGuide)
+          line('停車指引', shown(spot.parkingGuide), shown(guide.text.trim())),
       ];
     }
     // Only the vehicles that change, so riders need not compare two lists.
@@ -324,6 +425,9 @@ class _SuggestionFormState extends State<_SuggestionForm> {
   @override
   void dispose() {
     note.dispose();
+    entrance.dispose();
+    guide.dispose();
+    until.dispose();
     super.dispose();
   }
 
@@ -436,8 +540,11 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                   initialValue: type,
                   // A new pick clears the error at once.
                   autovalidateMode: AutovalidateMode.onUserInteraction,
-                  validator: (v) =>
-                      v == widget.spot.spaceType ? '這和目前的格位類型相同，請選擇另一種' : null,
+                  validator: (_) => changes().isNotEmpty
+                      ? null
+                      : lotType
+                      ? '請至少修改格位類型、場站型式或停放分類其中一項'
+                      : '這和目前的格位類型相同，請選擇另一種',
                   builder: (state) => Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -446,9 +553,79 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                       SpaceTypePicker(
                         value: type,
                         onChanged: (v) {
-                          state.didChange(v);
-                          setState(() => type = v);
+                          setState(() {
+                            type = v;
+                            state.didChange(v);
+                          });
                         },
+                      ),
+                      // These controls form one proposal with the space type.
+                      // Mark the field changed so its error updates immediately.
+                      if (lotType) ...[
+                        const SizedBox(height: 20),
+                        FacilityField(
+                          value: facility,
+                          onChanged: (v) => setState(() {
+                            facility = v;
+                            state.didChange(type);
+                          }),
+                        ),
+                        AccessField(
+                          value: access,
+                          onChanged: (v) => setState(() {
+                            access = v;
+                            state.didChange(type);
+                          }),
+                        ),
+                      ],
+                      fieldError(context, state.errorText),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+              ],
+              if (guideField) ...[
+                FormField<(String, String)>(
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  validator: (_) =>
+                      entrance.text.trim() == widget.spot.entranceNote &&
+                          guide.text.trim() == widget.spot.parkingGuide
+                      ? '請至少修改一項，和目前不同才能送出'
+                      : null,
+                  builder: (state) => Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (showsEntrance) ...[
+                        TextFormField(
+                          key: const ValueKey('suggestion-entrance'),
+                          controller: entrance,
+                          maxLength: 500,
+                          maxLines: 2,
+                          onChanged: (v) =>
+                              setState(() => state.didChange(null)),
+                          decoration: const InputDecoration(
+                            labelText: '入口在哪裡',
+                            hintText: '例：入口在松仁路側，機車走右側坡道',
+                            alignLabelWithHint: true,
+                          ),
+                          validator: (v) => fitsServer(v, 500),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                      TextFormField(
+                        key: const ValueKey('suggestion-guide'),
+                        controller: guide,
+                        maxLength: 500,
+                        maxLines: 2,
+                        onChanged: (v) => setState(() => state.didChange(null)),
+                        decoration: InputDecoration(
+                          labelText: '停車指引',
+                          hintText: showsEntrance
+                              ? '例：B2 機車區靠電梯，重機停最後一排'
+                              : '例：格位在便利商店前，靠路口一側',
+                          alignLabelWithHint: true,
+                        ),
+                        validator: (v) => fitsServer(v, 500),
                       ),
                       fieldError(context, state.errorText),
                     ],
@@ -534,7 +711,47 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                 const SizedBox(height: 20),
               ],
               if (unavailable) ...[
-                const Text('說明你看到的狀況。如果只是暫時封閉，請寫出原因或預計恢復時間。'),
+                FormField<GoneCause>(
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  validator: (_) => cause == null ? '請選擇原因' : null,
+                  builder: (state) => Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text('這裡為什麼不能停車？', style: text.bodyLarge),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (final option in GoneCause.values)
+                            ChoiceChip(
+                              key: ValueKey('gone-${option.name}'),
+                              label: Text(option.label),
+                              selected: cause == option,
+                              onSelected: (_) {
+                                setState(() => cause = option);
+                                state.didChange(option);
+                              },
+                            ),
+                        ],
+                      ),
+                      fieldError(context, state.errorText),
+                    ],
+                  ),
+                ),
+                if (cause?.temporary ?? false) ...[
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    key: const ValueKey('gone-until'),
+                    controller: until,
+                    maxLength: 40,
+                    decoration: const InputDecoration(
+                      labelText: '預計恢復時間（選填）',
+                      hintText: '例：公告寫 11 月 30 日完工',
+                      counterText: '',
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 16),
               ],
               TextFormField(
@@ -547,13 +764,15 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                   // At the top of the four lines, not floating mid-field.
                   alignLabelWithHint: true,
                   labelText: unavailable
-                      ? '現場狀況'
+                      ? (cause == GoneCause.other ? '現場狀況' : '補充說明（選填）')
                       : structured
                       ? '你在現場看到什麼？（選填）'
                       : '正確的${widget.label}',
                   hintText: switch (fieldKey) {
                     'gone' => '例：格線已塗銷，改成人行道',
-                    'space_type' || 'eligibility' => '例：入口告示寫「大型重機可停」',
+                    'space_type' ||
+                    'eligibility' ||
+                    'guide' => '例：入口告示寫「大型重機可停」',
                     'name' => '例：信義路五段收費機車格',
                     'fee_note' => '例：入口收費牌寫「機車每次 20 元」',
                     _ => '例：入口在松仁路側，B2',
@@ -561,7 +780,9 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                 ),
                 validator: (v) {
                   final empty = v == null || v.trim().isEmpty;
-                  if (unavailable && empty) return '請填寫現場狀況';
+                  if (unavailable && cause == GoneCause.other && empty) {
+                    return '請填寫現場狀況';
+                  }
                   if (!structured && !unavailable && empty) {
                     return '請填寫正確的${widget.label}';
                   }

@@ -485,10 +485,23 @@ void main() {
     await tester.pumpAndSettle();
     final suggestions = find.text('提出修改建議');
     expect(suggestions, findsOneWidget);
-    expect(find.text('這裡已經不能停車'), findsOneWidget);
-    expect(find.text('探索').hitTestable(), findsNothing);
     final ctx = tester.element(suggestions);
     expect(Navigator.of(ctx), same(Navigator.of(ctx, rootNavigator: true)));
+    // The "gone" report sits below the editable fields; the list itself is
+    // kept by element because its title scrolls away.
+    final listElement = tester.element(
+      find.ancestor(of: suggestions, matching: find.byType(Scrollable)).first,
+    );
+    final list = find.byElementPredicate((e) => e == listElement);
+    await tester.scrollUntilVisible(
+      find.text('這裡已經不能停車'),
+      200,
+      scrollable: list,
+    );
+    expect(find.text('這裡已經不能停車'), findsOneWidget);
+    expect(find.text('探索').hitTestable(), findsNothing);
+    await tester.scrollUntilVisible(suggestions, -200, scrollable: list);
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('關閉').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('探索').last);
