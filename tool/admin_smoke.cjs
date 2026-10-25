@@ -291,10 +291,11 @@ function session(role, aal, factors = [factor]) {
           await search.fill('中山北路二段與南京東路');
           await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
           await search.press('Enter');
-          await waitText('臺北市中山區的路口，只到交會點');
+          // Each result row is one semantics node: name and kind together.
+          await page.getByText(/臺北市中山區的路口，只到交會點/).first().waitFor({ timeout: 15000 });
           await page.screenshot({ path: path.join(output, `${name}-address-results.png`) });
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} address results scroll sideways`);
-          await page.getByText('中山北路二段與南京東路一段', { exact: true }).first().click();
+          await page.getByText(/中山北路二段與南京東路一段/).first().click();
           await page.getByText(/並填入「路段」/).waitFor({ timeout: 15000 });
           await page.screenshot({ path: path.join(output, `${name}-address-picked.png`) });
           await page.getByRole('button', { name: '審核', exact: false }).first().click();
