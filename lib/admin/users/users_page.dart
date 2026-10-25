@@ -928,7 +928,6 @@ class _BanDialogState extends State<_BanDialog> {
                     for (final l in BanLength.values)
                       Semantics(
                         selected: length == l,
-                        button: true,
                         child: OutlinedButton(
                           key: ValueKey('ban-length-${l.key}'),
                           onPressed: () => setState(() => length = l),

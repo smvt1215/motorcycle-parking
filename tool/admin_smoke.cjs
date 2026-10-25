@@ -304,7 +304,7 @@ function session(role, aal, factors = [factor]) {
           await page.getByRole('button', { name: /^夜騎小哲/ }).waitFor({ timeout: 15000 });
           await page.screenshot({ path: path.join(output, `${name}-users.png`) });
           await page.getByRole('button', { name: /^夜騎小哲/ }).click();
-          await waitText('可以回報');
+          await page.getByRole('button', { name: '停權帳號', exact: true }).waitFor({ timeout: 15000 });
           await page.screenshot({ path: path.join(output, `${name}-user.png`) });
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} user page scrolls sideways`);
           await page.getByRole('button', { name: '停權帳號', exact: true }).click();
