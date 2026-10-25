@@ -209,6 +209,72 @@ void main() {
     });
   }
 
+  Future<void> pumpAccess(WidgetTester tester, double width, ParkingSpot spot) {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = Size(width, 1100);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    return tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: ParkingAccessView(spot: spot),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  for (final width in [320.0, 390.0]) {
+    testWidgets('寬 $width：部分分區有費率時逐區顯示，沒有 fee 的分區照舊文字', (tester) async {
+      final spot = lot(
+        fee: const Fee(scooter: Rate(FeeMode.perVisit, amount: 20)),
+        zones: const [
+          ParkingZone(
+            name: 'B1',
+            access: ParkingAccess.scooterOnly,
+            fee: Fee(scooter: Rate(FeeMode.free)),
+          ),
+          ParkingZone(
+            name: 'B2',
+            access: ParkingAccess.scooterOnly,
+            feeNote: '舊 B2 每次 10 元',
+          ),
+        ],
+      );
+      expect(spotFeeSummary(spot, VehicleType.scooter), '依分區計費');
+      await pumpAccess(tester, width, spot);
+      expect(find.text('全場費率'), findsNothing);
+      expect(find.text('普通機車：免費'), findsOneWidget);
+      expect(find.text('費率：舊 B2 每次 10 元'), findsOneWidget);
+      expect(find.textContaining('每次 20 元'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('寬 $width：全場費率模式仍顯示分區的汽車費率', (tester) async {
+      final spot = lot(
+        fee: const Fee(heavy: Rate(FeeMode.sameAsCar)),
+        zones: const [
+          ParkingZone(
+            name: '1F',
+            access: ParkingAccess.heavyCar,
+            heavyFeeNote: '舊重機費率',
+            carFeeNote: '每小時 30 元',
+          ),
+        ],
+      );
+      await pumpAccess(tester, width, spot);
+      expect(find.text('全場費率'), findsOneWidget);
+      expect(find.text('汽車：每小時 30 元'), findsOneWidget);
+      expect(find.text('大型重機：比照汽車費率'), findsNWidgets(2));
+      expect(find.textContaining('舊重機'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   for (final width in [320.0, 360.0, 390.0, 1280.0]) {
     testWidgets('分區編輯器在寬 $width 驗證金額並把各車種費率保存在該區', (tester) async {
       tester.view.devicePixelRatio = 1;

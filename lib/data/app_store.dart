@@ -351,7 +351,7 @@ class AppStore extends ChangeNotifier {
         final rows = await client!.from('favorites').select('spot');
         final all = rows
             .map((r) => r['spot'])
-            .expand(ParkingSpot.known)
+            .expand(ParkingSpot.favorite)
             .toList();
         final loaded = withoutRetiredFavorites(all);
         if (key != favoritesKey) return;
