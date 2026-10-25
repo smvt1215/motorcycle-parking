@@ -2,6 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/town_lookup.dart';
 import '../domain/location_check.dart';
+import 'import/import_models.dart';
 import 'review/review_models.dart';
 import 'spots/spot_models.dart';
 
@@ -95,6 +96,28 @@ abstract class AdminGateway {
     String sourceId,
     Map<String, dynamic> values,
     String baseUpdatedAt,
+    String note,
+  );
+
+  /// `admin_import_preview`: what importing [spots] (at most 500) would do.
+  Future<List<ImportEntry>> previewImport(List<Map<String, dynamic>> spots);
+
+  /// `admin_import_apply`: imports the entries of [spots] named in
+  /// [choices] (source id → base version and fields to overwrite).
+  Future<ImportResult> applyImport(
+    List<Map<String, dynamic>> spots,
+    Map<String, dynamic> choices,
+    String effectiveDate,
+    String note,
+  );
+
+  /// `admin_fee_backlog`: spots whose fee note has no structured fee.
+  Future<List<FeeBacklogItem>> feeBacklog();
+
+  /// `admin_convert_fees`: writes confirmed fees (at most 500), each for the
+  /// note it was read from.
+  Future<ImportResult> convertFees(
+    List<Map<String, dynamic>> items,
     String note,
   );
 }
@@ -417,4 +440,58 @@ class SupabaseAdminGateway implements AdminGateway {
 
   @override
   Future<Town?> town(double lat, double lng) => lookupTown(lat, lng);
+
+  @override
+  Future<List<ImportEntry>> previewImport(
+    List<Map<String, dynamic>> spots,
+  ) async {
+    final rows = await client.rpc<List<dynamic>>(
+      'admin_import_preview',
+      params: {'p_spots': spots},
+    );
+    return rows
+        .map((r) => ImportEntry.fromJson(r as Map<String, dynamic>))
+        .toList();
+  }
+
+  @override
+  Future<ImportResult> applyImport(
+    List<Map<String, dynamic>> spots,
+    Map<String, dynamic> choices,
+    String effectiveDate,
+    String note,
+  ) async => ImportResult.fromJson(
+    await client.rpc<Map<String, dynamic>>(
+      'admin_import_apply',
+      params: {
+        'p_spots': spots,
+        'p_choices': choices,
+        'p_effective_date': effectiveDate,
+        'p_note': note,
+      },
+    ),
+  );
+
+  @override
+  Future<List<FeeBacklogItem>> feeBacklog() async {
+    final rows = await client.rpc<List<dynamic>>('admin_fee_backlog');
+    return rows
+        .map((r) => FeeBacklogItem.fromJson(r as Map<String, dynamic>))
+        .toList();
+  }
+
+  @override
+  Future<ImportResult> convertFees(
+    List<Map<String, dynamic>> items,
+    String note,
+  ) async {
+    final row = await client.rpc<Map<String, dynamic>>(
+      'admin_convert_fees',
+      params: {'p_items': items, 'p_note': note},
+    );
+    return ImportResult(
+      updated: (row['converted'] as num?)?.toInt() ?? 0,
+      skipped: Skipped.listOf(row['skipped']),
+    );
+  }
 }

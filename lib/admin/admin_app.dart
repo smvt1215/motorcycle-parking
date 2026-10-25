@@ -8,6 +8,9 @@ import 'admin_auth_page.dart';
 import 'admin_controller.dart';
 import 'admin_mfa_page.dart';
 import 'admin_theme.dart';
+import 'import/file_pick.dart';
+import 'import/import_controller.dart';
+import 'import/import_page.dart';
 import 'review/hidden_page.dart';
 import 'review/review_controller.dart';
 import 'review/review_map.dart';
@@ -64,6 +67,7 @@ class AdminApp extends StatefulWidget {
     this.reviewMapBuilder = googleReviewMap,
     this.locationMapBuilder,
     this.review,
+    this.pickFile = pickJsonFile,
   });
   final AdminController controller;
   final String? initialLocation;
@@ -75,6 +79,9 @@ class AdminApp extends StatefulWidget {
 
   /// Injected by tests; otherwise created over the controller's gateway.
   final ReviewController? review;
+
+  /// Tests replace the browser's file dialog.
+  final FilePicker pickFile;
 
   @override
   State<AdminApp> createState() => _AdminAppState();
@@ -88,6 +95,12 @@ class _AdminAppState extends State<AdminApp> {
         onResolved: () => widget.controller.refreshCount(),
       );
   late final SpotsController _spots = SpotsController(
+    widget.controller.gateway,
+  );
+  late final ImportController _imports = ImportController(
+    widget.controller.gateway,
+  );
+  late final FeeConversionController _fees = FeeConversionController(
     widget.controller.gateway,
   );
   String? _reviewUser;
@@ -110,6 +123,8 @@ class _AdminAppState extends State<AdminApp> {
       _reviewUser = user;
       _review.reset();
       _spots.reset();
+      _imports.reset();
+      _fees.reset();
     }
   }
 
@@ -177,7 +192,17 @@ class _AdminAppState extends State<AdminApp> {
                 locationMapBuilder: widget.locationMapBuilder,
               ),
             ),
-          for (final tab in _tabs.skip(2))
+          for (final path in ['/imports', '/imports/fees'])
+            GoRoute(
+              path: path,
+              builder: (context, state) => ImportPage(
+                imports: _imports,
+                fees: _fees,
+                feeSection: path.endsWith('/fees'),
+                pickFile: widget.pickFile,
+              ),
+            ),
+          for (final tab in _tabs.skip(2).where((t) => t.path != '/imports'))
             GoRoute(
               path: tab.path,
               builder: (context, state) => _watch(
@@ -220,6 +245,8 @@ class _AdminAppState extends State<AdminApp> {
     widget.controller.removeListener(_accessChanged);
     if (widget.review == null) _review.dispose();
     _spots.dispose();
+    _imports.dispose();
+    _fees.dispose();
     _router.dispose();
     super.dispose();
   }

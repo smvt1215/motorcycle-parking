@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:motorcycle_parking/admin/admin_gateway.dart';
+import 'package:motorcycle_parking/admin/import/import_models.dart';
 import 'package:motorcycle_parking/admin/review/review_models.dart';
 import 'package:motorcycle_parking/admin/spots/spot_models.dart';
 import 'package:motorcycle_parking/core/town_lookup.dart';
@@ -471,6 +472,84 @@ class FakeAdminGateway implements AdminGateway {
     await delayedTown?.future;
     if (failTown) throw StateError('offline');
     return townAt;
+  }
+
+  /// What the preview says about known ids; any other id is new.
+  Map<String, ImportEntry> importPlan = {};
+  final List<List<Map<String, dynamic>>> previewed = [];
+  final List<(List<Map<String, dynamic>>, Map<String, dynamic>, String, String)>
+  imported = [];
+  Object? importError;
+
+  @override
+  Future<List<ImportEntry>> previewImport(
+    List<Map<String, dynamic>> spots,
+  ) async {
+    previewed.add(spots);
+    if (importError case final error?) throw error;
+    return [
+      for (final s in spots)
+        importPlan[s['id']] ??
+            ImportEntry(
+              sourceId: '${s['id']}',
+              official: '${s['id']}'.startsWith('official:'),
+              status: ImportStatus.added,
+              reason: '',
+              name: '${s['name']}',
+              city: '${s['city'] ?? ''}',
+              district: '${s['district'] ?? ''}',
+            ),
+    ];
+  }
+
+  @override
+  Future<ImportResult> applyImport(
+    List<Map<String, dynamic>> spots,
+    Map<String, dynamic> choices,
+    String effectiveDate,
+    String note,
+  ) async {
+    imported.add((spots, choices, effectiveDate, note));
+    var inserted = 0, updated = 0;
+    for (final id in choices.keys) {
+      final entry = importPlan[id];
+      if (entry == null) {
+        inserted++;
+      } else {
+        updated++;
+      }
+      importPlan[id] = ImportEntry(
+        sourceId: id,
+        official: id.startsWith('official:'),
+        status: ImportStatus.unchanged,
+        reason: '',
+        name: entry?.name ?? '',
+        city: entry?.city ?? '',
+        district: entry?.district ?? '',
+        baseUpdatedAt: '2026-10-26T00:00:00Z',
+      );
+    }
+    return ImportResult(inserted: inserted, updated: updated);
+  }
+
+  List<FeeBacklogItem> backlog = [];
+  final List<(List<Map<String, dynamic>>, String)> conversions = [];
+
+  @override
+  Future<List<FeeBacklogItem>> feeBacklog() async => backlog;
+
+  @override
+  Future<ImportResult> convertFees(
+    List<Map<String, dynamic>> items,
+    String note,
+  ) async {
+    conversions.add((items, note));
+    final ids = {for (final i in items) i['source_id']};
+    backlog = [
+      for (final b in backlog)
+        if (!ids.contains(b.sourceId)) b,
+    ];
+    return ImportResult(updated: items.length);
   }
 
   Future<void> dispose() => events.close();
