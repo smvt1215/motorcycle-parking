@@ -737,7 +737,15 @@ class _ReportFormState extends State<ReportForm> {
   /// Vehicles whose shown value only the city's rule set. Stored, it would
   /// outlive a change to the rule, so they are sent unconfirmed and the rule
   /// decides them live.
-  late bool scooterRuled = ruledOnly.scooter, heavyRuled = ruledOnly.heavy;
+  bool scooterRuled = false, heavyRuled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Values and flags from the same bay kind and city, not computed lazily
+    // at submit time after either changed.
+    applyDefaults();
+  }
 
   ({bool scooter, bool heavy}) get ruledOnly {
     final marked = markedEligibility(type);
@@ -871,6 +879,7 @@ class _ReportFormState extends State<ReportForm> {
                         ? '現場有告示牌或地面標字時，才選「可停」。'
                         : '已依「${type.label}」'
                               '${ruled ? '與$city的停車規則' : ''}帶入，可以修改。'
+                              '${ruled ? '依規則帶入的車種只當預設，會隨規則更新，不存成這個點的資料。' : ''}'
                               '現場有告示牌或地面標字時，才選「可停」。',
                     style: TextStyle(color: colors.onSurfaceVariant),
                   ),
