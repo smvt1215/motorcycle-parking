@@ -264,7 +264,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
   late bool? heavy = widget.spot.heavyAllowed;
 
   /// Preserve known rates when the rider corrects only one vehicle.
-  late Fee fee = widget.spot.fee;
+  late Fee fee = widget.spot.fee ?? const Fee();
 
   /// A lot's details when the suggested kind is a lot.
   late FacilityType? facility = widget.spot.facilityType;

@@ -395,7 +395,7 @@ class _SpotSheetState extends State<SpotSheet> {
 }
 
 String _additionalFeeNote(ParkingSpot spot) {
-  if (!spot.fee.isEmpty) return '';
+  if (spot.fee != null) return '';
   final rates = [
     for (final zone in spot.zones) ...[
       zone.feeNote,
@@ -584,7 +584,7 @@ class _SpotSummary extends StatelessWidget {
         ? spot.zones.single
         : null;
     final feeLabel =
-        singleZone != null || (!spot.fee.isEmpty && !perVehicle && !perZone)
+        singleZone != null || (spot.fee != null && !perVehicle && !perZone)
         ? '${vehicle.label}費率'
         : '收費資訊';
     final feeValue = spotFeeSummary(spot, vehicle);

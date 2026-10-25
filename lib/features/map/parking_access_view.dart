@@ -15,9 +15,9 @@ class ParkingAccessView extends StatelessWidget {
         access: reportedAccess(spot),
         scooter: spot.scooterAllowed,
         heavy: spot.heavyAllowed,
-        scooterFee: spot.fee.scooter?.text ?? '',
-        heavyFee: spot.fee.heavy?.text ?? '',
-        showFees: !spot.fee.isEmpty,
+        scooterFee: spot.fee?.scooter?.text ?? '',
+        heavyFee: spot.fee?.heavy?.text ?? '',
+        showFees: spot.fee != null,
       );
     }
     return Column(
@@ -57,7 +57,7 @@ class ParkingAccessView extends StatelessWidget {
             carFee: zone.carFeeNote,
             showFees: zone.hasVehicleFees,
           ),
-          if (zone.fee.isEmpty && zone.feeNote.trim().isNotEmpty) ...[
+          if (zone.fee == null && zone.feeNote.trim().isNotEmpty) ...[
             const SizedBox(height: 10),
             _ZoneNote(
               icon: Icons.payments_outlined,
