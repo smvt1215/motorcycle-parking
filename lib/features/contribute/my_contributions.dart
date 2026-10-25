@@ -65,14 +65,27 @@ StatusLook statusLook(MyContribution item) =>
       ),
     };
 
+/// Why a report was not used, one fixed sentence per kind an admin picks
+/// (moderation_queue.resolution_kind); the admin's own note stays internal.
+const rejectionReasons = {
+  'wrong': '核對後與現場資訊不符。',
+  'duplicate': '已有相同的建議，併入先前的處理。',
+  'insufficient': '資訊不足，無法查證。',
+  'outdated': '點位已變更，建議不再適用。',
+  'abuse': '內容不符合回報規範。',
+  'other': '管理員核對後沒有採用。',
+};
+
 /// What happened after a result, for riders who wonder whether the map
 /// changed. Waiting needs no extra words beside its plate.
 String? statusNote(MyContribution item) => switch ((item.kind, item.status)) {
   (ContributionKind.newSpot, ContributionStatus.hidden) => '管理員已將這個停車點從地圖移除。',
   (ContributionKind.suggestion, ContributionStatus.accepted) => '地圖已依你的建議更新。',
   (ContributionKind.gone, ContributionStatus.accepted) => '已依你的回報處理這個停車點。',
-  (_, ContributionStatus.rejected) => '管理員核對後沒有採用，地圖維持原樣。',
-  (_, ContributionStatus.closed) => '這筆回報已處理完畢，地圖沒有變更。',
+  (_, ContributionStatus.rejected) =>
+    '${rejectionReasons[item.resolutionKind] ?? '管理員核對後沒有採用。'}地圖維持原樣。',
+  (_, ContributionStatus.closed) =>
+    '${rejectionReasons[item.resolutionKind] ?? '這筆回報已處理完畢。'}地圖沒有變更。',
   _ => null,
 };
 

@@ -212,6 +212,30 @@ void main() {
       });
     });
 
+    test('a rejection reads its kind, never an admin note', () {
+      String? note(String status, String? kind) => statusNote(
+        MyContribution.fromJson({
+          ...row('1', status: status),
+          'resolution_kind': kind,
+        }),
+      );
+      expect(note('rejected', 'insufficient'), '資訊不足，無法查證。地圖維持原樣。');
+      expect(note('rejected', 'outdated'), '點位已變更，建議不再適用。地圖維持原樣。');
+      expect(note('rejected', null), '管理員核對後沒有採用。地圖維持原樣。');
+      expect(note('closed', 'duplicate'), '已有相同的建議，併入先前的處理。地圖沒有變更。');
+      expect(note('closed', null), '這筆回報已處理完畢。地圖沒有變更。');
+      for (final kind in [
+        'wrong',
+        'duplicate',
+        'insufficient',
+        'outdated',
+        'abuse',
+        'other',
+      ]) {
+        expect(rejectionReasons[kind], isNotEmpty);
+      }
+    });
+
     test('dates say the day, and the year only when it differs', () {
       expect(sentDate(DateTime(2026, 10, 2), now), '10月2日送出');
       expect(sentDate(DateTime(2025, 12, 31), now), '2025年12月31日送出');

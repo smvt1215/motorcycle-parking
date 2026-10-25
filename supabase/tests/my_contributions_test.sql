@@ -37,7 +37,7 @@ update moderation_queue set status='accepted',resolved_at=now(),resolved_by='100
   where id=(select id from fx where name='q_accepted');
 with s as (insert into moderation_queue(source_id,reporter_id,reason,field,created_at)
   values('official:'||(select id from fx where name='official_hidden'),'10000000-0000-4000-8000-000000000002','這裡已經不能停車：格線已撤除','gone',now()-interval '1 day') returning id) insert into fx select 'q_rejected',id from s;
-update moderation_queue set status='rejected',resolved_at=now(),resolution_note='內部：重複' where id=(select id from fx where name='q_rejected');
+update moderation_queue set status='rejected',resolved_at=now(),resolution_kind='outdated',resolution_note='內部：重複' where id=(select id from fx where name='q_rejected');
 with s as (insert into moderation_queue(source_id,reporter_id,reason,created_at)
   values('tdx:retired-1','10000000-0000-4000-8000-000000000002','舊回報',now()-interval '6 days') returning id) insert into fx select 'q_retired',id from s;
 -- Someone else's report on my spot, and an unattributed vote-threshold row.
@@ -76,6 +76,10 @@ select is((select status||'|'||spot_name||'|'||lat from my_contributions() where
   'accepted|別人的點|25.055','an accepted suggestion on a public community spot comes with coordinates');
 select is((select status||'|'||spot_name||'|'||spot_visible||'|'||coalesce(lat::text,'none')||'|'||(resolved_at is not null) from my_contributions() where id=(select id from fx where name='q_rejected')::text),
   'rejected|我回報時的名稱|false|none|true','a hidden spot shows the reported name, no coordinates and no later edits');
+select is((select resolution_kind from my_contributions() where id=(select id from fx where name='q_rejected')::text),
+  'outdated','a rejection says which kind it was');
+select is((select count(*) from my_contributions() where resolution_kind is not null)::int,1,
+  'only rejected or closed reports carry a kind');
 select is((select coalesce(spot_name,'none')||'|'||spot_visible from my_contributions() where id=(select id from fx where name='q_retired')::text),
   'none|false','a report on a retired source has no spot');
 select is((select status||'|'||spot_name||'|'||spot_visible from my_contributions() where id=(select id from fx where name='mine_hidden')::text),
