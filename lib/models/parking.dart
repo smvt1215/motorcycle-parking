@@ -196,6 +196,8 @@ class ParkingSpot {
     this.sourceUrl = '',
     this.sourceName = '',
     this.licenseNote = '',
+    this.contributorName = '',
+    this.contributorRole = '',
     this.facilityType,
     this.access,
     this.address = '',
@@ -209,6 +211,12 @@ class ParkingSpot {
   });
   final String id, name, city, source, feeNote, note, district, sourceUrl;
   final String sourceName, licenseNote;
+
+  /// Public attribution only, supplied by the backend without contributor ids.
+  /// The name is live data: [toJson] leaves it out so saved copies never
+  /// keep it. The role describes who added the point; it never grants app
+  /// permissions.
+  final String contributorName, contributorRole;
   final Fee? fee;
   final double lat, lng;
   final SpaceType spaceType;
@@ -242,6 +250,12 @@ class ParkingSpot {
     if (_kind(j) == null) return const [];
     return [ParkingSpot.fromJson(j)];
   }
+
+  /// A saved favorite as a spot. Favorites never keep the contributor's
+  /// name: it follows the account and can be cleared, so a stored copy
+  /// would go stale. Copies saved by earlier builds are ignored here too.
+  static Iterable<ParkingSpot> favorite(Object? row) =>
+      known({...row as Map<String, dynamic>}..remove('contributor_name'));
 
   /// A snapshot's exact kind (see [toJson]), else its `space_type`; null
   /// when this build knows neither.
@@ -289,6 +303,13 @@ class ParkingSpot {
       sourceUrl: j['source_url'] as String? ?? '',
       sourceName: j['source_name'] as String? ?? '',
       licenseNote: j['license_note'] as String? ?? '',
+      contributorName: j['contributor_name'] is String
+          ? j['contributor_name'] as String
+          : '',
+      contributorRole:
+          const {'rider', 'admin', 'import'}.contains(j['contributor_role'])
+          ? j['contributor_role'] as String
+          : '',
       facilityType: _optionalEnum(FacilityType.values, j['facility_type']),
       access: _optionalEnum(ParkingAccess.values, j['parking_access']),
       address: j['address'] as String? ?? '',
@@ -339,6 +360,7 @@ class ParkingSpot {
       'source_url': sourceUrl,
       'source_name': sourceName,
       'license_note': licenseNote,
+      if (contributorRole.isNotEmpty) 'contributor_role': contributorRole,
       if (facilityType != null) 'facility_type': facilityType!.name,
       if (access != null) 'parking_access': access!.name,
       if (address.isNotEmpty) 'address': address,
