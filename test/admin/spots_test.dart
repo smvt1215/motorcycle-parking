@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:motorcycle_parking/admin/admin_app.dart';
 import 'package:motorcycle_parking/admin/admin_controller.dart';
 import 'package:motorcycle_parking/admin/spots/spot_models.dart';
 import 'package:motorcycle_parking/admin/spots/spots_controller.dart';
+import 'package:motorcycle_parking/core/town_lookup.dart';
 import 'package:motorcycle_parking/domain/location_check.dart';
 
 import 'fake_admin_gateway.dart';
@@ -115,6 +118,44 @@ void main() {
       await spots.locate();
       expect(spots.notes.duplicates.single.name, '隔壁同類型');
       expect(spots.locateError, contains('查不到縣市'));
+    });
+
+    test('切換點位後，前一個點位較晚回來的查詢不會覆蓋新表單', () async {
+      await spots.open(communityId);
+      spots.set('lat', 25.07);
+      gateway.delayedTown = Completer<void>();
+      gateway.townAt = const Town('新北市', '三重區');
+      final pending = spots.locate();
+      await spots.open(officialId);
+      gateway.delayedTown!.complete();
+      await pending;
+      expect(spots.record!.sourceId, officialId);
+      expect(spots.draft['city'], '新北市');
+      expect(spots.draft['district'], '板橋區');
+      expect(spots.changes, isEmpty);
+    });
+
+    test('移動後立即儲存，先完成縣市查詢再寫入', () async {
+      await spots.open(communityId);
+      gateway.townAt = const Town('新北市', '三重區');
+      spots.set('lat', 25.07);
+      expect(spots.positionResolved, isFalse);
+      expect(await spots.save(''), isTrue);
+      final values = gateway.spotUpdates.single.$2;
+      expect(values['lat'], 25.07);
+      expect((values['city'], values['district']), ('新北市', '三重區'));
+    });
+
+    test('新位置查不到縣市時不儲存', () async {
+      await spots.open(communityId);
+      gateway.failTown = true;
+      spots.set('lat', 25.07);
+      expect(await spots.save(''), isFalse);
+      expect(spots.saveError, contains('尚未查到'));
+      expect(gateway.spotUpdates, isEmpty);
+      spots.set('lat', gateway.spotRows[communityId]!['lat']);
+      spots.set('note', '只改備註');
+      expect(await spots.save(''), isTrue);
     });
 
     test('改為官方點只送管理者填的來源與資格', () async {

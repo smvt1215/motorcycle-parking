@@ -140,13 +140,23 @@ class SpotsController extends ChangeNotifier {
     if (gateway == null || lat is! num || lng is! num) return;
     final generation = _generation;
     final seq = ++_locateSeq;
+    final target = record;
+    final at = (lat.toDouble(), lng.toDouble());
+    // A response applies only to the record and position it was asked for:
+    // the form may have moved on, or the spot moved again, meanwhile.
+    bool current() =>
+        generation == _generation &&
+        seq == _locateSeq &&
+        identical(record, target) &&
+        draft['lat'] == lat &&
+        draft['lng'] == lng;
     locating = true;
     locateError = null;
     _notify();
     try {
-      final found = await gateway!.town(lat.toDouble(), lng.toDouble());
-      final near = await gateway!.nearbySpots(lat.toDouble(), lng.toDouble());
-      if (generation != _generation || seq != _locateSeq) return;
+      final found = await gateway!.town(at.$1, at.$2);
+      final near = await gateway!.nearbySpots(at.$1, at.$2);
+      if (!current()) return;
       town = found;
       nearby = near;
       if (found == null) {
@@ -154,16 +164,33 @@ class SpotsController extends ChangeNotifier {
       } else {
         draft = {...draft, 'city': found.city, 'district': found.district};
         filled++;
+        _locatedFor = at;
       }
     } catch (_) {
-      if (generation == _generation && seq == _locateSeq) {
-        locateError = '縣市與行政區查詢失敗，請手動確認或稍後重試。';
-      }
+      if (current()) locateError = '縣市與行政區查詢失敗，請手動確認或稍後重試。';
     } finally {
-      if (generation == _generation && seq == _locateSeq) locating = false;
+      if (seq == _locateSeq) locating = false;
       _notify();
     }
   }
+
+  /// The form's position has a county and district looked up for it: the
+  /// stored one of an existing spot, or the last successful [locate].
+  bool get positionResolved {
+    final lat = draft['lat'], lng = draft['lng'];
+    if (lat is! num || lng is! num) return false;
+    final at = (lat.toDouble(), lng.toDouble());
+    final r = record;
+    if (r != null &&
+        !r.isNew &&
+        r.values['lat'] == lat &&
+        r.values['lng'] == lng) {
+      return true;
+    }
+    return _locatedFor == at;
+  }
+
+  (double, double)? _locatedFor;
 
   Future<void> search() async {
     if (gateway == null) return;
@@ -221,6 +248,10 @@ class SpotsController extends ChangeNotifier {
   void _load(SpotRecord? loaded) {
     record = loaded;
     attempted = false;
+    // Lookups still running belong to the previous form.
+    _locateSeq++;
+    locating = false;
+    _locatedFor = null;
     nearby = [];
     town = null;
     locateError = null;
@@ -268,6 +299,17 @@ class SpotsController extends ChangeNotifier {
       saveError = '請先修正標示的欄位。';
       _notify();
       return false;
+    }
+    // A moved spot is saved with the county and district of where it is now,
+    // so the right rules apply; finish that lookup first.
+    if (!positionResolved) {
+      await locate();
+      if (!identical(record, current)) return false;
+      if (!positionResolved) {
+        saveError = '新位置的縣市與行政區尚未查到，無法儲存。請確認位置後重試。';
+        _notify();
+        return false;
+      }
     }
     final values = changes;
     if (values.isEmpty) return true;

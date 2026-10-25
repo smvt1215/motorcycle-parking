@@ -429,6 +429,9 @@ class FakeAdminGateway implements AdminGateway {
   List<NearbySpot> nearby = const [];
   int townRequests = 0;
 
+  /// Holds a lookup open, to race it against switching or saving.
+  Completer<void>? delayedTown;
+
   @override
   Future<SpotRecord> createSpot(
     SpotKind kind,
@@ -456,6 +459,7 @@ class FakeAdminGateway implements AdminGateway {
   @override
   Future<Town?> town(double lat, double lng) async {
     townRequests++;
+    await delayedTown?.future;
     if (failTown) throw StateError('offline');
     return townAt;
   }

@@ -152,6 +152,8 @@ class _SpotsPageState extends State<SpotsPage> {
     final messenger = ScaffoldMessenger.of(context);
     final name = spots.draft['name'] as String? ?? '';
     final creating = spots.record?.isNew == true;
+    // The save runs the lookup itself; a pending debounce would only repeat it.
+    _locate?.cancel();
     final notes = spots.notes;
     if (notes.far) {
       final same = await showDialog<bool>(
