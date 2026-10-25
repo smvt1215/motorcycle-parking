@@ -311,6 +311,90 @@ void main() {
       EligibilityStatus.notAllowed,
     );
   });
+  test('管理員核驗過的社群停車場車種欄位視同官方資料，並套用過期規則', () {
+    final today = DateTime.now();
+    ParkingSpot lot({
+      bool? scooter,
+      bool? heavy,
+      DateTime? scooterAt,
+      DateTime? heavyAt,
+    }) => ParkingSpot(
+      id: 'lot',
+      name: 'lot',
+      lat: 25,
+      lng: 121,
+      city: '臺北市',
+      spaceType: SpaceType.offStreet,
+      source: 'import',
+      status: TrustStatus.confirmed,
+      lastConfirmedAt: today.subtract(const Duration(days: 1)),
+      scooterAllowed: scooter,
+      heavyAllowed: heavy,
+      scooterVerifiedAt: scooterAt,
+      heavyVerifiedAt: heavyAt,
+    );
+    final heavyRule = rule('臺北市', VehicleType.heavy);
+    final checked = today.subtract(const Duration(days: 10));
+    final both = lot(
+      scooter: true,
+      heavy: true,
+      scooterAt: checked,
+      heavyAt: checked,
+    );
+    final open = eligibility(both, VehicleType.heavy, heavyRule, now: today);
+    expect(open.status, EligibilityStatus.allowed);
+    expect(open.reason, contains('管理員已核驗'));
+    expect(
+      eligibility(both, VehicleType.scooter, null, now: today).status,
+      EligibilityStatus.allowed,
+    );
+    // A verified "不開放" may deny like official data.
+    expect(
+      eligibility(
+        lot(heavy: false, heavyAt: checked),
+        VehicleType.heavy,
+        heavyRule,
+        now: today,
+      ).status,
+      EligibilityStatus.notAllowed,
+    );
+    // Each vehicle needs its own verification.
+    expect(
+      eligibility(
+        lot(scooter: true, heavy: true, scooterAt: checked),
+        VehicleType.heavy,
+        heavyRule,
+        now: today,
+      ).status,
+      EligibilityStatus.unverified,
+    );
+    // Verification goes stale like official data does.
+    expect(
+      eligibility(
+        both,
+        VehicleType.heavy,
+        heavyRule,
+        now: today.add(const Duration(days: 200)),
+      ).status,
+      EligibilityStatus.unverified,
+    );
+    // A verification time without a flag verifies nothing.
+    expect(
+      eligibility(
+        lot(heavyAt: checked),
+        VehicleType.heavy,
+        heavyRule,
+        now: today,
+      ).status,
+      EligibilityStatus.unverified,
+    );
+    // The times survive a favorites snapshot.
+    final copy = ParkingSpot.fromJson(
+      jsonDecode(jsonEncode(both.toJson())) as Map<String, dynamic>,
+    );
+    expect(copy.heavyVerifiedAt, checked);
+    expect(copy.scooterVerifiedAt, checked);
+  });
   test('沒有確認時間的社群資料視為未知，不當成新鮮證據', () {
     final heavy = rule('臺北市', VehicleType.heavy);
     expect(

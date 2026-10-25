@@ -207,6 +207,8 @@ class ParkingSpot {
     this.photoUrls = const [],
     this.zones = const [],
     this.availabilityUpdatedAt,
+    this.scooterVerifiedAt,
+    this.heavyVerifiedAt,
   });
   final String id, name, city, source, feeNote, note, district, sourceUrl;
   final String sourceName, licenseNote;
@@ -227,6 +229,15 @@ class ParkingSpot {
   final List<String> photoUrls;
   final List<ParkingZone> zones;
   final DateTime? availabilityUpdatedAt;
+
+  /// When an administrator last set this community spot's access for each
+  /// vehicle; null when none has, or a later rider-side change voided it.
+  /// Only the backend records these, never a rider's report or vote.
+  final DateTime? scooterVerifiedAt, heavyVerifiedAt;
+
+  /// [vehicle]'s admin verification time, see [scooterVerifiedAt].
+  DateTime? verifiedAt(VehicleType vehicle) =>
+      vehicle == VehicleType.heavy ? heavyVerifiedAt : scooterVerifiedAt;
 
   /// Points are either official (government data, including TDX spots kept in
   /// older favorites) or
@@ -315,6 +326,12 @@ class ParkingSpot {
       availabilityUpdatedAt: DateTime.tryParse(
         j['availability_updated_at'] as String? ?? '',
       ),
+      scooterVerifiedAt: DateTime.tryParse(
+        j['scooter_verified_at'] as String? ?? '',
+      ),
+      heavyVerifiedAt: DateTime.tryParse(
+        j['heavy_verified_at'] as String? ?? '',
+      ),
     );
   }
 
@@ -365,6 +382,10 @@ class ParkingSpot {
         'parking_zones': zones.map((zone) => zone.toJson()).toList(),
       if (availabilityUpdatedAt != null)
         'availability_updated_at': availabilityUpdatedAt!.toIso8601String(),
+      if (scooterVerifiedAt != null)
+        'scooter_verified_at': scooterVerifiedAt!.toIso8601String(),
+      if (heavyVerifiedAt != null)
+        'heavy_verified_at': heavyVerifiedAt!.toIso8601String(),
     };
   }
 }

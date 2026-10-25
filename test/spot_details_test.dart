@@ -384,6 +384,35 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  for (final width in [320.0, 390.0, 700.0, 1280.0]) {
+    testWidgets('管理員核驗過車種的社群停車場不顯示待確認橫幅（寬 $width）', (tester) async {
+      usePhone(tester, width: width);
+      final store = (await tester.runAsync(createStore))!;
+      addTearDown(store.dispose);
+      final checked = DateTime.now().subtract(const Duration(days: 1));
+      final spot = ParkingSpot.fromJson({
+        ...facility().toJson(),
+        'source': 'import',
+        'scooter_allowed': true,
+        'heavy_allowed': true,
+        'status': 'confirmed',
+        'last_confirmed_at': checked.toIso8601String(),
+        'scooter_verified_at': checked.toIso8601String(),
+        'heavy_verified_at': checked.toIso8601String(),
+      });
+      expect(store.eligible(spot).status, EligibilityStatus.allowed);
+      await openDetails(tester, store, spot);
+      expect(find.text('普通機車 · 可停'), findsOneWidget);
+      expect(find.textContaining('待確認'), findsNothing);
+      await store.setVehicle(VehicleType.heavy);
+      await tester.pumpAndSettle();
+      expect(find.text('大型重機 · 可停'), findsOneWidget);
+      expect(find.textContaining('待確認'), findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
   testWidgets('詳情開啟期間切換車種會即時重算資格提示', (tester) async {
     usePhone(tester);
     final store = (await tester.runAsync(createStore))!;
