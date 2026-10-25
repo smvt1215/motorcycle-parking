@@ -266,6 +266,11 @@ class FakeAdminGateway implements AdminGateway {
         message: 'a rejection needs a resolution kind',
       );
     }
+    if (resolutionKind == ResolutionKind.other && note.trim().isEmpty) {
+      throw const PostgrestException(
+        message: 'resolution kind other needs a note',
+      );
+    }
     forced.add(force);
     kinds.add(resolutionKind);
     resolved.add((id, decision, patch, note));

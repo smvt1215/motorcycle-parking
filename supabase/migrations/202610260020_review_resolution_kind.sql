@@ -30,6 +30,10 @@ returns int language sql immutable set search_path='' as $$
   select case
     when p_key in ('name','note','entrance_note','parking_guide','address','road_segment','special_rules') then 1
     when p_key in ('fee_note','fee','facility_type','status','hidden') then 2
+    -- Restating the current type (the app sends it with facility_type) is
+    -- no change at all.
+    when p_key='space_type' and p_base->>'space_type' is not null
+      and p_proposed->>'space_type' is not distinct from p_base->>'space_type' then 1
     when p_key='space_type' then
       case when p_base->>'space_type' is not null and p_proposed->>'space_type' is not null
         and p_base->>'space_type'<>'offStreet' and p_proposed->>'space_type'<>'offStreet' then 2 else 3 end
@@ -144,6 +148,10 @@ begin
   end if;
   if p_decision='rejected' and v_kind is null then
     raise exception 'a rejection needs a resolution kind' using errcode='22023';
+  end if;
+  -- "Other" says nothing by itself; the note is the reason.
+  if v_kind='other' and btrim(v_note)='' then
+    raise exception 'resolution kind other needs a note' using errcode='22023';
   end if;
   select * into v_report from moderation_queue where id=p_id for update;
   if not found then raise exception 'report not found' using errcode='22023'; end if;

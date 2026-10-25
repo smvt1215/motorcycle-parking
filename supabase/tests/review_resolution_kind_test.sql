@@ -36,6 +36,7 @@ select pg_temp.queue('fee',(select id::text from fx where name='spot'),'fee_note
 select pg_temp.queue('type_street',(select id::text from fx where name='spot'),'space_type','{"space_type":"freeMotorcycle"}');
 select pg_temp.queue('type_cross',(select id::text from fx where name='spot'),'space_type','{"space_type":"offStreet"}');
 select pg_temp.queue('type_out',(select id::text from fx where name='lot'),'space_type','{"space_type":"paidMotorcycle"}');
+select pg_temp.queue('lot_facility',(select id::text from fx where name='lot'),'space_type','{"space_type":"offStreet","facility_type":"underground"}');
 select pg_temp.queue('type_none',(select id::text from fx where name='spot'),'space_type',null);
 select pg_temp.queue('access',(select id::text from fx where name='spot'),'eligibility','{"heavy_allowed":true}');
 select pg_temp.queue('gone',(select id::text from fx where name='spot'),'gone','{"status":"hidden"}');
@@ -55,6 +56,7 @@ select is(pg_temp.risk('fee'),'medium','a fee change is medium risk');
 select is(pg_temp.risk('type_street'),'medium','a type change between street bays is medium risk');
 select is(pg_temp.risk('type_cross'),'high','a street bay turned off-street is high risk');
 select is(pg_temp.risk('type_out'),'high','an off-street lot turned street bay is high risk');
+select is(pg_temp.risk('lot_facility'),'medium','restating an off-street type with a facility change stays medium');
 select is(pg_temp.risk('type_none'),'high','a type report without a value is high risk');
 select is(pg_temp.risk('access'),'high','vehicle access is high risk');
 select is(pg_temp.risk('gone'),'medium','a gone report is medium risk');
@@ -88,6 +90,8 @@ select throws_ok($$select admin_resolve_report((select id from fx where name='na
   '22023','a rejection needs a resolution kind','a blank kind is no kind');
 select throws_ok($$select admin_resolve_report((select id from fx where name='name'),'rejected',p_resolution_kind=>'spam')$$,
   '22023','invalid resolution kind','unknown kinds are refused');
+select throws_ok($$select admin_resolve_report((select id from fx where name='name'),'rejected',null,'  ',p_resolution_kind=>'other')$$,
+  '22023','resolution kind other needs a note','other without a note is refused');
 select is((select status from moderation_queue where id=(select id from fx where name='name')),'pending','a refused rejection leaves the report pending');
 select is(admin_resolve_report(p_id=>(select id from fx where name='guide'),p_decision=>'accepted',p_patch=>'{"entrance_note":"由後門進入"}',p_note=>'',p_force=>false)->>'status',
   'accepted','an older call that accepts still works');
@@ -135,7 +139,7 @@ set local role authenticated;
 select throws_ok($$select * from admin_review_baseline(0)$$,'22023',null,'the window must be at least a month');
 select is((select count(*)::int from admin_review_baseline(3)),3,'one row per month');
 create temporary table b on commit drop as select * from admin_review_baseline(1);
-select is((select reports from b),17,'reports queued this month');
+select is((select reports from b),18,'reports queued this month');
 select is((select reporters from b),1,'distinct reporters this month');
 select is((select auto_reports from b),1,'vote-triggered reports have no reporter');
 select is((select resolved from b),4,'every resolution this month counts');

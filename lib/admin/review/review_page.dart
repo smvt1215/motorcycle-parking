@@ -83,11 +83,16 @@ class _ReviewPageState extends State<ReviewPage> {
   Future<void> _decide(ReviewReport report, ReviewDecision decision) async {
     ResolutionKind? kind;
     if (decision == ReviewDecision.reject) {
-      kind = await pickRejectReason(
+      final notes = _notes.putIfAbsent(report.id, TextEditingController.new);
+      final reason = await pickRejectReason(
         context,
         compact: MediaQuery.sizeOf(context).width < reviewCompactWidth,
+        note: notes.text,
       );
-      if (kind == null || !mounted) return;
+      if (reason == null || !mounted) return;
+      kind = reason.kind;
+      // The note written in the picker is the one sent and kept on the page.
+      if (reason.note.isNotEmpty) notes.text = reason.note;
     }
     final messenger = ScaffoldMessenger.of(context);
     // The page is rebuilt for the next report's route; keep the router.

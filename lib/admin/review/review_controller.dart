@@ -290,6 +290,11 @@ class ReviewController extends ChangeNotifier {
       _notify();
       return report.id;
     }
+    if (resolutionKind == ResolutionKind.other && note.trim().isEmpty) {
+      error = '選「其他原因」時，請在處理說明寫下原因。';
+      _notify();
+      return report.id;
+    }
     if (problem != null) {
       error = problem;
       _notify();
