@@ -174,6 +174,37 @@ void main() {
       expect(spots.positionResolved, isFalse);
     });
 
+    test('移回原座標但縣市已被改掉時，仍重新查詢', () async {
+      await spots.open(communityId);
+      final lat = gateway.spotRows[communityId]!['lat'];
+      gateway.townAt = const Town('新北市', '三重區');
+      spots.set('lat', 25.07);
+      await spots.locate();
+      expect(spots.draft['city'], '新北市');
+      spots.set('lat', lat);
+      expect(spots.positionResolved, isFalse);
+      gateway.townAt = const Town('臺北市', '中山區');
+      final before = gateway.townRequests;
+      expect(await spots.save(''), isTrue);
+      expect(gateway.townRequests, before + 1);
+      expect(spots.record!.values['city'], '臺北市');
+    });
+
+    test('查詢中連按兩次建立，只建立一筆', () async {
+      spots.startNew(SpotKind.community, 25.06, 121.52);
+      await Future<void>.delayed(Duration.zero);
+      spots.set('name', '新的機車格');
+      spots.set('space_type', 'freeMotorcycle');
+      spots.set('lat', 25.061);
+      gateway.delayedTown = Completer<void>();
+      final first = spots.save('');
+      final second = spots.save('');
+      gateway.delayedTown!.complete();
+      expect(await second, isFalse);
+      expect(await first, isTrue);
+      expect(gateway.created, hasLength(1));
+    });
+
     test('改為官方點只送管理者填的來源與資格', () async {
       await spots.open(communityId);
       final id = await spots.promote({
@@ -370,6 +401,24 @@ void main() {
       expect(gateway.created.single.$2['city'], '臺北市');
       expect(find.text('已建立：新的機車格'), findsOneWidget);
       expect(find.text('社群點（社群回報整理）'), findsOneWidget);
+    });
+
+    testWidgets('換新增類型時表單欄位重新開始', (tester) async {
+      await show(tester);
+      await tester.tap(find.text('新增停車點'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('社群點').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.widgetWithText(TextFormField, '名稱'), '暫時名稱');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('新增停車點'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('官方點').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('放棄修改').last);
+      await tester.pumpAndSettle();
+      expect(find.text('新增官方點'), findsOneWidget);
+      expect(find.text('暫時名稱'), findsNothing);
     });
 
     testWidgets('移動超過 150 m 時儲存前確認', (tester) async {

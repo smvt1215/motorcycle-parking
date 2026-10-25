@@ -181,10 +181,14 @@ class SpotsController extends ChangeNotifier {
     if (lat is! num || lng is! num) return false;
     final at = (lat.toDouble(), lng.toDouble());
     final r = record;
+    // Back at the stored position, the stored county and district hold only
+    // if the form still has them; a lookup for elsewhere may have changed them.
     if (r != null &&
         !r.isNew &&
         r.values['lat'] == lat &&
-        r.values['lng'] == lng) {
+        r.values['lng'] == lng &&
+        draft['city'] == r.values['city'] &&
+        draft['district'] == r.values['district']) {
       return true;
     }
     return _locatedFor == at;
@@ -261,8 +265,13 @@ class SpotsController extends ChangeNotifier {
     }
   }
 
+  /// Bumped for every form shown, including each new spot: fields keyed by
+  /// it start over instead of keeping the last form's text.
+  int formSeq = 0;
+
   void _load(SpotRecord? loaded) {
     record = loaded;
+    formSeq++;
     attempted = false;
     // Lookups still running belong to the previous form.
     _locateSeq++;
@@ -316,24 +325,26 @@ class SpotsController extends ChangeNotifier {
       _notify();
       return false;
     }
-    // A moved spot is saved with the county and district of where it is now,
-    // so the right rules apply; finish that lookup first.
-    if (!positionResolved) {
-      await locate();
-      if (!identical(record, current)) return false;
-      if (!positionResolved) {
-        saveError = '新位置的縣市與行政區尚未查到，無法儲存。請重試查詢，或確認表單中的縣市與行政區後按「使用手動填寫的縣市與行政區」。';
-        _notify();
-        return false;
-      }
-    }
-    final values = changes;
-    if (values.isEmpty) return true;
     final generation = _generation;
+    // Locked before the first wait: a second click must not start a second
+    // save (a new spot would be created twice).
     saving = true;
     saveError = null;
     _notify();
     try {
+      // A moved spot is saved with the county and district of where it is
+      // now, so the right rules apply; finish that lookup first.
+      if (!positionResolved) {
+        await locate();
+        if (!identical(record, current)) return false;
+        if (!positionResolved) {
+          saveError =
+              '新位置的縣市與行政區尚未查到，無法儲存。請重試查詢，或確認表單中的縣市與行政區後按「使用手動填寫的縣市與行政區」。';
+          return false;
+        }
+      }
+      final values = changes;
+      if (values.isEmpty) return true;
       final saved = current.isNew
           ? await gateway!.createSpot(current.newKind!, values, note)
           : await gateway!.updateSpot(

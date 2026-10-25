@@ -678,7 +678,7 @@ class _FormPane extends StatelessWidget {
           Expanded(
             child: ListView(
               // Another spot starts at the top, not where the last one was.
-              key: ValueKey('spot-form-${record.sourceId}'),
+              key: ValueKey('spot-form-${record.sourceId}-${spots.formSeq}'),
               padding: EdgeInsets.fromLTRB(pad, compact ? 8 : 22, pad, 24),
               children: [
                 ?back,
@@ -747,7 +747,7 @@ class _FormPane extends StatelessWidget {
                       // Coordinates follow the picker and the county
                       // follows the lookup; their fields must show it.
                       key: ValueKey(
-                        '${record.sourceId}-${record.updatedAt}-${f.key}'
+                        '${record.sourceId}-${spots.formSeq}-${f.key}'
                         '${switch (f.key) {
                           'lat' || 'lng' => '-$moves',
                           'city' || 'district' => '-${spots.filled}',
