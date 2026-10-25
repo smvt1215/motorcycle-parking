@@ -32,11 +32,19 @@ String? profileAvatarUrl(User? user) {
   return null;
 }
 
+/// Mirrors the server-side contributor name cleanup: invisible format
+/// characters (Unicode Cf, including bidi controls and ZWJ) are removed and
+/// runs of whitespace become one space.
+String normalizeProfileName(String value) => value
+    .replaceAll(RegExp(r'\p{Cf}', unicode: true), '')
+    .replaceAll(RegExp(r'\s+'), ' ')
+    .trim();
+
 String? profileNameError(String value) {
-  final name = value.trim();
+  if (RegExp(r'[\x00-\x1f\x7f-\x9f]').hasMatch(value)) return '顯示名稱請使用單行文字';
+  final name = normalizeProfileName(value);
   if (name.isEmpty) return '請填寫顯示名稱';
   if (name.runes.length > 40) return '顯示名稱最多 40 個字';
-  if (RegExp(r'[\x00-\x1f\x7f]').hasMatch(name)) return '顯示名稱請使用單行文字';
   return null;
 }
 
@@ -93,7 +101,9 @@ class ProfileRepository {
     final userId = user.id;
     final oldPath = user.userMetadata?['profile_avatar_path'];
     String? newPath;
-    final data = <String, dynamic>{'display_name': displayName.trim()};
+    final data = <String, dynamic>{
+      'display_name': normalizeProfileName(displayName),
+    };
     try {
       if (avatarBytes != null) {
         final format = avatarFormat(avatarBytes);
