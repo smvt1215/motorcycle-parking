@@ -196,7 +196,9 @@ class _SpotRow extends StatelessWidget {
         ),
       ),
       title: Text(spot.name, maxLines: 2, overflow: TextOverflow.ellipsis),
-      subtitle: Text('${spot.city}${spot.district} · ${eligibility.label}'),
+      subtitle: Text(
+        '${spot.city}${spot.district} · ${store.eligibleLabel(spot)}',
+      ),
       trailing: const Icon(Icons.edit_outlined),
       onTap: onTap,
     );

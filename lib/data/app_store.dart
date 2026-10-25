@@ -11,6 +11,7 @@ import '../core/geo.dart';
 import '../core/location_access.dart';
 import '../core/navigation.dart' as navigation;
 import '../domain/eligibility.dart';
+import '../domain/eligibility_display.dart';
 import '../domain/map_viewport.dart';
 import '../models/parking.dart';
 import 'repositories.dart';
@@ -235,6 +236,10 @@ class AppStore extends ChangeNotifier {
 
   Eligibility eligible(ParkingSpot spot) =>
       eligibility(spot, vehicle, ruleFor(spot));
+
+  /// [eligible]'s short status for a list, keeping a rider's claim visible.
+  String eligibleLabel(ParkingSpot spot) =>
+      eligibilityListLabel(spot, vehicle, eligible(spot));
   Future<void> markLegendSeen() {
     introduceLegend = false;
     return local.setLegendSeen();
