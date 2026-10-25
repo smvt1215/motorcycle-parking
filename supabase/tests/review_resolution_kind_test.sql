@@ -100,6 +100,11 @@ select is((select resolution_kind from moderation_queue where id=(select id from
 select is(admin_resolve_report((select id from fx where name='name'),'rejected',null,'已有相同名稱建議',p_resolution_kind=>'duplicate')->>'resolution_kind',
   'duplicate','a rejection with a kind is recorded');
 select is((select resolution_kind from moderation_queue where id=(select id from fx where name='name')),'duplicate','the kind is stored on the report');
+-- 202610260010's fee check still runs in the redefined RPC.
+select throws_ok($$select admin_resolve_report((select id from fx where name='fee'),'accepted',
+  '{"fee":{"scooter":{"mode":"daily","amount":30}},"fee_note":"每日 30 元"}',p_resolution_kind=>'other',p_note=>'改為結構化費率')$$,
+  '22023','fee_note must be the text of fee','the fee text check survives alongside the resolution kind');
+select is((select status from moderation_queue where id=(select id from fx where name='fee')),'pending','a refused fee patch leaves the report pending');
 -- Closing without a change may say why.
 select is(admin_resolve_report((select id from fx where name='fee'),'accepted',null,'',p_resolution_kind=>'outdated')->>'status','accepted','closing may carry a kind');
 select is((select resolution_kind from moderation_queue where id=(select id from fx where name='fee')),'outdated','the closing kind is stored');

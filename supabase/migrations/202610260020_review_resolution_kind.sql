@@ -115,6 +115,9 @@ revoke execute on function public.moderation_reject_kind() from public,anon,auth
 create trigger moderation_reject_kind before update on public.moderation_queue
   for each row execute function public.moderation_reject_kind();
 
+-- Based on 202610260010_admin_spot_fee.sql's definition (vehicle
+-- verification set_config, field-level version conflicts, and fee_note
+-- matching fee checked after the conflict check, p_force included).
 -- p_resolution_kind is new, so the old signature goes. Callers using named
 -- arguments keep working for accepting and closing; a rejection without a
 -- kind is refused (22023) and the report stays pending, so an older admin
@@ -188,6 +191,9 @@ begin
         raise exception 'spot changed since the report' using errcode='40001',
           hint='Review the current values, then apply again with p_force.';
       end if;
+      if (v_patch ? 'fee' or v_patch ? 'fee_note') and not public.fee_note_matches(v_before||v_patch) then
+        raise exception 'fee_note must be the text of fee' using errcode='22023';
+      end if;
       update community_spots c set (name,lat,lng,city,district,space_type,fee_note,note,scooter_allowed,heavy_allowed,
           facility_type,parking_access,address,road_segment,entrance_note,parking_guide,special_rules,fee,status,updated_at)
         =(select r.name,r.lat,r.lng,r.city,r.district,r.space_type,r.fee_note,r.note,r.scooter_allowed,r.heavy_allowed,
@@ -209,6 +215,9 @@ begin
       if v_conflict and not coalesce(p_force,false) then
         raise exception 'spot changed since the report' using errcode='40001',
           hint='Review the current values, then apply again with p_force.';
+      end if;
+      if (v_patch ? 'fee' or v_patch ? 'fee_note') and not public.fee_note_matches(v_before||v_patch) then
+        raise exception 'fee_note must be the text of fee' using errcode='22023';
       end if;
       update official_heavy_spots o set (name,lat,lng,city,district,space_type,fee_note,note,scooter_allowed,heavy_allowed,
           facility_type,parking_access,address,road_segment,entrance_note,parking_guide,special_rules,fee,hidden,updated_at)

@@ -26,7 +26,8 @@ const spot = { lat: 25.0581, lng: 121.5226, city: '臺北市', district: '中山
   address: '', road_segment: '', entrance_note: '', parking_guide: '', special_rules: '', facility_type: null, parking_access: null, scooter_total: null };
 const communitySpot = { ...spot, id: communityId, name: '中山北路二段路邊機車格', space_type: 'paidMotorcycle', status: 'pending' };
 const officialSpot = { ...spot, id: officialId, name: '新北市政府行政大樓地下停車場', city: '新北市', district: '板橋區', lat: 25.0124, lng: 121.4651, space_type: 'offStreet', heavy_allowed: true, source_name: '新北市政府', hidden: false,
-  address: '新北市板橋區中山路一段 161 號', facility_type: 'underground', parking_access: 'scooterHeavy', source_url: 'https://example.test/notice', source_id: 'ntpc-001', effective_date: '2026-01-01', license_note: '' };
+  address: '新北市板橋區中山路一段 161 號', facility_type: 'underground', parking_access: 'scooterHeavy', source_url: 'https://example.test/notice', source_id: 'ntpc-001', effective_date: '2026-01-01', license_note: '',
+  fee: { scooter: { mode: 'hourly', amount: 20, per_minutes: 60 }, heavy: { mode: 'same_as_scooter' } }, fee_note: '每小時 20 元（大型重機比照機車費率）' };
 const hiddenSpot = { ...spot, id: '66666666-6666-4666-8666-666666666666', name: '三重正義北路機車格', city: '新北市', district: '三重區', space_type: 'freeMotorcycle', status: 'hidden' };
 
 function session(role, aal, factors = [factor]) {
@@ -236,6 +237,25 @@ function session(role, aal, factors = [factor]) {
           await waitText('官方點（新北市政府）');
           await page.screenshot({ path: path.join(output, `${name}-spot-form.png`) });
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} spot form scrolls sideways`);
+          // Its structured fee: the editor and the text riders read.
+          {
+            const plate = page.getByText(officialSpot.fee_note);
+            const box = page.viewportSize();
+            const shown = async () => {
+              const at = (await plate.count()) ? await plate.first().boundingBox() : null;
+              return at && at.y > box.height * 0.2 && at.y + at.height < box.height - 180;
+            };
+            await page.mouse.move(box.width * (mobile ? 0.5 : 0.65), box.height * 0.5);
+            for (let i = 0; i < 40 && !(await shown()); i++) {
+              await page.mouse.wheel(0, 120);
+              await page.waitForTimeout(100);
+            }
+            assert.ok(await shown(), `${name} fee text is reachable`);
+            await page.mouse.wheel(0, -160);
+            await page.waitForTimeout(300);
+            await page.screenshot({ path: path.join(output, `${name}-spot-fee.png`) });
+            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} fee editor scrolls sideways`);
+          }
           // A community spot: verify its stored vehicle access as it is.
           if (mobile) await page.getByRole('button', { name: '返回點位清單', exact: true }).click();
           await page.getByRole('button', { name: /^中山北路二段路邊機車格/ }).click();
