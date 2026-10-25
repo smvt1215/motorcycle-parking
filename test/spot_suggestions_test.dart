@@ -46,6 +46,7 @@ Future<RecordingStore> createStore() async {
 Future<void> openDetails(
   WidgetTester tester,
   RecordingStore store, {
+  ParkingSpot selectedSpot = spot,
   double scale = 1,
   Brightness brightness = Brightness.light,
 }) async {
@@ -60,7 +61,7 @@ Future<void> openDetails(
       home: Scaffold(
         body: Builder(
           builder: (context) => TextButton(
-            onPressed: () => showSpot(context, store, spot),
+            onPressed: () => showSpot(context, store, selectedSpot),
             child: const Text('開啟點位'),
           ),
         ),
@@ -315,15 +316,16 @@ void main() {
 
   Future<RecordingStore> openSuggestion(
     WidgetTester tester,
-    String item,
-  ) async {
+    String item, {
+    ParkingSpot selectedSpot = spot,
+  }) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(390, 844);
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final store = (await tester.runAsync(createStore))!;
     addTearDown(store.dispose);
-    await openDetails(tester, store);
+    await openDetails(tester, store, selectedSpot: selectedSpot);
     await tester.ensureVisible(find.text('修改建議'));
     await tester.tap(find.text('修改建議'));
     await tester.pumpAndSettle();
@@ -352,7 +354,12 @@ void main() {
     await tester.scrollUntilVisible(
       button,
       200,
-      scrollable: find.byType(Scrollable).last,
+      scrollable: find
+          .descendant(
+            of: find.byType(Form).last,
+            matching: find.byType(Scrollable),
+          )
+          .first,
     );
     await tester.ensureVisible(button);
     await tester.pumpAndSettle();
@@ -422,6 +429,63 @@ void main() {
       'facility_type': 'surface',
     });
   });
+
+  for (final field in ['facility_type', 'parking_access']) {
+    testWidgets('既有路外場站只修改 $field 也能送出，還原後恢復未變更提示', (tester) async {
+      final lot = ParkingSpot.fromJson({
+        ...spot.toJson(),
+        'space_type': 'offStreet',
+        'facility_type': 'underground',
+        'parking_access': 'scooterHeavy',
+      });
+      final store = await openSuggestion(tester, '格位類型', selectedSpot: lot);
+      await submitSuggestion(tester, '送出建議');
+      const error = '請至少修改格位類型、場站型式或停放分類其中一項';
+      expect(find.text(error), findsOneWidget);
+      expect(store.submissions, isEmpty);
+
+      final control = field == 'facility_type'
+          ? find.byType(SegmentedButton<FacilityType?>)
+          : find.byType(DropdownButtonFormField<ParkingAccess?>);
+      Future<void> choose(String label) async {
+        await tester.scrollUntilVisible(
+          control,
+          -200,
+          scrollable: find
+              .descendant(
+                of: find.byType(Form).last,
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        );
+        await tester.ensureVisible(control);
+        await tester.pumpAndSettle();
+        if (field == 'parking_access') {
+          await tester.tap(control);
+          await tester.pumpAndSettle();
+          await tester.tap(find.text(label).last);
+        } else {
+          await tester.tap(
+            find.descendant(of: control, matching: find.text(label)),
+          );
+        }
+        await tester.pumpAndSettle();
+      }
+
+      await choose(field == 'facility_type' ? '平面' : '大型重機專用');
+      expect(find.text(error), findsNothing);
+      await choose(field == 'facility_type' ? '地下' : '普通機車與大型重機共用');
+      expect(find.text(error), findsOneWidget);
+      await choose(field == 'facility_type' ? '平面' : '大型重機專用');
+      await submitSuggestion(tester, '送出建議');
+      expect(store.submissions.single['proposed'], {
+        'space_type': 'offStreet',
+        field: field == 'facility_type' ? 'surface' : 'heavyOnly',
+      });
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
 
   test('摘要依伺服器的 UTF-16 長度截斷，不切開 emoji', () {
     final emoji = '🛵' * 300;

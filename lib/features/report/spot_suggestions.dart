@@ -539,8 +539,11 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                   initialValue: type,
                   // A new pick clears the error at once.
                   autovalidateMode: AutovalidateMode.onUserInteraction,
-                  validator: (v) =>
-                      v == widget.spot.spaceType ? '這和目前的格位類型相同，請選擇另一種' : null,
+                  validator: (_) => changes().isNotEmpty
+                      ? null
+                      : lotType
+                      ? '請至少修改格位類型、場站型式或停放分類其中一項'
+                      : '這和目前的格位類型相同，請選擇另一種',
                   builder: (state) => Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -549,26 +552,35 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                       SpaceTypePicker(
                         value: type,
                         onChanged: (v) {
-                          state.didChange(v);
-                          setState(() => type = v);
+                          setState(() {
+                            type = v;
+                            state.didChange(v);
+                          });
                         },
                       ),
+                      // These controls form one proposal with the space type.
+                      // Mark the field changed so its error updates immediately.
+                      if (lotType) ...[
+                        const SizedBox(height: 20),
+                        FacilityField(
+                          value: facility,
+                          onChanged: (v) => setState(() {
+                            facility = v;
+                            state.didChange(type);
+                          }),
+                        ),
+                        AccessField(
+                          value: access,
+                          onChanged: (v) => setState(() {
+                            access = v;
+                            state.didChange(type);
+                          }),
+                        ),
+                      ],
                       fieldError(context, state.errorText),
                     ],
                   ),
                 ),
-                // A lot, as on the new-spot form: how it is built, who parks.
-                if (lotType) ...[
-                  const SizedBox(height: 20),
-                  FacilityField(
-                    value: facility,
-                    onChanged: (v) => setState(() => facility = v),
-                  ),
-                  AccessField(
-                    value: access,
-                    onChanged: (v) => setState(() => access = v),
-                  ),
-                ],
                 const SizedBox(height: 20),
               ],
               if (guideField) ...[
