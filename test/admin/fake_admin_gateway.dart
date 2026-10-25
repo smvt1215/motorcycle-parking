@@ -4,6 +4,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:motorcycle_parking/admin/admin_gateway.dart';
 import 'package:motorcycle_parking/admin/review/review_models.dart';
 import 'package:motorcycle_parking/admin/spots/spot_models.dart';
+import 'package:motorcycle_parking/core/town_lookup.dart';
+import 'package:motorcycle_parking/domain/location_check.dart';
 
 Factor factor(
   String id, {
@@ -419,6 +421,47 @@ class FakeAdminGateway implements AdminGateway {
     };
     spotRows[sourceId] = {...row, 'status': 'hidden', 'updated_at': _bump()};
     return id;
+  }
+
+  final List<(SpotKind, Map<String, dynamic>, String)> created = [];
+  Town? townAt = const Town('臺北市', '中山區');
+  bool failTown = false;
+  List<NearbySpot> nearby = const [];
+  int townRequests = 0;
+
+  /// Holds a lookup open, to race it against switching or saving.
+  Completer<void>? delayedTown;
+
+  @override
+  Future<SpotRecord> createSpot(
+    SpotKind kind,
+    Map<String, dynamic> values,
+    String note,
+  ) async {
+    created.add((kind, values, note));
+    final id = kind == SpotKind.official
+        ? 'official:88888888-8888-4888-8888-888888888888'
+        : '77777777-7777-4777-8777-777777777777';
+    spotRows[id] = {
+      'id': id.replaceFirst('official:', ''),
+      'source': 'community',
+      'hidden': false,
+      'status': 'pending',
+      ...values,
+      'updated_at': _bump(),
+    };
+    return SpotRecord(sourceId: id, values: {...spotRows[id]!});
+  }
+
+  @override
+  Future<List<NearbySpot>> nearbySpots(double lat, double lng) async => nearby;
+
+  @override
+  Future<Town?> town(double lat, double lng) async {
+    townRequests++;
+    await delayedTown?.future;
+    if (failTown) throw StateError('offline');
+    return townAt;
   }
 
   Future<void> dispose() => events.close();
