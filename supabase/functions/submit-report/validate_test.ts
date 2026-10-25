@@ -1,4 +1,4 @@
-import { identityHash, validate, validFee } from './validate.ts';
+import { identityHash, validate, validFee, validZones } from './validate.ts';
 const base = {
   device_id: '10000000-0000-4000-8000-000000000001',
   action: 'create',
@@ -203,6 +203,46 @@ Deno.test('fees are a rate per vehicle with known modes only', () => {
     }) ===
       null
   ) throw new Error('suggested bad fee accepted');
+});
+Deno.test('new lots may carry their type, access, entrance, guide and zones', () => {
+  const lot = {
+    ...base,
+    spot: {
+      ...base.spot,
+      space_type: 'offStreet',
+      facility_type: 'underground',
+      parking_access: 'scooterHeavy',
+      entrance_note: '入口在松仁路側',
+      parking_guide: 'B2 機車區靠電梯',
+      parking_zones: [
+        { name: 'B2 機車區', access: 'scooterHeavy', guide: '靠電梯' },
+        { name: 'B3 汽車區', access: 'heavyCar' },
+      ],
+    },
+  };
+  if (validate(lot) !== null) throw new Error('lot details refused');
+  for (
+    const [key, value] of [
+      ['facility_type', 'tower'],
+      ['facility_type', ['underground']],
+      ['parking_access', 'everyone'],
+      ['entrance_note', 'a'.repeat(501)],
+      ['parking_guide', 42],
+      ['parking_zones', {}],
+      ['parking_zones', [{ name: '' }]],
+      ['parking_zones', [{ name: 'B2', access: 'all' }]],
+      ['parking_zones', [{ name: 'B2', fee: 20 }]],
+      [
+        'parking_zones',
+        Array.from({ length: 11 }, (_, i) => ({ name: `Z${i}` })),
+      ],
+    ] as const
+  ) {
+    if (validate({ ...lot, spot: { ...lot.spot, [key]: value } }) === null) {
+      throw new Error(`bad ${key} accepted: ${JSON.stringify(value)}`);
+    }
+  }
+  if (!validZones([]) || validZones(null)) throw new Error('zone list shape');
 });
 Deno.test('identity hashes are deterministic, namespaced and keyed', async () => {
   const a = await identityHash('secret', 'ip:127.0.0.1');

@@ -67,6 +67,28 @@ function validRate(v: unknown, heavy: boolean): boolean {
     ? whole(r.amount, 0, 10000)
     : true;
 }
+const facilityTypes = ['multiStorey', 'underground', 'surface', 'roadside'];
+const accessKinds = [
+  'scooterOnly',
+  'scooterHeavy',
+  'heavyCar',
+  'noMotorcycle',
+  'heavyOnly',
+];
+/** A lot's zones as riders report them: named, with access and a guide. */
+export function validZones(v: unknown): boolean {
+  if (!Array.isArray(v) || v.length > 10) return false;
+  return v.every((z) => {
+    if (!z || typeof z !== 'object' || Array.isArray(z)) return false;
+    const zone = z as Record<string, unknown>;
+    return Object.keys(zone).every((k) =>
+      ['name', 'access', 'guide'].includes(k)
+    ) &&
+      text(40, 1)(zone.name) &&
+      (!('access' in zone) || oneOf(accessKinds)(zone.access)) &&
+      (!('guide' in zone) || text(200)(zone.guide));
+  });
+}
 /** A rate per vehicle; a missing vehicle is unconfirmed. */
 export function validFee(v: unknown): boolean {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return false;
@@ -88,14 +110,8 @@ const proposedChecks: Record<string, (v: unknown) => boolean> = {
   note: text(500),
   scooter_allowed: flag,
   heavy_allowed: flag,
-  facility_type: oneOf(['multiStorey', 'underground', 'surface', 'roadside']),
-  parking_access: oneOf([
-    'scooterOnly',
-    'scooterHeavy',
-    'heavyCar',
-    'noMotorcycle',
-    'heavyOnly',
-  ]),
+  facility_type: oneOf(facilityTypes),
+  parking_access: oneOf(accessKinds),
   address: text(200),
   road_segment: text(200),
   entrance_note: text(500),
@@ -208,6 +224,18 @@ export function validate(body: Record<string, unknown>): string | null {
       }
       if (s.fee !== undefined && s.fee !== null && !validFee(s.fee)) {
         return 'invalid fee';
+      }
+      // Lot details, each optional and checked like the columns they fill.
+      for (
+        const [key, check] of [
+          ['facility_type', oneOf(facilityTypes)],
+          ['parking_access', oneOf(accessKinds)],
+          ['entrance_note', text(500)],
+          ['parking_guide', text(500)],
+          ['parking_zones', validZones],
+        ] as const
+      ) {
+        if (s[key] !== undefined && !check(s[key])) return `invalid ${key}`;
       }
     }
   }
