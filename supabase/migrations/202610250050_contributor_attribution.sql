@@ -1,62 +1,129 @@
--- Public attribution is a display-name snapshot, never an account identifier
--- or an authorization claim. Imported and admin-added points need only a role.
+-- Public attribution shows the reporter's current account name, never an
+-- account identifier or an authorization claim. The name column is a public
+-- cache kept in sync with the account; imported and admin-added points need
+-- only a role, which is fixed when the point is created.
 alter table public.community_spots
   add column contributor_name text not null default '' check (char_length(contributor_name)<=40),
   add column contributor_role text not null default 'rider' check (contributor_role in ('rider','admin','import'));
+create index community_spots_user_idx on public.community_spots(user_id);
 
--- Invoked only by the migration and the private, security-definer trigger.
--- user metadata supplies display text, while only app metadata supplies role.
-create function public.spot_contributor_snapshot(p_user uuid,p_source text)
-returns table(contributor_name text,contributor_role text)
-language sql stable security invoker set search_path='' as $$
-  with actor as (
-    select u.raw_user_meta_data as metadata,
-      case when p_source='import' then 'import'
-        when u.raw_app_meta_data->>'role'='admin' then 'admin' else 'rider' end as kind
-    from (values(p_user)) requested(id)
-    left join auth.users u on u.id=requested.id
-  )
-  select case when actor.kind='rider' then coalesce((
+-- Names an administrator removed stay removed, whatever the account later
+-- calls itself. Private: only the audited RPC below writes it.
+create table public.contributor_name_clears (
+  spot_id uuid primary key references public.community_spots(id) on delete cascade,
+  cleared_by uuid not null,
+  note text not null default '' check (char_length(note)<=500),
+  cleared_at timestamptz not null default now()
+);
+alter table public.contributor_name_clears enable row level security;
+revoke all on public.contributor_name_clears from anon,authenticated;
+
+-- A name the user set in the app comes first; a sign-in provider's name is the
+-- fallback. User metadata is display text only and never supplies the role.
+create function public.contributor_display_name(p_metadata jsonb)
+returns text language sql immutable set search_path='' as $$
+  select coalesce((
     select left(candidate.cleaned,40)
     from (
       select priority,btrim(regexp_replace(value,'[[:cntrl:][:space:]]+',' ','g')) as cleaned
       from (values
-        (1,case when jsonb_typeof(actor.metadata->'display_name')='string' then actor.metadata->>'display_name' end),
-        (2,case when jsonb_typeof(actor.metadata->'full_name')='string' then actor.metadata->>'full_name' end),
-        (3,case when jsonb_typeof(actor.metadata->'name')='string' then actor.metadata->>'name' end)
+        (1,case when jsonb_typeof(p_metadata->'display_name')='string' then p_metadata->>'display_name' end),
+        (2,case when jsonb_typeof(p_metadata->'full_name')='string' then p_metadata->>'full_name' end),
+        (3,case when jsonb_typeof(p_metadata->'name')='string' then p_metadata->>'name' end)
       ) supplied(priority,value)
     ) candidate
     where candidate.cleaned<>'' order by candidate.priority limit 1
-  ),'') else '' end,actor.kind
-  from actor;
+  ),'');
 $$;
-revoke execute on function public.spot_contributor_snapshot(uuid,text) from public,anon,authenticated,service_role;
+revoke execute on function public.contributor_display_name(jsonb) from public,anon,authenticated;
 
--- Backfill names without touching point freshness, source credits or fees.
+-- Only app metadata, which users cannot write, makes an administrator.
+create function public.spot_contributor_role(p_user uuid,p_source text)
+returns text language sql stable security invoker set search_path='' as $$
+  select case when p_source='import' then 'import'
+    when exists(select 1 from auth.users u where u.id=p_user and u.raw_app_meta_data->>'role'='admin') then 'admin'
+    else 'rider' end;
+$$;
+revoke execute on function public.spot_contributor_role(uuid,text) from public,anon,authenticated,service_role;
+
+-- Riders show their current name. Administrators, imports, cleared names and
+-- deleted accounts show none.
+create function public.spot_contributor_name(p_spot uuid,p_user uuid,p_role text)
+returns text language sql stable security invoker set search_path='' as $$
+  select case when p_role<>'rider'
+      or exists(select 1 from public.contributor_name_clears c where c.spot_id=p_spot) then ''
+    else coalesce((select public.contributor_display_name(u.raw_user_meta_data)
+      from auth.users u where u.id=p_user and u.deleted_at is null),'') end;
+$$;
+revoke execute on function public.spot_contributor_name(uuid,uuid,text) from public,anon,authenticated,service_role;
+
+-- Backfill without touching point freshness, source credits or fees.
 update public.community_spots s
-  set (contributor_name,contributor_role)=(
-    select snapshot.contributor_name,snapshot.contributor_role
-    from public.spot_contributor_snapshot(s.user_id,s.source) snapshot
-  );
+  set contributor_role=public.spot_contributor_role(s.user_id,s.source);
+update public.community_spots s
+  set contributor_name=public.spot_contributor_name(s.id,s.user_id,s.contributor_role);
 
-create function public.snapshot_spot_contributor() returns trigger
+-- Every write path, privileged RPCs included, gets server-derived values:
+-- the role is fixed at creation and the name always follows the account.
+create function public.community_spot_contributor() returns trigger
 language plpgsql security definer set search_path='' as $$
 begin
-  if tg_op='UPDATE' then
-    -- Editing a point, even through a privileged RPC, cannot replace its author.
-    new.contributor_name:=old.contributor_name;
-    new.contributor_role:=old.contributor_role;
+  if tg_op='INSERT' then
+    new.contributor_role:=public.spot_contributor_role(new.user_id,new.source);
   else
-    select snapshot.contributor_name,snapshot.contributor_role
-      into new.contributor_name,new.contributor_role
-      from public.spot_contributor_snapshot(new.user_id,new.source) snapshot;
+    new.contributor_role:=old.contributor_role;
   end if;
+  new.contributor_name:=public.spot_contributor_name(new.id,new.user_id,new.contributor_role);
   return new;
 end;
 $$;
-revoke execute on function public.snapshot_spot_contributor() from public,anon,authenticated,service_role;
-create trigger community_spots_contributor_snapshot before insert or update on public.community_spots
-  for each row execute function public.snapshot_spot_contributor();
+revoke execute on function public.community_spot_contributor() from public,anon,authenticated,service_role;
+create trigger community_spots_contributor before insert or update on public.community_spots
+  for each row execute function public.community_spot_contributor();
+
+-- Renaming or deleting an account updates every point it reported.
+create function public.sync_contributor_names() returns trigger
+language plpgsql security definer set search_path='' as $$
+begin
+  if public.contributor_display_name(old.raw_user_meta_data) is distinct from public.contributor_display_name(new.raw_user_meta_data)
+     or (old.deleted_at is null) is distinct from (new.deleted_at is null) then
+    -- The row trigger above recomputes the name from the updated account.
+    update public.community_spots s set contributor_name='' where s.user_id=new.id;
+  end if;
+  return null;
+end;
+$$;
+revoke execute on function public.sync_contributor_names() from public,anon,authenticated,service_role;
+create trigger community_contributor_names after update of raw_user_meta_data,deleted_at on auth.users
+  for each row execute function public.sync_contributor_names();
+
+-- Moderation: an administrator removes one point's public name, audited.
+create function public.admin_clear_contributor_name(p_spot_id uuid,p_note text default '')
+returns jsonb language plpgsql security definer set search_path='' as $$
+declare
+  v_note text:=btrim(coalesce(p_note,''));
+  v_before text; v_role text;
+begin
+  if not public.is_admin() then
+    raise exception 'admin with a second factor required' using errcode='42501';
+  end if;
+  if p_spot_id is null or char_length(v_note)>500 then
+    raise exception 'invalid contributor change' using errcode='22023';
+  end if;
+  select s.contributor_name into v_before from public.community_spots s where s.id=p_spot_id for update;
+  if not found then raise exception 'spot not found' using errcode='22023'; end if;
+  insert into public.contributor_name_clears(spot_id,cleared_by,note)
+    values(p_spot_id,auth.uid(),v_note) on conflict(spot_id) do nothing;
+  update public.community_spots s set contributor_name='' where s.id=p_spot_id
+    returning s.contributor_role into v_role;
+  insert into public.admin_audit_log(actor,action,target_table,target_id,before,after,note)
+  values(auth.uid(),'clear_contributor_name','community_spots',p_spot_id::text,
+    jsonb_build_object('contributor_name',v_before),jsonb_build_object('contributor_name',''),v_note);
+  return jsonb_build_object('id',p_spot_id,'contributor_name','','contributor_role',v_role);
+end;
+$$;
+revoke execute on function public.admin_clear_contributor_name(uuid,text) from public,anon;
+grant execute on function public.admin_clear_contributor_name(uuid,text) to authenticated;
 
 grant select (contributor_name,contributor_role) on public.community_spots to anon,authenticated;
 create or replace view public.public_spots with (security_invoker=true) as

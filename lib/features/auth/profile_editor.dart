@@ -180,7 +180,7 @@ class _ProfileEditorState extends State<ProfileEditor> {
                 maxLength: 40,
                 decoration: const InputDecoration(
                   labelText: '顯示名稱',
-                  helperText: '新回報會使用這個名稱',
+                  helperText: '你回報的停車點會顯示這個名稱',
                 ),
                 validator: (value) => profileNameError(value ?? ''),
                 onChanged: (_) => setState(() {}),

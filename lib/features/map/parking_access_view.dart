@@ -15,14 +15,41 @@ class ParkingAccessView extends StatelessWidget {
         access: reportedAccess(spot),
         scooter: spot.scooterAllowed,
         heavy: spot.heavyAllowed,
-        scooterFee: spot.fee.scooter?.text ?? '',
-        heavyFee: spot.fee.heavy?.text ?? '',
-        showFees: !spot.fee.isEmpty,
+        scooterFee: spot.fee?.scooter?.text ?? '',
+        heavyFee: spot.fee?.heavy?.text ?? '',
+        showFees: spot.fee != null,
       );
     }
+    // A lot-wide structured rate supersedes each zone's legacy fee text.
+    final lotFee = lotWideFee(spot);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (lotFee != null) ...[
+          Text(
+            '全場費率',
+            style: Theme.of(context).textTheme.titleSmall
+                ?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          _ZoneNote(
+            icon: Icons.moped_outlined,
+            label: '普通機車',
+            value: lotFee.scooter?.text ?? '費率未確認',
+          ),
+          const SizedBox(height: 8),
+          _ZoneNote(
+            icon: Icons.two_wheeler,
+            label: '大型重機',
+            value: lotFee.heavy?.text ?? '費率未確認',
+          ),
+          const SizedBox(height: 16),
+          Divider(
+            height: 1,
+            color: Theme.of(context).colorScheme.outlineVariant,
+          ),
+          const SizedBox(height: 16),
+        ],
         for (final (index, zone) in spot.zones.indexed) ...[
           if (index > 0) ...[
             const SizedBox(height: 16),
@@ -50,14 +77,19 @@ class ParkingAccessView extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          _AccessGroup(
-            access: zone.access,
-            scooterFee: zone.scooterFeeText,
-            heavyFee: zone.heavyFeeText,
-            carFee: zone.carFeeNote,
-            showFees: zone.hasVehicleFees,
-          ),
-          if (zone.fee.isEmpty && zone.feeNote.trim().isNotEmpty) ...[
+          if (lotFee != null)
+            _AccessGroup(access: zone.access)
+          else
+            _AccessGroup(
+              access: zone.access,
+              scooterFee: zone.scooterFeeText,
+              heavyFee: zone.heavyFeeText,
+              carFee: zone.carFeeNote,
+              showFees: zone.hasVehicleFees,
+            ),
+          if (lotFee == null &&
+              zone.fee == null &&
+              zone.feeNote.trim().isNotEmpty) ...[
             const SizedBox(height: 10),
             _ZoneNote(
               icon: Icons.payments_outlined,

@@ -18,7 +18,7 @@ void main() {
     for (final spot in spots) {
       expect(spot.isOfficial, isFalse);
       expect(spot.status, TrustStatus.pending);
-      expect(sourceSummary(spot, demo: false), '由管理員匯入整理');
+      expect(sourceSummary(spot, demo: false), '由管理員自其他社群統整後匯入');
       expect(trustSummary(spot, demo: false), '待確認');
       // Pending imports never read as unconditional, whatever the source claims.
       for (final vehicle in VehicleType.values) {

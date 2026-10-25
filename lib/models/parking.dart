@@ -107,7 +107,7 @@ class ParkingZone {
     this.scooterFeeNote = '',
     this.heavyFeeNote = '',
     this.carFeeNote = '',
-    this.fee = const Fee(),
+    this.fee,
   });
 
   final String name, feeNote, guide;
@@ -116,15 +116,16 @@ class ParkingZone {
   /// Empty means unprovided; a generic fee note is never copied into a rate.
   final String scooterFeeNote, heavyFeeNote, carFeeNote;
   final ParkingAccess? access;
-  final Fee fee;
+  final Fee? fee;
 
   /// Structured rates supersede the legacy vehicle strings as one record.
   /// A missing vehicle remains unconfirmed, even if an old string exists.
   String get scooterFeeText =>
-      fee.isEmpty ? scooterFeeNote : fee.scooter?.text ?? '';
-  String get heavyFeeText => fee.isEmpty ? heavyFeeNote : fee.heavy?.text ?? '';
+      fee == null ? scooterFeeNote : fee!.scooter?.text ?? '';
+  String get heavyFeeText =>
+      fee == null ? heavyFeeNote : fee!.heavy?.text ?? '';
   bool get hasVehicleFees =>
-      !fee.isEmpty ||
+      fee != null ||
       [
         scooterFeeNote,
         heavyFeeNote,
@@ -139,7 +140,7 @@ class ParkingZone {
     scooterFeeNote: _feeNoteText(json['scooter_fee_note']),
     heavyFeeNote: _feeNoteText(json['heavy_fee_note']),
     carFeeNote: _feeNoteText(json['car_fee_note']),
-    fee: Fee.fromJson(json['fee']),
+    fee: json['fee'] is Map ? Fee.fromJson(json['fee']) : null,
   );
 
   Map<String, dynamic> toJson() => {
@@ -150,7 +151,7 @@ class ParkingZone {
     if (scooterFeeNote.isNotEmpty) 'scooter_fee_note': scooterFeeNote,
     if (heavyFeeNote.isNotEmpty) 'heavy_fee_note': heavyFeeNote,
     if (carFeeNote.isNotEmpty) 'car_fee_note': carFeeNote,
-    if (!fee.isEmpty) 'fee': fee.toJson(),
+    if (fee case final fee?) 'fee': fee.toJson(),
   };
 }
 
@@ -182,7 +183,7 @@ class ParkingSpot {
     required this.spaceType,
     this.source = 'community',
     this.feeNote = '請依現場公告',
-    this.fee = const Fee(),
+    this.fee,
     this.scooterTotal,
     this.available,
     this.heavyAllowed,
@@ -216,7 +217,7 @@ class ParkingSpot {
   /// Public attribution only, supplied by the backend without contributor ids.
   /// The role describes who added the point; it never grants app permissions.
   final String contributorName, contributorRole;
-  final Fee fee;
+  final Fee? fee;
   final double lat, lng;
   final SpaceType spaceType;
   final int? scooterTotal, available;
@@ -290,7 +291,7 @@ class ParkingSpot {
       source: j['source'] as String? ?? 'community',
       spaceType: _kind(j) ?? SpaceType.values.byName(j['space_type'] as String),
       feeNote: j['fee_note'] as String? ?? '請依現場公告',
-      fee: Fee.fromJson(j['fee']),
+      fee: j['fee'] is Map ? Fee.fromJson(j['fee']) : null,
       scooterTotal: j['scooter_total'] as int?,
       available: j['available'] as int?,
       heavyAllowed: j['heavy_allowed'] as bool?,
@@ -348,7 +349,7 @@ class ParkingSpot {
       // builds that predate newer kinds (see [_newKinds]); `exact` restores it.
       'space_type': legacy ? SpaceType.offStreet.name : spaceType.name,
       'fee_note': feeNote,
-      if (!fee.isEmpty) 'fee': fee.toJson(),
+      if (fee case final fee?) 'fee': fee.toJson(),
       'scooter_total': scooterTotal,
       'available': available,
       'heavy_allowed': legacy ? null : heavyAllowed,

@@ -317,9 +317,6 @@ class _SpotSheetState extends State<SpotSheet> {
                                 _DetailField(
                                   label: '資料來源',
                                   value: sourceSummary(spot, demo: store.demo),
-                                  secondary: !store.demo && spot.isOfficial
-                                      ? contributorSummary(spot)
-                                      : '',
                                 ),
                                 _DetailField(
                                   label: '更新時間',
@@ -391,7 +388,7 @@ class _SpotSheetState extends State<SpotSheet> {
 }
 
 String _additionalFeeNote(ParkingSpot spot) {
-  if (!spot.fee.isEmpty) return '';
+  if (spot.fee != null) return '';
   final rates = [
     for (final zone in spot.zones) ...[
       zone.feeNote,
@@ -574,15 +571,7 @@ class _SpotSummary extends StatelessWidget {
   final VehicleType vehicle;
   @override
   Widget build(BuildContext context) {
-    final perVehicle = spot.zones.any((zone) => zone.hasVehicleFees);
-    final perZone = spot.zones.any((zone) => zone.feeNote.trim().isNotEmpty);
-    final singleZone = perVehicle && spot.zones.length == 1
-        ? spot.zones.single
-        : null;
-    final feeLabel =
-        singleZone != null || (!spot.fee.isEmpty && !perVehicle && !perZone)
-        ? '${vehicle.label}費率'
-        : '收費資訊';
+    final feeLabel = spotFeeIsVehicleRate(spot) ? '${vehicle.label}費率' : '收費資訊';
     final feeValue = spotFeeSummary(spot, vehicle);
     final available = spot.available;
     final availabilityTime =
