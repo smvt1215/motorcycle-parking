@@ -474,8 +474,13 @@ class ZoneEditor extends StatelessWidget {
           const SizedBox(height: 12),
           Material(
             key: ObjectKey(zone),
+            // Outlined: the sheet shares this surface, so a fill alone would
+            // not show where one zone ends.
             color: colors.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: colors.outlineVariant),
+            ),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 8, 16),
               child: Column(
