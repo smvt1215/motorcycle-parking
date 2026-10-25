@@ -1,5 +1,6 @@
 import '../../models/fee.dart';
 import '../../models/parking.dart';
+import '../../domain/eligibility.dart';
 
 /// A single zone can show its actual price in the preview. A zone never
 /// inherits the lot's fee or another vehicle's price.
@@ -48,16 +49,21 @@ bool spotFeeIsVehicleRate(ParkingSpot spot) => hasZoneFees(spot)
     : spot.fee != null ||
           (spot.zones.length == 1 && spot.zones.single.hasVehicleFees);
 
-Uri? sourceLinkUri(String value) {
-  final uri = Uri.tryParse(value.trim());
-  if (uri == null ||
-      !uri.isAbsolute ||
-      (uri.scheme != 'https' && uri.scheme != 'http') ||
-      uri.host.isEmpty) {
-    return null;
-  }
-  return uri;
-}
+/// Details link to the official license, never to imported community maps.
+Uri? licenseLinkUri(ParkingSpot spot) =>
+    spot.isOfficial ? Uri.https('data.gov.tw', '/license') : null;
+
+String regionSummary(ParkingSpot spot) =>
+    '${spot.city.trim()}${spot.district.trim()}';
+
+String decisionExplanation(ParkingSpot spot, Eligibility eligibility) =>
+    eligibility.status == EligibilityStatus.unverified &&
+        spot.isFacility &&
+        !spot.isOfficial &&
+        spot.status == TrustStatus.confirmed &&
+        !spot.stale
+    ? '已確認此停車點存在；目前車種是否開放仍待查核，請以入口公告為準。'
+    : eligibility.reason;
 
 String facilitySummary(ParkingSpot spot) =>
     spot.facilityType?.label ?? (spot.isFacility ? '路外停車場（型式未提供）' : '路邊停車格');
@@ -125,9 +131,17 @@ String sourceSummary(ParkingSpot spot, {required bool demo}) => demo
           : spot.city.isEmpty
           ? '政府公開資料'
           : '${spot.city}政府')
-    : spot.source == 'import'
-    ? '社群回報整理'
-    : '社群回報';
+    : contributorSummary(spot);
+
+String contributorSummary(ParkingSpot spot) {
+  if (spot.contributorRole == 'admin') return '由管理員新增';
+  if (spot.contributorRole == 'import' || spot.source == 'import') {
+    return '由管理員自其他社群統整後匯入';
+  }
+  final name = spot.contributorName.trim();
+  // Email is an account identifier, not a public reporter name.
+  return name.isEmpty || name.contains('@') ? '由車友回報' : '由車友 $name 回報';
+}
 
 String trustSummary(ParkingSpot spot, {required bool demo}) => demo
     ? '範例，僅供功能預覽'

@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:motorcycle_parking/data/app_store.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
+import 'package:motorcycle_parking/domain/eligibility.dart';
 import 'package:motorcycle_parking/features/map/spot_details.dart';
 import 'package:motorcycle_parking/features/map/spot_photos.dart';
 import 'package:motorcycle_parking/features/map/spot_sheet.dart';
@@ -124,11 +125,13 @@ Future<void> showField(WidgetTester tester, String text) async {
 }
 
 void main() {
-  test('點位只分官方與社群：官方以政府為來源，未核驗匯入為社群回報整理', () {
+  test('官方保留政府來源，社群標示車友、管理員與匯入整理', () {
     ParkingSpot spot(
       String source, {
       String sourceName = '',
       String city = '新竹市',
+      String contributorName = '',
+      String contributorRole = '',
     }) => ParkingSpot(
       id: '$source-1',
       name: '測試點',
@@ -138,6 +141,8 @@ void main() {
       spaceType: SpaceType.offStreet,
       source: source,
       sourceName: sourceName,
+      contributorName: contributorName,
+      contributorRole: contributorRole,
     );
     expect(spot('official', sourceName: '新竹市政府').isOfficial, isTrue);
     expect(spot('tdx').isOfficial, isTrue);
@@ -152,68 +157,69 @@ void main() {
     expect(sourceSummary(spot('tdx', city: ''), demo: false), '政府公開資料');
     expect(
       sourceSummary(spot('import', sourceName: '社群回報整理'), demo: false),
-      '社群回報整理',
+      '由管理員自其他社群統整後匯入',
     );
-    expect(sourceSummary(spot('community'), demo: false), '社群回報');
+    expect(sourceSummary(spot('community'), demo: false), '由車友回報');
+    expect(
+      sourceSummary(
+        spot('community', contributorName: '小哲', contributorRole: 'rider'),
+        demo: false,
+      ),
+      '由車友 小哲 回報',
+    );
+    expect(
+      sourceSummary(
+        spot(
+          'community',
+          contributorName: 'rider@example.com',
+          contributorRole: 'rider',
+        ),
+        demo: false,
+      ),
+      '由車友回報',
+    );
+    expect(
+      sourceSummary(spot('community', contributorRole: 'admin'), demo: false),
+      '由管理員新增',
+    );
     expect(trustSummary(spot('import'), demo: false), '待確認');
   });
 
-  test('資料來源連結只接受含主機的完整 HTTP(S) 網址', () {
-    for (final url in [
-      'https://example.com/parking',
-      'http://example.com/parking',
-      ' HTTPS://example.com/parking ',
-    ]) {
-      final uri = sourceLinkUri(url);
-      expect(uri, Uri.tryParse(url.trim()));
-      expect(uri!.host, 'example.com');
-    }
-    for (final url in [
-      '',
-      ' ',
-      'javascript:alert(1)',
-      'data:text/html,<script>alert(1)</script>',
-      'intent://parking#Intent;scheme=app;end',
-      'file:///tmp/parking.html',
-      'mailto:parking@example.com',
-      '/parking',
-      '//example.com/parking',
-      'https:parking',
-      'https:///parking',
-      'https://[invalid',
-    ]) {
-      expect(sourceLinkUri(url), isNull, reason: url);
-    }
-  });
-
-  testWidgets('詳情隱藏不安全資料來源連結，保留正常網站連結', (tester) async {
-    usePhone(tester);
+  testWidgets('社群移除來源與內部授權文字，官方僅提供固定授權首頁', (tester) async {
+    usePhone(tester, width: 320);
     final store = (await tester.runAsync(createStore))!;
     addTearDown(store.dispose);
-    for (final url in [
-      'javascript:alert(1)',
-      'data:text/html,<script>alert(1)</script>',
-      'intent://parking#Intent;scheme=app;end',
-      'https:///parking',
-      'https://example.com/parking',
-      'http://example.com/parking',
-    ]) {
+    for (final source in ['community', 'import', 'official', 'tdx']) {
       final spot = ParkingSpot.fromJson({
         ...facility().toJson(),
-        'source_url': url,
+        'source': source,
+        'source_url': 'https://example.com/community-map',
+        'license_note': '整理自 Alan 停車地圖；未通過官方核驗',
       });
       await openDetails(tester, store, spot);
       await showField(tester, '資料與查核');
       await tester.drag(detailScroll, const Offset(0, -800));
       await tester.pumpAndSettle();
       expect(
-        find.text('查看停車點資料來源'),
-        url.startsWith('https://example.com') ||
-                url.startsWith('http://example.com')
-            ? findsOneWidget
-            : findsNothing,
-        reason: url,
+        find.text('查看政府資料授權'),
+        spot.isOfficial ? findsOneWidget : findsNothing,
+        reason: source,
       );
+      if (spot.isOfficial) {
+        final link = find.widgetWithText(TextButton, '查看政府資料授權');
+        await tester.ensureVisible(link);
+        await tester.pumpAndSettle();
+        expect(link.hitTestable(), findsOneWidget, reason: source);
+        expect(tester.getSize(link).height, greaterThanOrEqualTo(48));
+      }
+      expect(
+        licenseLinkUri(spot),
+        spot.isOfficial ? Uri.parse('https://data.gov.tw/license') : null,
+      );
+      expect(find.text('查看停車點資料來源'), findsNothing);
+      expect(find.text('授權說明'), findsNothing);
+      expect(find.textContaining('Alan'), findsNothing);
+      expect(find.text('查核狀態'), findsNothing);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     }
@@ -289,42 +295,47 @@ void main() {
     expect(availabilitySummary(untimed), contains('車位資料時間未提供'));
   });
 
-  testWidgets('停車場依四組顯示欄位、分區與未知車位，深色大字不溢出', (tester) async {
-    usePhone(tester, width: 320);
-    final store = (await tester.runAsync(createStore))!;
-    addTearDown(store.dispose);
-    await openDetails(
-      tester,
-      store,
-      facility(),
-      scale: 1.6,
-      brightness: Brightness.dark,
-    );
-    expect(find.text('測試地下停車場'), findsOneWidget);
-    for (final field in [
-      '停車資訊',
-      '類型',
-      '分區',
-      '位置與指引',
-      '入口',
-      '停車指引',
-      '位置',
-      '特殊規則',
-      '現場補充',
-      '照片',
-      '備註',
-      '資料與查核',
-      '資料來源',
-      '查核狀態',
-      '更新時間',
-      '即時車位狀態',
-    ]) {
-      await showField(tester, field);
-    }
-    expect(find.text('暫無即時資訊'), findsOneWidget);
-    expect(find.textContaining('機車剩餘'), findsNothing);
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
+  for (final width in [320.0, 390.0, 700.0, 1280.0]) {
+    testWidgets('寬 $width 的停車場深色大字，車位只在頂部顯示一次', (tester) async {
+      usePhone(tester, width: width);
+      final store = (await tester.runAsync(createStore))!;
+      addTearDown(store.dispose);
+      await openDetails(
+        tester,
+        store,
+        facility(),
+        scale: 1.6,
+        brightness: Brightness.dark,
+      );
+      expect(find.text('測試地下停車場'), findsOneWidget);
+      expect(find.text('地下停車場 · 臺北市內湖區'), findsOneWidget);
+      expect(find.text('尚無即時資料'), findsOneWidget);
+      for (final field in [
+        '停車資訊',
+        '類型',
+        '分區',
+        '位置與指引',
+        '入口',
+        '停車指引',
+        '位置',
+        '特殊規則',
+        '現場補充',
+        '照片',
+        '備註',
+        '資料與查核',
+        '資料來源',
+        '更新時間',
+      ]) {
+        await showField(tester, field);
+      }
+      expect(find.text('查核狀態'), findsNothing);
+      expect(find.text('即時車位狀態'), findsNothing);
+      final navigate = find.text('導航到這裡');
+      expect(navigate.hitTestable(), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
 
   testWidgets('路邊格有殘留車位數也隱藏即時欄與入口，保留路段指引', (tester) async {
     usePhone(tester);
@@ -347,10 +358,78 @@ void main() {
     addTearDown(store.dispose);
     await openDetails(tester, store, facility(available: 0));
     expect(find.text('車位時間未提供'), findsOneWidget);
-    await showField(tester, '即時車位狀態');
-    expect(find.textContaining('機車剩餘 0 格 / 20 格'), findsOneWidget);
-    expect(find.textContaining('車位資料時間未提供'), findsOneWidget);
+    expect(find.text('0 格 / 20 格'), findsOneWidget);
+    await showField(tester, '資料與查核');
+    expect(find.text('即時車位狀態'), findsNothing);
     expect(find.text('暫無即時資訊'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  for (final width in [320.0, 390.0]) {
+    for (final status in ['pending', 'confirmed']) {
+      testWidgets('寬 $width 的 $status 匯入點不顯示查核狀態', (tester) async {
+        usePhone(tester, width: width);
+        final store = (await tester.runAsync(createStore))!;
+        addTearDown(store.dispose);
+        final spot = ParkingSpot.fromJson({
+          ...facility().toJson(),
+          'source': 'import',
+          'status': status,
+          'contributor_role': 'import',
+        });
+        expect(sourceSummary(spot, demo: false), '由管理員自其他社群統整後匯入');
+        await openDetails(tester, store, spot);
+        await showField(tester, '更新時間');
+        expect(find.text('資料來源'), findsOneWidget);
+        expect(find.text('查核狀態'), findsNothing);
+        expect(find.text('導航到這裡').hitTestable(), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      });
+    }
+  }
+
+  testWidgets('從收藏開啟的社群點不帶回報者名稱，資料來源顯示由車友回報', (tester) async {
+    usePhone(tester, width: 320);
+    final store = (await tester.runAsync(createStore))!;
+    addTearDown(store.dispose);
+    final live = ParkingSpot.fromJson({
+      ...facility().toJson(),
+      'source': 'community',
+      'contributor_name': '小哲',
+      'contributor_role': 'rider',
+    });
+    expect(sourceSummary(live, demo: false), '由車友 小哲 回報');
+    // Older builds saved the name; a favorite never shows it again.
+    final saved = ParkingSpot.favorite({
+      ...live.toJson(),
+      'contributor_name': '小哲',
+    }).single;
+    expect(saved.contributorName, isEmpty);
+    expect(sourceSummary(saved, demo: false), '由車友回報');
+    await openDetails(tester, store, saved);
+    await showField(tester, '資料來源');
+    expect(find.textContaining('小哲'), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('社群點已確認存在仍清楚提示車種開放待查核', (tester) async {
+    usePhone(tester);
+    final store = (await tester.runAsync(createStore))!;
+    addTearDown(store.dispose);
+    final spot = ParkingSpot.fromJson({
+      ...facility().toJson(),
+      'source': 'community',
+      'scooter_allowed': true,
+      'status': 'confirmed',
+      'last_confirmed_at': DateTime.now().toIso8601String(),
+    });
+    expect(store.eligible(spot).status, EligibilityStatus.unverified);
+    await openDetails(tester, store, spot);
+    expect(find.text('普通機車 · 開放資訊待確認'), findsOneWidget);
+    expect(find.text('已確認此停車點存在；目前車種是否開放仍待查核，請以入口公告為準。'), findsOneWidget);
+    expect(store.eligible(spot).status, EligibilityStatus.unverified);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -390,7 +469,7 @@ void main() {
         greaterThan(title.bottom),
       );
     }
-    expect(find.text('地下停車場 · 臺北市 · 內湖區 · 330 公尺'), findsOneWidget);
+    expect(find.text('地下停車場 · 臺北市內湖區 · 330 公尺'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -580,5 +659,26 @@ void main() {
     expect(find.byKey(const ValueKey('parking-spot-sheet')), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  test('場站型式不是路外格位時，說明與橫幅一樣依 isFacility 判斷', () {
+    final lot = ParkingSpot(
+      id: 'lot',
+      name: '地下停車場',
+      lat: 25.08,
+      lng: 121.55,
+      city: '臺北市',
+      spaceType: SpaceType.paidMotorcycle,
+      facilityType: FacilityType.underground,
+      status: TrustStatus.confirmed,
+      source: 'community',
+    );
+    expect(
+      decisionExplanation(
+        lot,
+        const Eligibility(EligibilityStatus.unverified, '規則說明'),
+      ),
+      '已確認此停車點存在；目前車種是否開放仍待查核，請以入口公告為準。',
+    );
   });
 }
