@@ -112,7 +112,7 @@ jobs:
         run: |
           deno fmt --check
           deno lint
-          deno check submit-report/index.ts
+          deno check submit-report/index.ts admin-users/index.ts
           deno test
       - name: Rebuild local database and check RLS
         if: steps.changes.outputs.run == 'true'

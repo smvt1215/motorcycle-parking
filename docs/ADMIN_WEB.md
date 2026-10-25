@@ -1,6 +1,6 @@
 # Web 管理介面 — 開發計畫
 
-> 狀態：P1 後端與 P2 外殼已完成，P2 已於 2026-10-24 通過 staging 登入驗收（https://motopark-admin-staging.web.app ）。P3 審核佇列已實作，待 staging 部署後驗收；P4a-1（點位清單、編輯、隱藏、改為官方點）已合併；P4a-2（位置選擇元件、新增停車點）已實作；全點位地圖圖層在 P4a-3，結構化費率的管理站支援待 #68 合併後補上，地址搜尋在 P4b。P0 仍差第二個備援驗證器 App。取代 [PLAN.md](PLAN.md)「社群回報機制 › 5. 管理」原本「第一版用 Supabase Dashboard」的做法；P3 驗收前審核仍以 Dashboard 操作。最後更新：2026-10-25
+> 狀態：P1 後端與 P2 外殼已完成，P2 已於 2026-10-24 通過 staging 登入驗收（https://motopark-admin-staging.web.app ）。P3 審核佇列已實作，待 staging 部署後驗收；P4a-1（點位清單、編輯、隱藏、改為官方點）已合併；P4a-2（位置選擇元件、新增停車點）已實作；全點位地圖圖層在 P4a-3，結構化費率的管理站支援待 #68 合併後補上，地址搜尋在 P4b。P7 使用者頁（搜尋、回報額度、停權、清除公開名稱）已實作。P0 仍差第二個備援驗證器 App。取代 [PLAN.md](PLAN.md)「社群回報機制 › 5. 管理」原本「第一版用 Supabase Dashboard」的做法；P3 驗收前審核仍以 Dashboard 操作。最後更新：2026-10-25
 
 ## 背景
 目前審核與資料維護都在 Supabase Dashboard 完成，有幾個問題：
@@ -86,7 +86,7 @@
    - `admin_upsert_spot`、`admin_set_spot_hidden`（隱藏／恢復，P3 已實作）、`admin_promote_spot`（社群點改為官方點），P4a-1 已實作；另有 `admin_spots` 合併搜尋兩張表。
    - `admin_upsert_city_rule`：伺服器遞增 `version`，檢查 `restriction`。
    - `admin_import_preview`／`admin_import_apply`：接收 `spots.json`，先試算差異再套用，取代 SQL Editor。
-6. 停權使用者需 Auth Admin API：Edge Function `admin-users` 先驗證呼叫者為 admin 且 `aal2`，再用 service role 執行。
+6. 停權使用者需 Auth Admin API：Edge Function `admin-users` 先驗證呼叫者為 admin 且 `aal2`，再用 service role 執行（P7 已實作，見下方「P7 實作」）。
 7. 地址定位：Edge Function 包裝定位服務，金鑰不進前端與 App，後台與 App 共用。Google Geocoding 支援路口查詢但另計費；TGOS／國土測繪中心的門牌與路口定位能力與申請條件，實作前查官方文件決定。
 8. pgTAP：一般使用者被拒、admin 沒有 `aal2` 被拒、套用與結案同一 transaction、稽核紀錄不可修改。
 
@@ -100,7 +100,7 @@
 | P4 點位 | P4a-1：清單、編輯表單、來源、隱藏／恢復、改為官方點；P4a-2：位置選擇元件、新增停車點；P4a-3：全點位地圖圖層（沿用 App 標記）；P4b：門牌與路口搜尋（Google Geocoding 經 Edge Function，先實測路口） | — |
 | P5 規則 | 規則表單、預覽、版本遞增；`tool/export_rules.py` 從 DB 匯出規則避免與 `parking_rules.json` 不一致 | — |
 | P6 匯入 | 上傳 `import_mymaps.py` 的 JSON → 差異試算 → 套用；既有點位的費率文字轉為結構化 `fee`（[PLAN.md](PLAN.md)「費率結構」）：只轉換能確定的寫法，「請依現場公告」「未知」與混有汽車、月租、身障費率而無法確定者維持 null 或交人工判斷；差異試算分列可轉換／無法判斷／需人工確認，確認後才寫入；解析結果以 `lib/models/fee.dart` 或 DB 的 `valid_fee()` 驗證 | 轉換完成前不開放依價格篩選 |
-| P7 使用者 | 檢視 `rate_limit_events`、停權（`admin-users`） | — |
+| P7 使用者 | 檢視 `rate_limit_events`、停權（`admin-users`）、清除點位上的公開名稱；等級、點數、角色撤銷與抽查佇列屬遊戲化階段 1 以後（[研究文件 §4](CONTRIBUTION_TIERS_FEASIBILITY.md)） | — |
 | App | 位置選擇元件用於新增停車點與「位置不正確」建議 | 可與 P4 同步 |
 
 ### P2 實作與待驗收事項
@@ -160,6 +160,17 @@ node tool/admin_smoke.cjs
 - 點位表單的「位置」區塊改用元件：移動後 0.6 秒自動反查縣市與行政區並帶入，查詢 15 m 內同類型的可見點位提示可能重複，跨縣市時提醒規則會改變；移動超過 150 m 時，儲存前確認是否仍是同一點位。座標欄位仍可直接輸入。
 - 新增停車點：清單「新增停車點」→ 選社群點或官方點 → `/spots/new?kind=` → 預設位置為上次開啟的點位（否則台北車站）→ 建立後開啟新點位。新表單在第一次按「建立停車點」後才顯示必填錯誤；新增的社群點由管理者帳號建立、狀態為待確認。
 - 每個點位的表單從頂端開始（列表 key 依點位）；開啟、新增各自排序，不會讓搜尋中的清單誤判為過期。
+
+### P7 實作
+
+- 路徑 `/users`、`/users/<使用者 id>`；程式位於 `lib/admin/users/`。版面與點位頁相同：寬螢幕清單＋詳情，< 680 px 先列表再詳情。
+- **搜尋**（`admin_users(p_query, p_limit)`，security definer，先檢查 `is_admin()`）：完整的使用者 id、完整 email（不分大小寫精確比對）或顯示名稱的一部分（萬用字元視為一般文字）；空白時列出最近 30 天有回報的帳號，最近回報的在前，最多 100 筆。顯示名稱沿用 `contributor_display_name()`。
+- **email 遮蔽**（2026-10-25 確認）：只顯示部分字元（如 `sm***@gmail.com`），遮蔽在資料庫函式內完成，完整 email 不經 API 或畫面；需要找特定騎士時以完整 email 精確搜尋。
+- **詳情**（`admin_user_detail(p_user)`）：今天的回報次數與每日上限（`apply_report` 的 10 次／帳號，UTC 日界＝台灣時間早上 8 點），近 7／30 天次數、網路位置數、近 30 天同網路位置的其他帳號數；最近 30 筆回報時間只附 6 碼網路代號（`ip_hash` 前綴，只能分辨是否同一網路，完整雜湊不離開資料庫）。回報統計：新增的社群點（含已隱藏）、仍在／已不存在投票、修改建議依狀態。另列此帳號新增的社群點與 App 上顯示的公開名稱，以及停權紀錄。這些是 P7 自己的查詢，不依賴 ④a 的 `admin_review_baseline`。
+- **停權／解除停權**：Edge Function `admin-users`（`verify_jwt = false`，函式自行驗證）。`getUser` 確認 session 仍有效、未被停權，且帳號目前的 `app_metadata.role` 是 admin；`getClaims` 驗證 token 簽章並讀 `aal`，必須是 `aal2`（與 `is_admin()` 相同）。之後以 service role 呼叫 Auth Admin API `updateUserById(id, { ban_duration })`：7 天＝`168h`、30 天＝`720h`、直到解除＝`876000h`，解除為 `none`。不能停權自己或其他管理者。原因必填（1–500 字）。Auth 會拒絕被停權帳號的登入、token 更新與 `/user`，因此 `submit-report` 的 `getUser` 立即擋下回報與投票。
+- **稽核**：停權變更後由 Edge Function 呼叫 `admin_record_user_ban`（只授權 service role）寫入 `admin_audit_log`（`target_table='auth.users'`，前後的 `banned_until`、期間、原因）。Auth API 與資料庫無法同一 transaction：稽核寫入失敗時函式把停權狀態還原（原本有停權則還原剩餘時數，無條件進位到小時）並回錯誤。
+- **清除公開名稱**：詳情的點位清單以 `admin_clear_contributor_name`（#81）逐點清除，原因選填、寫入稽核紀錄；清除後即使改名也不再顯示。
+- 測試：pgTAP `admin_users_test.sql`（一般使用者、無 `aal2` 的 admin、anon 被拒；搜尋與遮蔽；統計；只有 service role 能寫停權紀錄、稽核不可修改）；deno `admin-users/handler_test.ts`（非 admin、無 `aal2`、無 token 被拒且不呼叫 Auth；停權與解除寫稽核；稽核失敗還原；輸入驗證；不能停權自己或管理者）；widget test `test/admin/users_test.dart`。
 
 ## CI／CD
 - `tool/ci_changes.py` 將 `lib/admin/` 歸入品質檢查與 admin web 建置（`flutter build web -t lib/main_admin.dart -o build/admin`），不觸發模擬器。

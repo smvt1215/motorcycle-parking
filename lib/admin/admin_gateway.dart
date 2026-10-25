@@ -4,6 +4,7 @@ import '../core/town_lookup.dart';
 import '../domain/location_check.dart';
 import 'review/review_models.dart';
 import 'spots/spot_models.dart';
+import 'users/user_models.dart';
 
 class AdminAccess {
   const AdminAccess({
@@ -97,6 +98,24 @@ abstract class AdminGateway {
     String baseUpdatedAt,
     String note,
   );
+
+  /// `admin_users`: an id, a complete email or part of a display name;
+  /// empty lists recent reporters.
+  Future<List<AdminUser>> searchUsers(String query);
+
+  /// `admin_user_detail`; null when the account does not exist.
+  Future<AdminUserDetail?> userDetail(String userId);
+
+  /// The `admin-users` Edge Function: bans for [length], or lifts the ban
+  /// when it is null. Returns the new `banned_until`.
+  Future<DateTime?> setUserBan(
+    String userId, {
+    required BanLength? length,
+    required String reason,
+  });
+
+  /// `admin_clear_contributor_name`: removes the public name on one point.
+  Future<void> clearContributorName(String spotId, String note);
 }
 
 /// Community columns readable by clients; `user_id` is never granted.
@@ -417,4 +436,55 @@ class SupabaseAdminGateway implements AdminGateway {
 
   @override
   Future<Town?> town(double lat, double lng) => lookupTown(lat, lng);
+
+  @override
+  Future<List<AdminUser>> searchUsers(String query) async {
+    final rows = await client.rpc<List<dynamic>>(
+      'admin_users',
+      params: {'p_query': query},
+    );
+    return rows
+        .map((r) => AdminUser.fromJson(r as Map<String, dynamic>))
+        .toList();
+  }
+
+  @override
+  Future<AdminUserDetail?> userDetail(String userId) async {
+    if (!_uuid.hasMatch(userId)) return null;
+    try {
+      final row = await client.rpc<Map<String, dynamic>>(
+        'admin_user_detail',
+        params: {'p_user': userId},
+      );
+      return AdminUserDetail.fromJson(row);
+    } on PostgrestException catch (e) {
+      if (e.code == '22023') return null;
+      rethrow;
+    }
+  }
+
+  @override
+  Future<DateTime?> setUserBan(
+    String userId, {
+    required BanLength? length,
+    required String reason,
+  }) async {
+    final res = await client.functions.invoke(
+      'admin-users',
+      body: {
+        'action': length == null ? 'unban' : 'ban',
+        'user_id': userId,
+        'duration': ?length?.key,
+        'reason': reason,
+      },
+    );
+    final until = (res.data as Map?)?['banned_until'];
+    return until is String ? DateTime.tryParse(until)?.toLocal() : null;
+  }
+
+  @override
+  Future<void> clearContributorName(String spotId, String note) => client.rpc(
+    'admin_clear_contributor_name',
+    params: {'p_spot_id': spotId, 'p_note': note},
+  );
 }

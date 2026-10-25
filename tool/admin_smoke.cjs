@@ -27,6 +27,17 @@ const spot = { lat: 25.0581, lng: 121.5226, city: '臺北市', district: '中山
 const communitySpot = { ...spot, id: communityId, name: '中山北路二段路邊機車格', space_type: 'paidMotorcycle', status: 'pending' };
 const officialSpot = { ...spot, id: officialId, name: '新北市政府行政大樓地下停車場', city: '新北市', district: '板橋區', lat: 25.0124, lng: 121.4651, space_type: 'offStreet', heavy_allowed: true, source_name: '新北市政府', hidden: false,
   address: '新北市板橋區中山路一段 161 號', facility_type: 'underground', parking_access: 'scooterHeavy', source_url: 'https://example.test/notice', source_id: 'ntpc-001', effective_date: '2026-01-01', license_note: '' };
+const riderId = '77777777-7777-4777-8777-777777777777';
+const rider = { id: riderId, display_name: '夜騎小哲', email_masked: 'ri***@example.test', providers: ['google'], is_admin: false,
+  created_at: '2026-09-01T00:00:00Z', last_sign_in_at: '2026-10-24T01:00:00Z', banned_until: null, deleted: false, reports_30d: 12, last_report_at: '2026-10-24T02:00:00Z' };
+const riderDetail = banned => ({
+  user: { ...rider, banned_until: banned },
+  limits: { today: 3, daily_limit: 10, last_7d: 9, last_30d: 12, networks_30d: 2, shared_accounts_30d: 1 },
+  events: [{ created_at: '2026-10-24T02:00:00Z', network: 'a1b2c3' }, { created_at: '2026-10-23T02:00:00Z', network: 'd4e5f6' }],
+  reports: { spots: 2, spots_hidden: 1, votes_still_there: 5, votes_gone: 1, flags_pending: 1, flags_accepted: 2, flags_rejected: 3, flags_closed: 0 },
+  spots: [{ id: communityId, name: '中山北路二段路邊機車格', city: '臺北市', district: '中山區', status: 'confirmed', contributor_name: '夜騎小哲', name_cleared: false }],
+  history: banned ? [{ action: 'ban_user', note: '短時間內大量重複回報', created_at: '2026-10-25T00:00:00Z', banned_until: banned }] : [],
+});
 const hiddenSpot = { ...spot, id: '66666666-6666-4666-8666-666666666666', name: '三重正義北路機車格', city: '新北市', district: '三重區', space_type: 'freeMotorcycle', status: 'hidden' };
 
 function session(role, aal, factors = [factor]) {
@@ -77,6 +88,7 @@ function session(role, aal, factors = [factor]) {
         const errors = [];
         const requests = [];
         let conflicts = 0;
+        let riderBan = null;
         await context.route('https://admin-smoke.supabase.co/**', async route => {
           const url = new URL(route.request().url());
           requests.push(`${route.request().method()} ${url.pathname}`);
@@ -141,6 +153,17 @@ function session(role, aal, factors = [factor]) {
           }
           if (url.pathname === '/rest/v1/rpc/admin_resolve_report' || url.pathname === '/rest/v1/rpc/admin_set_spot_hidden') {
             return route.fulfill({ json: {}, headers: cors });
+          }
+          if (url.pathname === '/rest/v1/rpc/admin_users') return route.fulfill({ json: [{ ...rider, banned_until: riderBan }], headers: cors });
+          if (url.pathname === '/rest/v1/rpc/admin_user_detail') {
+            assert.equal(route.request().postDataJSON().p_user, riderId);
+            return route.fulfill({ json: riderDetail(riderBan), headers: cors });
+          }
+          if (url.pathname === '/functions/v1/admin-users') {
+            const body = route.request().postDataJSON();
+            assert.deepEqual(body, { action: 'ban', user_id: riderId, duration: '7d', reason: '短時間內大量重複回報' });
+            riderBan = '2026-11-01T00:00:00Z';
+            return route.fulfill({ json: { user_id: riderId, banned_until: riderBan }, headers: cors });
           }
           errors.push(`Unexpected API request: ${url.pathname}`);
           return route.fulfill({ status: 400, json: { message: 'Unexpected smoke request' }, headers: cors });
@@ -276,6 +299,23 @@ function session(role, aal, factors = [factor]) {
           for (let i = 0; i < 12; i++) await page.mouse.wheel(0, 150);
           await page.waitForTimeout(500);
           await page.screenshot({ path: path.join(output, `${name}-spot-location.png`) });
+          // Users page: find a rider, see the quota, ban with a reason.
+          await page.getByRole('button', { name: '使用者', exact: true }).click();
+          await page.getByRole('button', { name: /^夜騎小哲/ }).waitFor({ timeout: 15000 });
+          await page.screenshot({ path: path.join(output, `${name}-users.png`) });
+          await page.getByRole('button', { name: /^夜騎小哲/ }).click();
+          await waitText('可以回報');
+          await page.screenshot({ path: path.join(output, `${name}-user.png`) });
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} user page scrolls sideways`);
+          await page.getByRole('button', { name: '停權帳號', exact: true }).click();
+          await page.getByRole('button', { name: '直到解除', exact: true }).waitFor({ timeout: 15000 });
+          await enterText('短時間內大量重複回報');
+          await page.screenshot({ path: path.join(output, `${name}-user-ban.png`) });
+          const banned = page.waitForResponse(response => response.url().endsWith('/functions/v1/admin-users'));
+          await page.getByRole('button', { name: '停權帳號', exact: true }).last().click();
+          await banned;
+          await page.getByRole('button', { name: '解除停權', exact: true }).waitFor({ timeout: 15000 });
+          await page.screenshot({ path: path.join(output, `${name}-user-banned.png`) });
           await page.getByRole('button', { name: '審核', exact: false }).first().click();
           await page.screenshot({ path: path.join(output, `${name}.png`) });
           for (const [label, title] of [['點位', '停車點位'], ['規則', '各縣市停車規則'], ['匯入', '匯入停車資料'], ['使用者', '使用者管理'], ['審核', '待審回報']]) {

@@ -16,6 +16,8 @@ import '../ui/location_picker.dart';
 import 'spots/spot_models.dart';
 import 'spots/spots_controller.dart';
 import 'spots/spots_page.dart';
+import 'users/users_controller.dart';
+import 'users/users_page.dart';
 
 const _tabs = [
   (
@@ -90,6 +92,9 @@ class _AdminAppState extends State<AdminApp> {
   late final SpotsController _spots = SpotsController(
     widget.controller.gateway,
   );
+  late final UsersController _users = UsersController(
+    widget.controller.gateway,
+  );
   String? _reviewUser;
 
   @override
@@ -110,6 +115,7 @@ class _AdminAppState extends State<AdminApp> {
       _reviewUser = user;
       _review.reset();
       _spots.reset();
+      _users.reset();
     }
   }
 
@@ -177,7 +183,15 @@ class _AdminAppState extends State<AdminApp> {
                 locationMapBuilder: widget.locationMapBuilder,
               ),
             ),
-          for (final tab in _tabs.skip(2))
+          for (final path in ['/users', '/users/:id'])
+            GoRoute(
+              path: path,
+              builder: (context, state) => UsersPage(
+                users: _users,
+                selectedId: state.pathParameters['id'],
+              ),
+            ),
+          for (final tab in _tabs.skip(2).where((t) => t.path != '/users'))
             GoRoute(
               path: tab.path,
               builder: (context, state) => _watch(
@@ -220,6 +234,7 @@ class _AdminAppState extends State<AdminApp> {
     widget.controller.removeListener(_accessChanged);
     if (widget.review == null) _review.dispose();
     _spots.dispose();
+    _users.dispose();
     _router.dispose();
     super.dispose();
   }
