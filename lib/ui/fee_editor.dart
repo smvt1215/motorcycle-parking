@@ -11,12 +11,16 @@ class FeeEditor extends StatelessWidget {
     required this.value,
     required this.onChanged,
     this.errorText,
+    this.showPreview = true,
   });
   final Fee value;
   final ValueChanged<Fee> onChanged;
 
   /// A whole-fee error from the caller's own check, shown under the preview.
   final String? errorText;
+
+  /// Off when the caller shows the resulting text itself.
+  final bool showPreview;
 
   @override
   Widget build(BuildContext context) {
@@ -45,13 +49,15 @@ class FeeEditor extends StatelessWidget {
           onChanged: (rate) =>
               onChanged(Fee(scooter: value.scooter, heavy: rate)),
         ),
-        const SizedBox(height: 12),
-        // What the map will show, so the choices read back as a sentence.
-        Text(
-          complete ? '顯示為：${feeNoteOf(value)}' : '請填完金額，才會顯示費率',
-          key: const ValueKey('fee-preview'),
-          style: TextStyle(color: colors.onSurfaceVariant),
-        ),
+        if (showPreview) ...[
+          const SizedBox(height: 12),
+          // What the map will show, so the choices read back as a sentence.
+          Text(
+            complete ? '顯示為：${feeNoteOf(value)}' : '請填完金額，才會顯示費率',
+            key: const ValueKey('fee-preview'),
+            style: TextStyle(color: colors.onSurfaceVariant),
+          ),
+        ],
         if (errorText case final error?) ...[
           const SizedBox(height: 8),
           Text(error, style: TextStyle(color: colors.error)),

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../models/fee.dart';
 import '../admin_gateway.dart';
 import 'review_models.dart';
 
@@ -246,6 +247,15 @@ class ReviewController extends ChangeNotifier {
 
   void setDraft(String key, Object? value) {
     draft = {...draft, key: value};
+    // The fee's text follows it, as in the app's reports; incomplete amounts
+    // and a cleared fee leave the text as it is.
+    if (reviewField(key)?.input == FieldInput.fee) {
+      final fee = reviewFee(value);
+      if (fee != null &&
+          [fee.scooter, fee.heavy].nonNulls.every((r) => r.complete)) {
+        draft['fee_note'] = feeNoteOf(fee);
+      }
+    }
     _notify();
   }
 
@@ -268,7 +278,7 @@ class ReviewController extends ChangeNotifier {
         ? draft
         : applicablePatch(initialProposal(report, spot), spot);
     if (patch.isEmpty) return (patch, '沒有可套用的變更。');
-    return (patch, validatePatch(patch, spot));
+    return (wirePatch(patch), validatePatch(patch, spot));
   }
 
   /// Takes [report] out of the queue now and writes the decision after the
