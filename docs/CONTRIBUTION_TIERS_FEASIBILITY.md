@@ -21,6 +21,8 @@
 
 B 類保留管理員結案的理由不是不信任社群，而是這些操作一旦錯誤會連帶使其他核實失效或讓點位消失，回退成本高；社群預審讓管理員的工作從「審」變成「確認」。
 
+4. 所有提案在分類之前先經過兩道自動檢查：**預檢模組**（§5.8，欄位矛盾、違規內容、行為異常）與**法規預審引擎**（§5.7，用現行規則回答或整理 A 類提案）。兩者都不判斷對錯、不改資料，只決定提案能不能進、進哪裡、帶什麼旗標。
+
 ## 1. 結論
 
 **95% 社群審查是可以達成的目標，但前提是三件事同時成立：社群要能「結案」而不只是「提供觀察」、遊戲化只獎勵「事後證明正確」的貢獻、管理員的 5% 要定義成「爭議、申訴、法規與隨機抽查」而不是「剩下沒人審的」。**
@@ -44,6 +46,7 @@ B 類保留管理員結案的理由不是不信任社群，而是這些操作一
 | 管理員工作量 | 管理員逐案結案＋A／B 類案件＋抽查件數＋角色與閘門管理的時數 | 監看用，不設目標；抽查工作量≈社群結案數 × 抽查比例 |
 | **B 類預審率** | B 類（資料穩定性）案件中，管理員結案時已有社群共識預審的比例 | ≥ 80%；管理員對已預審案件的否決率另列，過高表示預審規則要調整 |
 | **A 類引擎回答率** | 涉及法規結論的提案中，被法規預審引擎（§5.7）直接回答、不進管理員佇列的比例 | ≥ 50%；另列規則複查任務數與其中導致規則更新的比例 |
+| **預檢誤攔率**（護欄） | 被預檢模組（§5.8）`fix`／`reject` 的提案中，經申訴或管理員覆核認定無誤的比例；攔截率另列 | ≤ 5%；單一規則誤攔 > 20% 即自動停用該規則並通知管理員 |
 | **翻案率**（護欄） | 以「結案後 90 天」為觀察窗，對每個滾動 90 天的結案批次計算被管理員或後續證據推翻的比例，依欄位類別分開算；批次樣本 < 100 件時只監看、不觸發閘門 | 低風險 ≤ 3%、中風險 ≤ 5%；超過即該類別暫停自動結案。指標有 3 個月遲滯，階段驗收需等第一個完整批次 |
 | **抽查不合格率**（護欄） | 管理員隨機抽查社群結案案件的不合格比例；樣本 < 100 件時只監看 | 與翻案率同門檻；抽查比例起始 5%，翻案率穩定後可降到 2%；案件量少時以「每月至少 30 件」取代比例 |
 | 審核時效 | 案件從送出到結案的中位數天數 | 社群 ≤ 7 天（參考值，依資料調整） |
@@ -262,6 +265,49 @@ A 類（法規）與 B 類（資料穩定性）依 §0 第 3 點只能由管理�
 
 **指標。** A 類提案被引擎直接回答（一致或缺規則）的比例，目標 ≥ 50% 不進管理員佇列；管理員處理一件 A 類案件的中位時間；規則複查任務數與其中確實導致規則更新的比例；來源變更任務的誤報率。
 
+### 5.8 預檢模組
+
+**定位。** 在提案、新增停車點與審核票進入任何佇列之前，用**確定性規則**檢查「欄位彼此是否矛盾」與「內容或行為是否違規」。它接在既有 `submit-report/validate.ts`（型別、白名單、座標範圍、長度）之後、法規預審（§5.7）與 A／B／C 分類之前。目的有三：把明顯錯誤在送出當下擋回給回報者修正，不浪費審核人力；把可疑但不確定的提案標上風險旗標，讓後面的共識規則加嚴；把政策不允許的提案直接拒絕並說明原因。
+
+**處理流程。**
+
+```text
+validate.ts（結構）→ 預檢（組合／內容／行為）→ 法規預審 §5.7 → 分類 A/B/C → 建案件與任務
+                      ├─ pass：照常進入下一步
+                      ├─ fix：拒收並回傳可修正的欄位與原因（App 即時顯示）
+                      ├─ hold：進入下一步，但寫入 risk_flags；該案件的共識門檻加 1 票且不計 L0／L1 的照片
+                      └─ reject：拒收並說明；連續觸發計入濫用訊號
+```
+
+規則定義在一份版本化的清單（`precheck_rules`），Flutter 與 Edge Function 共用同一份鍵值（與 §5.1 白名單的做法相同）：App 端只做即時提示，Edge Function 端才是強制點，不信任客戶端的預檢結果。
+
+**四組規則（初版清單，數值待校準）。**
+
+| 組 | 規則（代碼） | 動作 |
+| --- | --- | --- |
+| 1 異常組合：型式 | `offStreet` 卻帶 `facility_type='roadside'`；路邊型式卻帶 `multiStorey`／`underground`；`heavyOnly` 卻 `scooter_allowed=true`；`disabledMotorcycle`／`evMotorcycle` 帶 `parking_zones` | fix |
+| 1 異常組合：車種 | `parking_access='noMotorcycle'` 卻 `scooter_allowed` 或 `heavy_allowed` 為 true；`parking_access='heavyOnly'` 卻 `scooter_allowed=true`；`parking_zones` 全部 `noMotorcycle` 但頂層 `scooter_allowed=true`；`scooterOnly` 卻 `heavy_allowed=true` | fix |
+| 1 異常組合：費率 | `fee.heavy.mode='same_as_scooter'` 但沒有 `fee.scooter`；`daily_cap < amount`；`hourly` 且 `amount=0`（應填 `free`）；`fee` 為 `free` 但 `fee_note` 含「元／小時」等收費字樣；`fee_note` 含「免費」但 `fee` 為計費模式 | fix（結構與文字矛盾時提示擇一） |
+| 1 異常組合：位置 | 座標反查的縣市／行政區（`lib/core/town_lookup.dart`，國土測繪中心）與填寫不同；座標與同名既有點 > 2 km；與既有點座標完全相同但名稱不同；位置移動提案 > 150 m 卻未附照片 | 縣市不符：fix；其餘：hold |
+| 1 異常組合：時間 | `observed_at` 在未來或早於 90 天；臨時封閉的截止日早於今天 | fix |
+| 1 異常組合：提案本身 | 「已不存在」同時帶其他欄位修改；`proposed` 與目前值完全相同；同一人對同一點同一欄位 24 小時內重複提案（`idempotency_key` 以外的內容變體） | fix／合併至既有案件 |
+| 2 違規：政策 | 對路邊格位提車種資格 → 不拒絕，改送 §5.7（A 類）；官方點的 `source_url`、`source_name`、`effective_date` 修改 → reject；騎士對官方點送 `hidden` 以外的隱藏手段 → reject；對 A 類欄位的 `proposed` 值 | reject／改道 |
+| 2 違規：內容 | 名稱或備註含網址、電話、Email、車牌格式、身分證格式 → 個資與廣告；含「可停／不可停／合法／違規」等資格宣稱出現在備註類欄位 → 提示改用資格表單；全形重複字元或表情符號超過比例；名稱為「停車場」「測試」等占位詞 | 個資：reject；宣稱：fix（導向正確表單）；其餘：fix |
+| 2 違規：照片 | 同一張照片雜湊在 30 天內用於 ≥ 3 個不同點位；照片檔內 EXIF 拍攝時間與 `observed_at` 差 > 30 天（處理前讀取，處理後移除）；非圖片或超過大小（既有） | hold（照片不計入門檻） |
+| 3 行為異常 | 同一帳號 10 分鐘內對相距 > 50 km 的兩點送出「現場觀察」；同一帳號 1 小時內對 ≥ 10 個點位修改同一欄位為同一值；帳齡 < 7 天且當日第 5 筆以上；同裝置在 24 小時內出現 ≥ 3 個帳號；審核票在任務派出後 < 5 秒送出 | hold；達每日 3 次 → 當日後續提案 reject 並寫濫用訊號 |
+| 4 與現況衝突 | 提案的 `base_spot` 已與現值不同（提早觸發 §5.1 的欄位級衝突）；目標點位已隱藏或已被合併 | fix（要求重新載入） |
+
+**與其他機制的關係。**
+- `hold` 寫入的 `risk_flags` 就是核實計畫 §4.1 `spot_observations.risk_flags` 的內容；審核任務頁對 L2＋顯示旗標名稱（不顯示給 L0／L1，避免教人繞過）。
+- 預檢 `reject` 不扣點（提案沒有進入系統），但同一帳號每日 reject 次數計入 §5.4 的濫用訊號；連續三日觸發 → 凍結升級 7 天。
+- 群組 2 的「資格宣稱」不是拒絕，而是把人導向正確的表單；這與 §10 第 11 點一致。
+- 預檢不做任何「判斷對錯」：它只看欄位之間與政策之間的矛盾。一個自洽但錯誤的提案會照常進入共識流程。
+- 每條規則可由管理員單獨停用、調整參數；每次觸發寫 `precheck_results`，供計算誤攔率。
+
+**護欄。** 規則必須是可解釋的確定性檢查，回傳的原因文字要讓回報者知道改哪個欄位；不用機器學習模型做 reject（可用於 hold 的輔助訊號，但須另列決策）；個資偵測只做格式比對、不外送內容；預檢結果與風險旗標不進公開 view。
+
+**指標。** 預檢攔截率（fix＋reject 占送出數）；誤攔率（被攔後申訴或管理員覆核認定無誤的比例，目標 ≤ 5%）；`hold` 案件最終被翻案的比例相對一般案件的倍數（驗證旗標有效）；各規則的觸發數與誤攔數（決定停用或調參）。
+
 ## 6. 資料模型與 API（建議，實作時再定版號）
 
 **新增表**
@@ -278,6 +324,15 @@ A 類（法規）與 B 類（資料穩定性）依 §0 第 3 點只能由管理�
 - `rule_review_cases`（§5.7）：`kind`（`conflict_aggregate/missing_rule/source_changed/expiring`）、`city`、`vehicle`、`space_type`、`rule_version`、`evidence_ids`、`status`、`resolved_by`、`resolution`；管理員結案時可直接開啟規則草稿。
 - `rule_drafts`（§5.7）：`city`、`vehicle`、`draft jsonb`（與 `city_rules` 同結構）、`source_excerpts jsonb`（每欄位對應的原文片段）、`consistency jsonb`、`impact jsonb`（before／after 計數與清單）、`status`（`draft/confirmed/published/discarded`）、`created_by`、`published_version`。
 - `source_watch`（§5.7）：`url`、`last_hash`、`last_checked_at`、`linked_table`、`linked_id`。
+- `precheck_rules`（§5.8）：`code PK`、`group`（`combo/policy/content/behavior/conflict`）、`action`（`fix/hold/reject/reroute`）、`params jsonb`、`enabled`、`version`、`message_zh`（回報者看到的原因）；Flutter 端以同一份 `code` 清單做即時提示。
+- `precheck_results`（§5.8，私有）：`subject_kind`（`report/vote/photo`）、`subject_id`、`reporter_id`、`rule_codes text[]`、`action`、`created_at`；每日彙總為攔截率與誤攔率。
+- `moderation_queue.risk_flags jsonb`／`spot_observations.risk_flags`：由預檢 `hold` 寫入（核實計畫 §4.1 已規劃此欄位）。
+
+**預檢函式**
+
+- `precheck_report(p_user, p_payload, p_context)`：在 `submit-report` 內、`validate()` 之後呼叫；回傳 `{action, codes[], fields[], message}`；`fix`／`reject` 時 Edge Function 以 400／422 回傳給 App，不呼叫 `apply_report`。
+- `precheck_vote(p_user, p_task, p_vote, p_evidence)`：審核票與照片的預檢（照片雜湊重用、過快投票、同裝置多帳號）。
+- `admin_set_precheck_rule(p_code, p_enabled, p_params)`：寫稽核。
 
 **法規預審 RPC／函式**
 
@@ -341,12 +396,14 @@ A 類（法規）與 B 類（資料穩定性）依 §0 第 3 點只能由管理�
 階段 0（可立即，與核實計畫 P1 並行；不改權重，不發點數）
   ├─ moderation_queue.resolution_kind、risk；Admin Web 駁回必選
   ├─ my_contributions() + 貢獻頁「我的建議」
+  ├─ 預檢模組第 1、2、4 組（§5.8：組合、政策與內容、與現況衝突）；只需 validate.ts 擴充與 Flutter 即時提示，不依賴新表
   ├─ 量測基線：每月案件數、管理員結案時效、回報者人數（LEAN UX 待驗證項）
   └─ 另開 PR 修訂核實計畫 §1 不在範圍句與 §3.3 費率策略（#85 已合併；§0 已決定）
 階段 1（依賴核實計畫 P2：spot_observations、spot_evidence）
   ├─ review_tasks／review_votes／contributor_standing／point_ledger
   ├─ official_spot_overlays ＋ 匯入只更新官方欄位（§5.6；可先於遊戲化獨立交付）
   ├─ 法規預審引擎的入口預審與 rule_evidence（§5.7 第 1 面向；只依賴既有 eligibility 與 city_rules）
+  ├─ 預檢模組第 3 組行為異常與照片規則、precheck_rules／precheck_results、risk_flags 接入共識門檻（§5.8）
   ├─ 低風險類別共識結案（2 票）＋ 黃金任務 ＋ 點數
   ├─ L0–L2 自動等級；排行榜（選擇加入）
   └─ 驗收：低風險翻案率 ≤ 3%（第一個完整 90 天批次）、低風險類別的社群結案率 ≥ 50%
@@ -389,6 +446,10 @@ A 類（法規）與 B 類（資料穩定性）依 §0 第 3 點只能由管理�
 17. **法規預審引擎的 LLM 抽取**：規則草稿是否以 LLM 輔助抽取（建議是，但每欄位須對應原文片段且管理員逐欄確認），或只提供表單與原文並排。
 18. **與規則一致的提案是否建案**：本文建議不建案、只存佐證並即時回覆；若希望留痕供稽核，可改為建案並自動結案。
 19. **規則複查門檻**：90 天內同縣市同型式 5 件矛盾觀察、3 名以上獨立 L1＋（初值，待校準）。
+20. **預檢的硬拒絕範圍**：§5.8 表中哪些 `fix` 要升為 `reject`（本文只對個資、官方來源欄位、政策禁止項硬拒絕；其餘可修正後重送）。
+21. **預檢是否使用機器學習訊號**：本文建議第一年只用確定性規則；若要用（例如照片是否為停車場景），只能作為 `hold` 的輔助，不能 `reject`。
+22. **行為異常門檻初值**（§5.8 第 3 組）與「每日 3 次 reject 即封鎖後續提案」是否過嚴。
+23. **`hold` 的加嚴方式**：本文採「共識門檻加 1 票且不計 L0／L1 照片」；替代方案是直接改派管理員。
 
 ## 11. 必測情境（實作時納入）
 
@@ -426,6 +487,18 @@ A 類（法規）與 B 類（資料穩定性）依 §0 第 3 點只能由管理�
 | LLM 草稿某欄位沒有對應原文片段 | 該欄位不可確認，草稿不可發布 |
 | `city_rules.source_url` 內容雜湊變更 | 建「來源變更」任務；規則與點位不變 |
 | 規則試辦期到期前 30 天 | 建「到期複查」任務 |
+| 新增停車點：`space_type='heavyOnly'` 且 `scooter_allowed=true` | 預檢 `fix`：App 即時提示、Edge Function 回 400 並指出兩個欄位；不進 `apply_report` |
+| 新增停車點：座標反查為新北市，填寫臺北市 | 預檢 `fix`：提示縣市不符並帶入反查結果 |
+| 修改建議：`fee.scooter.mode='free'`，`fee_note`「每小時 20 元」 | 預檢 `fix`：提示結構與文字矛盾，擇一 |
+| 修改建議：備註含「大型重機可停」 | 預檢 `fix`：導向停放資格表單，不建備註案件 |
+| 修改建議：名稱含電話號碼 | 預檢 `reject`：個資；不扣點，計入當日 reject 次數 |
+| 官方點 `source_url` 修改建議 | 預檢 `reject`：政策禁止 |
+| 同一帳號 10 分鐘內對相距 60 km 的兩點送「現場觀察」 | 第二筆 `hold`：進佇列但 `risk_flags` 含 `travel_implausible`，共識門檻加 1 票 |
+| 同一照片雜湊 30 天內用於第 3 個點位 | 該照片 `hold`：不計入任何門檻 |
+| 審核票在派出後 2 秒送出 | `hold`：該票不計入共識，寫旗標 |
+| 客戶端略過預檢直接呼叫 `submit-report` | Edge Function 端預檢仍執行；結果相同 |
+| 管理員停用某條預檢規則 | 之後的提案不再觸發；`precheck_results` 保留歷史；寫稽核 |
+| 某規則 30 天誤攔率 > 20% | 自動停用並通知管理員 |
 | 管理員翻案 | 參與者各扣分、準確率更新、`audit_samples` 留紀錄 |
 | 某類別翻案率連續超門檻 | 該類別新任務改派管理員；既有任務到期回管理員 |
 | 黃金任務答錯 | －5、準確率下降；答案不外流到任何 API |
