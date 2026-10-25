@@ -143,7 +143,7 @@
 
 「已確認存在」仍不代表車種可停（§2.1 R1）。地圖標記維持現有四態；分層主要呈現在詳情頁的資格橫幅與「資料與查核」區，並依 §11 第 5 點顯示已核實欄位與最近核實時間。
 
-> 實作：[PR #PRNUM](https://github.com/smvt1215/motorcycle-parking/pull/PRNUM)（`eligibilityDisplay()`，回報時間取 `created_at`，核驗過期顯示「曾核驗」）。「回報不一致」這一層要等欄位級爭議資料（§4.2）上線後才能判斷，目前尚未實作。
+> 實作：[PR #91](https://github.com/smvt1215/motorcycle-parking/pull/91)（`eligibilityDisplay()`，回報時間取 `created_at`，核驗過期顯示「曾核驗」）。「回報不一致」這一層要等欄位級爭議資料（§4.2）上線後才能判斷，目前尚未實作。
 
 ## 4. 資料模型與最小遷移
 
