@@ -1,6 +1,5 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
-
 import '../../core/app_version.dart';
+import '../auth/sign_in.dart';
 import '../../core/geo.dart';
 import '../../data/app_store.dart';
 import '../../models/parking.dart';
@@ -138,24 +137,7 @@ class _AccountCard extends StatelessWidget {
             ),
             if (!store.demo && !signedIn) ...[
               const SizedBox(height: 16),
-              AdaptiveButton(
-                label: '使用 Google 登入',
-                onPressed: () => runAction(
-                  context,
-                  () => store.signIn(OAuthProvider.google),
-                ),
-              ),
-              if (isCupertino) ...[
-                const SizedBox(height: 12),
-                AdaptiveButton(
-                  label: '使用 Apple 登入',
-                  secondary: true,
-                  onPressed: () => runAction(
-                    context,
-                    () => store.signIn(OAuthProvider.apple),
-                  ),
-                ),
-              ],
+              SignInButtons(store: store),
             ],
             if (signedIn) ...[
               const SizedBox(height: 8),
@@ -444,11 +426,7 @@ class SignInPrompt extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            AdaptiveButton(
-              label: '登入帳號',
-              secondary: true,
-              onPressed: () => showSettings(context, store),
-            ),
+            SignInButtons(store: store),
           ],
         ),
       ),
@@ -504,7 +482,12 @@ class _ReportFormState extends State<ReportForm> {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: widget.store,
+    builder: (context, _) => _buildForm(context),
+  );
+
+  Widget _buildForm(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),

@@ -25,14 +25,33 @@ void main() {
       near.map((s) => s.id),
     );
   });
-  test('格線兩側近點仍聚合，空資料不產生群聚', () {
+  test('鄰近點位至少五個才顯示群聚，稀疏點位保留各自位置', () {
+    for (final count in [1, 2, 3, 4, 5]) {
+      final spots = [
+        for (var i = 0; i < count; i++) point('$i', 25.03 + i * .00002, 121.56),
+      ];
+      final groups = clusterSpots(spots, 16);
+      expect(groups.length, count < 5 ? count : 1);
+      expect(groups.expand((g) => g.spots).toSet(), spots.toSet());
+      if (count < 5) {
+        for (final group in groups) {
+          expect(group.center.latitude, group.spots.single.lat);
+          expect(group.center.longitude, group.spots.single.lng);
+        }
+      }
+    }
+    final spread = [
+      for (var i = 0; i < 10; i++) point('$i', 25.03 + i * .01, 121.56),
+    ];
+    expect(clusterSpots(spread, 16), hasLength(10));
+  });
+  test('格線兩側的密集點仍聚合，空資料不產生群聚', () {
     expect(clusterSpots([], 16), isEmpty);
     for (var i = 0; i < 100; i++) {
       final lng = 121.56 + i * .0001;
       expect(
         clusterSpots([
-          point('a', 25.03, lng),
-          point('b', 25.03, lng + .00001),
+          for (var j = 0; j < 5; j++) point('$j', 25.03, lng + j * .00001),
         ], 16),
         hasLength(1),
       );

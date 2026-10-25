@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -12,6 +11,7 @@ import '../../core/config.dart';
 import '../../data/app_store.dart';
 import '../../domain/eligibility.dart';
 import '../../domain/map_viewport.dart';
+import '../../domain/spot_clusters.dart';
 import '../../models/parking.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../report/report_sheet.dart';
@@ -481,33 +481,54 @@ class _MapPageState extends ConsumerState<MapPage> {
                     userAgentPackageName: 'tw.motopark.motorcycle_parking',
                   ),
                 ),
-              MarkerClusterLayerWidget(
-                options: MarkerClusterLayerOptions(
-                  maxClusterRadius: 45,
-                  size: const Size.square(clusterBadgeSize),
-                  markers: [
-                    for (final s in spots)
-                      if (s.id != open?.id)
-                        Marker(
-                          point: LatLng(s.lat, s.lng),
-                          width: 48,
-                          height: 48,
-                          child: Semantics(
-                            label: '${s.name} ${store.eligible(s).label}',
-                            button: true,
-                            child: GestureDetector(
-                              onTap: () => _showSpot(s),
-                              child: SpotMarker(
-                                look: markerLook(store.eligible(s)),
-                                badge: spaceBadge(s),
+              Builder(
+                builder: (mapContext) {
+                  final zoom = MapCamera.of(mapContext).zoom;
+                  final groups = clusterSpots(
+                    spots.where((s) => s.id != open?.id).toList(),
+                    zoom,
+                  );
+                  return MarkerLayer(
+                    markers: [
+                      for (final group in groups)
+                        if (group.spots.length > 1)
+                          Marker(
+                            point: group.center,
+                            width: clusterBadgeSize,
+                            height: clusterBadgeSize,
+                            child: Semantics(
+                              label: '${group.spots.length} 個停車點，點選放大',
+                              button: true,
+                              child: GestureDetector(
+                                onTap: () => controller.move(
+                                  group.center,
+                                  (zoom + 2).clamp(0, 20).toDouble(),
+                                ),
+                                child: ClusterBadge(count: group.spots.length),
                               ),
                             ),
-                          ),
-                        ),
-                  ],
-                  builder: (context, markers) =>
-                      ClusterBadge(count: markers.length),
-                ),
+                          )
+                        else
+                          for (final s in group.spots)
+                            Marker(
+                              point: LatLng(s.lat, s.lng),
+                              width: 48,
+                              height: 48,
+                              child: Semantics(
+                                label: '${s.name} ${store.eligible(s).label}',
+                                button: true,
+                                child: GestureDetector(
+                                  onTap: () => _showSpot(s),
+                                  child: SpotMarker(
+                                    look: markerLook(store.eligible(s)),
+                                    badge: spaceBadge(s),
+                                  ),
+                                ),
+                              ),
+                            ),
+                    ],
+                  );
+                },
               ),
               // Outside the clusters, so the open spot never folds away.
               if (open != null)

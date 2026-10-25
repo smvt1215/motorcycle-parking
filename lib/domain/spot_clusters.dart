@@ -4,6 +4,9 @@ import 'package:latlong2/latlong.dart';
 
 import '../models/parking.dart';
 
+/// Sparse groups remain individual parking markers.
+const minimumClusterSize = 5;
+
 class SpotCluster {
   SpotCluster(this.spots);
   final List<ParkingSpot> spots;
@@ -55,5 +58,11 @@ List<SpotCluster> clusterSpots(List<ParkingSpot> spots, double zoom) {
       (cells[(cellX, cellY)] ??= []).add((x, y, cluster));
     }
   }
-  return result;
+  return [
+    for (final group in result)
+      if (group.spots.length >= minimumClusterSize)
+        group
+      else
+        for (final spot in group.spots) SpotCluster([spot]),
+  ];
 }

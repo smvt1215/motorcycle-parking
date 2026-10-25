@@ -345,7 +345,12 @@ class _SuggestionFormState extends State<_SuggestionForm> {
         );
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: widget.store,
+    builder: (context, _) => _buildForm(context),
+  );
+
+  Widget _buildForm(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     final changed = changes();

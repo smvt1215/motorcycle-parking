@@ -5,7 +5,7 @@ import '../../data/app_store.dart';
 import '../../models/parking.dart';
 import '../../domain/eligibility.dart';
 import '../../ui/adaptive/adaptive.dart';
-import '../report/report_sheet.dart';
+import '../auth/sign_in.dart';
 
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -91,7 +91,12 @@ class _SpotSheetState extends State<SpotSheet> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: widget.store,
+    builder: (context, _) => _buildDetails(context),
+  );
+
+  Widget _buildDetails(BuildContext context) {
     final store = widget.store, spot = widget.spot;
     final sourceUri = sourceLinkUri(spot.sourceUrl);
     final colors = Theme.of(context).colorScheme;
@@ -353,7 +358,7 @@ class _SpotSheetState extends State<SpotSheet> {
                             ),
                             if (!store.canReport)
                               TextButton(
-                                onPressed: () => showSettings(ctx, store),
+                                onPressed: () => showSignIn(ctx, store),
                                 child: const Text('登入後提出修改建議'),
                               ),
                             if (!pinned) ...[
