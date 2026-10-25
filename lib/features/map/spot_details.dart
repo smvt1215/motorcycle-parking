@@ -20,10 +20,8 @@ String spotFeeSummary(ParkingSpot spot, VehicleType vehicle) {
   if (spot.zones.any((z) => z.hasVehicleFees || z.feeNote.trim().isNotEmpty)) {
     return '依分區計費';
   }
-  if (!spot.fee.isEmpty) {
-    final rate = vehicle == VehicleType.scooter
-        ? spot.fee.scooter
-        : spot.fee.heavy;
+  if (spot.fee case final fee?) {
+    final rate = vehicle == VehicleType.scooter ? fee.scooter : fee.heavy;
     return rate?.text ?? '費率未確認';
   }
   return spot.feeNote.trim().isEmpty ? '依現場公告' : spot.feeNote;
