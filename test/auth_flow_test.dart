@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/services.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -115,6 +117,21 @@ BuildContext appContext(WidgetTester tester) =>
     tester.element(find.byKey(const ValueKey('parking-search')));
 
 void main() {
+  late Directory cacheDirectory;
+  late BuiltInMapCachingProvider mapCache;
+  setUpAll(() async {
+    // Plain `flutter test` also mounts OSM tiles. Widget tests have no native
+    // path_provider plugin, so give the cache its own disposable directory.
+    cacheDirectory = await Directory.systemTemp.createTemp('auth-flow-map-');
+    mapCache = BuiltInMapCachingProvider.getOrCreateInstance(
+      cacheDirectory: cacheDirectory.path,
+    );
+  });
+  tearDownAll(() async {
+    await mapCache.destroy(deleteCache: true);
+    await cacheDirectory.delete();
+  });
+
   for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
     testWidgets('$platform 回報頁 OAuth 完成留在原表單、保留草稿並立即解鎖送出', (tester) async {
       final store = await mountAuthApp(tester);
