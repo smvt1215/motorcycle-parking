@@ -14,6 +14,7 @@ import '../domain/eligibility.dart';
 import '../domain/eligibility_display.dart';
 import '../domain/map_viewport.dart';
 import '../models/parking.dart';
+import 'contributions_repository.dart';
 import 'repositories.dart';
 import 'profile_repository.dart';
 
@@ -56,8 +57,11 @@ class AppStore extends ChangeNotifier {
     this.client, {
     ParkingRepository? parkingRepository,
     RulesRepository? rulesRepository,
+    ContributionsRepository? contributionsRepository,
   }) : parking = parkingRepository ?? ParkingRepository(client),
-       rulesRepository = rulesRepository ?? RulesRepository(client) {
+       rulesRepository = rulesRepository ?? RulesRepository(client),
+       contributions =
+           contributionsRepository ?? ContributionsRepository(client) {
     vehicle = local.vehicle;
     parked = local.parked;
     _auth = client?.auth.onAuthStateChange.listen((_) {
@@ -69,6 +73,10 @@ class AppStore extends ChangeNotifier {
   final SupabaseClient? client;
   final ParkingRepository parking;
   final RulesRepository rulesRepository;
+  final ContributionsRepository contributions;
+
+  /// Counts reports sent this session, so "我送出的建議" reloads after one.
+  int reportsSent = 0;
   final notifications = ParkingNotifications();
   StreamSubscription<AuthState>? _auth;
   late VehicleType vehicle;
@@ -137,6 +145,14 @@ class AppStore extends ChangeNotifier {
       demo ||
       (client!.auth.currentUser != null &&
           !client!.auth.currentUser!.isAnonymous);
+
+  /// The signed-in Google or Apple account, null for guests and anonymous
+  /// sessions: whose contributions the contribute tab lists.
+  String? get riderId {
+    final user = client?.auth.currentUser;
+    return user == null || user.isAnonymous ? null : user.id;
+  }
+
   String get favoritesKey => client?.auth.currentUser?.id ?? 'guest';
   Future<void> init() => reload();
 
@@ -474,6 +490,7 @@ class AppStore extends ChangeNotifier {
       return '範例回報已送出（只用於本次測試）';
     }
     final result = await parking.report(body);
+    reportsSent++;
     await refresh();
     return result['duplicate_id'] != null
         ? '附近已有相同類型的停車點，請確認既有停車點'

@@ -8,6 +8,7 @@ import '../map/map_legend.dart';
 import '../report/report_sheet.dart';
 import '../auth/sign_in.dart';
 import '../report/spot_suggestions.dart';
+import 'my_contributions.dart';
 
 /// Spots listed in the panel before "show all".
 const _listed = 8;
@@ -166,6 +167,8 @@ class ContributePage extends ConsumerWidget {
           '回報會先標示待確認；停車前仍請確認現場公告。',
           style: TextStyle(color: colors.onSurfaceVariant, fontSize: 13),
         ),
+        const SizedBox(height: 32),
+        MyContributionsSection(store: store),
       ],
     );
   }

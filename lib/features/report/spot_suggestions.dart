@@ -1,4 +1,5 @@
 import '../../data/app_store.dart';
+import '../../domain/precheck.dart';
 import '../../models/fee.dart';
 import '../../models/parking.dart';
 import '../../ui/adaptive/adaptive.dart';
@@ -598,6 +599,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                       if (showsEntrance) ...[
                         TextFormField(
                           key: const ValueKey('suggestion-entrance'),
+                          autovalidateMode: AutovalidateMode.onUserInteraction,
                           controller: entrance,
                           maxLength: 500,
                           maxLines: 2,
@@ -605,27 +607,30 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                               setState(() => state.didChange(null)),
                           decoration: const InputDecoration(
                             labelText: '入口在哪裡',
+                            errorMaxLines: 4,
                             hintText: '例：入口在松仁路側，機車走右側坡道',
                             alignLabelWithHint: true,
                           ),
-                          validator: (v) => fitsServer(v, 500),
+                          validator: (v) => textHint(v, 500),
                         ),
                         const SizedBox(height: 16),
                       ],
                       TextFormField(
                         key: const ValueKey('suggestion-guide'),
+                        autovalidateMode: AutovalidateMode.onUserInteraction,
                         controller: guide,
                         maxLength: 500,
                         maxLines: 2,
                         onChanged: (v) => setState(() => state.didChange(null)),
                         decoration: InputDecoration(
                           labelText: '停車指引',
+                          errorMaxLines: 4,
                           hintText: showsEntrance
                               ? '例：B2 機車區靠電梯，重機停最後一排'
                               : '例：格位在便利商店前，靠路口一側',
                           alignLabelWithHint: true,
                         ),
-                        validator: (v) => fitsServer(v, 500),
+                        validator: (v) => textHint(v, 500),
                       ),
                       fieldError(context, state.errorText),
                     ],
@@ -692,7 +697,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                       ? '請至少選一個車種的收費方式'
                       : fee == widget.spot.fee
                       ? '請先修改費率，和目前不同才能送出'
-                      : null,
+                      : precheckHint(precheckFee(fee.toJson()), 'fee'),
                   builder: (state) => Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -749,17 +754,21 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                     key: const ValueKey('gone-until'),
                     controller: until,
                     maxLength: 40,
+                    autovalidateMode: AutovalidateMode.onUserInteraction,
                     decoration: const InputDecoration(
                       labelText: '預計恢復時間（選填）',
+                      errorMaxLines: 4,
                       hintText: '例：公告寫 11 月 30 日完工',
                       counterText: '',
                     ),
+                    validator: (v) => precheckTextHint(v),
                   ),
                 ],
                 const SizedBox(height: 16),
               ],
               TextFormField(
                 key: const ValueKey('suggestion-input'),
+                autovalidateMode: AutovalidateMode.onUserInteraction,
                 controller: note,
                 maxLength: maxLength,
                 maxLines: 4,
@@ -767,6 +776,8 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                 decoration: InputDecoration(
                   // At the top of the four lines, not floating mid-field.
                   alignLabelWithHint: true,
+                  // Precheck hints are whole sentences; let them wrap.
+                  errorMaxLines: 4,
                   labelText: unavailable
                       ? (cause == GoneCause.other ? '現場狀況' : '補充說明（選填）')
                       : structured
@@ -793,7 +804,13 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                   if ((v?.length ?? 0) > maxLength) {
                     return '最多 $maxLength 字，請刪減後再送出';
                   }
-                  return null;
+                  // The text is the suggestion itself for a name or a note,
+                  // so a stand-in like 測試 says nothing there.
+                  return precheckTextHint(
+                    v,
+                    name: fieldKey == 'name',
+                    solo: !structured && !unavailable,
+                  );
                 },
               ),
               if (changed.isNotEmpty) ...[
