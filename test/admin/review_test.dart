@@ -45,6 +45,19 @@ void main() {
       expect(reports['r-legacy']!.title, '收費資訊');
       expect(reports['r-legacy']!.riderText, '收費資訊：改為每次 30 元');
       expect(reports['r-type']!.riderText, '地面有「大型重機」字樣');
+      // A temporary closure has no proposal; its cause must stay visible
+      // even when the rider also wrote a note.
+      expect(
+        ReviewReport(
+          id: 'r-closed',
+          sourceId: communityId,
+          reason: '點位已不存在：施工中；預計恢復：11 月底；說明：入口有圍籬',
+          field: 'gone',
+          note: '入口有圍籬',
+          createdAt: reportTime,
+        ).riderText,
+        '點位已不存在：施工中；預計恢復：11 月底；說明：入口有圍籬',
+      );
     });
 
     test('不存在回報：沒附建議值時不預設隱藏；社群點用 status，官方點用 hidden', () {
