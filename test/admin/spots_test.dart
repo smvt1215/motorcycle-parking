@@ -4,6 +4,7 @@ import 'package:motorcycle_parking/admin/admin_app.dart';
 import 'package:motorcycle_parking/admin/admin_controller.dart';
 import 'package:motorcycle_parking/admin/spots/spot_models.dart';
 import 'package:motorcycle_parking/admin/spots/spots_controller.dart';
+import 'package:motorcycle_parking/domain/location_check.dart';
 
 import 'fake_admin_gateway.dart';
 
@@ -79,6 +80,43 @@ void main() {
       expect(gateway.hiddenChanges.single, (communityId, true));
     });
 
+    test('新增點位送出全部已填欄位，位置帶入縣市與行政區', () async {
+      spots.startNew(SpotKind.community, 25.06, 121.52);
+      await Future<void>.delayed(Duration.zero);
+      expect(spots.draft['city'], '臺北市');
+      expect(spots.draft['district'], '中山區');
+      expect(spots.dirty, isTrue);
+      expect(spots.errors.keys, containsAll(['name', 'space_type']));
+      expect(await spots.save(''), isFalse);
+      spots.set('name', '新的機車格');
+      spots.set('space_type', 'freeMotorcycle');
+      expect(await spots.save('現場新增'), isTrue);
+      final (kind, values, note) = gateway.created.single;
+      expect((kind, note), (SpotKind.community, '現場新增'));
+      expect(values, containsPair('lat', 25.06));
+      expect(values, containsPair('city', '臺北市'));
+      expect(values, containsPair('status', 'pending'));
+      expect(spots.record!.isNew, isFalse);
+    });
+
+    test('附近 15 m 同類型點位列為可能重複，查不到縣市時說明', () async {
+      gateway.nearby = const [
+        NearbySpot(
+          sourceId: 'x',
+          name: '隔壁同類型',
+          spaceType: 'freeMotorcycle',
+          lat: 25.06001,
+          lng: 121.52,
+        ),
+      ];
+      gateway.townAt = null;
+      spots.startNew(SpotKind.community, 25.06, 121.52);
+      spots.set('space_type', 'freeMotorcycle');
+      await spots.locate();
+      expect(spots.notes.duplicates.single.name, '隔壁同類型');
+      expect(spots.locateError, contains('查不到縣市'));
+    });
+
     test('改為官方點只送管理者填的來源與資格', () async {
       await spots.open(communityId);
       final id = await spots.promote({
@@ -95,6 +133,18 @@ void main() {
       expect(gateway.spotRows[communityId]!['status'], 'hidden');
     });
   });
+
+  /// The form's own list, not a text field's inner scrollable.
+  Finder form() => find
+      .descendant(
+        of: find.byWidgetPredicate(
+          (w) =>
+              w.key is ValueKey<String> &&
+              (w.key! as ValueKey<String>).value.startsWith('spot-form-'),
+        ),
+        matching: find.byType(Scrollable),
+      )
+      .first;
 
   group('點位畫面', () {
     late FakeAdminGateway gateway;
@@ -122,6 +172,18 @@ void main() {
           controller: controller,
           initialLocation: path,
           reviewMapBuilder: (_, _) => const SizedBox(),
+          locationMapBuilder: (_, view) => Row(
+            children: [
+              TextButton(
+                onPressed: () => view.onMove(view.lat + 0.00005, view.lng),
+                child: const Text('拖曳到附近'),
+              ),
+              TextButton(
+                onPressed: () => view.onMove(view.lat + 0.002, view.lng),
+                child: const Text('拖曳到遠處'),
+              ),
+            ],
+          ),
         ),
       );
       await tester.pumpAndSettle();
@@ -210,6 +272,89 @@ void main() {
       expect(gateway.promotions.single.$2['source_name'], '臺北市政府');
       expect(find.text('官方點（臺北市政府）'), findsOneWidget);
     });
+
+    testWidgets('新增停車點：選類型、拖曳選位、自動帶入縣市後建立', (tester) async {
+      await show(tester);
+      await tester.tap(find.text('新增停車點'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('社群點').last);
+      await tester.pumpAndSettle();
+      expect(find.text('新增社群點'), findsOneWidget);
+      expect(find.text('建立停車點'), findsOneWidget);
+      expect(find.text('隱藏點位'), findsNothing);
+      expect(find.text('請填寫名稱'), findsNothing);
+      await tester.tap(find.text('建立停車點'));
+      await tester.pumpAndSettle();
+      expect(find.text('請填寫名稱'), findsOneWidget);
+      expect(gateway.created, isEmpty);
+      await tester.enterText(find.widgetWithText(TextFormField, '名稱'), '新的機車格');
+      await tester.scrollUntilVisible(
+        find.text('拖曳到附近'),
+        300,
+        scrollable: form(),
+      );
+      await tester.tap(find.text('拖曳到附近'));
+      await tester.pump(const Duration(milliseconds: 700));
+      await tester.pumpAndSettle();
+      expect(gateway.townRequests, greaterThan(0));
+      await tester.scrollUntilVisible(
+        find.widgetWithText(DropdownButtonFormField<String>, '格位類型'),
+        -300,
+        scrollable: form(),
+      );
+      await tester.tap(
+        find.widgetWithText(DropdownButtonFormField<String>, '格位類型'),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('免費機車格').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('建立停車點'));
+      await tester.pumpAndSettle();
+      expect(gateway.created.single.$2['city'], '臺北市');
+      expect(find.text('已建立：新的機車格'), findsOneWidget);
+      expect(find.text('社群點（社群回報整理）'), findsOneWidget);
+    });
+
+    testWidgets('移動超過 150 m 時儲存前確認', (tester) async {
+      await show(tester, path: '/spots/$communityId');
+      await tester.scrollUntilVisible(
+        find.text('拖曳到遠處'),
+        300,
+        scrollable: form(),
+      );
+      await tester.tap(find.text('拖曳到遠處'));
+      await tester.pump(const Duration(milliseconds: 700));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('超過 150 m'), findsOneWidget);
+      await tester.tap(find.text('儲存並關閉'));
+      await tester.pumpAndSettle();
+      expect(find.text('移動超過 150 m'), findsOneWidget);
+      await tester.tap(find.text('回去調整'));
+      await tester.pumpAndSettle();
+      expect(gateway.spotUpdates, isEmpty);
+      await tester.tap(find.text('儲存並關閉'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('是同一個點位，儲存'));
+      await tester.pumpAndSettle();
+      expect(gateway.spotUpdates.single.$2.keys, containsAll(['lat']));
+    });
+
+    for (final size in const [Size(390, 844), Size(700, 900)]) {
+      testWidgets('新增點位的位置區塊在 ${size.width.round()} px 不溢出', (tester) async {
+        await show(tester, path: '/spots/new?kind=official', size: size);
+        expect(find.text('新增官方點'), findsOneWidget);
+        await tester.scrollUntilVisible(
+          find.byTooltip('往東 1 m'),
+          300,
+          scrollable: form(),
+        );
+        await tester.ensureVisible(find.byTooltip('往東 1 m'));
+        await tester.pumpAndSettle();
+        expect(find.byTooltip('往東 1 m').hitTestable(), findsOneWidget);
+        expect(find.text('建立停車點').hitTestable(), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      });
+    }
 
     testWidgets('隱藏點位後可復原', (tester) async {
       await show(tester, path: '/spots/$officialId');
