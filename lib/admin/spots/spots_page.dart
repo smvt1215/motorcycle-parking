@@ -210,6 +210,18 @@ class _SpotsPageState extends State<SpotsPage> {
       ),
     );
     if (kind == null || !mounted || !await _mayLeave() || !mounted) return;
+    final current = spots.record;
+    if (widget.selectedId == 'new' &&
+        current != null &&
+        current.isNew &&
+        current.newKind == kind) {
+      // Same URL: nothing follows the navigation, and the discard above
+      // dropped the looked-up county and district; start over here.
+      _locate?.cancel();
+      note.clear();
+      spots.startNew(kind, _center.$1, _center.$2);
+      return;
+    }
     context.go('/spots/new?kind=${kind.name}');
   }
 

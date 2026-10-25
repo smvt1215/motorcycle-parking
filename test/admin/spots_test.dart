@@ -190,6 +190,36 @@ void main() {
       expect(spots.record!.values['city'], '臺北市');
     });
 
+    test('查到縣市後改了縣市或行政區，需重新查詢或確認', () async {
+      await spots.open(communityId);
+      gateway.townAt = const Town('新北市', '三重區');
+      spots.set('lat', 25.07);
+      await spots.locate();
+      expect(spots.positionResolved, isTrue);
+      spots.set('district', '蘆洲區');
+      expect(spots.positionResolved, isFalse);
+      spots.set('district', '三重區');
+      expect(spots.positionResolved, isTrue);
+      spots.set('city', '臺北市');
+      expect(spots.positionResolved, isFalse);
+      final before = gateway.townRequests;
+      expect(await spots.save(''), isTrue);
+      expect(gateway.townRequests, before + 1);
+      final values = gateway.spotUpdates.single.$2;
+      expect((values['city'], values['district']), ('新北市', '三重區'));
+    });
+
+    test('手動確認縣市後又改縣市，需再確認', () async {
+      spots.startNew(SpotKind.community, 25.06, 121.52);
+      gateway.failTown = true;
+      await spots.locate();
+      spots.set('city', '新北市');
+      expect(spots.confirmManualTown(), isTrue);
+      expect(spots.positionResolved, isTrue);
+      spots.set('city', '桃園市');
+      expect(spots.positionResolved, isFalse);
+    });
+
     test('查詢中連按兩次建立，只建立一筆', () async {
       spots.startNew(SpotKind.community, 25.06, 121.52);
       await Future<void>.delayed(Duration.zero);
@@ -419,6 +449,38 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('新增官方點'), findsOneWidget);
       expect(find.text('暫時名稱'), findsNothing);
+    });
+
+    testWidgets('新增中再選同類型並放棄修改，重新開始並帶入縣市', (tester) async {
+      await show(tester);
+      await tester.tap(find.text('新增停車點'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('社群點').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.widgetWithText(TextFormField, '名稱'), '暫時名稱');
+      await tester.pumpAndSettle();
+      final before = gateway.townRequests;
+      await tester.tap(find.text('新增停車點'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('社群點').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('放棄修改').last);
+      await tester.pumpAndSettle();
+      expect(find.text('新增社群點'), findsOneWidget);
+      expect(find.text('暫時名稱'), findsNothing);
+      expect(gateway.townRequests, before + 1);
+      // Both fields show the looked-up values; the district is further down.
+      await tester.scrollUntilVisible(
+        find.text('臺北市'),
+        300,
+        scrollable: form(),
+      );
+      await tester.drag(form(), const Offset(0, -300));
+      await tester.pumpAndSettle();
+      final texts = tester
+          .widgetList<EditableText>(find.byType(EditableText))
+          .map((e) => e.controller.text);
+      expect(texts, containsAll(['臺北市', '中山區']));
     });
 
     testWidgets('移動超過 150 m 時儲存前確認', (tester) async {

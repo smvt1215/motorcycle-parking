@@ -164,7 +164,7 @@ class SpotsController extends ChangeNotifier {
       } else {
         draft = {...draft, 'city': found.city, 'district': found.district};
         filled++;
-        _locatedFor = at;
+        _locatedFor = (at.$1, at.$2, found.city, found.district);
       }
     } catch (_) {
       if (current()) locateError = '縣市與行政區查詢失敗，請手動確認或稍後重試。';
@@ -175,7 +175,9 @@ class SpotsController extends ChangeNotifier {
   }
 
   /// The form's position has a county and district looked up for it: the
-  /// stored one of an existing spot, or the last successful [locate].
+  /// stored one of an existing spot, or the last successful [locate] (or
+  /// [confirmManualTown]). Editing the county or district afterwards undoes
+  /// it, as moving the spot does.
   bool get positionResolved {
     final lat = draft['lat'], lng = draft['lng'];
     if (lat is! num || lng is! num) return false;
@@ -191,10 +193,11 @@ class SpotsController extends ChangeNotifier {
         draft['district'] == r.values['district']) {
       return true;
     }
-    return _locatedFor == at;
+    return _locatedFor == (at.$1, at.$2, draft['city'], draft['district']);
   }
 
-  (double, double)? _locatedFor;
+  /// Position, county and district of the last lookup or confirmation.
+  (double, double, Object?, Object?)? _locatedFor;
 
   /// When the lookup service is down or finds nothing, the admin confirms
   /// the county and district typed in the form for the current position.
@@ -205,7 +208,7 @@ class SpotsController extends ChangeNotifier {
     if (lat is! num || lng is! num || city is! String || city.trim().isEmpty) {
       return false;
     }
-    _locatedFor = (lat.toDouble(), lng.toDouble());
+    _locatedFor = (lat.toDouble(), lng.toDouble(), city, draft['district']);
     locateError = null;
     saveError = null;
     _notify();
