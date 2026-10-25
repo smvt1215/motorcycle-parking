@@ -2,6 +2,7 @@ import '../../core/app_version.dart';
 import '../auth/sign_in.dart';
 import '../../core/geo.dart';
 import '../../data/app_store.dart';
+import '../../data/profile_repository.dart';
 import '../../domain/eligibility.dart';
 import '../../models/fee.dart';
 import '../../models/parking.dart';
@@ -10,6 +11,8 @@ import '../../ui/fee_editor.dart';
 import '../../ui/version_text.dart';
 import '../map/space_type_sheet.dart';
 import '../map/vehicle_sheet.dart';
+import '../auth/profile_avatar.dart';
+import '../auth/profile_editor.dart';
 
 Future<void> showSettings(BuildContext context, AppStore store) =>
     showAdaptiveSheet<void>(
@@ -74,9 +77,7 @@ class _AccountCard extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     final user = store.client?.auth.currentUser;
     final signedIn = user != null && !user.isAnonymous;
-    final name =
-        user?.userMetadata?['full_name'] as String? ??
-        user?.userMetadata?['name'] as String?;
+    final name = profileDisplayName(user);
     final email = user?.email;
     final (title, detail) = store.demo
         ? ('範例模式', '目前使用範例資料。回報只用於功能測試，請勿依範例資料停車。')
@@ -87,7 +88,6 @@ class _AccountCard extends StatelessWidget {
             name ?? email ?? '已登入',
             (name != null ? email : null) ?? '回報與收藏已同步到帳號',
           );
-    final initial = (name ?? email ?? '').characters.firstOrNull;
     return Material(
       color: colors.surfaceContainerHigh,
       borderRadius: BorderRadius.circular(24),
@@ -98,27 +98,27 @@ class _AccountCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                CircleAvatar(
-                  radius: 24,
-                  backgroundColor: signedIn
-                      ? colors.primary
-                      : colors.surfaceContainerHighest,
-                  foregroundColor: signedIn
-                      ? colors.onPrimary
-                      : colors.onSurfaceVariant,
-                  child: signedIn && initial != null
-                      ? Text(
-                          initial.toUpperCase(),
-                          style: text.titleLarge?.copyWith(
-                            color: colors.onPrimary,
-                          ),
-                        )
-                      : Icon(
-                          store.demo
-                              ? Icons.science_outlined
-                              : Icons.person_outline,
-                        ),
-                ),
+                if (signedIn)
+                  Semantics(
+                    button: true,
+                    label: '編輯頭像',
+                    child: InkWell(
+                      onTap: () => showProfileEditor(context, store),
+                      customBorder: const CircleBorder(),
+                      child: ProfileAvatar(user: user),
+                    ),
+                  )
+                else
+                  CircleAvatar(
+                    radius: 24,
+                    backgroundColor: colors.surfaceContainerHighest,
+                    foregroundColor: colors.onSurfaceVariant,
+                    child: Icon(
+                      store.demo
+                          ? Icons.science_outlined
+                          : Icons.person_outline,
+                    ),
+                  ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Text(
@@ -131,6 +131,12 @@ class _AccountCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                if (signedIn)
+                  IconButton(
+                    tooltip: '編輯個人資料',
+                    icon: const Icon(Icons.edit_outlined),
+                    onPressed: () => showProfileEditor(context, store),
+                  ),
               ],
             ),
             const SizedBox(height: 12),

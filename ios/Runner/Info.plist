@@ -17,6 +17,8 @@
 	<string>$(APP_DISPLAY_NAME)</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>尋找附近停車點，以及在你記錄停車時保存位置。</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>選擇一張照片作為你的帳號頭像。</string>
 	<key>CFBundleURLTypes</key>
 	<array><dict><key>CFBundleURLSchemes</key><array><string>$(OAUTH_SCHEME)</string></array></dict></array>
 	<key>CFBundleExecutable</key>

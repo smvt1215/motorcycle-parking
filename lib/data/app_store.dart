@@ -14,6 +14,7 @@ import '../domain/eligibility.dart';
 import '../domain/map_viewport.dart';
 import '../models/parking.dart';
 import 'repositories.dart';
+import 'profile_repository.dart';
 
 /// Sources stored in `community_spots`: user reports and authorized imports
 /// (`tool/import_kml.py`), both subject to moderation.
@@ -489,6 +490,21 @@ class AppStore extends ChangeNotifier {
 
   Future<void> signOut() async {
     await client?.auth.signOut();
+  }
+
+  Future<void> updateProfile({
+    required String displayName,
+    Uint8List? avatarBytes,
+    bool removeAvatar = false,
+  }) async {
+    final backend = client;
+    if (backend == null) throw StateError('請先登入再編輯個人資料');
+    await ProfileRepository(backend).update(
+      displayName: displayName,
+      avatarBytes: avatarBytes,
+      removeAvatar: removeAvatar,
+    );
+    if (!_disposed) notifyListeners();
   }
 
   @override
