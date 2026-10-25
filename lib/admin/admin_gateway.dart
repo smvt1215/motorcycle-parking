@@ -44,13 +44,15 @@ abstract class AdminGateway {
   Future<Map<String, ReviewSpot>> reviewSpots(Iterable<String> sourceIds);
 
   /// `admin_resolve_report`: applies [patch] and closes the report atomically.
-  /// It refuses a spot changed since the report unless [force] is set.
+  /// It refuses a spot changed since the report unless [force] is set, and a
+  /// rejection without [resolutionKind].
   Future<void> resolveReport(
     String id,
     String decision,
     Map<String, dynamic> patch,
     String note, {
     bool force = false,
+    ResolutionKind? resolutionKind,
   });
 
   /// Hidden community and official spots, most recently changed first.
@@ -198,7 +200,9 @@ class SupabaseAdminGateway implements AdminGateway {
   Future<List<ReviewReport>> pendingReports() async {
     final rows = await client
         .from('moderation_queue')
-        .select('id,source_id,reason,field,proposed,note,created_at,base_spot')
+        .select(
+          'id,source_id,reason,field,proposed,note,created_at,base_spot,risk',
+        )
         .eq('status', 'pending')
         .order('created_at')
         .limit(200);
@@ -252,6 +256,7 @@ class SupabaseAdminGateway implements AdminGateway {
     Map<String, dynamic> patch,
     String note, {
     bool force = false,
+    ResolutionKind? resolutionKind,
   }) => client.rpc(
     'admin_resolve_report',
     params: {
@@ -260,6 +265,7 @@ class SupabaseAdminGateway implements AdminGateway {
       'p_patch': patch,
       'p_note': note,
       'p_force': force,
+      'p_resolution_kind': resolutionKind?.name,
     },
   );
 

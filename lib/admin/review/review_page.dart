@@ -7,6 +7,7 @@ import '../admin_theme.dart';
 import 'review_controller.dart';
 import 'review_map.dart';
 import 'review_models.dart';
+import 'review_resolution.dart';
 
 /// Below this width the queue and the report are separate screens.
 const reviewCompactWidth = 680.0;
@@ -80,6 +81,14 @@ class _ReviewPageState extends State<ReviewPage> {
   }
 
   Future<void> _decide(ReviewReport report, ReviewDecision decision) async {
+    ResolutionKind? kind;
+    if (decision == ReviewDecision.reject) {
+      kind = await pickRejectReason(
+        context,
+        compact: MediaQuery.sizeOf(context).width < reviewCompactWidth,
+      );
+      if (kind == null || !mounted) return;
+    }
     final messenger = ScaffoldMessenger.of(context);
     // The page is rebuilt for the next report's route; keep the router.
     final router = GoRouter.of(context);
@@ -92,15 +101,23 @@ class _ReviewPageState extends State<ReviewPage> {
       decision,
       note,
       force: review.canForce(report.id),
+      resolutionKind: kind,
     );
     if (!mounted || identical(review.pending, before)) return;
     messenger
       ..hideCurrentSnackBar()
       ..showSnackBar(
-        undoSnackBar(context, '${decision.done}：$name', review.undoWindow, () {
-          final id = review.undo();
-          if (id != null) router.go('/review/$id');
-        }),
+        undoSnackBar(
+          context,
+          kind == null
+              ? '${decision.done}：$name'
+              : '${decision.done}（${kind.label}）：$name',
+          review.undoWindow,
+          () {
+            final id = review.undo();
+            if (id != null) router.go('/review/$id');
+          },
+        ),
       );
     _open(next);
   }
@@ -439,9 +456,17 @@ class _QueueItem extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      report.title,
-                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 2,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          report.title,
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        if (report.risk case final risk?) RiskTag(risk),
+                      ],
                     ),
                     Text(
                       spot?.name ?? '找不到點位',
@@ -661,6 +686,18 @@ class _ReviewDetail extends StatelessWidget {
                     ),
                   ],
                 ),
+                if (report.risk case final risk?) ...[
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      RiskTag(risk),
+                      Text(risk.reason, style: muted),
+                    ],
+                  ),
+                ],
                 if (spot != null) ...[
                   const SizedBox(height: 16),
                   _MapFrame(
@@ -753,7 +790,7 @@ class _ReviewDetail extends StatelessWidget {
                     maxLines: 4,
                     decoration: const InputDecoration(
                       labelText: '處理說明（選填）',
-                      helperText: '會和處理人、時間一起記錄在稽核紀錄。',
+                      helperText: '只給管理員看，會和處理人、時間一起記在稽核紀錄。',
                       hintText: '例如：已比對街景與停管處公告',
                     ),
                   ),

@@ -29,6 +29,7 @@ B 類保留管理員結案的理由不是不信任社群，而是這些操作一
 9. 官方點的「明載」旗標 `vehicle_source` **先回填再開放**：匯入工具補上旗標並完成既有 1,497 筆回填之前，官方點的車種欄位不開放社群核實，只能標爭議。
 10. 預檢硬拒絕（`reject`）只限個資、官方來源欄位（`validate.ts` 已擋，預檢補記錄）、政策禁止項；其餘矛盾一律 `fix`，修正後可重送。
 11. 核實計畫的修訂（§1 不在範圍句、§2.2 與 §3.3 費率策略）現在另開 PR 一起改；階段 0 的實作在本研究文件合併後另開 session，分成小 PR。
+12. **駁回分類定為 6 類**：`wrong`（與現況不符）、`duplicate`（與既有案件或已處理的建議重複）、`insufficient`（資訊不足、無法查證）、`outdated`（點位已更新，建議不再適用）、`abuse`（濫用）、`other`（其他，需寫處理說明）。在 §6 原本 4 類之外加上 `insufficient` 與 `outdated`，是為了讓 §5.3 計分時只有 `wrong`、`abuse` 算提案者的錯，不會因為無法查證或資料已更新就誤罰。`resolution_note` 只給管理員看，回報者只會看到依分類顯示的固定文案。
 
 ## 1. 結論
 
@@ -75,6 +76,24 @@ A 類（法規）與 B 類（資料穩定性）依 §0 第 3 點只能由管理�
 
 活躍審核者少於這個量時，案件會逾時（§5.1 的 14 天）回到管理員，社群結案率自然下降。這就是為什麼遊戲化要存在：它的工作是把「願意做 5 件」的人數養起來，而不是讓每個人做更多件。
 
+### 2.4 量測基線（階段 0）
+
+導入遊戲化之前先記錄基線，之後才能比較社群結案率與時效。`admin_review_baseline(p_months int default 12)`（security invoker，先檢查 `is_admin()`，非管理員或沒有 `aal2` 一律 `42501`）以 Asia/Taipei 月份分組，每月一列、最新的在前：
+
+| 欄位 | 定義 |
+| --- | --- |
+| `reports` | 當月入列的案件數 |
+| `reporters` | 當月案件中不重複的回報者人數（投票觸發的案件沒有回報者） |
+| `auto_reports` | 當月由投票觸發、沒有回報者的案件數 |
+| `resolved` | 當月結案數，不論結案方式（含 Dashboard 舊路徑） |
+| `admin_resolved` | 當月經 `admin_resolve_report` 結案的件數（`resolved_by` 有值） |
+| `median_hours` | `admin_resolved` 從入列到結案的時數中位數 |
+| `by_status` | 當月結案依 `accepted`／`rejected`／`closed` 分布 |
+| `by_resolution_kind` | 當月結案依分類分布；`unclassified` 是沒有記錄分類的件數 |
+| `by_risk` | 當月入列依風險分布；`unclassified` 是沒有推導出風險的件數 |
+
+限制：「結案不修改」在資料表上同樣是 `accepted`，要分開算得看稽核紀錄裡 `spot` 是否為 null；社群結案上線前，`admin_resolved` 就等於全部的逐案結案。目前只做資料層，不做儀表板（ADMIN_WEB.md「不在範圍內」）。管理員可在 SQL Editor 以 admin JWT 執行，或之後由指標頁讀取。
+
 ## 3. 現況盤點：系統裡已存在的隱性等級
 
 | 身分 | 判定方式（程式位置） | 現有能力 | 現有限制 |
@@ -98,7 +117,7 @@ A 類（法規）與 B 類（資料穩定性）依 §0 第 3 點只能由管理�
 
 - **社群沒有結案路徑。** 只有 `admin_resolve_report` 能把案件從 `pending` 改掉。
 - **使用者看不到自己的貢獻。** `moderation_queue` 只有 `admin_read_moderation` 一條讀取政策；貢獻頁（`lib/features/contribute/`）只列目前地圖範圍內的停車點。
-- **駁回沒有分類。** `rejected` 只有自由文字 `resolution_note`，分不出「判斷錯誤」「重複」「濫用」。
+- **駁回沒有分類。** `rejected` 只有自由文字 `resolution_note`，分不出「判斷錯誤」「重複」「濫用」。（階段 0 已補上 `resolution_kind` 與 `risk`，見 §6 與 [ADMIN_WEB.md P3](ADMIN_WEB.md#p3-實作)。）
 - **沒有使用者資料表。** #83 把顯示名稱與頭像放在 `raw_user_meta_data`（使用者可自改）；#81 把名稱快照到 `community_spots.contributor_name`。等級、點數屬伺服器判定的資料，**不能放 `raw_user_meta_data`**。
 - **沒有中間角色。** `is_admin()` 是布林；#84 的核驗 trigger 與所有管理 RPC 都以它為唯一閘門。
 - **沒有照片上傳。** 核實計畫 P2 的 `spot_evidence` 尚未實作；#85 §5.2 例外與本文 L3 的照片確認都依賴它。
@@ -358,7 +377,8 @@ validate.ts（結構）→ 預檢（組合／內容／行為）→ 法規預審 
 
 **既有表調整**
 
-- `moderation_queue`：加 `category`（`a_rule/b_stability/c_open`，§0 第 3 點）、`risk`、`prescreened_at`（B 類社群預審達成時間）、`resolved_by_kind`（`admin/community/guardian/system_expired`）、`resolution_kind`（`wrong/duplicate/abuse/other`，駁回必填）；`resolved_by` 社群結案時為 null，參與者記在 `review_votes` 與稽核。B 類案件達預審門檻時由 `submit_review_vote` 寫 `prescreened_at` 並套用安全中間狀態，不結案。
+- `moderation_queue`：加 `category`（`a_rule/b_stability/c_open`，§0 第 3 點）、`risk`、`prescreened_at`（B 類社群預審達成時間）、`resolved_by_kind`（`admin/community/guardian/system_expired`）、`resolution_kind`（`wrong/duplicate/insufficient/outdated/abuse/other`，駁回必填；2026-10-25 使用者決定為 6 類，見 §0 第 12 點）；`resolved_by` 社群結案時為 null，參與者記在 `review_votes` 與稽核。B 類案件達預審門檻時由 `submit_review_vote` 寫 `prescreened_at` 並套用安全中間狀態，不結案。
+  - **階段 0 已實作（`202610260020_review_resolution_kind.sql`）**：`resolution_kind` 與 `risk` 兩欄，皆可為 null。`risk` 由入列 trigger 呼叫 `moderation_risk(field, reason, proposed, base_spot)` 推導，取類別與每個建議欄位中最高的等級：名稱、備註、入口與停車指引為低；費率、場站型式、路邊格位之間的型式變更、移位 ≤ 150 m、已不存在（含投票觸發）為中；停放資格、型式進出 `offStreet`、移位 > 150 m，以及沒有快照或無法判斷的案件都算高。既有資料也用同一套規則回填。既有的駁回列 `resolution_kind` 維持 null，指標列為「未分類」，不猜原因。`category`、`prescreened_at`、`resolved_by_kind` 留到階段 1 以後。
 - `official_heavy_spots`：不新增欄位；`official_viewport_spots(_v2)` 與直接讀取的 view 加 `community_overrides jsonb`（由 `official_spot_overlays` 聚合）。`admin_resolve_report` 對官方點的 patch 改為預設寫覆蓋層，另加 `p_write_official boolean`（需填寫核對的來源說明）才直接改官方值。
 - 匯入 SQL（`tool/import_mymaps.py` 的 `official_sql()` 與 Admin Web P6）：`on conflict` 只更新官方欄位，保留 `hidden`，並由 trigger 處理覆蓋層狀態；差異試算列出受影響的覆蓋層。
 - `admin_audit_log`：新增 `action` 值 `community_resolve`、`audit_sample`、`set_role`、`reverse_decision`。
@@ -411,7 +431,7 @@ validate.ts（結構）→ 預檢（組合／內容／行為）→ 法規預審 
   ├─ moderation_queue.resolution_kind、risk；Admin Web 駁回必選
   ├─ my_contributions() + 貢獻頁「我的建議」
   ├─ 預檢模組中只看 payload 就能判定的規則（§5.8：型式／車種／費率結構組合、占位詞、個資格式）；只需 validate.ts 擴充與 Flutter 即時提示。需要查資料庫或外部服務的規則（位置反查、重複提案、現況衝突、行為異常）與 precheck_rules／precheck_results 移到階段 1
-  ├─ 量測基線：每月案件數、管理員結案時效、回報者人數（LEAN UX 待驗證項）
+  ├─ 量測基線：每月案件數、管理員結案時效、回報者人數（LEAN UX 待驗證項）；已實作 admin_review_baseline()，見 §2.4
   └─ 另開 PR 修訂核實計畫 §1 不在範圍句與 §3.3 費率策略（#85 已合併；§0 已決定）
 階段 1（依賴核實計畫 P2：spot_observations、spot_evidence）
   ├─ review_tasks／review_votes／contributor_standing／point_ledger

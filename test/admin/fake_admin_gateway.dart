@@ -35,6 +35,7 @@ List<ReviewReport> sampleReports() => [
     note: '地面有「大型重機」字樣',
     createdAt: reportTime,
     baseSpot: const {'space_type': 'freeMotorcycle'},
+    risk: ReviewRisk.medium,
   ),
   ReviewReport(
     id: 'r-access',
@@ -43,12 +44,14 @@ List<ReviewReport> sampleReports() => [
     field: 'eligibility',
     proposed: {'heavy_allowed': false},
     createdAt: reportTime.add(const Duration(hours: 1)),
+    risk: ReviewRisk.high,
   ),
   ReviewReport(
     id: 'r-gone',
     sourceId: communityId,
     reason: autoHiddenReason,
     createdAt: reportTime.add(const Duration(hours: 2)),
+    risk: ReviewRisk.medium,
   ),
   ReviewReport(
     id: 'r-legacy',
@@ -140,6 +143,7 @@ class FakeAdminGateway implements AdminGateway {
   /// Report ids whose spot changed after they were sent.
   final Set<String> changedSpots = {};
   final List<bool> forced = [];
+  final List<ResolutionKind?> kinds = [];
   Completer<List<Factor>>? delayedFactors;
   final List<String> verifiedWith = [];
   final List<String> cancelled = [];
@@ -250,13 +254,20 @@ class FakeAdminGateway implements AdminGateway {
     Map<String, dynamic> patch,
     String note, {
     bool force = false,
+    ResolutionKind? resolutionKind,
   }) async {
     await delayedResolve?.future;
     if (resolveError != null) throw resolveError!;
     if (changedSpots.contains(id) && patch.isNotEmpty && !force) {
       throw const PostgrestException(message: 'spot changed since the report');
     }
+    if (decision == 'rejected' && resolutionKind == null) {
+      throw const PostgrestException(
+        message: 'a rejection needs a resolution kind',
+      );
+    }
     forced.add(force);
+    kinds.add(resolutionKind);
     resolved.add((id, decision, patch, note));
     reports = reports.where((r) => r.id != id).toList();
     count--;
