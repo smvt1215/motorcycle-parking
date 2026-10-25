@@ -371,6 +371,47 @@ class SpotsController extends ChangeNotifier {
     }
   }
 
+  /// Records that an admin checked the open community spot's stored vehicle
+  /// access: the RPC restates the values unchanged, and the database marks
+  /// each restated vehicle verified. Unsaved edits must be saved first.
+  Future<bool> verifyVehicles() async {
+    final current = record;
+    if (gateway == null ||
+        current == null ||
+        current.isNew ||
+        current.official ||
+        saving ||
+        dirty) {
+      return false;
+    }
+    final flags = current.verifiableFlags;
+    if (flags.isEmpty) return false;
+    final generation = _generation;
+    saving = true;
+    saveError = null;
+    _notify();
+    try {
+      final saved = await gateway!.updateSpot(
+        current.sourceId,
+        flags,
+        current.updatedAt,
+        '核驗目前車種',
+      );
+      if (generation != _generation) return false;
+      _load(saved);
+      _refreshRow(saved);
+      return true;
+    } catch (e) {
+      if (generation == _generation) {
+        saveError = _message(e, '核驗失敗，請重試。');
+      }
+      return false;
+    } finally {
+      if (generation == _generation) saving = false;
+      _notify();
+    }
+  }
+
   /// Hides or restores the open spot. Unsaved edits are kept in the form.
   Future<bool> setHidden(bool hide) async {
     final current = record;

@@ -389,7 +389,16 @@ class FakeAdminGateway implements AdminGateway {
       );
     }
     spotUpdates.add((sourceId, values, baseUpdatedAt, note));
-    spotRows[sourceId] = {...row, ...values, 'updated_at': _bump()};
+    spotRows[sourceId] = {
+      ...row,
+      ...values,
+      'updated_at': _bump(),
+      // The database trigger: a stated community flag is verified.
+      if (!sourceId.startsWith('official:'))
+        for (final flag in ['scooter', 'heavy'])
+          if (values['${flag}_allowed'] is bool)
+            '${flag}_verified_at': '2026-10-25T01:19:36Z',
+    };
     return SpotRecord(sourceId: sourceId, values: {...spotRows[sourceId]!});
   }
 

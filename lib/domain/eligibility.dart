@@ -70,8 +70,10 @@ Eligibility _judge(
   // Only trusted data may deny outright; a pending, stale or undated
   // community claim falls through to the rules below, which keep it
   // unverified. Confirming a community spot shows the bay exists, not that
-  // its reported vehicle fields are right.
-  final trusted = spot.isOfficial || _recentlyConfirmed(spot, now);
+  // its reported vehicle fields are right; an administrator setting them
+  // does, for as long as official data would stay fresh.
+  final verified = explicit != null && _recentlyVerified(spot, vehicle, now);
+  final trusted = spot.isOfficial || verified || _recentlyConfirmed(spot, now);
   if (explicit == false && trusted) {
     return const Eligibility(EligibilityStatus.notAllowed, '此停車點標示不開放目前車種');
   }
@@ -121,11 +123,18 @@ Eligibility _judge(
       '汽車格為小型車及大型重機停放線，普通機車停放屬車種不依規定',
     );
   }
-  // Community claims never override legal rules, and only official data may
-  // open a lot: confirmed existence never verifies a community "可停".
+  // Community claims never override legal rules, and only official or
+  // admin-verified data may open a lot: confirmed existence never verifies a
+  // community "可停".
   if (spot.spaceType == SpaceType.offStreet) {
     if (explicit == true && spot.isOfficial && !spot.stale) {
       return const Eligibility(EligibilityStatus.allowed, '場站資料標示可停，請確認現場公告');
+    }
+    if (explicit == true && verified) {
+      return const Eligibility(
+        EligibilityStatus.allowed,
+        '管理員已核驗開放目前車種，請確認現場公告',
+      );
     }
     return const Eligibility(
       EligibilityStatus.unverified,
@@ -188,6 +197,13 @@ Eligibility _judge(
     EligibilityStatus.allowed,
     rule.canUseTwoSpaces ? '可斜停兩格，請依公告停放' : '依地方規則開放，請勿超出格線',
   );
+}
+
+/// An administrator set [vehicle]'s access on this spot within the last 180
+/// days, the same window a ground confirmation stays fresh for.
+bool _recentlyVerified(ParkingSpot spot, VehicleType vehicle, DateTime? now) {
+  final at = spot.verifiedAt(vehicle);
+  return at != null && (now ?? DateTime.now()).difference(at).inDays <= 180;
 }
 
 /// A community spot confirmed on the ground within the last 180 days. With

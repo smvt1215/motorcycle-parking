@@ -785,6 +785,10 @@ class _FormPane extends StatelessWidget {
                         }
                       },
                     ),
+                  if (group == SpotGroup.vehicles &&
+                      !record.isNew &&
+                      !record.official)
+                    _VehicleVerification(spots: spots),
                 ],
                 const SizedBox(height: 24),
                 ConstrainedBox(
@@ -817,6 +821,85 @@ class _FormPane extends StatelessWidget {
             onPromote: onPromote,
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The stored vehicle access an admin has verified, and a way to verify it
+/// as it stands. The app trusts a verified vehicle like official data for
+/// 180 days.
+class _VehicleVerification extends StatelessWidget {
+  const _VehicleVerification({required this.spots});
+  final SpotsController spots;
+
+  static const _labels = {'scooter_allowed': '普通機車', 'heavy_allowed': '大型重機'};
+
+  String _state(SpotRecord record, String flag) {
+    if (record.values[flag] is! bool) return '未確認，無法核驗';
+    final at = record.verifiedAt(flag);
+    if (at == null) return '尚未核驗';
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '已核驗（${at.year}-${two(at.month)}-${two(at.day)}）';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final record = spots.record!;
+    final muted = TextStyle(
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+    );
+    final canVerify =
+        !spots.dirty && !spots.saving && record.verifiableFlags.isNotEmpty;
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 720),
+        child: Column(
+          key: const ValueKey('vehicle-verification'),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final flag in vehicleFlags)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: 104,
+                      child: Text('${_labels[flag]}核驗', style: muted),
+                    ),
+                    Expanded(child: Text(_state(record, flag))),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              key: const ValueKey('verify-vehicles'),
+              style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
+              onPressed: canVerify
+                  ? () async {
+                      final messenger = ScaffoldMessenger.of(context);
+                      if (await spots.verifyVehicles()) {
+                        messenger.showSnackBar(
+                          const SnackBar(content: Text('已核驗目前車種')),
+                        );
+                      }
+                    }
+                  : null,
+              icon: const Icon(Icons.verified_outlined),
+              label: const Text('核驗目前車種'),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              spots.dirty
+                  ? '有未儲存的修改，請先儲存或捨棄後再核驗。'
+                  : '實地或依公告確認上方車種設定正確後按下；儲存或採納車種欄位也會自動核驗。'
+                        'App 會在 180 天內把核驗過的車種當成可信資料判定可停或不可停。',
+              style: muted.copyWith(fontSize: 13),
+            ),
+          ],
+        ),
       ),
     );
   }

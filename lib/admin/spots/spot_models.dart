@@ -46,6 +46,9 @@ class SpotSummary {
 }
 
 /// The spot as loaded for editing; [values] holds its columns.
+/// Vehicle access flags, in the order the form shows them.
+const vehicleFlags = ['scooter_allowed', 'heavy_allowed'];
+
 class SpotRecord {
   const SpotRecord({required this.sourceId, required this.values})
     : newKind = null;
@@ -69,6 +72,18 @@ class SpotRecord {
 
   /// The version the form was opened with, sent back with every write.
   String get updatedAt => values['updated_at'] as String? ?? '';
+
+  /// When an admin last verified [flag]'s value (`scooter_allowed` or
+  /// `heavy_allowed`); only community spots record it.
+  DateTime? verifiedAt(String flag) => DateTime.tryParse(
+    values['${flag.replaceFirst('_allowed', '')}_verified_at'] as String? ?? '',
+  )?.toLocal();
+
+  /// The stored vehicle flags an admin can verify as they are.
+  Map<String, bool> get verifiableFlags => {
+    for (final flag in vehicleFlags)
+      if (values[flag] case final bool value) flag: value,
+  };
 
   /// How the community spot came to be: imports are marked by `source`.
   String get origin =>
