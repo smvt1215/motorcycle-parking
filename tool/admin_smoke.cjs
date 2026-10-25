@@ -111,6 +111,7 @@ function session(role, aal, factors = [factor]) {
             return route.fulfill({ body: '', headers: { ...cors, 'content-range': '0-2/3' } });
           }
           if (url.pathname === '/rest/v1/community_spots') {
+            if ((route.request().headers().accept || '').includes('vnd.pgrst.object')) return route.fulfill({ json: communitySpot, headers: cors });
             return route.fulfill({ json: url.searchParams.get('status') === 'eq.hidden' ? [hiddenSpot] : [communitySpot], headers: cors });
           }
           if (url.pathname === '/rest/v1/official_heavy_spots') {
@@ -124,6 +125,14 @@ function session(role, aal, factors = [factor]) {
               name: spot.name, city: spot.city, district: spot.district, address: spot.address, space_type: spot.space_type,
               state: spot === officialSpot ? 'visible' : spot.status, lat: spot.lat, lng: spot.lng, updated_at: spot.updated_at,
             })), headers: cors });
+          }
+          if (url.pathname === '/rest/v1/rpc/admin_upsert_spot') {
+            // Verifying the stored vehicle access restates it unchanged.
+            const { p_source_id: sourceId, p_values: values, p_note: note } = route.request().postDataJSON();
+            assert.equal(sourceId, communityId);
+            assert.deepEqual(values, { scooter_allowed: true });
+            assert.equal(note, '核驗目前車種');
+            return route.fulfill({ json: { ...communitySpot, ...values, scooter_verified_at: '2026-10-25T01:19:36Z', updated_at: '2026-10-25T01:19:36Z' }, headers: cors });
           }
           if (url.pathname === '/rest/v1/rpc/admin_resolve_report' && !route.request().postDataJSON().p_force) {
             // The spot changed after the report: the admin must review and force.
@@ -217,8 +226,44 @@ function session(role, aal, factors = [factor]) {
           await waitText('官方點（新北市政府）');
           await page.screenshot({ path: path.join(output, `${name}-spot-form.png`) });
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} spot form scrolls sideways`);
-          // New spot: kind, then a form whose county follows the position.
+          // A community spot: verify its stored vehicle access as it is.
           if (mobile) await page.getByRole('button', { name: '返回點位清單', exact: true }).click();
+          await page.getByRole('button', { name: /^中山北路二段路邊機車格/ }).click();
+          await waitText('社群點（社群回報整理）');
+          const verify = page.getByRole('button', { name: '核驗目前車種' });
+          const box = page.viewportSize();
+          // Flutter draws on a canvas: wheel until the button clears the
+          // fixed header and the bottom action bar.
+          const inView = async () => {
+            const at = (await verify.count()) ? await verify.boundingBox() : null;
+            return at && at.y > box.height * 0.25 && at.y + at.height < box.height - 180;
+          };
+          const reachVerify = async () => {
+            await page.mouse.move(box.width * (mobile ? 0.5 : 0.65), box.height * 0.5);
+            for (let i = 0; i < 40 && !(await inView()); i++) {
+              await page.mouse.wheel(0, 120);
+              await page.waitForTimeout(100);
+            }
+            assert.ok(await inView(), `${name} vehicle verification button is reachable`);
+          };
+          await reachVerify();
+          await page.screenshot({ path: path.join(output, `${name}-spot-verify.png`) });
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} vehicle verification scrolls sideways`);
+          const verified = page.waitForResponse(response => response.url().endsWith('/rpc/admin_upsert_spot'));
+          await verify.click();
+          await verified;
+          // The reloaded form starts at the top again.
+          await page.waitForTimeout(500);
+          await reachVerify();
+          await page.getByRole('group', { name: /普通機車核驗\s+已核驗（2026-10-25）/ }).waitFor({ timeout: 15000 });
+          await page.screenshot({ path: path.join(output, `${name}-spot-verified.png`) });
+          // New spot: kind, then a form whose county follows the position.
+          if (mobile) {
+            const back = page.getByRole('button', { name: '返回點位清單', exact: true });
+            for (let i = 0; i < 40 && !(await back.count()); i++) await page.mouse.wheel(0, -200);
+            await page.waitForTimeout(300);
+            await back.click();
+          }
           await page.getByRole('button', { name: '新增停車點', exact: true }).click();
           await page.getByRole('button', { name: /現場確認、尚無官方資料的停車點/ }).click();
           await waitText('新增社群點');

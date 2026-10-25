@@ -490,6 +490,8 @@ void main() {
         300,
         scrollable: form(),
       );
+      await tester.ensureVisible(find.text('拖曳到遠處'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('拖曳到遠處'));
       await tester.pump(const Duration(milliseconds: 700));
       await tester.pumpAndSettle();
@@ -528,6 +530,53 @@ void main() {
         expect(tester.takeException(), isNull);
       });
     }
+
+    for (final size in const [
+      Size(320, 640),
+      Size(390, 844),
+      Size(700, 900),
+      Size(1280, 900),
+    ]) {
+      testWidgets('核驗目前車種在 ${size.width.round()} px 可用且不溢出', (tester) async {
+        await show(tester, path: '/spots/$communityId', size: size);
+        final button = find.byKey(const ValueKey('verify-vehicles'));
+        await tester.scrollUntilVisible(button, 300, scrollable: form());
+        await tester.ensureVisible(button);
+        await tester.pumpAndSettle();
+        expect(find.text('尚未核驗'), findsOneWidget);
+        expect(find.text('未確認，無法核驗'), findsOneWidget);
+        expect(tester.getSize(button).height, greaterThanOrEqualTo(48));
+        await tester.tap(button.hitTestable());
+        await tester.pumpAndSettle();
+        // Only the known flag is restated, unchanged.
+        expect(gateway.spotUpdates.single.$2, {'scooter_allowed': true});
+        expect(gateway.spotUpdates.single.$4, '核驗目前車種');
+        expect(find.text('已核驗目前車種'), findsOneWidget);
+        // The reloaded form starts at the top again.
+        await tester.scrollUntilVisible(
+          find.textContaining('已核驗（2026-10-25）'),
+          300,
+          scrollable: form(),
+        );
+        expect(find.textContaining('已核驗（2026-10-25）'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      });
+    }
+
+    testWidgets('有未儲存的修改時不能核驗車種', (tester) async {
+      await show(tester, path: '/spots/$communityId');
+      await tester.enterText(find.widgetWithText(TextFormField, '名稱'), '暫存名稱');
+      await tester.pumpAndSettle();
+      final button = find.byKey(const ValueKey('verify-vehicles'));
+      await tester.scrollUntilVisible(button, 300, scrollable: form());
+      expect(tester.widget<OutlinedButton>(button).onPressed, isNull);
+      expect(find.text('有未儲存的修改，請先儲存或捨棄後再核驗。'), findsOneWidget);
+    });
+
+    testWidgets('官方點不顯示車種核驗', (tester) async {
+      await show(tester, path: '/spots/$officialId');
+      expect(find.byKey(const ValueKey('vehicle-verification')), findsNothing);
+    });
 
     testWidgets('隱藏點位後可復原', (tester) async {
       await show(tester, path: '/spots/$officialId');

@@ -103,7 +103,8 @@ abstract class AdminGateway {
 const _communityColumns =
     'id,source,source_name,source_url,license_note,name,lat,lng,city,district,space_type,fee_note,note,'
     'scooter_total,scooter_allowed,heavy_allowed,status,updated_at,last_confirmed_at,created_at,'
-    'facility_type,parking_access,address,road_segment,entrance_note,parking_guide,special_rules';
+    'facility_type,parking_access,address,road_segment,entrance_note,parking_guide,special_rules,'
+    'scooter_verified_at,heavy_verified_at';
 
 /// Every column the review page shows or edits; a conflict refresh must
 /// show the admin each current value before a forced write.
