@@ -753,6 +753,12 @@ class _ReportFormState extends State<ReportForm> {
   /// Whether the city's rule, not only the markings, set a vehicle.
   bool get ruled => ruledOnly.scooter || ruledOnly.heavy;
 
+  /// The vehicles sent unconfirmed because only the city's rule set them.
+  List<String> get ruledVehicles => [
+    if (scooterRuled) '普通機車',
+    if (heavyRuled) '大型重機',
+  ];
+
   /// Once the reporter sets the vehicles, a new bay kind no longer resets them.
   bool vehiclesEdited = false;
 
@@ -897,12 +903,11 @@ class _ReportFormState extends State<ReportForm> {
                 Padding(
                   padding: const EdgeInsets.only(bottom: 16),
                   child: Text(
-                    vehiclesEdited
-                        ? '現場有告示牌或地面標字時，才選「可停」。'
-                        : '已依「${type.label}」'
-                              '${ruled ? '與$city的停車規則' : ''}帶入，可以修改。'
-                              '${ruled ? '依規則帶入的車種只當預設，會隨規則更新，不存成這個點的資料。' : ''}'
-                              '現場有告示牌或地面標字時，才選「可停」。',
+                    '${vehiclesEdited ? '' : '已依「${type.label}」${ruled ? '與$city的停車規則' : ''}帶入，可以修改。'}'
+                    // What is sent, not what the city rule says now: a
+                    // vehicle stays rule-filled after the other is edited.
+                    '${ruledVehicles.isEmpty ? '' : '${ruledVehicles.join('、')}依規則帶入，只當預設，會隨規則更新，不存成這個點的資料。'}'
+                    '現場有告示牌或地面標字時，才選「可停」。',
                     style: TextStyle(color: colors.onSurfaceVariant),
                   ),
                 ),
