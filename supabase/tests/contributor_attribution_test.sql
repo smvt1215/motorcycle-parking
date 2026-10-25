@@ -44,6 +44,13 @@ create temporary table attribution_report as select (public.apply_report('100000
   '{"action":"create","spot":{"name":"新回報使用新姓名","lat":25.098,"lng":121.618,"city":"臺北市","space_type":"offStreet","contributor_name":"假管理員","contributor_role":"admin"}}')->>'id')::uuid as id;
 select is((select contributor_name||'|'||contributor_role from community_spots where id=(select id from attribution_report)),'新名稱|rider','create RPC uses the current server-side snapshot and ignores client claims');
 
+select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-000000000005","role":"authenticated","aal":"aal2","app_metadata":{"role":"admin"}}',true);
+set local role authenticated;
+select is(public.admin_upsert_spot(null,'{"kind":"community","name":"管理站來源快照","lat":25.099,"lng":121.619,"city":"臺北市","space_type":"freeMotorcycle"}')->>'contributor_role',
+  'admin','admin create RPC works with the private snapshot trigger');
+reset role;
+select set_config('request.jwt.claims','',true);
+
 insert into official_heavy_spots(id,name,lat,lng,city,source_url,source_name,effective_date,fee)
 values('75000000-0000-4000-8000-000000000007','官方回報者測試',25.097,121.617,'臺北市','https://example.test/attribution','臺北市政府',current_date,'{"heavy":{"mode":"free"}}');
 
