@@ -365,6 +365,24 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('未確認的匯入點保留查核狀態，已確認點不顯示', (tester) async {
+    usePhone(tester, width: 320);
+    final store = (await tester.runAsync(createStore))!;
+    addTearDown(store.dispose);
+    final spot = ParkingSpot.fromJson({
+      ...facility().toJson(),
+      'source': 'import',
+      'status': 'pending',
+      'contributor_role': 'import',
+    });
+    await openDetails(tester, store, spot);
+    await showField(tester, '查核狀態');
+    expect(trustSummary(spot, demo: false), '待確認');
+    expect(sourceSummary(spot, demo: false), '由管理員匯入整理');
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('社群點已確認存在仍清楚提示車種開放待查核', (tester) async {
     usePhone(tester);
     final store = (await tester.runAsync(createStore))!;

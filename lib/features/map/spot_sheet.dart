@@ -317,10 +317,14 @@ class _SpotSheetState extends State<SpotSheet> {
                                 _DetailField(
                                   label: '資料來源',
                                   value: sourceSummary(spot, demo: store.demo),
-                                  secondary: !store.demo && spot.isOfficial
-                                      ? contributorSummary(spot)
-                                      : '',
                                 ),
+                                // Confirmed is the norm and says nothing; a
+                                // pending import still needs the warning.
+                                if (spot.status != TrustStatus.confirmed)
+                                  _DetailField(
+                                    label: '查核狀態',
+                                    value: trustSummary(spot, demo: store.demo),
+                                  ),
                                 _DetailField(
                                   label: '更新時間',
                                   value: spot.updatedAt == null

@@ -115,7 +115,7 @@ String sourceSummary(ParkingSpot spot, {required bool demo}) => demo
     : contributorSummary(spot);
 
 String contributorSummary(ParkingSpot spot) {
-  if (spot.contributorRole == 'admin' || spot.isOfficial) return '由管理員新增';
+  if (spot.contributorRole == 'admin') return '由管理員新增';
   if (spot.contributorRole == 'import' || spot.source == 'import') {
     return '由管理員匯入整理';
   }
