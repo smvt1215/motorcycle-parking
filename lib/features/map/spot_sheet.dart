@@ -4,6 +4,7 @@ import '../../core/geo.dart';
 import '../../data/app_store.dart';
 import '../../models/parking.dart';
 import '../../domain/eligibility.dart';
+import '../../domain/eligibility_display.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../auth/sign_in.dart';
 
@@ -18,6 +19,7 @@ import 'map_legend.dart';
 import 'spot_details.dart';
 import 'spot_photos.dart';
 import 'parking_access_view.dart';
+import 'vehicle_sheet.dart' show platesOf;
 
 /// Peek height: header, eligibility and actions, with the map left visible
 /// above, the way map apps open a place.
@@ -225,9 +227,13 @@ class _SpotSheetState extends State<SpotSheet> {
                             ),
                             const SizedBox(height: 14),
                             _SpotDecision(
-                              vehicle: store.vehicle.label,
+                              vehicle: store.vehicle,
                               eligibility: eligibility,
-                              spot: spot,
+                              display: eligibilityDisplay(
+                                spot,
+                                store.vehicle,
+                                eligibility,
+                              ),
                             ),
                             const SizedBox(height: 16),
                             _SpotSummary(spot: spot, vehicle: store.vehicle),
@@ -324,6 +330,14 @@ class _SpotSheetState extends State<SpotSheet> {
                                       ? '未提供'
                                       : formatSpotTime(spot.updatedAt!),
                                 ),
+                                if (!spot.isOfficial)
+                                  _DetailField(
+                                    label: '已核實欄位',
+                                    value: switch (verifiedFieldLines(spot)) {
+                                      final lines when lines.isEmpty => '尚未核實',
+                                      final lines => lines.join('\n'),
+                                    },
+                                  ),
                                 if (sourceUri != null)
                                   TextButton(
                                     onPressed: () => runAction(ctx, () async {
@@ -498,68 +512,135 @@ class _SpotDecision extends StatelessWidget {
   const _SpotDecision({
     required this.vehicle,
     required this.eligibility,
-    required this.spot,
+    required this.display,
   });
-  final String vehicle;
+  final VehicleType vehicle;
   final Eligibility eligibility;
-  final ParkingSpot spot;
+  final EligibilityDisplay display;
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
     final color = spotMarkerColor(eligibility.status);
-    final label =
-        eligibility.status == EligibilityStatus.unverified && spot.isFacility
-        ? '開放資訊待確認'
-        : eligibility.label;
-    return Container(
-      key: const ValueKey('spot-decision'),
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: .08),
-        border: Border(left: BorderSide(color: color, width: 3)),
-        borderRadius: const BorderRadius.only(
-          topRight: Radius.circular(12),
-          bottomRight: Radius.circular(12),
+    final (plate, ink) = platesOf(vehicle).last;
+    // The marker's colour and shape, so the banner reads like the map; a
+    // rider's claim swaps the question mark for people, never for a tick.
+    final icon = display.reported
+        ? Icons.groups_outlined
+        : spotMarkerIcon(markerLook(eligibility));
+    return MergeSemantics(
+      child: Container(
+        key: const ValueKey('spot-decision'),
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: .08),
+          border: Border(left: BorderSide(color: color, width: 3)),
+          borderRadius: const BorderRadius.only(
+            topRight: Radius.circular(12),
+            bottomRight: Radius.circular(12),
+          ),
         ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(
-                spotMarkerRadius(eligibility.status) * .8,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(
+                  spotMarkerRadius(eligibility.status) * .8,
+                ),
+              ),
+              child: Icon(icon, size: 20, color: Colors.white),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Riders know their class by plate colour.
+                  Row(
+                    children: [
+                      ExcludeSemantics(
+                        child: Container(
+                          key: const ValueKey('spot-decision-plate'),
+                          width: 20,
+                          height: 13,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: plate,
+                            borderRadius: BorderRadius.circular(3),
+                            border: Border.all(
+                              color: colors.onSurface,
+                              width: 1,
+                            ),
+                          ),
+                          child: Container(width: 10, height: 2, color: ink),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          vehicle.label,
+                          style: text.labelMedium?.copyWith(
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    display.label,
+                    key: const ValueKey('spot-decision-label'),
+                    style: text.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      height: 1.3,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    display.explanation,
+                    style: text.bodySmall?.copyWith(
+                      color: colors.onSurfaceVariant,
+                      height: 1.45,
+                    ),
+                  ),
+                  if (display.basis case final basis?) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(top: 1),
+                          child: Icon(
+                            display.reported
+                                ? Icons.schedule
+                                : Icons.verified_outlined,
+                            size: 16,
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            basis,
+                            key: const ValueKey('spot-decision-basis'),
+                            style: text.bodySmall?.copyWith(
+                              color: colors.onSurface,
+                              height: 1.45,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
               ),
             ),
-            child: Icon(
-              spotMarkerIcon(markerLook(eligibility)),
-              size: 20,
-              color: Colors.white,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '$vehicle · $label',
-                  style: Theme.of(context).textTheme.titleSmall
-                      ?.copyWith(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  decisionExplanation(spot, eligibility),
-                  style: Theme.of(context).textTheme.bodySmall
-                      ?.copyWith(color: colors.onSurfaceVariant, height: 1.45),
-                ),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
