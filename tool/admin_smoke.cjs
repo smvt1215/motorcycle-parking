@@ -18,9 +18,9 @@ const factor = {
 const communityId = '33333333-3333-4333-8333-333333333333';
 const officialId = '44444444-4444-4444-8444-444444444444';
 const reports = [
-  { id: '55555555-5555-4555-8555-555555555551', source_id: communityId, reason: '格位類型：建議「重機專用格」', field: 'space_type', proposed: { space_type: 'heavyOnly' }, note: '現場已改漆重機專用格標線，地面有「大型重機」字樣。', created_at: '2026-10-24T06:00:00Z', base_spot: { space_type: 'freeMotorcycle' } },
-  { id: '55555555-5555-4555-8555-555555555552', source_id: `official:${officialId}`, reason: '機車停放資格：建議「普通機車可停 · 大型重機不可停」', field: 'eligibility', proposed: { heavy_allowed: false }, note: '', created_at: '2026-10-24T07:00:00Z' },
-  { id: '55555555-5555-4555-8555-555555555553', source_id: `official:${officialId}`, reason: '點位已不存在：入口封閉', field: 'gone', proposed: { hidden: true }, note: '入口已封閉施工，現場無法進入。', created_at: '2026-10-24T08:00:00Z' },
+  { id: '55555555-5555-4555-8555-555555555551', source_id: communityId, reason: '格位類型：建議「重機專用格」', field: 'space_type', proposed: { space_type: 'heavyOnly' }, note: '現場已改漆重機專用格標線，地面有「大型重機」字樣。', created_at: '2026-10-24T06:00:00Z', base_spot: { space_type: 'freeMotorcycle' }, risk: 'medium' },
+  { id: '55555555-5555-4555-8555-555555555552', source_id: `official:${officialId}`, reason: '機車停放資格：建議「普通機車可停 · 大型重機不可停」', field: 'eligibility', proposed: { heavy_allowed: false }, note: '', created_at: '2026-10-24T07:00:00Z', risk: 'high' },
+  { id: '55555555-5555-4555-8555-555555555553', source_id: `official:${officialId}`, reason: '點位已不存在：入口封閉', field: 'gone', proposed: { hidden: true }, note: '入口已封閉施工，現場無法進入。', created_at: '2026-10-24T08:00:00Z', risk: 'medium' },
 ];
 const spot = { lat: 25.0581, lng: 121.5226, city: '臺北市', district: '中山區', fee_note: '每小時 20 元', note: '', scooter_allowed: true, heavy_allowed: null, source_name: '', updated_at: '2026-10-23T00:00:00Z',
   address: '', road_segment: '', entrance_note: '', parking_guide: '', special_rules: '', facility_type: null, parking_access: null, scooter_total: null };
@@ -157,7 +157,9 @@ function session(role, aal, factors = [factor]) {
         page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
         const waitText = async text => {
           try {
-            await page.getByText(text, { exact: true }).waitFor({ timeout: 15000 });
+            // Flutter web exposes some text (e.g. a snack bar's message) as the
+            // aria-label of a group rather than as a text node.
+            await page.getByText(text, { exact: true }).or(page.locator(`flt-semantics[aria-label="${text}"]`)).first().waitFor({ timeout: 15000 });
           } catch (error) {
             await page.screenshot({ path: path.join(output, `${name}-failure.png`) });
             await fs.writeFile(path.join(output, `${name}-failure.json`), JSON.stringify({ errors, requests, html: await page.content() }, null, 2));
@@ -199,6 +201,14 @@ function session(role, aal, factors = [factor]) {
           await waitText('機車停放資格的修改建議');
           await page.screenshot({ path: path.join(output, `${name}-next.png`) });
           await page.getByRole('button', { name: '復原', exact: true }).click();
+          await waitText('格位類型的修改建議');
+          // Rejecting asks why first: a bottom sheet on phones, a dialog wider.
+          await page.getByRole('button', { name: '駁回', exact: true }).click();
+          await waitText('駁回原因');
+          await page.getByRole('radio', { name: /^重複回報/ }).click();
+          await page.screenshot({ path: path.join(output, `${name}-reject.png`) });
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} reject reasons scroll sideways`);
+          await page.getByRole('button', { name: '取消', exact: true }).click();
           await waitText('格位類型的修改建議');
           if (mobile) await page.getByRole('button', { name: /^返回佇列/ }).click();
           await page.getByRole('button', { name: '已隱藏的點位', exact: true }).click();

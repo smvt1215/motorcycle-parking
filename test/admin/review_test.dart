@@ -7,6 +7,7 @@ import 'package:motorcycle_parking/admin/admin_controller.dart';
 import 'package:motorcycle_parking/admin/review/review_controller.dart';
 import 'package:motorcycle_parking/admin/review/review_models.dart';
 import 'package:motorcycle_parking/admin/review/review_page.dart';
+import 'package:motorcycle_parking/admin/review/review_resolution.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'fake_admin_gateway.dart';
@@ -167,7 +168,12 @@ void main() {
     test('時間到或下一個決定時寫入', () async {
       final reports = review.queue;
       await review.decide(reports[0], ReviewDecision.accept, '比對街景');
-      await review.decide(reports[1], ReviewDecision.reject, '');
+      await review.decide(
+        reports[1],
+        ReviewDecision.reject,
+        '',
+        resolutionKind: ResolutionKind.wrong,
+      );
       final first = gateway.resolved.single;
       expect((first.$1, first.$2, first.$4), ('r-type', 'accepted', '比對街景'));
       expect(first.$3, {'space_type': 'heavyOnly'});
@@ -175,6 +181,30 @@ void main() {
       expect(gateway.resolved.last.$2, 'rejected');
       expect(gateway.resolved.last.$3, isEmpty);
       expect(resolvedCalls, 2);
+    });
+
+    test('駁回必須帶原因，原因隨決定寫入', () async {
+      final report = review.queue.first;
+      expect(await review.decide(report, ReviewDecision.reject, ''), report.id);
+      expect(review.error, '請先選擇駁回原因。');
+      expect(review.pending, isNull);
+      await review.decide(
+        report,
+        ReviewDecision.reject,
+        '同一點已有相同建議',
+        resolutionKind: ResolutionKind.duplicate,
+      );
+      expect(review.error, isNull);
+      await review.flush();
+      expect(gateway.resolved.single.$2, 'rejected');
+      expect(gateway.kinds.single, ResolutionKind.duplicate);
+    });
+
+    test('結案不修改可不帶原因', () async {
+      await review.decide(review.queue[3], ReviewDecision.close, '');
+      await review.flush();
+      expect(gateway.resolved.single.$2, 'accepted');
+      expect(gateway.kinds.single, isNull);
     });
 
     test('寫入失敗放回佇列；已由他人處理則移除', () async {
@@ -247,7 +277,12 @@ void main() {
       final reports = review.queue;
       await review.decide(reports[0], ReviewDecision.accept, '');
       gateway.resolveError = const PostgrestException(message: 'offline');
-      await review.decide(reports[1], ReviewDecision.reject, '');
+      await review.decide(
+        reports[1],
+        ReviewDecision.reject,
+        '',
+        resolutionKind: ResolutionKind.wrong,
+      );
       expect(review.error, contains('尚未處理成功'));
       expect(review.byId(reports[0].id), isNotNull);
       expect(review.pending?.report.id, reports[1].id);
@@ -257,7 +292,12 @@ void main() {
       final reports = review.queue;
       await review.decide(reports[0], ReviewDecision.accept, '');
       gateway.delayedResolve = Completer<void>();
-      final next = review.decide(reports[1], ReviewDecision.reject, '');
+      final next = review.decide(
+        reports[1],
+        ReviewDecision.reject,
+        '',
+        resolutionKind: ResolutionKind.wrong,
+      );
       review.reset();
       gateway.delayedResolve!.complete();
       await next;
@@ -311,7 +351,12 @@ void main() {
 
     test('重新載入期間寫入成功的案件不會被舊結果加回', () async {
       final first = review.queue.first;
-      await review.decide(first, ReviewDecision.reject, '');
+      await review.decide(
+        first,
+        ReviewDecision.reject,
+        '',
+        resolutionKind: ResolutionKind.wrong,
+      );
       gateway.delayedSpots = Completer<void>();
       final reload = review.load();
       await review.flush();
@@ -360,7 +405,12 @@ void main() {
       final access = review.byId('r-access')!;
       await review.decide(access, ReviewDecision.accept, '');
       expect(review.error, contains('只能駁回'));
-      await review.decide(access, ReviewDecision.reject, '');
+      await review.decide(
+        access,
+        ReviewDecision.reject,
+        '',
+        resolutionKind: ResolutionKind.wrong,
+      );
       await review.flush();
       expect(gateway.resolved.single.$2, 'rejected');
     });
@@ -390,8 +440,11 @@ void main() {
       String path = '/review',
       Size size = const Size(1280, 900),
       ThemeMode mode = ThemeMode.light,
+      double textScale = 1,
     }) async {
       controller = AdminController(gateway);
+      tester.platformDispatcher.textScaleFactorTestValue = textScale;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
       tester.view.physicalSize = size;
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
@@ -442,6 +495,12 @@ void main() {
       expect(find.text('格位類型的修改建議'), findsOneWidget);
       expect(gateway.resolved, isEmpty);
       await tester.tap(find.text('駁回'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('與現況不符'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('駁回這筆回報'));
+      await tester.pumpAndSettle();
+      expect(find.text('已駁回（與現況不符）：中山北路二段路邊機車格'), findsOneWidget);
       await tester.pump(const Duration(seconds: 7));
       await tester.pumpAndSettle();
       expect(gateway.resolved.single.$2, 'rejected');
@@ -688,6 +747,106 @@ void main() {
       expect(find.textContaining('重新載入失敗'), findsOneWidget);
       expect(find.byKey(const ValueKey('report-r-type')), findsOneWidget);
     });
+
+    testWidgets('佇列與詳情以文字與圖示標示風險等級', (tester) async {
+      await show(tester);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('report-r-access')),
+          matching: find.text('高風險'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('report-r-type')),
+          matching: find.text('中風險'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('report-r-legacy')),
+          matching: find.byType(RiskTag),
+        ),
+        findsNothing,
+        reason: 'unclassified reports carry no tag',
+      );
+      expect(find.text(ReviewRisk.medium.reason), findsOneWidget);
+      expect(find.byIcon(Icons.signal_cellular_alt), findsOneWidget);
+    });
+
+    testWidgets('寬螢幕駁回以對話框選原因，未選不能駁回，可取消', (tester) async {
+      await show(tester);
+      await tester.tap(find.text('駁回'));
+      await tester.pumpAndSettle();
+      expect(find.byType(Dialog), findsOneWidget);
+      expect(find.text('駁回原因'), findsOneWidget);
+      final confirm = find.byKey(const ValueKey('reject-confirm'));
+      expect(tester.widget<FilledButton>(confirm).onPressed, isNull);
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      expect(find.text('格位類型的修改建議'), findsOneWidget);
+      expect(find.textContaining('已駁回'), findsNothing);
+      await tester.tap(find.text('駁回'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('重複回報'));
+      await tester.pumpAndSettle();
+      await tester.tap(confirm);
+      await tester.pumpAndSettle();
+      expect(find.text('已駁回（重複回報）：中山北路二段路邊機車格'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 7));
+      await tester.pumpAndSettle();
+      expect(gateway.resolved.single.$2, 'rejected');
+      expect(gateway.kinds.single, ResolutionKind.duplicate);
+    });
+
+    for (final (width, scale) in [(320.0, 1.6), (390.0, 1.0)]) {
+      testWidgets('手機 ${width.toInt()} px、${scale}x 字級以底部面板選駁回原因', (
+        tester,
+      ) async {
+        await show(
+          tester,
+          path: '/review/r-access',
+          size: Size(width, 700),
+          mode: ThemeMode.dark,
+          textScale: scale,
+        );
+        await tester.tap(find.text('駁回'));
+        await tester.pumpAndSettle();
+        expect(find.byType(BottomSheet), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        for (final k in ResolutionKind.values) {
+          final tile = find.byKey(ValueKey('reject-${k.name}'));
+          await tester.ensureVisible(tile);
+          await tester.pumpAndSettle();
+          expect(tile.hitTestable(), findsOneWidget, reason: k.label);
+          expect(
+            tester.getSize(tile).height,
+            greaterThanOrEqualTo(48),
+            reason: k.label,
+          );
+          expect(tester.getRect(tile).right, lessThanOrEqualTo(width));
+        }
+        final insufficient = find.byKey(const ValueKey('reject-insufficient'));
+        await tester.ensureVisible(insufficient);
+        await tester.pumpAndSettle();
+        await tester.tap(insufficient);
+        await tester.pumpAndSettle();
+        final confirm = find.byKey(const ValueKey('reject-confirm'));
+        await tester.ensureVisible(confirm);
+        await tester.pumpAndSettle();
+        expect(confirm.hitTestable(), findsOneWidget);
+        expect(tester.getSize(confirm).height, greaterThanOrEqualTo(48));
+        await tester.tap(confirm);
+        await tester.pumpAndSettle();
+        expect(find.byType(BottomSheet), findsNothing);
+        expect(tester.takeException(), isNull);
+        await tester.pump(const Duration(seconds: 7));
+        await tester.pumpAndSettle();
+        expect(gateway.kinds.single, ResolutionKind.insufficient);
+      });
+    }
 
     testWidgets('不存在的回報網址顯示說明', (tester) async {
       await show(tester, path: '/review/nope');

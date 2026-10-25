@@ -10,6 +10,39 @@ enum ReviewKind {
   final String label;
 }
 
+/// Risk class of a report (docs/CONTRIBUTION_TIERS_FEASIBILITY.md §5.1),
+/// derived by the database when the report is queued; null for rows the
+/// server has not classified.
+enum ReviewRisk {
+  low('低風險', '只改名稱或文字說明'),
+  medium('中風險', '費率、同類格位類型、150 m 內移位或已不存在'),
+  high('高風險', '停放資格、路外與路邊互換、移位超過 150 m，或無法判斷');
+
+  const ReviewRisk(this.label, this.reason);
+  final String label;
+
+  /// What puts a report in this class, in the admin's words.
+  final String reason;
+
+  static ReviewRisk? parse(Object? value) =>
+      values.where((r) => r.name == value).firstOrNull;
+}
+
+/// Why a report is rejected (required) or closed without a change
+/// (optional); stored as `moderation_queue.resolution_kind`.
+enum ResolutionKind {
+  wrong('與現況不符', '建議內容和現場或官方資料不一致'),
+  duplicate('重複回報', '與既有案件或已處理的建議重複'),
+  insufficient('資訊不足', '說明或照片不夠，無法查證'),
+  outdated('已不適用', '點位在送出後已更新，這項建議不再適用'),
+  abuse('濫用', '廣告、謾罵或刻意填寫錯誤資料'),
+  other('其他原因', '請在處理說明寫下原因');
+
+  const ResolutionKind(this.label, this.description);
+  final String label;
+  final String description;
+}
+
 enum FieldInput {
   text,
   spaceType,
@@ -110,6 +143,7 @@ class ReviewReport {
     this.proposed,
     this.note = '',
     this.baseSpot,
+    this.risk,
   });
 
   factory ReviewReport.fromJson(Map<String, dynamic> j) => ReviewReport(
@@ -121,6 +155,7 @@ class ReviewReport {
     note: j['note'] as String? ?? '',
     createdAt: DateTime.parse(j['created_at'] as String),
     baseSpot: (j['base_spot'] as Map?)?.cast<String, dynamic>(),
+    risk: ReviewRisk.parse(j['risk']),
   );
 
   final String id;
@@ -135,6 +170,9 @@ class ReviewReport {
 
   /// The spot as the rider saw it; null for reports queued before versions.
   final Map<String, dynamic>? baseSpot;
+
+  /// Derived on the server; null when it has not been classified.
+  final ReviewRisk? risk;
 
   bool get official => sourceId.startsWith('official:');
   bool get autoHidden => reason == autoHiddenReason;
