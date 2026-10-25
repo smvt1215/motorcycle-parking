@@ -25,45 +25,52 @@ alter table public.community_spots
 -- and the row still holds exactly what that write left in every field the
 -- verification covers. The time is the audit entry's, so the app's 180-day
 -- freshness rule counts from the real check. Runs before the trigger exists.
-with entries as (
-  select a.created_at,
-    case when a.action='resolve_report' then a.before->'spot' else a.before end as old_row,
-    case when a.action='resolve_report' then a.after->'spot' else a.after end as new_row
-  from public.admin_audit_log a
-  where (a.action in ('create_spot','update_spot') and a.target_table='community_spots')
-     or (a.action='resolve_report' and a.after->>'spot_table'='community_spots'
-         and a.after->>'status'='accepted')
-),
-current_rows as (
-  select c.id,jsonb_build_object('scooter_allowed',c.scooter_allowed,'heavy_allowed',c.heavy_allowed,
-    'parking_access',c.parking_access,'space_type',c.space_type,'facility_type',c.facility_type,
-    'lat',c.lat,'lng',c.lng) as now_row
-  from public.community_spots c
-),
-verified as (
-  select cur.id,v.flag,max(e.created_at) as at
-  from entries e
-  join current_rows cur on cur.id::text=e.new_row->>'id'
-  cross join (values('scooter_allowed'),('heavy_allowed')) v(flag)
-  where jsonb_typeof(e.new_row->v.flag)='boolean'
-    and (e.old_row is null
-      or (e.old_row->v.flag) is distinct from (e.new_row->v.flag)
-      or (e.old_row->'parking_access') is distinct from (e.new_row->'parking_access'))
-    -- The row still holds what the admin left.
-    and not exists(select 1 from jsonb_object_keys(cur.now_row) k
-      where (e.new_row->k) is distinct from (cur.now_row->k))
-    -- No later admin write left something else there (a non-admin path
-    -- must have restored the values since, so the check no longer holds).
-    and not exists(select 1 from entries later
-      where later.new_row->>'id'=e.new_row->>'id' and later.created_at>e.created_at
-        and exists(select 1 from jsonb_object_keys(cur.now_row) k
-          where (later.new_row->k) is distinct from (cur.now_row->k)))
-  group by cur.id,v.flag
-)
+-- Kept as a private function so pgTAP can check what it would verify.
+create function public.vehicle_verification_backfill()
+returns table(id uuid,flag text,verified_at timestamptz)
+language sql stable security invoker set search_path='' as $$
+  with entries as (
+    select a.created_at,
+      case when a.action='resolve_report' then a.before->'spot' else a.before end as old_row,
+      case when a.action='resolve_report' then a.after->'spot' else a.after end as new_row
+    from public.admin_audit_log a
+    where (a.action in ('create_spot','update_spot') and a.target_table='community_spots')
+       or (a.action='resolve_report' and a.after->>'spot_table'='community_spots'
+           and a.after->>'status'='accepted')
+  ),
+  current_rows as (
+    select c.id,jsonb_build_object('scooter_allowed',c.scooter_allowed,'heavy_allowed',c.heavy_allowed,
+      'parking_access',c.parking_access,'space_type',c.space_type,'facility_type',c.facility_type,
+      'lat',c.lat,'lng',c.lng) as now_row
+    from public.community_spots c
+  ),
+  verified as (
+    select cur.id,v.flag,max(e.created_at) as at
+    from entries e
+    join current_rows cur on cur.id::text=e.new_row->>'id'
+    cross join (values('scooter_allowed'),('heavy_allowed')) v(flag)
+    where jsonb_typeof(e.new_row->v.flag)='boolean'
+      and (e.old_row is null
+        or (e.old_row->v.flag) is distinct from (e.new_row->v.flag)
+        or (e.old_row->'parking_access') is distinct from (e.new_row->'parking_access'))
+      -- The row still holds what the admin left.
+      and not exists(select 1 from jsonb_object_keys(cur.now_row) k
+        where (e.new_row->k) is distinct from (cur.now_row->k))
+      -- No later admin write left something else there (a non-admin path
+      -- must have restored the values since, so the check no longer holds).
+      and not exists(select 1 from entries later
+        where later.new_row->>'id'=e.new_row->>'id' and later.created_at>e.created_at
+          and exists(select 1 from jsonb_object_keys(cur.now_row) k
+            where (later.new_row->k) is distinct from (cur.now_row->k)))
+    group by cur.id,v.flag
+  )
+  select verified.id,verified.flag,verified.at from verified;
+$$;
+revoke execute on function public.vehicle_verification_backfill() from public,anon,authenticated,service_role;
 update public.community_spots c
-  set scooter_verified_at=(select at from verified where verified.id=c.id and flag='scooter_allowed'),
-      heavy_verified_at=(select at from verified where verified.id=c.id and flag='heavy_allowed')
-  where c.id in (select id from verified);
+  set scooter_verified_at=(select b.verified_at from public.vehicle_verification_backfill() b where b.id=c.id and b.flag='scooter_allowed'),
+      heavy_verified_at=(select b.verified_at from public.vehicle_verification_backfill() b where b.id=c.id and b.flag='heavy_allowed')
+  where c.id in (select b.id from public.vehicle_verification_backfill() b);
 
 create function public.community_spots_vehicle_verification() returns trigger
 language plpgsql security definer set search_path='' as $$

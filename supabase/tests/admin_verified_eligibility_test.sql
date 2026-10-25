@@ -144,5 +144,38 @@ select is((admin_upsert_spot(null,'{"kind":"community","name":"核驗新增點",
 reset role;
 select is((select scooter_verified_at from community_spots where name='核驗新增點'),null,'an unset flag on create is not');
 
+-- The audit-log backfill: only admin writes that set a flag (or the shared
+-- access) and whose result the row still holds.
+select pg_temp.act('none');
+with s as (insert into community_spots(user_id,source,name,lat,lng,city,space_type,scooter_allowed,heavy_allowed,parking_access)
+  values('10000000-0000-4000-8000-000000000001','import','回填測試',25.1,121.5,'臺北市','offStreet',true,true,'scooterHeavy') returning id)
+  insert into fx select 'backfill',id from s;
+with s as (insert into community_spots(user_id,source,name,lat,lng,city,space_type,scooter_allowed,heavy_allowed)
+  values('10000000-0000-4000-8000-000000000001','import','回填移動',25.2,121.5,'臺北市','offStreet',true,true) returning id)
+  insert into fx select 'moved',id from s;
+create function pg_temp.row_of(p_id uuid) returns jsonb language sql as $$
+  select to_jsonb(c)-'location' from community_spots c where c.id=p_id;
+$$;
+insert into admin_audit_log(actor,action,target_table,target_id,before,after,created_at) values
+  -- Set parking_access (both vehicles) on a row that still matches.
+  ('10000000-0000-4000-8000-000000000005','update_spot','community_spots',(select id::text from fx where name='backfill'),
+    pg_temp.row_of((select id from fx where name='backfill'))||'{"parking_access":null}',
+    pg_temp.row_of((select id from fx where name='backfill')),'2026-10-20 01:00+00'),
+  -- A later edit of something else does not verify, nor undo the earlier one.
+  ('10000000-0000-4000-8000-000000000005','update_spot','community_spots',(select id::text from fx where name='backfill'),
+    pg_temp.row_of((select id from fx where name='backfill')),
+    pg_temp.row_of((select id from fx where name='backfill'))||'{"note":"x"}','2026-10-21 01:00+00'),
+  -- Set heavy access, but the spot has moved since.
+  ('10000000-0000-4000-8000-000000000005','update_spot','community_spots',(select id::text from fx where name='moved'),
+    pg_temp.row_of((select id from fx where name='moved'))||'{"heavy_allowed":null,"lat":25.3}',
+    pg_temp.row_of((select id from fx where name='moved'))||'{"lat":25.3}','2026-10-20 01:00+00');
+select is((select count(*)::integer from vehicle_verification_backfill() b where b.id=(select id from fx where name='backfill')),2,
+  'a shared-access edit the row still holds backfills both vehicles');
+select is((select verified_at from vehicle_verification_backfill() b where b.id=(select id from fx where name='backfill') and flag='heavy_allowed'),
+  '2026-10-20 01:00+00'::timestamptz,'the backfill keeps the audit time');
+select is((select count(*)::integer from vehicle_verification_backfill() b where b.id=(select id from fx where name='moved')),0,
+  'a spot changed since the admin write is not backfilled');
+select ok(not has_function_privilege('authenticated','public.vehicle_verification_backfill()','EXECUTE'),'the backfill is private');
+
 select * from finish();
 rollback;
