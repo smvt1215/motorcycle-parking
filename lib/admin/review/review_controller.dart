@@ -225,11 +225,16 @@ class ReviewController extends ChangeNotifier {
   void startEdit(ReviewReport report) {
     final spot = spots[report.sourceId];
     editingId = report.id;
+    final proposed = spot == null
+        ? <String, dynamic>{}
+        : applicablePatch(initialProposal(report, spot), spot);
     draft =
         savedDrafts[report.id] ??
-        (spot == null
-            ? {}
-            : applicablePatch(initialProposal(report, spot), spot));
+        // A gone report without a value starts at the spot's visibility as it
+        // is, so the admin chooses to hide it rather than finding the field.
+        (proposed.isEmpty && spot != null && report.kind == ReviewKind.gone
+            ? {visibilityKey(spot): spot.values[visibilityKey(spot)]}
+            : proposed);
     _notify();
   }
 

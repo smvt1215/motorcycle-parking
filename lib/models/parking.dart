@@ -195,6 +195,8 @@ class ParkingSpot {
     this.sourceUrl = '',
     this.sourceName = '',
     this.licenseNote = '',
+    this.contributorName = '',
+    this.contributorRole = '',
     this.facilityType,
     this.access,
     this.address = '',
@@ -208,6 +210,10 @@ class ParkingSpot {
   });
   final String id, name, city, source, feeNote, note, district, sourceUrl;
   final String sourceName, licenseNote;
+
+  /// Public attribution only, supplied by the backend without contributor ids.
+  /// The role describes who added the point; it never grants app permissions.
+  final String contributorName, contributorRole;
   final Fee fee;
   final double lat, lng;
   final SpaceType spaceType;
@@ -288,6 +294,13 @@ class ParkingSpot {
       sourceUrl: j['source_url'] as String? ?? '',
       sourceName: j['source_name'] as String? ?? '',
       licenseNote: j['license_note'] as String? ?? '',
+      contributorName: j['contributor_name'] is String
+          ? j['contributor_name'] as String
+          : '',
+      contributorRole:
+          const {'rider', 'admin', 'import'}.contains(j['contributor_role'])
+          ? j['contributor_role'] as String
+          : '',
       facilityType: _optionalEnum(FacilityType.values, j['facility_type']),
       access: _optionalEnum(ParkingAccess.values, j['parking_access']),
       address: j['address'] as String? ?? '',
@@ -338,6 +351,8 @@ class ParkingSpot {
       'source_url': sourceUrl,
       'source_name': sourceName,
       'license_note': licenseNote,
+      if (contributorName.isNotEmpty) 'contributor_name': contributorName,
+      if (contributorRole.isNotEmpty) 'contributor_role': contributorRole,
       if (facilityType != null) 'facility_type': facilityType!.name,
       if (access != null) 'parking_access': access!.name,
       if (address.isNotEmpty) 'address': address,

@@ -4,12 +4,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../core/config.dart';
 import '../core/notifications.dart';
 import '../core/geo.dart';
 import '../core/location_access.dart';
+import '../core/navigation.dart' as navigation;
 import '../domain/eligibility.dart';
 import '../domain/map_viewport.dart';
 import '../models/parking.dart';
@@ -517,14 +517,5 @@ class AppStore extends ChangeNotifier {
   }
 }
 
-Future<void> navigateTo(double lat, double lng) async {
-  final apple = !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
-  final uri = Uri.parse(
-    apple
-        ? 'https://maps.apple.com/?daddr=$lat,$lng&dirflg=d'
-        : 'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving',
-  );
-  if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-    throw StateError('無法開啟導航');
-  }
-}
+Future<void> navigateTo(double lat, double lng) =>
+    navigation.launchNavigation(lat, lng);

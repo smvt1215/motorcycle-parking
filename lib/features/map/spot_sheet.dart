@@ -98,7 +98,7 @@ class _SpotSheetState extends State<SpotSheet> {
 
   Widget _buildDetails(BuildContext context) {
     final store = widget.store, spot = widget.spot;
-    final sourceUri = sourceLinkUri(spot.sourceUrl);
+    final sourceUri = licenseLinkUri(spot);
     final colors = Theme.of(context).colorScheme;
     final photos = SpotPhotos.usable(spot.photoUrls);
     // Tablets keep a phone-width sheet instead of spanning the screen.
@@ -202,8 +202,7 @@ class _SpotSheetState extends State<SpotSheet> {
                               name: spot.name,
                               subtitle: [
                                 facilitySummary(spot),
-                                spot.city,
-                                spot.district,
+                                regionSummary(spot),
                                 if (store.located)
                                   _distanceLabel(
                                     distanceMeters(
@@ -228,6 +227,7 @@ class _SpotSheetState extends State<SpotSheet> {
                             _SpotDecision(
                               vehicle: store.vehicle.label,
                               eligibility: eligibility,
+                              spot: spot,
                             ),
                             const SizedBox(height: 16),
                             _SpotSummary(spot: spot, vehicle: store.vehicle),
@@ -317,10 +317,9 @@ class _SpotSheetState extends State<SpotSheet> {
                                 _DetailField(
                                   label: '資料來源',
                                   value: sourceSummary(spot, demo: store.demo),
-                                ),
-                                _DetailField(
-                                  label: '查核狀態',
-                                  value: trustSummary(spot, demo: store.demo),
+                                  secondary: !store.demo && spot.isOfficial
+                                      ? contributorSummary(spot)
+                                      : '',
                                 ),
                                 _DetailField(
                                   label: '更新時間',
@@ -328,24 +327,14 @@ class _SpotSheetState extends State<SpotSheet> {
                                       ? '未提供'
                                       : formatSpotTime(spot.updatedAt!),
                                 ),
-                                if (spot.isFacility)
-                                  _DetailField(
-                                    label: '即時車位狀態',
-                                    value: availabilitySummary(spot),
-                                  ),
-                                if (spot.licenseNote.trim().isNotEmpty)
-                                  _DetailField(
-                                    label: '授權說明',
-                                    value: spot.licenseNote,
-                                  ),
                                 if (sourceUri != null)
                                   TextButton(
                                     onPressed: () => runAction(ctx, () async {
                                       if (!await launchUrl(sourceUri)) {
-                                        throw StateError('無法開啟資料來源');
+                                        throw StateError('無法開啟資料授權');
                                       }
                                     }),
-                                    child: const Text('查看停車點資料來源'),
+                                    child: const Text('查看政府資料授權'),
                                   ),
                                 if (spot.stale) ...[
                                   const SizedBox(height: 8),
@@ -509,13 +498,22 @@ class _SpotHeading extends StatelessWidget {
 }
 
 class _SpotDecision extends StatelessWidget {
-  const _SpotDecision({required this.vehicle, required this.eligibility});
+  const _SpotDecision({
+    required this.vehicle,
+    required this.eligibility,
+    required this.spot,
+  });
   final String vehicle;
   final Eligibility eligibility;
+  final ParkingSpot spot;
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final color = spotMarkerColor(eligibility.status);
+    final label =
+        eligibility.status == EligibilityStatus.unverified && spot.isFacility
+        ? '開放資訊待確認'
+        : eligibility.label;
     return Container(
       key: const ValueKey('spot-decision'),
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
@@ -551,13 +549,13 @@ class _SpotDecision extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '$vehicle · ${eligibility.label}',
+                  '$vehicle · $label',
                   style: Theme.of(context).textTheme.titleSmall
                       ?.copyWith(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  eligibility.reason,
+                  decisionExplanation(spot, eligibility),
                   style: Theme.of(context).textTheme.bodySmall
                       ?.copyWith(color: colors.onSurfaceVariant, height: 1.45),
                 ),
@@ -598,8 +596,14 @@ class _SpotSummary extends StatelessWidget {
               ? '車位時間未提供'
               : formatSpotTime(availabilityTime)
         : null;
+    final total = spot.scooterTotal;
+    final capacity = total != null && available != null && total >= available
+        ? ' / $total 格'
+        : '';
     final second = spot.isFacility
-        ? (available == null || available < 0 ? '尚無即時資料' : '$available 格')
+        ? (available == null || available < 0
+              ? '尚無即時資料'
+              : '$available 格$capacity')
         : spot.spaceType.label;
     return LayoutBuilder(
       builder: (context, constraints) {
