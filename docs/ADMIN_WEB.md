@@ -1,6 +1,6 @@
 # Web 管理介面 — 開發計畫
 
-> 狀態：P1 後端與 P2 外殼已完成，P2 已於 2026-10-24 通過 staging 登入驗收（https://motopark-admin-staging.web.app ）。P3 審核佇列已實作，待 staging 部署後驗收；P4a-1（點位清單、編輯、隱藏、改為官方點）已合併；P4a-2（位置選擇元件、新增停車點）已實作；全點位地圖圖層在 P4a-3，結構化費率的管理站支援待 #68 合併後補上，地址搜尋在 P4b。P0 仍差第二個備援驗證器 App。取代 [PLAN.md](PLAN.md)「社群回報機制 › 5. 管理」原本「第一版用 Supabase Dashboard」的做法；P3 驗收前審核仍以 Dashboard 操作。最後更新：2026-10-25
+> 狀態：P1 後端與 P2 外殼已完成，P2 已於 2026-10-24 通過 staging 登入驗收（https://motopark-admin-staging.web.app ）。P3 審核佇列已實作，待 staging 部署後驗收；P4a-1（點位清單、編輯、隱藏、改為官方點）已合併；P4a-2（位置選擇元件、新增停車點）已實作；全點位地圖圖層在 P4a-3，結構化費率的管理站支援待 #68 合併後補上；P4b 地址搜尋（Google Geocoding 經 Edge Function `geocode`）已實作，待 staging 設定 secret 後驗收。P0 仍差第二個備援驗證器 App。取代 [PLAN.md](PLAN.md)「社群回報機制 › 5. 管理」原本「第一版用 Supabase Dashboard」的做法；P3 驗收前審核仍以 Dashboard 操作。最後更新：2026-10-25
 
 ## 背景
 目前審核與資料維護都在 Supabase Dashboard 完成，有幾個問題：
@@ -59,7 +59,7 @@
 
 ### 位置選擇（後台與 App 共用）
 - 拖曳標記選位置，拖曳地圖空白處平移；調整時縮放到街道層級，虛線圈標出原位置。
-- 搜尋門牌、路段、路口（「A 路與 B 路」、空格、`&` 都可）。門牌寫入「地址」；路段與路口寫入「路段」，並提醒路段只到中心點、路口只到交會點，需再拖曳對準。
+- 搜尋門牌、路段、路口（「A 路與 B 路」、兩個路名之間的空格、`&` 都可）。門牌寫入「地址」；路段與路口寫入「路段」，並提醒路段只到中心點、路口只到交會點，需再拖曳對準（P4b，見下方「P4b 實作」）。
 - 提醒：距原位置的距離；超過 150 m 確認是否同一點；15 m 內有同類型的點可能重複；跨縣市時適用規則會改變。
 - 套用後以國土測繪中心 `TownVillagePointQuery` 反查縣市與行政區（`tool/import_mymaps.py` 已使用）。
 - 後台另有東南西北 1 m 微調鈕。App 另有「我的位置」（顯示 GPS 精準度，誤差大於 20 m 時提醒），標記觸控範圍 56×68 px，拖曳時浮起避開手指。
@@ -87,7 +87,7 @@
    - `admin_upsert_city_rule`：伺服器遞增 `version`，檢查 `restriction`。
    - `admin_import_preview`／`admin_import_apply`：接收 `spots.json`，先試算差異再套用，取代 SQL Editor。
 6. 停權使用者需 Auth Admin API：Edge Function `admin-users` 先驗證呼叫者為 admin 且 `aal2`，再用 service role 執行。
-7. 地址定位：Edge Function 包裝定位服務，金鑰不進前端與 App，後台與 App 共用。Google Geocoding 支援路口查詢但另計費；TGOS／國土測繪中心的門牌與路口定位能力與申請條件，實作前查官方文件決定。
+7. 地址定位：Edge Function `geocode` 包裝 Google Geocoding API，金鑰只在 function secret `GOOGLE_GEOCODING_API_KEY`，不進前端與 App，後台與 App 共用。2026-10-25 比較後決定（見「P4b 實作」）。
 8. pgTAP：一般使用者被拒、admin 沒有 `aal2` 被拒、套用與結案同一 transaction、稽核紀錄不可修改。
 
 ## 階段
@@ -97,7 +97,7 @@
 | P1 後端基礎 | 後端變更 1、2、4、5（`admin_resolve_report`）與 pgTAP | `supabase test db` 通過 |
 | P2 外殼 | `main_admin.dart`、登入、驗證方式登記與選擇（驗證器 App、簡訊）、go_router 版面、非 admin 拒絕畫面、Firebase Hosting（CSP、`X-Frame-Options: DENY`、`noindex`） | staging 可登入 |
 | P3 審核佇列 | 篩選、差異表、小地圖、套用／修改後套用／駁回；App 改送結構化建議；採納前比對點位版本（[社群核實計畫](COMMUNITY_VERIFICATION_PLAN.md) §5.2） | 不用 Dashboard 也能審核；建議送出後點位已改版時，採納會提示衝突而不直接覆蓋（pgTAP 覆蓋） |
-| P4 點位 | P4a-1：清單、編輯表單、來源、隱藏／恢復、改為官方點；P4a-2：位置選擇元件、新增停車點；P4a-3：全點位地圖圖層（沿用 App 標記）；P4b：門牌與路口搜尋（Google Geocoding 經 Edge Function，先實測路口） | — |
+| P4 點位 | P4a-1：清單、編輯表單、來源、隱藏／恢復、改為官方點；P4a-2：位置選擇元件、新增停車點；P4a-3：全點位地圖圖層（沿用 App 標記）；P4b：門牌與路口搜尋（Google Geocoding 經 Edge Function `geocode`，已實測路口） | — |
 | P5 規則 | 規則表單、預覽、版本遞增；`tool/export_rules.py` 從 DB 匯出規則避免與 `parking_rules.json` 不一致 | — |
 | P6 匯入 | 上傳 `import_mymaps.py` 的 JSON → 差異試算 → 套用；既有點位的費率文字轉為結構化 `fee`（[PLAN.md](PLAN.md)「費率結構」）：只轉換能確定的寫法，「請依現場公告」「未知」與混有汽車、月租、身障費率而無法確定者維持 null 或交人工判斷；差異試算分列可轉換／無法判斷／需人工確認，確認後才寫入；解析結果以 `lib/models/fee.dart` 或 DB 的 `valid_fee()` 驗證 | 轉換完成前不開放依價格篩選 |
 | P7 使用者 | 檢視 `rate_limit_events`、停權（`admin-users`） | — |
@@ -160,6 +160,38 @@ node tool/admin_smoke.cjs
 - 點位表單的「位置」區塊改用元件：移動後 0.6 秒自動反查縣市與行政區並帶入，查詢 15 m 內同類型的可見點位提示可能重複，跨縣市時提醒規則會改變；移動超過 150 m 時，儲存前確認是否仍是同一點位。座標欄位仍可直接輸入。
 - 新增停車點：清單「新增停車點」→ 選社群點或官方點 → `/spots/new?kind=` → 預設位置為上次開啟的點位（否則台北車站）→ 建立後開啟新點位。新表單在第一次按「建立停車點」後才顯示必填錯誤；新增的社群點由管理者帳號建立、狀態為待確認。
 - 每個點位的表單從頂端開始（列表 key 依點位）；開啟、新增各自排序，不會讓搜尋中的清單誤判為過期。
+
+### P4b 實作
+
+**服務選擇（2026-10-25 使用者拍板）**
+
+| | Google Geocoding | TGOS | 國土測繪中心（NLSC） |
+|---|---|---|---|
+| 門牌 | 支援 | `QueryAddr` | 門牌 API（需申請） |
+| 路段 | 支援，回路段中心 | 道路定位（點＋範圍） | 路名清單 |
+| 路口 | 支援，含小路口（實測） | 路口定位 `roadcross` | 未標示 |
+| 申請與費用 | 每月免費 10,000 次，超過 US$5／1000 | 金鑰免費；全國門牌地址定位需公司或機關＋公文 | 民營須統一編號、審查、繳費，最低 NT$4,000／月 |
+| 從 Edge Function 呼叫 | 可（API 限制） | 不可：金鑰綁 Domain／IP，Edge Function 沒有固定對外 IP | 不可：同樣綁 URL／IP |
+
+OpenStreetMap Nominatim 免金鑰，但實測台灣門牌與路口都查不到，不採用。
+
+**設定**
+- staging 金鑰「Motopark staging geocoding」只開 Geocoding API；Geocoding 每日配額硬上限 300 次（約每月 9,000，留在免費額度內），另設帳單預算警示。production 需另建金鑰與配額。
+- Supabase secret `GOOGLE_GEOCODING_API_KEY`；未設定時 function 回 `not_configured`，畫面提示直接拖曳標記。
+- 條款（Google Maps Platform Service Specific Terms §6）：結果只能配 Google 地圖（App 與管理站都是）；跨使用者共用的經緯度快取最多 30 天。
+
+**Edge Function `geocode`**（`supabase/functions/geocode/`）
+- `POST {query, near?: {lat, lng}}` → `{kind, candidates: [{kind, label, place?, lat, lng, precision}]}`。`kind` 為 `address`（門牌）、`road`（路段）、`intersection`（路口）、`area`（其他區域）；`precision` 為 `exact`、`interpolated`、`center`、`approximate`。最多 5 筆，只留台灣範圍（緯度 20–27、經度 118–123）。
+- 查詢：全形轉半形、合併空白；「與」、`&`、`/` 或兩個路名之間的空格視為路口（「和」不算，避免和平東路），去掉結尾「路口」；含「號」的不當路口。送 Google 時加 `language=zh-TW`、`region=tw`、`components=country:TW`，並以地圖位置約 10 km 為偏好範圍（不是限制）。
+- 名稱（實測）：Google 的路名與路口常回英文，所以路口與路段的 `label` 用騎士輸入的路名（去掉開頭的縣市、行政區），縣市與行政區另放 `place`；門牌由縣市、行政區、路名、號組成，不含里與郵遞區號；「台」改「臺」。問兩條不相交的路時 Google 會回某條巷子與另一條路的交會點，或問不存在的門牌時只回英文路名，這些都略過，畫面顯示找不到。
+- 呼叫者：App 需 Google／Apple 登入（匿名拒絕），管理站以 admin＋aal2 身分。每人每台北日 30 次、管理者 200 次（含快取命中），超過回 429 `daily_limit`；Google 配額用完回 503 `service_limit`。其他錯誤：`sign_in_required`、`invalid_query`（2–100 字）、`unavailable`。
+- migration `202610260230_geocode.sql`：`geocode_events`（只計數，不混用回報的 `rate_limit_events`）、`geocode_cache`（以查詢＋約 5 km 偏好位置為鍵，30 天內才使用，寫入時刪除過期資料與 30 天前的計數），兩者只有 service role 可用。
+
+**畫面**（`lib/ui/address_search_field.dart`，由 `LocationPicker.search` 開啟）
+- 地圖上方一個搜尋欄＋「搜尋地址」；按鈕或鍵盤搜尋鍵才送出，不在輸入時查詢，以免消耗次數。窄於約 360 px 或放大字級時按鈕移到欄位下方。
+- 結果每列有圖示與文字說明類型（門牌、路段只到中心點、路口只到交會點、推估位置），列高至少 56 px。點一筆後移動標記、寫入對應欄位，並說明「已移到…，並填入『路段』。路口只定位到兩條路的交會點，請把標記拖到實際停車位置。」
+- 找不到時提示門牌寫到「號」、路口寫兩條路名，或直接拖曳；網路錯誤可「重新搜尋」；次數用完說明明天恢復。
+- 管理站點位表單：門牌寫入「地址」、路段與路口寫入「路段」，以既有的「已修改」標示。App 由 `ParkingRepository.searchAddress` 提供給位置選擇元件（新增停車點與「位置不正確」接入時使用）。
 
 ## CI／CD
 - `tool/ci_changes.py` 將 `lib/admin/` 歸入品質檢查與 admin web 建置（`flutter build web -t lib/main_admin.dart -o build/admin`），不觸發模擬器。

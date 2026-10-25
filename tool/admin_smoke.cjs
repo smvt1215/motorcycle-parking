@@ -119,6 +119,14 @@ function session(role, aal, factors = [factor]) {
             if ((route.request().headers().accept || '').includes('vnd.pgrst.object')) return route.fulfill({ json: officialSpot, headers: cors });
             return route.fulfill({ json: url.searchParams.get('hidden') === 'eq.true' ? [] : [officialSpot], headers: cors });
           }
+          if (url.pathname === '/functions/v1/geocode') {
+            if (route.request().method() === 'OPTIONS') return route.fulfill({ body: 'ok', headers: cors });
+            assert.equal(route.request().postDataJSON().query, '中山北路二段與南京東路');
+            return route.fulfill({ json: { kind: 'intersection', candidates: [
+              { kind: 'intersection', label: '中山北路二段與南京東路一段', place: '臺北市中山區', lat: 25.052154, lng: 121.522503, precision: 'center' },
+              { kind: 'road', label: '南京東路一段', place: '臺北市中山區', lat: 25.0521, lng: 121.525, precision: 'center' },
+            ] }, headers: cors });
+          }
           if (url.pathname === '/rest/v1/rpc/admin_spots') {
             return route.fulfill({ json: [communitySpot, officialSpot].map(spot => ({
               source_id: spot === officialSpot ? `official:${spot.id}` : spot.id, kind: spot === officialSpot ? 'official' : 'community',
@@ -276,6 +284,19 @@ function session(role, aal, factors = [factor]) {
           for (let i = 0; i < 12; i++) await page.mouse.wheel(0, 150);
           await page.waitForTimeout(500);
           await page.screenshot({ path: path.join(output, `${name}-spot-location.png`) });
+          // Address search above the picker: results, then the pick's reminder.
+          const search = page.getByRole('textbox', { name: '搜尋門牌、路段或路口' });
+          await search.click();
+          await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+          await search.fill('中山北路二段與南京東路');
+          await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+          await search.press('Enter');
+          await waitText('臺北市中山區的路口，只到交會點');
+          await page.screenshot({ path: path.join(output, `${name}-address-results.png`) });
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} address results scroll sideways`);
+          await page.getByText('中山北路二段與南京東路一段', { exact: true }).first().click();
+          await page.getByText(/並填入「路段」/).waitFor({ timeout: 15000 });
+          await page.screenshot({ path: path.join(output, `${name}-address-picked.png`) });
           await page.getByRole('button', { name: '審核', exact: false }).first().click();
           await page.screenshot({ path: path.join(output, `${name}.png`) });
           for (const [label, title] of [['點位', '停車點位'], ['規則', '各縣市停車規則'], ['匯入', '匯入停車資料'], ['使用者', '使用者管理'], ['審核', '待審回報']]) {
