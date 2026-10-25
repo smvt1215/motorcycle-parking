@@ -1,0 +1,15 @@
+# App icon. Source art: assets/branding/app_icon.svg → tool/render_brand_icons.py.
+# Regenerate: python3 tool/render_brand_icons.py && dart run flutter_launcher_icons
+# Web icons are written by the render script (maskable icons need their own crop).
+flutter_launcher_icons:
+  image_path: assets/branding/png/app_icon.png
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  background_color_ios: "#1F5FA8"
+  min_sdk_android: 21
+  adaptive_icon_background: assets/branding/png/adaptive_background.png
+  adaptive_icon_foreground: assets/branding/png/adaptive_foreground.png
+  # The foreground PNG already covers the full 108 dp layer.
+  adaptive_icon_foreground_inset: 0
+  adaptive_icon_monochrome: assets/branding/png/adaptive_monochrome.png

@@ -1,0 +1,18 @@
+# Native launch screen. Regenerate: dart run flutter_native_splash:create
+# Images come from tool/render_brand_icons.py; lib/features/launch draws the
+# same mark at the same size so the Flutter loading screen continues it.
+flutter_native_splash:
+  color: "#1F5FA8"
+  image: assets/branding/png/splash_mark.png
+  color_dark: "#1C2126"
+  image_dark: assets/branding/png/splash_mark_dark.png
+  android_gravity: center
+  ios_content_mode: center
+  web: false
+
+  android_12:
+    color: "#1F5FA8"
+    image: assets/branding/png/splash_mark.png
+    color_dark: "#1C2126"
+    image_dark: assets/branding/png/splash_android12_dark.png
+    icon_background_color_dark: "#1F5FA8"
