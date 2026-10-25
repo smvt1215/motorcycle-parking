@@ -89,6 +89,45 @@ select lives_ok($$select admin_resolve_report((select id from moderation_queue w
   'accepted','{"heavy_allowed":true}','',true)$$,'an admin adopts a report');
 reset role;
 select isnt((pg_temp.spot((select id from fx where name='lot'))).heavy_verified_at,null,'adopting the flag verifies it');
+
+-- Restating a value already stored verifies it too.
+select pg_temp.act('none');
+update community_spots set space_type='offStreet' where id=(select id from fx where name='lot');
+select is((pg_temp.spot((select id from fx where name='lot'))).heavy_verified_at,null,'unverified again before the restatement');
+insert into moderation_queue(source_id,reason,field,proposed) values((select id::text from fx where name='lot'),'重機可停','heavy_allowed','{"heavy_allowed":true}');
+select pg_temp.act('admin');
+set local role authenticated;
+select lives_ok($$select admin_resolve_report((select id from moderation_queue where source_id=(select id::text from fx where name='lot') and status='pending'),
+  'accepted','{"heavy_allowed":true}','',true)$$,'an admin adopts a report that agrees with the row');
+select lives_ok($$select admin_upsert_spot((select id::text from fx where name='lot'),'{"scooter_allowed":true}',
+  (select updated_at from community_spots where id=(select id from fx where name='lot')))$$,'an admin restates scooter access');
+reset role;
+select isnt((pg_temp.spot((select id from fx where name='lot'))).heavy_verified_at,null,'adopting an unchanged flag verifies it');
+select isnt((pg_temp.spot((select id from fx where name='lot'))).scooter_verified_at,null,'restating an unchanged flag verifies it');
+select is(current_setting('app.admin_vehicle_fields',true),'','the RPCs leave no stated fields behind');
+
+-- An admin moving the spot without restating access voids the old check;
+-- restating one vehicle keeps only that one.
+select pg_temp.act('admin');
+set local role authenticated;
+select lives_ok($$select admin_upsert_spot((select id::text from fx where name='lot'),'{"lat":25.084,"heavy_allowed":true}',
+  (select updated_at from community_spots where id=(select id from fx where name='lot')))$$,'an admin moves the spot and restates heavy access');
+reset role;
+select is((pg_temp.spot((select id from fx where name='lot'))).scooter_verified_at,null,'a move voids the vehicle not restated');
+select isnt((pg_temp.spot((select id from fx where name='lot'))).heavy_verified_at,null,'the restated vehicle stays verified');
+select pg_temp.act('admin');
+set local role authenticated;
+select lives_ok($$select admin_upsert_spot((select id::text from fx where name='lot'),'{"facility_type":"multiStorey"}',
+  (select updated_at from community_spots where id=(select id from fx where name='lot')))$$,'an admin changes the lot type only');
+reset role;
+select is((pg_temp.spot((select id from fx where name='lot'))).heavy_verified_at,null,'a lot type change voids the old check');
+
+-- Outside an admin JWT, naming fields grants nothing.
+select pg_temp.act('none');
+select set_config('app.admin_vehicle_fields','scooter_allowed,heavy_allowed',true);
+update community_spots set note='偽造' where id=(select id from fx where name='lot');
+select is((pg_temp.spot((select id from fx where name='lot'))).scooter_verified_at,null,'a forged field list does not verify');
+select set_config('app.admin_vehicle_fields','',true);
 -- Clearing a flag clears its verification.
 select pg_temp.act('admin');
 set local role authenticated;
