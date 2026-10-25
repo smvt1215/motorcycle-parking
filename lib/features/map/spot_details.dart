@@ -1,3 +1,4 @@
+import '../../models/fee.dart';
 import '../../models/parking.dart';
 import '../../domain/eligibility.dart';
 
@@ -13,7 +14,25 @@ String zoneFeeSummary(ParkingZone zone, VehicleType vehicle) {
   return zone.feeNote.trim();
 }
 
+/// Whether any zone carries its own structured rates.
+bool hasZoneFees(ParkingSpot spot) => spot.zones.any((z) => z.fee != null);
+
+/// The lot's structured rates when no zone has its own; they then supersede
+/// every legacy zone text, so a newer lot rate is never hidden by them.
+Fee? lotWideFee(ParkingSpot spot) => hasZoneFees(spot) ? null : spot.fee;
+
+/// Structured rates come first (a zone's own, then the lot's); legacy text
+/// is used only when neither exists.
 String spotFeeSummary(ParkingSpot spot, VehicleType vehicle) {
+  if (hasZoneFees(spot)) {
+    return spot.zones.length == 1
+        ? zoneFeeSummary(spot.zones.single, vehicle)
+        : '依分區計費';
+  }
+  if (spot.fee case final fee?) {
+    final rate = vehicle == VehicleType.scooter ? fee.scooter : fee.heavy;
+    return rate?.text ?? '費率未確認';
+  }
   if (spot.zones.length == 1) {
     final value = zoneFeeSummary(spot.zones.single, vehicle);
     if (value.isNotEmpty) return value;
@@ -21,14 +40,14 @@ String spotFeeSummary(ParkingSpot spot, VehicleType vehicle) {
   if (spot.zones.any((z) => z.hasVehicleFees || z.feeNote.trim().isNotEmpty)) {
     return '依分區計費';
   }
-  if (!spot.fee.isEmpty) {
-    final rate = vehicle == VehicleType.scooter
-        ? spot.fee.scooter
-        : spot.fee.heavy;
-    return rate?.text ?? '費率未確認';
-  }
   return spot.feeNote.trim().isEmpty ? '依現場公告' : spot.feeNote;
 }
+
+/// Whether [spotFeeSummary] gives the selected vehicle's own rate.
+bool spotFeeIsVehicleRate(ParkingSpot spot) => hasZoneFees(spot)
+    ? spot.zones.length == 1
+    : spot.fee != null ||
+          (spot.zones.length == 1 && spot.zones.single.hasVehicleFees);
 
 /// Details link to the official license, never to imported community maps.
 Uri? licenseLinkUri(ParkingSpot spot) =>
@@ -115,9 +134,9 @@ String sourceSummary(ParkingSpot spot, {required bool demo}) => demo
     : contributorSummary(spot);
 
 String contributorSummary(ParkingSpot spot) {
-  if (spot.contributorRole == 'admin' || spot.isOfficial) return '由管理員新增';
+  if (spot.contributorRole == 'admin') return '由管理員新增';
   if (spot.contributorRole == 'import' || spot.source == 'import') {
-    return '由管理員匯入整理';
+    return '由管理員自其他社群統整後匯入';
   }
   final name = spot.contributorName.trim();
   // Email is an account identifier, not a public reporter name.
