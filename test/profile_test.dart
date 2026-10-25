@@ -136,9 +136,22 @@ void main() {
     expect(profileNameError('  '), isNotNull);
     expect(profileNameError('換\n行'), isNotNull);
     expect(profileNameError('名' * 41), isNotNull);
+    // Mirrors #81 server cleanup: Cf (bidi/ZWJ/BOM) removed, spaces collapsed.
+    expect(normalizeProfileName(' \u202e騎\u200b士  小\ufeff明 '), '騎士 小明');
+    expect(profileNameError('\u200b\u2066'), isNotNull);
+    expect(profileNameError('\u0085名稱'), isNotNull);
+    expect(profileNameError('${'名' * 40}\u200d'), isNull);
     expect(avatarFormat(png).contentType, 'image/png');
     expect(() => avatarFormat(Uint8List(maxAvatarBytes + 1)), throwsStateError);
     expect(() => avatarFormat(Uint8List.fromList([1, 2, 3])), throwsStateError);
+  });
+
+  test('儲存前移除隱形格式字元，和伺服器顯示名稱一致', () async {
+    final fixture = ProfileFixture();
+    await fixture.open();
+    addTearDown(fixture.close);
+    await fixture.store.updateProfile(displayName: ' \u202e新\u200b名稱 ');
+    expect(fixture.updates.single['display_name'], '新名稱');
   });
 
   test('只改名稱時只更新 metadata，不碰照片且保留其他欄位', () async {

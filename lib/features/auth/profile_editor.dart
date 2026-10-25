@@ -46,7 +46,7 @@ class _ProfileEditorState extends State<ProfileEditor> {
   bool get changed =>
       photo != null ||
       remove ||
-      name.text.trim() != (profileDisplayName(user) ?? '');
+      normalizeProfileName(name.text) != (profileDisplayName(user) ?? '');
 
   @override
   void dispose() {

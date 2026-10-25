@@ -389,6 +389,31 @@ void main() {
     }
   }
 
+  testWidgets('從收藏開啟的社群點不帶回報者名稱，資料來源顯示由車友回報', (tester) async {
+    usePhone(tester, width: 320);
+    final store = (await tester.runAsync(createStore))!;
+    addTearDown(store.dispose);
+    final live = ParkingSpot.fromJson({
+      ...facility().toJson(),
+      'source': 'community',
+      'contributor_name': '小哲',
+      'contributor_role': 'rider',
+    });
+    expect(sourceSummary(live, demo: false), '由車友 小哲 回報');
+    // Older builds saved the name; a favorite never shows it again.
+    final saved = ParkingSpot.favorite({
+      ...live.toJson(),
+      'contributor_name': '小哲',
+    }).single;
+    expect(saved.contributorName, isEmpty);
+    expect(sourceSummary(saved, demo: false), '由車友回報');
+    await openDetails(tester, store, saved);
+    await showField(tester, '資料來源');
+    expect(find.textContaining('小哲'), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('社群點已確認存在仍清楚提示車種開放待查核', (tester) async {
     usePhone(tester);
     final store = (await tester.runAsync(createStore))!;

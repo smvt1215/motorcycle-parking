@@ -213,9 +213,19 @@ void main() {
     final store = await openForm(tester, rules: cityRules);
     expect(find.textContaining('與臺北市的停車規則帶入'), findsOneWidget);
     await pickType(tester, SpaceType.freeMotorcycle);
+    // Shown as the rule decides, but only the markings are stored, so the
+    // spot follows the rule if it changes.
+    expect(
+      tester
+          .widget<ChoiceField<bool?>>(
+            find.widgetWithText(ChoiceField<bool?>, '大型重機'),
+          )
+          .value,
+      false,
+    );
     final spot = await send(tester, store);
     expect(spot['scooter_allowed'], true);
-    expect(spot['heavy_allowed'], false);
+    expect(spot['heavy_allowed'], isNull);
   });
 
   testWidgets('路外停車場填型式、分類、入口與分區；路邊格只有指引', (tester) async {
@@ -278,6 +288,22 @@ void main() {
     final spot = await send(tester, store);
     expect(spot.containsKey('parking_zones'), isFalse);
     expect(spot.containsKey('facility_type'), isFalse);
+  });
+
+  testWidgets('先改一個車種再換格位，另一個規則帶入的車種仍送未確認', (tester) async {
+    final store = await openForm(tester, rules: cityRules);
+    final scooterUnconfirmed = find.descendant(
+      of: find.byType(SegmentedButton<bool?>).first,
+      matching: find.text('未確認'),
+    );
+    await tester.scrollUntilVisible(scooterUnconfirmed, 200, scrollable: form);
+    await tester.pumpAndSettle();
+    await tester.tap(scooterUnconfirmed);
+    await tester.pumpAndSettle();
+    await pickType(tester, SpaceType.freeMotorcycle);
+    final spot = await send(tester, store);
+    expect(spot['scooter_allowed'], isNull);
+    expect(spot['heavy_allowed'], isNull);
   });
 
   testWidgets('手動設定車種後，換格位不再覆蓋', (tester) async {

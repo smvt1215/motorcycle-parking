@@ -215,7 +215,9 @@ class ParkingSpot {
   final String sourceName, licenseNote;
 
   /// Public attribution only, supplied by the backend without contributor ids.
-  /// The role describes who added the point; it never grants app permissions.
+  /// The name is live data: [toJson] leaves it out so saved copies never
+  /// keep it. The role describes who added the point; it never grants app
+  /// permissions.
   final String contributorName, contributorRole;
   final Fee? fee;
   final double lat, lng;
@@ -259,6 +261,12 @@ class ParkingSpot {
     if (_kind(j) == null) return const [];
     return [ParkingSpot.fromJson(j)];
   }
+
+  /// A saved favorite as a spot. Favorites never keep the contributor's
+  /// name: it follows the account and can be cleared, so a stored copy
+  /// would go stale. Copies saved by earlier builds are ignored here too.
+  static Iterable<ParkingSpot> favorite(Object? row) =>
+      known({...row as Map<String, dynamic>}..remove('contributor_name'));
 
   /// A snapshot's exact kind (see [toJson]), else its `space_type`; null
   /// when this build knows neither.
@@ -369,7 +377,6 @@ class ParkingSpot {
       'source_url': sourceUrl,
       'source_name': sourceName,
       'license_note': licenseNote,
-      if (contributorName.isNotEmpty) 'contributor_name': contributorName,
       if (contributorRole.isNotEmpty) 'contributor_role': contributorRole,
       if (facilityType != null) 'facility_type': facilityType!.name,
       if (access != null) 'parking_access': access!.name,
