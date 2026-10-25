@@ -31,9 +31,12 @@ void main() {
   Future<RecordingStore> openForm(
     WidgetTester tester, {
     List<CityRule> rules = const [],
+    Size size = const Size(390, 844),
+    double scale = 1,
+    Brightness brightness = Brightness.light,
   }) async {
     tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(390, 844);
+    tester.view.physicalSize = size;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final store = (await tester.runAsync(() async {
@@ -57,6 +60,12 @@ void main() {
     addTearDown(store.dispose);
     await tester.pumpWidget(
       MaterialApp(
+        theme: ThemeData(brightness: brightness),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: TextScaler.linear(scale)),
+          child: child!,
+        ),
         home: Scaffold(
           body: Builder(
             builder: (context) => TextButton(
@@ -327,5 +336,118 @@ void main() {
     expect(spot['space_type'], 'paidMotorcycle');
     expect(spot['scooter_allowed'], false);
     expect(spot['heavy_allowed'], isNull);
+  });
+
+  Future<void> tapSegment(WidgetTester tester, int row, String label) async {
+    // The list builds lazily; come back from wherever the last step left it.
+    await tester.fling(form, const Offset(0, 3000), 3000);
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('precheck-heavy_allowed')),
+      200,
+      scrollable: form,
+    );
+    final segment = find.descendant(
+      of: find.byType(SegmentedButton<bool?>).at(row),
+      matching: find.text(label),
+    );
+    await tester.ensureVisible(segment);
+    await tester.pumpAndSettle();
+    await tester.tap(segment);
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> trySend(WidgetTester tester) async {
+    await tester.scrollUntilVisible(find.text('送出回報'), 200, scrollable: form);
+    await tester.ensureVisible(find.text('送出回報'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('送出回報'));
+    await tester.pumpAndSettle();
+  }
+
+  for (final (width, scale, brightness) in [
+    (390.0, 1.0, Brightness.light),
+    (320.0, 1.6, Brightness.dark),
+  ]) {
+    testWidgets('重機專用格選普通機車可停時，在普通機車下方說明怎麼改（$width px、$scale 倍）', (
+      tester,
+    ) async {
+      final store = await openForm(
+        tester,
+        size: Size(width, 844),
+        scale: scale,
+        brightness: brightness,
+      );
+      await pickType(tester, SpaceType.heavyOnly);
+      final hint = find.byKey(const ValueKey('precheck-scooter_allowed'));
+      expect(find.textContaining('大型重機專用格不能停普通機車'), findsNothing);
+      await tapSegment(tester, 0, '可停');
+      expect(
+        find.descendant(
+          of: hint,
+          matching: find.textContaining('大型重機專用格不能停普通機車'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.byIcon(Icons.error_outline), findsWidgets);
+      // The sentence wraps inside the sheet instead of overflowing.
+      expect(tester.takeException(), isNull);
+      expect(tester.getRect(hint).right, lessThanOrEqualTo(width));
+      await tester.fling(form, const Offset(0, 3000), 3000);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextFormField).first, '重機格');
+      await trySend(tester);
+      expect(store.submissions, isEmpty);
+      expect(find.byType(SnackBar), findsOneWidget);
+      // Let the message go so it no longer covers the choices.
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+      await tapSegment(tester, 0, '不可停');
+      expect(find.textContaining('大型重機專用格不能停普通機車'), findsNothing);
+      await trySend(tester);
+      expect(store.submissions.single['spot']['scooter_allowed'], false);
+    });
+  }
+
+  testWidgets('名稱是占位詞、備註含電話時在欄位下方提示，不送出', (tester) async {
+    final store = await openForm(tester);
+    await tester.enterText(find.byType(TextFormField).first, '測試');
+    await tester.pumpAndSettle();
+    expect(find.textContaining('「測試」看不出是哪個停車點'), findsOneWidget);
+    final note = find.widgetWithText(TextFormField, '其他備註');
+    await tester.scrollUntilVisible(note, 200, scrollable: form);
+    await tester.enterText(note, '車主電話 0912-345-678');
+    await tester.pumpAndSettle();
+    expect(find.textContaining('內容含有電話號碼'), findsOneWidget);
+    await trySend(tester);
+    expect(store.submissions, isEmpty);
+    await tester.enterText(note, '夜間有管理員');
+    await tester.fling(form, const Offset(0, 3000), 3000);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField).first, '市府路機車格');
+    await trySend(tester);
+    expect(store.submissions.single['spot']['note'], '夜間有管理員');
+  });
+
+  testWidgets('計時金額填 0 元時在收費下方提示改選免費', (tester) async {
+    final store = await openForm(tester);
+    final mode = find.byKey(const ValueKey('fee-mode-scooter'));
+    await tester.scrollUntilVisible(mode, 200, scrollable: form);
+    await tester.ensureVisible(mode);
+    await tester.pumpAndSettle();
+    await tester.tap(mode);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('計時').last);
+    await tester.pumpAndSettle();
+    final amount = find.widgetWithText(TextFormField, '金額');
+    await tester.ensureVisible(amount);
+    await tester.enterText(amount, '0');
+    await tester.pumpAndSettle();
+    expect(find.textContaining('普通機車的計時金額是 0 元'), findsOneWidget);
+    await tester.fling(form, const Offset(0, 3000), 3000);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField).first, '市府路機車格');
+    await trySend(tester);
+    expect(store.submissions, isEmpty);
   });
 }

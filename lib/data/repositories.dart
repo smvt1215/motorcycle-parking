@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 
 import '../models/parking.dart';
 import '../domain/map_viewport.dart';
+import '../domain/precheck.dart';
 
 class RulesRepository {
   RulesRepository(this.client);
@@ -114,12 +115,22 @@ class ParkingRepository {
     return value;
   }
 
+  /// Sends a report; a precheck refusal becomes a [StateError] carrying the
+  /// server's sentence, which the forms show as is.
   Future<Map<String, dynamic>> report(Map<String, dynamic> body) async {
-    final res = await client!.functions.invoke(
-      'submit-report',
-      body: {...body, 'device_id': await _deviceId()},
-    );
-    return res.data as Map<String, dynamic>;
+    final deviceId = await _deviceId();
+    try {
+      final res = await client!.functions.invoke(
+        'submit-report',
+        body: {...body, 'device_id': deviceId},
+      );
+      return res.data as Map<String, dynamic>;
+    } on FunctionException catch (e) {
+      if (precheckRefusal(e.details) case final message?) {
+        throw StateError(message);
+      }
+      rethrow;
+    }
   }
 }
 
