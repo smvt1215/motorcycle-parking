@@ -315,7 +315,7 @@ rate = {"mode":"free"} | {"mode":"posted"}
 
 ### 回報與可信度規則
 1. **兩種回報**
-   - 新增停車點：長按地圖 → 表單（格位類型、普通機車可停、重機可停、收費、樓層/入口備註、選填照片）。
+   - 新增停車點：長按地圖 → 表單（格位類型、普通機車可停、重機可停、收費、樓層/入口備註、選填照片）。2026-10-25 起 `submit-report` 也接受路外場站的 `facility_type`、`parking_access`、`entrance_note`、`parking_guide` 與最多 10 個 `parking_zones`（每區只有名稱、停放分類、指引），由 `apply_report` 存入（migration `202610250030_report_details.sql`）。
    - ~~**官方點位註記**~~（2026-10-17 隨 TDX 即時層移除）：在 TDX 停車場上回報「重機可停 / 不可停 / 須停汽車格」「入口限高/坡道陡」等，TDX 本身沒有這些欄位。
      - 註記先以 `pending` 存入 `spot_annotations`，管理者改為 `confirmed` 後才生效：`tdx-parking` 回傳停車點時以 RPC `confirmed_annotations` 取每個點最新一筆已確認註記，設定 `heavy_allowed`（須停汽車格視為可停）並在備註標示「社群回報經審核」。查詢失敗時維持 TDX 原資料，重機資格保持「有條件」。
 2. **去重**：送出前查 15 公尺內同類型點，有的話引導查看既有點並提出修改建議，而非重複新增。
