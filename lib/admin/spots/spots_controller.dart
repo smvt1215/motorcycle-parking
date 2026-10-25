@@ -192,6 +192,22 @@ class SpotsController extends ChangeNotifier {
 
   (double, double)? _locatedFor;
 
+  /// When the lookup service is down or finds nothing, the admin confirms
+  /// the county and district typed in the form for the current position.
+  /// Moving the spot again needs a new lookup or confirmation.
+  bool confirmManualTown() {
+    final lat = draft['lat'], lng = draft['lng'];
+    final city = draft['city'];
+    if (lat is! num || lng is! num || city is! String || city.trim().isEmpty) {
+      return false;
+    }
+    _locatedFor = (lat.toDouble(), lng.toDouble());
+    locateError = null;
+    saveError = null;
+    _notify();
+    return true;
+  }
+
   Future<void> search() async {
     if (gateway == null) return;
     final generation = _generation;
@@ -306,7 +322,7 @@ class SpotsController extends ChangeNotifier {
       await locate();
       if (!identical(record, current)) return false;
       if (!positionResolved) {
-        saveError = '新位置的縣市與行政區尚未查到，無法儲存。請確認位置後重試。';
+        saveError = '新位置的縣市與行政區尚未查到，無法儲存。請重試查詢，或確認表單中的縣市與行政區後按「使用手動填寫的縣市與行政區」。';
         _notify();
         return false;
       }

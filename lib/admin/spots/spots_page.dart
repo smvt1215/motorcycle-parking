@@ -1250,6 +1250,29 @@ class _LocationSection extends StatelessWidget {
             if (spots.locateError != null) ...[
               const SizedBox(height: 8),
               AdminNotice(spots.locateError!, error: true),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton(
+                    onPressed: spots.locating ? null : spots.locate,
+                    child: const Text('重新查詢'),
+                  ),
+                  // The service may be down; the admin can still vouch for
+                  // the county and district typed below.
+                  OutlinedButton(
+                    onPressed: () {
+                      if (!spots.confirmManualTown()) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('請先在下方填寫縣市。')),
+                        );
+                      }
+                    },
+                    child: const Text('使用手動填寫的縣市與行政區'),
+                  ),
+                ],
+              ),
             ],
             if (notes.cityChanged) ...[
               const SizedBox(height: 8),

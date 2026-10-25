@@ -158,6 +158,22 @@ void main() {
       expect(await spots.save(''), isTrue);
     });
 
+    test('查詢服務失敗時，確認手動填寫的縣市後可儲存', () async {
+      await spots.open(communityId);
+      gateway.failTown = true;
+      spots.set('lat', 25.07);
+      await spots.locate();
+      expect(spots.locateError, contains('查詢失敗'));
+      spots.set('city', '新北市');
+      spots.set('district', '三重區');
+      expect(spots.confirmManualTown(), isTrue);
+      expect(await spots.save(''), isTrue);
+      expect(gateway.spotUpdates.single.$2['city'], '新北市');
+      // Moving again needs a new lookup or confirmation.
+      spots.set('lat', 25.08);
+      expect(spots.positionResolved, isFalse);
+    });
+
     test('改為官方點只送管理者填的來源與資格', () async {
       await spots.open(communityId);
       final id = await spots.promote({
