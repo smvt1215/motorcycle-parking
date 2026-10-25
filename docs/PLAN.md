@@ -271,7 +271,7 @@ rate = {"mode":"free"} | {"mode":"posted"}
 
 - 缺少的車種代表「未確認」；只有大型重機可「比照機車／汽車費率」。
 - 金額與上限為 0–10000 的整數元，時間為 1–1440 的整數分鐘；每種收費方式只能帶自己使用的鍵。
-- 同一套規則由三處把關：資料表 check（`valid_fee()`）、`submit-report/validate.ts` 的 `validFee`、Dart 的 `Fee.fromJson`（不合規則的車種讀成未確認）。
+- 同一套規則由三處把關：資料表 check（`valid_fee()`）、`submit-report/validate.ts` 的 `validFee`、Dart 的 `Fee.fromJson`（不合規則的車種讀成未確認）。管理站寫入時另以 `fee_note_of(fee)`（`202610260010`，與 `feeNoteOf` 同寫法）檢查 `fee_note` 與 `fee` 一致。
 - 顯示文字沿用匯入資料的寫法，例如「每日 30 元（大型重機比照機車費率）」「機車免費；大型重機每小時 20 元，當日上限 100 元」；只有機車費率時標示「（大型重機費率未確認）」，兩者皆無時為「請依現場公告」。
 - **既有資料尚未轉換**：#68 只新增欄位，既有停車點的 `fee` 都是 null，只有 `fee_note` 文字（2026-10-25 staging：社群點 630 筆、138 種寫法；官方點 1,497 筆、943 種寫法，其中約 520 筆為「請依現場公告」或「未知」）。使用者決定**併入 Admin Web P6「匯入」一起做**（見 [ADMIN_WEB.md](ADMIN_WEB.md#階段)）：
   - 匯入工具（`tool/import_mymaps.py` 與後台匯入）解析費率文字時一併產生 `fee`，避免重新匯入後又只剩文字。
