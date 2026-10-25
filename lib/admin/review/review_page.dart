@@ -1161,6 +1161,17 @@ class _FieldEditor extends StatelessWidget {
       ],
       onChanged: onChanged,
     ),
+    FieldInput.choice => DropdownButtonFormField<String?>(
+      initialValue: field.choices.containsKey(value) ? value as String : null,
+      isExpanded: true,
+      decoration: _decoration(context),
+      items: [
+        const DropdownMenuItem(value: null, child: Text('未設定')),
+        for (final e in field.choices.entries)
+          DropdownMenuItem(value: e.key, child: Text(e.value)),
+      ],
+      onChanged: onChanged,
+    ),
     FieldInput.visibility => DropdownButtonFormField<String>(
       initialValue: value as String?,
       isExpanded: true,
