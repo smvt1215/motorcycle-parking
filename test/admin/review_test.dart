@@ -58,6 +58,18 @@ void main() {
         ).riderText,
         '點位已不存在：施工中；預計恢復：11 月底；說明：入口有圍籬',
       );
+      // A lasting cause proposes hiding; its cause still shows.
+      expect(
+        ReviewReport(
+          id: 'r-removed',
+          sourceId: communityId,
+          reason: '點位已不存在：格線已撤除',
+          field: 'gone',
+          proposed: const {'status': 'hidden'},
+          createdAt: reportTime,
+        ).riderText,
+        '點位已不存在：格線已撤除',
+      );
     });
 
     test('不存在回報：沒附建議值時不預設隱藏；社群點用 status，官方點用 hidden', () {

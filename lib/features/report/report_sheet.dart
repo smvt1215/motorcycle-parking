@@ -422,6 +422,11 @@ class AccessField extends StatelessWidget {
   );
 }
 
+/// [maxLength] counts characters, but the server counts UTF-16 units, where
+/// an emoji takes two; this catches what the server would reject.
+String? fitsServer(String? value, int max) =>
+    (value?.trim().length ?? 0) > max ? '最多 $max 個字元（表情符號算 2 個）' : null;
+
 /// One zone of a lot while it is being reported.
 class ZoneDraft {
   final name = TextEditingController();
@@ -516,7 +521,7 @@ class ZoneEditor extends StatelessWidget {
                           ),
                           validator: (v) => (v?.trim().isEmpty ?? true)
                               ? '請填寫分區名稱，或刪除此分區'
-                              : null,
+                              : fitsServer(v, 40),
                         ),
                         const SizedBox(height: 12),
                         AccessField(
@@ -535,6 +540,7 @@ class ZoneEditor extends StatelessWidget {
                             hintText: '例：靠電梯，重機停最後一排',
                             counterText: '',
                           ),
+                          validator: (v) => fitsServer(v, 200),
                         ),
                       ],
                     ),
@@ -900,6 +906,7 @@ class _ReportFormState extends State<ReportForm> {
                       hintText: '例：入口在松仁路側，機車走右側坡道',
                       alignLabelWithHint: true,
                     ),
+                    validator: (v) => fitsServer(v, 500),
                   ),
                   const SizedBox(height: 16),
                   ZoneEditor(
@@ -932,6 +939,7 @@ class _ReportFormState extends State<ReportForm> {
                     hintText: lot ? '例：B2 機車區靠電梯，重機停最後一排' : '例：格位在便利商店前，靠路口一側',
                     alignLabelWithHint: true,
                   ),
+                  validator: (v) => fitsServer(v, 500),
                 ),
                 const SizedBox(height: 16),
                 TextFormField(

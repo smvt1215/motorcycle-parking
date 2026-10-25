@@ -172,9 +172,9 @@ class ReviewReport {
   }
 
   /// The rider's own words: the whole reason when nothing structured came
-  /// with it (a temporary closure's cause and reopening date live only
-  /// there, alongside the note), else the note.
-  String? get riderText => proposed == null
+  /// with it, or for a gone report, whose cause and reopening date live only
+  /// there (alongside the note); else the note.
+  String? get riderText => proposed == null || kind == ReviewKind.gone
       ? reason
       : note.trim().isNotEmpty
       ? note.trim()
