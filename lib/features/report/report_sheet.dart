@@ -745,15 +745,33 @@ class _ReportFormState extends State<ReportForm> {
       defaultEligibility(widget.store.rules, type, city);
 
   /// Whether the city's rule, not only the markings, set a vehicle.
-  bool get ruled {
-    final marked = markedEligibility(type);
-    final rule = ruledEligibility(widget.store.rules, type, city);
-    return (marked.scooter == null && rule.scooter != null) ||
-        (marked.heavy == null && rule.heavy != null);
-  }
+  bool get ruled => ruledOnly.scooter || ruledOnly.heavy;
 
   /// Once the reporter sets the vehicles, a new bay kind no longer resets them.
   bool vehiclesEdited = false;
+
+  /// Vehicles whose shown value only the city's rule set. Stored, it would
+  /// outlive a change to the rule, so they are sent unconfirmed and the rule
+  /// decides them live.
+  bool scooterRuled = false, heavyRuled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Values and flags from the same bay kind and city, not computed lazily
+    // at submit time after either changed.
+    applyDefaults();
+  }
+
+  ({bool scooter, bool heavy}) get ruledOnly {
+    final marked = markedEligibility(type);
+    final rule = ruledEligibility(widget.store.rules, type, city);
+    return (
+      scooter: marked.scooter == null && rule.scooter != null,
+      heavy: marked.heavy == null && rule.heavy != null,
+    );
+  }
+
   late String? city = nearbyCity(widget.store.spots, widget.lat, widget.lng);
   bool sending = false;
   @override
@@ -779,6 +797,9 @@ class _ReportFormState extends State<ReportForm> {
     if (vehiclesEdited) return;
     scooter = defaults.scooter;
     heavy = defaults.heavy;
+    final ruled = ruledOnly;
+    scooterRuled = ruled.scooter;
+    heavyRuled = ruled.heavy;
   }
 
   @override
@@ -874,6 +895,7 @@ class _ReportFormState extends State<ReportForm> {
                         ? '現場有告示牌或地面標字時，才選「可停」。'
                         : '已依「${type.label}」'
                               '${ruled ? '與$city的停車規則' : ''}帶入，可以修改。'
+                              '${ruled ? '依規則帶入的車種只當預設，會隨規則更新，不存成這個點的資料。' : ''}'
                               '現場有告示牌或地面標字時，才選「可停」。',
                     style: TextStyle(color: colors.onSurfaceVariant),
                   ),
@@ -885,6 +907,7 @@ class _ReportFormState extends State<ReportForm> {
                   options: const [(null, '未確認'), (true, '可停'), (false, '不可停')],
                   onChanged: (v) => setState(() {
                     scooter = v;
+                    scooterRuled = false;
                     vehiclesEdited = true;
                   }),
                 ),
@@ -895,6 +918,7 @@ class _ReportFormState extends State<ReportForm> {
                   options: const [(null, '未確認'), (true, '可停'), (false, '不可停')],
                   onChanged: (v) => setState(() {
                     heavy = v;
+                    heavyRuled = false;
                     vehiclesEdited = true;
                   }),
                 ),
@@ -1004,8 +1028,8 @@ class _ReportFormState extends State<ReportForm> {
                                   for (final zone in zones) zone.toJson(),
                                 ],
                             },
-                            'scooter_allowed': scooter,
-                            'heavy_allowed': heavy,
+                            'scooter_allowed': scooterRuled ? null : scooter,
+                            'heavy_allowed': heavyRuled ? null : heavy,
                           },
                         });
                         if (context.mounted) {

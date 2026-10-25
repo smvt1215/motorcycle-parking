@@ -77,8 +77,18 @@ class ParkingAccessView extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
+          // Fee has no car amount, so a zone's car price stays visible; the
+          // motorcycle rates beside it repeat the lot's, never the old text.
           if (lotFee != null)
-            _AccessGroup(access: zone.access)
+            zone.carFeeNote.trim().isEmpty
+                ? _AccessGroup(access: zone.access)
+                : _AccessGroup(
+                    access: zone.access,
+                    scooterFee: lotFee.scooter?.text ?? '',
+                    heavyFee: lotFee.heavy?.text ?? '',
+                    carFee: zone.carFeeNote,
+                    showFees: true,
+                  )
           else
             _AccessGroup(
               access: zone.access,
