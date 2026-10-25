@@ -1,6 +1,6 @@
 # Web 管理介面 — 開發計畫
 
-> 狀態：P1 後端與 P2 外殼已完成，P2 已於 2026-10-24 通過 staging 登入驗收（https://motopark-admin-staging.web.app ）。P3 審核佇列已實作，待 staging 部署後驗收；P4a-1（點位清單、編輯、隱藏、改為官方點）已合併；P4a-2（位置選擇元件、新增停車點）已實作；全點位地圖圖層在 P4a-3，結構化費率的管理站支援待 #68 合併後補上，地址搜尋在 P4b。P0 仍差第二個備援驗證器 App。取代 [PLAN.md](PLAN.md)「社群回報機制 › 5. 管理」原本「第一版用 Supabase Dashboard」的做法；P3 驗收前審核仍以 Dashboard 操作。最後更新：2026-10-25
+> 狀態：P1 後端與 P2 外殼已完成，P2 已於 2026-10-24 通過 staging 登入驗收（https://motopark-admin-staging.web.app ）。P3 審核佇列已合併（#62；#77 補上入口指引、位置與場站欄位），待 staging 部署後驗收；P4a-1（點位清單、編輯、隱藏、改為官方點，#67）與 P4a-2（位置選擇元件、新增停車點，#76）已合併，管理員核驗車種欄位（#84）已合併；管理站的結構化費率（後端 #68 已合併）實作中；全點位地圖圖層在 P4a-3，地址搜尋在 P4b，App 尚未接入位置選擇元件。P0 仍差第二個備援驗證器 App。取代 [PLAN.md](PLAN.md)「社群回報機制 › 5. 管理」原本「第一版用 Supabase Dashboard」的做法；P3 驗收前審核仍以 Dashboard 操作。最後更新：2026-10-25
 
 ## 背景
 目前審核與資料維護都在 Supabase Dashboard 完成，有幾個問題：
@@ -84,6 +84,7 @@
 5. Admin RPC（皆先檢查 `is_admin()`，並在同一 transaction 寫稽核紀錄）：
    - `admin_resolve_report(id, decision, patch, note)`：依 `source_id` 前綴（`official:` 或社群點 uuid）更新對應資料表並結案。
    - `admin_upsert_spot`、`admin_set_spot_hidden`（隱藏／恢復，P3 已實作）、`admin_promote_spot`（社群點改為官方點），P4a-1 已實作；另有 `admin_spots` 合併搜尋兩張表。
+   - `admin_clear_contributor_name(spot_id, note)`：清除社群點公開的回報者名稱並寫稽核紀錄（#81 已實作，後台 UI 尚未接入）。
    - `admin_upsert_city_rule`：伺服器遞增 `version`，檢查 `restriction`。
    - `admin_import_preview`／`admin_import_apply`：接收 `spots.json`，先試算差異再套用，取代 SQL Editor。
 6. 停權使用者需 Auth Admin API：Edge Function `admin-users` 先驗證呼叫者為 admin 且 `aal2`，再用 service role 執行。
@@ -143,8 +144,9 @@ node tool/admin_smoke.cjs
 - **官方點隱藏**（2026-10-24 確認）：騎士不能單方面下架官方資料，只有管理者審核「已不存在」時立即隱藏。`official_heavy_spots.hidden` 由 `official_read` 政策過濾，直接讀取、收藏驗證與兩個 viewport 函式都不再回傳；admin（`aal2`）另有讀取政策。匯入不寫 `hidden`，重新匯入不會讓隱藏的點重新出現。
 - **已隱藏的點位**：列出隱藏的社群點與官方點，可逐筆「恢復顯示」（`admin_set_spot_hidden`，寫稽核紀錄，提示列可復原＝重新隱藏）。社群點恢復後回到「待確認」並清除「已不存在」票；P4 點位頁的已隱藏圖層沿用同一個 RPC。
 - **版本衝突**（2026-10-24 併入 P3）：`moderation_queue` 入列時由 trigger 記下點位的 `base_updated_at` 與快照 `base_spot`（不改 `apply_report`，舊版 App 送的建議也有）。`admin_resolve_report` 採納時，只要這次寫入的欄位在送出後被改過，就以 `40001`（`spot changed since the report`）拒絕，點位與案件不變；只比對寫入的欄位，投票或其他欄位的變動不算衝突，避免管理者習慣性強制。後台把案件放回佇列並標示「資料已更新，需重新檢視」，差異表多一欄「送出時」，按「仍要套用」才以 `p_force` 寫入，稽核紀錄 `after.forced=true`。入列早於此功能的案件沒有快照，照常審核。
-- `field` 改用穩定 key：`name`、`space_type`、`fee_note`、`eligibility`、`note`、`gone`，中文只做顯示；舊版 App 送的中文名稱仍可審核。`submit-report` 的白名單見 #61。
-- App 的修改建議改送 `field`（上述 key）、`proposed`、`note`，`reason` 照送給舊伺服器與 Dashboard：格位類型、停放資格送選擇值；名稱與收費送填寫內容（未超過欄位上限時）；點位已不存在時社群點送 `status=hidden`、官方點送 `hidden=true`；「位置或其他備註」只送說明。
+- `field` 改用穩定 key：`name`、`space_type`、`fee_note`、`eligibility`、`note`、`gone`，#75 再加入 `guide`（入口與停車指引），中文只做顯示；舊版 App 送的中文名稱仍可審核。`submit-report` 的白名單見 #61。審核頁另已辨識 `location`（「位置不正確」），但 App 與 `submit-report` 白名單尚未送出此 key。
+- App 的修改建議改送 `field`（上述 key）、`proposed`、`note`，`reason` 照送給舊伺服器與 Dashboard：格位類型、停放資格送選擇值；名稱與收費送填寫內容（未超過欄位上限時，收費自 #72 起另送結構化 `fee`）；「這裡已經不能停車」先選原因，只有格線已撤除、改為其他用途兩種永久原因才附隱藏建議（社群點 `status=hidden`、官方點 `hidden=true`），施工、暫時封閉與其他原因只送說明（#75）；原本的「位置或其他備註」拆成「入口與停車指引」（`guide`，只送有變更的 `entrance_note`、`parking_guide`）與「其他備註」（`note`，只送說明）。
+- 審核頁（#77）：可審核欄位加入場站型式、車種開放（選項）與入口說明、停放方式（文字，500 字）；沒附建議值的「已不存在」回報不預設隱藏，「修改後套用」從點位目前的顯示狀態開始，由管理者決定是否隱藏。
 
 ### P4a-1 實作
 
@@ -156,7 +158,7 @@ node tool/admin_smoke.cjs
 
 ### P4a-2 實作
 
-- 位置選擇元件 `lib/ui/location_picker.dart`（App 與管理站共用，App 由社群核實計畫 session 接入）：拖曳標記或點地圖選位置，顯示座標與距原位置的距離，可選 1 m 東西南北微調鈕，地圖可替換以利測試。位置邏輯在 `lib/domain/location_check.dart`（微調、距離、15 m 同類型重複、跨縣市），反查在 `lib/core/town_lookup.dart`（國土測繪中心 `TownVillagePointQuery`，免金鑰、允許 CORS；管理站 CSP 已加入 `https://api.nlsc.gov.tw`）。
+- 位置選擇元件 `lib/ui/location_picker.dart`（App 與管理站共用；目前只有管理站使用，App 的新增停車點與「位置不正確」建議尚未接入）：拖曳標記或點地圖選位置，顯示座標與距原位置的距離，可選 1 m 東西南北微調鈕，地圖可替換以利測試。位置邏輯在 `lib/domain/location_check.dart`（微調、距離、15 m 同類型重複、跨縣市），反查在 `lib/core/town_lookup.dart`（國土測繪中心 `TownVillagePointQuery`，免金鑰、允許 CORS；管理站 CSP 已加入 `https://api.nlsc.gov.tw`）。
 - 點位表單的「位置」區塊改用元件：移動後 0.6 秒自動反查縣市與行政區並帶入，查詢 15 m 內同類型的可見點位提示可能重複，跨縣市時提醒規則會改變；移動超過 150 m 時，儲存前確認是否仍是同一點位。座標欄位仍可直接輸入。
 - 新增停車點：清單「新增停車點」→ 選社群點或官方點 → `/spots/new?kind=` → 預設位置為上次開啟的點位（否則台北車站）→ 建立後開啟新點位。新表單在第一次按「建立停車點」後才顯示必填錯誤；新增的社群點由管理者帳號建立、狀態為待確認。
 - 每個點位的表單從頂端開始（列表 key 依點位）；開啟、新增各自排序，不會讓搜尋中的清單誤判為過期。
