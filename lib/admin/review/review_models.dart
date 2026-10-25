@@ -171,12 +171,13 @@ class ReviewReport {
     return ReviewKind.info;
   }
 
-  /// The rider's own words: the note, or the whole reason when nothing
-  /// structured came with it.
-  String? get riderText => note.trim().isNotEmpty
-      ? note.trim()
-      : proposed == null
+  /// The rider's own words: the whole reason when nothing structured came
+  /// with it (a temporary closure's cause and reopening date live only
+  /// there, alongside the note), else the note.
+  String? get riderText => proposed == null
       ? reason
+      : note.trim().isNotEmpty
+      ? note.trim()
       : null;
 }
 
