@@ -250,6 +250,63 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('收費建議以結構化費率送出，沒有選收費方式時提示', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final store = (await tester.runAsync(createStore))!;
+    addTearDown(store.dispose);
+    await openDetails(tester, store);
+    await tester.ensureVisible(find.text('修改建議'));
+    await tester.tap(find.text('修改建議'));
+    await tester.pumpAndSettle();
+    // The suggestion list's item, not the details row behind it.
+    await tester.tap(find.text('收費資訊').last);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('送出建議'));
+    await tester.tap(find.text('送出建議'));
+    await tester.pumpAndSettle();
+    expect(find.text('請至少選一個車種的收費方式'), findsOneWidget);
+    expect(store.submissions, isEmpty);
+    final menu = find.byKey(const ValueKey('fee-mode-scooter'));
+    await tester.ensureVisible(menu);
+    await tester.tap(menu);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('計次').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextFormField, '每次金額'), '20');
+    await tester.pumpAndSettle();
+    expect(find.text('請至少選一個車種的收費方式'), findsNothing);
+    expect(
+      find.text('收費資訊從「${spot.feeNote}」改成「每次 20 元（大型重機費率未確認）」'),
+      findsOneWidget,
+    );
+    // The form grew with the amount fields; scroll its own list to the button.
+    await tester.scrollUntilVisible(
+      find.text('送出建議'),
+      200,
+      scrollable: find
+          .ancestor(of: menu, matching: find.byType(Scrollable))
+          .first,
+    );
+    await tester.ensureVisible(find.text('送出建議'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('送出建議'));
+    await tester.pumpAndSettle();
+    final body = store.submissions.single;
+    expect(body['field'], 'fee_note');
+    expect(body['proposed'], {
+      'fee': {
+        'scooter': {'mode': 'per_visit', 'amount': 20},
+      },
+      'fee_note': '每次 20 元（大型重機費率未確認）',
+    });
+    expect(body['reason'], '收費資訊：建議「每次 20 元（大型重機費率未確認）」');
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('名稱建議以填寫內容作為建議值送出', (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(390, 844);
