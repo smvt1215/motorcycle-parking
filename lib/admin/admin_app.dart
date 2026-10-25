@@ -12,6 +12,8 @@ import 'review/hidden_page.dart';
 import 'review/review_controller.dart';
 import 'review/review_map.dart';
 import 'review/review_page.dart';
+import '../ui/location_picker.dart';
+import 'spots/spot_models.dart';
 import 'spots/spots_controller.dart';
 import 'spots/spots_page.dart';
 
@@ -60,12 +62,16 @@ class AdminApp extends StatefulWidget {
     this.initialLocation,
     this.themeMode = ThemeMode.system,
     this.reviewMapBuilder = googleReviewMap,
+    this.locationMapBuilder,
     this.review,
   });
   final AdminController controller;
   final String? initialLocation;
   final ThemeMode themeMode;
   final ReviewMapBuilder reviewMapBuilder;
+
+  /// Tests replace the location picker's Google map.
+  final LocationMapBuilder? locationMapBuilder;
 
   /// Injected by tests; otherwise created over the controller's gateway.
   final ReviewController? review;
@@ -166,6 +172,9 @@ class _AdminAppState extends State<AdminApp> {
               builder: (context, state) => SpotsPage(
                 spots: _spots,
                 selectedId: state.pathParameters['id'],
+                newKind: SpotKind.values
+                    .asNameMap()[state.uri.queryParameters['kind']],
+                locationMapBuilder: widget.locationMapBuilder,
               ),
             ),
           for (final tab in _tabs.skip(2))
