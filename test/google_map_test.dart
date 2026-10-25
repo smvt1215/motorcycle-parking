@@ -91,6 +91,64 @@ void main() {
     );
     await tester.pumpWidget(const SizedBox.shrink());
   });
+  testWidgets('Google 少於五個鄰近點不聚合，增至五點才顯示藍圈', (tester) async {
+    final platform = FakeMapsPlatform();
+    final previous = pi.GoogleMapsFlutterPlatform.instance;
+    pi.GoogleMapsFlutterPlatform.instance = platform;
+    addTearDown(() => pi.GoogleMapsFlutterPlatform.instance = previous);
+    final points = [
+      for (var i = 0; i < 5; i++)
+        ParkingSpot(
+          id: '$i',
+          name: '停車點$i',
+          lat: 25.03 + i * .00002,
+          lng: 121.56,
+          city: '臺北市',
+          spaceType: SpaceType.freeMotorcycle,
+        ),
+    ];
+    Widget mapWith(int count) => MaterialApp(
+      home: GoogleParkingMap(
+        center: const LatLng(25.03, 121.56),
+        spots: points.take(count).toList(),
+        eligibility: (_) => const Eligibility(EligibilityStatus.allowed, ''),
+        interactive: true,
+        onSpotTap: (_) {},
+        onViewport: (_, _) {},
+      ),
+    );
+    await tester.pumpWidget(mapWith(4));
+    await pumpMap(tester);
+    expect(
+      tester.widget<gm.GoogleMap>(find.byType(gm.GoogleMap)).markers,
+      hasLength(4),
+    );
+    await tester.pumpWidget(mapWith(5));
+    for (var i = 0; i < 50; i++) {
+      await tester.pump();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      if (tester
+          .widget<gm.GoogleMap>(find.byType(gm.GoogleMap))
+          .markers
+          .any((m) => m.markerId.value.startsWith('cluster:'))) {
+        break;
+      }
+    }
+    final markers = tester
+        .widget<gm.GoogleMap>(find.byType(gm.GoogleMap))
+        .markers;
+    expect(markers, hasLength(1));
+    expect(markers.single.markerId.value, startsWith('cluster:'));
+    await tester.pumpWidget(mapWith(4));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<gm.GoogleMap>(find.byType(gm.GoogleMap)).markers,
+      hasLength(4),
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
   addSelectionTests();
   testWidgets('Google 地圖移動後發布正確範圍，忽略較晚返回的舊範圍', (tester) async {
     final platform = FakeMapsPlatform();

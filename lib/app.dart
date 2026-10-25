@@ -15,6 +15,7 @@ import 'features/favorites/favorites_page.dart';
 import 'features/report/report_sheet.dart';
 import 'features/contribute/contribute_page.dart';
 import 'features/launch/launch_screen.dart';
+import 'features/auth/sign_in.dart';
 
 class ParkingApp extends ConsumerStatefulWidget {
   const ParkingApp({super.key, this.themeMode = ThemeMode.system});
@@ -151,10 +152,13 @@ class _ParkingAppState extends ConsumerState<ParkingApp> {
                 listenable: ref.read(storeProvider),
                 builder: (context, child) {
                   final store = ref.read(storeProvider);
-                  return LaunchCurtain(
-                    visible: store.starting,
-                    locating: store.locatingAtLaunch,
-                    child: child!,
+                  return AuthFeedback(
+                    store: store,
+                    child: LaunchCurtain(
+                      visible: store.starting,
+                      locating: store.locatingAtLaunch,
+                      child: child!,
+                    ),
                   );
                 },
                 child: child,

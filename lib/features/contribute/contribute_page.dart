@@ -6,6 +6,7 @@ import '../../ui/adaptive/adaptive.dart';
 import '../../ui/map_panel.dart';
 import '../map/map_legend.dart';
 import '../report/report_sheet.dart';
+import '../auth/sign_in.dart';
 import '../report/spot_suggestions.dart';
 
 /// Spots listed in the panel before "show all".
@@ -74,7 +75,7 @@ class ContributePage extends ConsumerWidget {
                   ),
                   if (!store.demo)
                     TextButton(
-                      onPressed: () => showSettings(context, store),
+                      onPressed: () => showSignIn(context, store),
                       child: const Text('登入'),
                     ),
                 ],
