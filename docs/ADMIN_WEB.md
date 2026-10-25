@@ -1,6 +1,6 @@
 # Web 管理介面 — 開發計畫
 
-> 狀態：P1 後端與 P2 外殼已完成，P2 已於 2026-10-24 通過 staging 登入驗收（https://motopark-admin-staging.web.app ）。P3 審核佇列已實作，待 staging 部署後驗收；P4a-1（點位清單、編輯、隱藏、改為官方點）已實作，地圖、位置選擇與新增停車點在 P4a-2，地址搜尋在 P4b。P0 仍差第二個備援驗證器 App。取代 [PLAN.md](PLAN.md)「社群回報機制 › 5. 管理」原本「第一版用 Supabase Dashboard」的做法；P3 驗收前審核仍以 Dashboard 操作。最後更新：2026-10-25
+> 狀態：P1 後端與 P2 外殼已完成，P2 已於 2026-10-24 通過 staging 登入驗收（https://motopark-admin-staging.web.app ）。P3 審核佇列已實作，待 staging 部署後驗收；P4a-1（點位清單、編輯、隱藏、改為官方點）已合併；P4a-2（位置選擇元件、新增停車點）已實作；全點位地圖圖層在 P4a-3，結構化費率的管理站支援待 #68 合併後補上，地址搜尋在 P4b。P0 仍差第二個備援驗證器 App。取代 [PLAN.md](PLAN.md)「社群回報機制 › 5. 管理」原本「第一版用 Supabase Dashboard」的做法；P3 驗收前審核仍以 Dashboard 操作。最後更新：2026-10-25
 
 ## 背景
 目前審核與資料維護都在 Supabase Dashboard 完成，有幾個問題：
@@ -97,9 +97,9 @@
 | P1 後端基礎 | 後端變更 1、2、4、5（`admin_resolve_report`）與 pgTAP | `supabase test db` 通過 |
 | P2 外殼 | `main_admin.dart`、登入、驗證方式登記與選擇（驗證器 App、簡訊）、go_router 版面、非 admin 拒絕畫面、Firebase Hosting（CSP、`X-Frame-Options: DENY`、`noindex`） | staging 可登入 |
 | P3 審核佇列 | 篩選、差異表、小地圖、套用／修改後套用／駁回；App 改送結構化建議；採納前比對點位版本（[社群核實計畫](COMMUNITY_VERIFICATION_PLAN.md) §5.2） | 不用 Dashboard 也能審核；建議送出後點位已改版時，採納會提示衝突而不直接覆蓋（pgTAP 覆蓋） |
-| P4 點位 | P4a-1：清單、編輯表單、來源、隱藏／恢復、改為官方點；P4a-2：地圖圖層、位置選擇元件、新增停車點；P4b：門牌與路口搜尋（Google Geocoding 經 Edge Function，先實測路口） | — |
+| P4 點位 | P4a-1：清單、編輯表單、來源、隱藏／恢復、改為官方點；P4a-2：位置選擇元件、新增停車點；P4a-3：全點位地圖圖層（沿用 App 標記）；P4b：門牌與路口搜尋（Google Geocoding 經 Edge Function，先實測路口） | — |
 | P5 規則 | 規則表單、預覽、版本遞增；`tool/export_rules.py` 從 DB 匯出規則避免與 `parking_rules.json` 不一致 | — |
-| P6 匯入 | 上傳 `import_mymaps.py` 的 JSON → 差異試算 → 套用 | — |
+| P6 匯入 | 上傳 `import_mymaps.py` 的 JSON → 差異試算 → 套用；既有點位的費率文字轉為結構化 `fee`（[PLAN.md](PLAN.md)「費率結構」）：只轉換能確定的寫法，「請依現場公告」「未知」與混有汽車、月租、身障費率而無法確定者維持 null 或交人工判斷；差異試算分列可轉換／無法判斷／需人工確認，確認後才寫入；解析結果以 `lib/models/fee.dart` 或 DB 的 `valid_fee()` 驗證 | 轉換完成前不開放依價格篩選 |
 | P7 使用者 | 檢視 `rate_limit_events`、停權（`admin-users`） | — |
 | App | 位置選擇元件用於新增停車點與「位置不正確」建議 | 可與 P4 同步 |
 
@@ -153,6 +153,13 @@ node tool/admin_smoke.cjs
 - `admin_upsert_spot(p_source_id, p_values, p_base_updated_at, p_note)`：只接受可編輯欄位（`source_id`、照片不在內）；社群點的 `status` 只能是待確認／已確認存在，隱藏走 `admin_set_spot_hidden`；官方點來源需 https。編輯必須帶開啟時的 `updated_at`，不一致以 `40001` 拒絕，不覆蓋他人的修改；表單保留修改並提示重新載入。也可新增（`p_source_id` 為 null、`kind` 指定社群或官方），供 P4a-2 使用。
 - 表單只送出改過的欄位，並只驗證改過的欄位（與 RPC 一致），舊匯入資料的空欄位不會擋住無關的修改。改過的欄位以黃色斜角色帶「已修改」標示；有未儲存的修改時，切換點位或返回前先確認。
 - 社群點的「存在狀態」註明「已確認存在」只代表點位存在，不代表停放資格已核實（社群核實計畫 R1）。管理者編輯只寫稽核紀錄，不寫欄位核實表（社群計畫 P3 再決定）。
+
+### P4a-2 實作
+
+- 位置選擇元件 `lib/ui/location_picker.dart`（App 與管理站共用，App 由社群核實計畫 session 接入）：拖曳標記或點地圖選位置，顯示座標與距原位置的距離，可選 1 m 東西南北微調鈕，地圖可替換以利測試。位置邏輯在 `lib/domain/location_check.dart`（微調、距離、15 m 同類型重複、跨縣市），反查在 `lib/core/town_lookup.dart`（國土測繪中心 `TownVillagePointQuery`，免金鑰、允許 CORS；管理站 CSP 已加入 `https://api.nlsc.gov.tw`）。
+- 點位表單的「位置」區塊改用元件：移動後 0.6 秒自動反查縣市與行政區並帶入，查詢 15 m 內同類型的可見點位提示可能重複，跨縣市時提醒規則會改變；移動超過 150 m 時，儲存前確認是否仍是同一點位。座標欄位仍可直接輸入。
+- 新增停車點：清單「新增停車點」→ 選社群點或官方點 → `/spots/new?kind=` → 預設位置為上次開啟的點位（否則台北車站）→ 建立後開啟新點位。新表單在第一次按「建立停車點」後才顯示必填錯誤；新增的社群點由管理者帳號建立、狀態為待確認。
+- 每個點位的表單從頂端開始（列表 key 依點位）；開啟、新增各自排序，不會讓搜尋中的清單誤判為過期。
 
 ## CI／CD
 - `tool/ci_changes.py` 將 `lib/admin/` 歸入品質檢查與 admin web 建置（`flutter build web -t lib/main_admin.dart -o build/admin`），不觸發模擬器。

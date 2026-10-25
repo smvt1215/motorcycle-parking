@@ -1,5 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../core/town_lookup.dart';
+import '../domain/location_check.dart';
 import 'review/review_models.dart';
 import 'spots/spot_models.dart';
 
@@ -74,6 +76,19 @@ abstract class AdminGateway {
     String baseUpdatedAt,
     String note,
   );
+
+  /// `admin_upsert_spot` with no id: a new spot of [kind].
+  Future<SpotRecord> createSpot(
+    SpotKind kind,
+    Map<String, dynamic> values,
+    String note,
+  );
+
+  /// Visible spots within about 30 m, for the duplicate warning.
+  Future<List<NearbySpot>> nearbySpots(double lat, double lng);
+
+  /// County or city and district of a point; null at sea.
+  Future<Town?> town(double lat, double lng);
 
   /// `admin_promote_spot`: a community spot becomes an official one.
   Future<String> promoteSpot(
@@ -345,4 +360,57 @@ class SupabaseAdminGateway implements AdminGateway {
     );
     return row['source_id'] as String;
   }
+
+  @override
+  Future<SpotRecord> createSpot(
+    SpotKind kind,
+    Map<String, dynamic> values,
+    String note,
+  ) async {
+    final row = await client.rpc<Map<String, dynamic>>(
+      'admin_upsert_spot',
+      params: {
+        'p_source_id': null,
+        'p_values': {...values, 'kind': kind.name},
+        'p_note': note,
+      },
+    );
+    return SpotRecord(sourceId: row['source_id'] as String, values: row);
+  }
+
+  @override
+  Future<List<NearbySpot>> nearbySpots(double lat, double lng) async {
+    // About 33 m each way; the exact 15 m check runs on the result.
+    const d = 0.0003;
+    final community = await client
+        .from('community_spots')
+        .select('id,name,space_type,lat,lng')
+        .neq('status', 'hidden')
+        .gte('lat', lat - d)
+        .lte('lat', lat + d)
+        .gte('lng', lng - d)
+        .lte('lng', lng + d);
+    final official = await client
+        .from('official_heavy_spots')
+        .select('id,name,space_type,lat,lng')
+        .eq('hidden', false)
+        .gte('lat', lat - d)
+        .lte('lat', lat + d)
+        .gte('lng', lng - d)
+        .lte('lng', lng + d);
+    NearbySpot spot(Map<String, dynamic> r, String id) => NearbySpot(
+      sourceId: id,
+      name: r['name'] as String,
+      spaceType: r['space_type'] as String,
+      lat: (r['lat'] as num).toDouble(),
+      lng: (r['lng'] as num).toDouble(),
+    );
+    return [
+      for (final r in community) spot(r, r['id'] as String),
+      for (final r in official) spot(r, 'official:${r['id']}'),
+    ];
+  }
+
+  @override
+  Future<Town?> town(double lat, double lng) => lookupTown(lat, lng);
 }
