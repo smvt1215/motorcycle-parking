@@ -3,6 +3,8 @@
 ## 專案
 台灣機車停車指南 APP（普通機車 + 大型重機），實作計畫見 [docs/PLAN.md](docs/PLAN.md)。
 
+與另一個 Claude／Codex 工作階段協作前，先讀 [通訊方式與驗證紀錄](docs/AGENT_COMMUNICATION.md)，重新確認收件工作階段；文件中的舊 thread ID 不可直接當成新對話的收件位址。
+
 ## Git 與 PR 規則
 - `main` 受 ruleset 保護：必須經 PR 合併、禁止 force push、需簽章 commit、線性歷史。合併一律用 **Squash and merge**。
 - **PR 流程：自我審查 → Ready for review → 處理審查意見直到全綠**：
