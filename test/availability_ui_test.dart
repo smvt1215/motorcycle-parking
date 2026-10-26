@@ -158,7 +158,7 @@ void main() {
       });
     }
 
-    testWidgets('膠囊與標記垂直置中、左側重疊 5', (tester) async {
+    testWidgets('膠囊在標記正上方置中，間隔 10，點膠囊開啟詳情', (tester) async {
       useSize(tester, 390);
       await pumpMap(tester, canvasSpots, canvasCounts);
       final pill = tester.getRect(
@@ -176,8 +176,30 @@ void main() {
             .first,
       );
       expect(pill.height, 24);
-      expect(pill.center.dy, closeTo(box.center.dy, .01));
-      expect(pill.left, closeTo(box.center.dx + 19 - 5, .01));
+      expect(pill.center.dx, closeTo(box.center.dx, .01));
+      expect(pill.bottom, closeTo(box.center.dy - 19 - 10, .01));
+      await tester.tap(capsule('剩 12'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('parking-spot-sheet')), findsOneWidget);
+      expect(find.text('測試停車場 fresh'), findsWidgets);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('白色膠囊與墨色膠囊外圈都是 2px 白邊、一樣高', (tester) async {
+      useSize(tester, 390);
+      await pumpMap(tester, canvasSpots, canvasCounts);
+      for (final text in ['剩 12', '剩 7']) {
+        final view = find.ancestor(
+          of: capsule(text),
+          matching: find.byType(AvailabilityCapsuleView),
+        );
+        expect(tester.getSize(view).height, 24);
+        final outer = tester.widget<Container>(
+          find.descendant(of: view, matching: find.byType(Container)).first,
+        );
+        expect((outer.decoration! as BoxDecoration).color, Colors.white);
+        expect(outer.padding, const EdgeInsets.all(2));
+      }
       await tester.pumpWidget(const SizedBox.shrink());
     });
 
@@ -215,6 +237,29 @@ void main() {
       expect(capsule('剩 12'), findsNothing);
       expect(find.textContaining('共用'), findsNothing);
       expect(find.textContaining('汽車格'), findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('密集時只留主要膠囊；選取一點時顯示完整一組並隱藏碰到它的鄰點', (tester) async {
+      // Tall enough that every lot stays on screen after the camera
+      // centres the open one above the details.
+      useSize(tester, 390, 1600);
+      await pumpMap(
+        tester,
+        denseSpots,
+        denseCounts,
+        vehicle: VehicleType.heavy,
+      );
+      expect(capsule('剩 3'), findsNWidgets(9));
+      expect(find.byType(CapsuleCar), findsNothing);
+      await tester.tap(find.bySemanticsLabel(RegExp('^測試停車場 row1 ')));
+      await tester.pumpAndSettle();
+      // row1 is open: its car pill joins; row0 and row2 touch it and hide.
+      // The camera centres row1 above the details, which moves row4 off
+      // screen: 9 - 2 hidden - 1 off screen.
+      expect(find.byType(CapsuleCar), findsOneWidget);
+      expect(capsule('剩 3'), findsNWidgets(6));
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     });

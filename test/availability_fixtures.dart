@@ -130,3 +130,31 @@ final emptyCounts = [
     minutes: 14,
   ),
 ];
+
+/// The MapDensity board, heavy bikes: a row of five lots 70px apart and a
+/// column of four 60px apart, each with a heavy count and car bays.
+final denseSpots = [
+  for (var i = 0; i < 5; i++)
+    lotAt(
+      'row$i',
+      49.0 + 70 * i - 195,
+      249 - 422,
+      heavy: true,
+      access: ParkingAccess.heavyCar,
+    ),
+  for (var i = 0; i < 4; i++)
+    lotAt(
+      'col$i',
+      189 - 195,
+      459.0 + 60 * i - 422,
+      heavy: true,
+      access: ParkingAccess.heavyCar,
+    ),
+];
+
+final denseCounts = [
+  for (final spot in denseSpots) ...[
+    count(spot.id, AvailabilityVehicle.heavy, total: 12, available: 3),
+    count(spot.id, AvailabilityVehicle.car, total: 100, available: 30),
+  ],
+];

@@ -264,6 +264,52 @@ void main() {
     });
   });
 
+  group('密集時的主要膠囊', () {
+    const own = AvailabilityCapsule(
+      text: '剩 3',
+      style: CapsuleStyle.live,
+      semantics: '官方即時：剩 3 格',
+    );
+    const car = AvailabilityCapsule(
+      text: '剩 30',
+      style: CapsuleStyle.car,
+      semantics: '汽車格剩 30 格，大型重機可停汽車格',
+    );
+    const allowed = EligibilityStatus.allowed;
+
+    test('① 重機只開放汽車格、沒有重機剩餘數：主要膠囊是汽車格', () {
+      expect(primaryCapsules(VehicleType.heavy, allowed, [car]), [car]);
+    });
+
+    test('② 有重機剩餘數也可停汽車格：主要膠囊是重機剩餘', () {
+      expect(primaryCapsules(VehicleType.heavy, allowed, [own, car]), [own]);
+      expect(
+        primaryCapsules(VehicleType.heavy, EligibilityStatus.conditional, [
+          own,
+          car,
+        ]),
+        [own],
+      );
+    });
+
+    test('③ 不可停或待確認：密集時不顯示膠囊', () {
+      for (final status in [
+        EligibilityStatus.notAllowed,
+        EligibilityStatus.unverified,
+      ]) {
+        expect(primaryCapsules(VehicleType.heavy, status, [own, car]), isEmpty);
+        expect(primaryCapsules(VehicleType.scooter, status, [own]), isEmpty);
+      }
+    });
+
+    test('普通機車模式：主要膠囊是機車剩餘，沒有就不顯示', () {
+      expect(primaryCapsules(VehicleType.scooter, allowed, [own]), [own]);
+      expect(primaryCapsules(VehicleType.scooter, allowed, const []), isEmpty);
+      // A car-bay pill never stands in for scooters.
+      expect(primaryCapsules(VehicleType.scooter, allowed, [car]), isEmpty);
+    });
+  });
+
   group('篩選', () {
     AvailabilityExclusion? reason(
       AvailabilityFilter filter,

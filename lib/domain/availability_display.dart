@@ -135,6 +135,33 @@ List<AvailabilityCapsule> markerCapsules(
   return capsules;
 }
 
+/// The one pill a crowded marker keeps, chosen by the parking rules; the
+/// pill still shows only a number (MapDensity board, third panel):
+/// - the rider may not park here, or it is unconfirmed: none, the
+///   eligibility marker alone speaks;
+/// - the rider's own count when there is one;
+/// - heavy bikes at a lot confirmed for car bays with no heavy count: the
+///   car-bay count.
+/// [capsules] is [markerCapsules]'s result. [eligibility] is the
+/// [Eligibility] status today; after stack C's C4 (issue #136) it will be
+/// read from `ParkingDecision` instead.
+List<AvailabilityCapsule> primaryCapsules(
+  VehicleType vehicle,
+  EligibilityStatus eligibility,
+  List<AvailabilityCapsule> capsules,
+) {
+  if (eligibility == EligibilityStatus.notAllowed ||
+      eligibility == EligibilityStatus.unverified) {
+    return const [];
+  }
+  final own = capsules.where((c) => c.style != CapsuleStyle.car);
+  if (own.isNotEmpty) return [own.first];
+  final car = capsules.where((c) => c.style == CapsuleStyle.car);
+  return vehicle == VehicleType.heavy && car.isNotEmpty
+      ? [car.first]
+      : const [];
+}
+
 /// A secondary line under the summary: another vehicle's count, never the
 /// selected vehicle's.
 class AvailabilityNote {

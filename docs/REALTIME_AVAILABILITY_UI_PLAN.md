@@ -278,7 +278,7 @@ flowchart TD
 
 - [x] 將「靜態容量／官方剩餘／社群目擊」明確定義為不同資料類型（見 [designs/2026-10-26-realtime-availability-ui.md](designs/2026-10-26-realtime-availability-ui.md)）。
 - [x] 完成路外標記、已滿、無資料、延遲、過期、選取與半高 sheet 的 UI 設計稿；路邊靜態與騎士回報列已一併設計，路段線只做示意。
-- [x] 依設計稿實作膠囊、詳情摘要與狀態總表所列文案（`lib/models/availability.dart`、`lib/domain/availability_display.dart`；資料來自 fake 資料源，只在範例模式啟用，連上後端時不顯示膠囊與篩選）。膠囊只掛在 FlutterMap（OpenStreetMap 預覽）；Google Maps 的增量 bitmap 圖層與真資料一起在 P2 做。
+- [x] 依設計稿實作膠囊、詳情摘要與狀態總表所列文案（`lib/models/availability.dart`、`lib/domain/availability_display.dart`；資料來自 fake 資料源，只在範例模式啟用，連上後端時不顯示膠囊與篩選）。膠囊只掛在 FlutterMap（OpenStreetMap 預覽）；Google Maps 的增量 bitmap 圖層與真資料一起在 P2 做（issue #139）。
 - [x] 確認篩選規則不會把未知車位排成「已滿」（`availabilityExclusion()` 與 `test/availability_test.dart`）。
 - [ ] Android、iOS、Web 的淺色／深色及大字級對照驗證。
 - **完成條件**：測試資料下，普通機車與大型重機都能正確辨別法律資格、總容量、空位數及來源。

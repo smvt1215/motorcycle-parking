@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/config.dart';
 import '../../data/app_store.dart';
 import '../../domain/availability_display.dart';
+import '../../domain/capsule_layout.dart';
 import '../../domain/eligibility.dart';
 import '../../domain/map_viewport.dart';
 import '../../domain/spot_clusters.dart';
@@ -488,11 +489,71 @@ class _MapPageState extends ConsumerState<MapPage> {
                 ),
               Builder(
                 builder: (mapContext) {
-                  final zoom = MapCamera.of(mapContext).zoom;
+                  final camera = MapCamera.of(mapContext);
+                  final zoom = camera.zoom;
                   final groups = clusterSpots(
                     spots.where((s) => s.id != open?.id).toList(),
                     zoom,
                   );
+                  // Crowded markers keep only the rider's own count, and
+                  // pills that would touch the open spot's set hide.
+                  final pills = {
+                    for (final s in [
+                      for (final group in groups)
+                        if (group.spots.length == 1) ...group.spots,
+                      ?open,
+                    ])
+                      s.id: (
+                        s,
+                        markerCapsules(
+                          s,
+                          store.availabilityOf(s),
+                          store.vehicle,
+                          now,
+                        ),
+                      ),
+                  };
+                  final layout = layoutCapsules([
+                    for (final (s, capsules) in pills.values)
+                      if (s.id == open?.id)
+                        CapsuleItem(
+                          id: s.id,
+                          center: camera.latLngToScreenOffset(
+                            LatLng(s.lat, s.lng),
+                          ),
+                          fullWidth: capsuleRowWidth(capsules, scale: 26 / 24),
+                          markerSize: 38 * selectedScale,
+                          height: 26,
+                        )
+                      else
+                        CapsuleItem(
+                          id: s.id,
+                          center: camera.latLngToScreenOffset(
+                            LatLng(s.lat, s.lng),
+                          ),
+                          fullWidth: capsuleRowWidth(capsules),
+                          primaryWidth: capsuleRowWidth(
+                            primaryCapsules(
+                              store.vehicle,
+                              store.eligible(s).status,
+                              capsules,
+                            ),
+                          ),
+                        ),
+                  ], selected: open?.id);
+                  List<AvailabilityCapsule> shown(ParkingSpot s) {
+                    final capsules = pills[s.id]?.$2 ?? const [];
+                    return switch (layout[s.id]) {
+                      CapsuleShow.primary => primaryCapsules(
+                        store.vehicle,
+                        store.eligible(s).status,
+                        capsules,
+                      ),
+                      CapsuleShow.none => const [],
+                      _ => capsules,
+                    };
+                  }
+
                   return MarkerLayer(
                     markers: [
                       for (final group in groups)
@@ -515,19 +576,13 @@ class _MapPageState extends ConsumerState<MapPage> {
                           )
                         else
                           for (final s in group.spots)
-                            if (markerCapsules(
-                                  s,
-                                  store.availabilityOf(s),
-                                  store.vehicle,
-                                  now,
-                                )
-                                case final capsules)
+                            if (shown(s) case final capsules)
                               Marker(
                                 point: LatLng(s.lat, s.lng),
-                                width: capsules.isEmpty
+                                width: capsules.isEmpty ? 48 : capsuleBoxWidth,
+                                height: capsules.isEmpty
                                     ? 48
-                                    : MarkerWithCapsules.width(48),
-                                height: 48,
+                                    : capsuleBoxHeight,
                                 child: Semantics(
                                   label: '${s.name} ${store.eligible(s).label}',
                                   button: true,
@@ -553,10 +608,8 @@ class _MapPageState extends ConsumerState<MapPage> {
                   markers: [
                     Marker(
                       point: LatLng(open.lat, open.lng),
-                      width: openCapsules.isEmpty
-                          ? 56
-                          : MarkerWithCapsules.width(56),
-                      height: 56,
+                      width: openCapsules.isEmpty ? 56 : capsuleBoxWidth,
+                      height: openCapsules.isEmpty ? 56 : capsuleBoxHeight,
                       child: Semantics(
                         label: '${open.name} ${store.eligible(open).label}，已選取',
                         button: true,

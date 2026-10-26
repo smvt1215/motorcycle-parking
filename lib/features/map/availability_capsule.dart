@@ -1,14 +1,63 @@
 import '../../ui/adaptive/adaptive.dart';
 
 import '../../domain/availability_display.dart';
+import '../../domain/capsule_layout.dart';
 import 'map_legend.dart';
 
 /// Paper white behind delayed and car-bay pills, from the design palette.
 const capsulePaper = Color(0xfff9fbfc);
 
-/// A space count beside a marker. Always neutral ink: colour and shape
-/// belong to the eligibility marker alone, so a 「剩 20」 next to a red
-/// square never reads as parkable.
+/// Inner padding (left, right) per style, from the MapBadges board.
+(double, double) _padding(CapsuleStyle style) => switch (style) {
+  CapsuleStyle.live => (10, 9),
+  CapsuleStyle.delayed => (8, 9),
+  CapsuleStyle.car => (8, 9),
+};
+
+/// The app font, named here so the measured width in [capsuleWidth] and
+/// the drawn pill use the same face.
+const _capsuleText = TextStyle(
+  fontFamily: 'Outfit',
+  fontSize: 13,
+  fontWeight: FontWeight.w700,
+  height: 1,
+  fontFeatures: [FontFeature.tabularFigures()],
+);
+
+/// The pill's width at [scale], for laying out crowded markers.
+double capsuleWidth(AvailabilityCapsule capsule, {double scale = 1}) {
+  final painter = TextPainter(
+    text: TextSpan(text: capsule.text, style: _capsuleText),
+    textDirection: TextDirection.ltr,
+    textScaler: TextScaler.noScaling,
+  )..layout();
+  final (left, right) = _padding(capsule.style);
+  final icons = switch (capsule.style) {
+    CapsuleStyle.live => 0.0,
+    CapsuleStyle.delayed => 12 + 4,
+    CapsuleStyle.car => 12 + 3 + (capsule.delayed ? 12 + 3 : 0),
+  };
+  final width = 4 + left + right + icons + painter.width;
+  painter.dispose();
+  return width * scale;
+}
+
+/// Width of a row of pills with their 4 gaps.
+double capsuleRowWidth(
+  List<AvailabilityCapsule> capsules, {
+  double scale = 1,
+}) => capsules.isEmpty
+    ? 0
+    : capsules
+              .map((c) => capsuleWidth(c, scale: scale))
+              .reduce((a, b) => a + b) +
+          4 * (capsules.length - 1);
+
+/// A space count above a marker. Always neutral ink: colour and shape
+/// belong to the eligibility marker alone, so a 「剩 20」 over a red square
+/// never reads as parkable. Every pill has the same 2px white keyline;
+/// delayed and car-bay pills draw their ink outline inside it, so dark and
+/// light pills are the same size.
 class AvailabilityCapsuleView extends StatelessWidget {
   const AvailabilityCapsuleView({
     super.key,
@@ -24,69 +73,63 @@ class AvailabilityCapsuleView extends StatelessWidget {
     final filled = style == CapsuleStyle.live;
     final ink = filled ? Colors.white : badgeInk;
     final delayed = style == CapsuleStyle.delayed;
-    // The design canvas pads live pills 10/9 and delayed ones 9/8.
-    final (left, right) = switch (style) {
-      CapsuleStyle.live => (10.0, 9.0),
-      CapsuleStyle.delayed => (9.0, 8.0),
-      // 7 on the 22-high reference table, scaled to the map's 24.
-      CapsuleStyle.car => (7 * 24 / 22, 7 * 24 / 22),
+    final (left, right) = _padding(style);
+    final outline = switch (style) {
+      CapsuleStyle.live => 0.0,
+      CapsuleStyle.delayed => 2.0,
+      CapsuleStyle.car => 1.25,
     };
     return Semantics(
       label: capsule.semantics,
       excludeSemantics: true,
       child: Container(
         height: 24 * scale,
-        padding: EdgeInsets.fromLTRB(left * scale, 0, right * scale, 0),
         decoration: BoxDecoration(
-          color: filled ? badgeInk : capsulePaper,
+          color: Colors.white,
           borderRadius: BorderRadius.circular(12 * scale),
-          border: Border.all(
-            // Live pills sit on the map with a white keyline; delayed ones
-            // trade it for an ink outline; car bays use a thinner one.
-            color: switch (style) {
-              CapsuleStyle.live => Colors.white,
-              CapsuleStyle.delayed => badgeInk,
-              CapsuleStyle.car => badgeInk,
-            },
-            width: (style == CapsuleStyle.car ? 1.25 : 2) * scale,
-          ),
           boxShadow: [
             BoxShadow(
               blurRadius: 6,
-              // .2 for the outlined delayed pill, .27 otherwise.
-              color: style != CapsuleStyle.live
-                  ? const Color(0x33000000)
-                  : const Color(0x44000000),
+              // .2 for the paper pills, .27 for the ink one.
+              color: filled ? const Color(0x44000000) : const Color(0x33000000),
               offset: const Offset(0, 2),
             ),
           ],
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (style == CapsuleStyle.car) ...[
-              CapsuleCar(size: 13 * scale, color: ink),
-              SizedBox(width: 3 * scale),
-            ],
-            if (delayed || capsule.delayed) ...[
-              CapsuleClock(size: 12 * scale, color: ink),
-              // The car pill keeps its 3 gap after the clock as well.
-              SizedBox(width: (delayed ? 4 : 3) * scale),
-            ],
-            Text(
-              capsule.text,
-              // Markers keep their size at any text scale, like the badge;
-              // the screen reader label carries the meaning.
-              textScaler: TextScaler.noScaling,
-              style: TextStyle(
-                color: ink,
-                fontSize: 13 * scale,
-                fontWeight: FontWeight.w700,
-                height: 1,
-                fontFeatures: const [FontFeature.tabularFigures()],
+        padding: EdgeInsets.all(2 * scale),
+        child: Container(
+          padding: EdgeInsets.fromLTRB(left * scale, 0, right * scale, 0),
+          decoration: BoxDecoration(
+            color: filled ? badgeInk : capsulePaper,
+            borderRadius: BorderRadius.circular(10 * scale),
+          ),
+          foregroundDecoration: outline == 0
+              ? null
+              : BoxDecoration(
+                  borderRadius: BorderRadius.circular(10 * scale),
+                  border: Border.all(color: badgeInk, width: outline * scale),
+                ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (style == CapsuleStyle.car) ...[
+                CapsuleCar(size: 12 * scale, color: ink),
+                SizedBox(width: 3 * scale),
+              ],
+              if (delayed || capsule.delayed) ...[
+                CapsuleClock(size: 12 * scale, color: ink),
+                // The car pill keeps its 3 gap after the clock as well.
+                SizedBox(width: (delayed ? 4 : 3) * scale),
+              ],
+              Text(
+                capsule.text,
+                // Markers keep their size at any text scale, like the badge;
+                // the screen reader label carries the meaning.
+                textScaler: TextScaler.noScaling,
+                style: _capsuleText.copyWith(color: ink, fontSize: 13 * scale),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -182,13 +225,14 @@ class _CarPainter extends CustomPainter {
   bool shouldRepaint(_CarPainter old) => old.color != color;
 }
 
-/// Room each side of a marker for its pills, so the marker stays centred on
-/// its point when the pills sit to its right.
-const capsuleReach = 136.0;
+/// The marker box with room above it for pills, symmetric about the
+/// marker's centre so a map that centres the box keeps the marker on its
+/// point.
+const capsuleBoxWidth = 200.0, capsuleBoxHeight = 136.0;
 
-/// [marker] with [capsules] to its right, slightly overlapping it. The box
-/// is symmetric so a map that centres it on the point keeps the marker
-/// there; the empty side takes no taps.
+/// [marker] with [capsules] side by side above it, centred, [capsuleGap]
+/// clear of its top (MapBadges board). The corner badge stays on the marker.
+/// Taps anywhere on the pills reach the marker's own handler.
 class MarkerWithCapsules extends StatelessWidget {
   const MarkerWithCapsules({
     super.key,
@@ -203,33 +247,26 @@ class MarkerWithCapsules extends StatelessWidget {
   final double markerSize, boxSize;
   final bool selected;
 
-  static double width(double boxSize) => boxSize + capsuleReach * 2;
-
   @override
   Widget build(BuildContext context) {
     if (capsules.isEmpty) return marker;
     final scale = selected ? 26 / 24 : 1.0;
     final size = selected ? markerSize * selectedScale : markerSize;
-    final total = width(boxSize);
     return SizedBox(
-      width: total,
-      height: boxSize,
+      width: capsuleBoxWidth,
+      height: capsuleBoxHeight,
       child: Stack(
         clipBehavior: Clip.none,
+        alignment: Alignment.center,
         children: [
+          SizedBox.square(dimension: boxSize, child: marker),
           Positioned(
-            left: capsuleReach,
-            top: 0,
-            width: boxSize,
-            height: boxSize,
-            child: marker,
-          ),
-          Positioned(
-            // Overlaps the marker by 5 (6 when selected), centred on it.
-            left: total / 2 + size / 2 - (selected ? 6 : 5),
-            top: boxSize / 2 - 12 * scale,
+            left: 0,
+            right: 0,
+            bottom: capsuleBoxHeight / 2 + size / 2 + capsuleGap,
             child: Row(
               mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 for (final (i, capsule) in capsules.indexed) ...[
                   if (i > 0) const SizedBox(width: 4),
