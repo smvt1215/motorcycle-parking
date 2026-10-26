@@ -250,3 +250,30 @@ def longest_fee(fee_contract):
 
 def fee_note_max_length(fee_contract):
     return len(fee_note_of(longest_fee(fee_contract)))
+
+
+# ---- The largest fee the contract allows (the size bound, §2.2) ----
+
+def largest_fee(fee_contract):
+    """A valid fee as large as any the contract allows: every vehicle
+    by_time with the most periods, each on every weekday as a list, with
+    times, cross_period, and the nested rate with the most keys at their
+    largest values written with a decimal point (20.0 is valid and stores
+    larger). valid_fee()'s max_bytes must hold it, so no side refuses a fee
+    of a valid shape for its size."""
+    whole = lambda n: float(n)
+    amount = whole(fee_contract["modes"]["per_visit"]["required"]["amount"]["max"])
+    minutes = whole(1440)
+    rates = [
+        {"mode": "per_visit", "amount": amount, "max_minutes": minutes, "renew": "midnight",
+         "extension": {"amount": amount, "max_times": whole(10), "minutes": minutes}},
+        {"mode": "hourly", "amount": amount, "per_minutes": minutes, "unit_minutes": minutes,
+         "free_minutes": minutes, "daily_cap": amount, "cap_reset": "calendar_day"},
+    ]
+    def by_time(rate):
+        return {"mode": "by_time", "cross_period": "each_period", "periods": [
+            {"days": list(WEEKDAYS), "from": "23:00", "to": "22:00", "rate": rate}
+            for _ in range(fee_contract["periods"]["max_entries"])]}
+    import json as _json
+    best = max(rates, key=lambda r: len(_json.dumps(r)))
+    return {v: by_time(best) for v in fee_contract["vehicles"]}

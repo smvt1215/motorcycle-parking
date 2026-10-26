@@ -15,8 +15,8 @@ class ParkingAccessView extends StatelessWidget {
         access: reportedAccess(spot),
         scooter: spot.scooterAllowed,
         heavy: spot.heavyAllowed,
-        scooterFee: spot.fee?.scooter?.text ?? '',
-        heavyFee: spot.fee?.heavy?.text ?? '',
+        scooterFee: spot.fee?.riderText('scooter') ?? '',
+        heavyFee: spot.fee?.riderText('heavy') ?? '',
         showFees: spot.fee != null,
       );
     }
@@ -35,13 +35,13 @@ class ParkingAccessView extends StatelessWidget {
           _ZoneNote(
             icon: Icons.moped_outlined,
             label: '普通機車',
-            value: lotFee.scooter?.text ?? '費率未確認',
+            value: lotFee.riderText('scooter') ?? '費率未確認',
           ),
           const SizedBox(height: 8),
           _ZoneNote(
             icon: Icons.two_wheeler,
             label: '大型重機',
-            value: lotFee.heavy?.text ?? '費率未確認',
+            value: lotFee.riderText('heavy') ?? '費率未確認',
           ),
           const SizedBox(height: 16),
           Divider(
@@ -84,8 +84,8 @@ class ParkingAccessView extends StatelessWidget {
                 ? _AccessGroup(access: zone.access)
                 : _AccessGroup(
                     access: zone.access,
-                    scooterFee: lotFee.scooter?.text ?? '',
-                    heavyFee: lotFee.heavy?.text ?? '',
+                    scooterFee: lotFee.riderText('scooter') ?? '',
+                    heavyFee: lotFee.riderText('heavy') ?? '',
                     carFee: zone.carFeeNote,
                     showFees: true,
                   )

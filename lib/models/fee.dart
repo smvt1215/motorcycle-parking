@@ -390,6 +390,13 @@ class Fee {
     return _rateText(json[vehicle], 100);
   }
 
+  /// One vehicle's rate for a rider's screen: [textOf], or 費率未提供 when a
+  /// heavy rate follows a vehicle whose rate is unconfirmed; null when the
+  /// vehicle's rate is unconfirmed.
+  String? riderText(String vehicle) =>
+      textOf(vehicle) ??
+      (vehicle == 'heavy' && (heavy?.mode.follows ?? false) ? '費率未提供' : null);
+
   /// One line for every vehicle, as stored in `fee_note`; empty when no
   /// vehicle is known.
   String get summary => isEmpty ? '' : feeNoteOf(this);

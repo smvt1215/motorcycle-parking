@@ -30,11 +30,14 @@ class GenContractSqlTest(unittest.TestCase):
         test = gen.generate()[gen.TEST_OUT]
         total = sum(len(cases[k]) for k in ("conditions", "legacy", "fees", "fee_notes", "fee_plans"))
         total += 1  # the longest sentence
+        largest = 1  # the largest fee (select ok)
         # Street legacy-safety where it applies; per zone: access, safety,
         # stored safety and a stored zone with another access.
         total += sum(1 for c in cases["legacy"] if c["safe"] is not None and not c["off_street"])
         total += 4 * len(cases["zones"])
+        total += len(cases["zone_rows"])
         self.assertEqual(test.count("select is("), total)
+        self.assertEqual(test.count("select ok("), largest)
 
     def test_migrations_apply_the_generated_condition_functions(self):
         """The shared, condition and fee sections are applied by copying them into
