@@ -48,13 +48,15 @@ abstract class AdminGateway {
   Future<Map<String, ReviewSpot>> reviewSpots(Iterable<String> sourceIds);
 
   /// `admin_resolve_report`: applies [patch] and closes the report atomically.
-  /// It refuses a spot changed since the report unless [force] is set.
+  /// It refuses a spot changed since the report unless [force] is set, and a
+  /// rejection without [resolutionKind].
   Future<void> resolveReport(
     String id,
     String decision,
     Map<String, dynamic> patch,
     String note, {
     bool force = false,
+    ResolutionKind? resolutionKind,
   });
 
   /// Hidden community and official spots, most recently changed first.
@@ -120,13 +122,13 @@ const _communityColumns =
     'id,source,source_name,source_url,license_note,name,lat,lng,city,district,space_type,fee_note,note,'
     'scooter_total,scooter_allowed,heavy_allowed,status,updated_at,last_confirmed_at,created_at,'
     'facility_type,parking_access,address,road_segment,entrance_note,parking_guide,special_rules,'
-    'scooter_verified_at,heavy_verified_at';
+    'scooter_verified_at,heavy_verified_at,fee';
 
 /// Every column the review page shows or edits; a conflict refresh must
 /// show the admin each current value before a forced write.
 const _spotColumns =
     'id,name,lat,lng,city,district,space_type,fee_note,note,scooter_allowed,heavy_allowed,source_name,updated_at,'
-    'facility_type,parking_access,entrance_note,parking_guide';
+    'facility_type,parking_access,entrance_note,parking_guide,fee';
 final _uuid = RegExp(
   r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
   caseSensitive: false,
@@ -214,7 +216,9 @@ class SupabaseAdminGateway implements AdminGateway {
   Future<List<ReviewReport>> pendingReports() async {
     final rows = await client
         .from('moderation_queue')
-        .select('id,source_id,reason,field,proposed,note,created_at,base_spot')
+        .select(
+          'id,source_id,reason,field,proposed,note,created_at,base_spot,risk',
+        )
         .eq('status', 'pending')
         .order('created_at')
         .limit(200);
@@ -268,6 +272,7 @@ class SupabaseAdminGateway implements AdminGateway {
     Map<String, dynamic> patch,
     String note, {
     bool force = false,
+    ResolutionKind? resolutionKind,
   }) => client.rpc(
     'admin_resolve_report',
     params: {
@@ -276,6 +281,7 @@ class SupabaseAdminGateway implements AdminGateway {
       'p_patch': patch,
       'p_note': note,
       'p_force': force,
+      'p_resolution_kind': resolutionKind?.name,
     },
   );
 

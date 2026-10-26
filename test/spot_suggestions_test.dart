@@ -804,6 +804,76 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  for (final (width, scale, brightness) in [
+    (390.0, 1.0, Brightness.light),
+    (320.0, 1.6, Brightness.dark),
+  ]) {
+    testWidgets('名稱建議填占位詞或電話時，在輸入框下方說明怎麼改（$width px、$scale 倍）', (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = Size(width, 844);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final store = (await tester.runAsync(createStore))!;
+      addTearDown(store.dispose);
+      await openDetails(tester, store, scale: scale, brightness: brightness);
+      await tester.ensureVisible(find.text('修改建議'));
+      await tester.tap(find.text('修改建議'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('停車點名稱'));
+      await tester.pumpAndSettle();
+      final input = find.byKey(const ValueKey('suggestion-input'));
+      await tester.enterText(input, '測試');
+      await tester.pumpAndSettle();
+      expect(find.textContaining('「測試」看不出是哪個停車點'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.enterText(input, '請打 0912 345 678');
+      await tester.pumpAndSettle();
+      expect(find.textContaining('內容含有電話號碼'), findsOneWidget);
+      final button = find.text('送出建議');
+      await tester.scrollUntilVisible(
+        button,
+        200,
+        scrollable: find
+            .ancestor(of: input, matching: find.byType(Scrollable))
+            .first,
+      );
+      await tester.ensureVisible(button);
+      await tester.pumpAndSettle();
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+      expect(store.submissions, isEmpty);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
+  testWidgets('其他備註只寫「不知道」時提示寫出現場狀況，不送出', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final store = (await tester.runAsync(createStore))!;
+    addTearDown(store.dispose);
+    await openDetails(tester, store);
+    await tester.ensureVisible(find.text('修改建議'));
+    await tester.tap(find.text('修改建議'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('其他備註').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('其他備註').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('suggestion-input')),
+      '不知道',
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('看不出現場狀況'), findsOneWidget);
+    await tester.tap(find.text('送出建議'));
+    await tester.pumpAndSettle();
+    expect(store.submissions, isEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   /// The open suggestion form's list, kept once the form opens: its title
   /// scrolls away and is disposed later.
   late ScrollPosition formList;

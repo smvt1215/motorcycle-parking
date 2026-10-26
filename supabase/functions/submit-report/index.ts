@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.108.1';
 import { cors, readBody, response } from '../_shared/http.ts';
+import { precheck, precheckResponse } from './precheck.ts';
 import { identityHash, validate } from './validate.ts';
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
@@ -34,6 +35,10 @@ Deno.serve(async (req) => {
     const body = await readBody(req);
     const invalid = validate(body);
     if (invalid) return response({ error: invalid }, 400);
+    // Contradictions and personal data come back with what to change; the
+    // client's own precheck is only a hint and is never trusted.
+    const issues = precheck(body);
+    if (issues.length) return response(precheckResponse(issues), 400);
     const { data: result, error: rpcError } = await admin.rpc('apply_report', {
       p_user: data.user.id,
       p_ip: await identityHash(secret, `ip:${ip}`),

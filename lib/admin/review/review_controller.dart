@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../models/fee.dart';
 import '../admin_gateway.dart';
 import 'review_models.dart';
 
@@ -28,11 +29,15 @@ class PendingDecision {
     this.patch,
     this.note, {
     this.force = false,
+    this.resolutionKind,
   });
   final ReviewReport report;
   final ReviewDecision decision;
   final Map<String, dynamic> patch;
   final String note;
+
+  /// Why the report is rejected; required for [ReviewDecision.reject].
+  final ResolutionKind? resolutionKind;
 
   /// Applies over a spot changed since the report, after the admin saw it.
   final bool force;
@@ -246,6 +251,14 @@ class ReviewController extends ChangeNotifier {
 
   void setDraft(String key, Object? value) {
     draft = {...draft, key: value};
+    // The fee's text follows it, as in the app's reports; incomplete or
+    // invalid amounts and a cleared fee leave the text as it is.
+    if (reviewField(key)?.input == FieldInput.fee) {
+      final fee = reviewFee(value);
+      if (fee != null && fee.valid) {
+        draft['fee_note'] = feeNoteOf(fee);
+      }
+    }
     _notify();
   }
 
@@ -268,7 +281,7 @@ class ReviewController extends ChangeNotifier {
         ? draft
         : applicablePatch(initialProposal(report, spot), spot);
     if (patch.isEmpty) return (patch, '沒有可套用的變更。');
-    return (patch, validatePatch(patch, spot));
+    return (wirePatch(patch), validatePatch(patch, spot));
   }
 
   /// Takes [report] out of the queue now and writes the decision after the
@@ -278,8 +291,19 @@ class ReviewController extends ChangeNotifier {
     ReviewDecision decision,
     String note, {
     bool force = false,
+    ResolutionKind? resolutionKind,
   }) async {
     final (patch, problem) = patchFor(report, decision);
+    if (decision == ReviewDecision.reject && resolutionKind == null) {
+      error = '請先選擇駁回原因。';
+      _notify();
+      return report.id;
+    }
+    if (resolutionKind == ResolutionKind.other && note.trim().isEmpty) {
+      error = '選「其他原因」時，請在處理說明寫下原因。';
+      _notify();
+      return report.id;
+    }
     if (problem != null) {
       error = problem;
       _notify();
@@ -295,7 +319,14 @@ class ReviewController extends ChangeNotifier {
     if (_disposed || generation != _generation) return null;
     final before = visible;
     final index = before.indexWhere((r) => r.id == report.id);
-    pending = PendingDecision(report, decision, patch, note, force: force);
+    pending = PendingDecision(
+      report,
+      decision,
+      patch,
+      note,
+      force: force,
+      resolutionKind: resolutionKind,
+    );
     editingId = null;
     draft = {};
     _timer = Timer(undoWindow, () => unawaited(flush()));
@@ -356,6 +387,7 @@ class ReviewController extends ChangeNotifier {
         held.patch,
         held.note,
         force: held.force,
+        resolutionKind: held.resolutionKind,
       );
       if (generation != _generation) return;
       reports = reports.where((r) => r.id != held.report.id).toList();

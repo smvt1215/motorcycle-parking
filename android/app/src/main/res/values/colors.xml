@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- Brand sea blue, matching the Flutter launch screen (lib/features/launch). -->
-    <color name="launch_background">#FF176273</color>
-</resources>
