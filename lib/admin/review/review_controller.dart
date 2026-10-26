@@ -251,12 +251,11 @@ class ReviewController extends ChangeNotifier {
 
   void setDraft(String key, Object? value) {
     draft = {...draft, key: value};
-    // The fee's text follows it, as in the app's reports; incomplete amounts
-    // and a cleared fee leave the text as it is.
+    // The fee's text follows it, as in the app's reports; incomplete or
+    // invalid amounts and a cleared fee leave the text as it is.
     if (reviewField(key)?.input == FieldInput.fee) {
       final fee = reviewFee(value);
-      if (fee != null &&
-          [fee.scooter, fee.heavy].nonNulls.every((r) => r.complete)) {
+      if (fee != null && fee.valid) {
         draft['fee_note'] = feeNoteOf(fee);
       }
     }

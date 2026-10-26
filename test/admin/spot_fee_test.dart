@@ -453,5 +453,87 @@ void main() {
         expect(tester.takeException(), isNull);
       });
     }
+
+    testWidgets('無法讀成整數的當日上限擋下儲存，不會被當成未填', (tester) async {
+      gateway.spotRows[communityId]!
+        ..['fee'] = {
+          'scooter': {
+            'mode': 'hourly',
+            'amount': 20,
+            'per_minutes': 60,
+            'daily_cap': 100,
+          },
+        }
+        ..['fee_note'] = '每小時 20 元，當日上限 100 元（大型重機費率未確認）';
+      await show(tester, '/spots/$communityId', const Size(390, 844));
+      final cap = find.widgetWithText(TextFormField, '當日上限（選填）');
+      await tester.scrollUntilVisible(
+        cap,
+        200,
+        scrollable: scrollable('spot-form-'),
+      );
+      await tester.enterText(cap, '100.5');
+      await tester.pumpAndSettle();
+      expect(find.text('金額請填 0 到 10000 的整數'), findsOneWidget);
+      // The plate keeps the stored text instead of a broken sentence.
+      expect(find.text('每小時 20 元，當日上限 100 元（大型重機費率未確認）'), findsOneWidget);
+      await tester.tap(find.text('儲存並關閉').hitTestable());
+      await tester.pumpAndSettle();
+      expect(gateway.spotUpdates, isEmpty);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('不在選單內的合法時間照樣顯示為目前選項', (tester) async {
+      gateway.spotRows[communityId]!
+        ..['fee'] = {
+          'scooter': {'mode': 'hourly', 'amount': 15, 'per_minutes': 90},
+          'heavy': {'mode': 'per_visit', 'amount': 50, 'max_minutes': 90},
+        }
+        ..['fee_note'] = '機車每 90 分鐘 15 元；大型重機每次 50 元（90 分鐘內）';
+      await show(tester, '/spots/$communityId', const Size(1280, 900));
+      final period = find.text('每 90 分鐘');
+      await tester.scrollUntilVisible(
+        period,
+        200,
+        scrollable: scrollable('spot-form-'),
+      );
+      expect(period, findsOneWidget);
+      expect(find.text('90 分鐘'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('審核頁改費率時，收費資訊直接顯示依費率產生的文字', (tester) async {
+      gateway.reports = [
+        ReviewReport(
+          id: 'r-fee2',
+          sourceId: communityId,
+          reason: '收費資訊',
+          field: 'fee_note',
+          proposed: const {
+            'fee': {
+              'scooter': {'mode': 'daily', 'amount': 30},
+            },
+            'fee_note': '每日 30 元（大型重機費率未確認）',
+          },
+          createdAt: reportTime,
+        ),
+      ];
+      await show(tester, '/review/r-fee2', const Size(1280, 900));
+      await tester.tap(find.text('修改後套用'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('edit-r-fee2-fee_note')), findsNothing);
+      final amount = find.widgetWithText(TextFormField, '每日金額');
+      await tester.ensureVisible(amount);
+      await tester.enterText(amount, '40');
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('derived-r-fee2-fee_note')),
+          matching: find.text('每日 40 元（大型重機費率未確認）'),
+        ),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    });
   });
 }
