@@ -235,6 +235,59 @@ void main() {
     });
   });
 
+  group('費率建議逐車種合併（設計 §5.4）', () {
+    final community = sampleSpots()[communityId]!;
+    const car = {'mode': 'hourly', 'amount': 40, 'per_minutes': 60};
+    final spot = ReviewSpot(
+      sourceId: communityId,
+      official: false,
+      values: {
+        ...community.values,
+        'fee': const {
+          'car': car,
+          'scooter': {'mode': 'free'},
+        },
+        'fee_note': '機車免費；汽車每小時 40 元；大型重機費率未確認',
+      },
+    );
+    ReviewReport report(Map<String, Object?> fee) => ReviewReport(
+      id: 'r-merge',
+      sourceId: communityId,
+      reason: '收費資訊',
+      field: 'fee_note',
+      proposed: {'fee': fee},
+      createdAt: reportTime,
+    );
+
+    test('只送有改的車種，其他車種保留現值', () {
+      final proposal = initialProposal(
+        report({
+          'heavy': {'mode': 'same_as_car'},
+        }),
+        spot,
+      );
+      expect(proposal['fee'], {
+        'car': car,
+        'scooter': {'mode': 'free'},
+        'heavy': {'mode': 'same_as_car'},
+      });
+      expect(proposal['fee_note'], '機車免費；大型重機每小時 40 元；汽車每小時 40 元');
+      expect(validatePatch(applicablePatch(proposal, spot), spot), isNull);
+    });
+
+    test('車種送 null 才清除', () {
+      final proposal = initialProposal(report({'scooter': null}), spot);
+      expect(proposal['fee'], {'car': car});
+      expect(proposal['fee_note'], '汽車每小時 40 元；大型重機費率未確認');
+      final cleared = initialProposal(
+        report({'scooter': null, 'car': null}),
+        spot,
+      );
+      expect(cleared['fee'], isNull);
+      expect(cleared['fee_note'], '請依現場公告');
+    });
+  });
+
   group('審核頁的費率建議', () {
     final community = sampleSpots()[communityId]!;
     final withFee = ReviewSpot(

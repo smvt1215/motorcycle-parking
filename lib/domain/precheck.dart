@@ -6,6 +6,8 @@
 /// precheck_cases.json (test/precheck_test.dart).
 library;
 
+import '../models/fee.dart' show mergeFeeJson;
+
 enum PrecheckAction { fix, reject }
 
 /// One broken rule: [field] is the payload path the rider corrects, such
@@ -411,15 +413,26 @@ List<({String field, String value, bool name})> _texts(_Json body) {
 
 const _goneFields = ['gone', '點位已不存在'];
 
-/// Every stage 0 rule [body], a submit-report request, breaks.
-List<PrecheckIssue> precheck(Map<String, Object?> body) {
+/// Every stage 0 rule [body], a submit-report request, breaks. A fee
+/// suggestion changes only the vehicles it names (design §5.4), so its rules
+/// run on the fee it leaves: [current] (the spot's stored values, when
+/// known) merged with it.
+List<PrecheckIssue> precheck(
+  Map<String, Object?> body, {
+  Map<String, Object?>? current,
+}) {
   final out = <PrecheckIssue>[];
   final action = body['action'];
   final spot = (action == 'create' || action == 'update') ? body['spot'] : null;
   final proposed = action == 'flag' ? body['proposed'] : null;
   if (spot is Map) out.addAll(_combinations(spot.cast()));
   if (proposed is Map) {
-    for (final i in _combinations(proposed.cast())) {
+    final merged = <String, Object?>{
+      ...proposed.cast<String, Object?>(),
+      if (proposed['fee'] is Map)
+        'fee': mergeFeeJson(current?['fee'], proposed['fee']),
+    };
+    for (final i in _combinations(merged)) {
       out.add(
         PrecheckIssue(i.rule, i.action, 'proposed.${i.field}', i.message),
       );

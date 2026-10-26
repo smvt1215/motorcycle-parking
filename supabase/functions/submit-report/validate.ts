@@ -4,6 +4,7 @@ import {
   subset,
   validFee,
   validFeeNote,
+  validProposedFee,
   validSlotTimes,
 } from '../_shared/fee.ts';
 
@@ -291,12 +292,17 @@ const proposedChecks: Record<string, (v: unknown) => boolean> = {
   entrance_note: text(500),
   parking_guide: text(500),
   special_rules: text(500),
-  fee: validFee,
+  // Merged per vehicle: null clears a vehicle, one left out keeps its rate.
+  fee: validProposedFee,
   status: (v) => v === 'hidden',
   // Riders ask to take a spot down; restoring one is an admin decision.
   hidden: (v) => v === true,
 };
 const locationKeys = ['lat', 'lng', 'city', 'district'];
+const withoutCleared = (fee: unknown) =>
+  fee && typeof fee === 'object' && !Array.isArray(fee)
+    ? Object.fromEntries(Object.entries(fee).filter(([, v]) => v !== null))
+    : fee;
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export function validate(body: Record<string, unknown>): string | null {
@@ -351,7 +357,9 @@ export function validate(body: Record<string, unknown>): string | null {
         (key === 'hidden' && !official) || !check(value)
       ) return 'invalid proposed';
     }
-    if ('fee_note' in p && !validFeeNote(p.fee_note, p.fee)) {
+    // A long note is the sentence of the rates the suggestion names; a
+    // vehicle it clears (null) is not one of them.
+    if ('fee_note' in p && !validFeeNote(p.fee_note, withoutCleared(p.fee))) {
       return 'invalid proposed';
     }
     if (
