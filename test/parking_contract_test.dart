@@ -215,6 +215,35 @@ void main() {
     });
   });
 
+  group('zone rows', () {
+    test('zone access agrees with its condition', () {
+      final rows = (cases['zone_rows']! as List).cast<Map<String, Object?>>();
+      expect(rows, isNotEmpty);
+      for (final c in rows) {
+        expect(
+          zoneConditionConsistent(c['zone']! as Map<String, Object?>),
+          c['consistent'],
+          reason: c['name']! as String,
+        );
+      }
+    });
+
+    test('a zone condition read back writes back its stored access', () {
+      for (final c
+          in (cases['zone_rows']! as List).cast<Map<String, Object?>>()) {
+        if (c['consistent'] != true) continue;
+        final zone = ParkingZone.fromJson(
+          Map<String, dynamic>.from(c['zone']! as Map),
+        );
+        expect(
+          zoneConditionConsistent(zone.toJson()),
+          isTrue,
+          reason: c['name']! as String,
+        );
+      }
+    });
+  });
+
   group('conversion', () {
     test('every legacy space type round-trips through its condition', () {
       for (final type in SpaceType.values) {

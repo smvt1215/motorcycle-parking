@@ -1,5 +1,5 @@
 {
-  "comment": "parking_contract.json 的共同案例。conditions：validCondition（Deno、Flutter、SQL）；legacy：legacySpaceType（三端）與 legacySafe（Flutter），safe 為 null 表示不適用；zones：legacyAccess 與 legacySafeZone（Flutter）；fees：valid_fee v2 形狀（目前只有 SQL，Dart／Deno 在費率 v2 PR 接上）。legacy 名稱中的 (a)–(d) 對應設計文件 §1.3 legacySafe 可遺失的四種資訊。",
+  "comment": "parking_contract.json 的共同案例。conditions：validCondition（Deno、Flutter、SQL）；legacy：legacySpaceType（三端）與 legacySafe（Flutter），safe 為 null 表示不適用；zones：legacyAccess 與 legacySafeZone（Flutter）；zone_rows：分區的 access 與 condition 一致（zone_condition_consistent／zoneConditionConsistent，三端；決定 32，condition 皆為 validCondition 接受的分區條件）；fees：valid_fee v2 形狀（目前只有 SQL，Dart／Deno 在費率 v2 PR 接上）。legacy 名稱中的 (a)–(d) 對應設計文件 §1.3 legacySafe 可遺失的四種資訊。",
   "conditions": [
     {
       "name": "收費機車格",
@@ -1706,6 +1706,254 @@
       },
       "access": "heavyCar",
       "safe": false
+    }
+  ],
+  "zone_rows": [
+    {
+      "name": "沒有 condition 的分區不檢查",
+      "zone": {
+        "name": "B1",
+        "access": "scooterHeavy"
+      },
+      "consistent": true
+    },
+    {
+      "name": "沒有 condition、也沒有 access",
+      "zone": {
+        "name": "B1"
+      },
+      "consistent": true
+    },
+    {
+      "name": "§2.4 機車區：普大共用",
+      "zone": {
+        "name": "機車區",
+        "area": "motorcycle",
+        "access": "scooterHeavy",
+        "condition": {
+          "bay": "motorcycle",
+          "use": "share",
+          "share": "scooter_heavy",
+          "charge": "toll",
+          "allow": {
+            "scooter": true,
+            "heavy": true
+          }
+        }
+      },
+      "consistent": true
+    },
+    {
+      "name": "§2.4 汽車區：大型重機可停",
+      "zone": {
+        "name": "汽車區",
+        "area": "car",
+        "access": "heavyCar",
+        "condition": {
+          "bay": "car",
+          "use": "usual",
+          "charge": "toll",
+          "allow": {
+            "scooter": false,
+            "heavy": true
+          }
+        }
+      },
+      "consistent": true
+    },
+    {
+      "name": "普機專用",
+      "zone": {
+        "name": "B1",
+        "access": "scooterOnly",
+        "condition": {
+          "bay": "motorcycle",
+          "use": "usual",
+          "allow": {
+            "scooter": true,
+            "heavy": false
+          }
+        }
+      },
+      "consistent": true
+    },
+    {
+      "name": "重機專區",
+      "zone": {
+        "name": "B2",
+        "access": "heavyOnly",
+        "condition": {
+          "bay": "heavy",
+          "use": "usual",
+          "allow": {
+            "scooter": false,
+            "heavy": true
+          }
+        }
+      },
+      "consistent": true
+    },
+    {
+      "name": "兩種機車都不開放，bay 未填",
+      "zone": {
+        "name": "B3",
+        "access": "noMotorcycle",
+        "condition": {
+          "allow": {
+            "scooter": false,
+            "heavy": false
+          }
+        }
+      },
+      "consistent": true
+    },
+    {
+      "name": "有時段也只看 allow 與 bay（安全與否另判）",
+      "zone": {
+        "name": "B4",
+        "access": "heavyCar",
+        "condition": {
+          "bay": "car",
+          "use": "usual",
+          "schedule": [
+            {
+              "days": "all",
+              "from": "07:00",
+              "to": "20:00",
+              "vehicles": [
+                "heavy"
+              ]
+            }
+          ],
+          "allow": {
+            "scooter": false,
+            "heavy": true
+          }
+        }
+      },
+      "consistent": true
+    },
+    {
+      "name": "缺 allow",
+      "zone": {
+        "name": "機車區",
+        "access": "scooterHeavy",
+        "condition": {
+          "bay": "motorcycle",
+          "use": "share",
+          "share": "scooter_heavy",
+          "charge": "toll"
+        }
+      },
+      "consistent": false
+    },
+    {
+      "name": "allow 只有一個車種",
+      "zone": {
+        "name": "B1",
+        "access": "scooterOnly",
+        "condition": {
+          "bay": "motorcycle",
+          "use": "usual",
+          "allow": {
+            "scooter": true
+          }
+        }
+      },
+      "consistent": false
+    },
+    {
+      "name": "缺 access",
+      "zone": {
+        "name": "B1",
+        "condition": {
+          "bay": "motorcycle",
+          "use": "usual",
+          "allow": {
+            "scooter": true,
+            "heavy": false
+          }
+        }
+      },
+      "consistent": false
+    },
+    {
+      "name": "access 與 allow 不一致",
+      "zone": {
+        "name": "B1",
+        "access": "scooterHeavy",
+        "condition": {
+          "bay": "motorcycle",
+          "use": "usual",
+          "allow": {
+            "scooter": true,
+            "heavy": false
+          }
+        }
+      },
+      "consistent": false
+    },
+    {
+      "name": "access 與 bay 不一致（重機專區寫成汽車區）",
+      "zone": {
+        "name": "B2",
+        "access": "heavyCar",
+        "condition": {
+          "bay": "heavy",
+          "use": "usual",
+          "allow": {
+            "scooter": false,
+            "heavy": true
+          }
+        }
+      },
+      "consistent": false
+    },
+    {
+      "name": "推導不出 access：機車格只開放大型重機",
+      "zone": {
+        "name": "B1",
+        "access": "heavyOnly",
+        "condition": {
+          "bay": "motorcycle",
+          "use": "usual",
+          "allow": {
+            "scooter": false,
+            "heavy": true
+          }
+        }
+      },
+      "consistent": false
+    },
+    {
+      "name": "推導不出 access：bay 未填而開放大型重機",
+      "zone": {
+        "name": "B1",
+        "access": "heavyCar",
+        "condition": {
+          "allow": {
+            "scooter": false,
+            "heavy": true
+          }
+        }
+      },
+      "consistent": false
+    },
+    {
+      "name": "access 不是字串",
+      "zone": {
+        "name": "B1",
+        "access": null,
+        "condition": {
+          "bay": "motorcycle",
+          "use": "usual",
+          "allow": {
+            "scooter": true,
+            "heavy": false
+          }
+        }
+      },
+      "consistent": false
     }
   ],
   "fees": [

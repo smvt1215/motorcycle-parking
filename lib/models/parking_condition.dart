@@ -751,6 +751,19 @@ ParkingAccess? legacyAccess(ParkingCondition? zone) {
   return null;
 }
 
+/// Whether a stored zone's `access` agrees with its `condition` (decision 32,
+/// §1.3; `zone_condition_consistent()` in SQL, `zoneConditionConsistent` in
+/// validate.ts): a zone without a condition is unchecked; one with a
+/// condition carries an `allow` naming both vehicles and the access it
+/// writes back. The DB refuses any other zone, so anything that writes a
+/// zone condition writes `access` as `legacyAccess(condition)`.
+bool zoneConditionConsistent(Map<String, Object?> zone) {
+  final json = zone['condition'];
+  if (json == null) return true;
+  final access = legacyAccess(ParkingCondition.fromJson(json, zone: true));
+  return access != null && zone['access'] == access.name;
+}
+
 /// [value] with map keys sorted, so equal JSON compares equal as text.
 Object? _canonical(Object? value) => switch (value) {
   Map() => {

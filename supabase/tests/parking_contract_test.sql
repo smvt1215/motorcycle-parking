@@ -254,6 +254,17 @@ language sql immutable set search_path='' as $$
       and (p_zone->>'access') is not distinct from pg_temp.condition_legacy_access(p_zone->'condition'));
 $$;
 
+-- Whether a zone's access agrees with its condition (§1.3, decision 32): a
+-- zone without a condition is not checked here; one with a condition has an
+-- allow naming both vehicles, and its access is the one the condition writes
+-- back. A condition that writes back no access is inconsistent.
+create or replace function pg_temp.zone_condition_consistent(p_zone jsonb) returns boolean
+language sql immutable set search_path='' as $$
+  select coalesce(jsonb_typeof(p_zone->'condition'),'null')='null'
+    or (jsonb_typeof(p_zone->'access')='string'
+      and coalesce((p_zone->>'access')=pg_temp.condition_legacy_access(p_zone->'condition'),false));
+$$;
+
 -- Whether a whole spot is legacy-safe: a street spot by its condition, a lot
 -- only without a top-level condition and when every zone is.
 create or replace function pg_temp.condition_legacy_safe_spot(p_off_street boolean,p_condition jsonb,p_zones jsonb) returns boolean
@@ -658,6 +669,23 @@ select is(pg_temp.condition_legacy_access($j${"bay":"car","use":"usual","schedul
 select is(pg_temp.condition_legacy_safe($j${"bay":"car","use":"usual","schedule":[{"days":"all","from":"07:00","to":"20:00","vehicles":["heavy"]}],"allow":{"scooter":false,"heavy":true}}$j$::jsonb,true),false,'zone safe: 分區有時段');
 select is(pg_temp.zone_legacy_safe($j${"name":"分區有時段","condition":{"bay":"car","use":"usual","schedule":[{"days":"all","from":"07:00","to":"20:00","vehicles":["heavy"]}],"allow":{"scooter":false,"heavy":true}},"access":"heavyCar"}$j$::jsonb),false,'stored zone safe: 分區有時段');
 select is(pg_temp.zone_legacy_safe($j${"name":"分區有時段","condition":{"bay":"car","use":"usual","schedule":[{"days":"all","from":"07:00","to":"20:00","vehicles":["heavy"]}],"allow":{"scooter":false,"heavy":true}},"access":"noMotorcycle"}$j$::jsonb),false,'stored zone with another access: 分區有時段');
+-- zone_rows: zone_condition_consistent()
+select is(pg_temp.zone_condition_consistent($j${"name":"B1","access":"scooterHeavy"}$j$::jsonb),true,'zone row: 沒有 condition 的分區不檢查');
+select is(pg_temp.zone_condition_consistent($j${"name":"B1"}$j$::jsonb),true,'zone row: 沒有 condition、也沒有 access');
+select is(pg_temp.zone_condition_consistent($j${"name":"機車區","area":"motorcycle","access":"scooterHeavy","condition":{"bay":"motorcycle","use":"share","share":"scooter_heavy","charge":"toll","allow":{"scooter":true,"heavy":true}}}$j$::jsonb),true,'zone row: §2.4 機車區：普大共用');
+select is(pg_temp.zone_condition_consistent($j${"name":"汽車區","area":"car","access":"heavyCar","condition":{"bay":"car","use":"usual","charge":"toll","allow":{"scooter":false,"heavy":true}}}$j$::jsonb),true,'zone row: §2.4 汽車區：大型重機可停');
+select is(pg_temp.zone_condition_consistent($j${"name":"B1","access":"scooterOnly","condition":{"bay":"motorcycle","use":"usual","allow":{"scooter":true,"heavy":false}}}$j$::jsonb),true,'zone row: 普機專用');
+select is(pg_temp.zone_condition_consistent($j${"name":"B2","access":"heavyOnly","condition":{"bay":"heavy","use":"usual","allow":{"scooter":false,"heavy":true}}}$j$::jsonb),true,'zone row: 重機專區');
+select is(pg_temp.zone_condition_consistent($j${"name":"B3","access":"noMotorcycle","condition":{"allow":{"scooter":false,"heavy":false}}}$j$::jsonb),true,'zone row: 兩種機車都不開放，bay 未填');
+select is(pg_temp.zone_condition_consistent($j${"name":"B4","access":"heavyCar","condition":{"bay":"car","use":"usual","schedule":[{"days":"all","from":"07:00","to":"20:00","vehicles":["heavy"]}],"allow":{"scooter":false,"heavy":true}}}$j$::jsonb),true,'zone row: 有時段也只看 allow 與 bay（安全與否另判）');
+select is(pg_temp.zone_condition_consistent($j${"name":"機車區","access":"scooterHeavy","condition":{"bay":"motorcycle","use":"share","share":"scooter_heavy","charge":"toll"}}$j$::jsonb),false,'zone row: 缺 allow');
+select is(pg_temp.zone_condition_consistent($j${"name":"B1","access":"scooterOnly","condition":{"bay":"motorcycle","use":"usual","allow":{"scooter":true}}}$j$::jsonb),false,'zone row: allow 只有一個車種');
+select is(pg_temp.zone_condition_consistent($j${"name":"B1","condition":{"bay":"motorcycle","use":"usual","allow":{"scooter":true,"heavy":false}}}$j$::jsonb),false,'zone row: 缺 access');
+select is(pg_temp.zone_condition_consistent($j${"name":"B1","access":"scooterHeavy","condition":{"bay":"motorcycle","use":"usual","allow":{"scooter":true,"heavy":false}}}$j$::jsonb),false,'zone row: access 與 allow 不一致');
+select is(pg_temp.zone_condition_consistent($j${"name":"B2","access":"heavyCar","condition":{"bay":"heavy","use":"usual","allow":{"scooter":false,"heavy":true}}}$j$::jsonb),false,'zone row: access 與 bay 不一致（重機專區寫成汽車區）');
+select is(pg_temp.zone_condition_consistent($j${"name":"B1","access":"heavyOnly","condition":{"bay":"motorcycle","use":"usual","allow":{"scooter":false,"heavy":true}}}$j$::jsonb),false,'zone row: 推導不出 access：機車格只開放大型重機');
+select is(pg_temp.zone_condition_consistent($j${"name":"B1","access":"heavyCar","condition":{"allow":{"scooter":false,"heavy":true}}}$j$::jsonb),false,'zone row: 推導不出 access：bay 未填而開放大型重機');
+select is(pg_temp.zone_condition_consistent($j${"name":"B1","access":null,"condition":{"bay":"motorcycle","use":"usual","allow":{"scooter":true,"heavy":false}}}$j$::jsonb),false,'zone row: access 不是字串');
 -- fees: valid_fee() v2
 select is(pg_temp.valid_fee($j${}$j$::jsonb),true,'fee: 空 fee：兩種車都未確認');
 select is(pg_temp.valid_fee($j${"scooter":{"mode":"hourly","amount":20,"per_minutes":60,"daily_cap":100},"heavy":{"mode":"same_as_car"}}$j$::jsonb),true,'fee: v1：計時加當日上限，重機比照汽車');

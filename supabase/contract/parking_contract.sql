@@ -248,6 +248,17 @@ language sql immutable set search_path='' as $$
       and (p_zone->>'access') is not distinct from public.condition_legacy_access(p_zone->'condition'));
 $$;
 
+-- Whether a zone's access agrees with its condition (§1.3, decision 32): a
+-- zone without a condition is not checked here; one with a condition has an
+-- allow naming both vehicles, and its access is the one the condition writes
+-- back. A condition that writes back no access is inconsistent.
+create or replace function public.zone_condition_consistent(p_zone jsonb) returns boolean
+language sql immutable set search_path='' as $$
+  select coalesce(jsonb_typeof(p_zone->'condition'),'null')='null'
+    or (jsonb_typeof(p_zone->'access')='string'
+      and coalesce((p_zone->>'access')=public.condition_legacy_access(p_zone->'condition'),false));
+$$;
+
 -- Whether a whole spot is legacy-safe: a street spot by its condition, a lot
 -- only without a top-level condition and when every zone is.
 create or replace function public.condition_legacy_safe_spot(p_off_street boolean,p_condition jsonb,p_zones jsonb) returns boolean
