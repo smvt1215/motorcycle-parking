@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../../domain/eligibility.dart';
 import '../../domain/parking_decision.dart';
 import '../../models/fee.dart';
@@ -121,15 +123,29 @@ FeeNow feeNowOf(Fee fee, VehicleType vehicle, DateTime now) {
     );
   }
   final time = current.from == null ? '全天' : '${current.from}–${current.to}';
-  final next = current.to == null
+  // The next period starts when this one ends, on the day it ends: a
+  // period across midnight that started today ends tomorrow (Codex P2).
+  final end = _minutes(current.to);
+  final from = _minutes(current.from);
+  final tomorrow =
+      from != null && end != null && from > end && at.minute >= from;
+  final endDay = tomorrow ? (at.day == 64 ? 1 : at.day << 1) : at.day;
+  final next = end == null
       ? null
-      : today.where((p) => p != current && p.from == current.to).firstOrNull;
+      : (rate.periods ?? const <FeePeriod>[])
+            .where(
+              (p) =>
+                  !(identical(p, current) && !tomorrow) &&
+                  FeeWords.dayMask(p.days) & endDay != 0 &&
+                  _covers(p, end),
+            )
+            .firstOrNull;
   final nextLines = next == null ? null : feeRateLines(next.rate, pct);
   final free = current.rate.mode == FeeMode.free;
   final caption = [
     if (!free && lines.length > 1) _short(lines[1].text),
     if (nextLines != null && nextLines.first.tone != FeeTone.unconfirmed)
-      '${next!.from} 起${next.rate.mode == FeeMode.free ? '不收費' : nextLines.first.text}',
+      '${current.to} 起${next!.rate.mode == FeeMode.free ? '不收費' : nextLines.first.text}',
   ].join('・');
   return FeeNow(
     label: '$label・$time',
@@ -361,7 +377,14 @@ List<FeeSectionBoard> feeSectionBoards(
                   z.condition ?? zoneConditionOf(z.access),
                   z.fee,
                 ),
-          legacy: z.fee == null ? _zoneLegacy(z) : const [],
+          legacy: z.fee == null
+              ? _zoneLegacy(z)
+              : [
+                  // A car price stays as text until the fee has one (as
+                  // ParkingZone.carFeeText reads it).
+                  if (z.fee!.car == null && !_placeholder(z.carFeeNote))
+                    (FeeVehicle.car, z.carFeeNote.trim()),
+                ],
           trialEnded: ended(i),
         ),
   ];
@@ -440,12 +463,30 @@ class _SectionBoard extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final vehicles = board.vehicles;
     final shown = vehicles == null || vehicles.contains(first) ? first : null;
-    final Widget plate = board.legacy.isNotEmpty
+    final textCar =
+        board.fee != null && board.legacy.any((l) => l.$1 == FeeVehicle.car);
+    final Widget plate = board.legacy.isNotEmpty && board.fee == null
         ? _LegacyBoard(board.legacy, first: first)
-        : FeeBoard(
-            fee: board.fee ?? const Fee(),
-            first: board.fee == null ? null : shown,
-            vehicles: board.fee == null ? null : vehicles,
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              FeeBoard(
+                fee: board.fee ?? const Fee(),
+                first: board.fee == null ? null : shown,
+                vehicles: board.fee == null || !textCar
+                    ? vehicles
+                    : [
+                        for (final v
+                            in vehicles ??
+                                const [FeeVehicle.scooter, FeeVehicle.heavy])
+                          if (v != FeeVehicle.car) v,
+                      ],
+              ),
+              if (textCar) ...[
+                const SizedBox(height: 8),
+                _LegacyBoard(board.legacy, first: first),
+              ],
+            ],
           );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -590,4 +631,47 @@ class _LegacyBoard extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Rebuilds [builder] at the start of every minute by [clock], so a rate
+/// summary on an open sheet turns to the next period on time (Codex P2).
+class MinuteTicker extends StatefulWidget {
+  const MinuteTicker({super.key, required this.clock, required this.builder});
+  final DateTime Function() clock;
+  final Widget Function(BuildContext context, DateTime now) builder;
+
+  @override
+  State<MinuteTicker> createState() => _MinuteTickerState();
+}
+
+class _MinuteTickerState extends State<MinuteTicker> {
+  Timer? timer;
+
+  void schedule() {
+    timer?.cancel();
+    final now = widget.clock();
+    final wait =
+        const Duration(minutes: 1) -
+        Duration(seconds: now.second, milliseconds: now.millisecond);
+    timer = Timer(wait, () {
+      if (!mounted) return;
+      setState(() {});
+      schedule();
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    schedule();
+  }
+
+  @override
+  void dispose() {
+    timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(context, widget.clock());
 }

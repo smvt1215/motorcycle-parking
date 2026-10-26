@@ -240,12 +240,17 @@ class _SpotSheetState extends State<SpotSheet> {
                               ),
                             ),
                             const SizedBox(height: 16),
-                            _SpotSummary(
-                              spot: spot,
-                              vehicle: store.vehicle,
-                              availability: store.availabilityOf(spot),
-                              eligibility: eligibility.status,
-                              now: store.clock(),
+                            // Ticks each minute: the rate follows the
+                            // period the rider is in (decision 26).
+                            MinuteTicker(
+                              clock: store.clock,
+                              builder: (_, now) => _SpotSummary(
+                                spot: spot,
+                                vehicle: store.vehicle,
+                                availability: store.availabilityOf(spot),
+                                eligibility: eligibility.status,
+                                now: now,
+                              ),
                             ),
                             if (feedback != null)
                               Padding(

@@ -220,6 +220,49 @@ void main() {
       );
     });
 
+    test('跨午夜時段預告的下一段依隔天的星期（Codex 審查）', () {
+      final fee = Fee.fromJson({
+        'scooter': {
+          'mode': 'by_time',
+          'periods': [
+            {
+              'days': 'all',
+              'from': '20:00',
+              'to': '08:00',
+              'rate': {'mode': 'free'},
+            },
+            {
+              'days': 'weekday',
+              'from': '08:00',
+              'to': '20:00',
+              'rate': {'mode': 'hourly', 'amount': 10, 'per_minutes': 60},
+            },
+            {
+              'days': 'holiday',
+              'from': '08:00',
+              'to': '20:00',
+              'rate': {'mode': 'hourly', 'amount': 20, 'per_minutes': 60},
+            },
+          ],
+        },
+      });
+      // 2026-10-30 is a Friday: tomorrow morning is Saturday's rate.
+      expect(
+        feeNowOf(fee, VehicleType.scooter, taipei(21, 10, day: 30)).caption,
+        '08:00 起每小時 20 元',
+      );
+      // Past midnight the period ends today: Friday 02:00 → Friday's rate.
+      expect(
+        feeNowOf(fee, VehicleType.scooter, taipei(2, 0, day: 30)).caption,
+        '08:00 起每小時 10 元',
+      );
+      // Sunday night → Monday.
+      expect(
+        feeNowOf(fee, VehicleType.scooter, taipei(21, 0, day: 25)).caption,
+        '08:00 起每小時 10 元',
+      );
+    });
+
     test('平日與假日依當天星期幾', () {
       final fee = Fee.fromJson({
         'scooter': {
@@ -435,6 +478,58 @@ void main() {
     // A zone with several rates: the summary sends the rider to the boards.
     expect(find.text('依分區計費'), findsOneWidget);
     expect(find.text('往下看完整收費公告牌'), findsOneWidget);
+  });
+
+  testWidgets('分區有結構化機車費率、汽車只有舊文字時，汽車文字仍顯示（Codex 審查）', (tester) async {
+    const spot = ParkingSpot(
+      id: 'car-text',
+      name: '汽車區舊文字',
+      lat: 25.04,
+      lng: 121.57,
+      city: '臺北市',
+      spaceType: SpaceType.offStreet,
+      zones: [
+        ParkingZone(
+          name: '汽車區',
+          access: ParkingAccess.heavyCar,
+          carFeeNote: '每小時 50 元',
+          fee: Fee(heavy: Rate(FeeMode.hourly, amount: 30, perMinutes: 60)),
+        ),
+      ],
+    );
+    await pumpFees(tester, 390, spot);
+    expect(find.text('每小時 30 元'), findsWidgets);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('fee-legacy-board')),
+        matching: find.text('每小時 50 元'),
+      ),
+      findsOneWidget,
+    );
+    // The car is listed once, as its text, not also as unconfirmed.
+    expect(find.text('汽車'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('詳情開著跨過時段邊界時，摘要在下一分鐘換成新時段', (tester) async {
+    var now = taipei(19, 59, day: 27).add(const Duration(seconds: 30));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MinuteTicker(
+            clock: () => now,
+            builder: (_, at) => FeeNowSummary(
+              now: feeNowOf(Fee(heavy: dayNight()), VehicleType.heavy, at),
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(find.text('每次 30 元'), findsOneWidget);
+    now = now.add(const Duration(seconds: 30));
+    await tester.pump(const Duration(seconds: 30));
+    expect(find.text('每次 50 元'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   for (final width in [320.0, 390.0]) {
