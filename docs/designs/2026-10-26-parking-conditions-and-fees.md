@@ -49,7 +49,7 @@
           └ 路外才有 ┘
 ```
 
-`condition` 的 JSON 契約（所有鍵都可省略，省略即未確認）：
+`condition` 的 JSON 契約（所有鍵都可省略，省略即未確認。未確認**一律以省略鍵表示**：`limits`、`schedule` 不收空陣列，`allow` 不收空物件，分區不收空的 `condition`。分鐘、金額等整數欄位接受沒有小數部分的數字，`20.0` 視同 `20`，`20.5` 不合法。`basis` 的日期年份須在 1900–9999（Postgres 沒有 0 年）；`source_url` 最長 2048 個 UTF-16 code unit（BMP 以外的字元算 2）。以上三端一致）：
 
 ```json
 {
@@ -72,7 +72,7 @@
 ```
 
 - `use='share'` 時 `share` 必填；`use='usual'` 時不得有 `share`。
-- `schedule[].days` 為 `all`／`weekday`／`holiday`，或星期陣列 `["mon",…]`；`from > to` 表示跨午夜。`vehicles` 為該時段允許停放的車種（`scooter`／`heavy`／`car`）。汽機車共用格（`share='car_motorcycle'`）的機車涵蓋範圍不預設，只認 `vehicles` 依公告寫明的車種，沒寫的車種為待確認（§7 第 1 項，已決定）。
+- `schedule[].days` 為 `all`／`weekday`／`holiday`，或星期陣列 `["mon",…]`；`from > to` 表示跨午夜。`from` 與 `to` 不可相同；**全天以同時省略 `from` 與 `to` 表示**（例：`{"days":"holiday","vehicles":["car","scooter"]}`），不寫 `00:00`–`24:00`，只省略其中一個不合法。`schedule` 最多 8 段；費率 `by_time.periods` 的時段用同一套規則（最多 6 段，§2.2）。`vehicles` 為該時段允許停放的車種（`scooter`／`heavy`／`car`）。汽機車共用格（`share='car_motorcycle'`）的機車涵蓋範圍不預設，只認 `vehicles` 依公告寫明的車種，沒寫的車種為待確認（§7 第 1 項，已決定）。
 - `basis` 記錄這個條件本身的公告依據（例如臺北 36 處試辦場域的分區），與 `city_rules` 分開。`expires_on` 已過即視為依據失效（§3.3）。依據的種類與照片規則見 §1.4。
 - 「特殊車型及地方特別開放另處理」（需求 6）：特殊車型用 `limits[]` 的 `{"kind":"special_vehicle","vehicle":…}`；地方開放仍放在 `city_rules`，不寫進格位。
 - 身障專用機車格的完整範例：
@@ -124,6 +124,15 @@
 - 有 `schedule` 的重機格、有 `basis.expires_on` 的條件 → 舊版會忽略時段或期限，**不安全**。
 - 限時格且 charge=free → `timedMotorcycle`，舊版當成收費限時格，資格可能較寬鬆，**不安全**。
 - **路外點要檢查每個分區**：分區的 condition 能由 `access` 完整表達（沒有 `schedule`、`limits`、`basis.expires_on`，`allow` 能對到一個 `access` 值）才算安全。任一分區不安全，整個場站就不安全。例：§2.4 機車區帶 `basis.expires_on`，舊版會忽略期限，照 `access=scooterHeavy` 顯示大型重機可停，所以這個場站不安全。
+
+**精確定義**（C1 實作，使用者 2026-10-26 同意；規則資料在 `parking_contract.json` 的 `conversion.legacy_safe`，案例檔逐條列出正反例）：先 `legacySpaceType` 再 `conditionOf`，與原 condition 比較時**只允許遺失**：
+
+- (a) `share='scooter_heavy'` 讀回 `use='usual'`。
+- (b) 沒有 `expires_on` 的 `basis`（`source_url`、`evidence_id`、`effective_date`）。
+- (c) `time_limit.max_minutes`。
+- (d) 讀回後為未確認的面向（bay、use、share、charge，即 `lossy_when_unconfirmed`；例如 `heavyOnly` 讀回沒有 charge，`disabledMotorcycle` 讀回沒有 use 與 charge），但 `assumed_charge` 列出的舊值除外：舊版把 `timedMotorcycle` 當收費格，所以限時格的 charge 只能是 toll 或未確認。例：重機格＋toll 安全；限時格＋free 不安全；限時格＋toll 安全。反方向（原本未填、讀回後有值，例如 `{"bay":"heavy"}` 讀回 `use='usual'`）不算遺失，判為不安全。
+
+有 `schedule`、`basis.expires_on` 或其他差異一律不安全。**分區**：依 `allow`（`from_access` 有 bay 時再比對 bay）推導 `access`，再由 `from_access` 讀回，可遺失 (b) 與讀回後未確認的面向（例如 charge）；有 `limits` 或 `schedule` 即不安全，對不到 `access`（`allow` 缺鍵或組合不存在）也不安全。路外點頂層不得有 `condition`，所有分區都安全才算安全。
 
 不安全的資料在**所有版本**的 viewport（原版、v2）與收藏中都改用保守投影（§5.2、§5.3）。
 
@@ -187,7 +196,7 @@ c    = "each_period" | "entry_only"           計次跨時段怎麼計，缺＝�
 | `renew` | 計次是否隔日另計：`none`＝不另計（停多久都只收一次）、`midnight`＝隔日另計（跨過每日零時重新計次）。只用於 `per_visit`，`by_time` 內每一段計次各自設定 | `none`／`midnight` | **未確認**。「沒填」不代表「不另計」（§2.5） |
 | `by_time.cross_period` | 停放跨進另一個計次時段時怎麼計：`each_period`＝每進入一個計次時段依該段費率另計一次、`entry_only`＝只依進場時段的費率計 | 二選一 | **未確認**（§2.5、§7 第 7 項，已決定） |
 | `extension` | 付費延長：每次金額、最多次數、每次分鐘 | 金額 0–10000、次數 1–10、分鐘 1–1440 | 沒有 `extension`＝未確認可否延長；`minutes` 缺＝延長時長未確認 |
-| `by_time.periods` | 時段差別費率，最多 8 段；內層 `rate` 不可再是 `by_time` 或比照 | | 沒有涵蓋的時間＝未確認 |
+| `by_time.periods` | 時段差別費率，最多 6 段（§2.5）；內層 `rate` 不可再是 `by_time` 或比照 | | 沒有涵蓋的時間＝未確認 |
 
 - `car` 不可用 `same_as_*`；`scooter` 也不可（既有規則）。
 - 時段費率不寫 `holiday` 以外的節日。本輪不依目前時間選用時段費率，只逐段顯示（§7 第 4 項，已決定）。
@@ -417,7 +426,7 @@ SQL 不能在執行時讀 JSON，所以由 `tool/gen_contract_sql.py` 從契約�
 | 資料表 check（`valid_condition`、`valid_fee` v2、`valid_zones`） | 形狀、鍵、範圍；不可能成立的組合（§4.3 標 DB 的列） | 寫入失敗。管理員 RPC 與匯入也受約束 |
 | `validate.ts` | 同上，外加信任邊界：社群不可帶 `zones_complete`、`condition.basis`（依據改以案件證據附上：新增選填鍵 `evidence_url`（https，存進案件，不寫入點位），或 P2 上線後的 `evidence_ids`，§1.4）；`proposed` 白名單加入 `condition`；P2 合併前拒收 `evidence_id` | 400 |
 | 預檢 `precheck.ts`（#94） | §4.3 標「預檢」的範圍與政策組合，可單獨停用、調參 | `fix`／`hold` |
-| Dart `ParkingCondition.fromJson`、`Fee.fromJson` | 同形狀規則；不合法的部分讀成未確認，不讓整張地圖失敗 | 該面向未確認 |
+| Dart `ParkingCondition.fromJson`、`Fee.fromJson` | 同形狀規則，不讓整張地圖失敗。`condition` 只要有任何一處不合法，**整個 condition 讀成 null（未確認）**，不逐面向降級：丟掉不合法的 `limits` 會讓格位看起來沒有限制，反而變寬鬆。另提供嚴格的 `validCondition`，與 Deno、SQL 共用同一份案例；`Fee` 維持逐車種未確認 | condition 整個未確認；費率該車種未確認 |
 
 原則：**資料表只擋「任何情況都不成立」的組合；本專案範圍或政策上的限制放在預檢**，因為範圍會隨公告改變（例如桃園 2026/4/1 起試辦開放免費機車格），寫死在 check 會擋下合法的新資料。
 
