@@ -373,12 +373,15 @@ class Fee {
     if (car case final rate?) 'car': rate.toJson(),
   };
 
-  /// This fee with the given vehicles replaced; the others, the car's
-  /// included, stay as they are.
-  Fee copyWith({Rate? Function()? scooter, Rate? Function()? heavy}) => Fee(
+  /// This fee with the given vehicles replaced; the others stay as they are.
+  Fee copyWith({
+    Rate? Function()? scooter,
+    Rate? Function()? heavy,
+    Rate? Function()? car,
+  }) => Fee(
     scooter: scooter == null ? this.scooter : scooter(),
     heavy: heavy == null ? this.heavy : heavy(),
-    car: car,
+    car: car == null ? this.car : car(),
   );
 
   /// One vehicle's rate as riders read it, a heavy follow with its amounts
@@ -629,4 +632,26 @@ String? _rateText(Object? r, int pct) {
       return t;
   }
   return null;
+}
+
+/// Pieces of the [feeNoteOf] sentences, so the notice board
+/// (lib/ui/fee_board.dart) lays a rate out line by line in the same words.
+abstract final class FeeWords {
+  /// Whole yuan at [pct] percent: 22.5, 41.25.
+  static String money(int? amount, [int pct = 100]) => _money(amount, pct);
+
+  /// 20 分鐘, 3 小時.
+  static String span(int minutes) => _span(minutes);
+
+  /// 每小時, 每 30 分鐘.
+  static String every(int? minutes) => _every(minutes);
+
+  /// 零時重算 and the like; null when unconfirmed.
+  static String? reset(CapReset? reset) => _resets[reset?.wire];
+
+  /// A period's `days` as a bit per weekday, Monday first.
+  static int dayMask(Object days) => _dayMask(days);
+
+  /// 每天, 平日, 假日 or the weekdays: 週六, 週一、週三.
+  static String dayLabel(int mask) => _dayLabel(mask);
 }

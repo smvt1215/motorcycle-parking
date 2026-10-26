@@ -17,6 +17,7 @@ class ParkingAccessView extends StatelessWidget {
         heavy: spot.heavyAllowed,
         scooterFee: spot.fee?.riderText('scooter') ?? '',
         heavyFee: spot.fee?.riderText('heavy') ?? '',
+        carFee: spot.fee?.textOf('car') ?? '',
         showFees: spot.fee != null,
       );
     }
@@ -43,6 +44,14 @@ class ParkingAccessView extends StatelessWidget {
             label: '大型重機',
             value: lotFee.riderText('heavy') ?? '費率未確認',
           ),
+          if (lotFee.textOf('car') case final car?) ...[
+            const SizedBox(height: 8),
+            _ZoneNote(
+              icon: Icons.directions_car_outlined,
+              label: '汽車',
+              value: car,
+            ),
+          ],
           const SizedBox(height: 16),
           Divider(
             height: 1,
@@ -77,8 +86,10 @@ class ParkingAccessView extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          // Fee has no car amount, so a zone's car price stays visible; the
-          // motorcycle rates beside it repeat the lot's, never the old text.
+          // A zone's own car price stays visible; the lot's car rate is
+          // listed once above, not again in every zone. The motorcycle
+          // rates beside a zone's car price repeat the lot's, never the old
+          // text.
           if (lotFee != null)
             zone.carFeeNote.trim().isEmpty
                 ? _AccessGroup(access: zone.access)
@@ -94,7 +105,7 @@ class ParkingAccessView extends StatelessWidget {
               access: zone.access,
               scooterFee: zone.scooterFeeText,
               heavyFee: zone.heavyFeeText,
-              carFee: zone.carFeeNote,
+              carFee: zone.carFeeText,
               showFees: zone.hasVehicleFees,
             ),
           if (lotFee == null &&

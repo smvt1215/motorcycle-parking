@@ -30,7 +30,7 @@ const communitySpot = { ...spot, id: communityId, name: '中山北路二段路�
 const cityRules = require('../assets/rules/parking_rules.json').map(rule => ({ district_space_types: {}, restriction: null, ...rule }));
 const officialSpot = { ...spot, id: officialId, name: '新北市政府行政大樓地下停車場', city: '新北市', district: '板橋區', lat: 25.0124, lng: 121.4651, space_type: 'offStreet', heavy_allowed: true, source_name: '新北市政府', hidden: false,
   address: '新北市板橋區中山路一段 161 號', facility_type: 'underground', parking_access: 'scooterHeavy', source_url: 'https://example.test/notice', source_id: 'ntpc-001', effective_date: '2026-01-01', license_note: '',
-  fee: { scooter: { mode: 'hourly', amount: 20, per_minutes: 60 }, heavy: { mode: 'same_as_scooter' } }, fee_note: '每小時 20 元（大型重機比照機車費率）' };
+  fee: { scooter: { mode: 'hourly', amount: 20, per_minutes: 60 }, heavy: { mode: 'same_as_scooter' } }, fee_note: '機車每小時 20 元；大型重機每小時 20 元' };
 const riderId = '77777777-7777-4777-8777-777777777777';
 const rider = { id: riderId, display_name: '夜騎小哲', email_masked: 'ri***@example.test', providers: ['google'], is_admin: false,
   created_at: '2026-09-01T00:00:00Z', last_sign_in_at: '2026-10-24T01:00:00Z', banned_until: null, deleted: false, reports_30d: 12, last_report_at: '2026-10-24T02:00:00Z' };
@@ -340,9 +340,12 @@ function session(role, aal, factors = [factor]) {
           await waitText('官方點（新北市政府）');
           await page.screenshot({ path: path.join(output, `${name}-spot-form.png`) });
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} spot form scrolls sideways`);
-          // Its structured fee: the editor and the text riders read.
+          // Its structured fee: the editor and the notice board riders read.
           {
-            const plate = page.getByText(officialSpot.fee_note);
+            // The board reads as one node (its label and its rows) that
+            // Flutter writes either as text or as an aria-label.
+            const plate = page.getByText('收費公告牌')
+              .or(page.locator('flt-semantics[aria-label*="收費公告牌"]'));
             const box = page.viewportSize();
             const shown = async () => {
               const at = (await plate.count()) ? await plate.first().boundingBox() : null;
@@ -536,10 +539,10 @@ function session(role, aal, factors = [factor]) {
           await page.getByRole('button', { name: '費率轉換', exact: true }).click();
           await page.getByRole('button', { name: '讀取尚未轉換的點位', exact: true }).click();
           // Each row is one checkbox that reads the writing and its reading.
-          await page.getByRole('checkbox', { name: /每次 20 元（大型重機費率未確認）/ }).waitFor({ timeout: 15000 });
+          await page.getByRole('checkbox', { name: /機車每次 20 元（隔日是否另計未確認）；大型重機費率未確認/ }).waitFor({ timeout: 15000 });
           await page.screenshot({ path: path.join(output, `${name}-fees.png`) });
           await page.getByRole('button', { name: '需人工確認 1 筆', exact: true }).click();
-          await page.getByRole('checkbox', { name: /每 4 小時 30 元（大型重機費率未確認）/ }).waitFor({ timeout: 15000 });
+          await page.getByRole('checkbox', { name: /機車每 4 小時 30 元；大型重機費率未確認/ }).waitFor({ timeout: 15000 });
           await page.screenshot({ path: path.join(output, `${name}-fees-manual.png`) });
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} fee conversion scrolls sideways`);
           const converted = page.waitForResponse(response => response.url().endsWith('/rpc/admin_convert_fees'));

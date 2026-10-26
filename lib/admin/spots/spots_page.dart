@@ -10,6 +10,7 @@ import 'package:pointer_interceptor/pointer_interceptor.dart';
 import '../../models/fee.dart';
 import '../../models/parking.dart';
 import '../../ui/address_search_field.dart';
+import '../../ui/fee_board.dart';
 import '../../ui/fee_editor.dart';
 import '../../ui/location_picker.dart';
 import '../admin_theme.dart';
@@ -1357,52 +1358,56 @@ class _FeeNotePlate extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 6),
-            Semantics(
-              label: 'App 顯示的費率',
-              child: Container(
-                key: const ValueKey('fee-note-plate'),
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 10,
-                ),
-                // A posted notice keeps its white plate in dark mode too.
-                decoration: BoxDecoration(
-                  color: AdminColors.white,
-                  border: Border.all(color: AdminColors.asphalt, width: 2),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Padding(
-                      padding: EdgeInsets.only(top: 2),
-                      child: Icon(
-                        Icons.payments_outlined,
-                        size: 20,
-                        color: AdminColors.asphalt,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        text,
-                        style: const TextStyle(
+            if (fee != null && !fee.isEmpty && complete)
+              // The same board riders read in the app (design §8.3).
+              FeeBoard(key: const ValueKey('fee-note-plate'), fee: fee)
+            else
+              Semantics(
+                label: 'App 顯示的費率',
+                child: Container(
+                  key: const ValueKey('fee-note-plate'),
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
+                  // A posted notice keeps its white plate in dark mode too.
+                  decoration: BoxDecoration(
+                    color: AdminColors.white,
+                    border: Border.all(color: AdminColors.asphalt, width: 2),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.only(top: 2),
+                        child: Icon(
+                          Icons.payments_outlined,
+                          size: 20,
                           color: AdminColors.asphalt,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w700,
-                          height: 1.4,
                         ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          text,
+                          style: const TextStyle(
+                            color: AdminColors.asphalt,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                            height: 1.4,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
             const SizedBox(height: 6),
             Text(
               complete
-                  ? '依上方費率產生。要改這段文字，請改費率；兩種車都改回「未確認」後，可以自行填寫。'
+                  ? '依上方費率產生。要改這段文字，請改費率；所有車種都改回「未確認」後，可以自行填寫。'
                   : '金額填好後，這段文字會跟著更新。',
               style: muted,
             ),

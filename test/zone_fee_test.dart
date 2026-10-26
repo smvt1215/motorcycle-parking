@@ -7,6 +7,8 @@ import 'package:motorcycle_parking/models/fee.dart';
 import 'package:motorcycle_parking/models/parking.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
 
+import 'fee_editor_steps.dart';
+
 ParkingSpot lot({Fee? fee, List<ParkingZone> zones = const []}) => ParkingSpot(
   id: 'zone-fees',
   name: '分區費率停車場',
@@ -295,6 +297,29 @@ void main() {
     });
   }
 
+  for (final width in [320.0, 390.0, 700.0, 1280.0]) {
+    testWidgets('寬 $width：詳情費率句子寫算好的金額與汽車費率，不寫比照（#140）', (tester) async {
+      final spot = lot(
+        fee: const Fee(
+          scooter: Rate(FeeMode.hourly, amount: 10, perMinutes: 60),
+          heavy: Rate(FeeMode.sameAsScooter, factorPct: 200),
+          car: Rate(FeeMode.hourly, amount: 40, perMinutes: 60),
+        ),
+        zones: const [
+          ParkingZone(name: '機車區', access: ParkingAccess.scooterHeavy),
+        ],
+      );
+      expect(spotFeeSummary(spot, VehicleType.heavy), '每小時 20 元');
+      await pumpAccess(tester, width, spot);
+      // The lot's rates, repeated beside the zone's vehicles.
+      expect(find.text('大型重機：每小時 20 元'), findsWidgets);
+      // The lot's car rate is listed once, not again in every zone.
+      expect(find.text('汽車：每小時 40 元'), findsOneWidget);
+      expect(find.textContaining('比照'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   for (final width in [320.0, 360.0, 390.0, 1280.0]) {
     testWidgets('分區編輯器在寬 $width 驗證金額並把各車種費率保存在該區', (tester) async {
       tester.view.devicePixelRatio = 1;
@@ -323,19 +348,10 @@ void main() {
           ),
         ),
       );
-      await tester.ensureVisible(find.byKey(const ValueKey('fee-mode-heavy')));
-      await tester.pumpAndSettle();
-      expect(
-        find.byKey(const ValueKey('fee-mode-heavy')).hitTestable(),
-        findsOneWidget,
-      );
-      await tester.tap(find.byKey(const ValueKey('fee-mode-heavy')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('計時').last);
-      await tester.pumpAndSettle();
+      await chooseFeeMode(tester, 'heavy', 'hourly');
       expect(form.currentState!.validate(), isFalse);
       await tester.pumpAndSettle();
-      await tester.enterText(find.widgetWithText(TextFormField, '金額'), '25');
+      await tester.enterText(feeField('amount', 'heavy'), '25');
       await tester.pumpAndSettle();
       expect(form.currentState!.validate(), isTrue);
       expect(zone.toJson(), {

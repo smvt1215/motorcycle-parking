@@ -1,5 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../ui/fee_board.dart';
+
 abstract final class AdminColors {
   static const road = Color(0xffeceeef);
   static const white = Color(0xffffffff);
@@ -51,6 +53,14 @@ ThemeData adminTheme(Brightness brightness) {
     ),
   );
   return base.copyWith(
+    // The fee board in ADMIN_WEB.md colours: asphalt on white, sign blue.
+    extensions: const [
+      FeeBoardTheme(
+        ink: AdminColors.asphalt,
+        muted: Color(0xff555b61),
+        accent: AdminColors.blue,
+      ),
+    ],
     textTheme: base.textTheme.apply().copyWith(
       headlineMedium: base.textTheme.headlineMedium?.copyWith(
         fontWeight: FontWeight.w700,
