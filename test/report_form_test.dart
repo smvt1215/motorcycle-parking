@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -20,9 +21,17 @@ class RecordingStore extends AppStore {
   Town? town = const Town('臺北市', '信義區');
   final lookups = <(double, double)>[];
 
+  /// When set, lookups wait here until a test answers them.
+  List<Completer<Town?>>? held;
+
   @override
   Future<Town?> townAt(double lat, double lng) async {
     lookups.add((lat, lng));
+    if (held case final waiting?) {
+      final answer = Completer<Town?>();
+      waiting.add(answer);
+      return answer.future;
+    }
     return town;
   }
 
@@ -583,5 +592,32 @@ void main() {
     await tester.enterText(nameField, '市府路機車格');
     await trySend(tester);
     expect(store.submissions, isEmpty);
+  });
+
+  testWidgets('標記移動後，前一個位置晚到的反查結果不會套用', (tester) async {
+    final store = await openForm(tester);
+    store.held = [];
+    store.fix = const LocationFix(25.0343, 121.5623, 8);
+    // Move once so a lookup for the first new position is in flight.
+    await tester.tap(find.text('移到我的位置'));
+    await tester.pump(const Duration(milliseconds: 700));
+    expect(store.held, hasLength(1));
+    // Move again; the first answer arrives before the next lookup starts.
+    store.fix = const LocationFix(25.0347, 121.5623, 8);
+    await tester.tap(find.text('移到我的位置'));
+    await tester.pump();
+    store.held!.single.complete(const Town('新北市', '板橋區'));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('report-city-changed')), findsNothing);
+    expect(find.text('位於新北市板橋區'), findsNothing);
+    await tester.pump(const Duration(milliseconds: 700));
+    store.held!.last.complete(const Town('臺北市', '大安區'));
+    await tester.pumpAndSettle();
+    expect(find.text('位於臺北市大安區'), findsOneWidget);
+    store.held = null;
+    final spot = await send(tester, store);
+    expect(spot['lat'], 25.0347);
+    expect(spot['city'], '臺北市');
+    expect(spot['district'], '大安區');
   });
 }

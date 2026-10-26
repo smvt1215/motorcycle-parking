@@ -336,8 +336,10 @@ class _SuggestionFormState extends State<_SuggestionForm> {
       newCity = null;
     });
     lookupTimer?.cancel();
+    // Counted now, not when the timer fires: an answer still in flight for
+    // the previous position must not land on this one.
+    final round = ++lookupRound;
     lookupTimer = Timer(const Duration(milliseconds: 600), () async {
-      final round = ++lookupRound;
       Town? town;
       try {
         town = await widget.store.townAt(a, b);
