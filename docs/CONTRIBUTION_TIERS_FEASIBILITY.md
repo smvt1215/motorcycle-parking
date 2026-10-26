@@ -256,7 +256,7 @@ A 類（法規）與 B 類（資料穩定性）依 §0 第 3 點只能由管理�
 
 2. **法規端：規則變更預審。** 管理員在 Admin Web P5 規則頁貼入公告（網址、文字或 PDF），引擎產出：
    - **結構化草稿**：`city`、`vehicle`、`allowed_space_types`、`conditional_space_types`、`districts`／`district_space_types`、`restriction`、`can_use_two_spaces`、`fee_note`、`effective_date`、`source_url`、`exceptions` 文字；`version` 由伺服器遞增（ADMIN_WEB.md P5），不在草稿內。抽取可用 LLM 輔助，但輸出只是草稿，每個欄位旁顯示抽取依據的原文片段，管理員逐欄確認。
-   - **一致性檢查**：資料庫約束（例如 `city_rules_restriction_required`）、與現行版本的欄位 diff、生效日不早於現行版本（同生效日的更正性修訂需填更正理由）、`assets/rules/parking_rules.json` 是否需同步（P5 規劃中的 `tool/export_rules.py`）。`city_rules` 目前以 `(city, vehicle)` 為主鍵、版本原地覆寫、沒有歷史表；引擎第一個 migration 需加 `city_rules_history`（§10 第 16 點），否則 `rule_evidence.rule_version` 事後無法還原當時規則。
+   - **一致性檢查**：資料庫約束（例如 `city_rules_restriction_required`）、與現行版本的欄位 diff、生效日不早於現行版本（同生效日的更正性修訂需填更正理由）、`assets/rules/parking_rules.json` 是否需同步（P5 規劃中的 `tool/export_rules.py`）。`city_rules` 以 `(city, vehicle)` 為主鍵、版本原地覆寫；被取代的版本由 Admin Web P5 的 `admin_upsert_city_rule` 寫入 `city_rules_history`（§10 第 16 點，2026-10-25 決定採歷史表），`rule_evidence.rule_version` 以此還原當時規則。
    - **影響分析**：套用草稿後，該縣市有多少點位的 `EligibilityStatus` 會改變，按型式與車種列出 before／after 與數量；哪些官方點 `vehicle_source='official'` 的值與新規則衝突；哪些既有 A 類案件會因此自動結案。
    - **產出**：規則新版本的 SQL 草稿與 JSON 同步 diff，管理員確認後發布（Admin Web P5 規則頁與伺服器端版本遞增是 §5.7 面向 2 的前置依賴，目前尚未實作）；發布時引擎回頭結掉被新規則解答的 A 類案件，並對早於公告生效日的矛盾觀察依 §5.3「被官方證實」一列加點。
 
@@ -334,7 +334,7 @@ validate.ts（結構）→ 預檢（組合／內容／行為）→ 法規預審 
 - `official_spot_overlays`（§5.6）：`spot_id → official_heavy_spots.id`、`field_key`、`official_value jsonb`（核實當時的官方值快照）、`community_value jsonb`、`state`（`active/disputed/superseded/confirmed_by_official/expired`）、`confirmations int`、`evidence_ids`、`verified_at`、`valid_until`、`case_id`。唯一性用 partial unique index（`(spot_id, field_key) where state in ('active','disputed')`），終態列保留為歷史。公開 view 只暴露 `field_key`、`community_value`、`confirmations`、`verified_at`、`state='active'`；不暴露參與者。trigger：`official_heavy_spots` 任一欄位更新時比對快照，依 §5.6 第 3 點改狀態。
 - `official_heavy_spots.vehicle_source jsonb`（§5.6）：匯入時寫入每個車種旗標的來源（`official`／`inferred`／`community`），是「官方明載」的唯一判定依據。
 - `rule_evidence`（§5.7）：`city`、`vehicle`、`district`、`rule_version`、`rule_snapshot jsonb`、`space_type`、`source_id`、`reporter_id`（不公開）、`agrees boolean`、`observed_at`、`evidence_ids`；只收帳齡 ≥ 7 天且通過獨立性檢查的觀察；一致與矛盾都存，矛盾聚合由此表計算。
-- `city_rules_history`（§5.7）：每次發布前把 `city_rules` 現列連同 `version`、`replaced_at` 複製一份；`rule_evidence.rule_version` 與 `rule_drafts.published_version` 以此還原「當時版本說什麼」。
+- `city_rules_history`（§5.7，已隨 Admin Web P5 建立）：每次發布前把 `city_rules` 現列連同 `version`、`replaced_at`、`replaced_by` 複製一份；`rule_evidence.rule_version` 與 `rule_drafts.published_version` 以此還原「當時版本說什麼」。
 - `rule_review_cases`（§5.7）：`kind`（`conflict_aggregate/missing_rule/source_changed/expiring`）、`city`、`vehicle`、`space_type`、`rule_version`、`evidence_ids`、`status`、`resolved_by`、`resolution`；管理員結案時可直接開啟規則草稿。
 - `rule_drafts`（§5.7）：`city`、`vehicle`、`draft jsonb`（與 `city_rules` 同結構）、`source_excerpts jsonb`（每欄位對應的原文片段）、`consistency jsonb`、`impact jsonb`（before／after 計數與清單）、`status`（`draft/confirmed/published/discarded`）、`created_by`、`published_version`。
 - `source_watch`（§5.7）：`url`、`last_hash`、`last_checked_at`、`linked_table`、`linked_id`。
@@ -458,7 +458,7 @@ validate.ts（結構）→ 預檢（組合／內容／行為）→ 法規預審 
 13. **規則複查門檻**：90 天內同縣市同型式 5 件矛盾觀察、3 名以上獨立 L1＋（初值，待校準）；等級系統上線前以「帳齡 ≥ 7 天且獨立性風險低」代替 L1＋。
 14. **預檢是否使用機器學習訊號**：本文建議第一年只用確定性規則；若要用（例如照片是否為停車場景），只能作為 `hold` 的輔助，不能 `reject`。
 15. **行為異常門檻初值**（§5.8 第 3 組）與「每日 3 次 reject 即封鎖當日後續提案」是否過嚴。
-16. **`city_rules` 歷史表**：引擎需要「當時版本說什麼」；採 `city_rules_history` 表，或在 `rule_evidence` 存規則快照（建議前者，一次 migration）。
+16. ~~**`city_rules` 歷史表**~~：2026-10-25 決定採 `city_rules_history` 表，已隨 Admin Web P5（migration `202610260240`）建立。
 17. **審核票與照片的 `hold` 語意**：提案的 `hold` 已決定為門檻加 1 票；審核票 `hold` 為該票不計入共識、照片 `hold` 為不計入任何門檻（§5.8），是否同意。
 
 ## 11. 必測情境（實作時納入）

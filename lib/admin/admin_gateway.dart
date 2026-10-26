@@ -97,6 +97,19 @@ abstract class AdminGateway {
     String baseUpdatedAt,
     String note,
   );
+
+  /// Every `city_rules` row; the table is public.
+  Future<List<Map<String, dynamic>>> cityRules();
+
+  /// `admin_upsert_city_rule`: publishes [values] as the next version of the
+  /// rule opened at [baseVersion] (null for a new rule).
+  Future<Map<String, dynamic>> publishCityRule(
+    String city,
+    String vehicle,
+    Map<String, dynamic> values,
+    int? baseVersion,
+    String note,
+  );
 }
 
 /// Community columns readable by clients; `user_id` is never granted.
@@ -417,4 +430,26 @@ class SupabaseAdminGateway implements AdminGateway {
 
   @override
   Future<Town?> town(double lat, double lng) => lookupTown(lat, lng);
+
+  @override
+  Future<List<Map<String, dynamic>>> cityRules() =>
+      client.from('city_rules').select().order('city').order('vehicle');
+
+  @override
+  Future<Map<String, dynamic>> publishCityRule(
+    String city,
+    String vehicle,
+    Map<String, dynamic> values,
+    int? baseVersion,
+    String note,
+  ) => client.rpc<Map<String, dynamic>>(
+    'admin_upsert_city_rule',
+    params: {
+      'p_city': city,
+      'p_vehicle': vehicle,
+      'p_values': values,
+      'p_base_version': baseVersion,
+      'p_note': note,
+    },
+  );
 }

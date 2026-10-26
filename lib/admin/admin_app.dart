@@ -4,6 +4,7 @@ import 'package:cupertino_ui/cupertino_ui.dart' as cu;
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../models/parking.dart';
 import 'admin_auth_page.dart';
 import 'admin_controller.dart';
 import 'admin_mfa_page.dart';
@@ -13,6 +14,8 @@ import 'review/review_controller.dart';
 import 'review/review_map.dart';
 import 'review/review_page.dart';
 import '../ui/location_picker.dart';
+import 'rules/rules_controller.dart';
+import 'rules/rules_page.dart';
 import 'spots/spot_models.dart';
 import 'spots/spots_controller.dart';
 import 'spots/spots_page.dart';
@@ -37,7 +40,7 @@ const _tabs = [
     label: '規則',
     icon: Icons.rule_outlined,
     title: '各縣市停車規則',
-    description: '在這裡檢視各縣市的普通機車與大型重機停放規則。',
+    description: '設定各縣市普通機車與大型重機的路邊停放規則並發布新版本。',
   ),
   (
     path: '/imports',
@@ -64,6 +67,7 @@ class AdminApp extends StatefulWidget {
     this.reviewMapBuilder = googleReviewMap,
     this.locationMapBuilder,
     this.review,
+    this.bundledRules,
   });
   final AdminController controller;
   final String? initialLocation;
@@ -75,6 +79,9 @@ class AdminApp extends StatefulWidget {
 
   /// Injected by tests; otherwise created over the controller's gateway.
   final ReviewController? review;
+
+  /// Tests replace the app's bundled rule file.
+  final Future<List<dynamic>> Function()? bundledRules;
 
   @override
   State<AdminApp> createState() => _AdminAppState();
@@ -89,6 +96,10 @@ class _AdminAppState extends State<AdminApp> {
       );
   late final SpotsController _spots = SpotsController(
     widget.controller.gateway,
+  );
+  late final RulesController _rules = RulesController(
+    widget.controller.gateway,
+    bundled: widget.bundledRules ?? bundledRules,
   );
   String? _reviewUser;
 
@@ -110,6 +121,7 @@ class _AdminAppState extends State<AdminApp> {
       _reviewUser = user;
       _review.reset();
       _spots.reset();
+      _rules.reset();
     }
   }
 
@@ -177,7 +189,17 @@ class _AdminAppState extends State<AdminApp> {
                 locationMapBuilder: widget.locationMapBuilder,
               ),
             ),
-          for (final tab in _tabs.skip(2))
+          for (final path in ['/rules', '/rules/:city/:vehicle'])
+            GoRoute(
+              path: path,
+              builder: (context, state) => RulesPage(
+                rules: _rules,
+                city: state.pathParameters['city'],
+                vehicle: VehicleType.values
+                    .asNameMap()[state.pathParameters['vehicle']],
+              ),
+            ),
+          for (final tab in _tabs.skip(3))
             GoRoute(
               path: tab.path,
               builder: (context, state) => _watch(
@@ -220,6 +242,7 @@ class _AdminAppState extends State<AdminApp> {
     widget.controller.removeListener(_accessChanged);
     if (widget.review == null) _review.dispose();
     _spots.dispose();
+    _rules.dispose();
     _router.dispose();
     super.dispose();
   }
