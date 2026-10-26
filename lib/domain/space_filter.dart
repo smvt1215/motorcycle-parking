@@ -24,6 +24,8 @@ FeeMode? _modeFor(Fee? fee, VehicleType vehicle) {
 /// never is, whatever its first minutes cost; nor are lots, car bays, or
 /// bays only some vehicles may use (身障特製, 電動).
 bool freeFor(ParkingSpot spot, VehicleType vehicle) {
+  // A lot by its space type or by how it is built (§1.1 placement).
+  if (isOffStreet(spot.spaceType, spot.facilityType)) return false;
   final condition = spot.condition ?? conditionOf(spot.spaceType);
   if (condition == null ||
       condition.bay == Bay.car ||

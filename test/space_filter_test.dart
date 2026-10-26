@@ -134,6 +134,19 @@ void main() {
     }
   });
 
+  test('a lot by its facility type is not a 免費機車格 either', () {
+    final lot = ParkingSpot.fromJson({
+      'id': 'x',
+      'name': '平面停車場',
+      'lat': 25.03,
+      'lng': 121.56,
+      'city': '臺北市',
+      'space_type': 'freeMotorcycle',
+      'facility_type': 'surface',
+    });
+    expect(freeFor(lot, VehicleType.scooter), isFalse);
+  });
+
   test('other kinds filter by their space type', () {
     final paid = _spot(SpaceType.paidMotorcycle);
     expect(matchesSpaceFilter(paid, SpaceType.paidMotorcycle, scooter), isTrue);

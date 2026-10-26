@@ -82,7 +82,12 @@ class ConditionDraft {
       }
     }
     slots.addAll(c.schedule.map(SlotDraft.of));
+    loadedLimits = c.limits;
   }
+
+  /// The stored limits, kept as they are while the kind does: the form
+  /// edits only a 限時 bay's minutes, never drops one it cannot show.
+  List<ParkingLimit> loadedLimits = const [];
 
   /// The kind the stored condition came with: its periods stay as they
   /// are while the kind does, even where this form cannot edit them.
@@ -113,8 +118,10 @@ class ConditionDraft {
       share: share ? ShareKind.scooterHeavy : base.share,
       charge: _chargeByType.contains(type) ? base.charge : charge,
       limits: [
-        for (final l in base.limits)
-          l.kind == LimitKind.timeLimit && minutes != null
+        for (final l in type == loadedType ? loadedLimits : base.limits)
+          // The minutes field shows on 限時 bays only; elsewhere a stored
+          // time limit stays as it is.
+          l.kind == LimitKind.timeLimit && type == SpaceType.timedMotorcycle
               ? ParkingLimit(LimitKind.timeLimit, maxMinutes: minutes)
               : l,
       ],
