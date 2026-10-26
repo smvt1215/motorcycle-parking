@@ -4,6 +4,7 @@ import {
   type Deps,
   handle,
   restoreDuration,
+  sameBan,
 } from './handler.ts';
 
 const adminId = '10000000-0000-4000-8000-000000000005';
@@ -13,21 +14,22 @@ const now = new Date('2026-10-25T00:00:00Z');
 function fake(caller: Caller | null, options: { recordFails?: boolean } = {}) {
   const bans: string[] = [];
   const records: BanRecord[] = [];
+  /** What the Auth server holds for the rider now. */
+  const state = { riderBan: null as string | null };
   const deps: Deps = {
     caller: () => Promise.resolve(caller),
     target: (id) =>
       Promise.resolve(
         id === riderId
-          ? { id, admin: false, bannedUntil: null }
+          ? { id, admin: false, bannedUntil: state.riderBan }
           : id === adminId || id === '10000000-0000-4000-8000-000000000009'
           ? { id, admin: true, bannedUntil: null }
           : null,
       ),
     setBan: (_id, duration) => {
       bans.push(duration);
-      return Promise.resolve(
-        duration === 'none' ? null : '2026-11-01T00:00:00Z',
-      );
+      state.riderBan = duration === 'none' ? null : '2026-11-01T00:00:00Z';
+      return Promise.resolve(state.riderBan);
     },
     record: (entry) => {
       if (options.recordFails) return Promise.reject(new Error('db down'));
@@ -36,7 +38,7 @@ function fake(caller: Caller | null, options: { recordFails?: boolean } = {}) {
     },
     now: () => now,
   };
-  return { deps, bans, records };
+  return { deps, bans, records, state };
 }
 
 const post = (body: unknown, token = 'token') =>
@@ -121,6 +123,32 @@ Deno.test('a ban the audit cannot record is undone', async () => {
   assert(res.status === 500, `status ${res.status}`);
   assert(bans.join() === '168h,none', `durations ${bans}`);
   assert(records.length === 0, 'recorded');
+});
+
+Deno.test('a newer ban from another admin is not undone', async () => {
+  const { deps, bans, state } = fake(admin);
+  // Another admin lifts the ban between this write and its failed audit.
+  deps.record = () => {
+    state.riderBan = null;
+    return Promise.reject(new Error('db down'));
+  };
+  const res = await handle(post(ban), deps);
+  assert(res.status === 500, `status ${res.status}`);
+  assert(
+    (await res.json()).error === 'audit failed; a newer change was kept',
+    'error',
+  );
+  assert(bans.join() === '168h', `durations ${bans}`);
+  assert(state.riderBan === null, "the other admin's change was overwritten");
+});
+
+Deno.test('the same ban end in another notation still counts as ours', () => {
+  assert(
+    sameBan('2026-11-01T00:00:00Z', '2026-11-01T00:00:00.000000Z'),
+    'same',
+  );
+  assert(!sameBan('2026-11-01T00:00:00Z', null), 'null');
+  assert(sameBan(null, null), 'both null');
 });
 
 Deno.test('invalid requests are refused before any change', async () => {

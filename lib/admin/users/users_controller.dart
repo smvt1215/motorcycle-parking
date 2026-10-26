@@ -265,6 +265,8 @@ String _banMessage(Object e) {
     (400, 'you cannot ban your own account') => '不能停權自己的帳號。',
     (400, _) => '停權資料不完整，請填寫原因後再試。',
     (500, 'audit failed; the change was undone') => '稽核紀錄寫入失敗，停權狀態已還原，請稍後重試。',
+    (500, 'audit failed; a newer change was kept') =>
+      '稽核紀錄寫入失敗，而另一位管理者已改了這個帳號的停權狀態；已保留對方的變更，請重新載入確認。',
     (500, _) => '稽核紀錄寫入失敗且無法還原，請重新載入確認目前的停權狀態。',
     _ => '停權狀態沒有變更，請稍後重試。',
   };

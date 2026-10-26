@@ -73,6 +73,12 @@ void main() {
       );
       expect(await users.setBan(BanLength.week, '測試'), isFalse);
       expect(users.writeError, contains('已還原'));
+      gateway.banError = const FunctionException(
+        status: 500,
+        details: {'error': 'audit failed; a newer change was kept'},
+      );
+      expect(await users.setBan(BanLength.week, '測試'), isFalse);
+      expect(users.writeError, contains('已保留對方的變更'));
       expect(users.detail!.user.banned, isFalse);
     });
 

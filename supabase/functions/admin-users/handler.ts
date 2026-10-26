@@ -77,6 +77,10 @@ export function restoreDuration(before: string | null, now: Date): string {
   return ms > 0 ? `${Math.ceil(ms / 3_600_000)}h` : 'none';
 }
 
+/** The same ban end, whatever the timestamp's notation. */
+export const sameBan = (a: string | null, b: string | null) =>
+  a === null || b === null ? a === b : Date.parse(a) === Date.parse(b);
+
 const active = (until: string | null, now: Date) =>
   until !== null && Date.parse(until) > now.getTime();
 
@@ -138,8 +142,19 @@ async function serve(req: Request, deps: Deps): Promise<Response> {
       note: request.reason,
     });
   } catch {
-    // Every ban change is audited: undo one that cannot be.
+    // Every ban change is audited: undo one that cannot be, unless another
+    // request changed the ban since; its newer value is kept.
     try {
+      const latest = await deps.target(target.id);
+      const current = latest && active(latest.bannedUntil, now)
+        ? latest.bannedUntil
+        : null;
+      if (!sameBan(current, after)) {
+        return response(
+          { error: 'audit failed; a newer change was kept' },
+          500,
+        );
+      }
       await deps.setBan(target.id, restoreDuration(before, now));
     } catch {
       return response(
