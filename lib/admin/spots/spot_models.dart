@@ -365,7 +365,9 @@ String? validateSpotField(SpotField field, Object? value) {
 
 /// The stored `fee` as the form edits it: null when the spot has none, or
 /// when it names no vehicle (the app reads `{}` as a lot-wide fee with both
-/// vehicles unconfirmed, so the form never writes it).
+/// vehicles unconfirmed, so the form never writes it). The server's
+/// `fee_note_matches` reads null and `{}` the same way, so the text of such
+/// a spot stays free to edit (202610270021_empty_fee_semantics.sql).
 Fee? storedFee(Object? json) {
   final fee = json is Map ? Fee.fromJson(json) : null;
   return fee == null || fee.isEmpty ? null : fee;
