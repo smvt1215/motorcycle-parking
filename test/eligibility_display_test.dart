@@ -272,6 +272,8 @@ void main() {
       expect(d.reported, isFalse);
       expect(d.label, '開放資訊待確認');
       expect(d.basis, startsWith('管理員確認，'));
+      // The zones' gap, not 「可停放車種未經確認」.
+      expect(d.explanation, '場站開放大型重機，但已知分區沒有標示可停區域，請依入口公告');
     });
 
     test('未確認的社群停車場也不列分區的試辦期限', () {
@@ -295,6 +297,52 @@ void main() {
         ],
       });
       expect(showDecision(spot).notices, isEmpty);
+    });
+
+    test('分區列只省略期限列已寫的部分，其他理由保留', () {
+      final spot = ParkingSpot.fromJson({
+        ...zoned('official').toJson(),
+        'parking_zones': [
+          {
+            'name': '夜間區',
+            'access': 'heavyOnly',
+            'condition': {
+              'bay': 'heavy',
+              'use': 'usual',
+              'allow': {'scooter': false, 'heavy': true},
+              'schedule': [
+                {
+                  'days': 'all',
+                  'vehicles': ['car'],
+                },
+              ],
+              'basis': {
+                'source_url': 'https://example.test',
+                'expires_on': '2026-12-31',
+              },
+            },
+          },
+          {
+            'name': '試辦區',
+            'access': 'heavyOnly',
+            'condition': {
+              'bay': 'heavy',
+              'use': 'usual',
+              'allow': {'scooter': false, 'heavy': true},
+              'limits': [
+                {'kind': 'ev_only'},
+              ],
+              'basis': {
+                'source_url': 'https://example.test',
+                'expires_on': '2026-12-31',
+              },
+            },
+          },
+        ],
+      });
+      final zones = showDecision(spot).zones;
+      expect(zones.first.reason, '公告沒有列出大型重機的開放時段');
+      expect(zones.last.reason, '限電動機車停放或充換電，燃油機車不可停');
     });
 
     test('未確認的社群停車場不列分區：分區是同一份未確認的回報', () {

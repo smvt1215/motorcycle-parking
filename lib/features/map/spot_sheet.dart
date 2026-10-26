@@ -719,10 +719,9 @@ class _ZoneRow extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     final color = spotMarkerColor(zone.status);
-    // Why it is conditional or unknown, unless the notice line above
-    // already says (試辦至…／已到期).
+    // Why it is conditional or unknown, less what the notice lines say.
     final detail =
-        !zone.dated &&
+        zone.reason.isNotEmpty &&
             (zone.status == EligibilityStatus.conditional ||
                 zone.status == EligibilityStatus.unverified)
         ? '：${zone.reason}'

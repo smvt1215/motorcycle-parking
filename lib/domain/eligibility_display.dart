@@ -46,15 +46,15 @@ class ZoneLine {
     required this.label,
     required this.reason,
     this.restriction,
-    this.dated = false,
   });
-  final String name, label, reason;
+  final String name, label;
+
+  /// Why the zone is conditional or unknown, without what the banner's
+  /// [EligibilityDisplay.notices] already say (試辦至…, ended, not started);
+  /// empty when nothing else limits it.
+  final String reason;
   final EligibilityStatus status;
   final RuleRestriction? restriction;
-
-  /// The zone's notice has an end date, already one of the banner's
-  /// [EligibilityDisplay.notices]; the row need not repeat it.
-  final bool dated;
 }
 
 class EligibilityDisplay {
@@ -186,7 +186,11 @@ EligibilityDisplay eligibilityDisplay(
         ? EligibilityTier.noData
         : EligibilityTier.other,
     label: spot.isFacility ? '開放資訊待確認' : result.label,
-    explanation: explanationOf(decisionExplanation(spot, result)),
+    // Checked access left open by zones or notices keeps its own reason;
+    // only unchecked access reads 「可停放車種未經確認」.
+    explanation: explanationOf(
+      checked ? result.reason : decisionExplanation(spot, result),
+    ),
     basis: checked && (decision?.gaps.isNotEmpty ?? false) ? sourceLine : null,
     notices: notices,
     zones: zones,
@@ -263,7 +267,6 @@ List<NoticeLine> noticeLines(
 /// Each zone of [decision] as listed under the banner; empty when no zone
 /// says anything about access.
 List<ZoneLine> zoneLines(ParkingDecision decision, DateTime now) {
-  final day = taipeiDay(now);
   if (!decision.zones.any((z) => z.hasData)) return const [];
   return [
     for (final z in decision.zones)
@@ -276,12 +279,19 @@ List<ZoneLine> zoneLines(ParkingDecision decision, DateTime now) {
           z.reason,
           restriction: z.restriction,
         ).label,
-        reason: z.reason,
-        dated:
-            z.notice != null &&
-            (z.notice!.expiresOn != null || _notStarted(z.notice!, day)),
+        reason: _zoneReason(z),
       ),
   ];
+}
+
+/// [z]'s reason less the parts the notice lines say: an ended or not yet
+/// started notice is the whole reason; a trial's end is one part.
+String _zoneReason(ZoneDecision z) {
+  if (z.gaps.contains(DecisionGap.noticeExpired)) return '';
+  return z.reason
+      .split('；')
+      .where((part) => !part.startsWith('試辦至 '))
+      .join('；');
 }
 
 /// [result]'s reason, except that a confirmed community lot says its
