@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - run: python3 -m unittest discover -s tool -p 'test_*.py'
-      - uses: ruby/setup-ruby@651ff0d62c5c79bed6d53ec518387aae20e72c1a
+      - uses: ruby/setup-ruby@26e5b7d197ebf60545ee9667bcbace0be11ccaec
         with:
           ruby-version: '3.3'
           bundler-cache: true
@@ -106,6 +106,12 @@ jobs:
         if: steps.changes.outputs.run == 'true'
         with:
           version: ${{ steps.versions.outputs.supabase }}
+      - name: Check generated contract SQL
+        if: steps.changes.outputs.run == 'true'
+        run: |
+          python3 tool/gen_contract_sql.py
+          git diff --exit-code -- supabase/contract supabase/tests/parking_contract_test.sql
+          test -z "$(git status --porcelain -- supabase/contract supabase/tests/parking_contract_test.sql)"
       - name: Edge Function checks
         if: steps.changes.outputs.run == 'true'
         working-directory: supabase/functions

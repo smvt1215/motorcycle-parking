@@ -1,0 +1,2541 @@
+{
+  "comment": "parking_contract.json 的共同案例。conditions：validCondition（Deno、Flutter、SQL）；legacy：legacySpaceType（三端）與 legacySafe（Flutter），safe 為 null 表示不適用；zones：legacyAccess 與 legacySafeZone（Flutter）；fees：valid_fee v2 形狀（目前只有 SQL，Dart／Deno 在費率 v2 PR 接上）。legacy 名稱中的 (a)–(d) 對應設計文件 §1.3 legacySafe 可遺失的四種資訊。",
+  "conditions": [
+    {
+      "name": "收費機車格",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll"
+      },
+      "valid": true
+    },
+    {
+      "name": "臺北限時格：Toll 首段 0 元，限停 20 分鐘",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "time_limit",
+            "max_minutes": 20
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "身障專用機車格（§1.2 範例）",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "free",
+        "limits": [
+          {
+            "kind": "special_vehicle",
+            "vehicle": "disabled_modified"
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "限電動機車，收費屬性未確認",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "limits": [
+          {
+            "kind": "ev_only"
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "限時格，收費屬性未確認",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "limits": [
+          {
+            "kind": "time_limit"
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "重機格，收費屬性未確認",
+      "zone": false,
+      "condition": {
+        "bay": "heavy"
+      },
+      "valid": true
+    },
+    {
+      "name": "汽車格",
+      "zone": false,
+      "condition": {
+        "bay": "car",
+        "use": "usual",
+        "charge": "toll"
+      },
+      "valid": true
+    },
+    {
+      "name": "汽機共用格依時段（§1.2 範例）",
+      "zone": false,
+      "condition": {
+        "bay": "car",
+        "use": "share",
+        "share": "car_motorcycle",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "time_limit",
+            "max_minutes": 20
+          }
+        ],
+        "schedule": [
+          {
+            "days": "weekday",
+            "from": "07:00",
+            "to": "20:00",
+            "vehicles": [
+              "car"
+            ]
+          },
+          {
+            "days": "weekday",
+            "from": "20:00",
+            "to": "07:00",
+            "vehicles": [
+              "car",
+              "scooter"
+            ]
+          }
+        ],
+        "basis": {
+          "source_url": "https://pma.gov.taipei/News_Content.aspx?n=E43F2E5AE1223B3D",
+          "evidence_id": null,
+          "effective_date": "2026-10-06",
+          "expires_on": null
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "普大共用收費格附公告網址",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "share",
+        "share": "scooter_heavy",
+        "charge": "toll",
+        "basis": {
+          "source_url": "https://pma.gov.taipei/News_Content.aspx?n=E43F2E5AE1223B3D"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "普大共用免費格：契約允許，預檢另外 hold（§7 第 2 項）",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "share",
+        "share": "scooter_heavy",
+        "charge": "free",
+        "basis": {
+          "source_url": "https://pma.gov.taipei/News_Content.aspx?n=E43F2E5AE1223B3D"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "依據有生效日與截止日",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "basis": {
+          "source_url": "https://pma.gov.taipei/News_Content.aspx?n=E43F2E5AE1223B3D",
+          "effective_date": "2026-04-06",
+          "expires_on": "2026-10-05"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "時段為星期陣列且跨午夜",
+      "zone": false,
+      "condition": {
+        "bay": "car",
+        "use": "share",
+        "share": "car_motorcycle",
+        "schedule": [
+          {
+            "days": [
+              "sat",
+              "sun"
+            ],
+            "from": "22:00",
+            "to": "06:00",
+            "vehicles": [
+              "scooter",
+              "heavy"
+            ]
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "不是物件",
+      "zone": false,
+      "condition": [
+        "bay"
+      ],
+      "valid": false
+    },
+    {
+      "name": "空物件",
+      "zone": false,
+      "condition": {},
+      "valid": false
+    },
+    {
+      "name": "路邊條件缺 bay",
+      "zone": false,
+      "condition": {
+        "use": "usual",
+        "charge": "toll"
+      },
+      "valid": false
+    },
+    {
+      "name": "未知的鍵",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "zones": []
+      },
+      "valid": false
+    },
+    {
+      "name": "路邊條件不可帶 allow",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "allow": {
+          "scooter": true
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "bay 不在列舉",
+      "zone": false,
+      "condition": {
+        "bay": "bicycle",
+        "charge": "toll"
+      },
+      "valid": false
+    },
+    {
+      "name": "bay 不是字串",
+      "zone": false,
+      "condition": {
+        "bay": [
+          "motorcycle"
+        ],
+        "charge": "toll"
+      },
+      "valid": false
+    },
+    {
+      "name": "機車格沒有收費屬性也沒有限制",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual"
+      },
+      "valid": false
+    },
+    {
+      "name": "use=share 缺 share",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "share",
+        "charge": "toll"
+      },
+      "valid": false
+    },
+    {
+      "name": "use=usual 帶 share",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "share": "scooter_heavy",
+        "charge": "toll"
+      },
+      "valid": false
+    },
+    {
+      "name": "沒有 use 卻帶 share",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "share": "scooter_heavy",
+        "charge": "toll"
+      },
+      "valid": false
+    },
+    {
+      "name": "普大共用畫在汽車格",
+      "zone": false,
+      "condition": {
+        "bay": "car",
+        "use": "share",
+        "share": "scooter_heavy"
+      },
+      "valid": false
+    },
+    {
+      "name": "汽機共用畫在機車格",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "share",
+        "share": "car_motorcycle",
+        "charge": "toll"
+      },
+      "valid": false
+    },
+    {
+      "name": "限制 kind 不在列舉",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "night_only"
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "vehicle 出現在 special_vehicle 以外",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "time_limit",
+            "vehicle": "disabled_modified"
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "special_vehicle 缺 vehicle",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "limits": [
+          {
+            "kind": "special_vehicle"
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "special_vehicle 的車型不在列舉",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "limits": [
+          {
+            "kind": "special_vehicle",
+            "vehicle": "disabled_permit"
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "同一種限制重複",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "time_limit"
+          },
+          {
+            "kind": "time_limit",
+            "max_minutes": 30
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "limits 為空陣列",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": []
+      },
+      "valid": false
+    },
+    {
+      "name": "限時 0 分鐘",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "time_limit",
+            "max_minutes": 0
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "限時超過 1440 分鐘",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "time_limit",
+            "max_minutes": 1441
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "限時分鐘是字串",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "time_limit",
+            "max_minutes": "20"
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "限時分鐘不是整數",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "time_limit",
+            "max_minutes": 20.5
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "限時分鐘寫成 20.0，視同 20",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "time_limit",
+            "max_minutes": 20.0
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "全天：同時省略 from 與 to",
+      "zone": false,
+      "condition": {
+        "bay": "car",
+        "use": "share",
+        "share": "car_motorcycle",
+        "schedule": [
+          {
+            "days": "holiday",
+            "vehicles": [
+              "car",
+              "scooter"
+            ]
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "全天不可寫成 00:00–24:00",
+      "zone": false,
+      "condition": {
+        "bay": "heavy",
+        "schedule": [
+          {
+            "days": "all",
+            "from": "00:00",
+            "to": "24:00",
+            "vehicles": [
+              "car"
+            ]
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "只省略 to",
+      "zone": false,
+      "condition": {
+        "bay": "heavy",
+        "schedule": [
+          {
+            "days": "all",
+            "from": "07:00",
+            "vehicles": [
+              "heavy"
+            ]
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "時段缺 days",
+      "zone": false,
+      "condition": {
+        "bay": "heavy",
+        "schedule": [
+          {
+            "vehicles": [
+              "heavy"
+            ]
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "schedule 為空陣列",
+      "zone": false,
+      "condition": {
+        "bay": "heavy",
+        "schedule": []
+      },
+      "valid": false
+    },
+    {
+      "name": "schedule 超過 8 段",
+      "zone": false,
+      "condition": {
+        "bay": "heavy",
+        "schedule": [
+          {
+            "days": "all",
+            "from": "07:00",
+            "to": "20:00",
+            "vehicles": [
+              "car"
+            ]
+          },
+          {
+            "days": "all",
+            "from": "07:00",
+            "to": "20:00",
+            "vehicles": [
+              "car"
+            ]
+          },
+          {
+            "days": "all",
+            "from": "07:00",
+            "to": "20:00",
+            "vehicles": [
+              "car"
+            ]
+          },
+          {
+            "days": "all",
+            "from": "07:00",
+            "to": "20:00",
+            "vehicles": [
+              "car"
+            ]
+          },
+          {
+            "days": "all",
+            "from": "07:00",
+            "to": "20:00",
+            "vehicles": [
+              "car"
+            ]
+          },
+          {
+            "days": "all",
+            "from": "07:00",
+            "to": "20:00",
+            "vehicles": [
+              "car"
+            ]
+          },
+          {
+            "days": "all",
+            "from": "07:00",
+            "to": "20:00",
+            "vehicles": [
+              "car"
+            ]
+          },
+          {
+            "days": "all",
+            "from": "07:00",
+            "to": "20:00",
+            "vehicles": [
+              "car"
+            ]
+          },
+          {
+            "days": "all",
+            "from": "07:00",
+            "to": "20:00",
+            "vehicles": [
+              "car"
+            ]
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "時間 24:00 不合法",
+      "zone": false,
+      "condition": {
+        "bay": "heavy",
+        "schedule": [
+          {
+            "days": "all",
+            "from": "07:00",
+            "to": "24:00",
+            "vehicles": [
+              "car"
+            ]
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "時間缺前導零",
+      "zone": false,
+      "condition": {
+        "bay": "heavy",
+        "schedule": [
+          {
+            "days": "all",
+            "from": "7:00",
+            "to": "20:00",
+            "vehicles": [
+              "car"
+            ]
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "起訖時間相同",
+      "zone": false,
+      "condition": {
+        "bay": "heavy",
+        "schedule": [
+          {
+            "days": "all",
+            "from": "07:00",
+            "to": "07:00",
+            "vehicles": [
+              "car"
+            ]
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "時段車種為空",
+      "zone": false,
+      "condition": {
+        "bay": "heavy",
+        "schedule": [
+          {
+            "days": "all",
+            "from": "07:00",
+            "to": "20:00",
+            "vehicles": []
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "時段車種不在列舉",
+      "zone": false,
+      "condition": {
+        "bay": "heavy",
+        "schedule": [
+          {
+            "days": "all",
+            "from": "07:00",
+            "to": "20:00",
+            "vehicles": [
+              "bicycle"
+            ]
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "時段車種重複",
+      "zone": false,
+      "condition": {
+        "bay": "heavy",
+        "schedule": [
+          {
+            "days": "all",
+            "from": "07:00",
+            "to": "20:00",
+            "vehicles": [
+              "car",
+              "car"
+            ]
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "days 不在列舉",
+      "zone": false,
+      "condition": {
+        "bay": "heavy",
+        "schedule": [
+          {
+            "days": "daily",
+            "from": "07:00",
+            "to": "20:00",
+            "vehicles": [
+              "car"
+            ]
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "星期重複",
+      "zone": false,
+      "condition": {
+        "bay": "heavy",
+        "schedule": [
+          {
+            "days": [
+              "mon",
+              "mon"
+            ],
+            "from": "07:00",
+            "to": "20:00",
+            "vehicles": [
+              "car"
+            ]
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "星期陣列為空",
+      "zone": false,
+      "condition": {
+        "bay": "heavy",
+        "schedule": [
+          {
+            "days": [],
+            "from": "07:00",
+            "to": "20:00",
+            "vehicles": [
+              "car"
+            ]
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "時段缺鍵",
+      "zone": false,
+      "condition": {
+        "bay": "heavy",
+        "schedule": [
+          {
+            "days": "all",
+            "from": "07:00",
+            "to": "20:00"
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "時段多出鍵",
+      "zone": false,
+      "condition": {
+        "bay": "heavy",
+        "schedule": [
+          {
+            "days": "all",
+            "from": "07:00",
+            "to": "20:00",
+            "vehicles": [
+              "car"
+            ],
+            "note": "x"
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "P2 前拒收 evidence_id（與網址並存也拒收）",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "basis": {
+          "source_url": "https://pma.gov.taipei/News_Content.aspx?n=E43F2E5AE1223B3D",
+          "evidence_id": "3f1c2a4e-0000-4000-8000-000000000001"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "P2 前只有照片依據也拒收",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "basis": {
+          "evidence_id": "3f1c2a4e-0000-4000-8000-000000000001"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "依據缺網址與照片",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "basis": {
+          "effective_date": "2026-10-06"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "依據網址為 null",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "basis": {
+          "source_url": null
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "依據網址不是 https",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "basis": {
+          "source_url": "http://pma.gov.taipei/"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "依據網址含空白",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "basis": {
+          "source_url": "https://pma.gov.taipei/a b"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "依據網址超過 2048 字",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "basis": {
+          "source_url": "https://e.tw/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "依據網址剛好 2048 字",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "basis": {
+          "source_url": "https://e.tw/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "網址含 BMP 以外的字元，UTF-16 剛好 2048",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "basis": {
+          "source_url": "https://e.tw/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa🛵"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "網址含 BMP 以外的字元，code point 2048 但 UTF-16 2049",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "basis": {
+          "source_url": "https://e.tw/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa🛵"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "生效日年份 0000（Postgres 沒有 0 年）",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "basis": {
+          "source_url": "https://pma.gov.taipei/News_Content.aspx?n=E43F2E5AE1223B3D",
+          "effective_date": "0000-01-01"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "生效日早於 1900 年",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "basis": {
+          "source_url": "https://pma.gov.taipei/News_Content.aspx?n=E43F2E5AE1223B3D",
+          "effective_date": "1899-12-31"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "生效日 1900-01-01",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "basis": {
+          "source_url": "https://pma.gov.taipei/News_Content.aspx?n=E43F2E5AE1223B3D",
+          "effective_date": "1900-01-01"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "生效日不存在",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "basis": {
+          "source_url": "https://pma.gov.taipei/News_Content.aspx?n=E43F2E5AE1223B3D",
+          "effective_date": "2026-02-30"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "截止日格式錯誤",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "basis": {
+          "source_url": "https://pma.gov.taipei/News_Content.aspx?n=E43F2E5AE1223B3D",
+          "expires_on": "2026/10/05"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "截止日不晚於生效日",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "basis": {
+          "source_url": "https://pma.gov.taipei/News_Content.aspx?n=E43F2E5AE1223B3D",
+          "effective_date": "2026-10-05",
+          "expires_on": "2026-10-05"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "依據有未知的鍵",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "basis": {
+          "source_url": "https://pma.gov.taipei/News_Content.aspx?n=E43F2E5AE1223B3D",
+          "photo": "x"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "依據不是物件",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "basis": "https://pma.gov.taipei/News_Content.aspx?n=E43F2E5AE1223B3D"
+      },
+      "valid": false
+    },
+    {
+      "name": "分區：由 scooterOnly 推導的條件",
+      "zone": true,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "allow": {
+          "scooter": true,
+          "heavy": false
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "分區：由 scooterHeavy 推導的條件",
+      "zone": true,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "share",
+        "share": "scooter_heavy",
+        "allow": {
+          "scooter": true,
+          "heavy": true
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "分區：由 heavyCar 推導的條件",
+      "zone": true,
+      "condition": {
+        "bay": "car",
+        "use": "usual",
+        "allow": {
+          "scooter": false,
+          "heavy": true
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "分區：由 heavyOnly 推導的條件",
+      "zone": true,
+      "condition": {
+        "bay": "heavy",
+        "use": "usual",
+        "allow": {
+          "scooter": false,
+          "heavy": true
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "分區：由 noMotorcycle 推導的條件",
+      "zone": true,
+      "condition": {
+        "allow": {
+          "scooter": false,
+          "heavy": false
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "分區：臺北試辦機車區（§2.4）",
+      "zone": true,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "share",
+        "share": "scooter_heavy",
+        "charge": "toll",
+        "basis": {
+          "source_url": "https://pma.gov.taipei/News_Content.aspx?n=E43F2E5AE1223B3D",
+          "effective_date": "2026-04-06",
+          "expires_on": "2026-10-05"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "分區：機車格可不填收費屬性",
+      "zone": true,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual"
+      },
+      "valid": true
+    },
+    {
+      "name": "分區：只有收費屬性",
+      "zone": true,
+      "condition": {
+        "charge": "toll"
+      },
+      "valid": true
+    },
+    {
+      "name": "分區：空物件",
+      "zone": true,
+      "condition": {},
+      "valid": false
+    },
+    {
+      "name": "分區：重機格不可開放普通機車",
+      "zone": true,
+      "condition": {
+        "bay": "heavy",
+        "allow": {
+          "scooter": true
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "分區：allow 為空",
+      "zone": true,
+      "condition": {
+        "bay": "car",
+        "allow": {}
+      },
+      "valid": false
+    },
+    {
+      "name": "分區：allow 不是布林",
+      "zone": true,
+      "condition": {
+        "bay": "car",
+        "allow": {
+          "heavy": "yes"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "分區：allow 有未知車種",
+      "zone": true,
+      "condition": {
+        "bay": "car",
+        "allow": {
+          "car": true
+        }
+      },
+      "valid": false
+    }
+  ],
+  "legacy": [
+    {
+      "name": "收費機車格",
+      "off_street": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll"
+      },
+      "space_type": "paidMotorcycle",
+      "safe": true
+    },
+    {
+      "name": "(a) 正例：普大共用收費格讀回 usual",
+      "off_street": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "share",
+        "share": "scooter_heavy",
+        "charge": "toll"
+      },
+      "space_type": "paidMotorcycle",
+      "safe": true
+    },
+    {
+      "name": "(a) 正例：普大共用免費格讀回 usual",
+      "off_street": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "share",
+        "share": "scooter_heavy",
+        "charge": "free",
+        "basis": {
+          "source_url": "https://pma.gov.taipei/News_Content.aspx?n=E43F2E5AE1223B3D"
+        }
+      },
+      "space_type": "freeMotorcycle",
+      "safe": true
+    },
+    {
+      "name": "(a) 反例：use 未填的重機格讀回 usual，多出資訊不算可遺失",
+      "off_street": false,
+      "condition": {
+        "bay": "heavy"
+      },
+      "space_type": "heavyOnly",
+      "safe": false
+    },
+    {
+      "name": "(b) 正例：沒有截止日的依據",
+      "off_street": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "basis": {
+          "source_url": "https://pma.gov.taipei/News_Content.aspx?n=E43F2E5AE1223B3D",
+          "effective_date": "2026-10-06"
+        }
+      },
+      "space_type": "paidMotorcycle",
+      "safe": true
+    },
+    {
+      "name": "(b) 反例：依據有截止日",
+      "off_street": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "basis": {
+          "source_url": "https://pma.gov.taipei/News_Content.aspx?n=E43F2E5AE1223B3D",
+          "expires_on": "2027-01-01"
+        }
+      },
+      "space_type": "paidMotorcycle",
+      "safe": false
+    },
+    {
+      "name": "(c) 正例：臺北限時格的 20 分鐘",
+      "off_street": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "time_limit",
+            "max_minutes": 20
+          }
+        ]
+      },
+      "space_type": "timedMotorcycle",
+      "safe": true
+    },
+    {
+      "name": "(c) 反例：限時又限電動，限時整個遺失",
+      "off_street": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "time_limit",
+            "max_minutes": 20
+          },
+          {
+            "kind": "ev_only"
+          }
+        ]
+      },
+      "space_type": "evMotorcycle",
+      "safe": false
+    },
+    {
+      "name": "(d) 正例：重機格的收費屬性",
+      "off_street": false,
+      "condition": {
+        "bay": "heavy",
+        "use": "usual",
+        "charge": "toll"
+      },
+      "space_type": "heavyOnly",
+      "safe": true
+    },
+    {
+      "name": "(d) 正例：身障專用格的用途與收費屬性（§1.2 範例）",
+      "off_street": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "free",
+        "limits": [
+          {
+            "kind": "special_vehicle",
+            "vehicle": "disabled_modified"
+          }
+        ]
+      },
+      "space_type": "disabledMotorcycle",
+      "safe": true
+    },
+    {
+      "name": "(d) 正例：收費限時格，舊版也當收費格",
+      "off_street": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "time_limit"
+          }
+        ]
+      },
+      "space_type": "timedMotorcycle",
+      "safe": true
+    },
+    {
+      "name": "(d) 正例：收費屬性未確認的限時格",
+      "off_street": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "limits": [
+          {
+            "kind": "time_limit"
+          }
+        ]
+      },
+      "space_type": "timedMotorcycle",
+      "safe": true
+    },
+    {
+      "name": "(d) 反例：免費限時格，舊版當收費格",
+      "off_street": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "free",
+        "limits": [
+          {
+            "kind": "time_limit"
+          }
+        ]
+      },
+      "space_type": "timedMotorcycle",
+      "safe": false
+    },
+    {
+      "name": "(d) 反例：重機格限電動，讀回變機車格",
+      "off_street": false,
+      "condition": {
+        "bay": "heavy",
+        "limits": [
+          {
+            "kind": "ev_only"
+          }
+        ]
+      },
+      "space_type": "evMotorcycle",
+      "safe": false
+    },
+    {
+      "name": "有時段的重機格",
+      "off_street": false,
+      "condition": {
+        "bay": "heavy",
+        "use": "usual",
+        "schedule": [
+          {
+            "days": "all",
+            "from": "07:00",
+            "to": "20:00",
+            "vehicles": [
+              "heavy"
+            ]
+          }
+        ]
+      },
+      "space_type": "heavyOnly",
+      "safe": false
+    },
+    {
+      "name": "汽機共用格沒有時段",
+      "off_street": false,
+      "condition": {
+        "bay": "car",
+        "use": "share",
+        "share": "car_motorcycle"
+      },
+      "space_type": "flexShared",
+      "safe": true
+    },
+    {
+      "name": "汽機共用格有時段",
+      "off_street": false,
+      "condition": {
+        "bay": "car",
+        "use": "share",
+        "share": "car_motorcycle",
+        "schedule": [
+          {
+            "days": "all",
+            "from": "07:00",
+            "to": "20:00",
+            "vehicles": [
+              "car",
+              "scooter"
+            ]
+          }
+        ]
+      },
+      "space_type": "flexShared",
+      "safe": false
+    },
+    {
+      "name": "路外一律 offStreet",
+      "off_street": true,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "share",
+        "share": "scooter_heavy",
+        "charge": "toll",
+        "basis": {
+          "source_url": "https://pma.gov.taipei/News_Content.aspx?n=E43F2E5AE1223B3D",
+          "effective_date": "2026-04-06",
+          "expires_on": "2026-10-05"
+        }
+      },
+      "space_type": "offStreet",
+      "safe": null
+    }
+  ],
+  "zones": [
+    {
+      "name": "普機專用",
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "allow": {
+          "scooter": true,
+          "heavy": false
+        }
+      },
+      "access": "scooterOnly",
+      "safe": true
+    },
+    {
+      "name": "普機專用帶收費屬性（可遺失）",
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "allow": {
+          "scooter": true,
+          "heavy": false
+        }
+      },
+      "access": "scooterOnly",
+      "safe": true
+    },
+    {
+      "name": "普大共用，依據沒有截止日",
+      "condition": {
+        "bay": "motorcycle",
+        "use": "share",
+        "share": "scooter_heavy",
+        "charge": "toll",
+        "allow": {
+          "scooter": true,
+          "heavy": true
+        },
+        "basis": {
+          "source_url": "https://pma.gov.taipei/News_Content.aspx?n=E43F2E5AE1223B3D"
+        }
+      },
+      "access": "scooterHeavy",
+      "safe": true
+    },
+    {
+      "name": "臺北試辦機車區帶截止日（§2.4）",
+      "condition": {
+        "bay": "motorcycle",
+        "use": "share",
+        "share": "scooter_heavy",
+        "charge": "toll",
+        "basis": {
+          "source_url": "https://pma.gov.taipei/News_Content.aspx?n=E43F2E5AE1223B3D",
+          "effective_date": "2026-04-06",
+          "expires_on": "2026-10-05"
+        },
+        "allow": {
+          "scooter": true,
+          "heavy": true
+        }
+      },
+      "access": "scooterHeavy",
+      "safe": false
+    },
+    {
+      "name": "機車格 usual 但兩種車都開放，讀回變普大共用",
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "allow": {
+          "scooter": true,
+          "heavy": true
+        }
+      },
+      "access": "scooterHeavy",
+      "safe": false
+    },
+    {
+      "name": "汽車區開放大型重機",
+      "condition": {
+        "bay": "car",
+        "use": "usual",
+        "allow": {
+          "scooter": false,
+          "heavy": true
+        }
+      },
+      "access": "heavyCar",
+      "safe": true
+    },
+    {
+      "name": "重機專區",
+      "condition": {
+        "bay": "heavy",
+        "use": "usual",
+        "allow": {
+          "scooter": false,
+          "heavy": true
+        }
+      },
+      "access": "heavyOnly",
+      "safe": true
+    },
+    {
+      "name": "機車格只開放大型重機，對不到 access",
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "allow": {
+          "scooter": false,
+          "heavy": true
+        }
+      },
+      "access": null,
+      "safe": false
+    },
+    {
+      "name": "汽車格兩種機車都不開放",
+      "condition": {
+        "bay": "car",
+        "use": "usual",
+        "allow": {
+          "scooter": false,
+          "heavy": false
+        }
+      },
+      "access": "noMotorcycle",
+      "safe": true
+    },
+    {
+      "name": "只有一個車種的 allow",
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "allow": {
+          "scooter": true
+        }
+      },
+      "access": null,
+      "safe": false
+    },
+    {
+      "name": "沒有 allow",
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll"
+      },
+      "access": null,
+      "safe": false
+    },
+    {
+      "name": "分區限電動",
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "limits": [
+          {
+            "kind": "ev_only"
+          }
+        ],
+        "allow": {
+          "scooter": true,
+          "heavy": false
+        }
+      },
+      "access": "scooterOnly",
+      "safe": false
+    },
+    {
+      "name": "分區有時段",
+      "condition": {
+        "bay": "car",
+        "use": "usual",
+        "schedule": [
+          {
+            "days": "all",
+            "from": "07:00",
+            "to": "20:00",
+            "vehicles": [
+              "heavy"
+            ]
+          }
+        ],
+        "allow": {
+          "scooter": false,
+          "heavy": true
+        }
+      },
+      "access": "heavyCar",
+      "safe": false
+    }
+  ],
+  "fees": [
+    {
+      "name": "空 fee：兩種車都未確認",
+      "fee": {},
+      "valid": true
+    },
+    {
+      "name": "v1：計時加當日上限，重機比照汽車",
+      "fee": {
+        "scooter": {
+          "mode": "hourly",
+          "amount": 20,
+          "per_minutes": 60,
+          "daily_cap": 100
+        },
+        "heavy": {
+          "mode": "same_as_car"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "v1：計次與每日",
+      "fee": {
+        "scooter": {
+          "mode": "per_visit",
+          "amount": 30,
+          "max_minutes": 360
+        },
+        "heavy": {
+          "mode": "daily",
+          "amount": 50
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "v1：免費與依現場公告",
+      "fee": {
+        "scooter": {
+          "mode": "free"
+        },
+        "heavy": {
+          "mode": "posted"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "臺北計次路段，隔日另計（§2.4）",
+      "fee": {
+        "heavy": {
+          "mode": "per_visit",
+          "amount": 40,
+          "renew": "midnight"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "計次停多久都只收一次",
+      "fee": {
+        "heavy": {
+          "mode": "per_visit",
+          "amount": 40,
+          "renew": "none"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "臺北計時路段，半小時計、當日上限（§2.4）",
+      "fee": {
+        "heavy": {
+          "mode": "hourly",
+          "amount": 20,
+          "per_minutes": 60,
+          "unit_minutes": 30,
+          "daily_cap": 100,
+          "cap_reset": "calendar_day"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "臺北限時格首段 0 元可延長一次（§2.4）",
+      "fee": {
+        "heavy": {
+          "mode": "per_visit",
+          "amount": 0,
+          "max_minutes": 20,
+          "extension": {
+            "amount": 40,
+            "max_times": 1
+          }
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "試辦機車區重機比照機車 2 倍（§2.4）",
+      "fee": {
+        "scooter": {
+          "mode": "hourly",
+          "amount": 10,
+          "per_minutes": 60
+        },
+        "heavy": {
+          "mode": "same_as_scooter",
+          "factor_pct": 200
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "試辦汽車區有汽車費率（§2.4）",
+      "fee": {
+        "car": {
+          "mode": "hourly",
+          "amount": 40,
+          "per_minutes": 60
+        },
+        "heavy": {
+          "mode": "same_as_car"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "計時有免費前段",
+      "fee": {
+        "scooter": {
+          "mode": "hourly",
+          "amount": 20,
+          "per_minutes": 60,
+          "free_minutes": 30
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "每日費率帶上限重算方式",
+      "fee": {
+        "scooter": {
+          "mode": "daily",
+          "amount": 50,
+          "cap_reset": "rolling_24h"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "延長帶每次分鐘",
+      "fee": {
+        "heavy": {
+          "mode": "per_visit",
+          "amount": 0,
+          "max_minutes": 20,
+          "extension": {
+            "amount": 40,
+            "max_times": 1,
+            "minutes": 60
+          }
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "依時段計次，跨時段另計（§2.5 範例）",
+      "fee": {
+        "scooter": {
+          "mode": "by_time",
+          "cross_period": "each_period",
+          "periods": [
+            {
+              "days": "all",
+              "from": "08:00",
+              "to": "20:00",
+              "rate": {
+                "mode": "per_visit",
+                "amount": 30,
+                "renew": "none"
+              }
+            },
+            {
+              "days": "all",
+              "from": "20:00",
+              "to": "08:00",
+              "rate": {
+                "mode": "per_visit",
+                "amount": 50,
+                "renew": "midnight"
+              }
+            }
+          ]
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "依時段計次，跨時段未確認",
+      "fee": {
+        "scooter": {
+          "mode": "by_time",
+          "periods": [
+            {
+              "days": "weekday",
+              "from": "08:00",
+              "to": "20:00",
+              "rate": {
+                "mode": "per_visit",
+                "amount": 30
+              }
+            }
+          ]
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "依時段 6 段",
+      "fee": {
+        "car": {
+          "mode": "by_time",
+          "periods": [
+            {
+              "days": "all",
+              "from": "00:00",
+              "to": "01:00",
+              "rate": {
+                "mode": "free"
+              }
+            },
+            {
+              "days": "all",
+              "from": "01:00",
+              "to": "02:00",
+              "rate": {
+                "mode": "free"
+              }
+            },
+            {
+              "days": "all",
+              "from": "02:00",
+              "to": "03:00",
+              "rate": {
+                "mode": "free"
+              }
+            },
+            {
+              "days": "all",
+              "from": "03:00",
+              "to": "04:00",
+              "rate": {
+                "mode": "free"
+              }
+            },
+            {
+              "days": "all",
+              "from": "04:00",
+              "to": "05:00",
+              "rate": {
+                "mode": "free"
+              }
+            },
+            {
+              "days": "all",
+              "from": "05:00",
+              "to": "06:00",
+              "rate": {
+                "mode": "free"
+              }
+            }
+          ]
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "依時段 7 段",
+      "fee": {
+        "car": {
+          "mode": "by_time",
+          "periods": [
+            {
+              "days": "all",
+              "from": "00:00",
+              "to": "01:00",
+              "rate": {
+                "mode": "free"
+              }
+            },
+            {
+              "days": "all",
+              "from": "01:00",
+              "to": "02:00",
+              "rate": {
+                "mode": "free"
+              }
+            },
+            {
+              "days": "all",
+              "from": "02:00",
+              "to": "03:00",
+              "rate": {
+                "mode": "free"
+              }
+            },
+            {
+              "days": "all",
+              "from": "03:00",
+              "to": "04:00",
+              "rate": {
+                "mode": "free"
+              }
+            },
+            {
+              "days": "all",
+              "from": "04:00",
+              "to": "05:00",
+              "rate": {
+                "mode": "free"
+              }
+            },
+            {
+              "days": "all",
+              "from": "05:00",
+              "to": "06:00",
+              "rate": {
+                "mode": "free"
+              }
+            },
+            {
+              "days": "all",
+              "from": "06:00",
+              "to": "07:00",
+              "rate": {
+                "mode": "free"
+              }
+            }
+          ]
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "依時段的一段為全天（省略 from 與 to）",
+      "fee": {
+        "car": {
+          "mode": "by_time",
+          "periods": [
+            {
+              "days": "weekday",
+              "rate": {
+                "mode": "hourly",
+                "amount": 40,
+                "per_minutes": 60
+              }
+            },
+            {
+              "days": "holiday",
+              "rate": {
+                "mode": "free"
+              }
+            }
+          ]
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "依時段的一段只省略 from",
+      "fee": {
+        "car": {
+          "mode": "by_time",
+          "periods": [
+            {
+              "days": "all",
+              "to": "20:00",
+              "rate": {
+                "mode": "free"
+              }
+            }
+          ]
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "依時段的全天不可寫成 00:00–24:00",
+      "fee": {
+        "car": {
+          "mode": "by_time",
+          "periods": [
+            {
+              "days": "all",
+              "from": "00:00",
+              "to": "24:00",
+              "rate": {
+                "mode": "free"
+              }
+            }
+          ]
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "依時段沒有任何一段",
+      "fee": {
+        "car": {
+          "mode": "by_time",
+          "periods": []
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "依時段缺 periods",
+      "fee": {
+        "car": {
+          "mode": "by_time"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "依時段內層不可再依時段",
+      "fee": {
+        "car": {
+          "mode": "by_time",
+          "periods": [
+            {
+              "days": "all",
+              "from": "08:00",
+              "to": "20:00",
+              "rate": {
+                "mode": "by_time",
+                "periods": []
+              }
+            }
+          ]
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "依時段內層不可比照",
+      "fee": {
+        "heavy": {
+          "mode": "by_time",
+          "periods": [
+            {
+              "days": "all",
+              "from": "08:00",
+              "to": "20:00",
+              "rate": {
+                "mode": "same_as_car"
+              }
+            }
+          ]
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "依時段的時段起訖相同",
+      "fee": {
+        "car": {
+          "mode": "by_time",
+          "periods": [
+            {
+              "days": "all",
+              "from": "08:00",
+              "to": "08:00",
+              "rate": {
+                "mode": "free"
+              }
+            }
+          ]
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "依時段的時段多出鍵",
+      "fee": {
+        "car": {
+          "mode": "by_time",
+          "periods": [
+            {
+              "days": "all",
+              "from": "08:00",
+              "to": "20:00",
+              "rate": {
+                "mode": "free"
+              },
+              "note": "x"
+            }
+          ]
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "依時段的時段缺 rate",
+      "fee": {
+        "car": {
+          "mode": "by_time",
+          "periods": [
+            {
+              "days": "all",
+              "from": "08:00",
+              "to": "20:00"
+            }
+          ]
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "renew 出現在計時",
+      "fee": {
+        "scooter": {
+          "mode": "hourly",
+          "amount": 20,
+          "per_minutes": 60,
+          "renew": "midnight"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "renew 出現在每日",
+      "fee": {
+        "scooter": {
+          "mode": "daily",
+          "amount": 50,
+          "renew": "none"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "renew 值不在列舉",
+      "fee": {
+        "scooter": {
+          "mode": "per_visit",
+          "amount": 40,
+          "renew": "daily"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "cross_period 出現在計次",
+      "fee": {
+        "scooter": {
+          "mode": "per_visit",
+          "amount": 40,
+          "cross_period": "entry_only"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "cross_period 值不在列舉",
+      "fee": {
+        "scooter": {
+          "mode": "by_time",
+          "cross_period": "always",
+          "periods": [
+            {
+              "days": "all",
+              "from": "08:00",
+              "to": "20:00",
+              "rate": {
+                "mode": "free"
+              }
+            }
+          ]
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "cap_reset 出現在計次",
+      "fee": {
+        "scooter": {
+          "mode": "per_visit",
+          "amount": 40,
+          "cap_reset": "calendar_day"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "cap_reset 值不在列舉",
+      "fee": {
+        "scooter": {
+          "mode": "daily",
+          "amount": 50,
+          "cap_reset": "weekly"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "汽車不可比照",
+      "fee": {
+        "car": {
+          "mode": "same_as_scooter"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "普通機車不可比照",
+      "fee": {
+        "scooter": {
+          "mode": "same_as_car"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "比照倍率低於 100",
+      "fee": {
+        "heavy": {
+          "mode": "same_as_scooter",
+          "factor_pct": 99
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "比照倍率高於 1000",
+      "fee": {
+        "heavy": {
+          "mode": "same_as_car",
+          "factor_pct": 1001
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "比照多出鍵",
+      "fee": {
+        "heavy": {
+          "mode": "same_as_car",
+          "amount": 40
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "計費單位等於計費週期",
+      "fee": {
+        "scooter": {
+          "mode": "hourly",
+          "amount": 20,
+          "per_minutes": 60,
+          "unit_minutes": 60
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "計費單位大於計費週期",
+      "fee": {
+        "scooter": {
+          "mode": "hourly",
+          "amount": 20,
+          "per_minutes": 60,
+          "unit_minutes": 61
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "免費前段超過 1440 分鐘",
+      "fee": {
+        "scooter": {
+          "mode": "hourly",
+          "amount": 0,
+          "per_minutes": 60,
+          "free_minutes": 1441
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "延長缺次數",
+      "fee": {
+        "heavy": {
+          "mode": "per_visit",
+          "amount": 0,
+          "extension": {
+            "amount": 40
+          }
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "延長次數超過 10",
+      "fee": {
+        "heavy": {
+          "mode": "per_visit",
+          "amount": 0,
+          "extension": {
+            "amount": 40,
+            "max_times": 11
+          }
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "延長多出鍵",
+      "fee": {
+        "heavy": {
+          "mode": "per_visit",
+          "amount": 0,
+          "extension": {
+            "amount": 40,
+            "max_times": 1,
+            "free": true
+          }
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "延長出現在計時",
+      "fee": {
+        "heavy": {
+          "mode": "hourly",
+          "amount": 20,
+          "per_minutes": 60,
+          "extension": {
+            "amount": 40,
+            "max_times": 1
+          }
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "未知車種",
+      "fee": {
+        "truck": {
+          "mode": "free"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "未知 mode",
+      "fee": {
+        "scooter": {
+          "mode": "monthly",
+          "amount": 300
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "免費不可帶金額",
+      "fee": {
+        "scooter": {
+          "mode": "free",
+          "amount": 0
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "計時缺計費週期",
+      "fee": {
+        "scooter": {
+          "mode": "hourly",
+          "amount": 20
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "金額是字串",
+      "fee": {
+        "scooter": {
+          "mode": "daily",
+          "amount": "20"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "金額寫成 20.0，視同 20",
+      "fee": {
+        "scooter": {
+          "mode": "daily",
+          "amount": 20.0
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "金額不是整數",
+      "fee": {
+        "scooter": {
+          "mode": "daily",
+          "amount": 20.5
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "費率不是物件",
+      "fee": {
+        "scooter": "free"
+      },
+      "valid": false
+    },
+    {
+      "name": "fee 不是物件",
+      "fee": [],
+      "valid": false
+    }
+  ]
+}
