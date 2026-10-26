@@ -5,7 +5,7 @@
 -- ===== 共用：parking_contract() 與輔助函式（C2、C3 都需要） =====
 create or replace function public.parking_contract() returns jsonb
 language sql immutable set search_path='' as $contract$
-  select $json${"version":1,"space_types":["paidMotorcycle","freeMotorcycle","heavyOnly","car","offStreet","disabledMotorcycle","timedMotorcycle","flexShared","evMotorcycle"],"access_kinds":["scooterOnly","scooterHeavy","heavyCar","noMotorcycle","heavyOnly"],"placement":{"off_street_space_types":["offStreet"],"off_street_facility_types":["multiStorey","underground","surface"]},"time":{"pattern":"^([01][0-9]|2[0-3]):[0-5][0-9]$","days":["all","weekday","holiday"],"weekdays":["mon","tue","wed","thu","fri","sat","sun"],"optional_pair":["from","to"]},"date":{"pattern":"^(19|[2-9][0-9])[0-9]{2}-[0-9]{2}-[0-9]{2}$"},"condition":{"keys":["bay","use","share","charge","limits","schedule","basis"],"zone_keys":["allow"],"bay":["motorcycle","heavy","car"],"use":["usual","share"],"share":{"scooter_heavy":"motorcycle","car_motorcycle":"car"},"charge":["toll","free"],"limits":{"time_limit":{"required":[],"optional":{"max_minutes":{"min":1,"max":1440}}},"special_vehicle":{"required":["vehicle"],"optional":{}},"ev_only":{"required":[],"optional":{}}},"special_vehicles":["disabled_modified"],"street_charge_optional_with":["time_limit","special_vehicle","ev_only"],"allow_keys":["scooter","heavy"],"schedule":{"keys":["days","from","to","vehicles"],"max_entries":8,"vehicles":["scooter","heavy","car"]},"basis":{"keys":["source_url","evidence_id","effective_date","expires_on"],"required_one_of":["source_url","evidence_id"],"reserved":["evidence_id"],"source_url":{"pattern":"^https://\\S+$","max_length":2048,"length_unit":"utf16"}}},"conversion":{"from_space_type":{"paidMotorcycle":{"bay":"motorcycle","use":"usual","charge":"toll"},"freeMotorcycle":{"bay":"motorcycle","use":"usual","charge":"free"},"heavyOnly":{"bay":"heavy","use":"usual"},"car":{"bay":"car","use":"usual"},"offStreet":null,"disabledMotorcycle":{"bay":"motorcycle","limits":[{"kind":"special_vehicle","vehicle":"disabled_modified"}]},"timedMotorcycle":{"bay":"motorcycle","use":"usual","limits":[{"kind":"time_limit"}]},"flexShared":{"bay":"car","use":"share","share":"car_motorcycle"},"evMotorcycle":{"bay":"motorcycle","limits":[{"kind":"ev_only"}]}},"from_access":{"scooterOnly":{"bay":"motorcycle","use":"usual","allow":{"scooter":true,"heavy":false}},"scooterHeavy":{"bay":"motorcycle","use":"share","share":"scooter_heavy","allow":{"scooter":true,"heavy":true}},"heavyCar":{"bay":"car","use":"usual","allow":{"scooter":false,"heavy":true}},"heavyOnly":{"bay":"heavy","use":"usual","allow":{"scooter":false,"heavy":true}},"noMotorcycle":{"allow":{"scooter":false,"heavy":false}}},"to_space_type":[{"when":{"placement":"off_street"},"space_type":"offStreet"},{"when":{"limit":"special_vehicle"},"space_type":"disabledMotorcycle"},{"when":{"limit":"ev_only"},"space_type":"evMotorcycle"},{"when":{"share":"car_motorcycle"},"space_type":"flexShared"},{"when":{"limit":"time_limit"},"space_type":"timedMotorcycle"},{"when":{"bay":"heavy"},"space_type":"heavyOnly"},{"when":{"bay":"car"},"space_type":"car"},{"when":{"bay":"motorcycle","charge":"toll"},"space_type":"paidMotorcycle"},{"when":{"bay":"motorcycle","charge":"free"},"space_type":"freeMotorcycle"}],"to_access":"allow 與 from_access 的 allow 相同，且 from_access 有 bay 時 bay 也相同","legacy_safe":{"unsafe_keys":["schedule"],"unsafe_basis_keys":["expires_on"],"lossy_share":"scooter_heavy","lossy_limit_keys":["max_minutes"],"assumed_charge":{"timedMotorcycle":"toll"},"lossy_when_unconfirmed":["bay","use","share","charge"]}},"fee":{"max_bytes":4096,"vehicles":["scooter","heavy","car"],"follow":{"vehicles":["heavy"],"modes":["same_as_scooter","same_as_car"],"optional":{"factor_pct":{"min":100,"max":1000}}},"modes":{"free":{"required":{},"optional":{}},"posted":{"required":{},"optional":{}},"hourly":{"required":{"amount":{"min":0,"max":10000},"per_minutes":{"min":1,"max":1440}},"optional":{"unit_minutes":{"min":1,"max":"per_minutes"},"free_minutes":{"min":1,"max":1440},"daily_cap":{"min":0,"max":10000},"cap_reset":"cap_reset"}},"per_visit":{"required":{"amount":{"min":0,"max":10000}},"optional":{"max_minutes":{"min":1,"max":1440},"renew":"renew","extension":"extension"}},"daily":{"required":{"amount":{"min":0,"max":10000}},"optional":{"cap_reset":"cap_reset"}},"by_time":{"required":{"periods":"periods"},"optional":{"cross_period":"cross_period"}}},"enums":{"cap_reset":["calendar_day","rolling_24h","per_entry"],"renew":["none","midnight"],"cross_period":["each_period","entry_only"]},"extension":{"required":{"amount":{"min":0,"max":10000},"max_times":{"min":1,"max":10}},"optional":{"minutes":{"min":1,"max":1440}}},"periods":{"max_entries":6,"keys":["days","from","to","rate"],"nested_modes":["free","posted","hourly","per_visit","daily"]}}}$json$::jsonb;
+  select $json${"version":1,"space_types":["paidMotorcycle","freeMotorcycle","heavyOnly","car","offStreet","disabledMotorcycle","timedMotorcycle","flexShared","evMotorcycle"],"access_kinds":["scooterOnly","scooterHeavy","heavyCar","noMotorcycle","heavyOnly"],"placement":{"off_street_space_types":["offStreet"],"off_street_facility_types":["multiStorey","underground","surface"]},"time":{"pattern":"^([01][0-9]|2[0-3]):[0-5][0-9]$","days":["all","weekday","holiday"],"weekdays":["mon","tue","wed","thu","fri","sat","sun"],"optional_pair":["from","to"]},"date":{"pattern":"^(19|[2-9][0-9])[0-9]{2}-[0-9]{2}-[0-9]{2}$"},"condition":{"keys":["bay","use","share","charge","limits","schedule","basis"],"zone_keys":["allow"],"bay":["motorcycle","heavy","car"],"use":["usual","share"],"share":{"scooter_heavy":"motorcycle","car_motorcycle":"car"},"charge":["toll","free"],"limits":{"time_limit":{"required":[],"optional":{"max_minutes":{"min":1,"max":1440}}},"special_vehicle":{"required":["vehicle"],"optional":{}},"ev_only":{"required":[],"optional":{}}},"special_vehicles":["disabled_modified"],"street_charge_optional_with":["time_limit","special_vehicle","ev_only"],"allow_keys":["scooter","heavy"],"schedule":{"keys":["days","from","to","vehicles"],"max_entries":8,"vehicles":["scooter","heavy","car"]},"basis":{"keys":["source_url","evidence_id","effective_date","expires_on"],"required_one_of":["source_url","evidence_id"],"reserved":["evidence_id"],"source_url":{"pattern":"^https://\\S+$","max_length":2048,"length_unit":"utf16"}}},"zone":{"area":["motorcycle","car","heavy","mixed"]},"conversion":{"from_space_type":{"paidMotorcycle":{"bay":"motorcycle","use":"usual","charge":"toll"},"freeMotorcycle":{"bay":"motorcycle","use":"usual","charge":"free"},"heavyOnly":{"bay":"heavy","use":"usual"},"car":{"bay":"car","use":"usual"},"offStreet":null,"disabledMotorcycle":{"bay":"motorcycle","limits":[{"kind":"special_vehicle","vehicle":"disabled_modified"}]},"timedMotorcycle":{"bay":"motorcycle","use":"usual","limits":[{"kind":"time_limit"}]},"flexShared":{"bay":"car","use":"share","share":"car_motorcycle"},"evMotorcycle":{"bay":"motorcycle","limits":[{"kind":"ev_only"}]}},"from_access":{"scooterOnly":{"bay":"motorcycle","use":"usual","allow":{"scooter":true,"heavy":false}},"scooterHeavy":{"bay":"motorcycle","use":"share","share":"scooter_heavy","allow":{"scooter":true,"heavy":true}},"heavyCar":{"bay":"car","use":"usual","allow":{"scooter":false,"heavy":true}},"heavyOnly":{"bay":"heavy","use":"usual","allow":{"scooter":false,"heavy":true}},"noMotorcycle":{"allow":{"scooter":false,"heavy":false}}},"to_space_type":[{"when":{"placement":"off_street"},"space_type":"offStreet"},{"when":{"limit":"special_vehicle"},"space_type":"disabledMotorcycle"},{"when":{"limit":"ev_only"},"space_type":"evMotorcycle"},{"when":{"share":"car_motorcycle"},"space_type":"flexShared"},{"when":{"limit":"time_limit"},"space_type":"timedMotorcycle"},{"when":{"bay":"heavy"},"space_type":"heavyOnly"},{"when":{"bay":"car"},"space_type":"car"},{"when":{"bay":"motorcycle","charge":"toll"},"space_type":"paidMotorcycle"},{"when":{"bay":"motorcycle","charge":"free"},"space_type":"freeMotorcycle"}],"to_access":"allow 與 from_access 的 allow 相同，且 from_access 有 bay 時 bay 也相同","legacy_safe":{"unsafe_keys":["schedule"],"unsafe_basis_keys":["expires_on"],"lossy_share":"scooter_heavy","lossy_limit_keys":["max_minutes"],"assumed_charge":{"timedMotorcycle":"toll"},"lossy_when_unconfirmed":["bay","use","share","charge"]}},"fee":{"max_bytes":4096,"vehicles":["scooter","heavy","car"],"follow":{"vehicles":["heavy"],"modes":["same_as_scooter","same_as_car"],"optional":{"factor_pct":{"min":100,"max":1000}}},"modes":{"free":{"required":{},"optional":{}},"posted":{"required":{},"optional":{}},"hourly":{"required":{"amount":{"min":0,"max":10000},"per_minutes":{"min":1,"max":1440}},"optional":{"unit_minutes":{"min":1,"max":"per_minutes"},"free_minutes":{"min":1,"max":1440},"daily_cap":{"min":0,"max":10000},"cap_reset":"cap_reset"}},"per_visit":{"required":{"amount":{"min":0,"max":10000}},"optional":{"max_minutes":{"min":1,"max":1440},"renew":"renew","extension":"extension"}},"daily":{"required":{"amount":{"min":0,"max":10000}},"optional":{"cap_reset":"cap_reset"}},"by_time":{"required":{"periods":"periods"},"optional":{"cross_period":"cross_period"}}},"enums":{"cap_reset":["calendar_day","rolling_24h","per_entry"],"renew":["none","midnight"],"cross_period":["each_period","entry_only"]},"extension":{"required":{"amount":{"min":0,"max":10000},"max_times":{"min":1,"max":10}},"optional":{"minutes":{"min":1,"max":1440}}},"periods":{"max_entries":6,"keys":["days","from","to","rate"],"nested_modes":["free","posted","hourly","per_visit","daily"]}}}$json$::jsonb;
 $contract$;
 
 -- A whole number in range; CASE so a string returns false, not a cast error.
@@ -168,6 +168,95 @@ begin
   end loop;
   return null;
 end;
+$$;
+
+-- Whether a spot is off the street (§1.1 placement); never stored.
+create or replace function public.condition_off_street(p_space_type text,p_facility_type text) returns boolean
+language sql immutable set search_path='' as $$
+  select coalesce(public.parking_contract()->'placement'->'off_street_space_types' ? p_space_type,false)
+    or coalesce(public.parking_contract()->'placement'->'off_street_facility_types' ? p_facility_type,false);
+$$;
+
+-- The legacy access a zone condition is written back as (§1.3, to_access):
+-- the from_access entry with the same allow and, when the entry names a bay,
+-- the same bay; null when none matches. At most one entry can match.
+create or replace function public.condition_legacy_access(p_condition jsonb) returns text
+language sql immutable set search_path='' as $$
+  select min(a.key) from jsonb_each(public.parking_contract()->'conversion'->'from_access') a
+  where jsonb_typeof(p_condition->'allow')='object'
+    and (a.value->'allow'->'scooter') is not distinct from (p_condition->'allow'->'scooter')
+    and (a.value->'allow'->'heavy') is not distinct from (p_condition->'allow'->'heavy')
+    and (not a.value ? 'bay' or (a.value->'bay') is not distinct from (p_condition->'bay'));
+$$;
+
+-- legacySafe (§1.3, conversion.legacy_safe): whether old apps, reading only
+-- the legacy space_type (a street condition) or access (p_zone), see the
+-- same condition or a more conservative one. Converts and reads back, then
+-- compares, losing only (a) scooter_heavy read back as usual, (b) a basis
+-- without the unsafe keys, (c) the lossy limit keys and (d) facets the read
+-- back leaves unconfirmed, except a charge old apps assume. Null is safe.
+create or replace function public.condition_legacy_safe(p_condition jsonb,p_zone boolean default false) returns boolean
+language plpgsql immutable set search_path='' as $$
+declare
+  conv jsonb:=public.parking_contract()->'conversion';
+  r jsonb:=conv->'legacy_safe';
+  o jsonb:=p_condition; b jsonb; t text; k text;
+  lossy text[]:=array(select jsonb_array_elements_text(r->'lossy_limit_keys'));
+begin
+  if o is null or jsonb_typeof(o)='null' then return true; end if;
+  if p_zone then
+    t:=public.condition_legacy_access(o);
+    b:=conv->'from_access'->t;
+  else
+    t:=public.condition_space_type(o,false);
+    b:=conv->'from_space_type'->t;
+  end if;
+  if b is null or jsonb_typeof(b)<>'object' then return false; end if;
+  if o ?| array(select jsonb_array_elements_text(r->'unsafe_keys')) then return false; end if;
+  -- (b) a basis without the unsafe keys; a null value counts as left out.
+  if exists(select 1 from jsonb_array_elements_text(r->'unsafe_basis_keys') x
+      where coalesce(jsonb_typeof(o->'basis'->x),'null')<>'null') then return false; end if;
+  o:=o-'basis'; b:=b-'basis';
+  -- (c) limit keys old apps never read.
+  if jsonb_typeof(o->'limits')='array' then
+    o:=jsonb_set(o,'{limits}',(select jsonb_agg(e-lossy) from jsonb_array_elements(o->'limits') e));
+  end if;
+  if jsonb_typeof(b->'limits')='array' then
+    b:=jsonb_set(b,'{limits}',(select jsonb_agg(e-lossy) from jsonb_array_elements(b->'limits') e));
+  end if;
+  -- (a) a shared use read back as usual.
+  if o->>'share'=r->>'lossy_share' and b->>'use'='usual' and not b ? 'share' then
+    o:=(o-'share')||'{"use":"usual"}'::jsonb;
+  end if;
+  -- (d) facets the legacy value leaves unconfirmed, except an assumed charge.
+  if not p_zone and r->'assumed_charge' ? t and not b ? 'charge' and o ? 'charge'
+    and o->>'charge'<>r->'assumed_charge'->>t then return false; end if;
+  for k in select jsonb_array_elements_text(r->'lossy_when_unconfirmed') loop
+    if not b ? k then o:=o-k; end if;
+  end loop;
+  return o=b;
+end;
+$$;
+
+-- Whether old builds, which read a zone's access only, read a stored zone
+-- (an element of parking_zones) as it is: it has no condition, or a
+-- legacy-safe one stored with the access it writes back.
+create or replace function public.zone_legacy_safe(p_zone jsonb) returns boolean
+language sql immutable set search_path='' as $$
+  select coalesce(jsonb_typeof(p_zone->'condition'),'null')='null'
+    or (public.condition_legacy_safe(p_zone->'condition',true)
+      and (p_zone->>'access') is not distinct from public.condition_legacy_access(p_zone->'condition'));
+$$;
+
+-- Whether a whole spot is legacy-safe: a street spot by its condition, a lot
+-- only without a top-level condition and when every zone is.
+create or replace function public.condition_legacy_safe_spot(p_off_street boolean,p_condition jsonb,p_zones jsonb) returns boolean
+language sql immutable set search_path='' as $$
+  select case when p_off_street then coalesce(jsonb_typeof(p_condition),'null')='null'
+      and not exists(select 1 from jsonb_array_elements(
+        case when jsonb_typeof(p_zones)='array' then p_zones else '[]'::jsonb end) z
+        where not public.zone_legacy_safe(z))
+    else public.condition_legacy_safe(p_condition,false) end;
 $$;
 
 -- ===== 費率 v2：valid_fee(p_fee)（只屬於 C3；C2 不可複製，否則會提早換掉現行的費率檢查） =====

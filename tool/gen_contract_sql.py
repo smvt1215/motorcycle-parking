@@ -6,8 +6,13 @@ so this writes (docs/designs/2026-10-26-parking-conditions-and-fees.md §4.1):
 - supabase/contract/parking_contract.sql: three marked sections, with the
   contract embedded as their key table. Not a migration: nothing applies it.
   - shared helpers and parking_contract(): needed by both later sections;
-  - conditions, valid_condition() and condition_space_type(): the C2
-    migration (feat/parking-condition-db) copies this and the shared section;
+  - conditions, valid_condition(), condition_space_type() and the
+    legacy-safe functions (condition_off_street(), condition_legacy_access(),
+    condition_legacy_safe(), zone_legacy_safe(),
+    condition_legacy_safe_spot()): the C2 migration
+    (feat/parking-condition-db) copies this and the shared section, and
+    tool/test_gen_contract_sql.py checks the latest migration defining each
+    of them matches;
   - fee v2, valid_fee(p_fee): belongs to C3 (feat/fee-v2) only. C2 must not
     copy it, or it would swap the live fee check for v2 before the app can
     read v2 fees. The parameter keeps the live name p_fee so C3's
@@ -204,6 +209,95 @@ begin
 end;
 $$;
 
+-- Whether a spot is off the street (§1.1 placement); never stored.
+create or replace function {s}.condition_off_street(p_space_type text,p_facility_type text) returns boolean
+language sql immutable set search_path='' as $$
+  select coalesce({s}.parking_contract()->'placement'->'off_street_space_types' ? p_space_type,false)
+    or coalesce({s}.parking_contract()->'placement'->'off_street_facility_types' ? p_facility_type,false);
+$$;
+
+-- The legacy access a zone condition is written back as (§1.3, to_access):
+-- the from_access entry with the same allow and, when the entry names a bay,
+-- the same bay; null when none matches. At most one entry can match.
+create or replace function {s}.condition_legacy_access(p_condition jsonb) returns text
+language sql immutable set search_path='' as $$
+  select min(a.key) from jsonb_each({s}.parking_contract()->'conversion'->'from_access') a
+  where jsonb_typeof(p_condition->'allow')='object'
+    and (a.value->'allow'->'scooter') is not distinct from (p_condition->'allow'->'scooter')
+    and (a.value->'allow'->'heavy') is not distinct from (p_condition->'allow'->'heavy')
+    and (not a.value ? 'bay' or (a.value->'bay') is not distinct from (p_condition->'bay'));
+$$;
+
+-- legacySafe (§1.3, conversion.legacy_safe): whether old apps, reading only
+-- the legacy space_type (a street condition) or access (p_zone), see the
+-- same condition or a more conservative one. Converts and reads back, then
+-- compares, losing only (a) scooter_heavy read back as usual, (b) a basis
+-- without the unsafe keys, (c) the lossy limit keys and (d) facets the read
+-- back leaves unconfirmed, except a charge old apps assume. Null is safe.
+create or replace function {s}.condition_legacy_safe(p_condition jsonb,p_zone boolean default false) returns boolean
+language plpgsql immutable set search_path='' as $$
+declare
+  conv jsonb:={s}.parking_contract()->'conversion';
+  r jsonb:=conv->'legacy_safe';
+  o jsonb:=p_condition; b jsonb; t text; k text;
+  lossy text[]:=array(select jsonb_array_elements_text(r->'lossy_limit_keys'));
+begin
+  if o is null or jsonb_typeof(o)='null' then return true; end if;
+  if p_zone then
+    t:={s}.condition_legacy_access(o);
+    b:=conv->'from_access'->t;
+  else
+    t:={s}.condition_space_type(o,false);
+    b:=conv->'from_space_type'->t;
+  end if;
+  if b is null or jsonb_typeof(b)<>'object' then return false; end if;
+  if o ?| array(select jsonb_array_elements_text(r->'unsafe_keys')) then return false; end if;
+  -- (b) a basis without the unsafe keys; a null value counts as left out.
+  if exists(select 1 from jsonb_array_elements_text(r->'unsafe_basis_keys') x
+      where coalesce(jsonb_typeof(o->'basis'->x),'null')<>'null') then return false; end if;
+  o:=o-'basis'; b:=b-'basis';
+  -- (c) limit keys old apps never read.
+  if jsonb_typeof(o->'limits')='array' then
+    o:=jsonb_set(o,'{{limits}}',(select jsonb_agg(e-lossy) from jsonb_array_elements(o->'limits') e));
+  end if;
+  if jsonb_typeof(b->'limits')='array' then
+    b:=jsonb_set(b,'{{limits}}',(select jsonb_agg(e-lossy) from jsonb_array_elements(b->'limits') e));
+  end if;
+  -- (a) a shared use read back as usual.
+  if o->>'share'=r->>'lossy_share' and b->>'use'='usual' and not b ? 'share' then
+    o:=(o-'share')||'{{"use":"usual"}}'::jsonb;
+  end if;
+  -- (d) facets the legacy value leaves unconfirmed, except an assumed charge.
+  if not p_zone and r->'assumed_charge' ? t and not b ? 'charge' and o ? 'charge'
+    and o->>'charge'<>r->'assumed_charge'->>t then return false; end if;
+  for k in select jsonb_array_elements_text(r->'lossy_when_unconfirmed') loop
+    if not b ? k then o:=o-k; end if;
+  end loop;
+  return o=b;
+end;
+$$;
+
+-- Whether old builds, which read a zone's access only, read a stored zone
+-- (an element of parking_zones) as it is: it has no condition, or a
+-- legacy-safe one stored with the access it writes back.
+create or replace function {s}.zone_legacy_safe(p_zone jsonb) returns boolean
+language sql immutable set search_path='' as $$
+  select coalesce(jsonb_typeof(p_zone->'condition'),'null')='null'
+    or ({s}.condition_legacy_safe(p_zone->'condition',true)
+      and (p_zone->>'access') is not distinct from {s}.condition_legacy_access(p_zone->'condition'));
+$$;
+
+-- Whether a whole spot is legacy-safe: a street spot by its condition, a lot
+-- only without a top-level condition and when every zone is.
+create or replace function {s}.condition_legacy_safe_spot(p_off_street boolean,p_condition jsonb,p_zones jsonb) returns boolean
+language sql immutable set search_path='' as $$
+  select case when p_off_street then coalesce(jsonb_typeof(p_condition),'null')='null'
+      and not exists(select 1 from jsonb_array_elements(
+        case when jsonb_typeof(p_zones)='array' then p_zones else '[]'::jsonb end) z
+        where not {s}.zone_legacy_safe(z))
+    else {s}.condition_legacy_safe(p_condition,false) end;
+$$;
+
 -- ===== 費率 v2：valid_fee(p_fee)（只屬於 C3；C2 不可複製，否則會提早換掉現行的費率檢查） =====
 
 -- The keys of p (besides mode) against a {{required, optional}} spec: ranges
@@ -325,6 +419,39 @@ def test_sql(contract, cases):
         lines.append(
             f"select is(pg_temp.condition_space_type({literal(c['condition'])},{off}),"
             f"{want},{quote('space type: ' + c['name'])});"
+        )
+    lines.append("-- legacy-safe street conditions: condition_legacy_safe()")
+    for c in cases["legacy"]:
+        if c["safe"] is None or c["off_street"]:
+            continue
+        lines.append(
+            f"select is(pg_temp.condition_legacy_safe({literal(c['condition'])},false),"
+            f"{'true' if c['safe'] else 'false'},{quote('legacy safe: ' + c['name'])});"
+        )
+    lines.append("-- zones: condition_legacy_access() and condition_legacy_safe(…,true)")
+    for c in cases["zones"]:
+        want = "null::text" if c["access"] is None else quote(c["access"])
+        lines.append(
+            f"select is(pg_temp.condition_legacy_access({literal(c['condition'])}),"
+            f"{want},{quote('zone access: ' + c['name'])});"
+        )
+        lines.append(
+            f"select is(pg_temp.condition_legacy_safe({literal(c['condition'])},true),"
+            f"{'true' if c['safe'] else 'false'},{quote('zone safe: ' + c['name'])});"
+        )
+        # Stored with the access it writes back, the zone is as safe as its
+        # condition; stored with another access, never.
+        stored = {"name": c["name"], "condition": c["condition"]}
+        if c["access"] is not None:
+            stored["access"] = c["access"]
+        lines.append(
+            f"select is(pg_temp.zone_legacy_safe({literal(stored)}),"
+            f"{'true' if c['safe'] else 'false'},{quote('stored zone safe: ' + c['name'])});"
+        )
+        wrong = {**stored, "access": "noMotorcycle" if c["access"] != "noMotorcycle" else "scooterOnly"}
+        lines.append(
+            f"select is(pg_temp.zone_legacy_safe({literal(wrong)}),false,"
+            f"{quote('stored zone with another access: ' + c['name'])});"
         )
     lines.append("-- fees: valid_fee() v2")
     for c in cases["fees"]:

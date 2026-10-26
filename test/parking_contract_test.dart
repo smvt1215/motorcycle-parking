@@ -66,6 +66,10 @@ void main() {
         _wires(streetChargeOptionalWith, (v) => v.wire),
       );
       expect(cond['allow_keys'], allowKeys);
+      expect(
+        (contract['zone']! as Map<String, Object?>)['area'],
+        _wires(ZoneArea.values, (v) => v.name),
+      );
       expect(cond['schedule'], {
         'keys': scheduleKeys,
         'max_entries': scheduleMaxEntries,
@@ -198,6 +202,14 @@ void main() {
         final zone = ParkingCondition.fromJson(c['condition'], zone: true)!;
         expect(legacyAccess(zone)?.name, c['access'], reason: name);
         expect(legacySafeZone(zone), c['safe'], reason: name);
+        // Stored with the access it writes back, as safe as its condition;
+        // stored with another access, never (the same as the generated SQL).
+        final access = legacyAccess(zone);
+        expect(legacySafeStoredZone(zone, access), c['safe'], reason: name);
+        final other = access == ParkingAccess.noMotorcycle
+            ? ParkingAccess.scooterOnly
+            : ParkingAccess.noMotorcycle;
+        expect(legacySafeStoredZone(zone, other), isFalse, reason: name);
       }
     });
   });

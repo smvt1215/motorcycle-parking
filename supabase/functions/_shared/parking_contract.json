@@ -154,6 +154,15 @@
       }
     }
   },
+  "zone": {
+    "area": [
+      "motorcycle",
+      "car",
+      "heavy",
+      "mixed"
+    ],
+    "comment": "parking_zones[] 的區域（§1.1）：機車區、汽車區、重機專區、混合；未填即省略鍵。只用在路外分區。分區的 condition 以 condition 段的規則加 zone_keys 檢查。舊版只讀 access，所以分區有 condition 時，只有 condition 為 legacy-safe 且 access 等於轉換層由 condition 推導的值（to_access），該分區才算 legacy-safe。"
+  },
   "conversion": {
     "from_space_type": {
       "paidMotorcycle": {

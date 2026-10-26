@@ -250,6 +250,9 @@ export function legacySpaceType(
   return null;
 }
 const facilityTypes = ['multiStorey', 'underground', 'surface', 'roadside'];
+const offStreetSpaceTypes: string[] = contract.placement.off_street_space_types;
+const offStreetFacilityTypes: string[] =
+  contract.placement.off_street_facility_types;
 const accessKinds = [
   'scooterOnly',
   'scooterHeavy',
@@ -419,6 +422,21 @@ export function validate(body: Record<string, unknown>): string | null {
       }
       if (s.fee !== undefined && s.fee !== null && !validFee(s.fee)) {
         return 'invalid fee';
+      }
+      // The bay's condition (docs/designs/2026-10-26-parking-conditions-and-fees.md
+      // §4.2): a street spot's only, stored under the space type it decides.
+      // Riders never write its basis or zones_complete: a notice travels with
+      // a report as evidence, and admins decide (§1.4).
+      if ('zones_complete' in s) return 'invalid zones_complete';
+      if (s.condition !== undefined && s.condition !== null) {
+        const offStreet = offStreetSpaceTypes.includes(String(s.space_type)) ||
+          offStreetFacilityTypes.includes(String(s.facility_type));
+        if (
+          offStreet || !validCondition(s.condition) ||
+          Object.hasOwn(s.condition as object, 'basis') ||
+          legacySpaceType(s.condition as Record<string, unknown>, false) !==
+            s.space_type
+        ) return 'invalid condition';
       }
       // Lot details, each optional and checked like the columns they fill.
       for (
