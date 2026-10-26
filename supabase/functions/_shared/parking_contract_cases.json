@@ -3238,5 +3238,1423 @@
       },
       "note": "大型重機每小時 20 元"
     }
+  ],
+  "fee_plans": [
+    {
+      "name": "沒有規則",
+      "plans": null,
+      "fee_plan": null,
+      "fee": null,
+      "zones": [],
+      "valid": true
+    },
+    {
+      "name": "分區引用規則，帶規則費率的副本（§2.6）",
+      "plans": [
+        {
+          "id": "p1",
+          "name": "機車計時",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 10,
+              "per_minutes": 60
+            },
+            "heavy": {
+              "mode": "same_as_scooter",
+              "factor_pct": 200
+            }
+          }
+        },
+        {
+          "id": "p2",
+          "name": "汽車計時",
+          "fee": {
+            "car": {
+              "mode": "hourly",
+              "amount": 40,
+              "per_minutes": 60
+            },
+            "heavy": {
+              "mode": "same_as_car"
+            }
+          }
+        }
+      ],
+      "fee_plan": null,
+      "fee": null,
+      "zones": [
+        {
+          "name": "機車區",
+          "fee_plan": "p1",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 10,
+              "per_minutes": 60
+            },
+            "heavy": {
+              "mode": "same_as_scooter",
+              "factor_pct": 200
+            }
+          }
+        },
+        {
+          "name": "汽車區",
+          "fee_plan": "p2",
+          "fee": {
+            "car": {
+              "mode": "hourly",
+              "amount": 40,
+              "per_minutes": 60
+            },
+            "heavy": {
+              "mode": "same_as_car"
+            }
+          }
+        }
+      ],
+      "valid": true
+    },
+    {
+      "name": "多個分區引用同一條規則",
+      "plans": [
+        {
+          "id": "p1",
+          "name": "機車計時",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 10,
+              "per_minutes": 60
+            },
+            "heavy": {
+              "mode": "same_as_scooter",
+              "factor_pct": 200
+            }
+          }
+        }
+      ],
+      "fee_plan": null,
+      "fee": null,
+      "zones": [
+        {
+          "name": "B1",
+          "fee_plan": "p1",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 10,
+              "per_minutes": 60
+            },
+            "heavy": {
+              "mode": "same_as_scooter",
+              "factor_pct": 200
+            }
+          }
+        },
+        {
+          "name": "B2",
+          "fee_plan": "p1",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 10,
+              "per_minutes": 60
+            },
+            "heavy": {
+              "mode": "same_as_scooter",
+              "factor_pct": 200
+            }
+          }
+        }
+      ],
+      "valid": true
+    },
+    {
+      "name": "路邊點引用規則",
+      "plans": [
+        {
+          "id": "p1",
+          "name": "機車計時",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 10,
+              "per_minutes": 60
+            },
+            "heavy": {
+              "mode": "same_as_scooter",
+              "factor_pct": 200
+            }
+          }
+        }
+      ],
+      "fee_plan": "p1",
+      "fee": {
+        "scooter": {
+          "mode": "hourly",
+          "amount": 10,
+          "per_minutes": 60
+        },
+        "heavy": {
+          "mode": "same_as_scooter",
+          "factor_pct": 200
+        }
+      },
+      "zones": [],
+      "valid": true
+    },
+    {
+      "name": "規則可以沒有人引用",
+      "plans": [
+        {
+          "id": "p1",
+          "name": "機車計時",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 10,
+              "per_minutes": 60
+            },
+            "heavy": {
+              "mode": "same_as_scooter",
+              "factor_pct": 200
+            }
+          }
+        },
+        {
+          "id": "p2",
+          "name": "汽車計時",
+          "fee": {
+            "car": {
+              "mode": "hourly",
+              "amount": 40,
+              "per_minutes": 60
+            },
+            "heavy": {
+              "mode": "same_as_car"
+            }
+          }
+        }
+      ],
+      "fee_plan": "p1",
+      "fee": {
+        "scooter": {
+          "mode": "hourly",
+          "amount": 10,
+          "per_minutes": 60
+        },
+        "heavy": {
+          "mode": "same_as_scooter",
+          "factor_pct": 200
+        }
+      },
+      "zones": [],
+      "valid": true
+    },
+    {
+      "name": "分區沒有引用規則，自己寫 fee（過渡期）",
+      "plans": [
+        {
+          "id": "p1",
+          "name": "機車計時",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 10,
+              "per_minutes": 60
+            },
+            "heavy": {
+              "mode": "same_as_scooter",
+              "factor_pct": 200
+            }
+          }
+        }
+      ],
+      "fee_plan": null,
+      "fee": null,
+      "zones": [
+        {
+          "name": "B1",
+          "fee": {
+            "car": {
+              "mode": "hourly",
+              "amount": 40,
+              "per_minutes": 60
+            },
+            "heavy": {
+              "mode": "same_as_car"
+            }
+          }
+        }
+      ],
+      "valid": true
+    },
+    {
+      "name": "12 條規則",
+      "plans": [
+        {
+          "id": "p0",
+          "name": "規則0",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 0,
+              "per_minutes": 60
+            }
+          }
+        },
+        {
+          "id": "p1",
+          "name": "規則1",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 1,
+              "per_minutes": 60
+            }
+          }
+        },
+        {
+          "id": "p2",
+          "name": "規則2",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 2,
+              "per_minutes": 60
+            }
+          }
+        },
+        {
+          "id": "p3",
+          "name": "規則3",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 3,
+              "per_minutes": 60
+            }
+          }
+        },
+        {
+          "id": "p4",
+          "name": "規則4",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 4,
+              "per_minutes": 60
+            }
+          }
+        },
+        {
+          "id": "p5",
+          "name": "規則5",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 5,
+              "per_minutes": 60
+            }
+          }
+        },
+        {
+          "id": "p6",
+          "name": "規則6",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 6,
+              "per_minutes": 60
+            }
+          }
+        },
+        {
+          "id": "p7",
+          "name": "規則7",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 7,
+              "per_minutes": 60
+            }
+          }
+        },
+        {
+          "id": "p8",
+          "name": "規則8",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 8,
+              "per_minutes": 60
+            }
+          }
+        },
+        {
+          "id": "p9",
+          "name": "規則9",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 9,
+              "per_minutes": 60
+            }
+          }
+        },
+        {
+          "id": "p10",
+          "name": "規則10",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 10,
+              "per_minutes": 60
+            }
+          }
+        },
+        {
+          "id": "p11",
+          "name": "規則11",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 11,
+              "per_minutes": 60
+            }
+          }
+        }
+      ],
+      "fee_plan": null,
+      "fee": null,
+      "zones": [],
+      "valid": true
+    },
+    {
+      "name": "13 條規則",
+      "plans": [
+        {
+          "id": "p0",
+          "name": "規則0",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 0,
+              "per_minutes": 60
+            }
+          }
+        },
+        {
+          "id": "p1",
+          "name": "規則1",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 1,
+              "per_minutes": 60
+            }
+          }
+        },
+        {
+          "id": "p2",
+          "name": "規則2",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 2,
+              "per_minutes": 60
+            }
+          }
+        },
+        {
+          "id": "p3",
+          "name": "規則3",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 3,
+              "per_minutes": 60
+            }
+          }
+        },
+        {
+          "id": "p4",
+          "name": "規則4",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 4,
+              "per_minutes": 60
+            }
+          }
+        },
+        {
+          "id": "p5",
+          "name": "規則5",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 5,
+              "per_minutes": 60
+            }
+          }
+        },
+        {
+          "id": "p6",
+          "name": "規則6",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 6,
+              "per_minutes": 60
+            }
+          }
+        },
+        {
+          "id": "p7",
+          "name": "規則7",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 7,
+              "per_minutes": 60
+            }
+          }
+        },
+        {
+          "id": "p8",
+          "name": "規則8",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 8,
+              "per_minutes": 60
+            }
+          }
+        },
+        {
+          "id": "p9",
+          "name": "規則9",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 9,
+              "per_minutes": 60
+            }
+          }
+        },
+        {
+          "id": "p10",
+          "name": "規則10",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 10,
+              "per_minutes": 60
+            }
+          }
+        },
+        {
+          "id": "p11",
+          "name": "規則11",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 11,
+              "per_minutes": 60
+            }
+          }
+        },
+        {
+          "id": "p12",
+          "name": "規則12",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 12,
+              "per_minutes": 60
+            }
+          }
+        }
+      ],
+      "fee_plan": null,
+      "fee": null,
+      "zones": [],
+      "valid": false
+    },
+    {
+      "name": "空的規則清單不收（未確認以 null 表示）",
+      "plans": [],
+      "fee_plan": null,
+      "fee": null,
+      "zones": [],
+      "valid": false
+    },
+    {
+      "name": "引用不存在的規則",
+      "plans": [
+        {
+          "id": "p1",
+          "name": "機車計時",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 10,
+              "per_minutes": 60
+            },
+            "heavy": {
+              "mode": "same_as_scooter",
+              "factor_pct": 200
+            }
+          }
+        }
+      ],
+      "fee_plan": null,
+      "fee": null,
+      "zones": [
+        {
+          "name": "B1",
+          "fee_plan": "p9",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 10,
+              "per_minutes": 60
+            },
+            "heavy": {
+              "mode": "same_as_scooter",
+              "factor_pct": 200
+            }
+          }
+        }
+      ],
+      "valid": false
+    },
+    {
+      "name": "點位引用不存在的規則",
+      "plans": [
+        {
+          "id": "p1",
+          "name": "機車計時",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 10,
+              "per_minutes": 60
+            },
+            "heavy": {
+              "mode": "same_as_scooter",
+              "factor_pct": 200
+            }
+          }
+        }
+      ],
+      "fee_plan": "p9",
+      "fee": {
+        "scooter": {
+          "mode": "hourly",
+          "amount": 10,
+          "per_minutes": 60
+        },
+        "heavy": {
+          "mode": "same_as_scooter",
+          "factor_pct": 200
+        }
+      },
+      "zones": [],
+      "valid": false
+    },
+    {
+      "name": "沒有規則卻有引用",
+      "plans": null,
+      "fee_plan": "p1",
+      "fee": {
+        "scooter": {
+          "mode": "hourly",
+          "amount": 10,
+          "per_minutes": 60
+        },
+        "heavy": {
+          "mode": "same_as_scooter",
+          "factor_pct": 200
+        }
+      },
+      "zones": [],
+      "valid": false
+    },
+    {
+      "name": "分區的費率副本與規則不同",
+      "plans": [
+        {
+          "id": "p1",
+          "name": "機車計時",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 10,
+              "per_minutes": 60
+            },
+            "heavy": {
+              "mode": "same_as_scooter",
+              "factor_pct": 200
+            }
+          }
+        }
+      ],
+      "fee_plan": null,
+      "fee": null,
+      "zones": [
+        {
+          "name": "B1",
+          "fee_plan": "p1",
+          "fee": {
+            "car": {
+              "mode": "hourly",
+              "amount": 40,
+              "per_minutes": 60
+            },
+            "heavy": {
+              "mode": "same_as_car"
+            }
+          }
+        }
+      ],
+      "valid": false
+    },
+    {
+      "name": "分區引用規則卻沒有費率副本",
+      "plans": [
+        {
+          "id": "p1",
+          "name": "機車計時",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 10,
+              "per_minutes": 60
+            },
+            "heavy": {
+              "mode": "same_as_scooter",
+              "factor_pct": 200
+            }
+          }
+        }
+      ],
+      "fee_plan": null,
+      "fee": null,
+      "zones": [
+        {
+          "name": "B1",
+          "fee_plan": "p1"
+        }
+      ],
+      "valid": false
+    },
+    {
+      "name": "點位的費率副本與規則不同",
+      "plans": [
+        {
+          "id": "p1",
+          "name": "機車計時",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 10,
+              "per_minutes": 60
+            },
+            "heavy": {
+              "mode": "same_as_scooter",
+              "factor_pct": 200
+            }
+          }
+        }
+      ],
+      "fee_plan": "p1",
+      "fee": {
+        "car": {
+          "mode": "hourly",
+          "amount": 40,
+          "per_minutes": 60
+        },
+        "heavy": {
+          "mode": "same_as_car"
+        }
+      },
+      "zones": [],
+      "valid": false
+    },
+    {
+      "name": "id 重複",
+      "plans": [
+        {
+          "id": "p1",
+          "name": "機車計時",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 10,
+              "per_minutes": 60
+            },
+            "heavy": {
+              "mode": "same_as_scooter",
+              "factor_pct": 200
+            }
+          }
+        },
+        {
+          "id": "p1",
+          "name": "汽車計時",
+          "fee": {
+            "car": {
+              "mode": "hourly",
+              "amount": 40,
+              "per_minutes": 60
+            },
+            "heavy": {
+              "mode": "same_as_car"
+            }
+          }
+        }
+      ],
+      "fee_plan": null,
+      "fee": null,
+      "zones": [],
+      "valid": false
+    },
+    {
+      "name": "id 不可有大寫",
+      "plans": [
+        {
+          "id": "P1",
+          "name": "機車計時",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 10,
+              "per_minutes": 60
+            },
+            "heavy": {
+              "mode": "same_as_scooter",
+              "factor_pct": 200
+            }
+          }
+        }
+      ],
+      "fee_plan": null,
+      "fee": null,
+      "zones": [],
+      "valid": false
+    },
+    {
+      "name": "id 最多 20 字",
+      "plans": [
+        {
+          "id": "aaaaaaaaaaaaaaaaaaaaa",
+          "name": "機車計時",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 10,
+              "per_minutes": 60
+            },
+            "heavy": {
+              "mode": "same_as_scooter",
+              "factor_pct": 200
+            }
+          }
+        }
+      ],
+      "fee_plan": null,
+      "fee": null,
+      "zones": [],
+      "valid": false
+    },
+    {
+      "name": "id 20 字",
+      "plans": [
+        {
+          "id": "a-b_c000000000000000",
+          "name": "機車計時",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 10,
+              "per_minutes": 60
+            },
+            "heavy": {
+              "mode": "same_as_scooter",
+              "factor_pct": 200
+            }
+          }
+        }
+      ],
+      "fee_plan": null,
+      "fee": null,
+      "zones": [],
+      "valid": true
+    },
+    {
+      "name": "name 20 字",
+      "plans": [
+        {
+          "id": "p1",
+          "name": "機機機機機機機機機機機機機機機機機機機機",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 10,
+              "per_minutes": 60
+            },
+            "heavy": {
+              "mode": "same_as_scooter",
+              "factor_pct": 200
+            }
+          }
+        }
+      ],
+      "fee_plan": null,
+      "fee": null,
+      "zones": [],
+      "valid": true
+    },
+    {
+      "name": "name 超過 20 字",
+      "plans": [
+        {
+          "id": "p1",
+          "name": "機機機機機機機機機機機機機機機機機機機機機",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 10,
+              "per_minutes": 60
+            },
+            "heavy": {
+              "mode": "same_as_scooter",
+              "factor_pct": 200
+            }
+          }
+        }
+      ],
+      "fee_plan": null,
+      "fee": null,
+      "zones": [],
+      "valid": false
+    },
+    {
+      "name": "name 以 UTF-16 計長：BMP 以外的字算 2",
+      "plans": [
+        {
+          "id": "p1",
+          "name": "機機機機機機機機機機機機機機機機機機機🏍",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 10,
+              "per_minutes": 60
+            },
+            "heavy": {
+              "mode": "same_as_scooter",
+              "factor_pct": 200
+            }
+          }
+        }
+      ],
+      "fee_plan": null,
+      "fee": null,
+      "zones": [],
+      "valid": false
+    },
+    {
+      "name": "name 不可空白",
+      "plans": [
+        {
+          "id": "p1",
+          "name": "  ",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 10,
+              "per_minutes": 60
+            },
+            "heavy": {
+              "mode": "same_as_scooter",
+              "factor_pct": 200
+            }
+          }
+        }
+      ],
+      "fee_plan": null,
+      "fee": null,
+      "zones": [],
+      "valid": false
+    },
+    {
+      "name": "規則缺 name",
+      "plans": [
+        {
+          "id": "p1",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 10,
+              "per_minutes": 60
+            },
+            "heavy": {
+              "mode": "same_as_scooter",
+              "factor_pct": 200
+            }
+          }
+        }
+      ],
+      "fee_plan": null,
+      "fee": null,
+      "zones": [],
+      "valid": false
+    },
+    {
+      "name": "規則多出鍵",
+      "plans": [
+        {
+          "id": "p1",
+          "name": "機車計時",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 10,
+              "per_minutes": 60
+            },
+            "heavy": {
+              "mode": "same_as_scooter",
+              "factor_pct": 200
+            }
+          },
+          "note": "x"
+        }
+      ],
+      "fee_plan": null,
+      "fee": null,
+      "zones": [],
+      "valid": false
+    },
+    {
+      "name": "規則的 fee 不可為 {}",
+      "plans": [
+        {
+          "id": "p1",
+          "name": "機車計時",
+          "fee": {}
+        }
+      ],
+      "fee_plan": null,
+      "fee": null,
+      "zones": [],
+      "valid": false
+    },
+    {
+      "name": "規則的 fee 依 v2 契約檢查",
+      "plans": [
+        {
+          "id": "p1",
+          "name": "機車計時",
+          "fee": {
+            "bus": {
+              "mode": "free"
+            }
+          }
+        }
+      ],
+      "fee_plan": null,
+      "fee": null,
+      "zones": [],
+      "valid": false
+    },
+    {
+      "name": "規則不是陣列",
+      "plans": {
+        "p1": {
+          "id": "p1",
+          "name": "機車計時",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 10,
+              "per_minutes": 60
+            },
+            "heavy": {
+              "mode": "same_as_scooter",
+              "factor_pct": 200
+            }
+          }
+        }
+      },
+      "fee_plan": null,
+      "fee": null,
+      "zones": [],
+      "valid": false
+    },
+    {
+      "name": "分區的引用不是字串",
+      "plans": [
+        {
+          "id": "p1",
+          "name": "機車計時",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 10,
+              "per_minutes": 60
+            },
+            "heavy": {
+              "mode": "same_as_scooter",
+              "factor_pct": 200
+            }
+          }
+        }
+      ],
+      "fee_plan": null,
+      "fee": null,
+      "zones": [
+        {
+          "name": "B1",
+          "fee_plan": 1,
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 10,
+              "per_minutes": 60
+            },
+            "heavy": {
+              "mode": "same_as_scooter",
+              "factor_pct": 200
+            }
+          }
+        }
+      ],
+      "valid": false
+    }
+  ],
+  "fee_projections": [
+    {
+      "name": "比照先解析成金額，倍率套在金額與上限",
+      "fee": {
+        "scooter": {
+          "mode": "hourly",
+          "amount": 15,
+          "per_minutes": 60,
+          "daily_cap": 50
+        },
+        "heavy": {
+          "mode": "same_as_scooter",
+          "factor_pct": 150
+        }
+      },
+      "zone": {
+        "condition": {
+          "bay": "motorcycle",
+          "use": "share",
+          "share": "scooter_heavy",
+          "allow": {
+            "scooter": true,
+            "heavy": true
+          }
+        }
+      },
+      "projected": {
+        "scooter": {
+          "mode": "hourly",
+          "amount": 15,
+          "per_minutes": 60,
+          "daily_cap": 50
+        },
+        "heavy": {
+          "mode": "hourly",
+          "amount": 22.5,
+          "per_minutes": 60,
+          "daily_cap": 75
+        }
+      }
+    },
+    {
+      "name": "重機格只取 heavy（§2.6 預檢第 2 步）",
+      "fee": {
+        "scooter": {
+          "mode": "hourly",
+          "amount": 10,
+          "per_minutes": 60
+        },
+        "heavy": {
+          "mode": "same_as_scooter",
+          "factor_pct": 200
+        }
+      },
+      "zone": {
+        "condition": {
+          "bay": "heavy",
+          "use": "usual",
+          "allow": {
+            "scooter": false,
+            "heavy": true
+          }
+        }
+      },
+      "projected": {
+        "heavy": {
+          "mode": "hourly",
+          "amount": 20,
+          "per_minutes": 60
+        }
+      }
+    },
+    {
+      "name": "普機專用分區不取 heavy",
+      "fee": {
+        "scooter": {
+          "mode": "hourly",
+          "amount": 10,
+          "per_minutes": 60
+        },
+        "heavy": {
+          "mode": "hourly",
+          "amount": 20,
+          "per_minutes": 60
+        },
+        "car": {
+          "mode": "hourly",
+          "amount": 40,
+          "per_minutes": 60
+        }
+      },
+      "zone": {
+        "condition": {
+          "bay": "motorcycle",
+          "use": "usual",
+          "allow": {
+            "scooter": true,
+            "heavy": false
+          }
+        }
+      },
+      "projected": {
+        "scooter": {
+          "mode": "hourly",
+          "amount": 10,
+          "per_minutes": 60
+        },
+        "car": {
+          "mode": "hourly",
+          "amount": 40,
+          "per_minutes": 60
+        }
+      }
+    },
+    {
+      "name": "汽車格開放重機：取 heavy 與 car",
+      "fee": {
+        "scooter": {
+          "mode": "hourly",
+          "amount": 10,
+          "per_minutes": 60
+        },
+        "heavy": {
+          "mode": "hourly",
+          "amount": 20,
+          "per_minutes": 60
+        },
+        "car": {
+          "mode": "hourly",
+          "amount": 40,
+          "per_minutes": 60
+        }
+      },
+      "zone": {
+        "condition": {
+          "bay": "car",
+          "use": "usual",
+          "allow": {
+            "scooter": false,
+            "heavy": true
+          }
+        }
+      },
+      "projected": {
+        "heavy": {
+          "mode": "hourly",
+          "amount": 20,
+          "per_minutes": 60
+        },
+        "car": {
+          "mode": "hourly",
+          "amount": 40,
+          "per_minutes": 60
+        }
+      }
+    },
+    {
+      "name": "沒有 condition 時由 access 推導",
+      "fee": {
+        "scooter": {
+          "mode": "hourly",
+          "amount": 10,
+          "per_minutes": 60
+        },
+        "heavy": {
+          "mode": "hourly",
+          "amount": 20,
+          "per_minutes": 60
+        },
+        "car": {
+          "mode": "hourly",
+          "amount": 40,
+          "per_minutes": 60
+        }
+      },
+      "zone": {
+        "access": "heavyOnly"
+      },
+      "projected": {
+        "heavy": {
+          "mode": "hourly",
+          "amount": 20,
+          "per_minutes": 60
+        }
+      }
+    },
+    {
+      "name": "被比照的車種未確認：heavy 未確認",
+      "fee": {
+        "heavy": {
+          "mode": "same_as_car"
+        },
+        "scooter": {
+          "mode": "hourly",
+          "amount": 10,
+          "per_minutes": 60
+        }
+      },
+      "zone": {
+        "condition": {
+          "bay": "motorcycle",
+          "use": "share",
+          "share": "scooter_heavy",
+          "allow": {
+            "scooter": true,
+            "heavy": true
+          }
+        }
+      },
+      "projected": {
+        "scooter": {
+          "mode": "hourly",
+          "amount": 10,
+          "per_minutes": 60
+        }
+      }
+    },
+    {
+      "name": "比照依時段的汽車，各段金額都套倍率",
+      "fee": {
+        "car": {
+          "mode": "by_time",
+          "periods": [
+            {
+              "days": "all",
+              "from": "08:00",
+              "to": "20:00",
+              "rate": {
+                "mode": "per_visit",
+                "amount": 30,
+                "extension": {
+                  "amount": 10,
+                  "max_times": 1
+                }
+              }
+            }
+          ]
+        },
+        "heavy": {
+          "mode": "same_as_car",
+          "factor_pct": 200
+        }
+      },
+      "zone": {
+        "condition": {
+          "bay": "car",
+          "use": "usual",
+          "allow": {
+            "scooter": false,
+            "heavy": true
+          }
+        }
+      },
+      "projected": {
+        "heavy": {
+          "mode": "by_time",
+          "periods": [
+            {
+              "days": "all",
+              "from": "08:00",
+              "to": "20:00",
+              "rate": {
+                "mode": "per_visit",
+                "amount": 60,
+                "extension": {
+                  "amount": 20,
+                  "max_times": 1
+                }
+              }
+            }
+          ]
+        },
+        "car": {
+          "mode": "by_time",
+          "periods": [
+            {
+              "days": "all",
+              "from": "08:00",
+              "to": "20:00",
+              "rate": {
+                "mode": "per_visit",
+                "amount": 30,
+                "extension": {
+                  "amount": 10,
+                  "max_times": 1
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "分區沒有 condition 也沒有 access：機車車種都不取",
+      "fee": {
+        "scooter": {
+          "mode": "hourly",
+          "amount": 10,
+          "per_minutes": 60
+        },
+        "heavy": {
+          "mode": "hourly",
+          "amount": 20,
+          "per_minutes": 60
+        },
+        "car": {
+          "mode": "hourly",
+          "amount": 40,
+          "per_minutes": 60
+        }
+      },
+      "zone": {},
+      "projected": {
+        "car": {
+          "mode": "hourly",
+          "amount": 40,
+          "per_minutes": 60
+        }
+      }
+    }
   ]
 }

@@ -482,5 +482,16 @@
         "daily"
       ]
     }
+  },
+  "fee_plans": {
+    "comment": "點位層的計費規則（§2.6）：每條 {id, name, fee}，最多 max_entries 條；id 在點位內唯一，name 只給管理員辨識（UTF-16 code unit 計長），fee 沿用 fee 段的 v2 契約且不可為 {}。點位頂層 fee_plan 與分區 parking_zones[].fee_plan 引用規則 id；引用不存在＝拒絕。引用規則的點位或分區，其 fee 是規則 fee 的副本（給舊版讀），必須相同。",
+    "max_entries": 12,
+    "keys": [
+      "id",
+      "name",
+      "fee"
+    ],
+    "id_pattern": "^[a-z0-9_-]{1,20}$",
+    "name_max_length": 20
   }
 }
