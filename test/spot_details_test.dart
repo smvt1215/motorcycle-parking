@@ -360,7 +360,8 @@ void main() {
       );
       expect(find.text('測試地下停車場'), findsOneWidget);
       expect(find.text('地下停車場 · 臺北市內湖區'), findsOneWidget);
-      expect(find.text('尚無即時資料'), findsOneWidget);
+      expect(find.text('無即時資料'), findsOneWidget);
+      expect(find.text('共 20 格（靜態資料）'), findsOneWidget);
       for (final field in [
         '停車資訊',
         '類型',
@@ -480,13 +481,13 @@ void main() {
     expect(store.eligible(spot).status, EligibilityStatus.unverified);
     await openDetails(tester, store, spot);
     expect(decisionText(tester), '普通機車 · 車友回報可停');
-    expect(find.text('已確認此停車點存在，但車種開放尚未核實，請以入口公告為準。'), findsOneWidget);
+    expect(find.text('此處確實有停車點，可停放車種未經確認，請以入口公告為準。'), findsOneWidget);
     expect(find.text('回報於 2026-03-01'), findsOneWidget);
     // The banner keeps the unverified colour: a claim never reads as open.
     expect(find.byIcon(Icons.local_parking), findsNothing);
     expect(store.eligible(spot).status, EligibilityStatus.unverified);
-    await showField(tester, '已核實欄位');
-    expect(find.text('尚未核實'), findsOneWidget);
+    await showField(tester, '已確認欄位');
+    expect(find.text('尚未確認'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -524,9 +525,18 @@ void main() {
       expect(tester.takeException(), isNull);
       await store.setVehicle(VehicleType.heavy);
       await tester.pumpAndSettle();
-      expect(decisionText(tester), '大型重機 · 曾核驗不可停');
+      expect(decisionText(tester), '大型重機 · 曾確認不可停');
+      // An administrator's lapsed check, not a rider's report: the question
+      // mark stays, never the people icon.
       expect(
-        find.textContaining('管理員核驗於 ${formatSpotDate(expired)}'),
+        find.descendant(
+          of: find.byKey(const ValueKey('spot-decision')),
+          matching: find.byIcon(Icons.groups_outlined),
+        ),
+        findsNothing,
+      );
+      expect(
+        find.textContaining('管理員確認，${formatSpotDate(expired)}'),
         findsWidgets,
       );
       final banner = tester.getRect(
@@ -541,9 +551,9 @@ void main() {
         );
       }
       expect(tester.takeException(), isNull);
-      await showField(tester, '已核實欄位');
+      await showField(tester, '已確認欄位');
       expect(
-        find.text('大型重機不可停：管理員核驗於 ${formatSpotDate(expired)}，已超過 180 天'),
+        find.text('大型重機不可停：管理員確認，${formatSpotDate(expired)}，已超過 180 天'),
         findsOneWidget,
       );
       expect(tester.takeException(), isNull);
@@ -551,7 +561,7 @@ void main() {
     });
   }
 
-  testWidgets('管理員核驗的社群點在橫幅標示核驗日期', (tester) async {
+  testWidgets('核實過的社群點以「管理員確認，日期」依據行標示，說明不重複可停（#132）', (tester) async {
     usePhone(tester, width: 320);
     final store = (await tester.runAsync(createStore))!;
     addTearDown(store.dispose);
@@ -564,8 +574,15 @@ void main() {
     });
     await openDetails(tester, store, spot, scale: 1.6);
     expect(decisionText(tester), '普通機車 · 可停');
-    expect(find.text('管理員核驗於 ${formatSpotDate(checked)}'), findsOneWidget);
-    expect(find.byIcon(Icons.verified_outlined), findsWidgets);
+    expect(find.text('管理員確認，${formatSpotDate(checked)}'), findsOneWidget);
+    expect(find.text('請確認現場公告'), findsOneWidget);
+    expect(find.byIcon(Icons.verified_user_outlined), findsOneWidget);
+    await showField(tester, '已確認欄位');
+    expect(
+      find.text('普通機車可停：管理員確認，${formatSpotDate(checked)}'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('核驗'), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -843,7 +860,7 @@ void main() {
         lot,
         const Eligibility(EligibilityStatus.unverified, '規則說明'),
       ),
-      '已確認此停車點存在；目前車種是否開放仍待查核，請以入口公告為準。',
+      '此處確實有停車點；可停放車種未經確認，請以入口公告為準。',
     );
   });
 }

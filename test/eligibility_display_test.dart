@@ -62,7 +62,7 @@ void main() {
     );
     expect(d.tier, EligibilityTier.decided);
     expect(d.label, '可停');
-    expect(d.basis, '管理員核驗於 2026-10-20');
+    expect(d.basis, '管理員確認，2026-10-20');
   });
 
   test('只有車友回報可停：仍是待確認判斷，顯示回報時間與入口公告提醒', () {
@@ -74,7 +74,8 @@ void main() {
     final d = show(spot);
     expect(d.tier, EligibilityTier.reportedAllowed);
     expect(d.label, '車友回報可停');
-    expect(d.explanation, '車種開放尚未核實，請以入口公告為準。');
+    expect(d.lapsed, isFalse);
+    expect(d.explanation, '可停放車種未經確認，請以入口公告為準。');
     expect(d.basis, '回報於 2026-03-01');
   });
 
@@ -87,7 +88,7 @@ void main() {
       ),
     );
     expect(d.tier, EligibilityTier.reportedAllowed);
-    expect(d.explanation, '已確認此停車點存在，但車種開放尚未核實，請以入口公告為準。');
+    expect(d.explanation, '此處確實有停車點，可停放車種未經確認，請以入口公告為準。');
     expect(d.basis, '回報時間未提供');
   });
 
@@ -109,7 +110,7 @@ void main() {
     expect(show(lot(scooter: true, source: 'import')).basis, '匯入時間未提供');
   });
 
-  test('核驗過期回落：顯示曾核驗與過期日期，判斷仍是待確認', () {
+  test('核驗過期回落：顯示曾確認與過期日期，判斷仍是待確認', () {
     final old = DateTime(2025, 1, 1);
     final spot = lot(scooter: true, scooterChecked: old);
     expect(
@@ -118,13 +119,14 @@ void main() {
     );
     final d = show(spot);
     expect(d.tier, EligibilityTier.reportedAllowed);
-    expect(d.label, '曾核驗可停');
-    expect(d.basis, '管理員核驗於 2025-01-01，已超過 180 天');
+    expect(d.label, '曾確認可停');
+    expect(d.basis, '管理員確認，2025-01-01，已超過 180 天');
     final closed = show(
       lot(heavy: false, heavyChecked: old),
       VehicleType.heavy,
     );
-    expect(closed.label, '曾核驗不可停');
+    expect(closed.label, '曾確認不可停');
+    expect(closed.lapsed, isTrue);
   });
 
   test('沒有任何車種資料：待確認', () {
@@ -188,7 +190,7 @@ void main() {
     }
   });
 
-  test('已核實欄位逐車種列出核驗日期，過期註明', () {
+  test('已確認欄位逐車種列出確認日期，過期註明', () {
     expect(
       verifiedFieldLines(
         lot(
@@ -199,7 +201,7 @@ void main() {
         ),
         now: now,
       ),
-      ['普通機車可停：管理員核驗於 2026-10-20', '大型重機不可停：管理員核驗於 2025-01-01，已超過 180 天'],
+      ['普通機車可停：管理員確認，2026-10-20', '大型重機不可停：管理員確認，2025-01-01，已超過 180 天'],
     );
     expect(verifiedFieldLines(lot(scooter: true), now: now), isEmpty);
     expect(
