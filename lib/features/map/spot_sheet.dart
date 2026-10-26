@@ -7,6 +7,7 @@ import '../../models/parking.dart';
 import '../../domain/availability_display.dart';
 import '../../domain/eligibility.dart';
 import '../../domain/eligibility_display.dart';
+import '../../domain/parking_decision.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../auth/sign_in.dart';
 
@@ -19,6 +20,7 @@ import 'package:share_plus/share_plus.dart';
 import '../report/spot_suggestions.dart';
 import 'map_legend.dart';
 import 'spot_details.dart';
+import 'spot_fees.dart';
 import 'spot_photos.dart';
 import 'parking_access_view.dart';
 import 'vehicle_sheet.dart' show SmallPlateStack, platesOf;
@@ -240,18 +242,37 @@ class _SpotSheetState extends State<SpotSheet> {
                               ),
                             ),
                             const SizedBox(height: 16),
-                            _SpotSummary(
-                              spot: spot,
-                              vehicle: store.vehicle,
-                              availability: store.availabilityOf(spot),
-                              eligibility: eligibility.status,
-                              now: store.clock(),
+                            // Ticks each minute: the rate follows the
+                            // period the rider is in (decision 26).
+                            MinuteTicker(
+                              clock: store.clock,
+                              builder: (_, now) => _SpotSummary(
+                                spot: spot,
+                                vehicle: store.vehicle,
+                                availability: store.availabilityOf(spot),
+                                eligibility: eligibility.status,
+                                now: now,
+                              ),
                             ),
                             if (feedback != null)
                               Padding(
                                 padding: const EdgeInsets.only(top: 12),
                                 child: Text(feedback!),
                               ),
+                            _DetailSection(
+                              title: '收費',
+                              icon: Icons.payments_outlined,
+                              children: [
+                                SpotFees(
+                                  spot: spot,
+                                  vehicle: store.vehicle,
+                                  decision: decideParking(spot, store.vehicle, [
+                                    ?store.ruleFor(spot),
+                                  ], now: store.clock()),
+                                  extraNote: extraFee,
+                                ),
+                              ],
+                            ),
                             _DetailSection(
                               title: '停車資訊',
                               icon: Icons.local_parking_outlined,
@@ -269,10 +290,6 @@ class _SpotSheetState extends State<SpotSheet> {
                                 ),
                                 const SizedBox(height: 10),
                                 ParkingAccessView(spot: spot),
-                                if (extraFee.isNotEmpty) ...[
-                                  const SizedBox(height: 14),
-                                  _DetailField(label: '收費說明', value: extraFee),
-                                ],
                               ],
                             ),
                             _DetailSection(
@@ -783,8 +800,8 @@ class _SpotSummary extends StatelessWidget {
     final live =
         spot.isFacility &&
         (!availability.isEmpty || legacy == null || legacy < 0);
-    final feeLabel = spotFeeIsVehicleRate(spot) ? '${vehicle.label}費率' : '收費資訊';
-    final feeValue = spotFeeSummary(spot, vehicle);
+    // The rate at this moment (decision 26); the full board is below.
+    final fee = spotFeeNow(spot, vehicle, now);
     final available = spot.available;
     final availabilityTime =
         spot.availabilityUpdatedAt ??
@@ -811,9 +828,9 @@ class _SpotSummary extends StatelessWidget {
         final stacked =
             constraints.maxWidth < 300 ||
             MediaQuery.textScalerOf(context).scale(14) > 18 ||
-            feeValue.length > 48;
+            fee.main.text.length + (fee.caption?.length ?? 0) > 48;
         final facts = [
-          _SummaryFact(label: feeLabel, value: feeValue, maxLines: null),
+          FeeNowSummary(now: fee),
           if (live)
             _AvailabilitySummary(
               fact: availabilityFact(
@@ -933,15 +950,9 @@ class _AvailabilitySummary extends StatelessWidget {
 }
 
 class _SummaryFact extends StatelessWidget {
-  const _SummaryFact({
-    required this.label,
-    required this.value,
-    this.caption,
-    this.maxLines = 2,
-  });
+  const _SummaryFact({required this.label, required this.value, this.caption});
   final String label, value;
   final String? caption;
-  final int? maxLines;
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -954,8 +965,8 @@ class _SummaryFact extends StatelessWidget {
       const SizedBox(height: 4),
       Text(
         value,
-        maxLines: maxLines,
-        overflow: maxLines == null ? TextOverflow.clip : TextOverflow.ellipsis,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
         style: Theme.of(context).textTheme.bodyMedium
             ?.copyWith(fontWeight: FontWeight.w600, height: 1.4),
       ),

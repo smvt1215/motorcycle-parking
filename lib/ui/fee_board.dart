@@ -351,6 +351,12 @@ List<FeeLine> _periodLines(Rate rate, int pct) {
   return [?d.headline, ...d.lines];
 }
 
+/// One rate's lines on the board at [pct] percent (a follow's factor), the
+/// amount first; a by_time rate has none, since its periods are rows. The
+/// details' summary row reads the current period's this way.
+List<FeeLine> feeRateLines(Rate rate, [int pct = 100]) =>
+    _periodLines(rate, pct);
+
 /// A period's time as the board writes it: 全天, 08:00–20:00, or
 /// 20:00–隔日 08:00 across midnight.
 String feePeriodTime(String? from, String? to) {
