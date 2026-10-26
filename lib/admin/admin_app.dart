@@ -23,6 +23,8 @@ import 'spots/spot_map.dart';
 import 'spots/spot_models.dart';
 import 'spots/spots_controller.dart';
 import 'spots/spots_page.dart';
+import 'users/users_controller.dart';
+import 'users/users_page.dart';
 
 const _tabs = [
   (
@@ -119,6 +121,9 @@ class _AdminAppState extends State<AdminApp> {
     widget.controller.gateway,
     bundled: widget.bundledRules ?? bundledRules,
   );
+  late final UsersController _users = UsersController(
+    widget.controller.gateway,
+  );
   late final SpotMapController _spotMap = SpotMapController(
     widget.controller.gateway,
   );
@@ -145,6 +150,7 @@ class _AdminAppState extends State<AdminApp> {
       _imports.reset();
       _fees.reset();
       _rules.reset();
+      _users.reset();
       _spotMap.reset();
     }
   }
@@ -240,16 +246,12 @@ class _AdminAppState extends State<AdminApp> {
                     .asNameMap()[state.pathParameters['vehicle']],
               ),
             ),
-          for (final tab in _tabs.skip(3).where((t) => t.path != '/imports'))
+          for (final path in ['/users', '/users/:id'])
             GoRoute(
-              path: tab.path,
-              builder: (context, state) => _watch(
-                () => _AdminBody(
-                  child: _WorkspacePage(
-                    controller: widget.controller,
-                    path: tab.path,
-                  ),
-                ),
+              path: path,
+              builder: (context, state) => UsersPage(
+                users: _users,
+                selectedId: state.pathParameters['id'],
               ),
             ),
           GoRoute(
@@ -286,6 +288,7 @@ class _AdminAppState extends State<AdminApp> {
     _imports.dispose();
     _fees.dispose();
     _rules.dispose();
+    _users.dispose();
     _spotMap.dispose();
     _router.dispose();
     super.dispose();
@@ -533,69 +536,6 @@ class _AdminBody extends StatelessWidget {
       ),
     ),
   );
-}
-
-class _WorkspacePage extends StatelessWidget {
-  const _WorkspacePage({required this.controller, required this.path});
-  final AdminController controller;
-  final String path;
-
-  @override
-  Widget build(BuildContext context) {
-    final tab = _tabs.firstWhere((t) => t.path == path);
-    final text = Theme.of(context).textTheme;
-    return AdminPanel(
-      width: 1400,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Semantics(
-            header: true,
-            child: Text(tab.title, style: text.headlineMedium),
-          ),
-          const SizedBox(height: 24),
-          const Divider(),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 48),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 520),
-                child: Column(
-                  children: [
-                    Icon(
-                      tab.icon,
-                      size: 40,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    const SizedBox(height: 20),
-                    Text(
-                      '${tab.label}工作區準備中',
-                      style: text.titleLarge,
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      tab.description,
-                      style: text.bodyLarge,
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      '此工作區的操作功能尚未開放。',
-                      style: text.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 /// `/review/<id>` belongs to the review tab.

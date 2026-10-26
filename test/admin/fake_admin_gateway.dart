@@ -6,6 +6,7 @@ import 'package:motorcycle_parking/admin/import/import_models.dart';
 import 'package:motorcycle_parking/admin/review/review_models.dart';
 import 'package:motorcycle_parking/admin/spots/spot_map.dart';
 import 'package:motorcycle_parking/admin/spots/spot_models.dart';
+import 'package:motorcycle_parking/admin/users/user_models.dart';
 import 'package:motorcycle_parking/core/address_search.dart';
 import 'package:motorcycle_parking/core/town_lookup.dart';
 import 'package:motorcycle_parking/domain/location_check.dart';
@@ -26,6 +27,73 @@ Factor factor(
 );
 
 const communityId = '11111111-1111-4111-8111-111111111111';
+const riderId = '33333333-3333-4333-8333-333333333333';
+
+Map<String, dynamic> sampleUserRow({
+  String id = riderId,
+  String name = '夜騎小哲',
+  String? bannedUntil,
+  bool admin = false,
+}) => {
+  'id': id,
+  'display_name': name,
+  'email_masked': 'ri***@example.test',
+  'providers': ['google'],
+  'is_admin': admin,
+  'created_at': '2026-09-01T00:00:00Z',
+  'last_sign_in_at': '2026-10-24T01:00:00Z',
+  'banned_until': bannedUntil,
+  'deleted': false,
+  'reports_30d': 12,
+  'last_report_at': '2026-10-24T02:00:00Z',
+};
+
+Map<String, dynamic> sampleUserDetail({String? bannedUntil, int today = 3}) => {
+  'user': sampleUserRow(bannedUntil: bannedUntil),
+  'limits': {
+    'today': today,
+    'daily_limit': 10,
+    'last_7d': 9,
+    'last_30d': 12,
+    'networks_30d': 2,
+    'shared_accounts_30d': 1,
+  },
+  'events': [
+    {'created_at': '2026-10-24T02:00:00Z', 'network': 'a1b2c3'},
+    {'created_at': '2026-10-23T02:00:00Z', 'network': 'd4e5f6'},
+  ],
+  'reports': {
+    'spots': 2,
+    'spots_hidden': 1,
+    'votes_still_there': 5,
+    'votes_gone': 1,
+    'flags_pending': 1,
+    'flags_accepted': 2,
+    'flags_rejected': 3,
+    'flags_closed': 0,
+  },
+  'spots': [
+    {
+      'id': communityId,
+      'name': '中山北路二段路邊機車格',
+      'city': '臺北市',
+      'district': '中山區',
+      'status': 'confirmed',
+      'contributor_name': '夜騎小哲',
+      'name_cleared': false,
+    },
+    {
+      'id': '44444444-4444-4444-8444-444444444444',
+      'name': '已清除名稱的點位',
+      'city': '臺北市',
+      'district': '大安區',
+      'status': 'hidden',
+      'contributor_name': '',
+      'name_cleared': true,
+    },
+  ],
+  'history': <Map<String, dynamic>>[],
+};
 const officialId = 'official:22222222-2222-4222-8222-222222222222';
 
 final reportTime = DateTime.utc(2026, 10, 24, 9);
@@ -597,6 +665,81 @@ class FakeAdminGateway implements AdminGateway {
     addressQueries.add(query);
     if (addressError case final e?) throw e;
     return addressResults;
+  }
+
+  List<Map<String, dynamic>> userRows = [sampleUserRow()];
+  Map<String, Map<String, dynamic>> userDetails = {riderId: sampleUserDetail()};
+  final userQueries = <String>[];
+  final bans = <(String, BanLength?, String)>[];
+  final clearedNames = <(String, String)>[];
+  Object? banError;
+  bool failUsers = false;
+
+  @override
+  Future<List<AdminUser>> searchUsers(String query) async {
+    userQueries.add(query);
+    if (failUsers) throw StateError('offline');
+    return userRows.map(AdminUser.fromJson).toList();
+  }
+
+  @override
+  Future<AdminUserDetail?> userDetail(String userId) async {
+    // Snapshot now: a slow response carries the state it was asked for.
+    final row = userDetails[userId];
+    await delayedDetail?.future;
+    return row == null ? null : AdminUserDetail.fromJson(row);
+  }
+
+  /// Points past the first page, by user id.
+  Map<String, List<Map<String, dynamic>>> olderSpots = {};
+  final spotPages = <(String, int)>[];
+
+  /// Holds [userDetail] until completed, to test out-of-order reloads.
+  Completer<void>? delayedDetail;
+
+  @override
+  Future<List<UserSpot>> userSpots(String userId, int offset) async {
+    spotPages.add((userId, offset));
+    return [
+      for (final s in olderSpots[userId] ?? <Map<String, dynamic>>[])
+        UserSpot.fromJson(s),
+    ];
+  }
+
+  @override
+  Future<DateTime?> setUserBan(
+    String userId, {
+    required BanLength? length,
+    required String reason,
+  }) async {
+    if (banError != null) throw banError!;
+    bans.add((userId, length, reason));
+    final until = length == null ? null : '2026-11-01T00:00:00Z';
+    final detail = userDetails[userId];
+    if (detail != null) {
+      userDetails[userId] = {
+        ...detail,
+        'user': {
+          ...detail['user'] as Map<String, dynamic>,
+          'banned_until': until,
+        },
+        'history': [
+          {
+            'action': length == null ? 'unban_user' : 'ban_user',
+            'note': reason,
+            'created_at': '2026-10-25T00:00:00Z',
+            'banned_until': until,
+          },
+          ...detail['history'] as List,
+        ],
+      };
+    }
+    return until == null ? null : DateTime.parse(until).toLocal();
+  }
+
+  @override
+  Future<void> clearContributorName(String spotId, String note) async {
+    clearedNames.add((spotId, note));
   }
 
   /// Rows `admin_viewport_spots` returns, before the layer filter.

@@ -426,3 +426,7 @@ verify_jwt = false
 # Verifies the caller itself, as submit-report does.
 [functions.geocode]
 verify_jwt = false
+
+[functions.admin-users]
+# The function verifies the caller itself (live session, admin role, aal2).
+verify_jwt = false
