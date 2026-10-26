@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -15,6 +16,7 @@ import '../domain/eligibility_display.dart';
 import '../domain/map_viewport.dart';
 import '../models/parking.dart';
 import 'contributions_repository.dart';
+import 'data_updates.dart';
 import 'repositories.dart';
 import 'profile_repository.dart';
 
@@ -51,17 +53,19 @@ final storeProvider = ChangeNotifierProvider<AppStore>(
   (ref) => throw StateError('AppStore 尚未初始化'),
 );
 
-class AppStore extends ChangeNotifier {
+class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   AppStore(
     this.local,
     this.client, {
     ParkingRepository? parkingRepository,
     RulesRepository? rulesRepository,
     ContributionsRepository? contributionsRepository,
+    DataUpdates? dataUpdates,
   }) : parking = parkingRepository ?? ParkingRepository(client),
        rulesRepository = rulesRepository ?? RulesRepository(client),
        contributions =
-           contributionsRepository ?? ContributionsRepository(client) {
+           contributionsRepository ?? ContributionsRepository(client),
+       updates = dataUpdates ?? DataUpdates(client) {
     vehicle = local.vehicle;
     parked = local.parked;
     _auth = client?.auth.onAuthStateChange.listen((_) {
@@ -74,11 +78,21 @@ class AppStore extends ChangeNotifier {
   final ParkingRepository parking;
   final RulesRepository rulesRepository;
   final ContributionsRepository contributions;
+  final DataUpdates updates;
 
   /// Counts reports sent this session, so "我送出的建議" reloads after one.
   int reportsSent = 0;
   final notifications = ParkingNotifications();
   StreamSubscription<AuthState>? _auth;
+  StreamSubscription<DataVersion>? _updates;
+  bool _observingLifecycle = false;
+
+  /// Backend data versions this store has loaded or been told about.
+  final _versions = <DataSet, int>{};
+
+  /// Datasets to reload once [_updateTimer] fires.
+  final _staleSets = <DataSet>{};
+  Timer? _updateTimer;
   late VehicleType vehicle;
   ParkedRecord? parked;
   List<ParkingSpot> spots = [], favorites = [];
@@ -168,6 +182,7 @@ class AppStore extends ChangeNotifier {
   }) async {
     starting = locatingAtLaunch = true;
     introduceLegend = !local.legendSeen;
+    listenForUpdates();
     final location = launchLocation = (locator ?? locateOnLaunch)();
     notifyListeners();
     unawaited(
@@ -180,12 +195,78 @@ class AppStore extends ChangeNotifier {
     final settled = location.timeout(locationWait, onTimeout: () => false);
     try {
       await init();
+      // Baseline for the resume check; a version streamed meanwhile wins.
+      unawaited(checkForUpdates());
       await settled;
       await _viewportSettled(settleLimit);
     } finally {
       starting = false;
       if (!_disposed) notifyListeners();
     }
+  }
+
+  /// Follows the backend's data versions (see [DataUpdates]) so a change
+  /// made in the admin site or by another rider reaches this map without a
+  /// camera move. [start] calls it; calling it again does nothing.
+  void listenForUpdates() {
+    if (_disposed || _updates != null) return;
+    _updates = updates.watch().listen(
+      (version) => _noteVersion(version, changed: true),
+      onError: (Object _) {},
+    );
+    // The resume check needs the binding; demo builds have nothing to check.
+    if (!demo && !_observingLifecycle) {
+      _observingLifecycle = true;
+      WidgetsBinding.instance.addObserver(this);
+    }
+  }
+
+  /// Compares the backend's data versions with the ones loaded and reloads
+  /// what changed. Runs when the app returns to the foreground, where a
+  /// Realtime message may have been missed; never throws.
+  Future<void> checkForUpdates() async {
+    try {
+      for (final version in await updates.current()) {
+        _noteVersion(version, changed: false);
+      }
+    } catch (_) {
+      // Offline or the backend is older than the migration: nothing to do.
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) unawaited(checkForUpdates());
+  }
+
+  /// Records [version]; reloads its dataset when it is newer than the one
+  /// loaded. A streamed version ([changed]) is a change by definition, while
+  /// a fetched one only counts against a known baseline. Bursts (an import,
+  /// a review session) collapse into one reload.
+  void _noteVersion(DataVersion version, {required bool changed}) {
+    if (_disposed) return;
+    final known = _versions[version.set];
+    if (known != null && known >= version.version) return;
+    _versions[version.set] = version.version;
+    if (known == null && !changed) return;
+    _staleSets.add(version.set);
+    _updateTimer?.cancel();
+    _updateTimer = Timer(
+      const Duration(seconds: 1),
+      () => unawaited(_reloadStale()),
+    );
+  }
+
+  Future<void> _reloadStale() async {
+    final sets = {..._staleSets};
+    _staleSets.clear();
+    if (_disposed) return;
+    if (sets.contains(DataSet.rules)) {
+      await _loadRules();
+      if (_disposed) return;
+      notifyListeners();
+    }
+    if (sets.contains(DataSet.spots)) await refresh();
   }
 
   /// Resolves once no viewport load has been queued or running for a short
@@ -205,6 +286,11 @@ class AppStore extends ChangeNotifier {
   /// Camera movement still calls [refresh] to load only viewport data.
   Future<void> reload() async {
     await loadFavorites();
+    await _loadRules();
+    await refresh();
+  }
+
+  Future<void> _loadRules() async {
     try {
       rules = await rulesRepository.load();
       rulesWarning = null;
@@ -212,7 +298,6 @@ class AppStore extends ChangeNotifier {
       rules = await RulesRepository(null).load();
       error = rulesWarning = '遠端規則讀取失敗，顯示內建規則';
     }
-    await refresh();
   }
 
   Future<void> refresh() async {
@@ -534,7 +619,10 @@ class AppStore extends ChangeNotifier {
     _disposed = true;
     _request++;
     _viewportTimer?.cancel();
+    _updateTimer?.cancel();
+    if (_observingLifecycle) WidgetsBinding.instance.removeObserver(this);
     unawaited(_auth?.cancel());
+    unawaited(_updates?.cancel());
     super.dispose();
   }
 }
