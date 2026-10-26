@@ -461,5 +461,47 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('新北市大型重機規則'), findsOneWidget);
     });
+
+    Future<void> editCar(WidgetTester tester) async {
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey('access-car')),
+          matching: find.text('不開放'),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('有未發布的修改時，點上方「規則」分頁先確認，繼續編輯會保留草稿', (tester) async {
+      await show(tester, path: '/rules/臺北市/heavy');
+      await editCar(tester);
+      await tester.tap(find.byKey(const ValueKey('nav/rules')));
+      await tester.pumpAndSettle();
+      expect(find.text('放棄未發布的修改？'), findsOneWidget);
+      await tester.tap(find.text('繼續編輯'));
+      await tester.pumpAndSettle();
+      expect(find.text('已修改'), findsWidgets);
+      expect(find.text('臺北市大型重機規則'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('nav/rules')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('放棄修改').last);
+      await tester.pumpAndSettle();
+      expect(find.text('已修改'), findsNothing);
+      expect(find.text('臺北市大型重機規則'), findsNothing);
+    });
+
+    testWidgets('有未發布的修改時切到其他分頁，返回「規則」分頁先確認', (tester) async {
+      await show(tester, path: '/rules/臺北市/heavy');
+      await editCar(tester);
+      await tester.tap(find.byKey(const ValueKey('nav/users')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('nav/rules')));
+      await tester.pumpAndSettle();
+      expect(find.text('放棄未發布的修改？'), findsOneWidget);
+      await tester.tap(find.text('繼續編輯'));
+      await tester.pumpAndSettle();
+      expect(find.text('臺北市大型重機規則'), findsOneWidget);
+      expect(find.text('已修改'), findsWidgets);
+    });
   });
 }
