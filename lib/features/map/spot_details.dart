@@ -1,6 +1,5 @@
 import '../../models/fee.dart';
 import '../../models/parking.dart';
-import '../../domain/eligibility.dart';
 
 /// A single zone can show its actual price in the preview. A zone never
 /// inherits the lot's fee or another vehicle's price.
@@ -55,15 +54,6 @@ Uri? licenseLinkUri(ParkingSpot spot) =>
 
 String regionSummary(ParkingSpot spot) =>
     '${spot.city.trim()}${spot.district.trim()}';
-
-String decisionExplanation(ParkingSpot spot, Eligibility eligibility) =>
-    eligibility.status == EligibilityStatus.unverified &&
-        spot.isFacility &&
-        !spot.isOfficial &&
-        spot.status == TrustStatus.confirmed &&
-        !spot.stale
-    ? '已確認此停車點存在；目前車種是否開放仍待查核，請以入口公告為準。'
-    : eligibility.reason;
 
 String facilitySummary(ParkingSpot spot) =>
     spot.facilityType?.label ?? (spot.isFacility ? '路外停車場（型式未提供）' : '路邊停車格');
