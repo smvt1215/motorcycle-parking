@@ -193,10 +193,12 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     );
     // Armed before loading so the wait overlaps data, not adds to it.
     final settled = location.timeout(locationWait, onTimeout: () => false);
+    // Baseline for the later checks, read before the data so it can only be
+    // older than what loads: a write between the two reads then reloads
+    // once instead of being missed.
+    unawaited(checkForUpdates());
     try {
       await init();
-      // Baseline for the resume check; a version streamed meanwhile wins.
-      unawaited(checkForUpdates());
       await settled;
       await _viewportSettled(settleLimit);
     } finally {
@@ -210,10 +212,16 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   /// camera move. [start] calls it; calling it again does nothing.
   void listenForUpdates() {
     if (_disposed || _updates != null) return;
-    _updates = updates.watch().listen(
-      (version) => _noteVersion(version, changed: true),
-      onError: (Object _) {},
-    );
+    _updates = updates
+        .watch(
+          // Each (re)join compares versions, since a dropped connection
+          // replays nothing.
+          onSubscribed: () => unawaited(checkForUpdates()),
+        )
+        .listen(
+          (version) => _noteVersion(version, changed: true),
+          onError: (Object _) {},
+        );
     // The resume check needs the binding; demo builds have nothing to check.
     if (!demo && !_observingLifecycle) {
       _observingLifecycle = true;
@@ -222,8 +230,9 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   /// Compares the backend's data versions with the ones loaded and reloads
-  /// what changed. Runs when the app returns to the foreground, where a
-  /// Realtime message may have been missed; never throws.
+  /// what changed. Runs at launch for the baseline, when the app returns to
+  /// the foreground and when Realtime (re)connects, where a message may have
+  /// been missed; never throws.
   Future<void> checkForUpdates() async {
     try {
       for (final version in await updates.current()) {

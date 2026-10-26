@@ -29,7 +29,9 @@ class DataUpdates {
   final SupabaseClient? client;
 
   /// Versions as the backend bumps them, for as long as someone listens.
-  Stream<DataVersion> watch() {
+  /// [onSubscribed] runs each time the channel joins, including a rejoin
+  /// after a dropped connection, when changes may have been missed.
+  Stream<DataVersion> watch({void Function()? onSubscribed}) {
     final backend = client;
     if (backend == null) return const Stream.empty();
     RealtimeChannel? channel;
@@ -48,7 +50,11 @@ class DataUpdates {
               }
             },
           )
-          ..subscribe();
+          ..subscribe((status, _) {
+            if (status == RealtimeSubscribeStatus.subscribed) {
+              onSubscribed?.call();
+            }
+          });
       },
       onCancel: () async {
         final open = channel;

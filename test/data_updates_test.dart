@@ -16,10 +16,18 @@ class FakeUpdates extends DataUpdates {
   final _stream = StreamController<DataVersion>.broadcast();
   var remote = <DataVersion>[];
   var reads = 0;
+  void Function()? subscribed;
   void push(DataSet set, int version) =>
       _stream.add((set: set, version: version));
+
+  /// The channel (re)joined.
+  void join() => subscribed?.call();
   @override
-  Stream<DataVersion> watch() => _stream.stream;
+  Stream<DataVersion> watch({void Function()? onSubscribed}) {
+    subscribed = onSubscribed;
+    return _stream.stream;
+  }
+
   @override
   Future<List<DataVersion>> current() async {
     reads++;
@@ -149,6 +157,18 @@ void main() {
     store.didChangeAppLifecycleState(AppLifecycleState.paused);
     await settle();
     expect(updates.reads, 3);
+  });
+
+  test('Realtime 重新連線後比對版本，補上斷線期間漏掉的變更', () async {
+    updates.remote = [(set: DataSet.spots, version: 1)];
+    updates.join();
+    await settle();
+    expect(updates.reads, 1);
+    expect(parking.loads, isEmpty);
+    updates.remote = [(set: DataSet.spots, version: 2)];
+    updates.join();
+    await settle();
+    expect(parking.loads, hasLength(1));
   });
 
   test('Realtime 已送達的版本，回到前景時不再重載', () async {

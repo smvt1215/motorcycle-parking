@@ -29,7 +29,7 @@ begin
   update public.data_versions set version=version+1,updated_at=now() where key=tg_argv[0];
   return null;
 end $$;
-revoke all on function public.bump_data_version() from public,anon,authenticated;
+revoke all on function public.bump_data_version() from public,anon,authenticated,service_role;
 
 create trigger community_spots_data_version
   after insert or update or delete or truncate on public.community_spots
