@@ -598,6 +598,8 @@ void main() {
         'source': 'import',
         'scooter_allowed': true,
         'heavy_allowed': true,
+        // No zones: the lot's verified flags decide (§3.2 step 3).
+        'parking_zones': <Object>[],
         'status': 'confirmed',
         'last_confirmed_at': checked.toIso8601String(),
         'scooter_verified_at': checked.toIso8601String(),

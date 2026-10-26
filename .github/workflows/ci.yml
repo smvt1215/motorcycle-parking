@@ -110,8 +110,8 @@ jobs:
         if: steps.changes.outputs.run == 'true'
         run: |
           python3 tool/gen_contract_sql.py
-          git diff --exit-code -- supabase/contract supabase/tests/parking_contract_test.sql
-          test -z "$(git status --porcelain -- supabase/contract supabase/tests/parking_contract_test.sql)"
+          git diff --exit-code -- supabase/contract supabase/tests/parking_contract_test.sql supabase/tests/rule_verdict_test.sql
+          test -z "$(git status --porcelain -- supabase/contract supabase/tests/parking_contract_test.sql supabase/tests/rule_verdict_test.sql)"
       - name: Edge Function checks
         if: steps.changes.outputs.run == 'true'
         working-directory: supabase/functions

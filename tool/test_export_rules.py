@@ -47,7 +47,12 @@ class ExportRulesTest(unittest.TestCase):
         rule = export([row], [])[0]
         self.assertNotIn("district_space_types", rule)
         self.assertNotIn("restriction", rule)
+        self.assertNotIn("expires_on", rule)
         self.assertEqual(rule["effective_date"], "2026-10-11")
+
+    def test_an_end_date_is_kept(self):
+        row = {**as_rows(self.bundled)[0], "expires_on": "2026-12-31"}
+        self.assertEqual(export([row], [])[0]["expires_on"], "2026-12-31")
 
     def test_a_rule_missing_from_the_database_stops_the_export(self):
         with self.assertRaisesRegex(RuleError, "not in the database"):

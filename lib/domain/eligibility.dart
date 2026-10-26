@@ -1,4 +1,5 @@
 import '../models/parking.dart';
+import 'parking_decision.dart';
 
 /// Ordered from most to least parkable; the map ranks search results by it.
 /// - [allowed]: law or verified data opens this space to the vehicle.
@@ -27,7 +28,26 @@ class Eligibility {
   };
 }
 
+/// Whether [eligibility] judges through [decideParking] (§3.2). False goes
+/// back to [legacyEligibility], the judgement before conditions, zones and
+/// rule end dates; kept one release so the switch is a one-line revert.
+const useParkingDecision = true;
+
+/// [vehicle]'s eligibility at [spot] under [rule]: a thin wrapper of
+/// [decideParking], which the map markers, search ranking and the details
+/// banner read without its basis, zones or prices.
 Eligibility eligibility(
+  ParkingSpot spot,
+  VehicleType vehicle,
+  CityRule? rule, {
+  DateTime? now,
+}) => useParkingDecision
+    ? decideParking(spot, vehicle, [?rule], now: now).eligibility
+    : legacyEligibility(spot, vehicle, rule, now: now);
+
+/// The eligibility before stack C4: lots read only their own flags, timed
+/// bays judge as paid ones, and rules never end.
+Eligibility legacyEligibility(
   ParkingSpot spot,
   VehicleType vehicle,
   CityRule? rule, {
@@ -47,7 +67,7 @@ Eligibility eligibility(
   return result;
 }
 
-/// The kind a city rule judges [type] as: rules list the original kinds,
+/// The kind [legacyEligibility] judges [type] as: rules list the original kinds,
 /// and a timed bay follows the paid bay it is painted like.
 SpaceType ruleSpaceType(SpaceType type) => switch (type) {
   SpaceType.timedMotorcycle => SpaceType.paidMotorcycle,
@@ -72,8 +92,13 @@ Eligibility _judge(
   // unverified. Confirming a community spot shows the bay exists, not that
   // its reported vehicle fields are right; an administrator setting them
   // does, for as long as official data would stay fresh.
-  final verified = explicit != null && _recentlyVerified(spot, vehicle, now);
-  final trusted = spot.isOfficial || verified || _recentlyConfirmed(spot, now);
+  final verified =
+      explicit != null &&
+      recentlyVerified(spot, vehicle, now ?? DateTime.now());
+  final trusted =
+      spot.isOfficial ||
+      verified ||
+      recentlyConfirmed(spot, now ?? DateTime.now());
   if (explicit == false && trusted) {
     return const Eligibility(EligibilityStatus.notAllowed, '此停車點標示不開放目前車種');
   }
@@ -201,20 +226,4 @@ Eligibility _judge(
     EligibilityStatus.allowed,
     rule.canUseTwoSpaces ? '可斜停兩格，請依公告停放' : '依地方規則開放，請勿超出格線',
   );
-}
-
-/// An administrator set [vehicle]'s access on this spot within the last 180
-/// days, the same window a ground confirmation stays fresh for.
-bool _recentlyVerified(ParkingSpot spot, VehicleType vehicle, DateTime? now) {
-  final at = spot.verifiedAt(vehicle);
-  return at != null && (now ?? DateTime.now()).difference(at).inDays <= 180;
-}
-
-/// A community spot confirmed on the ground within the last 180 days. With
-/// no confirmation time its freshness is unknown, never assumed.
-bool _recentlyConfirmed(ParkingSpot spot, DateTime? now) {
-  final at = spot.lastConfirmedAt;
-  return spot.status == TrustStatus.confirmed &&
-      at != null &&
-      (now ?? DateTime.now()).difference(at).inDays <= 180;
 }

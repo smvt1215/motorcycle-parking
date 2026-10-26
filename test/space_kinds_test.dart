@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:motorcycle_parking/domain/eligibility.dart';
 import 'package:motorcycle_parking/features/map/map_legend.dart';
 import 'package:motorcycle_parking/models/parking.dart';
+import 'package:motorcycle_parking/models/parking_condition.dart';
 
 void main() {
   final rules =
@@ -72,9 +73,46 @@ void main() {
   });
 
   test('彈性共用與電動機車格為有條件；未查核的社群回報為待確認', () {
+    // A shared car bay opens to scooters only in the slots its notice names
+    // (§7 item 1): none listed is unverified, never assumed.
     expect(
-      judge(SpaceType.flexShared, VehicleType.scooter).restriction,
-      RuleRestriction.timeLimited,
+      judge(SpaceType.flexShared, VehicleType.scooter).status,
+      EligibilityStatus.unverified,
+    );
+    final slotted = eligibility(
+      ParkingSpot(
+        id: 'flex',
+        name: 'flex',
+        lat: 25,
+        lng: 121,
+        city: '臺北市',
+        spaceType: SpaceType.flexShared,
+        status: TrustStatus.confirmed,
+        lastConfirmedAt: DateTime.now().subtract(const Duration(days: 1)),
+        condition: ParkingCondition.fromJson({
+          'bay': 'car',
+          'use': 'share',
+          'share': 'car_motorcycle',
+          'schedule': [
+            {
+              'days': 'weekday',
+              'from': '20:00',
+              'to': '07:00',
+              'vehicles': ['car', 'scooter'],
+            },
+          ],
+        }),
+      ),
+      VehicleType.scooter,
+      rule('臺北市', VehicleType.scooter),
+    );
+    expect(slotted.status, EligibilityStatus.conditional);
+    expect(slotted.restriction, RuleRestriction.timeLimited);
+    expect(slotted.reason, contains('平日 20:00–隔日 07:00'));
+    // Heavy bikes park on car bays by law, shared or not.
+    expect(
+      judge(SpaceType.flexShared, VehicleType.heavy).status,
+      EligibilityStatus.allowed,
     );
     final ev = judge(SpaceType.evMotorcycle, VehicleType.scooter);
     expect(ev.status, EligibilityStatus.conditional);

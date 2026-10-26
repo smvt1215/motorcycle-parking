@@ -12,8 +12,8 @@ end,true);
 $$;
 
 -- A known starting row, whatever the seed holds.
-delete from city_rules where city in ('基隆市','連江縣');
-insert into city_rules(city,vehicle,allowed_space_types,conditional_space_types,fee_note,exceptions,effective_date,source_url,version)
+delete from city_rules_data where city in ('基隆市','連江縣');
+insert into city_rules_data(city,vehicle,allowed_space_types,conditional_space_types,fee_note,exceptions,effective_date,source_url,version)
   values('基隆市','heavy','["heavyOnly","car"]','["offStreet"]','請依現場收費公告','路邊機車格未開放大型重機。','2026-01-01','https://example.test/keelung',4);
 
 -- Only an admin with a second factor.
@@ -51,9 +51,9 @@ select throws_ok($$select admin_upsert_city_rule('基隆市','heavy','{"fee_note
 select throws_ok($$select admin_upsert_city_rule('連江縣','heavy','{"fee_note":"x"}',1)$$,'40001',null,'a missing rule has no version to edit');
 
 -- Rules are written only through the RPC; reading stays open to everyone.
-select throws_ok($$insert into city_rules(city,vehicle,allowed_space_types,fee_note,exceptions,effective_date,source_url,version) values('連江縣','scooter','[]','a','a',current_date,'https://example.test',1)$$,'42501',null,'an admin cannot insert a rule directly');
-select throws_ok($$update city_rules set version=9 where city='基隆市' and vehicle='heavy'$$,'42501',null,'an admin cannot update a rule directly');
-select throws_ok($$delete from city_rules where city='基隆市' and vehicle='heavy'$$,'42501',null,'an admin cannot delete a rule directly');
+select throws_ok($$insert into city_rules_data(city,vehicle,allowed_space_types,fee_note,exceptions,effective_date,source_url,version) values('連江縣','scooter','[]','a','a',current_date,'https://example.test',1)$$,'42501',null,'an admin cannot insert a rule directly');
+select throws_ok($$update city_rules_data set version=9 where city='基隆市' and vehicle='heavy'$$,'42501',null,'an admin cannot update a rule directly');
+select throws_ok($$delete from city_rules_data where city='基隆市' and vehicle='heavy'$$,'42501',null,'an admin cannot delete a rule directly');
 reset role;
 select pg_temp.act('user');
 set local role authenticated;
