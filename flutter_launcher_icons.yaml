@@ -1,0 +1,17 @@
+# App icon. Source: assets/branding/app_icon_source.png → tool/render_brand_icons.py.
+# Regenerate: python3 tool/render_brand_icons.py && dart run flutter_launcher_icons
+# The script also writes the web icons and the staging icons.
+flutter_launcher_icons:
+  image_path: assets/branding/app_icon_source.png
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  background_color_ios: "#1F5FA8"
+  min_sdk_android: 21
+  # The artwork is a single picture: it is the background layer, scaled so
+  # the pin and scooter sit in the 66 dp safe zone; the foreground is empty.
+  adaptive_icon_background: assets/branding/png/adaptive_background.png
+  adaptive_icon_foreground: assets/branding/png/adaptive_foreground.png
+  adaptive_icon_foreground_inset: 0
+  # No monochrome layer: a themed icon would need a separately drawn
+  # silhouette; Android shows this full-color icon instead.

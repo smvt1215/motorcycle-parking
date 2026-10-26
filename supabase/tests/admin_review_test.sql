@@ -93,7 +93,7 @@ select throws_ok($$select admin_resolve_report((select id from fx where name='q_
   '40001','spot changed since the report','accepting over a newer spot version is refused');
 select is((select status from moderation_queue where id=(select id from fx where name='q_conflict')),'pending','a conflict leaves the report pending');
 select is((select fee_note from community_spots where id=(select id from fx where name='conflict_spot')),'每小時 25 元','a conflict leaves the spot unchanged');
-select is(admin_resolve_report((select id from fx where name='q_conflict'),'rejected')->>'status','rejected','a conflicting report can still be rejected');
+select is(admin_resolve_report((select id from fx where name='q_conflict'),'rejected',p_resolution_kind=>'outdated')->>'status','rejected','a conflicting report can still be rejected');
 reset role;
 
 -- Forcing after review is allowed and audited.
