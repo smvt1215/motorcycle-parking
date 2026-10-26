@@ -106,7 +106,7 @@ select throws_ok($$select pg_temp.c('x13','offStreet',null,'{"parking_zones":[{"
   '23514',null,'area is one of the listed areas');
 select throws_ok($$select pg_temp.c('x14','offStreet',null,'{"parking_zones":[{"name":"B1","condition":{}}]}')$$,
   '23514',null,'a zone never stores an empty condition');
-select throws_ok($$select pg_temp.c('x15','offStreet',null,'{"parking_zones":[{"name":"B1","fee":{"car":{"mode":"free"}}}]}')$$,
+select throws_ok($$select pg_temp.c('x15','offStreet',null,'{"parking_zones":[{"name":"B1","fee":{"bus":{"mode":"free"}}}]}')$$,
   '23514',null,'zone fees keep the live fee check');
 select throws_ok($$insert into official_heavy_spots(name,lat,lng,city,space_type,source_url,effective_date,condition)
   values('x16',25.25,121.45,'臺北市','heavyOnly','https://example.test/o',current_date,'{"bay":"car","use":"usual"}')$$,

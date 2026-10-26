@@ -340,7 +340,7 @@
     }
   },
   "fee": {
-    "max_bytes": 4096,
+    "max_bytes": 8192,
     "vehicles": [
       "scooter",
       "heavy",
@@ -481,6 +481,7 @@
         "per_visit",
         "daily"
       ]
-    }
+    },
+    "comment": "max_bytes 是資料表的保險上限（pg_column_size），刻意大於契約允許的最大費率（tool/fee_text.py 的 largest_fee，三端共同測試），所以合法形狀的費率不會因大小被任何一端拒絕。"
   }
 }

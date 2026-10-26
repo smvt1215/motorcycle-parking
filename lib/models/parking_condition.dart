@@ -128,7 +128,7 @@ const sourceUrlLengthUnit = 'utf16';
 /// The rule data of the fee contract (§2.2), mirrored as the JSON holds it.
 /// `Fee` and `Rate` still read the v1 shape; the fee v2 PR switches them.
 const Map<String, Object?> feeContract = {
-  'max_bytes': 4096,
+  'max_bytes': 8192,
   'vehicles': ['scooter', 'heavy', 'car'],
   'follow': {
     'vehicles': ['heavy'],

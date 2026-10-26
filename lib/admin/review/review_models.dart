@@ -267,9 +267,15 @@ class ReviewSpot {
 /// The proposal the admin starts from: only what the rider sent. A gone
 /// report without a value (works, a temporary closure, older builds, votes)
 /// is never turned into hiding; the admin decides, see [visibilityKey].
-Map<String, dynamic> initialProposal(ReviewReport report, ReviewSpot? spot) => {
-  ...?report.proposed,
-};
+Map<String, dynamic> initialProposal(ReviewReport report, ReviewSpot? spot) {
+  final proposal = {...?report.proposed};
+  // An adopted fee always carries this build's text of it, never the one
+  // the rider's build wrote (design §5.4): older builds write older
+  // sentences, which fee_note_of() would refuse.
+  final fee = reviewFee(proposal['fee']);
+  if (fee != null) proposal['fee_note'] = feeNoteOf(fee);
+  return proposal;
+}
 
 /// The column that hides [spot]: `hidden` for official spots, `status` for
 /// community ones.
@@ -368,7 +374,16 @@ String? validatePatch(Map<String, dynamic> patch, ReviewSpot spot) {
         final text = value is String ? value.trim() : '';
         if (key == 'name' && text.isEmpty) return '停車點名稱不可空白';
         if (key == 'city' && text.isEmpty) return '縣市不可空白';
-        if (value is! String || value.length > field.maxLength!) {
+        // A fee's own sentence may run past 200 (design §2.5); the check
+        // below holds it to the fee.
+        final fee = key == 'fee_note'
+            ? reviewFee(
+                patch.containsKey('fee') ? patch['fee'] : spot.values['fee'],
+              )
+            : null;
+        if (value is! String ||
+            (value.length > field.maxLength! &&
+                !(key == 'fee_note' && feeNoteFits(value, fee)))) {
           return '${field.label}請在 ${field.maxLength} 個字以內';
         }
       case FieldInput.spaceType:

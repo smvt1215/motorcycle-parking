@@ -135,9 +135,9 @@ class ParkingZone {
   /// Structured rates supersede the legacy vehicle strings as one record.
   /// A missing vehicle remains unconfirmed, even if an old string exists.
   String get scooterFeeText =>
-      fee == null ? scooterFeeNote : fee!.scooter?.text ?? '';
+      fee == null ? scooterFeeNote : fee!.riderText('scooter') ?? '';
   String get heavyFeeText =>
-      fee == null ? heavyFeeNote : fee!.heavy?.text ?? '';
+      fee == null ? heavyFeeNote : fee!.riderText('heavy') ?? '';
   bool get hasVehicleFees =>
       fee != null ||
       [
@@ -345,7 +345,7 @@ class ParkingSpot {
       source: j['source'] as String? ?? 'community',
       spaceType: _kind(j) ?? SpaceType.values.byName(j['space_type'] as String),
       feeNote: j['fee_note'] as String? ?? '請依現場公告',
-      fee: j['fee'] is Map ? Fee.fromJson(j['fee']) : null,
+      fee: structuredFee(j['fee']),
       scooterTotal: j['scooter_total'] as int?,
       available: j['available'] as int?,
       heavyAllowed: j['heavy_allowed'] as bool?,

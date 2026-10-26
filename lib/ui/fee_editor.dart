@@ -36,8 +36,8 @@ class FeeEditor extends StatelessWidget {
           label: '普通機車',
           heavy: false,
           value: value.scooter,
-          onChanged: (rate) =>
-              onChanged(Fee(scooter: rate, heavy: value.heavy)),
+          // copyWith keeps the vehicles this editor does not show (car).
+          onChanged: (rate) => onChanged(value.copyWith(scooter: () => rate)),
         ),
         const SizedBox(height: 16),
         RateEditor(
@@ -45,8 +45,7 @@ class FeeEditor extends StatelessWidget {
           label: '大型重機',
           heavy: true,
           value: value.heavy,
-          onChanged: (rate) =>
-              onChanged(Fee(scooter: value.scooter, heavy: rate)),
+          onChanged: (rate) => onChanged(value.copyWith(heavy: () => rate)),
         ),
         if (showPreview) ...[
           const SizedBox(height: 12),
@@ -72,6 +71,7 @@ String _modeLabel(FeeMode mode) => switch (mode) {
   FeeMode.hourly => '計時',
   FeeMode.perVisit => '計次',
   FeeMode.daily => '每日',
+  FeeMode.byTime => '依時段不同',
   FeeMode.sameAsScooter => '比照機車費率',
   FeeMode.sameAsCar => '比照汽車費率',
 };
@@ -131,6 +131,10 @@ class _RateEditorState extends State<RateEditor> {
   }) {
     if (clear) return widget.onChanged(null);
     final m = mode ?? rate!.mode;
+    // Settings this editor has no field for yet (fee v2: renew, extension,
+    // cap reset, …) stay as they are while the mode stays the same; the
+    // new editor (C3b) edits them.
+    final kept = m == rate?.mode ? rate : null;
     widget.onChanged(
       Rate(
         m,
@@ -142,6 +146,14 @@ class _RateEditorState extends State<RateEditor> {
         maxMinutes: m == FeeMode.perVisit && !clearLimit
             ? maxMinutes ?? rate?.maxMinutes
             : null,
+        unitMinutes: kept?.unitMinutes,
+        freeMinutes: kept?.freeMinutes,
+        capReset: kept?.capReset,
+        renew: kept?.renew,
+        extension: kept?.extension,
+        periods: kept?.periods,
+        crossPeriod: kept?.crossPeriod,
+        factorPct: kept?.factorPct,
       ),
     );
   }
@@ -192,6 +204,9 @@ class _RateEditorState extends State<RateEditor> {
       FeeMode.perVisit,
       FeeMode.daily,
       if (widget.heavy) ...[FeeMode.sameAsScooter, FeeMode.sameAsCar],
+      // Editing time-of-day rates comes with the new editor (C3b); a stored
+      // one still shows as itself rather than breaking the menu.
+      if (rate?.mode == FeeMode.byTime) FeeMode.byTime,
     ];
     final mode = rate?.mode;
     final details = <Widget>[

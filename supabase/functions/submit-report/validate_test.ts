@@ -1,6 +1,6 @@
 import { identityHash, validate, validFee, validZones } from './validate.ts';
 
-Deno.test('zones carry the same structured fee contract without car prices', () => {
+Deno.test('zones carry the same structured fee contract, car prices included', () => {
   const zone = {
     name: 'B2',
     access: 'scooterHeavy',
@@ -14,7 +14,7 @@ Deno.test('zones carry the same structured fee contract without car prices', () 
     const fee of [
       null,
       20,
-      { car: { mode: 'free' } },
+      { bus: { mode: 'free' } },
       { scooter: { mode: 'same_as_car' } },
       { heavy: { mode: 'hourly', amount: 20 } },
       { heavy: { mode: 'daily', amount: -1 } },
@@ -24,6 +24,9 @@ Deno.test('zones carry the same structured fee contract without car prices', () 
     if (validZones([{ ...zone, fee }])) {
       throw new Error('invalid zone fee accepted');
     }
+  }
+  if (!validZones([{ ...zone, fee: { car: { mode: 'free' } } }])) {
+    throw new Error('zone car fee rejected');
   }
   if (!validZones([{ name: '舊分區' }])) {
     throw new Error('legacy zone rejected');
@@ -257,6 +260,7 @@ Deno.test('fees are a rate per vehicle with known modes only', () => {
       },
       { scooter: { mode: 'free' }, heavy: { mode: 'posted' } },
       { heavy: { mode: 'same_as_scooter' } },
+      { car: { mode: 'free' } },
     ]
   ) {
     if (!validFee(fee)) {
@@ -269,7 +273,7 @@ Deno.test('fees are a rate per vehicle with known modes only', () => {
       [],
       'free',
       { scooter: 'free' },
-      { car: { mode: 'free' } },
+      { bus: { mode: 'free' } },
       { scooter: { mode: 'monthly', amount: 300 } },
       { scooter: { mode: 'same_as_car' } },
       { scooter: { mode: 'hourly', amount: 20 } },

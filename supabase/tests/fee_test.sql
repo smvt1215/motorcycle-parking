@@ -12,7 +12,8 @@ select ok(valid_fee('{"scooter":{"mode":"per_visit","amount":30,"max_minutes":36
 select ok(valid_fee('{"scooter":{"mode":"free"},"heavy":{"mode":"posted"}}'),'free and posted rates');
 select ok(not valid_fee('{"scooter":{"mode":"monthly","amount":300}}'),'unknown mode is refused');
 select ok(not valid_fee('{"scooter":{"mode":"same_as_car"}}'),'only heavy bikes follow another vehicle');
-select ok(not valid_fee('{"car":{"mode":"free"}}'),'unknown vehicle is refused');
+select ok(valid_fee('{"car":{"mode":"free"}}'),'cars have a rate too (fee v2)');
+select ok(not valid_fee('{"bus":{"mode":"free"}}'),'unknown vehicle is refused');
 select ok(not valid_fee('{"scooter":{"mode":"hourly","amount":20}}'),'an hourly rate needs its period');
 select ok(not valid_fee('{"scooter":{"mode":"hourly","amount":"20","per_minutes":60}}'),'amounts are numbers, not strings');
 select ok(not valid_fee('{"scooter":{"mode":"daily","amount":20.5}}'),'amounts are whole yuan');
@@ -38,7 +39,7 @@ select is((select fee_note from community_spots where id=(select id from target)
 -- Admins apply a suggested fee like any other field.
 with s as (insert into moderation_queue(source_id,reason,field,proposed)
   values((select id::text from target),'收費資訊：每日 30 元','fee_note',
-    '{"fee":{"scooter":{"mode":"daily","amount":30},"heavy":{"mode":"same_as_scooter"}},"fee_note":"每日 30 元（大型重機比照機車費率）"}') returning id)
+    '{"fee":{"scooter":{"mode":"daily","amount":30},"heavy":{"mode":"same_as_scooter"}},"fee_note":"機車每日 30 元；大型重機每日 30 元"}') returning id)
 select id into temporary table report from s;
 grant select on target,report to authenticated;
 select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-000000000005","role":"authenticated","aal":"aal2","app_metadata":{"role":"admin"}}',true);
@@ -46,7 +47,7 @@ set local role authenticated;
 select is(public.admin_resolve_report((select id from report),'accepted',
     (select proposed from moderation_queue where id=(select id from report)))->'spot'->'fee'->'heavy'->>'mode',
   'same_as_scooter','admin applies the suggested fee');
-select is((select fee_note from community_spots where id=(select id from target)),'每日 30 元（大型重機比照機車費率）',
+select is((select fee_note from community_spots where id=(select id from target)),'機車每日 30 元；大型重機每日 30 元',
   'the fee text changes with it');
 -- Promoting the spot to an official one keeps the fee beside its text.
 select is(public.admin_promote_spot((select id::text from target),

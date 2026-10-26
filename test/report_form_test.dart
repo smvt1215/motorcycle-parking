@@ -242,7 +242,7 @@ void main() {
       'scooter': {'mode': 'daily', 'amount': 30},
       'heavy': {'mode': 'same_as_scooter'},
     });
-    expect(spot['fee_note'], '每日 30 元（大型重機比照機車費率）');
+    expect(spot['fee_note'], '機車每日 30 元；大型重機每日 30 元');
   });
 
   testWidgets('沒有填收費時不送 fee，文字維持請依現場公告', (tester) async {

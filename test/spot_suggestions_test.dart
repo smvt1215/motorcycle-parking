@@ -304,7 +304,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('請至少選一個車種的收費方式'), findsNothing);
     expect(
-      find.text('收費資訊從「${spot.feeNote}」改成「每次 20 元（大型重機費率未確認）」'),
+      find.text('收費資訊從「${spot.feeNote}」改成「機車每次 20 元（隔日是否另計未確認）；大型重機費率未確認」'),
       findsOneWidget,
     );
     // The form grew with the amount fields; scroll its own list to the button.
@@ -325,9 +325,9 @@ void main() {
       'fee': {
         'scooter': {'mode': 'per_visit', 'amount': 20},
       },
-      'fee_note': '每次 20 元（大型重機費率未確認）',
+      'fee_note': '機車每次 20 元（隔日是否另計未確認）；大型重機費率未確認',
     });
-    expect(body['reason'], '收費資訊：建議「每次 20 元（大型重機費率未確認）」');
+    expect(body['reason'], '收費資訊：建議「機車每次 20 元（隔日是否另計未確認）；大型重機費率未確認」');
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });

@@ -5,7 +5,7 @@
 -- ===== 共用：parking_contract() 與輔助函式（C2、C3 都需要） =====
 create or replace function public.parking_contract() returns jsonb
 language sql immutable set search_path='' as $contract$
-  select $json${"version":1,"space_types":["paidMotorcycle","freeMotorcycle","heavyOnly","car","offStreet","disabledMotorcycle","timedMotorcycle","flexShared","evMotorcycle"],"access_kinds":["scooterOnly","scooterHeavy","heavyCar","noMotorcycle","heavyOnly"],"placement":{"off_street_space_types":["offStreet"],"off_street_facility_types":["multiStorey","underground","surface"]},"time":{"pattern":"^([01][0-9]|2[0-3]):[0-5][0-9]$","days":["all","weekday","holiday"],"weekdays":["mon","tue","wed","thu","fri","sat","sun"],"optional_pair":["from","to"]},"date":{"pattern":"^(19|[2-9][0-9])[0-9]{2}-[0-9]{2}-[0-9]{2}$"},"condition":{"keys":["bay","use","share","charge","limits","schedule","basis"],"zone_keys":["allow"],"bay":["motorcycle","heavy","car"],"use":["usual","share"],"share":{"scooter_heavy":"motorcycle","car_motorcycle":"car"},"charge":["toll","free"],"limits":{"time_limit":{"required":[],"optional":{"max_minutes":{"min":1,"max":1440}}},"special_vehicle":{"required":["vehicle"],"optional":{}},"ev_only":{"required":[],"optional":{}}},"special_vehicles":["disabled_modified"],"street_charge_optional_with":["time_limit","special_vehicle","ev_only"],"allow_keys":["scooter","heavy"],"schedule":{"keys":["days","from","to","vehicles"],"max_entries":8,"vehicles":["scooter","heavy","car"]},"basis":{"keys":["source_url","evidence_id","effective_date","expires_on"],"required_one_of":["source_url","evidence_id"],"reserved":["evidence_id"],"source_url":{"pattern":"^https://\\S+$","max_length":2048,"length_unit":"utf16"}}},"zone":{"area":["motorcycle","car","heavy","mixed"]},"conversion":{"from_space_type":{"paidMotorcycle":{"bay":"motorcycle","use":"usual","charge":"toll"},"freeMotorcycle":{"bay":"motorcycle","use":"usual","charge":"free"},"heavyOnly":{"bay":"heavy","use":"usual"},"car":{"bay":"car","use":"usual"},"offStreet":null,"disabledMotorcycle":{"bay":"motorcycle","limits":[{"kind":"special_vehicle","vehicle":"disabled_modified"}]},"timedMotorcycle":{"bay":"motorcycle","use":"usual","limits":[{"kind":"time_limit"}]},"flexShared":{"bay":"car","use":"share","share":"car_motorcycle"},"evMotorcycle":{"bay":"motorcycle","limits":[{"kind":"ev_only"}]}},"from_access":{"scooterOnly":{"bay":"motorcycle","use":"usual","allow":{"scooter":true,"heavy":false}},"scooterHeavy":{"bay":"motorcycle","use":"share","share":"scooter_heavy","allow":{"scooter":true,"heavy":true}},"heavyCar":{"bay":"car","use":"usual","allow":{"scooter":false,"heavy":true}},"heavyOnly":{"bay":"heavy","use":"usual","allow":{"scooter":false,"heavy":true}},"noMotorcycle":{"allow":{"scooter":false,"heavy":false}}},"to_space_type":[{"when":{"placement":"off_street"},"space_type":"offStreet"},{"when":{"limit":"special_vehicle"},"space_type":"disabledMotorcycle"},{"when":{"limit":"ev_only"},"space_type":"evMotorcycle"},{"when":{"share":"car_motorcycle"},"space_type":"flexShared"},{"when":{"limit":"time_limit"},"space_type":"timedMotorcycle"},{"when":{"bay":"heavy"},"space_type":"heavyOnly"},{"when":{"bay":"car"},"space_type":"car"},{"when":{"bay":"motorcycle","charge":"toll"},"space_type":"paidMotorcycle"},{"when":{"bay":"motorcycle","charge":"free"},"space_type":"freeMotorcycle"}],"to_access":"allow 與 from_access 的 allow 相同，且 from_access 有 bay 時 bay 也相同","legacy_safe":{"unsafe_keys":["schedule"],"unsafe_basis_keys":["expires_on"],"lossy_share":"scooter_heavy","lossy_limit_keys":["max_minutes"],"assumed_charge":{"timedMotorcycle":"toll"},"lossy_when_unconfirmed":["bay","use","share","charge"]}},"fee":{"max_bytes":4096,"vehicles":["scooter","heavy","car"],"follow":{"vehicles":["heavy"],"modes":["same_as_scooter","same_as_car"],"optional":{"factor_pct":{"min":100,"max":1000}}},"modes":{"free":{"required":{},"optional":{}},"posted":{"required":{},"optional":{}},"hourly":{"required":{"amount":{"min":0,"max":10000},"per_minutes":{"min":1,"max":1440}},"optional":{"unit_minutes":{"min":1,"max":"per_minutes"},"free_minutes":{"min":1,"max":1440},"daily_cap":{"min":0,"max":10000},"cap_reset":"cap_reset"}},"per_visit":{"required":{"amount":{"min":0,"max":10000}},"optional":{"max_minutes":{"min":1,"max":1440},"renew":"renew","extension":"extension"}},"daily":{"required":{"amount":{"min":0,"max":10000}},"optional":{"cap_reset":"cap_reset"}},"by_time":{"required":{"periods":"periods"},"optional":{"cross_period":"cross_period"}}},"enums":{"cap_reset":["calendar_day","rolling_24h","per_entry"],"renew":["none","midnight"],"cross_period":["each_period","entry_only"]},"extension":{"required":{"amount":{"min":0,"max":10000},"max_times":{"min":1,"max":10}},"optional":{"minutes":{"min":1,"max":1440}}},"periods":{"max_entries":6,"keys":["days","from","to","rate"],"nested_modes":["free","posted","hourly","per_visit","daily"]}}}$json$::jsonb;
+  select $json${"version":1,"space_types":["paidMotorcycle","freeMotorcycle","heavyOnly","car","offStreet","disabledMotorcycle","timedMotorcycle","flexShared","evMotorcycle"],"access_kinds":["scooterOnly","scooterHeavy","heavyCar","noMotorcycle","heavyOnly"],"placement":{"off_street_space_types":["offStreet"],"off_street_facility_types":["multiStorey","underground","surface"]},"time":{"pattern":"^([01][0-9]|2[0-3]):[0-5][0-9]$","days":["all","weekday","holiday"],"weekdays":["mon","tue","wed","thu","fri","sat","sun"],"optional_pair":["from","to"]},"date":{"pattern":"^(19|[2-9][0-9])[0-9]{2}-[0-9]{2}-[0-9]{2}$"},"condition":{"keys":["bay","use","share","charge","limits","schedule","basis"],"zone_keys":["allow"],"bay":["motorcycle","heavy","car"],"use":["usual","share"],"share":{"scooter_heavy":"motorcycle","car_motorcycle":"car"},"charge":["toll","free"],"limits":{"time_limit":{"required":[],"optional":{"max_minutes":{"min":1,"max":1440}}},"special_vehicle":{"required":["vehicle"],"optional":{}},"ev_only":{"required":[],"optional":{}}},"special_vehicles":["disabled_modified"],"street_charge_optional_with":["time_limit","special_vehicle","ev_only"],"allow_keys":["scooter","heavy"],"schedule":{"keys":["days","from","to","vehicles"],"max_entries":8,"vehicles":["scooter","heavy","car"]},"basis":{"keys":["source_url","evidence_id","effective_date","expires_on"],"required_one_of":["source_url","evidence_id"],"reserved":["evidence_id"],"source_url":{"pattern":"^https://\\S+$","max_length":2048,"length_unit":"utf16"}}},"zone":{"area":["motorcycle","car","heavy","mixed"]},"conversion":{"from_space_type":{"paidMotorcycle":{"bay":"motorcycle","use":"usual","charge":"toll"},"freeMotorcycle":{"bay":"motorcycle","use":"usual","charge":"free"},"heavyOnly":{"bay":"heavy","use":"usual"},"car":{"bay":"car","use":"usual"},"offStreet":null,"disabledMotorcycle":{"bay":"motorcycle","limits":[{"kind":"special_vehicle","vehicle":"disabled_modified"}]},"timedMotorcycle":{"bay":"motorcycle","use":"usual","limits":[{"kind":"time_limit"}]},"flexShared":{"bay":"car","use":"share","share":"car_motorcycle"},"evMotorcycle":{"bay":"motorcycle","limits":[{"kind":"ev_only"}]}},"from_access":{"scooterOnly":{"bay":"motorcycle","use":"usual","allow":{"scooter":true,"heavy":false}},"scooterHeavy":{"bay":"motorcycle","use":"share","share":"scooter_heavy","allow":{"scooter":true,"heavy":true}},"heavyCar":{"bay":"car","use":"usual","allow":{"scooter":false,"heavy":true}},"heavyOnly":{"bay":"heavy","use":"usual","allow":{"scooter":false,"heavy":true}},"noMotorcycle":{"allow":{"scooter":false,"heavy":false}}},"to_space_type":[{"when":{"placement":"off_street"},"space_type":"offStreet"},{"when":{"limit":"special_vehicle"},"space_type":"disabledMotorcycle"},{"when":{"limit":"ev_only"},"space_type":"evMotorcycle"},{"when":{"share":"car_motorcycle"},"space_type":"flexShared"},{"when":{"limit":"time_limit"},"space_type":"timedMotorcycle"},{"when":{"bay":"heavy"},"space_type":"heavyOnly"},{"when":{"bay":"car"},"space_type":"car"},{"when":{"bay":"motorcycle","charge":"toll"},"space_type":"paidMotorcycle"},{"when":{"bay":"motorcycle","charge":"free"},"space_type":"freeMotorcycle"}],"to_access":"allow 與 from_access 的 allow 相同，且 from_access 有 bay 時 bay 也相同","legacy_safe":{"unsafe_keys":["schedule"],"unsafe_basis_keys":["expires_on"],"lossy_share":"scooter_heavy","lossy_limit_keys":["max_minutes"],"assumed_charge":{"timedMotorcycle":"toll"},"lossy_when_unconfirmed":["bay","use","share","charge"]}},"fee":{"max_bytes":8192,"vehicles":["scooter","heavy","car"],"follow":{"vehicles":["heavy"],"modes":["same_as_scooter","same_as_car"],"optional":{"factor_pct":{"min":100,"max":1000}}},"modes":{"free":{"required":{},"optional":{}},"posted":{"required":{},"optional":{}},"hourly":{"required":{"amount":{"min":0,"max":10000},"per_minutes":{"min":1,"max":1440}},"optional":{"unit_minutes":{"min":1,"max":"per_minutes"},"free_minutes":{"min":1,"max":1440},"daily_cap":{"min":0,"max":10000},"cap_reset":"cap_reset"}},"per_visit":{"required":{"amount":{"min":0,"max":10000}},"optional":{"max_minutes":{"min":1,"max":1440},"renew":"renew","extension":"extension"}},"daily":{"required":{"amount":{"min":0,"max":10000}},"optional":{"cap_reset":"cap_reset"}},"by_time":{"required":{"periods":"periods"},"optional":{"cross_period":"cross_period"}}},"enums":{"cap_reset":["calendar_day","rolling_24h","per_entry"],"renew":["none","midnight"],"cross_period":["each_period","entry_only"]},"extension":{"required":{"amount":{"min":0,"max":10000},"max_times":{"min":1,"max":10}},"optional":{"minutes":{"min":1,"max":1440}}},"periods":{"max_entries":6,"keys":["days","from","to","rate"],"nested_modes":["free","posted","hourly","per_visit","daily"]}}}$json$::jsonb;
 $contract$;
 
 -- A whole number in range; CASE so a string returns false, not a cast error.
@@ -333,4 +333,157 @@ begin
     and not exists(select 1 from jsonb_object_keys(p) k where not fee->'vehicles' ? k)
     and not exists(select 1 from jsonb_object_keys(p) k where not public.contract_fee_rate(p->k,k,false));
 end;
+$$;
+
+-- ===== 費率文字：fee_note_of(p_fee)（C3；與 tool/fee_text.py、lib/models/fee.dart、
+-- supabase/functions/_shared/fee.ts 同一套句子，parking_contract_cases.json 的 fee_notes 固定） =====
+
+-- Whole yuan times a factor in percent, with at most two decimals: 22.5, 41.25.
+create or replace function public.fee_text_money(p jsonb,p_pct integer) returns text
+language sql immutable set search_path='' as $$
+  select case when v%100=0 then (v/100)::text
+    when v%10=0 then (v/100)::text||'.'||(v%100/10)::text
+    else (v/100)::text||'.'||lpad((v%100)::text,2,'0') end
+  from (select (p#>>'{}')::numeric::bigint*p_pct as v) x;
+$$;
+
+-- 3 小時, 45 分鐘.
+create or replace function public.fee_text_span(p jsonb) returns text
+language sql immutable set search_path='' as $$
+  select case when m%60=0 then (m/60)||' 小時' else m||' 分鐘' end
+  from (select (p#>>'{}')::numeric::integer as m) x;
+$$;
+
+-- 每小時, 每 2 小時, 每 90 分鐘.
+create or replace function public.fee_text_every(p jsonb) returns text
+language sql immutable set search_path='' as $$
+  select case when m=60 then '每小時' when m%60=0 then '每 '||(m/60)||' 小時' else '每 '||m||' 分鐘' end
+  from (select (p#>>'{}')::numeric::integer as m) x;
+$$;
+
+-- When a cap or a daily charge starts over; null when unconfirmed.
+create or replace function public.fee_text_reset(p text) returns text
+language sql immutable set search_path='' as $$
+  select case p when 'calendar_day' then '零時重算' when 'rolling_24h' then '停滿 24 小時重算'
+    when 'per_entry' then '每次進場重算' end;
+$$;
+
+-- A set of days as a bit mask (bit 0 Monday) and its label.
+create or replace function public.fee_text_day_mask(p jsonb) returns integer
+language sql immutable set search_path='' as $$
+  select case when jsonb_typeof(p)='string' then case p#>>'{}' when 'all' then 127 when 'weekday' then 31 else 96 end
+    else (select sum(1<<(array_position(array['mon','tue','wed','thu','fri','sat','sun'],d)-1))::integer
+      from jsonb_array_elements_text(p) d) end;
+$$;
+
+create or replace function public.fee_text_days(p_mask integer) returns text
+language sql immutable set search_path='' as $$
+  select case p_mask when 127 then '每天' when 31 then '平日' when 96 then '假日'
+    else (select string_agg('週'||substr('一二三四五六日',i+1,1),'、' order by i)
+      from generate_series(0,6) i where p_mask&(1<<i)<>0) end;
+$$;
+
+-- One rate's words at p_pct percent of its amounts, or null when it reads
+-- as unconfirmed (posted, a by_time of posted periods only, a follow).
+create or replace function public.fee_text_rate(p jsonb,p_pct integer) returns text
+language plpgsql immutable set search_path='' as $$
+declare
+  m text:=p->>'mode'; t text; notes text[]; e jsonb; mask integer; i integer;
+  masks integer[]:='{}'; parts text[]:='{}'; visits integer:=0;
+begin
+  if jsonb_typeof(p) is distinct from 'object' then return null; end if;
+  if m='free' then return '免費'; end if;
+  if m='hourly' then
+    t:=public.fee_text_every(p->'per_minutes')||' '||public.fee_text_money(p->'amount',p_pct)||' 元';
+    if p ? 'free_minutes' then t:='首 '||public.fee_text_span(p->'free_minutes')||' 0 元，之後'||t; end if;
+    if p ? 'unit_minutes' then t:=t||'（以 '||public.fee_text_span(p->'unit_minutes')||'計）'; end if;
+    if p ? 'daily_cap' then
+      t:=t||'，當日上限 '||public.fee_text_money(p->'daily_cap',p_pct)||' 元（'
+        ||coalesce(public.fee_text_reset(p->>'cap_reset'),'上限計算方式未確認')||'）';
+    end if;
+    return t;
+  end if;
+  if m='per_visit' then
+    if (p->>'amount')::numeric=0 and p ? 'max_minutes' then
+      t:='首 '||public.fee_text_span(p->'max_minutes')||' 0 元';
+    else
+      notes:='{}';
+      if p ? 'max_minutes' then notes:=notes||(public.fee_text_span(p->'max_minutes')||'內'); end if;
+      if not p ? 'renew' then notes:=notes||'隔日是否另計未確認'::text; end if;
+      t:='每次 '||public.fee_text_money(p->'amount',p_pct)||' 元'
+        ||case when cardinality(notes)>0 then '（'||array_to_string(notes,'，')||'）' else '' end
+        ||case p->>'renew' when 'midnight' then '，隔日另計'
+          when 'none' then case when p ? 'max_minutes' then '，有效時間內只收一次' else '，停多久都只收一次' end
+          else '' end;
+    end if;
+    if jsonb_typeof(p->'extension')='object' then
+      t:=t||'，可付 '||public.fee_text_money(p->'extension'->'amount',p_pct)||' 元延長 '
+        ||(p->'extension'->>'max_times')::numeric::integer||' 次'
+        ||case when p->'extension' ? 'minutes' then '（每次 '||public.fee_text_span(p->'extension'->'minutes')||'）'
+          else '（延長時間未確認）' end;
+    end if;
+    return t;
+  end if;
+  if m='daily' then
+    return '每日 '||public.fee_text_money(p->'amount',p_pct)||' 元'||coalesce('（'||public.fee_text_reset(p->>'cap_reset')||'）','');
+  end if;
+  if m='by_time' then
+    -- Periods grouped by the days they cover, in order of first appearance.
+    for e in select x from jsonb_array_elements(p->'periods') x loop
+      t:=public.fee_text_rate(e->'rate',p_pct);
+      continue when t is null;
+      if e->'rate'->>'mode'='per_visit' then visits:=visits+1; end if;
+      t:=case when e ? 'from' then (e->>'from')||'–'
+          ||case when (e->>'from') collate "C"<(e->>'to') collate "C" then '' else '隔日 ' end||(e->>'to')
+        else '全天' end||' '||t;
+      mask:=public.fee_text_day_mask(e->'days');
+      i:=array_position(masks,mask);
+      if i is null then masks:=masks||mask; parts:=parts||t; else parts[i]:=parts[i]||'；'||t; end if;
+    end loop;
+    if cardinality(masks)=0 then return null; end if;
+    t:=(select string_agg(public.fee_text_days(masks[k])||'：'||parts[k],'；' order by k)
+      from generate_subscripts(masks,1) k);
+    if p ? 'cross_period' then
+      t:=t||'；'||case p->>'cross_period' when 'each_period' then '跨時段分別計費' else '依進場時段計費' end;
+    elsif visits>=2 then t:=t||'；跨時段計費方式未確認';
+    end if;
+    return t;
+  end if;
+  return null;
+end;
+$$;
+
+-- The fee_note text of a valid fee: known vehicles as 機車…；大型重機…；汽車…,
+-- then 大型重機費率未確認 when the heavy rate is unknown; a heavy rate that
+-- follows another vehicle shows the amounts worked out (#140), or
+-- 大型重機費率未提供 when that vehicle is unconfirmed.
+create or replace function public.fee_note_of(p_fee jsonb) returns text
+language plpgsql immutable set search_path='' as $$
+declare
+  f text:=p_fee->'heavy'->>'mode'; s text; h text; c text; unprovided boolean:=false; parts text[]:='{}';
+begin
+  s:=public.fee_text_rate(p_fee->'scooter',100);
+  c:=public.fee_text_rate(p_fee->'car',100);
+  if f in ('same_as_scooter','same_as_car') then
+    h:=public.fee_text_rate(p_fee->(case f when 'same_as_scooter' then 'scooter' else 'car' end),
+      coalesce((p_fee->'heavy'->>'factor_pct')::numeric::integer,100));
+    unprovided:=h is null;
+  else
+    h:=public.fee_text_rate(p_fee->'heavy',100);
+  end if;
+  if s is null and h is null and c is null and not unprovided then return '請依現場公告'; end if;
+  if s is not null then parts:=parts||('機車'||s); end if;
+  if h is not null or unprovided then parts:=parts||('大型重機'||coalesce(h,'費率未提供')); end if;
+  if c is not null then parts:=parts||('汽車'||c); end if;
+  if h is null and not unprovided then parts:=parts||'大型重機費率未確認'::text; end if;
+  return array_to_string(parts,'；');
+end;
+$$;
+
+-- The longest fee_note_of() the contract allows (§2.5), worked out by
+-- tool/fee_text.py: the bound of both spot tables' fee_note check and of
+-- validate.ts for a note that is its fee's text.
+create or replace function public.fee_note_max_length() returns integer
+language sql immutable set search_path='' as $$
+  select 1909;
 $$;

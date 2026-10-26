@@ -72,11 +72,13 @@ void main() {
         },
       ],
     });
-    expect(spot.fee, const Fee());
+    // A spot's fee = {} holds no structured rate (#114) and reads as none;
+    // a zone's explicit empty fee still keeps its legacy strings out.
+    expect(spot.fee, isNull);
     expect(spot.zones.single.fee, const Fee());
     expect(spotFeeSummary(spot, VehicleType.heavy), '費率未確認');
     expect(spot.zones.single.heavyFeeText, '');
-    expect(spot.toJson()['fee'], <String, Object>{});
+    expect(spot.toJson()['fee'], isNull);
     expect(
       (spot.toJson()['parking_zones'] as List).single['fee'],
       <String, Object>{},
@@ -148,7 +150,20 @@ void main() {
         lot(fee: const Fee(heavy: Rate(FeeMode.sameAsCar))),
         VehicleType.heavy,
       ),
-      '比照汽車費率',
+      '費率未提供',
+    );
+    // A follow shows the amounts it works out to (#140).
+    expect(
+      spotFeeSummary(
+        lot(
+          fee: const Fee(
+            scooter: Rate(FeeMode.hourly, amount: 20, perMinutes: 60),
+            heavy: Rate(FeeMode.sameAsScooter, factorPct: 200),
+          ),
+        ),
+        VehicleType.heavy,
+      ),
+      '每小時 40 元',
     );
     expect(
       spotFeeSummary(
@@ -203,7 +218,10 @@ void main() {
         ),
       );
       expect(find.text('普通機車：免費'), findsOneWidget);
-      expect(find.text('大型重機：每 30 分鐘 20 元，當日上限 100 元'), findsOneWidget);
+      expect(
+        find.text('大型重機：每 30 分鐘 20 元，當日上限 100 元（上限計算方式未確認）'),
+        findsOneWidget,
+      );
       expect(find.textContaining('不應重複'), findsNothing);
       expect(tester.takeException(), isNull);
     });
@@ -269,7 +287,9 @@ void main() {
       await pumpAccess(tester, width, spot);
       expect(find.text('全場費率'), findsOneWidget);
       expect(find.text('汽車：每小時 30 元'), findsOneWidget);
-      expect(find.text('大型重機：比照汽車費率'), findsNWidgets(2));
+      // 比照 resolves within the same fee only (design §2.1); the car rate
+      // here is legacy zone text, so the heavy rate is not provided (#140).
+      expect(find.text('大型重機：費率未提供'), findsNWidgets(2));
       expect(find.textContaining('舊重機'), findsNothing);
       expect(tester.takeException(), isNull);
     });

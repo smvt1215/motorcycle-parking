@@ -1,4 +1,13 @@
 import contract from '../_shared/parking_contract.json' with { type: 'json' };
+import {
+  freeFeeNoteMaxLength,
+  subset,
+  validFee,
+  validFeeNote,
+  validSlotTimes,
+} from '../_shared/fee.ts';
+
+export { validFee, validSlotTimes };
 
 const spaceTypes = [
   'paidMotorcycle',
@@ -40,37 +49,6 @@ const coordinate = (v: unknown) => typeof v === 'number' && Number.isFinite(v);
 // Whole yuan or minutes in range; never a string or a fraction.
 const whole = (v: unknown, min: number, max: number) =>
   typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max;
-// The keys each fee mode uses (202610250010_spot_fee.sql holds the same).
-const rateKeys: Record<string, string[]> = {
-  free: [],
-  posted: [],
-  same_as_scooter: [],
-  same_as_car: [],
-  hourly: ['amount', 'per_minutes', 'daily_cap'],
-  per_visit: ['amount', 'max_minutes'],
-  daily: ['amount'],
-};
-function validRate(v: unknown, heavy: boolean): boolean {
-  if (!v || typeof v !== 'object' || Array.isArray(v)) return false;
-  const r = v as Record<string, unknown>;
-  const mode = r.mode;
-  if (typeof mode !== 'string' || !Object.hasOwn(rateKeys, mode)) return false;
-  // Only heavy bikes may follow another vehicle's rate.
-  if (mode.startsWith('same_as_') && !heavy) return false;
-  if (Object.keys(r).some((k) => k !== 'mode' && !rateKeys[mode].includes(k))) {
-    return false;
-  }
-  const optional = (key: string, min: number, max: number) =>
-    !(key in r) || whole(r[key], min, max);
-  return mode === 'hourly'
-    ? whole(r.amount, 0, 10000) && whole(r.per_minutes, 1, 1440) &&
-      optional('daily_cap', 0, 10000)
-    : mode === 'per_visit'
-    ? whole(r.amount, 0, 10000) && optional('max_minutes', 1, 1440)
-    : mode === 'daily'
-    ? whole(r.amount, 0, 10000)
-    : true;
-}
 // Parking conditions (docs/designs/2026-10-26-parking-conditions-and-fees.md
 // §1.2, §4): the rules come from _shared/parking_contract.json, which
 // lib/models/parking_condition.dart mirrors and tool/gen_contract_sql.py turns
@@ -79,11 +57,6 @@ const cond = contract.condition;
 const isObject = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === 'object' && !Array.isArray(v);
 const has = (o: Record<string, unknown>, k: string) => Object.hasOwn(o, k);
-// A non-empty list of distinct strings drawn from `values`.
-const subset = (v: unknown, values: string[]) =>
-  Array.isArray(v) && v.length > 0 &&
-  v.every((x) => typeof x === 'string' && values.includes(x)) &&
-  new Set(v).size === v.length;
 const realDate = (v: unknown) => {
   if (typeof v !== 'string' || !new RegExp(contract.date.pattern).test(v)) {
     return false;
@@ -91,21 +64,6 @@ const realDate = (v: unknown) => {
   const d = new Date(`${v}T00:00:00Z`);
   return !Number.isNaN(d.getTime()) && d.toISOString().startsWith(v);
 };
-/**
- * `days`, `from` and `to` of a schedule slot or a fee period; leaving out
- * both `from` and `to` means all day.
- */
-export function validSlotTimes(slot: Record<string, unknown>): boolean {
-  const time = new RegExp(contract.time.pattern);
-  const days = slot.days;
-  const validDays = typeof days === 'string'
-    ? contract.time.days.includes(days)
-    : subset(days, contract.time.weekdays);
-  if (!contract.time.optional_pair.some((k) => has(slot, k))) return validDays;
-  return validDays &&
-    typeof slot.from === 'string' && typeof slot.to === 'string' &&
-    time.test(slot.from) && time.test(slot.to) && slot.from !== slot.to;
-}
 const inList = (list: string[]) => (v: unknown) =>
   typeof v === 'string' && list.includes(v);
 /**
@@ -312,14 +270,6 @@ export function validZones(v: unknown): boolean {
       zoneConditionConsistent(zone);
   });
 }
-/** A rate per vehicle; a missing vehicle is unconfirmed. */
-export function validFee(v: unknown): boolean {
-  if (!v || typeof v !== 'object' || Array.isArray(v)) return false;
-  const f = v as Record<string, unknown>;
-  return Object.keys(f).every((k) => k === 'scooter' || k === 'heavy') &&
-    (!('scooter' in f) || validRate(f.scooter, false)) &&
-    (!('heavy' in f) || validRate(f.heavy, true));
-}
 // Mirrors the columns admin_resolve_report may patch, plus how riders ask to
 // take a spot down: status for community spots, hidden for official ones.
 const proposedChecks: Record<string, (v: unknown) => boolean> = {
@@ -329,7 +279,8 @@ const proposedChecks: Record<string, (v: unknown) => boolean> = {
   city: text(30, 1),
   district: text(30),
   space_type: (v) => typeof v === 'string' && spaceTypes.includes(v),
-  fee_note: text(200),
+  // Free text up to 200, or the proposed fee's own text (checked below).
+  fee_note: (v) => typeof v === 'string',
   note: text(500),
   scooter_allowed: flag,
   heavy_allowed: flag,
@@ -400,6 +351,9 @@ export function validate(body: Record<string, unknown>): string | null {
         (key === 'hidden' && !official) || !check(value)
       ) return 'invalid proposed';
     }
+    if ('fee_note' in p && !validFeeNote(p.fee_note, p.fee)) {
+      return 'invalid proposed';
+    }
     if (
       ('lat' in p &&
         (typeof p.lat !== 'number' || p.lat < 20 || p.lat > 27)) ||
@@ -429,11 +383,16 @@ export function validate(body: Record<string, unknown>): string | null {
       typeof s.name !== 'string' || s.name.trim().length < 1 ||
       s.name.length > 100
     ) return 'invalid name';
+    // A fee note longer than free text must be the new spot's fee's text.
+    if (
+      s.fee_note !== undefined &&
+      !(body.action === 'create'
+        ? validFeeNote(s.fee_note, s.fee)
+        : typeof s.fee_note === 'string' &&
+          s.fee_note.length <= freeFeeNoteMaxLength)
+    ) return 'invalid fee_note';
     for (
-      const [key, max] of [['fee_note', 200], ['note', 500], [
-        'district',
-        30,
-      ]] as const
+      const [key, max] of [['note', 500], ['district', 30]] as const
     ) {
       if (
         s[key] !== undefined &&

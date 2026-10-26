@@ -9,14 +9,15 @@ void main() {
   /// for the latest fee.
   Future<(GlobalKey<FormState>, Fee Function())> host(
     WidgetTester tester,
-    double width,
-  ) async {
+    double width, {
+    Fee initial = const Fee(),
+  }) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = Size(width, 1400);
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final form = GlobalKey<FormState>();
-    var fee = const Fee();
+    var fee = initial;
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -64,7 +65,10 @@ void main() {
       );
       await pick(tester, 'fee-mode-heavy', '比照汽車費率');
       await tester.pumpAndSettle();
-      expect(find.text('顯示為：每小時 20 元，當日上限 100 元（大型重機比照汽車費率）'), findsOneWidget);
+      expect(
+        find.text('顯示為：機車每小時 20 元，當日上限 100 元（上限計算方式未確認）；大型重機費率未提供'),
+        findsOneWidget,
+      );
       expect(form.currentState!.validate(), isTrue);
       expect(fee().toJson(), {
         'scooter': {
@@ -111,5 +115,36 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('比照汽車費率'), findsWidgets);
     expect(find.text('比照機車費率'), findsWidgets);
+  });
+
+  testWidgets('改金額時保留編輯器還沒有欄位的設定與汽車費率', (tester) async {
+    final initial = Fee.fromJson({
+      'heavy': {
+        'mode': 'per_visit',
+        'amount': 40,
+        'renew': 'midnight',
+        'extension': {'amount': 40, 'max_times': 1},
+      },
+      'car': {'mode': 'hourly', 'amount': 40, 'per_minutes': 60},
+    });
+    final (_, fee) = await host(tester, 390, initial: initial);
+    await tester.enterText(
+      find.descendant(
+        of: find.byKey(const ValueKey('fee-heavy')),
+        matching: find.widgetWithText(TextFormField, '每次金額'),
+      ),
+      '50',
+    );
+    await tester.pumpAndSettle();
+    expect(fee().heavy!.toJson(), {
+      'mode': 'per_visit',
+      'amount': 50,
+      'renew': 'midnight',
+      'extension': {'amount': 40, 'max_times': 1},
+    });
+    expect(fee().car, initial.car);
+    // Another mode starts from its own fields only.
+    await pick(tester, 'fee-mode-heavy', '每日');
+    expect(fee().heavy!.renew, isNull);
   });
 }

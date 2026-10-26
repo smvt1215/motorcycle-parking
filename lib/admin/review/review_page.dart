@@ -1247,7 +1247,10 @@ class _FieldEditor extends StatelessWidget {
   Widget build(BuildContext context) => switch (field.input) {
     FieldInput.text => TextFormField(
       initialValue: value as String? ?? '',
-      maxLength: field.maxLength,
+      // A fee's own sentence may already run past 200 (design §2.5).
+      maxLength: (value as String? ?? '').length > (field.maxLength ?? 0)
+          ? null
+          : field.maxLength,
       maxLines: field.key == 'name' ? 1 : null,
       decoration: _decoration(context),
       onChanged: onChanged,
