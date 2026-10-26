@@ -123,29 +123,37 @@ FeeNow feeNowOf(Fee fee, VehicleType vehicle, DateTime now) {
     );
   }
   final time = current.from == null ? '全天' : '${current.from}–${current.to}';
-  // The next period starts when this one ends, on the day it ends: a
-  // period across midnight that started today ends tomorrow (Codex P2).
+  // The next change: where this period ends, on the day it ends; or, for
+  // a period across midnight entered before midnight, 00:00 when the new
+  // day's periods differ (days are read by the current weekday, decision
+  // 26), whichever comes first (Codex P2).
+  final periods = rate.periods ?? const <FeePeriod>[];
   final end = _minutes(current.to);
   final from = _minutes(current.from);
   final tomorrow =
       from != null && end != null && from > end && at.minute >= from;
-  final endDay = tomorrow ? (at.day == 64 ? 1 : at.day << 1) : at.day;
-  final next = end == null
-      ? null
-      : (rate.periods ?? const <FeePeriod>[])
-            .where(
-              (p) =>
-                  !(identical(p, current) && !tomorrow) &&
-                  FeeWords.dayMask(p.days) & endDay != 0 &&
-                  _covers(p, end),
-            )
-            .firstOrNull;
+  final nextDay = at.day == 64 ? 1 : at.day << 1;
+  FeePeriod? on(int day, int minute) => periods
+      .where((p) => FeeWords.dayMask(p.days) & day != 0 && _covers(p, minute))
+      .firstOrNull;
+  String? nextAt;
+  FeePeriod? next;
+  if (tomorrow) {
+    final midnight = on(nextDay, 0);
+    if (midnight == null || midnight.rate != current.rate) {
+      (nextAt, next) = ('00:00', midnight);
+    } else {
+      (nextAt, next) = (current.to, on(nextDay, end));
+    }
+  } else if (end != null) {
+    (nextAt, next) = (current.to, on(at.day, end));
+  }
   final nextLines = next == null ? null : feeRateLines(next.rate, pct);
   final free = current.rate.mode == FeeMode.free;
   final caption = [
     if (!free && lines.length > 1) _short(lines[1].text),
     if (nextLines != null && nextLines.first.tone != FeeTone.unconfirmed)
-      '${current.to} 起${next!.rate.mode == FeeMode.free ? '不收費' : nextLines.first.text}',
+      '$nextAt 起${next!.rate.mode == FeeMode.free ? '不收費' : nextLines.first.text}',
   ].join('・');
   return FeeNow(
     label: '$label・$time',

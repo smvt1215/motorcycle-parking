@@ -263,6 +263,44 @@ void main() {
       );
     });
 
+    test('跨午夜時段在午夜換成另一組星期的費率時，預告 00:00（Codex 審查）', () {
+      final fee = Fee.fromJson({
+        'scooter': {
+          'mode': 'by_time',
+          'periods': [
+            {
+              'days': 'weekday',
+              'from': '20:00',
+              'to': '08:00',
+              'rate': {'mode': 'free'},
+            },
+            {
+              'days': 'holiday',
+              'from': '20:00',
+              'to': '08:00',
+              'rate': {'mode': 'hourly', 'amount': 20, 'per_minutes': 60},
+            },
+            {
+              'days': 'all',
+              'from': '08:00',
+              'to': '20:00',
+              'rate': {'mode': 'hourly', 'amount': 30, 'per_minutes': 60},
+            },
+          ],
+        },
+      });
+      // Friday night → Saturday 00:00 charges 20 an hour.
+      expect(
+        feeNowOf(fee, VehicleType.scooter, taipei(21, 10, day: 30)).caption,
+        '00:00 起每小時 20 元',
+      );
+      // Monday night: Tuesday's night period is the same, so 08:00.
+      expect(
+        feeNowOf(fee, VehicleType.scooter, taipei(21, 10, day: 26)).caption,
+        '08:00 起每小時 30 元',
+      );
+    });
+
     test('平日與假日依當天星期幾', () {
       final fee = Fee.fromJson({
         'scooter': {
