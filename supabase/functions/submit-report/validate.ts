@@ -440,6 +440,10 @@ export function validate(body: Record<string, unknown>): string | null {
         (typeof s[key] !== 'string' || s[key].length > max)
       ) return `invalid ${key}`;
     }
+    // The source link is an admin's (imports, official spots), never a
+    // rider's; the table takes only https (202610270040), and the app opens
+    // nothing else. apply_report would drop it anyway: refuse it outright.
+    if ('source_url' in s) return 'invalid source_url';
     if (body.action === 'create') {
       if (
         typeof s.lat !== 'number' || !Number.isFinite(s.lat) || s.lat < 20 ||

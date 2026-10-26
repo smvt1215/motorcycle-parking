@@ -470,6 +470,38 @@ void main() {
       expect(find.byKey(const ValueKey('spot-$communityId')), findsOneWidget);
     });
 
+    testWidgets('雙欄窄版表單旁切換清單時，相機重新偏移讓標記不被清單蓋住', (tester) async {
+      await show(tester, size: const Size(760, 900));
+      await tester.tap(find.byKey(const ValueKey('spot-$communityId')));
+      await tester.pumpAndSettle();
+      // Form 425.6 px (56 % of 760) on the right, no list: the spot sits in
+      // the middle of the map left of the form.
+      const formWidth = 760 * .56;
+      final opened = mapView!.focus!;
+      expect(opened.zoom, 18);
+      expect(opened.leftOfCenter, closeTo(formWidth / 2, 1e-9));
+      // The 300 px list comes back beside the form: the camera pans the
+      // spot into the gap between the panels, keeping the zoom.
+      await tester.tap(find.byKey(const ValueKey('list-toggle')));
+      await tester.pumpAndSettle();
+      final beside = mapView!.focus!;
+      expect(beside.seq, greaterThan(opened.seq));
+      expect(beside.zoom, isNull);
+      expect((beside.lat, beside.lng), (opened.lat, opened.lng));
+      expect(beside.leftOfCenter, closeTo((formWidth - 300) / 2, 1e-9));
+      final spotX = 760 / 2 - beside.leftOfCenter;
+      expect(spotX, greaterThan(300));
+      expect(spotX, lessThan(760 - formWidth));
+      // Stepping aside again pans it back to the middle of the open map.
+      await tester.tap(find.byKey(const ValueKey('list-toggle')));
+      await tester.pumpAndSettle();
+      final alone = mapView!.focus!;
+      expect(alone.seq, greaterThan(beside.seq));
+      expect(alone.zoom, isNull);
+      expect(alone.leftOfCenter, closeTo(formWidth / 2, 1e-9));
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('手機版從地圖點標記進表單，返回地圖', (tester) async {
       await show(tester, size: const Size(390, 844));
       await tester.tap(find.byKey(const ValueKey('marker-$communityId')));
