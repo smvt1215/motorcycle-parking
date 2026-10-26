@@ -277,7 +277,7 @@ A 類（法規）與 B 類（資料穩定性）依 §0 第 3 點只能由管理�
 
 2. **法規端：規則變更預審。** 管理員在 Admin Web P5 規則頁貼入公告（網址、文字或 PDF），引擎產出：
    - **結構化草稿**：`city`、`vehicle`、`allowed_space_types`、`conditional_space_types`、`districts`／`district_space_types`、`restriction`、`can_use_two_spaces`、`fee_note`、`effective_date`、`source_url`、`exceptions` 文字；`version` 由伺服器遞增（ADMIN_WEB.md P5），不在草稿內。抽取以 LLM 輔助（2026-10-26 決定，§10 第 11 點），但輸出只是草稿，每個欄位旁須標出抽取依據的原文片段，管理員逐欄確認後才能發布。
-   - **一致性檢查**：資料庫約束（例如 `city_rules_restriction_required`）、與現行版本的欄位 diff、生效日不早於現行版本（同生效日的更正性修訂需填更正理由）、`assets/rules/parking_rules.json` 是否需同步（P5 規劃中的 `tool/export_rules.py`）。`city_rules` 在 `main` 上以 `(city, vehicle)` 為主鍵、版本原地覆寫、沒有歷史表；採 `city_rules_history` 歷史表（§10 第 16 點，2026-10-26 決定），已由 Admin Web P5（#102，尚未合併）實作，否則 `rule_evidence.rule_version` 事後無法還原當時規則。
+   - **一致性檢查**：資料庫約束（例如 `city_rules_restriction_required`）、與現行版本的欄位 diff、生效日不早於現行版本（同生效日的更正性修訂需填更正理由）、`assets/rules/parking_rules.json` 是否需同步（P5 規劃中的 `tool/export_rules.py`）。`city_rules` 目前以 `(city, vehicle)` 為主鍵、版本原地覆寫、沒有歷史表；引擎第一個 migration 需加 `city_rules_history`（§10 第 16 點），否則 `rule_evidence.rule_version` 事後無法還原當時規則。
    - **影響分析**：套用草稿後，該縣市有多少點位的 `EligibilityStatus` 會改變，按型式與車種列出 before／after 與數量；哪些官方點 `vehicle_source='official'` 的值與新規則衝突；哪些既有 A 類案件會因此自動結案。
    - **產出**：規則新版本的 SQL 草稿與 JSON 同步 diff，管理員確認後發布（Admin Web P5 規則頁與伺服器端版本遞增是 §5.7 面向 2 的前置依賴，目前尚未實作）；發布時引擎回頭結掉被新規則解答的 A 類案件，並對早於公告生效日的矛盾觀察依 §5.3「被官方證實」一列加點。
 
