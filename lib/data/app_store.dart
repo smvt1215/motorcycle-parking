@@ -93,6 +93,10 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   /// Datasets to reload once [_updateTimer] fires.
   final _staleSets = <DataSet>{};
   Timer? _updateTimer;
+
+  /// True once a viewport load has returned, so a late first version read
+  /// (see [_noteVersion]) knows the data may predate it.
+  bool _loadedOnce = false;
   late VehicleType vehicle;
   ParkedRecord? parked;
   List<ParkingSpot> spots = [], favorites = [];
@@ -195,8 +199,9 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     final settled = location.timeout(locationWait, onTimeout: () => false);
     // Baseline for the later checks, read before the data so it can only be
     // older than what loads: a write between the two reads then reloads
-    // once instead of being missed.
-    unawaited(checkForUpdates());
+    // once instead of being missed. The location wait, already armed,
+    // usually covers this round trip.
+    await checkForUpdates();
     try {
       await init();
       await settled;
@@ -249,15 +254,17 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   /// Records [version]; reloads its dataset when it is newer than the one
-  /// loaded. A streamed version ([changed]) is a change by definition, while
-  /// a fetched one only counts against a known baseline. Bursts (an import,
-  /// a review session) collapse into one reload.
+  /// loaded. A streamed version ([changed]) is a change by definition. A
+  /// fetched one counts against a known baseline; with none, it becomes the
+  /// baseline when nothing has loaded yet, and reloads once when data loaded
+  /// without one (an offline launch that came back online). Bursts (an
+  /// import, a review session) collapse into one reload.
   void _noteVersion(DataVersion version, {required bool changed}) {
     if (_disposed) return;
     final known = _versions[version.set];
     if (known != null && known >= version.version) return;
     _versions[version.set] = version.version;
-    if (known == null && !changed) return;
+    if (known == null && !changed && !_loadedOnce) return;
     _staleSets.add(version.set);
     _updateTimer?.cancel();
     _updateTimer = Timer(
@@ -319,6 +326,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
       final result = await parking.inViewport(bounds);
       if (_disposed || request != _request) return;
       spots = result.spots;
+      _loadedOnce = true;
       error = result.warning ?? rulesWarning ?? favoritesWarning;
       truncated = result.truncated;
     } catch (_) {

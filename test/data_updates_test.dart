@@ -88,8 +88,13 @@ void main() {
       set: DataSet.rules,
       version: 2,
     ));
+    expect(dataVersionFromRow({'key': 'spots', 'version': '12'}), (
+      set: DataSet.spots,
+      version: 12,
+    ));
     expect(dataVersionFromRow({'key': 'photos', 'version': 1}), isNull);
     expect(dataVersionFromRow({'key': 'spots'}), isNull);
+    expect(dataVersionFromRow({'key': 'spots', 'version': 'x'}), isNull);
   });
 
   test('沒有後端時不訂閱也沒有版本可讀', () async {
@@ -169,6 +174,20 @@ void main() {
     updates.join();
     await settle();
     expect(parking.loads, hasLength(1));
+  });
+
+  test('啟動時讀不到版本、資料已載入後才首次取得版本，重新載入一次', () async {
+    // Offline launch: no baseline. The rider retries and data loads.
+    await store.refresh();
+    expect(parking.loads, hasLength(1));
+    updates.remote = [(set: DataSet.spots, version: 3)];
+    updates.join();
+    await settle();
+    expect(parking.loads, hasLength(2));
+    // Now a baseline exists; the same version does nothing more.
+    updates.join();
+    await settle();
+    expect(parking.loads, hasLength(2));
   });
 
   test('Realtime 已送達的版本，回到前景時不再重載', () async {
