@@ -518,7 +518,7 @@ SQL 不能在執行時讀 JSON，所以由 `tool/gen_contract_sql.py` 從契約�
 | 舊版擁有者修改（`update`） | `apply_report` 只更新名稱、`fee_note`、備註，不碰 `condition`／`fee` | 重新定義時維持只更新這三欄 |
 | 舊版送費率修改建議 | 舊版把它讀不懂的車種當成未確認，送出的 `fee` 會少掉 `car` 或少掉被它判成未確認的 `heavy` | **費率建議改為逐車種合併**：`proposed.fee` 沒有的車種保留現值，要清除須明確送 `null`（§7 第 3 項，已決定）。`validFee` 只在 `proposed.fee` 內接受車種值為 `null`，點位與分區的 `fee` 欄位仍不接受；審核頁差異表照合併後的結果顯示 |
 | 舊版送 `fee_note` 與 `fee` | #96 要求 `fee_note = fee_note_of(fee)`，新版句子不同時會被擋 | 審核頁採納費率時一律用新版 `feeNoteOf` 重算 `fee_note`，不採用建議中的文字 |
-| 匯入覆寫 | `official_sql()` 目前 `on conflict do update set` 全部欄位，含 `parking_zones` | P6 匯入改為只更新官方欄位（研究 §5.6 第 7 點），並逐區保留匯入資料沒有提供的 `condition` |
+| 匯入覆寫 | `official_sql()` 原以 `on conflict do update set` 覆寫全部欄位，含 `parking_zones`（SQL 輸出已於 #117 移除，匯入只經 P6） | P6 匯入改為只更新官方欄位（研究 §5.6 第 7 點），並逐區保留匯入資料沒有提供的 `condition` |
 
 ### 5.5 匯入與資料轉換（銜接 stack B P6）
 

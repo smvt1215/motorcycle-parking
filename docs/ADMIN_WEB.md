@@ -11,7 +11,7 @@
 | 採納建議不會改到點位 | 要另外到 Table Editor 改 `community_spots`／`official_heavy_spots`，再回頭填 `resolved_at`，兩步不在同一個 transaction |
 | 規則改版容易漏 | `city_rules` 要手動調高 `version`、確認 `restriction`，並同步 `assets/rules/parking_rules.json`（P5 起由管理站發布與 `tool/export_rules.py` 處理） |
 | 沒有操作紀錄 | 以 service role 在 Dashboard 操作，不知道誰改了什麼 |
-| 匯入要貼 SQL | `tool/import_mymaps.py` 產出的 `official.sql`／`import.sql` 要在 SQL Editor 執行 |
+| 匯入要貼 SQL | `tool/import_mymaps.py` 產出的 `official.sql`／`import.sql` 要在 SQL Editor 執行（SQL 輸出已於 2026-10-26 停用，#117；工具只產生匯入頁用的 JSON） |
 
 `city_rules` 原有 `app_metadata.role='admin'` 的寫入 policy（`202610110001_init.sql`），管理者角色從這裡延伸；P5 起改為只能經 `admin_upsert_city_rule` 寫入。
 
@@ -247,7 +247,8 @@ python3 tool/export_rules.py --check || python3 tool/export_rules.py
 
 - 路徑 `/imports`（匯入檔案）與 `/imports/fees`（費率轉換）；程式位於 `lib/admin/import/`，migration `202610260250_admin_import.sql`。
 - **匯入**：選擇 `tool/import_mymaps.py` 產生的 `spots.json`（官方點 `data/imports/official/spots.json` 或社群點 `data/imports/google-mymaps/spots.json`），檔案只在瀏覽器讀取，按下「匯入」才寫入。網站先以費率解析（見下）為能確定的點位補上 `fee`，再分批（每批 500 筆）呼叫 `admin_import_preview` 試算，每筆標示：新增、更新、有管理員修改、不變、已存在（社群點）、無法匯入（id、來源、名稱、座標、https 來源或費率格式不符，附原因）。
-  - 官方點與 `official.sql` 相同：以 id 更新，`hidden` 與既有點的 `effective_date` 不會改變；新官方點使用頁面上的生效日期。社群點與 `import.sql` 相同：只新增不存在的點（`source='import'`、`status='pending'`，擁有者沿用既有匯入點的帳號），已存在的點交給騎士回報與投票，不再更新。
+  - 官方點以 id 更新，`hidden` 與既有點的 `effective_date` 不會改變；新官方點使用頁面上的生效日期。社群點只新增不存在的點（`source='import'`、`status='pending'`，擁有者沿用既有匯入點的帳號），已存在的點交給騎士回報與投票，不再更新。
+  - 匯入頁是寫入資料庫的唯一途徑：`tool/import_mymaps.py` 原本的 `official.sql`／`import.sql` 輸出（`--sql-owner`）已於 2026-10-26 停用（#117），因為 `official.sql` 會覆寫除 `hidden`、`effective_date` 外的全部官方欄位，與本頁保留管理員修改的做法衝突。工具改以匯入頁的檢查（`admin_import_plan` 的 id、來源、名稱、座標、縣市、https 來源與欄位型別規則）驗證產出的 JSON，有任何一筆會被匯入頁拒絕時結束碼為 1 並列出原因。
   - **不默默覆寫管理員的修改**：某欄位最近一次改變它的稽核紀錄是管理員寫入（點位頁修改、採納回報、管理員新增、改為官方點、費率轉換），且目前值仍是那次寫入的值時，該欄位視為管理員修改。匯入值不同時列為「有管理員修改」，差異表顯示修改日期與來源，預設「保留管理員修改」，逐欄切換為「以匯入值覆寫」才會寫入；其餘欄位照常更新。匯入寫入記為 `import_spot`，之後的匯入不把匯入值當成管理員修改。
   - 檔案沒有 `fee` 且收費資訊與資料庫相同時，保留資料庫已有的結構化費率。
   - 套用時以試算時的 `updated_at` 檢查，試算後被改過的點位略過並提示重新試算；每筆各自寫入，被資料表約束拒絕的點位列出原因，不影響其他點位。結果顯示新增、更新與未寫入的筆數及原因，並重新試算。
