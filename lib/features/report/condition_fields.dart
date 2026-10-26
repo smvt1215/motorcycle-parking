@@ -83,7 +83,12 @@ class ConditionDraft {
     }
     slots.addAll(c.schedule.map(SlotDraft.of));
     loadedLimits = c.limits;
+    loaded = c;
   }
+
+  /// The stored condition: its bay use stays where the form shows no
+  /// 普大共用 choice for the kind.
+  ParkingCondition? loaded;
 
   /// The stored limits, kept as they are while the kind does: the form
   /// edits only a 限時 bay's minutes, never drops one it cannot show.
@@ -112,10 +117,15 @@ class ConditionDraft {
     if (base == null) return null;
     final share = shared && _shareable.contains(type);
     final minutes = int.tryParse(maxMinutes.text.trim());
+    final kept = type == loadedType && !_shareable.contains(type)
+        ? loaded
+        : null;
     return ParkingCondition(
       bay: base.bay,
-      use: share ? BayUse.share : base.use,
-      share: share ? ShareKind.scooterHeavy : base.share,
+      use: kept != null ? kept.use : (share ? BayUse.share : base.use),
+      share: kept != null
+          ? kept.share
+          : (share ? ShareKind.scooterHeavy : base.share),
       charge: _chargeByType.contains(type) ? base.charge : charge,
       limits: [
         for (final l in type == loadedType ? loadedLimits : base.limits)

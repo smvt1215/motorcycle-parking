@@ -58,17 +58,22 @@ void main() {
     expect(conditionSummary(sent), '收費、共用時段 週一、週三 20:00–隔日 07:00 普通機車');
   });
 
-  test('limits the form cannot show stay while the kind does', () {
-    final stored = ParkingCondition.fromJson({
-      'bay': 'motorcycle',
-      'limits': [
-        {'kind': 'time_limit', 'max_minutes': 20},
-        {'kind': 'ev_only'},
-      ],
-    });
-    final draft = ConditionDraft.of(stored, SpaceType.evMotorcycle);
-    expect(draft.conditionFor(SpaceType.evMotorcycle), stored);
-  });
+  test(
+    'limits and a 普大共用 use the form cannot show stay while the kind does',
+    () {
+      final stored = ParkingCondition.fromJson({
+        'bay': 'motorcycle',
+        'limits': [
+          {'kind': 'time_limit', 'max_minutes': 20},
+          {'kind': 'ev_only'},
+        ],
+        'use': 'share',
+        'share': 'scooter_heavy',
+      });
+      final draft = ConditionDraft.of(stored, SpaceType.evMotorcycle);
+      expect(draft.conditionFor(SpaceType.evMotorcycle), stored);
+    },
+  );
 
   test('periods of another kind stay while the kind does', () {
     final stored = ParkingCondition.fromJson({
