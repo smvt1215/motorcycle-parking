@@ -146,8 +146,9 @@ void main() {
     List<AvailabilityCapsule> capsules(
       ParkingSpot spot,
       List<AvailabilitySnapshot> list,
-      VehicleType vehicle,
-    ) => markerCapsules(spot, counts(list), vehicle, now);
+      VehicleType vehicle, {
+      EligibilityStatus eligibility = EligibilityStatus.allowed,
+    }) => markerCapsules(spot, counts(list), vehicle, eligibility, now);
 
     test('新鮮為墨色「剩 N」，0 為「已滿」，延遲為描邊並保留數字', () {
       final fresh = capsules(lot, [
@@ -158,7 +159,7 @@ void main() {
       final full = capsules(lot, [
         snap(AvailabilityVehicle.scooter, available: 0),
       ], VehicleType.scooter).single;
-      expect(full.text, '已滿');
+      expect((full.text, full.style), ('已滿', CapsuleStyle.full));
       final delayed = capsules(lot, [
         snap(AvailabilityVehicle.scooter, age: const Duration(minutes: 14)),
       ], VehicleType.scooter).single;
@@ -167,7 +168,32 @@ void main() {
       final suspended = capsules(lot, [
         snap(AvailabilityVehicle.scooter, suspended: true),
       ], VehicleType.scooter).single;
-      expect(suspended.text, '暫停');
+      expect((suspended.text, suspended.style), ('暫停', CapsuleStyle.suspended));
+    });
+
+    test('目前車種不可停時一律不顯示膠囊，待確認照常顯示', () {
+      final list = [
+        snap(AvailabilityVehicle.heavy, total: 40, available: 20),
+        snap(AvailabilityVehicle.car, total: 100, available: 30),
+      ];
+      expect(
+        capsules(
+          heavyCarLot,
+          list,
+          VehicleType.heavy,
+          eligibility: EligibilityStatus.notAllowed,
+        ),
+        isEmpty,
+      );
+      expect(
+        capsules(
+          heavyCarLot,
+          list,
+          VehicleType.heavy,
+          eligibility: EligibilityStatus.unverified,
+        ),
+        hasLength(2),
+      );
     });
 
     test('過期、無資料、異常都不顯示膠囊', () {
@@ -391,6 +417,12 @@ void main() {
     test('有即時資訊包含已滿；車種不符與汽車格不算重機有位', () {
       expect(
         reason(AvailabilityFilter.live, [
+          snap(AvailabilityVehicle.scooter),
+        ], eligibility: EligibilityStatus.notAllowed),
+        AvailabilityExclusion.notAllowed,
+      );
+      expect(
+        reason(AvailabilityFilter.live, [
           snap(AvailabilityVehicle.scooter, available: 0),
         ]),
         isNull,
@@ -436,7 +468,7 @@ void main() {
       expect(f.semantics, contains('剩餘 12 格'));
     });
 
-    test('已滿寫已滿；不可停仍照實顯示數字', () {
+    test('已滿寫已滿；不可停不顯示空位', () {
       expect(
         fact([snap(AvailabilityVehicle.scooter, available: 0)]).headline,
         '剩餘，已滿',
@@ -446,8 +478,11 @@ void main() {
         vehicle: VehicleType.heavy,
         eligibility: EligibilityStatus.notAllowed,
       );
-      expect(denied.count, 20);
-      expect(denied.caption, contains('大型重機不可停放此場站'));
+      expect(
+        (denied.count, denied.headline, denied.caption),
+        (null, '不顯示空位', '大型重機不可停放此場站'),
+      );
+      expect(denied.notes, isEmpty);
     });
 
     test('延遲強制註記分鐘數與最後更新時間', () {

@@ -12,7 +12,12 @@ const capsulePaper = Color(0xfff9fbfc);
   CapsuleStyle.live => (10, 9),
   CapsuleStyle.delayed => (8, 9),
   CapsuleStyle.car => (8, 9),
+  CapsuleStyle.full => (10, 9),
+  CapsuleStyle.suspended => (8, 9),
 };
+
+/// Light grey behind 「已滿」 and deep purple behind 「暫停」 (canvas v30).
+const capsuleFull = Color(0xffc3ccd0), capsuleSuspended = Color(0xff5e4b75);
 
 /// The app font, named here so the measured width in [capsuleWidth] and
 /// the drawn pill use the same face.
@@ -36,6 +41,8 @@ double capsuleWidth(AvailabilityCapsule capsule, {double scale = 1}) {
     CapsuleStyle.live => 0.0,
     CapsuleStyle.delayed => 12 + 4,
     CapsuleStyle.car => 12 + 3 + (capsule.delayed ? 12 + 3 : 0),
+    CapsuleStyle.full => 0.0,
+    CapsuleStyle.suspended => 12 + 3,
   };
   final width = 4 + left + right + icons + painter.width;
   painter.dispose();
@@ -70,14 +77,21 @@ class AvailabilityCapsuleView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final style = capsule.style;
-    final filled = style == CapsuleStyle.live;
-    final ink = filled ? Colors.white : badgeInk;
+    final (fill, ink) = switch (style) {
+      CapsuleStyle.live => (badgeInk, Colors.white),
+      CapsuleStyle.full => (capsuleFull, badgeInk),
+      CapsuleStyle.suspended => (capsuleSuspended, Colors.white),
+      CapsuleStyle.delayed || CapsuleStyle.car => (capsulePaper, badgeInk),
+    };
+    // Solid pills cast .27, the outlined paper ones .2.
+    final solid = fill != capsulePaper;
     final delayed = style == CapsuleStyle.delayed;
     final (left, right) = _padding(style);
     final outline = switch (style) {
       CapsuleStyle.live => 0.0,
       CapsuleStyle.delayed => 2.0,
       CapsuleStyle.car => 1.25,
+      CapsuleStyle.full || CapsuleStyle.suspended => 0.0,
     };
     return Semantics(
       label: capsule.semantics,
@@ -90,8 +104,7 @@ class AvailabilityCapsuleView extends StatelessWidget {
           boxShadow: [
             BoxShadow(
               blurRadius: 6,
-              // .2 for the paper pills, .27 for the ink one.
-              color: filled ? const Color(0x44000000) : const Color(0x33000000),
+              color: solid ? const Color(0x44000000) : const Color(0x33000000),
               offset: const Offset(0, 2),
             ),
           ],
@@ -100,7 +113,7 @@ class AvailabilityCapsuleView extends StatelessWidget {
         child: Container(
           padding: EdgeInsets.fromLTRB(left * scale, 0, right * scale, 0),
           decoration: BoxDecoration(
-            color: filled ? badgeInk : capsulePaper,
+            color: fill,
             borderRadius: BorderRadius.circular(10 * scale),
           ),
           foregroundDecoration: outline == 0
@@ -112,6 +125,10 @@ class AvailabilityCapsuleView extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (style == CapsuleStyle.suspended) ...[
+                CapsulePause(size: 12 * scale, color: ink),
+                SizedBox(width: 3 * scale),
+              ],
               if (style == CapsuleStyle.car) ...[
                 CapsuleCar(size: 12 * scale, color: ink),
                 SizedBox(width: 3 * scale),
@@ -134,6 +151,42 @@ class AvailabilityCapsuleView extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The design's pause sign: two bars (x 6 and 14, 4 wide, 14 high, radius
+/// 1, in a 24 box), for a closed lot.
+class CapsulePause extends StatelessWidget {
+  const CapsulePause({super.key, required this.size, required this.color});
+  final double size;
+  final Color color;
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+    key: const ValueKey('capsule-pause'),
+    size: Size.square(size),
+    painter: _PausePainter(color),
+  );
+}
+
+class _PausePainter extends CustomPainter {
+  const _PausePainter(this.color);
+  final Color color;
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.scale(size.width / 24);
+    final paint = Paint()..color = color;
+    for (final x in [6.0, 14.0]) {
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(x, 5, 4, 14),
+          const Radius.circular(1),
+        ),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_PausePainter old) => old.color != color;
 }
 
 /// The design's line clock (a circle of radius 9 and the hands

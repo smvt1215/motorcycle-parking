@@ -4,8 +4,8 @@ import 'eligibility.dart';
 
 /// How a count reads on the map and in the details. Whether a rider may
 /// park and whether a space is free are separate: nothing here looks at
-/// the eligibility colour, and nothing in eligibility looks at a count
-/// (designs/2026-10-26-realtime-availability-ui.md).
+/// the eligibility colour, and nothing in eligibility looks at a count;
+/// only a lot closed to the rider shows no count at all (designs/2026-10-26-realtime-availability-ui.md).
 
 AvailabilityVehicle availabilityVehicle(VehicleType vehicle) =>
     vehicle == VehicleType.scooter
@@ -34,9 +34,16 @@ enum CapsuleStyle {
 
   /// Paper with a thin ink outline and a car: car bays heavy bikes may use.
   car,
+
+  /// Light grey with ink text: an official count of zero, apart from the
+  /// ink pill of a lot with space.
+  full,
+
+  /// Deep purple with a pause sign: the source says the lot is closed.
+  suspended,
 }
 
-/// One pill beside a marker.
+/// One pill above a marker.
 class AvailabilityCapsule {
   const AvailabilityCapsule({
     required this.text,
@@ -77,9 +84,13 @@ List<AvailabilityCapsule> markerCapsules(
   ParkingSpot spot,
   SpotAvailability availability,
   VehicleType vehicle,
+  EligibilityStatus eligibility,
   DateTime now,
 ) {
-  if (!spot.isFacility) return const [];
+  // A count where the rider may not park only invites them in (canvas v30).
+  if (!spot.isFacility || eligibility == EligibilityStatus.notAllowed) {
+    return const [];
+  }
   final own = availability.of(availabilityVehicle(vehicle));
   final capsules = <AvailabilityCapsule>[
     if (own != null)
@@ -87,7 +98,7 @@ List<AvailabilityCapsule> markerCapsules(
         AvailabilityStatus.fresh => [
           AvailabilityCapsule(
             text: _count(own.available!),
-            style: CapsuleStyle.live,
+            style: own.available == 0 ? CapsuleStyle.full : CapsuleStyle.live,
             semantics: own.available == 0
                 ? '官方即時：已滿'
                 : '官方即時：剩 ${own.available} 格',
@@ -105,7 +116,7 @@ List<AvailabilityCapsule> markerCapsules(
         AvailabilityStatus.suspended => [
           const AvailabilityCapsule(
             text: '暫停',
-            style: CapsuleStyle.live,
+            style: CapsuleStyle.suspended,
             semantics: '暫停營運',
           ),
         ],
@@ -220,6 +231,15 @@ AvailabilityFact availabilityFact(
   DateTime now,
 ) {
   final title = vehicle == VehicleType.scooter ? '機車車位' : '大型重機車位';
+  // No count where the rider may not park, so it never reads as an
+  // invitation (canvas v30).
+  if (eligibility == EligibilityStatus.notAllowed) {
+    return AvailabilityFact(
+      title: title,
+      headline: '不顯示空位',
+      caption: '${vehicle.label}不可停放此場站',
+    );
+  }
   final own = availability.of(availabilityVehicle(vehicle));
   final notes = _notes(spot, availability, vehicle, own, now);
   final staticTotal =
@@ -239,11 +259,7 @@ AvailabilityFact availabilityFact(
         count: own.available,
         headline: full ? '剩餘，已滿' : '剩餘',
         capacity: '／ 共 ${own.total} 格',
-        caption: [
-          source,
-          if (eligibility == EligibilityStatus.notAllowed)
-            '${vehicle.label}不可停放此場站',
-        ].join(' ・ '),
+        caption: source,
         notes: notes,
       );
     case AvailabilityStatus.delayed:
@@ -394,13 +410,16 @@ AvailabilityExclusion? availabilityExclusion(
     case AvailabilityStatus.fresh:
       break;
   }
+  // A lot closed to the rider shows no count, so it is not live
+  // information for them either (canvas v30).
+  if (eligibility == EligibilityStatus.notAllowed) {
+    return AvailabilityExclusion.notAllowed;
+  }
   if (filter == AvailabilityFilter.live) return null;
   if (own!.available == 0) return AvailabilityExclusion.full;
-  return switch (eligibility) {
-    EligibilityStatus.allowed || EligibilityStatus.conditional => null,
-    EligibilityStatus.notAllowed => AvailabilityExclusion.notAllowed,
-    EligibilityStatus.unverified => AvailabilityExclusion.unverified,
-  };
+  return eligibility == EligibilityStatus.unverified
+      ? AvailabilityExclusion.unverified
+      : null;
 }
 
 /// One line of the empty-result card.
@@ -418,7 +437,7 @@ String exclusionReason(
         : '資料更新延遲，暫不列為即時資訊',
   AvailabilityExclusion.suspended => '暫停營運',
   AvailabilityExclusion.full => '目前已滿',
-  AvailabilityExclusion.notAllowed => '有位，但${vehicle.label}不可停',
+  AvailabilityExclusion.notAllowed => '${vehicle.label}不可停',
   AvailabilityExclusion.unverified => '有位，但${vehicle.label}是否可停待確認',
 };
 

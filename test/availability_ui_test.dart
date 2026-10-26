@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:motorcycle_parking/app.dart';
 import 'package:motorcycle_parking/data/app_store.dart';
+import 'package:motorcycle_parking/domain/availability_display.dart';
 import 'package:motorcycle_parking/features/map/availability_capsule.dart';
 import 'package:motorcycle_parking/features/map/parking_access_view.dart';
 import 'package:motorcycle_parking/features/map/spot_sheet.dart';
@@ -133,7 +134,7 @@ final heavyCarLot = lotAt(
 void main() {
   group('地圖膠囊', () {
     for (final width in [320.0, 390.0, 700.0, 1280.0]) {
-      testWidgets('寬 $width 依設計稿顯示新鮮、已滿、延遲與不可停的數字', (tester) async {
+      testWidgets('寬 $width 依設計稿顯示新鮮、已滿、延遲；不可停不顯示數字', (tester) async {
         useSize(tester, width);
         await pumpMap(tester, canvasSpots, canvasCounts);
         final shown = width >= 390;
@@ -142,10 +143,18 @@ void main() {
           expect(capsule('剩 2'), findsOneWidget);
           expect(capsule('已滿'), findsOneWidget);
           expect(capsule('剩 7'), findsOneWidget);
-          expect(capsule('剩 20'), findsOneWidget);
+          // Closed to scooters: no count, so it never reads as an invite.
+          expect(capsule('剩 20'), findsNothing);
           // Only the delayed pill has a clock; the -9 lot has no pill.
           expect(find.byType(CapsuleClock), findsOneWidget);
-          expect(find.byType(AvailabilityCapsuleView), findsNWidgets(5));
+          expect(find.byType(AvailabilityCapsuleView), findsNWidgets(4));
+          final full = tester.widget<AvailabilityCapsuleView>(
+            find.ancestor(
+              of: capsule('已滿'),
+              matching: find.byType(AvailabilityCapsuleView),
+            ),
+          );
+          expect(full.capsule.style, CapsuleStyle.full);
           expect(find.bySemanticsLabel(RegExp('官方即時：剩 12 格')), findsOneWidget);
           expect(find.bySemanticsLabel(RegExp('官方即時：已滿')), findsOneWidget);
           expect(
@@ -273,6 +282,31 @@ void main() {
     });
   });
 
+  testWidgets('圖例列出剩餘、延遲、已滿、暫停與沒有膠囊', (tester) async {
+    useSize(tester, 390);
+    await pumpMap(tester, canvasSpots, canvasCounts);
+    await tester.tap(find.byKey(const ValueKey('map-legend-button')));
+    await tester.pumpAndSettle();
+    final legend = find.byKey(const ValueKey('availability-legend'));
+    await tester.scrollUntilVisible(
+      legend,
+      200,
+      scrollable: find.byType(Scrollable).last,
+    );
+    for (final line in [
+      '剩 12：官方即時剩餘',
+      '剩 7：更新延遲，數字可能已變',
+      '已滿：官方資料目前沒有空位',
+      '暫停：場站暫停營運',
+      '沒有膠囊＝空位未知，不是沒位',
+    ]) {
+      expect(find.text(line), findsOneWidget);
+    }
+    expect(find.byType(CapsulePause), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   group('目前有位篩選', () {
     testWidgets('只留新鮮有位且可停的點，其他改成灰點，未知不算已滿', (tester) async {
       useSize(tester, 390);
@@ -307,7 +341,7 @@ void main() {
         expect(find.text('範圍內 4 個點都還在，只是都不符合條件：'), findsOneWidget);
         expect(find.text('場站沒有大型重機的即時資料，空位未知'), findsOneWidget);
         expect(find.text('資料更新延遲，暫不列為有位'), findsOneWidget);
-        expect(find.text('有位，但大型重機不可停'), findsOneWidget);
+        expect(find.text('大型重機不可停'), findsOneWidget);
         expect(find.textContaining('已滿'), findsNothing);
         expect(find.byType(ExcludedSpotDot), findsNWidgets(4));
         final clear = find.text('清除「目前有位」');
@@ -329,12 +363,13 @@ void main() {
         }
         await tester.tap(live);
         await tester.pumpAndSettle();
-        // The closed lot's fresh count is live information; the delayed
-        // and unknown ones stay dots.
-        expect(card, findsNothing);
-        expect(capsule('剩 4'), findsOneWidget);
-        expect(find.byType(ExcludedSpotDot), findsNWidgets(3));
-        await tapFilter(tester);
+        // Closed to heavy bikes is not live information for them either.
+        expect(find.text('這個範圍沒有大型重機的即時資訊'), findsOneWidget);
+        expect(find.byType(ExcludedSpotDot), findsNWidgets(4));
+        await tester.ensureVisible(find.text('清除「有即時資訊」'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('清除「有即時資訊」'));
+        await tester.pumpAndSettle();
         expect(card, findsNothing);
         expect(find.byType(ExcludedSpotDot), findsNothing);
         expect(tester.takeException(), isNull);

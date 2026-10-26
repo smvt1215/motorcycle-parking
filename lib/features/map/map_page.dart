@@ -110,7 +110,11 @@ class _MapPageState extends ConsumerState<MapPage> {
     if (!pending) await _promptLocation(store);
     if (store.introduceLegend && mounted) {
       unawaited(store.markLegendSeen());
-      await showMapLegend(context, store.vehicle);
+      await showMapLegend(
+        context,
+        store.vehicle,
+        availability: store.availabilitySource.enabled,
+      );
     }
     if (pending) {
       await store.launchLocation;
@@ -411,7 +415,13 @@ class _MapPageState extends ConsumerState<MapPage> {
   }) {
     final openCapsules = open == null
         ? const <AvailabilityCapsule>[]
-        : markerCapsules(open, store.availabilityOf(open), store.vehicle, now);
+        : markerCapsules(
+            open,
+            store.availabilityOf(open),
+            store.vehicle,
+            store.eligible(open).status,
+            now,
+          );
     return Stack(
       children: [
         if (AppConfig.useGoogleMaps)
@@ -509,6 +519,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                           s,
                           store.availabilityOf(s),
                           store.vehicle,
+                          store.eligible(s).status,
                           now,
                         ),
                       ),
@@ -818,7 +829,11 @@ class _MapPageState extends ConsumerState<MapPage> {
                           key: const ValueKey('map-legend-button'),
                           tooltip: '地圖怎麼看',
                           icon: Icons.help_outline,
-                          onTap: () => showMapLegend(context, store.vehicle),
+                          onTap: () => showMapLegend(
+                            context,
+                            store.vehicle,
+                            availability: store.availabilitySource.enabled,
+                          ),
                         ),
                       ),
                     ),
