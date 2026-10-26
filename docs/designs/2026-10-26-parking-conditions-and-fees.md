@@ -496,7 +496,7 @@ P6 匯入（`feat/admin-import`，stack B 第 5 層）的轉換規則延伸到�
 - **#109 即時車位**（`docs/REALTIME_AVAILABILITY_UI_PLAN.md`、`docs/designs/2026-10-26-realtime-availability-ui.md`）：剩餘車位改由獨立的 `AvailabilitySnapshot` 與 `viewport_availability` 提供，不放在 `condition` 或 `fee`，兩者互不依賴。設計上有三點一致：
   - 「可不可以停」與「有沒有位」分開：#109 的剩餘數膠囊只用中性墨色；本文的 `FeeBoard` 也不用資格色。詳情頁由上而下是資格結論、剩餘車位摘要、收費公告牌，三者不合併成一塊。
   - 收藏不保存即時剩餘數（#109 把 `available` 視為舊版相容欄位），本文的 `exact_v2` 也不加入剩餘數。
-  - 分區若之後有各自的剩餘數，#109 以 spot id 加分區名稱對應；本文的分區沒有穩定 id，C2 實作時要和 #109 的實作者確認是否需要 `parking_zones[].id`（不影響本文的契約，只多一個選填鍵）。
+  - #109 計畫「有多個格種區域時，依官方資料顯示分區」，但沒有規定剩餘數怎麼對應到分區。本文的分區目前只有名稱、沒有穩定 id；C2 實作時要和 #109 的實作者確認是否需要 `parking_zones[].id`（不影響本文的契約，只多一個選填鍵）。
 
 ## 6. 實作切分（stack C，兩個 stack 合併後開工）
 
