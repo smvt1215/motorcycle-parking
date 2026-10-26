@@ -116,6 +116,11 @@ class _MyContributionsSectionState extends State<MyContributionsSection> {
   (String?, int)? loadedFor;
   int _request = 0;
 
+  /// Whether the tab was showing at the last dependency change; the shell
+  /// keeps hidden tabs mounted with tickers off.
+  bool? _active;
+  late final AppLifecycleListener _lifecycle;
+
   AppStore get store => widget.store;
   String? get userId => store.riderId;
 
@@ -123,7 +128,24 @@ class _MyContributionsSectionState extends State<MyContributionsSection> {
   void initState() {
     super.initState();
     store.addListener(_storeChanged);
+    // Reviews finish while the app is away: check again on return.
+    _lifecycle = AppLifecycleListener(onResume: _refresh);
     _storeChanged();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final active = TickerMode.valuesOf(context).enabled;
+    if (active && _active == false) _refresh();
+    _active = active;
+  }
+
+  /// Fetches the first page again when coming back to the tab or the app,
+  /// keeping the current list on screen until the new one arrives.
+  void _refresh() {
+    if (userId == null || loading) return;
+    unawaited(reload(quiet: items.isNotEmpty));
   }
 
   @override
@@ -138,6 +160,7 @@ class _MyContributionsSectionState extends State<MyContributionsSection> {
 
   @override
   void dispose() {
+    _lifecycle.dispose();
     store.removeListener(_storeChanged);
     _request++;
     super.dispose();
@@ -151,18 +174,26 @@ class _MyContributionsSectionState extends State<MyContributionsSection> {
     unawaited(reload());
   }
 
-  Future<void> reload() async {
+  /// Loads the first page. [quiet] keeps the list shown meanwhile and keeps
+  /// it if the refresh fails; otherwise the list gives way to a spinner.
+  Future<void> reload({bool quiet = false}) async {
     final request = ++_request;
-    items.clear();
-    hasMore = false;
+    // Supersedes any older-page request, which can no longer clear these.
+    loadingMore = false;
     moreFailed = false;
+    if (!quiet) {
+      items.clear();
+      hasMore = false;
+    }
     if (userId == null) {
+      items.clear();
+      hasMore = false;
       if (mounted) setState(() => loading = failed = false);
       return;
     }
     if (mounted) {
       setState(() {
-        loading = true;
+        loading = !quiet;
         failed = false;
       });
     }
@@ -170,7 +201,9 @@ class _MyContributionsSectionState extends State<MyContributionsSection> {
       final page = await store.contributions.load();
       if (!mounted || request != _request) return;
       setState(() {
-        items.addAll(page.items);
+        items
+          ..clear()
+          ..addAll(page.items);
         hasMore = page.hasMore;
         loading = false;
       });
@@ -178,7 +211,7 @@ class _MyContributionsSectionState extends State<MyContributionsSection> {
       if (!mounted || request != _request) return;
       setState(() {
         loading = false;
-        failed = true;
+        failed = !quiet;
       });
     }
   }
@@ -390,7 +423,16 @@ class ContributionRow extends StatelessWidget {
     );
     return Semantics(
       button: true,
-      label: '$name，${item.action}，${look.label}',
+      // Everything the row shows, since the visible text is merged away.
+      label: [
+        name,
+        item.action,
+        ?detail,
+        look.label,
+        ?note,
+        sentDate(item.createdAt, now),
+        if (!item.canOpen) '已不在地圖上',
+      ].join('，'),
       excludeSemantics: true,
       child: InkWell(
         onTap: onTap,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -84,7 +86,9 @@ class FakeContributions extends ContributionsRepository {
         ? const <Map<String, dynamic>>[]
         : pages.removeAt(0);
     if (next is Exception) throw next;
-    final rows = next as List<Map<String, dynamic>>;
+    final rows = next is Completer<List<Map<String, dynamic>>>
+        ? await next.future
+        : next as List<Map<String, dynamic>>;
     return ContributionPage(
       rows.map(MyContribution.fromJson).toList(),
       hasMore: rows.length == 2 && pages.isNotEmpty,
@@ -126,6 +130,7 @@ Future<void> pump(
   double width = 390,
   double scale = 1,
   Brightness brightness = Brightness.light,
+  bool active = true,
 }) async {
   tester.view.physicalSize = Size(width, 1600);
   tester.view.devicePixelRatio = 1;
@@ -141,7 +146,12 @@ Future<void> pump(
       home: Scaffold(
         body: ListView(
           padding: const EdgeInsets.symmetric(horizontal: 24),
-          children: [MyContributionsSection(store: store, now: now)],
+          children: [
+            TickerMode(
+              enabled: active,
+              child: MyContributionsSection(store: store, now: now),
+            ),
+          ],
         ),
       ),
     ),
@@ -412,6 +422,74 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(find.text('已採納'), findsOneWidget);
+    });
+
+    testWidgets('returning to the tab fetches the latest results', (
+      tester,
+    ) async {
+      final store = await createStore([
+        [row('a')],
+        [row('a', status: 'accepted')],
+      ]);
+      await pump(tester, store);
+      expect(find.text('審核中'), findsOneWidget);
+      await pump(tester, store, active: false);
+      await pump(tester, store);
+      await tester.pump();
+      // The old list stays until the new one arrives, then is replaced.
+      expect(find.text('已採納'), findsOneWidget);
+      expect(find.text('審核中'), findsNothing);
+      expect((store.contributions as FakeContributions).calls, hasLength(2));
+    });
+
+    testWidgets('a reload during an older-page request frees the button', (
+      tester,
+    ) async {
+      final older = Completer<List<Map<String, dynamic>>>();
+      final store = await createStore([
+        [row('a'), row('b')],
+        older,
+        [row('c'), row('d')],
+        [row('e')],
+      ]);
+      await pump(tester, store);
+      await tester.tap(find.text('載入更早的紀錄'));
+      await tester.pump();
+      expect(find.text('載入更早的紀錄'), findsNothing);
+      store.reportsSent++;
+      store.notifyListeners();
+      await tester.pump();
+      await tester.pump();
+      older.complete([row('x')]);
+      await tester.pump();
+      expect(find.text('載入更早的紀錄').hitTestable(), findsOneWidget);
+      expect(find.byType(ContributionRow), findsNWidgets(2));
+    });
+
+    testWidgets('screen readers hear everything the row shows', (tester) async {
+      final semantics = tester.ensureSemantics();
+      final store = await createStore([
+        [
+          {
+            ...row('b', status: 'rejected', visible: false),
+            'resolution_kind': 'insufficient',
+          },
+        ],
+      ]);
+      await pump(tester, store);
+      final label = tester.getSemantics(find.byType(ContributionRow)).label;
+      for (final part in [
+        '市府轉運站重機格',
+        '建議修改收費資訊',
+        '建議「計時 每小時 20 元」；說明：現場告示牌',
+        '未採納',
+        '資訊不足，無法查證。',
+        '10月22日送出',
+        '已不在地圖上',
+      ]) {
+        expect(label, contains(part));
+      }
+      semantics.dispose();
     });
   });
 }
