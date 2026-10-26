@@ -558,8 +558,26 @@ class FakeAdminGateway implements AdminGateway {
 
   @override
   Future<AdminUserDetail?> userDetail(String userId) async {
+    // Snapshot now: a slow response carries the state it was asked for.
     final row = userDetails[userId];
+    await delayedDetail?.future;
     return row == null ? null : AdminUserDetail.fromJson(row);
+  }
+
+  /// Points past the first page, by user id.
+  Map<String, List<Map<String, dynamic>>> olderSpots = {};
+  final spotPages = <(String, int)>[];
+
+  /// Holds [userDetail] until completed, to test out-of-order reloads.
+  Completer<void>? delayedDetail;
+
+  @override
+  Future<List<UserSpot>> userSpots(String userId, int offset) async {
+    spotPages.add((userId, offset));
+    return [
+      for (final s in olderSpots[userId] ?? <Map<String, dynamic>>[])
+        UserSpot.fromJson(s),
+    ];
   }
 
   @override

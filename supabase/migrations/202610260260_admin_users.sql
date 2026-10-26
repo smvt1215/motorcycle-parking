@@ -74,6 +74,29 @@ $$;
 revoke execute on function public.admin_users(text,integer) from public,anon;
 grant execute on function public.admin_users(text,integer) to authenticated;
 
+-- Points one account reported, where its public name can be cleared, newest
+-- first. Clearing a name does not reorder them, so offsets stay stable.
+create function public.admin_user_spots(p_user uuid,p_offset integer default 0,p_limit integer default 50)
+returns jsonb language plpgsql stable security definer set search_path='' as $$
+begin
+  if not public.is_admin() then
+    raise exception 'admin with a second factor required' using errcode='42501';
+  end if;
+  if p_user is null or coalesce(p_offset,-1)<0 or coalesce(p_limit,0) not between 1 and 100 then
+    raise exception 'invalid spot page' using errcode='22023';
+  end if;
+  return coalesce((select jsonb_agg(jsonb_build_object('id',s.id,'name',s.name,'city',s.city,'district',s.district,
+      'status',s.status,'contributor_name',s.contributor_name,'name_cleared',s.cleared,'created_at',s.created_at)
+      order by s.created_at desc,s.id desc)
+    from (select c.id,c.name,c.city,c.district,c.status,c.contributor_name,c.created_at,
+        exists(select 1 from public.contributor_name_clears n where n.spot_id=c.id) as cleared
+      from public.community_spots c where c.user_id=p_user and c.source='community'
+      order by c.created_at desc,c.id desc offset p_offset limit p_limit) s),'[]');
+end;
+$$;
+revoke execute on function public.admin_user_spots(uuid,integer,integer) from public,anon;
+grant execute on function public.admin_user_spots(uuid,integer,integer) to authenticated;
+
 -- Everything the user page shows about one account. Network identities are
 -- keyed hashes; the page sees a short tag to tell them apart, never the hash.
 create function public.admin_user_detail(p_user uuid)
@@ -110,13 +133,8 @@ begin
       'flags_accepted',(select count(*) from public.moderation_queue q where q.reporter_id=p_user and q.status='accepted'),
       'flags_rejected',(select count(*) from public.moderation_queue q where q.reporter_id=p_user and q.status='rejected'),
       'flags_closed',(select count(*) from public.moderation_queue q where q.reporter_id=p_user and q.status='closed')),
-    -- Points this account reported, where its public name can be cleared.
-    'spots',coalesce((select jsonb_agg(jsonb_build_object('id',s.id,'name',s.name,'city',s.city,'district',s.district,
-        'status',s.status,'contributor_name',s.contributor_name,'name_cleared',s.cleared,'created_at',s.created_at) order by s.created_at desc)
-      from (select c.id,c.name,c.city,c.district,c.status,c.contributor_name,c.created_at,
-          exists(select 1 from public.contributor_name_clears n where n.spot_id=c.id) as cleared
-        from public.community_spots c where c.user_id=p_user and c.source='community'
-        order by c.created_at desc limit 50) s),'[]'),
+    -- The newest points this account reported; admin_user_spots pages on.
+    'spots',public.admin_user_spots(p_user,0,50),
     'history',coalesce((select jsonb_agg(jsonb_build_object('action',l.action,'note',l.note,'created_at',l.created_at,
         'banned_until',l.after->>'banned_until') order by l.created_at desc)
       from (select * from public.admin_audit_log a where a.target_table='auth.users' and a.target_id=p_user::text

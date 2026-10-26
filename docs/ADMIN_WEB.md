@@ -169,7 +169,7 @@ node tool/admin_smoke.cjs
 - **詳情**（`admin_user_detail(p_user)`）：今天的回報次數與每日上限（`apply_report` 的 10 次／帳號，UTC 日界＝台灣時間早上 8 點），近 7／30 天次數、網路位置數、近 30 天同網路位置的其他帳號數；最近 30 筆回報時間只附 6 碼網路代號（`ip_hash` 前綴，只能分辨是否同一網路，完整雜湊不離開資料庫）。回報統計：新增的社群點（含已隱藏）、仍在／已不存在投票、修改建議依狀態。另列此帳號新增的社群點與 App 上顯示的公開名稱，以及停權紀錄。這些是 P7 自己的查詢，不依賴 ④a 的 `admin_review_baseline`。
 - **停權／解除停權**：Edge Function `admin-users`（`verify_jwt = false`，函式自行驗證）。`getUser` 確認 session 仍有效、未被停權，且帳號目前的 `app_metadata.role` 是 admin；`getClaims` 驗證 token 簽章並讀 `aal`，必須是 `aal2`（與 `is_admin()` 相同）。之後以 service role 呼叫 Auth Admin API `updateUserById(id, { ban_duration })`：7 天＝`168h`、30 天＝`720h`、直到解除＝`876000h`，解除為 `none`。不能停權自己或其他管理者。原因必填（1–500 字）。Auth 會拒絕被停權帳號的登入、token 更新與 `/user`，因此 `submit-report` 的 `getUser` 立即擋下回報與投票。
 - **稽核**：停權變更後由 Edge Function 呼叫 `admin_record_user_ban`（只授權 service role）寫入 `admin_audit_log`（`target_table='auth.users'`，前後的 `banned_until`、期間、原因）。Auth API 與資料庫無法同一 transaction：稽核寫入失敗時函式把停權狀態還原（原本有停權則還原剩餘時數，無條件進位到小時）並回錯誤。
-- **清除公開名稱**：詳情的點位清單以 `admin_clear_contributor_name`（#81）逐點清除，原因選填、寫入稽核紀錄；清除後即使改名也不再顯示。
+- **清除公開名稱**：詳情先列最新 50 個社群點，「載入更早的點位」以 `admin_user_spots(p_user, p_offset)` 分頁（依建立時間，清除名稱不會改變順序）；逐點以 `admin_clear_contributor_name`（#81）清除，原因選填、寫入稽核紀錄；清除後即使改名也不再顯示。停權後背景重新讀取停權紀錄時，若期間又有停權或清除操作，舊的讀取結果會被捨棄，不覆蓋較新的畫面狀態。
 - 測試：pgTAP `admin_users_test.sql`（一般使用者、無 `aal2` 的 admin、anon 被拒；搜尋與遮蔽；統計；只有 service role 能寫停權紀錄、稽核不可修改）；deno `admin-users/handler_test.ts`（非 admin、無 `aal2`、無 token 被拒且不呼叫 Auth；停權與解除寫稽核；稽核失敗還原；輸入驗證；不能停權自己或管理者）；widget test `test/admin/users_test.dart`。
 
 ## CI／CD

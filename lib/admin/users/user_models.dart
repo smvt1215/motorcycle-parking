@@ -206,15 +206,18 @@ class AdminUserDetail {
   final List<UserSpot> spots;
   final List<UserHistory> history;
 
-  AdminUserDetail copyWith({AdminUser? user, List<UserSpot>? spots}) =>
-      AdminUserDetail(
-        user: user ?? this.user,
-        limits: limits,
-        events: events,
-        reports: reports,
-        spots: spots ?? this.spots,
-        history: history,
-      );
+  AdminUserDetail copyWith({
+    AdminUser? user,
+    List<UserSpot>? spots,
+    List<UserHistory>? history,
+  }) => AdminUserDetail(
+    user: user ?? this.user,
+    limits: limits,
+    events: events,
+    reports: reports,
+    spots: spots ?? this.spots,
+    history: history ?? this.history,
+  );
 }
 
 /// The ban lengths the `admin-users` function accepts.

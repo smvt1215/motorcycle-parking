@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:motorcycle_parking/admin/admin_app.dart';
@@ -80,6 +82,55 @@ void main() {
       expect(gateway.clearedNames.single, (communityId, '冒犯字眼'));
       final spot = users.detail!.spots.first;
       expect((spot.nameCleared, spot.contributorName), (true, ''));
+    });
+
+    test('較慢的背景重新載入不覆蓋較新的停權與清除狀態', () async {
+      await users.open(riderId);
+      final slow = Completer<void>();
+      gateway.delayedDetail = slow;
+      expect(await users.setBan(BanLength.week, '洗版'), isTrue);
+      gateway.delayedDetail = null;
+      expect(await users.setBan(null, '申訴成立'), isTrue);
+      await Future<void>.delayed(Duration.zero);
+      expect(users.detail!.user.banned, isFalse);
+      expect(users.detail!.history.first.label, '解除停權');
+      expect(await users.clearName(communityId, ''), isTrue);
+      slow.complete();
+      await Future<void>.delayed(Duration.zero);
+      expect(users.detail!.user.banned, isFalse);
+      expect(users.detail!.spots.first.nameCleared, isTrue);
+    });
+
+    test('超過第一頁的點位可載入後清除名稱', () async {
+      gateway.userDetails[riderId] = {
+        ...sampleUserDetail(),
+        'reports': {
+          ...sampleUserDetail()['reports'] as Map<String, dynamic>,
+          'spots': 3,
+        },
+      };
+      gateway.olderSpots[riderId] = [
+        {
+          'id': '55555555-5555-4555-8555-555555555555',
+          'name': '最早的點位',
+          'city': '臺北市',
+          'district': '',
+          'status': 'confirmed',
+          'contributor_name': '夜騎小哲',
+          'name_cleared': false,
+        },
+      ];
+      await users.open(riderId);
+      expect(users.hasMoreSpots, isTrue);
+      await users.loadMoreSpots();
+      expect(gateway.spotPages.single, (riderId, 2));
+      expect(users.detail!.spots.last.name, '最早的點位');
+      expect(users.hasMoreSpots, isFalse);
+      expect(
+        await users.clearName('55555555-5555-4555-8555-555555555555', ''),
+        isTrue,
+      );
+      expect(users.detail!.spots.last.nameCleared, isTrue);
     });
 
     test('失去權限後清除所有使用者資料', () async {
@@ -195,6 +246,40 @@ void main() {
       expect(gateway.clearedNames.single, (communityId, '冒犯字眼'));
       expect(clear, findsNothing);
       expect(find.text('公開名稱已清除'), findsNWidgets(2));
+    });
+
+    testWidgets('320 px、1.6 倍字級可載入更早的點位', (tester) async {
+      gateway.userDetails[riderId] = {
+        ...sampleUserDetail(),
+        'reports': {
+          ...sampleUserDetail()['reports'] as Map<String, dynamic>,
+          'spots': 3,
+        },
+      };
+      gateway.olderSpots[riderId] = [
+        {
+          'id': '55555555-5555-4555-8555-555555555555',
+          'name': '最早的點位',
+          'contributor_name': '夜騎小哲',
+          'name_cleared': false,
+        },
+      ];
+      await show(
+        tester,
+        path: '/users/$riderId',
+        size: const Size(320, 640),
+        textScale: 1.6,
+      );
+      final more = find.byKey(const ValueKey('more-spots'));
+      await tester.scrollUntilVisible(more, 300, scrollable: detail());
+      await tester.ensureVisible(more);
+      await tester.pumpAndSettle();
+      expect(tester.getSize(more).height, greaterThanOrEqualTo(48));
+      await tester.tap(more);
+      await tester.pumpAndSettle();
+      expect(find.text('最早的點位'), findsOneWidget);
+      expect(more, findsNothing);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('管理者帳號不提供停權', (tester) async {

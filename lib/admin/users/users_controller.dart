@@ -23,7 +23,22 @@ class UsersController extends ChangeNotifier {
   bool writing = false;
   String? writeError;
 
+  /// Loading the account's older points.
+  bool spotsLoading = false;
+  String? spotsError;
+  bool _spotsExhausted = false;
+
+  /// More of the account's points exist than are listed.
+  bool get hasMoreSpots {
+    final d = detail;
+    return d != null && !_spotsExhausted && d.spots.length < d.reports['spots'];
+  }
+
   int _generation = 0;
+
+  /// Bumped by every change to [detail] made here, so a slower background
+  /// reload never replaces a newer state with its older snapshot.
+  int _version = 0;
   int _searchSeq = 0;
   int _openSeq = 0;
   bool _disposed = false;
@@ -46,7 +61,15 @@ class UsersController extends ChangeNotifier {
     openError = null;
     writing = false;
     writeError = null;
+    _resetSpots();
     _notify();
+  }
+
+  void _resetSpots() {
+    _version++;
+    spotsLoading = false;
+    spotsError = null;
+    _spotsExhausted = false;
   }
 
   Future<void> search() async {
@@ -80,6 +103,7 @@ class UsersController extends ChangeNotifier {
     openError = null;
     writeError = null;
     detail = null;
+    _resetSpots();
     _notify();
     try {
       final loaded = await gateway!.userDetail(id);
@@ -101,6 +125,7 @@ class UsersController extends ChangeNotifier {
     opening = false;
     openError = null;
     writeError = null;
+    _resetSpots();
     _notify();
   }
 
@@ -120,10 +145,11 @@ class UsersController extends ChangeNotifier {
       );
       if (generation != _generation) return false;
       final user = current.user.withBan(until);
-      if (detail?.user.id == user.id) detail = current.copyWith(user: user);
+      final shown = detail;
+      if (shown?.user.id == user.id) detail = shown!.copyWith(user: user);
       results = [for (final u in results) u.id == user.id ? user : u];
       // The history row comes from the audit log; reload it quietly.
-      _reloadHistory(user.id, generation);
+      _reloadHistory(user.id, generation, ++_version);
       return true;
     } catch (e) {
       if (generation == _generation) writeError = _banMessage(e);
@@ -134,15 +160,19 @@ class UsersController extends ChangeNotifier {
     }
   }
 
-  Future<void> _reloadHistory(String id, int generation) async {
+  /// Takes the account and its history from a fresh read, only if nothing
+  /// changed here since [version]; the listed points stay as they are.
+  Future<void> _reloadHistory(String id, int generation, int version) async {
     try {
       final loaded = await gateway!.userDetail(id);
+      final shown = detail;
       if (generation != _generation ||
-          detail?.user.id != id ||
+          version != _version ||
+          shown?.user.id != id ||
           loaded == null) {
         return;
       }
-      detail = loaded;
+      detail = shown!.copyWith(user: loaded.user, history: loaded.history);
       _notify();
     } catch (_) {
       // The page keeps the ban it just applied; history shows on next open.
@@ -160,10 +190,12 @@ class UsersController extends ChangeNotifier {
     try {
       await gateway!.clearContributorName(spotId, note);
       if (generation != _generation) return false;
-      if (detail?.user.id == current.user.id) {
-        detail = current.copyWith(
+      final shown = detail;
+      if (shown?.user.id == current.user.id) {
+        _version++;
+        detail = shown!.copyWith(
           spots: [
-            for (final s in current.spots) s.id == spotId ? s.cleared() : s,
+            for (final s in shown.spots) s.id == spotId ? s.cleared() : s,
           ],
         );
       }
@@ -177,6 +209,41 @@ class UsersController extends ChangeNotifier {
       return false;
     } finally {
       if (generation == _generation) writing = false;
+      _notify();
+    }
+  }
+
+  /// Appends the next page of the account's points.
+  Future<void> loadMoreSpots() async {
+    final current = detail;
+    if (gateway == null || current == null || spotsLoading) return;
+    final generation = _generation;
+    final seq = _openSeq;
+    final id = current.user.id;
+    spotsLoading = true;
+    spotsError = null;
+    _notify();
+    try {
+      final page = await gateway!.userSpots(id, current.spots.length);
+      final shown = detail;
+      if (generation != _generation ||
+          seq != _openSeq ||
+          shown?.user.id != id) {
+        return;
+      }
+      final known = {for (final s in shown!.spots) s.id};
+      final added = [
+        for (final s in page)
+          if (!known.contains(s.id)) s,
+      ];
+      if (added.isEmpty) _spotsExhausted = true;
+      detail = shown.copyWith(spots: [...shown.spots, ...added]);
+    } catch (_) {
+      if (generation == _generation && seq == _openSeq) {
+        spotsError = '更早的點位載入失敗，請檢查連線後重試。';
+      }
+    } finally {
+      if (generation == _generation && seq == _openSeq) spotsLoading = false;
       _notify();
     }
   }

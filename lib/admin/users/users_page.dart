@@ -567,6 +567,26 @@ class _DetailPane extends StatelessWidget {
                   busy: users.writing,
                   onClear: () => onClearName(s),
                 ),
+              if (users.spotsError != null) ...[
+                const SizedBox(height: 10),
+                AdminNotice(users.spotsError!, error: true),
+              ],
+              if (users.hasMoreSpots) ...[
+                const SizedBox(height: 10),
+                Text(
+                  '已列出 ${detail.spots.length}／${detail.reports['spots']} 個點位。',
+                  style: muted,
+                ),
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton(
+                    key: const ValueKey('more-spots'),
+                    onPressed: users.spotsLoading ? null : users.loadMoreSpots,
+                    child: Text(users.spotsLoading ? '載入中…' : '載入更早的點位'),
+                  ),
+                ),
+              ],
             ],
             if (detail.history.isNotEmpty) ...[
               section('停權紀錄'),

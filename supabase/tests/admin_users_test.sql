@@ -22,12 +22,18 @@ insert into spot_votes(spot_id,user_id,vote,qualified,weight,ip_hash,device_hash
 values('76000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','still_there',true,1,repeat('a',64),repeat('a',64));
 insert into moderation_queue(source_id,reporter_id,reason,status)
 values('76000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','名稱：測試','pending');
+-- Rider 0003 reported 51 points; the oldest is past the first page.
+insert into community_spots(id,user_id,name,lat,lng,city,space_type,created_at)
+select ('77000000-0000-4000-8000-'||lpad(g::text,12,'0'))::uuid,'10000000-0000-4000-8000-000000000003',
+  '分頁點'||g,25.0+g*0.001,121.5,'臺北市','offStreet',now()-make_interval(days=>g)
+from generate_series(1,51) g;
 create temporary table expected on commit drop as
   select count(*)::text as spots from community_spots where user_id='10000000-0000-4000-8000-000000000001' and source='community';
 grant select on expected to authenticated;
 
 select ok(not has_function_privilege('anon','public.admin_users(text,integer)','EXECUTE'),'anonymous callers cannot search users');
 select ok(not has_function_privilege('anon','public.admin_user_detail(uuid)','EXECUTE'),'anonymous callers cannot read a user');
+select ok(not has_function_privilege('anon','public.admin_user_spots(uuid,integer,integer)','EXECUTE'),'anonymous callers cannot page a user''s points');
 select ok(not has_function_privilege('authenticated','public.admin_record_user_ban(uuid,uuid,text,timestamptz,timestamptz,text,text)','EXECUTE'),
   'signed-in users, admins included, cannot write ban records directly');
 select ok(not has_function_privilege('anon','public.admin_record_user_ban(uuid,uuid,text,timestamptz,timestamptz,text,text)','EXECUTE'),
@@ -39,6 +45,7 @@ select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-00000000
 set local role authenticated;
 select throws_ok($$select * from admin_users('')$$,'42501',null,'riders cannot search users');
 select throws_ok($$select admin_user_detail('10000000-0000-4000-8000-000000000001')$$,'42501',null,'riders cannot read a user');
+select throws_ok($$select admin_user_spots('10000000-0000-4000-8000-000000000003',50)$$,'42501',null,'riders cannot page a user''s points');
 reset role;
 
 -- An admin without a second factor is refused.
@@ -46,6 +53,7 @@ select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-00000000
 set local role authenticated;
 select throws_ok($$select * from admin_users('')$$,'42501',null,'searching users needs a second factor');
 select throws_ok($$select admin_user_detail('10000000-0000-4000-8000-000000000001')$$,'42501',null,'reading a user needs a second factor');
+select throws_ok($$select admin_user_spots('10000000-0000-4000-8000-000000000003',50)$$,'42501',null,'paging points needs a second factor');
 reset role;
 
 select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-000000000005","role":"authenticated","aal":"aal2","app_metadata":{"role":"admin"}}',true);
@@ -84,6 +92,14 @@ select is((select v#>>'{reports,flags_pending}' from d),'1','pending suggestions
 select is((select v#>>'{spots,0,name_cleared}' from d),'false','a public name not yet cleared');
 select is(admin_clear_contributor_name('76000000-0000-4000-8000-000000000001','冒犯字眼')->>'contributor_name','','the admin clears the name from the user page');
 select is((admin_user_detail('10000000-0000-4000-8000-000000000001')#>>'{spots,0,name_cleared}'),'true','the cleared name shows as cleared');
+select is(jsonb_array_length(admin_user_detail('10000000-0000-4000-8000-000000000003')->'spots'),50,'the user page shows the newest 50 points');
+select is((admin_user_detail('10000000-0000-4000-8000-000000000003')#>>'{reports,spots}'),'51','the count still covers every point');
+select is((select string_agg(e->>'name',',') from jsonb_array_elements(admin_user_spots('10000000-0000-4000-8000-000000000003',50)) e),'分頁點51',
+  'the next page reaches the oldest point');
+select is(admin_clear_contributor_name('77000000-0000-4000-8000-000000000051','')->>'contributor_name','','a point past the first page can be cleared');
+select is((admin_user_spots('10000000-0000-4000-8000-000000000003',50)#>>'{0,name_cleared}'),'true','clearing does not move a point to another page');
+select throws_ok($$select admin_user_spots('10000000-0000-4000-8000-000000000003',-1)$$,'22023',null,'the offset cannot be negative');
+select throws_ok($$select admin_user_spots('10000000-0000-4000-8000-000000000003',0,101)$$,'22023',null,'the page size is bounded');
 select throws_ok($$select admin_user_detail('10000000-0000-4000-8000-0000000000ff')$$,'22023',null,'a missing user is reported');
 select throws_ok($$select admin_record_user_ban('10000000-0000-4000-8000-000000000005','10000000-0000-4000-8000-000000000001','ban_user',null,now(),'168h','x')$$,
   '42501',null,'an admin JWT cannot write a ban record without the Edge Function');

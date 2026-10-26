@@ -106,6 +106,10 @@ abstract class AdminGateway {
   /// `admin_user_detail`; null when the account does not exist.
   Future<AdminUserDetail?> userDetail(String userId);
 
+  /// `admin_user_spots`: the account's points after the first [offset],
+  /// newest first.
+  Future<List<UserSpot>> userSpots(String userId, int offset);
+
   /// The `admin-users` Edge Function: bans for [length], or lifts the ban
   /// when it is null. Returns the new `banned_until`.
   Future<DateTime?> setUserBan(
@@ -461,6 +465,17 @@ class SupabaseAdminGateway implements AdminGateway {
       if (e.code == '22023') return null;
       rethrow;
     }
+  }
+
+  @override
+  Future<List<UserSpot>> userSpots(String userId, int offset) async {
+    final rows = await client.rpc<List<dynamic>>(
+      'admin_user_spots',
+      params: {'p_user': userId, 'p_offset': offset},
+    );
+    return rows
+        .map((r) => UserSpot.fromJson(r as Map<String, dynamic>))
+        .toList();
   }
 
   @override
