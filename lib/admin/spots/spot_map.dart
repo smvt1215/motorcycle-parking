@@ -179,11 +179,21 @@ class SpotMapController extends ChangeNotifier {
       ? SpotLayer.official
       : SpotLayer.community;
 
-  bool isHidden(ParkingSpot spot) =>
-      spots.any((s) => s.hidden && s.spot.id == spot.id);
+  /// Ids of [spots] by layer, rebuilt with each load: markers ask per spot.
+  Set<String> _hiddenIds = {};
+  Map<String, ParkingSpot> _byId = {};
 
-  ParkingSpot? find(String id) =>
-      spots.where((s) => s.spot.id == id).firstOrNull?.spot;
+  bool isHidden(ParkingSpot spot) => _hiddenIds.contains(spot.id);
+
+  ParkingSpot? find(String id) => _byId[id];
+
+  void _index() {
+    _hiddenIds = {
+      for (final s in spots)
+        if (s.hidden) s.spot.id,
+    };
+    _byId = {for (final s in spots) s.spot.id: s.spot};
+  }
 
   CityRule? _ruleFor(ParkingSpot spot) {
     final own = rules.where((r) => r.vehicle == vehicle && r.city == spot.city);
@@ -224,6 +234,7 @@ class SpotMapController extends ChangeNotifier {
     tooWide = !bounds.canQuery;
     if (tooWide || !bounds.intersectsTaiwan || layers.isEmpty) {
       spots = [];
+      _index();
       truncated = false;
       loading = false;
       error = null;
@@ -246,6 +257,7 @@ class SpotMapController extends ChangeNotifier {
       );
       if (!current()) return;
       spots = page.spots;
+      _index();
       truncated = page.truncated;
     } catch (_) {
       if (current()) error = '地圖上的停車點載入失敗，請檢查連線後重試。';
@@ -265,6 +277,7 @@ class SpotMapController extends ChangeNotifier {
   void reset() {
     _generation++;
     spots = [];
+    _index();
     rules = [];
     _rulesLoaded = false;
     viewport = null;

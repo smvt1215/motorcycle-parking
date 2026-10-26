@@ -607,7 +607,9 @@ class _PhoneSwitch extends StatelessWidget {
     return _intercept(
       Material(
         color: colors.surface,
+        // Full width: the web pointer interceptor loosens constraints.
         child: Container(
+          width: double.infinity,
           decoration: BoxDecoration(
             border: Border(bottom: BorderSide(color: colors.outlineVariant)),
           ),
