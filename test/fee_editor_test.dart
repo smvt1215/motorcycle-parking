@@ -126,10 +126,11 @@ void main() {
         await tapFee(tester, 'fee-days-heavy-p0-pick');
         expect(tester.takeException(), isNull);
         for (var i = 0; i < 7; i++) {
-          expect(
-            tester.getSize(find.byKey(ValueKey('fee-day-heavy-p0-$i'))).height,
-            greaterThanOrEqualTo(48),
+          final day = tester.getSize(
+            find.byKey(ValueKey('fee-day-heavy-p0-$i')),
           );
+          expect(day.width, greaterThanOrEqualTo(48), reason: '週$i 寬');
+          expect(day.height, greaterThanOrEqualTo(48), reason: '週$i 高');
         }
       });
     }

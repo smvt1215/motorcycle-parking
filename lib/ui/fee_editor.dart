@@ -1786,13 +1786,30 @@ class _WeekRow extends StatelessWidget {
       );
     }
 
-    final row = Row(
-      children: [
-        for (var i = 0; i < 7; i++) ...[
-          if (i > 0) const SizedBox(width: 4),
-          Expanded(child: cell(i)),
-        ],
-      ],
+    const gap = 4.0, target = 48.0;
+    final row = LayoutBuilder(
+      builder: (context, constraints) {
+        // Seven toggles share the row while each stays 48 px wide;
+        // narrower, they wrap at 48 × 48 (touch targets, design §8.5).
+        if (editable && constraints.maxWidth < target * 7 + gap * 6) {
+          return Wrap(
+            spacing: gap,
+            runSpacing: gap,
+            children: [
+              for (var i = 0; i < 7; i++)
+                SizedBox(width: target, child: cell(i)),
+            ],
+          );
+        }
+        return Row(
+          children: [
+            for (var i = 0; i < 7; i++) ...[
+              if (i > 0) const SizedBox(width: gap),
+              Expanded(child: cell(i)),
+            ],
+          ],
+        );
+      },
     );
     return editable
         ? Semantics(container: true, label: '指定星期幾', child: row)
