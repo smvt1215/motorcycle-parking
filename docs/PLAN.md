@@ -20,7 +20,7 @@
 - **社群回報**：新增停車點以地面標線選格位、依標線與縣市規則帶入車種資格（#63、#75）；路外停車場可填場站型式、停放分類、入口、指引與最多 10 個分區（#73、#75）；收費使用結構化費率編輯器（#72），分區也可填結構化費率（#80）。修改建議送出結構化 `field`／`proposed`（#61、#62、#66）；「這裡已經不能停車」依原因決定是否建議隱藏（#75）。「位置不正確」建議與 App 端的位置選擇元件尚未接入。
 - **可信度**：存在確認與車種資格解耦，舊投票不再自動隱藏（#59）；管理員核驗過的社群點車種欄位在 180 天內視為可信（#84）。後續分層核實見 [社群核實計畫](COMMUNITY_VERIFICATION_PLAN.md)（P0、P1 已完成），遊戲化與社群審核見 [可行性研究](CONTRIBUTION_TIERS_FEASIBILITY.md)。
 - **管理**：[Web 管理介面](ADMIN_WEB.md) P1–P4a-2 已合併（審核佇列、點位清單、編輯、隱藏、改為官方點、新增停車點），審核佇列待 staging 驗收；管理站的結構化費率實作中；全點位地圖（P4a-3）、地址搜尋（P4b）、規則（P5）、匯入（P6）、使用者（P7）尚未實作。
-- **尚未實作**：既有費率文字轉為結構化 `fee`（併入 Admin Web P6）、依價格篩選、照片上傳、即時車位。
+- **尚未實作**：既有費率文字轉為結構化 `fee`（併入 Admin Web P6）、依價格篩選、照片上傳、即時車位（計畫見 [REALTIME_AVAILABILITY_UI_PLAN.md](REALTIME_AVAILABILITY_UI_PLAN.md)）。
 
 ## 架構總覽
 ```
@@ -301,7 +301,7 @@ rate = {"mode":"free"} | {"mode":"posted"}
 ### Phase 0：TDX 資料完整性稽核（實作前先做）
 > 2026-10-17：改以 `tool/import_mymaps.py` 逐縣市比對官方資料（各縣市自有資料優先，TDX 補缺），結果見 `data/imports/google-mymaps/REPORT.md`；以下為原規劃。
 在開發用的雲端環境實測時，`tdx.transportdata.tw`、`data.taipei`、`data.gov.tw` 都被網路政策擋下（403），所以**目前無法親自確認完整性**，稽核要在放行網域並取得 TDX 金鑰後執行：
-- 寫 `tool/tdx_audit.dart`（或 Deno script），逐一跑 22 縣市，輸出 `docs/tdx-coverage.md`：
+- 寫 `tool/tdx_audit.dart`（或 Deno script），逐一跑 22 縣市，輸出 `docs/availability-coverage.md`（原規劃為 `docs/tdx-coverage.md`，併入 [REALTIME_AVAILABILITY_UI_PLAN.md](REALTIME_AVAILABILITY_UI_PLAN.md) 6.2 的同一份稽核）：
   - 路外停車場數、其中有機車車位數（`ParkingSpace` 機車類型）的比例
   - 有即時剩餘、且即時資料含機車欄位的比例；資料最後更新時間分佈（判斷是否「假即時」）
   - 座標缺漏/明顯錯誤（落在海上、0,0）比例
