@@ -125,7 +125,11 @@ class SpotsController extends ChangeNotifier {
   Map<String, String> get errors => {
     for (final f in fields)
       if (record!.isNew || changed(f.key))
-        f.key: ?validateSpotField(f, draft[f.key]),
+        f.key: ?validateSpotField(
+          f,
+          draft[f.key],
+          fee: draft['fee'] is Fee ? draft['fee'] as Fee : null,
+        ),
   };
 
   /// Errors the form shows: a fresh new spot is not scolded before a save.

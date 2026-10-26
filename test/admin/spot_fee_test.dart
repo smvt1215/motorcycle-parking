@@ -179,6 +179,62 @@ void main() {
     });
   });
 
+  group('超過 200 字的費率句子（設計 §2.5）', () {
+    final longFee = Fee.fromJson({
+      'car': {
+        'mode': 'by_time',
+        'periods': [
+          for (final d in ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'])
+            {
+              'days': [d],
+              'from': '23:00',
+              'to': '22:00',
+              'rate': {
+                'mode': 'per_visit',
+                'amount': 9999,
+                'max_minutes': 1439,
+              },
+            },
+        ],
+      },
+    });
+    final longNote = feeNoteOf(longFee);
+    final community = sampleSpots()[communityId]!;
+
+    test('句子本身可超過 200 字，自由文字維持 200', () {
+      expect(longNote.length, greaterThan(200));
+      expect(feeNoteFits(longNote, longFee), isTrue);
+      expect(feeNoteFits('$longNote。', longFee), isFalse);
+      expect(feeNoteFits(longNote, null), isFalse);
+      expect(feeNoteFits('元' * 200, null), isTrue);
+      expect(feeNoteFits('元' * 201, null), isFalse);
+    });
+
+    test('審核頁可採納超過 200 字的費率句子', () {
+      expect(
+        validatePatch({
+          'fee': longFee.toJson(),
+          'fee_note': longNote,
+        }, community),
+        isNull,
+      );
+      expect(
+        validatePatch({'fee_note': '元' * 201}, community),
+        contains('200 個字以內'),
+      );
+    });
+
+    test('點位表單可儲存超過 200 字的費率句子', () {
+      final field = spotField('fee_note');
+      expect(validateSpotField(field, longNote, fee: longFee), isNull);
+      expect(validateSpotField(field, longNote), contains('200 個字以內'));
+      expect(
+        validateSpotField(field, '元' * 201, fee: longFee),
+        contains('200 個字以內'),
+      );
+    });
+  });
+
   group('審核頁的費率建議', () {
     final community = sampleSpots()[communityId]!;
     final withFee = ReviewSpot(

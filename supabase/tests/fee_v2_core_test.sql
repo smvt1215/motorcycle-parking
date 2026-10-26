@@ -68,6 +68,14 @@ insert into official_heavy_spots(id,name,lat,lng,city,space_type,fee_note,source
     '{"heavy":{"mode":"per_visit","amount":40}}','大型重機每次40元');
 select pg_temp.act('admin');
 set local role authenticated;
+select ok(not exists(select 1 from jsonb_array_elements(admin_import_preview(jsonb_build_array(jsonb_build_object(
+    'id','official:22000000-0000-4000-8000-000000000001','source','official','name','費率 v2 官方點',
+    'lat',25.04,'lng',121.51,'city','臺北市','space_type','paidMotorcycle','fee_note','大型重機每次40元',
+    'source_url','https://data.example.test/v2','source_name','臺北市政府','source_id','V2')))->0->'changes') c
+  where c->>'field' in ('fee','fee_note')),'a re-imported source text keeps the stored fee and its sentence');
+reset role;
+select pg_temp.act('admin');
+set local role authenticated;
 select is(admin_upsert_spot('official:22000000-0000-4000-8000-000000000001',
     '{"fee":{"heavy":{"mode":"per_visit","amount":40,"renew":"midnight"},"car":{"mode":"hourly","amount":40,"per_minutes":60}},
       "fee_note":"大型重機每次 40 元，隔日另計；汽車每小時 40 元"}',
@@ -79,13 +87,43 @@ select throws_ok($$select admin_upsert_spot('official:22000000-0000-4000-8000-00
     (select updated_at from official_heavy_spots where id='22000000-0000-4000-8000-000000000001'))$$,
   '22023','fee_note must be the text of fee','a follow is written as amounts, never 比照 (#140)');
 
--- A file note that is the stored fee's source text reads as no change.
-select ok(not exists(select 1 from jsonb_array_elements(admin_import_preview(jsonb_build_array(jsonb_build_object(
+-- The edit above changed the fee, so its old source text no longer
+-- stands for it: the same file note is a change now.
+select ok(exists(select 1 from jsonb_array_elements(admin_import_preview(jsonb_build_array(jsonb_build_object(
     'id','official:22000000-0000-4000-8000-000000000001','source','official','name','費率 v2 官方點',
     'lat',25.04,'lng',121.51,'city','臺北市','space_type','paidMotorcycle','fee_note','大型重機每次40元',
     'source_url','https://data.example.test/v2','source_name','臺北市政府','source_id','V2')))->0->'changes') c
-  where c->>'field' in ('fee','fee_note')),'a re-imported source text keeps the stored fee and its sentence');
+  where c->>'field' in ('fee','fee_note')),'a source text the fee has moved away from hides nothing');
+
+-- An import that replaces the fee keeps its own note as the source text;
+-- a later file with the old note is then a real change again.
+select is(admin_import_apply(jsonb_build_array(jsonb_build_object(
+    'id','official:22000000-0000-4000-8000-000000000001','source','official','name','費率 v2 官方點',
+    'lat',25.04,'lng',121.51,'city','臺北市','space_type','paidMotorcycle','fee_note','大型重機每次50元',
+    'fee',jsonb_build_object('heavy',jsonb_build_object('mode','per_visit','amount',50)),
+    'source_url','https://data.example.test/v2','source_name','臺北市政府','source_id','V2')),
+  jsonb_build_object('official:22000000-0000-4000-8000-000000000001',jsonb_build_object(
+    'base_updated_at',(select updated_at from official_heavy_spots where id='22000000-0000-4000-8000-000000000001'),
+    'overwrite',jsonb_build_array('fee','fee_note'))),current_date)->>'updated','1','an import replaces the fee');
 reset role;
+select is((select fee_note||'|'||fee_source_text from official_heavy_spots where id='22000000-0000-4000-8000-000000000001'),
+  '大型重機每次 50 元（隔日是否另計未確認）|大型重機每次50元','the file''s note becomes the source text of its fee');
+select pg_temp.act('admin');
+set local role authenticated;
+select ok(exists(select 1 from jsonb_array_elements(admin_import_preview(jsonb_build_array(jsonb_build_object(
+    'id','official:22000000-0000-4000-8000-000000000001','source','official','name','費率 v2 官方點',
+    'lat',25.04,'lng',121.51,'city','臺北市','space_type','paidMotorcycle','fee_note','大型重機每次40元',
+    'source_url','https://data.example.test/v2','source_name','臺北市政府','source_id','V2')))->0->'changes') c
+  where c->>'field'='fee_note'),'an older note is a change again, not hidden by an old source text');
+-- An administrator's fee edit leaves no source text behind (each RPC is
+-- its own transaction; here the import's flag is reset by hand).
+select set_config('app.import_write','',true);
+select lives_ok($$select admin_upsert_spot('official:22000000-0000-4000-8000-000000000001',
+    '{"fee":{"heavy":{"mode":"free"}},"fee_note":"大型重機免費"}',
+    (select updated_at from official_heavy_spots where id='22000000-0000-4000-8000-000000000001'))$$,'an admin edits the fee');
+reset role;
+select is((select fee_source_text from official_heavy_spots where id='22000000-0000-4000-8000-000000000001'),'',
+  'the source text of the old fee is cleared');
 
 select * from finish();
 rollback;

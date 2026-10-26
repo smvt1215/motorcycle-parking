@@ -441,6 +441,16 @@ const defaultFeeNote = '請依現場公告';
 const feeNoteMaxLength = 1909;
 const freeFeeNoteMaxLength = 200;
 
+/// Whether [note] fits as a spot's fee_note beside [fee], as the tables'
+/// check: free text up to 200, or exactly the fee's sentence, which may be
+/// longer (up to [feeNoteMaxLength]).
+bool feeNoteFits(Object? note, Fee? fee) =>
+    note is String &&
+    (note.length <= freeFeeNoteMaxLength ||
+        (fee != null &&
+            note.length <= feeNoteMaxLength &&
+            note == feeNoteOf(fee)));
+
 ({String? text, bool unprovided}) _heavyText(Map<Object?, Object?> f) {
   final heavy = f['heavy'];
   if (heavy is Map &&

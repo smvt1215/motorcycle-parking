@@ -1471,7 +1471,10 @@ class _FieldRow extends StatelessWidget {
       case SpotInput.text || SpotInput.multiline:
         input = TextFormField(
           initialValue: value as String? ?? '',
-          maxLength: field.maxLength,
+          // A fee's own sentence may already run past 200 (design §2.5).
+          maxLength: (value as String? ?? '').length > (field.maxLength ?? 0)
+              ? null
+              : field.maxLength,
           minLines: 1,
           maxLines: field.input == SpotInput.multiline ? 4 : 1,
           decoration: decoration,
