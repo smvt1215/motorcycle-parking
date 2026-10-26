@@ -46,6 +46,7 @@ class MyContribution {
     this.field,
     this.summary,
     this.resolvedAt,
+    this.resolutionKind,
     this.spotVisible = false,
     this.lat,
     this.lng,
@@ -74,6 +75,7 @@ class MyContribution {
       summary: summary,
       resolvedAt: DateTime.tryParse(j['resolved_at'] as String? ?? '')
           ?.toLocal(),
+      resolutionKind: j['resolution_kind'] as String?,
       spotVisible: j['spot_visible'] == true,
       lat: (j['lat'] as num?)?.toDouble(),
       lng: (j['lng'] as num?)?.toDouble(),
@@ -95,6 +97,11 @@ class MyContribution {
   /// The rider's own summary as sent (`reason`); null for added spots.
   final String? summary;
   final DateTime? resolvedAt;
+
+  /// Why a rejected or closed report was not used: wrong, duplicate,
+  /// insufficient, outdated, abuse or other; null when unclassified. The
+  /// admin's own note is never sent to riders.
+  final String? resolutionKind;
 
   /// Whether the spot is on the public map now, so its details can open.
   final bool spotVisible;

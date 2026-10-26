@@ -35,9 +35,19 @@ with s as (insert into moderation_queue(source_id,reporter_id,reason,field,creat
   values((select id from fx where name='other_spot')::text,'10000000-0000-4000-8000-000000000002','其他備註：入口在右邊','note',now()-interval '2 days') returning id) insert into fx select 'q_accepted',id from s;
 update moderation_queue set status='accepted',resolved_at=now(),resolved_by='10000000-0000-4000-8000-000000000005',resolution_note='內部：已電話確認'
   where id=(select id from fx where name='q_accepted');
+insert into admin_audit_log(actor,action,target_table,target_id,after)
+  values('10000000-0000-4000-8000-000000000005','resolve_report','moderation_queue',(select id from fx where name='q_accepted')::text,
+    jsonb_build_object('status','accepted','spot',jsonb_build_object('name','別人的點')));
+-- 結案不修改: accepted with an empty patch, audited without a spot.
+with s as (insert into moderation_queue(source_id,reporter_id,reason,field,created_at)
+  values('official:'||(select id from fx where name='official'),'10000000-0000-4000-8000-000000000002','其他備註：只是提醒','note',now()-interval '7 days') returning id) insert into fx select 'q_closed_nochange',id from s;
+update moderation_queue set status='accepted',resolved_at=now(),resolution_kind='duplicate' where id=(select id from fx where name='q_closed_nochange');
+insert into admin_audit_log(actor,action,target_table,target_id,after)
+  values('10000000-0000-4000-8000-000000000005','resolve_report','moderation_queue',(select id from fx where name='q_closed_nochange')::text,
+    jsonb_build_object('status','accepted','spot',null));
 with s as (insert into moderation_queue(source_id,reporter_id,reason,field,created_at)
   values('official:'||(select id from fx where name='official_hidden'),'10000000-0000-4000-8000-000000000002','這裡已經不能停車：格線已撤除','gone',now()-interval '1 day') returning id) insert into fx select 'q_rejected',id from s;
-update moderation_queue set status='rejected',resolved_at=now(),resolution_note='內部：重複' where id=(select id from fx where name='q_rejected');
+update moderation_queue set status='rejected',resolved_at=now(),resolution_kind='outdated',resolution_note='內部：重複' where id=(select id from fx where name='q_rejected');
 with s as (insert into moderation_queue(source_id,reporter_id,reason,created_at)
   values('tdx:retired-1','10000000-0000-4000-8000-000000000002','舊回報',now()-interval '6 days') returning id) insert into fx select 'q_retired',id from s;
 -- Someone else's report on my spot, and an unattributed vote-threshold row.
@@ -59,9 +69,9 @@ select throws_ok($$select * from my_contributions()$$,'42501',null,'a token with
 select pg_temp.act('me');
 select is((select count(*) from moderation_queue)::int,0,'riders read no queue rows directly');
 
-select is((select count(*) from my_contributions())::int,6,'I see my four reports and two spots');
+select is((select count(*) from my_contributions())::int,7,'I see my five reports and two spots');
 select is((select string_agg(id,',' order by created_at desc) from my_contributions()),
-  (select string_agg(x,',') from (select (select id from fx where name=n)::text x from unnest(array['q_rejected','q_accepted','q_pending','mine_hidden','mine_spot','q_retired']) with ordinality u(n,o) order by o) y),
+  (select string_agg(x,',') from (select (select id from fx where name=n)::text x from unnest(array['q_rejected','q_accepted','q_pending','mine_hidden','mine_spot','q_retired','q_closed_nochange']) with ordinality u(n,o) order by o) y),
   'newest first');
 select ok(not exists(select 1 from my_contributions() where summary like '%別人的建議%' or summary='加權負向回報達門檻'),
   'reports by others or by vote thresholds on my spot are not mine');
@@ -76,6 +86,12 @@ select is((select status||'|'||spot_name||'|'||lat from my_contributions() where
   'accepted|別人的點|25.055','an accepted suggestion on a public community spot comes with coordinates');
 select is((select status||'|'||spot_name||'|'||spot_visible||'|'||coalesce(lat::text,'none')||'|'||(resolved_at is not null) from my_contributions() where id=(select id from fx where name='q_rejected')::text),
   'rejected|我回報時的名稱|false|none|true','a hidden spot shows the reported name, no coordinates and no later edits');
+select is((select resolution_kind from my_contributions() where id=(select id from fx where name='q_rejected')::text),
+  'outdated','a rejection says which kind it was');
+select is((select status||'|'||resolution_kind from my_contributions() where id=(select id from fx where name='q_closed_nochange')::text),
+  'closed|duplicate','an accepted report closed without changing the spot reads as closed');
+select is((select count(*) from my_contributions() where resolution_kind is not null)::int,2,
+  'only rejected or closed reports carry a kind');
 select is((select coalesce(spot_name,'none')||'|'||spot_visible from my_contributions() where id=(select id from fx where name='q_retired')::text),
   'none|false','a report on a retired source has no spot');
 select is((select status||'|'||spot_name||'|'||spot_visible from my_contributions() where id=(select id from fx where name='mine_hidden')::text),

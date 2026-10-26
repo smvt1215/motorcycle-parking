@@ -65,14 +65,27 @@ StatusLook statusLook(MyContribution item) =>
       ),
     };
 
+/// Why a report was not used, one fixed sentence per kind an admin picks
+/// (moderation_queue.resolution_kind); the admin's own note stays internal.
+const rejectionReasons = {
+  'wrong': '核對後與現場資訊不符。',
+  'duplicate': '已有相同的建議，併入先前的處理。',
+  'insufficient': '資訊不足，無法查證。',
+  'outdated': '點位已變更，建議不再適用。',
+  'abuse': '內容不符合回報規範。',
+  'other': '管理員核對後沒有採用。',
+};
+
 /// What happened after a result, for riders who wonder whether the map
 /// changed. Waiting needs no extra words beside its plate.
 String? statusNote(MyContribution item) => switch ((item.kind, item.status)) {
   (ContributionKind.newSpot, ContributionStatus.hidden) => '管理員已將這個停車點從地圖移除。',
   (ContributionKind.suggestion, ContributionStatus.accepted) => '地圖已依你的建議更新。',
   (ContributionKind.gone, ContributionStatus.accepted) => '已依你的回報處理這個停車點。',
-  (_, ContributionStatus.rejected) => '管理員核對後沒有採用，地圖維持原樣。',
-  (_, ContributionStatus.closed) => '這筆回報已處理完畢，地圖沒有變更。',
+  (_, ContributionStatus.rejected) =>
+    '${rejectionReasons[item.resolutionKind] ?? '管理員核對後沒有採用。'}地圖維持原樣。',
+  (_, ContributionStatus.closed) =>
+    '${rejectionReasons[item.resolutionKind] ?? '這筆回報已處理完畢。'}地圖沒有變更。',
   _ => null,
 };
 
@@ -99,9 +112,18 @@ class _MyContributionsSectionState extends State<MyContributionsSection> {
   bool loading = false, failed = false, hasMore = false, loadingMore = false;
   bool moreFailed = false;
 
+  /// A quiet refresh is replacing the first page; older pages wait for it,
+  /// or they would continue from a list about to be replaced.
+  bool refreshing = false;
+
   /// The account and report count [items] were loaded for.
   (String?, int)? loadedFor;
   int _request = 0;
+
+  /// Whether the tab was showing at the last dependency change; the shell
+  /// keeps hidden tabs mounted with tickers off.
+  bool? _active;
+  late final AppLifecycleListener _lifecycle;
 
   AppStore get store => widget.store;
   String? get userId => store.riderId;
@@ -110,7 +132,24 @@ class _MyContributionsSectionState extends State<MyContributionsSection> {
   void initState() {
     super.initState();
     store.addListener(_storeChanged);
+    // Reviews finish while the app is away: check again on return.
+    _lifecycle = AppLifecycleListener(onResume: _refresh);
     _storeChanged();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final active = TickerMode.valuesOf(context).enabled;
+    if (active && _active == false) _refresh();
+    _active = active;
+  }
+
+  /// Fetches the first page again when coming back to the tab or the app,
+  /// keeping the current list on screen until the new one arrives.
+  void _refresh() {
+    if (userId == null || loading) return;
+    unawaited(reload(quiet: items.isNotEmpty));
   }
 
   @override
@@ -125,6 +164,7 @@ class _MyContributionsSectionState extends State<MyContributionsSection> {
 
   @override
   void dispose() {
+    _lifecycle.dispose();
     store.removeListener(_storeChanged);
     _request++;
     super.dispose();
@@ -138,18 +178,27 @@ class _MyContributionsSectionState extends State<MyContributionsSection> {
     unawaited(reload());
   }
 
-  Future<void> reload() async {
+  /// Loads the first page. [quiet] keeps the list shown meanwhile and keeps
+  /// it if the refresh fails; otherwise the list gives way to a spinner.
+  Future<void> reload({bool quiet = false}) async {
     final request = ++_request;
-    items.clear();
-    hasMore = false;
+    // Supersedes any older-page request, which can no longer clear these.
+    loadingMore = false;
     moreFailed = false;
+    if (!quiet) {
+      items.clear();
+      hasMore = false;
+    }
     if (userId == null) {
-      if (mounted) setState(() => loading = failed = false);
+      items.clear();
+      hasMore = false;
+      if (mounted) setState(() => loading = failed = refreshing = false);
       return;
     }
     if (mounted) {
       setState(() {
-        loading = true;
+        loading = !quiet;
+        refreshing = quiet;
         failed = false;
       });
     }
@@ -157,20 +206,23 @@ class _MyContributionsSectionState extends State<MyContributionsSection> {
       final page = await store.contributions.load();
       if (!mounted || request != _request) return;
       setState(() {
-        items.addAll(page.items);
+        items
+          ..clear()
+          ..addAll(page.items);
         hasMore = page.hasMore;
-        loading = false;
+        loading = refreshing = false;
       });
     } catch (_) {
       if (!mounted || request != _request) return;
       setState(() {
-        loading = false;
-        failed = true;
+        loading = refreshing = false;
+        failed = !quiet;
       });
     }
   }
 
   Future<void> more() async {
+    if (refreshing || loadingMore || items.isEmpty) return;
     final request = _request;
     setState(() {
       loadingMore = true;
@@ -308,14 +360,20 @@ class _MyContributionsSectionState extends State<MyContributionsSection> {
         _Notice(
           '沒有載入更多紀錄。請確認網路連線後重試。',
           icon: Icons.cloud_off_outlined,
-          action: TextButton(onPressed: more, child: const Text('重試')),
+          action: TextButton(
+            onPressed: refreshing ? null : more,
+            child: const Text('重試'),
+          ),
         )
       else if (hasMore)
         Padding(
           padding: const EdgeInsets.only(top: 8),
           child: loadingMore
               ? const Center(child: CircularProgressIndicator.adaptive())
-              : TextButton(onPressed: more, child: const Text('載入更早的紀錄')),
+              : TextButton(
+                  onPressed: refreshing ? null : more,
+                  child: const Text('載入更早的紀錄'),
+                ),
         ),
     ];
   }
@@ -377,7 +435,18 @@ class ContributionRow extends StatelessWidget {
     );
     return Semantics(
       button: true,
-      label: '$name，${item.action}，${look.label}',
+      // Everything the row shows, since the visible text is merged away.
+      // The row's own tap, since excludeSemantics drops the InkWell's.
+      onTap: onTap,
+      label: [
+        name,
+        item.action,
+        ?detail,
+        look.label,
+        ?note,
+        sentDate(item.createdAt, now),
+        if (!item.canOpen) '已不在地圖上',
+      ].join('，'),
       excludeSemantics: true,
       child: InkWell(
         onTap: onTap,

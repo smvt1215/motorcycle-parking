@@ -1,12 +1,15 @@
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../models/fee.dart';
 import '../../models/parking.dart';
+import '../../ui/fee_editor.dart';
 import '../admin_controller.dart';
 import '../admin_theme.dart';
 import 'review_controller.dart';
 import 'review_map.dart';
 import 'review_models.dart';
+import 'review_resolution.dart';
 
 /// Below this width the queue and the report are separate screens.
 const reviewCompactWidth = 680.0;
@@ -80,6 +83,19 @@ class _ReviewPageState extends State<ReviewPage> {
   }
 
   Future<void> _decide(ReviewReport report, ReviewDecision decision) async {
+    ResolutionKind? kind;
+    if (decision == ReviewDecision.reject) {
+      final notes = _notes.putIfAbsent(report.id, TextEditingController.new);
+      final reason = await pickRejectReason(
+        context,
+        compact: MediaQuery.sizeOf(context).width < reviewCompactWidth,
+        note: notes.text,
+      );
+      if (reason == null || !mounted) return;
+      kind = reason.kind;
+      // The note written in the picker is the one sent and kept on the page.
+      if (reason.note.isNotEmpty) notes.text = reason.note;
+    }
     final messenger = ScaffoldMessenger.of(context);
     // The page is rebuilt for the next report's route; keep the router.
     final router = GoRouter.of(context);
@@ -92,15 +108,23 @@ class _ReviewPageState extends State<ReviewPage> {
       decision,
       note,
       force: review.canForce(report.id),
+      resolutionKind: kind,
     );
     if (!mounted || identical(review.pending, before)) return;
     messenger
       ..hideCurrentSnackBar()
       ..showSnackBar(
-        undoSnackBar(context, '${decision.done}：$name', review.undoWindow, () {
-          final id = review.undo();
-          if (id != null) router.go('/review/$id');
-        }),
+        undoSnackBar(
+          context,
+          kind == null
+              ? '${decision.done}：$name'
+              : '${decision.done}（${kind.label}）：$name',
+          review.undoWindow,
+          () {
+            final id = review.undo();
+            if (id != null) router.go('/review/$id');
+          },
+        ),
       );
     _open(next);
   }
@@ -439,9 +463,17 @@ class _QueueItem extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      report.title,
-                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 2,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          report.title,
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        if (report.risk case final risk?) RiskTag(risk),
+                      ],
                     ),
                     Text(
                       spot?.name ?? '找不到點位',
@@ -661,6 +693,18 @@ class _ReviewDetail extends StatelessWidget {
                     ),
                   ],
                 ),
+                if (report.risk case final risk?) ...[
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      RiskTag(risk),
+                      Text(risk.reason, style: muted),
+                    ],
+                  ),
+                ],
                 if (spot != null) ...[
                   const SizedBox(height: 16),
                   _MapFrame(
@@ -753,7 +797,7 @@ class _ReviewDetail extends StatelessWidget {
                     maxLines: 4,
                     decoration: const InputDecoration(
                       labelText: '處理說明（選填）',
-                      helperText: '會和處理人、時間一起記錄在稽核紀錄。',
+                      helperText: '只給管理員看，會和處理人、時間一起記在稽核紀錄。',
                       hintText: '例如：已比對街景與停管處公告',
                     ),
                   ),
@@ -885,6 +929,19 @@ class _DiffTable extends StatelessWidget {
     Widget cell(String key) {
       final current = spot.values[key];
       final value = rows[key];
+      // With a structured fee the text follows it (setDraft), so it is shown
+      // from the draft rather than typed: a text field would keep stale text.
+      if (editing && key == 'fee_note' && reviewFee(rows['fee']) != null) {
+        return Column(
+          key: ValueKey('derived-${report.id}-$key'),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(formatValue(key, value)),
+            const SizedBox(height: 4),
+            Text('依費率產生；要修改請改費率。', style: muted.copyWith(fontSize: 13)),
+          ],
+        );
+      }
       if (editing) {
         return Row(
           children: [
@@ -904,7 +961,7 @@ class _DiffTable extends StatelessWidget {
           ],
         );
       }
-      if (value == current) return Text('不變', style: muted);
+      if (sameValue(key, value, current)) return Text('不變', style: muted);
       return Align(
         alignment: Alignment.centerLeft,
         child: ChangeBand(formatValue(key, value)),
@@ -948,7 +1005,17 @@ class _DiffTable extends StatelessWidget {
                     : Border(top: BorderSide(color: colors.outlineVariant)),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              child: stacked
+              // A fee editor needs the row's whole width at any size.
+              child: editing && reviewField(key)!.input == FieldInput.fee
+                  ? _FeeRow(
+                      report: report,
+                      field: reviewField(key)!,
+                      current: formatValue(key, spot.values[key]),
+                      sent: base == null ? null : formatValue(key, base![key]),
+                      value: rows[key],
+                      review: review,
+                    )
+                  : stacked
                   ? Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -1047,6 +1114,70 @@ class _DiffTable extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+/// The fee row while editing: today's fee, then the editor full width.
+class _FeeRow extends StatelessWidget {
+  const _FeeRow({
+    required this.report,
+    required this.field,
+    required this.current,
+    required this.sent,
+    required this.value,
+    required this.review,
+  });
+  final ReviewReport report;
+  final ReviewField field;
+  final String current;
+  final String? sent;
+  final Object? value;
+  final ReviewController review;
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = TextStyle(
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+    );
+    Widget line(String label, String text) => Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(width: 56, child: Text(label, style: muted)),
+          Expanded(child: Text(text)),
+        ],
+      ),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                field.label,
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+            IconButton(
+              tooltip: '不修改${field.label}',
+              onPressed: () => review.removeDraft(field.key),
+              icon: const Icon(Icons.close),
+            ),
+          ],
+        ),
+        if (sent case final text?) line('送出時', text),
+        line('目前', current),
+        const SizedBox(height: 12),
+        _FieldEditor(
+          key: ValueKey('edit-${report.id}-${field.key}'),
+          field: field,
+          value: value,
+          onChanged: (v) => review.setDraft(field.key, v),
+        ),
+      ],
     );
   }
 }
@@ -1170,6 +1301,14 @@ class _FieldEditor extends StatelessWidget {
         for (final e in field.choices.entries)
           DropdownMenuItem(value: e.key, child: Text(e.value)),
       ],
+      onChanged: onChanged,
+    ),
+    FieldInput.fee => FeeEditor(
+      value: switch (value) {
+        final Fee fee => fee,
+        final Map<Object?, Object?> json => Fee.fromJson(json),
+        _ => const Fee(),
+      },
       onChanged: onChanged,
     ),
     FieldInput.visibility => DropdownButtonFormField<String>(

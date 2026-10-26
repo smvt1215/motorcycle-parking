@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../models/fee.dart';
 import '../../models/parking.dart';
+import '../../ui/fee_editor.dart';
 import '../../ui/location_picker.dart';
 import '../admin_theme.dart';
 import '../review/review_page.dart' show ChangeBand, reviewCompactWidth;
@@ -755,36 +757,48 @@ class _FormPane extends StatelessWidget {
                       mapBuilder: mapBuilder,
                     ),
                   for (final f in fields.where((f) => f.group == group))
-                    _FieldRow(
-                      // Coordinates follow the picker and the county
-                      // follows the lookup; their fields must show it.
-                      key: ValueKey(
-                        '${record.sourceId}-${spots.formSeq}-${f.key}'
-                        '${switch (f.key) {
-                          'lat' || 'lng' => '-$moves',
-                          'city' || 'district' => '-${spots.filled}',
-                          _ => '',
-                        }}',
+                    if (f.input == SpotInput.fee)
+                      _FeeField(
+                        // A reloaded or discarded form starts the editor over.
+                        key: ValueKey(
+                          '${record.sourceId}-${spots.formSeq}-${f.key}',
+                        ),
+                        spots: spots,
+                        error: errors[f.key],
+                      )
+                    else if (f.key == 'fee_note' && spots.feeStructured)
+                      _FeeNotePlate(spots: spots, error: errors[f.key])
+                    else
+                      _FieldRow(
+                        // Coordinates follow the picker and the county
+                        // follows the lookup; their fields must show it.
+                        key: ValueKey(
+                          '${record.sourceId}-${spots.formSeq}-${f.key}'
+                          '${switch (f.key) {
+                            'lat' || 'lng' => '-$moves',
+                            'city' || 'district' => '-${spots.filled}',
+                            _ => '',
+                          }}',
+                        ),
+                        field: f,
+                        value: spots.draft[f.key],
+                        changed: spots.changed(f.key),
+                        error: errors[f.key],
+                        onChanged: (v) {
+                          spots.set(f.key, v);
+                          final lat = spots.draft['lat'];
+                          final lng = spots.draft['lng'];
+                          if ((f.key == 'lat' || f.key == 'lng') &&
+                              lat is num &&
+                              lng is num) {
+                            onMove(
+                              lat.toDouble(),
+                              lng.toDouble(),
+                              fromPicker: false,
+                            );
+                          }
+                        },
                       ),
-                      field: f,
-                      value: spots.draft[f.key],
-                      changed: spots.changed(f.key),
-                      error: errors[f.key],
-                      onChanged: (v) {
-                        spots.set(f.key, v);
-                        final lat = spots.draft['lat'];
-                        final lng = spots.draft['lng'];
-                        if ((f.key == 'lat' || f.key == 'lng') &&
-                            lat is num &&
-                            lng is num) {
-                          onMove(
-                            lat.toDouble(),
-                            lng.toDouble(),
-                            fromPicker: false,
-                          );
-                        }
-                      },
-                    ),
                   if (group == SpotGroup.vehicles &&
                       !record.isNew &&
                       !record.official)
@@ -905,6 +919,154 @@ class _VehicleVerification extends StatelessWidget {
   }
 }
 
+/// The structured fee, per vehicle. A spot with only legacy text starts
+/// with every vehicle unconfirmed: no price is guessed from the text.
+class _FeeField extends StatelessWidget {
+  const _FeeField({super.key, required this.spots, required this.error});
+  final SpotsController spots;
+  final String? error;
+
+  @override
+  Widget build(BuildContext context) {
+    final record = spots.record!;
+    final muted = TextStyle(
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+      fontSize: 13,
+    );
+    final legacy =
+        !record.isNew &&
+        storedFee(record.values['fee']) == null &&
+        !spots.feeStructured;
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 720),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (spots.changed('fee'))
+              const Padding(
+                padding: EdgeInsets.only(bottom: 6),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: ChangeBand('已修改'),
+                ),
+              ),
+            if (legacy) ...[
+              Text(
+                '這個點位只有費率說明文字，還沒設定各車種的收費方式。'
+                '選了收費方式後，說明文字會改成依費率產生；保持「未確認」則照舊顯示下方文字。',
+                key: const ValueKey('fee-legacy'),
+                style: muted,
+              ),
+              const SizedBox(height: 12),
+            ],
+            FeeEditor(
+              value: spots.draft['fee'] as Fee? ?? const Fee(),
+              onChanged: spots.setFee,
+              errorText: error,
+              // The plate below shows the text riders read.
+              showPreview: false,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The fee text riders read, built from the fee above, shown like the
+/// posted fee notice at a lot's entrance rather than as an input: it
+/// cannot be typed while the spot has a structured fee.
+class _FeeNotePlate extends StatelessWidget {
+  const _FeeNotePlate({required this.spots, required this.error});
+  final SpotsController spots;
+  final String? error;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final muted = TextStyle(color: colors.onSurfaceVariant, fontSize: 13);
+    final fee = spots.draft['fee'] as Fee?;
+    final complete = fee?.valid ?? true;
+    final text = spots.draft['fee_note'] as String? ?? '';
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 720),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Flexible(child: Text('App 顯示的費率', style: muted)),
+                if (spots.changed('fee_note')) ...[
+                  const SizedBox(width: 8),
+                  const ChangeBand('已修改'),
+                ],
+              ],
+            ),
+            const SizedBox(height: 6),
+            Semantics(
+              label: 'App 顯示的費率',
+              child: Container(
+                key: const ValueKey('fee-note-plate'),
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
+                // A posted notice keeps its white plate in dark mode too.
+                decoration: BoxDecoration(
+                  color: AdminColors.white,
+                  border: Border.all(color: AdminColors.asphalt, width: 2),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.only(top: 2),
+                      child: Icon(
+                        Icons.payments_outlined,
+                        size: 20,
+                        color: AdminColors.asphalt,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        text,
+                        style: const TextStyle(
+                          color: AdminColors.asphalt,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              complete
+                  ? '依上方費率產生。要改這段文字，請改費率；兩種車都改回「未確認」後，可以自行填寫。'
+                  : '金額填好後，這段文字會跟著更新。',
+              style: muted,
+            ),
+            if (error case final message?) ...[
+              const SizedBox(height: 4),
+              Text(message, style: TextStyle(color: colors.error)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _SourceFacts extends StatelessWidget {
   const _SourceFacts({required this.record});
   final SpotRecord record;
@@ -996,6 +1158,9 @@ class _FieldRow extends StatelessWidget {
             onChanged(parsed ?? t);
           },
         );
+      // The form shows the fee with _FeeField, never as a row.
+      case SpotInput.fee:
+        throw StateError('fee is not a field row');
       case SpotInput.date:
         input = TextFormField(
           initialValue: value as String? ?? '',
