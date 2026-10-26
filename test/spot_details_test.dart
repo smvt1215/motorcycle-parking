@@ -114,6 +114,14 @@ void usePhone(WidgetTester tester, {double width = 390}) {
   addTearDown(tester.view.resetDevicePixelRatio);
 }
 
+/// The summary row's rate as it reads, its icon dropped.
+String feeNowMain(WidgetTester tester) => tester
+    .widget<Text>(find.byKey(const ValueKey('fee-now-main')))
+    .textSpan!
+    .toPlainText()
+    .replaceAll('\uFFFC', '')
+    .trim();
+
 Future<void> showField(WidgetTester tester, String text) async {
   await tester.scrollUntilVisible(
     find.text(text),
@@ -728,24 +736,16 @@ void main() {
       ],
     });
     await openDetails(tester, store, spot);
-    expect(find.text('普通機車費率'), findsOneWidget);
+    // The summary says 機車費率 (decision 28), never a bare 費率.
+    expect(find.text('機車費率'), findsOneWidget);
     expect(find.text('費率'), findsNothing);
     expect(find.text('分區'), findsOneWidget);
-    expect(find.text('20 元／次'), findsOneWidget);
+    expect(feeNowMain(tester), '20 元／次');
     store.vehicle = VehicleType.heavy;
     store.notifyListeners();
     await tester.pumpAndSettle();
-    final summary = find
-        .ancestor(of: find.text('大型重機費率'), matching: find.byType(Column))
-        .first;
-    expect(
-      find.descendant(of: summary, matching: find.text('費率未確認')),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(of: summary, matching: find.text('20 元／次')),
-      findsNothing,
-    );
+    expect(find.text('大型重機費率'), findsOneWidget);
+    expect(feeNowMain(tester), endsWith('費率未確認，請依現場公告'));
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -766,13 +766,16 @@ void main() {
         ],
       });
       await openDetails(tester, store, spot);
-      expect(find.text('普通機車費率'), findsOneWidget);
+      expect(find.text('機車費率'), findsOneWidget);
       expect(find.text('依分區計費'), findsNothing);
-      await showField(tester, '全場費率');
-      expect(find.text('普通機車：每次 20 元（隔日是否另計未確認）'), findsOneWidget);
-      expect(find.text('大型重機：費率未確認'), findsOneWidget);
+      expect(feeNowMain(tester), '每次 20 元');
+      await showField(tester, '全場');
+      // The board repeats the rate with its rule.
+      expect(find.text('每次 20 元'), findsWidgets);
+      expect(find.textContaining('隔日是否另計未確認'), findsWidgets);
+      expect(find.textContaining('費率未確認'), findsOneWidget);
       expect(find.textContaining('舊 B'), findsNothing);
-      expect(find.text('收費說明'), findsNothing);
+      expect(find.byKey(const ValueKey('fee-extra-note')), findsNothing);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     });
@@ -819,10 +822,10 @@ void main() {
         ],
       });
       await openDetails(tester, store, spot);
-      expect(find.text('免費'), findsOneWidget);
+      expect(feeNowMain(tester), '免費');
       expect(find.text('依分區計費'), findsNothing);
       await showField(tester, '位置與指引');
-      expect(find.text('收費說明'), findsNothing);
+      expect(find.byKey(const ValueKey('fee-extra-note')), findsNothing);
       expect(find.text('0'), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
     });
