@@ -146,14 +146,14 @@ void main() {
     expect(find.byTooltip('關閉詳情').hitTestable(), findsNothing);
     await tester.tap(find.text('停車點名稱'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('送出建議'));
+    await tester.tap(find.text('送出修改建議'));
     await tester.pumpAndSettle();
     expect(find.text('請填寫正確的停車點名稱'), findsOneWidget);
     await tester.enterText(
       find.byKey(const ValueKey('suggestion-input')),
       '建議的新名稱',
     );
-    await tester.tap(find.text('送出建議'));
+    await tester.tap(find.text('送出修改建議'));
     await tester.pumpAndSettle();
     expect(find.text('範例模式：建議沒有實際送出，只用來測試流程。'), findsOneWidget);
     await tester.tap(find.text('完成'));

@@ -1,6 +1,13 @@
 import cases from './precheck_cases.json' with { type: 'json' };
 import rulesFile from './precheck_rules.json' with { type: 'json' };
-import { isPlaceholder, precheck, precheckResponse } from './precheck.ts';
+import {
+  blocking,
+  isPlaceholder,
+  precheck,
+  precheckResponse,
+  riskFlags,
+} from './precheck.ts';
+import { currentSpot } from './current_spot.ts';
 import { validate } from './validate.ts';
 
 const sorted = (values: string[]) => [...values].sort();
@@ -16,6 +23,12 @@ Deno.test('shared precheck cases break exactly the expected rules', () => {
     );
     if (JSON.stringify(sorted(got)) !== JSON.stringify(sorted(expect))) {
       throw new Error(`${name}: got ${JSON.stringify(got)}`);
+    }
+    if ('blocking' in c) {
+      const issues = precheck(body as Record<string, unknown>, current);
+      if ((blocking(issues).length > 0) !== c.blocking) {
+        throw new Error(`${name}: blocking ${!c.blocking}`);
+      }
     }
   }
 });
@@ -95,5 +108,118 @@ Deno.test('placeholders are whole values, not words inside a name', () => {
   }
   for (const text of ['', '  ', '測試站', '無障礙機車格', '123 號前']) {
     if (isPlaceholder(text)) throw new Error(`${text} blocked`);
+  }
+});
+
+Deno.test('a hold lets the request through, flagged once per rule', () => {
+  const issues = precheck({
+    action: 'create',
+    spot: {
+      name: '信義路機車格',
+      space_type: 'freeMotorcycle',
+      condition: {
+        bay: 'motorcycle',
+        use: 'share',
+        share: 'scooter_heavy',
+        charge: 'free',
+      },
+    },
+  });
+  if (issues.length !== 1 || issues[0].action !== 'hold') {
+    throw new Error(JSON.stringify(issues));
+  }
+  if (blocking(issues).length) throw new Error('a hold refused the report');
+  if (
+    JSON.stringify(riskFlags([...issues, ...issues])) !==
+      '["share_free_needs_basis"]'
+  ) {
+    throw new Error('risk flags');
+  }
+  // Beside a fix, the refusal names the fix, not the hold.
+  const mixed = precheck({
+    action: 'create',
+    spot: {
+      name: '測試',
+      space_type: 'freeMotorcycle',
+      condition: {
+        bay: 'motorcycle',
+        use: 'share',
+        share: 'scooter_heavy',
+        charge: 'free',
+      },
+    },
+  });
+  const body = precheckResponse(blocking(mixed));
+  if (body.action !== 'fix' || body.issues.some((i) => i.action === 'hold')) {
+    throw new Error(JSON.stringify(body));
+  }
+});
+
+/** A stand-in for the service client: records the table and id asked for. */
+function fakeAdmin(row: Record<string, unknown> | null) {
+  const asked: string[] = [];
+  const admin = {
+    from(table: string) {
+      asked.push(table);
+      return {
+        select(columns: string) {
+          asked.push(columns);
+          return {
+            eq(_: string, id: string) {
+              asked.push(id);
+              return { maybeSingle: () => Promise.resolve({ data: row }) };
+            },
+          };
+        },
+      };
+    },
+  };
+  // deno-lint-ignore no-explicit-any
+  return { admin: admin as any, asked };
+}
+
+Deno.test('currentSpot reads the stored fee and condition of the spot a suggestion names', async () => {
+  const id = '3f1c2a4e-0000-4000-8000-000000000002';
+  const stored = { fee: { car: { mode: 'free' } }, condition: null };
+  const flag = (source: string, proposed: Record<string, unknown>) => ({
+    action: 'flag',
+    source_id: source,
+    proposed,
+  });
+  let fake = fakeAdmin(stored);
+  let got = await currentSpot(fake.admin, flag(id, { fee: {} }));
+  if (
+    got !== stored ||
+    fake.asked.join() !== `community_spots,fee,condition,${id}`
+  ) {
+    throw new Error(fake.asked.join());
+  }
+  fake = fakeAdmin(stored);
+  got = await currentSpot(
+    fake.admin,
+    flag(`official:${id}`, { space_type: 'car', condition: null }),
+  );
+  if (got !== stored || fake.asked[0] !== 'official_heavy_spots') {
+    throw new Error(fake.asked.join());
+  }
+  // A spot not found, a source that is no row, or a suggestion of another
+  // field: the suggestion stands alone.
+  fake = fakeAdmin(null);
+  if (await currentSpot(fake.admin, flag(id, { fee: {} })) !== undefined) {
+    throw new Error('missing spot');
+  }
+  for (
+    const body of [
+      flag('tdx:123', { fee: {} }),
+      flag(id, { name: '新名稱' }),
+      { action: 'create', spot: {} },
+    ]
+  ) {
+    fake = fakeAdmin(stored);
+    if (
+      await currentSpot(fake.admin, body) !== undefined || fake.asked.length
+    ) {
+      throw new Error(JSON.stringify(body));
+    }
   }
 });

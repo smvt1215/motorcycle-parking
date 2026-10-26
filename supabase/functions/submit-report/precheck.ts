@@ -8,7 +8,9 @@
 import data from './precheck_rules.json' with { type: 'json' };
 import { mergeFee } from '../_shared/fee.ts';
 
-export type PrecheckAction = 'fix' | 'reject';
+/** `hold` lets the request through, flagged for stricter review (design
+ * §4.3; feasibility §5.8): the Edge Function never refuses it. */
+export type PrecheckAction = 'fix' | 'hold' | 'reject';
 export interface PrecheckIssue {
   rule: string;
   action: PrecheckAction;
@@ -24,6 +26,13 @@ type Rule = {
 };
 const rules = data.rules as Record<string, Rule>;
 const placeholders = new Set(data.placeholders);
+/**
+ * Rules between a bay's condition and its fee. In a suggestion that names
+ * only one of the two, the other is the spot's stored value: the rider can
+ * fix only one side at a time, so these flag the case (hold) instead of
+ * refusing it, and the reviewer applies both.
+ */
+const storedPairHold = new Set(data.stored_pair_hold);
 const patterns = Object.entries(rules).flatMap(([code, rule]) =>
   (rule.patterns ?? []).map((p) => ({
     code,
@@ -92,6 +101,8 @@ type Json = Record<string, unknown>;
 const object = (v: unknown): v is Json =>
   !!v && typeof v === 'object' && !Array.isArray(v);
 const vehicles = { scooter: '普通機車', heavy: '大型重機' } as const;
+const feeVehicles = { ...vehicles, car: '汽車' } as const;
+type FeeVehicle = keyof typeof feeVehicles;
 const lotFacilities = ['multiStorey', 'underground', 'surface'];
 
 /** Contradictions between the fields of one spot or one suggestion. */
@@ -133,41 +144,157 @@ function combinationIssues(s: Json): PrecheckIssue[] {
       zones.length > 0 && zones.every((z) => z.access === 'noMotorcycle')
     ) out.push(issue('zones_no_motorcycle', field, { vehicle }));
   }
-  if (object(s.fee)) out.push(...feeIssues(s.fee, 'fee', ''));
+  // A lot's condition lives in its zones (§1.2); riders send zone areas.
+  const condition = object(s.condition) && s.space_type !== 'offStreet'
+    ? s.condition
+    : undefined;
+  if (object(s.fee)) {
+    out.push(...feeIssues(s.fee, 'fee', '', { condition }));
+  }
   zones.forEach((zone, i) => {
     if (object(zone.fee)) {
       out.push(
-        ...feeIssues(zone.fee, `parking_zones.${i}.fee`, `分區 ${i + 1}：`),
+        ...feeIssues(zone.fee, `parking_zones.${i}.fee`, `分區 ${i + 1}：`, {
+          condition: object(zone.condition) ? zone.condition : undefined,
+          area: typeof zone.area === 'string' ? zone.area : undefined,
+        }),
       );
     }
   });
   return out;
 }
 
-function feeIssues(fee: Json, field: string, where: string): PrecheckIssue[] {
+/** A free 普大共用 bay the request itself writes: rare, so it waits for a
+ * notice (§4.3, §1.4); a spot already stored that way is not re-flagged. */
+function shareFree(condition: unknown, field: string): PrecheckIssue[] {
+  return object(condition) && condition.share === 'scooter_heavy' &&
+      condition.charge === 'free'
+    ? [issue('share_free_needs_basis', field)]
+    : [];
+}
+
+/** The rates one vehicle pays: its own, or the periods of a by_time rate. */
+function ratesOf(rate: Json): Json[] {
+  if (rate.mode !== 'by_time' || !Array.isArray(rate.periods)) return [rate];
+  return rate.periods.flatMap((p) =>
+    object(p) && object(p.rate) ? [p.rate] : []
+  );
+}
+
+/** A heavy follow's mode as the vehicle it follows; others as they are. */
+function modeOf(fee: Json, key: FeeVehicle): unknown {
+  const rate = fee[key];
+  if (!object(rate)) return undefined;
+  if (key === 'heavy' && rate.mode === 'same_as_scooter') {
+    return object(fee.scooter) ? fee.scooter.mode : undefined;
+  }
+  if (key === 'heavy' && rate.mode === 'same_as_car') {
+    return object(fee.car) ? fee.car.mode : undefined;
+  }
+  return rate.mode;
+}
+
+/**
+ * The structural contradictions in one fee, and those between it and the
+ * bay it is for (§4.3): the bay's [condition], or a zone's [area].
+ */
+function feeIssues(
+  fee: Json,
+  field: string,
+  where: string,
+  bay: { condition?: Json; area?: string } = {},
+): PrecheckIssue[] {
   const out: PrecheckIssue[] = [];
+  const { condition, area } = bay;
   if (
     object(fee.heavy) && fee.heavy.mode === 'same_as_scooter' && !fee.scooter
   ) {
     out.push(issue('fee_follows_missing_scooter', `${field}.heavy`, { where }));
   }
-  for (const key of ['scooter', 'heavy'] as const) {
+  if (object(fee.heavy) && fee.heavy.mode === 'same_as_car' && !fee.car) {
+    out.push(issue('fee_follows_missing_car', `${field}.heavy`, { where }));
+  }
+  const limit = Array.isArray(condition?.limits)
+    ? condition.limits.find((l) => object(l) && l.kind === 'time_limit')
+    : undefined;
+  for (const key of Object.keys(feeVehicles) as FeeVehicle[]) {
     const rate = fee[key];
-    if (!object(rate) || rate.mode !== 'hourly') continue;
-    const params = { where, vehicle: vehicles[key] };
-    const amount = Number(rate.amount);
-    if (amount === 0) {
-      out.push(issue('fee_hourly_zero', `${field}.${key}`, params));
+    if (!object(rate)) continue;
+    const at = `${field}.${key}`;
+    const params = { where, vehicle: feeVehicles[key] };
+    for (const r of ratesOf(rate)) {
+      const amount = Number(r.amount);
+      if (r.mode === 'hourly' && amount === 0 && r.free_minutes === undefined) {
+        out.push(issue('fee_hourly_zero', at, params));
+      }
+      if (
+        r.mode === 'hourly' && typeof r.daily_cap === 'number' &&
+        r.daily_cap < amount
+      ) {
+        out.push(
+          issue('fee_cap_below_amount', at, {
+            ...params,
+            cap: r.daily_cap,
+            amount,
+          }),
+        );
+      }
+      // 首段 0 元 is a per-visit 0 with a valid time (§2.3), never free.
+      if (
+        (r.mode === 'per_visit' && amount === 0 &&
+          r.max_minutes === undefined) ||
+        (r.mode === 'daily' && amount === 0)
+      ) {
+        out.push(
+          issue('fee_zero_visit', at, {
+            ...params,
+            mode: r.mode === 'daily' ? '每日' : '計次',
+          }),
+        );
+      }
+      if (
+        limit && typeof limit.max_minutes === 'number' &&
+        r.mode === 'per_visit' && typeof r.max_minutes === 'number' &&
+        r.max_minutes !== limit.max_minutes
+      ) {
+        out.push(
+          issue('time_limit_mismatch', at, {
+            ...params,
+            limit: limit.max_minutes,
+            minutes: r.max_minutes,
+          }),
+        );
+      }
     }
-    if (typeof rate.daily_cap === 'number' && rate.daily_cap < amount) {
-      out.push(
-        issue('fee_cap_below_amount', `${field}.${key}`, {
-          ...params,
-          cap: rate.daily_cap,
-          amount,
-        }),
-      );
+    if (
+      rate.mode === 'by_time' && rate.cross_period !== undefined &&
+      ratesOf(rate).filter((r) => r.mode === 'per_visit').length < 2
+    ) out.push(issue('cross_period_single', at, params));
+    const mode = modeOf(fee, key);
+    if (condition?.charge === 'free') {
+      if (mode !== undefined && mode !== 'free') {
+        out.push(issue('charge_free_rate', at, params));
+      }
+      if (ratesOf(rate).some((r) => r.renew !== undefined)) {
+        out.push(issue('free_with_renew', at, params));
+      }
+      if (ratesOf(rate).some((r) => r.extension !== undefined)) {
+        out.push(issue('free_with_extension', at, params));
+      }
     }
+    if (condition?.charge === 'toll' && mode === 'free') {
+      out.push(issue('charge_toll_free_rate', at, params));
+    }
+  }
+  if (condition?.bay === 'heavy' && fee.scooter !== undefined) {
+    out.push(issue('heavy_bay_scooter_fee', `${field}.scooter`, { where }));
+  }
+  if (
+    (condition?.bay === 'motorcycle' || area === 'motorcycle') &&
+    fee.car !== undefined
+  ) out.push(issue('motorcycle_bay_car_fee', `${field}.car`, { where }));
+  if (area === 'car' && fee.scooter !== undefined) {
+    out.push(issue('car_area_scooter_fee', `${field}.scooter`, { where }));
   }
   return out;
 }
@@ -231,16 +358,40 @@ export function precheck(body: Json, current?: Json): PrecheckIssue[] {
   const proposed = body.action === 'flag' && object(body.proposed)
     ? body.proposed
     : undefined;
-  const merged = proposed && object(proposed.fee)
-    ? { ...proposed, fee: mergeFee(current?.fee, proposed.fee) }
-    : proposed;
-  if (spot) out.push(...combinationIssues(spot));
+  // The fee a suggestion leaves, judged with the condition it leaves: its
+  // own, or the spot's (§4.3, merged results).
+  const merged =
+    proposed && (object(proposed.fee) || object(proposed.condition))
+      ? {
+        ...proposed,
+        // A new condition is judged with the stored fee it would sit beside.
+        ...(object(proposed.fee) || object(current?.fee)
+          ? { fee: mergeFee(current?.fee, proposed.fee) }
+          : {}),
+        ...(!('condition' in proposed) && object(current?.condition)
+          ? { condition: current.condition }
+          : {}),
+      }
+      : proposed;
+  // Whether a suggestion's condition or fee is the spot's stored one.
+  const storedPair = !!proposed &&
+    (!object(proposed.fee) || !('condition' in proposed));
+  if (spot) {
+    out.push(...combinationIssues(spot));
+    if (spot.space_type !== 'offStreet') {
+      out.push(...shareFree(spot.condition, 'condition.charge'));
+    }
+  }
   if (proposed) {
     out.push(
       ...combinationIssues(merged!).map((i) => ({
         ...i,
+        action: storedPair && storedPairHold.has(i.rule)
+          ? 'hold' as const
+          : i.action,
         field: `proposed.${i.field}`,
       })),
+      ...shareFree(proposed.condition, 'proposed.condition.charge'),
     );
     if (
       goneFields.includes(String(body.field)) &&
@@ -265,12 +416,25 @@ export function precheck(body: Json, current?: Json): PrecheckIssue[] {
   return out;
 }
 
+/** The issues that refuse the request; a `hold` only flags it. */
+export const blocking = (issues: PrecheckIssue[]) =>
+  issues.filter((i) => i.action !== 'hold');
+
+/** The rules a held request broke, once each, for apply_report. */
+export function riskFlags(issues: PrecheckIssue[]) {
+  return [
+    ...new Set(issues.filter((i) => i.action === 'hold').map((i) => i.rule)),
+  ];
+}
+
 /** The response body for a blocked request; `error` stays a short code
  * like every other refusal, and `message` reads as a full sentence. */
 export function precheckResponse(issues: PrecheckIssue[]) {
   const action: PrecheckAction = issues.some((i) => i.action === 'reject')
     ? 'reject'
-    : 'fix';
+    : issues.some((i) => i.action === 'fix')
+    ? 'fix'
+    : 'hold';
   const first = issues.find((i) => i.action === action) ?? issues[0];
   return {
     error: `precheck ${action}`,

@@ -1,9 +1,7 @@
-import {
-  createClient,
-  type SupabaseClient,
-} from 'npm:@supabase/supabase-js@2.108.1';
+import { createClient } from 'npm:@supabase/supabase-js@2.108.1';
 import { cors, readBody, response } from '../_shared/http.ts';
-import { precheck, precheckResponse } from './precheck.ts';
+import { currentSpot } from './current_spot.ts';
+import { blocking, precheck, precheckResponse, riskFlags } from './precheck.ts';
 import { identityHash, validate } from './validate.ts';
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
@@ -41,12 +39,15 @@ Deno.serve(async (req) => {
     // Contradictions and personal data come back with what to change; the
     // client's own precheck is only a hint and is never trusted.
     const issues = precheck(body, await currentSpot(admin, body));
-    if (issues.length) return response(precheckResponse(issues), 400);
+    const refused = blocking(issues);
+    if (refused.length) return response(precheckResponse(refused), 400);
     const { data: result, error: rpcError } = await admin.rpc('apply_report', {
       p_user: data.user.id,
       p_ip: await identityHash(secret, `ip:${ip}`),
       p_device: await identityHash(secret, `device:${body.device_id}`),
-      p_payload: body,
+      // A hold goes through flagged for stricter review (§4.3); the flags
+      // are always the server's own, never a client's.
+      p_payload: { ...body, risk_flags: riskFlags(issues) },
     });
     if (rpcError) {
       return response(
@@ -65,29 +66,3 @@ Deno.serve(async (req) => {
     return response({ error: 'invalid report' }, 400);
   }
 });
-
-const uuidPattern =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/**
- * The stored fee of the spot a fee suggestion names, so its rules run on
- * the fee it leaves (design §4.3, §5.4); undefined for anything else or a
- * spot not found, where the suggestion stands alone.
- */
-async function currentSpot(
-  admin: SupabaseClient,
-  body: Record<string, unknown>,
-): Promise<Record<string, unknown> | undefined> {
-  const proposed = body.proposed as Record<string, unknown> | undefined;
-  if (body.action !== 'flag' || !proposed || !('fee' in proposed)) return;
-  const source = String(body.source_id);
-  const official = source.startsWith('official:');
-  const id = official ? source.slice('official:'.length) : source;
-  if (!uuidPattern.test(id)) return;
-  const { data } = await admin
-    .from(official ? 'official_heavy_spots' : 'community_spots')
-    .select('fee')
-    .eq('id', id)
-    .maybeSingle();
-  return data ?? undefined;
-}

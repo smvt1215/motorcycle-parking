@@ -13,9 +13,14 @@ Future<void> chooseFeeMode(
   await tapFee(tester, 'fee-mode-$vehicle-$mode');
 }
 
-/// Opens [vehicle] in the first fee editor unless it is open already.
+/// Opens [vehicle] in the first fee editor unless it is open already; in a
+/// fee suggestion, its card's 修改.
 Future<void> openFeeVehicle(WidgetTester tester, String vehicle) async {
-  if (find.byKey(ValueKey('fee-open-$vehicle')).evaluate().isNotEmpty) return;
+  bool shown(String key) => find.byKey(ValueKey(key)).evaluate().isNotEmpty;
+  if (shown('fee-open-$vehicle') || shown('suggest-rate-$vehicle')) return;
+  if (shown('suggest-edit-$vehicle')) {
+    return tapFee(tester, 'suggest-edit-$vehicle');
+  }
   await tapFee(tester, 'fee-row-$vehicle');
 }
 

@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "placeholders": [
     "測試",
     "測試用",
@@ -27,6 +27,15 @@
     "停車場",
     "停車格",
     "停車位"
+  ],
+  "stored_pair_hold": [
+    "charge_free_rate",
+    "charge_toll_free_rate",
+    "free_with_renew",
+    "free_with_extension",
+    "heavy_bay_scooter_fee",
+    "motorcycle_bay_car_fee",
+    "time_limit_mismatch"
   ],
   "rules": {
     "lot_roadside": {
@@ -61,13 +70,61 @@
       "action": "fix",
       "message": "{where}大型重機選了「比照機車費率」，但普通機車的收費方式是未確認。請填普通機車的費率，或改選大型重機的收費方式。"
     },
+    "fee_follows_missing_car": {
+      "action": "fix",
+      "message": "{where}大型重機比照汽車費率，但還沒填汽車費率。請填汽車費率，或改選其他收費方式。"
+    },
     "fee_cap_below_amount": {
       "action": "fix",
       "message": "{where}{vehicle}的當日上限 {cap} 元比計時金額 {amount} 元還低。請照收費牌重填；沒有上限就留空。"
     },
     "fee_hourly_zero": {
       "action": "fix",
-      "message": "{where}{vehicle}的計時金額是 0 元。不收費請改選「免費」。"
+      "message": "{where}{vehicle}計時 0 元等於免費。格位免費請選「免費」；前段免費請填「前幾分鐘 0 元」。"
+    },
+    "fee_zero_visit": {
+      "action": "fix",
+      "message": "{where}{vehicle}{mode} 0 元等於免費。格位免費請選「免費」；公告寫首段 0 元時，計次請填有效時間。"
+    },
+    "charge_free_rate": {
+      "action": "fix",
+      "message": "{where}這是免費格，{vehicle}的費率卻不是「免費」。請把{vehicle}改成免費，或把收費屬性改成收費格。"
+    },
+    "charge_toll_free_rate": {
+      "action": "fix",
+      "message": "{where}這是收費格，{vehicle}的費率不能是「免費」。公告寫首段 0 元時，請填「前幾分鐘 0 元」或計次的有效時間。"
+    },
+    "share_free_needs_basis": {
+      "action": "hold",
+      "message": "普大共用的免費格較少見，請附上公告連結，審核會比較快。"
+    },
+    "heavy_bay_scooter_fee": {
+      "action": "fix",
+      "message": "{where}重機專用格不能停普通機車，不用填普通機車的費率。請把普通機車改回未確認。"
+    },
+    "motorcycle_bay_car_fee": {
+      "action": "fix",
+      "message": "{where}機車格或機車區不用填汽車費率。請把汽車改回未確認；汽車區請另外新增分區。"
+    },
+    "car_area_scooter_fee": {
+      "action": "hold",
+      "message": "{where}汽車區通常不開放普通機車。現場公告開放時，請附上公告連結，審核會比較快。"
+    },
+    "time_limit_mismatch": {
+      "action": "fix",
+      "message": "{where}限時 {limit} 分鐘，和{vehicle}計次的有效時間 {minutes} 分鐘不同。請照公告改成一樣的時間。"
+    },
+    "cross_period_single": {
+      "action": "fix",
+      "message": "{where}{vehicle}的計次時段不到兩段，沒有可以跨的時段。請把「停到下一個時段時」改回未確認。"
+    },
+    "free_with_renew": {
+      "action": "fix",
+      "message": "{where}這是免費格，{vehicle}不用填「跨日怎麼收」。請改回未確認，或把收費屬性改成收費格。"
+    },
+    "free_with_extension": {
+      "action": "fix",
+      "message": "{where}這是免費格，{vehicle}不用填付費延長。請刪除延長，或把收費屬性改成收費格。"
     },
     "gone_with_changes": {
       "action": "fix",

@@ -695,4 +695,45 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   });
+
+  group('格位建議帶停放條件（C5a）', () {
+    final community = sampleSpots()[communityId]!;
+    final spot = ReviewSpot(
+      sourceId: communityId,
+      official: false,
+      values: {...community.values, 'space_type': 'paidMotorcycle'},
+    );
+    const timed = {
+      'bay': 'motorcycle',
+      'use': 'usual',
+      'charge': 'toll',
+      'limits': [
+        {'kind': 'time_limit', 'max_minutes': 20},
+      ],
+    };
+
+    test('條件隨格位類型一起套用，並以一句話顯示', () {
+      final patch = applicablePatch({
+        'space_type': 'timedMotorcycle',
+        'condition': timed,
+      }, spot);
+      expect(patch, {'space_type': 'timedMotorcycle', 'condition': timed});
+      expect(validatePatch(patch, spot), isNull);
+      expect(formatValue('condition', timed), '收費、限停 20 分鐘');
+      expect(formatValue('condition', null), '未提供');
+      expect(sameValue('condition', {...timed}, {...timed}), isTrue);
+    });
+
+    test('條件與格位類型不一致、或格式不對時不送出', () {
+      expect(validatePatch({'condition': timed}, spot), contains('格位類型不一致'));
+      expect(
+        ignoredKeys({
+          'condition': {'bay': 'bus'},
+        }, spot),
+        ['condition'],
+      );
+      // Dropping a stored condition needs no space type.
+      expect(validatePatch({'condition': null}, spot), isNull);
+    });
+  });
 }

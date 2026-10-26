@@ -8,7 +8,9 @@ library;
 
 import '../models/fee.dart' show mergeFeeJson;
 
-enum PrecheckAction { fix, reject }
+/// [hold] lets the request through, flagged for stricter review (design
+/// §4.3); only [fix] and [reject] refuse it.
+enum PrecheckAction { fix, hold, reject }
 
 /// One broken rule: [field] is the payload path the rider corrects, such
 /// as `scooter_allowed` or `parking_zones.1.fee.heavy`.
@@ -30,7 +32,7 @@ typedef PrecheckRule = ({
   List<PrecheckPattern> patterns,
 });
 
-const precheckVersion = 1;
+const precheckVersion = 2;
 
 const precheckPlaceholders = {
   '測試',
@@ -59,6 +61,20 @@ const precheckPlaceholders = {
   '停車場',
   '停車格',
   '停車位',
+};
+
+/// Rules between a bay's condition and its fee. In a suggestion that names
+/// only one of the two, the other is the spot's stored value: the rider can
+/// fix only one side at a time, so these flag the case (hold) instead of
+/// refusing it, and the reviewer applies both.
+const precheckStoredPairHold = {
+  'charge_free_rate',
+  'charge_toll_free_rate',
+  'free_with_renew',
+  'free_with_extension',
+  'heavy_bay_scooter_fee',
+  'motorcycle_bay_car_fee',
+  'time_limit_mismatch',
 };
 
 const Map<String, PrecheckRule> precheckRules = {
@@ -102,6 +118,11 @@ const Map<String, PrecheckRule> precheckRules = {
     message: '{where}大型重機選了「比照機車費率」，但普通機車的收費方式是未確認。請填普通機車的費率，或改選大型重機的收費方式。',
     patterns: [],
   ),
+  'fee_follows_missing_car': (
+    action: PrecheckAction.fix,
+    message: '{where}大型重機比照汽車費率，但還沒填汽車費率。請填汽車費率，或改選其他收費方式。',
+    patterns: [],
+  ),
   'fee_cap_below_amount': (
     action: PrecheckAction.fix,
     message: '{where}{vehicle}的當日上限 {cap} 元比計時金額 {amount} 元還低。請照收費牌重填；沒有上限就留空。',
@@ -109,7 +130,64 @@ const Map<String, PrecheckRule> precheckRules = {
   ),
   'fee_hourly_zero': (
     action: PrecheckAction.fix,
-    message: '{where}{vehicle}的計時金額是 0 元。不收費請改選「免費」。',
+    message: '{where}{vehicle}計時 0 元等於免費。格位免費請選「免費」；前段免費請填「前幾分鐘 0 元」。',
+    patterns: [],
+  ),
+  'fee_zero_visit': (
+    action: PrecheckAction.fix,
+    message: '{where}{vehicle}{mode} 0 元等於免費。格位免費請選「免費」；公告寫首段 0 元時，計次請填有效時間。',
+    patterns: [],
+  ),
+  'charge_free_rate': (
+    action: PrecheckAction.fix,
+    message: '{where}這是免費格，{vehicle}的費率卻不是「免費」。請把{vehicle}改成免費，或把收費屬性改成收費格。',
+    patterns: [],
+  ),
+  'charge_toll_free_rate': (
+    action: PrecheckAction.fix,
+    message:
+        '{where}這是收費格，{vehicle}的費率不能是「免費」。公告寫首段 0 元時，請填「前幾分鐘 0 元」或計次的有效時間。',
+    patterns: [],
+  ),
+  'share_free_needs_basis': (
+    action: PrecheckAction.hold,
+    message: '普大共用的免費格較少見，請附上公告連結，審核會比較快。',
+    patterns: [],
+  ),
+  'heavy_bay_scooter_fee': (
+    action: PrecheckAction.fix,
+    message: '{where}重機專用格不能停普通機車，不用填普通機車的費率。請把普通機車改回未確認。',
+    patterns: [],
+  ),
+  'motorcycle_bay_car_fee': (
+    action: PrecheckAction.fix,
+    message: '{where}機車格或機車區不用填汽車費率。請把汽車改回未確認；汽車區請另外新增分區。',
+    patterns: [],
+  ),
+  'car_area_scooter_fee': (
+    action: PrecheckAction.hold,
+    message: '{where}汽車區通常不開放普通機車。現場公告開放時，請附上公告連結，審核會比較快。',
+    patterns: [],
+  ),
+  'time_limit_mismatch': (
+    action: PrecheckAction.fix,
+    message:
+        '{where}限時 {limit} 分鐘，和{vehicle}計次的有效時間 {minutes} 分鐘不同。請照公告改成一樣的時間。',
+    patterns: [],
+  ),
+  'cross_period_single': (
+    action: PrecheckAction.fix,
+    message: '{where}{vehicle}的計次時段不到兩段，沒有可以跨的時段。請把「停到下一個時段時」改回未確認。',
+    patterns: [],
+  ),
+  'free_with_renew': (
+    action: PrecheckAction.fix,
+    message: '{where}這是免費格，{vehicle}不用填「跨日怎麼收」。請改回未確認，或把收費屬性改成收費格。',
+    patterns: [],
+  ),
+  'free_with_extension': (
+    action: PrecheckAction.fix,
+    message: '{where}這是免費格，{vehicle}不用填付費延長。請刪除延長，或把收費屬性改成收費格。',
     patterns: [],
   ),
   'gone_with_changes': (
@@ -321,8 +399,12 @@ List<PrecheckIssue> _combinations(_Json s) {
       out.add(_issue('zones_no_motorcycle', field, {'vehicle': vehicle}));
     }
   }
+  // A lot's condition lives in its zones (§1.2); riders send zone areas.
+  final condition = s['space_type'] != 'offStreet' && s['condition'] is Map
+      ? (s['condition']! as Map).cast<String, Object?>()
+      : null;
   if (s['fee'] case final Map<Object?, Object?> fee) {
-    out.addAll(precheckFee(fee.cast(), field: 'fee'));
+    out.addAll(precheckFee(fee.cast(), field: 'fee', condition: condition));
   }
   for (final (i, zone) in zones.indexed) {
     if (zone['fee'] case final Map<Object?, Object?> fee) {
@@ -331,6 +413,11 @@ List<PrecheckIssue> _combinations(_Json s) {
           fee.cast(),
           field: 'parking_zones.$i.fee',
           where: '分區 ${i + 1}：',
+          condition: switch (zone['condition']) {
+            final Map<Object?, Object?> c => c.cast(),
+            _ => null,
+          },
+          area: zone['area'] as String?,
         ),
       );
     }
@@ -338,11 +425,44 @@ List<PrecheckIssue> _combinations(_Json s) {
   return out;
 }
 
-/// The structural contradictions in one fee, as JSON (`Fee.toJson`).
+/// A free 普大共用 bay the request itself writes: rare, so it waits for a
+/// notice (§4.3, §1.4); a spot already stored that way is not re-flagged.
+List<PrecheckIssue> _shareFree(Object? condition, String field) => [
+  if (condition case {'share': 'scooter_heavy', 'charge': 'free'})
+    _issue('share_free_needs_basis', field),
+];
+
+const _feeVehicles = {..._vehicles, 'car': '汽車'};
+
+/// The rates one vehicle pays: its own, or the periods of a by_time rate.
+List<Map<Object?, Object?>> _ratesOf(Map<Object?, Object?> rate) =>
+    rate['mode'] == 'by_time' && rate['periods'] is List
+    ? [
+        for (final p in rate['periods']! as List)
+          if (p case {'rate': final Map<Object?, Object?> r}) r,
+      ]
+    : [rate];
+
+/// A heavy follow's mode as the vehicle it follows; others as they are.
+Object? _modeOf(Map<String, Object?> fee, String key) {
+  final rate = fee[key];
+  if (rate is! Map) return null;
+  return switch ((key, rate['mode'])) {
+    ('heavy', 'same_as_scooter') => (fee['scooter'] as Map?)?['mode'],
+    ('heavy', 'same_as_car') => (fee['car'] as Map?)?['mode'],
+    (_, final mode) => mode,
+  };
+}
+
+/// The structural contradictions in one fee, as JSON (`Fee.toJson`), and
+/// those between it and the bay it is for (§4.3): the bay's [condition], or
+/// a zone's [area].
 List<PrecheckIssue> precheckFee(
   Map<String, Object?> fee, {
   String field = 'fee',
   String where = '',
+  Map<String, Object?>? condition,
+  String? area,
 }) {
   final out = <PrecheckIssue>[];
   if (fee['heavy'] case {'mode': 'same_as_scooter'}
@@ -351,22 +471,97 @@ List<PrecheckIssue> precheckFee(
       _issue('fee_follows_missing_scooter', '$field.heavy', {'where': where}),
     );
   }
-  for (final MapEntry(key: key, value: vehicle) in _vehicles.entries) {
+  if (fee['heavy'] case {'mode': 'same_as_car'} when fee['car'] == null) {
+    out.add(
+      _issue('fee_follows_missing_car', '$field.heavy', {'where': where}),
+    );
+  }
+  final limit = switch (condition?['limits']) {
+    final List<Object?> limits =>
+      limits
+          .whereType<Map<Object?, Object?>>()
+          .where((l) => l['kind'] == 'time_limit')
+          .firstOrNull,
+    _ => null,
+  };
+  final charge = condition?['charge'];
+  for (final MapEntry(key: key, value: vehicle) in _feeVehicles.entries) {
     final rate = fee[key];
-    if (rate is! Map || rate['mode'] != 'hourly') continue;
+    if (rate is! Map) continue;
+    final at = '$field.$key';
     final params = {'where': where, 'vehicle': vehicle};
-    final amount = rate['amount'];
-    if (amount == 0) out.add(_issue('fee_hourly_zero', '$field.$key', params));
-    final cap = rate['daily_cap'];
-    if (cap is num && amount is num && cap < amount) {
-      out.add(
-        _issue('fee_cap_below_amount', '$field.$key', {
-          ...params,
-          'cap': cap,
-          'amount': amount,
-        }),
-      );
+    final rates = _ratesOf(rate);
+    for (final r in rates) {
+      final amount = r['amount'];
+      final mode = r['mode'];
+      if (mode == 'hourly' && amount == 0 && r['free_minutes'] == null) {
+        out.add(_issue('fee_hourly_zero', at, params));
+      }
+      final cap = r['daily_cap'];
+      if (mode == 'hourly' && cap is num && amount is num && cap < amount) {
+        out.add(
+          _issue('fee_cap_below_amount', at, {
+            ...params,
+            'cap': cap,
+            'amount': amount,
+          }),
+        );
+      }
+      // 首段 0 元 is a per-visit 0 with a valid time (§2.3), never free.
+      if ((mode == 'per_visit' && amount == 0 && r['max_minutes'] == null) ||
+          (mode == 'daily' && amount == 0)) {
+        out.add(
+          _issue('fee_zero_visit', at, {
+            ...params,
+            'mode': mode == 'daily' ? '每日' : '計次',
+          }),
+        );
+      }
+      if (limit?['max_minutes'] case final num minutes
+          when mode == 'per_visit' &&
+              r['max_minutes'] is num &&
+              r['max_minutes'] != minutes) {
+        out.add(
+          _issue('time_limit_mismatch', at, {
+            ...params,
+            'limit': minutes,
+            'minutes': r['max_minutes']!,
+          }),
+        );
+      }
     }
+    if (rate['mode'] == 'by_time' &&
+        rate['cross_period'] != null &&
+        rates.where((r) => r['mode'] == 'per_visit').length < 2) {
+      out.add(_issue('cross_period_single', at, params));
+    }
+    final mode = _modeOf(fee, key);
+    if (charge == 'free') {
+      if (mode != null && mode != 'free') {
+        out.add(_issue('charge_free_rate', at, params));
+      }
+      if (rates.any((r) => r['renew'] != null)) {
+        out.add(_issue('free_with_renew', at, params));
+      }
+      if (rates.any((r) => r['extension'] != null)) {
+        out.add(_issue('free_with_extension', at, params));
+      }
+    }
+    if (charge == 'toll' && mode == 'free') {
+      out.add(_issue('charge_toll_free_rate', at, params));
+    }
+  }
+  if (condition?['bay'] == 'heavy' && fee.containsKey('scooter')) {
+    out.add(
+      _issue('heavy_bay_scooter_fee', '$field.scooter', {'where': where}),
+    );
+  }
+  if ((condition?['bay'] == 'motorcycle' || area == 'motorcycle') &&
+      fee.containsKey('car')) {
+    out.add(_issue('motorcycle_bay_car_fee', '$field.car', {'where': where}));
+  }
+  if (area == 'car' && fee.containsKey('scooter')) {
+    out.add(_issue('car_area_scooter_fee', '$field.scooter', {'where': where}));
   }
   return out;
 }
@@ -425,18 +620,42 @@ List<PrecheckIssue> precheck(
   final action = body['action'];
   final spot = (action == 'create' || action == 'update') ? body['spot'] : null;
   final proposed = action == 'flag' ? body['proposed'] : null;
-  if (spot is Map) out.addAll(_combinations(spot.cast()));
+  if (spot is Map) {
+    out.addAll(_combinations(spot.cast()));
+    if (spot['space_type'] != 'offStreet') {
+      out.addAll(_shareFree(spot['condition'], 'condition.charge'));
+    }
+  }
   if (proposed is Map) {
+    // The fee a suggestion leaves, judged with the condition it leaves: its
+    // own, or the spot's (§4.3, merged results). A new condition is judged
+    // with the stored fee it would sit beside.
+    final judged = proposed['fee'] is Map || proposed['condition'] is Map;
     final merged = <String, Object?>{
       ...proposed.cast<String, Object?>(),
-      if (proposed['fee'] is Map)
+      if (judged && (proposed['fee'] is Map || current?['fee'] is Map))
         'fee': mergeFeeJson(current?['fee'], proposed['fee']),
+      if (judged &&
+          !proposed.containsKey('condition') &&
+          current?['condition'] is Map)
+        'condition': current!['condition'],
     };
+    // Whether the suggestion's condition or fee is the spot's stored one.
+    final storedPair =
+        proposed['fee'] is! Map || !proposed.containsKey('condition');
     for (final i in _combinations(merged)) {
       out.add(
-        PrecheckIssue(i.rule, i.action, 'proposed.${i.field}', i.message),
+        PrecheckIssue(
+          i.rule,
+          storedPair && precheckStoredPairHold.contains(i.rule)
+              ? PrecheckAction.hold
+              : i.action,
+          'proposed.${i.field}',
+          i.message,
+        ),
       );
     }
+    out.addAll(_shareFree(proposed['condition'], 'proposed.condition.charge'));
     if (_goneFields.contains(body['field']) &&
         proposed.keys.any((k) => k != 'hidden' && k != 'status')) {
       out.add(_issue('gone_with_changes', 'proposed'));
@@ -462,12 +681,25 @@ List<PrecheckIssue> precheck(
   return out;
 }
 
+/// The issues that refuse the request; a [PrecheckAction.hold] only flags it.
+List<PrecheckIssue> precheckBlocking(Iterable<PrecheckIssue> issues) => [
+  for (final i in issues)
+    if (i.action != PrecheckAction.hold) i,
+];
+
 /// The messages for issues under [prefix] (e.g. `fee` or
-/// `parking_zones.1.fee`), joined for one hint under that field.
-String? precheckHint(Iterable<PrecheckIssue> issues, String prefix) {
+/// `parking_zones.1.fee`), joined for one hint under that field: the ones
+/// that refuse the report, or with [holds] the ones that only flag it.
+String? precheckHint(
+  Iterable<PrecheckIssue> issues,
+  String prefix, {
+  bool holds = false,
+}) {
   final messages = {
     for (final i in issues)
-      if (i.field == prefix || i.field.startsWith('$prefix.')) i.message,
+      if ((i.field == prefix || i.field.startsWith('$prefix.')) &&
+          (i.action == PrecheckAction.hold) == holds)
+        i.message,
   };
   return messages.isEmpty ? null : messages.join('\n');
 }
