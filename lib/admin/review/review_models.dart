@@ -418,7 +418,11 @@ String? validatePatch(Map<String, dynamic> patch, ReviewSpot spot) {
         if (value == null) break;
         final fee = value is Fee ? value : Fee.tryParse(value);
         if (fee == null) return '費率格式不正確，請重新選擇收費方式';
-        if ([fee.scooter, fee.heavy].nonNulls.any((r) => !r.complete)) {
+        if ([
+          fee.scooter,
+          fee.heavy,
+          fee.car,
+        ].nonNulls.any((r) => !r.complete)) {
           return '請填完收費金額，計時另需選計費時間';
         }
         if (!fee.valid) return '金額請填 0 到 10000 的整數';
