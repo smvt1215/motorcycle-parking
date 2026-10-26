@@ -305,7 +305,9 @@ begin
     end if;
     -- A note that is the stored fee's source text, beside no fee or the
     -- stored fee, describes the same fee: the stored fee and its sentence
-    -- stay (202610270022 moved such notes to fee_source_text).
+    -- stay (202610270022 moved such notes to fee_source_text). The source
+    -- text always describes the stored fee: spot_fee_source_text() clears
+    -- it whenever the fee changes without one.
     if v_current->>'fee_source_text'<>'' and incoming->>'fee_note'=v_current->>'fee_source_text'
        and (incoming->'fee'='null'::jsonb or incoming->'fee'=v_current->'fee') then
       incoming:=jsonb_set(jsonb_set(incoming,'{fee}',v_current->'fee'),'{fee_note}',v_current->'fee_note');
