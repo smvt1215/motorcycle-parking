@@ -670,6 +670,36 @@ void main() {
       expect(ended.gaps, contains(DecisionGap.noticeExpired));
     });
 
+    test('分區公告到期只讓「開放」失效：不開放的分區仍是不開放', () {
+      final closed = zone(
+        '普機區',
+        access: ParkingAccess.scooterOnly,
+        condition: {
+          'bay': 'motorcycle',
+          'use': 'usual',
+          'charge': 'toll',
+          'allow': {'scooter': true, 'heavy': false},
+          'basis': {
+            'source_url': 'https://example.test/notice',
+            'effective_date': '2026-04-06',
+            'expires_on': '2026-10-05',
+          },
+        },
+      );
+      final d = heavy(lot([closed], complete: true));
+      expect(d.zones.single.status, EligibilityStatus.notAllowed);
+      expect(d.gaps, {DecisionGap.zonesConflict});
+      // Scooters it opened are unconfirmed once it ends.
+      final s = decideParking(
+        lot([closed], complete: true),
+        VehicleType.scooter,
+        bundled,
+        now: now,
+      );
+      expect(s.zones.single.status, EligibilityStatus.unverified);
+      expect(s.zones.single.gaps, {DecisionGap.noticeExpired});
+    });
+
     test('窮舉：場站旗標 × 分區組合 × 完整度 × 車種的不變式', () {
       final kinds = <ParkingZone>[
         zone('無資料'),
@@ -790,6 +820,73 @@ void main() {
       expect(missing.kind, PriceKind.unknown);
       expect(missing.text, '大型重機費率未提供');
       expect(priceAnswer(null, VehicleType.scooter).kind, PriceKind.unknown);
+    });
+
+    test('decideParking 的價格：路邊點與沒有分區的停車場讀點位 fee，沒有時退回舊文字', () {
+      ParkingSpot withFee(String type, Object? fee, String note) =>
+          ParkingSpot.fromJson({
+            'id': 's',
+            'name': 's',
+            'lat': 25,
+            'lng': 121,
+            'city': '臺北市',
+            'space_type': type,
+            'source': 'official',
+            'heavy_allowed': true,
+            'fee_note': note,
+            'fee': ?fee,
+          });
+      const fee = {
+        'heavy': {'mode': 'per_visit', 'amount': 40, 'renew': 'midnight'},
+      };
+      for (final type in ['paidMotorcycle', 'offStreet']) {
+        final known = decideParking(
+          withFee(type, fee, '大型重機每次 40 元，隔日另計'),
+          VehicleType.heavy,
+          bundled,
+          now: now,
+        ).price!;
+        expect(known.kind, PriceKind.known, reason: type);
+        expect(known.text, '每次 40 元，隔日另計', reason: type);
+        final legacy = decideParking(
+          withFee(type, null, '每小時 20 元'),
+          VehicleType.heavy,
+          bundled,
+          now: now,
+        ).price!;
+        expect(legacy.kind, PriceKind.unknown, reason: type);
+        expect(legacy.text, '每小時 20 元', reason: type);
+      }
+    });
+
+    test('分區有費率時，沒有費率的分區退回該分區的舊文字', () {
+      final d = decideParking(
+        ParkingSpot.fromJson({
+          'id': 'lot',
+          'name': 'lot',
+          'lat': 25,
+          'lng': 121,
+          'city': '臺北市',
+          'space_type': 'offStreet',
+          'source': 'official',
+          'heavy_allowed': true,
+          'parking_zones': [
+            {
+              'name': '機車區',
+              'access': 'scooterHeavy',
+              'fee': {
+                'scooter': {'mode': 'hourly', 'amount': 10, 'per_minutes': 60},
+              },
+            },
+            {'name': '重機區', 'access': 'heavyOnly', 'fee_note': '每次 50 元'},
+          ],
+        }),
+        VehicleType.heavy,
+        bundled,
+        now: now,
+      );
+      expect(d.zones.last.price?.kind, PriceKind.unknown);
+      expect(d.zones.last.price?.text, '每次 50 元');
     });
 
     test('價格未知不讓資格變差，分區費率只給開放的分區', () {

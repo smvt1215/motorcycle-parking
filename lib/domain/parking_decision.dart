@@ -560,7 +560,11 @@ ParkingDecision decideParking(
   if (spot.spaceType == SpaceType.offStreet) {
     return _lot(spot, vehicle, at, day, explicit, verified, source);
   }
-  final price = priceAnswer(spot.fee, vehicle);
+  final price = priceAnswer(
+    spot.fee?.toJson(),
+    vehicle,
+    legacyText: spot.feeNote,
+  );
   final decision = _street(
     spot,
     vehicle,
@@ -879,6 +883,18 @@ ZoneDecision _zone(
         : null,
     gaps: gaps,
   );
+  final allowed = vehicle == VehicleType.heavy
+      ? c.allow?.heavy
+      : c.allow?.scooter;
+  if (allowed == false) {
+    return zone(EligibilityStatus.notAllowed, '此分區標示不開放${vehicle.label}');
+  }
+  // allow only opens the lot's side; the law still applies (step 1).
+  if (vehicle == VehicleType.scooter && c.bay == Bay.heavy) {
+    return zone(EligibilityStatus.notAllowed, '大型重機專用格');
+  }
+  // A notice that ended (or has not started) voids only what it opens, as
+  // on the street: a zone it closes stays closed.
   if (!_noticeHolds(c.basis, day)) {
     return zone(
       EligibilityStatus.unverified,
@@ -886,18 +902,8 @@ ZoneDecision _zone(
       gaps: {DecisionGap.noticeExpired},
     );
   }
-  final allowed = vehicle == VehicleType.heavy
-      ? c.allow?.heavy
-      : c.allow?.scooter;
-  if (allowed == false) {
-    return zone(EligibilityStatus.notAllowed, '此分區標示不開放${vehicle.label}');
-  }
   if (allowed == null) {
     return zone(EligibilityStatus.unverified, '此分區的開放資訊未確認');
-  }
-  // allow only opens the lot's side; the law still applies (step 1).
-  if (vehicle == VehicleType.scooter && c.bay == Bay.heavy) {
-    return zone(EligibilityStatus.notAllowed, '大型重機專用格');
   }
   if (vehicle == VehicleType.scooter && c.bay == Bay.car) {
     return zone(EligibilityStatus.unverified, '汽車格開放普通機車須有公告，請依入口公告');
@@ -965,7 +971,11 @@ ParkingDecision _lot(
   DecisionBasis source,
 ) {
   // Prices (step 4): a zone's own fee; the lot's only when no zone has one.
-  final lotPrice = priceAnswer(spot.fee, vehicle);
+  final lotPrice = priceAnswer(
+    spot.fee?.toJson(),
+    vehicle,
+    legacyText: spot.feeNote,
+  );
   final anyZoneFee = spot.zones.any((z) => z.fee != null);
   final zones = [
     for (final z in spot.zones)
@@ -977,9 +987,10 @@ ParkingDecision _lot(
             ? priceAnswer(z.fee!.toJson(), vehicle)
             : anyZoneFee
             ? PriceAnswer.unknown(
-                vehicle == VehicleType.heavy
-                    ? _orNull(z.heavyFeeNote)
-                    : _orNull(z.scooterFeeNote),
+                (vehicle == VehicleType.heavy
+                        ? _orNull(z.heavyFeeNote)
+                        : _orNull(z.scooterFeeNote)) ??
+                    _orNull(z.feeNote),
               )
             : lotPrice,
       ),

@@ -121,7 +121,9 @@ begin
   if not v_started then return '{"verdict":"noRule","restriction":null}'; end if;
   return coalesce(v_out,'{"verdict":"expired","restriction":null}');
 end $$;
-grant execute on function public.rule_verdict(jsonb,text,text,timestamptz) to anon,authenticated;
+-- Server-side only (the rule prescreen engine, §5.7): apps judge with the
+-- Dart copy, so clients get no grant.
+revoke all on function public.rule_verdict(jsonb,text,text,timestamptz) from public,anon,authenticated;
 
 -- admin_upsert_city_rule (202610260240) on the renamed table, with
 -- expires_on: optional, a date after effective_date; null clears it.

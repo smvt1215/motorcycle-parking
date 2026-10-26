@@ -106,7 +106,15 @@ reset role;
 select is((select (row->>'expires_on')::date from city_rules_history where city='新竹市' and vehicle='heavy' and version=8),
   pg_temp.taipei_today()+60,'history keeps the replaced end date');
 
--- rule_verdict() is covered by rule_verdict_test.sql; it reads plain JSON.
+-- rule_verdict() is server-side only.
+set local role anon;
+select throws_ok($$select rule_verdict('[]','paidMotorcycle','',now())$$,'42501',null,'anon cannot call rule_verdict()');
+reset role;
+select pg_temp.act('user');
+set local role authenticated;
+select throws_ok($$select rule_verdict('[]','paidMotorcycle','',now())$$,'42501',null,'signed-in users cannot call rule_verdict()');
+reset role;
+-- It is covered by rule_verdict_test.sql; it reads plain JSON.
 select is(rule_verdict((select jsonb_agg(to_jsonb(r)) from city_rules_v2() r where city='基隆市' and vehicle='heavy'),
   'paidMotorcycle','',now()),'{"verdict":"expired","restriction":null}'::jsonb,
   'an expired stored rule reads as expired');
