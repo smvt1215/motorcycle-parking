@@ -997,6 +997,69 @@ void main() {
       }
     });
 
+    test('結構化費率沒有此車種：未知且不帶整段 fee_note（決定 29）', () {
+      final answer = priceAnswer(
+        {
+          'scooter': {'mode': 'hourly', 'amount': 20, 'per_minutes': 60},
+        },
+        VehicleType.heavy,
+        legacyText: '機車每小時 20 元；大型重機費率未確認',
+      );
+      expect(answer.kind, PriceKind.unknown);
+      expect(answer.text, isNull);
+    });
+
+    test('沒有分區有結構化費率時，分區先讀自己的文字，沒有才用場站的', () {
+      final d = decideParking(
+        ParkingSpot.fromJson({
+          'id': 'lot',
+          'name': 'lot',
+          'lat': 25,
+          'lng': 121,
+          'city': '臺北市',
+          'space_type': 'offStreet',
+          'source': 'official',
+          'heavy_allowed': true,
+          'fee_note': '依場站公告',
+          'parking_zones': [
+            {'name': '重機區', 'access': 'heavyOnly', 'heavy_fee_note': '每次 50 元'},
+            {'name': '汽車區', 'access': 'heavyCar'},
+          ],
+        }),
+        VehicleType.heavy,
+        bundled,
+        now: now,
+      );
+      expect(d.zones.first.price?.text, '每次 50 元');
+      expect(d.zones.last.price?.text, '依場站公告');
+    });
+
+    test('場站有結構化費率、分區都沒有時，分區用場站費率而不是自己的舊文字', () {
+      final d = decideParking(
+        ParkingSpot.fromJson({
+          'id': 'lot',
+          'name': 'lot',
+          'lat': 25,
+          'lng': 121,
+          'city': '臺北市',
+          'space_type': 'offStreet',
+          'source': 'official',
+          'heavy_allowed': true,
+          'fee': {
+            'heavy': {'mode': 'hourly', 'amount': 20, 'per_minutes': 60},
+          },
+          'parking_zones': [
+            {'name': '重機區', 'access': 'heavyOnly', 'heavy_fee_note': '舊文字'},
+          ],
+        }),
+        VehicleType.heavy,
+        bundled,
+        now: now,
+      );
+      expect(d.zones.single.price?.kind, PriceKind.known);
+      expect(d.zones.single.price?.text, '每小時 20 元');
+    });
+
     test('分區有費率時，沒有費率的分區退回該分區的舊文字', () {
       final d = decideParking(
         ParkingSpot.fromJson({

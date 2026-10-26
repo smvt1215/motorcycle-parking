@@ -170,7 +170,8 @@ class _SpotSheetState extends State<SpotSheet> {
           child: AnimatedBuilder(
             animation: store,
             builder: (ctx, _) {
-              final eligibility = store.eligible(spot);
+              final decision = store.decide(spot);
+              final eligibility = decision.eligibility;
               final extraFee = _additionalFeeNote(spot);
               final actions = _DetailActions(
                 onNavigate: () =>
@@ -237,6 +238,7 @@ class _SpotSheetState extends State<SpotSheet> {
                                 spot,
                                 store.vehicle,
                                 eligibility,
+                                decision: decision,
                               ),
                             ),
                             const SizedBox(height: 16),
@@ -357,8 +359,8 @@ class _SpotSheetState extends State<SpotSheet> {
                                 ),
                                 if (!spot.isOfficial)
                                   _DetailField(
-                                    label: '已確認欄位',
-                                    value: switch (verifiedFieldLines(spot)) {
+                                    label: '確認狀態',
+                                    value: switch (confirmationLines(spot)) {
                                       final lines when lines.isEmpty => '尚未確認',
                                       final lines => lines.join('\n'),
                                     },
@@ -614,14 +616,16 @@ class _SpotDecision extends StatelessWidget {
                       height: 1.3,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    display.explanation,
-                    style: text.bodySmall?.copyWith(
-                      color: colors.onSurfaceVariant,
-                      height: 1.45,
+                  if (display.explanation.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      display.explanation,
+                      style: text.bodySmall?.copyWith(
+                        color: colors.onSurfaceVariant,
+                        height: 1.45,
+                      ),
                     ),
-                  ),
+                  ],
                   if (display.basis case final basis?) ...[
                     const SizedBox(height: 6),
                     Row(
@@ -651,12 +655,126 @@ class _SpotDecision extends StatelessWidget {
                       ],
                     ),
                   ],
+                  for (final (i, notice) in display.notices.indexed) ...[
+                    const SizedBox(height: 4),
+                    _BannerLine(
+                      key: ValueKey('spot-decision-notice-$i'),
+                      // An ended notice changes the icon and says so in
+                      // words; amber only adds to that (§8.7 C4).
+                      icon: notice.expired
+                          ? Icons.event_busy_outlined
+                          : Icons.calendar_today_outlined,
+                      iconColor: notice.expired
+                          ? conditionalColor
+                          : colors.onSurfaceVariant,
+                      text: notice.text,
+                    ),
+                  ],
+                  if (display.zones.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    for (final (i, zone) in display.zones.indexed)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: _ZoneRow(
+                          key: ValueKey('spot-zone-$i'),
+                          zone: zone,
+                        ),
+                      ),
+                  ],
                 ],
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// One line under the banner's headline: an icon and wrapping text.
+class _BannerLine extends StatelessWidget {
+  const _BannerLine({
+    super.key,
+    required this.icon,
+    required this.iconColor,
+    required this.text,
+  });
+  final IconData icon;
+  final Color iconColor;
+  final String text;
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 1),
+          child: Icon(icon, size: 16, color: iconColor),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            text,
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(color: colors.onSurface, height: 1.45),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// A zone's eligibility under the banner (逐區資格): the map marker's small
+/// shape and colour, the zone's name and its status in words. Regular
+/// weight, so the banner's conclusion stays the only bold line.
+class _ZoneRow extends StatelessWidget {
+  const _ZoneRow({super.key, required this.zone});
+  final ZoneLine zone;
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final color = spotMarkerColor(zone.status);
+    // Why it is conditional or unknown, less what the notice lines say.
+    final detail =
+        zone.reason.isNotEmpty &&
+            (zone.status == EligibilityStatus.conditional ||
+                zone.status == EligibilityStatus.unverified)
+        ? '：${zone.reason}'
+        : '';
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Container(
+            width: 16,
+            height: 16,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(
+                spotMarkerRadius(zone.status) * .4,
+              ),
+            ),
+            child: Icon(
+              spotMarkerIcon((zone.status, zone.restriction)),
+              size: 11,
+              color: Colors.white,
+            ),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            '${zone.name}・${zone.label}$detail',
+            style: text.bodySmall?.copyWith(
+              color: colors.onSurface,
+              height: 1.45,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

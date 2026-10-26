@@ -13,6 +13,7 @@ import '../core/location_access.dart';
 import '../core/navigation.dart' as navigation;
 import '../core/town_lookup.dart';
 import '../domain/eligibility.dart';
+import '../domain/parking_decision.dart';
 import '../domain/eligibility_display.dart';
 import '../domain/location_check.dart';
 import '../domain/map_viewport.dart';
@@ -387,8 +388,37 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
               .firstOrNull;
   }
 
-  Eligibility eligible(ParkingSpot spot) =>
-      eligibility(spot, vehicle, ruleFor(spot));
+  /// The map marker's judgement; the details banner reads the same one
+  /// ([decide]), so they never disagree.
+  Eligibility eligible(ParkingSpot spot) => decide(spot).eligibility;
+
+  /// [eligible] with its basis, zones and prices, for the details sheet;
+  /// the same clock as [eligible], so the banner and the marker agree.
+  ParkingDecision decide(ParkingSpot spot) {
+    if (useParkingDecision) {
+      // Every rule of the city, so two that disagree read as a conflict.
+      return decideParking(spot, vehicle, rules);
+    }
+    // Rolled back: the old judgement, with only the spot's own source.
+    final e = legacyEligibility(spot, vehicle, ruleFor(spot));
+    final now = DateTime.now();
+    final explicit = vehicle == VehicleType.heavy
+        ? spot.heavyAllowed
+        : spot.scooterAllowed;
+    return ParkingDecision(
+      e.status,
+      e.reason,
+      restriction: e.restriction,
+      basis: [
+        sourceBasis(
+          spot,
+          vehicle,
+          now,
+          verified: explicit != null && recentlyVerified(spot, vehicle, now),
+        ),
+      ],
+    );
+  }
 
   /// [eligible]'s short status for a list, keeping a rider's claim visible.
   String eligibleLabel(ParkingSpot spot) =>
