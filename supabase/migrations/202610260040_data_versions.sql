@@ -16,6 +16,9 @@ create table public.data_versions (
 insert into public.data_versions(key) values ('spots'),('rules');
 alter table public.data_versions enable row level security;
 create policy public_data_versions on public.data_versions for select to anon,authenticated using(true);
+-- Supabase's default privileges hand new public tables every grant; apps
+-- only read.
+revoke all on public.data_versions from anon,authenticated;
 grant select on public.data_versions to anon,authenticated;
 
 -- Writers (submit-report's service role, admin RPCs, imports) hold no grant
