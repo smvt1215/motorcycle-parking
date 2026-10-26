@@ -1,6 +1,6 @@
 # 停放條件與費率模型（P1–P4 設計）
 
-> 狀態：設計草案，待使用者核准（2026-10-26）。只寫設計，不含程式。實作排在目前兩個 stack（第一批 #90–#95、stack B #97–#101 與後續層）合併之後，另開一個 stack。
+> 狀態：設計草案；§7 的 6 項設計取捨已由使用者於 2026-10-26 決定，全部採用建議方案。只寫設計，不含程式。實作排在目前兩個 stack（第一批 #90–#95、stack B #97–#101 與後續層）合併之後，另開一個 stack。
 >
 > 依據：Codex 交接（使用者已確認的需求 1–7、法規核對 A–E、程式對照、草案 P0–P6、使用者決定）；[PLAN.md](../PLAN.md)「費率結構」「社群回報機制」；[結構化分區費率](2026-10-25-structured-zone-fees.md)；[核實計畫](../COMMUNITY_VERIFICATION_PLAN.md) §3.2–§3.4、§4、§5.3；[可行性研究](../CONTRIBUTION_TIERS_FEASIBILITY.md) §5.1、§5.6、§5.7、§5.8；[ADMIN_WEB.md](../ADMIN_WEB.md)。程式基準為 `main` b827aab，另參考進行中的 #91、#94、#96。
 >
@@ -70,7 +70,7 @@
 ```
 
 - `use='share'` 時 `share` 必填；`use='usual'` 時不得有 `share`。
-- `schedule[].days` 為 `all`／`weekday`／`holiday`，或星期陣列 `["mon",…]`；`from > to` 表示跨午夜。`vehicles` 為該時段允許停放的車種（`scooter`／`heavy`／`car`）。
+- `schedule[].days` 為 `all`／`weekday`／`holiday`，或星期陣列 `["mon",…]`；`from > to` 表示跨午夜。`vehicles` 為該時段允許停放的車種（`scooter`／`heavy`／`car`）。汽機車共用格（`share='car_motorcycle'`）的機車涵蓋範圍不預設，只認 `vehicles` 依公告寫明的車種，沒寫的車種為待確認（§7 第 1 項，已決定）。
 - `basis` 記錄這個條件本身的公告依據（例如臺北 36 處試辦場域的分區），與 `city_rules` 分開。`expires_on` 已過即視為依據失效（§3.3）。
 - 「特殊車型及地方特別開放另處理」（需求 6）：特殊車型用 `limits[].kind='special_vehicle'`；地方開放仍放在 `city_rules`，不寫進格位。
 
@@ -147,14 +147,14 @@ w    = "midnight"
 | `by_time.periods` | 時段差別費率，最多 8 段；內層 `rate` 不可再是 `by_time` 或比照 | | 沒有涵蓋的時間＝未確認 |
 
 - `car` 不可用 `same_as_*`；`scooter` 也不可（既有規則）。
-- 時段費率不寫 `holiday` 以外的節日；國定假日判定見 §7 第 4 項。
+- 時段費率不寫 `holiday` 以外的節日。本輪不依目前時間選用時段費率，只逐段顯示（§7 第 4 項，已決定）。
 - 資料表 `valid_fee()` 的大小上限由 1024 bytes 提高到 4096 bytes，以容納 `by_time`。
 
 ### 2.3 Toll 首段 0 元 ≠ Free
 
 `charge='toll'` 的格位，費率可以是 `per_visit` `amount:0`＋`max_minutes`，或 `hourly`＋`free_minutes`；顯示為「首 20 分鐘 0 元」，**不**顯示「免費」，也不讓價格篩選把它當成免費格。只有 `mode:'free'` 才是免費。組合規則見 §4.3。
 
-#94 在研究文件 §5.8 留下的階段 1 候選規則「計次或每日 0 元」會誤攔臺北限時格；實作那條規則時須排除 `per_visit` 帶 `max_minutes`（或 `charge='toll'` 的限時格）的情況。
+#94 在研究文件 §5.8 留下的階段 1 候選規則「計次或每日 0 元」會誤攔臺北限時格（首 20 分鐘 0 元）。實作這條規則時，**必須排除帶 `max_minutes` 的 `per_visit` 費率**（`amount:0`＋`max_minutes` 正是 Toll 首段 0 元的寫法），只攔沒有 `max_minutes` 的計次 0 元與 `daily` 0 元。這項排除列入 stack C 的 C5 範圍（§6），由 `precheck_rules.json` 的規則參數與 `precheck_cases.json` 的不誤攔案例（臺北限時格）固定下來；如果階段 1 先於 C5 實作，就由實作階段 1 的 PR 一併做到。
 
 ### 2.4 臺北實例
 
@@ -243,7 +243,7 @@ PLAN.md 匯入紀錄：「依停管處新聞稿附件補上『機車區』與機
 | 機車格 share=scooter_heavy | 進入第 2 步 | 進入第 2 步；共用標示本身就是公告的一種，但仍須有效 |
 | 重機格 | 不可停 | 進入第 2 步 |
 | 汽車格 usual | 不可停，除非地方公告開放（需求 6；`eligibility.dart` 引 §112 末段） | 依法可停 |
-| 汽車格 share=car_motorcycle | 依 schedule 與共用涵蓋範圍（§7 第 1 項） | 依法可停汽車格；schedule 只限制機車時段 |
+| 汽車格 share=car_motorcycle | 只在 `schedule[].vehicles` 依公告寫明 `scooter` 的時段可停；沒寫就是待確認，不預設（§7 第 1 項，已決定） | 依法可停汽車格，不受共用標示影響；`schedule` 寫明 `heavy` 時另顯示該時段 |
 | `special_vehicle: disabled_modified` | 有條件：「限經監理單位檢驗合格的身障特製機車，持識別證本身不足」 | 同左 |
 | `ev_only` | 有條件：限電動機車 | 同左 |
 
@@ -264,7 +264,7 @@ PLAN.md 匯入紀錄：「依停管處新聞稿附件補上『機車區』與機
 | 不可進場 | 任意 | 任意 | 不可停 |
 | 可進場 | 至少一區對目前車種開放且依據有效 | 任意 | 可停或有條件，列出可停分區 |
 | 可進場 | 沒有分區資料 | — | 維持現行：官方資料可停（請確認入口公告） |
-| 可進場 | 有分區，但沒有一區對目前車種開放 | false | **待確認**：「場站開放大型重機，但已知分區沒有標示可停區域，請依入口公告」；不推定全場禁停 |
+| 可進場 | 有分區，但沒有一區對目前車種開放 | false | **待確認**（§7 第 6 項，已決定）：「場站開放大型重機，但已知分區沒有標示可停區域，請依入口公告」；不推定全場禁停 |
 | 可進場 | 同上 | true | **待確認**：「場站與分區資料不一致」，送管理員（不是不可停，因為兩份資料互相矛盾） |
 | 未確認 | 至少一區開放 | 任意 | 待確認（分區開放不能推出場站可進場，現行語意） |
 
@@ -298,7 +298,7 @@ class ParkingDecision {
 - `status` 的四態語意與核實計畫 §3.2 一致；`gaps` 不新增狀態，只說明為什麼是待確認，詳情頁據此寫理由。
 - **與核實計畫 §3.4 顯示分層（#91）**：分層由 `basis` 的來源種類決定（官方、管理員核驗、社群欄位核實、車友回報、無資料），`decideParking` 只負責把來源帶出來；#91 的 `eligibilityDisplay()` 改讀 `ParkingDecision.basis`，判斷不變。「依縣市規則判定的路邊格位不受分層影響」維持。
 - **與研究文件 §5.7**：`ruleVerdict()` 是第 2 步的純函式，Dart 與伺服器各一份，以 `assets/rules/parking_rules.json` 加 §4.2 的共同測試向量確保一致。`expired`、`conflict` 是本文新增的兩個結果，引擎一律視為「規則無法單獨回答」。
-- **時段**：本輪只判斷「此格位有時段限制」並回 `conditional(timeLimited)`，顯示各時段允許車種；不依目前時間切換狀態（§7 第 4 項）。
+- **時段**：本輪只判斷「此格位有時段限制」並回 `conditional(timeLimited)`（顯示「有條件・限時段」），列出各時段允許車種；不依目前時間切換狀態，依時間切換留待之後（§7 第 4 項，已決定）。
 
 ## 4. 三端契約與驗證
 
@@ -336,7 +336,7 @@ SQL 不能在執行時讀 JSON，所以由 `tool/gen_contract_sql.py` 從契約�
 | 路邊點的 `condition` 缺 `bay`；或 bay=motorcycle、沒有 `time_limit`／`special_vehicle`／`ev_only`、也沒有 `charge` | DB | 拒絕 | 推導不出 `space_type`（§1.3） |
 | `share='scooter_heavy'` 但 bay ≠ motorcycle；`share='car_motorcycle'` 但 bay ≠ car | DB | 拒絕 | 需求 4 |
 | `share='car_motorcycle'` 在路外分區 | 預檢 | fix | 本專案只列路邊（需求 4），屬範圍而非不可能 |
-| `share='scooter_heavy'` 且 `charge='free'` | 預檢 | 見 §7 第 2 項 | 使用者列為「目前僅 Toll」，但不可變成大型重機不能停免費機車格的全國限制（法規 A） |
+| `share='scooter_heavy'` 且 `charge='free'` | 預檢 | hold，要求附公告依據（`condition.basis.source_url`）；沒有依據時預檢提示補上 | 契約允許（§7 第 2 項，已決定）：不可變成大型重機不能停免費機車格的全國限制（法規 A），但保留「目前多為 Toll」的查核 |
 | `charge='free'` 而任一已填車種的費率不是 `free` | 預檢 | fix | |
 | `charge='toll'` 而某車種為 `mode:'free'` | 預檢 | fix，提示改用「首段 0 元」 | 法規 D |
 | bay=heavy 而有 `fee.scooter` | 預檢 | fix | 普通機車不能停重機格 |
@@ -384,7 +384,7 @@ SQL 不能在執行時讀 JSON，所以由 `tool/gen_contract_sql.py` 從契約�
 | 舊版讀新資料 | 不能表示的條件顯示待確認；新費率鍵的車種顯示未確認；`car` 被忽略 | §5.2、§5.3 的投影 |
 | 舊版新增停車點 | 不帶 `condition`，伺服器存 null，新版用 `conditionOf` 推導 | 不需處理 |
 | 舊版擁有者修改（`update`） | `apply_report` 只更新名稱、`fee_note`、備註，不碰 `condition`／`fee` | 重新定義時維持只更新這三欄 |
-| 舊版送費率修改建議 | 舊版把它讀不懂的車種當成未確認，送出的 `fee` 會少掉 `car` 或少掉被它判成未確認的 `heavy` | **費率建議改為逐車種合併**：`proposed.fee` 沒有的車種保留現值，要清除須明確送 `null`（§7 第 3 項）；審核頁差異表照合併後的結果顯示 |
+| 舊版送費率修改建議 | 舊版把它讀不懂的車種當成未確認，送出的 `fee` 會少掉 `car` 或少掉被它判成未確認的 `heavy` | **費率建議改為逐車種合併**：`proposed.fee` 沒有的車種保留現值，要清除須明確送 `null`（§7 第 3 項，已決定）。`validFee` 只在 `proposed.fee` 內接受車種值為 `null`，點位與分區的 `fee` 欄位仍不接受；審核頁差異表照合併後的結果顯示 |
 | 舊版送 `fee_note` 與 `fee` | #96 要求 `fee_note = fee_note_of(fee)`，新版句子不同時會被擋 | 審核頁採納費率時一律用新版 `feeNoteOf` 重算 `fee_note`，不採用建議中的文字 |
 | 匯入覆寫 | `official_sql()` 目前 `on conflict do update set` 全部欄位，含 `parking_zones` | P6 匯入改為只更新官方欄位（研究 §5.6 第 7 點），並逐區保留匯入資料沒有提供的 `condition` |
 
@@ -393,7 +393,7 @@ SQL 不能在執行時讀 JSON，所以由 `tool/gen_contract_sql.py` 從契約�
 P6 匯入（`feat/admin-import`，stack B 第 5 層）的轉換規則延伸到條件與汽車費率，不另做一套：
 
 - **只轉換確定的文字**：同一段文字只能對到一種 `condition`／`rate` 才寫入；「請依現場公告」「未知」、混有月租或身障費率、無法分辨計次或計時路段者，維持 null 交人工。
-- **保留原文與來源**：原始費率文字不能放在 `fee_note`（#96 要求它等於 `fee_note_of(fee)`），另存在新欄位 `fee_source_text`，並在 `condition.basis`／`source_url` 保留出處（§7 第 5 項）。
+- **保留原文與來源**：原始費率文字不能放在 `fee_note`（#96 要求它等於 `fee_note_of(fee)`），另存在新欄位 `fee_source_text`（§7 第 5 項，已決定；由 C3 新增，只有匯入與管理員寫入，詳情的「資料與查核」顯示為「原始公告文字」），並在 `condition.basis`／`source_url` 保留出處。
 - **差異試算多三欄**：條件可轉換／費率可轉換（含汽車）／需人工；有覆蓋層或管理員已改過的欄位另列（研究 §5.6 第 7 點）。
 - **轉換器共用契約**：P6 的解析結果以 `parking_contract.json` 與 `valid_fee()` 驗證。若 P6 先於本 stack 的 P2 合併，P6 只產生 v1 費率（scooter／heavy），汽車金額留在文字；P2 合併後重跑 P6 的差異試算即可補上汽車，不重寫轉換器。
 - 臺北路邊格位的官方格種代碼可直接對應條件（`SpaceType` 註解已記錄 pktype 04／18 身障、20 限時、22 汽機彈性共用、11 機車區）；代碼表其餘值待查證，對不到的不轉換。
@@ -406,9 +406,9 @@ P6 匯入（`feat/admin-import`，stack B 第 5 層）的轉換規則延伸到�
 | --- | --- | --- | --- | --- | --- |
 | C1 | `feat/parking-contract` | `parking_contract.json`、案例檔、`ParkingCondition` 模型與轉換層（純 Dart）、`validate.ts` 的 `validCondition`（尚未接上 action）、SQL 產生器與 CI 漂移檢查。**無 migration、無行為變更** | main | 轉換往返、`legacySafe` 窮舉 9 種 `space_type` × 5 種 `access`；JSON 與 Dart 常數逐欄比對；Deno 與 Flutter 共同執行案例 | 直接 revert |
 | C2 | `feat/parking-condition-db`（P1） | migration：`condition`、`zones_complete`、`valid_condition`、`valid_zones`、`public_spots` 加欄位、viewport v3 與 v2 保守投影；`apply_report` 建立時存 `condition`；`admin_spot_fields`、`admin_resolve_report` 白名單；`ParkingSpot` 讀寫、收藏 `exact_v2`；`reportedAccess` 改走轉換層 | C1 | pgTAP：check 允許／拒絕、v2 投影、v3 完整、RLS；收藏往返（新版→舊版模擬→新版）；舊 JSON 相容 | 新欄位全為 null 時行為與現在相同；App 回退到 v2 |
-| C3 | `feat/fee-v2`（P2） | `Fee.car`、`Rate` 新鍵與 `by_time`；`valid_fee` 擴充；`fee_note_of` SQL 與 `feeNoteOf` 新句子（沿用 #96 的共用句子測試）；`fee_source_text` 欄位；費率建議逐車種合併；`FeeEditor` 加汽車與新選項 | C1（可與 C2 平行，建議疊在 C2 上減少衝突） | 舊 fee 全部仍合法；新鍵允許／拒絕；Dart／SQL／Deno 句子一致；舊版讀新 fee 為未確認；合併語意 pgTAP | 新鍵不寫入即與現況相同 |
+| C3 | `feat/fee-v2`（P2） | `Fee.car`、`Rate` 新鍵與 `by_time`；`valid_fee` 擴充；`fee_note_of` SQL 與 `feeNoteOf` 新句子（沿用 #96 的共用句子測試）；`fee_source_text` 欄位；費率建議逐車種合併（`proposed.fee` 的車種可為 `null`＝清除）；`FeeEditor` 加汽車與新選項 | C1（可與 C2 平行，建議疊在 C2 上減少衝突） | 舊 fee 全部仍合法；新鍵允許／拒絕；Dart／SQL／Deno 句子一致；舊版讀新 fee 為未確認；合併語意 pgTAP | 新鍵不寫入即與現況相同 |
 | C4 | `feat/parking-decision`（P3） | `decideParking`、`ruleVerdict`、`PriceAnswer`；`eligibility()` 改為包裝；`city_rules.expires_on`；#91 `eligibilityDisplay` 改讀 `basis` | C2、C3 | 窮舉 條件 × 車種 × 規則 × 分區完整度 × 期限；`eligibility()` 包裝對既有測試全數不變（除交接列出的三個錯誤）；§5.7 共同向量 | 包裝可切回舊實作（保留一版） |
-| C5 | `feat/parking-conditions-app`（P4 App） | 詳情（分區、時段、首段 0 元、延長、依據與期限）、篩選、新增停車點與修改建議的條件／汽車費率欄位；預檢規則（§4.3）加入 `precheck_rules.json` | C4 | widget：320／390／700／1280 px、1.6 倍、深色；不溢出、觸控 ≥ 48 px；預檢案例 | UI 隱藏新欄位 |
+| C5 | `feat/parking-conditions-app`（P4 App） | 詳情（分區、時段、首段 0 元、延長、依據與期限）、篩選、新增停車點與修改建議的條件／汽車費率欄位；預檢規則（§4.3，含普大共用 Free 的 hold）加入 `precheck_rules.json`；階段 1 候選「計次或每日 0 元」排除帶 `max_minutes` 的計次費率（§2.3） | C4 | widget：320／390／700／1280 px、1.6 倍、深色；不溢出、觸控 ≥ 48 px；預檢案例，含臺北限時格（`per_visit` 0 元＋`max_minutes:20`）不被誤攔 | UI 隱藏新欄位 |
 | C6 | `feat/parking-conditions-admin`（P4 管理站） | 點位表單分區編輯（`area`、`condition`、`fee`、`zones_complete`）、審核頁條件差異、規則頁 `expires_on` | C4（可與 C5 平行） | admin smoke desktop-light／mobile-dark；pgTAP 管理員路徑 | 同上 |
 
 **會動到的既有功能與避免重工**
@@ -418,58 +418,25 @@ P6 匯入（`feat/admin-import`，stack B 第 5 層）的轉換規則延伸到�
 | #80 分區費率（`ParkingZone.fee`、詳情優先順序） | 優先順序與「不沿用其他分區」不變；C3 只擴充 `Fee`，C5 在既有逐區顯示上加汽車列 |
 | #96 管理站費率（`fee_note_of`、`FeeEditor`、審核 `fitsField`） | C3 以 #96 的 SQL `fee_note_of` 與共用句子測試為基礎擴充，不另寫一份；`FeeEditor` 加汽車區塊，管理站與 App 同時受益 |
 | #91 資格分層 | C4 讓 `eligibilityDisplay()` 改讀 `ParkingDecision.basis`，分層表不變 |
-| #94 預檢 | §4.3 的「預檢」列加進同一份 `precheck_rules.json`，不另建；修正階段 1 候選「計次 0 元」的排除條件（§2.3） |
+| #94 預檢 | §4.3 的「預檢」列加進同一份 `precheck_rules.json`，不另建；階段 1 候選「計次或每日 0 元」須排除帶 `max_minutes` 的計次費率（§2.3），列入 C5 |
 | P5 規則頁（stack B 第 4 層） | 若 P5 先合併，C6 在其表單加 `expires_on`；若 C4 先合併，P5 直接含此欄位。兩邊都以 `CityRule` 模型為準 |
 | P6 匯入（stack B 第 5 層） | 見 §5.5；轉換器共用契約，C3 合併後重跑差異試算 |
 | P0（身障文字、汽機共用分類） | C2 用轉換層取代 P0 修過的分支，P0 的測試保留為回歸測試 |
 
-## 7. 待使用者拍板
+## 7. 已決定的設計取捨（使用者，2026-10-26）
 
-只列會阻擋實作的決策。
+原列為待拍板的 6 項，使用者於 2026-10-26 全部採用建議方案。各章節已依結論同步。
 
-**1. 汽機車共用格的機車涵蓋範圍**（阻擋 C1 的 `share` 契約與 C4 判斷；交接需求 4 尚未確認）
+| # | 議題 | 結論 | 影響章節與 PR |
+| --- | --- | --- | --- |
+| 1 | 汽機車共用格的機車涵蓋範圍（交接需求 4） | **C 不預設**：每筆共用格在 `schedule[].vehicles` 依公告寫明車種；沒寫的車種顯示待確認。大型重機停汽車格的法源與共用標示無關，不受影響 | §1.2、§3.2 第 1 步；C1 契約、C4 判斷 |
+| 2 | 普大共用能不能是 Free | **B 允許**：契約接受 `share='scooter_heavy'`＋`charge='free'`，預檢先 hold 並要求附公告依據。縣市規則開放一般免費機車格時，格位用途仍是 `usual` | §4.3；C1 契約、C5 預檢 |
+| 3 | 費率修改建議的寫入語意 | **A 逐車種合併**：`proposed.fee` 沒有的車種保留現值，清除須明確送 `null` | §5.4；C3 |
+| 4 | 時段是否依目前時間判斷 | **A 本輪只顯示時段**：狀態固定「有條件・限時段」，列出各時段允許車種；依時間切換（需要國定假日資料）留待之後，屆時不必改資料格式 | §2.2、§3.3；C4、C5 |
+| 5 | 原始費率文字存放位置 | **A 新增 `fee_source_text`**：匯入與管理員寫入，詳情「資料與查核」顯示原始公告文字；#96 的 `fee_note = fee_note_of(fee)` 規則不放寬 | §5.5；C3、stack B P6 |
+| 6 | 官方場站可進場但已知分區皆不開放 | **A 待確認**：理由寫明「已知分區沒有標示可停區域，請依入口公告」，不推定全場禁停。受影響的官方點數在 C4 實作時以 staging 查詢列出，寫進 PR 說明 | §3.2 第 3 步；C4 |
 
-- A. 只涵蓋普通重型機車：大型重機本來就能依法停汽車格，共用標示只影響普通機車。
-- B. 普通與大型都涵蓋，大型重機在機車時段也可停。
-- C. 不預設，每筆共用格須在 `schedule[].vehicles` 寫明公告列出的車種；沒寫的車種為未確認。
-
-建議 **C**：各縣市公告寫法不同，預設任何一邊都可能放寬。大型重機停汽車格的法源與共用標示無關，不受影響。
-
-**2. 普大共用是否允許 Free**（阻擋 §4.3 的組合規則）
-
-- A. 只允許 Toll（交接目前的列法），免費格標成共用一律攔下。
-- B. 契約允許 Free，預檢 `hold` 並要求附公告依據。
-- C. 完全不限制。
-
-建議 **B**：桃園 2026/4/1 起試辦已含免費機車格（交接法規 A；本文未重新查證該公告），A 會把它變成全國限制；C 則失去「目前列為僅 Toll」的提醒。另外，縣市規則開放一般免費機車格時格位用途仍是 `usual`，不需要標共用。
-
-**3. 費率修改建議改為逐車種合併**（阻擋 C3；改變既有「缺車種＝未確認」在建議中的意思）
-
-- A. 合併：建議中沒有的車種保留現值，清除要明確送 `null`。
-- B. 維持整筆取代，由審核頁提醒「此建議會清除汽車費率」。
-
-建議 **A**：舊版 App 讀不懂新費率時會把那個車種當成未確認並省略，整筆取代會讓舊版的建議清掉新版欄位，違反「舊版寫入不得清掉新版欄位」；B 靠管理員每次注意，容易漏。
-
-**4. 時段是否依目前時間判斷**（阻擋 C4 範圍）
-
-- A. 本輪只顯示時段與各時段允許車種，狀態固定「有條件・限時段」。
-- B. 依目前時間切換可停／不可停，需要國定假日資料（來源與更新方式待定）。
-
-建議 **A**：假日判定錯誤會直接造成誤判可停；先有結構化時段資料，之後再加 B 不需要改資料格式。
-
-**5. 原始費率文字存放位置**（阻擋 C3 與 stack B P6 的銜接）
-
-- A. 新增 `fee_source_text`（匯入與管理員寫入，詳情的「資料與查核」顯示「原始公告文字」）。
-- B. 放回 `fee_note`，放寬 #96 的 `fee_note = fee_note_of(fee)` 規則。
-
-建議 **A**：#96 的一致性規則是「騎士看到的句子就是結構化費率」的保證，放寬會讓兩者再度分歧；原文另存也能讓 P6 之後重新轉換。
-
-**6. 官方場站可進場但已知分區都不開放時的狀態**（阻擋 C4；會改變現有官方點的顯示）
-
-- A. 待確認，理由寫明「已知分區沒有標示可停區域，請依入口公告」（§3.2 第 3 步）。
-- B. 有條件，提示依入口公告找可停區域。
-
-建議 **A**：B 仍暗示「可停」，而資料實際上沒有任何一區可停；A 不推定全場禁停，也不讓騎士以為一定有位置。受影響的點數在 C4 實作時以 staging 查詢列出。
+另外列入範圍（非拍板事項，main 2026-10-26 要求寫入）：#94 階段 1 候選規則「計次或每日 0 元」須排除帶 `max_minutes` 的計次費率，避免誤攔臺北限時格（§2.3）；列入 C5 的範圍與測試（§6）。
 
 ## 參考
 
