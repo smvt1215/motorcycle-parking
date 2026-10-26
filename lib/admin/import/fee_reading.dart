@@ -65,6 +65,9 @@ FeeReading readFeeNote(String note, {String? spaceType}) {
   // shape: a multiple of another rate, a first period at 0 yuan (a toll that
   // still charges after it, not free parking), or a cap or visit that resets
   // at some hour other than midnight.
+  if (_decimal.hasMatch(text)) {
+    return _manual('金額或時間有小數，現有費率格式只接受整數元與整數分鐘');
+  }
   if (_multiple.hasMatch(text)) {
     return _manual('以倍率計算的費率（例如機車費率 2 倍），現有費率格式無法表達');
   }
@@ -79,6 +82,7 @@ FeeReading readFeeNote(String note, {String? spaceType}) {
   return _readOfficial(text);
 }
 
+final _decimal = RegExp(r'\d+\.\d+\s*(?:元|萬|小時|時|分|[Hh](?![a-z]))');
 final _multiple = RegExp(r'\d+(?:\.\d+)?\s*倍|[兩二三]倍');
 final _zeroYuan = RegExp(r'(?<![\d.])0\s*元');
 final _offsetReset = RegExp(
@@ -273,7 +277,9 @@ class _Fact {
   _Fact(this.vehicles, this.rate, {this.qualified = false});
   final Set<_Vehicle> vehicles;
   Rate rate;
-  final bool qualified;
+
+  /// Limited to some days or hours, by its own piece or by its cap's.
+  bool qualified;
 }
 
 final _sentenceBreak = RegExp(r'[。；;\n|｜]');
@@ -392,9 +398,14 @@ FeeReading _readOfficial(String text) {
           final hourly = hourlies.reversed
               .where((f) => f.vehicles.containsAll(riders))
               .firstOrNull;
-          if (hourly == null) {
+          // A second, different cap (平日上限 30 元，假日上限 50 元) is not one
+          // rate; a cap for some days only limits the rate the same way.
+          if (hourly == null ||
+              (hourly.rate.dailyCap != null &&
+                  hourly.rate.dailyCap != reading.cap)) {
             unparsed.addAll(riders);
           } else {
+            if (qualified) hourly.qualified = true;
             final r = hourly.rate;
             hourly.rate = Rate(
               FeeMode.hourly,

@@ -394,6 +394,23 @@ void main() {
       );
     });
 
+    test('decimal amounts are not cut to their last digits', () {
+      for (final note in ['機車：2.5元/時', '機車計次(12.5元/日)', '機車每1.5小時10元']) {
+        expectReading(note, FeeVerdict.manual, reason: '小數');
+      }
+    });
+
+    test('caps that differ by day, or only for some days', () {
+      expectReading('機車：10元/時，平日上限30元，假日上限50元', FeeVerdict.manual);
+      expectReading('機車：10元/時，平日上限30元', FeeVerdict.manual);
+      // One cap for every day is still one rate.
+      expectReading(
+        '機車：10元/時，當日上限30元',
+        FeeVerdict.convertible,
+        fee: {'scooter': hourly(10, 60, 30)},
+      );
+    });
+
     test('rates that differ by time of day', () {
       expectReading('機車：日間10元/時(08-20)，夜間5元/時(20-08)', FeeVerdict.manual);
     });

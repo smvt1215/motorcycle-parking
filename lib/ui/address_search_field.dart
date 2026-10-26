@@ -1,5 +1,13 @@
+import 'package:flutter/foundation.dart';
+import 'package:pointer_interceptor/pointer_interceptor.dart';
+
 import '../core/address_search.dart';
 import 'adaptive/adaptive.dart';
+
+/// On the web the Google map below is an HTML element that would take the
+/// clicks meant for the search; tests turn this on to check the guard.
+@visibleForTesting
+bool addressSearchInterceptsPointers = kIsWeb;
 
 /// Opens [AddressSearchField] in a sheet (phones) or a dialog (wide
 /// screens) and returns the result picked; `LocationPicker.onSearch` uses it.
@@ -9,8 +17,10 @@ Future<AddressCandidate?> showAddressSearch(
   double? lat,
   double? lng,
 }) {
-  Widget body(BuildContext context) =>
-      _AddressSearchPanel(search: search, lat: lat, lng: lng);
+  Widget body(BuildContext context) => PointerInterceptor(
+    intercepting: addressSearchInterceptsPointers,
+    child: _AddressSearchPanel(search: search, lat: lat, lng: lng),
+  );
   if (MediaQuery.sizeOf(context).width >= 600) {
     return showDialog<AddressCandidate>(
       context: context,

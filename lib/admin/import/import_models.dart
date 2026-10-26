@@ -162,8 +162,10 @@ class FeeGroup {
   final FeeReading reading;
   final List<FeeBacklogItem> spots;
 
-  /// A stable key for selection: the writing and the reading's fee.
-  String get key => '${reading.fee?.toJson()}|$note';
+  /// A stable key for selection: the writing, the verdict and the reading's
+  /// fee, so a certain reading never shares a group (or its default choice)
+  /// with a suggestion that needs a person.
+  String get key => '${reading.verdict.name}|${reading.fee?.toJson()}|$note';
 }
 
 /// Groups [items] by writing; a community note reads differently on a
@@ -178,6 +180,9 @@ List<FeeGroup> groupFees(Iterable<FeeBacklogItem> items) {
   return groups.values.toList()
     ..sort((a, b) => b.spots.length.compareTo(a.spots.length));
 }
+
+/// The fee and the text it is read from belong together.
+const feePair = {'fee', 'fee_note'};
 
 /// Labels for every column an import writes.
 const importFieldLabels = {
