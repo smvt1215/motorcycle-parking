@@ -50,6 +50,22 @@ select throws_ok($$select admin_upsert_city_rule('基隆市','heavy','{"fee_note
 select throws_ok($$select admin_upsert_city_rule('基隆市','heavy','{"fee_note":"每次 30 元"}')$$,'40001',null,'an existing rule cannot be created again');
 select throws_ok($$select admin_upsert_city_rule('連江縣','heavy','{"fee_note":"x"}',1)$$,'40001',null,'a missing rule has no version to edit');
 
+-- Rules are written only through the RPC; reading stays open to everyone.
+select throws_ok($$insert into city_rules(city,vehicle,allowed_space_types,fee_note,exceptions,effective_date,source_url,version) values('連江縣','scooter','[]','a','a',current_date,'https://example.test',1)$$,'42501',null,'an admin cannot insert a rule directly');
+select throws_ok($$update city_rules set version=9 where city='基隆市' and vehicle='heavy'$$,'42501',null,'an admin cannot update a rule directly');
+select throws_ok($$delete from city_rules where city='基隆市' and vehicle='heavy'$$,'42501',null,'an admin cannot delete a rule directly');
+reset role;
+select pg_temp.act('user');
+set local role authenticated;
+select ok((select count(*) from city_rules where city='基隆市')=1,'signed-in riders read rules');
+reset role;
+set local role anon;
+select ok((select count(*) from city_rules where city='基隆市')=1,'anonymous riders read rules');
+reset role;
+select ok(not has_table_privilege('authenticated','public.city_rules','INSERT,UPDATE,DELETE'),'no client role may write rules');
+select pg_temp.act('admin');
+set local role authenticated;
+
 -- Publishing bumps the version on the server.
 select is((admin_upsert_city_rule('基隆市','heavy',
   '{"conditional_space_types":["offStreet","paidMotorcycle"],"restriction":"pilot_area","district_space_types":{"paidMotorcycle":["仁愛區"]},"can_use_two_spaces":true}',

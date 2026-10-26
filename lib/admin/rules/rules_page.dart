@@ -349,7 +349,7 @@ class _ListPane extends StatelessWidget {
         ),
         IconButton(
           tooltip: '重新載入規則',
-          onPressed: rules.loading ? null : rules.load,
+          onPressed: rules.loading || rules.publishing ? null : rules.load,
           icon: const Icon(Icons.refresh),
         ),
       ],
@@ -560,7 +560,7 @@ class _DetailPane extends StatelessWidget {
                       Align(
                         alignment: Alignment.centerLeft,
                         child: OutlinedButton(
-                          onPressed: rules.load,
+                          onPressed: rules.publishing ? null : rules.load,
                           child: const Text('重新載入（放棄目前的修改）'),
                         ),
                       ),

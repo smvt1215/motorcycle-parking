@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/town_lookup.dart';
 import '../../domain/location_check.dart';
+import '../../models/fee.dart';
 import '../admin_gateway.dart';
 import 'spot_models.dart';
 
@@ -63,15 +64,54 @@ class SpotsController extends ChangeNotifier {
   /// What [save] writes: changed fields of an existing spot, every filled
   /// field of a new one.
   Map<String, dynamic> get changes {
-    final r = record;
-    if (r == null) return const {};
-    if (r.isNew) {
-      return {
-        for (final e in draft.entries)
-          if (e.value != null && e.value != '') e.key: e.value,
-      };
+    final changed = _edits;
+    // The draft holds a Fee while it is edited; the RPC takes its JSON.
+    if (changed.containsKey('fee')) {
+      changed['fee'] = (changed['fee'] as Fee?)?.toJson();
     }
-    return changedValues(draft, r.values);
+    return changed;
+  }
+
+  /// [changes] as the draft holds them, a fee still a [Fee].
+  Map<String, dynamic> get _edits {
+    final r = record;
+    if (r == null) return {};
+    return r.isNew
+        ? {
+            for (final e in draft.entries)
+              if (e.value != null && e.value != '') e.key: e.value,
+          }
+        : changedValues(draft, {
+            ...r.values,
+            'fee': storedFee(r.values['fee']),
+          });
+  }
+
+  /// Whether the form's fee is structured; its text then follows it.
+  bool get feeStructured => draft['fee'] != null;
+
+  /// Sets the fee and keeps `fee_note` its text, as the app's reports do
+  /// (lib/models/fee.dart `feeNoteOf`). With no vehicle known the spot has
+  /// no structured fee and the text is free again: the stored text when the
+  /// spot had no fee, else the default note. Incomplete or invalid amounts
+  /// leave the text alone until they are fixed.
+  void setFee(Fee value) {
+    final r = record;
+    if (r == null) return;
+    final fee = value.isEmpty ? null : value;
+    final hadFee = !r.isNew && storedFee(r.values['fee']) != null;
+    // Complete and in range; an unreadable amount keeps the old text.
+    final complete = fee?.valid ?? true;
+    draft = {
+      ...draft,
+      'fee': fee,
+      'fee_note': fee == null
+          ? (hadFee ? feeNoteOf(null) : r.values['fee_note'])
+          : complete
+          ? feeNoteOf(fee)
+          : draft['fee_note'],
+    };
+    _notify();
   }
 
   bool get dirty => record?.isNew == true || changes.isNotEmpty;
@@ -285,7 +325,10 @@ class SpotsController extends ChangeNotifier {
     locateError = null;
     draft = {
       for (final f in fields)
-        if (loaded != null) f.key: loaded.values[f.key],
+        if (loaded != null)
+          f.key: f.input == SpotInput.fee
+              ? storedFee(loaded.values[f.key])
+              : loaded.values[f.key],
     };
   }
 
@@ -432,7 +475,7 @@ class SpotsController extends ChangeNotifier {
       await gateway!.setSpotHidden(current.sourceId, hide, '');
       final fresh = await gateway!.spot(current.sourceId);
       if (generation != _generation || fresh == null) return false;
-      final edits = changes;
+      final edits = _edits;
       _load(fresh);
       draft = {...draft, ...edits};
       _refreshRow(fresh);

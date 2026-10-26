@@ -151,7 +151,27 @@ class Fee {
         )
       : const Fee();
 
+  /// The fee in [json] when all of it is one the column accepts, else null.
+  /// Unlike [fromJson], an unknown vehicle or a bad rate is not dropped
+  /// silently, so a value from elsewhere (a report) is taken whole or not
+  /// at all.
+  static Fee? tryParse(Object? json) {
+    if (json is! Map) return null;
+    if (json.keys.any((k) => k != 'scooter' && k != 'heavy')) return null;
+    final scooter = Rate.fromJson(json['scooter'], heavy: false);
+    final heavy = Rate.fromJson(json['heavy'], heavy: true);
+    if (json.containsKey('scooter') && scooter == null) return null;
+    if (json.containsKey('heavy') && heavy == null) return null;
+    return Fee(scooter: scooter, heavy: heavy);
+  }
+
   bool get isEmpty => scooter == null && heavy == null;
+
+  /// Whether every rate given has its amounts, in the column's ranges.
+  bool get valid => [
+    if (scooter case final r?) Rate.fromJson(r.toJson(), heavy: false),
+    if (heavy case final r?) Rate.fromJson(r.toJson(), heavy: true),
+  ].every((r) => r != null);
 
   Map<String, Object> toJson() => {
     if (scooter case final rate?) 'scooter': rate.toJson(),

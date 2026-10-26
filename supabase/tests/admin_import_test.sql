@@ -184,6 +184,18 @@ select is((select fee from official_heavy_spots where id='20000000-0000-4000-800
 select is((select fee_note from official_heavy_spots where id='20000000-0000-4000-8000-000000000001'),'機車每次 20 元','the note stays as written');
 select is((select after->'fee' from admin_audit_log where action='convert_fee'),'{"scooter":{"mode":"per_visit","amount":20}}'::jsonb,'the conversion is audited');
 
+-- The note stays as written, so the spot form's fee_note check
+-- (202610260010) applies only to edits that touch the fee or its text.
+select pg_temp.act('admin');
+set local role authenticated;
+select lives_ok($$select admin_upsert_spot('official:20000000-0000-4000-8000-000000000001','{"note":"入口在地下一樓"}',
+  (select updated_at from official_heavy_spots where id='20000000-0000-4000-8000-000000000001'))$$,
+  'other edits of a converted spot still save');
+select throws_ok($$select admin_upsert_spot('official:20000000-0000-4000-8000-000000000001','{"fee_note":"機車每次 20 元（舊）"}',
+  (select updated_at from official_heavy_spots where id='20000000-0000-4000-8000-000000000001'))$$,
+  '22023','fee_note must be the text of fee','changing the text of a converted spot follows its fee');
+reset role;
+
 -- A converted fee counts as the administrator's for the next import.
 select pg_temp.act('admin');
 set local role authenticated;

@@ -1,11 +1,11 @@
 # 機車停車指南 APP（普通機車 + 大型重機）— 實作計畫
 
-> 狀態：MVP 實作與 UI 驗證中。本階段只提供靜態點（官方點＋社群點），不串接即時車位。CI（含 Android／iOS 模擬器與 CodeQL）已運作；staging 後端已部署到 Supabase 官方託管（2026-10-21，停車點資料待匯入），手機測試版建置待設定 Maps 金鑰與簽章。Google Maps Platform 已啟用，API Key 尚未設定。最後更新：2026-10-21
+> 狀態：MVP 實作與 staging 封測中。本階段只提供靜態點（官方點＋社群點），不串接即時車位。CI（含 Android／iOS 模擬器與 CodeQL）已運作；staging 後端已部署到 Supabase 官方託管並匯入停車點（官方點 1,497 筆、社群點 630 筆）。合併到 `main` 且 CI 通過後，CD 部署 staging 後端與管理站，並把 Android APK、iOS Ad Hoc 測試版送到 Firebase App Distribution；staging 的 Android／iOS／管理站 Maps 金鑰已設定。production 環境尚未設定。各項進度見「目前進度」。最後更新：2026-10-26
 
 ## 背景
 目標是做一個台灣用的機車停車指南 APP，同時服務「普通機車」與「大型重機（黃牌/紅牌）」騎士。
 重機停車規定各縣市差異大且正在快速變動（例：台北市 2026/10/6 起開放約 6.3 萬個路邊收費機車格給重機、可斜停兩格、每次 40 元；新北、桃園、台中、高雄各有不同做法），騎士跨縣市容易誤觸規定，找車位也困難。
-專案已建立 Flutter MVP、本機 Supabase schema 與測試；目前持續依參考介面調整並接入 Google Maps。
+專案已建立 Flutter MVP、Supabase schema 與測試，並提供 Web 管理介面；目前依封測回饋持續調整。
 
 已確認的決策：
 - 平台：**Flutter**（iOS / Android，另可建 Web 方便測試）
@@ -15,9 +15,17 @@
 - UI：**雙平台自適應**，iOS 依 Liquid Glass（HIG，iOS 26/27）、Android 依 Material 3 Expressive；iOS 關鍵導覽元件嵌入原生 Liquid Glass 元件（見「UI 設計規範」）
 - 第一版功能：地圖找附近停車位、停車規則指南、記住我停哪裡、使用者回報/收藏停車點
 
+## 目前進度（2026-10-26）
+- **App**：地圖範圍搜尋與篩選、車種資格判斷、縣市規則、收藏、停車紀錄。後端點位或規則變更時自動重新載入（2026-10-26）：`data_versions` 表每個資料集一列，`community_spots`／`official_heavy_spots`／`city_rules` 的敘述層觸發器每次寫入 bump 版本並經 Realtime 推送，App 收到後 1 秒內合併為一次重新載入（點位重查目前範圍、規則重讀）；回到前景與 Realtime 重新連線時再直接比對版本，補上漏掉的推送。取捨：敘述層觸發器讓每一筆回報、投票或管理站操作都推送一次，所有在線 App 各重查一次目前範圍（1 秒合併只合併同一台裝置的連續事件），封測規模可承受；用量上升時再考慮伺服器端合併或最小推送間隔。詳情依四組十二欄顯示，分區與結構化費率摘要見 [DESIGN.md](DESIGN.md)（#80）；資料來源顯示「由車友 XXX 回報」「由管理員新增」等公開回報者來源（#81、#82）。導航：iOS 先開 Google Maps App，無法開啟才改開 Apple Maps；Android 與 Web 使用 Google Maps 導航網址（#82）。帳號與設定可修改顯示名稱與頭像（#83）。
+- **社群回報**：新增停車點以地面標線選格位、依標線與縣市規則帶入車種資格（#63、#75）；路外停車場可填場站型式、停放分類、入口、指引與最多 10 個分區（#73、#75）；收費使用結構化費率編輯器（#72），分區也可填結構化費率（#80）。修改建議送出結構化 `field`／`proposed`（#61、#62、#66）；「這裡已經不能停車」依原因決定是否建議隱藏（#75）。「位置不正確」建議與 App 端的位置選擇元件尚未接入。
+- **可信度**：存在確認與車種資格解耦，舊投票不再自動隱藏（#59）；管理員核驗過的社群點車種欄位在 180 天內視為可信（#84）。後續分層核實見 [社群核實計畫](COMMUNITY_VERIFICATION_PLAN.md)（P0、P1 已完成），遊戲化與社群審核見 [可行性研究](CONTRIBUTION_TIERS_FEASIBILITY.md)。
+- **管理**：[Web 管理介面](ADMIN_WEB.md) P1–P4a-2 已合併（審核佇列、點位清單、編輯、隱藏、改為官方點、新增停車點），審核佇列待 staging 驗收；管理站的結構化費率實作中；全點位地圖（P4a-3）、地址搜尋（P4b）、規則（P5）、匯入（P6）、使用者（P7）尚未實作。
+- **尚未實作**：既有費率文字轉為結構化 `fee`（併入 Admin Web P6）、依價格篩選、照片上傳、即時車位（計畫見 [REALTIME_AVAILABILITY_UI_PLAN.md](REALTIME_AVAILABILITY_UI_PLAN.md)）。
+
 ## 架構總覽
 ```
 Flutter App ──► Supabase Postgres（官方點 official_heavy_spots／社群點 community_spots，RPC 依地圖範圍讀取）
+     │    ◄──── Supabase Realtime（data_versions：點位或規則在後端變更時推送版本，App 重新載入目前範圍）
      │
      └────────► Supabase Edge Function `submit-report`（社群寫入）
 （2026-10-17 起移除 TDX 即時層；TDX 只在 `tool/import_mymaps.py` 用於靜態核驗與補入。原架構：）
@@ -31,12 +39,12 @@ Flutter App ──► Supabase Edge Function `tdx-parking` ──► TDX API（�
 ## Google Maps 底圖切換（2026-10-11 更新）
 
 ### 已確認範圍
-- 使用者已啟用 Google Maps Platform，目前尚未建立或提供本機 API Key 設定。
+- 使用者已啟用 Google Maps Platform，目前尚未建立或提供本機 API Key 設定。（2026-10-25：staging 的 Android／iOS 金鑰與管理站 Web 金鑰已建立，存於 GitHub `staging` Environment，見 [CD_SETUP.md](CD_SETUP.md)；本機預覽仍需自行填入 `config/maps.local.json`。）
 - 更換地圖底圖、相機操作與群聚標記；沿用目前的浮動搜尋框、下拉停車點選單、車種與格位篩選、探索／個人中心／貢獻三個分頁。
 - 地圖拖曳或縮放結束後，依可見範圍查詢停車資料；搜尋只比對目前範圍的停車點，空白或只有空白字元不能送出。
 - 詳情抽屜使用根 Navigator，覆蓋分頁與其他控制元件。全高下拉先停在半高；從半高再次下拉關閉。修改建議面板疊在詳情之上。
 - 深淺色隨系統切換。Google Maps 淺色沿用預設底圖，深色使用本機樣式；停車資格仍以顏色加形狀區分。
-- 第一版沿用 TDX／社群搜尋，Google Maps 供應底圖。Google Places 地點搜尋、評論、照片與內建逐向導航未納入此次切換。
+- 第一版沿用官方點／社群點搜尋（TDX 即時層已於 2026-10-17 移除），Google Maps 供應底圖。Google Places 地點搜尋、評論、照片與內建逐向導航未納入此次切換。
 
 ### 搜尋目前行為
 - 單一浮動搜尋框搭配下拉結果，不另開搜尋頁。
@@ -130,43 +138,47 @@ Flutter App ──► Supabase Edge Function `tdx-parking` ──► TDX API（�
 ```
 pubspec.yaml
 lib/
-  main.dart, app.dart                 # go_router（底部分頁：探索／個人中心／貢獻；規則與收藏由個人中心進入）
-  ui/theme/                           # 設計 token（色彩、字級、圓角、間距）、Material 與 Cupertino 主題
+  main.dart, app.dart                 # App 入口、主題、go_router（底部分頁：探索／個人中心／貢獻；規則與收藏由個人中心進入）
+  main_admin.dart, admin/             # Web 管理介面（review/ 審核佇列、spots/ 點位維護）；App 不 import，見 ADMIN_WEB.md
   ui/adaptive/                        # 自適應元件層：依平台與 iOS 版本選擇實作（見「UI 設計規範」）
-  core/config.dart                    # SUPABASE_URL / SUPABASE_ANON_KEY（--dart-define）
-  core/geo.dart                       # 距離計算、bbox
-  models/                             # vehicle_type, parking_spot, city_rule, parked_record
-  domain/eligibility.dart             # 判斷某車位是否適合目前車種（純函式，單元測試重點）
+  ui/fee_editor.dart                  # 結構化費率編輯器（App 與管理站共用）
+  ui/location_picker.dart             # 位置選擇元件（目前只有管理站使用）
+  core/                               # config（--dart-define）、geo、定位權限、navigation（導航）、town_lookup（國土測繪中心反查）、通知、版本
+  models/                             # parking.dart（停車點、分區、規則）、fee.dart（結構化費率與 feeNoteOf）
+  domain/                             # eligibility.dart（車種資格判斷，純函式，單元測試重點）、地圖範圍與群聚、位置檢查
   data/
-    tdx_repository.dart               # 呼叫 Edge Function，取得正規化後的 ParkingSpot
-    community_repository.dart         # 社群回報 CRUD、投票、nearby RPC
-    rules_repository.dart             # 內建 JSON + Supabase city_rules 遠端覆蓋（取版本較新者）
-    favorites_repository.dart
-    parked_repository.dart            # 本機 shared_preferences
-    demo_data.dart                    # 無後端時的範例資料
+    repositories.dart                 # 內建規則 JSON + Supabase city_rules 遠端覆蓋（取版本較新者）、viewport RPC 讀取停車點、本機儲存
+    app_store.dart                    # App 狀態：登入、停車點、收藏同步；未設定後端時使用範例資料
+    data_updates.dart                 # 訂閱後端 data_versions（Realtime）與回前景時比對版本，資料變更即重新載入
+    profile_repository.dart           # 顯示名稱與頭像（user metadata、Storage `motopark-avatars`）
   features/
-    map/        # 地圖、群聚標記、篩選（車種、空間類型、隱藏不可停）、車位詳情 bottom sheet、導航
+    map/        # 地圖、群聚標記、篩選（車種、格位類型、隱藏不可停）、圖例、停車點詳情 sheet
     rules/      # 依縣市 × 車種顯示規則、生效日期、來源連結、免責聲明
     my_parking/ # 一鍵記錄位置/備註/樓層、計時提醒（本機通知）、導航回車旁
     favorites/  # 收藏清單
-    report/     # 新增停車點、修改建議（含點位已不存在）
+    report/     # 新增停車點、修改建議（含「這裡已經不能停車」）
+    contribute/ # 貢獻頁
+    auth/       # 登入、編輯顯示名稱與頭像
+    launch/     # 啟動畫面
 assets/rules/parking_rules.json       # 內建縣市規則（含 sourceUrl、effectiveDate）
 config/local.example.json             # 本機後端的 --dart-define-from-file 範本（實際 local.json 不進版控）
 config/maps.local.example.json        # Android／iOS／Web 地圖金鑰範本（實際金鑰不進版控）
-tool/configure_maps.py                # 產生原生與 Dart 地圖設定，不輸出金鑰
+admin_web/, web/admin/                # 管理站 metadata、圖示與字型（只用於 build/admin）
 .env.example                          # 本機 config.toml 以 env() 引用的 secrets 範本（例如開發用 Google OAuth secret；實際 .env 不進版控）
 supabase/
   config.toml                         # 本機堆疊設定（匿名登入、本機 Google OAuth、關閉 CAPTCHA），只影響本機
   seed.sql                            # 本機與 CI 用的種子資料（不推到雲端）
-  migrations/0001_init.sql            # 資料表、PostGIS、RLS、nearby_spots RPC、每日回報上限 trigger
+  migrations/                         # 以日期為前綴（例如 202610110001_init.sql）：資料表、PostGIS、RLS、viewport RPC、回報與管理 RPC
   functions/submit-report/            # Deno：社群寫入（驗證、限流、IP 雜湊）
   functions/.env.example              # 本機 Edge Function secrets 範本
+  tests/                              # pgTAP
 tool/import_mymaps.py                 # Google 我的地圖匯入、官方資料（含 TDX 靜態）核驗與正規化，輸出 data/imports/
-test/                                 # eligibility、rules 解析、匯入資料、車種切換 widget test、雙平台 golden 截圖測試
-.github/workflows/                    # ci.yml、ios.yml、android.yml、codeql.yml、cd-staging.yml、release.yml（見 docs/CICD.md）
+tool/                                 # 另有地圖金鑰設定、CI 路徑分流、CD 閘門與簽章、管理站建置與 smoke test 等腳本
+test/                                 # eligibility、rules 解析、匯入資料、詳情、回報表單、管理站（test/admin/）、雙平台 golden 截圖測試
+.github/workflows/                    # ci.yml、ios.yml、android.yml、codeql.yml、cd-staging.yml、release.yml、actions-cleanup.yml（見 docs/CICD.md）
 fastlane/                             # 兩平台簽章、上傳設定與商店文字（見 docs/CICD.md）
 integration_test/                     # 雙平台截圖情境（地圖、sheet、車種切換、深淺色），iOS 模擬器與 Android 模擬器共用
-README.md                             # 安裝、Supabase 建置（中文）
+README.md                             # 專案簡介與本機執行
 ```
 
 ## 主要套件
@@ -244,12 +256,12 @@ UI：`material_ui`、`cupertino_ui`（Flutter 官方設計套件，取代框架�
 
 ## 核心資料模型
 - `VehicleType`：`scooter`（普通機車，白/綠牌 ≤250cc）、`heavy`（大型重機，黃牌 250–550cc / 紅牌 >550cc，可在設定選牌色供顯示）。地圖篩選列提供單一切換入口，選擇持久化。
-- `ParkingSpot`：id, source(tdx/community), name, lat/lng, city, spaceType(路邊收費機車格/免費機車格/重機專用格/汽車格/路外停車場), feeNote, scooterTotal/available, heavyAllowed(nullable：依場站規定), updatedAt。
+- `ParkingSpot`：id, source（official／community／import；舊收藏的 tdx 點視為官方點）, name, lat/lng, city, spaceType（路邊收費機車格/免費機車格/重機專用格/汽車格/路外停車場，#51 另增 4 種格位）, feeNote, fee（結構化費率）, scooterTotal/available, scooterAllowed/heavyAllowed(nullable：依場站規定), 詳情欄位與 zones（`parking_zones`）, contributorName/contributorRole（#81）, scooterVerifiedAt/heavyVerifiedAt（#84）, updatedAt。
 - `CityRule`：city, vehicle, allowedSpaceTypes, feeNote, canUseTwoSpaces, exceptions（如台北免費巷弄格不開放）, effectiveDate, sourceUrl, version。
 - `eligibility(spot, vehicle, rule)` → `allowed / conditional(附說明) / notAllowed`，地圖標記顏色據此呈現。
 
 ### 費率結構（2026-10-25）
-`community_spots` 與 `official_heavy_spots` 的 `fee`（jsonb，可為 null）以普通機車、大型重機分開記錄費率；`fee_note` 保留為顯示文字，由 `lib/models/fee.dart` 的 `feeNoteOf` 依 `fee` 組成，App 與管理站共用同一份純 Dart 函式。地圖與詳情目前仍顯示 `fee_note`；依價格篩選與比較之後再接 `fee`。
+`community_spots` 與 `official_heavy_spots` 的 `fee`（jsonb，可為 null）以普通機車、大型重機分開記錄費率；`fee_note` 保留為顯示文字，由 `lib/models/fee.dart` 的 `feeNoteOf` 依 `fee` 組成，App 與管理站共用同一份純 Dart 函式。詳情有結構化 `fee` 時以它為準（`spotFeeSummary`／`zoneFeeSummary`，#80），沒有才退回 `fee_note`；`parking_zones` 每區也可選填同格式的 `fee`（`valid_zone_fees`，#80）。依價格篩選與比較之後再接 `fee`。
 
 ```text
 fee = {"scooter": rate, "heavy": rate | {"mode":"same_as_scooter"} | {"mode":"same_as_car"}}
@@ -261,7 +273,7 @@ rate = {"mode":"free"} | {"mode":"posted"}
 
 - 缺少的車種代表「未確認」；只有大型重機可「比照機車／汽車費率」。
 - 金額與上限為 0–10000 的整數元，時間為 1–1440 的整數分鐘；每種收費方式只能帶自己使用的鍵。
-- 同一套規則由三處把關：資料表 check（`valid_fee()`）、`submit-report/validate.ts` 的 `validFee`、Dart 的 `Fee.fromJson`（不合規則的車種讀成未確認）。
+- 同一套規則由三處把關：資料表 check（`valid_fee()`）、`submit-report/validate.ts` 的 `validFee`、Dart 的 `Fee.fromJson`（不合規則的車種讀成未確認）。管理站寫入（`admin_upsert_spot`、`admin_resolve_report`）時另以 `fee_note_of(fee)`（`202610260010`，與 `feeNoteOf` 同寫法）檢查 `fee_note` 與 `fee` 一致。
 - 顯示文字沿用匯入資料的寫法，例如「每日 30 元（大型重機比照機車費率）」「機車免費；大型重機每小時 20 元，當日上限 100 元」；只有機車費率時標示「（大型重機費率未確認）」，兩者皆無時為「請依現場公告」。
 - **既有資料尚未轉換**：#68 只新增欄位，既有停車點的 `fee` 都是 null，只有 `fee_note` 文字（2026-10-25 staging：社群點 630 筆、138 種寫法；官方點 1,497 筆、943 種寫法，其中約 520 筆為「請依現場公告」或「未知」）。使用者決定**併入 Admin Web P6「匯入」一起做**（見 [ADMIN_WEB.md](ADMIN_WEB.md#階段)）：
   - 匯入工具（`tool/import_mymaps.py` 與後台匯入）解析費率文字時一併產生 `fee`，避免重新匯入後又只剩文字。
@@ -285,12 +297,12 @@ rate = {"mode":"free"} | {"mode":"posted"}
 |---|---|---|---|
 | 1 | **TDX**（交通部運輸資料流通服務） | 路外停車場靜態（`CarPark`）、車位類型與數量（`ParkingSpace`）、即時剩餘（`ParkingAvailability`）、路邊路段（`OnStreet/ParkingSegment*`），以 City 代碼分縣市 | 交通部自述機車車位數「若有才提供」；各縣市資料及統計方式不一、部分縣市未開放齊全；**完全沒有「重機可否停」欄位** |
 | 2 | **縣市自有開放資料**（補 TDX 缺口） | 台北停管處路邊格位圖層（含機車格數、格種，每日更新）、台中路外/路邊剩餘（含機車欄位、10 分鐘更新）、台南 Parkweb API（含機車剩餘 `moto`） | 格式各異，每市要寫一個 adapter；只在 TDX 審查發現缺口時才接 |
-| 3 | **縣市公告（人工整理）** | 重機開放規則、重機專用格位置（如新北 17 格專用格的路段） | 多半只有新聞稿/公告，無開放資料 → 進 `city_rules` 與 `official_heavy_spots` 表，由管理者維護；地圖以 `official_viewport_spots` 讀取已生效（`effective_date` 已到）的點位，與社群、TDX 資料合併顯示 |
+| 3 | **縣市公告（人工整理）** | 重機開放規則、重機專用格位置（如新北 17 格專用格的路段） | 多半只有新聞稿/公告，無開放資料 → 進 `city_rules` 與 `official_heavy_spots` 表，由管理者維護；地圖以 `official_viewport_spots` 讀取已生效（`effective_date` 已到）的點位，與社群點合併顯示（TDX 即時層已移除） |
 
 ### Phase 0：TDX 資料完整性稽核（實作前先做）
 > 2026-10-17：改以 `tool/import_mymaps.py` 逐縣市比對官方資料（各縣市自有資料優先，TDX 補缺），結果見 `data/imports/google-mymaps/REPORT.md`；以下為原規劃。
 在開發用的雲端環境實測時，`tdx.transportdata.tw`、`data.taipei`、`data.gov.tw` 都被網路政策擋下（403），所以**目前無法親自確認完整性**，稽核要在放行網域並取得 TDX 金鑰後執行：
-- 寫 `tool/tdx_audit.dart`（或 Deno script），逐一跑 22 縣市，輸出 `docs/tdx-coverage.md`：
+- 寫 `tool/tdx_audit.dart`（或 Deno script），逐一跑 22 縣市，輸出 `docs/availability-coverage.md`（原規劃為 `docs/tdx-coverage.md`，併入 [REALTIME_AVAILABILITY_UI_PLAN.md](REALTIME_AVAILABILITY_UI_PLAN.md) 6.2 的同一份稽核）：
   - 路外停車場數、其中有機車車位數（`ParkingSpace` 機車類型）的比例
   - 有即時剩餘、且即時資料含機車欄位的比例；資料最後更新時間分佈（判斷是否「假即時」）
   - 座標缺漏/明顯錯誤（落在海上、0,0）比例
@@ -310,16 +322,16 @@ rate = {"mode":"free"} | {"mode":"posted"}
 ### 存在狀態與修改建議（2026-10-11 更新）
 - 未收到不存在回報的點位視同存在，正常顯示；不要求使用者持續點「還在」維持可見。
 - 移除獨立「還在／已不存在」按鈕。詳情以「導航到這裡／修改建議」為主要動作；小螢幕或放大字級時改為上下排列。標題與關閉獨占首列，收藏／分享放在次列。
-- 「修改建議 → 點位已不存在」提供獨立項目與現場說明表單；描述撤除、施工或封閉狀況，必填內容送出 `flag`，供管理者審核，不因一次回報直接刪除或隱藏。
+- 「修改建議 → 這裡已經不能停車」提供獨立項目與現場說明表單；先選原因（格線已撤除、改為其他用途、施工中、暫時封閉、其他），只有前兩種永久原因附隱藏建議，施工與封閉可填預計恢復時間（#75）。送出 `flag` 供管理者審核，不因一次回報直接刪除或隱藏。
 - 「存在」只代表仍列於地圖，不等同合法可停、剩餘車位或停放資格已驗證。既有可信度欄位仍供資格判斷與歷史相容，不再於詳情顯示「尚未確認／最後確認」等需要例行操作的提示。
 - 正式回報需登入；範例模式只供本次功能測試。官方點與社群點都可提出修改建議；已移除的 TDX 範例（fixture）點會在收藏載入時清除。
 
 ### 回報與可信度規則
 1. **兩種回報**
-   - 新增停車點：長按地圖 → 表單（格位類型、普通機車可停、重機可停、收費、樓層/入口備註、選填照片）。2026-10-25 起 `submit-report` 也接受路外場站的 `facility_type`、`parking_access`、`entrance_note`、`parking_guide` 與最多 10 個 `parking_zones`（每區只有名稱、停放分類、指引），由 `apply_report` 存入（migration `202610250030_report_details.sql`）。
+   - 新增停車點：長按地圖 → 表單（格位類型、普通機車可停、重機可停、收費、樓層/入口備註、選填照片）。位置以共用的位置選擇元件調整（長按或地圖中心只當起始位置，依位置反查縣市與行政區，見 [ADMIN_WEB.md](ADMIN_WEB.md#app-位置選擇實作)）。2026-10-25 起 `submit-report` 也接受路外場站的 `facility_type`、`parking_access`、`entrance_note`、`parking_guide` 與最多 10 個 `parking_zones`（每區只有名稱、停放分類、指引），由 `apply_report` 存入（migration `202610250030_report_details.sql`）；#80 起每區可另帶結構化 `fee`。社群點保存可公開的回報者名稱與角色快照（`contributor_name`／`contributor_role`，#81），不公開帳號識別。
    - ~~**官方點位註記**~~（2026-10-17 隨 TDX 即時層移除）：在 TDX 停車場上回報「重機可停 / 不可停 / 須停汽車格」「入口限高/坡道陡」等，TDX 本身沒有這些欄位。
      - 註記先以 `pending` 存入 `spot_annotations`，管理者改為 `confirmed` 後才生效：`tdx-parking` 回傳停車點時以 RPC `confirmed_annotations` 取每個點最新一筆已確認註記，設定 `heavy_allowed`（須停汽車格視為可停）並在備註標示「社群回報經審核」。查詢失敗時維持 TDX 原資料，重機資格保持「有條件」。
-2. **去重**：送出前查 15 公尺內同類型點，有的話引導查看既有點並提出修改建議，而非重複新增。
+2. **去重**：送出前查 15 公尺內同類型點，有的話引導查看既有點並提出修改建議，而非重複新增（App 新增停車點的位置區塊即時提示，`apply_report` 仍在伺服器端合併）。
 3. **存在與可信度分開處理**：新增點位的 `pending` 資料也正常可見；未知資格保留「有條件／請確認現場標示」。歷史投票的合格帳號與加權門檻保留於後端，但不是新版介面的存在確認流程；`confirmed` 只代表點位存在，不代表社群填寫的車種資格已核實（場站「可停」只採官方資料），沒有確認時間的 `confirmed` 視為新鮮度未知。不存在／資訊錯誤建議進入 `moderation_queue` 待審；管理者判定後處理，資料超過 180 天未確認仍可提示可能過時。
 4. **防濫用**：匿名身分可被任意重建（`signInAnonymously()` 每次都產生新 user id，[Supabase 官方文件](https://supabase.com/docs/guides/auth/auth-anonymous)亦建議搭配 CAPTCHA），因此**不能把匿名帳號當成一個人**：
    - **權限分級**：匿名或未登入只能瀏覽、收藏、記錄停車位置（收藏與停車紀錄不影響他人）；**回報、確認、投票、檢舉**需以 Google / Apple 帳號登入。
@@ -327,14 +339,14 @@ rate = {"mode":"free"} | {"mode":"posted"}
    - **伺服器端限流**：所有寫入經 Edge Function `submit-report`，依 user id **與** IP 雙重限流（如每帳號每日 10 筆、每 IP 每日 30 筆），並記錄於 `rate_limit_events`；Supabase Auth 本身的註冊/登入速率限制同時開啟。
    - **裝置驗證（第二階段）**：上架後加入 Android Play Integrity / iOS App Attest，由 Edge Function 驗證後才接受寫入。
    - 不能確認自己的回報；檢舉按鈕 → `moderation_queue`；照片存 Supabase Storage，上傳前移除 EXIF。
-5. **管理**：Web 管理介面完成前用 Supabase Dashboard；管理介面的範圍、管理者角色與審核畫面見 [ADMIN_WEB.md](ADMIN_WEB.md)。
-   | 工作 | Dashboard 位置 |
+5. **管理**：管理介面的範圍、管理者角色與審核畫面見 [ADMIN_WEB.md](ADMIN_WEB.md)。審核佇列與點位維護已在 Web 管理介面實作（審核佇列待 staging 驗收，驗收前仍以 Dashboard 操作）；其餘工作在對應階段完成前用 Supabase Dashboard：
+   | 工作 | 位置 |
    |---|---|
-   | 建立、停用使用者（含匯入用帳號） | Authentication → Users |
-   | 審核修改建議、不存在回報 | Table Editor → `moderation_queue` |
-   | 維護縣市規則（見下方 `restriction` 說明） | Table Editor → `city_rules` |
-   | 維護官方點 | Table Editor → `official_heavy_spots` |
-   | 匯入資料（2026-10-26 起改用管理站「匯入」）、批次修改 | SQL Editor |
+   | 建立、停用使用者（含匯入用帳號） | Dashboard：Authentication → Users（Admin Web P7 尚未實作） |
+   | 審核修改建議、不存在回報 | Admin Web 審核佇列（P3）；驗收前用 Table Editor → `moderation_queue` |
+   | 維護縣市規則（見下方 `restriction` 說明） | Dashboard：Table Editor → `city_rules`（Admin Web P5 尚未實作） |
+   | 維護官方點與社群點 | Admin Web 點位頁（P4a） |
+   | 匯入資料（`spots.json`）、既有費率文字轉結構化 | Admin Web 匯入頁（P6）；批次修改仍用 Dashboard：SQL Editor |
 
    改 `city_rules` 並調高 `version` 時（App 只在資料庫版本較大時改用資料庫那份），`restriction` 要一起確認：
    - `signage`：限現場標示開放的車格。
@@ -359,7 +371,7 @@ rate = {"mode":"free"} | {"mode":"posted"}
   - 臺北市路外 36 處試辦重機停機車區（115/4/6 首波 24 處、115/7/6 新增 12 處）：依停管處新聞稿附件補上「機車區」與機車費率 2 倍的重機費率；試辦期限已屆，是否延續須以現場公告為準。
   - 臺北市路邊收費機車格：依 115/10/6 起的新制（115/9/30 公告），大型重機依路段收費方式計費：計次路段每次 40 元；計時路段每小時 20 元、當日上限 100 元；限時格首 20 分鐘 0 元；皆可斜停 2 格。來源格點無法判定收費方式，因此三種都列出。
   - 同一官方場站的多個來源標點（例如汽車區、機車區）合併為一個點位、多個 zones；來源回報彼此矛盾時改為 `null` 並列入待人工確認。
-- 詳情十二欄（見 [DESIGN.md](DESIGN.md)「點位詳情十二欄分組版」）：名稱、費率、停放車種（`parking_access`／`parking_zones`）、GPS、來源、狀態與更新時間全數填入；類型取自官方資料或名稱中的地下／立體／平面；說明依內容分入「入口」「停車指引」「備註」；官方地址或路段填入位置；試辦規則與限時開放填入特殊規則。照片不匯入（屬來源作者的著作）；即時車位不屬於匯入資料。`community_spots` 尚無這些延伸欄位，`--sql-owner` 產生的 SQL 只含既有欄位；延伸欄位保留在 JSON，待後端加上對應欄位後再寫入。
+- 詳情十二欄（見 [DESIGN.md](DESIGN.md)「點位詳情十二欄分組版」）：名稱、費率、停放車種（`parking_access`／`parking_zones`）、GPS、來源、狀態與更新時間全數填入；類型取自官方資料或名稱中的地下／立體／平面；說明依內容分入「入口」「停車指引」「備註」；官方地址或路段填入位置；試辦規則與限時開放填入特殊規則。照片不匯入（屬來源作者的著作）；即時車位不屬於匯入資料。`community_spots` 與 `official_heavy_spots` 已有這些延伸欄位（`202610170002_spot_detail_fields.sql`），`import.sql`／`official.sql` 一併寫入。
 - 點位只分兩種（2026-10-17 決定）：
   - **官方點**：我的地圖點位通過官方核驗，或官方資料有、我的地圖沒有且記載機車格／重機證據的場站（含 TDX 獨有的停車場，作為靜態資料補入；與縣市資料或既有官方點重複者略過）。資料來源顯示該縣市政府（如「臺北市政府」），`status=confirmed`，寫入 `official_heavy_spots`。
   - **社群點**：我的地圖有但未通過核驗，`source='import'`、`status='pending'`，資料來源顯示「社群回報整理」，詳情顯示「待確認」。
@@ -371,7 +383,7 @@ rate = {"mode":"free"} | {"mode":"posted"}
 - 寫入資料庫改用管理站「匯入」（2026-10-26，[ADMIN_WEB.md](ADMIN_WEB.md#p6-實作)）：上傳上述 `spots.json`，試算新增／更新／管理員修改過的欄位後勾選匯入，管理員修改過的欄位預設保留，並寫入稽核紀錄。`official.sql` 會覆寫管理員的修改，只在管理站無法使用時才以 SQL Editor 執行。
 - 限制：其餘縣市自有資料不是缺座標（基隆、屏東）就是查無資料集，改由 TDX 比對；觀光景點、量販店等未登記為路外停車場的地點仍無官方資料可比對。臺中與桃園的市府資料沒有費率。
 
-資料表在原本的 `community_spots` / `spot_votes` 之外新增：`moderation_queue`、`official_heavy_spots`（官方點，含詳情十二欄）、`rate_limit_events`。`spot_annotations` 已於 2026-10-17 移除。
+資料表在原本的 `community_spots` / `spot_votes` 之外新增：`moderation_queue`、`official_heavy_spots`（官方點，含詳情十二欄）、`rate_limit_events`、`admin_audit_log`（#55）、`contributor_name_clears`（#81，私有）；頭像存於 Storage `motopark-avatars`（#83）。`spot_annotations` 已於 2026-10-17 移除。
 
 ## 驗證方式
 1. 使用 `.flutter-version` 指定的 Flutter SDK，執行程式分析與 Flutter 測試，包含資格判斷、搜尋、抽屜互動、Google 地圖橋接及匯入資料檢查；`tool/` 的 Python 測試涵蓋匯入工具與 CI 路徑分流。
@@ -380,9 +392,9 @@ rate = {"mode":"free"} | {"mode":"posted"}
 4. 依 CLAUDE.md 的 PR 流程：draft PR → 自我審查 → Ready for review → 處理 CI 與 Codex 意見到全綠。
 
 ## 待準備事項
-- Google Maps 平台 API Key：Android／iOS／Web 各自限制用途與應用程式，存於不進版控的本機設定；平台已啟用，金鑰尚未設定。
+- Google Maps 平台 API Key：staging 的 Android／iOS／管理站 Web 金鑰已設定（GitHub `staging` Environment）；production 金鑰上線前另建；本機預覽各自建立，存於不進版控的 `config/maps.local.json`。
 - CI／CD 所需的商店、Supabase 與 GitHub 設定，見 [CICD.md](CICD.md)「待準備事項」
-- Supabase：staging 專案已建立並部署（2026-10-21；GitHub `staging` Environment 已設定 Supabase 的 3 個 secret 與 2 個 variable，CI 用 Scoped token 只限 staging 專案）。待辦：匯入停車點（`official.sql`／`import.sql`，需匯入用帳號 UUID）、開啟 Google／Apple 登入與 Turnstile CAPTCHA；production 專案（Pro）於上線前另建。
+- Supabase：staging 專案已建立並部署（2026-10-21；GitHub `staging` Environment 已設定 Supabase 的 3 個 secret 與 2 個 variable，CI 用 Scoped token 只限 staging 專案），停車點已匯入，Google 登入已啟用（管理站 2026-10-24 驗收）。待辦：確認 Apple 登入與 Turnstile CAPTCHA；production 專案（Pro）於上線前另建。
 - TDX 會員 Client ID / Secret（已取得；只在本機 `supabase/functions/.env` 供匯入核驗使用）
 - ~~雲端環境網路放行 TDX 與縣市開放資料網域~~：已改在本機執行 `tool/import_mymaps.py` 取得官方資料並核驗（2026-10-17），不再需要。
 - ~~執行順序（先 demo／本機開發，放行後再做 Phase 0 與 TDX 介接）~~：App 本體、schema、社群回報與靜態官方點匯入已完成；TDX 即時介接本階段不做。

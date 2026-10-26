@@ -1,3 +1,4 @@
+import '../../models/fee.dart';
 import '../../models/parking.dart';
 
 /// Queue filters from docs/ADMIN_WEB.md: eligibility, gone, everything else.
@@ -10,6 +11,39 @@ enum ReviewKind {
   final String label;
 }
 
+/// Risk class of a report (docs/CONTRIBUTION_TIERS_FEASIBILITY.md §5.1),
+/// derived by the database when the report is queued; null for rows the
+/// server has not classified.
+enum ReviewRisk {
+  low('低風險', '只改名稱或文字說明'),
+  medium('中風險', '費率、同類格位類型、150 m 內移位或已不存在'),
+  high('高風險', '停放資格、路外與路邊互換、移位超過 150 m，或無法判斷');
+
+  const ReviewRisk(this.label, this.reason);
+  final String label;
+
+  /// What puts a report in this class, in the admin's words.
+  final String reason;
+
+  static ReviewRisk? parse(Object? value) =>
+      values.where((r) => r.name == value).firstOrNull;
+}
+
+/// Why a report is rejected (required) or closed without a change
+/// (optional); stored as `moderation_queue.resolution_kind`.
+enum ResolutionKind {
+  wrong('與現況不符', '建議內容和現場或官方資料不一致'),
+  duplicate('重複回報', '與既有案件或已處理的建議重複'),
+  insufficient('資訊不足', '說明或照片不夠，無法查證'),
+  outdated('已不適用', '點位在送出後已更新，這項建議不再適用'),
+  abuse('濫用', '廣告、謾罵或刻意填寫錯誤資料'),
+  other('其他原因', '請在處理說明寫下原因');
+
+  const ResolutionKind(this.label, this.description);
+  final String label;
+  final String description;
+}
+
 enum FieldInput {
   text,
   spaceType,
@@ -20,6 +54,9 @@ enum FieldInput {
 
   /// One of [ReviewField.choices], or unset.
   choice,
+
+  /// A structured fee per vehicle (`fee`), edited with the shared FeeEditor.
+  fee,
 }
 
 /// A spot column `admin_resolve_report` may change, as the admin sees it.
@@ -59,6 +96,7 @@ final reviewFields = [
   ),
   ReviewField('scooter_allowed', '普通機車', FieldInput.triState),
   ReviewField('heavy_allowed', '大型重機', FieldInput.triState),
+  ReviewField('fee', '費率', FieldInput.fee),
   ReviewField('fee_note', '收費資訊', FieldInput.text, maxLength: 200),
   const ReviewField('note', '備註', FieldInput.text, maxLength: 500),
   const ReviewField('entrance_note', '入口說明', FieldInput.text, maxLength: 500),
@@ -67,6 +105,10 @@ final reviewFields = [
   ReviewField('hidden', '地圖顯示', FieldInput.hiddenFlag),
   ReviewField('lat', '緯度', FieldInput.coordinate),
   ReviewField('lng', '經度', FieldInput.coordinate),
+  // A location suggestion brings the county and district the app looked up,
+  // so a move across a border also changes which rules apply.
+  const ReviewField('city', '縣市', FieldInput.text, maxLength: 30),
+  const ReviewField('district', '行政區', FieldInput.text, maxLength: 30),
 ];
 
 ReviewField? reviewField(String key) =>
@@ -110,6 +152,7 @@ class ReviewReport {
     this.proposed,
     this.note = '',
     this.baseSpot,
+    this.risk,
   });
 
   factory ReviewReport.fromJson(Map<String, dynamic> j) => ReviewReport(
@@ -121,6 +164,7 @@ class ReviewReport {
     note: j['note'] as String? ?? '',
     createdAt: DateTime.parse(j['created_at'] as String),
     baseSpot: (j['base_spot'] as Map?)?.cast<String, dynamic>(),
+    risk: ReviewRisk.parse(j['risk']),
   );
 
   final String id;
@@ -135,6 +179,9 @@ class ReviewReport {
 
   /// The spot as the rider saw it; null for reports queued before versions.
   final Map<String, dynamic>? baseSpot;
+
+  /// Derived on the server; null when it has not been classified.
+  final ReviewRisk? risk;
 
   bool get official => sourceId.startsWith('official:');
   bool get autoHidden => reason == autoHiddenReason;
@@ -260,6 +307,30 @@ bool fitsField(ReviewField field, Object? value) => switch (field.input) {
   FieldInput.hiddenFlag => value is bool,
   FieldInput.coordinate => value is num,
   FieldInput.choice => value == null || field.choices.containsKey(value),
+  FieldInput.fee =>
+    value == null || value is Fee || Fee.tryParse(value) != null,
+};
+
+/// A `fee` value as a [Fee]: the editor's own, or a valid JSON one. Null
+/// when there is none, it is invalid, or it names no vehicle (the form
+/// writes no structured fee then).
+Fee? reviewFee(Object? value) {
+  final fee = value is Fee ? value : Fee.tryParse(value);
+  return fee == null || fee.isEmpty ? null : fee;
+}
+
+/// Whether two values of [key] say the same; a fee compares by content.
+bool sameValue(String key, Object? a, Object? b) =>
+    reviewField(key)?.input == FieldInput.fee
+    ? reviewFee(a) == reviewFee(b)
+    : a == b;
+
+/// [patch] as the RPC takes it: a fee being edited becomes its JSON.
+Map<String, dynamic> wirePatch(Map<String, dynamic> patch) => {
+  for (final MapEntry(:key, :value) in patch.entries)
+    key: reviewField(key)?.input == FieldInput.fee
+        ? reviewFee(value)?.toJson()
+        : value,
 };
 
 String formatValue(String key, Object? value) {
@@ -283,6 +354,7 @@ String formatValue(String key, Object? value) {
     FieldInput.text =>
       value is String && value.trim().isNotEmpty ? value : '未填寫',
     FieldInput.choice => field.choices[value] ?? '未設定',
+    FieldInput.fee => reviewFee(value)?.summary ?? '未設定',
   };
 }
 
@@ -295,6 +367,7 @@ String? validatePatch(Map<String, dynamic> patch, ReviewSpot spot) {
       case FieldInput.text:
         final text = value is String ? value.trim() : '';
         if (key == 'name' && text.isEmpty) return '停車點名稱不可空白';
+        if (key == 'city' && text.isEmpty) return '縣市不可空白';
         if (value is! String || value.length > field.maxLength!) {
           return '${field.label}請在 ${field.maxLength} 個字以內';
         }
@@ -319,6 +392,29 @@ String? validatePatch(Map<String, dynamic> patch, ReviewSpot spot) {
         if (value is! num || value < min || value > max) {
           return '${field.label}需介於 $min 與 $max 之間';
         }
+      case FieldInput.fee:
+        if (value == null) break;
+        final fee = value is Fee ? value : Fee.tryParse(value);
+        if (fee == null) return '費率格式不正確，請重新選擇收費方式';
+        if ([fee.scooter, fee.heavy].nonNulls.any((r) => !r.complete)) {
+          return '請填完收費金額，計時另需選計費時間';
+        }
+        if (!fee.valid) return '金額請填 0 到 10000 的整數';
+    }
+  }
+  // The app shows a structured fee before the text, so the text must be the
+  // fee's own (feeNoteOf), or an edit to it would never reach riders.
+  if (patch.containsKey('fee') || patch.containsKey('fee_note')) {
+    final fee = reviewFee(
+      patch.containsKey('fee') ? patch['fee'] : spot.values['fee'],
+    );
+    final note = patch.containsKey('fee_note')
+        ? patch['fee_note']
+        : spot.values['fee_note'];
+    if (fee != null && note != feeNoteOf(fee)) {
+      return patch.containsKey('fee')
+          ? '收費資訊要和費率一致。改費率時收費資訊會自動更新，不需另外修改。'
+          : '這個點位已設定各車種費率，App 顯示的是費率而不是收費資訊。請按「修改後套用」，加入「費率」欄位修改。';
     }
   }
   return null;
@@ -330,4 +426,15 @@ String relativeAge(DateTime time, DateTime now) {
   if (d.inHours < 1) return '${d.inMinutes} 分鐘前';
   if (d.inDays < 1) return '${d.inHours} 小時前';
   return '${d.inDays} 天前';
+}
+
+/// A location suggestion without the county the app looked up (the lookup
+/// failed, or an older build): the admin has to check whether the new
+/// position lies in another county or city.
+bool locationWithoutCity(ReviewReport report) {
+  final proposed = report.proposed;
+  return suggestionKey(report.field) == 'location' &&
+      proposed != null &&
+      (proposed.containsKey('lat') || proposed.containsKey('lng')) &&
+      !proposed.containsKey('city');
 }

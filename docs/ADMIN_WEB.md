@@ -1,6 +1,6 @@
 # Web 管理介面 — 開發計畫
 
-> 狀態：P1 後端與 P2 外殼已完成，P2 已於 2026-10-24 通過 staging 登入驗收（https://motopark-admin-staging.web.app ）。P3 審核佇列已實作，待 staging 部署後驗收；P4a-1（點位清單、編輯、隱藏、改為官方點）已合併；P4a-2（位置選擇元件、新增停車點）已實作；全點位地圖圖層在 P4a-3，結構化費率的管理站支援待 #68 合併後補上；P4b 地址搜尋（Google Geocoding 經 Edge Function `geocode`）已實作，待 staging 設定 secret 後驗收；P5 規則頁已實作（見「P5 實作」）；P6 匯入與費率轉換已實作，待 staging 部署後驗收。P0 仍差第二個備援驗證器 App。取代 [PLAN.md](PLAN.md)「社群回報機制 › 5. 管理」原本「第一版用 Supabase Dashboard」的做法；P3 驗收前審核仍以 Dashboard 操作。最後更新：2026-10-26
+> 狀態：P1 後端與 P2 外殼已完成，P2 已於 2026-10-24 通過 staging 登入驗收（https://motopark-admin-staging.web.app ）。P3 審核佇列已合併（#62；#77 補上入口指引、位置與場站欄位），待 staging 部署後驗收；P4a-1（點位清單、編輯、隱藏、改為官方點，#67）與 P4a-2（位置選擇元件、新增停車點，#76）已合併，管理員核驗車種欄位（#84）已合併；點位表單與審核頁的結構化費率已實作（`202610260010`）；P4a-3（全點位地圖圖層）已實作；P4b 地址搜尋（Google Geocoding 經 Edge Function `geocode`）已實作，待 staging 部署後驗收；App 的新增停車點與「位置不正確」建議已接入位置選擇元件（見「App 位置選擇實作」）。P5 規則頁已實作（見「P5 實作」）。P6 匯入與費率轉換已實作（見「P6 實作」），待 staging 部署後驗收；P0 仍差第二個備援驗證器 App。取代 [PLAN.md](PLAN.md)「社群回報機制 › 5. 管理」原本「第一版用 Supabase Dashboard」的做法；P3 驗收前審核仍以 Dashboard 操作。最後更新：2026-10-26
 
 ## 背景
 目前審核與資料維護都在 Supabase Dashboard 完成，有幾個問題：
@@ -13,7 +13,7 @@
 | 沒有操作紀錄 | 以 service role 在 Dashboard 操作，不知道誰改了什麼 |
 | 匯入要貼 SQL | `tool/import_mymaps.py` 產出的 `official.sql`／`import.sql` 要在 SQL Editor 執行 |
 
-`city_rules` 已有 `app_metadata.role='admin'` 的寫入 policy（`202610110001_init.sql`），管理者角色從這裡延伸。
+`city_rules` 原有 `app_metadata.role='admin'` 的寫入 policy（`202610110001_init.sql`），管理者角色從這裡延伸；P5 起改為只能經 `admin_upsert_city_rule` 寫入。
 
 ## 決策
 以下四項已於 2026-10-24 確認：
@@ -84,6 +84,7 @@
 5. Admin RPC（皆先檢查 `is_admin()`，並在同一 transaction 寫稽核紀錄）：
    - `admin_resolve_report(id, decision, patch, note)`：依 `source_id` 前綴（`official:` 或社群點 uuid）更新對應資料表並結案。
    - `admin_upsert_spot`、`admin_set_spot_hidden`（隱藏／恢復，P3 已實作）、`admin_promote_spot`（社群點改為官方點），P4a-1 已實作；另有 `admin_spots` 合併搜尋兩張表。
+   - `admin_clear_contributor_name(spot_id, note)`：清除社群點公開的回報者名稱並寫稽核紀錄（#81 已實作，後台 UI 尚未接入）。
    - `admin_upsert_city_rule`：伺服器遞增 `version`，檢查 `restriction`；發布前把現列複製到 `city_rules_history`（P5 已實作）。
    - `admin_import_preview`／`admin_import_apply`：接收 `spots.json`，先試算差異再套用，取代 SQL Editor（P6 已實作，見下方「P6 實作」）。
    - `admin_fee_backlog`／`admin_convert_fees`：列出尚無結構化費率的點位，寫入管理者確認的費率（P6）。
@@ -98,11 +99,11 @@
 | P1 後端基礎 | 後端變更 1、2、4、5（`admin_resolve_report`）與 pgTAP | `supabase test db` 通過 |
 | P2 外殼 | `main_admin.dart`、登入、驗證方式登記與選擇（驗證器 App、簡訊）、go_router 版面、非 admin 拒絕畫面、Firebase Hosting（CSP、`X-Frame-Options: DENY`、`noindex`） | staging 可登入 |
 | P3 審核佇列 | 篩選、差異表、小地圖、套用／修改後套用／駁回；App 改送結構化建議；採納前比對點位版本（[社群核實計畫](COMMUNITY_VERIFICATION_PLAN.md) §5.2） | 不用 Dashboard 也能審核；建議送出後點位已改版時，採納會提示衝突而不直接覆蓋（pgTAP 覆蓋） |
-| P4 點位 | P4a-1：清單、編輯表單、來源、隱藏／恢復、改為官方點；P4a-2：位置選擇元件、新增停車點；P4a-3：全點位地圖圖層（沿用 App 標記）；P4b：門牌與路口搜尋（Google Geocoding 經 Edge Function `geocode`，已實測路口） | — |
+| P4 點位 | P4a-1：清單、編輯表單、來源、隱藏／恢復、改為官方點；P4a-2：位置選擇元件、新增停車點；P4a-3：全點位地圖圖層（沿用 App 標記，已實作）；P4b：門牌與路口搜尋（Google Geocoding 經 Edge Function `geocode`，已實測路口） | — |
 | P5 規則 | 規則表單、預覽、版本遞增、`city_rules_history`；`tool/export_rules.py` 從 DB 匯出規則避免與 `parking_rules.json` 不一致 | 已實作，見「P5 實作」 |
 | P6 匯入 | 上傳 `import_mymaps.py` 的 JSON → 差異試算 → 套用；既有點位的費率文字轉為結構化 `fee`（[PLAN.md](PLAN.md)「費率結構」）：只轉換能確定的寫法，「請依現場公告」「未知」與混有汽車、月租、身障費率而無法確定者維持 null 或交人工判斷；差異試算分列可轉換／無法判斷／需人工確認，確認後才寫入；解析結果以 `lib/models/fee.dart` 或 DB 的 `valid_fee()` 驗證 | 轉換完成前不開放依價格篩選 |
 | P7 使用者 | 檢視 `rate_limit_events`、停權（`admin-users`） | — |
-| App | 位置選擇元件用於新增停車點與「位置不正確」建議 | 可與 P4 同步 |
+| App | 位置選擇元件用於新增停車點與「位置不正確」建議（已實作，見「App 位置選擇實作」） | 可與 P4 同步 |
 
 ### P2 實作與待驗收事項
 
@@ -139,13 +140,17 @@ node tool/admin_smoke.cjs
 - 版面：寬度 ≥ 1040 px 佇列 360 px＋詳情；680–1039 px 佇列 300 px；< 680 px 先列表、點選後進詳情（返回鍵顯示剩餘筆數），差異表改為每個欄位上下排列，動作列固定在底部。網址帶回報 id，重新整理或瀏覽器返回不會掉位置。
 - 差異表只列 `admin_resolve_report` 可改的欄位，建議值以黃色斜角色帶標示；不在可改清單的建議另外列出，不會被默默略過。編輯值的驗證與資料表約束一致（名稱 1–100 字、收費 200 字、備註 500 字、緯度 20–27、經度 118–123、官方點大型重機只能可停或不可停）。
 - 動作：有建議值時「套用建議」「修改後套用」；沒有建議值時「修改後套用」「結案不修改」；找不到點位只能「駁回」。處理說明寫入 `resolution_note` 與稽核紀錄。
+- **駁回原因與風險等級**（遊戲化研究階段 0，`202610260020_review_resolution_kind.sql`）：按「駁回」後要先選原因才能「駁回這筆回報」。手機（< 680 px）用底部面板，較寬的畫面用對話框；選項可換行，每列至少 48 px。原因共 6 類：與現況不符、重複回報、資訊不足、已不適用、濫用、其他原因，存在 `resolution_kind`，提示列寫成「已駁回（原因）：點位」。`admin_resolve_report` 新增 `p_resolution_kind`：駁回沒帶原因就以 `22023` 拒絕；採納與「結案不修改」可以不帶；選「其他原因」時處理說明必填，面板內會出現說明欄，RPC 也會擋下空白說明。資料表另有 trigger，不論從 RPC、Dashboard 或 service role，只要把案件改成 `rejected` 都必須有原因。舊版管理站沒有這個參數，駁回會被拒絕、案件留在佇列，採納不受影響，所以 migration 與管理站要一起部署。處理說明只給管理員看，回報者只會看到依原因顯示的固定文案（我的貢獻）。佇列與詳情顯示伺服器推導的風險等級 `risk`（低／中／高，規則見 [研究文件 §6](CONTRIBUTION_TIERS_FEASIBILITY.md#6-資料模型與-api建議實作時再定版號)）。標示方式是路緣標線色條（白／黃／紅）加上訊號格圖示與文字，不只靠顏色；詳情另附一句判定理由。沒有風險資料的舊案件不顯示標示。
+- **量測基線**：`admin_review_baseline(p_months)` 只給 admin（`aal2`）讀取，每月列出案件數、回報者人數、管理員結案時效中位數，以及依結案狀態、原因、風險的分布；欄位定義見 [研究文件 §2.4](CONTRIBUTION_TIERS_FEASIBILITY.md#24-量測基線階段-0)。目前只做資料層，不做儀表板。
 - 復原：後端沒有重新開啟回報的 RPC，所以處理後先從佇列移除、6 秒後才寫入；提示列可「復原」。做下一個決定、重新載入或登出時立即寫入；關閉分頁則不寫入，回報留在佇列。寫入失敗會放回佇列；已由他人處理則移出並說明。
 - 小地圖以 Maps JavaScript API 顯示點位與 15 m 去重範圍；載入失敗時顯示座標與重試，不阻擋審核。
 - **官方點隱藏**（2026-10-24 確認）：騎士不能單方面下架官方資料，只有管理者審核「已不存在」時立即隱藏。`official_heavy_spots.hidden` 由 `official_read` 政策過濾，直接讀取、收藏驗證與兩個 viewport 函式都不再回傳；admin（`aal2`）另有讀取政策。匯入不寫 `hidden`，重新匯入不會讓隱藏的點重新出現。
 - **已隱藏的點位**：列出隱藏的社群點與官方點，可逐筆「恢復顯示」（`admin_set_spot_hidden`，寫稽核紀錄，提示列可復原＝重新隱藏）。社群點恢復後回到「待確認」並清除「已不存在」票；P4 點位頁的已隱藏圖層沿用同一個 RPC。
 - **版本衝突**（2026-10-24 併入 P3）：`moderation_queue` 入列時由 trigger 記下點位的 `base_updated_at` 與快照 `base_spot`（不改 `apply_report`，舊版 App 送的建議也有）。`admin_resolve_report` 採納時，只要這次寫入的欄位在送出後被改過，就以 `40001`（`spot changed since the report`）拒絕，點位與案件不變；只比對寫入的欄位，投票或其他欄位的變動不算衝突，避免管理者習慣性強制。後台把案件放回佇列並標示「資料已更新，需重新檢視」，差異表多一欄「送出時」，按「仍要套用」才以 `p_force` 寫入，稽核紀錄 `after.forced=true`。入列早於此功能的案件沒有快照，照常審核。
-- `field` 改用穩定 key：`name`、`space_type`、`fee_note`、`eligibility`、`note`、`gone`，中文只做顯示；舊版 App 送的中文名稱仍可審核。`submit-report` 的白名單見 #61。
-- App 的修改建議改送 `field`（上述 key）、`proposed`、`note`，`reason` 照送給舊伺服器與 Dashboard：格位類型、停放資格送選擇值；名稱與收費送填寫內容（未超過欄位上限時）；點位已不存在時社群點送 `status=hidden`、官方點送 `hidden=true`；「位置或其他備註」只送說明。
+- `field` 改用穩定 key：`name`、`space_type`、`fee_note`、`eligibility`、`note`、`gone`，#75 再加入 `guide`（入口與停車指引），中文只做顯示；舊版 App 送的中文名稱仍可審核。`submit-report` 的白名單見 #61。App 的「停車點位置」建議送 `location`（`proposed` 含 `lat`、`lng`，反查成功時另含 `city`、`district`），`submit-report` 白名單已加入，審核頁辨識為「位置不正確」，可審核欄位加入縣市與行政區（文字，30 字，縣市不可空白）；位置建議沒附縣市時（反查失敗或舊版 App）審核頁提醒管理者確認是否跨縣市，需要時「修改後套用」加入縣市與行政區。
+- App 的修改建議改送 `field`（上述 key）、`proposed`、`note`，`reason` 照送給舊伺服器與 Dashboard：格位類型、停放資格送選擇值；名稱與收費送填寫內容（未超過欄位上限時，收費自 #72 起另送結構化 `fee`）；「這裡已經不能停車」先選原因，只有格線已撤除、改為其他用途兩種永久原因才附隱藏建議（社群點 `status=hidden`、官方點 `hidden=true`），施工、暫時封閉與其他原因只送說明（#75）；原本的「位置或其他備註」拆成「入口與停車指引」（`guide`，只送有變更的 `entrance_note`、`parking_guide`）與「其他備註」（`note`，只送說明）。
+- 審核頁（#77）：可審核欄位加入場站型式、車種開放（選項）與入口說明、停放方式（文字，500 字）；沒附建議值的「已不存在」回報不預設隱藏，「修改後套用」從點位目前的顯示狀態開始，由管理者決定是否隱藏。
+- 審核頁的費率：可審核欄位加入 `fee`。App 送來的 `fee` 整筆合規才列入修改內容（`Fee.tryParse`），否則另列為無法套用；差異表以費率內容比較並顯示費率文字。「修改後套用」以共用 `FeeEditor` 編輯（任何寬度都佔滿整列），金額填完後收費資訊自動改為 `feeNoteOf(fee)`。點位已有結構化費率時，只改收費資訊的建議無法直接套用（App 顯示的是費率），需在「修改後套用」加入「費率」修改。伺服器端 `admin_resolve_report`（`202610260010`）同樣檢查：patch 動到 `fee` 或 `fee_note` 時，寫入後的 `fee_note` 必須等於 `fee_note_of(fee)`，否則以 `22023` 拒絕；檢查在版本衝突之後，強制套用也不略過；沒有 `fee` 的點位照舊。
 
 ### P4a-1 實作
 
@@ -155,12 +160,36 @@ node tool/admin_smoke.cjs
 - 表單只送出改過的欄位，並只驗證改過的欄位（與 RPC 一致），舊匯入資料的空欄位不會擋住無關的修改。改過的欄位以黃色斜角色帶「已修改」標示；有未儲存的修改時，切換點位或返回前先確認。
 - 社群點的「存在狀態」註明「已確認存在」只代表點位存在，不代表停放資格已核實（社群核實計畫 R1）。管理者編輯寫稽核紀錄，不寫欄位核實表（社群計畫 P3 再決定）；但管理者設定或採納車種資格（`scooter_allowed`、`heavy_allowed`，或同時說明兩車種的 `parking_access`）時，資料庫 trigger 會記錄該車種的核驗時間（`scooter_verified_at`／`heavy_verified_at`，僅 aal2 管理者 JWT 會寫入），App 在 180 天內把該車種欄位當成可信資料判定可停／不可停。`admin_upsert_spot`／`admin_resolve_report` 收到這些欄位時，即使值與現值相同也算核驗（例如採納與現值相同的建議）。非管理者路徑改了該車種欄位、`parking_access`、格位類型、場站型式或座標，核驗即失效；管理者改格位類型、場站型式或座標而沒有同時送出該車種欄位，該車種核驗也失效。只改其他欄位不影響核驗。點位表單只送出改過的欄位，因此「可停車種」區塊另有「核驗目前車種」按鈕（社群點、無未儲存修改時可按）：以 `admin_upsert_spot` 原值重送已設定的車種旗標，並顯示各車種的核驗日期。
 
+- **結構化費率**（`202610260010`）：`admin_spot_fields` 加入 `fee`（社群點與官方點）；`admin_upsert_spot` 以 `valid_fee()` 驗證 `fee`（錯誤為 `invalid fee`），並在這次寫入有 `fee` 或 `fee_note` 時，要求寫入後的 `fee_note` 等於 `fee_note_of(fee)`（與 `lib/models/fee.dart` 的 `feeNoteOf` 相同寫法，pgTAP 與 Dart 測試固定同一組句子），沒有 `fee` 的舊資料文字仍可自由修改。表單「費率與說明」使用共用 `FeeEditor`（手機上下排列、寬度 ≥ 520 並排），下方以白底黑框的公告牌顯示「App 顯示的費率」，由費率產生、不能直接輸入；兩種車都改回「未確認」時清除 `fee`，說明文字恢復可編輯（原本沒有 `fee` 時還原原文，原本有則改為「請依現場公告」）。只有 `fee_note` 的舊資料顯示提示、各車種保持未確認，不從文字猜價格。費率與文字只送改過的欄位，稽核紀錄的 before／after 含 `fee`。分區 `parking_zones` 不在管理站可編輯欄位（其 `fee` 由 `valid_zone_fees` 把關）。
+
 ### P4a-2 實作
 
-- 位置選擇元件 `lib/ui/location_picker.dart`（App 與管理站共用，App 由社群核實計畫 session 接入）：拖曳標記或點地圖選位置，顯示座標與距原位置的距離，可選 1 m 東西南北微調鈕，地圖可替換以利測試。位置邏輯在 `lib/domain/location_check.dart`（微調、距離、15 m 同類型重複、跨縣市），反查在 `lib/core/town_lookup.dart`（國土測繪中心 `TownVillagePointQuery`，免金鑰、允許 CORS；管理站 CSP 已加入 `https://api.nlsc.gov.tw`）。
+- 位置選擇元件 `lib/ui/location_picker.dart`（App 與管理站共用）：拖曳標記或點地圖選位置，顯示座標與距原位置的距離，可選 1 m 東西南北微調鈕，地圖可替換以利測試。位置邏輯在 `lib/domain/location_check.dart`（微調、距離、15 m 同類型重複、跨縣市），反查在 `lib/core/town_lookup.dart`（國土測繪中心 `TownVillagePointQuery`，免金鑰、允許 CORS；管理站 CSP 已加入 `https://api.nlsc.gov.tw`）。
 - 點位表單的「位置」區塊改用元件：移動後 0.6 秒自動反查縣市與行政區並帶入，查詢 15 m 內同類型的可見點位提示可能重複，跨縣市時提醒規則會改變；移動超過 150 m 時，儲存前確認是否仍是同一點位。座標欄位仍可直接輸入。
 - 新增停車點：清單「新增停車點」→ 選社群點或官方點 → `/spots/new?kind=` → 預設位置為上次開啟的點位（否則台北車站）→ 建立後開啟新點位。新表單在第一次按「建立停車點」後才顯示必填錯誤；新增的社群點由管理者帳號建立、狀態為待確認。
 - 每個點位的表單從頂端開始（列表 key 依點位）；開啟、新增各自排序，不會讓搜尋中的清單誤判為過期。
+
+### App 位置選擇實作
+
+- 元件新增 App 用的選項：`touchMarker` 以 Flutter 繪製的標記取代地圖原生標記，觸控範圍 56×68 px，拖曳時標記尖端浮在手指上方 24 px，地面以小圈標出實際落點；標記用 eager recognizer 取得手勢，拖曳標記不會捲動表單也不會平移地圖，拖曳空白處照常平移，點地圖也能移動標記。位置換算以 Web Mercator（每圖磚 256 邏輯像素，Google Maps 與 flutter_map 相同）由相機中心與縮放算出，因此 App 的選位地圖關閉旋轉與傾斜。Google Maps 在表單中以 `EagerGestureRecognizer` 保留地圖上的拖曳（iOS、Android 相同），沒有 Maps 金鑰時改用與主地圖相同的 OpenStreetMap 預覽（`osmLocationMap`）。
+- `onLocate`：「移到我的位置」讀取裝置定位（`AppStore.currentFix`，不移動主地圖），顯示「GPS 精準度約 ±N m」，誤差大於 20 m 時提醒拖曳對準；標記被移開後不再顯示精準度。定位未開啟或未授權時沿用既有的設定對話框。
+- `onSearch`：P4b 門牌、路段與路口搜尋（見「P4b 實作」），回傳選到的結果後移動標記；沒有提供時不顯示入口。
+- 提醒分三種語氣並都附圖示：資訊（所在縣市）、注意（條件琥珀：GPS 誤差、15 m 內同類型的點、跨縣市規則改變、查不到縣市）、錯誤（紅色：標記超出臺灣範圍等擋住送出的問題）。
+- 新增停車點：表單最上方「位置」區塊，長按點或地圖中心只當起始位置；開啟時與每次移動後 0.6 秒以 `AppStore.townAt`（國土測繪中心）反查，縣市與行政區帶入並送出 `district`；反查得到的縣市與原本帶入的不同時提醒「適用 X 的停車規則」，並依新縣市重新帶入未手動修改的可停車種；查不到時保留附近點位帶入的縣市請騎士確認。15 m 內同類型的點提示改到該點提出修改建議。地圖高度為螢幕高的 34%（200–300 px），320 px 寬與鍵盤彈出時表單仍可捲動。
+- 修改建議「停車點位置」（`field=location`）：從點位目前位置開始，空心小圈標出原位置，未移動 1 m 以上不能送出；變更卡片列出移動方向與距離、跨縣市時列出縣市變化；超過 150 m 送出前確認是否仍是同一個點。`proposed` 含 `lat`、`lng`（7 位小數），反查成功時一併送 `city`、`district`（2026-10-26 使用者決定），跨縣市移動採納後點位改用新縣市的規則；反查失敗時只送座標，由審核頁提醒管理者確認。TDX 點位沒有可修改的資料列，只送說明。說明欄選填，另寫入 `note`。
+- `submit-report` 白名單加入 `location`，`field=location` 的 `proposed` 必須有 `lat`、`lng`，只能另帶 `city`（1–30 字）、`district`（0–30 字），範圍沿用緯度 20–27、經度 118–123；任何建議的 `city`、`district` 都不能沒有座標單獨出現。`admin_resolve_report`（最新定義在 `202610260020`）本來就能套用 `lat`、`lng`，`location` geography 是產生欄位會一起更新，不需要 migration；`moderation_risk` 依移動距離把位置建議分級（150 m 內中、以上高）；pgTAP 已涵蓋採納位置建議，包括跨縣市時縣市與行政區一併更新。
+
+### P4a-3 實作
+
+- 點位頁改為全版地圖：地圖沿用 App 的 `GoogleParkingMap`（標記顏色、形狀、角落格位徽章、選取外圈與群聚），另加衛星圖（`MapType.hybrid`，保留路名）與淡化參數；程式位於 `lib/admin/spots/spot_map.dart`。`/spots` 與 `/spots/<id>` 共用同一個頁面，開關表單時地圖保留相機與已載入的點。
+- 車種切換（普通機車／大型重機）以 App 的 `eligibility()` 與規則（資料庫 `city_rules`，讀取失敗時用內建規則檔）重算標記。
+- 圖層：官方點、社群點、已隱藏三個開關互相獨立；已隱藏圖層包含兩種來源的隱藏點，以半透明標記顯示。資料來自 `admin_viewport_spots(south, west, north, east, p_community, p_official, p_hidden)`（migration `202610260220`）：只限 `is_admin()`，security invoker；範圍限制與 App 相同（每邊最多 0.5 度，超過時提示放大），每個圖層最多 501 筆，超過 500 筆時提示只顯示一部分。官方點含尚未生效的點，狀態與 App 相同視為已確認。App 的 viewport 函式不變。
+- 開表單：點標記開啟表單，地圖只平移不改縮放；點清單或由網址開啟則移到街道層級（zoom 18）。Maps JavaScript API 不會依地圖 padding 移動相機（`google_maps_flutter_web` 只在 `fitBounds` 使用 padding），所以改以相機偏移：目標點往東移（表單寬 − 清單寬）／2 px，讓標記停在兩個面板之間（`lib/domain/map_camera.dart` 的 `shiftCenter`）。表單中拖曳位置時選取標記跟著移動；儲存、核驗、隱藏／恢復、改為官方點、新增後重新載入地圖上的點。
+- 版面（斷點同審核頁）：
+  - ≥ 1040 px：左側清單 380 px、右側表單 480 px，皆疊在地圖上；清單可收起。
+  - 680–1039 px：清單 300 px；開表單時清單讓位（表單寬為視窗 56%，360–440 px），可再叫出；地圖控制放不下時只留清單開關。
+  - < 680 px：頂端「地圖／清單」切換，預設地圖；點標記或清單項目後表單佔滿畫面，返回鍵回到原本的地圖或清單。地圖一直保留在下層，返回後相機不變；被覆蓋時不查詢。
+- 疊在地圖上的面板與控制在 web 以 `PointerInterceptor` 擋住地圖的指標事件。控制按鈕至少 48 px。
 
 ### P4b 實作
 
@@ -184,28 +213,28 @@ OpenStreetMap Nominatim 免金鑰，但實測台灣門牌與路口都查不到�
 **Edge Function `geocode`**（`supabase/functions/geocode/`）
 - `POST {query, near?: {lat, lng}}` → `{kind, candidates: [{kind, label, place?, lat, lng, precision}]}`。`kind` 為 `address`（門牌）、`road`（路段）、`intersection`（路口）、`area`（其他區域）；`precision` 為 `exact`、`interpolated`、`center`、`approximate`。最多 5 筆，只留台灣範圍（緯度 20–27、經度 118–123）。
 - 查詢：全形轉半形、合併空白；「與」、`&`、`/` 或兩個路名之間的空格視為路口（「和」不算，避免和平東路），去掉結尾「路口」；含「號」的不當路口。送 Google 時加 `language=zh-TW`、`region=tw`、`components=country:TW`，並以地圖位置約 10 km 為偏好範圍（不是限制）。
-- 名稱（實測）：Google 的路名與路口常回英文，所以路口與路段的 `label` 用騎士輸入的路名（去掉開頭的縣市、行政區），縣市與行政區另放 `place`；門牌由縣市、行政區、路名、號組成，不含里與郵遞區號；「台」改「臺」。問兩條不相交的路時 Google 會回某條巷子與另一條路的交會點，或問不存在的門牌時只回英文路名，這些都略過，畫面顯示找不到。
+- 名稱（實測）：Google 的路名與路口常回英文，所以路口與路段的 `label` 用騎士輸入的路名（去掉開頭的縣市；行政區只在 Google 結果列出該名稱時才去掉，例如「前鎮區鎮中路」不會被當成「前鎮區鎮」＋「中路」），縣市與行政區另放 `place`；門牌由縣市、行政區、路名、號組成，不含里與郵遞區號；「台」改「臺」。問兩條不相交的路時 Google 會回某條巷子與另一條路的交會點，或問不存在的門牌時只回英文路名，這些都略過，畫面顯示找不到。
 - 呼叫者：App 需 Google／Apple 登入（匿名拒絕），管理站以 admin＋aal2 身分。每人每台北日 30 次、管理者 200 次（含快取命中），超過回 429 `daily_limit`；Google 配額用完回 503 `service_limit`。其他錯誤：`sign_in_required`、`invalid_query`（2–100 字）、`unavailable`。
 - migration `202610260230_geocode.sql`：`geocode_events`（只計數，不混用回報的 `rate_limit_events`）、`geocode_cache`（以查詢＋約 5 km 偏好位置為鍵，30 天內才使用，寫入時刪除過期資料與 30 天前的計數），兩者只有 service role 可用。
 
-**畫面**（`lib/ui/address_search_field.dart`，由 `LocationPicker.search` 開啟）
-- 地圖上方一個搜尋欄＋「搜尋地址」；按鈕或鍵盤搜尋鍵才送出，不在輸入時查詢，以免消耗次數。窄於約 360 px 或放大字級時按鈕移到欄位下方。
-- 結果每列有圖示與文字說明類型（門牌、路段只到中心點、路口只到交會點、推估位置），列高至少 56 px。點一筆後移動標記、寫入對應欄位，並說明「已移到…，並填入『路段』。路口只定位到兩條路的交會點，請把標記拖到實際停車位置。」
+**畫面**（`lib/ui/address_search_field.dart`，由位置選擇元件的 `onSearch` 入口「搜尋門牌、路段或路口」開啟）
+- 手機以底部面板、寬度 ≥ 600 px 以對話框開啟搜尋欄與「搜尋地址」；按鈕或鍵盤搜尋鍵才送出，不在輸入時查詢，以免消耗次數。窄於約 360 px 或放大字級時按鈕移到欄位下方；鍵盤彈出時面板內容上移。
+- 結果每列有圖示與文字說明類型（門牌、路段只到中心點、路口只到交會點、推估位置），列高至少 56 px。點一筆後關閉搜尋、移動標記、寫入對應欄位；入口下方說明「已移到…，並填入『路段』。路口只定位到兩條路的交會點，請把標記拖到實際停車位置。」，標記移開後不再顯示。
 - 找不到時提示門牌寫到「號」、路口寫兩條路名，或直接拖曳；網路錯誤可「重新搜尋」；次數用完說明明天恢復。
-- 管理站點位表單：門牌寫入「地址」、路段與路口寫入「路段」，以既有的「已修改」標示。App 由 `ParkingRepository.searchAddress` 提供給位置選擇元件（新增停車點與「位置不正確」接入時使用）。
+- 管理站點位表單：門牌寫入「地址」、路段與路口寫入「路段」，以既有的「已修改」標示；全版地圖的相機移到結果（搜尋可能跳到很遠的地方）。App 的新增停車點與「位置不正確」建議以 `ParkingRepository.searchAddress` 搜尋，App 表單沒有地址欄位，只移動標記。
 
 ### P5 實作
 
 - 路徑 `/rules`、`/rules/<縣市>/<scooter|heavy>`；程式位於 `lib/admin/rules/`。版面與點位頁相同：寬螢幕清單＋編輯區，< 680 px 先列表再編輯。編輯區寬度 ≥ 900 px 時預覽放在表單右側，較窄時接在表單下方。
 - 清單列出全國與 22 縣市 × 普通機車／大型重機（車牌色區分車種），顯示目前版本與限制類型，沒有規則的顯示「尚無規則」，可直接建立第 1 版。版本和 App 內建 `assets/rules/parking_rules.json` 不同的規則標「App 內建尚未更新」，清單上方提示發版前執行 `tool/export_rules.py`。
-- 路邊格位：普通機車設收費機車格、免費機車格、汽車格；大型重機另加重機專用格（普通機車一律不可停重機專用格，不提供設定）。每種格位選「可停／有條件／不開放」，可另填「只在這些行政區」（寫入 `district_space_types`，清單外行政區的該格位顯示不可停）。路外停車場、身障、電動、彈性共用格不在規則設定；既有規則中這些表單不顯示的種類（例如 `conditional_space_types` 的 `offStreet`）發布時原樣保留，新規則比照內建規則把 `offStreet` 列為有條件，讓還讀規則判斷停車場的舊版 App 行為不變。
+- 路邊格位：普通機車設收費機車格、免費機車格、汽車格；大型重機另加重機專用格（普通機車一律不可停重機專用格，不提供設定）。每種格位選「可停／有條件／不開放」，可另填「只在這些行政區」（寫入 `district_space_types`，清單外行政區的該格位顯示不可停；普通機車的汽車格也適用，`eligibility()` 把列在 `district_space_types` 的汽車格視為城市規則開放）。路外停車場、身障、電動、彈性共用格不在規則設定；既有規則中這些表單不顯示的種類（例如 `conditional_space_types` 的 `offStreet`）發布時原樣保留，新規則比照內建規則把 `offStreet` 列為有條件，讓還讀規則判斷停車場的舊版 App 行為不變。
 - 有條件的格位才顯示「限制類型」（限試辦路段 `pilot_area`、限標示車格 `signage`、規則未核實 `unverified`）；沒選時發布會被擋下，沒有有條件格位時不送限制類型。App 沒有 `pilot_area` 的列舉值，會顯示為一般的「有條件」。
 - 其他欄位：公告的開放行政區（`districts`，清單外顯示待確認）、可斜停兩格、費率說明（1–200 字）、例外與注意事項（1–500 字；規則沒有結構化的時段與截止日，平日／假日、時段或試辦截止日寫在這裡）、生效日期（YYYY-MM-DD，不存在的日期會擋下）、公告網址（https）。改過的欄位以黃色斜角色帶「已修改」標示；有未發布的修改時，換規則前先確認。
 - 預覽：以共用的 `eligibility()` 對每種路邊格位與限時停車格（比照收費格）判斷官方點，顯示 App 地圖標記（`SpotMarker`）、狀態與說明。生效日在未來時可切換「今天／生效後」；規則有列行政區時可切換點位所在的行政區、其他行政區、行政區不明。
-- 「發布第 N 版」先確認，提醒 App 內建規則檔不會跟著改變；成功後提示列可「復原」，做法是再發布一版恢復原內容（版本仍遞增，歷史保留）。開啟後他人已發布時以 `40001` 拒絕，保留修改並提示重新載入。
+- 「發布第 N 版」先確認，提醒 App 內建規則檔不會跟著改變；成功後提示列可「復原」，做法是再發布一版恢復原內容（版本仍遞增，歷史保留）。開啟後他人已發布時以 `40001` 拒絕，保留修改並提示重新載入。發布進行中不能重新載入規則，以免發布結果被丟棄。
 - `admin_upsert_city_rule(p_city, p_vehicle, p_values, p_base_version, p_note)`（`202610260240`）：`is_admin()`；縣市限全國與 22 縣市；只接受規則欄位（`version` 由伺服器遞增）；格位種類限原本五種（#51 前的 App 讀不懂其他種類）；同一種類不可同時可停與有條件；有條件路邊格位必須有限制類型（`23514`），有限制類型必須有有條件路邊格位；內容與目前版本相同時拒絕。`p_base_version` 必須等於目前版本（新規則為 null），否則 `40001`。同一 transaction 內把被取代的列寫入 `city_rules_history`、寫稽核紀錄（完整修改前後列與發布說明）。
 - `city_rules_history`（`city`、`vehicle`、`version`、`row jsonb`、`replaced_at`、`replaced_by`；`(city, vehicle, version)` 唯一）：只由 RPC 寫入、不可修改或刪除，僅 admin（`aal2`）可讀；供法規預審引擎（[CONTRIBUTION_TIERS_FEASIBILITY.md](CONTRIBUTION_TIERS_FEASIBILITY.md) §5.7、§10 第 16 點，2026-10-25 決定採歷史表）還原「當時版本說什麼」。
-- **限制**：`city_rules` 的 `admin_rules` policy（`202610110001`、`202610240003`）仍允許 admin 直接寫入資料表，從 Supabase Dashboard 或 service role 寫入不經 RPC，**不留稽核紀錄與歷史，也不會遞增版本**；是否收回直接寫入權限之後再決定。規則改版請一律用管理站。
+- **直接寫入已收回**（2026-10-26 使用者決定）：同一 migration 移除 `city_rules` 的 `admin_rules` 寫入 policy，並收回 `authenticated` 的 insert／update／delete；admin 只能經規則頁（`admin_upsert_city_rule`）改規則，每次修改都有版本、稽核與歷史。所有人照舊可讀。緊急時仍可用 service role（Dashboard SQL），但不會留稽核與歷史，也不遞增版本，事後應補發一版。
 - `tool/export_rules.py`：以 anon key 讀 `city_rules`（`SUPABASE_URL`／`SUPABASE_ANON_KEY` 環境變數，或 `--config`，預設 `config/staging.json`），依內建檔的格式與順序寫回 `assets/rules/parking_rules.json`（新規則依縣市順序附在後面，空的 `district_space_types` 與 null 的 `restriction` 不寫入）。內建檔有但資料庫沒有、或內建版本較新時停止並說明，需先修正資料庫。`--check` 只比對、不寫入（不一致時結束碼 1），`--input` 可改讀匯出的列。App 發版前執行：
 
 ```bash
@@ -228,7 +257,7 @@ python3 tool/export_rules.py --check || python3 tool/export_rules.py
   - **現有費率格式無法表達的寫法一律不轉換**，交人工確認並說明原因：以倍率計算（臺北路外試辦機車區為機車費率 2 倍）、首段 0 元（臺北限時重機格首 20 分鐘 0 元，不等於免費）、機車的免費時段（入場前 30 分鐘免費）、依平日／假日或日夜時段而不同、收費上限或計次的重設時間不是每日 0 時（以凌晨 2 時為基準、隔日 3 時另計、入場 24 小時）。
   - 需人工確認的其他原因：未註明車種、依區域或牌色而不同、「計時 X 元」沒有計費單位、另列「重型機車」、「另訂費率」、混有拖吊保管費等。能讀出建議值的可勾選採用；沒有建議值的列出點位連結，到點位頁逐筆設定（點位頁的結構化費率欄位由管理站結構化費率 PR 提供）。
   - 無法判斷：「請依現場公告」「未知」、只有汽車或月租費率，維持未確認（null），不需處理。
-  - 「寫入 N 筆費率」才呼叫 `admin_convert_fees`：只寫 `fee`（以 `valid_fee()` 驗證），`fee_note` 文字不變；收費資訊在讀取後被改過或已有費率的點位略過。每筆寫入稽核紀錄 `convert_fee`，之後匯入視為管理員修改。
+  - 「寫入 N 筆費率」才呼叫 `admin_convert_fees`：只寫 `fee`（以 `valid_fee()` 驗證），`fee_note` 保留原文（含月租、入口等補充，供重新匯入比對）；App 有 `fee` 時先顯示 `fee`。點位表單的「`fee_note` 須為 `fee` 的文字」檢查（`202610260010`）只在之後的編輯動到費率或收費資訊時套用，屆時兩者一起改；收費資訊在讀取後被改過或已有費率的點位略過。每筆寫入稽核紀錄 `convert_fee`，之後匯入視為管理員修改。
   - 以 2026-10-25 的匯入檔試算：官方點 1,497 筆中可轉換 646、需人工確認 260、無法判斷 591；社群點 630 筆中可轉換 140、需人工確認 296、無法判斷 194。轉換規則的單元測試使用 staging 的實際寫法（`test/admin/fee_reading_test.dart`）。
 - **依價格篩選不在本階段開放**：等 staging 與 production 的轉換與人工確認完成後另行處理。
 - 版面：< 680 px 差異表每個欄位上下排列（欄位名稱、目前、匯入、保留／覆寫開關），操作列固定在底部並上下堆疊；寬螢幕為「欄位／目前／匯入」三欄。狀態同時以圖示與文字表示，匯入會寫入的值以黃色斜角色帶標示，保留的匯入值以刪除線與「不匯入」標示。

@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:motorcycle_parking/data/app_store.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
 import 'package:motorcycle_parking/domain/eligibility.dart';
+import 'package:motorcycle_parking/domain/eligibility_display.dart';
 import 'package:motorcycle_parking/features/map/spot_details.dart';
 import 'package:motorcycle_parking/features/map/spot_photos.dart';
 import 'package:motorcycle_parking/features/map/spot_sheet.dart';
@@ -122,6 +123,20 @@ Future<void> showField(WidgetTester tester, String text) async {
   await tester.pumpAndSettle();
   expect(find.text(text), findsOneWidget);
   expect(tester.takeException(), isNull);
+}
+
+/// The banner's vehicle and headline, as 「普通機車 · 可停」.
+String decisionText(WidgetTester tester) {
+  final texts = tester
+      .widgetList<Text>(
+        find.descendant(
+          of: find.byKey(const ValueKey('spot-decision')),
+          matching: find.byType(Text),
+        ),
+      )
+      .map((text) => text.data)
+      .toList();
+  return '${texts[0]} · ${texts[1]}';
 }
 
 void main() {
@@ -263,6 +278,43 @@ void main() {
     });
     expect(reportedAccess(both), isNull);
     expect(reportedAccess(roadside), ParkingAccess.scooterHeavy);
+  });
+
+  test('汽機共用、身障與電動機車格兩種車種皆可停也不推定為普大共用', () {
+    for (final type in [
+      SpaceType.flexShared,
+      SpaceType.disabledMotorcycle,
+      SpaceType.evMotorcycle,
+    ]) {
+      final spot = ParkingSpot.fromJson({
+        ...roadside.toJson(),
+        'space_type': type.name,
+      });
+      expect(reportedAccess(spot), isNull, reason: type.name);
+      expect(accessSummary(spot), isNot(contains('普大共用')), reason: type.name);
+    }
+    for (final type in [
+      SpaceType.paidMotorcycle,
+      SpaceType.freeMotorcycle,
+      SpaceType.timedMotorcycle,
+    ]) {
+      final spot = ParkingSpot.fromJson({
+        ...roadside.toJson(),
+        'space_type': type.name,
+      });
+      expect(
+        reportedAccess(spot),
+        ParkingAccess.scooterHeavy,
+        reason: type.name,
+      );
+    }
+    // An explicit access value is the source's own statement and stays.
+    final labelled = ParkingSpot.fromJson({
+      ...roadside.toJson(),
+      'space_type': SpaceType.flexShared.name,
+      'parking_access': ParkingAccess.scooterHeavy.name,
+    });
+    expect(reportedAccess(labelled), ParkingAccess.scooterHeavy);
   });
 
   test('舊 TDX 停車場回應保留車位時間，新時間優先且不套用其他來源', () {
@@ -414,7 +466,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('社群點已確認存在仍清楚提示車種開放待查核', (tester) async {
+  testWidgets('社群點已確認存在，車友回報可停仍只是未核實的回報', (tester) async {
     usePhone(tester);
     final store = (await tester.runAsync(createStore))!;
     addTearDown(store.dispose);
@@ -424,12 +476,98 @@ void main() {
       'scooter_allowed': true,
       'status': 'confirmed',
       'last_confirmed_at': DateTime.now().toIso8601String(),
+      'created_at': DateTime(2026, 3, 1, 9).toIso8601String(),
     });
     expect(store.eligible(spot).status, EligibilityStatus.unverified);
     await openDetails(tester, store, spot);
-    expect(find.text('普通機車 · 開放資訊待確認'), findsOneWidget);
-    expect(find.text('已確認此停車點存在；目前車種是否開放仍待查核，請以入口公告為準。'), findsOneWidget);
+    expect(decisionText(tester), '普通機車 · 車友回報可停');
+    expect(find.text('已確認此停車點存在，但車種開放尚未核實，請以入口公告為準。'), findsOneWidget);
+    expect(find.text('回報於 2026-03-01'), findsOneWidget);
+    // The banner keeps the unverified colour: a claim never reads as open.
+    expect(find.byIcon(Icons.local_parking), findsNothing);
     expect(store.eligible(spot).status, EligibilityStatus.unverified);
+    await showField(tester, '已核實欄位');
+    expect(find.text('尚未核實'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  for (final (width, scale, brightness) in [
+    (320.0, 1.6, Brightness.dark),
+    (390.0, 1.6, Brightness.light),
+    (390.0, 1.0, Brightness.dark),
+    (700.0, 1.0, Brightness.light),
+    (1280.0, 1.6, Brightness.dark),
+  ]) {
+    testWidgets('資格分層橫幅不溢出（寬 $width、字級 $scale、$brightness）', (tester) async {
+      usePhone(tester, width: width);
+      final store = (await tester.runAsync(createStore))!;
+      addTearDown(store.dispose);
+      final expired = DateTime.now().subtract(const Duration(days: 400));
+      final spot = ParkingSpot.fromJson({
+        ...facility().toJson(),
+        'name': '很長很長的社群回報地下停車場名稱，用來測試換行與不溢出',
+        'source': 'community',
+        'scooter_allowed': true,
+        'heavy_allowed': false,
+        'status': 'pending',
+        'created_at': DateTime(2026, 3, 1, 9).toIso8601String(),
+        'heavy_verified_at': expired.toIso8601String(),
+      });
+      await openDetails(
+        tester,
+        store,
+        spot,
+        scale: scale,
+        brightness: brightness,
+      );
+      expect(decisionText(tester), '普通機車 · 車友回報可停');
+      expect(find.text('回報於 2026-03-01'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await store.setVehicle(VehicleType.heavy);
+      await tester.pumpAndSettle();
+      expect(decisionText(tester), '大型重機 · 曾核驗不可停');
+      expect(
+        find.textContaining('管理員核驗於 ${formatSpotDate(expired)}'),
+        findsWidgets,
+      );
+      final banner = tester.getRect(
+        find.byKey(const ValueKey('spot-decision')),
+      );
+      expect(banner.right, lessThanOrEqualTo(width));
+      for (final key in ['spot-decision-label', 'spot-decision-basis']) {
+        if (find.byKey(ValueKey(key)).evaluate().isEmpty) continue;
+        expect(
+          tester.getRect(find.byKey(ValueKey(key))).right,
+          lessThanOrEqualTo(banner.right),
+        );
+      }
+      expect(tester.takeException(), isNull);
+      await showField(tester, '已核實欄位');
+      expect(
+        find.text('大型重機不可停：管理員核驗於 ${formatSpotDate(expired)}，已超過 180 天'),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
+  testWidgets('管理員核驗的社群點在橫幅標示核驗日期', (tester) async {
+    usePhone(tester, width: 320);
+    final store = (await tester.runAsync(createStore))!;
+    addTearDown(store.dispose);
+    final checked = DateTime.now().subtract(const Duration(days: 2));
+    final spot = ParkingSpot.fromJson({
+      ...facility().toJson(),
+      'source': 'community',
+      'scooter_allowed': true,
+      'scooter_verified_at': checked.toIso8601String(),
+    });
+    await openDetails(tester, store, spot, scale: 1.6);
+    expect(decisionText(tester), '普通機車 · 可停');
+    expect(find.text('管理員核驗於 ${formatSpotDate(checked)}'), findsOneWidget);
+    expect(find.byIcon(Icons.verified_outlined), findsWidgets);
+    expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -451,11 +589,11 @@ void main() {
       });
       expect(store.eligible(spot).status, EligibilityStatus.allowed);
       await openDetails(tester, store, spot);
-      expect(find.text('普通機車 · 可停'), findsOneWidget);
+      expect(decisionText(tester), '普通機車 · 可停');
       expect(find.textContaining('待確認'), findsNothing);
       await store.setVehicle(VehicleType.heavy);
       await tester.pumpAndSettle();
-      expect(find.text('大型重機 · 可停'), findsOneWidget);
+      expect(decisionText(tester), '大型重機 · 可停');
       expect(find.textContaining('待確認'), findsNothing);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
@@ -467,11 +605,10 @@ void main() {
     final store = (await tester.runAsync(createStore))!;
     addTearDown(store.dispose);
     await openDetails(tester, store, facility());
-    expect(find.text('普通機車 · 可停'), findsOneWidget);
+    expect(decisionText(tester), '普通機車 · 可停');
     await store.setVehicle(VehicleType.heavy);
     await tester.pumpAndSettle();
-    expect(find.text('大型重機 · 不可停'), findsOneWidget);
-    expect(find.text('普通機車 · 可停'), findsNothing);
+    expect(decisionText(tester), '大型重機 · 不可停');
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });

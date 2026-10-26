@@ -1,3 +1,4 @@
+import '../../models/fee.dart';
 import '../../models/parking.dart';
 
 enum SpotKind {
@@ -99,6 +100,9 @@ enum SpotInput {
   triState,
   choice,
   date,
+
+  /// A structured [Fee], edited with the shared FeeEditor.
+  fee,
 }
 
 enum SpotGroup {
@@ -201,9 +205,10 @@ final spotFields = <SpotField>[
     SpotInput.triState,
     help: '大型重機只採官方明載；沒有官方資料時保持「未確認」。',
   ),
+  const SpotField('fee', '費率', SpotGroup.fees, SpotInput.fee),
   const SpotField(
     'fee_note',
-    '費率',
+    '費率說明文字',
     SpotGroup.fees,
     SpotInput.text,
     maxLength: 200,
@@ -349,8 +354,21 @@ String? validateSpotField(SpotField field, Object? value) {
       if (value is! String || DateTime.tryParse(value) == null) {
         return '${field.label}格式需為 YYYY-MM-DD';
       }
+    case SpotInput.fee:
+      if (value is! Fee) return '${field.label}的值無效';
+      final rates = [value.scooter, value.heavy].nonNulls;
+      if (rates.any((r) => !r.complete)) return '請填完收費金額，計時另需選計費時間';
+      if (!value.valid) return '金額請填 0 到 10000 的整數';
   }
   return null;
+}
+
+/// The stored `fee` as the form edits it: null when the spot has none, or
+/// when it names no vehicle (the app reads `{}` as a lot-wide fee with both
+/// vehicles unconfirmed, so the form never writes it).
+Fee? storedFee(Object? json) {
+  final fee = json is Map ? Fee.fromJson(json) : null;
+  return fee == null || fee.isEmpty ? null : fee;
 }
 
 /// Only fields whose value differs from the loaded row are sent.

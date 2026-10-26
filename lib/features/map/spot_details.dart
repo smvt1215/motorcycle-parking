@@ -1,6 +1,5 @@
 import '../../models/fee.dart';
 import '../../models/parking.dart';
-import '../../domain/eligibility.dart';
 
 /// A single zone can show its actual price in the preview. A zone never
 /// inherits the lot's fee or another vehicle's price.
@@ -56,17 +55,18 @@ Uri? licenseLinkUri(ParkingSpot spot) =>
 String regionSummary(ParkingSpot spot) =>
     '${spot.city.trim()}${spot.district.trim()}';
 
-String decisionExplanation(ParkingSpot spot, Eligibility eligibility) =>
-    eligibility.status == EligibilityStatus.unverified &&
-        spot.isFacility &&
-        !spot.isOfficial &&
-        spot.status == TrustStatus.confirmed &&
-        !spot.stale
-    ? '已確認此停車點存在；目前車種是否開放仍待查核，請以入口公告為準。'
-    : eligibility.reason;
-
 String facilitySummary(ParkingSpot spot) =>
     spot.facilityType?.label ?? (spot.isFacility ? '路外停車場（型式未提供）' : '路邊停車格');
+
+/// Roadside kinds whose bays are ordinary motorcycle bays, so admitting both
+/// motorcycle classes means the bay is shared by them. Car-and-motorcycle
+/// flex bays, disabled bays and EV bays are other kinds of sharing or
+/// reservation and are never read as 普大共用.
+const _motorcycleBayTypes = {
+  SpaceType.paidMotorcycle,
+  SpaceType.freeMotorcycle,
+  SpaceType.timedMotorcycle,
+};
 
 /// Do not infer shared bays from a facility admitting both vehicle types.
 ParkingAccess? reportedAccess(ParkingSpot spot) {
@@ -82,7 +82,7 @@ ParkingAccess? reportedAccess(ParkingSpot spot) {
     return ParkingAccess.scooterOnly;
   }
   if (!spot.isFacility &&
-      spot.spaceType != SpaceType.car &&
+      _motorcycleBayTypes.contains(spot.spaceType) &&
       spot.scooterAllowed == true &&
       spot.heavyAllowed == true) {
     return ParkingAccess.scooterHeavy;

@@ -43,8 +43,8 @@ function kindOf(types: string[]): CandidateKind {
 // The spot tables and the county lookup write 臺, not 台.
 const official = (s: string) => s.replace(/台(?=北|中|南|東|灣)/g, '臺');
 
-// 「臺北市中山區」 from the components, largest first.
-function placeOf(components: Component[]): string {
+// 「臺北市」「中山區」 from the components, largest first.
+function placesOf(components: Component[]): string[] {
   const names: string[] = [];
   for (const c of [...components].reverse()) {
     const admin = c.types.some((t) =>
@@ -55,21 +55,56 @@ function placeOf(components: Component[]): string {
       names.push(name);
     }
   }
-  return names.join('');
+  return names;
 }
 
 // Measured 2026-10-25: road and crossing names often come back in English
 // even with language=zh-TW, so their labels use what the rider typed.
 const latin = /[A-Za-z]/;
-// 「臺北市大安區」 at the start of what was typed.
-const typedPlace = (s: string) =>
-  s.match(
-    /^(?:[\u4e00-\u9fff]{2}[市縣])?\s*(?:[\u4e00-\u9fff]{1,3}[區鄉鎮])?\s*/,
-  )?.[0] ?? '';
-function withoutPlace(s: string): string {
-  const rest = s.slice(typedPlace(s).length).trim();
-  return rest || s.trim();
+// The 22 counties and cities; districts are only trusted when the result's
+// components name them, so a road such as 鎮中路 keeps its first character.
+const counties = [
+  '臺北市',
+  '新北市',
+  '桃園市',
+  '臺中市',
+  '臺南市',
+  '高雄市',
+  '基隆市',
+  '新竹市',
+  '嘉義市',
+  '新竹縣',
+  '苗栗縣',
+  '彰化縣',
+  '南投縣',
+  '雲林縣',
+  '嘉義縣',
+  '屏東縣',
+  '宜蘭縣',
+  '花蓮縣',
+  '臺東縣',
+  '澎湖縣',
+  '金門縣',
+  '連江縣',
+];
+// What was typed, without the county and district at its start: only
+// names in [counties] or [known] are removed.
+function withoutPlace(s: string, known: string[]): string {
+  let rest = official(s.trim());
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const name of [...counties, ...known]) {
+      if (rest.startsWith(name) && rest.length > name.length) {
+        rest = rest.slice(name.length).trimStart();
+        changed = true;
+      }
+    }
+  }
+  return rest;
 }
+// The county typed at the start, as the place of a result that names none.
+const typedCounty = (s: string) =>
+  counties.find((c) => official(s.trim()).startsWith(c)) ?? '';
 // Asked for two roads that never meet, Google answers with a lane off one
 // of them; that is not the crossing the rider asked for.
 const strayLane = (name: string, q: ParsedQuery) =>
@@ -102,6 +137,7 @@ export function toCandidate(r: Result, q: ParsedQuery): Candidate | null {
   const kind = kindOf(r.types ?? []);
   const named = (type: string) =>
     components.find((c) => c.types.includes(type))?.long_name;
+  const places = placesOf(components);
   let label: string;
   switch (kind) {
     case 'intersection': {
@@ -110,7 +146,7 @@ export function toCandidate(r: Result, q: ParsedQuery): Candidate | null {
       const name = named('intersection') ?? roads.slice(0, 2).join(' & ');
       if (strayLane(name, q)) return null;
       label = q.kind === 'intersection'
-        ? q.roads.map(withoutPlace).join('與')
+        ? q.roads.map((r) => withoutPlace(r, places)).join('與')
         : name.replace(/\s*&\s*/g, '與');
       break;
     }
@@ -124,7 +160,7 @@ export function toCandidate(r: Result, q: ParsedQuery): Candidate | null {
         (latin.test(name) || !name) &&
         (q.kind === 'intersection' || /\d+號/.test(q.text))
       ) return null;
-      label = latin.test(name) || !name ? withoutPlace(q.text) : name;
+      label = latin.test(name) || !name ? withoutPlace(q.text, places) : name;
       break;
     }
     default:
@@ -132,7 +168,7 @@ export function toCandidate(r: Result, q: ParsedQuery): Candidate | null {
   }
   label = official(label);
   if (!label) return null;
-  const place = placeOf(components) || official(typedPlace(q.text).trim());
+  const place = places.join('') || typedCounty(q.text);
   return {
     kind,
     label,

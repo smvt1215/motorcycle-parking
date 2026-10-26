@@ -117,13 +117,14 @@ class RulesController extends ChangeNotifier {
   }
 
   Future<void> load() async {
-    if (gateway == null) return;
+    // A reload mid-publish would drop the publish's result; wait for it.
+    if (gateway == null || publishing) return;
     final generation = ++_generation;
     loading = true;
     loadError = null;
     _notify();
     try {
-      final remote = await gateway!.cityRules();
+      final remote = await gateway!.cityRuleRows();
       if (generation != _generation) return;
       rows = {
         for (final r in remote)
