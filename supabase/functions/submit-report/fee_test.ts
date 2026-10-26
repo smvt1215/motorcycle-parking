@@ -2,7 +2,13 @@ import cases from '../_shared/parking_contract_cases.json' with {
   type: 'json',
 };
 import limit from '../_shared/fee_note_limit.json' with { type: 'json' };
-import { feeNoteMaxLength, feeNoteOf, validFee } from '../_shared/fee.ts';
+import {
+  feeNoteMaxLength,
+  feeNoteOf,
+  projectZoneFee,
+  validFee,
+  validFeePlans,
+} from '../_shared/fee.ts';
 import { validate } from './validate.ts';
 
 // The same cases lib/models/fee.dart and the generated SQL run.
@@ -95,3 +101,37 @@ Deno.test('a suggested fee note longer than 200 must be the fee text', () => {
     throw new Error('a long note without its fee was accepted');
   }
 });
+
+Deno.test('shared cases: validFeePlans', () => {
+  if (cases.fee_plans.length === 0) throw new Error('no cases');
+  for (const { name, plans, fee_plan, fee, zones, valid } of cases.fee_plans) {
+    if (validFeePlans(plans, fee_plan, fee, zones) !== valid) {
+      throw new Error(`${name}: expected ${valid}`);
+    }
+  }
+});
+
+Deno.test('shared cases: a plan projected onto a zone', () => {
+  if (cases.fee_projections.length === 0) throw new Error('no cases');
+  for (const { name, fee, zone, projected } of cases.fee_projections) {
+    const got = projectZoneFee(
+      fee as Record<string, unknown>,
+      zone as Record<string, unknown>,
+    );
+    if (JSON.stringify(sortKeys(got)) !== JSON.stringify(sortKeys(projected))) {
+      throw new Error(`${name}: got ${JSON.stringify(got)}`);
+    }
+  }
+});
+
+function sortKeys(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(sortKeys);
+  if (v && typeof v === 'object') {
+    return Object.fromEntries(
+      Object.entries(v).sort(([a], [b]) => a < b ? -1 : 1).map((
+        [k, x],
+      ) => [k, sortKeys(x)]),
+    );
+  }
+  return v;
+}

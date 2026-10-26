@@ -299,3 +299,137 @@ export function validFeeNote(note: unknown, fee: unknown): boolean {
   return note.length <= feeNoteMaxLength && validFee(fee) &&
     note === feeNoteOf(fee);
 }
+
+// ---- Fee plans (§2.6) ----
+
+const planContract = contract.fee_plans;
+const utf16Length = (s: string) => s.length;
+
+/**
+ * A spot's fee plans, its own plan reference and its zones' (§2.6), as
+ * valid_fee_plans() checks them: at most 12 plans of {id, name, fee}, ids
+ * unique, names 1–20 UTF-16 code units, each fee valid and not empty. A
+ * reference names an existing plan, and the spot or zone carries that
+ * plan's fee as its own copy.
+ */
+export function validFeePlans(
+  plans: unknown,
+  feePlan: unknown,
+  fee: unknown,
+  zones: unknown,
+): boolean {
+  const byId = new Map<string, unknown>();
+  if (plans !== null && plans !== undefined) {
+    if (
+      !Array.isArray(plans) || plans.length === 0 ||
+      plans.length > planContract.max_entries
+    ) return false;
+    for (const p of plans) {
+      if (
+        !isObject(p) ||
+        !Object.keys(p).every((k) => planContract.keys.includes(k)) ||
+        !planContract.keys.every((k) => has(p, k)) ||
+        typeof p.id !== 'string' ||
+        !new RegExp(planContract.id_pattern).test(p.id) || byId.has(p.id) ||
+        typeof p.name !== 'string' || p.name.trim() === '' ||
+        utf16Length(p.name) > planContract.name_max_length ||
+        !validFee(p.fee) || Object.keys(p.fee as Json).length === 0
+      ) return false;
+      byId.set(p.id, p.fee);
+    }
+  }
+  const copies = (id: unknown, copy: unknown) =>
+    typeof id === 'string' && byId.has(id) && sameJson(copy, byId.get(id));
+  if (feePlan !== null && feePlan !== undefined && !copies(feePlan, fee)) {
+    return false;
+  }
+  return !Array.isArray(zones) ||
+    zones.every((z) =>
+      !isObject(z) || !has(z, 'fee_plan') || copies(z.fee_plan, z.fee)
+    );
+}
+
+/** jsonb equality: the same values, object keys in any order. */
+function sameJson(a: unknown, b: unknown): boolean {
+  if (Array.isArray(a) || Array.isArray(b)) {
+    return Array.isArray(a) && Array.isArray(b) && a.length === b.length &&
+      a.every((x, i) => sameJson(x, b[i]));
+  }
+  if (isObject(a) || isObject(b)) {
+    if (!isObject(a) || !isObject(b)) return false;
+    const keys = Object.keys(a);
+    return keys.length === Object.keys(b).length &&
+      keys.every((k) => has(b, k) && sameJson(a[k], b[k]));
+  }
+  return a === b;
+}
+
+/** A rate with its amounts, caps and extension amounts at `pct` percent. */
+function scaled(rate: Json, pct: number): Json {
+  const out: Json = { ...rate };
+  for (const key of ['amount', 'daily_cap']) {
+    if (typeof out[key] === 'number') {
+      out[key] = (out[key] as number) * pct / 100;
+    }
+  }
+  if (isObject(out.extension)) {
+    out.extension = scaled(out.extension, pct);
+  }
+  if (Array.isArray(out.periods)) {
+    out.periods = out.periods.map((p) =>
+      isObject(p) && isObject(p.rate) ? { ...p, rate: scaled(p.rate, pct) } : p
+    );
+  }
+  return out;
+}
+
+/**
+ * A plan's fee with a heavy follow worked out (§2.6 precheck, step 1): the
+ * followed vehicle's rate at factor_pct, or no heavy rate when that vehicle
+ * is unconfirmed. Other vehicles stay as they are.
+ */
+export function resolveFee(fee: Json): Json {
+  const out: Json = { ...fee };
+  const heavy = fee.heavy;
+  if (
+    isObject(heavy) &&
+    (heavy.mode === 'same_as_scooter' || heavy.mode === 'same_as_car')
+  ) {
+    const target = heavy.mode === 'same_as_scooter' ? fee.scooter : fee.car;
+    const pct = typeof heavy.factor_pct === 'number' ? heavy.factor_pct : 100;
+    if (isObject(target) && target.mode !== 'posted') {
+      out.heavy = scaled(target, pct);
+    } else delete out.heavy;
+  }
+  return out;
+}
+
+/**
+ * The vehicles a zone's rate counts for (§2.6 precheck, step 2): a heavy
+ * bay only heavy bikes; otherwise the motorcycles its allow lets park (read
+ * from its access when it has no condition) and cars as they are.
+ */
+export function zoneFeeVehicles(zone: Json): string[] {
+  const fromAccess = contract.conversion.from_access as Record<string, Json>;
+  const condition = isObject(zone.condition)
+    ? zone.condition
+    : typeof zone.access === 'string' && has(fromAccess, zone.access)
+    ? fromAccess[zone.access]
+    : {};
+  if (condition.bay === 'heavy') return ['heavy'];
+  const allow = isObject(condition.allow) ? condition.allow : {};
+  return [
+    ...(allow.scooter === true ? ['scooter'] : []),
+    ...(allow.heavy === true ? ['heavy'] : []),
+    'car',
+  ];
+}
+
+/** A plan's fee as one zone's rates: resolved, then projected. */
+export function projectZoneFee(fee: Json, zone: Json): Json {
+  const resolved = resolveFee(fee);
+  const vehicles = zoneFeeVehicles(zone);
+  return Object.fromEntries(
+    Object.entries(resolved).filter(([k]) => vehicles.includes(k)),
+  );
+}

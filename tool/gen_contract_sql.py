@@ -15,8 +15,9 @@ so this writes (docs/designs/2026-10-26-parking-conditions-and-fees.md §4.1):
     of them matches;
   - fee v2, valid_fee(p_fee), and the fee text, fee_note_of() with its
     helpers and fee_note_max_length(): C3 (202610270022_fee_v2_core.sql)
-    copies both; tool/test_gen_contract_sql.py checks the latest migration
-    defining each matches. fee_note_of() writes the sentences of
+    copies both, and 202610270023_fee_plans.sql the fee plans section
+    (valid_fee_plans()); tool/test_gen_contract_sql.py checks the latest
+    migration defining each matches. fee_note_of() writes the sentences of
     tool/fee_text.py, which also works out the longest one.
 - supabase/functions/_shared/fee_note_limit.json: that longest length and
   a fee that reaches it, for validate.ts and the Dart and Deno tests.
@@ -525,6 +526,44 @@ begin
 end;
 $$;
 
+-- ===== 計費規則：valid_fee_plans()（C3 第二層，§2.6） =====
+
+-- A spot's fee plans, its own plan reference and its zones' (§2.6): at
+-- most max_entries plans of {{id, name, fee}}, ids unique and of id_pattern,
+-- names of 1–name_max_length UTF-16 code units, each fee a valid, non-empty
+-- fee. Every reference names an existing plan, and a spot or zone that
+-- refers to one carries that plan's fee as its own copy for older builds.
+create or replace function {s}.valid_fee_plans(p_plans jsonb,p_fee_plan text,p_fee jsonb,p_zones jsonb) returns boolean
+language plpgsql immutable set search_path='' as $$
+declare c jsonb:={s}.parking_contract()->'fee_plans'; p jsonb; z jsonb; ids text[]:='{{}}';
+begin
+  if coalesce(jsonb_typeof(p_plans),'null')<>'null' then
+    if jsonb_typeof(p_plans)<>'array'
+      or jsonb_array_length(p_plans) not between 1 and (c->>'max_entries')::integer then return false; end if;
+    for p in select e from jsonb_array_elements(p_plans) e loop
+      if jsonb_typeof(p) is distinct from 'object'
+        or exists(select 1 from jsonb_object_keys(p) k where not c->'keys' ? k)
+        or exists(select 1 from jsonb_array_elements_text(c->'keys') k where not p ? k)
+        or jsonb_typeof(p->'id') is distinct from 'string' or (p->>'id') !~ (c->>'id_pattern') or (p->>'id')=any(ids)
+        or jsonb_typeof(p->'name') is distinct from 'string' or btrim(p->>'name')=''
+        -- UTF-16 code units, as Dart and JS count.
+        or char_length(p->>'name')+regexp_count(p->>'name','[\U00010000-\U0010FFFF]')>(c->>'name_max_length')::integer
+        or not {s}.valid_fee(p->'fee') or p->'fee'='{{}}'::jsonb then return false; end if;
+      ids:=ids||(p->>'id');
+    end loop;
+  end if;
+  if p_fee_plan is not null and (not p_fee_plan=any(ids) or p_fee is distinct from
+      (select e->'fee' from jsonb_array_elements(p_plans) e where e->>'id'=p_fee_plan)) then return false; end if;
+  for z in select e from jsonb_array_elements(case when jsonb_typeof(p_zones)='array' then p_zones else '[]'::jsonb end) e loop
+    continue when jsonb_typeof(z) is distinct from 'object' or not z ? 'fee_plan';
+    if jsonb_typeof(z->'fee_plan') is distinct from 'string' or not (z->>'fee_plan')=any(ids)
+      or (z->'fee') is distinct from (select e->'fee' from jsonb_array_elements(p_plans) e where e->>'id'=z->>'fee_plan')
+    then return false; end if;
+  end loop;
+  return true;
+end;
+$$;
+
 -- The longest fee_note_of() the contract allows (§2.5), worked out by
 -- tool/fee_text.py: the bound of both spot tables' fee_note check and of
 -- validate.ts for a note that is its fee's text.
@@ -641,6 +680,14 @@ def test_sql(contract, cases):
         lines.append(
             f"select is(pg_temp.fee_note_of({literal(c['fee'])}),"
             f"{quote(c['note'])},{quote('fee note: ' + c['name'])});"
+        )
+    lines.append("-- fee plans: valid_fee_plans()")
+    for c in cases["fee_plans"]:
+        plan = "null::text" if c.get("fee_plan") is None else quote(c["fee_plan"])
+        fee = "null::jsonb" if c.get("fee") is None else literal(c["fee"])
+        lines.append(
+            f"select is(pg_temp.valid_fee_plans({literal(c['plans'])},{plan},{fee},{literal(c.get('zones', []))}),"
+            f"{'true' if c['valid'] else 'false'},{quote('fee plans: ' + c['name'])});"
         )
     longest = fee_text.longest_fee(contract["fee"])
     lines.append(
