@@ -1,8 +1,12 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/town_lookup.dart';
+import '../data/repositories.dart';
 import '../domain/location_check.dart';
+import '../domain/map_viewport.dart';
+import '../models/parking.dart';
 import 'review/review_models.dart';
+import 'spots/spot_map.dart';
 import 'spots/spot_models.dart';
 
 class AdminAccess {
@@ -97,6 +101,18 @@ abstract class AdminGateway {
     String baseUpdatedAt,
     String note,
   );
+
+  /// `admin_viewport_spots`: the spots of the chosen layers in [bounds].
+  Future<MapSpotPage> mapSpots(
+    MapViewport bounds, {
+    required bool community,
+    required bool official,
+    required bool hidden,
+  });
+
+  /// The rules the app judges markers by: the database's, else the bundled
+  /// copy.
+  Future<List<CityRule>> cityRules();
 }
 
 /// Community columns readable by clients; `user_id` is never granted.
@@ -417,4 +433,33 @@ class SupabaseAdminGateway implements AdminGateway {
 
   @override
   Future<Town?> town(double lat, double lng) => lookupTown(lat, lng);
+
+  @override
+  Future<MapSpotPage> mapSpots(
+    MapViewport bounds, {
+    required bool community,
+    required bool official,
+    required bool hidden,
+  }) async {
+    final rows = await client.rpc<List<dynamic>>(
+      'admin_viewport_spots',
+      params: {
+        ...bounds.toJson(),
+        'p_community': community,
+        'p_official': official,
+        'p_hidden': hidden,
+      },
+    );
+    return MapSpotPage.fromRows(rows);
+  }
+
+  @override
+  Future<List<CityRule>> cityRules() async {
+    try {
+      return await RulesRepository(client).load();
+    } catch (_) {
+      // Markers still follow the rules the app ships with.
+      return RulesRepository(null).load();
+    }
+  }
 }

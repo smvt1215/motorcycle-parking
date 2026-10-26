@@ -43,6 +43,7 @@ void main() {
         initialLocation: path,
         themeMode: mode,
         reviewMapBuilder: (_, _) => const SizedBox(),
+        spotMapBuilder: (_, _) => const SizedBox(),
       ),
     );
     await tester.pumpAndSettle();
