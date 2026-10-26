@@ -142,5 +142,40 @@ set local role authenticated;
 select is(admin_resolve_report((select id from moderation_queue where reason='備註：舊資料'),'accepted','{"note":"舊資料"}')->>'status','accepted','reports without a recorded version are reviewable');
 reset role;
 
+-- A location suggestion moves the spot; the geography follows the columns.
+with s as (insert into community_spots(user_id,name,lat,lng,city,space_type)
+  values('10000000-0000-4000-8000-000000000001','位置測試點',25.044,121.564,'臺北市','paidMotorcycle') returning id) insert into fx select 'moved_spot',id from s;
+delete from rate_limit_events;
+select public.apply_report('10000000-0000-4000-8000-000000000002',repeat('g',64),repeat('g',64),
+  jsonb_build_object('action','flag','source_id',(select id::text from fx where name='moved_spot'),
+    'reason','停車點位置：建議移到 25.044100, 121.564000','field','location','proposed',jsonb_build_object('lat',25.0441,'lng',121.564)));
+insert into fx select 'q_location',id from moderation_queue where reason like '停車點位置：%';
+select is((select field from moderation_queue where id=(select id from fx where name='q_location')),'location','a location suggestion keeps its field key');
+select pg_temp.act('admin');
+set local role authenticated;
+select is(admin_resolve_report((select id from fx where name='q_location'),'accepted',
+  (select proposed from moderation_queue where id=(select id from fx where name='q_location')))->>'status','accepted','an admin applies the suggested position');
+reset role;
+select is((select (lat,lng)::text from community_spots where id=(select id from fx where name='moved_spot')),'(25.0441,121.564)','the spot moves to the suggested coordinates');
+select ok((select extensions.st_dwithin(location,extensions.st_setsrid(extensions.st_makepoint(121.564,25.0441),4326)::extensions.geography,0.5)
+  from community_spots where id=(select id from fx where name='moved_spot')),'the spatial index position moves with it');
+-- Across a county border the suggestion carries the looked-up county and
+-- district, and applying it moves the spot under the new county's rules.
+with s as (insert into community_spots(user_id,name,lat,lng,city,district,space_type)
+  values('10000000-0000-4000-8000-000000000001','跨縣市測試點',25.0105,121.5010,'臺北市','萬華區','paidMotorcycle') returning id) insert into fx select 'border_spot',id from s;
+delete from rate_limit_events;
+select public.apply_report('10000000-0000-4000-8000-000000000002',repeat('h',64),repeat('h',64),
+  jsonb_build_object('action','flag','source_id',(select id::text from fx where name='border_spot'),
+    'reason','停車點位置：建議移到 25.009800, 121.499000（距原位置 214 m，位於新北市）','field','location',
+    'proposed',jsonb_build_object('lat',25.0098,'lng',121.499,'city','新北市','district','板橋區')));
+insert into fx select 'q_border',id from moderation_queue where reason like '停車點位置：建議移到 25.009800%';
+select pg_temp.act('admin');
+set local role authenticated;
+select is(admin_resolve_report((select id from fx where name='q_border'),'accepted',
+  (select proposed from moderation_queue where id=(select id from fx where name='q_border')))->>'status','accepted','an admin applies a move across a county border');
+reset role;
+select is((select (city,district)::text from community_spots where id=(select id from fx where name='border_spot')),'(新北市,板橋區)','the county and district follow the move');
+select is((select (lat,lng)::text from community_spots where id=(select id from fx where name='border_spot')),'(25.0098,121.499)','the spot moves across the border');
+
 select * from finish();
 rollback;

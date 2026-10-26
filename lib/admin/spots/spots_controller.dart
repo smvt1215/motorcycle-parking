@@ -346,6 +346,14 @@ class SpotsController extends ChangeNotifier {
     _notify();
   }
 
+  /// An address search result fills the address or road field; like a
+  /// lookup, the field's text box shows the new value.
+  void fillFromSearch(String key, String value) {
+    draft = {...draft, key: value};
+    filled++;
+    _notify();
+  }
+
   void discard() {
     _load(record);
     saveError = null;

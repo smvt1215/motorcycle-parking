@@ -67,7 +67,8 @@ const launchBlue = Color(0xff1f5fa8);
 const launchAsphalt = Color(0xff1c2126);
 
 /// Loading screen that continues the native splash: same background, same
-/// mark at the same size and position, plus the loading status at the bottom.
+/// mark at the same size and position, with the app name under the mark and
+/// the loading status at the bottom.
 class LaunchScreen extends StatelessWidget {
   const LaunchScreen({super.key, required this.locating});
   final bool locating;
@@ -84,72 +85,116 @@ class LaunchScreen extends StatelessWidget {
       child: Material(
         key: const ValueKey('launch-screen'),
         color: dark ? launchAsphalt : launchBlue,
-        child: CustomMultiChildLayout(
-          delegate: _LaunchLayout(),
-          children: [
-            LayoutId(
-              id: _LaunchSlot.mark,
-              child: Image.asset(
-                'assets/branding/png/splash_mark.png',
-                key: const ValueKey('launch-mark'),
-                excludeFromSemantics: true,
-                filterQuality: FilterQuality.medium,
-              ),
-            ),
-            LayoutId(
-              id: _LaunchSlot.status,
-              child: SafeArea(
-                top: false,
-                minimum: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const SizedBox.square(
-                      dimension: 22,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.5,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    Semantics(
-                      liveRegion: true,
-                      child: Text(
-                        locating ? '正在取得目前位置…' : '正在載入停車資料…',
-                        key: const ValueKey('launch-status'),
-                        textAlign: TextAlign.center,
-                        style: text.bodyMedium?.copyWith(color: Colors.white),
-                      ),
-                    ),
-                    const SizedBox(height: 32),
-                    Text(
-                      '停車前請確認現場標示',
-                      textAlign: TextAlign.center,
-                      style: quiet,
-                    ),
-                    const SizedBox(height: 4),
-                    VersionText(style: quiet),
-                  ],
+        // The title is laid out below the screen when it has no room, so the
+        // clip keeps it from painting over the edge.
+        child: ClipRect(
+          child: CustomMultiChildLayout(
+            delegate: _LaunchLayout(),
+            children: [
+              LayoutId(
+                id: _LaunchSlot.mark,
+                child: Image.asset(
+                  'assets/branding/png/splash_mark.png',
+                  key: const ValueKey('launch-mark'),
+                  excludeFromSemantics: true,
+                  filterQuality: FilterQuality.medium,
                 ),
               ),
-            ),
-          ],
+              LayoutId(
+                id: _LaunchSlot.title,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '機車停車指南',
+                        key: const ValueKey('launch-title'),
+                        textAlign: TextAlign.center,
+                        style: text.headlineMedium?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 2,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '普通機車・大型重機',
+                        key: const ValueKey('launch-subtitle'),
+                        textAlign: TextAlign.center,
+                        style: text.titleSmall?.copyWith(
+                          color: Colors.white.withValues(alpha: .78),
+                          letterSpacing: 4,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              LayoutId(
+                id: _LaunchSlot.status,
+                child: SafeArea(
+                  top: false,
+                  minimum: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox.square(
+                        dimension: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Semantics(
+                        liveRegion: true,
+                        child: Text(
+                          locating ? '正在取得目前位置…' : '正在載入停車資料…',
+                          key: const ValueKey('launch-status'),
+                          textAlign: TextAlign.center,
+                          style: text.bodyMedium?.copyWith(color: Colors.white),
+                        ),
+                      ),
+                      const SizedBox(height: 32),
+                      Text(
+                        '停車前請確認現場標示',
+                        textAlign: TextAlign.center,
+                        style: quiet,
+                      ),
+                      const SizedBox(height: 4),
+                      VersionText(style: quiet),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-enum _LaunchSlot { mark, status }
+enum _LaunchSlot { mark, title, status }
 
 /// Centers the mark on the whole screen like the native splash: a 288 logical
-/// px image with the 150 px rounded icon in its middle. On short screens the
-/// mark shrinks so the icon never runs into the status text.
+/// px image with the 150 px rounded icon in its middle, and the app name
+/// under the icon. On short screens the mark shrinks so the icon never runs
+/// into the title or the status text; when even a [minIconSide] icon leaves
+/// the title no room, the title moves below the screen and the icon keeps
+/// what is left.
 class _LaunchLayout extends MultiChildLayoutDelegate {
   static const nativeSize = 288.0;
 
   /// The icon's share of the image side.
   static const iconShare = 150 / nativeSize;
+
+  /// Space between the icon's bottom edge and the title.
+  static const titleGap = 20.0;
+
+  /// Smallest icon worth keeping the title for.
+  static const minIconSide = 40.0;
 
   @override
   void performLayout(Size size) {
@@ -158,12 +203,26 @@ class _LaunchLayout extends MultiChildLayoutDelegate {
       _LaunchSlot.status,
       Offset((size.width - status.width) / 2, size.height - status.height),
     );
-    final room = 2 * (size.height / 2 - status.height - 8) / iconShare;
+    final title = layoutChild(_LaunchSlot.title, BoxConstraints.loose(size));
+    // Below the screen center: the icon's lower half, then the title.
+    final below = size.height / 2 - status.height - 8;
+    final iconHalfWithTitle = below - titleGap - title.height;
+    final showTitle = iconHalfWithTitle >= minIconSide / 2;
+    final room = 2 * (showTitle ? iconHalfWithTitle : below) / iconShare;
     final side = room.clamp(0.0, nativeSize).clamp(0.0, size.width);
     layoutChild(_LaunchSlot.mark, BoxConstraints.tight(Size.square(side)));
     positionChild(
       _LaunchSlot.mark,
       Offset((size.width - side) / 2, (size.height - side) / 2),
+    );
+    positionChild(
+      _LaunchSlot.title,
+      showTitle
+          ? Offset(
+              (size.width - title.width) / 2,
+              (size.height + side * iconShare) / 2 + titleGap,
+            )
+          : Offset((size.width - title.width) / 2, size.height),
     );
   }
 

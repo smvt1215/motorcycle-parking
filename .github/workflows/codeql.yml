@@ -25,11 +25,11 @@ jobs:
         language: [actions, javascript-typescript, python]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
+      - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
         with:
           languages: ${{ matrix.language }}
           build-mode: none
-      - uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee
+      - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370
         with:
           category: /language:${{ matrix.language }}
   kotlin:
@@ -60,7 +60,7 @@ jobs:
           java-version: '17'
       - uses: ./.github/actions/mobile-setup
         if: steps.changes.outputs.run == 'true'
-      - uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee
+      - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370
         if: steps.changes.outputs.run == 'true'
         with:
           languages: java-kotlin
@@ -70,7 +70,7 @@ jobs:
         env:
           JAVA_TOOL_OPTIONS: -Dorg.gradle.daemon=false -Dorg.gradle.caching=false
         run: flutter build apk --debug --flavor production --target-platform=android-x64 --dart-define=OFFLINE_MAP=true
-      - uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee
+      - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370
         if: steps.changes.outputs.run == 'true'
         with:
           category: /language:java-kotlin
@@ -93,7 +93,7 @@ jobs:
       - uses: ./.github/actions/mobile-setup
       - name: Generate Flutter configuration and plugin Swift package
         run: flutter build ios --config-only --simulator --debug --no-codesign --dart-define=OFFLINE_MAP=true
-      - uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee
+      - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370
         with:
           languages: swift
           build-mode: manual
@@ -106,7 +106,7 @@ jobs:
             CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
             COMPILATION_CACHE_ENABLE_CACHING=NO SWIFT_ENABLE_COMPILE_CACHE=NO \
             SWIFT_USE_INTEGRATED_DRIVER=NO
-      - uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee
+      - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370
         with:
           category: /language:swift
   codeql-ok:

@@ -2,10 +2,16 @@ import 'dart:async';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:motorcycle_parking/admin/admin_gateway.dart';
+import 'package:motorcycle_parking/admin/import/import_models.dart';
 import 'package:motorcycle_parking/admin/review/review_models.dart';
+import 'package:motorcycle_parking/admin/spots/spot_map.dart';
 import 'package:motorcycle_parking/admin/spots/spot_models.dart';
+import 'package:motorcycle_parking/admin/users/user_models.dart';
+import 'package:motorcycle_parking/core/address_search.dart';
 import 'package:motorcycle_parking/core/town_lookup.dart';
 import 'package:motorcycle_parking/domain/location_check.dart';
+import 'package:motorcycle_parking/domain/map_viewport.dart';
+import 'package:motorcycle_parking/models/parking.dart';
 
 Factor factor(
   String id, {
@@ -21,6 +27,73 @@ Factor factor(
 );
 
 const communityId = '11111111-1111-4111-8111-111111111111';
+const riderId = '33333333-3333-4333-8333-333333333333';
+
+Map<String, dynamic> sampleUserRow({
+  String id = riderId,
+  String name = '夜騎小哲',
+  String? bannedUntil,
+  bool admin = false,
+}) => {
+  'id': id,
+  'display_name': name,
+  'email_masked': 'ri***@example.test',
+  'providers': ['google'],
+  'is_admin': admin,
+  'created_at': '2026-09-01T00:00:00Z',
+  'last_sign_in_at': '2026-10-24T01:00:00Z',
+  'banned_until': bannedUntil,
+  'deleted': false,
+  'reports_30d': 12,
+  'last_report_at': '2026-10-24T02:00:00Z',
+};
+
+Map<String, dynamic> sampleUserDetail({String? bannedUntil, int today = 3}) => {
+  'user': sampleUserRow(bannedUntil: bannedUntil),
+  'limits': {
+    'today': today,
+    'daily_limit': 10,
+    'last_7d': 9,
+    'last_30d': 12,
+    'networks_30d': 2,
+    'shared_accounts_30d': 1,
+  },
+  'events': [
+    {'created_at': '2026-10-24T02:00:00Z', 'network': 'a1b2c3'},
+    {'created_at': '2026-10-23T02:00:00Z', 'network': 'd4e5f6'},
+  ],
+  'reports': {
+    'spots': 2,
+    'spots_hidden': 1,
+    'votes_still_there': 5,
+    'votes_gone': 1,
+    'flags_pending': 1,
+    'flags_accepted': 2,
+    'flags_rejected': 3,
+    'flags_closed': 0,
+  },
+  'spots': [
+    {
+      'id': communityId,
+      'name': '中山北路二段路邊機車格',
+      'city': '臺北市',
+      'district': '中山區',
+      'status': 'confirmed',
+      'contributor_name': '夜騎小哲',
+      'name_cleared': false,
+    },
+    {
+      'id': '44444444-4444-4444-8444-444444444444',
+      'name': '已清除名稱的點位',
+      'city': '臺北市',
+      'district': '大安區',
+      'status': 'hidden',
+      'contributor_name': '',
+      'name_cleared': true,
+    },
+  ],
+  'history': <Map<String, dynamic>>[],
+};
 const officialId = 'official:22222222-2222-4222-8222-222222222222';
 
 final reportTime = DateTime.utc(2026, 10, 24, 9);
@@ -489,5 +562,330 @@ class FakeAdminGateway implements AdminGateway {
     return townAt;
   }
 
+  /// What the preview says about known ids; any other id is new.
+  Map<String, ImportEntry> importPlan = {};
+  final List<List<Map<String, dynamic>>> previewed = [];
+  final List<(List<Map<String, dynamic>>, Map<String, dynamic>, String, String)>
+  imported = [];
+  Object? importError;
+
+  /// Holds previews or backlog reads open, to race them against a reset.
+  Completer<void>? delayedPreview;
+  Completer<void>? delayedBacklog;
+
+  @override
+  Future<List<ImportEntry>> previewImport(
+    List<Map<String, dynamic>> spots,
+  ) async {
+    previewed.add(spots);
+    await delayedPreview?.future;
+    if (importError case final error?) throw error;
+    return [
+      for (final s in spots)
+        importPlan[s['id']] ??
+            ImportEntry(
+              sourceId: '${s['id']}',
+              official: '${s['id']}'.startsWith('official:'),
+              status: ImportStatus.added,
+              reason: '',
+              name: '${s['name']}',
+              city: '${s['city'] ?? ''}',
+              district: '${s['district'] ?? ''}',
+            ),
+    ];
+  }
+
+  @override
+  Future<ImportResult> applyImport(
+    List<Map<String, dynamic>> spots,
+    Map<String, dynamic> choices,
+    String effectiveDate,
+    String note,
+  ) async {
+    imported.add((spots, choices, effectiveDate, note));
+    var inserted = 0, updated = 0;
+    for (final id in choices.keys) {
+      final entry = importPlan[id];
+      if (entry == null) {
+        inserted++;
+      } else {
+        updated++;
+      }
+      importPlan[id] = ImportEntry(
+        sourceId: id,
+        official: id.startsWith('official:'),
+        status: ImportStatus.unchanged,
+        reason: '',
+        name: entry?.name ?? '',
+        city: entry?.city ?? '',
+        district: entry?.district ?? '',
+        baseUpdatedAt: '2026-10-26T00:00:00Z',
+      );
+    }
+    return ImportResult(inserted: inserted, updated: updated);
+  }
+
+  List<FeeBacklogItem> backlog = [];
+  Object? convertError;
+  final List<(List<Map<String, dynamic>>, String)> conversions = [];
+
+  @override
+  Future<List<FeeBacklogItem>> feeBacklog() async {
+    final answer = backlog;
+    await delayedBacklog?.future;
+    return answer;
+  }
+
+  @override
+  Future<ImportResult> convertFees(
+    List<Map<String, dynamic>> items,
+    String note,
+  ) async {
+    conversions.add((items, note));
+    if (convertError case final error?) throw error;
+    final ids = {for (final i in items) i['source_id']};
+    backlog = [
+      for (final b in backlog)
+        if (!ids.contains(b.sourceId)) b,
+    ];
+    return ImportResult(updated: items.length);
+  }
+
+  /// What [searchAddress] returns, or throws when set.
+  List<AddressCandidate> addressResults = [];
+  AddressSearchException? addressError;
+  final List<String> addressQueries = [];
+
+  @override
+  Future<List<AddressCandidate>> searchAddress(
+    String query, {
+    double? lat,
+    double? lng,
+  }) async {
+    addressQueries.add(query);
+    if (addressError case final e?) throw e;
+    return addressResults;
+  }
+
+  List<Map<String, dynamic>> userRows = [sampleUserRow()];
+  Map<String, Map<String, dynamic>> userDetails = {riderId: sampleUserDetail()};
+  final userQueries = <String>[];
+  final bans = <(String, BanLength?, String)>[];
+  final clearedNames = <(String, String)>[];
+  Object? banError;
+  bool failUsers = false;
+
+  @override
+  Future<List<AdminUser>> searchUsers(String query) async {
+    userQueries.add(query);
+    if (failUsers) throw StateError('offline');
+    return userRows.map(AdminUser.fromJson).toList();
+  }
+
+  @override
+  Future<AdminUserDetail?> userDetail(String userId) async {
+    // Snapshot now: a slow response carries the state it was asked for.
+    final row = userDetails[userId];
+    await delayedDetail?.future;
+    return row == null ? null : AdminUserDetail.fromJson(row);
+  }
+
+  /// Points past the first page, by user id.
+  Map<String, List<Map<String, dynamic>>> olderSpots = {};
+  final spotPages = <(String, int)>[];
+
+  /// Holds [userDetail] until completed, to test out-of-order reloads.
+  Completer<void>? delayedDetail;
+
+  @override
+  Future<List<UserSpot>> userSpots(String userId, int offset) async {
+    spotPages.add((userId, offset));
+    return [
+      for (final s in olderSpots[userId] ?? <Map<String, dynamic>>[])
+        UserSpot.fromJson(s),
+    ];
+  }
+
+  @override
+  Future<DateTime?> setUserBan(
+    String userId, {
+    required BanLength? length,
+    required String reason,
+  }) async {
+    if (banError != null) throw banError!;
+    bans.add((userId, length, reason));
+    final until = length == null ? null : '2026-11-01T00:00:00Z';
+    final detail = userDetails[userId];
+    if (detail != null) {
+      userDetails[userId] = {
+        ...detail,
+        'user': {
+          ...detail['user'] as Map<String, dynamic>,
+          'banned_until': until,
+        },
+        'history': [
+          {
+            'action': length == null ? 'unban_user' : 'ban_user',
+            'note': reason,
+            'created_at': '2026-10-25T00:00:00Z',
+            'banned_until': until,
+          },
+          ...detail['history'] as List,
+        ],
+      };
+    }
+    return until == null ? null : DateTime.parse(until).toLocal();
+  }
+
+  @override
+  Future<void> clearContributorName(String spotId, String note) async {
+    clearedNames.add((spotId, note));
+  }
+
+  /// Rows `admin_viewport_spots` returns, before the layer filter.
+  List<Map<String, dynamic>> mapRows = sampleMapRows();
+  final List<(MapViewport, bool, bool, bool)> mapRequests = [];
+  bool failMap = false;
+
+  @override
+  Future<MapSpotPage> mapSpots(
+    MapViewport bounds, {
+    required bool community,
+    required bool official,
+    required bool hidden,
+  }) async {
+    mapRequests.add((bounds, community, official, hidden));
+    if (failMap) throw StateError('offline');
+    return MapSpotPage.fromRows([
+      for (final row in mapRows)
+        if (row['hidden'] == true
+            ? hidden
+            : row['source'] == 'official'
+            ? official
+            : community)
+          row,
+    ]);
+  }
+
+  @override
+  Future<List<CityRule>> cityRules() async => const [];
+
   Future<void> dispose() => events.close();
+
+  /// `city_rules` rows, keyed `city:vehicle`.
+  Map<String, Map<String, dynamic>> ruleRows = {
+    for (final r in sampleRules()) '${r['city']}:${r['vehicle']}': r,
+  };
+  final List<(String, String, Map<String, dynamic>, int?, String)> published =
+      [];
+  bool failRules = false;
+
+  @override
+  Future<List<Map<String, dynamic>>> cityRuleRows() async {
+    if (failRules) throw StateError('offline');
+    return [
+      for (final r in ruleRows.values) {...r},
+    ];
+  }
+
+  @override
+  Future<Map<String, dynamic>> publishCityRule(
+    String city,
+    String vehicle,
+    Map<String, dynamic> values,
+    int? baseVersion,
+    String note,
+  ) async {
+    final old = ruleRows['$city:$vehicle'];
+    if (old?['version'] != baseVersion) {
+      throw const PostgrestException(
+        message: 'rule changed since it was opened',
+        code: '40001',
+      );
+    }
+    published.add((city, vehicle, values, baseVersion, note));
+    final row = {
+      ...?old,
+      'city': city,
+      'vehicle': vehicle,
+      ...values,
+      'version': (baseVersion ?? 0) + 1,
+    };
+    ruleRows['$city:$vehicle'] = row;
+    return {...row};
+  }
 }
+
+/// Two published rules: Taipei's heavy-bike rule and Taichung's conditional
+/// one, as the bundled file has them.
+List<Map<String, dynamic>> sampleRules() => [
+  {
+    'city': '臺北市',
+    'vehicle': 'heavy',
+    'allowed_space_types': ['paidMotorcycle', 'heavyOnly', 'car'],
+    'conditional_space_types': ['offStreet'],
+    'districts': <String>[],
+    'district_space_types': <String, dynamic>{},
+    'fee_note': '一般計次每次 40 元',
+    'exceptions': '僅公有路邊收費機車格；免費巷弄格不適用。',
+    'can_use_two_spaces': true,
+    'effective_date': '2026-10-06',
+    'source_url': 'https://www.gov.taipei/notice',
+    'restriction': null,
+    'version': 1,
+  },
+  {
+    'city': '新北市',
+    'vehicle': 'heavy',
+    'allowed_space_types': ['heavyOnly', 'car', 'paidMotorcycle'],
+    'conditional_space_types': ['offStreet'],
+    'districts': <String>[],
+    'district_space_types': {
+      'freeMotorcycle': ['板橋區', '新店區'],
+    },
+    'fee_note': '計次每 4 小時 30 元',
+    'exceptions': '免費機車格僅板橋區、新店區開放。',
+    'can_use_two_spaces': true,
+    'effective_date': '2026-07-01',
+    'source_url': 'https://www.traffic.ntpc.gov.tw/notice',
+    'restriction': null,
+    'version': 2,
+  },
+];
+
+List<Map<String, dynamic>> sampleMapRows() => [
+  {
+    'id': communityId,
+    'source': 'community',
+    'name': '中山北路二段路邊機車格',
+    'lat': 25.0581,
+    'lng': 121.5226,
+    'city': '臺北市',
+    'space_type': 'paidMotorcycle',
+    'status': 'pending',
+    'hidden': false,
+  },
+  {
+    'id': officialId,
+    'source': 'official',
+    'name': '新北市政府行政大樓地下停車場',
+    'lat': 25.0124,
+    'lng': 121.4651,
+    'city': '新北市',
+    'space_type': 'offStreet',
+    'status': 'confirmed',
+    'heavy_allowed': true,
+    'hidden': false,
+  },
+  {
+    'id': '33333333-3333-4333-8333-333333333333',
+    'source': 'community',
+    'name': '三重正義北路機車格',
+    'lat': 25.06,
+    'lng': 121.49,
+    'city': '新北市',
+    'space_type': 'freeMotorcycle',
+    'status': 'hidden',
+    'hidden': true,
+  },
+];

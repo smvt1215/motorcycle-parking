@@ -1,18 +1,45 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:motorcycle_parking/core/town_lookup.dart';
 import 'package:motorcycle_parking/data/app_store.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
 import 'package:motorcycle_parking/features/report/report_sheet.dart';
+import 'package:motorcycle_parking/domain/location_check.dart';
 import 'package:motorcycle_parking/models/parking.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
 
 class RecordingStore extends AppStore {
   RecordingStore(LocalRepository local) : super(local, null);
   final submissions = <Map<String, dynamic>>[];
+
+  /// What the reverse lookup answers; null means at sea.
+  Town? town = const Town('臺北市', '信義區');
+  final lookups = <(double, double)>[];
+
+  /// When set, lookups wait here until a test answers them.
+  List<Completer<Town?>>? held;
+
+  @override
+  Future<Town?> townAt(double lat, double lng) async {
+    lookups.add((lat, lng));
+    if (held case final waiting?) {
+      final answer = Completer<Town?>();
+      waiting.add(answer);
+      return answer.future;
+    }
+    return town;
+  }
+
+  /// What「移到我的位置」reads.
+  LocationFix fix = const LocationFix(25.0343, 121.5623, 8);
+
+  @override
+  Future<LocationFix> currentFix() async => fix;
 
   @override
   Future<String> submit(Map<String, dynamic> body) async {
@@ -32,8 +59,10 @@ void main() {
     WidgetTester tester, {
     List<CityRule> rules = const [],
     Size size = const Size(390, 844),
+    Town? town = const Town('臺北市', '信義區'),
     double scale = 1,
     Brightness brightness = Brightness.light,
+    double keyboard = 0,
   }) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = size;
@@ -55,15 +84,18 @@ void main() {
             spaceType: SpaceType.paidMotorcycle,
           ),
         ]
-        ..rules = rules;
+        ..rules = rules
+        ..town = town;
     }))!;
     addTearDown(store.dispose);
     await tester.pumpWidget(
       MaterialApp(
         theme: ThemeData(brightness: brightness),
         builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(context)
-              .copyWith(textScaler: TextScaler.linear(scale)),
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(scale),
+            viewInsets: EdgeInsets.only(bottom: keyboard),
+          ),
           child: child!,
         ),
         home: Scaffold(
@@ -83,14 +115,39 @@ void main() {
 
   // The form's own list: the first scrollable in the sheet.
   final form = find.byType(Scrollable).first;
+  final nameField = find.widgetWithText(TextFormField, '停車點名稱');
+
+  /// Scrolls the form until [target] is built and on screen. It moves the
+  /// list itself: a drag could land on the location map, which keeps drags.
+  Future<void> reveal(WidgetTester tester, Finder target) async {
+    final position = tester.state<ScrollableState>(form).position;
+    // A `.first` inside the finder throws until its parent is built.
+    bool built() {
+      try {
+        return target.evaluate().isNotEmpty;
+      } on StateError {
+        return false;
+      }
+    }
+
+    if (!built()) {
+      // From the top down, so targets above the fold are found too.
+      position.jumpTo(0);
+      await tester.pump();
+    }
+    for (var i = 0; i < 40 && !built(); i++) {
+      position.jumpTo(
+        (position.pixels + 200).clamp(0, position.maxScrollExtent),
+      );
+      await tester.pump();
+    }
+    await tester.ensureVisible(target);
+    await tester.pumpAndSettle();
+  }
 
   Future<void> pickType(WidgetTester tester, SpaceType type) async {
     final tile = find.byKey(ValueKey('report-space-${type.name}'));
-    // Back to the top of the form, where the picker is, then onto the tile.
-    await tester.fling(form, const Offset(0, 2000), 3000);
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(tile);
-    await tester.pumpAndSettle();
+    await reveal(tester, tile);
     await tester.tap(tile);
     await tester.pumpAndSettle();
   }
@@ -99,14 +156,13 @@ void main() {
     WidgetTester tester,
     RecordingStore store,
   ) async {
-    // Back to the top, where the name is the first field in the list.
-    await tester.fling(form, const Offset(0, 3000), 3000);
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextFormField).first, '測試點');
+    // Back up to the name, the first field in the list.
+    final name = find.widgetWithText(TextFormField, '停車點名稱');
+    await reveal(tester, name);
+    await tester.enterText(name, '測試點');
     await tester.pumpAndSettle();
     // The button sits below the fold of a lazily built list.
-    await tester.scrollUntilVisible(find.text('送出回報'), 200, scrollable: form);
-    // scrollUntilVisible stops once the button is built, maybe below the fold.
+    await reveal(tester, find.text('送出回報'));
     await tester.ensureVisible(find.text('送出回報'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('送出回報'));
@@ -138,6 +194,10 @@ void main() {
     final store = await openForm(tester);
     expect(find.byType(DropdownButtonFormField<SpaceType>), findsNothing);
     expect(find.text('地面畫的是哪一種格位？'), findsOneWidget);
+    await reveal(
+      tester,
+      find.byKey(const ValueKey('report-space-paidMotorcycle')),
+    );
     expect(
       tester.getSemantics(
         find.byKey(const ValueKey('report-space-paidMotorcycle')),
@@ -163,7 +223,7 @@ void main() {
   testWidgets('收費以結構化選項填寫，送出費率與組成的文字', (tester) async {
     final store = await openForm(tester);
     final menu = find.byKey(const ValueKey('fee-mode-scooter'));
-    await tester.scrollUntilVisible(menu, 200, scrollable: form);
+    await reveal(tester, menu);
     await tester.ensureVisible(menu);
     await tester.pumpAndSettle();
     await tester.tap(menu);
@@ -220,6 +280,7 @@ void main() {
 
   testWidgets('資格依縣市規則帶入並說明來源', (tester) async {
     final store = await openForm(tester, rules: cityRules);
+    await reveal(tester, find.textContaining('與臺北市的停車規則帶入'));
     expect(find.textContaining('與臺北市的停車規則帶入'), findsOneWidget);
     await pickType(tester, SpaceType.freeMotorcycle);
     // Shown as the rule decides, but only the markings are stored, so the
@@ -245,7 +306,7 @@ void main() {
       of: find.byType(SegmentedButton<FacilityType?>),
       matching: find.text('地下'),
     );
-    await tester.scrollUntilVisible(underground, 200, scrollable: form);
+    await reveal(tester, underground);
     await tester.ensureVisible(underground);
     await tester.pumpAndSettle();
     await tester.tap(underground);
@@ -269,7 +330,7 @@ void main() {
       'B2 機車區',
     );
     final guide = find.widgetWithText(TextFormField, '停車指引');
-    await tester.scrollUntilVisible(guide, 200, scrollable: form);
+    await reveal(tester, guide);
     await tester.ensureVisible(guide);
     await tester.enterText(guide, '靠電梯');
     final spot = await send(tester, store);
@@ -287,7 +348,7 @@ void main() {
     final store = await openForm(tester);
     await pickType(tester, SpaceType.offStreet);
     final add = find.text('新增分區');
-    await tester.scrollUntilVisible(add, 200, scrollable: form);
+    await reveal(tester, add);
     await tester.ensureVisible(add);
     await tester.pumpAndSettle();
     await tester.tap(add);
@@ -305,7 +366,7 @@ void main() {
       of: find.byType(SegmentedButton<bool?>).first,
       matching: find.text('未確認'),
     );
-    await tester.scrollUntilVisible(scooterUnconfirmed, 200, scrollable: form);
+    await reveal(tester, scooterUnconfirmed);
     await tester.pumpAndSettle();
     await tester.tap(scooterUnconfirmed);
     await tester.pumpAndSettle();
@@ -338,29 +399,115 @@ void main() {
     expect(spot['heavy_allowed'], isNull);
   });
 
+  testWidgets('依標記位置帶入縣市與行政區，並提醒 15 m 內同類型的點', (tester) async {
+    final store = await openForm(tester);
+    expect(store.lookups, [(25.0339, 121.5623)]);
+    expect(find.text('位於臺北市信義區'), findsOneWidget);
+    // The known spot sits at the same place with the same bay kind.
+    expect(find.byKey(const ValueKey('report-duplicate')), findsOneWidget);
+    await pickType(tester, SpaceType.heavyOnly);
+    expect(find.byKey(const ValueKey('report-duplicate')), findsNothing);
+    final spot = await send(tester, store);
+    expect(spot['city'], '臺北市');
+    expect(spot['district'], '信義區');
+    expect(spot['lat'], 25.0339);
+  });
+
+  testWidgets('移到另一個縣市時提醒規則改變，並依新縣市帶入車種', (tester) async {
+    final store = await openForm(
+      tester,
+      rules: cityRules,
+      town: const Town('新北市', '板橋區'),
+    );
+    expect(find.byKey(const ValueKey('report-city-changed')), findsOneWidget);
+    expect(find.textContaining('適用新北市的停車規則'), findsOneWidget);
+    final spot = await send(tester, store);
+    expect(spot['city'], '新北市');
+    expect(spot['district'], '板橋區');
+  });
+
+  testWidgets('查不到縣市時保留附近帶入的縣市並請騎士確認', (tester) async {
+    final store = await openForm(tester, town: null);
+    expect(find.textContaining('查不到縣市'), findsOneWidget);
+    final spot = await send(tester, store);
+    expect(spot['city'], '臺北市');
+    expect(spot.containsKey('district'), isFalse);
+  });
+
+  testWidgets('移到我的位置送出 GPS 座標，誤差大時提醒', (tester) async {
+    final store = await openForm(tester);
+    store.fix = const LocationFix(25.0343, 121.5623, 32);
+    await tester.tap(find.text('移到我的位置'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('GPS 誤差約 32 m'), findsOneWidget);
+    // The marker moved, so the county is asked again.
+    expect(store.lookups.last, (25.0343, 121.5623));
+    final spot = await send(tester, store);
+    expect(spot['lat'], 25.0343);
+    expect(spot['lng'], 121.5623);
+  });
+
+  testWidgets('拖曳標記移動位置，地圖上的拖曳不捲動表單', (tester) async {
+    final store = await openForm(tester);
+    final list = tester.state<ScrollableState>(form).position;
+    final pin = find.byKey(const ValueKey('touch-marker'));
+    final before = list.pixels;
+    final gesture = await tester.startGesture(tester.getCenter(pin));
+    await gesture.moveBy(const Offset(0, -30));
+    await gesture.moveBy(const Offset(20, 0));
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(list.pixels, before);
+    final spot = await send(tester, store);
+    // North-east of the start, by the lift and the drag.
+    expect(spot['lat'] as double, greaterThan(25.0339));
+    expect(spot['lng'] as double, greaterThan(121.5623));
+  });
+
+  for (final (width, height, scale, brightness, keyboard) in [
+    (320.0, 568.0, 1.0, Brightness.light, 0.0),
+    (320.0, 640.0, 1.6, Brightness.dark, 260.0),
+    (390.0, 844.0, 1.6, Brightness.dark, 300.0),
+    (700.0, 900.0, 1.0, Brightness.light, 0.0),
+  ]) {
+    testWidgets(
+      '位置區塊在 ${width.toInt()} px、字級 $scale、鍵盤 ${keyboard.toInt()} 不溢出',
+      (tester) async {
+        await openForm(
+          tester,
+          size: Size(width, height),
+          scale: scale,
+          brightness: brightness,
+          keyboard: keyboard,
+        );
+        expect(tester.takeException(), isNull);
+        await reveal(tester, find.text('移到我的位置'));
+        final locate = tester.getSize(
+          find.byKey(const ValueKey('location-locate')),
+        );
+        expect(locate.height, greaterThanOrEqualTo(48));
+        expect(find.text('移到我的位置').hitTestable(), findsOneWidget);
+        expect(find.byKey(const ValueKey('touch-marker')), findsOneWidget);
+        await reveal(tester, find.text('送出回報'));
+        expect(find.text('送出回報').hitTestable(), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   Future<void> tapSegment(WidgetTester tester, int row, String label) async {
     // The list builds lazily; come back from wherever the last step left it.
-    await tester.fling(form, const Offset(0, 3000), 3000);
-    await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.byKey(const ValueKey('precheck-heavy_allowed')),
-      200,
-      scrollable: form,
-    );
     final segment = find.descendant(
-      of: find.byType(SegmentedButton<bool?>).at(row),
+      of: find.widgetWithText(ChoiceField<bool?>, row == 0 ? '普通機車' : '大型重機'),
       matching: find.text(label),
     );
-    await tester.ensureVisible(segment);
-    await tester.pumpAndSettle();
+    await reveal(tester, segment);
     await tester.tap(segment);
     await tester.pumpAndSettle();
   }
 
   Future<void> trySend(WidgetTester tester) async {
-    await tester.scrollUntilVisible(find.text('送出回報'), 200, scrollable: form);
-    await tester.ensureVisible(find.text('送出回報'));
-    await tester.pumpAndSettle();
+    await reveal(tester, find.text('送出回報'));
     await tester.tap(find.text('送出回報'));
     await tester.pumpAndSettle();
   }
@@ -393,9 +540,8 @@ void main() {
       // The sentence wraps inside the sheet instead of overflowing.
       expect(tester.takeException(), isNull);
       expect(tester.getRect(hint).right, lessThanOrEqualTo(width));
-      await tester.fling(form, const Offset(0, 3000), 3000);
-      await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextFormField).first, '重機格');
+      await reveal(tester, nameField);
+      await tester.enterText(nameField, '重機格');
       await trySend(tester);
       expect(store.submissions, isEmpty);
       expect(find.byType(SnackBar), findsOneWidget);
@@ -411,20 +557,20 @@ void main() {
 
   testWidgets('名稱是占位詞、備註含電話時在欄位下方提示，不送出', (tester) async {
     final store = await openForm(tester);
-    await tester.enterText(find.byType(TextFormField).first, '測試');
+    await reveal(tester, nameField);
+    await tester.enterText(nameField, '測試');
     await tester.pumpAndSettle();
     expect(find.textContaining('「測試」看不出是哪個停車點'), findsOneWidget);
     final note = find.widgetWithText(TextFormField, '其他備註');
-    await tester.scrollUntilVisible(note, 200, scrollable: form);
+    await reveal(tester, note);
     await tester.enterText(note, '車主電話 0912-345-678');
     await tester.pumpAndSettle();
     expect(find.textContaining('內容含有電話號碼'), findsOneWidget);
     await trySend(tester);
     expect(store.submissions, isEmpty);
     await tester.enterText(note, '夜間有管理員');
-    await tester.fling(form, const Offset(0, 3000), 3000);
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextFormField).first, '市府路機車格');
+    await reveal(tester, nameField);
+    await tester.enterText(nameField, '市府路機車格');
     await trySend(tester);
     expect(store.submissions.single['spot']['note'], '夜間有管理員');
   });
@@ -432,9 +578,7 @@ void main() {
   testWidgets('計時金額填 0 元時在收費下方提示改選免費', (tester) async {
     final store = await openForm(tester);
     final mode = find.byKey(const ValueKey('fee-mode-scooter'));
-    await tester.scrollUntilVisible(mode, 200, scrollable: form);
-    await tester.ensureVisible(mode);
-    await tester.pumpAndSettle();
+    await reveal(tester, mode);
     await tester.tap(mode);
     await tester.pumpAndSettle();
     await tester.tap(find.text('計時').last);
@@ -444,10 +588,36 @@ void main() {
     await tester.enterText(amount, '0');
     await tester.pumpAndSettle();
     expect(find.textContaining('普通機車的計時金額是 0 元'), findsOneWidget);
-    await tester.fling(form, const Offset(0, 3000), 3000);
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextFormField).first, '市府路機車格');
+    await reveal(tester, nameField);
+    await tester.enterText(nameField, '市府路機車格');
     await trySend(tester);
     expect(store.submissions, isEmpty);
+  });
+
+  testWidgets('標記移動後，前一個位置晚到的反查結果不會套用', (tester) async {
+    final store = await openForm(tester);
+    store.held = [];
+    store.fix = const LocationFix(25.0343, 121.5623, 8);
+    // Move once so a lookup for the first new position is in flight.
+    await tester.tap(find.text('移到我的位置'));
+    await tester.pump(const Duration(milliseconds: 700));
+    expect(store.held, hasLength(1));
+    // Move again; the first answer arrives before the next lookup starts.
+    store.fix = const LocationFix(25.0347, 121.5623, 8);
+    await tester.tap(find.text('移到我的位置'));
+    await tester.pump();
+    store.held!.single.complete(const Town('新北市', '板橋區'));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('report-city-changed')), findsNothing);
+    expect(find.text('位於新北市板橋區'), findsNothing);
+    await tester.pump(const Duration(milliseconds: 700));
+    store.held!.last.complete(const Town('臺北市', '大安區'));
+    await tester.pumpAndSettle();
+    expect(find.text('位於臺北市大安區'), findsOneWidget);
+    store.held = null;
+    final spot = await send(tester, store);
+    expect(spot['lat'], 25.0347);
+    expect(spot['city'], '臺北市');
+    expect(spot['district'], '大安區');
   });
 }

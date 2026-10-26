@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
+import '../core/address_search.dart';
 import '../models/parking.dart';
 import '../domain/map_viewport.dart';
 import '../domain/precheck.dart';
@@ -131,6 +132,19 @@ class ParkingRepository {
       }
       rethrow;
     }
+  }
+
+  /// House number, road or intersection search for the location picker
+  /// (`LocationPicker.search`); needs a Google or Apple sign-in.
+  Future<List<AddressCandidate>> searchAddress(
+    String query, {
+    double? lat,
+    double? lng,
+  }) async {
+    if (client == null) {
+      throw const AddressSearchException('not_configured');
+    }
+    return geocodeSearch(client!.functions, query, lat: lat, lng: lng);
   }
 }
 
