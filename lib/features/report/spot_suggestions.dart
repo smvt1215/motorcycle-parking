@@ -8,10 +8,13 @@ import '../../domain/location_check.dart';
 import '../../domain/precheck.dart';
 import '../../models/fee.dart';
 import '../../models/parking.dart';
+import '../../models/parking_condition.dart';
 import '../../ui/address_search_field.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../../ui/fee_editor.dart';
 import '../../ui/location_picker.dart';
+import 'condition_fields.dart';
+import 'fee_suggestion.dart';
 import 'report_sheet.dart';
 
 String _yesNo(bool? value) => switch (value) {
@@ -289,8 +292,28 @@ class _SuggestionFormState extends State<_SuggestionForm> {
   late bool? scooter = widget.spot.scooterAllowed;
   late bool? heavy = widget.spot.heavyAllowed;
 
-  /// Preserve known rates when the rider corrects only one vehicle.
-  late Fee fee = widget.spot.fee ?? const Fee();
+  /// The spot's rates today; a suggestion names only the vehicles it
+  /// changes (design §5.4), so the others keep theirs.
+  Fee get currentFee => widget.spot.fee ?? const Fee();
+
+  /// The vehicles the rider changes: a new rate, or null for 改成未確認.
+  FeeEdits feeEdits = {};
+
+  /// The bay's condition as the rider corrects it with the kind.
+  late final condition = ConditionDraft.of(
+    widget.spot.condition,
+    widget.spot.spaceType,
+  );
+
+  /// The notice link the rider attaches (design §1.4).
+  final evidence = TextEditingController();
+
+  /// The condition stored today, or the one its space type reads as.
+  ParkingCondition? get currentCondition =>
+      widget.spot.condition ?? conditionOf(widget.spot.spaceType);
+
+  /// The condition suggested with the kind; null for a lot.
+  ParkingCondition? get suggestedCondition => condition.conditionFor(type);
 
   /// A lot's details when the suggested kind is a lot.
   late FacilityType? facility = widget.spot.facilityType;
@@ -399,7 +422,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
     final value = typeField
         ? type.label
         : feeField
-        ? feeNoteOf(fee)
+        ? feeNoteOf(feeAfter(currentFee, feeEdits))
         : _eligibility(scooter, heavy);
     return '${widget.label}：建議「$value」${text.isEmpty ? '' : '；說明：$text'}';
   }
@@ -413,6 +436,12 @@ class _SuggestionFormState extends State<_SuggestionForm> {
     if (typeField) {
       return {
         'space_type': type.name,
+        // A street bay's condition goes with its kind, so the two never
+        // disagree once applied (§1.3); a lot drops a stored one.
+        if (suggestedCondition case final c?)
+          'condition': c.toJson()
+        else if (spot.condition != null)
+          'condition': null,
         if (lotType) ...{
           if (facility != spot.facilityType) 'facility_type': facility?.name,
           if (access != spot.access) 'parking_access': access?.name,
@@ -448,7 +477,18 @@ class _SuggestionFormState extends State<_SuggestionForm> {
     // Suggestions merge per vehicle (design §5.4): a vehicle the rider
     // cleared goes as null, one never known is left out.
     if (feeField) {
-      return {'fee': feeSuggestion(spot.fee, fee), 'fee_note': feeNoteOf(fee)};
+      final fee = proposedFee(currentFee, feeEdits);
+      final after = feeNoteOf(feeAfter(currentFee, feeEdits));
+      return {
+        'fee': fee,
+        // The spot's text after the change; past 200 characters the server
+        // takes only the text of the rates sent (the review recomputes it).
+        'fee_note': after.length <= 200
+            ? after
+            : feeNoteOfJson({
+                for (final MapEntry(:key, :value) in fee.entries) key: ?value,
+              }),
+      };
     }
     if (eligibilityField) {
       return {
@@ -483,6 +523,9 @@ class _SuggestionFormState extends State<_SuggestionForm> {
       return [
         if (type != spot.spaceType)
           line(widget.label, spot.spaceType.label, type.label),
+        if (suggestedCondition case final c?
+            when type == spot.spaceType && c != currentCondition)
+          line('停放條件', conditionSummary(currentCondition), conditionSummary(c)),
         if (lotType && facility != spot.facilityType)
           line(
             '場站型式',
@@ -525,13 +568,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
           line('大型重機', _yesNo(spot.heavyAllowed), _yesNo(heavy)),
       ];
     }
-    if (feeField) {
-      // Every vehicle and period filled in and in range, the car's too: a
-      // half-filled rate would otherwise read as 0 元.
-      return fee.isEmpty || !fee.valid || fee == widget.spot.fee
-          ? const []
-          : [line(widget.label, widget.current ?? '', feeNoteOf(fee))];
-    }
+    if (feeField) return feeChangeLines(currentFee, feeEdits);
     if (unavailable || text.isEmpty) return const [];
     return [line(widget.label, widget.current ?? '', text)];
   }
@@ -579,32 +616,55 @@ class _SuggestionFormState extends State<_SuggestionForm> {
   void dispose() {
     lookupTimer?.cancel();
     note.dispose();
+    evidence.dispose();
+    condition.dispose();
     entrance.dispose();
     guide.dispose();
     until.dispose();
     super.dispose();
   }
 
+  /// The report as it will be sent.
+  Map<String, Object?> body() {
+    final value = proposed();
+    return {
+      'action': 'flag',
+      'source_id': widget.spot.id,
+      // Older servers and Dashboard reviews read only the summary.
+      'reason': reportSummary(reason()),
+      'field': fieldKey,
+      'proposed': ?value,
+      // The text is the value itself for name and fee suggestions.
+      if (value == null || structured || unavailable) 'note': note.text.trim(),
+      if ((feeField || typeField) && evidence.text.trim().isNotEmpty)
+        'evidence_url': evidence.text.trim(),
+    };
+  }
+
+  /// What the server's precheck finds in the suggestion, judged with the
+  /// spot's stored fee and condition as the server reads them (§4.3).
+  List<PrecheckIssue> get issues => precheck(
+    body(),
+    current: {
+      'fee': ?widget.spot.fee?.toJson(),
+      'condition': ?widget.spot.condition?.toJson(),
+    },
+  );
+
   Future<void> submit() async {
     if (!form.currentState!.validate()) return;
+    // Each hint already sits under its field; this covers one out of view.
+    if (precheckBlocking(issues).firstOrNull case final issue?) {
+      setState(() => error = issue.message);
+      return;
+    }
     if (!await confirmFarMove() || !mounted) return;
     setState(() {
       sending = true;
       error = null;
     });
     try {
-      final value = proposed();
-      await widget.store.submit({
-        'action': 'flag',
-        'source_id': widget.spot.id,
-        // Older servers and Dashboard reviews read only the summary.
-        'reason': reportSummary(reason()),
-        'field': fieldKey,
-        'proposed': ?value,
-        // The text is the value itself for name and fee suggestions.
-        if (value == null || structured || unavailable)
-          'note': note.text.trim(),
-      });
+      await widget.store.submit(body());
       if (mounted) {
         widget.onSubmitted();
         setState(() => sent = true);
@@ -651,20 +711,23 @@ class _SuggestionFormState extends State<_SuggestionForm> {
     final colors = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     final changed = changes();
+    final found = issues;
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: Form(
         key: form,
         child: ContentPage(
           children: [
-            SheetTitle(widget.label),
+            // Canvas SuggestFee names the whole sheet.
+            SheetTitle(feeField ? '修改建議：收費' : widget.label),
             const SizedBox(height: 8),
             Text(
               widget.spot.name,
               style: TextStyle(color: colors.onSurfaceVariant),
             ),
             const SizedBox(height: 16),
-            if (widget.current != null && !sent) ...[
+            // The fee cards show each vehicle's rate today themselves.
+            if (widget.current != null && !sent && !feeField) ...[
               Material(
                 color: colors.surfaceContainerLow,
                 borderRadius: BorderRadius.circular(16),
@@ -722,6 +785,23 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                             state.didChange(v);
                           });
                         },
+                      ),
+                      ConditionFields(
+                        type: type,
+                        draft: condition,
+                        onChanged: () => setState(() => state.didChange(type)),
+                        holdHint: evidence.text.trim().isEmpty
+                            ? precheckHint(
+                                found,
+                                'proposed.condition',
+                                holds: true,
+                              )
+                            : null,
+                      ),
+                      PrecheckHintText(
+                        precheckHint(found, 'proposed.condition') ??
+                            precheckHint(found, 'proposed.fee'),
+                        key: const ValueKey('precheck-proposed-condition'),
                       ),
                       // These controls form one proposal with the space type.
                       // Mark the field changed so its error updates immediately.
@@ -918,32 +998,50 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                 const SizedBox(height: 20),
               ],
               if (feeField) ...[
-                FormField<Fee>(
+                FormField<FeeEdits>(
                   autovalidateMode: AutovalidateMode.onUserInteraction,
-                  validator: (_) => fee.isEmpty
-                      ? '請至少選一個車種的收費方式'
-                      : fee == widget.spot.fee
-                      ? '請先修改費率，和目前不同才能送出'
-                      : precheckHint(precheckFee(fee.toJson()), 'fee'),
+                  validator: (_) {
+                    final missing = incompleteEdits(feeEdits);
+                    if (missing.isNotEmpty) {
+                      return '${missing.map((v) => v.label).join('、')}的費率還沒填完，'
+                          '請填好或按「維持目前」';
+                    }
+                    return effectiveEdits(currentFee, feeEdits).isEmpty
+                        ? '請至少修改一個車種，和目前不同才能送出'
+                        : null;
+                  },
                   builder: (state) => Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Text(
-                        '現場收費牌怎麼寫？不確定的車種維持「未確認」。',
+                        '現場收費牌怎麼寫？只改你看到不一樣的車種，其他維持目前。',
                         style: TextStyle(color: colors.onSurfaceVariant),
                       ),
                       const SizedBox(height: 12),
-                      FeeEditor(
-                        value: fee,
-                        initialVehicle: FeeVehicle.of(widget.store.vehicle),
-                        errorText: state.errorText,
+                      FeeSuggestionEditor(
+                        current: currentFee,
+                        edits: feeEdits,
+                        // Under each vehicle, including a stored
+                        // contradiction the merged fee still holds (#155).
+                        errors: {
+                          for (final v in FeeVehicle.values)
+                            v: ?precheckHint(found, 'proposed.fee.${v.wire}'),
+                        },
                         onChanged: (v) {
-                          setState(() => fee = v);
+                          setState(() => feeEdits = v);
                           state.didChange(v);
                         },
                       ),
+                      fieldError(context, state.errorText),
                     ],
                   ),
+                ),
+                const SizedBox(height: 10),
+              ],
+              if (feeField || typeField) ...[
+                EvidenceUrlField(
+                  controller: evidence,
+                  onChanged: (_) => setState(() {}),
                 ),
                 const SizedBox(height: 20),
               ],
@@ -1069,6 +1167,18 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                               color: colors.onSecondaryContainer,
                             ),
                           ),
+                        // Canvas SuggestFee: the vehicles left as they are.
+                        if (feeField)
+                          if (feeKeptLine(currentFee, feeEdits)
+                              case final kept?) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              kept,
+                              style: text.bodySmall?.copyWith(
+                                color: colors.onSecondaryContainer,
+                              ),
+                            ),
+                          ],
                       ],
                     ),
                   ),
@@ -1085,7 +1195,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                     ? '送出中…'
                     : unavailable
                     ? '送出回報'
-                    : '送出建議',
+                    : '送出修改建議',
                 onPressed: sending || !widget.store.canReport ? null : submit,
               ),
               TextButton(

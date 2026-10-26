@@ -139,17 +139,96 @@ Deno.test('a new spot refuses a condition the tables would refuse', () => {
   }
 });
 
-Deno.test('conditions stay outside suggestions until the app sends them', () => {
-  const body = {
-    device_id: '3f1c2a4e-0000-4000-8000-000000000001',
-    action: 'flag',
-    source_id: 'community:x',
-    reason: '格位改成限時',
-    proposed: {
-      condition: { bay: 'motorcycle', use: 'usual', charge: 'toll' },
-    },
+Deno.test('suggestions carry a condition with the space type it is stored under', () => {
+  const flag = (proposed: Record<string, unknown>) =>
+    validate({
+      device_id: '3f1c2a4e-0000-4000-8000-000000000001',
+      action: 'flag',
+      source_id: 'community:x',
+      reason: '格位類型',
+      proposed,
+    });
+  const timed = {
+    bay: 'motorcycle',
+    use: 'usual',
+    charge: 'toll',
+    limits: [{ kind: 'time_limit', max_minutes: 20 }],
   };
-  if (validate(body) !== 'invalid proposed') {
-    throw new Error('condition must stay outside the proposed allow-list');
+  const ok = [
+    { space_type: 'timedMotorcycle', condition: timed },
+    { space_type: 'paidMotorcycle', condition: null },
+  ];
+  for (const proposed of ok) {
+    const error = flag(proposed);
+    if (error) throw new Error(`${JSON.stringify(proposed)}: ${error}`);
   }
+  const bad = [
+    // Without its space type, or under another one, it would split state.
+    { condition: timed },
+    { space_type: 'paidMotorcycle', condition: timed },
+    // A lot's conditions live in its zones.
+    { space_type: 'offStreet', condition: null },
+    // Riders attach a notice as evidence; admins write the basis (§1.4).
+    {
+      space_type: 'timedMotorcycle',
+      condition: { ...timed, basis: { source_url: 'https://a.tw/x' } },
+    },
+    { space_type: 'timedMotorcycle', condition: { ...timed, bay: 'bus' } },
+    { space_type: 'timedMotorcycle', condition: 'timed' },
+  ];
+  for (const proposed of bad) {
+    if (flag(proposed) !== 'invalid proposed') {
+      throw new Error(`accepted ${JSON.stringify(proposed)}`);
+    }
+  }
+});
+
+Deno.test('rider zones may name their area', () => {
+  if (
+    !validZones([{ name: 'B1', area: 'motorcycle' }, {
+      name: 'B2',
+      area: 'car',
+    }])
+  ) {
+    throw new Error('zone area rejected');
+  }
+  for (const area of ['bus', '', null, ['car']]) {
+    if (validZones([{ name: 'B1', area }])) {
+      throw new Error(`area ${JSON.stringify(area)} accepted`);
+    }
+  }
+});
+
+Deno.test('reports may attach a notice link as evidence', () => {
+  const ids = {
+    device_id: '3f1c2a4e-0000-4000-8000-000000000001',
+  };
+  const flag = { ...ids, action: 'flag', source_id: 'x', reason: '收費' };
+  if (validate({ ...flag, evidence_url: 'https://pma.gov.taipei/n?a=1' })) {
+    throw new Error('https link rejected');
+  }
+  if (create({ space_type: 'paidMotorcycle' })) throw new Error('base');
+  for (
+    const url of [
+      'http://pma.gov.taipei',
+      'https://a b',
+      'javascript:alert(1)',
+      `https://a.tw/${'x'.repeat(2048)}`,
+      42,
+    ]
+  ) {
+    if (validate({ ...flag, evidence_url: url }) !== 'invalid evidence_url') {
+      throw new Error(`accepted ${url}`);
+    }
+  }
+  // Only reports that open a case or a spot keep one.
+  if (
+    validate({
+      ...ids,
+      action: 'vote',
+      spot_id: '3f1c2a4e-0000-4000-8000-000000000002',
+      vote: 'still_there',
+      evidence_url: 'https://a.tw',
+    }) !== 'invalid evidence_url'
+  ) throw new Error('vote kept evidence');
 });

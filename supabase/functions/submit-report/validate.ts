@@ -53,7 +53,7 @@ const whole = (v: unknown, min: number, max: number) =>
 // Parking conditions (docs/designs/2026-10-26-parking-conditions-and-fees.md
 // §1.2, §4): the rules come from _shared/parking_contract.json, which
 // lib/models/parking_condition.dart mirrors and tool/gen_contract_sql.py turns
-// into valid_condition(). Not wired into any action yet.
+// into valid_condition(). New spots and suggestions carry it (C5).
 const cond = contract.condition;
 const isObject = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === 'object' && !Array.isArray(v);
@@ -260,10 +260,11 @@ export function validZones(v: unknown): boolean {
     if (!z || typeof z !== 'object' || Array.isArray(z)) return false;
     const zone = z as Record<string, unknown>;
     return Object.keys(zone).every((k) =>
-      ['name', 'access', 'guide', 'fee'].includes(k)
+      ['name', 'access', 'area', 'guide', 'fee'].includes(k)
     ) &&
       text(40, 1)(zone.name) &&
       (!('access' in zone) || oneOf(accessKinds)(zone.access)) &&
+      (!('area' in zone) || inList(contract.zone.area)(zone.area)) &&
       (!('guide' in zone) || text(200)(zone.guide)) &&
       (!('fee' in zone) || validFee(zone.fee)) &&
       // Riders send no zone condition yet; the check keeps the DB rule in
@@ -294,11 +295,36 @@ const proposedChecks: Record<string, (v: unknown) => boolean> = {
   special_rules: text(500),
   // Merged per vehicle: null clears a vehicle, one left out keeps its rate.
   fee: validProposedFee,
+  // Checked with the space type beside it (validProposedCondition).
+  condition: (v) => v === null || isObject(v),
   status: (v) => v === 'hidden',
   // Riders ask to take a spot down; restoring one is an admin decision.
   hidden: (v) => v === true,
 };
 const locationKeys = ['lat', 'lng', 'city', 'district'];
+/**
+ * The notice a rider attaches as evidence (§1.4, §4.2): an https link kept
+ * with the case, never written to the spot. Same limits as a basis link.
+ */
+export const validEvidenceUrl = (v: unknown) =>
+  typeof v === 'string' && v.length <= cond.basis.source_url.max_length &&
+  new RegExp(cond.basis.source_url.pattern).test(v);
+/**
+ * A suggested street condition (decision 33): the contract's, without a
+ * basis (a notice travels as `evidence_url`), with the space type it is
+ * stored under beside it; null drops the condition for that space type.
+ */
+function validProposedCondition(p: Record<string, unknown>): boolean {
+  if (!('condition' in p)) return true;
+  const type = p.space_type;
+  if (typeof type !== 'string' || offStreetSpaceTypes.includes(type)) {
+    return false;
+  }
+  if (p.condition === null) return true;
+  return validCondition(p.condition) &&
+    !Object.hasOwn(p.condition as object, 'basis') &&
+    legacySpaceType(p.condition as Record<string, unknown>, false) === type;
+}
 const withoutCleared = (fee: unknown) =>
   fee && typeof fee === 'object' && !Array.isArray(fee)
     ? Object.fromEntries(Object.entries(fee).filter(([, v]) => v !== null))
@@ -362,6 +388,7 @@ export function validate(body: Record<string, unknown>): string | null {
     if ('fee_note' in p && !validFeeNote(p.fee_note, withoutCleared(p.fee))) {
       return 'invalid proposed';
     }
+    if (!validProposedCondition(p)) return 'invalid proposed';
     if (
       ('lat' in p &&
         (typeof p.lat !== 'number' || p.lat < 20 || p.lat > 27)) ||
@@ -384,6 +411,11 @@ export function validate(body: Record<string, unknown>): string | null {
     body.note !== undefined &&
     (typeof body.note !== 'string' || body.note.length > 500)
   ) return 'invalid note';
+  if (
+    body.evidence_url !== undefined &&
+    (!['create', 'flag'].includes(String(body.action)) ||
+      !validEvidenceUrl(body.evidence_url))
+  ) return 'invalid evidence_url';
   if (body.action === 'create' || body.action === 'update') {
     const s = body.spot as Record<string, unknown> | undefined;
     if (!s || typeof s !== 'object' || Array.isArray(s)) return 'invalid spot';

@@ -212,7 +212,7 @@ void main() {
     );
     expect(
       tester
-          .widget<AdaptiveButton>(find.widgetWithText(AdaptiveButton, '送出建議'))
+          .widget<AdaptiveButton>(find.widgetWithText(AdaptiveButton, '送出修改建議'))
           .onPressed,
       isNull,
     );
@@ -229,7 +229,7 @@ void main() {
     expect(find.text('帳號與設定'), findsNothing);
     expect(
       tester
-          .widget<AdaptiveButton>(find.widgetWithText(AdaptiveButton, '送出建議'))
+          .widget<AdaptiveButton>(find.widgetWithText(AdaptiveButton, '送出修改建議'))
           .onPressed,
       isNotNull,
     );

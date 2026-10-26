@@ -304,7 +304,7 @@
       ]
     },
     {
-      "name": "cap equal to the amount, zero per visit and zero daily pass",
+      "name": "cap equal to the amount passes; a zero per visit without a valid time is free (§2.3)",
       "body": {
         "action": "create",
         "spot": {
@@ -324,7 +324,9 @@
           }
         }
       },
-      "expect": []
+      "expect": [
+        "fee_zero_visit@fee.heavy"
+      ]
     },
     {
       "name": "zone fees are checked with their zone",
@@ -821,6 +823,653 @@
       },
       "expect": [
         "fee_follows_missing_scooter@proposed.fee.heavy"
+      ]
+    },
+    {
+      "name": "Taipei timed bay: first 20 minutes 0 元 with a 20-minute limit is not free and passes (§2.3)",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "信義路五段機車格",
+          "space_type": "timedMotorcycle",
+          "condition": {
+            "bay": "motorcycle",
+            "use": "usual",
+            "charge": "toll",
+            "limits": [
+              {
+                "kind": "time_limit",
+                "max_minutes": 20
+              }
+            ]
+          },
+          "fee": {
+            "heavy": {
+              "mode": "per_visit",
+              "amount": 0,
+              "max_minutes": 20,
+              "extension": {
+                "amount": 40,
+                "max_times": 1
+              }
+            }
+          }
+        }
+      },
+      "expect": []
+    },
+    {
+      "name": "a zero daily rate is free",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "信義路五段機車格",
+          "space_type": "paidMotorcycle",
+          "fee": {
+            "scooter": {
+              "mode": "daily",
+              "amount": 0
+            }
+          }
+        }
+      },
+      "expect": [
+        "fee_zero_visit@fee.scooter"
+      ]
+    },
+    {
+      "name": "a zero hourly rate after free minutes is not the zero-hourly rule",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "信義路五段機車格",
+          "space_type": "car",
+          "fee": {
+            "car": {
+              "mode": "hourly",
+              "amount": 0,
+              "per_minutes": 60,
+              "free_minutes": 30
+            }
+          },
+          "condition": {
+            "bay": "car",
+            "use": "usual"
+          }
+        }
+      },
+      "expect": []
+    },
+    {
+      "name": "a free 普大共用 bay waits for a notice (hold)",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "信義路五段機車格",
+          "space_type": "freeMotorcycle",
+          "condition": {
+            "bay": "motorcycle",
+            "use": "share",
+            "share": "scooter_heavy",
+            "charge": "free"
+          },
+          "fee": {
+            "scooter": {
+              "mode": "free"
+            },
+            "heavy": {
+              "mode": "free"
+            }
+          }
+        },
+        "evidence_url": "https://pma.gov.taipei/notice"
+      },
+      "expect": [
+        "share_free_needs_basis@condition.charge"
+      ]
+    },
+    {
+      "name": "a free bay with a paid rate",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "信義路五段機車格",
+          "space_type": "freeMotorcycle",
+          "condition": {
+            "bay": "motorcycle",
+            "use": "usual",
+            "charge": "free"
+          },
+          "fee": {
+            "scooter": {
+              "mode": "free"
+            },
+            "heavy": {
+              "mode": "hourly",
+              "amount": 20,
+              "per_minutes": 60
+            }
+          }
+        }
+      },
+      "expect": [
+        "charge_free_rate@fee.heavy"
+      ]
+    },
+    {
+      "name": "a free bay whose heavy rate follows the free scooter rate passes",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "信義路五段機車格",
+          "space_type": "freeMotorcycle",
+          "condition": {
+            "bay": "motorcycle",
+            "use": "usual",
+            "charge": "free"
+          },
+          "fee": {
+            "scooter": {
+              "mode": "free"
+            },
+            "heavy": {
+              "mode": "same_as_scooter"
+            }
+          }
+        }
+      },
+      "expect": []
+    },
+    {
+      "name": "a free bay with a renewing, extendable per-visit rate",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "信義路五段機車格",
+          "space_type": "freeMotorcycle",
+          "condition": {
+            "bay": "motorcycle",
+            "use": "usual",
+            "charge": "free"
+          },
+          "fee": {
+            "heavy": {
+              "mode": "per_visit",
+              "amount": 20,
+              "renew": "midnight",
+              "extension": {
+                "amount": 20,
+                "max_times": 1
+              }
+            }
+          }
+        }
+      },
+      "expect": [
+        "charge_free_rate@fee.heavy",
+        "free_with_renew@fee.heavy",
+        "free_with_extension@fee.heavy"
+      ]
+    },
+    {
+      "name": "a toll bay with a free rate (法規 D)",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "信義路五段機車格",
+          "space_type": "paidMotorcycle",
+          "condition": {
+            "bay": "motorcycle",
+            "use": "usual",
+            "charge": "toll"
+          },
+          "fee": {
+            "scooter": {
+              "mode": "free"
+            }
+          }
+        }
+      },
+      "expect": [
+        "charge_toll_free_rate@fee.scooter"
+      ]
+    },
+    {
+      "name": "a toll bay may leave one period free",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "信義路五段機車格",
+          "space_type": "paidMotorcycle",
+          "condition": {
+            "bay": "motorcycle",
+            "use": "usual",
+            "charge": "toll"
+          },
+          "fee": {
+            "scooter": {
+              "mode": "by_time",
+              "periods": [
+                {
+                  "days": "all",
+                  "from": "08:00",
+                  "to": "20:00",
+                  "rate": {
+                    "mode": "hourly",
+                    "amount": 10,
+                    "per_minutes": 60
+                  }
+                },
+                {
+                  "days": "all",
+                  "from": "20:00",
+                  "to": "08:00",
+                  "rate": {
+                    "mode": "free"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "expect": []
+    },
+    {
+      "name": "a heavy-only bay with a scooter rate",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "信義路五段機車格",
+          "space_type": "heavyOnly",
+          "condition": {
+            "bay": "heavy",
+            "use": "usual"
+          },
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 10,
+              "per_minutes": 60
+            }
+          }
+        }
+      },
+      "expect": [
+        "heavy_bay_scooter_fee@fee.scooter"
+      ]
+    },
+    {
+      "name": "a motorcycle bay with a car rate",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "信義路五段機車格",
+          "space_type": "paidMotorcycle",
+          "condition": {
+            "bay": "motorcycle",
+            "use": "usual",
+            "charge": "toll"
+          },
+          "fee": {
+            "car": {
+              "mode": "hourly",
+              "amount": 40,
+              "per_minutes": 60
+            }
+          }
+        }
+      },
+      "expect": [
+        "motorcycle_bay_car_fee@fee.car"
+      ]
+    },
+    {
+      "name": "zone areas: a car rate in the motorcycle area, a scooter rate in the car area (hold)",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "信義路五段機車格",
+          "space_type": "offStreet",
+          "facility_type": "underground",
+          "parking_zones": [
+            {
+              "name": "B1 機車區",
+              "area": "motorcycle",
+              "fee": {
+                "car": {
+                  "mode": "hourly",
+                  "amount": 40,
+                  "per_minutes": 60
+                }
+              }
+            },
+            {
+              "name": "B2 汽車區",
+              "area": "car",
+              "fee": {
+                "scooter": {
+                  "mode": "hourly",
+                  "amount": 10,
+                  "per_minutes": 60
+                },
+                "car": {
+                  "mode": "hourly",
+                  "amount": 40,
+                  "per_minutes": 60
+                }
+              }
+            }
+          ]
+        }
+      },
+      "expect": [
+        "motorcycle_bay_car_fee@parking_zones.0.fee.car",
+        "car_area_scooter_fee@parking_zones.1.fee.scooter"
+      ]
+    },
+    {
+      "name": "a time limit and a per-visit valid time that differ",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "信義路五段機車格",
+          "space_type": "timedMotorcycle",
+          "condition": {
+            "bay": "motorcycle",
+            "use": "usual",
+            "charge": "toll",
+            "limits": [
+              {
+                "kind": "time_limit",
+                "max_minutes": 20
+              }
+            ]
+          },
+          "fee": {
+            "heavy": {
+              "mode": "per_visit",
+              "amount": 0,
+              "max_minutes": 30
+            }
+          }
+        }
+      },
+      "expect": [
+        "time_limit_mismatch@fee.heavy"
+      ]
+    },
+    {
+      "name": "heavy follows an unconfirmed car rate",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "信義路五段機車格",
+          "space_type": "car",
+          "condition": {
+            "bay": "car",
+            "use": "usual"
+          },
+          "fee": {
+            "heavy": {
+              "mode": "same_as_car"
+            }
+          }
+        }
+      },
+      "expect": [
+        "fee_follows_missing_car@fee.heavy"
+      ]
+    },
+    {
+      "name": "a crossing rule with one per-visit period",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "信義路五段機車格",
+          "space_type": "car",
+          "condition": {
+            "bay": "car",
+            "use": "usual"
+          },
+          "fee": {
+            "car": {
+              "mode": "by_time",
+              "cross_period": "each_period",
+              "periods": [
+                {
+                  "days": "all",
+                  "from": "08:00",
+                  "to": "20:00",
+                  "rate": {
+                    "mode": "per_visit",
+                    "amount": 30
+                  }
+                },
+                {
+                  "days": "all",
+                  "from": "20:00",
+                  "to": "08:00",
+                  "rate": {
+                    "mode": "hourly",
+                    "amount": 20,
+                    "per_minutes": 60
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "expect": [
+        "cross_period_single@fee.car"
+      ]
+    },
+    {
+      "name": "car and time-period rates follow the cap and zero-hourly rules",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "信義路五段機車格",
+          "space_type": "car",
+          "condition": {
+            "bay": "car",
+            "use": "usual"
+          },
+          "fee": {
+            "car": {
+              "mode": "hourly",
+              "amount": 40,
+              "per_minutes": 60,
+              "daily_cap": 30
+            },
+            "heavy": {
+              "mode": "by_time",
+              "periods": [
+                {
+                  "days": "weekday",
+                  "from": "08:00",
+                  "to": "20:00",
+                  "rate": {
+                    "mode": "hourly",
+                    "amount": 0,
+                    "per_minutes": 60
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "expect": [
+        "fee_cap_below_amount@fee.car",
+        "fee_hourly_zero@fee.heavy"
+      ]
+    },
+    {
+      "name": "a fee suggestion is judged with the spot's condition: a free rate in a toll bay",
+      "body": {
+        "action": "flag",
+        "source_id": "3f1c2a4e-0000-4000-8000-000000000002",
+        "field": "fee_note",
+        "reason": "收費資訊",
+        "proposed": {
+          "fee": {
+            "heavy": {
+              "mode": "free"
+            }
+          }
+        }
+      },
+      "expect": [
+        "charge_toll_free_rate@proposed.fee.heavy"
+      ],
+      "current": {
+        "fee": {
+          "scooter": {
+            "mode": "hourly",
+            "amount": 10,
+            "per_minutes": 60
+          }
+        },
+        "condition": {
+          "bay": "motorcycle",
+          "use": "usual",
+          "charge": "toll"
+        }
+      }
+    },
+    {
+      "name": "a suggested condition replaces the spot's: free bay, free rates pass",
+      "body": {
+        "action": "flag",
+        "source_id": "3f1c2a4e-0000-4000-8000-000000000002",
+        "field": "space_type",
+        "reason": "收費資訊",
+        "proposed": {
+          "space_type": "freeMotorcycle",
+          "condition": {
+            "bay": "motorcycle",
+            "use": "usual",
+            "charge": "free"
+          }
+        }
+      },
+      "expect": [],
+      "current": {
+        "fee": {
+          "scooter": {
+            "mode": "free"
+          }
+        },
+        "condition": {
+          "bay": "motorcycle",
+          "use": "usual",
+          "charge": "toll"
+        }
+      }
+    },
+    {
+      "name": "a suggested free 普大共用 condition waits for a notice (hold)",
+      "body": {
+        "action": "flag",
+        "source_id": "3f1c2a4e-0000-4000-8000-000000000002",
+        "field": "space_type",
+        "reason": "收費資訊",
+        "proposed": {
+          "space_type": "freeMotorcycle",
+          "condition": {
+            "bay": "motorcycle",
+            "use": "share",
+            "share": "scooter_heavy",
+            "charge": "free"
+          }
+        }
+      },
+      "expect": [
+        "share_free_needs_basis@proposed.condition.charge"
+      ]
+    },
+    {
+      "name": "a stored contradiction in another vehicle still blocks, under that vehicle's fee (#155 item 12)",
+      "body": {
+        "action": "flag",
+        "source_id": "3f1c2a4e-0000-4000-8000-000000000002",
+        "field": "fee_note",
+        "reason": "收費資訊",
+        "proposed": {
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 20,
+              "per_minutes": 60
+            }
+          }
+        }
+      },
+      "expect": [
+        "fee_follows_missing_car@proposed.fee.heavy"
+      ],
+      "current": {
+        "fee": {
+          "heavy": {
+            "mode": "same_as_car"
+          }
+        }
+      }
+    },
+    {
+      "name": "a stored free 普大共用 bay is not flagged again by a fee suggestion",
+      "body": {
+        "action": "flag",
+        "source_id": "3f1c2a4e-0000-4000-8000-000000000002",
+        "field": "fee_note",
+        "reason": "收費資訊",
+        "proposed": {
+          "fee": {
+            "heavy": {
+              "mode": "free"
+            }
+          }
+        }
+      },
+      "expect": [],
+      "current": {
+        "condition": {
+          "bay": "motorcycle",
+          "use": "share",
+          "share": "scooter_heavy",
+          "charge": "free"
+        }
+      }
+    },
+    {
+      "name": "a suggested free bay is judged with the stored paid rate",
+      "body": {
+        "action": "flag",
+        "source_id": "3f1c2a4e-0000-4000-8000-000000000002",
+        "field": "space_type",
+        "reason": "格位類型",
+        "proposed": {
+          "space_type": "freeMotorcycle",
+          "condition": {
+            "bay": "motorcycle",
+            "use": "usual",
+            "charge": "free"
+          }
+        }
+      },
+      "current": {
+        "fee": {
+          "scooter": {
+            "mode": "hourly",
+            "amount": 10,
+            "per_minutes": 60
+          }
+        }
+      },
+      "expect": [
+        "charge_free_rate@proposed.fee.scooter"
       ]
     }
   ]

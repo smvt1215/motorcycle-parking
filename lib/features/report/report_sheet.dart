@@ -10,8 +10,11 @@ import '../../data/profile_repository.dart';
 import '../../domain/eligibility.dart';
 import '../../domain/location_check.dart';
 import '../../domain/precheck.dart';
+import 'condition_fields.dart';
 import '../../models/fee.dart';
 import '../../models/parking.dart';
+import '../../models/parking_condition.dart'
+    show ZoneArea, sourceUrlMaxLength, sourceUrlPattern;
 import '../../ui/address_search_field.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../../ui/fee_editor.dart';
@@ -462,6 +465,74 @@ class AccessField extends StatelessWidget {
   );
 }
 
+/// Which area of a lot a zone is (機車區、汽車區…), as its signs say.
+class ZoneAreaField extends StatelessWidget {
+  const ZoneAreaField({
+    super.key,
+    required this.value,
+    required this.onChanged,
+  });
+  final ZoneArea? value;
+  final ValueChanged<ZoneArea?> onChanged;
+
+  @override
+  Widget build(BuildContext context) => DropdownButtonFormField<ZoneArea?>(
+    key: const ValueKey('zone-area'),
+    initialValue: value,
+    isExpanded: true,
+    decoration: const InputDecoration(labelText: '區域'),
+    items: [
+      for (final (area, label) in zoneAreaLabels)
+        DropdownMenuItem(value: area, child: Text(label)),
+    ],
+    onChanged: onChanged,
+  );
+}
+
+/// Zone areas as lots post them; null is unconfirmed.
+const zoneAreaLabels = <(ZoneArea?, String)>[
+  (null, '未確認'),
+  (ZoneArea.motorcycle, '機車區'),
+  (ZoneArea.car, '汽車區'),
+  (ZoneArea.heavy, '重機專區'),
+  (ZoneArea.mixed, '汽機車混合區'),
+];
+
+/// The notice link a rider may attach (design §1.4, §4.2): https only,
+/// kept with the report for the reviewer, never shown on the map.
+String? evidenceUrlHint(String? value) {
+  final text = value?.trim() ?? '';
+  if (text.isEmpty) return null;
+  if (!RegExp(sourceUrlPattern).hasMatch(text)) {
+    return '請貼上以 https:// 開頭的公告網址';
+  }
+  return text.length > sourceUrlMaxLength ? '網址太長，請貼上公告頁的網址' : null;
+}
+
+/// The optional notice link field, the same in every report form.
+class EvidenceUrlField extends StatelessWidget {
+  const EvidenceUrlField({super.key, required this.controller, this.onChanged});
+  final TextEditingController controller;
+  final ValueChanged<String>? onChanged;
+
+  @override
+  Widget build(BuildContext context) => TextFormField(
+    key: const ValueKey('evidence-url'),
+    controller: controller,
+    keyboardType: TextInputType.url,
+    decoration: const InputDecoration(
+      labelText: '公告連結（選填）',
+      hintText: 'https://',
+      helperText: '停管處或現場公告的網頁，審核會比較快',
+      helperMaxLines: 2,
+      errorMaxLines: 3,
+    ),
+    autovalidateMode: AutovalidateMode.onUserInteraction,
+    validator: evidenceUrlHint,
+    onChanged: onChanged,
+  );
+}
+
 /// [maxLength] counts characters, but the server counts UTF-16 units, where
 /// an emoji takes two; this catches what the server would reject.
 String? fitsServer(String? value, int max) =>
@@ -506,6 +577,9 @@ class ZoneDraft {
   final name = TextEditingController();
   final guide = TextEditingController();
   ParkingAccess? access;
+
+  /// 機車區、汽車區… as the lot's signs name it; null is unconfirmed.
+  ZoneArea? area;
   Fee fee = const Fee();
 
   void dispose() {
@@ -516,6 +590,7 @@ class ZoneDraft {
   Map<String, Object> toJson() => {
     'name': name.text.trim(),
     if (access case final access?) 'access': access.name,
+    if (area case final area?) 'area': area.name,
     if (guide.text.trim().isNotEmpty) 'guide': guide.text.trim(),
     if (!fee.isEmpty) 'fee': fee.toJson(),
   };
@@ -530,9 +605,13 @@ class ZoneEditor extends StatelessWidget {
     required this.onRemove,
     required this.onChanged,
     this.feeHint,
+    this.feeHold,
     this.vehicle,
   });
   final List<ZoneDraft> zones;
+
+  /// The precheck hold note for the fee of the zone at an index, if any.
+  final String? Function(int index)? feeHold;
 
   /// The rider's vehicle, whose rate each zone's fee editor opens on.
   final VehicleType? vehicle;
@@ -609,6 +688,14 @@ class ZoneEditor extends StatelessWidget {
                               : textHint(v, 40, name: true),
                         ),
                         const SizedBox(height: 12),
+                        ZoneAreaField(
+                          value: zone.area,
+                          onChanged: (v) {
+                            zone.area = v;
+                            onChanged();
+                          },
+                        ),
+                        const SizedBox(height: 12),
                         AccessField(
                           value: zone.access,
                           onChanged: (v) {
@@ -647,6 +734,8 @@ class ZoneEditor extends StatelessWidget {
                             onChanged();
                           },
                         ),
+                        const SizedBox(height: 8),
+                        PrecheckHoldText(feeHold?.call(i)),
                       ],
                     ),
                   ),
@@ -834,6 +923,10 @@ class _ReportFormState extends State<ReportForm> {
   ParkingAccess? access;
   final zones = <ZoneDraft>[];
 
+  /// What the rider adds to the bay kind: charge, 普大共用, limits, periods.
+  final condition = ConditionDraft();
+  final evidence = TextEditingController();
+
   bool get lot => type == SpaceType.offStreet;
 
   ({bool? scooter, bool? heavy}) get defaults =>
@@ -948,6 +1041,8 @@ class _ReportFormState extends State<ReportForm> {
     note.dispose();
     entrance.dispose();
     guide.dispose();
+    evidence.dispose();
+    condition.dispose();
     for (final zone in zones) {
       zone.dispose();
     }
@@ -978,11 +1073,21 @@ class _ReportFormState extends State<ReportForm> {
     },
     'scooter_allowed': scooterRuled ? null : scooter,
     'heavy_allowed': heavyRuled ? null : heavy,
+    // A street bay's condition (design §1.2): the kind's, plus what the
+    // rider adds. Its space type is always the kind picked (§1.3).
+    'condition': ?condition.conditionFor(type)?.toJson(),
   };
 
-  /// What the server's precheck would refuse in the report as it stands.
-  List<PrecheckIssue> get issues =>
-      precheck({'action': 'create', 'spot': spotPayload()});
+  /// The report as it will be sent, with the notice link when given.
+  Map<String, Object?> body() => {
+    'action': 'create',
+    'spot': spotPayload(),
+    if (evidence.text.trim().isNotEmpty) 'evidence_url': evidence.text.trim(),
+  };
+
+  /// What the server's precheck would refuse, or hold, in the report as it
+  /// stands.
+  List<PrecheckIssue> get issues => precheck(body());
 
   void setType(SpaceType value) => setState(() {
     type = value;
@@ -1172,6 +1277,15 @@ class _ReportFormState extends State<ReportForm> {
                 ),
                 const SizedBox(height: 10),
                 SpaceTypePicker(value: type, onChanged: setType),
+                ConditionFields(
+                  type: type,
+                  draft: condition,
+                  onChanged: () => setState(() {}),
+                  // Waits for a notice; once one is attached, nothing to add.
+                  holdHint: evidence.text.trim().isEmpty
+                      ? precheckHint(found, 'condition', holds: true)
+                      : null,
+                ),
               ],
             ),
             FormSection(
@@ -1251,6 +1365,11 @@ class _ReportFormState extends State<ReportForm> {
                     zones: zones,
                     vehicle: widget.store.vehicle,
                     feeHint: (i) => precheckHint(found, 'parking_zones.$i.fee'),
+                    feeHold: (i) => precheckHint(
+                      found,
+                      'parking_zones.$i.fee',
+                      holds: true,
+                    ),
                     onAdd: () => setState(() => zones.add(ZoneDraft())),
                     onRemove: (zone) => setState(() {
                       zones.remove(zone);
@@ -1272,6 +1391,11 @@ class _ReportFormState extends State<ReportForm> {
                   onChanged: (v) => setState(() => fee = v),
                 ),
                 const SizedBox(height: 20),
+                EvidenceUrlField(
+                  controller: evidence,
+                  onChanged: (_) => setState(() {}),
+                ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: guide,
                   maxLength: 500,
@@ -1310,15 +1434,14 @@ class _ReportFormState extends State<ReportForm> {
                       if (!form.currentState!.validate()) return;
                       // Each hint already sits under its field; the message
                       // also covers one scrolled out of view.
-                      if (issues.firstOrNull case final issue?) {
+                      // A hold goes through, flagged for review.
+                      if (precheckBlocking(issues).firstOrNull
+                          case final issue?) {
                         return showMessage(context, issue.message);
                       }
                       setState(() => sending = true);
                       await runAction(context, () async {
-                        final result = await widget.store.submit({
-                          'action': 'create',
-                          'spot': spotPayload(),
-                        });
+                        final result = await widget.store.submit(body());
                         if (context.mounted) {
                           Navigator.pop(context);
                           showMessage(context, result);

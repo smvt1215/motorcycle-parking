@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/config.dart';
 import '../../data/app_store.dart';
+import '../../domain/space_filter.dart';
 import '../../domain/availability_display.dart';
 import '../../domain/capsule_layout.dart';
 import '../../domain/eligibility.dart';
@@ -224,7 +225,9 @@ class _MapPageState extends ConsumerState<MapPage> {
       counts: {
         null: inView.length,
         for (final option in SpaceType.values)
-          option: inView.where((s) => s.spaceType == option).length,
+          option: inView
+              .where((s) => matchesSpaceFilter(s, option, store.vehicle))
+              .length,
       },
       onChanged: (option) => setState(() => type = option),
     );
@@ -309,7 +312,7 @@ class _MapPageState extends ConsumerState<MapPage> {
     final spots = visible
         .where(
           (s) =>
-              (type == null || s.spaceType == type) &&
+              (type == null || matchesSpaceFilter(s, type!, store.vehicle)) &&
               // Pending reports reach notAllowed only through legal rules
               // (see eligibility()), so hiding them here is intended.
               (!hideDenied ||
