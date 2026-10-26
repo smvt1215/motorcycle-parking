@@ -105,6 +105,10 @@ final reviewFields = [
   ReviewField('hidden', '地圖顯示', FieldInput.hiddenFlag),
   ReviewField('lat', '緯度', FieldInput.coordinate),
   ReviewField('lng', '經度', FieldInput.coordinate),
+  // A location suggestion brings the county and district the app looked up,
+  // so a move across a border also changes which rules apply.
+  const ReviewField('city', '縣市', FieldInput.text, maxLength: 30),
+  const ReviewField('district', '行政區', FieldInput.text, maxLength: 30),
 ];
 
 ReviewField? reviewField(String key) =>
@@ -363,6 +367,7 @@ String? validatePatch(Map<String, dynamic> patch, ReviewSpot spot) {
       case FieldInput.text:
         final text = value is String ? value.trim() : '';
         if (key == 'name' && text.isEmpty) return '停車點名稱不可空白';
+        if (key == 'city' && text.isEmpty) return '縣市不可空白';
         if (value is! String || value.length > field.maxLength!) {
           return '${field.label}請在 ${field.maxLength} 個字以內';
         }
@@ -421,4 +426,15 @@ String relativeAge(DateTime time, DateTime now) {
   if (d.inHours < 1) return '${d.inMinutes} 分鐘前';
   if (d.inDays < 1) return '${d.inHours} 小時前';
   return '${d.inDays} 天前';
+}
+
+/// A location suggestion without the county the app looked up (the lookup
+/// failed, or an older build): the admin has to check whether the new
+/// position lies in another county or city.
+bool locationWithoutCity(ReviewReport report) {
+  final proposed = report.proposed;
+  return suggestionKey(report.field) == 'location' &&
+      proposed != null &&
+      (proposed.containsKey('lat') || proposed.containsKey('lng')) &&
+      !proposed.containsKey('city');
 }

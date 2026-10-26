@@ -14,6 +14,7 @@ import '../../models/parking.dart';
 import '../../ui/adaptive/adaptive.dart';
 import 'cluster_badge.dart';
 import 'map_legend.dart';
+import 'google_map_style.dart';
 import 'maps_sdk.dart';
 
 class GoogleParkingMap extends StatefulWidget {
@@ -241,7 +242,7 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
             children: [
               gm.GoogleMap(
                 initialCameraPosition: camera,
-                style: dark ? _darkMapStyle : null,
+                style: dark ? darkGoogleMapStyle : null,
                 padding: EdgeInsets.only(
                   // Sheet transitions must not change the map's projection.
                   top: 108,
@@ -491,13 +492,3 @@ class _MapLoadMessage extends StatelessWidget {
     ),
   );
 }
-
-const _darkMapStyle = '''[
- {"elementType":"geometry","stylers":[{"color":"#172838"}]},
- {"elementType":"labels.text.fill","stylers":[{"color":"#bdcbd1"}]},
- {"elementType":"labels.text.stroke","stylers":[{"color":"#172838"}]},
- {"featureType":"road","elementType":"geometry","stylers":[{"color":"#30465a"}]},
- {"featureType":"road.highway","elementType":"geometry","stylers":[{"color":"#536477"}]},
- {"featureType":"water","elementType":"geometry","stylers":[{"color":"#0a1c2b"}]},
- {"featureType":"poi.park","elementType":"geometry","stylers":[{"color":"#193e34"}]}
-]''';
