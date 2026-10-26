@@ -533,4 +533,33 @@ void main() {
     expect(preview('零時重算'), findsNothing);
     expect(form.currentState!.validate(), isTrue);
   });
+
+  testWidgets('上限填了讀不出的文字後收合再展開，欄位不顯示 -1 並清掉該值', (tester) async {
+    final (form, fee) = await host(tester, 390);
+    await chooseFeeMode(tester, 'scooter', 'hourly');
+    await tester.enterText(feeField('amount', 'scooter'), '10');
+    await tapFee(tester, 'fee-more-scooter');
+    await tester.enterText(feeField('cap', 'scooter'), 'abc');
+    await tester.pumpAndSettle();
+    // Unreadable text stays out of range, never silently dropped.
+    expect(fee().scooter!.dailyCap, -1);
+    expect(form.currentState!.validate(), isFalse);
+    await tapFee(tester, 'fee-row-heavy');
+    await tapFee(tester, 'fee-row-scooter');
+    await tapFee(tester, 'fee-more-scooter');
+    expect(
+      tester
+          .widget<TextField>(
+            find.descendant(
+              of: feeField('cap', 'scooter'),
+              matching: find.byType(TextField),
+            ),
+          )
+          .controller!
+          .text,
+      '',
+    );
+    expect(fee().scooter!.dailyCap, isNull);
+    expect(form.currentState!.validate(), isTrue);
+  });
 }

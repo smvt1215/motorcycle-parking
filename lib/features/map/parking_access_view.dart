@@ -86,17 +86,18 @@ class ParkingAccessView extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          // A zone's car price stays visible: the lot's car rate, else the
-          // zone's legacy text; the motorcycle rates beside it repeat the
-          // lot's, never the old text.
+          // A zone's own car price stays visible; the lot's car rate is
+          // listed once above, not again in every zone. The motorcycle
+          // rates beside a zone's car price repeat the lot's, never the old
+          // text.
           if (lotFee != null)
-            (lotFee.textOf('car') ?? zone.carFeeNote).trim().isEmpty
+            zone.carFeeNote.trim().isEmpty
                 ? _AccessGroup(access: zone.access)
                 : _AccessGroup(
                     access: zone.access,
                     scooterFee: lotFee.riderText('scooter') ?? '',
                     heavyFee: lotFee.riderText('heavy') ?? '',
-                    carFee: lotFee.textOf('car') ?? zone.carFeeNote,
+                    carFee: zone.carFeeNote,
                     showFees: true,
                   )
           else

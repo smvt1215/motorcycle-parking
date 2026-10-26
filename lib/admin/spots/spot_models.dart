@@ -360,7 +360,7 @@ String? validateSpotField(SpotField field, Object? value, {Fee? fee}) {
       }
     case SpotInput.fee:
       if (value is! Fee) return '${field.label}的值無效';
-      final rates = [value.scooter, value.heavy].nonNulls;
+      final rates = [value.scooter, value.heavy, value.car].nonNulls;
       if (rates.any((r) => !r.complete)) return '請填完收費金額，計時另需選計費時間';
       if (!value.valid) return '金額請填 0 到 10000 的整數';
   }

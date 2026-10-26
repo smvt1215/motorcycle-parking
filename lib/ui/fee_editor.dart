@@ -457,7 +457,6 @@ class _Preview extends StatelessWidget {
         if (_rateOf(fee, v) case final rate? when !_rateValid(rate, v)) v.label,
     ];
     return Semantics(
-      liveRegion: true,
       container: true,
       child: Container(
         key: const ValueKey('fee-preview'),
@@ -929,19 +928,39 @@ class SimpleRateFields extends StatefulWidget {
 }
 
 class _SimpleRateFieldsState extends State<SimpleRateFields> {
-  late final amount = TextEditingController(
-    text: widget.rate.amount?.toString() ?? '',
-  );
-  late final cap = TextEditingController(
-    text: widget.rate.dailyCap?.toString() ?? '',
-  );
+  late final amount = TextEditingController(text: _shown(widget.rate.amount));
+  late final cap = TextEditingController(text: _shown(widget.rate.dailyCap));
   late final free = TextEditingController(
-    text: widget.rate.freeMinutes?.toString() ?? '',
+    text: _shown(widget.rate.freeMinutes),
   );
   late final extAmount = TextEditingController(
-    text: widget.rate.extension?.amount.toString() ?? '',
+    text: _shown(widget.rate.extension?.amount),
   );
   bool more = false;
+
+  /// A stored value as its field shows it; the out-of-range mark that
+  /// unreadable text left ([_optional]) shows as an empty field.
+  static String _shown(int? v) => v == null || v < 0 ? '' : '$v';
+
+  @override
+  void initState() {
+    super.initState();
+    // Reopened after unreadable text in an optional field: the field shows
+    // empty, so the rate drops the mark too instead of staying unfinished.
+    if ((rate.dailyCap ?? 0) < 0 || (rate.freeMinutes ?? 0) < 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        emit(
+          _edit(
+            rate,
+            dailyCap: (rate.dailyCap ?? 0) < 0 ? null : _keep,
+            capReset: (rate.dailyCap ?? 0) < 0 ? null : _keep,
+            freeMinutes: (rate.freeMinutes ?? 0) < 0 ? null : _keep,
+          ),
+        );
+      });
+    }
+  }
 
   @override
   void dispose() {

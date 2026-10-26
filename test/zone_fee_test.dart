@@ -313,7 +313,8 @@ void main() {
       await pumpAccess(tester, width, spot);
       // The lot's rates, repeated beside the zone's vehicles.
       expect(find.text('大型重機：每小時 20 元'), findsWidgets);
-      expect(find.text('汽車：每小時 40 元'), findsWidgets);
+      // The lot's car rate is listed once, not again in every zone.
+      expect(find.text('汽車：每小時 40 元'), findsOneWidget);
       expect(find.textContaining('比照'), findsNothing);
       expect(tester.takeException(), isNull);
     });
