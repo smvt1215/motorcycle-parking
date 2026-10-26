@@ -1,0 +1,459 @@
+{
+  "comment": "停放條件與費率的三端契約（docs/designs/2026-10-26-parking-conditions-and-fees.md §1、§2.2、§4）。validate.ts 直接 import；lib/models/parking_condition.dart 鏡像常數並由 test/parking_contract_test.dart 逐欄比對；tool/gen_contract_sql.py 由此產生 supabase/contract/parking_contract.sql 與 supabase/tests/parking_contract_test.sql。改這個檔案後重跑產生器。",
+  "version": 1,
+  "space_types": [
+    "paidMotorcycle",
+    "freeMotorcycle",
+    "heavyOnly",
+    "car",
+    "offStreet",
+    "disabledMotorcycle",
+    "timedMotorcycle",
+    "flexShared",
+    "evMotorcycle"
+  ],
+  "access_kinds": [
+    "scooterOnly",
+    "scooterHeavy",
+    "heavyCar",
+    "noMotorcycle",
+    "heavyOnly"
+  ],
+  "placement": {
+    "off_street_space_types": [
+      "offStreet"
+    ],
+    "off_street_facility_types": [
+      "multiStorey",
+      "underground",
+      "surface"
+    ]
+  },
+  "time": {
+    "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+    "days": [
+      "all",
+      "weekday",
+      "holiday"
+    ],
+    "weekdays": [
+      "mon",
+      "tue",
+      "wed",
+      "thu",
+      "fri",
+      "sat",
+      "sun"
+    ],
+    "comment": "from > to 表示跨午夜；from 與 to 不可相同。days 為列舉值，或不重複的星期陣列。"
+  },
+  "date": {
+    "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+    "comment": "必須是存在的日期；effective_date 與 expires_on 都有時 expires_on 必須較晚。"
+  },
+  "condition": {
+    "keys": [
+      "bay",
+      "use",
+      "share",
+      "charge",
+      "limits",
+      "schedule",
+      "basis"
+    ],
+    "zone_keys": [
+      "allow"
+    ],
+    "bay": [
+      "motorcycle",
+      "heavy",
+      "car"
+    ],
+    "use": [
+      "usual",
+      "share"
+    ],
+    "share": {
+      "scooter_heavy": "motorcycle",
+      "car_motorcycle": "car"
+    },
+    "charge": [
+      "toll",
+      "free"
+    ],
+    "limits": {
+      "time_limit": {
+        "required": [],
+        "optional": {
+          "max_minutes": {
+            "min": 1,
+            "max": 1440
+          }
+        }
+      },
+      "special_vehicle": {
+        "required": [
+          "vehicle"
+        ],
+        "optional": {}
+      },
+      "ev_only": {
+        "required": [],
+        "optional": {}
+      }
+    },
+    "special_vehicles": [
+      "disabled_modified"
+    ],
+    "street_charge_optional_with": [
+      "time_limit",
+      "special_vehicle",
+      "ev_only"
+    ],
+    "allow_keys": [
+      "scooter",
+      "heavy"
+    ],
+    "schedule": {
+      "max_entries": 8,
+      "vehicles": [
+        "scooter",
+        "heavy",
+        "car"
+      ]
+    },
+    "basis": {
+      "keys": [
+        "source_url",
+        "evidence_id",
+        "effective_date",
+        "expires_on"
+      ],
+      "required_one_of": [
+        "source_url",
+        "evidence_id"
+      ],
+      "reserved": [
+        "evidence_id"
+      ],
+      "source_url": {
+        "pattern": "^https://\\S+$",
+        "max_length": 2048
+      }
+    }
+  },
+  "conversion": {
+    "from_space_type": {
+      "paidMotorcycle": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll"
+      },
+      "freeMotorcycle": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "free"
+      },
+      "heavyOnly": {
+        "bay": "heavy",
+        "use": "usual"
+      },
+      "car": {
+        "bay": "car",
+        "use": "usual"
+      },
+      "offStreet": null,
+      "disabledMotorcycle": {
+        "bay": "motorcycle",
+        "limits": [
+          {
+            "kind": "special_vehicle",
+            "vehicle": "disabled_modified"
+          }
+        ]
+      },
+      "timedMotorcycle": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "limits": [
+          {
+            "kind": "time_limit"
+          }
+        ]
+      },
+      "flexShared": {
+        "bay": "car",
+        "use": "share",
+        "share": "car_motorcycle"
+      },
+      "evMotorcycle": {
+        "bay": "motorcycle",
+        "limits": [
+          {
+            "kind": "ev_only"
+          }
+        ]
+      }
+    },
+    "from_access": {
+      "scooterOnly": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "allow": {
+          "scooter": true,
+          "heavy": false
+        }
+      },
+      "scooterHeavy": {
+        "bay": "motorcycle",
+        "use": "share",
+        "share": "scooter_heavy",
+        "allow": {
+          "scooter": true,
+          "heavy": true
+        }
+      },
+      "heavyCar": {
+        "bay": "car",
+        "use": "usual",
+        "allow": {
+          "scooter": false,
+          "heavy": true
+        }
+      },
+      "heavyOnly": {
+        "bay": "heavy",
+        "use": "usual",
+        "allow": {
+          "scooter": false,
+          "heavy": true
+        }
+      },
+      "noMotorcycle": {
+        "allow": {
+          "scooter": false,
+          "heavy": false
+        }
+      }
+    },
+    "to_space_type": [
+      {
+        "when": {
+          "placement": "off_street"
+        },
+        "space_type": "offStreet"
+      },
+      {
+        "when": {
+          "limit": "special_vehicle"
+        },
+        "space_type": "disabledMotorcycle"
+      },
+      {
+        "when": {
+          "limit": "ev_only"
+        },
+        "space_type": "evMotorcycle"
+      },
+      {
+        "when": {
+          "share": "car_motorcycle"
+        },
+        "space_type": "flexShared"
+      },
+      {
+        "when": {
+          "limit": "time_limit"
+        },
+        "space_type": "timedMotorcycle"
+      },
+      {
+        "when": {
+          "bay": "heavy"
+        },
+        "space_type": "heavyOnly"
+      },
+      {
+        "when": {
+          "bay": "car"
+        },
+        "space_type": "car"
+      },
+      {
+        "when": {
+          "bay": "motorcycle",
+          "charge": "toll"
+        },
+        "space_type": "paidMotorcycle"
+      },
+      {
+        "when": {
+          "bay": "motorcycle",
+          "charge": "free"
+        },
+        "space_type": "freeMotorcycle"
+      }
+    ],
+    "to_access": "allow 與 from_access 的 allow 相同，且 from_access 有 bay 時 bay 也相同",
+    "legacy_safe": {
+      "comment": "conditionOf(legacySpaceType(c)) 與 c 比較時可以遺失的資訊（§1.3）：(a) share=scooter_heavy 讀回 usual；(b) 沒有 expires_on 的 basis；(c) time_limit.max_minutes；(d) 讀回 charge 為未確認時的 charge，但 assumed_charge 列出的舊值除外（舊版把限時格當收費格，charge 只能是該值或未確認）。unsafe_keys 與 unsafe_basis_keys 出現即不安全。分區：condition 依 to_access 對到 access，再由 from_access 讀回，可遺失 (b) 與 charge。",
+      "unsafe_keys": [
+        "schedule"
+      ],
+      "unsafe_basis_keys": [
+        "expires_on"
+      ],
+      "lossy_share": "scooter_heavy",
+      "lossy_limit_keys": [
+        "max_minutes"
+      ],
+      "assumed_charge": {
+        "timedMotorcycle": "toll"
+      }
+    }
+  },
+  "fee": {
+    "max_bytes": 4096,
+    "vehicles": [
+      "scooter",
+      "heavy",
+      "car"
+    ],
+    "follow": {
+      "vehicles": [
+        "heavy"
+      ],
+      "modes": [
+        "same_as_scooter",
+        "same_as_car"
+      ],
+      "optional": {
+        "factor_pct": {
+          "min": 100,
+          "max": 1000
+        }
+      }
+    },
+    "modes": {
+      "free": {
+        "required": {},
+        "optional": {}
+      },
+      "posted": {
+        "required": {},
+        "optional": {}
+      },
+      "hourly": {
+        "required": {
+          "amount": {
+            "min": 0,
+            "max": 10000
+          },
+          "per_minutes": {
+            "min": 1,
+            "max": 1440
+          }
+        },
+        "optional": {
+          "unit_minutes": {
+            "min": 1,
+            "max": "per_minutes"
+          },
+          "free_minutes": {
+            "min": 1,
+            "max": 1440
+          },
+          "daily_cap": {
+            "min": 0,
+            "max": 10000
+          },
+          "cap_reset": "cap_reset"
+        }
+      },
+      "per_visit": {
+        "required": {
+          "amount": {
+            "min": 0,
+            "max": 10000
+          }
+        },
+        "optional": {
+          "max_minutes": {
+            "min": 1,
+            "max": 1440
+          },
+          "renew": "renew",
+          "extension": "extension"
+        }
+      },
+      "daily": {
+        "required": {
+          "amount": {
+            "min": 0,
+            "max": 10000
+          }
+        },
+        "optional": {
+          "cap_reset": "cap_reset"
+        }
+      },
+      "by_time": {
+        "required": {
+          "periods": "periods"
+        },
+        "optional": {
+          "cross_period": "cross_period"
+        }
+      }
+    },
+    "enums": {
+      "cap_reset": [
+        "calendar_day",
+        "rolling_24h",
+        "per_entry"
+      ],
+      "renew": [
+        "none",
+        "midnight"
+      ],
+      "cross_period": [
+        "each_period",
+        "entry_only"
+      ]
+    },
+    "extension": {
+      "required": {
+        "amount": {
+          "min": 0,
+          "max": 10000
+        },
+        "max_times": {
+          "min": 1,
+          "max": 10
+        }
+      },
+      "optional": {
+        "minutes": {
+          "min": 1,
+          "max": 1440
+        }
+      }
+    },
+    "periods": {
+      "max_entries": 6,
+      "keys": [
+        "days",
+        "from",
+        "to",
+        "rate"
+      ],
+      "nested_modes": [
+        "free",
+        "posted",
+        "hourly",
+        "per_visit",
+        "daily"
+      ]
+    }
+  }
+}

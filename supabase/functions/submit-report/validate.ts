@@ -1,3 +1,5 @@
+import contract from '../_shared/parking_contract.json' with { type: 'json' };
+
 const spaceTypes = [
   'paidMotorcycle',
   'freeMotorcycle',
@@ -68,6 +70,177 @@ function validRate(v: unknown, heavy: boolean): boolean {
     : mode === 'daily'
     ? whole(r.amount, 0, 10000)
     : true;
+}
+// Parking conditions (docs/designs/2026-10-26-parking-conditions-and-fees.md
+// §1.2, §4): the rules come from _shared/parking_contract.json, which
+// lib/models/parking_condition.dart mirrors and tool/gen_contract_sql.py turns
+// into valid_condition(). Not wired into any action yet.
+const cond = contract.condition;
+const isObject = (v: unknown): v is Record<string, unknown> =>
+  !!v && typeof v === 'object' && !Array.isArray(v);
+const has = (o: Record<string, unknown>, k: string) => Object.hasOwn(o, k);
+// A non-empty list of distinct strings drawn from `values`.
+const subset = (v: unknown, values: string[]) =>
+  Array.isArray(v) && v.length > 0 &&
+  v.every((x) => typeof x === 'string' && values.includes(x)) &&
+  new Set(v).size === v.length;
+const realDate = (v: unknown) => {
+  if (typeof v !== 'string' || !new RegExp(contract.date.pattern).test(v)) {
+    return false;
+  }
+  const d = new Date(`${v}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().startsWith(v);
+};
+/** `days`, `from` and `to` of a schedule slot or a fee period. */
+export function validSlotTimes(slot: Record<string, unknown>): boolean {
+  const time = new RegExp(contract.time.pattern);
+  const days = slot.days;
+  return (typeof days === 'string'
+    ? contract.time.days.includes(days)
+    : subset(days, contract.time.weekdays)) &&
+    typeof slot.from === 'string' && typeof slot.to === 'string' &&
+    time.test(slot.from) && time.test(slot.to) && slot.from !== slot.to;
+}
+const inList = (list: string[]) => (v: unknown) =>
+  typeof v === 'string' && list.includes(v);
+/**
+ * A condition the contract accepts. A zone may carry `allow` and leave its
+ * bay unconfirmed; a street condition names its bay and, on a motorcycle
+ * bay, toll or free unless a limit decides the legacy space type.
+ */
+export function validCondition(v: unknown, zone = false): boolean {
+  if (!isObject(v) || Object.keys(v).length === 0) return false;
+  if (
+    !Object.keys(v).every((k) =>
+      cond.keys.includes(k) || (zone && cond.zone_keys.includes(k))
+    )
+  ) return false;
+  const shares = cond.share as Record<string, string>;
+  for (
+    const [key, ok] of [
+      ['bay', inList(cond.bay)],
+      ['use', inList(cond.use)],
+      ['share', inList(Object.keys(shares))],
+      ['charge', inList(cond.charge)],
+    ] as const
+  ) {
+    if (has(v, key) && !ok(v[key])) return false;
+  }
+  if (!zone && !has(v, 'bay')) return false;
+  if (has(v, 'share') !== (v.use === 'share')) return false;
+  if (has(v, 'share') && v.bay !== shares[v.share as string]) return false;
+
+  const limitSpecs = cond.limits as Record<
+    string,
+    {
+      required: string[];
+      optional: Record<string, { min: number; max: number }>;
+    }
+  >;
+  const kinds = new Set<string>();
+  if (has(v, 'limits')) {
+    const limits = v.limits;
+    if (
+      !Array.isArray(limits) || limits.length === 0 ||
+      limits.length > Object.keys(limitSpecs).length
+    ) return false;
+    for (const l of limits) {
+      if (!isObject(l) || typeof l.kind !== 'string') return false;
+      const spec = Object.hasOwn(limitSpecs, l.kind)
+        ? limitSpecs[l.kind]
+        : undefined;
+      if (!spec || kinds.has(l.kind)) return false;
+      kinds.add(l.kind);
+      for (const [key, value] of Object.entries(l)) {
+        if (key === 'kind' || spec.required.includes(key)) continue;
+        const range = Object.hasOwn(spec.optional, key)
+          ? spec.optional[key]
+          : undefined;
+        if (!range || !whole(value, range.min, range.max)) return false;
+      }
+      if (!spec.required.every((k) => has(l, k))) return false;
+      if (has(l, 'vehicle') && !inList(cond.special_vehicles)(l.vehicle)) {
+        return false;
+      }
+    }
+  }
+  if (
+    !zone && v.bay === 'motorcycle' && !has(v, 'charge') &&
+    !cond.street_charge_optional_with.some((k) => kinds.has(k))
+  ) return false;
+
+  if (has(v, 'allow')) {
+    const allow = v.allow;
+    if (
+      !isObject(allow) || Object.keys(allow).length === 0 ||
+      !Object.entries(allow).every(([k, x]) =>
+        cond.allow_keys.includes(k) && typeof x === 'boolean'
+      )
+    ) return false;
+    if (allow.scooter === true && v.bay === 'heavy') return false;
+  }
+
+  if (has(v, 'schedule')) {
+    const schedule = v.schedule;
+    if (
+      !Array.isArray(schedule) || schedule.length === 0 ||
+      schedule.length > cond.schedule.max_entries
+    ) return false;
+    for (const s of schedule) {
+      if (
+        !isObject(s) || Object.keys(s).length !== 4 || !validSlotTimes(s) ||
+        !subset(s.vehicles, cond.schedule.vehicles)
+      ) return false;
+    }
+  }
+
+  if (has(v, 'basis')) {
+    const basis = v.basis;
+    if (
+      !isObject(basis) ||
+      !Object.keys(basis).every((k) => cond.basis.keys.includes(k))
+    ) return false;
+    // Reserved until photo evidence ships (verification plan P2).
+    if (cond.basis.reserved.some((k) => basis[k] != null)) return false;
+    if (!cond.basis.required_one_of.some((k) => basis[k] != null)) {
+      return false;
+    }
+    const url = basis.source_url;
+    if (
+      has(basis, 'source_url') &&
+      (typeof url !== 'string' ||
+        url.length > cond.basis.source_url.max_length ||
+        !new RegExp(cond.basis.source_url.pattern).test(url))
+    ) return false;
+    for (const key of ['effective_date', 'expires_on']) {
+      if (basis[key] != null && !realDate(basis[key])) return false;
+    }
+    const from = basis.effective_date, to = basis.expires_on;
+    if (typeof from === 'string' && typeof to === 'string' && to <= from) {
+      return false;
+    }
+  }
+  return true;
+}
+/**
+ * The legacy `space_type` a condition is stored under (§1.3): the first
+ * `to_space_type` rule that matches, or null.
+ */
+export function legacySpaceType(
+  c: Record<string, unknown>,
+  offStreet: boolean,
+): string | null {
+  const limits = Array.isArray(c.limits) ? c.limits : [];
+  for (const { when, space_type } of contract.conversion.to_space_type) {
+    const w = when as Record<string, string | undefined>;
+    if (
+      (!('placement' in w) || (w.placement === 'off_street') === offStreet) &&
+      (!('limit' in w) ||
+        limits.some((l) => isObject(l) && l.kind === w.limit)) &&
+      ['share', 'bay', 'charge'].every((k) => !(k in w) || c[k] === w[k])
+    ) return space_type;
+  }
+  return null;
 }
 const facilityTypes = ['multiStorey', 'underground', 'surface', 'roadside'];
 const accessKinds = [

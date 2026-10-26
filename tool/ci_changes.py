@@ -30,6 +30,9 @@ PATHS = {
         # test/precheck_test.dart checks the app against the shared rules.
         "supabase/functions/submit-report/precheck_rules.json",
         "supabase/functions/submit-report/precheck_cases.json",
+        # test/parking_contract_test.dart mirrors the parking contract.
+        "supabase/functions/_shared/parking_contract.json",
+        "supabase/functions/_shared/parking_contract_cases.json",
     ),
     "android": APP_PATHS + ROUTING_PATHS + (
         "android/", ".github/workflows/android.yml", ".github/actions/mobile-setup/",
@@ -42,6 +45,8 @@ PATHS = {
     "backend": ROUTING_PATHS + (
         "supabase/", ".supabase-version", ".github/workflows/ci.yml",
         "tool/generate_seed.py", "assets/demo/", "assets/rules/",
+        # Regenerates the contract SQL and checks it for drift.
+        "tool/gen_contract_sql.py",
     ),
 }
 

@@ -67,6 +67,16 @@ class ChangeRoutingTest(unittest.TestCase):
         self.assertEqual(self.targets("supabase/functions/submit-report/precheck.ts"),
                          {"backend"})
 
+    def test_parking_contract_checks_app_function_and_database(self):
+        for name in ("parking_contract.json", "parking_contract_cases.json"):
+            with self.subTest(name=name):
+                path = f"supabase/functions/_shared/{name}"
+                self.assertEqual(self.targets(path), {"quality", "backend"})
+        for path in ("tool/gen_contract_sql.py", "supabase/contract/parking_contract.sql",
+                     "supabase/tests/parking_contract_test.sql"):
+            with self.subTest(path=path):
+                self.assertEqual(self.targets(path), {"backend"})
+
     def test_routing_changes_revalidate_every_target(self):
         for path in ("tool/ci_changes.py", "tool/test_ci_changes.py", ".github/workflows/codeql.yml"):
             self.assertEqual(self.targets(path), set(PATHS))
