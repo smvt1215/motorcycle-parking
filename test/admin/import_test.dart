@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -162,6 +163,17 @@ void main() {
       expect(imports.overwrite[conflictId], isEmpty);
     });
 
+    test('重設後不寫回舊的試算結果', () async {
+      gateway.delayedPreview = Completer<void>();
+      final loading = imports.load('spots.json', file);
+      imports.reset();
+      gateway.delayedPreview!.complete();
+      await loading;
+      expect(imports.entries, isEmpty);
+      expect(imports.selected, isEmpty);
+      expect(imports.loading, isFalse);
+    });
+
     test('連線失敗時說明已匯入的部分不受影響', () async {
       await imports.load('spots.json', file);
       gateway.importError = StateError('offline');
@@ -224,6 +236,17 @@ void main() {
       expect(fees.spots(FeeVerdict.convertible), 1);
       expect(fees.spots(FeeVerdict.manual), 1);
       expect(fees.selectedSpots, 1);
+    });
+
+    test('重設後不寫回舊的待轉換清單', () async {
+      gateway.delayedBacklog = Completer<void>();
+      final loading = fees.load();
+      fees.reset();
+      gateway.delayedBacklog!.complete();
+      expect(await loading, isFalse);
+      expect(fees.groups, isEmpty);
+      expect(fees.loaded, isFalse);
+      expect(fees.selected, isEmpty);
     });
 
     test('寫入失敗時重新讀取清單仍保留錯誤', () async {

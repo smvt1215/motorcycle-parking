@@ -442,6 +442,34 @@ void main() {
       );
     });
 
+    test('free with a condition', () {
+      expectReading('免費限會員（大型重機比照機車費率）', FeeVerdict.manual, reason: '條件');
+      expectReading('免費；限會員（大型重機比照機車費率）', FeeVerdict.manual);
+      expectReading('機車免費（限會員）', FeeVerdict.manual);
+    });
+
+    test('limited rates convert only for 平日 together with 假日', () {
+      for (final note in [
+        '機車：平日 20元/次；機車：週六 20元/次',
+        '機車：上午 10元/時；機車：下午 10元/時',
+        '機車：日間 10元/時；機車：夜間 10元/時',
+        '機車：平日 20元/次；機車：假日 20元/次；機車：夜間 20元/次',
+      ]) {
+        expectReading(note, FeeVerdict.manual, reason: '無法確定涵蓋');
+      }
+      for (final note in [
+        '機車：平日 20元/次；機車：假日 20元/次',
+        '機車：平日、假日 20元/次',
+        '機車：平日／假日都20元/次',
+      ]) {
+        expectReading(
+          note,
+          FeeVerdict.convertible,
+          fee: {'scooter': visit(20)},
+        );
+      }
+    });
+
     test('rates that differ by time of day', () {
       expectReading('機車：日間10元/時(08-20)，夜間5元/時(20-08)', FeeVerdict.manual);
     });

@@ -180,6 +180,9 @@ FeeReading? _readCommunity(String text, String? spaceType) {
       if (RegExp(r'\d').hasMatch(freeMatch[1]!)) {
         return _manual('只有一段時間免費');
       }
+      if (_condition.hasMatch(segment) && !segment.contains('限專用格')) {
+        return _manual('免費另有條件：$segment');
+      }
       free++;
       continue;
     }
@@ -283,12 +286,15 @@ Rate? _valid(Rate rate) =>
 enum _Vehicle { car, scooter, heavy, disabled }
 
 class _Fact {
-  _Fact(this.vehicles, this.rate, {this.qualified = false});
+  _Fact(this.vehicles, this.rate, {Set<String> limits = const {}})
+    : limits = {...limits};
   final Set<_Vehicle> vehicles;
   Rate rate;
 
-  /// Limited to some days or hours, by its own piece or by its cap's.
-  bool qualified;
+  /// The day or time limits on it (平日, 08-20…), from its own piece, the
+  /// sentence or vehicle it belongs to, or its cap's.
+  final Set<String> limits;
+  bool get qualified => limits.isNotEmpty;
 }
 
 final _sentenceBreak = RegExp(r'[。；;\n|｜]');
@@ -306,6 +312,10 @@ final _qualifier = RegExp(
 
 /// A discount or a condition on who pays what.
 final _condition = RegExp(r'優惠|折抵|折扣|減免|半價|憑|(?<!維)持|會員|消費|(?<!上)限');
+Set<String> _limitsIn(String piece) => {
+  for (final m in _qualifier.allMatches(piece)) m[0]!,
+};
+
 final _cap = RegExp(r'(?:上限|最高)(?:收費)?(?:上限)?\s*(\d+)\s*元(?:\s*/\s*[日天次])?');
 final _daily = RegExp(
   r'(\d+)\s*元\s*/\s*[日天]|(?:每日|每天|當日計次)\s*[:：]?\s*(\d+)\s*元',
@@ -340,8 +350,9 @@ FeeReading _readOfficial(String text) {
     // Caps belong to the latest hourly rate of the same vehicle in a sentence.
     final hourlies = <_Fact>[];
     // 平日 standing alone qualifies the prices after it in the sentence.
-    var heading = false;
-    var limited = false, conditioned = false;
+    var heading = <String>{};
+    var limited = <String>{};
+    var conditioned = false;
     for (final raw in sentence.split(_pieceBreak)) {
       final piece = raw.trim();
       if (piece.isEmpty) continue;
@@ -359,9 +370,10 @@ FeeReading _readOfficial(String text) {
             : named;
         // A day or time limit next to a vehicle (機車：平日 20元/次) holds
         // for that vehicle's prices until another vehicle is named.
-        limited = conditioned = false;
+        limited = {};
+        conditioned = false;
       }
-      if (_qualifier.hasMatch(piece)) limited = true;
+      limited.addAll(_limitsIn(piece));
       if (_condition.hasMatch(piece)) conditioned = true;
       if (_passKeyword.hasMatch(piece)) {
         pass = passes = true;
@@ -373,7 +385,7 @@ FeeReading _readOfficial(String text) {
               .replaceAll(_qualifier, '')
               .replaceAll(RegExp(r'[\s:：]'), '')
               .isEmpty) {
-        heading = true;
+        heading = _limitsIn(piece);
       }
       final priced = _priced.hasMatch(piece);
       if (!priced || pass || vehicles.contains(_Vehicle.disabled)) continue;
@@ -406,7 +418,7 @@ FeeReading _readOfficial(String text) {
         unparsed.addAll(riders);
         continue;
       }
-      final qualified = heading || limited || _qualifier.hasMatch(piece);
+      final limits = {...heading, ...limited, ..._limitsIn(piece)};
       // A discount or condition on a motorcycle price is not one rate.
       if (conditioned &&
           vehicles.intersection({
@@ -434,7 +446,7 @@ FeeReading _readOfficial(String text) {
                   hourly.rate.dailyCap != reading.cap)) {
             unparsed.addAll(riders);
           } else {
-            if (qualified) hourly.qualified = true;
+            hourly.limits.addAll(limits);
             final r = hourly.rate;
             hourly.rate = Rate(
               FeeMode.hourly,
@@ -445,7 +457,7 @@ FeeReading _readOfficial(String text) {
           }
           continue;
         }
-        final fact = _Fact(riders, reading.rate!, qualified: qualified);
+        final fact = _Fact(riders, reading.rate!, limits: limits);
         facts.add(fact);
         if (fact.rate.mode == FeeMode.hourly) hourlies.add(fact);
       }
@@ -474,8 +486,18 @@ FeeReading _readOfficial(String text) {
     if (own.isEmpty) return null;
     final name = vehicle == _Vehicle.heavy ? '大型重機' : '機車';
     if (own.map((f) => f.rate).toSet().length > 1) return '$name有多種費率';
-    if (own.any((f) => f.qualified) && own.length < 2) {
-      return '$name費率只寫了部分日期或時段';
+    // Limited rates count as one rate only when they plainly cover every
+    // day: 平日 and 假日, at the same price (checked above). Any other mix
+    // (平日＋週六, 上午＋下午, one limited and one not) goes to a person.
+    if (own.any((f) => f.qualified)) {
+      final limits = {for (final f in own) ...f.limits};
+      final covered =
+          own.every((f) => f.qualified) &&
+          limits.length == 2 &&
+          limits.containsAll(const {'平日', '假日'});
+      if (!covered) {
+        return '$name費率只寫了「${limits.join('、')}」，無法確定涵蓋所有日期與時段';
+      }
     }
     return null;
   }
