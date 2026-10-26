@@ -18,8 +18,9 @@ create temporary table zone_target as select (public.apply_report('10000000-0000
 select is((select parking_zones->0->'fee'->'heavy'->>'amount' from community_spots where id=(select id from zone_target)),'20','create RPC preserves zone fee');
 grant select on zone_target to anon,authenticated;
 
-insert into official_heavy_spots(id,name,lat,lng,city,source_url,effective_date,fee,parking_zones)
-values('74000000-0000-4000-8000-000000000001','官方分區費率',25.09,121.61,'臺北市','https://example.test/zone-fees',current_date,
+-- A lot: street spots have no zones (202610270010_parking_conditions.sql).
+insert into official_heavy_spots(id,name,lat,lng,city,space_type,source_url,effective_date,fee,parking_zones)
+values('74000000-0000-4000-8000-000000000001','官方分區費率',25.09,121.61,'臺北市','offStreet','https://example.test/zone-fees',current_date,
   '{"heavy":{"mode":"daily","amount":60}}','[{"name":"機車區","fee":{"heavy":{"mode":"free"}}}]');
 
 set local role anon;

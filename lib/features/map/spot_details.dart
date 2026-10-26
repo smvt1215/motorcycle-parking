@@ -1,5 +1,6 @@
 import '../../models/fee.dart';
 import '../../models/parking.dart';
+import '../../models/parking_condition.dart';
 
 /// A single zone can show its actual price in the preview. A zone never
 /// inherits the lot's fee or another vehicle's price.
@@ -58,33 +59,36 @@ String regionSummary(ParkingSpot spot) =>
 String facilitySummary(ParkingSpot spot) =>
     spot.facilityType?.label ?? (spot.isFacility ? '路外停車場（型式未提供）' : '路邊停車格');
 
-/// Roadside kinds whose bays are ordinary motorcycle bays, so admitting both
-/// motorcycle classes means the bay is shared by them. Car-and-motorcycle
-/// flex bays, disabled bays and EV bays are other kinds of sharing or
-/// reservation and are never read as 普大共用.
-const _motorcycleBayTypes = {
-  SpaceType.paidMotorcycle,
-  SpaceType.freeMotorcycle,
-  SpaceType.timedMotorcycle,
-};
+/// Limits that reserve a motorcycle bay for some riders only: admitting
+/// both motorcycle classes there is not 普大共用.
+const _reservedLimits = {LimitKind.specialVehicle, LimitKind.evOnly};
 
+/// The bay classification the details page shows, read through the single
+/// conversion layer (lib/models/parking_condition.dart): the spot's stored
+/// condition, else the one its legacy space type stands for. Car-and-
+/// motorcycle flex bays are a car bay's shared use and never 大汽共用 or
+/// 普大共用; disabled and EV bays are reserved and never read as 普大共用.
 /// Do not infer shared bays from a facility admitting both vehicle types.
 ParkingAccess? reportedAccess(ParkingSpot spot) {
   if (spot.access != null) return spot.access;
-  if (spot.spaceType == SpaceType.heavyOnly) return ParkingAccess.heavyOnly;
+  final bay = spot.condition ?? conditionOf(spot.spaceType);
+  if (bay?.bay == Bay.heavy) return ParkingAccess.heavyOnly;
   if (spot.scooterAllowed == false && spot.heavyAllowed == false) {
     return ParkingAccess.noMotorcycle;
   }
-  if (spot.spaceType == SpaceType.car && spot.heavyAllowed == true) {
+  if (bay?.bay == Bay.car &&
+      bay?.use == BayUse.usual &&
+      spot.heavyAllowed == true) {
     return ParkingAccess.heavyCar;
   }
   if (spot.scooterAllowed == true && spot.heavyAllowed == false) {
     return ParkingAccess.scooterOnly;
   }
   if (!spot.isFacility &&
-      _motorcycleBayTypes.contains(spot.spaceType) &&
-      spot.scooterAllowed == true &&
-      spot.heavyAllowed == true) {
+      bay?.bay == Bay.motorcycle &&
+      !_reservedLimits.any(bay!.hasLimit) &&
+      (bay.share == ShareKind.scooterHeavy ||
+          (spot.scooterAllowed == true && spot.heavyAllowed == true))) {
     return ParkingAccess.scooterHeavy;
   }
   return null;

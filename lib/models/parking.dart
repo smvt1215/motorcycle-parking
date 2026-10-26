@@ -1,4 +1,5 @@
 import 'fee.dart';
+import 'parking_condition.dart';
 
 enum VehicleType { scooter, heavy }
 
@@ -108,6 +109,8 @@ class ParkingZone {
     this.heavyFeeNote = '',
     this.carFeeNote = '',
     this.fee,
+    this.area,
+    this.condition,
   });
 
   final String name, feeNote, guide;
@@ -117,6 +120,17 @@ class ParkingZone {
   final String scooterFeeNote, heavyFeeNote, carFeeNote;
   final ParkingAccess? access;
   final Fee? fee;
+
+  /// The zone's area; null is unconfirmed.
+  final ZoneArea? area;
+
+  /// The zone's parking condition (§1.2), or null — unconfirmed — when the
+  /// zone has none or it breaks the contract. [access] stays for builds
+  /// that cannot read it.
+  final ParkingCondition? condition;
+
+  /// Whether builds that read only [access] read this zone as it is.
+  bool get legacySafe => legacySafeStoredZone(condition, access);
 
   /// Structured rates supersede the legacy vehicle strings as one record.
   /// A missing vehicle remains unconfirmed, even if an old string exists.
@@ -141,11 +155,15 @@ class ParkingZone {
     heavyFeeNote: _feeNoteText(json['heavy_fee_note']),
     carFeeNote: _feeNoteText(json['car_fee_note']),
     fee: json['fee'] is Map ? Fee.fromJson(json['fee']) : null,
+    area: _optionalEnum(ZoneArea.values, json['area']),
+    condition: ParkingCondition.fromJson(json['condition'], zone: true),
   );
 
   Map<String, dynamic> toJson() => {
     'name': name,
     if (access != null) 'access': access!.name,
+    if (area != null) 'area': area!.name,
+    if (condition != null) 'condition': condition!.toJson(),
     if (feeNote.isNotEmpty) 'fee_note': feeNote,
     if (guide.isNotEmpty) 'guide': guide,
     if (scooterFeeNote.isNotEmpty) 'scooter_fee_note': scooterFeeNote,
@@ -211,6 +229,8 @@ class ParkingSpot {
     this.availabilityUpdatedAt,
     this.scooterVerifiedAt,
     this.heavyVerifiedAt,
+    this.condition,
+    this.zonesComplete = false,
   });
   final String id, name, city, source, feeNote, note, district, sourceUrl;
   final String sourceName, licenseNote;
@@ -243,6 +263,21 @@ class ParkingSpot {
   /// Only the backend records these, never a rider's report or vote.
   final DateTime? scooterVerifiedAt, heavyVerifiedAt;
 
+  /// A street bay's parking condition (§1.2); null when the spot has none
+  /// (read it through `conditionOf(spaceType)`) or it breaks the contract.
+  /// Lots keep theirs in [zones].
+  final ParkingCondition? condition;
+
+  /// Whether [zones] cover the whole lot; only admins and imports set it.
+  final bool zonesComplete;
+
+  /// Whether builds that cannot read conditions read this spot as it is
+  /// (§1.3, `condition_legacy_safe_spot()` in SQL). When not, [toJson] gives
+  /// them the conservative projection the viewports give (§5.2, §5.3).
+  bool get isLegacySafe => isOffStreet(spaceType, facilityType)
+      ? condition == null && zones.every((z) => z.legacySafe)
+      : legacySafe(condition);
+
   /// [vehicle]'s admin verification time, see [scooterVerifiedAt].
   DateTime? verifiedAt(VehicleType vehicle) =>
       vehicle == VehicleType.heavy ? heavyVerifiedAt : scooterVerifiedAt;
@@ -273,11 +308,12 @@ class ParkingSpot {
   static Iterable<ParkingSpot> favorite(Object? row) =>
       known({...row as Map<String, dynamic>}..remove('contributor_name'));
 
-  /// A snapshot's exact kind (see [toJson]), else its `space_type`; null
-  /// when this build knows neither.
+  /// A snapshot's exact kind (see [toJson]: `exact_v2`, then `exact`), else
+  /// its `space_type`; null when this build knows none of them.
   static SpaceType? _kind(Map<String, dynamic> j) {
     final names = SpaceType.values.asNameMap();
-    return names[(j['exact'] as Map<String, dynamic>?)?['space_type']] ??
+    return names[(j['exact_v2'] as Map<String, dynamic>?)?['space_type']] ??
+        names[(j['exact'] as Map<String, dynamic>?)?['space_type']] ??
         names[j['space_type']];
   }
 
@@ -293,8 +329,13 @@ class ParkingSpot {
   };
 
   factory ParkingSpot.fromJson(Map<String, dynamic> raw) {
-    // The exact fields of a new kind override the conservative ones.
-    final j = {...raw, ...?raw['exact'] as Map<String, dynamic>?};
+    // The exact fields override the conservative ones: `exact_v2` (a spot
+    // older builds cannot read safely), then `exact` (a newer kind).
+    final j = {
+      ...raw,
+      ...?raw['exact'] as Map<String, dynamic>?,
+      ...?raw['exact_v2'] as Map<String, dynamic>?,
+    };
     return ParkingSpot(
       id: j['id'] as String,
       name: j['name'] as String,
@@ -347,11 +388,22 @@ class ParkingSpot {
       heavyVerifiedAt: DateTime.tryParse(
         j['heavy_verified_at'] as String? ?? '',
       ),
+      condition: ParkingCondition.fromJson(j['condition']),
+      zonesComplete: j['zones_complete'] == true,
     );
   }
 
   Map<String, dynamic> toJson() {
-    final legacy = _newKinds.contains(spaceType);
+    // Favorites sync this snapshot to every signed-in device, including
+    // builds that predate newer kinds or conditions. A spot those builds
+    // would read more loosely gets the viewports' projection on top and its
+    // real fields in `exact_v2`, a key they do not know: re-saved there, it
+    // loses information, never safety (§5.3). A newer kind that is otherwise
+    // safe keeps `exact`, which builds since the kinds restore.
+    final safe = isLegacySafe;
+    final exact = safe && _newKinds.contains(spaceType);
+    final legacy = exact || !safe;
+    final zonesJson = [for (final zone in zones) zone.toJson()];
     return {
       'id': id,
       'name': name,
@@ -359,8 +411,6 @@ class ParkingSpot {
       'lng': lng,
       'city': city,
       'source': source,
-      // Favorites sync this snapshot to every signed-in device, including
-      // builds that predate newer kinds (see [_newKinds]); `exact` restores it.
       'space_type': legacy ? SpaceType.offStreet.name : spaceType.name,
       'fee_note': feeNote,
       if (fee case final fee?) 'fee': fee.toJson(),
@@ -369,13 +419,24 @@ class ParkingSpot {
       'heavy_allowed': legacy ? null : heavyAllowed,
       'scooter_allowed': legacy ? null : scooterAllowed,
       'status': legacy ? TrustStatus.pending.name : status.name,
-      if (legacy)
+      if (exact)
         'exact': {
           'space_type': spaceType.name,
           'heavy_allowed': heavyAllowed,
           'scooter_allowed': scooterAllowed,
           'status': status.name,
         },
+      if (!safe)
+        'exact_v2': {
+          'space_type': spaceType.name,
+          'heavy_allowed': heavyAllowed,
+          'scooter_allowed': scooterAllowed,
+          'status': status.name,
+          if (condition case final condition?) 'condition': condition.toJson(),
+          'parking_zones': zonesJson,
+        },
+      if (safe && condition != null) 'condition': condition!.toJson(),
+      if (zonesComplete) 'zones_complete': true,
       'updated_at': updatedAt?.toIso8601String(),
       'last_confirmed_at': lastConfirmedAt?.toIso8601String(),
       if (createdAt != null) 'created_at': createdAt!.toIso8601String(),
@@ -394,7 +455,12 @@ class ParkingSpot {
       if (specialRules.isNotEmpty) 'special_rules': specialRules,
       if (photoUrls.isNotEmpty) 'photo_urls': photoUrls,
       if (zones.isNotEmpty)
-        'parking_zones': zones.map((zone) => zone.toJson()).toList(),
+        'parking_zones': [
+          for (final (i, zone) in zones.indexed)
+            safe || zone.legacySafe
+                ? zonesJson[i]
+                : ({...zonesJson[i]}..remove('access')),
+        ],
       if (availabilityUpdatedAt != null)
         'availability_updated_at': availabilityUpdatedAt!.toIso8601String(),
       if (scooterVerifiedAt != null)

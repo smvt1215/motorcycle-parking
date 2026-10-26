@@ -11,7 +11,7 @@ select no_plan();
 -- ===== 共用：parking_contract() 與輔助函式（C2、C3 都需要） =====
 create or replace function pg_temp.parking_contract() returns jsonb
 language sql immutable set search_path='' as $contract$
-  select $json${"version":1,"space_types":["paidMotorcycle","freeMotorcycle","heavyOnly","car","offStreet","disabledMotorcycle","timedMotorcycle","flexShared","evMotorcycle"],"access_kinds":["scooterOnly","scooterHeavy","heavyCar","noMotorcycle","heavyOnly"],"placement":{"off_street_space_types":["offStreet"],"off_street_facility_types":["multiStorey","underground","surface"]},"time":{"pattern":"^([01][0-9]|2[0-3]):[0-5][0-9]$","days":["all","weekday","holiday"],"weekdays":["mon","tue","wed","thu","fri","sat","sun"],"optional_pair":["from","to"]},"date":{"pattern":"^(19|[2-9][0-9])[0-9]{2}-[0-9]{2}-[0-9]{2}$"},"condition":{"keys":["bay","use","share","charge","limits","schedule","basis"],"zone_keys":["allow"],"bay":["motorcycle","heavy","car"],"use":["usual","share"],"share":{"scooter_heavy":"motorcycle","car_motorcycle":"car"},"charge":["toll","free"],"limits":{"time_limit":{"required":[],"optional":{"max_minutes":{"min":1,"max":1440}}},"special_vehicle":{"required":["vehicle"],"optional":{}},"ev_only":{"required":[],"optional":{}}},"special_vehicles":["disabled_modified"],"street_charge_optional_with":["time_limit","special_vehicle","ev_only"],"allow_keys":["scooter","heavy"],"schedule":{"keys":["days","from","to","vehicles"],"max_entries":8,"vehicles":["scooter","heavy","car"]},"basis":{"keys":["source_url","evidence_id","effective_date","expires_on"],"required_one_of":["source_url","evidence_id"],"reserved":["evidence_id"],"source_url":{"pattern":"^https://\\S+$","max_length":2048,"length_unit":"utf16"}}},"conversion":{"from_space_type":{"paidMotorcycle":{"bay":"motorcycle","use":"usual","charge":"toll"},"freeMotorcycle":{"bay":"motorcycle","use":"usual","charge":"free"},"heavyOnly":{"bay":"heavy","use":"usual"},"car":{"bay":"car","use":"usual"},"offStreet":null,"disabledMotorcycle":{"bay":"motorcycle","limits":[{"kind":"special_vehicle","vehicle":"disabled_modified"}]},"timedMotorcycle":{"bay":"motorcycle","use":"usual","limits":[{"kind":"time_limit"}]},"flexShared":{"bay":"car","use":"share","share":"car_motorcycle"},"evMotorcycle":{"bay":"motorcycle","limits":[{"kind":"ev_only"}]}},"from_access":{"scooterOnly":{"bay":"motorcycle","use":"usual","allow":{"scooter":true,"heavy":false}},"scooterHeavy":{"bay":"motorcycle","use":"share","share":"scooter_heavy","allow":{"scooter":true,"heavy":true}},"heavyCar":{"bay":"car","use":"usual","allow":{"scooter":false,"heavy":true}},"heavyOnly":{"bay":"heavy","use":"usual","allow":{"scooter":false,"heavy":true}},"noMotorcycle":{"allow":{"scooter":false,"heavy":false}}},"to_space_type":[{"when":{"placement":"off_street"},"space_type":"offStreet"},{"when":{"limit":"special_vehicle"},"space_type":"disabledMotorcycle"},{"when":{"limit":"ev_only"},"space_type":"evMotorcycle"},{"when":{"share":"car_motorcycle"},"space_type":"flexShared"},{"when":{"limit":"time_limit"},"space_type":"timedMotorcycle"},{"when":{"bay":"heavy"},"space_type":"heavyOnly"},{"when":{"bay":"car"},"space_type":"car"},{"when":{"bay":"motorcycle","charge":"toll"},"space_type":"paidMotorcycle"},{"when":{"bay":"motorcycle","charge":"free"},"space_type":"freeMotorcycle"}],"to_access":"allow 與 from_access 的 allow 相同，且 from_access 有 bay 時 bay 也相同","legacy_safe":{"unsafe_keys":["schedule"],"unsafe_basis_keys":["expires_on"],"lossy_share":"scooter_heavy","lossy_limit_keys":["max_minutes"],"assumed_charge":{"timedMotorcycle":"toll"},"lossy_when_unconfirmed":["bay","use","share","charge"]}},"fee":{"max_bytes":4096,"vehicles":["scooter","heavy","car"],"follow":{"vehicles":["heavy"],"modes":["same_as_scooter","same_as_car"],"optional":{"factor_pct":{"min":100,"max":1000}}},"modes":{"free":{"required":{},"optional":{}},"posted":{"required":{},"optional":{}},"hourly":{"required":{"amount":{"min":0,"max":10000},"per_minutes":{"min":1,"max":1440}},"optional":{"unit_minutes":{"min":1,"max":"per_minutes"},"free_minutes":{"min":1,"max":1440},"daily_cap":{"min":0,"max":10000},"cap_reset":"cap_reset"}},"per_visit":{"required":{"amount":{"min":0,"max":10000}},"optional":{"max_minutes":{"min":1,"max":1440},"renew":"renew","extension":"extension"}},"daily":{"required":{"amount":{"min":0,"max":10000}},"optional":{"cap_reset":"cap_reset"}},"by_time":{"required":{"periods":"periods"},"optional":{"cross_period":"cross_period"}}},"enums":{"cap_reset":["calendar_day","rolling_24h","per_entry"],"renew":["none","midnight"],"cross_period":["each_period","entry_only"]},"extension":{"required":{"amount":{"min":0,"max":10000},"max_times":{"min":1,"max":10}},"optional":{"minutes":{"min":1,"max":1440}}},"periods":{"max_entries":6,"keys":["days","from","to","rate"],"nested_modes":["free","posted","hourly","per_visit","daily"]}}}$json$::jsonb;
+  select $json${"version":1,"space_types":["paidMotorcycle","freeMotorcycle","heavyOnly","car","offStreet","disabledMotorcycle","timedMotorcycle","flexShared","evMotorcycle"],"access_kinds":["scooterOnly","scooterHeavy","heavyCar","noMotorcycle","heavyOnly"],"placement":{"off_street_space_types":["offStreet"],"off_street_facility_types":["multiStorey","underground","surface"]},"time":{"pattern":"^([01][0-9]|2[0-3]):[0-5][0-9]$","days":["all","weekday","holiday"],"weekdays":["mon","tue","wed","thu","fri","sat","sun"],"optional_pair":["from","to"]},"date":{"pattern":"^(19|[2-9][0-9])[0-9]{2}-[0-9]{2}-[0-9]{2}$"},"condition":{"keys":["bay","use","share","charge","limits","schedule","basis"],"zone_keys":["allow"],"bay":["motorcycle","heavy","car"],"use":["usual","share"],"share":{"scooter_heavy":"motorcycle","car_motorcycle":"car"},"charge":["toll","free"],"limits":{"time_limit":{"required":[],"optional":{"max_minutes":{"min":1,"max":1440}}},"special_vehicle":{"required":["vehicle"],"optional":{}},"ev_only":{"required":[],"optional":{}}},"special_vehicles":["disabled_modified"],"street_charge_optional_with":["time_limit","special_vehicle","ev_only"],"allow_keys":["scooter","heavy"],"schedule":{"keys":["days","from","to","vehicles"],"max_entries":8,"vehicles":["scooter","heavy","car"]},"basis":{"keys":["source_url","evidence_id","effective_date","expires_on"],"required_one_of":["source_url","evidence_id"],"reserved":["evidence_id"],"source_url":{"pattern":"^https://\\S+$","max_length":2048,"length_unit":"utf16"}}},"zone":{"area":["motorcycle","car","heavy","mixed"]},"conversion":{"from_space_type":{"paidMotorcycle":{"bay":"motorcycle","use":"usual","charge":"toll"},"freeMotorcycle":{"bay":"motorcycle","use":"usual","charge":"free"},"heavyOnly":{"bay":"heavy","use":"usual"},"car":{"bay":"car","use":"usual"},"offStreet":null,"disabledMotorcycle":{"bay":"motorcycle","limits":[{"kind":"special_vehicle","vehicle":"disabled_modified"}]},"timedMotorcycle":{"bay":"motorcycle","use":"usual","limits":[{"kind":"time_limit"}]},"flexShared":{"bay":"car","use":"share","share":"car_motorcycle"},"evMotorcycle":{"bay":"motorcycle","limits":[{"kind":"ev_only"}]}},"from_access":{"scooterOnly":{"bay":"motorcycle","use":"usual","allow":{"scooter":true,"heavy":false}},"scooterHeavy":{"bay":"motorcycle","use":"share","share":"scooter_heavy","allow":{"scooter":true,"heavy":true}},"heavyCar":{"bay":"car","use":"usual","allow":{"scooter":false,"heavy":true}},"heavyOnly":{"bay":"heavy","use":"usual","allow":{"scooter":false,"heavy":true}},"noMotorcycle":{"allow":{"scooter":false,"heavy":false}}},"to_space_type":[{"when":{"placement":"off_street"},"space_type":"offStreet"},{"when":{"limit":"special_vehicle"},"space_type":"disabledMotorcycle"},{"when":{"limit":"ev_only"},"space_type":"evMotorcycle"},{"when":{"share":"car_motorcycle"},"space_type":"flexShared"},{"when":{"limit":"time_limit"},"space_type":"timedMotorcycle"},{"when":{"bay":"heavy"},"space_type":"heavyOnly"},{"when":{"bay":"car"},"space_type":"car"},{"when":{"bay":"motorcycle","charge":"toll"},"space_type":"paidMotorcycle"},{"when":{"bay":"motorcycle","charge":"free"},"space_type":"freeMotorcycle"}],"to_access":"allow 與 from_access 的 allow 相同，且 from_access 有 bay 時 bay 也相同","legacy_safe":{"unsafe_keys":["schedule"],"unsafe_basis_keys":["expires_on"],"lossy_share":"scooter_heavy","lossy_limit_keys":["max_minutes"],"assumed_charge":{"timedMotorcycle":"toll"},"lossy_when_unconfirmed":["bay","use","share","charge"]}},"fee":{"max_bytes":4096,"vehicles":["scooter","heavy","car"],"follow":{"vehicles":["heavy"],"modes":["same_as_scooter","same_as_car"],"optional":{"factor_pct":{"min":100,"max":1000}}},"modes":{"free":{"required":{},"optional":{}},"posted":{"required":{},"optional":{}},"hourly":{"required":{"amount":{"min":0,"max":10000},"per_minutes":{"min":1,"max":1440}},"optional":{"unit_minutes":{"min":1,"max":"per_minutes"},"free_minutes":{"min":1,"max":1440},"daily_cap":{"min":0,"max":10000},"cap_reset":"cap_reset"}},"per_visit":{"required":{"amount":{"min":0,"max":10000}},"optional":{"max_minutes":{"min":1,"max":1440},"renew":"renew","extension":"extension"}},"daily":{"required":{"amount":{"min":0,"max":10000}},"optional":{"cap_reset":"cap_reset"}},"by_time":{"required":{"periods":"periods"},"optional":{"cross_period":"cross_period"}}},"enums":{"cap_reset":["calendar_day","rolling_24h","per_entry"],"renew":["none","midnight"],"cross_period":["each_period","entry_only"]},"extension":{"required":{"amount":{"min":0,"max":10000},"max_times":{"min":1,"max":10}},"optional":{"minutes":{"min":1,"max":1440}}},"periods":{"max_entries":6,"keys":["days","from","to","rate"],"nested_modes":["free","posted","hourly","per_visit","daily"]}}}$json$::jsonb;
 $contract$;
 
 -- A whole number in range; CASE so a string returns false, not a cast error.
@@ -174,6 +174,95 @@ begin
   end loop;
   return null;
 end;
+$$;
+
+-- Whether a spot is off the street (§1.1 placement); never stored.
+create or replace function pg_temp.condition_off_street(p_space_type text,p_facility_type text) returns boolean
+language sql immutable set search_path='' as $$
+  select coalesce(pg_temp.parking_contract()->'placement'->'off_street_space_types' ? p_space_type,false)
+    or coalesce(pg_temp.parking_contract()->'placement'->'off_street_facility_types' ? p_facility_type,false);
+$$;
+
+-- The legacy access a zone condition is written back as (§1.3, to_access):
+-- the from_access entry with the same allow and, when the entry names a bay,
+-- the same bay; null when none matches. At most one entry can match.
+create or replace function pg_temp.condition_legacy_access(p_condition jsonb) returns text
+language sql immutable set search_path='' as $$
+  select min(a.key) from jsonb_each(pg_temp.parking_contract()->'conversion'->'from_access') a
+  where jsonb_typeof(p_condition->'allow')='object'
+    and (a.value->'allow'->'scooter') is not distinct from (p_condition->'allow'->'scooter')
+    and (a.value->'allow'->'heavy') is not distinct from (p_condition->'allow'->'heavy')
+    and (not a.value ? 'bay' or (a.value->'bay') is not distinct from (p_condition->'bay'));
+$$;
+
+-- legacySafe (§1.3, conversion.legacy_safe): whether old apps, reading only
+-- the legacy space_type (a street condition) or access (p_zone), see the
+-- same condition or a more conservative one. Converts and reads back, then
+-- compares, losing only (a) scooter_heavy read back as usual, (b) a basis
+-- without the unsafe keys, (c) the lossy limit keys and (d) facets the read
+-- back leaves unconfirmed, except a charge old apps assume. Null is safe.
+create or replace function pg_temp.condition_legacy_safe(p_condition jsonb,p_zone boolean default false) returns boolean
+language plpgsql immutable set search_path='' as $$
+declare
+  conv jsonb:=pg_temp.parking_contract()->'conversion';
+  r jsonb:=conv->'legacy_safe';
+  o jsonb:=p_condition; b jsonb; t text; k text;
+  lossy text[]:=array(select jsonb_array_elements_text(r->'lossy_limit_keys'));
+begin
+  if o is null or jsonb_typeof(o)='null' then return true; end if;
+  if p_zone then
+    t:=pg_temp.condition_legacy_access(o);
+    b:=conv->'from_access'->t;
+  else
+    t:=pg_temp.condition_space_type(o,false);
+    b:=conv->'from_space_type'->t;
+  end if;
+  if b is null or jsonb_typeof(b)<>'object' then return false; end if;
+  if o ?| array(select jsonb_array_elements_text(r->'unsafe_keys')) then return false; end if;
+  -- (b) a basis without the unsafe keys; a null value counts as left out.
+  if exists(select 1 from jsonb_array_elements_text(r->'unsafe_basis_keys') x
+      where coalesce(jsonb_typeof(o->'basis'->x),'null')<>'null') then return false; end if;
+  o:=o-'basis'; b:=b-'basis';
+  -- (c) limit keys old apps never read.
+  if jsonb_typeof(o->'limits')='array' then
+    o:=jsonb_set(o,'{limits}',(select jsonb_agg(e-lossy) from jsonb_array_elements(o->'limits') e));
+  end if;
+  if jsonb_typeof(b->'limits')='array' then
+    b:=jsonb_set(b,'{limits}',(select jsonb_agg(e-lossy) from jsonb_array_elements(b->'limits') e));
+  end if;
+  -- (a) a shared use read back as usual.
+  if o->>'share'=r->>'lossy_share' and b->>'use'='usual' and not b ? 'share' then
+    o:=(o-'share')||'{"use":"usual"}'::jsonb;
+  end if;
+  -- (d) facets the legacy value leaves unconfirmed, except an assumed charge.
+  if not p_zone and r->'assumed_charge' ? t and not b ? 'charge' and o ? 'charge'
+    and o->>'charge'<>r->'assumed_charge'->>t then return false; end if;
+  for k in select jsonb_array_elements_text(r->'lossy_when_unconfirmed') loop
+    if not b ? k then o:=o-k; end if;
+  end loop;
+  return o=b;
+end;
+$$;
+
+-- Whether old builds, which read a zone's access only, read a stored zone
+-- (an element of parking_zones) as it is: it has no condition, or a
+-- legacy-safe one stored with the access it writes back.
+create or replace function pg_temp.zone_legacy_safe(p_zone jsonb) returns boolean
+language sql immutable set search_path='' as $$
+  select coalesce(jsonb_typeof(p_zone->'condition'),'null')='null'
+    or (pg_temp.condition_legacy_safe(p_zone->'condition',true)
+      and (p_zone->>'access') is not distinct from pg_temp.condition_legacy_access(p_zone->'condition'));
+$$;
+
+-- Whether a whole spot is legacy-safe: a street spot by its condition, a lot
+-- only without a top-level condition and when every zone is.
+create or replace function pg_temp.condition_legacy_safe_spot(p_off_street boolean,p_condition jsonb,p_zones jsonb) returns boolean
+language sql immutable set search_path='' as $$
+  select case when p_off_street then coalesce(jsonb_typeof(p_condition),'null')='null'
+      and not exists(select 1 from jsonb_array_elements(
+        case when jsonb_typeof(p_zones)='array' then p_zones else '[]'::jsonb end) z
+        where not pg_temp.zone_legacy_safe(z))
+    else pg_temp.condition_legacy_safe(p_condition,false) end;
 $$;
 
 -- ===== 費率 v2：valid_fee(p_fee)（只屬於 C3；C2 不可複製，否則會提早換掉現行的費率檢查） =====
@@ -345,6 +434,77 @@ select is(pg_temp.condition_space_type($j${"bay":"heavy","use":"usual","schedule
 select is(pg_temp.condition_space_type($j${"bay":"car","use":"share","share":"car_motorcycle"}$j$::jsonb,false),'flexShared','space type: 汽機共用格沒有時段');
 select is(pg_temp.condition_space_type($j${"bay":"car","use":"share","share":"car_motorcycle","schedule":[{"days":"all","from":"07:00","to":"20:00","vehicles":["car","scooter"]}]}$j$::jsonb,false),'flexShared','space type: 汽機共用格有時段');
 select is(pg_temp.condition_space_type($j${"bay":"motorcycle","use":"share","share":"scooter_heavy","charge":"toll","basis":{"source_url":"https://pma.gov.taipei/News_Content.aspx?n=E43F2E5AE1223B3D","effective_date":"2026-04-06","expires_on":"2026-10-05"}}$j$::jsonb,true),'offStreet','space type: 路外一律 offStreet');
+-- legacy-safe street conditions: condition_legacy_safe()
+select is(pg_temp.condition_legacy_safe($j${"bay":"motorcycle","use":"usual","charge":"toll"}$j$::jsonb,false),true,'legacy safe: 收費機車格');
+select is(pg_temp.condition_legacy_safe($j${"bay":"motorcycle","use":"share","share":"scooter_heavy","charge":"toll"}$j$::jsonb,false),true,'legacy safe: (a) 正例：普大共用收費格讀回 usual');
+select is(pg_temp.condition_legacy_safe($j${"bay":"motorcycle","use":"share","share":"scooter_heavy","charge":"free","basis":{"source_url":"https://pma.gov.taipei/News_Content.aspx?n=E43F2E5AE1223B3D"}}$j$::jsonb,false),true,'legacy safe: (a) 正例：普大共用免費格讀回 usual');
+select is(pg_temp.condition_legacy_safe($j${"bay":"heavy"}$j$::jsonb,false),false,'legacy safe: (a) 反例：use 未填的重機格讀回 usual，多出資訊不算可遺失');
+select is(pg_temp.condition_legacy_safe($j${"bay":"motorcycle","use":"usual","charge":"toll","basis":{"source_url":"https://pma.gov.taipei/News_Content.aspx?n=E43F2E5AE1223B3D","effective_date":"2026-10-06"}}$j$::jsonb,false),true,'legacy safe: (b) 正例：沒有截止日的依據');
+select is(pg_temp.condition_legacy_safe($j${"bay":"motorcycle","use":"usual","charge":"toll","basis":{"source_url":"https://pma.gov.taipei/News_Content.aspx?n=E43F2E5AE1223B3D","expires_on":"2027-01-01"}}$j$::jsonb,false),false,'legacy safe: (b) 反例：依據有截止日');
+select is(pg_temp.condition_legacy_safe($j${"bay":"motorcycle","use":"usual","charge":"toll","limits":[{"kind":"time_limit","max_minutes":20}]}$j$::jsonb,false),true,'legacy safe: (c) 正例：臺北限時格的 20 分鐘');
+select is(pg_temp.condition_legacy_safe($j${"bay":"motorcycle","use":"usual","charge":"toll","limits":[{"kind":"time_limit","max_minutes":20},{"kind":"ev_only"}]}$j$::jsonb,false),false,'legacy safe: (c) 反例：限時又限電動，限時整個遺失');
+select is(pg_temp.condition_legacy_safe($j${"bay":"heavy","use":"usual","charge":"toll"}$j$::jsonb,false),true,'legacy safe: (d) 正例：重機格的收費屬性');
+select is(pg_temp.condition_legacy_safe($j${"bay":"motorcycle","use":"usual","charge":"free","limits":[{"kind":"special_vehicle","vehicle":"disabled_modified"}]}$j$::jsonb,false),true,'legacy safe: (d) 正例：身障專用格的用途與收費屬性（§1.2 範例）');
+select is(pg_temp.condition_legacy_safe($j${"bay":"motorcycle","use":"usual","charge":"toll","limits":[{"kind":"time_limit"}]}$j$::jsonb,false),true,'legacy safe: (d) 正例：收費限時格，舊版也當收費格');
+select is(pg_temp.condition_legacy_safe($j${"bay":"motorcycle","use":"usual","limits":[{"kind":"time_limit"}]}$j$::jsonb,false),true,'legacy safe: (d) 正例：收費屬性未確認的限時格');
+select is(pg_temp.condition_legacy_safe($j${"bay":"motorcycle","use":"usual","charge":"free","limits":[{"kind":"time_limit"}]}$j$::jsonb,false),false,'legacy safe: (d) 反例：免費限時格，舊版當收費格');
+select is(pg_temp.condition_legacy_safe($j${"bay":"heavy","limits":[{"kind":"ev_only"}]}$j$::jsonb,false),false,'legacy safe: (d) 反例：重機格限電動，讀回變機車格');
+select is(pg_temp.condition_legacy_safe($j${"bay":"heavy","use":"usual","schedule":[{"days":"all","from":"07:00","to":"20:00","vehicles":["heavy"]}]}$j$::jsonb,false),false,'legacy safe: 有時段的重機格');
+select is(pg_temp.condition_legacy_safe($j${"bay":"car","use":"share","share":"car_motorcycle"}$j$::jsonb,false),true,'legacy safe: 汽機共用格沒有時段');
+select is(pg_temp.condition_legacy_safe($j${"bay":"car","use":"share","share":"car_motorcycle","schedule":[{"days":"all","from":"07:00","to":"20:00","vehicles":["car","scooter"]}]}$j$::jsonb,false),false,'legacy safe: 汽機共用格有時段');
+-- zones: condition_legacy_access() and condition_legacy_safe(…,true)
+select is(pg_temp.condition_legacy_access($j${"bay":"motorcycle","use":"usual","allow":{"scooter":true,"heavy":false}}$j$::jsonb),'scooterOnly','zone access: 普機專用');
+select is(pg_temp.condition_legacy_safe($j${"bay":"motorcycle","use":"usual","allow":{"scooter":true,"heavy":false}}$j$::jsonb,true),true,'zone safe: 普機專用');
+select is(pg_temp.zone_legacy_safe($j${"name":"普機專用","condition":{"bay":"motorcycle","use":"usual","allow":{"scooter":true,"heavy":false}},"access":"scooterOnly"}$j$::jsonb),true,'stored zone safe: 普機專用');
+select is(pg_temp.zone_legacy_safe($j${"name":"普機專用","condition":{"bay":"motorcycle","use":"usual","allow":{"scooter":true,"heavy":false}},"access":"noMotorcycle"}$j$::jsonb),false,'stored zone with another access: 普機專用');
+select is(pg_temp.condition_legacy_access($j${"bay":"motorcycle","use":"usual","charge":"toll","allow":{"scooter":true,"heavy":false}}$j$::jsonb),'scooterOnly','zone access: 普機專用帶收費屬性（可遺失）');
+select is(pg_temp.condition_legacy_safe($j${"bay":"motorcycle","use":"usual","charge":"toll","allow":{"scooter":true,"heavy":false}}$j$::jsonb,true),true,'zone safe: 普機專用帶收費屬性（可遺失）');
+select is(pg_temp.zone_legacy_safe($j${"name":"普機專用帶收費屬性（可遺失）","condition":{"bay":"motorcycle","use":"usual","charge":"toll","allow":{"scooter":true,"heavy":false}},"access":"scooterOnly"}$j$::jsonb),true,'stored zone safe: 普機專用帶收費屬性（可遺失）');
+select is(pg_temp.zone_legacy_safe($j${"name":"普機專用帶收費屬性（可遺失）","condition":{"bay":"motorcycle","use":"usual","charge":"toll","allow":{"scooter":true,"heavy":false}},"access":"noMotorcycle"}$j$::jsonb),false,'stored zone with another access: 普機專用帶收費屬性（可遺失）');
+select is(pg_temp.condition_legacy_access($j${"bay":"motorcycle","use":"share","share":"scooter_heavy","charge":"toll","allow":{"scooter":true,"heavy":true},"basis":{"source_url":"https://pma.gov.taipei/News_Content.aspx?n=E43F2E5AE1223B3D"}}$j$::jsonb),'scooterHeavy','zone access: 普大共用，依據沒有截止日');
+select is(pg_temp.condition_legacy_safe($j${"bay":"motorcycle","use":"share","share":"scooter_heavy","charge":"toll","allow":{"scooter":true,"heavy":true},"basis":{"source_url":"https://pma.gov.taipei/News_Content.aspx?n=E43F2E5AE1223B3D"}}$j$::jsonb,true),true,'zone safe: 普大共用，依據沒有截止日');
+select is(pg_temp.zone_legacy_safe($j${"name":"普大共用，依據沒有截止日","condition":{"bay":"motorcycle","use":"share","share":"scooter_heavy","charge":"toll","allow":{"scooter":true,"heavy":true},"basis":{"source_url":"https://pma.gov.taipei/News_Content.aspx?n=E43F2E5AE1223B3D"}},"access":"scooterHeavy"}$j$::jsonb),true,'stored zone safe: 普大共用，依據沒有截止日');
+select is(pg_temp.zone_legacy_safe($j${"name":"普大共用，依據沒有截止日","condition":{"bay":"motorcycle","use":"share","share":"scooter_heavy","charge":"toll","allow":{"scooter":true,"heavy":true},"basis":{"source_url":"https://pma.gov.taipei/News_Content.aspx?n=E43F2E5AE1223B3D"}},"access":"noMotorcycle"}$j$::jsonb),false,'stored zone with another access: 普大共用，依據沒有截止日');
+select is(pg_temp.condition_legacy_access($j${"bay":"motorcycle","use":"share","share":"scooter_heavy","charge":"toll","basis":{"source_url":"https://pma.gov.taipei/News_Content.aspx?n=E43F2E5AE1223B3D","effective_date":"2026-04-06","expires_on":"2026-10-05"},"allow":{"scooter":true,"heavy":true}}$j$::jsonb),'scooterHeavy','zone access: 臺北試辦機車區帶截止日（§2.4）');
+select is(pg_temp.condition_legacy_safe($j${"bay":"motorcycle","use":"share","share":"scooter_heavy","charge":"toll","basis":{"source_url":"https://pma.gov.taipei/News_Content.aspx?n=E43F2E5AE1223B3D","effective_date":"2026-04-06","expires_on":"2026-10-05"},"allow":{"scooter":true,"heavy":true}}$j$::jsonb,true),false,'zone safe: 臺北試辦機車區帶截止日（§2.4）');
+select is(pg_temp.zone_legacy_safe($j${"name":"臺北試辦機車區帶截止日（§2.4）","condition":{"bay":"motorcycle","use":"share","share":"scooter_heavy","charge":"toll","basis":{"source_url":"https://pma.gov.taipei/News_Content.aspx?n=E43F2E5AE1223B3D","effective_date":"2026-04-06","expires_on":"2026-10-05"},"allow":{"scooter":true,"heavy":true}},"access":"scooterHeavy"}$j$::jsonb),false,'stored zone safe: 臺北試辦機車區帶截止日（§2.4）');
+select is(pg_temp.zone_legacy_safe($j${"name":"臺北試辦機車區帶截止日（§2.4）","condition":{"bay":"motorcycle","use":"share","share":"scooter_heavy","charge":"toll","basis":{"source_url":"https://pma.gov.taipei/News_Content.aspx?n=E43F2E5AE1223B3D","effective_date":"2026-04-06","expires_on":"2026-10-05"},"allow":{"scooter":true,"heavy":true}},"access":"noMotorcycle"}$j$::jsonb),false,'stored zone with another access: 臺北試辦機車區帶截止日（§2.4）');
+select is(pg_temp.condition_legacy_access($j${"bay":"motorcycle","use":"usual","allow":{"scooter":true,"heavy":true}}$j$::jsonb),'scooterHeavy','zone access: 機車格 usual 但兩種車都開放，讀回變普大共用');
+select is(pg_temp.condition_legacy_safe($j${"bay":"motorcycle","use":"usual","allow":{"scooter":true,"heavy":true}}$j$::jsonb,true),false,'zone safe: 機車格 usual 但兩種車都開放，讀回變普大共用');
+select is(pg_temp.zone_legacy_safe($j${"name":"機車格 usual 但兩種車都開放，讀回變普大共用","condition":{"bay":"motorcycle","use":"usual","allow":{"scooter":true,"heavy":true}},"access":"scooterHeavy"}$j$::jsonb),false,'stored zone safe: 機車格 usual 但兩種車都開放，讀回變普大共用');
+select is(pg_temp.zone_legacy_safe($j${"name":"機車格 usual 但兩種車都開放，讀回變普大共用","condition":{"bay":"motorcycle","use":"usual","allow":{"scooter":true,"heavy":true}},"access":"noMotorcycle"}$j$::jsonb),false,'stored zone with another access: 機車格 usual 但兩種車都開放，讀回變普大共用');
+select is(pg_temp.condition_legacy_access($j${"bay":"car","use":"usual","allow":{"scooter":false,"heavy":true}}$j$::jsonb),'heavyCar','zone access: 汽車區開放大型重機');
+select is(pg_temp.condition_legacy_safe($j${"bay":"car","use":"usual","allow":{"scooter":false,"heavy":true}}$j$::jsonb,true),true,'zone safe: 汽車區開放大型重機');
+select is(pg_temp.zone_legacy_safe($j${"name":"汽車區開放大型重機","condition":{"bay":"car","use":"usual","allow":{"scooter":false,"heavy":true}},"access":"heavyCar"}$j$::jsonb),true,'stored zone safe: 汽車區開放大型重機');
+select is(pg_temp.zone_legacy_safe($j${"name":"汽車區開放大型重機","condition":{"bay":"car","use":"usual","allow":{"scooter":false,"heavy":true}},"access":"noMotorcycle"}$j$::jsonb),false,'stored zone with another access: 汽車區開放大型重機');
+select is(pg_temp.condition_legacy_access($j${"bay":"heavy","use":"usual","allow":{"scooter":false,"heavy":true}}$j$::jsonb),'heavyOnly','zone access: 重機專區');
+select is(pg_temp.condition_legacy_safe($j${"bay":"heavy","use":"usual","allow":{"scooter":false,"heavy":true}}$j$::jsonb,true),true,'zone safe: 重機專區');
+select is(pg_temp.zone_legacy_safe($j${"name":"重機專區","condition":{"bay":"heavy","use":"usual","allow":{"scooter":false,"heavy":true}},"access":"heavyOnly"}$j$::jsonb),true,'stored zone safe: 重機專區');
+select is(pg_temp.zone_legacy_safe($j${"name":"重機專區","condition":{"bay":"heavy","use":"usual","allow":{"scooter":false,"heavy":true}},"access":"noMotorcycle"}$j$::jsonb),false,'stored zone with another access: 重機專區');
+select is(pg_temp.condition_legacy_access($j${"bay":"motorcycle","use":"usual","allow":{"scooter":false,"heavy":true}}$j$::jsonb),null::text,'zone access: 機車格只開放大型重機，對不到 access');
+select is(pg_temp.condition_legacy_safe($j${"bay":"motorcycle","use":"usual","allow":{"scooter":false,"heavy":true}}$j$::jsonb,true),false,'zone safe: 機車格只開放大型重機，對不到 access');
+select is(pg_temp.zone_legacy_safe($j${"name":"機車格只開放大型重機，對不到 access","condition":{"bay":"motorcycle","use":"usual","allow":{"scooter":false,"heavy":true}}}$j$::jsonb),false,'stored zone safe: 機車格只開放大型重機，對不到 access');
+select is(pg_temp.zone_legacy_safe($j${"name":"機車格只開放大型重機，對不到 access","condition":{"bay":"motorcycle","use":"usual","allow":{"scooter":false,"heavy":true}},"access":"noMotorcycle"}$j$::jsonb),false,'stored zone with another access: 機車格只開放大型重機，對不到 access');
+select is(pg_temp.condition_legacy_access($j${"bay":"car","use":"usual","allow":{"scooter":false,"heavy":false}}$j$::jsonb),'noMotorcycle','zone access: 汽車格兩種機車都不開放');
+select is(pg_temp.condition_legacy_safe($j${"bay":"car","use":"usual","allow":{"scooter":false,"heavy":false}}$j$::jsonb,true),true,'zone safe: 汽車格兩種機車都不開放');
+select is(pg_temp.zone_legacy_safe($j${"name":"汽車格兩種機車都不開放","condition":{"bay":"car","use":"usual","allow":{"scooter":false,"heavy":false}},"access":"noMotorcycle"}$j$::jsonb),true,'stored zone safe: 汽車格兩種機車都不開放');
+select is(pg_temp.zone_legacy_safe($j${"name":"汽車格兩種機車都不開放","condition":{"bay":"car","use":"usual","allow":{"scooter":false,"heavy":false}},"access":"scooterOnly"}$j$::jsonb),false,'stored zone with another access: 汽車格兩種機車都不開放');
+select is(pg_temp.condition_legacy_access($j${"bay":"motorcycle","use":"usual","allow":{"scooter":true}}$j$::jsonb),null::text,'zone access: 只有一個車種的 allow');
+select is(pg_temp.condition_legacy_safe($j${"bay":"motorcycle","use":"usual","allow":{"scooter":true}}$j$::jsonb,true),false,'zone safe: 只有一個車種的 allow');
+select is(pg_temp.zone_legacy_safe($j${"name":"只有一個車種的 allow","condition":{"bay":"motorcycle","use":"usual","allow":{"scooter":true}}}$j$::jsonb),false,'stored zone safe: 只有一個車種的 allow');
+select is(pg_temp.zone_legacy_safe($j${"name":"只有一個車種的 allow","condition":{"bay":"motorcycle","use":"usual","allow":{"scooter":true}},"access":"noMotorcycle"}$j$::jsonb),false,'stored zone with another access: 只有一個車種的 allow');
+select is(pg_temp.condition_legacy_access($j${"bay":"motorcycle","use":"usual","charge":"toll"}$j$::jsonb),null::text,'zone access: 沒有 allow');
+select is(pg_temp.condition_legacy_safe($j${"bay":"motorcycle","use":"usual","charge":"toll"}$j$::jsonb,true),false,'zone safe: 沒有 allow');
+select is(pg_temp.zone_legacy_safe($j${"name":"沒有 allow","condition":{"bay":"motorcycle","use":"usual","charge":"toll"}}$j$::jsonb),false,'stored zone safe: 沒有 allow');
+select is(pg_temp.zone_legacy_safe($j${"name":"沒有 allow","condition":{"bay":"motorcycle","use":"usual","charge":"toll"},"access":"noMotorcycle"}$j$::jsonb),false,'stored zone with another access: 沒有 allow');
+select is(pg_temp.condition_legacy_access($j${"bay":"motorcycle","use":"usual","limits":[{"kind":"ev_only"}],"allow":{"scooter":true,"heavy":false}}$j$::jsonb),'scooterOnly','zone access: 分區限電動');
+select is(pg_temp.condition_legacy_safe($j${"bay":"motorcycle","use":"usual","limits":[{"kind":"ev_only"}],"allow":{"scooter":true,"heavy":false}}$j$::jsonb,true),false,'zone safe: 分區限電動');
+select is(pg_temp.zone_legacy_safe($j${"name":"分區限電動","condition":{"bay":"motorcycle","use":"usual","limits":[{"kind":"ev_only"}],"allow":{"scooter":true,"heavy":false}},"access":"scooterOnly"}$j$::jsonb),false,'stored zone safe: 分區限電動');
+select is(pg_temp.zone_legacy_safe($j${"name":"分區限電動","condition":{"bay":"motorcycle","use":"usual","limits":[{"kind":"ev_only"}],"allow":{"scooter":true,"heavy":false}},"access":"noMotorcycle"}$j$::jsonb),false,'stored zone with another access: 分區限電動');
+select is(pg_temp.condition_legacy_access($j${"bay":"car","use":"usual","schedule":[{"days":"all","from":"07:00","to":"20:00","vehicles":["heavy"]}],"allow":{"scooter":false,"heavy":true}}$j$::jsonb),'heavyCar','zone access: 分區有時段');
+select is(pg_temp.condition_legacy_safe($j${"bay":"car","use":"usual","schedule":[{"days":"all","from":"07:00","to":"20:00","vehicles":["heavy"]}],"allow":{"scooter":false,"heavy":true}}$j$::jsonb,true),false,'zone safe: 分區有時段');
+select is(pg_temp.zone_legacy_safe($j${"name":"分區有時段","condition":{"bay":"car","use":"usual","schedule":[{"days":"all","from":"07:00","to":"20:00","vehicles":["heavy"]}],"allow":{"scooter":false,"heavy":true}},"access":"heavyCar"}$j$::jsonb),false,'stored zone safe: 分區有時段');
+select is(pg_temp.zone_legacy_safe($j${"name":"分區有時段","condition":{"bay":"car","use":"usual","schedule":[{"days":"all","from":"07:00","to":"20:00","vehicles":["heavy"]}],"allow":{"scooter":false,"heavy":true}},"access":"noMotorcycle"}$j$::jsonb),false,'stored zone with another access: 分區有時段');
 -- fees: valid_fee() v2
 select is(pg_temp.valid_fee($j${}$j$::jsonb),true,'fee: 空 fee：兩種車都未確認');
 select is(pg_temp.valid_fee($j${"scooter":{"mode":"hourly","amount":20,"per_minutes":60,"daily_cap":100},"heavy":{"mode":"same_as_car"}}$j$::jsonb),true,'fee: v1：計時加當日上限，重機比照汽車');

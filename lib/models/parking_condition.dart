@@ -58,6 +58,10 @@ enum SpecialVehicle {
 /// Vehicles a schedule slot lets park.
 enum SlotVehicle { scooter, heavy, car }
 
+/// A lot zone's area (§1.1): 機車區, 汽車區, 重機專區 or 混合; null is
+/// unconfirmed. Off-street zones only.
+enum ZoneArea { motorcycle, car, heavy, mixed }
+
 /// Which off-street spaces and facilities place a spot off the street.
 const offStreetSpaceTypes = {SpaceType.offStreet};
 const offStreetFacilityTypes = {
@@ -827,6 +831,18 @@ bool legacySafeZone(
   final back = zoneConditionOf(legacyAccess(zone));
   return back != null && _survives(zone, back, null, rules);
 }
+
+/// Whether old builds, which read only a zone's `access`, read a stored zone
+/// as it is: no condition, or a legacy-safe one stored with the access it
+/// writes back (`zone_legacy_safe()` in SQL).
+bool legacySafeStoredZone(
+  ParkingCondition? condition,
+  ParkingAccess? access, {
+  LegacySafeRules rules = legacySafeRules,
+}) =>
+    condition == null ||
+    (legacySafeZone(condition, rules: rules) &&
+        access == legacyAccess(condition));
 
 /// Whether a whole spot is legacy-safe: a lot only when every zone is.
 bool legacySafeSpot({

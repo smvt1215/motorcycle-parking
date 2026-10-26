@@ -1,4 +1,5 @@
 import json
+import re
 import unittest
 
 import gen_contract_sql as gen
@@ -27,7 +28,35 @@ class GenContractSqlTest(unittest.TestCase):
         cases = json.loads(gen.CASES.read_text())
         test = gen.generate()[gen.TEST_OUT]
         total = sum(len(cases[k]) for k in ("conditions", "legacy", "fees"))
+        # Street legacy-safety where it applies; per zone: access, safety,
+        # stored safety and a stored zone with another access.
+        total += sum(1 for c in cases["legacy"] if c["safe"] is not None and not c["off_street"])
+        total += 4 * len(cases["zones"])
         self.assertEqual(test.count("select is("), total)
+
+    def test_migrations_apply_the_generated_condition_functions(self):
+        """The shared and condition sections are applied by copying them into
+        a migration; the latest migration defining each function must hold
+        the generated text, so a contract change needs a new migration."""
+        text = gen.generate()[gen.FUNCTIONS_OUT]
+        sections = text[text.index("-- ===== 共用"):text.index("-- ===== 費率 v2")]
+        blocks = re.findall(
+            r"^create or replace function public\.(\w+)\(.*?^\$(?:contract)?\$;$",
+            sections, re.M | re.S)
+        statements = re.findall(
+            r"^(create or replace function public\.\w+\(.*?^\$(?:contract)?\$;)$",
+            sections, re.M | re.S)
+        self.assertEqual(len(blocks), len(statements))
+        self.assertIn("valid_condition", blocks)
+        self.assertIn("condition_legacy_safe_spot", blocks)
+        migrations = sorted((gen.ROOT / "supabase/migrations").glob("*.sql"))
+        for name, statement in zip(blocks, statements):
+            with self.subTest(function=name):
+                header = f"function public.{name}("
+                latest = [m for m in migrations if header in m.read_text()]
+                self.assertTrue(latest, f"no migration defines {name}")
+                self.assertIn(statement, latest[-1].read_text(),
+                              f"copy the generated {name} into a new migration")
 
     def test_the_embedded_contract_drops_comments(self):
         self.assertEqual(gen.strip_comments({"comment": "x", "a": [{"comment": 1, "b": 2}]}),

@@ -53,20 +53,25 @@ class ParkingRepository {
   final SupabaseClient? client;
   List<ParkingSpot>? _demoSpots;
 
-  /// Reads [name]'s _v2 variant, which returns every space kind; the
-  /// original keeps to the five kinds older builds can parse. A backend not
-  /// yet migrated has only the original, so fall back to it.
+  /// Reads [name]'s newest variant this backend has: _v3 returns every row
+  /// as stored, with its parking conditions; _v2 every space kind, with rows
+  /// older builds cannot read safely projected (§5.2 of
+  /// docs/designs/2026-10-26-parking-conditions-and-fees.md); the original
+  /// only the five first kinds. A backend not yet migrated lacks the newer
+  /// ones, so fall back in that order.
   Future<List<dynamic>> _viewport(String name, MapViewport bounds) async {
-    try {
-      return await client!.rpc<List<dynamic>>(
-        '${name}_v2',
-        params: bounds.toJson(),
-      );
-    } on PostgrestException catch (e) {
-      // PostgREST: no function with this name.
-      if (e.code != 'PGRST202') rethrow;
-      return client!.rpc<List<dynamic>>(name, params: bounds.toJson());
+    for (final suffix in const ['_v3', '_v2']) {
+      try {
+        return await client!.rpc<List<dynamic>>(
+          '$name$suffix',
+          params: bounds.toJson(),
+        );
+      } on PostgrestException catch (e) {
+        // PostgREST: no function with this name.
+        if (e.code != 'PGRST202') rethrow;
+      }
     }
+    return client!.rpc<List<dynamic>>(name, params: bounds.toJson());
   }
 
   Future<ParkingResult> inViewport(MapViewport bounds) async {
