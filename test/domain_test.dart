@@ -366,7 +366,7 @@ void main() {
     );
     final open = eligibility(both, VehicleType.heavy, heavyRule, now: today);
     expect(open.status, EligibilityStatus.allowed);
-    expect(open.reason, contains('管理員已核驗'));
+    expect(open.reason, '請確認現場公告');
     expect(
       eligibility(both, VehicleType.scooter, null, now: today).status,
       EligibilityStatus.allowed,

@@ -2,7 +2,9 @@ import 'dart:math' as math;
 
 import '../../core/geo.dart';
 import '../../data/app_store.dart';
+import '../../models/availability.dart';
 import '../../models/parking.dart';
+import '../../domain/availability_display.dart';
 import '../../domain/eligibility.dart';
 import '../../domain/eligibility_display.dart';
 import '../../ui/adaptive/adaptive.dart';
@@ -19,7 +21,7 @@ import 'map_legend.dart';
 import 'spot_details.dart';
 import 'spot_photos.dart';
 import 'parking_access_view.dart';
-import 'vehicle_sheet.dart' show platesOf;
+import 'vehicle_sheet.dart' show SmallPlateStack, platesOf;
 
 /// Peek height: header, eligibility and actions, with the map left visible
 /// above, the way map apps open a place.
@@ -236,7 +238,13 @@ class _SpotSheetState extends State<SpotSheet> {
                               ),
                             ),
                             const SizedBox(height: 16),
-                            _SpotSummary(spot: spot, vehicle: store.vehicle),
+                            _SpotSummary(
+                              spot: spot,
+                              vehicle: store.vehicle,
+                              availability: store.availabilityOf(spot),
+                              eligibility: eligibility.status,
+                              now: store.clock(),
+                            ),
                             if (feedback != null)
                               Padding(
                                 padding: const EdgeInsets.only(top: 12),
@@ -522,10 +530,9 @@ class _SpotDecision extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     final color = spotMarkerColor(eligibility.status);
-    final (plate, ink) = platesOf(vehicle).last;
     // The marker's colour and shape, so the banner reads like the map; a
     // rider's claim swaps the question mark for people, never for a tick.
-    final icon = display.reported
+    final icon = display.reported && !display.lapsed
         ? Icons.groups_outlined
         : spotMarkerIcon(markerLook(eligibility));
     return MergeSemantics(
@@ -563,20 +570,11 @@ class _SpotDecision extends StatelessWidget {
                   Row(
                     children: [
                       ExcludeSemantics(
-                        child: Container(
+                        // Both plates of the class, as in the vehicle
+                        // picker: one colour alone names only half of it.
+                        child: SmallPlateStack(
                           key: const ValueKey('spot-decision-plate'),
-                          width: 20,
-                          height: 13,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: plate,
-                            borderRadius: BorderRadius.circular(3),
-                            border: Border.all(
-                              color: colors.onSurface,
-                              width: 1,
-                            ),
-                          ),
-                          child: Container(width: 10, height: 2, color: ink),
+                          plates: platesOf(vehicle),
                         ),
                       ),
                       const SizedBox(width: 6),
@@ -617,7 +615,7 @@ class _SpotDecision extends StatelessWidget {
                           child: Icon(
                             display.reported
                                 ? Icons.schedule
-                                : Icons.verified_outlined,
+                                : Icons.verified_user_outlined,
                             size: 16,
                             color: colors.onSurfaceVariant,
                           ),
@@ -647,11 +645,26 @@ class _SpotDecision extends StatelessWidget {
 }
 
 class _SpotSummary extends StatelessWidget {
-  const _SpotSummary({required this.spot, required this.vehicle});
+  const _SpotSummary({
+    required this.spot,
+    required this.vehicle,
+    required this.availability,
+    required this.eligibility,
+    required this.now,
+  });
   final ParkingSpot spot;
   final VehicleType vehicle;
+  final SpotAvailability availability;
+  final EligibilityStatus eligibility;
+  final DateTime now;
   @override
   Widget build(BuildContext context) {
+    final legacy = spot.available;
+    // Live counts come from snapshots; a spot's own legacy count is shown
+    // the old way only when no snapshot exists for it.
+    final live =
+        spot.isFacility &&
+        (!availability.isEmpty || legacy == null || legacy < 0);
     final feeLabel = spotFeeIsVehicleRate(spot) ? '${vehicle.label}費率' : '收費資訊';
     final feeValue = spotFeeSummary(spot, vehicle);
     final available = spot.available;
@@ -683,11 +696,22 @@ class _SpotSummary extends StatelessWidget {
             feeValue.length > 48;
         final facts = [
           _SummaryFact(label: feeLabel, value: feeValue, maxLines: null),
-          _SummaryFact(
-            label: spot.isFacility ? '機車剩餘' : '地面格位',
-            value: second,
-            caption: availabilityCaption,
-          ),
+          if (live)
+            _AvailabilitySummary(
+              fact: availabilityFact(
+                spot,
+                availability,
+                vehicle,
+                eligibility,
+                now,
+              ),
+            )
+          else
+            _SummaryFact(
+              label: spot.isFacility ? '機車剩餘' : '地面格位',
+              value: second,
+              caption: availabilityCaption,
+            ),
         ];
         return stacked
             ? Column(
@@ -703,6 +727,89 @@ class _SpotSummary extends StatelessWidget {
                 ],
               );
       },
+    );
+  }
+}
+
+/// The availability half of the summary: a large count beside 「剩餘」 and
+/// the capacity, or the reason there is none. Ink only, never a status
+/// colour, so it never competes with the eligibility banner.
+class _AvailabilitySummary extends StatelessWidget {
+  const _AvailabilitySummary({required this.fact});
+  final AvailabilityFact fact;
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final muted = text.labelSmall?.copyWith(color: colors.onSurfaceVariant);
+    const figures = [FontFeature.tabularFigures()];
+    return Semantics(
+      key: const ValueKey('availability-summary'),
+      label: fact.semantics,
+      excludeSemantics: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(fact.title, style: muted),
+          const SizedBox(height: 4),
+          if (fact.count case final count?)
+            Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: '$count',
+                    style: text.headlineMedium?.copyWith(
+                      fontSize: 30,
+                      fontWeight: FontWeight.w600,
+                      height: 1.1,
+                      fontFeatures: figures,
+                    ),
+                  ),
+                  TextSpan(
+                    text: ' ${fact.headline}',
+                    style: text.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  if (fact.capacity case final capacity?)
+                    TextSpan(
+                      text: ' $capacity',
+                      style: text.bodySmall?.copyWith(
+                        color: colors.onSurfaceVariant,
+                        fontFeatures: figures,
+                      ),
+                    ),
+                ],
+              ),
+              key: const ValueKey('availability-count'),
+            )
+          else
+            Text(
+              fact.headline,
+              key: const ValueKey('availability-headline'),
+              style: text.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+                height: 1.4,
+              ),
+            ),
+          if (fact.caption.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(fact.caption, style: muted),
+          ],
+          for (final note in fact.notes) ...[
+            const SizedBox(height: 10),
+            Text(
+              note.text,
+              style: text.bodySmall?.copyWith(
+                fontWeight: FontWeight.w600,
+                fontFeatures: figures,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(note.caption, style: muted),
+          ],
+        ],
+      ),
     );
   }
 }

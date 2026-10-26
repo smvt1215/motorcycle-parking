@@ -9,12 +9,14 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/config.dart';
 import '../../data/app_store.dart';
+import '../../domain/availability_display.dart';
 import '../../domain/eligibility.dart';
 import '../../domain/map_viewport.dart';
 import '../../domain/spot_clusters.dart';
 import '../../models/parking.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../report/report_sheet.dart';
+import 'availability_capsule.dart';
 import 'map_legend.dart';
 import 'space_type_sheet.dart';
 import 'spot_sheet.dart';
@@ -36,6 +38,9 @@ class _MapPageState extends ConsumerState<MapPage> {
   final searchController = TextEditingController();
   final searchFocus = FocusNode();
   bool hideDenied = false;
+
+  /// 「目前有位」 or 「有即時資訊」; only offered while live counts exist.
+  AvailabilityFilter availabilityFilter = AvailabilityFilter.off;
   bool searchResultsSuppressed = false;
 
   /// The spot whose details are open over the map. The sheet is part of this
@@ -201,6 +206,7 @@ class _MapPageState extends ConsumerState<MapPage> {
   void _clearFilters() => setState(() {
     type = null;
     hideDenied = false;
+    availabilityFilter = AvailabilityFilter.off;
   });
 
   void _openSpaceSelector(AppStore store) {
@@ -305,6 +311,27 @@ class _MapPageState extends ConsumerState<MapPage> {
                   store.eligible(s).status != EligibilityStatus.notAllowed),
         )
         .toList();
+    // Spots an availability filter leaves out stay on the map as grey dots,
+    // with the reason kept for the empty-result card.
+    final now = store.clock();
+    final liveFilter = store.availabilitySource.enabled
+        ? availabilityFilter
+        : AvailabilityFilter.off;
+    final excluded = <(ParkingSpot, AvailabilityExclusion)>[];
+    if (liveFilter != AvailabilityFilter.off) {
+      spots.removeWhere((s) {
+        final reason = availabilityExclusion(
+          liveFilter,
+          s,
+          store.availabilityOf(s),
+          store.vehicle,
+          store.eligible(s).status,
+          now,
+        );
+        if (reason != null) excluded.add((s, reason));
+        return reason != null;
+      });
+    }
     // Most parkable first; List.sort is not stable, so tie-break by input order.
     final ranked = [
       for (final (i, s) in spots.indexed)
@@ -314,7 +341,8 @@ class _MapPageState extends ConsumerState<MapPage> {
           (store.eligible(s).status.index, i, s),
     ]..sort((a, b) => a.$1 != b.$1 ? a.$1 - b.$1 : a.$2 - b.$2);
     final matches = [for (final (_, _, s) in ranked) s];
-    final filtered = type != null || hideDenied;
+    final filtered =
+        type != null || hideDenied || liveFilter != AvailabilityFilter.off;
     final searchHeight = 32 + MediaQuery.textScalerOf(context).scale(20);
     final filterHeight = (16 + MediaQuery.textScalerOf(context).scale(15))
         .clamp(40.0, double.infinity);
@@ -349,6 +377,9 @@ class _MapPageState extends ConsumerState<MapPage> {
           darkMap: darkMap,
           tabBarInset: tabBarInset,
           spots: spots,
+          excluded: excluded,
+          liveFilter: liveFilter,
+          now: now,
           matches: matches,
           query: query,
           filtered: filtered,
@@ -367,6 +398,9 @@ class _MapPageState extends ConsumerState<MapPage> {
     required bool darkMap,
     required double tabBarInset,
     required List<ParkingSpot> spots,
+    required List<(ParkingSpot, AvailabilityExclusion)> excluded,
+    required AvailabilityFilter liveFilter,
+    required DateTime now,
     required List<ParkingSpot> matches,
     required String query,
     required bool filtered,
@@ -374,6 +408,9 @@ class _MapPageState extends ConsumerState<MapPage> {
     required double filterHeight,
     required ParkingSpot? open,
   }) {
+    final openCapsules = open == null
+        ? const <AvailabilityCapsule>[]
+        : markerCapsules(open, store.availabilityOf(open), store.vehicle, now);
     return Stack(
       children: [
         if (AppConfig.useGoogleMaps)
@@ -428,6 +465,27 @@ class _MapPageState extends ConsumerState<MapPage> {
             ),
             children: [
               if (AppConfig.showsOsmTiles) OsmTiles(dark: darkMap),
+              if (excluded.isNotEmpty)
+                MarkerLayer(
+                  markers: [
+                    for (final (s, _) in excluded)
+                      if (s.id != open?.id)
+                        Marker(
+                          point: LatLng(s.lat, s.lng),
+                          width: 48,
+                          height: 48,
+                          child: Semantics(
+                            label:
+                                '${s.name}，不符合「${availabilityFilterLabel(liveFilter)}」',
+                            button: true,
+                            child: GestureDetector(
+                              onTap: () => _showSpot(s),
+                              child: const ExcludedSpotDot(),
+                            ),
+                          ),
+                        ),
+                  ],
+                ),
               Builder(
                 builder: (mapContext) {
                   final zoom = MapCamera.of(mapContext).zoom;
@@ -457,22 +515,34 @@ class _MapPageState extends ConsumerState<MapPage> {
                           )
                         else
                           for (final s in group.spots)
-                            Marker(
-                              point: LatLng(s.lat, s.lng),
-                              width: 48,
-                              height: 48,
-                              child: Semantics(
-                                label: '${s.name} ${store.eligible(s).label}',
-                                button: true,
-                                child: GestureDetector(
-                                  onTap: () => _showSpot(s),
-                                  child: SpotMarker(
-                                    look: markerLook(store.eligible(s)),
-                                    badge: spaceBadge(s),
+                            if (markerCapsules(
+                                  s,
+                                  store.availabilityOf(s),
+                                  store.vehicle,
+                                  now,
+                                )
+                                case final capsules)
+                              Marker(
+                                point: LatLng(s.lat, s.lng),
+                                width: capsules.isEmpty
+                                    ? 48
+                                    : MarkerWithCapsules.width(48),
+                                height: 48,
+                                child: Semantics(
+                                  label: '${s.name} ${store.eligible(s).label}',
+                                  button: true,
+                                  child: GestureDetector(
+                                    onTap: () => _showSpot(s),
+                                    child: MarkerWithCapsules(
+                                      capsules: capsules,
+                                      marker: SpotMarker(
+                                        look: markerLook(store.eligible(s)),
+                                        badge: spaceBadge(s),
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
                     ],
                   );
                 },
@@ -483,7 +553,9 @@ class _MapPageState extends ConsumerState<MapPage> {
                   markers: [
                     Marker(
                       point: LatLng(open.lat, open.lng),
-                      width: 56,
+                      width: openCapsules.isEmpty
+                          ? 56
+                          : MarkerWithCapsules.width(56),
                       height: 56,
                       child: Semantics(
                         label: '${open.name} ${store.eligible(open).label}，已選取',
@@ -492,11 +564,16 @@ class _MapPageState extends ConsumerState<MapPage> {
                         // the empty map, which would close the details.
                         child: GestureDetector(
                           onTap: () => _showSpot(open),
-                          child: SpotMarker(
-                            key: const ValueKey('selected-spot-marker'),
-                            look: markerLook(store.eligible(open)),
-                            badge: spaceBadge(open),
+                          child: MarkerWithCapsules(
+                            capsules: openCapsules,
+                            boxSize: 56,
                             selected: true,
+                            marker: SpotMarker(
+                              key: const ValueKey('selected-spot-marker'),
+                              look: markerLook(store.eligible(open)),
+                              badge: spaceBadge(open),
+                              selected: true,
+                            ),
                           ),
                         ),
                       ),
@@ -646,6 +723,23 @@ class _MapPageState extends ConsumerState<MapPage> {
                             onTap: () =>
                                 setState(() => hideDenied = !hideDenied),
                           ),
+                          if (store.availabilitySource.enabled)
+                            _MapPill(
+                              key: const ValueKey('availability-filter'),
+                              label: availabilityFilterLabel(
+                                liveFilter == AvailabilityFilter.off
+                                    ? AvailabilityFilter.available
+                                    : liveFilter,
+                              ),
+                              icon: Icons.event_available_outlined,
+                              selected: liveFilter != AvailabilityFilter.off,
+                              onTap: () => setState(
+                                () => availabilityFilter =
+                                    liveFilter == AvailabilityFilter.off
+                                    ? AvailabilityFilter.available
+                                    : AvailabilityFilter.off,
+                              ),
+                            ),
                           if (filtered)
                             _MapPill(
                               label: '清除篩選',
@@ -719,6 +813,42 @@ class _MapPageState extends ConsumerState<MapPage> {
                         store.mapNotice!,
                         key: const ValueKey('map-notice'),
                       ),
+                    ),
+                  ),
+                ),
+              ),
+            if (liveFilter != AvailabilityFilter.off &&
+                spots.isEmpty &&
+                excluded.isNotEmpty &&
+                !store.loading)
+              Positioned(
+                top:
+                    MediaQuery.paddingOf(context).top +
+                    searchHeight +
+                    filterHeight +
+                    72,
+                left: 16,
+                right: 16,
+                // Above the two stacked map actions, so the card never
+                // covers them; a tall card scrolls instead.
+                bottom: tabBarInset + 16 + MapActions.width * 2 + 12 + 16,
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 480),
+                    child: _AvailabilityEmptyCard(
+                      filter: liveFilter,
+                      vehicle: store.vehicle,
+                      excluded: [for (final (_, reason) in excluded) reason],
+                      onClear: () => setState(
+                        () => availabilityFilter = AvailabilityFilter.off,
+                      ),
+                      onLiveOnly: liveFilter == AvailabilityFilter.live
+                          ? null
+                          : () => setState(
+                              () =>
+                                  availabilityFilter = AvailabilityFilter.live,
+                            ),
                     ),
                   ),
                 ),
@@ -907,6 +1037,7 @@ class _MapIconPill extends StatelessWidget {
 
 class _MapPill extends StatelessWidget {
   const _MapPill({
+    super.key,
     required this.label,
     required this.icon,
     required this.onTap,
@@ -962,6 +1093,115 @@ class _MapPill extends StatelessWidget {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Explains an empty 「目前有位」 result: the spots are there, they just
+/// have no free space this vehicle can use, and why.
+class _AvailabilityEmptyCard extends StatelessWidget {
+  const _AvailabilityEmptyCard({
+    required this.filter,
+    required this.vehicle,
+    required this.excluded,
+    required this.onClear,
+    required this.onLiveOnly,
+  });
+  final AvailabilityFilter filter;
+  final VehicleType vehicle;
+  final List<AvailabilityExclusion> excluded;
+  final VoidCallback onClear;
+  final VoidCallback? onLiveOnly;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final counts = <AvailabilityExclusion, int>{};
+    for (final reason in excluded) {
+      counts[reason] = (counts[reason] ?? 0) + 1;
+    }
+    final label = availabilityFilterLabel(filter);
+    return Material(
+      key: const ValueKey('availability-empty'),
+      color: colors.surface,
+      elevation: 3,
+      shadowColor: const Color(0x33000000),
+      borderRadius: BorderRadius.circular(16),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              filter == AvailabilityFilter.available
+                  ? '這個範圍沒有「${vehicle.label}$label」的停車點'
+                  : '這個範圍沒有${vehicle.label}的即時資訊',
+              style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '範圍內 ${excluded.length} 個點都還在，只是都不符合條件：',
+              style: text.bodyMedium,
+            ),
+            const SizedBox(height: 10),
+            for (final reason in AvailabilityExclusion.values)
+              if (counts[reason] case final count?)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: 28,
+                        child: Text(
+                          '$count',
+                          style: text.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          exclusionReason(reason, filter, vehicle),
+                          style: text.bodyMedium,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilledButton.tonal(
+                  style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
+                  onPressed: onClear,
+                  child: Text('清除「$label」'),
+                ),
+                if (onLiveOnly != null)
+                  OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(0, 48),
+                    ),
+                    onPressed: onLiveOnly,
+                    child: const Text('只看有即時資訊'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              filter == AvailabilityFilter.available
+                  ? '「目前有位」只列資料新鮮、車種相符、剩餘大於 0、且目前車種可停或有條件可停的點。未知、過期、延遲與不可停都不算。'
+                  : '「有即時資訊」只列資料新鮮、車種相符的點，已滿也算。未知、過期與延遲都不算。',
+              style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+            ),
+          ],
         ),
       ),
     );

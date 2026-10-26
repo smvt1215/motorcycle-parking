@@ -174,3 +174,38 @@ class PlateStack extends StatelessWidget {
     ),
   );
 }
+
+/// [PlateStack] at banner size (25×17): the back plate top-left, the front
+/// one offset (7, 5) with its number line, both 18×12. Used beside the
+/// details' verdict, where one colour alone would name half the class.
+class SmallPlateStack extends StatelessWidget {
+  const SmallPlateStack({super.key, required this.plates});
+  final List<(Color, Color)> plates;
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 25,
+    height: 17,
+    child: Stack(
+      children: [
+        for (final (i, (fill, ink)) in plates.indexed)
+          Positioned(
+            left: i * 7.0,
+            top: i * 5.0,
+            child: Container(
+              width: 18,
+              height: 12,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: fill,
+                borderRadius: BorderRadius.circular(2.5),
+                border: Border.all(color: const Color(0xff16313a)),
+              ),
+              child: i < plates.length - 1
+                  ? null
+                  : Container(width: 9, height: 2, color: ink),
+            ),
+          ),
+      ],
+    ),
+  );
+}

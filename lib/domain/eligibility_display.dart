@@ -29,14 +29,19 @@ class EligibilityDisplay {
     required this.label,
     required this.explanation,
     this.basis,
+    this.lapsed = false,
   });
   final EligibilityTier tier;
+
+  /// The claim is an administrator's check past [verificationDays], not a
+  /// rider's report: the banner keeps the question mark, not the people.
+  final bool lapsed;
 
   /// The banner headline, e.g. 「可停」 or 「車友回報可停」.
   final String label;
   final String explanation;
 
-  /// Who stated it and when, e.g. 「管理員核驗於 2026-10-25」; null when the
+  /// Who stated it and when, e.g. 「管理員確認，2026-10-25」; null when the
   /// result comes from a city rule or nothing dates it.
   final String? basis;
 
@@ -79,20 +84,21 @@ EligibilityDisplay eligibilityDisplay(
         ? spot.verifiedAt(vehicle)
         : null;
     final open = explicit;
-    final existence = spot.status == TrustStatus.confirmed && !spot.stale
-        ? '已確認此停車點存在，但車種開放尚未核實'
-        : '車種開放尚未核實';
+    final explanation = spot.status == TrustStatus.confirmed && !spot.stale
+        ? '此處確實有停車點，可停放車種未經確認，請以入口公告為準。'
+        : '可停放車種未經確認，請以入口公告為準。';
     return EligibilityDisplay(
       tier: open
           ? EligibilityTier.reportedAllowed
           : EligibilityTier.reportedNotAllowed,
       // An expired check was an administrator's, not a rider's report.
       label: checked != null
-          ? (open ? '曾核驗可停' : '曾核驗不可停')
+          ? (open ? '曾確認可停' : '曾確認不可停')
           : (open ? '車友回報可停' : '車友回報不可停'),
-      explanation: '$existence，請以入口公告為準。',
+      explanation: explanation,
+      lapsed: checked != null,
       basis: checked != null
-          ? '管理員核驗於 ${formatSpotDate(checked)}，已超過 $verificationDays 天'
+          ? '管理員確認，${formatSpotDate(checked)}，已超過 $verificationDays 天'
           : _reportBasis(spot),
     );
   }
@@ -113,7 +119,7 @@ String decisionExplanation(ParkingSpot spot, Eligibility result) =>
         !spot.isOfficial &&
         spot.status == TrustStatus.confirmed &&
         !spot.stale
-    ? '已確認此停車點存在；目前車種是否開放仍待查核，請以入口公告為準。'
+    ? '此處確實有停車點；可停放車種未經確認，請以入口公告為準。'
     : result.reason;
 
 String? _decidedBasis(ParkingSpot spot, VehicleType vehicle, DateTime now) {
@@ -124,7 +130,7 @@ String? _decidedBasis(ParkingSpot spot, VehicleType vehicle, DateTime now) {
         : '依政府公開資料，更新於 ${formatSpotDate(updated)}';
   }
   final checked = currentVerification(spot, vehicle, now: now);
-  return checked == null ? null : '管理員核驗於 ${formatSpotDate(checked)}';
+  return checked == null ? null : '管理員確認，${formatSpotDate(checked)}';
 }
 
 /// A rider sets a lot's vehicle fields only when adding it (an owner's edit
@@ -156,7 +162,7 @@ DateTime? currentVerification(
 }
 
 /// One line per vehicle an administrator has checked on a community spot,
-/// e.g. 「普通機車可停：管理員核驗於 2026-10-25」; empty when none has.
+/// e.g. 「普通機車可停：管理員確認，2026-10-25」; empty when none has.
 List<String> verifiedFieldLines(ParkingSpot spot, {DateTime? now}) => [
   if (!spot.isOfficial)
     for (final vehicle in VehicleType.values)
@@ -167,7 +173,7 @@ List<String> verifiedFieldLines(ParkingSpot spot, {DateTime? now}) => [
             spot.verifiedAt(vehicle),
           )
           case (final open?, final at?))
-        '${vehicle.label}${open ? '可停' : '不可停'}：管理員核驗於 ${formatSpotDate(at)}'
+        '${vehicle.label}${open ? '可停' : '不可停'}：管理員確認，${formatSpotDate(at)}'
             '${currentVerification(spot, vehicle, now: now) == null ? '，已超過 $verificationDays 天' : ''}',
 ];
 

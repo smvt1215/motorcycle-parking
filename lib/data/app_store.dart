@@ -16,7 +16,9 @@ import '../domain/eligibility.dart';
 import '../domain/eligibility_display.dart';
 import '../domain/location_check.dart';
 import '../domain/map_viewport.dart';
+import '../models/availability.dart';
 import '../models/parking.dart';
+import 'availability_repository.dart';
 import 'contributions_repository.dart';
 import 'data_updates.dart';
 import 'repositories.dart';
@@ -63,7 +65,17 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     RulesRepository? rulesRepository,
     ContributionsRepository? contributionsRepository,
     DataUpdates? dataUpdates,
+    AvailabilitySource? availabilitySource,
+    DateTime Function()? clock,
   }) : parking = parkingRepository ?? ParkingRepository(client),
+       // Live counts have no backend before P2: only the example build has
+       // (fake) ones.
+       availabilitySource =
+           availabilitySource ??
+           (client == null
+               ? demoAvailabilitySource(clock: clock)
+               : const NoAvailabilitySource()),
+       clock = clock ?? DateTime.now,
        rulesRepository = rulesRepository ?? RulesRepository(client),
        contributions =
            contributionsRepository ?? ContributionsRepository(client),
@@ -81,6 +93,17 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   final RulesRepository rulesRepository;
   final ContributionsRepository contributions;
   final DataUpdates updates;
+  final AvailabilitySource availabilitySource;
+
+  /// The time freshness is judged against; tests pin it.
+  final DateTime Function() clock;
+
+  /// Live counts for the loaded [spots], by spot id; kept apart from them
+  /// (see [AvailabilitySnapshot]).
+  Map<String, SpotAvailability> availability = const {};
+
+  SpotAvailability availabilityOf(ParkingSpot spot) =>
+      availability[spot.id] ?? SpotAvailability.none;
 
   /// Counts reports sent this session, so "我送出的建議" reloads after one.
   int reportsSent = 0;
@@ -329,11 +352,21 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
       if (_disposed || request != _request) return;
       spots = result.spots;
       _loadedOnce = true;
+      // A failed count read leaves every space unknown, never the map empty.
+      try {
+        final counts = await availabilitySource.forSpots(result.spots);
+        if (_disposed || request != _request) return;
+        availability = counts;
+      } catch (_) {
+        if (_disposed || request != _request) return;
+        availability = const {};
+      }
       error = result.warning ?? rulesWarning ?? favoritesWarning;
       truncated = result.truncated;
     } catch (_) {
       if (_disposed || request != _request) return;
       spots = [];
+      availability = const {};
       error = '停車資料讀取失敗，請確認連線後重試';
     } finally {
       if (!_disposed && request == _request) {
