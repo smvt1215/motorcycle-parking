@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:motorcycle_parking/domain/eligibility.dart';
 import 'package:motorcycle_parking/domain/eligibility_display.dart';
+import 'package:motorcycle_parking/domain/parking_decision.dart';
 import 'package:motorcycle_parking/models/parking.dart';
 
 final now = DateTime(2026, 10, 25, 12);
@@ -248,5 +249,87 @@ void main() {
     });
     expect(spot.createdAt, DateTime.utc(2026, 3, 1, 1));
     expect(ParkingSpot.fromJson(spot.toJson()).createdAt, spot.createdAt);
+  });
+
+  group('讀取 ParkingDecision.basis（C4）', () {
+    ParkingSpot zoned(String source, {DateTime? checked}) => ParkingSpot(
+      id: 'lot',
+      name: 'lot',
+      lat: 25,
+      lng: 121,
+      city: '臺北市',
+      spaceType: SpaceType.offStreet,
+      source: source,
+      status: TrustStatus.confirmed,
+      lastConfirmedAt: now,
+      heavyAllowed: true,
+      heavyVerifiedAt: checked,
+      updatedAt: DateTime(2026, 10, 20),
+      zones: const [
+        ParkingZone(name: '機車區', access: ParkingAccess.scooterOnly),
+      ],
+    );
+    EligibilityDisplay showDecision(ParkingSpot spot) {
+      final d = decideParking(spot, VehicleType.heavy, const [], now: now);
+      return eligibilityDisplay(
+        spot,
+        VehicleType.heavy,
+        d.eligibility,
+        now: now,
+        decision: d,
+      );
+    }
+
+    test('官方場站分區不完整：待確認，保留政府資料依據並列出分區', () {
+      final d = showDecision(zoned('official'));
+      expect(d.tier, EligibilityTier.other);
+      expect(d.label, '開放資訊待確認');
+      expect(d.basis, '依政府公開資料，更新於 2026-10-20');
+      expect(d.zones.single.label, '不可停');
+    });
+
+    test('管理員確認過的社群停車場分區不完整：不是「車友回報」', () {
+      final d = showDecision(
+        zoned('community', checked: now.subtract(const Duration(days: 3))),
+      );
+      expect(d.reported, isFalse);
+      expect(d.label, '開放資訊待確認');
+      expect(d.basis, startsWith('管理員確認，'));
+    });
+
+    test('未確認的社群停車場不列分區：分區是同一份未確認的回報', () {
+      final d = showDecision(zoned('community'));
+      expect(d.reported, isTrue);
+      expect(d.zones, isEmpty);
+    });
+  });
+
+  test('確認狀態逐類列出（決定 30）：只有停放車種，同日合併', () {
+    final day = DateTime(2026, 10, 20);
+    expect(
+      confirmationLines(
+        lot(
+          scooter: true,
+          heavy: false,
+          scooterChecked: day,
+          heavyChecked: day,
+        ),
+        now: now,
+      ),
+      ['停放車種・管理員確認，2026-10-20'],
+    );
+    expect(
+      confirmationLines(
+        lot(
+          scooter: true,
+          heavy: false,
+          scooterChecked: day,
+          heavyChecked: DateTime(2025, 1, 1),
+        ),
+        now: now,
+      ),
+      ['停放車種（普通機車）・管理員確認，2026-10-20', '停放車種（大型重機）・管理員確認，2025-01-01，已超過 180 天'],
+    );
+    expect(confirmationLines(lot(scooter: true), now: now), isEmpty);
   });
 }

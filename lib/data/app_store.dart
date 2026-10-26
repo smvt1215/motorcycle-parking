@@ -13,6 +13,7 @@ import '../core/location_access.dart';
 import '../core/navigation.dart' as navigation;
 import '../core/town_lookup.dart';
 import '../domain/eligibility.dart';
+import '../domain/parking_decision.dart';
 import '../domain/eligibility_display.dart';
 import '../domain/location_check.dart';
 import '../domain/map_viewport.dart';
@@ -389,6 +390,11 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
 
   Eligibility eligible(ParkingSpot spot) =>
       eligibility(spot, vehicle, ruleFor(spot));
+
+  /// [eligible] with its basis, zones and prices, for the details sheet;
+  /// the same clock as [eligible], so the banner and the marker agree.
+  ParkingDecision decide(ParkingSpot spot) =>
+      decideParking(spot, vehicle, [?ruleFor(spot)]);
 
   /// [eligible]'s short status for a list, keeping a rider's claim visible.
   String eligibleLabel(ParkingSpot spot) =>
