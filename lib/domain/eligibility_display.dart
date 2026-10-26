@@ -126,13 +126,19 @@ EligibilityDisplay eligibilityDisplay(
   final checked =
       source.kind == BasisKind.official ||
       source.kind == BasisKind.adminVerified;
+  // Zones decide only once the lot itself is open to the vehicle by data
+  // that may decide (§3.2 step 3, as decideParking reads them): a rider's
+  // zones are part of the same unchecked claim, and a lot whose access is
+  // unknown or stale opens no zone, so none is listed as 可停.
+  final zonesDecide =
+      checked &&
+      explicit == true &&
+      !(source.kind == BasisKind.official && spot.stale);
   // A zone's notice is part of the zone data, listed on the same terms.
   final notices = decision == null
       ? const <NoticeLine>[]
-      : noticeLines(decision, at, zones: checked);
-  // Zones are listed only from data that may decide: a rider's zones are
-  // part of the same unchecked claim.
-  final zones = decision == null || !checked
+      : noticeLines(decision, at, zones: zonesDecide);
+  final zones = decision == null || !zonesDecide
       ? const <ZoneLine>[]
       : zoneLines(decision, at);
   final sourceLine = _sourceLine(source);

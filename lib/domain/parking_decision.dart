@@ -1001,8 +1001,12 @@ ParkingDecision _lot(
         day,
         z.fee != null
             ? priceAnswer(z.fee!.toJson(), vehicle)
-            // A zone's own text, as the details list it zone by zone; the
-            // lot's only when the zone has none and no zone has a rate.
+            // §3.2 step 4: the lot's structured rate when no zone has one;
+            // only with no structured rate anywhere does a zone read its
+            // own text (as the details list it zone by zone), then the
+            // lot's.
+            : !anyZoneFee && spot.fee != null
+            ? lotPrice
             : switch (_zoneLegacyText(z, vehicle)) {
                 final text? => PriceAnswer.unknown(text),
                 null when anyZoneFee => const PriceAnswer.unknown(),

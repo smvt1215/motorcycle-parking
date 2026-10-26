@@ -1042,6 +1042,21 @@ void main() {
       expect(find.byIcon(Icons.event_busy_outlined), findsOneWidget);
     });
 
+    testWidgets('場站未確認開放大型重機：分區不列成「可停」', (tester) async {
+      await open(
+        tester,
+        ParkingSpot.fromJson({
+          ...lot([
+            {'name': '重機區', 'access': 'heavyOnly'},
+          ]).toJson(),
+          'heavy_allowed': null,
+        }),
+      );
+      expect(decisionText(tester), '大型重機 · 開放資訊待確認');
+      expect(find.byKey(const ValueKey('spot-zone-0')), findsNothing);
+      expect(find.textContaining('重機區・可停'), findsNothing);
+    });
+
     testWidgets('分區資料涵蓋全場而都不開放：資料不一致', (tester) async {
       await open(
         tester,

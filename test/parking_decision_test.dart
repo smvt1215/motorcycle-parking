@@ -1034,6 +1034,32 @@ void main() {
       expect(d.zones.last.price?.text, '依場站公告');
     });
 
+    test('場站有結構化費率、分區都沒有時，分區用場站費率而不是自己的舊文字', () {
+      final d = decideParking(
+        ParkingSpot.fromJson({
+          'id': 'lot',
+          'name': 'lot',
+          'lat': 25,
+          'lng': 121,
+          'city': '臺北市',
+          'space_type': 'offStreet',
+          'source': 'official',
+          'heavy_allowed': true,
+          'fee': {
+            'heavy': {'mode': 'hourly', 'amount': 20, 'per_minutes': 60},
+          },
+          'parking_zones': [
+            {'name': '重機區', 'access': 'heavyOnly', 'heavy_fee_note': '舊文字'},
+          ],
+        }),
+        VehicleType.heavy,
+        bundled,
+        now: now,
+      );
+      expect(d.zones.single.price?.kind, PriceKind.known);
+      expect(d.zones.single.price?.text, '每小時 20 元');
+    });
+
     test('分區有費率時，沒有費率的分區退回該分區的舊文字', () {
       final d = decideParking(
         ParkingSpot.fromJson({
