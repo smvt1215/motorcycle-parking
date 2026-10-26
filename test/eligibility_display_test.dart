@@ -190,7 +190,7 @@ void main() {
     }
   });
 
-  test('已核實欄位逐車種列出核驗日期，過期註明', () {
+  test('已確認欄位逐車種列出確認日期，過期註明', () {
     expect(
       verifiedFieldLines(
         lot(

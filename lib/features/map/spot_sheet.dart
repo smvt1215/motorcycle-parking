@@ -340,9 +340,9 @@ class _SpotSheetState extends State<SpotSheet> {
                                 ),
                                 if (!spot.isOfficial)
                                   _DetailField(
-                                    label: '已核實欄位',
+                                    label: '已確認欄位',
                                     value: switch (verifiedFieldLines(spot)) {
-                                      final lines when lines.isEmpty => '尚未核實',
+                                      final lines when lines.isEmpty => '尚未確認',
                                       final lines => lines.join('\n'),
                                     },
                                   ),

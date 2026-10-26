@@ -487,8 +487,8 @@ void main() {
     // The banner keeps the unverified colour: a claim never reads as open.
     expect(find.byIcon(Icons.local_parking), findsNothing);
     expect(store.eligible(spot).status, EligibilityStatus.unverified);
-    await showField(tester, '已核實欄位');
-    expect(find.text('尚未核實'), findsOneWidget);
+    await showField(tester, '已確認欄位');
+    expect(find.text('尚未確認'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -552,7 +552,7 @@ void main() {
         );
       }
       expect(tester.takeException(), isNull);
-      await showField(tester, '已核實欄位');
+      await showField(tester, '已確認欄位');
       expect(
         find.text('大型重機不可停：管理員確認，${formatSpotDate(expired)}，已超過 180 天'),
         findsOneWidget,
@@ -578,7 +578,7 @@ void main() {
     expect(find.text('管理員確認，${formatSpotDate(checked)}'), findsOneWidget);
     expect(find.text('請確認現場公告'), findsOneWidget);
     expect(find.byIcon(Icons.verified_user_outlined), findsOneWidget);
-    await showField(tester, '已核實欄位');
+    await showField(tester, '已確認欄位');
     expect(
       find.text('普通機車可停：管理員確認，${formatSpotDate(checked)}'),
       findsOneWidget,

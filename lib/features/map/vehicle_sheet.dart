@@ -182,30 +182,38 @@ class SmallPlateStack extends StatelessWidget {
   const SmallPlateStack({super.key, required this.plates});
   final List<(Color, Color)> plates;
   @override
-  Widget build(BuildContext context) => SizedBox(
-    width: 25,
-    height: 17,
-    child: Stack(
-      children: [
-        for (final (i, (fill, ink)) in plates.indexed)
-          Positioned(
-            left: i * 7.0,
-            top: i * 5.0,
-            child: Container(
-              width: 18,
-              height: 12,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: fill,
-                borderRadius: BorderRadius.circular(2.5),
-                border: Border.all(color: const Color(0xff16313a)),
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    // Ink on light surfaces; the foreground colour on dark ones, where the
+    // ink outline would vanish.
+    final edge = theme.brightness == Brightness.dark
+        ? theme.colorScheme.onSurface
+        : const Color(0xff16313a);
+    return SizedBox(
+      width: 25,
+      height: 17,
+      child: Stack(
+        children: [
+          for (final (i, (fill, ink)) in plates.indexed)
+            Positioned(
+              left: i * 7.0,
+              top: i * 5.0,
+              child: Container(
+                width: 18,
+                height: 12,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: fill,
+                  borderRadius: BorderRadius.circular(2.5),
+                  border: Border.all(color: edge),
+                ),
+                child: i < plates.length - 1
+                    ? null
+                    : Container(width: 9, height: 2, color: ink),
               ),
-              child: i < plates.length - 1
-                  ? null
-                  : Container(width: 9, height: 2, color: ink),
             ),
-          ),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+  }
 }

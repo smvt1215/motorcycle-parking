@@ -435,6 +435,33 @@ void main() {
     }
   });
 
+  testWidgets('#131 車牌邊框：淺色用墨色，深色用前景色', (tester) async {
+    useSize(tester, 390);
+    for (final dark in [false, true]) {
+      final store = await detailStore(tester, heavyLot, const []);
+      await openDetails(
+        tester,
+        store,
+        heavyLot,
+        brightness: dark ? Brightness.dark : Brightness.light,
+      );
+      final plate = find.byKey(const ValueKey('spot-decision-plate'));
+      final expected = dark
+          ? Theme.of(tester.element(plate)).colorScheme.onSurface
+          : const Color(0xff16313a);
+      final edges = tester
+          .widgetList<Container>(
+            find.descendant(of: plate, matching: find.byType(Container)),
+          )
+          .map((c) => (c.decoration as BoxDecoration?)?.border)
+          .whereType<Border>()
+          .map((b) => b.top.color)
+          .toSet();
+      expect(edges, {expected});
+      await tester.pumpWidget(const SizedBox.shrink());
+    }
+  });
+
   testWidgets('#130 停放車種區不顯示「共用」說明行，Semantics 保留完整說明', (tester) async {
     for (final access in [ParkingAccess.heavyCar, ParkingAccess.scooterHeavy]) {
       final handle = tester.ensureSemantics();
