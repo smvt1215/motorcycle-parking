@@ -44,7 +44,7 @@ enum RuleRestriction {
   final String key;
   String get label => switch (this) {
     signage => '限標示車格',
-    unverified => '規則未核實',
+    unverified => '規則未確認',
     timeLimited => '限時段',
     evOnly => '限電動機車',
   };

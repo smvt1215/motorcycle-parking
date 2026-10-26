@@ -1,6 +1,8 @@
 import '../../domain/eligibility.dart';
 import '../../models/parking.dart';
 import '../../ui/adaptive/adaptive.dart';
+import '../../domain/availability_display.dart';
+import 'availability_capsule.dart';
 import 'spot_details.dart';
 
 const unverifiedColor = Color(0xff59646c);
@@ -256,62 +258,169 @@ class MapLegend extends StatelessWidget {
   }
 }
 
-Future<void> showMapLegend(BuildContext context, VehicleType vehicle) =>
-    showAdaptiveSheet<void>(
-      context,
-      (ctx) => ContentPage(
-        children: [
-          SheetTitle('地圖怎麼看'),
-          const SizedBox(height: 4),
-          Text(
-            '標記依目前車種「${vehicle.label}」判斷，切換車種會即時更新。',
-            style: Theme.of(ctx).textTheme.bodyMedium,
+/// [availability] adds the space-count pills, shown only where live counts
+/// exist (the example build until P2).
+Future<void> showMapLegend(
+  BuildContext context,
+  VehicleType vehicle, {
+  bool availability = false,
+}) => showAdaptiveSheet<void>(
+  context,
+  (ctx) => ContentPage(
+    children: [
+      SheetTitle('地圖怎麼看'),
+      const SizedBox(height: 4),
+      Text(
+        '標記依目前車種「${vehicle.label}」判斷，切換車種會即時更新。',
+        style: Theme.of(ctx).textTheme.bodyMedium,
+      ),
+      const SizedBox(height: 20),
+      MapLegend(vehicle: vehicle),
+      const SizedBox(height: 8),
+      Text('角落小圖示', style: Theme.of(ctx).textTheme.titleSmall),
+      const SizedBox(height: 12),
+      for (final (badge, detail) in const [
+        (SpaceBadge.car, '汽車格，或大型重機與汽車共用的格位'),
+        (SpaceBadge.heavyOnly, '標示大型重機專用的格位'),
+        (SpaceBadge.shared, '普通機車與大型重機共用的格位'),
+        (SpaceBadge.disabled, '限經監理站檢驗合格的身障特製機車，並持識別證或專用牌照'),
+      ])
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Row(
+            children: [
+              SizedBox.square(
+                dimension: 44,
+                child: Center(
+                  child: ExcludeSemantics(
+                    child: SpaceBadgeDot(badge: badge, size: 26),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      spaceBadgeLabel(badge),
+                      style: Theme.of(ctx).textTheme.titleSmall,
+                    ),
+                    Text(detail, style: Theme.of(ctx).textTheme.bodySmall),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 20),
-          MapLegend(vehicle: vehicle),
-          const SizedBox(height: 8),
-          Text('角落小圖示', style: Theme.of(ctx).textTheme.titleSmall),
-          const SizedBox(height: 12),
-          for (final (badge, detail) in const [
-            (SpaceBadge.car, '汽車格，或大型重機與汽車共用的格位'),
-            (SpaceBadge.heavyOnly, '標示大型重機專用的格位'),
-            (SpaceBadge.shared, '普通機車與大型重機共用的格位'),
-            (SpaceBadge.disabled, '限經監理站檢驗合格的身障特製機車，並持識別證或專用牌照'),
-          ])
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Row(
-                children: [
-                  SizedBox.square(
-                    dimension: 44,
-                    child: Center(
-                      child: ExcludeSemantics(
-                        child: SpaceBadgeDot(badge: badge, size: 26),
-                      ),
+        ),
+      if (availability) ...[
+        const SizedBox(height: 8),
+        Text('標記上方的車位數', style: Theme.of(ctx).textTheme.titleSmall),
+        const SizedBox(height: 12),
+        const AvailabilityLegend(),
+      ],
+      const Divider(height: 32),
+      const Text('數字圓圈：附近有多個停車點，放大地圖即可展開。'),
+      const SizedBox(height: 8),
+      const Text('長按地圖：在該位置回報新的停車點。'),
+      const SizedBox(height: 16),
+      const Text('社群資訊可能有延遲，停車前請確認現場標示。'),
+    ],
+  ),
+);
+
+/// The pill states, as on the canvas's map board: a count, a delayed
+/// count, full, closed, and no pill for an unknown space.
+class AvailabilityLegend extends StatelessWidget {
+  const AvailabilityLegend({super.key});
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    const rows = [
+      (
+        AvailabilityCapsule(
+          text: '剩 12',
+          style: CapsuleStyle.live,
+          semantics: '',
+        ),
+        '官方即時剩餘',
+      ),
+      (
+        AvailabilityCapsule(
+          text: '剩 7',
+          style: CapsuleStyle.delayed,
+          semantics: '',
+        ),
+        '更新延遲，數字可能已變',
+      ),
+      (
+        AvailabilityCapsule(
+          text: '已滿',
+          style: CapsuleStyle.full,
+          semantics: '',
+        ),
+        '官方資料目前沒有空位',
+      ),
+      (
+        AvailabilityCapsule(
+          text: '暫停',
+          style: CapsuleStyle.suspended,
+          semantics: '',
+        ),
+        '場站暫停營運',
+      ),
+    ];
+    return Column(
+      key: const ValueKey('availability-legend'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final (capsule, detail) in rows)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 88,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: ExcludeSemantics(
+                      child: AvailabilityCapsuleView(capsule: capsule),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          spaceBadgeLabel(badge),
-                          style: Theme.of(ctx).textTheme.titleSmall,
-                        ),
-                        Text(detail, style: Theme.of(ctx).textTheme.bodySmall),
-                      ],
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    detail,
+                    semanticsLabel: '${capsule.text}：$detail',
+                    style: text.bodySmall,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        Row(
+          children: [
+            SizedBox(
+              width: 88,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: ExcludeSemantics(
+                  child: SizedBox.square(
+                    dimension: 24,
+                    child: SpotMarker(
+                      look: (EligibilityStatus.unverified, null),
+                      size: 22,
                     ),
                   ),
-                ],
+                ),
               ),
             ),
-          const Divider(height: 32),
-          const Text('數字圓圈：附近有多個停車點，放大地圖即可展開。'),
-          const SizedBox(height: 8),
-          const Text('長按地圖：在該位置回報新的停車點。'),
-          const SizedBox(height: 16),
-          const Text('社群資訊可能有延遲，停車前請確認現場標示。'),
-        ],
-      ),
+            const SizedBox(width: 12),
+            Expanded(child: Text('沒有膠囊＝空位未知，或目前車種不可停', style: text.bodySmall)),
+          ],
+        ),
+      ],
     );
+  }
+}

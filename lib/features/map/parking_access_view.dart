@@ -168,48 +168,59 @@ class _AccessGroup extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          access?.description ?? '格位配置未確認',
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-            height: 1.5,
+        // A known layout shows only its vehicle icons (#130); the words
+        // stay for screen readers on the row below. An unknown layout says
+        // so, since the icons alone would read as a confirmed one.
+        if (access == null) ...[
+          Text(
+            '格位配置未確認',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              height: 1.5,
+            ),
           ),
-        ),
-        const SizedBox(height: 8),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            for (final (index, vehicle) in vehicles.indexed) ...[
-              if (index > 0)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: shared
-                      ? Icon(
-                          Icons.swap_horiz,
-                          semanticLabel: '共用格位',
-                          color: Theme.of(context).colorScheme.primary,
-                          size: 22,
-                        )
-                      : const SizedBox(width: 4),
+          const SizedBox(height: 8),
+        ],
+        Semantics(
+          key: const ValueKey('parking-access-vehicles'),
+          container: true,
+          label: access?.description,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              for (final (index, vehicle) in vehicles.indexed) ...[
+                if (index > 0)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: shared
+                        ? Icon(
+                            Icons.swap_horiz,
+                            semanticLabel: '共用格位',
+                            color: Theme.of(context).colorScheme.primary,
+                            size: 22,
+                          )
+                        : const SizedBox(width: 4),
+                  ),
+                Expanded(
+                  child: _VehicleToken(
+                    icon: vehicle.$1,
+                    label: vehicle.$2,
+                    state:
+                        access == null || access == ParkingAccess.noMotorcycle
+                        ? switch (vehicle.$3) {
+                            true => '可停',
+                            false => '不可停',
+                            null => '未確認',
+                          }
+                        : shared
+                        ? '共用'
+                        : '專用',
+                    permitted: vehicle.$3,
+                  ),
                 ),
-              Expanded(
-                child: _VehicleToken(
-                  icon: vehicle.$1,
-                  label: vehicle.$2,
-                  state: access == null || access == ParkingAccess.noMotorcycle
-                      ? switch (vehicle.$3) {
-                          true => '可停',
-                          false => '不可停',
-                          null => '未確認',
-                        }
-                      : shared
-                      ? '共用'
-                      : '專用',
-                  permitted: vehicle.$3,
-                ),
-              ),
+              ],
             ],
-          ],
+          ),
         ),
         if (hasRates) ...[
           const SizedBox(height: 12),

@@ -136,10 +136,9 @@ Eligibility _judge(
       return const Eligibility(EligibilityStatus.allowed, '場站資料標示可停，請確認現場公告');
     }
     if (explicit == true && verified) {
-      return const Eligibility(
-        EligibilityStatus.allowed,
-        '管理員已核驗開放目前車種，請確認現場公告',
-      );
+      // The headline already says 可停 and the basis line says who checked
+      // it and when (#132), so the reason only adds the reminder.
+      return const Eligibility(EligibilityStatus.allowed, '請確認現場公告');
     }
     return const Eligibility(
       EligibilityStatus.unverified,
