@@ -1,0 +1,593 @@
+{
+  "comment": "Shared by precheck_test.ts and test/precheck_test.dart: each body must break exactly the listed rule@field pairs, in any order. Bodies are partial; validate() runs first in the Edge Function.",
+  "cases": [
+    {
+      "name": "plain street bay passes",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "信義路五段收費機車格",
+          "space_type": "paidMotorcycle",
+          "scooter_allowed": true,
+          "heavy_allowed": null,
+          "fee_note": "每小時 20 元，當日上限 100 元",
+          "note": "夜間有管理員，假日常客滿；營業 06:00-22:00"
+        }
+      },
+      "expect": []
+    },
+    {
+      "name": "lot with roadside facility",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "市府停車場",
+          "space_type": "offStreet",
+          "facility_type": "roadside"
+        }
+      },
+      "expect": ["lot_roadside@facility_type"]
+    },
+    {
+      "name": "lot with lot facility and zones passes",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "市府停車場",
+          "space_type": "offStreet",
+          "facility_type": "underground",
+          "parking_access": "scooterHeavy",
+          "parking_zones": [
+            { "name": "B2 機車區", "access": "scooterHeavy" },
+            { "name": "B3 汽車區", "access": "noMotorcycle" }
+          ],
+          "scooter_allowed": true,
+          "heavy_allowed": true
+        }
+      },
+      "expect": []
+    },
+    {
+      "name": "street bay with lot facility and zones",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "機車格",
+          "space_type": "freeMotorcycle",
+          "facility_type": "multiStorey",
+          "parking_zones": [{ "name": "B2" }]
+        }
+      },
+      "expect": [
+        "street_lot_details@facility_type",
+        "street_lot_details@parking_zones"
+      ]
+    },
+    {
+      "name": "street bay with roadside facility and empty zones passes",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "機車格",
+          "space_type": "freeMotorcycle",
+          "facility_type": "roadside",
+          "parking_zones": []
+        }
+      },
+      "expect": []
+    },
+    {
+      "name": "heavy only bay allowing scooters",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "重機格",
+          "space_type": "heavyOnly",
+          "scooter_allowed": true,
+          "heavy_allowed": true
+        }
+      },
+      "expect": ["heavy_only_scooter@scooter_allowed"]
+    },
+    {
+      "name": "heavy only bay with unconfirmed scooters passes",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "重機格",
+          "space_type": "heavyOnly",
+          "scooter_allowed": null,
+          "heavy_allowed": true
+        }
+      },
+      "expect": []
+    },
+    {
+      "name": "no motorcycle lot allowing both",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "汽車停車場",
+          "space_type": "offStreet",
+          "parking_access": "noMotorcycle",
+          "scooter_allowed": true,
+          "heavy_allowed": true
+        }
+      },
+      "expect": [
+        "access_no_motorcycle@scooter_allowed",
+        "access_no_motorcycle@heavy_allowed"
+      ]
+    },
+    {
+      "name": "no motorcycle lot with closed vehicles passes",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "汽車停車場",
+          "space_type": "offStreet",
+          "parking_access": "noMotorcycle",
+          "scooter_allowed": false,
+          "heavy_allowed": null
+        }
+      },
+      "expect": []
+    },
+    {
+      "name": "heavy only lot allowing scooters",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "重機停車場",
+          "space_type": "offStreet",
+          "parking_access": "heavyOnly",
+          "scooter_allowed": true,
+          "heavy_allowed": true
+        }
+      },
+      "expect": ["access_heavy_only_scooter@scooter_allowed"]
+    },
+    {
+      "name": "scooter only lot allowing heavy bikes",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "機車停車場",
+          "space_type": "offStreet",
+          "parking_access": "scooterOnly",
+          "scooter_allowed": true,
+          "heavy_allowed": true
+        }
+      },
+      "expect": ["access_scooter_only_heavy@heavy_allowed"]
+    },
+    {
+      "name": "heavy car lot is left alone",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "停車大樓",
+          "space_type": "offStreet",
+          "parking_access": "heavyCar",
+          "scooter_allowed": true,
+          "heavy_allowed": true
+        }
+      },
+      "expect": []
+    },
+    {
+      "name": "every zone closed but scooters allowed",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "停車大樓",
+          "space_type": "offStreet",
+          "parking_zones": [
+            { "name": "B1", "access": "noMotorcycle" },
+            { "name": "B2", "access": "noMotorcycle" }
+          ],
+          "scooter_allowed": true
+        }
+      },
+      "expect": ["zones_no_motorcycle@scooter_allowed"]
+    },
+    {
+      "name": "one zone without access keeps the lot open",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "停車大樓",
+          "space_type": "offStreet",
+          "parking_zones": [
+            { "name": "B1", "access": "noMotorcycle" },
+            { "name": "B2" }
+          ],
+          "scooter_allowed": true
+        }
+      },
+      "expect": []
+    },
+    {
+      "name": "heavy follows an unconfirmed scooter rate",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "機車格",
+          "space_type": "paidMotorcycle",
+          "fee": { "heavy": { "mode": "same_as_scooter" } }
+        }
+      },
+      "expect": ["fee_follows_missing_scooter@fee.heavy"]
+    },
+    {
+      "name": "heavy follows a known scooter rate",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "機車格",
+          "space_type": "paidMotorcycle",
+          "fee": {
+            "scooter": { "mode": "daily", "amount": 30 },
+            "heavy": { "mode": "same_as_scooter" }
+          }
+        }
+      },
+      "expect": []
+    },
+    {
+      "name": "daily cap below the hourly amount and a zero hourly rate",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "機車格",
+          "space_type": "paidMotorcycle",
+          "fee": {
+            "scooter": { "mode": "hourly", "amount": 0, "per_minutes": 60 },
+            "heavy": {
+              "mode": "hourly",
+              "amount": 40,
+              "per_minutes": 60,
+              "daily_cap": 30
+            }
+          }
+        }
+      },
+      "expect": [
+        "fee_hourly_zero@fee.scooter",
+        "fee_cap_below_amount@fee.heavy"
+      ]
+    },
+    {
+      "name": "cap equal to the amount, zero per visit and zero daily pass",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "機車格",
+          "space_type": "paidMotorcycle",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 20,
+              "per_minutes": 60,
+              "daily_cap": 20
+            },
+            "heavy": { "mode": "per_visit", "amount": 0 }
+          }
+        }
+      },
+      "expect": []
+    },
+    {
+      "name": "zone fees are checked with their zone",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "停車大樓",
+          "space_type": "offStreet",
+          "parking_zones": [
+            { "name": "B1" },
+            { "name": "B2", "fee": { "heavy": { "mode": "same_as_scooter" } } }
+          ]
+        }
+      },
+      "expect": ["fee_follows_missing_scooter@parking_zones.1.fee.heavy"]
+    },
+    {
+      "name": "a suggestion is checked only against its own fields",
+      "body": {
+        "action": "flag",
+        "field": "eligibility",
+        "proposed": { "scooter_allowed": true },
+        "reason": "機車停放資格：建議「普通機車可停 · 大型重機未確認」"
+      },
+      "expect": []
+    },
+    {
+      "name": "a type suggestion contradicting itself",
+      "body": {
+        "action": "flag",
+        "field": "space_type",
+        "proposed": { "space_type": "offStreet", "facility_type": "roadside" },
+        "reason": "格位類型：建議「路外停車場」"
+      },
+      "expect": ["lot_roadside@proposed.facility_type"]
+    },
+    {
+      "name": "a fee suggestion with a cap below the amount",
+      "body": {
+        "action": "flag",
+        "field": "fee_note",
+        "proposed": {
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 30,
+              "per_minutes": 60,
+              "daily_cap": 10
+            }
+          },
+          "fee_note": "每小時 30 元，當日上限 10 元"
+        },
+        "reason": "收費資訊：建議「每小時 30 元，當日上限 10 元」"
+      },
+      "expect": ["fee_cap_below_amount@proposed.fee.scooter"]
+    },
+    {
+      "name": "closing a spot while changing it",
+      "body": {
+        "action": "flag",
+        "field": "gone",
+        "proposed": { "status": "hidden", "name": "新名稱" },
+        "reason": "這裡已經不能停車：格線已撤除"
+      },
+      "expect": ["gone_with_changes@proposed"]
+    },
+    {
+      "name": "closing a spot alone passes",
+      "body": {
+        "action": "flag",
+        "field": "gone",
+        "proposed": { "hidden": true },
+        "reason": "這裡已經不能停車：格線已撤除；預計恢復：11 月 30 日",
+        "note": "無"
+      },
+      "expect": []
+    },
+    {
+      "name": "placeholder names",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": " 測試 ",
+          "space_type": "offStreet",
+          "parking_zones": [{ "name": "asdf" }]
+        }
+      },
+      "expect": [
+        "placeholder_name@name",
+        "placeholder_name@parking_zones.0.name"
+      ]
+    },
+    {
+      "name": "placeholder written with punctuation, case and full width",
+      "body": {
+        "action": "flag",
+        "field": "name",
+        "proposed": { "name": "ＴＥＳＴ！" },
+        "reason": "停車點名稱：TEST"
+      },
+      "expect": ["placeholder_name@proposed.name"]
+    },
+    {
+      "name": "only punctuation as a name",
+      "body": {
+        "action": "create",
+        "spot": { "name": "...", "space_type": "car" }
+      },
+      "expect": ["placeholder_name@name"]
+    },
+    {
+      "name": "names that contain a placeholder word pass",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "市府轉運站停車場",
+          "space_type": "offStreet",
+          "parking_zones": [{ "name": "B2 測試區" }],
+          "note": "測試"
+        }
+      },
+      "expect": []
+    },
+    {
+      "name": "a free text suggestion that says nothing",
+      "body": {
+        "action": "flag",
+        "field": "note",
+        "note": "不知道",
+        "reason": "其他備註：不知道"
+      },
+      "expect": ["placeholder_text@note"]
+    },
+    {
+      "name": "an optional note beside a structured suggestion passes",
+      "body": {
+        "action": "flag",
+        "field": "eligibility",
+        "proposed": { "heavy_allowed": true },
+        "note": "無",
+        "reason": "機車停放資格：建議「普通機車未確認 · 大型重機可停」"
+      },
+      "expect": []
+    },
+    {
+      "name": "mobile phone numbers in several shapes",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "機車格",
+          "space_type": "paidMotorcycle",
+          "note": "車主 0912-345-678",
+          "parking_guide": "打 +886 912 345 678",
+          "entrance_note": "０９１２３４５６７８"
+        }
+      },
+      "expect": [
+        "pii_phone@note",
+        "pii_phone@parking_guide",
+        "pii_phone@entrance_note"
+      ]
+    },
+    {
+      "name": "landline numbers",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "機車格",
+          "space_type": "paidMotorcycle",
+          "note": "管理室 (02)2345-6789",
+          "parking_guide": "客服 07-2345678"
+        }
+      },
+      "expect": ["pii_phone@note", "pii_phone@parking_guide"]
+    },
+    {
+      "name": "numbers that are not phones pass",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "信義路五段150巷22弄機車格",
+          "space_type": "paidMotorcycle",
+          "note": "06:00-22:00 收費，07-22 點，車位 1-120 號，限停 2026-11-30 前",
+          "parking_guide": "每 30 分鐘 10 元，B2-1 到 B2-40",
+          "fee_note": "每小時 20 元",
+          "entrance_note": "客服 0800-123-456，代表號 0223456789"
+        }
+      },
+      "expect": []
+    },
+    {
+      "name": "email",
+      "body": {
+        "action": "flag",
+        "field": "note",
+        "note": "請寄 rider.chen@example.com.tw",
+        "reason": "其他備註：請寄 rider.chen@example.com.tw"
+      },
+      "expect": ["pii_email@note", "pii_email@reason"]
+    },
+    {
+      "name": "national id with a valid checksum",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "機車格",
+          "space_type": "paidMotorcycle",
+          "note": "失主 A123456789 請聯絡"
+        }
+      },
+      "expect": ["pii_national_id@note"]
+    },
+    {
+      "name": "lowercase national id and resident certificate",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "機車格",
+          "space_type": "paidMotorcycle",
+          "note": "a123456789",
+          "parking_guide": "A800000014"
+        }
+      },
+      "expect": ["pii_national_id@note", "pii_national_id@parking_guide"]
+    },
+    {
+      "name": "id shaped codes with a wrong checksum pass",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "機車格",
+          "space_type": "paidMotorcycle",
+          "note": "格位編號 A123456780",
+          "parking_guide": "B2000000000"
+        }
+      },
+      "expect": []
+    },
+    {
+      "name": "licence plates",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "機車格",
+          "space_type": "paidMotorcycle",
+          "note": "ABC-1234 長期占用",
+          "parking_guide": "MXY-123 與 123-ABC 停在這",
+          "entrance_note": "舊牌 AB-1234、1234-AB"
+        }
+      },
+      "expect": [
+        "pii_plate@note",
+        "pii_plate@parking_guide",
+        "pii_plate@entrance_note"
+      ]
+    },
+    {
+      "name": "zone and floor codes that are not plates pass",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "機車格",
+          "space_type": "paidMotorcycle",
+          "note": "B2-12 到 B2-40，1F-A 區，abc-1234，EV 充電",
+          "parking_guide": "AB-12、A-1234、ABCD-1234"
+        }
+      },
+      "expect": []
+    },
+    {
+      "name": "links and bare domains",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "機車格",
+          "space_type": "paidMotorcycle",
+          "note": "詳見 https://example.com/parking",
+          "parking_guide": "加 line.me 好友",
+          "entrance_note": "www.parking.gov.tw 公告"
+        }
+      },
+      "expect": ["ad_url@note", "ad_url@parking_guide", "ad_url@entrance_note"]
+    },
+    {
+      "name": "decimals and dotted text are not links",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "機車格",
+          "space_type": "paidMotorcycle",
+          "note": "距離 1.5 km，限高 2.1 m，No.5 出口",
+          "parking_guide": "B2.機車區"
+        }
+      },
+      "expect": []
+    },
+    {
+      "name": "personal data in a zone and a flag reason",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "停車大樓",
+          "space_type": "offStreet",
+          "parking_zones": [{ "name": "B2", "guide": "管理員 0933123456" }]
+        }
+      },
+      "expect": ["pii_phone@parking_zones.0.guide"]
+    },
+    {
+      "name": "a vote note with a phone",
+      "body": { "action": "vote", "vote": "still_there", "note": "0912345678" },
+      "expect": ["pii_phone@note"]
+    }
+  ]
+}

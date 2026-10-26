@@ -4,6 +4,7 @@ import '../../core/geo.dart';
 import '../../data/app_store.dart';
 import '../../data/profile_repository.dart';
 import '../../domain/eligibility.dart';
+import '../../domain/precheck.dart';
 import '../../models/fee.dart';
 import '../../models/parking.dart';
 import '../../ui/adaptive/adaptive.dart';
@@ -433,6 +434,40 @@ class AccessField extends StatelessWidget {
 String? fitsServer(String? value, int max) =>
     (value?.trim().length ?? 0) > max ? '最多 $max 個字元（表情符號算 2 個）' : null;
 
+/// [fitsServer], then what the server's precheck would refuse in this text
+/// (personal data, or a placeholder for a [name]), so the rider fixes it here.
+String? textHint(String? value, int max, {bool name = false}) =>
+    fitsServer(value, max) ?? precheckTextHint(value, name: name);
+
+/// A precheck hint under the field it is about: an icon and the sentence,
+/// wrapping on narrow screens; nothing when [text] is null.
+class PrecheckHintText extends StatelessWidget {
+  const PrecheckHintText(this.text, {super.key});
+  final String? text;
+  @override
+  Widget build(BuildContext context) {
+    final message = text;
+    if (message == null) return const SizedBox.shrink();
+    final color = Theme.of(context).colorScheme.error;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Semantics(
+        liveRegion: true,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.error_outline, size: 20, color: color),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(message, style: TextStyle(color: color)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// One zone of a lot while it is being reported.
 class ZoneDraft {
   final name = TextEditingController();
@@ -461,8 +496,12 @@ class ZoneEditor extends StatelessWidget {
     required this.onAdd,
     required this.onRemove,
     required this.onChanged,
+    this.feeHint,
   });
   final List<ZoneDraft> zones;
+
+  /// The precheck hint for the fee of the zone at an index, if any.
+  final String? Function(int index)? feeHint;
   final VoidCallback onAdd;
   final ValueChanged<ZoneDraft> onRemove;
 
@@ -524,12 +563,13 @@ class ZoneEditor extends StatelessWidget {
                           maxLength: 40,
                           decoration: const InputDecoration(
                             labelText: '分區名稱',
+                            errorMaxLines: 4,
                             hintText: '例：B2 機車區',
                             counterText: '',
                           ),
                           validator: (v) => (v?.trim().isEmpty ?? true)
                               ? '請填寫分區名稱，或刪除此分區'
-                              : fitsServer(v, 40),
+                              : textHint(v, 40, name: true),
                         ),
                         const SizedBox(height: 12),
                         AccessField(
@@ -545,10 +585,11 @@ class ZoneEditor extends StatelessWidget {
                           maxLength: 200,
                           decoration: const InputDecoration(
                             labelText: '這區怎麼停（選填）',
+                            errorMaxLines: 4,
                             hintText: '例：靠電梯，重機停最後一排',
                             counterText: '',
                           ),
-                          validator: (v) => fitsServer(v, 200),
+                          validator: (v) => textHint(v, 200),
                         ),
                         const SizedBox(height: 16),
                         Text(
@@ -559,6 +600,7 @@ class ZoneEditor extends StatelessWidget {
                         FeeEditor(
                           key: ObjectKey(zone),
                           value: zone.fee,
+                          errorText: feeHint?.call(i),
                           onChanged: (value) {
                             zone.fee = value;
                             onChanged();
@@ -798,6 +840,35 @@ class _ReportFormState extends State<ReportForm> {
     super.dispose();
   }
 
+  /// The spot as it will be sent.
+  Map<String, Object?> spotPayload() => {
+    'name': name.text.trim(),
+    'lat': widget.lat,
+    'lng': widget.lng,
+    'city': city,
+    'space_type': type.name,
+    'fee_note': feeNoteOf(fee),
+    if (!fee.isEmpty) 'fee': fee.toJson(),
+    'note': note.text.trim(),
+    if (guide.text.trim().isNotEmpty) 'parking_guide': guide.text.trim(),
+    // Lot details only for lots, whatever was typed before the bay kind
+    // changed.
+    if (lot) ...{
+      'facility_type': ?facility?.name,
+      'parking_access': ?access?.name,
+      if (entrance.text.trim().isNotEmpty)
+        'entrance_note': entrance.text.trim(),
+      if (zones.isNotEmpty)
+        'parking_zones': [for (final zone in zones) zone.toJson()],
+    },
+    'scooter_allowed': scooterRuled ? null : scooter,
+    'heavy_allowed': heavyRuled ? null : heavy,
+  };
+
+  /// What the server's precheck would refuse in the report as it stands.
+  List<PrecheckIssue> get issues =>
+      precheck({'action': 'create', 'spot': spotPayload()});
+
   void setType(SpaceType value) => setState(() {
     type = value;
     applyDefaults();
@@ -822,6 +893,7 @@ class _ReportFormState extends State<ReportForm> {
 
   Widget _buildForm(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final found = issues;
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: Form(
@@ -865,11 +937,14 @@ class _ReportFormState extends State<ReportForm> {
                   textInputAction: TextInputAction.next,
                   decoration: const InputDecoration(
                     labelText: '停車點名稱',
+                    errorMaxLines: 4,
                     hintText: '例：信義路五段收費機車格',
                     counterText: '',
                   ),
-                  validator: (v) =>
-                      (v?.trim().isEmpty ?? true) ? '請填寫名稱' : null,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  validator: (v) => (v?.trim().isEmpty ?? true)
+                      ? '請填寫名稱'
+                      : precheckTextHint(v, name: true),
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
@@ -922,6 +997,10 @@ class _ReportFormState extends State<ReportForm> {
                     vehiclesEdited = true;
                   }),
                 ),
+                PrecheckHintText(
+                  precheckHint(found, 'scooter_allowed'),
+                  key: const ValueKey('precheck-scooter_allowed'),
+                ),
                 ChoiceField<bool?>(
                   label: '大型重機',
                   vehicle: VehicleType.heavy,
@@ -932,6 +1011,10 @@ class _ReportFormState extends State<ReportForm> {
                     heavyRuled = false;
                     vehiclesEdited = true;
                   }),
+                ),
+                PrecheckHintText(
+                  precheckHint(found, 'heavy_allowed'),
+                  key: const ValueKey('precheck-heavy_allowed'),
                 ),
               ],
             ),
@@ -954,14 +1037,17 @@ class _ReportFormState extends State<ReportForm> {
                     maxLines: 2,
                     decoration: const InputDecoration(
                       labelText: '入口在哪裡',
+                      errorMaxLines: 4,
                       hintText: '例：入口在松仁路側，機車走右側坡道',
                       alignLabelWithHint: true,
                     ),
-                    validator: (v) => fitsServer(v, 500),
+                    autovalidateMode: AutovalidateMode.onUserInteraction,
+                    validator: (v) => textHint(v, 500),
                   ),
                   const SizedBox(height: 16),
                   ZoneEditor(
                     zones: zones,
+                    feeHint: (i) => precheckHint(found, 'parking_zones.$i.fee'),
                     onAdd: () => setState(() => zones.add(ZoneDraft())),
                     onRemove: (zone) => setState(() {
                       zones.remove(zone);
@@ -978,6 +1064,7 @@ class _ReportFormState extends State<ReportForm> {
                 const SizedBox(height: 8),
                 FeeEditor(
                   value: fee,
+                  errorText: precheckHint(found, 'fee'),
                   onChanged: (v) => setState(() => fee = v),
                 ),
                 const SizedBox(height: 20),
@@ -987,10 +1074,12 @@ class _ReportFormState extends State<ReportForm> {
                   maxLines: 2,
                   decoration: InputDecoration(
                     labelText: '停車指引',
+                    errorMaxLines: 4,
                     hintText: lot ? '例：B2 機車區靠電梯，重機停最後一排' : '例：格位在便利商店前，靠路口一側',
                     alignLabelWithHint: true,
                   ),
-                  validator: (v) => fitsServer(v, 500),
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  validator: (v) => textHint(v, 500),
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
@@ -999,9 +1088,12 @@ class _ReportFormState extends State<ReportForm> {
                   maxLines: 3,
                   decoration: const InputDecoration(
                     labelText: '其他備註',
+                    errorMaxLines: 4,
                     hintText: '例：夜間有管理員，假日常客滿',
                     alignLabelWithHint: true,
                   ),
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  validator: (v) => textHint(v, 500),
                 ),
               ],
             ),
@@ -1012,36 +1104,16 @@ class _ReportFormState extends State<ReportForm> {
                   ? null
                   : () async {
                       if (!form.currentState!.validate()) return;
+                      // Each hint already sits under its field; the message
+                      // also covers one scrolled out of view.
+                      if (issues.firstOrNull case final issue?) {
+                        return showMessage(context, issue.message);
+                      }
                       setState(() => sending = true);
                       await runAction(context, () async {
                         final result = await widget.store.submit({
                           'action': 'create',
-                          'spot': {
-                            'name': name.text.trim(),
-                            'lat': widget.lat,
-                            'lng': widget.lng,
-                            'city': city,
-                            'space_type': type.name,
-                            'fee_note': feeNoteOf(fee),
-                            if (!fee.isEmpty) 'fee': fee.toJson(),
-                            'note': note.text.trim(),
-                            if (guide.text.trim().isNotEmpty)
-                              'parking_guide': guide.text.trim(),
-                            // Lot details only for lots, whatever was typed
-                            // before the bay kind changed.
-                            if (lot) ...{
-                              'facility_type': ?facility?.name,
-                              'parking_access': ?access?.name,
-                              if (entrance.text.trim().isNotEmpty)
-                                'entrance_note': entrance.text.trim(),
-                              if (zones.isNotEmpty)
-                                'parking_zones': [
-                                  for (final zone in zones) zone.toJson(),
-                                ],
-                            },
-                            'scooter_allowed': scooterRuled ? null : scooter,
-                            'heavy_allowed': heavyRuled ? null : heavy,
-                          },
+                          'spot': spotPayload(),
                         });
                         if (context.mounted) {
                           Navigator.pop(context);

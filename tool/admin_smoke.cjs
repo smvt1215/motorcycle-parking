@@ -18,15 +18,16 @@ const factor = {
 const communityId = '33333333-3333-4333-8333-333333333333';
 const officialId = '44444444-4444-4444-8444-444444444444';
 const reports = [
-  { id: '55555555-5555-4555-8555-555555555551', source_id: communityId, reason: '格位類型：建議「重機專用格」', field: 'space_type', proposed: { space_type: 'heavyOnly' }, note: '現場已改漆重機專用格標線，地面有「大型重機」字樣。', created_at: '2026-10-24T06:00:00Z', base_spot: { space_type: 'freeMotorcycle' } },
-  { id: '55555555-5555-4555-8555-555555555552', source_id: `official:${officialId}`, reason: '機車停放資格：建議「普通機車可停 · 大型重機不可停」', field: 'eligibility', proposed: { heavy_allowed: false }, note: '', created_at: '2026-10-24T07:00:00Z' },
-  { id: '55555555-5555-4555-8555-555555555553', source_id: `official:${officialId}`, reason: '點位已不存在：入口封閉', field: 'gone', proposed: { hidden: true }, note: '入口已封閉施工，現場無法進入。', created_at: '2026-10-24T08:00:00Z' },
+  { id: '55555555-5555-4555-8555-555555555551', source_id: communityId, reason: '格位類型：建議「重機專用格」', field: 'space_type', proposed: { space_type: 'heavyOnly' }, note: '現場已改漆重機專用格標線，地面有「大型重機」字樣。', created_at: '2026-10-24T06:00:00Z', base_spot: { space_type: 'freeMotorcycle' }, risk: 'medium' },
+  { id: '55555555-5555-4555-8555-555555555552', source_id: `official:${officialId}`, reason: '機車停放資格：建議「普通機車可停 · 大型重機不可停」', field: 'eligibility', proposed: { heavy_allowed: false }, note: '', created_at: '2026-10-24T07:00:00Z', risk: 'high' },
+  { id: '55555555-5555-4555-8555-555555555553', source_id: `official:${officialId}`, reason: '點位已不存在：入口封閉', field: 'gone', proposed: { hidden: true }, note: '入口已封閉施工，現場無法進入。', created_at: '2026-10-24T08:00:00Z', risk: 'medium' },
 ];
 const spot = { lat: 25.0581, lng: 121.5226, city: '臺北市', district: '中山區', fee_note: '每小時 20 元', note: '', scooter_allowed: true, heavy_allowed: null, source_name: '', updated_at: '2026-10-23T00:00:00Z',
   address: '', road_segment: '', entrance_note: '', parking_guide: '', special_rules: '', facility_type: null, parking_access: null, scooter_total: null };
 const communitySpot = { ...spot, id: communityId, name: '中山北路二段路邊機車格', space_type: 'paidMotorcycle', status: 'pending' };
 const officialSpot = { ...spot, id: officialId, name: '新北市政府行政大樓地下停車場', city: '新北市', district: '板橋區', lat: 25.0124, lng: 121.4651, space_type: 'offStreet', heavy_allowed: true, source_name: '新北市政府', hidden: false,
-  address: '新北市板橋區中山路一段 161 號', facility_type: 'underground', parking_access: 'scooterHeavy', source_url: 'https://example.test/notice', source_id: 'ntpc-001', effective_date: '2026-01-01', license_note: '' };
+  address: '新北市板橋區中山路一段 161 號', facility_type: 'underground', parking_access: 'scooterHeavy', source_url: 'https://example.test/notice', source_id: 'ntpc-001', effective_date: '2026-01-01', license_note: '',
+  fee: { scooter: { mode: 'hourly', amount: 20, per_minutes: 60 }, heavy: { mode: 'same_as_scooter' } }, fee_note: '每小時 20 元（大型重機比照機車費率）' };
 const hiddenSpot = { ...spot, id: '66666666-6666-4666-8666-666666666666', name: '三重正義北路機車格', city: '新北市', district: '三重區', space_type: 'freeMotorcycle', status: 'hidden' };
 
 function session(role, aal, factors = [factor]) {
@@ -157,7 +158,9 @@ function session(role, aal, factors = [factor]) {
         page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
         const waitText = async text => {
           try {
-            await page.getByText(text, { exact: true }).waitFor({ timeout: 15000 });
+            // Flutter web exposes some text (e.g. a snack bar's message) as the
+            // aria-label of a group rather than as a text node.
+            await page.getByText(text, { exact: true }).or(page.locator(`flt-semantics[aria-label="${text}"]`)).first().waitFor({ timeout: 15000 });
           } catch (error) {
             await page.screenshot({ path: path.join(output, `${name}-failure.png`) });
             await fs.writeFile(path.join(output, `${name}-failure.json`), JSON.stringify({ errors, requests, html: await page.content() }, null, 2));
@@ -200,6 +203,14 @@ function session(role, aal, factors = [factor]) {
           await page.screenshot({ path: path.join(output, `${name}-next.png`) });
           await page.getByRole('button', { name: '復原', exact: true }).click();
           await waitText('格位類型的修改建議');
+          // Rejecting asks why first: a bottom sheet on phones, a dialog wider.
+          await page.getByRole('button', { name: '駁回', exact: true }).click();
+          await waitText('駁回原因');
+          await page.getByRole('radio', { name: /^重複回報/ }).click();
+          await page.screenshot({ path: path.join(output, `${name}-reject.png`) });
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} reject reasons scroll sideways`);
+          await page.getByRole('button', { name: '取消', exact: true }).click();
+          await waitText('格位類型的修改建議');
           if (mobile) await page.getByRole('button', { name: /^返回佇列/ }).click();
           await page.getByRole('button', { name: '已隱藏的點位', exact: true }).click();
           await page.getByRole('button', { name: '恢復顯示', exact: true }).waitFor({ timeout: 15000 });
@@ -226,6 +237,25 @@ function session(role, aal, factors = [factor]) {
           await waitText('官方點（新北市政府）');
           await page.screenshot({ path: path.join(output, `${name}-spot-form.png`) });
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} spot form scrolls sideways`);
+          // Its structured fee: the editor and the text riders read.
+          {
+            const plate = page.getByText(officialSpot.fee_note);
+            const box = page.viewportSize();
+            const shown = async () => {
+              const at = (await plate.count()) ? await plate.first().boundingBox() : null;
+              return at && at.y > box.height * 0.2 && at.y + at.height < box.height - 180;
+            };
+            await page.mouse.move(box.width * (mobile ? 0.5 : 0.65), box.height * 0.5);
+            for (let i = 0; i < 40 && !(await shown()); i++) {
+              await page.mouse.wheel(0, 120);
+              await page.waitForTimeout(100);
+            }
+            assert.ok(await shown(), `${name} fee text is reachable`);
+            await page.mouse.wheel(0, -160);
+            await page.waitForTimeout(300);
+            await page.screenshot({ path: path.join(output, `${name}-spot-fee.png`) });
+            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} fee editor scrolls sideways`);
+          }
           // A community spot: verify its stored vehicle access as it is.
           if (mobile) await page.getByRole('button', { name: '返回點位清單', exact: true }).click();
           await page.getByRole('button', { name: /^中山北路二段路邊機車格/ }).click();

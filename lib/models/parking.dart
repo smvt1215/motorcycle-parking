@@ -191,6 +191,7 @@ class ParkingSpot {
     this.status = TrustStatus.pending,
     this.updatedAt,
     this.lastConfirmedAt,
+    this.createdAt,
     this.note = '',
     this.district = '',
     this.sourceUrl = '',
@@ -226,6 +227,10 @@ class ParkingSpot {
   final bool? heavyAllowed, scooterAllowed;
   final TrustStatus status;
   final DateTime? updatedAt, lastConfirmedAt;
+
+  /// When the spot was added (a community spot's report or import); null
+  /// for sources that do not send it.
+  final DateTime? createdAt;
   final FacilityType? facilityType;
   final ParkingAccess? access;
   final String address, roadSegment, entranceNote, parkingGuide, specialRules;
@@ -309,6 +314,7 @@ class ParkingSpot {
       lastConfirmedAt: DateTime.tryParse(
         j['last_confirmed_at'] as String? ?? '',
       ),
+      createdAt: DateTime.tryParse(j['created_at'] as String? ?? ''),
       note: j['note'] as String? ?? '',
       district: j['district'] as String? ?? '',
       sourceUrl: j['source_url'] as String? ?? '',
@@ -372,6 +378,7 @@ class ParkingSpot {
         },
       'updated_at': updatedAt?.toIso8601String(),
       'last_confirmed_at': lastConfirmedAt?.toIso8601String(),
+      if (createdAt != null) 'created_at': createdAt!.toIso8601String(),
       'note': note,
       'district': district,
       'source_url': sourceUrl,

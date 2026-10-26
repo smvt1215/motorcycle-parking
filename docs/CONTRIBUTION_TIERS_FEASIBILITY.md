@@ -1,11 +1,11 @@
 # 貢獻等級與遊戲化機制 — 可行性研究
 
-> 狀態：研究結論與設計提案，尚未實作  
+> 狀態：研究結論與設計提案。階段 0 的駁回分類與風險（`resolution_kind`、`risk`）與「我的建議」（`my_contributions()`）實作中，其餘尚未實作  
 > 日期：2026-10-25（Asia/Taipei）  
-> 盤點基準：`main` commit `40d96db`（含 #76）；另參考 #81、#83、#84、#85（均已合併，#84 的核驗欄位已在 `main`）  
+> 盤點基準：`main` commit `40d96db`（含 #76）；另參考 #81、#83、#84、#85（均已合併，#84 的核驗欄位已在 `main`）。2026-10-25 以 `main` commit `b827aab` 複核狀態：盤點後合併的 #86、#87、#89 只改文件，§3 現況盤點仍成立  
 > 依據：[社群共筆與停車資訊核實機制](COMMUNITY_VERIFICATION_PLAN.md)（以下稱「核實計畫」）、[Admin Web 計畫](ADMIN_WEB.md)、[專案總計畫「社群回報機制」](PLAN.md#社群回報機制)  
 > 目標（2026-10-25 使用者決定）：**加入遊戲化機制，使 95% 的審查由社群完成**，管理員只處理剩下的 5%。  
-> 性質：本文不更改程式。採用本方案時，核實計畫 §1「不在本計畫範圍」中的「公開使用者排行榜、可交換點數等遊戲化機制」一句，以及 §3.3「收費／時段優先人工確認」（依 §0 第 3 點費率已開放為中風險），需另開 PR 修訂（#85 已合併；為使本 PR 只新增文件，修訂另開 PR）。
+> 性質：本文不更改程式。核實計畫 §1「不在本計畫範圍」中的遊戲化一句，以及 §3.3 的收費／時段策略（依 §0 第 3 點費率開放為中風險），已依本文決策由 #87 修訂（另含 §2.2）。
 
 ## 0. 決策紀錄（2026-10-25）
 
@@ -28,7 +28,8 @@ B 類保留管理員結案的理由不是不信任社群，而是這些操作一
 8. 點數第一年不開放兌換金錢或實物；只做等級、徽章、排行榜、任務。
 9. 官方點的「明載」旗標 `vehicle_source` **先回填再開放**：匯入工具補上旗標並完成既有 1,497 筆回填之前，官方點的車種欄位不開放社群核實，只能標爭議。
 10. 預檢硬拒絕（`reject`）只限個資、官方來源欄位（`validate.ts` 已擋，預檢補記錄）、政策禁止項；其餘矛盾一律 `fix`，修正後可重送。
-11. 核實計畫的修訂（§1 不在範圍句、§2.2 與 §3.3 費率策略）現在另開 PR 一起改；階段 0 的實作在本研究文件合併後另開 session，分成小 PR。
+11. 核實計畫的修訂（§1 不在範圍句、§2.2 與 §3.3 費率策略）現在另開 PR 一起改（#87 已合併）；階段 0 的實作在本研究文件合併後另開 session，分成小 PR。
+12. **駁回分類定為 6 類**：`wrong`（與現況不符）、`duplicate`（與既有案件或已處理的建議重複）、`insufficient`（資訊不足、無法查證）、`outdated`（點位已更新，建議不再適用）、`abuse`（濫用）、`other`（其他，需寫處理說明）。在 §6 原本 4 類之外加上 `insufficient` 與 `outdated`，是為了讓 §5.3 計分時只有 `wrong`、`abuse` 算提案者的錯，不會因為無法查證或資料已更新就誤罰。`resolution_note` 只給管理員看，回報者只會看到依分類顯示的固定文案。
 
 ## 1. 結論
 
@@ -75,6 +76,24 @@ A 類（法規）與 B 類（資料穩定性）依 §0 第 3 點只能由管理�
 
 活躍審核者少於這個量時，案件會逾時（§5.1 的 14 天）回到管理員，社群結案率自然下降。這就是為什麼遊戲化要存在：它的工作是把「願意做 5 件」的人數養起來，而不是讓每個人做更多件。
 
+### 2.4 量測基線（階段 0）
+
+導入遊戲化之前先記錄基線，之後才能比較社群結案率與時效。`admin_review_baseline(p_months int default 12)`（security invoker，先檢查 `is_admin()`，非管理員或沒有 `aal2` 一律 `42501`）以 Asia/Taipei 月份分組，每月一列、最新的在前：
+
+| 欄位 | 定義 |
+| --- | --- |
+| `reports` | 當月入列的案件數 |
+| `reporters` | 當月案件中不重複的回報者人數（投票觸發的案件沒有回報者） |
+| `auto_reports` | 當月由投票觸發、沒有回報者的案件數 |
+| `resolved` | 當月結案數，不論結案方式（含 Dashboard 舊路徑） |
+| `admin_resolved` | 當月經 `admin_resolve_report` 結案的件數（`resolved_by` 有值） |
+| `median_hours` | `admin_resolved` 從入列到結案的時數中位數 |
+| `by_status` | 當月結案依 `accepted`／`rejected`／`closed` 分布 |
+| `by_resolution_kind` | 當月結案依分類分布；`unclassified` 是沒有記錄分類的件數 |
+| `by_risk` | 當月入列依風險分布；`unclassified` 是沒有推導出風險的件數 |
+
+限制：「結案不修改」在資料表上同樣是 `accepted`，要分開算得看稽核紀錄裡 `spot` 是否為 null；社群結案上線前，`admin_resolved` 就等於全部的逐案結案。目前只做資料層，不做儀表板（ADMIN_WEB.md「不在範圍內」）。管理員可在 SQL Editor 以 admin JWT 執行，或之後由指標頁讀取。
+
 ## 3. 現況盤點：系統裡已存在的隱性等級
 
 | 身分 | 判定方式（程式位置） | 現有能力 | 現有限制 |
@@ -97,8 +116,8 @@ A 類（法規）與 B 類（資料穩定性）依 §0 第 3 點只能由管理�
 ### 3.2 現在缺的
 
 - **社群沒有結案路徑。** 只有 `admin_resolve_report` 能把案件從 `pending` 改掉。
-- **使用者看不到自己的貢獻。** `moderation_queue` 只有 `admin_read_moderation` 一條讀取政策；貢獻頁（`lib/features/contribute/`）只列目前地圖範圍內的停車點。
-- **駁回沒有分類。** `rejected` 只有自由文字 `resolution_note`，分不出「判斷錯誤」「重複」「濫用」。
+- **使用者看不到自己的貢獻。** `moderation_queue` 只有 `admin_read_moderation` 一條讀取政策；貢獻頁（`lib/features/contribute/`）只列目前地圖範圍內的停車點。（階段 0 已補：`my_contributions()`，`202610260030_my_contributions.sql`；貢獻頁「我送出的建議」，見 §7。）
+- **駁回沒有分類。** `rejected` 只有自由文字 `resolution_note`，分不出「判斷錯誤」「重複」「濫用」。（階段 0 已補上 `resolution_kind` 與 `risk`，見 §6 與 [ADMIN_WEB.md P3](ADMIN_WEB.md#p3-實作)。）
 - **沒有使用者資料表。** #83 把顯示名稱與頭像放在 `raw_user_meta_data`（使用者可自改）；#81 把名稱快照到 `community_spots.contributor_name`。等級、點數屬伺服器判定的資料，**不能放 `raw_user_meta_data`**。
 - **沒有中間角色。** `is_admin()` 是布林；#84 的核驗 trigger 與所有管理 RPC 都以它為唯一閘門。
 - **沒有照片上傳。** 核實計畫 P2 的 `spot_evidence` 尚未實作；#85 §5.2 例外與本文 L3 的照片確認都依賴它。
@@ -107,7 +126,7 @@ A 類（法規）與 B 類（資料穩定性）依 §0 第 3 點只能由管理�
 
 | 來源 | 內容 | 對本方案的影響 |
 | --- | --- | --- |
-| 核實計畫 §1（#60） | 不在範圍：排行榜、可交換點數；原則 2：不以多數票取代法規 | **排行榜與點數需修訂該句**（另開 PR）。原則 2 保留：法規與路邊合法性仍是禁區，社群結案限事實類欄位與 #85 §5.2 例外 |
+| 核實計畫 §1（#60） | 不在範圍：排行榜、可交換點數；原則 2：不以多數票取代法規 | **排行榜與點數一句已由 #87 修訂**。原則 2 保留：法規與路邊合法性仍是禁區，社群結案限事實類欄位與 #85 §5.2 例外 |
 | 核實計畫 §5.2 | 計算單位是獨立觀察；合格＝已登入、帳齡 > 7 天、獨立性風險低；不把 IP 當身分 | 審核任務的計票沿用同一組獨立性檢查 |
 | 核實計畫 §4.1、§4.2 | `spot_observations`、`spot_field_verifications`（`source_kind`、`valid_until`） | 社群結案寫入的核實為 `source_kind='community'`；觀察表是點數與準確率的原始資料 |
 | #59（已合併） | 存在確認與車種資格解耦；舊投票只回到待確認 | 共識結案不得改變資格判斷的安全語意 |
@@ -321,6 +340,35 @@ validate.ts（結構）→ 預檢（組合／內容／行為）→ 法規預審 
 
 **指標。** 預檢攔截率（fix＋reject 占送出數）；誤攔率（被攔後申訴或管理員覆核認定無誤的比例，目標 ≤ 5%）；`hold` 案件最終被翻案的比例相對一般案件的倍數（驗證旗標有效）；各規則的觸發數與誤攔數（決定停用或調參）。
 
+**階段 0 實作（只看送出內容的規則）。** 規則資料在 `supabase/functions/submit-report/precheck_rules.json`（代碼、動作、訊息、占位詞、個資樣式），`precheck.ts` 在 `validate.ts` 通過後執行並強制；App 的 `lib/domain/precheck.dart` 鏡像同一份資料做即時提示，`test/precheck_test.dart` 逐欄比對 JSON，兩邊共同跑 `precheck_cases.json` 的命中與不誤攔案例。攔截回應為 400，`error` 維持短代碼（`precheck fix`／`precheck reject`），另帶 `action`、`message`（第一則中文說明）與 `issues[]`（`rule`、`action`、`field`、`message`）；`field` 是送出內容的路徑（例 `scooter_allowed`、`parking_zones.1.fee.heavy`、`proposed.name`）。舊版 App 不讀錯誤內容，只會顯示既有的通用失敗訊息；新版 App 把 `message` 原文顯示出來。跨欄位規則只在同一筆送出內容同時帶兩個欄位時判斷（修改建議只帶部分欄位，缺的那一邊不查資料庫推測）。
+
+| 規則代碼 | 動作 | 命中範例 | 不攔的例子 | 理由 |
+| --- | --- | --- | --- | --- |
+| `lot_roadside` | fix | `offStreet`＋`facility_type='roadside'` | `offStreet`＋`underground` | 路外場站不會是路邊格 |
+| `street_lot_details` | fix | `freeMotorcycle`＋`multiStorey`，或帶非空 `parking_zones` | 路邊格＋`roadside`、空分區 `[]` | 場站型式與分區只屬於路外場站 |
+| `heavy_only_scooter` | fix | `heavyOnly`＋`scooter_allowed=true` | `scooter_allowed=null` | 大型重機專用格依標線不收普通機車 |
+| `access_no_motorcycle` | fix | `parking_access='noMotorcycle'`＋任一車種 `true` | 該車種 `false`／`null` | 分類與車種互斥 |
+| `access_heavy_only_scooter` | fix | `heavyOnly` 分類＋普通機車 `true` | — | 同上 |
+| `access_scooter_only_heavy` | fix | `scooterOnly` 分類＋大型重機 `true` | `heavyCar` 分類不檢查（研究清單未列） | 同上 |
+| `zones_no_motorcycle` | fix | 每個分區都 `noMotorcycle`＋任一車種 `true` | 有一區沒填分類 | 研究列普通機車，大型重機同理一併檢查 |
+| `fee_follows_missing_scooter` | fix | `heavy.mode='same_as_scooter'` 且沒有 `scooter` | 普通機車有費率 | 比照的對象不存在 |
+| `fee_cap_below_amount` | fix | 計時 40 元、當日上限 30 元 | 上限等於金額 | 上限低於單次計費不合理 |
+| `fee_hourly_zero` | fix | 計時 0 元 | 計次 0 元、每日 0 元（研究只列計時） | 應選「免費」 |
+| `gone_with_changes` | fix | 「已不存在」同時改名稱 | 只帶 `hidden`／`status` | §5.8 提案本身：已不存在不得夾帶其他修改 |
+| `placeholder_name` | fix | 名稱或分區名稱整段是「測試」「asdf」「停車場」「...」（忽略空白、標點、大小寫、全形） | 「市府轉運站停車場」「B2 測試區」 | 只比對整段，不比對包含 |
+| `placeholder_text` | fix | 只有文字的建議（其他備註）整段是「不知道」 | 結構化建議或「已不存在」的選填補充說明寫「無」 | 選填欄位寫「無」是正常用法 |
+| `pii_phone` | reject | `0912-345-678`、`+886 912 345 678`、全形數字、`(02)2345-6789`、`07-2345678` | `06:00-22:00`、`07-22 點`、`2026-11-30`、巷弄門牌、0800 免付費 | 市話只認括號或連字號格式，裸 10 碼市話不攔 |
+| `pii_email` | reject | `rider.chen@example.com.tw` | — | 個資 |
+| `pii_national_id` | reject | `A123456789`、`a123456789`、居留證 `A800000014`（檢查碼正確） | 檢查碼錯誤的 `A123456780`、11 碼 | 加檢查碼降低格位編號誤攔 |
+| `pii_plate` | reject | `ABC-1234`、`MXY-123`、`123-ABC`、`AB-1234`、`1234-AB` | `B2-12`、`1F-A`、小寫 `abc-1234`、`AB-12`、`ABCD-1234` | 只認帶連字號的大寫現行格式 |
+| `ad_url` | reject | `https://…`、`www.…`、`line.me` | `1.5 km`、`No.5`、`B2.機車區` | 研究歸在「個資與廣告」 |
+
+檢查的文字欄位：新增／更新的名稱、`note`、`fee_note`、入口、指引、分區名稱與指引；修改建議 `proposed` 的文字欄位、`note`、`reason`；任何動作的 `note`。官方來源欄位（`source_url` 等）由 `validate.ts` 白名單擋下，`precheck_results` 紀錄隨階段 1。
+
+階段 0 拍板（2026-10-25）：網址維持 `reject`（階段 0 的 reject 不計次，回報者刪掉網址即可重送，體驗與 fix 相同）；電話攔截範圍如上表（含停車場客服與括號／連字號市話，不含 0800 與裸 10 碼市話）；占位詞含整段的「停車場」「停車格」「停車位」，不含「機車格」。
+
+**階段 1 候選規則**（階段 0 不做）：同一帳號每日 reject 達 3 次封鎖當日後續提案（§10 第 15 點，屬行為異常，需計數表）；備註資格宣稱 reroute 至資格表單；全形重複字元與表情符號比例；`parking_access='heavyCar'` 卻 `scooter_allowed=true`；計次或每日 0 元（應選免費）。
+
 ## 6. 資料模型與 API（建議，實作時再定版號）
 
 **新增表**
@@ -358,7 +406,8 @@ validate.ts（結構）→ 預檢（組合／內容／行為）→ 法規預審 
 
 **既有表調整**
 
-- `moderation_queue`：加 `category`（`a_rule/b_stability/c_open`，§0 第 3 點）、`risk`、`prescreened_at`（B 類社群預審達成時間）、`resolved_by_kind`（`admin/community/guardian/system_expired`）、`resolution_kind`（`wrong/duplicate/abuse/other`，駁回必填）；`resolved_by` 社群結案時為 null，參與者記在 `review_votes` 與稽核。B 類案件達預審門檻時由 `submit_review_vote` 寫 `prescreened_at` 並套用安全中間狀態，不結案。
+- `moderation_queue`：加 `category`（`a_rule/b_stability/c_open`，§0 第 3 點）、`risk`、`prescreened_at`（B 類社群預審達成時間）、`resolved_by_kind`（`admin/community/guardian/system_expired`）、`resolution_kind`（`wrong/duplicate/insufficient/outdated/abuse/other`，駁回必填；2026-10-25 使用者決定為 6 類，見 §0 第 12 點）；`resolved_by` 社群結案時為 null，參與者記在 `review_votes` 與稽核。B 類案件達預審門檻時由 `submit_review_vote` 寫 `prescreened_at` 並套用安全中間狀態，不結案。
+  - **階段 0 已實作（`202610260020_review_resolution_kind.sql`）**：`resolution_kind` 與 `risk` 兩欄，皆可為 null。`risk` 由入列 trigger 呼叫 `moderation_risk(field, reason, proposed, base_spot)` 推導，取類別與每個建議欄位中最高的等級：名稱、備註、入口與停車指引為低；建議內容裡與現值相同的 `space_type`（App 改場站型式時會一併送出）不算變更；費率、場站型式、路邊格位之間的型式變更、移位 ≤ 150 m、已不存在（含投票觸發）為中；停放資格、型式進出 `offStreet`、移位 > 150 m，以及沒有快照或無法判斷的案件都算高。既有資料也用同一套規則回填。既有的駁回列 `resolution_kind` 維持 null，指標列為「未分類」，不猜原因。`category`、`prescreened_at`、`resolved_by_kind` 留到階段 1 以後。
 - `official_heavy_spots`：不新增欄位；`official_viewport_spots(_v2)` 與直接讀取的 view 加 `community_overrides jsonb`（由 `official_spot_overlays` 聚合）。`admin_resolve_report` 對官方點的 patch 改為預設寫覆蓋層，另加 `p_write_official boolean`（需填寫核對的來源說明）才直接改官方值。
 - 匯入 SQL（`tool/import_mymaps.py` 的 `official_sql()` 與 Admin Web P6）：`on conflict` 只更新官方欄位，保留 `hidden`，並由 trigger 處理覆蓋層狀態；差異試算列出受影響的覆蓋層。
 - `admin_audit_log`：新增 `action` 值 `community_resolve`、`audit_sample`、`set_role`、`reverse_decision`。
@@ -368,6 +417,7 @@ validate.ts（結構）→ 預檢（組合／內容／行為）→ 法規預審 
 - `next_review_tasks(p_city, p_limit)`：依等級、獨立性、縣市派任務；黃金任務混入。
 - `submit_review_vote(p_task, p_vote, p_evidence)`：經 `submit-report` Edge Function 進入（沿用 IP／裝置雜湊；限流改為審核票獨立計數）；投票後檢查共識並在同一 transaction 結案、發點數、寫核實與稽核；高風險型式／位置結案時一併把該點的社群車種核實設為失效。
 - `my_contributions()`：本人的建議、狀態、等級、點數、徽章、距下一級差距。
+  - 階段 0 版本（`202610260030_my_contributions.sql`）：security definer、`search_path=''`，只回 `auth.uid()` 本人的修改建議／已不能停車回報（`moderation_queue.reporter_id`）與新增停車點（`community_spots.user_id`）；anon 無執行權。欄位：`id`、`kind`（`report`／`new_spot`）、`spot_id`、`spot_name`、`field`、`summary`（回報者自己送出的摘要 `reason`）、`status`、`created_at`、`resolved_at`、`resolution_kind`（只在 `rejected`／`closed` 時）、`spot_visible`、`lat`／`lng`（只在點位公開時）。點位已隱藏時名稱用回報當時的 `base_spot`，不洩漏之後的管理員修改。不回傳 `reporter_id`、`resolved_by`、IP／裝置雜湊與 `resolution_note`（使用者 2026-10-25 決定：處理說明不回給回報者，駁回時只依 `resolution_kind` 分類顯示固定文案）。分頁以 `(created_at, id)` 為游標，每頁最多 50 筆。等級、點數、徽章等階段 1 再加。
 - `leaderboard(p_city, p_month)`：只回選擇加入者的 `display_name`、等級、名次；security definer 內部過濾。
 - `confirm_evidence(p_evidence, p_supports, p_note)`：L3＋；寫 `spot_evidence.content_confirmed_by/at` 與稽核。
 - `guardian_resolve_dispute(p_case, p_decision, p_note)`：L4；只能在 `disputed` 案件上做「維持前一安全狀態」或「送管理員」，不能直接採納高風險值。
@@ -380,6 +430,7 @@ validate.ts（結構）→ 預檢（組合／內容／行為）→ 法規預審 
 ## 7. 使用者介面
 
 - **App「貢獻」頁**改為三區：我的等級與點數（含距下一級差距）、待我審核的任務（依目前地圖縣市）、我送出的建議與狀態。
+  - 階段 0 先上「我送出的建議」：每筆以點位名稱、送出內容（新增停車點／建議修改某欄位／回報這裡已經不能停車）、送出日期與狀態牌呈現；狀態牌是每列唯一醒目的元素，結果（已採納、未採納、已結案、車友已確認、已從地圖移除）用實心色牌＋圖示＋文字，等待中（審核中、在地圖上，待車友確認）用外框牌，不只靠顏色。點位仍在地圖上可開啟詳情；已不在地圖上時說明原因、不開啟。未登入只說明登入後可查看（登入按鈕沿用頁首提示卡）；空狀態引導新增停車點；讀取失敗可重試；「載入更早的紀錄」分頁。窄欄與手機狀態牌在上，寬度 ≥ 520 且字級 ≤ 1.3 倍時狀態牌在右欄。
 - **審核任務頁**：目前值／建議值／證據並排，三個按鈕，附照片入口；L0 看到「訓練模式，答案不計票」。
 - **詳情頁**沿用 #81「由車友 XXX 回報」，另在「資料與查核」區顯示「由 N 位車友確認・YYYY-MM-DD」；資格橫幅依 #85 §3.4 分層，不顯示等級。官方點有覆蓋層的欄位並列顯示「官方：X」「現場回報：Y（N 位車友確認・日期）」；`reported_gone` 顯示「車友回報已撤除，請先確認」橫幅。
 - **排行榜**在貢獻頁內，預設顯示本縣市本月；首次進入詢問是否加入顯示。
@@ -402,7 +453,7 @@ validate.ts（結構）→ 預檢（組合／內容／行為）→ 法規預審 
 | 隱私 | 點數、任務暴露活動地區 | 任務只用目前縣市、不存位置；排行榜只顯示縣市與名稱；standing 只本人與管理員可讀 |
 | 法律 | 點數若可兌換涉稅務與消保 | 第一年不開放兌換；開放前法務確認 |
 | 維運 | 多套狀態機、每日 job、黃金任務維護 | 分階段；每階段 pgTAP 與 Flutter 測試；閘門可一鍵關閉某類別 |
-| 核實計畫文件不一致 | §1 不在範圍句與本方案衝突 | 另開 PR 修訂 §1、§2.2、§3.3、§11，並把本文列為附屬設計 |
+| 核實計畫文件不一致 | §1 不在範圍句與本方案衝突 | #87 已修訂 §1、§2.2、§3.3，並把本文列為附屬設計；§11 未修訂 |
 
 ## 9. 分階段與依賴（每階段以指標驗收）
 
@@ -411,8 +462,8 @@ validate.ts（結構）→ 預檢（組合／內容／行為）→ 法規預審 
   ├─ moderation_queue.resolution_kind、risk；Admin Web 駁回必選
   ├─ my_contributions() + 貢獻頁「我的建議」
   ├─ 預檢模組中只看 payload 就能判定的規則（§5.8：型式／車種／費率結構組合、占位詞、個資格式）；只需 validate.ts 擴充與 Flutter 即時提示。需要查資料庫或外部服務的規則（位置反查、重複提案、現況衝突、行為異常）與 precheck_rules／precheck_results 移到階段 1
-  ├─ 量測基線：每月案件數、管理員結案時效、回報者人數（LEAN UX 待驗證項）
-  └─ 另開 PR 修訂核實計畫 §1 不在範圍句與 §3.3 費率策略（#85 已合併；§0 已決定）
+  ├─ 量測基線：每月案件數、管理員結案時效、回報者人數（LEAN UX 待驗證項）；已實作 admin_review_baseline()，見 §2.4
+  └─ 修訂核實計畫 §1 不在範圍句與 §3.3 費率策略（#87 已合併）
 階段 1（依賴核實計畫 P2：spot_observations、spot_evidence）
   ├─ review_tasks／review_votes／contributor_standing／point_ledger
   ├─ official_spot_overlays ＋ 匯入只更新官方欄位（§5.6；可先於遊戲化獨立交付）
@@ -530,6 +581,7 @@ validate.ts（結構）→ 預檢（組合／內容／行為）→ 法規預審 
 
 - [核實計畫 §5.2 交叉核實的判定](COMMUNITY_VERIFICATION_PLAN.md)、§4.1 `spot_observations`、§10 交付原則、§11 待拍板決策
 - [PR #85：核實規模分工與資格顯示分層](https://github.com/smvt1215/motorcycle-parking/pull/85)（已合併）
+- [PR #87：核實計畫依本文決策修訂 §1、§2.2、§3.3](https://github.com/smvt1215/motorcycle-parking/pull/87)（已合併）
 - [PR #84：管理員核驗社群點車種欄位](https://github.com/smvt1215/motorcycle-parking/pull/84)（已合併）
 - [PR #81：回報者來源快照](https://github.com/smvt1215/motorcycle-parking/pull/81)（已合併）
 - [PR #83：顯示名稱與頭像](https://github.com/smvt1215/motorcycle-parking/pull/83)（已合併）
