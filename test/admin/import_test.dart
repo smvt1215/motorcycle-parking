@@ -154,6 +154,14 @@ void main() {
       expect(gateway.imported.map((c) => c.$1.length), [500, 500, 201]);
     });
 
+    test('費率與收費資訊一起保留或覆寫', () async {
+      await imports.load('spots.json', file);
+      imports.setOverwrite(conflictId, 'fee_note', true);
+      expect(imports.overwrite[conflictId], {'fee', 'fee_note'});
+      imports.setOverwrite(conflictId, 'fee', false);
+      expect(imports.overwrite[conflictId], isEmpty);
+    });
+
     test('連線失敗時說明已匯入的部分不受影響', () async {
       await imports.load('spots.json', file);
       gateway.importError = StateError('offline');
@@ -198,6 +206,34 @@ void main() {
       expect(fees.selectedSpots, 2);
     });
 
+    test('同一寫法在不同格位判讀不同時分開列，不合併預設勾選', () async {
+      gateway.backlog = [
+        for (final (i, type) in ['heavyOnly', 'car'].indexed)
+          FeeBacklogItem(
+            sourceId: 'official:60000000-0000-4000-8000-00000000000$i',
+            official: true,
+            name: '點位 $i',
+            city: '新北市',
+            district: '板橋區',
+            spaceType: type,
+            feeNote: '每 4 小時 30 元',
+          ),
+      ];
+      await fees.load();
+      expect(fees.groups, hasLength(2));
+      expect(fees.spots(FeeVerdict.convertible), 1);
+      expect(fees.spots(FeeVerdict.manual), 1);
+      expect(fees.selectedSpots, 1);
+    });
+
+    test('寫入失敗時重新讀取清單仍保留錯誤', () async {
+      await fees.load();
+      gateway.convertError = StateError('offline');
+      await fees.convert('');
+      expect(fees.error, contains('連線失敗'));
+      expect(fees.loaded, isTrue);
+    });
+
     test('只寫入確認的費率，並帶讀取時的收費資訊', () async {
       await fees.load();
       fees.show(FeeVerdict.manual);
@@ -213,6 +249,7 @@ void main() {
       expect(items.first, {
         'source_id': 'official:50000000-0000-4000-8000-000000000000',
         'fee_note': '機車計次20元;機車月租300元;',
+        'space_type': 'offStreet',
         'fee': {
           'scooter': {'mode': 'per_visit', 'amount': 20},
         },

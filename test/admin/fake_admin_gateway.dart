@@ -553,6 +553,7 @@ class FakeAdminGateway implements AdminGateway {
   }
 
   List<FeeBacklogItem> backlog = [];
+  Object? convertError;
   final List<(List<Map<String, dynamic>>, String)> conversions = [];
 
   @override
@@ -564,6 +565,7 @@ class FakeAdminGateway implements AdminGateway {
     String note,
   ) async {
     conversions.add((items, note));
+    if (convertError case final error?) throw error;
     final ids = {for (final i in items) i['source_id']};
     backlog = [
       for (final b in backlog)

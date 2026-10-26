@@ -164,6 +164,14 @@ begin
         changes:=changes||jsonb_build_array(v_change);
       end if;
     end loop;
+    -- A fee is read from its text: when either is the administrator's, both
+    -- are kept or replaced together, never a file fee beside a kept text.
+    select coalesce(jsonb_agg(case
+        when c->>'field' in ('fee','fee_note') and jsonb_typeof(c->'admin') is distinct from 'object'
+        then c||jsonb_build_object('admin',(select p->'admin' from jsonb_array_elements(changes) p
+          where p->>'field' in ('fee','fee_note') and jsonb_typeof(p->'admin')='object' limit 1))
+        else c end order by o),'[]')
+      into changes from jsonb_array_elements(changes) with ordinality as e(c,o);
     status:=case when changes='[]'::jsonb then 'unchanged'
       when exists(select 1 from jsonb_array_elements(changes) c where jsonb_typeof(c->'admin')='object') then 'conflict'
       else 'update' end;
@@ -269,6 +277,10 @@ begin
           v_plan.target::text,null,v_after,v_note);
       else
         v_overwrite:=array(select jsonb_array_elements_text(coalesce(v_choice->'overwrite','[]')));
+        -- The fee and its text go together, whichever one was named.
+        if v_overwrite && array['fee','fee_note'] then
+          v_overwrite:=v_overwrite||array['fee','fee_note'];
+        end if;
         select coalesce(jsonb_object_agg(c->>'field',c->'incoming'),'{}'),
                '{}'::text[]
           into v_patch,v_kept
@@ -393,9 +405,11 @@ $$;
 revoke execute on function public.admin_fee_backlog() from public,anon;
 grant execute on function public.admin_fee_backlog() to authenticated;
 
--- Write confirmed fees: p_items is [{source_id, fee_note, fee}], at most 500.
--- A spot whose note changed since it was read, or that already has a fee,
--- is skipped rather than overwritten. fee_note is left as written. Audited
+-- Write confirmed fees: p_items is [{source_id, fee_note, space_type, fee}],
+-- at most 500. The reading depends on both the note and the space type (an
+-- amount on a heavy-only bay is the heavy rate), so a spot whose note or
+-- space type changed since it was read, or that already has a fee, is
+-- skipped rather than overwritten. fee_note is left as written. Audited
 -- per spot as convert_fee.
 create function public.admin_convert_fees(p_items jsonb,p_note text default '')
 returns jsonb language plpgsql security definer set search_path=public,extensions,pg_temp as $$
@@ -426,10 +440,10 @@ begin
       continue;
     end if;
     if v_official then
-      select jsonb_build_object('fee',o.fee,'fee_note',o.fee_note) into v_row
+      select jsonb_build_object('fee',o.fee,'fee_note',o.fee_note,'space_type',o.space_type) into v_row
         from official_heavy_spots o where o.id=v_target for update;
     else
-      select jsonb_build_object('fee',c.fee,'fee_note',c.fee_note) into v_row
+      select jsonb_build_object('fee',c.fee,'fee_note',c.fee_note,'space_type',c.space_type) into v_row
         from community_spots c where c.id=v_target for update;
     end if;
     if v_row is null then
@@ -438,6 +452,8 @@ begin
       v_skipped:=v_skipped||jsonb_build_object('source_id',v_id,'reason','已有結構化費率');
     elsif v_row->>'fee_note' is distinct from v_item->>'fee_note' then
       v_skipped:=v_skipped||jsonb_build_object('source_id',v_id,'reason','費率說明已變更，請重新讀取');
+    elsif v_row->>'space_type' is distinct from v_item->>'space_type' then
+      v_skipped:=v_skipped||jsonb_build_object('source_id',v_id,'reason','格位類型已變更，請重新讀取');
     else
       if v_official then
         update official_heavy_spots set fee=v_item->'fee',updated_at=now() where id=v_target;
@@ -446,7 +462,7 @@ begin
       end if;
       insert into admin_audit_log(actor,action,target_table,target_id,before,after,note)
       values(auth.uid(),'convert_fee',case when v_official then 'official_heavy_spots' else 'community_spots' end,
-        v_target::text,v_row,jsonb_build_object('fee',v_item->'fee','fee_note',v_row->'fee_note'),v_note);
+        v_target::text,v_row-'space_type',jsonb_build_object('fee',v_item->'fee','fee_note',v_row->'fee_note'),v_note);
       v_converted:=v_converted+1;
     end if;
   end loop;

@@ -99,6 +99,17 @@ select is((select jsonb_agg(c->>'field' order by c->>'field') from jsonb_array_e
   where jsonb_typeof(c->'admin')='object'),'["fee_note", "name"]','both edited fields are marked');
 select is((select c->'admin'->>'action' from jsonb_array_elements(pg_temp.plan()->'official:20000000-0000-4000-8000-000000000001'->'changes') c
   where c->>'field'='name'),'update_spot','with the write that set it');
+-- A file fee read from the old text is kept with the administrator's text.
+reset role;
+update file set spots=jsonb_set(spots,'{0,fee}','{"scooter":{"mode":"per_visit","amount":20}}');
+select pg_temp.act('admin');
+set local role authenticated;
+select is((select c->'admin'->>'action' from jsonb_array_elements(pg_temp.plan()->'official:20000000-0000-4000-8000-000000000001'->'changes') c
+  where c->>'field'='fee'),'update_spot','a fee goes with the administrator''s fee note');
+reset role;
+update file set spots=spots #- '{0,fee}';
+select pg_temp.act('admin');
+set local role authenticated;
 
 -- Apply keeps the administrator's fields unless told otherwise.
 create temporary table choice(value jsonb);
@@ -163,22 +174,25 @@ select is((select fee_note from admin_fee_backlog() where source_id='official:20
 select ok(not exists(select 1 from admin_fee_backlog() where source_id='official:20000000-0000-4000-8000-000000000002'),'spots with a fee are not listed');
 select throws_ok($$select admin_convert_fees((select jsonb_agg(x) from generate_series(1,501) x))$$,'22023',null,'at most 500 a call');
 select is(admin_convert_fees(jsonb_build_array(
-    jsonb_build_object('source_id','official:20000000-0000-4000-8000-000000000001','fee_note','機車每次 20 元',
+    jsonb_build_object('source_id','official:20000000-0000-4000-8000-000000000001','fee_note','機車每次 20 元','space_type','offStreet',
       'fee',jsonb_build_object('scooter',jsonb_build_object('mode','per_visit','amount',20))),
-    jsonb_build_object('source_id','20000000-0000-4000-8000-000000000003','fee_note','舊的說明',
+    jsonb_build_object('source_id','20000000-0000-4000-8000-000000000003','fee_note','舊的說明','space_type','offStreet',
       'fee',jsonb_build_object('scooter',jsonb_build_object('mode','free'))),
-    jsonb_build_object('source_id','20000000-0000-4000-8000-000000000004','fee_note','免費（大型重機比照機車費率）',
+    jsonb_build_object('source_id','20000000-0000-4000-8000-000000000004','fee_note','免費（大型重機比照機車費率）','space_type','offStreet',
       'fee',jsonb_build_object('scooter',jsonb_build_object('mode','same_as_scooter'))),
-    jsonb_build_object('source_id','official:20000000-0000-4000-8000-000000000002','fee_note','機車免費;',
+    jsonb_build_object('source_id','official:20000000-0000-4000-8000-000000000002','fee_note','機車免費;','space_type','offStreet',
       'fee',jsonb_build_object('scooter',jsonb_build_object('mode','free'))),
-    jsonb_build_object('source_id','nope','fee',jsonb_build_object())
+    jsonb_build_object('source_id','nope','fee',jsonb_build_object()),
+    jsonb_build_object('source_id','20000000-0000-4000-8000-000000000004','fee_note','免費（大型重機比照機車費率）','space_type','heavyOnly',
+      'fee',jsonb_build_object('heavy',jsonb_build_object('mode','free')))
   ),'確認轉換'),
   '{"converted":1,"skipped":[
     {"reason":"費率說明已變更，請重新讀取","source_id":"20000000-0000-4000-8000-000000000003"},
     {"reason":"費率格式不符","source_id":"20000000-0000-4000-8000-000000000004"},
     {"reason":"已有結構化費率","source_id":"official:20000000-0000-4000-8000-000000000002"},
-    {"reason":"無法辨識的點位","source_id":"nope"}]}'::jsonb,
-  'one written; changed notes, invalid fees and existing fees are skipped');
+    {"reason":"無法辨識的點位","source_id":"nope"},
+    {"reason":"格位類型已變更，請重新讀取","source_id":"20000000-0000-4000-8000-000000000004"}]}'::jsonb,
+  'one written; changed notes or space types, invalid fees and existing fees are skipped');
 reset role;
 select is((select fee from official_heavy_spots where id='20000000-0000-4000-8000-000000000001'),'{"scooter":{"mode":"per_visit","amount":20}}'::jsonb,'the fee is written');
 select is((select fee_note from official_heavy_spots where id='20000000-0000-4000-8000-000000000001'),'機車每次 20 元','the note stays as written');

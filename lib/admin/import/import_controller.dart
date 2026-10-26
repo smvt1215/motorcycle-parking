@@ -166,9 +166,11 @@ class ImportController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// A fee and its text are kept or replaced together.
   void setOverwrite(String sourceId, String field, bool replace) {
     final fields = overwrite.putIfAbsent(sourceId, () => {});
-    replace ? fields.add(field) : fields.remove(field);
+    final pair = feePair.contains(field) ? feePair : {field};
+    replace ? fields.addAll(pair) : fields.removeAll(pair);
     notifyListeners();
   }
 
@@ -311,6 +313,7 @@ class FeeConversionController extends ChangeNotifier {
             {
               'source_id': s.sourceId,
               'fee_note': s.feeNote,
+              'space_type': s.spaceType,
               'fee': g.reading.fee!.toJson(),
             },
     ];
@@ -327,6 +330,10 @@ class FeeConversionController extends ChangeNotifier {
     }
     result = total;
     converting = false;
+    // Reading the list again must not hide that a part failed to write.
+    final failed = error;
     await load();
+    error = failed ?? error;
+    notifyListeners();
   }
 }

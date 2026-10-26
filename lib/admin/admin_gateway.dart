@@ -518,10 +518,19 @@ class SupabaseAdminGateway implements AdminGateway {
 
   @override
   Future<List<FeeBacklogItem>> feeBacklog() async {
-    final rows = await client.rpc<List<dynamic>>('admin_fee_backlog');
-    return rows
-        .map((r) => FeeBacklogItem.fromJson(r as Map<String, dynamic>))
-        .toList();
+    // The API returns at most api.max_rows (1,000) rows a request; read pages
+    // in the function's stable order until one comes back short.
+    const page = 1000;
+    final items = <FeeBacklogItem>[];
+    for (var from = 0; ; from += page) {
+      final rows = await client
+          .rpc<List<dynamic>>('admin_fee_backlog')
+          .range(from, from + page - 1);
+      items.addAll(
+        rows.map((r) => FeeBacklogItem.fromJson(r as Map<String, dynamic>)),
+      );
+      if (rows.length < page) return items;
+    }
   }
 
   @override
