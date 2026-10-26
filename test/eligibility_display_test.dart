@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:motorcycle_parking/domain/eligibility.dart';
 import 'package:motorcycle_parking/domain/eligibility_display.dart';
+import 'package:motorcycle_parking/domain/parking_decision.dart';
 import 'package:motorcycle_parking/models/parking.dart';
 
 final now = DateTime(2026, 10, 25, 12);
@@ -190,29 +191,6 @@ void main() {
     }
   });
 
-  test('已確認欄位逐車種列出確認日期，過期註明', () {
-    expect(
-      verifiedFieldLines(
-        lot(
-          scooter: true,
-          heavy: false,
-          scooterChecked: DateTime(2026, 10, 20),
-          heavyChecked: DateTime(2025, 1, 1),
-        ),
-        now: now,
-      ),
-      ['普通機車可停：管理員確認，2026-10-20', '大型重機不可停：管理員確認，2025-01-01，已超過 180 天'],
-    );
-    expect(verifiedFieldLines(lot(scooter: true), now: now), isEmpty);
-    expect(
-      verifiedFieldLines(
-        lot(source: 'official', scooter: true, scooterChecked: now),
-        now: now,
-      ),
-      isEmpty,
-    );
-  });
-
   test('列表標籤保留車友回報，其他沿用判斷標籤', () {
     final reported = lot(scooter: true);
     expect(
@@ -248,5 +226,178 @@ void main() {
     });
     expect(spot.createdAt, DateTime.utc(2026, 3, 1, 1));
     expect(ParkingSpot.fromJson(spot.toJson()).createdAt, spot.createdAt);
+  });
+
+  group('讀取 ParkingDecision.basis（C4）', () {
+    ParkingSpot zoned(String source, {DateTime? checked}) => ParkingSpot(
+      id: 'lot',
+      name: 'lot',
+      lat: 25,
+      lng: 121,
+      city: '臺北市',
+      spaceType: SpaceType.offStreet,
+      source: source,
+      status: TrustStatus.confirmed,
+      lastConfirmedAt: now,
+      heavyAllowed: true,
+      heavyVerifiedAt: checked,
+      updatedAt: DateTime(2026, 10, 20),
+      zones: const [
+        ParkingZone(name: '機車區', access: ParkingAccess.scooterOnly),
+      ],
+    );
+    EligibilityDisplay showDecision(ParkingSpot spot) {
+      final d = decideParking(spot, VehicleType.heavy, const [], now: now);
+      return eligibilityDisplay(
+        spot,
+        VehicleType.heavy,
+        d.eligibility,
+        now: now,
+        decision: d,
+      );
+    }
+
+    test('官方場站分區不完整：待確認，保留政府資料依據並列出分區', () {
+      final d = showDecision(zoned('official'));
+      expect(d.tier, EligibilityTier.other);
+      expect(d.label, '開放資訊待確認');
+      expect(d.basis, '依政府公開資料，更新於 2026-10-20');
+      expect(d.zones.single.label, '不可停');
+    });
+
+    test('管理員確認過的社群停車場分區不完整：不是「車友回報」', () {
+      final d = showDecision(
+        zoned('community', checked: now.subtract(const Duration(days: 3))),
+      );
+      expect(d.reported, isFalse);
+      expect(d.label, '開放資訊待確認');
+      expect(d.basis, startsWith('管理員確認，'));
+      // The zones' gap, not 「可停放車種未經確認」.
+      expect(d.explanation, '場站開放大型重機，但已知分區沒有標示可停區域，請依入口公告');
+    });
+
+    test('未確認的社群停車場也不列分區的試辦期限', () {
+      final spot = ParkingSpot.fromJson({
+        ...zoned('community').toJson(),
+        'parking_zones': [
+          {
+            'name': '機車區',
+            'access': 'scooterHeavy',
+            'condition': {
+              'bay': 'motorcycle',
+              'use': 'share',
+              'share': 'scooter_heavy',
+              'allow': {'scooter': true, 'heavy': true},
+              'basis': {
+                'source_url': 'https://example.test',
+                'expires_on': '2026-12-31',
+              },
+            },
+          },
+        ],
+      });
+      expect(showDecision(spot).notices, isEmpty);
+    });
+
+    test('分區列只省略期限列已寫的部分，其他理由保留', () {
+      final spot = ParkingSpot.fromJson({
+        ...zoned('official').toJson(),
+        'parking_zones': [
+          {
+            'name': '夜間區',
+            'access': 'heavyOnly',
+            'condition': {
+              'bay': 'heavy',
+              'use': 'usual',
+              'allow': {'scooter': false, 'heavy': true},
+              'schedule': [
+                {
+                  'days': 'all',
+                  'vehicles': ['car'],
+                },
+              ],
+              'basis': {
+                'source_url': 'https://example.test',
+                'expires_on': '2026-12-31',
+              },
+            },
+          },
+          {
+            'name': '試辦區',
+            'access': 'heavyOnly',
+            'condition': {
+              'bay': 'heavy',
+              'use': 'usual',
+              'allow': {'scooter': false, 'heavy': true},
+              'limits': [
+                {'kind': 'ev_only'},
+              ],
+              'basis': {
+                'source_url': 'https://example.test',
+                'expires_on': '2026-12-31',
+              },
+            },
+          },
+        ],
+      });
+      final zones = showDecision(spot).zones;
+      expect(zones.first.reason, '公告沒有列出大型重機的開放時段');
+      expect(zones.last.reason, '限電動機車停放或充換電，燃油機車不可停');
+    });
+
+    test('未確認的社群停車場不列分區：分區是同一份未確認的回報', () {
+      final d = showDecision(zoned('community'));
+      expect(d.reported, isTrue);
+      expect(d.zones, isEmpty);
+    });
+  });
+
+  test('確認狀態逐類列出（決定 30）：只有停放車種，同日合併', () {
+    final day = DateTime(2026, 10, 20);
+    expect(
+      confirmationLines(
+        lot(
+          scooter: true,
+          heavy: false,
+          scooterChecked: day,
+          heavyChecked: day,
+        ),
+        now: now,
+      ),
+      ['停放車種・管理員確認，2026-10-20'],
+    );
+    expect(
+      confirmationLines(
+        lot(
+          scooter: true,
+          heavy: false,
+          scooterChecked: day,
+          heavyChecked: DateTime(2025, 1, 1),
+        ),
+        now: now,
+      ),
+      ['停放車種（普通機車）・管理員確認，2026-10-20', '停放車種（大型重機）・管理員確認，2025-01-01，已超過 180 天'],
+    );
+    // Same day, but one check has lapsed: listed apart.
+    expect(
+      confirmationLines(
+        lot(
+          scooter: true,
+          heavy: true,
+          scooterChecked: DateTime(2026, 3, 1),
+          heavyChecked: DateTime(2026, 3, 1, 23),
+        ),
+        now: DateTime(2026, 8, 29, 12),
+      ),
+      hasLength(2),
+    );
+    expect(confirmationLines(lot(scooter: true), now: now), isEmpty);
+    expect(
+      confirmationLines(
+        lot(source: 'official', scooter: true, scooterChecked: now),
+        now: now,
+      ),
+      isEmpty,
+    );
   });
 }

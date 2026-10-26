@@ -362,13 +362,16 @@ PriceAnswer priceAnswer(
   if (structured == null) return PriceAnswer.unknown(legacy);
   final key = _feeVehicle(vehicle);
   final text = structured.textOf(key);
+  // With a structured fee, `fee_note` is its sentence for every vehicle,
+  // not this vehicle's legacy text: an unknown rate stays unknown, and the
+  // rider reads 「費率未確認，請依現場公告」 (decision 29).
   if (text == null) {
     return PriceAnswer.unknown(
-      structured.riderText(key) != null ? '${vehicle.label}費率未提供' : legacy,
+      structured.riderText(key) != null ? '${vehicle.label}費率未提供' : null,
     );
   }
   final rate = resolveFee(fee! as Map)[key];
-  if (rate is! Map) return PriceAnswer.unknown(legacy);
+  if (rate is! Map) return const PriceAnswer.unknown();
   final gaps = <String>{};
   _rateGaps(rate, gaps);
   final json = {for (final e in rate.entries) '${e.key}': e.value};
@@ -550,7 +553,7 @@ ParkingDecision decideParking(
   // does, for as long as official data would stay fresh.
   final verified = explicit != null && recentlyVerified(spot, vehicle, at);
   final trusted = spot.isOfficial || verified || recentlyConfirmed(spot, at);
-  final source = _sourceBasis(spot, vehicle, at, verified: verified);
+  final source = sourceBasis(spot, vehicle, at, verified: verified);
   if (explicit == false && trusted) {
     return ParkingDecision(
       EligibilityStatus.notAllowed,
@@ -578,7 +581,9 @@ ParkingDecision decideParking(
   return decision._with(price: price);
 }
 
-DecisionBasis _sourceBasis(
+/// Who states [vehicle]'s access at [spot] (step 0): government data, an
+/// administrator's check (current or lapsed), a rider's report, or nobody.
+DecisionBasis sourceBasis(
   ParkingSpot spot,
   VehicleType vehicle,
   DateTime now, {
@@ -996,14 +1001,17 @@ ParkingDecision _lot(
         day,
         z.fee != null
             ? priceAnswer(z.fee!.toJson(), vehicle)
-            : anyZoneFee
-            ? PriceAnswer.unknown(
-                (vehicle == VehicleType.heavy
-                        ? _orNull(z.heavyFeeNote)
-                        : _orNull(z.scooterFeeNote)) ??
-                    _orNull(z.feeNote),
-              )
-            : lotPrice,
+            // §3.2 step 4: the lot's structured rate when no zone has one;
+            // only with no structured rate anywhere does a zone read its
+            // own text (as the details list it zone by zone), then the
+            // lot's.
+            : !anyZoneFee && spot.fee != null
+            ? lotPrice
+            : switch (_zoneLegacyText(z, vehicle)) {
+                final text? => PriceAnswer.unknown(text),
+                null when anyZoneFee => const PriceAnswer.unknown(),
+                null => lotPrice,
+              },
       ),
   ];
   final notices = [for (final z in zones) ?z.notice];
@@ -1075,3 +1083,9 @@ ParkingDecision _lot(
 }
 
 String? _orNull(String text) => text.trim().isEmpty ? null : text;
+
+String? _zoneLegacyText(ParkingZone z, VehicleType vehicle) =>
+    (vehicle == VehicleType.heavy
+        ? _orNull(z.heavyFeeNote)
+        : _orNull(z.scooterFeeNote)) ??
+    _orNull(z.feeNote);
