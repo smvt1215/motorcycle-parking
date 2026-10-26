@@ -285,18 +285,30 @@ function session(role, aal, factors = [factor]) {
           await page.waitForTimeout(500);
           await page.screenshot({ path: path.join(output, `${name}-spot-location.png`) });
           // Address search above the picker: results, then the pick's reminder.
+          // Flutter web shows these lines either as text or as a group's
+          // aria-label, so both are matched.
+          const partial = text => page.getByText(text, { exact: false })
+            .or(page.locator(`flt-semantics[aria-label*="${text}"]`)).first();
+          const waitPartial = async text => {
+            try {
+              await partial(text).waitFor({ timeout: 30000 });
+            } catch (error) {
+              await page.screenshot({ path: path.join(output, `${name}-failure.png`) });
+              await fs.writeFile(path.join(output, `${name}-failure.json`), JSON.stringify({ errors, requests, html: await page.content() }, null, 2));
+              throw error;
+            }
+          };
           const search = page.getByRole('textbox', { name: '搜尋門牌、路段或路口' });
           await search.click();
           await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
           await search.fill('中山北路二段與南京東路');
           await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
           await search.press('Enter');
-          // Each result row is one semantics node: name and kind together.
-          await page.getByText(/臺北市中山區的路口，只到交會點/).first().waitFor({ timeout: 15000 });
+          await waitPartial('臺北市中山區的路口，只到交會點');
           await page.screenshot({ path: path.join(output, `${name}-address-results.png`) });
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} address results scroll sideways`);
-          await page.getByText(/中山北路二段與南京東路一段/).first().click();
-          await page.getByText(/並填入「路段」/).waitFor({ timeout: 15000 });
+          await partial('中山北路二段與南京東路一段').click();
+          await waitPartial('並填入「路段」');
           await page.screenshot({ path: path.join(output, `${name}-address-picked.png`) });
           await page.getByRole('button', { name: '審核', exact: false }).first().click();
           await page.screenshot({ path: path.join(output, `${name}.png`) });
