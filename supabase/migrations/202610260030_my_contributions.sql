@@ -6,12 +6,15 @@
 -- security definer function is the only rider read. It returns the caller's
 -- own rows and nothing that identifies anyone: no reporter_id, resolved_by,
 -- IP or device hashes, other riders' rows, or the admin's resolution_note
--- (internal text: riders see only the rejection category, decided
--- 2026-10-25).
+-- (internal text: riders see only the category, resolution_kind from
+-- 202610260020, shown as a fixed text per kind; decided 2026-10-25).
 --
 -- Two kinds of row:
 --   report   a suggestion or a "這裡已經不能停車" report (moderation_queue);
---            status pending / accepted / rejected / closed.
+--            status pending / accepted (the spot was changed) / rejected /
+--            closed (handled without changing the spot, including an
+--            accepted report the admin closed with no patch); a rejected or
+--            closed one may say why (resolution_kind, null if unclassified).
 --   new_spot a spot the rider added (community_spots.user_id);
 --            status pending / confirmed / hidden.
 -- Spots the rider deleted are gone and not listed.
@@ -38,6 +41,7 @@ returns table(
   status text,
   created_at timestamptz,
   resolved_at timestamptz,
+  resolution_kind text,
   spot_visible boolean,
   lat double precision,
   lng double precision
@@ -69,7 +73,14 @@ begin
     limit v_limit
   ), detail as (
     select p.id,p.kind,p.created_at,
-      q.source_id,q.field,q.reason,q.status as q_status,q.resolved_at,q.base_spot,
+      q.source_id,q.field,q.reason,q.resolved_at,
+      -- "結案不修改" in the admin web is accepted with an empty patch; its
+      -- audit entry has no spot. Riders see it as closed, never as adopted.
+      case when q.status='accepted' and not exists(
+          select 1 from public.admin_audit_log a
+          where a.target_table='moderation_queue' and a.target_id=q.id::text
+            and a.action='resolve_report' and jsonb_typeof(a.after->'spot')='object')
+        then 'closed' else q.status end as q_status,q.resolution_kind,q.base_spot,
       c.name as c_name,c.status as c_status,c.lat as c_lat,c.lng as c_lng,
       o.name as o_name,o.lat as o_lat,o.lng as o_lng,
       (o.id is not null and not o.hidden and o.effective_date<=current_date) as o_visible
@@ -101,6 +112,7 @@ begin
     case when s.kind='new_spot' then s.c_status else s.q_status end,
     s.created_at,
     s.resolved_at,
+    case when s.q_status in ('rejected','closed') then s.resolution_kind end,
     s.visible,
     case when not s.visible then null when s.o_visible then s.o_lat else s.c_lat end,
     case when not s.visible then null when s.o_visible then s.o_lng else s.c_lng end

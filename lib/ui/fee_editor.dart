@@ -11,6 +11,7 @@ class FeeEditor extends StatelessWidget {
     required this.value,
     required this.onChanged,
     this.errorText,
+    this.showPreview = true,
   });
   final Fee value;
   final ValueChanged<Fee> onChanged;
@@ -18,13 +19,15 @@ class FeeEditor extends StatelessWidget {
   /// A whole-fee error from the caller's own check, shown under the preview.
   final String? errorText;
 
+  /// Off when the caller shows the resulting text itself.
+  final bool showPreview;
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final complete = [
-      value.scooter,
-      value.heavy,
-    ].every((rate) => rate == null || rate.complete);
+    // Complete and in range: an out-of-range or unreadable amount never
+    // reads back as a sentence.
+    final complete = value.valid;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -45,13 +48,15 @@ class FeeEditor extends StatelessWidget {
           onChanged: (rate) =>
               onChanged(Fee(scooter: value.scooter, heavy: rate)),
         ),
-        const SizedBox(height: 12),
-        // What the map will show, so the choices read back as a sentence.
-        Text(
-          complete ? '顯示為：${feeNoteOf(value)}' : '請填完金額，才會顯示費率',
-          key: const ValueKey('fee-preview'),
-          style: TextStyle(color: colors.onSurfaceVariant),
-        ),
+        if (showPreview) ...[
+          const SizedBox(height: 12),
+          // What the map will show, so the choices read back as a sentence.
+          Text(
+            complete ? '顯示為：${feeNoteOf(value)}' : '請填完金額，才會顯示費率',
+            key: const ValueKey('fee-preview'),
+            style: TextStyle(color: colors.onSurfaceVariant),
+          ),
+        ],
         if (errorText case final error?) ...[
           const SizedBox(height: 8),
           Text(error, style: TextStyle(color: colors.error)),
@@ -133,13 +138,29 @@ class _RateEditorState extends State<RateEditor> {
         perMinutes: m == FeeMode.hourly
             ? perMinutes ?? rate?.perMinutes ?? 60
             : null,
-        dailyCap: m == FeeMode.hourly ? int.tryParse(cap.text.trim()) : null,
+        dailyCap: m == FeeMode.hourly ? _optional(cap.text) : null,
         maxMinutes: m == FeeMode.perVisit && !clearLimit
             ? maxMinutes ?? rate?.maxMinutes
             : null,
       ),
     );
   }
+
+  /// An optional amount: none when empty. Text that is not a whole number
+  /// stays out of range instead of reading as none, so a caller that checks
+  /// only the [Fee] (no enclosing [Form]) still refuses it rather than
+  /// silently dropping a cap.
+  int? _optional(String text) {
+    final t = text.trim();
+    if (t.isEmpty) return null;
+    return int.tryParse(t) ?? -1;
+  }
+
+  /// [options] plus the stored [current] value when it is another valid
+  /// one (the column takes any 1–1440 minutes), so it shows as chosen.
+  List<int> _withCurrent(List<int> options, int? current) => [
+    ...{...options, ?current},
+  ]..sort();
 
   String? yuan(String? v, {required bool required}) {
     final text = v?.trim() ?? '';
@@ -180,7 +201,7 @@ class _RateEditorState extends State<RateEditor> {
           initialValue: rate?.perMinutes ?? 60,
           decoration: const InputDecoration(labelText: '計費時間'),
           items: [
-            for (final m in _periods)
+            for (final m in _withCurrent(_periods, rate?.perMinutes))
               DropdownMenuItem(value: m, child: Text('每 ${_minutes(m)}')),
           ],
           onChanged: (v) => emit(perMinutes: v),
@@ -194,7 +215,7 @@ class _RateEditorState extends State<RateEditor> {
           decoration: const InputDecoration(labelText: '一次可停（選填）'),
           items: [
             const DropdownMenuItem(child: Text('不限時')),
-            for (final m in _limits)
+            for (final m in _withCurrent(_limits, rate?.maxMinutes))
               DropdownMenuItem(value: m, child: Text(_minutes(m))),
           ],
           onChanged: (v) => emit(maxMinutes: v, clearLimit: v == null),
