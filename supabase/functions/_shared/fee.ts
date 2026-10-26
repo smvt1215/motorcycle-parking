@@ -433,3 +433,33 @@ export function projectZoneFee(fee: Json, zone: Json): Json {
     Object.entries(resolved).filter(([k]) => vehicles.includes(k)),
   );
 }
+
+// ---- Fee suggestions merged per vehicle (§5.4, §7 item 3) ----
+
+/**
+ * A suggested fee (`proposed.fee`): a rate per vehicle it changes, or null
+ * for a vehicle it clears. Vehicles it leaves out keep their rates, so an
+ * older build that cannot read a vehicle never clears it by omission.
+ */
+export function validProposedFee(v: unknown): boolean {
+  if (!isObject(v)) return false;
+  const rates = Object.fromEntries(
+    Object.entries(v).filter(([, rate]) => rate !== null),
+  );
+  return Object.keys(v).every((k) => feeContract.vehicles.includes(k)) &&
+    validFee(rates);
+}
+
+/**
+ * The fee a suggestion leaves: [current] with each vehicle [proposed]
+ * names replaced, or removed where it is null.
+ */
+export function mergeFee(current: unknown, proposed: unknown): Json {
+  const out: Json = isObject(current) ? { ...current } : {};
+  if (!isObject(proposed)) return out;
+  for (const [k, rate] of Object.entries(proposed)) {
+    if (rate === null) delete out[k];
+    else out[k] = rate;
+  }
+  return out;
+}

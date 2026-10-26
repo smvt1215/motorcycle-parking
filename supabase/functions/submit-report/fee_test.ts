@@ -5,9 +5,11 @@ import limit from '../_shared/fee_note_limit.json' with { type: 'json' };
 import {
   feeNoteMaxLength,
   feeNoteOf,
+  mergeFee,
   projectZoneFee,
   validFee,
   validFeePlans,
+  validProposedFee,
 } from '../_shared/fee.ts';
 import { validate } from './validate.ts';
 
@@ -131,3 +133,55 @@ function sortKeys(v: unknown): unknown {
   }
   return v;
 }
+
+Deno.test('a fee suggestion changes only the vehicles it names', () => {
+  const current = {
+    car: { mode: 'hourly', amount: 40, per_minutes: 60 },
+    scooter: { mode: 'free' },
+  };
+  const merged = mergeFee(current, {
+    heavy: { mode: 'same_as_car' },
+    scooter: null,
+  });
+  if (
+    JSON.stringify(merged) !==
+      JSON.stringify({ car: current.car, heavy: { mode: 'same_as_car' } })
+  ) throw new Error(JSON.stringify(merged));
+  if (Object.keys(mergeFee(null, { scooter: null })).length !== 0) {
+    throw new Error('clearing nothing leaves nothing');
+  }
+  for (
+    const ok of [{ heavy: null }, { scooter: null, car: { mode: 'free' } }]
+  ) {
+    if (!validProposedFee(ok)) throw new Error(JSON.stringify(ok));
+  }
+  for (const bad of [null, { bus: null }, { scooter: { mode: 'weekly' } }]) {
+    if (validProposedFee(bad)) throw new Error(JSON.stringify(bad));
+  }
+  // Only suggestions clear with null; a spot's fee never holds one.
+  if (validFee({ heavy: null })) throw new Error('a stored fee took null');
+  const flag = validate({
+    device_id: device,
+    action: 'flag',
+    source_id: '3f1c2a4e-0000-4000-8000-000000000002',
+    reason: '費率',
+    field: 'fee_note',
+    proposed: { fee: { heavy: null } },
+  });
+  if (flag !== null) throw new Error(`clearing a vehicle refused: ${flag}`);
+  const create = validate({
+    device_id: device,
+    action: 'create',
+    spot: {
+      name: '測試',
+      lat: 25.05,
+      lng: 121.5,
+      city: '臺北市',
+      space_type: 'paidMotorcycle',
+      fee: { heavy: null },
+    },
+  });
+  if (create !== 'invalid fee') {
+    throw new Error(`a new spot took null: ${create}`);
+  }
+});

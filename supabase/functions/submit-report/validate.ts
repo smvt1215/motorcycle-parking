@@ -4,6 +4,7 @@ import {
   subset,
   validFee,
   validFeeNote,
+  validProposedFee,
   validSlotTimes,
 } from '../_shared/fee.ts';
 
@@ -254,7 +255,8 @@ const proposedChecks: Record<string, (v: unknown) => boolean> = {
   entrance_note: text(500),
   parking_guide: text(500),
   special_rules: text(500),
-  fee: validFee,
+  // Merged per vehicle: null clears a vehicle, one left out keeps its rate.
+  fee: validProposedFee,
   status: (v) => v === 'hidden',
   // Riders ask to take a spot down; restoring one is an admin decision.
   hidden: (v) => v === true,

@@ -411,6 +411,27 @@ class Fee {
 Fee? structuredFee(Object? json) =>
     json is Map && json.isNotEmpty ? Fee.fromJson(json) : null;
 
+/// The fee a suggestion leaves (design §5.4, §7 item 3): [current] with
+/// each vehicle [proposed] names replaced, or removed where it is null.
+/// Vehicles it leaves out keep their rates, so an older build that cannot
+/// read a vehicle never clears it by omission.
+Map<String, Object?> mergeFeeJson(Object? current, Object? proposed) {
+  final out = <String, Object?>{
+    if (current is Map)
+      for (final MapEntry(:key, :value) in current.entries) '$key': value,
+  };
+  if (proposed is Map) {
+    for (final MapEntry(:key, :value) in proposed.entries) {
+      if (value == null) {
+        out.remove('$key');
+      } else {
+        out['$key'] = value;
+      }
+    }
+  }
+  return out;
+}
+
 /// The `fee_note` text stored beside [fee] (§2.5): the known vehicles as
 /// 機車…；大型重機…；汽車…, then 大型重機費率未確認 when the heavy rate is
 /// unknown; the default note when no vehicle is known.

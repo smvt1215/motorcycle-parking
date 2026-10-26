@@ -6,8 +6,12 @@ import { validate } from './validate.ts';
 const sorted = (values: string[]) => [...values].sort();
 
 Deno.test('shared precheck cases break exactly the expected rules', () => {
-  for (const { name, body, expect } of cases.cases) {
-    const got = precheck(body as Record<string, unknown>).map((i) =>
+  for (const c of cases.cases) {
+    const { name, body, expect } = c;
+    const current = 'current' in c
+      ? c.current as Record<string, unknown>
+      : undefined;
+    const got = precheck(body as Record<string, unknown>, current).map((i) =>
       `${i.rule}@${i.field}`
     );
     if (JSON.stringify(sorted(got)) !== JSON.stringify(sorted(expect))) {

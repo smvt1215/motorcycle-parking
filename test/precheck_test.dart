@@ -38,6 +38,7 @@ void main() {
     for (final c in cases) {
       final got = precheck(
         (c['body']! as Map).cast<String, Object?>(),
+        current: (c['current'] as Map?)?.cast<String, Object?>(),
       ).map((i) => '$i').toList()..sort();
       final want = (c['expect']! as List).cast<String>().toList()..sort();
       expect(got, want, reason: c['name'] as String);

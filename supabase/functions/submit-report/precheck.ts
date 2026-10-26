@@ -6,6 +6,7 @@
 // precheck_cases.json run against both. Rules stay conservative: a missed
 // contradiction still meets review, a wrong block loses a report.
 import data from './precheck_rules.json' with { type: 'json' };
+import { mergeFee } from '../_shared/fee.ts';
 
 export type PrecheckAction = 'fix' | 'reject';
 export interface PrecheckIssue {
@@ -215,8 +216,13 @@ function texts(body: Json): { field: string; value: string; name: boolean }[] {
 
 const goneFields = ['gone', '點位已不存在'];
 
-/** Every stage 0 rule the request breaks; empty when it may go on. */
-export function precheck(body: Json): PrecheckIssue[] {
+/**
+ * Every stage 0 rule the request breaks; empty when it may go on. A fee
+ * suggestion changes only the vehicles it names (§5.4), so its rules run on
+ * the fee it leaves: [current] (the spot's stored values, when known) merged
+ * with it. Without [current] the suggestion stands alone.
+ */
+export function precheck(body: Json, current?: Json): PrecheckIssue[] {
   const out: PrecheckIssue[] = [];
   const spot = ['create', 'update'].includes(String(body.action)) &&
       object(body.spot)
@@ -225,10 +231,13 @@ export function precheck(body: Json): PrecheckIssue[] {
   const proposed = body.action === 'flag' && object(body.proposed)
     ? body.proposed
     : undefined;
+  const merged = proposed && object(proposed.fee)
+    ? { ...proposed, fee: mergeFee(current?.fee, proposed.fee) }
+    : proposed;
   if (spot) out.push(...combinationIssues(spot));
   if (proposed) {
     out.push(
-      ...combinationIssues(proposed).map((i) => ({
+      ...combinationIssues(merged!).map((i) => ({
         ...i,
         field: `proposed.${i.field}`,
       })),

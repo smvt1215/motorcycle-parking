@@ -269,11 +269,18 @@ class ReviewSpot {
 /// is never turned into hiding; the admin decides, see [visibilityKey].
 Map<String, dynamic> initialProposal(ReviewReport report, ReviewSpot? spot) {
   final proposal = {...?report.proposed};
+  // A suggested fee changes only the vehicles it names; null clears one
+  // (design §5.4). What is adopted, shown and checked is the fee it leaves.
+  if (proposal['fee'] is Map) {
+    final merged = mergeFeeJson(spot?.values['fee'], proposal['fee']);
+    proposal['fee'] = merged.isEmpty ? null : merged;
+  }
   // An adopted fee always carries this build's text of it, never the one
-  // the rider's build wrote (design §5.4): older builds write older
-  // sentences, which fee_note_of() would refuse.
-  final fee = reviewFee(proposal['fee']);
-  if (fee != null) proposal['fee_note'] = feeNoteOf(fee);
+  // the rider's build wrote: older builds write older sentences, which
+  // fee_note_of() would refuse.
+  if (proposal.containsKey('fee')) {
+    proposal['fee_note'] = feeNoteOf(reviewFee(proposal['fee']));
+  }
   return proposal;
 }
 
