@@ -197,7 +197,6 @@ void main() {
       sourceSummary(spot('community', contributorRole: 'admin'), demo: false),
       '由管理員新增',
     );
-    expect(trustSummary(spot('import'), demo: false), '待確認');
   });
 
   testWidgets('社群移除來源與內部授權文字，官方僅提供固定授權首頁', (tester) async {

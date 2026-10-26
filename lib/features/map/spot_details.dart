@@ -142,11 +142,3 @@ String contributorSummary(ParkingSpot spot) {
   // Email is an account identifier, not a public reporter name.
   return name.isEmpty || name.contains('@') ? '由車友回報' : '由車友 $name 回報';
 }
-
-String trustSummary(ParkingSpot spot, {required bool demo}) => demo
-    ? '範例，僅供功能預覽'
-    : switch (spot.status) {
-        TrustStatus.pending => '待確認',
-        TrustStatus.confirmed => spot.stale ? '已確認，資訊可能過時' : '已確認',
-        TrustStatus.hidden => '已隱藏',
-      };
