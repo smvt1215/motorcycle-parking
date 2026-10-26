@@ -504,6 +504,35 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('編輯 fee={} 點位的費率文字可儲存', (tester) async {
+      // A stored {} names no vehicle: no structured fee, as the server's
+      // fee_note_matches reads it (202610270021_empty_fee_semantics.sql).
+      gateway.spotRows[communityId]!
+        ..['fee'] = <String, Object>{}
+        ..['fee_note'] = '請依現場公告';
+      await show(tester, '/spots/$communityId', const Size(390, 844));
+      // Read as a spot with text only, so the text is an input.
+      final legacy = find.byKey(const ValueKey('fee-legacy'));
+      await tester.scrollUntilVisible(
+        legacy,
+        200,
+        scrollable: scrollable('spot-form-'),
+      );
+      final note = find.widgetWithText(TextFormField, '費率說明文字');
+      await tester.scrollUntilVisible(
+        note,
+        200,
+        scrollable: scrollable('spot-form-'),
+      );
+      await tester.enterText(note, '每小時 20 元');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('儲存並關閉').hitTestable());
+      await tester.pumpAndSettle();
+      // Only the text is sent; the stored {} is not rewritten.
+      expect(gateway.spotUpdates.single.$2, {'fee_note': '每小時 20 元'});
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('審核頁改費率時，收費資訊直接顯示依費率產生的文字', (tester) async {
       gateway.reports = [
         ReviewReport(
