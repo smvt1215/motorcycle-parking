@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../data/app_store.dart';
 import '../../models/parking.dart';
 import '../../domain/eligibility.dart';
+import '../../domain/parking_decision.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../map/map_legend.dart';
 import '../map/space_type_sheet.dart';
@@ -101,6 +102,7 @@ List<(MarkerLook, List<SpaceType>)> ruleGroups(
       // names them.
       district: rule.districtSpaceTypes[ruleSpaceType(type)]?.first ?? '',
       spaceType: type,
+      condition: typicalCondition(type),
       status: TrustStatus.confirmed,
       // A lot's own data decides; the rule alone never opens it.
       source: 'official',

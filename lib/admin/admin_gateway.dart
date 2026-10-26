@@ -137,7 +137,7 @@ abstract class AdminGateway {
     String note,
   );
 
-  /// Every `city_rules` row; the table is public.
+  /// Every stored rule row, end dates included (`city_rules_v2()`).
   Future<List<Map<String, dynamic>>> cityRuleRows();
 
   /// `admin_upsert_city_rule`: publishes [values] as the next version of the
@@ -579,8 +579,20 @@ class SupabaseAdminGateway implements AdminGateway {
   }) => geocodeSearch(client.functions, query, lat: lat, lng: lng);
 
   @override
-  Future<List<Map<String, dynamic>>> cityRuleRows() =>
-      client.from('city_rules').select().order('city').order('vehicle');
+  Future<List<Map<String, dynamic>>> cityRuleRows() async {
+    // The stored rows (`city_rules_data`, §3.2), end dates included; the
+    // public `city_rules` view projects expired ones for older apps.
+    try {
+      final rows = await client
+          .rpc<List<dynamic>>('city_rules_v2')
+          .order('city')
+          .order('vehicle');
+      return rows.cast<Map<String, dynamic>>();
+    } on PostgrestException catch (e) {
+      if (e.code != 'PGRST202') rethrow;
+      return client.from('city_rules').select().order('city').order('vehicle');
+    }
+  }
 
   @override
   Future<Map<String, dynamic>> publishCityRule(

@@ -189,6 +189,8 @@ function session(role, aal, factors = [factor]) {
             return route.fulfill({ json: { ...communitySpot, ...values, scooter_verified_at: '2026-10-25T01:19:36Z', updated_at: '2026-10-25T01:19:36Z' }, headers: cors });
           }
           // The map layer and the rules page read the same rules.
+          // Both read the stored rows through city_rules_v2() (C4).
+          if (url.pathname === '/rest/v1/rpc/city_rules_v2') return route.fulfill({ json: cityRules, headers: cors });
           if (url.pathname === '/rest/v1/city_rules') return route.fulfill({ json: cityRules, headers: cors });
           if (url.pathname === '/rest/v1/rpc/admin_upsert_city_rule') {
             const { p_city: city, p_vehicle: vehicle, p_values: values, p_base_version: version } = route.request().postDataJSON();

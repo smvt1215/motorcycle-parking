@@ -68,12 +68,13 @@ class ChangeRoutingTest(unittest.TestCase):
                          {"backend"})
 
     def test_parking_contract_checks_app_function_and_database(self):
-        for name in ("parking_contract.json", "parking_contract_cases.json", "fee_note_limit.json"):
+        for name in ("parking_contract.json", "parking_contract_cases.json", "fee_note_limit.json",
+                     "rule_verdict_cases.json"):
             with self.subTest(name=name):
                 path = f"supabase/functions/_shared/{name}"
                 self.assertEqual(self.targets(path), {"quality", "backend"})
         for path in ("tool/gen_contract_sql.py", "tool/fee_text.py", "supabase/contract/parking_contract.sql",
-                     "supabase/tests/parking_contract_test.sql"):
+                     "supabase/tests/parking_contract_test.sql", "supabase/tests/rule_verdict_test.sql"):
             with self.subTest(path=path):
                 self.assertEqual(self.targets(path), {"backend"})
 

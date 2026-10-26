@@ -14,6 +14,23 @@ import '../domain/precheck.dart';
 class RulesRepository {
   RulesRepository(this.client);
   final SupabaseClient? client;
+
+  /// Every rule as stored, expired ones and their `expires_on` included
+  /// (`city_rules_v2()`, §3.2). A backend not yet migrated lacks it; its
+  /// `city_rules` table has no end dates, so reading it loses nothing.
+  /// Builds before C4 read the `city_rules` view, which serves expired rows
+  /// as a conservative projection over the bundled copies.
+  Future<List<Map<String, dynamic>>> _remoteRules() async {
+    try {
+      final rows = await client!.rpc<List<dynamic>>('city_rules_v2');
+      return rows.cast<Map<String, dynamic>>();
+    } on PostgrestException catch (e) {
+      // PostgREST: no function with this name.
+      if (e.code != 'PGRST202') rethrow;
+      return client!.from('city_rules').select();
+    }
+  }
+
   Future<List<CityRule>> load() async {
     final raw = jsonDecode(
       await rootBundle.loadString('assets/rules/parking_rules.json'),
@@ -22,7 +39,7 @@ class RulesRepository {
         .map((e) => CityRule.fromJson(e as Map<String, dynamic>))
         .toList();
     if (client != null) {
-      final remote = await client!.from('city_rules').select();
+      final remote = await _remoteRules();
       for (final row in remote) {
         final r = CityRule.fromJson(row);
         final i = rules.indexWhere(
@@ -47,10 +64,10 @@ class RulesRepository {
 /// its parking conditions; _v2 projects the rows that builds judging
 /// eligibility without conditions would read too loosely (§5.2 of
 /// docs/designs/2026-10-26-parking-conditions-and-fees.md). This build's
-/// `eligibility()` does not read conditions yet, so it stays on _v2; the
-/// condition-aware decision (stack C, C4) adds '_v3' here.
+/// `eligibility()` judges through `decideParking()` (stack C, C4), which
+/// reads conditions, so this build reads _v3 first.
 @visibleForTesting
-const viewportVariants = ['_v2'];
+const viewportVariants = ['_v3', '_v2'];
 
 class ParkingResult {
   const ParkingResult(this.spots, {this.warning, this.truncated = false});

@@ -436,6 +436,15 @@ class ParkingDecision {
 - **與研究文件 §5.7**：`ruleVerdict()` 是第 2 步的純函式，Dart 與伺服器各一份，以 `assets/rules/parking_rules.json` 加 §4.2 的共同測試向量確保一致。`expired`、`conflict` 是本文新增的兩個結果，引擎一律視為「規則無法單獨回答」。
 - **時段**：本輪先確認目前車種至少出現在一個時段的 `vehicles` 裡，才回 `conditional(timeLimited)`（顯示「有條件・限時段」）並列出各時段允許車種；目前車種沒有被任何時段列出時維持 `unverified`（缺口 `scheduleUnknown`，理由「公告沒有列出普通機車的開放時段」），不顯示成有條件。例如汽機共用格的時段只列 `car` 時，普通機車是待確認。大型重機在汽車格依法可停，不受這條影響。不依目前時間切換狀態，依時間切換留待之後（§7 第 4 項，已決定）。
 
+**C4 實作的細節**（`lib/domain/parking_decision.dart`；`ruleVerdict` 另有 Deno `_shared/rule_verdict.ts` 與 SQL `rule_verdict()`，三端跑 `_shared/rule_verdict_cases.json`，其中 `bundled:*` 須與 `assets/rules/parking_rules.json` 相同，規則檔更新時一併重算向量）：
+
+- **收費屬性未確認的機車格**：`ruleKindOf` 同時以收費格與免費格比對規則，兩者結論相同就採用，不同才是待確認（缺口 `chargeUnknown`）。所以沒有 `condition` 的舊限時格在臺北對大型重機是待確認，對普通機車仍是有條件・限時段；規則頁與管理站規則預覽把限時格當收費格展示（`typicalCondition`）。
+- **普大共用標示**：大型重機在 `share='scooter_heavy'` 的機車格，標示本身就是公告；`basis` 沒有或仍有效時可停（比縣市規則具體），`basis` 到期或尚未生效時回到縣市規則，規則沒有開放就是待確認（缺口 `noticeExpired`）。只有可信資料適用。
+- **條件依據到期**：只讓依公告才成立的開放（共用標示、時段）失效；格位類別、收費屬性與限制照舊，另加缺口 `noticeExpired`。
+- **路外分區**：分區只在場站對目前車種可信開放時才影響結論。所有分區都沒有 `condition`／`access` 時視為「沒有分區資料」，維持現行；有開放的分區時，任一開放分區是有條件（限制、時段、帶 `expires_on` 的試辦）則整場為有條件，否則可停，理由不變（逐區資格由詳情列出）。推導不出的分區是待確認（#155 第 7 項：未知不等於不允許），不繼承其他分區或場站。
+- **日期**：生效日與截止日一律以臺灣日期比較（`now ≥ expires_on` 即過期），三端一致。
+- **切回舊實作**：`eligibility()` 以常數 `useParkingDecision` 切換，舊實作保留為 `legacyEligibility()` 一版。
+
 ## 4. 三端契約與驗證
 
 ### 4.1 單一來源

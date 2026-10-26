@@ -8,8 +8,10 @@ published in the admin web (/rules), so run this before each release:
     python3 tool/export_rules.py --check         # fail if the file is behind
     python3 tool/export_rules.py --input rows.json
 
-The database is read with the public anon key (city_rules is public). URL and
-key come from SUPABASE_URL / SUPABASE_ANON_KEY, else from --config.
+The database is read with the public anon key through city_rules_v2(), which
+returns the stored rows with their end dates; the city_rules view would give
+expired rows as the projection older builds read. URL and key come from
+SUPABASE_URL / SUPABASE_ANON_KEY, else from --config.
 """
 import argparse
 import json
@@ -69,6 +71,8 @@ def normalize(row):
         rule["district_space_types"] = {k: list(v) for k, v in row["district_space_types"].items()}
     if row.get("restriction") is not None:
         rule["restriction"] = row["restriction"]
+    if row.get("expires_on"):
+        rule["expires_on"] = str(row["expires_on"])[:10]
     return rule
 
 
@@ -105,7 +109,7 @@ def dumps(rules):
 
 def fetch(url, anon_key):
     request = urllib.request.Request(
-        f"{url.rstrip('/')}/rest/v1/city_rules?select=*",
+        f"{url.rstrip('/')}/rest/v1/rpc/city_rules_v2",
         headers={"apikey": anon_key, "Authorization": f"Bearer {anon_key}"},
     )
     with urllib.request.urlopen(request, timeout=30) as response:
