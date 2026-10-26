@@ -106,7 +106,29 @@ class Throttle:
         self.last = self.clock()
 
 
-def tdx_get(url, token, throttle, opener=urllib.request.urlopen):
+RETRY_FALLBACK = 60  # seconds, when Retry-After is missing or unparsable
+
+
+def retry_after_seconds(value, now=None):
+    """Seconds to wait for a Retry-After header: delta-seconds or an HTTP-date; RETRY_FALLBACK otherwise."""
+    from email.utils import parsedate_to_datetime
+    if value is None:
+        return RETRY_FALLBACK
+    text = str(value).strip()
+    if text.isdigit():
+        return int(text)
+    try:
+        when = parsedate_to_datetime(text)
+    except (TypeError, ValueError, IndexError):
+        return RETRY_FALLBACK
+    if when is None:
+        return RETRY_FALLBACK
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    return max(0, math.ceil((when - (now or datetime.now(timezone.utc))).total_seconds()))
+
+
+def tdx_get(url, token, throttle, opener=urllib.request.urlopen, sleep=time.sleep):
     """(status, body or None, elapsed seconds); retries 429 after Retry-After."""
     for attempt in range(4):
         throttle.wait()
@@ -117,7 +139,7 @@ def tdx_get(url, token, throttle, opener=urllib.request.urlopen):
                 return response.status, json.loads(response.read()), time.monotonic() - started
         except urllib.error.HTTPError as error:
             if error.code == 429 and attempt < 3:
-                time.sleep(int(error.headers.get("Retry-After") or 60))
+                sleep(retry_after_seconds(error.headers.get("Retry-After")))
                 continue
             return error.code, None, time.monotonic() - started
         except (OSError, ValueError) as error:
@@ -167,7 +189,12 @@ def city_get(url, opener=urllib.request.urlopen):
             return b"", type(error).__name__
         if "{page}" not in url:
             return raw, status
-        rows = json.loads(raw.decode("utf-8-sig"))
+        try:
+            rows = json.loads(raw.decode("utf-8-sig"))
+        except ValueError as error:  # an HTML error page or a truncated body: record it, let the round go on
+            return b"", f"{type(error).__name__} on page {page}"
+        if not isinstance(rows, list):
+            return b"", f"unexpected {type(rows).__name__} on page {page}"
         if not rows or page >= 50:
             return json.dumps(pages, ensure_ascii=False).encode(), status
         pages += rows

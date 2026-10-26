@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 from availability_audit import (
     Throttle, age_buckets, age_minutes, changes, city_get, city_lots, classify_available, coordinate_quality, credentials,
-    duplicates, geometry_kind, match_staging, persistent_zero, parse_time, rows_of, safe_url, summarize_ages, tdx_offstreet_availability,
+    duplicates, fetch_city, geometry_kind, match_staging, persistent_zero, retry_after_seconds, tdx_get, parse_time, rows_of, safe_url, summarize_ages, tdx_offstreet_availability,
     tdx_segment_availability, type_sum_mismatch,
 )
 
@@ -43,6 +43,42 @@ class WrapperTest(unittest.TestCase):
         now[0] += 4
         throttle.wait()
         self.assertEqual(slept, [9])
+
+
+class RetryTest(unittest.TestCase):
+    def test_retry_after_seconds_and_http_date(self):
+        from datetime import datetime, timezone
+        now = datetime(2026, 10, 26, 8, 0, 0, tzinfo=timezone.utc)
+        self.assertEqual(retry_after_seconds("30", now), 30)
+        self.assertEqual(retry_after_seconds("Mon, 26 Oct 2026 08:01:30 GMT", now), 90)
+        self.assertEqual(retry_after_seconds("Mon, 26 Oct 2026 07:59:00 GMT", now), 0)
+        self.assertEqual(retry_after_seconds("soon", now), 60)
+        self.assertEqual(retry_after_seconds(None, now), 60)
+
+    def test_tdx_get_waits_on_http_date_retry_after(self):
+        import urllib.error
+        from email.message import Message
+        headers = Message()
+        headers["Retry-After"] = "Wed, 21 Oct 2015 07:28:00 GMT"  # in the past: wait 0
+        calls, slept = [], []
+
+        class Response(io.BytesIO):
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        def opener(request, timeout):
+            calls.append(request.full_url)
+            if len(calls) == 1:
+                raise urllib.error.HTTPError(request.full_url, 429, "Too Many Requests", headers, None)
+            return Response(b'{"ParkingAvailabilities": []}')
+
+        status, body, _ = tdx_get("https://x.example/a", "t", Throttle(0, sleep=lambda s: None), opener, sleep=slept.append)
+        self.assertEqual((status, body, slept, len(calls)), (200, {"ParkingAvailabilities": []}, [0], 2))
 
 
 class TimeTest(unittest.TestCase):
@@ -183,6 +219,28 @@ class CitySourceTest(unittest.TestCase):
 
         raw, status = city_get("https://x.example/json?page={page}&size=1000", opener)
         self.assertEqual((json.loads(raw), status), ([{"ID": "1"}, {"ID": "2"}], 200))
+
+
+    def test_non_json_page_is_recorded_and_the_round_continues(self):
+        class Response(io.BytesIO):
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        raw, status = city_get("https://x.example/json?page={page}", lambda request, timeout: Response(b"<html>busy</html>"))
+        self.assertEqual(raw, b"")
+        self.assertTrue(status.startswith("JSONDecodeError on page 0"))
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch("availability_audit.CITY_SOURCES", {"broken": "https://x.example/json?page={page}", "ok": "https://x.example/ok"}), \
+                patch("availability_audit.city_get", side_effect=[(b"", "JSONDecodeError on page 0"), (b"[]", 200)]):
+            lines = []
+            fetch_city(Path(tmp), log=lines.append)
+            self.assertEqual(lines, ["broken: JSONDecodeError on page 0 0 bytes", "ok: 200 2 bytes"])
+            self.assertEqual(json.loads((Path(tmp) / "city" / "broken.meta.json").read_text())["status"], "JSONDecodeError on page 0")
 
 
 class MappingTest(unittest.TestCase):
