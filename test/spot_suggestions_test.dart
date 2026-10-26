@@ -12,6 +12,8 @@ import 'package:motorcycle_parking/models/parking.dart';
 import 'package:motorcycle_parking/models/fee.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
 
+import 'fee_editor_steps.dart';
+
 const spot = ParkingSpot(
   id: '00000000-0000-4000-8000-000000000123',
   name: '尚未收到不存在回報的機車停車點',
@@ -289,24 +291,38 @@ void main() {
     // The suggestion list's item, not the details row behind it.
     await tester.tap(find.text('收費資訊').last);
     await tester.pumpAndSettle();
+    // The fee editor fills the screen; scroll the sheet to its button.
+    await tester.scrollUntilVisible(
+      find.text('送出建議'),
+      200,
+      scrollable: find
+          .descendant(
+            of: find.byType(Form).last,
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
     await tester.ensureVisible(find.text('送出建議'));
     await tester.tap(find.text('送出建議'));
     await tester.pumpAndSettle();
     expect(find.text('請至少選一個車種的收費方式'), findsOneWidget);
     expect(store.submissions, isEmpty);
-    final menu = find.byKey(const ValueKey('fee-mode-scooter'));
-    await tester.ensureVisible(menu);
-    await tester.tap(menu);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('計次').last);
-    await tester.pumpAndSettle();
-    await tester.enterText(find.widgetWithText(TextFormField, '每次金額'), '20');
+    final menu = find.byKey(const ValueKey('fee-mode-scooter-per_visit'));
+    await chooseFeeMode(tester, 'scooter', 'per_visit');
+    await tester.enterText(feeField('amount', 'scooter'), '20');
     await tester.pumpAndSettle();
     expect(find.text('請至少選一個車種的收費方式'), findsNothing);
-    expect(
-      find.text('收費資訊從「${spot.feeNote}」改成「機車每次 20 元（隔日是否另計未確認）；大型重機費率未確認」'),
-      findsOneWidget,
+    final change = find.text(
+      '收費資訊從「${spot.feeNote}」改成「機車每次 20 元（隔日是否另計未確認）；大型重機費率未確認」',
     );
+    await tester.scrollUntilVisible(
+      change,
+      200,
+      scrollable: find
+          .ancestor(of: menu, matching: find.byType(Scrollable))
+          .first,
+    );
+    expect(change, findsOneWidget);
     // The form grew with the amount fields; scroll its own list to the button.
     await tester.scrollUntilVisible(
       find.text('送出建議'),
@@ -537,23 +553,7 @@ void main() {
     await submitSuggestion(tester, '送出建議');
     expect(find.text('請先修改費率，和目前不同才能送出'), findsOneWidget);
     expect(store.submissions, isEmpty);
-    final menu = find.byKey(const ValueKey('fee-mode-heavy'));
-    await tester.scrollUntilVisible(
-      menu,
-      -150,
-      scrollable: find
-          .descendant(
-            of: find.byType(Form).last,
-            matching: find.byType(Scrollable),
-          )
-          .first,
-    );
-    await tester.ensureVisible(menu);
-    await tester.pumpAndSettle();
-    await tester.tap(menu);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('免費').last);
-    await tester.pumpAndSettle();
+    await chooseFeeMode(tester, 'heavy', 'free');
     await submitSuggestion(tester, '送出建議');
     expect(store.submissions.single['proposed'], {
       'fee': {
@@ -589,20 +589,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('收費資訊').last);
     await tester.pumpAndSettle();
-    for (final (menu, field) in [
-      ('fee-mode-scooter', 0),
-      ('fee-mode-heavy', 1),
-    ]) {
-      final mode = find.byKey(ValueKey(menu));
-      await tester.ensureVisible(mode);
-      await tester.tap(mode);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('計時').last);
-      await tester.pumpAndSettle();
-      final amount = find.widgetWithText(TextFormField, '金額').at(field);
-      await tester.ensureVisible(amount);
-      await tester.enterText(amount, '20');
-      final cap = find.widgetWithText(TextFormField, '當日上限（選填）').at(field);
+    for (final vehicle in ['scooter', 'heavy']) {
+      await chooseFeeMode(tester, vehicle, 'hourly');
+      await tester.enterText(feeField('amount', vehicle), '20');
+      await tapFee(tester, 'fee-more-$vehicle');
+      final cap = feeField('cap', vehicle);
       await tester.ensureVisible(cap);
       await tester.enterText(cap, '100');
       await tester.pumpAndSettle();

@@ -138,6 +138,10 @@ class ParkingZone {
       fee == null ? scooterFeeNote : fee!.riderText('scooter') ?? '';
   String get heavyFeeText =>
       fee == null ? heavyFeeNote : fee!.riderText('heavy') ?? '';
+
+  /// The car's structured rate when the zone's fee has one; otherwise the
+  /// legacy text, which predates `fee.car`.
+  String get carFeeText => fee?.textOf('car') ?? carFeeNote;
   bool get hasVehicleFees =>
       fee != null ||
       [

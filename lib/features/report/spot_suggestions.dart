@@ -937,6 +937,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                       const SizedBox(height: 12),
                       FeeEditor(
                         value: fee,
+                        initialVehicle: FeeVehicle.of(widget.store.vehicle),
                         errorText: state.errorText,
                         onChanged: (v) {
                           setState(() => fee = v);

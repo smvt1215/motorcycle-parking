@@ -11,6 +11,8 @@ import 'package:motorcycle_parking/models/fee.dart';
 
 import 'fake_admin_gateway.dart';
 
+import '../fee_editor_steps.dart';
+
 /// Structured fees in the admin spot form and the review queue.
 void main() {
   const hourly = Fee(
@@ -426,25 +428,37 @@ void main() {
         )
         .first;
 
+    /// Brings [target] into view in the spot form, built or not.
+    Future<void> reach(WidgetTester tester, Finder target) async {
+      if (target.evaluate().isEmpty) {
+        await tester.scrollUntilVisible(
+          target,
+          200,
+          scrollable: scrollable('spot-form-'),
+        );
+      }
+      // Mid-screen: the form's action bar covers its bottom edge.
+      await Scrollable.ensureVisible(
+        tester.element(target.first),
+        alignment: .3,
+      );
+      await tester.pumpAndSettle();
+    }
+
     Future<void> choose(
       WidgetTester tester,
       String vehicle,
       String mode,
     ) async {
-      final menu = find.byKey(ValueKey('fee-mode-$vehicle'));
-      await tester.scrollUntilVisible(
-        menu,
-        200,
-        scrollable: scrollable('spot-form-'),
-      );
-      await tester.ensureVisible(menu);
-      await tester.pumpAndSettle();
-      await tester.tap(menu);
-      await tester.pumpAndSettle();
-      // A long menu at a large text size scrolls to the item.
-      await tester.ensureVisible(find.text(mode).last);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text(mode).last);
+      if (find.byKey(ValueKey('fee-open-$vehicle')).evaluate().isEmpty) {
+        final row = find.byKey(ValueKey('fee-row-$vehicle'));
+        await reach(tester, row);
+        await tester.tap(row);
+        await tester.pumpAndSettle();
+      }
+      final pill = find.byKey(ValueKey('fee-mode-$vehicle-$mode'));
+      await reach(tester, pill);
+      await tester.tap(pill);
       await tester.pumpAndSettle();
     }
 
@@ -472,8 +486,8 @@ void main() {
         );
         expect(find.byKey(const ValueKey('fee-legacy')), findsOneWidget);
         expect(find.byKey(const ValueKey('fee-note-plate')), findsNothing);
-        await choose(tester, 'scooter', '計時');
-        final amount = find.widgetWithText(TextFormField, '金額');
+        await choose(tester, 'scooter', 'hourly');
+        final amount = feeField('amount', 'scooter');
         await tester.ensureVisible(amount);
         await tester.enterText(amount, '20');
         await tester.pumpAndSettle();
@@ -485,13 +499,17 @@ void main() {
             isTrue,
           );
         }
-        await choose(tester, 'heavy', '比照機車費率');
+        await choose(tester, 'heavy', 'same_as');
         final plate = find.byKey(const ValueKey('fee-note-plate'));
-        await tester.ensureVisible(plate);
-        await tester.pumpAndSettle();
+        await reach(tester, plate);
+        // The app's notice board: the follow's amount worked out (#140).
         expect(
-          find.descendant(of: plate, matching: find.text(hourlyNote)),
-          findsOneWidget,
+          find.descendant(of: plate, matching: find.text('每小時 20 元')),
+          findsNWidgets(2),
+        );
+        expect(
+          find.descendant(of: plate, matching: find.textContaining('比照')),
+          findsNothing,
         );
         final save = find.text('儲存並關閉').hitTestable();
         expect(save, findsOneWidget);
@@ -543,12 +561,8 @@ void main() {
         );
         await tester.tap(find.text('修改後套用'));
         await tester.pumpAndSettle();
-        final menu = find.byKey(const ValueKey('fee-mode-heavy'));
-        await tester.ensureVisible(menu);
-        await tester.pumpAndSettle();
-        await tester.tap(menu);
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('免費').last);
+        await chooseFeeMode(tester, 'heavy', 'free');
+        await tester.ensureVisible(find.text('套用修改'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('套用修改'));
         await tester.pumpAndSettle();
@@ -577,12 +591,12 @@ void main() {
         }
         ..['fee_note'] = '每小時 20 元，當日上限 100 元（大型重機費率未確認）';
       await show(tester, '/spots/$communityId', const Size(390, 844));
-      final cap = find.widgetWithText(TextFormField, '當日上限（選填）');
-      await tester.scrollUntilVisible(
-        cap,
-        200,
-        scrollable: scrollable('spot-form-'),
-      );
+      final more = find.byKey(const ValueKey('fee-more-scooter'));
+      await reach(tester, more);
+      await tester.tap(more);
+      await tester.pumpAndSettle();
+      final cap = feeField('cap', 'scooter');
+      await reach(tester, cap);
       await tester.enterText(cap, '100.5');
       await tester.pumpAndSettle();
       expect(find.text('金額請填 0 到 10000 的整數'), findsOneWidget);
@@ -609,6 +623,11 @@ void main() {
         scrollable: scrollable('spot-form-'),
       );
       expect(period, findsOneWidget);
+      await choose(tester, 'heavy', 'per_visit');
+      final more = find.byKey(const ValueKey('fee-more-heavy'));
+      await reach(tester, more);
+      await tester.tap(more);
+      await tester.pumpAndSettle();
       expect(find.text('90 分鐘'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });

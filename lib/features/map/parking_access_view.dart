@@ -17,6 +17,7 @@ class ParkingAccessView extends StatelessWidget {
         heavy: spot.heavyAllowed,
         scooterFee: spot.fee?.riderText('scooter') ?? '',
         heavyFee: spot.fee?.riderText('heavy') ?? '',
+        carFee: spot.fee?.textOf('car') ?? '',
         showFees: spot.fee != null,
       );
     }
@@ -43,6 +44,14 @@ class ParkingAccessView extends StatelessWidget {
             label: '大型重機',
             value: lotFee.riderText('heavy') ?? '費率未確認',
           ),
+          if (lotFee.textOf('car') case final car?) ...[
+            const SizedBox(height: 8),
+            _ZoneNote(
+              icon: Icons.directions_car_outlined,
+              label: '汽車',
+              value: car,
+            ),
+          ],
           const SizedBox(height: 16),
           Divider(
             height: 1,
@@ -77,16 +86,17 @@ class ParkingAccessView extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          // Fee has no car amount, so a zone's car price stays visible; the
-          // motorcycle rates beside it repeat the lot's, never the old text.
+          // A zone's car price stays visible: the lot's car rate, else the
+          // zone's legacy text; the motorcycle rates beside it repeat the
+          // lot's, never the old text.
           if (lotFee != null)
-            zone.carFeeNote.trim().isEmpty
+            (lotFee.textOf('car') ?? zone.carFeeNote).trim().isEmpty
                 ? _AccessGroup(access: zone.access)
                 : _AccessGroup(
                     access: zone.access,
                     scooterFee: lotFee.riderText('scooter') ?? '',
                     heavyFee: lotFee.riderText('heavy') ?? '',
-                    carFee: zone.carFeeNote,
+                    carFee: lotFee.textOf('car') ?? zone.carFeeNote,
                     showFees: true,
                   )
           else
@@ -94,7 +104,7 @@ class ParkingAccessView extends StatelessWidget {
               access: zone.access,
               scooterFee: zone.scooterFeeText,
               heavyFee: zone.heavyFeeText,
-              carFee: zone.carFeeNote,
+              carFee: zone.carFeeText,
               showFees: zone.hasVehicleFees,
             ),
           if (lotFee == null &&

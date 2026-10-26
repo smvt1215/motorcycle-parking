@@ -530,8 +530,12 @@ class ZoneEditor extends StatelessWidget {
     required this.onRemove,
     required this.onChanged,
     this.feeHint,
+    this.vehicle,
   });
   final List<ZoneDraft> zones;
+
+  /// The rider's vehicle, whose rate each zone's fee editor opens on.
+  final VehicleType? vehicle;
 
   /// The precheck hint for the fee of the zone at an index, if any.
   final String? Function(int index)? feeHint;
@@ -632,6 +636,10 @@ class ZoneEditor extends StatelessWidget {
                         const SizedBox(height: 8),
                         FeeEditor(
                           key: ObjectKey(zone),
+                          initialVehicle: switch (vehicle) {
+                            final v? => FeeVehicle.of(v),
+                            null => null,
+                          },
                           value: zone.fee,
                           errorText: feeHint?.call(i),
                           onChanged: (value) {
@@ -1241,6 +1249,7 @@ class _ReportFormState extends State<ReportForm> {
                   const SizedBox(height: 16),
                   ZoneEditor(
                     zones: zones,
+                    vehicle: widget.store.vehicle,
                     feeHint: (i) => precheckHint(found, 'parking_zones.$i.fee'),
                     onAdd: () => setState(() => zones.add(ZoneDraft())),
                     onRemove: (zone) => setState(() {
@@ -1258,6 +1267,7 @@ class _ReportFormState extends State<ReportForm> {
                 const SizedBox(height: 8),
                 FeeEditor(
                   value: fee,
+                  initialVehicle: FeeVehicle.of(widget.store.vehicle),
                   errorText: precheckHint(found, 'fee'),
                   onChanged: (v) => setState(() => fee = v),
                 ),

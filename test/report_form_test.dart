@@ -13,6 +13,8 @@ import 'package:motorcycle_parking/domain/location_check.dart';
 import 'package:motorcycle_parking/models/parking.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
 
+import 'fee_editor_steps.dart';
+
 class RecordingStore extends AppStore {
   RecordingStore(LocalRepository local) : super(local, null);
   final submissions = <Map<String, dynamic>>[];
@@ -222,21 +224,12 @@ void main() {
 
   testWidgets('收費以結構化選項填寫，送出費率與組成的文字', (tester) async {
     final store = await openForm(tester);
-    final menu = find.byKey(const ValueKey('fee-mode-scooter'));
-    await reveal(tester, menu);
-    await tester.ensureVisible(menu);
-    await tester.pumpAndSettle();
-    await tester.tap(menu);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('每日').last);
-    await tester.pumpAndSettle();
-    await tester.enterText(find.widgetWithText(TextFormField, '每日金額'), '30');
-    final heavy = find.byKey(const ValueKey('fee-mode-heavy'));
-    await tester.ensureVisible(heavy);
-    await tester.tap(heavy);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('比照機車費率').last);
-    await tester.pumpAndSettle();
+    // The rider's vehicle (普通機車) opens first.
+    final daily = find.byKey(const ValueKey('fee-mode-scooter-daily'));
+    await reveal(tester, daily);
+    await tapFee(tester, 'fee-mode-scooter-daily');
+    await tester.enterText(feeField('amount', 'scooter'), '30');
+    await chooseFeeMode(tester, 'heavy', 'same_as');
     final spot = await send(tester, store);
     expect(spot['fee'], {
       'scooter': {'mode': 'daily', 'amount': 30},
@@ -577,13 +570,10 @@ void main() {
 
   testWidgets('計時金額填 0 元時在收費下方提示改選免費', (tester) async {
     final store = await openForm(tester);
-    final mode = find.byKey(const ValueKey('fee-mode-scooter'));
+    final mode = find.byKey(const ValueKey('fee-mode-scooter-hourly'));
     await reveal(tester, mode);
-    await tester.tap(mode);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('計時').last);
-    await tester.pumpAndSettle();
-    final amount = find.widgetWithText(TextFormField, '金額');
+    await tapFee(tester, 'fee-mode-scooter-hourly');
+    final amount = feeField('amount', 'scooter');
     await tester.ensureVisible(amount);
     await tester.enterText(amount, '0');
     await tester.pumpAndSettle();
