@@ -417,7 +417,7 @@ class AvailabilityLegend extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 12),
-            Expanded(child: Text('沒有膠囊＝空位未知，不是沒位', style: text.bodySmall)),
+            Expanded(child: Text('沒有膠囊＝空位未知，或目前車種不可停', style: text.bodySmall)),
           ],
         ),
       ],
