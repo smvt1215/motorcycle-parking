@@ -116,11 +116,13 @@ Eligibility _judge(
   }
   // Car bays are painted for small cars and heavy bikes (標誌標線號誌設置規則
   // §190); an ordinary scooter there is the wrong vehicle class unless a
-  // city rule opens them (道路交通安全規則 §112, last paragraph).
+  // city rule opens them (道路交通安全規則 §112, last paragraph), also in
+  // named districts only; the district check below closes the others.
   if (spot.spaceType == SpaceType.car &&
       vehicle == VehicleType.scooter &&
       !(rule?.allowedSpaceTypes.contains(SpaceType.car) ?? false) &&
-      !(rule?.conditionalSpaceTypes.contains(SpaceType.car) ?? false)) {
+      !(rule?.conditionalSpaceTypes.contains(SpaceType.car) ?? false) &&
+      !(rule?.districtSpaceTypes.containsKey(SpaceType.car) ?? false)) {
     return const Eligibility(
       EligibilityStatus.notAllowed,
       '汽車格為小型車及大型重機停放線，普通機車停放屬車種不依規定',

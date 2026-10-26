@@ -538,7 +538,87 @@ class FakeAdminGateway implements AdminGateway {
   Future<List<CityRule>> cityRules() async => const [];
 
   Future<void> dispose() => events.close();
+
+  /// `city_rules` rows, keyed `city:vehicle`.
+  Map<String, Map<String, dynamic>> ruleRows = {
+    for (final r in sampleRules()) '${r['city']}:${r['vehicle']}': r,
+  };
+  final List<(String, String, Map<String, dynamic>, int?, String)> published =
+      [];
+  bool failRules = false;
+
+  @override
+  Future<List<Map<String, dynamic>>> cityRuleRows() async {
+    if (failRules) throw StateError('offline');
+    return [
+      for (final r in ruleRows.values) {...r},
+    ];
+  }
+
+  @override
+  Future<Map<String, dynamic>> publishCityRule(
+    String city,
+    String vehicle,
+    Map<String, dynamic> values,
+    int? baseVersion,
+    String note,
+  ) async {
+    final old = ruleRows['$city:$vehicle'];
+    if (old?['version'] != baseVersion) {
+      throw const PostgrestException(
+        message: 'rule changed since it was opened',
+        code: '40001',
+      );
+    }
+    published.add((city, vehicle, values, baseVersion, note));
+    final row = {
+      ...?old,
+      'city': city,
+      'vehicle': vehicle,
+      ...values,
+      'version': (baseVersion ?? 0) + 1,
+    };
+    ruleRows['$city:$vehicle'] = row;
+    return {...row};
+  }
 }
+
+/// Two published rules: Taipei's heavy-bike rule and Taichung's conditional
+/// one, as the bundled file has them.
+List<Map<String, dynamic>> sampleRules() => [
+  {
+    'city': '臺北市',
+    'vehicle': 'heavy',
+    'allowed_space_types': ['paidMotorcycle', 'heavyOnly', 'car'],
+    'conditional_space_types': ['offStreet'],
+    'districts': <String>[],
+    'district_space_types': <String, dynamic>{},
+    'fee_note': '一般計次每次 40 元',
+    'exceptions': '僅公有路邊收費機車格；免費巷弄格不適用。',
+    'can_use_two_spaces': true,
+    'effective_date': '2026-10-06',
+    'source_url': 'https://www.gov.taipei/notice',
+    'restriction': null,
+    'version': 1,
+  },
+  {
+    'city': '新北市',
+    'vehicle': 'heavy',
+    'allowed_space_types': ['heavyOnly', 'car', 'paidMotorcycle'],
+    'conditional_space_types': ['offStreet'],
+    'districts': <String>[],
+    'district_space_types': {
+      'freeMotorcycle': ['板橋區', '新店區'],
+    },
+    'fee_note': '計次每 4 小時 30 元',
+    'exceptions': '免費機車格僅板橋區、新店區開放。',
+    'can_use_two_spaces': true,
+    'effective_date': '2026-07-01',
+    'source_url': 'https://www.traffic.ntpc.gov.tw/notice',
+    'restriction': null,
+    'version': 2,
+  },
+];
 
 List<Map<String, dynamic>> sampleMapRows() => [
   {

@@ -113,6 +113,19 @@ abstract class AdminGateway {
     String note,
   );
 
+  /// Every `city_rules` row; the table is public.
+  Future<List<Map<String, dynamic>>> cityRuleRows();
+
+  /// `admin_upsert_city_rule`: publishes [values] as the next version of the
+  /// rule opened at [baseVersion] (null for a new rule).
+  Future<Map<String, dynamic>> publishCityRule(
+    String city,
+    String vehicle,
+    Map<String, dynamic> values,
+    int? baseVersion,
+    String note,
+  );
+
   /// `admin_viewport_spots`: the spots of the chosen layers in [bounds].
   Future<MapSpotPage> mapSpots(
     MapViewport bounds, {
@@ -455,6 +468,28 @@ class SupabaseAdminGateway implements AdminGateway {
     double? lat,
     double? lng,
   }) => geocodeSearch(client.functions, query, lat: lat, lng: lng);
+
+  @override
+  Future<List<Map<String, dynamic>>> cityRuleRows() =>
+      client.from('city_rules').select().order('city').order('vehicle');
+
+  @override
+  Future<Map<String, dynamic>> publishCityRule(
+    String city,
+    String vehicle,
+    Map<String, dynamic> values,
+    int? baseVersion,
+    String note,
+  ) => client.rpc<Map<String, dynamic>>(
+    'admin_upsert_city_rule',
+    params: {
+      'p_city': city,
+      'p_vehicle': vehicle,
+      'p_values': values,
+      'p_base_version': baseVersion,
+      'p_note': note,
+    },
+  );
 
   @override
   Future<MapSpotPage> mapSpots(
