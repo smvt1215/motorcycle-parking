@@ -3,8 +3,8 @@ import 'package:flutter/services.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../../ui/version_text.dart';
 
-/// Covers the app while [AppStore.start] runs. Its brand background matches
-/// the native splash so launch reads as one continuous screen.
+/// Covers the app while [AppStore.start] runs. It continues the native splash
+/// so launch reads as one screen.
 class LaunchCurtain extends StatefulWidget {
   const LaunchCurtain({
     super.key,
@@ -33,7 +33,7 @@ class _LaunchCurtainState extends State<LaunchCurtain> {
   Widget build(BuildContext context) => Stack(
     children: [
       // The map has no app bar to set system bar icons, so the app restores
-      // a theme-matched style once the brand-colored screen is gone.
+      // a theme-matched style once the launch screen is gone.
       AnnotatedRegion<SystemUiOverlayStyle>(
         value: Theme.of(context).brightness == Brightness.dark
             ? SystemUiOverlayStyle.light
@@ -61,6 +61,13 @@ class _LaunchCurtainState extends State<LaunchCurtain> {
   );
 }
 
+/// Native splash colors (flutter_native_splash.yaml): parking-sign blue in
+/// light mode, asphalt in dark mode; the same icon on both.
+const launchBlue = Color(0xff1f5fa8);
+const launchAsphalt = Color(0xff1c2126);
+
+/// Loading screen that continues the native splash: same background, same
+/// mark at the same size and position, plus the loading status at the bottom.
 class LaunchScreen extends StatelessWidget {
   const LaunchScreen({super.key, required this.locating});
   final bool locating;
@@ -68,130 +75,98 @@ class LaunchScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final quiet = text.labelSmall?.copyWith(
+      color: Colors.white.withValues(alpha: .72),
+    );
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
       child: Material(
         key: const ValueKey('launch-screen'),
-        color: brand,
-        child: DecoratedBox(
-          decoration: const BoxDecoration(
-            gradient: RadialGradient(
-              center: Alignment(0, -.35),
-              radius: 1.1,
-              colors: [Color(0xff21798c), brand, Color(0xff0f4652)],
-              stops: [0, .55, 1],
+        color: dark ? launchAsphalt : launchBlue,
+        child: CustomMultiChildLayout(
+          delegate: _LaunchLayout(),
+          children: [
+            LayoutId(
+              id: _LaunchSlot.mark,
+              child: Image.asset(
+                'assets/branding/png/splash_mark.png',
+                key: const ValueKey('launch-mark'),
+                excludeFromSemantics: true,
+                filterQuality: FilterQuality.medium,
+              ),
             ),
-          ),
-          child: SafeArea(
-            child: Column(
-              children: [
-                const Spacer(flex: 5),
-                TweenAnimationBuilder<double>(
-                  tween: Tween(begin: reduceMotion ? 1 : 0, end: 1),
-                  duration: const Duration(milliseconds: 650),
-                  curve: Curves.easeOutBack,
-                  builder: (context, t, child) => Opacity(
-                    opacity: t.clamp(0, 1),
-                    child: Transform.scale(scale: .85 + .15 * t, child: child),
-                  ),
-                  child: const _Mark(),
-                ),
-                const SizedBox(height: 28),
-                Text(
-                  '機車停車指南',
-                  style: text.headlineMedium?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 2,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '普通機車・大型重機',
-                  style: text.titleSmall?.copyWith(
-                    color: Colors.white.withValues(alpha: .78),
-                    letterSpacing: 4,
-                  ),
-                ),
-                const Spacer(flex: 4),
-                const SizedBox.square(
-                  dimension: 22,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.5,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Semantics(
-                  liveRegion: true,
-                  child: Text(
-                    locating ? '正在取得目前位置…' : '正在載入停車資料…',
-                    key: const ValueKey('launch-status'),
-                    style: text.bodyMedium?.copyWith(
-                      color: Colors.white.withValues(alpha: .88),
+            LayoutId(
+              id: _LaunchSlot.status,
+              child: SafeArea(
+                top: false,
+                minimum: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox.square(
+                      dimension: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        color: Colors.white,
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 14),
+                    Semantics(
+                      liveRegion: true,
+                      child: Text(
+                        locating ? '正在取得目前位置…' : '正在載入停車資料…',
+                        key: const ValueKey('launch-status'),
+                        textAlign: TextAlign.center,
+                        style: text.bodyMedium?.copyWith(color: Colors.white),
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                    Text(
+                      '停車前請確認現場標示',
+                      textAlign: TextAlign.center,
+                      style: quiet,
+                    ),
+                    const SizedBox(height: 4),
+                    VersionText(style: quiet),
+                  ],
                 ),
-                const SizedBox(height: 40),
-                Text(
-                  '停車前請確認現場標示',
-                  style: text.labelSmall?.copyWith(
-                    color: Colors.white.withValues(alpha: .6),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                VersionText(
-                  style: text.labelSmall?.copyWith(
-                    color: Colors.white.withValues(alpha: .6),
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );
   }
 }
 
-/// Parking sign: a "P" over a motorcycle, drawn so no image asset is needed.
-class _Mark extends StatelessWidget {
-  const _Mark();
+enum _LaunchSlot { mark, status }
+
+/// Centers the mark on the whole screen like the native splash: a 288 logical
+/// px image with the 150 px rounded icon in its middle. On short screens the
+/// mark shrinks so the icon never runs into the status text.
+class _LaunchLayout extends MultiChildLayoutDelegate {
+  static const nativeSize = 288.0;
+
+  /// The icon's share of the image side.
+  static const iconShare = 150 / nativeSize;
 
   @override
-  Widget build(BuildContext context) => Container(
-    width: 112,
-    height: 112,
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(32),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x40000000),
-          blurRadius: 24,
-          offset: Offset(0, 10),
-        ),
-      ],
-    ),
-    child: const Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Text(
-          'P',
-          textScaler: TextScaler.noScaling,
-          style: TextStyle(
-            fontFamily: 'Outfit',
-            fontSize: 56,
-            height: 1,
-            fontWeight: FontWeight.w800,
-            color: brand,
-          ),
-        ),
-        SizedBox(height: 2),
-        Icon(Icons.two_wheeler, size: 30, color: brand),
-      ],
-    ),
-  );
+  void performLayout(Size size) {
+    final status = layoutChild(_LaunchSlot.status, BoxConstraints.loose(size));
+    positionChild(
+      _LaunchSlot.status,
+      Offset((size.width - status.width) / 2, size.height - status.height),
+    );
+    final room = 2 * (size.height / 2 - status.height - 8) / iconShare;
+    final side = room.clamp(0.0, nativeSize).clamp(0.0, size.width);
+    layoutChild(_LaunchSlot.mark, BoxConstraints.tight(Size.square(side)));
+    positionChild(
+      _LaunchSlot.mark,
+      Offset((size.width - side) / 2, (size.height - side) / 2),
+    );
+  }
+
+  @override
+  bool shouldRelayout(_LaunchLayout oldDelegate) => false;
 }

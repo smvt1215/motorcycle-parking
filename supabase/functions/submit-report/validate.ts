@@ -19,6 +19,7 @@ const suggestionFields = [
   'eligibility',
   'note',
   'guide',
+  'location',
   'gone',
   '停車點名稱',
   '格位類型',
@@ -184,6 +185,11 @@ export function validate(body: Record<string, unknown>): string | null {
       ('lng' in p &&
         (typeof p.lng !== 'number' || p.lng < 118 || p.lng > 123))
     ) return 'invalid coordinates';
+    // A location suggestion is a position: both coordinates and nothing else.
+    if (
+      body.field === 'location' &&
+      (entries.length !== 2 || !('lat' in p) || !('lng' in p))
+    ) return 'invalid proposed';
   }
   if (
     body.note !== undefined &&

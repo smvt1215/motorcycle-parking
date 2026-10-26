@@ -1,13 +1,21 @@
+import 'dart:async';
+
 import '../../core/app_version.dart';
+import '../../core/config.dart';
 import '../auth/sign_in.dart';
 import '../../core/geo.dart';
+import '../../core/town_lookup.dart';
 import '../../data/app_store.dart';
 import '../../data/profile_repository.dart';
 import '../../domain/eligibility.dart';
+import '../../domain/location_check.dart';
+import '../../domain/precheck.dart';
 import '../../models/fee.dart';
 import '../../models/parking.dart';
+import '../../ui/address_search_field.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../../ui/fee_editor.dart';
+import '../../ui/location_picker.dart';
 import '../../ui/version_text.dart';
 import '../map/space_type_sheet.dart';
 import '../map/vehicle_sheet.dart';
@@ -208,6 +216,32 @@ String? nearbyCity(Iterable<ParkingSpot> spots, double lat, double lng) {
   }
   return city;
 }
+
+/// The bounds `submit-report` and the spot tables accept.
+bool inTaiwanBounds(double lat, double lng) =>
+    lat >= 20 && lat <= 27 && lng >= 118 && lng <= 123;
+
+/// The spots near a position as the location checks see them.
+List<NearbySpot> nearbySpots(Iterable<ParkingSpot> spots) => [
+  for (final s in spots)
+    NearbySpot(
+      sourceId: s.id,
+      name: s.name,
+      spaceType: s.spaceType.name,
+      lat: s.lat,
+      lng: s.lng,
+    ),
+];
+
+/// A map tall enough to aim at a bay, short enough to leave the form in
+/// view on a small phone.
+double pickerHeight(BuildContext context) =>
+    (MediaQuery.sizeOf(context).height * .34).clamp(200.0, 300.0);
+
+/// The picker's map: Google Maps when the build has keys, otherwise the
+/// OpenStreetMap preview the main map also uses.
+LocationMapBuilder? get appLocationMap =>
+    AppConfig.useGoogleMaps ? null : osmLocationMap;
 
 Future<void> showReport(
   BuildContext context,
@@ -433,6 +467,40 @@ class AccessField extends StatelessWidget {
 String? fitsServer(String? value, int max) =>
     (value?.trim().length ?? 0) > max ? '最多 $max 個字元（表情符號算 2 個）' : null;
 
+/// [fitsServer], then what the server's precheck would refuse in this text
+/// (personal data, or a placeholder for a [name]), so the rider fixes it here.
+String? textHint(String? value, int max, {bool name = false}) =>
+    fitsServer(value, max) ?? precheckTextHint(value, name: name);
+
+/// A precheck hint under the field it is about: an icon and the sentence,
+/// wrapping on narrow screens; nothing when [text] is null.
+class PrecheckHintText extends StatelessWidget {
+  const PrecheckHintText(this.text, {super.key});
+  final String? text;
+  @override
+  Widget build(BuildContext context) {
+    final message = text;
+    if (message == null) return const SizedBox.shrink();
+    final color = Theme.of(context).colorScheme.error;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Semantics(
+        liveRegion: true,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.error_outline, size: 20, color: color),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(message, style: TextStyle(color: color)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// One zone of a lot while it is being reported.
 class ZoneDraft {
   final name = TextEditingController();
@@ -461,8 +529,12 @@ class ZoneEditor extends StatelessWidget {
     required this.onAdd,
     required this.onRemove,
     required this.onChanged,
+    this.feeHint,
   });
   final List<ZoneDraft> zones;
+
+  /// The precheck hint for the fee of the zone at an index, if any.
+  final String? Function(int index)? feeHint;
   final VoidCallback onAdd;
   final ValueChanged<ZoneDraft> onRemove;
 
@@ -524,12 +596,13 @@ class ZoneEditor extends StatelessWidget {
                           maxLength: 40,
                           decoration: const InputDecoration(
                             labelText: '分區名稱',
+                            errorMaxLines: 4,
                             hintText: '例：B2 機車區',
                             counterText: '',
                           ),
                           validator: (v) => (v?.trim().isEmpty ?? true)
                               ? '請填寫分區名稱，或刪除此分區'
-                              : fitsServer(v, 40),
+                              : textHint(v, 40, name: true),
                         ),
                         const SizedBox(height: 12),
                         AccessField(
@@ -545,10 +618,11 @@ class ZoneEditor extends StatelessWidget {
                           maxLength: 200,
                           decoration: const InputDecoration(
                             labelText: '這區怎麼停（選填）',
+                            errorMaxLines: 4,
                             hintText: '例：靠電梯，重機停最後一排',
                             counterText: '',
                           ),
-                          validator: (v) => fitsServer(v, 200),
+                          validator: (v) => textHint(v, 200),
                         ),
                         const SizedBox(height: 16),
                         Text(
@@ -559,6 +633,7 @@ class ZoneEditor extends StatelessWidget {
                         FeeEditor(
                           key: ObjectKey(zone),
                           value: zone.fee,
+                          errorText: feeHint?.call(i),
                           onChanged: (value) {
                             zone.fee = value;
                             onChanged();
@@ -721,12 +796,18 @@ class ReportForm extends StatefulWidget {
     required this.lat,
     required this.lng,
     this.mapCenter = false,
+    this.mapBuilder,
   });
   final AppStore store;
+
+  /// Where the picker starts: the long-pressed point or the map center.
   final double lat, lng;
 
   /// Whether the point is the map center rather than a long-pressed spot.
   final bool mapCenter;
+
+  /// Tests swap the picker's map for a placeholder.
+  final LocationMapBuilder? mapBuilder;
   @override
   State<ReportForm> createState() => _ReportFormState();
 }
@@ -767,14 +848,6 @@ class _ReportFormState extends State<ReportForm> {
   /// decides them live.
   bool scooterRuled = false, heavyRuled = false;
 
-  @override
-  void initState() {
-    super.initState();
-    // Values and flags from the same bay kind and city, not computed lazily
-    // at submit time after either changed.
-    applyDefaults();
-  }
-
   ({bool scooter, bool heavy}) get ruledOnly {
     final marked = markedEligibility(type);
     final rule = ruledEligibility(widget.store.rules, type, city);
@@ -785,9 +858,82 @@ class _ReportFormState extends State<ReportForm> {
   }
 
   late String? city = nearbyCity(widget.store.spots, widget.lat, widget.lng);
+  late double lat = widget.lat, lng = widget.lng;
+
+  /// From the reverse lookup; empty until it answers.
+  String district = '';
+
+  /// Whether [city] came from the lookup rather than nearby spots.
+  bool cityLookedUp = false;
+  bool lookingUp = false;
+  String? lookupProblem;
+
+  /// Set when the lookup moved the spot into another county or city.
+  String? movedFromCity;
+  Timer? lookupTimer;
+  int lookupRound = 0;
   bool sending = false;
+
+  /// Asks which county and district the marker is in, 0.6 s after it
+  /// stops moving; only the latest answer counts.
+  void scheduleLookup({Duration delay = const Duration(milliseconds: 600)}) {
+    lookupTimer?.cancel();
+    lookupTimer = Timer(delay, () async {
+      final round = ++lookupRound;
+      final at = (lat, lng);
+      setState(() {
+        lookingUp = true;
+        lookupProblem = null;
+      });
+      Object? failure;
+      Town? town;
+      try {
+        town = await widget.store.townAt(at.$1, at.$2);
+      } catch (e) {
+        failure = e;
+      }
+      if (!mounted || round != lookupRound) return;
+      setState(() {
+        lookingUp = false;
+        if (failure != null) {
+          lookupProblem = '查不到縣市與行政區，請在下方確認縣市。';
+          district = '';
+        } else if (town == null || !taiwanCities.contains(town.city)) {
+          lookupProblem = '標記所在位置查不到縣市，請確認標記在停車點上，並在下方選擇縣市。';
+          district = '';
+        } else {
+          final before = city;
+          movedFromCity = before != null && before != town.city ? before : null;
+          city = town.city;
+          district = town.district;
+          cityLookedUp = true;
+          // The new city's rule may open or close bays for a vehicle.
+          applyDefaults();
+        }
+      });
+    });
+  }
+
+  void move(double a, double b) => setState(() {
+    lat = a;
+    lng = b;
+    // The district belonged to the old position; never send it stale.
+    district = '';
+    scheduleLookup();
+  });
+
+  @override
+  void initState() {
+    super.initState();
+    // Values and flags from the same bay kind and city, not computed lazily
+    // at submit time after either changed.
+    applyDefaults();
+    scheduleLookup(delay: Duration.zero);
+  }
+
   @override
   void dispose() {
+    lookupTimer?.cancel();
     name.dispose();
     note.dispose();
     entrance.dispose();
@@ -797,6 +943,36 @@ class _ReportFormState extends State<ReportForm> {
     }
     super.dispose();
   }
+
+  /// The spot as it will be sent.
+  Map<String, Object?> spotPayload() => {
+    'name': name.text.trim(),
+    'lat': lat,
+    'lng': lng,
+    'city': city,
+    if (district.isNotEmpty) 'district': district,
+    'space_type': type.name,
+    'fee_note': feeNoteOf(fee),
+    if (!fee.isEmpty) 'fee': fee.toJson(),
+    'note': note.text.trim(),
+    if (guide.text.trim().isNotEmpty) 'parking_guide': guide.text.trim(),
+    // Lot details only for lots, whatever was typed before the bay kind
+    // changed.
+    if (lot) ...{
+      'facility_type': ?facility?.name,
+      'parking_access': ?access?.name,
+      if (entrance.text.trim().isNotEmpty)
+        'entrance_note': entrance.text.trim(),
+      if (zones.isNotEmpty)
+        'parking_zones': [for (final zone in zones) zone.toJson()],
+    },
+    'scooter_allowed': scooterRuled ? null : scooter,
+    'heavy_allowed': heavyRuled ? null : heavy,
+  };
+
+  /// What the server's precheck would refuse in the report as it stands.
+  List<PrecheckIssue> get issues =>
+      precheck({'action': 'create', 'spot': spotPayload()});
 
   void setType(SpaceType value) => setState(() {
     type = value;
@@ -820,8 +996,97 @@ class _ReportFormState extends State<ReportForm> {
     builder: (context, _) => _buildForm(context),
   );
 
+  /// The picker with what the rider should know about the position: the
+  /// county it falls in, same-type spots within 15 m, a city change.
+  Widget _locationSection(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final notes = checkLocation(
+      lat: lat,
+      lng: lng,
+      spaceType: type.name,
+      nearby: nearbySpots(widget.store.spots),
+    );
+    return FormSection(
+      title: '位置',
+      children: [
+        Text(
+          widget.mapCenter
+              ? '從目前地圖中心開始。拖曳標記對準停車格，或點地圖選位置。'
+              : '從你長按的位置開始。拖曳標記對準停車格，或點地圖選位置。',
+          style: TextStyle(color: colors.onSurfaceVariant),
+        ),
+        const SizedBox(height: 12),
+        FormField<void>(
+          validator: (_) =>
+              inTaiwanBounds(lat, lng) ? null : '標記不在臺灣範圍內，請移回停車點的位置。',
+          builder: (state) => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              LocationPicker(
+                lat: lat,
+                lng: lng,
+                touchMarker: true,
+                onLocate: widget.store.currentFix,
+                height: pickerHeight(context),
+                mapBuilder: widget.mapBuilder ?? appLocationMap,
+                // Without a backend (demo) there is nothing to search.
+                onSearch: widget.store.client == null
+                    ? null
+                    : (context) => showAddressSearch(
+                        context,
+                        search: widget.store.parking.searchAddress,
+                        lat: lat,
+                        lng: lng,
+                      ),
+                onChanged: (a, b) {
+                  move(a, b);
+                  state.didChange(null);
+                },
+              ),
+              if (state.errorText != null)
+                LocationNote(
+                  icon: Icons.error_outline,
+                  text: state.errorText!,
+                  tone: NoteTone.error,
+                ),
+            ],
+          ),
+        ),
+        if (lookingUp)
+          const LocationNote(icon: Icons.travel_explore, text: '正在查詢所在縣市與行政區…')
+        else if (lookupProblem != null)
+          LocationNote(
+            icon: Icons.help_outline,
+            text: lookupProblem!,
+            tone: NoteTone.caution,
+          )
+        else if (cityLookedUp)
+          LocationNote(icon: Icons.place_outlined, text: '位於$city$district'),
+        if (movedFromCity != null)
+          LocationNote(
+            key: const ValueKey('report-city-changed'),
+            icon: Icons.rule,
+            text:
+                '標記在$city，不是原本帶入的$movedFromCity；適用$city的停車規則'
+                '${vehiclesEdited ? '，請確認可停車種。' : '，可停車種已依新規則帶入。'}',
+            tone: NoteTone.caution,
+          ),
+        if (notes.duplicates.isNotEmpty)
+          LocationNote(
+            key: const ValueKey('report-duplicate'),
+            icon: Icons.content_copy,
+            text:
+                '15 m 內已有同類型的停車點：${notes.duplicates.map((d) => d.name).join('、')}。'
+                '如果是同一處，請關閉這個表單，改到該點提出修改建議。',
+            tone: NoteTone.caution,
+          ),
+      ],
+    );
+  }
+
   Widget _buildForm(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final found = issues;
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: Form(
@@ -835,20 +1100,6 @@ class _ReportFormState extends State<ReportForm> {
               '新增的停車點會顯示於地圖，回報資訊待管理者確認；停放資格請依現場標示。',
               style: TextStyle(color: colors.onSurfaceVariant),
             ),
-            const SizedBox(height: 16),
-            Material(
-              color: colors.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(16),
-              child: ListTile(
-                leading: Icon(Icons.place_outlined, color: colors.primary),
-                title: Text(widget.mapCenter ? '位置：目前地圖中心' : '位置：長按的地圖位置'),
-                subtitle: Text(
-                  '${widget.lat.toStringAsFixed(5)}, '
-                  '${widget.lng.toStringAsFixed(5)}'
-                  '${widget.mapCenter ? '\n位置不對時，關閉後移動地圖再回報。' : ''}',
-                ),
-              ),
-            ),
             if (!widget.store.canReport) ...[
               const SizedBox(height: 16),
               SignInPrompt(
@@ -856,6 +1107,7 @@ class _ReportFormState extends State<ReportForm> {
                 message: '使用 Google 或 Apple 登入後才能送出回報。',
               ),
             ],
+            _locationSection(context),
             FormSection(
               title: '基本資訊',
               children: [
@@ -865,24 +1117,39 @@ class _ReportFormState extends State<ReportForm> {
                   textInputAction: TextInputAction.next,
                   decoration: const InputDecoration(
                     labelText: '停車點名稱',
+                    errorMaxLines: 4,
                     hintText: '例：信義路五段收費機車格',
                     counterText: '',
                   ),
-                  validator: (v) =>
-                      (v?.trim().isEmpty ?? true) ? '請填寫名稱' : null,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  validator: (v) => (v?.trim().isEmpty ?? true)
+                      ? '請填寫名稱'
+                      : precheckTextHint(v, name: true),
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
+                  // The lookup replaces the value; a new key shows it.
+                  key: ValueKey('report-city-$city'),
                   initialValue: city,
                   decoration: InputDecoration(
                     labelText: '縣市',
-                    helperText: city == null ? null : '依附近停車點自動帶入，請確認',
+                    helperText: city == null
+                        ? null
+                        : cityLookedUp
+                        ? '依標記位置帶入${district.isEmpty ? '' : '（$district）'}，請確認'
+                        : '依附近停車點自動帶入，請確認',
                   ),
                   items: taiwanCities
                       .map((s) => DropdownMenuItem(value: s, child: Text(s)))
                       .toList(),
                   validator: (v) => v == null ? '請選擇停車點所在縣市' : null,
                   onChanged: (v) => setState(() {
+                    if (v != city) {
+                      // The district belonged to the looked-up city.
+                      district = '';
+                      cityLookedUp = false;
+                      movedFromCity = null;
+                    }
                     city = v;
                     // The city's rule may open or close bays for a vehicle.
                     applyDefaults();
@@ -922,6 +1189,10 @@ class _ReportFormState extends State<ReportForm> {
                     vehiclesEdited = true;
                   }),
                 ),
+                PrecheckHintText(
+                  precheckHint(found, 'scooter_allowed'),
+                  key: const ValueKey('precheck-scooter_allowed'),
+                ),
                 ChoiceField<bool?>(
                   label: '大型重機',
                   vehicle: VehicleType.heavy,
@@ -932,6 +1203,10 @@ class _ReportFormState extends State<ReportForm> {
                     heavyRuled = false;
                     vehiclesEdited = true;
                   }),
+                ),
+                PrecheckHintText(
+                  precheckHint(found, 'heavy_allowed'),
+                  key: const ValueKey('precheck-heavy_allowed'),
                 ),
               ],
             ),
@@ -954,14 +1229,17 @@ class _ReportFormState extends State<ReportForm> {
                     maxLines: 2,
                     decoration: const InputDecoration(
                       labelText: '入口在哪裡',
+                      errorMaxLines: 4,
                       hintText: '例：入口在松仁路側，機車走右側坡道',
                       alignLabelWithHint: true,
                     ),
-                    validator: (v) => fitsServer(v, 500),
+                    autovalidateMode: AutovalidateMode.onUserInteraction,
+                    validator: (v) => textHint(v, 500),
                   ),
                   const SizedBox(height: 16),
                   ZoneEditor(
                     zones: zones,
+                    feeHint: (i) => precheckHint(found, 'parking_zones.$i.fee'),
                     onAdd: () => setState(() => zones.add(ZoneDraft())),
                     onRemove: (zone) => setState(() {
                       zones.remove(zone);
@@ -978,6 +1256,7 @@ class _ReportFormState extends State<ReportForm> {
                 const SizedBox(height: 8),
                 FeeEditor(
                   value: fee,
+                  errorText: precheckHint(found, 'fee'),
                   onChanged: (v) => setState(() => fee = v),
                 ),
                 const SizedBox(height: 20),
@@ -987,10 +1266,12 @@ class _ReportFormState extends State<ReportForm> {
                   maxLines: 2,
                   decoration: InputDecoration(
                     labelText: '停車指引',
+                    errorMaxLines: 4,
                     hintText: lot ? '例：B2 機車區靠電梯，重機停最後一排' : '例：格位在便利商店前，靠路口一側',
                     alignLabelWithHint: true,
                   ),
-                  validator: (v) => fitsServer(v, 500),
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  validator: (v) => textHint(v, 500),
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
@@ -999,9 +1280,12 @@ class _ReportFormState extends State<ReportForm> {
                   maxLines: 3,
                   decoration: const InputDecoration(
                     labelText: '其他備註',
+                    errorMaxLines: 4,
                     hintText: '例：夜間有管理員，假日常客滿',
                     alignLabelWithHint: true,
                   ),
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  validator: (v) => textHint(v, 500),
                 ),
               ],
             ),
@@ -1012,36 +1296,16 @@ class _ReportFormState extends State<ReportForm> {
                   ? null
                   : () async {
                       if (!form.currentState!.validate()) return;
+                      // Each hint already sits under its field; the message
+                      // also covers one scrolled out of view.
+                      if (issues.firstOrNull case final issue?) {
+                        return showMessage(context, issue.message);
+                      }
                       setState(() => sending = true);
                       await runAction(context, () async {
                         final result = await widget.store.submit({
                           'action': 'create',
-                          'spot': {
-                            'name': name.text.trim(),
-                            'lat': widget.lat,
-                            'lng': widget.lng,
-                            'city': city,
-                            'space_type': type.name,
-                            'fee_note': feeNoteOf(fee),
-                            if (!fee.isEmpty) 'fee': fee.toJson(),
-                            'note': note.text.trim(),
-                            if (guide.text.trim().isNotEmpty)
-                              'parking_guide': guide.text.trim(),
-                            // Lot details only for lots, whatever was typed
-                            // before the bay kind changed.
-                            if (lot) ...{
-                              'facility_type': ?facility?.name,
-                              'parking_access': ?access?.name,
-                              if (entrance.text.trim().isNotEmpty)
-                                'entrance_note': entrance.text.trim(),
-                              if (zones.isNotEmpty)
-                                'parking_zones': [
-                                  for (final zone in zones) zone.toJson(),
-                                ],
-                            },
-                            'scooter_allowed': scooterRuled ? null : scooter,
-                            'heavy_allowed': heavyRuled ? null : heavy,
-                          },
+                          'spot': spotPayload(),
                         });
                         if (context.mounted) {
                           Navigator.pop(context);

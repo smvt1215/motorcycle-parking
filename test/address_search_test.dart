@@ -139,10 +139,68 @@ void main() {
     );
   });
 
-  testWidgets('搜尋後點選路口：移動標記、填入路段並提醒拖曳', (tester) async {
+  for (final width in [390.0, 1280.0]) {
+    testWidgets('寬 $width：入口開啟搜尋，點選路口後關閉、移動標記並提醒拖曳', (tester) async {
+      tester.view.physicalSize = Size(width, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      var at = (25.0, 121.0);
+      final filled = <String, String>{};
+      final queries = <String>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: StatefulBuilder(
+                builder: (context, setState) => LocationPicker(
+                  lat: at.$1,
+                  lng: at.$2,
+                  mapBuilder: (context, view) => const SizedBox.expand(),
+                  onChanged: (a, b) => setState(() => at = (a, b)),
+                  fills: const {'address': '地址', 'road_segment': '路段'},
+                  onSearch: (context) async {
+                    final c = await showAddressSearch(
+                      context,
+                      search: (q, {lat, lng}) async {
+                        queries.add(q);
+                        return [_corner, _road];
+                      },
+                    );
+                    if (c?.field case final field?) filled[field] = c!.label;
+                    return c;
+                  },
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('搜尋門牌、路段或路口'));
+      await tester.pumpAndSettle();
+      // Phones get a sheet, wide screens a dialog.
+      expect(find.byType(Dialog), width >= 600 ? findsOneWidget : findsNothing);
+      final button = find.widgetWithText(OutlinedButton, '搜尋地址');
+      expect(tester.widget<OutlinedButton>(button).onPressed, isNull);
+      await tester.enterText(find.byType(TextField), '中山北路二段與南京東路');
+      await tester.pump();
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+      expect(queries, ['中山北路二段與南京東路']);
+      expect(find.text('臺北市中山區的路口，只到交會點'), findsOneWidget);
+      expect(find.text('路段，只到中心點'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.text('中山北路二段與南京東路一段'));
+      await tester.pumpAndSettle();
+      expect(find.text('搜尋位置'), findsNothing);
+      expect(at, (25.0521, 121.5222));
+      expect(filled, {'road_segment': '中山北路二段與南京東路一段'});
+      expect(find.textContaining('並填入「路段」'), findsOneWidget);
+      expect(find.textContaining('交會點，請把標記拖到'), findsOneWidget);
+    });
+  }
+
+  testWidgets('關閉搜尋不移動標記', (tester) async {
     var at = (25.0, 121.0);
-    final filled = <String, String>{};
-    final queries = <String>[];
     await tester.pumpWidget(
       _host(
         StatefulBuilder(
@@ -151,32 +209,20 @@ void main() {
             lng: at.$2,
             mapBuilder: (context, view) => const SizedBox.expand(),
             onChanged: (a, b) => setState(() => at = (a, b)),
-            search: (q, {lat, lng}) async {
-              queries.add(q);
-              return [_corner, _road];
-            },
-            fills: const {'address': '地址', 'road_segment': '路段'},
-            onAddressPicked: (c) => filled[c.field!] = c.label,
+            onSearch: (context) => showAddressSearch(
+              context,
+              search: (q, {lat, lng}) async => [_door],
+            ),
           ),
         ),
       ),
     );
-    final button = find.widgetWithText(OutlinedButton, '搜尋地址');
-    expect(tester.widget<OutlinedButton>(button).onPressed, isNull);
-    await tester.enterText(find.byType(TextField), '中山北路二段與南京東路');
-    await tester.pump();
-    await tester.tap(button);
+    await tester.tap(find.text('搜尋門牌、路段或路口'));
     await tester.pumpAndSettle();
-    expect(queries, ['中山北路二段與南京東路']);
-    expect(find.text('臺北市中山區的路口，只到交會點'), findsOneWidget);
-    expect(find.text('路段，只到中心點'), findsOneWidget);
-    await tester.tap(find.text('中山北路二段與南京東路一段'));
+    await tester.tap(find.byTooltip('關閉搜尋'));
     await tester.pumpAndSettle();
-    expect(at, (25.0521, 121.5222));
-    expect(filled, {'road_segment': '中山北路二段與南京東路一段'});
-    expect(find.textContaining('並填入「路段」'), findsOneWidget);
-    expect(find.textContaining('交會點，請把標記拖到'), findsOneWidget);
-    expect(find.text('路段，只到中心點'), findsNothing);
+    expect(at, (25.0, 121.0));
+    expect(find.textContaining('已移到'), findsNothing);
   });
 
   testWidgets('找不到時引導改寫或拖曳；可重試的錯誤有重新搜尋', (tester) async {

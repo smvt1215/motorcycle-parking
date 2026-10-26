@@ -5,10 +5,12 @@ import 'package:material_ui/material_ui.dart';
 import 'package:motorcycle_parking/core/address_search.dart';
 import 'package:motorcycle_parking/admin/admin_app.dart';
 import 'package:motorcycle_parking/admin/admin_controller.dart';
+import 'package:motorcycle_parking/admin/spots/spot_map.dart';
 import 'package:motorcycle_parking/admin/spots/spot_models.dart';
 import 'package:motorcycle_parking/admin/spots/spots_controller.dart';
 import 'package:motorcycle_parking/core/town_lookup.dart';
 import 'package:motorcycle_parking/domain/location_check.dart';
+import 'package:motorcycle_parking/domain/map_viewport.dart';
 
 import 'fake_admin_gateway.dart';
 
@@ -268,6 +270,7 @@ void main() {
   group('點位畫面', () {
     late FakeAdminGateway gateway;
     late AdminController controller;
+    SpotMapView? mapView;
 
     setUp(() => gateway = FakeAdminGateway(access: adminAal2));
     tearDown(() async {
@@ -291,6 +294,10 @@ void main() {
           controller: controller,
           initialLocation: path,
           reviewMapBuilder: (_, _) => const SizedBox(),
+          spotMapBuilder: (_, view) {
+            mapView = view;
+            return FakeSpotMap(view: view);
+          },
           locationMapBuilder: (_, view) => Row(
             children: [
               TextButton(
@@ -310,7 +317,7 @@ void main() {
 
     testWidgets('寬螢幕選點位、修改標示已修改、儲存後關閉', (tester) async {
       await show(tester);
-      expect(find.text('選擇一個點位'), findsOneWidget);
+      expect(find.text('儲存並關閉'), findsNothing);
       await tester.tap(find.byKey(const ValueKey('spot-$communityId')));
       await tester.pumpAndSettle();
       expect(find.text('社群點（社群回報整理）'), findsOneWidget);
@@ -325,7 +332,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(gateway.spotUpdates.single.$2, {'name': '中山北路機車格'});
       expect(find.text('已儲存：中山北路機車格'), findsOneWidget);
-      expect(find.text('選擇一個點位'), findsOneWidget);
+      expect(find.text('儲存並關閉'), findsNothing);
     });
 
     testWidgets('有未儲存的修改時，換點位前先確認', (tester) async {
@@ -348,6 +355,8 @@ void main() {
     testWidgets('手機版先列表，點選後進表單並可返回', (tester) async {
       await show(tester, size: const Size(390, 844));
       expect(find.text('儲存並關閉'), findsNothing);
+      await tester.tap(find.text('清單'));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('spot-$officialId')));
       await tester.pumpAndSettle();
       expect(find.text('官方點（新北市政府）'), findsOneWidget);
@@ -367,6 +376,158 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('spot-$communityId')), findsOneWidget);
     });
+
+    testWidgets('地圖顯示官方點與社群點，已隱藏圖層另外開啟並淡化', (tester) async {
+      await show(tester);
+      expect(find.byKey(const ValueKey('marker-$communityId')), findsOneWidget);
+      expect(find.byKey(const ValueKey('marker-$officialId')), findsOneWidget);
+      expect(find.textContaining('淡'), findsNothing);
+      expect(gateway.mapRequests.last.$2, isTrue);
+      expect(gateway.mapRequests.last.$4, isFalse);
+      await tester.tap(find.byKey(const ValueKey('map-layers')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('layer-hidden')));
+      await tester.pumpAndSettle();
+      expect(gateway.mapRequests.last.$4, isTrue);
+      expect(find.textContaining('淡'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('layer-official')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('marker-$officialId')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('layer-satellite')));
+      await tester.pumpAndSettle();
+      expect(mapView!.satellite, isTrue);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('車種切換改變標記的停放資格', (tester) async {
+      await show(tester);
+      String look() => tester
+          .widget<Text>(
+            find.descendant(
+              of: find.byKey(const ValueKey('marker-$officialId')),
+              matching: find.byType(Text),
+            ),
+          )
+          .data!;
+      final scooter = look();
+      await tester.tap(find.byKey(const ValueKey('map-vehicle-heavy')));
+      await tester.pumpAndSettle();
+      expect(look(), 'allowed');
+      expect(look(), isNot(scooter));
+    });
+
+    testWidgets('點標記開啟右側表單，標記停在表單旁並保持縮放', (tester) async {
+      await show(tester);
+      await tester.tap(find.byKey(const ValueKey('marker-$officialId')));
+      await tester.pumpAndSettle();
+      expect(find.text('官方點（新北市政府）'), findsOneWidget);
+      expect(mapView!.selected?.id, officialId);
+      expect(mapView!.focus!.zoom, isNull);
+      // Form 480 px on the right, list 380 px on the left.
+      expect(mapView!.focus!.leftOfCenter, 50);
+      await tester.tap(find.byKey(const ValueKey('close-form')));
+      await tester.pumpAndSettle();
+      expect(find.text('儲存並關閉'), findsNothing);
+      expect(mapView!.selected, isNull);
+    });
+
+    testWidgets('點清單移動地圖到街道層級並開啟表單', (tester) async {
+      await show(tester);
+      await tester.tap(find.byKey(const ValueKey('spot-$communityId')));
+      await tester.pumpAndSettle();
+      expect(mapView!.focus!.zoom, 18);
+      expect(mapView!.focus!.lat, 25.0581);
+      expect(mapView!.selected?.id, communityId);
+    });
+
+    testWidgets('清單可收起與展開', (tester) async {
+      await show(tester);
+      await tester.tap(find.byKey(const ValueKey('list-toggle')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('spot-$communityId')), findsNothing);
+      await tester.tap(find.text('顯示清單'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('spot-$communityId')), findsOneWidget);
+    });
+
+    testWidgets('雙欄窄版開表單時清單讓位，關閉後回來', (tester) async {
+      await show(tester, size: const Size(760, 900));
+      await tester.tap(find.byKey(const ValueKey('spot-$communityId')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('spot-$communityId')), findsNothing);
+      expect(find.text('社群點（社群回報整理）'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      // Brought back beside the form, the list can step aside again.
+      await tester.tap(find.byKey(const ValueKey('list-toggle')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('spot-$communityId')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.byKey(const ValueKey('list-toggle')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('spot-$communityId')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('close-form')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('spot-$communityId')), findsOneWidget);
+    });
+
+    testWidgets('手機版從地圖點標記進表單，返回地圖', (tester) async {
+      await show(tester, size: const Size(390, 844));
+      await tester.tap(find.byKey(const ValueKey('marker-$communityId')));
+      await tester.pumpAndSettle();
+      expect(find.text('社群點（社群回報整理）'), findsOneWidget);
+      expect(mapView!.covered, isTrue);
+      await tester.tap(find.text('返回地圖'));
+      await tester.pumpAndSettle();
+      expect(mapView!.covered, isFalse);
+      expect(find.byKey(const ValueKey('marker-$communityId')), findsOneWidget);
+    });
+
+    testWidgets('地圖載入失敗時說明並可重試', (tester) async {
+      gateway.failMap = true;
+      await show(tester);
+      expect(find.text('地圖上的停車點載入失敗，請檢查連線後重試。'), findsOneWidget);
+      gateway.failMap = false;
+      await tester.tap(find.text('重試'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('marker-$communityId')), findsOneWidget);
+    });
+
+    testWidgets('隱藏點位後地圖重新載入', (tester) async {
+      await show(tester, path: '/spots/$communityId');
+      final before = gateway.mapRequests.length;
+      await tester.tap(find.text('隱藏點位').last);
+      await tester.pumpAndSettle();
+      expect(gateway.mapRequests.length, greaterThan(before));
+    });
+
+    for (final size in const [
+      Size(320, 640),
+      Size(390, 844),
+      Size(700, 900),
+      Size(1280, 900),
+    ]) {
+      testWidgets('地圖控制在 ${size.width.round()} px 不溢出、按鈕至少 48 px', (
+        tester,
+      ) async {
+        await show(tester, size: size);
+        await tester.tap(find.byKey(const ValueKey('map-layers')));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        for (final key in [
+          'map-vehicle-scooter',
+          'map-vehicle-heavy',
+          'map-layers',
+        ]) {
+          final box = tester.getSize(find.byKey(ValueKey(key)));
+          expect(box.height, greaterThanOrEqualTo(48), reason: key);
+        }
+        if (size.width >= 680) {
+          await tester.tap(find.byKey(const ValueKey('spot-$officialId')));
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+        }
+      });
+    }
 
     testWidgets('改為官方點需填官方來源，完成後開啟新的官方點', (tester) async {
       await show(tester, path: '/spots/$communityId');
@@ -421,6 +582,11 @@ void main() {
         -300,
         scrollable: form(),
       );
+      // Fully on screen, not under the action bar, before opening the menu.
+      await tester.ensureVisible(
+        find.widgetWithText(DropdownButtonFormField<String>, '格位類型'),
+      );
+      await tester.pumpAndSettle();
       await tester.tap(
         find.widgetWithText(DropdownButtonFormField<String>, '格位類型'),
       );
@@ -523,15 +689,18 @@ void main() {
           ),
         ];
         await show(tester, path: '/spots/$communityId', size: size);
+        final entry = find.byKey(const ValueKey('location-search'));
+        await tester.scrollUntilVisible(entry, 300, scrollable: form());
+        await tester.ensureVisible(entry);
+        await tester.pumpAndSettle();
+        await tester.tap(entry);
+        await tester.pumpAndSettle();
         final search = find.byKey(const ValueKey('address-search'));
-        await tester.scrollUntilVisible(search, 300, scrollable: form());
         await tester.enterText(search, '中山北路二段與南京東路');
         await tester.testTextInput.receiveAction(TextInputAction.search);
         await tester.pumpAndSettle();
         expect(gateway.addressQueries, ['中山北路二段與南京東路']);
-        final result = find.text('中山北路二段與南京東路一段');
-        await tester.ensureVisible(result);
-        await tester.tap(result);
+        await tester.tap(find.text('中山北路二段與南京東路一段'));
         await tester.pump(const Duration(milliseconds: 700));
         await tester.pumpAndSettle();
         expect(find.textContaining('交會點，請把標記拖到'), findsOneWidget);
@@ -631,4 +800,48 @@ void main() {
       expect(find.text('隱藏點位'), findsOneWidget);
     });
   });
+}
+
+/// Stands in for the Google map: reports a Taipei view once, and shows each
+/// spot as a button.
+class FakeSpotMap extends StatefulWidget {
+  const FakeSpotMap({super.key, required this.view});
+  final SpotMapView view;
+  @override
+  State<FakeSpotMap> createState() => _FakeSpotMapState();
+}
+
+class _FakeSpotMapState extends State<FakeSpotMap> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => widget.view.onViewport(
+        const MapViewport(south: 24.9, west: 121.3, north: 25.2, east: 121.7),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final v = widget.view;
+    return ColoredBox(
+      color: const Color(0xffdde3e6),
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: Wrap(
+          children: [
+            for (final spot in v.spots)
+              TextButton(
+                key: ValueKey('marker-${spot.id}'),
+                onPressed: () => v.onSpotTap(spot),
+                child: Text(
+                  '${v.dimmed(spot) ? '淡' : ''}${v.eligibility(spot).status.name}',
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 }

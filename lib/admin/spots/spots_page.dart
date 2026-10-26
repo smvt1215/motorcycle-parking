@@ -1,27 +1,45 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/scheduler.dart' show SchedulerPhase;
 import 'package:go_router/go_router.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:pointer_interceptor/pointer_interceptor.dart';
 
+import '../../models/fee.dart';
 import '../../models/parking.dart';
+import '../../ui/address_search_field.dart';
+import '../../ui/fee_editor.dart';
 import '../../ui/location_picker.dart';
 import '../admin_theme.dart';
 import '../review/review_page.dart' show ChangeBand, reviewCompactWidth;
+import 'spot_map.dart';
 import 'spot_models.dart';
 import 'spots_controller.dart';
 
 const _wideWidth = 1040.0;
+
+/// Widths of the panels over the map; the camera keeps the open spot clear
+/// of them.
+double _listWidth(double width) => width >= _wideWidth ? 380 : 300;
+double _formWidth(double width) =>
+    width >= _wideWidth ? 480 : (width * .56).clamp(360.0, 440.0);
 
 /// `/spots` and `/spots/<source id>`: search both tables and edit one spot.
 class SpotsPage extends StatefulWidget {
   const SpotsPage({
     super.key,
     required this.spots,
+    required this.map,
     required this.selectedId,
     this.newKind,
     this.locationMapBuilder,
+    this.spotMapBuilder = googleSpotMap,
   });
   final SpotsController spots;
+  final SpotMapController map;
+  final SpotMapBuilder spotMapBuilder;
 
   /// A source id, `new` for a spot being created, or null for the list.
   final String? selectedId;
@@ -46,17 +64,102 @@ class _SpotsPageState extends State<SpotsPage> {
   /// Where a new spot starts: the last spot opened, else Taipei Main Station.
   (double, double) _center = (25.0478, 121.5170);
 
+  /// The list panel beside the map (680 px and wider). At 680–1039 px it
+  /// steps aside while a form is open, unless the admin brings it back for
+  /// that form ([_listBesideForm]).
+  bool _listOpen = true;
+  bool _listBesideForm = false;
+
+  bool _showsList(double width, bool open) => width < reviewCompactWidth
+      ? false
+      : width >= _wideWidth || !open
+      ? _listOpen
+      : _listBesideForm;
+
+  /// Below 680 px the map and the list take turns.
+  bool _phoneList = false;
+
+  /// The next spot opened came from its marker: the map pans only as far as
+  /// needed to clear the form, keeping the zoom.
+  bool _fromMarker = false;
+  SpotMapFocus? _focus;
+  int _focusSeq = 0;
+  String? _focusedFor;
+
+  /// The open spot and version, so a write reloads the map's spots.
+  String? _shownVersion;
+  double _width = 1280;
+
   SpotsController get spots => widget.spots;
+  SpotMapController get map => widget.map;
 
   @override
   void initState() {
     super.initState();
     query.text = spots.query;
+    spots.addListener(_spotsChanged);
     // Loading notifies listeners; never during this first build.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!spots.searched && !spots.searching) spots.search();
       _follow();
     });
+  }
+
+  /// Follows the open spot on the map: moves there once it has loaded, and
+  /// reloads the map after a write changed it.
+  void _spotsChanged() {
+    final r = spots.record;
+    final version = r == null
+        ? null
+        : '${r.sourceId}@${r.updatedAt}@${r.hidden}';
+    final previous = _shownVersion;
+    _shownVersion = version;
+    if (version != null &&
+        previous != null &&
+        previous != version &&
+        (previous.startsWith('${r!.sourceId}@') ||
+            previous.startsWith('new@'))) {
+      map.refresh();
+    }
+    final key = r?.sourceId;
+    if (key == _focusedFor) return;
+    _focusedFor = key;
+    final lat = spots.draft['lat'] ?? r?.values['lat'];
+    final lng = spots.draft['lng'] ?? r?.values['lng'];
+    _listBesideForm = false;
+    if (r == null || lat is! num || lng is! num) return;
+    final fromMarker = _fromMarker;
+    _fromMarker = false;
+    _focusAt(lat.toDouble(), lng.toDouble(), zoom: fromMarker ? null : 18);
+  }
+
+  /// Centres the big map on a point beside the open form and list.
+  void _focusAt(double lat, double lng, {double? zoom}) {
+    final compact = _width < reviewCompactWidth;
+    final left = _showsList(_width, true) ? _listWidth(_width) : 0.0;
+    final right = compact ? 0.0 : _formWidth(_width);
+    _setState(
+      () => _focus = SpotMapFocus(
+        lat: lat,
+        lng: lng,
+        zoom: zoom,
+        leftOfCenter: (right - left) / 2,
+        seq: ++_focusSeq,
+      ),
+    );
+  }
+
+  void _setState(VoidCallback change) {
+    if (!mounted) return;
+    // The controller may notify during a build; apply after it.
+    if (WidgetsBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(change);
+      });
+    } else {
+      setState(change);
+    }
   }
 
   @override
@@ -92,6 +195,7 @@ class _SpotsPageState extends State<SpotsPage> {
 
   @override
   void dispose() {
+    spots.removeListener(_spotsChanged);
     _debounce?.cancel();
     _locate?.cancel();
     query.dispose();
@@ -123,10 +227,12 @@ class _SpotsPageState extends State<SpotsPage> {
     return leave == true;
   }
 
-  Future<void> _go(String? id) async {
-    if (id == spots.record?.sourceId && id != null) return;
-    if (!await _mayLeave() || !mounted) return;
+  /// True when it navigated.
+  Future<bool> _go(String? id) async {
+    if (id == spots.record?.sourceId && id != null) return false;
+    if (!await _mayLeave() || !mounted) return false;
     context.go(id == null ? '/spots' : '/spots/$id');
+    return true;
   }
 
   void _search(String value) {
@@ -139,10 +245,17 @@ class _SpotsPageState extends State<SpotsPage> {
 
   /// A position change from the picker or the coordinate fields; the county,
   /// district and duplicates follow once the admin stops moving it.
-  void _move(double lat, double lng, {bool fromPicker = true}) {
+  /// [recenter]: an address search may jump far, so the big map follows.
+  void _move(
+    double lat,
+    double lng, {
+    bool fromPicker = true,
+    bool recenter = false,
+  }) {
     spots.set('lat', lat);
     spots.set('lng', lng);
     if (fromPicker) setState(() => _moves++);
+    if (recenter) _focusAt(lat, lng, zoom: 18);
     _locate?.cancel();
     _locate = Timer(const Duration(milliseconds: 600), spots.locate);
   }
@@ -257,15 +370,53 @@ class _SpotsPageState extends State<SpotsPage> {
     );
     if (result == null || !mounted) return;
     final id = await spots.promote(result.$1, result.$2);
-    if (id != null) router.go('/spots/$id');
+    if (id != null) {
+      map.refresh();
+      router.go('/spots/$id');
+    }
+  }
+
+  /// Opens a spot from its marker; the list and the URL open the others.
+  void _tapMarker(ParkingSpot spot) {
+    if (spot.id == spots.record?.sourceId) return;
+    _fromMarker = true;
+    _go(spot.id).then((went) {
+      // Stayed on the current form: the next open is not from this marker.
+      if (!went) _fromMarker = false;
+    });
+  }
+
+  Widget _map(bool covered) {
+    final record = spots.record;
+    final open = widget.selectedId != null;
+    return widget.spotMapBuilder(
+      context,
+      SpotMapView(
+        center: LatLng(_center.$1, _center.$2),
+        spots: map.shown,
+        eligibility: map.eligible,
+        dimmed: map.isHidden,
+        satellite: map.satellite,
+        covered: covered,
+        focus: _focus,
+        selected: open && record != null && record.sourceId == widget.selectedId
+            ? selectedSpot(record, spots.draft, map.find(record.sourceId))
+            : null,
+        onViewport: map.show,
+        onSpotTap: _tapMarker,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: spots,
+    listenable: Listenable.merge([spots, map]),
     builder: (context, _) => LayoutBuilder(
       builder: (context, constraints) {
-        final compact = constraints.maxWidth < reviewCompactWidth;
+        final width = constraints.maxWidth;
+        _width = width;
+        final compact = width < reviewCompactWidth;
+        final open = widget.selectedId != null;
         final list = _ListPane(
           spots: spots,
           query: query,
@@ -280,6 +431,7 @@ class _SpotsPageState extends State<SpotsPage> {
           note: note,
           compact: compact,
           selectedId: widget.selectedId,
+          backLabel: _phoneList ? '返回點位清單' : '返回地圖',
           onBack: () => _go(null),
           onSave: _save,
           onHide: _setHidden,
@@ -292,40 +444,212 @@ class _SpotsPageState extends State<SpotsPage> {
             if (id != null) spots.open(id);
           },
         );
-        if (compact) return widget.selectedId == null ? list : form;
-        return Padding(
-          padding: const EdgeInsets.all(20),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+        final controls = _intercept(SpotMapControls(map: map));
+        if (compact) {
+          // Phone: the form, or the map and list taking turns. The map
+          // stays mounted underneath so its camera survives.
+          final covered = open || _phoneList;
+          return Stack(
             children: [
-              SizedBox(
-                width: constraints.maxWidth >= _wideWidth ? 380 : 300,
-                child: _Pane(child: list),
+              Positioned.fill(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _PhoneSwitch(
+                      list: _phoneList,
+                      onChanged: (v) => setState(() => _phoneList = v),
+                    ),
+                    Expanded(
+                      child: Stack(
+                        children: [
+                          Positioned.fill(child: _map(covered)),
+                          if (!covered)
+                            Positioned(
+                              left: 12,
+                              right: 12,
+                              top: 12,
+                              child: Align(
+                                alignment: Alignment.topLeft,
+                                child: controls,
+                              ),
+                            ),
+                          if (_phoneList && !open)
+                            Positioned.fill(child: _intercept(list)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(width: 20),
-              Expanded(child: _Pane(child: form)),
+              if (open) Positioned.fill(child: _intercept(form)),
             ],
-          ),
+          );
+        }
+        final listWidth = _listWidth(width);
+        final formWidth = _formWidth(width);
+        final showList = _showsList(width, open);
+        final left = showList ? listWidth : 0.0;
+        final right = open ? formWidth : 0.0;
+        final colors = Theme.of(context).colorScheme;
+        final edge = BorderSide(color: colors.outlineVariant);
+        return Stack(
+          children: [
+            Positioned.fill(child: _map(false)),
+            if (showList)
+              Positioned(
+                left: 0,
+                top: 0,
+                bottom: 0,
+                width: listWidth,
+                child: _intercept(
+                  DecoratedBox(
+                    decoration: BoxDecoration(border: Border(right: edge)),
+                    child: list,
+                  ),
+                ),
+              ),
+            if (open)
+              Positioned(
+                right: 0,
+                top: 0,
+                bottom: 0,
+                width: formWidth,
+                child: _intercept(
+                  DecoratedBox(
+                    decoration: BoxDecoration(border: Border(left: edge)),
+                    child: form,
+                  ),
+                ),
+              ),
+            Positioned(
+              left: left + 12,
+              top: 12,
+              // With no room between the panels, the list toggle alone
+              // stays reachable over the form's empty top corner.
+              right: width - left - right >= 260 ? right + 12 : null,
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _intercept(
+                      _ListToggle(
+                        open: showList,
+                        // A narrow map between the panels keeps the icon only.
+                        iconOnly: width - left - right < 520,
+                        onPressed: () => setState(() {
+                          if (width >= _wideWidth || !open) {
+                            _listOpen = !showList;
+                          } else {
+                            _listBesideForm = !showList;
+                          }
+                        }),
+                      ),
+                    ),
+                    // Both panels open on a narrow window leave no room.
+                    if (width - left - right >= 260) ...[
+                      const SizedBox(width: 8),
+                      Flexible(child: controls),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
         );
       },
     ),
   );
 }
 
-class _Pane extends StatelessWidget {
-  const _Pane({required this.child});
-  final Widget child;
+/// Panels over the Google map take the pointer on the web; elsewhere this
+/// is the child itself.
+Widget _intercept(Widget child) =>
+    PointerInterceptor(intercepting: kIsWeb, child: child);
+
+/// Shows or hides the list panel beside the map.
+class _ListToggle extends StatelessWidget {
+  const _ListToggle({
+    required this.open,
+    required this.onPressed,
+    this.iconOnly = false,
+  });
+  final bool open, iconOnly;
+  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: colors.surface,
-        border: Border.all(color: colors.outlineVariant),
-        borderRadius: BorderRadius.circular(12),
+    return Material(
+      color: colors.surface,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: colors.outlineVariant),
+        borderRadius: BorderRadius.circular(10),
       ),
-      child: ClipRRect(borderRadius: BorderRadius.circular(11), child: child),
+      clipBehavior: Clip.antiAlias,
+      child: open || iconOnly
+          ? IconButton(
+              key: const ValueKey('list-toggle'),
+              tooltip: open ? '收起清單' : '顯示清單',
+              constraints: const BoxConstraints(minWidth: 56, minHeight: 56),
+              onPressed: onPressed,
+              icon: Icon(open ? Icons.chevron_left : Icons.view_list_outlined),
+            )
+          : Padding(
+              padding: const EdgeInsets.all(4),
+              child: TextButton.icon(
+                key: const ValueKey('list-toggle'),
+                onPressed: onPressed,
+                style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+                icon: const Icon(Icons.view_list_outlined),
+                label: const Text('顯示清單'),
+              ),
+            ),
+    );
+  }
+}
+
+/// The phone's map and list take turns.
+class _PhoneSwitch extends StatelessWidget {
+  const _PhoneSwitch({required this.list, required this.onChanged});
+  final bool list;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return _intercept(
+      Material(
+        color: colors.surface,
+        // Full width: the web pointer interceptor loosens constraints.
+        child: Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: colors.outlineVariant)),
+          ),
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+          child: SegmentedButton<bool>(
+            key: const ValueKey('phone-view'),
+            showSelectedIcon: false,
+            segments: const [
+              ButtonSegment(
+                value: false,
+                icon: Icon(Icons.map_outlined),
+                label: Text('地圖'),
+              ),
+              ButtonSegment(
+                value: true,
+                icon: Icon(Icons.view_list_outlined),
+                label: Text('清單'),
+              ),
+            ],
+            selected: {list},
+            onSelectionChanged: (v) => onChanged(v.single),
+            style: SegmentedButton.styleFrom(minimumSize: const Size(48, 48)),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -605,6 +929,7 @@ class _FormPane extends StatelessWidget {
     required this.note,
     required this.compact,
     required this.selectedId,
+    required this.backLabel,
     required this.onBack,
     required this.onSave,
     required this.onHide,
@@ -618,9 +943,13 @@ class _FormPane extends StatelessWidget {
   final TextEditingController note;
   final bool compact;
   final String? selectedId;
+
+  /// The phone's way back: to the map or the list it came from.
+  final String backLabel;
   final VoidCallback onBack, onSave, onPromote, onReload;
   final ValueChanged<bool> onHide;
-  final void Function(double lat, double lng, {bool fromPicker}) onMove;
+  final void Function(double lat, double lng, {bool fromPicker, bool recenter})
+  onMove;
   final int moves;
   final LocationMapBuilder? mapBuilder;
 
@@ -636,10 +965,18 @@ class _FormPane extends StatelessWidget {
             child: TextButton.icon(
               onPressed: onBack,
               icon: const Icon(Icons.arrow_back),
-              label: const Text('返回點位清單'),
+              label: Text(backLabel),
             ),
           )
-        : null;
+        : Align(
+            alignment: Alignment.centerRight,
+            child: IconButton(
+              key: const ValueKey('close-form'),
+              tooltip: '關閉表單',
+              onPressed: onBack,
+              icon: const Icon(Icons.close),
+            ),
+          );
     if (selectedId == null) {
       return Material(
         color: colors.surface,
@@ -662,7 +999,7 @@ class _FormPane extends StatelessWidget {
         child: ListView(
           padding: EdgeInsets.all(pad),
           children: [
-            ?back,
+            back,
             const SizedBox(height: 24),
             if (spots.openError != null) ...[
               AdminNotice(spots.openError!, error: true),
@@ -693,7 +1030,7 @@ class _FormPane extends StatelessWidget {
               key: ValueKey('spot-form-${record.sourceId}-${spots.formSeq}'),
               padding: EdgeInsets.fromLTRB(pad, compact ? 8 : 22, pad, 24),
               children: [
-                ?back,
+                back,
                 Text(
                   record.isNew
                       ? '新增${record.kind.label}'
@@ -755,36 +1092,48 @@ class _FormPane extends StatelessWidget {
                       mapBuilder: mapBuilder,
                     ),
                   for (final f in fields.where((f) => f.group == group))
-                    _FieldRow(
-                      // Coordinates follow the picker and the county
-                      // follows the lookup; their fields must show it.
-                      key: ValueKey(
-                        '${record.sourceId}-${spots.formSeq}-${f.key}'
-                        '${switch (f.key) {
-                          'lat' || 'lng' => '-$moves',
-                          'city' || 'district' || 'address' || 'road_segment' => '-${spots.filled}',
-                          _ => '',
-                        }}',
+                    if (f.input == SpotInput.fee)
+                      _FeeField(
+                        // A reloaded or discarded form starts the editor over.
+                        key: ValueKey(
+                          '${record.sourceId}-${spots.formSeq}-${f.key}',
+                        ),
+                        spots: spots,
+                        error: errors[f.key],
+                      )
+                    else if (f.key == 'fee_note' && spots.feeStructured)
+                      _FeeNotePlate(spots: spots, error: errors[f.key])
+                    else
+                      _FieldRow(
+                        // Coordinates follow the picker and the county
+                        // follows the lookup; their fields must show it.
+                        key: ValueKey(
+                          '${record.sourceId}-${spots.formSeq}-${f.key}'
+                          '${switch (f.key) {
+                            'lat' || 'lng' => '-$moves',
+                            'city' || 'district' || 'address' || 'road_segment' => '-${spots.filled}',
+                            _ => '',
+                          }}',
+                        ),
+                        field: f,
+                        value: spots.draft[f.key],
+                        changed: spots.changed(f.key),
+                        error: errors[f.key],
+                        onChanged: (v) {
+                          spots.set(f.key, v);
+                          final lat = spots.draft['lat'];
+                          final lng = spots.draft['lng'];
+                          if ((f.key == 'lat' || f.key == 'lng') &&
+                              lat is num &&
+                              lng is num) {
+                            onMove(
+                              lat.toDouble(),
+                              lng.toDouble(),
+                              fromPicker: false,
+                            );
+                          }
+                        },
                       ),
-                      field: f,
-                      value: spots.draft[f.key],
-                      changed: spots.changed(f.key),
-                      error: errors[f.key],
-                      onChanged: (v) {
-                        spots.set(f.key, v);
-                        final lat = spots.draft['lat'];
-                        final lng = spots.draft['lng'];
-                        if ((f.key == 'lat' || f.key == 'lng') &&
-                            lat is num &&
-                            lng is num) {
-                          onMove(
-                            lat.toDouble(),
-                            lng.toDouble(),
-                            fromPicker: false,
-                          );
-                        }
-                      },
-                    ),
                   if (group == SpotGroup.vehicles &&
                       !record.isNew &&
                       !record.official)
@@ -905,6 +1254,154 @@ class _VehicleVerification extends StatelessWidget {
   }
 }
 
+/// The structured fee, per vehicle. A spot with only legacy text starts
+/// with every vehicle unconfirmed: no price is guessed from the text.
+class _FeeField extends StatelessWidget {
+  const _FeeField({super.key, required this.spots, required this.error});
+  final SpotsController spots;
+  final String? error;
+
+  @override
+  Widget build(BuildContext context) {
+    final record = spots.record!;
+    final muted = TextStyle(
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+      fontSize: 13,
+    );
+    final legacy =
+        !record.isNew &&
+        storedFee(record.values['fee']) == null &&
+        !spots.feeStructured;
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 720),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (spots.changed('fee'))
+              const Padding(
+                padding: EdgeInsets.only(bottom: 6),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: ChangeBand('已修改'),
+                ),
+              ),
+            if (legacy) ...[
+              Text(
+                '這個點位只有費率說明文字，還沒設定各車種的收費方式。'
+                '選了收費方式後，說明文字會改成依費率產生；保持「未確認」則照舊顯示下方文字。',
+                key: const ValueKey('fee-legacy'),
+                style: muted,
+              ),
+              const SizedBox(height: 12),
+            ],
+            FeeEditor(
+              value: spots.draft['fee'] as Fee? ?? const Fee(),
+              onChanged: spots.setFee,
+              errorText: error,
+              // The plate below shows the text riders read.
+              showPreview: false,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The fee text riders read, built from the fee above, shown like the
+/// posted fee notice at a lot's entrance rather than as an input: it
+/// cannot be typed while the spot has a structured fee.
+class _FeeNotePlate extends StatelessWidget {
+  const _FeeNotePlate({required this.spots, required this.error});
+  final SpotsController spots;
+  final String? error;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final muted = TextStyle(color: colors.onSurfaceVariant, fontSize: 13);
+    final fee = spots.draft['fee'] as Fee?;
+    final complete = fee?.valid ?? true;
+    final text = spots.draft['fee_note'] as String? ?? '';
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 720),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Flexible(child: Text('App 顯示的費率', style: muted)),
+                if (spots.changed('fee_note')) ...[
+                  const SizedBox(width: 8),
+                  const ChangeBand('已修改'),
+                ],
+              ],
+            ),
+            const SizedBox(height: 6),
+            Semantics(
+              label: 'App 顯示的費率',
+              child: Container(
+                key: const ValueKey('fee-note-plate'),
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
+                // A posted notice keeps its white plate in dark mode too.
+                decoration: BoxDecoration(
+                  color: AdminColors.white,
+                  border: Border.all(color: AdminColors.asphalt, width: 2),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.only(top: 2),
+                      child: Icon(
+                        Icons.payments_outlined,
+                        size: 20,
+                        color: AdminColors.asphalt,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        text,
+                        style: const TextStyle(
+                          color: AdminColors.asphalt,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              complete
+                  ? '依上方費率產生。要改這段文字，請改費率；兩種車都改回「未確認」後，可以自行填寫。'
+                  : '金額填好後，這段文字會跟著更新。',
+              style: muted,
+            ),
+            if (error case final message?) ...[
+              const SizedBox(height: 4),
+              Text(message, style: TextStyle(color: colors.error)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _SourceFacts extends StatelessWidget {
   const _SourceFacts({required this.record});
   final SpotRecord record;
@@ -996,6 +1493,9 @@ class _FieldRow extends StatelessWidget {
             onChanged(parsed ?? t);
           },
         );
+      // The form shows the fee with _FeeField, never as a row.
+      case SpotInput.fee:
+        throw StateError('fee is not a field row');
       case SpotInput.date:
         input = TextFormField(
           initialValue: value as String? ?? '',
@@ -1306,7 +1806,8 @@ class _LocationSection extends StatelessWidget {
     required this.mapBuilder,
   });
   final SpotsController spots;
-  final void Function(double lat, double lng, {bool fromPicker}) onMove;
+  final void Function(double lat, double lng, {bool fromPicker, bool recenter})
+  onMove;
   final LocationMapBuilder? mapBuilder;
 
   @override
@@ -1333,12 +1834,23 @@ class _LocationSection extends StatelessWidget {
                 nudgeButtons: true,
                 mapBuilder: mapBuilder,
                 onChanged: (a, b) => onMove(a, b),
-                search: spots.gateway?.searchAddress,
                 fills: const {'address': '地址', 'road_segment': '路段'},
-                onAddressPicked: (c) {
-                  if (c.field case final field?) {
-                    spots.fillFromSearch(field, c.label);
-                  }
+                onSearch: switch (spots.gateway) {
+                  final gateway? => (context) async {
+                    final c = await showAddressSearch(
+                      context,
+                      search: gateway.searchAddress,
+                      lat: lat.toDouble(),
+                      lng: lng.toDouble(),
+                    );
+                    if (c == null) return null;
+                    if (c.field case final field?) {
+                      spots.fillFromSearch(field, c.label);
+                    }
+                    onMove(c.lat, c.lng, recenter: true);
+                    return c;
+                  },
+                  null => null,
                 },
               )
             else

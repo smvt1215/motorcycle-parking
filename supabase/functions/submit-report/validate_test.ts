@@ -163,6 +163,50 @@ Deno.test('flags may carry a structured suggestion', () => {
     }
   }
 });
+Deno.test('a location suggestion carries both coordinates inside Taiwan', () => {
+  const assertEquals = (got: unknown, want: unknown) => {
+    if (got !== want) throw new Error(`expected ${want}, got ${got}`);
+  };
+  const flag = {
+    device_id: base.device_id,
+    action: 'flag',
+    source_id: '10000000-0000-4000-8000-000000000002',
+    reason: '停車點位置：建議移到 25.033900, 121.562300',
+    field: 'location',
+  };
+  assertEquals(
+    validate({ ...flag, proposed: { lat: 25.0339, lng: 121.5623 } }),
+    null,
+  );
+  // TDX spots have no row to patch, so the app sends the summary only.
+  assertEquals(validate({ ...flag, note: '格位在對面' }), null);
+  for (
+    const proposed of [
+      { lat: 25.0339 },
+      { lng: 121.5623 },
+      { lat: 25.0339, lng: 121.5623, city: '新北市' },
+      { lat: 25.0339, lng: 121.5623, name: '改名' },
+    ]
+  ) {
+    assertEquals(validate({ ...flag, proposed }), 'invalid proposed');
+  }
+  for (
+    const proposed of [
+      { lat: 19.9, lng: 121.5 },
+      { lat: 27.1, lng: 121.5 },
+      { lat: 25, lng: 117.9 },
+      { lat: 25, lng: 123.1 },
+    ]
+  ) {
+    assertEquals(validate({ ...flag, proposed }), 'invalid coordinates');
+  }
+  for (
+    const proposed of [{ lat: '25', lng: 121.5 }, { lat: NaN, lng: 121.5 }]
+  ) {
+    assertEquals(validate({ ...flag, proposed }), 'invalid proposed');
+  }
+});
+
 Deno.test('fees are a rate per vehicle with known modes only', () => {
   for (
     const fee of [

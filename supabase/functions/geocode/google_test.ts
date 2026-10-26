@@ -77,6 +77,30 @@ Deno.test('路口：英文名稱改用騎士輸入的路名，縣市行政區另
   ]);
 });
 
+Deno.test('行政區只依結果確認的名稱移除，不吞掉路名', () => {
+  const c = toCandidate({
+    types: ['intersection'],
+    address_components: [
+      { long_name: 'Zhenzhong Road & Xinsheng Road', types: ['intersection'] },
+      ...admin('鎮中里', '前鎮區', '高雄市'),
+    ],
+    geometry: center(22.6, 120.32),
+  }, parseQuery('高雄市前鎮區鎮中路與新生路'));
+  assertEquals([c?.label, c?.place], ['鎮中路與新生路', '高雄市前鎮區']);
+  // A district the result does not name stays in the label.
+  const unnamed = toCandidate({
+    types: ['intersection'],
+    address_components: [
+      { long_name: 'Zhenzhong Road & Xinsheng Road', types: ['intersection'] },
+    ],
+    geometry: center(22.6, 120.32),
+  }, parseQuery('高雄市前鎮區鎮中路與新生路'));
+  assertEquals([unnamed?.label, unnamed?.place], [
+    '前鎮區鎮中路與新生路',
+    '高雄市',
+  ]);
+});
+
 Deno.test('不相交的兩條路：Google 回的巷口不是所問的路口', () => {
   const c = toCandidate({
     types: ['intersection'],
@@ -115,10 +139,11 @@ Deno.test('路段：英文名稱改用輸入的路名；只是某條巷子時略
     }],
     geometry: center(24.167898, 120.641076),
   }, parseQuery('台中市西屯區臺灣大道三段'));
+  // Without components naming the district, only the county is removed.
   assertEquals([road?.kind, road?.label, road?.place], [
     'road',
-    '臺灣大道三段',
-    '臺中市西屯區',
+    '西屯區臺灣大道三段',
+    '臺中市',
   ]);
   const lane = toCandidate({
     formatted_address: 'Lane 451, Section 6, Nanjingdong Road',
