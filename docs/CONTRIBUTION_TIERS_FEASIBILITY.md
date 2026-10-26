@@ -340,6 +340,35 @@ validate.ts（結構）→ 預檢（組合／內容／行為）→ 法規預審 
 
 **指標。** 預檢攔截率（fix＋reject 占送出數）；誤攔率（被攔後申訴或管理員覆核認定無誤的比例，目標 ≤ 5%）；`hold` 案件最終被翻案的比例相對一般案件的倍數（驗證旗標有效）；各規則的觸發數與誤攔數（決定停用或調參）。
 
+**階段 0 實作（只看送出內容的規則）。** 規則資料在 `supabase/functions/submit-report/precheck_rules.json`（代碼、動作、訊息、占位詞、個資樣式），`precheck.ts` 在 `validate.ts` 通過後執行並強制；App 的 `lib/domain/precheck.dart` 鏡像同一份資料做即時提示，`test/precheck_test.dart` 逐欄比對 JSON，兩邊共同跑 `precheck_cases.json` 的命中與不誤攔案例。攔截回應為 400，`error` 維持短代碼（`precheck fix`／`precheck reject`），另帶 `action`、`message`（第一則中文說明）與 `issues[]`（`rule`、`action`、`field`、`message`）；`field` 是送出內容的路徑（例 `scooter_allowed`、`parking_zones.1.fee.heavy`、`proposed.name`）。舊版 App 不讀錯誤內容，只會顯示既有的通用失敗訊息；新版 App 把 `message` 原文顯示出來。跨欄位規則只在同一筆送出內容同時帶兩個欄位時判斷（修改建議只帶部分欄位，缺的那一邊不查資料庫推測）。
+
+| 規則代碼 | 動作 | 命中範例 | 不攔的例子 | 理由 |
+| --- | --- | --- | --- | --- |
+| `lot_roadside` | fix | `offStreet`＋`facility_type='roadside'` | `offStreet`＋`underground` | 路外場站不會是路邊格 |
+| `street_lot_details` | fix | `freeMotorcycle`＋`multiStorey`，或帶非空 `parking_zones` | 路邊格＋`roadside`、空分區 `[]` | 場站型式與分區只屬於路外場站 |
+| `heavy_only_scooter` | fix | `heavyOnly`＋`scooter_allowed=true` | `scooter_allowed=null` | 大型重機專用格依標線不收普通機車 |
+| `access_no_motorcycle` | fix | `parking_access='noMotorcycle'`＋任一車種 `true` | 該車種 `false`／`null` | 分類與車種互斥 |
+| `access_heavy_only_scooter` | fix | `heavyOnly` 分類＋普通機車 `true` | — | 同上 |
+| `access_scooter_only_heavy` | fix | `scooterOnly` 分類＋大型重機 `true` | `heavyCar` 分類不檢查（研究清單未列） | 同上 |
+| `zones_no_motorcycle` | fix | 每個分區都 `noMotorcycle`＋任一車種 `true` | 有一區沒填分類 | 研究列普通機車，大型重機同理一併檢查 |
+| `fee_follows_missing_scooter` | fix | `heavy.mode='same_as_scooter'` 且沒有 `scooter` | 普通機車有費率 | 比照的對象不存在 |
+| `fee_cap_below_amount` | fix | 計時 40 元、當日上限 30 元 | 上限等於金額 | 上限低於單次計費不合理 |
+| `fee_hourly_zero` | fix | 計時 0 元 | 計次 0 元、每日 0 元（研究只列計時） | 應選「免費」 |
+| `gone_with_changes` | fix | 「已不存在」同時改名稱 | 只帶 `hidden`／`status` | §5.8 提案本身：已不存在不得夾帶其他修改 |
+| `placeholder_name` | fix | 名稱或分區名稱整段是「測試」「asdf」「停車場」「...」（忽略空白、標點、大小寫、全形） | 「市府轉運站停車場」「B2 測試區」 | 只比對整段，不比對包含 |
+| `placeholder_text` | fix | 只有文字的建議（其他備註）整段是「不知道」 | 結構化建議或「已不存在」的選填補充說明寫「無」 | 選填欄位寫「無」是正常用法 |
+| `pii_phone` | reject | `0912-345-678`、`+886 912 345 678`、全形數字、`(02)2345-6789`、`07-2345678` | `06:00-22:00`、`07-22 點`、`2026-11-30`、巷弄門牌、0800 免付費 | 市話只認括號或連字號格式，裸 10 碼市話不攔 |
+| `pii_email` | reject | `rider.chen@example.com.tw` | — | 個資 |
+| `pii_national_id` | reject | `A123456789`、`a123456789`、居留證 `A800000014`（檢查碼正確） | 檢查碼錯誤的 `A123456780`、11 碼 | 加檢查碼降低格位編號誤攔 |
+| `pii_plate` | reject | `ABC-1234`、`MXY-123`、`123-ABC`、`AB-1234`、`1234-AB` | `B2-12`、`1F-A`、小寫 `abc-1234`、`AB-12`、`ABCD-1234` | 只認帶連字號的大寫現行格式 |
+| `ad_url` | reject | `https://…`、`www.…`、`line.me` | `1.5 km`、`No.5`、`B2.機車區` | 研究歸在「個資與廣告」 |
+
+檢查的文字欄位：新增／更新的名稱、`note`、`fee_note`、入口、指引、分區名稱與指引；修改建議 `proposed` 的文字欄位、`note`、`reason`；任何動作的 `note`。官方來源欄位（`source_url` 等）由 `validate.ts` 白名單擋下，`precheck_results` 紀錄隨階段 1。
+
+階段 0 拍板（2026-10-25）：網址維持 `reject`（階段 0 的 reject 不計次，回報者刪掉網址即可重送，體驗與 fix 相同）；電話攔截範圍如上表（含停車場客服與括號／連字號市話，不含 0800 與裸 10 碼市話）；占位詞含整段的「停車場」「停車格」「停車位」，不含「機車格」。
+
+**階段 1 候選規則**（階段 0 不做）：同一帳號每日 reject 達 3 次封鎖當日後續提案（§10 第 15 點，屬行為異常，需計數表）；備註資格宣稱 reroute 至資格表單；全形重複字元與表情符號比例；`parking_access='heavyCar'` 卻 `scooter_allowed=true`；計次或每日 0 元（應選免費）。
+
 ## 6. 資料模型與 API（建議，實作時再定版號）
 
 **新增表**
