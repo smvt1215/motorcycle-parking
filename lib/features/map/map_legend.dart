@@ -390,7 +390,11 @@ class AvailabilityLegend extends StatelessWidget {
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Text('${capsule.text}：$detail', style: text.bodySmall),
+                  child: Text(
+                    detail,
+                    semanticsLabel: '${capsule.text}：$detail',
+                    style: text.bodySmall,
+                  ),
                 ),
               ],
             ),

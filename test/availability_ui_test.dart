@@ -294,15 +294,19 @@ void main() {
       scrollable: find.byType(Scrollable).last,
     );
     for (final line in [
-      '剩 12：官方即時剩餘',
-      '剩 7：更新延遲，數字可能已變',
-      '已滿：官方資料目前沒有空位',
-      '暫停：場站暫停營運',
+      '官方即時剩餘',
+      '更新延遲，數字可能已變',
+      '官方資料目前沒有空位',
+      '場站暫停營運',
       '沒有膠囊＝空位未知，不是沒位',
     ]) {
       expect(find.text(line), findsOneWidget);
     }
     expect(find.byType(CapsulePause), findsOneWidget);
+    expect(
+      tester.widget<Text>(find.text('官方資料目前沒有空位')).semanticsLabel,
+      '已滿：官方資料目前沒有空位',
+    );
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
