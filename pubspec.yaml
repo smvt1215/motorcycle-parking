@@ -10,10 +10,10 @@ dependencies:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
-  material_ui: 1.7.0
-  cupertino_ui: 1.1.2
+  material_ui: 1.8.0
+  cupertino_ui: 1.1.4
   cupertino_icons: ^2.0.0
-  cupertino_native_better: 1.6.0
+  cupertino_native_better: 1.7.0
   material_3_expressive: 1.1.7
   dynamic_color: ^2.1.0
   google_maps_flutter: 2.19.0
@@ -22,9 +22,9 @@ dependencies:
   flutter_map: ^8.2.2
   flutter_map_marker_cluster: ^8.2.2
   latlong2: ^0.9.1
-  geolocator: ^14.0.2
+  geolocator: ^14.1.2
   flutter_riverpod: ^3.0.3
-  go_router: ^18.0.2
+  go_router: ^18.1.1
   supabase_flutter: ^2.18.3
   flutter_svg: ^2.3.0
   http: ^1.6.0
