@@ -526,11 +526,9 @@ class _SuggestionFormState extends State<_SuggestionForm> {
       ];
     }
     if (feeField) {
-      final complete = [
-        fee.scooter,
-        fee.heavy,
-      ].every((rate) => rate == null || rate.complete);
-      return fee.isEmpty || !complete || fee == widget.spot.fee
+      // Every vehicle and period filled in and in range, the car's too: a
+      // half-filled rate would otherwise read as 0 元.
+      return fee.isEmpty || !fee.valid || fee == widget.spot.fee
           ? const []
           : [line(widget.label, widget.current ?? '', feeNoteOf(fee))];
     }

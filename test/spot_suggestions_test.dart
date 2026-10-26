@@ -323,14 +323,20 @@ void main() {
           .first,
     );
     expect(change, findsOneWidget);
+    // A car rate not filled in yet is not listed as 0 元.
+    final sheet = find
+        .descendant(
+          of: find.byType(Form).last,
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    await chooseFeeMode(tester, 'car', 'hourly');
+    await tester.scrollUntilVisible(find.text('送出建議'), 200, scrollable: sheet);
+    expect(find.textContaining(RegExp(r'(^|[^0-9])0 元')), findsNothing);
+    expect(find.textContaining('收費資訊從'), findsNothing);
+    await chooseFeeMode(tester, 'car', 'unknown');
     // The form grew with the amount fields; scroll its own list to the button.
-    await tester.scrollUntilVisible(
-      find.text('送出建議'),
-      200,
-      scrollable: find
-          .ancestor(of: menu, matching: find.byType(Scrollable))
-          .first,
-    );
+    await tester.scrollUntilVisible(find.text('送出建議'), 200, scrollable: sheet);
     await tester.ensureVisible(find.text('送出建議'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('送出建議'));
