@@ -299,6 +299,10 @@ const proposedChecks: Record<string, (v: unknown) => boolean> = {
   hidden: (v) => v === true,
 };
 const locationKeys = ['lat', 'lng', 'city', 'district'];
+const withoutCleared = (fee: unknown) =>
+  fee && typeof fee === 'object' && !Array.isArray(fee)
+    ? Object.fromEntries(Object.entries(fee).filter(([, v]) => v !== null))
+    : fee;
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export function validate(body: Record<string, unknown>): string | null {
@@ -353,7 +357,9 @@ export function validate(body: Record<string, unknown>): string | null {
         (key === 'hidden' && !official) || !check(value)
       ) return 'invalid proposed';
     }
-    if ('fee_note' in p && !validFeeNote(p.fee_note, p.fee)) {
+    // A long note is the sentence of the rates the suggestion names; a
+    // vehicle it clears (null) is not one of them.
+    if ('fee_note' in p && !validFeeNote(p.fee_note, withoutCleared(p.fee))) {
       return 'invalid proposed';
     }
     if (

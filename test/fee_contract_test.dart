@@ -95,4 +95,23 @@ void main() {
     expect(edited.scooter, const Rate(FeeMode.free));
     expect(edited.copyWith(scooter: () => null).scooter, isNull);
   });
+
+  test('a suggestion clears only what the rider cleared (design §5.4)', () {
+    final current = Fee.fromJson({
+      'scooter': {'mode': 'free'},
+      'heavy': {'mode': 'hourly', 'amount': 20, 'per_minutes': 60},
+    });
+    final edited = current.copyWith(heavy: () => null);
+    expect(feeSuggestion(current, edited), {
+      'scooter': {'mode': 'free'},
+      'heavy': null,
+    });
+    // A vehicle the spot never had is left out, not cleared.
+    expect(feeSuggestion(null, edited), {
+      'scooter': {'mode': 'free'},
+    });
+    expect(mergeFeeJson(current.toJson(), feeSuggestion(current, edited)), {
+      'scooter': {'mode': 'free'},
+    });
+  });
 }

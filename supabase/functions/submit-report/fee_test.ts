@@ -189,3 +189,18 @@ Deno.test('a fee suggestion changes only the vehicles it names', () => {
     throw new Error(`a new spot took null: ${create}`);
   }
 });
+
+Deno.test('a long suggested note may come with a cleared vehicle', () => {
+  const fee = { scooter: limit.longest_fee.scooter, heavy: null };
+  const note = feeNoteOf({ scooter: limit.longest_fee.scooter });
+  if (note.length <= 200) throw new Error('the note should be long');
+  const got = validate({
+    device_id: device,
+    action: 'flag',
+    source_id: '3f1c2a4e-0000-4000-8000-000000000002',
+    reason: '費率',
+    field: 'fee_note',
+    proposed: { fee, fee_note: note },
+  });
+  if (got !== null) throw new Error(`refused: ${got}`);
+});

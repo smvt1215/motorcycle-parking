@@ -439,6 +439,20 @@ Map<String, Object?> mergeFeeJson(Object? current, Object? proposed) {
   return out;
 }
 
+/// A fee suggestion (`proposed.fee`) turning [current] into [edited]: the
+/// edited rates, plus null for each vehicle [current] has that [edited]
+/// cleared. A vehicle [current] lacks — unconfirmed, or one this build
+/// cannot read — is left out, so the suggestion never clears it.
+Map<String, Object?> feeSuggestion(Fee? current, Fee edited) {
+  final before = current?.toJson() ?? const <String, Object>{};
+  final after = edited.toJson();
+  return {
+    ...after,
+    for (final vehicle in before.keys)
+      if (!after.containsKey(vehicle)) vehicle: null,
+  };
+}
+
 /// The `fee_note` text stored beside [fee] (§2.5): the known vehicles as
 /// 機車…；大型重機…；汽車…, then 大型重機費率未確認 when the heavy rate is
 /// unknown; the default note when no vehicle is known.

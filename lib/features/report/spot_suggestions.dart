@@ -445,7 +445,11 @@ class _SuggestionFormState extends State<_SuggestionForm> {
       };
     }
     // The text beside the fee is built from it, so the two never disagree.
-    if (feeField) return {'fee': fee.toJson(), 'fee_note': feeNoteOf(fee)};
+    // Suggestions merge per vehicle (design §5.4): a vehicle the rider
+    // cleared goes as null, one never known is left out.
+    if (feeField) {
+      return {'fee': feeSuggestion(spot.fee, fee), 'fee_note': feeNoteOf(fee)};
+    }
     if (eligibilityField) {
       return {
         if (scooter != spot.scooterAllowed) 'scooter_allowed': scooter,
