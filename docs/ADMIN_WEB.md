@@ -186,7 +186,7 @@ node tool/admin_smoke.cjs
 
 | 項目 | 範圍 | 依據 | 研究階段 |
 |---|---|---|---|
-| 多層級角色 | 社群等級 L0–L4 加管理員。L0–L2 由每日 job 依 `contributor_standing` 自動計算；L3 `verifier`、L4 `guardian` 寫入 `app_metadata.role`，伺服器端另以 standing 二次檢查。管理員在管理站確認 L4（L3 滿 90 天且準確率達標）、撤銷角色、凍結。既有 `admin_*` RPC 仍只認 `is_admin()`；L3／L4 的能力走各自的 RPC（`confirm_evidence`、`guardian_resolve_dispute`），不取得管理權限。L4 的爭議初審放在 App 或管理站，階段 2 實作前再決定 | [研究文件 §5.2](CONTRIBUTION_TIERS_FEASIBILITY.md#52-信任等級)、§6（`admin_set_role`） | 階段 1（L0–L2）、階段 2（L3、L4） |
+| 多層級角色 | 社群等級 L0–L4 加管理員。L0–L2 由每日 job 依 `contributor_standing` 自動計算；L3 `verifier`、L4 `guardian` 寫入 `app_metadata.role`，伺服器端另以 standing 二次檢查。管理員在管理站確認 L4（L3 滿 90 天且準確率達標）、撤銷角色、凍結。既有 `admin_*` RPC 仍只認 `is_admin()`；L3／L4 的能力走各自的 RPC（`confirm_evidence`、`guardian_resolve_dispute`），不取得管理權限。L4 的爭議初審在 App 內的審核任務進行，管理站維持只給 MFA（`aal2`）管理員（2026-10-26 決定） | [研究文件 §5.2](CONTRIBUTION_TIERS_FEASIBILITY.md#52-信任等級)、§6（`admin_set_role`） | 階段 1（L0–L2）、階段 2（L3、L4） |
 | P5 規則頁：草稿與影響分析 | 貼入公告（網址、文字或 PDF）→ LLM 輔助產生結構化草稿，每個欄位旁標出原文片段，沒有原文片段的欄位不可確認；一致性檢查；影響分析列出套用後 `EligibilityStatus` 會改變的點位數（依型式與車種的 before／after）、與新規則衝突的官方明載值、會自動結案的 A 類案件；管理員逐欄確認後才發布。另列規則複查任務（矛盾觀察聚合） | [研究文件 §5.7](CONTRIBUTION_TIERS_FEASIBILITY.md#57-法規預審引擎) 第 2 面向、§10 第 11、13 點 | 階段 2 |
 | P6 匯入：覆蓋層試算 | 差異試算除官方值差異外，另列「有覆蓋層的欄位」與「官方新值是否與社群值一致」：一致 → 覆蓋層 `confirmed_by_official`；不一致 → `superseded` 並產生重新核實任務；由管理員一次確認。匯入只更新官方欄位，保留 `hidden` 與覆蓋層；並寫入 `vehicle_source` 旗標 | [研究文件 §5.6](CONTRIBUTION_TIERS_FEASIBILITY.md#56-官方點的資料修改核實模式決定) 第 3、7 點、§0 第 9 點 | 階段 1 |
 | P7 使用者頁：等級、點數、角色 | 詳情加等級、點數（`point_ledger` 明細）、準確率、翻案與濫用紀錄、凍結期限；角色授予（L4 確認）與撤銷、標記濫用（回 L0 並凍結 180 天），皆寫稽核 | [研究文件 §5.2](CONTRIBUTION_TIERS_FEASIBILITY.md#52-信任等級)、§5.3、§7 | 階段 1（等級、點數）、階段 2（角色） |
@@ -194,7 +194,7 @@ node tool/admin_smoke.cjs
 | B 類「已預審」佇列 | 審核頁新增分頁：社群已達預審門檻的 B 類案件（已不存在、型式跨路外／路邊、位置移動 > 150 m、合併重複點、改為官方點），顯示參與票數、照片與已套用的安全中間狀態（例如 `reported_gone`），管理員一鍵確認或否決；否決時參與者扣分 | [研究文件 §5.1](CONTRIBUTION_TIERS_FEASIBILITY.md#51-社群審核流程與共識規則) B 類列、§0 第 3、6 點 | 階段 2 |
 | 抽查佇列 | 每月隨機抽查社群結案案件：起始 5%，翻案率穩定後 2%，案件少時每月至少 30 件；不合格即翻案（`admin_reverse_decision`），結果寫 `audit_samples` | [研究文件 §5.4](CONTRIBUTION_TIERS_FEASIBILITY.md#54-防刷與品質控制)、§5.5、§10 第 6 點 | 階段 2 |
 
-審核頁另依研究文件 §7 規劃「社群結案」「爭議」「禁區」分頁，與上表的「已預審」「抽查」一起實作；黃金任務題庫由管理員維護（§10 第 4 點），管理介面隨階段 1 規劃。
+審核頁另依研究文件 §7 規劃「社群結案」「爭議」（L4 初審後仍無法定案、送管理員終審者）「禁區」分頁，與上表的「已預審」「抽查」一起實作；黃金任務題庫由管理員維護（§10 第 4 點），管理介面隨階段 1 規劃。
 
 ## 不在範圍內
 即時車位與 TDX 即時層、照片審核（待 Storage 上傳上線後另行規劃）。數據儀表板與多層級角色原列於此，2026-10-26 起改為已規劃，見「遊戲化接軌」（指標頁、多層級角色）。
