@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../core/address_search.dart';
 import '../core/town_lookup.dart';
 import '../domain/location_check.dart';
 import 'review/review_models.dart';
@@ -89,6 +90,14 @@ abstract class AdminGateway {
 
   /// County or city and district of a point; null at sea.
   Future<Town?> town(double lat, double lng);
+
+  /// House number, road or intersection search through the `geocode` Edge
+  /// Function; throws [AddressSearchException].
+  Future<List<AddressCandidate>> searchAddress(
+    String query, {
+    double? lat,
+    double? lng,
+  });
 
   /// `admin_promote_spot`: a community spot becomes an official one.
   Future<String> promoteSpot(
@@ -430,6 +439,13 @@ class SupabaseAdminGateway implements AdminGateway {
 
   @override
   Future<Town?> town(double lat, double lng) => lookupTown(lat, lng);
+
+  @override
+  Future<List<AddressCandidate>> searchAddress(
+    String query, {
+    double? lat,
+    double? lng,
+  }) => geocodeSearch(client.functions, query, lat: lat, lng: lng);
 
   @override
   Future<List<Map<String, dynamic>>> cityRules() =>

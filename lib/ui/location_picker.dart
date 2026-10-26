@@ -1,9 +1,11 @@
 import 'package:google_maps_flutter/google_maps_flutter.dart' as gm;
 import 'package:material_ui/material_ui.dart';
 
+import '../core/address_search.dart';
 import '../core/geo.dart';
 import '../domain/location_check.dart';
 import '../features/map/maps_sdk.dart';
+import 'address_search_field.dart';
 
 /// What the map part of [LocationPicker] shows and reports.
 class LocationMapView {
@@ -25,8 +27,9 @@ typedef LocationMapBuilder = Widget Function(BuildContext, LocationMapView);
 
 /// Picks a position by dragging a marker; shared by the admin site and the
 /// app (docs/ADMIN_WEB.md「位置選擇」). The caller owns the position: it
-/// passes [lat] and [lng] back in after [onChanged]. Search, GPS and the
-/// lifted touch marker are added by their callers.
+/// passes [lat] and [lng] back in after [onChanged]. With [search], a
+/// house number, road or intersection search sits above the map; GPS and
+/// the lifted touch marker are added by their callers.
 class LocationPicker extends StatelessWidget {
   const LocationPicker({
     super.key,
@@ -38,6 +41,9 @@ class LocationPicker extends StatelessWidget {
     this.nudgeButtons = false,
     this.height = 320,
     this.mapBuilder,
+    this.search,
+    this.onAddressPicked,
+    this.fills = const {},
   });
 
   final double lat, lng;
@@ -52,6 +58,16 @@ class LocationPicker extends StatelessWidget {
 
   /// Tests swap the Google map for a placeholder.
   final LocationMapBuilder? mapBuilder;
+
+  /// The `geocode` search; null hides the search field.
+  final AddressSearcher? search;
+
+  /// After a search result moved the marker ([onChanged] runs first), the
+  /// caller fills [AddressCandidate.field] with its label.
+  final void Function(AddressCandidate)? onAddressPicked;
+
+  /// The fields [onAddressPicked] fills, see [AddressSearchField.fills].
+  final Map<String, String> fills;
 
   @override
   Widget build(BuildContext context) {
@@ -74,6 +90,19 @@ class LocationPicker extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (search case final search?) ...[
+          AddressSearchField(
+            search: search,
+            lat: lat,
+            lng: lng,
+            fills: fills,
+            onPicked: (c) {
+              onChanged(c.lat, c.lng);
+              onAddressPicked?.call(c);
+            },
+          ),
+          const SizedBox(height: 12),
+        ],
         Semantics(
           label: '位置地圖：拖曳標記選擇位置，拖曳地圖空白處可平移',
           child: ClipRRect(
