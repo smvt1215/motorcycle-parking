@@ -95,9 +95,17 @@ values('規則官方點',25.09,121.61,'臺北市','offStreet','https://example.t
   '[{"name":"機車區","fee_plan":"p7","fee":{"heavy":{"mode":"free"}}}]');
 select is((select (parking_zones->0->>'fee_plan')||'|'||(fee_plans->0->>'id') from official_heavy_spots where name='規則官方點'),
   'p1|p1','a reference to a plan the row lacks is taken in by its fee');
-select throws_ok($$insert into official_heavy_spots(name,lat,lng,city,space_type,source_url,source_name,effective_date,parking_zones)
-  values('規則官方點二',25.09,121.61,'臺北市','offStreet','https://example.test/plans','臺北市政府',current_date,
-    '[{"name":"機車區","fee_plan":"p7"}]')$$,'23514',null,'a reference without a plan or a fee is refused');
+-- A zone reference without a fee is a cleared fee (decision 51): the
+-- reference goes, whether or not the plan exists.
+insert into official_heavy_spots(name,lat,lng,city,space_type,source_url,source_name,effective_date,parking_zones)
+values('規則官方點二',25.09,121.61,'臺北市','offStreet','https://example.test/plans','臺北市政府',current_date,
+  '[{"name":"機車區","fee_plan":"p7"}]');
+select is((select parking_zones||jsonb_build_array(fee_plans) from official_heavy_spots where name='規則官方點二'),
+  '[{"name":"機車區"},null]'::jsonb,'a zone reference without a fee is dropped, not refused');
+-- A top-level reference to a missing plan beside no fee is still refused.
+select throws_ok($$insert into official_heavy_spots(name,lat,lng,city,space_type,source_url,source_name,effective_date,fee_plan)
+  values('規則官方點三',25.09,121.61,'臺北市','paidMotorcycle','https://example.test/plans','臺北市政府',current_date,'p7')$$,
+  '23514',null,'a spot reference without a plan or a fee is refused');
 
 -- Import compares zones as files write them, without references.
 insert into official_heavy_spots(id,name,lat,lng,city,district,space_type,fee_note,note,source_url,source_name,source_id,effective_date,
@@ -147,6 +155,98 @@ select is((select c->'admin'->>'action' from jsonb_array_elements(admin_import_p
   )))->0->'changes') c where c->>'field'='parking_zones'),'promote_spot',
   'promoted zones with plan references are still the administrator''s');
 reset role;
+
+-- ===== #155 第 1–3 項（決定 51，202610270080_fee_plans_edges.sql） =====
+
+-- 1. A zone that keeps fee_plan but loses its fee (no key, JSON null, {})
+-- drops the reference; a plan nobody else uses goes with it.
+update community_spots set fee_plans='[{"id":"p1","name":"機車免費","fee":{"scooter":{"mode":"free"}}},
+    {"id":"p2","name":"機車計次","fee":{"scooter":{"mode":"per_visit","amount":20}}}]',
+  parking_zones='[{"name":"B1","fee_plan":"p1","fee":{"scooter":{"mode":"free"}}},
+    {"name":"B2","fee_plan":"p2","fee":{"scooter":{"mode":"per_visit","amount":20}}},
+    {"name":"B3","fee_plan":"p1","fee":{"scooter":{"mode":"free"}}}]'
+  where id=(select id from lot);
+update community_spots set parking_zones=jsonb_set(parking_zones,'{0}',(parking_zones->0)-'fee') where id=(select id from lot);
+select is((select parking_zones->0||jsonb_build_object('plans',jsonb_array_length(fee_plans)) from community_spots where id=(select id from lot)),
+  '{"name":"B1","plans":2}'::jsonb,'a zone without a fee key drops its reference; the shared plan stays');
+update community_spots set parking_zones=jsonb_set(parking_zones,'{2,fee}','null') where id=(select id from lot);
+select is((select (parking_zones->2)||jsonb_build_object('plans',fee_plans) from community_spots where id=(select id from lot)),
+  '{"name":"B3","plans":[{"id":"p2","name":"機車計次","fee":{"scooter":{"mode":"per_visit","amount":20}}}]}'::jsonb,
+  'a zone fee of JSON null is not filled back: both keys go, and the plan nobody uses too');
+update community_spots set parking_zones=jsonb_set(parking_zones,'{1,fee}','{}') where id=(select id from lot);
+select is((select (parking_zones->1)||jsonb_build_object('plans',fee_plans) from community_spots where id=(select id from lot)),
+  '{"name":"B2","fee":{},"plans":null}'::jsonb,'a zone fee of {} clears it the same way');
+
+-- 2. Zones are matched by name and area, not by place.
+create temporary table two_zones as select
+  '[{"id":"p1","name":"機車免費","fee":{"scooter":{"mode":"free"}}},
+    {"id":"p2","name":"機車計次","fee":{"scooter":{"mode":"per_visit","amount":20}}}]'::jsonb as plans,
+  '[{"name":"A","fee_plan":"p1","fee":{"scooter":{"mode":"free"}}},
+    {"name":"B","fee_plan":"p2","fee":{"scooter":{"mode":"per_visit","amount":20}}}]'::jsonb as zones;
+update community_spots set fee_plans=(select plans from two_zones),parking_zones=(select zones from two_zones) where id=(select id from lot);
+-- An older writer deletes A and raises B's fee in one write.
+update community_spots set parking_zones=jsonb_build_array(
+    jsonb_set(parking_zones->1,'{fee}','{"scooter":{"mode":"per_visit","amount":30}}'))
+  where id=(select id from lot);
+select is((select (parking_zones->0->'fee'->'scooter'->>'amount')||'|'||(parking_zones->0->>'fee_plan'=fee_plans->0->>'id')::text
+    ||'|'||jsonb_array_length(fee_plans) from community_spots where id=(select id from lot)),
+  '30|true|1','deleting a zone and editing another keeps the edit');
+update community_spots set fee_plans=(select plans from two_zones),parking_zones=(select zones from two_zones) where id=(select id from lot);
+-- Zones reordered in the write that edits B.
+update community_spots set parking_zones=jsonb_build_array(
+    jsonb_set(parking_zones->1,'{fee}','{"scooter":{"mode":"per_visit","amount":30}}'),parking_zones->0)
+  where id=(select id from lot);
+select is((select (parking_zones->0->>'name')||':'||(parking_zones->0->'fee'->'scooter'->>'amount')
+    ||'|'||(parking_zones->1->>'name')||':'||(parking_zones->1->>'fee_plan')||':'||(parking_zones->1->'fee'->'scooter'->>'mode')
+  from community_spots where id=(select id from lot)),'B:30|A:p1:free','reordering zones while editing one keeps the edit');
+-- Choosing another plan is still read by name: B switched to p1 with p2's copy takes p1's fee.
+update community_spots set fee_plans=(select plans from two_zones),parking_zones=(select zones from two_zones) where id=(select id from lot);
+update community_spots set parking_zones=jsonb_build_array(jsonb_set(parking_zones->1,'{fee_plan}','"p1"'),parking_zones->0)
+  where id=(select id from lot);
+select is((select parking_zones->0 from community_spots where id=(select id from lot)),
+  '{"name":"B","fee_plan":"p1","fee":{"scooter":{"mode":"free"}}}'::jsonb,'a zone that switches plan while moving takes the plan''s fee');
+-- Area is part of the match: the same name in another area is a new zone,
+-- whose reference is a choice of plan.
+update community_spots set fee_plans=(select plans from two_zones),
+  parking_zones='[{"name":"機車區","area":"motorcycle","fee_plan":"p1","fee":{"scooter":{"mode":"free"}}}]' where id=(select id from lot);
+update community_spots set parking_zones='[{"name":"機車區","area":"heavy","fee_plan":"p1","fee":{"scooter":{"mode":"per_visit","amount":30}}}]'
+  where id=(select id from lot);
+select is((select parking_zones->0->'fee' from community_spots where id=(select id from lot)),
+  '{"scooter":{"mode":"free"}}'::jsonb,'a zone with no stored match is new: its reference copies the plan');
+-- The same name and area pair up in order.
+update community_spots set fee_plans=(select plans from two_zones),
+  parking_zones='[{"name":"B","fee_plan":"p1","fee":{"scooter":{"mode":"free"}}},
+    {"name":"B","fee_plan":"p2","fee":{"scooter":{"mode":"per_visit","amount":20}}}]' where id=(select id from lot);
+update community_spots set parking_zones=jsonb_set(parking_zones,'{1,fee}','{"scooter":{"mode":"per_visit","amount":30}}')
+  where id=(select id from lot);
+select is((select (parking_zones->0->'fee'->'scooter'->>'mode')||'|'||(parking_zones->1->'fee'->'scooter'->>'amount')
+  from community_spots where id=(select id from lot)),'free|30','zones of one name and area pair up in order');
+
+-- 3. Removing a plan still referred to in the write that changes the plans is refused.
+update community_spots set fee_plans=(select plans from two_zones),parking_zones=(select zones from two_zones) where id=(select id from lot);
+select throws_ok($$update community_spots set fee_plans=fee_plans-1 where id=(select id from lot)$$,'23503','fee plan in use',
+  'removing a plan a zone still uses is refused');
+create temporary table caught(detail jsonb);
+do $$ begin
+  update community_spots set fee_plans=fee_plans-1 where id=(select id from lot);
+exception when foreign_key_violation then
+  declare d text; begin get stacked diagnostics d=pg_exception_detail; insert into caught values(d::jsonb); end;
+end $$;
+select is((select detail from caught),'{"plans":[{"id":"p2","name":"機車計次","zones":1,"spot":false}]}'::jsonb,
+  'the detail names the plan and how many zones use it');
+select is((select fee_plans->1->>'name' from community_spots where id=(select id from lot)),'機車計次','and the plan is not rebuilt');
+select lives_ok($$update community_spots set fee_plans=fee_plans-1,parking_zones=jsonb_set(parking_zones,'{1,fee_plan}','"p1"')
+  where id=(select id from lot)$$,'a plan can go once its zones point elsewhere in the same write');
+select is((select parking_zones->1->'fee' from community_spots where id=(select id from lot)),
+  '{"scooter":{"mode":"free"}}'::jsonb,'and those zones take their new plan''s fee');
+update community_spots set fee_plans=(select plans from two_zones),parking_zones=(select zones from two_zones) where id=(select id from lot);
+select lives_ok($$update community_spots set fee_plans=fee_plans-1,parking_zones=jsonb_set(parking_zones,'{1,fee}','null')
+  where id=(select id from lot)$$,'or once the zones that used it clear their fee');
+select lives_ok($$update community_spots set fee_plans=jsonb_set(fee_plans,'{0,name}','"平日免費"') where id=(select id from lot)$$,
+  'renaming a plan in use is no removal');
+select is((select fee_plans->0->>'name' from community_spots where id=(select id from lot)),'平日免費','the administrator''s name stays');
+select throws_ok($$update community_spots set fee_plans=null where id=(select id from street)$$,'23503','fee plan in use',
+  'removing the plan a street spot refers to is refused');
 
 -- Riders never read or write plans directly.
 select ok(not has_column_privilege('anon','public.community_spots','fee_plans','select'),'anon cannot read plans');
