@@ -173,18 +173,18 @@ packages:
     dependency: "direct main"
     description:
       name: cupertino_native_better
-      sha256: "41c2a8ed69bc3448c2c05e3797e92e04fae340f1443ace396f8163035313903a"
+      sha256: bc5d097e022abcd297eea5105eea3d7153e8fa98a118a78209258a7403bc3538
       url: "https://pub.dev"
     source: hosted
-    version: "1.6.0"
+    version: "1.7.0"
   cupertino_ui:
     dependency: "direct main"
     description:
       name: cupertino_ui
-      sha256: ea0b8170b40a86262b2fc21ac0625303f52df209dbf6fccc2b98b27eff44f6ce
+      sha256: a47c4e7c66fd7444a063a602597fceb238f705c3f6b1322bc0053d0a2638ee6e
       url: "https://pub.dev"
     source: hosted
-    version: "1.1.2"
+    version: "1.1.4"
   dart_earcut:
     dependency: transitive
     description:
@@ -467,10 +467,10 @@ packages:
     dependency: "direct main"
     description:
       name: geolocator
-      sha256: "4e41ad6bc072364ff01822531dac47936c065e5bf8f928f240a25bb51256ada0"
+      sha256: "2b3bc0f7320d5a5fa02f8209ffcf1aaa7c2cabb7b2bedbc0cfeb5ff2778b8b09"
       url: "https://pub.dev"
     source: hosted
-    version: "14.1.1"
+    version: "14.1.2"
   geolocator_android:
     dependency: transitive
     description:
@@ -523,10 +523,10 @@ packages:
     dependency: "direct main"
     description:
       name: go_router
-      sha256: "530dcbb298dc7c319aea9e3b7c580a61effb2abee2c93825d2dd8d5af0e230f1"
+      sha256: "07089be6dc124eb9596a51b5e359c657f30a59929287f11b126c2cd13eaaece0"
       url: "https://pub.dev"
     source: hosted
-    version: "18.0.2"
+    version: "18.1.1"
   google_maps:
     dependency: transitive
     description:
@@ -816,10 +816,10 @@ packages:
     dependency: "direct main"
     description:
       name: material_3_expressive
-      sha256: "091a6d4bd157983e4a525dd89f60290ca80f98d17e44303a24b0d7393d92d93e"
+      sha256: "960a296792497cea3bb0dddb817dbb67b507f27eec481c631a733cb168901448"
       url: "https://pub.dev"
     source: hosted
-    version: "1.1.7"
+    version: "1.2.0"
   material_color_utilities:
     dependency: transitive
     description:
@@ -840,10 +840,10 @@ packages:
     dependency: "direct main"
     description:
       name: material_ui
-      sha256: "27ea1af251a79728ee63068417f2ab469d294931a9bb8366ba8b85b0ef839060"
+      sha256: e4031746f96c8316864d9b92bce375f1320a36ed56e166307e1e1bda9d90b4ab
       url: "https://pub.dev"
     source: hosted
-    version: "1.7.0"
+    version: "1.8.0"
   meta:
     dependency: transitive
     description:

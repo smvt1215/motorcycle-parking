@@ -1,7 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:material_ui/material_ui.dart';
+import 'package:material_ui/material_ui.dart'
+    hide CornerRounding, RoundedPolygon;
 import 'package:cupertino_ui/cupertino_ui.dart' as cu;
 import 'package:cupertino_native_better/cupertino_native_better.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
