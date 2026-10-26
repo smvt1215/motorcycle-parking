@@ -37,12 +37,14 @@ void main() {
     rule('臺北市', vehicle),
   );
 
-  test('身障機車專用格為有條件・其他限制，限持識別證明者', () {
+  test('身障機車專用格為有條件，須特製機車且持識別證，兩個條件都寫明', () {
     for (final vehicle in VehicleType.values) {
       final result = judge(SpaceType.disabledMotorcycle, vehicle);
       expect(result.status, EligibilityStatus.conditional);
       expect(result.restriction, isNull);
-      expect(result.reason, contains('識別證明'));
+      // A permit alone is not enough (身心障礙者專用停車位設置管理辦法 §12).
+      expect(result.reason, contains('經監理站檢驗合格的特製機車'));
+      expect(result.reason, contains('識別證'));
     }
     expect(
       judge(

@@ -280,6 +280,43 @@ void main() {
     expect(reportedAccess(roadside), ParkingAccess.scooterHeavy);
   });
 
+  test('汽機共用、身障與電動機車格兩種車種皆可停也不推定為普大共用', () {
+    for (final type in [
+      SpaceType.flexShared,
+      SpaceType.disabledMotorcycle,
+      SpaceType.evMotorcycle,
+    ]) {
+      final spot = ParkingSpot.fromJson({
+        ...roadside.toJson(),
+        'space_type': type.name,
+      });
+      expect(reportedAccess(spot), isNull, reason: type.name);
+      expect(accessSummary(spot), isNot(contains('普大共用')), reason: type.name);
+    }
+    for (final type in [
+      SpaceType.paidMotorcycle,
+      SpaceType.freeMotorcycle,
+      SpaceType.timedMotorcycle,
+    ]) {
+      final spot = ParkingSpot.fromJson({
+        ...roadside.toJson(),
+        'space_type': type.name,
+      });
+      expect(
+        reportedAccess(spot),
+        ParkingAccess.scooterHeavy,
+        reason: type.name,
+      );
+    }
+    // An explicit access value is the source's own statement and stays.
+    final labelled = ParkingSpot.fromJson({
+      ...roadside.toJson(),
+      'space_type': SpaceType.flexShared.name,
+      'parking_access': ParkingAccess.scooterHeavy.name,
+    });
+    expect(reportedAccess(labelled), ParkingAccess.scooterHeavy);
+  });
+
   test('舊 TDX 停車場回應保留車位時間，新時間優先且不套用其他來源', () {
     final liveTime = DateTime.utc(2026, 10, 12, 1);
     final explicitTime = liveTime.add(const Duration(minutes: 1));

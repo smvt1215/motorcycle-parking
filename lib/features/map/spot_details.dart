@@ -58,6 +58,16 @@ String regionSummary(ParkingSpot spot) =>
 String facilitySummary(ParkingSpot spot) =>
     spot.facilityType?.label ?? (spot.isFacility ? '路外停車場（型式未提供）' : '路邊停車格');
 
+/// Roadside kinds whose bays are ordinary motorcycle bays, so admitting both
+/// motorcycle classes means the bay is shared by them. Car-and-motorcycle
+/// flex bays, disabled bays and EV bays are other kinds of sharing or
+/// reservation and are never read as 普大共用.
+const _motorcycleBayTypes = {
+  SpaceType.paidMotorcycle,
+  SpaceType.freeMotorcycle,
+  SpaceType.timedMotorcycle,
+};
+
 /// Do not infer shared bays from a facility admitting both vehicle types.
 ParkingAccess? reportedAccess(ParkingSpot spot) {
   if (spot.access != null) return spot.access;
@@ -72,7 +82,7 @@ ParkingAccess? reportedAccess(ParkingSpot spot) {
     return ParkingAccess.scooterOnly;
   }
   if (!spot.isFacility &&
-      spot.spaceType != SpaceType.car &&
+      _motorcycleBayTypes.contains(spot.spaceType) &&
       spot.scooterAllowed == true &&
       spot.heavyAllowed == true) {
     return ParkingAccess.scooterHeavy;

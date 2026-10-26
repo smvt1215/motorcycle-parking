@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -84,7 +87,9 @@ class FakeContributions extends ContributionsRepository {
         ? const <Map<String, dynamic>>[]
         : pages.removeAt(0);
     if (next is Exception) throw next;
-    final rows = next as List<Map<String, dynamic>>;
+    final rows = next is Completer<List<Map<String, dynamic>>>
+        ? await next.future
+        : next as List<Map<String, dynamic>>;
     return ContributionPage(
       rows.map(MyContribution.fromJson).toList(),
       hasMore: rows.length == 2 && pages.isNotEmpty,
@@ -126,6 +131,7 @@ Future<void> pump(
   double width = 390,
   double scale = 1,
   Brightness brightness = Brightness.light,
+  bool active = true,
 }) async {
   tester.view.physicalSize = Size(width, 1600);
   tester.view.devicePixelRatio = 1;
@@ -141,7 +147,12 @@ Future<void> pump(
       home: Scaffold(
         body: ListView(
           padding: const EdgeInsets.symmetric(horizontal: 24),
-          children: [MyContributionsSection(store: store, now: now)],
+          children: [
+            TickerMode(
+              enabled: active,
+              child: MyContributionsSection(store: store, now: now),
+            ),
+          ],
         ),
       ),
     ),
@@ -210,6 +221,30 @@ void main() {
         '車友已確認',
         '已從地圖移除',
       });
+    });
+
+    test('a rejection reads its kind, never an admin note', () {
+      String? note(String status, String? kind) => statusNote(
+        MyContribution.fromJson({
+          ...row('1', status: status),
+          'resolution_kind': kind,
+        }),
+      );
+      expect(note('rejected', 'insufficient'), '資訊不足，無法查證。地圖維持原樣。');
+      expect(note('rejected', 'outdated'), '點位已變更，建議不再適用。地圖維持原樣。');
+      expect(note('rejected', null), '管理員核對後沒有採用。地圖維持原樣。');
+      expect(note('closed', 'duplicate'), '已有相同的建議，併入先前的處理。地圖沒有變更。');
+      expect(note('closed', null), '這筆回報已處理完畢。地圖沒有變更。');
+      for (final kind in [
+        'wrong',
+        'duplicate',
+        'insufficient',
+        'outdated',
+        'abuse',
+        'other',
+      ]) {
+        expect(rejectionReasons[kind], isNotEmpty);
+      }
     });
 
     test('dates say the day, and the year only when it differs', () {
@@ -388,6 +423,119 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(find.text('已採納'), findsOneWidget);
+    });
+
+    testWidgets('returning to the tab fetches the latest results', (
+      tester,
+    ) async {
+      final store = await createStore([
+        [row('a')],
+        [row('a', status: 'accepted')],
+      ]);
+      await pump(tester, store);
+      expect(find.text('審核中'), findsOneWidget);
+      await pump(tester, store, active: false);
+      await pump(tester, store);
+      await tester.pump();
+      // The old list stays until the new one arrives, then is replaced.
+      expect(find.text('已採納'), findsOneWidget);
+      expect(find.text('審核中'), findsNothing);
+      expect((store.contributions as FakeContributions).calls, hasLength(2));
+    });
+
+    testWidgets('a reload during an older-page request frees the button', (
+      tester,
+    ) async {
+      final older = Completer<List<Map<String, dynamic>>>();
+      final store = await createStore([
+        [row('a'), row('b')],
+        older,
+        [row('c'), row('d')],
+        [row('e')],
+      ]);
+      await pump(tester, store);
+      await tester.tap(find.text('載入更早的紀錄'));
+      await tester.pump();
+      expect(find.text('載入更早的紀錄'), findsNothing);
+      store.reportsSent++;
+      store.notifyListeners();
+      await tester.pump();
+      await tester.pump();
+      older.complete([row('x')]);
+      await tester.pump();
+      expect(find.text('載入更早的紀錄').hitTestable(), findsOneWidget);
+      expect(find.byType(ContributionRow), findsNWidgets(2));
+    });
+
+    testWidgets('screen readers hear everything the row shows', (tester) async {
+      final semantics = tester.ensureSemantics();
+      final store = await createStore([
+        [
+          {
+            ...row('b', status: 'rejected', visible: false),
+            'resolution_kind': 'insufficient',
+          },
+        ],
+      ]);
+      await pump(tester, store);
+      final label = tester.getSemantics(find.byType(ContributionRow)).label;
+      for (final part in [
+        '市府轉運站重機格',
+        '建議修改收費資訊',
+        '建議「計時 每小時 20 元」；說明：現場告示牌',
+        '未採納',
+        '資訊不足，無法查證。',
+        '10月22日送出',
+        '已不在地圖上',
+      ]) {
+        expect(label, contains(part));
+      }
+      semantics.dispose();
+    });
+
+    testWidgets('older pages wait while the first page is refreshed', (
+      tester,
+    ) async {
+      final refreshed = Completer<List<Map<String, dynamic>>>();
+      final store = await createStore([
+        [row('a'), row('b')],
+        refreshed,
+        [row('c'), row('d')],
+      ]);
+      await pump(tester, store);
+      await pump(tester, store, active: false);
+      await pump(tester, store);
+      // The refresh is running: paging from the old list is not offered.
+      final button = tester.widget<TextButton>(
+        find.widgetWithText(TextButton, '載入更早的紀錄'),
+      );
+      expect(button.onPressed, isNull);
+      await tester.tap(find.text('載入更早的紀錄'), warnIfMissed: false);
+      await tester.pump();
+      final calls = (store.contributions as FakeContributions).calls;
+      expect(calls, hasLength(2));
+      refreshed.complete([row('a2'), row('b2')]);
+      await tester.pump();
+      await tester.tap(find.text('載入更早的紀錄'));
+      await tester.pump();
+      await tester.pump();
+      // Paging continues from the refreshed list, not the replaced one.
+      expect(calls.last?.id, 'b2');
+      expect(find.byType(ContributionRow), findsNWidgets(4));
+    });
+
+    testWidgets('screen readers can open a row', (tester) async {
+      final semantics = tester.ensureSemantics();
+      final store = await createStore([
+        [row('a', status: 'accepted')],
+      ]);
+      await pump(tester, store);
+      final node = tester.getSemantics(find.byType(ContributionRow));
+      expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+      node.owner!.performAction(node.id, SemanticsAction.tap);
+      await tester.pumpAndSettle();
+      expect(find.byType(SpotSheet), findsOneWidget);
+      semantics.dispose();
     });
   });
 }
