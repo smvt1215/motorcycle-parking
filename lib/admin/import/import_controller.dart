@@ -41,6 +41,10 @@ class ImportController extends ChangeNotifier {
   final Map<String, Set<String>> overwrite = {};
   String effectiveDate = _today();
 
+  /// Bumped by [reset]; a response for an older generation (another file,
+  /// or another account after sign-out) is dropped, never written back.
+  int _generation = 0;
+
   int count(ImportStatus status) =>
       entries.where((e) => e.status == status).length;
 
@@ -61,6 +65,7 @@ class ImportController extends ChangeNotifier {
       DateTime.tryParse(effectiveDate) != null;
 
   void reset() {
+    _generation++;
     fileName = null;
     _spots.clear();
     entries = const [];
@@ -78,6 +83,7 @@ class ImportController extends ChangeNotifier {
   /// Reads [text] as tool/import_mymaps.py's spots.json and previews it.
   Future<void> load(String name, String text) async {
     reset();
+    final generation = _generation;
     fileName = name;
     Object? json;
     try {
@@ -111,7 +117,7 @@ class ImportController extends ChangeNotifier {
       final id = spot['id'];
       _spots.putIfAbsent(id is String ? id : '#${unnamed++}', () => spot);
     }
-    await _preview(file);
+    if (!await _preview(file) || generation != _generation) return;
     // New and updated spots start chosen; conflicts too, keeping the
     // administrator's fields until one is chosen to overwrite.
     selected.addAll([
@@ -123,29 +129,35 @@ class ImportController extends ChangeNotifier {
 
   List<Map<String, dynamic>>? _file;
 
-  Future<void> _preview([List<Map<String, dynamic>>? file]) async {
-    _file = file ?? _file;
+  /// Previews the file again; false when a reset made the answer stale.
+  Future<bool> _preview([List<Map<String, dynamic>>? file]) async {
+    final generation = _generation;
+    final spots = _file = file ?? _file;
     loading = true;
     notifyListeners();
     try {
       final all = <ImportEntry>[];
-      for (var i = 0; i < _file!.length; i += importChunk) {
-        all.addAll(
-          await gateway!.previewImport(
-            _file!.sublist(i, (i + importChunk).clamp(0, _file!.length)),
-          ),
+      for (var i = 0; i < spots!.length; i += importChunk) {
+        final part = await gateway!.previewImport(
+          spots.sublist(i, (i + importChunk).clamp(0, spots.length)),
         );
+        if (generation != _generation) return false;
+        all.addAll(part);
       }
       entries = all;
       selected.removeWhere(
         (id) => !entries.any((e) => e.sourceId == id && e.status.applicable),
       );
     } catch (e) {
+      if (generation != _generation) return false;
       error = _failure(e);
     } finally {
-      loading = false;
-      notifyListeners();
+      if (generation == _generation) {
+        loading = false;
+        notifyListeners();
+      }
     }
+    return true;
   }
 
   void setFilter(ImportStatus? status) {
@@ -182,6 +194,7 @@ class ImportController extends ChangeNotifier {
   /// Imports the chosen entries, then previews the file again.
   Future<void> apply(String note) async {
     if (applying || selected.isEmpty || (needsDate && !validDate)) return;
+    final generation = _generation;
     applying = true;
     error = null;
     result = null;
@@ -197,7 +210,7 @@ class ImportController extends ChangeNotifier {
           i,
           (i + importChunk).clamp(0, chosen.length),
         );
-        total += await gateway!.applyImport(
+        final done = await gateway!.applyImport(
           [for (final e in part) _spots[e.sourceId]!],
           {
             for (final e in part)
@@ -209,8 +222,11 @@ class ImportController extends ChangeNotifier {
           effectiveDate,
           note.trim(),
         );
+        if (generation != _generation) return;
+        total += done;
       }
     } catch (e) {
+      if (generation != _generation) return;
       error = '${_failure(e)}已匯入的部分不受影響，重新試算後可繼續。';
     }
     result = total;
@@ -235,6 +251,9 @@ class FeeConversionController extends ChangeNotifier {
   /// Group keys chosen for writing.
   final Set<String> selected = {};
 
+  /// Bumped by [reset]; older responses are dropped.
+  int _generation = 0;
+
   List<FeeGroup> get visible =>
       groups.where((g) => g.reading.verdict == verdict).toList();
 
@@ -250,6 +269,7 @@ class FeeConversionController extends ChangeNotifier {
       .fold(0, (n, g) => n + g.spots.length);
 
   void reset() {
+    _generation++;
     groups = const [];
     loaded = loading = converting = false;
     error = null;
@@ -259,12 +279,16 @@ class FeeConversionController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> load() async {
+  /// Reads the backlog; false when a reset made the answer stale.
+  Future<bool> load() async {
+    final generation = _generation;
     loading = true;
     error = null;
     notifyListeners();
     try {
-      groups = groupFees(await gateway!.feeBacklog());
+      final backlog = await gateway!.feeBacklog();
+      if (generation != _generation) return false;
+      groups = groupFees(backlog);
       loaded = true;
       // Certain readings start chosen; suggestions wait for a person.
       selected
@@ -274,11 +298,15 @@ class FeeConversionController extends ChangeNotifier {
             if (g.reading.verdict == FeeVerdict.convertible) g.key,
         ]);
     } catch (e) {
+      if (generation != _generation) return false;
       error = _failure(e);
     } finally {
-      loading = false;
-      notifyListeners();
+      if (generation == _generation) {
+        loading = false;
+        notifyListeners();
+      }
     }
+    return true;
   }
 
   void show(FeeVerdict v) {
@@ -302,6 +330,7 @@ class FeeConversionController extends ChangeNotifier {
   /// Writes the chosen groups' fees, then reads the backlog again.
   Future<void> convert(String note) async {
     if (converting || selected.isEmpty) return;
+    final generation = _generation;
     converting = true;
     error = null;
     result = null;
@@ -320,19 +349,22 @@ class FeeConversionController extends ChangeNotifier {
     var total = const ImportResult();
     try {
       for (var i = 0; i < items.length; i += importChunk) {
-        total += await gateway!.convertFees(
+        final part = await gateway!.convertFees(
           items.sublist(i, (i + importChunk).clamp(0, items.length)),
           note.trim(),
         );
+        if (generation != _generation) return;
+        total += part;
       }
     } catch (e) {
+      if (generation != _generation) return;
       error = '${_failure(e)}已寫入的部分不受影響，重新讀取後可繼續。';
     }
     result = total;
     converting = false;
     // Reading the list again must not hide that a part failed to write.
     final failed = error;
-    await load();
+    if (!await load()) return;
     error = failed ?? error;
     notifyListeners();
   }

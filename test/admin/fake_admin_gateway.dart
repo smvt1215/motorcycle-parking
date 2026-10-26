@@ -501,11 +501,16 @@ class FakeAdminGateway implements AdminGateway {
   imported = [];
   Object? importError;
 
+  /// Holds previews or backlog reads open, to race them against a reset.
+  Completer<void>? delayedPreview;
+  Completer<void>? delayedBacklog;
+
   @override
   Future<List<ImportEntry>> previewImport(
     List<Map<String, dynamic>> spots,
   ) async {
     previewed.add(spots);
+    await delayedPreview?.future;
     if (importError case final error?) throw error;
     return [
       for (final s in spots)
@@ -557,7 +562,11 @@ class FakeAdminGateway implements AdminGateway {
   final List<(List<Map<String, dynamic>>, String)> conversions = [];
 
   @override
-  Future<List<FeeBacklogItem>> feeBacklog() async => backlog;
+  Future<List<FeeBacklogItem>> feeBacklog() async {
+    final answer = backlog;
+    await delayedBacklog?.future;
+    return answer;
+  }
 
   @override
   Future<ImportResult> convertFees(
