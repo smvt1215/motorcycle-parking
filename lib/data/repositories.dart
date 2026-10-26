@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -41,6 +42,16 @@ class RulesRepository {
   }
 }
 
+/// The viewport RPC variants this build reads, newest first; the original
+/// (no suffix) is the last fallback. _v3 returns every row as stored, with
+/// its parking conditions; _v2 projects the rows that builds judging
+/// eligibility without conditions would read too loosely (§5.2 of
+/// docs/designs/2026-10-26-parking-conditions-and-fees.md). This build's
+/// `eligibility()` does not read conditions yet, so it stays on _v2; the
+/// condition-aware decision (stack C, C4) adds '_v3' here.
+@visibleForTesting
+const viewportVariants = ['_v2'];
+
 class ParkingResult {
   const ParkingResult(this.spots, {this.warning, this.truncated = false});
   final List<ParkingSpot> spots;
@@ -53,14 +64,11 @@ class ParkingRepository {
   final SupabaseClient? client;
   List<ParkingSpot>? _demoSpots;
 
-  /// Reads [name]'s newest variant this backend has: _v3 returns every row
-  /// as stored, with its parking conditions; _v2 every space kind, with rows
-  /// older builds cannot read safely projected (§5.2 of
-  /// docs/designs/2026-10-26-parking-conditions-and-fees.md); the original
-  /// only the five first kinds. A backend not yet migrated lacks the newer
-  /// ones, so fall back in that order.
+  /// Reads [name]'s newest variant in [viewportVariants] this backend has;
+  /// a backend not yet migrated lacks the newer ones, so fall back in that
+  /// order, then to the original, which returns the five first kinds only.
   Future<List<dynamic>> _viewport(String name, MapViewport bounds) async {
-    for (final suffix in const ['_v3', '_v2']) {
+    for (final suffix in viewportVariants) {
       try {
         return await client!.rpc<List<dynamic>>(
           '$name$suffix',

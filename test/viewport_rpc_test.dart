@@ -6,7 +6,6 @@ import 'package:http/testing.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
 import 'package:motorcycle_parking/domain/map_viewport.dart';
 import 'package:motorcycle_parking/models/parking.dart';
-import 'package:motorcycle_parking/models/parking_condition.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 void main() {
@@ -79,22 +78,23 @@ void main() {
     return (called, result.spots);
   }
 
-  test('新版讀取 _v3 RPC，取得停放條件', () async {
+  test('資格判斷尚未讀取停放條件，後端有 _v3 也讀 _v2 的保守投影', () async {
+    expect(viewportVariants, isNot(contains('_v3')));
     final (called, spots) = await load(version: 3);
     expect(
       called,
-      containsAll(['viewport_spots_v3', 'official_viewport_spots_v3']),
+      containsAll(['viewport_spots_v2', 'official_viewport_spots_v2']),
     );
-    expect(called, isNot(contains('viewport_spots_v2')));
+    expect(called.where((n) => n.endsWith('_v3')), isEmpty);
     expect(spots.map((s) => s.id), ['a', 'b', 'c']);
-    final c = spots.last;
-    expect(c.spaceType, SpaceType.timedMotorcycle);
-    expect(c.condition?.charge, Charge.free);
+    // The free timed bay arrives as an unverified lot, not as stored.
+    expect(spots.last.spaceType, SpaceType.offStreet);
+    expect(spots.last.condition, isNull);
   });
 
   test('後端只有 _v2 時退回 _v2，讀到保守投影', () async {
     final (called, spots) = await load(version: 2);
-    expect(called, containsAll(['viewport_spots_v3', 'viewport_spots_v2']));
+    expect(called, contains('viewport_spots_v2'));
     expect(called, isNot(contains('viewport_spots')));
     expect(spots.map((s) => s.id), ['a', 'b', 'c']);
     expect(spots.last.spaceType, SpaceType.offStreet);
@@ -106,7 +106,6 @@ void main() {
     expect(
       called,
       containsAll([
-        'viewport_spots_v3',
         'viewport_spots_v2',
         'viewport_spots',
         'official_viewport_spots',
