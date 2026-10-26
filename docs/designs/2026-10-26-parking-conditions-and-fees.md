@@ -292,6 +292,8 @@ PLAN.md 匯入紀錄：「依停管處新聞稿附件補上『機車區』與機
 
 如果夜間改成 00:00–08:00，那麼 00:00 同時是跨日和換時段：`each_period` 時只依夜間費率收一次，不會收兩次。
 
+**長度上限**：兩張點位表的 `char_length(fee_note) <= 200` 約束與 `submit-report/validate.ts` 的 200 字上限，容不下多時段費率逐段串接的句子，而 `fee_note = fee_note_of(fee)` 不放寬。C3 因此一併處理：(1) 契約限制 `by_time` 最多 6 段；(2) 依契約允許的最長組合（每個車種都是 6 段計次，含有效時間、隔日另計、跨時段計法）算出 `fee_note_of` 的最大長度，把兩表的 check 與 `validate.ts` 的上限改成同一個值（由 `tool/gen_contract_sql.py` 從契約產生，不手寫數字）；(3) 加一個測試，用這個最長組合呼叫 Dart、SQL、Deno 三端的句子函式，確認結果都不超過上限。回報者自由填寫的備註仍維持原本的長度限制。
+
 `by_time` 的費率文字會逐段寫出，最後一句寫跨時段的計法，例如：「08:00–20:00 每次 30 元，停多久都只收一次；20:00–08:00 每次 50 元，隔日另計；跨時段另計」。三種說法分別是 `each_period` 寫「跨時段另計」、`entry_only` 寫「依進場時段計費」、缺欄位寫「跨時段計費方式未確認」。
 
 **編輯器（`FeeEditor` 擴充，C3 做元件、C5／C6 接入表單）**
@@ -339,6 +341,7 @@ PLAN.md 匯入紀錄：「依停管處新聞稿附件補上『機車區』與機
 
 - 公告來源有兩層：縣市規則 `city_rules`（全市或行政區），以及條件自己的 `basis`（特定場域、特定路段，例如試辦場域）。`basis` 可以是網址或已確認內容的牌面照片（§1.4）；照片超過有效期時，這份依據失效。
 - `city_rules` 新增 `expires_on date`（可為 null）。`now ≥ expires_on` 的規則不算有效，結果為「此地區的規則已過期，請以現場標誌標線為準」（`unverified`），不回落到全國規則，因為過期的地方開放可能已經延長也可能已經結束。
+- **舊版相容**：舊版 App 直接查 `city_rules`（`lib/data/repositories.dart`），`CityRule.fromJson` 與 `eligibility()` 只看生效日，不認得 `expires_on`，規則到期後仍會顯示可停。因此 C4 新增欄位時同時修改 `city_rules` 給 `anon`／`authenticated` 的 select policy，只回傳 `expires_on is null or expires_on > (now() at time zone 'Asia/Taipei')::date` 的列；舊版查不到已過期的規則，`eligibility()` 走既有的 `noRule`（待確認），是保守的結果。新版改呼叫新的 `city_rules_v2()`（`security definer`，回傳含已過期的列與 `expires_on`），才能顯示「規則已過期」並套用上面的判斷；管理站沿用管理員 policy，看得到全部列。剩下的空窗是舊版在規則到期前抓到、離線保存的規則副本，要到下次重新抓取才會消失；到期不是寫入，不會觸發 #108 的通知（§5.6），這個空窗記在 C4 的 PR 說明，不另做推送。
 - 規則以格位面向判斷，取代 `ruleSpaceType()`：`ruleKindOf(condition)` 依 bay＋charge 對到 `allowed_space_types` 用的舊值（機車格 toll→`paidMotorcycle`、free→`freeMotorcycle`、charge 未確認→無法對應，結果為待確認）。限時格因此依它真正的收費屬性比對，不再一律當收費格。
 - `basis` 與 `city_rules` 同時有效且結論相反（例如縣市規則不開放機車格，但場域公告開放共用）→ 較具體的 `basis` 優先；`basis` 已過期而 `city_rules` 沒有涵蓋 → 待確認；兩個都有效但無法排出具體程度（兩份全市公告互相矛盾）→ `unverified`，理由「公告不一致，請以現場公告為準」，並列出兩個來源。
 - 這一步的輸出就是研究文件 §5.7 要抽出的純規則函式 `ruleVerdict()`：`open / conditional(restriction) / closed / noRule / unknownDistrict / expired / conflict`。法規預審引擎直接呼叫它，不重用混入信任狀態的 `eligibility()`。
@@ -432,12 +435,18 @@ SQL 不能在執行時讀 JSON，所以由 `tool/gen_contract_sql.py` 從契約�
 | bay=motorcycle 或 area=motorcycle 而有 `fee.car` | 預檢 | fix | |
 | area=car 而有 `fee.scooter`、且沒有地方公告開放 | 預檢 | hold | 需求 6；特別開放須另附依據 |
 | `time_limit.max_minutes` 與 `per_visit.max_minutes` 不同 | 預檢 | fix | |
-| `heavy` 為 `same_as_car` 但同一 `fee` 沒有 `car`（新送出） | 預檢 | fix | 延伸 #94 `fee_follows_missing_scooter`；既有資料仍允許，讀成未確認 |
+| `heavy` 為 `same_as_car` 但同一 `fee` 沒有 `car`（新送出） | 預檢 | fix | 延伸 #94 `fee_follows_missing_scooter`；既有資料仍允許，讀成未確認。**對合併後的費率判斷**，見本表下方說明 |
 | `daily_cap < amount`、`hourly` 且 `amount=0` 沒有 `free_minutes` | 預檢 | fix | 既有 #94 規則沿用到 `car` 與 `by_time` 內層 |
 | `renew` 出現在 `per_visit` 以外；`cross_period` 出現在 `by_time` 以外；值不在列舉中 | DB | 拒絕 | §2.5；三端以同一份契約檢查 |
 | `by_time` 帶 `cross_period`，但計次時段不到兩段 | 預檢 | fix | 沒有可以跨的計次時段 |
 | `charge='free'` 而有 `renew` | 預檢 | fix | 免費格沒有計次 |
 | `extension` 在 `charge='free'` 的格位 | 預檢 | fix | |
+
+**修改建議要用合併後的費率檢查**：費率修改建議逐車種合併（§5.4），只送有改的車種，例如點位已有汽車費率、使用者只把大型重機改為比照汽車時，`proposed.fee` 只有 `{"heavy":{"mode":"same_as_car"}}`。比照依賴（`same_as_car`、既有的 `same_as_scooter`）與本表其他跨車種、跨欄位的組合規則，因此一律對「現值合併 `proposed.fee` 後」的結果判斷，不直接檢查 `proposed`。做法：
+
+- App 與管理站送出前已經有點位現值，預檢函式改收 `(current, proposed)`，先合併再檢查；新增停車點沒有現值，`current` 為空，結果與現在相同。
+- `submit-report/index.ts` 目前在讀取點位前就呼叫 `precheck(body)`。C3 改為：只看 `proposed` 本身就能判斷的規則（形狀、占位詞、個資格式等）維持在讀取前；組合規則移到讀取點位、合併之後再跑。Dart 與 Deno 共用 `precheck_cases.json`，新增「只送 `heavy: same_as_car`、現值有 `car`」與同樣情況的 `same_as_scooter` 兩個不誤攔案例，以及現值沒有 `car` 時仍回 `fix` 的案例。
+- `apply_report` 採納時同樣以合併結果寫入，`valid_fee()` 與 DB 層規則檢查的也是合併結果。
 
 ## 5. 遷移與相容（交接 P6）
 
@@ -507,7 +516,7 @@ P6 匯入（`feat/admin-import`，stack B 第 5 層）的轉換規則延伸到�
 | C1 | `feat/parking-contract` | `parking_contract.json`（`basis` 含保留的 `evidence_id`，P2 前拒收）、案例檔、`ParkingCondition` 模型與轉換層（純 Dart）、`validate.ts` 的 `validCondition`（尚未接上 action）、SQL 產生器與 CI 漂移檢查。**無 migration、無行為變更** | main | 轉換往返、`legacySafe` 窮舉 9 種 `space_type` × 5 種 `access`；JSON 與 Dart 常數逐欄比對；Deno 與 Flutter 共同執行案例 | 直接 revert |
 | C2 | `feat/parking-condition-db`（P1） | migration：`condition`、`zones_complete`、`valid_condition`、`valid_zones`、`public_spots` 加欄位、viewport v3 與 v2 保守投影；`apply_report` 建立時存 `condition`；`admin_spot_fields`、`admin_resolve_report` 白名單；`ParkingSpot` 讀寫、收藏 `exact_v2`；`reportedAccess` 改走轉換層 | C1 | pgTAP：check 允許／拒絕、v2 投影、v3 完整、RLS；收藏往返（新版→舊版模擬→新版）；舊 JSON 相容 | 新欄位全為 null 時行為與現在相同；App 回退到 v2 |
 | C3 | `feat/fee-v2`（P2） | `Fee.car`、`Rate` 新鍵與 `by_time`；`valid_fee` 擴充；`fee_note_of` SQL 與 `feeNoteOf` 新句子（沿用 #96 的共用句子測試）；`fee_source_text` 欄位；費率建議逐車種合併（`proposed.fee` 的車種可為 `null`＝清除）；`renew`／`cross_period` 三態與句子（§2.5），以及重算既有列的 `fee_note`；`FeeEditor` 加汽車、跨日與跨時段單選等新選項；**儲存的 `fee = {}` 統一視為「無結構化資料」**（來自 #96 Codex 第二輪 P2，追蹤到本 PR）：伺服器端 `fee_note` 一致檢查（#96 202610260010 的 `fee_note_matches`，以及 `admin_upsert_spot`、`admin_resolve_report`）與管理站 `storedFee()` 用同一語意，讓管理員能編輯這類點位的費率文字；staging 目前 0 筆受影響 | C1（可與 C2 平行，建議疊在 C2 上減少衝突） | 舊 fee 全部仍合法；新鍵允許／拒絕；`renew`／`cross_period` 三態與 §2.5 範例表的收費時點；Dart／SQL／Deno 句子一致；舊版讀新 fee 為未確認；合併語意 pgTAP；`fee = {}` 點位：pgTAP 與管理站 widget 測試「編輯 fee={} 點位的費率文字可儲存」 | 新鍵不寫入即與現況相同 |
-| C4 | `feat/parking-decision`（P3） | `decideParking`、`ruleVerdict`、`PriceAnswer`；`eligibility()` 改為包裝；`city_rules.expires_on`；#91 `eligibilityDisplay` 改讀 `basis` | C2、C3 | 窮舉 條件 × 車種 × 規則 × 分區完整度 × 期限；`eligibility()` 包裝對既有測試全數不變（除交接列出的三個錯誤）；§5.7 共同向量 | 包裝可切回舊實作（保留一版） |
+| C4 | `feat/parking-decision`（P3） | `decideParking`、`ruleVerdict`、`PriceAnswer`；`eligibility()` 改為包裝；`city_rules.expires_on`、只回傳未過期列的 select policy 與 `city_rules_v2()`（§3.2 舊版相容）；#91 `eligibilityDisplay` 改讀 `basis` | C2、C3 | 窮舉 條件 × 車種 × 規則 × 分區完整度 × 期限；`eligibility()` 包裝對既有測試全數不變（除交接列出的三個錯誤）；§5.7 共同向量 | 包裝可切回舊實作（保留一版） |
 | C5 | `feat/parking-conditions-app`（P4 App） | 詳情（分區、時段、首段 0 元、延長、依據與期限，含「現場牌面照片」依據的顯示）、送出時附依據（網址；P2 合併後才開放附牌面照片，以功能旗標控制）、篩選、新增停車點與修改建議的條件／汽車費率欄位；預檢規則（§4.3，含普大共用 Free 的 hold）加入 `precheck_rules.json`；階段 1 候選「計次或每日 0 元」排除帶 `max_minutes` 的計次費率（§2.3） | C4；附照片依據另依核實計畫 P2（`spot_evidence` 上傳與內容確認） | widget：320／390／700／1280 px、1.6 倍、深色；不溢出、觸控 ≥ 48 px；預檢案例，含臺北限時格（`per_visit` 0 元＋`max_minutes:20`）不被誤攔 | UI 隱藏新欄位 |
 | C6 | `feat/parking-conditions-admin`（P4 管理站） | 點位表單分區編輯（`area`、`condition`、`fee`、`zones_complete`）、依據選「公告網址」或「牌面照片」（從該點已確認內容的照片中挑選；P2 合併前只顯示網址）、審核頁條件差異、規則頁 `expires_on` | C4（可與 C5 平行）；照片依據依核實計畫 P2 | admin smoke desktop-light／mobile-dark；pgTAP 管理員路徑 | 同上 |
 
