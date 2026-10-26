@@ -357,7 +357,7 @@ rate = {"mode":"free"} | {"mode":"posted"}
 
 ### 外部社群地圖（Google 我的地圖）（2026-10-17 更新）
 「Alan大重停車記事」Google 我的地圖（https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc）列為資料來源之一。只取地點、類型、費率等事實資訊並重新整理為專案格式，不沿用原說明全文、連結、照片與回報者署名。
-- 工具：`python3 tool/import_mymaps.py --mid <mid> --output data/imports/google-mymaps [--refresh] [--sql-owner <auth uid>]`。KML、官方資料與國土測繪中心查詢結果快取在 `artifacts/mymaps-cache/`（不進版控）；`--sql-owner` 另產生待審的 `community_spots` SQL，不直接寫入資料庫。
+- 工具：`python3 tool/import_mymaps.py --mid <mid> --output data/imports/google-mymaps [--refresh]`。KML、官方資料與國土測繪中心查詢結果快取在 `artifacts/mymaps-cache/`（不進版控）；只產生管理站匯入頁用的 JSON，不直接寫入資料庫（`--sql-owner` 的 SQL 輸出已於 2026-10-26 停用，#117）。
 - 圖層：匯入 7 個停車相關圖層；「重機友善店家」不是停車點，「路邊友善車格」中的行政區政策說明點屬於城市規則，皆不建點。三重的路段線段以線段中點建點並保留 `road_segment`。
 - 圖示對應：汽車區 → `heavyCar`、機車區 → `scooterHeavy`、重機專用格 → `heavyOnly`，以 `parking_zones` 表示；禁停圖層為 `heavy_allowed=false`，未確定圖層為 `null`。來源圖例的灰色（未確認）、橘色（進出場需注意）、藍色（特殊收費）轉為備註或入口說明。
 - 官方驗證與修正：
@@ -372,7 +372,7 @@ rate = {"mode":"free"} | {"mode":"posted"}
   - 臺北市路外 36 處試辦重機停機車區（115/4/6 首波 24 處、115/7/6 新增 12 處）：依停管處新聞稿附件補上「機車區」與機車費率 2 倍的重機費率；試辦期限已屆，是否延續須以現場公告為準。
   - 臺北市路邊收費機車格：依 115/10/6 起的新制（115/9/30 公告），大型重機依路段收費方式計費：計次路段每次 40 元；計時路段每小時 20 元、當日上限 100 元；限時格首 20 分鐘 0 元；皆可斜停 2 格。來源格點無法判定收費方式，因此三種都列出。
   - 同一官方場站的多個來源標點（例如汽車區、機車區）合併為一個點位、多個 zones；來源回報彼此矛盾時改為 `null` 並列入待人工確認。
-- 詳情十二欄（見 [DESIGN.md](DESIGN.md)「點位詳情十二欄分組版」）：名稱、費率、停放車種（`parking_access`／`parking_zones`）、GPS、來源、狀態與更新時間全數填入；類型取自官方資料或名稱中的地下／立體／平面；說明依內容分入「入口」「停車指引」「備註」；官方地址或路段填入位置；試辦規則與限時開放填入特殊規則。照片不匯入（屬來源作者的著作）；即時車位不屬於匯入資料。`community_spots` 與 `official_heavy_spots` 已有這些延伸欄位（`202610170002_spot_detail_fields.sql`），`import.sql`／`official.sql` 一併寫入。
+- 詳情十二欄（見 [DESIGN.md](DESIGN.md)「點位詳情十二欄分組版」）：名稱、費率、停放車種（`parking_access`／`parking_zones`）、GPS、來源、狀態與更新時間全數填入；類型取自官方資料或名稱中的地下／立體／平面；說明依內容分入「入口」「停車指引」「備註」；官方地址或路段填入位置；試辦規則與限時開放填入特殊規則。照片不匯入（屬來源作者的著作）；即時車位不屬於匯入資料。`community_spots` 與 `official_heavy_spots` 已有這些延伸欄位（`202610170002_spot_detail_fields.sql`），匯入 JSON 一併帶入、管理站匯入頁一併寫入。
 - 點位只分兩種（2026-10-17 決定）：
   - **官方點**：我的地圖點位通過官方核驗，或官方資料有、我的地圖沒有且記載機車格／重機證據的場站（含 TDX 獨有的停車場，作為靜態資料補入；與縣市資料或既有官方點重複者略過）。資料來源顯示該縣市政府（如「臺北市政府」），`status=confirmed`，寫入 `official_heavy_spots`。
   - **社群點**：我的地圖有但未通過核驗，`source='import'`、`status='pending'`，資料來源顯示「社群回報整理」，詳情顯示「待確認」。
@@ -380,8 +380,8 @@ rate = {"mode":"free"} | {"mode":"posted"}
   - App 已無 TDX 即時點；使用者舊收藏中的 TDX 點仍歸為官方點，來源顯示該縣市政府。
 - 官方點的重機資格只採官方明載（臺北市大型重機格數、36 處路外試辦場域），其餘維持「有條件」；我的地圖的重機回報、分區、入口與停車指引以「社群補充（未經官方查核）」標示。一般機車資格依官方記載的機車格數。
 - 本階段只做靜態點：TDX 只用於核驗與補入靜態停車場，不串接即時車位。
-- 結果：官方點 `data/imports/official/spots.json`；社群點 `data/imports/google-mymaps/spots.json`；`verification.json`（每點的核驗紀錄與處理結果）與 `REPORT.md`（統計、修正、待人工確認與不錄入清單）。`--sql-owner` 另產生 `import.sql`（社群點）與 `official.sql`（以 service role 執行的官方點 upsert），都不直接寫入資料庫。
-- 寫入資料庫改用管理站「匯入」（2026-10-26，[ADMIN_WEB.md](ADMIN_WEB.md#p6-實作)）：上傳上述 `spots.json`，試算新增／更新／管理員修改過的欄位後勾選匯入，管理員修改過的欄位預設保留，並寫入稽核紀錄。`official.sql` 會覆寫管理員的修改，只在管理站無法使用時才以 SQL Editor 執行。
+- 結果：官方點 `data/imports/official/spots.json`；社群點 `data/imports/google-mymaps/spots.json`；`verification.json`（每點的核驗紀錄與處理結果）與 `REPORT.md`（統計、修正、待人工確認與不錄入清單）。工具不直接寫入資料庫。
+- 寫入資料庫只經管理站「匯入」（2026-10-26，[ADMIN_WEB.md](ADMIN_WEB.md#p6-實作)）：上傳上述 `spots.json`，試算新增／更新／管理員修改過的欄位後勾選匯入，管理員修改過的欄位預設保留，並寫入稽核紀錄。原本 `--sql-owner` 產生的 `import.sql`／`official.sql` 已停用（#117）：`official.sql` 會覆寫管理員的修改，與匯入頁的做法衝突。工具產出前以匯入頁的檢查驗證 JSON，有會被拒絕的點位時結束碼為 1。
 - 限制：其餘縣市自有資料不是缺座標（基隆、屏東）就是查無資料集，改由 TDX 比對；觀光景點、量販店等未登記為路外停車場的地點仍無官方資料可比對。臺中與桃園的市府資料沒有費率。
 
 資料表在原本的 `community_spots` / `spot_votes` 之外新增：`moderation_queue`、`official_heavy_spots`（官方點，含詳情十二欄）、`rate_limit_events`、`admin_audit_log`（#55）、`contributor_name_clears`（#81，私有）；頭像存於 Storage `motopark-avatars`（#83）。`spot_annotations` 已於 2026-10-17 移除。
