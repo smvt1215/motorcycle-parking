@@ -70,8 +70,10 @@ class RulesRepository {
 /// docs/designs/2026-10-26-parking-conditions-and-fees.md). This build's
 /// `eligibility()` judges through `decideParking()` (stack C, C4), which
 /// reads conditions, so this build reads _v3 first.
+/// Rolled back to the judgement before C4 (`useParkingDecision` false), it
+/// reads _v2's conservative projection again.
 @visibleForTesting
-const viewportVariants = ['_v3', '_v2'];
+const viewportVariants = useParkingDecision ? ['_v3', '_v2'] : ['_v2'];
 
 class ParkingResult {
   const ParkingResult(this.spots, {this.warning, this.truncated = false});

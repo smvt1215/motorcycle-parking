@@ -807,13 +807,17 @@ ParkingDecision _street(
         moreGaps: [DecisionGap.scheduleUnknown],
       );
     } else if (result.open) {
-      final limits = special || ev ? '${result.reason}；' : '';
+      // The slots add to what already limits the bay (a city rule's
+      // signage, a limit), never replace it.
+      final limited = result.status == EligibilityStatus.conditional;
+      final kept = result.restriction;
       result = result._with(
         status: EligibilityStatus.conditional,
         reason:
-            '$limits${vehicle.label}可停時段：${slots.map(slotText).join('；')}，請看現場牌面',
+            '${limited ? '${result.reason}；' : ''}'
+            '${vehicle.label}可停時段：${slots.map(slotText).join('；')}，請看現場牌面',
         restriction: () =>
-            ev ? RuleRestriction.evOnly : RuleRestriction.timeLimited,
+            limited && kept != null ? kept : RuleRestriction.timeLimited,
       );
     }
   }

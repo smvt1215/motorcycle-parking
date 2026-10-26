@@ -526,6 +526,35 @@ void main() {
       expect(listed.reason, contains('平日 08:00–18:00'));
     });
 
+    test('開放時段不覆蓋縣市規則的必要限制（臺中限標示車格）', () {
+      final d = decideParking(
+        street(
+          SpaceType.paidMotorcycle,
+          city: '臺中市',
+          condition: c({
+            'bay': 'motorcycle',
+            'use': 'usual',
+            'charge': 'toll',
+            'schedule': [
+              {
+                'days': 'all',
+                'from': '08:00',
+                'to': '20:00',
+                'vehicles': ['heavy', 'scooter'],
+              },
+            ],
+          }),
+        ),
+        VehicleType.heavy,
+        bundled,
+        now: now,
+      );
+      expect(d.status, EligibilityStatus.conditional);
+      expect(d.restriction, RuleRestriction.signage);
+      expect(d.reason, startsWith(rule('臺中市', VehicleType.heavy).exceptions));
+      expect(d.reason, contains('每天 08:00–20:00'));
+    });
+
     test('縣市規則過期：待確認，不回落到全國規則', () {
       final expired = CityRule.fromJson({
         ...bundledJson.firstWhere(
