@@ -37,6 +37,11 @@ void main() {
       spaceBadge(spot(SpaceType.paidMotorcycle, scooter: true, heavy: true)),
       SpaceBadge.shared,
     );
+    // A car-and-motorcycle flex bay admitting both is not a 共 bay.
+    expect(
+      spaceBadge(spot(SpaceType.flexShared, scooter: true, heavy: true)),
+      isNull,
+    );
     // Ordinary scooter bays carry no badge.
     expect(spaceBadge(spot(SpaceType.paidMotorcycle)), isNull);
     expect(

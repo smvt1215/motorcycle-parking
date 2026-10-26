@@ -42,7 +42,7 @@ select ok((select last_confirmed_at is not null from community_spots where id=(s
 update community_spots set status='pending' where id=(select id from target);
 -- An admin keeping a disputed spot spends the votes behind the dispute.
 update spot_votes set created_at=now()-interval '2 days' where spot_id=(select id from target);
-update moderation_queue set status='rejected',resolved_at=now()-interval '1 day' where source_id=(select id::text from target);
+update moderation_queue set status='rejected',resolution_kind='wrong',resolved_at=now()-interval '1 day' where source_id=(select id::text from target);
 update community_spots set status='confirmed' where id=(select id from target);
 select pg_temp.report(3,jsonb_build_object('action','vote','spot_id',(select id from target),'vote','gone'),'e','e');
 select is((select status from community_spots where id=(select id from target)),'confirmed','a vote after an admin kept the spot does not recount the old dispute');

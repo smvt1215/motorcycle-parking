@@ -14,6 +14,7 @@ import '../../models/parking.dart';
 import '../../ui/adaptive/adaptive.dart';
 import 'cluster_badge.dart';
 import 'map_legend.dart';
+import 'google_map_style.dart';
 import 'maps_sdk.dart';
 
 class GoogleParkingMap extends StatefulWidget {
@@ -30,6 +31,8 @@ class GoogleParkingMap extends StatefulWidget {
     this.location,
     this.selected,
     this.panelVisible = false,
+    this.mapType = gm.MapType.normal,
+    this.dimmed,
   });
 
   final LatLng center;
@@ -46,6 +49,12 @@ class GoogleParkingMap extends StatefulWidget {
   /// even when it is no longer in [spots].
   final ParkingSpot? selected;
 
+  /// The admin site switches to satellite imagery; the app keeps the default.
+  final gm.MapType mapType;
+
+  /// Spots drawn faded, such as hidden ones on the admin site.
+  final bool Function(ParkingSpot)? dimmed;
+
   @override
   State<GoogleParkingMap> createState() => GoogleParkingMapState();
 }
@@ -61,7 +70,7 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
   gm.BitmapDescriptor? locationIcon;
   int viewportGeneration = 0;
   Size? lastSize;
-  (LatLng, double?, double)? pendingMove;
+  (LatLng, double?, double, double)? pendingMove;
   bool viewportFailed = false;
 
   @override
@@ -101,18 +110,26 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
     return Map.fromIterables(variants, icons);
   }
 
-  /// Keeps the current zoom when [zoom] is null.
+  /// Keeps the current zoom when [zoom] is null. [abovePanel] and
+  /// [leftOfCenter] show the point that many pixels above and left of the
+  /// map's center, clear of panels covering the map.
   Future<void> moveTo(
     LatLng point,
     double? zoom, {
     double abovePanel = 0,
+    double leftOfCenter = 0,
   }) async {
     final active = controller;
     if (active == null) {
-      pendingMove = (point, zoom, abovePanel);
+      pendingMove = (point, zoom, abovePanel, leftOfCenter);
       return;
     }
-    final target = centerAbovePanel(point, zoom ?? camera.zoom, abovePanel);
+    final target = shiftCenter(
+      point,
+      zoom ?? camera.zoom,
+      dx: leftOfCenter,
+      dy: abovePanel,
+    );
     await active.animateCamera(
       zoom == null
           ? gm.CameraUpdate.newLatLng(_googlePoint(target))
@@ -201,7 +218,12 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
     controller = value;
     if (pendingMove case final move?) {
       pendingMove = null;
-      await moveTo(move.$1, move.$2, abovePanel: move.$3);
+      await moveTo(
+        move.$1,
+        move.$2,
+        abovePanel: move.$3,
+        leftOfCenter: move.$4,
+      );
     }
     await _publishViewport();
   }
@@ -241,7 +263,8 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
             children: [
               gm.GoogleMap(
                 initialCameraPosition: camera,
-                style: dark ? _darkMapStyle : null,
+                mapType: widget.mapType,
+                style: dark ? darkGoogleMapStyle : null,
                 padding: EdgeInsets.only(
                   // Sheet transitions must not change the map's projection.
                   top: 108,
@@ -352,6 +375,7 @@ extension on GoogleParkingMapState {
           selected,
         )]!,
     anchor: const Offset(.5, .5),
+    alpha: !selected && (widget.dimmed?.call(spot) ?? false) ? .45 : 1,
     zIndexInt: selected ? 500 : 0,
     consumeTapEvents: true,
     onTap: widget.interactive ? () => widget.onSpotTap(spot) : null,
@@ -491,13 +515,3 @@ class _MapLoadMessage extends StatelessWidget {
     ),
   );
 }
-
-const _darkMapStyle = '''[
- {"elementType":"geometry","stylers":[{"color":"#172838"}]},
- {"elementType":"labels.text.fill","stylers":[{"color":"#bdcbd1"}]},
- {"elementType":"labels.text.stroke","stylers":[{"color":"#172838"}]},
- {"featureType":"road","elementType":"geometry","stylers":[{"color":"#30465a"}]},
- {"featureType":"road.highway","elementType":"geometry","stylers":[{"color":"#536477"}]},
- {"featureType":"water","elementType":"geometry","stylers":[{"color":"#0a1c2b"}]},
- {"featureType":"poi.park","elementType":"geometry","stylers":[{"color":"#193e34"}]}
-]''';

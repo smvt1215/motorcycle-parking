@@ -1,11 +1,13 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:motorcycle_parking/core/town_lookup.dart';
 import 'package:motorcycle_parking/data/app_store.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
 import 'package:motorcycle_parking/features/map/spot_sheet.dart';
 import 'package:motorcycle_parking/features/report/report_sheet.dart';
 import 'package:motorcycle_parking/features/report/spot_suggestions.dart';
+import 'package:motorcycle_parking/domain/location_check.dart';
 import 'package:motorcycle_parking/models/parking.dart';
 import 'package:motorcycle_parking/models/fee.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
@@ -23,6 +25,18 @@ class RecordingStore extends AppStore {
   RecordingStore(LocalRepository local) : super(local, null);
   final submissions = <Map<String, dynamic>>[];
   bool failNext = false;
+
+  /// What the reverse lookup answers, offline.
+  Town? town = const Town('臺北市', '信義區');
+
+  @override
+  Future<Town?> townAt(double lat, double lng) async => town;
+
+  /// What「移到我的位置」reads.
+  LocationFix fix = const LocationFix(25.0339, 121.5623, 5);
+
+  @override
+  Future<LocationFix> currentFix() async => fix;
 
   @override
   Future<String> submit(Map<String, dynamic> body) async {
@@ -170,6 +184,8 @@ void main() {
       120,
       scrollable: find.byType(Scrollable).last,
     );
+    await tester.ensureVisible(find.text('這裡已經不能停車'));
+    await tester.pumpAndSettle();
     expect(find.text('這裡已經不能停車'), findsOneWidget);
     await tester.tap(find.text('這裡已經不能停車'));
     await tester.pumpAndSettle();
@@ -234,6 +250,7 @@ void main() {
     expect(find.text('這和目前的格位類型相同，請選擇另一種'), findsOneWidget);
     final heavyOnly = find.byKey(const ValueKey('report-space-heavyOnly'));
     await tester.ensureVisible(heavyOnly);
+    await tester.pumpAndSettle();
     await tester.tap(heavyOnly);
     await tester.pumpAndSettle();
     expect(
@@ -705,7 +722,7 @@ void main() {
     );
     await tester.tap(find.text('新增'));
     await tester.pumpAndSettle();
-    expect(find.text('位置：目前地圖中心'), findsOneWidget);
+    expect(find.textContaining('從目前地圖中心開始'), findsOneWidget);
     // Closing stays reachable at the top of the long form.
     expect(find.byTooltip('關閉').hitTestable(), findsOneWidget);
     expect(find.text('0/100'), findsNothing);
@@ -715,6 +732,7 @@ void main() {
     );
     final heavyOnly = find.byKey(const ValueKey('report-space-heavyOnly'));
     await tester.ensureVisible(heavyOnly);
+    await tester.pumpAndSettle();
     await tester.tap(heavyOnly);
     await tester.pumpAndSettle();
     // Kept by element: the heading used to find the list scrolls away.
@@ -723,11 +741,16 @@ void main() {
           .ancestor(of: find.text('基本資訊'), matching: find.byType(Scrollable))
           .first,
     );
-    await tester.scrollUntilVisible(
-      find.text('送出回報'),
-      200,
-      scrollable: find.byElementPredicate((e) => e == listElement),
-    );
+    // Moved by its position: a drag could land on the location map.
+    final list = tester
+        .state<ScrollableState>(
+          find.byElementPredicate((e) => e == listElement),
+        )
+        .position;
+    while (find.text('送出回報').evaluate().isEmpty) {
+      list.jumpTo(list.pixels + 200);
+      await tester.pump();
+    }
     await tester.ensureVisible(find.text('送出回報'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('送出回報'));
@@ -777,6 +800,273 @@ void main() {
     await tester.tap(find.text('這裡已經不能停車'));
     await tester.pumpAndSettle();
     expect(find.text('這裡為什麼不能停車？'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  for (final (width, scale, brightness) in [
+    (390.0, 1.0, Brightness.light),
+    (320.0, 1.6, Brightness.dark),
+  ]) {
+    testWidgets('名稱建議填占位詞或電話時，在輸入框下方說明怎麼改（$width px、$scale 倍）', (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = Size(width, 844);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final store = (await tester.runAsync(createStore))!;
+      addTearDown(store.dispose);
+      await openDetails(tester, store, scale: scale, brightness: brightness);
+      await tester.ensureVisible(find.text('修改建議'));
+      await tester.tap(find.text('修改建議'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('停車點名稱'));
+      await tester.pumpAndSettle();
+      final input = find.byKey(const ValueKey('suggestion-input'));
+      await tester.enterText(input, '測試');
+      await tester.pumpAndSettle();
+      expect(find.textContaining('「測試」看不出是哪個停車點'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.enterText(input, '請打 0912 345 678');
+      await tester.pumpAndSettle();
+      expect(find.textContaining('內容含有電話號碼'), findsOneWidget);
+      final button = find.text('送出建議');
+      await tester.scrollUntilVisible(
+        button,
+        200,
+        scrollable: find
+            .ancestor(of: input, matching: find.byType(Scrollable))
+            .first,
+      );
+      await tester.ensureVisible(button);
+      await tester.pumpAndSettle();
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+      expect(store.submissions, isEmpty);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
+  testWidgets('其他備註只寫「不知道」時提示寫出現場狀況，不送出', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final store = (await tester.runAsync(createStore))!;
+    addTearDown(store.dispose);
+    await openDetails(tester, store);
+    await tester.ensureVisible(find.text('修改建議'));
+    await tester.tap(find.text('修改建議'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('其他備註').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('其他備註').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('suggestion-input')),
+      '不知道',
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('看不出現場狀況'), findsOneWidget);
+    await tester.tap(find.text('送出建議'));
+    await tester.pumpAndSettle();
+    expect(store.submissions, isEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  /// The open suggestion form's list, kept once the form opens: its title
+  /// scrolls away and is disposed later.
+  late ScrollPosition formList;
+
+  void captureForm(WidgetTester tester) {
+    formList = tester
+        .state<ScrollableState>(
+          find
+              .ancestor(
+                // The form's own close button, at the top of its list.
+                of: find.byTooltip('關閉').last,
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        )
+        .position;
+  }
+
+  /// Scrolls the suggestion form until [target] is built and on screen,
+  /// moving the list itself: a drag could land on the map.
+  Future<void> reveal(WidgetTester tester, Finder target) async {
+    final position = formList;
+    position.jumpTo(0);
+    await tester.pump();
+    for (var i = 0; i < 40 && target.evaluate().isEmpty; i++) {
+      position.jumpTo(
+        (position.pixels + 200).clamp(0, position.maxScrollExtent),
+      );
+      await tester.pump();
+    }
+    await tester.ensureVisible(target);
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> openLocation(WidgetTester tester, RecordingStore store) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await openDetails(tester, store);
+    await tester.ensureVisible(find.text('修改建議'));
+    await tester.tap(find.text('修改建議'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('停車點位置'));
+    await tester.pumpAndSettle();
+    expect(find.text('目前：25.03390, 121.56230'), findsOneWidget);
+    await tester.tap(find.text('停車點位置'));
+    await tester.pumpAndSettle();
+    captureForm(tester);
+  }
+
+  Future<void> sendSuggestion(WidgetTester tester) async {
+    await reveal(tester, find.text('送出建議'));
+    await tester.tap(find.text('送出建議'));
+    await tester.pumpAndSettle();
+  }
+
+  for (final found in [true, false]) {
+    testWidgets('位置不正確：拖曳標記後送座標${found ? '與反查的縣市、行政區' : '；查不到縣市時只送座標'}，說明另外寫', (
+      tester,
+    ) async {
+      final store = (await tester.runAsync(createStore))!;
+      addTearDown(store.dispose);
+      if (!found) store.town = null;
+      await openLocation(tester, store);
+      expect(find.text('在原位置'), findsOneWidget);
+      await sendSuggestion(tester);
+      expect(find.text('請把標記拖到停車格的實際位置，和目前不同才能送出'), findsOneWidget);
+      expect(store.submissions, isEmpty);
+      final pin = find.byKey(const ValueKey('touch-marker'));
+      await reveal(tester, pin);
+      final gesture = await tester.startGesture(tester.getCenter(pin));
+      await gesture.moveBy(const Offset(0, -40));
+      await gesture.up();
+      await tester.pump(const Duration(milliseconds: 700));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('請把標記拖到'), findsNothing);
+      expect(find.textContaining('距原位置'), findsOneWidget);
+      expect(find.textContaining('位置往北移動約'), findsOneWidget);
+      expect(
+        find.textContaining('行政區從「未提供」改成「信義區」'),
+        found ? findsOneWidget : findsNothing,
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('suggestion-input')),
+        '格位在對面的便利商店前',
+      );
+      await sendSuggestion(tester);
+      final body = store.submissions.single;
+      expect(body['field'], 'location');
+      final proposed = body['proposed'] as Map<String, Object?>;
+      expect(
+        proposed.keys,
+        unorderedEquals([
+          'lat',
+          'lng',
+          if (found) ...['city', 'district'],
+        ]),
+      );
+      if (found) {
+        expect(proposed['city'], '臺北市');
+        expect(proposed['district'], '信義區');
+      }
+      expect(proposed['lat'] as double, greaterThan(spot.lat));
+      expect(proposed['lng'], closeTo(spot.lng, 1e-6));
+      expect(body['note'], '格位在對面的便利商店前');
+      expect(body['reason'], startsWith('停車點位置：建議移到 '));
+      expect(body['reason'], endsWith('；說明：格位在對面的便利商店前'));
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
+  testWidgets('位置不正確：跨縣市提醒規則改變，超過 150 m 先確認', (tester) async {
+    final store = (await tester.runAsync(createStore))!;
+    addTearDown(store.dispose);
+    store
+      ..town = const Town('新北市', '板橋區')
+      ..fix = const LocationFix(25.0369, 121.5623, 6);
+    await openLocation(tester, store);
+    await reveal(tester, find.text('移到我的位置'));
+    await tester.tap(find.text('移到我的位置'));
+    await tester.pump(const Duration(milliseconds: 700));
+    await tester.pumpAndSettle();
+    expect(find.text('GPS 精準度約 ±6 m'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('suggestion-city-changed')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('縣市從「臺北市」改成「新北市」'), findsOneWidget);
+    await sendSuggestion(tester);
+    expect(find.byKey(const ValueKey('suggestion-far')), findsOneWidget);
+    await tester.tap(find.text('返回調整'));
+    await tester.pumpAndSettle();
+    expect(store.submissions, isEmpty);
+    await sendSuggestion(tester);
+    await tester.tap(find.text('是同一個，送出'));
+    await tester.pumpAndSettle();
+    final body = store.submissions.single;
+    expect(body['proposed'], {
+      'lat': 25.0369,
+      'lng': 121.5623,
+      'city': '新北市',
+      'district': '板橋區',
+    });
+    expect(body['reason'], contains('位於新北市'));
+    expect(find.text('完成'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('位置不正確在 320 px 深色放大字級與鍵盤彈出時不溢出', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 640);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final store = (await tester.runAsync(createStore))!;
+    addTearDown(store.dispose);
+    await openDetails(tester, store, scale: 1.6, brightness: Brightness.dark);
+    await tester.drag(
+      find.byKey(const ValueKey('parking-spot-sheet')),
+      const Offset(0, -500),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('修改建議').hitTestable(),
+      180,
+      scrollable: find
+          .descendant(
+            of: find.byKey(const ValueKey('parking-spot-sheet')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('修改建議'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('停車點位置').hitTestable(),
+      180,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('停車點位置'));
+    await tester.pumpAndSettle();
+    captureForm(tester);
+    expect(find.byKey(const ValueKey('touch-marker')), findsOneWidget);
+    await reveal(tester, find.byKey(const ValueKey('suggestion-input')));
+    await tester.showKeyboard(find.byKey(const ValueKey('suggestion-input')));
+    tester.view.viewInsets = const FakeViewPadding(bottom: 260);
+    addTearDown(tester.view.resetViewInsets);
+    await tester.pumpAndSettle();
+    await reveal(tester, find.text('送出建議'));
+    expect(find.text('送出建議').hitTestable(), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });

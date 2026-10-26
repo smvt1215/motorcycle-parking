@@ -2,8 +2,12 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/address_search.dart';
 import '../core/town_lookup.dart';
+import '../data/repositories.dart';
 import '../domain/location_check.dart';
+import '../domain/map_viewport.dart';
+import '../models/parking.dart';
 import 'review/review_models.dart';
+import 'spots/spot_map.dart';
 import 'spots/spot_models.dart';
 
 class AdminAccess {
@@ -45,13 +49,15 @@ abstract class AdminGateway {
   Future<Map<String, ReviewSpot>> reviewSpots(Iterable<String> sourceIds);
 
   /// `admin_resolve_report`: applies [patch] and closes the report atomically.
-  /// It refuses a spot changed since the report unless [force] is set.
+  /// It refuses a spot changed since the report unless [force] is set, and a
+  /// rejection without [resolutionKind].
   Future<void> resolveReport(
     String id,
     String decision,
     Map<String, dynamic> patch,
     String note, {
     bool force = false,
+    ResolutionKind? resolutionKind,
   });
 
   /// Hidden community and official spots, most recently changed first.
@@ -108,7 +114,7 @@ abstract class AdminGateway {
   );
 
   /// Every `city_rules` row; the table is public.
-  Future<List<Map<String, dynamic>>> cityRules();
+  Future<List<Map<String, dynamic>>> cityRuleRows();
 
   /// `admin_upsert_city_rule`: publishes [values] as the next version of the
   /// rule opened at [baseVersion] (null for a new rule).
@@ -119,6 +125,18 @@ abstract class AdminGateway {
     int? baseVersion,
     String note,
   );
+
+  /// `admin_viewport_spots`: the spots of the chosen layers in [bounds].
+  Future<MapSpotPage> mapSpots(
+    MapViewport bounds, {
+    required bool community,
+    required bool official,
+    required bool hidden,
+  });
+
+  /// The rules the app judges markers by: the database's, else the bundled
+  /// copy.
+  Future<List<CityRule>> cityRules();
 }
 
 /// Community columns readable by clients; `user_id` is never granted.
@@ -126,13 +144,13 @@ const _communityColumns =
     'id,source,source_name,source_url,license_note,name,lat,lng,city,district,space_type,fee_note,note,'
     'scooter_total,scooter_allowed,heavy_allowed,status,updated_at,last_confirmed_at,created_at,'
     'facility_type,parking_access,address,road_segment,entrance_note,parking_guide,special_rules,'
-    'scooter_verified_at,heavy_verified_at';
+    'scooter_verified_at,heavy_verified_at,fee';
 
 /// Every column the review page shows or edits; a conflict refresh must
 /// show the admin each current value before a forced write.
 const _spotColumns =
     'id,name,lat,lng,city,district,space_type,fee_note,note,scooter_allowed,heavy_allowed,source_name,updated_at,'
-    'facility_type,parking_access,entrance_note,parking_guide';
+    'facility_type,parking_access,entrance_note,parking_guide,fee';
 final _uuid = RegExp(
   r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
   caseSensitive: false,
@@ -220,7 +238,9 @@ class SupabaseAdminGateway implements AdminGateway {
   Future<List<ReviewReport>> pendingReports() async {
     final rows = await client
         .from('moderation_queue')
-        .select('id,source_id,reason,field,proposed,note,created_at,base_spot')
+        .select(
+          'id,source_id,reason,field,proposed,note,created_at,base_spot,risk',
+        )
         .eq('status', 'pending')
         .order('created_at')
         .limit(200);
@@ -274,6 +294,7 @@ class SupabaseAdminGateway implements AdminGateway {
     Map<String, dynamic> patch,
     String note, {
     bool force = false,
+    ResolutionKind? resolutionKind,
   }) => client.rpc(
     'admin_resolve_report',
     params: {
@@ -282,6 +303,7 @@ class SupabaseAdminGateway implements AdminGateway {
       'p_patch': patch,
       'p_note': note,
       'p_force': force,
+      'p_resolution_kind': resolutionKind?.name,
     },
   );
 
@@ -448,7 +470,7 @@ class SupabaseAdminGateway implements AdminGateway {
   }) => geocodeSearch(client.functions, query, lat: lat, lng: lng);
 
   @override
-  Future<List<Map<String, dynamic>>> cityRules() =>
+  Future<List<Map<String, dynamic>>> cityRuleRows() =>
       client.from('city_rules').select().order('city').order('vehicle');
 
   @override
@@ -468,4 +490,33 @@ class SupabaseAdminGateway implements AdminGateway {
       'p_note': note,
     },
   );
+
+  @override
+  Future<MapSpotPage> mapSpots(
+    MapViewport bounds, {
+    required bool community,
+    required bool official,
+    required bool hidden,
+  }) async {
+    final rows = await client.rpc<List<dynamic>>(
+      'admin_viewport_spots',
+      params: {
+        ...bounds.toJson(),
+        'p_community': community,
+        'p_official': official,
+        'p_hidden': hidden,
+      },
+    );
+    return MapSpotPage.fromRows(rows);
+  }
+
+  @override
+  Future<List<CityRule>> cityRules() async {
+    try {
+      return await RulesRepository(client).load();
+    } catch (_) {
+      // Markers still follow the rules the app ships with.
+      return RulesRepository(null).load();
+    }
+  }
 }

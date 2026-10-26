@@ -1,0 +1,143 @@
+{
+  "version": 1,
+  "placeholders": [
+    "測試",
+    "測試用",
+    "測試測試",
+    "test",
+    "testing",
+    "asdf",
+    "asdfg",
+    "asdfgh",
+    "qwer",
+    "qwerty",
+    "abc",
+    "aaa",
+    "xxx",
+    "ooo",
+    "123",
+    "1234",
+    "12345",
+    "不知道",
+    "不清楚",
+    "不確定",
+    "未知",
+    "無",
+    "沒有",
+    "停車場",
+    "停車格",
+    "停車位"
+  ],
+  "rules": {
+    "lot_roadside": {
+      "action": "fix",
+      "message": "路外停車場不能選「路邊」場站型式。請改選立體、地下或平面；不確定就選未確認。"
+    },
+    "street_lot_details": {
+      "action": "fix",
+      "message": "場站型式和分區只用在路外停車場。請把格位類型改成路外停車場，或清除場站型式與分區。"
+    },
+    "heavy_only_scooter": {
+      "action": "fix",
+      "message": "大型重機專用格不能停普通機車。普通機車請改選不可停或未確認，或把格位類型改成地面畫的那一種。"
+    },
+    "access_no_motorcycle": {
+      "action": "fix",
+      "message": "停放分類是「機車不可停」，{vehicle}就不能選可停。請改停放分類，或把{vehicle}改成不可停或未確認。"
+    },
+    "access_heavy_only_scooter": {
+      "action": "fix",
+      "message": "停放分類是「大型重機專用」，普通機車就不能選可停。請改停放分類，或把普通機車改成不可停或未確認。"
+    },
+    "access_scooter_only_heavy": {
+      "action": "fix",
+      "message": "停放分類是「普通機車專用」，大型重機就不能選可停。請改停放分類，或把大型重機改成不可停或未確認。"
+    },
+    "zones_no_motorcycle": {
+      "action": "fix",
+      "message": "每個分區都標成「機車不可停」，{vehicle}就不能選可停。請改分區的停放分類，或把{vehicle}改成不可停或未確認。"
+    },
+    "fee_follows_missing_scooter": {
+      "action": "fix",
+      "message": "{where}大型重機選了「比照機車費率」，但普通機車的收費方式是未確認。請填普通機車的費率，或改選大型重機的收費方式。"
+    },
+    "fee_cap_below_amount": {
+      "action": "fix",
+      "message": "{where}{vehicle}的當日上限 {cap} 元比計時金額 {amount} 元還低。請照收費牌重填；沒有上限就留空。"
+    },
+    "fee_hourly_zero": {
+      "action": "fix",
+      "message": "{where}{vehicle}的計時金額是 0 元。不收費請改選「免費」。"
+    },
+    "gone_with_changes": {
+      "action": "fix",
+      "message": "回報「這裡已經不能停車」時不能同時修改其他資料。請只送出這筆回報，其他修改另外提出建議。"
+    },
+    "placeholder_name": {
+      "action": "fix",
+      "message": "「{value}」看不出是哪個停車點。請填現場看得到的名稱，例如「信義路五段收費機車格」。"
+    },
+    "placeholder_text": {
+      "action": "fix",
+      "message": "「{value}」看不出現場狀況。請寫你看到的內容，例如「格線已塗銷，改成人行道」。"
+    },
+    "pii_email": {
+      "action": "reject",
+      "message": "內容含有 Email。為保護個人資料，請刪除 Email 再送出。",
+      "patterns": [
+        {
+          "source": "[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}",
+          "flags": ""
+        }
+      ]
+    },
+    "pii_phone": {
+      "action": "reject",
+      "message": "內容含有電話號碼。為保護個人資料，請刪除電話號碼再送出。",
+      "patterns": [
+        {
+          "source": "(?<![0-9])(?:\\+?886[- ]?|0)9[0-9]{2}[- ]?[0-9]{3}[- ]?[0-9]{3}(?![0-9])",
+          "flags": ""
+        },
+        {
+          "source": "(?<![0-9])(?:\\(0[2-8][0-9]?\\)[- ]?|0[2-8][0-9]?-)[0-9]{3,4}-?[0-9]{4}(?![0-9])",
+          "flags": ""
+        }
+      ]
+    },
+    "pii_national_id": {
+      "action": "reject",
+      "message": "內容含有身分證或居留證號碼。為保護個人資料，請刪除號碼再送出。",
+      "patterns": [
+        {
+          "source": "(?<![A-Za-z0-9])[A-Za-z][1289][0-9]{8}(?![A-Za-z0-9])",
+          "flags": ""
+        }
+      ]
+    },
+    "pii_plate": {
+      "action": "reject",
+      "message": "內容含有車牌號碼。為保護個人資料，請刪除車牌再送出。",
+      "patterns": [
+        {
+          "source": "(?<![A-Za-z0-9-])(?:[A-Z]{3}-[0-9]{3,4}|[A-Z]{2}-[0-9]{4}|[0-9]{3}-[A-Z]{3}|[0-9]{4}-[A-Z]{2})(?![A-Za-z0-9-])",
+          "flags": ""
+        }
+      ]
+    },
+    "ad_url": {
+      "action": "reject",
+      "message": "內容含有網址。請刪除網址，把需要的資訊直接寫成文字。",
+      "patterns": [
+        {
+          "source": "(?:https?://|www\\.)[^\\s]+",
+          "flags": "i"
+        },
+        {
+          "source": "(?<![A-Za-z0-9@.-])[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)*\\.(?:com|net|org|tw|io|me|cc|app|info|biz|xyz|link|ly|gl)(?![A-Za-z0-9])",
+          "flags": "i"
+        }
+      ]
+    }
+  }
+}

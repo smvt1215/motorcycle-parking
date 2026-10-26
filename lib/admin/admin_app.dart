@@ -16,6 +16,7 @@ import 'review/review_page.dart';
 import '../ui/location_picker.dart';
 import 'rules/rules_controller.dart';
 import 'rules/rules_page.dart';
+import 'spots/spot_map.dart';
 import 'spots/spot_models.dart';
 import 'spots/spots_controller.dart';
 import 'spots/spots_page.dart';
@@ -66,6 +67,7 @@ class AdminApp extends StatefulWidget {
     this.themeMode = ThemeMode.system,
     this.reviewMapBuilder = googleReviewMap,
     this.locationMapBuilder,
+    this.spotMapBuilder = googleSpotMap,
     this.review,
     this.bundledRules,
   });
@@ -76,6 +78,9 @@ class AdminApp extends StatefulWidget {
 
   /// Tests replace the location picker's Google map.
   final LocationMapBuilder? locationMapBuilder;
+
+  /// Tests replace the spots page's Google map.
+  final SpotMapBuilder spotMapBuilder;
 
   /// Injected by tests; otherwise created over the controller's gateway.
   final ReviewController? review;
@@ -101,6 +106,9 @@ class _AdminAppState extends State<AdminApp> {
     widget.controller.gateway,
     bundled: widget.bundledRules ?? bundledRules,
   );
+  late final SpotMapController _spotMap = SpotMapController(
+    widget.controller.gateway,
+  );
   String? _reviewUser;
 
   @override
@@ -122,6 +130,7 @@ class _AdminAppState extends State<AdminApp> {
       _review.reset();
       _spots.reset();
       _rules.reset();
+      _spotMap.reset();
     }
   }
 
@@ -181,12 +190,19 @@ class _AdminAppState extends State<AdminApp> {
           for (final path in ['/spots', '/spots/:id'])
             GoRoute(
               path: path,
-              builder: (context, state) => SpotsPage(
-                spots: _spots,
-                selectedId: state.pathParameters['id'],
-                newKind: SpotKind.values
-                    .asNameMap()[state.uri.queryParameters['kind']],
-                locationMapBuilder: widget.locationMapBuilder,
+              // One page for the list and every spot: the map keeps its
+              // camera and loaded spots while forms open and close.
+              pageBuilder: (context, state) => MaterialPage(
+                key: const ValueKey('spots'),
+                child: SpotsPage(
+                  spots: _spots,
+                  map: _spotMap,
+                  selectedId: state.pathParameters['id'],
+                  newKind: SpotKind.values
+                      .asNameMap()[state.uri.queryParameters['kind']],
+                  locationMapBuilder: widget.locationMapBuilder,
+                  spotMapBuilder: widget.spotMapBuilder,
+                ),
               ),
             ),
           for (final path in ['/rules', '/rules/:city/:vehicle'])
@@ -243,6 +259,7 @@ class _AdminAppState extends State<AdminApp> {
     if (widget.review == null) _review.dispose();
     _spots.dispose();
     _rules.dispose();
+    _spotMap.dispose();
     _router.dispose();
     super.dispose();
   }

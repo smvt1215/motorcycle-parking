@@ -19,6 +19,7 @@ const suggestionFields = [
   'eligibility',
   'note',
   'guide',
+  'location',
   'gone',
   '停車點名稱',
   '格位類型',
@@ -124,6 +125,7 @@ const proposedChecks: Record<string, (v: unknown) => boolean> = {
   // Riders ask to take a spot down; restoring one is an admin decision.
   hidden: (v) => v === true,
 };
+const locationKeys = ['lat', 'lng', 'city', 'district'];
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export function validate(body: Record<string, unknown>): string | null {
@@ -184,6 +186,17 @@ export function validate(body: Record<string, unknown>): string | null {
       ('lng' in p &&
         (typeof p.lng !== 'number' || p.lng < 118 || p.lng > 123))
     ) return 'invalid coordinates';
+    // The county and district only travel with the position they describe.
+    if (('city' in p || 'district' in p) && !('lat' in p && 'lng' in p)) {
+      return 'invalid proposed';
+    }
+    // A location suggestion is a position: both coordinates, plus the county
+    // and district the app looked up, and nothing else.
+    if (
+      body.field === 'location' &&
+      (!('lat' in p) || !('lng' in p) ||
+        Object.keys(p).some((k) => !locationKeys.includes(k)))
+    ) return 'invalid proposed';
   }
   if (
     body.note !== undefined &&

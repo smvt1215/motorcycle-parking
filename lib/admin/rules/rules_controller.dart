@@ -124,7 +124,7 @@ class RulesController extends ChangeNotifier {
     loadError = null;
     _notify();
     try {
-      final remote = await gateway!.cityRules();
+      final remote = await gateway!.cityRuleRows();
       if (generation != _generation) return;
       rows = {
         for (final r in remote)

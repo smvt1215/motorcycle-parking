@@ -73,7 +73,7 @@ class ParkingPage extends ConsumerWidget {
               overflow: TextOverflow.ellipsis,
             ),
             subtitle: Text(
-              '${spot.city}${spot.district} · ${store.eligible(spot).label}',
+              '${spot.city}${spot.district} · ${store.eligibleLabel(spot)}',
             ),
             trailing: IconButton(
               tooltip: '取消收藏',

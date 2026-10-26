@@ -137,8 +137,23 @@ void main() {
       final store = await mountAuthApp(tester);
       showReport(appContext(tester), store, authSpot.lat, authSpot.lng);
       await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextFormField).first, '尚未送出的停車點');
-      await tester.ensureVisible(find.text('使用 Google 登入'));
+      // The location section (map, search, GPS) comes first; the name field
+      // may be below the list's build range.
+      final form = find
+          .descendant(
+            of: find.byType(ReportForm),
+            matching: find.byType(Scrollable),
+          )
+          .first;
+      final name = find.widgetWithText(TextFormField, '停車點名稱');
+      await tester.scrollUntilVisible(name, 300, scrollable: form);
+      await tester.enterText(name, '尚未送出的停車點');
+      // The sign-in prompt sits just above the name field.
+      await tester.scrollUntilVisible(
+        find.text('使用 Google 登入'),
+        -100,
+        scrollable: form,
+      );
       await tester.tap(find.text('使用 Google 登入'));
       await tester.pumpAndSettle();
       expect(find.text('帳號與設定'), findsNothing);

@@ -3,10 +3,13 @@ import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:motorcycle_parking/admin/admin_gateway.dart';
 import 'package:motorcycle_parking/admin/review/review_models.dart';
+import 'package:motorcycle_parking/admin/spots/spot_map.dart';
 import 'package:motorcycle_parking/admin/spots/spot_models.dart';
 import 'package:motorcycle_parking/core/address_search.dart';
 import 'package:motorcycle_parking/core/town_lookup.dart';
 import 'package:motorcycle_parking/domain/location_check.dart';
+import 'package:motorcycle_parking/domain/map_viewport.dart';
+import 'package:motorcycle_parking/models/parking.dart';
 
 Factor factor(
   String id, {
@@ -36,6 +39,7 @@ List<ReviewReport> sampleReports() => [
     note: '地面有「大型重機」字樣',
     createdAt: reportTime,
     baseSpot: const {'space_type': 'freeMotorcycle'},
+    risk: ReviewRisk.medium,
   ),
   ReviewReport(
     id: 'r-access',
@@ -44,12 +48,14 @@ List<ReviewReport> sampleReports() => [
     field: 'eligibility',
     proposed: {'heavy_allowed': false},
     createdAt: reportTime.add(const Duration(hours: 1)),
+    risk: ReviewRisk.high,
   ),
   ReviewReport(
     id: 'r-gone',
     sourceId: communityId,
     reason: autoHiddenReason,
     createdAt: reportTime.add(const Duration(hours: 2)),
+    risk: ReviewRisk.medium,
   ),
   ReviewReport(
     id: 'r-legacy',
@@ -141,6 +147,7 @@ class FakeAdminGateway implements AdminGateway {
   /// Report ids whose spot changed after they were sent.
   final Set<String> changedSpots = {};
   final List<bool> forced = [];
+  final List<ResolutionKind?> kinds = [];
   Completer<List<Factor>>? delayedFactors;
   final List<String> verifiedWith = [];
   final List<String> cancelled = [];
@@ -251,13 +258,25 @@ class FakeAdminGateway implements AdminGateway {
     Map<String, dynamic> patch,
     String note, {
     bool force = false,
+    ResolutionKind? resolutionKind,
   }) async {
     await delayedResolve?.future;
     if (resolveError != null) throw resolveError!;
     if (changedSpots.contains(id) && patch.isNotEmpty && !force) {
       throw const PostgrestException(message: 'spot changed since the report');
     }
+    if (decision == 'rejected' && resolutionKind == null) {
+      throw const PostgrestException(
+        message: 'a rejection needs a resolution kind',
+      );
+    }
+    if (resolutionKind == ResolutionKind.other && note.trim().isEmpty) {
+      throw const PostgrestException(
+        message: 'resolution kind other needs a note',
+      );
+    }
     forced.add(force);
+    kinds.add(resolutionKind);
     resolved.add((id, decision, patch, note));
     reports = reports.where((r) => r.id != id).toList();
     count--;
@@ -490,6 +509,34 @@ class FakeAdminGateway implements AdminGateway {
     return addressResults;
   }
 
+  /// Rows `admin_viewport_spots` returns, before the layer filter.
+  List<Map<String, dynamic>> mapRows = sampleMapRows();
+  final List<(MapViewport, bool, bool, bool)> mapRequests = [];
+  bool failMap = false;
+
+  @override
+  Future<MapSpotPage> mapSpots(
+    MapViewport bounds, {
+    required bool community,
+    required bool official,
+    required bool hidden,
+  }) async {
+    mapRequests.add((bounds, community, official, hidden));
+    if (failMap) throw StateError('offline');
+    return MapSpotPage.fromRows([
+      for (final row in mapRows)
+        if (row['hidden'] == true
+            ? hidden
+            : row['source'] == 'official'
+            ? official
+            : community)
+          row,
+    ]);
+  }
+
+  @override
+  Future<List<CityRule>> cityRules() async => const [];
+
   Future<void> dispose() => events.close();
 
   /// `city_rules` rows, keyed `city:vehicle`.
@@ -501,7 +548,7 @@ class FakeAdminGateway implements AdminGateway {
   bool failRules = false;
 
   @override
-  Future<List<Map<String, dynamic>>> cityRules() async {
+  Future<List<Map<String, dynamic>>> cityRuleRows() async {
     if (failRules) throw StateError('offline');
     return [
       for (final r in ruleRows.values) {...r},
@@ -570,5 +617,42 @@ List<Map<String, dynamic>> sampleRules() => [
     'source_url': 'https://www.traffic.ntpc.gov.tw/notice',
     'restriction': null,
     'version': 2,
+  },
+];
+
+List<Map<String, dynamic>> sampleMapRows() => [
+  {
+    'id': communityId,
+    'source': 'community',
+    'name': '中山北路二段路邊機車格',
+    'lat': 25.0581,
+    'lng': 121.5226,
+    'city': '臺北市',
+    'space_type': 'paidMotorcycle',
+    'status': 'pending',
+    'hidden': false,
+  },
+  {
+    'id': officialId,
+    'source': 'official',
+    'name': '新北市政府行政大樓地下停車場',
+    'lat': 25.0124,
+    'lng': 121.4651,
+    'city': '新北市',
+    'space_type': 'offStreet',
+    'status': 'confirmed',
+    'heavy_allowed': true,
+    'hidden': false,
+  },
+  {
+    'id': '33333333-3333-4333-8333-333333333333',
+    'source': 'community',
+    'name': '三重正義北路機車格',
+    'lat': 25.06,
+    'lng': 121.49,
+    'city': '新北市',
+    'space_type': 'freeMotorcycle',
+    'status': 'hidden',
+    'hidden': true,
   },
 ];
