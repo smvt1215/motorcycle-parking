@@ -374,7 +374,16 @@ String? validatePatch(Map<String, dynamic> patch, ReviewSpot spot) {
         final text = value is String ? value.trim() : '';
         if (key == 'name' && text.isEmpty) return '停車點名稱不可空白';
         if (key == 'city' && text.isEmpty) return '縣市不可空白';
-        if (value is! String || value.length > field.maxLength!) {
+        // A fee's own sentence may run past 200 (design §2.5); the check
+        // below holds it to the fee.
+        final fee = key == 'fee_note'
+            ? reviewFee(
+                patch.containsKey('fee') ? patch['fee'] : spot.values['fee'],
+              )
+            : null;
+        if (value is! String ||
+            (value.length > field.maxLength! &&
+                !(key == 'fee_note' && feeNoteFits(value, fee)))) {
           return '${field.label}請在 ${field.maxLength} 個字以內';
         }
       case FieldInput.spaceType:

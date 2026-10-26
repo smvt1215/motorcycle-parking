@@ -133,6 +133,18 @@ class _SpotsPageState extends State<SpotsPage> {
     _focusAt(lat.toDouble(), lng.toDouble(), zoom: fromMarker ? null : 18);
   }
 
+  /// The list came or went beside an open form: the panels over the map
+  /// changed, so the camera pans the open spot clear of them again, keeping
+  /// the zoom.
+  void _refocus() {
+    if (widget.selectedId == null) return;
+    final r = spots.record;
+    final lat = spots.draft['lat'] ?? r?.values['lat'];
+    final lng = spots.draft['lng'] ?? r?.values['lng'];
+    if (r == null || lat is! num || lng is! num) return;
+    _focusAt(lat.toDouble(), lng.toDouble());
+  }
+
   /// Centres the big map on a point beside the open form and list.
   void _focusAt(double lat, double lng, {double? zoom}) {
     final compact = _width < reviewCompactWidth;
@@ -538,13 +550,16 @@ class _SpotsPageState extends State<SpotsPage> {
                         open: showList,
                         // A narrow map between the panels keeps the icon only.
                         iconOnly: width - left - right < 520,
-                        onPressed: () => setState(() {
-                          if (width >= _wideWidth || !open) {
-                            _listOpen = !showList;
-                          } else {
-                            _listBesideForm = !showList;
-                          }
-                        }),
+                        onPressed: () {
+                          setState(() {
+                            if (width >= _wideWidth || !open) {
+                              _listOpen = !showList;
+                            } else {
+                              _listBesideForm = !showList;
+                            }
+                          });
+                          _refocus();
+                        },
                       ),
                     ),
                     // Both panels open on a narrow window leave no room.
@@ -1471,7 +1486,10 @@ class _FieldRow extends StatelessWidget {
       case SpotInput.text || SpotInput.multiline:
         input = TextFormField(
           initialValue: value as String? ?? '',
-          maxLength: field.maxLength,
+          // A fee's own sentence may already run past 200 (design §2.5).
+          maxLength: (value as String? ?? '').length > (field.maxLength ?? 0)
+              ? null
+              : field.maxLength,
           minLines: 1,
           maxLines: field.input == SpotInput.multiline ? 4 : 1,
           decoration: decoration,

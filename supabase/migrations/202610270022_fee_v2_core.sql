@@ -394,6 +394,156 @@ $$;
 
 -- ===== 匯入 =====
 
+-- A fee_source_text describes the fee it was read into. A write that
+-- changes the fee without saying what it was read from (an administrator's
+-- edit, an accepted report) leaves it describing nothing, so it is
+-- cleared; imports and fee conversion write it with the fee.
+create function public.spot_fee_source_text() returns trigger
+language plpgsql set search_path='' as $$
+begin
+  if new.fee is distinct from old.fee and new.fee_source_text is not distinct from old.fee_source_text
+     and coalesce(current_setting('app.import_write',true),'')<>'on' then
+    new.fee_source_text:='';
+  end if;
+  return new;
+end;
+$$;
+create trigger community_spots_fee_source_text before update on public.community_spots
+  for each row execute function public.spot_fee_source_text();
+create trigger official_heavy_spots_fee_source_text before update on public.official_heavy_spots
+  for each row execute function public.spot_fee_source_text();
+
+-- The fee_note and fee_source_text of spot values p_row (fee and
+-- fee_note) as imports write them: beside a fee, a note that is not the
+-- fee's sentence is its source text and the sentence becomes the note;
+-- otherwise the note stays and there is no source text.
+create function public.fee_source_split(p_row jsonb) returns jsonb
+language sql immutable set search_path='' as $$
+  select case when jsonb_typeof(p_row->'fee')='object' and p_row->'fee'<>'{}'::jsonb
+      and (p_row->>'fee_note') is distinct from public.fee_note_of(p_row->'fee')
+    then jsonb_build_object('fee_note',public.fee_note_of(p_row->'fee'),'fee_source_text',coalesce(p_row->>'fee_note',''))
+    else jsonb_build_object('fee_note',coalesce(p_row->>'fee_note','請依現場公告'),'fee_source_text','') end;
+$$;
+revoke execute on function public.fee_source_split(jsonb) from public,anon,authenticated;
+
+-- 202610260250_admin_import.sql's admin_import_apply: a file's fee note
+-- beside a fee is kept as fee_source_text and fee_note becomes the fee's
+-- sentence, for new and updated spots alike. Same signature, so its grants
+-- stay.
+create or replace function public.admin_import_apply(p_spots jsonb,p_choices jsonb,p_effective_date date,p_note text default '')
+returns jsonb language plpgsql security definer set search_path=public,extensions,pg_temp as $$
+declare
+  v_note text:=coalesce(p_note,'');
+  v_plan record; v_choice jsonb; v_overwrite text[]; v_patch jsonb; v_kept text[];
+  v_before jsonb; v_after jsonb; v_owner uuid;
+  v_inserted integer:=0; v_updated integer:=0; v_skipped jsonb:='[]';
+begin
+  if not public.is_admin() then
+    raise exception 'admin with a second factor required' using errcode='42501';
+  end if;
+  if jsonb_typeof(p_spots) is distinct from 'array' or jsonb_array_length(p_spots)>500
+     or jsonb_typeof(p_choices) is distinct from 'object' or char_length(v_note)>500 then
+    raise exception 'invalid import' using errcode='22023';
+  end if;
+  -- New community spots join the earlier imports' owner, so they read as
+  -- imported rather than as the administrator's own reports.
+  select c.user_id into v_owner from community_spots c where c.source='import'
+    group by c.user_id order by count(*) desc limit 1;
+  v_owner:=coalesce(v_owner,auth.uid());
+  -- The verification trigger must not take an import for an administrator
+  -- checking vehicle access on site.
+  perform set_config('app.import_write','on',true);
+  -- Lock what the file touches before planning, so the plan stays true.
+  perform 1 from official_heavy_spots o where o.id in (
+    select substr(e->>'id',10)::uuid from jsonb_array_elements(p_spots) e
+    where e->>'id' ~* '^official:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$') for update;
+
+  for v_plan in select * from public.admin_import_plan(p_spots) p where p_choices ? p.source_id loop
+    v_choice:=p_choices->v_plan.source_id;
+    if v_plan.status in ('invalid','unchanged','existing') then
+      v_skipped:=v_skipped||jsonb_build_object('source_id',v_plan.source_id,'reason',
+        case v_plan.status when 'invalid' then v_plan.reason when 'unchanged' then '沒有變更' else v_plan.reason end);
+      continue;
+    end if;
+    -- The preview showed this version; anything else was written since.
+    if (case when v_plan.status='new' then v_choice->>'base_updated_at' is not null
+         else v_choice->>'base_updated_at' is null
+           or (v_choice->>'base_updated_at')::timestamptz is distinct from v_plan.base_updated_at end) then
+      v_skipped:=v_skipped||jsonb_build_object('source_id',v_plan.source_id,'reason','試算後點位已變更，請重新試算');
+      continue;
+    end if;
+    begin
+      if v_plan.status='new' then
+        if v_plan.kind='official' then
+          if p_effective_date is null then raise exception '新增官方點需要生效日期'; end if;
+          insert into official_heavy_spots(id,name,lat,lng,city,district,space_type,fee_note,note,heavy_allowed,scooter_allowed,
+              source_url,source_name,source_id,license_note,scooter_total,facility_type,parking_access,address,road_segment,
+              entrance_note,parking_guide,special_rules,parking_zones,fee,effective_date,fee_source_text)
+            select v_plan.target,r.name,r.lat,r.lng,r.city,r.district,coalesce(r.space_type,'heavyOnly'),r.fee_note,r.note,r.heavy_allowed,
+              r.scooter_allowed,r.source_url,r.source_name,r.source_id,r.license_note,r.scooter_total,r.facility_type,r.parking_access,
+              r.address,r.road_segment,r.entrance_note,r.parking_guide,r.special_rules,r.parking_zones,r.fee,p_effective_date,
+              r.fee_source_text
+            from jsonb_populate_record(null::official_heavy_spots,v_plan.incoming||public.fee_source_split(v_plan.incoming)) r
+            returning to_jsonb(official_heavy_spots.*) into v_after;
+        else
+          insert into community_spots(id,user_id,source,status,name,lat,lng,city,district,space_type,fee_note,note,heavy_allowed,
+              scooter_allowed,source_url,source_name,license_note,scooter_total,facility_type,parking_access,address,road_segment,
+              entrance_note,parking_guide,special_rules,parking_zones,fee,fee_source_text)
+            select v_plan.target,v_owner,'import','pending',r.name,r.lat,r.lng,r.city,r.district,r.space_type,r.fee_note,r.note,
+              r.heavy_allowed,r.scooter_allowed,r.source_url,r.source_name,r.license_note,r.scooter_total,r.facility_type,
+              r.parking_access,r.address,r.road_segment,r.entrance_note,r.parking_guide,r.special_rules,r.parking_zones,r.fee,
+              r.fee_source_text
+            from jsonb_populate_record(null::community_spots,v_plan.incoming||public.fee_source_split(v_plan.incoming)) r
+            returning to_jsonb(community_spots.*)-'location'-'user_id' into v_after;
+        end if;
+        v_inserted:=v_inserted+1;
+        insert into admin_audit_log(actor,action,target_table,target_id,before,after,note)
+        values(auth.uid(),'import_spot',case when v_plan.kind='official' then 'official_heavy_spots' else 'community_spots' end,
+          v_plan.target::text,null,v_after,v_note);
+      else
+        v_overwrite:=array(select jsonb_array_elements_text(coalesce(v_choice->'overwrite','[]')));
+        -- The fee and its text go together, whichever one was named.
+        if v_overwrite && array['fee','fee_note'] then
+          v_overwrite:=v_overwrite||array['fee','fee_note'];
+        end if;
+        select coalesce(jsonb_object_agg(c->>'field',c->'incoming'),'{}'),
+               '{}'::text[]
+          into v_patch,v_kept
+          from jsonb_array_elements(v_plan.changes) c
+          where jsonb_typeof(c->'admin') is distinct from 'object' or (c->>'field')=any(v_overwrite);
+        v_kept:=array(select c->>'field' from jsonb_array_elements(v_plan.changes) c
+          where jsonb_typeof(c->'admin')='object' and not (c->>'field')=any(v_overwrite));
+        if v_patch='{}'::jsonb then
+          v_skipped:=v_skipped||jsonb_build_object('source_id',v_plan.source_id,'reason','保留管理員的修改，沒有其他變更');
+          continue;
+        end if;
+        select to_jsonb(o) into v_before from official_heavy_spots o where o.id=v_plan.target;
+        -- The file's note is the source text of the fee it brings.
+        if v_patch ? 'fee' or v_patch ? 'fee_note' then
+          v_patch:=v_patch||public.fee_source_split(v_before||v_patch);
+        end if;
+        update official_heavy_spots o set (name,lat,lng,city,district,space_type,fee_note,note,heavy_allowed,scooter_allowed,
+            source_url,source_name,source_id,license_note,scooter_total,facility_type,parking_access,address,road_segment,
+            entrance_note,parking_guide,special_rules,parking_zones,fee,fee_source_text,updated_at)
+          =(select r.name,r.lat,r.lng,r.city,r.district,r.space_type,r.fee_note,r.note,r.heavy_allowed,r.scooter_allowed,
+            r.source_url,r.source_name,r.source_id,r.license_note,r.scooter_total,r.facility_type,r.parking_access,r.address,
+            r.road_segment,r.entrance_note,r.parking_guide,r.special_rules,r.parking_zones,r.fee,r.fee_source_text,now()
+            from jsonb_populate_record(o,v_patch) r)
+          where o.id=v_plan.target returning to_jsonb(o) into v_after;
+        v_updated:=v_updated+1;
+        insert into admin_audit_log(actor,action,target_table,target_id,before,after,note)
+        values(auth.uid(),'import_spot','official_heavy_spots',v_plan.target::text,v_before,
+          v_after||jsonb_build_object('import',jsonb_build_object('kept',to_jsonb(v_kept),
+            'overwritten',(select coalesce(jsonb_agg(f),'[]') from unnest(v_overwrite) f where v_patch ? f))),v_note);
+      end if;
+    exception when others then
+      v_skipped:=v_skipped||jsonb_build_object('source_id',v_plan.source_id,'reason','資料表拒絕：'||sqlerrm);
+    end;
+  end loop;
+  return jsonb_build_object('inserted',v_inserted,'updated',v_updated,'skipped',v_skipped);
+end;
+$$;
+
 -- 202610260250_admin_import.sql's admin_import_plan: a file note that is a
 -- spot's fee_source_text now reads as the note its fee replaced, so the
 -- next import of the same file shows no change for the rows rewritten
@@ -467,7 +617,9 @@ begin
     end if;
     -- A note that is the stored fee's source text, beside no fee or the
     -- stored fee, describes the same fee: the stored fee and its sentence
-    -- stay (202610270022 moved such notes to fee_source_text).
+    -- stay (202610270022 moved such notes to fee_source_text). The source
+    -- text always describes the stored fee: spot_fee_source_text() clears
+    -- it whenever the fee changes without one.
     if v_current->>'fee_source_text'<>'' and incoming->>'fee_note'=v_current->>'fee_source_text'
        and (incoming->'fee'='null'::jsonb or incoming->'fee'=v_current->'fee') then
       incoming:=jsonb_set(jsonb_set(incoming,'{fee}',v_current->'fee'),'{fee_note}',v_current->'fee_note');

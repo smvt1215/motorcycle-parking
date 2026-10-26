@@ -324,15 +324,19 @@ final spotFields = <SpotField>[
 
 SpotField spotField(String key) => spotFields.firstWhere((f) => f.key == key);
 
-/// Mirrors the table checks so a bad value never reaches the RPC.
-String? validateSpotField(SpotField field, Object? value) {
+/// Mirrors the table checks so a bad value never reaches the RPC. [fee] is
+/// the fee in the form: fee_note may run past 200 when it is that fee's
+/// sentence.
+String? validateSpotField(SpotField field, Object? value, {Fee? fee}) {
   final text = value is String ? value.trim() : null;
   final empty = value == null || (text != null && text.isEmpty);
   if (empty) return field.required ? '請填寫${field.label}' : null;
   switch (field.input) {
     case SpotInput.text || SpotInput.multiline:
       if (value is! String) return '${field.label}格式不正確';
-      if (field.maxLength != null && value.length > field.maxLength!) {
+      if (field.maxLength != null &&
+          value.length > field.maxLength! &&
+          !(field.key == 'fee_note' && feeNoteFits(value, fee))) {
         return '${field.label}請在 ${field.maxLength} 個字以內';
       }
       if (field.key == 'source_url' && !value.startsWith('https://')) {

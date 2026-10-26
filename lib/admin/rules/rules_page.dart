@@ -55,13 +55,31 @@ class _RulesPageState extends State<RulesPage> {
     }
   }
 
-  void _follow() {
+  /// Brings the controller in line with the route. The draft outlives the
+  /// page (other tabs, the top "規則" tab), so unpublished edits are confirmed
+  /// here; declining returns to the rule being edited.
+  Future<void> _follow() async {
     if (!mounted) return;
-    if (_hasSelection) {
-      if (rules.selected != (widget.city!, widget.vehicle!)) note.clear();
-      rules.select(widget.city!, widget.vehicle!);
-    } else if (rules.selected != null) {
+    final target = _hasSelection ? (widget.city!, widget.vehicle!) : null;
+    final current = rules.selected;
+    if (target == current) {
+      if (target != null) rules.select(target.$1, target.$2);
+      return;
+    }
+    if (rules.dirty) {
+      if (!await _mayLeave()) {
+        if (mounted && current != null) {
+          context.go('/rules/${current.$1}/${current.$2.name}');
+        }
+        return;
+      }
+      if (!mounted) return;
+    }
+    if (target == null) {
       rules.close();
+    } else {
+      note.clear();
+      rules.select(target.$1, target.$2);
     }
   }
 
