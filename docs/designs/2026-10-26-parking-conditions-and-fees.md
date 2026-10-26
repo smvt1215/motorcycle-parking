@@ -201,6 +201,7 @@ c    = "each_period" | "entry_only"           計次跨時段怎麼計，缺＝�
 | `by_time.periods` | 時段差別費率，最多 6 段（§2.5）；內層 `rate` 不可再是 `by_time` 或比照 | | 沒有涵蓋的時間＝未確認 |
 
 - `car` 不可用 `same_as_*`；`scooter` 也不可（既有規則）。
+- **跨午夜的時段屬於開始那天**（使用者 2026-10-27，決定 47）：`days` 判斷的是時段開始那天的星期，例如平日 20:00–08:00 涵蓋週五 20:00 到週六 08:00，週一 00:00–08:00 則屬於週日晚上的時段。詳情摘要列選出目前時段、預告下一段（跟隨實際換費率的時刻，#155 第 18 項）、公告牌分組與「其他時間」、編輯器列出的未涵蓋時間、`PriceAnswer` 的缺口都用同一套涵蓋計算（`lib/models/fee.dart` 的 `feePeriodSpans`）；時段重疊時，摘要列取最晚開始的那一段。`fee_note_of()` 的句子照時段原樣寫「平日：20:00–隔日 08:00」，不受影響。
 - 時段費率不寫 `holiday` 以外的節日。本輪不依目前時間選用時段費率，只逐段顯示（§7 第 4 項，已決定）。
 - 資料表 `valid_fee()` 的大小上限由 1024 bytes 提高到 8192 bytes，以容納 `by_time`。上限刻意大於契約允許的最大費率（`tool/fee_text.py` 的 `largest_fee`，pg_column_size 約 5.8 KB，三端共同測試），合法形狀的費率不會因大小被任何一端拒絕（C3 Codex 審查：JSON 字數與 `pg_column_size` 算法不同，原本 4096 會讓三端判斷不一致）。
 
@@ -381,6 +382,7 @@ PLAN.md 匯入紀錄：「依停管處新聞稿附件補上『機車區』與機
 
 - 公告來源有兩層：縣市規則 `city_rules`（全市或行政區），以及條件自己的 `basis`（特定場域、特定路段，例如試辦場域）。`basis` 可以是網址或已確認內容的牌面照片（§1.4）；照片超過有效期時，這份依據失效。
 - `city_rules` 新增 `expires_on date`（可為 null）。`now ≥ expires_on` 的規則不算有效，結果為「此地區的規則已過期，請以現場標誌標線為準」（`unverified`），不回落到全國規則，因為過期的地方開放可能已經延長也可能已經結束。
+- **到期只讓靠公告才開放的格位失效**（使用者 2026-10-27，決定 44）：依第 1 步依法可停的格位（大型重機在重機專用格、汽車格）照到期前的規則判斷，依據改列法規；普通機車規則開放的汽車格、大型重機的機車格等靠公告開放的格位才回到待確認。三端 `ruleVerdict` 與給舊版的保守投影（`202610270070`：過期的大型重機列保留 `allowed_space_types` 裡的 `heavyOnly`、`car`）一致。
 - **舊版相容**：舊版 App 直接查 `city_rules`（`lib/data/repositories.dart`），`CityRule.fromJson` 與 `eligibility()` 只看生效日，不認得 `expires_on`。只把過期列藏起來不夠：`RulesRepository.load()` 先載入內建的 `assets/rules/parking_rules.json`，再用遠端列覆蓋同縣市同車種的那筆，遠端沒回傳的列不會移除內建版本，舊版因此會退回內建的開放規則（例如臺北市大型重機的收費機車格）。所以過期列要**改成保守投影後照常回傳**，覆蓋內建版本：
   - C4 把資料表改名為 `city_rules_data`（新增 `expires_on`），並建立同名的 view `city_rules`（`security_invoker`）給舊版讀。未過期的列原樣回傳；已過期的列（`expires_on <= (now() at time zone 'Asia/Taipei')::date`）改成 `allowed_space_types = '{}'`、原本開放與有條件的格位全部併入 `conditional_space_types`、`district_space_types = '{}'`、`restriction = 'unverified'`、`exceptions = '此地區的規則已過期，請以現場標誌標線為準'`，`version` 不變（不低於內建版本，所以會覆蓋）。
   - 舊版 `eligibility()` 遇到「格位在 `conditionalSpaceTypes` 且 `restriction == unverified`」就回傳待確認並顯示 `exceptions`（既有分支），不會開放任何格位，也不會因為清空行政區而判成不可停；汽車格的普通機車判斷讀的是 `allowed`／`conditional` 兩者，結果同樣不會變成可停。
@@ -413,6 +415,8 @@ PLAN.md 匯入紀錄：「依停管處新聞稿附件補上『機車區』與機
 價格與資格分開回傳，價格未知不會讓資格變差，資格未知也不會隱藏已知價格：
 
 - 每個可停處（路邊點，或每個對目前車種開放的分區）各回一個 `PriceAnswer`：`known(rate)`／`partial(rate, gaps)`（例如有費率但上限計算方式或延長時長未確認）／`unknown`。
+- **汽車費率只看結構化費率**（使用者 2026-10-27，決定 45）：詳情頁的汽車費率用分區或全場的結構化費率；都沒有時寫「費率未確認，請依現場公告」，不再退回分區的舊汽車文字（`car_fee_note`）。
+- `by_time` 沒有涵蓋的時間（依上面「開始那天」的算法）與 `posted` 時段一樣，`PriceAnswer` 回 `partial`，缺口「部分時段費率」（#155 第 17 項）。
 - 解析順序沿用 #80，加上 §2.6 的規則：分區引用的計費規則（`fee_plan`）→ 分區自己的 `fee`（過渡期）→ 點位 `fee_plan`／`fee`（只在所有分區都沒有費率時）→ 舊文字。比照依 §2.1 只在同一條規則內解析，倍率直接套在金額、上限與延長金額上；被比照的車種缺值時回 `unknown`，文字為「大型重機費率未提供」（不寫「比照汽車」，§7 第 11 項）。
 - 價格篩選（PLAN.md：轉換完成前不開放）之後只看 `known` 與 `partial`，`unknown` 不被篩掉也不排在前面。
 
@@ -434,7 +438,7 @@ class ParkingDecision {
 - `status` 的四態語意與核實計畫 §3.2 一致；`gaps` 不新增狀態，只說明為什麼是待確認，詳情頁據此寫理由。
 - **與核實計畫 §3.4 顯示分層（#91）**：分層由 `basis` 的來源種類決定（官方、管理員核驗、社群欄位核實、車友回報、無資料），`decideParking` 只負責把來源帶出來；#91 的 `eligibilityDisplay()` 改讀 `ParkingDecision.basis`，判斷不變。「依縣市規則判定的路邊格位不受分層影響」維持。
 - **與研究文件 §5.7**：`ruleVerdict()` 是第 2 步的純函式，Dart 與伺服器各一份，以 `assets/rules/parking_rules.json` 加 §4.2 的共同測試向量確保一致。`expired`、`conflict` 是本文新增的兩個結果，引擎一律視為「規則無法單獨回答」。
-- **時段**：本輪先確認目前車種至少出現在一個時段的 `vehicles` 裡，才回 `conditional(timeLimited)`（顯示「有條件・限時段」）並列出各時段允許車種；目前車種沒有被任何時段列出時維持 `unverified`（缺口 `scheduleUnknown`，理由「公告沒有列出普通機車的開放時段」），不顯示成有條件。例如汽機共用格的時段只列 `car` 時，普通機車是待確認。大型重機在汽車格依法可停，不受這條影響。不依目前時間切換狀態，依時間切換留待之後（§7 第 4 項，已決定）。
+- **時段**：本輪先確認目前車種至少出現在一個時段的 `vehicles` 裡，才回 `conditional(timeLimited)`（顯示「有條件・限時段」）並列出各時段允許車種；目前車種沒有被任何時段列出時維持 `unverified`（缺口 `scheduleUnknown`，理由「公告沒有列出普通機車的開放時段」），不顯示成有條件。例如汽機共用格的時段只列 `car` 時，普通機車是待確認；汽機共用格同時有 `ev_only`／`special_vehicle` 等附加限制時也一樣，沒有寫明普通機車的時段就是待確認（共用格的開放資格獨立於附加限制，#155 第 16 項）。大型重機在汽車格依法可停，不受這條影響。不依目前時間切換狀態，依時間切換留待之後（§7 第 4 項，已決定）。
 
 **C4 實作的細節**（`lib/domain/parking_decision.dart`；`ruleVerdict` 另有 Deno `_shared/rule_verdict.ts` 與 SQL `rule_verdict()`，三端跑 `_shared/rule_verdict_cases.json`，其中 `bundled:*` 須與 `assets/rules/parking_rules.json` 相同，規則檔更新時一併重算向量）：
 

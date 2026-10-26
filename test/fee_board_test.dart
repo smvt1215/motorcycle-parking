@@ -162,13 +162,73 @@ void main() {
     expect(everyDay.footer!.tone, FeeTone.unconfirmed);
   });
 
+  test('跨午夜時段算開始那天：分組與其他時間依實際涵蓋（決定 47）', () {
+    Map<String, Object?> period(Object days, String from, String to) => {
+      'days': days,
+      'from': from,
+      'to': to,
+      'rate': {'mode': 'hourly', 'amount': 10, 'per_minutes': 60},
+    };
+    final weekday = boardOf({
+      'scooter': {
+        'mode': 'by_time',
+        'periods': [
+          period('weekday', '08:00', '20:00'),
+          period('weekday', '20:00', '08:00'),
+        ],
+      },
+    }, FeeVehicle.scooter);
+    // The night period sits under 平日, the day it starts.
+    expect([for (final g in weekday.groups) g.label], ['平日', '假日']);
+    // Monday before 08:00 belongs to Sunday night, which has no rate.
+    expect(
+      [for (final r in weekday.groups[0].rows) r.time],
+      ['08:00–20:00', '20:00–隔日 08:00', '其他時間'],
+    );
+    // Saturday until 08:00 is Friday night's: not 全天 unconfirmed.
+    expect(weekday.groups[1].rows.single.time, '其他時間');
+    final week = boardOf({
+      'scooter': {
+        'mode': 'by_time',
+        'periods': [
+          period('all', '08:00', '20:00'),
+          period('all', '20:00', '08:00'),
+        ],
+      },
+    }, FeeVehicle.scooter);
+    expect(week.groups.single.rows.map((r) => r.time), isNot(contains('其他時間')));
+  });
+
   test('未涵蓋的時間與日子寫成編輯器提示', () {
     const rate = Rate(FeeMode.free);
     expect(
       feeGaps(const [
         FeePeriod(days: 'weekday', from: '08:00', to: '20:00', rate: rate),
       ]),
-      ['平日 20:00–隔日 08:00', '假日 全天'],
+      // Decision 47: a gap is its start day's, so Friday night runs into
+      // the weekend and Monday's small hours follow Sunday.
+      [
+        '週一 00:00–08:00',
+        '週一、週二、週三、週四 20:00–隔日 08:00',
+        '週五 20:00–隔日 00:00',
+        '假日 全天',
+      ],
+    );
+    // Every night filled: what is left is the weekend, whose small hours
+    // Friday's night period already covers.
+    expect(
+      feeGaps(const [
+        FeePeriod(days: 'weekday', from: '08:00', to: '20:00', rate: rate),
+        FeePeriod(days: 'weekday', from: '20:00', to: '08:00', rate: rate),
+      ]),
+      ['週一 00:00–08:00', '週六 08:00–隔日 00:00', '週日 全天'],
+    );
+    expect(
+      feeGaps(const [
+        FeePeriod(days: 'all', from: '08:00', to: '20:00', rate: rate),
+        FeePeriod(days: 'weekday', from: '20:00', to: '08:00', rate: rate),
+      ]),
+      ['假日 20:00–隔日 08:00'],
     );
     expect(
       feeGaps(const [

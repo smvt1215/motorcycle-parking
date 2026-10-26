@@ -22,6 +22,7 @@ export interface RuleVerdict {
 
 /** A `city_rules` row as JSON; only the keys the verdict reads. */
 export interface CityRuleRow {
+  vehicle: string;
   allowed_space_types: string[];
   conditional_space_types?: string[];
   districts?: string[];
@@ -37,6 +38,14 @@ const restrictions = ['signage', 'unverified', 'time_limited', 'ev_only'];
 /** `YYYY-MM-DD` of [time] in Taiwan, as `(now() at time zone 'Asia/Taipei')::date`. */
 export function taipeiDay(time: Date): string {
   return new Date(time.getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+/**
+ * Bays the law opens to [rule]'s vehicle whatever a local notice says
+ * (§3.2 step 1): a heavy bike on a heavy-bike bay or a car bay.
+ */
+function lawful(rule: CityRuleRow, kind: string): boolean {
+  return rule.vehicle === 'heavy' && (kind === 'heavyOnly' || kind === 'car');
 }
 
 function single(
@@ -80,8 +89,9 @@ function single(
  * What [rules] — one city's and vehicle's, already matched — say about the
  * street bay [kind] in [district] at [now]. Dates are Taiwan's. Rules not
  * yet in force are ignored; expired ones answer only when none is in force,
- * and then the answer is `expired`; rules in force that disagree are a
- * `conflict`.
+ * and then the answer is `expired` — except on a bay the law opens to the
+ * vehicle, which the expired rules still judge as before they ended
+ * (decision 44); rules in force that disagree are a `conflict`.
  */
 export function ruleVerdict(
   rules: CityRuleRow[],
@@ -92,7 +102,10 @@ export function ruleVerdict(
   const day = taipeiDay(now);
   const started = rules.filter((r) => r.effective_date <= day);
   if (started.length === 0) return { verdict: 'noRule', restriction: null };
-  const current = started.filter((r) => !r.expires_on || day < r.expires_on);
+  let current = started.filter((r) => !r.expires_on || day < r.expires_on);
+  if (current.length === 0 && started.every((r) => lawful(r, kind))) {
+    current = started;
+  }
   if (current.length === 0) return { verdict: 'expired', restriction: null };
   const [first, ...rest] = current.map((r) => single(r, kind, district));
   return rest.every((v) =>
