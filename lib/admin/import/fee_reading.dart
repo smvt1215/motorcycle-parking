@@ -140,6 +140,10 @@ FeeReading? _readCommunity(String text, String? spaceType) {
     return _unknown('沒有寫明費率');
   }
 
+  // Any day or time limit anywhere in a community note splits the rate.
+  if (_qualifier.firstMatch(body) case final q?) {
+    return _manual('依「${q[0]}」分別計費');
+  }
   final prices = <({String unit, int amount, int hours})>[];
   var free = 0;
   var monthly = false;
@@ -155,6 +159,11 @@ FeeReading? _readCommunity(String text, String? spaceType) {
         return _manual('依「$label」分別計費');
       }
       if (tail.startsWith('起')) return _manual('金額只寫起價');
+      // Only a plain note may follow an amount; another amount or a
+      // condition means this is not the whole rate.
+      if (RegExp(r'\d|元|\$').hasMatch(tail) || _condition.hasMatch(tail)) {
+        return _manual('金額後另有費用或條件：$tail');
+      }
       if (price[2] == '每月') {
         monthly = true;
         continue;
@@ -174,7 +183,7 @@ FeeReading? _readCommunity(String text, String? spaceType) {
       free++;
       continue;
     }
-    if (RegExp(r'折抵|優惠|折扣').hasMatch(segment)) {
+    if (_condition.hasMatch(segment) && !RegExp(r'限專用格').hasMatch(segment)) {
       return _manual('另有折抵或優惠：$segment');
     }
     // Entrance and parking notes (需按鈴, 後牌, 機車區…) carry no price.
@@ -292,8 +301,11 @@ final _scooterWord = RegExp(r'(?<!重型|身障)機車');
 final _carWord = RegExp(r'小型車|小車|汽車|大客車|大型車|貨車');
 final _disabledWord = RegExp(r'身障|身心障礙');
 final _qualifier = RegExp(
-  r'平日|假日|週[一二三四五六日]|周[一二三四五六日]|日間|夜間|白天|晚上|\d{1,2}\s*[時點]?\s*[-~～至]\s*\d{1,2}\s*[時點]|\(\d{1,2}-\d{1,2}\)',
+  r'平日|假日|例假日|國定假日|週末|周末|週[一二三四五六日]|周[一二三四五六日]|星期|日間|夜間|白天|晚上|上午|下午|凌晨|尖峰|離峰|展覽|活動期間|\d{1,2}\s*[時點]?\s*[-~～至]\s*\d{1,2}\s*[時點]|\(\d{1,2}-\d{1,2}\)',
 );
+
+/// A discount or a condition on who pays what.
+final _condition = RegExp(r'優惠|折抵|折扣|減免|半價|憑|(?<!維)持|會員|消費|(?<!上)限');
 final _cap = RegExp(r'(?:上限|最高)(?:收費)?(?:上限)?\s*(\d+)\s*元(?:\s*/\s*[日天次])?');
 final _daily = RegExp(
   r'(\d+)\s*元\s*/\s*[日天]|(?:每日|每天|當日計次)\s*[:：]?\s*(\d+)\s*元',
@@ -329,6 +341,7 @@ FeeReading _readOfficial(String text) {
     final hourlies = <_Fact>[];
     // 平日 standing alone qualifies the prices after it in the sentence.
     var heading = false;
+    var limited = false, conditioned = false;
     for (final raw in sentence.split(_pieceBreak)) {
       final piece = raw.trim();
       if (piece.isEmpty) continue;
@@ -344,7 +357,12 @@ FeeReading _readOfficial(String text) {
         vehicles = named.contains(_Vehicle.disabled)
             ? {_Vehicle.disabled}
             : named;
+        // A day or time limit next to a vehicle (機車：平日 20元/次) holds
+        // for that vehicle's prices until another vehicle is named.
+        limited = conditioned = false;
       }
+      if (_qualifier.hasMatch(piece)) limited = true;
+      if (_condition.hasMatch(piece)) conditioned = true;
       if (_passKeyword.hasMatch(piece)) {
         pass = passes = true;
       } else if (_visitKeyword.hasMatch(piece)) {
@@ -388,7 +406,18 @@ FeeReading _readOfficial(String text) {
         unparsed.addAll(riders);
         continue;
       }
-      final qualified = heading || _qualifier.hasMatch(piece);
+      final qualified = heading || limited || _qualifier.hasMatch(piece);
+      // A discount or condition on a motorcycle price is not one rate.
+      if (conditioned &&
+          vehicles.intersection({
+            _Vehicle.scooter,
+            _Vehicle.heavy,
+          }).isNotEmpty) {
+        unparsed.addAll(
+          vehicles.intersection({_Vehicle.scooter, _Vehicle.heavy}),
+        );
+        continue;
+      }
       // Rates first, so a cap in the same piece finds its rate.
       for (final reading in [
         ...readings.where((r) => r.cap == null),

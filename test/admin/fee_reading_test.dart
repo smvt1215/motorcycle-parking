@@ -411,6 +411,37 @@ void main() {
       );
     });
 
+    test('another amount or a day limit after the price', () {
+      for (final note in [
+        '每小時 10 元，假日每小時 20 元（大型重機比照機車費率）',
+        '每小時 10 元；週末每小時 20 元（大型重機比照機車費率）',
+        '每日 30 元，夜間另收 10 元（大型重機比照機車費率）',
+        '每次 20 元，尖峰時段每次 30 元（大型重機比照機車費率）',
+        '每小時 10 元；消費滿 500 元折抵（大型重機比照機車費率）',
+      ]) {
+        expectReading(note, FeeVerdict.manual);
+      }
+    });
+
+    test('a day limit beside the vehicle label', () {
+      for (final note in [
+        '機車：平日 20元/次',
+        '機車：平日 20元/次，假日 30元/次',
+        '機車：週末 10元/時',
+        '機車：夜間 免費',
+        '機車：17點至22點 20元/次',
+        '機車：持停車證 免費',
+      ]) {
+        expectReading(note, FeeVerdict.manual);
+      }
+      // The same limit on both sides is still one rate.
+      expectReading(
+        '機車：平日 20元/次；機車：假日 20元/次',
+        FeeVerdict.convertible,
+        fee: {'scooter': visit(20)},
+      );
+    });
+
     test('rates that differ by time of day', () {
       expectReading('機車：日間10元/時(08-20)，夜間5元/時(20-08)', FeeVerdict.manual);
     });
