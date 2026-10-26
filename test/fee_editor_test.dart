@@ -179,6 +179,8 @@ void main() {
         isButton: true,
         hasSelectedState: true,
         isSelected: true,
+        hasEnabledState: true,
+        isEnabled: true,
         isFocusable: true,
         hasTapAction: true,
         hasFocusAction: true,
@@ -472,5 +474,35 @@ void main() {
     expect(fee().car, initial.car);
     await chooseFeeMode(tester, 'heavy', 'daily');
     expect(fee().heavy!.toJson(), {'mode': 'daily', 'amount': 50});
+  });
+
+  testWidgets('比照：沒有已知來源時不能選；被比照的車種改回未確認時擋下送出', (tester) async {
+    final (form, fee) = await host(tester, 390, open: FeeVehicle.heavy);
+    // Neither the scooter nor the car has a rate: nothing to follow.
+    expect(find.byKey(const ValueKey('fee-follow-hint')), findsOneWidget);
+    await tapFee(tester, 'fee-mode-heavy-same_as');
+    expect(fee().heavy, isNull);
+    expect(
+      tester.getSemantics(find.byKey(const ValueKey('fee-mode-heavy-same_as'))),
+      matchesSemantics(
+        label: '比照其他車種',
+        isButton: true,
+        hasSelectedState: true,
+        // Disabled: shown, not tappable.
+        hasEnabledState: true,
+      ),
+    );
+
+    await chooseFeeMode(tester, 'car', 'hourly');
+    await tester.enterText(feeField('amount', 'car'), '40');
+    await tester.pumpAndSettle();
+    await chooseFeeMode(tester, 'heavy', 'same_as');
+    // Only the car has a rate, so the heavy bike follows the car.
+    expect(fee().toJson()['heavy'], {'mode': 'same_as_car'});
+    expect(form.currentState!.validate(), isTrue);
+    await chooseFeeMode(tester, 'car', 'unknown');
+    expect(form.currentState!.validate(), isFalse);
+    await tester.pumpAndSettle();
+    expect(find.text('大型重機比照汽車費率，但還沒填汽車費率。請填汽車費率，或改選其他收費方式。'), findsOneWidget);
   });
 }

@@ -52,6 +52,25 @@ Fee _known(Fee fee) {
   return (_known(fee).textOf(v.wire) ?? '費率未提供', false);
 }
 
+/// The vehicle a heavy follow names when its rate is not known (design
+/// §8.6): such a follow would read 費率未提供, so it is not stored.
+String? _followGap(Fee fee) {
+  final heavy = fee.heavy;
+  if (heavy == null || !heavy.mode.follows) return null;
+  final source = heavy.mode == FeeMode.sameAsCar
+      ? FeeVehicle.car
+      : FeeVehicle.scooter;
+  if (_known(fee).textOf(source.wire) != null) return null;
+  final name = source == FeeVehicle.car ? '汽車' : '機車';
+  return '大型重機比照$name費率，但還沒填$name費率。請填$name費率，或改選其他收費方式。';
+}
+
+/// Whether a heavy bike has a vehicle to follow: one whose rate is known.
+bool _canFollow(Fee fee) {
+  final known = _known(fee);
+  return known.textOf('scooter') != null || known.textOf('car') != null;
+}
+
 /// Edits a [Fee] per vehicle (普通機車, 大型重機, 汽車), shared by the app's
 /// report forms and the admin site (design §2.5, §8.4–8.5). One vehicle is
 /// open at a time; the others collapse to the sentence riders read. The
@@ -103,7 +122,8 @@ class _FeeEditorState extends State<FeeEditor> {
       for (final v in FeeVehicle.values)
         if (_rateOf(fee, v) case final rate? when !_rateValid(rate, v)) v.label,
     ];
-    return bad.isEmpty ? null : '${bad.join('、')}的費率還沒填完，請填好或改回「未確認」';
+    if (bad.isNotEmpty) return '${bad.join('、')}的費率還沒填完，請填好或改回「未確認」';
+    return _followGap(fee);
   }
 
   @override
@@ -484,14 +504,18 @@ class _Pill extends StatelessWidget {
   });
   final String label;
   final bool selected;
-  final VoidCallback onTap;
+
+  /// Null when the choice is not available now.
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final enabled = onTap != null;
     return Semantics(
       button: true,
       selected: selected,
+      enabled: enabled,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(24),
@@ -527,7 +551,9 @@ class _Pill extends StatelessWidget {
                             : FontWeight.w400,
                         color: selected
                             ? colors.onPrimaryContainer
-                            : colors.onSurface,
+                            : enabled
+                            ? colors.onSurface
+                            : colors.onSurface.withValues(alpha: .38),
                       ),
                     ),
                   ),
@@ -549,12 +575,16 @@ class _Choices<T> extends StatelessWidget {
     required this.selected,
     required this.onSelect,
     required this.keyOf,
+    this.disabled = const {},
   });
   final String label;
   final List<(T, String)> values;
   final T selected;
   final ValueChanged<T> onSelect;
   final String Function(T) keyOf;
+
+  /// Choices shown but not available now.
+  final Set<T> disabled;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -569,7 +599,7 @@ class _Choices<T> extends StatelessWidget {
               key: ValueKey(keyOf(value)),
               label: text,
               selected: value == selected,
-              onTap: () => onSelect(value),
+              onTap: disabled.contains(value) ? null : () => onSelect(value),
             ),
         ],
       ),
@@ -797,6 +827,8 @@ class RateEditor extends StatelessWidget {
           ],
           // Both follows are one choice; which vehicle comes below.
           selected: follows ? FeeMode.sameAsScooter : mode,
+          // Nothing to follow until another vehicle has a rate.
+          disabled: {if (!follows && !_canFollow(fee)) FeeMode.sameAsScooter},
           keyOf: (m) =>
               'fee-mode-$w-${switch (m) {
                 null => 'unknown',
@@ -809,6 +841,15 @@ class RateEditor extends StatelessWidget {
             onChanged(_switchTo(m, value, fee));
           },
         ),
+        if (vehicle == FeeVehicle.heavy && !follows && !_canFollow(fee))
+          Text(
+            '普通機車或汽車有費率後，才能選「比照其他車種」。',
+            key: const ValueKey('fee-follow-hint'),
+            style: TextStyle(
+              fontSize: 12,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
         if (_simple(mode)) ...[
           const SizedBox(height: 8),
           SimpleRateFields(
