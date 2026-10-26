@@ -138,7 +138,7 @@ staging 設定已於 2026-10-24 完成，並以真實 Google 登入＋TOTP 取�
      - 只能改自己的資料
      - 每日回報上限
      - 隱藏待審的門檻
-   - Edge Function：`deno fmt --check`、`deno lint`、`deno check`、`deno test`（`submit-report` 驗證邏輯）。
+   - Edge Function：`deno fmt --check`、`deno lint`、`deno check`、`deno test`（`submit-report` 驗證邏輯、`admin-users` 權限與稽核）。
 5. **版本號檢查**：`pubspec.yaml` 的 `version` 必須**大於**最新的 release tag（見下方「版本號規則」）。
 
 ### `ios.yml`（macOS）

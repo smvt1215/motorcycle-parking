@@ -43,6 +43,7 @@ void main() {
         initialLocation: path,
         themeMode: mode,
         reviewMapBuilder: (_, _) => const SizedBox(),
+        spotMapBuilder: (_, _) => const SizedBox(),
       ),
     );
     await tester.pumpAndSettle();
@@ -121,7 +122,7 @@ void main() {
     expect(find.text('7'), findsOneWidget);
     for (final entry in {
       '/spots': '停車點位',
-      '/rules': '各縣市停車規則',
+      '/rules': '各縣市規則',
       '/imports': '匯入停車資料',
       '/users': '使用者管理',
       '/review': '待審回報',

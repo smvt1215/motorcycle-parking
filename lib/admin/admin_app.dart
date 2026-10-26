@@ -4,18 +4,27 @@ import 'package:cupertino_ui/cupertino_ui.dart' as cu;
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../models/parking.dart';
 import 'admin_auth_page.dart';
 import 'admin_controller.dart';
 import 'admin_mfa_page.dart';
 import 'admin_theme.dart';
+import 'import/file_pick.dart';
+import 'import/import_controller.dart';
+import 'import/import_page.dart';
 import 'review/hidden_page.dart';
 import 'review/review_controller.dart';
 import 'review/review_map.dart';
 import 'review/review_page.dart';
 import '../ui/location_picker.dart';
+import 'rules/rules_controller.dart';
+import 'rules/rules_page.dart';
+import 'spots/spot_map.dart';
 import 'spots/spot_models.dart';
 import 'spots/spots_controller.dart';
 import 'spots/spots_page.dart';
+import 'users/users_controller.dart';
+import 'users/users_page.dart';
 
 const _tabs = [
   (
@@ -37,7 +46,7 @@ const _tabs = [
     label: '規則',
     icon: Icons.rule_outlined,
     title: '各縣市停車規則',
-    description: '在這裡檢視各縣市的普通機車與大型重機停放規則。',
+    description: '設定各縣市普通機車與大型重機的路邊停放規則並發布新版本。',
   ),
   (
     path: '/imports',
@@ -63,7 +72,10 @@ class AdminApp extends StatefulWidget {
     this.themeMode = ThemeMode.system,
     this.reviewMapBuilder = googleReviewMap,
     this.locationMapBuilder,
+    this.spotMapBuilder = googleSpotMap,
     this.review,
+    this.pickFile = pickJsonFile,
+    this.bundledRules,
   });
   final AdminController controller;
   final String? initialLocation;
@@ -73,8 +85,17 @@ class AdminApp extends StatefulWidget {
   /// Tests replace the location picker's Google map.
   final LocationMapBuilder? locationMapBuilder;
 
+  /// Tests replace the spots page's Google map.
+  final SpotMapBuilder spotMapBuilder;
+
   /// Injected by tests; otherwise created over the controller's gateway.
   final ReviewController? review;
+
+  /// Tests replace the browser's file dialog.
+  final FilePicker pickFile;
+
+  /// Tests replace the app's bundled rule file.
+  final Future<List<dynamic>> Function()? bundledRules;
 
   @override
   State<AdminApp> createState() => _AdminAppState();
@@ -88,6 +109,22 @@ class _AdminAppState extends State<AdminApp> {
         onResolved: () => widget.controller.refreshCount(),
       );
   late final SpotsController _spots = SpotsController(
+    widget.controller.gateway,
+  );
+  late final ImportController _imports = ImportController(
+    widget.controller.gateway,
+  );
+  late final FeeConversionController _fees = FeeConversionController(
+    widget.controller.gateway,
+  );
+  late final RulesController _rules = RulesController(
+    widget.controller.gateway,
+    bundled: widget.bundledRules ?? bundledRules,
+  );
+  late final UsersController _users = UsersController(
+    widget.controller.gateway,
+  );
+  late final SpotMapController _spotMap = SpotMapController(
     widget.controller.gateway,
   );
   String? _reviewUser;
@@ -110,6 +147,11 @@ class _AdminAppState extends State<AdminApp> {
       _reviewUser = user;
       _review.reset();
       _spots.reset();
+      _imports.reset();
+      _fees.reset();
+      _rules.reset();
+      _users.reset();
+      _spotMap.reset();
     }
   }
 
@@ -169,24 +211,47 @@ class _AdminAppState extends State<AdminApp> {
           for (final path in ['/spots', '/spots/:id'])
             GoRoute(
               path: path,
-              builder: (context, state) => SpotsPage(
-                spots: _spots,
-                selectedId: state.pathParameters['id'],
-                newKind: SpotKind.values
-                    .asNameMap()[state.uri.queryParameters['kind']],
-                locationMapBuilder: widget.locationMapBuilder,
+              // One page for the list and every spot: the map keeps its
+              // camera and loaded spots while forms open and close.
+              pageBuilder: (context, state) => MaterialPage(
+                key: const ValueKey('spots'),
+                child: SpotsPage(
+                  spots: _spots,
+                  map: _spotMap,
+                  selectedId: state.pathParameters['id'],
+                  newKind: SpotKind.values
+                      .asNameMap()[state.uri.queryParameters['kind']],
+                  locationMapBuilder: widget.locationMapBuilder,
+                  spotMapBuilder: widget.spotMapBuilder,
+                ),
               ),
             ),
-          for (final tab in _tabs.skip(2))
+          for (final path in ['/imports', '/imports/fees'])
             GoRoute(
-              path: tab.path,
-              builder: (context, state) => _watch(
-                () => _AdminBody(
-                  child: _WorkspacePage(
-                    controller: widget.controller,
-                    path: tab.path,
-                  ),
-                ),
+              path: path,
+              builder: (context, state) => ImportPage(
+                imports: _imports,
+                fees: _fees,
+                feeSection: path.endsWith('/fees'),
+                pickFile: widget.pickFile,
+              ),
+            ),
+          for (final path in ['/rules', '/rules/:city/:vehicle'])
+            GoRoute(
+              path: path,
+              builder: (context, state) => RulesPage(
+                rules: _rules,
+                city: state.pathParameters['city'],
+                vehicle: VehicleType.values
+                    .asNameMap()[state.pathParameters['vehicle']],
+              ),
+            ),
+          for (final path in ['/users', '/users/:id'])
+            GoRoute(
+              path: path,
+              builder: (context, state) => UsersPage(
+                users: _users,
+                selectedId: state.pathParameters['id'],
               ),
             ),
           GoRoute(
@@ -220,6 +285,11 @@ class _AdminAppState extends State<AdminApp> {
     widget.controller.removeListener(_accessChanged);
     if (widget.review == null) _review.dispose();
     _spots.dispose();
+    _imports.dispose();
+    _fees.dispose();
+    _rules.dispose();
+    _users.dispose();
+    _spotMap.dispose();
     _router.dispose();
     super.dispose();
   }
@@ -466,69 +536,6 @@ class _AdminBody extends StatelessWidget {
       ),
     ),
   );
-}
-
-class _WorkspacePage extends StatelessWidget {
-  const _WorkspacePage({required this.controller, required this.path});
-  final AdminController controller;
-  final String path;
-
-  @override
-  Widget build(BuildContext context) {
-    final tab = _tabs.firstWhere((t) => t.path == path);
-    final text = Theme.of(context).textTheme;
-    return AdminPanel(
-      width: 1400,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Semantics(
-            header: true,
-            child: Text(tab.title, style: text.headlineMedium),
-          ),
-          const SizedBox(height: 24),
-          const Divider(),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 48),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 520),
-                child: Column(
-                  children: [
-                    Icon(
-                      tab.icon,
-                      size: 40,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    const SizedBox(height: 20),
-                    Text(
-                      '${tab.label}工作區準備中',
-                      style: text.titleLarge,
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      tab.description,
-                      style: text.bodyLarge,
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      '此工作區的操作功能尚未開放。',
-                      style: text.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 /// `/review/<id>` belongs to the review tab.

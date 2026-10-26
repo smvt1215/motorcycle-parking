@@ -11,8 +11,10 @@ import '../core/notifications.dart';
 import '../core/geo.dart';
 import '../core/location_access.dart';
 import '../core/navigation.dart' as navigation;
+import '../core/town_lookup.dart';
 import '../domain/eligibility.dart';
 import '../domain/eligibility_display.dart';
+import '../domain/location_check.dart';
 import '../domain/map_viewport.dart';
 import '../models/parking.dart';
 import 'contributions_repository.dart';
@@ -405,6 +407,19 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     located = true;
     notifyListeners();
   }
+
+  /// A fresh device fix with its accuracy, for placing a spot by hand. It
+  /// does not move the map. Throws [LocationAccessError] like [locate].
+  Future<LocationFix> currentFix() async {
+    if (demo && AppConfig.offlineMap) return LocationFix(lat, lng, 5);
+    await _ensureLocationAccess();
+    final p = await _currentPosition();
+    return LocationFix(p.latitude, p.longitude, p.accuracy);
+  }
+
+  /// The county or city and district at a position (國土測繪中心); tests
+  /// override it to stay offline.
+  Future<Town?> townAt(double lat, double lng) => lookupTown(lat, lng);
 
   Future<void> locate() async {
     if (demo && AppConfig.offlineMap) return;

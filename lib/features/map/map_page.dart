@@ -20,6 +20,7 @@ import 'space_type_sheet.dart';
 import 'spot_sheet.dart';
 import 'vehicle_sheet.dart';
 import 'google_parking_map.dart';
+import 'osm_tiles.dart';
 import 'cluster_badge.dart';
 
 class MapPage extends ConsumerStatefulWidget {
@@ -426,61 +427,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                   : null,
             ),
             children: [
-              if (AppConfig.showsOsmTiles)
-                ColorFiltered(
-                  colorFilter: ColorFilter.matrix(
-                    darkMap
-                        ? const [
-                            -.72,
-                            0,
-                            0,
-                            0,
-                            210,
-                            0,
-                            -.64,
-                            0,
-                            0,
-                            224,
-                            0,
-                            0,
-                            -.5,
-                            0,
-                            238,
-                            0,
-                            0,
-                            0,
-                            1,
-                            0,
-                          ]
-                        : const [
-                            1,
-                            0,
-                            0,
-                            0,
-                            0,
-                            0,
-                            1,
-                            0,
-                            0,
-                            0,
-                            0,
-                            0,
-                            1,
-                            0,
-                            0,
-                            0,
-                            0,
-                            0,
-                            1,
-                            0,
-                          ],
-                  ),
-                  child: TileLayer(
-                    urlTemplate:
-                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                    userAgentPackageName: 'tw.motopark.motorcycle_parking',
-                  ),
-                ),
+              if (AppConfig.showsOsmTiles) OsmTiles(dark: darkMap),
               Builder(
                 builder: (mapContext) {
                   final zoom = MapCamera.of(mapContext).zoom;

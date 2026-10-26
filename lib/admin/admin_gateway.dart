@@ -1,9 +1,16 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../core/address_search.dart';
 import '../core/town_lookup.dart';
+import '../data/repositories.dart';
 import '../domain/location_check.dart';
+import '../domain/map_viewport.dart';
+import '../models/parking.dart';
+import 'import/import_models.dart';
 import 'review/review_models.dart';
+import 'spots/spot_map.dart';
 import 'spots/spot_models.dart';
+import 'users/user_models.dart';
 
 class AdminAccess {
   const AdminAccess({
@@ -92,6 +99,14 @@ abstract class AdminGateway {
   /// County or city and district of a point; null at sea.
   Future<Town?> town(double lat, double lng);
 
+  /// House number, road or intersection search through the `geocode` Edge
+  /// Function; throws [AddressSearchException].
+  Future<List<AddressCandidate>> searchAddress(
+    String query, {
+    double? lat,
+    double? lng,
+  });
+
   /// `admin_promote_spot`: a community spot becomes an official one.
   Future<String> promoteSpot(
     String sourceId,
@@ -99,6 +114,75 @@ abstract class AdminGateway {
     String baseUpdatedAt,
     String note,
   );
+
+  /// `admin_import_preview`: what importing [spots] (at most 500) would do.
+  Future<List<ImportEntry>> previewImport(List<Map<String, dynamic>> spots);
+
+  /// `admin_import_apply`: imports the entries of [spots] named in
+  /// [choices] (source id → base version and fields to overwrite).
+  Future<ImportResult> applyImport(
+    List<Map<String, dynamic>> spots,
+    Map<String, dynamic> choices,
+    String effectiveDate,
+    String note,
+  );
+
+  /// `admin_fee_backlog`: spots whose fee note has no structured fee.
+  Future<List<FeeBacklogItem>> feeBacklog();
+
+  /// `admin_convert_fees`: writes confirmed fees (at most 500), each for the
+  /// note it was read from.
+  Future<ImportResult> convertFees(
+    List<Map<String, dynamic>> items,
+    String note,
+  );
+
+  /// Every `city_rules` row; the table is public.
+  Future<List<Map<String, dynamic>>> cityRuleRows();
+
+  /// `admin_upsert_city_rule`: publishes [values] as the next version of the
+  /// rule opened at [baseVersion] (null for a new rule).
+  Future<Map<String, dynamic>> publishCityRule(
+    String city,
+    String vehicle,
+    Map<String, dynamic> values,
+    int? baseVersion,
+    String note,
+  );
+
+  /// `admin_users`: an id, a complete email or part of a display name;
+  /// empty lists recent reporters.
+  Future<List<AdminUser>> searchUsers(String query);
+
+  /// `admin_user_detail`; null when the account does not exist.
+  Future<AdminUserDetail?> userDetail(String userId);
+
+  /// `admin_user_spots`: the account's points after the first [offset],
+  /// newest first.
+  Future<List<UserSpot>> userSpots(String userId, int offset);
+
+  /// The `admin-users` Edge Function: bans for [length], or lifts the ban
+  /// when it is null. Returns the new `banned_until`.
+  Future<DateTime?> setUserBan(
+    String userId, {
+    required BanLength? length,
+    required String reason,
+  });
+
+  /// `admin_clear_contributor_name`: removes the public name on one point.
+  Future<void> clearContributorName(String spotId, String note);
+
+  /// `admin_viewport_spots`: the spots of the chosen layers in [bounds].
+  Future<MapSpotPage> mapSpots(
+    MapViewport bounds, {
+    required bool community,
+    required bool official,
+    required bool hidden,
+  });
+
+  /// The rules the app judges markers by: the database's, else the bundled
+  /// copy.
+  Future<List<CityRule>> cityRules();
 }
 
 /// Community columns readable by clients; `user_id` is never granted.
@@ -423,4 +507,187 @@ class SupabaseAdminGateway implements AdminGateway {
 
   @override
   Future<Town?> town(double lat, double lng) => lookupTown(lat, lng);
+
+  @override
+  Future<List<ImportEntry>> previewImport(
+    List<Map<String, dynamic>> spots,
+  ) async {
+    final rows = await client.rpc<List<dynamic>>(
+      'admin_import_preview',
+      params: {'p_spots': spots},
+    );
+    return rows
+        .map((r) => ImportEntry.fromJson(r as Map<String, dynamic>))
+        .toList();
+  }
+
+  @override
+  Future<ImportResult> applyImport(
+    List<Map<String, dynamic>> spots,
+    Map<String, dynamic> choices,
+    String effectiveDate,
+    String note,
+  ) async => ImportResult.fromJson(
+    await client.rpc<Map<String, dynamic>>(
+      'admin_import_apply',
+      params: {
+        'p_spots': spots,
+        'p_choices': choices,
+        'p_effective_date': effectiveDate,
+        'p_note': note,
+      },
+    ),
+  );
+
+  @override
+  Future<List<FeeBacklogItem>> feeBacklog() async {
+    // The API returns at most api.max_rows (1,000) rows a request; read pages
+    // in the function's stable order until one comes back short.
+    const page = 1000;
+    final items = <FeeBacklogItem>[];
+    for (var from = 0; ; from += page) {
+      final rows = await client
+          .rpc<List<dynamic>>('admin_fee_backlog')
+          .range(from, from + page - 1);
+      items.addAll(
+        rows.map((r) => FeeBacklogItem.fromJson(r as Map<String, dynamic>)),
+      );
+      if (rows.length < page) return items;
+    }
+  }
+
+  @override
+  Future<ImportResult> convertFees(
+    List<Map<String, dynamic>> items,
+    String note,
+  ) async {
+    final row = await client.rpc<Map<String, dynamic>>(
+      'admin_convert_fees',
+      params: {'p_items': items, 'p_note': note},
+    );
+    return ImportResult(
+      updated: (row['converted'] as num?)?.toInt() ?? 0,
+      skipped: Skipped.listOf(row['skipped']),
+    );
+  }
+
+  @override
+  Future<List<AddressCandidate>> searchAddress(
+    String query, {
+    double? lat,
+    double? lng,
+  }) => geocodeSearch(client.functions, query, lat: lat, lng: lng);
+
+  @override
+  Future<List<Map<String, dynamic>>> cityRuleRows() =>
+      client.from('city_rules').select().order('city').order('vehicle');
+
+  @override
+  Future<Map<String, dynamic>> publishCityRule(
+    String city,
+    String vehicle,
+    Map<String, dynamic> values,
+    int? baseVersion,
+    String note,
+  ) => client.rpc<Map<String, dynamic>>(
+    'admin_upsert_city_rule',
+    params: {
+      'p_city': city,
+      'p_vehicle': vehicle,
+      'p_values': values,
+      'p_base_version': baseVersion,
+      'p_note': note,
+    },
+  );
+
+  @override
+  Future<List<AdminUser>> searchUsers(String query) async {
+    final rows = await client.rpc<List<dynamic>>(
+      'admin_users',
+      params: {'p_query': query},
+    );
+    return rows
+        .map((r) => AdminUser.fromJson(r as Map<String, dynamic>))
+        .toList();
+  }
+
+  @override
+  Future<AdminUserDetail?> userDetail(String userId) async {
+    if (!_uuid.hasMatch(userId)) return null;
+    try {
+      final row = await client.rpc<Map<String, dynamic>>(
+        'admin_user_detail',
+        params: {'p_user': userId},
+      );
+      return AdminUserDetail.fromJson(row);
+    } on PostgrestException catch (e) {
+      if (e.code == '22023') return null;
+      rethrow;
+    }
+  }
+
+  @override
+  Future<List<UserSpot>> userSpots(String userId, int offset) async {
+    final rows = await client.rpc<List<dynamic>>(
+      'admin_user_spots',
+      params: {'p_user': userId, 'p_offset': offset},
+    );
+    return rows
+        .map((r) => UserSpot.fromJson(r as Map<String, dynamic>))
+        .toList();
+  }
+
+  @override
+  Future<DateTime?> setUserBan(
+    String userId, {
+    required BanLength? length,
+    required String reason,
+  }) async {
+    final res = await client.functions.invoke(
+      'admin-users',
+      body: {
+        'action': length == null ? 'unban' : 'ban',
+        'user_id': userId,
+        'duration': ?length?.key,
+        'reason': reason,
+      },
+    );
+    final until = (res.data as Map?)?['banned_until'];
+    return until is String ? DateTime.tryParse(until)?.toLocal() : null;
+  }
+
+  @override
+  Future<void> clearContributorName(String spotId, String note) => client.rpc(
+    'admin_clear_contributor_name',
+    params: {'p_spot_id': spotId, 'p_note': note},
+  );
+
+  @override
+  Future<MapSpotPage> mapSpots(
+    MapViewport bounds, {
+    required bool community,
+    required bool official,
+    required bool hidden,
+  }) async {
+    final rows = await client.rpc<List<dynamic>>(
+      'admin_viewport_spots',
+      params: {
+        ...bounds.toJson(),
+        'p_community': community,
+        'p_official': official,
+        'p_hidden': hidden,
+      },
+    );
+    return MapSpotPage.fromRows(rows);
+  }
+
+  @override
+  Future<List<CityRule>> cityRules() async {
+    try {
+      return await RulesRepository(client).load();
+    } catch (_) {
+      // Markers still follow the rules the app ships with.
+      return RulesRepository(null).load();
+    }
+  }
 }

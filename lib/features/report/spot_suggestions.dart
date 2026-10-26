@@ -1,9 +1,17 @@
+import 'dart:async';
+import 'dart:math';
+
+import '../../core/geo.dart';
+import '../../core/town_lookup.dart';
 import '../../data/app_store.dart';
+import '../../domain/location_check.dart';
 import '../../domain/precheck.dart';
 import '../../models/fee.dart';
 import '../../models/parking.dart';
+import '../../ui/address_search_field.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../../ui/fee_editor.dart';
+import '../../ui/location_picker.dart';
 import 'report_sheet.dart';
 
 String _yesNo(bool? value) => switch (value) {
@@ -61,12 +69,29 @@ List<SuggestionField> suggestionFields(ParkingSpot spot) => [
     current: guideSummary(spot),
   ),
   (
+    key: 'location',
+    label: '停車點位置',
+    icon: Icons.edit_location_alt_outlined,
+    current: locationSummary(spot),
+  ),
+  (
     key: 'note',
     label: '其他備註',
     icon: Icons.notes_outlined,
     current: spot.note.isEmpty ? '未提供' : spot.note,
   ),
 ];
+
+/// Where the spot is as shown today: its address or road, else coordinates.
+String locationSummary(ParkingSpot spot) => spot.address.isNotEmpty
+    ? spot.address
+    : spot.roadSegment.isNotEmpty
+    ? spot.roadSegment
+    : '${spot.lat.toStringAsFixed(5)}, ${spot.lng.toStringAsFixed(5)}';
+
+/// [metres] as riders read a distance.
+String _metres(double metres) =>
+    '${metres.toStringAsFixed(metres < 10 ? 1 : 0)} m';
 
 /// The entrance and parking guide as shown today, or 未提供.
 String guideSummary(ParkingSpot spot) {
@@ -275,12 +300,66 @@ class _SuggestionFormState extends State<_SuggestionForm> {
   GoneCause? cause;
   final until = TextEditingController();
 
+  /// The suggested position, starting where the map shows the spot.
+  late double lat = widget.spot.lat, lng = widget.spot.lng;
+
+  /// The county or city and district at [lat], [lng] once looked up; null
+  /// until then or when the lookup failed.
+  Town? newTown;
+
+  String? get newCity => newTown?.city;
+  Timer? lookupTimer;
+  int lookupRound = 0;
+
   String get fieldKey => widget.fieldKey;
   bool get unavailable => fieldKey == 'gone';
   bool get typeField => fieldKey == 'space_type';
   bool get eligibilityField => fieldKey == 'eligibility';
   bool get feeField => fieldKey == 'fee_note';
   bool get guideField => fieldKey == 'guide';
+  bool get locationField => fieldKey == 'location';
+
+  /// Metres between the map's position and the suggested one.
+  double get moved =>
+      distanceMeters(widget.spot.lat, widget.spot.lng, lat, lng);
+
+  /// The marker moved enough to be a suggestion, not a slip of the finger.
+  bool get relocated => moved >= 1;
+
+  /// The new position lies in another county or city, with other rules.
+  bool get cityChanged =>
+      newCity != null &&
+      widget.spot.city.isNotEmpty &&
+      newCity != widget.spot.city;
+
+  void move(double a, double b) {
+    setState(() {
+      lat = a;
+      lng = b;
+      newTown = null;
+    });
+    lookupTimer?.cancel();
+    // Counted now, not when the timer fires: an answer still in flight for
+    // the previous position must not land on this one.
+    final round = ++lookupRound;
+    lookupTimer = Timer(const Duration(milliseconds: 600), () async {
+      Town? town;
+      try {
+        town = await widget.store.townAt(a, b);
+      } catch (_) {
+        // The admin checks the county when applying; nothing to warn about.
+      }
+      if (mounted && round == lookupRound) {
+        // Only a county the app knows; the sea or abroad sends coordinates
+        // alone and the admin checks.
+        setState(
+          () => newTown = town != null && taiwanCities.contains(town.city)
+              ? town
+              : null,
+        );
+      }
+    });
+  }
 
   /// Lots also say how they are built and who parks there.
   bool get lotType => typeField && type == SpaceType.offStreet;
@@ -292,7 +371,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
 
   /// Structured fields submit the chosen value; the note becomes optional.
   bool get structured =>
-      typeField || eligibilityField || feeField || guideField;
+      typeField || eligibilityField || feeField || guideField || locationField;
 
   /// The longest text the spot column takes, so an applied value fits.
   int get maxLength => fieldKey == 'name' ? 100 : 450;
@@ -304,6 +383,11 @@ class _SuggestionFormState extends State<_SuggestionForm> {
       final when = cause?.temporary ?? false ? until.text.trim() : '';
       return '${widget.label}：${cause?.label ?? ''}'
           '${when.isEmpty ? '' : '；預計恢復：$when'}'
+          '${text.isEmpty ? '' : '；說明：$text'}';
+    }
+    if (locationField) {
+      return '${widget.label}：建議移到 ${lat.toStringAsFixed(6)}, ${lng.toStringAsFixed(6)}'
+          '（距原位置 ${_metres(moved)}${cityChanged ? '，位於$newCity' : ''}）'
           '${text.isEmpty ? '' : '；說明：$text'}';
     }
     if (guideField) {
@@ -341,6 +425,23 @@ class _SuggestionFormState extends State<_SuggestionForm> {
           'entrance_note': entrance.text.trim(),
         if (guide.text.trim() != spot.parkingGuide)
           'parking_guide': guide.text.trim(),
+      };
+    }
+    // The coordinates, with the county and district once looked up so a
+    // move across a border changes the rules too (docs/ADMIN_WEB.md); the
+    // admin can still correct them. TDX spots have no row to patch.
+    if (locationField) {
+      if (spot.source != 'official' &&
+          !communitySpotSources.contains(spot.source)) {
+        return null;
+      }
+      return {
+        'lat': _round(lat),
+        'lng': _round(lng),
+        if (newTown case final town?) ...{
+          'city': town.city,
+          'district': town.district,
+        },
       };
     }
     // The text beside the fee is built from it, so the two never disagree.
@@ -392,6 +493,16 @@ class _SuggestionFormState extends State<_SuggestionForm> {
           ),
       ];
     }
+    if (locationField) {
+      if (!relocated) return const [];
+      return [
+        '位置往${_bearing()}移動約 ${_metres(moved)}',
+        if (cityChanged) '縣市從「${spot.city}」改成「$newCity」',
+        if (newTown case final town?
+            when town.district.isNotEmpty && town.district != spot.district)
+          '行政區從「${spot.district.isEmpty ? '未提供' : spot.district}」改成「${town.district}」',
+      ];
+    }
     if (guideField) {
       String shown(String value) => value.isEmpty ? '未提供' : value;
       return [
@@ -423,8 +534,48 @@ class _SuggestionFormState extends State<_SuggestionForm> {
     return [line(widget.label, widget.current ?? '', text)];
   }
 
+  /// The compass direction of the move, in the eight words riders use.
+  String _bearing() {
+    final north = lat - widget.spot.lat;
+    final east = (lng - widget.spot.lng) * cos(widget.spot.lat * pi / 180);
+    final degrees = (atan2(east, north) * 180 / pi + 360) % 360;
+    const names = ['北', '東北', '東', '東南', '南', '西南', '西', '西北'];
+    return names[((degrees + 22.5) ~/ 45) % 8];
+  }
+
+  /// Asks before sending a move far enough to be another spot.
+  Future<bool> confirmFarMove() async {
+    if (!locationField || moved <= farMoveMeters) return true;
+    final same = await showAdaptiveDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog.adaptive(
+        key: const ValueKey('suggestion-far'),
+        title: const Text('還是同一個停車點嗎？'),
+        content: Text(
+          '新位置距原位置約 ${moved.round()} m。'
+          '如果是另一處停車格，請回地圖新增停車點，不要移動這一個。',
+        ),
+        actions: [
+          adaptiveDialogAction(
+            ctx,
+            label: '返回調整',
+            onPressed: () => Navigator.pop(ctx, false),
+          ),
+          adaptiveDialogAction(
+            ctx,
+            label: '是同一個，送出',
+            primary: true,
+            onPressed: () => Navigator.pop(ctx, true),
+          ),
+        ],
+      ),
+    );
+    return same ?? false;
+  }
+
   @override
   void dispose() {
+    lookupTimer?.cancel();
     note.dispose();
     entrance.dispose();
     guide.dispose();
@@ -434,6 +585,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
 
   Future<void> submit() async {
     if (!form.currentState!.validate()) return;
+    if (!await confirmFarMove() || !mounted) return;
     setState(() {
       sending = true;
       error = null;
@@ -467,6 +619,15 @@ class _SuggestionFormState extends State<_SuggestionForm> {
       if (mounted) setState(() => sending = false);
     }
   }
+
+  /// Same-type spots within 15 m of the suggested position.
+  List<NearbySpot> _duplicates() => checkLocation(
+    lat: lat,
+    lng: lng,
+    spaceType: widget.spot.spaceType.name,
+    selfId: widget.spot.id,
+    nearby: nearbySpots(widget.store.spots),
+  ).duplicates;
 
   Widget fieldError(BuildContext context, String? text) => text == null
       ? const SizedBox.shrink()
@@ -638,6 +799,70 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                 ),
                 const SizedBox(height: 20),
               ],
+              if (locationField) ...[
+                FormField<(double, double)>(
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  validator: (_) => !relocated
+                      ? '請把標記拖到停車格的實際位置，和目前不同才能送出'
+                      : !inTaiwanBounds(lat, lng)
+                      ? '標記不在臺灣範圍內，請移回停車點的位置。'
+                      : null,
+                  builder: (state) => Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        '拖曳標記到停車格的實際位置，或點地圖選位置。空心小圈是地圖目前標示的位置。',
+                        style: TextStyle(color: colors.onSurfaceVariant),
+                      ),
+                      const SizedBox(height: 12),
+                      LocationPicker(
+                        lat: lat,
+                        lng: lng,
+                        originLat: widget.spot.lat,
+                        originLng: widget.spot.lng,
+                        touchMarker: true,
+                        onLocate: widget.store.currentFix,
+                        height: pickerHeight(context),
+                        mapBuilder: appLocationMap,
+                        // Without a backend (demo) there is nothing to search.
+                        onSearch: widget.store.client == null
+                            ? null
+                            : (context) => showAddressSearch(
+                                context,
+                                search: widget.store.parking.searchAddress,
+                                lat: lat,
+                                lng: lng,
+                              ),
+                        onChanged: (a, b) {
+                          move(a, b);
+                          state.didChange((a, b));
+                        },
+                      ),
+                      if (state.errorText != null)
+                        LocationNote(
+                          icon: Icons.error_outline,
+                          text: state.errorText!,
+                          tone: NoteTone.error,
+                        ),
+                      if (cityChanged)
+                        LocationNote(
+                          key: const ValueKey('suggestion-city-changed'),
+                          icon: Icons.rule,
+                          text:
+                              '新位置在$newCity，和原本的${widget.spot.city}不同，適用的停車規則會改變。',
+                          tone: NoteTone.caution,
+                        ),
+                      for (final d in _duplicates())
+                        LocationNote(
+                          icon: Icons.content_copy,
+                          text: '15 m 內已有同類型的停車點「${d.name}」，可能是同一處。',
+                          tone: NoteTone.caution,
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+              ],
               if (eligibilityField) ...[
                 FormField<(bool?, bool?)>(
                   autovalidateMode: AutovalidateMode.onUserInteraction,
@@ -788,9 +1013,10 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                     'space_type' ||
                     'eligibility' ||
                     'guide' => '例：入口告示寫「大型重機可停」',
+                    'location' => '例：格位在對面的便利商店前',
                     'name' => '例：信義路五段收費機車格',
                     'fee_note' => '例：入口收費牌寫「機車每次 20 元」',
-                    _ => '例：入口在松仁路側，B2',
+                    _ => '例：夜間有管理員，假日常客滿',
                   },
                 ),
                 validator: (v) {
@@ -804,12 +1030,14 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                   if ((v?.length ?? 0) > maxLength) {
                     return '最多 $maxLength 字，請刪減後再送出';
                   }
-                  // The text is the suggestion itself for a name or a note,
-                  // so a stand-in like 測試 says nothing there.
+                  // The text is the suggestion itself when nothing else is
+                  // proposed (a note, or a TDX spot's position), so a
+                  // stand-in like 測試 says nothing there; the server reads
+                  // it the same way.
                   return precheckTextHint(
                     v,
                     name: fieldKey == 'name',
-                    solo: !structured && !unavailable,
+                    solo: !unavailable && proposed() == null,
                   );
                 },
               ),
@@ -868,3 +1096,6 @@ class _SuggestionFormState extends State<_SuggestionForm> {
     );
   }
 }
+
+/// Seven decimals is about 1 cm, finer than any phone places a pin.
+double _round(double degrees) => (degrees * 1e7).roundToDouble() / 1e7;

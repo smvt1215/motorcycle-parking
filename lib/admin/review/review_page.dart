@@ -762,6 +762,12 @@ class _ReviewDetail extends StatelessWidget {
                     ),
                   ),
                 ],
+                if (spot != null && locationWithoutCity(report)) ...[
+                  const SizedBox(height: 10),
+                  const AdminNotice(
+                    '這筆位置建議沒有附縣市與行政區（App 反查失敗或舊版 App）。新位置若在其他縣市，請「修改後套用」並加入縣市與行政區，否則會套用原縣市的停車規則。',
+                  ),
+                ],
                 if (ignored.isNotEmpty && !editing) ...[
                   const SizedBox(height: 10),
                   AdminNotice(

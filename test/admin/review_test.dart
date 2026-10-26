@@ -484,6 +484,85 @@ void main() {
       await tester.pumpAndSettle();
     }
 
+    ReviewReport locationReport({bool withTown = true}) => ReviewReport(
+      id: 'r-loc',
+      sourceId: communityId,
+      reason: '停車點位置：建議移到 25.060000, 121.522600',
+      field: 'location',
+      proposed: {
+        'lat': 25.06,
+        'lng': 121.5226,
+        if (withTown) ...{'city': '新北市', 'district': '三重區'},
+      },
+      createdAt: reportTime,
+      risk: ReviewRisk.medium,
+    );
+
+    testWidgets('跨縣市的位置建議一併套用縣市與行政區', (tester) async {
+      gateway.reports = [locationReport()];
+      await show(tester, path: '/review/r-loc');
+      expect(find.widgetWithText(ChangeBand, '新北市'), findsOneWidget);
+      expect(find.widgetWithText(ChangeBand, '三重區'), findsOneWidget);
+      expect(find.textContaining('沒有附縣市與行政區'), findsNothing);
+      await tester.tap(find.text('套用建議'));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 7));
+      await tester.pumpAndSettle();
+      expect(gateway.resolved.single.$3, {
+        'lat': 25.06,
+        'lng': 121.5226,
+        'city': '新北市',
+        'district': '三重區',
+      });
+    });
+
+    for (final width in [390.0, 700.0]) {
+      testWidgets('位置建議沒有縣市時提醒，修改後套用可加入縣市（${width.toInt()} px）', (
+        tester,
+      ) async {
+        gateway.reports = [locationReport(withTown: false)];
+        await show(tester, path: '/review/r-loc', size: Size(width, 900));
+        final notice = find.textContaining('沒有附縣市與行政區');
+        await tester.scrollUntilVisible(
+          notice,
+          200,
+          scrollable: find
+              .ancestor(
+                of: find.text('建議變更'),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        );
+        expect(notice, findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.ensureVisible(find.text('修改後套用'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('修改後套用'));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('加入要修改的欄位'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('加入要修改的欄位'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('縣市').last);
+        await tester.pumpAndSettle();
+        final city = find.byKey(const ValueKey('edit-r-loc-city')).first;
+        await tester.ensureVisible(city);
+        await tester.enterText(city, '新北市');
+        await tester.ensureVisible(find.text('套用修改'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('套用修改'));
+        await tester.pumpAndSettle();
+        await tester.pump(const Duration(seconds: 7));
+        await tester.pumpAndSettle();
+        expect(gateway.resolved.single.$3, {
+          'lat': 25.06,
+          'lng': 121.5226,
+          'city': '新北市',
+        });
+        expect(tester.takeException(), isNull);
+      });
+    }
+
     testWidgets('寬螢幕並排顯示佇列與第一筆差異', (tester) async {
       await show(tester);
       expect(find.text('全部 4'), findsOneWidget);
