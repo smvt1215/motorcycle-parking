@@ -1,6 +1,6 @@
 # CI／CD 規劃
 
-> 狀態：CI 與 CD staging／release workflows 已實作；**CD staging 尚未就緒**：staging Environment 尚未設定部署憑證，部署 job 會在缺少憑證時直接失敗、不會實際部署；憑證就緒後才會真正部署。CodeQL 改採五類語言 Advanced Setup，AI Scan 維持停用。外部服務、Environment 憑證與第一次實際部署依 [CD_SETUP.md](CD_SETUP.md) 完成。最後更新：2026-10-23。整體計畫見 [PLAN.md](PLAN.md)。
+> 狀態：CI 與 CD staging／release workflows 已實作。CD staging 已就緒：`staging` Environment 的 Supabase、簽章、Maps 金鑰與 Firebase 設定已完成，main 的 CI、Android、iOS 都成功後部署 staging 後端與管理站，並把 Android APK、iOS Ad Hoc IPA 送到 Firebase App Distribution（2026-10-25 `b827aab` 五個 job 皆成功）。`production` Environment 已設定核准者，但尚未設定任何 secret 或 variable，也尚未推送版本 tag，release workflow 還沒有實際執行過。CodeQL 改採五類語言 Advanced Setup，AI Scan 維持停用。商店與 production 的外部設定依 [CD_SETUP.md](CD_SETUP.md) 完成。最後更新：2026-10-25。整體計畫見 [PLAN.md](PLAN.md)。
 
 ## 決策摘要
 - 平台：**GitHub Actions**（公開 repo 使用 GitHub 標準 runner 不收費，含 macOS）。
@@ -212,9 +212,9 @@ staging 設定已於 2026-10-24 完成，並以真實 Google 登入＋TOTP 取�
    - **發佈：Firebase App Distribution**（[說明](https://firebase.google.com/docs/app-distribution)）：
      - 以 Firebase CLI（`firebase-tools`，固定版本）執行 `firebase appdistribution:distribute <ipa> --app <Firebase iOS App ID> --groups staging-ios --release-notes "<commit SHA 與標題>"`。
      - 認證優先用 **Workload Identity Federation**（`google-github-actions/auth`，釘選 SHA；job 加 `id-token: write`），不存放長期金鑰：
-       - Google Cloud 的 provider 以 attribute condition 限定 `sub` 為 `repo:smvt1215/motorcycle-parking:environment:staging`，只有綁定 `staging` Environment 的 job 能換到憑證。
+       - Google Cloud 的 provider 以 attribute condition 限定 `sub` 為 `staging` Environment，只有綁定 `staging` Environment 的 job 能換到憑證。本 repo 啟用 GitHub 不可變 subject，實際值為 `repo:smvt1215@25175632/motorcycle-parking@1413881483:environment:staging`，不是 `repo:smvt1215/motorcycle-parking:environment:staging`（舊格式會被 attribute condition 拒絕）。
        - 對應的服務帳號只給 **Firebase App Distribution Admin** 角色。
-       - 實作時確認 Firebase CLI 能使用這種外部帳號憑證；不行才改用服務帳號 JSON 金鑰（存 `staging` Environment secret）。
+       - 已確認 Firebase CLI 能使用這種外部帳號憑證（staging 的 APK、IPA 與管理站部署都以此認證），不需服務帳號 JSON 金鑰。
      - **IPA 不上傳為 GitHub artifact**：Ad Hoc IPA 內嵌的 provisioning profile（`embedded.mobileprovision`）的 `ProvisionedDevices` 列出**所有測試裝置的 UDID**（[Apple TN3125](https://developer.apple.com/documentation/technotes/tn3125-inside-code-signing-provisioning-profiles)），公開 repo 的 artifact 任何登入 GitHub 的人都能下載。Firebase 上的版本只有受邀的測試者看得到；原始 IPA 不放進快取，job 結束即隨 runner 銷毀。
      - Firebase 上的版本保留 150 天後過期；APP 不需要整合 Firebase SDK。
    - **測試者 OTA 安裝**（在 iPhone 上完成，不需要 Mac）：
@@ -363,11 +363,11 @@ staging 設定已於 2026-10-24 完成，並以真實 Google 登入＋TOTP 取�
   - 建立 APP 並啟用 Play App Signing。
   - 建立服務帳號並授權發布。
   - 手動上傳第一個正式版建置，之後才能由 CD 以 API 上傳。
-- **Apple Developer（staging 測試 IPA）**：
+- **Apple Developer（staging 測試 IPA）**（已完成：staging Ad Hoc IPA 已由 CD 建置並送到 Firebase；新增測試裝置時仍需更新 profile）：
   - 註冊 staging bundle id（正式 bundle id 加 `.staging`）。
   - 註冊測試者 iPhone 的 UDID（可由 Firebase 收集，見上方「測試者 OTA 安裝」）。
   - 建立 staging 專用的 Apple Distribution 憑證，以及包含上述裝置的 Ad Hoc provisioning profile。
-- **Firebase（staging 測試 IPA 的 OTA 發佈）**：
+- **Firebase（staging 測試 IPA 的 OTA 發佈）**（已完成：iOS 與 Android APP、`staging-ios`／`staging-android` 群組、Workload Identity Federation 與服務帳號）：
   - 建立 Firebase 專案（同時是一個 Google Cloud 專案，下方的 Workload Identity Federation 也設在這裡），新增 iOS APP，bundle id 填 staging 的 `.staging` bundle id，記下 App ID。
   - 啟用 App Distribution，建立測試者群組 `staging-ios` 並邀請測試者。
   - 在 Google Cloud 設定 Workload Identity Federation（GitHub OIDC provider，限定 `staging` Environment）與只有 Firebase App Distribution Admin 角色的服務帳號。
@@ -376,6 +376,6 @@ staging 設定已於 2026-10-24 完成，並以真實 Google 登入＋TOTP 取�
   - 建立 API key（App Manager 權限）。
   - 建立發布憑證與 provisioning profile。
 - **Supabase**：
-  - 建立 staging、production 兩個專案。
+  - 建立 staging、production 兩個專案（staging 已建立並由 CD 部署；production 於上線前另建）。
   - 產生 access token。
-- **GitHub**：建立 `staging`、`production` 兩個 Environment，`production` 設定由你核准。
+- **GitHub**：建立 `staging`、`production` 兩個 Environment，`production` 設定由你核准（已完成；`production` 的 secret 與 variable 尚未設定）。

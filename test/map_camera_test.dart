@@ -25,4 +25,16 @@ void main() {
     }
     expect(centerAbovePanel(spot, 16, 0), spot);
   });
+
+  test('管理站表單在右側時，相機往東移讓點位停在表單左邊', () {
+    const spot = LatLng(25.03, 121.56);
+    for (final zoom in [12.0, 18.0]) {
+      final target = shiftCenter(spot, zoom, dx: 50);
+      expect(target.latitude, closeTo(spot.latitude, 1e-12));
+      final pixels =
+          (target.longitude - spot.longitude) / 360 * 256 * math.pow(2, zoom);
+      expect(pixels, closeTo(50, 1e-6));
+    }
+    expect(shiftCenter(spot, 16), spot);
+  });
 }

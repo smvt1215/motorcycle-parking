@@ -38,7 +38,7 @@ select pg_temp.act('admin_aal1');
 set local role authenticated;
 select ok(not public.is_admin(),'admin role without a second factor is not admin');
 select throws_ok($$select admin_resolve_report((select id from fx where name='q_type'),'accepted')$$,'42501',null,'admin without a second factor cannot resolve');
-select lives_ok($$update city_rules set version=version+1 where city='臺北市' and vehicle='heavy'$$,'rule update without a second factor runs');
+select throws_ok($$update city_rules set version=version+1 where city='臺北市' and vehicle='heavy'$$,'42501',null,'rules are not written directly, with or without a second factor');
 reset role;
 select is((select version from city_rules where city='臺北市' and vehicle='heavy'),1,'but changes no rule');
 select pg_temp.act('user');
@@ -48,7 +48,7 @@ select throws_ok($$select admin_resolve_report((select id from fx where name='q_
 select is((select count(*)::integer from moderation_queue),0,'ordinary user cannot read the queue');
 select is((select count(*)::integer from admin_audit_log),0,'ordinary user cannot read the audit log');
 reset role;
-select ok(not has_function_privilege('anon','public.admin_resolve_report(uuid,text,jsonb,text,boolean)','EXECUTE'),'anon cannot call the resolve RPC');
+select ok(not has_function_privilege('anon','public.admin_resolve_report(uuid,text,jsonb,text,boolean,text)','EXECUTE'),'anon cannot call the resolve RPC');
 
 -- Accepting applies the patch and closes the report together.
 select pg_temp.act('admin');
@@ -56,8 +56,8 @@ set local role authenticated;
 select ok((select count(*) from moderation_queue)>=5,'admin reads the queue');
 select is(admin_resolve_report((select id from fx where name='q_type'),'accepted','{"space_type":"heavyOnly","heavy_allowed":true}','比對街景')->>'status','accepted','admin accepts a suggestion');
 select throws_ok($$select admin_resolve_report((select id from fx where name='q_type'),'accepted')$$,'22023','report already resolved','a report resolves once');
-select throws_ok($$select admin_resolve_report((select id from fx where name='q_reject'),'rejected','{"name":"x"}')$$,'22023',null,'a rejection cannot carry a patch');
-select is(admin_resolve_report((select id from fx where name='q_reject'),'rejected',null,'與現場不符')->>'status','rejected','admin rejects a suggestion');
+select throws_ok($$select admin_resolve_report((select id from fx where name='q_reject'),'rejected','{"name":"x"}',p_resolution_kind=>'wrong')$$,'22023','a rejected report changes no spot','a rejection cannot carry a patch');
+select is(admin_resolve_report((select id from fx where name='q_reject'),'rejected',null,'與現場不符',p_resolution_kind=>'wrong')->>'status','rejected','admin rejects a suggestion');
 select throws_ok($$select admin_resolve_report((select id from fx where name='q_official'),'accepted','{"user_id":"10000000-0000-4000-8000-000000000005"}')$$,'22023',null,'columns outside the editable list are refused');
 select throws_ok($$select admin_resolve_report((select id from fx where name='q_official'),'accepted','{"status":"hidden"}')$$,'22023',null,'official spots have no status to change');
 select throws_ok($$select admin_resolve_report((select id from fx where name='q_official'),'accepted','{"lat":0}')$$,'23514',null,'patched values still meet table constraints');

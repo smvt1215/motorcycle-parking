@@ -369,6 +369,12 @@ class _FileSection extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 12),
+        if (compact)
+          ..._phoneFields([
+            if (imports.needsDate)
+              _dateField(date, imports.setEffectiveDate, imports.validDate),
+            _noteField(note),
+          ]),
         if (visible.any((e) => e.status.applicable))
           Align(
             alignment: Alignment.centerLeft,
@@ -711,6 +717,36 @@ class _Labelled extends StatelessWidget {
   );
 }
 
+Widget _dateField(
+  TextEditingController date,
+  ValueChanged<String> onDate,
+  bool valid,
+) => TextField(
+  controller: date,
+  onChanged: onDate,
+  keyboardType: TextInputType.datetime,
+  decoration: InputDecoration(
+    labelText: '新官方點的生效日期',
+    hintText: 'YYYY-MM-DD',
+    errorText: valid ? null : '請填寫日期，例如 2026-10-26',
+  ),
+);
+
+Widget _noteField(TextEditingController note) => TextField(
+  controller: note,
+  maxLength: 500,
+  decoration: const InputDecoration(
+    labelText: '處理說明（選填，寫入稽核紀錄）',
+    counterText: '',
+  ),
+);
+
+/// On a phone the fields scroll with the list, so the fixed bar holds only
+/// the action and the rows keep most of the screen.
+List<Widget> _phoneFields(List<Widget> fields) => [
+  for (final f in fields) ...[f, const SizedBox(height: 12)],
+];
+
 class _ApplyBar extends StatelessWidget {
   const _ApplyBar({
     required this.compact,
@@ -734,24 +770,8 @@ class _ApplyBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final dateField = TextField(
-      controller: date,
-      onChanged: onDate,
-      keyboardType: TextInputType.datetime,
-      decoration: InputDecoration(
-        labelText: '新官方點的生效日期',
-        hintText: 'YYYY-MM-DD',
-        errorText: validDate ? null : '請填寫日期，例如 2026-10-26',
-      ),
-    );
-    final noteField = TextField(
-      controller: note,
-      maxLength: 500,
-      decoration: const InputDecoration(
-        labelText: '處理說明（選填，寫入稽核紀錄）',
-        counterText: '',
-      ),
-    );
+    final dateField = _dateField(date, onDate, validDate);
+    final noteField = _noteField(note);
     final button = FilledButton.icon(
       onPressed: busy || count == 0 || (needsDate && !validDate)
           ? null
@@ -762,7 +782,13 @@ class _ApplyBar extends StatelessWidget {
               child: CircularProgressIndicator(strokeWidth: 2),
             )
           : const Icon(Icons.file_upload_outlined),
-      label: Text(count == 0 ? '請先勾選要匯入的點位' : '匯入勾選的 $count 筆'),
+      label: Text(
+        count == 0
+            ? '請先勾選要匯入的點位'
+            : needsDate && !validDate
+            ? '請填寫新官方點的生效日期'
+            : '匯入勾選的 $count 筆',
+      ),
     );
     return Container(
       decoration: BoxDecoration(
@@ -771,16 +797,7 @@ class _ApplyBar extends StatelessWidget {
       ),
       padding: EdgeInsets.fromLTRB(gutter, 12, gutter, 12),
       child: compact
-          ? Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (needsDate) ...[dateField, const SizedBox(height: 8)],
-                noteField,
-                const SizedBox(height: 8),
-                button,
-              ],
-            )
+          ? button
           : Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -875,7 +892,8 @@ class _FeeSection extends StatelessWidget {
               ),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
+        if (compact) ..._phoneFields([_noteField(note)]),
         Text(switch (fees.verdict) {
           FeeVerdict.convertible => '這些寫法可以確定費率，預設勾選；取消勾選的不會寫入。',
           FeeVerdict.manual => '有建議值的可以勾選採用；沒有建議值的請到點位頁逐筆設定費率。',
@@ -923,56 +941,40 @@ class _FeeSection extends StatelessWidget {
                 border: Border(top: BorderSide(color: colors.outlineVariant)),
               ),
               padding: EdgeInsets.fromLTRB(gutter, 12, gutter, 12),
-              child: Flex(
-                direction: compact ? Axis.vertical : Axis.horizontal,
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: compact
-                    ? CrossAxisAlignment.stretch
-                    : CrossAxisAlignment.start,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (compact)
-                    TextField(
-                      controller: note,
-                      maxLength: 500,
-                      decoration: const InputDecoration(
-                        labelText: '處理說明（選填，寫入稽核紀錄）',
-                        counterText: '',
-                      ),
-                    )
-                  else
-                    Expanded(
-                      child: TextField(
-                        controller: note,
-                        maxLength: 500,
-                        decoration: const InputDecoration(
-                          labelText: '處理說明（選填，寫入稽核紀錄）',
-                          counterText: '',
+                  if (!compact) ...[
+                    Expanded(child: _noteField(note)),
+                    const SizedBox(width: 12),
+                  ],
+                  Expanded(
+                    flex: compact ? 1 : 0,
+                    child: Padding(
+                      padding: EdgeInsets.only(top: compact ? 0 : 4),
+                      child: FilledButton.icon(
+                        onPressed:
+                            fees.converting ||
+                                fees.loading ||
+                                fees.selectedSpots == 0
+                            ? null
+                            : () async {
+                                await fees.convert(note.text);
+                                if (fees.error == null) note.clear();
+                              },
+                        icon: fees.converting
+                            ? const SizedBox.square(
+                                dimension: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.save_outlined),
+                        label: Text(
+                          fees.selectedSpots == 0
+                              ? '請先勾選要寫入的費率'
+                              : '寫入 ${fees.selectedSpots} 筆費率',
                         ),
-                      ),
-                    ),
-                  const SizedBox(width: 12, height: 8),
-                  Padding(
-                    padding: EdgeInsets.only(top: compact ? 0 : 4),
-                    child: FilledButton.icon(
-                      onPressed:
-                          fees.converting ||
-                              fees.loading ||
-                              fees.selectedSpots == 0
-                          ? null
-                          : () async {
-                              await fees.convert(note.text);
-                              if (fees.error == null) note.clear();
-                            },
-                      icon: fees.converting
-                          ? const SizedBox.square(
-                              dimension: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.save_outlined),
-                      label: Text(
-                        fees.selectedSpots == 0
-                            ? '請先勾選要寫入的費率'
-                            : '寫入 ${fees.selectedSpots} 筆費率',
                       ),
                     ),
                   ),

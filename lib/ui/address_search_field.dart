@@ -1,9 +1,80 @@
-import 'package:material_ui/material_ui.dart';
-
 import '../core/address_search.dart';
+import 'adaptive/adaptive.dart';
 
-/// Searches a house number, road or intersection and moves the picker
-/// there; shared by the admin site and the app (docs/ADMIN_WEB.md「位置選擇」).
+/// Opens [AddressSearchField] in a sheet (phones) or a dialog (wide
+/// screens) and returns the result picked; `LocationPicker.onSearch` uses it.
+Future<AddressCandidate?> showAddressSearch(
+  BuildContext context, {
+  required AddressSearcher search,
+  double? lat,
+  double? lng,
+}) {
+  Widget body(BuildContext context) =>
+      _AddressSearchPanel(search: search, lat: lat, lng: lng);
+  if (MediaQuery.sizeOf(context).width >= 600) {
+    return showDialog<AddressCandidate>(
+      context: context,
+      builder: (context) => Dialog(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560, maxHeight: 640),
+          child: body(context),
+        ),
+      ),
+    );
+  }
+  return showAdaptiveSheet<AddressCandidate>(context, body);
+}
+
+class _AddressSearchPanel extends StatelessWidget {
+  const _AddressSearchPanel({required this.search, this.lat, this.lng});
+  final AddressSearcher search;
+  final double? lat, lng;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    // The keyboard must not cover the field or the results.
+    padding: EdgeInsets.fromLTRB(
+      20,
+      12,
+      20,
+      16 + MediaQuery.viewInsetsOf(context).bottom,
+    ),
+    child: SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '搜尋位置',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ),
+              IconButton(
+                tooltip: '關閉搜尋',
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          AddressSearchField(
+            search: search,
+            lat: lat,
+            lng: lng,
+            autofocus: true,
+            onPicked: (c) => Navigator.pop(context, c),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+/// Searches a house number, road or intersection; shared by the admin site
+/// and the app (docs/ADMIN_WEB.md「位置選擇」).
 /// Each search is a request against a daily limit, so it runs on 「搜尋地址」
 /// or the keyboard's search key, never while typing.
 class AddressSearchField extends StatefulWidget {
@@ -13,7 +84,7 @@ class AddressSearchField extends StatefulWidget {
     required this.onPicked,
     this.lat,
     this.lng,
-    this.fills = const {},
+    this.autofocus = false,
   });
 
   final AddressSearcher search;
@@ -23,10 +94,7 @@ class AddressSearchField extends StatefulWidget {
 
   /// The caller moves the marker and fills [AddressCandidate.field].
   final void Function(AddressCandidate) onPicked;
-
-  /// Field key to label, for the fields the caller fills on a pick, so the
-  /// confirmation can say which one changed.
-  final Map<String, String> fills;
+  final bool autofocus;
 
   @override
   State<AddressSearchField> createState() => _AddressSearchFieldState();
@@ -37,7 +105,6 @@ class _AddressSearchFieldState extends State<AddressSearchField> {
   List<AddressCandidate>? _results;
   String? _searched;
   AddressSearchException? _error;
-  AddressCandidate? _picked;
   bool _busy = false;
   int _seq = 0;
 
@@ -62,7 +129,6 @@ class _AddressSearchFieldState extends State<AddressSearchField> {
     setState(() {
       _busy = true;
       _error = null;
-      _picked = null;
       _results = null;
     });
     try {
@@ -84,10 +150,7 @@ class _AddressSearchFieldState extends State<AddressSearchField> {
   }
 
   void _pick(AddressCandidate c) {
-    setState(() {
-      _picked = c;
-      _results = null;
-    });
+    setState(() => _results = null);
     widget.onPicked(c);
   }
 
@@ -104,6 +167,7 @@ class _AddressSearchFieldState extends State<AddressSearchField> {
             final field = TextField(
               key: const ValueKey('address-search'),
               controller: _query,
+              autofocus: widget.autofocus,
               textInputAction: TextInputAction.search,
               maxLength: 100,
               onSubmitted: (_) => _run(),
@@ -178,23 +242,6 @@ class _AddressSearchFieldState extends State<AddressSearchField> {
             ),
           ),
           Text('點一筆結果，標記會移到該位置。', style: muted),
-        ],
-        if (_picked case final picked?) ...[
-          const SizedBox(height: 8),
-          _Line(
-            icon: picked.reminder == null
-                ? Icons.check_circle_outline
-                : Icons.pan_tool_alt_outlined,
-            color: picked.reminder == null ? colors.primary : colors.tertiary,
-            text: [
-              '已移到「${picked.label}」'
-                  '${switch (widget.fills[picked.field]) {
-                    final label? => '，並填入「$label」',
-                    null => '',
-                  }}。',
-              ?picked.reminder,
-            ].join(''),
-          ),
         ],
       ],
     );

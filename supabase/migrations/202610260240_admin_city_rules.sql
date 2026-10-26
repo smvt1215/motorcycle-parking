@@ -1,8 +1,12 @@
 -- Admin web P5 (docs/ADMIN_WEB.md): publish a city rule through one audited
 -- RPC. The server owns the version number, so two admins cannot both publish
 -- "version 3", and a publish over a version the admin did not open is refused.
--- Writes made directly to city_rules (Dashboard, service role) still bypass
--- the audit log and the history below.
+-- Rules change only through that RPC: admins lose direct writes, so every
+-- change is versioned, audited and kept in the history below. Reads stay
+-- public; the service role (Dashboard SQL, emergencies) still bypasses this
+-- and leaves no audit entry.
+drop policy admin_rules on public.city_rules;
+revoke insert,update,delete on public.city_rules from anon,authenticated;
 
 -- Every version a publish replaces, so a later reader (rule evidence, the
 -- rule prescreen engine of CONTRIBUTION_TIERS_FEASIBILITY.md §5.7) can tell

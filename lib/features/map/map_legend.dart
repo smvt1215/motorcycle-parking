@@ -276,7 +276,7 @@ Future<void> showMapLegend(BuildContext context, VehicleType vehicle) =>
             (SpaceBadge.car, '汽車格，或大型重機與汽車共用的格位'),
             (SpaceBadge.heavyOnly, '標示大型重機專用的格位'),
             (SpaceBadge.shared, '普通機車與大型重機共用的格位'),
-            (SpaceBadge.disabled, '身心障礙者專用，須持識別證明'),
+            (SpaceBadge.disabled, '限經監理站檢驗合格的身障特製機車，並持識別證或專用牌照'),
           ])
             Padding(
               padding: const EdgeInsets.only(bottom: 12),

@@ -74,6 +74,22 @@ void main() {
       });
     });
 
+    test('普通機車汽車格限定行政區時，預覽在區內可停、區外不可停', () {
+      final r = bundledFile().firstWhere(
+        (r) => r['city'] == '臺北市' && r['vehicle'] == 'scooter',
+      );
+      final draft = RuleDraft.fromRow('臺北市', VehicleType.scooter, asRow(r));
+      draft.access[SpaceType.car] = StreetAccess.open;
+      draft.typeDistricts[SpaceType.car] = ['中山區'];
+      EligibilityStatus at(String district) => preview(
+        draft,
+        DateTime(2026, 12, 1),
+        district,
+      ).firstWhere((row) => row.type == SpaceType.car).result.status;
+      expect(at('中山區'), EligibilityStatus.allowed);
+      expect(at(otherDistrict), EligibilityStatus.notAllowed);
+    });
+
     test('有條件未選限制類型時擋下；沒有有條件格位時不送限制類型', () {
       final draft = RuleDraft.fromRow(
         '臺北市',
@@ -217,6 +233,18 @@ void main() {
       expect(rules.stale, isTrue);
       expect(rules.publishError, contains('其他人發布新版本'));
       expect(rules.draft!.feeNote, '每次 50 元');
+    });
+
+    test('發布中不能重新載入，發布結果不會被丟掉', () async {
+      rules.select('臺北市', VehicleType.heavy);
+      rules.update((d) => d.feeNote = '每次 50 元');
+      final publishing = rules.publish('');
+      expect(rules.publishing, isTrue);
+      await rules.load();
+      final row = await publishing;
+      expect(row!['version'], 2);
+      expect(rules.publishing, isFalse);
+      expect(rules.base!.version, 2);
     });
 
     test('欄位有誤時不送出', () async {
