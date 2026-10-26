@@ -112,23 +112,28 @@ class ConditionDraft {
 
   /// The condition a street bay of [type] is sent with; null for a lot,
   /// whose zones carry theirs. Its space type is always [type] (§1.3).
+  /// While the kind stays the one loaded, every facet the form does not
+  /// show stays as stored; only what the form edits changes. A basis is
+  /// never sent: riders attach a notice as evidence (§1.4).
   ParkingCondition? conditionFor(SpaceType type) {
     final base = conditionOf(type);
     if (base == null) return null;
-    final share = shared && _shareable.contains(type);
+    final from = type == loadedType ? loaded ?? base : base;
     final minutes = int.tryParse(maxMinutes.text.trim());
-    final kept = type == loadedType && !_shareable.contains(type)
-        ? loaded
-        : null;
+    final (use, share) = !_shareable.contains(type)
+        ? (from.use, from.share)
+        : shared
+        ? (BayUse.share, ShareKind.scooterHeavy)
+        : from.share == ShareKind.scooterHeavy
+        ? (BayUse.usual, null)
+        : (from.use, from.share);
     return ParkingCondition(
-      bay: base.bay,
-      use: kept != null ? kept.use : (share ? BayUse.share : base.use),
-      share: kept != null
-          ? kept.share
-          : (share ? ShareKind.scooterHeavy : base.share),
+      bay: from.bay,
+      use: use,
+      share: share,
       charge: _chargeByType.contains(type) ? base.charge : charge,
       limits: [
-        for (final l in type == loadedType ? loadedLimits : base.limits)
+        for (final l in from.limits)
           // The minutes field shows on 限時 bays only; elsewhere a stored
           // time limit stays as it is.
           l.kind == LimitKind.timeLimit && type == SpaceType.timedMotorcycle

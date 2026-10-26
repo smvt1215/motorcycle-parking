@@ -72,6 +72,20 @@ void main() {
       });
       final draft = ConditionDraft.of(stored, SpaceType.evMotorcycle);
       expect(draft.conditionFor(SpaceType.evMotorcycle), stored);
+      // A heavy bay that only takes EVs keeps its bay.
+      final heavyEv = ParkingCondition.fromJson({
+        'bay': 'heavy',
+        'limits': [
+          {'kind': 'ev_only'},
+        ],
+      });
+      expect(
+        ConditionDraft.of(
+          heavyEv,
+          SpaceType.evMotorcycle,
+        ).conditionFor(SpaceType.evMotorcycle),
+        heavyEv,
+      );
     },
   );
 
