@@ -438,6 +438,7 @@ class _SpotsPageState extends State<SpotsPage> {
             children: [
               Positioned.fill(
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _PhoneSwitch(
                       list: _phoneList,
