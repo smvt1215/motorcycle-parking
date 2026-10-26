@@ -61,10 +61,29 @@ FeeReading readFeeNote(String note, {String? spaceType}) {
   if (text.startsWith('大型重機依路段收費方式')) {
     return _manual('大型重機費率依路段收費方式而不同');
   }
+  // Writings the rate shape cannot hold go to a person, never to a nearby
+  // shape: a multiple of another rate, a first period at 0 yuan (a toll that
+  // still charges after it, not free parking), or a cap or visit that resets
+  // at some hour other than midnight.
+  if (_multiple.hasMatch(text)) {
+    return _manual('以倍率計算的費率（例如機車費率 2 倍），現有費率格式無法表達');
+  }
+  if (_zeroYuan.hasMatch(text)) {
+    return _manual('首段 0 元不等於免費，之後仍會收費，現有費率格式無法表達');
+  }
+  if (_offsetReset.hasMatch(text)) {
+    return _manual('收費上限或計次的重設時間不是每日 0 時，現有費率格式無法表達');
+  }
   final community = _readCommunity(text, spaceType);
   if (community != null) return community;
   return _readOfficial(text);
 }
+
+final _multiple = RegExp(r'\d+(?:\.\d+)?\s*倍|[兩二三]倍');
+final _zeroYuan = RegExp(r'(?<![\d.])0\s*元');
+final _offsetReset = RegExp(
+  r'以\s*(?:凌晨)?\s*(?:0?[1-9]|1\d|2[0-3])\s*時為(?:跨日)?基準|隔日\s*(?:凌晨)?\s*\d+\s*時|(?:每|入場)\s*24\s*小時',
+);
 
 /// Placeholder notes that state no price at all.
 final _posted = RegExp(r'^(請依現場公告|依現場公告|詳見現場公告|未知|無|不詳)$');
@@ -173,24 +192,18 @@ FeeReading? _readCommunity(String text, String? spaceType) {
 
   final basis = basisMatch?[1];
   switch (basis) {
+    // 比照 here is a rider's report, not an announcement: the heavy rate
+    // never falls back to another vehicle's without one.
     case '大型重機比照機車費率':
       return FeeReading(
         FeeVerdict.convertible,
-        '大型重機比照機車費率',
-        Fee(scooter: rate, heavy: const Rate(FeeMode.sameAsScooter)),
+        '金額為機車費率；大型重機比照機車是車友回報、非公告明定，維持未確認',
+        Fee(scooter: rate),
       );
     case '大型重機比照汽車費率' || '重機專用格比照汽車費率':
-      return FeeReading(
-        FeeVerdict.convertible,
-        '金額為大型重機付的汽車費率',
-        Fee(heavy: rate),
-      );
+      return _manual('大型重機比照汽車費率是車友回報、非公告明定，請核對公告', Fee(heavy: rate));
     case '大型重機停汽車區':
-      return FeeReading(
-        FeeVerdict.convertible,
-        '金額為大型重機停汽車區的費率',
-        Fee(heavy: rate),
-      );
+      return _manual('大型重機停汽車區的費率是車友回報、非公告明定，請核對公告', Fee(heavy: rate));
     case '大型重機另訂費率':
       return _manual('「另訂費率」未說明金額是否為大型重機費率', Fee(heavy: rate));
     case null:
@@ -303,6 +316,7 @@ FeeReading _readOfficial(String text) {
   var ambiguousHeavy = false;
   var vehicles = <_Vehicle>{};
   var passes = false;
+  var graceForRider = false;
   for (final sentence in text.split(_sentenceBreak)) {
     var pass = false;
     // Caps belong to the latest hourly rate of the same vehicle in a sentence.
@@ -343,9 +357,16 @@ FeeReading _readOfficial(String text) {
         ambiguousHeavy = true;
         continue;
       }
-      // A grace period (入場前 30 分鐘免費) leaves the rate as it is.
+      // A grace period (入場前 30 分鐘免費) is not a shape the rate can hold:
+      // for a motorcycle it goes to a person, for a car it does not matter.
       if (_graceFree.hasMatch(piece) &&
           !_priced.hasMatch(piece.replaceAll('免費', ''))) {
+        if (vehicles.intersection({
+          _Vehicle.scooter,
+          _Vehicle.heavy,
+        }).isNotEmpty) {
+          graceForRider = true;
+        }
         continue;
       }
       final readings = _pricesIn(piece);
@@ -391,6 +412,9 @@ FeeReading _readOfficial(String text) {
     }
   }
 
+  if (graceForRider) {
+    return _manual('機車有免費時段（例如入場前 30 分鐘免費），現有費率格式無法表達');
+  }
   if (ambiguousHeavy) {
     return _manual('另列「重型機車」費率，可能包含普通重型機車');
   }

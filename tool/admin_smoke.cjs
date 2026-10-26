@@ -333,27 +333,28 @@ function session(role, aal, factors = [factor]) {
           const chooser = page.waitForEvent('filechooser');
           await page.getByRole('button', { name: '選擇 spots.json', exact: true }).click();
           await (await chooser).setFiles(fileJson);
-          await waitText('保留管理員修改');
+          await page.getByRole('switch', { name: '保留管理員修改' }).waitFor({ timeout: 15000 });
           await page.screenshot({ path: path.join(output, `${name}-import-preview.png`) });
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} import preview scrolls sideways`);
           const imported = page.waitForResponse(response => response.url().endsWith('/rpc/admin_import_apply'));
           await page.getByRole('button', { name: '匯入勾選的 3 筆', exact: true }).click();
           await imported;
-          await page.getByText(/已匯入：新增 1 筆、更新 2 筆/).waitFor({ timeout: 15000 });
+          await page.locator('flt-semantics').getByText(/已匯入：新增 1 筆、更新 2 筆/).waitFor({ timeout: 15000 });
           await page.screenshot({ path: path.join(output, `${name}-import-done.png`) });
           // Fee conversion: certain readings chosen, unclear ones for a person.
           await page.getByRole('button', { name: '費率轉換', exact: true }).click();
           await page.getByRole('button', { name: '讀取尚未轉換的點位', exact: true }).click();
-          await waitText('每次 20 元（大型重機費率未確認）');
+          // Each row is one checkbox that reads the writing and its reading.
+          await page.getByRole('checkbox', { name: /每次 20 元（大型重機費率未確認）/ }).waitFor({ timeout: 15000 });
           await page.screenshot({ path: path.join(output, `${name}-fees.png`) });
           await page.getByRole('button', { name: '需人工確認 1 筆', exact: true }).click();
-          await waitText('每 4 小時 30 元（大型重機費率未確認）');
+          await page.getByRole('checkbox', { name: /每 4 小時 30 元（大型重機費率未確認）/ }).waitFor({ timeout: 15000 });
           await page.screenshot({ path: path.join(output, `${name}-fees-manual.png`) });
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} fee conversion scrolls sideways`);
           const converted = page.waitForResponse(response => response.url().endsWith('/rpc/admin_convert_fees'));
           await page.getByRole('button', { name: '寫入 1 筆費率', exact: true }).click();
           await converted;
-          await page.getByText(/已寫入 1 筆費率/).waitFor({ timeout: 15000 });
+          await page.locator('flt-semantics').getByText(/已寫入 1 筆費率/).waitFor({ timeout: 15000 });
           await page.getByRole('button', { name: /^審核/, exact: true }).click();
           await waitText('待審回報');
         }

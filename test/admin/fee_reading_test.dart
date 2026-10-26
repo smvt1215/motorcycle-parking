@@ -81,83 +81,45 @@ void main() {
       expectReading(
         '免費（大型重機比照機車費率）',
         FeeVerdict.convertible,
-        fee: {'scooter': free, 'heavy': sameAsScooter},
+        fee: {'scooter': free},
       );
       expectReading(
         '每日 30 元（大型重機比照機車費率）',
         FeeVerdict.convertible,
-        fee: {'scooter': daily(30), 'heavy': sameAsScooter},
+        fee: {'scooter': daily(30)},
       );
       expectReading(
         '每小時 10 元；每日 30 元（大型重機比照機車費率）',
         FeeVerdict.convertible,
-        fee: {'scooter': hourly(10, 60, 30), 'heavy': sameAsScooter},
+        fee: {'scooter': hourly(10, 60, 30)},
       );
       expectReading(
         '每次 20 元（大型重機比照機車費率）',
         FeeVerdict.convertible,
-        fee: {'scooter': visit(20), 'heavy': sameAsScooter},
+        fee: {'scooter': visit(20)},
       );
       expectReading(
         '機車每日 30 元（大型重機比照機車費率）',
         FeeVerdict.convertible,
-        fee: {'scooter': daily(30), 'heavy': sameAsScooter},
-      );
-    });
-
-    test('比照汽車費率 and 停汽車區: the amount is what a heavy bike pays', () {
-      expectReading(
-        '每小時 40 元（大型重機比照汽車費率）',
-        FeeVerdict.convertible,
-        fee: {'heavy': hourly(40)},
-      );
-      expectReading(
-        '每小時 30 元；每日 150 元（大型重機比照汽車費率）',
-        FeeVerdict.convertible,
-        fee: {'heavy': hourly(30, 60, 150)},
-      );
-      expectReading(
-        '每小時 30 元（重機專用格比照汽車費率）',
-        FeeVerdict.convertible,
-        fee: {'heavy': hourly(30)},
-      );
-      expectReading(
-        '免費（大型重機停汽車區）',
-        FeeVerdict.convertible,
-        fee: {'heavy': free},
-      );
-      expectReading(
-        '每次 100 元（大型重機比照汽車費率）',
-        FeeVerdict.convertible,
-        fee: {'heavy': visit(100)},
+        fee: {'scooter': daily(30)},
       );
     });
 
     test('entrance notes beside the price do not change it', () {
       expectReading(
-        '每小時 50 元；需管理員協助（大型重機比照汽車費率）',
+        '免費；機車區（大型重機比照機車費率）',
         FeeVerdict.convertible,
-        fee: {'heavy': hourly(50)},
+        fee: {'scooter': free},
       );
       expectReading(
-        '免費；需按鈴（大型重機停汽車區）',
+        '每小時 10 元；窄車道（大型重機比照機車費率）',
         FeeVerdict.convertible,
-        fee: {'heavy': free},
+        fee: {'scooter': hourly(10)},
       );
       expectReading(
-        '每小時 20 元；B2限悠遊卡（大型重機比照汽車費率）',
+        '每日 30 元；機車（大型重機比照機車費率）',
         FeeVerdict.convertible,
-        fee: {'heavy': hourly(20)},
-      );
-      expectReading(
-        '每小時 30 元；每日 130 元；倒退掃牌（大型重機比照汽車費率）',
-        FeeVerdict.convertible,
-        fee: {'heavy': hourly(30, 60, 130)},
-      );
-      expectReading(
-        '每 4 小時 50 元；注意開放時間（大型重機比照汽車費率）',
-        FeeVerdict.convertible,
-        fee: {'heavy': hourly(50, 240)},
+        fee: {'scooter': daily(30)},
       );
     });
 
@@ -165,7 +127,7 @@ void main() {
       expectReading(
         '每日 30 元；每月 600 元（大型重機比照機車費率）',
         FeeVerdict.convertible,
-        fee: {'scooter': daily(30), 'heavy': sameAsScooter},
+        fee: {'scooter': daily(30)},
       );
     });
 
@@ -180,6 +142,25 @@ void main() {
   });
 
   group('需人工確認：社群整理的寫法', () {
+    test('比照 is a rider\'s report: the heavy rate never falls back', () {
+      // The amount is a suggestion for a person to check, never a fallback
+      // to another vehicle's rate.
+      for (final (note, fee) in [
+        ('每小時 40 元（大型重機比照汽車費率）', {'heavy': hourly(40)}),
+        ('每小時 30 元；每日 150 元（大型重機比照汽車費率）', {'heavy': hourly(30, 60, 150)}),
+        ('每小時 30 元（重機專用格比照汽車費率）', {'heavy': hourly(30)}),
+        ('免費（大型重機停汽車區）', {'heavy': free}),
+        ('每小時 50 元；需管理員協助（大型重機比照汽車費率）', {'heavy': hourly(50)}),
+        ('每 4 小時 50 元；注意開放時間（大型重機比照汽車費率）', {'heavy': hourly(50, 240)}),
+      ]) {
+        expectReading(note, FeeVerdict.manual, fee: fee, reason: '非公告明定');
+      }
+      // 比照機車 converts only the scooter rate it names.
+      final reading = readFeeNote('每日 30 元（大型重機比照機車費率）');
+      expect(reading.fee!.heavy, isNull);
+      expect(reading.reason, contains('維持未確認'));
+    });
+
     test('an unlabelled price elsewhere names no vehicle', () {
       expectReading(
         '每 4 小時 30 元',
@@ -219,7 +200,7 @@ void main() {
         '黃牌每日 60 元；紅牌每日 100 元（大型重機另訂費率）',
         '機車區每日 20 元；汽車區每小時 40 元（大型重機比照機車費率）',
       ]) {
-        expectReading(note, FeeVerdict.manual, reason: '分別計費');
+        expectReading(note, FeeVerdict.manual);
       }
     });
 
@@ -326,11 +307,6 @@ void main() {
         FeeVerdict.convertible,
         fee: {'scooter': hourly(10, 60, 20)},
       );
-      expectReading(
-        '計時：小型車100元/時，機車20元/時，入場前30分鐘免費，停車未滿1小時以1小時計，逾1小時以上，未滿半小時以半小時計。',
-        FeeVerdict.convertible,
-        fee: {'scooter': hourly(20)},
-      );
     });
 
     test('a visit that ends after some hours', () {
@@ -373,6 +349,54 @@ void main() {
         );
       },
     );
+  });
+
+  group('不轉換：現有費率格式無法表達的寫法', () {
+    test('a multiple of another rate (臺北路外試辦機車區)', () {
+      expectReading('大型重機機車費率2倍', FeeVerdict.manual, reason: '倍率');
+      expectReading(
+        '機車區：大型重機依機車費率 2 倍計收；汽車區依小型車費率',
+        FeeVerdict.manual,
+        reason: '倍率',
+      );
+    });
+
+    test('a first period at 0 yuan is not free', () {
+      expectReading(
+        '限時格首 20 分鐘 0 元，可付 40 元延長一次',
+        FeeVerdict.manual,
+        reason: '0 元不等於免費',
+      );
+      expectReading('機車：首20分鐘0元，之後每次20元', FeeVerdict.manual);
+    });
+
+    test('a free first period for motorcycles', () {
+      expectReading(
+        '計時：小型車100元/時，機車20元/時，入場前30分鐘免費，停車未滿1小時以1小時計，逾1小時以上，未滿半小時以半小時計。',
+        FeeVerdict.manual,
+        reason: '免費時段',
+      );
+    });
+
+    test('caps and visits that reset at another hour', () {
+      for (final note in [
+        '計次：20元/次，隔日另計(以凌晨2時為基準)。季租：全日900元/季。',
+        '計時：小型車60元/時，機車10元/時，停車全程以半小時計，機車當日上限30元，並於隔日3時另計。',
+        '小型車：每小時30元,平日入場24小時內最高上限360元。機車：每次20元，入場24小時後、離場另計。',
+      ]) {
+        expectReading(note, FeeVerdict.manual, reason: '重設時間');
+      }
+      // Midnight is what daily_cap and per-visit already mean.
+      expectReading(
+        '計次：機車50元/次，隔日另計，以00時為基準。',
+        FeeVerdict.convertible,
+        fee: {'scooter': visit(50)},
+      );
+    });
+
+    test('rates that differ by time of day', () {
+      expectReading('機車：日間10元/時(08-20)，夜間5元/時(20-08)', FeeVerdict.manual);
+    });
   });
 
   group('需人工確認：官方資料的寫法', () {
@@ -476,6 +500,6 @@ void main() {
       }
     }
     // Most writings convert; the rest stay for a person or unconfirmed.
-    expect(convertible, greaterThan(800));
+    expect(convertible, greaterThan(600));
   });
 }

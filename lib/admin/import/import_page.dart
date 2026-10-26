@@ -180,7 +180,9 @@ class _Intro extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Its own node, so the heading is not read with the text below it.
         Semantics(
+          container: true,
           header: true,
           child: Text(title, style: theme.textTheme.headlineMedium),
         ),
@@ -210,9 +212,9 @@ class _Filter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    // The button is the node; this only adds that it is the chosen filter.
     return Semantics(
       selected: selected,
-      button: true,
       child: OutlinedButton.icon(
         onPressed: onPressed,
         icon: icon == null
