@@ -296,13 +296,14 @@ rate = {"mode":"free"} | {"mode":"posted"}
 | 層 | 來源 | 提供內容 | 已知限制 / 待確認 |
 |---|---|---|---|
 | 1 | **TDX**（交通部運輸資料流通服務） | 路外停車場靜態（`CarPark`）、車位類型與數量（`ParkingSpace`）、即時剩餘（`ParkingAvailability`）、路邊路段（`OnStreet/ParkingSegment*`），以 City 代碼分縣市 | 交通部自述機車車位數「若有才提供」；各縣市資料及統計方式不一、部分縣市未開放齊全；**完全沒有「重機可否停」欄位** |
-| 2 | **縣市自有開放資料**（補 TDX 缺口） | 台北停管處路邊格位圖層（含機車格數、格種，每日更新）、台中路外/路邊剩餘（含機車欄位、10 分鐘更新）、台南 Parkweb API（含機車剩餘 `moto`） | 格式各異，每市要寫一個 adapter；只在 TDX 審查發現缺口時才接 |
+| 2 | **縣市自有開放資料**（補 TDX 缺口） | 台北停管處路邊格位圖層（含機車格數、格種，每日更新）、台北停管處路外剩餘（含機車與重機剩餘，XML V2 約 5 分鐘更新）、台中路外剩餘（機車只有燈號）／路邊剩餘（逐格、無機車格種）、台南 Parkweb API（含機車剩餘 `moto`）、新竹 hispark（含機車剩餘） | 格式各異，每市要寫一個 adapter；即時車位的實測覆蓋與第一批來源見 [availability-coverage.md](availability-coverage.md) |
 | 3 | **縣市公告（人工整理）** | 重機開放規則、重機專用格位置（如新北 17 格專用格的路段） | 多半只有新聞稿/公告，無開放資料 → 進 `city_rules` 與 `official_heavy_spots` 表，由管理者維護；地圖以 `official_viewport_spots` 讀取已生效（`effective_date` 已到）的點位，與社群點合併顯示（TDX 即時層已移除） |
 
 ### Phase 0：TDX 資料完整性稽核（實作前先做）
+> 2026-10-26：即時車位覆蓋稽核已在本機完成，結果見 [availability-coverage.md](availability-coverage.md)（工具 `tool/availability_audit.py`，抽樣 8 個縣市的 TDX 路外／路邊端點與第二層縣市來源）；以下為原規劃，雲端 403 與 `tool/tdx_audit.dart` 等敘述為歷史紀錄。
 > 2026-10-17：改以 `tool/import_mymaps.py` 逐縣市比對官方資料（各縣市自有資料優先，TDX 補缺），結果見 `data/imports/google-mymaps/REPORT.md`；以下為原規劃。
 在開發用的雲端環境實測時，`tdx.transportdata.tw`、`data.taipei`、`data.gov.tw` 都被網路政策擋下（403），所以**目前無法親自確認完整性**，稽核要在放行網域並取得 TDX 金鑰後執行：
-- 寫 `tool/tdx_audit.dart`（或 Deno script），逐一跑 22 縣市，輸出 `docs/availability-coverage.md`（原規劃為 `docs/tdx-coverage.md`，併入 [REALTIME_AVAILABILITY_UI_PLAN.md](REALTIME_AVAILABILITY_UI_PLAN.md) 6.2 的同一份稽核）：
+- 寫稽核工具，逐縣市輸出 [availability-coverage.md](availability-coverage.md)（與 [REALTIME_AVAILABILITY_UI_PLAN.md](REALTIME_AVAILABILITY_UI_PLAN.md) 6.2 共用同一份稽核，不另開 TDX 專用稽核文件）：
   - 路外停車場數、其中有機車車位數（`ParkingSpace` 機車類型）的比例
   - 有即時剩餘、且即時資料含機車欄位的比例；資料最後更新時間分佈（判斷是否「假即時」）
   - 座標缺漏/明顯錯誤（落在海上、0,0）比例
