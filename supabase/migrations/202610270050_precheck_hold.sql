@@ -3,7 +3,8 @@
 -- `hold` rules through and passes their codes as `risk_flags`; a rider may
 -- attach a notice link (`evidence_url`, https). Both are kept on the case,
 -- never on the spot. A new spot that is held, or carries a link, opens a
--- case; while a held case is open, confirming the spot takes one more vote
+-- case; while that held creation case is open, confirming the spot takes
+-- one more vote (a held suggestion does not)
 -- (docs/CONTRIBUTION_TIERS_FEASIBILITY.md §5.8, decision 17). apply_report is
 -- the 202610270010 definition with only these changes.
 
@@ -94,8 +95,10 @@ begin
     select least(count(distinct ip_hash),count(distinct device_hash)) into v_count from spot_votes where spot_id=v_id and vote='still_there' and qualified;
     -- A spot created under a hold needs one more confirmation until an
     -- admin resolves its case (feasibility §5.8, decision 17).
+    -- Only the spot's own creation counts: a held suggestion is not applied
+    -- yet and must not shake the spot's standing.
     v_need:=2+case when exists(select 1 from moderation_queue where source_id=v_id::text
-      and resolved_at is null and cardinality(risk_flags)>0) then 1 else 0 end;
+      and field='create' and resolved_at is null and cardinality(risk_flags)>0) then 1 else 0 end;
     -- Once an admin has decided a dispute, the "gone" votes before that
     -- decision are spent: only later ones can reopen it.
     select max(resolved_at) into v_decided from moderation_queue

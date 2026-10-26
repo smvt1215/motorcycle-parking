@@ -157,6 +157,8 @@ Deno.test('suggestions carry a condition with the space type it is stored under'
   const ok = [
     { space_type: 'timedMotorcycle', condition: timed },
     { space_type: 'paidMotorcycle', condition: null },
+    // A street bay becoming a lot drops its condition.
+    { space_type: 'offStreet', condition: null },
   ];
   for (const proposed of ok) {
     const error = flag(proposed);
@@ -167,7 +169,7 @@ Deno.test('suggestions carry a condition with the space type it is stored under'
     { condition: timed },
     { space_type: 'paidMotorcycle', condition: timed },
     // A lot's conditions live in its zones.
-    { space_type: 'offStreet', condition: null },
+    { space_type: 'offStreet', condition: timed },
     // Riders attach a notice as evidence; admins write the basis (§1.4).
     {
       space_type: 'timedMotorcycle',

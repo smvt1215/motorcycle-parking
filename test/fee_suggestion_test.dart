@@ -4,6 +4,7 @@ import 'package:motorcycle_parking/features/report/condition_fields.dart';
 import 'package:motorcycle_parking/features/report/fee_suggestion.dart';
 import 'package:motorcycle_parking/models/fee.dart';
 import 'package:motorcycle_parking/models/parking.dart';
+import 'package:motorcycle_parking/models/parking_condition.dart';
 import 'package:motorcycle_parking/ui/fee_editor.dart';
 
 const current = Fee(
@@ -34,6 +35,27 @@ void main() {
     expect(incompleteEdits({FeeVehicle.heavy: const Rate(FeeMode.perVisit)}), [
       FeeVehicle.heavy,
     ]);
+  });
+
+  test('a 汽機共用 period keeps the weekdays it was stored with', () {
+    final stored = ParkingCondition.fromJson({
+      'bay': 'car',
+      'use': 'share',
+      'share': 'car_motorcycle',
+      'schedule': [
+        {
+          'days': ['mon', 'wed'],
+          'from': '20:00',
+          'to': '07:00',
+          'vehicles': ['scooter'],
+        },
+      ],
+    });
+    final draft = ConditionDraft.of(stored, SpaceType.flexShared)
+      ..charge = Charge.toll;
+    final sent = draft.conditionFor(SpaceType.flexShared)!;
+    expect(sent.schedule.single.days, ['mon', 'wed']);
+    expect(conditionSummary(sent), '收費、共用時段 週一、週三 20:00–隔日 07:00 普通機車');
   });
 
   test('a follow reads with the suggested rates, worked out (#140)', () {

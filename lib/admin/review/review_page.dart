@@ -1312,6 +1312,12 @@ class _FieldEditor extends StatelessWidget {
       ],
       onChanged: onChanged,
     ),
+    // Shown as sent; the zone and condition editors are C6's.
+    FieldInput.condition => InputDecorator(
+      decoration: _decoration(context)
+          .copyWith(helperText: '依騎士建議套用；需調整時請改用點位頁'),
+      child: Text(formatValue(field.key, value)),
+    ),
     FieldInput.fee => FeeEditor(
       value: switch (value) {
         final Fee fee => fee,

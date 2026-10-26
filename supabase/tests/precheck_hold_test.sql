@@ -67,6 +67,11 @@ select pg_temp.report(2,jsonb_build_object('action','flag','source_id',(select i
 select is((select (risk_flags,evidence_url)::text from moderation_queue
   where source_id=(select id::text from plain) and reason='格位類型'),
   '({share_free_needs_basis},https://pma.gov.taipei/y)','a held suggestion keeps its flags and link');
+-- A held suggestion is not applied yet: it does not raise the spot's threshold.
+select pg_temp.report(6,jsonb_build_object('action','vote','spot_id',(select id from plain),'vote','still_there'),'c','c');
+select pg_temp.report(7,jsonb_build_object('action','vote','spot_id',(select id from plain),'vote','still_there'),'d','d');
+select is((select status from community_spots where id=(select id from plain)),'confirmed',
+  'an open held suggestion leaves the usual two confirmations');
 
 select throws_ok($$insert into moderation_queue(source_id,reason,evidence_url) values('x','y','http://a.tw')$$,
   '23514',null,'only https links are kept');

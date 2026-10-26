@@ -1,7 +1,10 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../../models/parking.dart';
+import '../../models/fee.dart' show FeeWords;
 import '../../models/parking_condition.dart';
+
+export '../../models/condition_text.dart' show conditionSummary;
 import 'report_sheet.dart' show ChoiceField;
 
 /// The bay kinds whose painted markings already say whether they charge:
@@ -20,15 +23,17 @@ class SlotDraft {
   SlotDraft();
 
   SlotDraft.of(ScheduleSlot slot)
-    : days = slot.days is String ? slot.days as String : 'all',
+    : days = slot.days,
       allDay = slot.from == null && slot.to == null,
       vehicles = slot.vehicles.toSet() {
     from.text = slot.from ?? '';
     to.text = slot.to ?? '';
   }
 
-  /// `all`, `weekday` or `holiday`; weekdays one by one are the admin's.
-  String days = 'all';
+  /// `all`, `weekday` or `holiday`, or weekdays one by one (`["mon"]`) as
+  /// stored: the app picks presets only, but keeps picked days it loaded
+  /// rather than widening them to every day.
+  Object days = 'all';
   bool allDay = true;
   final from = TextEditingController(), to = TextEditingController();
   Set<SlotVehicle> vehicles = {};
@@ -340,6 +345,15 @@ class _SlotCard extends StatelessWidget {
                       spacing: 8,
                       runSpacing: 8,
                       children: [
+                        if (slot.days case final List<Object?> picked)
+                          ChoiceChip(
+                            key: ValueKey('$k-days-picked'),
+                            label: Text(
+                              FeeWords.dayLabel(FeeWords.dayMask(picked)),
+                            ),
+                            selected: true,
+                            onSelected: (_) {},
+                          ),
                         for (final (value, label) in _dayLabels)
                           ChoiceChip(
                             key: ValueKey('$k-days-$value'),
@@ -467,23 +481,4 @@ class _SlotCard extends StatelessWidget {
       ),
     );
   }
-}
-
-/// A condition as one line for 你要改的內容: charge, 普大共用, the time
-/// limit and the periods, each only when known.
-String conditionSummary(ParkingCondition? c) {
-  if (c == null) return '未提供';
-  final parts = [
-    switch (c.charge) {
-      Charge.toll => '收費',
-      Charge.free => '免費',
-      null => '收費未確認',
-    },
-    if (c.share == ShareKind.scooterHeavy) '普通、大型重機共用',
-    for (final l in c.limits)
-      if (l.kind == LimitKind.timeLimit)
-        l.maxMinutes == null ? '限時' : '限停 ${l.maxMinutes} 分鐘',
-    if (c.schedule.isNotEmpty) '共用時段 ${c.schedule.length} 段',
-  ];
-  return parts.join('、');
 }

@@ -312,15 +312,16 @@ export const validEvidenceUrl = (v: unknown) =>
 /**
  * A suggested street condition (decision 33): the contract's, without a
  * basis (a notice travels as `evidence_url`), with the space type it is
- * stored under beside it; null drops the condition for that space type.
+ * stored under beside it; null drops the condition (also when the bay
+ * becomes a lot, whose conditions live in its zones).
  */
 function validProposedCondition(p: Record<string, unknown>): boolean {
   if (!('condition' in p)) return true;
   const type = p.space_type;
-  if (typeof type !== 'string' || offStreetSpaceTypes.includes(type)) {
-    return false;
-  }
+  if (typeof type !== 'string') return false;
+  // A lot drops a stored street condition; it never carries one.
   if (p.condition === null) return true;
+  if (offStreetSpaceTypes.includes(type)) return false;
   return validCondition(p.condition) &&
     !Object.hasOwn(p.condition as object, 'basis') &&
     legacySpaceType(p.condition as Record<string, unknown>, false) === type;

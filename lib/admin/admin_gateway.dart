@@ -196,7 +196,7 @@ const _communityColumns =
 /// show the admin each current value before a forced write.
 const _spotColumns =
     'id,name,lat,lng,city,district,space_type,fee_note,note,scooter_allowed,heavy_allowed,source_name,updated_at,'
-    'facility_type,parking_access,entrance_note,parking_guide,fee';
+    'facility_type,parking_access,entrance_note,parking_guide,fee,condition';
 final _uuid = RegExp(
   r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
   caseSensitive: false,

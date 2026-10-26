@@ -1,3 +1,5 @@
+import '../../models/condition_text.dart';
+import '../../models/parking_condition.dart';
 import '../../models/fee.dart';
 import '../../models/parking.dart';
 
@@ -57,6 +59,10 @@ enum FieldInput {
 
   /// A structured fee per vehicle (`fee`), edited with the shared FeeEditor.
   fee,
+
+  /// A street bay's condition (`condition`, design §1.2): shown and applied
+  /// with its space type as the rider sent it; editing it is C6's.
+  condition,
 }
 
 /// A spot column `admin_resolve_report` may change, as the admin sees it.
@@ -96,6 +102,7 @@ final reviewFields = [
   ),
   ReviewField('scooter_allowed', '普通機車', FieldInput.triState),
   ReviewField('heavy_allowed', '大型重機', FieldInput.triState),
+  ReviewField('condition', '停放條件', FieldInput.condition),
   ReviewField('fee', '費率', FieldInput.fee),
   ReviewField('fee_note', '收費資訊', FieldInput.text, maxLength: 200),
   const ReviewField('note', '備註', FieldInput.text, maxLength: 500),
@@ -322,6 +329,7 @@ bool fitsField(ReviewField field, Object? value) => switch (field.input) {
   FieldInput.choice => value == null || field.choices.containsKey(value),
   FieldInput.fee =>
     value == null || value is Fee || Fee.tryParse(value) != null,
+  FieldInput.condition => value == null || validCondition(value),
 };
 
 /// A `fee` value as a [Fee]: the editor's own, or a valid JSON one. Null
@@ -334,9 +342,12 @@ Fee? reviewFee(Object? value) {
 
 /// Whether two values of [key] say the same; a fee compares by content.
 bool sameValue(String key, Object? a, Object? b) =>
-    reviewField(key)?.input == FieldInput.fee
-    ? reviewFee(a) == reviewFee(b)
-    : a == b;
+    switch (reviewField(key)?.input) {
+      FieldInput.fee => reviewFee(a) == reviewFee(b),
+      FieldInput.condition =>
+        ParkingCondition.fromJson(a) == ParkingCondition.fromJson(b),
+      _ => a == b,
+    };
 
 /// [patch] as the RPC takes it: a fee being edited becomes its JSON.
 Map<String, dynamic> wirePatch(Map<String, dynamic> patch) => {
@@ -368,6 +379,7 @@ String formatValue(String key, Object? value) {
       value is String && value.trim().isNotEmpty ? value : '未填寫',
     FieldInput.choice => field.choices[value] ?? '未設定',
     FieldInput.fee => reviewFee(value)?.summary ?? '未設定',
+    FieldInput.condition => conditionSummary(ParkingCondition.fromJson(value)),
   };
 }
 
@@ -413,6 +425,17 @@ String? validatePatch(Map<String, dynamic> patch, ReviewSpot spot) {
         final (min, max) = key == 'lat' ? (20.0, 27.0) : (118.0, 123.0);
         if (value is! num || value < min || value > max) {
           return '${field.label}需介於 $min 與 $max 之間';
+        }
+      case FieldInput.condition:
+        if (value == null) break;
+        final condition = ParkingCondition.fromJson(value);
+        if (condition == null) return '停放條件格式不正確';
+        // The table holds a street condition to its space type (§1.3).
+        final type = SpaceType.values
+            .asNameMap()[patch['space_type'] ?? spot.values['space_type']];
+        if (type == null ||
+            legacySpaceType(condition, offStreet: false) != type) {
+          return '停放條件和格位類型不一致，請一併套用建議的格位類型';
         }
       case FieldInput.fee:
         if (value == null) break;
