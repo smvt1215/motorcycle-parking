@@ -87,11 +87,14 @@ Eligibility _judge(
         EligibilityStatus.unverified,
         '社群資訊尚未查核或可能過時，請確認現場',
       );
-    // Open to permit holders, who may be the rider using the app.
+    // The rider using the app may qualify, but a permit alone does not: the
+    // bay is for 特製機車 passed by the motor vehicles office, used by or
+    // carrying the permit holder (身心障礙者專用停車位設置管理辦法 §12).
     case SpaceType.disabledMotorcycle:
       return const Eligibility(
         EligibilityStatus.conditional,
-        '身心障礙者專用，須持有效停車識別證明才可停放',
+        '身障專用格：須是經監理站檢驗合格的特製機車，且身障者本人騎乘或同行，'
+        '並持專用停車位識別證或掛專用牌照，才可停放',
       );
     case SpaceType.evMotorcycle:
       return const Eligibility(
