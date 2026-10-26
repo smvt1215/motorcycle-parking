@@ -120,6 +120,14 @@ function session(role, aal, factors = [factor]) {
             if ((route.request().headers().accept || '').includes('vnd.pgrst.object')) return route.fulfill({ json: officialSpot, headers: cors });
             return route.fulfill({ json: url.searchParams.get('hidden') === 'eq.true' ? [] : [officialSpot], headers: cors });
           }
+          if (url.pathname === '/functions/v1/geocode') {
+            if (route.request().method() === 'OPTIONS') return route.fulfill({ body: 'ok', headers: cors });
+            assert.equal(route.request().postDataJSON().query, '中山北路二段與南京東路');
+            return route.fulfill({ json: { kind: 'intersection', candidates: [
+              { kind: 'intersection', label: '中山北路二段與南京東路一段', place: '臺北市中山區', lat: 25.052154, lng: 121.522503, precision: 'center' },
+              { kind: 'road', label: '南京東路一段', place: '臺北市中山區', lat: 25.0521, lng: 121.525, precision: 'center' },
+            ] }, headers: cors });
+          }
           if (url.pathname === '/rest/v1/rpc/admin_spots') {
             return route.fulfill({ json: [communitySpot, officialSpot].map(spot => ({
               source_id: spot === officialSpot ? `official:${spot.id}` : spot.id, kind: spot === officialSpot ? 'official' : 'community',
@@ -323,6 +331,34 @@ function session(role, aal, factors = [factor]) {
           for (let i = 0; i < 12; i++) await page.mouse.wheel(0, 150);
           await page.waitForTimeout(500);
           await page.screenshot({ path: path.join(output, `${name}-spot-location.png`) });
+          // Address search from the picker's entry: results, then the pick's reminder.
+          // Flutter web shows these lines either as text or as a group's
+          // aria-label, so both are matched.
+          const partial = text => page.getByText(text, { exact: false })
+            .or(page.locator(`flt-semantics[aria-label*="${text}"]`)).first();
+          const waitPartial = async text => {
+            try {
+              await partial(text).waitFor({ timeout: 30000 });
+            } catch (error) {
+              await page.screenshot({ path: path.join(output, `${name}-failure.png`) });
+              await fs.writeFile(path.join(output, `${name}-failure.json`), JSON.stringify({ errors, requests, html: await page.content() }, null, 2));
+              throw error;
+            }
+          };
+          await page.getByRole('button', { name: '搜尋門牌、路段或路口', exact: true }).click();
+          const search = page.getByRole('textbox', { name: '搜尋門牌、路段或路口' });
+          await search.waitFor({ timeout: 15000 });
+          await search.click();
+          await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+          await search.fill('中山北路二段與南京東路');
+          await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+          await search.press('Enter');
+          await waitPartial('臺北市中山區的路口，只到交會點');
+          await page.screenshot({ path: path.join(output, `${name}-address-results.png`) });
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} address results scroll sideways`);
+          await partial('中山北路二段與南京東路一段').click();
+          await waitPartial('並填入「路段」');
+          await page.screenshot({ path: path.join(output, `${name}-address-picked.png`) });
           await page.getByRole('button', { name: '審核', exact: false }).first().click();
           await page.screenshot({ path: path.join(output, `${name}.png`) });
           for (const [label, title] of [['點位', '圖層'], ['規則', '各縣市停車規則'], ['匯入', '匯入停車資料'], ['使用者', '使用者管理'], ['審核', '待審回報']]) {

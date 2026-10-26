@@ -9,6 +9,7 @@ import 'package:pointer_interceptor/pointer_interceptor.dart';
 
 import '../../models/fee.dart';
 import '../../models/parking.dart';
+import '../../ui/address_search_field.dart';
 import '../../ui/fee_editor.dart';
 import '../../ui/location_picker.dart';
 import '../admin_theme.dart';
@@ -127,16 +128,21 @@ class _SpotsPageState extends State<SpotsPage> {
     final lng = spots.draft['lng'] ?? r?.values['lng'];
     _listBesideForm = false;
     if (r == null || lat is! num || lng is! num) return;
+    final fromMarker = _fromMarker;
+    _fromMarker = false;
+    _focusAt(lat.toDouble(), lng.toDouble(), zoom: fromMarker ? null : 18);
+  }
+
+  /// Centres the big map on a point beside the open form and list.
+  void _focusAt(double lat, double lng, {double? zoom}) {
     final compact = _width < reviewCompactWidth;
     final left = _showsList(_width, true) ? _listWidth(_width) : 0.0;
     final right = compact ? 0.0 : _formWidth(_width);
-    final fromMarker = _fromMarker;
-    _fromMarker = false;
     _setState(
       () => _focus = SpotMapFocus(
-        lat: lat.toDouble(),
-        lng: lng.toDouble(),
-        zoom: fromMarker ? null : 18,
+        lat: lat,
+        lng: lng,
+        zoom: zoom,
         leftOfCenter: (right - left) / 2,
         seq: ++_focusSeq,
       ),
@@ -239,10 +245,17 @@ class _SpotsPageState extends State<SpotsPage> {
 
   /// A position change from the picker or the coordinate fields; the county,
   /// district and duplicates follow once the admin stops moving it.
-  void _move(double lat, double lng, {bool fromPicker = true}) {
+  /// [recenter]: an address search may jump far, so the big map follows.
+  void _move(
+    double lat,
+    double lng, {
+    bool fromPicker = true,
+    bool recenter = false,
+  }) {
     spots.set('lat', lat);
     spots.set('lng', lng);
     if (fromPicker) setState(() => _moves++);
+    if (recenter) _focusAt(lat, lng, zoom: 18);
     _locate?.cancel();
     _locate = Timer(const Duration(milliseconds: 600), spots.locate);
   }
@@ -935,7 +948,8 @@ class _FormPane extends StatelessWidget {
   final String backLabel;
   final VoidCallback onBack, onSave, onPromote, onReload;
   final ValueChanged<bool> onHide;
-  final void Function(double lat, double lng, {bool fromPicker}) onMove;
+  final void Function(double lat, double lng, {bool fromPicker, bool recenter})
+  onMove;
   final int moves;
   final LocationMapBuilder? mapBuilder;
 
@@ -1097,7 +1111,7 @@ class _FormPane extends StatelessWidget {
                           '${record.sourceId}-${spots.formSeq}-${f.key}'
                           '${switch (f.key) {
                             'lat' || 'lng' => '-$moves',
-                            'city' || 'district' => '-${spots.filled}',
+                            'city' || 'district' || 'address' || 'road_segment' => '-${spots.filled}',
                             _ => '',
                           }}',
                         ),
@@ -1792,7 +1806,8 @@ class _LocationSection extends StatelessWidget {
     required this.mapBuilder,
   });
   final SpotsController spots;
-  final void Function(double lat, double lng, {bool fromPicker}) onMove;
+  final void Function(double lat, double lng, {bool fromPicker, bool recenter})
+  onMove;
   final LocationMapBuilder? mapBuilder;
 
   @override
@@ -1819,11 +1834,29 @@ class _LocationSection extends StatelessWidget {
                 nudgeButtons: true,
                 mapBuilder: mapBuilder,
                 onChanged: (a, b) => onMove(a, b),
+                fills: const {'address': '地址', 'road_segment': '路段'},
+                onSearch: switch (spots.gateway) {
+                  final gateway? => (context) async {
+                    final c = await showAddressSearch(
+                      context,
+                      search: gateway.searchAddress,
+                      lat: lat.toDouble(),
+                      lng: lng.toDouble(),
+                    );
+                    if (c == null) return null;
+                    if (c.field case final field?) {
+                      spots.fillFromSearch(field, c.label);
+                    }
+                    onMove(c.lat, c.lng, recenter: true);
+                    return c;
+                  },
+                  null => null,
+                },
               )
             else
               const AdminNotice('座標格式不正確，修正後地圖才會顯示。', error: true),
             const SizedBox(height: 4),
-            Text('拖曳標記或點地圖選位置；縣市與行政區會依位置自動帶入。', style: muted),
+            Text('搜尋地址，或拖曳標記、點地圖選位置；縣市與行政區會依位置自動帶入。', style: muted),
             if (spots.locating) ...[
               const SizedBox(height: 8),
               const LinearProgressIndicator(),

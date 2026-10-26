@@ -8,6 +8,7 @@ import '../../domain/location_check.dart';
 import '../../domain/precheck.dart';
 import '../../models/fee.dart';
 import '../../models/parking.dart';
+import '../../ui/address_search_field.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../../ui/fee_editor.dart';
 import '../../ui/location_picker.dart';
@@ -823,6 +824,15 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                         onLocate: widget.store.currentFix,
                         height: pickerHeight(context),
                         mapBuilder: appLocationMap,
+                        // Without a backend (demo) there is nothing to search.
+                        onSearch: widget.store.client == null
+                            ? null
+                            : (context) => showAddressSearch(
+                                context,
+                                search: widget.store.parking.searchAddress,
+                                lat: lat,
+                                lng: lng,
+                              ),
                         onChanged: (a, b) {
                           move(a, b);
                           state.didChange((a, b));

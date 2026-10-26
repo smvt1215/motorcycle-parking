@@ -5,6 +5,7 @@ import 'package:motorcycle_parking/admin/admin_gateway.dart';
 import 'package:motorcycle_parking/admin/review/review_models.dart';
 import 'package:motorcycle_parking/admin/spots/spot_map.dart';
 import 'package:motorcycle_parking/admin/spots/spot_models.dart';
+import 'package:motorcycle_parking/core/address_search.dart';
 import 'package:motorcycle_parking/core/town_lookup.dart';
 import 'package:motorcycle_parking/domain/location_check.dart';
 import 'package:motorcycle_parking/domain/map_viewport.dart';
@@ -490,6 +491,22 @@ class FakeAdminGateway implements AdminGateway {
     await delayedTown?.future;
     if (failTown) throw StateError('offline');
     return townAt;
+  }
+
+  /// What [searchAddress] returns, or throws when set.
+  List<AddressCandidate> addressResults = [];
+  AddressSearchException? addressError;
+  final List<String> addressQueries = [];
+
+  @override
+  Future<List<AddressCandidate>> searchAddress(
+    String query, {
+    double? lat,
+    double? lng,
+  }) async {
+    addressQueries.add(query);
+    if (addressError case final e?) throw e;
+    return addressResults;
   }
 
   /// Rows `admin_viewport_spots` returns, before the layer filter.

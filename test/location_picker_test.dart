@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:motorcycle_parking/core/address_search.dart';
 import 'package:motorcycle_parking/core/geo.dart';
 import 'package:motorcycle_parking/core/town_lookup.dart';
 import 'package:motorcycle_parking/domain/location_check.dart';
@@ -247,7 +248,7 @@ void main() {
       tester,
       onLocate: () async => LocationFix(25.06, 121.52, accuracy),
     );
-    expect(find.text('搜尋門牌或路口'), findsNothing);
+    expect(find.text('搜尋門牌、路段或路口'), findsNothing);
     await tester.tap(find.text('移到我的位置'));
     await tester.pumpAndSettle();
     expect(find.text('25.060000, 121.520000'), findsOneWidget);
@@ -271,13 +272,24 @@ void main() {
     expect(find.text('25.058100, 121.522600'), findsOneWidget);
   });
 
-  testWidgets('搜尋入口只在有提供搜尋時出現，結果移動標記', (tester) async {
+  testWidgets('搜尋入口只在有提供搜尋時出現，結果移動標記並提醒拖曳', (tester) async {
     await pumpPicker(
       tester,
-      onSearch: (context) async => (lat: 25.05, lng: 121.53),
+      onSearch: (context) async => const AddressCandidate(
+        kind: AddressKind.road,
+        label: '南京東路一段',
+        lat: 25.05,
+        lng: 121.53,
+        precision: AddressPrecision.center,
+      ),
     );
-    await tester.tap(find.text('搜尋門牌或路口'));
+    await tester.tap(find.text('搜尋門牌、路段或路口'));
     await tester.pumpAndSettle();
     expect(find.text('25.050000, 121.530000'), findsOneWidget);
+    expect(find.textContaining('已移到「南京東路一段」。路段只定位到中心點'), findsOneWidget);
+    // Once moved by hand, the note no longer describes the marker.
+    await tester.tap(find.text('拖曳'));
+    await tester.pump();
+    expect(find.textContaining('已移到'), findsNothing);
   });
 }

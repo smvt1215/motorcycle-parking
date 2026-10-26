@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:motorcycle_parking/core/address_search.dart';
 import 'package:motorcycle_parking/admin/admin_app.dart';
 import 'package:motorcycle_parking/admin/admin_controller.dart';
 import 'package:motorcycle_parking/admin/spots/spot_map.dart';
@@ -581,6 +582,11 @@ void main() {
         -300,
         scrollable: form(),
       );
+      // Fully on screen, not under the action bar, before opening the menu.
+      await tester.ensureVisible(
+        find.widgetWithText(DropdownButtonFormField<String>, '格位類型'),
+      );
+      await tester.pumpAndSettle();
       await tester.tap(
         find.widgetWithText(DropdownButtonFormField<String>, '格位類型'),
       );
@@ -669,6 +675,49 @@ void main() {
       await tester.pumpAndSettle();
       expect(gateway.spotUpdates.single.$2.keys, containsAll(['lat']));
     });
+
+    for (final size in const [Size(390, 844), Size(1280, 900)]) {
+      testWidgets('${size.width.round()} px 搜尋路口：移動標記、填入路段並儲存', (tester) async {
+        gateway.addressResults = const [
+          AddressCandidate(
+            kind: AddressKind.intersection,
+            label: '中山北路二段與南京東路一段',
+            place: '臺北市中山區',
+            lat: 25.0521,
+            lng: 121.5222,
+            precision: AddressPrecision.center,
+          ),
+        ];
+        await show(tester, path: '/spots/$communityId', size: size);
+        final entry = find.byKey(const ValueKey('location-search'));
+        await tester.scrollUntilVisible(entry, 300, scrollable: form());
+        await tester.ensureVisible(entry);
+        await tester.pumpAndSettle();
+        await tester.tap(entry);
+        await tester.pumpAndSettle();
+        final search = find.byKey(const ValueKey('address-search'));
+        await tester.enterText(search, '中山北路二段與南京東路');
+        await tester.testTextInput.receiveAction(TextInputAction.search);
+        await tester.pumpAndSettle();
+        expect(gateway.addressQueries, ['中山北路二段與南京東路']);
+        await tester.tap(find.text('中山北路二段與南京東路一段'));
+        await tester.pump(const Duration(milliseconds: 700));
+        await tester.pumpAndSettle();
+        expect(find.textContaining('交會點，請把標記拖到'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.tap(find.text('儲存並關閉'));
+        await tester.pumpAndSettle();
+        // The crossing may be far from the stored point.
+        final same = find.text('是同一個點位，儲存');
+        if (same.evaluate().isNotEmpty) {
+          await tester.tap(same);
+          await tester.pumpAndSettle();
+        }
+        final saved = gateway.spotUpdates.single.$2;
+        expect(saved['road_segment'], '中山北路二段與南京東路一段');
+        expect(saved['lat'], 25.0521);
+      });
+    }
 
     for (final size in const [
       Size(320, 640),

@@ -5,6 +5,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart' as gm;
 import 'package:latlong2/latlong.dart' as ll;
 import 'package:pointer_interceptor/pointer_interceptor.dart';
 
+import '../core/address_search.dart';
 import '../core/config.dart';
 import '../core/geo.dart';
 import '../core/location_access.dart';
@@ -37,10 +38,11 @@ class LocationMapView {
 
 typedef LocationMapBuilder = Widget Function(BuildContext, LocationMapView);
 
-/// Finds a place by address or intersection and returns its position, or
-/// null when the rider gave up. Address search arrives in P4b
-/// (docs/ADMIN_WEB.md); until then no caller passes one.
-typedef LocationSearch = Future<({double lat, double lng})?> Function(
+/// Finds a house number, road or intersection (P4b, docs/ADMIN_WEB.md) and
+/// returns the result picked, or null when the rider gave up. Usually
+/// [showAddressSearch]; a caller that keeps an address field fills it from
+/// [AddressCandidate.field] before returning.
+typedef LocationSearch = Future<AddressCandidate?> Function(
   BuildContext context,
 );
 
@@ -61,6 +63,7 @@ class LocationPicker extends StatefulWidget {
     this.onSearch,
     this.height = 320,
     this.mapBuilder,
+    this.fills = const {},
   });
 
   final double lat, lng;
@@ -81,6 +84,10 @@ class LocationPicker extends StatefulWidget {
 
   /// Address and intersection search; the entry shows only when set.
   final LocationSearch? onSearch;
+
+  /// Field key to label for the fields [onSearch] fills, so the note after
+  /// a search can say which one changed.
+  final Map<String, String> fills;
   final double height;
 
   /// Tests swap the map for a placeholder.
@@ -92,6 +99,7 @@ class LocationPicker extends StatefulWidget {
 
 class _LocationPickerState extends State<LocationPicker> {
   LocationFix? fix;
+  AddressCandidate? found;
   bool locating = false;
   String? locateError;
 
@@ -122,9 +130,16 @@ class _LocationPickerState extends State<LocationPicker> {
   }
 
   Future<void> search() async {
-    final found = await widget.onSearch!(context);
-    if (found != null && mounted) widget.onChanged(found.lat, found.lng);
+    final picked = await widget.onSearch!(context);
+    if (picked == null || !mounted) return;
+    setState(() => found = picked);
+    widget.onChanged(picked.lat, picked.lng);
   }
+
+  /// The marker still sits on the search result, so its note applies.
+  bool get atFound =>
+      found != null &&
+      distanceMeters(found!.lat, found!.lng, widget.lat, widget.lng) < 0.5;
 
   @override
   Widget build(BuildContext context) {
@@ -153,10 +168,12 @@ class _LocationPickerState extends State<LocationPicker> {
         if (widget.onSearch != null) ...[
           OutlinedButton.icon(
             key: const ValueKey('location-search'),
+            style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
             onPressed: search,
             icon: const Icon(Icons.search),
-            label: const Text('搜尋門牌或路口'),
+            label: const Text('搜尋門牌、路段或路口'),
           ),
+          if (atFound) _FoundNote(found: found!, fills: widget.fills),
           const SizedBox(height: 8),
         ],
         Semantics(
@@ -228,6 +245,32 @@ class _LocationPickerState extends State<LocationPicker> {
           ),
         ],
       ],
+    );
+  }
+}
+
+/// What a search moved the marker to, what it filled, and what is left to
+/// do: a road or intersection is only a starting point.
+class _FoundNote extends StatelessWidget {
+  const _FoundNote({required this.found, required this.fills});
+  final AddressCandidate found;
+  final Map<String, String> fills;
+
+  @override
+  Widget build(BuildContext context) {
+    final filled = fills[found.field];
+    final reminder = found.reminder;
+    return LocationNote(
+      icon: reminder == null
+          ? Icons.check_circle_outline
+          : Icons.pan_tool_alt_outlined,
+      tone: reminder == null ? NoteTone.info : NoteTone.caution,
+      text: [
+        '已移到「${found.label}」',
+        if (filled != null) '，並填入「$filled」',
+        '。',
+        ?reminder,
+      ].join(),
     );
   }
 }
