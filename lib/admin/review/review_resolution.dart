@@ -3,35 +3,48 @@ import 'package:material_ui/material_ui.dart';
 import '../admin_theme.dart';
 import 'review_models.dart';
 
+/// A chosen reason and the resolution note to send with it.
+typedef RejectReason = ({ResolutionKind kind, String note});
+
 /// Asks why a report is rejected: a bottom sheet on phones, a dialog on
-/// wider screens. Returns null when the admin backs out.
-Future<ResolutionKind?> pickRejectReason(
+/// wider screens. [note] is the resolution note typed so far; "other" needs
+/// one, so the picker asks for it there. Returns null when the admin backs out.
+Future<RejectReason?> pickRejectReason(
   BuildContext context, {
   required bool compact,
+  String note = '',
 }) {
   if (compact) {
-    return showModalBottomSheet<ResolutionKind>(
+    return showModalBottomSheet<RejectReason>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       showDragHandle: true,
-      builder: (context) => const RejectReasonPicker(),
+      // The keyboard for the "other" note must not cover the buttons.
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: RejectReasonPicker(note: note),
+      ),
     );
   }
-  return showDialog<ResolutionKind>(
+  return showDialog<RejectReason>(
     context: context,
     builder: (context) => Dialog(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 480),
-        child: const RejectReasonPicker(),
+        child: RejectReasonPicker(note: note),
       ),
     ),
   );
 }
 
-/// The reasons as a radio list; "駁回這筆回報" stays off until one is chosen.
+/// The reasons as a radio list; "駁回這筆回報" stays off until one is chosen,
+/// and for "other" until the note says what it is.
 class RejectReasonPicker extends StatefulWidget {
-  const RejectReasonPicker({super.key});
+  const RejectReasonPicker({super.key, this.note = ''});
+  final String note;
 
   @override
   State<RejectReasonPicker> createState() => _RejectReasonPickerState();
@@ -39,6 +52,17 @@ class RejectReasonPicker extends StatefulWidget {
 
 class _RejectReasonPickerState extends State<RejectReasonPicker> {
   ResolutionKind? _kind;
+  late final _note = TextEditingController(text: widget.note);
+
+  @override
+  void dispose() {
+    _note.dispose();
+    super.dispose();
+  }
+
+  bool get _ready =>
+      _kind != null &&
+      (_kind != ResolutionKind.other || _note.text.trim().isNotEmpty);
 
   @override
   Widget build(BuildContext context) {
@@ -85,6 +109,23 @@ class _RejectReasonPickerState extends State<RejectReasonPicker> {
                       ),
                       subtitle: Text(k.description),
                     ),
+                  if (_kind == ResolutionKind.other)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 4, 24, 8),
+                      child: TextField(
+                        key: const ValueKey('reject-other-note'),
+                        controller: _note,
+                        autofocus: _note.text.trim().isEmpty,
+                        maxLength: 500,
+                        minLines: 2,
+                        maxLines: 4,
+                        onChanged: (_) => setState(() {}),
+                        decoration: const InputDecoration(
+                          labelText: '處理說明（必填）',
+                          helperText: '選「其他原因」時請寫下原因，只給管理員看。',
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -103,9 +144,12 @@ class _RejectReasonPickerState extends State<RejectReasonPicker> {
               ),
               FilledButton(
                 key: const ValueKey('reject-confirm'),
-                onPressed: _kind == null
-                    ? null
-                    : () => Navigator.pop(context, _kind),
+                onPressed: _ready
+                    ? () => Navigator.pop<RejectReason>(context, (
+                        kind: _kind!,
+                        note: _note.text.trim(),
+                      ))
+                    : null,
                 style: FilledButton.styleFrom(
                   backgroundColor: colors.error,
                   foregroundColor: colors.onError,

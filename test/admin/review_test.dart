@@ -200,6 +200,27 @@ void main() {
       expect(gateway.kinds.single, ResolutionKind.duplicate);
     });
 
+    test('「其他原因」必須寫處理說明', () async {
+      final report = review.queue.first;
+      await review.decide(
+        report,
+        ReviewDecision.reject,
+        '  ',
+        resolutionKind: ResolutionKind.other,
+      );
+      expect(review.error, '選「其他原因」時，請在處理說明寫下原因。');
+      expect(review.pending, isNull);
+      await review.decide(
+        report,
+        ReviewDecision.reject,
+        '騎士回報的是隔壁停車場',
+        resolutionKind: ResolutionKind.other,
+      );
+      await review.flush();
+      expect(gateway.resolved.single.$4, '騎士回報的是隔壁停車場');
+      expect(gateway.kinds.single, ResolutionKind.other);
+    });
+
     test('結案不修改可不帶原因', () async {
       await review.decide(review.queue[3], ReviewDecision.close, '');
       await review.flush();
@@ -799,6 +820,37 @@ void main() {
       await tester.pumpAndSettle();
       expect(gateway.resolved.single.$2, 'rejected');
       expect(gateway.kinds.single, ResolutionKind.duplicate);
+    });
+
+    testWidgets('選「其他原因」要在面板內寫說明才能駁回', (tester) async {
+      await show(tester, size: const Size(390, 700));
+      await tester.tap(find.byKey(const ValueKey('report-r-type')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('駁回'));
+      await tester.pumpAndSettle();
+      final other = find.byKey(const ValueKey('reject-other'));
+      await tester.ensureVisible(other);
+      await tester.tap(other);
+      await tester.pumpAndSettle();
+      final field = find.byKey(const ValueKey('reject-other-note'));
+      expect(field, findsOneWidget);
+      final confirm = find.byKey(const ValueKey('reject-confirm'));
+      expect(tester.widget<FilledButton>(confirm).onPressed, isNull);
+      await tester.enterText(field, '騎士回報的是隔壁停車場');
+      await tester.pumpAndSettle();
+      // The keyboard is up; the field and the button stay reachable.
+      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+      addTearDown(tester.view.resetViewInsets);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await tester.ensureVisible(field);
+      expect(confirm.hitTestable(), findsOneWidget);
+      await tester.tap(confirm);
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 7));
+      await tester.pumpAndSettle();
+      expect(gateway.kinds.single, ResolutionKind.other);
+      expect(gateway.resolved.single.$4, '騎士回報的是隔壁停車場');
     });
 
     for (final (width, scale) in [(320.0, 1.6), (390.0, 1.0)]) {

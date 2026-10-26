@@ -1,7 +1,9 @@
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../models/fee.dart';
 import '../../models/parking.dart';
+import '../../ui/fee_editor.dart';
 import '../admin_controller.dart';
 import '../admin_theme.dart';
 import 'review_controller.dart';
@@ -83,11 +85,16 @@ class _ReviewPageState extends State<ReviewPage> {
   Future<void> _decide(ReviewReport report, ReviewDecision decision) async {
     ResolutionKind? kind;
     if (decision == ReviewDecision.reject) {
-      kind = await pickRejectReason(
+      final notes = _notes.putIfAbsent(report.id, TextEditingController.new);
+      final reason = await pickRejectReason(
         context,
         compact: MediaQuery.sizeOf(context).width < reviewCompactWidth,
+        note: notes.text,
       );
-      if (kind == null || !mounted) return;
+      if (reason == null || !mounted) return;
+      kind = reason.kind;
+      // The note written in the picker is the one sent and kept on the page.
+      if (reason.note.isNotEmpty) notes.text = reason.note;
     }
     final messenger = ScaffoldMessenger.of(context);
     // The page is rebuilt for the next report's route; keep the router.
@@ -941,7 +948,7 @@ class _DiffTable extends StatelessWidget {
           ],
         );
       }
-      if (value == current) return Text('不變', style: muted);
+      if (sameValue(key, value, current)) return Text('不變', style: muted);
       return Align(
         alignment: Alignment.centerLeft,
         child: ChangeBand(formatValue(key, value)),
@@ -985,7 +992,17 @@ class _DiffTable extends StatelessWidget {
                     : Border(top: BorderSide(color: colors.outlineVariant)),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              child: stacked
+              // A fee editor needs the row's whole width at any size.
+              child: editing && reviewField(key)!.input == FieldInput.fee
+                  ? _FeeRow(
+                      report: report,
+                      field: reviewField(key)!,
+                      current: formatValue(key, spot.values[key]),
+                      sent: base == null ? null : formatValue(key, base![key]),
+                      value: rows[key],
+                      review: review,
+                    )
+                  : stacked
                   ? Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -1084,6 +1101,70 @@ class _DiffTable extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+/// The fee row while editing: today's fee, then the editor full width.
+class _FeeRow extends StatelessWidget {
+  const _FeeRow({
+    required this.report,
+    required this.field,
+    required this.current,
+    required this.sent,
+    required this.value,
+    required this.review,
+  });
+  final ReviewReport report;
+  final ReviewField field;
+  final String current;
+  final String? sent;
+  final Object? value;
+  final ReviewController review;
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = TextStyle(
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+    );
+    Widget line(String label, String text) => Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(width: 56, child: Text(label, style: muted)),
+          Expanded(child: Text(text)),
+        ],
+      ),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                field.label,
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+            IconButton(
+              tooltip: '不修改${field.label}',
+              onPressed: () => review.removeDraft(field.key),
+              icon: const Icon(Icons.close),
+            ),
+          ],
+        ),
+        if (sent case final text?) line('送出時', text),
+        line('目前', current),
+        const SizedBox(height: 12),
+        _FieldEditor(
+          key: ValueKey('edit-${report.id}-${field.key}'),
+          field: field,
+          value: value,
+          onChanged: (v) => review.setDraft(field.key, v),
+        ),
+      ],
     );
   }
 }
@@ -1207,6 +1288,14 @@ class _FieldEditor extends StatelessWidget {
         for (final e in field.choices.entries)
           DropdownMenuItem(value: e.key, child: Text(e.value)),
       ],
+      onChanged: onChanged,
+    ),
+    FieldInput.fee => FeeEditor(
+      value: switch (value) {
+        final Fee fee => fee,
+        final Map<Object?, Object?> json => Fee.fromJson(json),
+        _ => const Fee(),
+      },
       onChanged: onChanged,
     ),
     FieldInput.visibility => DropdownButtonFormField<String>(

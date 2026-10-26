@@ -1,13 +1,13 @@
 # 社群共筆與停車資訊核實機制 — 實作計畫
 
-> 狀態：設計提案，尚未實作／尚未驗收  
+> 狀態：P0（#59）與 P1（#61、#62、#66，費率 #72）已合併，完成標準見 §8；#84 為 §4.2 欄位核驗的過渡實作，已合併。P2–P4 尚未實作。P1 的審核畫面（Admin Web P3）尚待 staging 驗收  
 > 盤點日期：2026-10-24（Asia/Taipei）  
 > 修訂：2026-10-25 新增 §2.2 規模限制、§3.4 資格顯示分層，並依此調整 §3.3、§4.2、§5.2、§9、P3 與 §11  
 > 修訂（二）：2026-10-25 依[貢獻等級與遊戲化機制可行性研究](CONTRIBUTION_TIERS_FEASIBILITY.md)的決策，改寫 §1「不在本計畫範圍」的遊戲化一句，費率改為可由社群以中風險共識核實（§2.2、§3.3）  
 > 專案：[`smvt1215/motorcycle-parking`](https://github.com/smvt1215/motorcycle-parking)  
-> 盤點基準：`main` commit `800520e`（含 #55、#56 與 #58 的 P2 驗收文件）  
+> 盤點基準：`main` commit `800520e`（含 #55、#56 與 #58 的 P2 驗收文件）；實作進度依 `main` commit `b827aab`（2026-10-25）核對  
 > 適用端：Flutter iOS／Android、Supabase Postgres／PostGIS／Auth／Edge Functions、Flutter Admin Web  
-> 性質：增量設計。本文不代表已完成的功能，也不更改既有程式碼。
+> 性質：增量設計。除 §8 已勾選並註明 PR 的項目外，本文不代表已完成的功能，也不更改既有程式碼。
 
 ## 1. 目標與原則
 
@@ -35,14 +35,14 @@
 
 | 模組 | 已有實作／設計 | 後續工作 |
 | --- | --- | --- |
-| 新增停車點 | `ReportForm` + `submit-report` + `community_spots` | 補證據、位置品質、修訂溯源 |
-| 修改建議 | `spot_suggestions.dart` 的 `flag` 流程 | 送出結構化 `field`／`proposed`／`note` |
+| 新增停車點 | `ReportForm` + `submit-report` + `community_spots`；#73／#75 已加入場站型式、停放分類、入口、指引與分區，#72／#80 加入結構化費率 | 補證據、位置品質、修訂溯源 |
+| 修改建議 | `spot_suggestions.dart` 的 `flag` 流程；#62／#66 起送出結構化 `field`／`proposed`／`note`（#61 白名單） | 「位置不正確」（`location`）尚未接入 App |
 | 防濫用 | Google／Apple 登入、帳號年齡、IP／裝置 HMAC、帳號／IP 限流 | 將裝置/IP 僅作風險訊號；加抗重放與可觀測性 |
-| 歷史投票 | `spot_votes`、`apply_report` 支援 `still_there`／`gone` | 與停放資格解耦；檢查舊 API 的自動隱藏 |
-| 資料可信度 | `TrustStatus.pending/confirmed/hidden`、`EligibilityStatus.unverified` | 由點位級改為存在／欄位／合法性分層 |
-| 資料過期 | `ParkingSpot.stale`：`lastConfirmedAt` 有值且超過 180 天 | 空值視為未知；依欄位不同效期 |
-| 管理審核後端 | #55 已合併 `moderation_queue` 結構化欄位、`admin_resolve_report`、`admin_audit_log`、MFA 權限 | 提案與審核欄位一致化、衝突檢查 |
-| 管理後台 | #56 已合併 Admin Web 外殼（登入、MFA、頁籤、待審數） | 實際審核／點位維護操作尚需實作 |
+| 歷史投票 | `spot_votes`、`apply_report` 支援 `still_there`／`gone`；#59 已與停放資格解耦，舊 `gone` 票不再自動隱藏 | 依版本占比決定淘汰時間（§11 第 3 點） |
+| 資料可信度 | `TrustStatus.pending/confirmed/hidden`、`EligibilityStatus.unverified`；#84 加入逐車種的管理員核驗時間 | 由點位級改為存在／欄位／合法性分層 |
+| 資料過期 | `ParkingSpot.stale`：`lastConfirmedAt` 有值且超過 180 天；#59 起沒有確認時間的 `confirmed` 視為未知 | 依欄位不同效期 |
+| 管理審核後端 | #55 已合併 `moderation_queue` 結構化欄位、`admin_resolve_report`、`admin_audit_log`、MFA 權限；#62 加入欄位級版本衝突檢查 | 觀察紀錄與證據（P2） |
+| 管理後台 | #56 外殼、#62 審核佇列、#67／#76 點位維護、#84 核驗車種已合併 | 審核佇列待 staging 驗收；證據與觀察的呈現（P2） |
 | 照片 | 點位有 `photo_urls` 顯示與儲存欄位 | Storage 上傳、審核、去識別、權限及保留期 |
 
 相關來源：
@@ -55,6 +55,8 @@
 - [停車點模型](../lib/models/parking.dart)
 
 ### 2.1 目前必須處理的風險
+
+> 2026-10-25 進度：R1、R4、R5 已由 #59 修正，R2 已由 #62／#66 修正；R3、R6 尚未處理（R3 的 `(source_id, reason)` 唯一索引仍在，待 P2 的 `spot_observations`）。以下保留盤點當時的描述。
 
 **R1（P0）存在確認會間接提升車種資格可信度。** 舊 `apply_report` 在兩個合格且獨立的 `still_there` 投票後，把整筆社群點設成 `confirmed`；`eligibility.dart` 又以 `status == confirmed && !stale` 作為部分停放資格判斷的可信條件。此狀態不能證明「重機可停／普機可停」欄位已獲證據核實。
 
@@ -170,7 +172,7 @@ RLS：只開放本人查自己的提案；管理員 `is_admin()` 才能檢視全
 
 需保留證據／提案關聯（另設 join table），避免只有最後一個驗證者的結果。對同一點位的 `heavy_allowed` 和 `scooter_allowed` 分開存狀態；場站 `parking_zones` 則考慮 `field_key + zone_id`。
 
-**過渡實作（PR #84，審核中）：** 預計先在 `community_spots` 加 `scooter_verified_at`、`heavy_verified_at`，只記錄管理員核驗時間，由觸發器在管理員路徑寫入、在非管理員修改相關欄位時失效；App 端以 180 天判定新鮮度。正式建立本表時：
+**過渡實作（PR #84，已合併）：** `community_spots` 已加 `scooter_verified_at`、`heavy_verified_at`（`202610250080_admin_verified_eligibility.sql`），只記錄管理員核驗時間，由觸發器在管理員路徑寫入、在非管理員修改相關欄位時失效；App 端以 180 天判定新鮮度。正式建立本表時：
 - 兩欄轉成 `field_key = 'scooter_allowed'／'heavy_allowed'`、`source_kind = 'admin'` 的列，`verified_at` 沿用原值。
 - `verified_value` 取遷移當下的 `scooter_allowed`／`heavy_allowed`；觸發器保證欄位在核驗後只能由管理員路徑變更（否則核驗已清除），因此現值即為核驗值。
 - `valid_until` 依 §5.3 計算。重機資格改為 90 天後，距遷移已 90–180 天的核驗會直接過期並回落到「車友回報」層級（§3.4），遷移前需在 Admin Web 列出受影響點位供管理員重新核驗。
@@ -303,11 +305,11 @@ RLS：只開放本人查自己的提案；管理員 `is_admin()` 才能檢視全
 - 後端：檢視舊 `vote` 路徑，停止未審判定的合法性提升，並讓負向票自動隱藏受安全策略管控；保留必要相容。
 - 新增針對不同車種／官方與社群／待確認／過期／衝突的單元測試。
 
-**完成標準：**
-- [ ] 兩人確認「仍存在」不使未經資格核實的重機點顯示「可停」。
-- [ ] 缺乏核實時間／已過期的社群資格不被當成新鮮證據。
-- [ ] 未授權者不得直接利用舊投票 API 修改高風險公開狀態。
-- [ ] 官方有效限制與不同車種的既有安全判定不回歸。
+**完成標準：**（2026-10-25 依程式與已合併 PR 核對）
+- [x] 兩人確認「仍存在」不使未經資格核實的重機點顯示「可停」。依據：#59，`eligibility()` 的路外場站「可停」只採官方資料，#84 再加上有效期內的管理員核驗；`confirmed` 不再當成車種資格的證據。
+- [x] 缺乏核實時間／已過期的社群資格不被當成新鮮證據。依據：#59，沒有 `last_confirmed_at` 的 `confirmed` 視為未知，180 天以傳入的 `now` 判斷；#84 的核驗時間同樣 180 天到期。
+- [x] 未授權者不得直接利用舊投票 API 修改高風險公開狀態。依據：#59 `202610240010_vote_safety.sql`，`gone` 加權達門檻只退回 `pending` 並送審，不再自動隱藏；只有合格的 `still_there` 會更新確認時間；隱藏只由管理員決定（#62）。
+- [x] 官方有效限制與不同車種的既有安全判定不回歸。依據：#59 的 Flutter 單元測試與 pgTAP（`reporting_test`、`admin_test`）；已確認社群點的「不可停」與依縣市規則推導的路邊格判定維持不變。
 
 ### P1 — 結構化共筆與審核串接
 
@@ -318,11 +320,11 @@ RLS：只開放本人查自己的提案；管理員 `is_admin()` 才能檢視全
 - `supabase/functions/submit-report/validate.ts`：欄位白名單、型別與衝突值驗證。
 - Admin Web：完成現有規劃中的待審案件比較、採納／駁回與錯誤處理。
 
-**完成標準：**
-- [ ] 類型、車種資格、名稱、費率修改以機器可辨的欄位值送審。
-- [ ] `admin_resolve_report` 能一次採納並保留 before／after 稽核。
-- [ ] 舊 App 只送 `reason` 仍能成功送審。
-- [ ] 管理員在提案送出後遇到點位資料變更會看到衝突，不盲目覆蓋。
+**完成標準：**（2026-10-25 依程式與已合併 PR 核對；Admin Web 審核畫面尚待 staging 驗收）
+- [x] 類型、車種資格、名稱、費率修改以機器可辨的欄位值送審。依據：#62／#66 送出穩定 `field` 與 `proposed`（`space_type`、`scooter_allowed`／`heavy_allowed`、`name`、`fee_note`），#72 費率另送結構化 `fee`；#61 在 `validate.ts` 驗證白名單與型別。
+- [x] `admin_resolve_report` 能一次採納並保留 before／after 稽核。依據：#55 在同一 transaction 更新點位、結案並寫 `admin_audit_log`；#62 沿用並加入衝突檢查。
+- [x] 舊 App 只送 `reason` 仍能成功送審。依據：#61，沒有 `field` 的 `flag` 照常接受，並相容舊版中文類別。
+- [x] 管理員在提案送出後遇到點位資料變更會看到衝突，不盲目覆蓋。依據：#62 `202610240011_admin_review.sql`，入列時記錄 `base_updated_at` 與 `base_spot`，寫入的欄位已被改過時以 `40001` 拒絕，後台要求重新檢視後才能 `p_force`（pgTAP 覆蓋）。
 
 ### P2 — 獨立觀察、證據與版本
 
@@ -410,9 +412,9 @@ CI 至少納入 `flutter analyze`、`flutter test`、Deno `validate_test.ts`、`
 **交付原則：** 每期獨立 PR，附 migration、測試、相容說明及回退方案；需後端先於／配合新版 App 部署。尚未經端到端驗收前不開啟可自動改變高風險可停資格的規則。
 
 **建議首批工作切分：**
-1. `fix(trust): separate existence from parking eligibility`
-2. `feat(report): send structured spot suggestions`
-3. `feat(admin): review structured suggestions and version conflicts`
+1. `fix(trust): separate existence from parking eligibility`（#59，已合併）
+2. `feat(report): send structured spot suggestions`（#61、#62、#66，已合併）
+3. `feat(admin): review structured suggestions and version conflicts`（#62，已合併）
 4. `feat(community): store independent observations and evidence`
 5. `feat(verification): field-level verification and expiry`
 
@@ -436,9 +438,12 @@ CI 至少納入 `flutter analyze`、`flutter test`、Deno `validate_test.ts`、`
 - [`docs/ADMIN_WEB.md`：審核後台與已排開發階段](ADMIN_WEB.md)
 - [PR #55：管理權限、結構化建議、審核 RPC](https://github.com/smvt1215/motorcycle-parking/pull/55)（已合併）
 - [PR #56：MFA Admin Web 外殼](https://github.com/smvt1215/motorcycle-parking/pull/56)（已合併）
-- [PR #84：管理員核驗社群點車種欄位](https://github.com/smvt1215/motorcycle-parking/pull/84)（過渡實作，審核中，見 §4.2）
+- [PR #59：存在確認與車種資格解耦](https://github.com/smvt1215/motorcycle-parking/pull/59)（P0，已合併）
+- [PR #61](https://github.com/smvt1215/motorcycle-parking/pull/61)、[#62](https://github.com/smvt1215/motorcycle-parking/pull/62)、[#66](https://github.com/smvt1215/motorcycle-parking/pull/66)：結構化修改建議、審核佇列與版本衝突（P1，已合併）
+- [PR #84：管理員核驗社群點車種欄位](https://github.com/smvt1215/motorcycle-parking/pull/84)（過渡實作，已合併，見 §4.2）
 - [貢獻等級與遊戲化機制可行性研究](CONTRIBUTION_TIERS_FEASIBILITY.md)（附屬設計：A／B／C 分類、信任等級、點數、官方點覆蓋層、法規預審引擎、預檢模組）
 - 2026-10-25：因管理員無法核驗全國點位，新增 §2.2、§3.4，調整 §3.3、§4.2、§5.2、§9、P3 與 §11。
 - 2026-10-25（二）：依研究文件的決策改寫 §1 遊戲化一句、§2.2 與 §3.3 的費率策略。
+- 2026-10-25（三）：依已合併 PR 更新狀態、§2 現況表、§2.1 風險進度、§4.2 過渡實作與 §8 P0／P1 完成標準。
 
 > 註：本文根據 2026-10-24 儲存庫程式碼與文件的靜態檢視形成，尚未執行正式／staging 系統測試。正式實作時，應重新核對 `main` 最新 schema、後台功能進度、地方法規來源與遷移依賴。
