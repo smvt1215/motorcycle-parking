@@ -386,10 +386,9 @@ bool _realDate(Object? v) {
 }
 
 /// A non-empty list of distinct strings drawn from [values].
-bool _subset(Object? v, List<String> values, {int? max}) =>
+bool _subset(Object? v, List<String> values) =>
     v is List &&
     v.isNotEmpty &&
-    (max == null || v.length <= max) &&
     v.every((x) => x is String && values.contains(x)) &&
     v.toSet().length == v.length;
 
