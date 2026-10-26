@@ -506,4 +506,31 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('大型重機比照汽車費率，但還沒填汽車費率。請填汽車費率，或改選其他收費方式。'), findsOneWidget);
   });
+
+  testWidgets('清空當日上限一併清除重算方式；換成每日不沿用計時的重算方式', (tester) async {
+    final (form, fee) = await host(tester, 390);
+    await chooseFeeMode(tester, 'scooter', 'hourly');
+    await tester.enterText(feeField('amount', 'scooter'), '10');
+    await tapFee(tester, 'fee-more-scooter');
+    await tester.enterText(feeField('cap', 'scooter'), '50');
+    await tester.pumpAndSettle();
+    await tapFee(tester, 'fee-cap-reset-scooter');
+    await tester.tap(find.text('零時重算').last);
+    await tester.pumpAndSettle();
+    expect(fee().scooter!.capReset, CapReset.calendarDay);
+    await tester.enterText(feeField('cap', 'scooter'), '');
+    await tester.pumpAndSettle();
+    expect(fee().scooter!.capReset, isNull);
+    // Set again, then switch to daily: the hourly cap's reset stays behind.
+    await tester.enterText(feeField('cap', 'scooter'), '50');
+    await tester.pumpAndSettle();
+    await tapFee(tester, 'fee-cap-reset-scooter');
+    await tester.tap(find.text('零時重算').last);
+    await tester.pumpAndSettle();
+    await chooseFeeMode(tester, 'scooter', 'daily');
+    expect(fee().toJson()['scooter'], {'mode': 'daily', 'amount': 10});
+    expect(preview('每日 10 元'), findsOneWidget);
+    expect(preview('零時重算'), findsNothing);
+    expect(form.currentState!.validate(), isTrue);
+  });
 }

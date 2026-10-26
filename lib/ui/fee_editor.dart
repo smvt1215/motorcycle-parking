@@ -784,6 +784,8 @@ Rate _switchTo(FeeMode mode, Rate? old, Fee fee) {
     base,
     mode: mode,
     perMinutes: mode == FeeMode.hourly ? base.perMinutes ?? 60 : _keep,
+    // An hourly cap's reset is not a daily charge's: each mode answers it.
+    capReset: base.mode == mode ? _keep : null,
   );
 }
 
@@ -1107,7 +1109,17 @@ class _SimpleRateFieldsState extends State<SimpleRateFields> {
               cap,
               suffix: '元',
               validator: (v) => _yuan(v, required: false),
-              onChanged: (t) => emit(_edit(rate, dailyCap: _optional(t))),
+              onChanged: (t) {
+                final cap = _optional(t);
+                // Without a cap there is nothing to reset.
+                emit(
+                  _edit(
+                    rate,
+                    dailyCap: cap,
+                    capReset: cap == null ? null : _keep,
+                  ),
+                );
+              },
             ),
             if (rate.dailyCap != null)
               dropdown<CapReset?>(
