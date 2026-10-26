@@ -29,11 +29,15 @@ class PendingDecision {
     this.patch,
     this.note, {
     this.force = false,
+    this.resolutionKind,
   });
   final ReviewReport report;
   final ReviewDecision decision;
   final Map<String, dynamic> patch;
   final String note;
+
+  /// Why the report is rejected; required for [ReviewDecision.reject].
+  final ResolutionKind? resolutionKind;
 
   /// Applies over a spot changed since the report, after the admin saw it.
   final bool force;
@@ -287,8 +291,19 @@ class ReviewController extends ChangeNotifier {
     ReviewDecision decision,
     String note, {
     bool force = false,
+    ResolutionKind? resolutionKind,
   }) async {
     final (patch, problem) = patchFor(report, decision);
+    if (decision == ReviewDecision.reject && resolutionKind == null) {
+      error = '請先選擇駁回原因。';
+      _notify();
+      return report.id;
+    }
+    if (resolutionKind == ResolutionKind.other && note.trim().isEmpty) {
+      error = '選「其他原因」時，請在處理說明寫下原因。';
+      _notify();
+      return report.id;
+    }
     if (problem != null) {
       error = problem;
       _notify();
@@ -304,7 +319,14 @@ class ReviewController extends ChangeNotifier {
     if (_disposed || generation != _generation) return null;
     final before = visible;
     final index = before.indexWhere((r) => r.id == report.id);
-    pending = PendingDecision(report, decision, patch, note, force: force);
+    pending = PendingDecision(
+      report,
+      decision,
+      patch,
+      note,
+      force: force,
+      resolutionKind: resolutionKind,
+    );
     editingId = null;
     draft = {};
     _timer = Timer(undoWindow, () => unawaited(flush()));
@@ -365,6 +387,7 @@ class ReviewController extends ChangeNotifier {
         held.patch,
         held.note,
         force: held.force,
+        resolutionKind: held.resolutionKind,
       );
       if (generation != _generation) return;
       reports = reports.where((r) => r.id != held.report.id).toList();
