@@ -381,3 +381,45 @@ Deno.test('every app space kind is accepted; unknown kinds fail', () => {
   const unknown = { ...base, spot: { ...base.spot, space_type: 'bus' } };
   if (validate(unknown) === null) throw new Error('unknown kind accepted');
 });
+Deno.test('riders never send a source link; suggestions cannot carry one', () => {
+  const update = {
+    ...base,
+    action: 'update',
+    spot_id: '10000000-0000-4000-8000-000000000002',
+    spot: { name: '更新' },
+  };
+  // Not even an https one: the link is set by admins and imports only, and
+  // the table (202610270040) takes nothing but https.
+  for (
+    const url of [
+      'javascript:alert(1)',
+      'data:text/html,<script>alert(1)</script>',
+      'intent://scan/#Intent;scheme=zxing;end',
+      'http://www.gov.taipei/',
+      'https://www.gov.taipei/',
+      '',
+      null,
+    ]
+  ) {
+    for (
+      const body of [
+        { ...base, spot: { ...base.spot, source_url: url } },
+        { ...update, spot: { ...update.spot, source_url: url } },
+      ]
+    ) {
+      if (validate(body) !== 'invalid source_url') {
+        throw new Error(`source link accepted: ${JSON.stringify(body)}`);
+      }
+    }
+  }
+  const flag = {
+    device_id: base.device_id,
+    action: 'flag',
+    source_id: '10000000-0000-4000-8000-000000000002',
+    reason: '來源網址',
+    proposed: { source_url: 'javascript:alert(1)' },
+  };
+  if (validate(flag) !== 'invalid proposed') {
+    throw new Error('a suggested source link was accepted');
+  }
+});
