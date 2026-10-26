@@ -200,7 +200,7 @@ c    = "each_period" | "entry_only"           計次跨時段怎麼計，缺＝�
 
 - `car` 不可用 `same_as_*`；`scooter` 也不可（既有規則）。
 - 時段費率不寫 `holiday` 以外的節日。本輪不依目前時間選用時段費率，只逐段顯示（§7 第 4 項，已決定）。
-- 資料表 `valid_fee()` 的大小上限由 1024 bytes 提高到 4096 bytes，以容納 `by_time`。
+- 資料表 `valid_fee()` 的大小上限由 1024 bytes 提高到 8192 bytes，以容納 `by_time`。上限刻意大於契約允許的最大費率（`tool/fee_text.py` 的 `largest_fee`，pg_column_size 約 5.8 KB，三端共同測試），合法形狀的費率不會因大小被任何一端拒絕（C3 Codex 審查：JSON 字數與 `pg_column_size` 算法不同，原本 4096 會讓三端判斷不一致）。
 
 ### 2.3 Toll 首段 0 元 ≠ Free
 

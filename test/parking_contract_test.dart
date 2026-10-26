@@ -144,7 +144,8 @@ void main() {
     });
 
     test('fee rule data', () {
-      final fee = contract['fee']! as Map<String, Object?>;
+      final fee = {...contract['fee']! as Map<String, Object?>}
+        ..remove('comment');
       expect(fee.keys, feeContract.keys);
       for (final key in fee.keys) {
         expect(fee[key], feeContract[key], reason: key);

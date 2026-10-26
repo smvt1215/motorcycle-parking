@@ -30,8 +30,11 @@ String spotFeeSummary(ParkingSpot spot, VehicleType vehicle) {
         : '依分區計費';
   }
   if (spot.fee case final fee?) {
-    final rate = vehicle == VehicleType.scooter ? fee.scooter : fee.heavy;
-    return rate?.text ?? '費率未確認';
+    // A heavy rate following another vehicle shows its amounts (#140).
+    return fee.riderText(
+          vehicle == VehicleType.scooter ? 'scooter' : 'heavy',
+        ) ??
+        '費率未確認';
   }
   if (spot.zones.length == 1) {
     final value = zoneFeeSummary(spot.zones.single, vehicle);
