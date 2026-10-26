@@ -707,6 +707,25 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('路外停車場改成路邊格時清除場站型式與停放分類', (tester) async {
+    final lot = ParkingSpot.fromJson({
+      ...spot.toJson(),
+      'space_type': 'offStreet',
+      'facility_type': 'underground',
+      'parking_access': 'scooterHeavy',
+    });
+    final store = await openSuggestion(tester, '格位類型', selectedSpot: lot);
+    await tapFee(tester, 'report-space-paidMotorcycle');
+    await submitSuggestion(tester, '送出修改建議');
+    expect(store.submissions.single['proposed'], {
+      'space_type': 'paidMotorcycle',
+      'condition': {'bay': 'motorcycle', 'use': 'usual', 'charge': 'toll'},
+      'facility_type': null,
+      'parking_access': null,
+    });
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('只改停放條件也能送出，並列在你要改的內容', (tester) async {
     final store = await openSuggestion(tester, '格位類型');
     final shared = find.byKey(const ValueKey('condition-shared'));

@@ -15,6 +15,7 @@ void main() {
     final data = _json('precheck_rules.json');
     expect(data['version'], precheckVersion);
     expect((data['placeholders']! as List).toSet(), precheckPlaceholders);
+    expect((data['stored_pair_hold']! as List).toSet(), precheckStoredPairHold);
     final rules = (data['rules']! as Map).cast<String, Map<String, Object?>>();
     expect(rules.keys.toSet(), precheckRules.keys.toSet());
     for (final MapEntry(:key, :value) in rules.entries) {
@@ -36,12 +37,20 @@ void main() {
         .cast<Map<String, Object?>>();
     expect(cases, isNotEmpty);
     for (final c in cases) {
-      final got = precheck(
+      final issues = precheck(
         (c['body']! as Map).cast<String, Object?>(),
         current: (c['current'] as Map?)?.cast<String, Object?>(),
-      ).map((i) => '$i').toList()..sort();
+      );
+      final got = issues.map((i) => '$i').toList()..sort();
       final want = (c['expect']! as List).cast<String>().toList()..sort();
       expect(got, want, reason: c['name'] as String);
+      if (c['blocking'] case final bool blocking) {
+        expect(
+          precheckBlocking(issues).isNotEmpty,
+          blocking,
+          reason: c['name'] as String,
+        );
+      }
     }
   });
 

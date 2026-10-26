@@ -1,5 +1,5 @@
 {
-  "comment": "Shared by precheck_test.ts and test/precheck_test.dart: each body must break exactly the listed rule@field pairs, in any order. Bodies are partial; validate() runs first in the Edge Function.",
+  "comment": "Shared by precheck_test.ts and test/precheck_test.dart: each body must break exactly the listed rule@field pairs, in any order. Bodies are partial; validate() runs first in the Edge Function. `blocking`, when given, says whether any issue refuses the request (fix or reject) rather than only holding it.",
   "cases": [
     {
       "name": "plain street bay passes",
@@ -1307,7 +1307,7 @@
       ]
     },
     {
-      "name": "a fee suggestion is judged with the spot's condition: a free rate in a toll bay",
+      "name": "a fee suggestion against the stored condition is held, not refused: the rider fixes one side at a time",
       "body": {
         "action": "flag",
         "source_id": "3f1c2a4e-0000-4000-8000-000000000002",
@@ -1337,7 +1337,8 @@
           "use": "usual",
           "charge": "toll"
         }
-      }
+      },
+      "blocking": false
     },
     {
       "name": "a suggested condition replaces the spot's: free bay, free rates pass",
@@ -1416,7 +1417,8 @@
             "mode": "same_as_car"
           }
         }
-      }
+      },
+      "blocking": true
     },
     {
       "name": "a stored free 普大共用 bay is not flagged again by a fee suggestion",
@@ -1444,7 +1446,7 @@
       }
     },
     {
-      "name": "a suggested free bay is judged with the stored paid rate",
+      "name": "a suggested free bay beside the stored paid rate is held, not refused",
       "body": {
         "action": "flag",
         "source_id": "3f1c2a4e-0000-4000-8000-000000000002",
@@ -1470,7 +1472,37 @@
       },
       "expect": [
         "charge_free_rate@proposed.fee.scooter"
-      ]
+      ],
+      "blocking": false
+    },
+    {
+      "name": "a suggestion naming both a free bay and a paid rate is refused",
+      "body": {
+        "action": "flag",
+        "source_id": "3f1c2a4e-0000-4000-8000-000000000002",
+        "field": "space_type",
+        "reason": "格位類型",
+        "proposed": {
+          "space_type": "freeMotorcycle",
+          "condition": {
+            "bay": "motorcycle",
+            "use": "usual",
+            "charge": "free"
+          },
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 10,
+              "per_minutes": 60
+            }
+          }
+        }
+      },
+      "current": {},
+      "expect": [
+        "charge_free_rate@proposed.fee.scooter"
+      ],
+      "blocking": true
     }
   ]
 }

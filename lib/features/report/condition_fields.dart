@@ -67,10 +67,11 @@ class SlotDraft {
 /// it charges, a 普大共用 notice, how long a 限時 bay allows, and when a
 /// 汽機共用 bay takes which vehicles. The kind decides the rest.
 class ConditionDraft {
-  ConditionDraft();
+  ConditionDraft() : loadedType = null;
 
   /// The rider's values from a stored [condition] of a bay of [type].
-  ConditionDraft.of(ParkingCondition? condition, SpaceType type) {
+  ConditionDraft.of(ParkingCondition? condition, SpaceType type)
+    : loadedType = type {
     final c = condition ?? conditionOf(type);
     if (c == null) return;
     if (!_chargeByType.contains(type)) charge = c.charge;
@@ -82,6 +83,10 @@ class ConditionDraft {
     }
     slots.addAll(c.schedule.map(SlotDraft.of));
   }
+
+  /// The kind the stored condition came with: its periods stay as they
+  /// are while the kind does, even where this form cannot edit them.
+  final SpaceType? loadedType;
 
   Charge? charge;
   bool shared = false;
@@ -113,7 +118,7 @@ class ConditionDraft {
               ? ParkingLimit(LimitKind.timeLimit, maxMinutes: minutes)
               : l,
       ],
-      schedule: type == SpaceType.flexShared
+      schedule: type == SpaceType.flexShared || type == loadedType
           ? [for (final s in slots) ?s.slot]
           : const [],
     );

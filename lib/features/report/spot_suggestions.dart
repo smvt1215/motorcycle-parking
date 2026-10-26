@@ -442,6 +442,14 @@ class _SuggestionFormState extends State<_SuggestionForm> {
           'condition': c.toJson()
         else if (spot.condition != null)
           'condition': null,
+        // A lot becoming a street bay drops what made it a lot, or the
+        // table would still read it as off-street (§1.1 placement).
+        if (!lotType && type != SpaceType.offStreet) ...{
+          if (spot.facilityType != null &&
+              spot.facilityType != FacilityType.roadside)
+            'facility_type': null,
+          if (spot.access != null) 'parking_access': null,
+        },
         if (lotType) ...{
           if (facility != spot.facilityType) 'facility_type': facility?.name,
           if (access != spot.access) 'parking_access': access?.name,

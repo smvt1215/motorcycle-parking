@@ -24,6 +24,12 @@ Deno.test('shared precheck cases break exactly the expected rules', () => {
     if (JSON.stringify(sorted(got)) !== JSON.stringify(sorted(expect))) {
       throw new Error(`${name}: got ${JSON.stringify(got)}`);
     }
+    if ('blocking' in c) {
+      const issues = precheck(body as Record<string, unknown>, current);
+      if ((blocking(issues).length > 0) !== c.blocking) {
+        throw new Error(`${name}: blocking ${!c.blocking}`);
+      }
+    }
   }
 });
 

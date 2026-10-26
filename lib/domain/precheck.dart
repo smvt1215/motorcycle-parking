@@ -63,6 +63,20 @@ const precheckPlaceholders = {
   '停車位',
 };
 
+/// Rules between a bay's condition and its fee. In a suggestion that names
+/// only one of the two, the other is the spot's stored value: the rider can
+/// fix only one side at a time, so these flag the case (hold) instead of
+/// refusing it, and the reviewer applies both.
+const precheckStoredPairHold = {
+  'charge_free_rate',
+  'charge_toll_free_rate',
+  'free_with_renew',
+  'free_with_extension',
+  'heavy_bay_scooter_fee',
+  'motorcycle_bay_car_fee',
+  'time_limit_mismatch',
+};
+
 const Map<String, PrecheckRule> precheckRules = {
   'lot_roadside': (
     action: PrecheckAction.fix,
@@ -626,9 +640,19 @@ List<PrecheckIssue> precheck(
           current?['condition'] is Map)
         'condition': current!['condition'],
     };
+    // Whether the suggestion's condition or fee is the spot's stored one.
+    final storedPair =
+        proposed['fee'] is! Map || !proposed.containsKey('condition');
     for (final i in _combinations(merged)) {
       out.add(
-        PrecheckIssue(i.rule, i.action, 'proposed.${i.field}', i.message),
+        PrecheckIssue(
+          i.rule,
+          storedPair && precheckStoredPairHold.contains(i.rule)
+              ? PrecheckAction.hold
+              : i.action,
+          'proposed.${i.field}',
+          i.message,
+        ),
       );
     }
     out.addAll(_shareFree(proposed['condition'], 'proposed.condition.charge'));

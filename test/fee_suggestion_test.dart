@@ -58,6 +58,25 @@ void main() {
     expect(conditionSummary(sent), '收費、共用時段 週一、週三 20:00–隔日 07:00 普通機車');
   });
 
+  test('periods of another kind stay while the kind does', () {
+    final stored = ParkingCondition.fromJson({
+      'bay': 'heavy',
+      'use': 'usual',
+      'schedule': [
+        {
+          'days': 'weekday',
+          'from': '08:00',
+          'to': '18:00',
+          'vehicles': ['heavy'],
+        },
+      ],
+    });
+    final draft = ConditionDraft.of(stored, SpaceType.heavyOnly);
+    expect(draft.conditionFor(SpaceType.heavyOnly), stored);
+    // Another kind starts without them.
+    expect(draft.conditionFor(SpaceType.car)!.schedule, isEmpty);
+  });
+
   test('a follow reads with the suggested rates, worked out (#140)', () {
     final edits = <FeeVehicle, Rate?>{
       FeeVehicle.heavy: const Rate(FeeMode.sameAsCar),

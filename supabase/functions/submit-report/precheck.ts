@@ -26,6 +26,13 @@ type Rule = {
 };
 const rules = data.rules as Record<string, Rule>;
 const placeholders = new Set(data.placeholders);
+/**
+ * Rules between a bay's condition and its fee. In a suggestion that names
+ * only one of the two, the other is the spot's stored value: the rider can
+ * fix only one side at a time, so these flag the case (hold) instead of
+ * refusing it, and the reviewer applies both.
+ */
+const storedPairHold = new Set(data.stored_pair_hold);
 const patterns = Object.entries(rules).flatMap(([code, rule]) =>
   (rule.patterns ?? []).map((p) => ({
     code,
@@ -366,6 +373,9 @@ export function precheck(body: Json, current?: Json): PrecheckIssue[] {
           : {}),
       }
       : proposed;
+  // Whether a suggestion's condition or fee is the spot's stored one.
+  const storedPair = !!proposed &&
+    (!object(proposed.fee) || !('condition' in proposed));
   if (spot) {
     out.push(...combinationIssues(spot));
     if (spot.space_type !== 'offStreet') {
@@ -376,6 +386,9 @@ export function precheck(body: Json, current?: Json): PrecheckIssue[] {
     out.push(
       ...combinationIssues(merged!).map((i) => ({
         ...i,
+        action: storedPair && storedPairHold.has(i.rule)
+          ? 'hold' as const
+          : i.action,
         field: `proposed.${i.field}`,
       })),
       ...shareFree(proposed.condition, 'proposed.condition.charge'),

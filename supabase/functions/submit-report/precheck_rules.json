@@ -28,6 +28,15 @@
     "停車格",
     "停車位"
   ],
+  "stored_pair_hold": [
+    "charge_free_rate",
+    "charge_toll_free_rate",
+    "free_with_renew",
+    "free_with_extension",
+    "heavy_bay_scooter_fee",
+    "motorcycle_bay_car_fee",
+    "time_limit_mismatch"
+  ],
   "rules": {
     "lot_roadside": {
       "action": "fix",
