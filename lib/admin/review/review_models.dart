@@ -1,3 +1,4 @@
+import '../../models/fee.dart';
 import '../../models/parking.dart';
 
 /// Queue filters from docs/ADMIN_WEB.md: eligibility, gone, everything else.
@@ -20,6 +21,9 @@ enum FieldInput {
 
   /// One of [ReviewField.choices], or unset.
   choice,
+
+  /// A structured fee per vehicle (`fee`), edited with the shared FeeEditor.
+  fee,
 }
 
 /// A spot column `admin_resolve_report` may change, as the admin sees it.
@@ -59,6 +63,7 @@ final reviewFields = [
   ),
   ReviewField('scooter_allowed', '普通機車', FieldInput.triState),
   ReviewField('heavy_allowed', '大型重機', FieldInput.triState),
+  ReviewField('fee', '費率', FieldInput.fee),
   ReviewField('fee_note', '收費資訊', FieldInput.text, maxLength: 200),
   const ReviewField('note', '備註', FieldInput.text, maxLength: 500),
   const ReviewField('entrance_note', '入口說明', FieldInput.text, maxLength: 500),
@@ -260,6 +265,30 @@ bool fitsField(ReviewField field, Object? value) => switch (field.input) {
   FieldInput.hiddenFlag => value is bool,
   FieldInput.coordinate => value is num,
   FieldInput.choice => value == null || field.choices.containsKey(value),
+  FieldInput.fee =>
+    value == null || value is Fee || Fee.tryParse(value) != null,
+};
+
+/// A `fee` value as a [Fee]: the editor's own, or a valid JSON one. Null
+/// when there is none, it is invalid, or it names no vehicle (the form
+/// writes no structured fee then).
+Fee? reviewFee(Object? value) {
+  final fee = value is Fee ? value : Fee.tryParse(value);
+  return fee == null || fee.isEmpty ? null : fee;
+}
+
+/// Whether two values of [key] say the same; a fee compares by content.
+bool sameValue(String key, Object? a, Object? b) =>
+    reviewField(key)?.input == FieldInput.fee
+    ? reviewFee(a) == reviewFee(b)
+    : a == b;
+
+/// [patch] as the RPC takes it: a fee being edited becomes its JSON.
+Map<String, dynamic> wirePatch(Map<String, dynamic> patch) => {
+  for (final MapEntry(:key, :value) in patch.entries)
+    key: reviewField(key)?.input == FieldInput.fee
+        ? reviewFee(value)?.toJson()
+        : value,
 };
 
 String formatValue(String key, Object? value) {
@@ -283,6 +312,7 @@ String formatValue(String key, Object? value) {
     FieldInput.text =>
       value is String && value.trim().isNotEmpty ? value : '未填寫',
     FieldInput.choice => field.choices[value] ?? '未設定',
+    FieldInput.fee => reviewFee(value)?.summary ?? '未設定',
   };
 }
 
@@ -319,6 +349,29 @@ String? validatePatch(Map<String, dynamic> patch, ReviewSpot spot) {
         if (value is! num || value < min || value > max) {
           return '${field.label}需介於 $min 與 $max 之間';
         }
+      case FieldInput.fee:
+        if (value == null) break;
+        final fee = value is Fee ? value : Fee.tryParse(value);
+        if (fee == null) return '費率格式不正確，請重新選擇收費方式';
+        if ([fee.scooter, fee.heavy].nonNulls.any((r) => !r.complete)) {
+          return '請填完收費金額，計時另需選計費時間';
+        }
+        if (!fee.valid) return '金額請填 0 到 10000 的整數';
+    }
+  }
+  // The app shows a structured fee before the text, so the text must be the
+  // fee's own (feeNoteOf), or an edit to it would never reach riders.
+  if (patch.containsKey('fee') || patch.containsKey('fee_note')) {
+    final fee = reviewFee(
+      patch.containsKey('fee') ? patch['fee'] : spot.values['fee'],
+    );
+    final note = patch.containsKey('fee_note')
+        ? patch['fee_note']
+        : spot.values['fee_note'];
+    if (fee != null && note != feeNoteOf(fee)) {
+      return patch.containsKey('fee')
+          ? '收費資訊要和費率一致。改費率時收費資訊會自動更新，不需另外修改。'
+          : '這個點位已設定各車種費率，App 顯示的是費率而不是收費資訊。請按「修改後套用」，加入「費率」欄位修改。';
     }
   }
   return null;
