@@ -3,9 +3,12 @@ import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:motorcycle_parking/admin/admin_gateway.dart';
 import 'package:motorcycle_parking/admin/review/review_models.dart';
+import 'package:motorcycle_parking/admin/spots/spot_map.dart';
 import 'package:motorcycle_parking/admin/spots/spot_models.dart';
 import 'package:motorcycle_parking/core/town_lookup.dart';
 import 'package:motorcycle_parking/domain/location_check.dart';
+import 'package:motorcycle_parking/domain/map_viewport.dart';
+import 'package:motorcycle_parking/models/parking.dart';
 
 Factor factor(
   String id, {
@@ -489,5 +492,70 @@ class FakeAdminGateway implements AdminGateway {
     return townAt;
   }
 
+  /// Rows `admin_viewport_spots` returns, before the layer filter.
+  List<Map<String, dynamic>> mapRows = sampleMapRows();
+  final List<(MapViewport, bool, bool, bool)> mapRequests = [];
+  bool failMap = false;
+
+  @override
+  Future<MapSpotPage> mapSpots(
+    MapViewport bounds, {
+    required bool community,
+    required bool official,
+    required bool hidden,
+  }) async {
+    mapRequests.add((bounds, community, official, hidden));
+    if (failMap) throw StateError('offline');
+    return MapSpotPage.fromRows([
+      for (final row in mapRows)
+        if (row['hidden'] == true
+            ? hidden
+            : row['source'] == 'official'
+            ? official
+            : community)
+          row,
+    ]);
+  }
+
+  @override
+  Future<List<CityRule>> cityRules() async => const [];
+
   Future<void> dispose() => events.close();
 }
+
+List<Map<String, dynamic>> sampleMapRows() => [
+  {
+    'id': communityId,
+    'source': 'community',
+    'name': '中山北路二段路邊機車格',
+    'lat': 25.0581,
+    'lng': 121.5226,
+    'city': '臺北市',
+    'space_type': 'paidMotorcycle',
+    'status': 'pending',
+    'hidden': false,
+  },
+  {
+    'id': officialId,
+    'source': 'official',
+    'name': '新北市政府行政大樓地下停車場',
+    'lat': 25.0124,
+    'lng': 121.4651,
+    'city': '新北市',
+    'space_type': 'offStreet',
+    'status': 'confirmed',
+    'heavy_allowed': true,
+    'hidden': false,
+  },
+  {
+    'id': '33333333-3333-4333-8333-333333333333',
+    'source': 'community',
+    'name': '三重正義北路機車格',
+    'lat': 25.06,
+    'lng': 121.49,
+    'city': '新北市',
+    'space_type': 'freeMotorcycle',
+    'status': 'hidden',
+    'hidden': true,
+  },
+];

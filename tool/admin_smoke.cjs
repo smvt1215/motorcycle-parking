@@ -127,6 +127,15 @@ function session(role, aal, factors = [factor]) {
               state: spot === officialSpot ? 'visible' : spot.status, lat: spot.lat, lng: spot.lng, updated_at: spot.updated_at,
             })), headers: cors });
           }
+          if (url.pathname === '/rest/v1/rpc/admin_viewport_spots') {
+            const { p_community: community, p_official: official, p_hidden: hidden } = route.request().postDataJSON();
+            return route.fulfill({ json: [
+              ...(community ? [{ ...communitySpot, source: 'community', hidden: false }] : []),
+              ...(official ? [{ ...officialSpot, id: `official:${officialId}`, source: 'official', status: 'confirmed', hidden: false }] : []),
+              ...(hidden ? [{ ...hiddenSpot, source: 'community', hidden: true }] : []),
+            ], headers: cors });
+          }
+          if (url.pathname === '/rest/v1/city_rules') return route.fulfill({ json: [], headers: cors });
           if (url.pathname === '/rest/v1/rpc/admin_upsert_spot') {
             // Verifying the stored vehicle access restates it unchanged.
             const { p_source_id: sourceId, p_values: values, p_note: note } = route.request().postDataJSON();
@@ -229,8 +238,16 @@ function session(role, aal, factors = [factor]) {
           await page.getByRole('button', { name: '仍要套用建議', exact: true }).click();
           await waitText('已套用建議：中山北路二段路邊機車格');
           if (mobile) await page.getByRole('button', { name: /^返回佇列/ }).click();
-          // Spots page: list, then the official spot's form.
+          // Spots page: the map with its controls, the list, then the
+          // official spot's form.
           await page.getByRole('button', { name: '點位', exact: true }).click();
+          await page.getByRole('button', { name: /^圖層/ }).waitFor({ timeout: 15000 });
+          await page.getByRole('button', { name: /^圖層/ }).click();
+          await page.getByRole('checkbox', { name: /^已隱藏/ }).waitFor({ timeout: 15000 });
+          await page.screenshot({ path: path.join(output, `${name}-spots-map.png`) });
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} spots map scrolls sideways`);
+          await page.getByRole('button', { name: /^圖層/ }).click();
+          if (mobile) await page.getByRole('button', { name: /^清單/ }).click();
           await page.getByRole('button', { name: /^新北市政府行政大樓地下停車場/ }).waitFor({ timeout: 15000 });
           await page.screenshot({ path: path.join(output, `${name}-spots.png`) });
           await page.getByRole('button', { name: /^新北市政府行政大樓地下停車場/ }).click();
@@ -269,7 +286,7 @@ function session(role, aal, factors = [factor]) {
             return at && at.y > box.height * 0.25 && at.y + at.height < box.height - 180;
           };
           const reachVerify = async () => {
-            await page.mouse.move(box.width * (mobile ? 0.5 : 0.65), box.height * 0.5);
+            await page.mouse.move(box.width * (mobile ? 0.5 : 0.85), box.height * 0.5);
             for (let i = 0; i < 40 && !(await inView()); i++) {
               await page.mouse.wheel(0, 120);
               await page.waitForTimeout(100);
@@ -302,13 +319,13 @@ function session(role, aal, factors = [factor]) {
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} new spot form scrolls sideways`);
           // Scroll the form down to the picker and its notes.
           const viewport = page.viewportSize();
-          await page.mouse.move(viewport.width * (mobile ? 0.5 : 0.65), viewport.height * 0.5);
+          await page.mouse.move(viewport.width * (mobile ? 0.5 : 0.85), viewport.height * 0.5);
           for (let i = 0; i < 12; i++) await page.mouse.wheel(0, 150);
           await page.waitForTimeout(500);
           await page.screenshot({ path: path.join(output, `${name}-spot-location.png`) });
           await page.getByRole('button', { name: '審核', exact: false }).first().click();
           await page.screenshot({ path: path.join(output, `${name}.png`) });
-          for (const [label, title] of [['點位', '停車點位'], ['規則', '各縣市停車規則'], ['匯入', '匯入停車資料'], ['使用者', '使用者管理'], ['審核', '待審回報']]) {
+          for (const [label, title] of [['點位', '圖層'], ['規則', '各縣市停車規則'], ['匯入', '匯入停車資料'], ['使用者', '使用者管理'], ['審核', '待審回報']]) {
             await page.getByRole('button', { name: label === '審核' ? /^審核/ : label, exact: true }).click();
             await waitText(title);
           }

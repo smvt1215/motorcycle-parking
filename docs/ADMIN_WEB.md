@@ -1,6 +1,6 @@
 # Web 管理介面 — 開發計畫
 
-> 狀態：P1 後端與 P2 外殼已完成，P2 已於 2026-10-24 通過 staging 登入驗收（https://motopark-admin-staging.web.app ）。P3 審核佇列已合併（#62；#77 補上入口指引、位置與場站欄位），待 staging 部署後驗收；P4a-1（點位清單、編輯、隱藏、改為官方點，#67）與 P4a-2（位置選擇元件、新增停車點，#76）已合併，管理員核驗車種欄位（#84）已合併；點位表單與審核頁的結構化費率已實作（`202610260010`）；全點位地圖圖層在 P4a-3，地址搜尋在 P4b；App 的新增停車點與「位置不正確」建議已接入位置選擇元件（見「App 位置選擇實作」）。P0 仍差第二個備援驗證器 App。取代 [PLAN.md](PLAN.md)「社群回報機制 › 5. 管理」原本「第一版用 Supabase Dashboard」的做法；P3 驗收前審核仍以 Dashboard 操作。最後更新：2026-10-26
+> 狀態：P1 後端與 P2 外殼已完成，P2 已於 2026-10-24 通過 staging 登入驗收（https://motopark-admin-staging.web.app ）。P3 審核佇列已合併（#62；#77 補上入口指引、位置與場站欄位），待 staging 部署後驗收；P4a-1（點位清單、編輯、隱藏、改為官方點，#67）與 P4a-2（位置選擇元件、新增停車點，#76）已合併，管理員核驗車種欄位（#84）已合併；點位表單與審核頁的結構化費率已實作（`202610260010`）；P4a-3（全點位地圖圖層）已實作；地址搜尋在 P4b；App 的新增停車點與「位置不正確」建議已接入位置選擇元件（見「App 位置選擇實作」）。P0 仍差第二個備援驗證器 App。取代 [PLAN.md](PLAN.md)「社群回報機制 › 5. 管理」原本「第一版用 Supabase Dashboard」的做法；P3 驗收前審核仍以 Dashboard 操作。最後更新：2026-10-26
 
 ## 背景
 目前審核與資料維護都在 Supabase Dashboard 完成，有幾個問題：
@@ -98,7 +98,7 @@
 | P1 後端基礎 | 後端變更 1、2、4、5（`admin_resolve_report`）與 pgTAP | `supabase test db` 通過 |
 | P2 外殼 | `main_admin.dart`、登入、驗證方式登記與選擇（驗證器 App、簡訊）、go_router 版面、非 admin 拒絕畫面、Firebase Hosting（CSP、`X-Frame-Options: DENY`、`noindex`） | staging 可登入 |
 | P3 審核佇列 | 篩選、差異表、小地圖、套用／修改後套用／駁回；App 改送結構化建議；採納前比對點位版本（[社群核實計畫](COMMUNITY_VERIFICATION_PLAN.md) §5.2） | 不用 Dashboard 也能審核；建議送出後點位已改版時，採納會提示衝突而不直接覆蓋（pgTAP 覆蓋） |
-| P4 點位 | P4a-1：清單、編輯表單、來源、隱藏／恢復、改為官方點；P4a-2：位置選擇元件、新增停車點；P4a-3：全點位地圖圖層（沿用 App 標記）；P4b：門牌與路口搜尋（Google Geocoding 經 Edge Function，先實測路口） | — |
+| P4 點位 | P4a-1：清單、編輯表單、來源、隱藏／恢復、改為官方點；P4a-2：位置選擇元件、新增停車點；P4a-3：全點位地圖圖層（沿用 App 標記，已實作）；P4b：門牌與路口搜尋（Google Geocoding 經 Edge Function，先實測路口） | — |
 | P5 規則 | 規則表單、預覽、版本遞增；`tool/export_rules.py` 從 DB 匯出規則避免與 `parking_rules.json` 不一致 | — |
 | P6 匯入 | 上傳 `import_mymaps.py` 的 JSON → 差異試算 → 套用；既有點位的費率文字轉為結構化 `fee`（[PLAN.md](PLAN.md)「費率結構」）：只轉換能確定的寫法，「請依現場公告」「未知」與混有汽車、月租、身障費率而無法確定者維持 null 或交人工判斷；差異試算分列可轉換／無法判斷／需人工確認，確認後才寫入；解析結果以 `lib/models/fee.dart` 或 DB 的 `valid_fee()` 驗證 | 轉換完成前不開放依價格篩選 |
 | P7 使用者 | 檢視 `rate_limit_events`、停權（`admin-users`） | — |
@@ -179,6 +179,18 @@ node tool/admin_smoke.cjs
 - 新增停車點：表單最上方「位置」區塊，長按點或地圖中心只當起始位置；開啟時與每次移動後 0.6 秒以 `AppStore.townAt`（國土測繪中心）反查，縣市與行政區帶入並送出 `district`；反查得到的縣市與原本帶入的不同時提醒「適用 X 的停車規則」，並依新縣市重新帶入未手動修改的可停車種；查不到時保留附近點位帶入的縣市請騎士確認。15 m 內同類型的點提示改到該點提出修改建議。地圖高度為螢幕高的 34%（200–300 px），320 px 寬與鍵盤彈出時表單仍可捲動。
 - 修改建議「停車點位置」（`field=location`）：從點位目前位置開始，空心小圈標出原位置，未移動 1 m 以上不能送出；變更卡片列出移動方向與距離、跨縣市時列出縣市變化；超過 150 m 送出前確認是否仍是同一個點。`proposed` 含 `lat`、`lng`（7 位小數），反查成功時一併送 `city`、`district`（2026-10-26 使用者決定），跨縣市移動採納後點位改用新縣市的規則；反查失敗時只送座標，由審核頁提醒管理者確認。TDX 點位沒有可修改的資料列，只送說明。說明欄選填，另寫入 `note`。
 - `submit-report` 白名單加入 `location`，`field=location` 的 `proposed` 必須有 `lat`、`lng`，只能另帶 `city`（1–30 字）、`district`（0–30 字），範圍沿用緯度 20–27、經度 118–123；任何建議的 `city`、`district` 都不能沒有座標單獨出現。`admin_resolve_report`（最新定義在 `202610260020`）本來就能套用 `lat`、`lng`，`location` geography 是產生欄位會一起更新，不需要 migration；`moderation_risk` 依移動距離把位置建議分級（150 m 內中、以上高）；pgTAP 已涵蓋採納位置建議，包括跨縣市時縣市與行政區一併更新。
+
+### P4a-3 實作
+
+- 點位頁改為全版地圖：地圖沿用 App 的 `GoogleParkingMap`（標記顏色、形狀、角落格位徽章、選取外圈與群聚），另加衛星圖（`MapType.hybrid`，保留路名）與淡化參數；程式位於 `lib/admin/spots/spot_map.dart`。`/spots` 與 `/spots/<id>` 共用同一個頁面，開關表單時地圖保留相機與已載入的點。
+- 車種切換（普通機車／大型重機）以 App 的 `eligibility()` 與規則（資料庫 `city_rules`，讀取失敗時用內建規則檔）重算標記。
+- 圖層：官方點、社群點、已隱藏三個開關互相獨立；已隱藏圖層包含兩種來源的隱藏點，以半透明標記顯示。資料來自 `admin_viewport_spots(south, west, north, east, p_community, p_official, p_hidden)`（migration `202610260220`）：只限 `is_admin()`，security invoker；範圍限制與 App 相同（每邊最多 0.5 度，超過時提示放大），每個圖層最多 501 筆，超過 500 筆時提示只顯示一部分。官方點含尚未生效的點，狀態與 App 相同視為已確認。App 的 viewport 函式不變。
+- 開表單：點標記開啟表單，地圖只平移不改縮放；點清單或由網址開啟則移到街道層級（zoom 18）。Maps JavaScript API 不會依地圖 padding 移動相機（`google_maps_flutter_web` 只在 `fitBounds` 使用 padding），所以改以相機偏移：目標點往東移（表單寬 − 清單寬）／2 px，讓標記停在兩個面板之間（`lib/domain/map_camera.dart` 的 `shiftCenter`）。表單中拖曳位置時選取標記跟著移動；儲存、核驗、隱藏／恢復、改為官方點、新增後重新載入地圖上的點。
+- 版面（斷點同審核頁）：
+  - ≥ 1040 px：左側清單 380 px、右側表單 480 px，皆疊在地圖上；清單可收起。
+  - 680–1039 px：清單 300 px；開表單時清單讓位（表單寬為視窗 56%，360–440 px），可再叫出；地圖控制放不下時只留清單開關。
+  - < 680 px：頂端「地圖／清單」切換，預設地圖；點標記或清單項目後表單佔滿畫面，返回鍵回到原本的地圖或清單。地圖一直保留在下層，返回後相機不變；被覆蓋時不查詢。
+- 疊在地圖上的面板與控制在 web 以 `PointerInterceptor` 擋住地圖的指標事件。控制按鈕至少 48 px。
 
 ## CI／CD
 - `tool/ci_changes.py` 將 `lib/admin/` 歸入品質檢查與 admin web 建置（`flutter build web -t lib/main_admin.dart -o build/admin`），不觸發模擬器。

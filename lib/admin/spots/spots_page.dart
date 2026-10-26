@@ -1,7 +1,11 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/scheduler.dart' show SchedulerPhase;
 import 'package:go_router/go_router.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:pointer_interceptor/pointer_interceptor.dart';
 
 import '../../models/fee.dart';
 import '../../models/parking.dart';
@@ -9,21 +13,32 @@ import '../../ui/fee_editor.dart';
 import '../../ui/location_picker.dart';
 import '../admin_theme.dart';
 import '../review/review_page.dart' show ChangeBand, reviewCompactWidth;
+import 'spot_map.dart';
 import 'spot_models.dart';
 import 'spots_controller.dart';
 
 const _wideWidth = 1040.0;
+
+/// Widths of the panels over the map; the camera keeps the open spot clear
+/// of them.
+double _listWidth(double width) => width >= _wideWidth ? 380 : 300;
+double _formWidth(double width) =>
+    width >= _wideWidth ? 480 : (width * .56).clamp(360.0, 440.0);
 
 /// `/spots` and `/spots/<source id>`: search both tables and edit one spot.
 class SpotsPage extends StatefulWidget {
   const SpotsPage({
     super.key,
     required this.spots,
+    required this.map,
     required this.selectedId,
     this.newKind,
     this.locationMapBuilder,
+    this.spotMapBuilder = googleSpotMap,
   });
   final SpotsController spots;
+  final SpotMapController map;
+  final SpotMapBuilder spotMapBuilder;
 
   /// A source id, `new` for a spot being created, or null for the list.
   final String? selectedId;
@@ -48,17 +63,97 @@ class _SpotsPageState extends State<SpotsPage> {
   /// Where a new spot starts: the last spot opened, else Taipei Main Station.
   (double, double) _center = (25.0478, 121.5170);
 
+  /// The list panel beside the map (680 px and wider). At 680–1039 px it
+  /// steps aside while a form is open, unless the admin brings it back for
+  /// that form ([_listBesideForm]).
+  bool _listOpen = true;
+  bool _listBesideForm = false;
+
+  bool _showsList(double width, bool open) => width < reviewCompactWidth
+      ? false
+      : width >= _wideWidth || !open
+      ? _listOpen
+      : _listBesideForm;
+
+  /// Below 680 px the map and the list take turns.
+  bool _phoneList = false;
+
+  /// The next spot opened came from its marker: the map pans only as far as
+  /// needed to clear the form, keeping the zoom.
+  bool _fromMarker = false;
+  SpotMapFocus? _focus;
+  int _focusSeq = 0;
+  String? _focusedFor;
+
+  /// The open spot and version, so a write reloads the map's spots.
+  String? _shownVersion;
+  double _width = 1280;
+
   SpotsController get spots => widget.spots;
+  SpotMapController get map => widget.map;
 
   @override
   void initState() {
     super.initState();
     query.text = spots.query;
+    spots.addListener(_spotsChanged);
     // Loading notifies listeners; never during this first build.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!spots.searched && !spots.searching) spots.search();
       _follow();
     });
+  }
+
+  /// Follows the open spot on the map: moves there once it has loaded, and
+  /// reloads the map after a write changed it.
+  void _spotsChanged() {
+    final r = spots.record;
+    final version = r == null
+        ? null
+        : '${r.sourceId}@${r.updatedAt}@${r.hidden}';
+    final previous = _shownVersion;
+    _shownVersion = version;
+    if (version != null &&
+        previous != null &&
+        previous != version &&
+        (previous.startsWith('${r!.sourceId}@') ||
+            previous.startsWith('new@'))) {
+      map.refresh();
+    }
+    final key = r?.sourceId;
+    if (key == _focusedFor) return;
+    _focusedFor = key;
+    final lat = spots.draft['lat'] ?? r?.values['lat'];
+    final lng = spots.draft['lng'] ?? r?.values['lng'];
+    _listBesideForm = false;
+    if (r == null || lat is! num || lng is! num) return;
+    final compact = _width < reviewCompactWidth;
+    final left = _showsList(_width, true) ? _listWidth(_width) : 0.0;
+    final right = compact ? 0.0 : _formWidth(_width);
+    final fromMarker = _fromMarker;
+    _fromMarker = false;
+    _setState(
+      () => _focus = SpotMapFocus(
+        lat: lat.toDouble(),
+        lng: lng.toDouble(),
+        zoom: fromMarker ? null : 18,
+        leftOfCenter: (right - left) / 2,
+        seq: ++_focusSeq,
+      ),
+    );
+  }
+
+  void _setState(VoidCallback change) {
+    if (!mounted) return;
+    // The controller may notify during a build; apply after it.
+    if (WidgetsBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(change);
+      });
+    } else {
+      setState(change);
+    }
   }
 
   @override
@@ -94,6 +189,7 @@ class _SpotsPageState extends State<SpotsPage> {
 
   @override
   void dispose() {
+    spots.removeListener(_spotsChanged);
     _debounce?.cancel();
     _locate?.cancel();
     query.dispose();
@@ -125,10 +221,12 @@ class _SpotsPageState extends State<SpotsPage> {
     return leave == true;
   }
 
-  Future<void> _go(String? id) async {
-    if (id == spots.record?.sourceId && id != null) return;
-    if (!await _mayLeave() || !mounted) return;
+  /// True when it navigated.
+  Future<bool> _go(String? id) async {
+    if (id == spots.record?.sourceId && id != null) return false;
+    if (!await _mayLeave() || !mounted) return false;
     context.go(id == null ? '/spots' : '/spots/$id');
+    return true;
   }
 
   void _search(String value) {
@@ -259,15 +357,53 @@ class _SpotsPageState extends State<SpotsPage> {
     );
     if (result == null || !mounted) return;
     final id = await spots.promote(result.$1, result.$2);
-    if (id != null) router.go('/spots/$id');
+    if (id != null) {
+      map.refresh();
+      router.go('/spots/$id');
+    }
+  }
+
+  /// Opens a spot from its marker; the list and the URL open the others.
+  void _tapMarker(ParkingSpot spot) {
+    if (spot.id == spots.record?.sourceId) return;
+    _fromMarker = true;
+    _go(spot.id).then((went) {
+      // Stayed on the current form: the next open is not from this marker.
+      if (!went) _fromMarker = false;
+    });
+  }
+
+  Widget _map(bool covered) {
+    final record = spots.record;
+    final open = widget.selectedId != null;
+    return widget.spotMapBuilder(
+      context,
+      SpotMapView(
+        center: LatLng(_center.$1, _center.$2),
+        spots: map.shown,
+        eligibility: map.eligible,
+        dimmed: map.isHidden,
+        satellite: map.satellite,
+        covered: covered,
+        focus: _focus,
+        selected: open && record != null && record.sourceId == widget.selectedId
+            ? selectedSpot(record, spots.draft, map.find(record.sourceId))
+            : null,
+        onViewport: map.show,
+        onSpotTap: _tapMarker,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: spots,
+    listenable: Listenable.merge([spots, map]),
     builder: (context, _) => LayoutBuilder(
       builder: (context, constraints) {
-        final compact = constraints.maxWidth < reviewCompactWidth;
+        final width = constraints.maxWidth;
+        _width = width;
+        final compact = width < reviewCompactWidth;
+        final open = widget.selectedId != null;
         final list = _ListPane(
           spots: spots,
           query: query,
@@ -282,6 +418,7 @@ class _SpotsPageState extends State<SpotsPage> {
           note: note,
           compact: compact,
           selectedId: widget.selectedId,
+          backLabel: _phoneList ? '返回點位清單' : '返回地圖',
           onBack: () => _go(null),
           onSave: _save,
           onHide: _setHidden,
@@ -294,40 +431,212 @@ class _SpotsPageState extends State<SpotsPage> {
             if (id != null) spots.open(id);
           },
         );
-        if (compact) return widget.selectedId == null ? list : form;
-        return Padding(
-          padding: const EdgeInsets.all(20),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+        final controls = _intercept(SpotMapControls(map: map));
+        if (compact) {
+          // Phone: the form, or the map and list taking turns. The map
+          // stays mounted underneath so its camera survives.
+          final covered = open || _phoneList;
+          return Stack(
             children: [
-              SizedBox(
-                width: constraints.maxWidth >= _wideWidth ? 380 : 300,
-                child: _Pane(child: list),
+              Positioned.fill(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _PhoneSwitch(
+                      list: _phoneList,
+                      onChanged: (v) => setState(() => _phoneList = v),
+                    ),
+                    Expanded(
+                      child: Stack(
+                        children: [
+                          Positioned.fill(child: _map(covered)),
+                          if (!covered)
+                            Positioned(
+                              left: 12,
+                              right: 12,
+                              top: 12,
+                              child: Align(
+                                alignment: Alignment.topLeft,
+                                child: controls,
+                              ),
+                            ),
+                          if (_phoneList && !open)
+                            Positioned.fill(child: _intercept(list)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(width: 20),
-              Expanded(child: _Pane(child: form)),
+              if (open) Positioned.fill(child: _intercept(form)),
             ],
-          ),
+          );
+        }
+        final listWidth = _listWidth(width);
+        final formWidth = _formWidth(width);
+        final showList = _showsList(width, open);
+        final left = showList ? listWidth : 0.0;
+        final right = open ? formWidth : 0.0;
+        final colors = Theme.of(context).colorScheme;
+        final edge = BorderSide(color: colors.outlineVariant);
+        return Stack(
+          children: [
+            Positioned.fill(child: _map(false)),
+            if (showList)
+              Positioned(
+                left: 0,
+                top: 0,
+                bottom: 0,
+                width: listWidth,
+                child: _intercept(
+                  DecoratedBox(
+                    decoration: BoxDecoration(border: Border(right: edge)),
+                    child: list,
+                  ),
+                ),
+              ),
+            if (open)
+              Positioned(
+                right: 0,
+                top: 0,
+                bottom: 0,
+                width: formWidth,
+                child: _intercept(
+                  DecoratedBox(
+                    decoration: BoxDecoration(border: Border(left: edge)),
+                    child: form,
+                  ),
+                ),
+              ),
+            Positioned(
+              left: left + 12,
+              top: 12,
+              // With no room between the panels, the list toggle alone
+              // stays reachable over the form's empty top corner.
+              right: width - left - right >= 260 ? right + 12 : null,
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _intercept(
+                      _ListToggle(
+                        open: showList,
+                        // A narrow map between the panels keeps the icon only.
+                        iconOnly: width - left - right < 520,
+                        onPressed: () => setState(() {
+                          if (width >= _wideWidth || !open) {
+                            _listOpen = !showList;
+                          } else {
+                            _listBesideForm = !showList;
+                          }
+                        }),
+                      ),
+                    ),
+                    // Both panels open on a narrow window leave no room.
+                    if (width - left - right >= 260) ...[
+                      const SizedBox(width: 8),
+                      Flexible(child: controls),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
         );
       },
     ),
   );
 }
 
-class _Pane extends StatelessWidget {
-  const _Pane({required this.child});
-  final Widget child;
+/// Panels over the Google map take the pointer on the web; elsewhere this
+/// is the child itself.
+Widget _intercept(Widget child) =>
+    PointerInterceptor(intercepting: kIsWeb, child: child);
+
+/// Shows or hides the list panel beside the map.
+class _ListToggle extends StatelessWidget {
+  const _ListToggle({
+    required this.open,
+    required this.onPressed,
+    this.iconOnly = false,
+  });
+  final bool open, iconOnly;
+  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: colors.surface,
-        border: Border.all(color: colors.outlineVariant),
-        borderRadius: BorderRadius.circular(12),
+    return Material(
+      color: colors.surface,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: colors.outlineVariant),
+        borderRadius: BorderRadius.circular(10),
       ),
-      child: ClipRRect(borderRadius: BorderRadius.circular(11), child: child),
+      clipBehavior: Clip.antiAlias,
+      child: open || iconOnly
+          ? IconButton(
+              key: const ValueKey('list-toggle'),
+              tooltip: open ? '收起清單' : '顯示清單',
+              constraints: const BoxConstraints(minWidth: 56, minHeight: 56),
+              onPressed: onPressed,
+              icon: Icon(open ? Icons.chevron_left : Icons.view_list_outlined),
+            )
+          : Padding(
+              padding: const EdgeInsets.all(4),
+              child: TextButton.icon(
+                key: const ValueKey('list-toggle'),
+                onPressed: onPressed,
+                style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+                icon: const Icon(Icons.view_list_outlined),
+                label: const Text('顯示清單'),
+              ),
+            ),
+    );
+  }
+}
+
+/// The phone's map and list take turns.
+class _PhoneSwitch extends StatelessWidget {
+  const _PhoneSwitch({required this.list, required this.onChanged});
+  final bool list;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return _intercept(
+      Material(
+        color: colors.surface,
+        // Full width: the web pointer interceptor loosens constraints.
+        child: Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: colors.outlineVariant)),
+          ),
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+          child: SegmentedButton<bool>(
+            key: const ValueKey('phone-view'),
+            showSelectedIcon: false,
+            segments: const [
+              ButtonSegment(
+                value: false,
+                icon: Icon(Icons.map_outlined),
+                label: Text('地圖'),
+              ),
+              ButtonSegment(
+                value: true,
+                icon: Icon(Icons.view_list_outlined),
+                label: Text('清單'),
+              ),
+            ],
+            selected: {list},
+            onSelectionChanged: (v) => onChanged(v.single),
+            style: SegmentedButton.styleFrom(minimumSize: const Size(48, 48)),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -607,6 +916,7 @@ class _FormPane extends StatelessWidget {
     required this.note,
     required this.compact,
     required this.selectedId,
+    required this.backLabel,
     required this.onBack,
     required this.onSave,
     required this.onHide,
@@ -620,6 +930,9 @@ class _FormPane extends StatelessWidget {
   final TextEditingController note;
   final bool compact;
   final String? selectedId;
+
+  /// The phone's way back: to the map or the list it came from.
+  final String backLabel;
   final VoidCallback onBack, onSave, onPromote, onReload;
   final ValueChanged<bool> onHide;
   final void Function(double lat, double lng, {bool fromPicker}) onMove;
@@ -638,10 +951,18 @@ class _FormPane extends StatelessWidget {
             child: TextButton.icon(
               onPressed: onBack,
               icon: const Icon(Icons.arrow_back),
-              label: const Text('返回點位清單'),
+              label: Text(backLabel),
             ),
           )
-        : null;
+        : Align(
+            alignment: Alignment.centerRight,
+            child: IconButton(
+              key: const ValueKey('close-form'),
+              tooltip: '關閉表單',
+              onPressed: onBack,
+              icon: const Icon(Icons.close),
+            ),
+          );
     if (selectedId == null) {
       return Material(
         color: colors.surface,
@@ -664,7 +985,7 @@ class _FormPane extends StatelessWidget {
         child: ListView(
           padding: EdgeInsets.all(pad),
           children: [
-            ?back,
+            back,
             const SizedBox(height: 24),
             if (spots.openError != null) ...[
               AdminNotice(spots.openError!, error: true),
@@ -695,7 +1016,7 @@ class _FormPane extends StatelessWidget {
               key: ValueKey('spot-form-${record.sourceId}-${spots.formSeq}'),
               padding: EdgeInsets.fromLTRB(pad, compact ? 8 : 22, pad, 24),
               children: [
-                ?back,
+                back,
                 Text(
                   record.isNew
                       ? '新增${record.kind.label}'

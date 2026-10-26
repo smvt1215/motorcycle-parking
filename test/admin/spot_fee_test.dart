@@ -299,6 +299,8 @@ void main() {
           themeMode: mode,
           reviewMapBuilder: (_, _) => const SizedBox(),
           locationMapBuilder: (_, _) => const SizedBox(),
+          // The spots page map is a Google map; tests stand in for it.
+          spotMapBuilder: (_, _) => const SizedBox(),
         ),
       );
       await tester.pumpAndSettle();

@@ -31,6 +31,8 @@ class GoogleParkingMap extends StatefulWidget {
     this.location,
     this.selected,
     this.panelVisible = false,
+    this.mapType = gm.MapType.normal,
+    this.dimmed,
   });
 
   final LatLng center;
@@ -47,6 +49,12 @@ class GoogleParkingMap extends StatefulWidget {
   /// even when it is no longer in [spots].
   final ParkingSpot? selected;
 
+  /// The admin site switches to satellite imagery; the app keeps the default.
+  final gm.MapType mapType;
+
+  /// Spots drawn faded, such as hidden ones on the admin site.
+  final bool Function(ParkingSpot)? dimmed;
+
   @override
   State<GoogleParkingMap> createState() => GoogleParkingMapState();
 }
@@ -62,7 +70,7 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
   gm.BitmapDescriptor? locationIcon;
   int viewportGeneration = 0;
   Size? lastSize;
-  (LatLng, double?, double)? pendingMove;
+  (LatLng, double?, double, double)? pendingMove;
   bool viewportFailed = false;
 
   @override
@@ -102,18 +110,26 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
     return Map.fromIterables(variants, icons);
   }
 
-  /// Keeps the current zoom when [zoom] is null.
+  /// Keeps the current zoom when [zoom] is null. [abovePanel] and
+  /// [leftOfCenter] show the point that many pixels above and left of the
+  /// map's center, clear of panels covering the map.
   Future<void> moveTo(
     LatLng point,
     double? zoom, {
     double abovePanel = 0,
+    double leftOfCenter = 0,
   }) async {
     final active = controller;
     if (active == null) {
-      pendingMove = (point, zoom, abovePanel);
+      pendingMove = (point, zoom, abovePanel, leftOfCenter);
       return;
     }
-    final target = centerAbovePanel(point, zoom ?? camera.zoom, abovePanel);
+    final target = shiftCenter(
+      point,
+      zoom ?? camera.zoom,
+      dx: leftOfCenter,
+      dy: abovePanel,
+    );
     await active.animateCamera(
       zoom == null
           ? gm.CameraUpdate.newLatLng(_googlePoint(target))
@@ -202,7 +218,12 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
     controller = value;
     if (pendingMove case final move?) {
       pendingMove = null;
-      await moveTo(move.$1, move.$2, abovePanel: move.$3);
+      await moveTo(
+        move.$1,
+        move.$2,
+        abovePanel: move.$3,
+        leftOfCenter: move.$4,
+      );
     }
     await _publishViewport();
   }
@@ -242,6 +263,7 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
             children: [
               gm.GoogleMap(
                 initialCameraPosition: camera,
+                mapType: widget.mapType,
                 style: dark ? darkGoogleMapStyle : null,
                 padding: EdgeInsets.only(
                   // Sheet transitions must not change the map's projection.
@@ -353,6 +375,7 @@ extension on GoogleParkingMapState {
           selected,
         )]!,
     anchor: const Offset(.5, .5),
+    alpha: !selected && (widget.dimmed?.call(spot) ?? false) ? .45 : 1,
     zIndexInt: selected ? 500 : 0,
     consumeTapEvents: true,
     onTap: widget.interactive ? () => widget.onSpotTap(spot) : null,
