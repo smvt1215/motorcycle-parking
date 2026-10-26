@@ -93,17 +93,15 @@ class SpotsController extends ChangeNotifier {
   /// Sets the fee and keeps `fee_note` its text, as the app's reports do
   /// (lib/models/fee.dart `feeNoteOf`). With no vehicle known the spot has
   /// no structured fee and the text is free again: the stored text when the
-  /// spot had no fee, else the default note. Incomplete amounts leave the
-  /// text alone until they are filled.
+  /// spot had no fee, else the default note. Incomplete or invalid amounts
+  /// leave the text alone until they are fixed.
   void setFee(Fee value) {
     final r = record;
     if (r == null) return;
     final fee = value.isEmpty ? null : value;
     final hadFee = !r.isNew && storedFee(r.values['fee']) != null;
-    final complete = [
-      fee?.scooter,
-      fee?.heavy,
-    ].nonNulls.every((x) => x.complete);
+    // Complete and in range; an unreadable amount keeps the old text.
+    final complete = fee?.valid ?? true;
     draft = {
       ...draft,
       'fee': fee,

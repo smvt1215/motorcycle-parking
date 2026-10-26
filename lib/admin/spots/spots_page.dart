@@ -988,10 +988,7 @@ class _FeeNotePlate extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final muted = TextStyle(color: colors.onSurfaceVariant, fontSize: 13);
     final fee = spots.draft['fee'] as Fee?;
-    final complete = [
-      fee?.scooter,
-      fee?.heavy,
-    ].nonNulls.every((r) => r.complete);
+    final complete = fee?.valid ?? true;
     final text = spots.draft['fee_note'] as String? ?? '';
     return Padding(
       padding: const EdgeInsets.only(top: 16),
@@ -1056,7 +1053,7 @@ class _FeeNotePlate extends StatelessWidget {
             Text(
               complete
                   ? '依上方費率產生。要改這段文字，請改費率；兩種車都改回「未確認」後，可以自行填寫。'
-                  : '金額填完後，這段文字會跟著更新。',
+                  : '金額填好後，這段文字會跟著更新。',
               style: muted,
             ),
             if (error case final message?) ...[
