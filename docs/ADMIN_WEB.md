@@ -146,7 +146,7 @@ node tool/admin_smoke.cjs
 - **官方點隱藏**（2026-10-24 確認）：騎士不能單方面下架官方資料，只有管理者審核「已不存在」時立即隱藏。`official_heavy_spots.hidden` 由 `official_read` 政策過濾，直接讀取、收藏驗證與兩個 viewport 函式都不再回傳；admin（`aal2`）另有讀取政策。匯入不寫 `hidden`，重新匯入不會讓隱藏的點重新出現。
 - **已隱藏的點位**：列出隱藏的社群點與官方點，可逐筆「恢復顯示」（`admin_set_spot_hidden`，寫稽核紀錄，提示列可復原＝重新隱藏）。社群點恢復後回到「待確認」並清除「已不存在」票；P4 點位頁的已隱藏圖層沿用同一個 RPC。
 - **版本衝突**（2026-10-24 併入 P3）：`moderation_queue` 入列時由 trigger 記下點位的 `base_updated_at` 與快照 `base_spot`（不改 `apply_report`，舊版 App 送的建議也有）。`admin_resolve_report` 採納時，只要這次寫入的欄位在送出後被改過，就以 `40001`（`spot changed since the report`）拒絕，點位與案件不變；只比對寫入的欄位，投票或其他欄位的變動不算衝突，避免管理者習慣性強制。後台把案件放回佇列並標示「資料已更新，需重新檢視」，差異表多一欄「送出時」，按「仍要套用」才以 `p_force` 寫入，稽核紀錄 `after.forced=true`。入列早於此功能的案件沒有快照，照常審核。
-- `field` 改用穩定 key：`name`、`space_type`、`fee_note`、`eligibility`、`note`、`gone`，#75 再加入 `guide`（入口與停車指引），中文只做顯示；舊版 App 送的中文名稱仍可審核。`submit-report` 的白名單見 #61。App 的「停車點位置」建議送 `location`（`proposed` 只含 `lat`、`lng`），`submit-report` 白名單已加入，審核頁辨識為「位置不正確」。
+- `field` 改用穩定 key：`name`、`space_type`、`fee_note`、`eligibility`、`note`、`gone`，#75 再加入 `guide`（入口與停車指引），中文只做顯示；舊版 App 送的中文名稱仍可審核。`submit-report` 的白名單見 #61。App 的「停車點位置」建議送 `location`（`proposed` 含 `lat`、`lng`，反查成功時另含 `city`、`district`），`submit-report` 白名單已加入，審核頁辨識為「位置不正確」，可審核欄位加入縣市與行政區（文字，30 字，縣市不可空白）；位置建議沒附縣市時（反查失敗或舊版 App）審核頁提醒管理者確認是否跨縣市，需要時「修改後套用」加入縣市與行政區。
 - App 的修改建議改送 `field`（上述 key）、`proposed`、`note`，`reason` 照送給舊伺服器與 Dashboard：格位類型、停放資格送選擇值；名稱與收費送填寫內容（未超過欄位上限時，收費自 #72 起另送結構化 `fee`）；「這裡已經不能停車」先選原因，只有格線已撤除、改為其他用途兩種永久原因才附隱藏建議（社群點 `status=hidden`、官方點 `hidden=true`），施工、暫時封閉與其他原因只送說明（#75）；原本的「位置或其他備註」拆成「入口與停車指引」（`guide`，只送有變更的 `entrance_note`、`parking_guide`）與「其他備註」（`note`，只送說明）。
 - 審核頁（#77）：可審核欄位加入場站型式、車種開放（選項）與入口說明、停放方式（文字，500 字）；沒附建議值的「已不存在」回報不預設隱藏，「修改後套用」從點位目前的顯示狀態開始，由管理者決定是否隱藏。
 - 審核頁的費率：可審核欄位加入 `fee`。App 送來的 `fee` 整筆合規才列入修改內容（`Fee.tryParse`），否則另列為無法套用；差異表以費率內容比較並顯示費率文字。「修改後套用」以共用 `FeeEditor` 編輯（任何寬度都佔滿整列），金額填完後收費資訊自動改為 `feeNoteOf(fee)`。點位已有結構化費率時，只改收費資訊的建議無法直接套用（App 顯示的是費率），需在「修改後套用」加入「費率」修改。伺服器端 `admin_resolve_report`（`202610260010`）同樣檢查：patch 動到 `fee` 或 `fee_note` 時，寫入後的 `fee_note` 必須等於 `fee_note_of(fee)`，否則以 `22023` 拒絕；檢查在版本衝突之後，強制套用也不略過；沒有 `fee` 的點位照舊。
@@ -175,8 +175,8 @@ node tool/admin_smoke.cjs
 - `onSearch`：預留給 P4b 門牌與路口搜尋，回傳座標後移動標記；沒有提供時不顯示入口。
 - 提醒分三種語氣並都附圖示：資訊（所在縣市）、注意（條件琥珀：GPS 誤差、15 m 內同類型的點、跨縣市規則改變、查不到縣市）、錯誤（紅色：標記超出臺灣範圍等擋住送出的問題）。
 - 新增停車點：表單最上方「位置」區塊，長按點或地圖中心只當起始位置；開啟時與每次移動後 0.6 秒以 `AppStore.townAt`（國土測繪中心）反查，縣市與行政區帶入並送出 `district`；反查得到的縣市與原本帶入的不同時提醒「適用 X 的停車規則」，並依新縣市重新帶入未手動修改的可停車種；查不到時保留附近點位帶入的縣市請騎士確認。15 m 內同類型的點提示改到該點提出修改建議。地圖高度為螢幕高的 34%（200–300 px），320 px 寬與鍵盤彈出時表單仍可捲動。
-- 修改建議「停車點位置」（`field=location`）：從點位目前位置開始，空心小圈標出原位置，未移動 1 m 以上不能送出；變更卡片列出移動方向與距離、跨縣市時列出縣市變化；超過 150 m 送出前確認是否仍是同一個點。`proposed` 只含 `lat`、`lng`（7 位小數），縣市與行政區由管理者採納時確認；TDX 點位沒有可修改的資料列，只送說明。說明欄選填，另寫入 `note`。
-- `submit-report` 白名單加入 `location`，`field=location` 的 `proposed` 必須正好是 `lat`、`lng`，範圍沿用緯度 20–27、經度 118–123。`admin_resolve_report`（最新定義在 `202610260020`）本來就能套用 `lat`、`lng`，`location` geography 是產生欄位會一起更新，不需要 migration；`moderation_risk` 依移動距離把位置建議分級（150 m 內中、以上高）；pgTAP 已涵蓋採納位置建議。
+- 修改建議「停車點位置」（`field=location`）：從點位目前位置開始，空心小圈標出原位置，未移動 1 m 以上不能送出；變更卡片列出移動方向與距離、跨縣市時列出縣市變化；超過 150 m 送出前確認是否仍是同一個點。`proposed` 含 `lat`、`lng`（7 位小數），反查成功時一併送 `city`、`district`（2026-10-26 使用者決定），跨縣市移動採納後點位改用新縣市的規則；反查失敗時只送座標，由審核頁提醒管理者確認。TDX 點位沒有可修改的資料列，只送說明。說明欄選填，另寫入 `note`。
+- `submit-report` 白名單加入 `location`，`field=location` 的 `proposed` 必須有 `lat`、`lng`，只能另帶 `city`（1–30 字）、`district`（0–30 字），範圍沿用緯度 20–27、經度 118–123；任何建議的 `city`、`district` 都不能沒有座標單獨出現。`admin_resolve_report`（最新定義在 `202610260020`）本來就能套用 `lat`、`lng`，`location` geography 是產生欄位會一起更新，不需要 migration；`moderation_risk` 依移動距離把位置建議分級（150 m 內中、以上高）；pgTAP 已涵蓋採納位置建議，包括跨縣市時縣市與行政區一併更新。
 
 ## CI／CD
 - `tool/ci_changes.py` 將 `lib/admin/` 歸入品質檢查與 admin web 建置（`flutter build web -t lib/main_admin.dart -o build/admin`），不觸發模擬器。

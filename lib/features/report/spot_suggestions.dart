@@ -302,9 +302,11 @@ class _SuggestionFormState extends State<_SuggestionForm> {
   /// The suggested position, starting where the map shows the spot.
   late double lat = widget.spot.lat, lng = widget.spot.lng;
 
-  /// The county or city at [lat], [lng] once looked up; null until then or
-  /// when the lookup failed.
-  String? newCity;
+  /// The county or city and district at [lat], [lng] once looked up; null
+  /// until then or when the lookup failed.
+  Town? newTown;
+
+  String? get newCity => newTown?.city;
   Timer? lookupTimer;
   int lookupRound = 0;
 
@@ -333,7 +335,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
     setState(() {
       lat = a;
       lng = b;
-      newCity = null;
+      newTown = null;
     });
     lookupTimer?.cancel();
     // Counted now, not when the timer fires: an answer still in flight for
@@ -347,7 +349,13 @@ class _SuggestionFormState extends State<_SuggestionForm> {
         // The admin checks the county when applying; nothing to warn about.
       }
       if (mounted && round == lookupRound) {
-        setState(() => newCity = town?.city);
+        // Only a county the app knows; the sea or abroad sends coordinates
+        // alone and the admin checks.
+        setState(
+          () => newTown = town != null && taiwanCities.contains(town.city)
+              ? town
+              : null,
+        );
       }
     });
   }
@@ -418,14 +426,22 @@ class _SuggestionFormState extends State<_SuggestionForm> {
           'parking_guide': guide.text.trim(),
       };
     }
-    // Only the coordinates (docs/ADMIN_WEB.md); the admin settles the
-    // county and district when applying. TDX spots have no row to patch.
+    // The coordinates, with the county and district once looked up so a
+    // move across a border changes the rules too (docs/ADMIN_WEB.md); the
+    // admin can still correct them. TDX spots have no row to patch.
     if (locationField) {
       if (spot.source != 'official' &&
           !communitySpotSources.contains(spot.source)) {
         return null;
       }
-      return {'lat': _round(lat), 'lng': _round(lng)};
+      return {
+        'lat': _round(lat),
+        'lng': _round(lng),
+        if (newTown case final town?) ...{
+          'city': town.city,
+          'district': town.district,
+        },
+      };
     }
     // The text beside the fee is built from it, so the two never disagree.
     if (feeField) return {'fee': fee.toJson(), 'fee_note': feeNoteOf(fee)};
@@ -481,6 +497,9 @@ class _SuggestionFormState extends State<_SuggestionForm> {
       return [
         '位置往${_bearing()}移動約 ${_metres(moved)}',
         if (cityChanged) '縣市從「${spot.city}」改成「$newCity」',
+        if (newTown case final town?
+            when town.district.isNotEmpty && town.district != spot.district)
+          '行政區從「${spot.district.isEmpty ? '未提供' : spot.district}」改成「${town.district}」',
       ];
     }
     if (guideField) {
