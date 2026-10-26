@@ -38,7 +38,7 @@ select pg_temp.act('admin_aal1');
 set local role authenticated;
 select ok(not public.is_admin(),'admin role without a second factor is not admin');
 select throws_ok($$select admin_resolve_report((select id from fx where name='q_type'),'accepted')$$,'42501',null,'admin without a second factor cannot resolve');
-select lives_ok($$update city_rules set version=version+1 where city='臺北市' and vehicle='heavy'$$,'rule update without a second factor runs');
+select throws_ok($$update city_rules set version=version+1 where city='臺北市' and vehicle='heavy'$$,'42501',null,'rules are not written directly, with or without a second factor');
 reset role;
 select is((select version from city_rules where city='臺北市' and vehicle='heavy'),1,'but changes no rule');
 select pg_temp.act('user');

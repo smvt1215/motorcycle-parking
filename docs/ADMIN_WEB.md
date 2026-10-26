@@ -13,7 +13,7 @@
 | 沒有操作紀錄 | 以 service role 在 Dashboard 操作，不知道誰改了什麼 |
 | 匯入要貼 SQL | `tool/import_mymaps.py` 產出的 `official.sql`／`import.sql` 要在 SQL Editor 執行 |
 
-`city_rules` 已有 `app_metadata.role='admin'` 的寫入 policy（`202610110001_init.sql`），管理者角色從這裡延伸。
+`city_rules` 原有 `app_metadata.role='admin'` 的寫入 policy（`202610110001_init.sql`），管理者角色從這裡延伸；P5 起改為只能經 `admin_upsert_city_rule` 寫入。
 
 ## 決策
 以下四項已於 2026-10-24 確認：
@@ -204,7 +204,7 @@ OpenStreetMap Nominatim 免金鑰，但實測台灣門牌與路口都查不到�
 - 「發布第 N 版」先確認，提醒 App 內建規則檔不會跟著改變；成功後提示列可「復原」，做法是再發布一版恢復原內容（版本仍遞增，歷史保留）。開啟後他人已發布時以 `40001` 拒絕，保留修改並提示重新載入。
 - `admin_upsert_city_rule(p_city, p_vehicle, p_values, p_base_version, p_note)`（`202610260240`）：`is_admin()`；縣市限全國與 22 縣市；只接受規則欄位（`version` 由伺服器遞增）；格位種類限原本五種（#51 前的 App 讀不懂其他種類）；同一種類不可同時可停與有條件；有條件路邊格位必須有限制類型（`23514`），有限制類型必須有有條件路邊格位；內容與目前版本相同時拒絕。`p_base_version` 必須等於目前版本（新規則為 null），否則 `40001`。同一 transaction 內把被取代的列寫入 `city_rules_history`、寫稽核紀錄（完整修改前後列與發布說明）。
 - `city_rules_history`（`city`、`vehicle`、`version`、`row jsonb`、`replaced_at`、`replaced_by`；`(city, vehicle, version)` 唯一）：只由 RPC 寫入、不可修改或刪除，僅 admin（`aal2`）可讀；供法規預審引擎（[CONTRIBUTION_TIERS_FEASIBILITY.md](CONTRIBUTION_TIERS_FEASIBILITY.md) §5.7、§10 第 16 點，2026-10-25 決定採歷史表）還原「當時版本說什麼」。
-- **限制**：`city_rules` 的 `admin_rules` policy（`202610110001`、`202610240003`）仍允許 admin 直接寫入資料表，從 Supabase Dashboard 或 service role 寫入不經 RPC，**不留稽核紀錄與歷史，也不會遞增版本**；是否收回直接寫入權限之後再決定。規則改版請一律用管理站。
+- **直接寫入已收回**（2026-10-26 使用者決定）：同一 migration 移除 `city_rules` 的 `admin_rules` 寫入 policy，並收回 `authenticated` 的 insert／update／delete；admin 只能經規則頁（`admin_upsert_city_rule`）改規則，每次修改都有版本、稽核與歷史。所有人照舊可讀。緊急時仍可用 service role（Dashboard SQL），但不會留稽核與歷史，也不遞增版本，事後應補發一版。
 - `tool/export_rules.py`：以 anon key 讀 `city_rules`（`SUPABASE_URL`／`SUPABASE_ANON_KEY` 環境變數，或 `--config`，預設 `config/staging.json`），依內建檔的格式與順序寫回 `assets/rules/parking_rules.json`（新規則依縣市順序附在後面，空的 `district_space_types` 與 null 的 `restriction` 不寫入）。內建檔有但資料庫沒有、或內建版本較新時停止並說明，需先修正資料庫。`--check` 只比對、不寫入（不一致時結束碼 1），`--input` 可改讀匯出的列。App 發版前執行：
 
 ```bash

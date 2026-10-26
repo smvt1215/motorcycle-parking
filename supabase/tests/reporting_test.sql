@@ -86,7 +86,7 @@ select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-00000000
 set local role authenticated;
 select is((select count(*)::integer from favorites),0,'other users cannot read private favorites');
 select throws_ok($$insert into favorites(user_id,spot_id,spot) values('10000000-0000-4000-8000-000000000001','fav-two','{"id":"fav-two"}')$$,'42501','new row violates row-level security policy for table "favorites"','cannot write another user favorite');
-select throws_ok($$insert into city_rules(city,vehicle,allowed_space_types,fee_note,exceptions,effective_date,source_url,version) values('測試','heavy','[]','a','a',current_date,'https://example.test',1)$$,'42501','new row violates row-level security policy for table "city_rules"','ordinary users cannot insert rules');
+select throws_ok($$insert into city_rules(city,vehicle,allowed_space_types,fee_note,exceptions,effective_date,source_url,version) values('測試','heavy','[]','a','a',current_date,'https://example.test',1)$$,'42501',null,'ordinary users cannot insert rules');
 reset role;
 select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
 set local role authenticated;
@@ -95,10 +95,11 @@ select lives_ok($$delete from favorites where spot_id='fav-one'$$,'owner can rem
 reset role;
 select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-000000000005","role":"authenticated","aal":"aal2","app_metadata":{"role":"admin"}}',true);
 set local role authenticated;
-select lives_ok($$update city_rules set version=version+1 where city='臺北市' and vehicle='heavy'$$,'admin can maintain rules');
-select is((select version from city_rules where city='臺北市' and vehicle='heavy'),2,'admin update takes effect');
-select throws_ok($$update city_rules set restriction=null,version=version+1 where city='臺中市' and vehicle='heavy'$$,'23514',null,'conditional street spaces keep their restriction kind');
-select lives_ok($$update city_rules set restriction='unverified',version=version+1 where city='臺中市' and vehicle='heavy'$$,'admin can change the restriction kind');
+-- Admins publish through admin_upsert_city_rule (admin_city_rules_test.sql).
+select throws_ok($$update city_rules set version=version+1 where city='臺北市' and vehicle='heavy'$$,'42501',null,'admins do not write rules directly');
 reset role;
+-- The constraint still guards writes that bypass the RPC (service role).
+select throws_ok($$update city_rules set restriction=null,version=version+1 where city='臺中市' and vehicle='heavy'$$,'23514',null,'conditional street spaces keep their restriction kind');
+select lives_ok($$update city_rules set restriction='unverified',version=version+1 where city='臺中市' and vehicle='heavy'$$,'the restriction kind can change');
 select * from finish();
 rollback;
