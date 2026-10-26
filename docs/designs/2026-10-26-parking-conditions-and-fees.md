@@ -103,7 +103,7 @@
 **舊版能不能正確表示（`legacySafe`）**：condition 依上表轉回 `space_type`，再用 `conditionOf` 讀回來，結果與原 condition 相同（或只少了舊版本來就當成未確認的資訊），才算 legacy-safe。例如：
 
 - 機車格、共用 scooter_heavy、Toll → `paidMotorcycle`，安全（舊版依縣市規則判斷，結果一致或更保守）。
-- 機車格、charge 未確認 → 沒有對應的舊值，**不安全**。
+- 機車格、沒有限制且 charge 未確認 → 沒有對應的舊值。`space_type` 不可為空，因此這個組合不允許寫入（§4.3）：回報者必須選收費或免費格，與現行表單一致；真的無法判斷時不寫 `condition`。
 - 有 `schedule` 的重機格、有 `basis.expires_on` 的條件 → 舊版會忽略時段或期限，**不安全**。
 - 限時格且 charge=free → `timedMotorcycle`，舊版當成收費限時格，資格可能較寬鬆，**不安全**。
 
@@ -333,6 +333,7 @@ SQL 不能在執行時讀 JSON，所以由 `tool/gen_contract_sql.py` 從契約�
 | 路邊點帶 `parking_zones` 或 `zones_complete` | DB | 拒絕 | 同 #94 `street_lot_details` |
 | 有 `condition` 但 `space_type ≠ legacySpaceType(condition)` | DB | 拒絕 | 避免雙份狀態 |
 | `use='share'` 缺 `share`，或 `use='usual'` 帶 `share` | DB | 拒絕 | |
+| 路邊點的 `condition` 缺 `bay`；或 bay=motorcycle、沒有 `time_limit`／`special_vehicle`／`ev_only`、也沒有 `charge` | DB | 拒絕 | 推導不出 `space_type`（§1.3） |
 | `share='scooter_heavy'` 但 bay ≠ motorcycle；`share='car_motorcycle'` 但 bay ≠ car | DB | 拒絕 | 需求 4 |
 | `share='car_motorcycle'` 在路外分區 | 預檢 | fix | 本專案只列路邊（需求 4），屬範圍而非不可能 |
 | `share='scooter_heavy'` 且 `charge='free'` | 預檢 | 見 §7 第 2 項 | 使用者列為「目前僅 Toll」，但不可變成大型重機不能停免費機車格的全國限制（法規 A） |
