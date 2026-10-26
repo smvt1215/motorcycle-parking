@@ -8,7 +8,7 @@ so this writes (docs/designs/2026-10-26-parking-conditions-and-fees.md §4.1):
   - shared helpers and parking_contract(): needed by both later sections;
   - conditions, valid_condition(), condition_space_type() and the
     legacy-safe functions (condition_off_street(), condition_legacy_access(),
-    condition_legacy_safe(), zone_legacy_safe(),
+    condition_legacy_safe(), zone_legacy_safe(), zone_condition_consistent(),
     condition_legacy_safe_spot()): the C2 migration
     (feat/parking-condition-db) copies this and the shared section, and
     tool/test_gen_contract_sql.py checks the latest migration defining each
@@ -287,6 +287,17 @@ language sql immutable set search_path='' as $$
       and (p_zone->>'access') is not distinct from {s}.condition_legacy_access(p_zone->'condition'));
 $$;
 
+-- Whether a zone's access agrees with its condition (§1.3, decision 32): a
+-- zone without a condition is not checked here; one with a condition has an
+-- allow naming both vehicles, and its access is the one the condition writes
+-- back. A condition that writes back no access is inconsistent.
+create or replace function {s}.zone_condition_consistent(p_zone jsonb) returns boolean
+language sql immutable set search_path='' as $$
+  select coalesce(jsonb_typeof(p_zone->'condition'),'null')='null'
+    or (jsonb_typeof(p_zone->'access')='string'
+      and coalesce((p_zone->>'access')={s}.condition_legacy_access(p_zone->'condition'),false));
+$$;
+
 -- Whether a whole spot is legacy-safe: a street spot by its condition, a lot
 -- only without a top-level condition and when every zone is.
 create or replace function {s}.condition_legacy_safe_spot(p_off_street boolean,p_condition jsonb,p_zones jsonb) returns boolean
@@ -452,6 +463,12 @@ def test_sql(contract, cases):
         lines.append(
             f"select is(pg_temp.zone_legacy_safe({literal(wrong)}),false,"
             f"{quote('stored zone with another access: ' + c['name'])});"
+        )
+    lines.append("-- zone_rows: zone_condition_consistent()")
+    for c in cases["zone_rows"]:
+        lines.append(
+            f"select is(pg_temp.zone_condition_consistent({literal(c['zone'])}),"
+            f"{'true' if c['consistent'] else 'false'},{quote('zone row: ' + c['name'])});"
         )
     lines.append("-- fees: valid_fee() v2")
     for c in cases["fees"]:

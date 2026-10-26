@@ -32,6 +32,7 @@ class GenContractSqlTest(unittest.TestCase):
         # stored safety and a stored zone with another access.
         total += sum(1 for c in cases["legacy"] if c["safe"] is not None and not c["off_street"])
         total += 4 * len(cases["zones"])
+        total += len(cases["zone_rows"])
         self.assertEqual(test.count("select is("), total)
 
     def test_migrations_apply_the_generated_condition_functions(self):

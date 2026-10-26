@@ -60,6 +60,7 @@ select lives_ok($$select pg_temp.c('試辦場站','offStreet',null,
   '{"facility_type":"underground","zones_complete":true,"parking_zones":[
     {"name":"機車區","area":"motorcycle","access":"scooterHeavy",
      "condition":{"bay":"motorcycle","use":"share","share":"scooter_heavy","charge":"toll",
+       "allow":{"scooter":true,"heavy":true},
        "basis":{"source_url":"https://pma.gov.taipei/x","effective_date":"2026-04-06","expires_on":"2026-10-05"}},
      "fee":{"scooter":{"mode":"hourly","amount":10,"per_minutes":60}}},
     {"name":"汽車區","area":"car","access":"heavyCar",
@@ -70,9 +71,6 @@ select lives_ok($$select pg_temp.c('安全場站','offStreet',null,
   '{"facility_type":"surface","parking_zones":[{"name":"汽車區","area":"car","access":"heavyCar",
     "condition":{"bay":"car","use":"usual","allow":{"scooter":false,"heavy":true}}}]}')$$,
   'a lot whose zone condition matches its access');
-select lives_ok($$select pg_temp.c('無access分區','offStreet',null,
-  '{"parking_zones":[{"name":"機車區","condition":{"bay":"motorcycle","use":"usual","allow":{"scooter":true}}}]}')$$,
-  'a zone condition no access matches stores no access');
 
 -- ===== Table checks: refused =====
 select throws_ok($$select pg_temp.c('x1','offStreet','{"bay":"motorcycle","use":"usual","charge":"toll"}')$$,
@@ -96,10 +94,14 @@ select throws_ok($$select pg_temp.c('x9','paidMotorcycle','{"bay":"motorcycle","
   '23514',null,'evidence_id is refused until photo evidence ships');
 select throws_ok($$select pg_temp.c('x10','paidMotorcycle','null')$$,
   '23514',null,'a JSON null condition is not a condition');
--- Stored, but not legacy-safe: old builds read only access (see below).
-select lives_ok($$select pg_temp.c('不一致分區','offStreet',null,
+-- A zone's access must be the one its condition writes back
+-- (202610270020_zone_access_consistency.sql, decision 32).
+select throws_ok($$select pg_temp.c('x11','offStreet',null,
   '{"parking_zones":[{"name":"汽車區","access":"scooterHeavy","condition":{"bay":"car","use":"usual","allow":{"scooter":false,"heavy":true}}}]}')$$,
-  'a zone access other than the one its condition writes back is stored');
+  '23514',null,'a zone access other than the one its condition writes back is refused');
+select throws_ok($$select pg_temp.c('x12','offStreet',null,
+  '{"parking_zones":[{"name":"機車區","condition":{"bay":"motorcycle","use":"usual","allow":{"scooter":true}}}]}')$$,
+  '23514',null,'a zone condition no access matches is refused');
 select throws_ok($$select pg_temp.c('x13','offStreet',null,'{"parking_zones":[{"name":"B1","area":"roof"}]}')$$,
   '23514',null,'area is one of the listed areas');
 select throws_ok($$select pg_temp.c('x14','offStreet',null,'{"parking_zones":[{"name":"B1","condition":{}}]}')$$,
@@ -133,6 +135,7 @@ insert into official_heavy_spots(id,name,lat,lng,city,space_type,facility_type,s
 values('74100000-0000-4000-8000-000000000004','官方試辦場站',25.26,121.46,'臺北市','offStreet','underground','https://example.test/o',current_date,true,true,
   '[{"name":"機車區","area":"motorcycle","access":"scooterHeavy",
      "condition":{"bay":"motorcycle","use":"share","share":"scooter_heavy","charge":"toll",
+       "allow":{"scooter":true,"heavy":true},
        "basis":{"source_url":"https://pma.gov.taipei/x","expires_on":"2026-10-05"}}},
     {"name":"汽車區","area":"car","access":"heavyCar","condition":{"bay":"car","use":"usual","allow":{"scooter":false,"heavy":true}}}]');
 update community_spots set status='hidden' where id=(select id from fx where name='汽機共用時段');
@@ -192,11 +195,13 @@ select is(pg_temp.row('v2','試辦場站')->'parking_zones'->0->>'name','機車�
 select is(pg_temp.row('v2','試辦場站')->'parking_zones'->1->>'access','heavyCar','a safe zone keeps its access');
 select is(pg_temp.row('v2','試辦場站')->'parking_zones'->2->>'access','scooterOnly','a zone without a condition keeps its access');
 select is(pg_temp.row('v2','安全場站'),pg_temp.row('v3','安全場站'),'a safe lot reads the same in v2 and v3');
-select is(pg_temp.row('v2','不一致分區')->'parking_zones'->0 ? 'access',false,
-  'v2 drops an access its zone condition contradicts');
-select is(pg_temp.row('v3','不一致分區')->'parking_zones'->0->>'access','scooterHeavy','v3 returns it as stored');
-select is(pg_temp.row('v2','無access分區')->>'status','pending',
-  'a zone condition no access expresses makes the lot unverified in v2');
+-- Rows the table now refuses (decision 32) still project conservatively.
+select is(legacy_projection('{"space_type":"offStreet","status":"confirmed","parking_zones":[{"name":"汽車區","access":"scooterHeavy",
+    "condition":{"bay":"car","use":"usual","allow":{"scooter":false,"heavy":true}}}]}')->'parking_zones'->0 ? 'access',false,
+  'the projection drops an access its zone condition contradicts');
+select is(legacy_projection('{"space_type":"offStreet","status":"confirmed","parking_zones":[{"name":"機車區",
+    "condition":{"bay":"motorcycle","use":"usual","allow":{"scooter":true}}}]}')->>'status','pending',
+  'a zone condition no access expresses makes the lot unverified in the projection');
 -- Official rows have no status to lower; the flags drop.
 select is(pg_temp.row('ov2','官方免費限時格')->>'space_type','offStreet','official v2 projects an unsafe bay');
 select is(pg_temp.row('ov2','官方免費限時格')->'heavy_allowed','null'::jsonb,'official v2 drops its flags');

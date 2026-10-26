@@ -1,7 +1,14 @@
 import cases from '../_shared/parking_contract_cases.json' with {
   type: 'json',
 };
-import { legacySpaceType, validate, validCondition } from './validate.ts';
+import {
+  legacyAccess,
+  legacySpaceType,
+  validate,
+  validCondition,
+  validZones,
+  zoneConditionConsistent,
+} from './validate.ts';
 
 // The same cases lib/models/parking_condition.dart and the generated SQL run.
 Deno.test('shared cases: validCondition accepts exactly the valid ones', () => {
@@ -21,6 +28,40 @@ Deno.test('shared cases: legacy space types', () => {
     );
     if (got !== space_type) throw new Error(`${name}: got ${got}`);
   }
+});
+
+Deno.test('shared cases: legacy access of zone conditions', () => {
+  for (const { name, condition, access } of cases.zones) {
+    const got = legacyAccess(condition as Record<string, unknown>);
+    if (got !== access) throw new Error(`${name}: got ${got}`);
+  }
+});
+
+Deno.test('shared cases: zone access agrees with its condition', () => {
+  if (cases.zone_rows.length === 0) throw new Error('no cases');
+  for (const { name, zone, consistent } of cases.zone_rows) {
+    if (zoneConditionConsistent(zone) !== consistent) {
+      throw new Error(`${name}: expected ${consistent}`);
+    }
+  }
+});
+
+Deno.test('rider zones keep their keys and stay consistent', () => {
+  if (!validZones([{ name: 'B1', access: 'scooterOnly' }, { name: 'B2' }])) {
+    throw new Error('a zone without a condition is unchecked');
+  }
+  // Riders send no zone condition yet: refused as an unknown key, so the
+  // consistency check never loosens what the DB refuses.
+  const zone = {
+    name: 'B1',
+    access: 'heavyCar',
+    condition: {
+      bay: 'car',
+      use: 'usual',
+      allow: { scooter: false, heavy: true },
+    },
+  };
+  if (validZones([zone])) throw new Error('zone condition accepted');
 });
 
 const create = (spot: Record<string, unknown>) =>
