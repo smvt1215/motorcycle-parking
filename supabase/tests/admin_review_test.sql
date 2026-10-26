@@ -142,5 +142,22 @@ set local role authenticated;
 select is(admin_resolve_report((select id from moderation_queue where reason='備註：舊資料'),'accepted','{"note":"舊資料"}')->>'status','accepted','reports without a recorded version are reviewable');
 reset role;
 
+-- A location suggestion moves the spot; the geography follows the columns.
+with s as (insert into community_spots(user_id,name,lat,lng,city,space_type)
+  values('10000000-0000-4000-8000-000000000001','位置測試點',25.044,121.564,'臺北市','paidMotorcycle') returning id) insert into fx select 'moved_spot',id from s;
+delete from rate_limit_events;
+select public.apply_report('10000000-0000-4000-8000-000000000002',repeat('g',64),repeat('g',64),
+  jsonb_build_object('action','flag','source_id',(select id::text from fx where name='moved_spot'),
+    'reason','停車點位置：建議移到 25.044100, 121.564000','field','location','proposed',jsonb_build_object('lat',25.0441,'lng',121.564)));
+insert into fx select 'q_location',id from moderation_queue where reason like '停車點位置：%';
+select is((select field from moderation_queue where id=(select id from fx where name='q_location')),'location','a location suggestion keeps its field key');
+select pg_temp.act('admin');
+set local role authenticated;
+select is(admin_resolve_report((select id from fx where name='q_location'),'accepted',
+  (select proposed from moderation_queue where id=(select id from fx where name='q_location')))->>'status','accepted','an admin applies the suggested position');
+reset role;
+select is((select (lat,lng)::text from community_spots where id=(select id from fx where name='moved_spot')),'(25.0441,121.564)','the spot moves to the suggested coordinates');
+select ok((select extensions.st_dwithin(location,extensions.st_setsrid(extensions.st_makepoint(121.564,25.0441),4326)::extensions.geography,0.5)
+  from community_spots where id=(select id from fx where name='moved_spot')),'the spatial index position moves with it');
 select * from finish();
 rollback;
