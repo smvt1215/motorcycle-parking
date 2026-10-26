@@ -63,6 +63,7 @@
   ],
   "basis": {
     "source_url": "https://…",
+    "evidence_id": null,
     "effective_date": "2026-10-06",
     "expires_on": null
   }
@@ -71,7 +72,7 @@
 
 - `use='share'` 時 `share` 必填；`use='usual'` 時不得有 `share`。
 - `schedule[].days` 為 `all`／`weekday`／`holiday`，或星期陣列 `["mon",…]`；`from > to` 表示跨午夜。`vehicles` 為該時段允許停放的車種（`scooter`／`heavy`／`car`）。汽機車共用格（`share='car_motorcycle'`）的機車涵蓋範圍不預設，只認 `vehicles` 依公告寫明的車種，沒寫的車種為待確認（§7 第 1 項，已決定）。
-- `basis` 記錄這個條件本身的公告依據（例如臺北 36 處試辦場域的分區），與 `city_rules` 分開。`expires_on` 已過即視為依據失效（§3.3）。
+- `basis` 記錄這個條件本身的公告依據（例如臺北 36 處試辦場域的分區），與 `city_rules` 分開。`expires_on` 已過即視為依據失效（§3.3）。依據的種類與照片規則見 §1.4。
 - 「特殊車型及地方特別開放另處理」（需求 6）：特殊車型用 `limits[].kind='special_vehicle'`；地方開放仍放在 `city_rules`，不寫進格位。
 
 ### 1.3 與 `SpaceType` 的單一轉換層
@@ -108,6 +109,28 @@
 - 限時格且 charge=free → `timedMotorcycle`，舊版當成收費限時格，資格可能較寬鬆，**不安全**。
 
 不安全的資料在兩版 viewport 與收藏中改用保守投影（§5.2、§5.3）。
+
+### 1.4 公告依據：網址或現場牌面照片（使用者 2026-10-26 補充）
+
+`condition.basis` 必須有 `source_url`（公告網址）**或** `evidence_id`（現場牌面照片），兩者擇一即可，也可以兩者都有。
+
+- **照片走核實計畫 P2 的 `spot_evidence`**，依使用者 2026-10-25 對 P2 的拍板：照片存在私有 bucket，只有管理員看得到（P2 D1）；本人可以看自己還沒審的原圖（D3）；保留期依狀態分級（D2），用於核實的照片保留到核實到期後 30 天。
+- **照片計入依據的前提**：審核者確認照片是**這個場站或路段的牌面**，而且**內容與要寫入的條件相符**（`spot_evidence.content_state='confirmed'`）。未確認、被拒或與其他點位共用的照片不計入。P2 只開放管理員確認；之後由 L3 確認時沿用研究文件 §5.1、§5.2 的規則。
+- **P2 照片上傳上線前只能附網址**：`evidence_id` 的鍵先保留在契約裡（C1），在 P2 的 `spot_evidence` 合併以前，三端都拒收帶 `evidence_id` 的資料。
+- **寫入的人**：`condition.basis` 只由管理員或匯入寫入。車友不能直接寫 `basis`，但送出時可以附上依據（網址或照片），作為審核案件的證據；管理員採納時才把它寫進 `basis`。管理員 RPC 會檢查 `evidence_id` 存在、屬於同一個點位、而且內容已確認。
+- **公開 view 不暴露照片**：`basis.evidence_id` 在 viewport 輸出時改寫成 `{"evidence":"photo","confirmed_at":"…"}`，不帶 id 和網址；App 顯示「依據：現場牌面照片（管理員確認於 YYYY-MM-DD）」。照片公開要等 P2 D1 的手動遮蔽流程。
+- **期限**：照片沒有網址可以查生效日和截止日，管理員依牌面內容填 `effective_date`、`expires_on`；牌面沒寫就留空。照片依據在核實計畫 §5.3 的有效期內才算數，預設依「費率與收費方式」的 30–90 天，時段與限制比照。期限過了之後只是依據失效、回到待確認，資料不會刪除。
+
+各處需要「公告依據」的地方一致處理如下：
+
+| 需要依據的資料 | 網址 | 牌面照片 | 理由 |
+| --- | --- | --- | --- |
+| 普大共用的免費格（§4.3） | 可 | 可 | 使用者 2026-10-26 指定 |
+| 格位的共用標示、汽機共用的時段與車種（§1.2、§7 第 1 項） | 可 | 可 | 現場牌面就是公告本身 |
+| 限時、限電動、身障特製機車等格位限制 | 可 | 可 | 同上 |
+| 場域試辦（分區 `basis`，例如臺北 36 處） | 可 | 可（網址優先，因為期限寫在新聞稿附件） | |
+| 路外場站業者的車種規則 | 可 | 可 | 核實計畫 §5.2 本來就要求入口公告照片 |
+| 縣市規則 `city_rules`（地方開放、行政區、試辦期限） | 必須 | **不可**當規則來源，只能作為研究文件 §5.7 的 `rule_evidence` 現場佐證 | 縣市法規只能依官方法規或主管機關公告發布（核實計畫 §3.3 A 類） |
 
 ## 2. 費率模型
 
@@ -297,7 +320,7 @@ PLAN.md 匯入紀錄：「依停管處新聞稿附件補上『機車區』與機
 
 **2. 地方公告**
 
-- 公告來源有兩層：縣市規則 `city_rules`（全市或行政區），以及條件自己的 `basis`（特定場域、特定路段，例如試辦場域）。
+- 公告來源有兩層：縣市規則 `city_rules`（全市或行政區），以及條件自己的 `basis`（特定場域、特定路段，例如試辦場域）。`basis` 可以是網址或已確認內容的牌面照片（§1.4）；照片超過有效期時，這份依據失效。
 - `city_rules` 新增 `expires_on date`（可為 null）。`now ≥ expires_on` 的規則不算有效，結果為「此地區的規則已過期，請以現場標誌標線為準」（`unverified`），不回落到全國規則，因為過期的地方開放可能已經延長也可能已經結束。
 - 規則以格位面向判斷，取代 `ruleSpaceType()`：`ruleKindOf(condition)` 依 bay＋charge 對到 `allowed_space_types` 用的舊值（機車格 toll→`paidMotorcycle`、free→`freeMotorcycle`、charge 未確認→無法對應，結果為待確認）。限時格因此依它真正的收費屬性比對，不再一律當收費格。
 - `basis` 與 `city_rules` 同時有效且結論相反（例如縣市規則不開放機車格，但場域公告開放共用）→ 較具體的 `basis` 優先；`basis` 已過期而 `city_rules` 沒有涵蓋 → 待確認；兩個都有效但無法排出具體程度（兩份全市公告互相矛盾）→ `unverified`，理由「公告不一致，請以現場公告為準」，並列出兩個來源。
@@ -367,7 +390,7 @@ SQL 不能在執行時讀 JSON，所以由 `tool/gen_contract_sql.py` 從契約�
 | 層 | 檢查 | 失敗時 |
 | --- | --- | --- |
 | 資料表 check（`valid_condition`、`valid_fee` v2、`valid_zones`） | 形狀、鍵、範圍；不可能成立的組合（§4.3 標 DB 的列） | 寫入失敗。管理員 RPC 與匯入也受約束 |
-| `validate.ts` | 同上，外加信任邊界：社群不可帶 `zones_complete`、`basis`；`proposed` 白名單加入 `condition` | 400 |
+| `validate.ts` | 同上，外加信任邊界：社群不可帶 `zones_complete`、`condition.basis`（依據改以案件證據附上：新增選填鍵 `evidence_url`（https，存進案件，不寫入點位），或 P2 上線後的 `evidence_ids`，§1.4）；`proposed` 白名單加入 `condition`；P2 合併前拒收 `evidence_id` | 400 |
 | 預檢 `precheck.ts`（#94） | §4.3 標「預檢」的範圍與政策組合，可單獨停用、調參 | `fix`／`hold` |
 | Dart `ParkingCondition.fromJson`、`Fee.fromJson` | 同形狀規則；不合法的部分讀成未確認，不讓整張地圖失敗 | 該面向未確認 |
 
@@ -384,7 +407,7 @@ SQL 不能在執行時讀 JSON，所以由 `tool/gen_contract_sql.py` 從契約�
 | 路邊點的 `condition` 缺 `bay`；或 bay=motorcycle、沒有 `time_limit`／`special_vehicle`／`ev_only`、也沒有 `charge` | DB | 拒絕 | 推導不出 `space_type`（§1.3） |
 | `share='scooter_heavy'` 但 bay ≠ motorcycle；`share='car_motorcycle'` 但 bay ≠ car | DB | 拒絕 | 需求 4 |
 | `share='car_motorcycle'` 在路外分區 | 預檢 | fix | 本專案只列路邊（需求 4），屬範圍而非不可能 |
-| `share='scooter_heavy'` 且 `charge='free'` | 預檢 | hold，要求附公告依據（`condition.basis.source_url`）；沒有依據時預檢提示補上 | 契約允許（§7 第 2 項，已決定）：不可變成大型重機不能停免費機車格的全國限制（法規 A），但保留「目前多為 Toll」的查核 |
+| `share='scooter_heavy'` 且 `charge='free'` | 預檢 | hold，要求附公告依據：公告網址或現場牌面照片擇一（§1.4；照片要等 P2 上線）；沒有依據時預檢提示補上 | 契約允許（§7 第 2 項，已決定）：不可變成大型重機不能停免費機車格的全國限制（法規 A），但保留「目前多為 Toll」的查核 |
 | `charge='free'` 而任一已填車種的費率不是 `free` | 預檢 | fix | |
 | `charge='toll'` 而某車種為 `mode:'free'` | 預檢 | fix，提示改用「首段 0 元」 | 法規 D |
 | bay=heavy 而有 `fee.scooter` | 預檢 | fix | 普通機車不能停重機格 |
@@ -455,12 +478,12 @@ P6 匯入（`feat/admin-import`，stack B 第 5 層）的轉換規則延伸到�
 
 | # | 分支 | 範圍 | 依賴 | 測試 | 回退 |
 | --- | --- | --- | --- | --- | --- |
-| C1 | `feat/parking-contract` | `parking_contract.json`、案例檔、`ParkingCondition` 模型與轉換層（純 Dart）、`validate.ts` 的 `validCondition`（尚未接上 action）、SQL 產生器與 CI 漂移檢查。**無 migration、無行為變更** | main | 轉換往返、`legacySafe` 窮舉 9 種 `space_type` × 5 種 `access`；JSON 與 Dart 常數逐欄比對；Deno 與 Flutter 共同執行案例 | 直接 revert |
+| C1 | `feat/parking-contract` | `parking_contract.json`（`basis` 含保留的 `evidence_id`，P2 前拒收）、案例檔、`ParkingCondition` 模型與轉換層（純 Dart）、`validate.ts` 的 `validCondition`（尚未接上 action）、SQL 產生器與 CI 漂移檢查。**無 migration、無行為變更** | main | 轉換往返、`legacySafe` 窮舉 9 種 `space_type` × 5 種 `access`；JSON 與 Dart 常數逐欄比對；Deno 與 Flutter 共同執行案例 | 直接 revert |
 | C2 | `feat/parking-condition-db`（P1） | migration：`condition`、`zones_complete`、`valid_condition`、`valid_zones`、`public_spots` 加欄位、viewport v3 與 v2 保守投影；`apply_report` 建立時存 `condition`；`admin_spot_fields`、`admin_resolve_report` 白名單；`ParkingSpot` 讀寫、收藏 `exact_v2`；`reportedAccess` 改走轉換層 | C1 | pgTAP：check 允許／拒絕、v2 投影、v3 完整、RLS；收藏往返（新版→舊版模擬→新版）；舊 JSON 相容 | 新欄位全為 null 時行為與現在相同；App 回退到 v2 |
 | C3 | `feat/fee-v2`（P2） | `Fee.car`、`Rate` 新鍵與 `by_time`；`valid_fee` 擴充；`fee_note_of` SQL 與 `feeNoteOf` 新句子（沿用 #96 的共用句子測試）；`fee_source_text` 欄位；費率建議逐車種合併（`proposed.fee` 的車種可為 `null`＝清除）；`renew`／`cross_period` 三態與句子（§2.5），以及重算既有列的 `fee_note`；`FeeEditor` 加汽車、跨日與跨時段單選等新選項 | C1（可與 C2 平行，建議疊在 C2 上減少衝突） | 舊 fee 全部仍合法；新鍵允許／拒絕；`renew`／`cross_period` 三態與 §2.5 範例表的收費時點；Dart／SQL／Deno 句子一致；舊版讀新 fee 為未確認；合併語意 pgTAP | 新鍵不寫入即與現況相同 |
 | C4 | `feat/parking-decision`（P3） | `decideParking`、`ruleVerdict`、`PriceAnswer`；`eligibility()` 改為包裝；`city_rules.expires_on`；#91 `eligibilityDisplay` 改讀 `basis` | C2、C3 | 窮舉 條件 × 車種 × 規則 × 分區完整度 × 期限；`eligibility()` 包裝對既有測試全數不變（除交接列出的三個錯誤）；§5.7 共同向量 | 包裝可切回舊實作（保留一版） |
-| C5 | `feat/parking-conditions-app`（P4 App） | 詳情（分區、時段、首段 0 元、延長、依據與期限）、篩選、新增停車點與修改建議的條件／汽車費率欄位；預檢規則（§4.3，含普大共用 Free 的 hold）加入 `precheck_rules.json`；階段 1 候選「計次或每日 0 元」排除帶 `max_minutes` 的計次費率（§2.3） | C4 | widget：320／390／700／1280 px、1.6 倍、深色；不溢出、觸控 ≥ 48 px；預檢案例，含臺北限時格（`per_visit` 0 元＋`max_minutes:20`）不被誤攔 | UI 隱藏新欄位 |
-| C6 | `feat/parking-conditions-admin`（P4 管理站） | 點位表單分區編輯（`area`、`condition`、`fee`、`zones_complete`）、審核頁條件差異、規則頁 `expires_on` | C4（可與 C5 平行） | admin smoke desktop-light／mobile-dark；pgTAP 管理員路徑 | 同上 |
+| C5 | `feat/parking-conditions-app`（P4 App） | 詳情（分區、時段、首段 0 元、延長、依據與期限，含「現場牌面照片」依據的顯示）、送出時附依據（網址；P2 合併後才開放附牌面照片，以功能旗標控制）、篩選、新增停車點與修改建議的條件／汽車費率欄位；預檢規則（§4.3，含普大共用 Free 的 hold）加入 `precheck_rules.json`；階段 1 候選「計次或每日 0 元」排除帶 `max_minutes` 的計次費率（§2.3） | C4；附照片依據另依核實計畫 P2（`spot_evidence` 上傳與內容確認） | widget：320／390／700／1280 px、1.6 倍、深色；不溢出、觸控 ≥ 48 px；預檢案例，含臺北限時格（`per_visit` 0 元＋`max_minutes:20`）不被誤攔 | UI 隱藏新欄位 |
+| C6 | `feat/parking-conditions-admin`（P4 管理站） | 點位表單分區編輯（`area`、`condition`、`fee`、`zones_complete`）、依據選「公告網址」或「牌面照片」（從該點已確認內容的照片中挑選；P2 合併前只顯示網址）、審核頁條件差異、規則頁 `expires_on` | C4（可與 C5 平行）；照片依據依核實計畫 P2 | admin smoke desktop-light／mobile-dark；pgTAP 管理員路徑 | 同上 |
 
 每張 PR 要改的畫面、元件與 RWD 驗證見 §8.7；UI 修正跟著各張 PR 依 §8 實作，不另開小 PR 先改現有 FeeEditor（使用者 2026-10-26）。
 
@@ -485,7 +508,7 @@ P6 匯入（`feat/admin-import`，stack B 第 5 層）的轉換規則延伸到�
 | # | 議題 | 結論 | 影響章節與 PR |
 | --- | --- | --- | --- |
 | 1 | 汽機車共用格的機車涵蓋範圍（交接需求 4） | **C 不預設**：每筆共用格在 `schedule[].vehicles` 依公告寫明車種；沒寫的車種顯示待確認。大型重機停汽車格的法源與共用標示無關，不受影響 | §1.2、§3.2 第 1 步；C1 契約、C4 判斷 |
-| 2 | 普大共用能不能是 Free | **B 允許**：契約接受 `share='scooter_heavy'`＋`charge='free'`，預檢先 hold 並要求附公告依據。縣市規則開放一般免費機車格時，格位用途仍是 `usual` | §4.3；C1 契約、C5 預檢 |
+| 2 | 普大共用能不能是 Free | **B 允許**：契約接受 `share='scooter_heavy'`＋`charge='free'`，預檢先 hold 並要求附公告依據。依據可以是公告網址**或**現場牌面照片，擇一即可（使用者 2026-10-26 補充；照片須經內容確認，P2 照片上傳上線前只能附網址，§1.4）。縣市規則開放一般免費機車格時，格位用途仍是 `usual` | §1.4、§4.3；C1 契約、C5 預檢、核實計畫 P2 |
 | 3 | 費率修改建議的寫入語意 | **A 逐車種合併**：`proposed.fee` 沒有的車種保留現值，清除須明確送 `null` | §5.4；C3 |
 | 4 | 時段是否依目前時間判斷 | **A 本輪只顯示時段**：狀態固定「有條件・限時段」，列出各時段允許車種；依時間切換（需要國定假日資料）留待之後，屆時不必改資料格式 | §2.2、§3.3；C4、C5 |
 | 5 | 原始費率文字存放位置 | **A 新增 `fee_source_text`**：匯入與管理員寫入，詳情「資料與查核」顯示原始公告文字；#96 的 `fee_note = fee_note_of(fee)` 規則不放寬 | §5.5；C3、stack B P6 |
@@ -702,7 +725,8 @@ P6 匯入（`feat/admin-import`，stack B 第 5 層）的轉換規則延伸到�
 分區資料已涵蓋全場  [ 否 ▾ ]       ← zones_complete，有說明文字
 分區 機車區                    展開 ▾
   區域 [機車區▾]  格位 [機車格▾] 用途 [普大共用▾]
-  收費格 [收費▾]  依據網址 [https://…]  到期日 [2026-10-05]
+  收費格 [收費▾]  依據 (●公告網址)(牌面照片) [https://…]
+  到期日 [2026-10-05]
   FeeEditor（同 App）
 原始公告文字（匯入，唯讀）
   「重機比照機車費率2倍…」
@@ -749,7 +773,8 @@ P6 匯入（`feat/admin-import`，stack B 第 5 層）的轉換規則延伸到�
 | 錯誤：計時 0 元 | 「計時 0 元等於免費。格位免費請選『免費』；前段免費請填『前幾分鐘 0 元』。」 |
 | 錯誤：收費格選了免費 | 「這是收費格，費率不能是『免費』。公告寫首段 0 元時，請填『前幾分鐘 0 元』。」 |
 | 錯誤：比照的車種沒費率 | 「大型重機比照汽車費率，但還沒填汽車費率。請填汽車費率，或改選其他收費方式。」 |
-| 提示：普大共用的免費格 | 「普大共用的免費格較少見，請在『依據網址』貼上公告連結，審核會比較快。」 |
+| 提示：普大共用的免費格 | 「普大共用的免費格較少見，請附上公告連結或現場牌面照片，審核會比較快。」（P2 上線前只寫「公告連結」） |
+| 依據顯示 | 「依據：現場牌面照片（管理員確認於 2026-10-20）」／「依據：公告（2026-10-06 起）」 |
 | 修改建議：未改的車種 | 「維持目前：每小時 10 元」 |
 | 修改建議：清除 | 按鈕「改成未確認」；確認清單「大型重機費率：每次 40 元 → 未確認」 |
 | 空狀態：沒有費率 | 「還沒有費率資料。在現場看到收費公告牌，可以提出修改建議。」 |
@@ -765,8 +790,8 @@ P6 匯入（`feat/admin-import`，stack B 第 5 層）的轉換規則延伸到�
 | C2 | 詳情頁的停放分類文字改由轉換層產生（汽機共用不再顯示成普大共用），版面不變 | 文字與 P0 修正一致 |
 | C3 | `FeeEditor`／`RateEditor` 擴充（汽車、比照與倍率、依時段不同、首段 0 元、計次三態、跨時段三態、延長、上限重算、計費單位）、新元件 `FeeBoard`；#96 管理站點位表單與審核頁「修改後套用」改用新元件；詳情頁的費率句子更新 | 首段 0 元不顯示成免費；三態預設未確認；手機一次展開一個車種；公告牌預覽是唯一醒目元素 |
 | C4 | 詳情資格橫幅的依據列與缺口說明（試辦到期、分區不完整、公告不一致），銜接 #91 分層；逐區資格 | 資格結論仍是唯一粗體；過期用文字＋日曆圖示，不只靠琥珀色 |
-| C5 | App 詳情頁費率與條件區（分區公告牌、時段表、首段 0 元、延長、隔日另計、汽車費率、依據與期限、原始公告文字）；篩選（「免費」只篩 `mode:'free'`，首段 0 元不算免費；價格篩選仍等 P6 轉換完成）；新增停車點（收費屬性、限制、時段、分區區域、汽車費率）；修改建議（條件、汽車費率、維持目前、改成未確認、確認清單）；預檢提示 | 目前車種排第一；未確認＝問號＋文字；錯誤寫在欄位下方並說怎麼改 |
-| C6 | 管理站點位表單（分區編輯：區域、格位、用途、收費屬性、依據與到期日、`zones_complete`、FeeEditor；`fee_source_text` 唯讀）；審核頁差異表（逐車種合併後的結果、會清除的標示）與「修改後套用」；匯入差異試算加「條件可轉換／費率可轉換／需人工」欄（銜接 stack B P6）；規則頁加到期日與到期提醒（銜接 stack B P5） | 「有變更」「會清除」用文字＋底線，不只靠黃／紅；主要動作只有一個 |
+| C5 | App 詳情頁費率與條件區（分區公告牌、時段表、首段 0 元、延長、隔日另計、汽車費率、依據與期限、原始公告文字）；篩選（「免費」只篩 `mode:'free'`，首段 0 元不算免費；價格篩選仍等 P6 轉換完成）；新增停車點（收費屬性、限制、時段、分區區域、汽車費率）；修改建議（條件、汽車費率、維持目前、改成未確認、確認清單）；附依據（公告連結；P2 合併後加「附牌面照片」）；詳情顯示照片依據的文字（不顯示照片）；預檢提示 | 目前車種排第一；未確認＝問號＋文字；錯誤寫在欄位下方並說怎麼改 |
+| C6 | 管理站點位表單（分區編輯：區域、格位、用途、收費屬性、依據與到期日、`zones_complete`、FeeEditor；依據選公告網址或已確認的牌面照片；`fee_source_text` 唯讀）；審核頁差異表（逐車種合併後的結果、會清除的標示）與「修改後套用」；匯入差異試算加「條件可轉換／費率可轉換／需人工」欄（銜接 stack B P6）；規則頁加到期日與到期提醒（銜接 stack B P5） | 「有變更」「會清除」用文字＋底線，不只靠黃／紅；主要動作只有一個 |
 
 ## 參考
 
