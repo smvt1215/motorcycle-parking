@@ -1,6 +1,6 @@
 # 即時車位 UI：資格與空位分開呈現
 
-對應即時車位 UI 計畫（`docs/REALTIME_AVAILABILITY_UI_PLAN.md`，審查修訂後收錄）的 P0「UI 原型與資料語意」。使用 frontend-design 指導，只擴充既有地圖標記與詳情面板，不改現有資格判斷。設計稿畫布：<https://claude.ai/artifact/KPJ9gVAMG3GbDvYC4pB3Zu>（六張畫板：地圖雙層標記、路外即時、路外延遲與重機無資料、路邊靜態與騎士回報、狀態總表、篩選空結果）。
+對應 [REALTIME_AVAILABILITY_UI_PLAN.md](../REALTIME_AVAILABILITY_UI_PLAN.md) 的 P0「UI 原型與資料語意」。使用 frontend-design 指導，只擴充既有地圖標記與詳情面板，不改現有資格判斷。設計稿畫布：<https://claude.ai/artifact/KPJ9gVAMG3GbDvYC4pB3Zu>（六張畫板：地圖雙層標記、路外即時、路外延遲與重機無資料、路邊靜態與騎士回報、狀態總表、篩選空結果）。
 
 ## 一句話原則
 
