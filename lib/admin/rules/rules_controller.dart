@@ -117,7 +117,8 @@ class RulesController extends ChangeNotifier {
   }
 
   Future<void> load() async {
-    if (gateway == null) return;
+    // A reload mid-publish would drop the publish's result; wait for it.
+    if (gateway == null || publishing) return;
     final generation = ++_generation;
     loading = true;
     loadError = null;

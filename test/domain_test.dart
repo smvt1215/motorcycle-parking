@@ -227,6 +227,29 @@ void main() {
       EligibilityStatus.unverified,
     );
   });
+  test('城市規則只在部分行政區開放普通機車停汽車格', () {
+    final byDistrict = CityRule.fromJson({
+      'city': '臺北市',
+      'vehicle': 'scooter',
+      'allowed_space_types': ['paidMotorcycle', 'freeMotorcycle'],
+      'district_space_types': {
+        'car': ['中山區'],
+      },
+      'fee_note': 'x',
+      'exceptions': '僅中山區開放',
+      'source_url': 'https://example.test',
+      'version': 2,
+      'effective_date': '2026-01-01',
+    });
+    EligibilityStatus at(String district) => eligibility(
+      spot(SpaceType.car, district: district),
+      VehicleType.scooter,
+      byDistrict,
+    ).status;
+    expect(at('中山區'), EligibilityStatus.allowed);
+    expect(at('大安區'), EligibilityStatus.notAllowed);
+    expect(at(''), EligibilityStatus.unverified);
+  });
   test('普通機車停汽車格屬車種不依規定，除非城市規則開放', () {
     // Car bays are painted for small cars and heavy bikes (§190).
     for (final rule in [rule('臺北市', VehicleType.scooter), null]) {
