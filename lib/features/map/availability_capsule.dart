@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import '../../ui/adaptive/adaptive.dart';
 
 import '../../domain/availability_display.dart';
 import 'map_legend.dart';
