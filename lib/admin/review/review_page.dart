@@ -929,6 +929,19 @@ class _DiffTable extends StatelessWidget {
     Widget cell(String key) {
       final current = spot.values[key];
       final value = rows[key];
+      // With a structured fee the text follows it (setDraft), so it is shown
+      // from the draft rather than typed: a text field would keep stale text.
+      if (editing && key == 'fee_note' && reviewFee(rows['fee']) != null) {
+        return Column(
+          key: ValueKey('derived-${report.id}-$key'),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(formatValue(key, value)),
+            const SizedBox(height: 4),
+            Text('依費率產生；要修改請改費率。', style: muted.copyWith(fontSize: 13)),
+          ],
+        );
+      }
       if (editing) {
         return Row(
           children: [

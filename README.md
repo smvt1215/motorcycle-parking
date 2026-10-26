@@ -11,7 +11,7 @@
 
 MVP 實作與 staging 封測中，已提供地圖範圍搜尋、車種規則、收藏、停車紀錄、社群回報，以及 Web 管理介面（審核與點位維護）。未設定後端時使用明確標示的範例點位。staging 後端已部署並匯入停車點，測試版經 Firebase App Distribution 發給受邀測試者；production 尚未設定。
 
-文件：完整計畫與目前進度見 [docs/PLAN.md](docs/PLAN.md)，介面與驗證說明見 [docs/DESIGN.md](docs/DESIGN.md)，Web 管理介面見 [docs/ADMIN_WEB.md](docs/ADMIN_WEB.md)，社群核實機制見 [docs/COMMUNITY_VERIFICATION_PLAN.md](docs/COMMUNITY_VERIFICATION_PLAN.md)，貢獻等級與遊戲化研究見 [docs/CONTRIBUTION_TIERS_FEASIBILITY.md](docs/CONTRIBUTION_TIERS_FEASIBILITY.md)。
+文件：完整計畫與目前進度見 [docs/PLAN.md](docs/PLAN.md)，介面與驗證說明見 [docs/DESIGN.md](docs/DESIGN.md)，Web 管理介面見 [docs/ADMIN_WEB.md](docs/ADMIN_WEB.md)，社群核實機制見 [docs/COMMUNITY_VERIFICATION_PLAN.md](docs/COMMUNITY_VERIFICATION_PLAN.md)，貢獻等級與遊戲化研究見 [docs/CONTRIBUTION_TIERS_FEASIBILITY.md](docs/CONTRIBUTION_TIERS_FEASIBILITY.md)，Claude／Codex 工作階段之間的通訊方式見 [docs/AGENT_COMMUNICATION.md](docs/AGENT_COMMUNICATION.md)。
 
 使用 `.flutter-version` 指定的 Flutter 版本，執行 `flutter pub get`，再以 `flutter run -d chrome --web-port=3000` 預覽。無網路測試可加 `--dart-define=OFFLINE_MAP=true`。
 
