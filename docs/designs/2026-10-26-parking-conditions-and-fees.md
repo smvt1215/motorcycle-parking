@@ -31,7 +31,8 @@
 | 區域 area | `motorcycle`（機車區）／`car`（汽車區）／`heavy`（重機專區）／`mixed`（混合）／未填 | 新增 `parking_zones[].area` | 只用於路外分區。機車區依公告適用機車或重機費率，汽車區依公告適用汽車費率（需求 5） |
 | 格位 bay | 類別 `motorcycle`／`heavy`／`car` ＋ 用途 `usual`／`share` | 新增 `condition.bay`、`condition.use`、`condition.share` | 共用分兩種，不能混用（需求 4）：`scooter_heavy`（普大共用，畫在機車格上）、`car_motorcycle`（汽機車共用，畫在汽車格上，本專案只列路邊） |
 | 收費屬性 charge | `toll`／`free`／未填 | 新增 `condition.charge` | Toll 方案的首段可以是 0 元，仍是 Toll，不等於 Free（法規 D） |
-| 限制 limits | `time_limit`（限時，帶 `max_minutes`）、`special_vehicle`（限特製車輛，帶 `kind`）、`ev_only`（限電動機車） | 新增 `condition.limits[]` | 身障專用機車格是 `special_vehicle`＋`kind:'disabled_modified'`：須為經監理單位檢驗合格的特製機車，持識別證本身不足（法規 C） |
+| 限制 limits | `kind` 是限制類型：`time_limit`（限時，另帶 `max_minutes`）、`special_vehicle`（限特製車輛，另以 `vehicle` 鍵寫車型，目前只有 `disabled_modified`）、`ev_only`（限電動機車） | 新增 `condition.limits[]` | 身障專用機車格是 `{"kind":"special_vehicle","vehicle":"disabled_modified"}`：須為經監理單位檢驗合格的特製機車，持識別證本身不足（法規 C）。`kind` 只放限制類型，車型一律放 `vehicle`，兩者不共用鍵 |
+| 分區明確車種 allow | 普通／大型各為 `true`／`false`，缺鍵＝依法規與公告 | 新增 `parking_zones[].condition.allow` | 保存分區的明確排除與開放，例如普機專用 `{"scooter":true,"heavy":false}`、機車不可停 `{"scooter":false,"heavy":false}`。只用在分區；路邊點沿用既有 `scooter_allowed`／`heavy_allowed`，不另存一份 |
 | 時段 schedule | 多段 `{days, from, to, vehicles}` | 新增 `condition.schedule[]` | 汽機彈性共用依平日／假日／時段切換允許車種（法規 E）；沒有涵蓋的時間為未確認 |
 
 資格（誰能停）與價格（要付多少）不在 `condition` 裡：資格由 §3 的判斷函式依法規、公告與上述面向計算；價格存在 `fee`（§2）。
@@ -73,7 +74,22 @@
 - `use='share'` 時 `share` 必填；`use='usual'` 時不得有 `share`。
 - `schedule[].days` 為 `all`／`weekday`／`holiday`，或星期陣列 `["mon",…]`；`from > to` 表示跨午夜。`vehicles` 為該時段允許停放的車種（`scooter`／`heavy`／`car`）。汽機車共用格（`share='car_motorcycle'`）的機車涵蓋範圍不預設，只認 `vehicles` 依公告寫明的車種，沒寫的車種為待確認（§7 第 1 項，已決定）。
 - `basis` 記錄這個條件本身的公告依據（例如臺北 36 處試辦場域的分區），與 `city_rules` 分開。`expires_on` 已過即視為依據失效（§3.3）。依據的種類與照片規則見 §1.4。
-- 「特殊車型及地方特別開放另處理」（需求 6）：特殊車型用 `limits[].kind='special_vehicle'`；地方開放仍放在 `city_rules`，不寫進格位。
+- 「特殊車型及地方特別開放另處理」（需求 6）：特殊車型用 `limits[]` 的 `{"kind":"special_vehicle","vehicle":…}`；地方開放仍放在 `city_rules`，不寫進格位。
+- 身障專用機車格的完整範例：
+
+```json
+{"space_type":"disabledMotorcycle",
+ "condition":{"bay":"motorcycle","use":"usual","charge":"free",
+              "limits":[{"kind":"special_vehicle","vehicle":"disabled_modified"}]}}
+```
+
+- 分區的 `allow` 範例（普機專用的機車區）：
+
+```json
+{"name":"B1 機車區","area":"motorcycle",
+ "condition":{"bay":"motorcycle","use":"usual","charge":"toll",
+              "allow":{"scooter":true,"heavy":false}}}
+```
 
 ### 1.3 與 `SpaceType` 的單一轉換層
 
@@ -90,12 +106,12 @@
 | `heavyOnly` | bay=heavy, use=usual, charge 未確認 | |
 | `car` | bay=car, use=usual, charge 未確認 | |
 | `offStreet` | null（看分區） | |
-| `disabledMotorcycle` | bay=motorcycle, limits=[special_vehicle: disabled_modified] | 修正法規 C |
+| `disabledMotorcycle` | bay=motorcycle, limits=[{kind:special_vehicle, vehicle:disabled_modified}] | 修正法規 C |
 | `timedMotorcycle` | bay=motorcycle, use=usual, limits=[time_limit]，charge **未確認** | 現行把它一律當 `paidMotorcycle`，無法表達限時免費格 |
 | `flexShared` | bay=car, use=share, share=car_motorcycle，schedule 未確認 | 取代 `reportedAccess` 把它推成普大共用的分支 |
 | `evMotorcycle` | bay=motorcycle, limits=[ev_only] | |
 
-分區沒有 `condition` 時，由既有 `access` 推導：`scooterOnly`→機車格 usual 只限普通；`scooterHeavy`→機車格 share=scooter_heavy；`heavyCar`→汽車格 usual（大型重機依法可停汽車格）；`heavyOnly`→重機格 usual；`noMotorcycle`→沒有機車可停的格位；null→未確認。`access` 保留為舊版相容欄位，有 `condition` 時由轉換層推導寫回，不另外編輯。
+分區沒有 `condition` 時，由既有 `access` 推導，明確排除一律寫進 `allow`，不會在轉換中遺失：`scooterOnly`→機車格 usual，`allow={scooter:true,heavy:false}`；`scooterHeavy`→機車格 share=scooter_heavy，`allow={scooter:true,heavy:true}`；`heavyCar`→汽車格 usual，`allow={scooter:false,heavy:true}`（大型重機依法可停汽車格）；`heavyOnly`→重機格 usual，`allow={scooter:false,heavy:true}`；`noMotorcycle`→bay 未填，`allow={scooter:false,heavy:false}`；null→未確認。反向推導 `access` 時也先看 `allow`，所以兩者一一對應。`access` 保留為舊版相容欄位，有 `condition` 時由轉換層推導寫回，不另外編輯。
 
 **寫入：`legacySpaceType(condition, placement)`（有 `condition` 的資料）**
 
@@ -107,8 +123,9 @@
 - 機車格、沒有限制且 charge 未確認 → 沒有對應的舊值。`space_type` 不可為空，因此這個組合不允許寫入（§4.3）：回報者必須選收費或免費格，與現行表單一致；真的無法判斷時不寫 `condition`。
 - 有 `schedule` 的重機格、有 `basis.expires_on` 的條件 → 舊版會忽略時段或期限，**不安全**。
 - 限時格且 charge=free → `timedMotorcycle`，舊版當成收費限時格，資格可能較寬鬆，**不安全**。
+- **路外點要檢查每個分區**：分區的 condition 能由 `access` 完整表達（沒有 `schedule`、`limits`、`basis.expires_on`，`allow` 能對到一個 `access` 值）才算安全。任一分區不安全，整個場站就不安全。例：§2.4 機車區帶 `basis.expires_on`，舊版會忽略期限，照 `access=scooterHeavy` 顯示大型重機可停，所以這個場站不安全。
 
-不安全的資料在兩版 viewport 與收藏中改用保守投影（§5.2、§5.3）。
+不安全的資料在**所有版本**的 viewport（原版、v2）與收藏中都改用保守投影（§5.2、§5.3）。
 
 ### 1.4 公告依據：網址或現場牌面照片（使用者 2026-10-26 補充）
 
@@ -315,7 +332,7 @@ PLAN.md 匯入紀錄：「依停管處新聞稿附件補上『機車區』與機
 | 重機格 | 不可停 | 進入第 2 步 |
 | 汽車格 usual | 不可停，除非地方公告開放（需求 6；`eligibility.dart` 引 §112 末段） | 依法可停 |
 | 汽車格 share=car_motorcycle | 只在 `schedule[].vehicles` 依公告寫明 `scooter` 的時段可停；沒寫就是待確認，不預設（§7 第 1 項，已決定） | 依法可停汽車格，不受共用標示影響；`schedule` 寫明 `heavy` 時另顯示該時段 |
-| `special_vehicle: disabled_modified` | 有條件：「限經監理單位檢驗合格的身障特製機車，持識別證本身不足」 | 同左 |
+| `special_vehicle`（`vehicle:'disabled_modified'`） | 有條件：「限經監理單位檢驗合格的身障特製機車，持識別證本身不足」 | 同左 |
 | `ev_only` | 有條件：限電動機車 | 同左 |
 
 **2. 地方公告**
@@ -340,7 +357,7 @@ PLAN.md 匯入紀錄：「依停管處新聞稿附件補上『機車區』與機
 | 未確認 | 至少一區開放 | 任意 | 待確認（分區開放不能推出場站可進場，現行語意） |
 
 - `zones_complete`（新增，點位層級布林，預設 false）：只有官方匯入或管理員能設為 true，表示分區清單涵蓋全場。社群回報與 `validate.ts` 不接受此鍵。
-- 分區的開放判斷：有 `condition` 用 condition，沒有則用 `access` 推導（§1.3）；推導不出就是該區未確認。未確認的分區不繼承其他分區或場站的資格（DESIGN.md 既有決定）。
+- 分區的開放判斷：有 `condition` 用 condition，沒有則用 `access` 推導（§1.3）；推導不出就是該區未確認。可信資料中 `allow` 對目前車種為 `false` 時，該區直接是不可停（「此分區標示不開放大型重機」），不再進第 2 步依地方公告判斷；例如普機專用分區不會因臺北開放收費機車格而變成大型重機可停。`allow` 為 `true` 只代表場站開放，仍要通過第 1 步的法定資格。未確認的分區不繼承其他分區或場站的資格（DESIGN.md 既有決定）。
 - 分區 `basis.expires_on` 已過 → 該區的開放依據失效，該區視為未確認。
 
 **4. 價格**
@@ -369,7 +386,7 @@ class ParkingDecision {
 - `status` 的四態語意與核實計畫 §3.2 一致；`gaps` 不新增狀態，只說明為什麼是待確認，詳情頁據此寫理由。
 - **與核實計畫 §3.4 顯示分層（#91）**：分層由 `basis` 的來源種類決定（官方、管理員核驗、社群欄位核實、車友回報、無資料），`decideParking` 只負責把來源帶出來；#91 的 `eligibilityDisplay()` 改讀 `ParkingDecision.basis`，判斷不變。「依縣市規則判定的路邊格位不受分層影響」維持。
 - **與研究文件 §5.7**：`ruleVerdict()` 是第 2 步的純函式，Dart 與伺服器各一份，以 `assets/rules/parking_rules.json` 加 §4.2 的共同測試向量確保一致。`expired`、`conflict` 是本文新增的兩個結果，引擎一律視為「規則無法單獨回答」。
-- **時段**：本輪只判斷「此格位有時段限制」並回 `conditional(timeLimited)`（顯示「有條件・限時段」），列出各時段允許車種；不依目前時間切換狀態，依時間切換留待之後（§7 第 4 項，已決定）。
+- **時段**：本輪先確認目前車種至少出現在一個時段的 `vehicles` 裡，才回 `conditional(timeLimited)`（顯示「有條件・限時段」）並列出各時段允許車種；目前車種沒有被任何時段列出時維持 `unverified`（缺口 `scheduleUnknown`，理由「公告沒有列出普通機車的開放時段」），不顯示成有條件。例如汽機共用格的時段只列 `car` 時，普通機車是待確認。大型重機在汽車格依法可停，不受這條影響。不依目前時間切換狀態，依時間切換留待之後（§7 第 4 項，已決定）。
 
 ## 4. 三端契約與驗證
 
@@ -404,6 +421,7 @@ SQL 不能在執行時讀 JSON，所以由 `tool/gen_contract_sql.py` 從契約�
 | 路邊點帶 `parking_zones` 或 `zones_complete` | DB | 拒絕 | 同 #94 `street_lot_details` |
 | 有 `condition` 但 `space_type ≠ legacySpaceType(condition)` | DB | 拒絕 | 避免雙份狀態 |
 | `use='share'` 缺 `share`，或 `use='usual'` 帶 `share` | DB | 拒絕 | |
+| 頂層 `condition` 帶 `allow`；`allow.scooter=true` 而 bay=heavy；限制 `kind` 不在列舉，或 `vehicle` 出現在 `special_vehicle` 以外 | DB | 拒絕 | 路邊沿用既有車種旗標；限制類型與車型分鍵（§1.1） |
 | 路邊點的 `condition` 缺 `bay`；或 bay=motorcycle、沒有 `time_limit`／`special_vehicle`／`ev_only`、也沒有 `charge` | DB | 拒絕 | 推導不出 `space_type`（§1.3） |
 | `share='scooter_heavy'` 但 bay ≠ motorcycle；`share='car_motorcycle'` 但 bay ≠ car | DB | 拒絕 | 需求 4 |
 | `share='car_motorcycle'` 在路外分區 | 預檢 | fix | 本專案只列路邊（需求 4），屬範圍而非不可能 |
@@ -437,17 +455,17 @@ SQL 不能在執行時讀 JSON，所以由 `tool/gen_contract_sql.py` 從契約�
 
 | RPC | 給誰 | 回傳 |
 | --- | --- | --- |
-| 原版 | 不認得 4 種新 `space_type` 的舊版 | 不變（只回原本 5 種） |
-| `_v2` | 認得 9 種 `space_type`、不認得 `condition` 的版本 | legacy-safe 的列照舊；**不安全的列改回保守投影**：`space_type='offStreet'`、兩個車種旗標 null、`status='pending'`（社群點）。這些版本對這種投影一律判「待確認」，與收藏 `exact` 的既有做法相同 |
+| 原版 | 不認得 4 種新 `space_type` 的舊版 | 仍只回原本 5 種；**不安全的列同樣改回保守投影**（同下一列）。只過濾新 `space_type` 不夠，例如帶 `schedule` 的重機格仍是 `heavyOnly`，舊版會依全國規則顯示可停 |
+| `_v2` | 認得 9 種 `space_type`、不認得 `condition` 的版本 | legacy-safe 的列照舊；**不安全的列改回保守投影**：`space_type='offStreet'`、兩個車種旗標 null、`status='pending'`（社群點），不安全場站的每個不安全分區移除 `access`（舊版讀成未確認）。這些版本對這種投影一律判「待確認」，與收藏 `exact` 的既有做法相同 |
 | `_v3` | 新版 | 全部欄位，含 `condition`、`zones_complete`、新 `fee` |
 
 `public_spots` view 新增欄位會一併出現在 v2 的回傳型別中；舊版 `ParkingSpot.fromJson` 忽略不認得的鍵，所以多出欄位不會出錯，需要處理的只有「舊版會誤讀」的列。官方點的 v2 沒有 `status` 可降，改成兩個車種旗標 null，舊版官方路外點在旗標 null 時判待確認。
 
-分區的新鍵（`area`、`condition`）不需要投影：舊版只讀 `name`、`access`、`fee` 等既有鍵，`access` 由轉換層寫回，舊版看到的分區分類與新版一致。
+分區的新鍵（`area`、`condition`）舊版會忽略，所以安全的分區不需要投影：`access` 由轉換層寫回，舊版看到的分區分類與新版一致。不安全的分區（帶時段、限制、期限）在原版與 v2 的回傳裡移除 `access`，場站頂層同時改成保守投影，舊版的 `eligibility()` 與分區顯示都會是待確認。投影由同一個 SQL 函式 `legacy_projection(row)` 產生，原版與 v2 共用。
 
 ### 5.3 收藏 JSON
 
-- `toJson` 新增 `condition`、`zones_complete`。legacy-safe 的點照舊寫；不安全的點沿用 `_newKinds` 的手法，但把真實值放在**新的** `exact_v2` 鍵（`space_type`、旗標、`status`、`condition`），頂層寫保守投影。
+- `toJson` 新增 `condition`、`zones_complete`。legacy-safe 的點照舊寫；不安全的點（含任一分區不安全的場站，判定同 §1.3）沿用 `_newKinds` 的手法，但把真實值放在**新的** `exact_v2` 鍵（`space_type`、旗標、`status`、`condition`、完整 `parking_zones`），頂層寫保守投影，頂層 `parking_zones` 中不安全分區移除 `access`，與 viewport 投影相同。
 - 不能沿用既有 `exact` 鍵：目前已發布的版本會把 `exact` 合併回頂層，再存檔時寫回放寬的值且丟掉 `condition`。改用它不認得的 `exact_v2`，舊版只會讀到保守的頂層，再存檔時遺失的是資訊而不是安全性。
 - 新版讀收藏時 `exact_v2` 優先於 `exact` 優先於頂層。收藏的 `fee` 原樣保存；舊版讀到新 `Rate` 鍵時該車種為未確認。
 
@@ -471,6 +489,14 @@ P6 匯入（`feat/admin-import`，stack B 第 5 層）的轉換規則延伸到�
 - **差異試算多三欄**：條件可轉換／費率可轉換（含汽車）／需人工；有覆蓋層或管理員已改過的欄位另列（研究 §5.6 第 7 點）。
 - **轉換器共用契約**：P6 的解析結果以 `parking_contract.json` 與 `valid_fee()` 驗證。若 P6 先於本 stack 的 P2 合併，P6 只產生 v1 費率（scooter／heavy），汽車金額留在文字；P2 合併後重跑 P6 的差異試算即可補上汽車，不重寫轉換器。
 - 臺北路邊格位的官方格種代碼可直接對應條件（`SpaceType` 註解已記錄 pktype 04／18 身障、20 限時、22 汽機彈性共用、11 機車區）；代碼表其餘值待查證，對不到的不轉換。
+
+### 5.6 與即時通知（#108）及即時車位計畫（#109）的關係
+
+- **#108 點位變更即時通知**（`202610260040_data_versions.sql`、`lib/data/data_updates.dart`）：`community_spots`、`official_heavy_spots`、`city_rules` 每個寫入陳述式都會讓 `data_versions` 加一，App 收到後重新載入目前畫面的點位或規則。本設計寫入 `condition`、`zones_complete`、新 `fee`、`city_rules.expires_on` 都走同樣的表，所以會自動觸發通知，不需要新的 trigger。App 重新載入時走同一條 `_viewport` 路徑（v3 → v2 → 原版），舊版重新載入拿到的仍是 §5.2 的保守投影。C3 重算既有列 `fee_note` 的 migration 是一個陳述式，只會加一次版本，不會讓所有 App 連續重載。依據到期（`basis.expires_on`、`city_rules.expires_on`）是時間到了才生效，不是寫入，所以不會觸發通知；App 每次判斷時用當下時間計算（§3.2），不依賴通知。
+- **#109 即時車位**（`docs/REALTIME_AVAILABILITY_UI_PLAN.md`、`docs/designs/2026-10-26-realtime-availability-ui.md`）：剩餘車位改由獨立的 `AvailabilitySnapshot` 與 `viewport_availability` 提供，不放在 `condition` 或 `fee`，兩者互不依賴。設計上有三點一致：
+  - 「可不可以停」與「有沒有位」分開：#109 的剩餘數膠囊只用中性墨色；本文的 `FeeBoard` 也不用資格色。詳情頁由上而下是資格結論、剩餘車位摘要、收費公告牌，三者不合併成一塊。
+  - 收藏不保存即時剩餘數（#109 把 `available` 視為舊版相容欄位），本文的 `exact_v2` 也不加入剩餘數。
+  - 分區若之後有各自的剩餘數，#109 以 spot id 加分區名稱對應；本文的分區沒有穩定 id，C2 實作時要和 #109 的實作者確認是否需要 `parking_zones[].id`（不影響本文的契約，只多一個選填鍵）。
 
 ## 6. 實作切分（stack C，兩個 stack 合併後開工）
 
