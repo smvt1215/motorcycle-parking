@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -489,6 +490,51 @@ void main() {
       ]) {
         expect(label, contains(part));
       }
+      semantics.dispose();
+    });
+
+    testWidgets('older pages wait while the first page is refreshed', (
+      tester,
+    ) async {
+      final refreshed = Completer<List<Map<String, dynamic>>>();
+      final store = await createStore([
+        [row('a'), row('b')],
+        refreshed,
+        [row('c'), row('d')],
+      ]);
+      await pump(tester, store);
+      await pump(tester, store, active: false);
+      await pump(tester, store);
+      // The refresh is running: paging from the old list is not offered.
+      final button = tester.widget<TextButton>(
+        find.widgetWithText(TextButton, '載入更早的紀錄'),
+      );
+      expect(button.onPressed, isNull);
+      await tester.tap(find.text('載入更早的紀錄'), warnIfMissed: false);
+      await tester.pump();
+      final calls = (store.contributions as FakeContributions).calls;
+      expect(calls, hasLength(2));
+      refreshed.complete([row('a2'), row('b2')]);
+      await tester.pump();
+      await tester.tap(find.text('載入更早的紀錄'));
+      await tester.pump();
+      await tester.pump();
+      // Paging continues from the refreshed list, not the replaced one.
+      expect(calls.last?.id, 'b2');
+      expect(find.byType(ContributionRow), findsNWidgets(4));
+    });
+
+    testWidgets('screen readers can open a row', (tester) async {
+      final semantics = tester.ensureSemantics();
+      final store = await createStore([
+        [row('a', status: 'accepted')],
+      ]);
+      await pump(tester, store);
+      final node = tester.getSemantics(find.byType(ContributionRow));
+      expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+      node.owner!.performAction(node.id, SemanticsAction.tap);
+      await tester.pumpAndSettle();
+      expect(find.byType(SpotSheet), findsOneWidget);
       semantics.dispose();
     });
   });

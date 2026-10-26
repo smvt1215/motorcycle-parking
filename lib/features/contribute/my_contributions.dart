@@ -112,6 +112,10 @@ class _MyContributionsSectionState extends State<MyContributionsSection> {
   bool loading = false, failed = false, hasMore = false, loadingMore = false;
   bool moreFailed = false;
 
+  /// A quiet refresh is replacing the first page; older pages wait for it,
+  /// or they would continue from a list about to be replaced.
+  bool refreshing = false;
+
   /// The account and report count [items] were loaded for.
   (String?, int)? loadedFor;
   int _request = 0;
@@ -188,12 +192,13 @@ class _MyContributionsSectionState extends State<MyContributionsSection> {
     if (userId == null) {
       items.clear();
       hasMore = false;
-      if (mounted) setState(() => loading = failed = false);
+      if (mounted) setState(() => loading = failed = refreshing = false);
       return;
     }
     if (mounted) {
       setState(() {
         loading = !quiet;
+        refreshing = quiet;
         failed = false;
       });
     }
@@ -205,18 +210,19 @@ class _MyContributionsSectionState extends State<MyContributionsSection> {
           ..clear()
           ..addAll(page.items);
         hasMore = page.hasMore;
-        loading = false;
+        loading = refreshing = false;
       });
     } catch (_) {
       if (!mounted || request != _request) return;
       setState(() {
-        loading = false;
+        loading = refreshing = false;
         failed = !quiet;
       });
     }
   }
 
   Future<void> more() async {
+    if (refreshing || loadingMore || items.isEmpty) return;
     final request = _request;
     setState(() {
       loadingMore = true;
@@ -354,14 +360,20 @@ class _MyContributionsSectionState extends State<MyContributionsSection> {
         _Notice(
           '沒有載入更多紀錄。請確認網路連線後重試。',
           icon: Icons.cloud_off_outlined,
-          action: TextButton(onPressed: more, child: const Text('重試')),
+          action: TextButton(
+            onPressed: refreshing ? null : more,
+            child: const Text('重試'),
+          ),
         )
       else if (hasMore)
         Padding(
           padding: const EdgeInsets.only(top: 8),
           child: loadingMore
               ? const Center(child: CircularProgressIndicator.adaptive())
-              : TextButton(onPressed: more, child: const Text('載入更早的紀錄')),
+              : TextButton(
+                  onPressed: refreshing ? null : more,
+                  child: const Text('載入更早的紀錄'),
+                ),
         ),
     ];
   }
@@ -424,6 +436,8 @@ class ContributionRow extends StatelessWidget {
     return Semantics(
       button: true,
       // Everything the row shows, since the visible text is merged away.
+      // The row's own tap, since excludeSemantics drops the InkWell's.
+      onTap: onTap,
       label: [
         name,
         item.action,
