@@ -276,7 +276,7 @@ A 類（法規）與 B 類（資料穩定性）依 §0 第 3 點只能由管理�
    同一縣市同型式的矛盾觀察在 90 天內達到門檻（初值 5 件、來自 3 名以上獨立 L1＋；等級系統上線前以「帳齡 ≥ 7 天且獨立性風險低」代替；2026-10-26 決定採此初值、上線後校準，§10 第 13 點）→ 自動產生一件「規則複查」任務給管理員，附全部觀察與照片；這是 A 類案件的聚合入口，避免管理員逐件看。
 
 2. **法規端：規則變更預審。** 管理員在 Admin Web P5 規則頁貼入公告（網址、文字或 PDF），引擎產出：
-   - **結構化草稿**：`city`、`vehicle`、`allowed_space_types`、`conditional_space_types`、`districts`／`district_space_types`、`restriction`、`can_use_two_spaces`、`fee_note`、`effective_date`、`source_url`、`exceptions` 文字；`version` 由伺服器遞增（ADMIN_WEB.md P5），不在草稿內。抽取以 LLM 輔助（2026-10-26 決定，§10 第 11 點），但輸出只是草稿，每個欄位旁須標出抽取依據的原文片段，管理員逐欄確認後才能發布。
+   - **結構化草稿**：`city`、`vehicle`、`allowed_space_types`、`conditional_space_types`、`districts`／`district_space_types`、`restriction`、`can_use_two_spaces`、`fee_note`、`effective_date`、`source_url`、`exceptions` 文字；`version` 由伺服器遞增（ADMIN_WEB.md P5），不在草稿內。抽取可用 LLM 輔助，但輸出只是草稿，每個欄位旁顯示抽取依據的原文片段，管理員逐欄確認。
    - **一致性檢查**：資料庫約束（例如 `city_rules_restriction_required`）、與現行版本的欄位 diff、生效日不早於現行版本（同生效日的更正性修訂需填更正理由）、`assets/rules/parking_rules.json` 是否需同步（P5 規劃中的 `tool/export_rules.py`）。`city_rules` 目前以 `(city, vehicle)` 為主鍵、版本原地覆寫、沒有歷史表；引擎第一個 migration 需加 `city_rules_history`（§10 第 16 點），否則 `rule_evidence.rule_version` 事後無法還原當時規則。
    - **影響分析**：套用草稿後，該縣市有多少點位的 `EligibilityStatus` 會改變，按型式與車種列出 before／after 與數量；哪些官方點 `vehicle_source='official'` 的值與新規則衝突；哪些既有 A 類案件會因此自動結案。
    - **產出**：規則新版本的 SQL 草稿與 JSON 同步 diff，管理員確認後發布（Admin Web P5 規則頁與伺服器端版本遞增是 §5.7 面向 2 的前置依賴，目前尚未實作）；發布時引擎回頭結掉被新規則解答的 A 類案件，並對早於公告生效日的矛盾觀察依 §5.3「被官方證實」一列加點。
@@ -289,7 +289,7 @@ A 類（法規）與 B 類（資料穩定性）依 §0 第 3 點只能由管理�
 - 引擎結果永遠是「規則目前這樣說」，不是「現場合法」；回覆文案沿用 App 既有的「請以現場標誌標線為準」。
 - 與規則一致的觀察不改變任何資格顯示，只更新佐證時間。
 - 矛盾觀察再多也不自動改規則；聚合門檻只產生管理員任務。
-- LLM 抽取的草稿不得直接寫入 `city_rules`；沒有原文片段對應的欄位不可確認。
+- 規則草稿以 LLM 輔助抽取，每欄位須標出原文片段，管理員逐欄確認後才發布（2026-10-26 決定，§10 第 11 點）；LLM 抽取的草稿不得直接寫入 `city_rules`；沒有原文片段對應的欄位不可確認。
 - 影響分析用唯讀查詢，不寫任何資料。
 
 **指標。** A 類提案被引擎判為與規則一致、不進管理員佇列的比例（一致率，目標 ≥ 50%）；缺規則率另列，不算回答；管理員處理一件 A 類案件的中位時間；規則複查任務數與其中確實導致規則更新的比例；來源變更任務的誤報率。
