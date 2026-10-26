@@ -52,8 +52,8 @@
     "comment": "from > to 表示跨午夜；from 與 to 不可相同。全天以同時省略 from 與 to 表示（不用 00:00–24:00）；只省略其中一個不合法。days 為列舉值，或不重複的星期陣列。"
   },
   "date": {
-    "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
-    "comment": "必須是存在的日期；effective_date 與 expires_on 都有時 expires_on 必須較晚。"
+    "pattern": "^(19|[2-9][0-9])[0-9]{2}-[0-9]{2}-[0-9]{2}$",
+    "comment": "年份 1900–9999，必須是存在的日期；effective_date 與 expires_on 都有時 expires_on 必須較晚。"
   },
   "condition": {
     "keys": [
@@ -148,7 +148,9 @@
       ],
       "source_url": {
         "pattern": "^https://\\S+$",
-        "max_length": 2048
+        "max_length": 2048,
+        "length_unit": "utf16",
+        "comment": "max_length 以 UTF-16 code unit 計（BMP 以外的字元算 2），與 Dart String.length、JS length 相同；SQL 另外加計。"
       }
     }
   },
@@ -306,7 +308,7 @@
     ],
     "to_access": "allow 與 from_access 的 allow 相同，且 from_access 有 bay 時 bay 也相同",
     "legacy_safe": {
-      "comment": "conditionOf(legacySpaceType(c)) 與 c 比較時可以遺失的資訊（§1.3）：(a) share=scooter_heavy 讀回 usual；(b) 沒有 expires_on 的 basis；(c) time_limit.max_minutes；(d) 讀回 charge 為未確認時的 charge，但 assumed_charge 列出的舊值除外（舊版把限時格當收費格，charge 只能是該值或未確認）。unsafe_keys 與 unsafe_basis_keys 出現即不安全。分區：condition 依 to_access 對到 access，再由 from_access 讀回，可遺失 (b) 與 charge。",
+      "comment": "conditionOf(legacySpaceType(c)) 與 c 比較時可以遺失的資訊（§1.3）：(a) share=scooter_heavy 讀回 usual；(b) 沒有 expires_on 的 basis；(c) time_limit.max_minutes；(d) lossy_when_unconfirmed 中讀回後為未確認的面向，但 assumed_charge 列出的舊值除外（舊版把限時格當收費格，charge 只能是該值或未確認）。unsafe_keys 與 unsafe_basis_keys 出現即不安全。分區：condition 依 to_access 對到 access，再由 from_access 讀回，可遺失 (b) 與 (d)；有 limits 也不安全（from_access 沒有 limits）。",
       "unsafe_keys": [
         "schedule"
       ],
@@ -319,7 +321,13 @@
       ],
       "assumed_charge": {
         "timedMotorcycle": "toll"
-      }
+      },
+      "lossy_when_unconfirmed": [
+        "bay",
+        "use",
+        "share",
+        "charge"
+      ]
     }
   },
   "fee": {

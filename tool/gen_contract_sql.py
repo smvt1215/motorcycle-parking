@@ -3,10 +3,15 @@
 SQL cannot read supabase/functions/_shared/parking_contract.json at run time,
 so this writes (docs/designs/2026-10-26-parking-conditions-and-fees.md §4.1):
 
-- supabase/contract/parking_contract.sql: valid_condition(),
-  condition_space_type() and the fee v2 valid_fee(), with the contract
-  embedded as their key table. Not a migration: nothing applies it; the
-  migrations that add the columns copy it.
+- supabase/contract/parking_contract.sql: three marked sections, with the
+  contract embedded as their key table. Not a migration: nothing applies it.
+  - shared helpers and parking_contract(): needed by both later sections;
+  - conditions, valid_condition() and condition_space_type(): the C2
+    migration (feat/parking-condition-db) copies this and the shared section;
+  - fee v2, valid_fee(p_fee): belongs to C3 (feat/fee-v2) only. C2 must not
+    copy it, or it would swap the live fee check for v2 before the app can
+    read v2 fees. The parameter keeps the live name p_fee so C3's
+    create or replace succeeds.
 - supabase/tests/parking_contract_test.sql: pgTAP that creates the same
   functions in pg_temp inside its transaction and runs
   parking_contract_cases.json against them, then rolls back.
@@ -31,6 +36,7 @@ HEADER = """\
 
 # {s} is the schema: public for the contract file, pg_temp for the test.
 TEMPLATE = r"""
+-- ===== 共用：parking_contract() 與輔助函式（C2、C3 都需要） =====
 create or replace function {s}.parking_contract() returns jsonb
 language sql immutable set search_path='' as $contract$
   select $json${contract}$json$::jsonb;
@@ -90,11 +96,14 @@ language sql immutable set search_path='' as $$
     else false end;
 $$;
 
+-- ===== 停放條件：valid_condition()、condition_space_type()（C2 複製本段與共用段） =====
+
 -- A bay's or a zone's condition (§1.2, §4.3), the same rules as
 -- validCondition in validate.ts and lib/models/parking_condition.dart.
-create or replace function {s}.valid_condition(p jsonb,p_zone boolean default false) returns boolean
+create or replace function {s}.valid_condition(p_condition jsonb,p_zone boolean default false) returns boolean
 language plpgsql immutable set search_path='' as $$
 declare
+  p jsonb:=p_condition;
   c jsonb:={s}.parking_contract()->'condition';
   l jsonb; v jsonb; spec jsonb; f record; kinds text[]:='{{}}';
 begin
@@ -160,7 +169,9 @@ begin
     if not exists(select 1 from jsonb_array_elements_text(c->'basis'->'required_one_of') r
         where coalesce(jsonb_typeof(v->r),'null')<>'null') then return false; end if;
     if v ? 'source_url' and not coalesce(jsonb_typeof(v->'source_url')='string'
-        and char_length(v->>'source_url')<=(c->'basis'->'source_url'->>'max_length')::integer
+        -- UTF-16 code units, as Dart and JS count: characters outside the BMP count twice.
+        and char_length(v->>'source_url')+regexp_count(v->>'source_url','[\U00010000-\U0010FFFF]')
+          <=(c->'basis'->'source_url'->>'max_length')::integer
         and (v->>'source_url') ~ (c->'basis'->'source_url'->>'pattern'),false) then return false; end if;
     if (coalesce(jsonb_typeof(v->'effective_date'),'null')<>'null' and not {s}.contract_date(v->'effective_date'))
       or (coalesce(jsonb_typeof(v->'expires_on'),'null')<>'null' and not {s}.contract_date(v->'expires_on'))
@@ -174,9 +185,9 @@ $$;
 
 -- The legacy space_type a condition is stored under (§1.3): the first
 -- to_space_type rule that matches, or null.
-create or replace function {s}.condition_space_type(p jsonb,p_off_street boolean) returns text
+create or replace function {s}.condition_space_type(p_condition jsonb,p_off_street boolean) returns text
 language plpgsql immutable set search_path='' as $$
-declare r jsonb; w jsonb;
+declare p jsonb:=p_condition; r jsonb; w jsonb;
 begin
   for r in select e from jsonb_array_elements({s}.parking_contract()->'conversion'->'to_space_type') e loop
     w:=r->'when';
@@ -192,6 +203,8 @@ begin
   return null;
 end;
 $$;
+
+-- ===== 費率 v2：valid_fee(p_fee)（只屬於 C3；C2 不可複製，否則會提早換掉現行的費率檢查） =====
 
 -- The keys of p (besides mode) against a {{required, optional}} spec: ranges
 -- (max may name a sibling key), enums, extension and periods.
@@ -245,9 +258,9 @@ end;
 $$;
 
 -- Fee v2 (§2.2): a rate per vehicle; a missing vehicle is unconfirmed.
-create or replace function {s}.valid_fee(p jsonb) returns boolean
+create or replace function {s}.valid_fee(p_fee jsonb) returns boolean
 language plpgsql immutable set search_path='' as $$
-declare fee jsonb:={s}.parking_contract()->'fee';
+declare fee jsonb:={s}.parking_contract()->'fee'; p jsonb:=p_fee;
 begin
   if jsonb_typeof(p) is distinct from 'object' then return false; end if;
   return pg_column_size(p)<=(fee->>'max_bytes')::integer

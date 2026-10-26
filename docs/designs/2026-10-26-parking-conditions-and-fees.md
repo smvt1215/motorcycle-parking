@@ -49,7 +49,7 @@
           └ 路外才有 ┘
 ```
 
-`condition` 的 JSON 契約（所有鍵都可省略，省略即未確認。未確認**一律以省略鍵表示**：`limits`、`schedule` 不收空陣列，`allow` 不收空物件，分區不收空的 `condition`。分鐘、金額等整數欄位接受沒有小數部分的數字，`20.0` 視同 `20`，`20.5` 不合法；三端一致）：
+`condition` 的 JSON 契約（所有鍵都可省略，省略即未確認。未確認**一律以省略鍵表示**：`limits`、`schedule` 不收空陣列，`allow` 不收空物件，分區不收空的 `condition`。分鐘、金額等整數欄位接受沒有小數部分的數字，`20.0` 視同 `20`，`20.5` 不合法。`basis` 的日期年份須在 1900–9999（Postgres 沒有 0 年）；`source_url` 最長 2048 個 UTF-16 code unit（BMP 以外的字元算 2）。以上三端一致）：
 
 ```json
 {
@@ -130,7 +130,7 @@
 - (a) `share='scooter_heavy'` 讀回 `use='usual'`。
 - (b) 沒有 `expires_on` 的 `basis`（`source_url`、`evidence_id`、`effective_date`）。
 - (c) `time_limit.max_minutes`。
-- (d) 讀回後為未確認的面向（例如 `heavyOnly` 讀回沒有 charge，`disabledMotorcycle` 讀回沒有 use 與 charge），但 `assumed_charge` 列出的舊值除外：舊版把 `timedMotorcycle` 當收費格，所以限時格的 charge 只能是 toll 或未確認。例：重機格＋toll 安全；限時格＋free 不安全；限時格＋toll 安全。反方向（原本未填、讀回後有值，例如 `{"bay":"heavy"}` 讀回 `use='usual'`）不算遺失，判為不安全。
+- (d) 讀回後為未確認的面向（bay、use、share、charge，即 `lossy_when_unconfirmed`；例如 `heavyOnly` 讀回沒有 charge，`disabledMotorcycle` 讀回沒有 use 與 charge），但 `assumed_charge` 列出的舊值除外：舊版把 `timedMotorcycle` 當收費格，所以限時格的 charge 只能是 toll 或未確認。例：重機格＋toll 安全；限時格＋free 不安全；限時格＋toll 安全。反方向（原本未填、讀回後有值，例如 `{"bay":"heavy"}` 讀回 `use='usual'`）不算遺失，判為不安全。
 
 有 `schedule`、`basis.expires_on` 或其他差異一律不安全。**分區**：依 `allow`（`from_access` 有 bay 時再比對 bay）推導 `access`，再由 `from_access` 讀回，可遺失 (b) 與讀回後未確認的面向（例如 charge）；有 `limits` 或 `schedule` 即不安全，對不到 `access`（`allow` 缺鍵或組合不存在）也不安全。路外點頂層不得有 `condition`，所有分區都安全才算安全。
 

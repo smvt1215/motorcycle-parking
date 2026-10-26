@@ -72,7 +72,9 @@ bool isOffStreet(SpaceType type, FacilityType? facility) =>
     offStreetFacilityTypes.contains(facility);
 
 const timePattern = r'^([01][0-9]|2[0-3]):[0-5][0-9]$';
-const datePattern = r'^[0-9]{4}-[0-9]{2}-[0-9]{2}$';
+
+/// Years 1900–9999: Postgres has no year 0, and the three sides must agree.
+const datePattern = r'^(19|[2-9][0-9])[0-9]{2}-[0-9]{2}-[0-9]{2}$';
 const scheduleDayPresets = ['all', 'weekday', 'holiday'];
 const scheduleWeekdays = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 const scheduleMaxEntries = 8;
@@ -114,7 +116,10 @@ const basisKeys = ['source_url', 'evidence_id', 'effective_date', 'expires_on'];
 const basisRequiredOneOf = ['source_url', 'evidence_id'];
 const basisReserved = ['evidence_id'];
 const sourceUrlPattern = r'^https://\S+$';
+
+/// In UTF-16 code units, as `String.length` counts; SQL counts the same.
 const sourceUrlMaxLength = 2048;
+const sourceUrlLengthUnit = 'utf16';
 
 /// The rule data of the fee contract (§2.2), mirrored as the JSON holds it.
 /// `Fee` and `Rate` still read the v1 shape; the fee v2 PR switches them.
@@ -351,24 +356,6 @@ class ParkingCondition {
     if (basis != null) 'basis': basis!.toJson(),
     if (allow != null) 'allow': allow!.toJson(),
   };
-
-  ParkingCondition _copy({
-    Bay? Function()? bay,
-    BayUse? Function()? use,
-    ShareKind? Function()? share,
-    Charge? Function()? charge,
-    List<ParkingLimit>? limits,
-    ConditionBasis? Function()? basis,
-  }) => ParkingCondition(
-    bay: bay == null ? this.bay : bay(),
-    use: use == null ? this.use : use(),
-    share: share == null ? this.share : share(),
-    charge: charge == null ? this.charge : charge(),
-    limits: limits ?? this.limits,
-    schedule: schedule,
-    basis: basis == null ? this.basis : basis(),
-    allow: allow,
-  );
 
   @override
   bool operator ==(Object other) =>
@@ -692,13 +679,33 @@ const legacySpaceTypeRules = <SpaceTypeRule>[
   ),
 ];
 
-/// Legacy-safe comparison (§1.3): facets that are always unsafe, and the
-/// charge old apps assume for a space type whose condition leaves it open.
+/// Legacy-safe comparison (§1.3, `conversion.legacy_safe`): condition keys
+/// and basis keys that are always unsafe, what may be lost — (a) the shared
+/// use, (c) limit keys, (d) facets left unconfirmed — and the charge old apps
+/// assume for a space type whose condition leaves it open.
+typedef LegacySafeRules = ({
+  List<String> unsafeKeys,
+  List<String> unsafeBasisKeys,
+  ShareKind lossyShare,
+  List<String> lossyLimitKeys,
+  List<String> lossyWhenUnconfirmed,
+  Map<SpaceType, Charge> assumedCharge,
+});
+
 const legacyUnsafeKeys = ['schedule'];
 const legacyUnsafeBasisKeys = ['expires_on'];
 const legacyLossyShare = ShareKind.scooterHeavy;
 const legacyLossyLimitKeys = ['max_minutes'];
+const legacyLossyWhenUnconfirmed = ['bay', 'use', 'share', 'charge'];
 const legacyAssumedCharge = {SpaceType.timedMotorcycle: Charge.toll};
+const LegacySafeRules legacySafeRules = (
+  unsafeKeys: legacyUnsafeKeys,
+  unsafeBasisKeys: legacyUnsafeBasisKeys,
+  lossyShare: legacyLossyShare,
+  lossyLimitKeys: legacyLossyLimitKeys,
+  lossyWhenUnconfirmed: legacyLossyWhenUnconfirmed,
+  assumedCharge: legacyAssumedCharge,
+);
 
 /// The condition a legacy row without one stands for.
 ParkingCondition? conditionOf(SpaceType type) => conditionBySpaceType[type];
@@ -740,60 +747,85 @@ ParkingAccess? legacyAccess(ParkingCondition? zone) {
   return null;
 }
 
+/// [value] with map keys sorted, so equal JSON compares equal as text.
+Object? _canonical(Object? value) => switch (value) {
+  Map() => {
+    for (final k in value.keys.map((k) => '$k').toList()..sort())
+      k: _canonical(value[k]),
+  },
+  List() => [for (final v in value) _canonical(v)],
+  _ => value,
+};
+
 /// Whether [original] reads back as [back] after the legacy round trip,
-/// losing only what old apps already treat as unconfirmed (§1.3, (a)–(d)).
+/// losing only what [rules] allow (§1.3, (a)–(d)). [type] is the legacy
+/// space type for street conditions, null for zones.
 bool _survives(
   ParkingCondition original,
   ParkingCondition back,
-  Charge? assumed,
+  SpaceType? type,
+  LegacySafeRules rules,
 ) {
-  if (original.schedule.isNotEmpty) return false;
-  if (original.basis?.expiresOn != null) return false;
-  if (assumed != null &&
-      back.charge == null &&
-      original.charge != null &&
-      original.charge != assumed) {
+  final o = original.toJson().cast<String, Object?>();
+  final b = back.toJson().cast<String, Object?>();
+  if (rules.unsafeKeys.any(o.containsKey)) return false;
+  // (b) a basis without the unsafe keys.
+  final basis = o.remove('basis') as Map?;
+  if (basis != null && rules.unsafeBasisKeys.any(basis.containsKey)) {
     return false;
   }
-  final lossyShare =
-      original.share == legacyLossyShare &&
-      back.use == BayUse.usual &&
-      back.share == null;
-  final kept = original._copy(
-    // (b) a basis without an end date.
-    basis: () => null,
-    // (c) a time limit's minutes.
-    limits: [
-      for (final l in original.limits) ParkingLimit(l.kind, vehicle: l.vehicle),
-    ],
-    // (a) shared scooter and heavy bays read back as usual.
-    use: lossyShare ? () => BayUse.usual : null,
-    share: lossyShare ? () => null : null,
-    // (d) any facet the legacy value leaves unconfirmed.
-    bay: back.bay == null ? () => null : null,
-    charge: back.charge == null ? () => null : null,
-  );
-  final cmp = back.use == null
-      ? kept._copy(use: () => null, share: () => null)
-      : kept;
-  return cmp == back;
+  b.remove('basis');
+  // (c) limit keys old apps never read.
+  for (final m in [o, b]) {
+    if (m['limits'] case final List<Object?> limits) {
+      m['limits'] = [
+        for (final l in limits)
+          {...l! as Map}
+            ..removeWhere((k, _) => rules.lossyLimitKeys.contains(k)),
+      ];
+    }
+  }
+  // (a) a shared use read back as usual.
+  if (o['share'] == rules.lossyShare.wire &&
+      b['use'] == BayUse.usual.name &&
+      !b.containsKey('share')) {
+    o['use'] = BayUse.usual.name;
+    o.remove('share');
+  }
+  // (d) facets the legacy value leaves unconfirmed, except an assumed charge.
+  final assumed = type == null ? null : rules.assumedCharge[type];
+  if (assumed != null &&
+      !b.containsKey('charge') &&
+      o.containsKey('charge') &&
+      o['charge'] != assumed.name) {
+    return false;
+  }
+  for (final key in rules.lossyWhenUnconfirmed) {
+    if (!b.containsKey(key)) o.remove(key);
+  }
+  return jsonEncode(_canonical(o)) == jsonEncode(_canonical(b));
 }
 
 /// Whether old apps reading only `space_type` see the same street condition,
 /// or a more conservative one.
-bool legacySafe(ParkingCondition? condition) {
+bool legacySafe(
+  ParkingCondition? condition, {
+  LegacySafeRules rules = legacySafeRules,
+}) {
   if (condition == null) return true;
   final type = legacySpaceType(condition, offStreet: false);
   final back = type == null ? null : conditionOf(type);
-  return back != null && _survives(condition, back, legacyAssumedCharge[type]);
+  return back != null && _survives(condition, back, type, rules);
 }
 
 /// Whether a zone condition is fully expressed by its legacy `access`.
-bool legacySafeZone(ParkingCondition? zone) {
+bool legacySafeZone(
+  ParkingCondition? zone, {
+  LegacySafeRules rules = legacySafeRules,
+}) {
   if (zone == null) return true;
-  if (zone.limits.isNotEmpty) return false;
   final back = zoneConditionOf(legacyAccess(zone));
-  return back != null && _survives(zone, back, null);
+  return back != null && _survives(zone, back, null, rules);
 }
 
 /// Whether a whole spot is legacy-safe: a lot only when every zone is.
