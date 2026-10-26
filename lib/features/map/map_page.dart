@@ -422,7 +422,7 @@ class _MapPageState extends ConsumerState<MapPage> {
             open,
             store.availabilityOf(open),
             store.vehicle,
-            store.eligible(open).status,
+            store.decide(open),
             now,
           );
     return Stack(
@@ -522,7 +522,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                           s,
                           store.availabilityOf(s),
                           store.vehicle,
-                          store.eligible(s).status,
+                          store.decide(s),
                           now,
                         ),
                       ),
@@ -548,8 +548,9 @@ class _MapPageState extends ConsumerState<MapPage> {
                           fullWidth: capsuleRowWidth(capsules),
                           primaryWidth: capsuleRowWidth(
                             primaryCapsules(
+                              s,
                               store.vehicle,
-                              store.eligible(s).status,
+                              store.decide(s),
                               capsules,
                             ),
                           ),
@@ -559,8 +560,9 @@ class _MapPageState extends ConsumerState<MapPage> {
                     final capsules = pills[s.id]?.$2 ?? const [];
                     return switch (layout[s.id]) {
                       CapsuleShow.primary => primaryCapsules(
+                        s,
                         store.vehicle,
-                        store.eligible(s).status,
+                        store.decide(s),
                         capsules,
                       ),
                       CapsuleShow.none => const [],
