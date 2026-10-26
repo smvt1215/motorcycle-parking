@@ -9,33 +9,34 @@ void main() {
         scooter: Rate(FeeMode.daily, amount: 30),
         heavy: Rate(FeeMode.sameAsScooter),
       ).summary,
-      '每日 30 元（大型重機比照機車費率）',
+      '機車每日 30 元；大型重機每日 30 元',
     );
     expect(
       const Fee(
         scooter: Rate(FeeMode.hourly, amount: 40, perMinutes: 60),
         heavy: Rate(FeeMode.sameAsCar),
       ).summary,
-      '每小時 40 元（大型重機比照汽車費率）',
+      '機車每小時 40 元；大型重機費率未提供',
     );
     expect(
       const Fee(
         scooter: Rate(FeeMode.free),
         heavy: Rate(FeeMode.hourly, amount: 20, perMinutes: 60, dailyCap: 100),
       ).summary,
-      '機車免費；大型重機每小時 20 元，當日上限 100 元',
+      '機車免費；大型重機每小時 20 元，當日上限 100 元（上限計算方式未確認）',
     );
     expect(
       const Fee(scooter: Rate(FeeMode.hourly, amount: 30, perMinutes: 240))
           .summary,
-      '每 4 小時 30 元（大型重機費率未確認）',
+      '機車每 4 小時 30 元；大型重機費率未確認',
     );
     expect(
       const Fee(scooter: Rate(FeeMode.perVisit, amount: 30, maxMinutes: 360))
           .summary,
-      '每次 30 元（6 小時內）（大型重機費率未確認）',
+      '機車每次 30 元（6 小時內，隔日是否另計未確認）；大型重機費率未確認',
     );
-    expect(const Fee(heavy: Rate(FeeMode.posted)).summary, '大型重機依現場公告');
+    // 依現場公告 reads as unconfirmed (§7 item 15).
+    expect(const Fee(heavy: Rate(FeeMode.posted)).summary, '請依現場公告');
     expect(
       const Rate(FeeMode.hourly, amount: 15, perMinutes: 30).text,
       '每 30 分鐘 15 元',
@@ -45,7 +46,7 @@ void main() {
   test('沒有任何車種費率時，fee_note 維持預設文字', () {
     expect(feeNoteOf(null), '請依現場公告');
     expect(feeNoteOf(const Fee()), '請依現場公告');
-    expect(feeNoteOf(const Fee(scooter: Rate(FeeMode.free))), '免費（大型重機費率未確認）');
+    expect(feeNoteOf(const Fee(scooter: Rate(FeeMode.free))), '機車免費；大型重機費率未確認');
   });
 
   test('JSON 往返只保留該收費方式使用的欄位', () {

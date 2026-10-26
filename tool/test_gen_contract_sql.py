@@ -2,6 +2,7 @@ import json
 import re
 import unittest
 
+import fee_text
 import gen_contract_sql as gen
 
 
@@ -27,7 +28,8 @@ class GenContractSqlTest(unittest.TestCase):
     def test_every_case_becomes_an_assertion(self):
         cases = json.loads(gen.CASES.read_text())
         test = gen.generate()[gen.TEST_OUT]
-        total = sum(len(cases[k]) for k in ("conditions", "legacy", "fees"))
+        total = sum(len(cases[k]) for k in ("conditions", "legacy", "fees", "fee_notes"))
+        total += 1  # the longest sentence
         # Street legacy-safety where it applies; per zone: access, safety,
         # stored safety and a stored zone with another access.
         total += sum(1 for c in cases["legacy"] if c["safe"] is not None and not c["off_street"])
@@ -35,11 +37,11 @@ class GenContractSqlTest(unittest.TestCase):
         self.assertEqual(test.count("select is("), total)
 
     def test_migrations_apply_the_generated_condition_functions(self):
-        """The shared and condition sections are applied by copying them into
+        """The shared, condition and fee sections are applied by copying them into
         a migration; the latest migration defining each function must hold
         the generated text, so a contract change needs a new migration."""
         text = gen.generate()[gen.FUNCTIONS_OUT]
-        sections = text[text.index("-- ===== 共用"):text.index("-- ===== 費率 v2")]
+        sections = text[text.index("-- ===== 共用"):]
         blocks = re.findall(
             r"^create or replace function public\.(\w+)\(.*?^\$(?:contract)?\$;$",
             sections, re.M | re.S)
@@ -49,6 +51,9 @@ class GenContractSqlTest(unittest.TestCase):
         self.assertEqual(len(blocks), len(statements))
         self.assertIn("valid_condition", blocks)
         self.assertIn("condition_legacy_safe_spot", blocks)
+        self.assertIn("valid_fee", blocks)
+        self.assertIn("fee_note_of", blocks)
+        self.assertIn("fee_note_max_length", blocks)
         migrations = sorted((gen.ROOT / "supabase/migrations").glob("*.sql"))
         for name, statement in zip(blocks, statements):
             with self.subTest(function=name):
@@ -57,6 +62,13 @@ class GenContractSqlTest(unittest.TestCase):
                 self.assertTrue(latest, f"no migration defines {name}")
                 self.assertIn(statement, latest[-1].read_text(),
                               f"copy the generated {name} into a new migration")
+
+    def test_the_limit_file_holds_the_longest_sentence(self):
+        limit = json.loads(gen.generate()[gen.LIMIT_OUT])
+        contract = json.loads(gen.CONTRACT.read_text())
+        self.assertEqual(limit["max_length"], fee_text.fee_note_max_length(contract["fee"]))
+        self.assertEqual(len(fee_text.fee_note_of(limit["longest_fee"])), limit["max_length"])
+        self.assertIn(f"select {limit['max_length']};", gen.generate()[gen.FUNCTIONS_OUT])
 
     def test_the_embedded_contract_drops_comments(self):
         self.assertEqual(gen.strip_comments({"comment": "x", "a": [{"comment": 1, "b": 2}]}),

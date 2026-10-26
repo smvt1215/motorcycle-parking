@@ -64,7 +64,10 @@ void main() {
       );
       await pick(tester, 'fee-mode-heavy', '比照汽車費率');
       await tester.pumpAndSettle();
-      expect(find.text('顯示為：每小時 20 元，當日上限 100 元（大型重機比照汽車費率）'), findsOneWidget);
+      expect(
+        find.text('顯示為：機車每小時 20 元，當日上限 100 元（上限計算方式未確認）；大型重機費率未提供'),
+        findsOneWidget,
+      );
       expect(form.currentState!.validate(), isTrue);
       expect(fee().toJson(), {
         'scooter': {

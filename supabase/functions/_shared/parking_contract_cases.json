@@ -2537,5 +2537,706 @@
       "fee": [],
       "valid": false
     }
+  ],
+  "fee_notes": [
+    {
+      "name": "沒有任何車種：預設文字",
+      "fee": {},
+      "note": "請依現場公告"
+    },
+    {
+      "name": "只有依現場公告：讀成未確認",
+      "fee": {
+        "scooter": {
+          "mode": "posted"
+        },
+        "heavy": {
+          "mode": "posted"
+        }
+      },
+      "note": "請依現場公告"
+    },
+    {
+      "name": "普通機車免費，大型重機未確認",
+      "fee": {
+        "scooter": {
+          "mode": "free"
+        }
+      },
+      "note": "機車免費；大型重機費率未確認"
+    },
+    {
+      "name": "只有大型重機",
+      "fee": {
+        "heavy": {
+          "mode": "hourly",
+          "amount": 20,
+          "per_minutes": 60
+        }
+      },
+      "note": "大型重機每小時 20 元"
+    },
+    {
+      "name": "三種車都有",
+      "fee": {
+        "scooter": {
+          "mode": "hourly",
+          "amount": 10,
+          "per_minutes": 60
+        },
+        "heavy": {
+          "mode": "hourly",
+          "amount": 20,
+          "per_minutes": 60
+        },
+        "car": {
+          "mode": "hourly",
+          "amount": 40,
+          "per_minutes": 60
+        }
+      },
+      "note": "機車每小時 10 元；大型重機每小時 20 元；汽車每小時 40 元"
+    },
+    {
+      "name": "只有汽車：大型重機未確認",
+      "fee": {
+        "car": {
+          "mode": "hourly",
+          "amount": 40,
+          "per_minutes": 30
+        }
+      },
+      "note": "汽車每 30 分鐘 40 元；大型重機費率未確認"
+    },
+    {
+      "name": "計時每 2 小時與每 90 分鐘",
+      "fee": {
+        "scooter": {
+          "mode": "hourly",
+          "amount": 20,
+          "per_minutes": 120
+        },
+        "heavy": {
+          "mode": "hourly",
+          "amount": 30,
+          "per_minutes": 90
+        }
+      },
+      "note": "機車每 2 小時 20 元；大型重機每 90 分鐘 30 元"
+    },
+    {
+      "name": "臺北計次路段，隔日另計（§2.4）",
+      "fee": {
+        "heavy": {
+          "mode": "per_visit",
+          "amount": 40,
+          "renew": "midnight"
+        }
+      },
+      "note": "大型重機每次 40 元，隔日另計"
+    },
+    {
+      "name": "計次停多久都只收一次（§2.5）",
+      "fee": {
+        "heavy": {
+          "mode": "per_visit",
+          "amount": 40,
+          "renew": "none"
+        }
+      },
+      "note": "大型重機每次 40 元，停多久都只收一次"
+    },
+    {
+      "name": "計次隔日是否另計未確認（§2.5）",
+      "fee": {
+        "heavy": {
+          "mode": "per_visit",
+          "amount": 40
+        }
+      },
+      "note": "大型重機每次 40 元（隔日是否另計未確認）"
+    },
+    {
+      "name": "計次有效時間內只收一次",
+      "fee": {
+        "heavy": {
+          "mode": "per_visit",
+          "amount": 30,
+          "max_minutes": 180,
+          "renew": "none"
+        }
+      },
+      "note": "大型重機每次 30 元（3 小時內），有效時間內只收一次"
+    },
+    {
+      "name": "計次有效時間，隔日另計（§2.5）",
+      "fee": {
+        "heavy": {
+          "mode": "per_visit",
+          "amount": 30,
+          "max_minutes": 180,
+          "renew": "midnight"
+        }
+      },
+      "note": "大型重機每次 30 元（3 小時內），隔日另計"
+    },
+    {
+      "name": "計次有效時間，隔日是否另計未確認",
+      "fee": {
+        "heavy": {
+          "mode": "per_visit",
+          "amount": 30,
+          "max_minutes": 45
+        }
+      },
+      "note": "大型重機每次 30 元（45 分鐘內，隔日是否另計未確認）"
+    },
+    {
+      "name": "臺北計時路段（§2.4）",
+      "fee": {
+        "heavy": {
+          "mode": "hourly",
+          "amount": 20,
+          "per_minutes": 60,
+          "unit_minutes": 30,
+          "daily_cap": 100,
+          "cap_reset": "calendar_day"
+        }
+      },
+      "note": "大型重機每小時 20 元（以 30 分鐘計），當日上限 100 元（零時重算）"
+    },
+    {
+      "name": "臺北限時格首段 0 元可延長一次（§2.4）",
+      "fee": {
+        "heavy": {
+          "mode": "per_visit",
+          "amount": 0,
+          "max_minutes": 20,
+          "extension": {
+            "amount": 40,
+            "max_times": 1
+          }
+        }
+      },
+      "note": "大型重機首 20 分鐘 0 元，可付 40 元延長 1 次（延長時間未確認）"
+    },
+    {
+      "name": "延長帶每次分鐘",
+      "fee": {
+        "heavy": {
+          "mode": "per_visit",
+          "amount": 20,
+          "renew": "none",
+          "extension": {
+            "amount": 20,
+            "max_times": 2,
+            "minutes": 60
+          }
+        }
+      },
+      "note": "大型重機每次 20 元，停多久都只收一次，可付 20 元延長 2 次（每次 1 小時）"
+    },
+    {
+      "name": "計時有免費前段",
+      "fee": {
+        "scooter": {
+          "mode": "hourly",
+          "amount": 10,
+          "per_minutes": 60,
+          "free_minutes": 30
+        }
+      },
+      "note": "機車首 30 分鐘 0 元，之後每小時 10 元；大型重機費率未確認"
+    },
+    {
+      "name": "當日上限依停滿 24 小時重算",
+      "fee": {
+        "scooter": {
+          "mode": "hourly",
+          "amount": 10,
+          "per_minutes": 60,
+          "daily_cap": 50,
+          "cap_reset": "rolling_24h"
+        }
+      },
+      "note": "機車每小時 10 元，當日上限 50 元（停滿 24 小時重算）；大型重機費率未確認"
+    },
+    {
+      "name": "當日上限每次進場重算",
+      "fee": {
+        "scooter": {
+          "mode": "hourly",
+          "amount": 10,
+          "per_minutes": 60,
+          "daily_cap": 50,
+          "cap_reset": "per_entry"
+        }
+      },
+      "note": "機車每小時 10 元，當日上限 50 元（每次進場重算）；大型重機費率未確認"
+    },
+    {
+      "name": "當日上限計算方式未確認",
+      "fee": {
+        "scooter": {
+          "mode": "hourly",
+          "amount": 10,
+          "per_minutes": 60,
+          "daily_cap": 50
+        }
+      },
+      "note": "機車每小時 10 元，當日上限 50 元（上限計算方式未確認）；大型重機費率未確認"
+    },
+    {
+      "name": "每日費率與重算方式",
+      "fee": {
+        "scooter": {
+          "mode": "daily",
+          "amount": 30,
+          "cap_reset": "calendar_day"
+        },
+        "heavy": {
+          "mode": "daily",
+          "amount": 60
+        }
+      },
+      "note": "機車每日 30 元（零時重算）；大型重機每日 60 元"
+    },
+    {
+      "name": "大型重機比照機車 2 倍，寫算好的金額（#140）",
+      "fee": {
+        "scooter": {
+          "mode": "hourly",
+          "amount": 10,
+          "per_minutes": 60
+        },
+        "heavy": {
+          "mode": "same_as_scooter",
+          "factor_pct": 200
+        }
+      },
+      "note": "機車每小時 10 元；大型重機每小時 20 元"
+    },
+    {
+      "name": "大型重機比照汽車，寫算好的金額（#140）",
+      "fee": {
+        "car": {
+          "mode": "hourly",
+          "amount": 40,
+          "per_minutes": 60
+        },
+        "heavy": {
+          "mode": "same_as_car"
+        }
+      },
+      "note": "大型重機每小時 40 元；汽車每小時 40 元"
+    },
+    {
+      "name": "比照倍率套在上限與延長金額",
+      "fee": {
+        "scooter": {
+          "mode": "per_visit",
+          "amount": 15,
+          "max_minutes": 120,
+          "renew": "midnight",
+          "extension": {
+            "amount": 15,
+            "max_times": 1
+          }
+        },
+        "heavy": {
+          "mode": "same_as_scooter",
+          "factor_pct": 150
+        }
+      },
+      "note": "機車每次 15 元（2 小時內），隔日另計，可付 15 元延長 1 次（延長時間未確認）；大型重機每次 22.5 元（2 小時內），隔日另計，可付 22.5 元延長 1 次（延長時間未確認）"
+    },
+    {
+      "name": "比照倍率有兩位小數",
+      "fee": {
+        "scooter": {
+          "mode": "hourly",
+          "amount": 33,
+          "per_minutes": 60,
+          "daily_cap": 99,
+          "cap_reset": "calendar_day"
+        },
+        "heavy": {
+          "mode": "same_as_scooter",
+          "factor_pct": 125
+        }
+      },
+      "note": "機車每小時 33 元，當日上限 99 元（零時重算）；大型重機每小時 41.25 元，當日上限 123.75 元（零時重算）"
+    },
+    {
+      "name": "比照的車種未確認：大型重機費率未提供",
+      "fee": {
+        "scooter": {
+          "mode": "free"
+        },
+        "heavy": {
+          "mode": "same_as_car"
+        }
+      },
+      "note": "機車免費；大型重機費率未提供"
+    },
+    {
+      "name": "比照依現場公告的車種：大型重機費率未提供",
+      "fee": {
+        "car": {
+          "mode": "posted"
+        },
+        "heavy": {
+          "mode": "same_as_car",
+          "factor_pct": 200
+        }
+      },
+      "note": "大型重機費率未提供"
+    },
+    {
+      "name": "依時段計次，跨時段分別計費（§2.5 範例）",
+      "fee": {
+        "car": {
+          "mode": "by_time",
+          "periods": [
+            {
+              "days": "all",
+              "rate": {
+                "mode": "per_visit",
+                "amount": 30,
+                "renew": "none"
+              },
+              "from": "08:00",
+              "to": "20:00"
+            },
+            {
+              "days": "all",
+              "rate": {
+                "mode": "per_visit",
+                "amount": 50,
+                "renew": "midnight"
+              },
+              "from": "20:00",
+              "to": "08:00"
+            }
+          ],
+          "cross_period": "each_period"
+        }
+      },
+      "note": "汽車每天：08:00–20:00 每次 30 元，停多久都只收一次；20:00–隔日 08:00 每次 50 元，隔日另計；跨時段分別計費；大型重機費率未確認"
+    },
+    {
+      "name": "依時段計次，依進場時段計費",
+      "fee": {
+        "car": {
+          "mode": "by_time",
+          "periods": [
+            {
+              "days": "all",
+              "rate": {
+                "mode": "per_visit",
+                "amount": 30,
+                "renew": "none"
+              },
+              "from": "08:00",
+              "to": "20:00"
+            },
+            {
+              "days": "all",
+              "rate": {
+                "mode": "per_visit",
+                "amount": 50,
+                "renew": "midnight"
+              },
+              "from": "20:00",
+              "to": "08:00"
+            }
+          ],
+          "cross_period": "entry_only"
+        }
+      },
+      "note": "汽車每天：08:00–20:00 每次 30 元，停多久都只收一次；20:00–隔日 08:00 每次 50 元，隔日另計；依進場時段計費；大型重機費率未確認"
+    },
+    {
+      "name": "依時段計次，跨時段計費方式未確認",
+      "fee": {
+        "car": {
+          "mode": "by_time",
+          "periods": [
+            {
+              "days": "all",
+              "rate": {
+                "mode": "per_visit",
+                "amount": 30,
+                "renew": "none"
+              },
+              "from": "08:00",
+              "to": "20:00"
+            },
+            {
+              "days": "all",
+              "rate": {
+                "mode": "per_visit",
+                "amount": 50,
+                "renew": "midnight"
+              },
+              "from": "20:00",
+              "to": "08:00"
+            }
+          ]
+        }
+      },
+      "note": "汽車每天：08:00–20:00 每次 30 元，停多久都只收一次；20:00–隔日 08:00 每次 50 元，隔日另計；跨時段計費方式未確認；大型重機費率未確認"
+    },
+    {
+      "name": "依時段只有一段計次：不寫跨時段",
+      "fee": {
+        "scooter": {
+          "mode": "by_time",
+          "periods": [
+            {
+              "days": "all",
+              "rate": {
+                "mode": "hourly",
+                "amount": 10,
+                "per_minutes": 60
+              },
+              "from": "08:00",
+              "to": "20:00"
+            },
+            {
+              "days": "all",
+              "rate": {
+                "mode": "per_visit",
+                "amount": 50
+              },
+              "from": "20:00",
+              "to": "08:00"
+            }
+          ]
+        }
+      },
+      "note": "機車每天：08:00–20:00 每小時 10 元；20:00–隔日 08:00 每次 50 元（隔日是否另計未確認）；大型重機費率未確認"
+    },
+    {
+      "name": "依時段只用平日與假日：分兩組（§7 第 34 項）",
+      "fee": {
+        "scooter": {
+          "mode": "by_time",
+          "periods": [
+            {
+              "days": "weekday",
+              "rate": {
+                "mode": "hourly",
+                "amount": 10,
+                "per_minutes": 60
+              },
+              "from": "08:00",
+              "to": "20:00"
+            },
+            {
+              "days": "holiday",
+              "rate": {
+                "mode": "free"
+              }
+            },
+            {
+              "days": "weekday",
+              "rate": {
+                "mode": "free"
+              },
+              "from": "20:00",
+              "to": "08:00"
+            }
+          ]
+        }
+      },
+      "note": "機車平日：08:00–20:00 每小時 10 元；20:00–隔日 08:00 免費；假日：全天 免費；大型重機費率未確認"
+    },
+    {
+      "name": "依時段有指定星期幾：列出那幾天",
+      "fee": {
+        "scooter": {
+          "mode": "by_time",
+          "periods": [
+            {
+              "days": "weekday",
+              "rate": {
+                "mode": "hourly",
+                "amount": 10,
+                "per_minutes": 60
+              },
+              "from": "08:00",
+              "to": "20:00"
+            },
+            {
+              "days": [
+                "sat"
+              ],
+              "rate": {
+                "mode": "per_visit",
+                "amount": 30,
+                "renew": "none"
+              }
+            }
+          ]
+        }
+      },
+      "note": "機車平日：08:00–20:00 每小時 10 元；週六：全天 每次 30 元，停多久都只收一次；大型重機費率未確認"
+    },
+    {
+      "name": "依時段指定的星期與順序無關",
+      "fee": {
+        "scooter": {
+          "mode": "by_time",
+          "periods": [
+            {
+              "days": [
+                "wed",
+                "mon"
+              ],
+              "rate": {
+                "mode": "hourly",
+                "amount": 10,
+                "per_minutes": 60
+              },
+              "from": "08:00",
+              "to": "12:00"
+            },
+            {
+              "days": [
+                "mon",
+                "wed"
+              ],
+              "rate": {
+                "mode": "hourly",
+                "amount": 20,
+                "per_minutes": 60
+              },
+              "from": "12:00",
+              "to": "18:00"
+            }
+          ]
+        }
+      },
+      "note": "機車週一、週三：08:00–12:00 每小時 10 元；12:00–18:00 每小時 20 元；大型重機費率未確認"
+    },
+    {
+      "name": "依時段的指定星期剛好是平日",
+      "fee": {
+        "scooter": {
+          "mode": "by_time",
+          "periods": [
+            {
+              "days": [
+                "mon",
+                "tue",
+                "wed",
+                "thu",
+                "fri"
+              ],
+              "rate": {
+                "mode": "hourly",
+                "amount": 10,
+                "per_minutes": 60
+              }
+            }
+          ]
+        }
+      },
+      "note": "機車平日：全天 每小時 10 元；大型重機費率未確認"
+    },
+    {
+      "name": "依時段跳過依現場公告的時段",
+      "fee": {
+        "scooter": {
+          "mode": "by_time",
+          "periods": [
+            {
+              "days": "all",
+              "rate": {
+                "mode": "posted"
+              },
+              "from": "08:00",
+              "to": "20:00"
+            },
+            {
+              "days": "all",
+              "rate": {
+                "mode": "free"
+              },
+              "from": "20:00",
+              "to": "08:00"
+            }
+          ]
+        }
+      },
+      "note": "機車每天：20:00–隔日 08:00 免費；大型重機費率未確認"
+    },
+    {
+      "name": "依時段每段都是依現場公告：讀成未確認",
+      "fee": {
+        "scooter": {
+          "mode": "by_time",
+          "periods": [
+            {
+              "days": "all",
+              "rate": {
+                "mode": "posted"
+              }
+            }
+          ]
+        },
+        "heavy": {
+          "mode": "hourly",
+          "amount": 20,
+          "per_minutes": 60
+        }
+      },
+      "note": "大型重機每小時 20 元"
+    },
+    {
+      "name": "大型重機比照依時段的汽車 2 倍",
+      "fee": {
+        "car": {
+          "mode": "by_time",
+          "periods": [
+            {
+              "days": "weekday",
+              "rate": {
+                "mode": "hourly",
+                "amount": 40,
+                "per_minutes": 60
+              },
+              "from": "08:00",
+              "to": "20:00"
+            },
+            {
+              "days": "holiday",
+              "rate": {
+                "mode": "hourly",
+                "amount": 50,
+                "per_minutes": 60
+              }
+            }
+          ]
+        },
+        "heavy": {
+          "mode": "same_as_car",
+          "factor_pct": 200
+        }
+      },
+      "note": "大型重機平日：08:00–20:00 每小時 80 元；假日：全天 每小時 100 元；汽車平日：08:00–20:00 每小時 40 元；假日：全天 每小時 50 元"
+    },
+    {
+      "name": "金額寫成 20.0，視同 20",
+      "fee": {
+        "heavy": {
+          "mode": "hourly",
+          "amount": 20.0,
+          "per_minutes": 60.0
+        }
+      },
+      "note": "大型重機每小時 20 元"
+    }
   ]
 }

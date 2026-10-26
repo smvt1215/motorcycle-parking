@@ -6,7 +6,8 @@ select no_plan();
 select ok(valid_zone_fees('[]'),'no zones remains valid');
 select ok(valid_zone_fees('[{"name":"舊區","fee_note":"免費","car_fee_note":"原文"}]'),'legacy strings stay valid');
 select ok(valid_zone_fees('[{"name":"B2","fee":{"scooter":{"mode":"free"},"heavy":{"mode":"same_as_scooter"}}}]'),'zone uses the existing fee contract');
-select ok(not valid_zone_fees('[{"name":"B2","fee":{"car":{"mode":"free"}}}]'),'zone cannot introduce car rates');
+select ok(valid_zone_fees('[{"name":"B2","fee":{"car":{"mode":"free"}}}]'),'zones carry car rates with fee v2');
+select ok(not valid_zone_fees('[{"name":"B2","fee":{"bus":{"mode":"free"}}}]'),'zone cannot introduce unknown vehicles');
 select ok(not valid_zone_fees('[{"name":"B2","fee":{"heavy":{"mode":"hourly","amount":20}}}]'),'zone hourly rate needs a period');
 select ok(not valid_zone_fees('[{"name":"B2","fee":{"heavy":{"mode":"daily","amount":-1}}}]'),'zone amount cannot be negative');
 select ok(not valid_zone_fees('[{"name":"B2","fee":{"scooter":{"mode":"same_as_car"}}}]'),'only heavy bikes follow another vehicle');
@@ -31,7 +32,7 @@ select is((select fee->'heavy'->>'amount' from official_viewport_spots(25.08,121
 select throws_ok($$select user_id from public_spots$$,'42703',null,'public view never exposes contributor ids');
 reset role;
 
-select throws_ok($$update community_spots set parking_zones='[{"name":"B2","fee":{"car":{"mode":"free"}}}]'
+select throws_ok($$update community_spots set parking_zones='[{"name":"B2","fee":{"bus":{"mode":"free"}}}]'
   where id=(select id from zone_target)$$,'23514',null,'table rejects invalid nested fees');
 select throws_ok($$update official_heavy_spots set parking_zones='[{"name":"B2","fee":{"scooter":{"mode":"hourly","amount":20}}}]'
   where id='74000000-0000-4000-8000-000000000001'$$,'23514',null,'official table also validates nested fees');

@@ -767,10 +767,38 @@ void main() {
       expect(find.text('普通機車費率'), findsOneWidget);
       expect(find.text('依分區計費'), findsNothing);
       await showField(tester, '全場費率');
-      expect(find.text('普通機車：每次 20 元'), findsOneWidget);
+      expect(find.text('普通機車：每次 20 元（隔日是否另計未確認）'), findsOneWidget);
       expect(find.text('大型重機：費率未確認'), findsOneWidget);
       expect(find.textContaining('舊 B'), findsNothing);
       expect(find.text('收費說明'), findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
+  test('儲存的 fee = {} 視為沒有結構化費率（#114）', () {
+    final spot = ParkingSpot.fromJson({
+      ...roadside.toJson(),
+      'fee_note': '每次 25 元（依現場牌面）',
+      'fee': <String, Object>{},
+    });
+    expect(spot.fee, isNull);
+    expect(ParkingSpot.fromJson(spot.toJson()).fee, isNull);
+  });
+
+  for (final width in [320.0, 390.0]) {
+    testWidgets('寬 $width：fee = {} 的點位顯示收費文字，不顯示費率未確認', (tester) async {
+      usePhone(tester, width: width);
+      final store = (await tester.runAsync(createStore))!;
+      addTearDown(store.dispose);
+      final spot = ParkingSpot.fromJson({
+        ...roadside.toJson(),
+        'fee_note': '每次 25 元（依現場牌面）',
+        'fee': <String, Object>{},
+      });
+      await openDetails(tester, store, spot);
+      expect(find.textContaining('每次 25 元（依現場牌面）'), findsWidgets);
+      expect(find.textContaining('費率未確認'), findsNothing);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     });

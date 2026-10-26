@@ -33,6 +33,8 @@ PATHS = {
         # test/parking_contract_test.dart mirrors the parking contract.
         "supabase/functions/_shared/parking_contract.json",
         "supabase/functions/_shared/parking_contract_cases.json",
+        # test/fee_contract_test.dart checks the generated fee note bound.
+        "supabase/functions/_shared/fee_note_limit.json",
     ),
     "android": APP_PATHS + ROUTING_PATHS + (
         "android/", ".github/workflows/android.yml", ".github/actions/mobile-setup/",
@@ -46,7 +48,7 @@ PATHS = {
         "supabase/", ".supabase-version", ".github/workflows/ci.yml",
         "tool/generate_seed.py", "assets/demo/", "assets/rules/",
         # Regenerates the contract SQL and checks it for drift.
-        "tool/gen_contract_sql.py",
+        "tool/gen_contract_sql.py", "tool/fee_text.py",
     ),
 }
 

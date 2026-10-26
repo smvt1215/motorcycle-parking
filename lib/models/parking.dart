@@ -345,7 +345,7 @@ class ParkingSpot {
       source: j['source'] as String? ?? 'community',
       spaceType: _kind(j) ?? SpaceType.values.byName(j['space_type'] as String),
       feeNote: j['fee_note'] as String? ?? '請依現場公告',
-      fee: j['fee'] is Map ? Fee.fromJson(j['fee']) : null,
+      fee: structuredFee(j['fee']),
       scooterTotal: j['scooter_total'] as int?,
       available: j['available'] as int?,
       heavyAllowed: j['heavy_allowed'] as bool?,

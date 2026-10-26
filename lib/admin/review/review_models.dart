@@ -267,9 +267,15 @@ class ReviewSpot {
 /// The proposal the admin starts from: only what the rider sent. A gone
 /// report without a value (works, a temporary closure, older builds, votes)
 /// is never turned into hiding; the admin decides, see [visibilityKey].
-Map<String, dynamic> initialProposal(ReviewReport report, ReviewSpot? spot) => {
-  ...?report.proposed,
-};
+Map<String, dynamic> initialProposal(ReviewReport report, ReviewSpot? spot) {
+  final proposal = {...?report.proposed};
+  // An adopted fee always carries this build's text of it, never the one
+  // the rider's build wrote (design §5.4): older builds write older
+  // sentences, which fee_note_of() would refuse.
+  final fee = reviewFee(proposal['fee']);
+  if (fee != null) proposal['fee_note'] = feeNoteOf(fee);
+  return proposal;
+}
 
 /// The column that hides [spot]: `hidden` for official spots, `status` for
 /// community ones.
