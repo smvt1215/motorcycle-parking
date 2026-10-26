@@ -191,29 +191,6 @@ void main() {
     }
   });
 
-  test('已確認欄位逐車種列出確認日期，過期註明', () {
-    expect(
-      verifiedFieldLines(
-        lot(
-          scooter: true,
-          heavy: false,
-          scooterChecked: DateTime(2026, 10, 20),
-          heavyChecked: DateTime(2025, 1, 1),
-        ),
-        now: now,
-      ),
-      ['普通機車可停：管理員確認，2026-10-20', '大型重機不可停：管理員確認，2025-01-01，已超過 180 天'],
-    );
-    expect(verifiedFieldLines(lot(scooter: true), now: now), isEmpty);
-    expect(
-      verifiedFieldLines(
-        lot(source: 'official', scooter: true, scooterChecked: now),
-        now: now,
-      ),
-      isEmpty,
-    );
-  });
-
   test('列表標籤保留車友回報，其他沿用判斷標籤', () {
     final reported = lot(scooter: true);
     expect(
@@ -297,6 +274,29 @@ void main() {
       expect(d.basis, startsWith('管理員確認，'));
     });
 
+    test('未確認的社群停車場也不列分區的試辦期限', () {
+      final spot = ParkingSpot.fromJson({
+        ...zoned('community').toJson(),
+        'parking_zones': [
+          {
+            'name': '機車區',
+            'access': 'scooterHeavy',
+            'condition': {
+              'bay': 'motorcycle',
+              'use': 'share',
+              'share': 'scooter_heavy',
+              'allow': {'scooter': true, 'heavy': true},
+              'basis': {
+                'source_url': 'https://example.test',
+                'expires_on': '2026-12-31',
+              },
+            },
+          },
+        ],
+      });
+      expect(showDecision(spot).notices, isEmpty);
+    });
+
     test('未確認的社群停車場不列分區：分區是同一份未確認的回報', () {
       final d = showDecision(zoned('community'));
       expect(d.reported, isTrue);
@@ -330,6 +330,26 @@ void main() {
       ),
       ['停放車種（普通機車）・管理員確認，2026-10-20', '停放車種（大型重機）・管理員確認，2025-01-01，已超過 180 天'],
     );
+    // Same day, but one check has lapsed: listed apart.
+    expect(
+      confirmationLines(
+        lot(
+          scooter: true,
+          heavy: true,
+          scooterChecked: DateTime(2026, 3, 1),
+          heavyChecked: DateTime(2026, 3, 1, 23),
+        ),
+        now: DateTime(2026, 8, 29, 12),
+      ),
+      hasLength(2),
+    );
     expect(confirmationLines(lot(scooter: true), now: now), isEmpty);
+    expect(
+      confirmationLines(
+        lot(source: 'official', scooter: true, scooterChecked: now),
+        now: now,
+      ),
+      isEmpty,
+    );
   });
 }

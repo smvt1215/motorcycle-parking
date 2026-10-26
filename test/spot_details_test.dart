@@ -1036,9 +1036,128 @@ void main() {
         }),
       );
       expect(decisionText(tester), '大型重機 · 待確認');
-      expect(find.text('此地區的規則已過期，請以現場標誌標線為準'), findsOneWidget);
+      // The dated line says it; the explanation does not repeat it.
+      expect(find.text('此地區的規則已過期，請以現場標誌標線為準'), findsNothing);
       expect(find.text('臺北市的規則已於 2026-03-01 到期，請看現場公告'), findsOneWidget);
       expect(find.byIcon(Icons.event_busy_outlined), findsOneWidget);
+    });
+
+    testWidgets('分區資料涵蓋全場而都不開放：資料不一致', (tester) async {
+      await open(
+        tester,
+        ParkingSpot.fromJson({
+          ...lot([
+            {'name': 'B1 機車區', 'access': 'scooterOnly'},
+          ]).toJson(),
+          'zones_complete': true,
+        }),
+      );
+      expect(decisionText(tester), '大型重機 · 開放資訊待確認');
+      expect(find.text('場站與分區資料不一致，請依入口公告'), findsOneWidget);
+      expect(find.text('B1 機車區・不可停'), findsOneWidget);
+    });
+
+    testWidgets('試辦尚未生效：寫出生效日，不寫成「試辦至」', (tester) async {
+      final pending = trial('2099-12-31');
+      ((pending['condition']! as Map)['basis'] as Map)['effective_date'] =
+          '2099-01-01';
+      await open(tester, lot([pending]));
+      expect(find.text('機車區試辦 2099-01-01 起生效，請看現場公告'), findsOneWidget);
+      expect(find.textContaining('試辦至'), findsNothing);
+      expect(find.byIcon(Icons.event_busy_outlined), findsOneWidget);
+      expect(find.text('機車區・待確認'), findsOneWidget);
+    });
+
+    Future<AppStore> openStreet(
+      WidgetTester tester,
+      List<CityRule> rules,
+      Map<String, Object?> extra,
+    ) async {
+      usePhone(tester);
+      final store = (await tester.runAsync(createStore))!;
+      addTearDown(store.dispose);
+      await store.setVehicle(VehicleType.heavy);
+      store.rules = rules;
+      await openDetails(
+        tester,
+        store,
+        ParkingSpot.fromJson({
+          ...roadside.toJson(),
+          'space_type': 'paidMotorcycle',
+          'source': 'official',
+          ...extra,
+        }),
+      );
+      return store;
+    }
+
+    Map<String, Object?> taipeiHeavy(List<String> allowed) => {
+      'city': '臺北市',
+      'vehicle': 'heavy',
+      'allowed_space_types': allowed,
+      'conditional_space_types': ['offStreet'],
+      'fee_note': '請依現場收費公告',
+      'exceptions': '測試',
+      'source_url': 'https://example.test',
+      'version': 1,
+      'effective_date': '2026-01-01',
+    };
+
+    testWidgets('兩份規則結論相反：公告不一致', (tester) async {
+      await openStreet(tester, [
+        CityRule.fromJson(taipeiHeavy(['paidMotorcycle', 'heavyOnly', 'car'])),
+        CityRule.fromJson(taipeiHeavy(['heavyOnly', 'car'])),
+      ], const {});
+      expect(decisionText(tester), '大型重機 · 待確認');
+      expect(find.text('公告不一致，請以現場公告為準'), findsOneWidget);
+    });
+
+    testWidgets('路邊公告到期：期限列寫到期，說明不重複同一句', (tester) async {
+      await openStreet(
+        tester,
+        [
+          CityRule.fromJson(taipeiHeavy(['heavyOnly'])),
+        ],
+        {
+          'condition': {
+            'bay': 'motorcycle',
+            'use': 'share',
+            'share': 'scooter_heavy',
+            'charge': 'toll',
+            'basis': {
+              'source_url': 'https://example.test/notice',
+              'effective_date': '2026-04-06',
+              'expires_on': '2026-10-05',
+            },
+          },
+        },
+      );
+      expect(find.text('公告已於 2026-10-05 到期，請看現場公告'), findsOneWidget);
+      expect(find.byIcon(Icons.event_busy_outlined), findsOneWidget);
+    });
+
+    testWidgets('橫幅結論與地圖標記（store.eligible）一致', (tester) async {
+      usePhone(tester);
+      final store = (await tester.runAsync(createStore))!;
+      addTearDown(store.dispose);
+      for (final vehicle in VehicleType.values) {
+        await store.setVehicle(vehicle);
+        for (final spot in [
+          trialLot,
+          endedLot,
+          partialLot,
+          facility(),
+          roadside,
+        ]) {
+          final e = store.eligible(spot);
+          final d = store.decide(spot).eligibility;
+          expect(
+            (d.status, d.reason, d.restriction),
+            (e.status, e.reason, e.restriction),
+            reason: '${spot.name} ${vehicle.name}',
+          );
+        }
+      }
     });
 
     for (final (width, scale, brightness) in [

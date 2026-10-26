@@ -599,14 +599,16 @@ class _SpotDecision extends StatelessWidget {
                       height: 1.3,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    display.explanation,
-                    style: text.bodySmall?.copyWith(
-                      color: colors.onSurfaceVariant,
-                      height: 1.45,
+                  if (display.explanation.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      display.explanation,
+                      style: text.bodySmall?.copyWith(
+                        color: colors.onSurfaceVariant,
+                        height: 1.45,
+                      ),
                     ),
-                  ),
+                  ],
                   if (display.basis case final basis?) ...[
                     const SizedBox(height: 6),
                     Row(

@@ -28,9 +28,14 @@ enum EligibilityTier {
 /// 試辦至 2026-12-31」, or once ended 「機車區試辦已於 2026-10-05 到期，請看
 /// 現場公告」. Shown with a calendar icon, never by colour alone.
 class NoticeLine {
-  const NoticeLine(this.text, {required this.expired});
+  const NoticeLine(this.text, {required this.expired, this.cityRule = false});
   final String text;
+
+  /// Ended, or not started yet: it holds nothing now.
   final bool expired;
+
+  /// A city rule's end, not a notice of the spot or a zone.
+  final bool cityRule;
 }
 
 /// One zone of a lot as the banner lists it (逐區資格).
@@ -118,23 +123,30 @@ EligibilityDisplay eligibilityDisplay(
         at,
         verified: explicit != null && recentlyVerified(spot, vehicle, at),
       );
-  final notices = decision == null
-      ? const <NoticeLine>[]
-      : noticeLines(decision, at);
   final checked =
       source.kind == BasisKind.official ||
       source.kind == BasisKind.adminVerified;
+  // A zone's notice is part of the zone data, listed on the same terms.
+  final notices = decision == null
+      ? const <NoticeLine>[]
+      : noticeLines(decision, at, zones: checked);
   // Zones are listed only from data that may decide: a rider's zones are
   // part of the same unchecked claim.
   final zones = decision == null || !checked
       ? const <ZoneLine>[]
-      : zoneLines(decision);
+      : zoneLines(decision, at);
   final sourceLine = _sourceLine(source);
+  // The notice line already says it ended; the explanation does not repeat
+  // it in other words.
+  final repeated =
+      notices.any((n) => n.text == result.reason) ||
+      (result.reason == ruleExpiredReason && notices.any((n) => n.cityRule));
+  String explanationOf(String text) => repeated ? '' : text;
   if (result.status != EligibilityStatus.unverified) {
     return EligibilityDisplay(
       tier: EligibilityTier.decided,
       label: _decidedLabel(result, decision),
-      explanation: result.reason,
+      explanation: explanationOf(result.reason),
       basis: sourceLine,
       notices: notices,
       zones: zones,
@@ -174,7 +186,7 @@ EligibilityDisplay eligibilityDisplay(
         ? EligibilityTier.noData
         : EligibilityTier.other,
     label: spot.isFacility ? '開放資訊待確認' : result.label,
-    explanation: decisionExplanation(spot, result),
+    explanation: explanationOf(decisionExplanation(spot, result)),
     basis: checked && (decision?.gaps.isNotEmpty ?? false) ? sourceLine : null,
     notices: notices,
     zones: zones,
@@ -201,33 +213,57 @@ String? _sourceLine(DecisionBasis source) => switch (source.kind) {
   _ => null,
 };
 
-/// The notices with an end date behind [decision], each once: a zone's
-/// trial, a bay's notice, an ended city rule.
-List<NoticeLine> noticeLines(ParkingDecision decision, DateTime now) {
+/// Whether a notice has not started on [day] (`YYYY-MM-DD`).
+bool _notStarted(DecisionBasis b, String day) =>
+    b.effectiveDate != null && b.effectiveDate!.compareTo(day) > 0;
+
+/// The notices with dates behind [decision], each once: a zone's trial
+/// (「試辦」), a bay's notice (「公告」), an ended city rule. A notice not in
+/// force yet says when it starts. Zones' notices only when [zones].
+List<NoticeLine> noticeLines(
+  ParkingDecision decision,
+  DateTime now, {
+  bool zones = true,
+}) {
+  final day = taipeiDay(now);
   final lines = <NoticeLine>[];
   final seen = <String>{};
   for (final b in decision.basis) {
     final String text;
+    var holds = true;
+    var cityRule = false;
     switch (b.kind) {
+      case BasisKind.notice when b.zone != null && !zones:
+        continue;
+      case BasisKind.notice when _notStarted(b, day):
+        final what = b.zone == null ? '公告' : '${b.zone}試辦';
+        text = '$what ${b.effectiveDate} 起生效，請看現場公告';
+        holds = false;
       case BasisKind.notice when b.expiresOn != null:
-        final zone = b.zone ?? '';
+        final what = b.zone == null ? '公告' : '${b.zone}試辦';
         text = b.expired
-            ? '$zone試辦已於 ${b.expiresOn} 到期，請看現場公告'
-            : '$zone試辦至 ${b.expiresOn}';
+            ? '$what已於 ${b.expiresOn} 到期，請看現場公告'
+            : '$what至 ${b.expiresOn}';
+        holds = !b.expired;
       case BasisKind.cityRule when b.expired && b.rule?.expiresOn != null:
         text =
             '${b.rule!.city}的規則已於 ${formatSpotDate(b.rule!.expiresOn!)} 到期，請看現場公告';
+        holds = false;
+        cityRule = true;
       default:
         continue;
     }
-    if (seen.add(text)) lines.add(NoticeLine(text, expired: b.expired));
+    if (seen.add(text)) {
+      lines.add(NoticeLine(text, expired: !holds, cityRule: cityRule));
+    }
   }
   return lines;
 }
 
 /// Each zone of [decision] as listed under the banner; empty when no zone
 /// says anything about access.
-List<ZoneLine> zoneLines(ParkingDecision decision) {
+List<ZoneLine> zoneLines(ParkingDecision decision, DateTime now) {
+  final day = taipeiDay(now);
   if (!decision.zones.any((z) => z.hasData)) return const [];
   return [
     for (final z in decision.zones)
@@ -241,7 +277,9 @@ List<ZoneLine> zoneLines(ParkingDecision decision) {
           restriction: z.restriction,
         ).label,
         reason: z.reason,
-        dated: z.notice?.expiresOn != null,
+        dated:
+            z.notice != null &&
+            (z.notice!.expiresOn != null || _notStarted(z.notice!, day)),
       ),
   ];
 }
@@ -285,22 +323,6 @@ DateTime? currentVerification(
       : null;
 }
 
-/// One line per vehicle an administrator has checked on a community spot,
-/// e.g. 「普通機車可停：管理員確認，2026-10-25」; empty when none has.
-List<String> verifiedFieldLines(ParkingSpot spot, {DateTime? now}) => [
-  if (!spot.isOfficial)
-    for (final vehicle in VehicleType.values)
-      if ((
-            vehicle == VehicleType.heavy
-                ? spot.heavyAllowed
-                : spot.scooterAllowed,
-            spot.verifiedAt(vehicle),
-          )
-          case (final open?, final at?))
-        '${vehicle.label}${open ? '可停' : '不可停'}：管理員確認，${formatSpotDate(at)}'
-            '${currentVerification(spot, vehicle, now: now) == null ? '，已超過 $verificationDays 天' : ''}',
-];
-
 /// The 確認狀態 rows of the data section (#141, decisions 27 and 30): one
 /// row per kind among DESIGN.md's twelve fields 1–9 that an administrator
 /// confirmed, 「停放車種・管理員確認，2026-10-25」. Only 停放車種 is
@@ -323,8 +345,10 @@ List<String> confirmationLines(ParkingSpot spot, {DateTime? now}) {
   String line(String kind, DateTime at, VehicleType vehicle) =>
       '$kind・管理員確認，${formatSpotDate(at)}'
       '${currentVerification(spot, vehicle, now: now) == null ? '，已超過 $verificationDays 天' : ''}';
+  bool lapsed(VehicleType v) => currentVerification(spot, v, now: now) == null;
   if (checked.length == 2 &&
-      formatSpotDate(checked[0].$2) == formatSpotDate(checked[1].$2)) {
+      formatSpotDate(checked[0].$2) == formatSpotDate(checked[1].$2) &&
+      lapsed(checked[0].$1) == lapsed(checked[1].$1)) {
     return [line('停放車種', checked[0].$2, checked[0].$1)];
   }
   return [
