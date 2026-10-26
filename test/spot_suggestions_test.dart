@@ -931,41 +931,61 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('位置不正確：拖曳標記後只送座標，說明另外寫', (tester) async {
-    final store = (await tester.runAsync(createStore))!;
-    addTearDown(store.dispose);
-    await openLocation(tester, store);
-    expect(find.text('在原位置'), findsOneWidget);
-    await sendSuggestion(tester);
-    expect(find.text('請把標記拖到停車格的實際位置，和目前不同才能送出'), findsOneWidget);
-    expect(store.submissions, isEmpty);
-    final pin = find.byKey(const ValueKey('touch-marker'));
-    await reveal(tester, pin);
-    final gesture = await tester.startGesture(tester.getCenter(pin));
-    await gesture.moveBy(const Offset(0, -40));
-    await gesture.up();
-    await tester.pump(const Duration(milliseconds: 700));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('請把標記拖到'), findsNothing);
-    expect(find.textContaining('距原位置'), findsOneWidget);
-    expect(find.textContaining('位置往北移動約'), findsOneWidget);
-    await tester.enterText(
-      find.byKey(const ValueKey('suggestion-input')),
-      '格位在對面的便利商店前',
-    );
-    await sendSuggestion(tester);
-    final body = store.submissions.single;
-    expect(body['field'], 'location');
-    final proposed = body['proposed'] as Map<String, Object?>;
-    expect(proposed.keys, unorderedEquals(['lat', 'lng']));
-    expect(proposed['lat'] as double, greaterThan(spot.lat));
-    expect(proposed['lng'], closeTo(spot.lng, 1e-6));
-    expect(body['note'], '格位在對面的便利商店前');
-    expect(body['reason'], startsWith('停車點位置：建議移到 '));
-    expect(body['reason'], endsWith('；說明：格位在對面的便利商店前'));
-    expect(tester.takeException(), isNull);
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
+  for (final found in [true, false]) {
+    testWidgets('位置不正確：拖曳標記後送座標${found ? '與反查的縣市、行政區' : '；查不到縣市時只送座標'}，說明另外寫', (
+      tester,
+    ) async {
+      final store = (await tester.runAsync(createStore))!;
+      addTearDown(store.dispose);
+      if (!found) store.town = null;
+      await openLocation(tester, store);
+      expect(find.text('在原位置'), findsOneWidget);
+      await sendSuggestion(tester);
+      expect(find.text('請把標記拖到停車格的實際位置，和目前不同才能送出'), findsOneWidget);
+      expect(store.submissions, isEmpty);
+      final pin = find.byKey(const ValueKey('touch-marker'));
+      await reveal(tester, pin);
+      final gesture = await tester.startGesture(tester.getCenter(pin));
+      await gesture.moveBy(const Offset(0, -40));
+      await gesture.up();
+      await tester.pump(const Duration(milliseconds: 700));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('請把標記拖到'), findsNothing);
+      expect(find.textContaining('距原位置'), findsOneWidget);
+      expect(find.textContaining('位置往北移動約'), findsOneWidget);
+      expect(
+        find.textContaining('行政區從「未提供」改成「信義區」'),
+        found ? findsOneWidget : findsNothing,
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('suggestion-input')),
+        '格位在對面的便利商店前',
+      );
+      await sendSuggestion(tester);
+      final body = store.submissions.single;
+      expect(body['field'], 'location');
+      final proposed = body['proposed'] as Map<String, Object?>;
+      expect(
+        proposed.keys,
+        unorderedEquals([
+          'lat',
+          'lng',
+          if (found) ...['city', 'district'],
+        ]),
+      );
+      if (found) {
+        expect(proposed['city'], '臺北市');
+        expect(proposed['district'], '信義區');
+      }
+      expect(proposed['lat'] as double, greaterThan(spot.lat));
+      expect(proposed['lng'], closeTo(spot.lng, 1e-6));
+      expect(body['note'], '格位在對面的便利商店前');
+      expect(body['reason'], startsWith('停車點位置：建議移到 '));
+      expect(body['reason'], endsWith('；說明：格位在對面的便利商店前'));
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
 
   testWidgets('位置不正確：跨縣市提醒規則改變，超過 150 m 先確認', (tester) async {
     final store = (await tester.runAsync(createStore))!;
@@ -993,7 +1013,12 @@ void main() {
     await tester.tap(find.text('是同一個，送出'));
     await tester.pumpAndSettle();
     final body = store.submissions.single;
-    expect(body['proposed'], {'lat': 25.0369, 'lng': 121.5623});
+    expect(body['proposed'], {
+      'lat': 25.0369,
+      'lng': 121.5623,
+      'city': '新北市',
+      'district': '板橋區',
+    });
     expect(body['reason'], contains('位於新北市'));
     expect(find.text('完成'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());

@@ -878,8 +878,10 @@ class _ReportFormState extends State<ReportForm> {
   /// stops moving; only the latest answer counts.
   void scheduleLookup({Duration delay = const Duration(milliseconds: 600)}) {
     lookupTimer?.cancel();
+    // Counted now, not when the timer fires: an answer still in flight for
+    // the previous position must not land on this one.
+    final round = ++lookupRound;
     lookupTimer = Timer(delay, () async {
-      final round = ++lookupRound;
       final at = (lat, lng);
       setState(() {
         lookingUp = true;
