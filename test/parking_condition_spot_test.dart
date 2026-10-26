@@ -335,7 +335,8 @@ void main() {
       expect(carZone.legacySafe, isTrue);
       expect(s.isLegacySafe, isFalse);
       final json = s.toJson();
-      final zones = (json['parking_zones'] as List).cast<Map<String, dynamic>>();
+      final zones = (json['parking_zones'] as List)
+          .cast<Map<String, dynamic>>();
       expect(zones[0].containsKey('access'), isFalse);
       expect(zones[1]['access'], 'heavyCar');
       expect(json['heavy_allowed'], isNull);
