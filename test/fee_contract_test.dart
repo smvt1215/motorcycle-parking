@@ -50,6 +50,10 @@ void main() {
     expect(feeNoteOfJson(longest).length, feeNoteMaxLength);
   });
 
+  test('the largest fee the contract allows fits the size bound', () {
+    expect(validFee(limit['largest_fee']), isTrue);
+  });
+
   test('a fee round-trips through its JSON', () {
     for (final c in (cases['fees']! as List).cast<Map<String, Object?>>()) {
       if (c['valid'] != true) continue;

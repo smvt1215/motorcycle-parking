@@ -28,6 +28,10 @@ Deno.test('shared cases: feeNoteOf writes the shared sentences', () => {
   }
 });
 
+Deno.test('the largest fee the contract allows fits the size bound', () => {
+  if (!validFee(limit.largest_fee)) throw new Error('largest fee refused');
+});
+
 Deno.test('the longest sentence is the generated bound', () => {
   if (!validFee(limit.longest_fee)) throw new Error('longest fee invalid');
   const got = feeNoteOf(limit.longest_fee).length;

@@ -150,7 +150,20 @@ void main() {
         lot(fee: const Fee(heavy: Rate(FeeMode.sameAsCar))),
         VehicleType.heavy,
       ),
-      '比照汽車費率',
+      '費率未提供',
+    );
+    // A follow shows the amounts it works out to (#140).
+    expect(
+      spotFeeSummary(
+        lot(
+          fee: const Fee(
+            scooter: Rate(FeeMode.hourly, amount: 20, perMinutes: 60),
+            heavy: Rate(FeeMode.sameAsScooter, factorPct: 200),
+          ),
+        ),
+        VehicleType.heavy,
+      ),
+      '每小時 40 元',
     );
     expect(
       spotFeeSummary(
@@ -274,7 +287,9 @@ void main() {
       await pumpAccess(tester, width, spot);
       expect(find.text('全場費率'), findsOneWidget);
       expect(find.text('汽車：每小時 30 元'), findsOneWidget);
-      expect(find.text('大型重機：比照汽車費率'), findsNWidgets(2));
+      // 比照 resolves within the same fee only (design §2.1); the car rate
+      // here is legacy zone text, so the heavy rate is not provided (#140).
+      expect(find.text('大型重機：費率未提供'), findsNWidgets(2));
       expect(find.textContaining('舊重機'), findsNothing);
       expect(tester.takeException(), isNull);
     });

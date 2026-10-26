@@ -86,7 +86,7 @@
 - 分區的 `allow` 範例（普機專用的機車區）：
 
 ```json
-{"name":"B1 機車區","area":"motorcycle",
+{"name":"B1 機車區","area":"motorcycle","access":"scooterOnly",
  "condition":{"bay":"motorcycle","use":"usual","charge":"toll",
               "allow":{"scooter":true,"heavy":false}}}
 ```
@@ -112,6 +112,8 @@
 | `evMotorcycle` | bay=motorcycle, limits=[ev_only] | |
 
 分區沒有 `condition` 時，由既有 `access` 推導，明確排除一律寫進 `allow`，不會在轉換中遺失：`scooterOnly`→機車格 usual，`allow={scooter:true,heavy:false}`；`scooterHeavy`→機車格 share=scooter_heavy，`allow={scooter:true,heavy:true}`；`heavyCar`→汽車格 usual，`allow={scooter:false,heavy:true}`（大型重機依法可停汽車格）；`heavyOnly`→重機格 usual，`allow={scooter:false,heavy:true}`；`noMotorcycle`→bay 未填，`allow={scooter:false,heavy:false}`；null→未確認。反向推導 `access` 時也先看 `allow`，所以兩者一一對應。`access` 保留為舊版相容欄位，有 `condition` 時由轉換層推導寫回，不另外編輯。
+
+**分區 `access` 與 `condition` 一致（決定 32，DB 拒絕）**：分區有 `condition` 時，`allow` 必填且同時寫明 `scooter` 與 `heavy`，`access` 必須等於由 `allow`（`from_access` 有 bay 時再比對 bay）推導的值（`to_access`）。缺 `allow`、只寫一個車種、推導不出 `access`（例如機車格只開放大型重機）、缺 `access` 或與推導值不同，DB 一律拒絕寫入（`valid_zones()` 呼叫 `zone_condition_consistent()`，202610270020）。沒有 `condition` 的分區維持現狀：不檢查，由 `access` 推導。三端以 `parking_contract_cases.json` 的 `zone_rows` 共同案例比對；寫入分區 `condition` 的路徑（C6 分區編輯、匯入）一律寫入 `allow`，並由 `legacyAccess` 寫回 `access`。
 
 **寫入：`legacySpaceType(condition, placement)`（有 `condition` 的資料）**
 
@@ -200,7 +202,7 @@ c    = "each_period" | "entry_only"           計次跨時段怎麼計，缺＝�
 
 - `car` 不可用 `same_as_*`；`scooter` 也不可（既有規則）。
 - 時段費率不寫 `holiday` 以外的節日。本輪不依目前時間選用時段費率，只逐段顯示（§7 第 4 項，已決定）。
-- 資料表 `valid_fee()` 的大小上限由 1024 bytes 提高到 4096 bytes，以容納 `by_time`。
+- 資料表 `valid_fee()` 的大小上限由 1024 bytes 提高到 8192 bytes，以容納 `by_time`。上限刻意大於契約允許的最大費率（`tool/fee_text.py` 的 `largest_fee`，pg_column_size 約 5.8 KB，三端共同測試），合法形狀的費率不會因大小被任何一端拒絕（C3 Codex 審查：JSON 字數與 `pg_column_size` 算法不同，原本 4096 會讓三端判斷不一致）。
 
 ### 2.3 Toll 首段 0 元 ≠ Free
 
@@ -251,12 +253,14 @@ PLAN.md 匯入紀錄：「依停管處新聞稿附件補上『機車區』與機
  "parking_zones":[
   {"name":"機車區","area":"motorcycle","access":"scooterHeavy",
    "condition":{"bay":"motorcycle","use":"share","share":"scooter_heavy","charge":"toll",
+     "allow":{"scooter":true,"heavy":true},
      "basis":{"source_url":"https://…（停管處新聞稿附件）",
               "effective_date":"2026-04-06","expires_on":"2026-10-05"}},
    "fee":{"scooter":{"mode":"hourly","amount":10,"per_minutes":60},
           "heavy":{"mode":"same_as_scooter","factor_pct":200}}},
   {"name":"汽車區","area":"car","access":"heavyCar",
-   "condition":{"bay":"car","use":"usual","charge":"toll"},
+   "condition":{"bay":"car","use":"usual","charge":"toll",
+     "allow":{"scooter":false,"heavy":true}},
    "fee":{"car":{"mode":"hourly","amount":40,"per_minutes":60},
           "heavy":{"mode":"same_as_car"}}}]}
 ```
@@ -465,6 +469,7 @@ SQL 不能在執行時讀 JSON，所以由 `tool/gen_contract_sql.py` 從契約�
 | 路邊點帶 `parking_zones` 或 `zones_complete` | DB | 拒絕 | 同 #94 `street_lot_details` |
 | 有 `condition` 但 `space_type ≠ legacySpaceType(condition)` | DB | 拒絕 | 避免雙份狀態 |
 | `use='share'` 缺 `share`，或 `use='usual'` 帶 `share` | DB | 拒絕 | |
+| 分區有 `condition` 但缺 `allow`、`allow` 未同時寫明 `scooter` 與 `heavy`，或 `access` 不等於由 `allow`（＋bay）推導的值、推導不出 | DB | 拒絕 | 決定 32：避免分區的雙份狀態；舊版只讀 `access`（§1.3） |
 | 頂層 `condition` 帶 `allow`；`allow.scooter=true` 而 bay=heavy；限制 `kind` 不在列舉，或 `vehicle` 出現在 `special_vehicle` 以外 | DB | 拒絕 | 路邊沿用既有車種旗標；限制類型與車型分鍵（§1.1） |
 | 路邊點的 `condition` 缺 `bay`；或 bay=motorcycle、沒有 `time_limit`／`special_vehicle`／`ev_only`、也沒有 `charge` | DB | 拒絕 | 推導不出 `space_type`（§1.3） |
 | `share='scooter_heavy'` 但 bay ≠ motorcycle；`share='car_motorcycle'` 但 bay ≠ car | DB | 拒絕 | 需求 4 |

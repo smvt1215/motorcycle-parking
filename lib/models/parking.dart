@@ -135,9 +135,9 @@ class ParkingZone {
   /// Structured rates supersede the legacy vehicle strings as one record.
   /// A missing vehicle remains unconfirmed, even if an old string exists.
   String get scooterFeeText =>
-      fee == null ? scooterFeeNote : fee!.scooter?.text ?? '';
+      fee == null ? scooterFeeNote : fee!.riderText('scooter') ?? '';
   String get heavyFeeText =>
-      fee == null ? heavyFeeNote : fee!.heavy?.text ?? '';
+      fee == null ? heavyFeeNote : fee!.riderText('heavy') ?? '';
   bool get hasVehicleFees =>
       fee != null ||
       [

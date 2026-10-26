@@ -131,6 +131,10 @@ class _RateEditorState extends State<RateEditor> {
   }) {
     if (clear) return widget.onChanged(null);
     final m = mode ?? rate!.mode;
+    // Settings this editor has no field for yet (fee v2: renew, extension,
+    // cap reset, …) stay as they are while the mode stays the same; the
+    // new editor (C3b) edits them.
+    final kept = m == rate?.mode ? rate : null;
     widget.onChanged(
       Rate(
         m,
@@ -142,6 +146,14 @@ class _RateEditorState extends State<RateEditor> {
         maxMinutes: m == FeeMode.perVisit && !clearLimit
             ? maxMinutes ?? rate?.maxMinutes
             : null,
+        unitMinutes: kept?.unitMinutes,
+        freeMinutes: kept?.freeMinutes,
+        capReset: kept?.capReset,
+        renew: kept?.renew,
+        extension: kept?.extension,
+        periods: kept?.periods,
+        crossPeriod: kept?.crossPeriod,
+        factorPct: kept?.factorPct,
       ),
     );
   }

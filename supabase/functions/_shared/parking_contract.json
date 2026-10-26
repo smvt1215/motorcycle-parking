@@ -161,7 +161,7 @@
       "heavy",
       "mixed"
     ],
-    "comment": "parking_zones[] 的區域（§1.1）：機車區、汽車區、重機專區、混合；未填即省略鍵。只用在路外分區。分區的 condition 以 condition 段的規則加 zone_keys 檢查。舊版只讀 access，所以分區有 condition 時，只有 condition 為 legacy-safe 且 access 等於轉換層由 condition 推導的值（to_access），該分區才算 legacy-safe。"
+    "comment": "parking_zones[] 的區域（§1.1）：機車區、汽車區、重機專區、混合；未填即省略鍵。只用在路外分區。分區的 condition 以 condition 段的規則加 zone_keys 檢查。分區有 condition 時，allow 必填（scooter、heavy 兩鍵），且 access 必須等於轉換層由 condition 推導的值（to_access）；推導不出或不一致，DB 拒絕寫入（決定 32，zone_condition_consistent）。沒有 condition 的分區不檢查，由 access 推導。舊版只讀 access，所以分區有 condition 時，只有 condition 為 legacy-safe 且 access 等於 to_access，該分區才算 legacy-safe。"
   },
   "conversion": {
     "from_space_type": {
@@ -340,7 +340,7 @@
     }
   },
   "fee": {
-    "max_bytes": 4096,
+    "max_bytes": 8192,
     "vehicles": [
       "scooter",
       "heavy",
@@ -481,7 +481,8 @@
         "per_visit",
         "daily"
       ]
-    }
+    },
+    "comment": "max_bytes 是資料表的保險上限（pg_column_size），刻意大於契約允許的最大費率（tool/fee_text.py 的 largest_fee，三端共同測試），所以合法形狀的費率不會因大小被任何一端拒絕。"
   },
   "fee_plans": {
     "comment": "點位層的計費規則（§2.6）：每條 {id, name, fee}，最多 max_entries 條；id 在點位內唯一，name 只給管理員辨識（UTF-16 code unit 計長），fee 沿用 fee 段的 v2 契約且不可為 {}。點位頂層 fee_plan 與分區 parking_zones[].fee_plan 引用規則 id；引用不存在＝拒絕。引用規則的點位或分區，其 fee 是規則 fee 的副本（給舊版讀），必須相同。",

@@ -207,6 +207,40 @@ export function legacySpaceType(
   }
   return null;
 }
+/**
+ * The legacy `access` a zone condition is written back as (§1.3,
+ * `to_access`): the `from_access` entry with the same `allow` and, when the
+ * entry names a bay, the same bay; null when none matches.
+ */
+export function legacyAccess(c: Record<string, unknown>): string | null {
+  if (!isObject(c.allow)) return null;
+  const allow = c.allow;
+  for (
+    const [access, entry] of Object.entries(contract.conversion.from_access)
+  ) {
+    const e = entry as { bay?: string; allow: Record<string, boolean> };
+    if (
+      cond.allow_keys.every((k: string) => allow[k] === e.allow[k]) &&
+      (e.bay === undefined || c.bay === e.bay)
+    ) return access;
+  }
+  return null;
+}
+/**
+ * Whether a zone's access agrees with its condition (decision 32, §1.3): a
+ * zone without a condition is unchecked; one with a condition carries an
+ * `allow` naming both vehicles and the access it writes back. The same rule
+ * as `zone_condition_consistent()` in SQL.
+ */
+export function zoneConditionConsistent(
+  zone: Record<string, unknown>,
+): boolean {
+  if (zone.condition === undefined || zone.condition === null) return true;
+  if (!isObject(zone.condition) || typeof zone.access !== 'string') {
+    return false;
+  }
+  return zone.access === legacyAccess(zone.condition);
+}
 const facilityTypes = ['multiStorey', 'underground', 'surface', 'roadside'];
 const offStreetSpaceTypes: string[] = contract.placement.off_street_space_types;
 const offStreetFacilityTypes: string[] =
@@ -230,7 +264,10 @@ export function validZones(v: unknown): boolean {
       text(40, 1)(zone.name) &&
       (!('access' in zone) || oneOf(accessKinds)(zone.access)) &&
       (!('guide' in zone) || text(200)(zone.guide)) &&
-      (!('fee' in zone) || validFee(zone.fee));
+      (!('fee' in zone) || validFee(zone.fee)) &&
+      // Riders send no zone condition yet; the check keeps the DB rule in
+      // step if they ever do (202610270020).
+      zoneConditionConsistent(zone);
   });
 }
 // Mirrors the columns admin_resolve_report may patch, plus how riders ask to

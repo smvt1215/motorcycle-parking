@@ -144,7 +144,8 @@ void main() {
     });
 
     test('fee rule data', () {
-      final fee = contract['fee']! as Map<String, Object?>;
+      final fee = {...contract['fee']! as Map<String, Object?>}
+        ..remove('comment');
       expect(fee.keys, feeContract.keys);
       for (final key in fee.keys) {
         expect(fee[key], feeContract[key], reason: key);
@@ -210,6 +211,35 @@ void main() {
             ? ParkingAccess.scooterOnly
             : ParkingAccess.noMotorcycle;
         expect(legacySafeStoredZone(zone, other), isFalse, reason: name);
+      }
+    });
+  });
+
+  group('zone rows', () {
+    test('zone access agrees with its condition', () {
+      final rows = (cases['zone_rows']! as List).cast<Map<String, Object?>>();
+      expect(rows, isNotEmpty);
+      for (final c in rows) {
+        expect(
+          zoneConditionConsistent(c['zone']! as Map<String, Object?>),
+          c['consistent'],
+          reason: c['name']! as String,
+        );
+      }
+    });
+
+    test('a zone condition read back writes back its stored access', () {
+      for (final c
+          in (cases['zone_rows']! as List).cast<Map<String, Object?>>()) {
+        if (c['consistent'] != true) continue;
+        final zone = ParkingZone.fromJson(
+          Map<String, dynamic>.from(c['zone']! as Map),
+        );
+        expect(
+          zoneConditionConsistent(zone.toJson()),
+          isTrue,
+          reason: c['name']! as String,
+        );
       }
     });
   });
