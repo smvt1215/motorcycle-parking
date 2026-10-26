@@ -762,7 +762,7 @@ class _FormPane extends StatelessWidget {
                         '${record.sourceId}-${spots.formSeq}-${f.key}'
                         '${switch (f.key) {
                           'lat' || 'lng' => '-$moves',
-                          'city' || 'district' => '-${spots.filled}',
+                          'city' || 'district' || 'address' || 'road_segment' => '-${spots.filled}',
                           _ => '',
                         }}',
                       ),
@@ -1333,11 +1333,18 @@ class _LocationSection extends StatelessWidget {
                 nudgeButtons: true,
                 mapBuilder: mapBuilder,
                 onChanged: (a, b) => onMove(a, b),
+                search: spots.gateway?.searchAddress,
+                fills: const {'address': '地址', 'road_segment': '路段'},
+                onAddressPicked: (c) {
+                  if (c.field case final field?) {
+                    spots.fillFromSearch(field, c.label);
+                  }
+                },
               )
             else
               const AdminNotice('座標格式不正確，修正後地圖才會顯示。', error: true),
             const SizedBox(height: 4),
-            Text('拖曳標記或點地圖選位置；縣市與行政區會依位置自動帶入。', style: muted),
+            Text('搜尋地址，或拖曳標記、點地圖選位置；縣市與行政區會依位置自動帶入。', style: muted),
             if (spots.locating) ...[
               const SizedBox(height: 8),
               const LinearProgressIndicator(),

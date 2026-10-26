@@ -25,6 +25,9 @@ const reports = [
 const spot = { lat: 25.0581, lng: 121.5226, city: '臺北市', district: '中山區', fee_note: '每小時 20 元', note: '', scooter_allowed: true, heavy_allowed: null, source_name: '', updated_at: '2026-10-23T00:00:00Z',
   address: '', road_segment: '', entrance_note: '', parking_guide: '', special_rules: '', facility_type: null, parking_access: null, scooter_total: null };
 const communitySpot = { ...spot, id: communityId, name: '中山北路二段路邊機車格', space_type: 'paidMotorcycle', status: 'pending' };
+// The bundled rules stand in for the database; Taipei's heavy-bike rule is
+// the one edited.
+const cityRules = require('../assets/rules/parking_rules.json').map(rule => ({ district_space_types: {}, restriction: null, ...rule }));
 const officialSpot = { ...spot, id: officialId, name: '新北市政府行政大樓地下停車場', city: '新北市', district: '板橋區', lat: 25.0124, lng: 121.4651, space_type: 'offStreet', heavy_allowed: true, source_name: '新北市政府', hidden: false,
   address: '新北市板橋區中山路一段 161 號', facility_type: 'underground', parking_access: 'scooterHeavy', source_url: 'https://example.test/notice', source_id: 'ntpc-001', effective_date: '2026-01-01', license_note: '' };
 // Import: a spots.json with an update, a conflict with an administrator's
@@ -141,6 +144,14 @@ function session(role, aal, factors = [factor]) {
             if ((route.request().headers().accept || '').includes('vnd.pgrst.object')) return route.fulfill({ json: officialSpot, headers: cors });
             return route.fulfill({ json: url.searchParams.get('hidden') === 'eq.true' ? [] : [officialSpot], headers: cors });
           }
+          if (url.pathname === '/functions/v1/geocode') {
+            if (route.request().method() === 'OPTIONS') return route.fulfill({ body: 'ok', headers: cors });
+            assert.equal(route.request().postDataJSON().query, '中山北路二段與南京東路');
+            return route.fulfill({ json: { kind: 'intersection', candidates: [
+              { kind: 'intersection', label: '中山北路二段與南京東路一段', place: '臺北市中山區', lat: 25.052154, lng: 121.522503, precision: 'center' },
+              { kind: 'road', label: '南京東路一段', place: '臺北市中山區', lat: 25.0521, lng: 121.525, precision: 'center' },
+            ] }, headers: cors });
+          }
           if (url.pathname === '/rest/v1/rpc/admin_spots') {
             return route.fulfill({ json: [communitySpot, officialSpot].map(spot => ({
               source_id: spot === officialSpot ? `official:${spot.id}` : spot.id, kind: spot === officialSpot ? 'official' : 'community',
@@ -155,6 +166,14 @@ function session(role, aal, factors = [factor]) {
             assert.deepEqual(values, { scooter_allowed: true });
             assert.equal(note, '核驗目前車種');
             return route.fulfill({ json: { ...communitySpot, ...values, scooter_verified_at: '2026-10-25T01:19:36Z', updated_at: '2026-10-25T01:19:36Z' }, headers: cors });
+          }
+          if (url.pathname === '/rest/v1/city_rules') return route.fulfill({ json: cityRules, headers: cors });
+          if (url.pathname === '/rest/v1/rpc/admin_upsert_city_rule') {
+            const { p_city: city, p_vehicle: vehicle, p_values: values, p_base_version: version } = route.request().postDataJSON();
+            const rule = cityRules.find(r => r.city === city && r.vehicle === vehicle);
+            assert.equal(version, rule.version, 'a publish names the version it edits');
+            assert.equal(values.fee_note, '每次 50 元');
+            return route.fulfill({ json: { ...rule, ...values, version: version + 1 }, headers: cors });
           }
           if (url.pathname === '/rest/v1/rpc/admin_resolve_report' && !route.request().postDataJSON().p_force) {
             // The spot changed after the report: the admin must review and force.
@@ -318,9 +337,64 @@ function session(role, aal, factors = [factor]) {
           for (let i = 0; i < 12; i++) await page.mouse.wheel(0, 150);
           await page.waitForTimeout(500);
           await page.screenshot({ path: path.join(output, `${name}-spot-location.png`) });
+          // Address search above the picker: results, then the pick's reminder.
+          const search = page.getByRole('textbox', { name: '搜尋門牌、路段或路口' });
+          await search.click();
+          await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+          await search.fill('中山北路二段與南京東路');
+          await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+          await search.press('Enter');
+          // Each result row is one semantics node: name and kind together.
+          await page.getByText(/臺北市中山區的路口，只到交會點/).first().waitFor({ timeout: 15000 });
+          await page.screenshot({ path: path.join(output, `${name}-address-results.png`) });
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} address results scroll sideways`);
+          await page.getByText(/中山北路二段與南京東路一段/).first().click();
+          await page.getByText(/並填入「路段」/).waitFor({ timeout: 15000 });
+          await page.screenshot({ path: path.join(output, `${name}-address-picked.png`) });
+          // Rules: Taipei's heavy-bike rule, its preview, then a new version.
+          await page.getByRole('button', { name: '規則', exact: true }).click();
+          await page.getByRole('button', { name: /^臺北市大型重機/ }).waitFor({ timeout: 15000 });
+          await page.screenshot({ path: path.join(output, `${name}-rules.png`) });
+          await page.getByRole('button', { name: /^臺北市大型重機/ }).click();
+          await waitText('臺北市大型重機規則');
+          await page.screenshot({ path: path.join(output, `${name}-rule-form.png`) });
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} rule form scrolls sideways`);
+          // Flutter builds the fee field only once it scrolls into view.
+          const fee = page.getByRole('textbox', { name: '費率說明' });
+          await page.mouse.move(viewport.width * (mobile ? 0.5 : 0.4), viewport.height * 0.5);
+          for (let i = 0; i < 40 && !(await fee.count()); i++) {
+            await page.mouse.wheel(0, 150);
+            await page.waitForTimeout(100);
+          }
+          // Flutter's input appends to fill(); replace the selection instead.
+          await fee.focus();
+          await page.keyboard.press('ControlOrMeta+A');
+          await page.keyboard.insertText('每次 50 元');
+          for (let i = 0; i < 30; i++) await page.mouse.wheel(0, 150);
+          await page.waitForTimeout(500);
+          await page.screenshot({ path: path.join(output, `${name}-rule-preview.png`) });
+          if (mobile) {
+            // The narrowest supported phone.
+            await page.setViewportSize({ width: 320, height: 640 });
+            await page.waitForTimeout(800);
+            await page.screenshot({ path: path.join(output, `${name}-rule-preview-320.png`) });
+            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} rule form scrolls sideways at 320 px`);
+            await page.setViewportSize({ width: 390, height: 844 });
+            await page.waitForTimeout(800);
+          }
+          const published = page.waitForResponse(response => response.url().endsWith('/rpc/admin_upsert_city_rule'));
+          await page.getByRole('button', { name: '發布第 2 版', exact: true }).click();
+          await waitText('發布臺北市大型重機第 2 版？');
+          await page.getByRole('button', { name: '發布第 2 版', exact: true }).last().click();
+          await published;
+          // The form reloads on the published version.
+          await page.getByRole('button', { name: '發布第 3 版', exact: true }).waitFor({ timeout: 15000 });
+          await waitText('目前第 2 版，2026-10-06 生效');
+          await page.screenshot({ path: path.join(output, `${name}-rule-published.png`) });
+          if (mobile) await page.getByRole('button', { name: '返回規則清單', exact: true }).click({ timeout: 3000 }).catch(() => {});
           await page.getByRole('button', { name: '審核', exact: false }).first().click();
           await page.screenshot({ path: path.join(output, `${name}.png`) });
-          for (const [label, title] of [['點位', '停車點位'], ['規則', '各縣市停車規則'], ['匯入', '匯入停車資料'], ['使用者', '使用者管理'], ['審核', '待審回報']]) {
+          for (const [label, title] of [['點位', '停車點位'], ['規則', '各縣市規則'], ['匯入', '匯入停車資料'], ['使用者', '使用者管理'], ['審核', '待審回報']]) {
             await page.getByRole('button', { name: label === '審核' ? /^審核/ : label, exact: true }).click();
             await waitText(title);
           }

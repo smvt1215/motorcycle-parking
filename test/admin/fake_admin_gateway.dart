@@ -5,6 +5,7 @@ import 'package:motorcycle_parking/admin/admin_gateway.dart';
 import 'package:motorcycle_parking/admin/import/import_models.dart';
 import 'package:motorcycle_parking/admin/review/review_models.dart';
 import 'package:motorcycle_parking/admin/spots/spot_models.dart';
+import 'package:motorcycle_parking/core/address_search.dart';
 import 'package:motorcycle_parking/core/town_lookup.dart';
 import 'package:motorcycle_parking/domain/location_check.dart';
 
@@ -552,5 +553,101 @@ class FakeAdminGateway implements AdminGateway {
     return ImportResult(updated: items.length);
   }
 
+  /// What [searchAddress] returns, or throws when set.
+  List<AddressCandidate> addressResults = [];
+  AddressSearchException? addressError;
+  final List<String> addressQueries = [];
+
+  @override
+  Future<List<AddressCandidate>> searchAddress(
+    String query, {
+    double? lat,
+    double? lng,
+  }) async {
+    addressQueries.add(query);
+    if (addressError case final e?) throw e;
+    return addressResults;
+  }
+
   Future<void> dispose() => events.close();
+
+  /// `city_rules` rows, keyed `city:vehicle`.
+  Map<String, Map<String, dynamic>> ruleRows = {
+    for (final r in sampleRules()) '${r['city']}:${r['vehicle']}': r,
+  };
+  final List<(String, String, Map<String, dynamic>, int?, String)> published =
+      [];
+  bool failRules = false;
+
+  @override
+  Future<List<Map<String, dynamic>>> cityRules() async {
+    if (failRules) throw StateError('offline');
+    return [
+      for (final r in ruleRows.values) {...r},
+    ];
+  }
+
+  @override
+  Future<Map<String, dynamic>> publishCityRule(
+    String city,
+    String vehicle,
+    Map<String, dynamic> values,
+    int? baseVersion,
+    String note,
+  ) async {
+    final old = ruleRows['$city:$vehicle'];
+    if (old?['version'] != baseVersion) {
+      throw const PostgrestException(
+        message: 'rule changed since it was opened',
+        code: '40001',
+      );
+    }
+    published.add((city, vehicle, values, baseVersion, note));
+    final row = {
+      ...?old,
+      'city': city,
+      'vehicle': vehicle,
+      ...values,
+      'version': (baseVersion ?? 0) + 1,
+    };
+    ruleRows['$city:$vehicle'] = row;
+    return {...row};
+  }
 }
+
+/// Two published rules: Taipei's heavy-bike rule and Taichung's conditional
+/// one, as the bundled file has them.
+List<Map<String, dynamic>> sampleRules() => [
+  {
+    'city': '臺北市',
+    'vehicle': 'heavy',
+    'allowed_space_types': ['paidMotorcycle', 'heavyOnly', 'car'],
+    'conditional_space_types': ['offStreet'],
+    'districts': <String>[],
+    'district_space_types': <String, dynamic>{},
+    'fee_note': '一般計次每次 40 元',
+    'exceptions': '僅公有路邊收費機車格；免費巷弄格不適用。',
+    'can_use_two_spaces': true,
+    'effective_date': '2026-10-06',
+    'source_url': 'https://www.gov.taipei/notice',
+    'restriction': null,
+    'version': 1,
+  },
+  {
+    'city': '新北市',
+    'vehicle': 'heavy',
+    'allowed_space_types': ['heavyOnly', 'car', 'paidMotorcycle'],
+    'conditional_space_types': ['offStreet'],
+    'districts': <String>[],
+    'district_space_types': {
+      'freeMotorcycle': ['板橋區', '新店區'],
+    },
+    'fee_note': '計次每 4 小時 30 元',
+    'exceptions': '免費機車格僅板橋區、新店區開放。',
+    'can_use_two_spaces': true,
+    'effective_date': '2026-07-01',
+    'source_url': 'https://www.traffic.ntpc.gov.tw/notice',
+    'restriction': null,
+    'version': 2,
+  },
+];

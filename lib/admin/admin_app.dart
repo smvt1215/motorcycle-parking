@@ -4,6 +4,7 @@ import 'package:cupertino_ui/cupertino_ui.dart' as cu;
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../models/parking.dart';
 import 'admin_auth_page.dart';
 import 'admin_controller.dart';
 import 'admin_mfa_page.dart';
@@ -16,6 +17,8 @@ import 'review/review_controller.dart';
 import 'review/review_map.dart';
 import 'review/review_page.dart';
 import '../ui/location_picker.dart';
+import 'rules/rules_controller.dart';
+import 'rules/rules_page.dart';
 import 'spots/spot_models.dart';
 import 'spots/spots_controller.dart';
 import 'spots/spots_page.dart';
@@ -40,7 +43,7 @@ const _tabs = [
     label: '規則',
     icon: Icons.rule_outlined,
     title: '各縣市停車規則',
-    description: '在這裡檢視各縣市的普通機車與大型重機停放規則。',
+    description: '設定各縣市普通機車與大型重機的路邊停放規則並發布新版本。',
   ),
   (
     path: '/imports',
@@ -68,6 +71,7 @@ class AdminApp extends StatefulWidget {
     this.locationMapBuilder,
     this.review,
     this.pickFile = pickJsonFile,
+    this.bundledRules,
   });
   final AdminController controller;
   final String? initialLocation;
@@ -82,6 +86,9 @@ class AdminApp extends StatefulWidget {
 
   /// Tests replace the browser's file dialog.
   final FilePicker pickFile;
+
+  /// Tests replace the app's bundled rule file.
+  final Future<List<dynamic>> Function()? bundledRules;
 
   @override
   State<AdminApp> createState() => _AdminAppState();
@@ -102,6 +109,10 @@ class _AdminAppState extends State<AdminApp> {
   );
   late final FeeConversionController _fees = FeeConversionController(
     widget.controller.gateway,
+  );
+  late final RulesController _rules = RulesController(
+    widget.controller.gateway,
+    bundled: widget.bundledRules ?? bundledRules,
   );
   String? _reviewUser;
 
@@ -125,6 +136,7 @@ class _AdminAppState extends State<AdminApp> {
       _spots.reset();
       _imports.reset();
       _fees.reset();
+      _rules.reset();
     }
   }
 
@@ -202,7 +214,17 @@ class _AdminAppState extends State<AdminApp> {
                 pickFile: widget.pickFile,
               ),
             ),
-          for (final tab in _tabs.skip(2).where((t) => t.path != '/imports'))
+          for (final path in ['/rules', '/rules/:city/:vehicle'])
+            GoRoute(
+              path: path,
+              builder: (context, state) => RulesPage(
+                rules: _rules,
+                city: state.pathParameters['city'],
+                vehicle: VehicleType.values
+                    .asNameMap()[state.pathParameters['vehicle']],
+              ),
+            ),
+          for (final tab in _tabs.skip(3).where((t) => t.path != '/imports'))
             GoRoute(
               path: tab.path,
               builder: (context, state) => _watch(
@@ -247,6 +269,7 @@ class _AdminAppState extends State<AdminApp> {
     _spots.dispose();
     _imports.dispose();
     _fees.dispose();
+    _rules.dispose();
     _router.dispose();
     super.dispose();
   }
