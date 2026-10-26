@@ -6,6 +6,7 @@ import 'package:motorcycle_parking/data/repositories.dart';
 import 'package:motorcycle_parking/domain/map_viewport.dart';
 import 'package:motorcycle_parking/models/availability.dart';
 import 'package:motorcycle_parking/models/parking.dart';
+import 'package:motorcycle_parking/models/parking_condition.dart';
 
 /// The pinned clock for availability tests: 17:05 local.
 final availabilityNow = DateTime(2026, 10, 26, 17, 5);
@@ -31,6 +32,7 @@ ParkingSpot lotAt(
   SpaceType type = SpaceType.offStreet,
   String source = 'official',
   ParkingAccess? access,
+  ParkingCondition? condition,
 }) => ParkingSpot(
   id: id,
   name: '測試停車場 $id',
@@ -46,6 +48,7 @@ ParkingSpot lotAt(
   heavyAllowed: heavy,
   scooterTotal: 80,
   access: access,
+  condition: condition,
   updatedAt: DateTime(2026, 10, 20),
 );
 
@@ -72,7 +75,26 @@ AvailabilitySnapshot count(
 /// delayed, unverified without a pill and not-allowed with a count.
 final canvasSpots = [
   lotAt('fresh', 83 - 195, 255 - 422),
-  lotAt('conditional', 231 - 195, 391 - 422, type: SpaceType.flexShared),
+  // A shared car bay whose notice opens it to scooters at night.
+  lotAt(
+    'conditional',
+    231 - 195,
+    391 - 422,
+    type: SpaceType.flexShared,
+    condition: const ParkingCondition(
+      bay: Bay.car,
+      use: BayUse.share,
+      share: ShareKind.carMotorcycle,
+      schedule: [
+        ScheduleSlot(
+          days: 'all',
+          from: '20:00',
+          to: '07:00',
+          vehicles: [SlotVehicle.car, SlotVehicle.scooter],
+        ),
+      ],
+    ),
+  ),
   lotAt('full', 145 - 195, 585 - 422),
   lotAt('delayed', 319 - 195, 457 - 422),
   lotAt('unverified', 59 - 195, 429 - 422, source: 'community'),

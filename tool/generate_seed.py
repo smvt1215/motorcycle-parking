@@ -30,6 +30,6 @@ for spot in json.loads(Path('assets/demo/spots.json').read_text()):
 for rule in json.loads(Path('assets/rules/parking_rules.json').read_text()):
     # Lists and maps (district_space_types) are jsonb columns.
     vals = [literal(json.dumps(v, ensure_ascii=False)) + '::jsonb' if isinstance(v, (list, dict)) else str(v).lower() if isinstance(v, (bool, int)) else literal(v) for v in rule.values()]
-    lines.append(f"insert into public.city_rules({','.join(rule)}) values({','.join(vals)}) on conflict(city,vehicle) do nothing;")
+    lines.append(f"insert into public.city_rules_data({','.join(rule)}) values({','.join(vals)}) on conflict(city,vehicle) do nothing;")
 lines.append("insert into public.community_spots(user_id,name,lat,lng,city,space_type,status) values('10000000-0000-4000-8000-000000000001','[範例] 隱藏待審',25.034,121.56,'臺北市','paidMotorcycle','hidden');")
 Path('supabase/seed.sql').write_text('\n'.join(lines) + '\n')

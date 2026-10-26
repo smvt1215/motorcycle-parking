@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:motorcycle_parking/features/map/parking_access_view.dart';
+import 'package:motorcycle_parking/features/map/spot_fees.dart';
 import 'package:motorcycle_parking/models/parking.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
 
@@ -51,7 +52,7 @@ void main() {
     await t.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: ParkingAccessView(
+          body: _AccessAndFees(
             spot: point(
               zones: const [
                 ParkingZone(
@@ -67,14 +68,15 @@ void main() {
       ),
     );
     expect(find.byIcon(Icons.swap_horiz), findsOneWidget);
-    expect(find.text('普通機車：20 元／次'), findsOneWidget);
-    expect(find.text('大型重機：30 元／小時'), findsOneWidget);
+    // Rates are on the fee board, each beside its own vehicle.
+    expect(legacyRow(t, '普通機車'), '20 元／次');
+    expect(legacyRow(t, '大型重機'), '30 元／小時');
   });
-  testWidgets('只有普通機車費率時，大型重機標示未提供，不套用共同備註價格', (t) async {
+  testWidgets('只有普通機車費率時，大型重機標示未確認，不套用共同備註價格', (t) async {
     await t.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: ParkingAccessView(
+          body: _AccessAndFees(
             spot: point(
               zones: const [
                 ParkingZone(
@@ -89,10 +91,10 @@ void main() {
         ),
       ),
     );
-    expect(find.text('普通機車：20 元／次'), findsOneWidget);
-    expect(find.text('大型重機：費率未提供'), findsOneWidget);
-    expect(find.text('大型重機：20 元／次'), findsNothing);
-    expect(find.text('費率：每日上限 150 元'), findsOneWidget);
+    expect(legacyRow(t, '普通機車'), '20 元／次');
+    expect(legacyRow(t, '大型重機'), contains('費率未確認'));
+    expect(find.text('20 元／次'), findsOneWidget);
+    expect(find.text('每日上限 150 元'), findsOneWidget);
   });
 
   testWidgets('專用以單一車種呈現，共用格明確連接兩個車種圖示', (t) async {
@@ -161,7 +163,7 @@ void main() {
           body: SingleChildScrollView(
             child: Padding(
               padding: const EdgeInsets.all(20),
-              child: ParkingAccessView(
+              child: _AccessAndFees(
                 spot: point(
                   facility: true,
                   zones: const [
@@ -186,12 +188,47 @@ void main() {
         ),
       ),
     );
-    expect(find.text('機車區'), findsOneWidget);
-    expect(find.text('重機與汽車區'), findsOneWidget);
-    expect(find.text('費率：20 元／次'), findsOneWidget);
+    // Each zone's name heads its access and its fee board.
+    expect(find.text('機車區'), findsNWidgets(2));
+    expect(find.text('重機與汽車區'), findsNWidgets(2));
+    expect(find.text('20 元／次'), findsOneWidget);
+    expect(find.text('30 元／時'), findsOneWidget);
     expect(find.text('指引：B2'), findsOneWidget);
     expect(find.text('未確認'), findsNWidgets(2));
     expect(find.byIcon(Icons.swap_horiz), findsOneWidget);
     expect(t.takeException(), isNull);
   });
+}
+
+/// The details' access list with the fee section, as the sheet shows them.
+class _AccessAndFees extends StatelessWidget {
+  const _AccessAndFees({required this.spot});
+  final ParkingSpot spot;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      ParkingAccessView(spot: spot),
+      const SizedBox(height: 16),
+      SpotFees(spot: spot, vehicle: VehicleType.scooter),
+    ],
+  );
+}
+
+/// The text beside [vehicle] on a text fee board.
+String legacyRow(WidgetTester t, String vehicle) {
+  final row = find
+      .ancestor(
+        of: find.descendant(
+          of: find.byKey(const ValueKey('fee-legacy-board')),
+          matching: find.text(vehicle),
+        ),
+        matching: find.byType(Row),
+      )
+      .first;
+  return t
+      .widgetList<Text>(find.descendant(of: row, matching: find.byType(Text)))
+      .map((w) => w.data ?? w.textSpan!.toPlainText())
+      .last;
 }

@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:motorcycle_parking/features/map/parking_access_view.dart';
+import 'package:motorcycle_parking/features/map/spot_fees.dart';
 import 'package:motorcycle_parking/features/map/spot_details.dart';
 import 'package:motorcycle_parking/features/report/report_sheet.dart';
 import 'package:motorcycle_parking/models/fee.dart';
@@ -176,76 +176,71 @@ void main() {
     );
   });
 
-  for (final width in [320.0, 360.0, 390.0, 700.0, 1280.0]) {
-    testWidgets('分區費率在寬 $width、深色放大字級下完整顯示', (tester) async {
-      tester.view.devicePixelRatio = 1;
-      tester.view.physicalSize = Size(width, 1100);
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: ThemeData(brightness: Brightness.dark),
-          builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(context)
-                .copyWith(textScaler: TextScaler.linear(1.6)),
-            child: child!,
-          ),
-          home: Scaffold(
-            body: SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: ParkingAccessView(
-                  spot: lot(
-                    zones: const [
-                      ParkingZone(
-                        name: 'B2',
-                        access: ParkingAccess.scooterHeavy,
-                        feeNote: '不應重複的舊費率',
-                        fee: Fee(
-                          scooter: Rate(FeeMode.free),
-                          heavy: Rate(
-                            FeeMode.hourly,
-                            amount: 20,
-                            perMinutes: 30,
-                            dailyCap: 100,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-      expect(find.text('普通機車：免費'), findsOneWidget);
-      expect(
-        find.text('大型重機：每 30 分鐘 20 元，當日上限 100 元（上限計算方式未確認）'),
-        findsOneWidget,
-      );
-      expect(find.textContaining('不應重複'), findsNothing);
-      expect(tester.takeException(), isNull);
-    });
-  }
-
-  Future<void> pumpAccess(WidgetTester tester, double width, ParkingSpot spot) {
+  Future<void> pumpFees(
+    WidgetTester tester,
+    double width,
+    ParkingSpot spot, {
+    double scale = 1,
+    Brightness brightness = Brightness.light,
+    VehicleType vehicle = VehicleType.scooter,
+  }) {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = Size(width, 1100);
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     return tester.pumpWidget(
       MaterialApp(
+        theme: ThemeData(brightness: brightness),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: TextScaler.linear(scale)),
+          child: child!,
+        ),
         home: Scaffold(
           body: SingleChildScrollView(
             child: Padding(
               padding: const EdgeInsets.all(16),
-              child: ParkingAccessView(spot: spot),
+              child: SpotFees(spot: spot, vehicle: vehicle),
             ),
           ),
         ),
       ),
     );
+  }
+
+  for (final width in [320.0, 360.0, 390.0, 700.0, 1280.0]) {
+    testWidgets('分區公告牌在寬 $width、深色放大字級下完整顯示', (tester) async {
+      await pumpFees(
+        tester,
+        width,
+        lot(
+          zones: const [
+            ParkingZone(
+              name: 'B2',
+              access: ParkingAccess.scooterHeavy,
+              feeNote: '不應重複的舊費率',
+              fee: Fee(
+                scooter: Rate(FeeMode.free),
+                heavy: Rate(
+                  FeeMode.hourly,
+                  amount: 20,
+                  perMinutes: 30,
+                  dailyCap: 100,
+                ),
+              ),
+            ),
+          ],
+        ),
+        scale: 1.6,
+        brightness: Brightness.dark,
+      );
+      expect(find.text('B2'), findsOneWidget);
+      expect(find.text('免費'), findsOneWidget);
+      expect(find.text('每 30 分鐘 20 元'), findsOneWidget);
+      expect(find.textContaining('上限計算方式未確認'), findsOneWidget);
+      expect(find.textContaining('不應重複'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
   }
 
   for (final width in [320.0, 390.0]) {
@@ -266,15 +261,16 @@ void main() {
         ],
       );
       expect(spotFeeSummary(spot, VehicleType.scooter), '依分區計費');
-      await pumpAccess(tester, width, spot);
-      expect(find.text('全場費率'), findsNothing);
-      expect(find.text('普通機車：免費'), findsOneWidget);
-      expect(find.text('費率：舊 B2 每次 10 元'), findsOneWidget);
+      await pumpFees(tester, width, spot);
+      expect(find.text('全場'), findsNothing);
+      expect(find.text('B1'), findsOneWidget);
+      expect(find.text('免費'), findsOneWidget);
+      expect(find.text('舊 B2 每次 10 元'), findsOneWidget);
       expect(find.textContaining('每次 20 元'), findsNothing);
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('寬 $width：全場費率模式仍顯示分區的汽車費率', (tester) async {
+    testWidgets('寬 $width：全場費率只列一次，分區只補自己的汽車費率文字', (tester) async {
       final spot = lot(
         fee: const Fee(heavy: Rate(FeeMode.sameAsCar)),
         zones: const [
@@ -286,19 +282,20 @@ void main() {
           ),
         ],
       );
-      await pumpAccess(tester, width, spot);
-      expect(find.text('全場費率'), findsOneWidget);
-      expect(find.text('汽車：每小時 30 元'), findsOneWidget);
+      await pumpFees(tester, width, spot, vehicle: VehicleType.heavy);
+      expect(find.text('全場'), findsOneWidget);
+      expect(find.text('1F'), findsOneWidget);
+      expect(find.text('每小時 30 元'), findsOneWidget);
       // 比照 resolves within the same fee only (design §2.1); the car rate
       // here is legacy zone text, so the heavy rate is not provided (#140).
-      expect(find.text('大型重機：費率未提供'), findsNWidgets(2));
+      expect(find.textContaining('費率未提供'), findsOneWidget);
       expect(find.textContaining('舊重機'), findsNothing);
       expect(tester.takeException(), isNull);
     });
   }
 
   for (final width in [320.0, 390.0, 700.0, 1280.0]) {
-    testWidgets('寬 $width：詳情費率句子寫算好的金額與汽車費率，不寫比照（#140）', (tester) async {
+    testWidgets('寬 $width：公告牌寫算好的金額與汽車費率，不寫比照（#140）', (tester) async {
       final spot = lot(
         fee: const Fee(
           scooter: Rate(FeeMode.hourly, amount: 10, perMinutes: 60),
@@ -310,11 +307,11 @@ void main() {
         ],
       );
       expect(spotFeeSummary(spot, VehicleType.heavy), '每小時 20 元');
-      await pumpAccess(tester, width, spot);
-      // The lot's rates, repeated beside the zone's vehicles.
-      expect(find.text('大型重機：每小時 20 元'), findsWidgets);
+      await pumpFees(tester, width, spot);
+      expect(find.text('每小時 10 元'), findsOneWidget);
+      expect(find.text('每小時 20 元'), findsOneWidget);
       // The lot's car rate is listed once, not again in every zone.
-      expect(find.text('汽車：每小時 40 元'), findsOneWidget);
+      expect(find.text('每小時 40 元'), findsOneWidget);
       expect(find.textContaining('比照'), findsNothing);
       expect(tester.takeException(), isNull);
     });

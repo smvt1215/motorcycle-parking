@@ -114,6 +114,14 @@ void usePhone(WidgetTester tester, {double width = 390}) {
   addTearDown(tester.view.resetDevicePixelRatio);
 }
 
+/// The summary row's rate as it reads, its icon dropped.
+String feeNowMain(WidgetTester tester) => tester
+    .widget<Text>(find.byKey(const ValueKey('fee-now-main')))
+    .textSpan!
+    .toPlainText()
+    .replaceAll('\uFFFC', '')
+    .trim();
+
 Future<void> showField(WidgetTester tester, String text) async {
   await tester.scrollUntilVisible(
     find.text(text),
@@ -486,7 +494,7 @@ void main() {
     // The banner keeps the unverified colour: a claim never reads as open.
     expect(find.byIcon(Icons.local_parking), findsNothing);
     expect(store.eligible(spot).status, EligibilityStatus.unverified);
-    await showField(tester, '已確認欄位');
+    await showField(tester, '確認狀態');
     expect(find.text('尚未確認'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -551,9 +559,11 @@ void main() {
         );
       }
       expect(tester.takeException(), isNull);
-      await showField(tester, '已確認欄位');
+      await showField(tester, '確認狀態');
       expect(
-        find.text('大型重機不可停：管理員確認，${formatSpotDate(expired)}，已超過 180 天'),
+        find.textContaining(
+          '停放車種（大型重機）・管理員確認，${formatSpotDate(expired)}，已超過 180 天',
+        ),
         findsOneWidget,
       );
       expect(tester.takeException(), isNull);
@@ -577,9 +587,10 @@ void main() {
     expect(find.text('管理員確認，${formatSpotDate(checked)}'), findsOneWidget);
     expect(find.text('請確認現場公告'), findsOneWidget);
     expect(find.byIcon(Icons.verified_user_outlined), findsOneWidget);
-    await showField(tester, '已確認欄位');
+    await showField(tester, '確認狀態');
+    // Decision 30: per kind, not per vehicle; only 停放車種 is recorded.
     expect(
-      find.text('普通機車可停：管理員確認，${formatSpotDate(checked)}'),
+      find.text('停放車種（普通機車）・管理員確認，${formatSpotDate(checked)}'),
       findsOneWidget,
     );
     expect(find.textContaining('核驗'), findsNothing);
@@ -598,6 +609,8 @@ void main() {
         'source': 'import',
         'scooter_allowed': true,
         'heavy_allowed': true,
+        // No zones: the lot's verified flags decide (§3.2 step 3).
+        'parking_zones': <Object>[],
         'status': 'confirmed',
         'last_confirmed_at': checked.toIso8601String(),
         'scooter_verified_at': checked.toIso8601String(),
@@ -726,24 +739,16 @@ void main() {
       ],
     });
     await openDetails(tester, store, spot);
-    expect(find.text('普通機車費率'), findsOneWidget);
+    // The summary says 機車費率 (decision 28), never a bare 費率.
+    expect(find.text('機車費率'), findsOneWidget);
     expect(find.text('費率'), findsNothing);
     expect(find.text('分區'), findsOneWidget);
-    expect(find.text('20 元／次'), findsOneWidget);
+    expect(feeNowMain(tester), '20 元／次');
     store.vehicle = VehicleType.heavy;
     store.notifyListeners();
     await tester.pumpAndSettle();
-    final summary = find
-        .ancestor(of: find.text('大型重機費率'), matching: find.byType(Column))
-        .first;
-    expect(
-      find.descendant(of: summary, matching: find.text('費率未確認')),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(of: summary, matching: find.text('20 元／次')),
-      findsNothing,
-    );
+    expect(find.text('大型重機費率'), findsOneWidget);
+    expect(feeNowMain(tester), endsWith('費率未確認，請依現場公告'));
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -764,13 +769,16 @@ void main() {
         ],
       });
       await openDetails(tester, store, spot);
-      expect(find.text('普通機車費率'), findsOneWidget);
+      expect(find.text('機車費率'), findsOneWidget);
       expect(find.text('依分區計費'), findsNothing);
-      await showField(tester, '全場費率');
-      expect(find.text('普通機車：每次 20 元（隔日是否另計未確認）'), findsOneWidget);
-      expect(find.text('大型重機：費率未確認'), findsOneWidget);
+      expect(feeNowMain(tester), '每次 20 元');
+      await showField(tester, '全場');
+      // The board repeats the rate with its rule.
+      expect(find.text('每次 20 元'), findsWidgets);
+      expect(find.textContaining('隔日是否另計未確認'), findsWidgets);
+      expect(find.textContaining('費率未確認'), findsOneWidget);
       expect(find.textContaining('舊 B'), findsNothing);
-      expect(find.text('收費說明'), findsNothing);
+      expect(find.byKey(const ValueKey('fee-extra-note')), findsNothing);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     });
@@ -817,10 +825,10 @@ void main() {
         ],
       });
       await openDetails(tester, store, spot);
-      expect(find.text('免費'), findsOneWidget);
+      expect(feeNowMain(tester), '免費');
       expect(find.text('依分區計費'), findsNothing);
       await showField(tester, '位置與指引');
-      expect(find.text('收費說明'), findsNothing);
+      expect(find.byKey(const ValueKey('fee-extra-note')), findsNothing);
       expect(find.text('0'), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
     });
@@ -890,5 +898,321 @@ void main() {
       ),
       '此處確實有停車點；可停放車種未經確認，請以入口公告為準。',
     );
+  });
+
+  group('C4 資格依據：逐區資格、試辦期限、缺口說明', () {
+    Map<String, Object?> trial(String ends) => {
+      'name': '機車區',
+      'access': 'scooterHeavy',
+      'condition': {
+        'bay': 'motorcycle',
+        'use': 'share',
+        'share': 'scooter_heavy',
+        'charge': 'toll',
+        'allow': {'scooter': true, 'heavy': true},
+        'basis': {
+          'source_url': 'https://example.test/pilot',
+          'effective_date': '2026-04-06',
+          'expires_on': ends,
+        },
+      },
+    };
+    ParkingSpot lot(List<Map<String, Object?>> zones) => ParkingSpot.fromJson({
+      ...facility().toJson(),
+      'name': '市府轉運站地下停車場',
+      'heavy_allowed': true,
+      'parking_zones': zones,
+    });
+    final trialLot = lot([
+      trial('2099-12-31'),
+      {'name': '汽車區', 'access': 'heavyCar'},
+    ]);
+    final endedLot = lot([
+      trial('2026-10-05'),
+      {'name': '汽車區', 'access': 'heavyCar'},
+    ]);
+    final partialLot = lot([
+      {'name': 'B1 機車區', 'access': 'scooterOnly'},
+      {'name': 'B2'},
+    ]);
+
+    Future<void> open(
+      WidgetTester tester,
+      ParkingSpot spot, {
+      double width = 390,
+      double scale = 1,
+      Brightness brightness = Brightness.light,
+    }) async {
+      usePhone(tester, width: width);
+      final store = (await tester.runAsync(createStore))!;
+      addTearDown(store.dispose);
+      await store.setVehicle(VehicleType.heavy);
+      await openDetails(
+        tester,
+        store,
+        spot,
+        scale: scale,
+        brightness: brightness,
+      );
+    }
+
+    void expectInside(WidgetTester tester, double width) {
+      final banner = tester.getRect(
+        find.byKey(const ValueKey('spot-decision')),
+      );
+      expect(banner.right, lessThanOrEqualTo(width));
+      for (final finder in [
+        find.byKey(const ValueKey('spot-decision-label')),
+        find.byKey(const ValueKey('spot-decision-notice-0')),
+        find.byKey(const ValueKey('spot-zone-0')),
+        find.byKey(const ValueKey('spot-zone-1')),
+      ]) {
+        if (finder.evaluate().isEmpty) continue;
+        expect(tester.getRect(finder).right, lessThanOrEqualTo(banner.right));
+      }
+      expect(tester.takeException(), isNull);
+    }
+
+    testWidgets('試辦分區：有條件並列出可停分區，日曆圖示寫出期限', (tester) async {
+      await open(tester, trialLot);
+      expect(decisionText(tester), '大型重機 · 有條件・機車區與汽車區可停');
+      expect(find.text('依政府公開資料，更新於 2026-10-12'), findsOneWidget);
+      expect(find.text('機車區試辦至 2099-12-31'), findsOneWidget);
+      expect(find.byIcon(Icons.calendar_today_outlined), findsOneWidget);
+      expect(find.text('機車區・有條件'), findsOneWidget);
+      expect(find.text('汽車區・可停'), findsOneWidget);
+      // The conclusion stays the banner's only bold line.
+      final bold = tester
+          .widgetList<Text>(
+            find.descendant(
+              of: find.byKey(const ValueKey('spot-decision')),
+              matching: find.byType(Text),
+            ),
+          )
+          .where((t) => (t.style?.fontWeight ?? FontWeight.w400).value >= 600);
+      expect(bold.map((t) => t.data), ['有條件・機車區與汽車區可停']);
+    });
+
+    testWidgets('試辦到期：文字＋日曆圖示，不只靠琥珀色；該區待確認', (tester) async {
+      await open(tester, endedLot);
+      expect(decisionText(tester), '大型重機 · 可停');
+      expect(find.text('機車區試辦已於 2026-10-05 到期，請看現場公告'), findsOneWidget);
+      expect(find.byIcon(Icons.event_busy_outlined), findsOneWidget);
+      expect(find.text('機車區・待確認'), findsOneWidget);
+    });
+
+    testWidgets('已知分區都不開放：待確認，說明分區不完整，依據行保留', (tester) async {
+      await open(tester, partialLot);
+      expect(decisionText(tester), '大型重機 · 開放資訊待確認');
+      expect(find.text('場站開放大型重機，但已知分區沒有標示可停區域，請依入口公告'), findsOneWidget);
+      expect(find.text('依政府公開資料，更新於 2026-10-12'), findsOneWidget);
+      expect(find.text('B1 機車區・不可停'), findsOneWidget);
+      expect(find.text('B2・待確認：此分區的開放資訊未確認'), findsOneWidget);
+    });
+
+    testWidgets('縣市規則過期：待確認並寫出到期日', (tester) async {
+      usePhone(tester);
+      final store = (await tester.runAsync(createStore))!;
+      addTearDown(store.dispose);
+      await store.setVehicle(VehicleType.heavy);
+      store.rules = [
+        CityRule.fromJson({
+          'city': '臺北市',
+          'vehicle': 'heavy',
+          'allowed_space_types': ['paidMotorcycle', 'heavyOnly', 'car'],
+          'conditional_space_types': ['offStreet'],
+          'fee_note': '請依現場收費公告',
+          'exceptions': '收費機車格開放',
+          'source_url': 'https://example.test',
+          'version': 1,
+          'effective_date': '2026-01-01',
+          'expires_on': '2026-03-01',
+        }),
+      ];
+      await openDetails(
+        tester,
+        store,
+        ParkingSpot.fromJson({
+          ...roadside.toJson(),
+          'space_type': 'paidMotorcycle',
+          'source': 'official',
+        }),
+      );
+      expect(decisionText(tester), '大型重機 · 待確認');
+      // The dated line says it; the explanation does not repeat it.
+      expect(find.text('此地區的規則已過期，請以現場標誌標線為準'), findsNothing);
+      expect(find.text('臺北市的規則已於 2026-03-01 到期，請看現場公告'), findsOneWidget);
+      expect(find.byIcon(Icons.event_busy_outlined), findsOneWidget);
+    });
+
+    testWidgets('場站未確認開放大型重機：分區不列成「可停」', (tester) async {
+      await open(
+        tester,
+        ParkingSpot.fromJson({
+          ...lot([
+            {'name': '重機區', 'access': 'heavyOnly'},
+          ]).toJson(),
+          'heavy_allowed': null,
+        }),
+      );
+      expect(decisionText(tester), '大型重機 · 開放資訊待確認');
+      expect(find.byKey(const ValueKey('spot-zone-0')), findsNothing);
+      expect(find.textContaining('重機區・可停'), findsNothing);
+    });
+
+    testWidgets('分區資料涵蓋全場而都不開放：資料不一致', (tester) async {
+      await open(
+        tester,
+        ParkingSpot.fromJson({
+          ...lot([
+            {'name': 'B1 機車區', 'access': 'scooterOnly'},
+          ]).toJson(),
+          'zones_complete': true,
+        }),
+      );
+      expect(decisionText(tester), '大型重機 · 開放資訊待確認');
+      expect(find.text('場站與分區資料不一致，請依入口公告'), findsOneWidget);
+      expect(find.text('B1 機車區・不可停'), findsOneWidget);
+    });
+
+    testWidgets('試辦尚未生效：寫出生效日，不寫成「試辦至」', (tester) async {
+      final pending = trial('2099-12-31');
+      ((pending['condition']! as Map)['basis'] as Map)['effective_date'] =
+          '2099-01-01';
+      await open(tester, lot([pending]));
+      expect(find.text('機車區試辦 2099-01-01 起生效，請看現場公告'), findsOneWidget);
+      expect(find.textContaining('試辦至'), findsNothing);
+      expect(find.byIcon(Icons.event_busy_outlined), findsOneWidget);
+      expect(find.text('機車區・待確認'), findsOneWidget);
+    });
+
+    Future<AppStore> openStreet(
+      WidgetTester tester,
+      List<CityRule> rules,
+      Map<String, Object?> extra,
+    ) async {
+      usePhone(tester);
+      final store = (await tester.runAsync(createStore))!;
+      addTearDown(store.dispose);
+      await store.setVehicle(VehicleType.heavy);
+      store.rules = rules;
+      await openDetails(
+        tester,
+        store,
+        ParkingSpot.fromJson({
+          ...roadside.toJson(),
+          'space_type': 'paidMotorcycle',
+          'source': 'official',
+          ...extra,
+        }),
+      );
+      return store;
+    }
+
+    Map<String, Object?> taipeiHeavy(List<String> allowed) => {
+      'city': '臺北市',
+      'vehicle': 'heavy',
+      'allowed_space_types': allowed,
+      'conditional_space_types': ['offStreet'],
+      'fee_note': '請依現場收費公告',
+      'exceptions': '測試',
+      'source_url': 'https://example.test',
+      'version': 1,
+      'effective_date': '2026-01-01',
+    };
+
+    testWidgets('兩份規則結論相反：公告不一致', (tester) async {
+      await openStreet(tester, [
+        CityRule.fromJson(taipeiHeavy(['paidMotorcycle', 'heavyOnly', 'car'])),
+        CityRule.fromJson(taipeiHeavy(['heavyOnly', 'car'])),
+      ], const {});
+      expect(decisionText(tester), '大型重機 · 待確認');
+      expect(find.text('公告不一致，請以現場公告為準'), findsOneWidget);
+    });
+
+    testWidgets('路邊公告到期：期限列寫到期，說明不重複同一句', (tester) async {
+      await openStreet(
+        tester,
+        [
+          CityRule.fromJson(taipeiHeavy(['heavyOnly'])),
+        ],
+        {
+          'condition': {
+            'bay': 'motorcycle',
+            'use': 'share',
+            'share': 'scooter_heavy',
+            'charge': 'toll',
+            'basis': {
+              'source_url': 'https://example.test/notice',
+              'effective_date': '2026-04-06',
+              'expires_on': '2026-10-05',
+            },
+          },
+        },
+      );
+      expect(find.text('公告已於 2026-10-05 到期，請看現場公告'), findsOneWidget);
+      expect(find.byIcon(Icons.event_busy_outlined), findsOneWidget);
+    });
+
+    testWidgets('橫幅結論與地圖標記（store.eligible）一致', (tester) async {
+      usePhone(tester);
+      final store = (await tester.runAsync(createStore))!;
+      addTearDown(store.dispose);
+      for (final vehicle in VehicleType.values) {
+        await store.setVehicle(vehicle);
+        for (final spot in [
+          trialLot,
+          endedLot,
+          partialLot,
+          facility(),
+          roadside,
+        ]) {
+          final e = store.eligible(spot);
+          final d = store.decide(spot).eligibility;
+          expect(
+            (d.status, d.reason, d.restriction),
+            (e.status, e.reason, e.restriction),
+            reason: '${spot.name} ${vehicle.name}',
+          );
+        }
+      }
+    });
+
+    for (final (width, scale, brightness) in [
+      (320.0, 1.6, Brightness.dark),
+      (390.0, 1.6, Brightness.light),
+      (390.0, 1.0, Brightness.dark),
+      (700.0, 1.6, Brightness.light),
+      (1280.0, 1.6, Brightness.dark),
+    ]) {
+      testWidgets('依據列與逐區資格不溢出（寬 $width、字級 $scale、$brightness）', (
+        tester,
+      ) async {
+        for (final spot in [trialLot, endedLot, partialLot]) {
+          await open(
+            tester,
+            spot,
+            width: width,
+            scale: scale,
+            brightness: brightness,
+          );
+          expectInside(tester, width);
+          // The sheet's actions keep their touch size.
+          for (final button
+              in find
+                  .descendant(
+                    of: find.byKey(const ValueKey('parking-spot-sheet')),
+                    matching: find.byWidgetPredicate(
+                      (w) => w is ButtonStyleButton,
+                    ),
+                  )
+                  .evaluate()) {
+            final size = (button.renderObject! as RenderBox).size;
+            expect(size.height, greaterThanOrEqualTo(48));
+          }
+          await tester.pumpWidget(const SizedBox.shrink());
+        }
+      });
+    }
   });
 }

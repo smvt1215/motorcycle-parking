@@ -1,4 +1,5 @@
 import '../../domain/eligibility.dart';
+import '../../domain/parking_decision.dart';
 import '../../models/parking.dart';
 
 /// Every place a rule can be written for: the national default and the 22
@@ -358,6 +359,7 @@ List<PreviewRow> preview(RuleDraft draft, DateTime date, String district) {
             city: draft.city == '全國' ? '臺北市' : draft.city,
             district: district == otherDistrict ? '（清單外）' : district,
             spaceType: type,
+            condition: typicalCondition(type),
             source: 'official',
           ),
           draft.vehicle,

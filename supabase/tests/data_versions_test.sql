@@ -34,7 +34,7 @@ select is(pg_temp.version_of('spots'),pg_temp.started_at('spots')+5,'an official
 select ok((select updated_at>now()-interval '1 minute' from data_versions where key='spots'),'spots updated_at follows the bump');
 
 -- Rules bump their own key only.
-update city_rules set fee_note=fee_note where vehicle='heavy';
+update city_rules_data set fee_note=fee_note where vehicle='heavy';
 select is(pg_temp.version_of('rules'),pg_temp.started_at('rules')+1,'a rules edit bumps rules');
 select is(pg_temp.version_of('spots'),pg_temp.started_at('spots')+5,'a rules edit leaves spots alone');
 

@@ -1,0 +1,4602 @@
+{
+  "comment": "§3.2 第 2 步 ruleVerdict() 的共同測試向量（CONTRIBUTION_TIERS_FEASIBILITY.md §5.7）。rules 以 id 引用：bundled:* 必須與 assets/rules/parking_rules.json 同一筆完全相同（test/parking_decision_test.dart 檢查），test:* 是補充案例。now 是時間點；生效日與 expires_on 一律以臺灣日期比較。Dart（lib/domain/parking_decision.dart）、Deno（_shared/rule_verdict.ts）與 SQL（rule_verdict()，由 tool/gen_contract_sql.py 產生 pgTAP）都跑這份。restriction 只有 signage／unverified／time_limited／ev_only，其他值（例如舊的 pilot_area）讀成 null。",
+  "rules": {
+    "bundled:全國/scooter": {
+      "city": "全國",
+      "vehicle": "scooter",
+      "allowed_space_types": [
+        "paidMotorcycle",
+        "freeMotorcycle"
+      ],
+      "conditional_space_types": [
+        "offStreet"
+      ],
+      "fee_note": "請依現場收費公告",
+      "exceptions": "請以現場標誌標線及場站規定為準；試辦路段須確認公告範圍。",
+      "effective_date": "2026-10-11",
+      "source_url": "https://tad.tycg.gov.tw/Law/Detail/bbc4c496-ca04-4f15-a3cf-a76600dcdb6f",
+      "version": 1,
+      "can_use_two_spaces": false,
+      "districts": []
+    },
+    "bundled:全國/heavy": {
+      "city": "全國",
+      "vehicle": "heavy",
+      "allowed_space_types": [
+        "heavyOnly",
+        "car"
+      ],
+      "conditional_space_types": [
+        "offStreet"
+      ],
+      "fee_note": "請依現場收費公告",
+      "exceptions": "請以現場標誌標線及場站規定為準；試辦路段須確認公告範圍。",
+      "effective_date": "2026-10-11",
+      "source_url": "https://tad.tycg.gov.tw/Law/Detail/bbc4c496-ca04-4f15-a3cf-a76600dcdb6f",
+      "version": 1,
+      "can_use_two_spaces": false,
+      "districts": []
+    },
+    "bundled:臺北市/scooter": {
+      "city": "臺北市",
+      "vehicle": "scooter",
+      "allowed_space_types": [
+        "paidMotorcycle",
+        "freeMotorcycle"
+      ],
+      "conditional_space_types": [
+        "offStreet"
+      ],
+      "fee_note": "請依現場收費公告",
+      "exceptions": "請以現場標誌標線及場站規定為準；試辦路段須確認公告範圍。",
+      "effective_date": "2026-10-11",
+      "source_url": "https://www.gov.taipei/News_Content.aspx?n=D0042A87C2F0270A&s=1190C312983454BA&sms=78D644F2755ACCAA",
+      "version": 1,
+      "can_use_two_spaces": false,
+      "districts": []
+    },
+    "bundled:臺北市/heavy": {
+      "city": "臺北市",
+      "vehicle": "heavy",
+      "allowed_space_types": [
+        "paidMotorcycle",
+        "heavyOnly",
+        "car"
+      ],
+      "conditional_space_types": [
+        "offStreet"
+      ],
+      "fee_note": "一般計次每次 40 元；一般計時每小時 20 元，當日上限 100 元；特殊路段另依公告。",
+      "exceptions": "僅公有路邊收費機車格；免費巷弄格不適用。可斜停兩格，勿阻礙通行。",
+      "effective_date": "2026-10-06",
+      "source_url": "https://www.gov.taipei/News_Content.aspx?n=D0042A87C2F0270A&s=1190C312983454BA&sms=78D644F2755ACCAA",
+      "version": 1,
+      "can_use_two_spaces": true,
+      "districts": []
+    },
+    "bundled:新北市/scooter": {
+      "city": "新北市",
+      "vehicle": "scooter",
+      "allowed_space_types": [
+        "paidMotorcycle",
+        "freeMotorcycle"
+      ],
+      "conditional_space_types": [
+        "offStreet"
+      ],
+      "fee_note": "請依現場收費公告",
+      "exceptions": "請以現場標誌標線及場站規定為準；試辦路段須確認公告範圍。",
+      "effective_date": "2026-10-11",
+      "source_url": "https://www.traffic.ntpc.gov.tw/home.jsp?act=be4f48068b2b0031&dataserno=99345bcf365b8f6ed7a6315705335638&id=54fa46e9e522dde4&mserno=39e5192ff77897e0ae099c1886ca9b09",
+      "version": 1,
+      "can_use_two_spaces": false,
+      "districts": []
+    },
+    "bundled:新北市/heavy": {
+      "city": "新北市",
+      "vehicle": "heavy",
+      "allowed_space_types": [
+        "heavyOnly",
+        "car",
+        "paidMotorcycle"
+      ],
+      "conditional_space_types": [
+        "offStreet"
+      ],
+      "fee_note": "收費機車格比照大型重機專用格，計次每 4 小時 30 元",
+      "exceptions": "2026/7/1 起全市路邊收費機車格開放大型重機。免費機車格僅板橋區、新店區（原試辦區）開放，其他行政區不開放。車身不得超出格線，車身較長可跨 2 格停放。",
+      "effective_date": "2026-07-01",
+      "source_url": "https://www.traffic.ntpc.gov.tw/home.jsp?act=be4f48068b2b0031&dataserno=99345bcf365b8f6ed7a6315705335638&id=54fa46e9e522dde4",
+      "version": 2,
+      "can_use_two_spaces": true,
+      "districts": [],
+      "district_space_types": {
+        "freeMotorcycle": [
+          "板橋區",
+          "新店區"
+        ]
+      }
+    },
+    "bundled:桃園市/scooter": {
+      "city": "桃園市",
+      "vehicle": "scooter",
+      "allowed_space_types": [
+        "paidMotorcycle",
+        "freeMotorcycle"
+      ],
+      "conditional_space_types": [
+        "offStreet"
+      ],
+      "fee_note": "請依現場收費公告",
+      "exceptions": "請以現場標誌標線及場站規定為準；試辦路段須確認公告範圍。",
+      "effective_date": "2026-10-11",
+      "source_url": "https://www.tycg.gov.tw/NewsPage_Content.aspx?n=7&s=1612945&sms=7882",
+      "version": 1,
+      "can_use_two_spaces": false,
+      "districts": []
+    },
+    "bundled:桃園市/heavy": {
+      "city": "桃園市",
+      "vehicle": "heavy",
+      "allowed_space_types": [
+        "heavyOnly",
+        "car",
+        "paidMotorcycle",
+        "freeMotorcycle"
+      ],
+      "conditional_space_types": [
+        "offStreet"
+      ],
+      "fee_note": "比照普通機車，依各路段費率與時段",
+      "exceptions": "2026/4/1 起試辦全市路邊機車格（收費與不收費）開放大型重機。以一車一格為原則，車身較長可斜停最多 2 格，車體須完全位於格線內。",
+      "effective_date": "2026-04-01",
+      "source_url": "https://www.tycg.gov.tw/NewsPage_Content.aspx?n=7&s=1612945&sms=7882",
+      "version": 2,
+      "can_use_two_spaces": true,
+      "districts": []
+    },
+    "bundled:臺中市/scooter": {
+      "city": "臺中市",
+      "vehicle": "scooter",
+      "allowed_space_types": [
+        "paidMotorcycle",
+        "freeMotorcycle"
+      ],
+      "conditional_space_types": [
+        "offStreet"
+      ],
+      "fee_note": "請依現場收費公告",
+      "exceptions": "請以現場標誌標線及場站規定為準；試辦路段須確認公告範圍。",
+      "effective_date": "2026-10-11",
+      "source_url": "https://tcparking.taichung.gov.tw/ParkWebStage/Pages/PublicService/Heavybike",
+      "version": 1,
+      "can_use_two_spaces": false,
+      "districts": []
+    },
+    "bundled:臺中市/heavy": {
+      "city": "臺中市",
+      "vehicle": "heavy",
+      "allowed_space_types": [
+        "heavyOnly",
+        "car"
+      ],
+      "conditional_space_types": [
+        "offStreet",
+        "paidMotorcycle",
+        "freeMotorcycle"
+      ],
+      "fee_note": "比照一般機車費率，依區域與路段計收",
+      "exceptions": "2026/5/1 起於逢甲、勤美、文心秀泰及台中火車站周邊試辦，僅限地面標示「大重機共用」的路邊機車格與機慢車停放區。須依格線停放、不得出線；車身過大請改停汽車格。",
+      "effective_date": "2026-05-01",
+      "source_url": "https://www.traffic.taichung.gov.tw/news/index-1.asp?Parser=9%2C4%2C20%2C%2C%2C%2C21267",
+      "version": 2,
+      "can_use_two_spaces": false,
+      "districts": [],
+      "restriction": "signage"
+    },
+    "bundled:高雄市/scooter": {
+      "city": "高雄市",
+      "vehicle": "scooter",
+      "allowed_space_types": [
+        "paidMotorcycle",
+        "freeMotorcycle"
+      ],
+      "conditional_space_types": [
+        "offStreet"
+      ],
+      "fee_note": "請依現場收費公告",
+      "exceptions": "請以現場標誌標線及場站規定為準；試辦路段須確認公告範圍。",
+      "effective_date": "2026-10-11",
+      "source_url": "https://www.tbkc.gov.tw/Service/ParkingAndTowing",
+      "version": 1,
+      "can_use_two_spaces": false,
+      "districts": []
+    },
+    "bundled:高雄市/heavy": {
+      "city": "高雄市",
+      "vehicle": "heavy",
+      "allowed_space_types": [
+        "heavyOnly",
+        "car"
+      ],
+      "conditional_space_types": [
+        "offStreet"
+      ],
+      "fee_note": "請依現場收費公告",
+      "exceptions": "路邊機車格未開放大型重機，請停汽車格或重機專用格。2026/8/1 起僅於 5 處捷運周邊公有停車場試辦停放普通機車格，請依場站公告。",
+      "effective_date": "2026-08-01",
+      "source_url": "https://www.facebook.com/tbkcdream/posts/1370509398601080/",
+      "version": 2,
+      "can_use_two_spaces": false,
+      "districts": []
+    },
+    "test:1": {
+      "city": "測試市",
+      "vehicle": "heavy",
+      "allowed_space_types": [
+        "heavyOnly",
+        "car",
+        "paidMotorcycle"
+      ],
+      "conditional_space_types": [
+        "offStreet"
+      ],
+      "districts": [],
+      "district_space_types": {},
+      "fee_note": "x",
+      "exceptions": "測試規則",
+      "source_url": "https://example.test",
+      "version": 1,
+      "effective_date": "2026-04-06",
+      "can_use_two_spaces": false,
+      "restriction": null,
+      "expires_on": "2026-10-06"
+    },
+    "test:2": {
+      "city": "測試市",
+      "vehicle": "heavy",
+      "allowed_space_types": [
+        "heavyOnly",
+        "car",
+        "paidMotorcycle"
+      ],
+      "conditional_space_types": [
+        "offStreet"
+      ],
+      "districts": [],
+      "district_space_types": {},
+      "fee_note": "x",
+      "exceptions": "測試規則",
+      "source_url": "https://example.test",
+      "version": 1,
+      "effective_date": "2026-11-01",
+      "can_use_two_spaces": false,
+      "restriction": null
+    },
+    "test:3": {
+      "city": "測試市",
+      "vehicle": "heavy",
+      "allowed_space_types": [
+        "heavyOnly",
+        "car"
+      ],
+      "conditional_space_types": [
+        "offStreet"
+      ],
+      "districts": [],
+      "district_space_types": {},
+      "fee_note": "x",
+      "exceptions": "測試規則",
+      "source_url": "https://example.test",
+      "version": 1,
+      "effective_date": "2026-04-06",
+      "can_use_two_spaces": false,
+      "restriction": null
+    },
+    "test:4": {
+      "city": "測試市",
+      "vehicle": "heavy",
+      "allowed_space_types": [
+        "heavyOnly",
+        "car",
+        "paidMotorcycle"
+      ],
+      "conditional_space_types": [
+        "offStreet"
+      ],
+      "districts": [],
+      "district_space_types": {},
+      "fee_note": "x",
+      "exceptions": "測試規則",
+      "source_url": "https://example.test",
+      "version": 1,
+      "effective_date": "2026-04-06",
+      "can_use_two_spaces": false,
+      "restriction": null
+    },
+    "test:5": {
+      "city": "測試市",
+      "vehicle": "heavy",
+      "allowed_space_types": [
+        "heavyOnly",
+        "car",
+        "paidMotorcycle"
+      ],
+      "conditional_space_types": [
+        "offStreet"
+      ],
+      "districts": [],
+      "district_space_types": {},
+      "fee_note": "x",
+      "exceptions": "另一份",
+      "source_url": "https://example.test",
+      "version": 1,
+      "effective_date": "2026-04-06",
+      "can_use_two_spaces": false,
+      "restriction": null
+    },
+    "test:6": {
+      "city": "測試市",
+      "vehicle": "heavy",
+      "allowed_space_types": [
+        "heavyOnly",
+        "car",
+        "paidMotorcycle"
+      ],
+      "conditional_space_types": [
+        "offStreet"
+      ],
+      "districts": [
+        "信義區"
+      ],
+      "district_space_types": {},
+      "fee_note": "x",
+      "exceptions": "測試規則",
+      "source_url": "https://example.test",
+      "version": 1,
+      "effective_date": "2026-04-06",
+      "can_use_two_spaces": false,
+      "restriction": null
+    },
+    "test:7": {
+      "city": "測試市",
+      "vehicle": "heavy",
+      "allowed_space_types": [
+        "heavyOnly",
+        "car"
+      ],
+      "conditional_space_types": [
+        "offStreet",
+        "paidMotorcycle"
+      ],
+      "districts": [],
+      "district_space_types": {},
+      "fee_note": "x",
+      "exceptions": "測試規則",
+      "source_url": "https://example.test",
+      "version": 1,
+      "effective_date": "2026-04-06",
+      "can_use_two_spaces": false,
+      "restriction": "unverified"
+    },
+    "test:8": {
+      "city": "測試市",
+      "vehicle": "heavy",
+      "allowed_space_types": [
+        "heavyOnly",
+        "car"
+      ],
+      "conditional_space_types": [
+        "offStreet",
+        "paidMotorcycle"
+      ],
+      "districts": [],
+      "district_space_types": {},
+      "fee_note": "x",
+      "exceptions": "測試規則",
+      "source_url": "https://example.test",
+      "version": 1,
+      "effective_date": "2026-04-06",
+      "can_use_two_spaces": false,
+      "restriction": "pilot_area"
+    },
+    "test:9": {
+      "city": "測試市",
+      "vehicle": "heavy",
+      "allowed_space_types": [
+        "heavyOnly",
+        "car"
+      ],
+      "conditional_space_types": [
+        "offStreet",
+        "paidMotorcycle"
+      ],
+      "districts": [],
+      "district_space_types": {},
+      "fee_note": "x",
+      "exceptions": "測試規則",
+      "source_url": "https://example.test",
+      "version": 1,
+      "effective_date": "2026-04-06",
+      "can_use_two_spaces": false,
+      "restriction": "signage"
+    },
+    "test:10": {
+      "city": "測試市",
+      "vehicle": "heavy",
+      "allowed_space_types": [
+        "heavyOnly",
+        "car",
+        "paidMotorcycle"
+      ],
+      "conditional_space_types": [
+        "offStreet"
+      ],
+      "districts": [
+        "中和區"
+      ],
+      "district_space_types": {
+        "freeMotorcycle": [
+          "板橋區"
+        ]
+      },
+      "fee_note": "x",
+      "exceptions": "測試規則",
+      "source_url": "https://example.test",
+      "version": 1,
+      "effective_date": "2026-04-06",
+      "can_use_two_spaces": false,
+      "restriction": null
+    }
+  },
+  "cases": [
+    {
+      "name": "全國 scooter paidMotorcycle 「」 2026-10-01",
+      "rules": [
+        "bundled:全國/scooter"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "全國 scooter paidMotorcycle 「」 2026-10-27",
+      "rules": [
+        "bundled:全國/scooter"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "全國 scooter paidMotorcycle 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:全國/scooter"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "全國 scooter paidMotorcycle 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:全國/scooter"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "全國 scooter paidMotorcycle 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:全國/scooter"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "全國 scooter paidMotorcycle 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:全國/scooter"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "全國 scooter freeMotorcycle 「」 2026-10-01",
+      "rules": [
+        "bundled:全國/scooter"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "全國 scooter freeMotorcycle 「」 2026-10-27",
+      "rules": [
+        "bundled:全國/scooter"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "全國 scooter freeMotorcycle 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:全國/scooter"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "全國 scooter freeMotorcycle 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:全國/scooter"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "全國 scooter freeMotorcycle 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:全國/scooter"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "全國 scooter freeMotorcycle 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:全國/scooter"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "全國 scooter heavyOnly 「」 2026-10-01",
+      "rules": [
+        "bundled:全國/scooter"
+      ],
+      "kind": "heavyOnly",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "全國 scooter heavyOnly 「」 2026-10-27",
+      "rules": [
+        "bundled:全國/scooter"
+      ],
+      "kind": "heavyOnly",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "全國 scooter heavyOnly 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:全國/scooter"
+      ],
+      "kind": "heavyOnly",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "全國 scooter heavyOnly 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:全國/scooter"
+      ],
+      "kind": "heavyOnly",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "全國 scooter heavyOnly 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:全國/scooter"
+      ],
+      "kind": "heavyOnly",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "全國 scooter heavyOnly 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:全國/scooter"
+      ],
+      "kind": "heavyOnly",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "全國 scooter car 「」 2026-10-01",
+      "rules": [
+        "bundled:全國/scooter"
+      ],
+      "kind": "car",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "全國 scooter car 「」 2026-10-27",
+      "rules": [
+        "bundled:全國/scooter"
+      ],
+      "kind": "car",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "全國 scooter car 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:全國/scooter"
+      ],
+      "kind": "car",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "全國 scooter car 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:全國/scooter"
+      ],
+      "kind": "car",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "全國 scooter car 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:全國/scooter"
+      ],
+      "kind": "car",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "全國 scooter car 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:全國/scooter"
+      ],
+      "kind": "car",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "全國 scooter offStreet 「」 2026-10-01",
+      "rules": [
+        "bundled:全國/scooter"
+      ],
+      "kind": "offStreet",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "全國 scooter offStreet 「」 2026-10-27",
+      "rules": [
+        "bundled:全國/scooter"
+      ],
+      "kind": "offStreet",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "全國 scooter offStreet 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:全國/scooter"
+      ],
+      "kind": "offStreet",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "全國 scooter offStreet 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:全國/scooter"
+      ],
+      "kind": "offStreet",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "全國 scooter offStreet 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:全國/scooter"
+      ],
+      "kind": "offStreet",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "全國 scooter offStreet 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:全國/scooter"
+      ],
+      "kind": "offStreet",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "全國 heavy paidMotorcycle 「」 2026-10-01",
+      "rules": [
+        "bundled:全國/heavy"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "全國 heavy paidMotorcycle 「」 2026-10-27",
+      "rules": [
+        "bundled:全國/heavy"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "全國 heavy paidMotorcycle 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:全國/heavy"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "全國 heavy paidMotorcycle 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:全國/heavy"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "全國 heavy paidMotorcycle 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:全國/heavy"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "全國 heavy paidMotorcycle 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:全國/heavy"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "全國 heavy freeMotorcycle 「」 2026-10-01",
+      "rules": [
+        "bundled:全國/heavy"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "全國 heavy freeMotorcycle 「」 2026-10-27",
+      "rules": [
+        "bundled:全國/heavy"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "全國 heavy freeMotorcycle 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:全國/heavy"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "全國 heavy freeMotorcycle 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:全國/heavy"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "全國 heavy freeMotorcycle 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:全國/heavy"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "全國 heavy freeMotorcycle 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:全國/heavy"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "全國 heavy heavyOnly 「」 2026-10-01",
+      "rules": [
+        "bundled:全國/heavy"
+      ],
+      "kind": "heavyOnly",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "全國 heavy heavyOnly 「」 2026-10-27",
+      "rules": [
+        "bundled:全國/heavy"
+      ],
+      "kind": "heavyOnly",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "全國 heavy heavyOnly 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:全國/heavy"
+      ],
+      "kind": "heavyOnly",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "全國 heavy heavyOnly 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:全國/heavy"
+      ],
+      "kind": "heavyOnly",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "全國 heavy heavyOnly 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:全國/heavy"
+      ],
+      "kind": "heavyOnly",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "全國 heavy heavyOnly 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:全國/heavy"
+      ],
+      "kind": "heavyOnly",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "全國 heavy car 「」 2026-10-01",
+      "rules": [
+        "bundled:全國/heavy"
+      ],
+      "kind": "car",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "全國 heavy car 「」 2026-10-27",
+      "rules": [
+        "bundled:全國/heavy"
+      ],
+      "kind": "car",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "全國 heavy car 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:全國/heavy"
+      ],
+      "kind": "car",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "全國 heavy car 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:全國/heavy"
+      ],
+      "kind": "car",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "全國 heavy car 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:全國/heavy"
+      ],
+      "kind": "car",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "全國 heavy car 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:全國/heavy"
+      ],
+      "kind": "car",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "全國 heavy offStreet 「」 2026-10-01",
+      "rules": [
+        "bundled:全國/heavy"
+      ],
+      "kind": "offStreet",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "全國 heavy offStreet 「」 2026-10-27",
+      "rules": [
+        "bundled:全國/heavy"
+      ],
+      "kind": "offStreet",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "全國 heavy offStreet 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:全國/heavy"
+      ],
+      "kind": "offStreet",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "全國 heavy offStreet 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:全國/heavy"
+      ],
+      "kind": "offStreet",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "全國 heavy offStreet 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:全國/heavy"
+      ],
+      "kind": "offStreet",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "全國 heavy offStreet 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:全國/heavy"
+      ],
+      "kind": "offStreet",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 scooter paidMotorcycle 「」 2026-10-01",
+      "rules": [
+        "bundled:臺北市/scooter"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 scooter paidMotorcycle 「」 2026-10-27",
+      "rules": [
+        "bundled:臺北市/scooter"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 scooter paidMotorcycle 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:臺北市/scooter"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 scooter paidMotorcycle 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:臺北市/scooter"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 scooter paidMotorcycle 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:臺北市/scooter"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 scooter paidMotorcycle 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:臺北市/scooter"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 scooter freeMotorcycle 「」 2026-10-01",
+      "rules": [
+        "bundled:臺北市/scooter"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 scooter freeMotorcycle 「」 2026-10-27",
+      "rules": [
+        "bundled:臺北市/scooter"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 scooter freeMotorcycle 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:臺北市/scooter"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 scooter freeMotorcycle 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:臺北市/scooter"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 scooter freeMotorcycle 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:臺北市/scooter"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 scooter freeMotorcycle 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:臺北市/scooter"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 scooter heavyOnly 「」 2026-10-01",
+      "rules": [
+        "bundled:臺北市/scooter"
+      ],
+      "kind": "heavyOnly",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 scooter heavyOnly 「」 2026-10-27",
+      "rules": [
+        "bundled:臺北市/scooter"
+      ],
+      "kind": "heavyOnly",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 scooter heavyOnly 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:臺北市/scooter"
+      ],
+      "kind": "heavyOnly",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 scooter heavyOnly 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:臺北市/scooter"
+      ],
+      "kind": "heavyOnly",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 scooter heavyOnly 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:臺北市/scooter"
+      ],
+      "kind": "heavyOnly",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 scooter heavyOnly 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:臺北市/scooter"
+      ],
+      "kind": "heavyOnly",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 scooter car 「」 2026-10-01",
+      "rules": [
+        "bundled:臺北市/scooter"
+      ],
+      "kind": "car",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 scooter car 「」 2026-10-27",
+      "rules": [
+        "bundled:臺北市/scooter"
+      ],
+      "kind": "car",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 scooter car 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:臺北市/scooter"
+      ],
+      "kind": "car",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 scooter car 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:臺北市/scooter"
+      ],
+      "kind": "car",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 scooter car 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:臺北市/scooter"
+      ],
+      "kind": "car",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 scooter car 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:臺北市/scooter"
+      ],
+      "kind": "car",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 scooter offStreet 「」 2026-10-01",
+      "rules": [
+        "bundled:臺北市/scooter"
+      ],
+      "kind": "offStreet",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 scooter offStreet 「」 2026-10-27",
+      "rules": [
+        "bundled:臺北市/scooter"
+      ],
+      "kind": "offStreet",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 scooter offStreet 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:臺北市/scooter"
+      ],
+      "kind": "offStreet",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 scooter offStreet 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:臺北市/scooter"
+      ],
+      "kind": "offStreet",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 scooter offStreet 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:臺北市/scooter"
+      ],
+      "kind": "offStreet",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 scooter offStreet 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:臺北市/scooter"
+      ],
+      "kind": "offStreet",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 heavy paidMotorcycle 「」 2026-10-01",
+      "rules": [
+        "bundled:臺北市/heavy"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 heavy paidMotorcycle 「」 2026-10-27",
+      "rules": [
+        "bundled:臺北市/heavy"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 heavy paidMotorcycle 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:臺北市/heavy"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 heavy paidMotorcycle 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:臺北市/heavy"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 heavy paidMotorcycle 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:臺北市/heavy"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 heavy paidMotorcycle 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:臺北市/heavy"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 heavy freeMotorcycle 「」 2026-10-01",
+      "rules": [
+        "bundled:臺北市/heavy"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 heavy freeMotorcycle 「」 2026-10-27",
+      "rules": [
+        "bundled:臺北市/heavy"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 heavy freeMotorcycle 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:臺北市/heavy"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 heavy freeMotorcycle 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:臺北市/heavy"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 heavy freeMotorcycle 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:臺北市/heavy"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 heavy freeMotorcycle 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:臺北市/heavy"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 heavy heavyOnly 「」 2026-10-01",
+      "rules": [
+        "bundled:臺北市/heavy"
+      ],
+      "kind": "heavyOnly",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 heavy heavyOnly 「」 2026-10-27",
+      "rules": [
+        "bundled:臺北市/heavy"
+      ],
+      "kind": "heavyOnly",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 heavy heavyOnly 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:臺北市/heavy"
+      ],
+      "kind": "heavyOnly",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 heavy heavyOnly 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:臺北市/heavy"
+      ],
+      "kind": "heavyOnly",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 heavy heavyOnly 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:臺北市/heavy"
+      ],
+      "kind": "heavyOnly",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 heavy heavyOnly 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:臺北市/heavy"
+      ],
+      "kind": "heavyOnly",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 heavy car 「」 2026-10-01",
+      "rules": [
+        "bundled:臺北市/heavy"
+      ],
+      "kind": "car",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 heavy car 「」 2026-10-27",
+      "rules": [
+        "bundled:臺北市/heavy"
+      ],
+      "kind": "car",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 heavy car 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:臺北市/heavy"
+      ],
+      "kind": "car",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 heavy car 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:臺北市/heavy"
+      ],
+      "kind": "car",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 heavy car 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:臺北市/heavy"
+      ],
+      "kind": "car",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 heavy car 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:臺北市/heavy"
+      ],
+      "kind": "car",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 heavy offStreet 「」 2026-10-01",
+      "rules": [
+        "bundled:臺北市/heavy"
+      ],
+      "kind": "offStreet",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 heavy offStreet 「」 2026-10-27",
+      "rules": [
+        "bundled:臺北市/heavy"
+      ],
+      "kind": "offStreet",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 heavy offStreet 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:臺北市/heavy"
+      ],
+      "kind": "offStreet",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 heavy offStreet 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:臺北市/heavy"
+      ],
+      "kind": "offStreet",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 heavy offStreet 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:臺北市/heavy"
+      ],
+      "kind": "offStreet",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺北市 heavy offStreet 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:臺北市/heavy"
+      ],
+      "kind": "offStreet",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "新北市 scooter paidMotorcycle 「」 2026-10-01",
+      "rules": [
+        "bundled:新北市/scooter"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "新北市 scooter paidMotorcycle 「」 2026-10-27",
+      "rules": [
+        "bundled:新北市/scooter"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "新北市 scooter paidMotorcycle 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:新北市/scooter"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "新北市 scooter paidMotorcycle 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:新北市/scooter"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "新北市 scooter paidMotorcycle 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:新北市/scooter"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "新北市 scooter paidMotorcycle 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:新北市/scooter"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "新北市 scooter freeMotorcycle 「」 2026-10-01",
+      "rules": [
+        "bundled:新北市/scooter"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "新北市 scooter freeMotorcycle 「」 2026-10-27",
+      "rules": [
+        "bundled:新北市/scooter"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "新北市 scooter freeMotorcycle 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:新北市/scooter"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "新北市 scooter freeMotorcycle 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:新北市/scooter"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "新北市 scooter freeMotorcycle 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:新北市/scooter"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "新北市 scooter freeMotorcycle 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:新北市/scooter"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "新北市 scooter heavyOnly 「」 2026-10-01",
+      "rules": [
+        "bundled:新北市/scooter"
+      ],
+      "kind": "heavyOnly",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "新北市 scooter heavyOnly 「」 2026-10-27",
+      "rules": [
+        "bundled:新北市/scooter"
+      ],
+      "kind": "heavyOnly",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "新北市 scooter heavyOnly 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:新北市/scooter"
+      ],
+      "kind": "heavyOnly",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "新北市 scooter heavyOnly 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:新北市/scooter"
+      ],
+      "kind": "heavyOnly",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "新北市 scooter heavyOnly 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:新北市/scooter"
+      ],
+      "kind": "heavyOnly",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "新北市 scooter heavyOnly 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:新北市/scooter"
+      ],
+      "kind": "heavyOnly",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "新北市 scooter car 「」 2026-10-01",
+      "rules": [
+        "bundled:新北市/scooter"
+      ],
+      "kind": "car",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "新北市 scooter car 「」 2026-10-27",
+      "rules": [
+        "bundled:新北市/scooter"
+      ],
+      "kind": "car",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "新北市 scooter car 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:新北市/scooter"
+      ],
+      "kind": "car",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "新北市 scooter car 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:新北市/scooter"
+      ],
+      "kind": "car",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "新北市 scooter car 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:新北市/scooter"
+      ],
+      "kind": "car",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "新北市 scooter car 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:新北市/scooter"
+      ],
+      "kind": "car",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "新北市 scooter offStreet 「」 2026-10-01",
+      "rules": [
+        "bundled:新北市/scooter"
+      ],
+      "kind": "offStreet",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "新北市 scooter offStreet 「」 2026-10-27",
+      "rules": [
+        "bundled:新北市/scooter"
+      ],
+      "kind": "offStreet",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "新北市 scooter offStreet 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:新北市/scooter"
+      ],
+      "kind": "offStreet",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "新北市 scooter offStreet 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:新北市/scooter"
+      ],
+      "kind": "offStreet",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "新北市 scooter offStreet 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:新北市/scooter"
+      ],
+      "kind": "offStreet",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "新北市 scooter offStreet 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:新北市/scooter"
+      ],
+      "kind": "offStreet",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "新北市 heavy paidMotorcycle 「」 2026-10-01",
+      "rules": [
+        "bundled:新北市/heavy"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "新北市 heavy paidMotorcycle 「」 2026-10-27",
+      "rules": [
+        "bundled:新北市/heavy"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "新北市 heavy paidMotorcycle 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:新北市/heavy"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "新北市 heavy paidMotorcycle 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:新北市/heavy"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "新北市 heavy paidMotorcycle 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:新北市/heavy"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "新北市 heavy paidMotorcycle 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:新北市/heavy"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "新北市 heavy freeMotorcycle 「」 2026-10-01",
+      "rules": [
+        "bundled:新北市/heavy"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "unknownDistrict",
+      "restriction": null
+    },
+    {
+      "name": "新北市 heavy freeMotorcycle 「」 2026-10-27",
+      "rules": [
+        "bundled:新北市/heavy"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "unknownDistrict",
+      "restriction": null
+    },
+    {
+      "name": "新北市 heavy freeMotorcycle 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:新北市/heavy"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "新北市 heavy freeMotorcycle 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:新北市/heavy"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "新北市 heavy freeMotorcycle 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:新北市/heavy"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "新北市 heavy freeMotorcycle 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:新北市/heavy"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "新北市 heavy heavyOnly 「」 2026-10-01",
+      "rules": [
+        "bundled:新北市/heavy"
+      ],
+      "kind": "heavyOnly",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "新北市 heavy heavyOnly 「」 2026-10-27",
+      "rules": [
+        "bundled:新北市/heavy"
+      ],
+      "kind": "heavyOnly",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "新北市 heavy heavyOnly 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:新北市/heavy"
+      ],
+      "kind": "heavyOnly",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "新北市 heavy heavyOnly 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:新北市/heavy"
+      ],
+      "kind": "heavyOnly",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "新北市 heavy heavyOnly 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:新北市/heavy"
+      ],
+      "kind": "heavyOnly",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "新北市 heavy heavyOnly 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:新北市/heavy"
+      ],
+      "kind": "heavyOnly",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "新北市 heavy car 「」 2026-10-01",
+      "rules": [
+        "bundled:新北市/heavy"
+      ],
+      "kind": "car",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "新北市 heavy car 「」 2026-10-27",
+      "rules": [
+        "bundled:新北市/heavy"
+      ],
+      "kind": "car",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "新北市 heavy car 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:新北市/heavy"
+      ],
+      "kind": "car",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "新北市 heavy car 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:新北市/heavy"
+      ],
+      "kind": "car",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "新北市 heavy car 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:新北市/heavy"
+      ],
+      "kind": "car",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "新北市 heavy car 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:新北市/heavy"
+      ],
+      "kind": "car",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "新北市 heavy offStreet 「」 2026-10-01",
+      "rules": [
+        "bundled:新北市/heavy"
+      ],
+      "kind": "offStreet",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "新北市 heavy offStreet 「」 2026-10-27",
+      "rules": [
+        "bundled:新北市/heavy"
+      ],
+      "kind": "offStreet",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "新北市 heavy offStreet 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:新北市/heavy"
+      ],
+      "kind": "offStreet",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "新北市 heavy offStreet 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:新北市/heavy"
+      ],
+      "kind": "offStreet",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "新北市 heavy offStreet 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:新北市/heavy"
+      ],
+      "kind": "offStreet",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "新北市 heavy offStreet 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:新北市/heavy"
+      ],
+      "kind": "offStreet",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 scooter paidMotorcycle 「」 2026-10-01",
+      "rules": [
+        "bundled:桃園市/scooter"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 scooter paidMotorcycle 「」 2026-10-27",
+      "rules": [
+        "bundled:桃園市/scooter"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 scooter paidMotorcycle 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:桃園市/scooter"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 scooter paidMotorcycle 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:桃園市/scooter"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 scooter paidMotorcycle 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:桃園市/scooter"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 scooter paidMotorcycle 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:桃園市/scooter"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 scooter freeMotorcycle 「」 2026-10-01",
+      "rules": [
+        "bundled:桃園市/scooter"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 scooter freeMotorcycle 「」 2026-10-27",
+      "rules": [
+        "bundled:桃園市/scooter"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 scooter freeMotorcycle 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:桃園市/scooter"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 scooter freeMotorcycle 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:桃園市/scooter"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 scooter freeMotorcycle 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:桃園市/scooter"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 scooter freeMotorcycle 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:桃園市/scooter"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 scooter heavyOnly 「」 2026-10-01",
+      "rules": [
+        "bundled:桃園市/scooter"
+      ],
+      "kind": "heavyOnly",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 scooter heavyOnly 「」 2026-10-27",
+      "rules": [
+        "bundled:桃園市/scooter"
+      ],
+      "kind": "heavyOnly",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 scooter heavyOnly 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:桃園市/scooter"
+      ],
+      "kind": "heavyOnly",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 scooter heavyOnly 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:桃園市/scooter"
+      ],
+      "kind": "heavyOnly",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 scooter heavyOnly 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:桃園市/scooter"
+      ],
+      "kind": "heavyOnly",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 scooter heavyOnly 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:桃園市/scooter"
+      ],
+      "kind": "heavyOnly",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 scooter car 「」 2026-10-01",
+      "rules": [
+        "bundled:桃園市/scooter"
+      ],
+      "kind": "car",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 scooter car 「」 2026-10-27",
+      "rules": [
+        "bundled:桃園市/scooter"
+      ],
+      "kind": "car",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 scooter car 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:桃園市/scooter"
+      ],
+      "kind": "car",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 scooter car 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:桃園市/scooter"
+      ],
+      "kind": "car",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 scooter car 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:桃園市/scooter"
+      ],
+      "kind": "car",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 scooter car 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:桃園市/scooter"
+      ],
+      "kind": "car",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 scooter offStreet 「」 2026-10-01",
+      "rules": [
+        "bundled:桃園市/scooter"
+      ],
+      "kind": "offStreet",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 scooter offStreet 「」 2026-10-27",
+      "rules": [
+        "bundled:桃園市/scooter"
+      ],
+      "kind": "offStreet",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 scooter offStreet 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:桃園市/scooter"
+      ],
+      "kind": "offStreet",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 scooter offStreet 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:桃園市/scooter"
+      ],
+      "kind": "offStreet",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 scooter offStreet 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:桃園市/scooter"
+      ],
+      "kind": "offStreet",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 scooter offStreet 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:桃園市/scooter"
+      ],
+      "kind": "offStreet",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 heavy paidMotorcycle 「」 2026-10-01",
+      "rules": [
+        "bundled:桃園市/heavy"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 heavy paidMotorcycle 「」 2026-10-27",
+      "rules": [
+        "bundled:桃園市/heavy"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 heavy paidMotorcycle 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:桃園市/heavy"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 heavy paidMotorcycle 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:桃園市/heavy"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 heavy paidMotorcycle 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:桃園市/heavy"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 heavy paidMotorcycle 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:桃園市/heavy"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 heavy freeMotorcycle 「」 2026-10-01",
+      "rules": [
+        "bundled:桃園市/heavy"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 heavy freeMotorcycle 「」 2026-10-27",
+      "rules": [
+        "bundled:桃園市/heavy"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 heavy freeMotorcycle 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:桃園市/heavy"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 heavy freeMotorcycle 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:桃園市/heavy"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 heavy freeMotorcycle 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:桃園市/heavy"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 heavy freeMotorcycle 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:桃園市/heavy"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 heavy heavyOnly 「」 2026-10-01",
+      "rules": [
+        "bundled:桃園市/heavy"
+      ],
+      "kind": "heavyOnly",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 heavy heavyOnly 「」 2026-10-27",
+      "rules": [
+        "bundled:桃園市/heavy"
+      ],
+      "kind": "heavyOnly",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 heavy heavyOnly 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:桃園市/heavy"
+      ],
+      "kind": "heavyOnly",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 heavy heavyOnly 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:桃園市/heavy"
+      ],
+      "kind": "heavyOnly",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 heavy heavyOnly 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:桃園市/heavy"
+      ],
+      "kind": "heavyOnly",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 heavy heavyOnly 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:桃園市/heavy"
+      ],
+      "kind": "heavyOnly",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 heavy car 「」 2026-10-01",
+      "rules": [
+        "bundled:桃園市/heavy"
+      ],
+      "kind": "car",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 heavy car 「」 2026-10-27",
+      "rules": [
+        "bundled:桃園市/heavy"
+      ],
+      "kind": "car",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 heavy car 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:桃園市/heavy"
+      ],
+      "kind": "car",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 heavy car 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:桃園市/heavy"
+      ],
+      "kind": "car",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 heavy car 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:桃園市/heavy"
+      ],
+      "kind": "car",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 heavy car 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:桃園市/heavy"
+      ],
+      "kind": "car",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 heavy offStreet 「」 2026-10-01",
+      "rules": [
+        "bundled:桃園市/heavy"
+      ],
+      "kind": "offStreet",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 heavy offStreet 「」 2026-10-27",
+      "rules": [
+        "bundled:桃園市/heavy"
+      ],
+      "kind": "offStreet",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 heavy offStreet 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:桃園市/heavy"
+      ],
+      "kind": "offStreet",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 heavy offStreet 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:桃園市/heavy"
+      ],
+      "kind": "offStreet",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 heavy offStreet 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:桃園市/heavy"
+      ],
+      "kind": "offStreet",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "桃園市 heavy offStreet 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:桃園市/heavy"
+      ],
+      "kind": "offStreet",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 scooter paidMotorcycle 「」 2026-10-01",
+      "rules": [
+        "bundled:臺中市/scooter"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 scooter paidMotorcycle 「」 2026-10-27",
+      "rules": [
+        "bundled:臺中市/scooter"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 scooter paidMotorcycle 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:臺中市/scooter"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 scooter paidMotorcycle 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:臺中市/scooter"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 scooter paidMotorcycle 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:臺中市/scooter"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 scooter paidMotorcycle 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:臺中市/scooter"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 scooter freeMotorcycle 「」 2026-10-01",
+      "rules": [
+        "bundled:臺中市/scooter"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 scooter freeMotorcycle 「」 2026-10-27",
+      "rules": [
+        "bundled:臺中市/scooter"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 scooter freeMotorcycle 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:臺中市/scooter"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 scooter freeMotorcycle 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:臺中市/scooter"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 scooter freeMotorcycle 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:臺中市/scooter"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 scooter freeMotorcycle 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:臺中市/scooter"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 scooter heavyOnly 「」 2026-10-01",
+      "rules": [
+        "bundled:臺中市/scooter"
+      ],
+      "kind": "heavyOnly",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 scooter heavyOnly 「」 2026-10-27",
+      "rules": [
+        "bundled:臺中市/scooter"
+      ],
+      "kind": "heavyOnly",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 scooter heavyOnly 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:臺中市/scooter"
+      ],
+      "kind": "heavyOnly",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 scooter heavyOnly 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:臺中市/scooter"
+      ],
+      "kind": "heavyOnly",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 scooter heavyOnly 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:臺中市/scooter"
+      ],
+      "kind": "heavyOnly",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 scooter heavyOnly 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:臺中市/scooter"
+      ],
+      "kind": "heavyOnly",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 scooter car 「」 2026-10-01",
+      "rules": [
+        "bundled:臺中市/scooter"
+      ],
+      "kind": "car",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 scooter car 「」 2026-10-27",
+      "rules": [
+        "bundled:臺中市/scooter"
+      ],
+      "kind": "car",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 scooter car 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:臺中市/scooter"
+      ],
+      "kind": "car",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 scooter car 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:臺中市/scooter"
+      ],
+      "kind": "car",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 scooter car 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:臺中市/scooter"
+      ],
+      "kind": "car",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 scooter car 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:臺中市/scooter"
+      ],
+      "kind": "car",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 scooter offStreet 「」 2026-10-01",
+      "rules": [
+        "bundled:臺中市/scooter"
+      ],
+      "kind": "offStreet",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 scooter offStreet 「」 2026-10-27",
+      "rules": [
+        "bundled:臺中市/scooter"
+      ],
+      "kind": "offStreet",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 scooter offStreet 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:臺中市/scooter"
+      ],
+      "kind": "offStreet",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 scooter offStreet 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:臺中市/scooter"
+      ],
+      "kind": "offStreet",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 scooter offStreet 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:臺中市/scooter"
+      ],
+      "kind": "offStreet",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 scooter offStreet 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:臺中市/scooter"
+      ],
+      "kind": "offStreet",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 heavy paidMotorcycle 「」 2026-10-01",
+      "rules": [
+        "bundled:臺中市/heavy"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": "signage"
+    },
+    {
+      "name": "臺中市 heavy paidMotorcycle 「」 2026-10-27",
+      "rules": [
+        "bundled:臺中市/heavy"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": "signage"
+    },
+    {
+      "name": "臺中市 heavy paidMotorcycle 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:臺中市/heavy"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": "signage"
+    },
+    {
+      "name": "臺中市 heavy paidMotorcycle 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:臺中市/heavy"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": "signage"
+    },
+    {
+      "name": "臺中市 heavy paidMotorcycle 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:臺中市/heavy"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": "signage"
+    },
+    {
+      "name": "臺中市 heavy paidMotorcycle 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:臺中市/heavy"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": "signage"
+    },
+    {
+      "name": "臺中市 heavy freeMotorcycle 「」 2026-10-01",
+      "rules": [
+        "bundled:臺中市/heavy"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": "signage"
+    },
+    {
+      "name": "臺中市 heavy freeMotorcycle 「」 2026-10-27",
+      "rules": [
+        "bundled:臺中市/heavy"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": "signage"
+    },
+    {
+      "name": "臺中市 heavy freeMotorcycle 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:臺中市/heavy"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": "signage"
+    },
+    {
+      "name": "臺中市 heavy freeMotorcycle 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:臺中市/heavy"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": "signage"
+    },
+    {
+      "name": "臺中市 heavy freeMotorcycle 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:臺中市/heavy"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": "signage"
+    },
+    {
+      "name": "臺中市 heavy freeMotorcycle 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:臺中市/heavy"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": "signage"
+    },
+    {
+      "name": "臺中市 heavy heavyOnly 「」 2026-10-01",
+      "rules": [
+        "bundled:臺中市/heavy"
+      ],
+      "kind": "heavyOnly",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 heavy heavyOnly 「」 2026-10-27",
+      "rules": [
+        "bundled:臺中市/heavy"
+      ],
+      "kind": "heavyOnly",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 heavy heavyOnly 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:臺中市/heavy"
+      ],
+      "kind": "heavyOnly",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 heavy heavyOnly 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:臺中市/heavy"
+      ],
+      "kind": "heavyOnly",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 heavy heavyOnly 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:臺中市/heavy"
+      ],
+      "kind": "heavyOnly",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 heavy heavyOnly 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:臺中市/heavy"
+      ],
+      "kind": "heavyOnly",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 heavy car 「」 2026-10-01",
+      "rules": [
+        "bundled:臺中市/heavy"
+      ],
+      "kind": "car",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 heavy car 「」 2026-10-27",
+      "rules": [
+        "bundled:臺中市/heavy"
+      ],
+      "kind": "car",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 heavy car 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:臺中市/heavy"
+      ],
+      "kind": "car",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 heavy car 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:臺中市/heavy"
+      ],
+      "kind": "car",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 heavy car 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:臺中市/heavy"
+      ],
+      "kind": "car",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 heavy car 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:臺中市/heavy"
+      ],
+      "kind": "car",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "臺中市 heavy offStreet 「」 2026-10-01",
+      "rules": [
+        "bundled:臺中市/heavy"
+      ],
+      "kind": "offStreet",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": "signage"
+    },
+    {
+      "name": "臺中市 heavy offStreet 「」 2026-10-27",
+      "rules": [
+        "bundled:臺中市/heavy"
+      ],
+      "kind": "offStreet",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": "signage"
+    },
+    {
+      "name": "臺中市 heavy offStreet 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:臺中市/heavy"
+      ],
+      "kind": "offStreet",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": "signage"
+    },
+    {
+      "name": "臺中市 heavy offStreet 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:臺中市/heavy"
+      ],
+      "kind": "offStreet",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": "signage"
+    },
+    {
+      "name": "臺中市 heavy offStreet 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:臺中市/heavy"
+      ],
+      "kind": "offStreet",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": "signage"
+    },
+    {
+      "name": "臺中市 heavy offStreet 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:臺中市/heavy"
+      ],
+      "kind": "offStreet",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": "signage"
+    },
+    {
+      "name": "高雄市 scooter paidMotorcycle 「」 2026-10-01",
+      "rules": [
+        "bundled:高雄市/scooter"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 scooter paidMotorcycle 「」 2026-10-27",
+      "rules": [
+        "bundled:高雄市/scooter"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 scooter paidMotorcycle 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:高雄市/scooter"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 scooter paidMotorcycle 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:高雄市/scooter"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 scooter paidMotorcycle 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:高雄市/scooter"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 scooter paidMotorcycle 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:高雄市/scooter"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 scooter freeMotorcycle 「」 2026-10-01",
+      "rules": [
+        "bundled:高雄市/scooter"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 scooter freeMotorcycle 「」 2026-10-27",
+      "rules": [
+        "bundled:高雄市/scooter"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 scooter freeMotorcycle 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:高雄市/scooter"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 scooter freeMotorcycle 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:高雄市/scooter"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 scooter freeMotorcycle 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:高雄市/scooter"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 scooter freeMotorcycle 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:高雄市/scooter"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 scooter heavyOnly 「」 2026-10-01",
+      "rules": [
+        "bundled:高雄市/scooter"
+      ],
+      "kind": "heavyOnly",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 scooter heavyOnly 「」 2026-10-27",
+      "rules": [
+        "bundled:高雄市/scooter"
+      ],
+      "kind": "heavyOnly",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 scooter heavyOnly 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:高雄市/scooter"
+      ],
+      "kind": "heavyOnly",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 scooter heavyOnly 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:高雄市/scooter"
+      ],
+      "kind": "heavyOnly",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 scooter heavyOnly 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:高雄市/scooter"
+      ],
+      "kind": "heavyOnly",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 scooter heavyOnly 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:高雄市/scooter"
+      ],
+      "kind": "heavyOnly",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 scooter car 「」 2026-10-01",
+      "rules": [
+        "bundled:高雄市/scooter"
+      ],
+      "kind": "car",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 scooter car 「」 2026-10-27",
+      "rules": [
+        "bundled:高雄市/scooter"
+      ],
+      "kind": "car",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 scooter car 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:高雄市/scooter"
+      ],
+      "kind": "car",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 scooter car 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:高雄市/scooter"
+      ],
+      "kind": "car",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 scooter car 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:高雄市/scooter"
+      ],
+      "kind": "car",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 scooter car 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:高雄市/scooter"
+      ],
+      "kind": "car",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 scooter offStreet 「」 2026-10-01",
+      "rules": [
+        "bundled:高雄市/scooter"
+      ],
+      "kind": "offStreet",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 scooter offStreet 「」 2026-10-27",
+      "rules": [
+        "bundled:高雄市/scooter"
+      ],
+      "kind": "offStreet",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 scooter offStreet 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:高雄市/scooter"
+      ],
+      "kind": "offStreet",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 scooter offStreet 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:高雄市/scooter"
+      ],
+      "kind": "offStreet",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 scooter offStreet 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:高雄市/scooter"
+      ],
+      "kind": "offStreet",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 scooter offStreet 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:高雄市/scooter"
+      ],
+      "kind": "offStreet",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 heavy paidMotorcycle 「」 2026-10-01",
+      "rules": [
+        "bundled:高雄市/heavy"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 heavy paidMotorcycle 「」 2026-10-27",
+      "rules": [
+        "bundled:高雄市/heavy"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 heavy paidMotorcycle 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:高雄市/heavy"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 heavy paidMotorcycle 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:高雄市/heavy"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 heavy paidMotorcycle 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:高雄市/heavy"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 heavy paidMotorcycle 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:高雄市/heavy"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 heavy freeMotorcycle 「」 2026-10-01",
+      "rules": [
+        "bundled:高雄市/heavy"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 heavy freeMotorcycle 「」 2026-10-27",
+      "rules": [
+        "bundled:高雄市/heavy"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 heavy freeMotorcycle 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:高雄市/heavy"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 heavy freeMotorcycle 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:高雄市/heavy"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 heavy freeMotorcycle 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:高雄市/heavy"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 heavy freeMotorcycle 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:高雄市/heavy"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 heavy heavyOnly 「」 2026-10-01",
+      "rules": [
+        "bundled:高雄市/heavy"
+      ],
+      "kind": "heavyOnly",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 heavy heavyOnly 「」 2026-10-27",
+      "rules": [
+        "bundled:高雄市/heavy"
+      ],
+      "kind": "heavyOnly",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 heavy heavyOnly 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:高雄市/heavy"
+      ],
+      "kind": "heavyOnly",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 heavy heavyOnly 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:高雄市/heavy"
+      ],
+      "kind": "heavyOnly",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 heavy heavyOnly 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:高雄市/heavy"
+      ],
+      "kind": "heavyOnly",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 heavy heavyOnly 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:高雄市/heavy"
+      ],
+      "kind": "heavyOnly",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 heavy car 「」 2026-10-01",
+      "rules": [
+        "bundled:高雄市/heavy"
+      ],
+      "kind": "car",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 heavy car 「」 2026-10-27",
+      "rules": [
+        "bundled:高雄市/heavy"
+      ],
+      "kind": "car",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 heavy car 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:高雄市/heavy"
+      ],
+      "kind": "car",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 heavy car 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:高雄市/heavy"
+      ],
+      "kind": "car",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 heavy car 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:高雄市/heavy"
+      ],
+      "kind": "car",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 heavy car 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:高雄市/heavy"
+      ],
+      "kind": "car",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 heavy offStreet 「」 2026-10-01",
+      "rules": [
+        "bundled:高雄市/heavy"
+      ],
+      "kind": "offStreet",
+      "district": "",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 heavy offStreet 「」 2026-10-27",
+      "rules": [
+        "bundled:高雄市/heavy"
+      ],
+      "kind": "offStreet",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 heavy offStreet 「板橋區」 2026-10-01",
+      "rules": [
+        "bundled:高雄市/heavy"
+      ],
+      "kind": "offStreet",
+      "district": "板橋區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 heavy offStreet 「板橋區」 2026-10-27",
+      "rules": [
+        "bundled:高雄市/heavy"
+      ],
+      "kind": "offStreet",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 heavy offStreet 「中山區」 2026-10-01",
+      "rules": [
+        "bundled:高雄市/heavy"
+      ],
+      "kind": "offStreet",
+      "district": "中山區",
+      "now": "2026-10-01T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "高雄市 heavy offStreet 「中山區」 2026-10-27",
+      "rules": [
+        "bundled:高雄市/heavy"
+      ],
+      "kind": "offStreet",
+      "district": "中山區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "試辦期限：到期前一刻（臺灣 10/5 23:59）",
+      "rules": [
+        "test:1"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "",
+      "now": "2026-10-05T15:59:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "試辦期限：到期當日零時（臺灣）",
+      "rules": [
+        "test:1"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "",
+      "now": "2026-10-05T16:00:00Z",
+      "verdict": "expired",
+      "restriction": null
+    },
+    {
+      "name": "試辦期限：到期後",
+      "rules": [
+        "test:1"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "expired",
+      "restriction": null
+    },
+    {
+      "name": "尚未生效的規則不算",
+      "rules": [
+        "test:2"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "過期規則與生效中的規則並存：只看生效中的",
+      "rules": [
+        "test:1",
+        "test:3"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "兩份同層級規則結論相反：公告不一致",
+      "rules": [
+        "test:4",
+        "test:3"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conflict",
+      "restriction": null
+    },
+    {
+      "name": "兩份同層級規則結論相同：不算不一致",
+      "rules": [
+        "test:4",
+        "test:5"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "沒有規則",
+      "rules": [],
+      "kind": "paidMotorcycle",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "noRule",
+      "restriction": null
+    },
+    {
+      "name": "限行政區的規則：「信義區」",
+      "rules": [
+        "test:6"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "信義區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "限行政區的規則：「大安區」",
+      "rules": [
+        "test:6"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "大安區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "unknownDistrict",
+      "restriction": null
+    },
+    {
+      "name": "限行政區的規則：「」",
+      "rules": [
+        "test:6"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "unknownDistrict",
+      "restriction": null
+    },
+    {
+      "name": "規則未確認的有條件格位",
+      "rules": [
+        "test:7"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": "unverified"
+    },
+    {
+      "name": "舊的 pilot_area 讀成沒有類型的有條件",
+      "rules": [
+        "test:8"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": null
+    },
+    {
+      "name": "限標示車格",
+      "rules": [
+        "test:9"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": "signage"
+    },
+    {
+      "name": "行政區限定格位與行政區清單並存：「板橋區」",
+      "rules": [
+        "test:10"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "板橋區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "unknownDistrict",
+      "restriction": null
+    },
+    {
+      "name": "行政區限定格位與行政區清單並存：「中和區」",
+      "rules": [
+        "test:10"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "中和區",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "closed",
+      "restriction": null
+    },
+    {
+      "name": "行政區限定格位與行政區清單並存：「」",
+      "rules": [
+        "test:10"
+      ],
+      "kind": "freeMotorcycle",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "unknownDistrict",
+      "restriction": null
+    }
+  ]
+}

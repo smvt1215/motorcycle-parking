@@ -6,6 +6,7 @@ import 'package:http/testing.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
 import 'package:motorcycle_parking/domain/map_viewport.dart';
 import 'package:motorcycle_parking/models/parking.dart';
+import 'package:motorcycle_parking/models/parking_condition.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 void main() {
@@ -78,23 +79,23 @@ void main() {
     return (called, result.spots);
   }
 
-  test('資格判斷尚未讀取停放條件，後端有 _v3 也讀 _v2 的保守投影', () async {
-    expect(viewportVariants, isNot(contains('_v3')));
+  test('資格判斷讀取停放條件（C4），後端有 _v3 時讀原樣的資料', () async {
+    expect(viewportVariants.first, '_v3');
     final (called, spots) = await load(version: 3);
     expect(
       called,
-      containsAll(['viewport_spots_v2', 'official_viewport_spots_v2']),
+      containsAll(['viewport_spots_v3', 'official_viewport_spots_v3']),
     );
-    expect(called.where((n) => n.endsWith('_v3')), isEmpty);
+    expect(called.where((n) => n.endsWith('_v2')), isEmpty);
     expect(spots.map((s) => s.id), ['a', 'b', 'c']);
-    // The free timed bay arrives as an unverified lot, not as stored.
-    expect(spots.last.spaceType, SpaceType.offStreet);
-    expect(spots.last.condition, isNull);
+    // The free timed bay arrives as stored, with its condition.
+    expect(spots.last.spaceType, SpaceType.timedMotorcycle);
+    expect(spots.last.condition?.charge, Charge.free);
   });
 
   test('後端只有 _v2 時退回 _v2，讀到保守投影', () async {
     final (called, spots) = await load(version: 2);
-    expect(called, contains('viewport_spots_v2'));
+    expect(called, containsAll(['viewport_spots_v3', 'viewport_spots_v2']));
     expect(called, isNot(contains('viewport_spots')));
     expect(spots.map((s) => s.id), ['a', 'b', 'c']);
     expect(spots.last.spaceType, SpaceType.offStreet);

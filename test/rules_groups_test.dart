@@ -24,18 +24,22 @@ void main() {
 
   test('規則頁依地圖相同的判斷分組，由可停排到不可停', () {
     final taipei = groups('臺北市', VehicleType.heavy);
+    // Heavy bikes park on car bays by law, shared with scooters or not
+    // (§3.2 step 1).
     expect(taipei[(EligibilityStatus.allowed, null)], [
       SpaceType.paidMotorcycle,
       SpaceType.heavyOnly,
       SpaceType.car,
+      SpaceType.flexShared,
     ]);
     expect(taipei[(EligibilityStatus.notAllowed, null)], [
       SpaceType.freeMotorcycle,
     ]);
-    // Timed bays follow paid ones, then the clock limits them.
+    // Timed bays are shown as the toll bays they usually are, then the
+    // clock limits them.
     expect(
       taipei[(EligibilityStatus.conditional, RuleRestriction.timeLimited)],
-      [SpaceType.timedMotorcycle, SpaceType.flexShared],
+      [SpaceType.timedMotorcycle],
     );
     // Permit holders may park in disabled bays whatever the rule.
     expect(taipei[(EligibilityStatus.conditional, null)], [
@@ -75,8 +79,11 @@ void main() {
       SpaceType.heavyOnly,
       SpaceType.car,
     ]);
+    // A shared car bay opens to scooters only in the slots its notice
+    // names; with none listed it is unverified (§7 item 1).
     expect(scooter[(EligibilityStatus.unverified, null)], [
       SpaceType.offStreet,
+      SpaceType.flexShared,
     ]);
   });
 }

@@ -35,6 +35,8 @@ PATHS = {
         "supabase/functions/_shared/parking_contract_cases.json",
         # test/fee_contract_test.dart checks the generated fee note bound.
         "supabase/functions/_shared/fee_note_limit.json",
+        # test/parking_decision_test.dart runs the shared rule verdicts.
+        "supabase/functions/_shared/rule_verdict_cases.json",
     ),
     "android": APP_PATHS + ROUTING_PATHS + (
         "android/", ".github/workflows/android.yml", ".github/actions/mobile-setup/",

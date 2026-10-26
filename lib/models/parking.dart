@@ -490,6 +490,7 @@ class CityRule {
     this.districts = const [],
     this.districtSpaceTypes = const {},
     this.restriction,
+    this.expiresOn,
   });
   final String city, feeNote, exceptions, sourceUrl;
   final VehicleType vehicle;
@@ -503,6 +504,11 @@ class CityRule {
   final DateTime effectiveDate;
   final bool canUseTwoSpaces;
   final RuleRestriction? restriction;
+
+  /// The first day the rule no longer holds (§3.2); null when it has no end.
+  /// Builds before C4 never read it, which is why `city_rules` serves them
+  /// expired rows as a conservative projection.
+  final DateTime? expiresOn;
   factory CityRule.fromJson(Map<String, dynamic> j) => CityRule(
     city: j['city'] as String,
     vehicle: VehicleType.values.byName(j['vehicle'] as String),
@@ -526,6 +532,9 @@ class CityRule {
     effectiveDate: DateTime.parse(j['effective_date'] as String),
     canUseTwoSpaces: j['can_use_two_spaces'] as bool? ?? false,
     restriction: RuleRestriction.parse(j['restriction']),
+    expiresOn: j['expires_on'] is String
+        ? DateTime.tryParse(j['expires_on'] as String)
+        : null,
   );
 }
 

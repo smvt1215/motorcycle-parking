@@ -10,55 +10,18 @@ class ParkingAccessView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Rates are on the 收費 section's notice boards (lib/features/map/
+    // spot_fees.dart); this lists who may park where.
     if (spot.zones.isEmpty) {
       return _AccessGroup(
         access: reportedAccess(spot),
         scooter: spot.scooterAllowed,
         heavy: spot.heavyAllowed,
-        scooterFee: spot.fee?.riderText('scooter') ?? '',
-        heavyFee: spot.fee?.riderText('heavy') ?? '',
-        carFee: spot.fee?.textOf('car') ?? '',
-        showFees: spot.fee != null,
       );
     }
-    // A lot-wide structured rate supersedes each zone's legacy fee text.
-    final lotFee = lotWideFee(spot);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (lotFee != null) ...[
-          Text(
-            '全場費率',
-            style: Theme.of(context).textTheme.titleSmall
-                ?.copyWith(fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 8),
-          _ZoneNote(
-            icon: Icons.moped_outlined,
-            label: '普通機車',
-            value: lotFee.riderText('scooter') ?? '費率未確認',
-          ),
-          const SizedBox(height: 8),
-          _ZoneNote(
-            icon: Icons.two_wheeler,
-            label: '大型重機',
-            value: lotFee.riderText('heavy') ?? '費率未確認',
-          ),
-          if (lotFee.textOf('car') case final car?) ...[
-            const SizedBox(height: 8),
-            _ZoneNote(
-              icon: Icons.directions_car_outlined,
-              label: '汽車',
-              value: car,
-            ),
-          ],
-          const SizedBox(height: 16),
-          Divider(
-            height: 1,
-            color: Theme.of(context).colorScheme.outlineVariant,
-          ),
-          const SizedBox(height: 16),
-        ],
         for (final (index, zone) in spot.zones.indexed) ...[
           if (index > 0) ...[
             const SizedBox(height: 16),
@@ -86,38 +49,7 @@ class ParkingAccessView extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          // A zone's own car price stays visible; the lot's car rate is
-          // listed once above, not again in every zone. The motorcycle
-          // rates beside a zone's car price repeat the lot's, never the old
-          // text.
-          if (lotFee != null)
-            zone.carFeeNote.trim().isEmpty
-                ? _AccessGroup(access: zone.access)
-                : _AccessGroup(
-                    access: zone.access,
-                    scooterFee: lotFee.riderText('scooter') ?? '',
-                    heavyFee: lotFee.riderText('heavy') ?? '',
-                    carFee: zone.carFeeNote,
-                    showFees: true,
-                  )
-          else
-            _AccessGroup(
-              access: zone.access,
-              scooterFee: zone.scooterFeeText,
-              heavyFee: zone.heavyFeeText,
-              carFee: zone.carFeeText,
-              showFees: zone.hasVehicleFees,
-            ),
-          if (lotFee == null &&
-              zone.fee == null &&
-              zone.feeNote.trim().isNotEmpty) ...[
-            const SizedBox(height: 10),
-            _ZoneNote(
-              icon: Icons.payments_outlined,
-              label: '費率',
-              value: zone.feeNote,
-            ),
-          ],
+          _AccessGroup(access: zone.access),
           if (zone.guide.trim().isNotEmpty) ...[
             const SizedBox(height: 8),
             _ZoneNote(
@@ -133,19 +65,9 @@ class ParkingAccessView extends StatelessWidget {
 }
 
 class _AccessGroup extends StatelessWidget {
-  const _AccessGroup({
-    required this.access,
-    this.scooter,
-    this.heavy,
-    this.scooterFee = '',
-    this.heavyFee = '',
-    this.carFee = '',
-    this.showFees = false,
-  });
+  const _AccessGroup({required this.access, this.scooter, this.heavy});
   final ParkingAccess? access;
   final bool? scooter, heavy;
-  final String scooterFee, heavyFee, carFee;
-  final bool showFees;
 
   @override
   Widget build(BuildContext context) {
@@ -153,29 +75,25 @@ class _AccessGroup extends StatelessWidget {
         access == ParkingAccess.scooterHeavy ||
         access == ParkingAccess.heavyCar;
     final vehicles = switch (access) {
-      ParkingAccess.scooterOnly => [
-        (Icons.moped_outlined, '普通機車', true, scooterFee),
-      ],
-      ParkingAccess.heavyOnly => [(Icons.two_wheeler, '大型重機', true, heavyFee)],
+      ParkingAccess.scooterOnly => [(Icons.moped_outlined, '普通機車', true)],
+      ParkingAccess.heavyOnly => [(Icons.two_wheeler, '大型重機', true)],
       ParkingAccess.scooterHeavy => [
-        (Icons.moped_outlined, '普通機車', true, scooterFee),
-        (Icons.two_wheeler, '大型重機', true, heavyFee),
+        (Icons.moped_outlined, '普通機車', true),
+        (Icons.two_wheeler, '大型重機', true),
       ],
       ParkingAccess.heavyCar => [
-        (Icons.two_wheeler, '大型重機', true, heavyFee),
-        (Icons.directions_car_outlined, '汽車', true, carFee),
+        (Icons.two_wheeler, '大型重機', true),
+        (Icons.directions_car_outlined, '汽車', true),
       ],
       ParkingAccess.noMotorcycle => [
-        (Icons.moped_outlined, '普通機車', false, scooterFee),
-        (Icons.two_wheeler, '大型重機', false, heavyFee),
+        (Icons.moped_outlined, '普通機車', false),
+        (Icons.two_wheeler, '大型重機', false),
       ],
       null => [
-        (Icons.moped_outlined, '普通機車', scooter, scooterFee),
-        (Icons.two_wheeler, '大型重機', heavy, heavyFee),
+        (Icons.moped_outlined, '普通機車', scooter),
+        (Icons.two_wheeler, '大型重機', heavy),
       ],
     };
-    final hasRates =
-        showFees || vehicles.any((vehicle) => vehicle.$4.trim().isNotEmpty);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -233,17 +151,6 @@ class _AccessGroup extends StatelessWidget {
             ],
           ),
         ),
-        if (hasRates) ...[
-          const SizedBox(height: 12),
-          for (final (index, vehicle) in vehicles.indexed) ...[
-            if (index > 0) const SizedBox(height: 8),
-            _ZoneNote(
-              icon: vehicle.$1,
-              label: vehicle.$2,
-              value: vehicle.$4.trim().isEmpty ? '費率未提供' : vehicle.$4,
-            ),
-          ],
-        ],
       ],
     );
   }
