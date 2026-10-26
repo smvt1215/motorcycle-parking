@@ -14,7 +14,7 @@ dependencies:
   cupertino_ui: 1.1.4
   cupertino_icons: ^2.0.0
   cupertino_native_better: 1.7.0
-  material_3_expressive: 1.1.7
+  material_3_expressive: 1.2.0
   dynamic_color: ^2.1.0
   google_maps_flutter: 2.19.0
   google_maps_flutter_ios_sdk9: 2.19.0
