@@ -114,6 +114,40 @@ select ok(not exists(select 1 from jsonb_array_elements(admin_import_preview(jso
   )))->0->'changes') c where c->>'field'='parking_zones'),'a re-imported zone is no change');
 reset role;
 
+-- Choosing another plan for a zone copies that plan's fee, even though the
+-- zone still carries the old plan's copy.
+update community_spots set fee_plans='[{"id":"p1","name":"機車免費","fee":{"scooter":{"mode":"free"}}},
+    {"id":"p2","name":"機車計次","fee":{"scooter":{"mode":"per_visit","amount":20}}}]',
+  parking_zones='[{"name":"B1","fee_plan":"p1","fee":{"scooter":{"mode":"free"}}}]'
+  where id=(select id from lot);
+update community_spots set parking_zones=jsonb_set(parking_zones,'{0,fee_plan}','"p2"') where id=(select id from lot);
+select is((select parking_zones->0 from community_spots where id=(select id from lot)),
+  '{"name":"B1","fee_plan":"p2","fee":{"scooter":{"mode":"per_visit","amount":20}}}'::jsonb,'a zone switched to another plan takes its fee');
+
+-- Editing a street spot's plan keeps its fee_note the fee's sentence.
+update community_spots set fee='{"heavy":{"mode":"per_visit","amount":40}}',fee_note='大型重機每次 40 元（隔日是否另計未確認）'
+  where id=(select id from street);
+update community_spots set fee_plans=jsonb_set(fee_plans,'{0,fee}','{"heavy":{"mode":"free"}}') where id=(select id from street);
+select is((select fee_note||'|'||(fee->'heavy'->>'mode') from community_spots where id=(select id from street)),
+  '大型重機免費|free','an edited plan rewrites the sentence beside its copy');
+
+-- A promoted spot's zones stay the administrator's for the next import.
+create temporary table promoted(id text);
+grant select,insert on promoted to authenticated;
+select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-000000000005","role":"authenticated","aal":"aal2","app_metadata":{"role":"admin"}}',true);
+set local role authenticated;
+insert into promoted select admin_promote_spot((select id::text from lot),
+  '{"source_name":"臺北市政府","source_url":"https://example.test/promoted","effective_date":"2026-10-25"}',
+  (select updated_at from community_spots where id=(select id from lot)))->>'id';
+select is((select c->'admin'->>'action' from jsonb_array_elements(admin_import_preview(jsonb_build_array(jsonb_build_object(
+    'id','official:'||(select id from promoted),'source','official','name','計費規則測試',
+    'lat',25.09,'lng',121.61,'city','臺北市','space_type','offStreet',
+    'source_url','https://example.test/promoted','source_name','臺北市政府','source_id','X',
+    'parking_zones',jsonb_build_array(jsonb_build_object('name','別的分區'))
+  )))->0->'changes') c where c->>'field'='parking_zones'),'promote_spot',
+  'promoted zones with plan references are still the administrator''s');
+reset role;
+
 -- Riders never read or write plans directly.
 select ok(not has_column_privilege('anon','public.community_spots','fee_plans','select'),'anon cannot read plans');
 select ok(not has_function_privilege('anon','public.fee_plans_sync(jsonb,jsonb)','execute'),'the sync is not public');

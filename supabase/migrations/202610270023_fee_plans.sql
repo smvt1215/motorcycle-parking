@@ -124,6 +124,7 @@ declare
   -- What each zone does: 'copy' its plan's fee, 'take' its fee into a plan, or 'keep'.
   v_acts text[]:='{}'; v_take_top boolean:=false; v_legacy boolean:=false;
   v_keep text[]:='{}'; v_taken jsonb:='[]'; v_out jsonb:='[]'; r jsonb; z jsonb; pf jsonb; i integer:=0;
+  v_n bigint; v_old_zone jsonb;
 begin
   -- Plans that are not a list are left for the check to refuse.
   if p_new->'fee_plans' is not null and jsonb_typeof(p_new->'fee_plans') not in ('array','null') then
@@ -141,12 +142,16 @@ begin
     v_keep:=v_keep||v_plan;
   end if;
 
-  for z in select e from jsonb_array_elements(case when jsonb_typeof(v_zones)='array' then v_zones else '[]'::jsonb end)
-      with ordinality x(e,n) order by n loop
+  for z,v_n in select e,x.n from jsonb_array_elements(case when jsonb_typeof(v_zones)='array' then v_zones else '[]'::jsonb end)
+      with ordinality x(e,n) order by x.n loop
     pf:=case when jsonb_typeof(z)='object' and jsonb_typeof(z->'fee_plan')='string' then (select e->'fee'
       from jsonb_array_elements(coalesce(v_plans,'[]')) e where e->>'id'=z->>'fee_plan' limit 1) end;
+    -- The stored zone at the same place: a reference the writer changed is
+    -- an explicit choice of plan, never a fee edit to take in.
+    v_old_zone:=case when jsonb_typeof(p_old->'parking_zones')='array' then p_old->'parking_zones'->(v_n::integer-1) end;
     if jsonb_typeof(z) is distinct from 'object' then v_acts:=v_acts||'keep'::text;
-    elsif pf is not null and not (v_same_plans and jsonb_typeof(z->'fee')='object' and z->'fee'<>'{}'::jsonb and z->'fee'<>pf) then
+    elsif pf is not null and not (v_same_plans and (z->'fee_plan') is not distinct from (v_old_zone->'fee_plan')
+        and jsonb_typeof(z->'fee')='object' and z->'fee'<>'{}'::jsonb and z->'fee'<>pf) then
       v_acts:=v_acts||'copy'::text; v_keep:=v_keep||(z->>'fee_plan');
     elsif jsonb_typeof(z->'fee')='object' and z->'fee'<>'{}'::jsonb then
       v_acts:=v_acts||'take'::text; v_legacy:=true; v_taken:=v_taken||jsonb_build_array(z->'fee');
@@ -190,6 +195,12 @@ declare r jsonb;
 begin
   r:=public.fee_plans_sync(to_jsonb(new),case when tg_op='UPDATE' then to_jsonb(old) end);
   new.fee:=nullif(r->'fee','null'::jsonb);
+  -- A fee the plans changed (an edited plan) keeps its text in step when
+  -- the text was the old fee's sentence and the writer left it alone.
+  if tg_op='UPDATE' and new.fee is distinct from old.fee and new.fee_note is not distinct from old.fee_note
+     and jsonb_typeof(old.fee)='object' and old.fee_note=public.fee_note_of(old.fee) then
+    new.fee_note:=public.fee_note_of(new.fee);
+  end if;
   new.fee_plan:=r->>'fee_plan';
   new.fee_plans:=nullif(r->'fee_plans','null'::jsonb);
   new.parking_zones:=r->'parking_zones';
@@ -336,7 +347,10 @@ begin
     )
     select coalesce(jsonb_object_agg(w.f,jsonb_build_object('at',w.created_at,'action',w.action)),'{}')
       into v_owned from writes w
-      where w.action<>'import_spot' and w.value is not distinct from v_current->w.f;
+      -- Stored zones are compared without plan references, the audited
+      -- values too, so a promoted or edited zone stays the administrator's.
+      where w.action<>'import_spot' and (case when w.f='parking_zones' then public.zones_without_plans(w.value)
+        else w.value end) is not distinct from v_current->w.f;
 
     foreach k in array public.admin_import_fields() loop
       if (incoming->k) is distinct from (v_current->k) then
