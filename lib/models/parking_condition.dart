@@ -76,6 +76,10 @@ const datePattern = r'^[0-9]{4}-[0-9]{2}-[0-9]{2}$';
 const scheduleDayPresets = ['all', 'weekday', 'holiday'];
 const scheduleWeekdays = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 const scheduleMaxEntries = 8;
+const scheduleKeys = ['days', 'from', 'to', 'vehicles'];
+
+/// Present together or not at all; leaving both out means all day.
+const timeOptionalPair = ['from', 'to'];
 const conditionKeys = [
   'bay',
   'use',
@@ -201,24 +205,25 @@ class ParkingLimit {
   };
 }
 
-/// When the posted vehicles may park; `from > to` crosses midnight.
+/// When the posted vehicles may park; `from > to` crosses midnight, and no
+/// [from] and [to] means all day.
 class ScheduleSlot {
   const ScheduleSlot({
     required this.days,
-    required this.from,
-    required this.to,
+    this.from,
+    this.to,
     required this.vehicles,
   });
 
   /// `all`, `weekday` or `holiday`, or a list of weekdays such as `mon`.
   final Object days;
-  final String from, to;
+  final String? from, to;
   final List<SlotVehicle> vehicles;
 
   Map<String, Object> toJson() => {
     'days': days,
-    'from': from,
-    'to': to,
+    'from': ?from,
+    'to': ?to,
     'vehicles': [for (final v in vehicles) v.name],
   };
 }
@@ -292,7 +297,7 @@ class ParkingCondition {
       for (final l in (c['limits'] as List?) ?? const [])
         ParkingLimit(
           LimitKind.values.firstWhere((k) => k.wire == l['kind']),
-          maxMinutes: l['max_minutes'] as int?,
+          maxMinutes: (l['max_minutes'] as num?)?.toInt(),
           vehicle: SpecialVehicle.values
               .where((v) => v.wire == l['vehicle'])
               .firstOrNull,
@@ -312,8 +317,8 @@ class ParkingCondition {
             days: s['days'] is List
                 ? List<String>.from(s['days'] as List)
                 : s['days'] as String,
-            from: s['from'] as String,
-            to: s['to'] as String,
+            from: s['from'] as String?,
+            to: s['to'] as String?,
             vehicles: [
               for (final v in s['vehicles'] as List)
                 SlotVehicle.values.byName(v as String),
@@ -377,7 +382,10 @@ class ParkingCondition {
   String toString() => jsonEncode(toJson());
 }
 
-bool _whole(Object? v, int min, int max) => v is int && v >= min && v <= max;
+/// A whole number in range. `20.0` counts as 20: Postgres may return it so,
+/// and JS and SQL accept it too.
+bool _whole(Object? v, int min, int max) =>
+    v is num && v.isFinite && v == v.truncate() && v >= min && v <= max;
 
 bool _realDate(Object? v) {
   if (v is! String || !RegExp(datePattern).hasMatch(v)) return false;
@@ -392,13 +400,16 @@ bool _subset(Object? v, List<String> values) =>
     v.every((x) => x is String && values.contains(x)) &&
     v.toSet().length == v.length;
 
-/// `days`, `from` and `to` of a schedule slot or a fee period.
+/// `days`, `from` and `to` of a schedule slot or a fee period; leaving out
+/// both `from` and `to` means all day.
 bool validSlotTimes(Map<Object?, Object?> slot) {
   final days = slot['days'];
   final time = RegExp(timePattern);
-  return (days is String
-          ? scheduleDayPresets.contains(days)
-          : _subset(days, scheduleWeekdays)) &&
+  final validDays = days is String
+      ? scheduleDayPresets.contains(days)
+      : _subset(days, scheduleWeekdays);
+  if (!timeOptionalPair.any(slot.containsKey)) return validDays;
+  return validDays &&
       slot['from'] is String &&
       slot['to'] is String &&
       time.hasMatch(slot['from'] as String) &&
@@ -490,7 +501,7 @@ bool validCondition(Object? json, {bool zone = false}) {
     }
     for (final s in schedule) {
       if (s is! Map ||
-          s.length != 4 ||
+          !s.keys.every(scheduleKeys.contains) ||
           !validSlotTimes(s) ||
           !_subset(s['vehicles'], [
             for (final v in SlotVehicle.values) v.name,

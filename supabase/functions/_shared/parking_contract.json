@@ -45,7 +45,11 @@
       "sat",
       "sun"
     ],
-    "comment": "from > to 表示跨午夜；from 與 to 不可相同。days 為列舉值，或不重複的星期陣列。"
+    "optional_pair": [
+      "from",
+      "to"
+    ],
+    "comment": "from > to 表示跨午夜；from 與 to 不可相同。全天以同時省略 from 與 to 表示（不用 00:00–24:00）；只省略其中一個不合法。days 為列舉值，或不重複的星期陣列。"
   },
   "date": {
     "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
@@ -115,6 +119,12 @@
       "heavy"
     ],
     "schedule": {
+      "keys": [
+        "days",
+        "from",
+        "to",
+        "vehicles"
+      ],
       "max_entries": 8,
       "vehicles": [
         "scooter",

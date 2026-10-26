@@ -478,6 +478,91 @@
       "valid": false
     },
     {
+      "name": "限時分鐘寫成 20.0，視同 20",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "time_limit",
+            "max_minutes": 20.0
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "全天：同時省略 from 與 to",
+      "zone": false,
+      "condition": {
+        "bay": "car",
+        "use": "share",
+        "share": "car_motorcycle",
+        "schedule": [
+          {
+            "days": "holiday",
+            "vehicles": [
+              "car",
+              "scooter"
+            ]
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "全天不可寫成 00:00–24:00",
+      "zone": false,
+      "condition": {
+        "bay": "heavy",
+        "schedule": [
+          {
+            "days": "all",
+            "from": "00:00",
+            "to": "24:00",
+            "vehicles": [
+              "car"
+            ]
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "只省略 to",
+      "zone": false,
+      "condition": {
+        "bay": "heavy",
+        "schedule": [
+          {
+            "days": "all",
+            "from": "07:00",
+            "vehicles": [
+              "heavy"
+            ]
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "時段缺 days",
+      "zone": false,
+      "condition": {
+        "bay": "heavy",
+        "schedule": [
+          {
+            "vehicles": [
+              "heavy"
+            ]
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
       "name": "schedule 為空陣列",
       "zone": false,
       "condition": {
@@ -1901,6 +1986,68 @@
       "valid": false
     },
     {
+      "name": "依時段的一段為全天（省略 from 與 to）",
+      "fee": {
+        "car": {
+          "mode": "by_time",
+          "periods": [
+            {
+              "days": "weekday",
+              "rate": {
+                "mode": "hourly",
+                "amount": 40,
+                "per_minutes": 60
+              }
+            },
+            {
+              "days": "holiday",
+              "rate": {
+                "mode": "free"
+              }
+            }
+          ]
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "依時段的一段只省略 from",
+      "fee": {
+        "car": {
+          "mode": "by_time",
+          "periods": [
+            {
+              "days": "all",
+              "to": "20:00",
+              "rate": {
+                "mode": "free"
+              }
+            }
+          ]
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "依時段的全天不可寫成 00:00–24:00",
+      "fee": {
+        "car": {
+          "mode": "by_time",
+          "periods": [
+            {
+              "days": "all",
+              "from": "00:00",
+              "to": "24:00",
+              "rate": {
+                "mode": "free"
+              }
+            }
+          ]
+        }
+      },
+      "valid": false
+    },
+    {
       "name": "依時段沒有任何一段",
       "fee": {
         "car": {
@@ -2289,6 +2436,16 @@
         }
       },
       "valid": false
+    },
+    {
+      "name": "金額寫成 20.0，視同 20",
+      "fee": {
+        "scooter": {
+          "mode": "daily",
+          "amount": 20.0
+        }
+      },
+      "valid": true
     },
     {
       "name": "金額不是整數",

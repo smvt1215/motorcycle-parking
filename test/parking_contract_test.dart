@@ -44,6 +44,7 @@ void main() {
       expect(time['pattern'], timePattern);
       expect(time['days'], scheduleDayPresets);
       expect(time['weekdays'], scheduleWeekdays);
+      expect(time['optional_pair'], timeOptionalPair);
       expect((contract['date']! as Map)['pattern'], datePattern);
     });
 
@@ -66,6 +67,7 @@ void main() {
       );
       expect(cond['allow_keys'], allowKeys);
       expect(cond['schedule'], {
+        'keys': scheduleKeys,
         'max_entries': scheduleMaxEntries,
         'vehicles': _wires(SlotVehicle.values, (v) => v.name),
       });

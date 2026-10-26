@@ -65,24 +65,28 @@ language sql immutable set search_path='' as $$
     and pg_input_is_valid(p#>>'{{}}','date'),false);
 $$;
 
--- days, from and to of a schedule slot or a fee period.
+-- days, from and to of a schedule slot or a fee period; leaving out both
+-- from and to means all day.
 create or replace function {s}.contract_slot_times(p jsonb) returns boolean
 language sql immutable set search_path='' as $$
   select coalesce(case when jsonb_typeof(p->'days')='string'
       then {s}.contract_str_in(p->'days',{s}.parking_contract()->'time'->'days')
       else {s}.contract_subset(p->'days',{s}.parking_contract()->'time'->'weekdays') end
-    and jsonb_typeof(p->'from')='string' and jsonb_typeof(p->'to')='string'
+    and (not p ?| array(select jsonb_array_elements_text({s}.parking_contract()->'time'->'optional_pair'))
+    or jsonb_typeof(p->'from')='string' and jsonb_typeof(p->'to')='string'
     and (p->>'from') ~ ({s}.parking_contract()->'time'->>'pattern')
     and (p->>'to') ~ ({s}.parking_contract()->'time'->>'pattern')
-    and p->>'from'<>p->>'to',false);
+    and p->>'from'<>p->>'to'),false);
 $$;
 
--- An object with exactly the listed keys.
-create or replace function {s}.contract_exact_keys(p jsonb,p_keys jsonb) returns boolean
+-- An object with only the listed keys, and all of them except the optional
+-- from/to pair, which contract_slot_times checks.
+create or replace function {s}.contract_slot_keys(p jsonb,p_keys jsonb) returns boolean
 language sql immutable set search_path='' as $$
   select case when jsonb_typeof(p)='object' then
     not exists(select 1 from jsonb_object_keys(p) k where not p_keys ? k)
-    and not exists(select 1 from jsonb_array_elements_text(p_keys) k where not p ? k)
+    and not exists(select 1 from jsonb_array_elements_text(p_keys) k
+      where not p ? k and not {s}.parking_contract()->'time'->'optional_pair' ? k)
     else false end;
 $$;
 
@@ -141,7 +145,7 @@ begin
       or jsonb_array_length(p->'schedule') not between 1 and (c->'schedule'->>'max_entries')::integer
     then return false; end if;
     for l in select e from jsonb_array_elements(p->'schedule') e loop
-      if not {s}.contract_exact_keys(l,'["days","from","to","vehicles"]') or not {s}.contract_slot_times(l)
+      if not {s}.contract_slot_keys(l,c->'schedule'->'keys') or not {s}.contract_slot_times(l)
         or not {s}.contract_subset(l->'vehicles',c->'schedule'->'vehicles') then return false; end if;
     end loop;
   end if;
@@ -215,7 +219,7 @@ begin
       if jsonb_typeof(f.value) is distinct from 'array'
         or jsonb_array_length(f.value) not between 1 and (fee->'periods'->>'max_entries')::integer
         or exists(select 1 from jsonb_array_elements(f.value) e
-          where not {s}.contract_exact_keys(e,fee->'periods'->'keys') or not {s}.contract_slot_times(e)
+          where not {s}.contract_slot_keys(e,fee->'periods'->'keys') or not {s}.contract_slot_times(e)
             or not {s}.contract_fee_rate(e->'rate',p_vehicle,true))
       then return false; end if;
     else return false; end if;

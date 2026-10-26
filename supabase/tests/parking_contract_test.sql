@@ -10,7 +10,7 @@ select no_plan();
 
 create or replace function pg_temp.parking_contract() returns jsonb
 language sql immutable set search_path='' as $contract$
-  select $json${"version":1,"space_types":["paidMotorcycle","freeMotorcycle","heavyOnly","car","offStreet","disabledMotorcycle","timedMotorcycle","flexShared","evMotorcycle"],"access_kinds":["scooterOnly","scooterHeavy","heavyCar","noMotorcycle","heavyOnly"],"placement":{"off_street_space_types":["offStreet"],"off_street_facility_types":["multiStorey","underground","surface"]},"time":{"pattern":"^([01][0-9]|2[0-3]):[0-5][0-9]$","days":["all","weekday","holiday"],"weekdays":["mon","tue","wed","thu","fri","sat","sun"]},"date":{"pattern":"^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},"condition":{"keys":["bay","use","share","charge","limits","schedule","basis"],"zone_keys":["allow"],"bay":["motorcycle","heavy","car"],"use":["usual","share"],"share":{"scooter_heavy":"motorcycle","car_motorcycle":"car"},"charge":["toll","free"],"limits":{"time_limit":{"required":[],"optional":{"max_minutes":{"min":1,"max":1440}}},"special_vehicle":{"required":["vehicle"],"optional":{}},"ev_only":{"required":[],"optional":{}}},"special_vehicles":["disabled_modified"],"street_charge_optional_with":["time_limit","special_vehicle","ev_only"],"allow_keys":["scooter","heavy"],"schedule":{"max_entries":8,"vehicles":["scooter","heavy","car"]},"basis":{"keys":["source_url","evidence_id","effective_date","expires_on"],"required_one_of":["source_url","evidence_id"],"reserved":["evidence_id"],"source_url":{"pattern":"^https://\\S+$","max_length":2048}}},"conversion":{"from_space_type":{"paidMotorcycle":{"bay":"motorcycle","use":"usual","charge":"toll"},"freeMotorcycle":{"bay":"motorcycle","use":"usual","charge":"free"},"heavyOnly":{"bay":"heavy","use":"usual"},"car":{"bay":"car","use":"usual"},"offStreet":null,"disabledMotorcycle":{"bay":"motorcycle","limits":[{"kind":"special_vehicle","vehicle":"disabled_modified"}]},"timedMotorcycle":{"bay":"motorcycle","use":"usual","limits":[{"kind":"time_limit"}]},"flexShared":{"bay":"car","use":"share","share":"car_motorcycle"},"evMotorcycle":{"bay":"motorcycle","limits":[{"kind":"ev_only"}]}},"from_access":{"scooterOnly":{"bay":"motorcycle","use":"usual","allow":{"scooter":true,"heavy":false}},"scooterHeavy":{"bay":"motorcycle","use":"share","share":"scooter_heavy","allow":{"scooter":true,"heavy":true}},"heavyCar":{"bay":"car","use":"usual","allow":{"scooter":false,"heavy":true}},"heavyOnly":{"bay":"heavy","use":"usual","allow":{"scooter":false,"heavy":true}},"noMotorcycle":{"allow":{"scooter":false,"heavy":false}}},"to_space_type":[{"when":{"placement":"off_street"},"space_type":"offStreet"},{"when":{"limit":"special_vehicle"},"space_type":"disabledMotorcycle"},{"when":{"limit":"ev_only"},"space_type":"evMotorcycle"},{"when":{"share":"car_motorcycle"},"space_type":"flexShared"},{"when":{"limit":"time_limit"},"space_type":"timedMotorcycle"},{"when":{"bay":"heavy"},"space_type":"heavyOnly"},{"when":{"bay":"car"},"space_type":"car"},{"when":{"bay":"motorcycle","charge":"toll"},"space_type":"paidMotorcycle"},{"when":{"bay":"motorcycle","charge":"free"},"space_type":"freeMotorcycle"}],"to_access":"allow 與 from_access 的 allow 相同，且 from_access 有 bay 時 bay 也相同","legacy_safe":{"unsafe_keys":["schedule"],"unsafe_basis_keys":["expires_on"],"lossy_share":"scooter_heavy","lossy_limit_keys":["max_minutes"],"assumed_charge":{"timedMotorcycle":"toll"}}},"fee":{"max_bytes":4096,"vehicles":["scooter","heavy","car"],"follow":{"vehicles":["heavy"],"modes":["same_as_scooter","same_as_car"],"optional":{"factor_pct":{"min":100,"max":1000}}},"modes":{"free":{"required":{},"optional":{}},"posted":{"required":{},"optional":{}},"hourly":{"required":{"amount":{"min":0,"max":10000},"per_minutes":{"min":1,"max":1440}},"optional":{"unit_minutes":{"min":1,"max":"per_minutes"},"free_minutes":{"min":1,"max":1440},"daily_cap":{"min":0,"max":10000},"cap_reset":"cap_reset"}},"per_visit":{"required":{"amount":{"min":0,"max":10000}},"optional":{"max_minutes":{"min":1,"max":1440},"renew":"renew","extension":"extension"}},"daily":{"required":{"amount":{"min":0,"max":10000}},"optional":{"cap_reset":"cap_reset"}},"by_time":{"required":{"periods":"periods"},"optional":{"cross_period":"cross_period"}}},"enums":{"cap_reset":["calendar_day","rolling_24h","per_entry"],"renew":["none","midnight"],"cross_period":["each_period","entry_only"]},"extension":{"required":{"amount":{"min":0,"max":10000},"max_times":{"min":1,"max":10}},"optional":{"minutes":{"min":1,"max":1440}}},"periods":{"max_entries":6,"keys":["days","from","to","rate"],"nested_modes":["free","posted","hourly","per_visit","daily"]}}}$json$::jsonb;
+  select $json${"version":1,"space_types":["paidMotorcycle","freeMotorcycle","heavyOnly","car","offStreet","disabledMotorcycle","timedMotorcycle","flexShared","evMotorcycle"],"access_kinds":["scooterOnly","scooterHeavy","heavyCar","noMotorcycle","heavyOnly"],"placement":{"off_street_space_types":["offStreet"],"off_street_facility_types":["multiStorey","underground","surface"]},"time":{"pattern":"^([01][0-9]|2[0-3]):[0-5][0-9]$","days":["all","weekday","holiday"],"weekdays":["mon","tue","wed","thu","fri","sat","sun"],"optional_pair":["from","to"]},"date":{"pattern":"^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},"condition":{"keys":["bay","use","share","charge","limits","schedule","basis"],"zone_keys":["allow"],"bay":["motorcycle","heavy","car"],"use":["usual","share"],"share":{"scooter_heavy":"motorcycle","car_motorcycle":"car"},"charge":["toll","free"],"limits":{"time_limit":{"required":[],"optional":{"max_minutes":{"min":1,"max":1440}}},"special_vehicle":{"required":["vehicle"],"optional":{}},"ev_only":{"required":[],"optional":{}}},"special_vehicles":["disabled_modified"],"street_charge_optional_with":["time_limit","special_vehicle","ev_only"],"allow_keys":["scooter","heavy"],"schedule":{"keys":["days","from","to","vehicles"],"max_entries":8,"vehicles":["scooter","heavy","car"]},"basis":{"keys":["source_url","evidence_id","effective_date","expires_on"],"required_one_of":["source_url","evidence_id"],"reserved":["evidence_id"],"source_url":{"pattern":"^https://\\S+$","max_length":2048}}},"conversion":{"from_space_type":{"paidMotorcycle":{"bay":"motorcycle","use":"usual","charge":"toll"},"freeMotorcycle":{"bay":"motorcycle","use":"usual","charge":"free"},"heavyOnly":{"bay":"heavy","use":"usual"},"car":{"bay":"car","use":"usual"},"offStreet":null,"disabledMotorcycle":{"bay":"motorcycle","limits":[{"kind":"special_vehicle","vehicle":"disabled_modified"}]},"timedMotorcycle":{"bay":"motorcycle","use":"usual","limits":[{"kind":"time_limit"}]},"flexShared":{"bay":"car","use":"share","share":"car_motorcycle"},"evMotorcycle":{"bay":"motorcycle","limits":[{"kind":"ev_only"}]}},"from_access":{"scooterOnly":{"bay":"motorcycle","use":"usual","allow":{"scooter":true,"heavy":false}},"scooterHeavy":{"bay":"motorcycle","use":"share","share":"scooter_heavy","allow":{"scooter":true,"heavy":true}},"heavyCar":{"bay":"car","use":"usual","allow":{"scooter":false,"heavy":true}},"heavyOnly":{"bay":"heavy","use":"usual","allow":{"scooter":false,"heavy":true}},"noMotorcycle":{"allow":{"scooter":false,"heavy":false}}},"to_space_type":[{"when":{"placement":"off_street"},"space_type":"offStreet"},{"when":{"limit":"special_vehicle"},"space_type":"disabledMotorcycle"},{"when":{"limit":"ev_only"},"space_type":"evMotorcycle"},{"when":{"share":"car_motorcycle"},"space_type":"flexShared"},{"when":{"limit":"time_limit"},"space_type":"timedMotorcycle"},{"when":{"bay":"heavy"},"space_type":"heavyOnly"},{"when":{"bay":"car"},"space_type":"car"},{"when":{"bay":"motorcycle","charge":"toll"},"space_type":"paidMotorcycle"},{"when":{"bay":"motorcycle","charge":"free"},"space_type":"freeMotorcycle"}],"to_access":"allow 與 from_access 的 allow 相同，且 from_access 有 bay 時 bay 也相同","legacy_safe":{"unsafe_keys":["schedule"],"unsafe_basis_keys":["expires_on"],"lossy_share":"scooter_heavy","lossy_limit_keys":["max_minutes"],"assumed_charge":{"timedMotorcycle":"toll"}}},"fee":{"max_bytes":4096,"vehicles":["scooter","heavy","car"],"follow":{"vehicles":["heavy"],"modes":["same_as_scooter","same_as_car"],"optional":{"factor_pct":{"min":100,"max":1000}}},"modes":{"free":{"required":{},"optional":{}},"posted":{"required":{},"optional":{}},"hourly":{"required":{"amount":{"min":0,"max":10000},"per_minutes":{"min":1,"max":1440}},"optional":{"unit_minutes":{"min":1,"max":"per_minutes"},"free_minutes":{"min":1,"max":1440},"daily_cap":{"min":0,"max":10000},"cap_reset":"cap_reset"}},"per_visit":{"required":{"amount":{"min":0,"max":10000}},"optional":{"max_minutes":{"min":1,"max":1440},"renew":"renew","extension":"extension"}},"daily":{"required":{"amount":{"min":0,"max":10000}},"optional":{"cap_reset":"cap_reset"}},"by_time":{"required":{"periods":"periods"},"optional":{"cross_period":"cross_period"}}},"enums":{"cap_reset":["calendar_day","rolling_24h","per_entry"],"renew":["none","midnight"],"cross_period":["each_period","entry_only"]},"extension":{"required":{"amount":{"min":0,"max":10000},"max_times":{"min":1,"max":10}},"optional":{"minutes":{"min":1,"max":1440}}},"periods":{"max_entries":6,"keys":["days","from","to","rate"],"nested_modes":["free","posted","hourly","per_visit","daily"]}}}$json$::jsonb;
 $contract$;
 
 -- A whole number in range; CASE so a string returns false, not a cast error.
@@ -42,24 +42,28 @@ language sql immutable set search_path='' as $$
     and pg_input_is_valid(p#>>'{}','date'),false);
 $$;
 
--- days, from and to of a schedule slot or a fee period.
+-- days, from and to of a schedule slot or a fee period; leaving out both
+-- from and to means all day.
 create or replace function pg_temp.contract_slot_times(p jsonb) returns boolean
 language sql immutable set search_path='' as $$
   select coalesce(case when jsonb_typeof(p->'days')='string'
       then pg_temp.contract_str_in(p->'days',pg_temp.parking_contract()->'time'->'days')
       else pg_temp.contract_subset(p->'days',pg_temp.parking_contract()->'time'->'weekdays') end
-    and jsonb_typeof(p->'from')='string' and jsonb_typeof(p->'to')='string'
+    and (not p ?| array(select jsonb_array_elements_text(pg_temp.parking_contract()->'time'->'optional_pair'))
+    or jsonb_typeof(p->'from')='string' and jsonb_typeof(p->'to')='string'
     and (p->>'from') ~ (pg_temp.parking_contract()->'time'->>'pattern')
     and (p->>'to') ~ (pg_temp.parking_contract()->'time'->>'pattern')
-    and p->>'from'<>p->>'to',false);
+    and p->>'from'<>p->>'to'),false);
 $$;
 
--- An object with exactly the listed keys.
-create or replace function pg_temp.contract_exact_keys(p jsonb,p_keys jsonb) returns boolean
+-- An object with only the listed keys, and all of them except the optional
+-- from/to pair, which contract_slot_times checks.
+create or replace function pg_temp.contract_slot_keys(p jsonb,p_keys jsonb) returns boolean
 language sql immutable set search_path='' as $$
   select case when jsonb_typeof(p)='object' then
     not exists(select 1 from jsonb_object_keys(p) k where not p_keys ? k)
-    and not exists(select 1 from jsonb_array_elements_text(p_keys) k where not p ? k)
+    and not exists(select 1 from jsonb_array_elements_text(p_keys) k
+      where not p ? k and not pg_temp.parking_contract()->'time'->'optional_pair' ? k)
     else false end;
 $$;
 
@@ -118,7 +122,7 @@ begin
       or jsonb_array_length(p->'schedule') not between 1 and (c->'schedule'->>'max_entries')::integer
     then return false; end if;
     for l in select e from jsonb_array_elements(p->'schedule') e loop
-      if not pg_temp.contract_exact_keys(l,'["days","from","to","vehicles"]') or not pg_temp.contract_slot_times(l)
+      if not pg_temp.contract_slot_keys(l,c->'schedule'->'keys') or not pg_temp.contract_slot_times(l)
         or not pg_temp.contract_subset(l->'vehicles',c->'schedule'->'vehicles') then return false; end if;
     end loop;
   end if;
@@ -192,7 +196,7 @@ begin
       if jsonb_typeof(f.value) is distinct from 'array'
         or jsonb_array_length(f.value) not between 1 and (fee->'periods'->>'max_entries')::integer
         or exists(select 1 from jsonb_array_elements(f.value) e
-          where not pg_temp.contract_exact_keys(e,fee->'periods'->'keys') or not pg_temp.contract_slot_times(e)
+          where not pg_temp.contract_slot_keys(e,fee->'periods'->'keys') or not pg_temp.contract_slot_times(e)
             or not pg_temp.contract_fee_rate(e->'rate',p_vehicle,true))
       then return false; end if;
     else return false; end if;
@@ -265,6 +269,11 @@ select is(pg_temp.valid_condition($j${"bay":"motorcycle","use":"usual","charge":
 select is(pg_temp.valid_condition($j${"bay":"motorcycle","use":"usual","charge":"toll","limits":[{"kind":"time_limit","max_minutes":1441}]}$j$::jsonb,false),false,'condition: 限時超過 1440 分鐘');
 select is(pg_temp.valid_condition($j${"bay":"motorcycle","use":"usual","charge":"toll","limits":[{"kind":"time_limit","max_minutes":"20"}]}$j$::jsonb,false),false,'condition: 限時分鐘是字串');
 select is(pg_temp.valid_condition($j${"bay":"motorcycle","use":"usual","charge":"toll","limits":[{"kind":"time_limit","max_minutes":20.5}]}$j$::jsonb,false),false,'condition: 限時分鐘不是整數');
+select is(pg_temp.valid_condition($j${"bay":"motorcycle","use":"usual","charge":"toll","limits":[{"kind":"time_limit","max_minutes":20.0}]}$j$::jsonb,false),true,'condition: 限時分鐘寫成 20.0，視同 20');
+select is(pg_temp.valid_condition($j${"bay":"car","use":"share","share":"car_motorcycle","schedule":[{"days":"holiday","vehicles":["car","scooter"]}]}$j$::jsonb,false),true,'condition: 全天：同時省略 from 與 to');
+select is(pg_temp.valid_condition($j${"bay":"heavy","schedule":[{"days":"all","from":"00:00","to":"24:00","vehicles":["car"]}]}$j$::jsonb,false),false,'condition: 全天不可寫成 00:00–24:00');
+select is(pg_temp.valid_condition($j${"bay":"heavy","schedule":[{"days":"all","from":"07:00","vehicles":["heavy"]}]}$j$::jsonb,false),false,'condition: 只省略 to');
+select is(pg_temp.valid_condition($j${"bay":"heavy","schedule":[{"vehicles":["heavy"]}]}$j$::jsonb,false),false,'condition: 時段缺 days');
 select is(pg_temp.valid_condition($j${"bay":"heavy","schedule":[]}$j$::jsonb,false),false,'condition: schedule 為空陣列');
 select is(pg_temp.valid_condition($j${"bay":"heavy","schedule":[{"days":"all","from":"07:00","to":"20:00","vehicles":["car"]},{"days":"all","from":"07:00","to":"20:00","vehicles":["car"]},{"days":"all","from":"07:00","to":"20:00","vehicles":["car"]},{"days":"all","from":"07:00","to":"20:00","vehicles":["car"]},{"days":"all","from":"07:00","to":"20:00","vehicles":["car"]},{"days":"all","from":"07:00","to":"20:00","vehicles":["car"]},{"days":"all","from":"07:00","to":"20:00","vehicles":["car"]},{"days":"all","from":"07:00","to":"20:00","vehicles":["car"]},{"days":"all","from":"07:00","to":"20:00","vehicles":["car"]}]}$j$::jsonb,false),false,'condition: schedule 超過 8 段');
 select is(pg_temp.valid_condition($j${"bay":"heavy","schedule":[{"days":"all","from":"07:00","to":"24:00","vehicles":["car"]}]}$j$::jsonb,false),false,'condition: 時間 24:00 不合法');
@@ -341,6 +350,9 @@ select is(pg_temp.valid_fee($j${"scooter":{"mode":"by_time","cross_period":"each
 select is(pg_temp.valid_fee($j${"scooter":{"mode":"by_time","periods":[{"days":"weekday","from":"08:00","to":"20:00","rate":{"mode":"per_visit","amount":30}}]}}$j$::jsonb),true,'fee: 依時段計次，跨時段未確認');
 select is(pg_temp.valid_fee($j${"car":{"mode":"by_time","periods":[{"days":"all","from":"00:00","to":"01:00","rate":{"mode":"free"}},{"days":"all","from":"01:00","to":"02:00","rate":{"mode":"free"}},{"days":"all","from":"02:00","to":"03:00","rate":{"mode":"free"}},{"days":"all","from":"03:00","to":"04:00","rate":{"mode":"free"}},{"days":"all","from":"04:00","to":"05:00","rate":{"mode":"free"}},{"days":"all","from":"05:00","to":"06:00","rate":{"mode":"free"}}]}}$j$::jsonb),true,'fee: 依時段 6 段');
 select is(pg_temp.valid_fee($j${"car":{"mode":"by_time","periods":[{"days":"all","from":"00:00","to":"01:00","rate":{"mode":"free"}},{"days":"all","from":"01:00","to":"02:00","rate":{"mode":"free"}},{"days":"all","from":"02:00","to":"03:00","rate":{"mode":"free"}},{"days":"all","from":"03:00","to":"04:00","rate":{"mode":"free"}},{"days":"all","from":"04:00","to":"05:00","rate":{"mode":"free"}},{"days":"all","from":"05:00","to":"06:00","rate":{"mode":"free"}},{"days":"all","from":"06:00","to":"07:00","rate":{"mode":"free"}}]}}$j$::jsonb),false,'fee: 依時段 7 段');
+select is(pg_temp.valid_fee($j${"car":{"mode":"by_time","periods":[{"days":"weekday","rate":{"mode":"hourly","amount":40,"per_minutes":60}},{"days":"holiday","rate":{"mode":"free"}}]}}$j$::jsonb),true,'fee: 依時段的一段為全天（省略 from 與 to）');
+select is(pg_temp.valid_fee($j${"car":{"mode":"by_time","periods":[{"days":"all","to":"20:00","rate":{"mode":"free"}}]}}$j$::jsonb),false,'fee: 依時段的一段只省略 from');
+select is(pg_temp.valid_fee($j${"car":{"mode":"by_time","periods":[{"days":"all","from":"00:00","to":"24:00","rate":{"mode":"free"}}]}}$j$::jsonb),false,'fee: 依時段的全天不可寫成 00:00–24:00');
 select is(pg_temp.valid_fee($j${"car":{"mode":"by_time","periods":[]}}$j$::jsonb),false,'fee: 依時段沒有任何一段');
 select is(pg_temp.valid_fee($j${"car":{"mode":"by_time"}}$j$::jsonb),false,'fee: 依時段缺 periods');
 select is(pg_temp.valid_fee($j${"car":{"mode":"by_time","periods":[{"days":"all","from":"08:00","to":"20:00","rate":{"mode":"by_time","periods":[]}}]}}$j$::jsonb),false,'fee: 依時段內層不可再依時段');
@@ -372,6 +384,7 @@ select is(pg_temp.valid_fee($j${"scooter":{"mode":"monthly","amount":300}}$j$::j
 select is(pg_temp.valid_fee($j${"scooter":{"mode":"free","amount":0}}$j$::jsonb),false,'fee: 免費不可帶金額');
 select is(pg_temp.valid_fee($j${"scooter":{"mode":"hourly","amount":20}}$j$::jsonb),false,'fee: 計時缺計費週期');
 select is(pg_temp.valid_fee($j${"scooter":{"mode":"daily","amount":"20"}}$j$::jsonb),false,'fee: 金額是字串');
+select is(pg_temp.valid_fee($j${"scooter":{"mode":"daily","amount":20.0}}$j$::jsonb),true,'fee: 金額寫成 20.0，視同 20');
 select is(pg_temp.valid_fee($j${"scooter":{"mode":"daily","amount":20.5}}$j$::jsonb),false,'fee: 金額不是整數');
 select is(pg_temp.valid_fee($j${"scooter":"free"}$j$::jsonb),false,'fee: 費率不是物件');
 select is(pg_temp.valid_fee($j$[]$j$::jsonb),false,'fee: fee 不是物件');

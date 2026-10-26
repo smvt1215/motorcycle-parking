@@ -91,13 +91,18 @@ const realDate = (v: unknown) => {
   const d = new Date(`${v}T00:00:00Z`);
   return !Number.isNaN(d.getTime()) && d.toISOString().startsWith(v);
 };
-/** `days`, `from` and `to` of a schedule slot or a fee period. */
+/**
+ * `days`, `from` and `to` of a schedule slot or a fee period; leaving out
+ * both `from` and `to` means all day.
+ */
 export function validSlotTimes(slot: Record<string, unknown>): boolean {
   const time = new RegExp(contract.time.pattern);
   const days = slot.days;
-  return (typeof days === 'string'
+  const validDays = typeof days === 'string'
     ? contract.time.days.includes(days)
-    : subset(days, contract.time.weekdays)) &&
+    : subset(days, contract.time.weekdays);
+  if (!contract.time.optional_pair.some((k) => has(slot, k))) return validDays;
+  return validDays &&
     typeof slot.from === 'string' && typeof slot.to === 'string' &&
     time.test(slot.from) && time.test(slot.to) && slot.from !== slot.to;
 }
@@ -188,7 +193,9 @@ export function validCondition(v: unknown, zone = false): boolean {
     ) return false;
     for (const s of schedule) {
       if (
-        !isObject(s) || Object.keys(s).length !== 4 || !validSlotTimes(s) ||
+        !isObject(s) ||
+        !Object.keys(s).every((k) => cond.schedule.keys.includes(k)) ||
+        !validSlotTimes(s) ||
         !subset(s.vehicles, cond.schedule.vehicles)
       ) return false;
     }

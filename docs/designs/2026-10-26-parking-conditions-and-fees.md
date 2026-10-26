@@ -49,7 +49,7 @@
           └ 路外才有 ┘
 ```
 
-`condition` 的 JSON 契約（所有鍵都可省略，省略即未確認）：
+`condition` 的 JSON 契約（所有鍵都可省略，省略即未確認。未確認**一律以省略鍵表示**：`limits`、`schedule` 不收空陣列，`allow` 不收空物件，分區不收空的 `condition`。分鐘、金額等整數欄位接受沒有小數部分的數字，`20.0` 視同 `20`，`20.5` 不合法；三端一致）：
 
 ```json
 {
@@ -72,7 +72,7 @@
 ```
 
 - `use='share'` 時 `share` 必填；`use='usual'` 時不得有 `share`。
-- `schedule[].days` 為 `all`／`weekday`／`holiday`，或星期陣列 `["mon",…]`；`from > to` 表示跨午夜。`vehicles` 為該時段允許停放的車種（`scooter`／`heavy`／`car`）。汽機車共用格（`share='car_motorcycle'`）的機車涵蓋範圍不預設，只認 `vehicles` 依公告寫明的車種，沒寫的車種為待確認（§7 第 1 項，已決定）。
+- `schedule[].days` 為 `all`／`weekday`／`holiday`，或星期陣列 `["mon",…]`；`from > to` 表示跨午夜。`from` 與 `to` 不可相同；**全天以同時省略 `from` 與 `to` 表示**（例：`{"days":"holiday","vehicles":["car","scooter"]}`），不寫 `00:00`–`24:00`，只省略其中一個不合法。`schedule` 最多 8 段；費率 `by_time.periods` 的時段用同一套規則（最多 6 段，§2.2）。`vehicles` 為該時段允許停放的車種（`scooter`／`heavy`／`car`）。汽機車共用格（`share='car_motorcycle'`）的機車涵蓋範圍不預設，只認 `vehicles` 依公告寫明的車種，沒寫的車種為待確認（§7 第 1 項，已決定）。
 - `basis` 記錄這個條件本身的公告依據（例如臺北 36 處試辦場域的分區），與 `city_rules` 分開。`expires_on` 已過即視為依據失效（§3.3）。依據的種類與照片規則見 §1.4。
 - 「特殊車型及地方特別開放另處理」（需求 6）：特殊車型用 `limits[]` 的 `{"kind":"special_vehicle","vehicle":…}`；地方開放仍放在 `city_rules`，不寫進格位。
 - 身障專用機車格的完整範例：
