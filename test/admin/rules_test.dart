@@ -247,6 +247,17 @@ void main() {
       expect(rules.base!.version, 2);
     });
 
+    test('發布進行中不接受修改，發布後的表單就是已發布的版本', () async {
+      rules.select('臺北市', VehicleType.heavy);
+      rules.update((d) => d.feeNote = '每次 50 元');
+      final publishing = rules.publish('');
+      rules.update((d) => d.feeNote = '發布中改的內容');
+      expect(rules.draft!.feeNote, '每次 50 元');
+      await publishing;
+      expect(rules.draft!.feeNote, '每次 50 元');
+      expect(rules.dirty, isFalse);
+    });
+
     test('欄位有誤時不送出', () async {
       rules.select('基隆市', VehicleType.heavy);
       rules.update((d) => d.access[SpaceType.car] = StreetAccess.open);
@@ -410,6 +421,28 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('rule-list')), findsOneWidget);
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('有未發布的修改時，重新載入規則前先確認', (tester) async {
+      await show(tester, path: '/rules/臺北市/heavy');
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey('access-car')),
+          matching: find.text('不開放'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('重新載入規則'));
+      await tester.pumpAndSettle();
+      expect(find.text('放棄未發布的修改？'), findsOneWidget);
+      await tester.tap(find.text('繼續編輯'));
+      await tester.pumpAndSettle();
+      expect(find.text('已修改'), findsWidgets);
+      await tester.tap(find.byTooltip('重新載入規則'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('放棄修改').last);
+      await tester.pumpAndSettle();
+      expect(find.text('已修改'), findsNothing);
     });
 
     testWidgets('有未發布的修改時，換規則前先確認', (tester) async {

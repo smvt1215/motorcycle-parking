@@ -193,7 +193,8 @@ class RulesController extends ChangeNotifier {
   /// Changes the draft; [edit] mutates it in place.
   void update(void Function(RuleDraft d) edit) {
     final d = draft;
-    if (d == null) return;
+    // The published version replaces the draft when the publish returns.
+    if (d == null || publishing) return;
     edit(d);
     _notify();
   }

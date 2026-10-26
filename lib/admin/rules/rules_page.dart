@@ -94,6 +94,12 @@ class _RulesPageState extends State<RulesPage> {
     return leave == true;
   }
 
+  /// Reloading refills the open form; unpublished edits are confirmed first.
+  Future<void> _reload() async {
+    if (!await _mayLeave() || !mounted) return;
+    await rules.load();
+  }
+
   Future<void> _go(RuleKey? key) async {
     if (key != null && key == rules.selected) return;
     if (!await _mayLeave() || !mounted) return;
@@ -168,7 +174,12 @@ class _RulesPageState extends State<RulesPage> {
     builder: (context, _) => LayoutBuilder(
       builder: (context, constraints) {
         final compact = constraints.maxWidth < reviewCompactWidth;
-        final list = _ListPane(rules: rules, compact: compact, onPick: _go);
+        final list = _ListPane(
+          rules: rules,
+          compact: compact,
+          onPick: _go,
+          onReload: _reload,
+        );
         final detail = _DetailPane(
           rules: rules,
           note: note,
@@ -248,10 +259,12 @@ class _ListPane extends StatelessWidget {
     required this.rules,
     required this.compact,
     required this.onPick,
+    required this.onReload,
   });
   final RulesController rules;
   final bool compact;
   final ValueChanged<RuleKey> onPick;
+  final VoidCallback onReload;
 
   @override
   Widget build(BuildContext context) {
@@ -349,7 +362,7 @@ class _ListPane extends StatelessWidget {
         ),
         IconButton(
           tooltip: '重新載入規則',
-          onPressed: rules.loading || rules.publishing ? null : rules.load,
+          onPressed: rules.loading || rules.publishing ? null : onReload,
           icon: const Icon(Icons.refresh),
         ),
       ],
@@ -510,7 +523,15 @@ class _DetailPane extends StatelessWidget {
       );
     }
     final current = rules.base!;
-    final form = _RuleForm(rules: rules, note: note);
+    // Edits made while a publish is in flight would be overwritten by the
+    // published version; the form is locked until it returns.
+    final form = IgnorePointer(
+      ignoring: rules.publishing,
+      child: ExcludeFocus(
+        excluding: rules.publishing,
+        child: _RuleForm(rules: rules, note: note),
+      ),
+    );
     final previewPane = _Preview(rules: rules);
     return Material(
       color: colors.surface,

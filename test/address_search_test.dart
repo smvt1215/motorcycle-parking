@@ -7,6 +7,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:motorcycle_parking/core/address_search.dart';
 import 'package:motorcycle_parking/ui/address_search_field.dart';
 import 'package:motorcycle_parking/ui/location_picker.dart';
+import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 const _door = AddressCandidate(
@@ -302,4 +303,74 @@ void main() {
       expect(stacked, width < 360 || scale > 1.5);
     });
   }
+
+  for (final width in [390.0, 1280.0]) {
+    testWidgets('寬 $width：Web 上搜尋面板擋住下層地圖的指標事件', (tester) async {
+      tester.view.physicalSize = Size(width, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      addressSearchInterceptsPointers = true;
+      addTearDown(() => addressSearchInterceptsPointers = false);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => showAddressSearch(
+                  context,
+                  search: (q, {lat, lng}) async => [_door],
+                ),
+                child: const Text('開啟'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('開啟'));
+      await tester.pumpAndSettle();
+      final guard = find.ancestor(
+        of: find.byType(AddressSearchField),
+        matching: find.byType(PointerInterceptor),
+      );
+      expect(guard, findsOneWidget);
+      expect(tester.widget<PointerInterceptor>(guard).intercepting, isTrue);
+      // The field, the button and the results are all inside the guard.
+      await tester.enterText(find.byType(TextField), '忠孝西路一段49號');
+      await tester.pump();
+      await tester.tap(find.text('搜尋地址'));
+      await tester.pumpAndSettle();
+      for (final f in [
+        find.byType(TextField),
+        find.widgetWithText(OutlinedButton, '搜尋地址'),
+        find.text('臺北市中正區忠孝西路一段49號'),
+      ]) {
+        expect(find.descendant(of: guard, matching: f), findsOneWidget);
+      }
+    });
+  }
+
+  testWidgets('非 Web 不攔截', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showAddressSearch(
+                context,
+                search: (q, {lat, lng}) async => [],
+              ),
+              child: const Text('開啟'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('開啟'));
+    await tester.pumpAndSettle();
+    final guard = find.ancestor(
+      of: find.byType(AddressSearchField),
+      matching: find.byType(PointerInterceptor),
+    );
+    expect(tester.widget<PointerInterceptor>(guard).intercepting, isFalse);
+  });
 }
