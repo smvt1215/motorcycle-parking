@@ -338,6 +338,7 @@ void _rateGaps(Map<Object?, Object?> rate, Set<String> gaps) {
       var visits = 0;
       for (final p in periods) {
         if (p case {'rate': final Map<Object?, Object?> r}) {
+          if (r['mode'] == 'posted') gaps.add('部分時段費率');
           if (r['mode'] == 'per_visit') visits++;
           _rateGaps(r, gaps);
         }
@@ -643,34 +644,60 @@ ParkingDecision _street(
   );
 
   final carShare = c.share == ShareKind.carMotorcycle;
-  // Step 1. Bays reserved by law or by vehicle, whatever the city rule says.
-  if (!trusted &&
-      (c.hasLimit(LimitKind.specialVehicle) ||
-          c.hasLimit(LimitKind.evOnly) ||
-          carShare)) {
+  final special = c.hasLimit(LimitKind.specialVehicle);
+  final ev = c.hasLimit(LimitKind.evOnly);
+  final timed = c.hasLimit(LimitKind.timeLimit);
+  // Step 1. The bay's own class first: no limit or notice opens a heavy bay
+  // to scooters, nor a car bay unless a city rule does.
+  if (c.bay == Bay.heavy && vehicle == VehicleType.scooter) {
+    return done(EligibilityStatus.notAllowed, '大型重機專用格', by: BasisKind.law);
+  }
+  // Car bays are painted for small cars and heavy bikes (標誌標線號誌設置規則
+  // §190); an ordinary scooter there is the wrong vehicle class unless a
+  // city rule opens them (道路交通安全規則 §112, last paragraph), also in
+  // named districts only; the district check below closes the others. A
+  // shared car bay's own notice decides below.
+  if (c.bay == Bay.car &&
+      !carShare &&
+      vehicle == VehicleType.scooter &&
+      !rules.any(
+        (r) =>
+            r.allowedSpaceTypes.contains(SpaceType.car) ||
+            r.conditionalSpaceTypes.contains(SpaceType.car) ||
+            r.districtSpaceTypes.containsKey(SpaceType.car),
+      )) {
+    return done(EligibilityStatus.notAllowed, _carBayReason, by: BasisKind.law);
+  }
+  // Bays reserved by vehicle, whatever the city rule says.
+  if (!trusted && (special || ev || carShare)) {
     return done(EligibilityStatus.unverified, communityUncheckedReason);
   }
-  // The rider using the app may qualify, but a permit alone does not: the
-  // bay is for 特製機車 passed by the motor vehicles office, used by or
-  // carrying the permit holder (身心障礙者專用停車位設置管理辦法 §12).
-  if (c.hasLimit(LimitKind.specialVehicle)) {
-    return done(
+
+  ParkingDecision result;
+  final heavyShare =
+      vehicle == VehicleType.heavy && c.share == ShareKind.scooterHeavy;
+  if (special || ev) {
+    // The rider using the app may qualify, but a permit alone does not: the
+    // bay is for 特製機車 passed by the motor vehicles office, used by or
+    // carrying the permit holder (身心障礙者專用停車位設置管理辦法 §12).
+    // Every limit is kept; the slots below still apply.
+    result = done(
       EligibilityStatus.conditional,
-      _disabledReason,
+      [
+        if (special) _disabledReason,
+        if (ev) _evReason,
+        if (timed) _timedReason,
+      ].join('；'),
+      restriction: ev
+          ? RuleRestriction.evOnly
+          : timed
+          ? RuleRestriction.timeLimited
+          : null,
       by: BasisKind.law,
     );
-  }
-  if (c.hasLimit(LimitKind.evOnly)) {
-    return done(
-      EligibilityStatus.conditional,
-      _evReason,
-      restriction: RuleRestriction.evOnly,
-      by: BasisKind.law,
-    );
-  }
-  // A shared car bay opens to scooters only in the slots its notice names
-  // (§7 item 1); heavy bikes park on car bays by law, shared or not.
-  if (carShare && vehicle == VehicleType.scooter) {
+  } else if (carShare && vehicle == VehicleType.scooter) {
+    // A shared car bay opens to scooters only in the slots its notice names
+    // (§7 item 1); heavy bikes park on car bays by law, shared or not.
     final slots = noticeHolds ? _slotsFor(c, vehicle) : const <ScheduleSlot>[];
     if (slots.isEmpty) {
       return done(
@@ -683,104 +710,87 @@ ParkingDecision _street(
     }
     return done(
       EligibilityStatus.conditional,
-      '汽機車依時段輪替使用，${vehicle.label}可停時段：'
-      '${slots.map(slotText).join('；')}，請看現場牌面',
+      [
+        '汽機車依時段輪替使用，${vehicle.label}可停時段：'
+            '${slots.map(slotText).join('；')}，請看現場牌面',
+        if (timed) _timedReason,
+      ].join('；'),
       restriction: RuleRestriction.timeLimited,
       by: BasisKind.notice,
     );
-  }
-  if (c.bay == Bay.heavy && vehicle == VehicleType.scooter) {
-    return done(EligibilityStatus.notAllowed, '大型重機專用格', by: BasisKind.law);
-  }
-  // Car bays are painted for small cars and heavy bikes (標誌標線號誌設置規則
-  // §190); an ordinary scooter there is the wrong vehicle class unless a
-  // city rule opens them (道路交通安全規則 §112, last paragraph), also in
-  // named districts only; the district check below closes the others.
-  if (c.bay == Bay.car &&
-      vehicle == VehicleType.scooter &&
-      !rules.any(
-        (r) =>
-            r.allowedSpaceTypes.contains(SpaceType.car) ||
-            r.conditionalSpaceTypes.contains(SpaceType.car) ||
-            r.districtSpaceTypes.containsKey(SpaceType.car),
-      )) {
-    return done(EligibilityStatus.notAllowed, _carBayReason, by: BasisKind.law);
-  }
-  final kinds = ruleKindsOf(c);
-  if (kinds.isEmpty) {
-    return done(EligibilityStatus.unverified, '格位類型未確認，請以現場標誌標線為準');
-  }
-
-  // Step 2. A shared-use sign is itself a notice, more specific than the
-  // city rule, while it holds.
-  ParkingDecision result;
-  final heavyShare =
-      vehicle == VehicleType.heavy && c.share == ShareKind.scooterHeavy;
-  if (heavyShare && noticeHolds) {
-    result = trusted
-        ? done(
-            EligibilityStatus.allowed,
-            '普大共用格：依現場共用標示停放，請勿超出格線',
-            by: BasisKind.notice,
-          )
-        : done(EligibilityStatus.unverified, communityUncheckedReason);
   } else {
-    final verdicts = [
-      for (final k in kinds) ruleVerdict(rules, k, spot.district, now: at),
-    ];
-    final judged = [for (final v in verdicts) _fromVerdict(v, trusted)];
-    final first = judged.first;
-    if (judged.every(
-      (j) => j.status == first.status && j.restriction == first.restriction,
-    )) {
-      final v = verdicts.first;
-      result = done(
-        first.status,
-        first.reason,
-        restriction: first.restriction,
-        more: [
-          if (v.rule case final rule?)
-            DecisionBasis(
-              BasisKind.cityRule,
-              rule: rule,
-              url: rule.sourceUrl,
-              date: rule.effectiveDate,
-              expired: v.kind == RuleVerdictKind.expired,
-            ),
-        ],
-        gaps: [
-          if (v.kind == RuleVerdictKind.expired) DecisionGap.noticeExpired,
-          if (v.kind == RuleVerdictKind.conflict) DecisionGap.noticeConflict,
-          if (v.kind == RuleVerdictKind.unknownDistrict)
-            DecisionGap.districtUnknown,
-        ],
-      );
-    } else {
-      result = done(
-        EligibilityStatus.unverified,
-        '無法確認此格是收費格或免費格，請看現場牌面',
-        gaps: [DecisionGap.chargeUnknown],
-      );
+    final kinds = ruleKindsOf(c);
+    if (kinds.isEmpty) {
+      return done(EligibilityStatus.unverified, '格位類型未確認，請以現場標誌標線為準');
     }
-    // A shared-use sign whose notice ended opens nothing the rule does not.
-    if (heavyShare && !result.open) {
+    // Step 2. A shared-use sign is itself a notice, more specific than the
+    // city rule, while it holds.
+    if (heavyShare && noticeHolds) {
+      result = trusted
+          ? done(
+              EligibilityStatus.allowed,
+              '普大共用格：依現場共用標示停放，請勿超出格線',
+              by: BasisKind.notice,
+            )
+          : done(EligibilityStatus.unverified, communityUncheckedReason);
+    } else {
+      final verdicts = [
+        for (final k in kinds) ruleVerdict(rules, k, spot.district, now: at),
+      ];
+      final judged = [for (final v in verdicts) _fromVerdict(v, trusted)];
+      final first = judged.first;
+      if (judged.every(
+        (j) => j.status == first.status && j.restriction == first.restriction,
+      )) {
+        final v = verdicts.first;
+        result = done(
+          first.status,
+          first.reason,
+          restriction: first.restriction,
+          more: [
+            if (v.rule case final rule?)
+              DecisionBasis(
+                BasisKind.cityRule,
+                rule: rule,
+                url: rule.sourceUrl,
+                date: rule.effectiveDate,
+                expired: v.kind == RuleVerdictKind.expired,
+              ),
+          ],
+          gaps: [
+            if (v.kind == RuleVerdictKind.expired) DecisionGap.noticeExpired,
+            if (v.kind == RuleVerdictKind.conflict) DecisionGap.noticeConflict,
+            if (v.kind == RuleVerdictKind.unknownDistrict)
+              DecisionGap.districtUnknown,
+          ],
+        );
+      } else {
+        result = done(
+          EligibilityStatus.unverified,
+          '無法確認此格是收費格或免費格，請看現場牌面',
+          gaps: [DecisionGap.chargeUnknown],
+        );
+      }
+      // A shared-use sign whose notice ended opens nothing the rule does
+      // not.
+      if (heavyShare && !result.open) {
+        result = result._with(
+          status: EligibilityStatus.unverified,
+          reason: _expiredNoticeReason(c.basis!, day),
+          restriction: () => null,
+        );
+      }
+    }
+    // Posted limits apply where the bay is open.
+    if (result.status == EligibilityStatus.allowed && timed) {
       result = result._with(
-        status: EligibilityStatus.unverified,
-        reason: _expiredNoticeReason(c.basis!, day),
-        restriction: () => null,
+        status: EligibilityStatus.conditional,
+        reason: _timedReason,
+        restriction: () => RuleRestriction.timeLimited,
       );
     }
   }
 
-  // Posted limits apply where the bay is open.
-  if (result.status == EligibilityStatus.allowed &&
-      c.hasLimit(LimitKind.timeLimit)) {
-    result = result._with(
-      status: EligibilityStatus.conditional,
-      reason: _timedReason,
-      restriction: () => RuleRestriction.timeLimited,
-    );
-  }
   // Time slots (§3.3): shown, not switched by the clock (§7 item 4). Heavy
   // bikes on a car bay park by law whatever the slots say.
   if (c.schedule.isNotEmpty &&
@@ -797,10 +807,13 @@ ParkingDecision _street(
         moreGaps: [DecisionGap.scheduleUnknown],
       );
     } else if (result.open) {
+      final limits = special || ev ? '${result.reason}；' : '';
       result = result._with(
         status: EligibilityStatus.conditional,
-        reason: '${vehicle.label}可停時段：${slots.map(slotText).join('；')}，請看現場牌面',
-        restriction: () => RuleRestriction.timeLimited,
+        reason:
+            '$limits${vehicle.label}可停時段：${slots.map(slotText).join('；')}，請看現場牌面',
+        restriction: () =>
+            ev ? RuleRestriction.evOnly : RuleRestriction.timeLimited,
       );
     }
   }
@@ -908,42 +921,36 @@ ZoneDecision _zone(
   if (vehicle == VehicleType.scooter && c.bay == Bay.car) {
     return zone(EligibilityStatus.unverified, '汽車格開放普通機車須有公告，請依入口公告');
   }
-  if (c.hasLimit(LimitKind.specialVehicle)) {
-    return zone(EligibilityStatus.conditional, _disabledReason);
-  }
-  if (c.hasLimit(LimitKind.evOnly)) {
+  // Every limit, the slots and a trial's end date are kept together.
+  final ev = c.hasLimit(LimitKind.evOnly);
+  final timed = c.hasLimit(LimitKind.timeLimit);
+  final slots = _slotsFor(c, vehicle);
+  if (c.schedule.isNotEmpty && slots.isEmpty) {
     return zone(
-      EligibilityStatus.conditional,
-      _evReason,
-      restriction: RuleRestriction.evOnly,
+      EligibilityStatus.unverified,
+      '公告沒有列出${vehicle.label}的開放時段',
+      gaps: {DecisionGap.scheduleUnknown},
     );
   }
-  if (c.schedule.isNotEmpty) {
-    final slots = _slotsFor(c, vehicle);
-    if (slots.isEmpty) {
-      return zone(
-        EligibilityStatus.unverified,
-        '公告沒有列出${vehicle.label}的開放時段',
-        gaps: {DecisionGap.scheduleUnknown},
-      );
-    }
+  final limits = [
+    if (c.hasLimit(LimitKind.specialVehicle)) _disabledReason,
+    if (ev) _evReason,
+    if (slots.isNotEmpty) '可停時段：${slots.map(slotText).join('；')}',
+    if (timed) _timedReason,
+    // A trial with an end date: open while it lasts, and the rider should
+    // know it ends.
+    if (c.basis?.expiresOn case final end?) '試辦至 $end',
+  ];
+  if (limits.isNotEmpty) {
     return zone(
       EligibilityStatus.conditional,
-      '可停時段：${slots.map(slotText).join('；')}',
-      restriction: RuleRestriction.timeLimited,
+      limits.join('；'),
+      restriction: ev
+          ? RuleRestriction.evOnly
+          : slots.isNotEmpty || timed
+          ? RuleRestriction.timeLimited
+          : null,
     );
-  }
-  if (c.hasLimit(LimitKind.timeLimit)) {
-    return zone(
-      EligibilityStatus.conditional,
-      _timedReason,
-      restriction: RuleRestriction.timeLimited,
-    );
-  }
-  // A trial with an end date: open while it lasts, and the rider should
-  // know it ends.
-  if (c.basis?.expiresOn case final end?) {
-    return zone(EligibilityStatus.conditional, '試辦至 $end');
   }
   return zone(EligibilityStatus.allowed, '此分區標示開放${vehicle.label}');
 }
@@ -1036,7 +1043,12 @@ ParkingDecision _lot(
       limited == null
           ? EligibilityStatus.allowed
           : EligibilityStatus.conditional,
-      remind,
+      // A conditional lot says which zones and what limits them; the
+      // wrapper keeps only this reason.
+      limited == null
+          ? remind
+          : '${[for (final z in reachable)
+              if (z.status == EligibilityStatus.conditional) '${z.name.trim().isEmpty ? '未命名分區' : z.name.trim()}：${z.reason}'].join('；')}。$remind',
       restriction: limited?.restriction,
       gaps: {for (final z in zones) ...z.gaps},
     );

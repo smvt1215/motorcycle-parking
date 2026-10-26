@@ -464,6 +464,68 @@ void main() {
       }
     });
 
+    test('格位車種先判斷，限制全部保留並繼續檢查時段（Codex #157）', () {
+      ParkingDecision judge(Map<String, Object?> json, VehicleType v) =>
+          decideParking(
+            street(SpaceType.evMotorcycle, condition: c(json)),
+            v,
+            bundled,
+            now: now,
+          );
+      // A heavy bay limited to electric bikes is still closed to scooters.
+      expect(
+        judge({
+          'bay': 'heavy',
+          'limits': [
+            {'kind': 'ev_only'},
+          ],
+        }, VehicleType.scooter).status,
+        EligibilityStatus.notAllowed,
+      );
+      final both = judge({
+        'bay': 'motorcycle',
+        'limits': [
+          {'kind': 'time_limit', 'max_minutes': 30},
+          {'kind': 'ev_only'},
+        ],
+      }, VehicleType.scooter);
+      expect(both.status, EligibilityStatus.conditional);
+      expect(both.restriction, RuleRestriction.evOnly);
+      expect(both.reason, contains('限電動機車'));
+      expect(both.reason, contains('限時停車'));
+      final unlisted = judge({
+        'bay': 'motorcycle',
+        'limits': [
+          {'kind': 'ev_only'},
+        ],
+        'schedule': [
+          {
+            'days': 'all',
+            'vehicles': ['car'],
+          },
+        ],
+      }, VehicleType.scooter);
+      expect(unlisted.status, EligibilityStatus.unverified);
+      expect(unlisted.gaps, {DecisionGap.scheduleUnknown});
+      final listed = judge({
+        'bay': 'motorcycle',
+        'limits': [
+          {'kind': 'ev_only'},
+        ],
+        'schedule': [
+          {
+            'days': 'weekday',
+            'from': '08:00',
+            'to': '18:00',
+            'vehicles': ['scooter'],
+          },
+        ],
+      }, VehicleType.scooter);
+      expect(listed.status, EligibilityStatus.conditional);
+      expect(listed.reason, contains('限電動機車'));
+      expect(listed.reason, contains('平日 08:00–18:00'));
+    });
+
     test('縣市規則過期：待確認，不回落到全國規則', () {
       final expired = CityRule.fromJson({
         ...bundledJson.firstWhere(
@@ -670,6 +732,32 @@ void main() {
       expect(ended.gaps, contains(DecisionGap.noticeExpired));
     });
 
+    test('有條件的場站理由寫出分區與限制；分區的限制與時段一起保留', () {
+      final d = heavy(
+        lot([
+          zone(
+            '重機區',
+            access: ParkingAccess.heavyOnly,
+            condition: {
+              'bay': 'heavy',
+              'use': 'usual',
+              'allow': {'scooter': false, 'heavy': true},
+              'limits': [
+                {'kind': 'ev_only'},
+                {'kind': 'time_limit'},
+              ],
+            },
+          ),
+        ]),
+      );
+      expect(d.status, EligibilityStatus.conditional);
+      expect(d.restriction, RuleRestriction.evOnly);
+      expect(d.zones.single.reason, contains('限電動機車'));
+      expect(d.zones.single.reason, contains('限時停車'));
+      expect(d.reason, startsWith('重機區：限電動機車'));
+      expect(d.reason, endsWith('場站資料標示可停，請確認現場公告'));
+    });
+
     test('分區公告到期只讓「開放」失效：不開放的分區仍是不開放', () {
       final closed = zone(
         '普機區',
@@ -814,6 +902,27 @@ void main() {
       }, VehicleType.heavy);
       expect(followed.kind, PriceKind.known);
       expect(followed.rate!['amount'], 22.5);
+      final posted = priceAnswer({
+        'heavy': {
+          'mode': 'by_time',
+          'periods': [
+            {
+              'days': 'all',
+              'from': '08:00',
+              'to': '20:00',
+              'rate': {'mode': 'hourly', 'amount': 20, 'per_minutes': 60},
+            },
+            {
+              'days': 'all',
+              'from': '20:00',
+              'to': '08:00',
+              'rate': {'mode': 'posted'},
+            },
+          ],
+        },
+      }, VehicleType.heavy);
+      expect(posted.kind, PriceKind.partial);
+      expect(posted.gaps, contains('部分時段費率'));
       final missing = priceAnswer({
         'heavy': {'mode': 'same_as_car'},
       }, VehicleType.heavy);

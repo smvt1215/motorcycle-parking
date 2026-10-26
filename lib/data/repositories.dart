@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 import '../core/address_search.dart';
 import '../models/parking.dart';
 import '../domain/map_viewport.dart';
+import '../domain/eligibility.dart' show useParkingDecision;
 import '../domain/precheck.dart';
 
 class RulesRepository {
@@ -21,6 +22,9 @@ class RulesRepository {
   /// Builds before C4 read the `city_rules` view, which serves expired rows
   /// as a conservative projection over the bundled copies.
   Future<List<Map<String, dynamic>>> _remoteRules() async {
+    // Rolled back to the judgement before C4, which never reads end dates:
+    // read the view's conservative projection, as older builds do.
+    if (!useParkingDecision) return client!.from('city_rules').select();
     try {
       final rows = await client!.rpc<List<dynamic>>('city_rules_v2');
       return rows.cast<Map<String, dynamic>>();
