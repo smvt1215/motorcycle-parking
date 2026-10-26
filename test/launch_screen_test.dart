@@ -49,6 +49,19 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('App 名稱與副標在圖示下方、載入狀態上方', (tester) async {
+    await pumpLaunch(tester, size: const Size(390, 844));
+    final title = tester.getRect(find.text('機車停車指南'));
+    final subtitle = tester.getRect(find.text('普通機車・大型重機'));
+    // The icon is the middle 150 of the 288 px image: its bottom is at 497.
+    expect(title.top, 497 + 20);
+    expect(title.center.dx, closeTo(195, .01));
+    expect(subtitle.top, greaterThanOrEqualTo(title.bottom));
+    expect(subtitle.center.dx, closeTo(195, .01));
+    final progress = tester.getRect(find.byType(CircularProgressIndicator));
+    expect(subtitle.bottom, lessThan(progress.top));
+  });
+
   testWidgets('深色模式用柏油底，和原生深色啟動畫面一致', (tester) async {
     await pumpLaunch(
       tester,
@@ -62,14 +75,17 @@ void main() {
     expect(screen.color, launchAsphalt);
   });
 
-  for (final (size, scale) in [
-    (const Size(320, 568), 1.6),
-    (const Size(844, 390), 1.6),
-    (const Size(700, 1000), 1.0),
-    (const Size(1280, 800), 1.0),
+  for (final (size, scale, titled) in [
+    (const Size(320, 568), 1.3, true),
+    // A small or landscape phone at a large text size has room for the icon
+    // only.
+    (const Size(320, 568), 1.6, false),
+    (const Size(844, 390), 1.6, false),
+    (const Size(700, 1000), 1.0, true),
+    (const Size(1280, 800), 1.0, true),
   ]) {
     testWidgets('${size.width.toInt()}×${size.height.toInt()}、字級 $scale 倍時標誌'
-        '不壓到載入狀態', (tester) async {
+        '${titled ? '與名稱' : ''}不壓到載入狀態', (tester) async {
       await pumpLaunch(tester, size: size, textScale: scale);
       expect(tester.takeException(), isNull);
       final mark = markRect(tester);
@@ -82,6 +98,19 @@ void main() {
         tester.getRect(find.text('正在取得目前位置…')).right,
         lessThanOrEqualTo(size.width),
       );
+      final title = tester.getRect(find.text('機車停車指南'));
+      final subtitle = tester.getRect(find.text('普通機車・大型重機'));
+      if (titled) {
+        // At least a 40 px icon stays beside the title.
+        expect(mark.height, greaterThanOrEqualTo(40 * 288 / 150));
+        expect(title.top, greaterThanOrEqualTo(drawingBottom));
+        expect(subtitle.bottom, lessThanOrEqualTo(progress.top));
+        expect(title.right, lessThanOrEqualTo(size.width));
+      } else {
+        // Laid out below the screen and clipped, not squeezed over the text.
+        expect(title.top, greaterThanOrEqualTo(size.height));
+        expect(mark.height, greaterThan(0));
+      }
     });
   }
 }

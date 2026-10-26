@@ -178,14 +178,40 @@ Deno.test('a location suggestion carries both coordinates inside Taiwan', () => 
     validate({ ...flag, proposed: { lat: 25.0339, lng: 121.5623 } }),
     null,
   );
+  // With the county and district the app looked up.
+  assertEquals(
+    validate({
+      ...flag,
+      proposed: {
+        lat: 25.0339,
+        lng: 121.5623,
+        city: '新北市',
+        district: '板橋區',
+      },
+    }),
+    null,
+  );
+  assertEquals(
+    validate({
+      ...flag,
+      proposed: { lat: 25.0339, lng: 121.5623, city: '新北市', district: '' },
+    }),
+    null,
+  );
   // TDX spots have no row to patch, so the app sends the summary only.
   assertEquals(validate({ ...flag, note: '格位在對面' }), null);
   for (
     const proposed of [
       { lat: 25.0339 },
       { lng: 121.5623 },
-      { lat: 25.0339, lng: 121.5623, city: '新北市' },
       { lat: 25.0339, lng: 121.5623, name: '改名' },
+      { lat: 25.0339, lng: 121.5623, city: '' },
+      { lat: 25.0339, lng: 121.5623, city: 'x'.repeat(31) },
+      { lat: 25.0339, lng: 121.5623, district: 'x'.repeat(31) },
+      { lat: 25.0339, lng: 121.5623, city: ['新北市'] },
+      { lat: 25.0339, lng: 121.5623, district: 3 },
+      { city: '新北市', district: '板橋區' },
+      { lat: 25.0339, city: '新北市' },
     ]
   ) {
     assertEquals(validate({ ...flag, proposed }), 'invalid proposed');
@@ -200,6 +226,11 @@ Deno.test('a location suggestion carries both coordinates inside Taiwan', () => 
   ) {
     assertEquals(validate({ ...flag, proposed }), 'invalid coordinates');
   }
+  // County and district never travel without a position, whatever the field.
+  assertEquals(
+    validate({ ...flag, field: 'name', proposed: { city: '新北市' } }),
+    'invalid proposed',
+  );
   for (
     const proposed of [{ lat: '25', lng: 121.5 }, { lat: NaN, lng: 121.5 }]
   ) {
