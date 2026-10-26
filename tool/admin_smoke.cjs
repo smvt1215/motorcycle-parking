@@ -407,7 +407,15 @@ function session(role, aal, factors = [factor]) {
           const chooser = page.waitForEvent('filechooser');
           await page.getByRole('button', { name: '選擇 spots.json', exact: true }).click();
           await (await chooser).setFiles(fileJson);
-          await page.getByRole('switch', { name: '保留管理員修改' }).waitFor({ timeout: 15000 });
+          // The list builds rows as they scroll in; the phone shows the conflict lower down.
+          const keep = page.getByRole('switch', { name: '保留管理員修改' });
+          await page.getByRole('checkbox', { name: /^匯入/ }).first().waitFor({ timeout: 15000 });
+          await page.mouse.move(page.viewportSize().width / 2, page.viewportSize().height * 0.4);
+          for (let i = 0; i < 30 && !(await keep.count()); i++) {
+            await page.mouse.wheel(0, 150);
+            await page.waitForTimeout(100);
+          }
+          await keep.waitFor({ timeout: 15000 });
           await page.screenshot({ path: path.join(output, `${name}-import-preview.png`) });
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} import preview scrolls sideways`);
           const imported = page.waitForResponse(response => response.url().endsWith('/rpc/admin_import_apply'));
