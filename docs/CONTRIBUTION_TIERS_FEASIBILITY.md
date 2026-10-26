@@ -235,7 +235,7 @@ A 類（法規）與 B 類（資料穩定性）依 §0 第 3 點只能由管理�
 
 ### 5.6 官方點的資料修改核實模式（決定）
 
-**現況與問題。** 官方點（`official_heavy_spots`，1,497 筆）的修改建議只能由 `admin_resolve_report` 採納，採納會直接改寫官方欄位。`tool/import_mymaps.py` 的 `official_sql()` 以 `on conflict(id) do update set` 覆寫全部 `OFFICIAL_COLUMNS`（名稱、座標、縣市、型式、`fee_note`、車種旗標、來源欄位，以及入口說明、停車指引、分區等細節欄位）；`hidden`、`effective_date` 不在更新清單，`fee` 與 `photo_urls` 不在匯入欄位。所以今天管理員採納的任何修改（除隱藏外），下次重新匯入就會消失，也分不出「哪個值是官方說的、哪個是我們改的」。核實計畫 §4.4 要求「社群證據只能形成修改提案，不可自行改寫官方來源與 `source_url`」，但沒有說提案採納後要存在哪裡。
+**現況與問題。** 官方點（`official_heavy_spots`，1,497 筆）的修改建議只能由 `admin_resolve_report` 採納，採納會直接改寫官方欄位。`tool/import_mymaps.py` 的 `official_sql()` 以 `on conflict(id) do update set` 覆寫全部 `OFFICIAL_COLUMNS`（名稱、座標、縣市、型式、`fee_note`、車種旗標、來源欄位，以及入口說明、停車指引、分區等細節欄位）；`hidden`、`effective_date` 不在更新清單，`fee` 與 `photo_urls` 不在匯入欄位（`official_sql()` 與 SQL 輸出已於 2026-10-26 移除，#117；重新匯入只經 Admin Web P6）。所以今天管理員採納的任何修改（除隱藏外），下次重新匯入就會消失，也分不出「哪個值是官方說的、哪個是我們改的」。核實計畫 §4.4 要求「社群證據只能形成修改提案，不可自行改寫官方來源與 `source_url`」，但沒有說提案採納後要存在哪裡。
 
 **決定：官方值不可寫，社群核實存覆蓋層，衝突進爭議。**
 
@@ -411,7 +411,7 @@ validate.ts（結構）→ 預檢（組合／內容／行為）→ 法規預審 
 - `moderation_queue`：加 `category`（`a_rule/b_stability/c_open`，§0 第 3 點）、`risk`、`prescreened_at`（B 類社群預審達成時間）、`resolved_by_kind`（`admin/community/guardian/system_expired`）、`resolution_kind`（`wrong/duplicate/insufficient/outdated/abuse/other`，駁回必填；2026-10-25 使用者決定為 6 類，見 §0 第 12 點）；`resolved_by` 社群結案時為 null，參與者記在 `review_votes` 與稽核。B 類案件達預審門檻時由 `submit_review_vote` 寫 `prescreened_at` 並套用安全中間狀態，不結案。
   - **階段 0 已實作（`202610260020_review_resolution_kind.sql`）**：`resolution_kind` 與 `risk` 兩欄，皆可為 null。`risk` 由入列 trigger 呼叫 `moderation_risk(field, reason, proposed, base_spot)` 推導，取類別與每個建議欄位中最高的等級：名稱、備註、入口與停車指引為低；建議內容裡與現值相同的 `space_type`（App 改場站型式時會一併送出）不算變更；費率、場站型式、路邊格位之間的型式變更、移位 ≤ 150 m、已不存在（含投票觸發）為中；停放資格、型式進出 `offStreet`、移位 > 150 m，以及沒有快照或無法判斷的案件都算高。既有資料也用同一套規則回填。既有的駁回列 `resolution_kind` 維持 null，指標列為「未分類」，不猜原因。`category`、`prescreened_at`、`resolved_by_kind` 留到階段 1 以後。
 - `official_heavy_spots`：不新增欄位；`official_viewport_spots(_v2)` 與直接讀取的 view 加 `community_overrides jsonb`（由 `official_spot_overlays` 聚合）。`admin_resolve_report` 對官方點的 patch 改為預設寫覆蓋層，另加 `p_write_official boolean`（需填寫核對的來源說明）才直接改官方值。
-- 匯入 SQL（`tool/import_mymaps.py` 的 `official_sql()` 與 Admin Web P6）：`on conflict` 只更新官方欄位，保留 `hidden`，並由 trigger 處理覆蓋層狀態；差異試算列出受影響的覆蓋層。
+- 匯入（Admin Web P6；`tool/import_mymaps.py` 的 `official_sql()` 已移除，#117）：只更新官方欄位，保留 `hidden`，並由 trigger 處理覆蓋層狀態；差異試算列出受影響的覆蓋層。
 - `admin_audit_log`：新增 `action` 值 `community_resolve`、`audit_sample`、`set_role`、`reverse_decision`。
 
 **新 RPC**
@@ -594,5 +594,5 @@ validate.ts（結構）→ 預檢（組合／內容／行為）→ 法規預審 
 - [PR #81：回報者來源快照](https://github.com/smvt1215/motorcycle-parking/pull/81)（已合併）
 - [PR #83：顯示名稱與頭像](https://github.com/smvt1215/motorcycle-parking/pull/83)（已合併）
 - [PR #59：存在確認與車種資格解耦](https://github.com/smvt1215/motorcycle-parking/pull/59)（已合併）
-- `supabase/migrations/202610110001_init.sql`（`qualified`／權重／限流的規則來源）、`202610240010_vote_safety.sql`（#59 調整隱藏行為）、`202610250030_report_details.sql`（`apply_report` 最新定義）、`202610240003_admin_backend.sql`（`is_admin()`、`moderation_queue` 結構）、`202610240011_admin_review.sql`（`base_spot` 欄位級衝突檢查）、`tool/import_mymaps.py`（`official_sql()` 的覆寫範圍）
+- `supabase/migrations/202610110001_init.sql`（`qualified`／權重／限流的規則來源）、`202610240010_vote_safety.sql`（#59 調整隱藏行為）、`202610250030_report_details.sql`（`apply_report` 最新定義）、`202610240003_admin_backend.sql`（`is_admin()`、`moderation_queue` 結構）、`202610240011_admin_review.sql`（`base_spot` 欄位級衝突檢查）、`tool/import_mymaps.py`（`official_sql()` 的覆寫範圍；已於 #117 移除）
 - 外部先例（依各平台公開說明的一般印象，未逐一查證）：維基百科以社群完成絕大多數審核，管理員只處理封鎖與刪除；Stack Overflow 以聲望解鎖審核佇列、含已知答案的「審核測驗」；iNaturalist 以三分之二社群同意達到「研究等級」；Google 地圖以「這是否正確」的輕量確認任務收集在地人確認。共通點是社群能結案、含品質校準、管理員只做例外。

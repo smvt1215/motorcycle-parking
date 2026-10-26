@@ -1,7 +1,10 @@
 """Check My Maps normalization rules and the committed import against database limits."""
+import contextlib
+import io
 import json
 import os
 from pathlib import Path
+import sys
 import tempfile
 import unittest
 import unittest.mock
@@ -10,9 +13,10 @@ import import_mymaps
 from unittest.mock import patch
 
 from import_mymaps import (
-    DETAIL_COLUMNS, PILOT_RULES, TAIPEI_PILOT, TDX_SOURCE, TAIPEI_ROADSIDE, apply_official, apply_taipei_rules, cell, clean_text, display_name,
-    entry_direction, facility_key, lot, locate, match_lot, merge, hccg_context, kaohsiung, midpoint, normalize, official_additions, official_lots,
-    official_spot, official_sql, parse_fee, split_name, sql, taichung_name, tdx_credentials, tdx_lots, tm2_to_wgs84,
+    PILOT_RULES, TAIPEI_PILOT, TDX_SOURCE, TAIPEI_ROADSIDE, apply_official, apply_taipei_rules, cell, clean_text, display_name,
+    entry_direction, facility_key, importable, lot, locate, match_lot, merge, hccg_context, kaohsiung, midpoint, normalize,
+    official_additions, official_lots, official_spot, parse_fee, split_name, taichung_name, tdx_credentials, tdx_lots, tm2_to_wgs84,
+    unimportable,
 )
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -365,21 +369,84 @@ class OfficialSpotTest(unittest.TestCase):
         self.assertEqual(taichung_name("Times萬華運動中心"), "Times萬華運動中心")
 
 
-class SqlTest(unittest.TestCase):
-    def test_both_tables_receive_every_detail_column_with_table_defaults(self):
-        spot = {"id": "00000000-0000-4000-8000-000000000009", "name": "x'y", "city": "臺北市", "district": "大安區",
-                "space_type": "offStreet", "fee_note": "請依現場公告", "note": "", "heavy_allowed": None, "scooter_allowed": True,
-                "scooter_total": None, "lat": 25.0, "lng": 121.5, "source_name": "社群回報整理", "source_url": "https://a",
-                "license_note": "", "parking_zones": [{"name": "機車區"}]}
-        community = sql([spot], "10000000-0000-4000-8000-000000000001")
-        for column in DETAIL_COLUMNS:
-            self.assertIn(column, community)
-        self.assertIn("'x''y'", community)
-        self.assertIn("null,null,'','','','','',", community)  # unknown enums null, text defaults empty
-        self.assertIn('\'[{"name": "機車區"}]\'::jsonb', community)
-        official = official_sql([spot | {"id": "official:00000000-0000-4000-8000-000000000009", "source_id": "TPE1"}], "2026-10-17")
-        self.assertIn("on conflict(id) do update set", official)
-        self.assertIn("facility_type=excluded.facility_type", official)
+class ImportableTest(unittest.TestCase):
+    """The JSON must pass the Admin Web import page's checks (admin_import_plan in 202610260250_admin_import.sql)."""
+    COMMUNITY = {"id": "00000000-0000-4000-8000-000000000009", "name": "x'y", "city": "臺北市", "district": "大安區", "source": "import",
+                 "space_type": "offStreet", "fee_note": "請依現場公告", "note": None, "heavy_allowed": None, "scooter_allowed": True,
+                 "scooter_total": None, "lat": 25.0, "lng": 121.5, "source_name": "社群回報整理", "source_url": "https://a",
+                 "license_note": "", "parking_zones": [{"name": "機車區"}]}
+    OFFICIAL = COMMUNITY | {"id": "official:00000000-0000-4000-8000-000000000009", "source": "official", "source_id": "TPE1",
+                            "source_name": "臺北市政府", "scooter_total": 12}
+
+    def test_the_tool_output_shape_is_accepted(self):
+        self.assertEqual(importable(self.COMMUNITY), "")
+        self.assertEqual(importable(self.OFFICIAL), "")
+        # Keys the page does not write (status, updated_at…) and missing optional columns are fine.
+        self.assertEqual(importable(self.OFFICIAL | {"status": "confirmed", "updated_at": "2026-10-17T00:00:00Z", "available": None}), "")
+        self.assertEqual(importable({k: v for k, v in self.COMMUNITY.items() if k not in ("note", "parking_zones", "license_note")}), "")
+
+    def test_refusals_follow_the_import_page(self):
+        cases = [
+            (self.COMMUNITY | {"id": "TPE0001"}, "沒有可辨識的 id"),
+            ({k: v for k, v in self.COMMUNITY.items() if k != "id"}, "沒有可辨識的 id"),
+            (self.COMMUNITY | {"source": "official"}, "來源與 id 不符"),
+            (self.OFFICIAL | {"source": "import"}, "來源與 id 不符"),
+            (self.COMMUNITY | {"lat": "25.0"}, "欄位型別錯誤：lat"),
+            (self.COMMUNITY | {"scooter_total": True}, "欄位型別錯誤：scooter_total"),
+            (self.COMMUNITY | {"parking_zones": "機車區"}, "欄位型別錯誤：parking_zones"),
+            (self.COMMUNITY | {"name": " "}, "名稱需為 1–100 字"),
+            (self.COMMUNITY | {"name": "長" * 101}, "名稱需為 1–100 字"),
+            (self.COMMUNITY | {"lat": 35.0}, "座標不在台灣範圍內"),
+            ({k: v for k, v in self.COMMUNITY.items() if k != "lng"}, "座標不在台灣範圍內"),
+            (self.COMMUNITY | {"city": ""}, "缺少縣市"),
+            (self.OFFICIAL | {"source_url": "http://a"}, "官方點需要資料來源與 https 官方資料網址"),
+            (self.OFFICIAL | {"source_name": ""}, "官方點需要資料來源與 https 官方資料網址"),
+        ]
+        for spot, reason in cases:
+            with self.subTest(reason=reason):
+                self.assertTrue(importable(spot).startswith(reason), importable(spot))
+        # A community spot needs no https source; an official one does.
+        self.assertEqual(importable(self.COMMUNITY | {"source_url": "http://a"}), "")
+
+    def test_a_repeated_id_is_refused_once_per_file(self):
+        self.assertEqual(unimportable([self.COMMUNITY, self.OFFICIAL]), [])
+        problems = unimportable([self.COMMUNITY, self.COMMUNITY | {"name": "again"}, self.OFFICIAL | {"city": ""}])
+        self.assertEqual(problems, [(1, "again", "檔案中重複的 id"), (2, "x'y", "缺少縣市")])
+
+
+class MainTest(unittest.TestCase):
+    def run_main(self, official, community, *extra):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            argv = ["import_mymaps.py", "--mid", "m", "--kml", str(root / "m.kml"), "--cache", str(root / "cache"),
+                    "--output", str(root / "community"), "--official-output", str(root / "official"), "--date", "2026-10-26", *extra]
+            out, err = io.StringIO(), io.StringIO()
+            with patch.object(sys, "argv", argv), patch("import_mymaps.build", return_value=(official, community, [], [], [], {})), \
+                    contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                try:
+                    import_mymaps.main()
+                    code = 0
+                except SystemExit as exit:
+                    code = exit.code
+            written = {p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file()}
+            return code, out.getvalue() + err.getvalue(), written
+
+    def test_sql_output_is_gone(self):
+        self.assertFalse(hasattr(import_mymaps, "official_sql") or hasattr(import_mymaps, "sql"))
+        code, output, written = self.run_main([], [ImportableTest.COMMUNITY], "--sql-owner", "10000000-0000-4000-8000-000000000001")
+        self.assertEqual(code, 2)
+        self.assertIn("--sql-owner", output)
+        self.assertEqual(written, set())
+        code, output, written = self.run_main([ImportableTest.OFFICIAL], [ImportableTest.COMMUNITY])
+        self.assertEqual(code, 0)
+        self.assertNotIn("sql", output.lower())
+        self.assertEqual(written, {"official/spots.json", "community/spots.json", "community/verification.json", "community/REPORT.md"})
+
+    def test_a_spot_the_import_page_would_refuse_fails_the_run_after_writing(self):
+        code, output, written = self.run_main([ImportableTest.OFFICIAL | {"source_url": "http://a"}], [ImportableTest.COMMUNITY])
+        self.assertEqual(code, 1)
+        self.assertIn("第 1 筆「x'y」管理站無法匯入：官方點需要資料來源與 https 官方資料網址", output)
+        self.assertIn("official/spots.json", written)
 
 
 class ImportedDataTest(unittest.TestCase):
@@ -400,6 +467,11 @@ class ImportedDataTest(unittest.TestCase):
             self.assertTrue(zone["name"])
             if "access" in zone:
                 self.assertIn(zone["access"], self.ENUMS["parking_access"])
+
+    def test_committed_files_pass_the_import_page_checks(self):
+        for path in (DATA, OFFICIAL_DATA):
+            with self.subTest(file=path.name):
+                self.assertEqual(unimportable(json.loads(path.read_text())), [])
 
     def test_community_spots_are_pending_community_compilations(self):
         spots = json.loads(DATA.read_text())
