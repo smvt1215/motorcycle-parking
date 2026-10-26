@@ -31,6 +31,28 @@ const cityRules = require('../assets/rules/parking_rules.json').map(rule => ({ d
 const officialSpot = { ...spot, id: officialId, name: '新北市政府行政大樓地下停車場', city: '新北市', district: '板橋區', lat: 25.0124, lng: 121.4651, space_type: 'offStreet', heavy_allowed: true, source_name: '新北市政府', hidden: false,
   address: '新北市板橋區中山路一段 161 號', facility_type: 'underground', parking_access: 'scooterHeavy', source_url: 'https://example.test/notice', source_id: 'ntpc-001', effective_date: '2026-01-01', license_note: '',
   fee: { scooter: { mode: 'hourly', amount: 20, per_minutes: 60 }, heavy: { mode: 'same_as_scooter' } }, fee_note: '每小時 20 元（大型重機比照機車費率）' };
+// Import: a spots.json with an update, a conflict with an administrator's
+// name, and a new spot; the fee backlog with one certain and one unclear note.
+const importFile = [
+  { id: `official:${officialId}`, source: 'official', name: '新北市政府行政大樓地下停車場', lat: 25.0124, lng: 121.4651, city: '新北市', district: '板橋區', space_type: 'offStreet', fee_note: '機車計次20元;機車月租300元;', source_url: 'https://example.test/notice', source_name: '新北市政府' },
+  { id: 'official:77777777-7777-4777-8777-777777777771', source: 'official', name: '府中立體停車場', lat: 25.009, lng: 121.459, city: '新北市', district: '板橋區', space_type: 'offStreet', fee_note: '小型車計時30元;機車計時10元;', source_url: 'https://example.test/notice', source_name: '新北市政府' },
+  { id: 'official:77777777-7777-4777-8777-777777777772', source: 'official', name: '板橋第一運動場地下停車場', lat: 25.013, lng: 121.458, city: '新北市', district: '板橋區', space_type: 'offStreet', fee_note: '機車免費;', source_url: 'https://example.test/notice', source_name: '新北市政府' },
+];
+const importPreview = [
+  { source_id: importFile[0].id, kind: 'official', status: 'update', reason: '', name: importFile[0].name, city: '新北市', district: '板橋區', base_updated_at: '2026-10-23T00:00:00+00:00', hidden: false,
+    changes: [{ field: 'fee', current: null, incoming: { scooter: { mode: 'per_visit', amount: 20 } }, admin: null }] },
+  { source_id: importFile[1].id, kind: 'official', status: 'conflict', reason: '', name: '府中立體停車場（市府新名稱公告前暫用）', city: '新北市', district: '板橋區', base_updated_at: '2026-10-24T08:00:00+00:00', hidden: false,
+    changes: [
+      { field: 'name', current: '府中立體停車場（市府新名稱公告前暫用）', incoming: '府中立體停車場', admin: { at: '2026-10-24T08:00:00+00:00', action: 'update_spot' } },
+      { field: 'scooter_total', current: 120, incoming: 150, admin: null },
+    ] },
+  { source_id: importFile[2].id, kind: 'official', status: 'new', reason: '', name: importFile[2].name, city: '新北市', district: '板橋區', base_updated_at: null, hidden: false, changes: [] },
+];
+const feeBacklog = [
+  { source_id: `official:${officialId}`, kind: 'official', name: '新北市政府行政大樓地下停車場', city: '新北市', district: '板橋區', space_type: 'offStreet', fee_note: '小型車計時30元;小型車月租4200元;身障車月租2200元;機車計次20元;機車月租300元;身障機車月租150元;', updated_at: '2026-10-23T00:00:00Z', hidden: false },
+  { source_id: communityId, kind: 'community', name: '中山北路二段路邊機車格', city: '臺北市', district: '中山區', space_type: 'paidMotorcycle', fee_note: '每 4 小時 30 元', updated_at: '2026-10-23T00:00:00Z', hidden: false },
+  { source_id: '66666666-6666-4666-8666-666666666666', kind: 'community', name: '三重正義北路機車格', city: '新北市', district: '三重區', space_type: 'freeMotorcycle', fee_note: '請依現場公告', updated_at: '2026-10-23T00:00:00Z', hidden: true },
+];
 const hiddenSpot = { ...spot, id: '66666666-6666-4666-8666-666666666666', name: '三重正義北路機車格', city: '新北市', district: '三重區', space_type: 'freeMotorcycle', status: 'hidden' };
 
 function session(role, aal, factors = [factor]) {
@@ -167,6 +189,26 @@ function session(role, aal, factors = [factor]) {
             // The spot changed after the report: the admin must review and force.
             conflicts++;
             return route.fulfill({ status: 400, json: { code: '40001', message: 'spot changed since the report' }, headers: cors });
+          }
+          if (url.pathname === '/rest/v1/rpc/admin_import_preview') {
+            const { p_spots: spots } = route.request().postDataJSON();
+            assert.deepEqual(spots.map(s => s.id), importFile.map(s => s.id));
+            // The certain fee is read in before the preview; the unclear one is not.
+            assert.deepEqual(spots[0].fee, { scooter: { mode: 'per_visit', amount: 20 } });
+            assert.equal(spots[1].fee, undefined);
+            return route.fulfill({ json: importPreview, headers: cors });
+          }
+          if (url.pathname === '/rest/v1/rpc/admin_import_apply') {
+            const { p_choices: choices, p_effective_date: date } = route.request().postDataJSON();
+            assert.deepEqual(choices[importFile[1].id], { base_updated_at: '2026-10-24T08:00:00+00:00', overwrite: [] });
+            assert.match(date, /^\d{4}-\d{2}-\d{2}$/);
+            return route.fulfill({ json: { inserted: 1, updated: 2, skipped: [] }, headers: cors });
+          }
+          if (url.pathname === '/rest/v1/rpc/admin_fee_backlog') return route.fulfill({ json: feeBacklog, headers: cors });
+          if (url.pathname === '/rest/v1/rpc/admin_convert_fees') {
+            const { p_items: items } = route.request().postDataJSON();
+            assert.deepEqual(items.map(i => i.source_id), [`official:${officialId}`]);
+            return route.fulfill({ json: { converted: 1, skipped: [] }, headers: cors });
           }
           if (url.pathname === '/rest/v1/rpc/admin_resolve_report' || url.pathname === '/rest/v1/rpc/admin_set_spot_hidden') {
             return route.fulfill({ json: {}, headers: cors });
@@ -417,6 +459,47 @@ function session(role, aal, factors = [factor]) {
             await page.getByRole('button', { name: label === '審核' ? /^審核/ : label, exact: true }).click();
             await waitText(title);
           }
+          // Import: choose a file, read the preview, keep the admin's name, import.
+          await page.getByRole('button', { name: '匯入', exact: true }).click();
+          await waitText('匯入停車資料');
+          await page.screenshot({ path: path.join(output, `${name}-import-empty.png`) });
+          const fileJson = path.join(output, 'smoke-spots.json');
+          await fs.writeFile(fileJson, JSON.stringify(importFile));
+          const chooser = page.waitForEvent('filechooser');
+          await page.getByRole('button', { name: '選擇 spots.json', exact: true }).click();
+          await (await chooser).setFiles(fileJson);
+          // The list builds rows as they scroll in; the phone shows the conflict lower down.
+          const keep = page.getByRole('switch', { name: '保留管理員修改' });
+          await page.getByRole('checkbox', { name: /^匯入/ }).first().waitFor({ timeout: 15000 });
+          await page.mouse.move(page.viewportSize().width / 2, page.viewportSize().height * 0.4);
+          for (let i = 0; i < 30 && !(await keep.count()); i++) {
+            await page.mouse.wheel(0, 150);
+            await page.waitForTimeout(100);
+          }
+          await keep.waitFor({ timeout: 15000 });
+          await page.screenshot({ path: path.join(output, `${name}-import-preview.png`) });
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} import preview scrolls sideways`);
+          const imported = page.waitForResponse(response => response.url().endsWith('/rpc/admin_import_apply'));
+          await page.getByRole('button', { name: '匯入勾選的 3 筆', exact: true }).click();
+          await imported;
+          await page.locator('flt-semantics').getByText(/已匯入：新增 1 筆、更新 2 筆/).waitFor({ timeout: 15000 });
+          await page.screenshot({ path: path.join(output, `${name}-import-done.png`) });
+          // Fee conversion: certain readings chosen, unclear ones for a person.
+          await page.getByRole('button', { name: '費率轉換', exact: true }).click();
+          await page.getByRole('button', { name: '讀取尚未轉換的點位', exact: true }).click();
+          // Each row is one checkbox that reads the writing and its reading.
+          await page.getByRole('checkbox', { name: /每次 20 元（大型重機費率未確認）/ }).waitFor({ timeout: 15000 });
+          await page.screenshot({ path: path.join(output, `${name}-fees.png`) });
+          await page.getByRole('button', { name: '需人工確認 1 筆', exact: true }).click();
+          await page.getByRole('checkbox', { name: /每 4 小時 30 元（大型重機費率未確認）/ }).waitFor({ timeout: 15000 });
+          await page.screenshot({ path: path.join(output, `${name}-fees-manual.png`) });
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} fee conversion scrolls sideways`);
+          const converted = page.waitForResponse(response => response.url().endsWith('/rpc/admin_convert_fees'));
+          await page.getByRole('button', { name: '寫入 1 筆費率', exact: true }).click();
+          await converted;
+          await page.locator('flt-semantics').getByText(/已寫入 1 筆費率/).waitFor({ timeout: 15000 });
+          await page.getByRole('button', { name: /^審核/, exact: true }).click();
+          await waitText('待審回報');
         }
         if (scenario !== 'shell') {
           assert(!requests.some(value => value.includes('/rest/v1/')), `${name} must not query admin data`);

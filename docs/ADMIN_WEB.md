@@ -1,6 +1,6 @@
 # Web 管理介面 — 開發計畫
 
-> 狀態：P1 後端與 P2 外殼已完成，P2 已於 2026-10-24 通過 staging 登入驗收（https://motopark-admin-staging.web.app ）。P3 審核佇列已合併（#62；#77 補上入口指引、位置與場站欄位），待 staging 部署後驗收；P4a-1（點位清單、編輯、隱藏、改為官方點，#67）與 P4a-2（位置選擇元件、新增停車點，#76）已合併，管理員核驗車種欄位（#84）已合併；點位表單與審核頁的結構化費率已實作（`202610260010`）；P4a-3（全點位地圖圖層）已實作；P4b 地址搜尋（Google Geocoding 經 Edge Function `geocode`）已實作，待 staging 部署後驗收；App 的新增停車點與「位置不正確」建議已接入位置選擇元件（見「App 位置選擇實作」）。P5 規則頁已實作（見「P5 實作」）。P0 仍差第二個備援驗證器 App。取代 [PLAN.md](PLAN.md)「社群回報機制 › 5. 管理」原本「第一版用 Supabase Dashboard」的做法；P3 驗收前審核仍以 Dashboard 操作。最後更新：2026-10-26
+> 狀態：P1 後端與 P2 外殼已完成，P2 已於 2026-10-24 通過 staging 登入驗收（https://motopark-admin-staging.web.app ）。P3 審核佇列已合併（#62；#77 補上入口指引、位置與場站欄位），待 staging 部署後驗收；P4a-1（點位清單、編輯、隱藏、改為官方點，#67）與 P4a-2（位置選擇元件、新增停車點，#76）已合併，管理員核驗車種欄位（#84）已合併；點位表單與審核頁的結構化費率已實作（`202610260010`）；P4a-3（全點位地圖圖層）已實作；P4b 地址搜尋（Google Geocoding 經 Edge Function `geocode`）已實作，待 staging 部署後驗收；App 的新增停車點與「位置不正確」建議已接入位置選擇元件（見「App 位置選擇實作」）。P5 規則頁已實作（見「P5 實作」）。P6 匯入與費率轉換已實作（見「P6 實作」），待 staging 部署後驗收；P0 仍差第二個備援驗證器 App。取代 [PLAN.md](PLAN.md)「社群回報機制 › 5. 管理」原本「第一版用 Supabase Dashboard」的做法；P3 驗收前審核仍以 Dashboard 操作。最後更新：2026-10-26
 
 ## 背景
 目前審核與資料維護都在 Supabase Dashboard 完成，有幾個問題：
@@ -86,7 +86,8 @@
    - `admin_upsert_spot`、`admin_set_spot_hidden`（隱藏／恢復，P3 已實作）、`admin_promote_spot`（社群點改為官方點），P4a-1 已實作；另有 `admin_spots` 合併搜尋兩張表。
    - `admin_clear_contributor_name(spot_id, note)`：清除社群點公開的回報者名稱並寫稽核紀錄（#81 已實作，後台 UI 尚未接入）。
    - `admin_upsert_city_rule`：伺服器遞增 `version`，檢查 `restriction`；發布前把現列複製到 `city_rules_history`（P5 已實作）。
-   - `admin_import_preview`／`admin_import_apply`：接收 `spots.json`，先試算差異再套用，取代 SQL Editor。
+   - `admin_import_preview`／`admin_import_apply`：接收 `spots.json`，先試算差異再套用，取代 SQL Editor（P6 已實作，見下方「P6 實作」）。
+   - `admin_fee_backlog`／`admin_convert_fees`：列出尚無結構化費率的點位，寫入管理者確認的費率（P6）。
 6. 停權使用者需 Auth Admin API：Edge Function `admin-users` 先驗證呼叫者為 admin 且 `aal2`，再用 service role 執行。
 7. 地址定位：Edge Function `geocode` 包裝 Google Geocoding API，金鑰只在 function secret `GOOGLE_GEOCODING_API_KEY`，不進前端與 App，後台與 App 共用。2026-10-25 比較後決定（見「P4b 實作」）。
 8. pgTAP：一般使用者被拒、admin 沒有 `aal2` 被拒、套用與結案同一 transaction、稽核紀錄不可修改。
@@ -241,6 +242,28 @@ OpenStreetMap Nominatim 免金鑰，但實測台灣門牌與路口都查不到�
 ```bash
 python3 tool/export_rules.py --check || python3 tool/export_rules.py
 ```
+
+### P6 實作
+
+- 路徑 `/imports`（匯入檔案）與 `/imports/fees`（費率轉換）；程式位於 `lib/admin/import/`，migration `202610260250_admin_import.sql`。
+- **匯入**：選擇 `tool/import_mymaps.py` 產生的 `spots.json`（官方點 `data/imports/official/spots.json` 或社群點 `data/imports/google-mymaps/spots.json`），檔案只在瀏覽器讀取，按下「匯入」才寫入。網站先以費率解析（見下）為能確定的點位補上 `fee`，再分批（每批 500 筆）呼叫 `admin_import_preview` 試算，每筆標示：新增、更新、有管理員修改、不變、已存在（社群點）、無法匯入（id、來源、名稱、座標、https 來源或費率格式不符，附原因）。
+  - 官方點與 `official.sql` 相同：以 id 更新，`hidden` 與既有點的 `effective_date` 不會改變；新官方點使用頁面上的生效日期。社群點與 `import.sql` 相同：只新增不存在的點（`source='import'`、`status='pending'`，擁有者沿用既有匯入點的帳號），已存在的點交給騎士回報與投票，不再更新。
+  - **不默默覆寫管理員的修改**：某欄位最近一次改變它的稽核紀錄是管理員寫入（點位頁修改、採納回報、管理員新增、改為官方點、費率轉換），且目前值仍是那次寫入的值時，該欄位視為管理員修改。匯入值不同時列為「有管理員修改」，差異表顯示修改日期與來源，預設「保留管理員修改」，逐欄切換為「以匯入值覆寫」才會寫入；其餘欄位照常更新。匯入寫入記為 `import_spot`，之後的匯入不把匯入值當成管理員修改。
+  - 檔案沒有 `fee` 且收費資訊與資料庫相同時，保留資料庫已有的結構化費率。
+  - 套用時以試算時的 `updated_at` 檢查，試算後被改過的點位略過並提示重新試算；每筆各自寫入，被資料表約束拒絕的點位列出原因，不影響其他點位。結果顯示新增、更新與未寫入的筆數及原因，並重新試算。
+  - 匯入不會讓管理員核驗車種的 trigger（P4a-1）把匯入新增的社群點當成管理員核驗。
+  - 覆蓋層（[CONTRIBUTION_TIERS_FEASIBILITY.md](CONTRIBUTION_TIERS_FEASIBILITY.md) §5.6）尚未建立：管理員保留的值仍存在 `official_heavy_spots`，以稽核紀錄辨識；覆蓋層上線後，差異試算改為列出受影響的覆蓋層。`vehicle_source` 旗標（同文件 §0 第 9 點）也尚未加入匯入。
+- **費率轉換**：`admin_fee_backlog` 列出 `fee` 為 null 的點位（兩張表，含已隱藏），網站以 `lib/admin/import/fee_reading.dart` 依收費資訊的寫法分組解析，分列：
+  - 可轉換：官方資料明確寫出的機車費率（略過汽車、月租、季租、身障費率；「小型車（含大型重型機車）」是公告寫明的大型重機費率）；社群整理的「X（大型重機比照機車費率）」只轉成機車費率 X；重機專用格上未註明依據的金額只屬於大型重機。預設勾選。
+  - **大型重機費率不回退**：沒有大型重機費率時維持未確認，不自動比照機車或汽車；只有公告明定比照時才用 `same_as_scooter`／`same_as_car`。社群整理的「比照機車／比照汽車費率」「停汽車區」是車友回報，不是公告，所以大型重機一律不自動轉換，「比照汽車費率」「停汽車區」的金額只列為需人工確認的建議值。
+  - **現有費率格式無法表達的寫法一律不轉換**，交人工確認並說明原因：以倍率計算（臺北路外試辦機車區為機車費率 2 倍）、首段 0 元（臺北限時重機格首 20 分鐘 0 元，不等於免費）、機車的免費時段（入場前 30 分鐘免費）、依平日／假日或日夜時段而不同、收費上限或計次的重設時間不是每日 0 時（以凌晨 2 時為基準、隔日 3 時另計、入場 24 小時）。
+  - **保守通則**：金額之外只要還有其他金額、日期或時段限定詞（平日、假日、週末、夜間、尖峰、x 點至 y 點等）、優惠或條件詞（折抵、憑證、限定對象等），就交人工；官方資料的限定詞與同一車種的相鄰片段一起判斷，社群整理的寫法在整段文字內判斷。只有入口位置、需按鈴等非計費備註可以略過。
+  - 需人工確認的其他原因：未註明車種、依區域或牌色而不同、「計時 X 元」沒有計費單位、另列「重型機車」、「另訂費率」、混有拖吊保管費等。能讀出建議值的可勾選採用；沒有建議值的列出點位連結，到點位頁逐筆設定（點位頁的結構化費率欄位由管理站結構化費率 PR 提供）。
+  - 無法判斷：「請依現場公告」「未知」、只有汽車或月租費率，維持未確認（null），不需處理。
+  - 「寫入 N 筆費率」才呼叫 `admin_convert_fees`：只寫 `fee`（以 `valid_fee()` 驗證），`fee_note` 保留原文（含月租、入口等補充，供重新匯入比對）；App 有 `fee` 時先顯示 `fee`。點位表單的「`fee_note` 須為 `fee` 的文字」檢查（`202610260010`）只在之後的編輯動到費率或收費資訊時套用，屆時兩者一起改；收費資訊在讀取後被改過或已有費率的點位略過。每筆寫入稽核紀錄 `convert_fee`，之後匯入視為管理員修改。
+  - 以 2026-10-25 的匯入檔試算：官方點 1,497 筆中可轉換 646、需人工確認 260、無法判斷 591；社群點 630 筆中可轉換 140、需人工確認 296、無法判斷 194。轉換規則的單元測試使用 staging 的實際寫法（`test/admin/fee_reading_test.dart`）。
+- **依價格篩選不在本階段開放**：等 staging 與 production 的轉換與人工確認完成後另行處理。
+- 版面：< 680 px 差異表每個欄位上下排列（欄位名稱、目前、匯入、保留／覆寫開關），操作列固定在底部並上下堆疊；寬螢幕為「欄位／目前／匯入」三欄。狀態同時以圖示與文字表示，匯入會寫入的值以黃色斜角色帶標示，保留的匯入值以刪除線與「不匯入」標示。
 
 ## CI／CD
 - `tool/ci_changes.py` 將 `lib/admin/` 歸入品質檢查與 admin web 建置（`flutter build web -t lib/main_admin.dart -o build/admin`），不觸發模擬器。

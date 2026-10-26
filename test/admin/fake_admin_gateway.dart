@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:motorcycle_parking/admin/admin_gateway.dart';
+import 'package:motorcycle_parking/admin/import/import_models.dart';
 import 'package:motorcycle_parking/admin/review/review_models.dart';
 import 'package:motorcycle_parking/admin/spots/spot_map.dart';
 import 'package:motorcycle_parking/admin/spots/spot_models.dart';
@@ -491,6 +492,95 @@ class FakeAdminGateway implements AdminGateway {
     await delayedTown?.future;
     if (failTown) throw StateError('offline');
     return townAt;
+  }
+
+  /// What the preview says about known ids; any other id is new.
+  Map<String, ImportEntry> importPlan = {};
+  final List<List<Map<String, dynamic>>> previewed = [];
+  final List<(List<Map<String, dynamic>>, Map<String, dynamic>, String, String)>
+  imported = [];
+  Object? importError;
+
+  /// Holds previews or backlog reads open, to race them against a reset.
+  Completer<void>? delayedPreview;
+  Completer<void>? delayedBacklog;
+
+  @override
+  Future<List<ImportEntry>> previewImport(
+    List<Map<String, dynamic>> spots,
+  ) async {
+    previewed.add(spots);
+    await delayedPreview?.future;
+    if (importError case final error?) throw error;
+    return [
+      for (final s in spots)
+        importPlan[s['id']] ??
+            ImportEntry(
+              sourceId: '${s['id']}',
+              official: '${s['id']}'.startsWith('official:'),
+              status: ImportStatus.added,
+              reason: '',
+              name: '${s['name']}',
+              city: '${s['city'] ?? ''}',
+              district: '${s['district'] ?? ''}',
+            ),
+    ];
+  }
+
+  @override
+  Future<ImportResult> applyImport(
+    List<Map<String, dynamic>> spots,
+    Map<String, dynamic> choices,
+    String effectiveDate,
+    String note,
+  ) async {
+    imported.add((spots, choices, effectiveDate, note));
+    var inserted = 0, updated = 0;
+    for (final id in choices.keys) {
+      final entry = importPlan[id];
+      if (entry == null) {
+        inserted++;
+      } else {
+        updated++;
+      }
+      importPlan[id] = ImportEntry(
+        sourceId: id,
+        official: id.startsWith('official:'),
+        status: ImportStatus.unchanged,
+        reason: '',
+        name: entry?.name ?? '',
+        city: entry?.city ?? '',
+        district: entry?.district ?? '',
+        baseUpdatedAt: '2026-10-26T00:00:00Z',
+      );
+    }
+    return ImportResult(inserted: inserted, updated: updated);
+  }
+
+  List<FeeBacklogItem> backlog = [];
+  Object? convertError;
+  final List<(List<Map<String, dynamic>>, String)> conversions = [];
+
+  @override
+  Future<List<FeeBacklogItem>> feeBacklog() async {
+    final answer = backlog;
+    await delayedBacklog?.future;
+    return answer;
+  }
+
+  @override
+  Future<ImportResult> convertFees(
+    List<Map<String, dynamic>> items,
+    String note,
+  ) async {
+    conversions.add((items, note));
+    if (convertError case final error?) throw error;
+    final ids = {for (final i in items) i['source_id']};
+    backlog = [
+      for (final b in backlog)
+        if (!ids.contains(b.sourceId)) b,
+    ];
+    return ImportResult(updated: items.length);
   }
 
   /// What [searchAddress] returns, or throws when set.
