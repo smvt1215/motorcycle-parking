@@ -268,6 +268,7 @@ rate = {"mode":"free"} | {"mode":"posted"}
   - 只轉換能確定的寫法；「請依現場公告」「未知」等維持 null（未確認），不當成已知費率。混有汽車、月租、身障費率的停車場說明，無法確定時留給人工判斷。
   - 先以差異試算列出「可轉換／無法判斷／需人工確認」，確認後才寫入 staging 與 production。
   - 在完成轉換前，不開放依價格篩選，避免大部分停車點因沒有資料而被篩掉。
+  - 2026-10-26 實作（Admin Web P6，見 [ADMIN_WEB.md](ADMIN_WEB.md#p6-實作)）：解析規則只有一份，在 `lib/admin/import/fee_reading.dart`；後台匯入在試算前以它為能確定的點位補上 `fee`，費率轉換頁以它分列三類並由管理者確認後寫入（`admin_convert_fees`）。`tool/import_mymaps.py` 不另寫解析，產生的 JSON 仍只有 `fee_note`；`official.sql`／`import.sql` 改由後台匯入取代。staging 與 production 尚待實際執行轉換。
 
 ## Supabase 資料表（RLS）
 - `community_spots`：geography(Point) + 欄位同上；所有人可讀非 `hidden` 點位（`pending`／`confirmed` 均可見）；**RLS 禁止客戶端直接寫入**，新增與建議一律經 Edge Function `submit-report`（見「防濫用」）。
@@ -333,7 +334,7 @@ rate = {"mode":"free"} | {"mode":"posted"}
    | 審核修改建議、不存在回報 | Table Editor → `moderation_queue` |
    | 維護縣市規則（見下方 `restriction` 說明） | Table Editor → `city_rules` |
    | 維護官方點 | Table Editor → `official_heavy_spots` |
-   | 匯入資料（`official.sql`／`import.sql`）、批次修改 | SQL Editor |
+   | 匯入資料（2026-10-26 起改用管理站「匯入」）、批次修改 | SQL Editor |
 
    改 `city_rules` 並調高 `version` 時（App 只在資料庫版本較大時改用資料庫那份），`restriction` 要一起確認：
    - `signage`：限現場標示開放的車格。
@@ -367,6 +368,7 @@ rate = {"mode":"free"} | {"mode":"posted"}
 - 官方點的重機資格只採官方明載（臺北市大型重機格數、36 處路外試辦場域），其餘維持「有條件」；我的地圖的重機回報、分區、入口與停車指引以「社群補充（未經官方查核）」標示。一般機車資格依官方記載的機車格數。
 - 本階段只做靜態點：TDX 只用於核驗與補入靜態停車場，不串接即時車位。
 - 結果：官方點 `data/imports/official/spots.json`；社群點 `data/imports/google-mymaps/spots.json`；`verification.json`（每點的核驗紀錄與處理結果）與 `REPORT.md`（統計、修正、待人工確認與不錄入清單）。`--sql-owner` 另產生 `import.sql`（社群點）與 `official.sql`（以 service role 執行的官方點 upsert），都不直接寫入資料庫。
+- 寫入資料庫改用管理站「匯入」（2026-10-26，[ADMIN_WEB.md](ADMIN_WEB.md#p6-實作)）：上傳上述 `spots.json`，試算新增／更新／管理員修改過的欄位後勾選匯入，管理員修改過的欄位預設保留，並寫入稽核紀錄。`official.sql` 會覆寫管理員的修改，只在管理站無法使用時才以 SQL Editor 執行。
 - 限制：其餘縣市自有資料不是缺座標（基隆、屏東）就是查無資料集，改由 TDX 比對；觀光景點、量販店等未登記為路外停車場的地點仍無官方資料可比對。臺中與桃園的市府資料沒有費率。
 
 資料表在原本的 `community_spots` / `spot_votes` 之外新增：`moderation_queue`、`official_heavy_spots`（官方點，含詳情十二欄）、`rate_limit_events`。`spot_annotations` 已於 2026-10-17 移除。
