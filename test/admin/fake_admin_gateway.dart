@@ -471,8 +471,14 @@ class FakeAdminGateway implements AdminGateway {
   final historyRequests = <String>[];
   Object? historyError;
 
+  /// Holds spot() open, to race a background reload against an edit.
+  Completer<void>? delayedSpot;
+  int spotRequests = 0;
+
   @override
   Future<SpotRecord?> spot(String sourceId) async {
+    spotRequests++;
+    await delayedSpot?.future;
     final v = spotRows[sourceId];
     return v == null ? null : SpotRecord(sourceId: sourceId, values: {...v});
   }

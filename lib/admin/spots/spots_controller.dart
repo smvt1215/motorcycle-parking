@@ -550,8 +550,33 @@ class SpotsController extends ChangeNotifier {
           !dirty &&
           !saving &&
           changed.contains(open.sourceId))
-        this.open(open.sourceId),
+        _reload(open.sourceId),
     ]);
+  }
+
+  /// Reads the open spot again in the background. The form stays usable
+  /// meanwhile, so the answer is dropped if the admin started editing,
+  /// saving or opened another form while it was on its way.
+  Future<void> _reload(String sourceId) async {
+    final generation = _generation;
+    final seq = _openSeq;
+    final shown = formSeq;
+    try {
+      final fresh = await gateway!.spot(sourceId);
+      if (fresh == null ||
+          generation != _generation ||
+          seq != _openSeq ||
+          shown != formSeq ||
+          record?.sourceId != sourceId ||
+          dirty ||
+          saving) {
+        return;
+      }
+      _load(fresh);
+      _notify();
+    } catch (_) {
+      // The form keeps what it shows; the next open reads it again.
+    }
   }
 
   void _refreshRow(SpotRecord saved) {

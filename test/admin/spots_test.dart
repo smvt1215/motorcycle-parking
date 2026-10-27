@@ -51,6 +51,28 @@ void main() {
       expect(spots.results.first.name, '中山北路二段機車格（新）');
     });
 
+    test('其他頁寫入後背景重新讀取開啟中的點位；等待期間的修改不被覆蓋（決定 49）', () async {
+      await spots.open(communityId);
+      gateway.spotRows[communityId]!['name'] = '審核後的新名稱';
+      // Not this spot: the form is left alone.
+      await spots.refresh({officialId});
+      expect(spots.record!.name, isNot('審核後的新名稱'));
+      // This spot, nothing typed: the form shows the new values.
+      await spots.refresh({communityId});
+      expect(spots.record!.name, '審核後的新名稱');
+      expect(spots.opening, isFalse);
+      // Typing while the read is on its way keeps what was typed.
+      gateway.delayedSpot = Completer<void>();
+      final reading = spots.refresh({communityId});
+      spots.set('note', '管理員剛輸入的備註');
+      gateway.spotRows[communityId]!['name'] = '又一次的新名稱';
+      gateway.delayedSpot!.complete();
+      await reading;
+      expect(spots.draft['note'], '管理員剛輸入的備註');
+      expect(spots.dirty, isTrue);
+      expect(spots.record!.name, '審核後的新名稱');
+    });
+
     test('開啟後被他人修改：不覆蓋，保留修改並提示重新載入', () async {
       await spots.open(communityId);
       gateway.spotRows[communityId]!['updated_at'] =
