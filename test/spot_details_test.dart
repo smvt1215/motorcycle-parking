@@ -384,7 +384,7 @@ void main() {
         '備註',
         '資料與查核',
         '資料來源',
-        '更新時間',
+        '最近更新',
       ]) {
         await showField(tester, field);
       }
@@ -408,7 +408,7 @@ void main() {
     await showField(tester, '資料與查核');
     expect(find.text('即時車位狀態'), findsNothing);
     expect(find.textContaining('機車剩餘'), findsNothing);
-    expect(find.textContaining('更新時間'), findsOneWidget);
+    expect(find.textContaining('最近更新'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -439,7 +439,7 @@ void main() {
         });
         expect(sourceSummary(spot, demo: false), '由管理員自其他社群統整後匯入');
         await openDetails(tester, store, spot);
-        await showField(tester, '更新時間');
+        await showField(tester, '最近更新');
         expect(find.text('資料來源'), findsOneWidget);
         expect(find.text('查核狀態'), findsNothing);
         expect(find.text('導航到這裡').hitTestable(), findsOneWidget);
@@ -681,7 +681,8 @@ void main() {
     await showField(tester, '資料與查核');
     expect(tester.getRect(find.text('導航到這裡')), action);
     expect(find.text('修改建議').hitTestable(), findsOneWidget);
-    expect(find.text('未提供'), findsNothing);
+    // Only 最近更新 says 未提供: this spot has no update time or history.
+    expect(find.text('未提供'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

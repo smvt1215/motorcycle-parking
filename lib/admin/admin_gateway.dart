@@ -6,6 +6,7 @@ import '../data/repositories.dart';
 import '../domain/location_check.dart';
 import '../domain/map_viewport.dart';
 import '../models/parking.dart';
+import '../models/spot_history.dart';
 import 'import/import_models.dart';
 import 'review/review_models.dart';
 import 'spots/spot_map.dart';
@@ -77,6 +78,9 @@ abstract class AdminGateway {
 
   /// Every editable column of one spot, with the version to edit against.
   Future<SpotRecord?> spot(String sourceId);
+
+  /// `admin_spot_history` (#141): the spot's timeline, newest first.
+  Future<List<HistoryEntry>> spotHistory(String sourceId);
 
   /// `admin_upsert_spot`: edits [values] on the version [baseUpdatedAt].
   Future<SpotRecord> updateSpot(
@@ -390,6 +394,15 @@ class SupabaseAdminGateway implements AdminGateway {
         .map((r) => SpotSummary.fromJson(r as Map<String, dynamic>))
         .toList();
   }
+
+  @override
+  Future<List<HistoryEntry>> spotHistory(String sourceId) async =>
+      HistoryEntry.list(
+        await client.rpc<dynamic>(
+          'admin_spot_history',
+          params: {'p_source_id': sourceId},
+        ),
+      );
 
   @override
   Future<SpotRecord?> spot(String sourceId) async {
