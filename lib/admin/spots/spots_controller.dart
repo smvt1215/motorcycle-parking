@@ -6,6 +6,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/town_lookup.dart';
 import '../../domain/location_check.dart';
 import '../../models/fee.dart';
+import '../../models/parking.dart';
+import '../../models/parking_condition.dart';
+import '../../models/space_kind.dart';
 import '../admin_gateway.dart';
 import 'lot_models.dart';
 import 'spot_models.dart';
@@ -534,8 +537,94 @@ class SpotsController extends ChangeNotifier {
         'parking_zones': copyJson(loaded.values['parking_zones'] ?? const []),
         'zones_complete': loaded.values['zones_complete'] == true,
         'closure': copyJson(loaded.values['closure']),
+        // Changed with the bay kind (setKind); a street bay's only.
+        'condition': copyJson(loaded.values['condition']),
       },
     };
+  }
+
+  /// The bay kind the draft reads as (C6 canvas AppPatterns, pattern 1):
+  /// its space type, or 普大共用 for a toll or free bay posted for both.
+  SpaceKind? get spaceKind {
+    final type = SpaceType.values.asNameMap()[draft['space_type']];
+    return type == null
+        ? null
+        : SpaceKind.of(type, ParkingCondition.fromJson(draft['condition']));
+  }
+
+  /// Picks [kind] and keeps the street condition with it, so the table's
+  /// check (space type = the condition's legacy type, §1.3) holds: back to
+  /// the stored kind restores the stored type and condition; another kind
+  /// takes that kind's condition, keeping the notice it rests on (basis).
+  /// A spot without a condition gets none unless the kind needs one
+  /// (普大共用, at [charge], else its present charge, else toll).
+  void setKind(SpaceKind kind, {Charge? charge}) {
+    final r = record;
+    if (r == null) return;
+    final storedType = SpaceType.values.asNameMap()[r.values['space_type']];
+    final stored = r.values['condition'];
+    final storedCondition = ParkingCondition.fromJson(stored);
+    // Back to the stored kind (and, for 普大共用, its charge): the stored
+    // type and condition as they were, schedule and limits included.
+    if (!r.isNew &&
+        storedType != null &&
+        SpaceKind.of(storedType, storedCondition) == kind &&
+        (charge == null ||
+            charge == (storedCondition ?? conditionOf(storedType))?.charge)) {
+      draft = {
+        ...draft,
+        'space_type': storedType.name,
+        'condition': copyJson(stored),
+      };
+      _notify();
+      return;
+    }
+    final now = ParkingCondition.fromJson(draft['condition']);
+    // What the admin set beyond the kind stays: the notice it rests on and
+    // its periods (the contract takes a schedule on any bay).
+    final basis = now?.basis;
+    final schedule = now?.schedule ?? const <ScheduleSlot>[];
+    final SpaceType type;
+    final ParkingCondition? condition;
+    if (kind == SpaceKind.sharedMotorcycle) {
+      final c = charge ?? now?.charge ?? Charge.toll;
+      type = c == Charge.free
+          ? SpaceType.freeMotorcycle
+          : SpaceType.paidMotorcycle;
+      condition = ParkingCondition(
+        bay: Bay.motorcycle,
+        use: BayUse.share,
+        share: ShareKind.scooterHeavy,
+        charge: c,
+        schedule: schedule,
+        basis: basis,
+      );
+    } else {
+      type = kind.type!;
+      final base = conditionOf(type);
+      condition = draft['condition'] == null || base == null
+          ? null
+          : ParkingCondition(
+              bay: base.bay,
+              use: base.use,
+              share: base.share,
+              charge: base.charge,
+              // The kind's own limits, with the details the admin set on
+              // the same kind of limit (a time limit's minutes).
+              limits: [
+                for (final l in base.limits)
+                  now?.limits.where((x) => x.kind == l.kind).firstOrNull ?? l,
+              ],
+              schedule: schedule,
+              basis: basis,
+            );
+    }
+    draft = {
+      ...draft,
+      'space_type': type.name,
+      'condition': condition?.toJson(),
+    };
+    _notify();
   }
 
   void close() {

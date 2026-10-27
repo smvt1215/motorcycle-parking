@@ -54,7 +54,7 @@ enum SpaceKind {
   String get detail => switch (this) {
     paidMotorcycle => '路邊白線機車格，依公告時段收費',
     freeMotorcycle => '不收費的路邊或巷弄機車格',
-    sharedMotorcycle => '非限時，標示普通機車與大型重機都能停',
+    sharedMotorcycle => '標示普通機車與大型重機都能停的機車格',
     heavyOnly => '標示大型重機專用的格位',
     evMotorcycle => '限電動機車停放或充換電',
     disabledMotorcycle => '限經監理站檢驗合格的身障特製機車，並持識別證或專用牌照',

@@ -10,6 +10,9 @@ import 'package:pointer_interceptor/pointer_interceptor.dart';
 import '../../models/closure.dart';
 import '../../models/fee.dart';
 import '../../models/parking.dart';
+import '../../models/parking_condition.dart' show Charge, ParkingCondition;
+import '../../models/space_kind.dart';
+import '../../features/map/space_type_sheet.dart' show SpaceKindList;
 import '../../ui/address_search_field.dart';
 import '../../ui/fee_board.dart';
 import '../../ui/fee_editor.dart';
@@ -1243,6 +1246,12 @@ class _FormPane extends StatelessWidget {
                           )
                         else if (f.key == 'fee_note' && spots.feeStructured)
                           _FeeNotePlate(spots: spots, error: errors[f.key])
+                        else if (f.input == SpotInput.spaceType)
+                          _SpaceKindField(
+                            spots: spots,
+                            field: f,
+                            error: errors[f.key],
+                          )
                         else
                           _FieldRow(
                             // Coordinates follow the picker and the county
@@ -2292,5 +2301,66 @@ String? _summaryOf(SpotGroup group, SpotsController spots) {
       return record.official
           ? joined([text('source_name'), text('effective_date')])
           : '社群回報整理・${record.origin}';
+  }
+}
+
+/// The bay kind as the app picks it (C6 canvas AppPatterns, pattern 1;
+/// decision 57): the grouped ground-marking list, 普大共用 asking 收費 or
+/// 免費 under it. The street condition changes with it (setKind).
+class _SpaceKindField extends StatelessWidget {
+  const _SpaceKindField({
+    required this.spots,
+    required this.field,
+    required this.error,
+  });
+  final SpotsController spots;
+  final SpotField field;
+  final String? error;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final kind = spots.spaceKind;
+    final muted = TextStyle(color: colors.onSurfaceVariant, fontSize: 13);
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 720),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (spots.changed('space_type') || spots.changed('condition'))
+              const Padding(
+                padding: EdgeInsets.only(bottom: 6),
+                child: ChangeBand('已修改'),
+              ),
+            Text(field.label, style: muted),
+            const SizedBox(height: 6),
+            SpaceKindList(
+              value: kind,
+              keyPrefix: 'spot-space',
+              onChanged: spots.setKind,
+              followUp: kind == SpaceKind.sharedMotorcycle
+                  ? OptionPills<Charge>(
+                      key: const ValueKey('spot-space-charge'),
+                      values: const [
+                        (Charge.toll, '收費格'),
+                        (Charge.free, '免費格'),
+                      ],
+                      selected:
+                          ParkingCondition.fromJson(spots.draft['condition'])
+                              ?.charge ??
+                          Charge.toll,
+                      keyOf: (c) => 'spot-space-charge-${c.name}',
+                      onSelect: (c) => spots.setKind(kind!, charge: c),
+                    )
+                  : null,
+            ),
+            if (error case final message?)
+              Text(message, style: TextStyle(color: colors.error)),
+          ],
+        ),
+      ),
+    );
   }
 }
