@@ -100,6 +100,10 @@ enum SpotInput {
   spaceType,
   triState,
   choice,
+
+  /// Several of [SpotField.choices] as a list (`facility_types`, decision
+  /// 58); none is unset.
+  multiChoice,
   date,
 
   /// A structured [Fee], edited with the shared FeeEditor.
@@ -178,12 +182,15 @@ final spotFields = <SpotField>[
     SpotInput.spaceType,
     required: true,
   ),
+  // Every type the lot is built as (decision 58); the table keeps
+  // facility_type as the first for older readers.
   SpotField(
-    'facility_type',
+    'facility_types',
     '場站類型',
     SpotGroup.space,
-    SpotInput.choice,
+    SpotInput.multiChoice,
     choices: {for (final f in FacilityType.values) f.name: f.label},
+    help: '可複選，例如同一場站有地下與平面停車。',
   ),
   SpotField(
     'parking_access',
@@ -333,6 +340,17 @@ final spotFields = <SpotField>[
 
 SpotField spotField(String key) => spotFields.firstWhere((f) => f.key == key);
 
+/// A stored row as the form edits it: a row written before the set
+/// existed, or by a server without it, shows its one facility type as the
+/// set (decision 58), so the form never reads it as unset.
+Map<String, dynamic> spotRowValues(Map<String, dynamic> row) =>
+    row['facility_types'] == null && row['facility_type'] is String
+    ? {
+        ...row,
+        'facility_types': [row['facility_type']],
+      }
+    : row;
+
 /// Mirrors the table checks so a bad value never reaches the RPC. [fee] is
 /// the fee in the form: fee_note may run past 200 when it is that fee's
 /// sentence.
@@ -363,6 +381,12 @@ String? validateSpotField(SpotField field, Object? value, {Fee? fee}) {
       if (value is! bool) return '${field.label}的值無效';
     case SpotInput.choice:
       if (!field.choices.containsKey(value)) return '請選擇${field.label}';
+    case SpotInput.multiChoice:
+      if (value is! List ||
+          !value.every(field.choices.containsKey) ||
+          value.toSet().length != value.length) {
+        return '請選擇${field.label}';
+      }
     case SpotInput.date:
       if (value is! String || DateTime.tryParse(value) == null) {
         return '${field.label}格式需為 YYYY-MM-DD';

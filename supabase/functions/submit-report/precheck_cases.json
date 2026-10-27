@@ -89,6 +89,75 @@
       "expect": []
     },
     {
+      "name": "lot with several lot facilities passes",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "市府停車場",
+          "space_type": "offStreet",
+          "facility_types": [
+            "underground",
+            "surface"
+          ]
+        }
+      },
+      "expect": []
+    },
+    {
+      "name": "lot with roadside among its facilities",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "市府停車場",
+          "space_type": "offStreet",
+          "facility_type": "underground",
+          "facility_types": [
+            "underground",
+            "roadside"
+          ]
+        }
+      },
+      "expect": [
+        "lot_roadside@facility_types"
+      ]
+    },
+    {
+      "name": "street bay with a lot among its facilities",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "機車格",
+          "space_type": "freeMotorcycle",
+          "facility_types": [
+            "roadside",
+            "surface"
+          ]
+        }
+      },
+      "expect": [
+        "street_lot_details@facility_types"
+      ]
+    },
+    {
+      "name": "suggested lot facilities with roadside",
+      "body": {
+        "action": "flag",
+        "source_id": "x",
+        "field": "space_type",
+        "reason": "格位類型：建議「路外停車場」",
+        "proposed": {
+          "space_type": "offStreet",
+          "facility_types": [
+            "multiStorey",
+            "roadside"
+          ]
+        }
+      },
+      "expect": [
+        "lot_roadside@proposed.facility_types"
+      ]
+    },
+    {
       "name": "heavy only bay allowing scooters",
       "body": {
         "action": "create",

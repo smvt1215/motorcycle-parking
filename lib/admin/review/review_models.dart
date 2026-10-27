@@ -59,6 +59,10 @@ enum FieldInput {
   /// One of [ReviewField.choices], or unset.
   choice,
 
+  /// Several of [ReviewField.choices] (`facility_types`, decision 58), or
+  /// unset.
+  multiChoice,
+
   /// A structured fee per vehicle (`fee`), edited with the shared FeeEditor.
   fee,
 
@@ -97,6 +101,13 @@ final reviewFields = [
     'facility_type',
     '場站類型',
     FieldInput.choice,
+    choices: {for (final f in FacilityType.values) f.name: f.label},
+  ),
+  // Builds since decision 58 send every type the lot is built as.
+  ReviewField(
+    'facility_types',
+    '場站類型（複選）',
+    FieldInput.multiChoice,
     choices: {for (final f in FacilityType.values) f.name: f.label},
   ),
   ReviewField(
@@ -360,11 +371,19 @@ bool fitsField(ReviewField field, Object? value) => switch (field.input) {
   FieldInput.hiddenFlag => value is bool,
   FieldInput.coordinate => value is num,
   FieldInput.choice => value == null || field.choices.containsKey(value),
+  FieldInput.multiChoice => value == null || validChoices(field, value),
   FieldInput.fee =>
     value == null || value is Fee || Fee.tryParse(value) != null,
   FieldInput.condition => value == null || validCondition(value),
   FieldInput.closure => value == null || validClosure(value),
 };
+
+/// Whether [value] is a non-empty list of distinct [field] choices.
+bool validChoices(ReviewField field, Object? value) =>
+    value is List &&
+    value.isNotEmpty &&
+    value.every(field.choices.containsKey) &&
+    value.toSet().length == value.length;
 
 /// A `fee` value as a [Fee]: the editor's own, or a valid JSON one. Null
 /// when there is none, it is invalid, or it names no vehicle (the form
@@ -380,8 +399,16 @@ bool sameValue(String key, Object? a, Object? b) =>
       FieldInput.fee => reviewFee(a) == reviewFee(b),
       FieldInput.condition =>
         ParkingCondition.fromJson(a) == ParkingCondition.fromJson(b),
+      // The same set in any order.
+      FieldInput.multiChoice => _sameSet(a, b),
       _ => a == b,
     };
+
+bool _sameSet(Object? a, Object? b) {
+  if (a is! List || b is! List) return a == b;
+  final x = a.toSet(), y = b.toSet();
+  return x.length == y.length && x.containsAll(y);
+}
 
 /// [patch] as the RPC takes it: a fee being edited becomes its JSON.
 Map<String, dynamic> wirePatch(Map<String, dynamic> patch) => {
@@ -412,6 +439,10 @@ String formatValue(String key, Object? value) {
     FieldInput.text =>
       value is String && value.trim().isNotEmpty ? value : '未填寫',
     FieldInput.choice => field.choices[value] ?? '未設定',
+    FieldInput.multiChoice =>
+      value is List && facilityTypesOf(value).isNotEmpty
+          ? facilityTypesLabel(facilityTypesOf(value))
+          : '未設定',
     FieldInput.fee => reviewFee(value)?.summary ?? '未設定',
     FieldInput.condition => conditionSummary(ParkingCondition.fromJson(value)),
     FieldInput.closure => closureSummary(value),
@@ -452,6 +483,10 @@ String? validatePatch(Map<String, dynamic> patch, ReviewSpot spot) {
         }
       case FieldInput.choice:
         if (value != null && !field.choices.containsKey(value)) {
+          return '請選擇${field.label}';
+        }
+      case FieldInput.multiChoice:
+        if (value != null && !validChoices(field, value)) {
           return '請選擇${field.label}';
         }
       case FieldInput.hiddenFlag:

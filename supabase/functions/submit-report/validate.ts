@@ -244,7 +244,17 @@ export function zoneConditionConsistent(
   }
   return zone.access === legacyAccess(zone.condition);
 }
-const facilityTypes = ['multiStorey', 'underground', 'surface', 'roadside'];
+const facilityTypes: string[] = contract.placement.facility_types;
+/**
+ * The facility types of one spot (decision 58): one or more distinct types
+ * of the contract; the table stores them in the contract's order.
+ */
+export function validFacilityTypes(v: unknown): boolean {
+  return Array.isArray(v) && v.length >= 1 &&
+    v.length <= facilityTypes.length &&
+    v.every((t) => typeof t === 'string' && facilityTypes.includes(t)) &&
+    new Set(v).size === v.length;
+}
 const offStreetSpaceTypes: string[] = contract.placement.off_street_space_types;
 const offStreetFacilityTypes: string[] =
   contract.placement.off_street_facility_types;
@@ -289,6 +299,8 @@ const proposedChecks: Record<string, (v: unknown) => boolean> = {
   scooter_allowed: flag,
   heavy_allowed: flag,
   facility_type: oneOf(facilityTypes),
+  // null clears them, as it clears facility_type.
+  facility_types: (v) => v === null || validFacilityTypes(v),
   parking_access: oneOf(accessKinds),
   address: text(200),
   road_segment: text(200),
@@ -492,8 +504,13 @@ export function validate(body: Record<string, unknown>): string | null {
       // a report as evidence, and admins decide (§1.4).
       if ('zones_complete' in s) return 'invalid zones_complete';
       if (s.condition !== undefined && s.condition !== null) {
+        // Any lot type among the facility types places it off the street.
         const offStreet = offStreetSpaceTypes.includes(String(s.space_type)) ||
-          offStreetFacilityTypes.includes(String(s.facility_type));
+          offStreetFacilityTypes.includes(String(s.facility_type)) ||
+          (Array.isArray(s.facility_types) &&
+            s.facility_types.some((t) =>
+              offStreetFacilityTypes.includes(String(t))
+            ));
         if (
           offStreet || !validCondition(s.condition) ||
           Object.hasOwn(s.condition as object, 'basis') ||
@@ -505,6 +522,7 @@ export function validate(body: Record<string, unknown>): string | null {
       for (
         const [key, check] of [
           ['facility_type', oneOf(facilityTypes)],
+          ['facility_types', validFacilityTypes],
           ['parking_access', oneOf(accessKinds)],
           ['entrance_note', text(500)],
           ['parking_guide', text(500)],

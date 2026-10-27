@@ -6,6 +6,7 @@ import '../../models/fee.dart';
 import '../../models/fee_plan.dart' show canonicalJson;
 import '../../models/parking.dart';
 import '../../ui/fee_editor.dart';
+import '../../ui/option_pill.dart';
 import '../admin_controller.dart';
 import '../admin_layout.dart';
 import '../admin_theme.dart';
@@ -995,7 +996,12 @@ class _DiffTable extends StatelessWidget {
     ];
     final addable = [
       for (final f in reviewFields)
-        if (spot.allows(f.key) && !rows.containsKey(f.key)) f,
+        // Older builds' single facility_type is shown when sent; admins
+        // edit the whole set (decision 58).
+        if (spot.allows(f.key) &&
+            !rows.containsKey(f.key) &&
+            f.key != 'facility_type')
+          f,
     ];
     Widget cell(String key) {
       final current = spot.values[key];
@@ -1556,6 +1562,10 @@ class _FieldEditor extends StatelessWidget {
       ],
       onChanged: onChanged,
     ),
+    FieldInput.multiChoice => InputDecorator(
+      decoration: _decoration(context),
+      child: _MultiChoice(field: field, value: value, onChanged: onChanged),
+    ),
     // Shown as sent; the zone and condition editors are C6's.
     FieldInput.condition => InputDecorator(
       decoration: _decoration(context)
@@ -1698,6 +1708,41 @@ class _ActionBar extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+/// Every lot type ticked; none clears them (decision 58).
+class _MultiChoice extends StatelessWidget {
+  const _MultiChoice({
+    required this.field,
+    required this.value,
+    required this.onChanged,
+  });
+  final ReviewField field;
+  final Object? value;
+  final ValueChanged<Object?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final picked = value is List ? value! as List : const <Object?>[];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final e in field.choices.entries)
+          OptionCheck(
+            key: ValueKey('review-${field.key}-${e.key}'),
+            label: e.value,
+            value: picked.contains(e.key),
+            onChanged: (bool on) {
+              final next = [
+                for (final k in field.choices.keys)
+                  if (k == e.key ? on : picked.contains(k)) k,
+              ];
+              onChanged(next.isEmpty ? null : next);
+            },
+          ),
+      ],
     );
   }
 }

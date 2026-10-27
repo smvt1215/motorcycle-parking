@@ -59,8 +59,11 @@ Uri? licenseLinkUri(ParkingSpot spot) =>
 String regionSummary(ParkingSpot spot) =>
     '${spot.city.trim()}${spot.district.trim()}';
 
-String facilitySummary(ParkingSpot spot) =>
-    spot.facilityType?.label ?? (spot.isFacility ? '路外停車場（型式未提供）' : '路邊停車格');
+String facilitySummary(ParkingSpot spot) => spot.facilities.isNotEmpty
+    ? facilityTypesLabel(spot.facilities)
+    : spot.isFacility
+    ? '路外停車場（型式未提供）'
+    : '路邊停車格';
 
 /// Limits that reserve a motorcycle bay for some riders only: admitting
 /// both motorcycle classes there is not 普大共用.

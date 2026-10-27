@@ -40,6 +40,11 @@ void main() {
         placement['off_street_facility_types'],
         _wires(offStreetFacilityTypes, (v) => v.name),
       );
+      // The order a set of facility types is stored in (decision 58) is
+      // FacilityType's.
+      expect(placement['facility_types'], [
+        for (final t in FacilityType.values) t.name,
+      ]);
       final time = contract['time']! as Map<String, Object?>;
       expect(time['pattern'], timePattern);
       expect(time['days'], scheduleDayPresets);

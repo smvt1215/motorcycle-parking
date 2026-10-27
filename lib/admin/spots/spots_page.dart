@@ -1696,6 +1696,27 @@ class _FieldRow extends StatelessWidget {
           keyOf: (v) => '${field.key}-${v ?? 'none'}',
           onSelect: onChanged,
         );
+      // Several may apply (pattern 3, decision 58): check rows.
+      case SpotInput.multiChoice:
+        final picked = value is List ? value! as List : const <Object?>[];
+        input = Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final e in field.choices.entries)
+              OptionCheck(
+                key: ValueKey('spot-${field.key}-${e.key}'),
+                label: e.value,
+                value: picked.contains(e.key),
+                onChanged: (bool on) {
+                  final next = [
+                    for (final k in field.choices.keys)
+                      if (k == e.key ? on : picked.contains(k)) k,
+                  ];
+                  onChanged(next.isEmpty ? null : next);
+                },
+              ),
+          ],
+        );
       case SpotInput.choice:
         input = DropdownButtonFormField<String?>(
           initialValue: field.choices.containsKey(value)
@@ -1715,6 +1736,7 @@ class _FieldRow extends StatelessWidget {
     // Pills and segments have no box to carry the label, help and error.
     final bare =
         field.input == SpotInput.triState ||
+        field.input == SpotInput.multiChoice ||
         (field.input == SpotInput.choice && input is! DropdownButtonFormField);
     if (bare) {
       final muted = TextStyle(color: colors.onSurfaceVariant, fontSize: 13);
@@ -1723,7 +1745,8 @@ class _FieldRow extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (field.input == SpotInput.choice)
+            if (field.input == SpotInput.choice ||
+                field.input == SpotInput.multiChoice)
               Text(decoration.labelText!, style: muted),
             input,
             if (field.help case final help?)
@@ -2230,7 +2253,10 @@ String? _summaryOf(SpotGroup group, SpotsController spots) {
       final total = draft['scooter_total'];
       return joined([
         type?.label,
-        choice('facility_type'),
+        // Every type ticked (decision 58).
+        if (facilityTypesOf(draft['facility_types']) case final types
+            when types.isNotEmpty)
+          facilityTypesLabel(types),
         choice('parking_access'),
         if (total is int) '機車 $total 格',
       ]);

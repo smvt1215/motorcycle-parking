@@ -359,15 +359,13 @@ void main() {
     final store = await openForm(tester);
     expect(find.text('入口在哪裡'), findsNothing);
     await pickType(tester, SpaceType.offStreet);
-    final underground = find.descendant(
-      of: find.byType(ChoiceField<FacilityType?>),
-      matching: find.text('地下'),
-    );
-    await reveal(tester, underground);
-    await tester.ensureVisible(underground);
-    await tester.pumpAndSettle();
-    await tester.tap(underground);
-    await tester.pumpAndSettle();
+    // A lot built two ways (decision 58): both ticked.
+    for (final type in ['surface', 'underground']) {
+      final row = find.byKey(ValueKey('facility-$type'));
+      await reveal(tester, row);
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+    }
     final access = find.descendant(
       of: find.byType(ChoiceField<ParkingAccess?>).first,
       matching: find.text('普通機車與大型重機共用'),
@@ -391,7 +389,9 @@ void main() {
     await tester.ensureVisible(guide);
     await tester.enterText(guide, '靠電梯');
     final spot = await send(tester, store);
+    // Stored in the contract's order; the first is the one old builds read.
     expect(spot['facility_type'], 'underground');
+    expect(spot['facility_types'], ['underground', 'surface']);
     expect(spot['parking_access'], 'scooterHeavy');
     expect(spot['entrance_note'], '入口在松仁路側');
     expect(spot['parking_zones'], [

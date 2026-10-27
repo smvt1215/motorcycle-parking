@@ -278,6 +278,32 @@ void main() {
     expect(accessSummary(unknown), contains('格位配置未確認'));
   });
 
+  test('多個場站型式：詳情寫「地下、平面停車場」，收藏保留，舊資料只有一個型式', () {
+    final lot = ParkingSpot.fromJson({
+      ...roadside.toJson(),
+      'space_type': 'offStreet',
+      'facility_type': 'underground',
+      'facility_types': ['surface', 'underground', 'future-type'],
+    });
+    // In the contract's order; unknown names left out.
+    expect(lot.facilityTypes, [FacilityType.underground, FacilityType.surface]);
+    expect(lot.facilityType, FacilityType.underground);
+    expect(facilitySummary(lot), '地下、平面停車場');
+    final saved = ParkingSpot.fromJson(lot.toJson());
+    expect(saved.facilities, lot.facilities);
+    final old = ParkingSpot.fromJson({
+      ...roadside.toJson(),
+      'space_type': 'offStreet',
+      'facility_type': 'multiStorey',
+    });
+    expect(old.facilities, [FacilityType.multiStorey]);
+    expect(facilitySummary(old), '立體停車場');
+    expect(
+      facilityTypesLabel([FacilityType.surface, FacilityType.roadside]),
+      '平面停車場、路邊停車格',
+    );
+  });
+
   test('停車場兩種車種皆可停不推定共用格，路邊明確共用可分類', () {
     final both = ParkingSpot.fromJson({
       ...roadside.toJson(),

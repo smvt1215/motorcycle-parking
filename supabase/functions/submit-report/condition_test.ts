@@ -112,6 +112,12 @@ Deno.test('a new spot refuses a condition the tables would refuse', () => {
       facility_type: 'underground',
       condition: { bay: 'motorcycle', use: 'usual', charge: 'toll' },
     },
+    // Any lot type among several places it off the street (decision 58).
+    {
+      space_type: 'paidMotorcycle',
+      facility_types: ['roadside', 'surface'],
+      condition: { bay: 'motorcycle', use: 'usual', charge: 'toll' },
+    },
     // Riders attach notices as evidence; only admins write a basis.
     {
       space_type: 'paidMotorcycle',

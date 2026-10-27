@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:motorcycle_parking/ui/option_pill.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:motorcycle_parking/core/address_search.dart';
 import 'package:motorcycle_parking/admin/admin_app.dart';
@@ -358,6 +359,30 @@ void main() {
       expect(gateway.spotUpdates.single.$2, {'name': '中山北路機車格'});
       expect(find.text('已儲存：中山北路機車格'), findsOneWidget);
       expect(find.text('儲存並關閉'), findsNothing);
+    });
+
+    testWidgets('場站類型可複選，送出依契約順序的型式（決定 58）', (tester) async {
+      await show(tester, path: '/spots/$officialId');
+      await openFold(tester, '格位與停放條件');
+      final surface = find.byKey(const ValueKey('spot-facility_types-surface'));
+      await tester.ensureVisible(surface);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<OptionCheck>(
+              find.byKey(const ValueKey('spot-facility_types-underground')),
+            )
+            .value,
+        isTrue,
+      );
+      await tester.tap(surface);
+      await tester.pumpAndSettle();
+      expect(find.text('已修改'), findsOneWidget);
+      await tester.tap(find.text('儲存並關閉'));
+      await tester.pumpAndSettle();
+      expect(gateway.spotUpdates.single.$2, {
+        'facility_types': ['underground', 'surface'],
+      });
     });
 
     testWidgets('有未儲存的修改時，換點位前先確認', (tester) async {
@@ -903,13 +928,13 @@ void main() {
       await tester.pumpAndSettle();
       await openFold(tester, '格位與停放條件');
       final underground = find.byKey(
-        const ValueKey('facility_type-underground'),
+        const ValueKey('spot-facility_types-underground'),
       );
       await tester.ensureVisible(underground);
       await tester.tap(underground);
       await tester.pumpAndSettle();
       // Folded with an edit: the yellow band stays above it.
-      // One over the pills in the open section, one over 可停車種.
+      // One over the check rows in the open section, one over 可停車種.
       expect(find.byType(ChangeBand), findsNWidgets(2));
       expect(
         find.descendant(
@@ -922,7 +947,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(gateway.spotUpdates.single.$2, {
         'heavy_allowed': false,
-        'facility_type': 'underground',
+        'facility_types': ['underground'],
       });
     });
 

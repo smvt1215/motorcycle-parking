@@ -394,10 +394,11 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(note);
       await tester.pumpAndSettle();
-      // The admin scrolls back to the top, away from the focused field.
-      await tester.drag(form, const Offset(0, 3000));
-      await tester.pumpAndSettle();
+      // The admin scrolls back to the top, away from the focused field. By
+      // the position: a drag could start on the form's map or check rows.
       final scroll = tester.state<ScrollableState>(form);
+      scroll.position.jumpTo(0);
+      await tester.pumpAndSettle();
       expect(scroll.position.pixels, 0);
       tester.view.physicalSize = const Size(390, 640);
       await tester.pumpAndSettle();

@@ -192,7 +192,7 @@ abstract class AdminGateway {
 /// The columns the hidden list shows; clients may select them.
 const _spotColumns =
     'id,name,lat,lng,city,district,space_type,fee_note,note,scooter_allowed,heavy_allowed,source_name,updated_at,'
-    'facility_type,parking_access,entrance_note,parking_guide,fee,condition';
+    'facility_type,facility_types,parking_access,entrance_note,parking_guide,fee,condition';
 final _uuid = RegExp(
   r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
   caseSensitive: false,
@@ -410,7 +410,7 @@ class SupabaseAdminGateway implements AdminGateway {
     final rows = await _spotRows([sourceId]);
     return rows.isEmpty
         ? null
-        : SpotRecord(sourceId: sourceId, values: rows.single);
+        : SpotRecord(sourceId: sourceId, values: spotRowValues(rows.single));
   }
 
   @override
@@ -429,7 +429,7 @@ class SupabaseAdminGateway implements AdminGateway {
         'p_note': note,
       },
     );
-    return SpotRecord(sourceId: sourceId, values: row);
+    return SpotRecord(sourceId: sourceId, values: spotRowValues(row));
   }
 
   @override
@@ -465,7 +465,10 @@ class SupabaseAdminGateway implements AdminGateway {
         'p_note': note,
       },
     );
-    return SpotRecord(sourceId: row['source_id'] as String, values: row);
+    return SpotRecord(
+      sourceId: row['source_id'] as String,
+      values: spotRowValues(row),
+    );
   }
 
   @override

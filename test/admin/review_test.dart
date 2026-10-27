@@ -418,6 +418,34 @@ void main() {
       ]);
       expect(formatValue('facility_type', 'underground'), '地下停車場');
       expect(validatePatch({'facility_type': 'rooftop'}, spot), isNotNull);
+      // Builds since decision 58 send the set.
+      expect(
+        formatValue('facility_types', ['underground', 'surface']),
+        '地下、平面停車場',
+      );
+      expect(
+        validatePatch({
+          'facility_types': ['surface'],
+        }, spot),
+        isNull,
+      );
+      expect(validatePatch({'facility_types': null}, spot), isNull);
+      for (final bad in [
+        <String>[],
+        ['rooftop'],
+        ['surface', 'surface'],
+        'surface',
+      ]) {
+        expect(validatePatch({'facility_types': bad}, spot), isNotNull);
+      }
+      expect(
+        sameValue(
+          'facility_types',
+          ['surface', 'underground'],
+          ['underground', 'surface'],
+        ),
+        isTrue,
+      );
     });
 
     test('找不到點位只能駁回', () async {

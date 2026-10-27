@@ -112,12 +112,20 @@ function combinationIssues(s: Json): PrecheckIssue[] {
     ? s.parking_zones.filter(object)
     : [];
   if ('space_type' in s) {
-    if (s.space_type === 'offStreet' && s.facility_type === 'roadside') {
-      out.push(issue('lot_roadside', 'facility_type'));
+    // The set a new build sends (decision 58), else the one type: any of
+    // them that does not fit the space type counts.
+    const types = Array.isArray(s.facility_types)
+      ? s.facility_types.map(String)
+      : s.facility_type == null
+      ? []
+      : [String(s.facility_type)];
+    const field = 'facility_types' in s ? 'facility_types' : 'facility_type';
+    if (s.space_type === 'offStreet' && types.includes('roadside')) {
+      out.push(issue('lot_roadside', field));
     }
     if (s.space_type !== 'offStreet') {
-      if (lotFacilities.includes(String(s.facility_type))) {
-        out.push(issue('street_lot_details', 'facility_type'));
+      if (types.some((t) => lotFacilities.includes(t))) {
+        out.push(issue('street_lot_details', field));
       }
       if (zones.length > 0) {
         out.push(issue('street_lot_details', 'parking_zones'));
