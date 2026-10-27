@@ -26,9 +26,10 @@ class OptionPill extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final enabled = onTap != null;
-    // The outline thickens inside the pill: the padding gives back what the
-    // border takes, so the pill is the same size either way.
-    final border = selected ? 2.0 : 1.0;
+    // The outline thickens inside the pill, so it is the same size either
+    // way.
+    // Thinner than 2 px, which only the fee board preview draws.
+    final border = selected ? 1.5 : 1.0;
     return Semantics(
       button: true,
       selected: selected,
@@ -54,9 +55,11 @@ class OptionPill extends StatelessWidget {
               child: ConstrainedBox(
                 constraints: const BoxConstraints(minHeight: 40),
                 child: Padding(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 13 - border,
-                    vertical: 7 - border,
+                  // A DecoratedBox paints its border over the child, so the
+                  // padding stays the same either way.
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
                   ),
                   // As wide as its label; long labels wrap.
                   child: Align(

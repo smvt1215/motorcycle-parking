@@ -12,6 +12,7 @@
 /// vectors in supabase/functions/_shared/rule_verdict_cases.json.
 library;
 
+import '../models/closure.dart';
 import '../models/fee.dart';
 import '../models/fee_plan.dart';
 import '../models/parking.dart';
@@ -586,6 +587,18 @@ ParkingDecision decideParking(
   final verified = explicit != null && recentlyVerified(spot, vehicle, at);
   final trusted = spot.isOfficial || verified || recentlyConfirmed(spot, at);
   final source = sourceBasis(spot, vehicle, at, verified: verified);
+  // Works or a closure (#116) while it holds: nobody parks, whatever the
+  // bay allows. Once its date has passed the spot reads as before, with
+  // the details asking riders to confirm.
+  if (spot.closure case final closure?
+      when closure.stateOn(at) == ClosureState.active) {
+    return ParkingDecision(
+      EligibilityStatus.notAllowed,
+      '${closure.reason.label}期間暫停開放',
+      basis: [source],
+      price: priceAnswer(spot.fee?.toJson(), vehicle, legacyText: spot.feeNote),
+    );
+  }
   if (explicit == false && trusted) {
     return ParkingDecision(
       EligibilityStatus.notAllowed,

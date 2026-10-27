@@ -1,5 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../../ui/option_pill.dart';
 import '../../models/parking.dart';
 import '../../models/fee.dart' show FeeWords;
 import '../../models/parking_condition.dart';
@@ -373,20 +374,18 @@ class _SlotCard extends StatelessWidget {
                       runSpacing: 8,
                       children: [
                         if (slot.days case final List<Object?> picked)
-                          ChoiceChip(
+                          OptionPill(
                             key: ValueKey('$k-days-picked'),
-                            label: Text(
-                              FeeWords.dayLabel(FeeWords.dayMask(picked)),
-                            ),
+                            label: FeeWords.dayLabel(FeeWords.dayMask(picked)),
                             selected: true,
-                            onSelected: (_) {},
+                            onTap: () {},
                           ),
                         for (final (value, label) in _dayLabels)
-                          ChoiceChip(
+                          OptionPill(
                             key: ValueKey('$k-days-$value'),
-                            label: Text(label),
+                            label: label,
                             selected: slot.days == value,
-                            onSelected: (_) {
+                            onTap: () {
                               slot.days = value;
                               onChanged();
                             },
@@ -402,11 +401,11 @@ class _SlotCard extends StatelessWidget {
                           (true, '全天'),
                           (false, '指定時間'),
                         ])
-                          ChoiceChip(
+                          OptionPill(
                             key: ValueKey('$k-all-day-$value'),
-                            label: Text(label),
+                            label: label,
                             selected: slot.allDay == value,
-                            onSelected: (_) {
+                            onTap: () {
                               slot.allDay = value;
                               if (!value && slot.from.text.isEmpty) {
                                 slot.from.text = '07:00';

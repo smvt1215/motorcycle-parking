@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../features/map/map_legend.dart' show SpotMarker, markerLook;
 import '../../features/map/vehicle_sheet.dart' show platesOf;
 import '../../models/parking.dart';
+import '../../ui/option_pill.dart';
 import '../admin_theme.dart';
 import '../review/review_page.dart' show ChangeBand, reviewCompactWidth;
 import 'rule_models.dart';
@@ -1103,12 +1104,12 @@ class _Preview extends StatelessWidget {
               runSpacing: 6,
               children: [
                 for (final district in districts)
-                  ChoiceChip(
+                  // Selecting changes only the fill and outline (#116).
+                  OptionPill(
                     key: ValueKey('preview-district-$district'),
-                    label: Text(_district(district)),
+                    label: _district(district),
                     selected: rules.previewDistrict == district,
-                    onSelected: (_) => rules.setPreview(district: district),
-                    materialTapTargetSize: MaterialTapTargetSize.padded,
+                    onTap: () => rules.setPreview(district: district),
                   ),
               ],
             ),

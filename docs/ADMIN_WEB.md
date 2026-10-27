@@ -295,6 +295,18 @@ python3 tool/export_rules.py --check || python3 tool/export_rules.py
   - 顯示預檢標記 `risk_flags`（#158）與附上的公告連結 `evidence_url`；`stored_pair_hold` 的規則寫明「建議只改費率（或條件），和點位目前的條件（或費率）不一致」，提醒一併確認（#155 第 19、20 項）。
   - 全場費率引用的規則也被分區使用時，套用前詢問「只改全場費率」（預設，另開一條規則，名稱可改）或「改這條規則」（全部跟著改），確認鈕寫明套用到哪裡。`admin_resolve_report` 因此接受 `fee_plans`／`fee_plan`；這兩個鍵是管理員推導的值，不參與 `base_spot` 衝突檢查。
 
+### C6b 暫時封閉與地圖上限（#116、#133）
+
+依暫時封閉畫布（Main、ClosureDetail，決定 41）與 C6 畫布 ClosureAdmin、MapLimit，migration `202610270091_spot_closures.sql`：
+
+- **資料**：兩張點位表加 `closure`：`{reason: works|closed, since, until?, basis?}`（`valid_closure()`）。沒有 `until` 時 `since` 後 7 天到期；`closure_state()` 依臺灣日期回 `active`／`expired`。`public_spots`（v3／v2／原版 viewport 同步帶出）、`official_viewport_spots_v3` 與 `admin_spot_rows()` 帶 `closure` 與 `closure_state`，App 與管理站讀伺服器的判斷。到期後點位照常顯示並請車友確認，不刪除點位。
+- **App 回報**：「這裡已經不能停車」的原因改成膠囊（選中只換底色與框線、不加勾勾、寬度不變）；施工中與暫時封閉改問「預計什麼時候恢復？」（不知道／有寫日期＋日期選擇器），取代 40 字自由文字，送 `proposed.closure = {reason, until?}`（`validate.ts` 與預檢 `gone_with_changes` 允許）。
+- **停放判斷**：生效中的封閉讓 `decideParking()` 判為不可停（原因「施工中期間暫停開放」），地圖標記、排序與詳情資格一致；到期後恢復原判斷。改為官方點時封閉資料一併搬過去。
+- **App 詳情**：到期前「施工中／暫時封閉，暫時不能停」與預計恢復日期或「恢復時間未知」；過期後「原定…恢復・現場是否已恢復，還沒有人確認」與「已經可以停」（送 `field: reopened`、`proposed.closure = null`）／「還是不能停」（開啟「這裡已經不能停車」）。
+- **管理站**：點位表單「暫時無法停車」區：原因（沒有／施工中／暫時封閉）、預計恢復日期（選填，可清除）、到期說明、依據、生效中／待確認標籤；過期時「延長到…」與「標記已恢復」。審核頁新增「暫時無法停車」欄位：騎士的建議套用時開始日為回報日（臺灣時間）、依據為「車友回報，附「說明」」，可在修改後套用調整；`admin_upsert_spot`、`admin_resolve_report` 接受 `closure`。
+- **全站選項膠囊**：`OptionPill` 取代規則頁行政區預覽、App 共用時段的 ChoiceChip，FeeEditor 的收費方式膠囊也改用它（選中不再加粗字，寬度不變）。駁回原因維持附說明的單選清單。
+- **地圖上限（#133）**：`admin_viewport_spots_v2()` 以單一 jsonb 回傳 `{rows, counts, truncated}`，不受 API `max_rows` 截斷；全部最多 1,000 筆、每層最多 500 筆，依社群點、官方點、已隱藏的順序填入。截斷時地圖顯示「這個範圍的點位太多，只顯示 1,000 個」、各圖層數量（未全部載入時寫「已顯示／總數」，一筆都沒載入寫「未載入」）與「放大地圖或關掉一個圖層」。後端尚未更新時退回舊 RPC，回 1,000 列也視為截斷。
+
 ### 點位編輯紀錄（#141）
 
 - 依 C6 畫布 EditHistory／AppHistory 與決定 52；migration `202610270100_spot_history.sql`，不新增資料表，稽核紀錄仍是唯一紀錄。

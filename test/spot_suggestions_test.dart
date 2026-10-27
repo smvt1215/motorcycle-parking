@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:motorcycle_parking/models/closure.dart';
 import 'package:motorcycle_parking/core/town_lookup.dart';
 import 'package:motorcycle_parking/data/app_store.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
@@ -427,33 +428,67 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('暫時施工只送審、不建議隱藏，可填預計恢復時間', (tester) async {
+  Future<void> pickReopening(WidgetTester tester) async {
+    await tester.ensureVisible(find.byKey(const ValueKey('gone-dated-true')));
+    await tester.tap(find.byKey(const ValueKey('gone-dated-true')));
+    await tester.pumpAndSettle();
+    // The picker opens on today; confirm it.
+    final ok = find.text('確定').evaluate().isNotEmpty
+        ? find.text('確定')
+        : find.text('OK');
+    await tester.tap(ok.last);
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('施工中送暫時封閉（#116）：日期用選擇器，不建議隱藏', (tester) async {
     final store = await openSuggestion(tester, '這裡已經不能停車');
     await tester.tap(find.byKey(const ValueKey('gone-works')));
     await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const ValueKey('gone-until')),
-      '公告寫 11 月 30 日完工',
-    );
+    // The 40-character free text is gone; 不知道 is the start.
+    expect(find.byType(TextFormField), findsOneWidget);
+    await pickReopening(tester);
+    final today = taiwanToday(DateTime.now());
+    expect(find.text(closureDayLabel(today)), findsOneWidget);
     await submitSuggestion(tester, '送出回報');
     final body = store.submissions.single;
     expect(body['field'], 'gone');
-    expect(body.containsKey('proposed'), isFalse);
-    expect(body['reason'], '這裡已經不能停車：施工中；預計恢復：公告寫 11 月 30 日完工');
+    expect(body['proposed'], {
+      'closure': {'reason': 'works', 'until': closureDate(today)},
+    });
+    expect(body['reason'], '這裡已經不能停車：施工中；預計恢復：${closureDayLabel(today)}');
   });
 
-  testWidgets('改選長期原因後不再帶預計恢復時間', (tester) async {
+  testWidgets('暫時封閉沒有日期：只送原因，7 天後到期', (tester) async {
+    final store = await openSuggestion(tester, '這裡已經不能停車');
+    await tester.tap(find.byKey(const ValueKey('gone-closed')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('7 天後自動恢復顯示'), findsOneWidget);
+    await submitSuggestion(tester, '送出回報');
+    expect(store.submissions.single['proposed'], {
+      'closure': {'reason': 'closed'},
+    });
+  });
+
+  testWidgets('改選長期原因後不再帶預計恢復日期', (tester) async {
     final store = await openSuggestion(tester, '這裡已經不能停車');
     await tester.tap(find.byKey(const ValueKey('gone-works')));
     await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const ValueKey('gone-until')),
-      '公告寫 11 月 30 日完工',
-    );
+    await pickReopening(tester);
     await tester.tap(find.byKey(const ValueKey('gone-removed')));
     await tester.pumpAndSettle();
     await submitSuggestion(tester, '送出回報');
     expect(store.submissions.single['reason'], '這裡已經不能停車：格線已撤除');
+    expect(store.submissions.single['proposed'], isNot(contains('closure')));
+  });
+
+  testWidgets('原因膠囊選中不加勾勾、寬度不變', (tester) async {
+    await openSuggestion(tester, '這裡已經不能停車');
+    final pill = find.byKey(const ValueKey('gone-works'));
+    final before = tester.getSize(pill);
+    await tester.tap(pill);
+    await tester.pumpAndSettle();
+    expect(tester.getSize(pill), before);
+    expect(find.byIcon(Icons.check), findsNothing);
   });
 
   test('長度依伺服器的 UTF-16 計算', () {
@@ -1243,5 +1278,148 @@ void main() {
     expect(find.text('送出修改建議').hitTestable(), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  group('暫時封閉（#116）', () {
+    final today = taiwanToday(DateTime.now());
+    ParkingSpot closed(SpotClosure closure) => ParkingSpot(
+      id: spot.id,
+      name: spot.name,
+      lat: spot.lat,
+      lng: spot.lng,
+      city: spot.city,
+      spaceType: spot.spaceType,
+      closure: closure,
+    );
+
+    test('沒填日期 7 天後到期；伺服器的判斷優先', () {
+      final c = SpotClosure.fromJson({
+        'reason': 'works',
+        'since': closureDate(today.subtract(const Duration(days: 7))),
+      })!;
+      expect(c.stateOn(DateTime.now()), ClosureState.active);
+      final older = SpotClosure.fromJson({
+        'reason': 'works',
+        'since': closureDate(today.subtract(const Duration(days: 8))),
+      })!;
+      expect(older.stateOn(DateTime.now()), ClosureState.expired);
+      // Read as active, then the date passes: it lapses all the same.
+      expect(
+        SpotClosure.fromJson({
+          'reason': 'works',
+          'since': '2020-01-01',
+        }, state: 'active')!.stateOn(DateTime.now()),
+        ClosureState.expired,
+      );
+      expect(
+        SpotClosure.fromJson({
+          'reason': 'works',
+          'since': closureDate(today),
+        }, state: 'active')!.stateOn(DateTime.now()),
+        ClosureState.active,
+      );
+      // Favorites keep it, without the judgement.
+      final saved = ParkingSpot.fromJson(
+        ParkingSpot(
+          id: spot.id,
+          name: spot.name,
+          lat: spot.lat,
+          lng: spot.lng,
+          city: spot.city,
+          spaceType: spot.spaceType,
+          closure: SpotClosure(reason: ClosureReason.works, since: today),
+        ).toJson(),
+      );
+      expect(saved.closure?.reason, ClosureReason.works);
+      expect(saved.closure?.state, isNull);
+      expect(validClosure({'reason': 'works', 'since': '2026-02-30'}), isFalse);
+      expect(
+        validClosure({
+          'reason': 'closed',
+          'since': '2026-10-26',
+          'until': '2026-10-25',
+        }),
+        isFalse,
+      );
+    });
+
+    for (final width in [320.0, 390.0]) {
+      testWidgets('詳情：到期前、沒填日期、過期待確認（${width.toInt()} px）', (tester) async {
+        tester.view.devicePixelRatio = 1;
+        tester.view.physicalSize = Size(width, 844);
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final store = (await tester.runAsync(createStore))!;
+        addTearDown(store.dispose);
+        final until = today.add(const Duration(days: 30));
+        await openDetails(
+          tester,
+          store,
+          selectedSpot: closed(
+            SpotClosure(
+              reason: ClosureReason.works,
+              since: today,
+              until: until,
+              basis: '車友回報',
+              state: ClosureState.active,
+            ),
+          ),
+        );
+        expect(find.text('施工中，暫時不能停'), findsOneWidget);
+        expect(find.text('預計 ${closureDayLabel(until)}恢復'), findsOneWidget);
+        expect(find.text('已經可以停'), findsNothing);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+
+        await openDetails(
+          tester,
+          store,
+          selectedSpot: closed(
+            SpotClosure(
+              reason: ClosureReason.closed,
+              since: today,
+              state: ClosureState.active,
+            ),
+          ),
+        );
+        expect(find.text('暫時封閉，暫時不能停'), findsOneWidget);
+        expect(find.text('恢復時間未知'), findsOneWidget);
+        await tester.pumpWidget(const SizedBox.shrink());
+
+        await openDetails(
+          tester,
+          store,
+          selectedSpot: closed(
+            SpotClosure(
+              reason: ClosureReason.closed,
+              since: today.subtract(const Duration(days: 40)),
+              until: today.subtract(const Duration(days: 1)),
+              state: ClosureState.expired,
+            ),
+          ),
+        );
+        expect(find.textContaining('原定'), findsOneWidget);
+        expect(find.text('現場是否已恢復，還沒有人確認'), findsOneWidget);
+        final reopened = find.byKey(const ValueKey('closure-reopened'));
+        await tester.ensureVisible(reopened);
+        await tester.pumpAndSettle();
+        expect(tester.getSize(reopened).height, greaterThanOrEqualTo(48));
+        await tester.tap(reopened);
+        await tester.pumpAndSettle();
+        expect(store.submissions.single, {
+          'action': 'flag',
+          'source_id': spot.id,
+          'reason': '暫時封閉已恢復：現場已經可以停',
+          'field': 'reopened',
+          'proposed': {'closure': null},
+        });
+        await tester.ensureVisible(find.byKey(const ValueKey('closure-still')));
+        await tester.tap(find.byKey(const ValueKey('closure-still')));
+        await tester.pumpAndSettle();
+        expect(find.text('這裡為什麼不能停車？'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      });
+    }
   });
 }
