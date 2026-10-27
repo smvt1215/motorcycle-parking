@@ -1207,8 +1207,9 @@ class _LatestUpdateField extends StatelessWidget {
       final entries = snapshot.data ?? const <HistoryEntry>[];
       final latest = entries.firstOrNull;
       final updated = spot.updatedAt;
-      // History covers administrators' writes and decided reports, not an
-      // owner's own edit or a vote: a later update time keeps its place.
+      // History covers administrators' writes, decided reports, owners'
+      // edits and votes (decision 56); an update it does not cover (an older
+      // server) keeps its later time.
       final covered =
           latest != null &&
           (updated == null ||

@@ -1417,14 +1417,10 @@ class _ByTimeFieldsState extends State<_ByTimeFields> {
           ),
         ),
         if (gaps.isNotEmpty) ...[
-          Text(
-            '${gaps.join('、')} 還沒有費率，會顯示未確認',
-            key: ValueKey('fee-gaps-$k'),
-            style: muted.copyWith(fontWeight: FontWeight.w700),
-          ),
+          _GapsNote(keyPrefix: k, gaps: gaps, brief: feeGapsBrief(list)),
           const SizedBox(height: 4),
         ],
-        Text('國定假日依當天是星期幾計費。沒有被設定包含到的日子和時間，App 顯示「未確認」。', style: muted),
+        Text('國定假日依當天是星期幾計費。沒有被設定包含到的日子和時間，App 顯示「費率未確認」。', style: muted),
         if (visits >= 2) ...[
           const SizedBox(height: 8),
           _ThreeWay(
@@ -1442,6 +1438,70 @@ class _ByTimeFieldsState extends State<_ByTimeFields> {
                     .where((c) => c.wire == v)
                     .firstOrNull,
               ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// What no period covers (decision 55): a short line first (「平日夜間、假日
+/// 全天沒有費率」), the full list of times under 看完整時段.
+class _GapsNote extends StatefulWidget {
+  const _GapsNote({
+    required this.keyPrefix,
+    required this.gaps,
+    required this.brief,
+  });
+  final String keyPrefix;
+  final List<String> gaps, brief;
+
+  @override
+  State<_GapsNote> createState() => _GapsNoteState();
+}
+
+class _GapsNoteState extends State<_GapsNote> {
+  bool full = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final muted = TextStyle(
+      fontSize: 12,
+      height: 1.5,
+      color: colors.onSurfaceVariant,
+    );
+    final k = widget.keyPrefix;
+    final brief = widget.brief.join('、');
+    // The full list adds nothing when the short line already gives every
+    // time.
+    final more = brief != widget.gaps.join('、');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          '$brief沒有費率',
+          key: ValueKey('fee-gaps-$k'),
+          style: muted.copyWith(fontWeight: FontWeight.w700),
+        ),
+        if (more) ...[
+          if (full)
+            for (final gap in widget.gaps)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text('・$gap', style: muted),
+              ),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: TextButton(
+              key: ValueKey('fee-gaps-more-$k'),
+              style: TextButton.styleFrom(
+                minimumSize: const Size(48, 48),
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+              ),
+              onPressed: () => setState(() => full = !full),
+              child: Text(full ? '收起完整時段' : '看完整時段'),
             ),
           ),
         ],

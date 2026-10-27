@@ -295,7 +295,9 @@ void main() {
       expect(find.textContaining('每小時 30 元'), findsNothing);
       // The lot has car bays but no structured car rate.
       expect(find.text('汽車'), findsOneWidget);
-      expect(find.textContaining('費率未確認，請依現場公告'), findsOneWidget);
+      // Decision 54: 費率未確認 on the car's line, the posted notice once.
+      expect(find.textContaining('費率未確認'), findsOneWidget);
+      expect(find.text('未確認的費率請依現場公告'), findsOneWidget);
       // 比照 resolves within the same fee only (design §2.1), so the heavy
       // rate is not provided (#140).
       expect(find.textContaining('費率未提供'), findsOneWidget);
@@ -324,7 +326,9 @@ void main() {
       );
       expect(find.text('每次 40 元'), findsOneWidget);
       expect(find.textContaining('每小時 30 元'), findsNothing);
-      expect(find.textContaining('費率未確認，請依現場公告'), findsOneWidget);
+      // Decision 54: 費率未確認 on the car's line, the posted notice once.
+      expect(find.textContaining('費率未確認'), findsOneWidget);
+      expect(find.text('未確認的費率請依現場公告'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
