@@ -75,9 +75,11 @@ void main() {
   group('匯入控制', () {
     late FakeAdminGateway gateway;
     late ImportController imports;
+    var applied = <Set<String>>[];
     setUp(() {
+      applied = [];
       gateway = FakeAdminGateway(access: adminAal2)..importPlan = plan();
-      imports = ImportController(gateway);
+      imports = ImportController(gateway, onApplied: applied.add);
     });
     tearDown(() => gateway.dispose());
 
@@ -127,6 +129,10 @@ void main() {
       expect((date, note), ('2026-10-26', '十月匯入'));
       expect(imports.result!.inserted, 1);
       expect(imports.result!.updated, 2);
+      // The spots page and the review queue are told to read again (決定 49).
+      expect(applied, [
+        {updatedId, conflictId, newOfficialId},
+      ]);
       // The file is previewed again, so the list shows what is now stored.
       expect(gateway.previewed, hasLength(2));
       expect(imports.selected, isEmpty);
@@ -185,6 +191,7 @@ void main() {
   group('費率轉換控制', () {
     late FakeAdminGateway gateway;
     late FeeConversionController fees;
+    var converted = 0;
     setUp(() {
       gateway = FakeAdminGateway(access: adminAal2)
         ..backlog = [
@@ -205,7 +212,8 @@ void main() {
               feeNote: note,
             ),
         ];
-      fees = FeeConversionController(gateway);
+      converted = 0;
+      fees = FeeConversionController(gateway, onApplied: (_) => converted++);
     });
     tearDown(() => gateway.dispose());
 
@@ -253,6 +261,7 @@ void main() {
       await fees.load();
       gateway.convertError = StateError('offline');
       await fees.convert('');
+      expect(converted, 0);
       expect(fees.error, contains('連線失敗'));
       expect(fees.loaded, isTrue);
     });
@@ -266,6 +275,7 @@ void main() {
       fees.toggle(none, true);
       expect(fees.selectedSpots, 3);
       await fees.convert('確認');
+      expect(converted, 1);
       final (items, note) = gateway.conversions.single;
       expect(note, '確認');
       expect(items, hasLength(3));

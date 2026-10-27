@@ -630,6 +630,11 @@ void main() {
       expect(gateway.created.single.$2['city'], '臺北市');
       expect(find.text('已建立：新的機車格'), findsOneWidget);
       expect(find.text('社群點（社群回報整理）'), findsOneWidget);
+      // The list reads again and shows the new spot at once (決定 49).
+      expect(
+        find.byKey(const ValueKey('spot-77777777-7777-4777-8777-777777777777')),
+        findsOneWidget,
+      );
     });
 
     testWidgets('換新增類型時表單欄位重新開始', (tester) async {

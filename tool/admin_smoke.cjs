@@ -108,12 +108,26 @@ function session(role, aal, factors = [factor]) {
   const results = [];
   try {
     browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
-    for (const mobile of [false, true]) {
-      for (const scenario of ['login', 'denied', 'mfa', 'unfinished', 'shell']) {
-        const name = `${scenario}-${mobile ? 'mobile-dark' : 'desktop'}`;
+    // The C6 canvas sizes (#118) run the signed-in shell only: the sign-in
+    // pages do not change with the shell's breakpoints.
+    const viewports = [
+      { id: 'desktop', width: 1440, height: 960, dark: false, scenarios: ['login', 'denied', 'mfa', 'unfinished', 'shell'] },
+      { id: 'mobile-dark', width: 390, height: 844, dark: true, scenarios: ['login', 'denied', 'mfa', 'unfinished', 'shell'] },
+      { id: 'iphone16pro', width: 402, height: 874, dark: false, scenarios: ['shell'] },
+      { id: 'ipad-air', width: 820, height: 1180, dark: false, scenarios: ['shell'] },
+    ];
+    // SMOKE_VIEWPORTS=iphone16pro,ipad-air runs only those sizes.
+    const only = process.env.SMOKE_VIEWPORTS?.split(',');
+    for (const vp of viewports.filter(v => !only || only.includes(v.id))) {
+      // Below 680 px one column and a bottom navigation bar; 680–1039 two
+      // columns under a one-row top bar whose account button is a menu.
+      const mobile = vp.width < 680;
+      const tablet = !mobile && vp.width < 1040;
+      for (const scenario of vp.scenarios) {
+        const name = `${scenario}-${vp.id}`;
         const context = await browser.newContext({
-          viewport: mobile ? { width: 390, height: 844 } : { width: 1440, height: 960 },
-          colorScheme: mobile ? 'dark' : 'light', reducedMotion: 'reduce',
+          viewport: { width: vp.width, height: vp.height },
+          colorScheme: vp.dark ? 'dark' : 'light', reducedMotion: 'reduce',
           // A shell locale such as C.UTF-8 gives Chromium an invalid language tag.
           locale: 'zh-TW',
         });
@@ -125,6 +139,9 @@ function session(role, aal, factors = [factor]) {
         const requests = [];
         let conflicts = 0;
         let riderBan = null;
+        // After the vehicle check the stored row says so; a later read (the
+        // page refreshing after another write) must not undo it.
+        let verified = {};
         await context.route('https://admin-smoke.supabase.co/**', async route => {
           const url = new URL(route.request().url());
           requests.push(`${route.request().method()} ${url.pathname}`);
@@ -159,8 +176,8 @@ function session(role, aal, factors = [factor]) {
             return route.fulfill({ body: '', headers: { ...cors, 'content-range': '0-2/3' } });
           }
           if (url.pathname === '/rest/v1/community_spots') {
-            if ((route.request().headers().accept || '').includes('vnd.pgrst.object')) return route.fulfill({ json: communitySpot, headers: cors });
-            return route.fulfill({ json: url.searchParams.get('status') === 'eq.hidden' ? [hiddenSpot] : [communitySpot], headers: cors });
+            if ((route.request().headers().accept || '').includes('vnd.pgrst.object')) return route.fulfill({ json: { ...communitySpot, ...verified }, headers: cors });
+            return route.fulfill({ json: url.searchParams.get('status') === 'eq.hidden' ? [hiddenSpot] : [{ ...communitySpot, ...verified }], headers: cors });
           }
           if (url.pathname === '/rest/v1/official_heavy_spots') {
             // maybeSingle() asks for one object instead of an array.
@@ -200,7 +217,8 @@ function session(role, aal, factors = [factor]) {
             assert.equal(sourceId, communityId);
             assert.deepEqual(values, { scooter_allowed: true });
             assert.equal(note, '核驗目前車種');
-            return route.fulfill({ json: { ...communitySpot, ...values, scooter_verified_at: '2026-10-25T01:19:36Z', updated_at: '2026-10-25T01:19:36Z' }, headers: cors });
+            verified = { scooter_verified_at: '2026-10-25T01:19:36Z', updated_at: '2026-10-25T01:19:36Z' };
+            return route.fulfill({ json: { ...communitySpot, ...values, ...verified }, headers: cors });
           }
           // The map layer and the rules page read the same rules.
           // Both read the stored rows through city_rules_v2() (C4).
@@ -365,7 +383,7 @@ function session(role, aal, factors = [factor]) {
             await page.screenshot({ path: path.join(output, `${name}-spot-history-${size.width}.png`) });
             assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} spot history scrolls sideways at ${size.width} px`);
           }
-          await page.setViewportSize(mobile ? { width: 390, height: 844 } : { width: 1440, height: 960 });
+          await page.setViewportSize({ width: vp.width, height: vp.height });
           await page.waitForTimeout(500);
           await page.getByRole('button', { name: '返回點位', exact: true }).click();
           await waitText('官方點（新北市政府）');
@@ -399,6 +417,11 @@ function session(role, aal, factors = [factor]) {
             await page.waitForTimeout(300);
             await back.click();
           }
+          // 680–1039 px: the list steps aside while a form is open.
+          const showList = async () => {
+            if (tablet) await page.getByRole('button', { name: '顯示清單' }).click();
+          };
+          await showList();
           await page.getByRole('button', { name: /^中山北路二段路邊機車格/ }).click();
           await waitText('社群點（社群回報整理）');
           const verify = page.getByRole('button', { name: '核驗目前車種' });
@@ -435,11 +458,35 @@ function session(role, aal, factors = [factor]) {
             await page.waitForTimeout(300);
             await back.click();
           }
+          await showList();
           await page.getByRole('button', { name: '新增停車點', exact: true }).click();
           await page.getByRole('button', { name: /現場確認、尚無官方資料的停車點/ }).click();
           await waitText('新增社群點');
           await page.getByRole('button', { name: '建立停車點', exact: true }).waitFor({ timeout: 15000 });
           await page.screenshot({ path: path.join(output, `${name}-spot-new.png`) });
+          if (vp.id === 'iphone16pro') {
+            // The keyboard and Safari's bars leave a short page: the small
+            // map folds into a button and the buttons scroll with the form.
+            await page.getByRole('textbox', { name: /^名稱/ }).first().click();
+            await page.setViewportSize({ width: vp.width, height: 460 });
+            await page.waitForTimeout(500);
+            await page.screenshot({ path: path.join(output, `${name}-spot-new-kbd.png`) });
+            const openMap = page.getByRole('button', { name: /開地圖調整/ });
+            // Below the undo toast, which takes the wheel.
+            await page.mouse.move(vp.width / 2, 400);
+            for (let i = 0; i < 30 && !(await openMap.count()); i++) {
+              await page.mouse.wheel(0, 120);
+              await page.waitForTimeout(100);
+            }
+            await openMap.waitFor({ timeout: 15000 });
+            await page.screenshot({ path: path.join(output, `${name}-spot-new-kbd-map.png`) });
+            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} short form scrolls sideways`);
+            await page.setViewportSize({ width: vp.width, height: vp.height });
+            await page.waitForTimeout(500);
+            // Back to the top of the form, where the next steps start.
+            for (let i = 0; i < 20; i++) await page.mouse.wheel(0, -300);
+            await page.waitForTimeout(300);
+          }
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} new spot form scrolls sideways`);
           // Scroll the form down to the picker and its notes.
           const viewport = page.viewportSize();
@@ -503,7 +550,7 @@ function session(role, aal, factors = [factor]) {
             await page.waitForTimeout(800);
             await page.screenshot({ path: path.join(output, `${name}-rule-preview-320.png`) });
             assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} rule form scrolls sideways at 320 px`);
-            await page.setViewportSize({ width: 390, height: 844 });
+            await page.setViewportSize({ width: vp.width, height: vp.height });
             await page.waitForTimeout(800);
           }
           const published = page.waitForResponse(response => response.url().endsWith('/rpc/admin_upsert_city_rule'));
@@ -599,7 +646,16 @@ function session(role, aal, factors = [factor]) {
           await waitText('待審回報');
         }
         if (scenario === 'shell') {
-          await page.getByRole('button', { name: /帳號安全/ }).click();
+          // Below 1040 px the account and signing out sit behind one menu.
+          const account = async item => {
+            if (mobile || tablet) {
+              await page.getByRole('button', { name: '帳號與安全' }).click();
+              await page.getByRole('menuitem', { name: item }).or(page.getByText(item, { exact: true })).last().click();
+            } else {
+              await page.getByRole('button', item === '登出' ? { name: '登出', exact: true } : { name: /帳號安全/ }).click();
+            }
+          };
+          await account('帳號安全');
           await waitText('管理驗證方式');
           await page.getByRole('button', { name: '登記另一個驗證方式', exact: true }).click();
           await enterText('備援驗證器');
@@ -610,7 +666,7 @@ function session(role, aal, factors = [factor]) {
           await page.getByRole('button', { name: /^隱藏密鑰/ }).click();
           await page.getByRole('button', { name: '取消這次登記', exact: true }).click();
           await waitText('已登記的驗證方式');
-          await page.getByRole('button', { name: '登出', exact: true }).click();
+          await account('登出');
           await waitText('登入管理介面');
           assert.equal(await page.evaluate(() => localStorage.getItem('sb-admin-smoke-auth-token')), null);
         }

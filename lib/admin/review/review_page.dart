@@ -5,6 +5,7 @@ import '../../models/fee.dart';
 import '../../models/parking.dart';
 import '../../ui/fee_editor.dart';
 import '../admin_controller.dart';
+import '../admin_layout.dart';
 import '../admin_theme.dart';
 import 'review_controller.dart';
 import 'review_map.dart';
@@ -273,24 +274,46 @@ class _QueuePane extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(18, 14, 8, 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Semantics(
-                    header: true,
-                    child: Text('待審回報', style: text.titleLarge),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => context.go('/review/hidden'),
-                  child: const Text('已隱藏的點位'),
-                ),
-                IconButton(
-                  tooltip: '重新載入佇列',
-                  onPressed: review.loading ? null : onReload,
-                  icon: const Icon(Icons.refresh),
-                ),
-              ],
+            // A narrow column keeps the title on one line; its buttons
+            // become icons (G6). A phone names the page in the top bar.
+            child: LayoutBuilder(
+              builder: (context, box) {
+                final narrow = box.maxWidth < 320;
+                return Row(
+                  children: [
+                    Expanded(
+                      child: compact
+                          ? const SizedBox()
+                          : Semantics(
+                              header: true,
+                              child: Text(
+                                '待審回報',
+                                maxLines: 1,
+                                softWrap: false,
+                                overflow: TextOverflow.fade,
+                                style: text.titleLarge,
+                              ),
+                            ),
+                    ),
+                    if (narrow)
+                      IconButton(
+                        tooltip: '已隱藏的點位',
+                        onPressed: () => context.go('/review/hidden'),
+                        icon: const Icon(Icons.visibility_off_outlined),
+                      )
+                    else
+                      TextButton(
+                        onPressed: () => context.go('/review/hidden'),
+                        child: const Text('已隱藏的點位'),
+                      ),
+                    IconButton(
+                      tooltip: '重新載入佇列',
+                      onPressed: review.loading ? null : onReload,
+                      icon: const Icon(Icons.refresh),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
           if (admin.countError != null)
@@ -314,15 +337,11 @@ class _QueuePane extends StatelessWidget {
           Semantics(
             label: '依回報類型篩選',
             container: true,
-            // One row at every width: a wrapped row reads as two groups.
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
+            // Wrapped, never scrolled: a sideways row hid its last chips
+            // and a mouse could not drag it (G5).
+            child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: Row(
-                children: [
-                  for (final f in filters) ...[f, const SizedBox(width: 6)],
-                ],
-              ),
+              child: Wrap(spacing: 8, runSpacing: 8, children: filters),
             ),
           ),
           Divider(height: 1, color: colors.outlineVariant),
@@ -360,6 +379,8 @@ class _QueuePane extends StatelessWidget {
                     ),
                   )
                 : ListView.separated(
+                    // A phone's queue comes back where it was left.
+                    key: const PageStorageKey('review-queue'),
                     itemCount: visible.length,
                     separatorBuilder: (_, _) =>
                         Divider(height: 1, color: colors.outlineVariant),
@@ -400,8 +421,8 @@ class _FilterButton extends StatelessWidget {
       child: OutlinedButton(
         onPressed: onPressed,
         style: OutlinedButton.styleFrom(
-          minimumSize: const Size(44, 44),
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          minimumSize: const Size(48, 48),
+          padding: const EdgeInsets.symmetric(horizontal: 14),
           shape: const StadiumBorder(),
           foregroundColor: selected ? colors.surface : colors.onSurface,
           backgroundColor: selected ? colors.onSurface : null,
@@ -635,6 +656,26 @@ class _ReviewDetail extends StatelessWidget {
     final proposedLat = moved ? (lat as num?)?.toDouble() ?? spot.lat : null;
     final proposedLng = moved ? (lng as num?)?.toDouble() ?? spot.lng : null;
 
+    final short = AdminLayout.shortOf(context);
+    // Stack the buttons by the pane's own width: two columns at
+    // 680–720 px leave the detail too narrow for one row.
+    final bar = LayoutBuilder(
+      builder: (context, box) => _ActionBar(
+        compact: compact || box.maxWidth < 560,
+        editing: editing,
+        hasSpot: spot != null,
+        hasPatch: patch.isNotEmpty,
+        busy: review.writing,
+        conflict: conflict,
+        stale: conflict && stale,
+        onRefresh: () => review.refreshSpot(report),
+        error: review.error,
+        onDecide: onDecide,
+        onEdit: () => review.startEdit(report),
+        onCancelEdit: review.cancelEdit,
+      ),
+    );
+
     return Material(
       color: colors.surface,
       child: Column(
@@ -650,6 +691,8 @@ class _ReviewDetail extends StatelessWidget {
                     child: TextButton.icon(
                       onPressed: onBack,
                       style: TextButton.styleFrom(
+                        minimumSize: const Size(48, 48),
+                        tapTargetSize: MaterialTapTargetSize.padded,
                         padding: const EdgeInsets.symmetric(horizontal: 8),
                       ),
                       icon: const Icon(Icons.arrow_back),
@@ -803,6 +846,8 @@ class _ReviewDetail extends StatelessWidget {
                     maxLines: 4,
                     decoration: const InputDecoration(
                       labelText: '處理說明（選填）',
+                      // A phone wraps it instead of cutting it off (R2).
+                      helperMaxLines: 3,
                       helperText: '只給管理員看，會和處理人、時間一起記在稽核紀錄。',
                       hintText: '例如：已比對街景與停管處公告',
                     ),
@@ -810,27 +855,12 @@ class _ReviewDetail extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text('套用後地圖上的點位會立即更新；駁回不會改動點位。', style: muted),
+                // A short viewport scrolls the buttons with the report.
+                if (short) ...[const SizedBox(height: 16), bar],
               ],
             ),
           ),
-          // Stack the buttons by the pane's own width: two columns at
-          // 680–720 px leave the detail too narrow for one row.
-          LayoutBuilder(
-            builder: (context, box) => _ActionBar(
-              compact: compact || box.maxWidth < 560,
-              editing: editing,
-              hasSpot: spot != null,
-              hasPatch: patch.isNotEmpty,
-              busy: review.writing,
-              conflict: conflict,
-              stale: conflict && stale,
-              onRefresh: () => review.refreshSpot(report),
-              error: review.error,
-              onDecide: onDecide,
-              onEdit: () => review.startEdit(report),
-              onCancelEdit: review.cancelEdit,
-            ),
-          ),
+          if (!short) bar,
         ],
       ),
     );

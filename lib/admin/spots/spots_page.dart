@@ -13,6 +13,7 @@ import '../../ui/address_search_field.dart';
 import '../../ui/fee_board.dart';
 import '../../ui/fee_editor.dart';
 import '../../ui/location_picker.dart';
+import '../admin_layout.dart';
 import '../admin_theme.dart';
 import '../review/review_page.dart' show ChangeBand, reviewCompactWidth;
 import 'spot_history_page.dart';
@@ -87,6 +88,12 @@ class _SpotsPageState extends State<SpotsPage> {
   SpotMapFocus? _focus;
   int _focusSeq = 0;
   String? _focusedFor;
+
+  /// The list and the form move between the phone and the two-column
+  /// layouts when the window is resized; their state (scroll, the picker's
+  /// search note, fields being typed) moves with them.
+  final _listKey = GlobalKey(debugLabel: 'spot-list-pane');
+  final _formKey = GlobalKey(debugLabel: 'spot-form-pane');
 
   /// The open spot and version, so a write reloads the map's spots.
   String? _shownVersion;
@@ -432,6 +439,7 @@ class _SpotsPageState extends State<SpotsPage> {
         final compact = width < reviewCompactWidth;
         final open = widget.selectedId != null;
         final list = _ListPane(
+          key: _listKey,
           spots: spots,
           query: query,
           selectedId: widget.selectedId,
@@ -441,6 +449,7 @@ class _SpotsPageState extends State<SpotsPage> {
           onCreate: _create,
         );
         final form = _FormPane(
+          key: _formKey,
           spots: spots,
           note: note,
           compact: compact,
@@ -681,6 +690,7 @@ const _states = [
 
 class _ListPane extends StatelessWidget {
   const _ListPane({
+    super.key,
     required this.spots,
     required this.query,
     required this.selectedId,
@@ -701,14 +711,11 @@ class _ListPane extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
-    Widget chips(List<Widget> children) => SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
+    // Wrapped, never scrolled sideways: the last chips were cut off and a
+    // mouse could not drag the row (G5).
+    Widget chips(List<Widget> children) => Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-      child: Row(
-        children: [
-          for (final c in children) ...[c, const SizedBox(width: 6)],
-        ],
-      ),
+      child: Wrap(spacing: 8, runSpacing: 8, children: children),
     );
     return Material(
       color: colors.surface,
@@ -717,25 +724,44 @@ class _ListPane extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(18, 14, 8, 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Semantics(
-                    header: true,
-                    child: Text('停車點位', style: text.titleLarge),
+            // A narrow column keeps the title on one line; its buttons
+            // become icons (G6). A phone names the page in the top bar.
+            child: LayoutBuilder(
+              builder: (context, box) => Row(
+                children: [
+                  Expanded(
+                    child: compact
+                        ? const SizedBox()
+                        : Semantics(
+                            header: true,
+                            child: Text(
+                              '停車點位',
+                              maxLines: 1,
+                              softWrap: false,
+                              overflow: TextOverflow.fade,
+                              style: text.titleLarge,
+                            ),
+                          ),
                   ),
-                ),
-                TextButton.icon(
-                  onPressed: onCreate,
-                  icon: const Icon(Icons.add_location_alt_outlined),
-                  label: const Text('新增停車點'),
-                ),
-                IconButton(
-                  tooltip: '重新搜尋',
-                  onPressed: spots.searching ? null : spots.search,
-                  icon: const Icon(Icons.refresh),
-                ),
-              ],
+                  if (box.maxWidth < 320)
+                    IconButton(
+                      tooltip: '新增停車點',
+                      onPressed: onCreate,
+                      icon: const Icon(Icons.add_location_alt_outlined),
+                    )
+                  else
+                    TextButton.icon(
+                      onPressed: onCreate,
+                      icon: const Icon(Icons.add_location_alt_outlined),
+                      label: const Text('新增停車點'),
+                    ),
+                  IconButton(
+                    tooltip: '重新搜尋',
+                    onPressed: spots.searching ? null : spots.search,
+                    icon: const Icon(Icons.refresh),
+                  ),
+                ],
+              ),
             ),
           ),
           Padding(
@@ -799,6 +825,7 @@ class _ListPane extends StatelessWidget {
                     ),
                   )
                 : ListView.separated(
+                    key: const PageStorageKey('spot-list'),
                     itemCount: spots.results.length + 1,
                     separatorBuilder: (_, _) =>
                         Divider(height: 1, color: colors.outlineVariant),
@@ -849,8 +876,8 @@ class _Chip extends StatelessWidget {
       child: OutlinedButton(
         onPressed: onPressed,
         style: OutlinedButton.styleFrom(
-          minimumSize: const Size(44, 44),
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          minimumSize: const Size(48, 48),
+          padding: const EdgeInsets.symmetric(horizontal: 14),
           shape: const StadiumBorder(),
           foregroundColor: selected ? colors.surface : colors.onSurface,
           backgroundColor: selected ? colors.onSurface : null,
@@ -942,6 +969,7 @@ class _SpotItem extends StatelessWidget {
 
 class _FormPane extends StatelessWidget {
   const _FormPane({
+    super.key,
     required this.spots,
     required this.note,
     required this.compact,
@@ -1036,6 +1064,21 @@ class _FormPane extends StatelessWidget {
     }
     final errors = spots.shownErrors;
     final fields = spots.fields;
+    // A short viewport (keyboard up): the buttons scroll with the form and
+    // the small map folds into a button (C6 畫布 KeyboardForm).
+    final short = AdminLayout.shortOf(context);
+    final actions = _SpotActions(
+      compact: compact,
+      creating: record.isNew,
+      official: record.official,
+      hidden: record.hidden,
+      dirty: spots.dirty,
+      busy: spots.saving,
+      onSave: onSave,
+      onDiscard: spots.discard,
+      onHide: onHide,
+      onPromote: onPromote,
+    );
     return Material(
       color: colors.surface,
       child: Column(
@@ -1126,6 +1169,7 @@ class _FormPane extends StatelessWidget {
                       spots: spots,
                       onMove: onMove,
                       mapBuilder: mapBuilder,
+                      collapsed: short,
                     ),
                   for (final f in fields.where((f) => f.group == group))
                     if (f.input == SpotInput.fee)
@@ -1190,21 +1234,11 @@ class _FormPane extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (short) ...[const SizedBox(height: 16), actions],
               ],
             ),
           ),
-          _SpotActions(
-            compact: compact,
-            creating: record.isNew,
-            official: record.official,
-            hidden: record.hidden,
-            dirty: spots.dirty,
-            busy: spots.saving,
-            onSave: onSave,
-            onDiscard: spots.discard,
-            onHide: onHide,
-            onPromote: onPromote,
-          ),
+          if (!short) actions,
         ],
       ),
     );
@@ -1847,7 +1881,11 @@ class _LocationSection extends StatelessWidget {
     required this.spots,
     required this.onMove,
     required this.mapBuilder,
+    required this.collapsed,
   });
+
+  /// The map folds into「開地圖調整」.
+  final bool collapsed;
   final SpotsController spots;
   final void Function(double lat, double lng, {bool fromPicker, bool recenter})
   onMove;
@@ -1875,6 +1913,7 @@ class _LocationSection extends StatelessWidget {
                 originLat: (origin?['lat'] as num?)?.toDouble(),
                 originLng: (origin?['lng'] as num?)?.toDouble(),
                 nudgeButtons: true,
+                collapsed: collapsed,
                 mapBuilder: mapBuilder,
                 onChanged: (a, b) => onMove(a, b),
                 fills: const {'address': '地址', 'road_segment': '路段'},

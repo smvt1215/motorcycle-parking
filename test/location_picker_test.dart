@@ -107,6 +107,157 @@ void main() {
     expect(find.text('距原位置 10 m'), findsOneWidget);
   });
 
+  testWidgets('搜尋地址時清單縮小把選位捲出畫面，選定後「已移到」提示仍在（S1）', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    var at = (25.0581, 121.5226);
+    final picked = Completer<AddressCandidate?>();
+    final scroll = ScrollController();
+    addTearDown(scroll.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) => ListView(
+              controller: scroll,
+              children: [
+                LocationPicker(
+                  lat: at.$1,
+                  lng: at.$2,
+                  mapBuilder: (_, _) => const SizedBox(),
+                  onSearch: (_) => picked.future,
+                  onChanged: (lat, lng) => setState(() => at = (lat, lng)),
+                ),
+                const SizedBox(height: 3000),
+                const Text('表單底部'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('location-search')));
+    await tester.pump();
+    // The keyboard shrinks the page and the list scrolls the picker far
+    // out of view (and out of the list's cache) while the search is open.
+    tester.view.physicalSize = const Size(390, 508);
+    scroll.jumpTo(scroll.position.maxScrollExtent);
+    await tester.pumpAndSettle();
+    picked.complete(
+      const AddressCandidate(
+        kind: AddressKind.address,
+        label: '臺北市中正區忠孝西路一段49號',
+        lat: 25.0478,
+        lng: 121.517,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(at, (25.0478, 121.517));
+    // The keyboard closes and the admin scrolls back to the picker.
+    tester.view.physicalSize = const Size(390, 844);
+    scroll.jumpTo(0);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('已移到「臺北市中正區忠孝西路一段49號」'), findsOneWidget);
+  });
+
+  testWidgets('搜尋結果提示落在畫面外時捲到可見（S2）', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    var at = (25.0581, 121.5226);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) => ListView(
+              children: [
+                const SizedBox(height: 780),
+                LocationPicker(
+                  lat: at.$1,
+                  lng: at.$2,
+                  mapBuilder: (_, _) => const SizedBox(),
+                  onSearch: (_) async => const AddressCandidate(
+                    kind: AddressKind.address,
+                    label: '臺北市中正區忠孝西路一段49號',
+                    lat: 25.0478,
+                    lng: 121.517,
+                  ),
+                  onChanged: (lat, lng) => setState(() => at = (lat, lng)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    final note = find.textContaining('已移到「臺北市中正區忠孝西路一段49號」');
+    await tester.tap(find.byKey(const ValueKey('location-search')));
+    await tester.pumpAndSettle();
+    expect(note, findsOneWidget);
+    expect(tester.getRect(note).bottom, lessThanOrEqualTo(844));
+  });
+
+  testWidgets('矮螢幕模式：小地圖收成「開地圖調整」，全螢幕地圖調整後回到表單', (tester) async {
+    var at = (25.0581, 121.5226);
+    var collapsed = true;
+    late StateSetter outer;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) {
+              outer = setState;
+              return ListView(
+                children: [
+                  LocationPicker(
+                    lat: at.$1,
+                    lng: at.$2,
+                    nudgeButtons: true,
+                    collapsed: collapsed,
+                    mapBuilder: (context, view) => TextButton(
+                      onPressed: () => view.onMove(view.lat + 0.0001, view.lng),
+                      child: const Text('拖曳'),
+                    ),
+                    onChanged: (lat, lng) => setState(() => at = (lat, lng)),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    expect(find.text('拖曳'), findsNothing);
+    expect(find.text('開地圖調整'), findsOneWidget);
+    expect(find.text('位置：25.0581, 121.5226'), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(const ValueKey('location-open-map'))).height,
+      greaterThanOrEqualTo(48),
+    );
+    await tester.tap(find.text('開地圖調整'));
+    await tester.pumpAndSettle();
+    expect(find.text('調整位置'), findsOneWidget);
+    await tester.tap(find.text('拖曳'));
+    await tester.pump();
+    // Each move reaches the form at once, and the dialog's map follows it.
+    expect(at.$1, closeTo(25.0582, 1e-9));
+    expect(find.text('25.058200, 121.522600'), findsOneWidget);
+    await tester.tap(find.byTooltip('往南 1 m'));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('location-map-done')));
+    await tester.pumpAndSettle();
+    expect(find.text('調整位置'), findsNothing);
+    expect(at.$1, lessThan(25.0582));
+    // The keyboard closed: the map is back inline.
+    outer(() => collapsed = false);
+    await tester.pump();
+    expect(find.text('拖曳'), findsOneWidget);
+    expect(find.text('開地圖調整'), findsNothing);
+  });
+
   test('投影：點位到地圖中心的像素位移可以換回同一點', () {
     final (dx, dy) = offsetFromCenter(
       centerLat: 25.0339,

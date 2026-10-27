@@ -47,6 +47,7 @@ class ReviewController extends ChangeNotifier {
   ReviewController(
     this.gateway, {
     this.onResolved,
+    this.onSpotChanged,
     this.undoWindow = const Duration(seconds: 6),
     DateTime Function()? clock,
   }) : now = clock ?? DateTime.now;
@@ -55,6 +56,10 @@ class ReviewController extends ChangeNotifier {
 
   /// Called after a decision is written, to refresh the pending count.
   final VoidCallback? onResolved;
+
+  /// Called after a decision or a restore changed a spot, so the spots
+  /// page's list, map and form read it again (決定 49).
+  final ValueChanged<String>? onSpotChanged;
   final Duration undoWindow;
   final DateTime Function() now;
 
@@ -206,6 +211,7 @@ class ReviewController extends ChangeNotifier {
       hidden = hide
           ? [spot, ...hidden.where((s) => s.sourceId != spot.sourceId)]
           : hidden.where((s) => s.sourceId != spot.sourceId).toList();
+      onSpotChanged?.call(spot.sourceId);
       return true;
     } catch (_) {
       if (generation == _generation) {
@@ -372,6 +378,18 @@ class ReviewController extends ChangeNotifier {
     }
   }
 
+  Future<void> _reloadSpot(String sourceId, int generation) async {
+    if (!reports.any((r) => r.sourceId == sourceId)) return;
+    try {
+      final fresh = await gateway!.reviewSpots([sourceId]);
+      if (generation != _generation) return;
+      spots = {...spots, ...fresh};
+      _notify();
+    } catch (_) {
+      // The next load or a conflict on apply brings the newer values.
+    }
+  }
+
   /// Writes the held-back decision now (sign-out, a second decision).
   Future<void> flush() async {
     final held = pending;
@@ -394,6 +412,11 @@ class ReviewController extends ChangeNotifier {
       _resolved.add(held.report.id);
       savedDrafts.remove(held.report.id);
       onResolved?.call();
+      if (held.patch.isNotEmpty) {
+        onSpotChanged?.call(held.report.sourceId);
+        // Other reports on the same spot compare against its new values.
+        unawaited(_reloadSpot(held.report.sourceId, generation));
+      }
     } catch (e) {
       if (generation != _generation) return;
       // An edited decision that did not land keeps its values, so a retry

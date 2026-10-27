@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -8,8 +10,12 @@ import '../admin_gateway.dart';
 import 'spot_models.dart';
 
 class SpotsController extends ChangeNotifier {
-  SpotsController(this.gateway);
+  SpotsController(this.gateway, {this.onChanged});
   final AdminGateway? gateway;
+
+  /// Called after a write here changed a spot, so other pages showing it
+  /// (the review queue) read it again (決定 49).
+  final VoidCallback? onChanged;
 
   String query = '';
   SpotKind? kind;
@@ -414,6 +420,9 @@ class SpotsController extends ChangeNotifier {
       if (generation != _generation) return false;
       _load(saved);
       _refreshRow(saved);
+      // A new spot is not in the list yet; search again to show it.
+      if (current.isNew && searched) unawaited(search());
+      onChanged?.call();
       return true;
     } catch (e) {
       if (generation == _generation) {
@@ -455,6 +464,7 @@ class SpotsController extends ChangeNotifier {
       if (generation != _generation) return false;
       _load(saved);
       _refreshRow(saved);
+      onChanged?.call();
       return true;
     } catch (e) {
       if (generation == _generation) {
@@ -483,6 +493,7 @@ class SpotsController extends ChangeNotifier {
       _load(fresh);
       draft = {...draft, ...edits};
       _refreshRow(fresh);
+      onChanged?.call();
       return true;
     } catch (e) {
       if (generation == _generation) {
@@ -514,6 +525,7 @@ class SpotsController extends ChangeNotifier {
       );
       if (generation != _generation) return null;
       await search();
+      onChanged?.call();
       return id;
     } catch (e) {
       if (generation == _generation) {
@@ -524,6 +536,22 @@ class SpotsController extends ChangeNotifier {
       if (generation == _generation) saving = false;
       _notify();
     }
+  }
+
+  /// Another page wrote [changed] spots (a review decision, an import): the
+  /// list reads again, and so does the open spot when it is one of them. A
+  /// form with unsaved edits is kept as it is.
+  Future<void> refresh(Set<String> changed) async {
+    final open = record;
+    await Future.wait([
+      if (searched) search(),
+      if (open != null &&
+          !open.isNew &&
+          !dirty &&
+          !saving &&
+          changed.contains(open.sourceId))
+        this.open(open.sourceId),
+    ]);
   }
 
   void _refreshRow(SpotRecord saved) {

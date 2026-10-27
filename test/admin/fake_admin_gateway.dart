@@ -424,6 +424,7 @@ class FakeAdminGateway implements AdminGateway {
   final List<(String, Map<String, dynamic>, String, String)> spotUpdates = [];
   final List<(String, Map<String, dynamic>, String)> promotions = [];
   bool failSearch = false;
+  int searchRequests = 0;
   int _version = 10;
 
   @override
@@ -432,6 +433,7 @@ class FakeAdminGateway implements AdminGateway {
     SpotKind? kind,
     String? state,
   }) async {
+    searchRequests++;
     if (failSearch) throw StateError('offline');
     return [
       for (final MapEntry(key: id, value: v) in spotRows.entries)
@@ -446,8 +448,9 @@ class FakeAdminGateway implements AdminGateway {
             name: v['name'] as String,
             city: v['city'] as String,
             district: v['district'] as String,
-            address: v['address'] as String,
-            spaceType: v['space_type'] as String,
+            // A spot created here may leave these out.
+            address: v['address'] as String? ?? '',
+            spaceType: v['space_type'] as String? ?? '',
             state: id.startsWith('official:')
                 ? (v['hidden'] == true ? 'hidden' : 'visible')
                 : v['status'] as String,
@@ -780,8 +783,13 @@ class FakeAdminGateway implements AdminGateway {
     ]);
   }
 
+  int ruleRequests = 0;
+
   @override
-  Future<List<CityRule>> cityRules() async => const [];
+  Future<List<CityRule>> cityRules() async {
+    ruleRequests++;
+    return const [];
+  }
 
   Future<void> dispose() => events.close();
 
