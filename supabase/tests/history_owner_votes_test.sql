@@ -66,6 +66,15 @@ update community_spots set note='維護' where id=(select id from s);
 select is((select count(*)::integer from spot_rider_events where spot_id=(select id from s) and kind='owner_update'),1,
   'a write without a JWT is not an owner edit');
 
+-- Nor a service-role UPDATE outside apply_report.
+select set_config('request.jwt.claims','{"role":"service_role"}',true);
+update community_spots set note='服務帳號直接改' where id=(select id from s);
+select pg_temp.act('');
+select is((select count(*)::integer from spot_rider_events where spot_id=(select id from s) and kind='owner_update'),1,
+  'a service-role UPDATE outside apply_report is not an owner edit');
+select is((select after from spot_rider_events where spot_id=(select id from s) and kind='owner_update'),
+  '{"name":"車友紀錄測試點（改）","note":"新的備註","status":"pending"}'::jsonb,'an owner edit keeps only the fields it changed');
+
 -- The administrators' timeline: every vote, with who.
 select pg_temp.act('admin');
 set local role authenticated;
@@ -96,6 +105,44 @@ select is((select v->1->'changes' from p),'[{"field":"name","after":"車友紀�
   'public fields only, a value no longer held left out');
 select is((select v->2->'votes' from p),'{"gone":0,"still_there":2}'::jsonb,'the first run');
 select ok((select not (v::text ~ '("(actor|actor_name|note|report|reason)":|10000000-)') from p),'nobody named');
+
+-- A second spot: a rider changing their mind counts once, by their last
+-- vote; an entry riders cannot see does not split the run.
+create temporary table s2 as select (pg_temp.report(1,jsonb_build_object('action','create','spot',jsonb_build_object(
+  'name','改票測試點','lat',25.32,'lng',121.5,'city','臺北市','space_type','freeMotorcycle',
+  'condition','{"bay":"motorcycle","use":"share","share":"scooter_heavy","charge":"free"}'::jsonb)),'a','a')->>'id')::uuid as id;
+grant select on s2 to anon,authenticated;
+select pg_temp.vote(2,(select id from s2),'still_there','b');
+insert into admin_audit_log(actor,action,target_table,target_id,before,after,note,created_at)
+select '10000000-0000-4000-8000-000000000005','update_spot','community_spots',s2.id::text,
+  '{"heavy_verified_at":null}','{"heavy_verified_at":"2026-10-27T00:00:00Z"}','',clock_timestamp() from s2;
+select pg_temp.vote(2,(select id from s2),'gone','b');
+select pg_temp.vote(6,(select id from s2),'still_there','c');
+set local role anon;
+select is(jsonb_array_length(spot_history((select id::text from s2))),2,'one run of votes and the creation');
+select is(spot_history((select id::text from s2))->0->'votes','{"gone":1,"still_there":1}'::jsonb,
+  'A still there then gone, B still there: one each');
+reset role;
+select pg_temp.act('admin');
+set local role authenticated;
+select is((select count(*)::integer from jsonb_array_elements(admin_spot_history((select id::text from s2))) e
+  where e->>'kind'='admin'),1,'the administrators still see the hidden-field edit');
+reset role;
+select pg_temp.act('');
+
+-- A busy spot: votes beyond 200 drop off the administrators' list, edits
+-- never do.
+insert into spot_rider_events(spot_id,kind,actor,vote,at)
+select s2.id,'vote',pg_temp.uid(2),'still_there',clock_timestamp()+g*interval '1 second' from s2,generate_series(1,205) g;
+select pg_temp.act('admin');
+set local role authenticated;
+create temporary table busy on commit drop as select admin_spot_history((select id::text from s2)) as v;
+reset role;
+select pg_temp.act('');
+select is((select count(*)::integer from jsonb_array_elements((select v from busy)) e where e->>'kind'='vote'),200,
+  'the latest 200 votes');
+select is((select count(*)::integer from jsonb_array_elements((select v from busy)) e where e->>'kind'<>'vote'),2,
+  'and every other entry: the edit and the creation');
 
 -- Closures are compared, publicly too (#155 item 30).
 insert into admin_audit_log(actor,action,target_table,target_id,before,after,note,created_at)

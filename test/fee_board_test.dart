@@ -251,6 +251,9 @@ void main() {
     expect(feeGapsBrief([p('all', '20:00', '08:00')]), ['每天白天']);
     // Out of the usual hours: the times themselves.
     expect(feeGapsBrief([p('all', '10:00', '16:00')]), ['16:00–隔日 10:00']);
+    // A morning gap from 07:00 is day, not night.
+    expect(feeGapsBrief([p('all', '09:00', '07:00')]), ['每天白天']);
+    expect(feeGapsBrief([p('all', '06:00', '00:00')]), ['每天夜間']);
     expect(feeGapsBrief(const [FeePeriod(days: 'all', rate: rate)]), isEmpty);
   });
 

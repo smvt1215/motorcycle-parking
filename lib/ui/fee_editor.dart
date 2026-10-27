@@ -1420,7 +1420,7 @@ class _ByTimeFieldsState extends State<_ByTimeFields> {
           _GapsNote(keyPrefix: k, gaps: gaps, brief: feeGapsBrief(list)),
           const SizedBox(height: 4),
         ],
-        Text('國定假日依當天是星期幾計費。沒有被設定包含到的日子和時間，App 顯示「未確認」。', style: muted),
+        Text('國定假日依當天是星期幾計費。沒有被設定包含到的日子和時間，App 顯示「費率未確認」。', style: muted),
         if (visits >= 2) ...[
           const SizedBox(height: 8),
           _ThreeWay(

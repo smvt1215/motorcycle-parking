@@ -489,14 +489,17 @@ List<String> feeGaps(List<FeePeriod> periods) => _byDays([
 ], (days, phrase) => days == '每天' && phrase != '全天' ? phrase : '$days $phrase');
 
 /// The gaps in a few words, for the editor's first line (decision 55):
-/// 「平日夜間、假日全天」. A day whose gaps all fall at night (18:00 to 09:00
-/// the next morning) reads 夜間, in the day (06:00–21:00) 白天, none
+/// 「平日夜間、假日全天」. A day whose gaps all fall at night (starting from
+/// 18:00, or before 06:00, and over by 09:00) reads 夜間, in the day (06:00–21:00) 白天, none
 /// covered 全天; any other day keeps its times as [feeGaps] writes them.
 /// Empty when nothing is left uncovered.
 List<String> feeGapsBrief(List<FeePeriod> periods) {
   String? word(_Gap g) {
     if (g.whole) return '全天';
-    if ((g.start >= 18 * 60 || g.end <= 9 * 60) && g.end <= 1440 + 9 * 60) {
+    // Starting in the evening, or in the small hours before 06:00, and
+    // over by 09:00: a gap from 07:00 is morning, not night.
+    if ((g.start >= 18 * 60 && g.end <= 1440 + 9 * 60) ||
+        (g.start < 6 * 60 && g.end <= 9 * 60)) {
       return '夜間';
     }
     if (g.start >= 6 * 60 && g.end <= 21 * 60) return '白天';
