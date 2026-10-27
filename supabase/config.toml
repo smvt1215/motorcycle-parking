@@ -430,3 +430,7 @@ verify_jwt = false
 [functions.admin-users]
 # The function verifies the caller itself (live session, admin role, aal2).
 verify_jwt = false
+
+[functions.availability-ingest]
+# pg_cron calls it with the shared AVAILABILITY_INGEST_SECRET header, not a JWT.
+verify_jwt = false
