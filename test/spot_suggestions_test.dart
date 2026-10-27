@@ -392,9 +392,10 @@ void main() {
     WidgetTester tester,
     String item, {
     ParkingSpot selectedSpot = spot,
+    Size size = const Size(390, 844),
   }) async {
     tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(390, 844);
+    tester.view.physicalSize = size;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final store = (await tester.runAsync(createStore))!;
@@ -821,6 +822,8 @@ void main() {
     await tester.tap(free);
     await tester.pumpAndSettle();
     expect(find.text('格位類型從「免費機車格」改成「普大共用機車格」'), findsOneWidget);
+    // Decision 60: 普大共用 brings heavy bikes in, 可停 by default.
+    expect(find.text('大型重機從「未確認」改成「可停」'), findsOneWidget);
     // A free 普大共用 bay waits for review; a link helps.
     expect(find.byKey(const ValueKey('condition-hold')), findsOneWidget);
     await submitSuggestion(tester, '送出修改建議');
@@ -832,7 +835,51 @@ void main() {
         'share': 'scooter_heavy',
         'charge': 'free',
       },
+      'heavy_allowed': true,
     });
+    expect(store.submissions.single['reason'], contains('普大共用機車格，大型重機可停'));
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  // 320 px wide, tall enough that the helper finds 修改建議 without dragging
+  // the sheet.
+  for (final size in const [Size(320, 900), Size(402, 874), Size(820, 1180)]) {
+    testWidgets('普大共用的大型重機選項在 ${size.width.toInt()} 寬不溢出、可點', (tester) async {
+      await openSuggestion(tester, '格位類型', size: size);
+      await pickKind(tester, SpaceKind.sharedMotorcycle);
+      for (final v in [true, false, null]) {
+        final option = find.byKey(ValueKey('suggestion-share-heavy-$v'));
+        await tester.ensureVisible(option);
+        await tester.pumpAndSettle();
+        expect(tester.getSize(option).height, greaterThanOrEqualTo(48));
+        await tester.tap(option);
+        await tester.pumpAndSettle();
+      }
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
+  testWidgets('建議普大共用時大型重機預設可停，可改回未確認（決定 60）', (tester) async {
+    final store = await openSuggestion(tester, '格位類型');
+    await pickKind(tester, SpaceKind.sharedMotorcycle);
+    final toll = find.descendant(
+      of: find.byKey(const ValueKey('condition-charge')),
+      matching: find.text('收費格'),
+    );
+    await tester.ensureVisible(toll);
+    await tester.tap(toll);
+    await tester.pumpAndSettle();
+    final unknown = find.byKey(const ValueKey('suggestion-share-heavy-null'));
+    await tester.ensureVisible(unknown);
+    await tester.tap(unknown);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('大型重機從'), findsNothing);
+    await submitSuggestion(tester, '送出修改建議');
+    expect(
+      store.submissions.single['proposed'],
+      isNot(contains('heavy_allowed')),
+    );
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

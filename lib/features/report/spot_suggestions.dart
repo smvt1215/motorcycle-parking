@@ -363,6 +363,21 @@ class _SuggestionFormState extends State<_SuggestionForm> {
   /// The condition suggested with the kind; null for a lot.
   ParkingCondition? get suggestedCondition => condition.conditionFor(kind);
 
+  /// Whether the suggested kind turns the bay into 普大共用 (decision 60):
+  /// the suggestion then also says whether heavy bikes may park, 可停 unless
+  /// the rider changes it.
+  bool get suggestsShare =>
+      typeField &&
+      suggestedCondition?.share == ShareKind.scooterHeavy &&
+      currentCondition?.share != ShareKind.scooterHeavy;
+
+  /// The heavy bikes' access suggested with 普大共用.
+  bool? shareHeavy = true;
+
+  /// [shareHeavy] when it changes the spot's.
+  bool get shareHeavyChanged =>
+      suggestsShare && shareHeavy != widget.spot.heavyAllowed;
+
   /// A lot's details when the suggested kind is a lot.
   late Set<FacilityType> facilities = widget.spot.facilities.toSet();
 
@@ -477,7 +492,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
     }
     if (!structured) return '${widget.label}：$text';
     final value = typeField
-        ? kind.label
+        ? '${kind.label}${shareHeavyChanged ? '，大型重機${_yesNo(shareHeavy)}' : ''}'
         : feeField
         ? feeNoteOf(feeAfter(currentFee, feeEdits))
         : _eligibility(scooter, heavy);
@@ -518,6 +533,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
             'facility_types': facilityPayload(facilities)['facility_types'],
           if (access != spot.access) 'parking_access': access?.name,
         },
+        if (shareHeavyChanged) 'heavy_allowed': shareHeavy,
       };
     }
     if (guideField) {
@@ -627,6 +643,8 @@ class _SuggestionFormState extends State<_SuggestionForm> {
             spot.access?.description ?? '未提供',
             access?.description ?? '未確認',
           ),
+        if (shareHeavyChanged)
+          line('大型重機', _yesNo(spot.heavyAllowed), _yesNo(shareHeavy)),
       ];
     }
     if (locationField) {
@@ -901,6 +919,20 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                             precheckHint(found, 'proposed.fee'),
                         key: const ValueKey('precheck-proposed-condition'),
                       ),
+                      // Decision 60: 普大共用 brings heavy bikes in, 可停 by
+                      // default; the rider may change it.
+                      if (suggestsShare) ...[
+                        const SizedBox(height: 12),
+                        VehicleTriState(
+                          label: '大型重機',
+                          value: shareHeavy,
+                          keyPrefix: 'suggestion-share-heavy',
+                          onChanged: (v) => setState(() {
+                            shareHeavy = v;
+                            state.didChange(type);
+                          }),
+                        ),
+                      ],
                       // These controls form one proposal with the space type.
                       // Mark the field changed so its error updates immediately.
                       if (lotType) ...[

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:motorcycle_parking/domain/eligibility.dart';
 import 'package:motorcycle_parking/domain/parking_decision.dart';
+import 'package:motorcycle_parking/models/holiday_calendar.dart';
 import 'package:motorcycle_parking/models/parking.dart';
 import 'package:motorcycle_parking/models/parking_condition.dart';
 
@@ -448,6 +449,94 @@ void main() {
       expect(slotted(['heavy']).reason, contains('每天 22:00–隔日 06:00'));
       expect(slotted(['car']).status, EligibilityStatus.unverified);
       expect(slotted(['car']).gaps, {DecisionGap.scheduleUnknown});
+    });
+
+    group('時段依目前時間判斷可不可停（#120、決定 61）', () {
+      DateTime at(int y, int m, int d, int h, [int min = 0]) =>
+          DateTime.utc(y, m, d, h, min).subtract(const Duration(hours: 8));
+      const night = ScheduleSlot(
+        days: 'weekday',
+        from: '20:00',
+        to: '07:00',
+        vehicles: [SlotVehicle.scooter],
+      );
+      const holiday = ScheduleSlot(
+        days: 'holiday',
+        vehicles: [SlotVehicle.scooter],
+      );
+
+      test('時段內現在可停，時段外寫下一段何時開始', () {
+        // 2026-11-03 is a Tuesday after a working Monday.
+        expect(slotNowText([night], at(2026, 11, 3, 21)), '現在可停');
+        expect(slotNowText([night], at(2026, 11, 3, 6, 59)), '現在可停');
+        expect(slotNowText([night], at(2026, 11, 3, 7)), '現在不可停，20:00 起可停');
+        // 2026-10-26 is a Monday off (補假): its night is not 平日.
+        expect(slotNowText([night], at(2026, 10, 27, 6)), '現在不可停，20:00 起可停');
+      });
+
+      test('跨午夜依開始那天：週五晚到週六 07:00 可停，之後到週一 20:00', () {
+        // 2026-10-30 Friday night belongs to Friday (decision 47).
+        expect(slotNowText([night], at(2026, 10, 31, 3)), '現在可停');
+        expect(slotNowText([night], at(2026, 10, 31, 8)), '現在不可停，週一 20:00 起可停');
+        expect(slotNowText([night], at(2026, 11, 1, 8)), '現在不可停，明天 20:00 起可停');
+      });
+
+      test('國定假日算假日：端午週五白天依假日時段可停', () {
+        expect(slotNowText([holiday], at(2026, 6, 19, 10)), '現在可停');
+        // Thursday's night ends at 07:00 on 端午; Friday night is not 平日.
+        expect(slotNowText([night], at(2026, 6, 19, 6)), '現在可停');
+        expect(slotNowText([night], at(2026, 6, 19, 8)), '現在不可停，週一 20:00 起可停');
+        expect(
+          slotNowText(
+            [holiday],
+            at(2026, 6, 19, 10),
+            calendar: HolidayCalendar.none,
+          ),
+          '現在不可停，明天 00:00 起可停（$holidayFallbackNote）',
+        );
+      });
+
+      test('沒有日曆的年份退回週六日並標示', () {
+        expect(
+          slotNowText([night], at(2030, 6, 19, 21)),
+          '現在可停（$holidayFallbackNote）',
+        );
+        const every = ScheduleSlot(
+          days: 'all',
+          from: '08:00',
+          to: '10:00',
+          vehicles: [SlotVehicle.scooter],
+        );
+        expect(slotNowText([every], at(2030, 6, 19, 11)), '現在不可停，明天 08:00 起可停');
+      });
+
+      test('詳情的理由寫現在可不可停，狀態仍是有條件・限時段', () {
+        ParkingDecision decide(DateTime when) => decideParking(
+          street(
+            SpaceType.heavyOnly,
+            condition: c({
+              'bay': 'heavy',
+              'use': 'usual',
+              'schedule': [
+                {
+                  'days': 'weekday',
+                  'from': '20:00',
+                  'to': '07:00',
+                  'vehicles': ['heavy'],
+                },
+              ],
+            }),
+          ),
+          VehicleType.heavy,
+          bundled,
+          now: when,
+        );
+        final day = decide(at(2026, 10, 27, 12));
+        expect(day.status, EligibilityStatus.conditional);
+        expect(day.restriction, RuleRestriction.timeLimited);
+        expect(day.reason, '現在不可停，20:00 起可停；大型重機可停時段：平日 20:00–隔日 07:00，請看現場牌面');
+        expect(decide(at(2026, 10, 27, 22)).reason, startsWith('現在可停；'));
+      });
     });
 
     test('身障特製機車與限電動：有條件，未查核為待確認', () {

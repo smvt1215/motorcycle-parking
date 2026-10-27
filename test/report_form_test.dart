@@ -965,6 +965,24 @@ void main() {
       'share': 'scooter_heavy',
       'charge': 'toll',
     });
+    // Decision 60: 普大共用 brings heavy bikes in, 可停 by default.
+    expect(spot['heavy_allowed'], true);
+  });
+
+  testWidgets('普大共用預設大型重機可停，騎士可改（決定 60）', (tester) async {
+    final store = await openForm(tester);
+    await pickKind(tester, SpaceKind.sharedMotorcycle);
+    await reveal(tester, nameField);
+    await tester.enterText(nameField, '市府路共用格');
+    await tapIn(tester, 'condition-charge', '收費格');
+    await openPart(tester, '可停車種');
+    final unknown = find.byKey(const ValueKey('report-heavy-null'));
+    await reveal(tester, unknown);
+    await tester.tap(unknown);
+    await tester.pumpAndSettle();
+    await trySend(tester);
+    final spot = store.submissions.single['spot'] as Map;
+    expect(spot['heavy_allowed'], isNull);
   });
 
   testWidgets('位置段：區只列所選縣市的行政區，換縣市清掉區', (tester) async {

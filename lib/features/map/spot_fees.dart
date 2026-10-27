@@ -3,6 +3,7 @@ import 'dart:async';
 import '../../domain/eligibility.dart';
 import '../../domain/parking_decision.dart';
 import '../../models/fee.dart';
+import '../../models/holiday_calendar.dart';
 import '../../models/parking.dart';
 import '../../models/parking_condition.dart';
 import '../../ui/adaptive/adaptive.dart';
@@ -34,13 +35,6 @@ const _seeBoard = '往下看完整收費公告牌';
 String feeNowLabel(VehicleType vehicle) =>
     vehicle == VehicleType.scooter ? '機車費率' : '大型重機費率';
 
-/// The minute of the week in Taiwan, Monday 00:00 first, as
-/// [feePeriodSpans] counts.
-int _taipeiWeekMinute(DateTime now) {
-  final t = now.toUtc().add(const Duration(hours: 8));
-  return (t.weekday - 1) * 1440 + t.hour * 60 + t.minute;
-}
-
 String _hhmm(int minute) {
   final m = minute % 1440;
   return '${(m ~/ 60).toString().padLeft(2, '0')}:'
@@ -67,8 +61,16 @@ String _short(String text) => text.replaceFirst(RegExp(r'（[^（）]*）$'), ''
 
 /// [vehicle]'s rate in [fee] at [now]: a by_time rate's current period
 /// (its time without 現在 or 隔日), with the next period's start; a time no
-/// period covers reads 此時段費率未確認 and points to the board.
-FeeNow feeNowOf(Fee fee, VehicleType vehicle, DateTime now) {
+/// period covers reads 此時段費率未確認 and points to the board. 平日 and
+/// 假日 follow [calendar] (decision 61, [HolidayCalendar.current] by
+/// default); where it lacks the year, the weekend decides and the caption
+/// says so.
+FeeNow feeNowOf(
+  Fee fee,
+  VehicleType vehicle,
+  DateTime now, {
+  HolidayCalendar? calendar,
+}) {
   final label = feeNowLabel(vehicle);
   final v = FeeVehicle.of(vehicle);
   final resolved = _resolved(fee, v);
@@ -93,18 +95,27 @@ FeeNow feeNowOf(Fee fee, VehicleType vehicle, DateTime now) {
     );
   }
   // Decision 47: a period across midnight belongs to the day it starts,
-  // so 平日 20:00–08:00 holds from Friday 20:00 to Saturday 08:00. Where
-  // periods overlap, the one that started last holds (假日 06:00 starts
-  // charging even if Friday's night period runs to 08:00).
+  // so 平日 20:00–08:00 holds from Friday 20:00 to Saturday 08:00, and
+  // whether that day is 平日 is the calendar's (decision 61). Where periods
+  // overlap, the one that started last holds (假日 06:00 starts charging
+  // even if Friday's night period runs to 08:00). Minutes count from
+  // today's 00:00 in Taiwan; yesterday's night and tomorrow's day are read
+  // too, for the next change within a day.
+  final cal = calendar ?? HolidayCalendar.current;
+  final (today, at) = taipeiDateMinute(now);
   final periods = rate.periods ?? const <FeePeriod>[];
-  final spans = [for (final p in periods) feePeriodSpans(p.days, p.from, p.to)];
+  final spans = [
+    for (final p in periods) datedSpans(p.days, p.from, p.to, today, cal),
+  ];
   FeePeriod? on(int minute) {
     FeePeriod? best;
-    var since = weekMinutes;
+    int? since;
     for (final (i, list) in spans.indexed) {
       for (final (start, end) in list) {
-        final elapsed = (minute - start) % weekMinutes;
-        if (elapsed < end - start && elapsed < since) {
+        final elapsed = minute - start;
+        if (elapsed >= 0 &&
+            minute < end &&
+            (since == null || elapsed < since)) {
           (best, since) = (periods[i], elapsed);
         }
       }
@@ -112,7 +123,10 @@ FeeNow feeNowOf(Fee fee, VehicleType vehicle, DateTime now) {
     return best;
   }
 
-  final at = _taipeiWeekMinute(now);
+  final fallback =
+      calendarFellBack([for (final p in periods) p.days], today, cal)
+      ? holidayFallbackNote
+      : null;
   final current = on(at);
   final lines = current == null
       ? const <FeeLine>[]
@@ -125,7 +139,7 @@ FeeNow feeNowOf(Fee fee, VehicleType vehicle, DateTime now) {
         tone: FeeTone.unconfirmed,
         icon: _unconfirmedIcon,
       ),
-      caption: _seeBoard,
+      caption: [_seeBoard, ?fallback].join('・'),
     );
   }
   final time = current.from == null ? '全天' : '${current.from}–${current.to}';
@@ -147,6 +161,7 @@ FeeNow feeNowOf(Fee fee, VehicleType vehicle, DateTime now) {
     if (!free && lines.length > 1) _short(lines[1].text),
     if (nextLines != null && nextLines.first.tone != FeeTone.unconfirmed)
       '$nextAt 起${next!.rate.mode == FeeMode.free ? '不收費' : nextLines.first.text}',
+    ?fallback,
   ].join('・');
   return FeeNow(
     label: '$label・$time',
@@ -162,11 +177,16 @@ bool _placeholder(String text) =>
 
 /// The summary row's rate for the spot: its own structured rate, a single
 /// zone's, or the text riders have read until now.
-FeeNow spotFeeNow(ParkingSpot spot, VehicleType vehicle, DateTime now) {
+FeeNow spotFeeNow(
+  ParkingSpot spot,
+  VehicleType vehicle,
+  DateTime now, {
+  HolidayCalendar? calendar,
+}) {
   final fee = hasZoneFees(spot)
       ? (spot.zones.length == 1 ? spot.zones.single.fee : null)
       : spot.fee;
-  if (fee != null) return feeNowOf(fee, vehicle, now);
+  if (fee != null) return feeNowOf(fee, vehicle, now, calendar: calendar);
   final text = spotFeeSummary(spot, vehicle);
   if (text == '依分區計費') {
     return const FeeNow(
