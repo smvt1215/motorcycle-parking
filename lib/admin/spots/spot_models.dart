@@ -178,10 +178,11 @@ final spotFields = <SpotField>[
   // facility_type as the first for older readers.
   SpotField(
     'facility_types',
-    '場站類型（可複選）',
+    '場站類型',
     SpotGroup.basic,
     SpotInput.multiChoice,
     choices: {for (final f in FacilityType.values) f.name: f.label},
+    help: '可複選，例如同一場站有地下與平面停車。',
   ),
   SpotField(
     'parking_access',
