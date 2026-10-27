@@ -39,59 +39,68 @@ Rate dayNight({String days = 'all'}) => Rate.fromJson({
 }, heavy: true)!;
 
 /// The canvas's 市府轉運站 lot: 機車區 (普大共用, 試辦) and 汽車區.
-ParkingSpot canvasLot({String expiresOn = '2026-12-31'}) =>
-    ParkingSpot.fromJson({
-      'id': 'canvas-lot',
-      'name': '市府轉運站地下停車場',
-      'lat': 25.04,
-      'lng': 121.57,
-      'city': '臺北市',
-      'district': '信義區',
-      'space_type': 'offStreet',
-      'facility_type': 'underground',
-      'source': 'official',
-      'status': 'confirmed',
-      'scooter_allowed': true,
-      'heavy_allowed': true,
-      'parking_zones': [
-        {
-          'name': '機車區',
-          'area': 'motorcycle',
-          'access': 'scooterHeavy',
-          'condition': {
-            'bay': 'motorcycle',
-            'use': 'share',
-            'share': 'scooter_heavy',
-            'charge': 'toll',
-            'allow': {'scooter': true, 'heavy': true},
-            'basis': {
-              'source_url': 'https://pma.gov.taipei/',
-              'effective_date': '2026-04-06',
-              'expires_on': expiresOn,
-            },
-          },
-          'fee': {
-            'scooter': {'mode': 'hourly', 'amount': 10, 'per_minutes': 60},
-            'heavy': {'mode': 'same_as_scooter', 'factor_pct': 200},
-          },
+ParkingSpot canvasLot({
+  String expiresOn = '2026-12-31',
+  bool lotWide = false,
+}) => ParkingSpot.fromJson({
+  // One rate for the whole lot instead of the zones' own.
+  if (lotWide)
+    'fee': {
+      'scooter': {'mode': 'hourly', 'amount': 10, 'per_minutes': 60},
+    },
+  'id': 'canvas-lot',
+  'name': '市府轉運站地下停車場',
+  'lat': 25.04,
+  'lng': 121.57,
+  'city': '臺北市',
+  'district': '信義區',
+  'space_type': 'offStreet',
+  'facility_type': 'underground',
+  'source': 'official',
+  'status': 'confirmed',
+  'scooter_allowed': true,
+  'heavy_allowed': true,
+  'parking_zones': [
+    {
+      'name': '機車區',
+      'area': 'motorcycle',
+      'access': 'scooterHeavy',
+      'condition': {
+        'bay': 'motorcycle',
+        'use': 'share',
+        'share': 'scooter_heavy',
+        'charge': 'toll',
+        'allow': {'scooter': true, 'heavy': true},
+        'basis': {
+          'source_url': 'https://pma.gov.taipei/',
+          'effective_date': '2026-04-06',
+          'expires_on': expiresOn,
         },
-        {
-          'name': '汽車區',
-          'area': 'car',
-          'access': 'heavyCar',
-          'condition': {
-            'bay': 'car',
-            'use': 'usual',
-            'charge': 'toll',
-            'allow': {'scooter': false, 'heavy': true},
-          },
-          'fee': {
-            'car': {'mode': 'hourly', 'amount': 40, 'per_minutes': 60},
-            'heavy': {'mode': 'same_as_car'},
-          },
+      },
+      if (!lotWide)
+        'fee': {
+          'scooter': {'mode': 'hourly', 'amount': 10, 'per_minutes': 60},
+          'heavy': {'mode': 'same_as_scooter', 'factor_pct': 200},
         },
-      ],
-    });
+    },
+    {
+      'name': '汽車區',
+      'area': 'car',
+      'access': 'heavyCar',
+      'condition': {
+        'bay': 'car',
+        'use': 'usual',
+        'charge': 'toll',
+        'allow': {'scooter': false, 'heavy': true},
+      },
+      if (!lotWide)
+        'fee': {
+          'car': {'mode': 'hourly', 'amount': 40, 'per_minutes': 60},
+          'heavy': {'mode': 'same_as_car'},
+        },
+    },
+  ],
+});
 
 void main() {
   group('摘要列依目前時間選出當下時段（#120、決定 26、47）', () {
@@ -493,6 +502,64 @@ void main() {
     });
   });
 
+  group('#155 第 27–29 項', () {
+    ParkingSpot lotOf(List<ParkingZone> zones) => ParkingSpot(
+      id: 'items-27-29',
+      name: '舊資料停車場',
+      lat: 25.04,
+      lng: 121.57,
+      city: '臺北市',
+      spaceType: SpaceType.offStreet,
+      zones: zones,
+    );
+
+    test('第 27 項：分區有結構化費率但條件未知，汽車列仍在且寫未確認', () {
+      final spot = lotOf(const [
+        ParkingZone(
+          name: '舊分區',
+          carFeeNote: '每小時 40 元',
+          fee: Fee(scooter: Rate(FeeMode.hourly, amount: 10, perMinutes: 60)),
+        ),
+      ]);
+      final board = feeSectionBoards(spot, null).single;
+      expect(board.vehicles, [
+        FeeVehicle.scooter,
+        FeeVehicle.heavy,
+        FeeVehicle.car,
+      ]);
+      final car = feeBoardOf(
+        board.fee!,
+        vehicles: board.vehicles,
+      ).firstWhere((b) => b.vehicle == FeeVehicle.car);
+      expect(car.headline?.text, feeUnconfirmed);
+    });
+
+    test('第 28 項：分區說明等於舊汽車文字時不從通用說明列漏出', () {
+      final spot = lotOf(const [
+        ParkingZone(
+          name: '汽車區',
+          access: ParkingAccess.heavyCar,
+          heavyFeeNote: '每次 40 元',
+          carFeeNote: '每小時 30 元',
+          feeNote: '每小時 30 元',
+        ),
+      ]);
+      final legacy = feeSectionBoards(spot, null).single.legacy;
+      expect(legacy.map((l) => l.$2), isNot(contains('每小時 30 元')));
+      expect(legacy, contains((FeeVehicle.car, '')));
+    });
+
+    test('第 29 項：全場費率也標出分區試辦到期', () {
+      final spot = canvasLot(expiresOn: '2026-10-05', lotWide: true);
+      final boards = feeSectionBoards(
+        spot,
+        decideParking(spot, VehicleType.heavy, const [], now: taipei(12, 0)),
+      );
+      expect(boards.single.title, '全場');
+      expect(boards.single.trialEnded, '2026-10-05');
+    });
+  });
+
   Future<void> pumpFees(
     WidgetTester tester,
     double width,
@@ -643,7 +710,10 @@ void main() {
       expect(find.byKey(const ValueKey('fee-legacy-board')), findsNothing);
       // The car is listed once, unconfirmed.
       expect(find.text('汽車'), findsOneWidget);
-      expect(find.textContaining('費率未確認，請依現場公告'), findsOneWidget);
+      // Decision 54: the line says 費率未確認, the board's foot says once
+      // to read the posted notice.
+      expect(find.textContaining('費率未確認'), findsOneWidget);
+      expect(find.text('未確認的費率請依現場公告'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   }

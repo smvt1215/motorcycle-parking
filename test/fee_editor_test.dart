@@ -336,14 +336,21 @@ void main() {
     await tapFee(tester, 'fee-mode-car-p0-per_visit');
     await tester.enterText(feeField('amount', 'car-p0'), '30');
     await tapFee(tester, 'fee-renew-car-p0-none');
-    // Decision 47: gaps are the start day's.
-    expect(
-      find.text(
-        '週一 00:00–08:00、週一、週二、週三、週四 20:00–隔日 08:00、'
-        '週五 20:00–隔日 00:00、假日 全天 還沒有費率，會顯示未確認',
-      ),
-      findsOneWidget,
-    );
+    // Decision 55: the gaps in a few words first, the times under
+    // 看完整時段; decision 47: gaps are the start day's.
+    expect(find.text('平日夜間、假日全天沒有費率'), findsOneWidget);
+    expect(find.text('・週五 20:00–隔日 00:00'), findsNothing);
+    await tapFee(tester, 'fee-gaps-more-car');
+    for (final gap in [
+      '週一 00:00–08:00',
+      '週一、週二、週三、週四 20:00–隔日 08:00',
+      '週五 20:00–隔日 00:00',
+      '假日 全天',
+    ]) {
+      expect(find.text('・$gap'), findsOneWidget);
+    }
+    await tapFee(tester, 'fee-gaps-more-car');
+    expect(find.text('・假日 全天'), findsNothing);
     await tapFee(tester, 'fee-period-add-car');
     // The new period opens and the first collapses to one line.
     expect(find.text('每次 30 元，停多久都只收一次'), findsOneWidget);
