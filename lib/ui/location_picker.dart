@@ -563,6 +563,20 @@ class _PinPainter extends CustomPainter {
 
 Future<void>? _sdk;
 
+/// The gestures the picker's Google map takes inside a scrolling form (iOS
+/// and Android alike). A swipe decides by its direction: up or down scrolls
+/// the form, as anywhere else on it, so the fields below the map are one
+/// swipe away; sideways pans the map, and two fingers pan and zoom it. A
+/// tap still picks a point and the touch marker still drags (it claims its
+/// own pointers). Taking every drag instead (an eager recognizer) left
+/// riders stuck on a map a third of the screen tall.
+final pickerMapGestures = <Factory<OneSequenceGestureRecognizer>>{
+  Factory<OneSequenceGestureRecognizer>(HorizontalDragGestureRecognizer.new),
+  Factory<OneSequenceGestureRecognizer>(ScaleGestureRecognizer.new),
+  // Without a tap of its own, a tap nobody claims would not reach the map.
+  Factory<OneSequenceGestureRecognizer>(TapGestureRecognizer.new),
+};
+
 Widget googleLocationMap(BuildContext context, LocationMapView view) =>
     _GoogleLocationMap(view: view);
 
@@ -639,15 +653,8 @@ class _GoogleLocationMapState extends State<_GoogleLocationMap> {
             lng: c.target.longitude,
             zoom: c.zoom,
           ),
-          // Inside a scrolling form, the map keeps the drags that land on it
-          // (iOS and Android alike) instead of scrolling the form.
-          gestureRecognizers: v.touchMarker
-              ? {
-                  Factory<OneSequenceGestureRecognizer>(
-                    EagerGestureRecognizer.new,
-                  ),
-                }
-              : const {},
+          // Inside a scrolling form, see [pickerMapGestures].
+          gestureRecognizers: v.touchMarker ? pickerMapGestures : const {},
           // The touch marker projects through an unrotated, flat camera.
           rotateGesturesEnabled: !v.touchMarker,
           tiltGesturesEnabled: !v.touchMarker,
