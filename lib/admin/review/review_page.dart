@@ -1,7 +1,9 @@
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/fee.dart';
+import '../../models/fee_plan.dart' show canonicalJson;
 import '../../models/parking.dart';
 import '../../ui/fee_editor.dart';
 import '../admin_controller.dart';
@@ -10,6 +12,8 @@ import 'review_controller.dart';
 import 'review_map.dart';
 import 'review_models.dart';
 import 'review_resolution.dart';
+import 'shared_plan_dialog.dart';
+import '../spots/lot_models.dart' show jsonList;
 
 /// Below this width the queue and the report are separate screens.
 const reviewCompactWidth = 680.0;
@@ -96,6 +100,27 @@ class _ReviewPageState extends State<ReviewPage> {
       // The note written in the picker is the one sent and kept on the page.
       if (reason.note.isNotEmpty) notes.text = reason.note;
     }
+    // A fee for a plan some zones share: only here, or the plan itself.
+    Map<String, dynamic> Function(Map<String, dynamic>)? adjust;
+    final spot = review.spots[report.sourceId];
+    if (spot != null &&
+        (decision == ReviewDecision.accept ||
+            decision == ReviewDecision.acceptEdited)) {
+      final (patch, problem) = review.patchFor(report, decision);
+      final shared = problem == null ? sharedPlanOf(patch, spot) : null;
+      if (shared != null) {
+        final choice = await pickSharedPlanScope(
+          context,
+          plan: shared.plan,
+          zones: shared.zones,
+          fee: Fee.fromJson(patch['fee']),
+          plans: jsonList(spot.values['fee_plans']),
+        );
+        if (choice == null || !mounted) return;
+        adjust = (p) => applySharedPlanChoice(p, spot, choice);
+      }
+    }
+    if (!mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     // The page is rebuilt for the next report's route; keep the router.
     final router = GoRouter.of(context);
@@ -109,6 +134,7 @@ class _ReviewPageState extends State<ReviewPage> {
       note,
       force: review.canForce(report.id),
       resolutionKind: kind,
+      adjust: adjust,
     );
     if (!mounted || identical(review.pending, before)) return;
     messenger
@@ -705,6 +731,14 @@ class _ReviewDetail extends StatelessWidget {
                     ],
                   ),
                 ],
+                if (report.riskFlags.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  _HoldNotice(report: report),
+                ],
+                if (report.evidenceUrl case final url?) ...[
+                  const SizedBox(height: 10),
+                  _Evidence(url: url),
+                ],
                 if (spot != null) ...[
                   const SizedBox(height: 16),
                   _MapFrame(
@@ -1012,7 +1046,15 @@ class _DiffTable extends StatelessWidget {
               ),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               // A fee editor needs the row's whole width at any size.
-              child: editing && reviewField(key)!.input == FieldInput.fee
+              child: !editing && key == 'fee'
+                  ? _FeeDiff(
+                      current: spot.values['fee'],
+                      proposed: rows['fee'],
+                      sent: base?['fee'],
+                      stacked: stacked,
+                      hasBase: base != null,
+                    )
+                  : editing && reviewField(key)!.input == FieldInput.fee
                   ? _FeeRow(
                       report: report,
                       field: reviewField(key)!,
@@ -1122,6 +1164,165 @@ class _DiffTable extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Why a report was let through for a closer look (#158, #155 items 19–20):
+/// each precheck hold, and for a stored-pair hold which half was the
+/// spot's.
+class _HoldNotice extends StatelessWidget {
+  const _HoldNotice({required this.report});
+  final ReviewReport report;
+
+  @override
+  Widget build(BuildContext context) => AdminNotice(
+    '預檢標記，需要仔細看：\n${riskFlagLines(report).map((l) => '・$l').join('\n')}',
+    key: const ValueKey('risk-flags'),
+  );
+}
+
+/// The notice link the rider attached; opened outside the admin site.
+class _Evidence extends StatelessWidget {
+  const _Evidence({required this.url});
+  final String url;
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = TextStyle(
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+      fontSize: 14,
+    );
+    return Wrap(
+      key: const ValueKey('evidence-url'),
+      spacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Text('附上的依據：公告連結', style: muted),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: SelectableText(url),
+        ),
+        TextButton.icon(
+          onPressed: () =>
+              launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
+          icon: const Icon(Icons.open_in_new, size: 18),
+          label: const Text('開啟'),
+        ),
+      ],
+    );
+  }
+}
+
+/// The fee a suggestion leaves, vehicle by vehicle (canvas AdminReviewDiff):
+/// 維持目前, or the new rate with 有變更, or 改成未確認 with 會清除 — each
+/// state in words and an underline, never colour alone.
+class _FeeDiff extends StatelessWidget {
+  const _FeeDiff({
+    required this.current,
+    required this.proposed,
+    required this.sent,
+    required this.stacked,
+    required this.hasBase,
+  });
+  final Object? current, proposed, sent;
+  final bool stacked, hasBase;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final muted = TextStyle(color: colors.onSurfaceVariant);
+    final now = reviewFee(current) ?? const Fee();
+    final next = reviewFee(proposed) ?? const Fee();
+    final before = reviewFee(sent) ?? const Fee();
+    String text(Fee fee, String v) => fee.riderText(v) ?? '未確認';
+    final rows = [
+      for (final (v, label) in const [
+        ('scooter', '普通機車費率'),
+        ('heavy', '大型重機費率'),
+        ('car', '汽車費率'),
+      ])
+        if (now.toJson().containsKey(v) || next.toJson().containsKey(v))
+          (v, label),
+    ];
+    Widget state(String v) {
+      final had = now.toJson()[v], will = next.toJson()[v];
+      if (canonicalJson(had) == canonicalJson(will)) {
+        return Text('維持目前', style: muted);
+      }
+      final clears = will == null;
+      final color = clears ? colors.error : AdminColors.yellow;
+      return Wrap(
+        spacing: 8,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Text(clears ? '改成未確認' : text(next, v)),
+          Container(
+            key: ValueKey('fee-diff-$v-${clears ? 'clear' : 'change'}'),
+            padding: const EdgeInsets.only(bottom: 1),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: color, width: 3)),
+            ),
+            child: Text(
+              clears ? '會清除' : '有變更',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      key: const ValueKey('fee-diff'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final (i, (v, label)) in rows.indexed)
+          Padding(
+            padding: EdgeInsets.only(top: i == 0 ? 0 : 12),
+            child: stacked
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        label,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      if (hasBase) _line('送出時', Text(text(before, v)), muted),
+                      _line('目前', Text(text(now, v)), muted),
+                      _line('建議', state(v), muted),
+                    ],
+                  )
+                : Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(flex: 8, child: Text(label, style: muted)),
+                      if (hasBase) ...[
+                        const SizedBox(width: 12),
+                        Expanded(flex: 10, child: Text(text(before, v))),
+                      ],
+                      const SizedBox(width: 12),
+                      Expanded(flex: 10, child: Text(text(now, v))),
+                      const SizedBox(width: 12),
+                      Expanded(flex: 13, child: state(v)),
+                    ],
+                  ),
+          ),
+      ],
+    );
+  }
+
+  Widget _line(String label, Widget value, TextStyle muted) => Padding(
+    padding: const EdgeInsets.only(top: 6),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: hasBase ? 56 : 44,
+          child: Text(label, style: muted),
+        ),
+        Expanded(child: value),
+      ],
+    ),
+  );
 }
 
 /// The fee row while editing: today's fee, then the editor full width.

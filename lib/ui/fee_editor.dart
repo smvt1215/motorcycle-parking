@@ -53,17 +53,10 @@ Fee _known(Fee fee) {
 }
 
 /// The vehicle a heavy follow names when its rate is not known (design
-/// §8.6): such a follow would read 費率未提供, so it is not stored.
-String? _followGap(Fee fee) {
-  final heavy = fee.heavy;
-  if (heavy == null || !heavy.mode.follows) return null;
-  final source = heavy.mode == FeeMode.sameAsCar
-      ? FeeVehicle.car
-      : FeeVehicle.scooter;
-  if (_known(fee).textOf(source.wire) != null) return null;
-  final name = source == FeeVehicle.car ? '汽車' : '機車';
-  return '大型重機比照$name費率，但還沒填$name費率。請填$name費率，或改選其他收費方式。';
-}
+/// §8.6): such a follow would read 費率未提供, so it is not stored. The check
+/// lives on [Fee.followGap] so forms outside the editor's [Form] block it too.
+String? _followGap(Fee fee) =>
+    _known(fee).copyWith(heavy: () => fee.heavy).followGap;
 
 /// Whether a heavy bike has a vehicle to follow: one whose rate is known.
 bool _canFollow(Fee fee) {

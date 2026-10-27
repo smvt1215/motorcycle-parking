@@ -1,4 +1,5 @@
 import '../../models/fee.dart';
+import '../../models/fee_plan.dart' show canonicalJson;
 import '../../models/parking.dart';
 
 enum SpotKind {
@@ -363,6 +364,7 @@ String? validateSpotField(SpotField field, Object? value, {Fee? fee}) {
       final rates = [value.scooter, value.heavy, value.car].nonNulls;
       if (rates.any((r) => !r.complete)) return '請填完收費金額，計時另需選計費時間';
       if (!value.valid) return '金額請填 0 到 10000 的整數';
+      if (value.followGap case final gap?) return gap;
   }
   return null;
 }
@@ -389,5 +391,9 @@ Map<String, dynamic> changedValues(
 bool _differs(Object? a, Object? b) {
   if (a is num && b is num) return a != b;
   if (a is String && b is String) return a.trim() != b.trim();
+  // Zones and plans are JSON: compared by content, keys in any order.
+  if (a is List || a is Map || b is List || b is Map) {
+    return canonicalJson(a) != canonicalJson(b);
+  }
   return a != b;
 }

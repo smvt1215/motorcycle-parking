@@ -15,6 +15,7 @@ import '../../ui/fee_editor.dart';
 import '../../ui/location_picker.dart';
 import '../admin_theme.dart';
 import '../review/review_page.dart' show ChangeBand, reviewCompactWidth;
+import 'lot_editor.dart';
 import 'spot_map.dart';
 import 'spot_models.dart';
 import 'spots_controller.dart';
@@ -1108,7 +1109,23 @@ class _FormPane extends StatelessWidget {
                       mapBuilder: mapBuilder,
                     ),
                   for (final f in fields.where((f) => f.group == group))
-                    if (f.input == SpotInput.fee)
+                    if (f.input == SpotInput.fee && spots.lot) ...[
+                      // A lot's rates are its plans (design §2.6).
+                      LotPlansSection(
+                        key: ValueKey(
+                          '${record.sourceId}-${spots.formSeq}-plans',
+                        ),
+                        spots: spots,
+                        error: errors['fee_plans'],
+                      ),
+                      LotAreasSection(
+                        key: ValueKey(
+                          '${record.sourceId}-${spots.formSeq}-zones',
+                        ),
+                        spots: spots,
+                        error: errors['parking_zones'],
+                      ),
+                    ] else if (f.input == SpotInput.fee)
                       _FeeField(
                         // A reloaded or discarded form starts the editor over.
                         key: ValueKey(
@@ -1154,6 +1171,10 @@ class _FormPane extends StatelessWidget {
                       !record.isNew &&
                       !record.official)
                     _VehicleVerification(spots: spots),
+                  if (group == SpotGroup.fees)
+                    if (record.values['fee_source_text']
+                        case final String source when source.trim().isNotEmpty)
+                      FeeSourceText(source),
                 ],
                 const SizedBox(height: 24),
                 ConstrainedBox(
