@@ -173,7 +173,7 @@ node tool/admin_smoke.cjs
 
 ### App 位置選擇實作
 
-- 元件新增 App 用的選項：`touchMarker` 以 Flutter 繪製的標記取代地圖原生標記，觸控範圍 56×68 px，拖曳時標記尖端浮在手指上方 24 px，地面以小圈標出實際落點；標記用 eager recognizer 取得手勢，拖曳標記不會捲動表單也不會平移地圖，拖曳空白處照常平移，點地圖也能移動標記。位置換算以 Web Mercator（每圖磚 256 邏輯像素，Google Maps 與 flutter_map 相同）由相機中心與縮放算出，因此 App 的選位地圖關閉旋轉與傾斜。Google Maps 在表單中以 `EagerGestureRecognizer` 保留地圖上的拖曳（iOS、Android 相同），沒有 Maps 金鑰時改用與主地圖相同的 OpenStreetMap 預覽（`osmLocationMap`）。
+- 元件新增 App 用的選項：`touchMarker` 以 Flutter 繪製的標記取代地圖原生標記，觸控範圍 56×68 px，拖曳時標記尖端浮在手指上方 24 px，地面以小圈標出實際落點；標記用 eager recognizer 取得手勢，拖曳標記不會捲動表單也不會平移地圖，點地圖也能移動標記。位置換算以 Web Mercator（每圖磚 256 邏輯像素，Google Maps 與 flutter_map 相同）由相機中心與縮放算出，因此 App 的選位地圖關閉旋轉與傾斜。Google Maps 在表單中只接手左右拖曳、雙指平移／縮放與點按（`pickerMapGestures`，iOS、Android 相同）：上下滑動依方向交給表單捲動，地圖下方的欄位一滑就到（2026-10-27 修正：原本以 `EagerGestureRecognizer` 取走地圖上的所有拖曳，地圖佔螢幕三分之一，騎士在地圖上滑不動表單，回報「下方表單消失」）；沒有 Maps 金鑰時改用與主地圖相同的 OpenStreetMap 預覽（`osmLocationMap`）。
 - `onLocate`：「移到我的位置」讀取裝置定位（`AppStore.currentFix`，不移動主地圖），顯示「GPS 精準度約 ±N m」，誤差大於 20 m 時提醒拖曳對準；標記被移開後不再顯示精準度。定位未開啟或未授權時沿用既有的設定對話框。
 - `onSearch`：P4b 門牌、路段與路口搜尋（見「P4b 實作」），回傳選到的結果後移動標記；沒有提供時不顯示入口。
 - 提醒分三種語氣並都附圖示：資訊（所在縣市）、注意（條件琥珀：GPS 誤差、15 m 內同類型的點、跨縣市規則改變、查不到縣市）、錯誤（紅色：標記超出臺灣範圍等擋住送出的問題）。
@@ -276,6 +276,15 @@ python3 tool/export_rules.py --check || python3 tool/export_rules.py
 - **稽核**：停權變更後由 Edge Function 呼叫 `admin_record_user_ban`（只授權 service role）寫入 `admin_audit_log`（`target_table='auth.users'`，前後的 `banned_until`、期間、原因）。Auth API 與資料庫無法同一 transaction：稽核寫入失敗時函式把停權狀態還原（原本有停權則還原剩餘時數，無條件進位到小時）並回錯誤；還原前重新讀取帳號，若停權狀態已不是本次寫入的值（另一位管理者同時變更），保留較新的變更、不還原。
 - **清除公開名稱**：詳情先列最新 50 個社群點，「載入更早的點位」以 `admin_user_spots(p_user, p_offset)` 分頁（依建立時間，清除名稱不會改變順序）；逐點以 `admin_clear_contributor_name`（#81）清除，原因選填、寫入稽核紀錄；清除後即使改名也不再顯示。停權後背景重新讀取停權紀錄時，若期間又有停權或清除操作，舊的讀取結果會被捨棄，不覆蓋較新的畫面狀態。
 - 測試：pgTAP `admin_users_test.sql`（一般使用者、無 `aal2` 的 admin、anon 被拒；搜尋與遮蔽；統計；只有 service role 能寫停權紀錄、稽核不可修改）；deno `admin-users/handler_test.ts`（非 admin、無 `aal2`、無 token 被拒且不呼叫 Auth；停權與解除寫稽核；稽核失敗還原；輸入驗證；不能停權自己或管理者）；widget test `test/admin/users_test.dart`。
+
+### 點位編輯紀錄（#141）
+
+- 依 C6 畫布 EditHistory／AppHistory 與決定 52；migration `202610270100_spot_history.sql`，不新增資料表，稽核紀錄仍是唯一紀錄。
+- `spot_history_entries(source_id)`（內部，不授權給任何角色）把點位的時間軸合成一條、由新到舊：點位本身的稽核寫入（新增、編輯、匯入、費率轉換、隱藏／恢復、清除回報者名稱、改為官方點；官方點另含「由社群點改為官方點」）、管理員採納或駁回的車友回報（`moderation_queue` 的 `accepted`／`rejected`，採納時以 `resolve_report` 稽核的 before／after 算出改了哪些欄位；Dashboard 時代結案的 `closed` 與未處理的不列），以及沒有稽核的車友新增點。每筆只比對寫入時帶的欄位（`spot_history_fields()`，不含 id、更新時間、位置、票數等），只帶部分欄位的寫入（費率轉換、清除名稱）只比那些欄位。
+- `admin_spot_history(source_id)`：`is_admin()`（aal2），最多 200 筆，含管理員顯示名稱、原本／改成、處理說明與原始回報（原因、建議內容、車友說明、公告連結、處理結果）。點位頁表單標題下「編輯紀錄」開啟全頁時間軸，可依「全部／管理員／車友回報／匯入」篩選，回報列「看原始回報」開對話框。
+- `spot_history(source_id)`：anon 可呼叫，只回最近 10 筆、隱藏點位回空陣列；每筆只有時間、來源類別（車友建議／匯入／管理員）、是否建立點位與改到的**公開欄位**（不含車種確認、顯示狀態、計費規則名稱、原始公告文字與回報者名稱）。不回操作者、回報者、處理說明、回報內容，也不回原本的值；改成的值只在點位目前仍是這個值時才回，之後被改掉的文字（例如管理員移除的個資）不會經由紀錄再出現。被駁回的回報與只改非公開欄位的紀錄不列。
+- App 詳情「資料與查核」：「確認狀態」只顯示最新一筆，其餘收進「還有 N 項」（決定 52）；「更新時間」改為「最近更新」（最新一筆的資料類別與日期，例「費率，2026-10-27」），有紀錄時附「看更新紀錄」底部面板，讀取前或沒有紀錄時沿用點位更新時間。
+- 測試：pgTAP `spot_history_test.sql`（權限、合併與排序、駁回不改欄位、公開版不含個人資料與已移除的文字、隱藏點位、最多 10 筆）；widget test `test/spot_history_test.dart`、`test/admin/spot_history_test.dart`；`tool/admin_smoke.cjs` 加入編輯紀錄截圖（手機 390／402、桌面 1440／820）。
 
 ## CI／CD
 - `tool/ci_changes.py` 將 `lib/admin/` 歸入品質檢查與 admin web 建置（`flutter build web -t lib/main_admin.dart -o build/admin`），不觸發模擬器。
