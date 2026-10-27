@@ -7,11 +7,13 @@ import 'package:latlong2/latlong.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
 
+import '../../models/closure.dart';
 import '../../models/fee.dart';
 import '../../models/parking.dart';
 import '../../ui/address_search_field.dart';
 import '../../ui/fee_board.dart';
 import '../../ui/fee_editor.dart';
+import '../../ui/fold_section.dart';
 import '../../ui/location_picker.dart';
 import '../../ui/option_pill.dart';
 import '../admin_layout.dart';
@@ -1192,107 +1194,111 @@ class _FormPane extends StatelessWidget {
                     ),
                   ],
                 ],
-                for (final group in SpotGroup.values) ...[
-                  const SizedBox(height: 24),
-                  Semantics(
-                    header: true,
-                    child: Text(
-                      group.label,
-                      style: text.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+                const SizedBox(height: 14),
+                for (final group in SpotGroup.values)
+                  _SpotFold(
+                    key: ValueKey('fold-${group.name}'),
+                    title: group.title(lot: spots.lot),
+                    summary: _summaryOf(group, spots),
+                    open: spots.openGroup == group,
+                    changed: _groupChanged(group, spots),
+                    problem: spots.groupsWithErrors.contains(group),
+                    onToggle: () => spots.toggleGroup(group),
+                    children: [
+                      if (group == SpotGroup.source)
+                        _SourceFacts(record: record),
+                      if (group == SpotGroup.location)
+                        _LocationSection(
+                          spots: spots,
+                          onMove: onMove,
+                          mapBuilder: mapBuilder,
+                          collapsed: short,
+                        ),
+                      for (final f in fields.where((f) => f.group == group))
+                        if (f.input == SpotInput.fee && spots.lot) ...[
+                          // A lot's rates are its plans (design §2.6).
+                          LotPlansSection(
+                            key: ValueKey(
+                              '${record.sourceId}-${spots.formSeq}-plans',
+                            ),
+                            spots: spots,
+                            error: errors['fee_plans'],
+                          ),
+                          LotAreasSection(
+                            key: ValueKey(
+                              '${record.sourceId}-${spots.formSeq}-zones',
+                            ),
+                            spots: spots,
+                            error: errors['parking_zones'],
+                          ),
+                        ] else if (f.input == SpotInput.fee)
+                          _FeeField(
+                            // A reloaded or discarded form starts the editor
+                            // over.
+                            key: ValueKey(
+                              '${record.sourceId}-${spots.formSeq}-${f.key}',
+                            ),
+                            spots: spots,
+                            error: errors[f.key],
+                          )
+                        else if (f.key == 'fee_note' && spots.feeStructured)
+                          _FeeNotePlate(spots: spots, error: errors[f.key])
+                        else
+                          _FieldRow(
+                            // Coordinates follow the picker and the county
+                            // follows the lookup; their fields must show it.
+                            key: ValueKey(
+                              '${record.sourceId}-${spots.formSeq}-${f.key}'
+                              '${switch (f.key) {
+                                'lat' || 'lng' => '-$moves',
+                                'city' || 'district' || 'address' || 'road_segment' => '-${spots.filled}',
+                                _ => '',
+                              }}',
+                            ),
+                            field: f,
+                            value: spots.draft[f.key],
+                            changed: spots.changed(f.key),
+                            error: errors[f.key],
+                            onChanged: (v) {
+                              spots.set(f.key, v);
+                              final lat = spots.draft['lat'];
+                              final lng = spots.draft['lng'];
+                              if ((f.key == 'lat' || f.key == 'lng') &&
+                                  lat is num &&
+                                  lng is num) {
+                                onMove(
+                                  lat.toDouble(),
+                                  lng.toDouble(),
+                                  fromPicker: false,
+                                );
+                              }
+                            },
+                          ),
+                      if (group == SpotGroup.vehicles &&
+                          !record.isNew &&
+                          !record.official)
+                        _VehicleVerification(spots: spots),
+                      // Temporary closure (#116; C6 canvas ClosureAdmin).
+                      if (group == SpotGroup.closure)
+                        ClosureSection(
+                          key: ValueKey(
+                            '${record.sourceId}-${spots.formSeq}-closure',
+                          ),
+                          value: (spots.draft['closure'] as Map?)
+                              ?.cast<String, dynamic>(),
+                          onChanged: spots.setClosure,
+                          now: DateTime.now(),
+                          changed: spots.changed('closure'),
+                          stored: record.values['closure_state'] as String?,
+                          framed: false,
+                        ),
+                      if (group == SpotGroup.fees)
+                        if (record.values['fee_source_text']
+                            case final String source
+                            when source.trim().isNotEmpty)
+                          FeeSourceText(source),
+                    ],
                   ),
-                  const SizedBox(height: 4),
-                  if (group == SpotGroup.source) _SourceFacts(record: record),
-                  if (group == SpotGroup.location)
-                    _LocationSection(
-                      spots: spots,
-                      onMove: onMove,
-                      mapBuilder: mapBuilder,
-                      collapsed: short,
-                    ),
-                  for (final f in fields.where((f) => f.group == group))
-                    if (f.input == SpotInput.fee && spots.lot) ...[
-                      // A lot's rates are its plans (design §2.6).
-                      LotPlansSection(
-                        key: ValueKey(
-                          '${record.sourceId}-${spots.formSeq}-plans',
-                        ),
-                        spots: spots,
-                        error: errors['fee_plans'],
-                      ),
-                      LotAreasSection(
-                        key: ValueKey(
-                          '${record.sourceId}-${spots.formSeq}-zones',
-                        ),
-                        spots: spots,
-                        error: errors['parking_zones'],
-                      ),
-                    ] else if (f.input == SpotInput.fee)
-                      _FeeField(
-                        // A reloaded or discarded form starts the editor over.
-                        key: ValueKey(
-                          '${record.sourceId}-${spots.formSeq}-${f.key}',
-                        ),
-                        spots: spots,
-                        error: errors[f.key],
-                      )
-                    else if (f.key == 'fee_note' && spots.feeStructured)
-                      _FeeNotePlate(spots: spots, error: errors[f.key])
-                    else
-                      _FieldRow(
-                        // Coordinates follow the picker and the county
-                        // follows the lookup; their fields must show it.
-                        key: ValueKey(
-                          '${record.sourceId}-${spots.formSeq}-${f.key}'
-                          '${switch (f.key) {
-                            'lat' || 'lng' => '-$moves',
-                            'city' || 'district' || 'address' || 'road_segment' => '-${spots.filled}',
-                            _ => '',
-                          }}',
-                        ),
-                        field: f,
-                        value: spots.draft[f.key],
-                        changed: spots.changed(f.key),
-                        error: errors[f.key],
-                        onChanged: (v) {
-                          spots.set(f.key, v);
-                          final lat = spots.draft['lat'];
-                          final lng = spots.draft['lng'];
-                          if ((f.key == 'lat' || f.key == 'lng') &&
-                              lat is num &&
-                              lng is num) {
-                            onMove(
-                              lat.toDouble(),
-                              lng.toDouble(),
-                              fromPicker: false,
-                            );
-                          }
-                        },
-                      ),
-                  if (group == SpotGroup.vehicles &&
-                      !record.isNew &&
-                      !record.official)
-                    _VehicleVerification(spots: spots),
-                  // Temporary closure (#116; C6 canvas ClosureAdmin).
-                  if (group == SpotGroup.basic)
-                    ClosureSection(
-                      key: ValueKey(
-                        '${record.sourceId}-${spots.formSeq}-closure',
-                      ),
-                      value: (spots.draft['closure'] as Map?)
-                          ?.cast<String, dynamic>(),
-                      onChanged: spots.setClosure,
-                      now: DateTime.now(),
-                      changed: spots.changed('closure'),
-                      stored: record.values['closure_state'] as String?,
-                    ),
-                  if (group == SpotGroup.fees)
-                    if (record.values['fee_source_text']
-                        case final String source when source.trim().isNotEmpty)
-                      FeeSourceText(source),
-                ],
                 const SizedBox(height: 24),
                 ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 720),
@@ -1666,48 +1672,50 @@ class _FieldRow extends StatelessWidget {
           ],
           onChanged: onChanged,
         );
+      // Three states on one row (C6 canvas AppPatterns, pattern 4).
       case SpotInput.triState:
-        input = DropdownButtonFormField<int>(
-          initialValue: switch (value) {
-            true => 1,
-            false => 0,
-            _ => -1,
-          },
-          isExpanded: true,
-          decoration: decoration,
-          items: const [
-            DropdownMenuItem(value: 1, child: Text('可停')),
-            DropdownMenuItem(value: 0, child: Text('不可停')),
-            DropdownMenuItem(value: -1, child: Text('未確認')),
-          ],
-          onChanged: (v) => onChanged(switch (v) {
-            1 => true,
-            0 => false,
+        input = VehicleTriState(
+          label: field.label,
+          value: switch (value) {
+            final bool b => b,
             _ => null,
-          }),
+          },
+          keyPrefix: field.key,
+          onChanged: onChanged,
         );
+      // A few choices are pills (pattern 2); the 22 governments stay a
+      // menu.
+      case SpotInput.choice
+          when field.choices.length + (field.required ? 0 : 1) <= 6:
+        input = OptionPills<String?>(
+          values: [
+            if (!field.required) (null, '未設定'),
+            for (final e in field.choices.entries) (e.key, e.value),
+          ],
+          selected: field.choices.containsKey(value) ? value as String : null,
+          keyOf: (v) => '${field.key}-${v ?? 'none'}',
+          onSelect: onChanged,
+        );
+      // Several may apply (pattern 3, decision 58): check rows.
       case SpotInput.multiChoice:
         final picked = value is List ? value! as List : const <Object?>[];
-        input = InputDecorator(
-          decoration: decoration,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (final e in field.choices.entries)
-                OptionCheck(
-                  key: ValueKey('spot-${field.key}-${e.key}'),
-                  label: e.value,
-                  value: picked.contains(e.key),
-                  onChanged: (bool on) {
-                    final next = [
-                      for (final k in field.choices.keys)
-                        if (k == e.key ? on : picked.contains(k)) k,
-                    ];
-                    onChanged(next.isEmpty ? null : next);
-                  },
-                ),
-            ],
-          ),
+        input = Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final e in field.choices.entries)
+              OptionCheck(
+                key: ValueKey('spot-${field.key}-${e.key}'),
+                label: e.value,
+                value: picked.contains(e.key),
+                onChanged: (bool on) {
+                  final next = [
+                    for (final k in field.choices.keys)
+                      if (k == e.key ? on : picked.contains(k)) k,
+                  ];
+                  onChanged(next.isEmpty ? null : next);
+                },
+              ),
+          ],
         );
       case SpotInput.choice:
         input = DropdownButtonFormField<String?>(
@@ -1724,6 +1732,36 @@ class _FieldRow extends StatelessWidget {
           ],
           onChanged: onChanged,
         );
+    }
+    // Pills and segments have no box to carry the label, help and error.
+    final bare =
+        field.input == SpotInput.triState ||
+        field.input == SpotInput.multiChoice ||
+        (field.input == SpotInput.choice && input is! DropdownButtonFormField);
+    if (bare) {
+      final muted = TextStyle(color: colors.onSurfaceVariant, fontSize: 13);
+      input = Semantics(
+        container: true,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (field.input == SpotInput.choice ||
+                field.input == SpotInput.multiChoice)
+              Text(decoration.labelText!, style: muted),
+            input,
+            if (field.help case final help?)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(help, style: muted),
+              ),
+            if (error case final message?)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(message, style: TextStyle(color: colors.error)),
+              ),
+          ],
+        ),
+      );
     }
     return Padding(
       padding: const EdgeInsets.only(top: 12),
@@ -2091,5 +2129,168 @@ class _LocationSection extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// One folding section of the spot form (decision 57; C6 canvas
+/// AppPatterns, pattern 5). A folded section with edits keeps the yellow
+/// band above it, so changes are never hidden. Opening one folds the one
+/// above, which pulls this one up; it scrolls back to its title.
+class _SpotFold extends StatefulWidget {
+  const _SpotFold({
+    super.key,
+    required this.title,
+    required this.summary,
+    required this.open,
+    required this.changed,
+    required this.problem,
+    required this.onToggle,
+    required this.children,
+  });
+  final String title;
+  final String? summary;
+  final bool open, changed, problem;
+  final VoidCallback onToggle;
+  final List<Widget> children;
+
+  @override
+  State<_SpotFold> createState() => _SpotFoldState();
+}
+
+class _SpotFoldState extends State<_SpotFold> {
+  @override
+  void didUpdateWidget(_SpotFold old) {
+    super.didUpdateWidget(old);
+    if (widget.open && !old.open) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        Scrollable.ensureVisible(
+          context,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+        );
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => ConstrainedBox(
+    constraints: const BoxConstraints(maxWidth: 720),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (widget.changed && !widget.open)
+          const Padding(
+            padding: EdgeInsets.only(top: 10),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: ChangeBand('已修改'),
+            ),
+          ),
+        FoldSection(
+          title: widget.title,
+          summary: widget.summary,
+          open: widget.open,
+          problem: widget.problem,
+          onToggle: widget.onToggle,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: widget.children,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+/// Draft keys each section edits besides its fields.
+const _groupExtras = {
+  SpotGroup.fees: ['fee_plans', 'fee_plan', 'parking_zones', 'zones_complete'],
+  SpotGroup.closure: ['closure'],
+};
+
+bool _groupChanged(SpotGroup group, SpotsController spots) => [
+  for (final f in spots.fields)
+    if (f.group == group) f.key,
+  ...?_groupExtras[group],
+].any(spots.changed);
+
+/// What a folded section says it holds; null for 還沒填.
+String? _summaryOf(SpotGroup group, SpotsController spots) {
+  final draft = spots.draft;
+  final record = spots.record!;
+  String? text(String key) => switch (draft[key]) {
+    final String s when s.trim().isNotEmpty => s.trim(),
+    _ => null,
+  };
+  String? choice(String key) => spotField(key).choices[draft[key]];
+  String? joined(Iterable<String?> parts) {
+    final shown = parts.nonNulls.toList();
+    return shown.isEmpty ? null : shown.join('・');
+  }
+
+  String vehicle(String key) => switch (draft[key]) {
+    true => '可停',
+    false => '不可停',
+    _ => '未確認',
+  };
+  switch (group) {
+    case SpotGroup.location:
+      final lat = draft['lat'], lng = draft['lng'];
+      return joined([
+        text('city'),
+        text('district'),
+        if (lat is num && lng is num)
+          '${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)}',
+      ]);
+    case SpotGroup.basic:
+      final name = text('name');
+      return name == null
+          ? null
+          : joined([name, if (!record.official) choice('status')]);
+    case SpotGroup.space:
+      final type = SpaceType.values.asNameMap()[draft['space_type']];
+      final total = draft['scooter_total'];
+      return joined([
+        type?.label,
+        // Every type ticked (decision 58).
+        if (facilityTypesOf(draft['facility_types']) case final types
+            when types.isNotEmpty)
+          facilityTypesLabel(types),
+        choice('parking_access'),
+        if (total is int) '機車 $total 格',
+      ]);
+    case SpotGroup.vehicles:
+      return '普通機車${vehicle('scooter_allowed')}・'
+          '大型重機${vehicle('heavy_allowed')}';
+    case SpotGroup.fees:
+      if (spots.lot) {
+        final plans = spots.plans.length, zones = spots.zones.length;
+        return plans == 0 && zones == 0 ? null : '計費規則 $plans 條・區域 $zones 個';
+      }
+      return text('fee_note');
+    case SpotGroup.closure:
+      final closure = SpotClosure.fromJson(
+        draft['closure'],
+        state: spots.changed('closure') ? null : record.values['closure_state'],
+      );
+      if (closure == null) return '沒有';
+      return joined([
+        closure.reason.label,
+        closure.until == null
+            ? '沒填恢復日期'
+            : '預計 ${closureDayLabel(closure.until!)}恢復',
+        if (closure.stateOn(DateTime.now()) == ClosureState.expired) '待確認',
+      ]);
+    case SpotGroup.notes:
+      final filled = [
+        for (final f in spots.fields)
+          if (f.group == SpotGroup.notes && text(f.key) != null) f.label,
+      ];
+      return filled.isEmpty ? null : '已填：${filled.join('、')}';
+    case SpotGroup.source:
+      return record.official
+          ? joined([text('source_name'), text('effective_date')])
+          : '社群回報整理・${record.origin}';
   }
 }

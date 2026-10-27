@@ -6,6 +6,8 @@ import 'package:material_ui/material_ui.dart';
 import 'package:motorcycle_parking/core/address_search.dart';
 import 'package:motorcycle_parking/admin/admin_app.dart';
 import 'package:motorcycle_parking/admin/admin_controller.dart';
+import 'package:motorcycle_parking/admin/review/review_page.dart'
+    show ChangeBand;
 import 'package:motorcycle_parking/admin/spots/spot_map.dart';
 import 'package:motorcycle_parking/admin/spots/spot_models.dart';
 import 'package:motorcycle_parking/admin/spots/spots_controller.dart';
@@ -14,6 +16,7 @@ import 'package:motorcycle_parking/domain/location_check.dart';
 import 'package:motorcycle_parking/domain/map_viewport.dart';
 
 import 'fake_admin_gateway.dart';
+import 'fold_helpers.dart';
 
 void main() {
   group('點位編輯', () {
@@ -360,6 +363,7 @@ void main() {
 
     testWidgets('場站類型可複選，送出依契約順序的型式（決定 58）', (tester) async {
       await show(tester, path: '/spots/$officialId');
+      await openFold(tester, '格位與停放條件');
       final surface = find.byKey(const ValueKey('spot-facility_types-surface'));
       await tester.ensureVisible(surface);
       await tester.pumpAndSettle();
@@ -406,6 +410,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('spot-$officialId')));
       await tester.pumpAndSettle();
       expect(find.text('官方點（新北市政府）'), findsOneWidget);
+      await openFold(tester, '資料來源');
       await tester.scrollUntilVisible(
         find.text('ntpc-001'),
         300,
@@ -645,7 +650,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('請填寫名稱'), findsOneWidget);
       expect(gateway.created, isEmpty);
+      // The first section with an error opened.
       await tester.enterText(find.widgetWithText(TextFormField, '名稱'), '新的機車格');
+      await openFold(tester, '位置');
       await tester.scrollUntilVisible(
         find.text('拖曳到附近'),
         300,
@@ -655,6 +662,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 700));
       await tester.pumpAndSettle();
       expect(gateway.townRequests, greaterThan(0));
+      await openFold(tester, '格位與停放條件');
       await tester.scrollUntilVisible(
         find.widgetWithText(DropdownButtonFormField<String>, '格位類型'),
         -300,
@@ -689,6 +697,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('社群點').last);
       await tester.pumpAndSettle();
+      await openFold(tester, '基本資訊');
       await tester.enterText(find.widgetWithText(TextFormField, '名稱'), '暫時名稱');
       await tester.pumpAndSettle();
       await tester.tap(find.text('新增停車點'));
@@ -707,6 +716,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('社群點').last);
       await tester.pumpAndSettle();
+      await openFold(tester, '基本資訊');
       await tester.enterText(find.widgetWithText(TextFormField, '名稱'), '暫時名稱');
       await tester.pumpAndSettle();
       final before = gateway.townRequests;
@@ -735,6 +745,7 @@ void main() {
 
     testWidgets('移動超過 150 m 時儲存前確認', (tester) async {
       await show(tester, path: '/spots/$communityId');
+      await openFold(tester, '位置');
       await tester.scrollUntilVisible(
         find.text('拖曳到遠處'),
         300,
@@ -772,6 +783,7 @@ void main() {
           ),
         ];
         await show(tester, path: '/spots/$communityId', size: size);
+        await openFold(tester, '位置');
         final entry = find.byKey(const ValueKey('location-search'));
         await tester.scrollUntilVisible(entry, 300, scrollable: form());
         await tester.ensureVisible(entry);
@@ -832,6 +844,7 @@ void main() {
     ]) {
       testWidgets('核驗目前車種在 ${size.width.round()} px 可用且不溢出', (tester) async {
         await show(tester, path: '/spots/$communityId', size: size);
+        await openFold(tester, '可停車種');
         final button = find.byKey(const ValueKey('verify-vehicles'));
         await tester.scrollUntilVisible(button, 300, scrollable: form());
         await tester.ensureVisible(button);
@@ -860,6 +873,7 @@ void main() {
       await show(tester, path: '/spots/$communityId');
       await tester.enterText(find.widgetWithText(TextFormField, '名稱'), '暫存名稱');
       await tester.pumpAndSettle();
+      await openFold(tester, '可停車種');
       final button = find.byKey(const ValueKey('verify-vehicles'));
       await tester.scrollUntilVisible(button, 300, scrollable: form());
       expect(tester.widget<OutlinedButton>(button).onPressed, isNull);
@@ -870,6 +884,109 @@ void main() {
       await show(tester, path: '/spots/$officialId');
       expect(find.byKey(const ValueKey('vehicle-verification')), findsNothing);
     });
+
+    testWidgets('分段收合：一次展開一段，收起時寫摘要，沒填的寫「還沒填」（決定 57）', (tester) async {
+      await show(tester, path: '/spots/new?kind=community');
+      Future<Finder> sub(String title, String text) async => find.descendant(
+        of: await revealFold(tester, title),
+        matching: find.text(text),
+      );
+      // A new spot starts at its position; the rest is folded.
+      expect(find.byKey(const ValueKey('location-search')), findsOneWidget);
+      expect(await sub('基本資訊', '還沒填'), findsOneWidget);
+      expect(await sub('補充', '還沒填'), findsOneWidget);
+      expect(await sub('可停車種', '普通機車未確認・大型重機未確認'), findsOneWidget);
+      await openFold(tester, '基本資訊');
+      // Opening one folds the other; its summary says where it is.
+      expect(find.byKey(const ValueKey('location-search')), findsNothing);
+      expect(
+        find.descendant(
+          of: await revealFold(tester, '位置'),
+          matching: find.textContaining('臺北市・中山區・'),
+        ),
+        findsOneWidget,
+      );
+      // A save with gaps opens the first section to fix and flags the next.
+      await tester.tap(find.text('建立停車點'));
+      await tester.pumpAndSettle();
+      expect(find.text('請填寫名稱'), findsOneWidget);
+      expect(await sub('格位與停放條件', '有欄位要修正'), findsOneWidget);
+      await tester.enterText(find.widgetWithText(TextFormField, '名稱'), '新的機車格');
+      await openFold(tester, '格位與停放條件');
+      expect(find.text('請填寫格位類型'), findsOneWidget);
+      expect(await sub('基本資訊', '新的機車格・待確認'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('車種用三段按鈕、少量選項用膠囊；收起的段落保留已修改色帶', (tester) async {
+      await show(tester, path: '/spots/$communityId');
+      expect(find.byType(DropdownButtonFormField<int>), findsNothing);
+      await openFold(tester, '可停車種');
+      final heavy = find.byKey(const ValueKey('heavy_allowed-false'));
+      expect(tester.getSize(heavy).height, greaterThanOrEqualTo(48));
+      await tester.tap(heavy);
+      await tester.pumpAndSettle();
+      await openFold(tester, '格位與停放條件');
+      final underground = find.byKey(
+        const ValueKey('spot-facility_types-underground'),
+      );
+      await tester.ensureVisible(underground);
+      await tester.tap(underground);
+      await tester.pumpAndSettle();
+      // Folded with an edit: the yellow band stays above it.
+      // One over the check rows in the open section, one over 可停車種.
+      expect(find.byType(ChangeBand), findsNWidgets(2));
+      expect(
+        find.descendant(
+          of: await revealFold(tester, '可停車種'),
+          matching: find.text('普通機車可停・大型重機不可停'),
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('儲存並關閉'));
+      await tester.pumpAndSettle();
+      expect(gateway.spotUpdates.single.$2, {
+        'heavy_allowed': false,
+        'facility_types': ['underground'],
+      });
+    });
+
+    for (final size in const [
+      Size(320, 640),
+      Size(390, 844),
+      Size(402, 874),
+      Size(820, 1180),
+      Size(1180, 820),
+      Size(1024, 1366),
+      Size(1440, 960),
+    ]) {
+      testWidgets(
+        '分段表單在 ${size.width.round()}×${size.height.round()} 每段都能展開、不溢出、標題至少 48 px',
+        (tester) async {
+          await show(tester, path: '/spots/$officialId', size: size);
+          if (size.width < 680) {
+            expect(find.byKey(const ValueKey('fold-位置')), findsOneWidget);
+          }
+          for (final title in [
+            '位置',
+            '基本資訊',
+            '格位與停放條件',
+            '可停車種',
+            '計費規則與區域',
+            '暫時無法停車',
+            '補充',
+            '資料來源',
+          ]) {
+            await openFold(tester, title);
+            await tester.pumpAndSettle();
+            final header = find.byKey(ValueKey('fold-$title'));
+            expect(tester.getSize(header).height, greaterThanOrEqualTo(48));
+            expect(header.hitTestable(), findsOneWidget, reason: title);
+            expect(tester.takeException(), isNull, reason: title);
+          }
+        },
+      );
+    }
 
     testWidgets('隱藏點位後可復原', (tester) async {
       await show(tester, path: '/spots/$officialId');

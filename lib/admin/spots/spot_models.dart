@@ -110,15 +110,23 @@ enum SpotInput {
   fee,
 }
 
+/// The form's folding sections, in display order (C6 canvas AppPatterns,
+/// pattern 5; decision 57): one is open at a time.
 enum SpotGroup {
-  basic('基本資訊'),
-  vehicles('可停車種'),
-  fees('費率與說明'),
   location('位置'),
-  source('來源');
+  basic('基本資訊'),
+  space('格位與停放條件'),
+  vehicles('可停車種'),
+  fees('費率'),
+  closure('暫時無法停車'),
+  notes('補充'),
+  source('資料來源');
 
   const SpotGroup(this.label);
   final String label;
+
+  /// A lot's rates are its plans and areas (design §2.6).
+  String title({required bool lot}) => this == fees && lot ? '計費規則與區域' : label;
 }
 
 class SpotField {
@@ -170,7 +178,7 @@ final spotFields = <SpotField>[
   const SpotField(
     'space_type',
     '格位類型',
-    SpotGroup.basic,
+    SpotGroup.space,
     SpotInput.spaceType,
     required: true,
   ),
@@ -179,7 +187,7 @@ final spotFields = <SpotField>[
   SpotField(
     'facility_types',
     '場站類型',
-    SpotGroup.basic,
+    SpotGroup.space,
     SpotInput.multiChoice,
     choices: {for (final f in FacilityType.values) f.name: f.label},
     help: '可複選，例如同一場站有地下與平面停車。',
@@ -187,7 +195,7 @@ final spotFields = <SpotField>[
   SpotField(
     'parking_access',
     '車種開放',
-    SpotGroup.basic,
+    SpotGroup.space,
     SpotInput.choice,
     choices: {for (final a in ParkingAccess.values) a.name: a.label},
   ),
@@ -222,32 +230,32 @@ final spotFields = <SpotField>[
     maxLength: 200,
     required: true,
   ),
-  const SpotField('scooter_total', '機車格數', SpotGroup.fees, SpotInput.integer),
+  const SpotField('scooter_total', '機車格數', SpotGroup.space, SpotInput.integer),
   const SpotField(
     'note',
     '備註',
-    SpotGroup.fees,
+    SpotGroup.notes,
     SpotInput.multiline,
     maxLength: 500,
   ),
   const SpotField(
     'entrance_note',
     '入口說明',
-    SpotGroup.fees,
+    SpotGroup.notes,
     SpotInput.multiline,
     maxLength: 500,
   ),
   const SpotField(
     'parking_guide',
     '停放方式',
-    SpotGroup.fees,
+    SpotGroup.notes,
     SpotInput.multiline,
     maxLength: 500,
   ),
   const SpotField(
     'special_rules',
     '特殊規定',
-    SpotGroup.fees,
+    SpotGroup.notes,
     SpotInput.multiline,
     maxLength: 500,
   ),

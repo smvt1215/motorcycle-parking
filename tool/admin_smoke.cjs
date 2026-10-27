@@ -410,6 +410,30 @@ function session(role, aal, factors = [factor]) {
           await page.getByRole('button', { name: /^新北市政府行政大樓地下停車場/ }).click();
           await waitText('官方點（新北市政府）');
           await page.screenshot({ path: path.join(output, `${name}-spot-form.png`) });
+          // The form folds into sections, one open at a time (decision 57):
+          // from the top, wheel to a section's title and open it.
+          const openFold = async title => {
+            const header = page.getByRole('button', { name: new RegExp(`^${title}`) }).first();
+            const size = page.viewportSize();
+            await page.mouse.move(size.width * (mobile ? 0.5 : 0.85), size.height * 0.5);
+            for (let i = 0; i < 40; i++) await page.mouse.wheel(0, -200);
+            await page.waitForTimeout(300);
+            const inView = async () => {
+              const at = (await header.count()) ? await header.boundingBox() : null;
+              return at && at.y > size.height * 0.1 && at.y + at.height < size.height - 120;
+            };
+            for (let i = 0; i < 60 && !(await inView()); i++) {
+              await page.mouse.wheel(0, 120);
+              await page.waitForTimeout(80);
+            }
+            if (!(await inView())) await page.screenshot({ path: path.join(output, `${name}-fold-failure.png`) });
+            assert.ok(await inView(), `${name} section ${title} is reachable`);
+            // Open, the title stands alone; folded, the summary follows it.
+            const label = await header.evaluate(el => (el.getAttribute('aria-label') ?? el.textContent ?? '').trim());
+            const open = label === title;
+            if (!open) await header.click();
+            await page.waitForTimeout(600);
+          };
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} spot form scrolls sideways`);
           // Its edit history (#141), at each size the history was checked at.
           await page.getByRole('button', { name: '編輯紀錄', exact: true }).click();
@@ -426,7 +450,11 @@ function session(role, aal, factors = [factor]) {
           await page.waitForTimeout(500);
           await page.getByRole('button', { name: '返回點位', exact: true }).click();
           await waitText('官方點（新北市政府）');
+          await openFold('格位與停放條件');
+          await page.screenshot({ path: path.join(output, `${name}-spot-fold-space.png`) });
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} space section scrolls sideways`);
           // Its structured fee: the editor and the notice board riders read.
+          await openFold('計費規則與區域');
           {
             // The board reads as one node (its label and its rows) that
             // Flutter writes either as text or as an aria-label.
@@ -494,6 +522,7 @@ function session(role, aal, factors = [factor]) {
           await showList();
           await page.getByRole('button', { name: /^中山北路二段路邊機車格/ }).click();
           await waitText('社群點（社群回報整理）');
+          await openFold('可停車種');
           const verify = page.getByRole('button', { name: '核驗目前車種' });
           const box = page.viewportSize();
           // Flutter draws on a canvas: wheel until the button clears the
@@ -519,7 +548,10 @@ function session(role, aal, factors = [factor]) {
           // The reloaded form starts at the top again.
           await page.waitForTimeout(500);
           await reachVerify();
-          await page.getByRole('group', { name: /普通機車核驗\s+已核驗（2026-10-25）/ }).waitFor({ timeout: 15000 });
+          // Inside its folding section the row may read as text or a group.
+          await page.getByText('已核驗（2026-10-25）', { exact: true })
+            .or(page.getByRole('group', { name: /普通機車核驗\s+已核驗（2026-10-25）/ }))
+            .first().waitFor({ timeout: 15000 });
           await page.screenshot({ path: path.join(output, `${name}-spot-verified.png`) });
           // New spot: kind, then a form whose county follows the position.
           if (mobile) {
@@ -537,10 +569,12 @@ function session(role, aal, factors = [factor]) {
           if (vp.id === 'iphone16pro') {
             // The keyboard and Safari's bars leave a short page: the small
             // map folds into a button and the buttons scroll with the form.
+            await openFold('基本資訊');
             await page.getByRole('textbox', { name: /^名稱/ }).first().click();
             await page.setViewportSize({ width: vp.width, height: 460 });
             await page.waitForTimeout(500);
             await page.screenshot({ path: path.join(output, `${name}-spot-new-kbd.png`) });
+            await openFold('位置');
             const openMap = page.getByRole('button', { name: /開地圖調整/ });
             // Below the undo toast, which takes the wheel.
             await page.mouse.move(vp.width / 2, 400);
@@ -558,10 +592,12 @@ function session(role, aal, factors = [factor]) {
             await page.waitForTimeout(300);
           }
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} new spot form scrolls sideways`);
-          // Scroll the form down to the picker and its notes.
+          await openFold('位置');
+          // The position is the first section: a little down shows the
+          // picker and its notes.
           const viewport = page.viewportSize();
           await page.mouse.move(viewport.width * (mobile ? 0.5 : 0.85), viewport.height * 0.5);
-          for (let i = 0; i < 12; i++) await page.mouse.wheel(0, 150);
+          for (let i = 0; i < 2; i++) await page.mouse.wheel(0, 100);
           await page.waitForTimeout(500);
           await page.screenshot({ path: path.join(output, `${name}-spot-location.png`) });
           // Address search from the picker's entry: results, then the pick's reminder.
