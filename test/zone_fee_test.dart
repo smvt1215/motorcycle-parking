@@ -270,7 +270,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('寬 $width：全場費率只列一次，分區只補自己的汽車費率文字', (tester) async {
+    testWidgets('寬 $width：全場費率只列一次，分區的舊汽車文字不再顯示（決定 45）', (tester) async {
       final spot = lot(
         fee: const Fee(heavy: Rate(FeeMode.sameAsCar)),
         zones: const [
@@ -282,14 +282,66 @@ void main() {
           ),
         ],
       );
-      await pumpFees(tester, width, spot, vehicle: VehicleType.heavy);
+      await pumpFees(
+        tester,
+        width,
+        spot,
+        vehicle: VehicleType.heavy,
+        scale: 1.6,
+        brightness: Brightness.dark,
+      );
       expect(find.text('全場'), findsOneWidget);
-      expect(find.text('1F'), findsOneWidget);
-      expect(find.text('每小時 30 元'), findsOneWidget);
-      // 比照 resolves within the same fee only (design §2.1); the car rate
-      // here is legacy zone text, so the heavy rate is not provided (#140).
+      expect(find.text('1F'), findsNothing);
+      expect(find.textContaining('每小時 30 元'), findsNothing);
+      // The lot has car bays but no structured car rate.
+      expect(find.text('汽車'), findsOneWidget);
+      expect(find.textContaining('費率未確認，請依現場公告'), findsOneWidget);
+      // 比照 resolves within the same fee only (design §2.1), so the heavy
+      // rate is not provided (#140).
       expect(find.textContaining('費率未提供'), findsOneWidget);
       expect(find.textContaining('舊重機'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('寬 $width：沒有任何結構化費率的分區，汽車也寫未確認（決定 45）', (tester) async {
+      final spot = lot(
+        zones: const [
+          ParkingZone(
+            name: '1F',
+            access: ParkingAccess.heavyCar,
+            heavyFeeNote: '每次 40 元',
+            carFeeNote: '每小時 30 元',
+          ),
+        ],
+      );
+      await pumpFees(
+        tester,
+        width,
+        spot,
+        vehicle: VehicleType.heavy,
+        scale: 1.6,
+        brightness: Brightness.dark,
+      );
+      expect(find.text('每次 40 元'), findsOneWidget);
+      expect(find.textContaining('每小時 30 元'), findsNothing);
+      expect(find.textContaining('費率未確認，請依現場公告'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('寬 $width：全場與分區都有結構化汽車費率時各自顯示', (tester) async {
+      final spot = lot(
+        zones: const [
+          ParkingZone(
+            name: '汽車區',
+            access: ParkingAccess.heavyCar,
+            carFeeNote: '每小時 99 元',
+            fee: Fee(car: Rate(FeeMode.hourly, amount: 40, perMinutes: 60)),
+          ),
+        ],
+      );
+      await pumpFees(tester, width, spot, vehicle: VehicleType.heavy);
+      expect(find.text('每小時 40 元'), findsOneWidget);
+      expect(find.textContaining('每小時 99 元'), findsNothing);
       expect(tester.takeException(), isNull);
     });
   }

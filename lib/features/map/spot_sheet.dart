@@ -469,7 +469,7 @@ String _additionalFeeNote(ParkingSpot spot) {
       zone.feeNote,
       zone.scooterFeeText,
       zone.heavyFeeText,
-      zone.carFeeNote,
+      // A car's old text is not shown (decision 45).
     ],
   ];
   if (!rates.any((rate) => rate.trim().isNotEmpty)) return '';

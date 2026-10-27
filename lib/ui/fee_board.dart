@@ -1,7 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../models/fee.dart';
-import '../models/parking_condition.dart' show timePattern;
 import 'vehicle_marks.dart';
 
 /// Colours of the fee notice board: a white plate with ink lines, kept white
@@ -109,6 +108,10 @@ class FeeVehicleBoard {
 }
 
 const _unconfirmedIcon = Icons.help_outline;
+
+/// A car without a structured rate (decision 45): the details never fall
+/// back to a zone's old car text.
+const carUnconfirmed = '費率未確認，請依現場公告';
 const _timerIcon = Icons.timer_outlined;
 const _nightIcon = Icons.bedtime_outlined;
 const _extendIcon = Icons.add_circle_outline;
@@ -154,7 +157,11 @@ FeeVehicleBoard _vehicleBoard(Fee fee, FeeVehicle vehicle) {
     return FeeVehicleBoard(
       vehicle,
       headline: FeeLine(
-        rate?.mode.follows ?? false ? '費率未提供' : '費率未確認',
+        rate?.mode.follows ?? false
+            ? '費率未提供'
+            : vehicle == FeeVehicle.car
+            ? carUnconfirmed
+            : '費率未確認',
         tone: FeeTone.unconfirmed,
         icon: _unconfirmedIcon,
       ),
@@ -314,12 +321,23 @@ const _unconfirmedRow = [
 
 /// The periods grouped by the days they cover, in order of first appearance
 /// (平日 and 假日, single weekdays only when a period names them), with the
-/// times and days no period covers written out as unconfirmed.
+/// times and days no period covers written out as unconfirmed. A period
+/// across midnight belongs to the day it starts (decision 47): 平日
+/// 20:00–08:00 covers Saturday until 08:00, and not Monday before 08:00.
 List<FeeDayGroup> _groups(List<FeePeriod> periods, int pct) {
   final byDays = <int, List<FeePeriod>>{};
   for (final p in periods) {
     byDays.putIfAbsent(FeeWords.dayMask(p.days), () => []).add(p);
   }
+  final covered = _coverage(periods);
+  bool open(int day) =>
+      covered.sublist(day * 1440, day * 1440 + 1440).contains(false);
+  bool whole(int day) =>
+      !covered.sublist(day * 1440, day * 1440 + 1440).contains(true);
+  List<int> days(int mask) => [
+    for (var d = 0; d < 7; d++)
+      if (mask & (1 << d) != 0) d,
+  ];
   final groups = [
     for (final MapEntry(key: mask, value: list) in byDays.entries)
       (
@@ -330,14 +348,22 @@ List<FeeDayGroup> _groups(List<FeePeriod> periods, int pct) {
               feePeriodTime(p.from, p.to),
               _periodLines(p.rate, pct),
             ),
-          if (feeUncovered(list).isNotEmpty)
-            const FeePeriodRow('其他時間', _unconfirmedRow),
+          if (days(mask).any(open)) const FeePeriodRow('其他時間', _unconfirmedRow),
         ],
       ),
   ];
   final missing = 127 & ~byDays.keys.fold(0, (a, b) => a | b);
   if (missing != 0) {
-    groups.add((missing, const [FeePeriodRow('全天', _unconfirmedRow)]));
+    // A day no period starts on may still hold the night before's end.
+    groups.add((
+      missing,
+      [
+        FeePeriodRow(
+          days(missing).every(whole) ? '全天' : '其他時間',
+          _unconfirmedRow,
+        ),
+      ],
+    ));
   }
   final single = groups.length == 1 && groups.single.$1 == 127;
   return [
@@ -345,6 +371,10 @@ List<FeeDayGroup> _groups(List<FeePeriod> periods, int pct) {
       FeeDayGroup(single ? null : FeeWords.dayLabel(mask), rows),
   ];
 }
+
+List<bool> _coverage(List<FeePeriod> periods) => feeWeekCoverage([
+  for (final p in periods) (days: p.days, from: p.from, to: p.to),
+]);
 
 List<FeeLine> _periodLines(Rate rate, int pct) {
   final d = _describe(rate, pct);
@@ -364,58 +394,66 @@ String feePeriodTime(String? from, String? to) {
   return '$from–${from.compareTo(to) < 0 ? '' : '隔日 '}$to';
 }
 
-int? _clock(String? hhmm) {
-  if (hhmm == null || !RegExp(timePattern).hasMatch(hhmm)) return null;
-  return int.parse(hhmm.substring(0, 2)) * 60 + int.parse(hhmm.substring(3));
-}
-
-/// The times of day no period in [periods] covers, as `[start, end)` minute
-/// ranges; one that wraps past midnight is a single range with end < start.
-/// A period without valid times (an editor's draft) covers nothing.
-List<(int, int)> feeUncovered(List<FeePeriod> periods) {
-  final covered = List.filled(1440, false);
-  for (final p in periods) {
-    if (p.from == null && p.to == null) return const [];
-    final from = _clock(p.from), to = _clock(p.to);
-    if (from == null || to == null || from == to) continue;
-    for (var m = from; m != to; m = (m + 1) % 1440) {
-      covered[m] = true;
-    }
-  }
-  final gaps = <(int, int)>[];
-  for (var m = 0; m < 1440; m++) {
-    if (covered[m]) continue;
-    final start = m;
-    while (m < 1440 && !covered[m]) {
-      m++;
-    }
-    gaps.add((start, m));
-  }
-  if (gaps.length >= 2 && gaps.first.$1 == 0 && gaps.last.$2 == 1440) {
-    final (start, _) = gaps.removeLast();
-    gaps[0] = (start, gaps[0].$2);
-  }
-  return gaps;
-}
-
 String _hhmm(int m) =>
     '${(m ~/ 60).toString().padLeft(2, '0')}:${(m % 60).toString().padLeft(2, '0')}';
 
-/// What a time-of-day rate leaves unconfirmed, one phrase per gap:
-/// 平日 20:00–隔日 08:00, 週日 全天; the editor writes them under the list.
+/// What a time-of-day rate leaves unconfirmed, one phrase per gap, each the
+/// period that would fill it: 平日 20:00–隔日 08:00, 週日 全天; the editor
+/// writes them under the list. A gap is the start day's (decision 47), so
+/// one running past midnight is written from the day it starts.
 List<String> feeGaps(List<FeePeriod> periods) {
-  final byDays = <int, List<FeePeriod>>{};
-  for (final p in periods) {
-    byDays.putIfAbsent(FeeWords.dayMask(p.days), () => []).add(p);
+  final covered = _coverage(periods);
+  // Each day's uncovered `[start, end)` minutes.
+  final segments = List.generate(7, (d) {
+    final list = <(int, int)>[];
+    var m = 0;
+    while (m < 1440) {
+      if (covered[d * 1440 + m]) {
+        m++;
+        continue;
+      }
+      final start = m;
+      while (m < 1440 && !covered[d * 1440 + m]) {
+        m++;
+      }
+      list.add((start, m));
+    }
+    return list;
+  });
+  bool whole(int d) =>
+      segments[d].length == 1 && segments[d].single == (0, 1440);
+  // A gap running into the next morning is written once, from its start.
+  final carried = List.filled(7, false);
+  for (var d = 0; d < 7; d++) {
+    final next = (d + 1) % 7;
+    if (!whole(d) &&
+        !whole(next) &&
+        segments[d].lastOrNull?.$2 == 1440 &&
+        segments[next].firstOrNull?.$1 == 0) {
+      carried[next] = true;
+    }
   }
-  final missing = 127 & ~byDays.keys.fold(0, (a, b) => a | b);
-  final single = byDays.length == 1 && byDays.keys.single == 127;
+  // Each phrase with the days it applies to, in order of the first day.
+  final masks = <String, int>{};
+  for (var d = 0; d < 7; d++) {
+    final next = (d + 1) % 7;
+    for (final (i, (start, end)) in segments[d].indexed) {
+      if (i == 0 && carried[d]) continue;
+      final phrase = whole(d)
+          ? '全天'
+          : end < 1440
+          ? feePeriodTime(_hhmm(start), _hhmm(end))
+          : carried[next]
+          ? feePeriodTime(_hhmm(start), _hhmm(segments[next].first.$2))
+          : '${_hhmm(start)}–隔日 00:00';
+      masks[phrase] = (masks[phrase] ?? 0) | (1 << d);
+    }
+  }
   return [
-    for (final MapEntry(key: mask, value: list) in byDays.entries)
-      for (final (start, end) in feeUncovered(list))
-        '${single ? '' : '${FeeWords.dayLabel(mask)} '}'
-            '${end == 1440 ? '${_hhmm(start)}–隔日 00:00' : feePeriodTime(_hhmm(start), _hhmm(end))}',
-    if (missing != 0) '${FeeWords.dayLabel(missing)} 全天',
+    for (final MapEntry(key: phrase, value: mask) in masks.entries)
+      mask == 127 && phrase != '全天'
+          ? phrase
+          : '${FeeWords.dayLabel(mask)} $phrase',
   ];
 }
 

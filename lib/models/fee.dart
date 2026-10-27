@@ -11,7 +11,12 @@ library;
 import 'dart:convert';
 
 import 'parking_condition.dart'
-    show feeContract, scheduleWeekdays, timeOptionalPair, validSlotTimes;
+    show
+        feeContract,
+        scheduleWeekdays,
+        timeOptionalPair,
+        timePattern,
+        validSlotTimes;
 
 /// How a vehicle pays. Heavy bikes may also follow another vehicle's rate.
 enum FeeMode {
@@ -652,6 +657,56 @@ String? _rateText(Object? r, int pct) {
       return t;
   }
   return null;
+}
+
+/// Minutes in a week, Monday 00:00 first: how [feeWeekCoverage] counts.
+const weekMinutes = 7 * 1440;
+
+int? _clockOf(Object? hhmm) {
+  if (hhmm is! String || !RegExp(timePattern).hasMatch(hhmm)) return null;
+  return int.parse(hhmm.substring(0, 2)) * 60 + int.parse(hhmm.substring(3));
+}
+
+/// The minutes of the week, as `[start, end)` ranges (Monday 00:00 is 0),
+/// that the time-of-day period on [days] from [from] to [to] covers; a
+/// Sunday night's ends past [weekMinutes], in the next week's Monday.
+/// Decision 47: a period across midnight belongs to the day it starts, so
+/// 平日 20:00–08:00 runs from Friday 20:00 to Saturday 08:00, and not from
+/// Monday 00:00. A period without times covers its days whole; one with
+/// invalid times (an editor's draft) covers nothing.
+List<(int, int)> feePeriodSpans(Object? days, String? from, String? to) {
+  if (days == null) return const [];
+  final mask = _dayMask(days);
+  final allDay = from == null && to == null;
+  final start = _clockOf(from), end = _clockOf(to);
+  if (!allDay && (start == null || end == null || start == end)) {
+    return const [];
+  }
+  return [
+    for (var d = 0; d < 7; d++)
+      if (mask & (1 << d) != 0)
+        if (allDay)
+          (d * 1440, d * 1440 + 1440)
+        else if (start! < end!)
+          (d * 1440 + start, d * 1440 + end)
+        else
+          (d * 1440 + start, d * 1440 + 1440 + end),
+  ];
+}
+
+/// Which minutes of the week the periods cover, as [feePeriodSpans] reads
+/// each one (decision 47).
+List<bool> feeWeekCoverage(
+  Iterable<({Object? days, String? from, String? to})> periods,
+) {
+  final covered = List.filled(weekMinutes, false);
+  for (final p in periods) {
+    for (final (start, end) in feePeriodSpans(p.days, p.from, p.to)) {
+      covered.fillRange(start, end.clamp(0, weekMinutes), true);
+      if (end > weekMinutes) covered.fillRange(0, end - weekMinutes, true);
+    }
+  }
+  return covered;
 }
 
 /// Pieces of the [feeNoteOf] sentences, so the notice board

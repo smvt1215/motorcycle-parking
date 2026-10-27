@@ -70,6 +70,10 @@ const noticeConflictReason = '公告不一致，請以現場公告為準';
 const communityUncheckedReason = '社群資訊尚未查核或可能過時，請確認現場';
 const lotUncheckedReason = '場站資料未確認開放目前車種，請以入口公告為準';
 
+/// A heavy bike on a heavy-bike or car bay after the city rule ended
+/// (decision 44).
+const lawfulReason = '大型重機依法可停此格位，請勿超出格線';
+
 /// `YYYY-MM-DD` of [time] in Taiwan, the day `expires_on` is compared with,
 /// as `(now() at time zone 'Asia/Taipei')::date` in SQL.
 String taipeiDay(DateTime time) =>
@@ -137,11 +141,19 @@ RuleVerdict _single(CityRule rule, SpaceType kind, String district) {
   );
 }
 
+/// Bays the law opens to [rule]'s vehicle whatever a local notice says
+/// (§3.2 step 1): a heavy bike on a heavy-bike bay or a car bay.
+bool _lawful(CityRule rule, SpaceType kind) =>
+    rule.vehicle == VehicleType.heavy &&
+    (kind == SpaceType.heavyOnly || kind == SpaceType.car);
+
 /// What [rules] — the rules of one city and vehicle, already matched —
 /// say about the street bay [kind] in [district] at [now] (§3.2 step 2).
-/// Dates are Taiwan's, as in SQL. Rules not yet in force are ignored; expired ones count only when no
-/// other is in force, and then the answer is [RuleVerdictKind.expired],
-/// never another rule's. Rules in force that disagree are a
+/// Dates are Taiwan's, as in SQL. Rules not yet in force are ignored;
+/// expired ones count only when no other is in force, and then the answer
+/// is [RuleVerdictKind.expired], never another rule's — except on a bay the
+/// law opens to the vehicle, which the expired rules still judge as before
+/// they ended (decision 44). Rules in force that disagree are a
 /// [RuleVerdictKind.conflict].
 RuleVerdict ruleVerdict(
   Iterable<CityRule> rules,
@@ -156,10 +168,14 @@ RuleVerdict ruleVerdict(
   if (started.isEmpty) {
     return const RuleVerdict(RuleVerdictKind.noRule, noRuleReason);
   }
-  final current = [
+  var current = [
     for (final r in started)
       if (!ruleExpired(r, now)) r,
   ];
+  // Decision 44: an ended rule voids only what it opened. A bay the law
+  // opens to its vehicle (§3.2 step 1) is judged as before the rule ended.
+  final lawful = current.isEmpty && started.every((r) => _lawful(r, kind));
+  if (lawful) current = started;
   if (current.isEmpty) {
     return RuleVerdict(
       RuleVerdictKind.expired,
@@ -172,6 +188,10 @@ RuleVerdict ruleVerdict(
   if (verdicts.every(
     (v) => v.kind == first.kind && v.restriction == first.restriction,
   )) {
+    // The rule no longer says it; the law does.
+    if (lawful && first.kind == RuleVerdictKind.open) {
+      return RuleVerdict(first.kind, lawfulReason, rule: first.rule);
+    }
     return first;
   }
   return const RuleVerdict(RuleVerdictKind.conflict, noticeConflictReason);
@@ -347,6 +367,18 @@ void _rateGaps(Map<Object?, Object?> rate, Set<String> gaps) {
       if (visits >= 2 && !rate.containsKey('cross_period')) {
         gaps.add('跨時段如何計費');
       }
+      // A time no period covers is unconfirmed (§2.2), as a posted one is
+      // (#155 item 17); days are the start day's (decision 47).
+      final covered = feeWeekCoverage([
+        for (final p in periods)
+          if (p case final Map<Object?, Object?> m)
+            (
+              days: m['days'],
+              from: m['from'] as String?,
+              to: m['to'] as String?,
+            ),
+      ]);
+      if (covered.contains(false)) gaps.add('部分時段費率');
   }
 }
 
@@ -691,6 +723,24 @@ ParkingDecision _street(
     return done(EligibilityStatus.unverified, communityUncheckedReason);
   }
 
+  // A shared car bay opens to scooters only in the slots its notice names
+  // (§7 item 1), whatever else limits it (#155 item 16); heavy bikes park
+  // on car bays by law, shared or not.
+  final shareSlots = carShare && vehicle == VehicleType.scooter
+      ? noticeHolds
+            ? _slotsFor(c, vehicle)
+            : const <ScheduleSlot>[]
+      : null;
+  if (shareSlots != null && shareSlots.isEmpty) {
+    return done(
+      EligibilityStatus.unverified,
+      noticeHolds
+          ? '公告沒有列出${vehicle.label}的開放時段，請看現場牌面'
+          : _expiredNoticeReason(c.basis!, day),
+      gaps: [DecisionGap.scheduleUnknown],
+    );
+  }
+
   ParkingDecision result;
   final heavyShare =
       vehicle == VehicleType.heavy && c.share == ShareKind.scooterHeavy;
@@ -713,19 +763,8 @@ ParkingDecision _street(
           : null,
       by: BasisKind.law,
     );
-  } else if (carShare && vehicle == VehicleType.scooter) {
-    // A shared car bay opens to scooters only in the slots its notice names
-    // (§7 item 1); heavy bikes park on car bays by law, shared or not.
-    final slots = noticeHolds ? _slotsFor(c, vehicle) : const <ScheduleSlot>[];
-    if (slots.isEmpty) {
-      return done(
-        EligibilityStatus.unverified,
-        noticeHolds
-            ? '公告沒有列出${vehicle.label}的開放時段，請看現場牌面'
-            : _expiredNoticeReason(c.basis!, day),
-        gaps: [DecisionGap.scheduleUnknown],
-      );
-    }
+  } else if (shareSlots != null) {
+    final slots = shareSlots;
     return done(
       EligibilityStatus.conditional,
       [
@@ -766,7 +805,12 @@ ParkingDecision _street(
           first.reason,
           restriction: first.restriction,
           more: [
-            if (v.rule case final rule?)
+            // An ended rule a lawful bay is still judged by (decision 44)
+            // is not its basis any more: the law is.
+            if (v.rule case final rule?
+                when v.kind != RuleVerdictKind.expired && ruleExpired(rule, at))
+              const DecisionBasis(BasisKind.law)
+            else if (v.rule case final rule?)
               DecisionBasis(
                 BasisKind.cityRule,
                 rule: rule,
