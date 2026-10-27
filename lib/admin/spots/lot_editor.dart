@@ -216,6 +216,8 @@ class _PlanPicker extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         DropdownButtonFormField<String?>(
+          // Follows the draft: initialValue alone keeps a stale choice.
+          key: ValueKey('$label-$value-${plans.length}'),
           initialValue: known ? value : null,
           isExpanded: true,
           decoration: InputDecoration(
@@ -476,8 +478,9 @@ class LotAreasSection extends StatelessWidget {
             if (cards.isEmpty) Text('還沒有區域。', style: muted),
             for (final (i, card) in cards.indexed)
               _AreaCard(
-                // A renamed card is the same card; key by position.
-                key: ValueKey('area-$i-${spots.formSeq}'),
+                // A renamed card is the same card, so key by position; start
+                // over when zones come or go, as the cards shift then.
+                key: ValueKey('area-$i-${spots.formSeq}-${zones.length}'),
                 index: i,
                 card: card,
                 spots: spots,
