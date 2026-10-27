@@ -12,6 +12,7 @@ Future<void> showSpaceTypeSheet(
   BuildContext context, {
   required SpaceKind? value,
   required Map<SpaceKind?, int> counts,
+  Map<SpaceKindGroup, int> groupCounts = const {},
   required ValueChanged<SpaceKind?> onChanged,
 }) => showAdaptiveSheet<void>(
   context,
@@ -37,6 +38,7 @@ Future<void> showSpaceTypeSheet(
       SpaceKindList(
         value: value,
         counts: counts,
+        groupCounts: groupCounts,
         onChanged: (option) {
           onChanged(option);
           Navigator.pop(ctx);
@@ -56,6 +58,7 @@ class SpaceKindList extends StatefulWidget {
     required this.value,
     required this.onChanged,
     this.counts,
+    this.groupCounts = const {},
     this.followUp,
     this.keyPrefix = 'space',
   });
@@ -64,6 +67,11 @@ class SpaceKindList extends StatefulWidget {
 
   /// Spots of each kind in the map view (the filter); null shows none.
   final Map<SpaceKind?, int>? counts;
+
+  /// Distinct spots of each group in the map view, shown while it is
+  /// folded: a 普大共用 bay is also a toll or free one, so the kinds' counts
+  /// do not add up to it.
+  final Map<SpaceKindGroup, int> groupCounts;
   final Widget? followUp;
 
   /// Prefix of each row's widget key, for tests.
@@ -123,7 +131,7 @@ class _SpaceKindListState extends State<SpaceKindList> {
                             child: Text(
                               counts == null
                                   ? group.hint
-                                  : '${group.kinds.fold(0, (n, k) => n + (counts[k] ?? 0))}',
+                                  : '${widget.groupCounts[group] ?? 0}',
                               textAlign: TextAlign.end,
                               style: text.bodyMedium?.copyWith(
                                 color: colors.onSurfaceVariant,
