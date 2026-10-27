@@ -562,7 +562,7 @@ ParkingDecision decideParking(
       when closure.stateOn(at) == ClosureState.active) {
     return ParkingDecision(
       EligibilityStatus.notAllowed,
-      '${closure.reason.label}，暫時不能停',
+      '${closure.reason.label}期間暫停開放',
       basis: [source],
       price: priceAnswer(spot.fee?.toJson(), vehicle, legacyText: spot.feeNote),
     );

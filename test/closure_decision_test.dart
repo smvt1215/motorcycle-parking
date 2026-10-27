@@ -41,7 +41,7 @@ void main() {
       now: now,
     );
     expect(active.status, EligibilityStatus.notAllowed);
-    expect(active.reason, '施工中，暫時不能停');
+    expect(active.reason, '施工中期間暫停開放');
     final expired = decideParking(
       spot(
         SpotClosure(
