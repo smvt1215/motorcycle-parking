@@ -341,10 +341,11 @@ DateTime? currentVerification(
 
 /// The 確認狀態 rows of the data section (#141, decisions 27 and 30): one
 /// row per kind among DESIGN.md's twelve fields 1–9 that an administrator
-/// confirmed, 「停放車種・管理員確認，2026-10-25」. Only 停放車種 is
-/// recorded so far; the other kinds wait for the verification plan's P2,
-/// so they are not listed rather than shown with made-up states. Empty
-/// when nothing is confirmed.
+/// confirmed, 「停放車種・管理員確認，2026-10-25」, newest first: the
+/// details show the first and fold the rest under 「還有 N 項」
+/// (decision 52). Only 停放車種 is recorded so far; the other kinds wait
+/// for the verification plan's P2, so they are not listed rather than
+/// shown with made-up states. Empty when nothing is confirmed.
 List<String> confirmationLines(ParkingSpot spot, {DateTime? now}) {
   if (spot.isOfficial) return const [];
   final checked = [
@@ -367,6 +368,7 @@ List<String> confirmationLines(ParkingSpot spot, {DateTime? now}) {
       lapsed(checked[0].$1) == lapsed(checked[1].$1)) {
     return [line('停放車種', checked[0].$2, checked[0].$1)];
   }
+  checked.sort((a, b) => b.$2.compareTo(a.$2));
   return [
     for (final (vehicle, at) in checked)
       line('停放車種（${vehicle.label}）', at, vehicle),

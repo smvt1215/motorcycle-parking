@@ -81,6 +81,16 @@ const feeBacklog = [
   { source_id: communityId, kind: 'community', name: '中山北路二段路邊機車格', city: '臺北市', district: '中山區', space_type: 'paidMotorcycle', fee_note: '每 4 小時 30 元', updated_at: '2026-10-23T00:00:00Z', hidden: false },
   { source_id: '66666666-6666-4666-8666-666666666666', kind: 'community', name: '三重正義北路機車格', city: '新北市', district: '三重區', space_type: 'freeMotorcycle', fee_note: '請依現場公告', updated_at: '2026-10-23T00:00:00Z', hidden: true },
 ];
+// The official spot's edit history (#141): an accepted report, an import
+// and the import that created it.
+const spotHistory = [
+  { at: '2026-10-27T01:12:00Z', kind: 'report', action: 'resolve_report', actor_name: '小哲', created: false, note: '現場確認',
+    changes: [{ field: 'fee_note', before: '大型重機每小時 20 元', after: '大型重機每次 40 元，隔日另計' }],
+    report: { id: '55555555-5555-4555-8555-555555555559', status: 'accepted', reason: '收費：大型重機每次 40 元', note: '我昨天停過', created_at: '2026-10-26T01:00:00Z' } },
+  { at: '2026-10-20T07:40:00Z', kind: 'import', action: 'import_spot', actor_name: '小哲', created: false, source_name: '新北市政府',
+    changes: [{ field: 'address', before: '', after: '新北市板橋區中山路一段 161 號' }, { field: 'scooter_total', before: 120, after: 150 }] },
+  { at: '2026-09-30T02:00:00Z', kind: 'import', action: 'import_spot', created: true, changes: [] },
+];
 const hiddenSpot = { ...spot, id: '66666666-6666-4666-8666-666666666666', name: '三重正義北路機車格', city: '新北市', district: '三重區', space_type: 'freeMotorcycle', status: 'hidden' };
 
 function session(role, aal, factors = [factor]) {
@@ -218,6 +228,10 @@ function session(role, aal, factors = [factor]) {
               ...(official ? [{ ...officialSpot, id: `official:${officialId}`, source: 'official', status: 'confirmed', hidden: false }] : []),
               ...(hidden ? [{ ...hiddenSpot, source: 'community', hidden: true }] : []),
             ], headers: cors });
+          }
+          if (url.pathname === '/rest/v1/rpc/admin_spot_history') {
+            assert.equal(route.request().postDataJSON().p_source_id, `official:${officialId}`);
+            return route.fulfill({ json: spotHistory, headers: cors });
           }
           if (url.pathname === '/rest/v1/rpc/admin_upsert_spot') {
             // Verifying the stored vehicle access restates it unchanged.
@@ -379,6 +393,21 @@ function session(role, aal, factors = [factor]) {
           await waitText('官方點（新北市政府）');
           await page.screenshot({ path: path.join(output, `${name}-spot-form.png`) });
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} spot form scrolls sideways`);
+          // Its edit history (#141), at each size the history was checked at.
+          await page.getByRole('button', { name: '編輯紀錄', exact: true }).click();
+          await waitText('共 3 筆，最新在上');
+          await page.screenshot({ path: path.join(output, `${name}-spot-history.png`) });
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} spot history scrolls sideways`);
+          for (const size of mobile ? [{ width: 402, height: 874 }] : [{ width: 820, height: 1180 }]) {
+            await page.setViewportSize(size);
+            await page.waitForTimeout(800);
+            await page.screenshot({ path: path.join(output, `${name}-spot-history-${size.width}.png`) });
+            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} spot history scrolls sideways at ${size.width} px`);
+          }
+          await page.setViewportSize(mobile ? { width: 390, height: 844 } : { width: 1440, height: 960 });
+          await page.waitForTimeout(500);
+          await page.getByRole('button', { name: '返回點位', exact: true }).click();
+          await waitText('官方點（新北市政府）');
           // Its structured fee: the editor and the notice board riders read.
           {
             // The board reads as one node (its label and its rows) that

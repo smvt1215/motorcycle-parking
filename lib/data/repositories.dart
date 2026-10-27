@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 
 import '../core/address_search.dart';
 import '../models/parking.dart';
+import '../models/spot_history.dart';
 import '../domain/map_viewport.dart';
 import '../domain/eligibility.dart' show useParkingDecision;
 import '../domain/precheck.dart';
@@ -142,6 +143,19 @@ class ParkingRepository {
   }
 
   void addDemo(ParkingSpot spot) => (_demoSpots ??= []).add(spot);
+
+  /// The spot's latest public changes (`spot_history`, #141), newest
+  /// first; none without a backend (demo) or for a spot that has no
+  /// history there (TDX, hidden).
+  Future<List<HistoryEntry>> history(String spotId) async {
+    if (client == null) return const [];
+    return HistoryEntry.list(
+      await client!.rpc<dynamic>(
+        'spot_history',
+        params: {'p_source_id': spotId},
+      ),
+    );
+  }
 
   Future<String> _deviceId() async {
     final prefs = await SharedPreferences.getInstance();
