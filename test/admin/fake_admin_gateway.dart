@@ -12,6 +12,7 @@ import 'package:motorcycle_parking/core/town_lookup.dart';
 import 'package:motorcycle_parking/domain/location_check.dart';
 import 'package:motorcycle_parking/domain/map_viewport.dart';
 import 'package:motorcycle_parking/models/parking.dart';
+import 'package:motorcycle_parking/models/spot_history.dart';
 
 Factor factor(
   String id, {
@@ -454,6 +455,18 @@ class FakeAdminGateway implements AdminGateway {
           ),
     ];
   }
+
+  @override
+  Future<List<HistoryEntry>> spotHistory(String sourceId) async {
+    historyRequests.add(sourceId);
+    if (historyError case final e?) throw e;
+    return HistoryEntry.list(historyRows[sourceId] ?? const []);
+  }
+
+  /// `admin_spot_history` rows by spot.
+  Map<String, List<Map<String, dynamic>>> historyRows = {};
+  final historyRequests = <String>[];
+  Object? historyError;
 
   @override
   Future<SpotRecord?> spot(String sourceId) async {

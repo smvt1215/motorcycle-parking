@@ -4,6 +4,7 @@ import '../../core/geo.dart';
 import '../../data/app_store.dart';
 import '../../models/availability.dart';
 import '../../models/parking.dart';
+import '../../models/spot_history.dart';
 import '../../domain/availability_display.dart';
 import '../../domain/eligibility.dart';
 import '../../domain/eligibility_display.dart';
@@ -64,6 +65,20 @@ class _SpotSheetState extends State<SpotSheet> {
       (widget.onClose ?? () => Navigator.pop(context))();
 
   final extent = DraggableScrollableController();
+
+  /// The spot's latest public changes (#141), read once per spot.
+  late Future<List<HistoryEntry>> history = _history();
+
+  Future<List<HistoryEntry>> _history() => widget.store.parking
+      .history(widget.spot.id)
+      .catchError((Object _) => const <HistoryEntry>[]);
+
+  @override
+  void didUpdateWidget(SpotSheet old) {
+    super.didUpdateWidget(old);
+    if (old.spot.id != widget.spot.id) history = _history();
+  }
+
   Offset? start;
   bool dismissGesture = false;
   bool closing = false;
@@ -351,20 +366,14 @@ class _SpotSheetState extends State<SpotSheet> {
                                   label: '資料來源',
                                   value: sourceSummary(spot, demo: store.demo),
                                 ),
-                                _DetailField(
-                                  label: '更新時間',
-                                  value: spot.updatedAt == null
-                                      ? '未提供'
-                                      : formatSpotTime(spot.updatedAt!),
-                                ),
                                 if (!spot.isOfficial)
-                                  _DetailField(
-                                    label: '確認狀態',
-                                    value: switch (confirmationLines(spot)) {
-                                      final lines when lines.isEmpty => '尚未確認',
-                                      final lines => lines.join('\n'),
-                                    },
+                                  _ConfirmationField(
+                                    lines: confirmationLines(spot),
                                   ),
+                                _LatestUpdateField(
+                                  spot: spot,
+                                  history: history,
+                                ),
                                 if (sourceUri != null)
                                   TextButton(
                                     onPressed: () => runAction(ctx, () async {
@@ -1051,9 +1060,13 @@ class _DetailField extends StatelessWidget {
     required this.label,
     required this.value,
     this.secondary = '',
+    this.action,
   });
 
   final String label, value, secondary;
+
+  /// A link or toggle under the value (看更新紀錄, 還有 N 項).
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
@@ -1080,6 +1093,7 @@ class _DetailField extends StatelessWidget {
                 ?.copyWith(color: colors.onSurfaceVariant, height: 1.5),
           ),
         ],
+        ?action,
       ],
     );
     return Padding(
@@ -1102,6 +1116,165 @@ class _DetailField extends StatelessWidget {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+/// 確認狀態 (decision 52): the newest confirmation, the rest folded under
+/// 「還有 N 項」; 尚未確認 when there is none.
+class _ConfirmationField extends StatefulWidget {
+  const _ConfirmationField({required this.lines});
+  final List<String> lines;
+
+  @override
+  State<_ConfirmationField> createState() => _ConfirmationFieldState();
+}
+
+class _ConfirmationFieldState extends State<_ConfirmationField> {
+  bool expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final lines = widget.lines;
+    if (lines.length < 2) {
+      return _DetailField(label: '確認狀態', value: lines.firstOrNull ?? '尚未確認');
+    }
+    final colors = Theme.of(context).colorScheme;
+    return _DetailField(
+      label: '確認狀態',
+      value: (expanded ? lines : lines.take(1)).join('\n'),
+      action: Semantics(
+        expanded: expanded,
+        child: TextButton.icon(
+          key: const ValueKey('spot-confirmations-more'),
+          style: TextButton.styleFrom(
+            padding: EdgeInsets.zero,
+            minimumSize: const Size(48, 40),
+            alignment: AlignmentDirectional.centerStart,
+            foregroundColor: colors.primary,
+          ),
+          onPressed: () => setState(() => expanded = !expanded),
+          iconAlignment: IconAlignment.end,
+          icon: Icon(
+            expanded ? Icons.expand_less : Icons.expand_more,
+            size: 18,
+          ),
+          label: Text(expanded ? '收起' : '還有 ${lines.length - 1} 項'),
+        ),
+      ),
+    );
+  }
+}
+
+/// 最近更新 (#141, AppHistory): the latest change's kinds and date, and
+/// 「看更新紀錄」 for the last 10. Until the history answers, or where there
+/// is none, the spot's own update time stands in.
+class _LatestUpdateField extends StatelessWidget {
+  const _LatestUpdateField({required this.spot, required this.history});
+  final ParkingSpot spot;
+  final Future<List<HistoryEntry>> history;
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<List<HistoryEntry>>(
+    future: history,
+    builder: (context, snapshot) {
+      final entries = snapshot.data ?? const <HistoryEntry>[];
+      final latest = entries.firstOrNull;
+      return _DetailField(
+        label: '最近更新',
+        value: latest != null
+            ? '${latest.title(app: true)}，${formatSpotDate(latest.at)}'
+            : spot.updatedAt == null
+            ? '未提供'
+            : formatSpotTime(spot.updatedAt!),
+        action: latest == null
+            ? null
+            : TextButton(
+                key: const ValueKey('spot-history-open'),
+                style: TextButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(48, 40),
+                  alignment: AlignmentDirectional.centerStart,
+                ),
+                onPressed: () => showSpotHistory(context, spot, entries),
+                child: const Text('看更新紀錄'),
+              ),
+      );
+    },
+  );
+}
+
+/// The app's 更新紀錄 sheet (AppHistory): the latest 10 changes, each its
+/// kinds, what it changed to where the spot still holds it, and the date
+/// with where it came from. No reporter or administrator is named, and no
+/// before value is shown.
+Future<void> showSpotHistory(
+  BuildContext context,
+  ParkingSpot spot,
+  List<HistoryEntry> entries,
+) => showAdaptiveSheet<void>(
+  context,
+  (ctx) => ContentPage(
+    children: [
+      SheetTitle('更新紀錄'),
+      const SizedBox(height: 8),
+      for (final (i, entry) in entries.take(10).indexed)
+        _HistoryItem(
+          key: ValueKey('spot-history-$i'),
+          entry: entry,
+          official: spot.isOfficial,
+          last: i == math.min(entries.length, 10) - 1,
+        ),
+      const SizedBox(height: 12),
+      Text(
+        '只列最近 10 筆，不顯示回報者名稱。',
+        style: Theme.of(ctx).textTheme.bodySmall
+            ?.copyWith(color: Theme.of(ctx).colorScheme.onSurfaceVariant),
+      ),
+    ],
+  ),
+);
+
+class _HistoryItem extends StatelessWidget {
+  const _HistoryItem({
+    super.key,
+    required this.entry,
+    required this.official,
+    required this.last,
+  });
+  final HistoryEntry entry;
+  final bool official, last;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final summary = historySummary(entry);
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(
+        border: last
+            ? null
+            : Border(bottom: BorderSide(color: colors.outlineVariant)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            entry.title(app: true),
+            style: text.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          if (summary.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(summary, style: text.bodyMedium),
+          ],
+          const SizedBox(height: 2),
+          Text(
+            '${formatSpotDate(entry.at)}・${historySourceText(entry, official: official)}',
+            style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+          ),
+        ],
       ),
     );
   }
