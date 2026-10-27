@@ -16,6 +16,8 @@ import '../../ui/location_picker.dart';
 import '../admin_layout.dart';
 import '../admin_theme.dart';
 import '../review/review_page.dart' show ChangeBand, reviewCompactWidth;
+import 'closure_editor.dart';
+import 'lot_editor.dart';
 import 'spot_history_page.dart';
 import 'spot_map.dart';
 import 'spot_models.dart';
@@ -1210,7 +1212,23 @@ class _FormPane extends StatelessWidget {
                       collapsed: short,
                     ),
                   for (final f in fields.where((f) => f.group == group))
-                    if (f.input == SpotInput.fee)
+                    if (f.input == SpotInput.fee && spots.lot) ...[
+                      // A lot's rates are its plans (design §2.6).
+                      LotPlansSection(
+                        key: ValueKey(
+                          '${record.sourceId}-${spots.formSeq}-plans',
+                        ),
+                        spots: spots,
+                        error: errors['fee_plans'],
+                      ),
+                      LotAreasSection(
+                        key: ValueKey(
+                          '${record.sourceId}-${spots.formSeq}-zones',
+                        ),
+                        spots: spots,
+                        error: errors['parking_zones'],
+                      ),
+                    ] else if (f.input == SpotInput.fee)
                       _FeeField(
                         // A reloaded or discarded form starts the editor over.
                         key: ValueKey(
@@ -1256,6 +1274,23 @@ class _FormPane extends StatelessWidget {
                       !record.isNew &&
                       !record.official)
                     _VehicleVerification(spots: spots),
+                  // Temporary closure (#116; C6 canvas ClosureAdmin).
+                  if (group == SpotGroup.basic)
+                    ClosureSection(
+                      key: ValueKey(
+                        '${record.sourceId}-${spots.formSeq}-closure',
+                      ),
+                      value: (spots.draft['closure'] as Map?)
+                          ?.cast<String, dynamic>(),
+                      onChanged: spots.setClosure,
+                      now: DateTime.now(),
+                      changed: spots.changed('closure'),
+                      stored: record.values['closure_state'] as String?,
+                    ),
+                  if (group == SpotGroup.fees)
+                    if (record.values['fee_source_text']
+                        case final String source when source.trim().isNotEmpty)
+                      FeeSourceText(source),
                 ],
                 const SizedBox(height: 24),
                 ConstrainedBox(

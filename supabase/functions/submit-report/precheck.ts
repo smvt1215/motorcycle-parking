@@ -395,7 +395,10 @@ export function precheck(body: Json, current?: Json): PrecheckIssue[] {
     );
     if (
       goneFields.includes(String(body.field)) &&
-      Object.keys(proposed).some((k) => k !== 'hidden' && k !== 'status')
+      // A closure (#116) is what works or a closure suggest instead.
+      Object.keys(proposed).some((k) =>
+        k !== 'hidden' && k !== 'status' && k !== 'closure'
+      )
     ) out.push(issue('gone_with_changes', 'proposed'));
   }
   for (const { field, value, name } of texts(body)) {

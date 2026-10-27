@@ -278,6 +278,36 @@ python3 tool/export_rules.py --check || python3 tool/export_rules.py
 - **清除公開名稱**：詳情先列最新 50 個社群點，「載入更早的點位」以 `admin_user_spots(p_user, p_offset)` 分頁（依建立時間，清除名稱不會改變順序）；逐點以 `admin_clear_contributor_name`（#81）清除，原因選填、寫入稽核紀錄；清除後即使改名也不再顯示。停權後背景重新讀取停權紀錄時，若期間又有停權或清除操作，舊的讀取結果會被捨棄，不覆蓋較新的畫面狀態。
 - 測試：pgTAP `admin_users_test.sql`（一般使用者、無 `aal2` 的 admin、anon 被拒；搜尋與遮蔽；統計；只有 service role 能寫停權紀錄、稽核不可修改）；deno `admin-users/handler_test.ts`（非 admin、無 `aal2`、無 token 被拒且不呼叫 Auth；停權與解除寫稽核；稽核失敗還原；輸入驗證；不能停權自己或管理者）；widget test `test/admin/users_test.dart`。
 
+### C6b 點位表單計費規則與審核頁（stack C）
+
+依停放條件與費率畫布（AdminSpotForm、AdminReviewDiff、AdminSharedPlan）與設計文件 §2.6、§8.4，migration `202610270090_admin_spot_plans.sql`：
+
+- **讀取**：點位表單與審核頁改用 `admin_spot_rows(p_source_ids)`（管理員限定、最多 200 筆）讀完整欄位，包含 `fee_plans`、`fee_plan`、`fee_source_text`、`parking_zones`。`community_spots` 的欄位授權不變（規則名稱只給管理員看）。
+- **路外點位（`space_type = offStreet`）的費率改由計費規則管理**：
+  - 「計費規則」列出每條規則的名稱與 App 句子；新增、改名、改費率在對話框用共用 FeeEditor（手機全螢幕）。名稱空白時依車種與收費方式命名（同 `fee_plan_name()`）；最多 12 條、名稱 1–20 字且不重複。
+  - 仍被全場費率或分區引用的規則，刪除鈕停用並寫「N 個分區在用，先改掉引用」（決定 51）；伺服器回 `23503 fee plan in use` 時依 `detail` 顯示同一句。
+  - 「全場費率套用」選一條規則或不套用；改選時一併送 `fee` 與它的句子。只改規則內容時不送全場 `fee`／`fee_note`，由 `fee_plans_sync()` 同步（避免被當成不認得規則的寫入而移除未使用的規則）。
+  - 「區域與格位」：同名同 `area` 的分區合成一張區域卡；每種格位可選格位（機車格／重機格／汽車格）、用途（普大共用、汽機共用）、收費格／免費格、兩個車種的可停三段按鈕，以及計費規則（一併帶上規則的費率）。分區條件一律寫 `allow`，`access` 由 `legacyAccess()` 推導（決定 32），推導不出時不能儲存並說明原因。依據（公告網址、生效日、到期日）寫在區域卡，套用到卡內每種格位；既有的限時、共用時段照原樣保留。另有「分區資料已涵蓋全場」（`zones_complete`）。
+  - 路邊點位維持單一 FeeEditor，規則由觸發器自動管理。
+- **原始公告文字**：`fee_source_text` 有值時在費率區唯讀顯示，App 不顯示（設計 §7 第 12 項）。
+- **比照來源沒有費率**（#155 第 13 項）：`Fee.followGap` 由 FeeEditor、點位表單 `validateSpotField` 與審核頁 `validatePatch` 共用，汽車未確認時大型重機比照汽車不能儲存或套用。
+- **審核頁**：
+  - 費率差異逐車種列出合併後的結果：「維持目前」、新費率＋「有變更」、「改成未確認」＋「會清除」，狀態用文字與底線表示，不只靠顏色。
+  - 顯示預檢標記 `risk_flags`（#158）與附上的公告連結 `evidence_url`；`stored_pair_hold` 的規則寫明「建議只改費率（或條件），和點位目前的條件（或費率）不一致」，提醒一併確認（#155 第 19、20 項）。
+  - 全場費率引用的規則也被分區使用時，套用前詢問「只改全場費率」（預設，另開一條規則，名稱可改）或「改這條規則」（全部跟著改），確認鈕寫明套用到哪裡。`admin_resolve_report` 因此接受 `fee_plans`／`fee_plan`；這兩個鍵是管理員推導的值，不參與 `base_spot` 衝突檢查。
+
+### C6b 暫時封閉與地圖上限（#116、#133）
+
+依暫時封閉畫布（Main、ClosureDetail，決定 41）與 C6 畫布 ClosureAdmin、MapLimit，migration `202610270091_spot_closures.sql`：
+
+- **資料**：兩張點位表加 `closure`：`{reason: works|closed, since, until?, basis?}`（`valid_closure()`）。沒有 `until` 時 `since` 後 7 天到期；`closure_state()` 依臺灣日期回 `active`／`expired`。`public_spots`（v3／v2／原版 viewport 同步帶出）、`official_viewport_spots_v3` 與 `admin_spot_rows()` 帶 `closure` 與 `closure_state`，App 與管理站讀伺服器的判斷。到期後點位照常顯示並請車友確認，不刪除點位。
+- **App 回報**：「這裡已經不能停車」的原因改成膠囊（選中只換底色與框線、不加勾勾、寬度不變）；施工中與暫時封閉改問「預計什麼時候恢復？」（不知道／有寫日期＋日期選擇器），取代 40 字自由文字，送 `proposed.closure = {reason, until?}`（`validate.ts` 與預檢 `gone_with_changes` 允許）。
+- **停放判斷**：生效中的封閉讓 `decideParking()` 判為不可停（原因「施工中期間暫停開放」），地圖標記、排序與詳情資格一致；到期後恢復原判斷。改為官方點時封閉資料一併搬過去。
+- **App 詳情**：到期前「施工中／暫時封閉，暫時不能停」與預計恢復日期或「恢復時間未知」；過期後「原定…恢復・現場是否已恢復，還沒有人確認」與「已經可以停」（送 `field: reopened`、`proposed.closure = null`）／「還是不能停」（開啟「這裡已經不能停車」）。
+- **管理站**：點位表單「暫時無法停車」區：原因（沒有／施工中／暫時封閉）、預計恢復日期（選填，可清除）、到期說明、依據、生效中／待確認標籤；過期時「延長到…」與「標記已恢復」。審核頁新增「暫時無法停車」欄位：騎士的建議套用時開始日為回報日（臺灣時間）、依據為「車友回報，附「說明」」，可在修改後套用調整；`admin_upsert_spot`、`admin_resolve_report` 接受 `closure`。
+- **全站選項膠囊**：`OptionPill` 取代規則頁行政區預覽、App 共用時段的 ChoiceChip，FeeEditor 的收費方式膠囊也改用它（選中不再加粗字，寬度不變）。駁回原因維持附說明的單選清單。
+- **地圖上限（#133）**：`admin_viewport_spots_v2()` 以單一 jsonb 回傳 `{rows, counts, truncated}`，不受 API `max_rows` 截斷；全部最多 1,000 筆、每層最多 500 筆，依社群點、官方點、已隱藏的順序填入。截斷時地圖顯示「這個範圍的點位太多，只顯示 1,000 個」、各圖層數量（未全部載入時寫「已顯示／總數」，一筆都沒載入寫「未載入」）與「放大地圖或關掉一個圖層」。後端尚未更新時退回舊 RPC，回 1,000 列也視為截斷。
+
 ### 點位編輯紀錄（#141）
 
 - 依 C6 畫布 EditHistory／AppHistory 與決定 52；migration `202610270100_spot_history.sql`，不新增資料表，稽核紀錄仍是唯一紀錄。

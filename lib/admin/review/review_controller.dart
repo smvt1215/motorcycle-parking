@@ -30,10 +30,15 @@ class PendingDecision {
     this.note, {
     this.force = false,
     this.resolutionKind,
-  });
+    Map<String, dynamic>? draft,
+  }) : draft = draft ?? patch;
   final ReviewReport report;
   final ReviewDecision decision;
   final Map<String, dynamic> patch;
+
+  /// The edit as the admin left it, before a shared plan choice reshaped
+  /// [patch]; an undo or a failed write returns to it.
+  final Map<String, dynamic> draft;
   final String note;
 
   /// Why the report is rejected; required for [ReviewDecision.reject].
@@ -298,8 +303,11 @@ class ReviewController extends ChangeNotifier {
     String note, {
     bool force = false,
     ResolutionKind? resolutionKind,
+    Map<String, dynamic> Function(Map<String, dynamic>)? adjust,
   }) async {
-    final (patch, problem) = patchFor(report, decision);
+    final (wired, problem) = patchFor(report, decision);
+    // How a fee reaches a shared plan, as the admin chose (design §2.6).
+    final patch = problem == null && adjust != null ? adjust(wired) : wired;
     if (decision == ReviewDecision.reject && resolutionKind == null) {
       error = '請先選擇駁回原因。';
       _notify();
@@ -332,6 +340,7 @@ class ReviewController extends ChangeNotifier {
       note,
       force: force,
       resolutionKind: resolutionKind,
+      draft: decision == ReviewDecision.acceptEdited ? {...draft} : null,
     );
     editingId = null;
     draft = {};
@@ -350,9 +359,9 @@ class ReviewController extends ChangeNotifier {
     pending = null;
     // Undoing an edited decision returns to the edit, values intact.
     if (held.decision == ReviewDecision.acceptEdited) {
-      savedDrafts[held.report.id] = held.patch;
+      savedDrafts[held.report.id] = held.draft;
       editingId = held.report.id;
-      draft = held.patch;
+      draft = held.draft;
     }
     _notify();
     return held.report.id;
@@ -422,10 +431,10 @@ class ReviewController extends ChangeNotifier {
       // An edited decision that did not land keeps its values, so a retry
       // (or a forced one after a conflict) sends what the admin wrote.
       if (held.decision == ReviewDecision.acceptEdited) {
-        savedDrafts[held.report.id] = held.patch;
+        savedDrafts[held.report.id] = held.draft;
         if (editingId == null) {
           editingId = held.report.id;
-          draft = held.patch;
+          draft = held.draft;
         }
       }
       final message = e is PostgrestException ? e.message : '';

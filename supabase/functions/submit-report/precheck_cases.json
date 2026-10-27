@@ -432,6 +432,21 @@
       "expect": []
     },
     {
+      "name": "works with a reopening date pass as a closure (#116)",
+      "body": {
+        "action": "flag",
+        "field": "gone",
+        "proposed": {
+          "closure": {
+            "reason": "works",
+            "until": "2026-11-30"
+          }
+        },
+        "reason": "這裡已經不能停車：施工中；預計恢復：11 月 30 日（一）"
+      },
+      "expect": []
+    },
+    {
       "name": "placeholder names",
       "body": {
         "action": "create",

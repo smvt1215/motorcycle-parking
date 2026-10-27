@@ -657,7 +657,10 @@ List<PrecheckIssue> precheck(
     }
     out.addAll(_shareFree(proposed['condition'], 'proposed.condition.charge'));
     if (_goneFields.contains(body['field']) &&
-        proposed.keys.any((k) => k != 'hidden' && k != 'status')) {
+        // A closure (#116) is what works or a closure suggest instead.
+        proposed.keys.any(
+          (k) => k != 'hidden' && k != 'status' && k != 'closure',
+        )) {
       out.add(_issue('gone_with_changes', 'proposed'));
     }
   }

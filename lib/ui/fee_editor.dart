@@ -4,6 +4,7 @@ import '../models/fee.dart';
 import '../models/parking_condition.dart'
     show feeContract, scheduleWeekdays, timePattern;
 import 'fee_board.dart';
+import 'option_pill.dart';
 import 'vehicle_marks.dart';
 
 export 'vehicle_marks.dart' show FeeVehicle;
@@ -53,17 +54,10 @@ Fee _known(Fee fee) {
 }
 
 /// The vehicle a heavy follow names when its rate is not known (design
-/// §8.6): such a follow would read 費率未提供, so it is not stored.
-String? _followGap(Fee fee) {
-  final heavy = fee.heavy;
-  if (heavy == null || !heavy.mode.follows) return null;
-  final source = heavy.mode == FeeMode.sameAsCar
-      ? FeeVehicle.car
-      : FeeVehicle.scooter;
-  if (_known(fee).textOf(source.wire) != null) return null;
-  final name = source == FeeVehicle.car ? '汽車' : '機車';
-  return '大型重機比照$name費率，但還沒填$name費率。請填$name費率，或改選其他收費方式。';
-}
+/// §8.6): such a follow would read 費率未提供, so it is not stored. The check
+/// lives on [Fee.followGap] so forms outside the editor's [Form] block it too.
+String? _followGap(Fee fee) =>
+    _known(fee).copyWith(heavy: () => fee.heavy).followGap;
 
 /// Whether a heavy bike has a vehicle to follow: one whose rate is known.
 bool _canFollow(Fee fee) {
@@ -493,7 +487,7 @@ class _Preview extends StatelessWidget {
   }
 }
 
-/// A pill choice (canvas 收費方式): 40 px tall inside a 48 px target.
+/// A pill choice (canvas 收費方式), the site-wide [OptionPill].
 class _Pill extends StatelessWidget {
   const _Pill({
     super.key,
@@ -508,62 +502,8 @@ class _Pill extends StatelessWidget {
   final VoidCallback? onTap;
 
   @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final enabled = onTap != null;
-    return Semantics(
-      button: true,
-      selected: selected,
-      enabled: enabled,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(24),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: selected ? colors.primaryContainer : colors.surface,
-                border: Border.all(
-                  color: selected ? colors.primary : colors.outlineVariant,
-                ),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 40),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  // As wide as its label; long labels wrap at 320 px.
-                  child: Align(
-                    widthFactor: 1,
-                    child: Text(
-                      label,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: selected
-                            ? FontWeight.w700
-                            : FontWeight.w400,
-                        color: selected
-                            ? colors.onPrimaryContainer
-                            : enabled
-                            ? colors.onSurface
-                            : colors.onSurface.withValues(alpha: .38),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) =>
+      OptionPill(label: label, selected: selected, onTap: onTap);
 }
 
 /// A labelled group of pills; [values] pairs each choice with its label.

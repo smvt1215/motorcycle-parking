@@ -31,6 +31,23 @@ const cityRules = require('../assets/rules/parking_rules.json').map(rule => ({ d
 const officialSpot = { ...spot, id: officialId, name: '新北市政府行政大樓地下停車場', city: '新北市', district: '板橋區', lat: 25.0124, lng: 121.4651, space_type: 'offStreet', heavy_allowed: true, source_name: '新北市政府', hidden: false,
   address: '新北市板橋區中山路一段 161 號', facility_type: 'underground', parking_access: 'scooterHeavy', source_url: 'https://example.test/notice', source_id: 'ntpc-001', effective_date: '2026-01-01', license_note: '',
   fee: { scooter: { mode: 'hourly', amount: 20, per_minutes: 60 }, heavy: { mode: 'same_as_scooter' } }, fee_note: '機車每小時 20 元；大型重機每小時 20 元' };
+// A lot's plans and zones (C6b): one area with two bays, the whole fee on
+// the first plan, and the imported notice text shown read-only.
+{
+  const motorcycle = { scooter: { mode: 'hourly', amount: 20, per_minutes: 60 }, heavy: { mode: 'same_as_scooter' } };
+  const heavy = { heavy: { mode: 'per_visit', amount: 40 } };
+  Object.assign(officialSpot, {
+    fee_plans: [{ id: 'p1', name: '機車計時', fee: motorcycle }, { id: 'p2', name: '重機計次', fee: heavy }],
+    fee_plan: 'p1', zones_complete: false, fee_source_text: '機車計時20元;重機計次40元;',
+    parking_zones: [
+      { name: 'B1 機車區', area: 'motorcycle', access: 'scooterHeavy', fee_plan: 'p1', fee: motorcycle,
+        condition: { bay: 'motorcycle', use: 'share', share: 'scooter_heavy', charge: 'toll', allow: { scooter: true, heavy: true },
+          basis: { source_url: 'https://example.test/notice', expires_on: '2026-12-31' } } },
+      { name: 'B1 機車區', area: 'motorcycle', access: 'heavyOnly', fee_plan: 'p2', fee: heavy,
+        condition: { bay: 'heavy', use: 'usual', charge: 'toll', allow: { scooter: false, heavy: true } } },
+    ],
+  });
+}
 const riderId = '77777777-7777-4777-8777-777777777777';
 const rider = { id: riderId, display_name: '夜騎小哲', email_masked: 'ri***@example.test', providers: ['google'], is_admin: false,
   created_at: '2026-09-01T00:00:00Z', last_sign_in_at: '2026-10-24T01:00:00Z', banned_until: null, deleted: false, reports_30d: 12, last_report_at: '2026-10-24T02:00:00Z' };
@@ -175,6 +192,14 @@ function session(role, aal, factors = [factor]) {
             if (url.searchParams.get('select')?.includes('source_id')) return route.fulfill({ json: reports, headers: cors });
             return route.fulfill({ body: '', headers: { ...cors, 'content-range': '0-2/3' } });
           }
+          // The spot form and the review page read every column here (C6b).
+          if (url.pathname === '/rest/v1/rpc/admin_spot_rows') {
+            const ids = route.request().postDataJSON().p_source_ids;
+            return route.fulfill({ json: [
+              ...(ids.includes(communityId) ? [{ ...communitySpot, source_id: communityId }] : []),
+              ...(ids.includes(`official:${officialId}`) ? [{ ...officialSpot, source_id: `official:${officialId}` }] : []),
+            ], headers: cors });
+          }
           if (url.pathname === '/rest/v1/community_spots') {
             if ((route.request().headers().accept || '').includes('vnd.pgrst.object')) return route.fulfill({ json: { ...communitySpot, ...verified }, headers: cors });
             return route.fulfill({ json: url.searchParams.get('status') === 'eq.hidden' ? [hiddenSpot] : [{ ...communitySpot, ...verified }], headers: cors });
@@ -198,6 +223,20 @@ function session(role, aal, factors = [factor]) {
               name: spot.name, city: spot.city, district: spot.district, address: spot.address, space_type: spot.space_type,
               state: spot === officialSpot ? 'visible' : spot.status, lat: spot.lat, lng: spot.lng, updated_at: spot.updated_at,
             })), headers: cors });
+          }
+          // #133: the layers as one value with their counts.
+          if (url.pathname === '/rest/v1/rpc/admin_viewport_spots_v2') {
+            const { p_community: community, p_official: official, p_hidden: hidden } = route.request().postDataJSON();
+            const rows = [
+              ...(community ? [{ ...communitySpot, source: 'community', hidden: false }] : []),
+              ...(official ? [{ ...officialSpot, id: `official:${officialId}`, source: 'official', status: 'confirmed', hidden: false }] : []),
+              ...(hidden ? [{ ...hiddenSpot, source: 'community', hidden: true }] : []),
+            ];
+            const counts = {};
+            if (community) counts.community = { shown: 1, total: 1 };
+            if (official) counts.official = { shown: 1, total: 1 };
+            if (hidden) counts.hidden = { shown: 1, total: 1 };
+            return route.fulfill({ json: { rows, counts, truncated: false }, headers: cors });
           }
           if (url.pathname === '/rest/v1/rpc/admin_viewport_spots') {
             const { p_community: community, p_official: official, p_hidden: hidden } = route.request().postDataJSON();
@@ -408,6 +447,37 @@ function session(role, aal, factors = [factor]) {
             await page.waitForTimeout(300);
             await page.screenshot({ path: path.join(output, `${name}-spot-fee.png`) });
             assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} fee editor scrolls sideways`);
+            // The lot's plans and area cards (C6b) on iPhone 16 Pro and on
+            // iPad Air portrait, then back to this pass's size.
+            const before = page.viewportSize();
+            const size = mobile ? { width: 402, height: 874 } : { width: 820, height: 1180 };
+            await page.setViewportSize(size);
+            await page.waitForTimeout(500);
+            const areas = page.getByText('區域與格位', { exact: true });
+            await page.mouse.move(size.width * (mobile ? 0.5 : 0.75), size.height * 0.5);
+            const inView = async () => {
+              const at = (await areas.count()) ? await areas.first().boundingBox() : null;
+              return at && at.y > 0 && at.y < size.height * 0.5;
+            };
+            // From the top of the form down: offscreen, Flutter drops a
+            // node's semantics, so its position cannot say which way to go.
+            for (let i = 0; i < 60; i++) await page.mouse.wheel(0, -200);
+            await page.waitForTimeout(300);
+            for (let i = 0; i < 80 && !(await inView()); i++) {
+              await page.mouse.wheel(0, 120);
+              await page.waitForTimeout(80);
+            }
+            if (!(await inView())) await page.screenshot({ path: path.join(output, `${name}-spot-areas-failure.png`) });
+            assert.ok(await inView(), `${name} area cards are reachable at ${size.width} px`);
+            await page.mouse.wheel(0, -360);
+            await page.waitForTimeout(300);
+            await page.screenshot({ path: path.join(output, `${name}-spot-plans-${size.width}.png`) });
+            await page.mouse.wheel(0, 360);
+            await page.waitForTimeout(300);
+            await page.screenshot({ path: path.join(output, `${name}-spot-areas-${size.width}.png`) });
+            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} lot form scrolls sideways at ${size.width} px`);
+            await page.setViewportSize(before);
+            await page.waitForTimeout(500);
           }
           // A community spot: verify its stored vehicle access as it is.
           if (mobile) {

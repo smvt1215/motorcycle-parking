@@ -7,6 +7,7 @@ import '../../core/town_lookup.dart';
 import '../../domain/location_check.dart';
 import '../../models/fee.dart';
 import '../admin_gateway.dart';
+import 'lot_models.dart';
 import 'spot_models.dart';
 
 class SpotsController extends ChangeNotifier {
@@ -70,13 +71,162 @@ class SpotsController extends ChangeNotifier {
   /// What [save] writes: changed fields of an existing spot, every filled
   /// field of a new one.
   Map<String, dynamic> get changes {
-    final changed = _edits;
+    var changed = _edits;
     // The draft holds a Fee while it is edited; the RPC takes its JSON.
     if (changed.containsKey('fee')) {
       changed['fee'] = (changed['fee'] as Fee?)?.toJson();
     }
+    // A lot's fee is its plans': see lotChanges.
+    if (lot && record?.isNew != true) {
+      changed = lotChanges(changed, draft);
+    } else if (lot) {
+      changed = lotChanges(changed, draft)
+        ..['fee_plans'] = jsonList(draft['fee_plans']).isEmpty
+            ? null
+            : draft['fee_plans'];
+      changed.removeWhere((k, v) => v == null);
+    }
     return changed;
   }
+
+  /// Whether the form edits a lot: its rates live in plans its zones and
+  /// its whole fee pick (design §2.6); a street spot keeps one fee.
+  bool get lot => draft['space_type'] == 'offStreet';
+
+  List<Json> get plans => jsonList(draft['fee_plans']);
+  List<Json> get zones => jsonList(draft['parking_zones']);
+
+  /// The spot's temporary closure (#116) as JSON, or none.
+  void setClosure(Json? closure) => set('closure', closure);
+
+  /// Adds a plan; returns its id.
+  String addPlan(String name, Fee fee) {
+    final id = nextPlanId(plans);
+    draft = {
+      ...draft,
+      'fee_plans': [
+        ...plans,
+        {'id': id, 'name': name.trim(), 'fee': fee.toJson()},
+      ],
+    };
+    _notify();
+    return id;
+  }
+
+  /// Renames or re-prices plan [id]; every zone using it follows, and the
+  /// whole fee when it uses it.
+  void setPlan(String id, String name, Fee fee) {
+    final next = [
+      for (final p in plans)
+        if (p['id'] == id)
+          {...p, 'name': name.trim(), 'fee': fee.toJson()}
+        else
+          p,
+    ];
+    draft = {
+      ...draft,
+      'fee_plans': next,
+      'parking_zones': zonesFollowingPlans(zones, next),
+      if (draft['fee_plan'] == id) ...{'fee': fee, 'fee_note': feeNoteOf(fee)},
+    };
+    _notify();
+  }
+
+  /// Removes plan [id]; the form allows it only when nothing uses it.
+  void deletePlan(String id) {
+    if (planInUse(id, draft['fee_plan'], draft['parking_zones']) != null) {
+      return;
+    }
+    draft = {
+      ...draft,
+      'fee_plans': [
+        for (final p in plans)
+          if (p['id'] != id) p,
+      ],
+    };
+    _notify();
+  }
+
+  /// The plan the whole lot's fee uses, or none.
+  void setTopPlan(String? id) {
+    final plan = planById(plans, id);
+    final fee = plan == null ? null : Fee.fromJson(plan['fee']);
+    draft = {
+      ...draft,
+      'fee_plan': plan == null ? null : id,
+      'fee': fee,
+      'fee_note': fee == null
+          ? (storedFee(record?.values['fee']) == null
+                ? record?.values['fee_note'] ?? feeNoteOf(null)
+                : feeNoteOf(null))
+          : feeNoteOf(fee),
+    };
+    _notify();
+  }
+
+  void setZone(int index, Json zone) {
+    final next = [...zones];
+    if (index < 0 || index >= next.length) return;
+    next[index] = zone;
+    draft = {...draft, 'parking_zones': next};
+    _notify();
+  }
+
+  /// Adds a zone; [like] gives it another zone's name and area (a second
+  /// bay in that area).
+  void addZone({Json? like}) {
+    draft = {
+      ...draft,
+      'parking_zones': [
+        ...zones,
+        like == null
+            ? {'name': '新區域'}
+            // A second bay in the area rests on the area's notice too.
+            : {
+                'name': like['name'],
+                'area': ?like['area'],
+                if (rawBasis(like) case final basis?)
+                  'condition': {'basis': basis},
+              },
+      ],
+    };
+    _notify();
+  }
+
+  void removeZone(int index) {
+    final next = [...zones];
+    if (index < 0 || index >= next.length) return;
+    next.removeAt(index);
+    draft = {...draft, 'parking_zones': next};
+    _notify();
+  }
+
+  /// Renames an area card, changes its area or its basis: every zone in it.
+  void setCard(
+    AreaCard card, {
+    String? name,
+    Object? area = _keep,
+    Object? basis = _keep,
+  }) {
+    final next = [...zones];
+    for (final i in card.indexes) {
+      var z = {...next[i]};
+      if (name != null) z['name'] = name;
+      if (area != _keep) {
+        if (area == null) {
+          z.remove('area');
+        } else {
+          z['area'] = area;
+        }
+      }
+      if (basis != _keep) z = zoneWithBasis(z, basis as Json?);
+      next[i] = z;
+    }
+    draft = {...draft, 'parking_zones': next};
+    _notify();
+  }
+
+  static const _keep = Object();
 
   /// [changes] as the draft holds them, a fee still a [Fee].
   Map<String, dynamic> get _edits {
@@ -90,6 +240,9 @@ class SpotsController extends ChangeNotifier {
         : changedValues(draft, {
             ...r.values,
             'fee': storedFee(r.values['fee']),
+            // As [_load] reads them, so an untouched lot is not dirty.
+            'parking_zones': r.values['parking_zones'] ?? const <Object?>[],
+            'zones_complete': r.values['zones_complete'] == true,
           });
   }
 
@@ -123,7 +276,7 @@ class SpotsController extends ChangeNotifier {
   bool get dirty => record?.isNew == true || changes.isNotEmpty;
 
   /// Marked as changed in the form; a new spot has nothing to compare to.
-  bool changed(String key) => record?.isNew != true && changes.containsKey(key);
+  bool changed(String key) => record?.isNew != true && _edits.containsKey(key);
 
   /// Errors of changed fields only, as the RPC checks only what it receives:
   /// an old imported row must not block an unrelated edit. A new spot has
@@ -136,6 +289,10 @@ class SpotsController extends ChangeNotifier {
           draft[f.key],
           fee: draft['fee'] is Fee ? draft['fee'] as Fee : null,
         ),
+    if (lot && (record!.isNew || _edits.containsKey('fee_plans')))
+      'fee_plans': ?plansProblem(plans),
+    if (lot && (record!.isNew || _edits.containsKey('parking_zones')))
+      'parking_zones': ?zones.map(zoneProblem).nonNulls.firstOrNull,
   };
 
   /// Errors the form shows: a fresh new spot is not scolded before a save.
@@ -339,6 +496,13 @@ class SpotsController extends ChangeNotifier {
           f.key: f.input == SpotInput.fee
               ? storedFee(loaded.values[f.key])
               : loaded.values[f.key],
+      if (loaded != null) ...{
+        'fee_plans': copyJson(loaded.values['fee_plans']),
+        'fee_plan': loaded.values['fee_plan'],
+        'parking_zones': copyJson(loaded.values['parking_zones'] ?? const []),
+        'zones_complete': loaded.values['zones_complete'] == true,
+        'closure': copyJson(loaded.values['closure']),
+      },
     };
   }
 
@@ -375,6 +539,17 @@ class SpotsController extends ChangeNotifier {
     if (message.contains('changed since it was opened')) {
       stale = true;
       return '這個點位在你開啟後已被其他人修改，尚未儲存。請重新載入後再編輯。';
+    }
+    // 202610270080: a plan the spot or a zone still uses cannot go.
+    if (message.contains('fee plan in use')) {
+      final which = planInUseRefusal((e as PostgrestException).details);
+      return '計費規則仍在使用，尚未儲存：${which ?? '有分區在用，先改掉引用'}。';
+    }
+    if (message.contains('invalid closure')) {
+      return '暫時無法停車的資料不正確，尚未儲存。請確認預計恢復日期不早於開始日期。';
+    }
+    if (message.contains('invalid parking_zones')) {
+      return '區域與格位的資料不正確，尚未儲存。請檢查每個格位的可停車種。';
     }
     return fallback;
   }
