@@ -169,7 +169,10 @@ const historyFieldGroups = <(String, List<String>)>[
   ('位置', ['lat', 'lng']),
   ('地址', ['city', 'district', 'address', 'road_segment']),
   ('格位類型', ['space_type', 'condition']),
-  ('場站與分區', ['facility_type', 'parking_zones', 'zones_complete']),
+  (
+    '場站與分區',
+    ['facility_type', 'facility_types', 'parking_zones', 'zones_complete'],
+  ),
   ('停放車種', ['scooter_allowed', 'heavy_allowed', 'parking_access']),
   ('車種確認', ['scooter_verified_at', 'heavy_verified_at']),
   ('收費', ['fee', 'fee_note', 'fee_plan', 'fee_plans', 'fee_source_text']),
@@ -204,6 +207,7 @@ const historyFieldLabels = <String, String>{
   'space_type': '格位',
   'condition': '停放條件',
   'facility_type': '場站型式',
+  'facility_types': '場站型式',
   'parking_zones': '分區',
   'zones_complete': '分區涵蓋全場',
   'scooter_allowed': '普通機車',
@@ -247,6 +251,9 @@ String historyValueText(String field, Object? value) {
       SpaceType.values.asNameMap()[v]?.label ?? v,
     ('facility_type', final String v) =>
       FacilityType.values.asNameMap()[v]?.label ?? v,
+    ('facility_types', final List<dynamic> v)
+        when facilityTypesOf(v).isNotEmpty =>
+      facilityTypesLabel(facilityTypesOf(v)),
     ('parking_access', final String v) =>
       ParkingAccess.values.asNameMap()[v]?.description ?? v,
     ('scooter_total', final num v) => '$v 格',
@@ -333,7 +340,10 @@ String historySummary(HistoryEntry entry) {
         parts.add(
           '${historyFieldLabel(c.field)}改為${historyValueText(c.field, v)}',
         );
-      case 'space_type' || 'facility_type' || 'parking_access':
+      case 'space_type' ||
+          'facility_type' ||
+          'facility_types' ||
+          'parking_access':
         parts.add('改為${historyValueText(c.field, v)}');
       case 'name' ||
               'address' ||

@@ -192,7 +192,7 @@ abstract class AdminGateway {
 /// The columns the hidden list shows; clients may select them.
 const _spotColumns =
     'id,name,lat,lng,city,district,space_type,fee_note,note,scooter_allowed,heavy_allowed,source_name,updated_at,'
-    'facility_type,parking_access,entrance_note,parking_guide,fee,condition';
+    'facility_type,facility_types,parking_access,entrance_note,parking_guide,fee,condition';
 final _uuid = RegExp(
   r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
   caseSensitive: false,

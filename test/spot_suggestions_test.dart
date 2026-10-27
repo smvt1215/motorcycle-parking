@@ -540,10 +540,7 @@ void main() {
   testWidgets('格位建議改為路外停車場時追問型式與分類', (tester) async {
     final store = await openSuggestion(tester, '格位類型');
     await pickKind(tester, SpaceKind.offStreet);
-    final surface = find.descendant(
-      of: find.byType(ChoiceField<FacilityType?>),
-      matching: find.text('平面'),
-    );
+    final surface = find.byKey(const ValueKey('facility-surface'));
     await tester.ensureVisible(surface);
     await tester.tap(surface);
     await tester.pumpAndSettle();
@@ -551,11 +548,11 @@ void main() {
     await submitSuggestion(tester, '送出修改建議');
     expect(store.submissions.single['proposed'], {
       'space_type': 'offStreet',
-      'facility_type': 'surface',
+      'facility_types': ['surface'],
     });
   });
 
-  for (final field in ['facility_type', 'parking_access']) {
+  for (final field in ['facility_types', 'parking_access']) {
     testWidgets('既有路外場站只修改 $field 也能送出，還原後恢復未變更提示', (tester) async {
       final lot = ParkingSpot.fromJson({
         ...spot.toJson(),
@@ -569,8 +566,8 @@ void main() {
       expect(find.text(error), findsOneWidget);
       expect(store.submissions, isEmpty);
 
-      final control = field == 'facility_type'
-          ? find.byType(ChoiceField<FacilityType?>)
+      final control = field == 'facility_types'
+          ? find.byType(FacilityField)
           : find.byType(ChoiceField<ParkingAccess?>);
       Future<void> choose(String label) async {
         await tester.scrollUntilVisible(
@@ -591,15 +588,21 @@ void main() {
         await tester.pumpAndSettle();
       }
 
-      await choose(field == 'facility_type' ? '平面' : '大型重機專用');
+      // A second lot type for the facility; ticking it off restores it.
+      await choose(field == 'facility_types' ? '路外平面停車場' : '大型重機專用');
       expect(find.text(error), findsNothing);
-      await choose(field == 'facility_type' ? '地下' : '普通機車與大型重機共用');
+      if (field == 'facility_types') {
+        expect(find.text('場站型式從「地下停車場」改成「地下、平面停車場」'), findsOneWidget);
+      }
+      await choose(field == 'facility_types' ? '路外平面停車場' : '普通機車與大型重機共用');
       expect(find.text(error), findsOneWidget);
-      await choose(field == 'facility_type' ? '平面' : '大型重機專用');
+      await choose(field == 'facility_types' ? '路外平面停車場' : '大型重機專用');
       await submitSuggestion(tester, '送出修改建議');
       expect(store.submissions.single['proposed'], {
         'space_type': 'offStreet',
-        field: field == 'facility_type' ? 'surface' : 'heavyOnly',
+        field: field == 'facility_types'
+            ? ['underground', 'surface']
+            : 'heavyOnly',
       });
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
@@ -759,7 +762,7 @@ void main() {
     expect(store.submissions.single['proposed'], {
       'space_type': 'paidMotorcycle',
       'condition': {'bay': 'motorcycle', 'use': 'usual', 'charge': 'toll'},
-      'facility_type': null,
+      'facility_types': null,
       'parking_access': null,
     });
     await tester.pumpWidget(const SizedBox.shrink());

@@ -13,6 +13,7 @@ import '../../ui/address_search_field.dart';
 import '../../ui/fee_board.dart';
 import '../../ui/fee_editor.dart';
 import '../../ui/location_picker.dart';
+import '../../ui/option_pill.dart';
 import '../admin_layout.dart';
 import '../admin_theme.dart';
 import '../review/review_page.dart' show ChangeBand, reviewCompactWidth;
@@ -1684,6 +1685,29 @@ class _FieldRow extends StatelessWidget {
             0 => false,
             _ => null,
           }),
+        );
+      case SpotInput.multiChoice:
+        final picked = value is List ? value! as List : const <Object?>[];
+        input = InputDecorator(
+          decoration: decoration,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final e in field.choices.entries)
+                OptionCheck(
+                  key: ValueKey('spot-${field.key}-${e.key}'),
+                  label: e.value,
+                  value: picked.contains(e.key),
+                  onChanged: (bool on) {
+                    final next = [
+                      for (final k in field.choices.keys)
+                        if (k == e.key ? on : picked.contains(k)) k,
+                    ];
+                    onChanged(next.isEmpty ? null : next);
+                  },
+                ),
+            ],
+          ),
         );
       case SpotInput.choice:
         input = DropdownButtonFormField<String?>(

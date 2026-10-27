@@ -193,6 +193,7 @@ const importFieldLabels = {
   'district': '行政區',
   'space_type': '格位類型',
   'facility_type': '場站類型',
+  'facility_types': '場站類型',
   'parking_access': '車種開放',
   'scooter_allowed': '普通機車',
   'heavy_allowed': '大型重機',

@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart' show setEquals;
+
 import '../../core/geo.dart';
 import '../../core/town_lookup.dart';
 import '../../data/app_store.dart';
@@ -362,7 +364,11 @@ class _SuggestionFormState extends State<_SuggestionForm> {
   ParkingCondition? get suggestedCondition => condition.conditionFor(kind);
 
   /// A lot's details when the suggested kind is a lot.
-  late FacilityType? facility = widget.spot.facilityType;
+  late Set<FacilityType> facilities = widget.spot.facilities.toSet();
+
+  /// Whether the suggested facility types differ from the spot's.
+  bool get facilitiesChanged =>
+      !setEquals(facilities, widget.spot.facilities.toSet());
   late ParkingAccess? access = widget.spot.access;
   late final entrance = TextEditingController(text: widget.spot.entranceNote);
   late final guide = TextEditingController(text: widget.spot.parkingGuide);
@@ -499,13 +505,16 @@ class _SuggestionFormState extends State<_SuggestionForm> {
         // A lot becoming a street bay drops what made it a lot, or the
         // table would still read it as off-street (§1.1 placement).
         if (!lotType && type != SpaceType.offStreet) ...{
-          if (spot.facilityType != null &&
-              spot.facilityType != FacilityType.roadside)
-            'facility_type': null,
+          // The set alone: the table clears facility_type with it.
+          if (spot.facilities.any((t) => t != FacilityType.roadside))
+            'facility_types': null,
           if (spot.access != null) 'parking_access': null,
         },
         if (lotType) ...{
-          if (facility != spot.facilityType) 'facility_type': facility?.name,
+          // The set alone (decision 58); the table keeps facility_type
+          // as its first.
+          if (facilitiesChanged)
+            'facility_types': facilityPayload(facilities)['facility_types'],
           if (access != spot.access) 'parking_access': access?.name,
         },
       };
@@ -598,11 +607,18 @@ class _SuggestionFormState extends State<_SuggestionForm> {
         if (suggestedCondition case final c?
             when kind == currentKind && c != currentCondition)
           line('停放條件', conditionSummary(currentCondition), conditionSummary(c)),
-        if (lotType && facility != spot.facilityType)
+        if (lotType && facilitiesChanged)
           line(
             '場站型式',
-            spot.facilityType?.label ?? '未提供',
-            facility?.label ?? '未確認',
+            spot.facilities.isEmpty
+                ? '未提供'
+                : facilityTypesLabel(spot.facilities),
+            facilities.isEmpty
+                ? '未確認'
+                : facilityTypesLabel([
+                    for (final t in FacilityType.values)
+                      if (facilities.contains(t)) t,
+                  ]),
           ),
         if (lotType && access != spot.access)
           line(
@@ -881,9 +897,9 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                       if (lotType) ...[
                         const SizedBox(height: 20),
                         FacilityField(
-                          value: facility,
+                          value: facilities,
                           onChanged: (v) => setState(() {
-                            facility = v;
+                            facilities = v;
                             state.didChange(type);
                           }),
                         ),

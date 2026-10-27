@@ -410,32 +410,50 @@ const lotFacilities = [
   FacilityType.surface,
 ];
 
-String _shortFacility(FacilityType type) => switch (type) {
-  FacilityType.multiStorey => '立體',
-  FacilityType.underground => '地下',
-  FacilityType.surface => '平面',
-  FacilityType.roadside => '路邊',
-};
-
-/// A lot's facility type, as a short single choice.
+/// A lot's facility types (decision 58): a lot may be built several ways
+/// (地下＋平面), so each is a check row (C6 canvas AppPatterns, pattern 3);
+/// none ticked is unconfirmed.
 class FacilityField extends StatelessWidget {
   const FacilityField({
     super.key,
     required this.value,
     required this.onChanged,
   });
-  final FacilityType? value;
-  final ValueChanged<FacilityType?> onChanged;
+  final Set<FacilityType> value;
+  final ValueChanged<Set<FacilityType>> onChanged;
   @override
-  Widget build(BuildContext context) => ChoiceField<FacilityType?>(
-    label: '場站型式',
-    value: value,
-    options: [
-      (null, '未確認'),
-      for (final type in lotFacilities) (type, _shortFacility(type)),
-    ],
-    onChanged: onChanged,
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 16),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('場站型式（可複選）', style: Theme.of(context).textTheme.bodyLarge),
+        for (final type in lotFacilities)
+          OptionCheck(
+            key: ValueKey('facility-${type.name}'),
+            label: type.label,
+            value: value.contains(type),
+            onChanged: (on) => onChanged({
+              for (final t in lotFacilities)
+                if (t == type ? on : value.contains(t)) t,
+            }),
+          ),
+      ],
+    ),
   );
+}
+
+/// [types] as sent: `facility_types` in [FacilityType] order and, for
+/// builds and viewports that read one, `facility_type` as its first.
+Map<String, Object?> facilityPayload(Set<FacilityType> types) {
+  final ordered = [
+    for (final t in FacilityType.values)
+      if (types.contains(t)) t.name,
+  ];
+  return {
+    'facility_type': ordered.firstOrNull,
+    'facility_types': ordered.isEmpty ? null : ordered,
+  };
 }
 
 /// Who may park in a lot or zone, by the posted vehicle classes.
@@ -827,7 +845,7 @@ class _ReportFormState extends State<ReportForm> {
   };
   late bool? scooter = defaults.scooter;
   late bool? heavy = defaults.heavy;
-  FacilityType? facility;
+  Set<FacilityType> facilities = {};
   ParkingAccess? access;
   final zones = <ZoneDraft>[];
 
@@ -972,7 +990,7 @@ class _ReportFormState extends State<ReportForm> {
     // Lot details only for lots, whatever was typed before the bay kind
     // changed.
     if (lot) ...{
-      'facility_type': ?facility?.name,
+      if (facilities.isNotEmpty) ...facilityPayload(facilities),
       'parking_access': ?access?.name,
       if (entrance.text.trim().isNotEmpty)
         'entrance_note': entrance.text.trim(),
@@ -1399,23 +1417,25 @@ class _ReportFormState extends State<ReportForm> {
             _part(
               _Part.lot,
               title: '停車場（選填）',
-              summary:
-                  [
-                    ?facility?.label,
-                    ?access?.description,
-                    if (zones.isNotEmpty) '${zones.length} 個分區',
-                  ].isEmpty
-                  ? null
-                  : [
-                      ?facility?.label,
-                      ?access?.description,
-                      if (zones.isNotEmpty) '${zones.length} 個分區',
-                    ].join('・'),
+              summary: switch ([
+                if (facilities.isNotEmpty)
+                  facilityTypesLabel([
+                    for (final t in FacilityType.values)
+                      if (facilities.contains(t)) t,
+                  ]),
+                ?access?.description,
+                if (zones.isNotEmpty) '${zones.length} 個分區',
+              ]) {
+                final List<String> parts when parts.isNotEmpty => parts.join(
+                  '・',
+                ),
+                _ => null,
+              },
               hint: '場站型式、停放分類與分區',
               children: [
                 FacilityField(
-                  value: facility,
-                  onChanged: (v) => setState(() => facility = v),
+                  value: facilities,
+                  onChanged: (v) => setState(() => facilities = v),
                 ),
                 AccessField(
                   value: access,

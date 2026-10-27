@@ -27,6 +27,12 @@
       "multiStorey",
       "underground",
       "surface"
+    ],
+    "facility_types": [
+      "multiStorey",
+      "underground",
+      "surface",
+      "roadside"
     ]
   },
   "time": {

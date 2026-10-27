@@ -56,7 +56,18 @@ enum RuleRestriction {
 
 enum TrustStatus { pending, confirmed, hidden }
 
+/// In the order the contract stores a set of them
+/// (`placement.facility_types`): lot types first, 路邊 last.
 enum FacilityType { multiStorey, underground, surface, roadside }
+
+/// The facility types in [json] (a list of names), each once, in
+/// [FacilityType] order; names this build does not know are left out.
+List<FacilityType> facilityTypesOf(Object? json) => json is List
+    ? [
+        for (final t in FacilityType.values)
+          if (json.contains(t.name)) t,
+      ]
+    : const [];
 
 enum ParkingAccess {
   scooterOnly,
@@ -66,7 +77,29 @@ enum ParkingAccess {
   heavyOnly,
 }
 
+/// Several facility types in one name (decision 58): the lot types share
+/// one 停車場 (「地下、平面停車場」); one type reads as its own label.
+String facilityTypesLabel(List<FacilityType> types) {
+  if (types.length == 1) return types.single.label;
+  final lots = [
+    for (final t in types)
+      if (t != FacilityType.roadside) t.shortLabel,
+  ];
+  return [
+    if (lots.isNotEmpty) '${lots.join('、')}停車場',
+    if (types.contains(FacilityType.roadside)) FacilityType.roadside.label,
+  ].join('、');
+}
+
 extension FacilityLabel on FacilityType {
+  /// The type alone, as a choice or inside [facilityTypesLabel].
+  String get shortLabel => switch (this) {
+    FacilityType.multiStorey => '立體',
+    FacilityType.underground => '地下',
+    FacilityType.surface => '平面',
+    FacilityType.roadside => '路邊',
+  };
+
   String get label => switch (this) {
     FacilityType.multiStorey => '立體停車場',
     FacilityType.underground => '地下停車場',
@@ -223,6 +256,7 @@ class ParkingSpot {
     this.contributorName = '',
     this.contributorRole = '',
     this.facilityType,
+    this.facilityTypes = const [],
     this.access,
     this.address = '',
     this.roadSegment = '',
@@ -257,7 +291,21 @@ class ParkingSpot {
   /// When the spot was added (a community spot's report or import); null
   /// for sources that do not send it.
   final DateTime? createdAt;
+
+  /// The first of [facilityTypes], kept for builds and viewports that read
+  /// one type; a lot type whenever any is (they are stored in the
+  /// contract's order).
   final FacilityType? facilityType;
+
+  /// Every type the spot is built as (decision 58), in [FacilityType]
+  /// order; empty when the source sends only [facilityType]. Read
+  /// [facilities] for both.
+  final List<FacilityType> facilityTypes;
+
+  /// The types the spot is built as: [facilityTypes], or the one
+  /// [facilityType] older sources send.
+  List<FacilityType> get facilities =>
+      facilityTypes.isNotEmpty ? facilityTypes : [?facilityType];
   final ParkingAccess? access;
   final String address, roadSegment, entranceNote, parkingGuide, specialRules;
   final List<String> photoUrls;
@@ -380,7 +428,10 @@ class ParkingSpot {
           const {'rider', 'admin', 'import'}.contains(j['contributor_role'])
           ? j['contributor_role'] as String
           : '',
-      facilityType: _optionalEnum(FacilityType.values, j['facility_type']),
+      facilityType:
+          facilityTypesOf(j['facility_types']).firstOrNull ??
+          _optionalEnum(FacilityType.values, j['facility_type']),
+      facilityTypes: facilityTypesOf(j['facility_types']),
       access: _optionalEnum(ParkingAccess.values, j['parking_access']),
       address: j['address'] as String? ?? '',
       roadSegment: j['road_segment'] as String? ?? '',
@@ -460,6 +511,8 @@ class ParkingSpot {
       'license_note': licenseNote,
       if (contributorRole.isNotEmpty) 'contributor_role': contributorRole,
       if (facilityType != null) 'facility_type': facilityType!.name,
+      if (facilityTypes.isNotEmpty)
+        'facility_types': [for (final t in facilityTypes) t.name],
       if (access != null) 'parking_access': access!.name,
       if (address.isNotEmpty) 'address': address,
       if (roadSegment.isNotEmpty) 'road_segment': roadSegment,

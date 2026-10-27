@@ -100,6 +100,10 @@ enum SpotInput {
   spaceType,
   triState,
   choice,
+
+  /// Several of [SpotField.choices] as a list (`facility_types`, decision
+  /// 58); none is unset.
+  multiChoice,
   date,
 
   /// A structured [Fee], edited with the shared FeeEditor.
@@ -170,11 +174,13 @@ final spotFields = <SpotField>[
     SpotInput.spaceType,
     required: true,
   ),
+  // Every type the lot is built as (decision 58); the table keeps
+  // facility_type as the first for older readers.
   SpotField(
-    'facility_type',
-    '場站類型',
+    'facility_types',
+    '場站類型（可複選）',
     SpotGroup.basic,
-    SpotInput.choice,
+    SpotInput.multiChoice,
     choices: {for (final f in FacilityType.values) f.name: f.label},
   ),
   SpotField(
@@ -355,6 +361,12 @@ String? validateSpotField(SpotField field, Object? value, {Fee? fee}) {
       if (value is! bool) return '${field.label}的值無效';
     case SpotInput.choice:
       if (!field.choices.containsKey(value)) return '請選擇${field.label}';
+    case SpotInput.multiChoice:
+      if (value is! List ||
+          !value.every(field.choices.containsKey) ||
+          value.toSet().length != value.length) {
+        return '請選擇${field.label}';
+      }
     case SpotInput.date:
       if (value is! String || DateTime.tryParse(value) == null) {
         return '${field.label}格式需為 YYYY-MM-DD';

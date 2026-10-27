@@ -411,6 +411,7 @@ class FakeAdminGateway implements AdminGateway {
       'effective_date': '2026-01-01',
       'license_note': '',
       'facility_type': 'underground',
+      'facility_types': ['underground'],
       'parking_access': 'scooterHeavy',
       'address': '新北市板橋區中山路一段 161 號',
       'road_segment': '',

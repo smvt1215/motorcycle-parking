@@ -26,7 +26,7 @@
 
 | 面向 | 值 | 存放位置 | 說明 |
 | --- | --- | --- | --- |
-| 位置 placement | `on_street`（路邊）／`off_street`（路外） | 不新增欄位，由 `space_type` 與 `facility_type` 推導 | `space_type='offStreet'` 或 `facility_type` 為 `multiStorey`／`underground`／`surface` 即路外，其餘為路邊。#94 的 `lot_roadside`、`street_lot_details` 已經擋下互相矛盾的組合 |
+| 位置 placement | `on_street`（路邊）／`off_street`（路外） | 不新增欄位，由 `space_type` 與 `facility_type` 推導 | `space_type='offStreet'` 或 `facility_type` 為 `multiStorey`／`underground`／`surface` 即路外，其餘為路邊。#94 的 `lot_roadside`、`street_lot_details` 已經擋下互相矛盾的組合。決定 58 起場站型式可複選：`facility_types`（一個以上、不重複，依契約 `placement.facility_types` 的順序存放，路外型式在前、路邊最後），任一個是路外型式即路外；`facility_type` 保留給舊版，恆為陣列第一個（202610270111） |
 | 停車場允許車種 | 普通／大型各為 可進場／不可進場／未確認 | 既有 `scooter_allowed`、`heavy_allowed`（路外點） | 只代表**能不能進場**，不代表有可停的格位（需求 5、DESIGN.md「兩種車種都可進入停車場，不足以推定共用同一格位」） |
 | 區域 area | `motorcycle`（機車區）／`car`（汽車區）／`heavy`（重機專區）／`mixed`（混合）／未填 | 新增 `parking_zones[].area` | 只用於路外分區。機車區依公告適用機車或重機費率，汽車區依公告適用汽車費率（需求 5） |
 | 格位 bay | 類別 `motorcycle`／`heavy`／`car` ＋ 用途 `usual`／`share` | 新增 `condition.bay`、`condition.use`、`condition.share` | 共用分兩種，不能混用（需求 4）：`scooter_heavy`（普大共用，畫在機車格上）、`car_motorcycle`（汽機車共用，畫在汽車格上，本專案只列路邊） |

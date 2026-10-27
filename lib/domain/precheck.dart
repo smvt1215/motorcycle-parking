@@ -367,12 +367,21 @@ List<PrecheckIssue> _combinations(_Json s) {
   ];
   if (s.containsKey('space_type')) {
     final type = s['space_type'];
-    if (type == 'offStreet' && s['facility_type'] == 'roadside') {
-      out.add(_issue('lot_roadside', 'facility_type'));
+    // The set a new build sends (decision 58), else the one type: any of
+    // them that does not fit the space type counts.
+    final types = switch (s['facility_types']) {
+      final List<Object?> list => [for (final t in list) '$t'],
+      _ => [?s['facility_type']?.toString()],
+    };
+    final field = s.containsKey('facility_types')
+        ? 'facility_types'
+        : 'facility_type';
+    if (type == 'offStreet' && types.contains('roadside')) {
+      out.add(_issue('lot_roadside', field));
     }
     if (type != 'offStreet') {
-      if (_lotFacilities.contains(s['facility_type'])) {
-        out.add(_issue('street_lot_details', 'facility_type'));
+      if (types.any(_lotFacilities.contains)) {
+        out.add(_issue('street_lot_details', field));
       }
       if (zones.isNotEmpty) {
         out.add(_issue('street_lot_details', 'parking_zones'));
