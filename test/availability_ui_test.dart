@@ -194,6 +194,35 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     });
 
+    testWidgets('官方資料更新時，開著的詳情不關閉、不重建，數字與時間跟著更新', (tester) async {
+      // Side panel: the whole details are on screen.
+      useSize(tester, 1180, 820);
+      final counts = [...canvasCounts];
+      final store = await pumpMap(tester, canvasSpots, counts);
+      await tester.tap(capsule('剩 12'));
+      await tester.pumpAndSettle();
+      final sheet = find.byKey(const ValueKey('parking-spot-sheet'));
+      final before = tester.element(sheet);
+      expect(summaryText(tester), startsWith('機車車位｜12 剩餘 ／ 共 80 格｜17:02 更新'));
+      counts[0] = count(
+        'fresh',
+        AvailabilityVehicle.scooter,
+        available: 9,
+        minutes: 1,
+      );
+      await tester.runAsync(store.pollAvailability);
+      await tester.pump();
+      expect(sheet, findsOneWidget, reason: '詳情沒有關閉');
+      expect(
+        identical(tester.element(sheet), before),
+        isTrue,
+        reason: '沒有重建整個面板',
+      );
+      expect(summaryText(tester), startsWith('機車車位｜9 剩餘 ／ 共 80 格｜17:04 更新'));
+      expect(capsule('剩 9'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
     testWidgets('白色膠囊與墨色膠囊外圈都是 2px 白邊、一樣高', (tester) async {
       useSize(tester, 390);
       await pumpMap(tester, canvasSpots, canvasCounts);
@@ -273,7 +302,7 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     });
 
-    testWidgets('連上後端（沒有即時資料源）時不顯示膠囊與「目前有位」', (tester) async {
+    testWidgets('沒有即時資料源時不顯示膠囊與「目前有位」', (tester) async {
       useSize(tester, 390);
       await pumpMap(tester, canvasSpots, canvasCounts, enabled: false);
       expect(find.byType(AvailabilityCapsuleView), findsNothing);
