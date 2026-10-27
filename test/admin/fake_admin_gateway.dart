@@ -422,6 +422,9 @@ class FakeAdminGateway implements AdminGateway {
     },
   };
   final List<(String, Map<String, dynamic>, String, String)> spotUpdates = [];
+
+  /// Thrown by the next updateSpot, e.g. 'fee plan in use'.
+  Object? spotUpdateError;
   final List<(String, Map<String, dynamic>, String)> promotions = [];
   bool failSearch = false;
   int _version = 10;
@@ -490,6 +493,7 @@ class FakeAdminGateway implements AdminGateway {
         message: 'spot changed since it was opened',
       );
     }
+    if (spotUpdateError case final error?) throw error;
     spotUpdates.add((sourceId, values, baseUpdatedAt, note));
     spotRows[sourceId] = {
       ...row,

@@ -189,15 +189,7 @@ abstract class AdminGateway {
   Future<List<CityRule>> cityRules();
 }
 
-/// Community columns readable by clients; `user_id` is never granted.
-const _communityColumns =
-    'id,source,source_name,source_url,license_note,name,lat,lng,city,district,space_type,fee_note,note,'
-    'scooter_total,scooter_allowed,heavy_allowed,status,updated_at,last_confirmed_at,created_at,'
-    'facility_type,parking_access,address,road_segment,entrance_note,parking_guide,special_rules,'
-    'scooter_verified_at,heavy_verified_at,fee';
-
-/// Every column the review page shows or edits; a conflict refresh must
-/// show the admin each current value before a forced write.
+/// The columns the hidden list shows; clients may select them.
 const _spotColumns =
     'id,name,lat,lng,city,district,space_type,fee_note,note,scooter_allowed,heavy_allowed,source_name,updated_at,'
     'facility_type,parking_access,entrance_note,parking_guide,fee,condition';
@@ -289,7 +281,8 @@ class SupabaseAdminGateway implements AdminGateway {
     final rows = await client
         .from('moderation_queue')
         .select(
-          'id,source_id,reason,field,proposed,note,created_at,base_spot,risk',
+          'id,source_id,reason,field,proposed,note,created_at,base_spot,risk,'
+          'risk_flags,evidence_url',
         )
         .eq('status', 'pending')
         .order('created_at')
@@ -301,41 +294,35 @@ class SupabaseAdminGateway implements AdminGateway {
   Future<Map<String, ReviewSpot>> reviewSpots(
     Iterable<String> sourceIds,
   ) async {
-    final official = <String>{}, community = <String>{};
-    for (final id in sourceIds) {
-      if (id.startsWith('official:')) {
-        final raw = id.substring('official:'.length);
-        if (_uuid.hasMatch(raw)) official.add(raw);
-      } else if (_uuid.hasMatch(id)) {
-        community.add(id);
-      }
-    }
+    final ids = sourceIds.where(_sourceId).toSet().toList();
     final result = <String, ReviewSpot>{};
-    if (community.isNotEmpty) {
-      final rows = await client
-          .from('community_spots')
-          .select('$_spotColumns,status')
-          .inFilter('id', community.toList());
-      for (final row in rows) {
-        result[row['id'] as String] = ReviewSpot(
-          sourceId: row['id'] as String,
-          official: false,
+    // admin_spot_rows takes at most 200 ids a call, as the queue loads.
+    for (var i = 0; i < ids.length; i += 200) {
+      for (final row in await _spotRows(ids.skip(i).take(200))) {
+        final id = row['source_id'] as String;
+        result[id] = ReviewSpot(
+          sourceId: id,
+          official: id.startsWith('official:'),
           values: row,
         );
       }
     }
-    if (official.isNotEmpty) {
-      final rows = await client
-          .from('official_heavy_spots')
-          .select('$_spotColumns,hidden')
-          .inFilter('id', official.toList());
-      for (final row in rows) {
-        final id = 'official:${row['id']}';
-        result[id] = ReviewSpot(sourceId: id, official: true, values: row);
-      }
-    }
     return result;
   }
+
+  /// `admin_spot_rows`: every column of the spots named, plan names and
+  /// fee_source_text included, which clients cannot select themselves.
+  Future<List<Map<String, dynamic>>> _spotRows(Iterable<String> ids) async {
+    final rows = await client.rpc<List<dynamic>>(
+      'admin_spot_rows',
+      params: {'p_source_ids': ids.toList()},
+    );
+    return rows.cast<Map<String, dynamic>>();
+  }
+
+  static bool _sourceId(String id) => _uuid.hasMatch(
+    id.startsWith('official:') ? id.substring('official:'.length) : id,
+  );
 
   @override
   Future<void> resolveReport(
@@ -419,15 +406,11 @@ class SupabaseAdminGateway implements AdminGateway {
 
   @override
   Future<SpotRecord?> spot(String sourceId) async {
-    final official = sourceId.startsWith('official:');
-    final id = official ? sourceId.substring('official:'.length) : sourceId;
-    if (!_uuid.hasMatch(id)) return null;
-    final row = await client
-        .from(official ? 'official_heavy_spots' : 'community_spots')
-        .select(official ? '*' : _communityColumns)
-        .eq('id', id)
-        .maybeSingle();
-    return row == null ? null : SpotRecord(sourceId: sourceId, values: row);
+    if (!_sourceId(sourceId)) return null;
+    final rows = await _spotRows([sourceId]);
+    return rows.isEmpty
+        ? null
+        : SpotRecord(sourceId: sourceId, values: rows.single);
   }
 
   @override

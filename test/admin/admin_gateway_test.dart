@@ -1,8 +1,9 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:motorcycle_parking/admin/admin_gateway.dart';
-import 'package:motorcycle_parking/admin/review/review_models.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 void main() {
@@ -30,29 +31,47 @@ void main() {
     expect(requests.single.headers['Prefer'], contains('count=exact'));
   });
 
-  test('審核頁讀取點位時包含每個可審核欄位', () async {
-    final selects = <String>[];
+  test('審核頁與點位表單經 admin_spot_rows 讀取完整欄位（含計費規則與原始公告文字）', () async {
+    final calls = <(String, Object?)>[];
     final client = SupabaseClient(
       'https://example.supabase.co',
       'public-test',
       httpClient: MockClient((request) async {
-        selects.add(request.url.queryParameters['select'] ?? '');
-        return http.Response('[]', 200, request: request);
+        calls.add((request.url.path, jsonDecode(request.body)));
+        return http.Response(
+          jsonEncode([
+            {
+              'source_id': '11111111-1111-4111-8111-111111111111',
+              'id': '11111111-1111-4111-8111-111111111111',
+              'name': '甲',
+              'fee_plans': <Object?>[],
+              'fee_source_text': '原文',
+            },
+          ]),
+          200,
+          request: request,
+          headers: {'content-type': 'application/json'},
+        );
       }),
     );
     addTearDown(client.dispose);
-    await SupabaseAdminGateway(client).reviewSpots([
+    final gateway = SupabaseAdminGateway(client);
+    final spots = await gateway.reviewSpots([
+      '11111111-1111-4111-8111-111111111111',
+      'official:22222222-2222-4222-8222-222222222222',
+      'not-an-id',
+    ]);
+    expect(calls.single.$1, '/rest/v1/rpc/admin_spot_rows');
+    expect((calls.single.$2! as Map)['p_source_ids'], [
       '11111111-1111-4111-8111-111111111111',
       'official:22222222-2222-4222-8222-222222222222',
     ]);
-    expect(selects, hasLength(2));
-    for (final select in selects) {
-      final columns = select.split(',');
-      for (final field in reviewFields) {
-        // Visibility is per table: status on community, hidden on official.
-        if (field.key == 'status' || field.key == 'hidden') continue;
-        expect(columns, contains(field.key), reason: select);
-      }
-    }
+    expect(
+      spots['11111111-1111-4111-8111-111111111111']!.values['fee_source_text'],
+      '原文',
+    );
+    final record = await gateway.spot('11111111-1111-4111-8111-111111111111');
+    expect(record!.values['fee_plans'], isEmpty);
+    expect(await gateway.spot('nope'), isNull);
   });
 }

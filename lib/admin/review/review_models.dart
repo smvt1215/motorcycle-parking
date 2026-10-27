@@ -2,6 +2,7 @@ import '../../models/condition_text.dart';
 import '../../models/parking_condition.dart';
 import '../../models/fee.dart';
 import '../../models/parking.dart';
+import '../spots/lot_models.dart';
 
 /// Queue filters from docs/ADMIN_WEB.md: eligibility, gone, everything else.
 enum ReviewKind {
@@ -160,6 +161,8 @@ class ReviewReport {
     this.note = '',
     this.baseSpot,
     this.risk,
+    this.riskFlags = const [],
+    this.evidenceUrl,
   });
 
   factory ReviewReport.fromJson(Map<String, dynamic> j) => ReviewReport(
@@ -172,6 +175,11 @@ class ReviewReport {
     createdAt: DateTime.parse(j['created_at'] as String),
     baseSpot: (j['base_spot'] as Map?)?.cast<String, dynamic>(),
     risk: ReviewRisk.parse(j['risk']),
+    riskFlags: [
+      for (final f in j['risk_flags'] as List? ?? const [])
+        if (f is String) f,
+    ],
+    evidenceUrl: j['evidence_url'] as String?,
   );
 
   final String id;
@@ -189,6 +197,13 @@ class ReviewReport {
 
   /// Derived on the server; null when it has not been classified.
   final ReviewRisk? risk;
+
+  /// The precheck `hold` rules the report broke (#158): it was let through
+  /// for a closer look. Codes of precheck_rules.json.
+  final List<String> riskFlags;
+
+  /// The notice link the rider attached (https), never written to the spot.
+  final String? evidenceUrl;
 
   bool get official => sourceId.startsWith('official:');
   bool get autoHidden => reason == autoHiddenReason;
@@ -449,6 +464,7 @@ String? validatePatch(Map<String, dynamic> patch, ReviewSpot spot) {
           return '請填完收費金額，計時另需選計費時間';
         }
         if (!fee.valid) return '金額請填 0 到 10000 的整數';
+        if (fee.followGap case final gap?) return gap;
     }
   }
   // The app shows a structured fee before the text, so the text must be the
@@ -486,4 +502,121 @@ bool locationWithoutCity(ReviewReport report) {
       proposed != null &&
       (proposed.containsKey('lat') || proposed.containsKey('lng')) &&
       !proposed.containsKey('city');
+}
+
+/// The precheck rules that flag a report for a closer look rather than
+/// refuse it (supabase/functions/submit-report/precheck_rules.json), in the
+/// reviewer's words. Rules in [storedPairHoldRules] are refused when a
+/// report names both sides; they only reach review as a hold.
+const riskFlagLabels = {
+  'share_free_needs_basis': '普大共用的免費格較少見，請對照公告',
+  'car_area_scooter_fee': '汽車區填了普通機車費率，請確認現場公告開放機車',
+  'charge_free_rate': '免費格的費率不是「免費」',
+  'charge_toll_free_rate': '收費格的費率是「免費」',
+  'free_with_renew': '免費格填了跨日怎麼收',
+  'free_with_extension': '免費格填了付費延長',
+  'heavy_bay_scooter_fee': '重機格填了普通機車費率',
+  'motorcycle_bay_car_fee': '機車格填了汽車費率',
+  'time_limit_mismatch': '限時與計次的有效時間不同',
+};
+
+/// precheck_rules.json `stored_pair_hold`: rules between a bay's condition
+/// and its fee. A suggestion that brings only one of the two is judged with
+/// the spot's stored other half (#158 design trade-off, #155 item 20).
+const storedPairHoldRules = {
+  'charge_free_rate',
+  'charge_toll_free_rate',
+  'free_with_renew',
+  'free_with_extension',
+  'heavy_bay_scooter_fee',
+  'motorcycle_bay_car_fee',
+  'time_limit_mismatch',
+};
+
+/// Each flag of [report] as one line for the reviewer: what the rule says,
+/// and for a stored-pair hold which half came from the spot.
+List<String> riskFlagLines(ReviewReport report) {
+  final proposed = report.proposed ?? const {};
+  final hasFee = proposed['fee'] is Map;
+  final hasCondition = proposed.containsKey('condition');
+  return [
+    for (final code in report.riskFlags)
+      [
+        riskFlagLabels[code] ?? '預檢規則 $code',
+        if (storedPairHoldRules.contains(code))
+          hasFee && !hasCondition
+              ? '：建議只改費率，和點位目前的停放條件不一致。套用前請一併確認停放條件，必要時「修改後套用」加入條件。'
+              : !hasFee && hasCondition
+              ? '：建議只改停放條件，和點位目前的費率不一致。套用前請一併確認費率，必要時「修改後套用」加入費率。'
+              : '：和點位目前的資料組合不一致，請一併確認條件與費率。',
+      ].join(),
+  ];
+}
+
+/// The shared plan an accepted fee would reach beyond this suggestion
+/// (design §2.6; canvas AdminSharedPlan): the spot's whole fee uses a plan
+/// some zones use too. Suggestions name the spot's whole fee, so the
+/// suggestion's own use is 全場費率. Null when the plan is the spot's alone,
+/// or the fee is cleared (that only drops the reference).
+({Json plan, List<String> zones})? sharedPlanOf(
+  Map<String, dynamic> patch,
+  ReviewSpot spot,
+) {
+  if (patch['fee'] is! Map) return null;
+  final plan = planById(
+    jsonList(spot.values['fee_plans']),
+    spot.values['fee_plan'],
+  );
+  if (plan == null) return null;
+  final zones = [
+    for (final z in jsonList(spot.values['parking_zones']))
+      if (z['fee_plan'] == plan['id'] && z['fee'] is Map)
+        (z['name'] as String?)?.trim().isNotEmpty == true
+            ? z['name'] as String
+            : '未命名分區',
+  ];
+  return zones.isEmpty ? null : (plan: plan, zones: zones);
+}
+
+/// [patch] (as wired) giving the whole fee a plan of its own named [name];
+/// the zones keep the shared one.
+Map<String, dynamic> ownPlanPatch(
+  Map<String, dynamic> patch,
+  ReviewSpot spot,
+  String name,
+) {
+  final plans = jsonList(spot.values['fee_plans']);
+  final id = nextPlanId(plans);
+  return {
+    ...patch,
+    'fee_plans': [
+      ...plans,
+      {'id': id, 'name': name.trim(), 'fee': patch['fee']},
+    ],
+    'fee_plan': id,
+    'fee_plans_seen': _seen(spot),
+  };
+}
+
+/// The plans the page built the edit on; the server refuses the write as a
+/// conflict when they changed meanwhile.
+Map<String, Object?> _seen(ReviewSpot spot) => {
+  'plans': spot.values['fee_plans'],
+};
+
+/// [patch] (as wired) editing the shared plan itself: every use follows
+/// through the database, so the fee and its text are left to it.
+Map<String, dynamic> editedPlanPatch(
+  Map<String, dynamic> patch,
+  ReviewSpot spot,
+) {
+  final id = spot.values['fee_plan'];
+  return {
+    ...patch,
+    'fee_plans': [
+      for (final p in jsonList(spot.values['fee_plans']))
+        if (p['id'] == id) {...p, 'fee': patch['fee']} else p,
+    ],
+    'fee_plans_seen': _seen(spot),
+  }..removeWhere((k, _) => k == 'fee' || k == 'fee_note');
 }

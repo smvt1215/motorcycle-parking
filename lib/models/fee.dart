@@ -409,6 +409,26 @@ class Fee {
   /// vehicle is known.
   String get summary => isEmpty ? '' : feeNoteOf(this);
 
+  /// Why a heavy follow cannot be stored (design §8.6, #155 item 13): the
+  /// vehicle it follows has no known rate, so riders would read 費率未提供.
+  /// Null when the heavy rate follows nothing or its source is known. Shared
+  /// by the FeeEditor and every form that saves a fee without one (the admin
+  /// spot form, the review page).
+  String? get followGap {
+    final mode = heavy?.mode;
+    if (mode == null || !mode.follows) return null;
+    final car = mode == FeeMode.sameAsCar;
+    final source = car ? this.car : scooter;
+    final wire = car ? 'car' : 'scooter';
+    if (source != null &&
+        validRate(source.toJson(), wire) &&
+        _rateText(toJson()[wire], 100) != null) {
+      return null;
+    }
+    final name = car ? '汽車' : '機車';
+    return '大型重機比照$name費率，但還沒填$name費率。請填$name費率，或改選其他收費方式。';
+  }
+
   @override
   bool operator ==(Object other) =>
       other is Fee &&

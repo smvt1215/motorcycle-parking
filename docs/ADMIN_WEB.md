@@ -277,6 +277,24 @@ python3 tool/export_rules.py --check || python3 tool/export_rules.py
 - **清除公開名稱**：詳情先列最新 50 個社群點，「載入更早的點位」以 `admin_user_spots(p_user, p_offset)` 分頁（依建立時間，清除名稱不會改變順序）；逐點以 `admin_clear_contributor_name`（#81）清除，原因選填、寫入稽核紀錄；清除後即使改名也不再顯示。停權後背景重新讀取停權紀錄時，若期間又有停權或清除操作，舊的讀取結果會被捨棄，不覆蓋較新的畫面狀態。
 - 測試：pgTAP `admin_users_test.sql`（一般使用者、無 `aal2` 的 admin、anon 被拒；搜尋與遮蔽；統計；只有 service role 能寫停權紀錄、稽核不可修改）；deno `admin-users/handler_test.ts`（非 admin、無 `aal2`、無 token 被拒且不呼叫 Auth；停權與解除寫稽核；稽核失敗還原；輸入驗證；不能停權自己或管理者）；widget test `test/admin/users_test.dart`。
 
+### C6b 點位表單計費規則與審核頁（stack C）
+
+依停放條件與費率畫布（AdminSpotForm、AdminReviewDiff、AdminSharedPlan）與設計文件 §2.6、§8.4，migration `202610270090_admin_spot_plans.sql`：
+
+- **讀取**：點位表單與審核頁改用 `admin_spot_rows(p_source_ids)`（管理員限定、最多 200 筆）讀完整欄位，包含 `fee_plans`、`fee_plan`、`fee_source_text`、`parking_zones`。`community_spots` 的欄位授權不變（規則名稱只給管理員看）。
+- **路外點位（`space_type = offStreet`）的費率改由計費規則管理**：
+  - 「計費規則」列出每條規則的名稱與 App 句子；新增、改名、改費率在對話框用共用 FeeEditor（手機全螢幕）。名稱空白時依車種與收費方式命名（同 `fee_plan_name()`）；最多 12 條、名稱 1–20 字且不重複。
+  - 仍被全場費率或分區引用的規則，刪除鈕停用並寫「N 個分區在用，先改掉引用」（決定 51）；伺服器回 `23503 fee plan in use` 時依 `detail` 顯示同一句。
+  - 「全場費率套用」選一條規則或不套用；改選時一併送 `fee` 與它的句子。只改規則內容時不送全場 `fee`／`fee_note`，由 `fee_plans_sync()` 同步（避免被當成不認得規則的寫入而移除未使用的規則）。
+  - 「區域與格位」：同名同 `area` 的分區合成一張區域卡；每種格位可選格位（機車格／重機格／汽車格）、用途（普大共用、汽機共用）、收費格／免費格、兩個車種的可停三段按鈕，以及計費規則（一併帶上規則的費率）。分區條件一律寫 `allow`，`access` 由 `legacyAccess()` 推導（決定 32），推導不出時不能儲存並說明原因。依據（公告網址、生效日、到期日）寫在區域卡，套用到卡內每種格位；既有的限時、共用時段照原樣保留。另有「分區資料已涵蓋全場」（`zones_complete`）。
+  - 路邊點位維持單一 FeeEditor，規則由觸發器自動管理。
+- **原始公告文字**：`fee_source_text` 有值時在費率區唯讀顯示，App 不顯示（設計 §7 第 12 項）。
+- **比照來源沒有費率**（#155 第 13 項）：`Fee.followGap` 由 FeeEditor、點位表單 `validateSpotField` 與審核頁 `validatePatch` 共用，汽車未確認時大型重機比照汽車不能儲存或套用。
+- **審核頁**：
+  - 費率差異逐車種列出合併後的結果：「維持目前」、新費率＋「有變更」、「改成未確認」＋「會清除」，狀態用文字與底線表示，不只靠顏色。
+  - 顯示預檢標記 `risk_flags`（#158）與附上的公告連結 `evidence_url`；`stored_pair_hold` 的規則寫明「建議只改費率（或條件），和點位目前的條件（或費率）不一致」，提醒一併確認（#155 第 19、20 項）。
+  - 全場費率引用的規則也被分區使用時，套用前詢問「只改全場費率」（預設，另開一條規則，名稱可改）或「改這條規則」（全部跟著改），確認鈕寫明套用到哪裡。`admin_resolve_report` 因此接受 `fee_plans`／`fee_plan`；這兩個鍵是管理員推導的值，不參與 `base_spot` 衝突檢查。
+
 ### 點位編輯紀錄（#141）
 
 - 依 C6 畫布 EditHistory／AppHistory 與決定 52；migration `202610270100_spot_history.sql`，不新增資料表，稽核紀錄仍是唯一紀錄。
