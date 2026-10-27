@@ -38,6 +38,10 @@ class SupabaseAvailabilitySource extends AvailabilitySource {
   /// The function reads at most this many ids; a viewport holds fewer.
   static const maxIds = 600;
 
+  /// Ids per call: up to three rows each (scooter, heavy, car) must stay
+  /// under the API's 1,000-row limit, or the last lots would lose counts.
+  static const batch = 300;
+
   @override
   bool get enabled => true;
 
@@ -51,11 +55,21 @@ class SupabaseAvailabilitySource extends AvailabilitySource {
           spot.id,
     ].take(maxIds).toList();
     if (ids.isEmpty) return const {};
-    final rows = await client.rpc<List<dynamic>>(
-      'viewport_availability',
-      params: {'p_spot_ids': ids},
-    );
-    return availabilityFromRows(rows.cast<Map<String, dynamic>>());
+    final pages = await Future.wait([
+      for (var i = 0; i < ids.length; i += batch)
+        client.rpc<List<dynamic>>(
+          'viewport_availability',
+          params: {
+            'p_spot_ids': ids.sublist(
+              i,
+              i + batch > ids.length ? ids.length : i + batch,
+            ),
+          },
+        ),
+    ]);
+    return availabilityFromRows([
+      for (final rows in pages) ...rows.cast<Map<String, dynamic>>(),
+    ]);
   }
 }
 

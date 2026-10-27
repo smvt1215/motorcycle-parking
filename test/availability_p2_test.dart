@@ -120,6 +120,25 @@ void main() {
       expect(result, isEmpty);
     });
 
+    test('分批讀取，每批 300 點，不超過 API 1,000 列上限', () async {
+      final many = [
+        for (var i = 0; i < 350; i++)
+          lotAt(
+            'official:aaaaaaaa-0000-4000-8000-${i.toString().padLeft(12, '0')}',
+            0,
+            0,
+          ),
+      ];
+      final (sent, _) = await read(many, []);
+      expect(
+        [
+          for (final body in sent.cast<Map<String, dynamic>>())
+            (body['p_spot_ids'] as List).length,
+        ],
+        [300, 50],
+      );
+    });
+
     test('0＝已滿；-9／缺值＝無即時資料；跨車種各自判斷', () async {
       final (_, result) = await read(
         [a, b],
@@ -336,6 +355,42 @@ void main() {
       store.setMapShown(true);
       await settle();
       expect(source.reads.length, reads, reason: '上次讀取未滿一個週期，等剩下的時間');
+      store.dispose();
+    });
+
+    test('輪詢趕在範圍載入的讀取之前完成時，較舊的範圍讀取不覆蓋它', () async {
+      final (store, source, _) = await make();
+      final loading = store.refresh();
+      await settle();
+      final viewportRead = source.reads.last;
+      final poll = store.pollAvailability();
+      await settle();
+      source.reads.last.complete(scooter(a.id, 9));
+      await poll;
+      viewportRead.complete(scooter(a.id, 12));
+      await loading;
+      expect(scooterCount(store, a), 9);
+      store.dispose();
+    });
+
+    testWidgets('讀取退避時，地圖仍每分鐘重算新鮮度', (tester) async {
+      final (store, source, _) = (await tester.runAsync(make))!;
+      var reads = 0;
+      final loading = store.refresh();
+      await tester.pump();
+      source.reads.last.complete(scooter(a.id, 12));
+      await tester.pump();
+      await loading;
+      reads = source.reads.length;
+      var notified = 0;
+      store.addListener(() => notified++);
+      await tester.pump(const Duration(minutes: 1, seconds: 1));
+      expect(notified, 1, reason: '沒有網路讀取也重畫');
+      expect(source.reads.length, reads);
+      store.didChangeAppLifecycleState(AppLifecycleState.paused);
+      await tester.pump(const Duration(minutes: 5));
+      expect(notified, 1, reason: '背景不重畫也不讀取');
+      expect(source.reads.length, reads);
       store.dispose();
     });
 
