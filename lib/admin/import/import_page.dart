@@ -33,6 +33,19 @@ class _ImportPageState extends State<ImportPage> {
   final note = TextEditingController();
   final date = TextEditingController();
 
+  /// The result notice sits at the top of the list; after a write the list
+  /// scrolls back to it (I1).
+  final scroll = ScrollController();
+
+  void _showResult() {
+    if (!mounted || !scroll.hasClients) return;
+    scroll.animateTo(
+      0,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+    );
+  }
+
   /// Entries whose changes are open; conflicts are always open.
   final Set<String> open = {};
 
@@ -49,6 +62,7 @@ class _ImportPageState extends State<ImportPage> {
   void dispose() {
     note.dispose();
     date.dispose();
+    scroll.dispose();
     super.dispose();
   }
 
@@ -81,6 +95,8 @@ class _ImportPageState extends State<ImportPage> {
                 compact: compact,
                 gutter: gutter,
                 note: note,
+                scroll: scroll,
+                onDone: _showResult,
               )
             : _FileSection(
                 imports: imports,
@@ -93,6 +109,8 @@ class _ImportPageState extends State<ImportPage> {
                 onChoose: _choose,
                 note: note,
                 date: date,
+                scroll: scroll,
+                onDone: _showResult,
               );
         return Align(
           alignment: Alignment.topCenter,
@@ -142,8 +160,10 @@ class _Frame extends StatelessWidget {
     required this.header,
     required this.itemCount,
     required this.itemBuilder,
+    required this.scroll,
     this.bar,
   });
+  final ScrollController scroll;
   final double gutter;
   final List<Widget> header;
   final int itemCount;
@@ -157,6 +177,7 @@ class _Frame extends StatelessWidget {
       Expanded(
         child: SelectionArea(
           child: ListView.builder(
+            controller: scroll,
             padding: EdgeInsets.fromLTRB(gutter, 20, gutter, 32),
             itemCount: header.length + itemCount,
             itemBuilder: (context, i) => i < header.length
@@ -171,8 +192,11 @@ class _Frame extends StatelessWidget {
 }
 
 class _Intro extends StatelessWidget {
-  const _Intro({required this.title, required this.text});
+  const _Intro({required this.title, required this.text, this.heading = true});
   final String title, text;
+
+  /// False when the phone's top bar already names the page.
+  final bool heading;
 
   @override
   Widget build(BuildContext context) {
@@ -180,13 +204,15 @@ class _Intro extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Its own node, so the heading is not read with the text below it.
-        Semantics(
-          container: true,
-          header: true,
-          child: Text(title, style: theme.textTheme.headlineMedium),
-        ),
-        const SizedBox(height: 8),
+        if (heading) ...[
+          // Its own node, so the heading is not read with the text below it.
+          Semantics(
+            container: true,
+            header: true,
+            child: Text(title, style: theme.textTheme.headlineMedium),
+          ),
+          const SizedBox(height: 8),
+        ],
         Text(text, style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
         const SizedBox(height: 16),
       ],
@@ -287,7 +313,11 @@ class _FileSection extends StatelessWidget {
     required this.onChoose,
     required this.note,
     required this.date,
+    required this.scroll,
+    required this.onDone,
   });
+  final ScrollController scroll;
+  final VoidCallback onDone;
   final ImportController imports;
   final bool compact;
   final double gutter;
@@ -313,7 +343,8 @@ class _FileSection extends StatelessWidget {
             label: const Text('選擇 spots.json'),
           );
     final header = <Widget>[
-      const _Intro(
+      _Intro(
+        heading: !compact,
         title: '匯入停車資料',
         text:
             '選擇 tool/import_mymaps.py 產生的 spots.json（官方點或社群點），先試算會新增、更新哪些點位，再勾選要匯入的項目。'
@@ -401,6 +432,7 @@ class _FileSection extends StatelessWidget {
         ),
     ];
     return _Frame(
+      scroll: scroll,
       gutter: gutter,
       header: header,
       itemCount: loaded ? visible.length : 0,
@@ -431,6 +463,7 @@ class _FileSection extends StatelessWidget {
               onApply: () async {
                 await imports.apply(note.text);
                 if (imports.error == null) note.clear();
+                onDone();
               },
             )
           : null,
@@ -832,7 +865,11 @@ class _FeeSection extends StatelessWidget {
     required this.compact,
     required this.gutter,
     required this.note,
+    required this.scroll,
+    required this.onDone,
   });
+  final ScrollController scroll;
+  final VoidCallback onDone;
   final FeeConversionController fees;
   final bool compact;
   final double gutter;
@@ -926,6 +963,7 @@ class _FeeSection extends StatelessWidget {
       ],
     ];
     return _Frame(
+      scroll: scroll,
       gutter: gutter,
       header: header,
       itemCount: fees.loaded ? visible.length : 0,
@@ -961,6 +999,7 @@ class _FeeSection extends StatelessWidget {
                             : () async {
                                 await fees.convert(note.text);
                                 if (fees.error == null) note.clear();
+                                onDone();
                               },
                         icon: fees.converting
                             ? const SizedBox.square(

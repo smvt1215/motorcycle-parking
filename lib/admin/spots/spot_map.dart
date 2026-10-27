@@ -275,6 +275,12 @@ class SpotMapController extends ChangeNotifier {
     }
   }
 
+  /// A rule was published: the markers are judged by the new version.
+  Future<void> reloadRules() {
+    _rulesLoaded = false;
+    return refresh();
+  }
+
   /// Reloads the last view, after a write changed what it shows.
   Future<void> refresh() async {
     final bounds = viewport;
