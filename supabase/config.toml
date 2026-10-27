@@ -423,6 +423,11 @@ redirect_uri = "http://127.0.0.1:54321/auth/v1/callback"
 [functions.submit-report]
 verify_jwt = false
 
+# Riders' on-site sightings (#154); verifies the caller itself, as
+# submit-report does.
+[functions.submit-sighting]
+verify_jwt = false
+
 # Verifies the caller itself, as submit-report does.
 [functions.geocode]
 verify_jwt = false
