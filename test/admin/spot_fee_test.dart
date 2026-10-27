@@ -10,6 +10,7 @@ import 'package:motorcycle_parking/admin/spots/spots_controller.dart';
 import 'package:motorcycle_parking/models/fee.dart';
 
 import 'fake_admin_gateway.dart';
+import 'fold_helpers.dart';
 
 import '../fee_editor_steps.dart';
 
@@ -415,6 +416,8 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      // The spot form opens at its name; the rates fold below (decision 57).
+      if (path.startsWith('/spots/')) await openFold(tester, '費率');
     }
 
     Finder scrollable(String prefix) => find
