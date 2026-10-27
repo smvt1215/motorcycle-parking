@@ -17,6 +17,9 @@ Future<RejectReason?> pickRejectReason(
   if (compact) {
     return showModalBottomSheet<RejectReason>(
       context: context,
+      // Over the whole window, not the shell's page area under the top bar
+      // and the bottom navigation (R1).
+      useRootNavigator: true,
       isScrollControlled: true,
       useSafeArea: true,
       showDragHandle: true,

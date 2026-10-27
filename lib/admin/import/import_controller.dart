@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:material_ui/material_ui.dart' show ChangeNotifier;
+import 'package:material_ui/material_ui.dart' show ChangeNotifier, ValueChanged;
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
 import '../admin_gateway.dart';
@@ -20,8 +20,12 @@ String _failure(Object error) => error is PostgrestException
 
 /// `/imports`: a spots.json file, its preview, and what to import.
 class ImportController extends ChangeNotifier {
-  ImportController(this.gateway);
+  ImportController(this.gateway, {this.onApplied});
   final AdminGateway? gateway;
+
+  /// Called after an import wrote spots, so the spots page and the review
+  /// queue read them again (決定 49).
+  final ValueChanged<Set<String>>? onApplied;
 
   String? fileName;
 
@@ -233,14 +237,20 @@ class ImportController extends ChangeNotifier {
     applying = false;
     selected.clear();
     overwrite.clear();
+    if (total.inserted + total.updated > 0) {
+      onApplied?.call({for (final e in chosen) e.sourceId});
+    }
     await _preview();
   }
 }
 
 /// `/imports/fees`: existing fee notes read into structured fees.
 class FeeConversionController extends ChangeNotifier {
-  FeeConversionController(this.gateway);
+  FeeConversionController(this.gateway, {this.onApplied});
   final AdminGateway? gateway;
+
+  /// Called with the spots whose fees were written (決定 49).
+  final ValueChanged<Set<String>>? onApplied;
 
   List<FeeGroup> groups = const [];
   bool loaded = false, loading = false, converting = false;
@@ -362,6 +372,9 @@ class FeeConversionController extends ChangeNotifier {
     }
     result = total;
     converting = false;
+    if (total.updated > 0) {
+      onApplied?.call({for (final i in items) i['source_id'] as String});
+    }
     // Reading the list again must not hide that a part failed to write.
     final failed = error;
     if (!await load()) return;
