@@ -552,6 +552,31 @@ void main() {
     });
   });
 
+  testWidgets('勾選場站型式時保留選項外的既有型式（路邊）', (tester) async {
+    final lot = ParkingSpot.fromJson({
+      ...spot.toJson(),
+      'space_type': 'offStreet',
+      'facility_type': 'underground',
+      'facility_types': ['underground', 'roadside'],
+    });
+    final store = await openSuggestion(tester, '格位類型', selectedSpot: lot);
+    final surface = find.byKey(const ValueKey('facility-surface'));
+    await tester.ensureVisible(surface);
+    await tester.pumpAndSettle();
+    await tester.tap(surface);
+    await tester.pumpAndSettle();
+    // Still in the set, so the precheck asks the rider about it instead of
+    // the form dropping it unseen.
+    expect(tester.widget<FacilityField>(find.byType(FacilityField)).value, {
+      FacilityType.underground,
+      FacilityType.surface,
+      FacilityType.roadside,
+    });
+    await submitSuggestion(tester, '送出修改建議');
+    expect(store.submissions, isEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   for (final field in ['facility_types', 'parking_access']) {
     testWidgets('既有路外場站只修改 $field 也能送出，還原後恢復未變更提示', (tester) async {
       final lot = ParkingSpot.fromJson({
@@ -777,7 +802,7 @@ void main() {
     expect(store.submissions.single['proposed'], {
       'space_type': 'paidMotorcycle',
       'condition': {'bay': 'motorcycle', 'use': 'usual', 'charge': 'toll'},
-      'facility_types': null,
+      'facility_types': ['roadside'],
       'parking_access': null,
     });
     await tester.pumpWidget(const SizedBox.shrink());

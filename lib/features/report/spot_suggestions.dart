@@ -505,9 +505,10 @@ class _SuggestionFormState extends State<_SuggestionForm> {
         // A lot becoming a street bay drops what made it a lot, or the
         // table would still read it as off-street (§1.1 placement).
         if (!lotType && type != SpaceType.offStreet) ...{
-          // The set alone: the table clears facility_type with it.
+          // A street bay is built roadside; the table sets facility_type
+          // from the set.
           if (spot.facilities.any((t) => t != FacilityType.roadside))
-            'facility_types': null,
+            'facility_types': [FacilityType.roadside.name],
           if (spot.access != null) 'parking_access': null,
         },
         if (lotType) ...{

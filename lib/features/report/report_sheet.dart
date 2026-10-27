@@ -433,7 +433,9 @@ class FacilityField extends StatelessWidget {
             key: ValueKey('facility-${type.name}'),
             label: type.label,
             value: value.contains(type),
+            // A stored type not offered here (路邊) stays as it is.
             onChanged: (on) => onChanged({
+              ...value.where((t) => !lotFacilities.contains(t)),
               for (final t in lotFacilities)
                 if (t == type ? on : value.contains(t)) t,
             }),

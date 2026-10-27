@@ -382,7 +382,11 @@ begin
       v_conflict:=(v_report.base_spot is not null and exists(
           select 1 from jsonb_object_keys(v_patch) k
           cross join lateral (select case when k in ('fee_plans','fee_plan') then 'fee' else k end f) m
-          where (v_report.base_spot->m.f) is distinct from (v_before->m.f)))
+          where (case when m.f='facility_types' and not (v_report.base_spot ? 'facility_types')
+            -- A report from before the set existed: its one type as the set.
+            then case when v_report.base_spot->>'facility_type' is null then 'null'::jsonb
+              else jsonb_build_array(v_report.base_spot->>'facility_type') end
+            else v_report.base_spot->m.f end) is distinct from (v_before->m.f)))
         or (v_seen is not null and (v_seen->'plans') is distinct from (v_before->'fee_plans'));
       if v_conflict and not coalesce(p_force,false) then
         raise exception 'spot changed since the report' using errcode='40001',
@@ -412,7 +416,11 @@ begin
       v_conflict:=(v_report.base_spot is not null and exists(
           select 1 from jsonb_object_keys(v_patch) k
           cross join lateral (select case when k in ('fee_plans','fee_plan') then 'fee' else k end f) m
-          where (v_report.base_spot->m.f) is distinct from (v_before->m.f)))
+          where (case when m.f='facility_types' and not (v_report.base_spot ? 'facility_types')
+            -- A report from before the set existed: its one type as the set.
+            then case when v_report.base_spot->>'facility_type' is null then 'null'::jsonb
+              else jsonb_build_array(v_report.base_spot->>'facility_type') end
+            else v_report.base_spot->m.f end) is distinct from (v_before->m.f)))
         or (v_seen is not null and (v_seen->'plans') is distinct from (v_before->'fee_plans'));
       if v_conflict and not coalesce(p_force,false) then
         raise exception 'spot changed since the report' using errcode='40001',
@@ -452,6 +460,156 @@ AS $function$
   select array['name','lat','lng','city','district','space_type','fee_note','note','heavy_allowed','scooter_allowed',
     'source_url','source_name','source_id','license_note','scooter_total','facility_type','facility_types','parking_access','address',
     'road_segment','entrance_note','parking_guide','special_rules','parking_zones','fee'];
+$function$;
+
+CREATE OR REPLACE FUNCTION public.admin_import_plan(p_spots jsonb)
+ RETURNS TABLE(source_id text, kind text, target uuid, status text, reason text, name text, city text, district text, base_updated_at timestamp with time zone, hidden boolean, incoming jsonb, changes jsonb)
+ LANGUAGE plpgsql
+ STABLE
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare
+  v_spot jsonb; v_index integer:=0; v_seen text[]:='{}';
+  v_official boolean; v_raw text; v_current jsonb; v_owned jsonb; k text;
+  v_change jsonb;
+begin
+  for v_spot in select value from jsonb_array_elements(p_spots) loop
+    v_index:=v_index+1;
+    source_id:=coalesce(v_spot->>'id',''); kind:=null; target:=null; status:=null; reason:='';
+    name:=coalesce(v_spot->>'name',''); city:=coalesce(v_spot->>'city',''); district:=coalesce(v_spot->>'district','');
+    base_updated_at:=null; hidden:=false; incoming:=null; changes:='[]';
+    v_official:=source_id like 'official:%';
+    kind:=case when v_official then 'official' else 'community' end;
+    v_raw:=case when v_official then substr(source_id,10) else source_id end;
+    if jsonb_typeof(v_spot) is distinct from 'object' or v_raw !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+      status:='invalid'; reason:=format('第 %s 筆沒有可辨識的 id',v_index); return next; continue;
+    end if;
+    target:=v_raw::uuid;
+    if source_id=any(v_seen) then
+      status:='invalid'; reason:='檔案中重複的 id'; return next; continue;
+    end if;
+    v_seen:=v_seen||source_id;
+    if coalesce(v_spot->>'source','')<>(case when v_official then 'official' else 'import' end) then
+      status:='invalid'; reason:='來源與 id 不符（官方點 id 以 official: 開頭，社群點 source 為 import）'; return next; continue;
+    end if;
+    begin
+      incoming:=public.admin_import_row(v_spot,v_official);
+    exception when others then
+      status:='invalid'; reason:='欄位型別錯誤：'||sqlerrm; return next; continue;
+    end;
+    if btrim(coalesce(incoming->>'name',''))='' or char_length(incoming->>'name')>100 then
+      reason:='名稱需為 1–100 字';
+    elsif (incoming->>'lat') is null or (incoming->>'lng') is null
+       or (incoming->>'lat')::float8 not between 20 and 27 or (incoming->>'lng')::float8 not between 118 and 123 then
+      reason:='座標不在台灣範圍內';
+    elsif btrim(coalesce(incoming->>'city',''))='' then
+      reason:='缺少縣市';
+    elsif v_official and (coalesce(incoming->>'source_url','') !~ '^https://' or btrim(coalesce(incoming->>'source_name',''))='') then
+      reason:='官方點需要資料來源與 https 官方資料網址';
+    elsif jsonb_typeof(incoming->'fee')='object' and not public.valid_fee(incoming->'fee') then
+      reason:='費率格式不符';
+    end if;
+    if reason<>'' then status:='invalid'; return next; continue; end if;
+
+    if not v_official then
+      select to_jsonb(c)-'location' into v_current from community_spots c where c.id=target;
+      if v_current is null then status:='new';
+      else
+        status:='existing'; reason:='社群點已存在，匯入不更新';
+        base_updated_at:=(v_current->>'updated_at')::timestamptz;
+        hidden:=v_current->>'status'='hidden';
+      end if;
+      return next; continue;
+    end if;
+
+    select to_jsonb(o) into v_current from official_heavy_spots o where o.id=target;
+    if v_current is null then status:='new'; return next; continue; end if;
+    -- Zones as files write them: a plan reference is the database's own
+    -- (fee_plans_sync() puts it back on write), so it is no change.
+    v_current:=jsonb_set(v_current,'{parking_zones}',public.zones_without_plans(v_current->'parking_zones'));
+    base_updated_at:=(v_current->>'updated_at')::timestamptz;
+    hidden:=(v_current->>'hidden')::boolean;
+    -- A file without a fee leaves the stored one while the note it
+    -- describes stays the same.
+    if incoming->'fee'='null'::jsonb and incoming->'fee_note'=v_current->'fee_note' then
+      incoming:=jsonb_set(incoming,'{fee}',v_current->'fee');
+    end if;
+    -- A note that is the stored fee's source text, beside no fee or the
+    -- stored fee, describes the same fee: the stored fee and its sentence
+    -- stay (202610270022 moved such notes to fee_source_text). The source
+    -- text always describes the stored fee: spot_fee_source_text() clears
+    -- it whenever the fee changes without one.
+    if v_current->>'fee_source_text'<>'' and incoming->>'fee_note'=v_current->>'fee_source_text'
+       and (incoming->'fee'='null'::jsonb or incoming->'fee'=v_current->'fee') then
+      incoming:=jsonb_set(jsonb_set(incoming,'{fee}',v_current->'fee'),'{fee_note}',v_current->'fee_note');
+    end if;
+
+    -- Files written before the set (decision 58) carry facility_type alone:
+    -- the stored set stays while the type is the stored first one, else
+    -- the file's type becomes the set. A file with the set gives its first
+    -- as facility_type, as the table keeps it.
+    if incoming->'facility_types'='null'::jsonb then
+      incoming:=jsonb_set(incoming,'{facility_types}',case
+        when incoming->'facility_type'='null'::jsonb then 'null'::jsonb
+        when incoming->'facility_type'=v_current->'facility_type'
+          then coalesce(v_current->'facility_types','null'::jsonb)
+        else jsonb_build_array(incoming->'facility_type') end);
+    elsif jsonb_typeof(incoming->'facility_types')='array'
+        and public.valid_facility_types(array(select jsonb_array_elements_text(incoming->'facility_types'))) then
+      incoming:=jsonb_set(jsonb_set(incoming,'{facility_types}',to_jsonb(public.facility_types_ordered(
+          array(select jsonb_array_elements_text(incoming->'facility_types'))))),
+        '{facility_type}',to_jsonb(public.facility_types_ordered(
+          array(select jsonb_array_elements_text(incoming->'facility_types'))))->0);
+    end if;
+
+    -- For each field, the latest audited write that changed it, if that
+    -- was an administrator's and the row still holds its value.
+    with entries as (
+      select a.created_at,a.action,a.before as old_row,a.after as new_row
+      from admin_audit_log a
+      where a.target_table='official_heavy_spots' and a.target_id=target::text
+        and a.action in ('create_spot','update_spot','import_spot','convert_fee')
+      union all
+      select a.created_at,a.action,a.before->'spot',a.after->'spot' from admin_audit_log a
+      where a.action='resolve_report' and a.after->'spot'->>'id'=target::text
+        and a.after->>'spot_table'='official_heavy_spots' and a.after->>'status'='accepted'
+      union all
+      select a.created_at,a.action,null,a.after->'official' from admin_audit_log a
+      where a.action='promote_spot' and a.after->'official'->>'id'=target::text
+    ),
+    writes as (
+      select distinct on (f) f,e.action,e.created_at,e.new_row->f as value
+      from entries e cross join unnest(public.admin_import_fields()) f
+      where e.new_row ? f and (e.old_row is null or (e.old_row->f) is distinct from (e.new_row->f))
+      order by f,e.created_at desc
+    )
+    select coalesce(jsonb_object_agg(w.f,jsonb_build_object('at',w.created_at,'action',w.action)),'{}')
+      into v_owned from writes w
+      -- Stored zones are compared without plan references, the audited
+      -- values too, so a promoted or edited zone stays the administrator's.
+      where w.action<>'import_spot' and (case when w.f='parking_zones' then public.zones_without_plans(w.value)
+        else w.value end) is not distinct from v_current->w.f;
+
+    foreach k in array public.admin_import_fields() loop
+      if (incoming->k) is distinct from (v_current->k) then
+        v_change:=jsonb_build_object('field',k,'current',v_current->k,'incoming',incoming->k,'admin',v_owned->k);
+        changes:=changes||jsonb_build_array(v_change);
+      end if;
+    end loop;
+    -- A fee is read from its text: when either is the administrator's, both
+    -- are kept or replaced together, never a file fee beside a kept text.
+    select coalesce(jsonb_agg(case
+        when c->>'field' in ('fee','fee_note') and jsonb_typeof(c->'admin') is distinct from 'object'
+        then c||jsonb_build_object('admin',(select p->'admin' from jsonb_array_elements(changes) p
+          where p->>'field' in ('fee','fee_note') and jsonb_typeof(p->'admin')='object' limit 1))
+        else c end order by o),'[]')
+      into changes from jsonb_array_elements(changes) with ordinality as e(c,o);
+    status:=case when changes='[]'::jsonb then 'unchanged'
+      when exists(select 1 from jsonb_array_elements(changes) c where jsonb_typeof(c->'admin')='object') then 'conflict'
+      else 'update' end;
+    return next;
+  end loop;
+end;
 $function$;
 
 CREATE OR REPLACE FUNCTION public.admin_import_apply(p_spots jsonb, p_choices jsonb, p_effective_date date, p_note text DEFAULT ''::text)
@@ -733,8 +891,9 @@ AS $function$
   end;
 $function$;
 
--- The history records the whole set of types; entries written before
--- keep their facility_type.
+-- The history records the whole set of types. Both keys are listed:
+-- spot_history_changes() compares facility_types where the row carries it
+-- and facility_type on snapshots written before it existed.
 
 CREATE OR REPLACE FUNCTION public.spot_history_fields()
  RETURNS text[]
@@ -743,7 +902,7 @@ CREATE OR REPLACE FUNCTION public.spot_history_fields()
  SET search_path TO ''
 AS $function$
   select array['name','lat','lng','city','district','address','road_segment','space_type','condition',
-    'facility_types','parking_access','parking_zones','zones_complete','scooter_allowed','heavy_allowed',
+    'facility_type','facility_types','parking_access','parking_zones','zones_complete','scooter_allowed','heavy_allowed',
     'scooter_verified_at','heavy_verified_at','fee','fee_note','fee_plan','fee_plans','fee_source_text',
     'scooter_total','entrance_note','parking_guide','special_rules','photo_urls','note','closure','status','hidden',
     'source_name','source_url','effective_date','license_note','contributor_name'];
@@ -756,9 +915,23 @@ CREATE OR REPLACE FUNCTION public.spot_history_public_fields()
  SET search_path TO ''
 AS $function$
   select array['name','lat','lng','city','district','address','road_segment','space_type','condition',
-    'facility_types','parking_access','parking_zones','zones_complete','scooter_allowed','heavy_allowed',
+    'facility_type','facility_types','parking_access','parking_zones','zones_complete','scooter_allowed','heavy_allowed',
     'fee','fee_note','scooter_total','entrance_note','parking_guide','special_rules','photo_urls','note','closure',
     'source_name','source_url','effective_date','license_note'];
+$function$;
+
+CREATE OR REPLACE FUNCTION public.spot_history_changes(p_before jsonb, p_after jsonb)
+ RETURNS jsonb
+ LANGUAGE sql
+ IMMUTABLE
+ SET search_path TO ''
+AS $function$
+  select coalesce(jsonb_agg(jsonb_build_object('field',f,'before',p_before->f,'after',p_after->f) order by n),'[]'::jsonb)
+  from unnest(public.spot_history_fields()) with ordinality u(f,n)
+  where jsonb_typeof(p_after)='object' and p_after ? f
+    -- One entry per change of type: the set once rows carry it.
+    and not (f='facility_type' and p_after ? 'facility_types')
+    and (p_before is null or jsonb_typeof(p_before)<>'object' or (p_before->f) is distinct from (p_after->f));
 $function$;
 
 -- 202610270091_spot_closures.sql's view plus facility_types (appended: a
