@@ -1,16 +1,19 @@
 import 'dart:math' as math;
 
 import '../../models/parking.dart';
+import '../../models/space_kind.dart';
 import '../../ui/adaptive/adaptive.dart';
 import 'map_legend.dart';
 
-/// Filters the map by space type. Each option shows its ground marking and
-/// how many spots of that type the current map view holds.
+/// Filters the map by bay kind with the same grouped list the report forms
+/// use (C6 canvas AppPatterns, pattern 1). Each option shows its ground
+/// marking and how many spots of that kind the current map view holds.
 Future<void> showSpaceTypeSheet(
   BuildContext context, {
-  required SpaceType? value,
-  required Map<SpaceType?, int> counts,
-  required ValueChanged<SpaceType?> onChanged,
+  required SpaceKind? value,
+  required Map<SpaceKind?, int> counts,
+  Map<SpaceKindGroup, int> groupCounts = const {},
+  required ValueChanged<SpaceKind?> onChanged,
 }) => showAdaptiveSheet<void>(
   context,
   (ctx) => ContentPage(
@@ -23,107 +26,267 @@ Future<void> showSpaceTypeSheet(
             ?.copyWith(color: Theme.of(ctx).colorScheme.onSurfaceVariant),
       ),
       const SizedBox(height: 16),
-      for (final option in <SpaceType?>[null, ...SpaceType.values])
-        SpaceTypeOption(
-          type: option,
-          count: counts[option] ?? 0,
-          selected: option == value,
-          onTap: () {
-            onChanged(option);
-            Navigator.pop(ctx);
-          },
-        ),
+      SpaceKindOption(
+        kind: null,
+        count: counts[null] ?? 0,
+        selected: value == null,
+        onTap: () {
+          onChanged(null);
+          Navigator.pop(ctx);
+        },
+      ),
+      SpaceKindList(
+        value: value,
+        counts: counts,
+        groupCounts: groupCounts,
+        onChanged: (option) {
+          onChanged(option);
+          Navigator.pop(ctx);
+        },
+      ),
     ],
   ),
 );
 
-String _detail(SpaceType? type) => switch (type) {
-  null => '顯示所有類型的停車點',
-  SpaceType.paidMotorcycle => '路邊白線機車格，依公告時段收費',
-  SpaceType.freeMotorcycle => '不收費的路邊或巷弄機車格',
-  SpaceType.heavyOnly => '標示大型重機專用的格位',
-  SpaceType.car => '依規定可停放機車的汽車格',
-  SpaceType.offStreet => '停車場內的機車或重機區',
-  SpaceType.disabledMotorcycle => '限經監理站檢驗合格的身障特製機車，並持識別證或專用牌照',
-  SpaceType.timedMotorcycle => '黃色內框機車格，依牌面時段限時停放',
-  SpaceType.flexShared => '汽車與機車依時段輪替使用的格位',
-  SpaceType.evMotorcycle => '限電動機車停放或充換電',
-};
-
-class SpaceTypeOption extends StatelessWidget {
-  const SpaceTypeOption({
+/// The bay kinds in their four groups (C6 canvas AppPatterns, pattern 1;
+/// AppForm): each group folds, and only the one holding the pick, or the
+/// one the rider opened, shows its kinds. [followUp] goes indented under
+/// the picked kind: what the form asks about it next.
+class SpaceKindList extends StatefulWidget {
+  const SpaceKindList({
     super.key,
-    required this.type,
-    required this.count,
-    required this.selected,
-    required this.onTap,
+    required this.value,
+    required this.onChanged,
+    this.counts,
+    this.groupCounts = const {},
+    this.followUp,
+    this.keyPrefix = 'space',
   });
-  final SpaceType? type;
-  final int count;
-  final bool selected;
-  final VoidCallback onTap;
+  final SpaceKind? value;
+  final ValueChanged<SpaceKind> onChanged;
+
+  /// Spots of each kind in the map view (the filter); null shows none.
+  final Map<SpaceKind?, int>? counts;
+
+  /// Distinct spots of each group in the map view, shown while it is
+  /// folded: a 普大共用 bay is also a toll or free one, so the kinds' counts
+  /// do not add up to it.
+  final Map<SpaceKindGroup, int> groupCounts;
+  final Widget? followUp;
+
+  /// Prefix of each row's widget key, for tests.
+  final String keyPrefix;
+
+  @override
+  State<SpaceKindList> createState() => _SpaceKindListState();
+}
+
+class _SpaceKindListState extends State<SpaceKindList> {
+  late SpaceKindGroup? open = widget.value?.group;
+
+  @override
+  void didUpdateWidget(covariant SpaceKindList old) {
+    super.didUpdateWidget(old);
+    if (widget.value != old.value && widget.value != null) {
+      open = widget.value!.group;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
-    final label = type?.label ?? '全部格位';
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Semantics(
-        button: true,
-        selected: selected,
-        label: '$label，目前範圍 $count 個',
-        // The child's tap is excluded with its semantics; screen readers need it here.
-        onTap: onTap,
-        excludeSemantics: true,
-        child: Material(
-          color: selected ? colors.primaryContainer : Colors.transparent,
-          borderRadius: BorderRadius.circular(16),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            key: ValueKey('space-${type?.name ?? 'all'}'),
-            onTap: onTap,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-              child: Row(
-                children: [
-                  ExcludeSemantics(child: GroundMarking(type: type)),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+    final counts = widget.counts;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final group in SpaceKindGroup.values) ...[
+          DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border(top: BorderSide(color: colors.outlineVariant)),
+            ),
+            child: Semantics(
+              button: true,
+              expanded: open == group,
+              child: InkWell(
+                key: ValueKey('${widget.keyPrefix}-group-${group.name}'),
+                onTap: () =>
+                    setState(() => open = open == group ? null : group),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 48),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Row(
                       children: [
-                        Text(
-                          label,
-                          style: text.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w600,
+                        Expanded(
+                          child: Text(
+                            group.label,
+                            style: text.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
-                        Text(
-                          _detail(type),
-                          style: text.bodySmall?.copyWith(
-                            color: colors.onSurfaceVariant,
+                        if (open != group)
+                          Flexible(
+                            child: Text(
+                              counts == null
+                                  ? group.hint
+                                  : '${widget.groupCounts[group] ?? 0}',
+                              textAlign: TextAlign.end,
+                              style: text.bodyMedium?.copyWith(
+                                color: colors.onSurfaceVariant,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                              ),
+                            ),
                           ),
+                        const SizedBox(width: 8),
+                        Icon(
+                          open == group ? Icons.expand_less : Icons.expand_more,
+                          size: 20,
+                          color: colors.onSurfaceVariant,
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '$count',
-                    style: text.titleSmall?.copyWith(
-                      color: count == 0 ? colors.outline : colors.onSurface,
-                      fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ),
+          ),
+          if (open == group)
+            for (final kind in group.kinds) ...[
+              SpaceKindOption(
+                targetKey: ValueKey('${widget.keyPrefix}-${kind.name}'),
+                kind: kind,
+                count: counts?[kind],
+                selected: kind == widget.value,
+                onTap: () => widget.onChanged(kind),
+              ),
+              if (kind == widget.value && widget.followUp != null)
+                Padding(
+                  padding: const EdgeInsetsDirectional.only(
+                    start: 16,
+                    bottom: 8,
+                  ),
+                  child: widget.followUp,
+                ),
+            ],
+        ],
+      ],
+    );
+  }
+}
+
+/// One bay kind: its ground marking, its name and one sentence; the whole
+/// row is the target, and a pick changes only its fill and outline. Null
+/// [kind] is 全部格位 (the filter).
+class SpaceKindOption extends StatelessWidget {
+  const SpaceKindOption({
+    super.key,
+    required this.kind,
+    required this.selected,
+    required this.onTap,
+    this.count,
+    this.targetKey,
+  });
+  final SpaceKind? kind;
+
+  /// The key of the row's tap target, for tests.
+  final Key? targetKey;
+  final bool selected;
+  final VoidCallback onTap;
+
+  /// Spots of this kind in the map view; null shows none.
+  final int? count;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final label = kind?.label ?? '全部格位';
+    final count = this.count;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Semantics(
+        button: true,
+        selected: selected,
+        inMutuallyExclusiveGroup: true,
+        label: count == null ? label : '$label，目前範圍 $count 個',
+        // The child's tap is excluded with its semantics; screen readers
+        // need it here.
+        onTap: onTap,
+        excludeSemantics: true,
+        child: Material(
+          color: selected ? colors.primaryContainer : colors.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(
+              color: selected ? colors.primary : colors.outlineVariant,
+              width: selected ? 2 : 1,
+            ),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            key:
+                targetKey ??
+                (kind == null ? const ValueKey('space-all') : null),
+            onTap: onTap,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 60),
+              child: Padding(
+                // The thicker outline sits inside, so the row keeps its size.
+                padding: EdgeInsets.symmetric(
+                  horizontal: selected ? 11 : 12,
+                  vertical: 8,
+                ),
+                child: Row(
+                  children: [
+                    ExcludeSemantics(
+                      child: GroundMarking(
+                        type: kind?.type,
+                        shared: kind == SpaceKind.sharedMotorcycle,
+                        size: 40,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  SizedBox.square(
-                    dimension: 24,
-                    child: selected
-                        ? Icon(Icons.check, color: colors.primary)
-                        : null,
-                  ),
-                ],
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            label,
+                            style: text.titleSmall?.copyWith(
+                              fontSize: 15,
+                              fontWeight: selected
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              color: selected
+                                  ? colors.onPrimaryContainer
+                                  : colors.onSurface,
+                            ),
+                          ),
+                          Text(
+                            kind?.detail ?? '顯示所有類型的停車點',
+                            style: text.bodySmall?.copyWith(
+                              color: colors.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (count != null) ...[
+                      const SizedBox(width: 8),
+                      Text(
+                        '$count',
+                        style: text.titleSmall?.copyWith(
+                          color: count == 0 ? colors.outline : colors.onSurface,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -137,22 +300,33 @@ class SpaceTypeOption extends StatelessWidget {
 /// boxes (with a meter when paid), a yellow heavy-bike box, a wide car
 /// bay, or a lot's P sign. "All" tiles the four street markings.
 class GroundMarking extends StatelessWidget {
-  const GroundMarking({super.key, required this.type, this.size = 44});
+  const GroundMarking({
+    super.key,
+    required this.type,
+    this.size = 44,
+    this.shared = false,
+  });
+
+  /// Null with [shared] unset tiles the four street markings (全部).
   final SpaceType? type;
   final double size;
+
+  /// 普大共用機車格: plain motorcycle bays with the heavy-bike helmet.
+  final bool shared;
   @override
   Widget build(BuildContext context) => SizedBox.square(
     dimension: size,
     child: ClipRRect(
       borderRadius: BorderRadius.circular(10),
-      child: CustomPaint(painter: _MarkingPainter(type)),
+      child: CustomPaint(painter: _MarkingPainter(type, shared: shared)),
     ),
   );
 }
 
 class _MarkingPainter extends CustomPainter {
-  _MarkingPainter(this.type);
+  _MarkingPainter(this.type, {this.shared = false});
   final SpaceType? type;
+  final bool shared;
 
   static const asphalt = Color(0xff3d4247);
   static const white = Color(0xfff2f2ee);
@@ -163,6 +337,18 @@ class _MarkingPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     canvas.drawRect(Offset.zero & size, Paint()..color = asphalt);
+    if (shared) {
+      _paintType(canvas, size, SpaceType.freeMotorcycle);
+      // The helmet of the heavy-only badge over the plain bays.
+      _paintGlyph(
+        canvas,
+        size,
+        spaceBadgeIcon(SpaceBadge.heavyOnly)!,
+        yellow,
+        .34,
+      );
+      return;
+    }
     final type = this.type;
     if (type == null) {
       // Four quarters, one per street marking.
@@ -330,5 +516,6 @@ class _MarkingPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_MarkingPainter old) => old.type != type;
+  bool shouldRepaint(_MarkingPainter old) =>
+      old.type != type || old.shared != shared;
 }

@@ -16,6 +16,7 @@ import '../../domain/eligibility.dart';
 import '../../domain/map_viewport.dart';
 import '../../domain/spot_clusters.dart';
 import '../../models/parking.dart';
+import '../../models/space_kind.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../report/report_sheet.dart';
 import 'availability_capsule.dart';
@@ -55,7 +56,7 @@ class _MapPageState extends ConsumerState<MapPage> {
 
   /// Kept for dispose, where `ref` can no longer be read.
   late final launchStore = ref.read(storeProvider);
-  SpaceType? type;
+  SpaceKind? type;
   bool greeted = false;
   bool promptDeferred = false;
   late final AppLifecycleListener lifecycle;
@@ -224,9 +225,20 @@ class _MapPageState extends ConsumerState<MapPage> {
       value: type,
       counts: {
         null: inView.length,
-        for (final option in SpaceType.values)
+        for (final option in SpaceKind.values)
           option: inView
               .where((s) => matchesSpaceFilter(s, option, store.vehicle))
+              .length,
+      },
+      // Each spot once per group, though it may match two of its kinds.
+      groupCounts: {
+        for (final group in SpaceKindGroup.values)
+          group: inView
+              .where(
+                (s) => group.kinds.any(
+                  (k) => matchesSpaceFilter(s, k, store.vehicle),
+                ),
+              )
               .length,
       },
       onChanged: (option) => setState(() => type = option),
