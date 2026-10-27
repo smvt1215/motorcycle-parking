@@ -334,9 +334,25 @@ List<(FeeVehicle?, String)> _zoneLegacy(ParkingZone z) {
     if (named)
       for (final v in FeeVehicle.values)
         if (has(texts[v]!)) (v, texts[v]!) else if (serves.contains(v)) (v, ''),
-    if (has(note) && !texts.values.contains(note)) (null, note),
+    // The zone's note is shown as given unless it repeats a vehicle's text,
+    // the old car text included: that never shows (decision 45, #155 item
+    // 28).
+    if (has(note) &&
+        !texts.values.contains(note) &&
+        note != z.carFeeNote.trim())
+      (null, note),
   ];
 }
+
+/// The vehicles [fee]'s board lists by default (the known ones and the
+/// heavy bike), and the car whether known or not.
+List<FeeVehicle> _withCar(Fee fee) => [
+  for (final v in FeeVehicle.values)
+    if (fee.textOf(v.wire) != null ||
+        v == FeeVehicle.heavy ||
+        v == FeeVehicle.car)
+      v,
+];
 
 /// The boards the details' 收費 section lists, in the lot's zone order
 /// (design §8.4). A zone's own rate first; the lot's when no zone has one,
@@ -374,15 +390,11 @@ List<FeeSectionBoard> feeSectionBoards(
       FeeSectionBoard(
         title: '全場',
         fee: fee,
-        vehicles: cars
-            ? [
-                for (final v in FeeVehicle.values)
-                  if (fee.textOf(v.wire) != null ||
-                      v == FeeVehicle.heavy ||
-                      v == FeeVehicle.car)
-                    v,
-              ]
-            : null,
+        vehicles: cars ? _withCar(fee) : null,
+        // The lot-wide rate is every zone's, so a zone's ended trial marks
+        // it (#155 item 29).
+        trialEnded: [for (var i = 0; i < spot.zones.length; i++) ?ended(i)]
+            .firstOrNull,
       ),
     ];
   }
@@ -402,6 +414,9 @@ List<FeeSectionBoard> feeSectionBoards(
                     ...list,
                     FeeVehicle.car,
                   }.toList(),
+                  // No bays to go by, yet the zone has cars: the board's
+                  // own vehicles and the car, unconfirmed (#155 item 27).
+                  null when _zoneHasCars(z) => _withCar(z.fee!),
                   final list => list,
                 },
           legacy: z.fee == null ? _zoneLegacy(z) : const [],
@@ -558,6 +573,9 @@ class _LegacyBoard extends StatelessWidget {
       ...lines.where((l) => l.$1 == first),
       ...lines.where((l) => l.$1 != first),
     ];
+    // Decision 54: each unconfirmed vehicle reads 費率未確認, and the board
+    // says once, at its foot, to read the posted notice.
+    final posted = lines.any((l) => l.$1 != null && l.$2.isEmpty);
     return Container(
       key: const ValueKey('fee-legacy-board'),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
@@ -608,10 +626,7 @@ class _LegacyBoard extends StatelessWidget {
                                             color: colors.unconfirmed,
                                           ),
                                         ),
-                                        TextSpan(
-                                          text:
-                                              ' ${vehicle == FeeVehicle.car ? carUnconfirmed : '費率未確認'}',
-                                        ),
+                                        TextSpan(text: ' $feeUnconfirmed'),
                                       ],
                                     ),
                                     textAlign: TextAlign.end,
@@ -631,6 +646,7 @@ class _LegacyBoard extends StatelessWidget {
                         ],
                       ),
               ),
+            if (posted) FeeBoardPostedNote(colors: colors),
           ],
         ),
       ),

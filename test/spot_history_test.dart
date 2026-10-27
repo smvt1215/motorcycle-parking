@@ -86,6 +86,68 @@ void main() {
     },
   );
 
+  test('車主自行修改、投票與暫時封閉（決定 56、#155 第 30 項）', () {
+    final entries = HistoryEntry.list([
+      {
+        'at': '2026-10-27T03:00:00Z',
+        'kind': 'vote',
+        'created': false,
+        'votes': {'still_there': 3, 'gone': 0},
+        'changes': [
+          {'field': 'status', 'after': 'confirmed'},
+        ],
+      },
+      {
+        'at': '2026-10-26T03:00:00Z',
+        'kind': 'vote',
+        'created': false,
+        'votes': {'still_there': 1, 'gone': 2},
+        'changes': <Object>[],
+      },
+      {
+        'at': '2026-10-25T03:00:00Z',
+        'kind': 'owner',
+        'created': false,
+        'changes': [
+          {'field': 'name', 'after': '新名稱'},
+        ],
+      },
+      {
+        'at': '2026-10-24T03:00:00Z',
+        'kind': 'admin',
+        'created': false,
+        'changes': [
+          {
+            'field': 'closure',
+            'after': {
+              'reason': 'works',
+              'since': '2026-10-24',
+              'until': '2026-11-03',
+            },
+          },
+        ],
+      },
+      {
+        'at': '2026-10-23T03:00:00Z',
+        'kind': 'admin',
+        'created': false,
+        'changes': [
+          {'field': 'closure', 'after': null},
+        ],
+      },
+    ]);
+    expect(entries[0].title(app: true), '3 位車友確認仍在');
+    expect(historySummary(entries[0]), '點位改為已確認存在');
+    expect(historySourceText(entries[0], official: false), '車友投票');
+    expect(entries[1].title(app: true), '1 位車友確認仍在、2 位車友回報已不存在');
+    expect(historySummary(entries[1]), isEmpty);
+    expect(entries[2].title(app: true), '名稱');
+    expect(historySourceText(entries[2], official: false), '車友更新');
+    expect(entries[3].title(app: true), '暫時封閉');
+    expect(historySummary(entries[3]), '施工中，10 月 24 日（六）起，預計 11 月 3 日（二）恢復');
+    expect(historySummary(entries[4]), '解除暫時封閉');
+  });
+
   for (final (width, height) in [
     (320.0, 640.0),
     (390.0, 844.0),
