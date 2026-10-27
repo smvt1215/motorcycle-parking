@@ -9,6 +9,7 @@ import 'package:motorcycle_parking/admin/rules/rules_page.dart';
 import 'package:motorcycle_parking/admin/users/users_page.dart';
 
 import 'fake_admin_gateway.dart';
+import 'fold_helpers.dart';
 import 'spots_test.dart' show FakeSpotMap;
 
 /// The admin shell at the C6 canvas sizes (#118, 決定 48、49).
@@ -312,6 +313,7 @@ void main() {
         size: const Size(402, 480),
       );
       final form = spotForm();
+      await openFold(tester, '位置');
       await tester.scrollUntilVisible(
         find.text('開地圖調整'),
         200,
