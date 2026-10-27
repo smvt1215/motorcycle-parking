@@ -48,7 +48,10 @@ void main() {
       expect(cal.years, {2025});
       expect(cal.dayOf(DateTime.utc(2025, 2, 8)).off, isFalse);
       expect(HolidayCalendar.fromJson(null), isNull);
-      expect(HolidayCalendar.fromJson({'years': <int>[], 'off': <String>[]}), isNull);
+      expect(
+        HolidayCalendar.fromJson({'years': <int>[], 'off': <String>[]}),
+        isNull,
+      );
       expect(
         HolidayCalendar.fromJson({
           'years': [2025],
