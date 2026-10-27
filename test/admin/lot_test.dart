@@ -294,6 +294,21 @@ void main() {
       expect(spots.saveError, contains('「重機計時」1 個分區在用，先改掉引用'));
     });
 
+    test('沒有分區費率時，區域卡預覽 App 會顯示的全場費率', () async {
+      gateway.spotRows[officialId] = {
+        ...lotRow(gateway),
+        'parking_zones': [
+          for (final z in zones)
+            {...z}
+              ..remove('fee_plan')
+              ..remove('fee'),
+        ],
+      };
+      await spots.open(officialId);
+      expect(spots.zones.any((z) => z['fee'] is Map), isFalse);
+      expect(spots.draft['fee'], Fee.fromJson(scooterHourly));
+    });
+
     test('全場費率改選規則時一併送 fee 與它的句子', () async {
       await spots.open(officialId);
       spots.setTopPlan('p2');
@@ -482,6 +497,13 @@ void main() {
         final unknown = find.byKey(const ValueKey('bay-1-大型重機-null'));
         await reach(unknown);
         expect(unknown.hitTestable(), findsOneWidget);
+        // A heavy bay cannot open to scooters: the choice does nothing.
+        final scooter = find.byKey(const ValueKey('bay-1-普通機車-true'));
+        await reach(scooter);
+        await tester.tap(scooter.hitTestable());
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('bay-problem-1')), findsNothing);
+        expect(find.text('已修改'), findsNothing);
         await reach(find.byKey(const ValueKey('fee-source-text')));
         expect(find.textContaining('機車每小時10元'), findsOneWidget);
         expect(tester.takeException(), isNull);

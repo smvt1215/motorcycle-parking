@@ -744,8 +744,18 @@ class _BayRow extends StatelessWidget {
       Bay.car => ShareKind.carMotorcycle,
       _ => null,
     };
+    // What the app reads (parking_decision.dart _lot()): the zone's own
+    // rate, or the whole lot's when no zone has one.
+    final top = spots.draft['fee'];
+    final lotWide =
+        zone['fee'] is! Map &&
+        top is Fee &&
+        !top.isEmpty &&
+        !spots.zones.any((z) => z['fee'] is Map);
     final rates = zone['fee'] is Map
         ? Fee.fromJson(projectZoneFee(zone['fee'] as Map, zone))
+        : lotWide
+        ? top
         : null;
     final other = [
       for (final l in c.limits)
@@ -757,13 +767,18 @@ class _BayRow extends StatelessWidget {
         },
       if (c.schedule.isNotEmpty) '共用時段 ${c.schedule.length} 段',
     ];
-    Widget vehicle(String label, bool? value, ValueChanged<bool?> onPick) =>
-        VehicleTriState(
-          label: label,
-          value: value,
-          keyPrefix: 'bay-$index-$label',
-          onChanged: onPick,
-        );
+    Widget vehicle(
+      String label,
+      bool? value,
+      ValueChanged<bool?> onPick, {
+      Set<bool?> disabled = const {},
+    }) => VehicleTriState(
+      label: label,
+      value: value,
+      keyPrefix: 'bay-$index-$label',
+      onChanged: onPick,
+      disabled: disabled,
+    );
     return Container(
       margin: const EdgeInsets.only(top: 12),
       padding: const EdgeInsets.fromLTRB(12, 8, 4, 12),
@@ -874,6 +889,9 @@ class _BayRow extends StatelessWidget {
                       (v) => _set(
                         _with(c, allow: () => _allow(v, c.allow?.heavy)),
                       ),
+                      // The contract refuses scooters in a heavy bay; the
+                      // choice would leave a condition nothing can read.
+                      disabled: c.bay == Bay.heavy ? const {true} : const {},
                     ),
                     vehicle(
                       '大型重機',
@@ -901,6 +919,8 @@ class _BayRow extends StatelessWidget {
                 Text(
                   rates == null || rates.isEmpty
                       ? 'App 顯示：費率未確認'
+                      : lotWide
+                      ? 'App 顯示全場費率：${rates.summary}'
                       : 'App 顯示：${rates.summary}',
                   key: ValueKey('zone-rates-$index'),
                   style: muted,

@@ -131,10 +131,14 @@ class VehicleTriState extends StatelessWidget {
     required this.value,
     required this.onChanged,
     this.keyPrefix,
+    this.disabled = const {},
   });
   final String label;
   final bool? value;
   final ValueChanged<bool?>? onChanged;
+
+  /// States shown but not available now.
+  final Set<bool?> disabled;
 
   /// Prefix of each segment's widget key, for tests.
   final String? keyPrefix;
@@ -180,9 +184,12 @@ class VehicleTriState extends StatelessWidget {
                   Semantics(
                     button: true,
                     selected: v == value,
+                    enabled: !disabled.contains(v),
                     child: InkWell(
                       key: keyPrefix == null ? null : ValueKey('$keyPrefix-$v'),
-                      onTap: onChanged == null ? null : () => onChanged!(v),
+                      onTap: onChanged == null || disabled.contains(v)
+                          ? null
+                          : () => onChanged!(v),
                       child: Container(
                         constraints: const BoxConstraints(
                           minHeight: 48,
@@ -198,6 +205,8 @@ class VehicleTriState extends StatelessWidget {
                             fontWeight: FontWeight.w500,
                             color: v == value
                                 ? colors.onPrimaryContainer
+                                : disabled.contains(v)
+                                ? colors.onSurface.withValues(alpha: .38)
                                 : colors.onSurface,
                           ),
                         ),
