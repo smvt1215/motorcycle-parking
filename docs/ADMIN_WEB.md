@@ -316,6 +316,13 @@ python3 tool/export_rules.py --check || python3 tool/export_rules.py
 - `spot_history(source_id)`：anon 可呼叫，只回最近 10 筆、隱藏點位回空陣列；每筆只有時間、來源類別（車友建議／匯入／管理員）、是否建立點位與改到的**公開欄位**（不含車種確認、顯示狀態、計費規則名稱、原始公告文字與回報者名稱）。不回操作者、回報者、處理說明、回報內容，也不回原本的值；改成的值只在點位目前仍是這個值時才回，之後被改掉的文字（例如管理員移除的個資）不會經由紀錄再出現。被駁回的回報與只改非公開欄位的紀錄不列。
 - App 詳情「資料與查核」：「確認狀態」只顯示最新一筆，其餘收進「還有 N 項」（決定 52）；「更新時間」改為「最近更新」（最新一筆的資料類別與日期，例「費率，2026-10-27」），有紀錄時附「看更新紀錄」底部面板，讀取前或沒有紀錄時沿用點位更新時間。
 - 測試：pgTAP `spot_history_test.sql`（權限、合併與排序、駁回不改欄位、公開版不含個人資料與已移除的文字、隱藏點位、最多 10 筆）；widget test `test/spot_history_test.dart`、`test/admin/spot_history_test.dart`；`tool/admin_smoke.cjs` 加入編輯紀錄截圖（手機 390／402、桌面 1440／820）。
+- **車友更新與投票（決定 56、#155 第 22、30 項；migration `202610270120_history_owner_votes.sql`）**：新增 `spot_rider_events`（RLS 開、不授權任何角色），由觸發器寫入；`apply_report` 只多一行標記：
+  - 投票：`spot_votes` 每次新增或改票記一筆（投票者、仍在／已不存在）；同一次 `apply_report` 接著更新點位時，若狀態改變（例如待確認→已確認存在）記在這一票上。
+  - 車主自行修改：`apply_report` 的 update 分支在更新前設 `app.owner_update`（交易內、指名該點位，觸發器用完即清），觸發器只記有變動的編輯紀錄欄位前後值。管理員的寫入照舊由稽核紀錄涵蓋；migration、維護、service role 直接 UPDATE 都不記。
+  - `spot_history_entries()` 多兩類：`owner`（`owner_update`，來源「車友更新」）與 `vote`（`vote_still_there`／`vote_gone`，改到狀態時列出）。管理站時間軸逐筆列出並顯示車友名稱（「車友投票・車友 阿明」「車友更新・車主 小美」），歸在「車友回報」篩選；`admin_spot_history()` 的 200 筆上限只套用在投票，其他紀錄全列。
+  - `spot_history()`（App）把中間沒有其他紀錄的連續投票合併成一筆 `{kind:'vote', votes:{still_there, gone}}`，App 寫「3 位車友確認仍在」「1 位車友確認仍在、2 位車友回報已不存在」，每位車友在同一段只依最後一票計一次，只計人數、不回任何人名或 id；App 看不到的紀錄（只改非公開欄位）先濾掉，不會把一段投票切成兩筆；這段投票讓狀態改變且點位目前仍是該狀態時附「點位改為已確認存在」。合併後仍只回最近 10 筆。
+  - `closure`（暫時封閉）加入比對欄位，也是公開欄位：App 寫「施工中，10 月 24 日（六）起，預計 11 月 3 日（二）恢復」或「解除暫時封閉」，不顯示依據文字。
+  - 測試：pgTAP `history_owner_votes_test.sql`。
 
 ### 版面與 RWD（#118）
 

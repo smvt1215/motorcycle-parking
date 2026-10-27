@@ -6,18 +6,25 @@ library;
 
 import 'dart:convert';
 
+import 'closure.dart';
 import 'condition_text.dart';
 import 'fee.dart';
 import 'parking.dart';
 import 'parking_condition.dart';
 
 /// Who made an entry: an administrator's own write, an import (or fee
-/// conversion), or a rider's report an administrator decided (or a rider's
-/// new spot).
+/// conversion), a rider's report an administrator decided (or a rider's
+/// new spot), the spot's owner editing it through a report (車友更新), or a
+/// rider's vote (decision 56).
 enum HistoryKind {
   admin,
   import,
-  report;
+  report,
+  owner,
+  vote;
+
+  /// A rider's own entry: a report, an owner's edit or a vote.
+  bool get rider => this == report || this == owner || this == vote;
 
   static HistoryKind parse(Object? v) =>
       values.where((k) => k.name == v).firstOrNull ?? admin;
@@ -93,6 +100,7 @@ class HistoryEntry {
     this.note = '',
     this.sourceName,
     this.report,
+    this.votes,
   });
   final DateTime at;
   final HistoryKind kind;
@@ -114,6 +122,11 @@ class HistoryEntry {
   final String? sourceName;
   final HistoryReport? report;
 
+  /// The app's run of votes (`spot_history` merges consecutive ones): how
+  /// many riders said still there and gone. Null elsewhere; the admin
+  /// site's votes are one each, by [action].
+  final ({int stillThere, int gone})? votes;
+
   factory HistoryEntry.fromJson(Map<String, dynamic> j) => HistoryEntry(
     at: DateTime.parse(j['at'] as String),
     kind: HistoryKind.parse(j['kind']),
@@ -128,6 +141,13 @@ class HistoryEntry {
     sourceName: j['source_name'] as String?,
     report: switch (j['report']) {
       final Map<String, dynamic> r => HistoryReport.fromJson(r),
+      _ => null,
+    },
+    votes: switch (j['votes']) {
+      final Map<String, dynamic> v => (
+        stillThere: (v['still_there'] as num?)?.toInt() ?? 0,
+        gone: (v['gone'] as num?)?.toInt() ?? 0,
+      ),
       _ => null,
     },
   );
@@ -146,10 +166,23 @@ class HistoryEntry {
     }
   }
 
+  /// A vote's heading: the app's run as counts (「3 位車友確認仍在」), the
+  /// admin site's single vote as what it said.
+  String voteTitle() {
+    if (votes case (:final stillThere, :final gone)) {
+      return [
+        if (stillThere > 0) '$stillThere 位車友確認仍在',
+        if (gone > 0) '$gone 位車友回報已不存在',
+      ].join('、');
+    }
+    return action == 'vote_gone' ? '回報已不存在' : '確認仍在';
+  }
+
   /// The kinds of data the entry changed, as one heading (「總格數、地址」);
   /// [app] uses the app's words (費率 rather than 收費).
   String title({bool app = false}) {
     if (created) return '建立點位';
+    if (kind == HistoryKind.vote) return voteTitle();
     if (action == 'promote_spot') return '改為官方點';
     final groups = historyGroups(changes.map((c) => c.field), app: app);
     if (groups.isNotEmpty) return groups.join('、');
@@ -178,6 +211,7 @@ const historyFieldGroups = <(String, List<String>)>[
   ('特殊規則', ['special_rules']),
   ('照片', ['photo_urls']),
   ('備註', ['note']),
+  ('暫時封閉', ['closure']),
   ('顯示狀態', ['status', 'hidden']),
   ('資料來源', ['source_name', 'source_url', 'effective_date', 'license_note']),
   ('回報者名稱', ['contributor_name']),
@@ -222,6 +256,7 @@ const historyFieldLabels = <String, String>{
   'special_rules': '特殊規則',
   'photo_urls': '照片',
   'note': '備註',
+  'closure': '暫時封閉',
   'status': '狀態',
   'hidden': '顯示',
   'source_name': '資料來源',
@@ -256,6 +291,8 @@ String historyValueText(String field, Object? value) {
       v.isEmpty ? '沒有照片' : '${v.length} 張照片',
     ('zones_complete', final bool v) => v ? '是' : '否',
     ('hidden', final bool v) => v ? '隱藏' : '顯示',
+    ('closure', null) => '沒有封閉',
+    ('closure', _) => historyClosureText(value),
     ('status', 'pending') => '待確認',
     ('status', 'confirmed') => '已確認存在',
     ('status', 'hidden') => '隱藏',
@@ -267,6 +304,16 @@ String historyValueText(String field, Object? value) {
     (_, final bool v) => v ? '是' : '否',
     _ => clip(jsonEncode(value)),
   };
+}
+
+/// A closure as the details word it, without its basis: 「施工中，10 月 27 日
+/// （二）起，預計 11 月 3 日（二）恢復」, or 「…起，沒有填恢復日期」.
+String historyClosureText(Object? value) {
+  final c = SpotClosure.fromJson(value);
+  if (c == null) return value == null ? '沒有封閉' : jsonEncode(value);
+  final until = c.until;
+  return '${c.reason.label}，${closureDayLabel(c.since)}起，'
+      '${until == null ? '沒有填恢復日期' : '預計 ${closureDayLabel(until)}恢復'}';
 }
 
 /// A lot's zones, one line each with what a rider reads of it: name,
@@ -329,6 +376,10 @@ String historySummary(HistoryEntry entry) {
         parts.add(v.trim());
       case 'scooter_total' when v is num:
         parts.add('機車格改為 $v 格');
+      case 'closure':
+        parts.add(v == null ? '解除暫時封閉' : historyClosureText(v));
+      case 'status' when entry.kind == HistoryKind.vote:
+        parts.add('點位改為${historyValueText(c.field, v)}');
       case 'scooter_allowed' || 'heavy_allowed':
         parts.add(
           '${historyFieldLabel(c.field)}改為${historyValueText(c.field, v)}',
@@ -365,4 +416,6 @@ String historySourceText(HistoryEntry entry, {required bool official}) =>
       (HistoryKind.import, false) => official ? '政府公開資料更新' : '匯入資料更新',
       (HistoryKind.admin, true) => '管理員新增',
       (HistoryKind.admin, false) => '管理員更新',
+      (HistoryKind.owner, _) => '車友更新',
+      (HistoryKind.vote, _) => '車友投票',
     };
