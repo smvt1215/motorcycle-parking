@@ -22,6 +22,8 @@ select ok(valid_closure('{"reason":"works","since":"2026-10-26"}'),'works withou
 select ok(valid_closure('{"reason":"closed","since":"2026-10-26","until":"2026-11-30","basis":"車友回報"}'),'a closure with a date');
 select ok(not valid_closure('{"reason":"gone","since":"2026-10-26"}'),'only works or closed');
 select ok(not valid_closure('{"reason":"works"}'),'since is required');
+select is(valid_closure('{"since":"2026-10-27"}'),false,'a reason is required: false, never NULL');
+select is(valid_closure('{"reason":null,"since":"2026-10-27"}'),false,'a null reason too');
 select ok(not valid_closure('{"reason":"works","since":"2026-02-30"}'),'a real date');
 select ok(not valid_closure('{"reason":"works","since":"2026-10-26","until":"2026-10-25"}'),'until is not before since');
 select ok(not valid_closure('{"reason":"works","since":"2026-10-26","note":"x"}'),'no other keys');
@@ -80,6 +82,20 @@ select lives_ok($$select admin_resolve_report((select id from fx where name='reo
   'a rider''s 已經可以停 clears it (forced: the admin extended it since)');
 reset role;
 select is((select closure from community_spots where id=(select id from fx where name='spot')),null,'and the spot stays');
+
+-- ===== 改為官方點 =====
+reset role;
+update community_spots set closure=jsonb_build_object('reason','works','since',(select today from d))
+  where id=(select id from fx where name='spot');
+delete from v; insert into v select updated_at from community_spots where id=(select id from fx where name='spot');
+set local role authenticated;
+select pg_temp.act('admin');
+create temporary table promoted(j jsonb);
+grant all on promoted to authenticated;
+insert into promoted select admin_promote_spot((select id::text from fx where name='spot'),
+  '{"source_name":"臺北市政府","source_url":"https://example.test/n","effective_date":"2026-01-01"}',(select at from v),'');
+reset role;
+select is((select j->'closure'->>'reason' from promoted),'works','a promoted spot keeps its closure');
 
 -- ===== 地圖上限（#133） =====
 insert into community_spots(user_id,name,lat,lng,city,space_type)
