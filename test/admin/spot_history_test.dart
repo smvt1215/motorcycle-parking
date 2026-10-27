@@ -92,6 +92,50 @@ void main() {
     expect(HistoryFilter.admin.shows(e[0]), isFalse);
   });
 
+  test('車主自行修改與投票逐筆列出，含車友名稱（決定 56）', () {
+    final e = HistoryEntry.list([
+      {
+        'at': '2026-10-27T03:00:00Z',
+        'kind': 'vote',
+        'action': 'vote_gone',
+        'actor_name': '阿明',
+        'created': false,
+        'changes': [
+          {'field': 'status', 'before': 'confirmed', 'after': 'pending'},
+        ],
+      },
+      {
+        'at': '2026-10-26T03:00:00Z',
+        'kind': 'vote',
+        'action': 'vote_still_there',
+        'actor_name': '',
+        'created': false,
+        'changes': <Object>[],
+      },
+      {
+        'at': '2026-10-25T03:00:00Z',
+        'kind': 'owner',
+        'action': 'owner_update',
+        'actor_name': '小美',
+        'created': false,
+        'changes': [
+          {'field': 'note', 'before': '', 'after': '晚上會鎖'},
+        ],
+      },
+    ]);
+    expect(historyMeta(e[0]), endsWith('車友投票・車友 阿明'));
+    expect(e[0].title(), '回報已不存在');
+    expect(shownChanges(e[0]).single.field, 'status');
+    expect(historyMeta(e[1]), endsWith('車友投票・車友'));
+    expect(e[1].title(), '確認仍在');
+    expect(historyMeta(e[2]), endsWith('車友更新・車主 小美'));
+    expect(e[2].title(), '備註');
+    for (final entry in e) {
+      expect(HistoryFilter.report.shows(entry), isTrue);
+      expect(HistoryFilter.admin.shows(entry), isFalse);
+    }
+  });
+
   late FakeAdminGateway gateway;
   AdminController? controller;
   setUp(() => gateway = FakeAdminGateway(access: adminAal2));

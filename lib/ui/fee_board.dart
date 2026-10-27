@@ -109,9 +109,14 @@ class FeeVehicleBoard {
 
 const _unconfirmedIcon = Icons.help_outline;
 
-/// A car without a structured rate (decision 45): the details never fall
-/// back to a zone's old car text.
-const carUnconfirmed = '費率未確認，請依現場公告';
+/// A vehicle or period without a confirmed rate (decision 54): every line
+/// says only this, and the board ends with [feeBoardPostedNote] once. A car
+/// without a structured rate reads it too (decision 45): the details never
+/// fall back to a zone's old car text.
+const feeUnconfirmed = '費率未確認';
+
+/// The board's last line when any line is unconfirmed (decision 54).
+const feeBoardPostedNote = '未確認的費率請依現場公告';
 const _timerIcon = Icons.timer_outlined;
 const _nightIcon = Icons.bedtime_outlined;
 const _extendIcon = Icons.add_circle_outline;
@@ -157,11 +162,7 @@ FeeVehicleBoard _vehicleBoard(Fee fee, FeeVehicle vehicle) {
     return FeeVehicleBoard(
       vehicle,
       headline: FeeLine(
-        rate?.mode.follows ?? false
-            ? '費率未提供'
-            : vehicle == FeeVehicle.car
-            ? carUnconfirmed
-            : '費率未確認',
+        rate?.mode.follows ?? false ? '費率未提供' : feeUnconfirmed,
         tone: FeeTone.unconfirmed,
         icon: _unconfirmedIcon,
       ),
@@ -310,13 +311,17 @@ _Described _describe(Rate r, int pct) {
       );
     case FeeMode.posted || FeeMode.sameAsScooter || FeeMode.sameAsCar:
       return _plain(
-        const FeeLine('未確認', tone: FeeTone.unconfirmed, icon: _unconfirmedIcon),
+        const FeeLine(
+          feeUnconfirmed,
+          tone: FeeTone.unconfirmed,
+          icon: _unconfirmedIcon,
+        ),
       );
   }
 }
 
 const _unconfirmedRow = [
-  FeeLine('未確認', tone: FeeTone.unconfirmed, icon: _unconfirmedIcon),
+  FeeLine(feeUnconfirmed, tone: FeeTone.unconfirmed, icon: _unconfirmedIcon),
 ];
 
 /// The periods grouped by the days they cover, in order of first appearance
@@ -397,11 +402,14 @@ String feePeriodTime(String? from, String? to) {
 String _hhmm(int m) =>
     '${(m ~/ 60).toString().padLeft(2, '0')}:${(m % 60).toString().padLeft(2, '0')}';
 
-/// What a time-of-day rate leaves unconfirmed, one phrase per gap, each the
-/// period that would fill it: 平日 20:00–隔日 08:00, 週日 全天; the editor
-/// writes them under the list. A gap is the start day's (decision 47), so
-/// one running past midnight is written from the day it starts.
-List<String> feeGaps(List<FeePeriod> periods) {
+/// One gap of a time-of-day rate: the day it starts on (Monday 0) and its
+/// minutes from that day's 00:00; [end] passes 1440 when the gap runs into
+/// the next morning. [whole] marks a day no period touches.
+typedef _Gap = ({int day, int start, int end, bool whole});
+
+/// The gaps of [periods], each the start day's (decision 47): one running
+/// past midnight is a single gap from the day it starts.
+List<_Gap> _gaps(List<FeePeriod> periods) {
   final covered = _coverage(periods);
   // Each day's uncovered `[start, end)` minutes.
   final segments = List.generate(7, (d) {
@@ -433,33 +441,124 @@ List<String> feeGaps(List<FeePeriod> periods) {
       carried[next] = true;
     }
   }
-  // Each phrase with the days it applies to, in order of the first day.
+  return [
+    for (var d = 0; d < 7; d++)
+      for (final (i, (start, end)) in segments[d].indexed)
+        if (!(i == 0 && carried[d]))
+          (
+            day: d,
+            start: start,
+            end: end == 1440 && carried[(d + 1) % 7]
+                ? 1440 + segments[(d + 1) % 7].first.$2
+                : end,
+            whole: whole(d),
+          ),
+  ];
+}
+
+/// Each phrase with the days it applies to, in order of the first day,
+/// written by [join] (「平日 20:00–隔日 08:00」).
+List<String> _byDays(
+  List<(int, String)> phrases,
+  String Function(String days, String phrase) join,
+) {
   final masks = <String, int>{};
-  for (var d = 0; d < 7; d++) {
-    final next = (d + 1) % 7;
-    for (final (i, (start, end)) in segments[d].indexed) {
-      if (i == 0 && carried[d]) continue;
-      final phrase = whole(d)
-          ? '全天'
-          : end < 1440
-          ? feePeriodTime(_hhmm(start), _hhmm(end))
-          : carried[next]
-          ? feePeriodTime(_hhmm(start), _hhmm(segments[next].first.$2))
-          : '${_hhmm(start)}–隔日 00:00';
-      masks[phrase] = (masks[phrase] ?? 0) | (1 << d);
-    }
+  for (final (day, phrase) in phrases) {
+    masks[phrase] = (masks[phrase] ?? 0) | (1 << day);
   }
   return [
     for (final MapEntry(key: phrase, value: mask) in masks.entries)
-      mask == 127 && phrase != '全天'
-          ? phrase
-          : '${FeeWords.dayLabel(mask)} $phrase',
+      join(FeeWords.dayLabel(mask), phrase),
   ];
+}
+
+String _gapTime(_Gap g) => g.whole
+    ? '全天'
+    : g.end <= 1440
+    ? (g.end < 1440
+          ? feePeriodTime(_hhmm(g.start), _hhmm(g.end))
+          : '${_hhmm(g.start)}–隔日 00:00')
+    : feePeriodTime(_hhmm(g.start), _hhmm(g.end - 1440));
+
+/// What a time-of-day rate leaves unconfirmed, one phrase per gap, each the
+/// period that would fill it: 平日 20:00–隔日 08:00, 週日 全天; the editor
+/// lists them under 看完整時段. A gap is the start day's (decision 47), so
+/// one running past midnight is written from the day it starts.
+List<String> feeGaps(List<FeePeriod> periods) => _byDays([
+  for (final g in _gaps(periods)) (g.day, _gapTime(g)),
+], (days, phrase) => days == '每天' && phrase != '全天' ? phrase : '$days $phrase');
+
+/// The gaps in a few words, for the editor's first line (decision 55):
+/// 「平日夜間、假日全天」. A day whose gaps all fall at night (18:00 to 09:00
+/// the next morning) reads 夜間, in the day (06:00–21:00) 白天, none
+/// covered 全天; any other day keeps its times as [feeGaps] writes them.
+/// Empty when nothing is left uncovered.
+List<String> feeGapsBrief(List<FeePeriod> periods) {
+  String? word(_Gap g) {
+    if (g.whole) return '全天';
+    if ((g.start >= 18 * 60 || g.end <= 9 * 60) && g.end <= 1440 + 9 * 60) {
+      return '夜間';
+    }
+    if (g.start >= 6 * 60 && g.end <= 21 * 60) return '白天';
+    return null;
+  }
+
+  final gaps = _gaps(periods);
+  final days = <(int, String)>[];
+  for (var d = 0; d < 7; d++) {
+    final own = gaps.where((g) => g.day == d).toList();
+    if (own.isEmpty) continue;
+    final words = own.map(word).toSet();
+    if (words.length == 1 && words.single != null) {
+      days.add((d, words.single!));
+    } else {
+      // Mixed or out of the usual hours: the times themselves.
+      days.add((d, ' ${own.map(_gapTime).join('、')}'));
+    }
+  }
+  return _byDays(
+    days,
+    (days, phrase) =>
+        days == '每天' && phrase.startsWith(' ') ? phrase.trim() : '$days$phrase',
+  );
+}
+
+/// Whether any line of [boards] is unconfirmed: the board then ends with
+/// [feeBoardPostedNote] (decision 54).
+bool feeBoardHasUnconfirmed(List<FeeVehicleBoard> boards) {
+  bool any(Iterable<FeeLine?> lines) =>
+      lines.any((l) => l?.tone == FeeTone.unconfirmed);
+  return boards.any(
+    (b) =>
+        any([b.headline, ...b.lines, b.footer]) ||
+        b.groups.any((g) => g.rows.any((r) => any(r.lines))),
+  );
+}
+
+/// The board's closing line, once whatever the number of unconfirmed lines
+/// above it (decision 54).
+class FeeBoardPostedNote extends StatelessWidget {
+  const FeeBoardPostedNote({super.key, required this.colors});
+  final FeeBoardTheme colors;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    key: const ValueKey('fee-board-posted-note'),
+    padding: const EdgeInsets.symmetric(vertical: 10),
+    decoration: BoxDecoration(
+      border: Border(top: BorderSide(color: colors.divider)),
+    ),
+    child: Text(
+      feeBoardPostedNote,
+      style: TextStyle(fontSize: 13, height: 1.4, color: colors.muted),
+    ),
+  );
 }
 
 /// The fee notice board (design §8.3, canvas 「收費公告牌」): one block per
 /// vehicle with its plates, the amounts worked out, 首段 0 元 never written as
-/// 免費, and every gap written out as 未確認. The app's details and the admin
+/// 免費, and every gap written out as 費率未確認 with one closing line to read
+/// the posted notice (decision 54). The app's details and the admin
 /// site show the same board; the fee editor previews it.
 class FeeBoard extends StatelessWidget {
   const FeeBoard({
@@ -485,6 +584,7 @@ class FeeBoard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = FeeBoardTheme.of(context);
     final vehicles = feeBoardOf(fee, first: first, vehicles: this.vehicles);
+    final posted = feeBoardHasUnconfirmed(vehicles);
     final body = vehicles.isEmpty
         ? Padding(
             padding: EdgeInsets.symmetric(vertical: framed ? 12 : 0),
@@ -511,11 +611,14 @@ class FeeBoard extends StatelessWidget {
                   child: Padding(
                     padding: EdgeInsets.only(
                       top: i == 0 && !framed ? 0 : 10,
-                      bottom: i == vehicles.length - 1 && !framed ? 0 : 10,
+                      bottom: i == vehicles.length - 1 && !framed && !posted
+                          ? 0
+                          : 10,
                     ),
                     child: _VehicleBlock(v, colors: colors),
                   ),
                 ),
+              if (posted) FeeBoardPostedNote(colors: colors),
             ],
           );
     // Ink on white whatever the theme: the board is the posted notice.

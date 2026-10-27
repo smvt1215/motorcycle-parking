@@ -129,7 +129,7 @@ void main() {
     expect([for (final r in b.groups[0].rows) r.time], ['08:00–20:00', '其他時間']);
     expect(b.groups[0].rows[1].lines.single.tone, FeeTone.unconfirmed);
     expect(b.groups[2].rows.single.time, '全天');
-    expect(b.groups[2].rows.single.lines.single.text, '未確認');
+    expect(b.groups[2].rows.single.lines.single.text, '費率未確認');
     // One per-visit period: no cross-period line.
     expect(b.footer, isNull);
 
@@ -239,6 +239,58 @@ void main() {
     expect(feeGaps(const [FeePeriod(days: 'all', rate: rate)]), isEmpty);
   });
 
+  test('未涵蓋時間的精簡說法（決定 55）', () {
+    const rate = Rate(FeeMode.free);
+    FeePeriod p(String days, String from, String to) =>
+        FeePeriod(days: days, from: from, to: to, rate: rate);
+    // The decision's own example.
+    expect(feeGapsBrief([p('weekday', '08:00', '20:00')]), ['平日夜間', '假日全天']);
+    // Every day by day: the nights are left.
+    expect(feeGapsBrief([p('all', '08:00', '20:00')]), ['每天夜間']);
+    // Nights only: the days are left.
+    expect(feeGapsBrief([p('all', '20:00', '08:00')]), ['每天白天']);
+    // Out of the usual hours: the times themselves.
+    expect(feeGapsBrief([p('all', '10:00', '16:00')]), ['16:00–隔日 10:00']);
+    expect(feeGapsBrief(const [FeePeriod(days: 'all', rate: rate)]), isEmpty);
+  });
+
+  test('公告牌每列寫「費率未確認」，底下只說一次請依現場公告（決定 54）', () {
+    final fee = Fee.fromJson({
+      'scooter': {'mode': 'hourly', 'amount': 10, 'per_minutes': 60},
+    });
+    final boards = feeBoardOf(fee, vehicles: FeeVehicle.values);
+    expect(
+      [for (final b in boards) b.headline?.text],
+      ['每小時 10 元', feeUnconfirmed, feeUnconfirmed],
+    );
+    expect(feeBoardHasUnconfirmed(boards), isTrue);
+    expect(feeBoardHasUnconfirmed(feeBoardOf(fee)..removeLast()), isFalse);
+  });
+
+  testWidgets('公告牌底部的請依現場公告只出現一次', (tester) async {
+    final fee = Fee.fromJson({
+      'scooter': {'mode': 'hourly', 'amount': 10, 'per_minutes': 60},
+    });
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: FeeBoard(fee: fee, vehicles: FeeVehicle.values),
+        ),
+      ),
+    );
+    expect(find.textContaining(feeUnconfirmed), findsNWidgets(2));
+    expect(find.text(feeBoardPostedNote), findsOneWidget);
+    expect(find.textContaining('請依現場公告'), findsOneWidget);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: FeeBoard(fee: fee, vehicles: const [FeeVehicle.scooter]),
+        ),
+      ),
+    );
+    expect(find.text(feeBoardPostedNote), findsNothing);
+  });
+
   test('車種順序：指定的車種第一，大型重機未知時也列出', () {
     final fee = Fee.fromJson({
       'scooter': {'mode': 'hourly', 'amount': 10, 'per_minutes': 60},
@@ -277,7 +329,7 @@ void main() {
           continue;
         }
         for (final line in linesOf(b)) {
-          if (line.tone == FeeTone.unconfirmed && line.text == '未確認') {
+          if (line.tone == FeeTone.unconfirmed && line.text == feeUnconfirmed) {
             continue;
           }
           // Board lines are pieces of the sentence, never other words.
