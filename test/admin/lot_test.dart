@@ -119,6 +119,41 @@ void main() {
       });
     });
 
+    test('依據輸入到一半不合格式時，限時與共用時段照樣保留', () {
+      const zone = {
+        'name': 'A',
+        'access': 'scooterOnly',
+        'condition': {
+          'bay': 'motorcycle',
+          'use': 'usual',
+          'charge': 'toll',
+          'limits': [
+            {'kind': 'time_limit', 'max_minutes': 120},
+          ],
+          'allow': {'scooter': true, 'heavy': false},
+        },
+      };
+      var z = zoneWithBasis({...zone}, {'source_url': 'h'});
+      expect(zoneProblem(z), contains('https://'));
+      z = zoneWithBasis(z, {'source_url': 'ht'});
+      z = zoneWithBasis(z, {'source_url': 'https://example.test/n'});
+      expect(zoneProblem(z), isNull);
+      expect((z['condition'] as Map)['limits'], [
+        {'kind': 'time_limit', 'max_minutes': 120},
+      ]);
+      // A bay edit meanwhile keeps the basis as typed.
+      final half = zoneWithBasis({...zone}, {'source_url': 'h'});
+      final edited = zoneWithCondition(
+        half,
+        const ParkingCondition(
+          bay: Bay.motorcycle,
+          charge: Charge.free,
+          allow: ZoneAllow(scooter: true, heavy: false),
+        ),
+      );
+      expect((edited['condition'] as Map)['basis'], {'source_url': 'h'});
+    });
+
     test('分區選規則時一併帶上規則的費率（#155 決定 51）', () {
       final z = zoneWithPlan({'name': 'A'}, 'p2', [...plans]);
       expect(z['fee_plan'], 'p2');
@@ -201,8 +236,20 @@ void main() {
     test('分區改用另一條規則、新增區域與格位', () async {
       await spots.open(officialId);
       spots.setZone(2, zoneWithPlan(spots.zones[2], 'p2', spots.plans));
+      spots.setCard(
+        areaCards(spots.zones).first,
+        basis: {
+          'source_url': 'https://example.test/n',
+          'expires_on': '2026-12-31',
+        },
+      );
       spots.addZone(like: spots.zones[0]);
       expect(areaCards(spots.zones).first.indexes, [0, 1, 3]);
+      // The new bay rests on the area's notice too.
+      expect((spots.zones[3]['condition'] as Map)['basis'], {
+        'source_url': 'https://example.test/n',
+        'expires_on': '2026-12-31',
+      });
       // A new bay knows nothing yet: it needs both vehicles before saving.
       spots.setZone(
         3,
@@ -319,7 +366,10 @@ void main() {
         spot,
         (scope: SharedPlanScope.plan, name: ''),
       );
-      expect(all.keys.toSet(), {'fee_plans'});
+      expect(all.keys.toSet(), {'fee_plans', 'fee_plans_seen'});
+      // The server refuses it when the plans changed since the page loaded.
+      expect(all['fee_plans_seen'], {'plans': plans});
+      expect(own['fee_plans_seen'], {'plans': plans});
       expect((all['fee_plans'] as List).first['fee'], visit);
     });
 
@@ -447,7 +497,14 @@ void main() {
           officialId: ReviewSpot(
             sourceId: officialId,
             official: true,
-            values: {...lotRow(gateway)},
+            values: {
+              ...lotRow(gateway),
+              // The heavy rate follows the scooter's: same JSON, new price.
+              'fee': {
+                ...scooterHourly,
+                'heavy': {'mode': 'same_as_scooter'},
+              },
+            },
           ),
         };
         gateway.reports = [
@@ -504,7 +561,11 @@ void main() {
           find.byKey(const ValueKey('fee-diff-car-change')),
           findsOneWidget,
         );
-        expect(find.text('有變更'), findsNWidgets(2));
+        expect(
+          find.byKey(const ValueKey('fee-diff-heavy-change')),
+          findsOneWidget,
+        );
+        expect(find.text('有變更'), findsNWidgets(3));
         expect(tester.takeException(), isNull);
         await tester.tap(find.text('套用建議').hitTestable());
         await tester.pumpAndSettle();
@@ -518,7 +579,7 @@ void main() {
         await tester.pumpAndSettle();
         final patch = gateway.resolved.single.$3;
         expect(patch['fee_plan'], 'p3');
-        expect((patch['fee_plans'] as List).last['name'], '機車汽車混合');
+        expect((patch['fee_plans'] as List).last['name'], '機車重機汽車混合');
       });
     }
   });

@@ -198,10 +198,20 @@ List<AreaCard> areaCards(Object? zones) {
 /// the one its legacy access stands for, else nothing known.
 ParkingCondition zoneCondition(Json zone) =>
     ParkingCondition.fromJson(zone['condition'], zone: true) ??
+    // A basis still being typed must not drop the rest of the condition.
+    ParkingCondition.fromJson(_withoutBasis(zone['condition']), zone: true) ??
     zoneConditionOf(
       ParkingAccess.values.where((a) => a.name == zone['access']).firstOrNull,
     ) ??
     const ParkingCondition();
+
+Object? _withoutBasis(Object? condition) => condition is Map
+    ? ({...condition.cast<String, dynamic>()}..remove('basis'))
+    : condition;
+
+/// The basis [zone] holds as typed, valid or not.
+Object? rawBasis(Json zone) =>
+    zone['condition'] is Map ? (zone['condition'] as Map)['basis'] : null;
 
 /// [zone] with [condition] written as decision 32 asks: `access` is what
 /// the condition derives, or dropped when it derives none (the form then
@@ -214,7 +224,11 @@ Json zoneWithCondition(Json zone, ParkingCondition condition) {
       ..remove('access');
   }
   final access = legacyAccess(condition);
-  return {...zone, 'condition': condition.toJson(), 'access': ?access?.name}
+  final json = condition.toJson().cast<String, dynamic>();
+  // A basis still being typed stays as typed (zoneProblem names it).
+  final typed = rawBasis(zone);
+  if (condition.basis == null && typed != null) json['basis'] = typed;
+  return {...zone, 'condition': json, 'access': ?access?.name}
     ..removeWhere((k, v) => k == 'access' && access == null);
 }
 

@@ -1245,7 +1245,10 @@ class _FeeDiff extends StatelessWidget {
     ];
     Widget state(String v) {
       final had = now.toJson()[v], will = next.toJson()[v];
-      if (canonicalJson(had) == canonicalJson(will)) {
+      // A follow is the same JSON while the rate it follows changes: compare
+      // what riders read too.
+      if (canonicalJson(had) == canonicalJson(will) &&
+          now.riderText(v) == next.riderText(v)) {
         return Text('維持目前', style: muted);
       }
       final clears = will == null;

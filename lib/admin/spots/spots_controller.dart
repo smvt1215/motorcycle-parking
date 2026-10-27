@@ -172,7 +172,13 @@ class SpotsController extends ChangeNotifier {
         ...zones,
         like == null
             ? {'name': '新區域'}
-            : {'name': like['name'], 'area': ?like['area']},
+            // A second bay in the area rests on the area's notice too.
+            : {
+                'name': like['name'],
+                'area': ?like['area'],
+                if (rawBasis(like) case final basis?)
+                  'condition': {'basis': basis},
+              },
       ],
     };
     _notify();

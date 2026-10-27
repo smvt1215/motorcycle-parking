@@ -594,8 +594,15 @@ Map<String, dynamic> ownPlanPatch(
       {'id': id, 'name': name.trim(), 'fee': patch['fee']},
     ],
     'fee_plan': id,
+    'fee_plans_seen': _seen(spot),
   };
 }
+
+/// The plans the page built the edit on; the server refuses the write as a
+/// conflict when they changed meanwhile.
+Map<String, Object?> _seen(ReviewSpot spot) => {
+  'plans': spot.values['fee_plans'],
+};
 
 /// [patch] (as wired) editing the shared plan itself: every use follows
 /// through the database, so the fee and its text are left to it.
@@ -610,5 +617,6 @@ Map<String, dynamic> editedPlanPatch(
       for (final p in jsonList(spot.values['fee_plans']))
         if (p['id'] == id) {...p, 'fee': patch['fee']} else p,
     ],
+    'fee_plans_seen': _seen(spot),
   }..removeWhere((k, _) => k == 'fee' || k == 'fee_note');
 }

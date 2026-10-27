@@ -104,17 +104,23 @@ select lives_ok($$select admin_resolve_report((select id from fx where name='onl
     'fee_note',fee_note_of('{"scooter":{"mode":"per_visit","amount":30}}'),
     'fee_plan','p3',
     'fee_plans',(select fee_plans||'[{"id":"p3","name":"全場計次","fee":{"scooter":{"mode":"per_visit","amount":30}}}]'::jsonb
-      from pl)))$$,
-  'plan keys take no part in the conflict check');
+      from pl),
+    'fee_plans_seen',(select jsonb_build_object('plans',fee_plans) from pl)))$$,
+  'plans the page saw, and a fee as sent: no conflict');
 reset role;
 select is((select fee_plan||'|'||(parking_zones->0->>'fee_plan')||'|'||(parking_zones->1->>'fee_plan') from community_spots
   where id=(select id from fx where name='lot')),'p3|p1|p1','the whole fee moved to its own plan');
 select is((select fee_plans->2->>'name' from community_spots where id=(select id from fx where name='lot')),'全場計次','under the admin''s name');
--- The plan for everyone: every use follows.
+-- The plan for everyone: every use follows. Built on plans that have
+-- changed since, it is a conflict until the admin forces it.
 set local role authenticated;
+select throws_ok($$select admin_resolve_report((select id from fx where name='everywhere'),'accepted',
+  jsonb_build_object('fee_plans',(select fee_plans from pl),'fee_plans_seen',(select jsonb_build_object('plans',fee_plans) from pl)))$$,
+  '40001','spot changed since the report','plans changed since the page loaded them');
 select lives_ok($$select admin_resolve_report((select id from fx where name='everywhere'),'accepted',
   jsonb_build_object('fee_plans',(select jsonb_set(fee_plans,'{0,fee}','{"scooter":{"mode":"per_visit","amount":25}}')
-      ||'[{"id":"p3","name":"全場計次","fee":{"scooter":{"mode":"per_visit","amount":30}}}]'::jsonb from pl)))$$,'editing the shared plan');
+      ||'[{"id":"p3","name":"全場計次","fee":{"scooter":{"mode":"per_visit","amount":30}}}]'::jsonb from pl)),
+  '',true)$$,'editing the shared plan, forced once the admin has seen the newer fee');
 reset role;
 select is((select jsonb_agg(z->'fee'->'scooter'->>'amount' order by n) from community_spots c,
     jsonb_array_elements(c.parking_zones) with ordinality x(z,n) where c.id=(select id from fx where name='lot')),
