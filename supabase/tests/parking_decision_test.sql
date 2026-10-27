@@ -32,11 +32,14 @@ insert into city_rules_data(city,vehicle,allowed_space_types,conditional_space_t
    null,pg_temp.taipei_today()+1);
 
 -- The legacy view: expired rows projected, the others as stored.
-select is((select allowed_space_types from city_rules where city='基隆市' and vehicle='heavy'),'[]'::jsonb,
-  'an expired rule opens nothing for older builds');
+select is((select allowed_space_types from city_rules where city='基隆市' and vehicle='heavy'),
+  '["car","heavyOnly"]'::jsonb,
+  'an expired rule opens only the bays the law opens to heavy bikes (decision 44)');
 select is((select conditional_space_types from city_rules where city='基隆市' and vehicle='heavy'),
-  '["car","freeMotorcycle","heavyOnly","offStreet","paidMotorcycle"]'::jsonb,
-  'what it opened, in all lists, becomes conditional');
+  '["freeMotorcycle","offStreet","paidMotorcycle"]'::jsonb,
+  'what else it opened, in all lists, becomes conditional');
+select is((select allowed_space_types from city_rules where city='連江縣' and vehicle='heavy'),
+  '["car","heavyOnly"]'::jsonb,'lawful bays stay open in every expired heavy-bike rule');
 select is((select restriction from city_rules where city='基隆市' and vehicle='heavy'),'unverified',
   'with the unverified restriction, which older builds read as 待確認');
 select is((select district_space_types from city_rules where city='基隆市' and vehicle='heavy'),'{}'::jsonb,
@@ -118,6 +121,20 @@ reset role;
 select is(rule_verdict((select jsonb_agg(to_jsonb(r)) from city_rules_v2() r where city='基隆市' and vehicle='heavy'),
   'paidMotorcycle','',now()),'{"verdict":"expired","restriction":null}'::jsonb,
   'an expired stored rule reads as expired');
+select is(rule_verdict((select jsonb_agg(to_jsonb(r)) from city_rules_v2() r where city='基隆市' and vehicle='heavy'),
+  'heavyOnly','',now()),'{"verdict":"open","restriction":null}'::jsonb,
+  'but a heavy-bike bay is judged as before it ended (decision 44)');
+-- A scooter rule that opened car bays: the opening ends with it.
+insert into city_rules_data(city,vehicle,allowed_space_types,conditional_space_types,districts,
+    district_space_types,fee_note,exceptions,effective_date,source_url,version,restriction,expires_on)
+  values('基隆市','scooter','["paidMotorcycle","freeMotorcycle","car"]','["offStreet"]','[]','{}',
+   '請依現場收費公告','試辦開放汽車格。',pg_temp.taipei_today()-30,'https://example.test/keelung',1,null,
+   pg_temp.taipei_today()-1);
+select is((select allowed_space_types from city_rules where city='基隆市' and vehicle='scooter'),'[]'::jsonb,
+  'an expired scooter rule keeps nothing open, car bays included');
+select is(rule_verdict((select jsonb_agg(to_jsonb(r)) from city_rules_v2() r where city='基隆市' and vehicle='scooter'),
+  'car','',now()),'{"verdict":"expired","restriction":null}'::jsonb,
+  'car bays a scooter rule opened read as expired');
 
 select * from finish();
 rollback;

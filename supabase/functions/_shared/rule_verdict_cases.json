@@ -447,6 +447,49 @@
       "effective_date": "2026-04-06",
       "can_use_two_spaces": false,
       "restriction": null
+    },
+    "test:11": {
+      "city": "測試市",
+      "vehicle": "scooter",
+      "allowed_space_types": [
+        "paidMotorcycle",
+        "freeMotorcycle",
+        "car"
+      ],
+      "conditional_space_types": [
+        "offStreet"
+      ],
+      "districts": [],
+      "district_space_types": {},
+      "fee_note": "x",
+      "exceptions": "測試規則",
+      "source_url": "https://example.test",
+      "version": 1,
+      "effective_date": "2026-04-06",
+      "can_use_two_spaces": false,
+      "restriction": null,
+      "expires_on": "2026-10-06"
+    },
+    "test:12": {
+      "city": "測試市",
+      "vehicle": "heavy",
+      "allowed_space_types": [
+        "heavyOnly"
+      ],
+      "conditional_space_types": [
+        "offStreet",
+        "car"
+      ],
+      "districts": [],
+      "district_space_types": {},
+      "fee_note": "x",
+      "exceptions": "測試規則",
+      "source_url": "https://example.test",
+      "version": 1,
+      "effective_date": "2026-04-06",
+      "can_use_two_spaces": false,
+      "restriction": "signage",
+      "expires_on": "2026-10-06"
     }
   },
   "cases": [
@@ -4596,6 +4639,73 @@
       "district": "",
       "now": "2026-10-27T04:00:00Z",
       "verdict": "unknownDistrict",
+      "restriction": null
+    },
+    {
+      "name": "試辦期限：到期後，依法可停的重機專用格照原本判斷（決定 44）",
+      "rules": [
+        "test:1"
+      ],
+      "kind": "heavyOnly",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "試辦期限：到期後，依法可停的汽車格照原本判斷（決定 44）",
+      "rules": [
+        "test:1"
+      ],
+      "kind": "car",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "open",
+      "restriction": null
+    },
+    {
+      "name": "試辦期限：到期後，普通機車規則開放的汽車格失效（決定 44）",
+      "rules": [
+        "test:11"
+      ],
+      "kind": "car",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "expired",
+      "restriction": null
+    },
+    {
+      "name": "試辦期限：到期後，普通機車規則開放的機車格失效",
+      "rules": [
+        "test:11"
+      ],
+      "kind": "paidMotorcycle",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "expired",
+      "restriction": null
+    },
+    {
+      "name": "試辦期限：到期後，依法可停格位的有條件照原本判斷（決定 44）",
+      "rules": [
+        "test:12"
+      ],
+      "kind": "car",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conditional",
+      "restriction": "signage"
+    },
+    {
+      "name": "試辦期限：兩份都到期，依法可停格位依兩份照原本判斷",
+      "rules": [
+        "test:1",
+        "test:12"
+      ],
+      "kind": "car",
+      "district": "",
+      "now": "2026-10-27T04:00:00Z",
+      "verdict": "conflict",
       "restriction": null
     }
   ]
