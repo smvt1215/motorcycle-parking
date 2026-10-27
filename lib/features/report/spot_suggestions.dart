@@ -10,6 +10,8 @@ import '../../models/closure.dart';
 import '../../models/fee.dart';
 import '../../models/parking.dart';
 import '../../models/parking_condition.dart';
+import '../../models/space_kind.dart';
+import '../map/space_type_sheet.dart';
 import '../../ui/option_pill.dart';
 import '../../ui/address_search_field.dart';
 import '../../ui/adaptive/adaptive.dart';
@@ -323,7 +325,16 @@ class _SuggestionFormState extends State<_SuggestionForm> {
   final note = TextEditingController();
   bool sending = false, sent = false;
   String? error;
-  late SpaceType type = widget.spot.spaceType;
+
+  /// The kind the spot is today, and the one the rider suggests.
+  late final SpaceKind currentKind = SpaceKind.of(
+    widget.spot.spaceType,
+    widget.spot.condition,
+  );
+  late SpaceKind kind = currentKind;
+
+  /// The space type sent: the one the suggested condition converts to.
+  SpaceType get type => condition.typeFor(kind);
   late bool? scooter = widget.spot.scooterAllowed;
   late bool? heavy = widget.spot.heavyAllowed;
 
@@ -348,7 +359,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
       widget.spot.condition ?? conditionOf(widget.spot.spaceType);
 
   /// The condition suggested with the kind; null for a lot.
-  ParkingCondition? get suggestedCondition => condition.conditionFor(type);
+  ParkingCondition? get suggestedCondition => condition.conditionFor(kind);
 
   /// A lot's details when the suggested kind is a lot.
   late FacilityType? facility = widget.spot.facilityType;
@@ -424,7 +435,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
   }
 
   /// Lots also say how they are built and who parks there.
-  bool get lotType => typeField && type == SpaceType.offStreet;
+  bool get lotType => typeField && kind == SpaceKind.offStreet;
 
   /// Entrances belong to lots; a street bay only has a guide.
   bool get showsEntrance =>
@@ -460,7 +471,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
     }
     if (!structured) return '${widget.label}：$text';
     final value = typeField
-        ? type.label
+        ? kind.label
         : feeField
         ? feeNoteOf(feeAfter(currentFee, feeEdits))
         : _eligibility(scooter, heavy);
@@ -582,10 +593,10 @@ class _SuggestionFormState extends State<_SuggestionForm> {
         '$label從「$from」改成「$to」';
     if (typeField) {
       return [
-        if (type != spot.spaceType)
-          line(widget.label, spot.spaceType.label, type.label),
+        if (kind != currentKind)
+          line(widget.label, currentKind.label, kind.label),
         if (suggestedCondition case final c?
-            when type == spot.spaceType && c != currentCondition)
+            when kind == currentKind && c != currentCondition)
           line('停放條件', conditionSummary(currentCondition), conditionSummary(c)),
         if (lotType && facility != spot.facilityType)
           line(
@@ -837,26 +848,28 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                     children: [
                       Text('地面畫的是哪一種格位？', style: text.bodyLarge),
                       const SizedBox(height: 10),
-                      SpaceTypePicker(
-                        value: type,
+                      SpaceKindList(
+                        value: kind,
+                        keyPrefix: 'report-space',
                         onChanged: (v) {
                           setState(() {
-                            type = v;
-                            state.didChange(v);
+                            kind = v;
+                            state.didChange(type);
                           });
                         },
-                      ),
-                      ConditionFields(
-                        type: type,
-                        draft: condition,
-                        onChanged: () => setState(() => state.didChange(type)),
-                        holdHint: evidence.text.trim().isEmpty
-                            ? precheckHint(
-                                found,
-                                'proposed.condition',
-                                holds: true,
-                              )
-                            : null,
+                        followUp: ConditionFields(
+                          kind: kind,
+                          draft: condition,
+                          onChanged: () =>
+                              setState(() => state.didChange(type)),
+                          holdHint: evidence.text.trim().isEmpty
+                              ? precheckHint(
+                                  found,
+                                  'proposed.condition',
+                                  holds: true,
+                                )
+                              : null,
+                        ),
                       ),
                       PrecheckHintText(
                         precheckHint(found, 'proposed.condition') ??
@@ -1023,29 +1036,19 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                           style: TextStyle(color: colors.onSurfaceVariant),
                         ),
                       ),
-                      ChoiceField<bool?>(
+                      VehicleTriState(
                         label: '普通機車',
-                        vehicle: VehicleType.scooter,
                         value: scooter,
-                        options: const [
-                          (null, '未確認'),
-                          (true, '可停'),
-                          (false, '不可停'),
-                        ],
+                        keyPrefix: 'suggestion-scooter',
                         onChanged: (v) {
                           setState(() => scooter = v);
                           state.didChange((scooter, heavy));
                         },
                       ),
-                      ChoiceField<bool?>(
+                      VehicleTriState(
                         label: '大型重機',
-                        vehicle: VehicleType.heavy,
                         value: heavy,
-                        options: const [
-                          (null, '未確認'),
-                          (true, '可停'),
-                          (false, '不可停'),
-                        ],
+                        keyPrefix: 'suggestion-heavy',
                         onChanged: (v) {
                           setState(() => heavy = v);
                           state.didChange((scooter, heavy));

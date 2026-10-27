@@ -11,6 +11,10 @@ import 'package:motorcycle_parking/data/repositories.dart';
 import 'package:motorcycle_parking/features/report/report_sheet.dart';
 import 'package:motorcycle_parking/domain/location_check.dart';
 import 'package:motorcycle_parking/models/parking.dart';
+import 'package:motorcycle_parking/models/space_kind.dart';
+import 'package:motorcycle_parking/ui/fold_section.dart';
+import 'package:motorcycle_parking/ui/location_picker.dart';
+import 'package:motorcycle_parking/ui/option_pill.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
 
 import 'fee_editor_steps.dart';
@@ -56,6 +60,9 @@ void main() {
               as List<dynamic>)
           .map((j) => CityRule.fromJson(j as Map<String, dynamic>))
           .toList();
+
+  /// Whether the test picked a bay kind; [send] picks 收費機車格 otherwise.
+  var picked = false;
 
   Future<RecordingStore> openForm(
     WidgetTester tester, {
@@ -112,6 +119,7 @@ void main() {
     );
     await tester.tap(find.text('新增'));
     await tester.pumpAndSettle();
+    picked = false;
     return store;
   }
 
@@ -119,25 +127,25 @@ void main() {
   final form = find.byType(Scrollable).first;
   final nameField = find.widgetWithText(TextFormField, '停車點名稱');
 
+  bool built(Finder target) {
+    // A `.first` inside the finder throws until its parent is built.
+    try {
+      return target.evaluate().isNotEmpty;
+    } on StateError {
+      return false;
+    }
+  }
+
   /// Scrolls the form until [target] is built and on screen. It moves the
   /// list itself: a drag could land on the location map, which keeps drags.
-  Future<void> reveal(WidgetTester tester, Finder target) async {
+  Future<void> scrollTo(WidgetTester tester, Finder target) async {
     final position = tester.state<ScrollableState>(form).position;
-    // A `.first` inside the finder throws until its parent is built.
-    bool built() {
-      try {
-        return target.evaluate().isNotEmpty;
-      } on StateError {
-        return false;
-      }
-    }
-
-    if (!built()) {
+    if (!built(target)) {
       // From the top down, so targets above the fold are found too.
       position.jumpTo(0);
       await tester.pump();
     }
-    for (var i = 0; i < 40 && !built(); i++) {
+    for (var i = 0; i < 40 && !built(target); i++) {
       position.jumpTo(
         (position.pixels + 200).clamp(0, position.maxScrollExtent),
       );
@@ -147,27 +155,76 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  Future<void> pickType(WidgetTester tester, SpaceType type) async {
-    final tile = find.byKey(ValueKey('report-space-${type.name}'));
-    await reveal(tester, tile);
+  /// The form's folding sections, in order (C6 canvas AppForm).
+  const parts = ['位置', '名稱', '格位', '停車場（選填）', '可停車種', '收費（選填）', '補充（選填）'];
+
+  /// Opens the section titled [title] unless it is open already.
+  Future<void> openPart(WidgetTester tester, String title) async {
+    final header = find.byKey(ValueKey('fold-$title'));
+    await scrollTo(tester, header);
+    final section = tester.widget<FoldSection>(
+      find.ancestor(of: header, matching: find.byType(FoldSection)),
+    );
+    if (section.open) return;
+    await tester.tap(header);
+    await tester.pumpAndSettle();
+  }
+
+  /// Scrolls to [target], opening the section that holds it first.
+  Future<void> reveal(WidgetTester tester, Finder target) async {
+    for (final title in parts) {
+      if (built(target)) break;
+      final header = find.byKey(ValueKey('fold-$title'));
+      // The list builds lazily; 停車場 shows only for lots.
+      final position = tester.state<ScrollableState>(form).position;
+      if (!built(header)) {
+        position.jumpTo(0);
+        await tester.pump();
+      }
+      for (var i = 0; i < 40 && !built(header); i++) {
+        position.jumpTo(
+          (position.pixels + 200).clamp(0, position.maxScrollExtent),
+        );
+        await tester.pump();
+      }
+      if (!built(header)) continue;
+      await openPart(tester, title);
+    }
+    await scrollTo(tester, target);
+  }
+
+  Future<void> pickKind(WidgetTester tester, SpaceKind kind) async {
+    picked = true;
+    await openPart(tester, '格位');
+    final tile = find.byKey(ValueKey('report-space-${kind.name}'));
+    if (!built(tile)) {
+      final group = find.byKey(
+        ValueKey('report-space-group-${kind.group.name}'),
+      );
+      await scrollTo(tester, group);
+      await tester.tap(group);
+      await tester.pumpAndSettle();
+    }
+    await scrollTo(tester, tile);
     await tester.tap(tile);
     await tester.pumpAndSettle();
   }
+
+  Future<void> pickType(WidgetTester tester, SpaceType type) =>
+      pickKind(tester, SpaceKind.values.firstWhere((k) => k.type == type));
 
   Future<Map<String, dynamic>> send(
     WidgetTester tester,
     RecordingStore store,
   ) async {
-    // Back up to the name, the first field in the list.
+    if (!picked) await pickType(tester, SpaceType.paidMotorcycle);
     final name = find.widgetWithText(TextFormField, '停車點名稱');
     await reveal(tester, name);
     await tester.enterText(name, '測試點');
     await tester.pumpAndSettle();
     // The button sits below the fold of a lazily built list.
-    await reveal(tester, find.text('送出回報'));
-    await tester.ensureVisible(find.text('送出回報'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('送出回報'));
+    await scrollTo(tester, find.text('送出'));
+    await tester.tap(find.text('送出'));
     await tester.pumpAndSettle();
     return store.submissions.single['spot'] as Map<String, dynamic>;
   }
@@ -195,11 +252,17 @@ void main() {
   testWidgets('依地面標線選格位，並帶入可停車種', (tester) async {
     final store = await openForm(tester);
     expect(find.byType(DropdownButtonFormField<SpaceType>), findsNothing);
-    expect(find.text('地面畫的是哪一種格位？'), findsOneWidget);
-    await reveal(
-      tester,
-      find.byKey(const ValueKey('report-space-paidMotorcycle')),
+    // Nothing is picked until the rider picks (C6 canvas AppFormLocation).
+    await scrollTo(tester, find.byKey(const ValueKey('fold-格位')));
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('fold-格位')),
+        matching: find.text('還沒填'),
+      ),
+      findsOneWidget,
     );
+    await pickType(tester, SpaceType.paidMotorcycle);
+    expect(find.text('地面畫的是哪一種？'), findsOneWidget);
     expect(
       tester.getSemantics(
         find.byKey(const ValueKey('report-space-paidMotorcycle')),
@@ -214,6 +277,7 @@ void main() {
       ),
     );
     await pickType(tester, SpaceType.offStreet);
+    await openPart(tester, '可停車種');
     expect(find.textContaining('已依「路外停車場」帶入'), findsOneWidget);
     final spot = await send(tester, store);
     expect(spot['space_type'], 'offStreet');
@@ -273,16 +337,16 @@ void main() {
 
   testWidgets('資格依縣市規則帶入並說明來源', (tester) async {
     final store = await openForm(tester, rules: cityRules);
+    await pickType(tester, SpaceType.paidMotorcycle);
     await reveal(tester, find.textContaining('與臺北市的停車規則帶入'));
     expect(find.textContaining('與臺北市的停車規則帶入'), findsOneWidget);
     await pickType(tester, SpaceType.freeMotorcycle);
     // Shown as the rule decides, but only the markings are stored, so the
     // spot follows the rule if it changes.
+    await openPart(tester, '可停車種');
     expect(
       tester
-          .widget<ChoiceField<bool?>>(
-            find.widgetWithText(ChoiceField<bool?>, '大型重機'),
-          )
+          .widget<VehicleTriState>(find.widgetWithText(VehicleTriState, '大型重機'))
           .value,
       false,
     );
@@ -296,7 +360,7 @@ void main() {
     expect(find.text('入口在哪裡'), findsNothing);
     await pickType(tester, SpaceType.offStreet);
     final underground = find.descendant(
-      of: find.byType(SegmentedButton<FacilityType?>),
+      of: find.byType(ChoiceField<FacilityType?>),
       matching: find.text('地下'),
     );
     await reveal(tester, underground);
@@ -304,16 +368,13 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(underground);
     await tester.pumpAndSettle();
-    final access = find.byType(DropdownButtonFormField<ParkingAccess?>).first;
+    final access = find.descendant(
+      of: find.byType(ChoiceField<ParkingAccess?>).first,
+      matching: find.text('普通機車與大型重機共用'),
+    );
     await tester.ensureVisible(access);
     await tester.tap(access);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('普通機車與大型重機共用').last);
-    await tester.pumpAndSettle();
-    await tester.enterText(
-      find.widgetWithText(TextFormField, '入口在哪裡'),
-      '入口在松仁路側',
-    );
     final add = find.text('新增分區');
     await tester.ensureVisible(add);
     await tester.tap(add);
@@ -322,6 +383,9 @@ void main() {
       find.widgetWithText(TextFormField, '分區名稱'),
       'B2 機車區',
     );
+    final entrance = find.widgetWithText(TextFormField, '入口在哪裡');
+    await reveal(tester, entrance);
+    await tester.enterText(entrance, '入口在松仁路側');
     final guide = find.widgetWithText(TextFormField, '停車指引');
     await reveal(tester, guide);
     await tester.ensureVisible(guide);
@@ -355,9 +419,9 @@ void main() {
 
   testWidgets('先改一個車種再換格位，另一個規則帶入的車種仍送未確認', (tester) async {
     final store = await openForm(tester, rules: cityRules);
-    final scooterUnconfirmed = find.descendant(
-      of: find.byType(SegmentedButton<bool?>).first,
-      matching: find.text('未確認'),
+    await pickType(tester, SpaceType.paidMotorcycle);
+    final scooterUnconfirmed = find.byKey(
+      const ValueKey('report-scooter-null'),
     );
     await reveal(tester, scooterUnconfirmed);
     await tester.pumpAndSettle();
@@ -366,6 +430,7 @@ void main() {
     // The rule decides heavy bikes here only before the switch, so a flag
     // computed at submit time would wrongly send the shown value.
     await pickType(tester, SpaceType.evMotorcycle);
+    await openPart(tester, '可停車種');
     expect(find.textContaining('大型重機依規則帶入，只當預設'), findsOneWidget);
     final spot = await send(tester, store);
     expect(spot['scooter_allowed'], isNull);
@@ -376,11 +441,8 @@ void main() {
     final store = await openForm(tester);
     await pickType(tester, SpaceType.heavyOnly);
     // The heavy-bike segments, not the fee menus that also read 未確認.
-    final heavyUnconfirmed = find.descendant(
-      of: find.byType(SegmentedButton<bool?>).last,
-      matching: find.text('未確認'),
-    );
-    await tester.ensureVisible(heavyUnconfirmed);
+    final heavyUnconfirmed = find.byKey(const ValueKey('report-heavy-null'));
+    await reveal(tester, heavyUnconfirmed);
     // Heavy-only bays already read "heavy: allowed"; the reporter overrides it.
     await tester.tap(heavyUnconfirmed);
     await tester.pumpAndSettle();
@@ -395,10 +457,21 @@ void main() {
   testWidgets('依標記位置帶入縣市與行政區，並提醒 15 m 內同類型的點', (tester) async {
     final store = await openForm(tester);
     expect(store.lookups, [(25.0339, 121.5623)]);
-    expect(find.text('位於臺北市信義區'), findsOneWidget);
+    // Filled in from the lookup; the district lists only the city's.
+    expect(find.text('信義區'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('fold-位置')),
+        matching: find.text('臺北市・信義區・25.0339, 121.5623'),
+      ),
+      findsNothing,
+    );
     // The known spot sits at the same place with the same bay kind.
+    await pickType(tester, SpaceType.paidMotorcycle);
+    await openPart(tester, '位置');
     expect(find.byKey(const ValueKey('report-duplicate')), findsOneWidget);
     await pickType(tester, SpaceType.heavyOnly);
+    await openPart(tester, '位置');
     expect(find.byKey(const ValueKey('report-duplicate')), findsNothing);
     final spot = await send(tester, store);
     expect(spot['city'], '臺北市');
@@ -481,8 +554,8 @@ void main() {
         expect(locate.height, greaterThanOrEqualTo(48));
         expect(find.text('移到我的位置').hitTestable(), findsOneWidget);
         expect(find.byKey(const ValueKey('touch-marker')), findsOneWidget);
-        await reveal(tester, find.text('送出回報'));
-        expect(find.text('送出回報').hitTestable(), findsOneWidget);
+        await scrollTo(tester, find.text('送出'));
+        expect(find.text('送出').hitTestable(), findsOneWidget);
         expect(tester.takeException(), isNull);
       },
     );
@@ -491,7 +564,7 @@ void main() {
   Future<void> tapSegment(WidgetTester tester, int row, String label) async {
     // The list builds lazily; come back from wherever the last step left it.
     final segment = find.descendant(
-      of: find.widgetWithText(ChoiceField<bool?>, row == 0 ? '普通機車' : '大型重機'),
+      of: find.widgetWithText(VehicleTriState, row == 0 ? '普通機車' : '大型重機'),
       matching: find.text(label),
     );
     await reveal(tester, segment);
@@ -500,8 +573,8 @@ void main() {
   }
 
   Future<void> trySend(WidgetTester tester) async {
-    await reveal(tester, find.text('送出回報'));
-    await tester.tap(find.text('送出回報'));
+    await scrollTo(tester, find.text('送出'));
+    await tester.tap(find.text('送出'));
     await tester.pumpAndSettle();
   }
 
@@ -550,6 +623,7 @@ void main() {
 
   testWidgets('名稱是占位詞、備註含電話時在欄位下方提示，不送出', (tester) async {
     final store = await openForm(tester);
+    await pickType(tester, SpaceType.paidMotorcycle);
     await reveal(tester, nameField);
     await tester.enterText(nameField, '測試');
     await tester.pumpAndSettle();
@@ -561,6 +635,7 @@ void main() {
     expect(find.textContaining('內容含有電話號碼'), findsOneWidget);
     await trySend(tester);
     expect(store.submissions, isEmpty);
+    await reveal(tester, note);
     await tester.enterText(note, '夜間有管理員');
     await reveal(tester, nameField);
     await tester.enterText(nameField, '市府路機車格');
@@ -599,11 +674,11 @@ void main() {
     store.held!.single.complete(const Town('新北市', '板橋區'));
     await tester.pump();
     expect(find.byKey(const ValueKey('report-city-changed')), findsNothing);
-    expect(find.text('位於新北市板橋區'), findsNothing);
+    expect(find.text('板橋區'), findsNothing);
     await tester.pump(const Duration(milliseconds: 700));
     store.held!.last.complete(const Town('臺北市', '大安區'));
     await tester.pumpAndSettle();
-    expect(find.text('位於臺北市大安區'), findsOneWidget);
+    expect(find.text('大安區'), findsOneWidget);
     store.held = null;
     final spot = await send(tester, store);
     expect(spot['lat'], 25.0347);
@@ -624,11 +699,12 @@ void main() {
   testWidgets('臺北限時格：收費、限停 20 分鐘、首 20 分鐘 0 元不被預檢攔下，條件一起送出', (tester) async {
     final store = await openForm(tester);
     await pickType(tester, SpaceType.timedMotorcycle);
-    await tapIn(tester, 'condition-charge', '收費');
+    await tapIn(tester, 'condition-charge', '收費格');
     final minutes = find.byKey(const ValueKey('condition-max-minutes'));
     await reveal(tester, minutes);
     await tester.enterText(minutes, '20');
     await tester.pumpAndSettle();
+    await openPart(tester, '收費（選填）');
     await chooseFeeMode(tester, 'heavy', 'per_visit');
     await tester.enterText(feeField('amount', 'heavy'), '0');
     await tester.pumpAndSettle();
@@ -661,6 +737,7 @@ void main() {
     await reveal(tester, minutes);
     await tester.enterText(minutes, '20');
     await tester.pumpAndSettle();
+    await openPart(tester, '收費（選填）');
     await chooseFeeMode(tester, 'heavy', 'per_visit');
     await tester.enterText(feeField('amount', 'heavy'), '0');
     await tapFee(tester, 'fee-more-heavy');
@@ -679,7 +756,9 @@ void main() {
 
   testWidgets('收費格選免費時說明改用首段 0 元，不能送出', (tester) async {
     final store = await openForm(tester);
+    await pickType(tester, SpaceType.paidMotorcycle);
     await reveal(tester, find.byKey(const ValueKey('fee-mode-scooter-free')));
+    await openPart(tester, '收費（選填）');
     await chooseFeeMode(tester, 'scooter', 'free');
     expect(find.textContaining('這是收費格，普通機車的費率不能是「免費」'), findsOneWidget);
     await reveal(tester, nameField);
@@ -690,11 +769,8 @@ void main() {
 
   testWidgets('普大共用的免費格提示附公告連結，仍可送出並帶上連結', (tester) async {
     final store = await openForm(tester);
-    await pickType(tester, SpaceType.freeMotorcycle);
-    final shared = find.byKey(const ValueKey('condition-shared'));
-    await reveal(tester, shared);
-    await tester.tap(shared);
-    await tester.pumpAndSettle();
+    await pickKind(tester, SpaceKind.sharedMotorcycle);
+    await tapIn(tester, 'condition-charge', '免費格');
     expect(find.byKey(const ValueKey('condition-hold')), findsOneWidget);
     expect(find.textContaining('普大共用的免費格較少見'), findsOneWidget);
     final link = find.byKey(const ValueKey('evidence-url'));
@@ -725,12 +801,7 @@ void main() {
     final zoneName = find.widgetWithText(TextFormField, '分區名稱');
     await reveal(tester, zoneName);
     await tester.enterText(zoneName, 'B2 汽車區');
-    final area = find.byKey(const ValueKey('zone-area'));
-    await reveal(tester, area);
-    await tester.tap(area);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('汽車區').last);
-    await tester.pumpAndSettle();
+    await tapIn(tester, 'zone-area', '汽車區');
     await chooseFeeMode(tester, 'scooter', 'hourly');
     await tester.enterText(feeField('amount', 'scooter'), '10');
     await tester.pumpAndSettle();
@@ -757,7 +828,7 @@ void main() {
         brightness: brightness,
       );
       await pickType(tester, SpaceType.flexShared);
-      await tapIn(tester, 'condition-charge', '收費');
+      await tapIn(tester, 'condition-charge', '收費格');
       await tapFee(tester, 'condition-slot-add');
       await tapFee(tester, 'condition-slot-0-days-weekday');
       await tapFee(tester, 'condition-slot-0-all-day-false');
@@ -791,5 +862,207 @@ void main() {
       });
       expect(tester.takeException(), isNull);
     });
+  }
+
+  testWidgets('分段收合：一次只展開一段，收起時寫目前填了什麼或還沒填', (tester) async {
+    final store = await openForm(tester, rules: cityRules);
+    Finder summaryOf(String title, String text) => find.descendant(
+      of: find.byKey(ValueKey('fold-$title')),
+      matching: find.text(text),
+    );
+    await openPart(tester, '名稱');
+    // The position folded to its county, district and coordinates.
+    await scrollTo(tester, find.byKey(const ValueKey('fold-位置')));
+    expect(summaryOf('位置', '臺北市・信義區・25.0339, 121.5623'), findsOneWidget);
+    expect(find.byKey(const ValueKey('touch-marker')), findsNothing);
+    await tester.enterText(nameField, '市府路機車格');
+    await tester.pumpAndSettle();
+    await pickType(tester, SpaceType.paidMotorcycle);
+    await scrollTo(tester, find.byKey(const ValueKey('fold-名稱')));
+    expect(summaryOf('名稱', '市府路機車格'), findsOneWidget);
+    expect(nameField, findsNothing);
+    await scrollTo(tester, find.byKey(const ValueKey('fold-可停車種')));
+    expect(summaryOf('可停車種', '普通機車可停・大型重機可停（已依格位與臺北市規則帶入）'), findsOneWidget);
+    await scrollTo(tester, find.byKey(const ValueKey('fold-收費（選填）')));
+    expect(summaryOf('收費（選填）', '還沒填'), findsOneWidget);
+    expect(store.submissions, isEmpty);
+  });
+
+  testWidgets('送出時沒填的段落自動展開並標示要修正', (tester) async {
+    final store = await openForm(tester);
+    await trySend(tester);
+    expect(store.submissions, isEmpty);
+    // The name comes first among what is missing; the kind is flagged too.
+    expect(find.text('請填寫名稱'), findsOneWidget);
+    await scrollTo(tester, find.byKey(const ValueKey('fold-格位')));
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('fold-格位')),
+        matching: find.text('有欄位要修正'),
+      ),
+      findsOneWidget,
+    );
+    await tester.enterText(nameField, '市府路機車格');
+    await openPart(tester, '格位');
+    expect(find.text('請選地面畫的格位'), findsOneWidget);
+    await pickType(tester, SpaceType.freeMotorcycle);
+    await trySend(tester);
+    expect(store.submissions.single['spot']['space_type'], 'freeMotorcycle');
+  });
+
+  testWidgets('格位選後追問：限制可複選，App 會顯示預覽，送出的格位類型與條件一致', (tester) async {
+    final store = await openForm(tester);
+    await pickType(tester, SpaceType.paidMotorcycle);
+    await tapFee(tester, 'condition-limit-time_limit');
+    final minutes = find.byKey(const ValueKey('condition-max-minutes'));
+    await tester.enterText(minutes, '20');
+    await tester.pumpAndSettle();
+    await tapFee(tester, 'condition-limit-ev_only');
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('report-preview')),
+        matching: find.textContaining('有條件・限時 20 分鐘、限電動機車'),
+      ),
+      findsOneWidget,
+    );
+    final spot = await send(tester, store);
+    // The legacy type the condition converts to (§1.3), as validate.ts
+    // checks.
+    expect(spot['space_type'], 'evMotorcycle');
+    expect(spot['condition'], {
+      'bay': 'motorcycle',
+      'use': 'usual',
+      'charge': 'toll',
+      'limits': [
+        {'kind': 'time_limit', 'max_minutes': 20},
+        {'kind': 'ev_only'},
+      ],
+    });
+  });
+
+  testWidgets('普大共用機車格要選收費或免費才能送出', (tester) async {
+    final store = await openForm(tester);
+    await pickKind(tester, SpaceKind.sharedMotorcycle);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('condition-charge')),
+        matching: find.text('未確認'),
+      ),
+      findsNothing,
+    );
+    await reveal(tester, nameField);
+    await tester.enterText(nameField, '市府路共用格');
+    await trySend(tester);
+    expect(store.submissions, isEmpty);
+    expect(find.text('請選收費格或免費格'), findsOneWidget);
+    await tapIn(tester, 'condition-charge', '收費格');
+    await trySend(tester);
+    final spot = store.submissions.single['spot'] as Map;
+    expect(spot['space_type'], 'paidMotorcycle');
+    expect(spot['condition'], {
+      'bay': 'motorcycle',
+      'use': 'share',
+      'share': 'scooter_heavy',
+      'charge': 'toll',
+    });
+  });
+
+  testWidgets('位置段：區只列所選縣市的行政區，換縣市清掉區', (tester) async {
+    final store = await openForm(tester);
+    final district = find.byWidgetPredicate(
+      (w) =>
+          w is DropdownButtonFormField<String> &&
+          '${w.key}'.contains('report-district'),
+    );
+    await scrollTo(tester, district);
+    await tester.tap(district);
+    await tester.pumpAndSettle();
+    // Taipei's twelve districts, not New Taipei's.
+    expect(find.text('大安區').last, findsOneWidget);
+    expect(find.text('板橋區'), findsNothing);
+    await tester.tap(find.text('大安區').last);
+    await tester.pumpAndSettle();
+    final city = find.byWidgetPredicate(
+      (w) =>
+          w is DropdownButtonFormField<String> &&
+          '${w.key}'.contains('report-city'),
+    );
+    await tester.tap(city);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('新北市').last);
+    await tester.pumpAndSettle();
+    expect(find.text('大安區'), findsNothing);
+    await tester.tap(district);
+    await tester.pumpAndSettle();
+    expect(find.text('板橋區').last, findsOneWidget);
+    await tester.tap(find.text('板橋區').last);
+    await tester.pumpAndSettle();
+    final spot = await send(tester, store);
+    expect(spot['city'], '新北市');
+    expect(spot['district'], '板橋區');
+  });
+
+  testWidgets('放大地圖調整：在大地圖移動標記，完成後帶回表單', (tester) async {
+    final store = await openForm(tester);
+    await scrollTo(tester, find.byKey(const ValueKey('location-expand')));
+    await tester.tap(find.byKey(const ValueKey('location-expand')));
+    await tester.pumpAndSettle();
+    expect(find.text('調整位置'), findsOneWidget);
+    final pin = find.byKey(const ValueKey('touch-marker'));
+    expect(
+      tester.getSize(find.byType(LocationPicker)).height,
+      greaterThan(500),
+    );
+    final gesture = await tester.startGesture(tester.getCenter(pin));
+    await gesture.moveBy(const Offset(0, -30));
+    await gesture.moveBy(const Offset(20, 0));
+    await gesture.up();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('location-expand-done')));
+    await tester.pumpAndSettle();
+    expect(find.text('調整位置'), findsNothing);
+    final spot = await send(tester, store);
+    expect(spot['lat'] as double, greaterThan(25.0339));
+    expect(spot['lng'] as double, greaterThan(121.5623));
+  });
+
+  for (final size in const [
+    Size(320, 640),
+    Size(390, 844),
+    Size(402, 874),
+    Size(820, 1180),
+    Size(1180, 820),
+    Size(1024, 1366),
+    Size(1440, 960),
+  ]) {
+    testWidgets(
+      '分段表單在 ${size.width.toInt()}×${size.height.toInt()} 不溢出、觸控 ≥ 48',
+      (tester) async {
+        await openForm(tester, size: size, rules: cityRules);
+        await pickType(tester, SpaceType.timedMotorcycle);
+        await tapFee(tester, 'condition-limit-ev_only');
+        for (final key in [
+          'report-space-timedMotorcycle',
+          'report-space-group-motorcycle',
+          'condition-limit-ev_only',
+          'condition-shared',
+        ]) {
+          final box = tester.getSize(find.byKey(ValueKey(key)));
+          expect(box.height, greaterThanOrEqualTo(48), reason: key);
+        }
+        await openPart(tester, '可停車種');
+        final segment = tester.getSize(
+          find.byKey(const ValueKey('report-heavy-true')),
+        );
+        expect(segment.height, greaterThanOrEqualTo(48));
+        for (final title in parts) {
+          if (title == '停車場（選填）') continue;
+          await openPart(tester, title);
+          expect(tester.takeException(), isNull, reason: title);
+          final header = tester.getSize(find.byKey(ValueKey('fold-$title')));
+          expect(header.height, greaterThanOrEqualTo(48), reason: title);
+        }
+      },
+    );
   }
 }
