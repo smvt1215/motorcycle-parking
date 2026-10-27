@@ -278,7 +278,7 @@ flowchart TD
 
 - [x] 將「靜態容量／官方剩餘／社群目擊」明確定義為不同資料類型（見 [designs/2026-10-26-realtime-availability-ui.md](designs/2026-10-26-realtime-availability-ui.md)）。
 - [x] 完成路外標記、已滿、無資料、延遲、過期、選取與半高 sheet 的 UI 設計稿；路邊靜態與騎士回報列已一併設計，路段線只做示意。
-- [x] 依設計稿實作膠囊、詳情摘要與狀態總表所列文案（`lib/models/availability.dart`、`lib/domain/availability_display.dart`；資料來自 fake 資料源，只在範例模式啟用，連上後端時不顯示膠囊與篩選）。膠囊只掛在 FlutterMap（OpenStreetMap 預覽）；Google Maps 的增量 bitmap 圖層與真資料一起在 P2 做（issue #139）。
+- [x] 依設計稿實作膠囊、詳情摘要與狀態總表所列文案（`lib/models/availability.dart`、`lib/domain/availability_display.dart`；P0 時資料來自 fake 資料源，只在範例模式啟用；P2 起連上後端改讀官方快照）。膠囊只掛在 FlutterMap（OpenStreetMap 預覽）；Google Maps 的增量 bitmap 圖層與真資料一起在 P2 做（issue #139）。
 - [x] 確認篩選規則不會把未知車位排成「已滿」（`availabilityExclusion()` 與 `test/availability_test.dart`）。
 - [ ] Android、iOS、Web 的淺色／深色及大字級對照驗證。
 - **完成條件**：測試資料下，普通機車與大型重機都能正確辨別法律資格、總容量、空位數及來源。
@@ -292,10 +292,10 @@ flowchart TD
 
 ### P2 — 官方動態 MVP
 
-- [ ] 新增後端來源表、映射表、最新快照與唯讀 API／RPC；驗證 RLS。
-- [ ] 接入臺北市停管處 `TCMSV_allavailable.xml`（V2，P1 第一批）；完成即時摘要及更新時間。重機剩餘數膠囊同批上線，只在有有效重機值的場站顯示，無值時不顯示也不顯示 0；已確認重機可停汽車格的場站另顯示汽車格剩餘膠囊（見 3.1）。
+- [x] 新增後端來源表、映射表、最新快照與唯讀 API／RPC；驗證 RLS（migration `202610270140_availability_p2.sql`：`availability_sources`、`availability_facilities`、`availability_mappings`、`parking_availability_latest`、`availability_ingest_runs`；App 只能呼叫 `viewport_availability(text[])`，pgTAP `availability_test.sql`）。
+- [x] 接入臺北市停管處 `TCMSV_allavailable.xml`（V2，P1 第一批）；完成即時摘要及更新時間（Edge Function `availability-ingest`，pg_cron 每 5 分鐘；上線前須依 [CD_SETUP.md](CD_SETUP.md#即時車位擷取availability-ingest) 設定 Vault 與函式密鑰）。Google 地圖的膠囊圖層另見 #139。重機剩餘數膠囊同批上線，只在有有效重機值的場站顯示，無值時不顯示也不顯示 0；已確認重機可停汽車格的場站另顯示汽車格剩餘膠囊（見 3.1）。
 - [ ] 路邊只做**靜態路段**（2026-10-26 使用者決定）：P1 稽核的 8 個縣市都缺少機車路段即時資料（臺北「含機車」路段為汽機車共用格、新北分車種值為佔位 0、其他縣市只有汽車），阻礙記錄於 [availability-coverage.md §4.3](availability-coverage.md#43-路邊路段與逐格v1parkingonstreetcitycity)。
-- [ ] 實作 `fresh/delayed/stale/unavailable/invalid` 行為、地圖增量更新與篩選。
+- [x] 實作 `fresh/delayed/stale/unavailable/invalid` 行為、地圖增量更新與篩選：App 連上後端時改用 `SupabaseAvailabilitySource`，地圖顯示且在前景時每 2 分鐘只重讀剩餘數（失敗加倍退避，最長 20 分鐘；背景與其他分頁暫停）；範例模式仍用固定資料。
 - **完成條件**：官方來源延遲、斷訊、0 格、缺值、跨車種都可正確顯示，沒有假即時。
 
 ### P3 — 社群近期目擊（須另核准資料治理）
@@ -315,23 +315,23 @@ flowchart TD
 
 ### 邏輯與資料
 
-- [ ] `available = 0` 顯示「已滿」。
-- [ ] `available = null`、`-9` 或缺少該車種欄位顯示「無即時資料」，不顯示「已滿」。
+- [x] `available = 0` 顯示「已滿」。
+- [x] `available = null`、`-9` 或缺少該車種欄位顯示「無即時資料」，不顯示「已滿」。
 - [ ] 靜態 `total = 24`、無官方即時欄位時只顯示「共 24 格／空位未知」。
-- [ ] 一般機車剩餘 12 格、大重剩餘缺值時，切換至大型重機只顯示未知，法律資格照舊判斷。
-- [ ] 已經 30 分鐘沒有來源更新的資料，不能因剛剛成功輪詢而重新標為新鮮。
-- [ ] `available > total`、異常負值、未來時間與資料亂序不直接進入 UI。
-- [ ] 兩個官方來源對同一點回報衝突時，不自行加總；採核准的來源優先順序／人工映射。
-- [ ] 社群目擊永遠不產生「剩 N 格」官方標籤。
+- [x] 一般機車剩餘 12 格、大重剩餘缺值時，切換至大型重機只顯示未知，法律資格照舊判斷。
+- [x] 已經 30 分鐘沒有來源更新的資料，不能因剛剛成功輪詢而重新標為新鮮。
+- [x] `available > total`、異常負值、未來時間與資料亂序不直接進入 UI。
+- [x] 兩個官方來源對同一點回報衝突時，不自行加總；採核准的來源優先順序／人工映射。
+- [x] 社群目擊永遠不產生「剩 N 格」官方標籤。
 
 ### 地圖與互動
 
-- [ ] 範圍拖曳時舊請求不覆蓋新結果；所選停車點不被群聚吞沒。
+- [ ] 範圍拖曳時舊請求不覆蓋新結果（剩餘數輪詢也一樣，`test/availability_p2_test.dart`）；所選停車點不被群聚吞沒。
 - [ ] 群聚「12」永遠代表 12 個點／路段，不是 12 個剩餘車位。
 - [ ] 逐格資料缺少精確位置時不能展開逐格占用標記。
 - [ ] 篩選「目前有位」排除過期、未知、0 格、車種不匹配與不可停；無結果可一鍵清除。
 - [ ] 地圖與清單使用相同篩選和即時資料版本。
-- [ ] 官方動態資料更新時，已開啟的詳情面板不關閉、不閃爍，會更新時間與數值。
+- [x] 官方動態資料更新時，已開啟的詳情面板不關閉、不閃爍，會更新時間與數值。
 
 ### 品質與可用性
 

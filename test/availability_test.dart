@@ -778,7 +778,7 @@ void main() {
     });
   });
 
-  test('連上後端（P2 前）沒有即時資料源，範例資料源只給範例停車場', () async {
+  test('NoAvailabilitySource 沒有資料；範例資料源只給範例停車場', () async {
     expect(const NoAvailabilitySource().enabled, isFalse);
     expect(await const NoAvailabilitySource().forSpots([lot]), isEmpty);
     final demo = demoAvailabilitySource(clock: () => now);

@@ -69,15 +69,19 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     ContributionsRepository? contributionsRepository,
     DataUpdates? dataUpdates,
     AvailabilitySource? availabilitySource,
+    Duration? availabilityPoll,
     DateTime Function()? clock,
   }) : parking = parkingRepository ?? ParkingRepository(client),
-       // Live counts have no backend before P2: only the example build has
-       // (fake) ones.
+       // Official counts from the backend; the example build has fake ones.
        availabilitySource =
            availabilitySource ??
            (client == null
                ? demoAvailabilitySource(clock: clock)
-               : const NoAvailabilitySource()),
+               : SupabaseAvailabilitySource(client)),
+       // The example build's counts never change: no polling.
+       availabilityPoll =
+           availabilityPoll ??
+           (client == null ? null : defaultAvailabilityPoll),
        clock = clock ?? DateTime.now,
        rulesRepository = rulesRepository ?? RulesRepository(client),
        holidayRepository = holidayRepository ?? HolidayRepository(client),
@@ -102,6 +106,28 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
 
   /// The time freshness is judged against; tests pin it.
   final DateTime Function() clock;
+
+  /// How often the counts of the loaded spots are read again while the map
+  /// is on screen and the app in the foreground; null never polls. Taipei
+  /// writes every five minutes, so two keeps a count at most one cycle
+  /// behind without hammering the backend (plan §7.4).
+  final Duration? availabilityPoll;
+  static const defaultAvailabilityPoll = Duration(minutes: 2);
+
+  /// The longest wait after failed reads in a row (plan §10: back off).
+  static const availabilityBackoffLimit = Duration(minutes: 20);
+  Timer? _availabilityTimer;
+
+  /// Redraws once a minute while counts are on screen, so a count turns
+  /// delayed or stale on time even while reads back off.
+  Timer? _availabilityClock;
+
+  /// Every count read, from a viewport load or a poll, takes the next
+  /// number; only the newest one started may land.
+  int _availabilityRead = 0;
+  int _availabilityFailures = 0;
+  DateTime? _availabilityReadAt;
+  bool _foreground = true, _mapShown = true;
 
   /// Live counts for the loaded [spots], by spot id; kept apart from them
   /// (see [AvailabilitySnapshot]).
@@ -280,7 +306,124 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) unawaited(checkForUpdates());
+    switch (state) {
+      case AppLifecycleState.resumed:
+        _foreground = true;
+        unawaited(checkForUpdates());
+        _resumeAvailability();
+      case AppLifecycleState.paused:
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.detached:
+        // No polling in the background.
+        _foreground = false;
+        _stopAvailability();
+      case AppLifecycleState.inactive:
+        break;
+    }
+  }
+
+  /// Whether the map is on screen (another tab covers it otherwise); counts
+  /// are only polled while it is.
+  void setMapShown(bool shown) {
+    if (_mapShown == shown) return;
+    _mapShown = shown;
+    if (shown) {
+      _resumeAvailability();
+    } else {
+      _stopAvailability();
+    }
+  }
+
+  /// Back on screen: reads at once when the last read is a poll interval
+  /// old, otherwise waits out the rest of it.
+  void _resumeAvailability() {
+    final poll = availabilityPoll;
+    if (poll == null || !_foreground || !_mapShown) return;
+    final at = _availabilityReadAt;
+    final since = at == null ? null : DateTime.now().difference(at);
+    if (since == null || since >= poll) {
+      unawaited(pollAvailability());
+    } else {
+      _scheduleAvailability(poll - since);
+    }
+  }
+
+  /// The wait before the next poll: the interval, doubled for each failed
+  /// read in a row up to [availabilityBackoffLimit].
+  Duration? get availabilityDelay {
+    final poll = availabilityPoll;
+    if (poll == null) return null;
+    final delay = poll * (1 << _availabilityFailures.clamp(0, 4));
+    return delay > availabilityBackoffLimit ? availabilityBackoffLimit : delay;
+  }
+
+  void _scheduleAvailability([Duration? after]) {
+    _availabilityTimer?.cancel();
+    final delay = after ?? availabilityDelay;
+    if (delay == null ||
+        _disposed ||
+        !_foreground ||
+        !_mapShown ||
+        !availabilitySource.enabled) {
+      return;
+    }
+    _availabilityTimer = Timer(delay, () => unawaited(pollAvailability()));
+    _availabilityClock ??= Timer.periodic(const Duration(minutes: 1), (_) {
+      if (!_disposed && availability.isNotEmpty) notifyListeners();
+    });
+  }
+
+  void _stopAvailability() {
+    _availabilityTimer?.cancel();
+    _availabilityClock?.cancel();
+    _availabilityClock = null;
+  }
+
+  /// Reads the counts of the loaded spots again, without reloading the
+  /// spots. A viewport load started meanwhile wins: its spots and counts
+  /// are newer, so this result is dropped. A failed read keeps the last
+  /// counts, which age on screen by their source time (delayed, then
+  /// stale), and backs off.
+  Future<void> pollAvailability() async {
+    _availabilityTimer?.cancel();
+    if (_disposed || !availabilitySource.enabled || spots.isEmpty) return;
+    final request = _request, read = ++_availabilityRead;
+    final current = spots;
+    final counts = await _readAvailability(current);
+    if (_disposed ||
+        request != _request ||
+        read != _availabilityRead ||
+        !identical(current, spots)) {
+      return;
+    }
+    availability = counts ?? _keptAvailability(current);
+    // Also on failure: the ages shown move on.
+    notifyListeners();
+    _scheduleAvailability();
+  }
+
+  /// The counts for [spots], or null when the read fails.
+  Future<Map<String, SpotAvailability>?> _readAvailability(
+    List<ParkingSpot> spots,
+  ) async {
+    try {
+      final counts = await availabilitySource.forSpots(spots);
+      _availabilityFailures = 0;
+      _availabilityReadAt = DateTime.now();
+      return counts;
+    } catch (_) {
+      _availabilityFailures++;
+      return null;
+    }
+  }
+
+  /// The last counts of the spots still loaded, for when a read fails.
+  Map<String, SpotAvailability> _keptAvailability(List<ParkingSpot> spots) {
+    final ids = {for (final spot in spots) spot.id};
+    return {
+      for (final MapEntry(:key, :value) in availability.entries)
+        if (ids.contains(key)) key: value,
+    };
   }
 
   /// Records [version]; reloads its dataset when it is newer than the one
@@ -362,15 +505,17 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
       if (_disposed || request != _request) return;
       spots = result.spots;
       _loadedOnce = true;
-      // A failed count read leaves every space unknown, never the map empty.
-      try {
-        final counts = await availabilitySource.forSpots(result.spots);
-        if (_disposed || request != _request) return;
-        availability = counts;
-      } catch (_) {
-        if (_disposed || request != _request) return;
-        availability = const {};
-      }
+      // A failed count read keeps the last counts of the spots still in
+      // view (they age by source time) and never empties the map.
+      final read = ++_availabilityRead;
+      final counts = await _readAvailability(result.spots);
+      if (_disposed || request != _request) return;
+      // A poll started since read these same spots later: its result wins,
+      // so this older one only drops counts of spots out of view.
+      availability = read == _availabilityRead
+          ? counts ?? _keptAvailability(result.spots)
+          : _keptAvailability(result.spots);
+      _scheduleAvailability();
       error = result.warning ?? rulesWarning ?? favoritesWarning;
       truncated = result.truncated;
     } catch (_) {
@@ -724,6 +869,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     _request++;
     _viewportTimer?.cancel();
     _updateTimer?.cancel();
+    _stopAvailability();
     if (_observingLifecycle) WidgetsBinding.instance.removeObserver(this);
     unawaited(_auth?.cancel());
     unawaited(_updates?.cancel());
