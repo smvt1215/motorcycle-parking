@@ -1303,13 +1303,35 @@ void main() {
         'since': closureDate(today.subtract(const Duration(days: 8))),
       })!;
       expect(older.stateOn(DateTime.now()), ClosureState.expired);
+      // Read as active, then the date passes: it lapses all the same.
       expect(
         SpotClosure.fromJson({
           'reason': 'works',
           'since': '2020-01-01',
         }, state: 'active')!.stateOn(DateTime.now()),
+        ClosureState.expired,
+      );
+      expect(
+        SpotClosure.fromJson({
+          'reason': 'works',
+          'since': closureDate(today),
+        }, state: 'active')!.stateOn(DateTime.now()),
         ClosureState.active,
       );
+      // Favorites keep it, without the judgement.
+      final saved = ParkingSpot.fromJson(
+        ParkingSpot(
+          id: spot.id,
+          name: spot.name,
+          lat: spot.lat,
+          lng: spot.lng,
+          city: spot.city,
+          spaceType: spot.spaceType,
+          closure: SpotClosure(reason: ClosureReason.works, since: today),
+        ).toJson(),
+      );
+      expect(saved.closure?.reason, ClosureReason.works);
+      expect(saved.closure?.state, isNull);
       expect(validClosure({'reason': 'works', 'since': '2026-02-30'}), isFalse);
       expect(
         validClosure({

@@ -73,11 +73,13 @@ class SpotClosure {
   DateTime get endsOn =>
       until ?? since.add(const Duration(days: closureDefaultDays));
 
+  /// The server's judgement, unless the date has passed since it was read
+  /// (an app left open overnight, a saved favorite): a closure never holds
+  /// past [endsOn].
   ClosureState stateOn(DateTime now) =>
-      state ??
-      (taiwanToday(now).isAfter(endsOn)
-          ? ClosureState.expired
-          : ClosureState.active);
+      state == ClosureState.expired || taiwanToday(now).isAfter(endsOn)
+      ? ClosureState.expired
+      : ClosureState.active;
 
   /// The stored closure in [json], or null when there is none or it breaks
   /// the column's shape (`valid_closure()`).

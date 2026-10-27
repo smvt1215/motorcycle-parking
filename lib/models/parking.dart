@@ -278,8 +278,9 @@ class ParkingSpot {
   final bool zonesComplete;
 
   /// A temporary closure or works (#116), with the server's judgement of
-  /// whether it still holds. Live data like [contributorName]: [toJson]
-  /// leaves it out, so a saved favorite never shows a stale closure.
+  /// whether it still holds. Saved with favorites like the other fields
+  /// (without the judgement, which [SpotClosure.stateOn] makes again by
+  /// date), so a favorite opened later still shows it and lets it lapse.
   final SpotClosure? closure;
 
   /// Whether builds that cannot read conditions read this spot as it is
@@ -479,6 +480,7 @@ class ParkingSpot {
         'scooter_verified_at': scooterVerifiedAt!.toIso8601String(),
       if (heavyVerifiedAt != null)
         'heavy_verified_at': heavyVerifiedAt!.toIso8601String(),
+      if (closure case final closure?) 'closure': closure.toJson(),
     };
   }
 }
