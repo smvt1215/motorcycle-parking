@@ -20,7 +20,7 @@ enum HistoryFilter {
   bool shows(HistoryEntry e) => switch (this) {
     all => true,
     admin => e.kind == HistoryKind.admin,
-    report => e.kind == HistoryKind.report,
+    report => e.kind.rider,
     import => e.kind == HistoryKind.import,
   };
 }
@@ -39,9 +39,9 @@ Future<void> showSpotHistoryPage(
 );
 
 /// 編輯紀錄 (#141): one timeline of administrators' writes, decided rider
-/// reports and imports, newest first, each with its time, who, the kinds of
-/// data and what they were and became; a decided report links to what the
-/// rider sent.
+/// reports, owners' own edits and votes (decision 56) and imports, newest
+/// first, each with its time, who, the kinds of data and what they were and
+/// became; a decided report links to what the rider sent.
 class SpotHistoryPage extends StatefulWidget {
   const SpotHistoryPage({
     super.key,
@@ -179,6 +179,8 @@ String historyMeta(HistoryEntry e) {
       e.report!.accepted ? '車友回報（已採納）' : '車友回報（已駁回）',
       ?admin,
     ],
+    HistoryKind.owner => ['車友更新', _rider(e.actorName, '車主')],
+    HistoryKind.vote => ['車友投票', _rider(e.actorName, '車友')],
     HistoryKind.import => [
       e.action == 'convert_fee'
           ? '費率轉換'
@@ -201,6 +203,12 @@ String historyMeta(HistoryEntry e) {
   };
   return [_time(e.at), ...parts].join('・');
 }
+
+/// A rider by name for administrators, or [role] alone without one.
+String _rider(String? name, String role) => switch (name) {
+  final n? when n.trim().isNotEmpty => '$role ${n.trim()}',
+  _ => role,
+};
 
 /// The changes worth a row: the fee speaks through its sentence when both
 /// changed.
@@ -229,7 +237,9 @@ class _TimelineItem extends StatelessWidget {
         shape: BoxShape.circle,
       ),
       HistoryKind.import => BoxDecoration(color: ink, shape: BoxShape.circle),
-      HistoryKind.report => BoxDecoration(
+      HistoryKind.report ||
+      HistoryKind.owner ||
+      HistoryKind.vote => BoxDecoration(
         color: colors.surface,
         shape: BoxShape.circle,
         border: Border.all(color: ink, width: 2),
