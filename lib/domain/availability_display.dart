@@ -1,6 +1,8 @@
 import '../models/availability.dart';
 import '../models/parking.dart';
+import '../models/parking_condition.dart';
 import 'eligibility.dart';
+import 'parking_decision.dart';
 
 /// How a count reads on the map and in the details. Whether a rider may
 /// park and whether a space is free are separate: nothing here looks at
@@ -12,11 +14,39 @@ AvailabilityVehicle availabilityVehicle(VehicleType vehicle) =>
     ? AvailabilityVehicle.scooter
     : AvailabilityVehicle.heavy;
 
-/// Whether the spot's data confirms that heavy bikes may use its car bays,
-/// for the lot or any zone. Admitting heavy bikes alone does not.
-bool heavyCarConfirmed(ParkingSpot spot) =>
-    spot.access == ParkingAccess.heavyCar ||
-    spot.zones.any((zone) => zone.access == ParkingAccess.heavyCar);
+/// Whether heavy bikes may use [spot]'s car bays now, as [decision] (the
+/// heavy-bike [decideParking] result) judges them (#136): the lot must be
+/// trusted and open to heavy bikes, and
+/// - with zones: a car-area zone is allowed or conditional for heavy bikes;
+///   a car zone that is unconfirmed (an expired notice, a missing slot) or
+///   closed does not count, nor does a lot whose zones disagree;
+/// - without zones, or zones that say nothing: the lot's own data puts heavy
+///   bikes in car bays, which the law allows (§3.2 step 1).
+/// Admitting heavy bikes alone does not.
+bool heavyCarOpen(ParkingSpot spot, ParkingDecision decision) {
+  if (decision.status != EligibilityStatus.allowed &&
+      decision.status != EligibilityStatus.conditional) {
+    return false;
+  }
+  final zones = decision.zones;
+  // decideParking judges every zone in the lot's order. A decision without
+  // them (the rolled-back judgement) speaks for the lot only.
+  if (zones.length == spot.zones.length && zones.any((z) => z.hasData)) {
+    for (var i = 0; i < zones.length; i++) {
+      if (zones[i].open && _carArea(spot.zones[i])) return true;
+    }
+    return false;
+  }
+  return spot.access == ParkingAccess.heavyCar ||
+      (spot.condition?.bay == Bay.car && spot.condition?.allow?.heavy != false);
+}
+
+/// A zone of car bays: its area says so, or, with no area, its condition
+/// (or the one its access stands for) is a car bay.
+bool _carArea(ParkingZone zone) =>
+    zone.area == ZoneArea.car ||
+    (zone.area == null &&
+        (zone.condition ?? zoneConditionOf(zone.access))?.bay == Bay.car);
 
 /// 「17:02」 in local time.
 String availabilityClock(DateTime value) {
@@ -78,15 +108,17 @@ String _count(int available) => available == 0 ? '已滿' : '剩 $available';
 
 /// The pills beside [spot]'s marker for [vehicle]: none when the space is
 /// unknown (no data, stale, invalid), so a missing pill never reads as
-/// zero. A car-bay pill joins only for heavy bikes at a lot confirmed to
-/// let them use car bays, while its count is fresh or delayed.
+/// zero. A car-bay pill joins only for heavy bikes where [decision] opens
+/// car bays to them ([heavyCarOpen]), while its count is fresh or delayed.
+/// [decision] is [vehicle]'s [decideParking] result.
 List<AvailabilityCapsule> markerCapsules(
   ParkingSpot spot,
   SpotAvailability availability,
   VehicleType vehicle,
-  EligibilityStatus eligibility,
+  ParkingDecision decision,
   DateTime now,
 ) {
+  final eligibility = decision.status;
   // A count where the rider may not park only invites them in (canvas v30).
   if (!spot.isFacility || eligibility == EligibilityStatus.notAllowed) {
     return const [];
@@ -126,8 +158,8 @@ List<AvailabilityCapsule> markerCapsules(
   final car = availability.of(AvailabilityVehicle.car);
   final carStatus = car?.status(now);
   if (vehicle == VehicleType.heavy &&
-      heavyCarConfirmed(spot) &&
       car != null &&
+      heavyCarOpen(spot, decision) &&
       (carStatus == AvailabilityStatus.fresh ||
           carStatus == AvailabilityStatus.delayed)) {
     final delayed = carStatus == AvailabilityStatus.delayed;
@@ -151,24 +183,26 @@ List<AvailabilityCapsule> markerCapsules(
 /// - the rider may not park here, or it is unconfirmed: none, the
 ///   eligibility marker alone speaks;
 /// - the rider's own count when there is one;
-/// - heavy bikes at a lot confirmed for car bays with no heavy count: the
-///   car-bay count.
-/// [capsules] is [markerCapsules]'s result. [eligibility] is the
-/// [Eligibility] status today; after stack C's C4 (issue #136) it will be
-/// read from `ParkingDecision` instead.
+/// - heavy bikes with no heavy count, where [decision] opens car bays to
+///   them ([heavyCarOpen]): the car-bay count.
+/// [capsules] is [markerCapsules]'s result; [decision] is [vehicle]'s
+/// [decideParking] result for [spot].
 List<AvailabilityCapsule> primaryCapsules(
+  ParkingSpot spot,
   VehicleType vehicle,
-  EligibilityStatus eligibility,
+  ParkingDecision decision,
   List<AvailabilityCapsule> capsules,
 ) {
-  if (eligibility == EligibilityStatus.notAllowed ||
-      eligibility == EligibilityStatus.unverified) {
+  if (decision.status == EligibilityStatus.notAllowed ||
+      decision.status == EligibilityStatus.unverified) {
     return const [];
   }
   final own = capsules.where((c) => c.style != CapsuleStyle.car);
   if (own.isNotEmpty) return [own.first];
   final car = capsules.where((c) => c.style == CapsuleStyle.car);
-  return vehicle == VehicleType.heavy && car.isNotEmpty
+  return vehicle == VehicleType.heavy &&
+          car.isNotEmpty &&
+          heavyCarOpen(spot, decision)
       ? [car.first]
       : const [];
 }
@@ -221,15 +255,18 @@ String _withTotal(int? total, String rest) => [
   rest,
 ].where((s) => s.isNotEmpty).join(' ・ ');
 
-/// The summary for an off-street lot. [eligibility] only adds a reminder
-/// beside a count the rider may not use; it never changes the count.
+/// The summary for an off-street lot. [decision] ([vehicle]'s
+/// [decideParking] result) hides the count where the rider may not park and
+/// decides whether the car-bay line joins ([heavyCarOpen]); it never
+/// changes a count.
 AvailabilityFact availabilityFact(
   ParkingSpot spot,
   SpotAvailability availability,
   VehicleType vehicle,
-  EligibilityStatus eligibility,
+  ParkingDecision decision,
   DateTime now,
 ) {
+  final eligibility = decision.status;
   final title = vehicle == VehicleType.scooter ? '機車車位' : '大型重機車位';
   // No count where the rider may not park, so it never reads as an
   // invitation (canvas v30).
@@ -241,7 +278,7 @@ AvailabilityFact availabilityFact(
     );
   }
   final own = availability.of(availabilityVehicle(vehicle));
-  final notes = _notes(spot, availability, vehicle, own, now);
+  final notes = _notes(spot, availability, vehicle, decision, own, now);
   final staticTotal =
       own?.capacity ??
       (vehicle == VehicleType.scooter && (spot.scooterTotal ?? 0) > 0
@@ -320,6 +357,7 @@ List<AvailabilityNote> _notes(
   ParkingSpot spot,
   SpotAvailability availability,
   VehicleType vehicle,
+  ParkingDecision decision,
   AvailabilitySnapshot? own,
   DateTime now,
 ) {
@@ -341,7 +379,7 @@ List<AvailabilityNote> _notes(
   final car = availability.of(AvailabilityVehicle.car);
   final scooter = availability.of(AvailabilityVehicle.scooter);
   return [
-    if (heavyCarConfirmed(spot) && shown(car))
+    if (shown(car) && heavyCarOpen(spot, decision))
       AvailabilityNote(
         car!.available == 0
             ? '汽車格已滿${delay(car)}'

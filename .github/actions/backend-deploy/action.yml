@@ -20,5 +20,7 @@ runs:
         : "${SUPABASE_DB_PASSWORD:?Missing Supabase database password}"
         python3 tool/cd_config.py '${{ inputs.environment }}' backend
         supabase link --project-ref "$SUPABASE_PROJECT_REF"
-        supabase db push --yes
+        # PRs merge in a different order than their pre-assigned migration
+        # numbers, so a lower number can land after a higher one is applied.
+        supabase db push --include-all --yes
         supabase functions deploy --project-ref "$SUPABASE_PROJECT_REF" --use-api --prune --yes

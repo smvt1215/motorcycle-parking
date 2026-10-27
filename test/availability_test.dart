@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:motorcycle_parking/data/availability_repository.dart';
 import 'package:motorcycle_parking/domain/availability_display.dart';
 import 'package:motorcycle_parking/domain/eligibility.dart';
+import 'package:motorcycle_parking/domain/parking_decision.dart';
 import 'package:motorcycle_parking/models/availability.dart';
 import 'package:motorcycle_parking/models/parking.dart';
 
@@ -50,6 +51,16 @@ final heavyCarLot = ParkingSpot.fromJson({
 
 SpotAvailability counts(List<AvailabilitySnapshot> list) =>
     SpotAvailability(list);
+
+/// The judgement the map reads: [decideParking] for [spot], or one with only
+/// [status] (no zones), which stands for the lot alone.
+ParkingDecision judged(
+  ParkingSpot spot,
+  VehicleType vehicle, [
+  EligibilityStatus? status,
+]) => status == null
+    ? decideParking(spot, vehicle, const [], now: now)
+    : ParkingDecision(status, '');
 
 void main() {
   group('狀態判定', () {
@@ -147,8 +158,14 @@ void main() {
       ParkingSpot spot,
       List<AvailabilitySnapshot> list,
       VehicleType vehicle, {
-      EligibilityStatus eligibility = EligibilityStatus.allowed,
-    }) => markerCapsules(spot, counts(list), vehicle, eligibility, now);
+      EligibilityStatus? eligibility,
+    }) => markerCapsules(
+      spot,
+      counts(list),
+      vehicle,
+      judged(spot, vehicle, eligibility),
+      now,
+    );
 
     test('新鮮為墨色「剩 N」，0 為「已滿」，延遲為描邊並保留數字', () {
       final fresh = capsules(lot, [
@@ -171,7 +188,7 @@ void main() {
       expect((suspended.text, suspended.style), ('暫停', CapsuleStyle.suspended));
     });
 
-    test('目前車種不可停時一律不顯示膠囊，待確認照常顯示', () {
+    test('目前車種不可停時一律不顯示膠囊，待確認只顯示本車種剩餘', () {
       final list = [
         snap(AvailabilityVehicle.heavy, total: 40, available: 20),
         snap(AvailabilityVehicle.car, total: 100, available: 30),
@@ -192,7 +209,15 @@ void main() {
           VehicleType.heavy,
           eligibility: EligibilityStatus.unverified,
         ),
-        hasLength(2),
+        // The rider's own count stays; the car-bay pill needs a lot open
+        // to heavy bikes (#136).
+        [
+          isA<AvailabilityCapsule>().having(
+            (c) => c.style,
+            'style',
+            CapsuleStyle.live,
+          ),
+        ],
       );
     });
 
@@ -230,7 +255,7 @@ void main() {
       );
     });
 
-    test('汽車格膠囊只在大型重機且確認 heavyCar 時出現，只有汽車圖示與「剩 N」', () {
+    test('汽車格膠囊只在大型重機且判斷開放汽車格時出現，只有汽車圖示與「剩 N」', () {
       final car = snap(AvailabilityVehicle.car, total: 100, available: 30);
       final shown = capsules(heavyCarLot, [car], VehicleType.heavy).single;
       expect(
@@ -302,18 +327,26 @@ void main() {
       semantics: '汽車格剩 30 格，大型重機可停汽車格',
     );
     const allowed = EligibilityStatus.allowed;
+    List<AvailabilityCapsule> primary(
+      VehicleType vehicle,
+      EligibilityStatus status,
+      List<AvailabilityCapsule> capsules, {
+      ParkingSpot? spot,
+    }) => primaryCapsules(
+      spot ?? heavyCarLot,
+      vehicle,
+      judged(spot ?? heavyCarLot, vehicle, status),
+      capsules,
+    );
 
     test('① 重機只開放汽車格、沒有重機剩餘數：主要膠囊是汽車格', () {
-      expect(primaryCapsules(VehicleType.heavy, allowed, [car]), [car]);
+      expect(primary(VehicleType.heavy, allowed, [car]), [car]);
     });
 
     test('② 有重機剩餘數也可停汽車格：主要膠囊是重機剩餘', () {
-      expect(primaryCapsules(VehicleType.heavy, allowed, [own, car]), [own]);
+      expect(primary(VehicleType.heavy, allowed, [own, car]), [own]);
       expect(
-        primaryCapsules(VehicleType.heavy, EligibilityStatus.conditional, [
-          own,
-          car,
-        ]),
+        primary(VehicleType.heavy, EligibilityStatus.conditional, [own, car]),
         [own],
       );
     });
@@ -323,16 +356,183 @@ void main() {
         EligibilityStatus.notAllowed,
         EligibilityStatus.unverified,
       ]) {
-        expect(primaryCapsules(VehicleType.heavy, status, [own, car]), isEmpty);
-        expect(primaryCapsules(VehicleType.scooter, status, [own]), isEmpty);
+        expect(primary(VehicleType.heavy, status, [own, car]), isEmpty);
+        expect(primary(VehicleType.scooter, status, [own]), isEmpty);
       }
     });
 
+    test('④ 判斷結果沒有開放汽車格：密集時也不拿汽車格當主要膠囊', () {
+      expect(primary(VehicleType.heavy, allowed, [car], spot: lot), isEmpty);
+    });
+
     test('普通機車模式：主要膠囊是機車剩餘，沒有就不顯示', () {
-      expect(primaryCapsules(VehicleType.scooter, allowed, [own]), [own]);
-      expect(primaryCapsules(VehicleType.scooter, allowed, const []), isEmpty);
+      expect(primary(VehicleType.scooter, allowed, [own]), [own]);
+      expect(primary(VehicleType.scooter, allowed, const []), isEmpty);
       // A car-bay pill never stands in for scooters.
-      expect(primaryCapsules(VehicleType.scooter, allowed, [car]), isEmpty);
+      expect(primary(VehicleType.scooter, allowed, [car]), isEmpty);
+    });
+  });
+
+  group('汽車格膠囊依停放判斷（#136）', () {
+    final car = snap(AvailabilityVehicle.car, total: 100, available: 30);
+    final heavy = snap(AvailabilityVehicle.heavy, total: 40, available: 20);
+    List<AvailabilityCapsule> shown(ParkingSpot spot) => markerCapsules(
+      spot,
+      counts([heavy, car]),
+      VehicleType.heavy,
+      decideParking(spot, VehicleType.heavy, const [], now: now),
+      now,
+    );
+    bool hasCar(ParkingSpot spot) =>
+        shown(spot).any((c) => c.style == CapsuleStyle.car);
+    ParkingSpot zoned(
+      List<Map<String, Object?>> zones, {
+      bool? heavyAllowed = true,
+      bool complete = false,
+    }) => ParkingSpot.fromJson({
+      ...lot.toJson(),
+      'heavy_allowed': heavyAllowed,
+      'zones_complete': complete,
+      'parking_zones': zones,
+    });
+    const carZone = {
+      'name': '汽車區',
+      'area': 'car',
+      'access': 'heavyCar',
+      'condition': {
+        'bay': 'car',
+        'use': 'usual',
+        'charge': 'toll',
+        'allow': {'scooter': false, 'heavy': true},
+      },
+    };
+    const sharedZone = {
+      'name': '機車區',
+      'area': 'motorcycle',
+      'access': 'scooterHeavy',
+      'condition': {
+        'bay': 'motorcycle',
+        'use': 'share',
+        'share': 'scooter_heavy',
+        'charge': 'toll',
+        'allow': {'scooter': true, 'heavy': true},
+      },
+    };
+    Map<String, Object?> withBasis(
+      Map<String, Object?> zone,
+      Map<String, Object?> basis,
+    ) => {
+      ...zone,
+      'condition': {...zone['condition']! as Map, 'basis': basis},
+    };
+
+    test('臺北試辦例（§2.4）：機車區試辦已過期，汽車區照常顯示汽車格膠囊', () {
+      final taipei = zoned([
+        withBasis(sharedZone, {
+          'source_url': 'https://pma.gov.taipei/',
+          'effective_date': '2026-04-06',
+          'expires_on': '2026-10-05',
+        }),
+        carZone,
+      ]);
+      final decision = decideParking(
+        taipei,
+        VehicleType.heavy,
+        const [],
+        now: now,
+      );
+      expect(decision.zones.map((z) => z.status), [
+        EligibilityStatus.unverified,
+        EligibilityStatus.allowed,
+      ]);
+      expect(hasCar(taipei), isTrue);
+    });
+
+    test('汽車區依據已過期：不顯示汽車格膠囊，即使場站其他分區可停', () {
+      final spot = zoned([
+        sharedZone,
+        withBasis(carZone, {
+          'source_url': 'https://pma.gov.taipei/',
+          'effective_date': '2026-04-06',
+          'expires_on': '2026-10-05',
+        }),
+      ]);
+      expect(
+        decideParking(spot, VehicleType.heavy, const [], now: now).status,
+        EligibilityStatus.allowed,
+      );
+      expect(hasCar(spot), isFalse);
+      // The heavy count still shows: only the car pill depends on the zone.
+      expect(shown(spot).map((c) => c.text), ['剩 20']);
+    });
+
+    test('場站未確認可進場：汽車區標示開放也不顯示汽車格膠囊', () {
+      expect(hasCar(zoned([carZone], heavyAllowed: null)), isFalse);
+      final community = ParkingSpot.fromJson({
+        ...zoned([carZone]).toJson(),
+        'source': 'community',
+      });
+      expect(hasCar(community), isFalse);
+      expect(
+        hasCar(
+          ParkingSpot.fromJson({
+            ...heavyCarLot.toJson(),
+            'heavy_allowed': null,
+          }),
+        ),
+        isFalse,
+      );
+    });
+
+    test('zones_complete 與分區衝突（待確認）：不顯示汽車格膠囊', () {
+      final spot = zoned([
+        {
+          ...carZone,
+          'access': 'scooterOnly',
+          'condition': {
+            ...carZone['condition']! as Map,
+            'allow': {'scooter': false, 'heavy': false},
+          },
+        },
+      ], complete: true);
+      final decision = decideParking(
+        spot,
+        VehicleType.heavy,
+        const [],
+        now: now,
+      );
+      expect(decision.status, EligibilityStatus.unverified);
+      expect(decision.gaps, contains(DecisionGap.zonesConflict));
+      expect(hasCar(spot), isFalse);
+    });
+
+    test('只有機車區開放重機：不顯示汽車格膠囊', () {
+      expect(hasCar(zoned([sharedZone])), isFalse);
+    });
+
+    test('分區沒有標示區域但條件是汽車格：照條件判斷', () {
+      expect(
+        hasCar(
+          zoned([
+            {'name': 'B2', 'access': 'heavyCar'},
+          ]),
+        ),
+        isTrue,
+      );
+    });
+
+    test('詳情的汽車格剩餘列與膠囊依同一個判斷', () {
+      AvailabilityFact fact(ParkingSpot spot) => availabilityFact(
+        spot,
+        counts([car]),
+        VehicleType.heavy,
+        decideParking(spot, VehicleType.heavy, const [], now: now),
+        now,
+      );
+      bool carNote(ParkingSpot spot) =>
+          fact(spot).notes.any((n) => n.text.startsWith('汽車格'));
+      expect(carNote(zoned([sharedZone, carZone])), isTrue);
+      expect(carNote(zoned([carZone], heavyAllowed: null)), isFalse);
     });
   });
 
@@ -454,9 +654,14 @@ void main() {
       List<AvailabilitySnapshot> list, {
       VehicleType vehicle = VehicleType.scooter,
       ParkingSpot? spot,
-      EligibilityStatus eligibility = EligibilityStatus.allowed,
-    }) =>
-        availabilityFact(spot ?? lot, counts(list), vehicle, eligibility, now);
+      EligibilityStatus? eligibility,
+    }) => availabilityFact(
+      spot ?? lot,
+      counts(list),
+      vehicle,
+      judged(spot ?? lot, vehicle, eligibility),
+      now,
+    );
 
     test('新鮮：大數字、剩餘、共 N 格、時間與來源', () {
       final f = fact([snap(AvailabilityVehicle.scooter)]);
