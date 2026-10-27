@@ -68,6 +68,7 @@ class _MapPageState extends ConsumerState<MapPage> {
     searchController.addListener(_searchChanged);
     unawaited(_followLaunchLocation(launchStore));
     launchStore.addListener(_afterLaunch);
+    if (!widget.showControls) launchStore.setMapShown(false);
     lifecycle = AppLifecycleListener(
       onResume: () => unawaited(_relocateAfterSettings()),
     );
@@ -92,6 +93,10 @@ class _MapPageState extends ConsumerState<MapPage> {
   @override
   void didUpdateWidget(MapPage old) {
     super.didUpdateWidget(old);
+    // Live counts are polled only while the map is on screen.
+    if (widget.showControls != old.showControls) {
+      launchStore.setMapShown(widget.showControls);
+    }
     // Another tab covers the map: its details close with it.
     if (!widget.showControls) selected = null;
     if (!widget.showControls || old.showControls) return;

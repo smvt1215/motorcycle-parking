@@ -39,6 +39,16 @@ class AvailabilityWindow {
   const AvailabilityWindow({required this.fresh, required this.stale});
   final Duration fresh, stale;
 
+  /// The windows a source row carries (`viewport_availability`), or
+  /// [taipei] when they are missing or do not make sense.
+  factory AvailabilityWindow.seconds(int? fresh, int? stale) =>
+      fresh != null && stale != null && fresh > 0 && fresh < stale
+      ? AvailabilityWindow(
+          fresh: Duration(seconds: fresh),
+          stale: Duration(seconds: stale),
+        )
+      : taipei;
+
   static const taipei = AvailabilityWindow(
     fresh: Duration(minutes: 10),
     stale: Duration(minutes: 20),
@@ -68,6 +78,7 @@ class AvailabilitySnapshot {
     this.sourceUpdatedAt,
     this.fetchedAt,
     this.suspended = false,
+    this.invalid = false,
     this.zeroSince,
   });
 
@@ -90,11 +101,16 @@ class AvailabilitySnapshot {
   /// The source marks the lot closed.
   final bool suspended;
 
+  /// The backend already judged the count unusable (an odd negative code,
+  /// more free than total, zero for hours) and withheld the number.
+  final bool invalid;
+
   /// Since when the count has read zero without a break, if it does.
   final DateTime? zeroSince;
 
   AvailabilityStatus status(DateTime now) {
     if (suspended) return AvailabilityStatus.suspended;
+    if (invalid) return AvailabilityStatus.invalid;
     final available = this.available, total = this.total;
     if (available == null || availabilityNoDataCodes.contains(available)) {
       return AvailabilityStatus.unavailable;
