@@ -15,6 +15,7 @@ import '../../ui/fee_editor.dart';
 import '../../ui/location_picker.dart';
 import '../admin_theme.dart';
 import '../review/review_page.dart' show ChangeBand, reviewCompactWidth;
+import 'spot_history_page.dart';
 import 'spot_map.dart';
 import 'spot_models.dart';
 import 'spots_controller.dart';
@@ -1070,6 +1071,25 @@ class _FormPane extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (!record.isNew && spots.gateway != null)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      key: const ValueKey('spot-history-open'),
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(48, 48),
+                      ),
+                      onPressed: () => showSpotHistoryPage(
+                        context,
+                        spots.gateway!,
+                        sourceId: record.sourceId,
+                        name: record.name,
+                      ),
+                      icon: const Icon(Icons.history, size: 20),
+                      label: const Text('編輯紀錄'),
+                    ),
+                  ),
                 if (record.hidden) ...[
                   const SizedBox(height: 8),
                   const AdminNotice('這個點位已隱藏，App 地圖上不會顯示。', error: true),
