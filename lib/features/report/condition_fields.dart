@@ -170,11 +170,19 @@ class ConditionDraft {
           // A stored limit the form cannot show stays as it is.
           else if (same && !offered.contains(k) && from.hasLimit(k))
             from.limits.firstWhere((l) => l.kind == k),
-      ],
+      ]..sort((a, b) => _order(from, a).compareTo(_order(from, b))),
       schedule: kind == SpaceKind.flexShared || same
           ? [for (final s in slots) ?s.slot]
           : const [],
     );
+  }
+
+  /// A limit's place: where the stored condition had it, so an untouched
+  /// condition compares equal whatever order it was stored in; new ones
+  /// after, in [LimitKind] order.
+  static int _order(ParkingCondition from, ParkingLimit l) {
+    final i = from.limits.indexWhere((x) => x.kind == l.kind);
+    return i < 0 ? from.limits.length + l.kind.index : i;
   }
 
   /// The legacy space type a bay of [kind] is sent under: the one its

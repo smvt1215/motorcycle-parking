@@ -746,6 +746,21 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('收起格位分組後送出，普大共用沒選收費或免費仍會擋下並重新展開', (tester) async {
+    final store = await openSuggestion(tester, '格位類型');
+    await pickKind(tester, SpaceKind.sharedMotorcycle);
+    final group = find.byKey(const ValueKey('report-space-group-motorcycle'));
+    await tester.ensureVisible(group);
+    await tester.pumpAndSettle();
+    await tester.tap(group);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('condition-charge')), findsNothing);
+    await submitSuggestion(tester, '送出修改建議');
+    expect(store.submissions, isEmpty);
+    expect(find.text('請選收費格或免費格'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('路外停車場改成路邊格時清除場站型式與停放分類', (tester) async {
     final lot = ParkingSpot.fromJson({
       ...spot.toJson(),

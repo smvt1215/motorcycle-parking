@@ -722,8 +722,15 @@ class _SuggestionFormState extends State<_SuggestionForm> {
     },
   );
 
+  /// Bumped when the check fails, so the bay kind's group opens again and
+  /// its follow-up's errors show.
+  int reveal = 0;
+
   Future<void> submit() async {
-    if (!form.currentState!.validate()) return;
+    if (!form.currentState!.validate()) {
+      setState(() => reveal++);
+      return;
+    }
     // Each hint already sits under its field; this covers one out of view.
     if (precheckBlocking(issues).firstOrNull case final issue?) {
       setState(() => error = issue.message);
@@ -851,6 +858,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                       SpaceKindList(
                         value: kind,
                         keyPrefix: 'report-space',
+                        reveal: reveal,
                         onChanged: (v) {
                           setState(() {
                             kind = v;

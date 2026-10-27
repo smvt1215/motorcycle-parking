@@ -1066,4 +1066,77 @@ void main() {
       },
     );
   }
+
+  testWidgets('收起格位分組後送出，追問的檢查仍會擋下並重新展開分組', (tester) async {
+    final store = await openForm(tester);
+    await pickKind(tester, SpaceKind.sharedMotorcycle);
+    await reveal(tester, nameField);
+    await tester.enterText(nameField, '市府路共用格');
+    // The rider folds the group without picking 收費 or 免費.
+    await openPart(tester, '格位');
+    final group = find.byKey(const ValueKey('report-space-group-motorcycle'));
+    await scrollTo(tester, group);
+    await tester.tap(group);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('condition-charge')), findsNothing);
+    await trySend(tester);
+    expect(store.submissions, isEmpty);
+    // The group holding the pick opened again with the error under it.
+    expect(find.text('請選收費格或免費格'), findsOneWidget);
+    expect(find.byKey(const ValueKey('condition-charge')), findsOneWidget);
+    // A time limit out of range is checked the same way.
+    await pickType(tester, SpaceType.timedMotorcycle);
+    await tester.enterText(
+      find.byKey(const ValueKey('condition-max-minutes')),
+      '0',
+    );
+    await tester.pumpAndSettle();
+    final timed = find.byKey(
+      const ValueKey('report-space-group-timedOrShared'),
+    );
+    await scrollTo(tester, timed);
+    await tester.tap(timed);
+    await tester.pumpAndSettle();
+    await trySend(tester);
+    expect(store.submissions, isEmpty);
+    expect(find.text('填 1 到 1440'), findsOneWidget);
+  });
+
+  testWidgets('矮螢幕（390×700）沒捲到的段落也會檢查：名稱空白送不出', (tester) async {
+    final store = await openForm(tester, size: const Size(390, 700));
+    await pickType(tester, SpaceType.paidMotorcycle);
+    await trySend(tester);
+    expect(store.submissions, isEmpty);
+    expect(find.text('請填寫名稱'), findsOneWidget);
+    // Fixed: the flag on its folded header goes away.
+    await tester.enterText(nameField, '市府路機車格');
+    await tester.pumpAndSettle();
+    await openPart(tester, '格位');
+    await scrollTo(tester, find.byKey(const ValueKey('fold-名稱')));
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('fold-名稱')),
+        matching: find.text('有欄位要修正'),
+      ),
+      findsNothing,
+    );
+  });
+
+  testWidgets('預檢擋下時展開問題所在的段落並標示要修正', (tester) async {
+    final store = await openForm(tester);
+    await pickType(tester, SpaceType.heavyOnly);
+    await openPart(tester, '可停車種');
+    final scooter = find.byKey(const ValueKey('report-scooter-true'));
+    await scrollTo(tester, scooter);
+    await tester.tap(scooter);
+    await tester.pumpAndSettle();
+    await reveal(tester, nameField);
+    await tester.enterText(nameField, '重機格');
+    await tester.pumpAndSettle();
+    await trySend(tester);
+    expect(store.submissions, isEmpty);
+    // 可停車種 opened again, its hint in view.
+    expect(find.byKey(const ValueKey('report-scooter-true')), findsOneWidget);
+    expect(find.textContaining('大型重機專用格不能停普通機車'), findsWidgets);
+  });
 }

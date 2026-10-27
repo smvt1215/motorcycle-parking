@@ -1020,11 +1020,26 @@ class _ReportFormState extends State<ReportForm> {
   bool validateAll() {
     problems.clear();
     for (final part in parts) {
-      if (!(forms[part]!.currentState?.validate() ?? true)) problems.add(part);
+      // Every section is built (ContentPage(lazy: false)); one that is not
+      // yet counts as failing rather than passing unchecked.
+      if (!(forms[part]!.currentState?.validate() ?? false)) problems.add(part);
     }
     if (problems.isEmpty) return true;
+    showProblems();
+    return false;
+  }
+
+  /// Bumped when a check fails, so the bay kind's group opens again and
+  /// its follow-up's errors show.
+  int reveal = 0;
+
+  /// Opens the first section in [problems] and scrolls to it.
+  void showProblems() {
     final first = parts.firstWhere(problems.contains);
-    setState(() => open = first);
+    setState(() {
+      open = first;
+      reveal++;
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final at = anchors[first]!.currentContext;
       if (at != null && at.mounted) {
@@ -1034,8 +1049,26 @@ class _ReportFormState extends State<ReportForm> {
         );
       }
     });
-    return false;
   }
+
+  /// The section holding the field a precheck issue is about, if the
+  /// form shows it.
+  _Part? partOf(String field) => switch (field.split('.').first) {
+    'name' => _Part.name,
+    'lat' || 'lng' || 'city' || 'district' => _Part.location,
+    'space_type' || 'condition' => _Part.kind,
+    'scooter_allowed' || 'heavy_allowed' => _Part.vehicles,
+    'fee' => _Part.fee,
+    'facility_type' ||
+    'facility_types' ||
+    'parking_access' ||
+    'parking_zones' => lot ? _Part.lot : _Part.kind,
+    'note' ||
+    'parking_guide' ||
+    'entrance_note' ||
+    'evidence_url' => _Part.extra,
+    _ => null,
+  };
 
   /// The sections this report shows, in order.
   List<_Part> get parts => [
@@ -1083,6 +1116,16 @@ class _ReportFormState extends State<ReportForm> {
     onToggle: () => toggle(part),
     child: Form(
       key: forms[part],
+      // A flagged section is cleared once its fields pass again.
+      onChanged: () {
+        if (!problems.contains(part)) return;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || !problems.contains(part)) return;
+          if (forms[part]!.currentState?.validate() ?? false) {
+            setState(() => problems.remove(part));
+          }
+        });
+      },
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: children,
@@ -1289,6 +1332,7 @@ class _ReportFormState extends State<ReportForm> {
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: ContentPage(
+        lazy: false,
         children: [
           // The same close as every sheet, at the top of a long form.
           SheetTitle('新增停車點'),
@@ -1343,6 +1387,7 @@ class _ReportFormState extends State<ReportForm> {
                     SpaceKindList(
                       value: kind,
                       keyPrefix: 'report-space',
+                      reveal: reveal,
                       onChanged: (v) {
                         setKind(v);
                         state.didChange(v);
@@ -1460,6 +1505,7 @@ class _ReportFormState extends State<ReportForm> {
                   scooter = v;
                   scooterRuled = false;
                   vehiclesEdited = true;
+                  problems.remove(_Part.vehicles);
                 }),
               ),
               PrecheckHintText(
@@ -1475,6 +1521,7 @@ class _ReportFormState extends State<ReportForm> {
                   heavy = v;
                   heavyRuled = false;
                   vehiclesEdited = true;
+                  problems.remove(_Part.vehicles);
                 }),
               ),
               PrecheckHintText(
@@ -1492,7 +1539,10 @@ class _ReportFormState extends State<ReportForm> {
                 value: fee,
                 initialVehicle: FeeVehicle.of(widget.store.vehicle),
                 errorText: precheckHint(found, 'fee'),
-                onChanged: (v) => setState(() => fee = v),
+                onChanged: (v) => setState(() {
+                  fee = v;
+                  problems.remove(_Part.fee);
+                }),
               ),
             ],
           ),
@@ -1564,8 +1614,13 @@ class _ReportFormState extends State<ReportForm> {
                     // Each hint already sits under its field; the message
                     // also covers one scrolled out of view.
                     // A hold goes through, flagged for review.
-                    if (precheckBlocking(issues).firstOrNull
-                        case final issue?) {
+                    final blocking = precheckBlocking(issues);
+                    if (blocking.firstOrNull case final issue?) {
+                      // Each section a refusal is about opens and is flagged.
+                      problems
+                        ..clear()
+                        ..addAll(blocking.map((i) => partOf(i.field)).nonNulls);
+                      if (problems.isNotEmpty) showProblems();
                       return showMessage(context, issue.message);
                     }
                     setState(() => sending = true);
