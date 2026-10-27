@@ -95,6 +95,10 @@ class _SpotsPageState extends State<SpotsPage> {
   final _listKey = GlobalKey(debugLabel: 'spot-list-pane');
   final _formKey = GlobalKey(debugLabel: 'spot-form-pane');
 
+  /// The search field moves into the list's scroll when the keyboard makes
+  /// the page short; it keeps its focus and text across the move.
+  final _searchKey = GlobalKey(debugLabel: 'spot-search');
+
   /// The open spot and version, so a write reloads the map's spots.
   String? _shownVersion;
   double _width = 1280;
@@ -440,6 +444,7 @@ class _SpotsPageState extends State<SpotsPage> {
         final open = widget.selectedId != null;
         final list = _ListPane(
           key: _listKey,
+          searchKey: _searchKey,
           spots: spots,
           query: query,
           selectedId: widget.selectedId,
@@ -691,6 +696,7 @@ const _states = [
 class _ListPane extends StatelessWidget {
   const _ListPane({
     super.key,
+    required this.searchKey,
     required this.spots,
     required this.query,
     required this.selectedId,
@@ -700,6 +706,7 @@ class _ListPane extends StatelessWidget {
     required this.onCreate,
   });
   final SpotsController spots;
+  final GlobalKey searchKey;
   final VoidCallback onCreate;
   final TextEditingController query;
   final String? selectedId;
@@ -717,139 +724,170 @@ class _ListPane extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
       child: Wrap(spacing: 8, runSpacing: 8, children: children),
     );
+    final top = <Widget>[
+      Padding(
+        padding: const EdgeInsets.fromLTRB(18, 14, 8, 8),
+        // A narrow column keeps the title on one line; its buttons
+        // become icons (G6). A phone names the page in the top bar.
+        child: LayoutBuilder(
+          builder: (context, box) => Row(
+            children: [
+              Expanded(
+                child: compact
+                    ? const SizedBox()
+                    : Semantics(
+                        header: true,
+                        child: Text(
+                          '停車點位',
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.fade,
+                          style: text.titleLarge,
+                        ),
+                      ),
+              ),
+              if (box.maxWidth < 320)
+                IconButton(
+                  tooltip: '新增停車點',
+                  onPressed: onCreate,
+                  icon: const Icon(Icons.add_location_alt_outlined),
+                )
+              else
+                TextButton.icon(
+                  onPressed: onCreate,
+                  icon: const Icon(Icons.add_location_alt_outlined),
+                  label: const Text('新增停車點'),
+                ),
+              IconButton(
+                tooltip: '重新搜尋',
+                onPressed: spots.searching ? null : spots.search,
+                icon: const Icon(Icons.refresh),
+              ),
+            ],
+          ),
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+        child: KeyedSubtree(
+          key: searchKey,
+          child: TextField(
+            key: const ValueKey('spot-search'),
+            controller: query,
+            onChanged: onQuery,
+            decoration: const InputDecoration(
+              labelText: '搜尋名稱、地址、路段或行政區',
+              prefixIcon: Icon(Icons.search),
+              isDense: true,
+            ),
+          ),
+        ),
+      ),
+      Semantics(
+        label: '依來源篩選',
+        container: true,
+        child: chips([
+          for (final k in [null, ...SpotKind.values])
+            _Chip(
+              label: k?.label ?? '全部來源',
+              selected: spots.kind == k,
+              onPressed: () => spots.setFilters(kind: k, state: spots.state),
+            ),
+        ]),
+      ),
+      Semantics(
+        label: '依狀態篩選',
+        container: true,
+        child: chips([
+          for (final (value, label) in _states)
+            _Chip(
+              label: label,
+              selected: spots.state == value,
+              onPressed: () => spots.setFilters(kind: spots.kind, state: value),
+            ),
+        ]),
+      ),
+      if (spots.searchError != null)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: AdminNotice(spots.searchError!, error: true),
+        ),
+      Divider(height: 1, color: colors.outlineVariant),
+    ];
+    Widget item(BuildContext context, int i) => i == spots.results.length
+        ? Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(
+              spots.results.length >= 200
+                  ? '只顯示最近更新的 200 筆，請用關鍵字縮小範圍。'
+                  : '共 ${spots.results.length} 筆',
+              style: TextStyle(fontSize: 13, color: colors.onSurfaceVariant),
+            ),
+          )
+        : _SpotItem(
+            spot: spots.results[i],
+            selected: !compact && spots.results[i].sourceId == selectedId,
+            onPressed: () => onPick(spots.results[i].sourceId),
+          );
+    Widget separator(BuildContext context, int i) =>
+        Divider(height: 1, color: colors.outlineVariant);
+    final Widget? status = !spots.searched
+        ? Center(
+            child: spots.searching
+                ? const CircularProgressIndicator()
+                : const SizedBox(),
+          )
+        : spots.results.isEmpty
+        ? Padding(
+            padding: const EdgeInsets.all(18),
+            child: Text(
+              '沒有符合的點位。換個關鍵字，或調整來源與狀態篩選。',
+              style: TextStyle(color: colors.onSurfaceVariant),
+            ),
+          )
+        : null;
+    // A short viewport (the keyboard is up while searching): the search,
+    // the filters and the results scroll together, so the results are
+    // never squeezed to nothing.
+    if (AdminLayout.shortOf(context)) {
+      return Material(
+        color: colors.surface,
+        child: CustomScrollView(
+          key: const PageStorageKey('spot-list-short'),
+          slivers: [
+            SliverList.list(children: top),
+            if (status != null)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: status,
+                ),
+              )
+            else
+              SliverList.separated(
+                itemCount: spots.results.length + 1,
+                separatorBuilder: separator,
+                itemBuilder: item,
+              ),
+          ],
+        ),
+      );
+    }
     return Material(
       color: colors.surface,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(18, 14, 8, 8),
-            // A narrow column keeps the title on one line; its buttons
-            // become icons (G6). A phone names the page in the top bar.
-            child: LayoutBuilder(
-              builder: (context, box) => Row(
-                children: [
-                  Expanded(
-                    child: compact
-                        ? const SizedBox()
-                        : Semantics(
-                            header: true,
-                            child: Text(
-                              '停車點位',
-                              maxLines: 1,
-                              softWrap: false,
-                              overflow: TextOverflow.fade,
-                              style: text.titleLarge,
-                            ),
-                          ),
-                  ),
-                  if (box.maxWidth < 320)
-                    IconButton(
-                      tooltip: '新增停車點',
-                      onPressed: onCreate,
-                      icon: const Icon(Icons.add_location_alt_outlined),
-                    )
-                  else
-                    TextButton.icon(
-                      onPressed: onCreate,
-                      icon: const Icon(Icons.add_location_alt_outlined),
-                      label: const Text('新增停車點'),
-                    ),
-                  IconButton(
-                    tooltip: '重新搜尋',
-                    onPressed: spots.searching ? null : spots.search,
-                    icon: const Icon(Icons.refresh),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-            child: TextField(
-              key: const ValueKey('spot-search'),
-              controller: query,
-              onChanged: onQuery,
-              decoration: const InputDecoration(
-                labelText: '搜尋名稱、地址、路段或行政區',
-                prefixIcon: Icon(Icons.search),
-                isDense: true,
-              ),
-            ),
-          ),
-          Semantics(
-            label: '依來源篩選',
-            container: true,
-            child: chips([
-              for (final k in [null, ...SpotKind.values])
-                _Chip(
-                  label: k?.label ?? '全部來源',
-                  selected: spots.kind == k,
-                  onPressed: () =>
-                      spots.setFilters(kind: k, state: spots.state),
-                ),
-            ]),
-          ),
-          Semantics(
-            label: '依狀態篩選',
-            container: true,
-            child: chips([
-              for (final (value, label) in _states)
-                _Chip(
-                  label: label,
-                  selected: spots.state == value,
-                  onPressed: () =>
-                      spots.setFilters(kind: spots.kind, state: value),
-                ),
-            ]),
-          ),
-          if (spots.searchError != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: AdminNotice(spots.searchError!, error: true),
-            ),
-          Divider(height: 1, color: colors.outlineVariant),
+          ...top,
           Expanded(
-            child: !spots.searched
-                ? Center(
-                    child: spots.searching
-                        ? const CircularProgressIndicator()
-                        : const SizedBox(),
-                  )
-                : spots.results.isEmpty
-                ? Padding(
-                    padding: const EdgeInsets.all(18),
-                    child: Text(
-                      '沒有符合的點位。換個關鍵字，或調整來源與狀態篩選。',
-                      style: TextStyle(color: colors.onSurfaceVariant),
-                    ),
-                  )
-                : ListView.separated(
-                    key: const PageStorageKey('spot-list'),
-                    itemCount: spots.results.length + 1,
-                    separatorBuilder: (_, _) =>
-                        Divider(height: 1, color: colors.outlineVariant),
-                    itemBuilder: (context, i) => i == spots.results.length
-                        ? Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Text(
-                              spots.results.length >= 200
-                                  ? '只顯示最近更新的 200 筆，請用關鍵字縮小範圍。'
-                                  : '共 ${spots.results.length} 筆',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: colors.onSurfaceVariant,
-                              ),
-                            ),
-                          )
-                        : _SpotItem(
-                            spot: spots.results[i],
-                            selected:
-                                !compact &&
-                                spots.results[i].sourceId == selectedId,
-                            onPressed: () => onPick(spots.results[i].sourceId),
-                          ),
-                  ),
+            child:
+                status ??
+                ListView.separated(
+                  key: const PageStorageKey('spot-list'),
+                  itemCount: spots.results.length + 1,
+                  separatorBuilder: separator,
+                  itemBuilder: item,
+                ),
           ),
         ],
       ),

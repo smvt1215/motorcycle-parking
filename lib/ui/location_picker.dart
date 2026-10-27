@@ -217,7 +217,21 @@ class _LocationPickerState extends State<LocationPicker>
                     nudgeButtons: widget.nudgeButtons,
                     touchMarker: widget.touchMarker,
                     mapBuilder: widget.mapBuilder,
-                    height: (box.maxHeight - 200).clamp(200.0, 640.0),
+                    fills: widget.fills,
+                    // The address search lives here while the form is
+                    // short; its note shows on the form afterwards too.
+                    onSearch: switch (widget.onSearch) {
+                      final search? => (context) async {
+                        final picked = await search(context);
+                        if (picked != null && mounted) {
+                          setState(() => found = picked);
+                          updateKeepAlive();
+                        }
+                        return picked;
+                      },
+                      null => null,
+                    },
+                    height: (box.maxHeight - 260).clamp(200.0, 640.0),
                     onChanged: (a, b) {
                       setLocal(() {
                         lat = a;

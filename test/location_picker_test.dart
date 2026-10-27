@@ -258,6 +258,47 @@ void main() {
     expect(find.text('開地圖調整'), findsNothing);
   });
 
+  testWidgets('矮螢幕模式的全螢幕地圖仍可搜尋地址，結果回到表單並顯示提示', (tester) async {
+    var at = (25.0581, 121.5226);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) => ListView(
+              children: [
+                LocationPicker(
+                  lat: at.$1,
+                  lng: at.$2,
+                  collapsed: true,
+                  fills: const {'address': '地址'},
+                  mapBuilder: (_, _) => const SizedBox(),
+                  onSearch: (_) async => const AddressCandidate(
+                    kind: AddressKind.address,
+                    label: '臺北市中正區忠孝西路一段49號',
+                    lat: 25.0478,
+                    lng: 121.517,
+                  ),
+                  onChanged: (lat, lng) => setState(() => at = (lat, lng)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(find.byKey(const ValueKey('location-search')), findsNothing);
+    await tester.tap(find.text('開地圖調整'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('location-search')));
+    await tester.pumpAndSettle();
+    expect(at, (25.0478, 121.517));
+    expect(find.text('25.047800, 121.517000'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('location-map-done')));
+    await tester.pumpAndSettle();
+    expect(find.text('位置：25.0478, 121.5170'), findsOneWidget);
+    expect(find.textContaining('已移到「臺北市中正區忠孝西路一段49號」，並填入「地址」'), findsOneWidget);
+  });
+
   test('投影：點位到地圖中心的像素位移可以換回同一點', () {
     final (dx, dy) = offsetFromCenter(
       centerLat: 25.0339,

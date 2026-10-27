@@ -330,6 +330,37 @@ void main() {
       expect(find.text('開地圖調整'), findsNothing);
     });
 
+    testWidgets('點位清單搜尋時鍵盤縮小視窗：搜尋、篩選與結果一起捲動，不溢出、不失焦', (tester) async {
+      await show(tester, path: '/spots', size: const Size(390, 844));
+      await tester.tap(find.text('清單'));
+      await tester.pumpAndSettle();
+      final search = find.byKey(const ValueKey('spot-search'));
+      await tester.tap(search);
+      await tester.pumpAndSettle();
+      tester.view.physicalSize = const Size(390, 360);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      final focused = FocusManager.instance.primaryFocus?.context;
+      expect(focused, isNotNull);
+      expect(
+        find.ancestor(of: find.byWidget(focused!.widget), matching: search),
+        findsOneWidget,
+      );
+      final item = find.byKey(const ValueKey('spot-$officialId'));
+      await tester.scrollUntilVisible(
+        item,
+        200,
+        scrollable: find
+            .ancestor(of: search, matching: find.byType(Scrollable))
+            .first,
+      );
+      await tester.pumpAndSettle();
+      expect(item.hitTestable(), findsOneWidget);
+      tester.view.physicalSize = const Size(390, 844);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('鍵盤縮小視窗時，聚焦的欄位捲到可見（G3、G4）', (tester) async {
       await show(
         tester,
