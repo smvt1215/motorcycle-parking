@@ -299,6 +299,9 @@ declare
     'entrance_note','parking_guide','special_rules','fee','condition','fee_plans','fee_plan','closure'];
   v_table text; v_target uuid; v_bad text; v_before jsonb; v_after jsonb;
   v_conflict boolean:=false;
+  -- The fee_plans the review page built a plan edit on ({"plans": …}); not
+  -- a column, so it leaves the patch before the field check.
+  v_seen jsonb:=p_patch->'fee_plans_seen';
 begin
   if not public.is_admin() then
     raise exception 'admin with a second factor required' using errcode='42501';
@@ -322,6 +325,7 @@ begin
   select * into v_report from moderation_queue where id=p_id for update;
   if not found then raise exception 'report not found' using errcode='22023'; end if;
   if v_report.status<>'pending' then raise exception 'report already resolved' using errcode='22023'; end if;
+  v_patch:=v_patch-'fee_plans_seen';
   if p_decision='rejected' and v_patch<>'{}'::jsonb then
     raise exception 'a rejected report changes no spot' using errcode='22023';
   end if;
@@ -352,9 +356,13 @@ begin
       if v_before is null then raise exception 'spot not found' using errcode='22023'; end if;
       -- Only the fields this patch writes count: votes or other edits that
       -- leave them alone must not train admins to force every decision.
-      v_conflict:=v_report.base_spot is not null and exists(
-        select 1 from jsonb_object_keys(v_patch) k where k not in ('fee_plans','fee_plan')
-          and (v_report.base_spot->k) is distinct from (v_before->k));
+      -- A plan edit stands for the fee it changes: compared as the fee.
+      -- The plans themselves must be the ones the admin was shown.
+      v_conflict:=(v_report.base_spot is not null and exists(
+          select 1 from jsonb_object_keys(v_patch) k
+          cross join lateral (select case when k in ('fee_plans','fee_plan') then 'fee' else k end f) m
+          where (v_report.base_spot->m.f) is distinct from (v_before->m.f)))
+        or (v_seen is not null and (v_seen->'plans') is distinct from (v_before->'fee_plans'));
       if v_conflict and not coalesce(p_force,false) then
         raise exception 'spot changed since the report' using errcode='40001',
           hint='Review the current values, then apply again with p_force.';
@@ -378,9 +386,13 @@ begin
       if v_before is null then raise exception 'spot not found' using errcode='22023'; end if;
       -- Only the fields this patch writes count: votes or other edits that
       -- leave them alone must not train admins to force every decision.
-      v_conflict:=v_report.base_spot is not null and exists(
-        select 1 from jsonb_object_keys(v_patch) k where k not in ('fee_plans','fee_plan')
-          and (v_report.base_spot->k) is distinct from (v_before->k));
+      -- A plan edit stands for the fee it changes: compared as the fee.
+      -- The plans themselves must be the ones the admin was shown.
+      v_conflict:=(v_report.base_spot is not null and exists(
+          select 1 from jsonb_object_keys(v_patch) k
+          cross join lateral (select case when k in ('fee_plans','fee_plan') then 'fee' else k end f) m
+          where (v_report.base_spot->m.f) is distinct from (v_before->m.f)))
+        or (v_seen is not null and (v_seen->'plans') is distinct from (v_before->'fee_plans'));
       if v_conflict and not coalesce(p_force,false) then
         raise exception 'spot changed since the report' using errcode='40001',
           hint='Review the current values, then apply again with p_force.';
