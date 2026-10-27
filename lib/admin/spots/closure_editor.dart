@@ -16,7 +16,12 @@ class ClosureSection extends StatelessWidget {
     required this.now,
     this.changed = false,
     this.stored,
+    this.framed = true,
   });
+
+  /// False inside the form's folding section, which gives the title and
+  /// the border.
+  final bool framed;
 
   /// The closure as edited, as JSON; null for none.
   final Map<String, dynamic>? value;
@@ -60,16 +65,18 @@ class ClosureSection extends StatelessWidget {
     );
     void set(SpotClosure? c) => onChanged(c?.toJson());
     return Padding(
-      padding: const EdgeInsets.only(top: 24),
+      padding: EdgeInsets.only(top: framed ? 24 : 0),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 720),
         child: Container(
           key: const ValueKey('closure-section'),
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            border: Border.all(color: colors.outlineVariant),
-            borderRadius: BorderRadius.circular(12),
-          ),
+          padding: framed ? const EdgeInsets.all(14) : EdgeInsets.zero,
+          decoration: framed
+              ? BoxDecoration(
+                  border: Border.all(color: colors.outlineVariant),
+                  borderRadius: BorderRadius.circular(12),
+                )
+              : null,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -78,14 +85,15 @@ class ClosureSection extends StatelessWidget {
                 runSpacing: 4,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  Semantics(
-                    header: true,
-                    child: Text(
-                      '暫時無法停車',
-                      style: Theme.of(context).textTheme.titleSmall
-                          ?.copyWith(fontWeight: FontWeight.w700),
+                  if (framed)
+                    Semantics(
+                      header: true,
+                      child: Text(
+                        '暫時無法停車',
+                        style: Theme.of(context).textTheme.titleSmall
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
                     ),
-                  ),
                   if (state == ClosureState.active)
                     tag('生效中', const Color(0xff2a2e33), Colors.white),
                   if (state == ClosureState.expired)

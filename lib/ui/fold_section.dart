@@ -35,7 +35,10 @@ class FoldSection extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final shown = problem ? '有欄位要修正' : summary ?? '還沒填';
     final sub = open ? hint : shown;
+    // Its own node: the fields' text below must not read as part of the
+    // button.
     final header = Semantics(
+      container: true,
       button: true,
       expanded: open,
       child: InkWell(
@@ -88,10 +91,12 @@ class FoldSection extends StatelessWidget {
     );
     return Padding(
       padding: const EdgeInsets.only(top: 10),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: colors.surface,
-          border: Border.all(
+      // A Material, not a coloured box, so the ink of the header and of
+      // list tiles inside shows.
+      child: Material(
+        color: colors.surface,
+        shape: RoundedRectangleBorder(
+          side: BorderSide(
             color: open
                 ? colors.primary
                 : problem

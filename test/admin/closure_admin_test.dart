@@ -11,6 +11,7 @@ import 'package:motorcycle_parking/domain/map_viewport.dart';
 import 'package:motorcycle_parking/models/closure.dart';
 
 import 'fake_admin_gateway.dart';
+import 'fold_helpers.dart';
 
 Map<String, dynamic> _row(String id, {bool official = false}) => {
   'id': official ? 'official:$id' : id,
@@ -186,6 +187,15 @@ void main() {
           'closure_state': 'expired',
         };
         await show(tester, '/spots/$communityId', size);
+        // Folded, the section says what is set (decision 57).
+        expect(
+          find.descendant(
+            of: await revealFold(tester, '暫時無法停車'),
+            matching: find.textContaining('暫時封閉・預計'),
+          ),
+          findsOneWidget,
+        );
+        await openFold(tester, '暫時無法停車');
         final section = find.byKey(const ValueKey('closure-section'));
         await tester.scrollUntilVisible(
           find.byKey(const ValueKey('closure-reopen')),

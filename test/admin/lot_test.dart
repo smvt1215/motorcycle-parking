@@ -12,6 +12,7 @@ import 'package:motorcycle_parking/models/parking_condition.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'fake_admin_gateway.dart';
+import 'fold_helpers.dart';
 
 /// A lot's fee plans and zones in the admin spot form (C6b; design §2.6,
 /// canvas AdminSpotForm) and fees reaching a shared plan on the review page
@@ -462,6 +463,14 @@ void main() {
           await tester.pumpAndSettle();
         }
 
+        expect(
+          find.descendant(
+            of: await revealFold(tester, '計費規則與區域'),
+            matching: find.textContaining('計費規則 2 條'),
+          ),
+          findsOneWidget,
+        );
+        await openFold(tester, '計費規則與區域');
         await reach(find.byKey(const ValueKey('plan-p2')));
         expect(find.text('重機計時'), findsWidgets);
         // The plan a zone uses cannot be deleted.
