@@ -464,6 +464,65 @@ void main() {
       }
     });
 
+    test('汽機共用格加附加限制、沒有時段：普通機車待確認（#155 第 16 項）', () {
+      for (final limit in ['ev_only', 'special_vehicle']) {
+        Map<String, Object?> json({List<Object?>? schedule}) => {
+          'bay': 'car',
+          'use': 'share',
+          'share': 'car_motorcycle',
+          'limits': [
+            limit == 'special_vehicle'
+                ? {'kind': limit, 'vehicle': 'disabled_modified'}
+                : {'kind': limit},
+          ],
+          'schedule': ?schedule,
+        };
+        final d = decideParking(
+          street(SpaceType.flexShared, condition: c(json())),
+          VehicleType.scooter,
+          bundled,
+          now: now,
+        );
+        expect(d.status, EligibilityStatus.unverified, reason: limit);
+        expect(d.gaps, {DecisionGap.scheduleUnknown}, reason: limit);
+        expect(d.reason, contains('開放時段'), reason: limit);
+        // With the scooter's slots listed, the limit and the slots both hold.
+        final listed = decideParking(
+          street(
+            SpaceType.flexShared,
+            condition: c(
+              json(
+                schedule: [
+                  {
+                    'days': 'all',
+                    'from': '20:00',
+                    'to': '07:00',
+                    'vehicles': ['scooter'],
+                  },
+                ],
+              ),
+            ),
+          ),
+          VehicleType.scooter,
+          bundled,
+          now: now,
+        );
+        expect(listed.status, EligibilityStatus.conditional, reason: limit);
+        expect(listed.reason, contains('20:00–隔日 07:00'), reason: limit);
+        // Heavy bikes park on car bays by law; the limit still applies.
+        expect(
+          decideParking(
+            street(SpaceType.flexShared, condition: c(json())),
+            VehicleType.heavy,
+            bundled,
+            now: now,
+          ).status,
+          EligibilityStatus.conditional,
+          reason: limit,
+        );
+      }
+    });
+
     test('格位車種先判斷，限制全部保留並繼續檢查時段（Codex #157）', () {
       ParkingDecision judge(Map<String, Object?> json, VehicleType v) =>
           decideParking(
@@ -588,6 +647,48 @@ void main() {
         ], now: now).status,
         EligibilityStatus.notAllowed,
       );
+    });
+
+    test('規則到期只讓靠公告開放的格位失效；依法可停的照原本判斷（決定 44）', () {
+      final now = DateTime.utc(2026, 10, 27, 4);
+      final expired = CityRule.fromJson({
+        ...bundledJson.firstWhere(
+          (r) => r['city'] == '臺北市' && r['vehicle'] == 'heavy',
+        ),
+        'expires_on': '2026-10-20',
+      });
+      for (final type in [SpaceType.heavyOnly, SpaceType.car]) {
+        final d = decideParking(street(type), VehicleType.heavy, [
+          expired,
+        ], now: now);
+        expect(d.status, EligibilityStatus.allowed, reason: type.name);
+        expect(d.reason, lawfulReason, reason: type.name);
+        expect(d.gaps, isEmpty, reason: type.name);
+        // The ended rule is not the basis; the law is.
+        final kinds = [for (final b in d.basis) b.kind];
+        expect(kinds, contains(BasisKind.law), reason: type.name);
+        expect(kinds, isNot(contains(BasisKind.cityRule)), reason: type.name);
+      }
+      // What only the rule opened ends with it.
+      expect(
+        decideParking(street(SpaceType.paidMotorcycle), VehicleType.heavy, [
+          expired,
+        ], now: now).reason,
+        ruleExpiredReason,
+      );
+      // A scooter rule opening car bays is a notice too.
+      final scooterCars = CityRule.fromJson({
+        ...bundledJson.firstWhere(
+          (r) => r['city'] == '臺北市' && r['vehicle'] == 'scooter',
+        ),
+        'allowed_space_types': ['paidMotorcycle', 'freeMotorcycle', 'car'],
+        'expires_on': '2026-10-20',
+      });
+      final car = decideParking(street(SpaceType.car), VehicleType.scooter, [
+        scooterCars,
+      ], now: now);
+      expect(car.status, EligibilityStatus.unverified);
+      expect(car.reason, ruleExpiredReason);
     });
 
     test('兩份同城規則矛盾：公告不一致', () {
@@ -952,6 +1053,45 @@ void main() {
       }, VehicleType.heavy);
       expect(posted.kind, PriceKind.partial);
       expect(posted.gaps, contains('部分時段費率'));
+      // #155 item 17: a time no period covers is as unconfirmed as a
+      // posted one.
+      Map<String, Object?> period(Object days, String? from, String? to) => {
+        'days': days,
+        'from': ?from,
+        'to': ?to,
+        'rate': {'mode': 'hourly', 'amount': 20, 'per_minutes': 60},
+      };
+      PriceAnswer byTime(List<Object?> periods) => priceAnswer({
+        'heavy': {'mode': 'by_time', 'periods': periods},
+      }, VehicleType.heavy);
+      final daytime = byTime([period('all', '08:00', '20:00')]);
+      expect(daytime.kind, PriceKind.partial);
+      expect(daytime.gaps, ['部分時段費率']);
+      expect(daytime.rate, isNotNull);
+      expect(
+        byTime([
+          period('all', '08:00', '20:00'),
+          period('all', '20:00', '08:00'),
+        ]).kind,
+        PriceKind.known,
+      );
+      // Decision 47: 平日 20:00–08:00 ends Saturday 08:00, so Monday
+      // 00:00–08:00 needs Sunday's night period.
+      final weekNights = [
+        period('weekday', '08:00', '20:00'),
+        period('weekday', '20:00', '08:00'),
+        period('holiday', '08:00', '20:00'),
+      ];
+      expect(byTime(weekNights).gaps, ['部分時段費率']);
+      expect(
+        byTime([...weekNights, period('holiday', '20:00', '08:00')]).kind,
+        PriceKind.known,
+      );
+      expect(
+        byTime([period('weekday', null, null), period('holiday', null, null)])
+            .kind,
+        PriceKind.known,
+      );
       final missing = priceAnswer({
         'heavy': {'mode': 'same_as_car'},
       }, VehicleType.heavy);
@@ -1123,18 +1263,14 @@ void main() {
     });
   });
 
-  test('舊版 App：過期列的保守投影覆蓋內建開放規則後為待確認', () {
-    // As the `city_rules` view serves an expired Taipei heavy rule.
+  test('舊版 App：過期列的保守投影覆蓋內建開放規則後為待確認，依法可停的仍可停（決定 44）', () {
+    // As the `city_rules` view serves an expired Taipei heavy rule
+    // (202610270070): heavyOnly and car stay allowed.
     final projected = CityRule.fromJson({
       'city': '臺北市',
       'vehicle': 'heavy',
-      'allowed_space_types': <String>[],
-      'conditional_space_types': [
-        'car',
-        'heavyOnly',
-        'offStreet',
-        'paidMotorcycle',
-      ],
+      'allowed_space_types': ['car', 'heavyOnly'],
+      'conditional_space_types': ['offStreet', 'paidMotorcycle'],
       'districts': <String>[],
       'district_space_types': <String, Object>{},
       'fee_note': '請依現場收費公告',
@@ -1157,13 +1293,26 @@ void main() {
         projected,
         now: now,
       );
-      expect(
-        old.status,
-        type == SpaceType.freeMotorcycle
-            ? EligibilityStatus.notAllowed
-            : EligibilityStatus.unverified,
-        reason: type.name,
+      expect(old.status, switch (type) {
+        SpaceType.freeMotorcycle => EligibilityStatus.notAllowed,
+        SpaceType.heavyOnly || SpaceType.car => EligibilityStatus.allowed,
+        _ => EligibilityStatus.unverified,
+      }, reason: type.name);
+      // The new app reads the stored row and agrees on the lawful bays.
+      if (type != SpaceType.heavyOnly && type != SpaceType.car) continue;
+      final stored = CityRule.fromJson({
+        ...bundledJson.firstWhere(
+          (r) => r['city'] == '臺北市' && r['vehicle'] == 'heavy',
+        ),
+        'expires_on': '2026-10-20',
+      });
+      final current = decideParking(
+        street(type, source: 'official'),
+        VehicleType.heavy,
+        [stored],
+        now: now,
       );
+      expect(current.status, old.status, reason: type.name);
     }
   });
 }
