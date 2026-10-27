@@ -331,6 +331,17 @@ final spotFields = <SpotField>[
 
 SpotField spotField(String key) => spotFields.firstWhere((f) => f.key == key);
 
+/// A stored row as the form edits it: a row written before the set
+/// existed, or by a server without it, shows its one facility type as the
+/// set (decision 58), so the form never reads it as unset.
+Map<String, dynamic> spotRowValues(Map<String, dynamic> row) =>
+    row['facility_types'] == null && row['facility_type'] is String
+    ? {
+        ...row,
+        'facility_types': [row['facility_type']],
+      }
+    : row;
+
 /// Mirrors the table checks so a bad value never reaches the RPC. [fee] is
 /// the fee in the form: fee_note may run past 200 when it is that fee's
 /// sentence.

@@ -410,7 +410,7 @@ class SupabaseAdminGateway implements AdminGateway {
     final rows = await _spotRows([sourceId]);
     return rows.isEmpty
         ? null
-        : SpotRecord(sourceId: sourceId, values: rows.single);
+        : SpotRecord(sourceId: sourceId, values: spotRowValues(rows.single));
   }
 
   @override
@@ -429,7 +429,7 @@ class SupabaseAdminGateway implements AdminGateway {
         'p_note': note,
       },
     );
-    return SpotRecord(sourceId: sourceId, values: row);
+    return SpotRecord(sourceId: sourceId, values: spotRowValues(row));
   }
 
   @override
@@ -465,7 +465,10 @@ class SupabaseAdminGateway implements AdminGateway {
         'p_note': note,
       },
     );
-    return SpotRecord(sourceId: row['source_id'] as String, values: row);
+    return SpotRecord(
+      sourceId: row['source_id'] as String,
+      values: spotRowValues(row),
+    );
   }
 
   @override
