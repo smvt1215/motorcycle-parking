@@ -65,6 +65,7 @@ class LocationPicker extends StatefulWidget {
     this.mapBuilder,
     this.fills = const {},
     this.collapsed = false,
+    this.expandButton = false,
   });
 
   final double lat, lng;
@@ -98,6 +99,10 @@ class LocationPicker extends StatefulWidget {
   /// 「開地圖調整」, which opens it full screen, so it never squeezes the
   /// form (admin site, C6 畫布 KeyboardForm).
   final bool collapsed;
+
+  /// 「放大地圖調整」beside the search under the map (C6 canvas
+  /// AppFormLocation), opening the same full-screen map as [collapsed].
+  final bool expandButton;
 
   @override
   State<LocationPicker> createState() => _LocationPickerState();
@@ -316,7 +321,7 @@ class _LocationPickerState extends State<LocationPicker>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (widget.onSearch != null) ...[
+        if (widget.onSearch != null && !widget.expandButton) ...[
           OutlinedButton.icon(
             key: const ValueKey('location-search'),
             style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
@@ -342,6 +347,37 @@ class _LocationPickerState extends State<LocationPicker>
           ),
         ),
         const SizedBox(height: 8),
+        if (widget.expandButton) ...[
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  key: const ValueKey('location-expand'),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(48, 48),
+                  ),
+                  onPressed: openMap,
+                  child: const Text('放大地圖調整', textAlign: TextAlign.center),
+                ),
+              ),
+              if (widget.onSearch != null) ...[
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton(
+                    key: const ValueKey('location-search'),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(48, 48),
+                    ),
+                    onPressed: search,
+                    child: const Text('搜尋地址', textAlign: TextAlign.center),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          if (atFound) _FoundNote(found: found!, fills: widget.fills),
+          const SizedBox(height: 8),
+        ],
         Wrap(
           spacing: 16,
           runSpacing: 4,
@@ -908,51 +944,69 @@ class _OsmLocationMapState extends State<_OsmLocationMap> {
     return Stack(
       children: [
         Positioned.fill(
-          child: fm.FlutterMap(
-            mapController: controller,
-            options: fm.MapOptions(
-              initialCenter: here,
-              initialZoom: _pickZoom,
-              maxZoom: 19,
-              backgroundColor: dark
-                  ? const Color(0xff142130)
-                  : const Color(0xffe6eee9),
-              // The touch marker projects through an unrotated camera.
-              interactionOptions: const fm.InteractionOptions(
-                flags: fm.InteractiveFlag.all & ~fm.InteractiveFlag.rotate,
+          child: _FormPan(
+            enabled: v.touchMarker,
+            onPan: (delta) {
+              if (!ready) return;
+              final c = controller.camera;
+              final center = c.unprojectAtZoom(
+                c.projectAtZoom(c.center) - delta,
+              );
+              controller.move(center, c.zoom);
+            },
+            child: fm.FlutterMap(
+              mapController: controller,
+              options: fm.MapOptions(
+                initialCenter: here,
+                initialZoom: _pickZoom,
+                maxZoom: 19,
+                backgroundColor: dark
+                    ? const Color(0xff142130)
+                    : const Color(0xffe6eee9),
+                // The touch marker projects through an unrotated camera.
+                // Inside a scrolling form the map takes no one-finger drag
+                // of its own: [_FormPan] pans it sideways (and by mouse in
+                // any direction), so an up or down swipe scrolls the form as
+                // on the Google map (#155 item 21).
+                interactionOptions: fm.InteractionOptions(
+                  flags:
+                      fm.InteractiveFlag.all &
+                      ~fm.InteractiveFlag.rotate &
+                      (v.touchMarker ? ~fm.InteractiveFlag.drag : ~0),
+                ),
+                onMapReady: () => ready = true,
+                onPositionChanged: (c, _) => camera.value = (
+                  lat: c.center.latitude,
+                  lng: c.center.longitude,
+                  zoom: c.zoom,
+                ),
+                onTap: (_, p) => v.onMove(p.latitude, p.longitude),
               ),
-              onMapReady: () => ready = true,
-              onPositionChanged: (c, _) => camera.value = (
-                lat: c.center.latitude,
-                lng: c.center.longitude,
-                zoom: c.zoom,
-              ),
-              onTap: (_, p) => v.onMove(p.latitude, p.longitude),
-            ),
-            children: [
-              if (AppConfig.showsOsmTiles) OsmTiles(dark: dark),
-              fm.CircleLayer(
-                circles: [
-                  fm.CircleMarker(
-                    point: here,
-                    radius: duplicateMeters,
-                    useRadiusInMeter: true,
-                    color: const Color(0x141f5fa8),
-                    borderColor: const Color(0xff1f5fa8),
-                    borderStrokeWidth: 1,
-                  ),
-                  if (v.originLat != null && v.originLng != null)
+              children: [
+                if (AppConfig.showsOsmTiles) OsmTiles(dark: dark),
+                fm.CircleLayer(
+                  circles: [
                     fm.CircleMarker(
-                      point: ll.LatLng(v.originLat!, v.originLng!),
-                      radius: 3,
+                      point: here,
+                      radius: duplicateMeters,
                       useRadiusInMeter: true,
-                      color: const Color(0x00000000),
-                      borderColor: colors.onSurface,
-                      borderStrokeWidth: 2,
+                      color: const Color(0x141f5fa8),
+                      borderColor: const Color(0xff1f5fa8),
+                      borderStrokeWidth: 1,
                     ),
-                ],
-              ),
-            ],
+                    if (v.originLat != null && v.originLng != null)
+                      fm.CircleMarker(
+                        point: ll.LatLng(v.originLat!, v.originLng!),
+                        radius: 3,
+                        useRadiusInMeter: true,
+                        color: const Color(0x00000000),
+                        borderColor: colors.onSurface,
+                        borderStrokeWidth: 2,
+                      ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
         Positioned.fill(
@@ -964,6 +1018,50 @@ class _OsmLocationMapState extends State<_OsmLocationMap> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Pans the OpenStreetMap picker inside a scrolling form: a finger drags it
+/// sideways only, leaving up and down to the form, as [pickerMapGestures]
+/// does for the Google map; a mouse, which never scrolls the form, drags
+/// it any way.
+class _FormPan extends StatelessWidget {
+  const _FormPan({
+    required this.enabled,
+    required this.onPan,
+    required this.child,
+  });
+  final bool enabled;
+  final ValueChanged<Offset> onPan;
+  final Widget child;
+
+  static const _mice = {PointerDeviceKind.mouse, PointerDeviceKind.trackpad};
+
+  @override
+  Widget build(BuildContext context) {
+    if (!enabled) return child;
+    return RawGestureDetector(
+      gestures: {
+        HorizontalDragGestureRecognizer:
+            GestureRecognizerFactoryWithHandlers<
+              HorizontalDragGestureRecognizer
+            >(
+              () => HorizontalDragGestureRecognizer(
+                supportedDevices: {
+                  for (final k in PointerDeviceKind.values)
+                    if (!_mice.contains(k)) k,
+                },
+              ),
+              (r) => r.onUpdate = (d) => onPan(Offset(d.delta.dx, 0)),
+            ),
+        PanGestureRecognizer:
+            GestureRecognizerFactoryWithHandlers<PanGestureRecognizer>(
+              () => PanGestureRecognizer(supportedDevices: _mice),
+              (r) => r.onUpdate = (d) => onPan(d.delta),
+            ),
+      },
+      child: child,
     );
   }
 }

@@ -497,16 +497,28 @@ class SheetTitle extends StatelessWidget {
 }
 
 class ContentPage extends StatelessWidget {
-  const ContentPage({super.key, required this.children});
+  const ContentPage({super.key, required this.children, this.lazy = true});
   final List<Widget> children;
+
+  /// Whether rows build only as they scroll into view. A form whose
+  /// sections hold their own [Form]s builds them all (false), so a check
+  /// on send reaches every field, not only the ones on screen.
+  final bool lazy;
   @override
-  Widget build(BuildContext context) => SafeArea(
-    // Sized to its content: a short sheet does not fill the screen with
-    // empty space, and a long one still scrolls at full height.
-    child: ListView(
-      shrinkWrap: true,
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 110),
-      children: children,
-    ),
-  );
+  Widget build(BuildContext context) {
+    const padding = EdgeInsets.fromLTRB(20, 16, 20, 110);
+    return SafeArea(
+      // Sized to its content: a short sheet does not fill the screen with
+      // empty space, and a long one still scrolls at full height.
+      child: lazy
+          ? ListView(shrinkWrap: true, padding: padding, children: children)
+          : SingleChildScrollView(
+              padding: padding,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: children,
+              ),
+            ),
+    );
+  }
 }

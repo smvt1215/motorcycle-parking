@@ -15,6 +15,10 @@ import '../../models/fee.dart';
 import '../../models/parking.dart';
 import '../../models/parking_condition.dart'
     show ZoneArea, sourceUrlMaxLength, sourceUrlPattern;
+import '../../models/space_kind.dart';
+import '../../models/taiwan_districts.dart';
+import '../../ui/fold_section.dart';
+import '../../ui/option_pill.dart';
 import '../../ui/address_search_field.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../../ui/fee_editor.dart';
@@ -280,7 +284,8 @@ class FormSection extends StatelessWidget {
   );
 }
 
-/// Labeled single choice; segments are easier to scan than a dropdown.
+/// Labeled single choice of 2–6 options as pills; easier to scan than a
+/// dropdown.
 class ChoiceField<T> extends StatelessWidget {
   const ChoiceField({
     super.key,
@@ -323,16 +328,9 @@ class ChoiceField<T> extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 8),
-        SegmentedButton<T>(
-          showSelectedIcon: false,
-          segments: [
-            for (final (value, text) in options)
-              ButtonSegment(value: value, label: Text(text)),
-          ],
-          selected: {value},
-          onSelectionChanged: (v) => onChanged(v.single),
-        ),
+        const SizedBox(height: 4),
+        // 2–6 single choices are pills (C6 canvas AppPatterns, pattern 2).
+        OptionPills<T>(values: options, selected: value, onSelect: onChanged),
       ],
     ),
   );
@@ -452,14 +450,12 @@ class AccessField extends StatelessWidget {
   final ValueChanged<ParkingAccess?> onChanged;
   final String label;
   @override
-  Widget build(BuildContext context) => DropdownButtonFormField<ParkingAccess?>(
-    initialValue: value,
-    isExpanded: true,
-    decoration: InputDecoration(labelText: label),
-    items: [
-      const DropdownMenuItem(child: Text('未確認')),
-      for (final access in ParkingAccess.values)
-        DropdownMenuItem(value: access, child: Text(access.description)),
+  Widget build(BuildContext context) => ChoiceField<ParkingAccess?>(
+    label: label,
+    value: value,
+    options: [
+      (null, '未確認'),
+      for (final access in ParkingAccess.values) (access, access.description),
     ],
     onChanged: onChanged,
   );
@@ -476,15 +472,11 @@ class ZoneAreaField extends StatelessWidget {
   final ValueChanged<ZoneArea?> onChanged;
 
   @override
-  Widget build(BuildContext context) => DropdownButtonFormField<ZoneArea?>(
+  Widget build(BuildContext context) => ChoiceField<ZoneArea?>(
     key: const ValueKey('zone-area'),
-    initialValue: value,
-    isExpanded: true,
-    decoration: const InputDecoration(labelText: '區域'),
-    items: [
-      for (final (area, label) in zoneAreaLabels)
-        DropdownMenuItem(value: area, child: Text(label)),
-    ],
+    label: '區域',
+    value: value,
+    options: zoneAreaLabels,
     onChanged: onChanged,
   );
 }
@@ -758,97 +750,6 @@ class ZoneEditor extends StatelessWidget {
   }
 }
 
-/// Bay kinds as their painted markings, so reporters match what is on the
-/// ground instead of a list of names.
-class SpaceTypePicker extends StatelessWidget {
-  const SpaceTypePicker({
-    super.key,
-    required this.value,
-    required this.onChanged,
-  });
-  final SpaceType value;
-  final ValueChanged<SpaceType> onChanged;
-  @override
-  Widget build(BuildContext context) {
-    // Three across on phones; two when large text needs the width.
-    final columns = MediaQuery.textScalerOf(context).scale(1) > 1.3 ? 2 : 3;
-    const types = SpaceType.values;
-    return Column(
-      children: [
-        for (var row = 0; row < types.length; row += columns)
-          Padding(
-            padding: EdgeInsets.only(top: row == 0 ? 0 : 8),
-            // Tiles in a row share one height, however their labels wrap.
-            child: IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (var i = row; i < row + columns; i++) ...[
-                    if (i > row) const SizedBox(width: 8),
-                    Expanded(
-                      child: i < types.length
-                          ? _tile(context, types[i])
-                          : const SizedBox.shrink(),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _tile(BuildContext context, SpaceType type) {
-    final colors = Theme.of(context).colorScheme;
-    final selected = type == value;
-    return Semantics(
-      button: true,
-      selected: selected,
-      inMutuallyExclusiveGroup: true,
-      label: type.label,
-      // The child's tap is excluded with its semantics; screen readers need
-      // it here.
-      onTap: () => onChanged(type),
-      excludeSemantics: true,
-      child: Material(
-        color: selected ? colors.primaryContainer : colors.surfaceContainerLow,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(
-            color: selected ? colors.primary : colors.outlineVariant,
-            width: selected ? 2 : 1,
-          ),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          key: ValueKey('report-space-${type.name}'),
-          onTap: () => onChanged(type),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(8, 12, 8, 10),
-            child: Column(
-              children: [
-                GroundMarking(type: type),
-                const SizedBox(height: 8),
-                Text(
-                  type.label,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    fontWeight: selected ? FontWeight.w600 : null,
-                    color: selected
-                        ? colors.onPrimaryContainer
-                        : colors.onSurface,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// Shown above a form when the reporter still has to sign in.
 class SignInPrompt extends StatelessWidget {
   const SignInPrompt({super.key, required this.store, required this.message});
@@ -910,13 +811,20 @@ class ReportForm extends StatefulWidget {
 }
 
 class _ReportFormState extends State<ReportForm> {
-  final form = GlobalKey<FormState>();
   final name = TextEditingController(),
       note = TextEditingController(),
       entrance = TextEditingController(),
       guide = TextEditingController();
   Fee fee = const Fee();
-  SpaceType type = SpaceType.paidMotorcycle;
+
+  /// The bay kind picked; none until the rider picks (C6 canvas AppForm).
+  SpaceKind? kind;
+
+  /// The space type sent: the one the kind's condition converts to.
+  SpaceType? get type => switch (kind) {
+    final k? => condition.typeFor(k),
+    null => null,
+  };
   late bool? scooter = defaults.scooter;
   late bool? heavy = defaults.heavy;
   FacilityType? facility;
@@ -927,10 +835,12 @@ class _ReportFormState extends State<ReportForm> {
   final condition = ConditionDraft();
   final evidence = TextEditingController();
 
-  bool get lot => type == SpaceType.offStreet;
+  bool get lot => kind == SpaceKind.offStreet;
 
-  ({bool? scooter, bool? heavy}) get defaults =>
-      defaultEligibility(widget.store.rules, type, city);
+  ({bool? scooter, bool? heavy}) get defaults => switch (type) {
+    final t? => defaultEligibility(widget.store.rules, t, city),
+    null => (scooter: null, heavy: null),
+  };
 
   /// Whether the city's rule, not only the markings, set a vehicle.
   bool get ruled => ruledOnly.scooter || ruledOnly.heavy;
@@ -950,6 +860,8 @@ class _ReportFormState extends State<ReportForm> {
   bool scooterRuled = false, heavyRuled = false;
 
   ({bool scooter, bool heavy}) get ruledOnly {
+    final type = this.type;
+    if (type == null) return (scooter: false, heavy: false);
     final marked = markedEligibility(type);
     final rule = ruledEligibility(widget.store.rules, type, city);
     return (
@@ -961,11 +873,8 @@ class _ReportFormState extends State<ReportForm> {
   late String? city = nearbyCity(widget.store.spots, widget.lat, widget.lng);
   late double lat = widget.lat, lng = widget.lng;
 
-  /// From the reverse lookup; empty until it answers.
+  /// From the reverse lookup or the rider's pick; empty until either.
   String district = '';
-
-  /// Whether [city] came from the lookup rather than nearby spots.
-  bool cityLookedUp = false;
   bool lookingUp = false;
   String? lookupProblem;
 
@@ -1009,7 +918,6 @@ class _ReportFormState extends State<ReportForm> {
           movedFromCity = before != null && before != town.city ? before : null;
           city = town.city;
           district = town.district;
-          cityLookedUp = true;
           // The new city's rule may open or close bays for a vehicle.
           applyDefaults();
         }
@@ -1056,7 +964,7 @@ class _ReportFormState extends State<ReportForm> {
     'lng': lng,
     'city': city,
     if (district.isNotEmpty) 'district': district,
-    'space_type': type.name,
+    'space_type': type?.name,
     'fee_note': feeNoteOf(fee),
     if (!fee.isEmpty) 'fee': fee.toJson(),
     'note': note.text.trim(),
@@ -1075,7 +983,10 @@ class _ReportFormState extends State<ReportForm> {
     'heavy_allowed': heavyRuled ? null : heavy,
     // A street bay's condition (design §1.2): the kind's, plus what the
     // rider adds. Its space type is always the kind picked (§1.3).
-    'condition': ?condition.conditionFor(type)?.toJson(),
+    'condition': ?switch (kind) {
+      final k? => condition.conditionFor(k)?.toJson(),
+      null => null,
+    },
   };
 
   /// The report as it will be sent, with the notice link when given.
@@ -1089,10 +1000,86 @@ class _ReportFormState extends State<ReportForm> {
   /// stands.
   List<PrecheckIssue> get issues => precheck(body());
 
-  void setType(SpaceType value) => setState(() {
-    type = value;
+  void setKind(SpaceKind value) => setState(() {
+    kind = value;
     applyDefaults();
   });
+
+  /// The section open now (C6 canvas AppForm: one at a time); null when all
+  /// are folded. The position comes first.
+  _Part? open = _Part.location;
+
+  /// Sections whose fields failed the last check, flagged while folded.
+  final problems = <_Part>{};
+  final forms = {for (final part in _Part.values) part: GlobalKey<FormState>()};
+  final anchors = {for (final part in _Part.values) part: GlobalKey()};
+
+  void toggle(_Part part) => setState(() => open = open == part ? null : part);
+
+  /// Checks every section; opens and scrolls to the first that fails.
+  bool validateAll() {
+    problems.clear();
+    for (final part in parts) {
+      // Every section is built (ContentPage(lazy: false)); one that is not
+      // yet counts as failing rather than passing unchecked.
+      if (!(forms[part]!.currentState?.validate() ?? false)) problems.add(part);
+    }
+    if (problems.isEmpty) return true;
+    showProblems();
+    return false;
+  }
+
+  /// Bumped when a check fails, so the bay kind's group opens again and
+  /// its follow-up's errors show.
+  int reveal = 0;
+
+  /// Opens the first section in [problems] and scrolls to it.
+  void showProblems() {
+    final first = parts.firstWhere(problems.contains);
+    setState(() {
+      open = first;
+      reveal++;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final at = anchors[first]!.currentContext;
+      if (at != null && at.mounted) {
+        Scrollable.ensureVisible(
+          at,
+          duration: const Duration(milliseconds: 250),
+        );
+      }
+    });
+  }
+
+  /// The section holding the field a precheck issue is about, if the
+  /// form shows it.
+  _Part? partOf(String field) => switch (field.split('.').first) {
+    'name' => _Part.name,
+    'lat' || 'lng' || 'city' || 'district' => _Part.location,
+    'space_type' || 'condition' => _Part.kind,
+    'scooter_allowed' || 'heavy_allowed' => _Part.vehicles,
+    'fee' => _Part.fee,
+    'facility_type' ||
+    'facility_types' ||
+    'parking_access' ||
+    'parking_zones' => lot ? _Part.lot : _Part.kind,
+    'note' ||
+    'parking_guide' ||
+    'entrance_note' ||
+    'evidence_url' => _Part.extra,
+    _ => null,
+  };
+
+  /// The sections this report shows, in order.
+  List<_Part> get parts => [
+    _Part.location,
+    _Part.name,
+    _Part.kind,
+    if (lot) _Part.lot,
+    _Part.vehicles,
+    _Part.fee,
+    _Part.extra,
+  ];
 
   /// Refills the vehicles from the markings and city rule until the
   /// reporter sets them.
@@ -1111,53 +1098,168 @@ class _ReportFormState extends State<ReportForm> {
     builder: (context, _) => _buildForm(context),
   );
 
-  /// The picker with what the rider should know about the position: the
-  /// county it falls in, same-type spots within 15 m, a city change.
-  Widget _locationSection(BuildContext context) {
+  /// A section of the form: folded to its summary, or open with [children]
+  /// in a form of its own, so a folded one is still checked on send.
+  Widget _part(
+    _Part part, {
+    required String title,
+    required String? summary,
+    String? hint,
+    required List<Widget> children,
+  }) => FoldSection(
+    key: anchors[part],
+    title: title,
+    summary: summary,
+    hint: hint,
+    open: open == part,
+    problem: open != part && problems.contains(part),
+    onToggle: () => toggle(part),
+    child: Form(
+      key: forms[part],
+      // A flagged section is cleared once its fields pass again.
+      onChanged: () {
+        if (!problems.contains(part)) return;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || !problems.contains(part)) return;
+          if (forms[part]!.currentState?.validate() ?? false) {
+            setState(() => problems.remove(part));
+          }
+        });
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: children,
+      ),
+    ),
+  );
+
+  String get locationSummary => [
+    city ?? '縣市未選',
+    if (district.isNotEmpty) district,
+    '${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)}',
+  ].join('・');
+
+  String get vehicleSummary {
+    String word(bool? v) => switch (v) {
+      true => '可停',
+      false => '不可停',
+      null => '未確認',
+    };
+    final from = kind == null || vehiclesEdited
+        ? ''
+        : ruled
+        ? '（已依格位與$city規則帶入）'
+        : '（已依格位帶入）';
+    return '普通機車${word(scooter)}・大型重機${word(heavy)}$from';
+  }
+
+  String? get extraSummary {
+    final filled = [
+      if (lot && entrance.text.trim().isNotEmpty) '入口',
+      if (guide.text.trim().isNotEmpty) '停車指引',
+      if (evidence.text.trim().isNotEmpty) '公告連結',
+      if (note.text.trim().isNotEmpty) '備註',
+    ];
+    return filled.isEmpty ? null : '已填：${filled.join('、')}';
+  }
+
+  /// The position: the map with 放大地圖調整 and the search under it, the
+  /// county and district it falls in, same-type spots within 15 m and a
+  /// city change (C6 canvas AppFormLocation).
+  Widget _locationPart(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final notes = checkLocation(
-      lat: lat,
-      lng: lng,
-      spaceType: type.name,
-      nearby: nearbySpots(widget.store.spots),
+    // Same-type spots nearby, once there is a type to compare.
+    final duplicates = switch (type) {
+      final t? => checkLocation(
+        lat: lat,
+        lng: lng,
+        spaceType: t.name,
+        nearby: nearbySpots(widget.store.spots),
+      ).duplicates,
+      null => const <NearbySpot>[],
+    };
+    final districts = [
+      ...?taiwanDistricts[city],
+      if (district.isNotEmpty &&
+          !(taiwanDistricts[city]?.contains(district) ?? false))
+        district,
+    ];
+    final cityField = DropdownButtonFormField<String>(
+      // The lookup replaces the value; a new key shows it.
+      key: ValueKey('report-city-$city'),
+      initialValue: city,
+      isExpanded: true,
+      decoration: const InputDecoration(labelText: '縣市'),
+      items: [
+        for (final c in taiwanCities)
+          DropdownMenuItem(value: c, child: Text(c)),
+      ],
+      validator: (v) => v == null ? '請選擇停車點所在縣市' : null,
+      onChanged: (v) => setState(() {
+        if (v != city) {
+          // The district belonged to the old city.
+          district = '';
+          movedFromCity = null;
+        }
+        city = v;
+        // The city's rule may open or close bays for a vehicle.
+        applyDefaults();
+      }),
     );
-    return FormSection(
+    final districtField = DropdownButtonFormField<String>(
+      key: ValueKey('report-district-$city-$district'),
+      initialValue: district.isEmpty ? null : district,
+      isExpanded: true,
+      decoration: const InputDecoration(labelText: '區'),
+      hint: Text(city == null ? '先選縣市' : '未選'),
+      items: [
+        for (final d in districts) DropdownMenuItem(value: d, child: Text(d)),
+      ],
+      onChanged: city == null
+          ? null
+          : (v) => setState(() => district = v ?? ''),
+    );
+    return _part(
+      _Part.location,
       title: '位置',
+      summary: locationSummary,
+      hint: '拖曳標記對準停車格，或點地圖選位置',
       children: [
         Text(
-          widget.mapCenter
-              ? '從目前地圖中心開始。拖曳標記對準停車格，或點地圖選位置。'
-              : '從你長按的位置開始。拖曳標記對準停車格，或點地圖選位置。',
+          widget.mapCenter ? '從目前地圖中心開始。' : '從你長按的位置開始。',
           style: TextStyle(color: colors.onSurfaceVariant),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
         FormField<void>(
           validator: (_) =>
               inTaiwanBounds(lat, lng) ? null : '標記不在臺灣範圍內，請移回停車點的位置。',
           builder: (state) => Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              LocationPicker(
-                lat: lat,
-                lng: lng,
-                touchMarker: true,
-                onLocate: widget.store.currentFix,
-                height: pickerHeight(context),
-                mapBuilder: widget.mapBuilder ?? appLocationMap,
-                // Without a backend (demo) there is nothing to search.
-                onSearch: widget.store.client == null
-                    ? null
-                    : (context) => showAddressSearch(
-                        context,
-                        search: widget.store.parking.searchAddress,
-                        lat: lat,
-                        lng: lng,
-                      ),
-                onChanged: (a, b) {
-                  move(a, b);
-                  state.didChange(null);
-                },
-              ),
+              // Only while open: a folded section keeps no map running.
+              if (open == _Part.location)
+                LocationPicker(
+                  lat: lat,
+                  lng: lng,
+                  touchMarker: true,
+                  onLocate: widget.store.currentFix,
+                  height: pickerHeight(context),
+                  mapBuilder: widget.mapBuilder ?? appLocationMap,
+                  expandButton: true,
+                  // Without a backend (demo) there is nothing to search.
+                  onSearch: widget.store.client == null
+                      ? null
+                      : (context) => showAddressSearch(
+                          context,
+                          search: widget.store.parking.searchAddress,
+                          lat: lat,
+                          lng: lng,
+                        ),
+                  onChanged: (a, b) {
+                    move(a, b);
+                    state.didChange(null);
+                  },
+                ),
               if (state.errorText != null)
                 LocationNote(
                   icon: Icons.error_outline,
@@ -1167,6 +1269,31 @@ class _ReportFormState extends State<ReportForm> {
             ],
           ),
         ),
+        const SizedBox(height: 12),
+        LayoutBuilder(
+          builder: (context, box) => box.maxWidth < 280
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    cityField,
+                    const SizedBox(height: 12),
+                    districtField,
+                  ],
+                )
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: cityField),
+                    const SizedBox(width: 10),
+                    Expanded(child: districtField),
+                  ],
+                ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          '依地圖位置自動帶入，可以改。選了縣市後，「區」只列這個縣市的行政區。',
+          style: TextStyle(fontSize: 13, color: colors.onSurfaceVariant),
+        ),
         if (lookingUp)
           const LocationNote(icon: Icons.travel_explore, text: '正在查詢所在縣市與行政區…')
         else if (lookupProblem != null)
@@ -1174,9 +1301,7 @@ class _ReportFormState extends State<ReportForm> {
             icon: Icons.help_outline,
             text: lookupProblem!,
             tone: NoteTone.caution,
-          )
-        else if (cityLookedUp)
-          LocationNote(icon: Icons.place_outlined, text: '位於$city$district'),
+          ),
         if (movedFromCity != null)
           LocationNote(
             key: const ValueKey('report-city-changed'),
@@ -1186,12 +1311,12 @@ class _ReportFormState extends State<ReportForm> {
                 '${vehiclesEdited ? '，請確認可停車種。' : '，可停車種已依新規則帶入。'}',
             tone: NoteTone.caution,
           ),
-        if (notes.duplicates.isNotEmpty)
+        if (duplicates.isNotEmpty)
           LocationNote(
             key: const ValueKey('report-duplicate'),
             icon: Icons.content_copy,
             text:
-                '15 m 內已有同類型的停車點：${notes.duplicates.map((d) => d.name).join('、')}。'
+                '15 m 內已有同類型的停車點：${duplicates.map((d) => d.name).join('、')}。'
                 '如果是同一處，請關閉這個表單，改到該點提出修改建議。',
             tone: NoteTone.caution,
           ),
@@ -1202,260 +1327,321 @@ class _ReportFormState extends State<ReportForm> {
   Widget _buildForm(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final found = issues;
+    final kind = this.kind;
+    final picked = kind == null ? null : condition.conditionFor(kind);
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-      child: Form(
-        key: form,
-        child: ContentPage(
-          children: [
-            // The same close as every sheet, at the top of a long form.
-            SheetTitle('新增停車點'),
-            const SizedBox(height: 8),
-            Text(
-              '新增的停車點會顯示於地圖，回報資訊待管理者確認；停放資格請依現場標示。',
-              style: TextStyle(color: colors.onSurfaceVariant),
+      child: ContentPage(
+        lazy: false,
+        children: [
+          // The same close as every sheet, at the top of a long form.
+          SheetTitle('新增停車點'),
+          const SizedBox(height: 8),
+          Text(
+            '新增的停車點會顯示於地圖，回報資訊待管理者確認；停放資格請依現場標示。',
+            style: TextStyle(color: colors.onSurfaceVariant),
+          ),
+          if (!widget.store.canReport) ...[
+            const SizedBox(height: 16),
+            SignInPrompt(
+              store: widget.store,
+              message: '使用 Google 或 Apple 登入後才能送出回報。',
             ),
-            if (!widget.store.canReport) ...[
-              const SizedBox(height: 16),
-              SignInPrompt(
-                store: widget.store,
-                message: '使用 Google 或 Apple 登入後才能送出回報。',
+          ],
+          const SizedBox(height: 6),
+          _locationPart(context),
+          _part(
+            _Part.name,
+            title: '名稱',
+            summary: name.text.trim().isEmpty ? null : name.text.trim(),
+            children: [
+              TextFormField(
+                controller: name,
+                maxLength: 100,
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(
+                  labelText: '停車點名稱',
+                  errorMaxLines: 4,
+                  hintText: '例：信義路五段收費機車格',
+                  counterText: '',
+                ),
+                autovalidateMode: AutovalidateMode.onUserInteraction,
+                validator: (v) => (v?.trim().isEmpty ?? true)
+                    ? '請填寫名稱'
+                    : precheckTextHint(v, name: true),
+                onChanged: (_) => setState(() {}),
               ),
             ],
-            _locationSection(context),
-            FormSection(
-              title: '基本資訊',
+          ),
+          _part(
+            _Part.kind,
+            title: '格位',
+            summary: kind == null ? null : condition.summary(kind),
+            hint: '地面畫的是哪一種？',
+            children: [
+              FormField<SpaceKind>(
+                validator: (_) => this.kind == null ? '請選地面畫的格位' : null,
+                builder: (state) => Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SpaceKindList(
+                      value: kind,
+                      keyPrefix: 'report-space',
+                      reveal: reveal,
+                      onChanged: (v) {
+                        setKind(v);
+                        state.didChange(v);
+                      },
+                      followUp: kind == null
+                          ? null
+                          : ConditionFields(
+                              kind: kind,
+                              draft: condition,
+                              onChanged: () => setState(applyDefaults),
+                              // Waits for a notice; once one is attached,
+                              // nothing to add.
+                              holdHint: evidence.text.trim().isEmpty
+                                  ? precheckHint(
+                                      found,
+                                      'condition',
+                                      holds: true,
+                                    )
+                                  : null,
+                            ),
+                    ),
+                    if (state.errorText case final error?)
+                      Text(error, style: TextStyle(color: colors.error)),
+                  ],
+                ),
+              ),
+              if (kind != null && kind != SpaceKind.offStreet)
+                Container(
+                  key: const ValueKey('report-preview'),
+                  margin: const EdgeInsets.only(top: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colors.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text.rich(
+                    TextSpan(
+                      children: [
+                        const TextSpan(
+                          text: 'App 會顯示：',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        TextSpan(text: conditionHeadline(type!, picked)),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          if (lot)
+            _part(
+              _Part.lot,
+              title: '停車場（選填）',
+              summary:
+                  [
+                    ?facility?.label,
+                    ?access?.description,
+                    if (zones.isNotEmpty) '${zones.length} 個分區',
+                  ].isEmpty
+                  ? null
+                  : [
+                      ?facility?.label,
+                      ?access?.description,
+                      if (zones.isNotEmpty) '${zones.length} 個分區',
+                    ].join('・'),
+              hint: '場站型式、停放分類與分區',
               children: [
+                FacilityField(
+                  value: facility,
+                  onChanged: (v) => setState(() => facility = v),
+                ),
+                AccessField(
+                  value: access,
+                  onChanged: (v) => setState(() => access = v),
+                ),
+                ZoneEditor(
+                  zones: zones,
+                  vehicle: widget.store.vehicle,
+                  feeHint: (i) => precheckHint(found, 'parking_zones.$i.fee'),
+                  feeHold: (i) =>
+                      precheckHint(found, 'parking_zones.$i.fee', holds: true),
+                  onAdd: () => setState(() => zones.add(ZoneDraft())),
+                  onRemove: (zone) => setState(() {
+                    zones.remove(zone);
+                    zone.dispose();
+                  }),
+                  onChanged: () => setState(() {}),
+                ),
+              ],
+            ),
+          _part(
+            _Part.vehicles,
+            title: '可停車種',
+            summary: vehicleSummary,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(
+                  '${vehiclesEdited || kind == null ? '' : '已依「${kind.label}」${ruled ? '與$city的停車規則' : ''}帶入，可以修改。'}'
+                  // What is sent, not what the city rule says now: a
+                  // vehicle stays rule-filled after the other is edited.
+                  '${ruledVehicles.isEmpty ? '' : '${ruledVehicles.join('、')}依規則帶入，只當預設，會隨規則更新，不存成這個點的資料。'}'
+                  '現場有告示牌或地面標字時，才選「可停」。',
+                  style: TextStyle(color: colors.onSurfaceVariant),
+                ),
+              ),
+              VehicleTriState(
+                label: '普通機車',
+                value: scooter,
+                keyPrefix: 'report-scooter',
+                onChanged: (v) => setState(() {
+                  scooter = v;
+                  scooterRuled = false;
+                  vehiclesEdited = true;
+                  problems.remove(_Part.vehicles);
+                }),
+              ),
+              PrecheckHintText(
+                precheckHint(found, 'scooter_allowed'),
+                key: const ValueKey('precheck-scooter_allowed'),
+              ),
+              const SizedBox(height: 8),
+              VehicleTriState(
+                label: '大型重機',
+                value: heavy,
+                keyPrefix: 'report-heavy',
+                onChanged: (v) => setState(() {
+                  heavy = v;
+                  heavyRuled = false;
+                  vehiclesEdited = true;
+                  problems.remove(_Part.vehicles);
+                }),
+              ),
+              PrecheckHintText(
+                precheckHint(found, 'heavy_allowed'),
+                key: const ValueKey('precheck-heavy_allowed'),
+              ),
+            ],
+          ),
+          _part(
+            _Part.fee,
+            title: '收費（選填）',
+            summary: fee.isEmpty ? null : feeNoteOf(fee),
+            children: [
+              FeeEditor(
+                value: fee,
+                initialVehicle: FeeVehicle.of(widget.store.vehicle),
+                errorText: precheckHint(found, 'fee'),
+                onChanged: (v) => setState(() {
+                  fee = v;
+                  problems.remove(_Part.fee);
+                }),
+              ),
+            ],
+          ),
+          _part(
+            _Part.extra,
+            title: '補充（選填）',
+            summary: extraSummary ?? (lot ? '入口、停車指引、公告連結、備註' : '停車指引、公告連結、備註'),
+            children: [
+              if (lot) ...[
                 TextFormField(
-                  controller: name,
-                  maxLength: 100,
-                  textInputAction: TextInputAction.next,
+                  controller: entrance,
+                  maxLength: 500,
+                  maxLines: 2,
                   decoration: const InputDecoration(
-                    labelText: '停車點名稱',
+                    labelText: '入口在哪裡',
                     errorMaxLines: 4,
-                    hintText: '例：信義路五段收費機車格',
-                    counterText: '',
+                    hintText: '例：入口在松仁路側，機車走右側坡道',
+                    alignLabelWithHint: true,
                   ),
                   autovalidateMode: AutovalidateMode.onUserInteraction,
-                  validator: (v) => (v?.trim().isEmpty ?? true)
-                      ? '請填寫名稱'
-                      : precheckTextHint(v, name: true),
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  // The lookup replaces the value; a new key shows it.
-                  key: ValueKey('report-city-$city'),
-                  initialValue: city,
-                  decoration: InputDecoration(
-                    labelText: '縣市',
-                    helperText: city == null
-                        ? null
-                        : cityLookedUp
-                        ? '依標記位置帶入${district.isEmpty ? '' : '（$district）'}，請確認'
-                        : '依附近停車點自動帶入，請確認',
-                  ),
-                  items: taiwanCities
-                      .map((s) => DropdownMenuItem(value: s, child: Text(s)))
-                      .toList(),
-                  validator: (v) => v == null ? '請選擇停車點所在縣市' : null,
-                  onChanged: (v) => setState(() {
-                    if (v != city) {
-                      // The district belonged to the looked-up city.
-                      district = '';
-                      cityLookedUp = false;
-                      movedFromCity = null;
-                    }
-                    city = v;
-                    // The city's rule may open or close bays for a vehicle.
-                    applyDefaults();
-                  }),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  '地面畫的是哪一種格位？',
-                  style: Theme.of(context).textTheme.bodyLarge,
-                ),
-                const SizedBox(height: 10),
-                SpaceTypePicker(value: type, onChanged: setType),
-                ConditionFields(
-                  type: type,
-                  draft: condition,
-                  onChanged: () => setState(() {}),
-                  // Waits for a notice; once one is attached, nothing to add.
-                  holdHint: evidence.text.trim().isEmpty
-                      ? precheckHint(found, 'condition', holds: true)
-                      : null,
-                ),
-              ],
-            ),
-            FormSection(
-              title: '可停車種',
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: Text(
-                    '${vehiclesEdited ? '' : '已依「${type.label}」${ruled ? '與$city的停車規則' : ''}帶入，可以修改。'}'
-                    // What is sent, not what the city rule says now: a
-                    // vehicle stays rule-filled after the other is edited.
-                    '${ruledVehicles.isEmpty ? '' : '${ruledVehicles.join('、')}依規則帶入，只當預設，會隨規則更新，不存成這個點的資料。'}'
-                    '現場有告示牌或地面標字時，才選「可停」。',
-                    style: TextStyle(color: colors.onSurfaceVariant),
-                  ),
-                ),
-                ChoiceField<bool?>(
-                  label: '普通機車',
-                  vehicle: VehicleType.scooter,
-                  value: scooter,
-                  options: const [(null, '未確認'), (true, '可停'), (false, '不可停')],
-                  onChanged: (v) => setState(() {
-                    scooter = v;
-                    scooterRuled = false;
-                    vehiclesEdited = true;
-                  }),
-                ),
-                PrecheckHintText(
-                  precheckHint(found, 'scooter_allowed'),
-                  key: const ValueKey('precheck-scooter_allowed'),
-                ),
-                ChoiceField<bool?>(
-                  label: '大型重機',
-                  vehicle: VehicleType.heavy,
-                  value: heavy,
-                  options: const [(null, '未確認'), (true, '可停'), (false, '不可停')],
-                  onChanged: (v) => setState(() {
-                    heavy = v;
-                    heavyRuled = false;
-                    vehiclesEdited = true;
-                  }),
-                ),
-                PrecheckHintText(
-                  precheckHint(found, 'heavy_allowed'),
-                  key: const ValueKey('precheck-heavy_allowed'),
-                ),
-              ],
-            ),
-            if (lot)
-              FormSection(
-                title: '停車場（選填）',
-                children: [
-                  FacilityField(
-                    value: facility,
-                    onChanged: (v) => setState(() => facility = v),
-                  ),
-                  AccessField(
-                    value: access,
-                    onChanged: (v) => setState(() => access = v),
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: entrance,
-                    maxLength: 500,
-                    maxLines: 2,
-                    decoration: const InputDecoration(
-                      labelText: '入口在哪裡',
-                      errorMaxLines: 4,
-                      hintText: '例：入口在松仁路側，機車走右側坡道',
-                      alignLabelWithHint: true,
-                    ),
-                    autovalidateMode: AutovalidateMode.onUserInteraction,
-                    validator: (v) => textHint(v, 500),
-                  ),
-                  const SizedBox(height: 16),
-                  ZoneEditor(
-                    zones: zones,
-                    vehicle: widget.store.vehicle,
-                    feeHint: (i) => precheckHint(found, 'parking_zones.$i.fee'),
-                    feeHold: (i) => precheckHint(
-                      found,
-                      'parking_zones.$i.fee',
-                      holds: true,
-                    ),
-                    onAdd: () => setState(() => zones.add(ZoneDraft())),
-                    onRemove: (zone) => setState(() {
-                      zones.remove(zone);
-                      zone.dispose();
-                    }),
-                    onChanged: () => setState(() {}),
-                  ),
-                ],
-              ),
-            FormSection(
-              title: '補充資訊（選填）',
-              children: [
-                Text('收費', style: Theme.of(context).textTheme.bodyLarge),
-                const SizedBox(height: 8),
-                FeeEditor(
-                  value: fee,
-                  initialVehicle: FeeVehicle.of(widget.store.vehicle),
-                  errorText: precheckHint(found, 'fee'),
-                  onChanged: (v) => setState(() => fee = v),
-                ),
-                const SizedBox(height: 20),
-                EvidenceUrlField(
-                  controller: evidence,
+                  validator: (v) => textHint(v, 500),
                   onChanged: (_) => setState(() {}),
                 ),
                 const SizedBox(height: 16),
-                TextFormField(
-                  controller: guide,
-                  maxLength: 500,
-                  maxLines: 2,
-                  decoration: InputDecoration(
-                    labelText: '停車指引',
-                    errorMaxLines: 4,
-                    hintText: lot ? '例：B2 機車區靠電梯，重機停最後一排' : '例：格位在便利商店前，靠路口一側',
-                    alignLabelWithHint: true,
-                  ),
-                  autovalidateMode: AutovalidateMode.onUserInteraction,
-                  validator: (v) => textHint(v, 500),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: note,
-                  maxLength: 500,
-                  maxLines: 3,
-                  decoration: const InputDecoration(
-                    labelText: '其他備註',
-                    errorMaxLines: 4,
-                    hintText: '例：夜間有管理員，假日常客滿',
-                    alignLabelWithHint: true,
-                  ),
-                  autovalidateMode: AutovalidateMode.onUserInteraction,
-                  validator: (v) => textHint(v, 500),
-                ),
               ],
-            ),
-            const SizedBox(height: 20),
-            AdaptiveButton(
-              label: sending ? '送出中…' : '送出回報',
-              onPressed: sending || !widget.store.canReport
-                  ? null
-                  : () async {
-                      if (!form.currentState!.validate()) return;
-                      // Each hint already sits under its field; the message
-                      // also covers one scrolled out of view.
-                      // A hold goes through, flagged for review.
-                      if (precheckBlocking(issues).firstOrNull
-                          case final issue?) {
-                        return showMessage(context, issue.message);
+              TextFormField(
+                controller: guide,
+                maxLength: 500,
+                maxLines: 2,
+                decoration: InputDecoration(
+                  labelText: '停車指引',
+                  errorMaxLines: 4,
+                  hintText: lot ? '例：B2 機車區靠電梯，重機停最後一排' : '例：格位在便利商店前，靠路口一側',
+                  alignLabelWithHint: true,
+                ),
+                autovalidateMode: AutovalidateMode.onUserInteraction,
+                validator: (v) => textHint(v, 500),
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 16),
+              EvidenceUrlField(
+                controller: evidence,
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: note,
+                maxLength: 500,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: '其他備註',
+                  errorMaxLines: 4,
+                  hintText: '例：夜間有管理員，假日常客滿',
+                  alignLabelWithHint: true,
+                ),
+                autovalidateMode: AutovalidateMode.onUserInteraction,
+                validator: (v) => textHint(v, 500),
+                onChanged: (_) => setState(() {}),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          AdaptiveButton(
+            label: sending ? '送出中…' : '送出',
+            onPressed: sending || !widget.store.canReport
+                ? null
+                : () async {
+                    if (!validateAll()) return;
+                    // Each hint already sits under its field; the message
+                    // also covers one scrolled out of view.
+                    // A hold goes through, flagged for review.
+                    final blocking = precheckBlocking(issues);
+                    if (blocking.firstOrNull case final issue?) {
+                      // Each section a refusal is about opens and is flagged.
+                      problems
+                        ..clear()
+                        ..addAll(blocking.map((i) => partOf(i.field)).nonNulls);
+                      if (problems.isNotEmpty) showProblems();
+                      return showMessage(context, issue.message);
+                    }
+                    setState(() => sending = true);
+                    await runAction(context, () async {
+                      final result = await widget.store.submit(body());
+                      if (context.mounted) {
+                        Navigator.pop(context);
+                        showMessage(context, result);
                       }
-                      setState(() => sending = true);
-                      await runAction(context, () async {
-                        final result = await widget.store.submit(body());
-                        if (context.mounted) {
-                          Navigator.pop(context);
-                          showMessage(context, result);
-                        }
-                      });
-                      if (mounted) setState(() => sending = false);
-                    },
-            ),
-          ],
-        ),
+                    });
+                    if (mounted) setState(() => sending = false);
+                  },
+          ),
+        ],
       ),
     );
   }
 }
+
+/// The sections of the new spot form, in order.
+enum _Part { location, name, kind, lot, vehicles, fee, extra }
 
 Future<void> showParkingForm(BuildContext context, AppStore store) =>
     showAdaptiveSheet<void>(context, (ctx) => ParkingForm(store: store));

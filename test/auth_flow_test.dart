@@ -146,7 +146,10 @@ void main() {
           )
           .first;
       final name = find.widgetWithText(TextFormField, '停車點名稱');
-      await tester.scrollUntilVisible(name, 300, scrollable: form);
+      final namePart = find.byKey(const ValueKey('fold-名稱'));
+      await tester.scrollUntilVisible(namePart, 300, scrollable: form);
+      await tester.tap(namePart);
+      await tester.pumpAndSettle();
       await tester.enterText(name, '尚未送出的停車點');
       // The sign-in prompt sits just above the name field.
       await tester.scrollUntilVisible(
@@ -175,13 +178,13 @@ void main() {
           )
           .first;
       await tester.scrollUntilVisible(
-        find.text('送出回報'),
+        find.text('送出'),
         300,
         scrollable: scrollable,
       );
       expect(
         tester
-            .widget<AdaptiveButton>(find.widgetWithText(AdaptiveButton, '送出回報'))
+            .widget<AdaptiveButton>(find.widgetWithText(AdaptiveButton, '送出'))
             .onPressed,
         isNotNull,
       );

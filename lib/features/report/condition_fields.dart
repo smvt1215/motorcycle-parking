@@ -4,20 +4,30 @@ import '../../ui/option_pill.dart';
 import '../../models/parking.dart';
 import '../../models/fee.dart' show FeeWords;
 import '../../models/parking_condition.dart';
+import '../../models/space_kind.dart';
 
-export '../../models/condition_text.dart' show conditionSummary;
-import 'report_sheet.dart' show ChoiceField;
+export '../../models/condition_text.dart'
+    show conditionHeadline, conditionSummary;
 
-/// The bay kinds whose painted markings already say whether they charge:
-/// the rider picks 收費 or 免費 through the kind itself.
-const _chargeByType = {SpaceType.paidMotorcycle, SpaceType.freeMotorcycle};
+/// The kinds whose painted markings already say whether they charge: the
+/// rider picks 收費 or 免費 through the kind itself.
+const _chargeByKind = {SpaceKind.paidMotorcycle, SpaceKind.freeMotorcycle};
 
-/// Motorcycle bays a notice may open to both classes (普大共用, §1.1).
-const _shareable = {
-  SpaceType.paidMotorcycle,
-  SpaceType.freeMotorcycle,
-  SpaceType.timedMotorcycle,
+/// The limits a rider may add to a kind beyond its own (C6 canvas AppForm
+/// 「還有其他限制嗎？」, decision 57): what a motorcycle bay's sign can add.
+/// Each stays one the contract and the legacy space type agree on (§1.3).
+Set<LimitKind> extraLimits(SpaceKind kind) => switch (kind) {
+  SpaceKind.paidMotorcycle ||
+  SpaceKind.freeMotorcycle => {LimitKind.timeLimit, LimitKind.evOnly},
+  SpaceKind.sharedMotorcycle || SpaceKind.evMotorcycle => {LimitKind.timeLimit},
+  SpaceKind.timedMotorcycle => {LimitKind.evOnly},
+  _ => const {},
 };
+
+/// Whether the follow-ups ask 收費格還是免費格 for [kind]; 普大共用 must say
+/// which, as its stored space type is toll or free.
+bool asksCharge(SpaceKind kind) =>
+    !_chargeByKind.contains(kind) && kind != SpaceKind.offStreet;
 
 /// One period of a 汽機共用 bay while it is being reported (§1.2 schedule).
 class SlotDraft {
@@ -64,42 +74,44 @@ class SlotDraft {
   }
 }
 
-/// What a rider adds to the bay kind they picked (design §8.4, C5): whether
-/// it charges, a 普大共用 notice, how long a 限時 bay allows, and when a
-/// 汽機共用 bay takes which vehicles. The kind decides the rest.
+/// What a rider adds to the bay kind they picked (design §8.4, C5; C6
+/// canvas AppForm): whether it charges, the limits it adds, how long a
+/// time limit allows, a 普大共用 notice on a 限時 bay, and when a 汽機共用
+/// bay takes which vehicles. The kind decides the rest.
 class ConditionDraft {
-  ConditionDraft() : loadedType = null;
+  ConditionDraft() : loadedKind = null;
 
   /// The rider's values from a stored [condition] of a bay of [type].
   ConditionDraft.of(ParkingCondition? condition, SpaceType type)
-    : loadedType = type {
+    : loadedKind = SpaceKind.of(type, condition) {
     final c = condition ?? conditionOf(type);
     if (c == null) return;
-    if (!_chargeByType.contains(type)) charge = c.charge;
+    if (asksCharge(loadedKind!)) charge = c.charge;
     shared = c.share == ShareKind.scooterHeavy;
     for (final l in c.limits) {
+      if (extraLimits(loadedKind!).contains(l.kind)) extras.add(l.kind);
       if (l.kind == LimitKind.timeLimit && l.maxMinutes != null) {
         maxMinutes.text = '${l.maxMinutes}';
       }
     }
     slots.addAll(c.schedule.map(SlotDraft.of));
-    loadedLimits = c.limits;
     loaded = c;
   }
 
-  /// The stored condition: its bay use stays where the form shows no
-  /// 普大共用 choice for the kind.
+  /// The stored condition: what the form does not show stays as stored
+  /// while the kind does.
   ParkingCondition? loaded;
 
-  /// The stored limits, kept as they are while the kind does: the form
-  /// edits only a 限時 bay's minutes, never drops one it cannot show.
-  List<ParkingLimit> loadedLimits = const [];
-
-  /// The kind the stored condition came with: its periods stay as they
-  /// are while the kind does, even where this form cannot edit them.
-  final SpaceType? loadedType;
+  /// The kind the stored condition came with.
+  final SpaceKind? loadedKind;
 
   Charge? charge;
+
+  /// The limits ticked under 還有其他限制嗎？, kept across kinds; only those
+  /// [extraLimits] offers for the kind are sent.
+  final extras = <LimitKind>{};
+
+  /// 標示「普通、大型重機共用」 on a 限時 bay.
   bool shared = false;
   final maxMinutes = TextEditingController();
   final slots = <SlotDraft>[];
@@ -111,55 +123,111 @@ class ConditionDraft {
     }
   }
 
-  /// The condition a street bay of [type] is sent with; null for a lot,
-  /// whose zones carry theirs. Its space type is always [type] (§1.3).
-  /// While the kind stays the one loaded, every facet the form does not
-  /// show stays as stored; only what the form edits changes. A basis is
-  /// never sent: riders attach a notice as evidence (§1.4).
-  ParkingCondition? conditionFor(SpaceType type) {
-    final base = conditionOf(type);
+  /// Whether a bay of [kind] asks how many minutes it allows.
+  bool asksMinutes(SpaceKind kind) =>
+      kind == SpaceKind.timedMotorcycle ||
+      (extras.contains(LimitKind.timeLimit) &&
+          extraLimits(kind).contains(LimitKind.timeLimit));
+
+  /// The condition a street bay of [kind] is sent with; null for a lot,
+  /// whose zones carry theirs. While the kind stays the one loaded, every
+  /// facet the form does not show stays as stored; only what the form
+  /// edits changes. A basis is never sent: riders attach a notice as
+  /// evidence (§1.4).
+  ParkingCondition? conditionFor(SpaceKind kind) {
+    final base = conditionOf(kind.type ?? SpaceType.paidMotorcycle);
     if (base == null) return null;
-    final from = type == loadedType ? loaded ?? base : base;
+    final same = kind == loadedKind;
+    final from = same ? loaded ?? base : base;
     final minutes = int.tryParse(maxMinutes.text.trim());
-    final (use, share) = !_shareable.contains(type)
-        ? (from.use, from.share)
-        : shared
-        ? (BayUse.share, ShareKind.scooterHeavy)
-        : from.share == ShareKind.scooterHeavy
-        ? (BayUse.usual, null)
-        : (from.use, from.share);
+    final (use, share) = switch (kind) {
+      SpaceKind.sharedMotorcycle => (BayUse.share, ShareKind.scooterHeavy),
+      SpaceKind.timedMotorcycle when shared => (
+        BayUse.share,
+        ShareKind.scooterHeavy,
+      ),
+      SpaceKind.paidMotorcycle ||
+      SpaceKind.freeMotorcycle ||
+      SpaceKind.timedMotorcycle when from.share == ShareKind.scooterHeavy => (
+        BayUse.usual,
+        null,
+      ),
+      _ => (from.use, from.share),
+    };
+    final offered = extraLimits(kind);
     return ParkingCondition(
       bay: from.bay,
       use: use,
       share: share,
-      charge: _chargeByType.contains(type) ? base.charge : charge,
+      charge: _chargeByKind.contains(kind) ? base.charge : charge,
       limits: [
-        for (final l in from.limits)
-          // The minutes field shows on 限時 bays only; elsewhere a stored
-          // time limit stays as it is.
-          l.kind == LimitKind.timeLimit && type == SpaceType.timedMotorcycle
-              ? ParkingLimit(LimitKind.timeLimit, maxMinutes: minutes)
-              : l,
-      ],
-      schedule: type == SpaceType.flexShared || type == loadedType
+        for (final k in LimitKind.values)
+          if (base.hasLimit(k) || (offered.contains(k) && extras.contains(k)))
+            k == LimitKind.timeLimit
+                ? ParkingLimit(LimitKind.timeLimit, maxMinutes: minutes)
+                : base.limits.where((l) => l.kind == k).firstOrNull ??
+                      ParkingLimit(k)
+          // A stored limit the form cannot show stays as it is.
+          else if (same && !offered.contains(k) && from.hasLimit(k))
+            from.limits.firstWhere((l) => l.kind == k),
+      ]..sort((a, b) => _order(from, a).compareTo(_order(from, b))),
+      schedule: kind == SpaceKind.flexShared || same
           ? [for (final s in slots) ?s.slot]
           : const [],
     );
   }
+
+  /// A limit's place: where the stored condition had it, so an untouched
+  /// condition compares equal whatever order it was stored in; new ones
+  /// after, in [LimitKind] order.
+  static int _order(ParkingCondition from, ParkingLimit l) {
+    final i = from.limits.indexWhere((x) => x.kind == l.kind);
+    return i < 0 ? from.limits.length + l.kind.index : i;
+  }
+
+  /// The legacy space type a bay of [kind] is sent under: the one its
+  /// condition converts to (§1.3), which validate.ts checks.
+  SpaceType typeFor(SpaceKind kind) {
+    final c = conditionFor(kind);
+    return (c == null ? null : legacySpaceType(c, offStreet: false)) ??
+        kind.type ??
+        (charge == Charge.free
+            ? SpaceType.freeMotorcycle
+            : SpaceType.paidMotorcycle);
+  }
+
+  /// What the folded 格位 section says: the kind and what was added.
+  String summary(SpaceKind kind) {
+    final c = conditionFor(kind);
+    return [
+      kind.label,
+      if (asksCharge(kind) && c?.charge != null)
+        c!.charge == Charge.toll ? '收費' : '免費',
+      if (kind == SpaceKind.timedMotorcycle && shared) '普大共用',
+      for (final l in c?.limits ?? const <ParkingLimit>[])
+        if (l.kind == LimitKind.timeLimit && kind != SpaceKind.timedMotorcycle)
+          l.maxMinutes == null ? '限時' : '限時 ${l.maxMinutes} 分鐘'
+        else if (l.kind == LimitKind.timeLimit && l.maxMinutes != null)
+          '限時 ${l.maxMinutes} 分鐘'
+        else if (l.kind == LimitKind.evOnly && kind != SpaceKind.evMotorcycle)
+          '限電動機車',
+    ].join('・');
+  }
 }
 
-/// The fields of [ConditionDraft] that a bay of [type] asks for, under the
-/// bay kind picker. [hint] is a precheck fix about them; [holdHint] a note
-/// that the report will wait for review.
+/// What the form asks about the bay kind just picked, indented under it
+/// (C6 canvas AppForm): 收費格還是免費格, how long a 限時 bay allows, the
+/// limits it adds, and a 汽機共用 bay's periods. [holdHint] is a note that
+/// the report will wait for review.
 class ConditionFields extends StatelessWidget {
   const ConditionFields({
     super.key,
-    required this.type,
+    required this.kind,
     required this.draft,
     required this.onChanged,
     this.holdHint,
   });
-  final SpaceType type;
+  final SpaceKind kind;
   final ConditionDraft draft;
   final VoidCallback onChanged;
   final String? holdHint;
@@ -168,67 +236,146 @@ class ConditionFields extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (conditionOf(type) == null) return const SizedBox.shrink();
+    if (kind == SpaceKind.offStreet) return const SizedBox.shrink();
     final colors = Theme.of(context).colorScheme;
+    final offered = extraLimits(kind);
+    final muted = TextStyle(fontSize: 13, color: colors.onSurfaceVariant);
+    Widget minutes() => Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(padding: EdgeInsets.only(top: 14), child: Text('最多停')),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 96,
+            child: TextFormField(
+              key: const ValueKey('condition-max-minutes'),
+              controller: draft.maxMinutes,
+              keyboardType: TextInputType.number,
+              textAlign: TextAlign.end,
+              decoration: const InputDecoration(
+                hintText: '20',
+                errorMaxLines: 3,
+                isDense: true,
+              ),
+              autovalidateMode: AutovalidateMode.onUserInteraction,
+              validator: (v) {
+                final text = v?.trim() ?? '';
+                if (text.isEmpty) return null;
+                final n = int.tryParse(text);
+                return n == null || n < 1 || n > 1440 ? '填 1 到 1440' : null;
+              },
+              onChanged: (_) => onChanged(),
+            ),
+          ),
+          const SizedBox(width: 8),
+          const Padding(padding: EdgeInsets.only(top: 14), child: Text('分鐘')),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 14),
+              child: Text('牌面沒寫就留空', style: muted),
+            ),
+          ),
+        ],
+      ),
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SizedBox(height: 20),
-        if (!_chargeByType.contains(type))
-          ChoiceField<Charge?>(
-            key: const ValueKey('condition-charge'),
-            label: '收費格還是免費格',
-            value: draft.charge,
-            options: const [
-              (Charge.toll, '收費'),
-              (Charge.free, '免費'),
-              (null, '未確認'),
-            ],
-            onChanged: (v) {
-              draft.charge = v;
-              onChanged();
-            },
+        if (kind == SpaceKind.timedMotorcycle) minutes(),
+        if (asksCharge(kind))
+          FormField<Charge?>(
+            // A 普大共用 bay is stored as toll or free, so it must say.
+            validator: (_) =>
+                kind == SpaceKind.sharedMotorcycle && draft.charge == null
+                ? '請選收費格或免費格'
+                : null,
+            builder: (state) => Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    kind == SpaceKind.sharedMotorcycle
+                        ? '收費還是免費？'
+                        : '收費格還是免費格？',
+                    style: muted,
+                  ),
+                  const SizedBox(height: 4),
+                  OptionPills<Charge?>(
+                    key: const ValueKey('condition-charge'),
+                    values: [
+                      if (kind != SpaceKind.sharedMotorcycle) (null, '未確認'),
+                      (Charge.toll, '收費格'),
+                      (Charge.free, '免費格'),
+                    ],
+                    selected: draft.charge,
+                    keyOf: (v) => 'condition-charge-${v?.name ?? 'unknown'}',
+                    onSelect: (v) {
+                      draft.charge = v;
+                      state.didChange(v);
+                      onChanged();
+                    },
+                  ),
+                  if (state.errorText case final error?)
+                    Text(
+                      error,
+                      style: TextStyle(fontSize: 13, color: colors.error),
+                    ),
+                ],
+              ),
+            ),
           ),
-        if (_shareable.contains(type))
-          CheckboxListTile(
-            key: const ValueKey('condition-shared'),
-            contentPadding: EdgeInsets.zero,
-            controlAffinity: ListTileControlAffinity.leading,
-            value: draft.shared,
-            title: const Text('標示「普通、大型重機共用」'),
-            subtitle: const Text('地面或告示牌寫明兩種機車都能停時才勾選'),
-            onChanged: (v) {
-              draft.shared = v ?? false;
-              onChanged();
-            },
-          ),
+        if (offered.isNotEmpty || kind == SpaceKind.timedMotorcycle) ...[
+          const SizedBox(height: 4),
+          Text('還有其他限制嗎？（可複選）', style: muted),
+          if (offered.contains(LimitKind.timeLimit)) ...[
+            OptionCheck(
+              key: const ValueKey('condition-limit-time_limit'),
+              label: '限時停車',
+              value: draft.extras.contains(LimitKind.timeLimit),
+              onChanged: (on) {
+                on
+                    ? draft.extras.add(LimitKind.timeLimit)
+                    : draft.extras.remove(LimitKind.timeLimit);
+                onChanged();
+              },
+            ),
+            if (draft.extras.contains(LimitKind.timeLimit))
+              Padding(
+                padding: const EdgeInsetsDirectional.only(start: 44),
+                child: minutes(),
+              ),
+          ],
+          if (offered.contains(LimitKind.evOnly))
+            OptionCheck(
+              key: const ValueKey('condition-limit-ev_only'),
+              label: '也限電動機車',
+              value: draft.extras.contains(LimitKind.evOnly),
+              onChanged: (on) {
+                on
+                    ? draft.extras.add(LimitKind.evOnly)
+                    : draft.extras.remove(LimitKind.evOnly);
+                onChanged();
+              },
+            ),
+          if (kind == SpaceKind.timedMotorcycle)
+            OptionCheck(
+              key: const ValueKey('condition-shared'),
+              label: '標示「普通、大型重機共用」',
+              subtitle: '地面或告示牌寫明兩種機車都能停時才勾選',
+              value: draft.shared,
+              onChanged: (on) {
+                draft.shared = on;
+                onChanged();
+              },
+            ),
+        ],
         if (holdHint case final hint?)
           _Note(key: const ValueKey('condition-hold'), text: hint),
-        if (type == SpaceType.timedMotorcycle) ...[
-          const SizedBox(height: 8),
-          TextFormField(
-            key: const ValueKey('condition-max-minutes'),
-            controller: draft.maxMinutes,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: '限停幾分鐘（選填）',
-              hintText: '例：20',
-              suffixText: '分鐘',
-              errorMaxLines: 3,
-            ),
-            autovalidateMode: AutovalidateMode.onUserInteraction,
-            validator: (v) {
-              final text = v?.trim() ?? '';
-              if (text.isEmpty) return null;
-              final n = int.tryParse(text);
-              return n == null || n < 1 || n > 1440
-                  ? '請填 1 到 1440 的整數；牌面沒寫就留空'
-                  : null;
-            },
-            onChanged: (_) => onChanged(),
-          ),
-        ],
-        if (type == SpaceType.flexShared) ...[
+        if (kind == SpaceKind.flexShared) ...[
           const SizedBox(height: 8),
           Text('汽機共用的時段（選填）', style: Theme.of(context).textTheme.bodyLarge),
           const SizedBox(height: 4),
@@ -467,26 +614,20 @@ class _SlotCard extends StatelessWidget {
                             style: TextStyle(color: colors.onSurfaceVariant),
                           ),
                           const SizedBox(height: 4),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: [
-                              for (final (value, label) in _slotVehicles)
-                                FilterChip(
-                                  key: ValueKey('$k-vehicle-${value.name}'),
-                                  label: Text(label),
-                                  selected: slot.vehicles.contains(value),
-                                  onSelected: (on) {
-                                    slot.vehicles = {
-                                      ...slot.vehicles.where((v) => v != value),
-                                      if (on) value,
-                                    };
-                                    state.didChange(slot.vehicles);
-                                    onChanged();
-                                  },
-                                ),
-                            ],
-                          ),
+                          for (final (value, label) in _slotVehicles)
+                            OptionCheck(
+                              key: ValueKey('$k-vehicle-${value.name}'),
+                              label: label,
+                              value: slot.vehicles.contains(value),
+                              onChanged: (on) {
+                                slot.vehicles = {
+                                  ...slot.vehicles.where((v) => v != value),
+                                  if (on) value,
+                                };
+                                state.didChange(slot.vehicles);
+                                onChanged();
+                              },
+                            ),
                           if (state.errorText case final error?)
                             Padding(
                               padding: const EdgeInsets.only(top: 6),

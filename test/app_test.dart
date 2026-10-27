@@ -482,7 +482,7 @@ void main() {
     expect(find.byTooltip('檢舉錯誤'), findsNothing);
     await tester.tap(find.byTooltip('新增停車點'));
     await tester.pumpAndSettle();
-    expect(find.text('停車點名稱'), findsOneWidget);
+    expect(find.text('拖曳標記對準停車格，或點地圖選位置'), findsOneWidget);
     await tester.tap(find.byTooltip('關閉').last);
     await tester.pumpAndSettle();
     // A spot in the list goes straight to the edit and "gone" reports.

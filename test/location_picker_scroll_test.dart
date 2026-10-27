@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -126,7 +127,10 @@ void main() {
         expect(list.pixels, greaterThan(150), reason: '上滑捲動表單');
         expect(log.pans, 0);
         // The fields right after the map come into view.
-        expect(find.text('基本資訊').hitTestable(), findsOneWidget);
+        expect(
+          find.text('依地圖位置自動帶入，可以改。選了縣市後，「區」只列這個縣市的行政區。').hitTestable(),
+          findsOneWidget,
+        );
 
         list.jumpTo(0);
         await tester.pumpAndSettle();
@@ -146,4 +150,63 @@ void main() {
       }),
     );
   }
+
+  testWidgets('OSM 備援地圖：上下滑交給表單，左右拖曳平移地圖（#155 第 21 項）', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final store = (await tester.runAsync(() async {
+      SharedPreferences.setMockInitialValues({});
+      return AppStore(
+        LocalRepository(await SharedPreferences.getInstance()),
+        null,
+      );
+    }))!;
+    addTearDown(store.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ReportForm(
+            store: store,
+            lat: 25.0339,
+            lng: 121.5623,
+            mapBuilder: osmLocationMap,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final list = tester
+        .state<ScrollableState>(
+          find
+              .descendant(
+                of: find.byType(ReportForm),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        )
+        .position;
+    final map = tester.getRect(find.byType(FlutterMap));
+    final onMap = map.topLeft + const Offset(30, 30);
+    final camera = MapCamera.of(tester.element(find.byType(CircleLayer)));
+    await tester.dragFrom(onMap, const Offset(0, -240));
+    await tester.pumpAndSettle();
+    expect(list.pixels, greaterThan(150), reason: '上滑捲動表單');
+    expect(
+      MapCamera.of(tester.element(find.byType(CircleLayer))).center,
+      camera.center,
+      reason: '上下滑不平移地圖',
+    );
+    list.jumpTo(0);
+    await tester.pumpAndSettle();
+    await tester.dragFrom(onMap, const Offset(-120, 0));
+    await tester.pumpAndSettle();
+    expect(list.pixels, 0, reason: '左右拖曳不捲動表單');
+    expect(
+      MapCamera.of(tester.element(find.byType(CircleLayer))).center.longitude,
+      greaterThan(camera.center.longitude),
+      reason: '左右拖曳平移地圖',
+    );
+  });
 }

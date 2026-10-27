@@ -61,6 +61,7 @@ class SpaceKindList extends StatefulWidget {
     this.groupCounts = const {},
     this.followUp,
     this.keyPrefix = 'space',
+    this.reveal = 0,
   });
   final SpaceKind? value;
   final ValueChanged<SpaceKind> onChanged;
@@ -77,6 +78,10 @@ class SpaceKindList extends StatefulWidget {
   /// Prefix of each row's widget key, for tests.
   final String keyPrefix;
 
+  /// Bumped by a form whose check failed: the group holding the pick opens
+  /// again, so its follow-up's errors show.
+  final int reveal;
+
   @override
   State<SpaceKindList> createState() => _SpaceKindListState();
 }
@@ -87,10 +92,19 @@ class _SpaceKindListState extends State<SpaceKindList> {
   @override
   void didUpdateWidget(covariant SpaceKindList old) {
     super.didUpdateWidget(old);
-    if (widget.value != old.value && widget.value != null) {
+    if ((widget.value != old.value || widget.reveal != old.reveal) &&
+        widget.value != null) {
       open = widget.value!.group;
     }
   }
+
+  Widget _option(SpaceKind kind) => SpaceKindOption(
+    targetKey: ValueKey('${widget.keyPrefix}-${kind.name}'),
+    kind: kind,
+    count: widget.counts?[kind],
+    selected: kind == widget.value,
+    onTap: () => widget.onChanged(kind),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -154,24 +168,30 @@ class _SpaceKindListState extends State<SpaceKindList> {
               ),
             ),
           ),
-          if (open == group)
-            for (final kind in group.kinds) ...[
-              SpaceKindOption(
-                targetKey: ValueKey('${widget.keyPrefix}-${kind.name}'),
-                kind: kind,
-                count: counts?[kind],
-                selected: kind == widget.value,
-                onTap: () => widget.onChanged(kind),
-              ),
-              if (kind == widget.value && widget.followUp != null)
-                Padding(
-                  padding: const EdgeInsetsDirectional.only(
-                    start: 16,
-                    bottom: 8,
-                  ),
-                  child: widget.followUp,
+          for (final kind in group.kinds)
+            if (kind == widget.value)
+              // The pick and its follow-up stay mounted while the group is
+              // folded, so a form still checks their fields.
+              Visibility(
+                visible: open == group,
+                maintainState: true,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _option(kind),
+                    if (widget.followUp != null)
+                      Padding(
+                        padding: const EdgeInsetsDirectional.only(
+                          start: 16,
+                          bottom: 8,
+                        ),
+                        child: widget.followUp,
+                      ),
+                  ],
                 ),
-            ],
+              )
+            else if (open == group)
+              _option(kind),
         ],
       ],
     );
