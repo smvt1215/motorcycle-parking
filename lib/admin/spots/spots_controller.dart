@@ -563,10 +563,14 @@ class SpotsController extends ChangeNotifier {
     if (r == null) return;
     final storedType = SpaceType.values.asNameMap()[r.values['space_type']];
     final stored = r.values['condition'];
+    final storedCondition = ParkingCondition.fromJson(stored);
+    // Back to the stored kind (and, for 普大共用, its charge): the stored
+    // type and condition as they were, schedule and limits included.
     if (!r.isNew &&
-        charge == null &&
         storedType != null &&
-        SpaceKind.of(storedType, ParkingCondition.fromJson(stored)) == kind) {
+        SpaceKind.of(storedType, storedCondition) == kind &&
+        (charge == null ||
+            charge == (storedCondition ?? conditionOf(storedType))?.charge)) {
       draft = {
         ...draft,
         'space_type': storedType.name,
@@ -576,7 +580,10 @@ class SpotsController extends ChangeNotifier {
       return;
     }
     final now = ParkingCondition.fromJson(draft['condition']);
+    // What the admin set beyond the kind stays: the notice it rests on and
+    // its periods (the contract takes a schedule on any bay).
     final basis = now?.basis;
+    final schedule = now?.schedule ?? const <ScheduleSlot>[];
     final SpaceType type;
     final ParkingCondition? condition;
     if (kind == SpaceKind.sharedMotorcycle) {
@@ -589,6 +596,7 @@ class SpotsController extends ChangeNotifier {
         use: BayUse.share,
         share: ShareKind.scooterHeavy,
         charge: c,
+        schedule: schedule,
         basis: basis,
       );
     } else {
@@ -601,7 +609,13 @@ class SpotsController extends ChangeNotifier {
               use: base.use,
               share: base.share,
               charge: base.charge,
-              limits: base.limits,
+              // The kind's own limits, with the details the admin set on
+              // the same kind of limit (a time limit's minutes).
+              limits: [
+                for (final l in base.limits)
+                  now?.limits.where((x) => x.kind == l.kind).firstOrNull ?? l,
+              ],
+              schedule: schedule,
               basis: basis,
             );
     }

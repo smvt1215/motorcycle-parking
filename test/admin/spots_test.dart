@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:motorcycle_parking/models/space_kind.dart';
 import 'package:motorcycle_parking/ui/option_pill.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:motorcycle_parking/core/address_search.dart';
@@ -415,6 +416,86 @@ void main() {
           'share': 'scooter_heavy',
           'charge': 'free',
         },
+      });
+    });
+
+    group('換格位類型時的條件', () {
+      Future<void> tapKey(WidgetTester tester, String key) async {
+        final target = find.byKey(ValueKey(key));
+        if (target.evaluate().isEmpty) {
+          // Its group is folded: open it first.
+          final kind = SpaceKind.values.byName(key.split('-').last);
+          await tapKey(tester, 'spot-space-group-${kind.group.name}');
+        }
+        await tester.ensureVisible(target);
+        await tester.pumpAndSettle();
+        await tester.tap(target);
+        await tester.pumpAndSettle();
+      }
+
+      Future<Map<String, dynamic>> save(WidgetTester tester) async {
+        await tester.tap(find.text('儲存並關閉'));
+        await tester.pumpAndSettle();
+        return gateway.spotUpdates.single.$2;
+      }
+
+      testWidgets('保留公告依據與共用時段；普大共用收費切回原值即還原', (tester) async {
+        const basis = {'source_url': 'https://example.test/notice'};
+        const slot = {
+          'days': 'weekday',
+          'from': '07:00',
+          'to': '20:00',
+          'vehicles': ['scooter', 'car'],
+        };
+        gateway.spotRows[communityId]!
+          ..['space_type'] = 'paidMotorcycle'
+          ..['condition'] = {
+            'bay': 'motorcycle',
+            'use': 'share',
+            'share': 'scooter_heavy',
+            'charge': 'toll',
+            'schedule': [slot],
+            'basis': basis,
+          };
+        await show(tester, path: '/spots/$communityId');
+        await openFold(tester, '格位與停放條件');
+        // 免費 then back to 收費: the stored condition, nothing to save.
+        await tapKey(tester, 'spot-space-charge-free');
+        expect(find.text('已修改'), findsWidgets);
+        await tapKey(tester, 'spot-space-charge-toll');
+        expect(find.byType(ChangeBand), findsNothing);
+        await tapKey(tester, 'spot-space-car');
+        expect(await save(tester), {
+          'space_type': 'car',
+          'condition': {
+            'bay': 'car',
+            'use': 'usual',
+            'schedule': [slot],
+            'basis': basis,
+          },
+        });
+      });
+
+      testWidgets('改成路外時條件為 null', (tester) async {
+        gateway.spotRows[communityId]!['condition'] = {
+          'bay': 'motorcycle',
+          'use': 'usual',
+          'charge': 'toll',
+        };
+        await show(tester, path: '/spots/$communityId');
+        await openFold(tester, '格位與停放條件');
+        await tapKey(tester, 'spot-space-offStreet');
+        final saved = await save(tester);
+        expect(saved['space_type'], 'offStreet');
+        expect(saved.containsKey('condition'), isTrue);
+        expect(saved['condition'], isNull);
+      });
+
+      testWidgets('原本沒有條件的點位換一般類型仍沒有條件', (tester) async {
+        await show(tester, path: '/spots/$communityId');
+        await openFold(tester, '格位與停放條件');
+        await tapKey(tester, 'spot-space-heavyOnly');
+        expect(await save(tester), {'space_type': 'heavyOnly'});
       });
     });
 
