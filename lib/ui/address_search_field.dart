@@ -183,7 +183,8 @@ class _AddressSearchFieldState extends State<AddressSearchField> {
               onSubmitted: (_) => _run(),
               decoration: const InputDecoration(
                 labelText: '搜尋門牌、路段或路口',
-                hintText: '例如 中山北路二段與南京東路',
+                // Short enough for a 320 px phone without being cut off (S3).
+                hintText: '例：中山北路與南京東路',
                 prefixIcon: Icon(Icons.search),
                 counterText: '',
               ),

@@ -197,10 +197,13 @@ class _ListPane extends StatelessWidget {
             child: Row(
               children: [
                 Expanded(
-                  child: Semantics(
-                    header: true,
-                    child: Text('使用者管理', style: text.titleLarge),
-                  ),
+                  // A phone names the page in the top bar.
+                  child: MediaQuery.sizeOf(context).width < reviewCompactWidth
+                      ? const SizedBox()
+                      : Semantics(
+                          header: true,
+                          child: Text('使用者管理', style: text.titleLarge),
+                        ),
                 ),
                 IconButton(
                   tooltip: '重新搜尋',

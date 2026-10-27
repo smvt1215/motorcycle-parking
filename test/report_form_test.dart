@@ -1008,9 +1008,10 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('location-expand')));
     await tester.pumpAndSettle();
     expect(find.text('調整位置'), findsOneWidget);
-    final pin = find.byKey(const ValueKey('touch-marker'));
+    // The full-screen map sits over the form's.
+    final pin = find.byKey(const ValueKey('touch-marker')).last;
     expect(
-      tester.getSize(find.byType(LocationPicker)).height,
+      tester.getSize(find.byType(LocationPicker).last).height,
       greaterThan(500),
     );
     final gesture = await tester.startGesture(tester.getCenter(pin));
@@ -1018,7 +1019,7 @@ void main() {
     await gesture.moveBy(const Offset(20, 0));
     await gesture.up();
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('location-expand-done')));
+    await tester.tap(find.byKey(const ValueKey('location-map-done')));
     await tester.pumpAndSettle();
     expect(find.text('調整位置'), findsNothing);
     final spot = await send(tester, store);

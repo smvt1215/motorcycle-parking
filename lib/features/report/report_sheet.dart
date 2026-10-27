@@ -1048,46 +1048,6 @@ class _ReportFormState extends State<ReportForm> {
     _Part.extra,
   ];
 
-  /// Opens a larger map to aim with; keeps where it ends.
-  Future<void> expandMap() async {
-    var at = (lat, lng);
-    final picked = await Navigator.of(context).push<(double, double)>(
-      MaterialPageRoute(
-        fullscreenDialog: true,
-        builder: (ctx) => StatefulBuilder(
-          builder: (ctx, set) => Scaffold(
-            appBar: AppBar(
-              title: const Text('調整位置'),
-              actions: [
-                TextButton(
-                  key: const ValueKey('location-expand-done'),
-                  onPressed: () => Navigator.pop(ctx, at),
-                  child: const Text('完成'),
-                ),
-              ],
-            ),
-            body: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: LayoutBuilder(
-                  builder: (ctx, box) => LocationPicker(
-                    lat: at.$1,
-                    lng: at.$2,
-                    touchMarker: true,
-                    height: (box.maxHeight - 64).clamp(200.0, 2000.0),
-                    mapBuilder: widget.mapBuilder ?? appLocationMap,
-                    onChanged: (a, b) => set(() => at = (a, b)),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-    if (picked != null && mounted) move(picked.$1, picked.$2);
-  }
-
   /// Refills the vehicles from the markings and city rule until the
   /// reporter sets them.
   void applyDefaults() {
@@ -1242,10 +1202,7 @@ class _ReportFormState extends State<ReportForm> {
                   onLocate: widget.store.currentFix,
                   height: pickerHeight(context),
                   mapBuilder: widget.mapBuilder ?? appLocationMap,
-                  onExpand: () async {
-                    await expandMap();
-                    state.didChange(null);
-                  },
+                  expandButton: true,
                   // Without a backend (demo) there is nothing to search.
                   onSearch: widget.store.client == null
                       ? null

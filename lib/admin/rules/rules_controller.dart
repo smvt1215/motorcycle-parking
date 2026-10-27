@@ -17,8 +17,16 @@ Future<List<dynamic>> bundledRules() async =>
 typedef RuleKey = (String city, VehicleType vehicle);
 
 class RulesController extends ChangeNotifier {
-  RulesController(this.gateway, {this.bundled = bundledRules});
+  RulesController(
+    this.gateway, {
+    this.bundled = bundledRules,
+    this.onPublished,
+  });
   final AdminGateway? gateway;
+
+  /// Called after a rule was published, so the spots map judges its
+  /// markers by the new version (決定 49).
+  final VoidCallback? onPublished;
   final Future<List<dynamic>> Function() bundled;
 
   Map<RuleKey, Map<String, dynamic>> rows = {};
@@ -276,6 +284,7 @@ class RulesController extends ChangeNotifier {
       if (generation != _generation) return null;
       rows = {...rows, key: row};
       if (selected == key) _fill(key);
+      onPublished?.call();
       return row;
     } catch (e) {
       if (generation == _generation) publishError = _message(e);

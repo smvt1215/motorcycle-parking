@@ -178,11 +178,14 @@ void main() {
   group('規則發布', () {
     late FakeAdminGateway gateway;
     late RulesController rules;
+    var published = 0;
 
     setUp(() async {
       gateway = FakeAdminGateway(access: adminAal2);
+      published = 0;
       rules = RulesController(
         gateway,
+        onPublished: () => published++,
         bundled: () async => [
           {'city': '臺北市', 'vehicle': 'heavy', 'version': 1},
           {'city': '新北市', 'vehicle': 'heavy', 'version': 1},
@@ -215,6 +218,8 @@ void main() {
       final previous = rules.base!.copy();
       final row = await rules.publish('依新公告');
       expect(row!['version'], 2);
+      // The spots map judges its markers by the new version (決定 49).
+      expect(published, 1);
       final (city, vehicle, values, base, note) = gateway.published.single;
       expect((city, vehicle, base, note), ('臺北市', 'heavy', 1, '依新公告'));
       expect(values['fee_note'], '每次 50 元');
@@ -405,6 +410,8 @@ void main() {
         200,
         scrollable: find.byType(Scrollable).first,
       );
+      // The jump to the item is laid out in the next frame.
+      await tester.pump();
       await tester.tap(find.byKey(const ValueKey('rule-臺北市-heavy')));
       await tester.pumpAndSettle();
       expect(find.text('返回規則清單'), findsOneWidget);
