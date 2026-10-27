@@ -250,7 +250,7 @@ class _SpotSheetState extends State<SpotSheet> {
                                 spot: spot,
                                 vehicle: store.vehicle,
                                 availability: store.availabilityOf(spot),
-                                eligibility: eligibility.status,
+                                decision: decision,
                                 now: now,
                               ),
                             ),
@@ -784,13 +784,13 @@ class _SpotSummary extends StatelessWidget {
     required this.spot,
     required this.vehicle,
     required this.availability,
-    required this.eligibility,
+    required this.decision,
     required this.now,
   });
   final ParkingSpot spot;
   final VehicleType vehicle;
   final SpotAvailability availability;
-  final EligibilityStatus eligibility;
+  final ParkingDecision decision;
   final DateTime now;
   @override
   Widget build(BuildContext context) {
@@ -837,7 +837,7 @@ class _SpotSummary extends StatelessWidget {
                 spot,
                 availability,
                 vehicle,
-                eligibility,
+                decision,
                 now,
               ),
             )
