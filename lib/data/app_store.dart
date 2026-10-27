@@ -19,11 +19,13 @@ import '../domain/location_check.dart';
 import '../domain/map_viewport.dart';
 import '../models/availability.dart';
 import '../models/parking.dart';
+import '../models/rider_sighting.dart';
 import 'availability_repository.dart';
 import 'contributions_repository.dart';
 import 'data_updates.dart';
 import 'repositories.dart';
 import 'profile_repository.dart';
+import 'sighting_repository.dart';
 
 /// Sources stored in `community_spots`: user reports and authorized imports
 /// (`tool/import_kml.py`), both subject to moderation.
@@ -67,6 +69,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     ContributionsRepository? contributionsRepository,
     DataUpdates? dataUpdates,
     AvailabilitySource? availabilitySource,
+    SightingSource? sightingSource,
     Duration? availabilityPoll,
     DateTime Function()? clock,
   }) : parking = parkingRepository ?? ParkingRepository(client),
@@ -77,6 +80,12 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
                ? demoAvailabilitySource(clock: clock)
                : SupabaseAvailabilitySource(client)),
        // The example build's counts never change: no polling.
+       // Riders' sightings (#154); the example build keeps its own.
+       sightingSource =
+           sightingSource ??
+           (client == null
+               ? const NoSightingSource()
+               : SupabaseSightingSource(client)),
        availabilityPoll =
            availabilityPoll ??
            (client == null ? null : defaultAvailabilityPoll),
@@ -99,6 +108,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   final ContributionsRepository contributions;
   final DataUpdates updates;
   final AvailabilitySource availabilitySource;
+  final SightingSource sightingSource;
 
   /// The time freshness is judged against; tests pin it.
   final DateTime Function() clock;
@@ -131,6 +141,12 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
 
   SpotAvailability availabilityOf(ParkingSpot spot) =>
       availability[spot.id] ?? SpotAvailability.none;
+
+  /// Riders' sightings of the loaded [spots] in the last 30 minutes, read
+  /// with the counts but never mixed into them (#154).
+  Map<String, RiderSighting> sightings = const {};
+
+  RiderSighting? sightingOf(ParkingSpot spot) => sightings[spot.id];
 
   /// Counts reports sent this session, so "我送出的建議" reloads after one.
   int reportsSent = 0;
@@ -365,7 +381,9 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     }
     _availabilityTimer = Timer(delay, () => unawaited(pollAvailability()));
     _availabilityClock ??= Timer.periodic(const Duration(minutes: 1), (_) {
-      if (!_disposed && availability.isNotEmpty) notifyListeners();
+      if (!_disposed && (availability.isNotEmpty || sightings.isNotEmpty)) {
+        notifyListeners();
+      }
     });
   }
 
@@ -385,7 +403,10 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     if (_disposed || !availabilitySource.enabled || spots.isEmpty) return;
     final request = _request, read = ++_availabilityRead;
     final current = spots;
-    final counts = await _readAvailability(current);
+    final (counts, seen) = await (
+      _readAvailability(current),
+      _readSightings(current),
+    ).wait;
     if (_disposed ||
         request != _request ||
         read != _availabilityRead ||
@@ -393,6 +414,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
       return;
     }
     availability = counts ?? _keptAvailability(current);
+    sightings = seen ?? _keptSightings(current);
     // Also on failure: the ages shown move on.
     notifyListeners();
     _scheduleAvailability();
@@ -411,6 +433,26 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
       _availabilityFailures++;
       return null;
     }
+  }
+
+  /// Riders' sightings of [spots], or null when the read fails.
+  Future<Map<String, RiderSighting>?> _readSightings(
+    List<ParkingSpot> spots,
+  ) async {
+    try {
+      return await sightingSource.forSpots(spots);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// The last sightings of the spots still loaded; they age out on screen.
+  Map<String, RiderSighting> _keptSightings(List<ParkingSpot> spots) {
+    final ids = {for (final spot in spots) spot.id};
+    return {
+      for (final MapEntry(:key, :value) in sightings.entries)
+        if (ids.contains(key)) key: value,
+    };
   }
 
   /// The last counts of the spots still loaded, for when a read fails.
@@ -499,13 +541,19 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
       // A failed count read keeps the last counts of the spots still in
       // view (they age by source time) and never empties the map.
       final read = ++_availabilityRead;
-      final counts = await _readAvailability(result.spots);
+      final (counts, seen) = await (
+        _readAvailability(result.spots),
+        _readSightings(result.spots),
+      ).wait;
       if (_disposed || request != _request) return;
       // A poll started since read these same spots later: its result wins,
       // so this older one only drops counts of spots out of view.
       availability = read == _availabilityRead
           ? counts ?? _keptAvailability(result.spots)
           : _keptAvailability(result.spots);
+      sightings = read == _availabilityRead
+          ? seen ?? _keptSightings(result.spots)
+          : _keptSightings(result.spots);
       _scheduleAvailability();
       error = result.warning ?? rulesWarning ?? favoritesWarning;
       truncated = result.truncated;
@@ -513,6 +561,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
       if (_disposed || request != _request) return;
       spots = [];
       availability = const {};
+      sightings = const {};
       error = '停車資料讀取失敗，請確認連線後重試';
     } finally {
       if (!_disposed && request == _request) {
@@ -820,6 +869,40 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     return result['duplicate_id'] != null
         ? '附近已有相同類型的停車點，請確認既有停車點'
         : '回報已送出，等待管理者確認';
+  }
+
+  /// Sends what the rider sees at [spot] now (#154) and returns the
+  /// sentence to show. The sighting needs a Google or Apple sign-in, as
+  /// reports do; refusals the rider can act on throw a [StateError].
+  Future<String> reportSighting(ParkingSpot spot, SightingKind kind) async {
+    if (!canReport) throw StateError('請先以 Google 或 Apple 登入才能回報');
+    if (demo) {
+      if (kind != SightingKind.closed) {
+        final now = clock();
+        sightings = {
+          ...sightings,
+          spot.id: RiderSighting(
+            spotId: spot.id,
+            state: kind == SightingKind.available
+                ? SightingState.available
+                : SightingState.full,
+            latestAt: now,
+            since: now,
+          ),
+        };
+        notifyListeners();
+      }
+      return '範例回報已送出（只用於本次測試）';
+    }
+    if (!canSight(spot)) throw StateError('這個停車點無法回報現場狀況');
+    await parking.sighting(
+      spotId: spot.id,
+      kind: kind.wire,
+      vehicle: vehicle.name,
+    );
+    // Show it at once; the next poll would take up to two minutes.
+    unawaited(pollAvailability());
+    return '謝謝回報，其他車友 30 分鐘內會看到。';
   }
 
   Future<void> signIn(OAuthProvider provider) async {

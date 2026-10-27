@@ -14,6 +14,7 @@ import '../../domain/availability_display.dart';
 import '../../domain/capsule_layout.dart';
 import '../../domain/eligibility.dart';
 import '../../domain/map_viewport.dart';
+import '../../domain/sighting_display.dart';
 import '../../domain/spot_clusters.dart';
 import '../../models/parking.dart';
 import '../../models/space_kind.dart';
@@ -442,6 +443,10 @@ class _MapPageState extends ConsumerState<MapPage> {
             store.decide(open),
             now,
           );
+    final openRider =
+        open != null &&
+        openCapsules.isEmpty &&
+        sightingBadge(store.sightingOf(open), now);
     return Stack(
       children: [
         if (AppConfig.useGoogleMaps)
@@ -573,6 +578,14 @@ class _MapPageState extends ConsumerState<MapPage> {
                           ),
                         ),
                   ], selected: open?.id);
+                  // A rider's sighting marks the spot only where no
+                  // official count is shown: the count comes first (#154).
+                  bool riderBadge(
+                    ParkingSpot s,
+                    List<AvailabilityCapsule> capsules,
+                  ) =>
+                      capsules.isEmpty &&
+                      sightingBadge(store.sightingOf(s), now);
                   List<AvailabilityCapsule> shown(ParkingSpot s) {
                     final capsules = pills[s.id]?.$2 ?? const [];
                     return switch (layout[s.id]) {
@@ -617,7 +630,9 @@ class _MapPageState extends ConsumerState<MapPage> {
                                     ? 48
                                     : capsuleBoxHeight,
                                 child: Semantics(
-                                  label: '${s.name} ${store.eligible(s).label}',
+                                  label:
+                                      '${s.name} ${store.eligible(s).label}'
+                                      '${riderBadge(s, capsules) ? '，近期有騎士回報' : ''}',
                                   button: true,
                                   child: GestureDetector(
                                     onTap: () => _showSpot(s),
@@ -626,6 +641,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                                       marker: SpotMarker(
                                         look: markerLook(store.eligible(s)),
                                         badge: spaceBadge(s),
+                                        rider: riderBadge(s, capsules),
                                       ),
                                     ),
                                   ),
@@ -644,7 +660,9 @@ class _MapPageState extends ConsumerState<MapPage> {
                       width: openCapsules.isEmpty ? 56 : capsuleBoxWidth,
                       height: openCapsules.isEmpty ? 56 : capsuleBoxHeight,
                       child: Semantics(
-                        label: '${open.name} ${store.eligible(open).label}，已選取',
+                        label:
+                            '${open.name} ${store.eligible(open).label}，已選取'
+                            '${openRider ? '，近期有騎士回報' : ''}',
                         button: true,
                         // Its own tap, as on the Google map: never a tap on
                         // the empty map, which would close the details.
@@ -658,6 +676,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                               key: const ValueKey('selected-spot-marker'),
                               look: markerLook(store.eligible(open)),
                               badge: spaceBadge(open),
+                              rider: openRider,
                               selected: true,
                             ),
                           ),

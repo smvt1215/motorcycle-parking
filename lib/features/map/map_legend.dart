@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import '../../domain/eligibility.dart';
 import '../../models/parking.dart';
 import '../../ui/adaptive/adaptive.dart';
@@ -91,11 +93,17 @@ class SpotMarker extends StatelessWidget {
     this.size = 38,
     this.selected = false,
     this.badge,
+    this.rider = false,
   });
   final MarkerLook look;
   final double size;
   final bool selected;
   final SpaceBadge? badge;
+
+  /// A rider reported spaces or a full bay here within 15 minutes (#154):
+  /// the 16 px rider badge, bottom right — bottom left when the space-kind
+  /// badge holds that corner. Never a number.
+  final bool rider;
   @override
   Widget build(BuildContext context) {
     final size = selected ? this.size * selectedScale : this.size;
@@ -126,24 +134,87 @@ class SpotMarker extends StatelessWidget {
       ),
     );
     final badge = this.badge;
-    if (badge == null) return Center(child: marker);
+    if (badge == null && !rider) return Center(child: marker);
     final dot = size * .5;
+    final room = badge == null ? riderBadgeSize * .3 : dot * .3;
     return Center(
-      child: SizedBox.square(
-        dimension: size + dot * .3,
+      child: SizedBox(
+        width: size + room * (badge != null && rider ? 2 : 1),
+        height: size + room,
         child: Stack(
+          clipBehavior: Clip.none,
           children: [
-            marker,
             Positioned(
-              right: 0,
-              bottom: 0,
-              child: SpaceBadgeDot(badge: badge, size: dot),
+              left: badge != null && rider ? room : 0,
+              top: 0,
+              child: marker,
             ),
+            if (badge != null)
+              Positioned(
+                right: 0,
+                bottom: 0,
+                child: SpaceBadgeDot(badge: badge, size: dot),
+              ),
+            if (rider)
+              Positioned(
+                left: badge != null ? 0 : null,
+                right: badge != null ? null : 0,
+                bottom: 0,
+                child: const RiderBadge(),
+              ),
           ],
         ),
       ),
     );
   }
+}
+
+/// The rider badge's size (realtime availability canvas, 狀態總表 row 10).
+const riderBadgeSize = 16.0;
+
+/// A rider reported here recently: white disc, ink ring and a person, no
+/// number (canvas 狀態總表 「騎士回報・近期」).
+class RiderBadge extends StatelessWidget {
+  const RiderBadge({super.key});
+  @override
+  Widget build(BuildContext context) => Container(
+    key: const ValueKey('rider-badge'),
+    width: riderBadgeSize,
+    height: riderBadgeSize,
+    decoration: BoxDecoration(
+      color: Colors.white,
+      shape: BoxShape.circle,
+      border: Border.all(color: badgeInk, width: 1.5),
+    ),
+    alignment: Alignment.center,
+    child: const CustomPaint(size: Size.square(9), painter: _RiderPainter()),
+  );
+}
+
+/// The canvas's person: head r4 at (12,8), shoulders `M4 21a8 8 0 0 1 16 0`,
+/// stroke 3 on a 24 grid.
+class _RiderPainter extends CustomPainter {
+  const _RiderPainter();
+  @override
+  void paint(Canvas canvas, Size size) {
+    final k = size.width / 24;
+    final pen = Paint()
+      ..color = badgeInk
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3 * k
+      ..strokeCap = StrokeCap.round;
+    canvas.drawCircle(Offset(12 * k, 8 * k), 4 * k, pen);
+    canvas.drawArc(
+      Rect.fromCircle(center: Offset(12 * k, 21 * k), radius: 8 * k),
+      math.pi,
+      math.pi,
+      false,
+      pen,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_RiderPainter oldDelegate) => false;
 }
 
 class SpaceBadgeDot extends StatelessWidget {

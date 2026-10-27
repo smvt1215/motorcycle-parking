@@ -184,6 +184,34 @@ class ParkingRepository {
     }
   }
 
+  /// Sends a rider's on-site sighting (#154) to `submit-sighting`: the spot,
+  /// what they saw and their vehicle, never where they are. A refusal the
+  /// rider can act on becomes a [StateError] with the sentence to show.
+  Future<Map<String, dynamic>> sighting({
+    required String spotId,
+    required String kind,
+    required String vehicle,
+  }) async {
+    final deviceId = await _deviceId();
+    try {
+      final res = await client!.functions.invoke(
+        'submit-sighting',
+        body: {
+          'spot_id': spotId,
+          'kind': kind,
+          'vehicle': vehicle,
+          'device_id': deviceId,
+        },
+      );
+      return res.data as Map<String, dynamic>;
+    } on FunctionException catch (e) {
+      if (sightingRefusal(e.status, e.details) case final message?) {
+        throw StateError(message);
+      }
+      rethrow;
+    }
+  }
+
   /// House number, road or intersection search for the location picker
   /// (`LocationPicker.search`); needs a Google or Apple sign-in.
   Future<List<AddressCandidate>> searchAddress(
@@ -196,6 +224,21 @@ class ParkingRepository {
     }
     return geocodeSearch(client!.functions, query, lat: lat, lng: lng);
   }
+}
+
+/// The sentence for a sighting the server refused, or null for a failure
+/// the generic message covers.
+@visibleForTesting
+String? sightingRefusal(int status, Object? details) {
+  final error = details is Map ? details['error'] : null;
+  return switch ((status, error)) {
+    (429, 'sighting too soon') => '10 分鐘內已回報過這個停車點。',
+    (429, _) => '今天的現場回報已達上限，明天再試。',
+    (403, 'sighting suspended') => '現場回報暫停中，請稍後再試。',
+    (401, _) => '請先以 Google 或 Apple 登入才能回報',
+    (404, _) => '找不到這個停車點，請重新整理地圖。',
+    _ => null,
+  };
 }
 
 class LocalRepository {

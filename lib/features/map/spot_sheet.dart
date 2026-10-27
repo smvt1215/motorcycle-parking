@@ -6,6 +6,9 @@ import '../../models/availability.dart';
 import '../../models/parking.dart';
 import '../../models/spot_history.dart';
 import '../../domain/availability_display.dart';
+import '../../domain/sighting_display.dart';
+import '../../data/sighting_repository.dart' show canSight;
+import '../report/sighting_sheet.dart';
 import '../../domain/eligibility.dart';
 import '../../domain/eligibility_display.dart';
 import '../../domain/parking_decision.dart';
@@ -194,14 +197,37 @@ class _SpotSheetState extends State<SpotSheet> {
                     runAction(ctx, () => navigateTo(spot.lat, spot.lng)),
                 onSuggest: () =>
                     runAction(ctx, () => showSpotSuggestions(ctx, store, spot)),
+                // Riders' on-site sightings (#154), for spots stored in
+                // the backend.
+                onSighting: store.demo || canSight(spot)
+                    ? () => runAction(
+                        ctx,
+                        () => showSightingSheet(ctx, store, spot),
+                      )
+                    : null,
               );
               return LayoutBuilder(
                 builder: (ctx, constraints) {
                   // A short sheet (landscape, large text) keeps the actions
                   // in the scrolling list so the header is never squeezed out.
+                  // Three actions one per row would fill a narrow sheet:
+                  // 導航到這裡 and 修改建議 stay pinned as before, and
+                  // 回報現場狀況 follows the summary.
+                  final split =
+                      actions.onSighting != null &&
+                      _stackedActions(
+                        ctx,
+                        constraints.maxWidth - 40,
+                        three: true,
+                      );
                   final pinned =
                       constraints.maxHeight -
-                          _footerHeight(ctx, constraints.maxWidth - 40) >=
+                          _footerHeight(
+                            ctx,
+                            constraints.maxWidth - 40,
+                            three: actions.onSighting != null,
+                            split: split,
+                          ) >=
                       _minDetailHeight;
                   return Column(
                     children: [
@@ -286,12 +312,24 @@ class _SpotSheetState extends State<SpotSheet> {
                             // period the rider is in (decision 26).
                             MinuteTicker(
                               clock: store.clock,
-                              builder: (_, now) => _SpotSummary(
-                                spot: spot,
-                                vehicle: store.vehicle,
-                                availability: store.availabilityOf(spot),
-                                decision: decision,
-                                now: now,
+                              builder: (_, now) => Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  _SpotSummary(
+                                    spot: spot,
+                                    vehicle: store.vehicle,
+                                    availability: store.availabilityOf(spot),
+                                    decision: decision,
+                                    now: now,
+                                  ),
+                                  // Its own row, never in the count above:
+                                  // a sighting is not official (#154).
+                                  if (sightingLine(store.sightingOf(spot), now)
+                                      case final line?) ...[
+                                    const SizedBox(height: 14),
+                                    _SightingRow(line: line),
+                                  ],
+                                ],
                               ),
                             ),
                             if (feedback != null)
@@ -299,6 +337,10 @@ class _SpotSheetState extends State<SpotSheet> {
                                 padding: const EdgeInsets.only(top: 12),
                                 child: Text(feedback!),
                               ),
+                            if (pinned && split) ...[
+                              const SizedBox(height: 16),
+                              actions.sightingOnly,
+                            ],
                             _DetailSection(
                               title: '收費',
                               icon: Icons.payments_outlined,
@@ -446,7 +488,7 @@ class _SpotSheetState extends State<SpotSheet> {
                                 20,
                                 12,
                               ),
-                              child: actions,
+                              child: split ? actions.withoutSighting : actions,
                             ),
                           ),
                         ),
@@ -1337,46 +1379,126 @@ class _DetailRow extends StatelessWidget {
 /// handle, the name and the start of the eligibility summary.
 const _minDetailHeight = 160.0;
 
-bool _stackedActions(BuildContext context, double width) =>
-    width < 320 || MediaQuery.textScalerOf(context).scale(14) > 18;
+/// Content width from which three actions fit side by side (tablets).
+const _oneRowThree = 528.0;
+
+/// Whether the actions stack one per row. With 回報現場狀況 the two
+/// secondary actions share a row under 導航到這裡 (canvas), which needs
+/// more width for its six characters.
+bool _stackedActions(
+  BuildContext context,
+  double width, {
+  bool three = false,
+}) =>
+    width < (three ? 340 : 320) ||
+    MediaQuery.textScalerOf(context).scale(14) > 18;
 
 /// Upper estimate of the pinned footer: border, 24 padding, the safe area and
-/// one or two rows of buttons at the current text size.
-double _footerHeight(BuildContext context, double width) {
+/// one or two rows of buttons at the current text size; [split] leaves
+/// 回報現場狀況 out of it.
+double _footerHeight(
+  BuildContext context,
+  double width, {
+  bool three = false,
+  bool split = false,
+}) {
   final button = math.max(
     48.0,
     MediaQuery.textScalerOf(context).scale(20) + 28,
   );
+  final rows = split
+      ? 2
+      : _stackedActions(context, width)
+      ? 2
+      : (three && width < _oneRowThree ? 2 : 1);
   return 25 +
       MediaQuery.paddingOf(context).bottom +
-      (_stackedActions(context, width) ? button * 2 + 12 : button);
+      button * rows +
+      12 * (rows - 1);
 }
 
 class _DetailActions extends StatelessWidget {
-  const _DetailActions({required this.onNavigate, this.onSuggest});
+  const _DetailActions({
+    required this.onNavigate,
+    this.onSuggest,
+    this.onSighting,
+    this.navigate = true,
+  });
   final VoidCallback onNavigate;
   final VoidCallback? onSuggest;
+
+  /// 回報現場狀況 (#154); null where a spot cannot be sighted.
+  final VoidCallback? onSighting;
+
+  /// Whether 導航到這裡 is among them (a split footer leaves 回報現場狀況
+  /// to the details).
+  final bool navigate;
+
+  _DetailActions get withoutSighting =>
+      _DetailActions(onNavigate: onNavigate, onSuggest: onSuggest);
+  _DetailActions get sightingOnly => _DetailActions(
+    onNavigate: onNavigate,
+    onSighting: onSighting,
+    navigate: false,
+  );
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      final stacked = _stackedActions(context, constraints.maxWidth);
-      final width = stacked || onSuggest == null
+      final three = onSighting != null;
+      final stacked = _stackedActions(
+        context,
+        constraints.maxWidth,
+        three: three,
+      );
+      final half = (constraints.maxWidth - 12) / 2;
+      // A tablet's sheet fits all three in a row; on a phone 導航到這裡
+      // keeps the whole first row (canvas).
+      final oneRow = three && !stacked && constraints.maxWidth >= _oneRowThree;
+      final third = (constraints.maxWidth - 24) / 3;
+      final width = oneRow
+          ? third
+          : stacked || onSuggest == null || three
           ? constraints.maxWidth
-          : (constraints.maxWidth - 12) / 2;
+          : half;
+      final secondary = oneRow
+          ? third
+          : (stacked ? constraints.maxWidth : half);
       return Wrap(
         spacing: 12,
         runSpacing: 12,
         children: [
-          SizedBox(
-            width: width,
-            child: AdaptiveButton(
-              label: '導航到這裡',
-              icon: Icons.navigation_outlined,
-              onPressed: onNavigate,
+          if (navigate)
+            SizedBox(
+              width: width,
+              child: AdaptiveButton(
+                label: '導航到這裡',
+                icon: Icons.navigation_outlined,
+                onPressed: onNavigate,
+              ),
             ),
-          ),
-          if (onSuggest != null)
+          if (onSighting != null)
+            SizedBox(
+              width: secondary,
+              child: AdaptiveButton(
+                key: const ValueKey('sighting-action'),
+                label: '回報現場狀況',
+                secondary: true,
+                icon: Icons.location_searching,
+                onPressed: onSighting,
+              ),
+            ),
+          if (onSuggest != null && three)
+            SizedBox(
+              width: secondary,
+              child: AdaptiveButton(
+                label: '修改建議',
+                secondary: true,
+                icon: Icons.edit_outlined,
+                onPressed: onSuggest,
+              ),
+            )
+          else if (onSuggest != null)
             SizedBox(
               width: width,
               child: AdaptiveButton(
@@ -1390,4 +1512,64 @@ class _DetailActions extends StatelessWidget {
       );
     },
   );
+}
+
+/// 「8 分鐘前有騎士回報『有空位』」 and the line under it, in its own bordered
+/// row (canvas 路邊靜態與騎士回報).
+class _SightingRow extends StatelessWidget {
+  const _SightingRow({required this.line});
+  final SightingLine line;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Semantics(
+      container: true,
+      child: Container(
+        key: const ValueKey('rider-sighting'),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          border: Border.all(color: colors.outlineVariant),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 1),
+              child: Icon(
+                Icons.person_outline,
+                size: 22,
+                color: colors.primary,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    line.title,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: colors.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    line.caption,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
