@@ -14,7 +14,7 @@ import 'condition_fields.dart';
 import '../../models/fee.dart';
 import '../../models/parking.dart';
 import '../../models/parking_condition.dart'
-    show ZoneArea, sourceUrlMaxLength, sourceUrlPattern;
+    show ShareKind, ZoneArea, sourceUrlMaxLength, sourceUrlPattern;
 import '../../models/space_kind.dart';
 import '../../models/taiwan_districts.dart';
 import '../../ui/fold_section.dart';
@@ -858,8 +858,20 @@ class _ReportFormState extends State<ReportForm> {
   bool get lot => kind == SpaceKind.offStreet;
 
   ({bool? scooter, bool? heavy}) get defaults => switch (type) {
+    // Decision 60: a 普大共用 bay is marked for heavy bikes too.
+    final t? when sharesHeavy => (
+      scooter: defaultEligibility(widget.store.rules, t, city).scooter,
+      heavy: true,
+    ),
     final t? => defaultEligibility(widget.store.rules, t, city),
     null => (scooter: null, heavy: null),
+  };
+
+  /// Whether the bay as picked is 普大共用 (the kind, or a 限時 bay marked
+  /// for both).
+  bool get sharesHeavy => switch (kind) {
+    final k? => condition.conditionFor(k)?.share == ShareKind.scooterHeavy,
+    null => false,
   };
 
   /// Whether the city's rule, not only the markings, set a vehicle.
@@ -886,7 +898,7 @@ class _ReportFormState extends State<ReportForm> {
     final rule = ruledEligibility(widget.store.rules, type, city);
     return (
       scooter: marked.scooter == null && rule.scooter != null,
-      heavy: marked.heavy == null && rule.heavy != null,
+      heavy: marked.heavy == null && rule.heavy != null && !sharesHeavy,
     );
   }
 

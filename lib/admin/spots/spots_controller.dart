@@ -509,6 +509,7 @@ class SpotsController extends ChangeNotifier {
     final same =
         loaded != null && !loaded.isNew && loaded.sourceId == record?.sourceId;
     record = loaded;
+    _heavyBeforeShare = null;
     formSeq++;
     attempted = false;
     openGroup = loaded == null
@@ -575,6 +576,8 @@ class SpotsController extends ChangeNotifier {
         ...draft,
         'space_type': storedType.name,
         'condition': copyJson(stored),
+        // Back to a stored 普大共用 bay: its stored heavy access.
+        ..._heavyFor(kind, stored: (r.values['heavy_allowed'],)),
       };
       _notify();
       return;
@@ -623,12 +626,37 @@ class SpotsController extends ChangeNotifier {
       ...draft,
       'space_type': type.name,
       'condition': condition?.toJson(),
+      ..._heavyFor(kind),
     };
     _notify();
   }
 
+  /// The heavy bikes' access before 普大共用 set it, as `(value,)`; null
+  /// while it did not.
+  (Object?,)? _heavyBeforeShare;
+
+  /// Decision 60: turning a bay into 普大共用 brings heavy bikes in, 可停
+  /// until the admin changes it; turning it back restores what was there,
+  /// unless the admin changed it since. A change of charge within 普大共用
+  /// leaves the admin's choice.
+  Map<String, Object?> _heavyFor(SpaceKind kind, {(Object?,)? stored}) {
+    final shared =
+        ParkingCondition.fromJson(draft['condition'])?.share ==
+        ShareKind.scooterHeavy;
+    if (kind == SpaceKind.sharedMotorcycle) {
+      if (shared) return const {};
+      _heavyBeforeShare = (draft['heavy_allowed'],);
+      return {'heavy_allowed': stored == null ? true : stored.$1};
+    }
+    final before = _heavyBeforeShare;
+    _heavyBeforeShare = null;
+    if (before == null || draft['heavy_allowed'] != true) return const {};
+    return {'heavy_allowed': before.$1};
+  }
+
   void close() {
     record = null;
+    _heavyBeforeShare = null;
     draft = {};
     saveError = null;
     openError = null;
