@@ -18,6 +18,7 @@ import '../domain/eligibility_display.dart';
 import '../domain/location_check.dart';
 import '../domain/map_viewport.dart';
 import '../models/availability.dart';
+import '../models/holiday_calendar.dart';
 import '../models/parking.dart';
 import 'availability_repository.dart';
 import 'contributions_repository.dart';
@@ -64,6 +65,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     this.client, {
     ParkingRepository? parkingRepository,
     RulesRepository? rulesRepository,
+    HolidayRepository? holidayRepository,
     ContributionsRepository? contributionsRepository,
     DataUpdates? dataUpdates,
     AvailabilitySource? availabilitySource,
@@ -82,6 +84,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
            (client == null ? null : defaultAvailabilityPoll),
        clock = clock ?? DateTime.now,
        rulesRepository = rulesRepository ?? RulesRepository(client),
+       holidayRepository = holidayRepository ?? HolidayRepository(client),
        contributions =
            contributionsRepository ?? ContributionsRepository(client),
        updates = dataUpdates ?? DataUpdates(client) {
@@ -96,6 +99,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   final SupabaseClient? client;
   final ParkingRepository parking;
   final RulesRepository rulesRepository;
+  final HolidayRepository holidayRepository;
   final ContributionsRepository contributions;
   final DataUpdates updates;
   final AvailabilitySource availabilitySource;
@@ -483,6 +487,11 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
       rules = await RulesRepository(null).load();
       error = rulesWarning = '遠端規則讀取失敗，顯示內建規則';
     }
+    // The holidays ride along with the rules; a failed read keeps the
+    // copy in use, which says so only for a year it lacks.
+    try {
+      HolidayCalendar.current = await holidayRepository.load(clock());
+    } catch (_) {}
   }
 
   Future<void> refresh() async {
@@ -542,7 +551,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   ParkingDecision decide(ParkingSpot spot) {
     if (useParkingDecision) {
       // Every rule of the city, so two that disagree read as a conflict.
-      return decideParking(spot, vehicle, rules);
+      return decideParking(spot, vehicle, rules, now: clock());
     }
     // Rolled back: the old judgement, with only the spot's own source.
     final e = legacyEligibility(spot, vehicle, ruleFor(spot));

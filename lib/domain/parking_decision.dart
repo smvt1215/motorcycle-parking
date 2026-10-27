@@ -15,6 +15,7 @@ library;
 import '../models/closure.dart';
 import '../models/fee.dart';
 import '../models/fee_plan.dart';
+import '../models/holiday_calendar.dart';
 import '../models/parking.dart';
 import '../models/parking_condition.dart';
 import 'eligibility.dart';
@@ -558,6 +559,59 @@ List<ScheduleSlot> _slotsFor(ParkingCondition condition, VehicleType v) => [
     if (s.vehicles.contains(_slotVehicle(v))) s,
 ];
 
+String _clockText(int minute) {
+  final m = minute % 1440;
+  return '${(m ~/ 60).toString().padLeft(2, '0')}:'
+      '${(m % 60).toString().padLeft(2, '0')}';
+}
+
+/// Whether [slots] let the rider park at [now] (#120): 現在可停, or 現在不可停
+/// with when the next slot opens (20:00, 明天 08:00, 週一 08:00). 平日 and
+/// 假日 follow [calendar] (decision 61) and a period across midnight
+/// belongs to the day it starts (decision 47); where the calendar lacks
+/// the year, the weekend decides and the text says so.
+String slotNowText(
+  List<ScheduleSlot> slots,
+  DateTime now, {
+  HolidayCalendar? calendar,
+}) {
+  final cal = calendar ?? HolidayCalendar.current;
+  final (today, at) = taipeiDateMinute(now);
+  const last = 7;
+  final spans = [
+    for (final s in slots)
+      ...datedSpans(s.days, s.from, s.to, today, cal, last: last),
+  ];
+  String text;
+  if (spans.any((s) => s.$1 <= at && at < s.$2)) {
+    text = '現在可停';
+  } else {
+    final starts = [
+      for (final (start, _) in spans)
+        if (start > at) start,
+    ]..sort();
+    if (starts.isEmpty) {
+      text = '現在不可停';
+    } else {
+      final next = starts.first, day = next ~/ 1440;
+      final date = DateTime.utc(today.year, today.month, today.day + day);
+      final when = switch (day) {
+        0 => _clockText(next),
+        1 => '明天 ${_clockText(next)}',
+        _ => '週${'一二三四五六日'[date.weekday - 1]} ${_clockText(next)}',
+      };
+      text = '現在不可停，$when 起可停';
+    }
+  }
+  final fellBack = calendarFellBack(
+    [for (final s in slots) s.days],
+    today,
+    cal,
+    last: last,
+  );
+  return fellBack ? '$text（$holidayFallbackNote）' : text;
+}
+
 const _disabledReason =
     '身障專用格：須是經監理站檢驗合格的特製機車，且身障者本人騎乘或同行，'
     '並持專用停車位識別證或掛專用牌照，才可停放';
@@ -573,9 +627,11 @@ ParkingDecision decideParking(
   VehicleType vehicle,
   Iterable<CityRule> rules, {
   DateTime? now,
+  HolidayCalendar? calendar,
 }) {
   final at = now ?? DateTime.now();
   final day = taipeiDay(at);
+  final cal = calendar ?? HolidayCalendar.current;
   final explicit = vehicle == VehicleType.heavy
       ? spot.heavyAllowed
       : spot.scooterAllowed;
@@ -607,7 +663,7 @@ ParkingDecision decideParking(
     );
   }
   if (spot.spaceType == SpaceType.offStreet) {
-    return _lot(spot, vehicle, at, day, explicit, verified, source);
+    return _lot(spot, vehicle, at, day, explicit, verified, source, cal);
   }
   final price = priceAnswer(
     spot.fee?.toJson(),
@@ -622,6 +678,7 @@ ParkingDecision decideParking(
     day,
     trusted,
     source,
+    cal,
   );
   return decision._with(price: price);
 }
@@ -659,6 +716,7 @@ ParkingDecision _street(
   String day,
   bool trusted,
   DecisionBasis source,
+  HolidayCalendar calendar,
 ) {
   final c = spot.condition ?? conditionOf(spot.spaceType);
   if (c == null) {
@@ -768,8 +826,8 @@ ParkingDecision _street(
     return done(
       EligibilityStatus.conditional,
       [
-        '汽機車依時段輪替使用，${vehicle.label}可停時段：'
-            '${slots.map(slotText).join('；')}，請看現場牌面',
+        '汽機車依時段輪替使用，${slotNowText(slots, at, calendar: calendar)}；'
+            '${vehicle.label}可停時段：${slots.map(slotText).join('；')}，請看現場牌面',
         if (timed) _timedReason,
       ].join('；'),
       restriction: RuleRestriction.timeLimited,
@@ -853,8 +911,10 @@ ParkingDecision _street(
     }
   }
 
-  // Time slots (§3.3): shown, not switched by the clock (§7 item 4). Heavy
-  // bikes on a car bay park by law whatever the slots say.
+  // Time slots (§3.3): shown with whether they hold now (#120), which the
+  // reason says without switching the status, so markers and search keep
+  // the bay's standing. Heavy bikes on a car bay park by law whatever the
+  // slots say.
   if (c.schedule.isNotEmpty &&
       !(vehicle == VehicleType.heavy && c.bay == Bay.car) &&
       result.status != EligibilityStatus.notAllowed) {
@@ -877,6 +937,7 @@ ParkingDecision _street(
         status: EligibilityStatus.conditional,
         reason:
             '${limited ? '${result.reason}；' : ''}'
+            '${slotNowText(slots, at, calendar: calendar)}；'
             '${vehicle.label}可停時段：${slots.map(slotText).join('；')}，請看現場牌面',
         restriction: () =>
             limited && kept != null ? kept : RuleRestriction.timeLimited,
@@ -928,8 +989,10 @@ Eligibility _fromVerdict(RuleVerdict v, bool trusted) => switch (v.kind) {
 ZoneDecision _zone(
   ParkingZone z,
   VehicleType vehicle,
+  DateTime at,
   String day,
   PriceAnswer? price,
+  HolidayCalendar calendar,
 ) {
   final c = z.condition ?? zoneConditionOf(z.access);
   final name = z.name;
@@ -1001,7 +1064,9 @@ ZoneDecision _zone(
   final limits = [
     if (c.hasLimit(LimitKind.specialVehicle)) _disabledReason,
     if (ev) _evReason,
-    if (slots.isNotEmpty) '可停時段：${slots.map(slotText).join('；')}',
+    if (slots.isNotEmpty)
+      '${slotNowText(slots, at, calendar: calendar)}；'
+          '可停時段：${slots.map(slotText).join('；')}',
     if (timed) _timedReason,
     // A trial with an end date: open while it lasts, and the rider should
     // know it ends.
@@ -1042,6 +1107,7 @@ ParkingDecision _lot(
   bool? explicit,
   bool verified,
   DecisionBasis source,
+  HolidayCalendar calendar,
 ) {
   // Prices (step 4): a zone's own fee; the lot's only when no zone has one.
   final lotPrice = priceAnswer(
@@ -1055,6 +1121,7 @@ ParkingDecision _lot(
       _zone(
         z,
         vehicle,
+        at,
         day,
         z.fee != null
             ? priceAnswer(z.fee!.toJson(), vehicle)
@@ -1069,6 +1136,7 @@ ParkingDecision _lot(
                 null when anyZoneFee => const PriceAnswer.unknown(),
                 null => lotPrice,
               },
+        calendar,
       ),
   ];
   final notices = [for (final z in zones) ?z.notice];

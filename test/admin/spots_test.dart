@@ -401,7 +401,8 @@ void main() {
       await tapKey('spot-space-sharedMotorcycle');
       await tapKey('spot-space-charge-free');
       expect(find.text('已修改'), findsWidgets);
-      // Back to the stored kind: nothing left to save.
+      // Back to the stored kind: nothing left to save, the heavy bikes'
+      // access 普大共用 set (decision 60) included.
       await tapKey('spot-space-paidMotorcycle');
       expect(find.byType(ChangeBand), findsNothing);
       await tapKey('spot-space-sharedMotorcycle');
@@ -416,6 +417,8 @@ void main() {
           'share': 'scooter_heavy',
           'charge': 'free',
         },
+        // Decision 60: 普大共用 brings heavy bikes in, 可停.
+        'heavy_allowed': true,
       });
     });
 

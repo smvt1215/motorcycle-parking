@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:motorcycle_parking/domain/parking_decision.dart';
 import 'package:motorcycle_parking/features/map/spot_fees.dart';
 import 'package:motorcycle_parking/models/fee.dart';
+import 'package:motorcycle_parking/models/holiday_calendar.dart';
 import 'package:motorcycle_parking/models/parking.dart';
 import 'package:motorcycle_parking/models/parking_condition.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
@@ -275,10 +276,19 @@ void main() {
         feeNowOf(fee, VehicleType.scooter, taipei(2, 0, day: 30)).caption,
         '08:00 起每小時 10 元',
       );
-      // Sunday night → Monday.
+      // Sunday night → Monday: 2026-11-02 works.
+      expect(
+        feeNowOf(
+          fee,
+          VehicleType.scooter,
+          DateTime.utc(2026, 11, 1, 13),
+        ).caption,
+        '08:00 起每小時 10 元',
+      );
+      // 2026-10-26 is a Monday off (補假), so 假日 (decision 61).
       expect(
         feeNowOf(fee, VehicleType.scooter, taipei(21, 0, day: 25)).caption,
-        '08:00 起每小時 10 元',
+        '08:00 起每小時 20 元',
       );
     });
 
@@ -458,6 +468,110 @@ void main() {
       expect(missing.main.tone, FeeTone.unconfirmed);
       final none = feeNowOf(const Fee(), VehicleType.scooter, taipei(9, 0));
       expect(none.main.text, '費率未確認，請依現場公告');
+    });
+  });
+
+  group('國定假日算假日（決定 61）', () {
+    /// 平日 08:00–20:00 每小時 10 元、20:00–08:00 免費; 假日全天每小時 20 元.
+    final fee = Fee.fromJson({
+      'scooter': {
+        'mode': 'by_time',
+        'periods': [
+          {
+            'days': 'weekday',
+            'from': '08:00',
+            'to': '20:00',
+            'rate': {'mode': 'hourly', 'amount': 10, 'per_minutes': 60},
+          },
+          {
+            'days': 'weekday',
+            'from': '20:00',
+            'to': '08:00',
+            'rate': {'mode': 'free'},
+          },
+          {
+            'days': 'holiday',
+            'rate': {'mode': 'hourly', 'amount': 20, 'per_minutes': 60},
+          },
+        ],
+      },
+    });
+    DateTime at(int y, int m, int d, int h, [int min = 0]) =>
+        DateTime.utc(y, m, d, h, min).subtract(const Duration(hours: 8));
+
+    test('2026-06-19 端午（週五）套假日費率', () {
+      final now = feeNowOf(fee, VehicleType.scooter, at(2026, 6, 19, 10));
+      expect(now.label, '機車費率・全天');
+      expect(now.main.text, '每小時 20 元');
+      expect(now.caption, isNull);
+      // Without the calendar it is a Friday.
+      expect(
+        feeNowOf(
+          fee,
+          VehicleType.scooter,
+          at(2026, 6, 19, 10),
+          calendar: HolidayCalendar.none,
+        ).main.text,
+        '每小時 10 元',
+      );
+    });
+
+    test('補假（2026-10-26 週一）是假日；隔天週二回到平日', () {
+      expect(
+        feeNowOf(fee, VehicleType.scooter, at(2026, 10, 26, 10)).main.text,
+        '每小時 20 元',
+      );
+      expect(
+        feeNowOf(fee, VehicleType.scooter, at(2026, 10, 27, 10)).main.text,
+        '每小時 10 元',
+      );
+    });
+
+    test('跨午夜：週四平日夜間延續到端午早上，之後才換假日費率（決定 47）', () {
+      // 06-18 Thursday 23:00 is 平日's night; 端午's 假日 period starts at
+      // 00:00, later than Thursday's night, so it holds from then.
+      final night = feeNowOf(fee, VehicleType.scooter, at(2026, 6, 18, 23));
+      expect(night.main.text, '此時段不收費');
+      expect(night.caption, '00:00 起每小時 20 元');
+      // 端午 07:00: the 假日 period (00:00) started after Thursday's night.
+      expect(
+        feeNowOf(fee, VehicleType.scooter, at(2026, 6, 19, 7)).main.text,
+        '每小時 20 元',
+      );
+      // Friday 端午 21:00 is not 平日, so no free night.
+      expect(
+        feeNowOf(fee, VehicleType.scooter, at(2026, 6, 19, 21)).main.text,
+        '每小時 20 元',
+      );
+      // Sunday 06-21 night: Monday's small hours belong to Sunday, a
+      // 假日 without a night period, so nothing is announced.
+      final sunday = feeNowOf(fee, VehicleType.scooter, at(2026, 6, 21, 23));
+      expect(sunday.caption, isNull);
+    });
+
+    test('補行上班的週六是平日', () {
+      const cal = HolidayCalendar(years: {2025}, work: {'2025-02-08'});
+      expect(
+        feeNowOf(
+          fee,
+          VehicleType.scooter,
+          at(2025, 2, 8, 10),
+          calendar: cal,
+        ).main.text,
+        '每小時 10 元',
+      );
+    });
+
+    test('沒有日曆的年份退回週六日是假日，並標示', () {
+      final now = feeNowOf(fee, VehicleType.scooter, at(2030, 6, 19, 10));
+      expect(now.main.text, '每小時 10 元');
+      expect(now.caption, '20:00 起不收費・$holidayFallbackNote');
+      // Every day only: the calendar does not matter.
+      final allDays = Fee(heavy: dayNight());
+      expect(
+        feeNowOf(allDays, VehicleType.heavy, at(2030, 6, 19, 10)).caption,
+        isNot(contains(holidayFallbackNote)),
+      );
     });
   });
 

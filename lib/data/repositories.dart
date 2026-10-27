@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 import '../core/address_search.dart';
+import '../models/holiday_calendar.dart';
 import '../models/parking.dart';
 import '../models/spot_history.dart';
 import '../domain/map_viewport.dart';
@@ -61,6 +62,34 @@ class RulesRepository {
       }
     }
     return rules;
+  }
+}
+
+/// The national holidays (decision 61): the backend's `holiday_calendar()`
+/// for this year and the next over the app's copy ([builtinHolidays]).
+class HolidayRepository {
+  HolidayRepository(this.client);
+  final SupabaseClient? client;
+
+  /// The calendar for [now]'s year (in Taiwan) and the next. Without a
+  /// client, or when the backend lacks the function (not yet migrated) or
+  /// sends something else, the app's copy stays; other failures throw.
+  Future<HolidayCalendar> load(DateTime now) async {
+    if (client == null) return builtinHolidays;
+    final year = now.toUtc().add(const Duration(hours: 8)).year;
+    try {
+      final json = await client!.rpc<Object?>(
+        'holiday_calendar',
+        params: {'p_from': year, 'p_to': year + 1},
+      );
+      final remote = HolidayCalendar.fromJson(json);
+      return remote == null
+          ? builtinHolidays
+          : builtinHolidays.overriddenBy(remote);
+    } on PostgrestException catch (e) {
+      if (e.code != 'PGRST202') rethrow;
+      return builtinHolidays;
+    }
   }
 }
 
