@@ -107,4 +107,28 @@ void main() {
     expect(find.byKey(const ValueKey('inside')), findsOne);
     expect(find.text('還沒填'), findsNothing);
   });
+
+  testWidgets('收起的分組顯示不重複的點位數，不是各種類相加', (tester) async {
+    await pump(
+      tester,
+      SpaceKindList(
+        value: null,
+        // A shared toll bay counts as 收費 and as 普大共用, once in its group.
+        counts: const {
+          SpaceKind.paidMotorcycle: 2,
+          SpaceKind.sharedMotorcycle: 1,
+        },
+        groupCounts: const {SpaceKindGroup.motorcycle: 2},
+        onChanged: (_) {},
+      ),
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('space-group-motorcycle')),
+        matching: find.text('2'),
+      ),
+      findsOne,
+    );
+    expect(find.text('3'), findsNothing);
+  });
 }
