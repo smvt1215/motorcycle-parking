@@ -691,6 +691,9 @@ begin
     if v_owner is distinct from p_user then raise exception 'only owner can edit' using errcode='42501';end if;
     if v_action='delete' then delete from community_spots where id=v_id;
     else
+      -- Edit history (decision 56): the trigger records this update as the
+      -- owner's own edit (車友更新).
+      perform set_config('app.owner_update',v_id::text,true);
       update community_spots set name=btrim(v_spot->>'name'),fee_note=coalesce(v_spot->>'fee_note',fee_note),note=coalesce(v_spot->>'note',note),status='pending',last_confirmed_at=null,updated_at=now() where id=v_id;
       delete from spot_votes where spot_id=v_id;
     end if;
@@ -742,7 +745,7 @@ AS $function$
   select array['name','lat','lng','city','district','address','road_segment','space_type','condition',
     'facility_types','parking_access','parking_zones','zones_complete','scooter_allowed','heavy_allowed',
     'scooter_verified_at','heavy_verified_at','fee','fee_note','fee_plan','fee_plans','fee_source_text',
-    'scooter_total','entrance_note','parking_guide','special_rules','photo_urls','note','status','hidden',
+    'scooter_total','entrance_note','parking_guide','special_rules','photo_urls','note','closure','status','hidden',
     'source_name','source_url','effective_date','license_note','contributor_name'];
 $function$;
 
@@ -754,7 +757,7 @@ CREATE OR REPLACE FUNCTION public.spot_history_public_fields()
 AS $function$
   select array['name','lat','lng','city','district','address','road_segment','space_type','condition',
     'facility_types','parking_access','parking_zones','zones_complete','scooter_allowed','heavy_allowed',
-    'fee','fee_note','scooter_total','entrance_note','parking_guide','special_rules','photo_urls','note',
+    'fee','fee_note','scooter_total','entrance_note','parking_guide','special_rules','photo_urls','note','closure',
     'source_name','source_url','effective_date','license_note'];
 $function$;
 
