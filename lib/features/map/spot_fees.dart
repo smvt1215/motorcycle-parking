@@ -34,27 +34,17 @@ const _seeBoard = '往下看完整收費公告牌';
 String feeNowLabel(VehicleType vehicle) =>
     vehicle == VehicleType.scooter ? '機車費率' : '大型重機費率';
 
-/// The time of day in Taiwan, in minutes, and the weekday bit (Monday 1).
-({int minute, int day}) _taipei(DateTime now) {
+/// The minute of the week in Taiwan, Monday 00:00 first, as
+/// [feePeriodSpans] counts.
+int _taipeiWeekMinute(DateTime now) {
   final t = now.toUtc().add(const Duration(hours: 8));
-  return (minute: t.hour * 60 + t.minute, day: 1 << (t.weekday - 1));
+  return (t.weekday - 1) * 1440 + t.hour * 60 + t.minute;
 }
 
-int? _minutes(String? hhmm) {
-  if (hhmm == null || !RegExp(timePattern).hasMatch(hhmm)) return null;
-  return int.parse(hhmm.substring(0, 2)) * 60 + int.parse(hhmm.substring(3));
-}
-
-/// Whether [p] covers [minute] of a day it applies to. Days are read by
-/// today's weekday (decision 26), as the board groups them, so a period
-/// across midnight covers both ends of the same day.
-bool _covers(FeePeriod p, int minute) {
-  if (p.from == null && p.to == null) return true;
-  final from = _minutes(p.from), to = _minutes(p.to);
-  if (from == null || to == null || from == to) return false;
-  return from < to
-      ? minute >= from && minute < to
-      : minute >= from || minute < to;
+String _hhmm(int minute) {
+  final m = minute % 1440;
+  return '${(m ~/ 60).toString().padLeft(2, '0')}:'
+      '${(m % 60).toString().padLeft(2, '0')}';
 }
 
 /// A caption drops the board's bracketed rule (零時重算, 延長時間未確認): the
@@ -102,12 +92,28 @@ FeeNow feeNowOf(Fee fee, VehicleType vehicle, DateTime now) {
       caption: lines.length > 1 ? _short(lines[1].text) : null,
     );
   }
-  final at = _taipei(now);
-  final today = [
-    for (final p in rate.periods ?? const <FeePeriod>[])
-      if (FeeWords.dayMask(p.days) & at.day != 0) p,
-  ];
-  final current = today.where((p) => _covers(p, at.minute)).firstOrNull;
+  // Decision 47: a period across midnight belongs to the day it starts,
+  // so 平日 20:00–08:00 holds from Friday 20:00 to Saturday 08:00. Where
+  // periods overlap, the one that started last holds (假日 06:00 starts
+  // charging even if Friday's night period runs to 08:00).
+  final periods = rate.periods ?? const <FeePeriod>[];
+  final spans = [for (final p in periods) feePeriodSpans(p.days, p.from, p.to)];
+  FeePeriod? on(int minute) {
+    FeePeriod? best;
+    var since = weekMinutes;
+    for (final (i, list) in spans.indexed) {
+      for (final (start, end) in list) {
+        final elapsed = (minute - start) % weekMinutes;
+        if (elapsed < end - start && elapsed < since) {
+          (best, since) = (periods[i], elapsed);
+        }
+      }
+    }
+    return best;
+  }
+
+  final at = _taipeiWeekMinute(now);
+  final current = on(at);
   final lines = current == null
       ? const <FeeLine>[]
       : feeRateLines(current.rate, pct);
@@ -123,30 +129,17 @@ FeeNow feeNowOf(Fee fee, VehicleType vehicle, DateTime now) {
     );
   }
   final time = current.from == null ? '全天' : '${current.from}–${current.to}';
-  // The next change: where this period ends, on the day it ends; or, for
-  // a period across midnight entered before midnight, 00:00 when the new
-  // day's periods differ (days are read by the current weekday, decision
-  // 26), whichever comes first (Codex P2).
-  final periods = rate.periods ?? const <FeePeriod>[];
-  final end = _minutes(current.to);
-  final from = _minutes(current.from);
-  final tomorrow =
-      from != null && end != null && from > end && at.minute >= from;
-  final nextDay = at.day == 64 ? 1 : at.day << 1;
-  FeePeriod? on(int day, int minute) => periods
-      .where((p) => FeeWords.dayMask(p.days) & day != 0 && _covers(p, minute))
-      .firstOrNull;
+  // The next change within a day: the first minute whose rate differs,
+  // so the next period's own boundary counts, not this one's (#155 item
+  // 18).
   String? nextAt;
   FeePeriod? next;
-  if (tomorrow) {
-    final midnight = on(nextDay, 0);
-    if (midnight == null || midnight.rate != current.rate) {
-      (nextAt, next) = ('00:00', midnight);
-    } else {
-      (nextAt, next) = (current.to, on(nextDay, end));
+  for (var k = 1; k < 1440; k++) {
+    final p = on(at + k);
+    if (p?.rate != current.rate) {
+      (nextAt, next) = (_hhmm(at + k), p);
+      break;
     }
-  } else if (end != null) {
-    (nextAt, next) = (current.to, on(at.day, end));
   }
   final nextLines = next == null ? null : feeRateLines(next.rate, pct);
   final free = current.rate.mode == FeeMode.free;
@@ -312,33 +305,45 @@ class FeeSectionBoard {
   final String? trialEnded;
 }
 
+/// Whether [z] has cars: a car bay, or a car rate given as text.
+bool _zoneHasCars(ParkingZone z) =>
+    (zoneFeeVehicles(z.condition ?? zoneConditionOf(z.access), null) ??
+            const [])
+        .contains(FeeVehicle.car) ||
+    !_placeholder(z.carFeeNote);
+
 /// A zone's text rates; an empty text is a vehicle the zone serves that
-/// the texts leave out (費率未確認, never another vehicle's price).
-List<(FeeVehicle?, String)> _zoneLegacy(ParkingZone z, {bool carOnly = false}) {
+/// the texts leave out (費率未確認, never another vehicle's price). A car
+/// price is only ever a structured rate (decision 45): the zone's old car
+/// text is not shown, and the car reads unconfirmed.
+List<(FeeVehicle?, String)> _zoneLegacy(ParkingZone z) {
   bool has(String s) => !_placeholder(s);
   final texts = {
-    FeeVehicle.scooter: carOnly ? '' : z.scooterFeeNote.trim(),
-    FeeVehicle.heavy: carOnly ? '' : z.heavyFeeNote.trim(),
-    FeeVehicle.car: z.carFeeNote.trim(),
+    FeeVehicle.scooter: z.scooterFeeNote.trim(),
+    FeeVehicle.heavy: z.heavyFeeNote.trim(),
+    FeeVehicle.car: '',
   };
   final named = texts.values.any(has);
-  final serves = carOnly
-      ? const [FeeVehicle.car]
-      : zoneFeeVehicles(z.condition ?? zoneConditionOf(z.access), null) ??
-            const [FeeVehicle.scooter, FeeVehicle.heavy];
+  final serves = [
+    ...zoneFeeVehicles(z.condition ?? zoneConditionOf(z.access), null) ??
+        const [FeeVehicle.scooter, FeeVehicle.heavy],
+    if (_zoneHasCars(z)) FeeVehicle.car,
+  ];
   final note = z.feeNote.trim();
   return [
     if (named)
       for (final v in FeeVehicle.values)
         if (has(texts[v]!)) (v, texts[v]!) else if (serves.contains(v)) (v, ''),
-    if (!carOnly && has(note) && !texts.values.contains(note)) (null, note),
+    if (has(note) && !texts.values.contains(note)) (null, note),
   ];
 }
 
 /// The boards the details' 收費 section lists, in the lot's zone order
 /// (design §8.4). A zone's own rate first; the lot's when no zone has one,
-/// listed once as 全場 with only zones' own car text after it; text rates
-/// where nothing is structured. [decision] marks a zone whose trial ended.
+/// listed once as 全場; text rates where nothing is structured. A car's
+/// rate is only ever structured (decision 45): with none, the car reads
+/// 費率未確認，請依現場公告, never a zone's old car text. [decision] marks a
+/// zone whose trial ended.
 List<FeeSectionBoard> feeSectionBoards(
   ParkingSpot spot,
   ParkingDecision? decision,
@@ -362,15 +367,23 @@ List<FeeSectionBoard> feeSectionBoards(
     ];
   }
   if (lotWideFee(spot) case final fee?) {
+    // A lot with car zones lists the car, unconfirmed when the lot's rate
+    // has none.
+    final cars = fee.car == null && spot.zones.any(_zoneHasCars);
     return [
-      FeeSectionBoard(title: '全場', fee: fee),
-      for (final (i, z) in spot.zones.indexed)
-        if (z.carFeeNote.trim().isNotEmpty)
-          FeeSectionBoard(
-            title: name(z),
-            legacy: _zoneLegacy(z, carOnly: true),
-            trialEnded: ended(i),
-          ),
+      FeeSectionBoard(
+        title: '全場',
+        fee: fee,
+        vehicles: cars
+            ? [
+                for (final v in FeeVehicle.values)
+                  if (fee.textOf(v.wire) != null ||
+                      v == FeeVehicle.heavy ||
+                      v == FeeVehicle.car)
+                    v,
+              ]
+            : null,
+      ),
     ];
   }
   final boards = [
@@ -381,18 +394,17 @@ List<FeeSectionBoard> feeSectionBoards(
           fee: z.fee,
           vehicles: z.fee == null
               ? null
-              : zoneFeeVehicles(
+              : switch (zoneFeeVehicles(
                   z.condition ?? zoneConditionOf(z.access),
                   z.fee,
-                ),
-          legacy: z.fee == null
-              ? _zoneLegacy(z)
-              : [
-                  // A car price stays as text until the fee has one (as
-                  // ParkingZone.carFeeText reads it).
-                  if (z.fee!.car == null && !_placeholder(z.carFeeNote))
-                    (FeeVehicle.car, z.carFeeNote.trim()),
-                ],
+                )) {
+                  final list? when _zoneHasCars(z) => {
+                    ...list,
+                    FeeVehicle.car,
+                  }.toList(),
+                  final list => list,
+                },
+          legacy: z.fee == null ? _zoneLegacy(z) : const [],
           trialEnded: ended(i),
         ),
   ];
@@ -471,30 +483,12 @@ class _SectionBoard extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final vehicles = board.vehicles;
     final shown = vehicles == null || vehicles.contains(first) ? first : null;
-    final textCar =
-        board.fee != null && board.legacy.any((l) => l.$1 == FeeVehicle.car);
     final Widget plate = board.legacy.isNotEmpty && board.fee == null
         ? _LegacyBoard(board.legacy, first: first)
-        : Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              FeeBoard(
-                fee: board.fee ?? const Fee(),
-                first: board.fee == null ? null : shown,
-                vehicles: board.fee == null || !textCar
-                    ? vehicles
-                    : [
-                        for (final v
-                            in vehicles ??
-                                const [FeeVehicle.scooter, FeeVehicle.heavy])
-                          if (v != FeeVehicle.car) v,
-                      ],
-              ),
-              if (textCar) ...[
-                const SizedBox(height: 8),
-                _LegacyBoard(board.legacy, first: first),
-              ],
-            ],
+        : FeeBoard(
+            fee: board.fee ?? const Fee(),
+            first: board.fee == null ? null : shown,
+            vehicles: vehicles,
           );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -614,7 +608,10 @@ class _LegacyBoard extends StatelessWidget {
                                             color: colors.unconfirmed,
                                           ),
                                         ),
-                                        const TextSpan(text: ' 費率未確認'),
+                                        TextSpan(
+                                          text:
+                                              ' ${vehicle == FeeVehicle.car ? carUnconfirmed : '費率未確認'}',
+                                        ),
                                       ],
                                     ),
                                     textAlign: TextAlign.end,
