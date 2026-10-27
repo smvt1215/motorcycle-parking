@@ -64,6 +64,7 @@ class LocationPicker extends StatefulWidget {
     this.height = 320,
     this.mapBuilder,
     this.fills = const {},
+    this.collapsed = false,
   });
 
   final double lat, lng;
@@ -93,15 +94,30 @@ class LocationPicker extends StatefulWidget {
   /// Tests swap the map for a placeholder.
   final LocationMapBuilder? mapBuilder;
 
+  /// A short viewport (the keyboard is up): the map folds into
+  /// 「開地圖調整」, which opens it full screen, so it never squeezes the
+  /// form (admin site, C6 畫布 KeyboardForm).
+  final bool collapsed;
+
   @override
   State<LocationPicker> createState() => _LocationPickerState();
 }
 
-class _LocationPickerState extends State<LocationPicker> {
+class _LocationPickerState extends State<LocationPicker>
+    with AutomaticKeepAliveClientMixin {
   LocationFix? fix;
   AddressCandidate? found;
   bool locating = false;
   String? locateError;
+
+  /// An address search is open.
+  bool _searching = false;
+  final _noteKey = GlobalKey(debugLabel: 'location-found-note');
+
+  /// A list that scrolls the picker away (a keyboard shrinking the page
+  /// while the search is open) must not drop the search or its note (S1).
+  @override
+  bool get wantKeepAlive => _searching || found != null || fix != null;
 
   /// The marker still sits where the device put it, so its accuracy applies.
   bool get atFix =>
@@ -130,10 +146,107 @@ class _LocationPickerState extends State<LocationPicker> {
   }
 
   Future<void> search() async {
-    final picked = await widget.onSearch!(context);
+    setState(() => _searching = true);
+    updateKeepAlive();
+    final AddressCandidate? picked;
+    try {
+      picked = await widget.onSearch!(context);
+    } finally {
+      if (mounted) {
+        setState(() => _searching = false);
+        updateKeepAlive();
+      }
+    }
     if (picked == null || !mounted) return;
     setState(() => found = picked);
+    updateKeepAlive();
     widget.onChanged(picked.lat, picked.lng);
+    // The note may land under a pinned action bar or off screen (S2).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final note = _noteKey.currentContext;
+      if (note == null || !note.mounted) return;
+      // Kept alive off screen, the note is not laid out yet; it shows when
+      // the admin scrolls back.
+      final box = note.findRenderObject();
+      if (box is! RenderBox || !box.hasSize) return;
+      Scrollable.ensureVisible(
+        note,
+        duration: const Duration(milliseconds: 200),
+        alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+      );
+    });
+  }
+
+  /// The full-screen map behind「開地圖調整」; moves go to [onChanged] as
+  /// they happen.
+  Future<void> openMap() async {
+    var lat = widget.lat, lng = widget.lng;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => Dialog.fullscreen(
+        child: StatefulBuilder(
+          builder: (context, setLocal) => SafeArea(
+            child: LayoutBuilder(
+              builder: (context, box) => ListView(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Semantics(
+                          header: true,
+                          child: Text(
+                            '調整位置',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                        ),
+                      ),
+                      FilledButton(
+                        key: const ValueKey('location-map-done'),
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('完成'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  LocationPicker(
+                    lat: lat,
+                    lng: lng,
+                    originLat: widget.originLat,
+                    originLng: widget.originLng,
+                    nudgeButtons: widget.nudgeButtons,
+                    touchMarker: widget.touchMarker,
+                    mapBuilder: widget.mapBuilder,
+                    fills: widget.fills,
+                    // The address search lives here while the form is
+                    // short; its note shows on the form afterwards too.
+                    onSearch: switch (widget.onSearch) {
+                      final search? => (context) async {
+                        final picked = await search(context);
+                        if (picked != null && mounted) {
+                          setState(() => found = picked);
+                          updateKeepAlive();
+                        }
+                        return picked;
+                      },
+                      null => null,
+                    },
+                    height: (box.maxHeight - 260).clamp(200.0, 640.0),
+                    onChanged: (a, b) {
+                      setLocal(() {
+                        lat = a;
+                        lng = b;
+                      });
+                      widget.onChanged(a, b);
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   /// The marker still sits on the search result, so its note applies.
@@ -143,9 +256,47 @@ class _LocationPickerState extends State<LocationPicker> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final colors = Theme.of(context).colorScheme;
     final lat = widget.lat, lng = widget.lng;
     final originLat = widget.originLat, originLng = widget.originLng;
+    if (widget.collapsed) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          OutlinedButton(
+            key: const ValueKey('location-open-map'),
+            onPressed: openMap,
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(48, 48),
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              alignment: AlignmentDirectional.centerStart,
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.map_outlined, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '位置：${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: colors.onSurface),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Text('開地圖調整'),
+              ],
+            ),
+          ),
+          if (atFound)
+            KeyedSubtree(
+              key: _noteKey,
+              child: _FoundNote(found: found!, fills: widget.fills),
+            ),
+        ],
+      );
+    }
     final moved = originLat == null || originLng == null
         ? null
         : distanceMeters(originLat, originLng, lat, lng);
@@ -173,7 +324,11 @@ class _LocationPickerState extends State<LocationPicker> {
             icon: const Icon(Icons.search),
             label: const Text('搜尋門牌、路段或路口'),
           ),
-          if (atFound) _FoundNote(found: found!, fills: widget.fills),
+          if (atFound)
+            KeyedSubtree(
+              key: _noteKey,
+              child: _FoundNote(found: found!, fills: widget.fills),
+            ),
           const SizedBox(height: 8),
         ],
         Semantics(

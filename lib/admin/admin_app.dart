@@ -7,7 +7,9 @@ import 'package:material_ui/material_ui.dart';
 import '../models/parking.dart';
 import 'admin_auth_page.dart';
 import 'admin_controller.dart';
+import 'admin_layout.dart';
 import 'admin_mfa_page.dart';
+import 'admin_shell.dart';
 import 'admin_theme.dart';
 import 'import/file_pick.dart';
 import 'import/import_controller.dart';
@@ -25,44 +27,6 @@ import 'spots/spots_controller.dart';
 import 'spots/spots_page.dart';
 import 'users/users_controller.dart';
 import 'users/users_page.dart';
-
-const _tabs = [
-  (
-    path: '/review',
-    label: '審核',
-    icon: Icons.fact_check_outlined,
-    title: '待審回報',
-    description: '騎士送出的修改建議與現場回報，會集中在這裡確認。',
-  ),
-  (
-    path: '/spots',
-    label: '點位',
-    icon: Icons.location_on_outlined,
-    title: '停車點位',
-    description: '在這裡查詢官方與社群停車點，確認位置與停放資訊。',
-  ),
-  (
-    path: '/rules',
-    label: '規則',
-    icon: Icons.rule_outlined,
-    title: '各縣市停車規則',
-    description: '設定各縣市普通機車與大型重機的路邊停放規則並發布新版本。',
-  ),
-  (
-    path: '/imports',
-    label: '匯入',
-    icon: Icons.file_upload_outlined,
-    title: '匯入停車資料',
-    description: '在這裡匯入整理好的停車資料，並確認變更內容。',
-  ),
-  (
-    path: '/users',
-    label: '使用者',
-    icon: Icons.people_outline,
-    title: '使用者管理',
-    description: '在這裡查看使用者的回報狀況與帳號管理資訊。',
-  ),
-];
 
 class AdminApp extends StatefulWidget {
   const AdminApp({
@@ -102,24 +66,37 @@ class AdminApp extends StatefulWidget {
 }
 
 class _AdminAppState extends State<AdminApp> {
+  // A write on one page refreshes every other page showing the same data:
+  // lists, map markers, the open form and the pending count (決定 49).
   late final ReviewController _review =
       widget.review ??
       ReviewController(
         widget.controller.gateway,
         onResolved: () => widget.controller.refreshCount(),
+        onSpotChanged: (id) => _spotsWritten({id}),
       );
   late final SpotsController _spots = SpotsController(
     widget.controller.gateway,
+    onChanged: _reviewStale,
   );
   late final ImportController _imports = ImportController(
     widget.controller.gateway,
+    onApplied: (ids) {
+      _spotsWritten(ids);
+      _reviewStale();
+    },
   );
   late final FeeConversionController _fees = FeeConversionController(
     widget.controller.gateway,
+    onApplied: (ids) {
+      _spotsWritten(ids);
+      _reviewStale();
+    },
   );
   late final RulesController _rules = RulesController(
     widget.controller.gateway,
     bundled: widget.bundledRules ?? bundledRules,
+    onPublished: () => _spotMap.reloadRules(),
   );
   late final UsersController _users = UsersController(
     widget.controller.gateway,
@@ -128,6 +105,19 @@ class _AdminAppState extends State<AdminApp> {
     widget.controller.gateway,
   );
   String? _reviewUser;
+
+  /// Spots changed outside the spots page.
+  void _spotsWritten(Set<String> ids) {
+    _spots.refresh(ids);
+    _spotMap.refresh();
+  }
+
+  /// Spots changed outside the review page: the queue's current values
+  /// and the hidden list read again.
+  void _reviewStale() {
+    if (_review.loaded) _review.load();
+    if (_review.hiddenLoaded) _review.loadHidden();
+  }
 
   @override
   void initState() {
@@ -185,7 +175,7 @@ class _AdminAppState extends State<AdminApp> {
       ),
       ShellRoute(
         builder: (context, state, child) => _watch(
-          () => _AdminShell(
+          () => AdminShell(
             controller: widget.controller,
             path: state.uri.path,
             onSignOut: _signOut,
@@ -201,11 +191,17 @@ class _AdminAppState extends State<AdminApp> {
           for (final path in ['/review', '/review/:id'])
             GoRoute(
               path: path,
-              builder: (context, state) => ReviewPage(
-                admin: widget.controller,
-                review: _review,
-                selectedId: state.pathParameters['id'],
-                mapBuilder: widget.reviewMapBuilder,
+              // One page for the queue and every report (決定 48): picking
+              // a report swaps the detail; the queue keeps its scroll,
+              // filter and selection.
+              pageBuilder: (context, state) => MaterialPage(
+                key: const ValueKey('review'),
+                child: ReviewPage(
+                  admin: widget.controller,
+                  review: _review,
+                  selectedId: state.pathParameters['id'],
+                  mapBuilder: widget.reviewMapBuilder,
+                ),
               ),
             ),
           for (final path in ['/spots', '/spots/:id'])
@@ -239,19 +235,25 @@ class _AdminAppState extends State<AdminApp> {
           for (final path in ['/rules', '/rules/:city/:vehicle'])
             GoRoute(
               path: path,
-              builder: (context, state) => RulesPage(
-                rules: _rules,
-                city: state.pathParameters['city'],
-                vehicle: VehicleType.values
-                    .asNameMap()[state.pathParameters['vehicle']],
+              pageBuilder: (context, state) => MaterialPage(
+                key: const ValueKey('rules'),
+                child: RulesPage(
+                  rules: _rules,
+                  city: state.pathParameters['city'],
+                  vehicle: VehicleType.values
+                      .asNameMap()[state.pathParameters['vehicle']],
+                ),
               ),
             ),
           for (final path in ['/users', '/users/:id'])
             GoRoute(
               path: path,
-              builder: (context, state) => UsersPage(
-                users: _users,
-                selectedId: state.pathParameters['id'],
+              pageBuilder: (context, state) => MaterialPage(
+                key: const ValueKey('users'),
+                child: UsersPage(
+                  users: _users,
+                  selectedId: state.pathParameters['id'],
+                ),
               ),
             ),
           GoRoute(
@@ -311,212 +313,11 @@ class _AdminAppState extends State<AdminApp> {
       theme: adminTheme(Brightness.light),
       darkTheme: adminTheme(Brightness.dark),
       themeMode: widget.themeMode,
-      // ignore: deprecated_member_use
-      builder: (context, child) => MaterialUiCompatibilityBridge(child: child!),
+      builder: (context, child) =>
+          // ignore: deprecated_member_use
+          MaterialUiCompatibilityBridge(child: AdminViewport(child: child!)),
     ),
   );
-}
-
-class _AdminShell extends StatelessWidget {
-  const _AdminShell({
-    required this.controller,
-    required this.path,
-    required this.onSignOut,
-    required this.child,
-  });
-  final AdminController controller;
-  final String path;
-  final VoidCallback onSignOut;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: colors.surface,
-                border: Border(
-                  bottom: BorderSide(color: colors.outlineVariant),
-                ),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 14,
-                ),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final compact = constraints.maxWidth < 1040;
-                    final navigation = Semantics(
-                      label: '管理功能',
-                      container: true,
-                      child: Wrap(
-                        spacing: 4,
-                        runSpacing: 4,
-                        children: [
-                          for (final tab in _tabs)
-                            Semantics(
-                              selected: _section(path) == tab.path,
-                              child: TextButton(
-                                key: ValueKey('nav${tab.path}'),
-                                onPressed: () => context.go(tab.path),
-                                style: TextButton.styleFrom(
-                                  foregroundColor: _section(path) == tab.path
-                                      ? colors.onSurface
-                                      : colors.onSurfaceVariant,
-                                  backgroundColor: _section(path) == tab.path
-                                      ? colors.primary.withValues(alpha: .1)
-                                      : null,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 14,
-                                    vertical: 12,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      tab.label,
-                                      style: TextStyle(
-                                        fontWeight: _section(path) == tab.path
-                                            ? FontWeight.w700
-                                            : FontWeight.w400,
-                                      ),
-                                    ),
-                                    if (tab.path == '/review') ...[
-                                      const SizedBox(width: 8),
-                                      Semantics(
-                                        label: controller.pendingCount == null
-                                            ? '待審數尚未取得'
-                                            : '${controller.pendingCount} 筆待審',
-                                        child: Container(
-                                          constraints: const BoxConstraints(
-                                            minWidth: 24,
-                                          ),
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 7,
-                                            vertical: 1,
-                                          ),
-                                          alignment: Alignment.center,
-                                          decoration: BoxDecoration(
-                                            color: AdminColors.yellow,
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
-                                          ),
-                                          child: ExcludeSemantics(
-                                            child: Text(
-                                              controller.pendingCount
-                                                      ?.toString() ??
-                                                  '—',
-                                              style: const TextStyle(
-                                                color: AdminColors.asphalt,
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.w700,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    );
-                    final account = Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (!compact) ...[
-                          Icon(
-                            Icons.verified_user_outlined,
-                            size: 18,
-                            color: colors.onSurfaceVariant,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            '兩步驟驗證已通過',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: colors.onSurfaceVariant,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                        ],
-                        IconButton(
-                          tooltip:
-                              '帳號安全${controller.access.email == null ? '' : '：${controller.access.email}'}',
-                          onPressed: () => context.go('/security'),
-                          icon: const Icon(Icons.manage_accounts_outlined),
-                        ),
-                        IconButton(
-                          tooltip: '登出',
-                          onPressed: controller.busy ? null : onSignOut,
-                          icon: const Icon(Icons.logout),
-                        ),
-                      ],
-                    );
-                    return compact
-                        ? Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  const Expanded(child: AdminBrand()),
-                                  account,
-                                ],
-                              ),
-                              const SizedBox(height: 12),
-                              navigation,
-                            ],
-                          )
-                        : Row(
-                            children: [
-                              const SizedBox(width: 210, child: AdminBrand()),
-                              const SizedBox(width: 20),
-                              Expanded(child: navigation),
-                              account,
-                            ],
-                          );
-                  },
-                ),
-              ),
-            ),
-            if (controller.error != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                child: AdminNotice(controller.error!, error: true),
-              ),
-            if (controller.authenticatorCount < 2 && path != '/security')
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                child: Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 12,
-                  runSpacing: 8,
-                  children: [
-                    const Text('尚未登記兩個驗證器 App，請補上備援方式。'),
-                    TextButton.icon(
-                      onPressed: () => context.go('/security'),
-                      icon: const Icon(Icons.phonelink_lock),
-                      label: const Text('登記備援驗證器'),
-                    ),
-                  ],
-                ),
-              ),
-            Expanded(child: child),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _AdminBody extends StatelessWidget {
@@ -537,7 +338,3 @@ class _AdminBody extends StatelessWidget {
     ),
   );
 }
-
-/// `/review/<id>` belongs to the review tab.
-String _section(String path) =>
-    '/${path.split('/').where((p) => p.isNotEmpty).firstOrNull ?? ''}';

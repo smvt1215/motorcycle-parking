@@ -427,6 +427,7 @@ class FakeAdminGateway implements AdminGateway {
   Object? spotUpdateError;
   final List<(String, Map<String, dynamic>, String)> promotions = [];
   bool failSearch = false;
+  int searchRequests = 0;
   int _version = 10;
 
   @override
@@ -435,6 +436,7 @@ class FakeAdminGateway implements AdminGateway {
     SpotKind? kind,
     String? state,
   }) async {
+    searchRequests++;
     if (failSearch) throw StateError('offline');
     return [
       for (final MapEntry(key: id, value: v) in spotRows.entries)
@@ -449,8 +451,9 @@ class FakeAdminGateway implements AdminGateway {
             name: v['name'] as String,
             city: v['city'] as String,
             district: v['district'] as String,
-            address: v['address'] as String,
-            spaceType: v['space_type'] as String,
+            // A spot created here may leave these out.
+            address: v['address'] as String? ?? '',
+            spaceType: v['space_type'] as String? ?? '',
             state: id.startsWith('official:')
                 ? (v['hidden'] == true ? 'hidden' : 'visible')
                 : v['status'] as String,
@@ -471,8 +474,14 @@ class FakeAdminGateway implements AdminGateway {
   final historyRequests = <String>[];
   Object? historyError;
 
+  /// Holds spot() open, to race a background reload against an edit.
+  Completer<void>? delayedSpot;
+  int spotRequests = 0;
+
   @override
   Future<SpotRecord?> spot(String sourceId) async {
+    spotRequests++;
+    await delayedSpot?.future;
     final v = spotRows[sourceId];
     return v == null ? null : SpotRecord(sourceId: sourceId, values: {...v});
   }
@@ -784,8 +793,13 @@ class FakeAdminGateway implements AdminGateway {
     ]);
   }
 
+  int ruleRequests = 0;
+
   @override
-  Future<List<CityRule>> cityRules() async => const [];
+  Future<List<CityRule>> cityRules() async {
+    ruleRequests++;
+    return const [];
+  }
 
   Future<void> dispose() => events.close();
 
