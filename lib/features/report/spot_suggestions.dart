@@ -505,9 +505,10 @@ class _SuggestionFormState extends State<_SuggestionForm> {
         // A lot becoming a street bay drops what made it a lot, or the
         // table would still read it as off-street (§1.1 placement).
         if (!lotType && type != SpaceType.offStreet) ...{
-          // The set alone: the table clears facility_type with it.
+          // A street bay is built roadside; the table sets facility_type
+          // from the set.
           if (spot.facilities.any((t) => t != FacilityType.roadside))
-            'facility_types': null,
+            'facility_types': [FacilityType.roadside.name],
           if (spot.access != null) 'parking_access': null,
         },
         if (lotType) ...{
@@ -738,8 +739,15 @@ class _SuggestionFormState extends State<_SuggestionForm> {
     },
   );
 
+  /// Bumped when the check fails, so the bay kind's group opens again and
+  /// its follow-up's errors show.
+  int reveal = 0;
+
   Future<void> submit() async {
-    if (!form.currentState!.validate()) return;
+    if (!form.currentState!.validate()) {
+      setState(() => reveal++);
+      return;
+    }
     // Each hint already sits under its field; this covers one out of view.
     if (precheckBlocking(issues).firstOrNull case final issue?) {
       setState(() => error = issue.message);
@@ -867,6 +875,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                       SpaceKindList(
                         value: kind,
                         keyPrefix: 'report-space',
+                        reveal: reveal,
                         onChanged: (v) {
                           setState(() {
                             kind = v;

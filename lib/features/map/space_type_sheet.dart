@@ -12,6 +12,7 @@ Future<void> showSpaceTypeSheet(
   BuildContext context, {
   required SpaceKind? value,
   required Map<SpaceKind?, int> counts,
+  Map<SpaceKindGroup, int> groupCounts = const {},
   required ValueChanged<SpaceKind?> onChanged,
 }) => showAdaptiveSheet<void>(
   context,
@@ -37,6 +38,7 @@ Future<void> showSpaceTypeSheet(
       SpaceKindList(
         value: value,
         counts: counts,
+        groupCounts: groupCounts,
         onChanged: (option) {
           onChanged(option);
           Navigator.pop(ctx);
@@ -56,18 +58,29 @@ class SpaceKindList extends StatefulWidget {
     required this.value,
     required this.onChanged,
     this.counts,
+    this.groupCounts = const {},
     this.followUp,
     this.keyPrefix = 'space',
+    this.reveal = 0,
   });
   final SpaceKind? value;
   final ValueChanged<SpaceKind> onChanged;
 
   /// Spots of each kind in the map view (the filter); null shows none.
   final Map<SpaceKind?, int>? counts;
+
+  /// Distinct spots of each group in the map view, shown while it is
+  /// folded: a 普大共用 bay is also a toll or free one, so the kinds' counts
+  /// do not add up to it.
+  final Map<SpaceKindGroup, int> groupCounts;
   final Widget? followUp;
 
   /// Prefix of each row's widget key, for tests.
   final String keyPrefix;
+
+  /// Bumped by a form whose check failed: the group holding the pick opens
+  /// again, so its follow-up's errors show.
+  final int reveal;
 
   @override
   State<SpaceKindList> createState() => _SpaceKindListState();
@@ -79,10 +92,19 @@ class _SpaceKindListState extends State<SpaceKindList> {
   @override
   void didUpdateWidget(covariant SpaceKindList old) {
     super.didUpdateWidget(old);
-    if (widget.value != old.value && widget.value != null) {
+    if ((widget.value != old.value || widget.reveal != old.reveal) &&
+        widget.value != null) {
       open = widget.value!.group;
     }
   }
+
+  Widget _option(SpaceKind kind) => SpaceKindOption(
+    targetKey: ValueKey('${widget.keyPrefix}-${kind.name}'),
+    kind: kind,
+    count: widget.counts?[kind],
+    selected: kind == widget.value,
+    onTap: () => widget.onChanged(kind),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -123,7 +145,7 @@ class _SpaceKindListState extends State<SpaceKindList> {
                             child: Text(
                               counts == null
                                   ? group.hint
-                                  : '${group.kinds.fold(0, (n, k) => n + (counts[k] ?? 0))}',
+                                  : '${widget.groupCounts[group] ?? 0}',
                               textAlign: TextAlign.end,
                               style: text.bodyMedium?.copyWith(
                                 color: colors.onSurfaceVariant,
@@ -146,24 +168,30 @@ class _SpaceKindListState extends State<SpaceKindList> {
               ),
             ),
           ),
-          if (open == group)
-            for (final kind in group.kinds) ...[
-              SpaceKindOption(
-                targetKey: ValueKey('${widget.keyPrefix}-${kind.name}'),
-                kind: kind,
-                count: counts?[kind],
-                selected: kind == widget.value,
-                onTap: () => widget.onChanged(kind),
-              ),
-              if (kind == widget.value && widget.followUp != null)
-                Padding(
-                  padding: const EdgeInsetsDirectional.only(
-                    start: 16,
-                    bottom: 8,
-                  ),
-                  child: widget.followUp,
+          for (final kind in group.kinds)
+            if (kind == widget.value)
+              // The pick and its follow-up stay mounted while the group is
+              // folded, so a form still checks their fields.
+              Visibility(
+                visible: open == group,
+                maintainState: true,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _option(kind),
+                    if (widget.followUp != null)
+                      Padding(
+                        padding: const EdgeInsetsDirectional.only(
+                          start: 16,
+                          bottom: 8,
+                        ),
+                        child: widget.followUp,
+                      ),
+                  ],
                 ),
-            ],
+              )
+            else if (open == group)
+              _option(kind),
         ],
       ],
     );

@@ -133,6 +133,21 @@ void main() {
     expect(draft.conditionFor(SpaceKind.heavyOnly)!.limits, isEmpty);
   });
 
+  test('an untouched condition compares equal whatever its limits order', () {
+    // Built directly, not read through fromJson (which sorts them).
+    const stored = ParkingCondition(
+      bay: Bay.motorcycle,
+      use: BayUse.usual,
+      charge: Charge.toll,
+      limits: [
+        ParkingLimit(LimitKind.evOnly),
+        ParkingLimit(LimitKind.timeLimit, maxMinutes: 30),
+      ],
+    );
+    final draft = ConditionDraft.of(stored, SpaceType.evMotorcycle);
+    expect(draft.conditionFor(SpaceKind.evMotorcycle), stored);
+  });
+
   test('every kind and tick sends a condition validate.ts accepts', () {
     for (final kind in SpaceKind.values) {
       if (kind == SpaceKind.offStreet) continue;

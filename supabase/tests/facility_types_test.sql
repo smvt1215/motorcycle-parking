@@ -92,5 +92,60 @@ reset role;
 select ok('facility_types'=any(spot_history_fields()) and 'facility_types'=any(spot_history_public_fields()),'the history records the set');
 select is(moderation_key_risk('facility_types','{}','{}'),2,'a suggested set is medium risk like facility_type');
 
+
+-- An import file of the old shape (facility_type only) keeps a stored set
+-- while the type is the stored first one, and replaces it otherwise.
+insert into official_heavy_spots(id,name,lat,lng,city,source_url,source_name,source_id,effective_date,space_type,facility_types)
+  values('30000000-0000-4000-8000-000000000001','匯入型式',24.5,121.0,'新竹縣','https://data.gov.tw/dataset/2','新竹縣政府','F1',
+    current_date-1,'offStreet',array['underground','surface']);
+create temporary table import_file(spots jsonb);
+grant select on import_file to authenticated;
+insert into import_file values(jsonb_build_array(jsonb_build_object(
+  'id','official:30000000-0000-4000-8000-000000000001','source','official','name','匯入型式',
+  'lat',24.5,'lng',121.0,'city','新竹縣','space_type','offStreet','facility_type','underground',
+  'source_url','https://data.gov.tw/dataset/2','source_name','新竹縣政府','source_id','F1')));
+select pg_temp.act('admin');
+set local role authenticated;
+select ok(not exists(select 1 from jsonb_array_elements(admin_import_preview((select spots from import_file))) p,
+    jsonb_array_elements(p->'changes') c where c->>'field' like 'facility%'),
+  'an old file with the stored first type changes no type');
+reset role;
+update import_file set spots=jsonb_set(spots,'{0,facility_type}','"surface"');
+select pg_temp.act('admin');
+set local role authenticated;
+select is((select c->'incoming' from jsonb_array_elements(admin_import_preview((select spots from import_file))) p,
+    jsonb_array_elements(p->'changes') c where c->>'field'='facility_types'),
+  '["surface"]'::jsonb,'an old file with another type proposes it as the set');
+select is((admin_import_apply((select spots from import_file),
+    jsonb_build_object('official:30000000-0000-4000-8000-000000000001',jsonb_build_object('base_updated_at',
+      (select updated_at from official_heavy_spots where id='30000000-0000-4000-8000-000000000001'))),
+    null))->>'updated','1','the import applies');
+reset role;
+select is((select facility_type||'|'||array_to_string(facility_types,',') from official_heavy_spots
+  where id='30000000-0000-4000-8000-000000000001'),'surface|surface','the type and the set are the file''s');
+
+-- History: snapshots from before the set compare facility_type; rows with
+-- the set list only the set.
+select is(spot_history_changes('{"facility_type":"surface"}','{"facility_type":"underground"}')->0->>'field',
+  'facility_type','an old snapshot still records a change of type');
+select is(spot_history_changes(
+    '{"facility_type":"surface","facility_types":["surface"]}',
+    '{"facility_type":"underground","facility_types":["underground","surface"]}'),
+  '[{"field":"facility_types","before":["surface"],"after":["underground","surface"]}]'::jsonb,
+  'a row with the set records the set once');
+
+-- A report from before the set (its base_spot has facility_type only) is
+-- not a conflict for a suggested set.
+insert into moderation_queue(source_id,reason,field,proposed)
+  values('official:30000000-0000-4000-8000-000000000001','場站型式','space_type','{"facility_types":["surface","underground"]}');
+update moderation_queue set base_spot=base_spot-'facility_types' where reason='場站型式';
+select pg_temp.act('admin');
+set local role authenticated;
+select lives_ok($$select admin_resolve_report((select id from moderation_queue where reason='場站型式'),'accepted',
+  '{"facility_types":["surface","underground"]}')$$,'an old report applies a set without a false conflict');
+reset role;
+select is((select facility_types from official_heavy_spots where id='30000000-0000-4000-8000-000000000001'),
+  array['underground','surface'],'the suggested set is stored');
+
 select * from finish();
 rollback;
