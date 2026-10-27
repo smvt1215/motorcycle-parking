@@ -47,6 +47,17 @@ APP 識別碼：
 
 後端部署只套用 migrations 與 functions，**不推送 local seed**；TDX／Turnstile 等後端秘密仍只設定在各自 Supabase 專案。首次部署後確認 migration、RLS、Auth provider 與函式秘密齊備。
 
+### 即時車位擷取（`availability-ingest`）
+
+migration `202610270140_availability_p2.sql` 建立 pg_cron 工作 `availability-ingest`（每 5 分鐘，第 1 分起），經 pg_net 呼叫 Edge Function。三個值都只設定在各自 Supabase 專案，**不進版控**；缺任何一個時排程不呼叫（或函式回 503），App 只顯示靜態容量。
+
+1. 產生一組隨機字串作為共用密鑰（例如 `openssl rand -hex 32`，不要貼到聊天或 issue）。
+2. Edge Function secret：`supabase secrets set AVAILABILITY_INGEST_SECRET=<密鑰> --project-ref <ref>`。
+3. Vault（SQL Editor）：`select vault.create_secret('https://<ref>.supabase.co','project_url');`、`select vault.create_secret('<密鑰>','availability_ingest_secret');`。
+4. 確認：`select outcome,source_updated_at,rows,message from availability_ingest_runs order by ran_at desc limit 5;` 應每 5 分鐘一筆 `ok`（來源未更新時為 `unchanged`）；連續失敗時 `availability_sources.next_attempt_at` 會退避（最長 1 小時）。
+
+停用來源：`update availability_sources set enabled=false where key='taipei_tcmsv';`。錯誤的場站對應改 `availability_mappings.review_status='rejected'`，之後不會再自動建立。
+
 ## staging：Firebase 與 iOS 測試裝置
 
 staging profile 必須是 Ad Hoc，包含受邀 iPhone 的 UDID；production profile 必須是 App Store，不能包含 `ProvisionedDevices`。

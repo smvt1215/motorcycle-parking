@@ -1,0 +1,42 @@
+{
+  "data": {
+    "UPDATETIME": "Mon Oct 19 10:26:00 CST 2026",
+    "park": [
+      {
+        "id": "TPE0001",
+        "name": "台灣聯通長春停車場",
+        "totalcar": 17,
+        "totalmotor": 0,
+        "totallargemotor": "0"
+      },
+      {
+        "id": "TPE0003",
+        "name": "民生立體停車場",
+        "totalcar": 457,
+        "totalmotor": 0,
+        "totallargemotor": "3"
+      },
+      {
+        "id": "TPE0075",
+        "name": "五分埔公園地下停車場",
+        "totalcar": 209,
+        "totalmotor": 0,
+        "totallargemotor": "1"
+      },
+      {
+        "id": "TPE0125",
+        "name": "新生公園停車場",
+        "totalcar": 114,
+        "totalmotor": 68,
+        "totallargemotor": "1"
+      },
+      {
+        "id": "TPE0318",
+        "name": "青年公園棒球場地下停車場",
+        "totalcar": 276,
+        "totalmotor": 118,
+        "totallargemotor": "1"
+      }
+    ]
+  }
+}
