@@ -90,6 +90,9 @@ class SpotsController extends ChangeNotifier {
   List<Json> get plans => jsonList(draft['fee_plans']);
   List<Json> get zones => jsonList(draft['parking_zones']);
 
+  /// The spot's temporary closure (#116) as JSON, or none.
+  void setClosure(Json? closure) => set('closure', closure);
+
   /// Adds a plan; returns its id.
   String addPlan(String name, Fee fee) {
     final id = nextPlanId(plans);
@@ -492,6 +495,7 @@ class SpotsController extends ChangeNotifier {
         'fee_plan': loaded.values['fee_plan'],
         'parking_zones': copyJson(loaded.values['parking_zones'] ?? const []),
         'zones_complete': loaded.values['zones_complete'] == true,
+        'closure': copyJson(loaded.values['closure']),
       },
     };
   }
@@ -534,6 +538,9 @@ class SpotsController extends ChangeNotifier {
     if (message.contains('fee plan in use')) {
       final which = planInUseRefusal((e as PostgrestException).details);
       return '計費規則仍在使用，尚未儲存：${which ?? '有分區在用，先改掉引用'}。';
+    }
+    if (message.contains('invalid closure')) {
+      return '暫時無法停車的資料不正確，尚未儲存。請確認預計恢復日期不早於開始日期。';
     }
     if (message.contains('invalid parking_zones')) {
       return '區域與格位的資料不正確，尚未儲存。請檢查每個格位的可停車種。';

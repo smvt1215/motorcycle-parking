@@ -19,6 +19,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../report/spot_suggestions.dart';
 import 'map_legend.dart';
+import 'closure_card.dart';
 import 'spot_details.dart';
 import 'spot_fees.dart';
 import 'spot_photos.dart';
@@ -231,6 +232,30 @@ class _SpotSheetState extends State<SpotSheet> {
                               onClose: () => close(ctx),
                             ),
                             const SizedBox(height: 14),
+                            // Works or a closure (#116), above the verdict:
+                            // it overrides it while it holds.
+                            if (spot.closure case final closure?) ...[
+                              ClosureCard(
+                                closure: closure,
+                                now: store.clock(),
+                                onReopened: () => runAction(ctx, () async {
+                                  final message = await reportReopened(
+                                    store,
+                                    spot,
+                                  );
+                                  if (ctx.mounted) {
+                                    ScaffoldMessenger.of(ctx).showSnackBar(
+                                      SnackBar(content: Text(message)),
+                                    );
+                                  }
+                                }),
+                                onStillClosed: () => runAction(
+                                  ctx,
+                                  () => showGoneReport(ctx, store, spot),
+                                ),
+                              ),
+                              const SizedBox(height: 14),
+                            ],
                             _SpotDecision(
                               vehicle: store.vehicle,
                               eligibility: eligibility,

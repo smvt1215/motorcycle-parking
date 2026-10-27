@@ -15,6 +15,7 @@ import '../../ui/fee_editor.dart';
 import '../../ui/location_picker.dart';
 import '../admin_theme.dart';
 import '../review/review_page.dart' show ChangeBand, reviewCompactWidth;
+import 'closure_editor.dart';
 import 'lot_editor.dart';
 import 'spot_map.dart';
 import 'spot_models.dart';
@@ -1171,6 +1172,19 @@ class _FormPane extends StatelessWidget {
                       !record.isNew &&
                       !record.official)
                     _VehicleVerification(spots: spots),
+                  // Temporary closure (#116; C6 canvas ClosureAdmin).
+                  if (group == SpotGroup.basic)
+                    ClosureSection(
+                      key: ValueKey(
+                        '${record.sourceId}-${spots.formSeq}-closure',
+                      ),
+                      value: (spots.draft['closure'] as Map?)
+                          ?.cast<String, dynamic>(),
+                      onChanged: spots.setClosure,
+                      now: DateTime.now(),
+                      changed: spots.changed('closure'),
+                      stored: record.values['closure_state'] as String?,
+                    ),
                   if (group == SpotGroup.fees)
                     if (record.values['fee_source_text']
                         case final String source when source.trim().isNotEmpty)

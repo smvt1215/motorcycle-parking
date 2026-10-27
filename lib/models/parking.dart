@@ -1,3 +1,4 @@
+import 'closure.dart';
 import 'fee.dart';
 import 'parking_condition.dart';
 
@@ -235,6 +236,7 @@ class ParkingSpot {
     this.heavyVerifiedAt,
     this.condition,
     this.zonesComplete = false,
+    this.closure,
   });
   final String id, name, city, source, feeNote, note, district, sourceUrl;
   final String sourceName, licenseNote;
@@ -274,6 +276,11 @@ class ParkingSpot {
 
   /// Whether [zones] cover the whole lot; only admins and imports set it.
   final bool zonesComplete;
+
+  /// A temporary closure or works (#116), with the server's judgement of
+  /// whether it still holds. Live data like [contributorName]: [toJson]
+  /// leaves it out, so a saved favorite never shows a stale closure.
+  final SpotClosure? closure;
 
   /// Whether builds that cannot read conditions read this spot as it is
   /// (§1.3, `condition_legacy_safe_spot()` in SQL). When not, [toJson] gives
@@ -394,6 +401,7 @@ class ParkingSpot {
       ),
       condition: ParkingCondition.fromJson(j['condition']),
       zonesComplete: j['zones_complete'] == true,
+      closure: SpotClosure.fromJson(j['closure'], state: j['closure_state']),
     );
   }
 

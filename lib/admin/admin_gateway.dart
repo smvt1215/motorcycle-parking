@@ -664,14 +664,27 @@ class SupabaseAdminGateway implements AdminGateway {
     required bool official,
     required bool hidden,
   }) async {
+    final params = {
+      ...bounds.toJson(),
+      'p_community': community,
+      'p_official': official,
+      'p_hidden': hidden,
+    };
+    // One jsonb value, never cut at the API's 1,000 rows, with each
+    // layer's count (#133); the rows alone on a backend not yet migrated.
+    try {
+      return MapSpotPage.fromJson(
+        await client.rpc<Map<String, dynamic>>(
+          'admin_viewport_spots_v2',
+          params: params,
+        ),
+      );
+    } on PostgrestException catch (e) {
+      if (e.code != 'PGRST202') rethrow;
+    }
     final rows = await client.rpc<List<dynamic>>(
       'admin_viewport_spots',
-      params: {
-        ...bounds.toJson(),
-        'p_community': community,
-        'p_official': official,
-        'p_hidden': hidden,
-      },
+      params: params,
     );
     return MapSpotPage.fromRows(rows);
   }

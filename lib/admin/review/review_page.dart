@@ -8,6 +8,7 @@ import '../../models/parking.dart';
 import '../../ui/fee_editor.dart';
 import '../admin_controller.dart';
 import '../admin_theme.dart';
+import '../spots/closure_editor.dart';
 import 'review_controller.dart';
 import 'review_map.dart';
 import 'review_models.dart';
@@ -1054,7 +1055,11 @@ class _DiffTable extends StatelessWidget {
                       stacked: stacked,
                       hasBase: base != null,
                     )
-                  : editing && reviewField(key)!.input == FieldInput.fee
+                  : editing &&
+                        const {
+                          FieldInput.fee,
+                          FieldInput.closure,
+                        }.contains(reviewField(key)!.input)
                   ? _FeeRow(
                       report: report,
                       field: reviewField(key)!,
@@ -1449,6 +1454,11 @@ class _FieldEditor extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => switch (field.input) {
+    FieldInput.closure => ClosureSection(
+      value: (value as Map?)?.cast<String, dynamic>(),
+      onChanged: onChanged,
+      now: DateTime.now(),
+    ),
     FieldInput.text => TextFormField(
       initialValue: value as String? ?? '',
       // A fee's own sentence may already run past 200 (design §2.5).

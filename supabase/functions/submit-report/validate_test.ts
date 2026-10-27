@@ -423,3 +423,38 @@ Deno.test('riders never send a source link; suggestions cannot carry one', () =>
     throw new Error('a suggested source link was accepted');
   }
 });
+
+Deno.test('a closure suggestion carries its cause and a real date (#116)', () => {
+  const flag = (proposed: unknown, field = 'gone') => ({
+    action: 'flag',
+    device_id: '00000000-0000-4000-8000-000000000000',
+    source_id: '00000000-0000-4000-8000-000000000001',
+    reason: '這裡已經不能停車：施工中',
+    field,
+    proposed,
+  });
+  for (
+    const ok of [
+      { closure: { reason: 'works' } },
+      { closure: { reason: 'closed', until: '2026-11-30' } },
+    ]
+  ) {
+    const error = validate(flag(ok));
+    if (error) throw new Error(`valid closure refused: ${error}`);
+  }
+  const reopened = validate(flag({ closure: null }, 'reopened'));
+  if (reopened) throw new Error(`reopened refused: ${reopened}`);
+  for (
+    const bad of [
+      { closure: { reason: 'gone' } },
+      { closure: { reason: 'works', until: '2026-02-30' } },
+      { closure: { reason: 'works', until: '11/30' } },
+      { closure: { reason: 'works', since: '2026-10-01' } },
+      { closure: 'works' },
+    ]
+  ) {
+    if (!validate(flag(bad))) {
+      throw new Error(`invalid closure accepted: ${JSON.stringify(bad)}`);
+    }
+  }
+});

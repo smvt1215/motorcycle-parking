@@ -1,3 +1,4 @@
+import '../../models/closure.dart';
 import '../../models/condition_text.dart';
 import '../../models/parking_condition.dart';
 import '../../models/fee.dart';
@@ -64,6 +65,9 @@ enum FieldInput {
   /// A street bay's condition (`condition`, design §1.2): shown and applied
   /// with its space type as the rider sent it; editing it is C6's.
   condition,
+
+  /// A temporary closure (`closure`, #116): works or a closure until a date.
+  closure,
 }
 
 /// A spot column `admin_resolve_report` may change, as the admin sees it.
@@ -117,6 +121,7 @@ final reviewFields = [
   // so a move across a border also changes which rules apply.
   const ReviewField('city', '縣市', FieldInput.text, maxLength: 30),
   const ReviewField('district', '行政區', FieldInput.text, maxLength: 30),
+  ReviewField('closure', '暫時無法停車', FieldInput.closure),
 ];
 
 ReviewField? reviewField(String key) =>
@@ -136,6 +141,7 @@ const suggestionFieldLabels = {
   'note': '其他備註',
   'location': '位置不正確',
   'gone': '點位已不存在',
+  'reopened': '暫時封閉已恢復',
 };
 
 /// Labels older builds sent instead of a key.
@@ -297,6 +303,18 @@ Map<String, dynamic> initialProposal(ReviewReport report, ReviewSpot? spot) {
     final merged = mergeFeeJson(spot?.values['fee'], proposal['fee']);
     proposal['fee'] = merged.isEmpty ? null : merged;
   }
+  // A rider's closure (#116) starts the day it was reported and rests on
+  // that report; the reviewer may change either before applying.
+  if (proposal['closure'] case final Map<String, dynamic> c
+      when !c.containsKey('since')) {
+    final words = report.note.trim();
+    final basis = words.isEmpty ? '車友回報' : '車友回報，附「$words」';
+    proposal['closure'] = {
+      ...c,
+      'since': closureDate(taiwanToday(report.createdAt)),
+      'basis': basis.length <= 200 ? basis : '${basis.substring(0, 198)}…」',
+    };
+  }
   // An adopted fee always carries this build's text of it, never the one
   // the rider's build wrote: older builds write older sentences, which
   // fee_note_of() would refuse.
@@ -345,6 +363,7 @@ bool fitsField(ReviewField field, Object? value) => switch (field.input) {
   FieldInput.fee =>
     value == null || value is Fee || Fee.tryParse(value) != null,
   FieldInput.condition => value == null || validCondition(value),
+  FieldInput.closure => value == null || validClosure(value),
 };
 
 /// A `fee` value as a [Fee]: the editor's own, or a valid JSON one. Null
@@ -395,6 +414,7 @@ String formatValue(String key, Object? value) {
     FieldInput.choice => field.choices[value] ?? '未設定',
     FieldInput.fee => reviewFee(value)?.summary ?? '未設定',
     FieldInput.condition => conditionSummary(ParkingCondition.fromJson(value)),
+    FieldInput.closure => closureSummary(value),
   };
 }
 
@@ -452,6 +472,8 @@ String? validatePatch(Map<String, dynamic> patch, ReviewSpot spot) {
             legacySpaceType(condition, offStreet: false) != type) {
           return '停放條件和格位類型不一致，請一併套用建議的格位類型';
         }
+      case FieldInput.closure:
+        if (!validClosure(value)) return '暫時無法停車的資料不正確，請重新選擇預計恢復日期';
       case FieldInput.fee:
         if (value == null) break;
         final fee = value is Fee ? value : Fee.tryParse(value);
@@ -619,4 +641,14 @@ Map<String, dynamic> editedPlanPatch(
     ],
     'fee_plans_seen': _seen(spot),
   }..removeWhere((k, _) => k == 'fee' || k == 'fee_note');
+}
+
+/// A closure as one line: 施工中，預計 11 月 30 日（一）恢復; 沒有 when none.
+String closureSummary(Object? value) {
+  final c = SpotClosure.fromJson(value);
+  if (c == null) return value == null ? '沒有（可以停）' : '格式不正確';
+  final until = c.until;
+  return '${c.reason.label}，'
+      '${until == null ? '恢復時間未知（$closureDefaultDays 天後到期）' : '預計 ${closureDayLabel(until)}恢復'}'
+      '（${closureDate(c.since)} 起）';
 }

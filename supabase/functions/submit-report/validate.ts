@@ -33,6 +33,8 @@ const suggestionFields = [
   'guide',
   'location',
   'gone',
+  // A rider at a lapsed closure: 已經可以停 (#116).
+  'reopened',
   '停車點名稱',
   '格位類型',
   '收費資訊',
@@ -300,8 +302,28 @@ const proposedChecks: Record<string, (v: unknown) => boolean> = {
   status: (v) => v === 'hidden',
   // Riders ask to take a spot down; restoring one is an admin decision.
   hidden: (v) => v === true,
+  // Works or a closure (#116): the cause and the date the notice gives;
+  // null says it is over. The start and basis are the reviewer's.
+  closure: validProposedClosure,
 };
 const locationKeys = ['lat', 'lng', 'city', 'district'];
+/** A suggested closure: `{reason: works|closed, until?: YYYY-MM-DD}` or null. */
+function validProposedClosure(v: unknown): boolean {
+  if (v === null) return true;
+  if (!isObject(v)) return false;
+  const c = v as Record<string, unknown>;
+  if (Object.keys(c).some((k) => k !== 'reason' && k !== 'until')) {
+    return false;
+  }
+  if (c.reason !== 'works' && c.reason !== 'closed') return false;
+  if (!('until' in c)) return true;
+  if (typeof c.until !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(c.until)) {
+    return false;
+  }
+  const d = new Date(`${c.until}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) &&
+    d.toISOString().slice(0, 10) === c.until;
+}
 /**
  * The notice a rider attaches as evidence (§1.4, §4.2): an https link kept
  * with the case, never written to the spot. Same limits as a basis link.

@@ -197,6 +197,20 @@ function session(role, aal, factors = [factor]) {
               state: spot === officialSpot ? 'visible' : spot.status, lat: spot.lat, lng: spot.lng, updated_at: spot.updated_at,
             })), headers: cors });
           }
+          // #133: the layers as one value with their counts.
+          if (url.pathname === '/rest/v1/rpc/admin_viewport_spots_v2') {
+            const { p_community: community, p_official: official, p_hidden: hidden } = route.request().postDataJSON();
+            const rows = [
+              ...(community ? [{ ...communitySpot, source: 'community', hidden: false }] : []),
+              ...(official ? [{ ...officialSpot, id: `official:${officialId}`, source: 'official', status: 'confirmed', hidden: false }] : []),
+              ...(hidden ? [{ ...hiddenSpot, source: 'community', hidden: true }] : []),
+            ];
+            const counts = {};
+            if (community) counts.community = { shown: 1, total: 1 };
+            if (official) counts.official = { shown: 1, total: 1 };
+            if (hidden) counts.hidden = { shown: 1, total: 1 };
+            return route.fulfill({ json: { rows, counts, truncated: false }, headers: cors });
+          }
           if (url.pathname === '/rest/v1/rpc/admin_viewport_spots') {
             const { p_community: community, p_official: official, p_hidden: hidden } = route.request().postDataJSON();
             return route.fulfill({ json: [

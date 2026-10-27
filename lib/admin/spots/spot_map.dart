@@ -156,6 +156,12 @@ class SpotMapController extends ChangeNotifier {
   /// A layer had more spots in view than one query returns.
   bool truncated = false;
 
+  /// Each chosen layer's spots shown and in view, when the server counts.
+  Map<SpotLayer, ({int shown, int total})> counts = const {};
+
+  /// Spots shown in all, as the limit note says it (1,000 at most).
+  int get shownCount => spots.length;
+
   /// The view is too large to query; the admin zooms in.
   bool tooWide = false;
 
@@ -236,6 +242,7 @@ class SpotMapController extends ChangeNotifier {
       spots = [];
       _index();
       truncated = false;
+      counts = const {};
       loading = false;
       error = null;
       _notify();
@@ -259,6 +266,7 @@ class SpotMapController extends ChangeNotifier {
       spots = page.spots;
       _index();
       truncated = page.truncated;
+      counts = page.counts;
     } catch (_) {
       if (current()) error = '地圖上的停車點載入失敗，請檢查連線後重試。';
     } finally {
@@ -284,6 +292,7 @@ class SpotMapController extends ChangeNotifier {
     loading = false;
     error = null;
     truncated = false;
+    counts = const {};
     tooWide = false;
     _notify();
   }
@@ -297,9 +306,37 @@ class SpotMapController extends ChangeNotifier {
 
 /// One `admin_viewport_spots` answer: at most 500 spots per layer.
 class MapSpotPage {
-  const MapSpotPage(this.spots, {this.truncated = false});
+  const MapSpotPage(
+    this.spots, {
+    this.truncated = false,
+    this.counts = const {},
+  });
   final List<AdminMapSpot> spots;
   final bool truncated;
+
+  /// Each chosen layer's spots shown and in view (#133); empty when the
+  /// server did not count them.
+  final Map<SpotLayer, ({int shown, int total})> counts;
+
+  /// `admin_viewport_spots_v2`: `{rows, counts, truncated}`, at most 1,000
+  /// rows in all.
+  factory MapSpotPage.fromJson(Map<String, dynamic> json) {
+    final rows = MapSpotPage.fromRows(json['rows'] as List? ?? const []);
+    final counts = json['counts'];
+    return MapSpotPage(
+      rows.spots,
+      truncated: json['truncated'] == true,
+      counts: {
+        if (counts is Map)
+          for (final layer in SpotLayer.values)
+            if (counts[layer.name] case {
+              'shown': final num shown,
+              'total': final num total,
+            })
+              layer: (shown: shown.toInt(), total: total.toInt()),
+      },
+    );
+  }
 
   /// Rows as the RPC returns them, 501 per layer at most: the extra row only
   /// tells the layer was cut off. Kinds this build does not know are skipped,
@@ -313,9 +350,14 @@ class MapSpotPage {
         (byLayer[SpotMapController._layerOf(s)] ??= []).add(s);
       }
     }
-    return MapSpotPage([
-      for (final list in byLayer.values) ...list.take(500),
-    ], truncated: byLayer.values.any((list) => list.length > 500));
+    return MapSpotPage(
+      [for (final list in byLayer.values) ...list.take(500)],
+      // The API cuts any answer at max_rows (1,000) without saying so:
+      // that many rows means some may be missing (#133).
+      truncated:
+          rows.length >= 1000 ||
+          byLayer.values.any((list) => list.length > 500),
+    );
   }
 }
 
@@ -378,7 +420,7 @@ class _SpotMapControlsState extends State<SpotMapControls> {
         ? null
         : map.tooWide
         ? '放大地圖以顯示停車點。'
-        : map.truncated
+        : map.truncated && map.counts.isEmpty
         ? '這個範圍的停車點太多，只顯示一部分，放大地圖可看到全部。'
         : map.layers.isEmpty
         ? '所有圖層都已關閉，打開「圖層」選擇要顯示的點。'
@@ -504,6 +546,12 @@ class _SpotMapControlsState extends State<SpotMapControls> {
             constraints: const BoxConstraints(maxWidth: 360),
             child: AdminMapNote(status),
           ),
+        ] else if (map.truncated) ...[
+          const SizedBox(height: 6),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 380),
+            child: MapLimitNote(map: map),
+          ),
         ],
       ],
     );
@@ -580,6 +628,95 @@ class _VehicleChoice extends StatelessWidget {
           size: 20,
         ),
         label: Text(vehicle.label),
+      ),
+    );
+  }
+}
+
+/// The map holds more spots than it shows (#133; C6 canvas MapLimit): how
+/// many it shows, each layer's count, and how to see the rest.
+class MapLimitNote extends StatelessWidget {
+  const MapLimitNote({super.key, required this.map});
+  final SpotMapController map;
+
+  static String _number(int n) => n.toString().replaceAllMapped(
+    RegExp(r'\B(?=(\d{3})+(?!\d))'),
+    (_) => ',',
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final layers = [
+      // In the order the server fills them.
+      for (final layer in const [
+        SpotLayer.community,
+        SpotLayer.official,
+        SpotLayer.hidden,
+      ])
+        if (map.layers.contains(layer))
+          switch (map.counts[layer]) {
+            null => '${layer.label} 未載入',
+            (shown: 0, total: > 0) => '${layer.label} 未載入',
+            (:final shown, :final total) when shown < total =>
+              '${layer.label} ${_number(shown)}／${_number(total)}',
+            (:final shown, total: _) => '${layer.label} ${_number(shown)}',
+          },
+    ];
+    return Semantics(
+      liveRegion: true,
+      container: true,
+      child: Material(
+        key: const ValueKey('map-limit'),
+        color: colors.surface,
+        shape: RoundedRectangleBorder(
+          side: const BorderSide(color: Color(0xffe3ae00), width: 2),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.warning_amber_rounded,
+                size: 20,
+                color: colors.onSurfaceVariant,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '這個範圍的點位太多，只顯示 ${_number(map.shownCount)} 個',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '放大地圖或關掉一個圖層，就能看到全部點位。',
+                      style: TextStyle(
+                        color: colors.onSurfaceVariant,
+                        fontSize: 13,
+                      ),
+                    ),
+                    if (layers.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        layers.join('・'),
+                        key: const ValueKey('map-limit-counts'),
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

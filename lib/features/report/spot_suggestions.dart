@@ -6,9 +6,11 @@ import '../../core/town_lookup.dart';
 import '../../data/app_store.dart';
 import '../../domain/location_check.dart';
 import '../../domain/precheck.dart';
+import '../../models/closure.dart';
 import '../../models/fee.dart';
 import '../../models/parking.dart';
 import '../../models/parking_condition.dart';
+import '../../ui/option_pill.dart';
 import '../../ui/address_search_field.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../../ui/fee_editor.dart';
@@ -235,6 +237,39 @@ Future<void> showSpotSuggestions(
   ),
 );
 
+/// The 這裡已經不能停車 report, from a lapsed closure's 還是不能停.
+Future<void> showGoneReport(
+  BuildContext context,
+  AppStore store,
+  ParkingSpot spot,
+) => _showSuggestionForm(
+  context,
+  store,
+  spot,
+  fieldKey: 'gone',
+  label: goneLabel,
+);
+
+/// A rider at a lapsed closure says the spot can be parked at again: a
+/// report clearing the closure (`field: reopened`, proposed `closure: null`)
+/// for an admin to apply. Returns the message to show.
+Future<String> reportReopened(AppStore store, ParkingSpot spot) async {
+  try {
+    await store.submit({
+      'action': 'flag',
+      'source_id': spot.id,
+      'reason': '暫時封閉已恢復：現場已經可以停',
+      'field': 'reopened',
+      'proposed': {'closure': null},
+    });
+    return '謝謝回報，審核後會更新地圖。';
+  } on StateError catch (e) {
+    return e.message.toString();
+  } catch (_) {
+    return '回報沒有送出，請確認網路後再試一次。';
+  }
+}
+
 Future<void> _showSuggestionForm(
   BuildContext context,
   AppStore store,
@@ -321,7 +356,11 @@ class _SuggestionFormState extends State<_SuggestionForm> {
   late final entrance = TextEditingController(text: widget.spot.entranceNote);
   late final guide = TextEditingController(text: widget.spot.parkingGuide);
   GoneCause? cause;
-  final until = TextEditingController();
+
+  /// Whether the notice gives a reopening date (有寫日期), and which; a
+  /// closure without one ends 7 days after it is applied (#116).
+  bool dated = false;
+  DateTime? until;
 
   /// The suggested position, starting where the map shows the spot.
   late double lat = widget.spot.lat, lng = widget.spot.lng;
@@ -403,7 +442,8 @@ class _SuggestionFormState extends State<_SuggestionForm> {
     final text = note.text.trim();
     if (unavailable) {
       // A field hidden after switching to a lasting cause says nothing.
-      final when = cause?.temporary ?? false ? until.text.trim() : '';
+      final day = cause?.temporary ?? false ? closureUntil : null;
+      final when = day == null ? '' : closureDayLabel(day);
       return '${widget.label}：${cause?.label ?? ''}'
           '${when.isEmpty ? '' : '；預計恢復：$when'}'
           '${text.isEmpty ? '' : '；說明：$text'}';
@@ -426,6 +466,9 @@ class _SuggestionFormState extends State<_SuggestionForm> {
         : _eligibility(scooter, heavy);
     return '${widget.label}：建議「$value」${text.isEmpty ? '' : '；說明：$text'}';
   }
+
+  /// The reopening date chosen, when the rider says the notice gives one.
+  DateTime? get closureUntil => dated ? until : null;
 
   /// The value the admin applies, keyed by spot column (docs/ADMIN_WEB.md);
   /// null when the suggestion is only free text. Columns follow the table
@@ -505,7 +548,17 @@ class _SuggestionFormState extends State<_SuggestionForm> {
       };
     }
     if (unavailable) {
-      // Only a lasting cause suggests hiding; works and closures end.
+      // Works and closures end: the admin applies a closure with the date
+      // the notice gives (#116), never hiding the spot.
+      if (cause?.temporary ?? false) {
+        return {
+          'closure': {
+            'reason': cause == GoneCause.works ? 'works' : 'closed',
+            if (closureUntil case final d?) 'until': closureDate(d),
+          },
+        };
+      }
+      // Only a lasting cause suggests hiding.
       if (cause?.lasting != true) return null;
       // Official spots hide through their own flag; TDX spots cannot be hidden.
       if (spot.source == 'official') return {'hidden': true};
@@ -628,7 +681,6 @@ class _SuggestionFormState extends State<_SuggestionForm> {
     condition.dispose();
     entrance.dispose();
     guide.dispose();
-    until.dispose();
     super.dispose();
   }
 
@@ -1066,12 +1118,14 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                         spacing: 8,
                         runSpacing: 8,
                         children: [
+                          // Selecting changes only the fill and outline, so
+                          // the row never jumps (closure canvas).
                           for (final option in GoneCause.values)
-                            ChoiceChip(
+                            OptionPill(
                               key: ValueKey('gone-${option.name}'),
-                              label: Text(option.label),
+                              label: option.label,
                               selected: cause == option,
-                              onSelected: (_) {
+                              onTap: () {
                                 setState(() => cause = option);
                                 state.didChange(option);
                               },
@@ -1084,18 +1138,14 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                 ),
                 if (cause?.temporary ?? false) ...[
                   const SizedBox(height: 16),
-                  TextFormField(
-                    key: const ValueKey('gone-until'),
-                    controller: until,
-                    maxLength: 40,
-                    autovalidateMode: AutovalidateMode.onUserInteraction,
-                    decoration: const InputDecoration(
-                      labelText: '預計恢復時間（選填）',
-                      errorMaxLines: 4,
-                      hintText: '例：公告寫 11 月 30 日完工',
-                      counterText: '',
-                    ),
-                    validator: (v) => precheckTextHint(v),
+                  _ReopenDate(
+                    dated: dated,
+                    until: until,
+                    onDated: (v) => setState(() => dated = v),
+                    onPick: (d) => setState(() {
+                      dated = true;
+                      until = d;
+                    }),
                   ),
                 ],
                 const SizedBox(height: 16),
@@ -1220,3 +1270,83 @@ class _SuggestionFormState extends State<_SuggestionForm> {
 
 /// Seven decimals is about 1 cm, finer than any phone places a pin.
 double _round(double degrees) => (degrees * 1e7).roundToDouble() / 1e7;
+
+/// 預計什麼時候恢復？ (closure canvas Main): 不知道 or 有寫日期 with the date
+/// from a picker, never free text, so the server can end the closure.
+class _ReopenDate extends StatelessWidget {
+  const _ReopenDate({
+    required this.dated,
+    required this.until,
+    required this.onDated,
+    required this.onPick,
+  });
+  final bool dated;
+  final DateTime? until;
+  final ValueChanged<bool> onDated;
+  final ValueChanged<DateTime> onPick;
+
+  Future<void> _pick(BuildContext context) async {
+    final today = taiwanToday(DateTime.now());
+    final d = await showDatePicker(
+      context: context,
+      initialDate: until ?? today,
+      firstDate: today,
+      lastDate: today.add(const Duration(days: 730)),
+      helpText: '預計恢復日期',
+    );
+    if (d != null) onPick(d);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    return Container(
+      key: const ValueKey('gone-until'),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        border: Border.all(color: colors.outlineVariant),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            '預計什麼時候恢復？',
+            style: text.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 6),
+          OptionPills<bool>(
+            values: const [(false, '不知道'), (true, '有寫日期')],
+            selected: dated,
+            keyOf: (v) => 'gone-dated-$v',
+            onSelect: (v) {
+              onDated(v);
+              if (v && until == null) _pick(context);
+            },
+          ),
+          if (dated) ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              key: const ValueKey('gone-until-date'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(48, 48),
+                alignment: Alignment.centerLeft,
+              ),
+              onPressed: () => _pick(context),
+              icon: const Icon(Icons.calendar_today_outlined),
+              label: Text(until == null ? '選擇預計恢復日期' : closureDayLabel(until!)),
+            ),
+          ],
+          const SizedBox(height: 8),
+          Text(
+            dated
+                ? '照現場公告填。過了這天，點位會自動恢復顯示，並請下一位車友確認現場。'
+                : '沒有日期時，審核通過 $closureDefaultDays 天後自動恢復顯示，並請車友確認現場。',
+            style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+          ),
+        ],
+      ),
+    );
+  }
+}
