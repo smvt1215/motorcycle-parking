@@ -1181,13 +1181,20 @@ class _LatestUpdateField extends StatelessWidget {
     builder: (context, snapshot) {
       final entries = snapshot.data ?? const <HistoryEntry>[];
       final latest = entries.firstOrNull;
+      final updated = spot.updatedAt;
+      // History covers administrators' writes and decided reports, not an
+      // owner's own edit or a vote: a later update time keeps its place.
+      final covered =
+          latest != null &&
+          (updated == null ||
+              !updated.isAfter(latest.at.add(const Duration(minutes: 1))));
       return _DetailField(
         label: '最近更新',
-        value: latest != null
+        value: covered
             ? '${latest.title(app: true)}，${formatSpotDate(latest.at)}'
-            : spot.updatedAt == null
+            : updated == null
             ? '未提供'
-            : formatSpotTime(spot.updatedAt!),
+            : formatSpotTime(updated),
         action: latest == null
             ? null
             : TextButton(

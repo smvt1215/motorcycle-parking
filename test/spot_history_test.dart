@@ -132,6 +132,29 @@ void main() {
     });
   }
 
+  testWidgets('點位在最新紀錄之後又更新（車主自行修改）時，最近更新顯示點位時間，仍可看紀錄', (tester) async {
+    usePhone(tester);
+    final store = (await tester.runAsync(
+      () => _store(_HistoryRepository(_rows)),
+    ))!;
+    addTearDown(store.dispose);
+    final spot = ParkingSpot.fromJson({
+      ...facility().toJson(),
+      'updated_at': '2026-10-28T03:00:00Z',
+    });
+    await openDetails(tester, store, spot);
+    await showField(tester, '最近更新');
+    expect(find.text('費率，2026-10-27'), findsNothing);
+    expect(find.textContaining('2026-10-28'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('看更新紀錄'),
+      80,
+      scrollable: detailScroll,
+    );
+    expect(find.text('看更新紀錄'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('沒有紀錄時最近更新沿用點位更新時間，不顯示連結', (tester) async {
     usePhone(tester);
     final store = (await tester.runAsync(
