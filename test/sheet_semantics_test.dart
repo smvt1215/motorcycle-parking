@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:motorcycle_parking/features/map/space_type_sheet.dart';
 import 'package:motorcycle_parking/features/map/vehicle_sheet.dart';
 import 'package:motorcycle_parking/models/parking.dart';
+import 'package:motorcycle_parking/models/space_kind.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
 
 void main() {
@@ -18,8 +19,8 @@ void main() {
                 selected: false,
                 onTap: () => tapped.add('vehicle'),
               ),
-              SpaceTypeOption(
-                type: SpaceType.car,
+              SpaceKindOption(
+                kind: SpaceKind.car,
                 count: 3,
                 selected: false,
                 onTap: () => tapped.add('space'),

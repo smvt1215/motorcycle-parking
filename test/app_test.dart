@@ -199,7 +199,12 @@ void main() {
     expect(tester.widget<IconButton>(searchButton).onPressed, isNull);
     await tester.tap(find.text('全部格位'));
     await tester.pumpAndSettle();
+    // The kinds fold into their groups until one is opened.
+    expect(find.text('路邊收費機車格'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('space-group-motorcycle')));
+    await tester.pumpAndSettle();
     expect(find.text('路邊收費機車格'), findsOneWidget);
+    expect(find.text('普大共用機車格'), findsOneWidget);
     await tester.tap(find.text('免費機車格'));
     await tester.pumpAndSettle();
     final input = find.byKey(const ValueKey('parking-search'));

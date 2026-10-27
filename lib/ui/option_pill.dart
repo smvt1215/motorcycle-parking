@@ -225,3 +225,74 @@ class VehicleTriState extends StatelessWidget {
     );
   }
 }
+
+/// One choice of several that may all apply (C6 canvas AppPatterns,
+/// pattern 3): a check box and its label on a row the whole of which is a
+/// 48 px target. What a tick asks next goes indented under it, by the
+/// caller.
+class OptionCheck extends StatelessWidget {
+  const OptionCheck({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.onChanged,
+    this.subtitle,
+  });
+  final String label;
+  final bool value;
+
+  /// Null when the choice is not available now.
+  final ValueChanged<bool>? onChanged;
+  final String? subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final enabled = onChanged != null;
+    return MergeSemantics(
+      child: InkWell(
+        onTap: enabled ? () => onChanged!(!value) : null,
+        borderRadius: BorderRadius.circular(8),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 48),
+          child: Row(
+            children: [
+              Checkbox(
+                value: value,
+                onChanged: enabled ? (v) => onChanged!(v ?? false) : null,
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 15,
+                          color: enabled
+                              ? colors.onSurface
+                              : colors.onSurface.withValues(alpha: .38),
+                        ),
+                      ),
+                      if (subtitle case final subtitle?)
+                        Text(
+                          subtitle,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

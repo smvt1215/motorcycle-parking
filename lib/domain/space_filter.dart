@@ -6,6 +6,7 @@ library;
 import '../models/fee.dart';
 import '../models/parking.dart';
 import '../models/parking_condition.dart';
+import '../models/space_kind.dart';
 
 /// The rider's own rate at [spot], a heavy follow read as the rate it
 /// follows; null when unconfirmed.
@@ -39,12 +40,21 @@ bool freeFor(ParkingSpot spot, VehicleType vehicle) {
   return condition.charge == Charge.free;
 }
 
-/// Whether the space filter [type] keeps [spot]: 免費機車格 by [freeFor],
-/// every other kind by its space type.
+/// Whether a street bay is posted for both motorcycle classes (condition
+/// `share: scooter_heavy`), whatever else limits it.
+bool postedShared(ParkingSpot spot) =>
+    !isOffStreet(spot.spaceType, spot.facilityType) &&
+    (spot.condition ?? conditionOf(spot.spaceType))?.share ==
+        ShareKind.scooterHeavy;
+
+/// Whether the space filter [kind] keeps [spot]: 免費機車格 by [freeFor],
+/// 普大共用機車格 by [postedShared], every other kind by its space type.
 bool matchesSpaceFilter(
   ParkingSpot spot,
-  SpaceType type,
+  SpaceKind kind,
   VehicleType vehicle,
-) => type == SpaceType.freeMotorcycle
-    ? freeFor(spot, vehicle)
-    : spot.spaceType == type;
+) => switch (kind) {
+  SpaceKind.freeMotorcycle => freeFor(spot, vehicle),
+  SpaceKind.sharedMotorcycle => postedShared(spot),
+  _ => spot.spaceType == kind.type,
+};

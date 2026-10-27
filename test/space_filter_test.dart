@@ -2,6 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:motorcycle_parking/domain/space_filter.dart';
 import 'package:motorcycle_parking/models/fee.dart';
 import 'package:motorcycle_parking/models/parking.dart';
+import 'package:motorcycle_parking/models/parking_condition.dart';
+import 'package:motorcycle_parking/models/space_kind.dart';
 
 ParkingSpot _spot(SpaceType type, {Object? fee, Object? condition}) =>
     ParkingSpot.fromJson({
@@ -149,11 +151,65 @@ void main() {
 
   test('other kinds filter by their space type', () {
     final paid = _spot(SpaceType.paidMotorcycle);
-    expect(matchesSpaceFilter(paid, SpaceType.paidMotorcycle, scooter), isTrue);
+    expect(matchesSpaceFilter(paid, SpaceKind.paidMotorcycle, scooter), isTrue);
     expect(
-      matchesSpaceFilter(paid, SpaceType.freeMotorcycle, scooter),
+      matchesSpaceFilter(paid, SpaceKind.freeMotorcycle, scooter),
       isFalse,
     );
-    expect(matchesSpaceFilter(paid, SpaceType.heavyOnly, scooter), isFalse);
+    expect(matchesSpaceFilter(paid, SpaceKind.heavyOnly, scooter), isFalse);
+    expect(
+      matchesSpaceFilter(paid, SpaceKind.sharedMotorcycle, scooter),
+      isFalse,
+    );
+  });
+
+  test('普大共用機車格 keeps street bays posted for both classes', () {
+    const shared = ParkingCondition(
+      bay: Bay.motorcycle,
+      use: BayUse.share,
+      share: ShareKind.scooterHeavy,
+      charge: Charge.toll,
+    );
+    final paid = ParkingSpot(
+      id: 'shared',
+      name: '普大共用',
+      lat: 25.03,
+      lng: 121.56,
+      city: '臺北市',
+      spaceType: SpaceType.paidMotorcycle,
+      condition: shared,
+    );
+    expect(
+      matchesSpaceFilter(paid, SpaceKind.sharedMotorcycle, scooter),
+      isTrue,
+    );
+    // Still a toll bay for the 收費 filter.
+    expect(matchesSpaceFilter(paid, SpaceKind.paidMotorcycle, scooter), isTrue);
+    final timed = ParkingSpot(
+      id: 'timed',
+      name: '限時共用',
+      lat: 25.03,
+      lng: 121.56,
+      city: '臺北市',
+      spaceType: SpaceType.timedMotorcycle,
+      condition: const ParkingCondition(
+        bay: Bay.motorcycle,
+        use: BayUse.share,
+        share: ShareKind.scooterHeavy,
+        limits: [ParkingLimit(LimitKind.timeLimit)],
+      ),
+    );
+    expect(
+      matchesSpaceFilter(timed, SpaceKind.sharedMotorcycle, scooter),
+      isTrue,
+    );
+    expect(
+      matchesSpaceFilter(
+        _spot(SpaceType.freeMotorcycle),
+        SpaceKind.sharedMotorcycle,
+        scooter,
+      ),
+      isFalse,
+    );
   });
 }
