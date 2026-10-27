@@ -299,6 +299,28 @@ class SpotsController extends ChangeNotifier {
   Map<String, String> get shownErrors =>
       record?.isNew == true && !attempted ? const {} : errors;
 
+  /// The one section of the form that is open (decision 57); null when all
+  /// are folded. A new spot starts at its position, an existing one at its
+  /// name.
+  SpotGroup? openGroup;
+
+  void toggleGroup(SpotGroup group) {
+    openGroup = openGroup == group ? null : group;
+    _notify();
+  }
+
+  /// The section an error belongs to: the plans and areas are the lot's
+  /// rates.
+  static SpotGroup? groupOf(String key) => switch (key) {
+    'fee_plans' || 'parking_zones' => SpotGroup.fees,
+    _ => spotFields.where((f) => f.key == key).firstOrNull?.group,
+  };
+
+  /// Sections holding an error the form shows.
+  Set<SpotGroup> get groupsWithErrors => {
+    for (final key in shownErrors.keys) ?groupOf(key),
+  };
+
   /// Distance, duplicates and county change of the position in the form.
   LocationNotes get notes {
     final r = record;
@@ -480,9 +502,19 @@ class SpotsController extends ChangeNotifier {
   int formSeq = 0;
 
   void _load(SpotRecord? loaded) {
+    // Saving or reloading the same spot keeps the section in view.
+    final same =
+        loaded != null && !loaded.isNew && loaded.sourceId == record?.sourceId;
     record = loaded;
     formSeq++;
     attempted = false;
+    openGroup = loaded == null
+        ? null
+        : same
+        ? openGroup
+        : loaded.isNew
+        ? SpotGroup.location
+        : SpotGroup.basic;
     // Lookups still running belong to the previous form.
     _locateSeq++;
     locating = false;
@@ -561,6 +593,12 @@ class SpotsController extends ChangeNotifier {
     if (errors.isNotEmpty) {
       attempted = true;
       saveError = '請先修正標示的欄位。';
+      // Open the first section that needs fixing, so its field is seen.
+      final bad = {for (final key in errors.keys) ?groupOf(key)};
+      if (!bad.contains(openGroup)) {
+        openGroup =
+            SpotGroup.values.where(bad.contains).firstOrNull ?? openGroup;
+      }
       _notify();
       return false;
     }
