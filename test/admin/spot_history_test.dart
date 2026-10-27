@@ -101,6 +101,61 @@ void main() {
     await gateway.dispose();
   });
 
+  test('分區的修改列出分區內容，看得出改了哪一區的什麼', () {
+    final before = [
+      {'name': '機車區', 'access': 'scooterOnly', 'fee_note': '20 元／次'},
+      {'name': '汽車區', 'access': 'heavyCar'},
+    ];
+    final after = [
+      {
+        'name': '機車區',
+        'access': 'scooterHeavy',
+        'fee_note': '30 元／次',
+        'guide': 'B1',
+      },
+      {'name': '汽車區', 'access': 'heavyCar'},
+    ];
+    final a = historyValueText('parking_zones', before);
+    final b = historyValueText('parking_zones', after);
+    expect(a, isNot(b));
+    expect(a, '機車區・普通機車專用・20 元／次\n汽車區・大型重機與汽車共用・費率未填');
+    expect(b.split('\n').first, '機車區・普通機車與大型重機共用・30 元／次・指引：B1');
+  });
+
+  testWidgets('文字相同的前後值改列原始資料', (tester) async {
+    gateway.historyRows[communityId] = [
+      {
+        'at': '2026-10-27T01:12:00Z',
+        'kind': 'admin',
+        'action': 'update_spot',
+        'actor_name': '小哲',
+        'changes': [
+          {
+            'field': 'parking_zones',
+            'before': [
+              {'name': '甲', 'note_x': 1},
+            ],
+            'after': [
+              {'name': '甲', 'note_x': 2},
+            ],
+          },
+        ],
+      },
+    ];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SpotHistoryPage(
+          gateway: gateway,
+          sourceId: communityId,
+          name: '測試點',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('[{"name":"甲","note_x":1}]'), findsOneWidget);
+    expect(find.text('[{"name":"甲","note_x":2}]'), findsOneWidget);
+  });
+
   for (final size in const [
     Size(320, 640),
     Size(402, 874),

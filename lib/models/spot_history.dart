@@ -251,7 +251,7 @@ String historyValueText(String field, Object? value) {
       ParkingAccess.values.asNameMap()[v]?.description ?? v,
     ('scooter_total', final num v) => '$v 格',
     ('parking_zones', final List<dynamic> v) =>
-      v.isEmpty ? '沒有分區' : '${v.length} 個分區',
+      v.isEmpty ? '沒有分區' : historyZonesText(v),
     ('photo_urls', final List<dynamic> v) =>
       v.isEmpty ? '沒有照片' : '${v.length} 張照片',
     ('zones_complete', final bool v) => v ? '是' : '否',
@@ -268,6 +268,48 @@ String historyValueText(String field, Object? value) {
     _ => clip(jsonEncode(value)),
   };
 }
+
+/// A lot's zones, one line each with what a rider reads of it: name,
+/// access, condition, fee (its sentence, else the zone's note), plan and
+/// guide, so an edit inside a zone shows, not only the count.
+String historyZonesText(List<dynamic> zones) => [
+  for (final z in zones)
+    if (z is Map)
+      [
+        switch (z['name']) {
+          final String n when n.trim().isNotEmpty => n.trim(),
+          _ => '未命名分區',
+        },
+        if (ParkingAccess.values.asNameMap()[z['access']] case final a?)
+          a.description,
+        if (z['condition'] != null)
+          conditionSummary(
+            ParkingCondition.fromJson(z['condition'], zone: true),
+          ),
+        switch (z['fee']) {
+          final Map<dynamic, dynamic> f when f.isNotEmpty => feeNoteOf(
+            structuredFee(f),
+          ),
+          _ => switch (z['fee_note']) {
+            final String n when n.trim().isNotEmpty => n.trim(),
+            _ => '費率未填',
+          },
+        },
+        for (final (key, label) in const [
+          ('car_fee_note', '汽車'),
+          ('scooter_fee_note', '機車'),
+          ('heavy_fee_note', '大型重機'),
+        ])
+          if (z[key] case final String n when n.trim().isNotEmpty)
+            '$label：${n.trim()}',
+        if (z['fee_plan'] case final String plan when plan.isNotEmpty)
+          '計費規則「$plan」',
+        if (z['guide'] case final String g when g.trim().isNotEmpty)
+          '指引：${g.trim()}',
+      ].join('・')
+    else
+      jsonEncode(z),
+].join('\n');
 
 /// What the app says an entry changed (AppHistory): each new value the spot
 /// still holds, joined with 「；」; fields without one are only named in the

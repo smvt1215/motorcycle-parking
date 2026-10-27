@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:material_ui/material_ui.dart';
 
 import '../../models/spot_history.dart';
@@ -346,9 +348,20 @@ class _Diff extends StatelessWidget {
                 historyFieldLabel(c.field),
                 style: muted?.copyWith(fontWeight: FontWeight.w700),
               ),
-            if (c.hasBefore)
-              row('原本', historyValueText(c.field, c.before), before: true),
-            row('改成', historyValueText(c.field, c.after)),
+            ...() {
+              var before = historyValueText(c.field, c.before);
+              var after = historyValueText(c.field, c.after);
+              // Values that read the same (a detail the wording leaves out)
+              // show as stored, so the change itself is visible.
+              if (c.hasBefore && before == after) {
+                before = jsonEncode(c.before);
+                after = jsonEncode(c.after);
+              }
+              return [
+                if (c.hasBefore) row('原本', before, before: true),
+                row('改成', after),
+              ];
+            }(),
           ],
         ],
       ),
