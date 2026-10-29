@@ -149,6 +149,16 @@ const Map<String, PrecheckRule> precheckRules = {
         '{where}這是收費格，{vehicle}的費率不能是「免費」。公告寫首段 0 元時，請填「前幾分鐘 0 元」或計次的有效時間。',
     patterns: [],
   ),
+  'no_parking_all_day': (
+    action: PrecheckAction.fix,
+    message: '時段性禁停填了「每天全天」，等於這裡不能停車。請只填禁停的時間；整天都不能停，請回報「這裡已經不能停車」。',
+    patterns: [],
+  ),
+  'share_scooter_heavy_schedule': (
+    action: PrecheckAction.fix,
+    message: '普通＆大型重機共用格是全時段共用，不用填時段。請刪除時段；汽車和機車輪流使用的格位請改選「汽車＆機車」共用格。',
+    patterns: [],
+  ),
   'share_free_needs_basis': (
     action: PrecheckAction.hold,
     message: '普大共用的免費格較少見，請附上公告連結，審核會比較快。',
@@ -441,6 +451,34 @@ List<PrecheckIssue> _shareFree(Object? condition, String field) => [
     _issue('share_free_needs_basis', field),
 ];
 
+/// A condition's own shape (decisions 62, 64): a 時段性禁停 every day all
+/// day is no parking spot, and a 普大共用 bay is shared all the time, so it
+/// has no periods.
+List<PrecheckIssue> _conditionShape(Object? condition, String field) {
+  if (condition is! Map) return const [];
+  final limits = condition['limits'];
+  return [
+    if (limits is List &&
+        limits.any(
+          (l) =>
+              l is Map &&
+              l['kind'] == 'no_parking' &&
+              l['periods'] is List &&
+              (l['periods'] as List).any(
+                (p) =>
+                    p is Map &&
+                    p['days'] == 'all' &&
+                    !p.containsKey('from') &&
+                    !p.containsKey('to'),
+              ),
+        ))
+      _issue('no_parking_all_day', '$field.limits'),
+    if (condition['share'] == 'scooter_heavy' &&
+        condition.containsKey('schedule'))
+      _issue('share_scooter_heavy_schedule', '$field.schedule'),
+  ];
+}
+
 const _feeVehicles = {..._vehicles, 'car': '汽車'};
 
 /// The rates one vehicle pays: its own, or the periods of a by_time rate.
@@ -633,6 +671,7 @@ List<PrecheckIssue> precheck(
     out.addAll(_combinations(spot.cast()));
     if (spot['space_type'] != 'offStreet') {
       out.addAll(_shareFree(spot['condition'], 'condition.charge'));
+      out.addAll(_conditionShape(spot['condition'], 'condition'));
     }
   }
   if (proposed is Map) {
@@ -665,6 +704,7 @@ List<PrecheckIssue> precheck(
       );
     }
     out.addAll(_shareFree(proposed['condition'], 'proposed.condition.charge'));
+    out.addAll(_conditionShape(proposed['condition'], 'proposed.condition'));
     if (_goneFields.contains(body['field']) &&
         // A closure (#116) is what works or a closure suggest instead.
         proposed.keys.any(

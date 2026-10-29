@@ -95,6 +95,11 @@ void main() {
           },
       });
       expect(limitKeys.keys, LimitKind.values);
+      final periods = Map.of(cond['limit_periods']! as Map)..remove('comment');
+      expect(periods, {
+        'keys': limitPeriodKeys,
+        'max_entries': limitPeriodsMaxEntries,
+      });
     });
 
     test('basis', () {

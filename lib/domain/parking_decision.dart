@@ -612,6 +612,70 @@ String slotNowText(
   return fellBack ? '$text（$holidayFallbackNote）' : text;
 }
 
+/// A 時段性禁停 period as riders read it, e.g. 平日 07:00–09:00.
+String periodText(TimePeriod p) =>
+    slotText(ScheduleSlot(days: p.days, from: p.from, to: p.to, vehicles: []));
+
+/// The 時段性禁停 periods of [c] (decision 62); empty without the limit.
+List<TimePeriod> banPeriods(ParkingCondition c) => [
+  for (final l in c.limits)
+    if (l.kind == LimitKind.noParking) ...l.periods,
+];
+
+/// When [periods] ban parking at [now]: null when they do not, otherwise
+/// 現在禁停 with when parking is allowed again (09:00, 明天 07:00, 週一
+/// 07:00), as [slotNowText] words it (#120). Back-to-back or overlapping
+/// periods are one ban; 平日 and 假日 follow [calendar] (decision 61).
+String? banNowText(
+  List<TimePeriod> periods,
+  DateTime now, {
+  HolidayCalendar? calendar,
+}) {
+  final cal = calendar ?? HolidayCalendar.current;
+  final (today, at) = taipeiDateMinute(now);
+  const last = 7;
+  final spans = [
+    for (final p in periods)
+      ...datedSpans(p.days, p.from, p.to, today, cal, last: last),
+  ]..sort((a, b) => a.$1.compareTo(b.$1));
+  if (!spans.any((s) => s.$1 <= at && at < s.$2)) return null;
+  var end = at;
+  var moved = true;
+  while (moved) {
+    moved = false;
+    for (final (start, stop) in spans) {
+      if (start <= end && end < stop) {
+        end = stop;
+        moved = true;
+      }
+    }
+  }
+  final String text;
+  if (end >= (last + 1) * 1440) {
+    text = '現在禁停';
+  } else {
+    final day = end ~/ 1440;
+    final date = DateTime.utc(today.year, today.month, today.day + day);
+    final when = switch (day) {
+      0 => _clockText(end),
+      1 => '明天 ${_clockText(end)}',
+      _ => '週${'一二三四五六日'[date.weekday - 1]} ${_clockText(end)}',
+    };
+    text = '現在禁停，$when 起可停';
+  }
+  final fellBack = calendarFellBack(
+    [for (final p in periods) p.days],
+    today,
+    cal,
+    last: last,
+  );
+  return fellBack ? '$text（$holidayFallbackNote）' : text;
+}
+
+/// The 禁停時段 line: every period, e.g. 禁停時段：平日 07:00–09:00.
+String _banReason(List<TimePeriod> periods) =>
+    '禁停時段：${periods.map(periodText).join('；')}，請看現場牌面';
+
 const _disabledReason =
     '身障專用格：須是經監理站檢驗合格的特製機車，且身障者本人騎乘或同行，'
     '並持專用停車位識別證或掛專用牌照，才可停放';
@@ -709,6 +773,25 @@ DecisionBasis sourceBasis(
 }
 
 ParkingDecision _street(
+  ParkingSpot spot,
+  VehicleType vehicle,
+  List<CityRule> rules,
+  DateTime at,
+  String day,
+  bool trusted,
+  DecisionBasis source,
+  HolidayCalendar calendar,
+) {
+  final result = _bay(spot, vehicle, rules, at, day, trusted, source, calendar);
+  final c = spot.condition ?? conditionOf(spot.spaceType);
+  return c == null
+      ? result
+      : _withBan(result, c, at, calendar, trusted: trusted);
+}
+
+/// A street bay by its own class, limits, notices and slots, before its
+/// 時段性禁停 ([_withBan]).
+ParkingDecision _bay(
   ParkingSpot spot,
   VehicleType vehicle,
   List<CityRule> rules,
@@ -947,6 +1030,43 @@ ParkingDecision _street(
   return result;
 }
 
+/// A street bay's 時段性禁停 (decision 62) on top of [result]: inside a
+/// period nobody parks (現在禁停，X 起可停); outside them an open bay is
+/// conditional and says when it is banned. Only trusted data closes a bay
+/// (step 0): an unchecked report only adds the periods to its reason.
+ParkingDecision _withBan(
+  ParkingDecision result,
+  ParkingCondition c,
+  DateTime at,
+  HolidayCalendar calendar, {
+  required bool trusted,
+}) {
+  final periods = banPeriods(c);
+  if (periods.isEmpty || result.status == EligibilityStatus.notAllowed) {
+    return result;
+  }
+  final now = banNowText(periods, at, calendar: calendar);
+  final ban = _banReason(periods);
+  if (now != null && trusted) {
+    return result._with(
+      status: EligibilityStatus.notAllowed,
+      reason: '$now；$ban',
+      restriction: () => null,
+    );
+  }
+  if (!result.open) {
+    return result._with(reason: [result.reason, ?now, ban].join('；'));
+  }
+  final limited = result.status == EligibilityStatus.conditional;
+  final kept = result.restriction;
+  return result._with(
+    status: EligibilityStatus.conditional,
+    reason: [if (limited) result.reason, ?now, ban].join('；'),
+    restriction: () =>
+        limited && kept != null ? kept : RuleRestriction.timeLimited,
+  );
+}
+
 extension on ParkingDecision {
   bool get open =>
       status == EligibilityStatus.allowed ||
@@ -1061,6 +1181,13 @@ ZoneDecision _zone(
       gaps: {DecisionGap.scheduleUnknown},
     );
   }
+  // 時段性禁停 (decision 62): nobody parks in the zone inside a period.
+  final bans = banPeriods(c);
+  if (bans.isNotEmpty) {
+    if (banNowText(bans, at, calendar: calendar) case final now?) {
+      return zone(EligibilityStatus.notAllowed, '$now；${_banReason(bans)}');
+    }
+  }
   final limits = [
     if (c.hasLimit(LimitKind.specialVehicle)) _disabledReason,
     if (ev) _evReason,
@@ -1068,6 +1195,7 @@ ZoneDecision _zone(
       '${slotNowText(slots, at, calendar: calendar)}；'
           '可停時段：${slots.map(slotText).join('；')}',
     if (timed) _timedReason,
+    if (bans.isNotEmpty) _banReason(bans),
     // A trial with an end date: open while it lasts, and the rider should
     // know it ends.
     if (c.basis?.expiresOn case final end?) '試辦至 $end',
@@ -1078,7 +1206,7 @@ ZoneDecision _zone(
       limits.join('；'),
       restriction: ev
           ? RuleRestriction.evOnly
-          : slots.isNotEmpty || timed
+          : slots.isNotEmpty || timed || bans.isNotEmpty
           ? RuleRestriction.timeLimited
           : null,
     );

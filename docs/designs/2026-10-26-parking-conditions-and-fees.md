@@ -31,7 +31,7 @@
 | 區域 area | `motorcycle`（機車區）／`car`（汽車區）／`heavy`（重機專區）／`mixed`（混合）／未填 | 新增 `parking_zones[].area` | 只用於路外分區。機車區依公告適用機車或重機費率，汽車區依公告適用汽車費率（需求 5） |
 | 格位 bay | 類別 `motorcycle`／`heavy`／`car` ＋ 用途 `usual`／`share` | 新增 `condition.bay`、`condition.use`、`condition.share` | 共用分兩種，不能混用（需求 4）：`scooter_heavy`（普大共用，畫在機車格上）、`car_motorcycle`（汽機車共用，畫在汽車格上，本專案只列路邊） |
 | 收費屬性 charge | `toll`／`free`／未填 | 新增 `condition.charge` | Toll 方案的首段可以是 0 元，仍是 Toll，不等於 Free（法規 D） |
-| 限制 limits | `kind` 是限制類型：`time_limit`（限時，另帶 `max_minutes`）、`special_vehicle`（限特製車輛，另以 `vehicle` 鍵寫車型，目前只有 `disabled_modified`）、`ev_only`（限電動機車） | 新增 `condition.limits[]` | 身障專用機車格是 `{"kind":"special_vehicle","vehicle":"disabled_modified"}`：須為經監理單位檢驗合格的特製機車，持識別證本身不足（法規 C）。`kind` 只放限制類型，車型一律放 `vehicle`，兩者不共用鍵 |
+| 限制 limits | `kind` 是限制類型：`time_limit`（限時，另帶 `max_minutes`）、`special_vehicle`（限特製車輛，另以 `vehicle` 鍵寫車型，目前只有 `disabled_modified`）、`ev_only`（限電動機車）、`no_parking`（時段性禁停，另帶必填 `periods`：1–6 段 `{days, from, to}`，規則同 schedule 時段但沒有 `vehicles`，決定 62） | 新增 `condition.limits[]` | 身障專用機車格是 `{"kind":"special_vehicle","vehicle":"disabled_modified"}`：須為經監理單位檢驗合格的特製機車，持識別證本身不足（法規 C）。`kind` 只放限制類型，車型一律放 `vehicle`，兩者不共用鍵 |
 | 分區明確車種 allow | 普通／大型各為 `true`／`false`，缺鍵＝依法規與公告 | 新增 `parking_zones[].condition.allow` | 保存分區的明確排除與開放，例如普機專用 `{"scooter":true,"heavy":false}`、機車不可停 `{"scooter":false,"heavy":false}`。只用在分區；路邊點沿用既有 `scooter_allowed`／`heavy_allowed`，不另存一份 |
 | 時段 schedule | 多段 `{days, from, to, vehicles}` | 新增 `condition.schedule[]` | 汽機彈性共用依平日／假日／時段切換允許車種（法規 E）；沒有涵蓋的時間為未確認 |
 
@@ -381,6 +381,7 @@ PLAN.md 匯入紀錄：「依停管處新聞稿附件補上『機車區』與機
 | 汽車格 share=car_motorcycle | 只在 `schedule[].vehicles` 依公告寫明 `scooter` 的時段可停；沒寫就是待確認，不預設（§7 第 1 項，已決定） | 依法可停汽車格，不受共用標示影響；`schedule` 寫明 `heavy` 時另顯示該時段 |
 | `special_vehicle`（`vehicle:'disabled_modified'`） | 有條件：「限經監理單位檢驗合格的身障特製機車，持識別證本身不足」 | 同左 |
 | `ev_only` | 有條件：限電動機車 | 同左 |
+| `no_parking` | 禁停時段內：不可停（只限可信資料），理由「現在禁停，X 起可停；禁停時段：…」；時段外：有條件・限時段，理由列出禁停時段。分區同。不改變 `space_type`；帶 `no_parking` 的條件對舊版不是 legacy-safe（決定 62） | 同左 |
 
 **2. 地方公告**
 
@@ -498,6 +499,8 @@ SQL 不能在執行時讀 JSON，所以由 `tool/gen_contract_sql.py` 從契約�
 | bay=motorcycle 或 area=motorcycle 而有 `fee.car` | 預檢 | fix | |
 | area=car 而有 `fee.scooter`、且沒有地方公告開放 | 預檢 | hold | 需求 6；特別開放須另附依據 |
 | `time_limit.max_minutes` 與 `per_visit.max_minutes` 不同 | 預檢 | fix | |
+| `no_parking` 有「每天全天」的時段 | 預檢 | fix | 等於不能停車（決定 62） |
+| 普大共用（`share=scooter_heavy`）帶 `schedule` | 預檢 | fix | 普大共用是全時段共用（決定 64） |
 | `heavy` 為 `same_as_car` 但同一 `fee` 沒有 `car`（新送出） | 預檢 | fix | 延伸 #94 `fee_follows_missing_scooter`；既有資料仍允許，讀成未確認。**對合併後的費率判斷**，見本表下方說明 |
 | `daily_cap < amount`、`hourly` 且 `amount=0` 沒有 `free_minutes` | 預檢 | fix | 既有 #94 規則沿用到 `car` 與 `by_time` 內層 |
 | `renew` 出現在 `per_visit` 以外；`cross_period` 出現在 `by_time` 以外；值不在列舉中 | DB | 拒絕 | §2.5；三端以同一份契約檢查 |

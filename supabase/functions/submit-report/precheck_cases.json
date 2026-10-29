@@ -1587,6 +1587,125 @@
         "charge_free_rate@proposed.fee.scooter"
       ],
       "blocking": true
+    },
+    {
+      "name": "a no-parking ban every day all day is no spot (decision 62)",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "信義路五段機車格",
+          "space_type": "paidMotorcycle",
+          "condition": {
+            "bay": "motorcycle",
+            "use": "usual",
+            "charge": "toll",
+            "limits": [
+              {
+                "kind": "no_parking",
+                "periods": [
+                  {
+                    "days": "all"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "expect": [
+        "no_parking_all_day@condition.limits"
+      ]
+    },
+    {
+      "name": "a no-parking ban at set hours passes (decision 62)",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "信義路五段機車格",
+          "space_type": "paidMotorcycle",
+          "condition": {
+            "bay": "motorcycle",
+            "use": "usual",
+            "charge": "toll",
+            "limits": [
+              {
+                "kind": "no_parking",
+                "periods": [
+                  {
+                    "days": "weekday",
+                    "from": "07:00",
+                    "to": "09:00"
+                  },
+                  {
+                    "days": "holiday"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "expect": []
+    },
+    {
+      "name": "a suggested all-day ban every day is no spot",
+      "body": {
+        "action": "flag",
+        "source_id": "3f1c2a4e-0000-4000-8000-000000000002",
+        "field": "space_type",
+        "reason": "格位類型",
+        "proposed": {
+          "space_type": "paidMotorcycle",
+          "condition": {
+            "bay": "motorcycle",
+            "use": "usual",
+            "charge": "toll",
+            "limits": [
+              {
+                "kind": "no_parking",
+                "periods": [
+                  {
+                    "days": "all"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "expect": [
+        "no_parking_all_day@proposed.condition.limits"
+      ]
+    },
+    {
+      "name": "a 普大共用 bay is shared all the time: no periods (decision 64)",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "信義路五段機車格",
+          "space_type": "paidMotorcycle",
+          "condition": {
+            "bay": "motorcycle",
+            "use": "share",
+            "share": "scooter_heavy",
+            "charge": "toll",
+            "schedule": [
+              {
+                "days": "weekday",
+                "from": "08:00",
+                "to": "20:00",
+                "vehicles": [
+                  "scooter",
+                  "heavy"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "expect": [
+        "share_scooter_heavy_schedule@condition.schedule"
+      ]
     }
   ]
 }

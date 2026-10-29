@@ -94,7 +94,15 @@
       "action": "fix",
       "message": "{where}這是收費格，{vehicle}的費率不能是「免費」。公告寫首段 0 元時，請填「前幾分鐘 0 元」或計次的有效時間。"
     },
-    "share_free_needs_basis": {
+    "no_parking_all_day": {
+    "action": "fix",
+    "message": "時段性禁停填了「每天全天」，等於這裡不能停車。請只填禁停的時間；整天都不能停，請回報「這裡已經不能停車」。"
+  },
+  "share_scooter_heavy_schedule": {
+    "action": "fix",
+    "message": "普通＆大型重機共用格是全時段共用，不用填時段。請刪除時段；汽車和機車輪流使用的格位請改選「汽車＆機車」共用格。"
+  },
+  "share_free_needs_basis": {
       "action": "hold",
       "message": "普大共用的免費格較少見，請附上公告連結，審核會比較快。"
     },

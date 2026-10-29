@@ -153,6 +153,15 @@ begin
       end loop;
       if exists(select 1 from jsonb_array_elements_text(spec->'required') r where not l ? r) then return false; end if;
       if l ? 'vehicle' and not {s}.contract_str_in(l->'vehicle',c->'special_vehicles') then return false; end if;
+      -- A limit's periods (時段性禁停, decision 62): like schedule slots, without vehicles.
+      if l ? 'periods' then
+        if jsonb_typeof(l->'periods') is distinct from 'array'
+          or jsonb_array_length(l->'periods') not between 1 and (c->'limit_periods'->>'max_entries')::integer
+        then return false; end if;
+        if exists(select 1 from jsonb_array_elements(l->'periods') e
+            where not {s}.contract_slot_keys(e,c->'limit_periods'->'keys') or not {s}.contract_slot_times(e))
+        then return false; end if;
+      end if;
     end loop;
   end if;
   if not p_zone and p->>'bay'='motorcycle' and not p ? 'charge'

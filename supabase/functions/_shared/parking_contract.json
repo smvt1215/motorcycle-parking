@@ -110,7 +110,22 @@
       "ev_only": {
         "required": [],
         "optional": {}
+      },
+      "no_parking": {
+        "required": [
+          "periods"
+        ],
+        "optional": {}
       }
+    },
+    "limit_periods": {
+      "keys": [
+        "days",
+        "from",
+        "to"
+      ],
+      "max_entries": 6,
+      "comment": "必填 periods 的限制（時段性禁停 no_parking，決定 62）：periods 為 1 到 max_entries 個時段，每段的 days、from、to 與 schedule 時段同樣規則（time 段）；全天以同時省略 from 與 to 表示。"
     },
     "special_vehicles": [
       "disabled_modified"

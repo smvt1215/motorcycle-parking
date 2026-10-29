@@ -40,7 +40,10 @@ enum Charge { toll, free }
 enum LimitKind {
   timeLimit('time_limit'),
   specialVehicle('special_vehicle'),
-  evOnly('ev_only');
+  evOnly('ev_only'),
+
+  /// 時段性禁停 (decision 62): no vehicle parks in its periods.
+  noParking('no_parking');
 
   const LimitKind(this.wire);
   final String wire;
@@ -104,7 +107,13 @@ const limitKeys =
       LimitKind.timeLimit: (required: [], optional: {'max_minutes': (1, 1440)}),
       LimitKind.specialVehicle: (required: ['vehicle'], optional: {}),
       LimitKind.evOnly: (required: [], optional: {}),
+      LimitKind.noParking: (required: ['periods'], optional: {}),
     };
+
+/// A limit's `periods` (時段性禁停): 1 to [limitPeriodsMaxEntries] entries
+/// of these keys, under a schedule slot's time rules ([validSlotTimes]).
+const limitPeriodKeys = ['days', 'from', 'to'];
+const limitPeriodsMaxEntries = 6;
 
 /// A street bay on a motorcycle bay must say toll or free unless one of
 /// these limits already decides its legacy space type (§4.3).
@@ -198,7 +207,12 @@ const Map<String, Object?> feeContract = {
 };
 
 class ParkingLimit {
-  const ParkingLimit(this.kind, {this.maxMinutes, this.vehicle});
+  const ParkingLimit(
+    this.kind, {
+    this.maxMinutes,
+    this.vehicle,
+    this.periods = const [],
+  });
   final LimitKind kind;
 
   /// Only for [LimitKind.timeLimit]; null is unconfirmed.
@@ -207,11 +221,28 @@ class ParkingLimit {
   /// Only for [LimitKind.specialVehicle], where it is required.
   final SpecialVehicle? vehicle;
 
+  /// Only for [LimitKind.noParking], where at least one is required: when
+  /// parking is banned.
+  final List<TimePeriod> periods;
+
   Map<String, Object> toJson() => {
     'kind': kind.wire,
     'max_minutes': ?maxMinutes,
     'vehicle': ?vehicle?.wire,
+    if (periods.isNotEmpty) 'periods': [for (final p in periods) p.toJson()],
   };
+}
+
+/// Days and a time of day, as a 時段性禁停 limit names them: `from > to`
+/// crosses midnight, and no [from] and [to] means all day.
+class TimePeriod {
+  const TimePeriod({required this.days, this.from, this.to});
+
+  /// `all`, `weekday` or `holiday`, or a list of weekdays such as `mon`.
+  final Object days;
+  final String? from, to;
+
+  Map<String, Object> toJson() => {'days': days, 'from': ?from, 'to': ?to};
 }
 
 /// When the posted vehicles may park; `from > to` crosses midnight, and no
@@ -310,6 +341,16 @@ class ParkingCondition {
           vehicle: SpecialVehicle.values
               .where((v) => v.wire == l['vehicle'])
               .firstOrNull,
+          periods: [
+            for (final p in (l['periods'] as List?) ?? const [])
+              TimePeriod(
+                days: p['days'] is List
+                    ? List<String>.from(p['days'] as List)
+                    : p['days'] as String,
+                from: p['from'] as String?,
+                to: p['to'] as String?,
+              ),
+          ],
         ),
     ]..sort((a, b) => a.kind.index.compareTo(b.kind.index));
     final basis = c['basis'] as Map?;
@@ -461,6 +502,23 @@ bool validCondition(Object? json, {bool zone = false}) {
       if (l.containsKey('vehicle') &&
           !SpecialVehicle.values.any((v) => v.wire == l['vehicle'])) {
         return false;
+      }
+      // A limit's periods (時段性禁停, decision 62): like schedule slots,
+      // without vehicles.
+      if (l.containsKey('periods')) {
+        final periods = l['periods'];
+        if (periods is! List ||
+            periods.isEmpty ||
+            periods.length > limitPeriodsMaxEntries ||
+            !periods.every(
+              (p) =>
+                  p is Map &&
+                  p.keys.every(limitPeriodKeys.contains) &&
+                  p.containsKey('days') &&
+                  validSlotTimes(p),
+            )) {
+          return false;
+        }
       }
     }
   }

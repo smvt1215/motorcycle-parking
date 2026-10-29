@@ -1236,6 +1236,404 @@
         }
       },
       "valid": false
+    },
+    {
+      "name": "時段性禁停：平日 07:00–09:00（決定 62）",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "no_parking",
+            "periods": [
+              {
+                "days": "weekday",
+                "from": "07:00",
+                "to": "09:00"
+              }
+            ]
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "時段性禁停：多段、指定星期、跨午夜、全天",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "no_parking",
+            "periods": [
+              {
+                "days": [
+                  "mon",
+                  "wed"
+                ],
+                "from": "22:00",
+                "to": "06:00"
+              },
+              {
+                "days": "holiday"
+              }
+            ]
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "一般機車格＋限時＋時段性禁停",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "free",
+        "limits": [
+          {
+            "kind": "time_limit",
+            "max_minutes": 30
+          },
+          {
+            "kind": "no_parking",
+            "periods": [
+              {
+                "days": "weekday",
+                "from": "07:00",
+                "to": "09:00"
+              }
+            ]
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "汽車格帶收費與時段性禁停",
+      "zone": false,
+      "condition": {
+        "bay": "car",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "no_parking",
+            "periods": [
+              {
+                "days": "weekday",
+                "from": "07:00",
+                "to": "09:00"
+              }
+            ]
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "分區帶時段性禁停",
+      "zone": true,
+      "condition": {
+        "bay": "motorcycle",
+        "allow": {
+          "scooter": true,
+          "heavy": false
+        },
+        "limits": [
+          {
+            "kind": "no_parking",
+            "periods": [
+              {
+                "days": "weekday",
+                "from": "07:00",
+                "to": "09:00"
+              }
+            ]
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "時段性禁停沒有 periods",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "no_parking"
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "時段性禁停 periods 是空陣列",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "no_parking",
+            "periods": []
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "時段性禁停 periods 不是陣列",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "no_parking",
+            "periods": {
+              "days": "all"
+            }
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "時段性禁停超過 6 段",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "no_parking",
+            "periods": [
+              {
+                "days": "all",
+                "from": "00:00",
+                "to": "00:30"
+              },
+              {
+                "days": "all",
+                "from": "01:00",
+                "to": "01:30"
+              },
+              {
+                "days": "all",
+                "from": "02:00",
+                "to": "02:30"
+              },
+              {
+                "days": "all",
+                "from": "03:00",
+                "to": "03:30"
+              },
+              {
+                "days": "all",
+                "from": "04:00",
+                "to": "04:30"
+              },
+              {
+                "days": "all",
+                "from": "05:00",
+                "to": "05:30"
+              },
+              {
+                "days": "all",
+                "from": "06:00",
+                "to": "06:30"
+              }
+            ]
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "時段性禁停的時段帶 vehicles",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "no_parking",
+            "periods": [
+              {
+                "days": "all",
+                "from": "07:00",
+                "to": "09:00",
+                "vehicles": [
+                  "scooter"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "時段性禁停的時段沒有 days",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "no_parking",
+            "periods": [
+              {
+                "from": "07:00",
+                "to": "09:00"
+              }
+            ]
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "時段性禁停只有 from",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "no_parking",
+            "periods": [
+              {
+                "days": "all",
+                "from": "07:00"
+              }
+            ]
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "時段性禁停 from 等於 to",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "no_parking",
+            "periods": [
+              {
+                "days": "all",
+                "from": "07:00",
+                "to": "07:00"
+              }
+            ]
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "時段性禁停的 days 不合法",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "no_parking",
+            "periods": [
+              {
+                "days": "weekend",
+                "from": "07:00",
+                "to": "09:00"
+              }
+            ]
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "時段性禁停帶 max_minutes",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "no_parking",
+            "periods": [
+              {
+                "days": "weekday",
+                "from": "07:00",
+                "to": "09:00"
+              }
+            ],
+            "max_minutes": 20
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "限時帶 periods",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "time_limit",
+            "periods": [
+              {
+                "days": "all"
+              }
+            ]
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "沒有收費屬性的機車格只有時段性禁停",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "limits": [
+          {
+            "kind": "no_parking",
+            "periods": [
+              {
+                "days": "weekday",
+                "from": "07:00",
+                "to": "09:00"
+              }
+            ]
+          }
+        ]
+      },
+      "valid": false
     }
   ],
   "legacy": [
@@ -1511,6 +1909,99 @@
       },
       "space_type": "offStreet",
       "safe": null
+    },
+    {
+      "name": "收費機車格帶時段性禁停：舊版不知道禁停，不安全",
+      "off_street": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "no_parking",
+            "periods": [
+              {
+                "days": "weekday",
+                "from": "07:00",
+                "to": "09:00"
+              }
+            ]
+          }
+        ]
+      },
+      "space_type": "paidMotorcycle",
+      "safe": false
+    },
+    {
+      "name": "一般機車格＋限時（收費）：仍存成 timedMotorcycle",
+      "off_street": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "time_limit",
+            "max_minutes": 30
+          }
+        ]
+      },
+      "space_type": "timedMotorcycle",
+      "safe": true
+    },
+    {
+      "name": "限時加時段性禁停：仍是 timedMotorcycle，不安全",
+      "off_street": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "time_limit"
+          },
+          {
+            "kind": "no_parking",
+            "periods": [
+              {
+                "days": "weekday",
+                "from": "07:00",
+                "to": "09:00"
+              }
+            ]
+          }
+        ]
+      },
+      "space_type": "timedMotorcycle",
+      "safe": false
+    },
+    {
+      "name": "大型重機專用格帶收費屬性（可遺失）",
+      "off_street": false,
+      "condition": {
+        "bay": "heavy",
+        "use": "usual",
+        "charge": "toll"
+      },
+      "space_type": "heavyOnly",
+      "safe": true
+    },
+    {
+      "name": "充電格帶收費屬性（可遺失）",
+      "off_street": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "free",
+        "limits": [
+          {
+            "kind": "ev_only"
+          }
+        ]
+      },
+      "space_type": "evMotorcycle",
+      "safe": true
     }
   ],
   "zones": [
@@ -1705,6 +2196,31 @@
         }
       },
       "access": "heavyCar",
+      "safe": false
+    },
+    {
+      "name": "分區帶時段性禁停：舊版不知道禁停，不安全",
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "allow": {
+          "scooter": true,
+          "heavy": false
+        },
+        "limits": [
+          {
+            "kind": "no_parking",
+            "periods": [
+              {
+                "days": "weekday",
+                "from": "07:00",
+                "to": "09:00"
+              }
+            ]
+          }
+        ]
+      },
+      "access": "scooterOnly",
       "safe": false
     }
   ],

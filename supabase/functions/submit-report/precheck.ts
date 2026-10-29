@@ -181,6 +181,27 @@ function shareFree(condition: unknown, field: string): PrecheckIssue[] {
     : [];
 }
 
+/** A condition's own shape (decisions 62, 64): a 時段性禁停 every day all
+ * day is no parking spot, and a 普大共用 bay is shared all the time, so it
+ * has no periods. */
+function conditionShape(condition: unknown, field: string): PrecheckIssue[] {
+  if (!object(condition)) return [];
+  const out: PrecheckIssue[] = [];
+  const limits = Array.isArray(condition.limits) ? condition.limits : [];
+  if (
+    limits.some((l) =>
+      object(l) && l.kind === 'no_parking' && Array.isArray(l.periods) &&
+      l.periods.some((p) =>
+        object(p) && p.days === 'all' && !('from' in p) && !('to' in p)
+      )
+    )
+  ) out.push(issue('no_parking_all_day', `${field}.limits`));
+  if (condition.share === 'scooter_heavy' && 'schedule' in condition) {
+    out.push(issue('share_scooter_heavy_schedule', `${field}.schedule`));
+  }
+  return out;
+}
+
 /** The rates one vehicle pays: its own, or the periods of a by_time rate. */
 function ratesOf(rate: Json): Json[] {
   if (rate.mode !== 'by_time' || !Array.isArray(rate.periods)) return [rate];
@@ -388,6 +409,7 @@ export function precheck(body: Json, current?: Json): PrecheckIssue[] {
     out.push(...combinationIssues(spot));
     if (spot.space_type !== 'offStreet') {
       out.push(...shareFree(spot.condition, 'condition.charge'));
+      out.push(...conditionShape(spot.condition, 'condition'));
     }
   }
   if (proposed) {
@@ -400,6 +422,7 @@ export function precheck(body: Json, current?: Json): PrecheckIssue[] {
         field: `proposed.${i.field}`,
       })),
       ...shareFree(proposed.condition, 'proposed.condition.charge'),
+      ...conditionShape(proposed.condition, 'proposed.condition'),
     );
     if (
       goneFields.includes(String(body.field)) &&

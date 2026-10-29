@@ -128,6 +128,20 @@ export function validCondition(v: unknown, zone = false): boolean {
       if (has(l, 'vehicle') && !inList(cond.special_vehicles)(l.vehicle)) {
         return false;
       }
+      // A limit's periods (時段性禁停, decision 62): like schedule slots,
+      // without vehicles.
+      if (has(l, 'periods')) {
+        const periods = l.periods;
+        if (
+          !Array.isArray(periods) || periods.length === 0 ||
+          periods.length > cond.limit_periods.max_entries ||
+          !periods.every((p) =>
+            isObject(p) &&
+            Object.keys(p).every((k) => cond.limit_periods.keys.includes(k)) &&
+            validSlotTimes(p)
+          )
+        ) return false;
+      }
     }
   }
   if (
