@@ -502,7 +502,7 @@ void main() {
         await tester.pumpAndSettle();
 
         await reach(find.byKey(const ValueKey('bay-1')));
-        expect(find.text('重機格 ・ 收費未確認'), findsOneWidget);
+        expect(find.text('大型重機專用格 ・ 收費未確認'), findsOneWidget);
         final unknown = find.byKey(const ValueKey('bay-1-大型重機-null'));
         await reach(unknown);
         expect(unknown.hitTestable(), findsOneWidget);

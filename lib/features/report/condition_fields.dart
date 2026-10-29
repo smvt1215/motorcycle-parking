@@ -2,36 +2,19 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../ui/option_pill.dart';
 import '../../models/parking.dart';
-import '../../models/fee.dart' show FeeWords;
 import '../../models/parking_condition.dart';
 import '../../models/space_kind.dart';
 
 export '../../models/condition_text.dart'
     show conditionHeadline, conditionSummary;
 
-/// The kinds whose painted markings already say whether they charge: the
-/// rider picks 收費 or 免費 through the kind itself.
-const _chargeByKind = {SpaceKind.paidMotorcycle, SpaceKind.freeMotorcycle};
+/// Whether the follow-ups ask 收費嗎 for [kind]: every painted kind does.
+bool asksCharge(SpaceKind kind) => kind != SpaceKind.offStreet;
 
-/// The limits a rider may add to a kind beyond its own (C6 canvas AppForm
-/// 「還有其他限制嗎？」, decision 57): what a motorcycle bay's sign can add.
-/// Each stays one the contract and the legacy space type agree on (§1.3).
-Set<LimitKind> extraLimits(SpaceKind kind) => switch (kind) {
-  SpaceKind.paidMotorcycle ||
-  SpaceKind.freeMotorcycle => {LimitKind.timeLimit, LimitKind.evOnly},
-  SpaceKind.sharedMotorcycle || SpaceKind.evMotorcycle => {LimitKind.timeLimit},
-  SpaceKind.timedMotorcycle => {LimitKind.evOnly},
-  _ => const {},
-};
-
-/// Whether the follow-ups ask 收費格還是免費格 for [kind]; 普大共用 must say
-/// which, as its stored space type is toll or free.
-bool asksCharge(SpaceKind kind) =>
-    !_chargeByKind.contains(kind) && kind != SpaceKind.offStreet;
-
-/// One period of a 汽機共用 bay while it is being reported (§1.2 schedule).
+/// One period while it is being reported: a 汽機共用 slot (§1.2 schedule)
+/// or a 時段性禁停 period (decision 62), which has no vehicles.
 class SlotDraft {
-  SlotDraft();
+  SlotDraft({this.allDay = true});
 
   SlotDraft.of(ScheduleSlot slot)
     : days = slot.days,
@@ -41,11 +24,16 @@ class SlotDraft {
     to.text = slot.to ?? '';
   }
 
-  /// `all`, `weekday` or `holiday`, or weekdays one by one (`["mon"]`) as
-  /// stored: the app picks presets only, but keeps picked days it loaded
-  /// rather than widening them to every day.
+  SlotDraft.ofPeriod(TimePeriod period)
+    : days = period.days,
+      allDay = period.from == null && period.to == null {
+    from.text = period.from ?? '';
+    to.text = period.to ?? '';
+  }
+
+  /// `all`, `weekday` or `holiday`, or weekdays one by one (`["mon"]`).
   Object days = 'all';
-  bool allDay = true;
+  bool allDay;
   final from = TextEditingController(), to = TextEditingController();
   Set<SlotVehicle> vehicles = {};
 
@@ -54,48 +42,133 @@ class SlotDraft {
     to.dispose();
   }
 
-  /// The slot as the contract takes it; null until it is complete.
-  ScheduleSlot? get slot {
+  /// The days and times as the contract takes them; null until complete.
+  ({Object days, String? from, String? to})? get _times {
     final f = from.text.trim(), t = to.text.trim();
     final time = RegExp(timePattern);
-    if (vehicles.isEmpty) return null;
+    if (days is List && (days as List).isEmpty) return null;
     if (!allDay && (!time.hasMatch(f) || !time.hasMatch(t) || f == t)) {
       return null;
     }
+    return (days: days, from: allDay ? null : f, to: allDay ? null : t);
+  }
+
+  /// The slot as the contract takes it; null until it is complete.
+  ScheduleSlot? get slot {
+    final t = _times;
+    if (t == null || vehicles.isEmpty) return null;
     return ScheduleSlot(
-      days: days,
-      from: allDay ? null : f,
-      to: allDay ? null : t,
+      days: t.days,
+      from: t.from,
+      to: t.to,
       vehicles: [
         for (final v in SlotVehicle.values)
           if (vehicles.contains(v)) v,
       ],
     );
   }
+
+  /// The 禁停 period as the contract takes it; null until it is complete.
+  TimePeriod? get period {
+    final t = _times;
+    return t == null ? null : TimePeriod(days: t.days, from: t.from, to: t.to);
+  }
 }
 
-/// What a rider adds to the bay kind they picked (design §8.4, C5; C6
-/// canvas AppForm): whether it charges, the limits it adds, how long a
-/// time limit allows, a 普大共用 notice on a 限時 bay, and when a 汽機共用
-/// bay takes which vehicles. The kind decides the rest.
+/// What a rider adds to the bay kind they picked (decision 62; C6 canvas
+/// SpaceTaxonomy): 誰共用 for 共用格, 收費嗎, a 汽機共用 bay's 共用與專用時段,
+/// and the added conditions 限時 and 時段性禁停. The kind decides the rest.
 class ConditionDraft {
   ConditionDraft() : loadedKind = null;
 
   /// The rider's values from a stored [condition] of a bay of [type].
   ConditionDraft.of(ParkingCondition? condition, SpaceType type)
     : loadedKind = SpaceKind.of(type, condition) {
-    final c = condition ?? conditionOf(type);
+    _load(condition ?? conditionOf(type));
+  }
+
+  /// The values of a lot zone's stored [condition] (decision 62: zones use
+  /// the same kinds); its kind is null while its bay is unconfirmed.
+  ConditionDraft.zone(ParkingCondition? condition)
+    : loadedKind = zoneKindOf(condition) {
+    _load(condition);
+  }
+
+  /// The kind a zone's condition reads as; null when it names no bay, no
+  /// share and no reserved use.
+  static SpaceKind? zoneKindOf(ParkingCondition? c) =>
+      c == null ||
+          (c.bay == null &&
+              c.share == null &&
+              !c.hasLimit(LimitKind.evOnly) &&
+              !c.hasLimit(LimitKind.specialVehicle))
+      ? null
+      : SpaceKind.of(SpaceType.paidMotorcycle, c);
+
+  void _load(ParkingCondition? c) {
     if (c == null) return;
-    if (asksCharge(loadedKind!)) charge = c.charge;
-    shared = c.share == ShareKind.scooterHeavy;
+    share = c.share;
+    _charges[loadedKind] = c.charge;
     for (final l in c.limits) {
-      if (extraLimits(loadedKind!).contains(l.kind)) extras.add(l.kind);
-      if (l.kind == LimitKind.timeLimit && l.maxMinutes != null) {
-        maxMinutes.text = '${l.maxMinutes}';
+      if (l.kind == LimitKind.timeLimit) {
+        timed = true;
+        if (l.maxMinutes != null) maxMinutes.text = '${l.maxMinutes}';
+      }
+      if (l.kind == LimitKind.noParking) {
+        banned = true;
+        bans.addAll(l.periods.map(SlotDraft.ofPeriod));
       }
     }
     slots.addAll(c.schedule.map(SlotDraft.of));
     loaded = c;
+  }
+
+  /// A lot zone's condition for [kind] (null: bay unconfirmed): what the
+  /// form builds, with [current]'s `allow` and notice kept. A heavy bay
+  /// never opens to scooters.
+  ParkingCondition zoneConditionFor(SpaceKind? kind, ParkingCondition current) {
+    final built = kind == null
+        ? ParkingCondition(
+            // The form asks 收費嗎 as for a plain motorcycle bay.
+            charge: chargeFor(SpaceKind.motorcycle),
+            limits: [
+              for (final l in _added.values) l,
+              for (final l in current.limits)
+                if (!addedLimits.contains(l.kind)) l,
+            ],
+          )
+        : conditionFor(kind)!;
+    final allow = current.allow;
+    return ParkingCondition(
+      bay: built.bay,
+      use: built.use,
+      share: built.share,
+      charge: built.charge,
+      limits: built.limits,
+      schedule: built.schedule,
+      basis: current.basis,
+      allow: built.bay == Bay.heavy && allow?.scooter == true
+          ? ZoneAllow(scooter: false, heavy: allow!.heavy)
+          : allow,
+    );
+  }
+
+  /// The added conditions as ticked, in [LimitKind] order.
+  Map<LimitKind, ParkingLimit> get _added {
+    final minutes = int.tryParse(maxMinutes.text.trim());
+    final periods = [for (final b in bans) ?b.period];
+    return {
+      if (timed)
+        LimitKind.timeLimit: ParkingLimit(
+          LimitKind.timeLimit,
+          maxMinutes: minutes,
+        ),
+      if (banned && periods.isNotEmpty)
+        LimitKind.noParking: ParkingLimit(
+          LimitKind.noParking,
+          periods: periods,
+        ),
+    };
   }
 
   /// The stored condition: what the form does not show stays as stored
@@ -105,74 +178,96 @@ class ConditionDraft {
   /// The kind the stored condition came with.
   final SpaceKind? loadedKind;
 
-  Charge? charge;
+  /// 共用格: who shares it; null until picked.
+  ShareKind? share;
 
-  /// The limits ticked under 還有其他限制嗎？, kept across kinds; only those
-  /// [extraLimits] offers for the kind are sent.
-  final extras = <LimitKind>{};
+  /// 收費嗎 as answered for each kind: a charge belongs to the bay it was
+  /// answered for, so another kind asks again; null keys the answer for
+  /// every kind not answered on its own (the [charge] setter).
+  final _charges = <SpaceKind?, Charge?>{};
 
-  /// 標示「普通、大型重機共用」 on a 限時 bay.
-  bool shared = false;
+  /// The answer for any kind not answered on its own.
+  set charge(Charge? value) => _charges[null] = value;
+
+  /// 收費嗎 for [kind]: its own answer, else the stored one (for the kind
+  /// loaded), else the shared one.
+  Charge? chargeFor(SpaceKind? kind) =>
+      _charges.containsKey(kind) ? _charges[kind] : _charges[null];
+
+  void setCharge(SpaceKind? kind, Charge? value) => _charges[kind] = value;
+
+  /// 限時停車, and how many minutes (empty: the sign does not say).
+  bool timed = false;
   final maxMinutes = TextEditingController();
+
+  /// 時段性禁停 and its periods.
+  bool banned = false;
+  final bans = <SlotDraft>[];
+
+  /// A 汽機共用 bay's periods.
   final slots = <SlotDraft>[];
 
   void dispose() {
     maxMinutes.dispose();
-    for (final s in slots) {
+    for (final s in [...slots, ...bans]) {
       s.dispose();
     }
   }
 
-  /// Whether a bay of [kind] asks how many minutes it allows.
-  bool asksMinutes(SpaceKind kind) =>
-      kind == SpaceKind.timedMotorcycle ||
-      (extras.contains(LimitKind.timeLimit) &&
-          extraLimits(kind).contains(LimitKind.timeLimit));
+  /// Whether a bay of [kind] has periods: 汽車＆機車 only (decision 64).
+  bool asksSlots(SpaceKind kind) =>
+      kind == SpaceKind.shared && share == ShareKind.carMotorcycle;
+
+  /// Whether 收費嗎 must be answered: a motorcycle bay is stored as a toll
+  /// or a free one unless a time limit decides its space type (§1.3).
+  bool needsCharge(SpaceKind kind) =>
+      !timed &&
+      (kind == SpaceKind.motorcycle ||
+          (kind == SpaceKind.shared && share == ShareKind.scooterHeavy));
 
   /// The condition a street bay of [kind] is sent with; null for a lot,
   /// whose zones carry theirs. While the kind stays the one loaded, every
-  /// facet the form does not show stays as stored; only what the form
-  /// edits changes. A basis is never sent: riders attach a notice as
-  /// evidence (§1.4).
+  /// facet the form does not show stays as stored. A basis is never sent:
+  /// riders attach a notice as evidence (§1.4).
   ParkingCondition? conditionFor(SpaceKind kind) {
-    final base = conditionOf(kind.type ?? SpaceType.paidMotorcycle);
-    if (base == null) return null;
+    if (kind == SpaceKind.offStreet) return null;
+    final base = conditionOf(kind.baseType)!;
     final same = kind == loadedKind;
     final from = same ? loaded ?? base : base;
-    final minutes = int.tryParse(maxMinutes.text.trim());
-    final (use, share) = switch (kind) {
-      SpaceKind.sharedMotorcycle => (BayUse.share, ShareKind.scooterHeavy),
-      SpaceKind.timedMotorcycle when shared => (
-        BayUse.share,
-        ShareKind.scooterHeavy,
-      ),
-      SpaceKind.paidMotorcycle ||
-      SpaceKind.freeMotorcycle ||
-      SpaceKind.timedMotorcycle when from.share == ShareKind.scooterHeavy => (
-        BayUse.usual,
-        null,
-      ),
-      _ => (from.use, from.share),
-    };
-    final offered = extraLimits(kind);
+    final shareKind = kind == SpaceKind.shared
+        ? share ?? ShareKind.carMotorcycle
+        : null;
+    final added = _added;
+    // A reserved bay (充電, 身障) keeps the bay, use and share it was
+    // stored with: the form does not ask them.
+    final reserved =
+        kind == SpaceKind.evMotorcycle || kind == SpaceKind.disabledMotorcycle;
     return ParkingCondition(
-      bay: from.bay,
-      use: use,
-      share: share,
-      charge: _chargeByKind.contains(kind) ? base.charge : charge,
+      bay: reserved ? from.bay : shareKind?.bay ?? base.bay,
+      use: reserved
+          ? from.use
+          : shareKind != null
+          ? BayUse.share
+          : BayUse.usual,
+      share: reserved ? from.share : shareKind,
+      charge: chargeFor(kind),
       limits: [
         for (final k in LimitKind.values)
-          if (base.hasLimit(k) || (offered.contains(k) && extras.contains(k)))
-            k == LimitKind.timeLimit
-                ? ParkingLimit(LimitKind.timeLimit, maxMinutes: minutes)
-                : base.limits.where((l) => l.kind == k).firstOrNull ??
-                      ParkingLimit(k)
+          if (base.hasLimit(k))
+            from.limits.where((l) => l.kind == k).firstOrNull ??
+                base.limits.firstWhere((l) => l.kind == k)
+          else if (added[k] case final limit?)
+            limit
           // A stored limit the form cannot show stays as it is.
-          else if (same && !offered.contains(k) && from.hasLimit(k))
+          else if (same && !addedLimits.contains(k) && from.hasLimit(k))
             from.limits.firstWhere((l) => l.kind == k),
       ]..sort((a, b) => _order(from, a).compareTo(_order(from, b))),
-      schedule: kind == SpaceKind.flexShared || same
+      schedule: shareKind == ShareKind.carMotorcycle
           ? [for (final s in slots) ?s.slot]
+          // 普大共用 is shared all the time (decision 64); other kinds
+          // keep the periods stored with them.
+          : same && shareKind == null
+          ? from.schedule
           : const [],
     );
   }
@@ -190,10 +285,7 @@ class ConditionDraft {
   SpaceType typeFor(SpaceKind kind) {
     final c = conditionFor(kind);
     return (c == null ? null : legacySpaceType(c, offStreet: false)) ??
-        kind.type ??
-        (charge == Charge.free
-            ? SpaceType.freeMotorcycle
-            : SpaceType.paidMotorcycle);
+        kind.baseType;
   }
 
   /// What the folded 格位 section says: the kind and what was added.
@@ -201,24 +293,21 @@ class ConditionDraft {
     final c = conditionFor(kind);
     return [
       kind.label,
-      if (asksCharge(kind) && c?.charge != null)
-        c!.charge == Charge.toll ? '收費' : '免費',
-      if (kind == SpaceKind.timedMotorcycle && shared) '普大共用',
+      if (kind == SpaceKind.shared && share != null) share!.label,
+      if (c?.charge != null) c!.charge == Charge.toll ? '收費' : '免費',
       for (final l in c?.limits ?? const <ParkingLimit>[])
-        if (l.kind == LimitKind.timeLimit && kind != SpaceKind.timedMotorcycle)
+        if (l.kind == LimitKind.timeLimit)
           l.maxMinutes == null ? '限時' : '限時 ${l.maxMinutes} 分鐘'
-        else if (l.kind == LimitKind.timeLimit && l.maxMinutes != null)
-          '限時 ${l.maxMinutes} 分鐘'
-        else if (l.kind == LimitKind.evOnly && kind != SpaceKind.evMotorcycle)
-          '限電動機車',
+        else if (l.kind == LimitKind.noParking)
+          '時段性禁停',
     ].join('・');
   }
 }
 
 /// What the form asks about the bay kind just picked, indented under it
-/// (C6 canvas AppForm): 收費格還是免費格, how long a 限時 bay allows, the
-/// limits it adds, and a 汽機共用 bay's periods. [holdHint] is a note that
-/// the report will wait for review.
+/// (C6 canvas SpaceTaxonomy): 誰共用 (共用格), 收費嗎, a 汽機共用 bay's
+/// 共用與專用時段, and the added conditions. [holdHint] is a note that the
+/// report will wait for review.
 class ConditionFields extends StatelessWidget {
   const ConditionFields({
     super.key,
@@ -233,13 +322,19 @@ class ConditionFields extends StatelessWidget {
   final String? holdHint;
 
   static const maxSlots = scheduleMaxEntries;
+  static const maxBans = limitPeriodsMaxEntries;
 
   @override
   Widget build(BuildContext context) {
     if (kind == SpaceKind.offStreet) return const SizedBox.shrink();
     final colors = Theme.of(context).colorScheme;
-    final offered = extraLimits(kind);
     final muted = TextStyle(fontSize: 13, color: colors.onSurfaceVariant);
+    Widget error(FormFieldState<Object?> state) => state.errorText == null
+        ? const SizedBox.shrink()
+        : Text(
+            state.errorText!,
+            style: TextStyle(fontSize: 13, color: colors.error),
+          );
     Widget minutes() => Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: Row(
@@ -284,110 +379,81 @@ class ConditionFields extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (kind == SpaceKind.timedMotorcycle) minutes(),
-        if (asksCharge(kind))
-          FormField<Charge?>(
-            // A 普大共用 bay is stored as toll or free, so it must say.
-            validator: (_) =>
-                kind == SpaceKind.sharedMotorcycle && draft.charge == null
-                ? '請選收費格或免費格'
-                : null,
+        if (kind == SpaceKind.shared)
+          FormField<ShareKind?>(
+            validator: (_) => draft.share == null ? '請選誰共用' : null,
             builder: (state) => Padding(
               padding: const EdgeInsets.only(bottom: 4),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    kind == SpaceKind.sharedMotorcycle
-                        ? '收費還是免費？'
-                        : '收費格還是免費格？',
-                    style: muted,
-                  ),
+                  Text('誰共用？', style: muted),
                   const SizedBox(height: 4),
-                  OptionPills<Charge?>(
-                    key: const ValueKey('condition-charge'),
-                    values: [
-                      if (kind != SpaceKind.sharedMotorcycle) (null, '未確認'),
-                      (Charge.toll, '收費格'),
-                      (Charge.free, '免費格'),
-                    ],
-                    selected: draft.charge,
-                    keyOf: (v) => 'condition-charge-${v?.name ?? 'unknown'}',
+                  OptionPills<ShareKind?>(
+                    key: const ValueKey('condition-share'),
+                    values: [for (final s in ShareKind.values) (s, s.label)],
+                    selected: draft.share,
+                    keyOf: (v) => 'condition-share-${v?.wire}',
                     onSelect: (v) {
-                      draft.charge = v;
+                      draft.share = v;
                       state.didChange(v);
                       onChanged();
                     },
                   ),
-                  if (state.errorText case final error?)
-                    Text(
-                      error,
-                      style: TextStyle(fontSize: 13, color: colors.error),
-                    ),
+                  if (draft.share == ShareKind.scooterHeavy)
+                    Text('普通機車與大型重機全時段都能停', style: muted),
+                  error(state),
                 ],
               ),
             ),
           ),
-        if (offered.isNotEmpty || kind == SpaceKind.timedMotorcycle) ...[
-          const SizedBox(height: 4),
-          Text('還有其他限制嗎？（可複選）', style: muted),
-          if (offered.contains(LimitKind.timeLimit)) ...[
-            OptionCheck(
-              key: const ValueKey('condition-limit-time_limit'),
-              label: '限時停車',
-              value: draft.extras.contains(LimitKind.timeLimit),
-              onChanged: (on) {
-                on
-                    ? draft.extras.add(LimitKind.timeLimit)
-                    : draft.extras.remove(LimitKind.timeLimit);
-                onChanged();
-              },
+        FormField<Charge?>(
+          validator: (_) =>
+              draft.needsCharge(kind) && draft.chargeFor(kind) == null
+              ? '機車格請選收費或免費'
+              : null,
+          builder: (state) => Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('收費嗎？', style: muted),
+                const SizedBox(height: 4),
+                OptionPills<Charge?>(
+                  key: const ValueKey('condition-charge'),
+                  values: const [
+                    (null, '未確認'),
+                    (Charge.toll, '收費'),
+                    (Charge.free, '免費'),
+                  ],
+                  selected: draft.chargeFor(kind),
+                  keyOf: (v) => 'condition-charge-${v?.name ?? 'unknown'}',
+                  onSelect: (v) {
+                    draft.setCharge(kind, v);
+                    state.didChange(v);
+                    onChanged();
+                  },
+                ),
+                error(state),
+              ],
             ),
-            if (draft.extras.contains(LimitKind.timeLimit))
-              Padding(
-                padding: const EdgeInsetsDirectional.only(start: 44),
-                child: minutes(),
-              ),
-          ],
-          if (offered.contains(LimitKind.evOnly))
-            OptionCheck(
-              key: const ValueKey('condition-limit-ev_only'),
-              label: '也限電動機車',
-              value: draft.extras.contains(LimitKind.evOnly),
-              onChanged: (on) {
-                on
-                    ? draft.extras.add(LimitKind.evOnly)
-                    : draft.extras.remove(LimitKind.evOnly);
-                onChanged();
-              },
-            ),
-          if (kind == SpaceKind.timedMotorcycle)
-            OptionCheck(
-              key: const ValueKey('condition-shared'),
-              label: '標示「普通、大型重機共用」',
-              subtitle: '地面或告示牌寫明兩種機車都能停時才勾選',
-              value: draft.shared,
-              onChanged: (on) {
-                draft.shared = on;
-                onChanged();
-              },
-            ),
-        ],
-        if (holdHint case final hint?)
-          _Note(key: const ValueKey('condition-hold'), text: hint),
-        if (kind == SpaceKind.flexShared) ...[
+          ),
+        ),
+        if (draft.asksSlots(kind)) ...[
           const SizedBox(height: 8),
-          Text('汽機共用的時段（選填）', style: Theme.of(context).textTheme.bodyLarge),
+          Text('共用時段與專用時段', style: Theme.of(context).textTheme.bodyLarge),
           const SizedBox(height: 4),
           Text(
-            '照告示牌填每段時間可停的車種；沒填的時間 App 會顯示未確認。',
+            '照告示牌填每段時間：汽機車共用，或汽車專用、機車專用；沒填的時間 App 會顯示未確認。',
             style: TextStyle(color: colors.onSurfaceVariant),
           ),
           for (final (i, slot) in draft.slots.indexed)
-            _SlotCard(
+            _PeriodCard(
               key: ObjectKey(slot),
-              index: i,
+              keyPrefix: 'condition-slot-$i',
+              title: '時段 ${i + 1}',
               slot: slot,
+              ban: false,
               onChanged: onChanged,
               onRemove: () {
                 draft.slots.remove(slot);
@@ -412,6 +478,89 @@ class ConditionFields extends StatelessWidget {
             ),
           ),
         ],
+        const SizedBox(height: 4),
+        Text('加註條件（可複選）', style: muted),
+        OptionCheck(
+          key: const ValueKey('condition-limit-time_limit'),
+          label: '限時停車',
+          value: draft.timed,
+          onChanged: (on) {
+            draft.timed = on;
+            onChanged();
+          },
+        ),
+        if (draft.timed)
+          Padding(
+            padding: const EdgeInsetsDirectional.only(start: 44),
+            child: minutes(),
+          ),
+        OptionCheck(
+          key: const ValueKey('condition-limit-no_parking'),
+          label: '時段性禁停',
+          value: draft.banned,
+          onChanged: (on) {
+            draft.banned = on;
+            if (on && draft.bans.isEmpty) {
+              draft.bans.add(SlotDraft(allDay: false));
+            }
+            onChanged();
+          },
+        ),
+        if (draft.banned)
+          Padding(
+            padding: const EdgeInsetsDirectional.only(start: 44),
+            child: FormField<int>(
+              validator: (_) => draft.bans.any((b) => b.period != null)
+                  ? null
+                  : '請填禁停的時間，或取消勾選時段性禁停',
+              builder: (state) => Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final (i, ban) in draft.bans.indexed)
+                    _PeriodCard(
+                      key: ObjectKey(ban),
+                      keyPrefix: 'condition-ban-$i',
+                      title: '禁停 ${i + 1}',
+                      slot: ban,
+                      ban: true,
+                      onChanged: () {
+                        state.didChange(i);
+                        onChanged();
+                      },
+                      onRemove: draft.bans.length == 1
+                          ? null
+                          : () {
+                              draft.bans.remove(ban);
+                              ban.dispose();
+                              onChanged();
+                            },
+                    ),
+                  Text('選「平日」＝假日（含國定假日）除外。', style: muted),
+                  Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: TextButton.icon(
+                      key: const ValueKey('condition-ban-add'),
+                      onPressed: draft.bans.length >= maxBans
+                          ? null
+                          : () {
+                              draft.bans.add(SlotDraft(allDay: false));
+                              onChanged();
+                            },
+                      icon: const Icon(Icons.add),
+                      label: Text(
+                        draft.bans.length >= maxBans
+                            ? '最多 $maxBans 段禁停時間'
+                            : '加一段禁停時間',
+                      ),
+                    ),
+                  ),
+                  error(state),
+                ],
+              ),
+            ),
+          ),
+        if (holdHint case final hint?)
+          _Note(key: const ValueKey('condition-hold'), text: hint),
       ],
     );
   }
@@ -459,29 +608,57 @@ String? _time(String? v) =>
     RegExp(timePattern).hasMatch(v?.trim() ?? '') ? null : '請用 24 小時制，例如 08:00';
 
 const _dayLabels = [('all', '每天'), ('weekday', '平日'), ('holiday', '假日')];
-const _slotVehicles = [
-  (SlotVehicle.scooter, '普通機車'),
-  (SlotVehicle.heavy, '大型重機'),
-  (SlotVehicle.car, '汽車'),
+const _weekdayLabels = [
+  ('mon', '一'),
+  ('tue', '二'),
+  ('wed', '三'),
+  ('thu', '四'),
+  ('fri', '五'),
+  ('sat', '六'),
+  ('sun', '日'),
 ];
 
-class _SlotCard extends StatelessWidget {
-  const _SlotCard({
+/// Who a 汽機共用 period is for (decision 62): both, or one side only.
+const _shareUses = [
+  ('both', '汽機車共用', {SlotVehicle.scooter, SlotVehicle.heavy, SlotVehicle.car}),
+  ('car', '汽車專用', {SlotVehicle.car}),
+  ('bike', '機車專用', {SlotVehicle.scooter, SlotVehicle.heavy}),
+];
+
+/// One period: its days (每天、平日、假日 or 指定 weekdays), all day or a
+/// time, and — for a 汽機共用 slot — who parks then. A 禁停 period has no
+/// vehicles.
+class _PeriodCard extends StatelessWidget {
+  const _PeriodCard({
     super.key,
-    required this.index,
+    required this.keyPrefix,
+    required this.title,
     required this.slot,
+    required this.ban,
     required this.onChanged,
     required this.onRemove,
   });
-  final int index;
+  final String keyPrefix;
+  final String title;
   final SlotDraft slot;
+  final bool ban;
   final VoidCallback onChanged;
-  final VoidCallback onRemove;
+
+  /// Null when the period cannot be removed (the only 禁停 period).
+  final VoidCallback? onRemove;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final k = 'condition-slot-$index';
+    final k = keyPrefix;
+    final picked = slot.days is List;
+    final use = _shareUses
+        .where(
+          (u) =>
+              u.$3.length == slot.vehicles.length &&
+              u.$3.containsAll(slot.vehicles),
+        )
+        .firstOrNull;
     return Padding(
       padding: const EdgeInsets.only(top: 12),
       child: Material(
@@ -499,16 +676,19 @@ class _SlotCard extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      '時段 ${index + 1}',
+                      title,
                       style: Theme.of(context).textTheme.titleSmall,
                     ),
                   ),
-                  IconButton(
-                    key: ValueKey('$k-remove'),
-                    tooltip: '刪除時段 ${index + 1}',
-                    icon: const Icon(Icons.delete_outline),
-                    onPressed: onRemove,
-                  ),
+                  if (onRemove != null)
+                    IconButton(
+                      key: ValueKey('$k-remove'),
+                      tooltip: '刪除$title',
+                      icon: const Icon(Icons.delete_outline),
+                      onPressed: onRemove,
+                    )
+                  else
+                    const SizedBox(height: 48),
                 ],
               ),
               Padding(
@@ -516,17 +696,13 @@ class _SlotCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    Text(
+                      '哪些天',
+                      style: TextStyle(color: colors.onSurfaceVariant),
+                    ),
                     Wrap(
                       spacing: 8,
-                      runSpacing: 8,
                       children: [
-                        if (slot.days case final List<Object?> picked)
-                          OptionPill(
-                            key: ValueKey('$k-days-picked'),
-                            label: FeeWords.dayLabel(FeeWords.dayMask(picked)),
-                            selected: true,
-                            onTap: () {},
-                          ),
                         for (final (value, label) in _dayLabels)
                           OptionPill(
                             key: ValueKey('$k-days-$value'),
@@ -537,12 +713,61 @@ class _SlotCard extends StatelessWidget {
                               onChanged();
                             },
                           ),
+                        OptionPill(
+                          key: ValueKey('$k-days-picked'),
+                          label: '指定',
+                          selected: picked,
+                          onTap: () {
+                            if (!picked) slot.days = <String>[];
+                            onChanged();
+                          },
+                        ),
                       ],
                     ),
-                    const SizedBox(height: 8),
+                    if (picked)
+                      FormField<Object>(
+                        validator: (_) =>
+                            (slot.days as List).isEmpty ? '請選星期幾' : null,
+                        builder: (state) => Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Wrap(
+                              spacing: 4,
+                              children: [
+                                for (final (value, label) in _weekdayLabels)
+                                  OptionPill(
+                                    key: ValueKey('$k-weekday-$value'),
+                                    label: label,
+                                    tooltip: '週$label',
+                                    selected: (slot.days as List).contains(
+                                      value,
+                                    ),
+                                    onTap: () {
+                                      final days = slot.days as List;
+                                      slot.days = [
+                                        for (final (w, _) in _weekdayLabels)
+                                          if (w == value
+                                              ? !days.contains(w)
+                                              : days.contains(w))
+                                            w,
+                                      ];
+                                      state.didChange(slot.days);
+                                      onChanged();
+                                    },
+                                  ),
+                              ],
+                            ),
+                            if (state.errorText case final error?)
+                              Text(
+                                error,
+                                style: TextStyle(color: colors.error),
+                              ),
+                          ],
+                        ),
+                      ),
+                    const SizedBox(height: 4),
                     Wrap(
                       spacing: 8,
-                      runSpacing: 8,
                       children: [
                         for (final (value, label) in [
                           (true, '全天'),
@@ -554,7 +779,7 @@ class _SlotCard extends StatelessWidget {
                             selected: slot.allDay == value,
                             onTap: () {
                               slot.allDay = value;
-                              if (!value && slot.from.text.isEmpty) {
+                              if (!value && !ban && slot.from.text.isEmpty) {
                                 slot.from.text = '07:00';
                                 slot.to.text = '20:00';
                               }
@@ -570,8 +795,8 @@ class _SlotCard extends StatelessWidget {
                         runSpacing: 8,
                         children: [
                           for (final (field, label, controller) in [
-                            ('from', '開始', slot.from),
-                            ('to', '結束', slot.to),
+                            ('from', ban ? '禁停開始' : '開始', slot.from),
+                            ('to', ban ? '禁停結束' : '結束', slot.to),
                           ])
                             SizedBox(
                               width: 140,
@@ -581,7 +806,9 @@ class _SlotCard extends StatelessWidget {
                                 keyboardType: TextInputType.datetime,
                                 decoration: InputDecoration(
                                   labelText: label,
-                                  hintText: field == 'from' ? '07:00' : '20:00',
+                                  hintText: field == 'from'
+                                      ? '07:00'
+                                      : (ban ? '09:00' : '20:00'),
                                   helperText: field == 'to'
                                       ? '比開始早表示到隔日'
                                       : null,
@@ -602,43 +829,54 @@ class _SlotCard extends StatelessWidget {
                         ],
                       ),
                     ],
-                    const SizedBox(height: 8),
-                    FormField<Set<SlotVehicle>>(
-                      validator: (_) =>
-                          slot.vehicles.isEmpty ? '請選這段時間可停的車種，或刪除這個時段' : null,
-                      builder: (state) => Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Text(
-                            '這段時間可停',
-                            style: TextStyle(color: colors.onSurfaceVariant),
-                          ),
-                          const SizedBox(height: 4),
-                          for (final (value, label) in _slotVehicles)
-                            OptionCheck(
-                              key: ValueKey('$k-vehicle-${value.name}'),
-                              label: label,
-                              value: slot.vehicles.contains(value),
-                              onChanged: (on) {
-                                slot.vehicles = {
-                                  ...slot.vehicles.where((v) => v != value),
-                                  if (on) value,
-                                };
-                                state.didChange(slot.vehicles);
-                                onChanged();
-                              },
+                    if (!ban) ...[
+                      const SizedBox(height: 8),
+                      FormField<Set<SlotVehicle>>(
+                        validator: (_) => slot.vehicles.isEmpty
+                            ? '請選這段時間是共用還是專用，或刪除這個時段'
+                            : null,
+                        builder: (state) => Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              '這段時間',
+                              style: TextStyle(color: colors.onSurfaceVariant),
                             ),
-                          if (state.errorText case final error?)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 6),
-                              child: Text(
+                            Wrap(
+                              spacing: 8,
+                              children: [
+                                // Vehicles stored in another mix stay as
+                                // they are until the rider picks.
+                                if (use == null && slot.vehicles.isNotEmpty)
+                                  OptionPill(
+                                    key: ValueKey('$k-use-stored'),
+                                    label: _storedVehicles(slot.vehicles),
+                                    selected: true,
+                                    onTap: () {},
+                                  ),
+                                for (final (value, label, vehicles)
+                                    in _shareUses)
+                                  OptionPill(
+                                    key: ValueKey('$k-use-$value'),
+                                    label: label,
+                                    selected: use?.$1 == value,
+                                    onTap: () {
+                                      slot.vehicles = {...vehicles};
+                                      state.didChange(slot.vehicles);
+                                      onChanged();
+                                    },
+                                  ),
+                              ],
+                            ),
+                            if (state.errorText case final error?)
+                              Text(
                                 error,
                                 style: TextStyle(color: colors.error),
                               ),
-                            ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
@@ -649,3 +887,13 @@ class _SlotCard extends StatelessWidget {
     );
   }
 }
+
+String _storedVehicles(Set<SlotVehicle> vehicles) => [
+  for (final v in SlotVehicle.values)
+    if (vehicles.contains(v))
+      switch (v) {
+        SlotVehicle.scooter => '普通機車',
+        SlotVehicle.heavy => '大型重機',
+        SlotVehicle.car => '汽車',
+      },
+].join('、');

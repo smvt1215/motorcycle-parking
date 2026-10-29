@@ -335,6 +335,12 @@ class _SuggestionFormState extends State<_SuggestionForm> {
   );
   late SpaceKind kind = currentKind;
 
+  /// The kind as the change list names it, 共用格 with who shares it.
+  late final String currentKindText = kindText(
+    currentKind,
+    SpaceKind.shareOf(widget.spot.spaceType, widget.spot.condition),
+  );
+
   /// The space type sent: the one the suggested condition converts to.
   SpaceType get type => condition.typeFor(kind);
   late bool? scooter = widget.spot.scooterAllowed;
@@ -492,7 +498,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
     }
     if (!structured) return '${widget.label}：$text';
     final value = typeField
-        ? '${kind.label}${shareHeavyChanged ? '，大型重機${_yesNo(shareHeavy)}' : ''}'
+        ? '${kindText(kind, condition.share)}${shareHeavyChanged ? '，大型重機${_yesNo(shareHeavy)}' : ''}'
         : feeField
         ? feeNoteOf(feeAfter(currentFee, feeEdits))
         : _eligibility(scooter, heavy);
@@ -619,10 +625,11 @@ class _SuggestionFormState extends State<_SuggestionForm> {
         '$label從「$from」改成「$to」';
     if (typeField) {
       return [
-        if (kind != currentKind)
-          line(widget.label, currentKind.label, kind.label),
+        if (kindText(kind, condition.share) != currentKindText)
+          line(widget.label, currentKindText, kindText(kind, condition.share)),
         if (suggestedCondition case final c?
-            when kind == currentKind && c != currentCondition)
+            when kindText(kind, condition.share) == currentKindText &&
+                c != currentCondition)
           line('停放條件', conditionSummary(currentCondition), conditionSummary(c)),
         if (lotType && facilitiesChanged)
           line(
@@ -894,6 +901,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                         value: kind,
                         keyPrefix: 'report-space',
                         reveal: reveal,
+                        share: condition.share,
                         onChanged: (v) {
                           setState(() {
                             kind = v;

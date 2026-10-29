@@ -16,7 +16,6 @@ import '../../domain/eligibility.dart';
 import '../../domain/map_viewport.dart';
 import '../../domain/spot_clusters.dart';
 import '../../models/parking.dart';
-import '../../models/space_kind.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../report/report_sheet.dart';
 import 'availability_capsule.dart';
@@ -56,7 +55,7 @@ class _MapPageState extends ConsumerState<MapPage> {
 
   /// Kept for dispose, where `ref` can no longer be read.
   late final launchStore = ref.read(storeProvider);
-  SpaceKind? type;
+  SpaceFilter type = const SpaceFilter();
   bool greeted = false;
   bool promptDeferred = false;
   late final AppLifecycleListener lifecycle;
@@ -216,7 +215,7 @@ class _MapPageState extends ConsumerState<MapPage> {
   }
 
   void _clearFilters() => setState(() {
-    type = null;
+    type = const SpaceFilter();
     hideDenied = false;
     availabilityFilter = AvailabilityFilter.off;
   });
@@ -228,24 +227,8 @@ class _MapPageState extends ConsumerState<MapPage> {
     showSpaceTypeSheet(
       context,
       value: type,
-      counts: {
-        null: inView.length,
-        for (final option in SpaceKind.values)
-          option: inView
-              .where((s) => matchesSpaceFilter(s, option, store.vehicle))
-              .length,
-      },
-      // Each spot once per group, though it may match two of its kinds.
-      groupCounts: {
-        for (final group in SpaceKindGroup.values)
-          group: inView
-              .where(
-                (s) => group.kinds.any(
-                  (k) => matchesSpaceFilter(s, k, store.vehicle),
-                ),
-              )
-              .length,
-      },
+      count: (filter) =>
+          inView.where((s) => filter.matches(s, store.vehicle)).length,
       onChanged: (option) => setState(() => type = option),
     );
   }
@@ -329,7 +312,7 @@ class _MapPageState extends ConsumerState<MapPage> {
     final spots = visible
         .where(
           (s) =>
-              (type == null || matchesSpaceFilter(s, type!, store.vehicle)) &&
+              type.matches(s, store.vehicle) &&
               // Pending reports reach notAllowed only through legal rules
               // (see eligibility()), so hiding them here is intended.
               (!hideDenied ||
@@ -367,7 +350,7 @@ class _MapPageState extends ConsumerState<MapPage> {
     ]..sort((a, b) => a.$1 != b.$1 ? a.$1 - b.$1 : a.$2 - b.$2);
     final matches = [for (final (_, _, s) in ranked) s];
     final filtered =
-        type != null || hideDenied || liveFilter != AvailabilityFilter.off;
+        !type.isEmpty || hideDenied || liveFilter != AvailabilityFilter.off;
     final searchHeight = 32 + MediaQuery.textScalerOf(context).scale(20);
     final filterHeight = (16 + MediaQuery.textScalerOf(context).scale(15))
         .clamp(40.0, double.infinity);
@@ -796,10 +779,10 @@ class _MapPageState extends ConsumerState<MapPage> {
                             onTap: () => openVehicleSelector(store),
                           ),
                           _MapPill(
-                            label: type?.label ?? '全部格位',
+                            label: type.label,
                             icon: Icons.local_parking_outlined,
                             showChevron: true,
-                            selected: type != null,
+                            selected: !type.isEmpty,
                             onTap: () => _openSpaceSelector(store),
                           ),
                           _MapPill(

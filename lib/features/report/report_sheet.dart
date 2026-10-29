@@ -1420,6 +1420,7 @@ class _ReportFormState extends State<ReportForm> {
                       value: kind,
                       keyPrefix: 'report-space',
                       reveal: reveal,
+                      share: condition.share,
                       onChanged: (v) {
                         setKind(v);
                         state.didChange(v);

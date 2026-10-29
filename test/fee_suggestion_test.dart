@@ -53,8 +53,8 @@ void main() {
       ],
     });
     final draft = ConditionDraft.of(stored, SpaceType.flexShared)
-      ..charge = Charge.toll;
-    final sent = draft.conditionFor(SpaceKind.flexShared)!;
+      ..setCharge(SpaceKind.shared, Charge.toll);
+    final sent = draft.conditionFor(SpaceKind.shared)!;
     expect(sent.schedule.single.days, ['mon', 'wed']);
     expect(conditionSummary(sent), '收費、共用時段 週一、週三 20:00–隔日 07:00 普通機車');
   });
@@ -90,48 +90,60 @@ void main() {
     },
   );
 
-  test('limits ticked under a kind convert to the space type sent (§1.3)', () {
-    final draft = ConditionDraft()..extras.add(LimitKind.evOnly);
-    final ev = draft.conditionFor(SpaceKind.paidMotorcycle)!;
-    expect(ev.toJson(), {
-      'bay': 'motorcycle',
-      'use': 'usual',
-      'charge': 'toll',
-      'limits': [
-        {'kind': 'ev_only'},
-      ],
-    });
-    expect(draft.typeFor(SpaceKind.paidMotorcycle), SpaceType.evMotorcycle);
-    // 普大共用 is stored as the toll or free bay it is.
-    draft
-      ..extras.clear()
-      ..charge = Charge.free;
-    expect(draft.typeFor(SpaceKind.sharedMotorcycle), SpaceType.freeMotorcycle);
-    expect(draft.conditionFor(SpaceKind.sharedMotorcycle)!.toJson(), {
-      'bay': 'motorcycle',
-      'use': 'share',
-      'share': 'scooter_heavy',
-      'charge': 'free',
-    });
-    // A 限時 bay posted for both classes that also only takes EVs.
-    draft
-      ..shared = true
-      ..extras.add(LimitKind.evOnly)
-      ..maxMinutes.text = '30';
-    expect(draft.conditionFor(SpaceKind.timedMotorcycle)!.toJson(), {
-      'bay': 'motorcycle',
-      'use': 'share',
-      'share': 'scooter_heavy',
-      'charge': 'free',
-      'limits': [
-        {'kind': 'time_limit', 'max_minutes': 30},
-        {'kind': 'ev_only'},
-      ],
-    });
-    expect(draft.typeFor(SpaceKind.timedMotorcycle), SpaceType.evMotorcycle);
-    // An offer of one kind is not sent with another.
-    expect(draft.conditionFor(SpaceKind.heavyOnly)!.limits, isEmpty);
-  });
+  test(
+    'added conditions convert to the space type sent (§1.3, decision 62)',
+    () {
+      final draft = ConditionDraft()..charge = Charge.toll;
+      expect(draft.conditionFor(SpaceKind.motorcycle)!.toJson(), {
+        'bay': 'motorcycle',
+        'use': 'usual',
+        'charge': 'toll',
+      });
+      expect(draft.typeFor(SpaceKind.motorcycle), SpaceType.paidMotorcycle);
+      // 一般機車格＋限時 is still stored as timedMotorcycle.
+      draft
+        ..timed = true
+        ..maxMinutes.text = '30';
+      expect(draft.typeFor(SpaceKind.motorcycle), SpaceType.timedMotorcycle);
+      // 普大共用 is stored as the toll or free bay it is, without periods
+      // (decision 64).
+      draft
+        ..timed = false
+        ..charge = Charge.free
+        ..share = ShareKind.scooterHeavy
+        ..slots.add(SlotDraft()..vehicles = {SlotVehicle.scooter});
+      expect(draft.typeFor(SpaceKind.shared), SpaceType.freeMotorcycle);
+      expect(draft.conditionFor(SpaceKind.shared)!.toJson(), {
+        'bay': 'motorcycle',
+        'use': 'share',
+        'share': 'scooter_heavy',
+        'charge': 'free',
+      });
+      // 汽車＆機車 carries its periods.
+      draft.share = ShareKind.carMotorcycle;
+      expect(draft.typeFor(SpaceKind.shared), SpaceType.flexShared);
+      expect(draft.conditionFor(SpaceKind.shared)!.schedule, hasLength(1));
+      // 時段性禁停 does not change the space type.
+      draft
+        ..banned = true
+        ..bans.add(SlotDraft(allDay: false));
+      draft.bans.single
+        ..days = 'weekday'
+        ..from.text = '07:00'
+        ..to.text = '09:00';
+      final heavy = draft.conditionFor(SpaceKind.heavyOnly)!;
+      expect(heavy.toJson()['limits'], [
+        {
+          'kind': 'no_parking',
+          'periods': [
+            {'days': 'weekday', 'from': '07:00', 'to': '09:00'},
+          ],
+        },
+      ]);
+      expect(draft.typeFor(SpaceKind.heavyOnly), SpaceType.heavyOnly);
+      expect(draft.summary(SpaceKind.heavyOnly), '大型重機專用格・免費・時段性禁停');
+    },
+  );
 
   test('an untouched condition compares equal whatever its limits order', () {
     // Built directly, not read through fromJson (which sorts them).
@@ -149,25 +161,35 @@ void main() {
   });
 
   test('every kind and tick sends a condition validate.ts accepts', () {
-    for (final kind in SpaceKind.values) {
-      if (kind == SpaceKind.offStreet) continue;
-      for (final charge in [Charge.toll, Charge.free, null]) {
-        if (kind == SpaceKind.sharedMotorcycle && charge == null) continue;
-        for (var mask = 0; mask < 8; mask++) {
-          final draft = ConditionDraft()
-            ..charge = charge
-            ..shared = mask & 4 != 0
-            ..maxMinutes.text = '20';
-          if (mask & 1 != 0) draft.extras.add(LimitKind.timeLimit);
-          if (mask & 2 != 0) draft.extras.add(LimitKind.evOnly);
-          final c = draft.conditionFor(kind)!;
-          final why = '$kind $charge $mask';
-          expect(validCondition(c.toJson()), isTrue, reason: why);
-          expect(
-            legacySpaceType(c, offStreet: false),
-            draft.typeFor(kind),
-            reason: why,
-          );
+    for (final kind in SpaceKind.painted) {
+      for (final share in [...ShareKind.values, null]) {
+        if ((kind == SpaceKind.shared) != (share != null)) continue;
+        for (final charge in [Charge.toll, Charge.free, null]) {
+          for (var mask = 0; mask < 4; mask++) {
+            final draft = ConditionDraft()
+              ..charge = charge
+              ..share = share
+              ..timed = mask & 1 != 0
+              ..banned = mask & 2 != 0
+              ..maxMinutes.text = '20'
+              ..bans.add(SlotDraft(allDay: false));
+            draft.bans.single
+              ..from.text = '07:00'
+              ..to.text = '09:00';
+            final c = draft.conditionFor(kind)!;
+            final why = '$kind $share $charge $mask';
+            // The form asks 收費嗎 where the space type needs it.
+            if (draft.needsCharge(kind) && charge == null) {
+              expect(validCondition(c.toJson()), isFalse, reason: why);
+              continue;
+            }
+            expect(validCondition(c.toJson()), isTrue, reason: why);
+            expect(
+              legacySpaceType(c, offStreet: false),
+              draft.typeFor(kind),
+              reason: why,
+            );
+          }
         }
       }
     }
@@ -283,7 +305,12 @@ void main() {
     });
 
     testWidgets('停放條件欄位在 ${width.toInt()} px、$scale 倍不溢出', (tester) async {
-      final draft = ConditionDraft()..slots.add(SlotDraft()..allDay = false);
+      final draft = ConditionDraft()
+        ..share = ShareKind.carMotorcycle
+        ..banned = true
+        ..timed = true
+        ..bans.add(SlotDraft(allDay: false))
+        ..slots.add(SlotDraft()..allDay = false);
       draft.slots.single.from.text = '20:00';
       draft.slots.single.to.text = '07:00';
       await pump(
@@ -291,7 +318,7 @@ void main() {
         width,
         StatefulBuilder(
           builder: (context, setState) => ConditionFields(
-            kind: SpaceKind.flexShared,
+            kind: SpaceKind.shared,
             draft: draft,
             holdHint: '普大共用的免費格較少見，請附上公告連結，審核會比較快。',
             onChanged: () => setState(() {}),

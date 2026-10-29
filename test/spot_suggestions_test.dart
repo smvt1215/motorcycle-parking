@@ -11,6 +11,8 @@ import 'package:motorcycle_parking/features/report/fee_suggestion.dart';
 import 'package:motorcycle_parking/features/report/spot_suggestions.dart';
 import 'package:motorcycle_parking/domain/location_check.dart';
 import 'package:motorcycle_parking/models/parking.dart';
+import 'package:motorcycle_parking/models/parking_condition.dart'
+    show ShareKind;
 import 'package:motorcycle_parking/models/space_kind.dart';
 import 'package:motorcycle_parking/models/fee.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
@@ -55,20 +57,28 @@ class RecordingStore extends AppStore {
 }
 
 /// Scrolls the open suggestion form to its button and taps it.
-/// Taps the bay kind [kind] in the grouped list, opening its group first.
+/// Taps the bay kind [kind] in the list.
 Future<void> pickKind(WidgetTester tester, SpaceKind kind) async {
   final tile = find.byKey(ValueKey('report-space-${kind.name}'));
-  if (tile.evaluate().isEmpty) {
-    final group = find.byKey(ValueKey('report-space-group-${kind.group.name}'));
-    await tester.ensureVisible(group);
-    await tester.pumpAndSettle();
-    await tester.tap(group);
-    await tester.pumpAndSettle();
-  }
   await tester.ensureVisible(tile);
   await tester.pumpAndSettle();
   await tester.tap(tile);
   await tester.pumpAndSettle();
+}
+
+/// Taps the pill or check keyed [key], scrolling to it first.
+Future<void> tapKey(WidgetTester tester, String key) async {
+  final target = find.byKey(ValueKey(key));
+  await tester.ensureVisible(target);
+  await tester.pumpAndSettle();
+  await tester.tap(target);
+  await tester.pumpAndSettle();
+}
+
+/// 共用格 shared by [share] (decision 62).
+Future<void> pickShared(WidgetTester tester, ShareKind share) async {
+  await pickKind(tester, SpaceKind.shared);
+  await tapKey(tester, 'condition-share-${share.wire}');
 }
 
 Future<void> scrollAndSend(WidgetTester tester) async {
@@ -289,8 +299,8 @@ void main() {
     await pickKind(tester, SpaceKind.heavyOnly);
     expect(
       find.text(
-        '格位類型從「${SpaceType.freeMotorcycle.label}」'
-        '改成「${SpaceType.heavyOnly.label}」',
+        '格位類型從「${SpaceKind.motorcycle.label}」'
+        '改成「${SpaceKind.heavyOnly.label}」',
       ),
       findsOneWidget,
     );
@@ -298,9 +308,10 @@ void main() {
     expect(store.submissions.single, {
       'action': 'flag',
       'source_id': spot.id,
-      'reason': '格位類型：建議「${SpaceType.heavyOnly.label}」',
+      'reason': '格位類型：建議「${SpaceKind.heavyOnly.label}」',
       'field': 'space_type',
-      // The kind's condition goes with it, so the two never disagree.
+      // The kind's condition goes with it, so the two never disagree; 收費嗎
+      // is asked again for the new kind (decision 62).
       'proposed': {
         'space_type': 'heavyOnly',
         'condition': {'bay': 'heavy', 'use': 'usual'},
@@ -748,14 +759,9 @@ void main() {
 
   testWidgets('格位建議帶停放條件：限時格的收費與限停分鐘', (tester) async {
     final store = await openSuggestion(tester, '格位類型');
-    await pickKind(tester, SpaceKind.timedMotorcycle);
-    final charge = find.descendant(
-      of: find.byKey(const ValueKey('condition-charge')),
-      matching: find.text('收費格'),
-    );
-    await tester.ensureVisible(charge);
-    await tester.tap(charge);
-    await tester.pumpAndSettle();
+    await pickKind(tester, SpaceKind.motorcycle);
+    await tapKey(tester, 'condition-charge-toll');
+    await tapKey(tester, 'condition-limit-time_limit');
     final minutes = find.byKey(const ValueKey('condition-max-minutes'));
     await tester.ensureVisible(minutes);
     await tester.enterText(minutes, '20');
@@ -775,18 +781,17 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('收起格位分組後送出，普大共用沒選收費或免費仍會擋下並重新展開', (tester) async {
+  testWidgets('共用格沒選誰共用、普大共用沒選收費或免費都會擋下', (tester) async {
     final store = await openSuggestion(tester, '格位類型');
-    await pickKind(tester, SpaceKind.sharedMotorcycle);
-    final group = find.byKey(const ValueKey('report-space-group-motorcycle'));
-    await tester.ensureVisible(group);
-    await tester.pumpAndSettle();
-    await tester.tap(group);
-    await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('condition-charge')), findsNothing);
+    await pickKind(tester, SpaceKind.shared);
     await submitSuggestion(tester, '送出修改建議');
     expect(store.submissions, isEmpty);
-    expect(find.text('請選收費格或免費格'), findsOneWidget);
+    expect(find.text('請選誰共用'), findsOneWidget);
+    await tapKey(tester, 'condition-share-scooter_heavy');
+    await tapKey(tester, 'condition-charge-unknown');
+    await submitSuggestion(tester, '送出修改建議');
+    expect(store.submissions, isEmpty);
+    expect(find.text('機車格請選收費或免費'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -798,7 +803,8 @@ void main() {
       'parking_access': 'scooterHeavy',
     });
     final store = await openSuggestion(tester, '格位類型', selectedSpot: lot);
-    await pickKind(tester, SpaceKind.paidMotorcycle);
+    await pickKind(tester, SpaceKind.motorcycle);
+    await tapKey(tester, 'condition-charge-toll');
     await submitSuggestion(tester, '送出修改建議');
     expect(store.submissions.single['proposed'], {
       'space_type': 'paidMotorcycle',
@@ -813,15 +819,15 @@ void main() {
     final store = await openSuggestion(tester, '格位類型');
     // 普大共用 is a kind of its own (C6 canvas AppPatterns), still stored as
     // the free bay it is.
-    await pickKind(tester, SpaceKind.sharedMotorcycle);
-    final free = find.descendant(
-      of: find.byKey(const ValueKey('condition-charge')),
-      matching: find.text('免費格'),
+    await pickShared(tester, ShareKind.scooterHeavy);
+    await tapKey(tester, 'condition-charge-free');
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('suggestion-change')),
+      200,
+      scrollable: find.byType(Scrollable).last,
     );
-    await tester.ensureVisible(free);
-    await tester.tap(free);
     await tester.pumpAndSettle();
-    expect(find.text('格位類型從「免費機車格」改成「普大共用機車格」'), findsOneWidget);
+    expect(find.text('格位類型從「一般機車格」改成「共用格（普通＆大型重機）」'), findsOneWidget);
     // Decision 60: 普大共用 brings heavy bikes in, 可停 by default.
     expect(find.text('大型重機從「未確認」改成「可停」'), findsOneWidget);
     // A free 普大共用 bay waits for review; a link helps.
@@ -837,7 +843,7 @@ void main() {
       },
       'heavy_allowed': true,
     });
-    expect(store.submissions.single['reason'], contains('普大共用機車格，大型重機可停'));
+    expect(store.submissions.single['reason'], contains('共用格（普通＆大型重機），大型重機可停'));
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -846,7 +852,7 @@ void main() {
   for (final size in const [Size(320, 900), Size(402, 874), Size(820, 1180)]) {
     testWidgets('普大共用的大型重機選項在 ${size.width.toInt()} 寬不溢出、可點', (tester) async {
       await openSuggestion(tester, '格位類型', size: size);
-      await pickKind(tester, SpaceKind.sharedMotorcycle);
+      await pickShared(tester, ShareKind.scooterHeavy);
       for (final v in [true, false, null]) {
         final option = find.byKey(ValueKey('suggestion-share-heavy-$v'));
         await tester.ensureVisible(option);
@@ -862,14 +868,8 @@ void main() {
 
   testWidgets('建議普大共用時大型重機預設可停，可改回未確認（決定 60）', (tester) async {
     final store = await openSuggestion(tester, '格位類型');
-    await pickKind(tester, SpaceKind.sharedMotorcycle);
-    final toll = find.descendant(
-      of: find.byKey(const ValueKey('condition-charge')),
-      matching: find.text('收費格'),
-    );
-    await tester.ensureVisible(toll);
-    await tester.tap(toll);
-    await tester.pumpAndSettle();
+    await pickShared(tester, ShareKind.scooterHeavy);
+    await tapKey(tester, 'condition-charge-toll');
     final unknown = find.byKey(const ValueKey('suggestion-share-heavy-null'));
     await tester.ensureVisible(unknown);
     await tester.tap(unknown);

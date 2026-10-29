@@ -32,7 +32,7 @@ void main() {
     );
     // Each option is one button node whose tap action reaches its handler,
     // as TalkBack and VoiceOver activate it.
-    for (final label in [RegExp('^大型重機，'), RegExp('^汽車格，')]) {
+    for (final label in [RegExp('^大型重機，'), RegExp('^一般汽車格，')]) {
       final option = find.semantics.byLabel(label);
       expect(option, findsOne);
       tester.semantics.tap(option);

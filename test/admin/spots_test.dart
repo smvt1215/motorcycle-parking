@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:motorcycle_parking/models/space_kind.dart';
 import 'package:motorcycle_parking/ui/option_pill.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:motorcycle_parking/core/address_search.dart';
@@ -386,7 +385,7 @@ void main() {
       });
     });
 
-    testWidgets('格位類型用 App 的分組清單：普大共用寫入條件，選回原類型還原', (tester) async {
+    testWidgets('格位類型用 App 的清單：普大共用寫入條件，選回原類型還原', (tester) async {
       await show(tester, path: '/spots/$communityId');
       await openFold(tester, '格位與停放條件');
       Future<void> tapKey(String key) async {
@@ -397,16 +396,15 @@ void main() {
         await tester.pumpAndSettle();
       }
 
-      // The stored paid bay sits in its open group.
-      await tapKey('spot-space-sharedMotorcycle');
-      await tapKey('spot-space-charge-free');
+      await tapKey('spot-space-shared');
+      await tapKey('condition-share-scooter_heavy');
+      await tapKey('condition-charge-free');
       expect(find.text('已修改'), findsWidgets);
       // Back to the stored kind: nothing left to save, the heavy bikes'
       // access 普大共用 set (decision 60) included.
-      await tapKey('spot-space-paidMotorcycle');
+      await tapKey('spot-space-motorcycle');
       expect(find.byType(ChangeBand), findsNothing);
-      await tapKey('spot-space-sharedMotorcycle');
-      await tapKey('spot-space-charge-free');
+      await tapKey('spot-space-shared');
       await tester.tap(find.text('儲存並關閉'));
       await tester.pumpAndSettle();
       expect(gateway.spotUpdates.single.$2, {
@@ -425,11 +423,6 @@ void main() {
     group('換格位類型時的條件', () {
       Future<void> tapKey(WidgetTester tester, String key) async {
         final target = find.byKey(ValueKey(key));
-        if (target.evaluate().isEmpty) {
-          // Its group is folded: open it first.
-          final kind = SpaceKind.values.byName(key.split('-').last);
-          await tapKey(tester, 'spot-space-group-${kind.group.name}');
-        }
         await tester.ensureVisible(target);
         await tester.pumpAndSettle();
         await tester.tap(target);
@@ -442,14 +435,8 @@ void main() {
         return gateway.spotUpdates.single.$2;
       }
 
-      testWidgets('保留公告依據與共用時段；普大共用收費切回原值即還原', (tester) async {
+      testWidgets('保留公告依據；普大共用收費切回原值即還原；汽機共用填專用時段與禁停', (tester) async {
         const basis = {'source_url': 'https://example.test/notice'};
-        const slot = {
-          'days': 'weekday',
-          'from': '07:00',
-          'to': '20:00',
-          'vehicles': ['scooter', 'car'],
-        };
         gateway.spotRows[communityId]!
           ..['space_type'] = 'paidMotorcycle'
           ..['condition'] = {
@@ -457,26 +444,69 @@ void main() {
             'use': 'share',
             'share': 'scooter_heavy',
             'charge': 'toll',
-            'schedule': [slot],
             'basis': basis,
           };
         await show(tester, path: '/spots/$communityId');
         await openFold(tester, '格位與停放條件');
         // 免費 then back to 收費: the stored condition, nothing to save.
-        await tapKey(tester, 'spot-space-charge-free');
+        await tapKey(tester, 'condition-charge-free');
         expect(find.text('已修改'), findsWidgets);
-        await tapKey(tester, 'spot-space-charge-toll');
+        await tapKey(tester, 'condition-charge-toll');
         expect(find.byType(ChangeBand), findsNothing);
-        await tapKey(tester, 'spot-space-car');
+        // 普大共用 has no periods (decision 64).
+        expect(find.byKey(const ValueKey('condition-slot-add')), findsNothing);
+        await tapKey(tester, 'condition-share-car_motorcycle');
+        await tapKey(tester, 'condition-slot-add');
+        await tapKey(tester, 'condition-slot-0-days-weekday');
+        await tapKey(tester, 'condition-slot-0-all-day-false');
+        await tapKey(tester, 'condition-slot-0-use-car');
+        await tapKey(tester, 'condition-limit-no_parking');
+        await tapKey(tester, 'condition-ban-0-days-all');
+        await tester.enterText(
+          find.byKey(const ValueKey('condition-ban-0-from')),
+          '07:00',
+        );
+        await tester.enterText(
+          find.byKey(const ValueKey('condition-ban-0-to')),
+          '09:00',
+        );
+        await tester.pumpAndSettle();
         expect(await save(tester), {
-          'space_type': 'car',
+          'space_type': 'flexShared',
           'condition': {
             'bay': 'car',
-            'use': 'usual',
-            'schedule': [slot],
+            'use': 'share',
+            'share': 'car_motorcycle',
+            'charge': 'toll',
+            'limits': [
+              {
+                'kind': 'no_parking',
+                'periods': [
+                  {'days': 'all', 'from': '07:00', 'to': '09:00'},
+                ],
+              },
+            ],
+            'schedule': [
+              {
+                'days': 'weekday',
+                'from': '07:00',
+                'to': '20:00',
+                'vehicles': ['car'],
+              },
+            ],
             'basis': basis,
           },
         });
+      });
+
+      testWidgets('一般機車格沒選收費或免費時不能儲存', (tester) async {
+        await show(tester, path: '/spots/$communityId');
+        await openFold(tester, '格位與停放條件');
+        await tapKey(tester, 'condition-charge-unknown');
+        expect(find.text('機車格請選收費或免費'), findsWidgets);
+        await tester.tap(find.text('儲存並關閉'));
+        await tester.pumpAndSettle();
+        expect(gateway.spotUpdates, isEmpty);
       });
 
       testWidgets('改成路外時條件為 null', (tester) async {
@@ -780,20 +810,15 @@ void main() {
       await tester.pumpAndSettle();
       expect(gateway.townRequests, greaterThan(0));
       await openFold(tester, '格位與停放條件');
-      // The app's grouped ground-marking list (decision 57).
-      final free = find.byKey(const ValueKey('spot-space-freeMotorcycle'));
-      if (free.evaluate().isEmpty) {
-        final group = find.byKey(const ValueKey('spot-space-group-motorcycle'));
-        await tester.scrollUntilVisible(group, -300, scrollable: form());
-        await tester.ensureVisible(group);
+      // The app's ground-marking list (decision 62), then 收費嗎.
+      for (final key in ['spot-space-motorcycle', 'condition-charge-free']) {
+        final target = find.byKey(ValueKey(key));
+        await tester.scrollUntilVisible(target, -300, scrollable: form());
+        await tester.ensureVisible(target);
         await tester.pumpAndSettle();
-        await tester.tap(group);
+        await tester.tap(target);
         await tester.pumpAndSettle();
       }
-      await tester.ensureVisible(free);
-      await tester.pumpAndSettle();
-      await tester.tap(free);
-      await tester.pumpAndSettle();
       await tester.tap(find.text('建立停車點'));
       await tester.pumpAndSettle();
       expect(gateway.created.single.$2['city'], '臺北市');
@@ -1047,11 +1072,13 @@ void main() {
         const ValueKey('spot-facility_types-underground'),
       );
       await tester.ensureVisible(underground);
+      await tester.pumpAndSettle();
       await tester.tap(underground);
       await tester.pumpAndSettle();
       // Folded with an edit: the yellow band stays above it.
-      // One over the check rows in the open section, one over 可停車種.
-      expect(find.byType(ChangeBand), findsNWidgets(2));
+      // One over the check rows in the open section, one over 可停車種
+      // (built once scrolled to: the 格位 section is long).
+      expect(find.byType(ChangeBand), findsWidgets);
       expect(
         find.descendant(
           of: await revealFold(tester, '可停車種'),
@@ -1059,6 +1086,7 @@ void main() {
         ),
         findsOneWidget,
       );
+      expect(find.byType(ChangeBand), findsWidgets);
       await tester.tap(find.text('儲存並關閉'));
       await tester.pumpAndSettle();
       expect(gateway.spotUpdates.single.$2, {

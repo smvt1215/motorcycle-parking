@@ -10,9 +10,11 @@ import 'package:pointer_interceptor/pointer_interceptor.dart';
 import '../../models/closure.dart';
 import '../../models/fee.dart';
 import '../../models/parking.dart';
-import '../../models/parking_condition.dart' show Charge, ParkingCondition;
+import '../../models/parking_condition.dart' show ParkingCondition;
 import '../../models/space_kind.dart';
 import '../../features/map/space_type_sheet.dart' show SpaceKindList;
+import '../../features/report/condition_fields.dart'
+    show ConditionDraft, ConditionFields;
 import '../../ui/address_search_field.dart';
 import '../../ui/fee_board.dart';
 import '../../ui/fee_editor.dart';
@@ -1248,6 +1250,9 @@ class _FormPane extends StatelessWidget {
                           _FeeNotePlate(spots: spots, error: errors[f.key])
                         else if (f.input == SpotInput.spaceType)
                           _SpaceKindField(
+                            key: ValueKey(
+                              '${record.sourceId}-${spots.formSeq}-space',
+                            ),
                             spots: spots,
                             field: f,
                             error: errors[f.key],
@@ -2304,11 +2309,13 @@ String? _summaryOf(SpotGroup group, SpotsController spots) {
   }
 }
 
-/// The bay kind as the app picks it (C6 canvas AppPatterns, pattern 1;
-/// decision 57): the grouped ground-marking list, 普大共用 asking 收費 or
-/// 免費 under it. The street condition changes with it (setKind).
-class _SpaceKindField extends StatelessWidget {
+/// The bay kind as the app picks it (decision 62; C6 canvas
+/// SpaceTaxonomy): the same list and follow-ups as the app's forms (誰共用,
+/// 收費嗎, 共用與專用時段, 加註條件). The street condition changes with them
+/// (setSpace); a lot's conditions live in its zones.
+class _SpaceKindField extends StatefulWidget {
   const _SpaceKindField({
+    super.key,
     required this.spots,
     required this.field,
     required this.error,
@@ -2318,7 +2325,48 @@ class _SpaceKindField extends StatelessWidget {
   final String? error;
 
   @override
+  State<_SpaceKindField> createState() => _SpaceKindFieldState();
+}
+
+class _SpaceKindFieldState extends State<_SpaceKindField> {
+  late final ConditionDraft condition = () {
+    final type = SpaceType.values.asNameMap()[widget.spots.draft['space_type']];
+    return type == null
+        ? ConditionDraft()
+        : ConditionDraft.of(
+            ParkingCondition.fromJson(widget.spots.draft['condition']),
+            type,
+          );
+  }();
+
+  @override
+  void dispose() {
+    condition.dispose();
+    super.dispose();
+  }
+
+  /// What keeps the condition from being saved, as the app's checks say.
+  String? _problem(SpaceKind kind) {
+    if (kind == SpaceKind.offStreet) return null;
+    if (kind == SpaceKind.shared && condition.share == null) return '請選誰共用';
+    if (condition.needsCharge(kind) && condition.chargeFor(kind) == null) {
+      return '機車格請選收費或免費';
+    }
+    if (condition.banned && !condition.bans.any((b) => b.period != null)) {
+      return '請填禁停的時間，或取消勾選時段性禁停';
+    }
+    return null;
+  }
+
+  void _pick(SpaceKind kind) => widget.spots.setSpace(
+    kind,
+    condition.conditionFor(kind),
+    problem: _problem(kind),
+  );
+
+  @override
   Widget build(BuildContext context) {
+    final spots = widget.spots;
     final colors = Theme.of(context).colorScheme;
     final kind = spots.spaceKind;
     final muted = TextStyle(color: colors.onSurfaceVariant, fontSize: 13);
@@ -2326,39 +2374,35 @@ class _SpaceKindField extends StatelessWidget {
       padding: const EdgeInsets.only(top: 12),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 720),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (spots.changed('space_type') || spots.changed('condition'))
-              const Padding(
-                padding: EdgeInsets.only(bottom: 6),
-                child: ChangeBand('已修改'),
+        child: Form(
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (spots.changed('space_type') || spots.changed('condition'))
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 6),
+                  child: ChangeBand('已修改'),
+                ),
+              Text(widget.field.label, style: muted),
+              const SizedBox(height: 6),
+              SpaceKindList(
+                value: kind,
+                keyPrefix: 'spot-space',
+                share: condition.share,
+                onChanged: (k) => setState(() => _pick(k)),
+                followUp: kind == null
+                    ? null
+                    : ConditionFields(
+                        kind: kind,
+                        draft: condition,
+                        onChanged: () => setState(() => _pick(kind)),
+                      ),
               ),
-            Text(field.label, style: muted),
-            const SizedBox(height: 6),
-            SpaceKindList(
-              value: kind,
-              keyPrefix: 'spot-space',
-              onChanged: spots.setKind,
-              followUp: kind == SpaceKind.sharedMotorcycle
-                  ? OptionPills<Charge>(
-                      key: const ValueKey('spot-space-charge'),
-                      values: const [
-                        (Charge.toll, '收費格'),
-                        (Charge.free, '免費格'),
-                      ],
-                      selected:
-                          ParkingCondition.fromJson(spots.draft['condition'])
-                              ?.charge ??
-                          Charge.toll,
-                      keyOf: (c) => 'spot-space-charge-${c.name}',
-                      onSelect: (c) => spots.setKind(kind!, charge: c),
-                    )
-                  : null,
-            ),
-            if (error case final message?)
-              Text(message, style: TextStyle(color: colors.error)),
-          ],
+              if (widget.error case final message?)
+                Text(message, style: TextStyle(color: colors.error)),
+            ],
+          ),
         ),
       ),
     );

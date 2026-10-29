@@ -553,6 +553,47 @@ function session(role, aal, factors = [factor]) {
             .or(page.getByRole('group', { name: /普通機車核驗\s+已核驗（2026-10-25）/ }))
             .first().waitFor({ timeout: 15000 });
           await page.screenshot({ path: path.join(output, `${name}-spot-verified.png`) });
+          // The bay kinds (decision 62; C6 canvas SpaceTaxonomy): 共用格,
+          // 汽車＆機車 with its periods and 時段性禁停, on iPhone 16 Pro and
+          // iPad Air portrait; then the edit is dropped.
+          {
+            const reach = async locator => {
+              const size = page.viewportSize();
+              await page.mouse.move(size.width * (mobile ? 0.5 : 0.85), size.height * 0.5);
+              const shown = async () => {
+                const at = (await locator.count()) ? await locator.first().boundingBox() : null;
+                return at && at.y > size.height * 0.15 && at.y + at.height < size.height - 140;
+              };
+              for (let i = 0; i < 60 && !(await shown()); i++) {
+                await page.mouse.wheel(0, 120);
+                await page.waitForTimeout(80);
+              }
+              if (!(await shown())) await page.screenshot({ path: path.join(output, `${name}-taxonomy-failure.png`) });
+              assert.ok(await shown(), `${name} space kind choice is reachable`);
+            };
+            const choice = label => page.getByRole('button', { name: label, exact: true })
+              .or(page.getByRole('checkbox', { name: label, exact: true }))
+              .or(page.getByText(label, { exact: true }));
+            await openFold('格位與停放條件');
+            for (const label of ['共用格', '汽車＆機車', '時段性禁停']) {
+              const target = choice(label).first();
+              await reach(target);
+              await target.click();
+              await page.waitForTimeout(500);
+            }
+            const before = page.viewportSize();
+            const size = mobile ? { width: 402, height: 874 } : { width: 820, height: 1180 };
+            await page.setViewportSize(size);
+            await page.waitForTimeout(600);
+            await page.screenshot({ path: path.join(output, `${name}-spot-taxonomy-${size.width}.png`) });
+            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} space kinds scroll sideways at ${size.width} px`);
+            await page.setViewportSize(before);
+            await page.waitForTimeout(500);
+            const discard = page.getByRole('button', { name: '放棄修改', exact: true }).first();
+            await reach(discard);
+            await discard.click();
+            await page.waitForTimeout(500);
+          }
           // New spot: kind, then a form whose county follows the position.
           if (mobile) {
             const back = page.getByRole('button', { name: '返回點位清單', exact: true });

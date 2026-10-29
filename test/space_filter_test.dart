@@ -149,21 +149,49 @@ void main() {
     expect(freeFor(lot, VehicleType.scooter), isFalse);
   });
 
-  test('other kinds filter by their space type', () {
+  bool keeps(ParkingSpot spot, SpaceFilter filter, [VehicleType v = scooter]) =>
+      filter.matches(spot, v);
+
+  test('六種格位依條件篩選；限時機車格算一般機車格（決定 62）', () {
     final paid = _spot(SpaceType.paidMotorcycle);
-    expect(matchesSpaceFilter(paid, SpaceKind.paidMotorcycle, scooter), isTrue);
+    expect(keeps(paid, const SpaceFilter(kind: SpaceKind.motorcycle)), isTrue);
+    expect(keeps(paid, const SpaceFilter(kind: SpaceKind.heavyOnly)), isFalse);
+    expect(keeps(paid, const SpaceFilter(kind: SpaceKind.shared)), isFalse);
+    final timed = _spot(SpaceType.timedMotorcycle);
+    expect(keeps(timed, const SpaceFilter(kind: SpaceKind.motorcycle)), isTrue);
     expect(
-      matchesSpaceFilter(paid, SpaceKind.freeMotorcycle, scooter),
-      isFalse,
+      keeps(
+        _spot(SpaceType.flexShared),
+        const SpaceFilter(kind: SpaceKind.shared),
+      ),
+      isTrue,
     );
-    expect(matchesSpaceFilter(paid, SpaceKind.heavyOnly, scooter), isFalse);
     expect(
-      matchesSpaceFilter(paid, SpaceKind.sharedMotorcycle, scooter),
-      isFalse,
+      keeps(
+        _spot(SpaceType.evMotorcycle),
+        const SpaceFilter(kind: SpaceKind.evMotorcycle),
+      ),
+      isTrue,
+    );
+    expect(
+      keeps(
+        _spot(SpaceType.offStreet),
+        const SpaceFilter(kind: SpaceKind.offStreet),
+      ),
+      isTrue,
+    );
+    expect(const SpaceFilter().label, '全部格位');
+    expect(
+      const SpaceFilter(
+        kind: SpaceKind.motorcycle,
+        charge: Charge.free,
+        limits: {LimitKind.noParking},
+      ).label,
+      '一般機車格・免費・時段性禁停',
     );
   });
 
-  test('普大共用機車格 keeps street bays posted for both classes', () {
+  test('普大共用與汽機共用都是共用格；收費／免費照費率或收費屬性', () {
     const shared = ParkingCondition(
       bay: Bay.motorcycle,
       use: BayUse.share,
@@ -179,37 +207,92 @@ void main() {
       spaceType: SpaceType.paidMotorcycle,
       condition: shared,
     );
-    expect(
-      matchesSpaceFilter(paid, SpaceKind.sharedMotorcycle, scooter),
-      isTrue,
+    expect(keeps(paid, const SpaceFilter(kind: SpaceKind.shared)), isTrue);
+    expect(keeps(paid, const SpaceFilter(kind: SpaceKind.motorcycle)), isFalse);
+    expect(keeps(paid, const SpaceFilter(charge: Charge.toll)), isTrue);
+    expect(keeps(paid, const SpaceFilter(charge: Charge.free)), isFalse);
+    // A free bay whose heavy rate is hourly: free for scooters only.
+    final heavyPays = _spot(
+      SpaceType.freeMotorcycle,
+      fee: {
+        'scooter': {'mode': 'free'},
+        'heavy': {'mode': 'hourly', 'amount': 20, 'per_minutes': 60},
+      },
     );
-    // Still a toll bay for the 收費 filter.
-    expect(matchesSpaceFilter(paid, SpaceKind.paidMotorcycle, scooter), isTrue);
-    final timed = ParkingSpot(
-      id: 'timed',
-      name: '限時共用',
-      lat: 25.03,
-      lng: 121.56,
-      city: '臺北市',
-      spaceType: SpaceType.timedMotorcycle,
-      condition: const ParkingCondition(
-        bay: Bay.motorcycle,
-        use: BayUse.share,
-        share: ShareKind.scooterHeavy,
-        limits: [ParkingLimit(LimitKind.timeLimit)],
-      ),
-    );
+    expect(keeps(heavyPays, const SpaceFilter(charge: Charge.free)), isTrue);
     expect(
-      matchesSpaceFilter(timed, SpaceKind.sharedMotorcycle, scooter),
-      isTrue,
-    );
-    expect(
-      matchesSpaceFilter(
-        _spot(SpaceType.freeMotorcycle),
-        SpaceKind.sharedMotorcycle,
-        scooter,
+      keeps(
+        heavyPays,
+        const SpaceFilter(charge: Charge.free),
+        VehicleType.heavy,
       ),
       isFalse,
     );
+    // A heavy bay with a free rate counts as free too.
+    expect(
+      keeps(
+        _spot(
+          SpaceType.heavyOnly,
+          fee: {
+            'heavy': {'mode': 'free'},
+          },
+        ),
+        const SpaceFilter(charge: Charge.free),
+        VehicleType.heavy,
+      ),
+      isTrue,
+    );
+    expect(
+      keeps(_spot(SpaceType.heavyOnly), const SpaceFilter(charge: Charge.free)),
+      isFalse,
+    );
+  });
+
+  test('加註條件：限時與時段性禁停（分區也算）', () {
+    final banned = _spot(
+      SpaceType.paidMotorcycle,
+      condition: {
+        'bay': 'motorcycle',
+        'use': 'usual',
+        'charge': 'toll',
+        'limits': [
+          {
+            'kind': 'no_parking',
+            'periods': [
+              {'days': 'weekday', 'from': '07:00', 'to': '09:00'},
+            ],
+          },
+        ],
+      },
+    );
+    const ban = SpaceFilter(limits: {LimitKind.noParking});
+    const timedOnly = SpaceFilter(limits: {LimitKind.timeLimit});
+    expect(keeps(banned, ban), isTrue);
+    expect(keeps(banned, timedOnly), isFalse);
+    expect(keeps(_spot(SpaceType.timedMotorcycle), timedOnly), isTrue);
+    final lot = ParkingSpot.fromJson({
+      'id': 'lot',
+      'name': '停車場',
+      'lat': 25.03,
+      'lng': 121.56,
+      'city': '臺北市',
+      'space_type': 'offStreet',
+      'parking_zones': [
+        {
+          'name': 'B1',
+          'access': 'scooterOnly',
+          'condition': {
+            'bay': 'motorcycle',
+            'use': 'usual',
+            'allow': {'scooter': true, 'heavy': false},
+            'limits': [
+              {'kind': 'time_limit'},
+            ],
+          },
+        },
+      ],
+    });
+    expect(keeps(lot, timedOnly), isTrue);
+    expect(keeps(lot, ban), isFalse);
   });
 }

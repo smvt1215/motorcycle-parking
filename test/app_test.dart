@@ -199,14 +199,23 @@ void main() {
     expect(tester.widget<IconButton>(searchButton).onPressed, isNull);
     await tester.tap(find.text('全部格位'));
     await tester.pumpAndSettle();
-    // The kinds fold into their groups until one is opened.
-    expect(find.text('路邊收費機車格'), findsNothing);
-    await tester.tap(find.byKey(const ValueKey('space-group-motorcycle')));
+    // The six painted kinds and the lot (decision 62), then 收費嗎 and the
+    // added conditions; the map follows each pick, 完成 closes.
+    expect(find.text('一般機車格'), findsOneWidget);
+    expect(find.text('共用格'), findsOneWidget);
+    await tester.tap(find.text('一般機車格'));
     await tester.pumpAndSettle();
-    expect(find.text('路邊收費機車格'), findsOneWidget);
-    expect(find.text('普大共用機車格'), findsOneWidget);
-    await tester.tap(find.text('免費機車格'));
+    final free = find.byKey(const ValueKey('filter-charge-free'));
+    await tester.ensureVisible(free);
     await tester.pumpAndSettle();
+    await tester.tap(free);
+    await tester.pumpAndSettle();
+    final done = find.byKey(const ValueKey('filter-done'));
+    await tester.ensureVisible(done);
+    await tester.pumpAndSettle();
+    await tester.tap(done);
+    await tester.pumpAndSettle();
+    expect(find.text('一般機車格・免費'), findsOneWidget);
     final input = find.byKey(const ValueKey('parking-search'));
     await tester.enterText(input, '[範例]');
     await tester.pumpAndSettle();

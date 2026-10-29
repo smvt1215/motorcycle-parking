@@ -2,7 +2,9 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../models/fee.dart';
 import '../../models/fee_plan.dart' show projectZoneFee;
-import '../../models/condition_text.dart' show banPeriodText;
+import '../../features/report/condition_fields.dart'
+    show ConditionDraft, ConditionFields;
+import '../../models/space_kind.dart';
 import '../../models/parking_condition.dart';
 import '../../ui/fee_editor.dart';
 import '../../ui/option_pill.dart';
@@ -658,7 +660,10 @@ class _AreaCardState extends State<_AreaCard> {
               ),
               for (final i in card.indexes)
                 _BayRow(
-                  key: ValueKey('bay-$i'),
+                  // A row keeps what is being typed while the zones stay
+                  // as they are; adding or removing one starts them over
+                  // from the stored conditions.
+                  key: ValueKey('bay-$i-${zones.length}-${spots.formSeq}'),
                   index: i,
                   zone: zones[i],
                   spots: spots,
@@ -693,14 +698,14 @@ ZoneAllow? _allow(bool? scooter, bool? heavy) =>
     ? null
     : ZoneAllow(scooter: scooter, heavy: heavy);
 
-const _bayLabels = <(Bay?, String)>[
-  (Bay.motorcycle, '機車格'),
-  (Bay.heavy, '重機格'),
-  (Bay.car, '汽車格'),
+/// The kinds a zone picks from (decision 62): the six painted ones of the
+/// app's list, or 未確認.
+final _zoneKinds = <(SpaceKind?, String)>[
+  for (final k in SpaceKind.painted) (k, k.label),
   (null, '未確認'),
 ];
 
-class _BayRow extends StatelessWidget {
+class _BayRow extends StatefulWidget {
   const _BayRow({
     super.key,
     required this.index,
@@ -713,8 +718,32 @@ class _BayRow extends StatelessWidget {
   final SpotsController spots;
   final bool removable;
 
+  @override
+  State<_BayRow> createState() => _BayRowState();
+}
+
+class _BayRowState extends State<_BayRow> {
+  int get index => widget.index;
+  Json get zone => widget.zone;
+  SpotsController get spots => widget.spots;
+  bool get removable => widget.removable;
+
+  late final ConditionDraft draft = ConditionDraft.zone(
+    zoneCondition(widget.zone),
+  );
+  late SpaceKind? kind = draft.loadedKind;
+
+  @override
+  void dispose() {
+    draft.dispose();
+    super.dispose();
+  }
+
   void _set(ParkingCondition c) =>
       spots.setZone(index, zoneWithCondition(zone, c));
+
+  /// The zone's condition rebuilt from the kind and its follow-ups.
+  void _rebuild() => _set(draft.zoneConditionFor(kind, zoneCondition(zone)));
 
   ParkingCondition _with(
     ParkingCondition c, {
@@ -740,11 +769,6 @@ class _BayRow extends StatelessWidget {
     final muted = TextStyle(color: colors.onSurfaceVariant, fontSize: 13);
     final c = zoneCondition(zone);
     final problem = zone.containsKey('condition') ? zoneProblem(zone) : null;
-    final shareKind = switch (c.bay) {
-      Bay.motorcycle => ShareKind.scooterHeavy,
-      Bay.car => ShareKind.carMotorcycle,
-      _ => null,
-    };
     // What the app reads (parking_decision.dart _lot()): the zone's own
     // rate, or the whole lot's when no zone has one.
     final top = spots.draft['fee'];
@@ -758,18 +782,12 @@ class _BayRow extends StatelessWidget {
         : lotWide
         ? top
         : null;
+    // What the form cannot show stays as stored: a schedule on a bay that
+    // is not 汽機共用.
     final other = [
-      for (final l in c.limits)
-        switch (l.kind) {
-          LimitKind.timeLimit =>
-            l.maxMinutes == null ? '限時' : '限停 ${l.maxMinutes} 分鐘',
-          LimitKind.evOnly => '限電動機車',
-          LimitKind.specialVehicle => '限身障特製機車',
-          LimitKind.noParking => [
-            for (final p in l.periods) '${banPeriodText(p)} 禁停',
-          ].join('；'),
-        },
-      if (c.schedule.isNotEmpty) '共用時段 ${c.schedule.length} 段',
+      if (c.schedule.isNotEmpty &&
+          !draft.asksSlots(kind ?? SpaceKind.motorcycle))
+        '共用時段 ${c.schedule.length} 段',
     ];
     Widget vehicle(
       String label,
@@ -784,6 +802,7 @@ class _BayRow extends StatelessWidget {
       disabled: disabled,
     );
     return Container(
+      key: ValueKey('bay-$index'),
       margin: const EdgeInsets.only(top: 12),
       padding: const EdgeInsets.fromLTRB(12, 8, 4, 12),
       decoration: BoxDecoration(
@@ -798,9 +817,8 @@ class _BayRow extends StatelessWidget {
               Expanded(
                 child: Text(
                   [
-                    _bayLabels.firstWhere((b) => b.$1 == c.bay).$2,
-                    if (c.share == ShareKind.scooterHeavy) '普大共用',
-                    if (c.share == ShareKind.carMotorcycle) '汽機共用',
+                    kind?.label ?? '格位未確認',
+                    if (c.share case final share?) share.label,
                     switch (c.charge) {
                       Charge.toll => '收費',
                       Charge.free => '免費',
@@ -824,62 +842,23 @@ class _BayRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('格位', style: muted),
-                OptionPills<Bay?>(
-                  values: _bayLabels,
-                  selected: c.bay,
-                  keyOf: (v) => 'bay-$index-${v?.name ?? 'unknown'}',
-                  onSelect: (bay) => _set(
-                    _with(
-                      c,
-                      bay: () => bay,
-                      // A share names its bay; another bay drops it.
-                      use: () => c.use == BayUse.share ? BayUse.usual : c.use,
-                      share: () => null,
-                      allow: () => bay == Bay.heavy && c.allow != null
-                          ? ZoneAllow(scooter: false, heavy: c.allow!.heavy)
-                          : c.allow,
-                    ),
-                  ),
+                Text('格位類型', style: muted),
+                OptionPills<SpaceKind?>(
+                  values: _zoneKinds,
+                  selected: kind,
+                  keyOf: (v) => 'bay-$index-kind-${v?.name ?? 'unknown'}',
+                  onSelect: (v) => setState(() {
+                    kind = v;
+                    _rebuild();
+                  }),
                 ),
-                if (shareKind != null) ...[
-                  const SizedBox(height: 4),
-                  Text('用途', style: muted),
-                  OptionPills<bool?>(
-                    values: [
-                      (false, '一般'),
-                      (
-                        true,
-                        shareKind == ShareKind.scooterHeavy ? '普大共用' : '汽機共用',
-                      ),
-                      (null, '未確認'),
-                    ],
-                    selected: c.use == null ? null : c.use == BayUse.share,
-                    keyOf: (v) => 'bay-$index-share-$v',
-                    onSelect: (shared) => _set(
-                      _with(
-                        c,
-                        use: () => shared == null
-                            ? null
-                            : shared
-                            ? BayUse.share
-                            : BayUse.usual,
-                        share: () => shared == true ? shareKind : null,
-                      ),
-                    ),
-                  ),
-                ],
                 const SizedBox(height: 4),
-                Text('收費格還是免費格', style: muted),
-                OptionPills<Charge?>(
-                  values: const [
-                    (Charge.toll, '收費'),
-                    (Charge.free, '免費'),
-                    (null, '未確認'),
-                  ],
-                  selected: c.charge,
-                  keyOf: (v) => 'bay-$index-charge-${v?.name ?? 'unknown'}',
-                  onSelect: (charge) => _set(_with(c, charge: () => charge)),
+                ConditionFields(
+                  // Without a kind the zone still says 收費 and its added
+                  // conditions; a plain motorcycle bay asks only those.
+                  kind: kind ?? SpaceKind.motorcycle,
+                  draft: draft,
+                  onChanged: () => setState(_rebuild),
                 ),
                 const SizedBox(height: 4),
                 Text('可停車種', style: muted),

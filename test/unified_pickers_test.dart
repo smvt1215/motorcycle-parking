@@ -1,5 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:motorcycle_parking/features/map/space_type_sheet.dart';
+import 'package:motorcycle_parking/models/parking.dart';
+import 'package:motorcycle_parking/models/parking_condition.dart'
+    show ShareKind;
 import 'package:motorcycle_parking/models/space_kind.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
 import 'package:motorcycle_parking/ui/fold_section.dart';
@@ -19,20 +22,31 @@ void main() {
     );
   }
 
-  test('every kind sits in one of the four groups, 普大共用 among them', () {
-    expect(SpaceKindGroup.values.expand((g) => g.kinds), SpaceKind.values);
-    expect(SpaceKindGroup.motorcycle.kinds, [
-      SpaceKind.paidMotorcycle,
-      SpaceKind.freeMotorcycle,
-      SpaceKind.sharedMotorcycle,
+  test('六種格位加停車場；限時不再是格位類型（決定 62）', () {
+    expect(SpaceKind.painted.map((k) => k.label), [
+      '一般機車格',
+      '大型重機專用格',
+      '充電格',
+      '身障格',
+      '共用格',
+      '一般汽車格',
     ]);
-    expect(SpaceKind.sharedMotorcycle.label, '普大共用機車格');
-    expect(SpaceKind.sharedMotorcycle.type, isNull);
+    expect(SpaceKind.values, [...SpaceKind.painted, SpaceKind.offStreet]);
+    expect(SpaceKind.of(SpaceType.timedMotorcycle, null), SpaceKind.motorcycle);
+    expect(SpaceKind.of(SpaceType.flexShared, null), SpaceKind.shared);
+    expect(
+      SpaceKind.shareOf(SpaceType.flexShared, null),
+      ShareKind.carMotorcycle,
+    );
+    expect(kindText(SpaceKind.shared, ShareKind.scooterHeavy), '共用格（普通＆大型重機）');
+    // Decision 63: the app's ground markings.
+    expect(SpaceKind.motorcycle.markingType, SpaceType.freeMotorcycle);
+    expect(SpaceKind.shared.markingType, SpaceType.flexShared);
   });
 
   for (final width in [320.0, 402.0, 820.0]) {
-    testWidgets('格位分組清單只展開選中的組，其他組可點開（$width px）', (tester) async {
-      SpaceKind? picked = SpaceKind.timedMotorcycle;
+    testWidgets('格位清單列出全部類型，追問只在選中的下方（$width px）', (tester) async {
+      SpaceKind? picked = SpaceKind.motorcycle;
       await pump(
         tester,
         StatefulBuilder(
@@ -44,23 +58,19 @@ void main() {
         ),
         width: width,
       );
-      expect(find.byKey(const ValueKey('space-timedMotorcycle')), findsOne);
-      expect(find.byKey(const ValueKey('space-heavyOnly')), findsNothing);
-      // The follow-up sits under the pick only.
+      for (final k in SpaceKind.values) {
+        expect(find.byKey(ValueKey('space-${k.name}')), findsOne);
+      }
       expect(find.text('追問'), findsOne);
-      expect(find.text('重機、電動、身障'), findsOne);
-      await tester.tap(find.byKey(const ValueKey('space-group-reserved')));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('space-timedMotorcycle')), findsNothing);
       await tester.tap(find.byKey(const ValueKey('space-heavyOnly')));
       await tester.pumpAndSettle();
       expect(picked, SpaceKind.heavyOnly);
       expect(find.text('追問'), findsOne);
-      for (final key in ['space-heavyOnly', 'space-group-motorcycle']) {
+      for (final k in SpaceKind.values) {
         expect(
-          tester.getSize(find.byKey(ValueKey(key))).height,
+          tester.getSize(find.byKey(ValueKey('space-${k.name}'))).height,
           greaterThanOrEqualTo(48),
-          reason: key,
+          reason: k.name,
         );
       }
       expect(tester.takeException(), isNull);
@@ -108,27 +118,21 @@ void main() {
     expect(find.text('還沒填'), findsNothing);
   });
 
-  testWidgets('收起的分組顯示不重複的點位數，不是各種類相加', (tester) async {
+  testWidgets('清單顯示每種的點位數', (tester) async {
     await pump(
       tester,
       SpaceKindList(
         value: null,
-        // A shared toll bay counts as 收費 and as 普大共用, once in its group.
-        counts: const {
-          SpaceKind.paidMotorcycle: 2,
-          SpaceKind.sharedMotorcycle: 1,
-        },
-        groupCounts: const {SpaceKindGroup.motorcycle: 2},
+        counts: const {SpaceKind.motorcycle: 2, SpaceKind.shared: 1},
         onChanged: (_) {},
       ),
     );
     expect(
       find.descendant(
-        of: find.byKey(const ValueKey('space-group-motorcycle')),
+        of: find.byKey(const ValueKey('space-motorcycle')),
         matching: find.text('2'),
       ),
       findsOne,
     );
-    expect(find.text('3'), findsNothing);
   });
 }

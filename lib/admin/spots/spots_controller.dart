@@ -292,6 +292,7 @@ class SpotsController extends ChangeNotifier {
           draft[f.key],
           fee: draft['fee'] is Fee ? draft['fee'] as Fee : null,
         ),
+    if (!lot && spaceProblem != null) 'space_type': spaceProblem!,
     if (lot && (record!.isNew || _edits.containsKey('fee_plans')))
       'fee_plans': ?plansProblem(plans),
     if (lot && (record!.isNew || _edits.containsKey('parking_zones')))
@@ -510,6 +511,8 @@ class SpotsController extends ChangeNotifier {
         loaded != null && !loaded.isNew && loaded.sourceId == record?.sourceId;
     record = loaded;
     _heavyBeforeShare = null;
+    _kind = null;
+    spaceProblem = null;
     formSeq++;
     attempted = false;
     openGroup = loaded == null
@@ -544,89 +547,76 @@ class SpotsController extends ChangeNotifier {
     };
   }
 
-  /// The bay kind the draft reads as (C6 canvas AppPatterns, pattern 1):
-  /// its space type, or 普大共用 for a toll or free bay posted for both.
+  /// The bay kind picked in the form; null until the admin picks, when
+  /// the draft's kind shows.
+  SpaceKind? _kind;
+
+  /// What keeps the picked kind's condition from being saved (誰共用,
+  /// 收費嗎, 禁停時間), as the form found it; null when complete.
+  String? spaceProblem;
+
+  /// The bay kind the draft reads as (decision 62): the one picked, else
+  /// its space type and condition's.
   SpaceKind? get spaceKind {
+    if (_kind case final kind?) return kind;
     final type = SpaceType.values.asNameMap()[draft['space_type']];
     return type == null
         ? null
         : SpaceKind.of(type, ParkingCondition.fromJson(draft['condition']));
   }
 
-  /// Picks [kind] and keeps the street condition with it, so the table's
-  /// check (space type = the condition's legacy type, §1.3) holds: back to
-  /// the stored kind restores the stored type and condition; another kind
-  /// takes that kind's condition, keeping the notice it rests on (basis).
-  /// A spot without a condition gets none unless the kind needs one
-  /// (普大共用, at [charge], else its present charge, else toll).
-  void setKind(SpaceKind kind, {Charge? charge}) {
+  /// Picks [kind] with the street [condition] the form built for it, so
+  /// the table's check (space type = the condition's legacy type, §1.3)
+  /// holds. The notice the condition rests on (basis) stays; the stored
+  /// condition comes back as stored when the form builds the same one, and
+  /// a spot stored without one keeps none while its space type says it all.
+  void setSpace(
+    SpaceKind kind,
+    ParkingCondition? condition, {
+    String? problem,
+  }) {
     final r = record;
     if (r == null) return;
-    final storedType = SpaceType.values.asNameMap()[r.values['space_type']];
+    _kind = kind;
+    spaceProblem = problem;
     final stored = r.values['condition'];
     final storedCondition = ParkingCondition.fromJson(stored);
-    // Back to the stored kind (and, for 普大共用, its charge): the stored
-    // type and condition as they were, schedule and limits included.
-    if (!r.isNew &&
-        storedType != null &&
-        SpaceKind.of(storedType, storedCondition) == kind &&
-        (charge == null ||
-            charge == (storedCondition ?? conditionOf(storedType))?.charge)) {
-      draft = {
-        ...draft,
-        'space_type': storedType.name,
-        'condition': copyJson(stored),
-        // Back to a stored 普大共用 bay: its stored heavy access.
-        ..._heavyFor(kind, stored: (r.values['heavy_allowed'],)),
-      };
-      _notify();
-      return;
-    }
-    final now = ParkingCondition.fromJson(draft['condition']);
-    // What the admin set beyond the kind stays: the notice it rests on and
-    // its periods (the contract takes a schedule on any bay).
-    final basis = now?.basis;
-    final schedule = now?.schedule ?? const <ScheduleSlot>[];
-    final SpaceType type;
-    final ParkingCondition? condition;
-    if (kind == SpaceKind.sharedMotorcycle) {
-      final c = charge ?? now?.charge ?? Charge.toll;
-      type = c == Charge.free
-          ? SpaceType.freeMotorcycle
-          : SpaceType.paidMotorcycle;
-      condition = ParkingCondition(
-        bay: Bay.motorcycle,
-        use: BayUse.share,
-        share: ShareKind.scooterHeavy,
-        charge: c,
-        schedule: schedule,
-        basis: basis,
-      );
-    } else {
-      type = kind.type!;
-      final base = conditionOf(type);
-      condition = draft['condition'] == null || base == null
-          ? null
-          : ParkingCondition(
-              bay: base.bay,
-              use: base.use,
-              share: base.share,
-              charge: base.charge,
-              // The kind's own limits, with the details the admin set on
-              // the same kind of limit (a time limit's minutes).
-              limits: [
-                for (final l in base.limits)
-                  now?.limits.where((x) => x.kind == l.kind).firstOrNull ?? l,
-              ],
-              schedule: schedule,
-              basis: basis,
-            );
-    }
+    final basis = ParkingCondition.fromJson(draft['condition'])?.basis;
+    final c = condition == null || kind == SpaceKind.offStreet
+        ? null
+        : ParkingCondition(
+            bay: condition.bay,
+            use: condition.use,
+            share: condition.share,
+            charge: condition.charge,
+            limits: condition.limits,
+            schedule: condition.schedule,
+            basis: basis,
+          );
+    final type = c == null
+        ? kind.baseType
+        : legacySpaceType(c, offStreet: false) ?? kind.baseType;
+    final Object? json = switch (c) {
+      null => null,
+      _ when !r.isNew && storedCondition != null && storedCondition == c =>
+        copyJson(stored),
+      _ when stored == null && conditionOf(type) == c => null,
+      _ => c.toJson(),
+    };
+    final shares = c?.share == ShareKind.scooterHeavy;
     draft = {
       ...draft,
       'space_type': type.name,
-      'condition': condition?.toJson(),
-      ..._heavyFor(kind),
+      'condition': json,
+      ..._heavyFor(
+        shares,
+        stored:
+            !r.isNew &&
+                shares &&
+                storedCondition?.share == ShareKind.scooterHeavy
+            ? (r.values['heavy_allowed'],)
+            : null,
+      ),
     };
     _notify();
   }
@@ -637,13 +627,13 @@ class SpotsController extends ChangeNotifier {
 
   /// Decision 60: turning a bay into 普大共用 brings heavy bikes in, 可停
   /// until the admin changes it; turning it back restores what was there,
-  /// unless the admin changed it since. A change of charge within 普大共用
-  /// leaves the admin's choice.
-  Map<String, Object?> _heavyFor(SpaceKind kind, {(Object?,)? stored}) {
+  /// unless the admin changed it since. Other changes within 普大共用 leave
+  /// the admin's choice.
+  Map<String, Object?> _heavyFor(bool shares, {(Object?,)? stored}) {
     final shared =
         ParkingCondition.fromJson(draft['condition'])?.share ==
         ShareKind.scooterHeavy;
-    if (kind == SpaceKind.sharedMotorcycle) {
+    if (shares) {
       if (shared) return const {};
       _heavyBeforeShare = (draft['heavy_allowed'],);
       return {'heavy_allowed': stored == null ? true : stored.$1};
@@ -657,6 +647,8 @@ class SpotsController extends ChangeNotifier {
   void close() {
     record = null;
     _heavyBeforeShare = null;
+    _kind = null;
+    spaceProblem = null;
     draft = {};
     saveError = null;
     openError = null;

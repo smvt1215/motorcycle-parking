@@ -1,65 +1,141 @@
 import 'dart:math' as math;
 
+import '../../domain/space_filter.dart';
 import '../../models/parking.dart';
+import '../../models/parking_condition.dart';
 import '../../models/space_kind.dart';
 import '../../ui/adaptive/adaptive.dart';
+import '../../ui/option_pill.dart';
 import 'map_legend.dart';
 
-/// Filters the map by bay kind with the same grouped list the report forms
-/// use (C6 canvas AppPatterns, pattern 1). Each option shows its ground
-/// marking and how many spots of that kind the current map view holds.
+/// Filters the map by bay kind with the same list the report forms use
+/// (decision 62), then by 收費／免費 and the added conditions. Each kind
+/// shows its ground marking and how many spots of it the current map view
+/// holds under the other choices. The map follows each change; 完成 closes.
 Future<void> showSpaceTypeSheet(
   BuildContext context, {
-  required SpaceKind? value,
-  required Map<SpaceKind?, int> counts,
-  Map<SpaceKindGroup, int> groupCounts = const {},
-  required ValueChanged<SpaceKind?> onChanged,
+  required SpaceFilter value,
+  required int Function(SpaceFilter filter) count,
+  required ValueChanged<SpaceFilter> onChanged,
 }) => showAdaptiveSheet<void>(
   context,
-  (ctx) => ContentPage(
-    children: [
-      SheetTitle('格位類型'),
-      const SizedBox(height: 4),
-      Text(
-        '只顯示選定類型的停車點，數字為目前地圖範圍內的數量。',
-        style: Theme.of(ctx).textTheme.bodyMedium
-            ?.copyWith(color: Theme.of(ctx).colorScheme.onSurfaceVariant),
-      ),
-      const SizedBox(height: 16),
-      SpaceKindOption(
-        kind: null,
-        count: counts[null] ?? 0,
-        selected: value == null,
-        onTap: () {
-          onChanged(null);
-          Navigator.pop(ctx);
-        },
-      ),
-      SpaceKindList(
-        value: value,
-        counts: counts,
-        groupCounts: groupCounts,
-        onChanged: (option) {
-          onChanged(option);
-          Navigator.pop(ctx);
-        },
-      ),
-    ],
-  ),
+  (ctx) =>
+      _SpaceFilterSheet(initial: value, count: count, onChanged: onChanged),
 );
 
-/// The bay kinds in their four groups (C6 canvas AppPatterns, pattern 1;
-/// AppForm): each group folds, and only the one holding the pick, or the
-/// one the rider opened, shows its kinds. [followUp] goes indented under
-/// the picked kind: what the form asks about it next.
-class SpaceKindList extends StatefulWidget {
+class _SpaceFilterSheet extends StatefulWidget {
+  const _SpaceFilterSheet({
+    required this.initial,
+    required this.count,
+    required this.onChanged,
+  });
+  final SpaceFilter initial;
+  final int Function(SpaceFilter filter) count;
+  final ValueChanged<SpaceFilter> onChanged;
+
+  @override
+  State<_SpaceFilterSheet> createState() => _SpaceFilterSheetState();
+}
+
+class _SpaceFilterSheetState extends State<_SpaceFilterSheet> {
+  late SpaceFilter filter = widget.initial;
+
+  void _set(SpaceFilter next) {
+    setState(() => filter = next);
+    widget.onChanged(next);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final muted = Theme.of(context).textTheme.bodyMedium
+        ?.copyWith(color: colors.onSurfaceVariant);
+    return ContentPage(
+      children: [
+        SheetTitle('格位類型'),
+        const SizedBox(height: 4),
+        Text('只顯示選定類型的停車點，數字為目前地圖範圍內的數量。', style: muted),
+        const SizedBox(height: 16),
+        SpaceKindOption(
+          kind: null,
+          count: widget.count(filter.copyWith(kind: () => null)),
+          selected: filter.kind == null,
+          onTap: () => _set(filter.copyWith(kind: () => null)),
+        ),
+        SpaceKindList(
+          value: filter.kind,
+          counts: {
+            for (final k in SpaceKind.values)
+              k: widget.count(filter.copyWith(kind: () => k)),
+          },
+          onChanged: (k) => _set(filter.copyWith(kind: () => k)),
+        ),
+        const SizedBox(height: 8),
+        Text('收費嗎？', style: muted),
+        OptionPills<Charge?>(
+          values: const [
+            (null, '不限'),
+            (Charge.toll, '收費'),
+            (Charge.free, '免費'),
+          ],
+          selected: filter.charge,
+          keyOf: (v) => 'filter-charge-${v?.name ?? 'any'}',
+          onSelect: (v) => _set(filter.copyWith(charge: () => v)),
+        ),
+        const SizedBox(height: 8),
+        Text('加註條件（只顯示有勾選條件的停車點）', style: muted),
+        for (final (limit, label) in const [
+          (LimitKind.timeLimit, '限時停車'),
+          (LimitKind.noParking, '時段性禁停'),
+        ])
+          OptionCheck(
+            key: ValueKey('filter-limit-${limit.wire}'),
+            label: label,
+            value: filter.limits.contains(limit),
+            onChanged: (on) => _set(
+              filter.copyWith(
+                limits: {
+                  for (final l in addedLimits)
+                    if (l == limit ? on : filter.limits.contains(l)) l,
+                },
+              ),
+            ),
+          ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            TextButton(
+              key: const ValueKey('filter-reset'),
+              onPressed: filter.isEmpty
+                  ? null
+                  : () => _set(const SpaceFilter()),
+              child: const Text('清除'),
+            ),
+            const Spacer(),
+            FilledButton(
+              key: const ValueKey('filter-done'),
+              onPressed: () => Navigator.pop(context),
+              child: Text('完成（${widget.count(filter)} 個）'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// The bay kinds (decision 62; C6 canvas SpaceTaxonomy): the six painted
+/// ones, then the lot under a rule. [followUp] goes indented under the
+/// picked kind: what the form asks about it next. [share] picks the 共用格
+/// row's marking: 普大共用 or 汽機共用.
+class SpaceKindList extends StatelessWidget {
   const SpaceKindList({
     super.key,
     required this.value,
     required this.onChanged,
     this.counts,
-    this.groupCounts = const {},
     this.followUp,
+    this.share,
     this.keyPrefix = 'space',
     this.reveal = 0,
   });
@@ -68,131 +144,47 @@ class SpaceKindList extends StatefulWidget {
 
   /// Spots of each kind in the map view (the filter); null shows none.
   final Map<SpaceKind?, int>? counts;
-
-  /// Distinct spots of each group in the map view, shown while it is
-  /// folded: a 普大共用 bay is also a toll or free one, so the kinds' counts
-  /// do not add up to it.
-  final Map<SpaceKindGroup, int> groupCounts;
   final Widget? followUp;
+  final ShareKind? share;
 
   /// Prefix of each row's widget key, for tests.
   final String keyPrefix;
 
-  /// Bumped by a form whose check failed: the group holding the pick opens
-  /// again, so its follow-up's errors show.
+  /// Kept for forms that bump it when a check fails; every kind shows, so
+  /// the pick's follow-up is always on screen.
   final int reveal;
-
-  @override
-  State<SpaceKindList> createState() => _SpaceKindListState();
-}
-
-class _SpaceKindListState extends State<SpaceKindList> {
-  late SpaceKindGroup? open = widget.value?.group;
-
-  @override
-  void didUpdateWidget(covariant SpaceKindList old) {
-    super.didUpdateWidget(old);
-    if ((widget.value != old.value || widget.reveal != old.reveal) &&
-        widget.value != null) {
-      open = widget.value!.group;
-    }
-  }
-
-  Widget _option(SpaceKind kind) => SpaceKindOption(
-    targetKey: ValueKey('${widget.keyPrefix}-${kind.name}'),
-    kind: kind,
-    count: widget.counts?[kind],
-    selected: kind == widget.value,
-    onTap: () => widget.onChanged(kind),
-  );
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
-    final counts = widget.counts;
+    Widget option(SpaceKind kind) => SpaceKindOption(
+      targetKey: ValueKey('$keyPrefix-${kind.name}'),
+      kind: kind,
+      share: share,
+      count: counts?[kind],
+      selected: kind == value,
+      onTap: () => onChanged(kind),
+    );
+    Widget picked(SpaceKind kind) => Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        option(kind),
+        if (kind == value && followUp != null)
+          Padding(
+            padding: const EdgeInsetsDirectional.only(start: 16, bottom: 8),
+            child: followUp,
+          ),
+      ],
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final group in SpaceKindGroup.values) ...[
-          DecoratedBox(
-            decoration: BoxDecoration(
-              border: Border(top: BorderSide(color: colors.outlineVariant)),
-            ),
-            child: Semantics(
-              button: true,
-              expanded: open == group,
-              child: InkWell(
-                key: ValueKey('${widget.keyPrefix}-group-${group.name}'),
-                onTap: () =>
-                    setState(() => open = open == group ? null : group),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: 48),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            group.label,
-                            style: text.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                        if (open != group)
-                          Flexible(
-                            child: Text(
-                              counts == null
-                                  ? group.hint
-                                  : '${widget.groupCounts[group] ?? 0}',
-                              textAlign: TextAlign.end,
-                              style: text.bodyMedium?.copyWith(
-                                color: colors.onSurfaceVariant,
-                                fontFeatures: const [
-                                  FontFeature.tabularFigures(),
-                                ],
-                              ),
-                            ),
-                          ),
-                        const SizedBox(width: 8),
-                        Icon(
-                          open == group ? Icons.expand_less : Icons.expand_more,
-                          size: 20,
-                          color: colors.onSurfaceVariant,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          for (final kind in group.kinds)
-            if (kind == widget.value)
-              // The pick and its follow-up stay mounted while the group is
-              // folded, so a form still checks their fields.
-              Visibility(
-                visible: open == group,
-                maintainState: true,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _option(kind),
-                    if (widget.followUp != null)
-                      Padding(
-                        padding: const EdgeInsetsDirectional.only(
-                          start: 16,
-                          bottom: 8,
-                        ),
-                        child: widget.followUp,
-                      ),
-                  ],
-                ),
-              )
-            else if (open == group)
-              _option(kind),
-        ],
+        for (final kind in SpaceKind.painted) picked(kind),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Divider(height: 1, color: colors.outlineVariant),
+        ),
+        picked(SpaceKind.offStreet),
       ],
     );
   }
@@ -209,8 +201,12 @@ class SpaceKindOption extends StatelessWidget {
     required this.onTap,
     this.count,
     this.targetKey,
+    this.share,
   });
   final SpaceKind? kind;
+
+  /// For [SpaceKind.shared]: which marking it shows (普大共用 or 汽機共用).
+  final ShareKind? share;
 
   /// The key of the row's tap target, for tests.
   final Key? targetKey;
@@ -264,8 +260,10 @@ class SpaceKindOption extends StatelessWidget {
                   children: [
                     ExcludeSemantics(
                       child: GroundMarking(
-                        type: kind?.type,
-                        shared: kind == SpaceKind.sharedMotorcycle,
+                        type: kind?.markingType,
+                        shared:
+                            kind == SpaceKind.shared &&
+                            share == ShareKind.scooterHeavy,
                         size: 40,
                       ),
                     ),
