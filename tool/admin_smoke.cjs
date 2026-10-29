@@ -589,9 +589,8 @@ function session(role, aal, factors = [factor]) {
             assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} space kinds scroll sideways at ${size.width} px`);
             await page.setViewportSize(before);
             await page.waitForTimeout(500);
-            const discard = page.getByRole('button', { name: '放棄修改', exact: true }).first();
-            await reach(discard);
-            await discard.click();
+            // In the action bar fixed under the form.
+            await page.getByRole('button', { name: '放棄修改', exact: true }).first().click();
             await page.waitForTimeout(500);
           }
           // New spot: kind, then a form whose county follows the position.
