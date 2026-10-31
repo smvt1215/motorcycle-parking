@@ -1,5 +1,6 @@
 import {
   identityHash,
+  spotDeletedResponse,
   validate,
   validFee,
   validZones,
@@ -743,5 +744,12 @@ Deno.test('a zone a suggestion changes states both vehicles once applied (#201)'
   }
   if (!zonePatchesStated([{ id: 'b', guide: 'x' }], undefined)) {
     throw new Error('without the stored list the review decides');
+  }
+});
+
+Deno.test('a deleted spot is refused with a sentence the app shows (#200)', () => {
+  if (spotDeletedResponse.error !== 'spot deleted') throw new Error('error');
+  if (spotDeletedResponse.message !== '這個點已被刪除') {
+    throw new Error('message');
   }
 });

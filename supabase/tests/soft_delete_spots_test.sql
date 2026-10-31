@@ -89,6 +89,37 @@ set local role authenticated;
 select throws_ok($$select admin_set_spot_hidden((select id::text from fx where name='community'),false,'')$$,
   '22023','only a deleted spot can be restored','a spot that is not deleted is not restored');
 
+-- ===== 騎士不能寫入已刪除的點，車主也不能復原 =====
+reset role;
+with s as (insert into community_spots(user_id,name,lat,lng,city,space_type,scooter_allowed,heavy_allowed)
+  values('10000000-0000-4000-8000-000000000001','車主的點',25.085,121.585,'臺北市','freeMotorcycle',true,false) returning id)
+  insert into fx select 'owned',id from s;
+select pg_temp.act('admin');
+set local role authenticated;
+select lives_ok($$select admin_set_spot_hidden((select id::text from fx where name='owned'),true,'')$$,'an admin deletes the owner''s spot');
+reset role;
+create function pg_temp.rider(body jsonb) returns jsonb language sql as $$
+select public.apply_report('10000000-0000-4000-8000-000000000001',repeat('f',64),repeat('f',64),body);
+$$;
+select throws_ok($$select pg_temp.rider(jsonb_build_object('action','update','spot_id',(select id from fx where name='owned'),
+  'spot',jsonb_build_object('name','車主改名')))$$,'P0410','spot deleted','the owner cannot edit or restore it');
+select throws_ok($$select pg_temp.rider(jsonb_build_object('action','delete','spot_id',(select id from fx where name='owned')))$$,
+  'P0410','spot deleted','nor delete it outright');
+select throws_ok($$select pg_temp.rider(jsonb_build_object('action','vote','spot_id',(select id from fx where name='owned'),'vote','still_there'))$$,
+  'P0410','spot deleted','nobody votes on it');
+select throws_ok($$select pg_temp.rider(jsonb_build_object('action','flag','source_id',(select id::text from fx where name='owned'),'reason','名稱'))$$,
+  'P0410','spot deleted','nor suggests a change');
+select ok((select deleted_at is not null and status='hidden' from community_spots where id=(select id from fx where name='owned')),
+  'it stays deleted');
+select pg_temp.act('admin');
+set local role authenticated;
+select lives_ok($$select admin_set_spot_hidden((select id::text from fx where name='owned'),false,'')$$,'only an admin restores it');
+reset role;
+select lives_ok($$select pg_temp.rider(jsonb_build_object('action','update','spot_id',(select id from fx where name='owned'),
+  'spot',jsonb_build_object('name','車主改名')))$$,'then its owner edits it again');
+select pg_temp.act('admin');
+set local role authenticated;
+
 -- ===== 升級官方點：社群點隱藏但不刪除 =====
 select lives_ok($$select admin_promote_spot((select id::text from fx where name='promote'),
   '{"source_name":"臺北市政府","source_url":"https://example.test/p","effective_date":"2026-10-31","scooter_allowed":true,"heavy_allowed":false}',
