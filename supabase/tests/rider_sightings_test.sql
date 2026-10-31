@@ -143,19 +143,31 @@ select is((select count(*)::integer from rider_sightings where user_id=pg_temp.u
 select throws_ok($$select apply_sighting(pg_temp.uid(101),repeat('0101',16),repeat('0101',16),upper(pg_temp.spot('t1')),'level','scooter',2::smallint)$$,
   'P0001','spot sighted within 10 minutes','an id in capitals is the same spot');
 select is((select count(*)::integer from spot_sightings(array[upper(pg_temp.spot('t1'))])),1,'and reads the same result');
--- 30 a day per account (UTC day).
+-- 30 a day per account (the day of Taiwan, #203).
 insert into rider_sightings(user_id,spot_id,kind,level,vehicle,ip_hash,device_hash,created_at)
 select pg_temp.uid(103),'00000000-0000-4000-8000-'||lpad(n::text,12,'0'),'level',0,'scooter',repeat('0103',16),repeat('0103',16),
-  greatest(date_trunc('day',now() at time zone 'UTC') at time zone 'UTC',now()-interval '20 minutes')
+  greatest(date_trunc('day',now() at time zone 'Asia/Taipei') at time zone 'Asia/Taipei',now()-interval '20 minutes')
 from generate_series(1,30) n;
 select throws_ok($$select pg_temp.sight(103,'t3','3')$$,'P0001','daily sighting limit reached','30 sightings a day per account');
--- 100 a day per network.
+-- 200 a day per network while App Check only logs (#203).
 insert into rider_sightings(user_id,spot_id,kind,level,vehicle,ip_hash,device_hash,created_at)
 select pg_temp.uid(104),'00000000-0000-4000-8000-'||lpad(n::text,12,'0'),'level',0,'scooter',repeat('beef',16),repeat('0104',16),
-  greatest(date_trunc('day',now() at time zone 'UTC') at time zone 'UTC',now()-interval '20 minutes')
-from generate_series(1,100) n;
-select throws_ok($$select pg_temp.sight(105,'t3','3',ip=>'beef')$$,'P0001','daily sighting limit reached','100 a day per network');
-delete from rider_sightings where user_id in (pg_temp.uid(103),pg_temp.uid(104));
+  greatest(date_trunc('day',now() at time zone 'Asia/Taipei') at time zone 'Asia/Taipei',now()-interval '20 minutes')
+from generate_series(1,199) n;
+select lives_ok($$select pg_temp.sight(105,'t3','3',ip=>'beef')$$,'the 200th of a network is accepted');
+select throws_ok($$select pg_temp.sight(106,'t4','3',ip=>'beef')$$,'P0001','daily sighting limit reached','the 201st is refused');
+-- Once App Check is enforced the network count is only a risk signal.
+select lives_ok($$select apply_sighting(pg_temp.uid(106),repeat('beef',16),repeat('0106',16),pg_temp.spot('t4'),'level','scooter',
+  3::smallint,p_ip_capped=>false)$$,'with App Check enforced a busy network is not refused');
+select is((select ip_busy from rider_sightings where user_id=pg_temp.uid(106)),true,'but the sighting is marked');
+select is((select penalty from rider_sighting_scores where user_id=pg_temp.uid(106)),1::numeric,'and weighs less');
+select is((select ip_busy from rider_sightings where user_id=pg_temp.uid(105) and spot_id=pg_temp.spot('t3')),false,
+  'a network under the line is no signal');
+-- The count runs from midnight in Taiwan (16:00 UTC the day before).
+select is((select count(*)::integer from rider_sightings where ip_hash=repeat('beef',16)
+  and created_at>=date_trunc('day',now() at time zone 'Asia/Taipei') at time zone 'Asia/Taipei'),201,'all counted today in Taiwan');
+delete from rider_sightings where user_id in (pg_temp.uid(103),pg_temp.uid(104),pg_temp.uid(105),pg_temp.uid(106));
+delete from rider_sighting_scores where user_id in (pg_temp.uid(105),pg_temp.uid(106));
 
 -- ===== 規則評分：官方即時資料 =====
 select pg_temp.sight(106,'lot','3');

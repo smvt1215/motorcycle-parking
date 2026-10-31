@@ -1,3 +1,9 @@
+import {
+  type AppCheckMode,
+  appCheckRefuses,
+  type AppCheckResult,
+  appCheckToken,
+} from '../_shared/app_check.ts';
 import { cors, readBody, response } from '../_shared/http.ts';
 import { type Sighting, validate } from './validate.ts';
 
@@ -18,11 +24,23 @@ export interface Deps {
     ip: string;
     device: string;
     sighting: Sighting;
+    /**
+     * Whether the network's daily cap applies: while App Check only logs.
+     * Once it is enforced the network count is a risk signal instead (#203).
+     */
+    ipCapped: boolean;
   }): Promise<
     { data?: Record<string, unknown> | null; error?: RpcError | null }
   >;
   /** Auth Admin API ban, as the admin-users function sets it. */
   ban(user: string, duration: string): Promise<string | null>;
+  /**
+   * The App Check verdict on the request's token (#203); null when App Check
+   * is not configured.
+   */
+  appCheck?(token: string | null): Promise<AppCheckResult | null>;
+  /** APP_CHECK_MODE: off, log (the default) or enforce. */
+  appCheckMode?: AppCheckMode;
   /** admin_record_user_ban(): every ban change is audited. */
   record(entry: {
     user: string;
@@ -83,6 +101,15 @@ export async function handle(
     if (!user || user.anonymous) {
       return response({ error: 'Google or Apple sign-in required' }, 401);
     }
+    const mode = deps.appCheckMode ?? 'off';
+    if (mode !== 'off') {
+      const verdict = deps.appCheck
+        ? await deps.appCheck(appCheckToken(req))
+        : null;
+      if (appCheckRefuses('submit-sighting', mode, verdict)) {
+        return response({ error: 'app check required' }, 401);
+      }
+    }
     let sighting: Sighting | string;
     try {
       sighting = validate(await readBody(req));
@@ -97,6 +124,7 @@ export async function handle(
       ip: await deps.hash(`ip:${ip}`),
       device: await deps.hash(`device:${sighting.device_id}`),
       sighting,
+      ipCapped: mode !== 'enforce',
     });
     if (error) {
       const [message, status] = refusal(error);
