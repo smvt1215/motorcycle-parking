@@ -204,7 +204,13 @@ const historyFieldGroups = <(String, List<String>)>[
   ('格位類型', ['space_type', 'condition']),
   (
     '場站與分區',
-    ['facility_type', 'facility_types', 'parking_zones', 'zones_complete'],
+    [
+      'facility_type',
+      'facility_types',
+      'parking_zones',
+      'parking_segments',
+      'zones_complete',
+    ],
   ),
   ('停放車種', ['scooter_allowed', 'heavy_allowed', 'parking_access']),
   ('車種確認', ['scooter_verified_at', 'heavy_verified_at']),
@@ -243,6 +249,7 @@ const historyFieldLabels = <String, String>{
   'facility_type': '場站型式',
   'facility_types': '場站型式',
   'parking_zones': '分區',
+  'parking_segments': '路邊分段',
   'zones_complete': '分區涵蓋全場',
   'scooter_allowed': '普通機車',
   'heavy_allowed': '大型重機',
@@ -294,6 +301,13 @@ String historyValueText(String field, Object? value) {
     ('scooter_total', final num v) => '$v 格',
     ('parking_zones', final List<dynamic> v) =>
       v.isEmpty ? '沒有分區' : historyZonesText(v),
+    ('parking_segments', final List<dynamic> v) =>
+      v.isEmpty
+          ? '沒有分段'
+          : [
+              for (final s in v)
+                if (s is Map && s['name'] is String) s['name'],
+            ].join('、'),
     ('photo_urls', final List<dynamic> v) =>
       v.isEmpty ? '沒有照片' : '${v.length} 張照片',
     ('zones_complete', final bool v) => v ? '是' : '否',

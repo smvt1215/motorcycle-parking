@@ -199,13 +199,10 @@ void main() {
     expect(tester.widget<IconButton>(searchButton).onPressed, isNull);
     await tester.tap(find.text('全部格位'));
     await tester.pumpAndSettle();
-    // The kinds fold into their groups until one is opened.
-    expect(find.text('路邊收費機車格'), findsNothing);
-    await tester.tap(find.byKey(const ValueKey('space-group-motorcycle')));
-    await tester.pumpAndSettle();
-    expect(find.text('路邊收費機車格'), findsOneWidget);
-    expect(find.text('普大共用機車格'), findsOneWidget);
-    await tester.tap(find.text('免費機車格'));
+    // The seven bay kinds and the lot (#188, P1).
+    expect(find.text('一般機車格'), findsOneWidget);
+    expect(find.text('普大共用格'), findsOneWidget);
+    await tester.tap(find.text('一般機車格'));
     await tester.pumpAndSettle();
     final input = find.byKey(const ValueKey('parking-search'));
     await tester.enterText(input, '[範例]');
@@ -213,8 +210,8 @@ void main() {
     expect(find.text('[範例] 市府周邊免費機車格'), findsOneWidget);
     expect(find.text('[範例] 信義地下停車場'), findsNothing);
     expect(find.textContaining('已套用篩選'), findsOneWidget);
-    // The off-street lot exists but the free-bay filter hides it.
-    await tester.enterText(input, '[範例] 信義');
+    // The off-street lot exists but the bay filter hides it.
+    await tester.enterText(input, '[範例] 信義地下');
     await tester.pumpAndSettle();
     expect(find.textContaining('沒有符合的停車點'), findsOneWidget);
     await tester.tap(find.text('清除篩選查看結果'));
@@ -435,10 +432,14 @@ void main() {
     await tester.pumpAndSettle();
     // Favorites appear once: one section, no separate shortcut to them.
     expect(find.text('我的收藏'), findsOneWidget);
+    // The legend and the account sheet are also rows of the page.
+    expect(find.text('地圖怎麼看'), findsOneWidget);
+    expect(find.text('帳號與設定'), findsOneWidget);
     // One vehicle switch: the map's pill, not the account sheet.
     await tester.tap(find.byTooltip('設定與登入'));
     await tester.pumpAndSettle();
-    expect(find.text('帳號與設定'), findsOneWidget);
+    // The page row and the sheet's title.
+    expect(find.text('帳號與設定'), findsNWidgets(2));
     expect(find.text('大型重機'), findsNothing);
     expect(find.text('範例模式'), findsOneWidget);
     await tester.tap(find.byTooltip('關閉').last);
@@ -600,6 +601,15 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('record-fab')));
     await tester.pumpAndSettle();
     expect(find.text('記錄停車'), findsOneWidget);
+    expect(find.text('樓層或區域（選填）'), findsOneWidget);
+    // The reminder is one segmented choice, not a dropdown.
+    final reminder = find.byKey(const ValueKey('parking-reminder'));
+    expect(reminder, findsOneWidget);
+    await tester.tap(
+      find.descendant(of: reminder, matching: find.text('1 小時')).first,
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(DropdownButtonFormField<int>), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
     debugDefaultTargetPlatformOverride = null;

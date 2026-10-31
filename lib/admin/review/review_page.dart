@@ -850,7 +850,7 @@ class _ReviewDetail extends StatelessWidget {
                 if (ignored.isNotEmpty && !editing) ...[
                   const SizedBox(height: 10),
                   AdminNotice(
-                    '另有無法在這裡修改的建議：${ignored.map((k) => '$k＝${proposal[k]}').join('、')}',
+                    '另有無法在這裡修改的建議：${ignored.map((k) => '${reviewField(k)?.label ?? k}＝${proposal[k]}').join('、')}',
                   ),
                 ],
                 const SizedBox(height: 24),
@@ -1041,7 +1041,14 @@ class _DiffTable extends StatelessWidget {
       if (sameValue(key, value, current)) return Text('不變', style: muted);
       return Align(
         alignment: Alignment.centerLeft,
-        child: ChangeBand(formatValue(key, value)),
+        child: ChangeBand(
+          // Zones and segments (#188): the list, then what each change does.
+          [
+            formatValue(key, value),
+            if (reviewField(key)?.input == FieldInput.entries)
+              ...entriesChangeLines(current, value),
+          ].join('\n'),
+        ),
       );
     }
 
@@ -1565,6 +1572,13 @@ class _FieldEditor extends StatelessWidget {
     FieldInput.multiChoice => InputDecorator(
       decoration: _decoration(context),
       child: _MultiChoice(field: field, value: value, onChanged: onChanged),
+    ),
+    // Zones and segments (#188) as the rider's patches leave them; the
+    // spot page edits them.
+    FieldInput.entries => InputDecorator(
+      decoration: _decoration(context)
+          .copyWith(helperText: '依騎士建議套用；需調整時請改用點位頁'),
+      child: Text(formatValue(field.key, value)),
     ),
     // Shown as sent; the zone and condition editors are C6's.
     FieldInput.condition => InputDecorator(

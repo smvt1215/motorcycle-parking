@@ -10,8 +10,7 @@ import 'package:pointer_interceptor/pointer_interceptor.dart';
 import '../../models/closure.dart';
 import '../../models/fee.dart';
 import '../../models/parking.dart';
-import '../../models/parking_condition.dart' show Charge, ParkingCondition;
-import '../../models/space_kind.dart';
+import '../../models/parking_condition.dart' show Charge;
 import '../../features/map/space_type_sheet.dart' show SpaceKindList;
 import '../../ui/address_search_field.dart';
 import '../../ui/fee_board.dart';
@@ -2304,9 +2303,9 @@ String? _summaryOf(SpotGroup group, SpotsController spots) {
   }
 }
 
-/// The bay kind as the app picks it (C6 canvas AppPatterns, pattern 1;
-/// decision 57): the grouped ground-marking list, 普大共用 asking 收費 or
-/// 免費 under it. The street condition changes with it (setKind).
+/// The bay kind as the app picks it (#188, design canvas S4): the seven
+/// ground markings and the lot, 一般機車格 and 普大共用格 asking 收費 or 免費
+/// under it. The street condition changes with it (setKind).
 class _SpaceKindField extends StatelessWidget {
   const _SpaceKindField({
     required this.spots,
@@ -2340,19 +2339,72 @@ class _SpaceKindField extends StatelessWidget {
               value: kind,
               keyPrefix: 'spot-space',
               onChanged: spots.setKind,
-              followUp: kind == SpaceKind.sharedMotorcycle
-                  ? OptionPills<Charge>(
-                      key: const ValueKey('spot-space-charge'),
-                      values: const [
-                        (Charge.toll, '收費格'),
-                        (Charge.free, '免費格'),
+              followUp: kind != null && kind.asksCharge
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        OptionPills<Charge?>(
+                          key: const ValueKey('spot-space-charge'),
+                          values: const [
+                            (Charge.toll, '收費格'),
+                            (Charge.free, '免費格'),
+                          ],
+                          // A 限時 bay may leave it unconfirmed.
+                          selected: spots.draftCondition?.charge,
+                          keyOf: (c) => 'spot-space-charge-${c?.name}',
+                          onSelect: (c) => spots.setKind(kind, charge: c),
+                        ),
+                        // 限時 is an added condition of these kinds (#188);
+                        // the later time-limit layer replaces this.
+                        OptionCheck(
+                          key: const ValueKey('spot-space-time-limit'),
+                          label: '限時停車',
+                          value: spots.timeLimit != null,
+                          onChanged: (on) => spots.setTimeLimit(
+                            on,
+                            minutes: spots.timeLimit?.maxMinutes,
+                          ),
+                        ),
+                        if (spots.timeLimit case final limit?)
+                          Padding(
+                            padding: const EdgeInsetsDirectional.only(
+                              start: 44,
+                            ),
+                            child: Align(
+                              alignment: AlignmentDirectional.centerStart,
+                              child: SizedBox(
+                                width: 200,
+                                child: TextFormField(
+                                  key: const ValueKey('spot-space-max-minutes'),
+                                  initialValue: limit.maxMinutes?.toString(),
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(
+                                    labelText: '最多停幾分鐘',
+                                    helperText: '牌面沒寫就留空',
+                                    suffixText: '分鐘',
+                                  ),
+                                  autovalidateMode:
+                                      AutovalidateMode.onUserInteraction,
+                                  validator: (v) {
+                                    final text = v?.trim() ?? '';
+                                    if (text.isEmpty) return null;
+                                    final n = int.tryParse(text);
+                                    return n == null || n < 1 || n > 1440
+                                        ? '填 1 到 1440'
+                                        : null;
+                                  },
+                                  onChanged: (v) {
+                                    final n = int.tryParse(v.trim());
+                                    if (v.trim().isEmpty ||
+                                        (n != null && n >= 1 && n <= 1440)) {
+                                      spots.setTimeLimit(true, minutes: n);
+                                    }
+                                  },
+                                ),
+                              ),
+                            ),
+                          ),
                       ],
-                      selected:
-                          ParkingCondition.fromJson(spots.draft['condition'])
-                              ?.charge ??
-                          Charge.toll,
-                      keyOf: (c) => 'spot-space-charge-${c.name}',
-                      onSelect: (c) => spots.setKind(kind!, charge: c),
                     )
                   : null,
             ),

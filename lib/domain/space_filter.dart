@@ -1,12 +1,14 @@
-/// The map's space kind filter (PLAN.md 篩選列). 免費機車格 keeps the bays
-/// that are free for the rider: only a rate of `mode: free` or a bay marked
-/// free, never a toll bay whose first minutes cost 0 元 (design §2.3, C5).
+/// The map's space kind filter (PLAN.md 篩選列; #188, design canvas P1):
+/// the seven bay kinds and the lot. [freeFor] still says which bays are free
+/// for the rider: only a rate of `mode: free` or a bay marked free, never a
+/// toll bay whose first minutes cost 0 元 (design §2.3, C5).
 library;
 
 import '../models/fee.dart';
 import '../models/parking.dart';
 import '../models/parking_condition.dart';
 import '../models/space_kind.dart';
+import '../models/zone_entries.dart';
 
 /// The rider's own rate at [spot], a heavy follow read as the rate it
 /// follows; null when unconfirmed.
@@ -47,14 +49,24 @@ bool postedShared(ParkingSpot spot) =>
     (spot.condition ?? conditionOf(spot.spaceType))?.share ==
         ShareKind.scooterHeavy;
 
-/// Whether the space filter [kind] keeps [spot]: 免費機車格 by [freeFor],
-/// 普大共用機車格 by [postedShared], every other kind by its space type.
+/// The bay kinds painted at a street spot (#188): its own condition's (or
+/// its space type's), and each segment's. Empty for a lot.
+Set<BayKind> bayKindsAt(ParkingSpot spot) {
+  if (isOffStreet(spot.spaceType, spot.facilityType)) return const {};
+  return {
+    ?bayKindOf(spot.condition ?? conditionOf(spot.spaceType)),
+    for (final s in spot.segments) ?s.bayKind,
+  };
+}
+
+/// Whether the space filter [kind] keeps [spot]: 停車場 by placement, every
+/// painted kind by the bays painted there ([bayKindsAt]), whatever they
+/// charge or limit.
 bool matchesSpaceFilter(
   ParkingSpot spot,
   SpaceKind kind,
   VehicleType vehicle,
-) => switch (kind) {
-  SpaceKind.freeMotorcycle => freeFor(spot, vehicle),
-  SpaceKind.sharedMotorcycle => postedShared(spot),
-  _ => spot.spaceType == kind.type,
+) => switch (kind.bay) {
+  null => isOffStreet(spot.spaceType, spot.facilityType),
+  final bay => bayKindsAt(spot).contains(bay),
 };
