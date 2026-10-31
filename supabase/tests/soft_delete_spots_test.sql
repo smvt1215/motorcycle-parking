@@ -70,6 +70,8 @@ set local role authenticated;
 select throws_ok($$select admin_set_spot_hidden((select id::text from fx where name='community'),false,'')$$,
   '22023','deleted more than 14 days ago','past 14 days nothing is restored');
 reset role;
+select throws_ok($$update community_spots set status='pending' where id=(select id from fx where name='community')$$,
+  '22023','deleted more than 14 days ago','nor does any other writer');
 update community_spots set deleted_at=now()-interval '1 day' where id=(select id from fx where name='community');
 select pg_temp.act('admin');
 set local role authenticated;

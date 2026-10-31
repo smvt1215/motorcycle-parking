@@ -36,6 +36,10 @@ begin
   if p_is and not p_was and coalesce(current_setting('app.promote',true),'')<>'on' then
     p_at:=now(); p_by:=auth.uid();
   elsif not p_is then
+    -- Past the grace period nothing brings it back, whichever writer tries.
+    if p_was and p_at<now()-public.spot_delete_grace() then
+      raise exception 'deleted more than 14 days ago' using errcode='22023';
+    end if;
     p_at:=null; p_by:=null;
   end if;
 end;
