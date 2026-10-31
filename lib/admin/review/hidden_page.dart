@@ -6,7 +6,9 @@ import 'review_controller.dart';
 import 'review_models.dart';
 import 'review_page.dart';
 
-/// Spots off the map, hidden by an admin or by riders' votes, with a way back.
+/// Deleted spots (#200): off the map at once, restorable for 14 days, then
+/// purged. Purged official spots are listed too: imports skip them until
+/// an admin releases one.
 class HiddenSpotsPage extends StatefulWidget {
   const HiddenSpotsPage({super.key, required this.review});
   final ReviewController review;
@@ -33,7 +35,7 @@ class _HiddenSpotsPageState extends State<HiddenSpotsPage> {
       ..showSnackBar(
         undoSnackBar(
           context,
-          '已恢復顯示：${spot.name}',
+          '已復原：${spot.name}',
           review.undoWindow,
           () => review.setHidden(spot, true),
         ),
@@ -108,7 +110,7 @@ class _HiddenSpotsPageState extends State<HiddenSpotsPage> {
                               Semantics(
                                 header: true,
                                 child: Text(
-                                  '已隱藏的點位',
+                                  '已刪除的點位',
                                   style: text.headlineMedium?.copyWith(
                                     fontSize: compact ? 22 : 26,
                                   ),
@@ -120,7 +122,8 @@ class _HiddenSpotsPageState extends State<HiddenSpotsPage> {
                                   maxWidth: 640,
                                 ),
                                 child: Text(
-                                  '這些點位不會出現在 App 地圖上。恢復後，官方點直接重新顯示；社群點回到「待確認」，並清除先前的「已不存在」回報。',
+                                  '騎士已看不到這些點位。刪除後 14 天內可以復原，之後永久刪除，無法復原。'
+                                  '復原後，官方點直接重新顯示；社群點回到「待確認」，並清除先前的「已不存在」回報；刪除時一起結案的回報不會重開。',
                                   style: TextStyle(
                                     color: colors.onSurfaceVariant,
                                   ),
@@ -154,7 +157,7 @@ class _HiddenSpotsPageState extends State<HiddenSpotsPage> {
                               compact ? 16 : 24,
                               32,
                             ),
-                            child: Text('目前沒有隱藏的點位。', style: text.titleMedium),
+                            child: Text('目前沒有已刪除的點位。', style: text.titleMedium),
                           )
                         else
                           for (final (i, spot) in review.hidden.indexed) ...[
@@ -191,9 +194,12 @@ class _HiddenSpotsPageState extends State<HiddenSpotsPage> {
                                           '${spot.city}${spot.district}，${spot.sourceLabel}',
                                           style: muted,
                                         ),
-                                        if (spot.updatedAt != null)
+                                        if (spot.deletedAt case final at?)
                                           Text(
-                                            '${relativeAge(spot.updatedAt!, review.now())}更新',
+                                            '已刪除，${purgeDaysLeft(at, review.now())} 天後永久刪除',
+                                            key: ValueKey(
+                                              'purge-days-${spot.sourceId}',
+                                            ),
                                             style: muted,
                                           ),
                                       ],
@@ -205,12 +211,90 @@ class _HiddenSpotsPageState extends State<HiddenSpotsPage> {
                                         review.changing.contains(spot.sourceId)
                                         ? null
                                         : () => _restore(spot),
-                                    child: const Text('恢復顯示'),
+                                    child: const Text('復原'),
                                   ),
                                 ],
                               ),
                             ),
                           ],
+                        if (review.hiddenLoaded &&
+                            review.purged.isNotEmpty) ...[
+                          Divider(height: 1, color: colors.outlineVariant),
+                          Padding(
+                            padding: EdgeInsets.fromLTRB(
+                              compact ? 16 : 24,
+                              16,
+                              compact ? 16 : 24,
+                              4,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Semantics(
+                                  header: true,
+                                  child: Text(
+                                    '已永久刪除的官方點',
+                                    style: text.titleMedium,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '匯入時會跳過這些官方資料編號。要讓下次匯入帶回來，按「解除」。',
+                                  style: muted,
+                                ),
+                              ],
+                            ),
+                          ),
+                          for (final p in review.purged)
+                            Padding(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: compact ? 16 : 24,
+                                vertical: 8,
+                              ),
+                              child: Wrap(
+                                alignment: WrapAlignment.spaceBetween,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                spacing: 16,
+                                runSpacing: 8,
+                                children: [
+                                  ConstrainedBox(
+                                    constraints: BoxConstraints(
+                                      maxWidth: compact
+                                          ? constraints.maxWidth
+                                          : 600,
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          p.name.isEmpty ? '（未命名）' : p.name,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                        Text(
+                                          p.sourceId.isEmpty
+                                              ? '官方點'
+                                              : '官方資料編號 ${p.sourceId}',
+                                          style: muted,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  OutlinedButton(
+                                    key: ValueKey('release-${p.officialId}'),
+                                    onPressed:
+                                        review.changing.contains(p.officialId)
+                                        ? null
+                                        : () => review.releasePurged(p),
+                                    child: const Text('解除'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          const SizedBox(height: 8),
+                        ],
                       ],
                     ),
                   ),

@@ -789,15 +789,33 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('已隱藏清單可恢復並復原', (tester) async {
+    testWidgets('已刪除清單顯示剩餘天數，可復原並撤銷（#200）', (tester) async {
+      gateway.purged = const [
+        PurgedOfficialSpot(
+          officialId: '99999999-9999-4999-8999-999999999999',
+          sourceId: 'TP-9',
+          name: '已永久刪除的官方點',
+        ),
+      ];
       await show(tester);
-      await tester.tap(find.text('已隱藏的點位'));
+      await tester.tap(find.text('已刪除的點位'));
       await tester.pumpAndSettle();
       expect(find.text('中山北路二段路邊機車格'), findsOneWidget);
+      expect(find.byKey(ValueKey('purge-days-$communityId')), findsOneWidget);
+      expect(find.textContaining('天後永久刪除'), findsOneWidget);
+      expect(find.text('官方資料編號 TP-9'), findsOneWidget);
+      await tester.tap(
+        find.byKey(
+          const ValueKey('release-99999999-9999-4999-8999-999999999999'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(gateway.released, ['99999999-9999-4999-8999-999999999999']);
+      expect(find.text('已永久刪除的官方點'), findsNothing);
       await tester.tap(find.byKey(const ValueKey('restore-$communityId')));
       await tester.pumpAndSettle();
       expect(gateway.hiddenChanges.single, (communityId, false));
-      expect(find.text('目前沒有隱藏的點位。'), findsOneWidget);
+      expect(find.text('目前沒有已刪除的點位。'), findsOneWidget);
       await tester.tap(find.text('復原'));
       await tester.pumpAndSettle();
       expect(gateway.hiddenChanges.last, (communityId, true));

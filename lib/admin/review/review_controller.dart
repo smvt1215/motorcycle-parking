@@ -85,6 +85,9 @@ class ReviewController extends ChangeNotifier {
   bool writing = false;
 
   List<ReviewSpot> hidden = [];
+
+  /// Official spots purged after deletion, which imports skip (#200).
+  List<PurgedOfficialSpot> purged = [];
   bool hiddenLoading = false;
   bool hiddenLoaded = false;
   String? hiddenError;
@@ -192,15 +195,39 @@ class ReviewController extends ChangeNotifier {
     _notify();
     try {
       final rows = await gateway!.hiddenSpots();
+      final gone = await gateway!.purgedOfficialSpots();
       if (generation != _generation) return;
       hidden = rows;
+      purged = gone;
       hiddenLoaded = true;
     } catch (_) {
       if (generation == _generation) {
-        hiddenError = '已隱藏的點位載入失敗，請檢查連線後重試。';
+        hiddenError = '已刪除的點位載入失敗，請檢查連線後重試。';
       }
     } finally {
       if (generation == _generation) hiddenLoading = false;
+      _notify();
+    }
+  }
+
+  /// Lets an import bring a purged official spot back (#200).
+  Future<bool> releasePurged(PurgedOfficialSpot spot) async {
+    if (gateway == null || !changing.add(spot.officialId)) return false;
+    final generation = _generation;
+    hiddenError = null;
+    _notify();
+    try {
+      await gateway!.releasePurgedOfficial(spot.officialId, '');
+      if (generation != _generation) return false;
+      purged = purged.where((p) => p.officialId != spot.officialId).toList();
+      return true;
+    } catch (_) {
+      if (generation == _generation) {
+        hiddenError = '「${spot.name}」尚未解除，請重試。';
+      }
+      return false;
+    } finally {
+      changing.remove(spot.officialId);
       _notify();
     }
   }
@@ -223,8 +250,8 @@ class ReviewController extends ChangeNotifier {
     } catch (_) {
       if (generation == _generation) {
         hiddenError = hide
-            ? '「${spot.name}」尚未重新隱藏，請重試。'
-            : '「${spot.name}」尚未恢復顯示，請重試。';
+            ? '「${spot.name}」尚未重新刪除，請重試。'
+            : '「${spot.name}」尚未復原，請重試。';
       }
       return false;
     } finally {

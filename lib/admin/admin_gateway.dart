@@ -63,11 +63,19 @@ abstract class AdminGateway {
     ResolutionKind? resolutionKind,
   });
 
-  /// Hidden community and official spots, most recently changed first.
+  /// Deleted community and official spots (#200), still restorable within
+  /// 14 days, most recently deleted first.
   Future<List<ReviewSpot>> hiddenSpots();
 
-  /// `admin_set_spot_hidden`: hide or restore one spot, audited.
+  /// `admin_set_spot_hidden`: delete (soft, #200) or restore one spot,
+  /// audited.
   Future<void> setSpotHidden(String sourceId, bool hidden, String note);
+
+  /// Official spots purged 14 days after deletion, which imports skip.
+  Future<List<PurgedOfficialSpot>> purgedOfficialSpots();
+
+  /// `admin_release_purged_official`: lets an import bring one back.
+  Future<void> releasePurgedOfficial(String officialId, String note);
 
   /// `admin_spots`: both tables, newest first.
   Future<List<SpotSummary>> searchSpots(
@@ -192,7 +200,7 @@ abstract class AdminGateway {
 /// The columns the hidden list shows; clients may select them.
 const _spotColumns =
     'id,name,lat,lng,city,district,space_type,fee_note,note,scooter_allowed,heavy_allowed,source_name,updated_at,'
-    'facility_type,facility_types,parking_access,entrance_note,parking_guide,fee,condition';
+    'facility_type,facility_types,parking_access,entrance_note,parking_guide,fee,condition,deleted_at';
 final _uuid = RegExp(
   r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
   caseSensitive: false,
@@ -349,14 +357,14 @@ class SupabaseAdminGateway implements AdminGateway {
     final community = await client
         .from('community_spots')
         .select('$_spotColumns,status')
-        .eq('status', 'hidden')
-        .order('updated_at', ascending: false)
+        .not('deleted_at', 'is', null)
+        .order('deleted_at', ascending: false)
         .limit(200);
     final official = await client
         .from('official_heavy_spots')
         .select('$_spotColumns,hidden')
-        .eq('hidden', true)
-        .order('updated_at', ascending: false)
+        .not('deleted_at', 'is', null)
+        .order('deleted_at', ascending: false)
         .limit(200);
     final spots = [
       for (final row in community)
@@ -370,8 +378,25 @@ class SupabaseAdminGateway implements AdminGateway {
     ];
     final epoch = DateTime.utc(2000);
     return spots
-      ..sort((a, b) => (b.updatedAt ?? epoch).compareTo(a.updatedAt ?? epoch));
+      ..sort((a, b) => (b.deletedAt ?? epoch).compareTo(a.deletedAt ?? epoch));
   }
+
+  @override
+  Future<List<PurgedOfficialSpot>> purgedOfficialSpots() async {
+    final rows = await client
+        .from('purged_official_spots')
+        .select('official_id,source_id,name,purged_at')
+        .order('purged_at', ascending: false)
+        .limit(200);
+    return [for (final row in rows) PurgedOfficialSpot.fromJson(row)];
+  }
+
+  @override
+  Future<void> releasePurgedOfficial(String officialId, String note) =>
+      client.rpc(
+        'admin_release_purged_official',
+        params: {'p_official_id': officialId, 'p_note': note},
+      );
 
   @override
   Future<void> setSpotHidden(String sourceId, bool hidden, String note) =>

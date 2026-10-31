@@ -309,6 +309,11 @@ class ReviewSpot {
   DateTime? get updatedAt =>
       DateTime.tryParse(values['updated_at'] as String? ?? '');
 
+  /// When an admin deleted it (#200); null when it is not deleted (a
+  /// promoted community spot is hidden without being deleted).
+  DateTime? get deletedAt =>
+      DateTime.tryParse(values['deleted_at'] as String? ?? '');
+
   /// Official spots carry their government source; community rows say so.
   String get sourceLabel {
     final name = values['source_name'] as String? ?? '';
@@ -828,4 +833,34 @@ String closureSummary(Object? value) {
   return '${c.reason.label}，'
       '${until == null ? '恢復時間未知（$closureDefaultDays 天後到期）' : '預計 ${closureDayLabel(until)}恢復'}'
       '（${closureDate(c.since)} 起）';
+}
+
+/// How long a deleted spot can be restored (#200, spot_delete_grace()).
+const spotDeleteGrace = Duration(days: 14);
+
+/// Whole days left before a spot deleted at [deletedAt] is purged, at
+/// least 0; the purge runs once a day.
+int purgeDaysLeft(DateTime deletedAt, DateTime now) {
+  final left = deletedAt.add(spotDeleteGrace).difference(now);
+  return left.isNegative ? 0 : (left.inHours / 24).ceil();
+}
+
+/// An official spot purged 14 days after deletion (#200): imports skip
+/// its id and source id until an admin releases it.
+class PurgedOfficialSpot {
+  const PurgedOfficialSpot({
+    required this.officialId,
+    required this.sourceId,
+    required this.name,
+    this.purgedAt,
+  });
+  factory PurgedOfficialSpot.fromJson(Map<String, dynamic> json) =>
+      PurgedOfficialSpot(
+        officialId: json['official_id'] as String,
+        sourceId: json['source_id'] as String? ?? '',
+        name: json['name'] as String? ?? '',
+        purgedAt: DateTime.tryParse(json['purged_at'] as String? ?? ''),
+      );
+  final String officialId, sourceId, name;
+  final DateTime? purgedAt;
 }

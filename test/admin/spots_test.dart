@@ -755,10 +755,14 @@ void main() {
       expect(find.byKey(const ValueKey('marker-$communityId')), findsOneWidget);
     });
 
-    testWidgets('隱藏點位後地圖重新載入', (tester) async {
+    testWidgets('刪除點位後地圖重新載入', (tester) async {
       await show(tester, path: '/spots/$communityId');
       final before = gateway.mapRequests.length;
-      await tester.tap(find.text('隱藏點位').last);
+      await tester.tap(find.text('刪除點位').last);
+      await tester.pumpAndSettle();
+      // Confirmed first (#200): 14 days to restore.
+      expect(find.textContaining('管理站會保留 14 天'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('confirm-delete-spot')));
       await tester.pumpAndSettle();
       expect(gateway.mapRequests.length, greaterThan(before));
     });
@@ -1214,16 +1218,25 @@ void main() {
       );
     }
 
-    testWidgets('隱藏點位後可復原', (tester) async {
+    testWidgets('刪除點位要確認，之後可復原（#200）', (tester) async {
       await show(tester, path: '/spots/$officialId');
-      await tester.tap(find.text('隱藏點位'));
+      await tester.tap(find.text('刪除點位'));
       await tester.pumpAndSettle();
-      expect(find.text('這個點位已隱藏，App 地圖上不會顯示。'), findsOneWidget);
-      expect(find.text('恢復顯示'), findsOneWidget);
+      // Cancelling deletes nothing.
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      expect(gateway.hiddenChanges, isEmpty);
+      await tester.tap(find.text('刪除點位'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('confirm-delete-spot')));
+      await tester.pumpAndSettle();
+      expect(gateway.hiddenChanges.single, (officialId, true));
+      expect(find.textContaining('這個點位已刪除，騎士看不到'), findsOneWidget);
+      expect(find.text('復原點位'), findsOneWidget);
       await tester.tap(find.text('復原'));
       await tester.pumpAndSettle();
       expect(gateway.hiddenChanges.last, (officialId, false));
-      expect(find.text('隱藏點位'), findsOneWidget);
+      expect(find.text('刪除點位'), findsOneWidget);
     });
   });
 }
