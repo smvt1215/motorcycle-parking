@@ -123,7 +123,17 @@ void main() {
       final official = spots[officialId]!;
       expect(validatePatch({'name': ' '}, official), '停車點名稱不可空白');
       expect(validatePatch({'name': 'a' * 101}, official), contains('100'));
-      expect(validatePatch({'heavy_allowed': null}, official), isNull);
+      // A write never clears a vehicle; 官方未標示 goes with a null flag (#201).
+      expect(validatePatch({'heavy_allowed': null}, official), isNotNull);
+      expect(
+        validatePatch({
+          'heavy_allowed': null,
+          'heavy_not_stated': true,
+        }, official),
+        isNull,
+      );
+      expect(validatePatch({'heavy_not_stated': false}, official), isNotNull);
+      expect(formatValue('heavy_not_stated', true), '官方未標示');
       expect(validatePatch({'lat': 30}, official), contains('緯度'));
       expect(validatePatch({'space_type': 'rocket'}, official), isNotNull);
       expect(
@@ -658,7 +668,7 @@ void main() {
       });
     });
 
-    testWidgets('官方點加入大型重機欄位可保留未確認', (tester) async {
+    testWidgets('官方點加入大型重機欄位不能留未確認（#201）', (tester) async {
       final spot = gateway.spots[officialId]!;
       gateway.spots[officialId] = ReviewSpot(
         sourceId: officialId,
@@ -688,10 +698,11 @@ void main() {
       await tester.tap(find.text('套用修改'));
       await tester.pump(const Duration(seconds: 7));
       await tester.pumpAndSettle();
-      expect(gateway.resolved.single.$3, {'heavy_allowed': null});
+      expect(find.textContaining('大型重機請選可停或不可停，或設為官方未標示'), findsWidgets);
+      expect(gateway.resolved, isEmpty);
     });
 
-    testWidgets('官方點未確認資格建議可編輯並套用', (tester) async {
+    testWidgets('舊版送來的未確認資格建議不能直接套用（#201）', (tester) async {
       gateway.reports = [
         ReviewReport(
           id: 'r-unknown',
@@ -709,7 +720,7 @@ void main() {
       await tester.tap(find.text('套用修改'));
       await tester.pump(const Duration(seconds: 7));
       await tester.pumpAndSettle();
-      expect(gateway.resolved.single.$3, {'heavy_allowed': null});
+      expect(gateway.resolved, isEmpty);
     });
 
     testWidgets('版本衝突顯示送出時的值，按仍要套用才強制', (tester) async {

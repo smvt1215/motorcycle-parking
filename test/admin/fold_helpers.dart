@@ -39,3 +39,21 @@ Future<void> openFold(WidgetTester tester, String title) async {
     await tester.pumpAndSettle();
   }
 }
+
+/// Picks [scooter] and [heavy] (`allowed`, `notAllowed`, `notStated`) in
+/// the spot form's 可停車種 section: every save of new or old data states
+/// both vehicles (#201).
+Future<void> pickVehicles(
+  WidgetTester tester, {
+  String scooter = 'allowed',
+  String heavy = 'allowed',
+}) async {
+  await openFold(tester, '可停車種');
+  for (final key in ['scooter_allowed-$scooter', 'heavy_allowed-$heavy']) {
+    final target = find.byKey(ValueKey(key));
+    await tester.ensureVisible(target);
+    await tester.pumpAndSettle();
+    await tester.tap(target);
+    await tester.pumpAndSettle();
+  }
+}

@@ -503,11 +503,11 @@ void main() {
 
         await reach(find.byKey(const ValueKey('bay-1')));
         expect(find.text('重機格 ・ 收費未確認'), findsOneWidget);
-        final unknown = find.byKey(const ValueKey('bay-1-大型重機-null'));
+        final unknown = find.byKey(const ValueKey('bay-1-大型重機-notStated'));
         await reach(unknown);
         expect(unknown.hitTestable(), findsOneWidget);
         // A heavy bay cannot open to scooters: the choice does nothing.
-        final scooter = find.byKey(const ValueKey('bay-1-普通機車-true'));
+        final scooter = find.byKey(const ValueKey('bay-1-普通機車-allowed'));
         await reach(scooter);
         await tester.tap(scooter.hitTestable());
         await tester.pumpAndSettle();

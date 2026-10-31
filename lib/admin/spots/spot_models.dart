@@ -99,6 +99,9 @@ enum SpotInput {
   integer,
   spaceType,
   triState,
+
+  /// 可停／不可停／官方未標示 (#201), stored with `x_not_stated`.
+  eligibility,
   choice,
 
   /// Several of [SpotField.choices] as a list (`facility_types`, decision
@@ -212,14 +215,14 @@ final spotFields = <SpotField>[
     'scooter_allowed',
     '普通機車',
     SpotGroup.vehicles,
-    SpotInput.triState,
+    SpotInput.eligibility,
   ),
   const SpotField(
     'heavy_allowed',
     '大型重機',
     SpotGroup.vehicles,
-    SpotInput.triState,
-    help: '大型重機只採官方明載；沒有官方資料時保持「未確認」。',
+    SpotInput.eligibility,
+    help: '大型重機只採官方明載。',
   ),
   const SpotField('fee', '費率', SpotGroup.fees, SpotInput.fee),
   const SpotField(
@@ -377,7 +380,7 @@ String? validateSpotField(SpotField field, Object? value, {Fee? fee}) {
       if (value is! int || value < 0) return '${field.label}需為 0 以上的整數';
     case SpotInput.spaceType:
       if (!SpaceType.values.asNameMap().containsKey(value)) return '請選擇格位類型';
-    case SpotInput.triState:
+    case SpotInput.triState || SpotInput.eligibility:
       if (value is! bool) return '${field.label}的值無效';
     case SpotInput.choice:
       if (!field.choices.containsKey(value)) return '請選擇${field.label}';

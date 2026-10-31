@@ -281,6 +281,19 @@ class SpotsController extends ChangeNotifier {
   /// Marked as changed in the form; a new spot has nothing to compare to.
   bool changed(String key) => record?.isNew != true && _edits.containsKey(key);
 
+  /// Why [flag]'s eligibility cannot be saved as it is, if it cannot.
+  String? eligibilityProblem(String flag) {
+    final label = spotField(flag).label;
+    final value = eligibilityOf(flag);
+    if (value == Eligible.notStated && !notStatedOffered) {
+      return '社群路邊格位的$label請選「可停」或「不可停」';
+    }
+    if (value != null) return null;
+    if (record?.isNew == true) return '請選擇$label能不能停';
+    return '這是舊資料，$label還沒填。選一個後才能儲存'
+        '${notStatedOffered ? '；官方資料沒寫就選「官方未標示」' : ''}。';
+  }
+
   /// Errors of changed fields only, as the RPC checks only what it receives:
   /// an old imported row must not block an unrelated edit. A new spot has
   /// nothing to keep, so every field is checked.
@@ -292,6 +305,8 @@ class SpotsController extends ChangeNotifier {
           draft[f.key],
           fee: draft['fee'] is Fee ? draft['fee'] as Fee : null,
         ),
+    if (mustStateVehicles)
+      for (final flag in vehicleFlags) flag: ?eligibilityProblem(flag),
     if (lot && (record!.isNew || _edits.containsKey('fee_plans')))
       'fee_plans': ?plansProblem(plans),
     if (lot && (record!.isNew || _edits.containsKey('parking_zones')))
@@ -727,6 +742,46 @@ class SpotsController extends ChangeNotifier {
     draft = {...draft, key: value};
     _notify();
   }
+
+  /// The `x_not_stated` key beside a vehicle flag (#201).
+  static String notStatedKey(String flag) =>
+      flag.replaceFirst('_allowed', '_not_stated');
+
+  /// [flag]'s eligibility in the form; null is old data's 待確認.
+  Eligible? eligibilityOf(String flag) => Eligible.of(
+    draft[flag] is bool ? draft[flag] as bool : null,
+    notStated: draft[notStatedKey(flag)] == true,
+  );
+
+  /// Sets a vehicle: its flag and `x_not_stated` together.
+  void setEligibility(String flag, Eligible value) {
+    final key = notStatedKey(flag);
+    draft = {
+      ...draft,
+      flag: value.flag,
+      // Written only when it says something: the table clears it whenever
+      // a boolean is written.
+      if (value == Eligible.notStated)
+        key: true
+      else if (draft[key] == true)
+        key: false,
+    };
+    _notify();
+  }
+
+  bool eligibilityChanged(String flag) =>
+      changed(flag) || changed(notStatedKey(flag));
+
+  /// Whether 官方未標示 is offered: official spots and lots (官方、營運業者
+  /// 都沒寫); a community street bay is 可停 or 不可停.
+  bool get notStatedOffered => record?.official == true || lot;
+
+  /// Whether saving must state both vehicles (#201): a new spot, or any edit
+  /// of the data; setting the closure or the status alone is exempt, as on
+  /// the server.
+  bool get mustStateVehicles =>
+      record?.isNew == true ||
+      _edits.keys.any((k) => k != 'closure' && k != 'status');
 
   /// An address search result fills the address or road field; like a
   /// lookup, the field's text box shows the new value.
