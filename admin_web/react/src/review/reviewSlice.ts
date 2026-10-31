@@ -9,10 +9,15 @@ export interface QueuedDecision {
   request: ResolveRequest;
   /** Spot name, for 「已套用 復興南路…」. */
   name: string;
+  /**
+   * The window has closed and the write is in flight: it can no longer be
+   * undone, and the report stays out of the queue until the write settles.
+   */
+  writing?: boolean;
 }
 
 export interface ReviewState {
-  /** Decisions waiting out the undo window, by report id. */
+  /** Decisions waiting out the undo window or being written, by report id. */
   pending: Record<string, QueuedDecision>;
   /** The decision the action bar offers to undo. */
   lastQueued: string | null;
@@ -49,7 +54,14 @@ export const reviewSlice = createSlice({
       delete state.failures[id];
     },
     decisionUndone(state, action: PayloadAction<string>) {
+      // Too late once the write has started: the server may already have it.
+      if (state.pending[action.payload]?.writing) return;
       delete state.pending[action.payload];
+      if (state.lastQueued === action.payload) state.lastQueued = null;
+    },
+    decisionWriting(state, action: PayloadAction<string>) {
+      const decision = state.pending[action.payload];
+      if (decision) decision.writing = true;
       if (state.lastQueued === action.payload) state.lastQueued = null;
     },
     decisionCommitted(state, action: PayloadAction<string>) {
@@ -80,6 +92,7 @@ export const {
   noteChanged,
   decisionQueued,
   decisionUndone,
+  decisionWriting,
   decisionCommitted,
   decisionFailed,
   failureDismissed,
@@ -105,6 +118,8 @@ export function startReviewListeners(startListening: TypedStartListening<unknown
         UNDO_MS,
       );
       if (undone) return;
+      // Close the undo offer before the request leaves (Codex review, PR #214).
+      api.dispatch(decisionWriting(request.reportId));
       const result = await api.dispatch(
         adminApi.endpoints.resolveReport.initiate(request, { fixedCacheKey: request.reportId }),
       );

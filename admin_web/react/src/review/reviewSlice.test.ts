@@ -75,6 +75,27 @@ describe('undo window', () => {
     expect(queue.reports.some((r) => r.id === 'r-ximen')).toBe(false);
   });
 
+  it('stops offering undo once the write is in flight (Codex review, PR #214)', async () => {
+    const source = fixtureSource({ now: Date.parse('2026-10-31T10:00:00Z'), latencyMs: 400 });
+    const store = makeStore({ source });
+    const loading = store.dispatch(adminApi.endpoints.getQueue.initiate());
+    await vi.advanceTimersByTimeAsync(400);
+    await loading;
+    store.dispatch(decisionQueued({ request: request('r-ximen'), name: '西門' }));
+    await vi.advanceTimersByTimeAsync(UNDO_MS + 100);
+
+    // The request is out; the window is closed and the report stays hidden.
+    expect(store.getState().review.lastQueued).toBeNull();
+    expect(store.getState().review.pending['r-ximen']?.writing).toBe(true);
+    store.dispatch(decisionUndone('r-ximen'));
+    expect(store.getState().review.pending['r-ximen']).toBeDefined();
+
+    await vi.advanceTimersByTimeAsync(400);
+    expect(source.resolved.map((r) => r.reportId)).toEqual(['r-ximen']);
+    expect(store.getState().review.pending).toEqual({});
+    expect(store.getState().review.resolvedCount).toBe(1);
+  });
+
   it('keeps separate windows for separate decisions', async () => {
     const { source, store } = await setup();
     store.dispatch(decisionQueued({ request: request('r-ximen'), name: '西門' }));

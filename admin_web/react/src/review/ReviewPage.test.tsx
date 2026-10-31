@@ -151,6 +151,29 @@ describe('ReviewPage', () => {
     expect(source.resolved).toMatchObject([{ reportId: 'r-ximen', force: true }]);
   });
 
+  it('a phone opening a report whose queue fails sees the error, retry and a way back', async () => {
+    // Below 680px the queue (and its error) is hidden while a report is open.
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query.includes('max-width: 679.98px'),
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+    try {
+      const failing = fixtureSource({ now: NOW });
+      failing.loadQueue = () => Promise.reject(new Error('offline'));
+      renderApp(FIRST, { source: failing });
+      // The queue's own alert is also in the DOM (CSS hides it on a phone); take the detail's.
+      const back = await screen.findByRole('link', { name: '回到清單' });
+      expect(back).toHaveAttribute('href', '/review');
+      const alert = back.closest('[role="alert"]') as HTMLElement;
+      expect(alert).toHaveTextContent('讀取失敗');
+      expect(within(alert).getByRole('button', { name: '重試' })).toBeInTheDocument();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('shows 全部處理完了 when the queue empties', async () => {
     const { user, source } = setup(FIRST);
     await detailTitle();

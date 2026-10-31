@@ -158,7 +158,7 @@ export function ReviewDetail() {
   const note = useAppSelector((state) => state.review.notes[reportId] ?? '');
   const failure = useAppSelector((state) => state.review.failures[reportId]);
   const reloaded = useAppSelector((state) => reportId in state.review.reloaded);
-  const pending = useAppSelector((state) => reportId in state.review.pending);
+  const pendingDecision = useAppSelector((state) => state.review.pending[reportId]);
   const noteId = useId();
 
   const report = open.find((r) => r.id === reportId);
@@ -202,13 +202,53 @@ export function ReviewDetail() {
     return () => document.removeEventListener('keydown', onKey);
   });
 
-  if (!query.isSuccess) return null;
+  // Wide screens show loading and failure in the queue beside this pane; a
+  // phone hides the queue while a report is open, so the detail says it
+  // itself and offers retry and a way back (Codex review, PR #214).
+  if (!query.isSuccess) {
+    if (!isPhone) return null;
+    return (
+      <section className="review-done" aria-label={query.isError ? '讀取失敗' : '正在讀取'}>
+        {query.isError ? (
+          <div className="review-alert" role="alert">
+            <p className="t-title">讀取失敗</p>
+            <p>
+              {(query.error as { code?: string }).code === 'timeout'
+                ? '超過 10 秒還沒讀到這筆回報。'
+                : '連不上伺服器，沒有讀到這筆回報。'}
+            </p>
+            <div className="review-alert__actions">
+              <Button variant="primary" onClick={() => void query.refetch()}>
+                重試
+              </Button>
+              <Link className="btn btn--secondary" to={`/review${search}`}>
+                回到清單
+              </Link>
+            </div>
+          </div>
+        ) : (
+          <p className="muted" role="status">
+            正在讀取這筆回報
+          </p>
+        )}
+      </section>
+    );
+  }
 
   if (!report) {
+    const writing = pendingDecision?.writing === true;
     return (
       <section className="review-done" aria-label="找不到這筆回報">
-        <h2 className="t-headline">{pending ? '這筆回報正在套用' : '找不到這筆回報'}</h2>
-        <p className="muted">{pending ? '5 秒後寫入，期間可以復原。' : '它可能已經被處理，或網址打錯了。'}</p>
+        <h2 className="t-headline">
+          {pendingDecision ? (writing ? '這筆回報正在寫入' : '這筆回報正在套用') : '找不到這筆回報'}
+        </h2>
+        <p className="muted">
+          {pendingDecision
+            ? writing
+              ? '已經送出，不能再復原。'
+              : '5 秒後寫入，期間可以復原。'
+            : '它可能已經被處理，或網址打錯了。'}
+        </p>
         <UndoNotice />
         <Link className="btn btn--secondary" to={`/review${search}`}>
           回到佇列
