@@ -92,7 +92,8 @@ const spotHistory = [
     changes: [{ field: 'address', before: '', after: '新北市板橋區中山路一段 161 號' }, { field: 'scooter_total', before: 120, after: 150 }] },
   { at: '2026-09-30T02:00:00Z', kind: 'import', action: 'import_spot', created: true, changes: [] },
 ];
-const hiddenSpot = { ...spot, id: '66666666-6666-4666-8666-666666666666', name: '三重正義北路機車格', city: '新北市', district: '三重區', space_type: 'freeMotorcycle', status: 'hidden' };
+// Deleted (#200): restorable for 14 days.
+const hiddenSpot = { ...spot, id: '66666666-6666-4666-8666-666666666666', name: '三重正義北路機車格', city: '新北市', district: '三重區', space_type: 'freeMotorcycle', status: 'hidden', deleted_at: new Date(Date.now() - 3 * 86400000).toISOString() };
 
 function session(role, aal, factors = [factor]) {
   const exp = Math.floor(Date.now() / 1000) + 3600;
@@ -203,12 +204,15 @@ function session(role, aal, factors = [factor]) {
           }
           if (url.pathname === '/rest/v1/community_spots') {
             if ((route.request().headers().accept || '').includes('vnd.pgrst.object')) return route.fulfill({ json: { ...communitySpot, ...verified }, headers: cors });
-            return route.fulfill({ json: url.searchParams.get('status') === 'eq.hidden' ? [hiddenSpot] : [{ ...communitySpot, ...verified }], headers: cors });
+            return route.fulfill({ json: url.searchParams.get('deleted_at') === 'not.is.null' ? [hiddenSpot] : [{ ...communitySpot, ...verified }], headers: cors });
           }
           if (url.pathname === '/rest/v1/official_heavy_spots') {
             // maybeSingle() asks for one object instead of an array.
             if ((route.request().headers().accept || '').includes('vnd.pgrst.object')) return route.fulfill({ json: officialSpot, headers: cors });
-            return route.fulfill({ json: url.searchParams.get('hidden') === 'eq.true' ? [] : [officialSpot], headers: cors });
+            return route.fulfill({ json: url.searchParams.get('deleted_at') === 'not.is.null' ? [] : [officialSpot], headers: cors });
+          }
+          if (url.pathname === '/rest/v1/purged_official_spots') {
+            return route.fulfill({ json: [{ official_id: '88888888-8888-4888-8888-888888888888', source_id: 'ntpc-099', name: '板橋舊停車場', purged_at: '2026-10-20T00:00:00Z' }], headers: cors });
           }
           if (url.pathname === '/functions/v1/geocode') {
             if (route.request().method() === 'OPTIONS') return route.fulfill({ body: 'ok', headers: cors });
@@ -379,8 +383,9 @@ function session(role, aal, factors = [factor]) {
           await page.getByRole('button', { name: '取消', exact: true }).click();
           await waitText('格位類型的修改建議');
           if (mobile) await page.getByRole('button', { name: /^返回佇列/ }).click();
-          await page.getByRole('button', { name: '已隱藏的點位', exact: true }).click();
-          await page.getByRole('button', { name: '恢復顯示', exact: true }).waitFor({ timeout: 15000 });
+          await page.getByRole('button', { name: '已刪除的點位', exact: true }).click();
+          await page.getByRole('button', { name: '復原', exact: true }).waitFor({ timeout: 15000 });
+          await waitText('已永久刪除的官方點');
           await page.screenshot({ path: path.join(output, `${name}-hidden.png`) });
           await page.getByRole('button', { name: '返回待審回報', exact: true }).click();
           if (mobile) await page.getByRole('button', { name: /^格位類型/ }).click();

@@ -202,7 +202,7 @@ void main() {
       expect(tester.getSize(badge.first).height, lessThanOrEqualTo(24));
       final title = find.text('待審回報');
       expect(tester.getSize(title).height, lessThan(40));
-      expect(find.byTooltip('已隱藏的點位'), findsOneWidget);
+      expect(find.byTooltip('已刪除的點位'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('nav/spots')));
       await tester.pumpAndSettle();
       expect(tester.getSize(find.text('停車點位')).height, lessThan(40));

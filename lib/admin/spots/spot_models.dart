@@ -209,7 +209,7 @@ final spotFields = <SpotField>[
     SpotInput.choice,
     only: SpotKind.community,
     choices: {'pending': '待確認', 'confirmed': '已確認存在'},
-    help: '「已確認存在」只代表點位存在，不代表停放資格已核實。隱藏請用「隱藏點位」。',
+    help: '「已確認存在」只代表點位存在，不代表停放資格已核實。要下架請用「刪除點位」。',
   ),
   const SpotField(
     'scooter_allowed',
