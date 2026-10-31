@@ -58,12 +58,30 @@ class ExportRulesTest(unittest.TestCase):
         with self.assertRaisesRegex(RuleError, "not in the database"):
             export(as_rows(self.bundled)[1:], self.bundled)
 
-    def test_an_older_database_version_stops_the_export(self):
+    def test_an_older_database_version_saying_the_same_passes(self):
+        # Staging was seeded from this file at version 1 (2026-11-01): the
+        # rules match, so the file follows the database's version.
         rows = as_rows(self.bundled)
         rows[0]["version"] = 1
         bundled = [dict(self.bundled[0], version=3), *self.bundled[1:]]
+        result = export(rows, bundled)
+        self.assertEqual(result[0]["version"], 1)
+        self.assertEqual({k: v for k, v in result[0].items() if k != "version"},
+                         {k: v for k, v in self.bundled[0].items() if k != "version"})
+
+    def test_an_older_database_version_saying_something_else_stops_the_export(self):
+        # A rollback: the database lost a newer rule the app already ships.
+        rows = as_rows(self.bundled)
+        rows[0].update(version=1, fee_note="舊的收費說明")
+        bundled = [dict(self.bundled[0], version=3), *self.bundled[1:]]
         with self.assertRaisesRegex(RuleError, "version 3 in the app file"):
             export(rows, bundled)
+
+    def test_todays_staging_rows_export(self):
+        # Every rule at version 1, as staging holds them after the seed.
+        rows = [dict(r, version=1) for r in as_rows(self.bundled)]
+        result = export(rows, self.bundled)
+        self.assertEqual({r["version"] for r in result}, {1})
 
     def test_kinds_older_builds_cannot_read_are_refused(self):
         rows = as_rows(self.bundled)

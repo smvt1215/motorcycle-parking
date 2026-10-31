@@ -195,6 +195,16 @@ jobs:
           java-version: '17'
       - uses: ./.github/actions/mobile-setup
       - run: python3 tool/cd_config.py staging android
+      - name: Bundle the staging rules
+        # The app ships assets/rules/parking_rules.json for installs that have
+        # never been online: build with the rules staging serves now. Only this
+        # build uses the export (never written back, PM_ANS_20261101_44); a
+        # failed export fails the build rather than ship the old file.
+        run: |
+          if ! python3 tool/export_rules.py --config config/staging.json --check; then
+            echo "::warning title=Bundled rules behind staging::assets/rules/parking_rules.json in the repo differs from staging; this build bundles the exported rules."
+          fi
+          python3 tool/export_rules.py --config config/staging.json
       - name: Build signed staging APK
         run: |
           test "$(git rev-parse --is-shallow-repository)" = false
@@ -271,6 +281,16 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/mobile-setup
       - run: python3 tool/cd_config.py staging ios
+      - name: Bundle the staging rules
+        # The app ships assets/rules/parking_rules.json for installs that have
+        # never been online: build with the rules staging serves now. Only this
+        # build uses the export (never written back, PM_ANS_20261101_44); a
+        # failed export fails the build rather than ship the old file.
+        run: |
+          if ! python3 tool/export_rules.py --config config/staging.json --check; then
+            echo "::warning title=Bundled rules behind staging::assets/rules/parking_rules.json in the repo differs from staging; this build bundles the exported rules."
+          fi
+          python3 tool/export_rules.py --config config/staging.json
       - run: python3 tool/ios_signing.py staging
       - name: Build Ad Hoc IPA
         run: flutter build ipa --release --flavor staging --build-number="$IOS_BUILD_NUMBER" --dart-define-from-file=config/staging.json --export-options-plist="$RUNNER_TEMP/ExportOptions.plist"
