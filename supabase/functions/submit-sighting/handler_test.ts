@@ -12,7 +12,18 @@ const device = '6f1c2b8e-3d4a-4b5c-9d6e-7f8091a2b3c4';
 const spot = 'official:00000000-0000-4000-8000-000000000004';
 const body = {
   spot_id: spot,
-  kind: 'available',
+  kind: 'level',
+  level: 1,
+  vehicle: 'scooter',
+  device_id: device,
+};
+/** body as validate() returns it: every key, in its order. */
+const parsed = {
+  spot_id: spot,
+  kind: 'level',
+  level: 1,
+  zone_id: null,
+  segment_id: null,
   vehicle: 'scooter',
   device_id: device,
 };
@@ -65,22 +76,54 @@ function fake(
   return { deps, calls };
 }
 
-Deno.test('validate: the three kinds, two vehicles, a spot and a device', () => {
-  assertEquals(validate(body), body);
+Deno.test('validate: four levels or closed, two vehicles, a spot and a device', () => {
+  assertEquals(validate(body), parsed);
   assertEquals(
     validate({ ...body, spot_id: '00000000-0000-4000-8000-000000000004' }),
-    { ...body, spot_id: '00000000-0000-4000-8000-000000000004' },
+    { ...parsed, spot_id: '00000000-0000-4000-8000-000000000004' },
   );
-  for (const kind of ['full', 'closed']) {
-    assertEquals(validate({ ...body, kind }), { ...body, kind });
+  for (const level of [0, 1, 2, 3]) {
+    assertEquals(validate({ ...body, level }), { ...parsed, level });
   }
-  assertEquals(validate({ ...body, kind: 'gone' }), 'invalid kind');
+  assertEquals(validate({ ...body, level: 4 }), 'invalid level');
+  assertEquals(validate({ ...body, level: 1.5 }), 'invalid level');
+  assertEquals(validate({ ...body, level: '1' }), 'invalid level');
+  assertEquals(validate({ ...body, level: undefined }), 'invalid level');
+  assertEquals(
+    validate({ ...body, kind: 'closed', level: undefined }),
+    { ...parsed, kind: 'closed', level: null },
+  );
+  // Closed is the whole spot: no level, no zone.
+  assertEquals(validate({ ...body, kind: 'closed' }), 'invalid level');
+  assertEquals(
+    validate({ ...body, kind: 'closed', level: null, zone_id: 'b2' }),
+    'invalid area',
+  );
+  assertEquals(validate({ ...body, kind: 'available' }), 'invalid kind');
   assertEquals(validate({ ...body, kind: 3 }), 'invalid kind');
   assertEquals(validate({ ...body, vehicle: 'car' }), 'invalid vehicle');
   assertEquals(validate({ ...body, spot_id: 'tdx:123' }), 'invalid spot');
   assertEquals(validate({ ...body, spot_id: `${spot}x` }), 'invalid spot');
   assertEquals(validate({ ...body, device_id: 'phone' }), 'invalid device');
   assertEquals(validate({ ...body, device_id: undefined }), 'invalid device');
+});
+
+Deno.test('validate: a zone or a segment by its id, not both', () => {
+  assertEquals(validate({ ...body, zone_id: 'b2' }), {
+    ...parsed,
+    zone_id: 'b2',
+  });
+  assertEquals(validate({ ...body, segment_id: 'north-1' }), {
+    ...parsed,
+    segment_id: 'north-1',
+  });
+  assertEquals(
+    validate({ ...body, zone_id: 'b2', segment_id: 'north-1' }),
+    'invalid area',
+  );
+  assertEquals(validate({ ...body, zone_id: 'B2' }), 'invalid area');
+  assertEquals(validate({ ...body, zone_id: 'x'.repeat(33) }), 'invalid area');
+  assertEquals(validate({ ...body, segment_id: 7 }), 'invalid area');
 });
 
 Deno.test('validate: never where the rider is', () => {
@@ -100,7 +143,7 @@ Deno.test('a sighting goes to apply_sighting with hashed identities', async () =
     user: rider,
     ip: 'h(ip:203.0.113.9)',
     device: `h(device:${device})`,
-    sighting: body,
+    sighting: parsed,
   }]);
 });
 
@@ -142,7 +185,7 @@ Deno.test('sign-in: Google or Apple, never anonymous', async () => {
 Deno.test('an invalid body never reaches the database', async () => {
   const { deps, calls } = fake();
   const res = await handle(
-    request({ ...body, kind: 'gone' }),
+    request({ ...body, kind: 'available' }),
     deps,
     'x-real-ip',
   );
@@ -192,6 +235,10 @@ Deno.test('refusals keep their meaning', () => {
     refusal({ code: '42501', message: 'Google or Apple sign-in required' }),
     ['report not permitted', 403],
   );
+  assertEquals(refusal({ code: '22023', message: 'area not found' }), [
+    'area not found',
+    404,
+  ]);
   assertEquals(refusal({ code: '22023', message: 'spot not found' }), [
     'spot not found',
     404,
@@ -229,7 +276,7 @@ Deno.test('a failed ban still answers suspended (the database refuses)', async (
 
 Deno.test('a closure suggestion is reported back', async () => {
   const res = await handle(
-    request({ ...body, kind: 'closed' }),
+    request({ ...body, kind: 'closed', level: null }),
     fake({ data: { accepted: true, closure_suggested: true } }).deps,
     'x-real-ip',
   );

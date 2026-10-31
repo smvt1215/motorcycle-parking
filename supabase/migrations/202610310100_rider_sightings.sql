@@ -1,6 +1,8 @@
--- Riders' on-site sightings, 即時車位 P3 (#154; REALTIME_AVAILABILITY_UI_PLAN
--- §5.2, §9 P3; decisions 40 and 50). A signed-in rider says what they see at
--- a spot now: 剛看到有空位 (available), 現場停滿 (full) or 無法停車／施工中
+-- Riders' on-site sightings, 即時車位 P3 (#154, #189; REALTIME_AVAILABILITY_UI_PLAN
+-- §5.2, §9 P3; decisions 40 and 50; design Ver.143 A6, A7, A7b, A11, A12).
+-- A signed-in rider says how full a spot's zone (off-street) or segment
+-- (roadside) is now for their vehicle, on a four-level scale — 很多空位 (0),
+-- 還有一些 (1), 快滿了 (2), 已停滿 (3) — or that it is 無法停車／施工中
 -- (closed). Judged by rules on the server, never by an LLM, and never shown
 -- as an official count: no 「剩 N」 comes from here.
 --
@@ -16,9 +18,11 @@
 --    100 per network, one per spot per 10 minutes), scoring, flood rules
 --    (suspend 7 days or lower the weight) and the automatic closure
 --    suggestion (two riders within 2 hours, nobody saying otherwise).
--- 4. spot_sightings(): what the app shows per spot — available, full or
---    conflict, and when — for the last 30 minutes. No names, no single
---    sightings, no counts.
+-- 4. spot_sightings(): what the app shows per spot, zone or segment and
+--    vehicle for the last 30 minutes: the weighted median level when the
+--    riders agree (70% of the weight within one level of it), else
+--    說法不一 with the two extremes and how many riders said each. No
+--    names, no single sightings.
 
 -- ===== 1. 目擊紀錄 =====
 create table public.rider_sightings (
@@ -26,19 +30,30 @@ create table public.rider_sightings (
   user_id uuid not null references auth.users(id) on delete cascade,
   -- The app's spot id: 'official:<uuid>' or a community spot's uuid.
   spot_id text not null check (spot_id ~* '^(official:)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'),
-  kind text not null check (kind in ('available','full','closed')),
+  -- A level of the scale, or closed (the whole spot, no level).
+  kind text not null check (kind in ('level','closed')),
+  -- 0 很多空位, 1 還有一些, 2 快滿了, 3 已停滿.
+  level smallint check (level between 0 and 3),
+  -- The zone (off-street) or segment (roadside) the rider saw, by its
+  -- stable id (#188); neither for a spot without them or the whole spot.
+  zone_id text check (zone_id ~ '^[a-z0-9_-]{1,32}$'),
+  segment_id text check (segment_id ~ '^[a-z0-9_-]{1,32}$'),
   -- The vehicle the rider had chosen, to compare with that vehicle's count.
   vehicle text not null check (vehicle in ('scooter','heavy')),
-  -- The official count's reading at that moment, when there was a fresh
-  -- one: 3 or more free is available, 0 is full; 1–2 compares with neither.
-  official text check (official in ('available','full')),
+  -- The official count's level at that moment, when there was a fresh one
+  -- for the whole facility: share of free spaces > 50% is 0, 20–50% is 1,
+  -- above 0 is 2, none is 3.
+  official smallint check (official between 0 and 3),
   -- The jump from the rider's previous sighting was faster than a scooter
   -- can travel (flood rule).
   jump boolean not null default false,
   -- Keyed hashes, as in report_identities; for limits and independence.
   ip_hash text not null check (char_length(ip_hash)=64),
   device_hash text not null check (char_length(device_hash)=64),
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  check ((kind='level')=(level is not null)),
+  check (kind='level' or (zone_id is null and segment_id is null)),
+  check (zone_id is null or segment_id is null)
 );
 create index rider_sightings_spot_idx on public.rider_sightings(spot_id,created_at desc);
 create index rider_sightings_user_idx on public.rider_sightings(user_id,created_at desc);
@@ -63,7 +78,7 @@ alter table public.rider_sightings enable row level security;
 alter table public.rider_sighting_scores enable row level security;
 revoke all on public.rider_sightings,public.rider_sighting_scores from anon,authenticated;
 -- A rider may see their own sightings (what they sent, never anyone else's).
-grant select (id,user_id,spot_id,kind,vehicle,created_at) on public.rider_sightings to authenticated;
+grant select (id,user_id,spot_id,kind,level,zone_id,segment_id,vehicle,created_at) on public.rider_sightings to authenticated;
 create policy rider_sightings_own on public.rider_sightings for select to authenticated
   using(user_id=(select auth.uid()));
 
@@ -110,31 +125,63 @@ begin
   return null;
 end $$;
 
+-- The zones and segments of a spot a rider can see (#188), as stored:
+-- arrays of objects with an id; null for a hidden or unknown spot.
+create function public.sighting_spot_entries(p_spot text,out zones jsonb,out segments jsonb)
+language plpgsql stable set search_path='' as $$
+begin
+  if p_spot ~* '^official:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+    select o.parking_zones,o.parking_segments into zones,segments from public.official_heavy_spots o
+      where o.id=substr(p_spot,10)::uuid and not o.hidden and o.effective_date<=current_date;
+  elsif p_spot ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+    select c.parking_zones,c.parking_segments into zones,segments from public.community_spots c
+      where c.id=p_spot::uuid and c.status<>'hidden';
+  end if;
+end $$;
+
+-- The scale's level of an official count: the share of free spaces above
+-- 50% is 0 (很多空位), 20–50% is 1 (還有一些), above 0 is 2 (快滿了), none
+-- is 3 (已停滿); null without a total.
+create function public.sighting_official_level(p_available integer,p_total integer) returns smallint
+language sql immutable set search_path='' as $$
+  select case when p_available is null or p_total is null or p_total<=0 then null
+    when p_available<=0 then 3
+    when p_available::numeric/p_total>0.5 then 0
+    when p_available::numeric/p_total>=0.2 then 1
+    else 2 end::smallint;
+$$;
+
 -- ===== 3. 寫入 =====
--- The thresholds of decision 50 in one place:
+-- The thresholds of decision 50 and Ver.143 in one place:
 --   shown           credibility >= 0.3, last 30 minutes, map badge 15
---   agreement       weighted share >= 70% for 有空位／停滿, else 不一致
+--   agreement       70% of the weight within one level of the weighted
+--                   median, else 說法不一
+--   match           two levels match when they differ by at most one
 --   peer judgement  a later sighting within 10 minutes by another rider
---                   and device judges an earlier one (weight = its
---                   rider's credibility)
---   official        a fresh count at the time: >= 3 free or 0 free
+--                   and device, of the same zone or segment and vehicle,
+--                   judges an earlier one (weight = its rider's credibility)
+--   official        a fresh count for the rider's vehicle, compared only
+--                   when it covers what the rider saw (the whole spot, or
+--                   a spot with at most one zone and no segments)
 --   flood           6+ in 10 minutes or a jump (> 3 km at > 150 km/h):
 --                   weight lowered; 12+ in 10 minutes or 3 jumps in 24
 --                   hours: suspended 7 days (admins are only lowered)
 --   closure         2 riders (and devices) within 2 hours say closed and
---                   no credible rider says available or full: a closure
---                   suggestion for review (#116)
-create function public.apply_sighting(p_user uuid,p_ip text,p_device text,p_spot text,p_kind text,p_vehicle text)
+--                   no credible rider gives a level: a closure suggestion
+--                   for review (#116)
+create function public.apply_sighting(p_user uuid,p_ip text,p_device text,p_spot text,p_kind text,
+  p_vehicle text,p_level smallint default null,p_zone text default null,p_segment text default null)
 returns jsonb language plpgsql security definer set search_path='' as $$
 declare
   v_day timestamptz:=date_trunc('day',now() at time zone 'UTC') at time zone 'UTC';
   v_at extensions.geography;
+  v_entries record;
   v_prev record;
   v_prev_at extensions.geography;
   v_jump boolean:=false;
   v_recent integer;
   v_jumps integer;
-  v_official text;
+  v_official smallint;
   v_id bigint;
   v_weight numeric;
   v_admin boolean;
@@ -146,8 +193,12 @@ begin
   if p_ip is null or char_length(p_ip)<>64 or p_device is null or char_length(p_device)<>64 then
     raise exception 'missing trusted identity' using errcode='22023';
   end if;
-  if p_kind is null or p_kind not in ('available','full','closed')
-     or p_vehicle is null or p_vehicle not in ('scooter','heavy') then
+  if p_kind is null or p_kind not in ('level','closed')
+     or p_vehicle is null or p_vehicle not in ('scooter','heavy')
+     or (p_kind='level') is distinct from (p_level is not null)
+     or (p_level is not null and p_level not between 0 and 3)
+     or (p_kind='closed' and (p_zone is not null or p_segment is not null))
+     or (p_zone is not null and p_segment is not null) then
     raise exception 'invalid sighting' using errcode='22023';
   end if;
   if not exists(select 1 from auth.users u join auth.identities i on i.user_id=u.id
@@ -159,6 +210,14 @@ begin
   end if;
   v_at:=public.sighting_spot_location(p_spot);
   if v_at is null then raise exception 'spot not found' using errcode='22023'; end if;
+  -- The zone or segment must be one of the spot's own, by its stable id.
+  select * into v_entries from public.sighting_spot_entries(p_spot);
+  if (p_zone is not null and not exists(select 1 from jsonb_array_elements(coalesce(v_entries.zones,'[]')) z
+        where z->>'id'=p_zone))
+     or (p_segment is not null and not exists(select 1 from jsonb_array_elements(coalesce(v_entries.segments,'[]')) g
+        where g->>'id'=p_segment)) then
+    raise exception 'area not found' using errcode='22023';
+  end if;
 
   -- Same order as apply_report: IP, then account.
   perform pg_advisory_xact_lock(hashtextextended('sighting-ip:'||p_ip,0));
@@ -167,7 +226,10 @@ begin
      (select count(*) from public.rider_sightings where ip_hash=p_ip and created_at>=v_day)>=100 then
     raise exception 'daily sighting limit reached' using errcode='P0001';
   end if;
+  -- One sighting per zone or segment every 10 minutes, so a rider can tell
+  -- each zone of a car park in one visit.
   if exists(select 1 from public.rider_sightings where user_id=p_user and spot_id=p_spot
+      and zone_id is not distinct from p_zone and segment_id is not distinct from p_segment
       and created_at>now()-interval '10 minutes') then
     raise exception 'spot sighted within 10 minutes' using errcode='P0001';
   end if;
@@ -184,31 +246,38 @@ begin
     end if;
   end if;
 
-  -- The official count for the rider's vehicle at this moment, if fresh.
-  if p_spot like 'official:%' then
-    select case when a.available>=3 then 'available' when a.available=0 then 'full' end into v_official
+  -- The official count for the rider's vehicle at this moment, if fresh and
+  -- for what the rider saw: the count is per facility, so only a sighting
+  -- of the whole spot, or of a spot with at most one zone, compares.
+  if p_kind='level' and p_spot like 'official:%' and p_segment is null
+     and jsonb_array_length(coalesce(v_entries.segments,'[]'))=0
+     and (p_zone is null or jsonb_array_length(coalesce(v_entries.zones,'[]'))<=1) then
+    select public.sighting_official_level(a.available,a.total) into v_official
       from public.viewport_availability(array[p_spot]) a
       where a.vehicle=p_vehicle and a.status='fresh';
   end if;
 
-  insert into public.rider_sightings(user_id,spot_id,kind,vehicle,official,jump,ip_hash,device_hash)
-  values(p_user,p_spot,p_kind,p_vehicle,v_official,v_jump,p_ip,p_device) returning id into v_id;
+  insert into public.rider_sightings(user_id,spot_id,kind,level,zone_id,segment_id,vehicle,official,jump,ip_hash,device_hash)
+  values(p_user,p_spot,p_kind,p_level,p_zone,p_segment,p_vehicle,v_official,v_jump,p_ip,p_device)
+  returning id into v_id;
 
   -- ===== 評分 =====
-  if p_kind<>'closed' and v_official is not null then
-    perform public.rider_score_add(p_user,case when p_kind=v_official then 1 else 0 end,
-      case when p_kind=v_official then 0 else 1 end,0);
+  if p_kind='level' and v_official is not null then
+    perform public.rider_score_add(p_user,case when abs(p_level-v_official)<=1 then 1 else 0 end,
+      case when abs(p_level-v_official)<=1 then 0 else 1 end,0);
   end if;
   -- This sighting judges the earlier ones of other riders on other devices
-  -- in the last 10 minutes, each once (a rider sights a spot at most every
-  -- 10 minutes), by this rider's credibility; a rider not shown judges no one.
+  -- in the last 10 minutes, of the same zone or segment and vehicle, each
+  -- once, by this rider's credibility; a rider not shown judges no one.
   v_weight:=public.rider_credibility(p_user);
-  if p_kind<>'closed' and v_weight>=public.rider_min_credibility() then
-    perform public.rider_score_add(e.user_id,case when e.kind=p_kind then v_weight else 0 end,
-        case when e.kind=p_kind then 0 else v_weight end,0)
-      from (select distinct on (s.user_id) s.user_id,s.kind from public.rider_sightings s
+  if p_kind='level' and v_weight>=public.rider_min_credibility() then
+    perform public.rider_score_add(e.user_id,case when abs(e.level-p_level)<=1 then v_weight else 0 end,
+        case when abs(e.level-p_level)<=1 then 0 else v_weight end,0)
+      from (select distinct on (s.user_id) s.user_id,s.level from public.rider_sightings s
         where s.spot_id=p_spot and s.id<>v_id and s.user_id<>p_user and s.device_hash<>p_device
-          and s.kind in ('available','full') and s.created_at>now()-interval '10 minutes'
+          and s.kind='level' and s.vehicle=p_vehicle
+          and s.zone_id is not distinct from p_zone and s.segment_id is not distinct from p_segment
+          and s.created_at>now()-interval '10 minutes'
         order by s.user_id,s.created_at desc) e;
   end if;
 
@@ -240,7 +309,7 @@ begin
            and not public.rider_suspended(s.user_id)
            and public.rider_credibility(s.user_id)>=public.rider_min_credibility())>=2
        and not exists(select 1 from public.rider_sightings s
-         where s.spot_id=p_spot and s.kind in ('available','full') and s.created_at>now()-interval '2 hours'
+         where s.spot_id=p_spot and s.kind='level' and s.created_at>now()-interval '2 hours'
            and not public.rider_suspended(s.user_id)
            and public.rider_credibility(s.user_id)>=public.rider_min_credibility()) then
       -- Held for review like a rider's 這裡已經不能停車 report for works or
@@ -257,50 +326,73 @@ begin
   return jsonb_build_object('id',v_id,'accepted',true,'closure_suggested',v_suggested,
     'suspended_until',v_suspend);
 end $$;
-revoke all on function public.apply_sighting(uuid,text,text,text,text,text) from public,anon,authenticated;
-grant execute on function public.apply_sighting(uuid,text,text,text,text,text) to service_role;
+revoke all on function public.apply_sighting(uuid,text,text,text,text,text,smallint,text,text) from public,anon,authenticated;
+grant execute on function public.apply_sighting(uuid,text,text,text,text,text,smallint,text,text) to service_role;
 
 -- ===== 4. 讀取（App） =====
--- Per spot of p_spot_ids (at most 600) with a sighting in the last 30
--- minutes: 'available' or 'full' when credible riders agree by weight
--- (>= 70%), else 'conflict'; latest_at is the newest sighting behind the
--- state, since the oldest one considered. Each rider and each device counts
--- once (its latest); suspended and low-credibility riders are left out.
+-- Per spot of p_spot_ids (at most 600), zone or segment (both null for the
+-- whole spot) and vehicle, with a level sighting in the last 30 minutes.
+-- Each rider and each device counts once (its latest); suspended and
+-- low-credibility riders are left out; each counts by its credibility.
+--   level      the weighted median level (the lowest level whose
+--              cumulative weight reaches half)
+--   state      'level' when 70% of the weight is within one level of it,
+--              else 'conflict'
+--   low, high  the lowest and highest level said, and low_riders,
+--              high_riders how many riders said each (for 說法不一)
+--   latest_at  the newest sighting, since the oldest one considered
 -- Closed sightings feed the closure suggestion, not this.
 create function public.spot_sightings(p_spot_ids text[])
-returns table(spot_id text,state text,latest_at timestamptz,since timestamptz)
+returns table(spot_id text,zone_id text,segment_id text,vehicle text,state text,level smallint,
+  low smallint,high smallint,low_riders integer,high_riders integer,latest_at timestamptz,since timestamptz)
 language sql stable security definer set search_path='' as $$
   with ids as (
     select distinct i from unnest(p_spot_ids[1:600]) i where i is not null
   ), recent as (
-    select s.spot_id,s.user_id,s.device_hash,s.kind,s.created_at
+    select s.spot_id,s.zone_id,s.segment_id,s.vehicle,s.user_id,s.device_hash,s.level,s.created_at
     from public.rider_sightings s join ids on ids.i=s.spot_id
-    where s.created_at>now()-interval '30 minutes' and s.created_at<=now()
-      and s.kind in ('available','full')
+    where s.created_at>now()-interval '30 minutes' and s.created_at<=now() and s.kind='level'
   ), per_user as (
-    select distinct on (r.spot_id,r.user_id) r.* from recent r
-    order by r.spot_id,r.user_id,r.created_at desc
+    select distinct on (r.spot_id,r.zone_id,r.segment_id,r.vehicle,r.user_id) r.* from recent r
+    order by r.spot_id,r.zone_id,r.segment_id,r.vehicle,r.user_id,r.created_at desc
   ), per_device as (
-    select distinct on (p.spot_id,p.device_hash) p.* from per_user p
-    order by p.spot_id,p.device_hash,p.created_at desc
+    select distinct on (p.spot_id,p.zone_id,p.segment_id,p.vehicle,p.device_hash) p.* from per_user p
+    order by p.spot_id,p.zone_id,p.segment_id,p.vehicle,p.device_hash,p.created_at desc
   ), weighted as (
     select d.*,public.rider_credibility(d.user_id) w from per_device d
     where not public.rider_suspended(d.user_id)
-  ), shares as (
-    select w.spot_id,
-      sum(w.w) filter (where w.kind='available')/sum(w.w) share,
-      max(w.created_at) filter (where w.kind='available') available_at,
-      max(w.created_at) filter (where w.kind='full') full_at,
-      max(w.created_at) latest,min(w.created_at) oldest
-    from weighted w where w.w>=public.rider_min_credibility()
-    group by w.spot_id
+  ), shown as (
+    select w.* from weighted w where w.w>=public.rider_min_credibility()
+  ), cumulative as (
+    select s.*,
+      sum(s.w) over (partition by s.spot_id,s.zone_id,s.segment_id,s.vehicle order by s.level
+        range between unbounded preceding and current row) cum,
+      sum(s.w) over (partition by s.spot_id,s.zone_id,s.segment_id,s.vehicle) total
+    from shown s
+  ), medians as (
+    select c.spot_id,c.zone_id,c.segment_id,c.vehicle,min(c.level) filter (where c.cum>=c.total/2) median
+    from cumulative c group by 1,2,3,4
+  ), groups as (
+    select s.spot_id,s.zone_id,s.segment_id,s.vehicle,m.median,
+      sum(s.w) filter (where abs(s.level-m.median)<=1)/sum(s.w) share,
+      min(s.level) low,max(s.level) high,
+      max(s.created_at) latest,min(s.created_at) oldest
+    from shown s join medians m using (spot_id,vehicle)
+    where s.zone_id is not distinct from m.zone_id and s.segment_id is not distinct from m.segment_id
+    group by 1,2,3,4,5
   )
-  select s.spot_id,
-    case when s.share>=0.7 then 'available' when s.share<=0.3 then 'full' else 'conflict' end,
-    case when s.share>=0.7 then s.available_at when s.share<=0.3 then s.full_at else s.latest end,
-    s.oldest
-  from shares s
-  order by 1;
+  select g.spot_id,g.zone_id,g.segment_id,g.vehicle,
+    case when g.share>=0.7 then 'level' else 'conflict' end,
+    g.median::smallint,g.low::smallint,g.high::smallint,
+    (select count(distinct s.user_id) from shown s where s.spot_id=g.spot_id and s.vehicle=g.vehicle
+      and s.zone_id is not distinct from g.zone_id and s.segment_id is not distinct from g.segment_id
+      and s.level=g.low)::integer,
+    (select count(distinct s.user_id) from shown s where s.spot_id=g.spot_id and s.vehicle=g.vehicle
+      and s.zone_id is not distinct from g.zone_id and s.segment_id is not distinct from g.segment_id
+      and s.level=g.high)::integer,
+    g.latest,g.oldest
+  from groups g
+  order by 1,2,3,4;
 $$;
 revoke all on function public.spot_sightings(text[]) from public;
 grant execute on function public.spot_sightings(text[]) to anon,authenticated;
@@ -317,7 +409,8 @@ begin
 end $$;
 revoke all on function public.rider_sightings_prune() from public,anon,authenticated;
 revoke all on function public.rider_credibility(uuid),public.rider_suspended(uuid),
-  public.rider_score_add(uuid,numeric,numeric,numeric),public.sighting_spot_location(text) from public,anon,authenticated;
+  public.rider_score_add(uuid,numeric,numeric,numeric),public.sighting_spot_location(text),
+  public.sighting_spot_entries(text) from public,anon,authenticated;
 
 create extension if not exists pg_cron;
 select cron.schedule('rider-sightings-prune','17 * * * *','select public.rider_sightings_prune()');

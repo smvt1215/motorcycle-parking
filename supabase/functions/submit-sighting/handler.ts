@@ -56,6 +56,7 @@ export function refusal(error: RpcError): [string, number] {
       : ['report not permitted', 403];
   }
   if (message.includes('spot not found')) return ['spot not found', 404];
+  if (message.includes('area not found')) return ['area not found', 404];
   return ['invalid sighting', 400];
 }
 

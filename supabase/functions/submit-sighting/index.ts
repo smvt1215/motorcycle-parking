@@ -29,6 +29,9 @@ Deno.serve((req) => {
         p_spot: sighting.spot_id,
         p_kind: sighting.kind,
         p_vehicle: sighting.vehicle,
+        p_level: sighting.level,
+        p_zone: sighting.zone_id,
+        p_segment: sighting.segment_id,
       });
       return { data, error };
     },
