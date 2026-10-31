@@ -152,10 +152,23 @@ String plateRateText(PlateRate r) => switch (r.mode) {
     r.perMinutes == 60
         ? '${_num(r.amount ?? 0)}/時'
         : '${_num(r.amount ?? 0)}/${r.perMinutes}分',
-  FeeMode.perVisit => '${_num(r.amount ?? 0)}/次',
+  FeeMode.perVisit =>
+    r.firstMinutes != null
+        ? '首 ${_span(r.firstMinutes!)} 0 元'
+        : '${_num(r.amount ?? 0)}/次',
   FeeMode.daily => '${_num(r.amount ?? 0)}/日',
   _ => '',
 };
+
+/// 20 分鐘, 2 小時 (fee.dart's spans).
+String _span(int minutes) =>
+    minutes % 60 == 0 ? '${minutes ~/ 60} 小時' : '$minutes 分鐘';
+
+/// 可付 40 元延長 1 次, when the rate has a paid extension.
+String? _extensionText(PlateRate r) =>
+    r.extensionAmount == null || r.extensionTimes == null
+    ? null
+    : '可付 ${_num(r.extensionAmount!)} 元延長 ${r.extensionTimes} 次';
 
 SignPlate _verdictPlate(FourSign s) {
   final v = s.verdict;
@@ -170,6 +183,13 @@ SignPlate _verdictPlate(FourSign s) {
           : v.opensAt != null
           ? '${v.opensAt} 起'
           : basis,
+    ),
+    // 官方未標示 (A3): as unsure as 待確認, worded apart and drawn
+    // dashed, since it is no conclusion either way.
+    EligibilityStatus.unverified when v.notStated => (
+      PlateTone.dashed,
+      '不確定',
+      '官方未標示',
     ),
     EligibilityStatus.unverified => (
       PlateTone.unverified,
@@ -186,6 +206,15 @@ SignPlate _verdictPlate(FourSign s) {
       basis,
     ),
   };
+  if (v.status == EligibilityStatus.unverified && v.notStated) {
+    return SignPlate(
+      face: FourSignFace.verdict,
+      main: main,
+      note: note,
+      tone: tone,
+      semantics: '能不能停：不確定，官方與營運業者都沒有標示${s.vehicle.label}能不能停',
+    );
+  }
   return SignPlate(
     face: FourSignFace.verdict,
     main: main,
@@ -309,6 +338,7 @@ SignPlate _feePlate(FourSign s) {
         if (fee.places > 1) '全場同價',
         if (r.from != null && r.to != null) '${r.from}–${r.to}',
         if (r.dailyCap != null) '上限 ${_num(r.dailyCap!)}',
+        ?_extensionText(r),
       ].join('\n');
       final main = plateRateText(r);
       return SignPlate(
@@ -321,6 +351,7 @@ SignPlate _feePlate(FourSign s) {
           if (fee.places > 1) '全場同價',
           if (r.from != null && r.to != null) '${r.from} 到 ${r.to}',
           if (r.dailyCap != null) '當日上限 ${_num(r.dailyCap!)} 元',
+          ?_extensionText(r),
         ].join('，'),
       );
     case FeeKind.varies:
@@ -370,7 +401,10 @@ String _spokenRate(PlateRate r) => switch (r.mode) {
     r.perMinutes == 60
         ? '每小時 ${_num(r.amount ?? 0)} 元'
         : '每 ${r.perMinutes} 分鐘 ${_num(r.amount ?? 0)} 元',
-  FeeMode.perVisit => '每次 ${_num(r.amount ?? 0)} 元',
+  FeeMode.perVisit =>
+    r.firstMinutes != null
+        ? '首 ${_span(r.firstMinutes!)} 0 元'
+        : '每次 ${_num(r.amount ?? 0)} 元',
   FeeMode.daily => '每日 ${_num(r.amount ?? 0)} 元',
   _ => plateRateText(r),
 };

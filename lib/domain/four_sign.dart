@@ -82,6 +82,7 @@ class VerdictAnswer {
     this.basis = BasisKind.none,
     this.city,
     this.openNow = false,
+    this.notStated = false,
   });
 
   /// The four signs' status: [decideParking]'s, except that only places
@@ -101,6 +102,10 @@ class VerdictAnswer {
   /// The city of the rule that decided it.
   final String? city;
   final bool openNow;
+
+  /// 官方未標示 (#201): an unverified answer because the official data
+  /// names the vehicle without saying whether it may park (A3 不確定).
+  final bool notStated;
 }
 
 enum SeatKind {
@@ -221,8 +226,19 @@ class PlateRate {
     this.dailyCap,
     this.from,
     this.to,
+    this.firstMinutes,
+    this.extensionAmount,
+    this.extensionTimes,
   });
   final FeeMode mode;
+
+  /// A per-visit rate whose first stretch costs 0 (首 20 分鐘 0 元, §2.3):
+  /// its length; never read as free.
+  final int? firstMinutes;
+
+  /// A per-visit rate's paid extension (可付 40 元延長 1 次).
+  final num? extensionAmount;
+  final int? extensionTimes;
 
   /// Worked out from a follow's factor; may have decimals.
   final num? amount, dailyCap;
@@ -241,10 +257,23 @@ class PlateRate {
       other.perMinutes == perMinutes &&
       other.dailyCap == dailyCap &&
       other.from == from &&
-      other.to == to;
+      other.to == to &&
+      other.firstMinutes == firstMinutes &&
+      other.extensionAmount == extensionAmount &&
+      other.extensionTimes == extensionTimes;
 
   @override
-  int get hashCode => Object.hash(mode, amount, perMinutes, dailyCap, from, to);
+  int get hashCode => Object.hash(
+    mode,
+    amount,
+    perMinutes,
+    dailyCap,
+    from,
+    to,
+    firstMinutes,
+    extensionAmount,
+    extensionTimes,
+  );
 }
 
 /// 怎麼算錢.
@@ -585,6 +614,7 @@ VerdictAnswer _verdict(
     status: EligibilityStatus.unverified,
     basis: basis,
     city: city,
+    notStated: whole.gaps.contains(DecisionGap.notStated),
   );
 }
 
@@ -615,9 +645,10 @@ SeatAnswer _seat(
           groups.putIfAbsent(cls, () => []).add(a);
         }
       }
-      // No zone a count describes: the lot's own class's count stands for
-      // the whole lot, as before zones.
-      if (groups.isEmpty) groups[availabilityVehicle(vehicle)] = const [];
+      // No zone open now that a count describes: the space stays unknown.
+      // The lot's count would describe the zones left out (a heavy-bike
+      // count while only a shared motorcycle zone is open); only a lot
+      // with no zone data at all reads it, above.
     }
     if (vehicle == VehicleType.heavy &&
         !groups.containsKey(AvailabilityVehicle.car) &&
@@ -789,7 +820,19 @@ PlateRate? _plateRate(
         from: from,
         to: to,
       );
-    case FeeMode.perVisit || FeeMode.daily:
+    case FeeMode.perVisit:
+      final ext = rate.extension;
+      return PlateRate(
+        rate.mode,
+        amount: _times(rate.amount, pct),
+        // 首段 0 元 (0 with a valid time), as the fee texts read it.
+        firstMinutes: rate.amount == 0 ? rate.maxMinutes : null,
+        extensionAmount: ext == null ? null : _times(ext.amount, pct),
+        extensionTimes: ext?.maxTimes,
+        from: from,
+        to: to,
+      );
+    case FeeMode.daily:
       return PlateRate(
         rate.mode,
         amount: _times(rate.amount, pct),

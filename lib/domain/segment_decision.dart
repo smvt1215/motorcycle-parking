@@ -262,14 +262,29 @@ List<SegmentDecision> decideSegments(
           );
         }()
       else
-        SegmentDecision(
-          segment: s,
-          decision: ParkingDecision(
-            EligibilityStatus.unverified,
-            segmentUncheckedReason,
-            basis: spotDecision.basis.take(1).toList(),
-          ),
-          window: OpenWindow.never,
-        ),
+        () {
+          // No painted condition: judged as the spot with an empty one, so
+          // what closes the spot itself (works, its own explicit 不可停)
+          // still closes the segment, and otherwise the bay reads
+          // unconfirmed. Missing bay data never weakens a prohibition.
+          final d = decideParking(
+            _asSegment(spot, const ParkingCondition()),
+            vehicle,
+            rules,
+            now: at,
+            calendar: calendar,
+          );
+          return SegmentDecision(
+            segment: s,
+            decision: d.status == EligibilityStatus.notAllowed
+                ? d
+                : ParkingDecision(
+                    EligibilityStatus.unverified,
+                    segmentUncheckedReason,
+                    basis: d.basis,
+                  ),
+            window: OpenWindow.never,
+          );
+        }(),
   ];
 }

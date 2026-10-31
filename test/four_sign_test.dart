@@ -659,6 +659,156 @@ void main() {
     });
   });
 
+  group('審查修正（#222 第二輪）', () {
+    Map<String, dynamic> contractFee(String name) =>
+        ((jsonDecode(
+                  File('supabase/functions/_shared/parking_contract_cases.json')
+                      .readAsStringSync(),
+                ) as Map<String, dynamic>).values
+                .whereType<List<dynamic>>()
+                .expand((l) => l)
+                .whereType<Map<String, dynamic>>()
+                .firstWhere((c) => c['name'] == name && c['fee'] is Map)['fee']
+            as Map<String, dynamic>);
+
+    test('官方路邊點明確不開放此車種：沒有條件的段仍判不能停', () {
+      final closed = ParkingSpot.fromJson({
+        ...street.toJson(),
+        'heavy_allowed': false,
+        'parking_segments': [
+          {'id': 'x', 'name': '東側'},
+        ],
+      });
+      final segments = decideSegments(
+        closed,
+        VehicleType.heavy,
+        rules,
+        now: day,
+      );
+      expect(segments.single.status, EligibilityStatus.notAllowed);
+      final p = plates(closed, VehicleType.heavy, day);
+      expect(p, hasLength(1));
+      expect(p.single.main, '大型重機不能停');
+    });
+
+    test('只有共用機車區開放時，不借用整場的重機數字', () {
+      final shared = ParkingSpot.fromJson({
+        ...lotJson,
+        'parking_zones': [
+          {
+            'id': 'b1',
+            'name': 'B1 普大共用區',
+            'area': 'motorcycle',
+            'condition': {
+              'bay': 'motorcycle',
+              'use': 'share',
+              'share': 'scooter_heavy',
+              'allow': {'scooter': true, 'heavy': true},
+            },
+          },
+          {
+            'id': 'b2',
+            'name': 'B2 重機專區',
+            'area': 'heavy',
+            'condition': {
+              'bay': 'heavy',
+              'use': 'usual',
+              'allow': {'heavy': true},
+              'schedule': [
+                {
+                  'days': 'all',
+                  'from': '20:00',
+                  'to': '23:00',
+                  'vehicles': ['heavy'],
+                },
+              ],
+            },
+          },
+        ],
+      });
+      final p = plates(
+        shared,
+        VehicleType.heavy,
+        day,
+        availability: SpotAvailability([
+          count(
+            AvailabilityVehicle.heavy,
+            5,
+            day.subtract(const Duration(minutes: 2)),
+          ),
+        ]),
+      );
+      expect(p[3].main, 'B1');
+      expect(p[1].main, '空位未知');
+      expect(p[1].tone, PlateTone.dashed);
+    });
+
+    test('首段 0 元寫「首 20 分鐘 0 元」與付費延長（parking_contract_cases）', () {
+      final fee = contractFee('臺北限時格首段 0 元可延長一次（§2.4）');
+      final spot = ParkingSpot.fromJson({...street.toJson(), 'fee': fee});
+      final one = ParkingSpot.fromJson({
+        ...spot.toJson(),
+        'parking_segments': [street.segments.first.toJson()],
+      });
+      final p = plates(one, VehicleType.heavy, day);
+      expect((p[2].main, p[2].note), ('首 20 分鐘 0 元', '可付 40 元延長 1 次'));
+      expect(p[2].semantics, '怎麼算錢：首 20 分鐘 0 元，可付 40 元延長 1 次');
+    });
+  });
+
+  group('官方未標示（#201、A3 不確定）', () {
+    test('場站官方未標示大型重機：能不能停寫不確定／官方未標示（虛框），其他三面照常', () {
+      final unstated = ParkingSpot.fromJson({
+        ...lotJson,
+        'heavy_allowed': null,
+        'heavy_not_stated': true,
+        'parking_zones': null,
+      });
+      final p = plates(unstated, VehicleType.heavy, day);
+      expect(p, hasLength(4));
+      expect(
+        (p[0].main, p[0].note, p[0].tone),
+        ('不確定', '官方未標示', PlateTone.dashed),
+      );
+      expect(p[0].semantics, '能不能停：不確定，官方與營運業者都沒有標示大型重機能不能停');
+      // 普通機車 stays as stated.
+      expect(plates(unstated, VehicleType.scooter, day)[0].main, '可停');
+    });
+
+    test('分區官方未標示：沒有其他可停分區時寫不確定', () {
+      final zoned = ParkingSpot.fromJson({
+        ...lotJson,
+        'parking_zones': [
+          for (final z in lotJson['parking_zones'] as List)
+            if ((z as Map)['id'] == 'b1') z,
+          {
+            'id': 'b2',
+            'name': 'B2 重機專區',
+            'area': 'heavy',
+            'condition': {
+              'bay': 'heavy',
+              'use': 'usual',
+              'allow': {'heavy': 'not_stated'},
+            },
+          },
+        ],
+      });
+      expect(zoned.zones.last.condition?.allow?.heavyNotStated, isTrue);
+      final p = plates(zoned, VehicleType.heavy, day);
+      expect((p[0].main, p[0].note), ('不確定', '官方未標示'));
+    });
+
+    test('沒有官方未標示的待確認仍寫待確認（實色灰）', () {
+      final community = ParkingSpot.fromJson({
+        ...lotJson,
+        'source': 'community',
+        'parking_zones': null,
+      });
+      final p = plates(community, VehicleType.heavy, day);
+      expect((p[0].main, p[0].tone), ('待確認', PlateTone.unverified));
+    });
+  });
+
   test('目前車種不能停：只剩一面路牌', () {
     final heavyBay = ParkingSpot.fromJson({
       'id': 'h',
