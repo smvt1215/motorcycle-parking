@@ -500,6 +500,40 @@ void main() {
         });
       });
 
+      testWidgets('一般機車格可勾限時並填分鐘，存成限時機車格', (tester) async {
+        await show(tester, path: '/spots/$communityId');
+        await openFold(tester, '格位與停放條件');
+        await tapKey(tester, 'spot-space-time-limit');
+        final minutes = find.byKey(const ValueKey('spot-space-max-minutes'));
+        await tester.ensureVisible(minutes);
+        await tester.enterText(minutes, '20');
+        await tester.pumpAndSettle();
+        expect(await save(tester), {
+          'space_type': 'timedMotorcycle',
+          'condition': {
+            'bay': 'motorcycle',
+            'use': 'usual',
+            'charge': 'toll',
+            'limits': [
+              {'kind': 'time_limit', 'max_minutes': 20},
+            ],
+          },
+        });
+      });
+
+      testWidgets('取消限時回到收費機車格', (tester) async {
+        gateway.spotRows[communityId]!
+          ..['space_type'] = 'timedMotorcycle'
+          ..['condition'] = null;
+        await show(tester, path: '/spots/$communityId');
+        await openFold(tester, '格位與停放條件');
+        await tapKey(tester, 'spot-space-time-limit');
+        expect(await save(tester), {
+          'space_type': 'paidMotorcycle',
+          'condition': {'bay': 'motorcycle', 'use': 'usual', 'charge': 'toll'},
+        });
+      });
+
       testWidgets('改成路外時條件為 null', (tester) async {
         gateway.spotRows[communityId]!['condition'] = {
           'bay': 'motorcycle',

@@ -1,6 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:motorcycle_parking/admin/review/review_controller.dart';
 import 'package:motorcycle_parking/admin/review/review_models.dart';
 import 'package:motorcycle_parking/models/zone_entries.dart';
+
+import 'fake_admin_gateway.dart';
 
 /// Zone and segment suggestions on the review page (#188): shown as the
 /// list the rider's patches leave, sent back as the patches that make it.
@@ -241,6 +244,56 @@ void main() {
           },
         ],
       );
+    },
+  );
+
+  test(
+    'a conflict retry sends the first patch again, keeping others\' changes',
+    () async {
+      final gateway = FakeAdminGateway(access: adminAal2);
+      addTearDown(gateway.dispose);
+      final r = report({
+        'parking_zones': [
+          {'id': 'b1', 'guide': '走右側坡道'},
+        ],
+      });
+      gateway
+        ..reports = [r]
+        ..spots = {spot.sourceId: spot}
+        ..changedSpots.add(r.id);
+      final review = ReviewController(gateway);
+      await review.load();
+      review.startEdit(r);
+      await review.decide(r, ReviewDecision.acceptEdited, '');
+      // Meanwhile another admin renames B1 and adds B3.
+      gateway.spots = {
+        spot.sourceId: ReviewSpot(
+          sourceId: spot.sourceId,
+          official: false,
+          values: {
+            ...spot.values,
+            'parking_zones': [
+              {...zones[0], 'name': 'B1 機車區'},
+              zones[1],
+              {'id': 'b3', 'name': 'B3'},
+            ],
+          },
+        ),
+      };
+      await review.flush();
+      expect(review.conflicts, contains(r.id));
+      // The page shows the rider's change on the newer list.
+      expect(
+        (review.draft['parking_zones'] as List).map((z) => (z as Map)['name']),
+        ['B1 機車區', 'B2', 'B3'],
+      );
+      await review.decide(r, ReviewDecision.acceptEdited, '', force: true);
+      await review.flush();
+      expect(gateway.resolved.single.$3, {
+        'parking_zones': [
+          {'id': 'b1', 'guide': '走右側坡道'},
+        ],
+      });
     },
   );
 }

@@ -2340,16 +2340,71 @@ class _SpaceKindField extends StatelessWidget {
               keyPrefix: 'spot-space',
               onChanged: spots.setKind,
               followUp: kind != null && kind.asksCharge
-                  ? OptionPills<Charge?>(
-                      key: const ValueKey('spot-space-charge'),
-                      values: const [
-                        (Charge.toll, '收費格'),
-                        (Charge.free, '免費格'),
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        OptionPills<Charge?>(
+                          key: const ValueKey('spot-space-charge'),
+                          values: const [
+                            (Charge.toll, '收費格'),
+                            (Charge.free, '免費格'),
+                          ],
+                          // A 限時 bay may leave it unconfirmed.
+                          selected: spots.draftCondition?.charge,
+                          keyOf: (c) => 'spot-space-charge-${c?.name}',
+                          onSelect: (c) => spots.setKind(kind, charge: c),
+                        ),
+                        // 限時 is an added condition of these kinds (#188);
+                        // the later time-limit layer replaces this.
+                        OptionCheck(
+                          key: const ValueKey('spot-space-time-limit'),
+                          label: '限時停車',
+                          value: spots.timeLimit != null,
+                          onChanged: (on) => spots.setTimeLimit(
+                            on,
+                            minutes: spots.timeLimit?.maxMinutes,
+                          ),
+                        ),
+                        if (spots.timeLimit case final limit?)
+                          Padding(
+                            padding: const EdgeInsetsDirectional.only(
+                              start: 44,
+                            ),
+                            child: Align(
+                              alignment: AlignmentDirectional.centerStart,
+                              child: SizedBox(
+                                width: 200,
+                                child: TextFormField(
+                                  key: const ValueKey('spot-space-max-minutes'),
+                                  initialValue: limit.maxMinutes?.toString(),
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(
+                                    labelText: '最多停幾分鐘',
+                                    helperText: '牌面沒寫就留空',
+                                    suffixText: '分鐘',
+                                  ),
+                                  autovalidateMode:
+                                      AutovalidateMode.onUserInteraction,
+                                  validator: (v) {
+                                    final text = v?.trim() ?? '';
+                                    if (text.isEmpty) return null;
+                                    final n = int.tryParse(text);
+                                    return n == null || n < 1 || n > 1440
+                                        ? '填 1 到 1440'
+                                        : null;
+                                  },
+                                  onChanged: (v) {
+                                    final n = int.tryParse(v.trim());
+                                    if (v.trim().isEmpty ||
+                                        (n != null && n >= 1 && n <= 1440)) {
+                                      spots.setTimeLimit(true, minutes: n);
+                                    }
+                                  },
+                                ),
+                              ),
+                            ),
+                          ),
                       ],
-                      // A 限時 bay may leave it unconfirmed.
-                      selected: spots.draftCondition?.charge,
-                      keyOf: (c) => 'spot-space-charge-${c?.name}',
-                      onSelect: (c) => spots.setKind(kind, charge: c),
                     )
                   : null,
             ),

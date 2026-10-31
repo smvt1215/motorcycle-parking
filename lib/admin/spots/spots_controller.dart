@@ -655,6 +655,41 @@ class SpotsController extends ChangeNotifier {
     _notify();
   }
 
+  /// The time limit of a 一般機車格 or 普大共用格 (#188: 限時 is no longer a
+  /// kind of its own): on adds `time_limit` with [minutes] (null leaves them
+  /// unconfirmed), off takes it away; the space type follows the whole
+  /// condition (§1.3). A bay left with no limit and no charge is toll.
+  void setTimeLimit(bool on, {int? minutes}) {
+    final c = draftCondition;
+    final type = SpaceType.values.asNameMap()[draft['space_type']];
+    if (c == null || type == null || !(spaceKind?.asksCharge ?? false)) return;
+    final limits = [
+      for (final l in c.limits)
+        if (l.kind != LimitKind.timeLimit) l,
+      if (on) ParkingLimit(LimitKind.timeLimit, maxMinutes: minutes),
+    ]..sort((a, b) => a.kind.index.compareTo(b.kind.index));
+    final next = ParkingCondition(
+      bay: c.bay,
+      use: c.use,
+      share: c.share,
+      charge: c.charge ?? (on ? null : Charge.toll),
+      limits: limits,
+      schedule: c.schedule,
+      basis: c.basis,
+    );
+    draft = {
+      ...draft,
+      'space_type': legacySpaceType(next, offStreet: false)!.name,
+      'condition': next.toJson(),
+    };
+    _notify();
+  }
+
+  /// The draft's time limit, or null when it has none.
+  ParkingLimit? get timeLimit => draftCondition?.limits
+      .where((l) => l.kind == LimitKind.timeLimit)
+      .firstOrNull;
+
   /// The heavy bikes' access before 普大共用 set it, as `(value,)`; null
   /// while it did not.
   (Object?,)? _heavyBeforeShare;
