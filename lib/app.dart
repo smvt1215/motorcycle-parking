@@ -14,6 +14,7 @@ import 'features/my_parking/parking_page.dart';
 import 'features/favorites/favorites_page.dart';
 import 'features/report/report_sheet.dart';
 import 'features/contribute/contribute_page.dart';
+import 'features/contribute/my_contributions_page.dart';
 import 'features/launch/launch_screen.dart';
 import 'features/auth/sign_in.dart';
 
@@ -90,6 +91,12 @@ class _ParkingAppState extends ConsumerState<ParkingApp> {
               GoRoute(
                 path: '/contribute',
                 builder: (context, state) => const ContributePage(),
+                routes: [
+                  GoRoute(
+                    path: 'mine',
+                    builder: (context, state) => const MyContributionsPage(),
+                  ),
+                ],
               ),
             ],
           ),

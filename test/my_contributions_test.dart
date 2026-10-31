@@ -205,22 +205,14 @@ void main() {
       );
     });
 
-    test('every status has words and an icon, not only a colour', () {
+    test('every status has words, not only a colour', () {
       final labels = <String>{};
       for (final r in allRows) {
         final look = statusLook(MyContribution.fromJson(r));
         expect(look.label, isNotEmpty);
         labels.add(look.label);
       }
-      expect(labels, {
-        '已採納',
-        '未採納',
-        '審核中',
-        '已結案',
-        '在地圖上，待車友確認',
-        '車友已確認',
-        '已從地圖移除',
-      });
+      expect(labels, {'已採納', '未採納', '審核中', '已結案', '待車友確認', '車友已確認', '已從地圖移除'});
     });
 
     test('a rejection reads its kind, never an admin note', () {
@@ -230,9 +222,9 @@ void main() {
           'resolution_kind': kind,
         }),
       );
-      expect(note('rejected', 'insufficient'), '資訊不足，無法查證。地圖維持原樣。');
-      expect(note('rejected', 'outdated'), '點位已變更，建議不再適用。地圖維持原樣。');
-      expect(note('rejected', null), '管理員核對後沒有採用。地圖維持原樣。');
+      expect(note('rejected', 'insufficient'), '資訊不足，無法查證。');
+      expect(note('rejected', 'outdated'), '點位已變更，建議不再適用。');
+      expect(note('rejected', null), '管理員核對後沒有採用。');
       expect(note('closed', 'duplicate'), '已有相同的建議，併入先前的處理。地圖沒有變更。');
       expect(note('closed', null), '這筆回報已處理完畢。地圖沒有變更。');
       for (final kind in [
@@ -245,6 +237,37 @@ void main() {
       ]) {
         expect(rejectionReasons[kind], isNotEmpty);
       }
+    });
+
+    test('不能停車回報照畫板：停車點確定不在地圖上才是已從地圖移除', () {
+      MyContribution gone(
+        String status, [
+        String? kind,
+        bool visible = false,
+      ]) => MyContribution.fromJson({
+        ...row(
+          'g',
+          status: status,
+          field: 'gone',
+          summary: '這裡已經不能停車：格線已撤除',
+          visible: visible,
+        ),
+        'resolution_kind': kind,
+      });
+      // Hidden or removed: the spot is no longer public.
+      expect(statusLook(gone('accepted')).label, '已從地圖移除');
+      expect(statusNote(gone('accepted')), '管理員已將這個停車點從地圖移除。');
+      // A temporary closure (works, closed) keeps the spot on the map with a
+      // closure, so the adopted report reads neutrally.
+      final closure = gone('accepted', null, true);
+      expect(goneRemoved(closure), isFalse);
+      expect(statusLook(closure).label, '已採納');
+      expect(statusNote(closure), '已依你的回報處理這個停車點。');
+      expect(statusLook(gone('pending')).label, '審核中');
+      expect(statusNote(gone('pending')), isNull);
+      expect(statusLook(gone('rejected')).label, '未採納');
+      expect(statusNote(gone('rejected', 'wrong')), '核對後與現場資訊不符。');
+      expect(statusLook(gone('closed')).label, '已結案');
     });
 
     test('dates say the day, and the year only when it differs', () {
@@ -278,7 +301,7 @@ void main() {
           '未採納',
           '審核中',
           '已結案',
-          '在地圖上，待車友確認',
+          '待車友確認',
           '車友已確認',
           '已從地圖移除',
         ]) {
@@ -300,21 +323,19 @@ void main() {
       });
     }
 
-    testWidgets('the status plate sits beside the text on wide panes only', (
+    testWidgets('the row reads kind and date, then the plate, spot and field', (
       tester,
     ) async {
       final store = await createStore([
         [row('a', status: 'accepted')],
       ]);
       await pump(tester, store, width: 390);
-      final narrowPlate = tester.getTopLeft(find.byType(StatusPlate));
-      final narrowName = tester.getTopLeft(find.text('市府轉運站重機格'));
-      expect(narrowPlate.dy, lessThan(narrowName.dy));
-
-      await pump(tester, store, width: 900);
-      final widePlate = tester.getTopLeft(find.byType(StatusPlate));
-      final wideName = tester.getTopLeft(find.text('市府轉運站重機格'));
-      expect(widePlate.dx, greaterThan(wideName.dx + 200));
+      final plate = tester.getTopLeft(find.byType(StatusPlate));
+      final meta = tester.getTopLeft(find.text('修改建議　10月22日'));
+      final name = tester.getTopLeft(find.text('市府轉運站重機格'));
+      expect(plate.dy, lessThan(name.dy));
+      expect(plate.dx, greaterThan(meta.dx + 100));
+      expect(find.text('怎麼算錢：建議「計時 每小時 20 元」；說明：現場告示牌'), findsOneWidget);
     });
 
     testWidgets('a visible spot opens its details', (tester) async {
@@ -337,7 +358,7 @@ void main() {
         ],
       ]);
       await pump(tester, store);
-      expect(find.text('10月22日送出，已不在地圖上'), findsNWidgets(2));
+      expect(find.text('修改建議　10月22日，已不在地圖上'), findsNWidgets(2));
       await tester.tap(find.byType(ContributionRow).first);
       await tester.pump();
       expect(find.text('「已撤除的格位」已不在地圖上，無法開啟詳情。'), findsOneWidget);
