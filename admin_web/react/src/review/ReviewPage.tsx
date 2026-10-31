@@ -1,7 +1,5 @@
-import { useEffect } from 'react';
 import { Outlet, useParams } from 'react-router';
 import { useDataConnection } from '../app/connection';
-import { useAppSelector } from '../app/hooks';
 import { EmptyState } from '../ui/EmptyState';
 import { Page } from '../pages/Page';
 import { QueuePane } from './QueuePane';
@@ -16,16 +14,6 @@ import './Review.css';
 export function ReviewPage() {
   const connection = useDataConnection();
   const { reportId } = useParams();
-  const pendingCount = useAppSelector((state) => Object.keys(state.review.pending).length);
-
-  // Decisions wait out the undo window before they are written; closing the
-  // tab inside it would drop them, so the browser asks first.
-  useEffect(() => {
-    if (pendingCount === 0) return;
-    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
-    window.addEventListener('beforeunload', warn);
-    return () => window.removeEventListener('beforeunload', warn);
-  }, [pendingCount]);
 
   if (connection === 'none') {
     return (

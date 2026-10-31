@@ -1,4 +1,5 @@
 import { Link, Outlet, useLocation, useMatch } from 'react-router';
+import { usePendingGuard } from '../review/usePendingGuard';
 import { LineIcon } from '../ui/icons';
 import { MORE, MORE_PATHS, SECTIONS, sectionLabel, type Section } from './sections';
 import './AppShell.css';
@@ -34,6 +35,7 @@ export function AppShell() {
   const inMore = MORE_PATHS.some((path) => within(pathname, path));
   // A report's detail fills a phone screen; its own bar leads back (ReviewPhoneDetail.dc.html).
   const focused = useMatch('/review/:reportId') !== null;
+  usePendingGuard();
 
   return (
     <div className={`shell${focused ? ' shell--focus' : ''}`}>

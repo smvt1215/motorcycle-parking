@@ -174,6 +174,22 @@ describe('ReviewPage', () => {
     }
   });
 
+  it('still warns before closing the tab after leaving the review page (Codex review, PR #214)', async () => {
+    const { user, router } = setup(FIRST);
+    await detailTitle();
+    await user.keyboard('a');
+    await act(() => router.navigate('/spots'));
+    const leaving = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(leaving);
+    expect(leaving.defaultPrevented).toBe(true);
+
+    // Once written, closing is fine again.
+    await act(() => vi.advanceTimersByTimeAsync(UNDO_MS));
+    const later = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(later);
+    expect(later.defaultPrevented).toBe(false);
+  });
+
   it('shows 全部處理完了 when the queue empties', async () => {
     const { user, source } = setup(FIRST);
     await detailTitle();
