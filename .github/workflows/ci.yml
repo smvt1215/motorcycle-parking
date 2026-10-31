@@ -160,6 +160,18 @@ jobs:
       # build runs tsc -b first, so it also type-checks.
       - if: steps.changes.outputs.run == 'true'
         run: npm run build
+      - name: Production bundle carries no sample data
+        if: steps.changes.outputs.run == 'true'
+        run: |
+          status=0
+          grep -rl -e MOTOPARK_ADMIN_FIXTURE_DATA -e 西門町峨眉立體停車場 dist || status=$?
+          if [ "$status" -eq 0 ]; then
+            echo 'src/review/fixtureSource.ts leaked into the production build.'
+            exit 1
+          fi
+          [ "$status" -eq 1 ]
+      - if: steps.changes.outputs.run == 'true'
+        run: npm run build:fixture
   ci-ok:
     name: CI 全部通過
     runs-on: ubuntu-24.04

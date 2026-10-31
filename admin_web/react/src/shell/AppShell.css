@@ -195,6 +195,14 @@
     padding-bottom: calc(var(--bottom-tabs-height) + env(safe-area-inset-bottom, 0px));
   }
 
+  .shell--focus .shell-nav {
+    display: none;
+  }
+
+  .shell--focus .shell-main {
+    padding-bottom: 0;
+  }
+
   /* The bar already names the page. */
   .page-headline {
     position: absolute;

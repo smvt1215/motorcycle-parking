@@ -1,7 +1,8 @@
-// RWD smoke for the React admin: builds must exist (`npm run build`).
-// Serves dist/ with an SPA fallback, then checks every page at the target
-// widths (docs: rwd-required — 320 / 390 / iPhone 16 Pro 402 / two-pane
-// 680–1040 / iPad Air 820 & 1180 / 13" 1024 / desktop) and saves screenshots.
+// RWD smoke for the React admin. Needs `npm run build:fixture` first: it
+// serves dist-fixture/ (sample data, never shipped) with an SPA fallback,
+// checks every page at the target widths (rwd rule: 320 / 390 / iPhone 16
+// Pro 402 / two-pane 680–1040 / iPad Air 820 & 1180 / 13" 1024 / desktop),
+// runs a few real-browser interactions, and saves screenshots.
 import { createServer } from 'node:http';
 import { mkdir, readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
@@ -9,20 +10,33 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
-const dist = join(root, 'dist');
+const dist = join(root, 'dist-fixture');
 const output = join(root, 'artifacts', 'smoke');
 
 const VIEWPORTS = [
-  { name: 'phone-320', width: 320, height: 640, tabs: 4 },
-  { name: 'phone-390', width: 390, height: 844, tabs: 4 },
-  { name: 'iphone16pro-402', width: 402, height: 874, tabs: 4 },
-  { name: 'two-pane-700', width: 700, height: 900, tabs: 5 },
-  { name: 'ipad-air-820', width: 820, height: 1180, tabs: 5 },
-  { name: 'ipad-13-1024', width: 1024, height: 1366, tabs: 5 },
-  { name: 'ipad-air-land-1180', width: 1180, height: 820, tabs: 5 },
-  { name: 'desktop-1440', width: 1440, height: 960, tabs: 5 },
+  { name: 'phone-320', width: 320, height: 640, phone: true },
+  { name: 'phone-390', width: 390, height: 844, phone: true },
+  { name: 'iphone16pro-402', width: 402, height: 874, phone: true },
+  { name: 'two-pane-700', width: 700, height: 900, phone: false },
+  { name: 'ipad-air-820', width: 820, height: 1180, phone: false },
+  { name: 'ipad-13-1024', width: 1024, height: 1366, phone: false },
+  { name: 'ipad-air-land-1180', width: 1180, height: 820, phone: false },
+  { name: 'desktop-1440', width: 1440, height: 960, phone: false },
 ];
-const PAGES = ['/review', '/spots', '/more', '/design', '/import', '/nope'];
+const PAGES = [
+  '/review',
+  '/review/r-fuxing',
+  '/review/r-daan',
+  '/review/r-cks?kind=location',
+  '/spots',
+  '/more',
+  '/design',
+  '/import',
+  '/nope',
+];
+
+/** Tabs a page shows: none on a phone's report detail, else 4 on phones and 5 wider. */
+const expectedTabs = (viewport, path) => (viewport.phone ? (/^\/review\/[^/?]+/.test(path) ? 0 : 4) : 5);
 
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml' };
 
@@ -48,13 +62,26 @@ await mkdir(output, { recursive: true });
 const browser = await chromium.launch();
 const failures = [];
 
+async function open(page, path) {
+  await page.goto(`${base}${path}`);
+  await page.waitForSelector('nav[aria-label="管理功能"]', { state: 'attached' });
+  // The fixture answers after 400 ms; wait for the page's own content.
+  await page.waitForSelector('main h1, main h2, main [role="article"]', { state: 'attached' });
+  if (/^\/review\/[^/?]+/.test(path)) {
+    // A report's URL: its detail, not just the queue, must be on screen
+    // before keys are pressed.
+    await page.waitForSelector('.review-detail, .review-done', { state: 'attached' });
+  } else if (path.startsWith('/review')) {
+    await page.waitForSelector('.queue__list, .review-detail, .review-done', { state: 'attached' });
+  }
+}
+
 for (const viewport of VIEWPORTS) {
   const page = await browser.newPage({ viewport: { width: viewport.width, height: viewport.height } });
   // Fonts come from Google; the smoke checks layout, not the network.
   await page.route(/fonts\.(googleapis|gstatic)\.com/, (route) => route.abort());
   for (const path of PAGES) {
-    await page.goto(`${base}${path}`);
-    await page.waitForSelector('nav[aria-label="管理功能"]');
+    await open(page, path);
     const result = await page.evaluate(() => {
       const nav = document.querySelector('nav[aria-label="管理功能"]');
       const visible = [...nav.querySelectorAll('a')].filter((a) => a.getClientRects().length > 0);
@@ -63,9 +90,10 @@ for (const viewport of VIEWPORTS) {
         .filter((r) => r.height < 44 || r.width < 44)
         .map((r) => `${Math.round(r.width)}×${Math.round(r.height)}`);
       const buttons = [...document.querySelectorAll('main button, main a.btn')]
-        .map((b) => b.getBoundingClientRect())
-        .filter((r) => r.height < 44)
-        .map((r) => Math.round(r.height));
+        .filter((b) => b.getClientRects().length > 0)
+        .map((b) => [b.textContent.trim(), b.getBoundingClientRect()])
+        .filter(([, r]) => r.height < 44)
+        .map(([name, r]) => `${name} ${Math.round(r.height)}`);
       const current = visible
         .filter((a) => a.getAttribute('aria-current') === 'page')
         .map((a) => a.textContent);
@@ -78,17 +106,74 @@ for (const viewport of VIEWPORTS) {
       };
     });
     const where = `${viewport.name} ${path}`;
+    const tabs = expectedTabs(viewport, path);
     if (result.overflow > 0) failures.push(`${where}: scrolls sideways by ${result.overflow}px`);
-    if (result.tabs !== viewport.tabs) failures.push(`${where}: ${result.tabs} tabs, want ${viewport.tabs}`);
+    if (result.tabs !== tabs) failures.push(`${where}: ${result.tabs} tabs, want ${tabs}`);
     if (result.small.length) failures.push(`${where}: nav targets under 44px: ${result.small.join(', ')}`);
     if (result.buttons.length) failures.push(`${where}: buttons under 44px: ${result.buttons.join(', ')}`);
-    if (['/review', '/spots', '/import'].includes(path) && result.current.length !== 1) {
+    if (tabs > 0 && ['/review', '/spots', '/import'].includes(path) && result.current.length !== 1) {
       failures.push(`${where}: ${result.current.length} current tabs (${result.current.join(', ')})`);
     }
     await page.screenshot({
-      path: join(output, `${viewport.name}${path.replaceAll('/', '_')}.png`),
+      path: join(output, `${viewport.name}${path.replace(/[/?=]/g, '_')}.png`),
       fullPage: true,
     });
+  }
+
+  // Real-browser interactions: Chinese text in a controlled textarea, A, undo.
+  await open(page, '/review/r-ximen');
+  const note = page.getByRole('textbox', { name: /處理說明/ });
+  await note.fill('');
+  await note.pressSequentially('已比對停管處公告');
+  const typed = await note.inputValue();
+  if (typed !== '已比對停管處公告') failures.push(`${viewport.name}: note kept 「${typed}」`);
+  await page.locator('body').click({ position: { x: 1, y: 1 } });
+  await page.keyboard.press('a');
+  await page.waitForURL(/\/review\/r-fuxing-2/);
+  const undo = page.getByRole('status').filter({ hasText: '秒內可復原' });
+  if (!(await undo.isVisible())) failures.push(`${viewport.name}: no undo notice after A`);
+  await page.screenshot({ path: join(output, `${viewport.name}_review_after-apply.png`), fullPage: true });
+  await undo.getByRole('button', { name: '復原' }).click();
+  await page.waitForURL(/\/review\/r-ximen/);
+  if ((await note.inputValue()) !== '已比對停管處公告') failures.push(`${viewport.name}: note lost on undo`);
+
+  // 駁回 (ReviewReject boards): inline panel, or a bottom sheet on phones.
+  const sideways = () => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  await open(page, '/review/r-fuxing');
+  // Keys go to the detail once its toolbar (and its shortcut listener) is up.
+  await page.getByRole('toolbar', { name: '處理這筆回報' }).waitFor();
+  await page.locator('body').click({ position: { x: 1, y: 1 } });
+  await page.keyboard.press('r');
+  await page.getByRole('radio', { name: /其他原因/ }).waitFor({ state: 'attached' });
+  await page.keyboard.press('6');
+  if ((await sideways()) > 0) failures.push(`${viewport.name}: reject panel scrolls sideways`);
+  await page.screenshot({
+    path: join(output, `${viewport.name}_review_reject.png`),
+    fullPage: !viewport.phone,
+  });
+  await page.keyboard.press('Escape');
+
+  // 修改後套用 (ReviewEdit boards).
+  await page.keyboard.press('e');
+  const type = page.getByRole('combobox', { name: '格位類型' });
+  await type.waitFor();
+  await page.getByRole('region', { name: '資格' }).getByRole('radio', { name: '不可停' }).check();
+  if ((await sideways()) > 0) failures.push(`${viewport.name}: edit form scrolls sideways`);
+  const small = await page.evaluate(() =>
+    [...document.querySelectorAll('.edit-field__value input, .edit-field__value select, .plate-pick__option')]
+      .map((el) => el.getBoundingClientRect().height)
+      .filter((h) => h < 44),
+  );
+  if (small.length) failures.push(`${viewport.name}: edit controls under 44px: ${small.join(', ')}`);
+  await page.screenshot({ path: join(output, `${viewport.name}_review_edit.png`), fullPage: true });
+  await page.keyboard.press('Escape');
+
+  if (viewport.phone) {
+    // The phone list expands a row in place before opening the detail.
+    await open(page, '/review');
+    await page.getByRole('list', { name: '待審回報' }).getByRole('button').first().click();
+    await page.getByRole('link', { name: '看完整差異' }).waitFor();
+    await page.screenshot({ path: join(output, `${viewport.name}_review_expanded.png`), fullPage: true });
   }
   await page.close();
 }
@@ -100,4 +185,4 @@ if (failures.length) {
   console.error(failures.join('\n'));
   process.exit(1);
 }
-console.log(`smoke ok: ${VIEWPORTS.length} viewports × ${PAGES.length} pages → ${output}`);
+console.log(`smoke ok: ${VIEWPORTS.length} viewports × ${PAGES.length} pages + interactions → ${output}`);
