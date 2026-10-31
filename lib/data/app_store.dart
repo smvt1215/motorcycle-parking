@@ -17,6 +17,7 @@ import '../domain/parking_decision.dart';
 import '../domain/eligibility_display.dart';
 import '../domain/location_check.dart';
 import '../domain/map_viewport.dart';
+import '../domain/rules_display.dart';
 import '../models/availability.dart';
 import '../models/holiday_calendar.dart';
 import '../models/parking.dart';
@@ -24,6 +25,7 @@ import 'availability_repository.dart';
 import 'contributions_repository.dart';
 import 'data_updates.dart';
 import 'repositories.dart';
+import 'rules_cache.dart';
 import 'profile_repository.dart';
 
 /// Sources stored in `community_spots`: user reports and authorized imports
@@ -83,7 +85,13 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
            availabilityPoll ??
            (client == null ? null : defaultAvailabilityPoll),
        clock = clock ?? DateTime.now,
-       rulesRepository = rulesRepository ?? RulesRepository(client),
+       rulesRepository =
+           rulesRepository ??
+           RulesRepository(
+             client,
+             // The example build has no download to keep.
+             cache: client == null ? null : RulesCache(),
+           ),
        holidayRepository = holidayRepository ?? HolidayRepository(client),
        contributions =
            contributionsRepository ?? ContributionsRepository(client),
@@ -484,8 +492,10 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
       rules = await rulesRepository.load();
       rulesWarning = null;
     } catch (_) {
-      rules = await RulesRepository(null).load();
-      error = rulesWarning = '遠端規則讀取失敗，顯示內建規則';
+      // The last download over the bundled file, rule by rule.
+      final offline = await offlineRules(rulesRepository.cache);
+      rules = offline.rules;
+      error = rulesWarning = rulesFallbackWarning(offline.cachedAt);
     }
     // The holidays ride along with the rules; a failed read keeps the
     // copy in use, which says so only for a year it lacks.
