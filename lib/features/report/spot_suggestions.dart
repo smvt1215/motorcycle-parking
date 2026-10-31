@@ -30,11 +30,16 @@ String _yesNo(bool? value) => switch (value) {
 };
 
 /// Eligibility as reported on the spot, shown so people know what they fix.
-String eligibilitySummary(ParkingSpot spot) =>
-    _eligibility(spot.scooterAllowed, spot.heavyAllowed);
+String eligibilitySummary(ParkingSpot spot) => _eligibility(
+  Eligible.of(spot.scooterAllowed, notStated: spot.scooterNotStated),
+  Eligible.of(spot.heavyAllowed, notStated: spot.heavyNotStated),
+);
 
-String _eligibility(bool? scooter, bool? heavy) =>
-    '普通機車${_yesNo(scooter)} · 大型重機${_yesNo(heavy)}';
+/// A vehicle's eligibility in words; null is old data's 未確認.
+String _word(Eligible? value) => value?.label ?? '未確認';
+
+String _eligibility(Eligible? scooter, Eligible? heavy) =>
+    '普通機車${_word(scooter)} · 大型重機${_word(heavy)}';
 
 /// A correctable field: the stable key sent as `field` (docs/ADMIN_WEB.md),
 /// the label people read, and the value shown today.
@@ -337,8 +342,24 @@ class _SuggestionFormState extends State<_SuggestionForm> {
 
   /// The space type sent: the one the suggested condition converts to.
   SpaceType get type => condition.typeFor(kind);
-  late bool? scooter = widget.spot.scooterAllowed;
-  late bool? heavy = widget.spot.heavyAllowed;
+
+  /// The spot's eligibility today; null is old data's 未確認, which a
+  /// suggestion never sends back (#201).
+  late final Eligible? currentScooter = Eligible.of(
+    widget.spot.scooterAllowed,
+    notStated: widget.spot.scooterNotStated,
+  );
+  late final Eligible? currentHeavy = Eligible.of(
+    widget.spot.heavyAllowed,
+    notStated: widget.spot.heavyNotStated,
+  );
+  late Eligible? scooter = currentScooter;
+  late Eligible? heavy = currentHeavy;
+
+  /// Whether 官方未標示 is offered: a lot's official data or its operator's
+  /// notice may leave a vehicle out; a street bay is 可停 or 不可停.
+  bool get lotSpot =>
+      isOffStreet(widget.spot.spaceType, widget.spot.facilityType);
 
   /// The spot's rates today; a suggestion names only the vehicles it
   /// changes (design §5.4), so the others keep theirs.
@@ -580,8 +601,9 @@ class _SuggestionFormState extends State<_SuggestionForm> {
     }
     if (eligibilityField) {
       return {
-        if (scooter != spot.scooterAllowed) 'scooter_allowed': scooter,
-        if (heavy != spot.heavyAllowed) 'heavy_allowed': heavy,
+        if (scooter case final v? when v != currentScooter)
+          ...v.payload('scooter'),
+        if (heavy case final v? when v != currentHeavy) ...v.payload('heavy'),
       };
     }
     if (unavailable) {
@@ -669,10 +691,10 @@ class _SuggestionFormState extends State<_SuggestionForm> {
     // Only the vehicles that change, so riders need not compare two lists.
     if (eligibilityField) {
       return [
-        if (scooter != spot.scooterAllowed)
-          line('普通機車', _yesNo(spot.scooterAllowed), _yesNo(scooter)),
-        if (heavy != spot.heavyAllowed)
-          line('大型重機', _yesNo(spot.heavyAllowed), _yesNo(heavy)),
+        if (scooter != currentScooter)
+          line('普通機車', _word(currentScooter), _word(scooter)),
+        if (heavy != currentHeavy)
+          line('大型重機', _word(currentHeavy), _word(heavy)),
       ];
     }
     if (feeField) return feeChangeLines(currentFee, feeEdits);
@@ -923,12 +945,13 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                       // default; the rider may change it.
                       if (suggestsShare) ...[
                         const SizedBox(height: 12),
-                        VehicleTriState(
+                        EligibilityChoice(
                           label: '大型重機',
-                          value: shareHeavy,
+                          value: Eligible.of(shareHeavy),
+                          notStated: false,
                           keyPrefix: 'suggestion-share-heavy',
                           onChanged: (v) => setState(() {
-                            shareHeavy = v;
+                            shareHeavy = v.flag;
                             state.didChange(type);
                           }),
                         ),
@@ -1076,11 +1099,10 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                 const SizedBox(height: 20),
               ],
               if (eligibilityField) ...[
-                FormField<(bool?, bool?)>(
+                FormField<(Eligible?, Eligible?)>(
                   autovalidateMode: AutovalidateMode.onUserInteraction,
                   validator: (_) =>
-                      scooter == widget.spot.scooterAllowed &&
-                          heavy == widget.spot.heavyAllowed
+                      scooter == currentScooter && heavy == currentHeavy
                       ? '請至少改一個車種，和目前不同才能送出'
                       : null,
                   builder: (state) => Column(
@@ -1093,18 +1115,20 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                           style: TextStyle(color: colors.onSurfaceVariant),
                         ),
                       ),
-                      VehicleTriState(
+                      EligibilityChoice(
                         label: '普通機車',
                         value: scooter,
+                        notStated: lotSpot,
                         keyPrefix: 'suggestion-scooter',
                         onChanged: (v) {
                           setState(() => scooter = v);
                           state.didChange((scooter, heavy));
                         },
                       ),
-                      VehicleTriState(
+                      EligibilityChoice(
                         label: '大型重機',
                         value: heavy,
+                        notStated: lotSpot,
                         keyPrefix: 'suggestion-heavy',
                         onChanged: (v) {
                           setState(() => heavy = v);

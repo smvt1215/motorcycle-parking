@@ -9,7 +9,7 @@
           "name": "信義路五段收費機車格",
           "space_type": "paidMotorcycle",
           "scooter_allowed": true,
-          "heavy_allowed": null,
+          "heavy_allowed": true,
           "fee_note": "每小時 20 元，當日上限 100 元",
           "note": "夜間有管理員，假日常客滿；營業 06:00-22:00"
         }
@@ -23,7 +23,9 @@
         "spot": {
           "name": "市府停車場",
           "space_type": "offStreet",
-          "facility_type": "roadside"
+          "facility_type": "roadside",
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": [
@@ -65,9 +67,12 @@
           "facility_type": "multiStorey",
           "parking_zones": [
             {
-              "name": "B2"
+              "name": "B2",
+              "access": "scooterOnly"
             }
-          ]
+          ],
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": [
@@ -83,7 +88,9 @@
           "name": "機車格",
           "space_type": "freeMotorcycle",
           "facility_type": "roadside",
-          "parking_zones": []
+          "parking_zones": [],
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": []
@@ -98,7 +105,9 @@
           "facility_types": [
             "underground",
             "surface"
-          ]
+          ],
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": []
@@ -114,7 +123,9 @@
           "facility_types": [
             "underground",
             "roadside"
-          ]
+          ],
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": [
@@ -131,7 +142,9 @@
           "facility_types": [
             "roadside",
             "surface"
-          ]
+          ],
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": [
@@ -179,7 +192,7 @@
         "spot": {
           "name": "重機格",
           "space_type": "heavyOnly",
-          "scooter_allowed": null,
+          "scooter_allowed": false,
           "heavy_allowed": true
         }
       },
@@ -211,7 +224,7 @@
           "space_type": "offStreet",
           "parking_access": "noMotorcycle",
           "scooter_allowed": false,
-          "heavy_allowed": null
+          "heavy_allowed": false
         }
       },
       "expect": []
@@ -279,7 +292,8 @@
               "access": "noMotorcycle"
             }
           ],
-          "scooter_allowed": true
+          "scooter_allowed": true,
+          "heavy_allowed": false
         }
       },
       "expect": [
@@ -287,7 +301,7 @@
       ]
     },
     {
-      "name": "one zone without access keeps the lot open",
+      "name": "one zone 官方未標示 keeps the lot open",
       "body": {
         "action": "create",
         "spot": {
@@ -299,10 +313,17 @@
               "access": "noMotorcycle"
             },
             {
-              "name": "B2"
+              "name": "B2",
+              "condition": {
+                "allow": {
+                  "scooter": "not_stated",
+                  "heavy": "not_stated"
+                }
+              }
             }
           ],
-          "scooter_allowed": true
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": []
@@ -318,7 +339,9 @@
             "heavy": {
               "mode": "same_as_scooter"
             }
-          }
+          },
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": [
@@ -340,7 +363,9 @@
             "heavy": {
               "mode": "same_as_scooter"
             }
-          }
+          },
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": []
@@ -364,7 +389,9 @@
               "per_minutes": 60,
               "daily_cap": 30
             }
-          }
+          },
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": [
@@ -390,7 +417,9 @@
               "mode": "per_visit",
               "amount": 0
             }
-          }
+          },
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": [
@@ -406,7 +435,8 @@
           "space_type": "offStreet",
           "parking_zones": [
             {
-              "name": "B1"
+              "name": "B1",
+              "access": "scooterHeavy"
             },
             {
               "name": "B2",
@@ -414,9 +444,12 @@
                 "heavy": {
                   "mode": "same_as_scooter"
                 }
-              }
+              },
+              "access": "scooterHeavy"
             }
-          ]
+          ],
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": [
@@ -524,9 +557,12 @@
           "space_type": "offStreet",
           "parking_zones": [
             {
-              "name": "asdf"
+              "name": "asdf",
+              "access": "scooterHeavy"
             }
-          ]
+          ],
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": [
@@ -554,7 +590,9 @@
         "action": "create",
         "spot": {
           "name": "...",
-          "space_type": "car"
+          "space_type": "car",
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": [
@@ -570,10 +608,13 @@
           "space_type": "offStreet",
           "parking_zones": [
             {
-              "name": "B2 測試區"
+              "name": "B2 測試區",
+              "access": "scooterHeavy"
             }
           ],
-          "note": "測試"
+          "note": "測試",
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": []
@@ -612,7 +653,9 @@
           "space_type": "paidMotorcycle",
           "note": "車主 0912-345-678",
           "parking_guide": "打 +886 912 345 678",
-          "entrance_note": "０９１２３４５６７８"
+          "entrance_note": "０９１２３４５６７８",
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": [
@@ -629,7 +672,9 @@
           "name": "機車格",
           "space_type": "paidMotorcycle",
           "note": "管理室 (02)2345-6789",
-          "parking_guide": "客服 07-2345678"
+          "parking_guide": "客服 07-2345678",
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": [
@@ -647,7 +692,9 @@
           "note": "06:00-22:00 收費，07-22 點，車位 1-120 號，限停 2026-11-30 前",
           "parking_guide": "每 30 分鐘 10 元，B2-1 到 B2-40",
           "fee_note": "每小時 20 元",
-          "entrance_note": "客服 0800-123-456，代表號 0223456789"
+          "entrance_note": "客服 0800-123-456，代表號 0223456789",
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": []
@@ -672,7 +719,9 @@
         "spot": {
           "name": "機車格",
           "space_type": "paidMotorcycle",
-          "note": "失主 A123456789 請聯絡"
+          "note": "失主 A123456789 請聯絡",
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": [
@@ -687,7 +736,9 @@
           "name": "機車格",
           "space_type": "paidMotorcycle",
           "note": "a123456789",
-          "parking_guide": "A800000014"
+          "parking_guide": "A800000014",
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": [
@@ -703,7 +754,9 @@
           "name": "機車格",
           "space_type": "paidMotorcycle",
           "note": "格位編號 A123456780",
-          "parking_guide": "B2000000000"
+          "parking_guide": "B2000000000",
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": []
@@ -717,7 +770,9 @@
           "space_type": "paidMotorcycle",
           "note": "ABC-1234 長期占用",
           "parking_guide": "MXY-123 與 123-ABC 停在這",
-          "entrance_note": "舊牌 AB-1234、1234-AB"
+          "entrance_note": "舊牌 AB-1234、1234-AB",
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": [
@@ -734,7 +789,9 @@
           "name": "機車格",
           "space_type": "paidMotorcycle",
           "note": "B2-12 到 B2-40，1F-A 區，abc-1234，EV 充電",
-          "parking_guide": "AB-12、A-1234、ABCD-1234"
+          "parking_guide": "AB-12、A-1234、ABCD-1234",
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": []
@@ -748,7 +805,9 @@
           "space_type": "paidMotorcycle",
           "note": "詳見 https://example.com/parking",
           "parking_guide": "加 line.me 好友",
-          "entrance_note": "www.parking.gov.tw 公告"
+          "entrance_note": "www.parking.gov.tw 公告",
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": [
@@ -765,7 +824,9 @@
           "name": "機車格",
           "space_type": "paidMotorcycle",
           "note": "距離 1.5 km，限高 2.1 m，No.5 出口",
-          "parking_guide": "B2.機車區"
+          "parking_guide": "B2.機車區",
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": []
@@ -780,9 +841,12 @@
           "parking_zones": [
             {
               "name": "B2",
-              "guide": "管理員 0933123456"
+              "guide": "管理員 0933123456",
+              "access": "scooterHeavy"
             }
-          ]
+          ],
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": [
@@ -937,7 +1001,9 @@
                 "max_times": 1
               }
             }
-          }
+          },
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": []
@@ -954,7 +1020,9 @@
               "mode": "daily",
               "amount": 0
             }
-          }
+          },
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": [
@@ -979,7 +1047,9 @@
           "condition": {
             "bay": "car",
             "use": "usual"
-          }
+          },
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": []
@@ -1004,7 +1074,9 @@
             "heavy": {
               "mode": "free"
             }
-          }
+          },
+          "scooter_allowed": true,
+          "heavy_allowed": true
         },
         "evidence_url": "https://pma.gov.taipei/notice"
       },
@@ -1033,7 +1105,9 @@
               "amount": 20,
               "per_minutes": 60
             }
-          }
+          },
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": [
@@ -1059,7 +1133,9 @@
             "heavy": {
               "mode": "same_as_scooter"
             }
-          }
+          },
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": []
@@ -1086,7 +1162,9 @@
                 "max_times": 1
               }
             }
-          }
+          },
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": [
@@ -1111,7 +1189,9 @@
             "scooter": {
               "mode": "free"
             }
-          }
+          },
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": [
@@ -1154,7 +1234,9 @@
                 }
               ]
             }
-          }
+          },
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": []
@@ -1176,7 +1258,9 @@
               "amount": 10,
               "per_minutes": 60
             }
-          }
+          },
+          "scooter_allowed": false,
+          "heavy_allowed": true
         }
       },
       "expect": [
@@ -1201,7 +1285,9 @@
               "amount": 40,
               "per_minutes": 60
             }
-          }
+          },
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": [
@@ -1226,7 +1312,8 @@
                   "amount": 40,
                   "per_minutes": 60
                 }
-              }
+              },
+              "access": "scooterHeavy"
             },
             {
               "name": "B2 汽車區",
@@ -1242,9 +1329,12 @@
                   "amount": 40,
                   "per_minutes": 60
                 }
-              }
+              },
+              "access": "scooterHeavy"
             }
-          ]
+          ],
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": [
@@ -1276,7 +1366,9 @@
               "amount": 0,
               "max_minutes": 30
             }
-          }
+          },
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": [
@@ -1298,7 +1390,9 @@
             "heavy": {
               "mode": "same_as_car"
             }
-          }
+          },
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": [
@@ -1342,7 +1436,9 @@
                 }
               ]
             }
-          }
+          },
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": [
@@ -1382,7 +1478,9 @@
                 }
               ]
             }
-          }
+          },
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": [
@@ -1606,7 +1704,9 @@
               "guide": "車主 0912345678",
               "range": "建國北路口至松江路口"
             }
-          ]
+          ],
+          "scooter_allowed": true,
+          "heavy_allowed": true
         }
       },
       "expect": [

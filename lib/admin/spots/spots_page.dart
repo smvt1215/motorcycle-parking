@@ -21,6 +21,7 @@ import '../../ui/option_pill.dart';
 import '../admin_layout.dart';
 import '../admin_theme.dart';
 import '../review/review_page.dart' show ChangeBand, reviewCompactWidth;
+import '../review/review_models.dart' show purgeDaysLeft;
 import 'closure_editor.dart';
 import 'lot_editor.dart';
 import 'spot_history_page.dart';
@@ -374,12 +375,13 @@ class _SpotsPageState extends State<SpotsPage> {
     final messenger = ScaffoldMessenger.of(context);
     final record = spots.record;
     if (record == null) return;
+    if (hide && !await _confirmDelete(record.name)) return;
     if (await spots.setHidden(hide)) {
       messenger
         ..hideCurrentSnackBar()
         ..showSnackBar(
           SnackBar(
-            content: Text('${hide ? '已隱藏' : '已恢復顯示'}：${record.name}'),
+            content: Text('${hide ? '已刪除' : '已復原'}：${record.name}'),
             action: SnackBarAction(
               label: '復原',
               onPressed: () => spots.setHidden(!hide),
@@ -387,6 +389,41 @@ class _SpotsPageState extends State<SpotsPage> {
           ),
         );
     }
+  }
+
+  /// 刪除點位 (#200): off the map at once, restorable for 14 days.
+  Future<bool> _confirmDelete(String name) async {
+    final now = DateTime.now();
+    final end = now.add(const Duration(days: 14));
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('刪除這個點位？'),
+        content: SizedBox(
+          width: 480,
+          child: Text(
+            '「$name」刪除後騎士馬上看不到。管理站會保留 14 天，這段期間可以在「已刪除」裡復原；'
+            '${end.month}/${end.day} 之後永久刪除，無法復原。這個點位還沒處理的回報會一起結案。',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            key: const ValueKey('confirm-delete-spot'),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('刪除點位'),
+          ),
+        ],
+      ),
+    );
+    return ok ?? false;
   }
 
   Future<void> _promote() async {
@@ -1117,6 +1154,7 @@ class _FormPane extends StatelessWidget {
       creating: record.isNew,
       official: record.official,
       hidden: record.hidden,
+      deleted: record.values['deleted_at'] != null,
       dirty: spots.dirty,
       busy: spots.saving,
       onSave: onSave,
@@ -1180,7 +1218,15 @@ class _FormPane extends StatelessWidget {
                   ),
                 if (record.hidden) ...[
                   const SizedBox(height: 8),
-                  const AdminNotice('這個點位已隱藏，App 地圖上不會顯示。', error: true),
+                  AdminNotice(switch (DateTime.tryParse(
+                    record.values['deleted_at'] as String? ?? '',
+                  )) {
+                    final at? =>
+                      '這個點位已刪除，騎士看不到；${purgeDaysLeft(at, DateTime.now())} 天後永久刪除，之前可以復原。',
+                    // A promoted community spot: hidden, kept with its
+                    // official copy.
+                    null => '這個社群點已改為官方點，App 地圖上不會顯示。',
+                  }, error: true),
                 ],
                 if (spots.saveError != null) ...[
                   const SizedBox(height: 12),
@@ -1245,6 +1291,15 @@ class _FormPane extends StatelessWidget {
                           )
                         else if (f.key == 'fee_note' && spots.feeStructured)
                           _FeeNotePlate(spots: spots, error: errors[f.key])
+                        else if (f.input == SpotInput.eligibility)
+                          _EligibilityRow(
+                            key: ValueKey(
+                              '${record.sourceId}-${spots.formSeq}-${f.key}',
+                            ),
+                            spots: spots,
+                            field: f,
+                            error: errors[f.key],
+                          )
                         else if (f.input == SpotInput.spaceType)
                           _SpaceKindField(
                             spots: spots,
@@ -1356,8 +1411,20 @@ class _VehicleVerification extends StatelessWidget {
     final muted = TextStyle(
       color: Theme.of(context).colorScheme.onSurfaceVariant,
     );
+    // A write states both vehicles (#201): old data is filled in first.
+    final unstated = vehicleFlags.any(
+      (f) =>
+          Eligible.of(
+            record.values[f] is bool ? record.values[f] as bool : null,
+            notStated: record.values[SpotsController.notStatedKey(f)] == true,
+          ) ==
+          null,
+    );
     final canVerify =
-        !spots.dirty && !spots.saving && record.verifiableFlags.isNotEmpty;
+        !spots.dirty &&
+        !spots.saving &&
+        !unstated &&
+        record.verifiableFlags.isNotEmpty;
     return Padding(
       padding: const EdgeInsets.only(top: 16),
       child: ConstrainedBox(
@@ -1399,7 +1466,9 @@ class _VehicleVerification extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              spots.dirty
+              unstated
+                  ? '兩種車都填好並儲存後才能核驗。'
+                  : spots.dirty
                   ? '有未儲存的修改，請先儲存或捨棄後再核驗。'
                   : '實地或依公告確認上方車種設定正確後按下；儲存或採納車種欄位也會自動核驗。'
                         'App 會在 180 天內把核驗過的車種當成可信資料判定可停或不可停。',
@@ -1681,7 +1750,8 @@ class _FieldRow extends StatelessWidget {
           onChanged: onChanged,
         );
       // Three states on one row (C6 canvas AppPatterns, pattern 4).
-      case SpotInput.triState:
+      // Eligibility has its own row (_EligibilityRow); kept for the switch.
+      case SpotInput.triState || SpotInput.eligibility:
         input = VehicleTriState(
           label: field.label,
           value: switch (value) {
@@ -1794,12 +1864,104 @@ class _FieldRow extends StatelessWidget {
   }
 }
 
+/// A vehicle's eligibility (#201): 可停、不可停, or 官方未標示 for official
+/// spots and lots; a community street bay is 可停 or 不可停. Old data that
+/// says neither is marked 要補填 and must be filled in before saving.
+class _EligibilityRow extends StatelessWidget {
+  const _EligibilityRow({
+    super.key,
+    required this.spots,
+    required this.field,
+    required this.error,
+  });
+  final SpotsController spots;
+  final SpotField field;
+  final String? error;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final record = spots.record!;
+    final stored = Eligible.of(
+      record.values[field.key] as bool?,
+      notStated: record.values[SpotsController.notStatedKey(field.key)] == true,
+    );
+    final muted = TextStyle(color: colors.onSurfaceVariant, fontSize: 13);
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 720),
+        child: Semantics(
+          container: true,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (spots.eligibilityChanged(field.key))
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 6),
+                  child: ChangeBand('已修改'),
+                )
+              else if (!record.isNew && stored == null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Container(
+                    key: ValueKey('need-${field.key}'),
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: colors.error, width: 1.5),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                    child: Text(
+                      '要補填',
+                      style: TextStyle(
+                        color: colors.error,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              EligibilityChoice(
+                label: field.label,
+                value: spots.eligibilityOf(field.key),
+                notStated: spots.notStatedOffered,
+                keyPrefix: field.key,
+                onChanged: (v) => spots.setEligibility(field.key, v),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  spots.notStatedOffered
+                      ? '官方資料（路外含營運業者公告）沒寫時選「官方未標示」。'
+                      : '社群路邊格位選「可停」或「不可停」。',
+                  style: muted,
+                ),
+              ),
+              if (field.help case final help?)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(help, style: muted),
+                ),
+              if (error case final message?)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(message, style: TextStyle(color: colors.error)),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _SpotActions extends StatelessWidget {
   const _SpotActions({
     required this.compact,
     required this.creating,
     required this.official,
     required this.hidden,
+    required this.deleted,
     required this.dirty,
     required this.busy,
     required this.onSave,
@@ -1808,6 +1970,10 @@ class _SpotActions extends StatelessWidget {
     required this.onPromote,
   });
   final bool compact, creating, official, hidden, dirty, busy;
+
+  /// Deleted (#200), so it can be restored; a promoted community spot is
+  /// hidden without being deleted and stays with its official copy.
+  final bool deleted;
   final VoidCallback onSave, onDiscard, onPromote;
   final ValueChanged<bool> onHide;
 
@@ -1838,7 +2004,7 @@ class _SpotActions extends StatelessWidget {
               foregroundColor: colors.error,
               side: BorderSide(color: colors.error),
             ),
-      child: Text(hidden ? '恢復顯示' : '隱藏點位'),
+      child: Text(hidden ? '復原點位' : '刪除點位'),
     );
     return LayoutBuilder(
       builder: (context, box) {
@@ -1864,7 +2030,10 @@ class _SpotActions extends StatelessWidget {
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: [...others, if (!creating) hide],
+                      children: [
+                        ...others,
+                        if (!creating && (!hidden || deleted)) hide,
+                      ],
                     ),
                   ],
                 )
@@ -1873,7 +2042,7 @@ class _SpotActions extends StatelessWidget {
                     save,
                     for (final b in others) ...[const SizedBox(width: 10), b],
                     const Spacer(),
-                    if (!creating) hide,
+                    if (!creating && (!hidden || deleted)) hide,
                   ],
                 ),
         );
@@ -1898,7 +2067,9 @@ class _PromoteDialogState extends State<_PromoteDialog> {
   );
   final reason = TextEditingController();
   String? government;
-  bool? scooter, heavy;
+
+  /// Both required (#201): an official spot is 可停、不可停 or 官方未標示.
+  Eligible? scooter, heavy;
 
   @override
   void dispose() {
@@ -1915,33 +2086,30 @@ class _PromoteDialogState extends State<_PromoteDialog> {
         'source_name': government,
         'source_url': url.text.trim(),
         'effective_date': date.text.trim(),
-        if (scooter != null) 'scooter_allowed': scooter,
-        if (heavy != null) 'heavy_allowed': heavy,
+        ...scooter!.payload('scooter'),
+        ...heavy!.payload('heavy'),
       },
       reason.text.trim(),
     ));
   }
 
-  Widget _tri(String label, bool? value, ValueChanged<bool?> onChanged) =>
-      DropdownButtonFormField<int>(
-        initialValue: switch (value) {
-          true => 1,
-          false => 0,
-          _ => -1,
-        },
-        isExpanded: true,
-        decoration: InputDecoration(labelText: label),
-        items: const [
-          DropdownMenuItem(value: -1, child: Text('未確認')),
-          DropdownMenuItem(value: 1, child: Text('可停（官方明載）')),
-          DropdownMenuItem(value: 0, child: Text('不可停（官方明載）')),
-        ],
-        onChanged: (v) => onChanged(switch (v) {
-          1 => true,
-          0 => false,
-          _ => null,
-        }),
-      );
+  Widget _tri(
+    String label,
+    Eligible? value,
+    ValueChanged<Eligible?> onChanged,
+  ) => DropdownButtonFormField<Eligible>(
+    key: ValueKey('promote-$label'),
+    initialValue: value,
+    isExpanded: true,
+    decoration: InputDecoration(labelText: label),
+    items: const [
+      DropdownMenuItem(value: Eligible.allowed, child: Text('可停（官方明載）')),
+      DropdownMenuItem(value: Eligible.notAllowed, child: Text('不可停（官方明載）')),
+      DropdownMenuItem(value: Eligible.notStated, child: Text('官方未標示')),
+    ],
+    validator: (v) => v == null ? '請選擇$label能不能停' : null,
+    onChanged: onChanged,
+  );
 
   @override
   Widget build(BuildContext context) => AlertDialog(
@@ -1957,7 +2125,8 @@ class _PromoteDialogState extends State<_PromoteDialog> {
             children: [
               const Text(
                 '比對官方資料確認點位存在後使用。社群點會隱藏並保留紀錄，未結的回報會改到新的官方點。'
-                '騎士填寫的停放資格不會沿用；只有官方明載時才填「可停」或「不可停」。',
+                '騎士填寫的停放資格不會沿用；兩種車都要選：官方明載時選「可停」或「不可停」，'
+                '官方（路外含營運業者公告）沒寫時選「官方未標示」。',
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
@@ -2237,11 +2406,7 @@ String? _summaryOf(SpotGroup group, SpotsController spots) {
     return shown.isEmpty ? null : shown.join('・');
   }
 
-  String vehicle(String key) => switch (draft[key]) {
-    true => '可停',
-    false => '不可停',
-    _ => '未確認',
-  };
+  String vehicle(String key) => spots.eligibilityOf(key)?.label ?? '未確認（要補填）';
   switch (group) {
     case SpotGroup.location:
       final lat = draft['lat'], lng = draft['lng'];

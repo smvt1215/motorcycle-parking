@@ -325,14 +325,14 @@ class _QueuePane extends StatelessWidget {
                     ),
                     if (narrow)
                       IconButton(
-                        tooltip: '已隱藏的點位',
+                        tooltip: '已刪除的點位',
                         onPressed: () => context.go('/review/hidden'),
                         icon: const Icon(Icons.visibility_off_outlined),
                       )
                     else
                       TextButton(
                         onPressed: () => context.go('/review/hidden'),
-                        child: const Text('已隱藏的點位'),
+                        child: const Text('已刪除的點位'),
                       ),
                     IconButton(
                       tooltip: '重新載入佇列',
@@ -1547,6 +1547,16 @@ class _FieldEditor extends StatelessWidget {
         0 => false,
         _ => null,
       }),
+    ),
+    FieldInput.notStated => DropdownButtonFormField<bool>(
+      initialValue: value == true,
+      isExpanded: true,
+      decoration: _decoration(context),
+      items: const [
+        DropdownMenuItem(value: false, child: Text('否')),
+        DropdownMenuItem(value: true, child: Text('官方未標示')),
+      ],
+      onChanged: onChanged,
     ),
     FieldInput.hiddenFlag => DropdownButtonFormField<bool>(
       initialValue: value == true,

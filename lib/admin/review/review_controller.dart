@@ -85,6 +85,12 @@ class ReviewController extends ChangeNotifier {
   bool writing = false;
 
   List<ReviewSpot> hidden = [];
+
+  /// Official spots purged after deletion, which imports skip (#200).
+  List<PurgedOfficialSpot> purged = [];
+
+  /// What [purged] is narrowed by (name or source id).
+  String purgedQuery = '';
   bool hiddenLoading = false;
   bool hiddenLoaded = false;
   String? hiddenError;
@@ -192,15 +198,57 @@ class ReviewController extends ChangeNotifier {
     _notify();
     try {
       final rows = await gateway!.hiddenSpots();
+      final gone = await gateway!.purgedOfficialSpots(query: purgedQuery);
       if (generation != _generation) return;
       hidden = rows;
+      purged = gone;
       hiddenLoaded = true;
     } catch (_) {
       if (generation == _generation) {
-        hiddenError = '已隱藏的點位載入失敗，請檢查連線後重試。';
+        hiddenError = '已刪除的點位載入失敗，請檢查連線後重試。';
       }
     } finally {
       if (generation == _generation) hiddenLoading = false;
+      _notify();
+    }
+  }
+
+  /// Narrows the purged official spots by name or source id (#200).
+  Future<void> searchPurged(String query) async {
+    if (gateway == null) return;
+    purgedQuery = query.trim();
+    final generation = _generation;
+    try {
+      final gone = await gateway!.purgedOfficialSpots(query: purgedQuery);
+      if (generation != _generation || purgedQuery != query.trim()) return;
+      purged = gone;
+    } catch (_) {
+      if (generation == _generation) {
+        hiddenError = '已永久刪除的官方點載入失敗，請重試。';
+      }
+    } finally {
+      _notify();
+    }
+  }
+
+  /// Lets an import bring a purged official spot back (#200).
+  Future<bool> releasePurged(PurgedOfficialSpot spot) async {
+    if (gateway == null || !changing.add(spot.officialId)) return false;
+    final generation = _generation;
+    hiddenError = null;
+    _notify();
+    try {
+      await gateway!.releasePurgedOfficial(spot.officialId, '');
+      if (generation != _generation) return false;
+      purged = purged.where((p) => p.officialId != spot.officialId).toList();
+      return true;
+    } catch (_) {
+      if (generation == _generation) {
+        hiddenError = '「${spot.name}」尚未解除，請重試。';
+      }
+      return false;
+    } finally {
+      changing.remove(spot.officialId);
       _notify();
     }
   }
@@ -223,8 +271,8 @@ class ReviewController extends ChangeNotifier {
     } catch (_) {
       if (generation == _generation) {
         hiddenError = hide
-            ? '「${spot.name}」尚未重新隱藏，請重試。'
-            : '「${spot.name}」尚未恢復顯示，請重試。';
+            ? '「${spot.name}」尚未重新刪除，請重試。'
+            : '「${spot.name}」尚未復原，請重試。';
       }
       return false;
     } finally {
@@ -457,7 +505,16 @@ class ReviewController extends ChangeNotifier {
         resolutionKind: held.resolutionKind,
       );
       if (generation != _generation) return;
-      reports = reports.where((r) => r.id != held.report.id).toList();
+      // Deleting the spot (#200) closes its other open reports too.
+      final deleted =
+          held.patch['hidden'] == true || held.patch['status'] == 'hidden';
+      reports = reports
+          .where(
+            (r) =>
+                r.id != held.report.id &&
+                !(deleted && r.sourceId == held.report.sourceId),
+          )
+          .toList();
       _resolved.add(held.report.id);
       savedDrafts.remove(held.report.id);
       _entryPatches.remove(held.report.id);
