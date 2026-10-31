@@ -8,6 +8,7 @@ import 'package:motorcycle_parking/domain/four_sign_display.dart';
 import 'package:motorcycle_parking/domain/segment_decision.dart';
 import 'package:motorcycle_parking/models/availability.dart';
 import 'package:motorcycle_parking/models/parking.dart';
+import 'package:motorcycle_parking/models/parking_condition.dart';
 
 /// The four signs (canvas Ver.143 Main, A3, A6, A11) on the demo data of
 /// FIX-DECISIONS: 松壽地下停車場 and 南京東路三段路邊機車格.
@@ -533,6 +534,128 @@ void main() {
       );
       expect(segments.single.status, EligibilityStatus.unverified);
       expect(plates(unknown, VehicleType.scooter, day)[0].main, '待確認');
+    });
+  });
+
+  group('審查修正（#222）', () {
+    test('停車場開放此車種但列出的分區都不准：維持待確認，不判不能停', () {
+      final closedZones = ParkingSpot.fromJson({
+        ...lotJson,
+        'zones_complete': true,
+        'parking_zones': [
+          for (final z in lotJson['parking_zones'] as List)
+            if ((z as Map)['id'] == 'b1') z,
+        ],
+      });
+      final p = plates(closedZones, VehicleType.heavy, day);
+      expect(p, hasLength(4));
+      expect((p[0].main, p[0].tone), ('待確認', PlateTone.unverified));
+    });
+
+    test('有新鮮資料時，延遲的區不算「另 N 區有位」', () {
+      final p = plates(
+        lot,
+        VehicleType.heavy,
+        night,
+        availability: SpotAvailability([
+          count(
+            AvailabilityVehicle.heavy,
+            0,
+            night.subtract(const Duration(minutes: 2)),
+          ),
+          count(
+            AvailabilityVehicle.car,
+            9,
+            night.subtract(const Duration(minutes: 15)),
+          ),
+        ]),
+      );
+      expect(p[1].main, '已滿');
+      expect(p[1].tag, isNull);
+      expect(p[1].semantics, isNot(contains('另')));
+    });
+
+    test('比照倍率有兩位小數：保留 41.25、123.75（parking_contract_cases）', () {
+      final cases =
+          (jsonDecode(
+                File('supabase/functions/_shared/parking_contract_cases.json')
+                    .readAsStringSync(),
+              ) as Map<String, dynamic>).values
+              .whereType<List<dynamic>>()
+              .expand((l) => l)
+              .whereType<Map<String, dynamic>>()
+              .where((c) => c['name'] == '比照倍率有兩位小數');
+      final fee = cases.single['fee'] as Map<String, dynamic>;
+      final spot = ParkingSpot.fromJson({...lotJson, 'fee': fee});
+      final p = plates(spot, VehicleType.heavy, day);
+      expect((p[2].main, p[2].note), ('41.25/時', '上限 123.75'));
+      expect(p[2].semantics, contains('每小時 41.25 元'));
+      expect(p[2].semantics, contains('當日上限 123.75 元'));
+    });
+
+    ParkingCondition notice(
+      List<Object> days,
+      String from,
+      String to, {
+      String? effective,
+      String? expires,
+    }) => ParkingCondition.fromJson({
+      'bay': 'car',
+      'use': 'share',
+      'share': 'car_motorcycle',
+      'allow': {'heavy': true},
+      'schedule': [
+        {
+          'days':
+              days.length == 1 && days.single is String && days.single == 'all'
+              ? 'all'
+              : days,
+          'from': from,
+          'to': to,
+          'vehicles': ['heavy'],
+        },
+      ],
+      'basis': {
+        'source_url': 'https://example.com/notice',
+        'effective_date': ?effective,
+        'expires_on': ?expires,
+      },
+    }, zone: true)!;
+
+    test('公告在下次開放前到期：不寫「週一 20:00 起」', () {
+      // Tuesday 2026-11-03; the next Monday is 11-09.
+      final open = openWindow(
+        EligibilityStatus.conditional,
+        notice(['mon'], '20:00', '23:00'),
+        VehicleType.heavy,
+        day,
+      );
+      expect(open.opensAt, '週一 20:00');
+      final ended = openWindow(
+        EligibilityStatus.conditional,
+        notice(['mon'], '20:00', '23:00', expires: '2026-11-08'),
+        VehicleType.heavy,
+        day,
+      );
+      expect((ended.now, ended.opensAt), (false, null));
+    });
+
+    test('到期日當天不算；跨夜時段截在到期之前', () {
+      final night20 = openWindow(
+        EligibilityStatus.conditional,
+        notice(['all'], '20:00', '02:00', expires: '2026-11-04'),
+        VehicleType.heavy,
+        night,
+      );
+      expect(night20.now, isTrue);
+      expect((night20.until, night20.untilMinute), ('00:00', 1440));
+      final notYet = openWindow(
+        EligibilityStatus.conditional,
+        notice(['all'], '20:00', '23:00', effective: '2026-11-05'),
+        VehicleType.heavy,
+        night,
+      );
+      expect((notYet.now, notYet.opensAt), (false, '週四 20:00'));
     });
   });
 

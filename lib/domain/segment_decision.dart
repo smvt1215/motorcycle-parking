@@ -87,10 +87,32 @@ OpenWindow openWindow(
   final cal = calendar ?? HolidayCalendar.current;
   final (today, at) = taipeiDateMinute(now);
   const last = 7;
+  // The notice holds from its effective day and up to, not on, its
+  // expiry day (as decideParking's notice check): slots outside it open
+  // nothing, and a night slot stops where the notice ends.
+  int? dayMinute(String? ymd) {
+    final d = ymd == null ? null : DateTime.tryParse(ymd);
+    if (d == null) return null;
+    return DateTime.utc(d.year, d.month, d.day).difference(today).inDays * 1440;
+  }
+
+  final from = dayMinute(c.basis?.effectiveDate);
+  final until = dayMinute(c.basis?.expiresOn);
   final spans = [
     for (final s in slots)
-      ...datedSpans(s.days, s.from, s.to, today, cal, last: last),
-  ]..sort((a, b) => a.$1.compareTo(b.$1));
+      for (final (start, end) in datedSpans(
+        s.days,
+        s.from,
+        s.to,
+        today,
+        cal,
+        last: last,
+      ))
+        (
+          from != null && start < from ? from : start,
+          until != null && end > until ? until : end,
+        ),
+  ].where((s) => s.$1 < s.$2).toList()..sort((a, b) => a.$1.compareTo(b.$1));
   final holding = spans.where((s) => s.$1 <= at && at < s.$2).toList();
   if (holding.isNotEmpty) {
     // Slots that touch or overlap run on as one.

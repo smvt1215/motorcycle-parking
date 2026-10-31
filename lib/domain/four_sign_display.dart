@@ -136,8 +136,14 @@ String _list(Iterable<String> items) {
   return unique.length > 3 ? '${unique.take(3).join('、')}…' : unique.join('、');
 }
 
-String _num(num v) =>
-    v is int || v == v.truncate() ? '${v.toInt()}' : v.toStringAsFixed(1);
+/// An amount as the fee texts write it (fee.dart's money format): whole,
+/// else up to two decimals without trailing zeros, 41.25, 22.5.
+String _num(num v) {
+  final cents = (v * 100).round(), whole = cents ~/ 100, rem = cents % 100;
+  if (rem == 0) return '$whole';
+  if (rem % 10 == 0) return '$whole.${rem ~/ 10}';
+  return '$whole.${rem.toString().padLeft(2, '0')}';
+}
 
 /// A rate in the plate's short form: 20/時, 10/30分, 30/次, 100/日, 免費.
 String plateRateText(PlateRate r) => switch (r.mode) {

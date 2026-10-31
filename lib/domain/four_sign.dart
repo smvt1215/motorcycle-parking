@@ -521,7 +521,10 @@ VerdictAnswer _verdict(
   final works = spot.closure?.stateOn(now) == ClosureState.active;
   if (works ||
       whole.status == EligibilityStatus.notAllowed && !street ||
-      areas.every((a) => a.status == EligibilityStatus.notAllowed)) {
+      // Every segment closed closes a street. A lot whose listed zones are
+      // all closed stays as decideParking judged it: open to the vehicle
+      // but with a partial or conflicting zone list, it is unverified.
+      street && areas.every((a) => a.status == EligibilityStatus.notAllowed)) {
     return VerdictAnswer(
       status: EligibilityStatus.notAllowed,
       basis: basis,
@@ -653,9 +656,12 @@ SeatAnswer _seat(
     });
     final bestAt = pool.first;
     final best = usable[bestAt];
+    // Only counts in the same pool say another place has space: with fresh
+    // ones, a delayed count never does.
     final more = [
-      for (final (i, c) in usable.indexed)
-        if (i != bestAt && c.$1.available! > 0) c.$2.isEmpty ? 1 : c.$2.length,
+      for (final i in pool)
+        if (i != bestAt && usable[i].$1.available! > 0)
+          usable[i].$2.isEmpty ? 1 : usable[i].$2.length,
     ].fold<int>(0, (a, b) => a + b);
     return SeatAnswer(
       kind: anyFresh ? SeatKind.live : SeatKind.delayed,
