@@ -478,10 +478,13 @@ begin
     end loop;
     -- A fee is read from its text: when either is the administrator's, both
     -- are kept or replaced together, never a file fee beside a kept text.
+    -- So are a vehicle's flag and its not_stated (#201): the table clears
+    -- one whenever the other is written.
     select coalesce(jsonb_agg(case
-        when c->>'field' in ('fee','fee_note') and jsonb_typeof(c->'admin') is distinct from 'object'
+        when public.admin_import_pair(c->>'field') is not null and jsonb_typeof(c->'admin') is distinct from 'object'
         then c||jsonb_build_object('admin',(select p->'admin' from jsonb_array_elements(changes) p
-          where p->>'field' in ('fee','fee_note') and jsonb_typeof(p->'admin')='object' limit 1))
+          where public.admin_import_pair(p->>'field')=public.admin_import_pair(c->>'field')
+            and jsonb_typeof(p->'admin')='object' limit 1))
         else c end order by o),'[]')
       into changes from jsonb_array_elements(changes) with ordinality as e(c,o);
     status:=case when changes='[]'::jsonb then 'unchanged'
