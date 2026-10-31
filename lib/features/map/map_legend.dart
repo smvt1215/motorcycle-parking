@@ -74,7 +74,8 @@ SpaceBadge? spaceBadge(ParkingSpot spot) {
 }
 
 /// The badge's icon; both heavy-bike badges draw the IconScout silhouette
-/// when the build carries it ([heavyGlyph]) and this helmet otherwise.
+/// when the build carries it ([heavyGlyph]) and Material's two-wheeler
+/// otherwise.
 IconData? spaceBadgeIcon(SpaceBadge badge) => switch (badge) {
   SpaceBadge.heavyOnly || SpaceBadge.shared => heavyGlyphFallback,
   SpaceBadge.car || SpaceBadge.carMotorcycle => Icons.directions_car,

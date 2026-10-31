@@ -95,10 +95,12 @@ void main() {
       expect(heavyGlyph.value, isNull);
     });
 
-    testWidgets('建置沒有剪影時退回安全帽，不拋錯', (tester) async {
+    testWidgets('建置沒有剪影時退回 two_wheeler，不拋錯', (tester) async {
       await tester.runAsync(() => loadHeavyGlyph(_Bundle(const {})));
       expect(heavyGlyph.value, isNull);
       expect(spaceBadgeIcon(SpaceBadge.heavyOnly), heavyGlyphFallback);
+      expect(heavyGlyphFallback, Icons.two_wheeler);
+      expect(spaceBadgeIcon(SpaceBadge.shared), Icons.two_wheeler);
       await tester.pumpWidget(
         const MaterialApp(
           home: SpotMarker(

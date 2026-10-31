@@ -12,8 +12,8 @@ import '../../ui/adaptive/adaptive.dart';
 /// without it (forks, tests, the admin site) draw [heavyGlyphFallback].
 const heavyGlyphAsset = 'assets/private/heavy_glyph.svg';
 
-/// The helmet of the heavy-bike vehicle pill, when the silhouette is absent.
-const heavyGlyphFallback = Icons.sports_motorsports;
+/// Material's two-wheeler, when the silhouette is absent (user decision).
+const heavyGlyphFallback = Icons.two_wheeler;
 
 /// The silhouette once loaded; null before [loadHeavyGlyph] finishes, and
 /// for good when the build does not carry it.

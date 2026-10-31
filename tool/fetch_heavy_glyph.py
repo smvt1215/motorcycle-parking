@@ -7,7 +7,7 @@ be committed to this public repository. Sources, in order:
 2. HEAVY_GLYPH_SVG_PATH, else ~/.config/motorcycle-parking/heavy_glyph.svg:
    a file on the developer's machine.
 
-With neither, nothing is written and the app draws its fallback helmet; the
+With neither, nothing is written and the app draws Material's two_wheeler; the
 build still succeeds (forks, pull requests, the admin site).
 """
 import argparse
