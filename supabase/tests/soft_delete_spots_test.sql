@@ -116,6 +116,10 @@ select is((select status from admin_import_plan(jsonb_build_array(jsonb_build_ob
     'id','official:00000000-0000-4000-8000-0000000000aa','source','official','name','同一筆換了 id',
     'lat',25.083,'lng',121.583,'city','臺北市','source_id','TP-9','source_url','https://example.test/a','source_name','臺北市政府')))),
   'invalid','also by its source id');
+select is((select status from admin_import_plan(jsonb_build_array(jsonb_build_object(
+    'id','official:00000000-0000-4000-8000-0000000000ab','source','official','name','另一個資料集的同編號',
+    'lat',25.084,'lng',121.584,'city','臺北市','source_id','TP-9','source_url','https://example.test/other','source_name','新北市政府')))),
+  'new','the same id in another dataset is not skipped');
 select pg_temp.act('user');
 set local role authenticated;
 select throws_ok($$select admin_release_purged_official((select id from fx where name='official'),'')$$,'42501',null,

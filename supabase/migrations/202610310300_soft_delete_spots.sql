@@ -361,6 +361,8 @@ $$;
 create table public.purged_official_spots (
   official_id uuid primary key,
   source_id text not null default '',
+  -- The dataset the source id belongs to: ids repeat across datasets.
+  source_url text not null default '',
   name text not null default '',
   deleted_at timestamptz,
   purged_at timestamptz not null default now()
@@ -386,11 +388,11 @@ begin
     delete from community_spots where id=r.id;
     n:=n+1;
   end loop;
-  for r in select o.id,to_jsonb(o) as row,o.deleted_by,o.source_id,o.name,o.deleted_at from official_heavy_spots o
+  for r in select o.id,to_jsonb(o) as row,o.deleted_by,o.source_id,o.source_url,o.name,o.deleted_at from official_heavy_spots o
       where o.deleted_at<now()-public.spot_delete_grace() for update skip locked loop
-    insert into purged_official_spots(official_id,source_id,name,deleted_at)
-      values(r.id,coalesce(r.source_id,''),coalesce(r.name,''),r.deleted_at)
-      on conflict (official_id) do update set source_id=excluded.source_id,name=excluded.name,
+    insert into purged_official_spots(official_id,source_id,source_url,name,deleted_at)
+      values(r.id,coalesce(r.source_id,''),coalesce(r.source_url,''),coalesce(r.name,''),r.deleted_at)
+      on conflict (official_id) do update set source_id=excluded.source_id,source_url=excluded.source_url,name=excluded.name,
         deleted_at=excluded.deleted_at,purged_at=now();
     if r.deleted_by is not null then
       insert into admin_audit_log(actor,action,target_table,target_id,before,after,note)
@@ -426,7 +428,8 @@ $$;
 revoke execute on function public.admin_release_purged_official(uuid,text) from public,anon;
 grant execute on function public.admin_release_purged_official(uuid,text) to authenticated;
 
--- ---- Imports skip a purged official spot, by its id or its source's id.
+-- ---- Imports skip a purged official spot, by its id or by its source's id
+-- within the same dataset (source_url).
 
 CREATE OR REPLACE FUNCTION public.admin_import_plan(p_spots jsonb)
  RETURNS TABLE(source_id text, kind text, target uuid, status text, reason text, name text, city text, district text, base_updated_at timestamp with time zone, hidden boolean, incoming jsonb, changes jsonb)
@@ -490,7 +493,7 @@ begin
 
     select to_jsonb(o) into v_current from official_heavy_spots o where o.id=target;
     if v_current is null and exists(select 1 from purged_official_spots p where p.official_id=target
-        or (p.source_id<>'' and p.source_id=incoming->>'source_id')) then
+        or (p.source_id<>'' and p.source_id=incoming->>'source_id' and p.source_url=incoming->>'source_url')) then
       status:='invalid'; reason:='這個官方點已永久刪除，匯入時跳過；要匯回請先在管理站「已刪除」解除'; return next; continue;
     end if;
     if v_current is null then status:='new'; return next; continue; end if;
