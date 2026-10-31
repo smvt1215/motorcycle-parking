@@ -151,6 +151,7 @@ Deno.test('a sighting goes to apply_sighting with hashed identities', async () =
     ip: 'h(ip:203.0.113.9)',
     device: `h(device:${device})`,
     sighting: parsed,
+    ipCapped: true,
   }]);
 });
 
@@ -327,6 +328,8 @@ Deno.test('App Check: log only records, the sighting goes through', async () => 
     assertEquals(res.status, 200);
     assertEquals(calls.applied.length, 1);
     assertEquals(JSON.parse(lines[0]).status, 'missing');
+    // Only logging: the network's daily cap still applies.
+    assertEquals((calls.applied[0] as { ipCapped: boolean }).ipCapped, true);
   } finally {
     console.log = log;
   }
@@ -339,4 +342,19 @@ Deno.test('App Check: off never asks', async () => {
   };
   const res = await handle(request(), deps, 'x-real-ip');
   assertEquals(res.status, 200);
+});
+
+Deno.test('App Check enforced: the network cap becomes a risk signal', async () => {
+  const { deps, calls } = fake();
+  deps.appCheckMode = 'enforce';
+  deps.appCheck = () => Promise.resolve({ status: 'valid', appId: 'a' });
+  const log = console.log;
+  console.log = () => {};
+  try {
+    const res = await handle(request(), deps, 'x-real-ip');
+    assertEquals(res.status, 200);
+    assertEquals((calls.applied[0] as { ipCapped: boolean }).ipCapped, false);
+  } finally {
+    console.log = log;
+  }
 });

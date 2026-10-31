@@ -24,6 +24,11 @@ export interface Deps {
     ip: string;
     device: string;
     sighting: Sighting;
+    /**
+     * Whether the network's daily cap applies: while App Check only logs.
+     * Once it is enforced the network count is a risk signal instead (#203).
+     */
+    ipCapped: boolean;
   }): Promise<
     { data?: Record<string, unknown> | null; error?: RpcError | null }
   >;
@@ -119,6 +124,7 @@ export async function handle(
       ip: await deps.hash(`ip:${ip}`),
       device: await deps.hash(`device:${sighting.device_id}`),
       sighting,
+      ipCapped: mode !== 'enforce',
     });
     if (error) {
       const [message, status] = refusal(error);

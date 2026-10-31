@@ -30,7 +30,7 @@ Deno.serve((req) => {
       return { id: data.user.id, anonymous: data.user.is_anonymous === true };
     },
     hash: (value) => identityHash(secret, value),
-    async apply({ user, ip, device, sighting }) {
+    async apply({ user, ip, device, sighting, ipCapped }) {
       const { data, error } = await admin.rpc('apply_sighting', {
         p_user: user,
         p_ip: ip,
@@ -41,6 +41,7 @@ Deno.serve((req) => {
         p_level: sighting.level,
         p_zone: sighting.zone_id,
         p_segment: sighting.segment_id,
+        p_ip_capped: ipCapped,
       });
       return { data, error };
     },
