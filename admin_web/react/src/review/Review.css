@@ -401,6 +401,14 @@
   font-weight: 700;
 }
 
+.queue__header .undo-notice {
+  justify-content: space-between;
+  padding: 4px 4px 4px 12px;
+  border: 1.5px solid var(--color-rail-black);
+  border-radius: var(--radius-control);
+  background: var(--color-paper-white);
+}
+
 .undo-notice + .review-toolbar__hint {
   display: none;
 }

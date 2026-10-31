@@ -7,6 +7,7 @@ import { EligibilityPair, PlateStack } from '../ui/PlateStack';
 import { STATUS_LABEL } from '../ui/eligibility';
 import { LineIcon } from '../ui/icons';
 import { useIsPhone, useKindFilter, useReviewQueue, type KindFilter } from './hooks';
+import { UndoNotice } from './UndoNotice';
 import {
   diffRows,
   KIND_LABEL,
@@ -106,6 +107,9 @@ export function QueuePane({ selectedId }: { selectedId: string | null }) {
           <span className="t-caption">最舊的在最上面</span>
           {connection === 'fixture' && <span className="fixture-tag">示範資料，不會寫入伺服器</span>}
         </div>
+        {/* A phone back on the list keeps its undo (Codex review, PR #214); wider
+            screens have it in the detail's toolbar, an empty list in ReviewIndex. */}
+        {isPhone && selectedId === null && visible.length > 0 && <UndoNotice />}
         <div className="queue__filters" role="group" aria-label="依類型篩選">
           {FILTERS.map((filter) => (
             <Chip

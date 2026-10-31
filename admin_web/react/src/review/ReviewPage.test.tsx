@@ -190,6 +190,31 @@ describe('ReviewPage', () => {
     expect(later.defaultPrevented).toBe(false);
   });
 
+  it('a phone back on the list can still undo (Codex review, PR #214)', async () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query.includes('max-width: 679.98px'),
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+    try {
+      const { user, source, router } = setup(FIRST);
+      await detailTitle();
+      await user.keyboard('a');
+      await user.click(screen.getByRole('link', { name: '返回審核清單' }));
+      expect(router.state.location.pathname).toBe('/review');
+      const queue = screen.getByRole('region', { name: '待審佇列' });
+      const undo = within(queue).getByRole('status');
+      expect(undo).toHaveTextContent('已套用「西門町峨眉立體停車場」');
+      await user.click(within(undo).getByRole('button', { name: '復原' }));
+      expect(router.state.location.pathname).toBe('/review/r-ximen');
+      await act(() => vi.advanceTimersByTimeAsync(UNDO_MS * 2));
+      expect(source.resolved).toEqual([]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('shows 全部處理完了 when the queue empties', async () => {
     const { user, source } = setup(FIRST);
     await detailTitle();
