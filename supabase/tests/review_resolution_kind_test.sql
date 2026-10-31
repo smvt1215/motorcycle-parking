@@ -136,9 +136,18 @@ select throws_ok($$select * from admin_review_baseline()$$,'42501',null,'an admi
 reset role;
 select ok(not has_function_privilege('anon','public.admin_review_baseline(int)','EXECUTE'),'anon cannot call the baseline');
 
-update moderation_queue set created_at=now()-interval '2 hours' where id in (select id from fx where name in ('name','fee'));
-update moderation_queue set resolved_at=now()-interval '1 hour' where id in (select id from fx where name in ('name','fee'));
-update moderation_queue set resolved_at=now()-interval '1 hour',created_at=now()-interval '5 hours' where id=(select id from fx where name='guide');
+-- Resolution times are pinned to the start of this Taiwan month, not to
+-- now(): admin_review_baseline() buckets by Asia/Taipei month, so
+-- now()-5 hours fell into last month from 00:00 to 05:00 on the 1st (#224).
+-- Month start + 1–5 hours is in this month whenever the test runs (also in
+-- its last hours); early on the 1st it is still ahead of now(), which the
+-- baseline does not bound. Durations stay 1, 1 and 4 hours (median 1.0).
+create temporary table m0 on commit drop as
+  select (date_trunc('month',now() at time zone 'Asia/Taipei') at time zone 'Asia/Taipei') as t;
+update moderation_queue set created_at=(select t from m0)+interval '1 hour',resolved_at=(select t from m0)+interval '2 hours'
+  where id in (select id from fx where name in ('name','fee'));
+update moderation_queue set created_at=(select t from m0)+interval '1 hour',resolved_at=(select t from m0)+interval '5 hours'
+  where id=(select id from fx where name='guide');
 select pg_temp.act('admin');
 set local role authenticated;
 select throws_ok($$select * from admin_review_baseline(0)$$,'22023',null,'the window must be at least a month');
