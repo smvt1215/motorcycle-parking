@@ -189,6 +189,7 @@ declare
   v_closure jsonb;
   v_suggested boolean:=false;
   v_meters float8;
+  v_scored uuid;
 begin
   if p_ip is null or char_length(p_ip)<>64 or p_device is null or char_length(p_device)<>64 then
     raise exception 'missing trusted identity' using errcode='22023';
@@ -262,6 +263,23 @@ begin
   returning id into v_id;
 
   -- ===== 評分 =====
+  -- Every score this sighting may change — the rider's own (official
+  -- count, flood rules) and the earlier riders it judges — is locked first,
+  -- in one order, so two riders judging each other at once wait instead of
+  -- deadlocking on each other's score rows.
+  for v_scored in
+    select x.u from (
+      select p_user u
+      union
+      select s.user_id from public.rider_sightings s
+        where p_kind='level' and s.spot_id=p_spot and s.id<>v_id and s.user_id<>p_user
+          and s.device_hash<>p_device and s.kind='level' and s.vehicle=p_vehicle
+          and s.zone_id is not distinct from p_zone and s.segment_id is not distinct from p_segment
+          and s.created_at>now()-interval '10 minutes'
+    ) x order by x.u
+  loop
+    perform pg_advisory_xact_lock(hashtextextended('sighting-score:'||v_scored::text,0));
+  end loop;
   if p_kind='level' and v_official is not null then
     perform public.rider_score_add(p_user,case when abs(p_level-v_official)<=1 then 1 else 0 end,
       case when abs(p_level-v_official)<=1 then 0 else 1 end,0);
