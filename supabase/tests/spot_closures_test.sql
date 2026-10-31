@@ -93,7 +93,7 @@ select pg_temp.act('admin');
 create temporary table promoted(j jsonb);
 grant all on promoted to authenticated;
 insert into promoted select admin_promote_spot((select id::text from fx where name='spot'),
-  '{"source_name":"臺北市政府","source_url":"https://example.test/n","effective_date":"2026-01-01"}',(select at from v),'');
+  '{"scooter_allowed":true,"heavy_allowed":true,"source_name":"臺北市政府","source_url":"https://example.test/n","effective_date":"2026-01-01"}',(select at from v),'');
 reset role;
 select is((select j->'closure'->>'reason' from promoted),'works','a promoted spot keeps its closure');
 

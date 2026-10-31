@@ -1,5 +1,5 @@
 {
-  "comment": "parking_contract.json 的共同案例。conditions：validCondition（Deno、Flutter、SQL）；legacy：legacySpaceType（三端）與 legacySafe（Flutter），safe 為 null 表示不適用；zones：legacyAccess 與 legacySafeZone（Flutter）；zone_rows：分區的 access 與 condition 一致（zone_condition_consistent／zoneConditionConsistent，三端；決定 32，condition 皆為 validCondition 接受的分區條件）；fees：valid_fee v2 形狀（目前只有 SQL，Dart／Deno 在費率 v2 PR 接上）。legacy 名稱中的 (a)–(d) 對應設計文件 §1.3 legacySafe 可遺失的四種資訊。zone_lists：分區清單 valid_zones／validZoneList／validZoneEntries（三端，#188 id 與 evidence_url）；segment_lists：路段清單 valid_segments／validSegmentList／validSegments（三端）；bay_kinds：格位 7 類 condition_bay_kind／bayKindOf（三端），bay_kind 為 null 表示未確認。",
+  "comment": "parking_contract.json 的共同案例。conditions：validCondition（Deno、Flutter、SQL）；legacy：legacySpaceType（三端）與 legacySafe（Flutter），safe 為 null 表示不適用；zones：legacyAccess 與 legacySafeZone（Flutter）；zone_rows：分區的 access 與 condition 一致（zone_condition_consistent／zoneConditionConsistent，三端；決定 32，condition 皆為 validCondition 接受的分區條件）；fees：valid_fee v2 形狀（目前只有 SQL，Dart／Deno 在費率 v2 PR 接上）。legacy 名稱中的 (a)–(d) 對應設計文件 §1.3 legacySafe 可遺失的四種資訊。zone_lists：分區清單 valid_zones／validZoneList／validZoneEntries（三端，#188 id 與 evidence_url）；segment_lists：路段清單 valid_segments／validSegmentList／validSegments（三端）；bay_kinds：格位 7 類 condition_bay_kind／bayKindOf（三端），bay_kind 為 null 表示未確認。 官方未標示（#201）：allow 的值可為 not_stated，有 not_stated 的分區不可帶 access。",
   "conditions": [
     {
       "name": "收費機車格",
@@ -1236,6 +1236,51 @@
         }
       },
       "valid": false
+    },
+    {
+      "name": "分區官方未標示大型重機",
+      "zone": true,
+      "condition": {
+        "bay": "motorcycle",
+        "allow": {
+          "scooter": true,
+          "heavy": "not_stated"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "分區兩種車都官方未標示",
+      "zone": true,
+      "condition": {
+        "allow": {
+          "scooter": "not_stated",
+          "heavy": "not_stated"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "allow 的其他字串不合法",
+      "zone": true,
+      "condition": {
+        "allow": {
+          "scooter": "unknown",
+          "heavy": true
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "allow 的 null 不合法",
+      "zone": true,
+      "condition": {
+        "allow": {
+          "scooter": null,
+          "heavy": true
+        }
+      },
+      "valid": false
     }
   ],
   "legacy": [
@@ -1706,6 +1751,18 @@
       },
       "access": "heavyCar",
       "safe": false
+    },
+    {
+      "name": "官方未標示推導不出 access",
+      "condition": {
+        "bay": "motorcycle",
+        "allow": {
+          "scooter": true,
+          "heavy": "not_stated"
+        }
+      },
+      "access": null,
+      "safe": false
     }
   ],
   "zone_rows": [
@@ -1950,6 +2007,45 @@
           "allow": {
             "scooter": true,
             "heavy": false
+          }
+        }
+      },
+      "consistent": false
+    },
+    {
+      "name": "官方未標示：不帶 access",
+      "zone": {
+        "name": "B1",
+        "condition": {
+          "allow": {
+            "scooter": true,
+            "heavy": "not_stated"
+          }
+        }
+      },
+      "consistent": true
+    },
+    {
+      "name": "官方未標示卻帶 access",
+      "zone": {
+        "name": "B1",
+        "access": "scooterOnly",
+        "condition": {
+          "allow": {
+            "scooter": true,
+            "heavy": "not_stated"
+          }
+        }
+      },
+      "consistent": false
+    },
+    {
+      "name": "官方未標示但只寫一種車",
+      "zone": {
+        "name": "B1",
+        "condition": {
+          "allow": {
+            "heavy": "not_stated"
           }
         }
       },

@@ -57,6 +57,44 @@ enum RuleRestriction {
 
 enum TrustStatus { pending, confirmed, hidden }
 
+/// A vehicle's eligibility as it is written (#201): 可停、不可停 or 官方未標示
+/// (the official data, for a lot its operator's notice too, does not say).
+/// Stored as the `x_allowed` flag and `x_not_stated`; a spot with neither is
+/// old data's 待確認, which no write leaves behind.
+enum Eligible {
+  allowed,
+  notAllowed,
+  notStated;
+
+  /// What a stored flag pair says; null is 待確認.
+  static Eligible? of(bool? allowed, {bool notStated = false}) => notStated
+      ? Eligible.notStated
+      : switch (allowed) {
+          true => Eligible.allowed,
+          false => Eligible.notAllowed,
+          null => null,
+        };
+
+  /// The `x_allowed` flag it is stored as.
+  bool? get flag => switch (this) {
+    allowed => true,
+    notAllowed => false,
+    notStated => null,
+  };
+
+  String get label => switch (this) {
+    allowed => '可停',
+    notAllowed => '不可停',
+    notStated => '官方未標示',
+  };
+
+  /// [vehicle]'s keys (`scooter` or `heavy`) as a write sends them.
+  Map<String, Object?> payload(String vehicle) => {
+    '${vehicle}_allowed': flag,
+    '${vehicle}_not_stated': this == notStated,
+  };
+}
+
 /// In the order the contract stores a set of them
 /// (`placement.facility_types`): lot types first, 路邊 last.
 enum FacilityType { multiStorey, underground, surface, roadside }
@@ -329,6 +367,8 @@ class ParkingSpot {
     this.available,
     this.heavyAllowed,
     this.scooterAllowed,
+    this.scooterNotStated = false,
+    this.heavyNotStated = false,
     this.status = TrustStatus.pending,
     this.updatedAt,
     this.lastConfirmedAt,
@@ -371,6 +411,16 @@ class ParkingSpot {
   final SpaceType spaceType;
   final int? scooterTotal, available;
   final bool? heavyAllowed, scooterAllowed;
+
+  /// 官方未標示 (#201): the official data (for a lot, its operator's notice
+  /// too) does not say whether the vehicle may park; [scooterAllowed] or
+  /// [heavyAllowed] is then null. Neither 可停 nor 不可停: it judges as
+  /// unconfirmed. False with a null flag is old data's 待確認.
+  final bool scooterNotStated, heavyNotStated;
+
+  /// [vehicle]'s [scooterNotStated] or [heavyNotStated].
+  bool notStated(VehicleType vehicle) =>
+      vehicle == VehicleType.heavy ? heavyNotStated : scooterNotStated;
   final TrustStatus status;
   final DateTime? updatedAt, lastConfirmedAt;
 
@@ -500,6 +550,8 @@ class ParkingSpot {
       available: j['available'] as int?,
       heavyAllowed: j['heavy_allowed'] as bool?,
       scooterAllowed: j['scooter_allowed'] as bool?,
+      scooterNotStated: j['scooter_not_stated'] == true,
+      heavyNotStated: j['heavy_not_stated'] == true,
       status: TrustStatus.values.byName(j['status'] as String? ?? 'pending'),
       updatedAt: DateTime.tryParse(j['updated_at'] as String? ?? ''),
       lastConfirmedAt: DateTime.tryParse(
@@ -576,6 +628,9 @@ class ParkingSpot {
       'available': available,
       'heavy_allowed': legacy ? null : heavyAllowed,
       'scooter_allowed': legacy ? null : scooterAllowed,
+      // Builds before #201 ignore these and read the null flag as 待確認.
+      if (scooterNotStated) 'scooter_not_stated': true,
+      if (heavyNotStated) 'heavy_not_stated': true,
       'status': legacy ? TrustStatus.pending.name : status.name,
       if (exact)
         'exact': {

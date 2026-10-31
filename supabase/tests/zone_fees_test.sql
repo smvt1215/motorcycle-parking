@@ -13,7 +13,7 @@ select ok(not valid_zone_fees('[{"name":"B2","fee":{"heavy":{"mode":"daily","amo
 select ok(not valid_zone_fees('[{"name":"B2","fee":{"scooter":{"mode":"same_as_car"}}}]'),'only heavy bikes follow another vehicle');
 
 create temporary table zone_target as select (public.apply_report('10000000-0000-4000-8000-000000000001',repeat('a',64),repeat('a',64),
-  '{"action":"create","spot":{"name":"分區費率測試","lat":25.09,"lng":121.61,"city":"臺北市","space_type":"offStreet",
+  '{"action":"create","spot":{"scooter_allowed":true,"heavy_allowed":true,"name":"分區費率測試","lat":25.09,"lng":121.61,"city":"臺北市","space_type":"offStreet",
     "fee":{"heavy":{"mode":"daily","amount":80}},
     "parking_zones":[{"name":"B2","access":"scooterHeavy","fee":{"scooter":{"mode":"free"},"heavy":{"mode":"hourly","amount":20,"per_minutes":30}}}]}}')->>'id')::uuid as id;
 select is((select parking_zones->0->'fee'->'heavy'->>'amount' from community_spots where id=(select id from zone_target)),'20','create RPC preserves zone fee');

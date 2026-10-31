@@ -77,7 +77,7 @@ reset role;
 
 -- A rider's report and an admin's edit write the set.
 create temporary table lot as select (public.apply_report('10000000-0000-4000-8000-000000000001',repeat('b',64),repeat('b',64),
-  '{"action":"create","spot":{"name":"回報複選停車場","lat":25.06,"lng":121.58,"city":"臺北市","space_type":"offStreet",
+  '{"action":"create","spot":{"scooter_allowed":true,"heavy_allowed":true,"name":"回報複選停車場","lat":25.06,"lng":121.58,"city":"臺北市","space_type":"offStreet",
     "facility_type":"surface","facility_types":["surface","underground"]}}')->>'id')::uuid as id;
 grant select on lot to authenticated;
 select is((select facility_type||'|'||array_to_string(facility_types,',') from community_spots where id=(select id from lot)),

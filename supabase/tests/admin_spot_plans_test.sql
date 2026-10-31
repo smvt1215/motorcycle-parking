@@ -26,6 +26,16 @@ update community_spots set fee=parking_zones->0->'fee',fee_note=fee_note_of(park
     fee_source_text='機車每小時10元' where id=(select id from fx where name='lot');
 
 -- ===== 讀取 =====
+-- #201: fixtures written before eligibility was required state both
+-- vehicles (官方未標示 where they left one out), without touching updated_at.
+alter table community_spots disable trigger user;
+alter table official_heavy_spots disable trigger user;
+update community_spots set scooter_not_stated=scooter_allowed is null,heavy_not_stated=heavy_allowed is null
+  where scooter_allowed is null or heavy_allowed is null;
+update official_heavy_spots set scooter_not_stated=scooter_allowed is null,heavy_not_stated=heavy_allowed is null
+  where scooter_allowed is null or heavy_allowed is null;
+alter table community_spots enable trigger user;
+alter table official_heavy_spots enable trigger user;
 set local role authenticated;
 select pg_temp.act('user');
 select throws_ok($$select admin_spot_rows(array[(select id::text from fx where name='lot')])$$,'42501',null,
@@ -72,7 +82,7 @@ select throws_ok($$select admin_upsert_spot((select id::text from fx where name=
   (select at from v),'')$$,'22023','invalid parking_zones','a zone whose access is not its condition''s is named');
 
 -- ===== 新增 =====
-select is((admin_upsert_spot(null,'{"kind":"community","name":"新場站","lat":25.052,"lng":121.572,"city":"臺北市","space_type":"offStreet",
+select is((admin_upsert_spot(null,'{"scooter_allowed":true,"heavy_allowed":true,"kind":"community","name":"新場站","lat":25.052,"lng":121.572,"city":"臺北市","space_type":"offStreet",
     "fee_plans":[{"id":"p1","name":"重機計時","fee":{"heavy":{"mode":"hourly","amount":20,"per_minutes":60}}}],
     "parking_zones":[{"name":"重機區","area":"heavy","access":"heavyOnly","fee_plan":"p1","fee":{"heavy":{"mode":"hourly","amount":20,"per_minutes":60}},
       "condition":{"bay":"heavy","use":"usual","allow":{"scooter":false,"heavy":true}}}]}')->'fee_plans'->0->>'name'),

@@ -66,6 +66,16 @@ insert into official_heavy_spots(id,name,lat,lng,city,space_type,fee_note,source
   values('22000000-0000-4000-8000-000000000001','費率 v2 官方點',25.04,121.51,'臺北市','paidMotorcycle',
     '大型重機每次 40 元（隔日是否另計未確認）','https://data.example.test/v2','臺北市政府','V2','2026-10-17',
     '{"heavy":{"mode":"per_visit","amount":40}}','大型重機每次40元');
+-- #201: fixtures written before eligibility was required state both
+-- vehicles (官方未標示 where they left one out), without touching updated_at.
+alter table community_spots disable trigger user;
+alter table official_heavy_spots disable trigger user;
+update community_spots set scooter_not_stated=scooter_allowed is null,heavy_not_stated=heavy_allowed is null
+  where scooter_allowed is null or heavy_allowed is null;
+update official_heavy_spots set scooter_not_stated=scooter_allowed is null,heavy_not_stated=heavy_allowed is null
+  where scooter_allowed is null or heavy_allowed is null;
+alter table community_spots enable trigger user;
+alter table official_heavy_spots enable trigger user;
 select pg_temp.act('admin');
 set local role authenticated;
 select ok(not exists(select 1 from jsonb_array_elements(admin_import_preview(jsonb_build_array(jsonb_build_object(

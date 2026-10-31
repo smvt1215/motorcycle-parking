@@ -24,7 +24,7 @@ select set_config('request.jwt.claims',case who
 $$;
 
 create temporary table s as select (pg_temp.report(1,jsonb_build_object('action','create','spot',jsonb_build_object(
-  'name','車友紀錄測試點','lat',25.31,'lng',121.5,'city','臺北市','space_type','freeMotorcycle',
+  'scooter_allowed',true,'heavy_allowed',true,'name','車友紀錄測試點','lat',25.31,'lng',121.5,'city','臺北市','space_type','freeMotorcycle',
   'note','原本的備註','condition','{"bay":"motorcycle","use":"share","share":"scooter_heavy","charge":"free"}'::jsonb)),'a','a')->>'id')::uuid as id;
 grant select on s to anon,authenticated;
 select is((select count(*)::integer from spot_rider_events where spot_id=(select id from s)),0,
@@ -43,7 +43,7 @@ select ok((select before is null and after is null from spot_rider_events where 
 
 -- The owner edits the spot: 車友更新.
 select pg_temp.report(1,jsonb_build_object('action','update','spot_id',(select id from s),
-  'spot',jsonb_build_object('name','車友紀錄測試點（改）','note','新的備註')),'a','a');
+  'spot',jsonb_build_object('scooter_allowed',true,'heavy_allowed',true,'name','車友紀錄測試點（改）','note','新的備註')),'a','a');
 select is((select count(*)::integer from spot_rider_events where spot_id=(select id from s) and kind='owner_update'),1,
   'the owner''s edit is recorded once');
 select is((select actor from spot_rider_events where kind='owner_update' and spot_id=(select id from s)),pg_temp.uid(1),'by the owner');
@@ -109,7 +109,7 @@ select ok((select not (v::text ~ '("(actor|actor_name|note|report|reason)":|1000
 -- A second spot: a rider changing their mind counts once, by their last
 -- vote; an entry riders cannot see does not split the run.
 create temporary table s2 as select (pg_temp.report(1,jsonb_build_object('action','create','spot',jsonb_build_object(
-  'name','改票測試點','lat',25.32,'lng',121.5,'city','臺北市','space_type','freeMotorcycle',
+  'scooter_allowed',true,'heavy_allowed',true,'name','改票測試點','lat',25.32,'lng',121.5,'city','臺北市','space_type','freeMotorcycle',
   'condition','{"bay":"motorcycle","use":"share","share":"scooter_heavy","charge":"free"}'::jsonb)),'a','a')->>'id')::uuid as id;
 grant select on s2 to anon,authenticated;
 select pg_temp.vote(2,(select id from s2),'still_there','b');
