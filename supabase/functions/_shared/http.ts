@@ -1,7 +1,7 @@
 export const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers':
-    'authorization, x-client-info, apikey, content-type',
+    'authorization, x-client-info, apikey, content-type, x-firebase-appcheck',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 export const response = (data: unknown, status = 200) =>
