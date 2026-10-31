@@ -289,3 +289,54 @@ Deno.test('a closure suggestion is reported back', async () => {
   );
   assertEquals(await res.json(), { accepted: true, closure_suggested: true });
 });
+
+Deno.test('App Check: enforce refuses a bad token before the database', async () => {
+  const { deps, calls } = fake();
+  const seen: (string | null)[] = [];
+  deps.appCheckMode = 'enforce';
+  deps.appCheck = (token) => {
+    seen.push(token);
+    return Promise.resolve({ status: 'invalid', reason: 'signature' });
+  };
+  const log = console.log;
+  console.log = () => {};
+  try {
+    const res = await handle(
+      request(body, { 'X-Firebase-AppCheck': 'tok' }),
+      deps,
+      'x-real-ip',
+    );
+    assertEquals(res.status, 401);
+    assertEquals(await res.json(), { error: 'app check required' });
+    assertEquals(seen, ['tok']);
+    assertEquals(calls.applied, []);
+  } finally {
+    console.log = log;
+  }
+});
+
+Deno.test('App Check: log only records, the sighting goes through', async () => {
+  const { deps, calls } = fake();
+  deps.appCheckMode = 'log';
+  deps.appCheck = () => Promise.resolve({ status: 'missing' });
+  const log = console.log;
+  const lines: string[] = [];
+  console.log = (line: string) => lines.push(line);
+  try {
+    const res = await handle(request(), deps, 'x-real-ip');
+    assertEquals(res.status, 200);
+    assertEquals(calls.applied.length, 1);
+    assertEquals(JSON.parse(lines[0]).status, 'missing');
+  } finally {
+    console.log = log;
+  }
+});
+
+Deno.test('App Check: off never asks', async () => {
+  const { deps } = fake();
+  deps.appCheck = () => {
+    throw new Error('asked');
+  };
+  const res = await handle(request(), deps, 'x-real-ip');
+  assertEquals(res.status, 200);
+});
