@@ -315,22 +315,30 @@ function texts(body: Json): { field: string; value: string; name: boolean }[] {
       out.push({ field, value, name });
     }
   };
+  // The free text of zones and segments (#188): names, guides and ranges.
+  const entryTexts = (field: string, list: unknown) => {
+    if (!Array.isArray(list)) return;
+    list.forEach((e, i) => {
+      if (!object(e)) return;
+      add(`${field}.${i}.name`, e.name, true);
+      add(`${field}.${i}.guide`, e.guide);
+      add(`${field}.${i}.range`, e.range);
+    });
+  };
   if (object(body.spot)) {
     const s = body.spot;
     add('name', s.name, true);
     for (const key of ['fee_note', 'note', 'entrance_note', 'parking_guide']) {
       add(key, s[key]);
     }
-    if (Array.isArray(s.parking_zones)) {
-      s.parking_zones.forEach((z, i) => {
-        if (!object(z)) return;
-        add(`parking_zones.${i}.name`, z.name, true);
-        add(`parking_zones.${i}.guide`, z.guide);
-      });
-    }
+    entryTexts('parking_zones', s.parking_zones);
+    entryTexts('parking_segments', s.parking_segments);
   }
   if (object(body.proposed)) {
     const p = body.proposed;
+    // Zone and segment patches (#188): the same free text, by position.
+    entryTexts('proposed.parking_zones', p.parking_zones);
+    entryTexts('proposed.parking_segments', p.parking_segments);
     add('proposed.name', p.name, true);
     for (
       const key of [

@@ -256,13 +256,15 @@ $$;
 
 -- p_current (a zone or segment list) with p_patch applied: an entry with an
 -- id changes the current entry with that id, its keys replacing the
--- current ones and a null value removing one; {"id": …, "removed": true}
+-- current ones and a null value removing one (a fee sent leaves the zone's
+-- plan reference; an access sent without a condition brings the condition's
+-- allow, and bay, in line with it); {"id": …, "removed": true}
 -- removes it; an entry without an id is added at the end. Entries the patch
 -- does not name stay as they are, in place. Null when the patch is not a
 -- list of objects or names an id the list does not have.
 create or replace function public.entries_patch(p_current jsonb,p_patch jsonb) returns jsonb
 language plpgsql immutable set search_path='' as $$
-declare v jsonb:=coalesce(p_current,'[]'::jsonb); e jsonb; i integer;
+declare v jsonb:=coalesce(p_current,'[]'::jsonb); e jsonb; i integer; v_z jsonb; v_a jsonb; v_c jsonb;
 begin
   if jsonb_typeof(v)<>'array' or jsonb_typeof(p_patch) is distinct from 'array' then return null; end if;
   for e in select x from jsonb_array_elements(p_patch) with ordinality t(x,n) order by n loop
@@ -275,8 +277,28 @@ begin
         if e->'removed'<>'true'::jsonb or e-'id'-'removed'<>'{}'::jsonb then return null; end if;
         v:=v-i;
       else
-        v:=jsonb_set(v,array[i::text],(select coalesce(jsonb_object_agg(k,x),'{}'::jsonb)
-          from jsonb_each(v->i||e) j(k,x) where jsonb_typeof(x)<>'null'));
+        v_z:=(select coalesce(jsonb_object_agg(k,x),'{}'::jsonb)
+          from jsonb_each(v->i||e) j(k,x) where jsonb_typeof(x)<>'null');
+        -- A new or cleared fee leaves the plan it copied; else the plan's
+        -- fee would be copied back over it (fee_plans_sync()).
+        if e ? 'fee' and not e ? 'fee_plan' then v_z:=v_z-'fee_plan'; end if;
+        -- A new access without a condition carries the condition with it,
+        -- so the two still agree (decision 32): the access's allow, and its
+        -- bay when it names one (a shared use of another bay goes); no
+        -- access left, no condition.
+        if e ? 'access' and not e ? 'condition' and v_z ? 'condition' then
+          v_a:=public.parking_contract()->'conversion'->'from_access'->(v_z->>'access');
+          if v_a is null then
+            v_z:=v_z-'condition';
+          else
+            v_c:=v_z->'condition'||jsonb_build_object('allow',v_a->'allow');
+            if v_a ? 'bay' and (v_c->'bay') is distinct from (v_a->'bay') then
+              v_c:=(v_c-'use'-'share')||jsonb_build_object('bay',v_a->'bay');
+            end if;
+            v_z:=jsonb_set(v_z,'{condition}',v_c);
+          end if;
+        end if;
+        v:=jsonb_set(v,array[i::text],v_z);
       end if;
     else
       if e ? 'removed' then return null; end if;
@@ -496,7 +518,7 @@ begin
       case when v_values ? 'scooter_allowed' then (v_values->>'scooter_allowed')::boolean end,
       case when v_values ? 'heavy_allowed' then (v_values->>'heavy_allowed')::boolean end,
       r.facility_type,r.facility_types,r.parking_access,r.address,r.road_segment,r.entrance_note,r.parking_guide,r.special_rules,r.scooter_total,
-      v_community.parking_zones,v_community.parking_segments,r.source_name,r.source_url,r.effective_date,coalesce(r.license_note,''),
+      v_community.parking_zones,r.parking_segments,r.source_name,r.source_url,r.effective_date,coalesce(r.license_note,''),
       -- The fee moves with its fee_note text, so the two stay in step.
       r.fee,r.condition,coalesce(r.zones_complete,false),
       -- Works or a closure moves with the spot, as it stands (#116).

@@ -1587,6 +1587,58 @@
         "charge_free_rate@proposed.fee.scooter"
       ],
       "blocking": true
+    },
+    {
+      "name": "phone numbers in a new street spot's segments (#188)",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "機車格",
+          "space_type": "paidMotorcycle",
+          "condition": {
+            "bay": "motorcycle",
+            "use": "usual",
+            "charge": "toll"
+          },
+          "parking_segments": [
+            {
+              "name": "北側",
+              "guide": "車主 0912345678",
+              "range": "建國北路口至松江路口"
+            }
+          ]
+        }
+      },
+      "expect": [
+        "pii_phone@parking_segments.0.guide"
+      ]
+    },
+    {
+      "name": "phone numbers in zone and segment suggestions (#188)",
+      "body": {
+        "action": "flag",
+        "source_id": "10000000-0000-4000-8000-000000000002",
+        "reason": "分區：修改",
+        "field": "zones",
+        "proposed": {
+          "parking_zones": [
+            {
+              "id": "b1",
+              "guide": "打 0912-345-678"
+            }
+          ],
+          "parking_segments": [
+            {
+              "name": "南側",
+              "range": "管理室 (02)2345-6789"
+            }
+          ]
+        }
+      },
+      "expect": [
+        "pii_phone@proposed.parking_zones.0.guide",
+        "pii_phone@proposed.parking_segments.0.range"
+      ]
     }
   ]
 }
