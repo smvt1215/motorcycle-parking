@@ -1,8 +1,5 @@
-import 'dart:typed_data';
-
-import 'package:image_picker/image_picker.dart';
-
 import '../../data/app_store.dart';
+import '../../domain/account_display.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../../data/profile_repository.dart';
 import 'profile_avatar.dart';
@@ -10,28 +7,12 @@ import 'profile_avatar.dart';
 Future<void> showProfileEditor(BuildContext context, AppStore store) =>
     showAdaptiveSheet<void>(context, (_) => ProfileEditor(store: store));
 
-Future<Uint8List?> pickProfilePhoto() async {
-  final file = await ImagePicker().pickImage(
-    source: ImageSource.gallery,
-    maxWidth: 768,
-    maxHeight: 768,
-    imageQuality: 85,
-    requestFullMetadata: false,
-  );
-  if (file == null) return null;
-  final bytes = await file.readAsBytes();
-  avatarFormat(bytes);
-  return bytes;
-}
-
+/// 編輯個人資料 (P12). Avatar uploads count as photos and stay off until
+/// photo uploads open (社群核實 P2): the editor changes the name and can
+/// remove the avatar the account has, which falls back to the default.
 class ProfileEditor extends StatefulWidget {
-  const ProfileEditor({
-    super.key,
-    required this.store,
-    this.pickPhoto = pickProfilePhoto,
-  });
+  const ProfileEditor({super.key, required this.store});
   final AppStore store;
-  final Future<Uint8List?> Function() pickPhoto;
   @override
   State<ProfileEditor> createState() => _ProfileEditorState();
 }
@@ -40,11 +21,9 @@ class _ProfileEditorState extends State<ProfileEditor> {
   final form = GlobalKey<FormState>();
   late final user = widget.store.client?.auth.currentUser;
   late final name = TextEditingController(text: profileDisplayName(user) ?? '');
-  Uint8List? photo;
-  bool remove = false, saving = false, picking = false;
+  bool saving = false, remove = false;
   String? error;
   bool get changed =>
-      photo != null ||
       remove ||
       normalizeProfileName(name.text) != (profileDisplayName(user) ?? '');
 
@@ -52,33 +31,6 @@ class _ProfileEditorState extends State<ProfileEditor> {
   void dispose() {
     name.dispose();
     super.dispose();
-  }
-
-  Future<void> pick() async {
-    setState(() {
-      picking = true;
-      error = null;
-    });
-    try {
-      final value = await widget.pickPhoto();
-      if (value != null) {
-        avatarFormat(value);
-        if (mounted) {
-          setState(() {
-            photo = value;
-            remove = false;
-          });
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(
-          () => error = e is StateError ? e.message.toString() : '無法讀取照片，請再試一次',
-        );
-      }
-    } finally {
-      if (mounted) setState(() => picking = false);
-    }
   }
 
   Future<void> save() async {
@@ -93,7 +45,6 @@ class _ProfileEditorState extends State<ProfileEditor> {
       }
       await widget.store.updateProfile(
         displayName: name.text,
-        avatarBytes: photo,
         removeAvatar: remove,
       );
       if (mounted) Navigator.pop(context);
@@ -110,9 +61,61 @@ class _ProfileEditorState extends State<ProfileEditor> {
     }
   }
 
+  Widget _header(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final title = Text(
+      '編輯個人資料',
+      style: isCupertino
+          ? Theme.of(context).textTheme.titleMedium
+                ?.copyWith(fontWeight: FontWeight.w600)
+          : Theme.of(context).textTheme.titleLarge,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+    final saveButton = TextButton(
+      key: const ValueKey('profile-save'),
+      onPressed: saving || !changed ? null : save,
+      child: Text(
+        saving ? '儲存中…' : '儲存',
+        style: TextStyle(fontWeight: isCupertino ? FontWeight.w600 : null),
+      ),
+    );
+    final close = saving ? null : () => Navigator.pop(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 48),
+        child: isCupertino
+            // iOS sheet navigation bar: 取消 / title / 儲存.
+            ? Row(
+                children: [
+                  TextButton(onPressed: close, child: const Text('取消')),
+                  Expanded(child: Center(child: title)),
+                  saveButton,
+                ],
+              )
+            // Android full-screen dialog bar: close, title, 儲存.
+            : Row(
+                children: [
+                  IconButton(
+                    tooltip: '關閉',
+                    onPressed: close,
+                    icon: Icon(Icons.close, color: colors.onSurface),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(child: title),
+                  saveButton,
+                ],
+              ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final busy = saving || picking;
+    final colors = Theme.of(context).colorScheme;
+    final quiet = Theme.of(context).textTheme.bodySmall
+        ?.copyWith(color: colors.onSurfaceVariant);
     return PopScope(
       canPop: !saving,
       child: Padding(
@@ -121,93 +124,85 @@ class _ProfileEditorState extends State<ProfileEditor> {
         ),
         child: Form(
           key: form,
-          child: ContentPage(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      '編輯個人資料',
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: '關閉',
-                    onPressed: saving ? null : () => Navigator.pop(context),
-                    icon: const Icon(Icons.close),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              Center(
-                child: ProfileAvatar(
-                  bytes: photo,
-                  url: remove ? '' : profileAvatarUrl(user),
-                  name: name.text,
-                  size: 96,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Center(
-                child: Wrap(
-                  alignment: WrapAlignment.center,
-                  spacing: 12,
+              _header(context),
+              Flexible(
+                child: ContentPage(
                   children: [
-                    TextButton.icon(
-                      onPressed: busy ? null : pick,
-                      icon: const Icon(Icons.photo_library_outlined),
-                      label: Text(picking ? '讀取照片中…' : '從相簿選擇'),
+                    Center(
+                      child: ProfileAvatar(
+                        url: remove ? '' : profileAvatarUrl(user),
+                        name: name.text,
+                        size: 96,
+                      ),
                     ),
-                    if (photo != null ||
-                        (!remove && profileAvatarUrl(user) != null))
-                      TextButton(
-                        onPressed: busy
-                            ? null
-                            : () => setState(() {
-                                photo = null;
-                                remove = true;
-                              }),
-                        child: const Text('移除頭像'),
+                    const SizedBox(height: 16),
+                    Center(
+                      child: Semantics(
+                        label: profilePhotoSemantics,
+                        button: true,
+                        enabled: false,
+                        excludeSemantics: true,
+                        child: isCupertino
+                            ? TextButton.icon(
+                                onPressed: null,
+                                icon: const Icon(Icons.photo_library_outlined),
+                                label: const Text(profilePhotoLabel),
+                              )
+                            : const OutlinedButton(
+                                onPressed: null,
+                                child: Text(profilePhotoLabel),
+                              ),
+                      ),
+                    ),
+                    if (!remove && profileAvatarUrl(user) != null)
+                      Center(
+                        child: TextButton(
+                          key: const ValueKey('profile-remove-avatar'),
+                          onPressed: saving
+                              ? null
+                              : () => setState(() => remove = true),
+                          child: const Text(profileRemoveAvatar),
+                        ),
+                      ),
+                    const SizedBox(height: 4),
+                    Text(
+                      profilePhotoDisabled,
+                      textAlign: TextAlign.center,
+                      style: quiet,
+                    ),
+                    const SizedBox(height: 20),
+                    TextFormField(
+                      key: const ValueKey('profile-name'),
+                      controller: name,
+                      enabled: !saving,
+                      maxLength: 40,
+                      decoration: const InputDecoration(
+                        labelText: '顯示名稱',
+                        helperText: profileNameHelper,
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (value) => profileNameError(value ?? ''),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                    if (user?.email case final email?)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(email, style: quiet),
+                      ),
+                    if (error != null)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: Text(
+                          error!,
+                          style: TextStyle(color: colors.error),
+                        ),
                       ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 20),
-              TextFormField(
-                key: const ValueKey('profile-name'),
-                controller: name,
-                enabled: !busy,
-                maxLength: 40,
-                decoration: const InputDecoration(
-                  labelText: '顯示名稱',
-                  helperText: '你回報的停車點會顯示這個名稱',
-                ),
-                validator: (value) => profileNameError(value ?? ''),
-                onChanged: (_) => setState(() {}),
-              ),
-              if (user?.email case final email?)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(email),
-                ),
-              if (error != null)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: Text(
-                    error!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                  ),
-                ),
-              const SizedBox(height: 20),
-              AdaptiveButton(
-                label: saving ? '儲存中…' : '儲存個人資料',
-                onPressed: busy || !changed ? null : save,
-              ),
-              TextButton(
-                onPressed: saving ? null : () => Navigator.pop(context),
-                child: const Text('取消'),
               ),
             ],
           ),

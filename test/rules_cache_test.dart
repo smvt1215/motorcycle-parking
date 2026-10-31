@@ -113,7 +113,10 @@ void main() {
     // Rules the cache lacks still come from the bundled file.
     expect(pick(offline.rules, '高雄市', VehicleType.heavy).version, 2);
     expect(offline.cachedAt, downloaded);
-    expect(rulesFallbackWarning(offline.cachedAt), '離線，使用上次下載的規則（10月30日）');
+    expect(
+      rulesFallbackWarning(offline.cachedAt),
+      '遠端規則讀取失敗，使用上次下載的規則（10月30日）',
+    );
   });
 
   test('離線且沒有快取：使用內建規則', () async {
@@ -235,7 +238,7 @@ void main() {
       final store = await offlineStore(cacheIn(dir));
       addTearDown(store.dispose);
       expect(pick(store.rules, '臺北市', VehicleType.heavy).feeNote, '快取費率');
-      expect(store.rulesWarning, '離線，使用上次下載的規則（10月30日）');
+      expect(store.rulesWarning, '遠端規則讀取失敗，使用上次下載的規則（10月30日）');
     });
 
     test('快取損毀時不當掉，退回內建並顯示內建提示', () async {
@@ -262,7 +265,7 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-        expect(find.text('離線，使用上次下載的規則（10月30日）'), findsOneWidget);
+        expect(find.text('遠端規則讀取失敗，使用上次下載的規則（10月30日）'), findsOneWidget);
         expect(find.text(bundledRulesWarning), findsNothing);
         expect(find.byTooltip('重新整理'), findsOneWidget);
         // The binding checks this before tear-downs run.

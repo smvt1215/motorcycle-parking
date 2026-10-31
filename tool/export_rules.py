@@ -76,13 +76,24 @@ def normalize(row):
     return rule
 
 
+def same_rule(a, b):
+    """Two rules that say the same thing, whatever their version numbers."""
+    def body(rule):
+        return {k: v for k, v in normalize({"district_space_types": {}, "restriction": None, **rule}).items()
+                if k != "version"}
+    return body(a) == body(b)
+
+
 def export(rows, bundled):
     """The bundled rules replaced by the database rows.
 
     Existing rows keep their place in the file so a diff shows only what
     changed; new rules follow in city order. A bundled rule missing from the
-    database, or newer than it, means the two diverged the other way: the
-    database must be fixed first, so both raise.
+    database, or newer than it and saying something else, means the two
+    diverged the other way: the database must be fixed first, so both raise.
+    A newer bundled rule that says the same thing takes the database's lower
+    version (the file follows the database, so the app then reads the remote
+    row; installed builds keep their own same-content copy).
     """
     current = {key(r): r for r in (normalize(r) for r in rows)}
     if len(current) != len(rows):
@@ -92,7 +103,10 @@ def export(rows, bundled):
         new = current.get(key(old))
         if new is None:
             problems.append(f"{old['city']}:{old['vehicle']} is in the app file but not in the database")
-        elif new["version"] < old["version"]:
+        elif new["version"] < old["version"] and not same_rule(new, old):
+            # An older database version with the same rule only restarted its
+            # count (staging was seeded from this file at version 1); one that
+            # says something else is a rollback and must be fixed first.
             problems.append(f"{old['city']}:{old['vehicle']} is version {old['version']} in the app file "
                             f"but {new['version']} in the database")
     if problems:
