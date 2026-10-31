@@ -64,6 +64,7 @@ Workflow 依平台分工：跨平台檢查放 `ci.yml`，各平台的建置與�
 - 三個既有必要彙總 checks 仍要求所有前置 jobs 成功；取消／失敗不得偽裝為通過。嚴格同步 main、簽章、線性歷史、Squash 與審查 thread 結案規則不變。
 - 管理介面的 `lib/admin/`、`lib/main_admin.dart`、`test/admin/`、`admin_web/`、`firebase.json`、`.firebaserc` 與 Hosting 整理工具只觸發品質，不觸發 Android／iOS 模擬器；與共用程式一起修改時仍跑平台驗證。`web/admin/` 沿用 Web 的品質路徑；新增共用套件仍由 `pubspec` 觸發所有平台。
 - 品質 job 另建置 `lib/main_admin.dart` 到 `build/admin`，套用管理站 metadata；原 App Web 仍獨立建置到 `build/web`。
+- React 管理站（`admin_web/react/`，#195 P7 改寫）由獨立的 `admin-react` job 檢查（Prettier、ESLint、Vitest、`tsc -b`＋Vite 建置），只由 `admin_web/react/`、`admin_web/DESIGN.md`、`ci.yml` 與路徑判斷檔觸發；它不觸發 Flutter 品質、行動平台或後端。尚未部署到 Hosting。
 
 ### 管理介面 staging Hosting
 
