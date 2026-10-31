@@ -40,6 +40,7 @@ CI 會確認 `dist/` 裡沒有示範資料（`MOTOPARK_ADMIN_FIXTURE_DATA` 標�
 ## 統一 API（#195）
 
 `src/api/v1/` 是打 Supabase 統一 API 的 RTK Query 用戶端：
+
 - `base.ts`：兩個 base（`api_v1`、`admin_v1`），自動帶 `apikey`、登入 token 與 `Content-Profile`，並把錯誤轉成 `{status, code, message, details}`。連線設定由 `makeStore({ postgrest })` 注入；沒有連線時一律回 `client.not_connected`。
 - `*.generated.ts`：`npm run codegen` 由 `supabase/api/v1/<schema>.json` 產生，不要手改；CI 會重新產生並比對。讀取類 API 要在 `scripts/codegen.mjs` 的 `READS` 列為 query。
 
