@@ -29,8 +29,13 @@ import 'osm_tiles.dart';
 import 'cluster_badge.dart';
 
 class MapPage extends ConsumerStatefulWidget {
-  const MapPage({super.key, this.showControls = true});
+  const MapPage({super.key, this.showControls = true, this.covered = false});
   final bool showControls;
+
+  /// A page of the map tab (地圖怎麼看) is on top: the open spot's sheet,
+  /// drawn on the root overlay, hides with its state kept and returns
+  /// when the page closes. Unlike [showControls], nothing is reset.
+  final bool covered;
   @override
   ConsumerState<MapPage> createState() => _MapPageState();
 }
@@ -361,11 +366,13 @@ class _MapPageState extends ConsumerState<MapPage> {
     final filterHeight = (16 + MediaQuery.textScalerOf(context).scale(15))
         .clamp(40.0, double.infinity);
     final open = widget.showControls ? selected : null;
+    final covered = widget.covered;
     return PopScope(
-      // Back closes the details before leaving the map.
-      canPop: open == null,
+      // Back closes the details before leaving the map; a covering page
+      // handles back itself.
+      canPop: open == null || covered,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _closeSpot();
+        if (!didPop && !covered) _closeSpot();
       },
       child: OverlayPortal(
         controller: sheetPortal,
@@ -377,11 +384,20 @@ class _MapPageState extends ConsumerState<MapPage> {
                 right: 0,
                 top: MediaQuery.paddingOf(overlay).top,
                 bottom: 0,
-                child: SpotSheet(
-                  key: ValueKey(open.id),
-                  store: store,
-                  spot: open,
-                  onClose: _closeSpot,
+                // Hidden, not removed, under a covering page: the sheet
+                // keeps its size and scroll for when the page closes.
+                child: Offstage(
+                  key: const ValueKey('spot-sheet-overlay'),
+                  offstage: covered,
+                  child: TickerMode(
+                    enabled: !covered,
+                    child: SpotSheet(
+                      key: ValueKey(open.id),
+                      store: store,
+                      spot: open,
+                      onClose: _closeSpot,
+                    ),
+                  ),
                 ),
               ),
         child: _layers(

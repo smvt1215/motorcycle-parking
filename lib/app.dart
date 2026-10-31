@@ -46,7 +46,10 @@ class _ParkingAppState extends ConsumerState<ParkingApp> {
                   excluding: mapCovered(shell.currentIndex, state.uri.path),
                   child: TickerMode(
                     enabled: !mapCovered(shell.currentIndex, state.uri.path),
-                    child: MapPage(showControls: shell.currentIndex == 0),
+                    child: MapPage(
+                      showControls: shell.currentIndex == 0,
+                      covered: mapCovered(shell.currentIndex, state.uri.path),
+                    ),
                   ),
                 ),
                 Offstage(

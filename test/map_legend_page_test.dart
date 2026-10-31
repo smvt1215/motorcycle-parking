@@ -2,9 +2,11 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:motorcycle_parking/app.dart';
 import 'package:motorcycle_parking/data/app_store.dart';
 import 'package:motorcycle_parking/domain/eligibility.dart';
@@ -382,4 +384,79 @@ void main() {
       debugDefaultTargetPlatformOverride = null;
     });
   }
+
+  testWidgets('詳情開啟時推入圖例：sheet 隱藏不擋點擊，返回後 sheet 與選取都還在', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final store = (await tester.runAsync(testStore))!;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [storeProvider.overrideWith((ref) => store)],
+        child: const ParkingApp(),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+    final spot = store.spots.first;
+    tester
+        .widget<FlutterMap>(find.byType(FlutterMap))
+        .mapController!
+        .move(LatLng(spot.lat, spot.lng), 18);
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find
+          .descendant(
+            of: find.byType(FlutterMap),
+            matching: find.byWidgetPredicate(
+              (w) =>
+                  w is Semantics &&
+                  (w.properties.label ?? '').startsWith('${spot.name} '),
+            ),
+          )
+          .hitTestable()
+          .first,
+    );
+    await tester.pumpAndSettle();
+    final sheet = find.byKey(const ValueKey('parking-spot-sheet'));
+    final selected = find.byKey(const ValueKey('selected-spot-marker'));
+    expect(sheet.hitTestable(), findsOneWidget);
+    expect(selected, findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('map-legend-button')));
+    await tester.pumpAndSettle();
+    expect(find.byType(MapLegendPage), findsOneWidget);
+    // The sheet is hidden, not closed: nothing of it takes taps.
+    expect(sheet.hitTestable(), findsNothing);
+    expect(sheet, findsNothing);
+    expect(find.text('貢獻').hitTestable(), findsOneWidget);
+    final footnote = find.text('社群資訊可能有延遲，停車前請確認現場標示。');
+    await tester.scrollUntilVisible(
+      footnote,
+      200,
+      scrollable: find
+          .descendant(
+            of: find.byType(MapLegendPage),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.ensureVisible(footnote);
+    await tester.pumpAndSettle();
+    expect(footnote.hitTestable(), findsOneWidget);
+
+    await tester.tap(find.byTooltip('返回'));
+    await tester.pumpAndSettle();
+    expect(find.byType(MapLegendPage), findsNothing);
+    expect(sheet.hitTestable(), findsOneWidget);
+    expect(selected, findsOneWidget);
+    expect(
+      find.descendant(of: sheet, matching: find.text(spot.name)),
+      findsWidgets,
+    );
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 }
