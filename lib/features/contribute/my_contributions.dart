@@ -2,67 +2,44 @@ import 'dart:async';
 
 import '../../data/app_store.dart';
 import '../../data/contributions_repository.dart';
+import '../../domain/contribution_display.dart';
 import '../../domain/map_viewport.dart';
 import '../../ui/adaptive/adaptive.dart';
-import '../map/map_legend.dart';
 import '../map/spot_sheet.dart';
 import '../report/report_sheet.dart';
 
-/// How a status reads: a plate in the colour riders know from the map's
-/// legend, always with its own icon and words. Results are filled plates;
-/// waiting is an outline, so a finished review stands out in the list.
-typedef StatusLook = ({String label, IconData icon, Color color, bool done});
+/// How a status reads: a small tinted plate with its words (P9). The
+/// tints are fixed, as on road signs, so they read the same in dark mode.
+typedef StatusLook = ({String label, Color background, Color foreground});
+
+const _reviewing = (Color(0xffe3f0f2), Color(0xff0f4e5c));
+const _waiting = (Color(0xfffdf4e3), Color(0xff5c4310));
+const _accepted = (Color(0xffddf0e5), Color(0xff145238));
+const _rejected = (Color(0xfffbecee), Color(0xff7a1f2e));
+const _removed = (Color(0xffeceff1), Color(0xff3e4a50));
+
+StatusLook _look(String label, (Color, Color) tint) =>
+    (label: label, background: tint.$1, foreground: tint.$2);
 
 StatusLook statusLook(MyContribution item) =>
     switch ((item.kind, item.status)) {
-      (ContributionKind.newSpot, ContributionStatus.pending) => (
-        label: '在地圖上，待車友確認',
-        icon: Icons.schedule,
-        color: unverifiedColor,
-        done: false,
+      (ContributionKind.newSpot, ContributionStatus.pending) => _look(
+        '待車友確認',
+        _waiting,
       ),
-      (ContributionKind.newSpot, ContributionStatus.confirmed) => (
-        label: '車友已確認',
-        icon: Icons.check_circle,
-        color: allowedColor,
-        done: true,
+      (ContributionKind.newSpot, ContributionStatus.confirmed) => _look(
+        '車友已確認',
+        _accepted,
       ),
-      (ContributionKind.newSpot, ContributionStatus.hidden) => (
-        label: '已從地圖移除',
-        icon: Icons.visibility_off,
-        color: deniedColor,
-        done: true,
+      (ContributionKind.newSpot, ContributionStatus.hidden) => _look(
+        '已從地圖移除',
+        _removed,
       ),
-      (_, ContributionStatus.pending) => (
-        label: '審核中',
-        icon: Icons.schedule,
-        color: unverifiedColor,
-        done: false,
-      ),
-      (_, ContributionStatus.accepted) => (
-        label: '已採納',
-        icon: Icons.check_circle,
-        color: allowedColor,
-        done: true,
-      ),
-      (_, ContributionStatus.rejected) => (
-        label: '未採納',
-        icon: Icons.cancel,
-        color: deniedColor,
-        done: true,
-      ),
-      (_, ContributionStatus.closed) => (
-        label: '已結案',
-        icon: Icons.task_alt,
-        color: unverifiedColor,
-        done: true,
-      ),
-      _ => (
-        label: '處理中',
-        icon: Icons.schedule,
-        color: unverifiedColor,
-        done: false,
-      ),
+      (_, ContributionStatus.pending) => _look('審核中', _reviewing),
+      (_, ContributionStatus.accepted) => _look('已採納', _accepted),
+      (_, ContributionStatus.rejected) => _look('未採納', _rejected),
+      (_, ContributionStatus.closed) => _look('已結案', _removed),
+      _ => _look('處理中', _reviewing),
     };
 
 /// Why a report was not used, one fixed sentence per kind an admin picks
@@ -79,11 +56,12 @@ const rejectionReasons = {
 /// What happened after a result, for riders who wonder whether the map
 /// changed. Waiting needs no extra words beside its plate.
 String? statusNote(MyContribution item) => switch ((item.kind, item.status)) {
+  (ContributionKind.newSpot, ContributionStatus.pending) => '在地圖上，等其他車友確認',
   (ContributionKind.newSpot, ContributionStatus.hidden) => '管理員已將這個停車點從地圖移除。',
   (ContributionKind.suggestion, ContributionStatus.accepted) => '地圖已依你的建議更新。',
   (ContributionKind.gone, ContributionStatus.accepted) => '已依你的回報處理這個停車點。',
   (_, ContributionStatus.rejected) =>
-    '${rejectionReasons[item.resolutionKind] ?? '管理員核對後沒有採用。'}地圖維持原樣。',
+    rejectionReasons[item.resolutionKind] ?? '管理員核對後沒有採用。',
   (_, ContributionStatus.closed) =>
     '${rejectionReasons[item.resolutionKind] ?? '這筆回報已處理完畢。'}地圖沒有變更。',
   _ => null,
@@ -94,11 +72,25 @@ String sentDate(DateTime time, DateTime now) => time.year == now.year
     ? '${time.month}月${time.day}日送出'
     : '${time.year}年${time.month}月${time.day}日送出';
 
-/// "我送出的建議" in the contribute tab: what the rider sent and how it
-/// was handled (docs/CONTRIBUTION_TIERS_FEASIBILITY.md §7, stage 0).
+/// "我送出的建議": what the rider sent and how it was handled
+/// (docs/CONTRIBUTION_TIERS_FEASIBILITY.md §7, stage 0). In the contribute
+/// tab it previews the latest [preview] rows with 「查看全部紀錄」 (P8); the
+/// pushed page lists them all with older pages on demand (P9).
 class MyContributionsSection extends StatefulWidget {
-  const MyContributionsSection({super.key, required this.store, this.now});
+  const MyContributionsSection({
+    super.key,
+    required this.store,
+    this.now,
+    this.preview,
+    this.onShowAll,
+  });
   final AppStore store;
+
+  /// Rows shown in the tab; null lists them all.
+  final int? preview;
+
+  /// Opens the full list, from the preview.
+  final VoidCallback? onShowAll;
 
   /// Fixed in tests so dates read the same every run.
   final DateTime? now;
@@ -283,19 +275,27 @@ class _MyContributionsSectionState extends State<MyContributionsSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Semantics(
-          header: true,
-          child: Text(
-            '我送出的建議',
-            style: text.titleLarge?.copyWith(fontWeight: FontWeight.w600),
+        if (widget.preview != null)
+          Padding(
+            padding: EdgeInsets.fromLTRB(isCupertino ? 16 : 0, 0, 16, 6),
+            child: Semantics(
+              header: true,
+              child: Text(
+                myContributionsTitle,
+                style: text.bodySmall?.copyWith(
+                  color: isCupertino ? colors.onSurfaceVariant : colors.primary,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          )
+        else ...[
+          Text(
+            myContributionsIntro,
+            style: TextStyle(color: colors.onSurfaceVariant),
           ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          '新增的停車點、修改建議與不能停車的回報，以及審核結果。',
-          style: TextStyle(color: colors.onSurfaceVariant),
-        ),
-        const SizedBox(height: 8),
+          const SizedBox(height: 12),
+        ],
         ..._body(context),
       ],
     );
@@ -351,12 +351,29 @@ class _MyContributionsSectionState extends State<MyContributionsSection> {
       ];
     }
     final now = widget.now ?? DateTime.now();
+    final preview = widget.preview;
+    final shown = preview == null ? items : items.take(preview).toList();
     return [
-      for (final (i, item) in items.indexed) ...[
-        if (i > 0) const Divider(height: 1),
-        ContributionRow(item: item, now: now, onTap: () => open(item)),
-      ],
-      if (moreFailed)
+      ContributionGroup(
+        children: [
+          for (final item in shown)
+            ContributionRow(item: item, now: now, onTap: () => open(item)),
+        ],
+      ),
+      if (preview != null)
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: TextButton(
+            key: const ValueKey('contributions-all'),
+            style: TextButton.styleFrom(
+              minimumSize: const Size(48, 48),
+              padding: EdgeInsets.symmetric(horizontal: isCupertino ? 16 : 0),
+            ),
+            onPressed: widget.onShowAll,
+            child: const Text(myContributionsAll),
+          ),
+        )
+      else if (moreFailed)
         _Notice(
           '沒有載入更多紀錄。請確認網路連線後重試。',
           icon: Icons.cloud_off_outlined,
@@ -379,14 +396,41 @@ class _MyContributionsSectionState extends State<MyContributionsSection> {
   }
 }
 
+/// iOS inset grouped rows; a plain divided list on Android.
+class ContributionGroup extends StatelessWidget {
+  const ContributionGroup({super.key, required this.children});
+  final List<Widget> children;
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final rows = [
+      for (final (i, child) in children.indexed) ...[
+        if (i > 0)
+          Divider(
+            height: 1,
+            indent: isCupertino ? 16 : 0,
+            color: colors.outlineVariant,
+          ),
+        child,
+      ],
+    ];
+    if (!isCupertino) return Column(children: rows);
+    return Material(
+      color: colors.surfaceContainerLowest,
+      borderRadius: BorderRadius.circular(12),
+      clipBehavior: Clip.antiAlias,
+      child: Column(children: rows),
+    );
+  }
+}
+
 /// Why a contribution's spot cannot open.
 String unavailableMessage(MyContribution item) => item.spotName == null
     ? '這個停車點已不在地圖資料中，無法開啟。'
     : '「${item.spotName}」已不在地圖上，無法開啟詳情。';
 
-/// One contribution: what it was about, then its status plate, which is
-/// the one strong element of the row. Beside the text when the pane is
-/// wide enough, under it on phones and at large text sizes.
+/// One contribution (P9): its kind and date with the status plate, the
+/// spot, then what was sent or what happened.
 class ContributionRow extends StatelessWidget {
   const ContributionRow({
     super.key,
@@ -404,35 +448,16 @@ class ContributionRow extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     final look = statusLook(item);
     final note = statusNote(item);
-    final detail = item.detail;
+    final summary = contributionSummary(item);
     final name = item.spotName ?? '已不在地圖資料中的停車點';
-    final plate = StatusPlate(look: look);
-    final body = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          name,
-          style: text.titleMedium,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
-        const SizedBox(height: 2),
-        Text(item.action, style: TextStyle(color: colors.onSurfaceVariant)),
-        if (detail != null) ...[
-          const SizedBox(height: 2),
-          Text(
-            detail,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: colors.onSurfaceVariant),
-          ),
-        ],
-      ],
-    );
-    final meta = Text(
-      [sentDate(item.createdAt, now), if (!item.canOpen) '已不在地圖上'].join('，'),
-      style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant),
-    );
+    final meta = [
+      contributionKindLabel(item.kind),
+      [
+        contributionDate(item.createdAt, now),
+        if (!item.canOpen) '已不在地圖上',
+      ].join('，'),
+    ].join('　');
+    final quiet = TextStyle(color: colors.onSurfaceVariant);
     return Semantics(
       button: true,
       // Everything the row shows, since the visible text is merged away.
@@ -441,7 +466,7 @@ class ContributionRow extends StatelessWidget {
       label: [
         name,
         item.action,
-        ?detail,
+        ?summary,
         look.label,
         ?note,
         sentDate(item.createdAt, now),
@@ -453,70 +478,50 @@ class ContributionRow extends StatelessWidget {
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 48),
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: LayoutBuilder(
-              builder: (context, box) {
-                // Side by side only when the text keeps a readable width.
-                final wide =
-                    box.maxWidth >= 520 &&
-                    MediaQuery.textScalerOf(context).scale(1) <= 1.3;
-                final trailing = Icon(
-                  item.canOpen ? Icons.chevron_right : Icons.info_outline,
-                  color: colors.onSurfaceVariant,
-                );
-                if (wide) {
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [body, const SizedBox(height: 4), meta],
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      SizedBox(
-                        width: 200,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            plate,
-                            if (note != null) ...[
-                              const SizedBox(height: 4),
-                              Text(note, style: text.bodySmall),
-                            ],
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      trailing,
-                    ],
-                  );
-                }
-                return Row(
+            padding: EdgeInsets.symmetric(
+              horizontal: isCupertino ? 16 : 0,
+              vertical: 12,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          plate,
-                          const SizedBox(height: 8),
-                          body,
-                          if (note != null) ...[
-                            const SizedBox(height: 4),
-                            Text(note, style: text.bodySmall),
-                          ],
-                          const SizedBox(height: 4),
-                          meta,
-                        ],
+                      child: Text(
+                        meta,
+                        style: text.bodySmall?.copyWith(
+                          color: colors.onSurfaceVariant,
+                          fontSize: 13,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 8),
-                    trailing,
+                    StatusPlate(look: look),
                   ],
-                );
-              },
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  name,
+                  style: text.titleMedium,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (summary != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    summary,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: quiet,
+                  ),
+                ],
+                if (note != null) ...[
+                  const SizedBox(height: 2),
+                  Text(note, style: quiet),
+                ],
+              ],
             ),
           ),
         ),
@@ -525,41 +530,27 @@ class ContributionRow extends StatelessWidget {
   }
 }
 
-/// A status as a small road-sign plate: filled with white words for a
-/// result, outlined while it waits.
+/// A status as a small tinted plate.
 class StatusPlate extends StatelessWidget {
   const StatusPlate({super.key, required this.look});
   final StatusLook look;
 
   @override
-  Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    // An outline on a dark surface needs a lighter stroke and text to stay
-    // readable; filled plates keep white text on the legend colour.
-    final waiting = dark ? const Color(0xffb7c0c6) : look.color;
-    final fg = look.done ? Colors.white : waiting;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: look.done ? look.color : null,
-        border: look.done ? null : Border.all(color: waiting, width: 1.5),
-        borderRadius: BorderRadius.circular(4),
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+    decoration: BoxDecoration(
+      color: look.background,
+      borderRadius: BorderRadius.circular(isCupertino ? 6 : 8),
+    ),
+    child: Text(
+      look.label,
+      style: TextStyle(
+        color: look.foreground,
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(look.icon, size: 18, color: fg),
-          const SizedBox(width: 6),
-          Flexible(
-            child: Text(
-              look.label,
-              style: TextStyle(color: fg, fontWeight: FontWeight.w700),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+    ),
+  );
 }
 
 /// A short message in place of the list, with what to do next.

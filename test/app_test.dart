@@ -418,7 +418,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('停車規則').last);
     await tester.pumpAndSettle();
-    expect(find.text('停之前，先看規則'), findsOneWidget);
+    expect(find.text('停之前，先看規則。各縣市開放的格位和收費不同。'), findsOneWidget);
     // The fee sits below the space-type groups.
     await tester.scrollUntilVisible(
       find.textContaining('40 元'),
@@ -477,17 +477,17 @@ void main() {
     expect(find.text('貢獻').hitTestable(), findsOneWidget);
     await tester.tap(find.text('貢獻').last);
     await tester.pumpAndSettle();
-    expect(find.text('修正現有資訊'), findsOneWidget);
+    expect(find.text('修正附近停車點'), findsOneWidget);
     // Editing and reporting share one list: no duplicate action buttons.
     expect(find.byTooltip('修改資訊'), findsNothing);
     expect(find.byTooltip('檢舉錯誤'), findsNothing);
-    await tester.tap(find.byTooltip('新增停車點'));
+    await tester.tap(find.byKey(const ValueKey('contribute-new-spot')));
     await tester.pumpAndSettle();
     expect(find.text('拖曳標記對準停車格，或點地圖選位置'), findsOneWidget);
     await tester.tap(find.byTooltip('關閉').last);
     await tester.pumpAndSettle();
     // A spot in the list goes straight to the edit and "gone" reports.
-    await tester.tap(find.text(store.spots.first.name));
+    await tester.tap(find.text('修改').first);
     await tester.pumpAndSettle();
     final suggestions = find.text('提出修改建議');
     expect(suggestions, findsOneWidget);
@@ -533,7 +533,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pumpAndSettle();
     final search = find.byKey(const ValueKey('parking-search'));
-    for (final (tab, content) in [('個人中心', '我停哪裡'), ('貢獻', '修正現有資訊')]) {
+    for (final (tab, content) in [('個人中心', '我停哪裡'), ('貢獻', '修正附近停車點')]) {
       await tester.tap(find.text(tab).last);
       await tester.pumpAndSettle();
       expect(search, findsNothing);

@@ -3,8 +3,9 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:motorcycle_parking/domain/eligibility.dart';
-import 'package:motorcycle_parking/features/rules/rules_page.dart';
+import 'package:motorcycle_parking/domain/rules_display.dart';
 import 'package:motorcycle_parking/models/parking.dart';
+import 'package:motorcycle_parking/models/zone_entries.dart';
 
 void main() {
   final rules =
@@ -14,76 +15,60 @@ void main() {
           .toList();
   CityRule rule(String city, VehicleType vehicle) =>
       rules.firstWhere((r) => r.city == city && r.vehicle == vehicle);
-  Map<(EligibilityStatus, RuleRestriction?), List<SpaceType>> groups(
-    String city,
-    VehicleType vehicle,
-  ) => {
-    for (final (look, types) in ruleGroups(rule(city, vehicle), vehicle))
-      look: types,
+  Map<BayKind, (String, String)> rows(String city, VehicleType vehicle) => {
+    for (final r in ruleRows(rule(city, vehicle), vehicle))
+      r.kind: (r.pill, r.detail),
   };
 
-  test('規則頁依地圖相同的判斷分組，由可停排到不可停', () {
-    final taipei = groups('臺北市', VehicleType.heavy);
-    // Heavy bikes park on car bays by law, shared with scooters or not
-    // (§3.2 step 1).
-    expect(taipei[(EligibilityStatus.allowed, null)], [
-      SpaceType.paidMotorcycle,
-      SpaceType.heavyOnly,
-      SpaceType.car,
-      SpaceType.flexShared,
+  test('規則頁固定 7 類格位，一類一列，順序照定案', () {
+    final list = ruleRows(rule('臺北市', VehicleType.heavy), VehicleType.heavy);
+    expect(list.map((r) => r.label), [
+      '一般機車格',
+      '普大共用格',
+      '重機專用格',
+      '汽機車共用格',
+      '汽車格',
+      '身障格',
+      '充電格',
     ]);
-    expect(taipei[(EligibilityStatus.notAllowed, null)], [
-      SpaceType.freeMotorcycle,
-    ]);
-    // Timed bays are shown as the toll bays they usually are, then the
-    // clock limits them.
-    expect(
-      taipei[(EligibilityStatus.conditional, RuleRestriction.timeLimited)],
-      [SpaceType.timedMotorcycle],
-    );
-    // Permit holders may park in disabled bays whatever the rule.
-    expect(taipei[(EligibilityStatus.conditional, null)], [
-      SpaceType.disabledMotorcycle,
-    ]);
-    expect(taipei[(EligibilityStatus.conditional, RuleRestriction.evOnly)], [
-      SpaceType.evMotorcycle,
-    ]);
-    // A lot's own data decides, never the city rule alone.
-    expect(taipei[(EligibilityStatus.unverified, null)], [SpaceType.offStreet]);
-    final order = ruleGroups(
-      rule('臺北市', VehicleType.heavy),
-      VehicleType.heavy,
-    ).map((g) => g.$1.$1.index).toList();
-    expect(order, [...order]..sort());
+  });
 
-    final taichung = groups('臺中市', VehicleType.heavy);
-    // A timed bay that is only conditionally open keeps that condition.
-    expect(taichung[(EligibilityStatus.conditional, RuleRestriction.signage)], [
-      SpaceType.paidMotorcycle,
-      SpaceType.freeMotorcycle,
-      SpaceType.timedMotorcycle,
-    ]);
-    // Kinds open in named districts are grouped as they are there.
-    final newTaipei = groups('新北市', VehicleType.heavy);
-    expect(
-      newTaipei[(EligibilityStatus.allowed, null)],
-      contains(SpaceType.freeMotorcycle),
-    );
-    final scooter = groups('臺北市', VehicleType.scooter);
-    expect(scooter[(EligibilityStatus.allowed, null)], [
-      SpaceType.paidMotorcycle,
-      SpaceType.freeMotorcycle,
-    ]);
-    // Car bays are for small cars and heavy bikes, not scooters.
-    expect(scooter[(EligibilityStatus.notAllowed, null)], [
-      SpaceType.heavyOnly,
-      SpaceType.car,
-    ]);
+  test('臺北市大型重機：一般機車格合併一列為有條件', () {
+    final taipei = rows('臺北市', VehicleType.heavy);
+    expect(taipei[BayKind.motorcycle], ('有條件', '收費格可停，免費巷弄格不能停'));
+    expect(taipei[BayKind.scooterHeavy], ('可停', '標示普通機車與大型重機共用'));
+    expect(taipei[BayKind.heavy], ('可停', '標示大型重機專用'));
+    expect(taipei[BayKind.car], ('可停', '依規定可停，照汽車費率'));
+    // Read from the same judgement as the map: heavy bikes park on car
+    // bays by law, and permit or EV bays are conditional.
+    expect(taipei[BayKind.carMotorcycle]!.$1, '可停');
+    expect(taipei[BayKind.disabled], ('有條件', '限身障特製車輛，持識別證'));
+    expect(taipei[BayKind.ev], ('有條件', '限電動機車充換電'));
+  });
+
+  test('臺北市普通機車：一般機車格可停，重機與汽車格不能停', () {
+    final taipei = rows('臺北市', VehicleType.scooter);
+    expect(taipei[BayKind.motorcycle], ('可停', '收費格、免費巷弄格都可停'));
+    expect(taipei[BayKind.heavy]!.$1, '不能停');
+    expect(taipei[BayKind.car], ('不能停', '小型車及大型重機停放線'));
+    expect(taipei[BayKind.scooterHeavy]!.$1, '可停');
     // A shared car bay opens to scooters only in the slots its notice
-    // names; with none listed it is unverified (§7 item 1).
-    expect(scooter[(EligibilityStatus.unverified, null)], [
-      SpaceType.offStreet,
-      SpaceType.flexShared,
-    ]);
+    // names; with none listed it is unverified.
+    expect(taipei[BayKind.carMotorcycle]!.$1, '待確認');
+  });
+
+  test('只在部分行政區開放的格位寫出行政區', () {
+    final newTaipei = rows('新北市', VehicleType.heavy);
+    expect(newTaipei[BayKind.motorcycle], ('有條件', '收費格可停，免費巷弄格僅板橋區、新店區可停'));
+    final taichung = rows('臺中市', VehicleType.heavy);
+    expect(taichung[BayKind.motorcycle], ('有條件', '收費格、免費巷弄格都有條件：限標示車格'));
+  });
+
+  test('核對日期與版本照規則資料', () {
+    expect(
+      ruleCheckedLine(rule('臺北市', VehicleType.heavy)),
+      '規則依臺北市公告整理。核對日期 2026-10-06，版本 1。',
+    );
+    expect(rulePillLabel(EligibilityStatus.notAllowed), '不能停');
   });
 }

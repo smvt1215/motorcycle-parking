@@ -1,3 +1,4 @@
+import '../../domain/vehicle_display.dart';
 import '../../models/parking.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../../ui/vehicle_marks.dart';
@@ -17,35 +18,36 @@ Future<void> showVehicleSheet(
       SheetTitle('選擇車種'),
       const SizedBox(height: 4),
       Text(
-        '地圖上的可停判斷會依車種更新。',
+        vehicleSheetIntro,
         style: Theme.of(ctx).textTheme.bodyMedium
             ?.copyWith(color: Theme.of(ctx).colorScheme.onSurfaceVariant),
       ),
       const SizedBox(height: 20),
-      for (final vehicle in VehicleType.values) ...[
-        VehicleChoice(
-          vehicle: vehicle,
-          selected: vehicle == value,
-          onTap: () {
-            onChanged(vehicle);
-            Navigator.pop(ctx);
-          },
+      // A radio group: one class is always chosen.
+      Semantics(
+        container: true,
+        label: '車種',
+        explicitChildNodes: true,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final vehicle in VehicleType.values) ...[
+              VehicleChoice(
+                vehicle: vehicle,
+                selected: vehicle == value,
+                onTap: () {
+                  onChanged(vehicle);
+                  Navigator.pop(ctx);
+                },
+              ),
+              const SizedBox(height: 12),
+            ],
+          ],
         ),
-        const SizedBox(height: 12),
-      ],
+      ),
     ],
   ),
 );
-
-String _plates(VehicleType vehicle) => switch (vehicle) {
-  VehicleType.scooter => '綠牌・白牌，250cc 以下',
-  VehicleType.heavy => '紅牌・黃牌，250cc 以上',
-};
-
-String _effect(VehicleType vehicle) => switch (vehicle) {
-  VehicleType.scooter => '可停一般機車格；重機專用格不可停',
-  VehicleType.heavy => '可停重機專用格與汽車格；機車格依各縣市開放規則',
-};
 
 class VehicleChoice extends StatelessWidget {
   const VehicleChoice({
@@ -62,9 +64,10 @@ class VehicleChoice extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     return Semantics(
-      button: true,
-      selected: selected,
-      label: '${vehicle.label}，${_plates(vehicle)}',
+      inMutuallyExclusiveGroup: true,
+      checked: selected,
+      label:
+          '${vehicle.label}，${vehiclePlates(vehicle)}，${vehicleEffect(vehicle)}',
       // The child's tap is excluded with its semantics; screen readers need it here.
       onTap: onTap,
       excludeSemantics: true,
@@ -98,10 +101,10 @@ class VehicleChoice extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 2),
-                      Text(_plates(vehicle), style: text.bodySmall),
+                      Text(vehiclePlates(vehicle), style: text.bodySmall),
                       const SizedBox(height: 6),
                       Text(
-                        _effect(vehicle),
+                        vehicleEffect(vehicle),
                         style: text.bodySmall?.copyWith(
                           color: colors.onSurfaceVariant,
                         ),

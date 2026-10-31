@@ -234,7 +234,6 @@ void main() {
   Future<ProfileFixture> host(
     WidgetTester tester,
     double width, {
-    Future<Uint8List?> Function()? pickPhoto,
     bool settings = false,
     double height = 1000,
   }) async {
@@ -269,10 +268,7 @@ void main() {
                 } else {
                   showAdaptiveSheet<void>(
                     context,
-                    (_) => ProfileEditor(
-                      store: fixture.store,
-                      pickPhoto: pickPhoto ?? () async => null,
-                    ),
+                    (_) => ProfileEditor(store: fixture.store),
                   );
                 }
               },
@@ -294,9 +290,7 @@ void main() {
         find.byKey(const ValueKey('profile-name')),
         '還沒儲存',
       );
-      await tester.ensureVisible(find.text('取消'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('取消'));
+      await tester.tap(find.byTooltip('關閉'));
       await tester.pumpAndSettle();
       expect(fixture.updates, isEmpty);
       expect(tester.takeException(), isNull);
@@ -314,24 +308,10 @@ void main() {
         '鍵盤上的名稱',
       );
       await tester.pumpAndSettle();
-      final save = find.text('儲存個人資料');
-      await tester.scrollUntilVisible(
-        save,
-        80,
-        scrollable: find
-            .descendant(
-              of: find.byType(ProfileEditor),
-              matching: find.byType(Scrollable),
-            )
-            .first,
-      );
-      await tester.pumpAndSettle();
+      final save = find.byKey(const ValueKey('profile-save'));
       final box = tester.getRect(save);
       expect(box.bottom, lessThanOrEqualTo(640 - 300));
-      expect(
-        tester.getSize(find.byType(AdaptiveButton)).height,
-        greaterThanOrEqualTo(48),
-      );
+      expect(tester.getSize(save).height, greaterThanOrEqualTo(48));
       await tester.tap(save);
       await tester.runAsync(
         () async =>
@@ -343,42 +323,35 @@ void main() {
     });
   }
 
-  testWidgets('相簿取消沒有變更；儲存失敗保留名稱與照片並可重試', (tester) async {
-    var picks = 0;
-    final fixture = await host(
-      tester,
-      390,
-      pickPhoto: () async => ++picks == 1 ? null : png,
+  testWidgets('從相簿選擇停用並說明，不能移除頭像；儲存失敗保留名稱並可重試', (tester) async {
+    final fixture = await host(tester, 390);
+    final pick = tester.widget<OutlinedButton>(
+      find.widgetWithText(OutlinedButton, '從相簿選擇'),
     );
-    await tester.tap(find.text('從相簿選擇'));
-    await tester.pumpAndSettle();
+    expect(pick.onPressed, isNull);
+    expect(find.text('照片上傳開放後才能用（社群核實 P2）。現在使用預設頭像。'), findsOneWidget);
     expect(find.text('移除頭像'), findsNothing);
-    expect(fixture.uploaded, isEmpty);
-    await tester.tap(find.text('從相簿選擇'));
-    await tester.pumpAndSettle();
-    expect(find.text('移除頭像'), findsOneWidget);
+    final save = find.byKey(const ValueKey('profile-save'));
+    expect(tester.widget<TextButton>(save).onPressed, isNull);
     await tester.enterText(find.byKey(const ValueKey('profile-name')), '新名稱');
+    await tester.pump();
     fixture.failUpdate = true;
-    await tester.ensureVisible(find.text('儲存個人資料'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('儲存個人資料'));
+    await tester.tap(save);
     await tester.runAsync(
       () async => await Future<void>.delayed(const Duration(milliseconds: 20)),
     );
     await tester.pumpAndSettle();
     expect(find.text('資料尚未儲存，內容還在，請確認連線後再試一次'), findsOneWidget);
     expect(find.text('新名稱'), findsOneWidget);
-    expect(find.text('移除頭像'), findsOneWidget);
     fixture.failUpdate = false;
-    await tester.ensureVisible(find.text('儲存個人資料'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('儲存個人資料'));
+    await tester.tap(save);
     await tester.runAsync(
       () async => await Future<void>.delayed(const Duration(milliseconds: 20)),
     );
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('profile-name')), findsNothing);
     expect(fixture.metadata['display_name'], '新名稱');
+    expect(fixture.uploaded, isEmpty);
     expect(tester.takeException(), isNull);
   });
 
@@ -387,9 +360,8 @@ void main() {
     await tester.tap(find.byTooltip('編輯個人資料'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const ValueKey('profile-name')), '新的騎士');
-    await tester.ensureVisible(find.text('儲存個人資料'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('儲存個人資料'));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('profile-save')));
     await tester.runAsync(
       () async => await Future<void>.delayed(const Duration(milliseconds: 20)),
     );
