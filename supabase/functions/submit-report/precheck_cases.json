@@ -1639,6 +1639,117 @@
         "pii_phone@proposed.parking_zones.0.guide",
         "pii_phone@proposed.parking_segments.0.range"
       ]
+    },
+    {
+      "name": "a lot turned street bay with every zone removed passes (#188)",
+      "body": {
+        "action": "flag",
+        "source_id": "10000000-0000-4000-8000-000000000002",
+        "reason": "格位類型：改成路邊",
+        "field": "space_type",
+        "proposed": {
+          "space_type": "paidMotorcycle",
+          "condition": {
+            "bay": "motorcycle",
+            "use": "usual",
+            "charge": "toll"
+          },
+          "facility_types": [
+            "roadside"
+          ],
+          "parking_zones": [
+            {
+              "id": "b1",
+              "removed": true
+            },
+            {
+              "id": "b2",
+              "removed": true
+            }
+          ]
+        }
+      },
+      "current": {
+        "parking_zones": [
+          {
+            "id": "b1",
+            "name": "B1"
+          },
+          {
+            "id": "b2",
+            "name": "B2"
+          }
+        ]
+      },
+      "expect": []
+    },
+    {
+      "name": "removing zones without the stored list known is judged on what remains (#188)",
+      "body": {
+        "action": "flag",
+        "source_id": "10000000-0000-4000-8000-000000000002",
+        "reason": "格位類型：改成路邊",
+        "field": "space_type",
+        "proposed": {
+          "space_type": "paidMotorcycle",
+          "condition": {
+            "bay": "motorcycle",
+            "use": "usual",
+            "charge": "toll"
+          },
+          "facility_types": [
+            "roadside"
+          ],
+          "parking_zones": [
+            {
+              "id": "b1",
+              "removed": true
+            }
+          ]
+        }
+      },
+      "expect": []
+    },
+    {
+      "name": "a street bay keeping one of its zones is still a contradiction (#188)",
+      "body": {
+        "action": "flag",
+        "source_id": "10000000-0000-4000-8000-000000000002",
+        "reason": "格位類型：改成路邊",
+        "field": "space_type",
+        "proposed": {
+          "space_type": "paidMotorcycle",
+          "condition": {
+            "bay": "motorcycle",
+            "use": "usual",
+            "charge": "toll"
+          },
+          "facility_types": [
+            "roadside"
+          ],
+          "parking_zones": [
+            {
+              "id": "b1",
+              "removed": true
+            }
+          ]
+        }
+      },
+      "current": {
+        "parking_zones": [
+          {
+            "id": "b1",
+            "name": "B1"
+          },
+          {
+            "id": "b2",
+            "name": "B2"
+          }
+        ]
+      },
+      "expect": [
+        "street_lot_details@proposed.parking_zones"
+      ]
     }
   ]
 }

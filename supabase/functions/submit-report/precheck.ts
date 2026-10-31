@@ -105,6 +105,43 @@ const feeVehicles = { ...vehicles, car: '汽車' } as const;
 type FeeVehicle = keyof typeof feeVehicles;
 const lotFacilities = ['multiStorey', 'underground', 'surface'];
 
+const entryKeys = ['parking_zones', 'parking_segments'];
+
+/**
+ * [current] (a zone or segment list) with a suggestion's [patch] applied by
+ * id, as `entries_patch()` in SQL: a null value removes a key,
+ * `removed: true` the entry, one without an id is added. Null when the
+ * patch names an id [current] lacks.
+ */
+function entriesPatch(current: unknown[], patch: unknown[]): unknown[] | null {
+  const out = current.filter(object).map((e) => ({ ...e }));
+  const withoutNulls = (e: Json) =>
+    Object.fromEntries(Object.entries(e).filter(([, v]) => v !== null));
+  for (const e of patch) {
+    if (!object(e)) return null;
+    if (!('id' in e)) {
+      if ('removed' in e) return null;
+      out.push(withoutNulls(e));
+      continue;
+    }
+    const i = out.findIndex((z) => z.id === e.id);
+    if (i < 0) return null;
+    if ('removed' in e) out.splice(i, 1);
+    else out[i] = withoutNulls({ ...out[i], ...e });
+  }
+  return out;
+}
+
+/**
+ * The list a suggestion's [patch] leaves (#188): applied to [current] when
+ * it is known and names only entries it has; else the patch's own entries,
+ * less those it removes. The same as `patchedEntries` in Dart.
+ */
+export function patchedEntries(current: unknown, patch: unknown[]): unknown[] {
+  return (Array.isArray(current) ? entriesPatch(current, patch) : null) ??
+    patch.filter((e) => !object(e) || e.removed !== true);
+}
+
 /** Contradictions between the fields of one spot or one suggestion. */
 function combinationIssues(s: Json): PrecheckIssue[] {
   const out: PrecheckIssue[] = [];
@@ -376,7 +413,7 @@ export function precheck(body: Json, current?: Json): PrecheckIssue[] {
     : undefined;
   // The fee a suggestion leaves, judged with the condition it leaves: its
   // own, or the spot's (§4.3, merged results).
-  const merged =
+  const judged =
     proposed && (object(proposed.fee) || object(proposed.condition))
       ? {
         ...proposed,
@@ -389,6 +426,17 @@ export function precheck(body: Json, current?: Json): PrecheckIssue[] {
           : {}),
       }
       : proposed;
+  // Zone and segment patches (#188) are judged as the lists they leave.
+  const merged = judged && entryKeys.some((k) => Array.isArray(judged[k]))
+    ? Object.fromEntries(
+      Object.entries(judged).map(([k, v]) => [
+        k,
+        entryKeys.includes(k) && Array.isArray(v)
+          ? patchedEntries(current?.[k], v)
+          : v,
+      ]),
+    )
+    : judged;
   // Whether a suggestion's condition or fee is the spot's stored one.
   const storedPair = !!proposed &&
     (!object(proposed.fee) || !('condition' in proposed));
