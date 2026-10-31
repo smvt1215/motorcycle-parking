@@ -88,10 +88,12 @@ enum Eligible {
     notStated => '官方未標示',
   };
 
-  /// [vehicle]'s keys (`scooter` or `heavy`) as a write sends them.
+  /// [vehicle]'s keys (`scooter` or `heavy`) as a write sends them: a
+  /// boolean, or a null flag with `x_not_stated`; the table clears
+  /// `x_not_stated` whenever a boolean is written.
   Map<String, Object?> payload(String vehicle) => {
     '${vehicle}_allowed': flag,
-    '${vehicle}_not_stated': this == notStated,
+    if (this == notStated) '${vehicle}_not_stated': true,
   };
 }
 
