@@ -544,8 +544,15 @@ class SpotsController extends ChangeNotifier {
     };
   }
 
-  /// The bay kind the draft reads as (C6 canvas AppPatterns, pattern 1):
-  /// its space type, or 普大共用 for a toll or free bay posted for both.
+  /// The draft's street condition, or the one its space type stands for.
+  ParkingCondition? get draftCondition {
+    final type = SpaceType.values.asNameMap()[draft['space_type']];
+    return ParkingCondition.fromJson(draft['condition']) ??
+        (type == null ? null : conditionOf(type));
+  }
+
+  /// The bay kind the draft reads as (#188, design canvas S4): by its
+  /// condition, or the one its space type stands for.
   SpaceKind? get spaceKind {
     final type = SpaceType.values.asNameMap()[draft['space_type']];
     return type == null
@@ -557,15 +564,16 @@ class SpotsController extends ChangeNotifier {
   /// check (space type = the condition's legacy type, §1.3) holds: back to
   /// the stored kind restores the stored type and condition; another kind
   /// takes that kind's condition, keeping the notice it rests on (basis).
-  /// A spot without a condition gets none unless the kind needs one
-  /// (普大共用, at [charge], else its present charge, else toll).
+  /// A 一般機車格 or 普大共用格 is toll or free: at [charge], else its present
+  /// charge, else toll; 普大共用 always carries its condition, a spot
+  /// without one otherwise gets none.
   void setKind(SpaceKind kind, {Charge? charge}) {
     final r = record;
     if (r == null) return;
     final storedType = SpaceType.values.asNameMap()[r.values['space_type']];
     final stored = r.values['condition'];
     final storedCondition = ParkingCondition.fromJson(stored);
-    // Back to the stored kind (and, for 普大共用, its charge): the stored
+    // Back to the stored kind (and, for a toll or free kind, its charge): the stored
     // type and condition as they were, schedule and limits included.
     if (!r.isNew &&
         storedType != null &&
@@ -589,21 +597,37 @@ class SpotsController extends ChangeNotifier {
     final schedule = now?.schedule ?? const <ScheduleSlot>[];
     final SpaceType type;
     final ParkingCondition? condition;
-    if (kind == SpaceKind.sharedMotorcycle) {
-      final c = charge ?? now?.charge ?? Charge.toll;
-      type = c == Charge.free
-          ? SpaceType.freeMotorcycle
-          : SpaceType.paidMotorcycle;
-      condition = ParkingCondition(
+    if (kind == SpaceKind.scooterHeavy || kind == SpaceKind.motorcycle) {
+      // A 一般機車格 or 普大共用格 keeps a time limit it has (a 限時 bay,
+      // §1.3) and its charge while it stays one of the two; one without
+      // either is toll until the admin says. The legacy type comes from the
+      // whole condition.
+      final shared = kind == SpaceKind.scooterHeavy;
+      final draftType = SpaceType.values.asNameMap()[draft['space_type']];
+      final prev = draftType == null ? null : now ?? conditionOf(draftType);
+      final same = draftType != null && SpaceKind.of(draftType, now).asksCharge;
+      final timed = same
+          ? prev?.limits.where((l) => l.kind == LimitKind.timeLimit).firstOrNull
+          : null;
+      final c = charge ?? (same ? prev?.charge : null);
+      final full = ParkingCondition(
         bay: Bay.motorcycle,
-        use: BayUse.share,
-        share: ShareKind.scooterHeavy,
-        charge: c,
+        use: shared ? BayUse.share : BayUse.usual,
+        share: shared ? ShareKind.scooterHeavy : null,
+        charge: c ?? (timed == null ? Charge.toll : null),
+        limits: [?timed],
         schedule: schedule,
         basis: basis,
       );
+      type = legacySpaceType(full, offStreet: false)!;
+      // 普大共用 always carries its condition; a 一般機車格 stored without
+      // one keeps none while its type says it all.
+      condition =
+          !shared && draft['condition'] == null && full == conditionOf(type)
+          ? null
+          : full;
     } else {
-      type = kind.type!;
+      type = kind.baseType;
       final base = conditionOf(type);
       condition = draft['condition'] == null || base == null
           ? null
@@ -631,6 +655,41 @@ class SpotsController extends ChangeNotifier {
     _notify();
   }
 
+  /// The time limit of a 一般機車格 or 普大共用格 (#188: 限時 is no longer a
+  /// kind of its own): on adds `time_limit` with [minutes] (null leaves them
+  /// unconfirmed), off takes it away; the space type follows the whole
+  /// condition (§1.3). A bay left with no limit and no charge is toll.
+  void setTimeLimit(bool on, {int? minutes}) {
+    final c = draftCondition;
+    final type = SpaceType.values.asNameMap()[draft['space_type']];
+    if (c == null || type == null || !(spaceKind?.asksCharge ?? false)) return;
+    final limits = [
+      for (final l in c.limits)
+        if (l.kind != LimitKind.timeLimit) l,
+      if (on) ParkingLimit(LimitKind.timeLimit, maxMinutes: minutes),
+    ]..sort((a, b) => a.kind.index.compareTo(b.kind.index));
+    final next = ParkingCondition(
+      bay: c.bay,
+      use: c.use,
+      share: c.share,
+      charge: c.charge ?? (on ? null : Charge.toll),
+      limits: limits,
+      schedule: c.schedule,
+      basis: c.basis,
+    );
+    draft = {
+      ...draft,
+      'space_type': legacySpaceType(next, offStreet: false)!.name,
+      'condition': next.toJson(),
+    };
+    _notify();
+  }
+
+  /// The draft's time limit, or null when it has none.
+  ParkingLimit? get timeLimit => draftCondition?.limits
+      .where((l) => l.kind == LimitKind.timeLimit)
+      .firstOrNull;
+
   /// The heavy bikes' access before 普大共用 set it, as `(value,)`; null
   /// while it did not.
   (Object?,)? _heavyBeforeShare;
@@ -643,7 +702,7 @@ class SpotsController extends ChangeNotifier {
     final shared =
         ParkingCondition.fromJson(draft['condition'])?.share ==
         ShareKind.scooterHeavy;
-    if (kind == SpaceKind.sharedMotorcycle) {
+    if (kind == SpaceKind.scooterHeavy) {
       if (shared) return const {};
       _heavyBeforeShare = (draft['heavy_allowed'],);
       return {'heavy_allowed': stored == null ? true : stored.$1};

@@ -199,13 +199,10 @@ void main() {
     expect(tester.widget<IconButton>(searchButton).onPressed, isNull);
     await tester.tap(find.text('全部格位'));
     await tester.pumpAndSettle();
-    // The kinds fold into their groups until one is opened.
-    expect(find.text('路邊收費機車格'), findsNothing);
-    await tester.tap(find.byKey(const ValueKey('space-group-motorcycle')));
-    await tester.pumpAndSettle();
-    expect(find.text('路邊收費機車格'), findsOneWidget);
-    expect(find.text('普大共用機車格'), findsOneWidget);
-    await tester.tap(find.text('免費機車格'));
+    // The seven bay kinds and the lot (#188, P1).
+    expect(find.text('一般機車格'), findsOneWidget);
+    expect(find.text('普大共用格'), findsOneWidget);
+    await tester.tap(find.text('一般機車格'));
     await tester.pumpAndSettle();
     final input = find.byKey(const ValueKey('parking-search'));
     await tester.enterText(input, '[範例]');
@@ -213,8 +210,8 @@ void main() {
     expect(find.text('[範例] 市府周邊免費機車格'), findsOneWidget);
     expect(find.text('[範例] 信義地下停車場'), findsNothing);
     expect(find.textContaining('已套用篩選'), findsOneWidget);
-    // The off-street lot exists but the free-bay filter hides it.
-    await tester.enterText(input, '[範例] 信義');
+    // The off-street lot exists but the bay filter hides it.
+    await tester.enterText(input, '[範例] 信義地下');
     await tester.pumpAndSettle();
     expect(find.textContaining('沒有符合的停車點'), findsOneWidget);
     await tester.tap(find.text('清除篩選查看結果'));

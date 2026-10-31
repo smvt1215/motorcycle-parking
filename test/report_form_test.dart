@@ -197,21 +197,27 @@ void main() {
     picked = true;
     await openPart(tester, '格位');
     final tile = find.byKey(ValueKey('report-space-${kind.name}'));
-    if (!built(tile)) {
-      final group = find.byKey(
-        ValueKey('report-space-group-${kind.group.name}'),
-      );
-      await scrollTo(tester, group);
-      await tester.tap(group);
-      await tester.pumpAndSettle();
-    }
     await scrollTo(tester, tile);
     await tester.tap(tile);
     await tester.pumpAndSettle();
   }
 
-  Future<void> pickType(WidgetTester tester, SpaceType type) =>
-      pickKind(tester, SpaceKind.values.firstWhere((k) => k.type == type));
+  /// Picks the kind [type] reads as and what makes it [type]: 收費 or 免費
+  /// for a 一般機車格, a time limit for a 限時 one (#188).
+  Future<void> pickType(WidgetTester tester, SpaceType type) async {
+    await pickKind(tester, SpaceKind.of(type, null));
+    final follow = switch (type) {
+      SpaceType.paidMotorcycle => 'condition-charge-toll',
+      SpaceType.freeMotorcycle => 'condition-charge-free',
+      SpaceType.timedMotorcycle => 'condition-limit-time_limit',
+      _ => null,
+    };
+    if (follow == null) return;
+    final target = find.byKey(ValueKey(follow));
+    await scrollTo(tester, target);
+    await tester.tap(target);
+    await tester.pumpAndSettle();
+  }
 
   Future<Map<String, dynamic>> send(
     WidgetTester tester,
@@ -263,12 +269,16 @@ void main() {
     );
     await pickType(tester, SpaceType.paidMotorcycle);
     expect(find.text('地面畫的是哪一種？'), findsOneWidget);
+    await scrollTo(
+      tester,
+      find.byKey(const ValueKey('report-space-motorcycle')),
+    );
     expect(
       tester.getSemantics(
-        find.byKey(const ValueKey('report-space-paidMotorcycle')),
+        find.byKey(const ValueKey('report-space-motorcycle')),
       ),
       matchesSemantics(
-        label: '路邊收費機車格',
+        label: '一般機車格',
         isButton: true,
         isSelected: true,
         hasSelectedState: true,
@@ -278,7 +288,7 @@ void main() {
     );
     await pickType(tester, SpaceType.offStreet);
     await openPart(tester, '可停車種');
-    expect(find.textContaining('已依「路外停車場」帶入'), findsOneWidget);
+    expect(find.textContaining('已依「停車場」帶入'), findsOneWidget);
     final spot = await send(tester, store);
     expect(spot['space_type'], 'offStreet');
     // A lot's markings settle neither vehicle.
@@ -769,7 +779,7 @@ void main() {
 
   testWidgets('普大共用的免費格提示附公告連結，仍可送出並帶上連結', (tester) async {
     final store = await openForm(tester);
-    await pickKind(tester, SpaceKind.sharedMotorcycle);
+    await pickKind(tester, SpaceKind.scooterHeavy);
     await tapIn(tester, 'condition-charge', '免費格');
     expect(find.byKey(const ValueKey('condition-hold')), findsOneWidget);
     expect(find.textContaining('普大共用的免費格較少見'), findsOneWidget);
@@ -917,32 +927,32 @@ void main() {
     final minutes = find.byKey(const ValueKey('condition-max-minutes'));
     await tester.enterText(minutes, '20');
     await tester.pumpAndSettle();
-    await tapFee(tester, 'condition-limit-ev_only');
     expect(
       find.descendant(
         of: find.byKey(const ValueKey('report-preview')),
-        matching: find.textContaining('有條件・限時 20 分鐘、限電動機車'),
+        matching: find.textContaining('有條件・限時 20 分鐘'),
       ),
       findsOneWidget,
     );
+    // 電動 only is its own kind now (充電格, #188): not offered here.
+    expect(find.byKey(const ValueKey('condition-limit-ev_only')), findsNothing);
     final spot = await send(tester, store);
     // The legacy type the condition converts to (§1.3), as validate.ts
     // checks.
-    expect(spot['space_type'], 'evMotorcycle');
+    expect(spot['space_type'], 'timedMotorcycle');
     expect(spot['condition'], {
       'bay': 'motorcycle',
       'use': 'usual',
       'charge': 'toll',
       'limits': [
         {'kind': 'time_limit', 'max_minutes': 20},
-        {'kind': 'ev_only'},
       ],
     });
   });
 
   testWidgets('普大共用機車格要選收費或免費才能送出', (tester) async {
     final store = await openForm(tester);
-    await pickKind(tester, SpaceKind.sharedMotorcycle);
+    await pickKind(tester, SpaceKind.scooterHeavy);
     expect(
       find.descendant(
         of: find.byKey(const ValueKey('condition-charge')),
@@ -971,7 +981,7 @@ void main() {
 
   testWidgets('普大共用預設大型重機可停，騎士可改（決定 60）', (tester) async {
     final store = await openForm(tester);
-    await pickKind(tester, SpaceKind.sharedMotorcycle);
+    await pickKind(tester, SpaceKind.scooterHeavy);
     await reveal(tester, nameField);
     await tester.enterText(nameField, '市府路共用格');
     await tapIn(tester, 'condition-charge', '收費格');
@@ -1059,12 +1069,11 @@ void main() {
       (tester) async {
         await openForm(tester, size: size, rules: cityRules);
         await pickType(tester, SpaceType.timedMotorcycle);
-        await tapFee(tester, 'condition-limit-ev_only');
         for (final key in [
-          'report-space-timedMotorcycle',
-          'report-space-group-motorcycle',
-          'condition-limit-ev_only',
-          'condition-shared',
+          'report-space-motorcycle',
+          'report-space-offStreet',
+          'condition-limit-time_limit',
+          'condition-charge-toll',
         ]) {
           final box = tester.getSize(find.byKey(ValueKey(key)));
           expect(box.height, greaterThanOrEqualTo(48), reason: key);
@@ -1085,21 +1094,18 @@ void main() {
     );
   }
 
-  testWidgets('收起格位分組後送出，追問的檢查仍會擋下並重新展開分組', (tester) async {
+  testWidgets('收起格位段落後送出，追問的檢查仍會擋下並重新展開', (tester) async {
     final store = await openForm(tester);
-    await pickKind(tester, SpaceKind.sharedMotorcycle);
+    await pickKind(tester, SpaceKind.scooterHeavy);
     await reveal(tester, nameField);
     await tester.enterText(nameField, '市府路共用格');
-    // The rider folds the group without picking 收費 or 免費.
+    // The rider folds the section without picking 收費 or 免費.
     await openPart(tester, '格位');
-    final group = find.byKey(const ValueKey('report-space-group-motorcycle'));
-    await scrollTo(tester, group);
-    await tester.tap(group);
+    await tester.tap(find.byKey(const ValueKey('fold-格位')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('condition-charge')), findsNothing);
     await trySend(tester);
     expect(store.submissions, isEmpty);
-    // The group holding the pick opened again with the error under it.
+    // The section holding the pick opened again with the error under it.
     expect(find.text('請選收費格或免費格'), findsOneWidget);
     expect(find.byKey(const ValueKey('condition-charge')), findsOneWidget);
     // A time limit out of range is checked the same way.
@@ -1108,12 +1114,6 @@ void main() {
       find.byKey(const ValueKey('condition-max-minutes')),
       '0',
     );
-    await tester.pumpAndSettle();
-    final timed = find.byKey(
-      const ValueKey('report-space-group-timedOrShared'),
-    );
-    await scrollTo(tester, timed);
-    await tester.tap(timed);
     await tester.pumpAndSettle();
     await trySend(tester);
     expect(store.submissions, isEmpty);
