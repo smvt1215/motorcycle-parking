@@ -372,27 +372,43 @@ create policy admin_read_purged on public.purged_official_spots for select to au
   using((select public.is_admin()));
 grant select on public.purged_official_spots to authenticated;
 
+-- Whether a pending report on the spot is locked (an admin resolving it now);
+-- the others are locked here, for the purge to close.
+create function public.spot_reports_locked(p_source text) returns boolean
+language sql volatile set search_path='' as $$
+  select (select count(*) from public.moderation_queue where source_id=p_source and status='pending')
+    <> (select count(*) from (select m.id from public.moderation_queue m
+          where m.source_id=p_source and m.status='pending' for update skip locked) x);
+$$;
+revoke execute on function public.spot_reports_locked(text) from public,anon,authenticated;
+
 -- Deletes the spots deleted more than spot_delete_grace() ago, each audited
 -- with its last row as the admin who deleted it; an official spot's ids are
 -- kept so an import skips it. Run daily by pg_cron.
 create function public.purge_deleted_spots() returns integer
 language plpgsql security definer set search_path=public,pg_temp as $$
-declare r record; n integer:=0;
+declare r record; n integer:=0; v_src text;
 begin
   for r in select c.id,to_jsonb(c)-'user_id'-'location' as row,c.deleted_by from community_spots c
       where c.deleted_at<now()-public.spot_delete_grace() for update skip locked loop
+    -- Reports a concurrent review left open (the delete skipped their lock)
+    -- close now; one an admin is resolving at this moment holds its row,
+    -- so the spot waits for the next run rather than for that lock.
+    v_src:=r.id::text;
+    continue when public.spot_reports_locked(v_src);
     if r.deleted_by is not null then
       insert into admin_audit_log(actor,action,target_table,target_id,before,after,note)
       values(r.deleted_by,'purge_spot','community_spots',r.id::text,r.row,null,'刪除滿 14 天，永久刪除');
     end if;
-    -- Reports a concurrent review left open (the delete skipped their lock).
     update moderation_queue set status='rejected',resolution_kind='other',resolution_note='點位已刪除',
-      resolved_at=now(),resolved_by=r.deleted_by where source_id=r.id::text and status='pending';
+      resolved_at=now(),resolved_by=r.deleted_by where source_id=v_src and status='pending';
     delete from community_spots where id=r.id;
     n:=n+1;
   end loop;
   for r in select o.id,to_jsonb(o) as row,o.deleted_by,o.source_id,o.source_url,o.name,o.deleted_at from official_heavy_spots o
       where o.deleted_at<now()-public.spot_delete_grace() for update skip locked loop
+    v_src:='official:'||r.id;
+    continue when public.spot_reports_locked(v_src);
     insert into purged_official_spots(official_id,source_id,source_url,name,deleted_at)
       values(r.id,coalesce(r.source_id,''),coalesce(r.source_url,''),coalesce(r.name,''),r.deleted_at)
       on conflict (official_id) do update set source_id=excluded.source_id,source_url=excluded.source_url,name=excluded.name,
@@ -402,7 +418,7 @@ begin
       values(r.deleted_by,'purge_spot','official_heavy_spots',r.id::text,r.row,null,'刪除滿 14 天，永久刪除');
     end if;
     update moderation_queue set status='rejected',resolution_kind='other',resolution_note='點位已刪除',
-      resolved_at=now(),resolved_by=r.deleted_by where source_id='official:'||r.id and status='pending';
+      resolved_at=now(),resolved_by=r.deleted_by where source_id=v_src and status='pending';
     delete from official_heavy_spots where id=r.id;
     n:=n+1;
   end loop;
