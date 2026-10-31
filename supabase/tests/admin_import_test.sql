@@ -133,7 +133,7 @@ select is((select source||'|'||status||'|'||contributor_role||'|'||user_id from 
   'import|pending|import|10000000-0000-4000-8000-000000000001','new community spots join the earlier imports');
 select ok((select heavy_verified_at is null and scooter_verified_at is null from community_spots where id='20000000-0000-4000-8000-000000000004'),
   'an import is not an administrator verifying vehicle access');
-select is((select parking_zones from community_spots where id='20000000-0000-4000-8000-000000000004'),'[{"name":"機車區"}]'::jsonb,'detail columns are imported');
+select is((select zones_without_plans(parking_zones) from community_spots where id='20000000-0000-4000-8000-000000000004'),'[{"name":"機車區"}]'::jsonb,'detail columns are imported');
 select is((select name from community_spots where id='20000000-0000-4000-8000-000000000003'),'匯入測試社群點','existing community spots stay as they are');
 select is((select count(*)::integer from admin_audit_log where action='import_spot'),3,'every write is audited');
 

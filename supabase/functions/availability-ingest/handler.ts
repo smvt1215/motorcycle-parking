@@ -1,7 +1,9 @@
 // availability-ingest: fetches the Taipei parking office's live counts and
 // stores them through the service-role functions of migration
-// 202610270140_availability_p2.sql. pg_cron calls it every five minutes
-// with the shared secret; nobody else can.
+// 202610270140_availability_p2.sql and 202610310500_availability_next_update.sql.
+// pg_cron calls it with the shared secret when the next batch is due
+// (UPDATETIME + interval + the learned publish delay), and again a minute
+// later while the source still has the same one; nobody else can.
 import { response } from '../_shared/http.ts';
 import {
   type ParkCapacity,
@@ -50,6 +52,7 @@ export type Deps = {
     updatedAt: Date,
     parks: ParkCounts[],
     etag: string | null,
+    publishedAt: Date | null,
   ): Promise<{ outcome: Outcome; rows: number }>;
   record(key: string, outcome: Outcome, message: string): Promise<void>;
 };
@@ -65,6 +68,16 @@ export function sameSecret(a: string, b: string): boolean {
 }
 
 class FetchError extends Error {}
+
+/**
+ * When the file went public, from its Last-Modified header; null when
+ * missing or unreadable. The database learns the publish delay from it.
+ */
+export function publishedAt(res: Response): Date | null {
+  const value = res.headers.get('last-modified');
+  const time = value ? Date.parse(value) : NaN;
+  return Number.isFinite(time) ? new Date(time) : null;
+}
 
 /**
  * One GET with a timeout, retried once after a short pause when the
@@ -170,6 +183,7 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
       feed.updatedAt,
       feed.parks,
       res.headers.get('etag'),
+      publishedAt(res),
     );
     return response({
       ...result,

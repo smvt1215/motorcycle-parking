@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../models/fee.dart';
+import '../../models/zone_entries.dart';
+import '../spots/lot_models.dart' show jsonList;
 import '../admin_gateway.dart';
 import 'review_models.dart';
 
@@ -292,7 +294,18 @@ class ReviewController extends ChangeNotifier {
         ? draft
         : applicablePatch(initialProposal(report, spot), spot);
     if (patch.isEmpty) return (patch, '沒有可套用的變更。');
-    return (wirePatch(patch), validatePatch(patch, spot));
+    final kept = decision == ReviewDecision.acceptEdited
+        ? _entryPatches[report.id]
+        : null;
+    return (
+      {
+        ...wirePatch(patch, spot: spot),
+        // The patches sent before a conflict, not a new diff (#188).
+        for (final MapEntry(:key, :value) in (kept ?? const {}).entries)
+          if (patch.containsKey(key)) key: value,
+      },
+      validatePatch(patch, spot),
+    );
   }
 
   /// Takes [report] out of the queue now and writes the decision after the
@@ -367,6 +380,32 @@ class ReviewController extends ChangeNotifier {
     return held.report.id;
   }
 
+  /// The zone and segment patches (#188) an edited decision sent before a
+  /// conflict, by report: a retry sends them again as they were, merged onto
+  /// the newer lists for the page, never diffed again from a list that
+  /// others have changed since.
+  final Map<String, Map<String, Object?>> _entryPatches = {};
+
+  /// [report]'s edited lists, the kept patches applied to its spot's
+  /// current ones (or set aside when they name an entry no longer there).
+  void _rebaseEntries(ReviewReport report) {
+    final kept = _entryPatches[report.id];
+    final spot = spots[report.sourceId];
+    if (kept == null || spot == null) return;
+    Map<String, dynamic> rebase(Map<String, dynamic> d) => {
+      ...d,
+      for (final MapEntry(:key, :value) in kept.entries)
+        if (d.containsKey(key))
+          key:
+              entriesPatch(jsonList(spot.values[key]), value) ??
+              StaleEntries(key),
+    };
+    if (savedDrafts[report.id] case final saved?) {
+      savedDrafts[report.id] = rebase(saved);
+    }
+    if (editingId == report.id) draft = rebase(draft);
+  }
+
   /// Reloads [report]'s spot after a conflict; forcing is allowed only once
   /// this has succeeded.
   Future<bool> refreshSpot(ReviewReport report) async {
@@ -379,6 +418,7 @@ class ReviewController extends ChangeNotifier {
       }
       spots = {...spots, ...fresh};
       unrefreshed.remove(report.id);
+      _rebaseEntries(report);
       return true;
     } catch (_) {
       return false;
@@ -420,6 +460,7 @@ class ReviewController extends ChangeNotifier {
       reports = reports.where((r) => r.id != held.report.id).toList();
       _resolved.add(held.report.id);
       savedDrafts.remove(held.report.id);
+      _entryPatches.remove(held.report.id);
       onResolved?.call();
       if (held.patch.isNotEmpty) {
         onSpotChanged?.call(held.report.sourceId);
@@ -431,6 +472,10 @@ class ReviewController extends ChangeNotifier {
       // An edited decision that did not land keeps its values, so a retry
       // (or a forced one after a conflict) sends what the admin wrote.
       if (held.decision == ReviewDecision.acceptEdited) {
+        _entryPatches[held.report.id] = {
+          for (final key in entryKeys)
+            if (held.patch[key] is List) key: held.patch[key],
+        };
         savedDrafts[held.report.id] = held.draft;
         if (editingId == null) {
           editingId = held.report.id;

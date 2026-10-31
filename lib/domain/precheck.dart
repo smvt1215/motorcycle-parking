@@ -7,6 +7,7 @@
 library;
 
 import '../models/fee.dart' show mergeFeeJson;
+import '../models/zone_entries.dart' show entriesPatch;
 
 /// [hold] lets the request through, flagged for stricter review (design
 /// §4.3); only [fix] and [reject] refuse it.
@@ -583,21 +584,30 @@ List<({String field, String value, bool name})> _texts(_Json body) {
     }
   }
 
+  // The free text of zones and segments (#188): names, guides and ranges.
+  void entryTexts(String field, Object? list) {
+    if (list is! List) return;
+    for (final (i, e) in list.indexed) {
+      if (e is! Map) continue;
+      add('$field.$i.name', e['name'], true);
+      add('$field.$i.guide', e['guide']);
+      add('$field.$i.range', e['range']);
+    }
+  }
+
   if (body['spot'] case final Map<Object?, Object?> s) {
     add('name', s['name'], true);
     for (final key in ['fee_note', 'note', 'entrance_note', 'parking_guide']) {
       add(key, s[key]);
     }
-    if (s['parking_zones'] case final List<Object?> zones) {
-      for (final (i, z) in zones.indexed) {
-        if (z is! Map) continue;
-        add('parking_zones.$i.name', z['name'], true);
-        add('parking_zones.$i.guide', z['guide']);
-      }
-    }
+    entryTexts('parking_zones', s['parking_zones']);
+    entryTexts('parking_segments', s['parking_segments']);
   }
   if (body['proposed'] case final Map<Object?, Object?> p) {
     add('proposed.name', p['name'], true);
+    // Zone and segment patches (#188): the same free text, by position.
+    entryTexts('proposed.parking_zones', p['parking_zones']);
+    entryTexts('proposed.parking_segments', p['parking_segments']);
     for (final key in [
       'fee_note',
       'note',
@@ -616,6 +626,16 @@ List<({String field, String value, bool name})> _texts(_Json body) {
 }
 
 const _goneFields = ['gone', '點位已不存在'];
+
+/// The zone or segment list a suggestion's [patch] leaves (#188): applied
+/// by id to [current] when it is known and names only entries it has; else
+/// the patch's own entries, less those it removes.
+List<Object?> patchedEntries(Object? current, List<Object?> patch) =>
+    (current is List ? entriesPatch(current, patch) : null) ??
+    [
+      for (final e in patch)
+        if (e is! Map || e['removed'] != true) e,
+    ];
 
 /// Every stage 0 rule [body], a submit-report request, breaks. A fee
 /// suggestion changes only the vehicles it names (design §5.4), so its rules
@@ -648,6 +668,10 @@ List<PrecheckIssue> precheck(
           !proposed.containsKey('condition') &&
           current?['condition'] is Map)
         'condition': current!['condition'],
+      // Zone and segment patches (#188) are judged as the lists they leave.
+      for (final key in const ['parking_zones', 'parking_segments'])
+        if (proposed[key] is List)
+          key: patchedEntries(current?[key], proposed[key]! as List<Object?>),
     };
     // Whether the suggestion's condition or fee is the spot's stored one.
     final storedPair =

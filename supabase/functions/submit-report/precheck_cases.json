@@ -1587,6 +1587,169 @@
         "charge_free_rate@proposed.fee.scooter"
       ],
       "blocking": true
+    },
+    {
+      "name": "phone numbers in a new street spot's segments (#188)",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "機車格",
+          "space_type": "paidMotorcycle",
+          "condition": {
+            "bay": "motorcycle",
+            "use": "usual",
+            "charge": "toll"
+          },
+          "parking_segments": [
+            {
+              "name": "北側",
+              "guide": "車主 0912345678",
+              "range": "建國北路口至松江路口"
+            }
+          ]
+        }
+      },
+      "expect": [
+        "pii_phone@parking_segments.0.guide"
+      ]
+    },
+    {
+      "name": "phone numbers in zone and segment suggestions (#188)",
+      "body": {
+        "action": "flag",
+        "source_id": "10000000-0000-4000-8000-000000000002",
+        "reason": "分區：修改",
+        "field": "zones",
+        "proposed": {
+          "parking_zones": [
+            {
+              "id": "b1",
+              "guide": "打 0912-345-678"
+            }
+          ],
+          "parking_segments": [
+            {
+              "name": "南側",
+              "range": "管理室 (02)2345-6789"
+            }
+          ]
+        }
+      },
+      "expect": [
+        "pii_phone@proposed.parking_zones.0.guide",
+        "pii_phone@proposed.parking_segments.0.range"
+      ]
+    },
+    {
+      "name": "a lot turned street bay with every zone removed passes (#188)",
+      "body": {
+        "action": "flag",
+        "source_id": "10000000-0000-4000-8000-000000000002",
+        "reason": "格位類型：改成路邊",
+        "field": "space_type",
+        "proposed": {
+          "space_type": "paidMotorcycle",
+          "condition": {
+            "bay": "motorcycle",
+            "use": "usual",
+            "charge": "toll"
+          },
+          "facility_types": [
+            "roadside"
+          ],
+          "parking_zones": [
+            {
+              "id": "b1",
+              "removed": true
+            },
+            {
+              "id": "b2",
+              "removed": true
+            }
+          ]
+        }
+      },
+      "current": {
+        "parking_zones": [
+          {
+            "id": "b1",
+            "name": "B1"
+          },
+          {
+            "id": "b2",
+            "name": "B2"
+          }
+        ]
+      },
+      "expect": []
+    },
+    {
+      "name": "removing zones without the stored list known is judged on what remains (#188)",
+      "body": {
+        "action": "flag",
+        "source_id": "10000000-0000-4000-8000-000000000002",
+        "reason": "格位類型：改成路邊",
+        "field": "space_type",
+        "proposed": {
+          "space_type": "paidMotorcycle",
+          "condition": {
+            "bay": "motorcycle",
+            "use": "usual",
+            "charge": "toll"
+          },
+          "facility_types": [
+            "roadside"
+          ],
+          "parking_zones": [
+            {
+              "id": "b1",
+              "removed": true
+            }
+          ]
+        }
+      },
+      "expect": []
+    },
+    {
+      "name": "a street bay keeping one of its zones is still a contradiction (#188)",
+      "body": {
+        "action": "flag",
+        "source_id": "10000000-0000-4000-8000-000000000002",
+        "reason": "格位類型：改成路邊",
+        "field": "space_type",
+        "proposed": {
+          "space_type": "paidMotorcycle",
+          "condition": {
+            "bay": "motorcycle",
+            "use": "usual",
+            "charge": "toll"
+          },
+          "facility_types": [
+            "roadside"
+          ],
+          "parking_zones": [
+            {
+              "id": "b1",
+              "removed": true
+            }
+          ]
+        }
+      },
+      "current": {
+        "parking_zones": [
+          {
+            "id": "b1",
+            "name": "B1"
+          },
+          {
+            "id": "b2",
+            "name": "B2"
+          }
+        ]
+      },
+      "expect": [
+        "street_lot_details@proposed.parking_zones"
+      ]
     }
   ]
 }

@@ -32,12 +32,13 @@ Deno.serve((req) => {
       });
       if (error) throw error;
     },
-    async ingest(key, updatedAt, parks, etag) {
+    async ingest(key, updatedAt, parks, etag, publishedAt) {
       const { data, error } = await db.rpc('availability_ingest', {
         p_source: key,
         p_source_updated_at: updatedAt.toISOString(),
         p_parks: parks,
         p_etag: etag,
+        p_published_at: publishedAt?.toISOString() ?? null,
       });
       if (error) throw error;
       return data;

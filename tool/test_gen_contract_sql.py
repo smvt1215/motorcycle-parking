@@ -28,7 +28,8 @@ class GenContractSqlTest(unittest.TestCase):
     def test_every_case_becomes_an_assertion(self):
         cases = json.loads(gen.CASES.read_text())
         test = gen.generate()[gen.TEST_OUT]
-        total = sum(len(cases[k]) for k in ("conditions", "legacy", "fees", "fee_notes", "fee_plans"))
+        total = sum(len(cases[k]) for k in ("conditions", "legacy", "fees", "fee_notes", "fee_plans",
+                                                 "zone_lists", "segment_lists", "bay_kinds"))
         total += 1  # the longest sentence
         largest = 1  # the largest fee (select ok)
         # Street legacy-safety where it applies; per zone: access, safety,
@@ -58,6 +59,9 @@ class GenContractSqlTest(unittest.TestCase):
         self.assertIn("fee_note_of", blocks)
         self.assertIn("fee_note_max_length", blocks)
         self.assertIn("valid_fee_plans", blocks)
+        self.assertIn("valid_zones", blocks)
+        self.assertIn("valid_segments", blocks)
+        self.assertIn("condition_bay_kind", blocks)
         migrations = sorted((gen.ROOT / "supabase/migrations").glob("*.sql"))
         for name, statement in zip(blocks, statements):
             with self.subTest(function=name):

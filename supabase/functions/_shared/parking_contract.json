@@ -167,7 +167,92 @@
       "heavy",
       "mixed"
     ],
-    "comment": "parking_zones[] 的區域（§1.1）：機車區、汽車區、重機專區、混合；未填即省略鍵。只用在路外分區。分區的 condition 以 condition 段的規則加 zone_keys 檢查。分區有 condition 時，allow 必填（scooter、heavy 兩鍵），且 access 必須等於轉換層由 condition 推導的值（to_access）；推導不出或不一致，DB 拒絕寫入（決定 32，zone_condition_consistent）。沒有 condition 的分區不檢查，由 access 推導。舊版只讀 access，所以分區有 condition 時，只有 condition 為 legacy-safe 且 access 等於 to_access，該分區才算 legacy-safe。"
+    "id_pattern": "^[a-z0-9_-]{1,32}$",
+    "comment": "parking_zones[] 的區域（§1.1）：機車區、汽車區、重機專區、混合；未填即省略鍵。只用在路外分區。分區的 condition 以 condition 段的規則加 zone_keys 檢查。分區有 condition 時，allow 必填（scooter、heavy 兩鍵），且 access 必須等於轉換層由 condition 推導的值（to_access）；推導不出或不一致，DB 拒絕寫入（決定 32，zone_condition_consistent）。沒有 condition 的分區不檢查，由 access 推導。舊版只讀 access，所以分區有 condition 時，只有 condition 為 legacy-safe 且 access 等於 to_access，該分區才算 legacy-safe。 穩定 id（#188）：分區與路段的 id 在點位內唯一、符合 id_pattern；新增時由 DB 觸發器產生（寫入端可省略），修改時保留（寫入端照原樣送回；沒送 id 的舊寫入端由觸發器以名稱比對沿用舊 id）。表上每個分區與路段都必須有 id；驗證函式本身允許省略，好讓新增前先檢查。evidence_url：選填的佐證連結，與 condition.basis.source_url 同規則（https、UTF-16 長度上限）；照片上傳屬社群核實 P2。"
+  },
+  "segment": {
+    "keys": [
+      "id",
+      "name",
+      "side",
+      "range",
+      "condition",
+      "total",
+      "guide",
+      "evidence_url"
+    ],
+    "max_entries": 30,
+    "sides": [
+      "east",
+      "west",
+      "south",
+      "north",
+      "both"
+    ],
+    "name_max_length": 40,
+    "range_max_length": 100,
+    "guide_max_length": 500,
+    "total": {
+      "min": 1,
+      "max": 9999
+    },
+    "comment": "路邊分段 parking_segments[]（#188，設計稿 S3b、S4）：路邊點位依路段分開記，每段一個物件。id 與分區同規則（zone.id_pattern）；name 必填（去頭尾空白後非空，UTF-16 長度上限 name_max_length）；side 哪一側；range 選填的範圍描述（例：建國北路口至松江路口）；total 格數；guide 怎麼找到這段；evidence_url 與分區同規則。condition 以分區規則（zone=true：bay 可未確認、不必寫 charge）檢查，但不可有 allow：可停車種依縣市規則判斷，路段不另開放或排除。路段沒有 legacy space_type，舊版不讀。"
+  },
+  "bay_kinds": {
+    "order": [
+      "motorcycle",
+      "scooter_heavy",
+      "heavy",
+      "car_motorcycle",
+      "car",
+      "disabled",
+      "ev"
+    ],
+    "rules": [
+      {
+        "when": {
+          "limit": "special_vehicle"
+        },
+        "bay_kind": "disabled"
+      },
+      {
+        "when": {
+          "limit": "ev_only"
+        },
+        "bay_kind": "ev"
+      },
+      {
+        "when": {
+          "share": "car_motorcycle"
+        },
+        "bay_kind": "car_motorcycle"
+      },
+      {
+        "when": {
+          "share": "scooter_heavy"
+        },
+        "bay_kind": "scooter_heavy"
+      },
+      {
+        "when": {
+          "bay": "heavy"
+        },
+        "bay_kind": "heavy"
+      },
+      {
+        "when": {
+          "bay": "car"
+        },
+        "bay_kind": "car"
+      },
+      {
+        "when": {
+          "bay": "motorcycle"
+        },
+        "bay_kind": "motorcycle"
+      }
+    ],
+    "comment": "格位 7 類（#188，設計稿 Ver.143 S4、P1）：一般機車格 motorcycle、普大共用格 scooter_heavy（全時段共用，決定 64）、重機專用格 heavy、汽機車共用格 car_motorcycle、汽車格 car、身障格 disabled（汽車格或機車格都算）、充電格 ev。由 condition 依 rules 順序推導（第一條符合者）；沒有 bay 也沒有符合的限制＝未確認（null）。order 是清單與篩選的順序。收費、限時等是另外的面向，不改變格位類別；舊 space_type 由 conversion.from_space_type 讀成 condition 再推導（timedMotorcycle、paid／freeMotorcycle → motorcycle，evMotorcycle → ev，disabledMotorcycle → disabled，flexShared → car_motorcycle）。"
   },
   "conversion": {
     "from_space_type": {

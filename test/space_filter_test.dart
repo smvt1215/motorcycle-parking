@@ -149,21 +149,36 @@ void main() {
     expect(freeFor(lot, VehicleType.scooter), isFalse);
   });
 
-  test('other kinds filter by their space type', () {
+  test('each kind keeps the bays painted as it, whatever they charge', () {
     final paid = _spot(SpaceType.paidMotorcycle);
-    expect(matchesSpaceFilter(paid, SpaceKind.paidMotorcycle, scooter), isTrue);
-    expect(
-      matchesSpaceFilter(paid, SpaceKind.freeMotorcycle, scooter),
-      isFalse,
-    );
-    expect(matchesSpaceFilter(paid, SpaceKind.heavyOnly, scooter), isFalse);
-    expect(
-      matchesSpaceFilter(paid, SpaceKind.sharedMotorcycle, scooter),
-      isFalse,
-    );
+    final free = _spot(SpaceType.freeMotorcycle);
+    final timed = _spot(SpaceType.timedMotorcycle);
+    for (final s in [paid, free, timed]) {
+      expect(matchesSpaceFilter(s, SpaceKind.motorcycle, scooter), isTrue);
+      expect(matchesSpaceFilter(s, SpaceKind.heavy, scooter), isFalse);
+      expect(matchesSpaceFilter(s, SpaceKind.scooterHeavy, scooter), isFalse);
+    }
+    for (final (type, kind) in [
+      (SpaceType.heavyOnly, SpaceKind.heavy),
+      (SpaceType.car, SpaceKind.car),
+      (SpaceType.flexShared, SpaceKind.carMotorcycle),
+      (SpaceType.disabledMotorcycle, SpaceKind.disabled),
+      (SpaceType.evMotorcycle, SpaceKind.ev),
+      (SpaceType.offStreet, SpaceKind.offStreet),
+    ]) {
+      final spot = _spot(type);
+      expect(
+        [
+          for (final k in SpaceKind.values)
+            if (matchesSpaceFilter(spot, k, scooter)) k,
+        ],
+        [kind],
+        reason: '$type',
+      );
+    }
   });
 
-  test('普大共用機車格 keeps street bays posted for both classes', () {
+  test('普大共用格 keeps street bays posted for both classes, time limited too', () {
     const shared = ParkingCondition(
       bay: Bay.motorcycle,
       use: BayUse.share,
@@ -179,12 +194,9 @@ void main() {
       spaceType: SpaceType.paidMotorcycle,
       condition: shared,
     );
-    expect(
-      matchesSpaceFilter(paid, SpaceKind.sharedMotorcycle, scooter),
-      isTrue,
-    );
-    // Still a toll bay for the 收費 filter.
-    expect(matchesSpaceFilter(paid, SpaceKind.paidMotorcycle, scooter), isTrue);
+    expect(matchesSpaceFilter(paid, SpaceKind.scooterHeavy, scooter), isTrue);
+    // Its own kind only: not also a 一般機車格.
+    expect(matchesSpaceFilter(paid, SpaceKind.motorcycle, scooter), isFalse);
     final timed = ParkingSpot(
       id: 'timed',
       name: '限時共用',
@@ -199,17 +211,31 @@ void main() {
         limits: [ParkingLimit(LimitKind.timeLimit)],
       ),
     );
-    expect(
-      matchesSpaceFilter(timed, SpaceKind.sharedMotorcycle, scooter),
-      isTrue,
-    );
-    expect(
-      matchesSpaceFilter(
-        _spot(SpaceType.freeMotorcycle),
-        SpaceKind.sharedMotorcycle,
-        scooter,
-      ),
-      isFalse,
-    );
+    expect(matchesSpaceFilter(timed, SpaceKind.scooterHeavy, scooter), isTrue);
+  });
+
+  test('a street spot also matches the kinds of its segments (#188)', () {
+    final spot = ParkingSpot.fromJson({
+      'id': 'seg',
+      'name': '南京東路三段',
+      'lat': 25.05,
+      'lng': 121.54,
+      'city': '臺北市',
+      'space_type': 'paidMotorcycle',
+      'parking_segments': [
+        {
+          'id': 's1',
+          'name': '南側',
+          'condition': {
+            'bay': 'car',
+            'use': 'share',
+            'share': 'car_motorcycle',
+          },
+        },
+      ],
+    });
+    expect(matchesSpaceFilter(spot, SpaceKind.motorcycle, scooter), isTrue);
+    expect(matchesSpaceFilter(spot, SpaceKind.carMotorcycle, scooter), isTrue);
+    expect(matchesSpaceFilter(spot, SpaceKind.car, scooter), isFalse);
   });
 }

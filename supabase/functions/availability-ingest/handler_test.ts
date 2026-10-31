@@ -2,6 +2,7 @@ import {
   type Deps,
   handle,
   type Outcome,
+  publishedAt,
   sameSecret,
   type Source,
 } from './handler.ts';
@@ -37,6 +38,7 @@ function fake(
       updatedAt: Date;
       parks: ParkCounts[];
       etag: string | null;
+      publishedAt: Date | null;
     }[],
     records: [] as { outcome: Outcome; message: string }[],
     slept: 0,
@@ -78,8 +80,8 @@ function fake(
       calls.capacities.push(rows);
       return Promise.resolve();
     },
-    ingest(_key, updatedAt, parks, etag) {
-      calls.ingested.push({ updatedAt, parks, etag });
+    ingest(_key, updatedAt, parks, etag, publishedAt) {
+      calls.ingested.push({ updatedAt, parks, etag, publishedAt });
       return Promise.resolve({
         outcome: options.ingest ?? 'ok',
         rows: parks.length * 3,
@@ -133,9 +135,37 @@ Deno.test('a run reads capacities, then the feed, and stores it', async () => {
   assert(calls.capacities[0].length === 5, 'capacities stored');
   assert(calls.ingested[0].parks.length === 5, 'lots passed on');
   assert(calls.ingested[0].etag === '"v2"', 'etag kept');
+  assert(calls.ingested[0].publishedAt === null, 'no Last-Modified, none sent');
   assert(
     calls.ingested[0].updatedAt.toISOString() === '2026-10-26T08:20:00.000Z',
     'the header time, not the fetch time',
+  );
+});
+
+Deno.test('Last-Modified is passed on as the publish time', async () => {
+  const { deps, calls } = fake({
+    source: { capacity_updated_at: '2026-10-26T07:00:00Z' },
+    replies: {
+      [feedUrl]: [
+        new Response(xml, {
+          headers: { 'last-modified': 'Mon, 26 Oct 2026 08:21:12 GMT' },
+        }),
+      ],
+    },
+  });
+  await handle(post(), deps);
+  assert(
+    calls.ingested[0].publishedAt?.toISOString() ===
+      '2026-10-26T08:21:12.000Z',
+    'publish time',
+  );
+});
+
+Deno.test('an unreadable Last-Modified is no publish time', () => {
+  assert(
+    publishedAt(new Response('', { headers: { 'last-modified': 'soon' } })) ===
+      null,
+    'unreadable',
   );
 });
 
