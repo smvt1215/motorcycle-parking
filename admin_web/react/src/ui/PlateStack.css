@@ -1,0 +1,154 @@
+/* Plate Stack, transcribed from the canvas `.ps` rules (Main.dc.html). */
+.plate-stack {
+  --plate-w: 26px;
+  --plate-h: 17px;
+  --plate-border: 1.5px;
+  --plate-radius: var(--radius-plate);
+  --front-x: 10px;
+  --front-y: 8px;
+  --number-w: 12px;
+  --number-h: 3px;
+  --notch: 7px;
+  --cross: 1.1px;
+  --badge: 16px;
+  --badge-offset: -6px;
+  position: relative;
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 25px;
+  vertical-align: middle;
+}
+
+.plate-stack--large {
+  --plate-w: 48px;
+  --plate-h: 31px;
+  --plate-border: 2px;
+  --plate-radius: 5px;
+  --front-x: 16px;
+  --front-y: 15px;
+  --number-w: 26px;
+  --number-h: 5px;
+  --notch: 11px;
+  --cross: 1.6px;
+  --badge: 22px;
+  --badge-offset: -8px;
+  width: 64px;
+  height: 46px;
+}
+
+.plate-stack i {
+  position: absolute;
+  width: var(--plate-w);
+  height: var(--plate-h);
+  border: var(--plate-border) solid var(--color-plate-ink);
+  border-radius: var(--plate-radius);
+}
+
+.plate-stack__rear {
+  left: 0;
+  top: 0;
+}
+
+.plate-stack__front {
+  left: var(--front-x);
+  top: var(--front-y);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* The number line across the front plate. */
+.plate-stack__front::after {
+  content: '';
+  width: var(--number-w);
+  height: var(--number-h);
+  border-radius: calc(var(--number-h) / 2);
+  background: var(--color-plate-ink);
+}
+
+.plate-stack--scooter .plate-stack__rear {
+  background: var(--color-plate-ordinary-green);
+}
+
+.plate-stack--scooter .plate-stack__front {
+  background: var(--color-paper-white);
+}
+
+.plate-stack--heavy .plate-stack__rear {
+  background: var(--color-plate-heavy-red);
+}
+
+.plate-stack--heavy .plate-stack__front {
+  background: var(--color-plate-heavy-yellow);
+}
+
+/* 有條件可停: full colour, front plate notched top-right. */
+.plate-stack--conditional .plate-stack__front {
+  clip-path: polygon(0 0, calc(100% - var(--notch)) 0, 100% var(--notch), 100% 100%, 0 100%);
+}
+
+/* 不可停: transparent, steel outline, graphite X over the stack. */
+.plate-stack--denied i {
+  background: transparent !important;
+  border-color: var(--color-steel);
+}
+
+.plate-stack--denied .plate-stack__front::after {
+  background: var(--color-steel);
+}
+
+.plate-stack--denied::after {
+  content: '';
+  position: absolute;
+  inset: -2px -3px;
+  background:
+    linear-gradient(
+      to top right,
+      transparent calc(50% - var(--cross)),
+      var(--color-graphite) calc(50% - var(--cross)),
+      var(--color-graphite) calc(50% + var(--cross)),
+      transparent calc(50% + var(--cross))
+    ),
+    linear-gradient(
+      to bottom right,
+      transparent calc(50% - var(--cross)),
+      var(--color-graphite) calc(50% - var(--cross)),
+      var(--color-graphite) calc(50% + var(--cross)),
+      transparent calc(50% + var(--cross))
+    );
+}
+
+/* 官方未標示 and legacy 待確認: transparent, dashed graphite outline. */
+.plate-stack--notStated i,
+.plate-stack--legacyUnknown i {
+  background: transparent !important;
+  border-style: dashed;
+  border-color: var(--color-graphite);
+}
+
+.plate-stack--notStated .plate-stack__front::after,
+.plate-stack--legacyUnknown .plate-stack__front::after {
+  background: var(--color-steel);
+}
+
+/* Only 官方未標示 carries the dark 「?」 dot, so the two never look alike. */
+.plate-stack--notStated::after {
+  content: '?';
+  position: absolute;
+  right: var(--badge-offset);
+  top: var(--badge-offset);
+  width: var(--badge);
+  height: var(--badge);
+  border-radius: 50%;
+  background: var(--color-rail-black);
+  color: var(--color-plate-white);
+  font: 700 calc(var(--badge) * 0.75) / var(--badge) var(--font-numeral);
+  text-align: center;
+}
+
+.eligibility-pair {
+  display: inline-flex;
+  gap: var(--space-4);
+  flex: 0 0 auto;
+}
