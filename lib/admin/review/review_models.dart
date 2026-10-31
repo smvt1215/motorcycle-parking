@@ -611,6 +611,11 @@ String? validatePatch(Map<String, dynamic> patch, ReviewSpot spot) {
             patch[key.replaceFirst('_allowed', '_not_stated')] != true) {
           return '${field.label}請選可停或不可停，或設為官方未標示';
         }
+        // Not both: the RPC refuses a flag beside 官方未標示.
+        if (value is bool &&
+            patch[key.replaceFirst('_allowed', '_not_stated')] == true) {
+          return '${field.label}選了可停或不可停，請把「${field.label}官方未標示」改成「否」';
+        }
       case FieldInput.notStated:
         if (value is! bool) return '${field.label}的值無效';
         if (value == false &&
