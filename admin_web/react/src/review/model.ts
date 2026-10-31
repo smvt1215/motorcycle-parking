@@ -260,6 +260,117 @@ export function applyPlan(report: ReviewReport, spot: ReviewSpot | undefined): A
   return { ok: true, patch, ignored };
 }
 
+/**
+ * Why a report is rejected (`moderation_queue.resolution_kind`, required on
+ * reject; review_models.dart ResolutionKind). Order = keys 1–6.
+ */
+export const RESOLUTION_KINDS = [
+  { kind: 'wrong', label: '與現況不符', description: '建議內容和現場或官方資料不一致' },
+  { kind: 'duplicate', label: '重複回報', description: '與既有案件或已處理的建議重複' },
+  { kind: 'insufficient', label: '資訊不足', description: '說明或照片不夠，無法查證' },
+  { kind: 'outdated', label: '已不適用', description: '點位在送出後已更新，這項建議不再適用' },
+  { kind: 'abuse', label: '濫用', description: '廣告、謾罵或刻意填寫錯誤資料' },
+  { kind: 'other', label: '其他原因', description: '要在處理說明寫下原因' },
+] as const;
+export type ResolutionKind = (typeof RESOLUTION_KINDS)[number]['kind'];
+
+/** `other` needs a written reason (admin_resolve_report rejects it otherwise). */
+export const needsRejectNote = (kind: ResolutionKind | null, note: string) =>
+  kind === 'other' && note.trim() === '';
+
+export type EditInput =
+  | { type: 'text'; maxLength: number; required?: boolean }
+  | { type: 'choice'; choices: Record<string, string> }
+  | { type: 'coordinate'; min: number; max: number }
+  | { type: 'visibility' };
+
+/**
+ * Columns 「修改後套用」 can edit here, in diff order, with the table limits
+ * the Flutter editor uses (review_models.dart reviewFields). Eligibility is
+ * edited with plate tiles; structured columns wait for the shared core.
+ */
+export const EDIT_FIELDS: readonly { key: string; label: string; input: EditInput }[] = [
+  { key: 'name', label: '停車點名稱', input: { type: 'text', maxLength: 100, required: true } },
+  { key: 'space_type', label: '格位類型', input: { type: 'choice', choices: SPACE_TYPE_LABEL } },
+  { key: 'facility_type', label: '場站類型', input: { type: 'choice', choices: FACILITY_LABEL } },
+  { key: 'parking_access', label: '車種開放', input: { type: 'choice', choices: ACCESS_LABEL } },
+  { key: 'fee_note', label: '收費資訊', input: { type: 'text', maxLength: 200 } },
+  { key: 'note', label: '備註', input: { type: 'text', maxLength: 500 } },
+  { key: 'entrance_note', label: '入口說明', input: { type: 'text', maxLength: 500 } },
+  { key: 'parking_guide', label: '停放方式', input: { type: 'text', maxLength: 500 } },
+  { key: 'status', label: '地圖顯示', input: { type: 'visibility' } },
+  { key: 'hidden', label: '地圖顯示', input: { type: 'visibility' } },
+  { key: 'lat', label: '緯度', input: { type: 'coordinate', min: 21, max: 27 } },
+  { key: 'lng', label: '經度', input: { type: 'coordinate', min: 118, max: 123 } },
+  { key: 'city', label: '縣市', input: { type: 'text', maxLength: 30 } },
+  { key: 'district', label: '行政區', input: { type: 'text', maxLength: 30 } },
+];
+
+/** What the editor starts from: the rider's proposal over the current values. */
+export function editStart(report: ReviewReport, spot: ReviewSpot): Record<string, unknown> {
+  const values: Record<string, unknown> = {};
+  for (const key of [...ELIGIBILITY_KEYS, ...EDIT_FIELDS.map((f) => f.key)]) {
+    if (!allowsKey(spot, key)) continue;
+    const proposed = report.proposed ?? {};
+    values[key] = key in proposed ? proposed[key] : spot.values[key];
+  }
+  return values;
+}
+
+export interface EditOutcome {
+  /** Columns that will differ from the spot once written. */
+  patch: Record<string, unknown>;
+  /** Proposal keys the admin set to something other than the rider's value. */
+  changedFromRider: string[];
+  /** Keys the rider did not propose that the admin changed. */
+  added: string[];
+  /** Field key → message, for values that cannot be written. */
+  errors: Record<string, string>;
+}
+
+/** The patch and checks for edited values (acceptEdited in the Flutter admin). */
+export function editOutcome(
+  report: ReviewReport,
+  spot: ReviewSpot,
+  values: Record<string, unknown>,
+): EditOutcome {
+  const proposed = report.proposed ?? {};
+  const outcome: EditOutcome = { patch: {}, changedFromRider: [], added: [], errors: {} };
+  for (const [key, value] of Object.entries(values)) {
+    if (!allowsKey(spot, key)) continue;
+    const field = EDIT_FIELDS.find((f) => f.key === key);
+    if (field?.input.type === 'text') {
+      const text = typeof value === 'string' ? value : '';
+      if (field.input.required && text.trim() === '') outcome.errors[key] = `${field.label}不能空白`;
+      if (text.length > field.input.maxLength) outcome.errors[key] = `最多 ${field.input.maxLength} 字`;
+    }
+    if (field?.input.type === 'coordinate') {
+      if (
+        typeof value !== 'number' ||
+        Number.isNaN(value) ||
+        value < field.input.min ||
+        value > field.input.max
+      ) {
+        outcome.errors[key] = `要在 ${field.input.min} 到 ${field.input.max} 之間`;
+      }
+    }
+    const changesSpot = !same(value, spot.values[key]);
+    // 「未確認」 is cancelled: eligibility that is written is 可停 or 不可停.
+    // Legacy null left as it is is not written, so it does not block.
+    const eligibility = (ELIGIBILITY_KEYS as readonly string[]).includes(key);
+    if (eligibility && typeof value !== 'boolean' && (key in proposed || changesSpot)) {
+      outcome.errors[key] = '選可停或不可停';
+    }
+    // Counted before the spot check: putting back the current value is still
+    // a change to what the rider asked for.
+    if (key in proposed && !same(value, proposed[key])) outcome.changedFromRider.push(key);
+    if (!changesSpot) continue;
+    outcome.patch[key] = value;
+    if (!(key in proposed)) outcome.added.push(key);
+  }
+  return outcome;
+}
+
 /** Metres between two points (haversine), for 「建議移動 38 m」. */
 export function distanceMetres(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
   const rad = Math.PI / 180;

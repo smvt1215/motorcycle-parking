@@ -48,6 +48,16 @@
   border-color: var(--color-destructive);
 }
 
+.btn--danger {
+  border-color: var(--color-destructive);
+  background: var(--color-destructive);
+  --btn-fg: var(--color-paper-white);
+}
+
+.btn--danger:hover {
+  border-color: var(--color-rail-black);
+}
+
 .btn--quiet {
   border-color: transparent;
   background: transparent;

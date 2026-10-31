@@ -7,6 +7,7 @@ const request = (reportId: string) => ({
   reportId,
   decision: 'accepted' as const,
   patch: { scooter_allowed: true },
+  edited: false,
   note: '',
   force: false,
 });
@@ -59,7 +60,7 @@ describe('undo window', () => {
     store.dispatch(decisionQueued({ request: request('r-ximen'), name: '西門' }));
     await vi.advanceTimersByTimeAsync(UNDO_MS);
     const { review } = store.getState();
-    expect(review.failures['r-ximen']?.code).toBe('network');
+    expect(review.failures['r-ximen']?.error.code).toBe('network');
     expect(review.notes['r-ximen']).toBe('已比對公告');
     expect(review.resolvedCount).toBe(0);
   });

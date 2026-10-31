@@ -16,13 +16,18 @@ export interface QueuedDecision {
   writing?: boolean;
 }
 
+export interface FailedDecision {
+  error: ApiError;
+  request: ResolveRequest;
+}
+
 export interface ReviewState {
   /** Decisions waiting out the undo window or being written, by report id. */
   pending: Record<string, QueuedDecision>;
   /** The decision the action bar offers to undo. */
   lastQueued: string | null;
-  /** Writes that failed; the report is back in the queue with this error. */
-  failures: Record<string, ApiError>;
+  /** Writes that failed; the report is back in the queue with the error and the request to retry. */
+  failures: Record<string, FailedDecision>;
   /** 處理說明 per report, kept until the report is written. */
   notes: Record<string, string>;
   /** Reports reloaded after a version conflict, so 「仍然套用」 may force. */
@@ -72,12 +77,13 @@ export const reviewSlice = createSlice({
       if (state.lastQueued === id) state.lastQueued = null;
       state.resolvedCount += 1;
     },
-    decisionFailed(state, action: PayloadAction<{ reportId: string; error: ApiError }>) {
-      const { reportId, error } = action.payload;
+    decisionFailed(state, action: PayloadAction<FailedDecision>) {
+      const { request, error } = action.payload;
+      const reportId = request.reportId;
       delete state.pending[reportId];
       if (state.lastQueued === reportId) state.lastQueued = null;
       // Another admin resolved it: it simply leaves the queue.
-      if (error.code !== 'alreadyResolved') state.failures[reportId] = error;
+      if (error.code !== 'alreadyResolved') state.failures[reportId] = { error, request };
     },
     failureDismissed(state, action: PayloadAction<string>) {
       delete state.failures[action.payload];
@@ -124,7 +130,7 @@ export function startReviewListeners(startListening: TypedStartListening<unknown
         adminApi.endpoints.resolveReport.initiate(request, { fixedCacheKey: request.reportId }),
       );
       if ('error' in result && result.error) {
-        api.dispatch(decisionFailed({ reportId: request.reportId, error: result.error as ApiError }));
+        api.dispatch(decisionFailed({ request, error: result.error as ApiError }));
       } else {
         api.dispatch(decisionCommitted(request.reportId));
       }

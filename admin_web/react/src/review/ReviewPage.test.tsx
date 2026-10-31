@@ -94,6 +94,7 @@ describe('ReviewPage', () => {
         reportId: 'r-ximen',
         decision: 'accepted',
         patch: { scooter_allowed: true },
+        edited: false,
         note: '已比對停管處公告',
         force: false,
       },
@@ -213,6 +214,91 @@ describe('ReviewPage', () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  it('R opens 駁回原因; a digit picks it and Enter rejects without touching the spot', async () => {
+    const { user, source, router } = setup('/review/r-fuxing');
+    await detailTitle();
+    await user.keyboard('r');
+    const panel = screen.getByRole('region', { name: '駁回原因' });
+    // Reasons are a real radio group; nothing is chosen yet.
+    expect(within(panel).getAllByRole('radio')).toHaveLength(6);
+    await user.keyboard('{Enter}');
+    expect(within(panel).getByText('選一個駁回原因才能送出。')).toBeInTheDocument();
+    await user.keyboard('3');
+    expect(within(panel).getByRole('radio', { name: /資訊不足/ })).toBeChecked();
+    await user.keyboard('{Enter}');
+    expect(router.state.location.pathname).not.toBe('/review/r-fuxing');
+    expect(screen.getByRole('status')).toHaveTextContent('已駁回「復興南路一段 107 巷路邊機車格」');
+    await act(() => vi.advanceTimersByTimeAsync(UNDO_MS));
+    expect(source.resolved).toEqual([
+      { reportId: 'r-fuxing', decision: 'rejected', resolutionKind: 'insufficient', note: '' },
+    ]);
+  });
+
+  it('其他原因 needs a written reason before rejecting', async () => {
+    const { user, source } = setup('/review/r-fuxing');
+    await detailTitle();
+    await user.click(screen.getByRole('button', { name: /駁回/ }));
+    await user.click(screen.getByRole('radio', { name: /其他原因/ }));
+    expect(screen.getByText('選了「其他原因」，寫下為什麼駁回才能送出。')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /確定駁回/ }));
+    await act(() => vi.advanceTimersByTimeAsync(UNDO_MS));
+    expect(source.resolved).toEqual([]);
+    await user.type(screen.getByRole('textbox', { name: /處理說明/ }), 'x');
+    await user.click(screen.getByRole('button', { name: /確定駁回/ }));
+    await act(() => vi.advanceTimersByTimeAsync(UNDO_MS));
+    expect(source.resolved).toMatchObject([{ decision: 'rejected', resolutionKind: 'other', note: 'x' }]);
+  });
+
+  it('Esc closes the reject panel and keeps the report', async () => {
+    const { user, router } = setup('/review/r-fuxing');
+    await detailTitle();
+    await user.keyboard('r');
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('region', { name: '駁回原因' })).not.toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/review/r-fuxing');
+    expect(screen.getByRole('button', { name: /套用建議/ })).toBeInTheDocument();
+  });
+
+  it('E edits the values to apply; Ctrl+Enter writes the edited patch', async () => {
+    const { user, source } = setup('/review/r-fuxing');
+    await detailTitle();
+    await user.keyboard('e');
+    const plates = screen.getByRole('region', { name: '資格' });
+    // The rider suggested 可停; the reviewer decides 不可停.
+    await user.click(within(plates).getByRole('radio', { name: /不可停/ }));
+    const type = screen.getByRole('combobox', { name: '格位類型' });
+    expect(type).toHaveValue('heavyOnly');
+    expect(screen.getByText('騎士建議：重機專用格')).toBeInTheDocument();
+    expect(screen.getByRole('toolbar', { name: '修改後套用' })).toHaveTextContent('你改了騎士建議的 1 處');
+    await user.keyboard('{Control>}{Enter}{/Control}');
+    expect(screen.getByRole('status')).toHaveTextContent('已套用修改「復興南路一段 107 巷路邊機車格」');
+    await act(() => vi.advanceTimersByTimeAsync(UNDO_MS));
+    expect(source.resolved).toEqual([
+      {
+        reportId: 'r-fuxing',
+        decision: 'accepted',
+        patch: { space_type: 'heavyOnly' },
+        edited: true,
+        note: '',
+        force: false,
+      },
+    ]);
+  });
+
+  it('refuses to save an edit that changes nothing', async () => {
+    const { user, source } = setup('/review/r-fuxing');
+    await detailTitle();
+    await user.keyboard('e');
+    await user.click(
+      within(screen.getByRole('region', { name: '資格' })).getByRole('radio', { name: /不可停/ }),
+    );
+    await user.selectOptions(screen.getByRole('combobox', { name: '格位類型' }), 'freeMotorcycle');
+    await user.click(screen.getByRole('button', { name: /儲存並套用/ }));
+    expect(screen.getByRole('alert')).toHaveTextContent('沒有要寫入的修改');
+    await act(() => vi.advanceTimersByTimeAsync(UNDO_MS));
+    expect(source.resolved).toEqual([]);
   });
 
   it('shows 全部處理完了 when the queue empties', async () => {

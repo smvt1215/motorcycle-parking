@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router';
 import { useAppDispatch, useAppSelector } from '../app/hooks';
 import { Button } from '../ui/controls';
+import { actionVerb } from './decisionText';
 import { useKindFilter } from './hooks';
 import { decisionUndone, UNDO_MS } from './reviewSlice';
 
@@ -20,7 +21,7 @@ export function UndoNotice() {
   return (
     <p className="undo-notice" role="status">
       <span>
-        已套用「{last.name}」，<span className="num">{UNDO_MS / 1000}</span> 秒內可復原
+        已{actionVerb(last.request)}「{last.name}」，<span className="num">{UNDO_MS / 1000}</span> 秒內可復原
       </span>
       <Button
         variant="quiet"

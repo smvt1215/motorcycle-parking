@@ -67,7 +67,11 @@ async function open(page, path) {
   await page.waitForSelector('nav[aria-label="管理功能"]', { state: 'attached' });
   // The fixture answers after 400 ms; wait for the page's own content.
   await page.waitForSelector('main h1, main h2, main [role="article"]', { state: 'attached' });
-  if (path.startsWith('/review')) {
+  if (/^\/review\/[^/?]+/.test(path)) {
+    // A report's URL: its detail, not just the queue, must be on screen
+    // before keys are pressed.
+    await page.waitForSelector('.review-detail, .review-done', { state: 'attached' });
+  } else if (path.startsWith('/review')) {
     await page.waitForSelector('.queue__list, .review-detail, .review-done', { state: 'attached' });
   }
 }
@@ -132,6 +136,37 @@ for (const viewport of VIEWPORTS) {
   await undo.getByRole('button', { name: '復原' }).click();
   await page.waitForURL(/\/review\/r-ximen/);
   if ((await note.inputValue()) !== '已比對停管處公告') failures.push(`${viewport.name}: note lost on undo`);
+
+  // 駁回 (ReviewReject boards): inline panel, or a bottom sheet on phones.
+  const sideways = () => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  await open(page, '/review/r-fuxing');
+  // Keys go to the detail once its toolbar (and its shortcut listener) is up.
+  await page.getByRole('toolbar', { name: '處理這筆回報' }).waitFor();
+  await page.locator('body').click({ position: { x: 1, y: 1 } });
+  await page.keyboard.press('r');
+  await page.getByRole('radio', { name: /其他原因/ }).waitFor({ state: 'attached' });
+  await page.keyboard.press('6');
+  if ((await sideways()) > 0) failures.push(`${viewport.name}: reject panel scrolls sideways`);
+  await page.screenshot({
+    path: join(output, `${viewport.name}_review_reject.png`),
+    fullPage: !viewport.phone,
+  });
+  await page.keyboard.press('Escape');
+
+  // 修改後套用 (ReviewEdit boards).
+  await page.keyboard.press('e');
+  const type = page.getByRole('combobox', { name: '格位類型' });
+  await type.waitFor();
+  await page.getByRole('region', { name: '資格' }).getByRole('radio', { name: '不可停' }).check();
+  if ((await sideways()) > 0) failures.push(`${viewport.name}: edit form scrolls sideways`);
+  const small = await page.evaluate(() =>
+    [...document.querySelectorAll('.edit-field__value input, .edit-field__value select, .plate-pick__option')]
+      .map((el) => el.getBoundingClientRect().height)
+      .filter((h) => h < 44),
+  );
+  if (small.length) failures.push(`${viewport.name}: edit controls under 44px: ${small.join(', ')}`);
+  await page.screenshot({ path: join(output, `${viewport.name}_review_edit.png`), fullPage: true });
+  await page.keyboard.press('Escape');
 
   if (viewport.phone) {
     // The phone list expands a row in place before opening the detail.

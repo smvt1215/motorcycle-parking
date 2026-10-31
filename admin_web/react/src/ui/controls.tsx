@@ -2,13 +2,20 @@ import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import { LineIcon } from './icons';
 import './controls.css';
 
-type ButtonVariant = 'primary' | 'secondary' | 'destructive' | 'quiet';
+/**
+ * `danger` is the solid red final confirmation (刪除點位、確定駁回 on the
+ * canvas); `destructive` is the red-outlined button that leads to it.
+ */
+type ButtonVariant = 'primary' | 'secondary' | 'destructive' | 'danger' | 'quiet';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
-  /** Keyboard shortcut drawn as a key cap (A 套用、E 修改後套用…). */
+  /** Keyboard shortcut drawn as a key cap (A 套用、E 修改後套用、Ctrl Enter…). */
   shortcut?: string;
 }
+
+/** 「Ctrl Enter」 → 「Control+Enter」 for aria-keyshortcuts. */
+const ariaKeys = (shortcut: string) => shortcut.replace(/^Ctrl /, 'Control+');
 
 /** 48px tool buttons (DESIGN.md Buttons). */
 export function Button({ variant = 'secondary', shortcut, className, children, type, ...rest }: ButtonProps) {
@@ -16,7 +23,7 @@ export function Button({ variant = 'secondary', shortcut, className, children, t
     <button
       type={type ?? 'button'}
       className={['btn', `btn--${variant}`, className].filter(Boolean).join(' ')}
-      aria-keyshortcuts={shortcut}
+      aria-keyshortcuts={shortcut ? ariaKeys(shortcut) : undefined}
       {...rest}
     >
       {children}
