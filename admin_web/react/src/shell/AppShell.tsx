@@ -1,4 +1,4 @@
-import { Link, Outlet, useLocation } from 'react-router';
+import { Link, Outlet, useLocation, useMatch } from 'react-router';
 import { LineIcon } from '../ui/icons';
 import { MORE, MORE_PATHS, SECTIONS, sectionLabel, type Section } from './sections';
 import './AppShell.css';
@@ -32,9 +32,11 @@ export function AppShell() {
   // 「更多」 stays active on every page it leads to. On wider layouts those
   // pages have their own item, so 「更多」 is hidden there (AppShell.css).
   const inMore = MORE_PATHS.some((path) => within(pathname, path));
+  // A report's detail fills a phone screen; its own bar leads back (ReviewPhoneDetail.dc.html).
+  const focused = useMatch('/review/:reportId') !== null;
 
   return (
-    <div className="shell">
+    <div className={`shell${focused ? ' shell--focus' : ''}`}>
       <header className="shell-bar">
         <span className="shell-logo" role="img" aria-label="機車停車指南管理">
           <span aria-hidden="true">P</span>
