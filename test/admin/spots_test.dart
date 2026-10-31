@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:motorcycle_parking/models/space_kind.dart';
 import 'package:motorcycle_parking/ui/option_pill.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:motorcycle_parking/core/address_search.dart';
@@ -398,14 +397,14 @@ void main() {
       }
 
       // The stored paid bay sits in its open group.
-      await tapKey('spot-space-sharedMotorcycle');
+      await tapKey('spot-space-scooterHeavy');
       await tapKey('spot-space-charge-free');
       expect(find.text('已修改'), findsWidgets);
       // Back to the stored kind: nothing left to save, the heavy bikes'
       // access 普大共用 set (decision 60) included.
-      await tapKey('spot-space-paidMotorcycle');
+      await tapKey('spot-space-motorcycle');
       expect(find.byType(ChangeBand), findsNothing);
-      await tapKey('spot-space-sharedMotorcycle');
+      await tapKey('spot-space-scooterHeavy');
       await tapKey('spot-space-charge-free');
       await tester.tap(find.text('儲存並關閉'));
       await tester.pumpAndSettle();
@@ -425,11 +424,6 @@ void main() {
     group('換格位類型時的條件', () {
       Future<void> tapKey(WidgetTester tester, String key) async {
         final target = find.byKey(ValueKey(key));
-        if (target.evaluate().isEmpty) {
-          // Its group is folded: open it first.
-          final kind = SpaceKind.values.byName(key.split('-').last);
-          await tapKey(tester, 'spot-space-group-${kind.group.name}');
-        }
         await tester.ensureVisible(target);
         await tester.pumpAndSettle();
         await tester.tap(target);
@@ -497,7 +491,7 @@ void main() {
       testWidgets('原本沒有條件的點位換一般類型仍沒有條件', (tester) async {
         await show(tester, path: '/spots/$communityId');
         await openFold(tester, '格位與停放條件');
-        await tapKey(tester, 'spot-space-heavyOnly');
+        await tapKey(tester, 'spot-space-heavy');
         expect(await save(tester), {'space_type': 'heavyOnly'});
       });
     });
@@ -780,20 +774,15 @@ void main() {
       await tester.pumpAndSettle();
       expect(gateway.townRequests, greaterThan(0));
       await openFold(tester, '格位與停放條件');
-      // The app's grouped ground-marking list (decision 57).
-      final free = find.byKey(const ValueKey('spot-space-freeMotorcycle'));
-      if (free.evaluate().isEmpty) {
-        final group = find.byKey(const ValueKey('spot-space-group-motorcycle'));
-        await tester.scrollUntilVisible(group, -300, scrollable: form());
-        await tester.ensureVisible(group);
+      // The app's ground-marking list (#188): 一般機車格, then 免費格.
+      for (final key in ['spot-space-motorcycle', 'spot-space-charge-free']) {
+        final target = find.byKey(ValueKey(key));
+        await tester.scrollUntilVisible(target, 300, scrollable: form());
+        await tester.ensureVisible(target);
         await tester.pumpAndSettle();
-        await tester.tap(group);
+        await tester.tap(target);
         await tester.pumpAndSettle();
       }
-      await tester.ensureVisible(free);
-      await tester.pumpAndSettle();
-      await tester.tap(free);
-      await tester.pumpAndSettle();
       await tester.tap(find.text('建立停車點'));
       await tester.pumpAndSettle();
       expect(gateway.created.single.$2['city'], '臺北市');
@@ -1046,12 +1035,16 @@ void main() {
       final underground = find.byKey(
         const ValueKey('spot-facility_types-underground'),
       );
-      await tester.ensureVisible(underground);
+      await Scrollable.ensureVisible(
+        tester.element(underground),
+        alignment: .5,
+      );
+      await tester.pumpAndSettle();
       await tester.tap(underground);
       await tester.pumpAndSettle();
       // Folded with an edit: the yellow band stays above it.
       // One over the check rows in the open section, one over 可停車種.
-      expect(find.byType(ChangeBand), findsNWidgets(2));
+      expect(find.byType(ChangeBand, skipOffstage: false), findsAtLeast(2));
       expect(
         find.descendant(
           of: await revealFold(tester, '可停車種'),

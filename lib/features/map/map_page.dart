@@ -235,17 +235,6 @@ class _MapPageState extends ConsumerState<MapPage> {
               .where((s) => matchesSpaceFilter(s, option, store.vehicle))
               .length,
       },
-      // Each spot once per group, though it may match two of its kinds.
-      groupCounts: {
-        for (final group in SpaceKindGroup.values)
-          group: inView
-              .where(
-                (s) => group.kinds.any(
-                  (k) => matchesSpaceFilter(s, k, store.vehicle),
-                ),
-              )
-              .length,
-      },
       onChanged: (option) => setState(() => type = option),
     );
   }

@@ -1566,6 +1566,13 @@ class _FieldEditor extends StatelessWidget {
       decoration: _decoration(context),
       child: _MultiChoice(field: field, value: value, onChanged: onChanged),
     ),
+    // Zones and segments (#188) as the rider's patches leave them; the
+    // spot page edits them.
+    FieldInput.entries => InputDecorator(
+      decoration: _decoration(context)
+          .copyWith(helperText: '依騎士建議套用；需調整時請改用點位頁'),
+      child: Text(formatValue(field.key, value)),
+    ),
     // Shown as sent; the zone and condition editors are C6's.
     FieldInput.condition => InputDecorator(
       decoration: _decoration(context)

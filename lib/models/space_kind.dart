@@ -1,78 +1,90 @@
-/// The bay kinds riders pick from (C6 canvas AppPatterns, pattern 1;
-/// decision 57): the legacy space types plus 普大共用機車格, a motorcycle
-/// bay posted for both classes, grouped by use. The map filter, the new
-/// spot form and the suggestion form share one list. Pure Dart.
+/// The bay kinds riders pick from (#188, design canvas Ver.143 S4, P1): the
+/// seven painted kinds of [BayKind], in its order, plus the lot. The map
+/// filter, the new spot form, the suggestion form and the admin spot form
+/// share one list. Charge, time limits and the other added conditions are
+/// facets of their own, not kinds: a 一般機車格 is stored as a toll or free
+/// bay (or a 限時 one), as before. Pure Dart.
 library;
 
 import 'parking.dart';
 import 'parking_condition.dart';
-
-/// The four groups the list folds into.
-enum SpaceKindGroup {
-  motorcycle('一般機車格', '收費、免費、普大共用'),
-  reserved('專用格', '重機、電動、身障'),
-  timedOrShared('限時或共用', '限時、汽機共用'),
-  carOrLot('汽車格與停車場', '汽車格、停車場');
-
-  const SpaceKindGroup(this.label, this.hint);
-  final String label;
-
-  /// What the group holds, beside its name while it is folded.
-  final String hint;
-
-  List<SpaceKind> get kinds => [
-    for (final k in SpaceKind.values)
-      if (k.group == this) k,
-  ];
-}
+import 'zone_entries.dart';
 
 enum SpaceKind {
-  paidMotorcycle(SpaceKindGroup.motorcycle, SpaceType.paidMotorcycle),
-  freeMotorcycle(SpaceKindGroup.motorcycle, SpaceType.freeMotorcycle),
+  motorcycle(BayKind.motorcycle),
+  scooterHeavy(BayKind.scooterHeavy),
+  heavy(BayKind.heavy),
+  carMotorcycle(BayKind.carMotorcycle),
+  car(BayKind.car),
+  disabled(BayKind.disabled),
+  ev(BayKind.ev),
 
-  /// 普大共用機車格: not time limited, posted for 普通 and 大型重機 alike
-  /// (condition `share: scooter_heavy`); stored as a toll or free bay.
-  sharedMotorcycle(SpaceKindGroup.motorcycle, null),
-  heavyOnly(SpaceKindGroup.reserved, SpaceType.heavyOnly),
-  evMotorcycle(SpaceKindGroup.reserved, SpaceType.evMotorcycle),
-  disabledMotorcycle(SpaceKindGroup.reserved, SpaceType.disabledMotorcycle),
-  timedMotorcycle(SpaceKindGroup.timedOrShared, SpaceType.timedMotorcycle),
-  flexShared(SpaceKindGroup.timedOrShared, SpaceType.flexShared),
-  car(SpaceKindGroup.carOrLot, SpaceType.car),
-  offStreet(SpaceKindGroup.carOrLot, SpaceType.offStreet);
+  /// 停車場: its zones carry the bays.
+  offStreet(null);
 
-  const SpaceKind(this.group, this.type);
-  final SpaceKindGroup group;
+  const SpaceKind(this.bay);
 
-  /// The legacy space type this kind is; null for [sharedMotorcycle], whose
-  /// charge decides it.
-  final SpaceType? type;
+  /// The painted kind; null for [offStreet].
+  final BayKind? bay;
 
-  String get label => type?.label ?? '普大共用機車格';
-
-  /// One sentence under the name, as the ground and its signs show it.
-  String get detail => switch (this) {
-    paidMotorcycle => '路邊白線機車格，依公告時段收費',
-    freeMotorcycle => '不收費的路邊或巷弄機車格',
-    sharedMotorcycle => '標示普通機車與大型重機都能停的機車格',
-    heavyOnly => '標示大型重機專用的格位',
-    evMotorcycle => '限電動機車停放或充換電',
-    disabledMotorcycle => '限經監理站檢驗合格的身障特製機車，並持識別證或專用牌照',
-    timedMotorcycle => '黃色內框機車格，依牌面時段限時停放',
-    flexShared => '汽車與機車依時段輪替使用的格位',
-    car => '依規定可停放機車的汽車格',
-    offStreet => '停車場內的機車或重機區',
+  String get label => switch (this) {
+    motorcycle => '一般機車格',
+    scooterHeavy => '普大共用格',
+    heavy => '重機專用格',
+    carMotorcycle => '汽機車共用格',
+    car => '汽車格',
+    disabled => '身障格',
+    ev => '充電格',
+    offStreet => '停車場',
   };
 
-  /// The kind a stored spot reads as: its space type, except a toll or free
-  /// motorcycle bay posted for both classes, which is [sharedMotorcycle].
+  /// One sentence under the name (P1).
+  String get detail => switch (this) {
+    motorcycle => '一般白線機車格',
+    scooterHeavy => '普通機車與大型重機都能停',
+    heavy => '標示大型重機專用',
+    carMotorcycle => '依牌面時段汽車與機車輪替',
+    car => '一般汽車格',
+    disabled => '限身障特製車輛，持識別證',
+    ev => '充換電專用',
+    offStreet => '路外停車場',
+  };
+
+  /// The space type whose condition the kind starts from (§1.3); a
+  /// 一般機車格's or 普大共用格's charge comes from the form.
+  SpaceType get baseType => switch (this) {
+    motorcycle || scooterHeavy => SpaceType.paidMotorcycle,
+    heavy => SpaceType.heavyOnly,
+    carMotorcycle => SpaceType.flexShared,
+    car => SpaceType.car,
+    disabled => SpaceType.disabledMotorcycle,
+    ev => SpaceType.evMotorcycle,
+    offStreet => SpaceType.offStreet,
+  };
+
+  /// The ground marking the list shows (decision 63): the plain motorcycle
+  /// boxes for 一般機車格 whether toll or free, the app's markings for the
+  /// rest; 普大共用格 draws the plain boxes with the heavy-bike helmet.
+  SpaceType get markingType => switch (this) {
+    motorcycle || scooterHeavy => SpaceType.freeMotorcycle,
+    _ => baseType,
+  };
+
+  /// Whether a stored bay of this kind is toll or free by its condition
+  /// (its legacy space type depends on it), so the form asks which.
+  bool get asksCharge => this == motorcycle || this == scooterHeavy;
+
+  /// The kind of [bay].
+  static SpaceKind ofBay(BayKind bay) => values.firstWhere((k) => k.bay == bay);
+
+  /// The kind a stored spot reads as: a lot is [offStreet]; a street bay
+  /// reads by its condition, or the one its space type stands for.
   static SpaceKind of(SpaceType type, ParkingCondition? condition) {
-    final c = condition ?? conditionOf(type);
-    if ((type == SpaceType.paidMotorcycle ||
-            type == SpaceType.freeMotorcycle) &&
-        c?.share == ShareKind.scooterHeavy) {
-      return sharedMotorcycle;
-    }
-    return values.firstWhere((k) => k.type == type);
+    if (type == SpaceType.offStreet) return offStreet;
+    final bay =
+        bayKindOf(condition) ??
+        bayKindOf(conditionOf(type)) ??
+        BayKind.motorcycle;
+    return ofBay(bay);
   }
 }

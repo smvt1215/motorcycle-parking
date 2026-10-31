@@ -1,0 +1,156 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:motorcycle_parking/admin/review/review_models.dart';
+import 'package:motorcycle_parking/models/zone_entries.dart';
+
+/// Zone and segment suggestions on the review page (#188): shown as the
+/// list the rider's patches leave, sent back as the patches that make it.
+void main() {
+  const zones = [
+    {'id': 'b1', 'name': 'B1', 'access': 'scooterOnly', 'guide': '靠電梯'},
+    {'id': 'b2', 'name': 'B2', 'access': 'heavyOnly'},
+  ];
+  final spot = ReviewSpot(
+    sourceId: '10000000-0000-4000-8000-000000000002',
+    official: false,
+    values: {'name': '松壽地下停車場', 'parking_zones': zones},
+  );
+  ReviewReport report(Map<String, dynamic> proposed) => ReviewReport.fromJson({
+    'id': 'r1',
+    'source_id': spot.sourceId,
+    'reason': '分區：修改',
+    'field': 'zones',
+    'proposed': proposed,
+    'created_at': '2026-10-31T00:00:00Z',
+  });
+
+  test('entriesPatch changes, removes and adds by id', () {
+    expect(
+      entriesPatch(zones, [
+        {'id': 'b1', 'guide': null, 'area': 'motorcycle'},
+        {'id': 'b2', 'removed': true},
+        {'name': 'B3', 'access': 'scooterHeavy', 'guide': null},
+      ]),
+      [
+        {
+          'id': 'b1',
+          'name': 'B1',
+          'access': 'scooterOnly',
+          'area': 'motorcycle',
+        },
+        {'name': 'B3', 'access': 'scooterHeavy'},
+      ],
+    );
+    expect(
+      entriesPatch(zones, [
+        {'id': 'b9', 'guide': 'x'},
+      ]),
+      isNull,
+    );
+    expect(
+      entriesPatch(zones, [
+        {'id': 'b1', 'removed': true, 'name': 'B1'},
+      ]),
+      isNull,
+    );
+    expect(entriesPatch(zones, {'id': 'b1'}), isNull);
+  });
+
+  test('entriesDiff is the patch back, leaving unchanged entries out', () {
+    final next = entriesPatch(zones, [
+      {'id': 'b1', 'guide': '走右側坡道'},
+      {'id': 'b2', 'removed': true},
+      {'name': 'B3'},
+    ])!;
+    final diff = entriesDiff(zones, next);
+    expect(diff, [
+      {'id': 'b1', 'guide': '走右側坡道'},
+      {'name': 'B3'},
+      {'id': 'b2', 'removed': true},
+    ]);
+    expect(entriesPatch(zones, diff), [
+      {'id': 'b1', 'name': 'B1', 'access': 'scooterOnly', 'guide': '走右側坡道'},
+      {'name': 'B3'},
+    ]);
+    expect(entriesDiff(zones, zones), isEmpty);
+    // A key taken out is sent as null.
+    expect(
+      entriesDiff(zones, [
+        {'id': 'b1', 'name': 'B1', 'access': 'scooterOnly'},
+        zones[1],
+      ]),
+      [
+        {'id': 'b1', 'guide': null},
+      ],
+    );
+  });
+
+  test('the review adopts the list the patches leave and sends patches', () {
+    final proposal = initialProposal(
+      report({
+        'parking_zones': [
+          {'id': 'b2', 'removed': true},
+          {'name': 'B3', 'access': 'scooterHeavy'},
+        ],
+      }),
+      spot,
+    );
+    expect(proposal['parking_zones'], [
+      zones[0],
+      {'name': 'B3', 'access': 'scooterHeavy'},
+    ]);
+    final patch = applicablePatch(proposal, spot);
+    expect(patch.keys, ['parking_zones']);
+    expect(validatePatch(patch, spot), isNull);
+    expect(formatValue('parking_zones', patch['parking_zones']), '2 區：B1、B3');
+    expect(formatValue('parking_zones', zones), '2 區：B1、B2');
+    expect(wirePatch(patch, spot: spot), {
+      'parking_zones': [
+        {'name': 'B3', 'access': 'scooterHeavy'},
+        {'id': 'b2', 'removed': true},
+      ],
+    });
+  });
+
+  test('a patch naming a zone the spot no longer has is set aside', () {
+    final proposal = initialProposal(
+      report({
+        'parking_zones': [
+          {'id': 'b9', 'guide': 'x'},
+        ],
+      }),
+      spot,
+    );
+    expect(applicablePatch(proposal, spot), isEmpty);
+    expect(ignoredKeys(proposal, spot), ['parking_zones']);
+  });
+
+  test('segments read the same way, with their own label', () {
+    final street = ReviewSpot(
+      sourceId: spot.sourceId,
+      official: false,
+      values: {
+        'parking_segments': [
+          {'id': 's1', 'name': '北側', 'total': 18},
+        ],
+      },
+    );
+    final proposal = initialProposal(
+      report({
+        'parking_segments': [
+          {'id': 's1', 'total': 20},
+        ],
+      }),
+      street,
+    );
+    expect(proposal['parking_segments'], [
+      {'id': 's1', 'name': '北側', 'total': 20},
+    ]);
+    expect(reviewField('parking_segments')!.label, '路邊分段');
+    expect(suggestionFieldLabels['segments'], '路邊分段');
+    expect(wirePatch(applicablePatch(proposal, street), spot: street), {
+      'parking_segments': [
+        {'id': 's1', 'total': 20},
+      ],
+    });
+  });
+}

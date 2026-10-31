@@ -10,8 +10,7 @@ import 'package:pointer_interceptor/pointer_interceptor.dart';
 import '../../models/closure.dart';
 import '../../models/fee.dart';
 import '../../models/parking.dart';
-import '../../models/parking_condition.dart' show Charge, ParkingCondition;
-import '../../models/space_kind.dart';
+import '../../models/parking_condition.dart' show Charge;
 import '../../features/map/space_type_sheet.dart' show SpaceKindList;
 import '../../ui/address_search_field.dart';
 import '../../ui/fee_board.dart';
@@ -2304,9 +2303,9 @@ String? _summaryOf(SpotGroup group, SpotsController spots) {
   }
 }
 
-/// The bay kind as the app picks it (C6 canvas AppPatterns, pattern 1;
-/// decision 57): the grouped ground-marking list, 普大共用 asking 收費 or
-/// 免費 under it. The street condition changes with it (setKind).
+/// The bay kind as the app picks it (#188, design canvas S4): the seven
+/// ground markings and the lot, 一般機車格 and 普大共用格 asking 收費 or 免費
+/// under it. The street condition changes with it (setKind).
 class _SpaceKindField extends StatelessWidget {
   const _SpaceKindField({
     required this.spots,
@@ -2340,19 +2339,17 @@ class _SpaceKindField extends StatelessWidget {
               value: kind,
               keyPrefix: 'spot-space',
               onChanged: spots.setKind,
-              followUp: kind == SpaceKind.sharedMotorcycle
-                  ? OptionPills<Charge>(
+              followUp: kind != null && kind.asksCharge
+                  ? OptionPills<Charge?>(
                       key: const ValueKey('spot-space-charge'),
                       values: const [
                         (Charge.toll, '收費格'),
                         (Charge.free, '免費格'),
                       ],
-                      selected:
-                          ParkingCondition.fromJson(spots.draft['condition'])
-                              ?.charge ??
-                          Charge.toll,
-                      keyOf: (c) => 'spot-space-charge-${c.name}',
-                      onSelect: (c) => spots.setKind(kind!, charge: c),
+                      // A 限時 bay may leave it unconfirmed.
+                      selected: spots.draftCondition?.charge,
+                      keyOf: (c) => 'spot-space-charge-${c?.name}',
+                      onSelect: (c) => spots.setKind(kind, charge: c),
                     )
                   : null,
             ),

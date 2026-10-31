@@ -8,6 +8,8 @@
 /// cases (test/parking_contract_test.dart). Pure Dart.
 library;
 
+import 'dart:convert';
+
 import 'fee.dart';
 import 'parking_condition.dart';
 
@@ -212,3 +214,87 @@ bool validSegmentList(Object? json) {
   }
   return _validIds(json);
 }
+
+/// [current] (a zone or segment list) with [patch] applied, as
+/// `entries_patch()` in SQL applies a suggestion: an entry with an id
+/// changes the current entry with that id, its keys replacing the current
+/// ones and a null removing one; `{id, removed: true}` removes it; one
+/// without an id is added at the end. Null when [patch] is not a list of
+/// objects or names an id [current] lacks.
+List<Map<String, Object?>>? entriesPatch(List<Object?> current, Object? patch) {
+  if (patch is! List) return null;
+  final out = [
+    for (final e in current)
+      if (e is Map) {...e.cast<String, Object?>()},
+  ];
+  Map<String, Object?> withoutNulls(Map<String, Object?> m) => {
+    for (final MapEntry(:key, :value) in m.entries) key: ?value,
+  };
+  for (final e in patch) {
+    if (e is! Map) return null;
+    final entry = e.cast<String, Object?>();
+    if (!entry.containsKey('id')) {
+      if (entry.containsKey('removed')) return null;
+      out.add(withoutNulls(entry));
+      continue;
+    }
+    final i = out.indexWhere((z) => z['id'] == entry['id']);
+    if (i < 0) return null;
+    if (entry.containsKey('removed')) {
+      if (entry['removed'] != true || entry.length != 2) return null;
+      out.removeAt(i);
+    } else {
+      out[i] = withoutNulls({...out[i], ...entry});
+    }
+  }
+  return out;
+}
+
+/// The patch that turns [current] into [next] (the inverse of
+/// [entriesPatch]): each entry of [current] that [next] changes, with its
+/// changed keys (null for one taken out); each it no longer has, removed;
+/// each new one, without an id. Unchanged entries are left out, so a review
+/// conflict is only about what the patch touches.
+List<Map<String, Object?>> entriesDiff(
+  List<Object?> current,
+  List<Object?> next,
+) {
+  String text(Object? v) => jsonEncode(_sorted(v));
+  final byId = {
+    for (final e in current)
+      if (e is Map && e['id'] is String) e['id'] as String: e,
+  };
+  final kept = <String>{};
+  final out = <Map<String, Object?>>[];
+  for (final e in next) {
+    if (e is! Map) continue;
+    final id = e['id'];
+    final old = id is String ? byId[id] : null;
+    if (old == null) {
+      out.add({
+        for (final MapEntry(:key, :value) in e.entries)
+          if (key != 'id') '$key': value,
+      });
+      continue;
+    }
+    kept.add(id as String);
+    final change = <String, Object?>{'id': id};
+    for (final key in {...old.keys, ...e.keys}) {
+      if (key == 'id') continue;
+      if (text(old[key]) != text(e[key])) change['$key'] = e[key];
+    }
+    if (change.length > 1) out.add(change);
+  }
+  for (final id in byId.keys) {
+    if (!kept.contains(id)) out.add({'id': id, 'removed': true});
+  }
+  return out;
+}
+
+Object? _sorted(Object? v) => switch (v) {
+  Map() => {
+    for (final k in v.keys.map((k) => '$k').toList()..sort()) k: _sorted(v[k]),
+  },
+  List() => [for (final x in v) _sorted(x)],
+  _ => v,
+};

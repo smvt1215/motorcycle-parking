@@ -292,7 +292,7 @@ class ReviewController extends ChangeNotifier {
         ? draft
         : applicablePatch(initialProposal(report, spot), spot);
     if (patch.isEmpty) return (patch, '沒有可套用的變更。');
-    return (wirePatch(patch), validatePatch(patch, spot));
+    return (wirePatch(patch, spot: spot), validatePatch(patch, spot));
   }
 
   /// Takes [report] out of the queue now and writes the decision after the

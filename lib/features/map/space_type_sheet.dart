@@ -5,14 +5,13 @@ import '../../models/space_kind.dart';
 import '../../ui/adaptive/adaptive.dart';
 import 'map_legend.dart';
 
-/// Filters the map by bay kind with the same grouped list the report forms
-/// use (C6 canvas AppPatterns, pattern 1). Each option shows its ground
-/// marking and how many spots of that kind the current map view holds.
+/// Filters the map by bay kind with the same list the report forms use
+/// (#188, design canvas P1). Each option shows its ground marking and how
+/// many spots of that kind the current map view holds.
 Future<void> showSpaceTypeSheet(
   BuildContext context, {
   required SpaceKind? value,
   required Map<SpaceKind?, int> counts,
-  Map<SpaceKindGroup, int> groupCounts = const {},
   required ValueChanged<SpaceKind?> onChanged,
 }) => showAdaptiveSheet<void>(
   context,
@@ -38,7 +37,6 @@ Future<void> showSpaceTypeSheet(
       SpaceKindList(
         value: value,
         counts: counts,
-        groupCounts: groupCounts,
         onChanged: (option) {
           onChanged(option);
           Navigator.pop(ctx);
@@ -48,17 +46,15 @@ Future<void> showSpaceTypeSheet(
   ),
 );
 
-/// The bay kinds in their four groups (C6 canvas AppPatterns, pattern 1;
-/// AppForm): each group folds, and only the one holding the pick, or the
-/// one the rider opened, shows its kinds. [followUp] goes indented under
-/// the picked kind: what the form asks about it next.
-class SpaceKindList extends StatefulWidget {
+/// The seven bay kinds and the lot (#188, design canvas S4, P1), in
+/// [SpaceKind] order. [followUp] goes indented under the picked kind: what
+/// the form asks about it next.
+class SpaceKindList extends StatelessWidget {
   const SpaceKindList({
     super.key,
     required this.value,
     required this.onChanged,
     this.counts,
-    this.groupCounts = const {},
     this.followUp,
     this.keyPrefix = 'space',
     this.reveal = 0,
@@ -68,134 +64,35 @@ class SpaceKindList extends StatefulWidget {
 
   /// Spots of each kind in the map view (the filter); null shows none.
   final Map<SpaceKind?, int>? counts;
-
-  /// Distinct spots of each group in the map view, shown while it is
-  /// folded: a 普大共用 bay is also a toll or free one, so the kinds' counts
-  /// do not add up to it.
-  final Map<SpaceKindGroup, int> groupCounts;
   final Widget? followUp;
 
   /// Prefix of each row's widget key, for tests.
   final String keyPrefix;
 
-  /// Bumped by a form whose check failed: the group holding the pick opens
-  /// again, so its follow-up's errors show.
+  /// Bumped by a form whose check failed; the list shows every kind, so
+  /// the pick's follow-up is always in view.
   final int reveal;
 
   @override
-  State<SpaceKindList> createState() => _SpaceKindListState();
-}
-
-class _SpaceKindListState extends State<SpaceKindList> {
-  late SpaceKindGroup? open = widget.value?.group;
-
-  @override
-  void didUpdateWidget(covariant SpaceKindList old) {
-    super.didUpdateWidget(old);
-    if ((widget.value != old.value || widget.reveal != old.reveal) &&
-        widget.value != null) {
-      open = widget.value!.group;
-    }
-  }
-
-  Widget _option(SpaceKind kind) => SpaceKindOption(
-    targetKey: ValueKey('${widget.keyPrefix}-${kind.name}'),
-    kind: kind,
-    count: widget.counts?[kind],
-    selected: kind == widget.value,
-    onTap: () => widget.onChanged(kind),
-  );
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
-    final counts = widget.counts;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (final group in SpaceKindGroup.values) ...[
-          DecoratedBox(
-            decoration: BoxDecoration(
-              border: Border(top: BorderSide(color: colors.outlineVariant)),
-            ),
-            child: Semantics(
-              button: true,
-              expanded: open == group,
-              child: InkWell(
-                key: ValueKey('${widget.keyPrefix}-group-${group.name}'),
-                onTap: () =>
-                    setState(() => open = open == group ? null : group),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: 48),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            group.label,
-                            style: text.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                        if (open != group)
-                          Flexible(
-                            child: Text(
-                              counts == null
-                                  ? group.hint
-                                  : '${widget.groupCounts[group] ?? 0}',
-                              textAlign: TextAlign.end,
-                              style: text.bodyMedium?.copyWith(
-                                color: colors.onSurfaceVariant,
-                                fontFeatures: const [
-                                  FontFeature.tabularFigures(),
-                                ],
-                              ),
-                            ),
-                          ),
-                        const SizedBox(width: 8),
-                        Icon(
-                          open == group ? Icons.expand_less : Icons.expand_more,
-                          size: 20,
-                          color: colors.onSurfaceVariant,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      for (final kind in SpaceKind.values) ...[
+        SpaceKindOption(
+          targetKey: ValueKey('$keyPrefix-${kind.name}'),
+          kind: kind,
+          count: counts?[kind],
+          selected: kind == value,
+          onTap: () => onChanged(kind),
+        ),
+        if (kind == value && followUp != null)
+          Padding(
+            padding: const EdgeInsetsDirectional.only(start: 16, bottom: 8),
+            child: followUp,
           ),
-          for (final kind in group.kinds)
-            if (kind == widget.value)
-              // The pick and its follow-up stay mounted while the group is
-              // folded, so a form still checks their fields.
-              Visibility(
-                visible: open == group,
-                maintainState: true,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _option(kind),
-                    if (widget.followUp != null)
-                      Padding(
-                        padding: const EdgeInsetsDirectional.only(
-                          start: 16,
-                          bottom: 8,
-                        ),
-                        child: widget.followUp,
-                      ),
-                  ],
-                ),
-              )
-            else if (open == group)
-              _option(kind),
-        ],
       ],
-    );
-  }
+    ],
+  );
 }
 
 /// One bay kind: its ground marking, its name and one sentence; the whole
@@ -264,8 +161,8 @@ class SpaceKindOption extends StatelessWidget {
                   children: [
                     ExcludeSemantics(
                       child: GroundMarking(
-                        type: kind?.type,
-                        shared: kind == SpaceKind.sharedMotorcycle,
+                        type: kind?.markingType,
+                        shared: kind == SpaceKind.scooterHeavy,
                         size: 40,
                       ),
                     ),

@@ -544,8 +544,15 @@ class SpotsController extends ChangeNotifier {
     };
   }
 
-  /// The bay kind the draft reads as (C6 canvas AppPatterns, pattern 1):
-  /// its space type, or 普大共用 for a toll or free bay posted for both.
+  /// The draft's street condition, or the one its space type stands for.
+  ParkingCondition? get draftCondition {
+    final type = SpaceType.values.asNameMap()[draft['space_type']];
+    return ParkingCondition.fromJson(draft['condition']) ??
+        (type == null ? null : conditionOf(type));
+  }
+
+  /// The bay kind the draft reads as (#188, design canvas S4): by its
+  /// condition, or the one its space type stands for.
   SpaceKind? get spaceKind {
     final type = SpaceType.values.asNameMap()[draft['space_type']];
     return type == null
@@ -557,15 +564,16 @@ class SpotsController extends ChangeNotifier {
   /// check (space type = the condition's legacy type, §1.3) holds: back to
   /// the stored kind restores the stored type and condition; another kind
   /// takes that kind's condition, keeping the notice it rests on (basis).
-  /// A spot without a condition gets none unless the kind needs one
-  /// (普大共用, at [charge], else its present charge, else toll).
+  /// A 一般機車格 or 普大共用格 is toll or free: at [charge], else its present
+  /// charge, else toll; 普大共用 always carries its condition, a spot
+  /// without one otherwise gets none.
   void setKind(SpaceKind kind, {Charge? charge}) {
     final r = record;
     if (r == null) return;
     final storedType = SpaceType.values.asNameMap()[r.values['space_type']];
     final stored = r.values['condition'];
     final storedCondition = ParkingCondition.fromJson(stored);
-    // Back to the stored kind (and, for 普大共用, its charge): the stored
+    // Back to the stored kind (and, for a toll or free kind, its charge): the stored
     // type and condition as they were, schedule and limits included.
     if (!r.isNew &&
         storedType != null &&
@@ -589,7 +597,7 @@ class SpotsController extends ChangeNotifier {
     final schedule = now?.schedule ?? const <ScheduleSlot>[];
     final SpaceType type;
     final ParkingCondition? condition;
-    if (kind == SpaceKind.sharedMotorcycle) {
+    if (kind == SpaceKind.scooterHeavy) {
       final c = charge ?? now?.charge ?? Charge.toll;
       type = c == Charge.free
           ? SpaceType.freeMotorcycle
@@ -602,8 +610,33 @@ class SpotsController extends ChangeNotifier {
         schedule: schedule,
         basis: basis,
       );
+    } else if (kind == SpaceKind.motorcycle) {
+      // A 一般機車格 keeps a time limit it has (a 限時 bay, §1.3) and its
+      // charge; one without either is toll until the admin says.
+      final draftType = SpaceType.values.asNameMap()[draft['space_type']];
+      final prev = draftType == null ? null : now ?? conditionOf(draftType);
+      final same =
+          draftType != null &&
+          SpaceKind.of(draftType, now) == SpaceKind.motorcycle;
+      final timed = same
+          ? prev?.limits.where((l) => l.kind == LimitKind.timeLimit).firstOrNull
+          : null;
+      final c = charge ?? (same ? prev?.charge : null);
+      final full = ParkingCondition(
+        bay: Bay.motorcycle,
+        use: BayUse.usual,
+        charge: c ?? (timed == null ? Charge.toll : null),
+        limits: [?timed],
+        schedule: schedule,
+        basis: basis,
+      );
+      type = legacySpaceType(full, offStreet: false)!;
+      // A spot stored without a condition keeps none while its type says it all.
+      condition = draft['condition'] == null && full == conditionOf(type)
+          ? null
+          : full;
     } else {
-      type = kind.type!;
+      type = kind.baseType;
       final base = conditionOf(type);
       condition = draft['condition'] == null || base == null
           ? null
@@ -643,7 +676,7 @@ class SpotsController extends ChangeNotifier {
     final shared =
         ParkingCondition.fromJson(draft['condition'])?.share ==
         ShareKind.scooterHeavy;
-    if (kind == SpaceKind.sharedMotorcycle) {
+    if (kind == SpaceKind.scooterHeavy) {
       if (shared) return const {};
       _heavyBeforeShare = (draft['heavy_allowed'],);
       return {'heavy_allowed': stored == null ? true : stored.$1};

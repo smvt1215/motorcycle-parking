@@ -2,7 +2,9 @@ import '../../models/closure.dart';
 import '../../models/condition_text.dart';
 import '../../models/parking_condition.dart';
 import '../../models/fee.dart';
+import '../../models/fee_plan.dart' show canonicalJson;
 import '../../models/parking.dart';
+import '../../models/zone_entries.dart';
 import '../spots/lot_models.dart';
 
 /// Queue filters from docs/ADMIN_WEB.md: eligibility, gone, everything else.
@@ -72,6 +74,11 @@ enum FieldInput {
 
   /// A temporary closure (`closure`, #116): works or a closure until a date.
   closure,
+
+  /// A lot's zones or a street spot's segments (`parking_zones`,
+  /// `parking_segments`, #188): shown as the list the rider's patches leave
+  /// and sent back as the patches that make it, by id.
+  entries,
 }
 
 /// A spot column `admin_resolve_report` may change, as the admin sees it.
@@ -133,6 +140,8 @@ final reviewFields = [
   const ReviewField('city', '縣市', FieldInput.text, maxLength: 30),
   const ReviewField('district', '行政區', FieldInput.text, maxLength: 30),
   ReviewField('closure', '暫時無法停車', FieldInput.closure),
+  const ReviewField('parking_zones', '分區', FieldInput.entries),
+  const ReviewField('parking_segments', '路邊分段', FieldInput.entries),
 ];
 
 ReviewField? reviewField(String key) =>
@@ -153,6 +162,8 @@ const suggestionFieldLabels = {
   'location': '位置不正確',
   'gone': '點位已不存在',
   'reopened': '暫時封閉已恢復',
+  'zones': '分區',
+  'segments': '路邊分段',
 };
 
 /// Labels older builds sent instead of a key.
@@ -314,6 +325,14 @@ Map<String, dynamic> initialProposal(ReviewReport report, ReviewSpot? spot) {
     final merged = mergeFeeJson(spot?.values['fee'], proposal['fee']);
     proposal['fee'] = merged.isEmpty ? null : merged;
   }
+  // Zone and segment patches (#188) change the entries they name by id:
+  // what is adopted, shown and checked is the list they leave. A patch
+  // naming an entry the spot no longer has stays as sent, and is set aside.
+  for (final key in entryKeys) {
+    if (!proposal.containsKey(key)) continue;
+    final merged = entriesPatch(jsonList(spot?.values[key]), proposal[key]);
+    if (merged != null) proposal[key] = merged;
+  }
   // A rider's closure (#116) starts the day it was reported and rests on
   // that report; the reviewer may change either before applying.
   if (proposal['closure'] case final Map<String, dynamic> c
@@ -357,6 +376,16 @@ List<String> ignoredKeys(Map<String, dynamic> proposal, ReviewSpot spot) => [
 bool _applicable(String key, Object? value, ReviewSpot spot) =>
     spot.allows(key) && fitsField(reviewField(key)!, value);
 
+/// The fields that hold a list of zones or segments by id (#188).
+const entryKeys = ['parking_zones', 'parking_segments'];
+
+/// Whether [value] is a whole list of [key]'s entries, each named, as the
+/// contract takes it.
+bool validEntries(String key, Object? value) =>
+    value is List &&
+    value.every((e) => e is Map && e['name'] is String) &&
+    (key == 'parking_zones' ? validZoneList(value) : validSegmentList(value));
+
 /// Whether [value] has the shape [field]'s editor expects. Proposals come
 /// from riders, so a wrong type is set aside instead of reaching an editor.
 bool fitsField(ReviewField field, Object? value) => switch (field.input) {
@@ -376,6 +405,7 @@ bool fitsField(ReviewField field, Object? value) => switch (field.input) {
     value == null || value is Fee || Fee.tryParse(value) != null,
   FieldInput.condition => value == null || validCondition(value),
   FieldInput.closure => value == null || validClosure(value),
+  FieldInput.entries => validEntries(field.key, value),
 };
 
 /// Whether [value] is a non-empty list of distinct [field] choices.
@@ -401,6 +431,7 @@ bool sameValue(String key, Object? a, Object? b) =>
         ParkingCondition.fromJson(a) == ParkingCondition.fromJson(b),
       // The same set in any order.
       FieldInput.multiChoice => _sameSet(a, b),
+      FieldInput.entries => canonicalJson(a) == canonicalJson(b),
       _ => a == b,
     };
 
@@ -410,13 +441,35 @@ bool _sameSet(Object? a, Object? b) {
   return x.length == y.length && x.containsAll(y);
 }
 
-/// [patch] as the RPC takes it: a fee being edited becomes its JSON.
-Map<String, dynamic> wirePatch(Map<String, dynamic> patch) => {
+/// [patch] as the RPC takes it: a fee being edited becomes its JSON; a
+/// zone or segment list becomes the patches that turn [spot]'s into it, by
+/// id (#188), so only the entries it changes can conflict.
+Map<String, dynamic> wirePatch(
+  Map<String, dynamic> patch, {
+  ReviewSpot? spot,
+}) => {
   for (final MapEntry(:key, :value) in patch.entries)
-    key: reviewField(key)?.input == FieldInput.fee
-        ? reviewFee(value)?.toJson()
-        : value,
+    key: switch (reviewField(key)?.input) {
+      FieldInput.fee => reviewFee(value)?.toJson(),
+      FieldInput.entries when value is List => entriesDiff(
+        jsonList(spot?.values[key]),
+        value,
+      ),
+      _ => value,
+    },
 };
+
+/// A zone or segment list in a line: how many, and their names.
+String entriesSummary(String key, Object? value) {
+  if (value is! List) return '未設定';
+  final names = [
+    for (final e in value)
+      if (e is Map && e['name'] is String) e['name'] as String,
+  ];
+  if (names.isEmpty) return key == 'parking_zones' ? '沒有分區' : '沒有路段';
+  final unit = key == 'parking_zones' ? '區' : '段';
+  return '${names.length} $unit：${names.join('、')}';
+}
 
 String formatValue(String key, Object? value) {
   final field = reviewField(key);
@@ -446,6 +499,7 @@ String formatValue(String key, Object? value) {
     FieldInput.fee => reviewFee(value)?.summary ?? '未設定',
     FieldInput.condition => conditionSummary(ParkingCondition.fromJson(value)),
     FieldInput.closure => closureSummary(value),
+    FieldInput.entries => entriesSummary(key, value),
   };
 }
 
@@ -509,6 +563,8 @@ String? validatePatch(Map<String, dynamic> patch, ReviewSpot spot) {
         }
       case FieldInput.closure:
         if (!validClosure(value)) return '暫時無法停車的資料不正確，請重新選擇預計恢復日期';
+      case FieldInput.entries:
+        if (!validEntries(key, value)) return '${field.label}的資料不正確';
       case FieldInput.fee:
         if (value == null) break;
         final fee = value is Fee ? value : Fee.tryParse(value);
