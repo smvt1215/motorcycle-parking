@@ -232,7 +232,7 @@ class AvailabilityFact {
   final int? count;
 
   /// Beside the number (「剩餘」「剩餘，已滿」), or alone without one
-  /// (「無即時資料」「空位未知」).
+  /// (「空位未知」).
   final String headline;
 
   /// 「／ 共 80 格」 after a number; empty otherwise.
@@ -274,7 +274,7 @@ AvailabilityFact availabilityFact(
     return AvailabilityFact(
       title: title,
       headline: '不顯示空位',
-      caption: '${vehicle.label}不可停放此場站',
+      caption: '${vehicle.label}不能停這個場站',
     );
   }
   final own = availability.of(availabilityVehicle(vehicle));
@@ -346,7 +346,7 @@ AvailabilityFact availabilityFact(
           : '場站未提供重機或汽車格剩餘';
       return AvailabilityFact(
         title: title,
-        headline: '無即時資料',
+        headline: '空位未知',
         caption: [static, missing].where((s) => s.isNotEmpty).join(' ・ '),
         notes: notes,
       );
@@ -475,7 +475,7 @@ String exclusionReason(
         : '資料更新延遲，暫不列為即時資訊',
   AvailabilityExclusion.suspended => '暫停營運',
   AvailabilityExclusion.full => '目前已滿',
-  AvailabilityExclusion.notAllowed => '${vehicle.label}不可停',
+  AvailabilityExclusion.notAllowed => '${vehicle.label}不能停',
   AvailabilityExclusion.unverified => '有位，但${vehicle.label}是否可停待確認',
 };
 

@@ -124,6 +124,22 @@ Future<void> openDetails(
   await tester.pumpAndSettle();
 }
 
+/// Scrolls the spot sheet until [finder] shows: the details sit under the
+/// preview's four signs.
+Future<void> showInSheet(WidgetTester tester, Finder finder) async {
+  await tester.scrollUntilVisible(
+    finder,
+    160,
+    scrollable: find
+        .descendant(
+          of: find.byKey(const ValueKey('parking-spot-sheet')),
+          matching: find.byType(Scrollable),
+        )
+        .first,
+  );
+  await tester.pumpAndSettle();
+}
+
 void main() {
   for (final dismissal in ['完成', '關閉', '返回', '下滑']) {
     testWidgets('建議成功後以$dismissal離開，同時關閉父面板', (tester) async {
@@ -1145,7 +1161,10 @@ void main() {
       final store = (await tester.runAsync(createStore))!;
       addTearDown(store.dispose);
       await openDetails(tester, store, scale: scale, brightness: brightness);
-      await tester.ensureVisible(find.text('修改建議'));
+      // At this size a resting sheet keeps the three actions (three rows)
+      // at the end of its list; opened to full height it pins them.
+      await tester.tap(find.byKey(const ValueKey('four-sign-verdict')));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('修改建議'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('停車點名稱'));
@@ -1485,6 +1504,7 @@ void main() {
             ),
           ),
         );
+        await showInSheet(tester, find.text('施工中，暫時不能停'));
         expect(find.text('施工中，暫時不能停'), findsOneWidget);
         expect(find.text('預計 ${closureDayLabel(until)}恢復'), findsOneWidget);
         expect(find.text('已經可以停'), findsNothing);
@@ -1502,6 +1522,7 @@ void main() {
             ),
           ),
         );
+        await showInSheet(tester, find.text('暫時封閉，暫時不能停'));
         expect(find.text('暫時封閉，暫時不能停'), findsOneWidget);
         expect(find.text('恢復時間未知'), findsOneWidget);
         await tester.pumpWidget(const SizedBox.shrink());
@@ -1518,6 +1539,7 @@ void main() {
             ),
           ),
         );
+        await showInSheet(tester, find.textContaining('原定'));
         expect(find.textContaining('原定'), findsOneWidget);
         expect(find.text('現場是否已恢復，還沒有人確認'), findsOneWidget);
         final reopened = find.byKey(const ValueKey('closure-reopened'));

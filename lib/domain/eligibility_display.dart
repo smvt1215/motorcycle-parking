@@ -174,8 +174,8 @@ EligibilityDisplay eligibilityDisplay(
           : EligibilityTier.reportedNotAllowed,
       // An expired check was an administrator's, not a rider's report.
       label: lapsed
-          ? (open ? '曾確認可停' : '曾確認不可停')
-          : (open ? '車友回報可停' : '車友回報不可停'),
+          ? (open ? '曾確認可停' : '曾確認不能停')
+          : (open ? '車友回報可停' : '車友回報不能停'),
       explanation: explanation,
       lapsed: lapsed,
       basis: lapsed

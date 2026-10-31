@@ -1,0 +1,459 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:motorcycle_parking/domain/eligibility.dart';
+import 'package:motorcycle_parking/domain/four_sign.dart';
+import 'package:motorcycle_parking/domain/four_sign_display.dart';
+import 'package:motorcycle_parking/domain/segment_decision.dart';
+import 'package:motorcycle_parking/models/availability.dart';
+import 'package:motorcycle_parking/models/parking.dart';
+
+/// The four signs (canvas Ver.143 Main, A3, A6, A11) on the demo data of
+/// FIX-DECISIONS: 松壽地下停車場 and 南京東路三段路邊機車格.
+void main() {
+  final rules =
+      (jsonDecode(File('assets/rules/parking_rules.json').readAsStringSync())
+              as List<dynamic>)
+          .cast<Map<String, dynamic>>()
+          .map(CityRule.fromJson)
+          .toList();
+  // 2026-11-03 (Tuesday) 14:20 and 21:00 in Taiwan.
+  final day = DateTime.utc(2026, 11, 3, 6, 20);
+  final night = DateTime.utc(2026, 11, 3, 13);
+
+  final lotJson = <String, dynamic>{
+    'id': 'songshou',
+    'name': '松壽地下停車場',
+    'lat': 25.03,
+    'lng': 121.56,
+    'city': '臺北市',
+    'district': '信義區',
+    'space_type': 'offStreet',
+    'facility_type': 'underground',
+    'source': 'official',
+    'scooter_allowed': true,
+    'heavy_allowed': true,
+    'entrance_note': '松壽路側車道下坡，機車走右側',
+    'fee': {
+      'scooter': {
+        'mode': 'hourly',
+        'amount': 20,
+        'per_minutes': 60,
+        'daily_cap': 100,
+        'cap_reset': 'calendar_day',
+      },
+      'heavy': {
+        'mode': 'hourly',
+        'amount': 20,
+        'per_minutes': 60,
+        'daily_cap': 100,
+        'cap_reset': 'calendar_day',
+      },
+    },
+    'parking_zones': [
+      {
+        'id': 'b1',
+        'name': 'B1 機車區',
+        'area': 'motorcycle',
+        'condition': {
+          'bay': 'motorcycle',
+          'use': 'usual',
+          'allow': {'scooter': true, 'heavy': false},
+        },
+      },
+      {
+        'id': 'b2',
+        'name': 'B2 重機專區',
+        'area': 'heavy',
+        'condition': {
+          'bay': 'heavy',
+          'use': 'usual',
+          'allow': {'heavy': true},
+        },
+      },
+      {
+        'id': 'b3',
+        'name': 'B3 汽車區',
+        'area': 'car',
+        'condition': {
+          'bay': 'car',
+          'use': 'share',
+          'share': 'car_motorcycle',
+          'allow': {'heavy': true},
+          'schedule': [
+            {
+              'days': 'all',
+              'from': '20:00',
+              'to': '23:00',
+              'vehicles': ['heavy'],
+            },
+          ],
+        },
+      },
+    ],
+  };
+  final lot = ParkingSpot.fromJson(lotJson);
+
+  final street = ParkingSpot.fromJson({
+    'id': 'nanjing',
+    'name': '南京東路三段路邊機車格',
+    'lat': 25.05,
+    'lng': 121.54,
+    'city': '臺北市',
+    'district': '中山區',
+    'space_type': 'paidMotorcycle',
+    'facility_type': 'roadside',
+    'source': 'official',
+    'fee': {
+      'scooter': {'mode': 'hourly', 'amount': 20, 'per_minutes': 60},
+      'heavy': {'mode': 'hourly', 'amount': 20, 'per_minutes': 60},
+    },
+    'parking_segments': [
+      {
+        'id': 'n1',
+        'name': '北側一般機車格',
+        'side': 'north',
+        'total': 18,
+        'condition': {'bay': 'motorcycle', 'use': 'usual', 'charge': 'toll'},
+      },
+      {
+        'id': 'n2',
+        'name': '北側汽機車共用格',
+        'side': 'north',
+        'total': 6,
+        'condition': {
+          'bay': 'car',
+          'use': 'share',
+          'share': 'car_motorcycle',
+          'schedule': [
+            {
+              'days': 'all',
+              'from': '20:00',
+              'to': '08:00',
+              'vehicles': ['scooter'],
+            },
+          ],
+        },
+      },
+      {
+        'id': 's1',
+        'name': '南側汽機車共用格',
+        'side': 'south',
+        'total': 12,
+        'condition': {
+          'bay': 'car',
+          'use': 'share',
+          'share': 'car_motorcycle',
+          'schedule': [
+            {
+              'days': 'all',
+              'from': '08:00',
+              'to': '20:00',
+              'vehicles': ['scooter', 'heavy'],
+            },
+          ],
+        },
+      },
+    ],
+  });
+
+  AvailabilitySnapshot count(
+    AvailabilityVehicle vehicle,
+    int available,
+    DateTime at, {
+    int total = 40,
+  }) => AvailabilitySnapshot(
+    spotId: 'songshou',
+    vehicle: vehicle,
+    provider: '臺北市停管處',
+    window: AvailabilityWindow.taipei,
+    total: total,
+    available: available,
+    sourceUpdatedAt: at,
+  );
+
+  List<SignPlate> plates(
+    ParkingSpot spot,
+    VehicleType vehicle,
+    DateTime now, {
+    SpotAvailability availability = SpotAvailability.none,
+    RiderSeats riders = noRiderSeats,
+  }) => fourSignPlates(
+    fourSign(
+      spot,
+      vehicle,
+      rules,
+      now: now,
+      availability: availability,
+      riders: riders,
+    ),
+    now,
+  );
+
+  test('解析示範資料：分區與路段條件都讀得到', () {
+    expect(lot.zones.map((z) => z.condition), everyElement(isNotNull));
+    expect(street.segments.map((s) => s.condition), everyElement(isNotNull));
+  });
+
+  group('路外：松壽地下停車場', () {
+    test('Main：大型重機白天只有 B2 可停，路牌照順序、停哪裡寫單區', () {
+      final p = plates(lot, VehicleType.heavy, day);
+      expect(p.map((x) => x.question), ['能不能停', '有沒有位', '怎麼算錢', '停哪裡']);
+      expect(
+        (p[0].main, p[0].note, p[0].tone),
+        ('可停', '政府資料', PlateTone.allowed),
+      );
+      expect(
+        (p[1].main, p[1].note, p[1].tone),
+        ('空位未知', '到場再找', PlateTone.dashed),
+      );
+      expect((p[2].main, p[2].note), ('20/時', '上限 100'));
+      expect((p[3].main, p[3].note), ('B2', '重機專區'));
+      expect(p[3].semantics, '停哪裡：B2 重機專區');
+    });
+
+    test('A11 卡 1：21:00 多區官方新鮮，挑最多的區並寫另 N 區有位', () {
+      final p = plates(
+        lot,
+        VehicleType.heavy,
+        night,
+        availability: SpotAvailability([
+          count(
+            AvailabilityVehicle.heavy,
+            4,
+            night.subtract(const Duration(minutes: 2)),
+          ),
+          count(
+            AvailabilityVehicle.car,
+            9,
+            night.subtract(const Duration(minutes: 1)),
+          ),
+        ]),
+      );
+      // B2 is open all day beside B3 by the hour: 可停 (A11 card 1).
+      expect(p[0].main, '可停');
+      expect(
+        (p[1].main, p[1].note, p[1].tag),
+        ('剩 9 格', 'B3 汽車區\n1 分鐘前', '另 1 區有位'),
+      );
+      expect(p[1].semantics, contains('B3 汽車區剩 9 格'));
+      expect(p[1].semantics, endsWith('另 1 區有位'));
+      expect((p[2].main, p[2].note), ('20/時', '全場同價\n上限 100'));
+      expect((p[3].main, p[3].note), ('2 區', 'B2、B3'));
+    });
+
+    test('A11 卡 2：每區都延遲時挑最新的區，維持琥珀色', () {
+      final p = plates(
+        lot,
+        VehicleType.heavy,
+        night,
+        availability: SpotAvailability([
+          count(
+            AvailabilityVehicle.heavy,
+            4,
+            night.subtract(const Duration(minutes: 15)),
+          ),
+          count(
+            AvailabilityVehicle.car,
+            9,
+            night.subtract(const Duration(minutes: 18)),
+          ),
+        ]),
+      );
+      expect(p[1].tone, PlateTone.delayed);
+      expect(p[1].main, '剩 4 格');
+      expect(p[1].note, 'B2 重機專區\n更新延遲\n15 分鐘前');
+      expect(p[1].tag, '另 1 區有位');
+    });
+
+    test('單區時有沒有位不寫區名，朗讀仍唸', () {
+      final p = plates(
+        lot,
+        VehicleType.heavy,
+        day,
+        availability: SpotAvailability([
+          count(
+            AvailabilityVehicle.heavy,
+            12,
+            day.subtract(const Duration(minutes: 3)),
+          ),
+        ]),
+      );
+      expect((p[1].main, p[1].note), ('剩 12 格', '3 分鐘前'));
+      expect(p[1].semantics, contains('B2 重機專區剩 12 格'));
+    });
+
+    test('只有靜態格數時寫共 N 格、空位未知（虛框）', () {
+      final p = plates(
+        lot,
+        VehicleType.heavy,
+        day,
+        availability: SpotAvailability([
+          count(
+            AvailabilityVehicle.heavy,
+            12,
+            day.subtract(const Duration(hours: 2)),
+          ),
+        ]),
+      );
+      expect(
+        (p[1].main, p[1].note, p[1].tone),
+        ('共 40 格', '空位未知', PlateTone.dashed),
+      );
+    });
+
+    test('現在沒有可停的區時，能不能停寫幾點起，停哪裡寫之後開放的區', () {
+      final onlyB3 = ParkingSpot.fromJson({
+        ...lotJson,
+        'parking_zones': [
+          for (final z in lotJson['parking_zones'] as List)
+            if ((z as Map)['id'] != 'b2') z,
+        ],
+      });
+      final p = plates(onlyB3, VehicleType.heavy, day);
+      expect(
+        (p[0].main, p[0].note, p[0].tone),
+        ('限時段', '20:00 起', PlateTone.conditional),
+      );
+      expect(p[3].main, 'B3');
+      final evening = plates(onlyB3, VehicleType.heavy, night);
+      expect((evening[0].main, evening[0].note), ('限時段', '到 23:00'));
+    });
+
+    test('普通機車：只有 B1 可停；重機格、汽車格不算', () {
+      final p = plates(lot, VehicleType.scooter, day);
+      expect(p[0].main, '可停');
+      expect((p[3].main, p[3].note), ('B1', '機車區'));
+    });
+
+    test('沒有費率資料寫官方未標示（虛框）', () {
+      final bare = ParkingSpot.fromJson({
+        ...lotJson,
+        'fee': null,
+        'fee_note': '請依現場公告',
+      });
+      final p = plates(bare, VehicleType.heavy, day);
+      expect(
+        (p[2].main, p[2].note, p[2].tone),
+        ('官方未標示', '依現場公告', PlateTone.dashed),
+      );
+    });
+
+    test('車友回報：沒有官方數字時用量表與車友回報小字', () {
+      final p = plates(
+        lot,
+        VehicleType.heavy,
+        day,
+        riders: _Riders([
+          RiderSeat(
+            level: 2,
+            at: day.subtract(const Duration(minutes: 8)),
+            areaId: 'b2',
+          ),
+        ]),
+      );
+      expect(
+        (p[1].main, p[1].note, p[1].tone),
+        ('還有一些', '車友回報\n8 分鐘前', PlateTone.rider),
+      );
+      expect(p[1].meters, [2]);
+    });
+  });
+
+  group('路邊：南京東路三段（逐段判定）', () {
+    test('逐段：白天普通機車北側一般機車格、南側共用格可停，北側共用格不算', () {
+      final segments = decideSegments(
+        street,
+        VehicleType.scooter,
+        rules,
+        now: day,
+      );
+      expect([for (final s in segments) s.openNow], [true, false, true]);
+    });
+
+    test('大型重機在汽機車共用格依法可停（decideParking 的判定，不看機車時段）', () {
+      final segments = decideSegments(
+        street,
+        VehicleType.heavy,
+        rules,
+        now: day,
+      );
+      expect([for (final s in segments) s.openNow], [true, true, true]);
+    });
+
+    test('A6 卡 2：普通機車白天 2 段共 30 格，分 2 段', () {
+      final p = plates(street, VehicleType.scooter, day);
+      expect(p[0].tone, isNot(PlateTone.denied));
+      expect((p[1].main, p[1].note), ('共 30 格', '分 2 段\n空位未知'));
+      expect(p[1].semantics, '有沒有位：共 30 格，分 2 段，空位未知');
+      expect((p[3].main, p[3].note), ('2 段', '北側、南側'));
+      expect(p[3].semantics, '停哪裡：2 段，北側一般機車格、南側汽機車共用格');
+    });
+
+    test('單段時停哪裡寫段名，有沒有位不重複段名', () {
+      final one = ParkingSpot.fromJson({
+        ...street.toJson(),
+        'parking_segments': [street.segments.first.toJson()],
+      });
+      final p = plates(one, VehicleType.scooter, day);
+      expect((p[0].main, p[0].tone), ('可停', PlateTone.allowed));
+      expect(p[0].note, '臺北市規則');
+      expect((p[1].main, p[1].note), ('共 18 格', '空位未知'));
+      expect(p[1].semantics, contains('北側一般機車格共 18 格'));
+      expect((p[2].main, p[2].note), ('20/時', ''));
+      expect((p[3].main, p[3].note), ('北側', '一般機車格'));
+    });
+
+    test('沒有路段資料的路邊點，整個點當成一段', () {
+      final bare = ParkingSpot.fromJson({
+        ...street.toJson(),
+        'parking_segments': null,
+      });
+      final p = plates(bare, VehicleType.scooter, day);
+      expect(p, hasLength(4));
+      expect(p[3].main, '一般機車格');
+      expect(p[1].main, '空位未知');
+    });
+
+    test('段條件未確認的段不借用點位條件', () {
+      final unknown = ParkingSpot.fromJson({
+        ...street.toJson(),
+        'parking_segments': [
+          {'id': 'x', 'name': '東側'},
+        ],
+      });
+      final segments = decideSegments(
+        unknown,
+        VehicleType.scooter,
+        rules,
+        now: day,
+      );
+      expect(segments.single.status, EligibilityStatus.unverified);
+      expect(plates(unknown, VehicleType.scooter, day)[0].main, '待確認');
+    });
+  });
+
+  test('目前車種不能停：只剩一面路牌', () {
+    final heavyBay = ParkingSpot.fromJson({
+      'id': 'h',
+      'name': '重機格',
+      'lat': 25,
+      'lng': 121,
+      'city': '臺北市',
+      'space_type': 'heavyOnly',
+      'facility_type': 'roadside',
+      'source': 'official',
+    });
+    final p = plates(heavyBay, VehicleType.scooter, day);
+    expect(p, hasLength(1));
+    expect((p.single.main, p.single.tone), ('普通機車不能停', PlateTone.denied));
+  });
+}
+
+class _Riders implements RiderSeats {
+  const _Riders(this.seats);
+  final List<RiderSeat> seats;
+  @override
+  List<RiderSeat> of(String spotId) => seats;
+}

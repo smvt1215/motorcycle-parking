@@ -99,7 +99,7 @@ void main() {
       VehicleType.heavy,
     );
     expect(d.tier, EligibilityTier.reportedNotAllowed);
-    expect(d.label, '車友回報不可停');
+    expect(d.label, '車友回報不能停');
     expect(d.basis, '回報於 2026-05-02');
   });
 
@@ -126,7 +126,7 @@ void main() {
       lot(heavy: false, heavyChecked: old),
       VehicleType.heavy,
     );
-    expect(closed.label, '曾確認不可停');
+    expect(closed.label, '曾確認不能停');
     expect(closed.lapsed, isTrue);
   });
 
@@ -186,7 +186,7 @@ void main() {
       if (d.reported) {
         expect(result.status, EligibilityStatus.unverified, reason: reason);
         expect(d.label, isNot('可停'), reason: reason);
-        expect(d.label.endsWith(flag! ? '可停' : '不可停'), isTrue, reason: reason);
+        expect(d.label.endsWith(flag! ? '可停' : '不能停'), isTrue, reason: reason);
       }
     }
   });
@@ -262,7 +262,7 @@ void main() {
       expect(d.tier, EligibilityTier.other);
       expect(d.label, '開放資訊待確認');
       expect(d.basis, '依政府公開資料，更新於 2026-10-20');
-      expect(d.zones.single.label, '不可停');
+      expect(d.zones.single.label, '不能停');
     });
 
     test('管理員確認過的社群停車場分區不完整：不是「車友回報」', () {

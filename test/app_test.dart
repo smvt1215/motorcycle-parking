@@ -251,7 +251,7 @@ void main() {
       tester.getTopLeft(denied).dy,
       greaterThan(tester.getTopLeft(find.text('[範例] 信義路收費機車格')).dy),
     );
-    expect(find.textContaining('不可停 · 汽車格'), findsOneWidget);
+    expect(find.textContaining('不能停 · 汽車格'), findsOneWidget);
     await tester.tapAt(const Offset(30, 550));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('隱藏不可停'));

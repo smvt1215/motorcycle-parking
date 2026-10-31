@@ -685,7 +685,7 @@ void main() {
       );
       expect(
         (denied.count, denied.headline, denied.caption),
-        (null, '不顯示空位', '大型重機不可停放此場站'),
+        (null, '不顯示空位', '大型重機不能停這個場站'),
       );
       expect(denied.notes, isEmpty);
     });
@@ -726,7 +726,7 @@ void main() {
       final none = fact([]);
       expect(
         (none.count, none.headline, none.caption),
-        (null, '無即時資料', '共 80 格（靜態資料）'),
+        (null, '空位未知', '共 80 格（靜態資料）'),
       );
       final noTotal = fact(
         [],
@@ -740,7 +740,7 @@ void main() {
         snap(AvailabilityVehicle.scooter, age: const Duration(minutes: 14)),
         snap(AvailabilityVehicle.heavy, available: -9),
       ], vehicle: VehicleType.heavy);
-      expect((f.title, f.count, f.headline), ('大型重機車位', null, '無即時資料'));
+      expect((f.title, f.count, f.headline), ('大型重機車位', null, '空位未知'));
       expect(f.caption, contains('場站未提供重機或汽車格剩餘'));
       expect(f.notes.single.text, '普通機車區剩 12 格，更新延遲 14 分鐘');
       expect(f.notes.single.caption, contains('不代表重機可用格數'));

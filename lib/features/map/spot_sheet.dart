@@ -8,6 +8,8 @@ import '../../models/spot_history.dart';
 import '../../domain/availability_display.dart';
 import '../../domain/eligibility.dart';
 import '../../domain/eligibility_display.dart';
+import '../../domain/four_sign.dart';
+import '../../domain/four_sign_display.dart';
 import '../../domain/parking_decision.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../auth/sign_in.dart';
@@ -24,17 +26,14 @@ import 'closure_card.dart';
 import 'spot_details.dart';
 import 'spot_fees.dart';
 import 'spot_photos.dart';
+import 'spot_preview.dart';
 import 'parking_access_view.dart';
 import 'vehicle_sheet.dart' show SmallPlateStack, platesOf;
 
-/// Peek height: header, eligibility and actions, with the map left visible
-/// above, the way map apps open a place.
+/// Peek height: the preview (name, the four signs and the actions), with
+/// the map left visible above, the way map apps open a place.
 /// The sheet's resting height, as a fraction of the space it opens in.
 const spotSheetPeek = .42;
-
-String _distanceLabel(double meters) => meters < 1000
-    ? '${(meters / 10).round() * 10} 公尺'
-    : '${(meters / 1000).toStringAsFixed(1)} 公里';
 
 /// Opens a spot's details over another page. The map embeds [SpotSheet]
 /// instead, so it stays movable and other spots stay tappable.
@@ -66,6 +65,33 @@ class _SpotSheetState extends State<SpotSheet> {
       (widget.onClose ?? () => Navigator.pop(context))();
 
   final extent = DraggableScrollableController();
+
+  /// Where each plate leads in the details below the preview (A3, decision
+  /// 10). PR-D's full-page details replace these sections.
+  final sections = {for (final face in FourSignFace.values) face: GlobalKey()};
+
+  /// Opens the details at [face]'s section.
+  Future<void> showSection(FourSignFace face) async {
+    if (extent.isAttached && extent.size < 1) {
+      await extent.animateTo(
+        1,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOutCubic,
+      );
+    }
+    final target = sections[face]!.currentContext;
+    if (target == null || !target.mounted) return;
+    await Scrollable.ensureVisible(
+      target,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  /// 回報現場狀況: the existing report entry until the rider sighting sheet
+  /// (A7, A7b; PR-E) replaces it.
+  Future<void> report(BuildContext context) =>
+      showSpotSuggestions(context, widget.store, widget.spot);
 
   /// The spot's latest public changes (#141), read once per spot.
   late Future<List<HistoryEntry>> history = _history();
@@ -193,13 +219,27 @@ class _SpotSheetState extends State<SpotSheet> {
                 final decision = store.decide(spot);
                 final eligibility = decision.eligibility;
                 final extraFee = _additionalFeeNote(spot);
-                final actions = _DetailActions(
+                final actions = SpotPreviewActions(
+                  street: !spot.isFacility,
                   onNavigate: () =>
                       runAction(ctx, () => navigateTo(spot.lat, spot.lng)),
+                  onReport: () => runAction(ctx, () => report(ctx)),
                   onSuggest: () => runAction(
                     ctx,
                     () => showSpotSuggestions(ctx, store, spot),
                   ),
+                );
+                final now = store.clock();
+                final plates = fourSignPlates(
+                  fourSign(
+                    spot,
+                    store.vehicle,
+                    store.rules,
+                    now: now,
+                    availability: store.availabilityOf(spot),
+                    decision: decision,
+                  ),
+                  now,
                 );
                 return LayoutBuilder(
                   builder: (ctx, constraints) {
@@ -227,24 +267,20 @@ class _SpotSheetState extends State<SpotSheet> {
                                   ),
                                 ),
                               ),
-                              _SpotHeading(
-                                name: spot.name,
-                                subtitle:
-                                    [
-                                          facilitySummary(spot),
-                                          regionSummary(spot),
-                                          if (store.located)
-                                            _distanceLabel(
-                                              distanceMeters(
-                                                store.lat,
-                                                store.lng,
-                                                spot.lat,
-                                                spot.lng,
-                                              ),
-                                            ),
-                                        ]
-                                        .where((value) => value.isNotEmpty)
-                                        .join(' · '),
+                              SpotPreview(
+                                spot: spot,
+                                plates: plates,
+                                subtitle: previewSubtitle(
+                                  spot,
+                                  meters: store.located
+                                      ? distanceMeters(
+                                          store.lat,
+                                          store.lng,
+                                          spot.lat,
+                                          spot.lng,
+                                        )
+                                      : null,
+                                ),
                                 favorite: store.favorites.any(
                                   (s) => s.id == spot.id,
                                 ),
@@ -254,7 +290,10 @@ class _SpotSheetState extends State<SpotSheet> {
                                 ),
                                 onShare: share,
                                 onClose: () => close(ctx),
+                                onPlate: showSection,
                               ),
+                              const SizedBox(height: 20),
+                              Divider(height: 1, color: colors.outlineVariant),
                               const SizedBox(height: 14),
                               // Works or a closure (#116), above the verdict:
                               // it overrides it while it holds.
@@ -281,6 +320,7 @@ class _SpotSheetState extends State<SpotSheet> {
                                 const SizedBox(height: 14),
                               ],
                               _SpotDecision(
+                                key: sections[FourSignFace.verdict],
                                 vehicle: store.vehicle,
                                 eligibility: eligibility,
                                 display: eligibilityDisplay(
@@ -294,6 +334,7 @@ class _SpotSheetState extends State<SpotSheet> {
                               // Ticks each minute: the rate follows the
                               // period the rider is in (decision 26).
                               MinuteTicker(
+                                key: sections[FourSignFace.seat],
                                 clock: store.clock,
                                 builder: (_, now) => _SpotSummary(
                                   spot: spot,
@@ -309,6 +350,7 @@ class _SpotSheetState extends State<SpotSheet> {
                                   child: Text(feedback!),
                                 ),
                               _DetailSection(
+                                key: sections[FourSignFace.fee],
                                 title: '收費',
                                 icon: Icons.payments_outlined,
                                 children: [
@@ -326,6 +368,7 @@ class _SpotSheetState extends State<SpotSheet> {
                                 ],
                               ),
                               _DetailSection(
+                                key: sections[FourSignFace.where],
                                 title: '停車資訊',
                                 icon: Icons.local_parking_outlined,
                                 children: [
@@ -506,87 +549,9 @@ String _additionalFeeNote(ParkingSpot spot) {
   return note;
 }
 
-class _SpotHeading extends StatelessWidget {
-  const _SpotHeading({
-    required this.name,
-    required this.subtitle,
-    required this.favorite,
-    required this.onFavorite,
-    required this.onShare,
-    required this.onClose,
-  });
-  final String name, subtitle;
-  final bool favorite;
-  final VoidCallback onFavorite, onClose;
-  final Future<void> Function(BuildContext) onShare;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.only(top: 5),
-                child: Text(
-                  name,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w600,
-                    height: 1.25,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            IconButton(
-              tooltip: '關閉詳情',
-              onPressed: onClose,
-              icon: const Icon(Icons.close),
-            ),
-          ],
-        ),
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                subtitle,
-                key: const ValueKey('spot-subtitle'),
-                style: Theme.of(context).textTheme.bodySmall
-                    ?.copyWith(color: colors.onSurfaceVariant, height: 1.5),
-              ),
-            ),
-            IconButton(
-              tooltip: favorite ? '取消收藏' : '收藏停車點',
-              onPressed: onFavorite,
-              icon: Icon(
-                favorite ? Icons.bookmark : Icons.bookmark_outline,
-                size: 21,
-              ),
-              color: colors.primary,
-            ),
-            Builder(
-              builder: (buttonContext) => IconButton(
-                tooltip: '分享停車點',
-                onPressed: () =>
-                    runAction(buttonContext, () => onShare(buttonContext)),
-                icon: const Icon(Icons.ios_share, size: 21),
-                color: colors.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
 class _SpotDecision extends StatelessWidget {
   const _SpotDecision({
+    super.key,
     required this.vehicle,
     required this.eligibility,
     required this.display,
@@ -1034,6 +999,7 @@ class _SummaryFact extends StatelessWidget {
 
 class _DetailSection extends StatelessWidget {
   const _DetailSection({
+    super.key,
     required this.title,
     required this.icon,
     required this.children,
@@ -1353,57 +1319,9 @@ class _DetailRow extends StatelessWidget {
 /// handle, the name and the start of the eligibility summary.
 const _minDetailHeight = 160.0;
 
-bool _stackedActions(BuildContext context, double width) =>
-    width < 320 || MediaQuery.textScalerOf(context).scale(14) > 18;
-
 /// Upper estimate of the pinned footer: border, 24 padding, the safe area and
 /// one or two rows of buttons at the current text size.
-double _footerHeight(BuildContext context, double width) {
-  final button = math.max(
-    48.0,
-    MediaQuery.textScalerOf(context).scale(20) + 28,
-  );
-  return 25 +
-      MediaQuery.paddingOf(context).bottom +
-      (_stackedActions(context, width) ? button * 2 + 12 : button);
-}
-
-class _DetailActions extends StatelessWidget {
-  const _DetailActions({required this.onNavigate, this.onSuggest});
-  final VoidCallback onNavigate;
-  final VoidCallback? onSuggest;
-
-  @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
-      final stacked = _stackedActions(context, constraints.maxWidth);
-      final width = stacked || onSuggest == null
-          ? constraints.maxWidth
-          : (constraints.maxWidth - 12) / 2;
-      return Wrap(
-        spacing: 12,
-        runSpacing: 12,
-        children: [
-          SizedBox(
-            width: width,
-            child: AdaptiveButton(
-              label: '導航到這裡',
-              icon: Icons.navigation_outlined,
-              onPressed: onNavigate,
-            ),
-          ),
-          if (onSuggest != null)
-            SizedBox(
-              width: width,
-              child: AdaptiveButton(
-                label: '修改建議',
-                secondary: true,
-                icon: Icons.edit_outlined,
-                onPressed: onSuggest,
-              ),
-            ),
-        ],
-      );
-    },
-  );
-}
+double _footerHeight(BuildContext context, double width) =>
+    25 +
+    MediaQuery.paddingOf(context).bottom +
+    SpotPreviewActions.heightFor(context, width);

@@ -114,9 +114,14 @@ Future<AppStore> detailStore(
 
 String summaryText(WidgetTester tester) => tester
     .widgetList<Text>(
+      // The summary sits under the preview; it may be scrolled past.
       find.descendant(
-        of: find.byKey(const ValueKey('availability-summary')),
-        matching: find.byType(Text),
+        of: find.byKey(
+          const ValueKey('availability-summary'),
+          skipOffstage: false,
+        ),
+        matching: find.byType(Text, skipOffstage: false),
+        skipOffstage: false,
       ),
     )
     .map((t) => t.data ?? t.textSpan!.toPlainText())
@@ -374,7 +379,7 @@ void main() {
         expect(find.text('範圍內 4 個點都還在，只是都不符合條件：'), findsOneWidget);
         expect(find.text('場站沒有大型重機的即時資料，空位未知'), findsOneWidget);
         expect(find.text('資料更新延遲，暫不列為有位'), findsOneWidget);
-        expect(find.text('大型重機不可停'), findsOneWidget);
+        expect(find.text('大型重機不能停'), findsOneWidget);
         expect(find.textContaining('已滿'), findsNothing);
         expect(find.byType(ExcludedSpotDot), findsNWidgets(4));
         final clear = find.text('清除「目前有位」');
@@ -447,9 +452,9 @@ void main() {
       ),
       '無資料': (
         [count('fresh', AvailabilityVehicle.scooter, available: -9)],
-        '無即時資料｜共 80 格（靜態資料） ・ 場站未提供此車種剩餘',
+        '空位未知｜共 80 格（靜態資料） ・ 場站未提供此車種剩餘',
       ),
-      '靜態': (const [], '無即時資料｜共 80 格（靜態資料）'),
+      '靜態': (const [], '空位未知｜共 80 格（靜態資料）'),
     };
     for (final MapEntry(key: name, value: (counts, expected))
         in cases.entries) {
@@ -471,7 +476,7 @@ void main() {
         count('h', AvailabilityVehicle.scooter, minutes: 14),
       ], vehicle: VehicleType.heavy);
       await openDetails(tester, store, heavyLot);
-      expect(summaryText(tester), startsWith('大型重機車位｜無即時資料'));
+      expect(summaryText(tester), startsWith('大型重機車位｜空位未知'));
       expect(summaryText(tester), contains('普通機車區剩 12 格，更新延遲 14 分鐘'));
       expect(summaryText(tester), contains('不代表重機可用格數'));
       await tester.pumpWidget(const SizedBox.shrink());
@@ -507,12 +512,24 @@ void main() {
           scale: 1.6,
           brightness: Brightness.dark,
         );
+        // The summary sits under the preview.
+        await tester.scrollUntilVisible(
+          find.byKey(const ValueKey('availability-summary')),
+          160,
+          scrollable: find
+              .descendant(
+                of: find.byKey(const ValueKey('parking-spot-sheet')),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        );
+        await tester.pumpAndSettle();
         final summary = tester.getRect(
           find.byKey(const ValueKey('availability-summary')),
         );
         expect(summary.right, lessThanOrEqualTo(width));
         expect(find.bySemanticsLabel(RegExp('大型重機車位，剩餘 3 格')), findsOneWidget);
-        expect(find.text('導航到這裡').hitTestable(), findsOneWidget);
+        expect(find.text('導航到入口').hitTestable(), findsOneWidget);
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
       });
