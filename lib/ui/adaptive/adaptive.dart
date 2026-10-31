@@ -237,10 +237,9 @@ class AdaptiveScaffold extends StatelessWidget {
           ? cu.CupertinoNavigationBar(
               middle: Text(title),
               leading: back
-                  ? cu.CupertinoButton(
-                      padding: EdgeInsets.zero,
+                  ? cu.CupertinoNavigationBarBackButton(
+                      previousPageTitle: '個人中心',
                       onPressed: () => onTab(2),
-                      child: const Icon(Icons.arrow_back_ios_new),
                     )
                   : null,
               backgroundColor: Theme.of(context).colorScheme.surface
