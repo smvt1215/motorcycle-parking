@@ -473,6 +473,33 @@ void main() {
         });
       });
 
+      testWidgets('限時的普大共用格改收費時保留限時與分鐘', (tester) async {
+        gateway.spotRows[communityId]!
+          ..['space_type'] = 'timedMotorcycle'
+          ..['condition'] = {
+            'bay': 'motorcycle',
+            'use': 'share',
+            'share': 'scooter_heavy',
+            'limits': [
+              {'kind': 'time_limit', 'max_minutes': 30},
+            ],
+          };
+        await show(tester, path: '/spots/$communityId');
+        await openFold(tester, '格位與停放條件');
+        await tapKey(tester, 'spot-space-charge-free');
+        expect(await save(tester), {
+          'condition': {
+            'bay': 'motorcycle',
+            'use': 'share',
+            'share': 'scooter_heavy',
+            'charge': 'free',
+            'limits': [
+              {'kind': 'time_limit', 'max_minutes': 30},
+            ],
+          },
+        });
+      });
+
       testWidgets('改成路外時條件為 null', (tester) async {
         gateway.spotRows[communityId]!['condition'] = {
           'bay': 'motorcycle',

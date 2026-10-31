@@ -327,11 +327,12 @@ Map<String, dynamic> initialProposal(ReviewReport report, ReviewSpot? spot) {
   }
   // Zone and segment patches (#188) change the entries they name by id:
   // what is adopted, shown and checked is the list they leave. A patch
-  // naming an entry the spot no longer has stays as sent, and is set aside.
+  // naming an entry the spot no longer has is marked stale: never read as
+  // a whole list (that would remove the others), only set aside.
   for (final key in entryKeys) {
     if (!proposal.containsKey(key)) continue;
     final merged = entriesPatch(jsonList(spot?.values[key]), proposal[key]);
-    if (merged != null) proposal[key] = merged;
+    proposal[key] = merged ?? StaleEntries(key);
   }
   // A rider's closure (#116) starts the day it was reported and rests on
   // that report; the reviewer may change either before applying.
@@ -378,6 +379,70 @@ bool _applicable(String key, Object? value, ReviewSpot spot) =>
 
 /// The fields that hold a list of zones or segments by id (#188).
 const entryKeys = ['parking_zones', 'parking_segments'];
+
+/// A zone or segment suggestion that names an entry the spot no longer has
+/// (removed or replaced since the report): it cannot be applied, and is
+/// shown among the suggestions set aside.
+class StaleEntries {
+  const StaleEntries(this.key);
+  final String key;
+
+  @override
+  String toString() => key == 'parking_zones' ? '這區已不存在，無法套用' : '這段已不存在，無法套用';
+}
+
+/// The keys an entry change names, as the review shows them.
+const _entryKeyLabels = {
+  'name': '名稱',
+  'access': '車種開放',
+  'area': '區域',
+  'guide': '指引',
+  'fee': '費率',
+  'fee_plan': '計費規則',
+  'condition': '格位',
+  'evidence_url': '照片連結',
+  'side': '哪一側',
+  'range': '範圍',
+  'total': '格數',
+};
+
+String _entryValue(String key, Object? v) => switch ((key, v)) {
+  (_, null) => '未填',
+  ('access', final String a) => ParkingAccess.values.asNameMap()[a]?.label ?? a,
+  ('fee', _) => reviewFee(v)?.summary ?? '未設定',
+  ('condition', _) => conditionSummary(
+    ParkingCondition.fromJson(v, zone: true),
+  ),
+  ('side', final String side) =>
+    RoadSide.values.asNameMap()[side]?.label ?? side,
+  ('total', final num n) => '$n 格',
+  (_, final String text) => text.trim().isEmpty ? '未填' : text,
+  _ => '$v',
+};
+
+/// What [next] changes in [current] (a zone or segment list), one line per
+/// change: 新增, 撤除, or each changed key of an entry, 舊→新.
+List<String> entriesChangeLines(Object? current, Object? next) {
+  if (next is! List) return const [];
+  final now = jsonList(current);
+  String nameOf(Map<Object?, Object?> e) =>
+      e['name'] is String ? '「${e['name']}」' : '#${e['id']}';
+  final byId = {
+    for (final e in now)
+      if (e['id'] is String) e['id'] as String: e,
+  };
+  return [
+    for (final change in entriesDiff(now, next))
+      if (change['removed'] == true)
+        '撤除${nameOf(byId[change['id']] ?? change)}'
+      else if (!change.containsKey('id'))
+        '新增${nameOf(change)}'
+      else
+        '${nameOf(byId[change['id']]!)}：${[for (final k in change.keys)
+          if (k != 'id') '${_entryKeyLabels[k] ?? k} '
+                '${_entryValue(k, byId[change['id']]![k])}→${_entryValue(k, change[k])}'].join('；')}',
+  ];
+}
 
 /// Whether [value] is a whole list of [key]'s entries, each named, as the
 /// contract takes it.

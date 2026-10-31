@@ -850,7 +850,7 @@ class _ReviewDetail extends StatelessWidget {
                 if (ignored.isNotEmpty && !editing) ...[
                   const SizedBox(height: 10),
                   AdminNotice(
-                    '另有無法在這裡修改的建議：${ignored.map((k) => '$k＝${proposal[k]}').join('、')}',
+                    '另有無法在這裡修改的建議：${ignored.map((k) => '${reviewField(k)?.label ?? k}＝${proposal[k]}').join('、')}',
                   ),
                 ],
                 const SizedBox(height: 24),
@@ -1041,7 +1041,14 @@ class _DiffTable extends StatelessWidget {
       if (sameValue(key, value, current)) return Text('不變', style: muted);
       return Align(
         alignment: Alignment.centerLeft,
-        child: ChangeBand(formatValue(key, value)),
+        child: ChangeBand(
+          // Zones and segments (#188): the list, then what each change does.
+          [
+            formatValue(key, value),
+            if (reviewField(key)?.input == FieldInput.entries)
+              ...entriesChangeLines(current, value),
+          ].join('\n'),
+        ),
       );
     }
 

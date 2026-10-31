@@ -153,4 +153,44 @@ void main() {
       ],
     });
   });
+
+  test('a stale rename never reaches the patch, nor removes the others', () {
+    final proposal = initialProposal(
+      report({
+        'parking_zones': [
+          {'id': 'b9', 'name': '新名稱'},
+        ],
+      }),
+      spot,
+    );
+    expect(proposal['parking_zones'], isA<StaleEntries>());
+    expect(applicablePatch(proposal, spot), isEmpty);
+    expect(ignoredKeys(proposal, spot), ['parking_zones']);
+    expect('${proposal['parking_zones']}', '這區已不存在，無法套用');
+    expect(wirePatch(applicablePatch(proposal, spot), spot: spot), isEmpty);
+  });
+
+  test('the review lists what each change does, not only the names', () {
+    final next = entriesPatch(zones, [
+      {'id': 'b1', 'guide': '走右側坡道', 'access': 'scooterHeavy'},
+      {'id': 'b2', 'removed': true},
+      {'name': 'B3'},
+    ])!;
+    expect(entriesChangeLines(zones, next), [
+      '「B1」：車種開放 普機專用→普大共用；指引 靠電梯→走右側坡道',
+      '新增「B3」',
+      '撤除「B2」',
+    ]);
+    expect(
+      entriesChangeLines(
+        [
+          {'id': 's1', 'name': '北側', 'total': 18},
+        ],
+        [
+          {'id': 's1', 'name': '北側', 'total': 20, 'side': 'north'},
+        ],
+      ),
+      ['「北側」：格數 18 格→20 格；哪一側 未填→北側'],
+    );
+  });
 }

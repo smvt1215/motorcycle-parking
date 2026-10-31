@@ -597,42 +597,33 @@ class SpotsController extends ChangeNotifier {
     final schedule = now?.schedule ?? const <ScheduleSlot>[];
     final SpaceType type;
     final ParkingCondition? condition;
-    if (kind == SpaceKind.scooterHeavy) {
-      final c = charge ?? now?.charge ?? Charge.toll;
-      type = c == Charge.free
-          ? SpaceType.freeMotorcycle
-          : SpaceType.paidMotorcycle;
-      condition = ParkingCondition(
-        bay: Bay.motorcycle,
-        use: BayUse.share,
-        share: ShareKind.scooterHeavy,
-        charge: c,
-        schedule: schedule,
-        basis: basis,
-      );
-    } else if (kind == SpaceKind.motorcycle) {
-      // A 一般機車格 keeps a time limit it has (a 限時 bay, §1.3) and its
-      // charge; one without either is toll until the admin says.
+    if (kind == SpaceKind.scooterHeavy || kind == SpaceKind.motorcycle) {
+      // A 一般機車格 or 普大共用格 keeps a time limit it has (a 限時 bay,
+      // §1.3) and its charge while it stays one of the two; one without
+      // either is toll until the admin says. The legacy type comes from the
+      // whole condition.
+      final shared = kind == SpaceKind.scooterHeavy;
       final draftType = SpaceType.values.asNameMap()[draft['space_type']];
       final prev = draftType == null ? null : now ?? conditionOf(draftType);
-      final same =
-          draftType != null &&
-          SpaceKind.of(draftType, now) == SpaceKind.motorcycle;
+      final same = draftType != null && SpaceKind.of(draftType, now).asksCharge;
       final timed = same
           ? prev?.limits.where((l) => l.kind == LimitKind.timeLimit).firstOrNull
           : null;
       final c = charge ?? (same ? prev?.charge : null);
       final full = ParkingCondition(
         bay: Bay.motorcycle,
-        use: BayUse.usual,
+        use: shared ? BayUse.share : BayUse.usual,
+        share: shared ? ShareKind.scooterHeavy : null,
         charge: c ?? (timed == null ? Charge.toll : null),
         limits: [?timed],
         schedule: schedule,
         basis: basis,
       );
       type = legacySpaceType(full, offStreet: false)!;
-      // A spot stored without a condition keeps none while its type says it all.
-      condition = draft['condition'] == null && full == conditionOf(type)
+      // 普大共用 always carries its condition; a 一般機車格 stored without
+      // one keeps none while its type says it all.
+      condition =
+          !shared && draft['condition'] == null && full == conditionOf(type)
           ? null
           : full;
     } else {
