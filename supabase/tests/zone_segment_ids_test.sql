@@ -182,6 +182,50 @@ select is((select parking_zones->0->>'guide' from community_spots where id=(sele
 select is((select parking_zones->0->>'id' from community_spots where id=(select id from fx where name='lot')),'b1','keeps its id');
 select ok((select parking_zones->2 ? 'id' from community_spots where id=(select id from fx where name='lot')),'the new zone has an id');
 
+-- ===== Codex 第 1 輪：清除費率解除計費規則、改 access 帶著 condition =====
+select is(entries_patch('[{"id":"a","name":"A","fee_plan":"p1","fee":{"scooter":{"mode":"free"}}}]','[{"id":"a","fee":null}]'),
+  '[{"id":"a","name":"A"}]'::jsonb,'clearing a zone fee drops its plan reference');
+select is(entries_patch('[{"id":"a","name":"A","access":"scooterOnly",
+    "condition":{"bay":"motorcycle","use":"usual","limits":[{"kind":"time_limit"}],"allow":{"scooter":true,"heavy":false}}}]',
+  '[{"id":"a","access":"heavyOnly"}]'),
+  '[{"id":"a","name":"A","access":"heavyOnly","condition":{"bay":"heavy","limits":[{"kind":"time_limit"}],"allow":{"scooter":false,"heavy":true}}}]'::jsonb,
+  'a new access brings the condition''s allow and bay with it, limits kept');
+select is(entries_patch('[{"id":"a","name":"A","access":"scooterOnly","condition":{"bay":"motorcycle","allow":{"scooter":true,"heavy":false}}}]',
+  '[{"id":"a","access":null}]'),'[{"id":"a","name":"A"}]'::jsonb,'no access left, no condition');
+select ok(valid_zones(entries_patch('[{"id":"a","name":"A","access":"heavyCar","condition":{"bay":"car","use":"share","share":"car_motorcycle","allow":{"scooter":false,"heavy":true}}}]',
+  '[{"id":"a","access":"scooterHeavy"}]')),'the zone stays valid when the bay changes with a shared use');
+
+-- Through the review: a lot zone with a plan, and one with a condition.
+reset role;
+update community_spots set fee_plans='[{"id":"p1","name":"機車計時","fee":{"scooter":{"mode":"hourly","amount":10,"per_minutes":60}}}]',
+  parking_zones='[{"id":"c1","name":"C1","fee_plan":"p1","fee":{"scooter":{"mode":"hourly","amount":10,"per_minutes":60}}},
+    {"id":"c2","name":"C2","access":"scooterOnly","condition":{"bay":"motorcycle","use":"usual","allow":{"scooter":true,"heavy":false}}}]'
+  where id=(select id from fx where name='lot');
+insert into moderation_queue(source_id,reporter_id,reason,field,proposed)
+  values((select id::text from fx where name='lot'),'10000000-0000-4000-8000-000000000001','清費率改資格','zones',
+    '{"parking_zones":[{"id":"c1","fee":null},{"id":"c2","access":"heavyOnly"}]}');
+insert into fx select 'report2',id from moderation_queue where reason='清費率改資格';
+set local role authenticated;
+select pg_temp.act('admin');
+select lives_ok($$select admin_resolve_report((select id from fx where name='report2'),'accepted',
+  (select jsonb_build_object('parking_zones',proposed->'parking_zones') from moderation_queue where id=(select id from fx where name='report2')))$$,
+  'clearing a planned zone''s fee and changing a conditioned zone''s access apply');
+reset role;
+select is((select parking_zones->0 from community_spots where id=(select id from fx where name='lot')),
+  '{"id":"c1","name":"C1"}'::jsonb,'the fee is cleared, not copied back from the plan');
+select is((select parking_zones->1->'condition'->'allow' from community_spots where id=(select id from fx where name='lot')),
+  '{"scooter":false,"heavy":true}'::jsonb,'the condition follows the new access');
+
+-- ===== 升級為官方點時採用管理員給的路段 =====
+set local role authenticated;
+select pg_temp.act('admin');
+select is((admin_promote_spot((select id::text from fx where name='street'),
+  '{"source_name":"臺北市停管處","source_url":"https://example.test/promote","effective_date":"2026-10-01",
+    "parking_segments":[{"name":"北側（官方）","side":"north"}]}',
+  (select updated_at from community_spots where id=(select id from fx where name='street')))->'parking_segments'->0->>'name'),
+  '北側（官方）','promotion takes the segments the admin gives');
+reset role;
+
 -- ===== 匯入比較不看 id =====
 select is(zones_without_plans('[{"id":"b1","name":"B1","fee_plan":"p1"}]'),'[{"name":"B1"}]'::jsonb,
   'imports compare zones without ids or plan references');
