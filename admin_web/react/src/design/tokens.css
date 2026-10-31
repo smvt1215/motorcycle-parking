@@ -1,0 +1,72 @@
+/*
+ * Design tokens from ../../../DESIGN.md (frontmatter). Names match the
+ * frontmatter keys: colors.<name> → --color-<name>, rounded.<name> →
+ * --radius-<name>, spacing.<n> → --space-<n>. tokens.test.ts fails when the
+ * two drift apart; change DESIGN.md first, then this file.
+ */
+:root {
+  --color-rail-black: #16181a;
+  --color-aluminium: #e4e7e9;
+  --color-plate-white: #fafaf6;
+  --color-paper-white: #ffffff;
+  --color-action-blue: #1f5fa8;
+  --color-action-blue-deep: #164a85;
+  --color-graphite: #565c62;
+  --color-steel: #9aa0a6;
+  --color-rivet: #c9cdd1;
+  --color-divider: #e1e4e6;
+  --color-section-divider: #dde0e3;
+  --color-map-ground: #d6dadd;
+  --color-reflective-yellow: #fff3c4;
+  --color-destructive: #a3241b;
+  --color-destructive-border: #d9a7a2;
+  --color-plate-ink: #1c1c1c;
+  --color-plate-ordinary-green: #2e7d4f;
+  --color-plate-heavy-red: #c62828;
+  --color-plate-heavy-yellow: #f2c200;
+  --color-marker-allowed: #186348;
+  --color-marker-conditional: #865500;
+  --color-marker-unverified: #59646c;
+  --color-marker-denied: #a13042;
+  --color-marker-badge-ink: #22282d;
+
+  --radius-tag: 3px;
+  --radius-plate: 3.5px;
+  --radius-control: 6px;
+  --radius-panel: 8px;
+  --radius-dialog: 10px;
+  --radius-sheet: 14px;
+  --radius-chip: 20px;
+
+  --space-4: 4px;
+  --space-8: 8px;
+  --space-12: 12px;
+  --space-16: 16px;
+  --space-20: 20px;
+  --space-24: 24px;
+  --space-32: 32px;
+  --space-40: 40px;
+
+  --font-body: 'Noto Sans TC', sans-serif;
+  --font-numeral: 'Barlow Condensed', 'Noto Sans TC', sans-serif;
+  --text-headline: 28px;
+  --text-body: 15px;
+  --text-caption: 13px;
+  --text-figure: 22px;
+
+  /* Elevation & Depth: shadows only for things that float. */
+  --shadow-float: 0 6px 24px rgba(22, 24, 26, 0.18);
+  --shadow-dialog: 0 18px 48px rgba(22, 24, 26, 0.35);
+  --shadow-sheet: 0 -6px 20px rgba(22, 24, 26, 0.16);
+  --shadow-marker: 0 2px 6px rgba(22, 24, 26, 0.3);
+  --scrim: rgba(22, 24, 26, 0.55);
+
+  /* Rail hover is one step lighter than rail-black (Main.dc.html). */
+  --color-rail-hover: #2a2d30;
+
+  /* Layout breakpoints (DESIGN.md Layout): phone < 680 ≤ tablet < 1040 ≤ desktop. */
+  --rail-width: 96px;
+  --tabs-height: 64px;
+  --topbar-height: 56px;
+  --bottom-tabs-height: 72px;
+}

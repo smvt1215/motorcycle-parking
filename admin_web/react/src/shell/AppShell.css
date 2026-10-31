@@ -1,0 +1,207 @@
+/*
+ * Desktop first (≥ 1040px): 96px rail-black rail on the left.
+ * Breakpoints match DESIGN.md Layout; the tablet and phone overrides follow.
+ */
+.shell {
+  display: flex;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.shell-bar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  flex: 0 0 var(--rail-width);
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: var(--rail-width);
+  height: 100vh;
+  height: 100dvh;
+  padding: 18px 0;
+  background: var(--color-rail-black);
+  color: var(--color-rivet);
+}
+
+.shell-logo {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 52px;
+  height: 32px;
+  margin-bottom: 14px;
+  border: 2px solid var(--color-plate-white);
+  border-radius: 5px;
+  color: var(--color-plate-white);
+  font: 700 17px var(--font-numeral);
+}
+
+.shell-logo__han {
+  font: 700 var(--text-caption) var(--font-body);
+}
+
+.shell-bar__title {
+  display: none;
+}
+
+.shell-nav {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.shell-nav__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 80px;
+  min-height: 64px;
+  border-radius: var(--radius-control);
+  color: var(--color-rivet);
+  font-size: var(--text-caption);
+  text-decoration: none;
+}
+
+.shell-nav__item:hover {
+  background: var(--color-rail-hover);
+  color: var(--color-paper-white);
+}
+
+.shell-nav__item.is-active {
+  background: var(--color-plate-white);
+  color: var(--color-rail-black);
+  font-weight: 700;
+}
+
+.shell-nav__icon {
+  flex: 0 0 auto;
+}
+
+.shell-nav__item--more {
+  display: none;
+}
+
+.shell-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Tablet (680–1039px): 64px top tab bar, text-only tabs, 48px high. */
+@media (max-width: 1039.98px) {
+  .shell {
+    flex-direction: column;
+  }
+
+  .shell-bar {
+    flex: 0 0 var(--tabs-height);
+    flex-direction: row;
+    gap: 6px;
+    width: auto;
+    height: var(--tabs-height);
+    padding: 0 12px;
+  }
+
+  .shell-logo {
+    margin: 0 8px 0 0;
+  }
+
+  .shell-nav {
+    flex-direction: row;
+    gap: 4px;
+    min-width: 0;
+    overflow-x: auto;
+  }
+
+  .shell-nav__item {
+    flex-direction: row;
+    gap: 6px;
+    width: auto;
+    min-height: 48px;
+    padding: 0 14px;
+    font-size: var(--text-body);
+    white-space: nowrap;
+  }
+
+  .shell-nav__icon {
+    display: none;
+  }
+}
+
+/*
+ * Phone (< 680px): 56px top bar naming the page, 72px bottom tabs with
+ * 審核、點位、規則、更多; 匯入 and 使用者 move under 更多.
+ */
+@media (max-width: 679.98px) {
+  .shell-bar {
+    flex: 0 0 var(--topbar-height);
+    height: var(--topbar-height);
+    padding: 0 16px;
+    gap: 12px;
+  }
+
+  .shell-logo {
+    margin: 0;
+  }
+
+  .shell-bar__title {
+    display: block;
+    color: var(--color-paper-white);
+    font-weight: 900;
+  }
+
+  .shell-nav {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    gap: 4px;
+    height: calc(var(--bottom-tabs-height) + env(safe-area-inset-bottom, 0px));
+    padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px));
+    overflow: visible;
+    background: var(--color-rail-black);
+  }
+
+  .shell-nav__item {
+    flex: 1 1 0;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    min-height: 56px;
+    padding: 0;
+    border-radius: var(--radius-panel);
+    font-size: var(--text-caption);
+  }
+
+  .shell-nav__icon {
+    display: block;
+  }
+
+  .shell-nav__item--wide {
+    display: none;
+  }
+
+  .shell-nav__item--more {
+    display: flex;
+  }
+
+  .shell-main {
+    padding-bottom: calc(var(--bottom-tabs-height) + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* The bar already names the page. */
+  .page-headline {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+}
