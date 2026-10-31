@@ -46,12 +46,14 @@ class MyContributionsPage extends ConsumerWidget {
               ),
             ),
       body: ListView(
+        // The shell's iOS tab bar floats over the page (extendBody), and
+        // its height already arrives as bottom padding; Android's bar sits
+        // below the body. Either way only a small gap is added.
         padding: EdgeInsets.fromLTRB(
           16,
           16,
           16,
-          // Above the iOS floating tab bar.
-          (isCupertino ? 110 : 24) + MediaQuery.paddingOf(context).bottom,
+          16 + MediaQuery.paddingOf(context).bottom,
         ),
         children: [MyContributionsSection(store: store, now: now)],
       ),

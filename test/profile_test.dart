@@ -235,6 +235,7 @@ void main() {
     WidgetTester tester,
     double width, {
     bool settings = false,
+    Map<String, dynamic>? metadata,
     double height = 1000,
   }) async {
     tester.view.devicePixelRatio = 1;
@@ -243,7 +244,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetViewInsets);
     final fixture = (await tester.runAsync(() async {
-      final value = ProfileFixture();
+      final value = ProfileFixture(metadata: metadata);
       await value.open();
       return value;
     }))!;
@@ -323,7 +324,7 @@ void main() {
     });
   }
 
-  testWidgets('從相簿選擇停用並說明，不能移除頭像；儲存失敗保留名稱並可重試', (tester) async {
+  testWidgets('從相簿選擇停用並說明，沒有頭像時不顯示移除；儲存失敗保留名稱並可重試', (tester) async {
     final fixture = await host(tester, 390);
     final pick = tester.widget<OutlinedButton>(
       find.widgetWithText(OutlinedButton, '從相簿選擇'),
@@ -353,6 +354,33 @@ void main() {
     expect(fixture.metadata['display_name'], '新名稱');
     expect(fixture.uploaded, isEmpty);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('移除頭像仍可用：移除後回到預設頭像並沿用原本的移除流程', (tester) async {
+    final fixture = await host(
+      tester,
+      390,
+      metadata: {
+        'full_name': '原始名稱',
+        'profile_avatar_path': oldPath,
+        'profile_avatar_url': 'https://example.test/original.png',
+      },
+    );
+    final save = find.byKey(const ValueKey('profile-save'));
+    expect(tester.widget<TextButton>(save).onPressed, isNull);
+    await tester.tap(find.text('移除頭像'));
+    await tester.pump();
+    expect(find.text('移除頭像'), findsNothing);
+    expect(tester.widget<TextButton>(save).onPressed, isNotNull);
+    await tester.tap(save);
+    await tester.runAsync(
+      () async => await Future<void>.delayed(const Duration(milliseconds: 20)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('profile-name')), findsNothing);
+    expect(fixture.metadata['profile_avatar_url'], '');
+    expect(fixture.deleted, contains(oldPath));
+    expect(fixture.uploaded, isEmpty);
   });
 
   testWidgets('設定卡提供編輯入口，名稱儲存後回到設定即時更新', (tester) async {

@@ -4,6 +4,9 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:cupertino_ui/cupertino_ui.dart' show CupertinoTabBar;
+import 'package:material_3_expressive/material_3_expressive.dart'
+    show M3ENavigationBar;
 
 import 'package:motorcycle_parking/data/app_store.dart';
 import 'package:motorcycle_parking/features/auth/profile_editor.dart';
@@ -108,6 +111,18 @@ void main() {
           expect(find.text(name), findsOneWidget);
         }
         expect(find.text('收費格可停，免費巷弄格不能停'), findsOneWidget);
+        // The rule's remarks sit under the 一般機車格 row, below its name.
+        final note = find.text('僅公有路邊收費機車格；免費巷弄格不適用。可斜停兩格，勿阻礙通行。');
+        await tester.scrollUntilVisible(note, 100);
+        expect(note, findsOneWidget);
+        expect(
+          tester.getTopLeft(note).dy,
+          greaterThan(tester.getBottomLeft(find.text('一般機車格')).dy),
+        );
+        expect(
+          tester.getTopLeft(note).dy,
+          lessThan(tester.getTopLeft(find.text('普大共用格')).dy),
+        );
         expect(find.text('規則依臺北市公告整理。核對日期 2026-10-06，版本 1。'), findsOneWidget);
         await tester.scrollUntilVisible(find.text('查看官方來源'), 100);
         await tester.ensureVisible(find.text('查看官方來源'));
@@ -226,6 +241,89 @@ void main() {
       expect(tester.takeException(), isNull);
     }, variant: TargetPlatformVariant.only(platform));
   }
+
+  for (final platform in platforms) {
+    testWidgets('P9 最後一列到分頁列的距離不重複留白（${platform.name}）', (tester) async {
+      setView(tester, const Size(390, 844));
+      final store = await createStore([
+        [for (var i = 0; i < 12; i++) row('r$i')],
+      ]);
+      final router = GoRouter(
+        initialLocation: '/contribute/mine',
+        routes: [
+          ShellRoute(
+            builder: (context, state, child) => AdaptiveScaffold(
+              index: 4,
+              onTab: (_) {},
+              onSettings: () {},
+              child: child,
+            ),
+            routes: [
+              GoRoute(
+                path: '/contribute/mine',
+                builder: (_, _) => const MyContributionsPage(),
+              ),
+            ],
+          ),
+        ],
+      );
+      addTearDown(router.dispose);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [storeProvider.overrideWith((ref) => store)],
+          child: MaterialApp.router(routerConfig: router),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.fling(
+        find.byType(Scrollable).first,
+        const Offset(0, -5000),
+        3000,
+      );
+      await tester.pumpAndSettle();
+      final last = tester.getRect(find.byType(ContributionRow).last);
+      final bar = tester.getRect(
+        find.byType(
+          platform == TargetPlatform.iOS ? CupertinoTabBar : M3ENavigationBar,
+        ),
+      );
+      final gap = bar.top - last.bottom;
+      expect(gap, greaterThanOrEqualTo(0));
+      expect(gap, lessThanOrEqualTo(24));
+      expect(tester.takeException(), isNull);
+    }, variant: TargetPlatformVariant.only(platform));
+  }
+
+  testWidgets('查看全部停車點：依距離排序並延遲建立', (tester) async {
+    setView(tester, const Size(390, 844));
+    final store = (await createStore([<Map<String, dynamic>>[]]))
+      ..spots = [
+        for (var i = 99; i >= 0; i--)
+          ParkingSpot(
+            id: 'official:far-$i',
+            name: '遠近 $i',
+            lat: 25.0339 + i * .001,
+            lng: 121.5623,
+            city: '臺北市',
+            source: 'official',
+            spaceType: SpaceType.paidMotorcycle,
+          ),
+      ];
+    store.located = true;
+    await pumpApp(tester, store, initial: '/contribute');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('查看全部 100 個停車點'));
+    await tester.pumpAndSettle();
+    final list = find.byKey(const ValueKey('contribute-all-spots'));
+    expect(list, findsOneWidget);
+    final names = find.descendant(
+      of: list,
+      matching: find.textContaining('遠近 '),
+    );
+    // Nearest first, and only the rows on screen are built.
+    expect(tester.widget<Text>(names.first).data, '遠近 0');
+    expect(names.evaluate().length, lessThan(100));
+  });
 
   testWidgets('P2 車種用語與單選語意', (tester) async {
     final handle = tester.ensureSemantics();

@@ -244,44 +244,65 @@ class _RuleRowTile extends StatelessWidget {
           horizontal: isCupertino ? 16 : 0,
           vertical: 10,
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ExcludeSemantics(child: bayKindMarking(row.kind)),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(row.label, style: text.titleMedium),
-                  if (row.detail.isNotEmpty)
-                    Text(
-                      row.detail,
-                      style: text.bodySmall?.copyWith(
-                        color: colors.onSurfaceVariant,
-                        fontSize: 13,
-                      ),
+            Row(
+              children: [
+                ExcludeSemantics(child: bayKindMarking(row.kind)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(row.label, style: text.titleMedium),
+                      if (row.detail.isNotEmpty)
+                        Text(
+                          row.detail,
+                          style: text.bodySmall?.copyWith(
+                            color: colors.onSurfaceVariant,
+                            fontSize: 13,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Container(
+                  constraints: const BoxConstraints(minWidth: 64),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: rulePillColor(row.status),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    row.pill,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
                     ),
-                ],
-              ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 12),
-            Container(
-              constraints: const BoxConstraints(minWidth: 64),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              decoration: BoxDecoration(
-                color: rulePillColor(row.status),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                row.pill,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
+            if (row.note.isNotEmpty)
+              Padding(
+                key: ValueKey('rule-note-${row.kind.wire}'),
+                // Under the name, past the 44 px marking and its gap.
+                padding: const EdgeInsetsDirectional.only(start: 56, top: 6),
+                child: Text(
+                  row.note,
+                  style: text.bodySmall?.copyWith(
+                    color: colors.onSurfaceVariant,
+                    fontSize: 12,
+                  ),
                 ),
               ),
-            ),
           ],
         ),
       ),

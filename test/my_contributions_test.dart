@@ -239,6 +239,26 @@ void main() {
       }
     });
 
+    test('不能停車回報照畫板：採納後是已從地圖移除', () {
+      MyContribution gone(String status, [String? kind]) =>
+          MyContribution.fromJson({
+            ...row(
+              'g',
+              status: status,
+              field: 'gone',
+              summary: '這裡已經不能停車：格線已撤除',
+            ),
+            'resolution_kind': kind,
+          });
+      expect(statusLook(gone('accepted')).label, '已從地圖移除');
+      expect(statusNote(gone('accepted')), '管理員已將這個停車點從地圖移除。');
+      expect(statusLook(gone('pending')).label, '審核中');
+      expect(statusNote(gone('pending')), isNull);
+      expect(statusLook(gone('rejected')).label, '未採納');
+      expect(statusNote(gone('rejected', 'wrong')), '核對後與現場資訊不符。');
+      expect(statusLook(gone('closed')).label, '已結案');
+    });
+
     test('dates say the day, and the year only when it differs', () {
       expect(sentDate(DateTime(2026, 10, 2), now), '10月2日送出');
       expect(sentDate(DateTime(2025, 12, 31), now), '2025年12月31日送出');

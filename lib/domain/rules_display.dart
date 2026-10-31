@@ -50,12 +50,17 @@ class RuleRow {
     required this.kind,
     required this.status,
     required this.detail,
+    this.note = '',
   });
   final BayKind kind;
   final EligibilityStatus status;
 
   /// The small line under the name.
   final String detail;
+
+  /// The rule's own remarks (`exceptions`, e.g. 「可斜停兩格，勿阻礙通行。」),
+  /// shown in small print under the row they are about; empty for others.
+  final String note;
 
   String get label => bayKindLabel(kind);
   String get pill => rulePillLabel(status);
@@ -173,7 +178,14 @@ RuleRow _row(CityRule rule, VehicleType vehicle, BayKind kind, DateTime? now) {
   } else {
     detail = _kindDetail(kind, status);
   }
-  return RuleRow(kind: kind, status: status, detail: detail);
+  return RuleRow(
+    kind: kind,
+    status: status,
+    detail: detail,
+    // A city rule's remarks are about the motorcycle bays it opens or
+    // closes, so they sit under that row.
+    note: kind == BayKind.motorcycle ? rule.exceptions.trim() : '',
+  );
 }
 
 /// 「規則依臺北市公告整理。核對日期 2026-10-06，版本 1。」

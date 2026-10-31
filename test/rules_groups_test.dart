@@ -64,6 +64,13 @@ void main() {
     expect(taichung[BayKind.motorcycle], ('有條件', '收費格、免費巷弄格都有條件：限標示車格'));
   });
 
+  test('規則補充說明放在一般機車格那一列，其他列沒有', () {
+    final list = ruleRows(rule('臺北市', VehicleType.heavy), VehicleType.heavy);
+    expect(list.first.kind, BayKind.motorcycle);
+    expect(list.first.note, '僅公有路邊收費機車格；免費巷弄格不適用。可斜停兩格，勿阻礙通行。');
+    expect(list.skip(1).every((r) => r.note.isEmpty), isTrue);
+  });
+
   test('核對日期與版本照規則資料', () {
     expect(
       ruleCheckedLine(rule('臺北市', VehicleType.heavy)),

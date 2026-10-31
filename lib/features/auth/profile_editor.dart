@@ -8,8 +8,8 @@ Future<void> showProfileEditor(BuildContext context, AppStore store) =>
     showAdaptiveSheet<void>(context, (_) => ProfileEditor(store: store));
 
 /// 編輯個人資料 (P12). Avatar uploads count as photos and stay off until
-/// photo uploads open (社群核實 P2): the editor only changes the name, and
-/// the avatar shown is the one the account already has, else the default.
+/// photo uploads open (社群核實 P2): the editor changes the name and can
+/// remove the avatar the account has, which falls back to the default.
 class ProfileEditor extends StatefulWidget {
   const ProfileEditor({super.key, required this.store});
   final AppStore store;
@@ -21,9 +21,10 @@ class _ProfileEditorState extends State<ProfileEditor> {
   final form = GlobalKey<FormState>();
   late final user = widget.store.client?.auth.currentUser;
   late final name = TextEditingController(text: profileDisplayName(user) ?? '');
-  bool saving = false;
+  bool saving = false, remove = false;
   String? error;
   bool get changed =>
+      remove ||
       normalizeProfileName(name.text) != (profileDisplayName(user) ?? '');
 
   @override
@@ -42,7 +43,10 @@ class _ProfileEditorState extends State<ProfileEditor> {
       if (widget.store.client?.auth.currentUser?.id != user?.id) {
         throw StateError('帳號已變更，請重新開啟個人資料');
       }
-      await widget.store.updateProfile(displayName: name.text);
+      await widget.store.updateProfile(
+        displayName: name.text,
+        removeAvatar: remove,
+      );
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
@@ -130,7 +134,7 @@ class _ProfileEditorState extends State<ProfileEditor> {
                   children: [
                     Center(
                       child: ProfileAvatar(
-                        url: profileAvatarUrl(user),
+                        url: remove ? '' : profileAvatarUrl(user),
                         name: name.text,
                         size: 96,
                       ),
@@ -154,6 +158,16 @@ class _ProfileEditorState extends State<ProfileEditor> {
                               ),
                       ),
                     ),
+                    if (!remove && profileAvatarUrl(user) != null)
+                      Center(
+                        child: TextButton(
+                          key: const ValueKey('profile-remove-avatar'),
+                          onPressed: saving
+                              ? null
+                              : () => setState(() => remove = true),
+                          child: const Text(profileRemoveAvatar),
+                        ),
+                      ),
                     const SizedBox(height: 4),
                     Text(
                       profilePhotoDisabled,

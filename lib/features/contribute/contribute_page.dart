@@ -22,29 +22,53 @@ class ContributePage extends ConsumerWidget {
   const ContributePage({super.key});
 
   /// Every spot in view, for when the panel's short list is not enough.
-  void _pickSpot(BuildContext context, AppStore store) {
-    final spots = store.spots;
+  /// Every spot in view, nearest first like the panel's short list, for
+  /// when that list is not enough. Built lazily: a wide view holds hundreds.
+  void _pickSpot(
+    BuildContext context,
+    AppStore store,
+    List<ParkingSpot> spots,
+    double? Function(ParkingSpot) distance,
+  ) {
     showAdaptiveSheet<void>(
       context,
-      (ctx) => ContentPage(
-        children: [
-          SheetTitle(contributeFixTitle),
-          const SizedBox(height: 8),
-          const Text(contributeFixHint),
-          const SizedBox(height: 16),
-          for (final spot in spots)
-            _SpotRow(
-              spot: spot,
-              onTap: () {
-                Navigator.pop(ctx);
-                showSpotSuggestions(context, store, spot);
-              },
-            ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
+      (ctx) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(ctx).height * .85,
+          child: ListView.builder(
+            key: const ValueKey('contribute-all-spots'),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+            itemCount: spots.length + 2,
+            itemBuilder: (_, i) {
+              if (i == 0) {
+                return const Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SheetTitle(contributeFixTitle),
+                    SizedBox(height: 8),
+                    Text(contributeFixHint),
+                    SizedBox(height: 16),
+                  ],
+                );
+              }
+              if (i == spots.length + 1) {
+                return TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('取消'),
+                );
+              }
+              final spot = spots[i - 1];
+              return _SpotRow(
+                spot: spot,
+                distance: distance(spot),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  showSpotSuggestions(context, store, spot);
+                },
+              );
+            },
           ),
-        ],
+        ),
       ),
     );
   }
@@ -149,7 +173,12 @@ class ContributePage extends ConsumerWidget {
                 minimumSize: const Size(48, 48),
                 padding: EdgeInsets.zero,
               ),
-              onPressed: () => _pickSpot(context, store),
+              onPressed: () => _pickSpot(
+                context,
+                store,
+                nearby,
+                (s) => store.located ? away(s) : null,
+              ),
               child: Text(showAllSpots(store.spots.length)),
             ),
           ),
