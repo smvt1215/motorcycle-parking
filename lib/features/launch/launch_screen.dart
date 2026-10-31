@@ -78,7 +78,7 @@ class LaunchScreen extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     final dark = Theme.of(context).brightness == Brightness.dark;
     final quiet = text.labelSmall?.copyWith(
-      color: Colors.white.withValues(alpha: .72),
+      color: Colors.white.withValues(alpha: .85),
     );
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
