@@ -26,7 +26,11 @@ insert into revoked values
   ('fee_text_day_mask(jsonb)'), ('fee_text_days(integer)'), ('fee_text_every(jsonb)'), ('fee_text_money(jsonb,integer)'),
   ('fee_text_rate(jsonb,integer)'), ('fee_text_reset(text)'), ('fee_text_span(jsonb)'), ('fee_whole(jsonb,integer,integer)'),
   ('valid_fee(jsonb)'), ('valid_fee_plans(jsonb,text,jsonb,jsonb)'), ('valid_fee_rate(jsonb,boolean)'),
-  ('valid_zone_fees(jsonb)'), ('zones_without_plans(jsonb)');
+  ('valid_zone_fees(jsonb)'), ('zones_without_plans(jsonb)'),
+  -- 202611010200: helpers added by #201 and #200.
+  ('admin_import_pair(text)'), ('eligibility_stated(jsonb)'), ('eligibility_values_ok(jsonb)'),
+  ('spot_delete_grace()'), ('sync_not_stated()'), ('zone_eligibility_stated(jsonb)'),
+  ('zone_patch_stated(jsonb,jsonb)');
 
 -- Every revoked helper exists (a renamed function would silently keep its grant).
 select ok(to_regprocedure('public.'||sig) is not null, sig||' exists') from revoked;
