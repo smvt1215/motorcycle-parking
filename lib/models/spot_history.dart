@@ -188,6 +188,8 @@ class HistoryEntry {
     if (groups.isNotEmpty) return groups.join('、');
     return switch (action) {
       'hide_spot' => '隱藏點位',
+      'delete_spot' => '刪除點位',
+      'purge_spot' => '永久刪除',
       'restore_spot' => '恢復顯示',
       _ when report != null && !report!.accepted => '駁回回報',
       _ => '沒有欄位變更',

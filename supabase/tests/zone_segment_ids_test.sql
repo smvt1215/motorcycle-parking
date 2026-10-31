@@ -95,6 +95,16 @@ select is((select parking_segments->1->>'id' from community_spots where id=(sele
   'an id-less segment takes the id of the old one with its name and side');
 
 -- The public viewport and the anon grant carry segments.
+-- #201: fixtures written before eligibility was required state both
+-- vehicles (官方未標示 where they left one out), without touching updated_at.
+alter table community_spots disable trigger user;
+alter table official_heavy_spots disable trigger user;
+update community_spots set scooter_not_stated=scooter_allowed is null,heavy_not_stated=heavy_allowed is null
+  where scooter_allowed is null or heavy_allowed is null;
+update official_heavy_spots set scooter_not_stated=scooter_allowed is null,heavy_not_stated=heavy_allowed is null
+  where scooter_allowed is null or heavy_allowed is null;
+alter table community_spots enable trigger user;
+alter table official_heavy_spots enable trigger user;
 set local role anon;
 select is((select jsonb_array_length(parking_segments) from public_spots where id=(select id from fx where name='street')),2,
   'public_spots carries the segments');
@@ -117,14 +127,14 @@ select is((select parking_segments->0->>'id' from community_spots where id=(sele
 
 -- ===== 新增停車點帶路段 =====
 create temporary table made as select (public.apply_report('10000000-0000-4000-8000-000000000001',repeat('b',64),repeat('b',64),
-  '{"action":"create","device_id":"00000000-0000-4000-8000-000000000009","spot":{"name":"新路段","lat":25.071,"lng":121.591,
+  '{"action":"create","device_id":"00000000-0000-4000-8000-000000000009","spot":{"scooter_allowed":true,"heavy_allowed":true,"name":"新路段","lat":25.071,"lng":121.591,
     "city":"臺北市","space_type":"freeMotorcycle","condition":{"bay":"motorcycle","use":"usual","charge":"free"},
     "parking_segments":[{"name":"東側","side":"east","condition":{"bay":"motorcycle"}}]}}')->>'id')::uuid id;
 select is((select parking_segments->0->>'name' from community_spots where id=(select id from made)),'東側',
   'a new spot keeps its segments');
 select ok((select entries_have_ids(parking_segments) from community_spots where id=(select id from made)),'with ids');
 select throws_ok($$select public.apply_report('10000000-0000-4000-8000-000000000001',repeat('b',64),repeat('b',64),
-  '{"action":"create","device_id":"00000000-0000-4000-8000-000000000009","spot":{"name":"附依據","lat":25.081,"lng":121.601,
+  '{"action":"create","device_id":"00000000-0000-4000-8000-000000000009","spot":{"scooter_allowed":true,"heavy_allowed":true,"name":"附依據","lat":25.081,"lng":121.601,
     "city":"臺北市","space_type":"freeMotorcycle","condition":{"bay":"motorcycle","use":"usual","charge":"free"},
     "parking_segments":[{"name":"東側","condition":{"bay":"motorcycle","basis":{"source_url":"https://x.tw"}}}]}}')$$,
   '22023','a report cannot set a condition basis','a rider cannot set a segment basis');
@@ -198,7 +208,7 @@ select ok(valid_zones(entries_patch('[{"id":"a","name":"A","access":"heavyCar","
 -- Through the review: a lot zone with a plan, and one with a condition.
 reset role;
 update community_spots set fee_plans='[{"id":"p1","name":"機車計時","fee":{"scooter":{"mode":"hourly","amount":10,"per_minutes":60}}}]',
-  parking_zones='[{"id":"c1","name":"C1","fee_plan":"p1","fee":{"scooter":{"mode":"hourly","amount":10,"per_minutes":60}}},
+  parking_zones='[{"id":"c1","name":"C1","access":"scooterOnly","fee_plan":"p1","fee":{"scooter":{"mode":"hourly","amount":10,"per_minutes":60}}},
     {"id":"c2","name":"C2","access":"scooterOnly","condition":{"bay":"motorcycle","use":"usual","allow":{"scooter":true,"heavy":false}}}]'
   where id=(select id from fx where name='lot');
 insert into moderation_queue(source_id,reporter_id,reason,field,proposed)
@@ -212,7 +222,7 @@ select lives_ok($$select admin_resolve_report((select id from fx where name='rep
   'clearing a planned zone''s fee and changing a conditioned zone''s access apply');
 reset role;
 select is((select parking_zones->0 from community_spots where id=(select id from fx where name='lot')),
-  '{"id":"c1","name":"C1"}'::jsonb,'the fee is cleared, not copied back from the plan');
+  '{"id":"c1","name":"C1","access":"scooterOnly"}'::jsonb,'the fee is cleared, not copied back from the plan');
 select is((select parking_zones->1->'condition'->'allow' from community_spots where id=(select id from fx where name='lot')),
   '{"scooter":false,"heavy":true}'::jsonb,'the condition follows the new access');
 
@@ -220,7 +230,7 @@ select is((select parking_zones->1->'condition'->'allow' from community_spots wh
 set local role authenticated;
 select pg_temp.act('admin');
 select is((admin_promote_spot((select id::text from fx where name='street'),
-  '{"source_name":"臺北市停管處","source_url":"https://example.test/promote","effective_date":"2026-10-01",
+  '{"scooter_allowed":true,"heavy_allowed":true,"source_name":"臺北市停管處","source_url":"https://example.test/promote","effective_date":"2026-10-01",
     "parking_segments":[{"name":"北側（官方）","side":"north"}]}',
   (select updated_at from community_spots where id=(select id from fx where name='street')))->'parking_segments'->0->>'name'),
   '北側（官方）','promotion takes the segments the admin gives');

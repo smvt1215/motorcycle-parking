@@ -162,7 +162,9 @@ begin
   if p ? 'allow' then
     v:=p->'allow';
     if jsonb_typeof(v) is distinct from 'object' or v='{{}}'::jsonb
-      or exists(select 1 from jsonb_each(v) e where not c->'allow_keys' ? e.key or jsonb_typeof(e.value)<>'boolean')
+      -- A value is true, false or not_stated (#201, eligibility.not_stated).
+      or exists(select 1 from jsonb_each(v) e where not c->'allow_keys' ? e.key
+        or (jsonb_typeof(e.value)<>'boolean' and e.value is distinct from {s}.parking_contract()->'eligibility'->'not_stated'))
     then return false; end if;
     if v->'scooter'='true'::jsonb and p->>'bay'='heavy' then return false; end if;
   end if;
@@ -303,12 +305,19 @@ $$;
 -- Whether a zone's access agrees with its condition (§1.3, decision 32): a
 -- zone without a condition is not checked here; one with a condition has an
 -- allow naming both vehicles, and its access is the one the condition writes
--- back. A condition that writes back no access is inconsistent.
+-- back. A condition that writes back no access is inconsistent, except one
+-- whose allow says not_stated for a vehicle (#201): it has no access to
+-- write back, so the zone carries none.
 create or replace function {s}.zone_condition_consistent(p_zone jsonb) returns boolean
 language sql immutable set search_path='' as $$
   select coalesce(jsonb_typeof(p_zone->'condition'),'null')='null'
-    or (jsonb_typeof(p_zone->'access')='string'
-      and coalesce((p_zone->>'access')={s}.condition_legacy_access(p_zone->'condition'),false));
+    or case when jsonb_typeof(p_zone->'condition'->'allow')='object' and exists(
+        select 1 from jsonb_each(p_zone->'condition'->'allow') e
+        where e.value=({s}.parking_contract()->'eligibility'->'not_stated'))
+      then coalesce(jsonb_typeof(p_zone->'access'),'null')='null'
+        and p_zone->'condition'->'allow' ?& array['scooter','heavy']
+      else jsonb_typeof(p_zone->'access')='string'
+        and coalesce((p_zone->>'access')={s}.condition_legacy_access(p_zone->'condition'),false) end;
 $$;
 
 -- Whether a whole spot is legacy-safe: a street spot by its condition, a lot

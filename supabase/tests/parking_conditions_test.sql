@@ -226,25 +226,25 @@ select ok(has_function_privilege('anon','public.official_viewport_spots_v3(doubl
 -- ===== apply_report =====
 create temporary table rep as
   select 'free' as name,public.apply_report('10000000-0000-4000-8000-000000000001',repeat('b',64),repeat('b',64),
-    '{"action":"create","spot":{"name":"回報免費限時格","lat":25.27,"lng":121.47,"city":"臺北市","space_type":"timedMotorcycle",
+    '{"action":"create","spot":{"scooter_allowed":true,"heavy_allowed":true,"name":"回報免費限時格","lat":25.27,"lng":121.47,"city":"臺北市","space_type":"timedMotorcycle",
       "condition":{"bay":"motorcycle","use":"usual","charge":"free","limits":[{"kind":"time_limit","max_minutes":30}]}}}') as r;
 insert into rep select 'legacy',public.apply_report('10000000-0000-4000-8000-000000000001',repeat('b',64),repeat('b',64),
-  '{"action":"create","spot":{"name":"舊版回報","lat":25.271,"lng":121.471,"city":"臺北市","space_type":"paidMotorcycle"}}');
+  '{"action":"create","spot":{"scooter_allowed":true,"heavy_allowed":true,"name":"舊版回報","lat":25.271,"lng":121.471,"city":"臺北市","space_type":"paidMotorcycle"}}');
 select is((select condition->>'charge' from community_spots where id=(select (r->>'id')::uuid from rep where name='free')),
   'free','a new spot stores its condition');
 select is((select condition from community_spots where id=(select (r->>'id')::uuid from rep where name='legacy')),
   null,'a build without conditions stores none');
 select throws_ok($$select public.apply_report('10000000-0000-4000-8000-000000000001',repeat('b',64),repeat('b',64),
-  '{"action":"create","spot":{"name":"附依據","lat":25.272,"lng":121.472,"city":"臺北市","space_type":"paidMotorcycle",
+  '{"action":"create","spot":{"scooter_allowed":true,"heavy_allowed":true,"name":"附依據","lat":25.272,"lng":121.472,"city":"臺北市","space_type":"paidMotorcycle",
     "condition":{"bay":"motorcycle","use":"usual","charge":"toll","basis":{"source_url":"https://example.test/n"}}}}')$$,
   '22023','a report cannot set a condition basis','riders cannot write a basis');
 select throws_ok($$select public.apply_report('10000000-0000-4000-8000-000000000001',repeat('b',64),repeat('b',64),
-  '{"action":"create","spot":{"name":"分區附依據","lat":25.273,"lng":121.473,"city":"臺北市","space_type":"offStreet",
+  '{"action":"create","spot":{"scooter_allowed":true,"heavy_allowed":true,"name":"分區附依據","lat":25.273,"lng":121.473,"city":"臺北市","space_type":"offStreet",
     "parking_zones":[{"name":"B1","access":"heavyCar","condition":{"bay":"car","use":"usual","allow":{"scooter":false,"heavy":true},
       "basis":{"source_url":"https://example.test/n"}}}]}}')$$,
   '22023','a report cannot set a condition basis','nor a zone basis');
 select throws_ok($$select public.apply_report('10000000-0000-4000-8000-000000000001',repeat('b',64),repeat('b',64),
-  '{"action":"create","spot":{"name":"不一致","lat":25.274,"lng":121.474,"city":"臺北市","space_type":"paidMotorcycle",
+  '{"action":"create","spot":{"scooter_allowed":true,"heavy_allowed":true,"name":"不一致","lat":25.274,"lng":121.474,"city":"臺北市","space_type":"paidMotorcycle",
     "condition":{"bay":"heavy","use":"usual"}}}')$$,
   '23514',null,'a condition must match the space type it is sent with');
 -- An owner's edit from any build leaves the condition alone (§5.4).
@@ -272,10 +272,10 @@ select throws_ok($$select admin_upsert_spot((select id::text from fx where name=
 select is(admin_upsert_spot((select id::text from fx where name='安全場站'),'{"zones_complete":true}',
   (select updated_at from community_spots where id=(select id from fx where name='安全場站')))->>'zones_complete',
   'true','an admin marks a lot''s zones complete');
-select is((admin_upsert_spot(null,'{"kind":"official","name":"新官方格","lat":25.28,"lng":121.48,"city":"臺北市","space_type":"heavyOnly",
+select is((admin_upsert_spot(null,'{"scooter_allowed":true,"heavy_allowed":true,"kind":"official","name":"新官方格","lat":25.28,"lng":121.48,"city":"臺北市","space_type":"heavyOnly",
     "source_name":"臺北市政府","source_url":"https://example.test/new","effective_date":"2026-10-27",
     "condition":{"bay":"heavy","use":"usual","charge":"toll"}}')->'condition'->>'charge'),'toll','an admin creates an official spot with a condition');
-select is((admin_upsert_spot(null,'{"kind":"community","name":"新社群場站","lat":25.281,"lng":121.481,"city":"臺北市","space_type":"offStreet",
+select is((admin_upsert_spot(null,'{"scooter_allowed":true,"heavy_allowed":true,"kind":"community","name":"新社群場站","lat":25.281,"lng":121.481,"city":"臺北市","space_type":"offStreet",
     "zones_complete":true}')->>'zones_complete'),'true','an admin creates a lot with zones_complete');
 reset role;
 
@@ -294,11 +294,11 @@ select is(legacy_projection((select to_jsonb(c) from community_spots c where id=
 select pg_temp.act('admin');
 set local role authenticated;
 select is((admin_promote_spot((select id::text from fx where name='臺北限時格'),
-  '{"source_name":"臺北市政府","source_url":"https://example.test/promote","effective_date":"2026-10-27"}',
+  '{"scooter_allowed":true,"heavy_allowed":true,"source_name":"臺北市政府","source_url":"https://example.test/promote","effective_date":"2026-10-27"}',
   (select updated_at from community_spots where id=(select id from fx where name='臺北限時格')))->'condition'->'limits'->0->>'max_minutes'),
   '20','promotion keeps the condition');
 select is((admin_promote_spot((select id::text from fx where name='試辦場站'),
-  '{"source_name":"臺北市政府","source_url":"https://example.test/promote","effective_date":"2026-10-27"}',
+  '{"scooter_allowed":true,"heavy_allowed":true,"source_name":"臺北市政府","source_url":"https://example.test/promote","effective_date":"2026-10-27"}',
   (select updated_at from community_spots where id=(select id from fx where name='試辦場站')))->>'zones_complete'),
   'true','promotion keeps zones_complete');
 reset role;

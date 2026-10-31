@@ -50,9 +50,19 @@ Deno.test('shared cases: zone access agrees with its condition', () => {
 });
 
 Deno.test('rider zones keep their keys and stay consistent', () => {
-  if (!validZones([{ name: 'B1', access: 'scooterOnly' }, { name: 'B2' }])) {
-    throw new Error('a zone without a condition is unchecked');
+  if (
+    !validZones([{ name: 'B1', access: 'scooterOnly' }, {
+      name: 'B2',
+      condition: { allow: { scooter: 'not_stated', heavy: true } },
+    }])
+  ) {
+    throw new Error('a zone stated by access or by allow is accepted');
   }
+  // Every zone of a new spot states both vehicles (#201).
+  if (validZones([{ name: 'B2' }])) throw new Error('unstated zone accepted');
+  if (
+    validZones([{ name: 'B2', condition: { allow: { scooter: true } } }])
+  ) throw new Error('a zone stating one vehicle accepted');
   // Riders send no zone condition yet: refused as an unknown key, so the
   // consistency check never loosens what the DB refuses.
   const zone = {
@@ -71,7 +81,15 @@ const create = (spot: Record<string, unknown>) =>
   validate({
     device_id: '3f1c2a4e-0000-4000-8000-000000000001',
     action: 'create',
-    spot: { name: '測試', lat: 25.05, lng: 121.5, city: '臺北市', ...spot },
+    spot: {
+      name: '測試',
+      lat: 25.05,
+      lng: 121.5,
+      city: '臺北市',
+      scooter_allowed: true,
+      heavy_allowed: false,
+      ...spot,
+    },
   });
 
 Deno.test('a new street spot may carry its condition', () => {
@@ -196,15 +214,16 @@ Deno.test('suggestions carry a condition with the space type it is stored under'
 
 Deno.test('rider zones may name their area', () => {
   if (
-    !validZones([{ name: 'B1', area: 'motorcycle' }, {
+    !validZones([{ name: 'B1', area: 'motorcycle', access: 'scooterOnly' }, {
       name: 'B2',
       area: 'car',
+      access: 'heavyCar',
     }])
   ) {
     throw new Error('zone area rejected');
   }
   for (const area of ['bus', '', null, ['car']]) {
-    if (validZones([{ name: 'B1', area }])) {
+    if (validZones([{ name: 'B1', area, access: 'scooterOnly' }])) {
       throw new Error(`area ${JSON.stringify(area)} accepted`);
     }
   }

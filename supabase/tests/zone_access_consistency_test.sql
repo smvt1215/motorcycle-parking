@@ -76,11 +76,11 @@ select throws_ok($$update community_spots set parking_zones=jsonb_set(parking_zo
   where name='試辦場站'$$,
   '23514',null,'an update cannot make a stored zone inconsistent');
 select throws_ok($$select public.apply_report('10000000-0000-4000-8000-000000000001',repeat('b',64),repeat('b',64),
-  '{"action":"create","spot":{"name":"回報場站","lat":25.273,"lng":121.473,"city":"臺北市","space_type":"offStreet",
+  '{"action":"create","spot":{"scooter_allowed":true,"heavy_allowed":true,"name":"回報場站","lat":25.273,"lng":121.473,"city":"臺北市","space_type":"offStreet",
     "parking_zones":[{"name":"B1","access":"scooterOnly","condition":{"bay":"car","use":"usual","allow":{"scooter":false,"heavy":true}}}]}}')$$,
   '23514',null,'a new spot report with an inconsistent zone');
 select lives_ok($$select public.apply_report('10000000-0000-4000-8000-000000000001',repeat('b',64),repeat('b',64),
-  '{"action":"create","spot":{"name":"回報場站","lat":25.273,"lng":121.473,"city":"臺北市","space_type":"offStreet",
+  '{"action":"create","spot":{"scooter_allowed":true,"heavy_allowed":true,"name":"回報場站","lat":25.273,"lng":121.473,"city":"臺北市","space_type":"offStreet",
     "parking_zones":[{"name":"B1","access":"heavyCar","condition":{"bay":"car","use":"usual","allow":{"scooter":false,"heavy":true}}}]}}')$$,
   'a new spot report with a consistent zone');
 

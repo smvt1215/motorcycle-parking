@@ -13,9 +13,9 @@ $$;
 
 -- An official spot already imported, one the file adds, and a community one.
 insert into official_heavy_spots(id,name,lat,lng,city,district,space_type,fee_note,note,source_url,source_name,source_id,
-    effective_date,scooter_allowed,heavy_allowed)
+    effective_date,scooter_allowed,heavy_allowed,heavy_not_stated)
   values('20000000-0000-4000-8000-000000000001','匯入測試停車場',25.04,121.51,'臺北市','中正區','offStreet','機車計次20元;','',
-    'https://data.example.test/a','臺北市政府','A1','2026-10-17',true,null);
+    'https://data.example.test/a','臺北市政府','A1','2026-10-17',true,null,true);
 insert into community_spots(id,user_id,source,name,lat,lng,city,district,space_type,fee_note)
   values('20000000-0000-4000-8000-000000000003','10000000-0000-4000-8000-000000000001','import','匯入測試社群點',
     25.05,121.52,'臺北市','中正區','offStreet','免費（大型重機比照機車費率）');
