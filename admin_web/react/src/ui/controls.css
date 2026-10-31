@@ -1,0 +1,176 @@
+/* Buttons: 48px, 6px radius, 15px/500 (DESIGN.md Buttons). */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 18px;
+  border: 1px solid var(--color-steel);
+  border-radius: var(--radius-control);
+  background: var(--color-paper-white);
+  color: var(--btn-fg, var(--color-rail-black));
+  font-size: var(--text-body);
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+/* Links styled as buttons keep the button's text colour on hover. */
+.btn:hover {
+  border-color: var(--color-rail-black);
+  color: var(--btn-fg, var(--color-rail-black));
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  border-color: var(--color-rivet);
+  color: var(--color-graphite);
+}
+
+.btn--primary {
+  border-color: var(--color-action-blue);
+  background: var(--color-action-blue);
+  --btn-fg: var(--color-paper-white);
+}
+
+.btn--primary:hover {
+  border-color: var(--color-action-blue-deep);
+  background: var(--color-action-blue-deep);
+}
+
+.btn--destructive {
+  border-color: var(--color-destructive-border);
+  --btn-fg: var(--color-destructive);
+}
+
+.btn--destructive:hover {
+  border-color: var(--color-destructive);
+}
+
+.btn--quiet {
+  border-color: transparent;
+  background: transparent;
+}
+
+.btn--quiet:hover {
+  border-color: transparent;
+  background: var(--color-paper-white);
+}
+
+kbd {
+  padding: 2px 5px;
+  border: 1px solid currentColor;
+  border-radius: var(--radius-tag);
+  font: 700 12px/1 var(--font-numeral);
+  opacity: 0.8;
+}
+
+/* Chips: 44px pills; the only capsule shape in the system. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--color-steel);
+  border-radius: var(--radius-chip);
+  background: var(--color-plate-white);
+  color: var(--color-rail-black);
+  font-size: var(--text-body);
+  cursor: pointer;
+}
+
+.chip:hover {
+  border-color: var(--color-rail-black);
+}
+
+.chip--filter.chip--selected {
+  border-color: var(--color-rail-black);
+  background: var(--color-rail-black);
+  color: var(--color-paper-white);
+}
+
+.chip--toggle.chip--selected {
+  border-color: var(--color-rail-black);
+  box-shadow: inset 0 0 0 1px var(--color-rail-black);
+  font-weight: 700;
+}
+
+/* Segmented control. */
+.segmented {
+  display: inline-flex;
+  flex-wrap: wrap;
+  border: 1px solid var(--color-rail-black);
+  border-radius: var(--radius-control);
+  overflow: hidden;
+}
+
+.segmented__option {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 0;
+  background: var(--color-plate-white);
+  font-size: var(--text-body);
+  cursor: pointer;
+}
+
+.segmented__option + .segmented__option {
+  border-left: 1px solid var(--color-rail-black);
+}
+
+.segmented__option[aria-pressed='true'] {
+  background: var(--color-rail-black);
+  color: var(--color-paper-white);
+  font-weight: 700;
+}
+
+/* Status tags: 20px, 1.5px frame, 3px radius, 13px/700. */
+.status-tag,
+.modified-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 7px;
+  border: 1.5px solid var(--color-rail-black);
+  border-radius: var(--radius-tag);
+  background: var(--color-plate-white);
+  font-size: var(--text-caption);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.status-tag--closed {
+  background: var(--color-rail-black);
+  color: var(--color-paper-white);
+}
+
+.status-tag--deleted {
+  border-color: var(--color-destructive);
+  color: var(--color-destructive);
+}
+
+.modified-tag {
+  padding: 0 6px;
+  background: var(--color-reflective-yellow);
+}
+
+.source-tag {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: var(--radius-tag);
+  background: var(--color-rail-black);
+  color: var(--color-paper-white);
+  font-size: var(--text-caption);
+}
+
+/* Panels lie flat: rivet border, no shadow. */
+.panel {
+  border: 1px solid var(--color-rivet);
+  border-radius: var(--radius-panel);
+  background: var(--color-plate-white);
+}

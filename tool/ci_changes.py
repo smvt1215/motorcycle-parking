@@ -18,6 +18,9 @@ ADMIN_PATHS = (
     "lib/admin/", "lib/main_admin.dart", "test/admin/", "admin_web/",
     "firebase.json", ".firebaserc", "tool/prepare_admin_web.py", "tool/admin_smoke.cjs",
 )
+# The React admin rewrite (#195 P7) has its own Node toolchain and job; it
+# cannot reach the Flutter app, the mobile builds or the database.
+REACT_ADMIN_PATHS = ("admin_web/react/",)
 ROUTING_PATHS = (
     "tool/ci_changes.py", "tool/test_ci_changes.py", ".github/workflows/codeql.yml",
 )
@@ -52,12 +55,19 @@ PATHS = {
         # Regenerates the contract SQL and checks it for drift.
         "tool/gen_contract_sql.py", "tool/fee_text.py",
     ),
+    "admin_react": REACT_ADMIN_PATHS + ROUTING_PATHS + (
+        # src/design/tokens.test.ts checks the tokens against DESIGN.md.
+        "admin_web/DESIGN.md", ".github/workflows/ci.yml",
+    ),
 }
 
 
 def needs_run(target, changed):
     """Directory prefixes end in /; other inputs are exact file names."""
     patterns = PATHS[target]
+    if target != "admin_react":
+        # admin_web/ feeds the Flutter admin build; its react/ folder does not.
+        changed = [path for path in changed if not path.startswith(REACT_ADMIN_PATHS)]
     if target in ("android", "ios"):
         # The admin entrypoint and tests cannot be reached from the mobile app.
         changed = [path for path in changed if not any(

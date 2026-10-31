@@ -52,12 +52,23 @@ class ChangeRoutingTest(unittest.TestCase):
         self.assertEqual(self.targets("lib/admin/auth.dart", "lib/features/auth.dart"),
                          {"quality", "android", "ios"})
 
+    def test_react_admin_runs_only_its_own_job(self):
+        for path in ("admin_web/react/src/main.tsx", "admin_web/react/package-lock.json"):
+            with self.subTest(path=path):
+                self.assertEqual(self.targets(path), {"admin_react"})
+        # Its tokens are checked against DESIGN.md; the Flutter admin still reads admin_web/.
+        self.assertEqual(self.targets("admin_web/DESIGN.md"), {"quality", "admin_react"})
+        self.assertEqual(self.targets("admin_web/index.html"), {"quality"})
+        self.assertEqual(self.targets("admin_web/react/src/main.tsx", "lib/main_admin.dart"),
+                         {"quality", "admin_react"})
+
     def test_seed_inputs_check_both_generation_and_database(self):
         for path in ("tool/generate_seed.py", "supabase/seed.sql"):
             with self.subTest(path=path):
                 self.assertEqual(self.targets(path), {"quality", "backend"})
-        self.assertEqual(self.targets("assets/demo/spots.json"), set(PATHS))
-        self.assertEqual(self.targets("assets/rules/parking_rules.json"), set(PATHS))
+        flutter_and_backend = set(PATHS) - {"admin_react"}
+        self.assertEqual(self.targets("assets/demo/spots.json"), flutter_and_backend)
+        self.assertEqual(self.targets("assets/rules/parking_rules.json"), flutter_and_backend)
 
     def test_shared_precheck_rules_check_both_app_and_function(self):
         for name in ("precheck_rules.json", "precheck_cases.json"):
@@ -83,7 +94,7 @@ class ChangeRoutingTest(unittest.TestCase):
             self.assertEqual(self.targets(path), set(PATHS))
 
     def test_workflows_revalidate_their_own_checks(self):
-        self.assertEqual(self.targets(".github/workflows/ci.yml"), {"quality", "backend"})
+        self.assertEqual(self.targets(".github/workflows/ci.yml"), {"quality", "backend", "admin_react"})
         self.assertEqual(self.targets(".github/workflows/android.yml"), {"android"})
         self.assertEqual(self.targets(".github/workflows/ios.yml"), {"ios"})
 

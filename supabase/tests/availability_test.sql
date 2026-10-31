@@ -135,8 +135,8 @@ select is((select zero_since from parking_availability_latest where facility_id=
   'clears the zero');
 
 -- ===== 兩個來源 =====
-insert into availability_sources(key,provider,feed_url,vehicles,expected_interval,fresh_within,delayed_within,priority)
-values('test_tdx','測試來源','https://example.test/feed',array['scooter'],'1 minute','3 minutes','10 minutes',50);
+insert into availability_sources(key,provider,feed_url,vehicles,expected_interval,delayed_within,priority)
+values('test_tdx','測試來源','https://example.test/feed',array['scooter'],'1 minute','10 minutes',50);
 insert into availability_facilities(source_key,facility_id,scooter_total) values('test_tdx','T-1',24);
 insert into availability_mappings(source_key,facility_id,spot_id,match,review_status)
   values('test_tdx','T-1',(select id from fx where name='tpex002'),'manual','approved');

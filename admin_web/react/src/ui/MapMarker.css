@@ -1,0 +1,76 @@
+.map-marker {
+  --marker-size: 30px;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: var(--marker-size);
+  height: var(--marker-size);
+  border: 3px solid var(--color-paper-white);
+  box-shadow: var(--shadow-marker);
+  color: var(--color-paper-white);
+}
+
+.map-marker--selected {
+  --marker-size: 38px;
+  box-shadow:
+    0 0 0 4px var(--color-rail-black),
+    var(--shadow-marker);
+}
+
+.map-marker--allowed {
+  background: var(--color-marker-allowed);
+  border-radius: 50%;
+}
+
+.map-marker--conditional {
+  background: var(--color-marker-conditional);
+  border-radius: 10px;
+}
+
+.map-marker--unverified {
+  background: var(--color-marker-unverified);
+  border-radius: 10px;
+}
+
+.map-marker--denied {
+  background: var(--color-marker-denied);
+  border-radius: 4px;
+}
+
+.map-marker__p {
+  font: 700 calc(var(--marker-size) * 0.55) / 1 var(--font-numeral);
+}
+
+/* Glyph is 22/38 of the marker, as in the App's SpotMarker. */
+.map-marker__glyph {
+  flex: 0 0 auto;
+  width: calc(var(--marker-size) * 22 / 38);
+  height: calc(var(--marker-size) * 22 / 38);
+  fill: currentColor;
+}
+
+/*
+ * 「共」 badge for bays shared by both vehicles (App SpaceBadgeDot): a white
+ * circle half the marker's size, bottom-right. Its glyph scales with the
+ * marker; it is part of the mark, not interface text.
+ */
+.map-marker__badge {
+  --dot: calc(var(--marker-size) * 0.5);
+  position: absolute;
+  right: calc(var(--dot) * -0.45);
+  bottom: calc(var(--dot) * -0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--dot);
+  height: var(--dot);
+  border: calc(var(--dot) * 0.08) solid var(--color-marker-badge-ink);
+  border-radius: 50%;
+  background: var(--color-paper-white);
+  color: var(--color-marker-badge-ink);
+  font-size: calc(var(--dot) * 0.6);
+  font-weight: 900;
+  line-height: 1;
+}
