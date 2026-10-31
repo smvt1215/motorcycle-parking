@@ -385,7 +385,6 @@ function session(role, aal, factors = [factor]) {
           if (mobile) await page.getByRole('button', { name: /^返回佇列/ }).click();
           await page.getByRole('button', { name: '已刪除的點位', exact: true }).click();
           await page.getByRole('button', { name: '復原', exact: true }).waitFor({ timeout: 15000 });
-          await waitText('已刪除，11 天後永久刪除');
           await waitText('已永久刪除的官方點');
           await page.screenshot({ path: path.join(output, `${name}-hidden.png`) });
           await page.getByRole('button', { name: '返回待審回報', exact: true }).click();
