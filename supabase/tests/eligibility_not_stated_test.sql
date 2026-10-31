@@ -108,5 +108,42 @@ select is((admin_import_row('{"name":"x","heavy_allowed":true}',true)->>'scooter
 select is((admin_import_row('{"name":"x","heavy_allowed":true}',true)->>'heavy_not_stated'),'false','one it states');
 select is((admin_import_row('{"name":"x"}',false)->>'scooter_not_stated'),'false','a community file stays unconfirmed');
 
+-- An admin's vehicle and its not_stated are kept or replaced together.
+with s as (insert into official_heavy_spots(name,lat,lng,city,space_type,source_url,source_name,effective_date,scooter_allowed,heavy_not_stated)
+  values('匯入配對測試點',25.079,121.579,'臺北市','offStreet','https://example.test/i','臺北市政府',current_date,false,true) returning id)
+  insert into fx select 'paired',id from s;
+create temporary table file as select jsonb_build_array(jsonb_build_object(
+  'id','official:'||(select id from fx where name='paired'),'source','official','name','匯入配對測試點','lat',25.079,'lng',121.579,
+  'city','臺北市','space_type','offStreet','source_url','https://example.test/i','source_name','臺北市政府','scooter_allowed',false)) spots;
+grant select on file to authenticated;
+select pg_temp.act('admin');
+set local role authenticated;
+select lives_ok($$select admin_upsert_spot('official:'||(select id from fx where name='paired'),'{"heavy_allowed":true}',
+  (select updated_at from official_heavy_spots where id=(select id from fx where name='paired')))$$,'an admin states heavy bikes');
+reset role;
+create temporary table plan as select * from admin_import_plan((select spots from file));
+grant select on plan to authenticated;
+select is((select status from plan),'conflict','a file leaving heavy bikes out conflicts with the admin''s value');
+select is((select count(*)::integer from plan,jsonb_array_elements(changes) c
+  where c->>'field' in ('heavy_allowed','heavy_not_stated') and jsonb_typeof(c->'admin')='object'),2,
+  'both of the vehicle''s fields are the admin''s');
+select pg_temp.act('admin');
+set local role authenticated;
+select lives_ok($$select admin_import_apply((select spots from file),
+  jsonb_build_object('official:'||(select id from fx where name='paired'),
+    jsonb_build_object('base_updated_at',(select base_updated_at from plan))),current_date)$$,'the import keeps the admin''s fields');
+reset role;
+select ok((select heavy_allowed and not heavy_not_stated from official_heavy_spots where id=(select id from fx where name='paired')),
+  'the admin''s heavy value stands');
+select pg_temp.act('admin');
+set local role authenticated;
+select lives_ok($$select admin_import_apply((select spots from file),
+  jsonb_build_object('official:'||(select id from fx where name='paired'),
+    jsonb_build_object('base_updated_at',(select updated_at from official_heavy_spots where id=(select id from fx where name='paired')),
+      'overwrite',jsonb_build_array('heavy_allowed'))),current_date)$$,'overwriting one field');
+reset role;
+select ok((select heavy_allowed is null and heavy_not_stated from official_heavy_spots where id=(select id from fx where name='paired')),
+  'replaces the vehicle''s two fields together');
+
 select * from finish();
 rollback;
