@@ -1,4 +1,9 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.108.1';
+import {
+  appCheckConfig,
+  appCheckMode,
+  verifyAppCheck,
+} from '../_shared/app_check.ts';
 import { identityHash } from '../submit-report/validate.ts';
 import { handle } from './handler.ts';
 
@@ -14,14 +19,18 @@ Deno.serve((req) => {
   const admin = createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+  const appCheck = appCheckConfig((name) => Deno.env.get(name));
   return handle(req, {
+    appCheckMode: appCheckMode(Deno.env.get('APP_CHECK_MODE')),
+    appCheck: (token) =>
+      appCheck ? verifyAppCheck(token, appCheck) : Promise.resolve(null),
     async user(token) {
       const { data, error } = await admin.auth.getUser(token);
       if (error || !data.user) return null;
       return { id: data.user.id, anonymous: data.user.is_anonymous === true };
     },
     hash: (value) => identityHash(secret, value),
-    async apply({ user, ip, device, sighting }) {
+    async apply({ user, ip, device, sighting, ipCapped }) {
       const { data, error } = await admin.rpc('apply_sighting', {
         p_user: user,
         p_ip: ip,
@@ -32,6 +41,7 @@ Deno.serve((req) => {
         p_level: sighting.level,
         p_zone: sighting.zone_id,
         p_segment: sighting.segment_id,
+        p_ip_capped: ipCapped,
       });
       return { data, error };
     },

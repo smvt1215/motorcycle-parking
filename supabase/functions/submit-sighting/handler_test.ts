@@ -151,6 +151,7 @@ Deno.test('a sighting goes to apply_sighting with hashed identities', async () =
     ip: 'h(ip:203.0.113.9)',
     device: `h(device:${device})`,
     sighting: parsed,
+    ipCapped: true,
   }]);
 });
 
@@ -288,4 +289,72 @@ Deno.test('a closure suggestion is reported back', async () => {
     'x-real-ip',
   );
   assertEquals(await res.json(), { accepted: true, closure_suggested: true });
+});
+
+Deno.test('App Check: enforce refuses a bad token before the database', async () => {
+  const { deps, calls } = fake();
+  const seen: (string | null)[] = [];
+  deps.appCheckMode = 'enforce';
+  deps.appCheck = (token) => {
+    seen.push(token);
+    return Promise.resolve({ status: 'invalid', reason: 'signature' });
+  };
+  const log = console.log;
+  console.log = () => {};
+  try {
+    const res = await handle(
+      request(body, { 'X-Firebase-AppCheck': 'tok' }),
+      deps,
+      'x-real-ip',
+    );
+    assertEquals(res.status, 401);
+    assertEquals(await res.json(), { error: 'app check required' });
+    assertEquals(seen, ['tok']);
+    assertEquals(calls.applied, []);
+  } finally {
+    console.log = log;
+  }
+});
+
+Deno.test('App Check: log only records, the sighting goes through', async () => {
+  const { deps, calls } = fake();
+  deps.appCheckMode = 'log';
+  deps.appCheck = () => Promise.resolve({ status: 'missing' });
+  const log = console.log;
+  const lines: string[] = [];
+  console.log = (line: string) => lines.push(line);
+  try {
+    const res = await handle(request(), deps, 'x-real-ip');
+    assertEquals(res.status, 200);
+    assertEquals(calls.applied.length, 1);
+    assertEquals(JSON.parse(lines[0]).status, 'missing');
+    // Only logging: the network's daily cap still applies.
+    assertEquals((calls.applied[0] as { ipCapped: boolean }).ipCapped, true);
+  } finally {
+    console.log = log;
+  }
+});
+
+Deno.test('App Check: off never asks', async () => {
+  const { deps } = fake();
+  deps.appCheck = () => {
+    throw new Error('asked');
+  };
+  const res = await handle(request(), deps, 'x-real-ip');
+  assertEquals(res.status, 200);
+});
+
+Deno.test('App Check enforced: the network cap becomes a risk signal', async () => {
+  const { deps, calls } = fake();
+  deps.appCheckMode = 'enforce';
+  deps.appCheck = () => Promise.resolve({ status: 'valid', appId: 'a' });
+  const log = console.log;
+  console.log = () => {};
+  try {
+    const res = await handle(request(), deps, 'x-real-ip');
+    assertEquals(res.status, 200);
+    assertEquals((calls.applied[0] as { ipCapped: boolean }).ipCapped, false);
+  } finally {
+    console.log = log;
+  }
 });
