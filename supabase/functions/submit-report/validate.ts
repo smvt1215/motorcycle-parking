@@ -514,11 +514,12 @@ const proposedChecks: Record<string, (v: unknown) => boolean> = {
   // Free text up to 200, or the proposed fee's own text (checked below).
   fee_note: (v) => typeof v === 'string',
   note: text(500),
-  // Never cleared (#201): true or false, or not_stated below.
-  scooter_allowed: (v) => typeof v === 'boolean',
-  heavy_allowed: (v) => typeof v === 'boolean',
-  scooter_not_stated: (v) => v === true,
-  heavy_not_stated: (v) => v === true,
+  // Typed here; eligibilityValuesOk() below holds each vehicle to true,
+  // false or not_stated (a null flag beside not_stated), never cleared.
+  scooter_allowed: (v) => v === null || typeof v === 'boolean',
+  heavy_allowed: (v) => v === null || typeof v === 'boolean',
+  scooter_not_stated: (v) => typeof v === 'boolean',
+  heavy_not_stated: (v) => typeof v === 'boolean',
   facility_type: oneOf(facilityTypes),
   // null clears them, as it clears facility_type.
   facility_types: (v) => v === null || validFacilityTypes(v),
