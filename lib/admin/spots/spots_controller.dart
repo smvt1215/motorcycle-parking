@@ -555,6 +555,10 @@ class SpotsController extends ChangeNotifier {
         'closure': copyJson(loaded.values['closure']),
         // Changed with the bay kind (setKind); a street bay's only.
         'condition': copyJson(loaded.values['condition']),
+        // 官方未標示 beside each vehicle flag (#201); not a field of its own.
+        for (final flag in vehicleFlags)
+          if (loaded.values[notStatedKey(flag)] case final bool notStated)
+            notStatedKey(flag): notStated,
       },
     };
   }
@@ -600,7 +604,10 @@ class SpotsController extends ChangeNotifier {
         'space_type': storedType.name,
         'condition': copyJson(stored),
         // Back to a stored 普大共用 bay: its stored heavy access.
-        ..._heavyFor(kind, stored: (r.values['heavy_allowed'],)),
+        ..._heavyFor(
+          kind,
+          stored: (r.values['heavy_allowed'], r.values['heavy_not_stated']),
+        ),
       };
       _notify();
       return;
@@ -705,27 +712,33 @@ class SpotsController extends ChangeNotifier {
       .where((l) => l.kind == LimitKind.timeLimit)
       .firstOrNull;
 
-  /// The heavy bikes' access before 普大共用 set it, as `(value,)`; null
-  /// while it did not.
-  (Object?,)? _heavyBeforeShare;
+  /// The heavy bikes' access before 普大共用 set it, as its flag and its
+  /// `heavy_not_stated` (#201); null while it did not.
+  (Object?, Object?)? _heavyBeforeShare;
 
   /// Decision 60: turning a bay into 普大共用 brings heavy bikes in, 可停
   /// until the admin changes it; turning it back restores what was there,
   /// unless the admin changed it since. A change of charge within 普大共用
   /// leaves the admin's choice.
-  Map<String, Object?> _heavyFor(SpaceKind kind, {(Object?,)? stored}) {
+  Map<String, Object?> _heavyFor(SpaceKind kind, {(Object?, Object?)? stored}) {
     final shared =
         ParkingCondition.fromJson(draft['condition'])?.share ==
         ShareKind.scooterHeavy;
     if (kind == SpaceKind.scooterHeavy) {
       if (shared) return const {};
-      _heavyBeforeShare = (draft['heavy_allowed'],);
-      return {'heavy_allowed': stored == null ? true : stored.$1};
+      _heavyBeforeShare = (draft['heavy_allowed'], draft['heavy_not_stated']);
+      // The flag and 官方未標示 move together (#201), as setEligibility.
+      return stored == null
+          ? {
+              'heavy_allowed': true,
+              if (draft['heavy_not_stated'] == true) 'heavy_not_stated': false,
+            }
+          : {'heavy_allowed': stored.$1, 'heavy_not_stated': stored.$2};
     }
     final before = _heavyBeforeShare;
     _heavyBeforeShare = null;
     if (before == null || draft['heavy_allowed'] != true) return const {};
-    return {'heavy_allowed': before.$1};
+    return {'heavy_allowed': before.$1, 'heavy_not_stated': before.$2};
   }
 
   void close() {
