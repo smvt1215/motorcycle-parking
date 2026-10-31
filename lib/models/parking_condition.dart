@@ -98,6 +98,17 @@ const conditionKeys = [
 const conditionZoneKeys = ['allow'];
 const allowKeys = ['scooter', 'heavy'];
 
+/// 官方未標示 (#201, `eligibility.not_stated`): the official data (for a
+/// lot, its operator's notice too) does not say. Neither 可停 nor 不可停;
+/// it judges as unconfirmed.
+const eligibilityNotStated = 'not_stated';
+
+/// The spot keys of each vehicle's eligibility (`eligibility.spot_keys`).
+const eligibilitySpotKeys = {
+  'scooter': (allowed: 'scooter_allowed', notStated: 'scooter_not_stated'),
+  'heavy': (allowed: 'heavy_allowed', notStated: 'heavy_not_stated'),
+};
+
 /// The keys each limit kind must and may carry, with whole-number ranges.
 const limitKeys =
     <LimitKind, ({List<String> required, Map<String, (int, int)> optional})>{
@@ -259,10 +270,34 @@ class ConditionBasis {
 /// A zone's explicit opening or exclusion per vehicle; null keys follow the
 /// law and notices.
 class ZoneAllow {
-  const ZoneAllow({this.scooter, this.heavy});
+  const ZoneAllow({
+    this.scooter,
+    this.heavy,
+    this.scooterNotStated = false,
+    this.heavyNotStated = false,
+  });
+
+  /// Null when not given or 官方未標示 ([scooterNotStated]).
   final bool? scooter, heavy;
 
-  Map<String, Object> toJson() => {'scooter': ?scooter, 'heavy': ?heavy};
+  /// 官方未標示 (#201): the vehicle is named, but the official data does not
+  /// say; [scooter] or [heavy] is then null.
+  final bool scooterNotStated, heavyNotStated;
+
+  /// Whether [vehicle] (`scooter` or `heavy`) is named at all.
+  bool states(String vehicle) => vehicle == 'heavy'
+      ? heavy != null || heavyNotStated
+      : scooter != null || scooterNotStated;
+
+  bool get anyNotStated => scooterNotStated || heavyNotStated;
+
+  Map<String, Object> toJson() => {
+    if (scooterNotStated)
+      'scooter': eligibilityNotStated
+    else
+      'scooter': ?scooter,
+    if (heavyNotStated) 'heavy': eligibilityNotStated else 'heavy': ?heavy,
+  };
 }
 
 /// A bay's (or a zone's) parking condition (§1.2). Every facet may be null:
@@ -344,8 +379,12 @@ class ParkingCondition {
       allow: allow == null
           ? null
           : ZoneAllow(
-              scooter: allow['scooter'] as bool?,
-              heavy: allow['heavy'] as bool?,
+              scooter: allow['scooter'] is bool
+                  ? allow['scooter'] as bool
+                  : null,
+              heavy: allow['heavy'] is bool ? allow['heavy'] as bool : null,
+              scooterNotStated: allow['scooter'] == eligibilityNotStated,
+              heavyNotStated: allow['heavy'] == eligibilityNotStated,
             ),
     );
   }
@@ -476,7 +515,9 @@ bool validCondition(Object? json, {bool zone = false}) {
     if (allow is! Map ||
         allow.isEmpty ||
         !allow.entries.every(
-          (e) => allowKeys.contains(e.key) && e.value is bool,
+          (e) =>
+              allowKeys.contains(e.key) &&
+              (e.value is bool || e.value == eligibilityNotStated),
         )) {
       return false;
     }
@@ -760,7 +801,12 @@ ParkingAccess? legacyAccess(ParkingCondition? zone) {
 bool zoneConditionConsistent(Map<String, Object?> zone) {
   final json = zone['condition'];
   if (json == null) return true;
-  final access = legacyAccess(ParkingCondition.fromJson(json, zone: true));
+  final condition = ParkingCondition.fromJson(json, zone: true);
+  // 官方未標示 (#201) writes back no access: the zone carries none.
+  if (condition?.allow case final allow? when allow.anyNotStated) {
+    return zone['access'] == null && allowKeys.every(allow.states);
+  }
+  final access = legacyAccess(condition);
   return access != null && zone['access'] == access.name;
 }
 

@@ -13,7 +13,7 @@ select is(fee_plan_name('{"scooter":{"mode":"free"},"heavy":{"mode":"daily","amo
 
 -- A lot reported by a rider: the zones' fees become plans, the same fee one plan.
 create temporary table lot as select (public.apply_report('10000000-0000-4000-8000-000000000001',repeat('a',64),repeat('a',64),
-  '{"action":"create","spot":{"name":"計費規則測試","lat":25.09,"lng":121.61,"city":"臺北市","space_type":"offStreet",
+  '{"action":"create","spot":{"scooter_allowed":true,"heavy_allowed":true,"name":"計費規則測試","lat":25.09,"lng":121.61,"city":"臺北市","space_type":"offStreet",
     "parking_zones":[
       {"name":"B1","access":"scooterHeavy","fee":{"scooter":{"mode":"hourly","amount":10,"per_minutes":60}}},
       {"name":"B2","access":"scooterHeavy","fee":{"scooter":{"mode":"hourly","amount":10,"per_minutes":60}}},
@@ -65,7 +65,7 @@ select is((select fee_plans from community_spots where id=(select id from lot)),
 
 -- A street spot refers to its plan from the top level.
 create temporary table street as select (public.apply_report('10000000-0000-4000-8000-000000000001',repeat('b',64),repeat('b',64),
-  '{"action":"create","spot":{"name":"路邊規則測試","lat":25.091,"lng":121.611,"city":"臺北市","space_type":"paidMotorcycle",
+  '{"action":"create","spot":{"scooter_allowed":true,"heavy_allowed":true,"name":"路邊規則測試","lat":25.091,"lng":121.611,"city":"臺北市","space_type":"paidMotorcycle",
     "fee":{"heavy":{"mode":"per_visit","amount":40}},"fee_note":"大型重機每次 40 元（隔日是否另計未確認）"}}')->>'id')::uuid as id;
 select is((select fee_plan||'|'||(fee_plans->0->>'name')||'|'||(fee->'heavy'->>'amount') from community_spots where id=(select id from street)),
   'p1|重機計次|40','a street spot''s fee becomes its plan');
@@ -145,7 +145,7 @@ grant select,insert on promoted to authenticated;
 select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-000000000005","role":"authenticated","aal":"aal2","app_metadata":{"role":"admin"}}',true);
 set local role authenticated;
 insert into promoted select admin_promote_spot((select id::text from lot),
-  '{"source_name":"臺北市政府","source_url":"https://example.test/promoted","effective_date":"2026-10-25"}',
+  '{"scooter_allowed":true,"heavy_allowed":true,"source_name":"臺北市政府","source_url":"https://example.test/promoted","effective_date":"2026-10-25"}',
   (select updated_at from community_spots where id=(select id from lot)))->>'id';
 select is((select c->'admin'->>'action' from jsonb_array_elements(admin_import_preview(jsonb_build_array(jsonb_build_object(
     'id','official:'||(select id from promoted),'source','official','name','計費規則測試',

@@ -193,6 +193,8 @@ String historyMeta(HistoryEntry e) {
       ?switch (e.action) {
         'create_spot' => '新增點位',
         'hide_spot' => '隱藏點位',
+        'delete_spot' => '刪除點位',
+        'purge_spot' => '永久刪除',
         'restore_spot' => '恢復顯示',
         'promote_spot' => '改為官方點',
         'promoted_from' => '由社群點改為官方點',

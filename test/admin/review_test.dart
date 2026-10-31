@@ -123,7 +123,24 @@ void main() {
       final official = spots[officialId]!;
       expect(validatePatch({'name': ' '}, official), '停車點名稱不可空白');
       expect(validatePatch({'name': 'a' * 101}, official), contains('100'));
-      expect(validatePatch({'heavy_allowed': null}, official), isNull);
+      // A write never clears a vehicle; 官方未標示 goes with a null flag (#201).
+      expect(validatePatch({'heavy_allowed': null}, official), isNotNull);
+      expect(
+        validatePatch({
+          'heavy_allowed': null,
+          'heavy_not_stated': true,
+        }, official),
+        isNull,
+      );
+      expect(validatePatch({'heavy_not_stated': false}, official), isNotNull);
+      expect(
+        validatePatch({
+          'heavy_allowed': true,
+          'heavy_not_stated': true,
+        }, official),
+        isNotNull,
+      );
+      expect(formatValue('heavy_not_stated', true), '官方未標示');
       expect(validatePatch({'lat': 30}, official), contains('緯度'));
       expect(validatePatch({'space_type': 'rocket'}, official), isNotNull);
       expect(
@@ -163,6 +180,24 @@ void main() {
       expect(review.queue.first.id, first.id);
       await review.flush();
       expect(gateway.resolved, isEmpty);
+    });
+
+    test('採納刪除點位後，同一點位的其他回報一起離開佇列（#200）', () async {
+      final access = review.queue.firstWhere((r) => r.id == 'r-access');
+      await review.decide(
+        access,
+        ReviewDecision.accept,
+        '',
+        adjust: (_) => {'hidden': true},
+      );
+      await review.flush();
+      expect(gateway.resolved.single.$3, {'hidden': true});
+      expect(
+        review.queue.where((r) => r.sourceId == officialId),
+        isEmpty,
+        reason: 'r-legacy was closed with the deletion',
+      );
+      expect(review.queue.map((r) => r.id), contains('r-type'));
     });
 
     test('時間到或下一個決定時寫入', () async {
@@ -658,7 +693,7 @@ void main() {
       });
     });
 
-    testWidgets('官方點加入大型重機欄位可保留未確認', (tester) async {
+    testWidgets('官方點加入大型重機欄位不能留未確認（#201）', (tester) async {
       final spot = gateway.spots[officialId]!;
       gateway.spots[officialId] = ReviewSpot(
         sourceId: officialId,
@@ -688,10 +723,11 @@ void main() {
       await tester.tap(find.text('套用修改'));
       await tester.pump(const Duration(seconds: 7));
       await tester.pumpAndSettle();
-      expect(gateway.resolved.single.$3, {'heavy_allowed': null});
+      expect(find.textContaining('大型重機請選可停或不可停，或設為官方未標示'), findsWidgets);
+      expect(gateway.resolved, isEmpty);
     });
 
-    testWidgets('官方點未確認資格建議可編輯並套用', (tester) async {
+    testWidgets('舊版送來的未確認資格建議不能直接套用（#201）', (tester) async {
       gateway.reports = [
         ReviewReport(
           id: 'r-unknown',
@@ -709,7 +745,7 @@ void main() {
       await tester.tap(find.text('套用修改'));
       await tester.pump(const Duration(seconds: 7));
       await tester.pumpAndSettle();
-      expect(gateway.resolved.single.$3, {'heavy_allowed': null});
+      expect(gateway.resolved, isEmpty);
     });
 
     testWidgets('版本衝突顯示送出時的值，按仍要套用才強制', (tester) async {
@@ -778,15 +814,47 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('已隱藏清單可恢復並復原', (tester) async {
+    testWidgets('已刪除清單顯示剩餘天數，可復原並撤銷（#200）', (tester) async {
+      gateway.purged = const [
+        PurgedOfficialSpot(
+          officialId: '99999999-9999-4999-8999-999999999999',
+          sourceId: 'TP-9',
+          name: '已永久刪除的官方點',
+        ),
+      ];
       await show(tester);
-      await tester.tap(find.text('已隱藏的點位'));
+      await tester.tap(find.text('已刪除的點位'));
       await tester.pumpAndSettle();
       expect(find.text('中山北路二段路邊機車格'), findsOneWidget);
+      expect(find.byKey(ValueKey('purge-days-$communityId')), findsOneWidget);
+      expect(find.textContaining('天後永久刪除'), findsOneWidget);
+      expect(find.text('官方資料編號 TP-9'), findsOneWidget);
+      await tester.enterText(
+        find.byKey(const ValueKey('purged-search')),
+        'TP-9',
+      );
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+      expect(find.text('官方資料編號 TP-9'), findsOneWidget);
+      await tester.enterText(find.byKey(const ValueKey('purged-search')), '無');
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+      expect(find.text('找不到符合的官方點。'), findsOneWidget);
+      await tester.enterText(find.byKey(const ValueKey('purged-search')), '');
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(
+          const ValueKey('release-99999999-9999-4999-8999-999999999999'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(gateway.released, ['99999999-9999-4999-8999-999999999999']);
+      expect(find.text('已永久刪除的官方點'), findsNothing);
       await tester.tap(find.byKey(const ValueKey('restore-$communityId')));
       await tester.pumpAndSettle();
       expect(gateway.hiddenChanges.single, (communityId, false));
-      expect(find.text('目前沒有隱藏的點位。'), findsOneWidget);
+      expect(find.text('目前沒有已刪除的點位。'), findsOneWidget);
       await tester.tap(find.text('復原'));
       await tester.pumpAndSettle();
       expect(gateway.hiddenChanges.last, (communityId, true));

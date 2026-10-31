@@ -65,8 +65,10 @@ class GenContractSqlTest(unittest.TestCase):
         migrations = sorted((gen.ROOT / "supabase/migrations").glob("*.sql"))
         for name, statement in zip(blocks, statements):
             with self.subTest(function=name):
-                header = f"function public.{name}("
-                latest = [m for m in migrations if header in m.read_text()]
+                # Only a definition counts: revoke/grant/comment on the
+                # function also name it (#195 P0 revokes these helpers).
+                header = re.compile(rf"^create (or replace )?function public\.{name}\(", re.M)
+                latest = [m for m in migrations if header.search(m.read_text())]
                 self.assertTrue(latest, f"no migration defines {name}")
                 self.assertIn(statement, latest[-1].read_text(),
                               f"copy the generated {name} into a new migration")

@@ -5,7 +5,7 @@ select plan(7);
 create temporary table update_target as
 select (public.apply_report(
   '10000000-0000-4000-8000-000000000001',repeat('u',64),repeat('u',64),
-  '{"action":"create","spot":{"name":"更新測試","lat":24.8,"lng":121.2,"city":"桃園市","space_type":"paidMotorcycle","fee_note":"每小時 20 元","note":"入口在北側"}}'
+  '{"action":"create","spot":{"scooter_allowed":true,"heavy_allowed":true,"name":"更新測試","lat":24.8,"lng":121.2,"city":"桃園市","space_type":"paidMotorcycle","fee_note":"每小時 20 元","note":"入口在北側"}}'
 )->>'id')::uuid as id;
 select public.apply_report('10000000-0000-4000-8000-000000000001',repeat('u',64),repeat('u',64),
   jsonb_build_object('action','update','spot_id',(select id from update_target),'spot',jsonb_build_object('name','只更新名稱')));

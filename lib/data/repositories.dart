@@ -195,8 +195,8 @@ class ParkingRepository {
     return value;
   }
 
-  /// Sends a report; a precheck refusal becomes a [StateError] carrying the
-  /// server's sentence, which the forms show as is.
+  /// Sends a report; a precheck refusal, or one for a spot an admin deleted
+  /// (#200), becomes a [StateError] carrying the sentence the forms show.
   Future<Map<String, dynamic>> report(Map<String, dynamic> body) async {
     final deviceId = await _deviceId();
     try {
@@ -206,7 +206,7 @@ class ParkingRepository {
       );
       return res.data as Map<String, dynamic>;
     } on FunctionException catch (e) {
-      if (precheckRefusal(e.details) case final message?) {
+      if (reportRefusal(e.details) case final message?) {
         throw StateError(message);
       }
       rethrow;

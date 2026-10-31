@@ -71,7 +71,7 @@ select is(admin_set_spot_hidden((select id::text from fx where name='spot'),true
 select is(admin_set_spot_hidden((select id::text from fx where name='spot'),false)->>'status','pending','a restored community spot is pending again');
 reset role;
 select is((select count(*)::integer from spot_votes where spot_id=(select id from fx where name='spot') and vote='gone'),0,'restoring clears the gone votes');
-select is((select count(*)::integer from admin_audit_log where action='hide_spot'),1,'hiding is audited');
+select is((select count(*)::integer from admin_audit_log where action='delete_spot'),1,'deleting is audited (#200)');
 
 -- Version conflicts: a suggestion records the spot it was made against.
 with s as (insert into community_spots(user_id,name,lat,lng,city,space_type,fee_note)
