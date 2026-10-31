@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../models/fee.dart';
 import '../../models/fee_plan.dart' show projectZoneFee;
+import '../../models/parking.dart' show Eligible;
 import '../../models/parking_condition.dart';
 import '../../ui/fee_editor.dart';
 import '../../ui/option_pill.dart';
@@ -686,11 +687,21 @@ class _AreaCardState extends State<_AreaCard> {
 }
 
 /// Both vehicles unconfirmed is no `allow` at all: the contract refuses an
-/// empty one.
-ZoneAllow? _allow(bool? scooter, bool? heavy) =>
+/// empty one. 官方未標示 (#201) names the vehicle without a flag.
+ZoneAllow? _allow(Eligible? scooter, Eligible? heavy) =>
     scooter == null && heavy == null
     ? null
-    : ZoneAllow(scooter: scooter, heavy: heavy);
+    : ZoneAllow(
+        scooter: scooter?.flag,
+        heavy: heavy?.flag,
+        scooterNotStated: scooter == Eligible.notStated,
+        heavyNotStated: heavy == Eligible.notStated,
+      );
+
+/// A zone's vehicle as its allow states it; null is unconfirmed.
+Eligible? _eligible(ZoneAllow? allow, String vehicle) => vehicle == 'heavy'
+    ? Eligible.of(allow?.heavy, notStated: allow?.heavyNotStated ?? false)
+    : Eligible.of(allow?.scooter, notStated: allow?.scooterNotStated ?? false);
 
 const _bayLabels = <(Bay?, String)>[
   (Bay.motorcycle, '機車格'),
@@ -767,14 +778,17 @@ class _BayRow extends StatelessWidget {
         },
       if (c.schedule.isNotEmpty) '共用時段 ${c.schedule.length} 段',
     ];
+    // 可停／不可停／官方未標示 (#201); none picked is unconfirmed, which a
+    // save refuses (zoneProblem).
     Widget vehicle(
       String label,
-      bool? value,
-      ValueChanged<bool?> onPick, {
-      Set<bool?> disabled = const {},
-    }) => VehicleTriState(
+      Eligible? value,
+      ValueChanged<Eligible?> onPick, {
+      Set<Eligible?> disabled = const {},
+    }) => VehicleSegments<Eligible?>(
       label: label,
       value: value,
+      options: [for (final e in Eligible.values) (e, e.label)],
       keyPrefix: 'bay-$index-$label',
       onChanged: onPick,
       disabled: disabled,
@@ -885,19 +899,27 @@ class _BayRow extends StatelessWidget {
                   children: [
                     vehicle(
                       '普通機車',
-                      c.allow?.scooter,
+                      _eligible(c.allow, 'scooter'),
                       (v) => _set(
-                        _with(c, allow: () => _allow(v, c.allow?.heavy)),
+                        _with(
+                          c,
+                          allow: () => _allow(v, _eligible(c.allow, 'heavy')),
+                        ),
                       ),
                       // The contract refuses scooters in a heavy bay; the
                       // choice would leave a condition nothing can read.
-                      disabled: c.bay == Bay.heavy ? const {true} : const {},
+                      disabled: c.bay == Bay.heavy
+                          ? const {Eligible.allowed}
+                          : const {},
                     ),
                     vehicle(
                       '大型重機',
-                      c.allow?.heavy,
+                      _eligible(c.allow, 'heavy'),
                       (v) => _set(
-                        _with(c, allow: () => _allow(c.allow?.scooter, v)),
+                        _with(
+                          c,
+                          allow: () => _allow(_eligible(c.allow, 'scooter'), v),
+                        ),
                       ),
                     ),
                   ],

@@ -857,6 +857,61 @@ void main() {
       expect(d.zones.single.reason, '此分區標示不開放大型重機');
     });
 
+    test('官方未標示（#201）：場站不是可停也不是不可停，判為待確認', () {
+      final s = ParkingSpot.fromJson({
+        'id': 'official:lot',
+        'name': 'lot',
+        'lat': 25,
+        'lng': 121,
+        'city': '臺北市',
+        'source': 'official',
+        'space_type': 'offStreet',
+        'scooter_allowed': true,
+        'heavy_allowed': null,
+        'heavy_not_stated': true,
+        'status': 'confirmed',
+        'updated_at': recent.toIso8601String(),
+      });
+      expect(s.heavyNotStated, isTrue);
+      expect(s.notStated(VehicleType.scooter), isFalse);
+      final d = heavy(s);
+      expect(d.status, EligibilityStatus.unverified);
+      expect(d.gaps, {DecisionGap.notStated});
+      expect(d.reason, '場站官方未標示是否開放大型重機，請以入口公告為準');
+      expect(s.toJson()['heavy_not_stated'], isTrue);
+      expect(s.toJson().containsKey('scooter_not_stated'), isFalse);
+    });
+
+    test('分區官方未標示（#201）：該區待確認，另一區可停時場站仍可停', () {
+      final d = heavy(
+        lot([
+          zone(
+            'B1',
+            condition: {
+              'allow': {'scooter': true, 'heavy': 'not_stated'},
+            },
+          ),
+          zone('重機區', access: ParkingAccess.heavyOnly),
+        ]),
+      );
+      expect(d.zones.first.status, EligibilityStatus.unverified);
+      expect(d.zones.first.gaps, {DecisionGap.notStated});
+      expect(d.zones.first.reason, '此分區官方未標示是否開放大型重機，請以入口公告為準');
+      expect(d.status, EligibilityStatus.allowed);
+      final only = heavy(
+        lot([
+          zone(
+            'B1',
+            condition: {
+              'allow': {'scooter': 'not_stated', 'heavy': 'not_stated'},
+            },
+          ),
+        ]),
+      );
+      expect(only.status, isNot(EligibilityStatus.allowed));
+      expect(only.status, isNot(EligibilityStatus.notAllowed));
+    });
+
     test('分區涵蓋全場而都不開放：場站與分區資料不一致', () {
       final d = heavy(
         lot([zone('B1', access: ParkingAccess.scooterOnly)], complete: true),

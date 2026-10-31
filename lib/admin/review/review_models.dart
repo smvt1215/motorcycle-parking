@@ -56,6 +56,9 @@ enum FieldInput {
   triState,
   visibility,
   hiddenFlag,
+
+  /// `scooter_not_stated`／`heavy_not_stated` (#201): 官方未標示 or not.
+  notStated,
   coordinate,
 
   /// One of [ReviewField.choices], or unset.
@@ -142,6 +145,9 @@ final reviewFields = [
   ReviewField('closure', '暫時無法停車', FieldInput.closure),
   const ReviewField('parking_zones', '分區', FieldInput.entries),
   const ReviewField('parking_segments', '路邊分段', FieldInput.entries),
+  // 官方未標示 (#201), beside a null flag; last, as riders rarely send it.
+  ReviewField('scooter_not_stated', '普通機車官方未標示', FieldInput.notStated),
+  ReviewField('heavy_not_stated', '大型重機官方未標示', FieldInput.notStated),
 ];
 
 ReviewField? reviewField(String key) =>
@@ -262,7 +268,9 @@ class ReviewReport {
     }
     if (key == 'eligibility' ||
         keys.contains('scooter_allowed') ||
-        keys.contains('heavy_allowed')) {
+        keys.contains('heavy_allowed') ||
+        keys.contains('scooter_not_stated') ||
+        keys.contains('heavy_not_stated')) {
       return ReviewKind.access;
     }
     return ReviewKind.info;
@@ -300,6 +308,11 @@ class ReviewSpot {
       official ? values['hidden'] == true : values['status'] == 'hidden';
   DateTime? get updatedAt =>
       DateTime.tryParse(values['updated_at'] as String? ?? '');
+
+  /// When an admin deleted it (#200); null when it is not deleted (a
+  /// promoted community spot is hidden without being deleted).
+  DateTime? get deletedAt =>
+      DateTime.tryParse(values['deleted_at'] as String? ?? '');
 
   /// Official spots carry their government source; community rows say so.
   String get sourceLabel {
@@ -463,6 +476,7 @@ bool fitsField(ReviewField field, Object? value) => switch (field.input) {
     'hidden',
   }.contains(value),
   FieldInput.hiddenFlag => value is bool,
+  FieldInput.notStated => value is bool,
   FieldInput.coordinate => value is num,
   FieldInput.choice => value == null || field.choices.containsKey(value),
   FieldInput.multiChoice => value == null || validChoices(field, value),
@@ -553,6 +567,7 @@ String formatValue(String key, Object? value) {
       _ => '顯示（待確認）',
     },
     FieldInput.hiddenFlag => value == true ? '隱藏' : '顯示',
+    FieldInput.notStated => value == true ? '官方未標示' : '否',
     FieldInput.coordinate => value is num ? value.toStringAsFixed(6) : '未填寫',
     FieldInput.text =>
       value is String && value.trim().isNotEmpty ? value : '未填寫',
@@ -596,6 +611,22 @@ String? validatePatch(Map<String, dynamic> patch, ReviewSpot spot) {
         }
       case FieldInput.triState:
         if (value != null && value is! bool) return '${field.label}的值無效';
+        // A write never clears a vehicle (#201): 可停、不可停, or 官方未標示.
+        if (value == null &&
+            patch[key.replaceFirst('_allowed', '_not_stated')] != true) {
+          return '${field.label}請選可停或不可停，或設為官方未標示';
+        }
+        // Not both: the RPC refuses a flag beside 官方未標示.
+        if (value is bool &&
+            patch[key.replaceFirst('_allowed', '_not_stated')] == true) {
+          return '${field.label}選了可停或不可停，請把「${field.label}官方未標示」改成「否」';
+        }
+      case FieldInput.notStated:
+        if (value is! bool) return '${field.label}的值無效';
+        if (value == false &&
+            patch[key.replaceFirst('_not_stated', '_allowed')] is! bool) {
+          return '${field.label}取消時，請同時選可停或不可停';
+        }
       case FieldInput.visibility:
         if (!const {'pending', 'confirmed', 'hidden'}.contains(value)) {
           return '請選擇地圖顯示方式';
@@ -807,4 +838,34 @@ String closureSummary(Object? value) {
   return '${c.reason.label}，'
       '${until == null ? '恢復時間未知（$closureDefaultDays 天後到期）' : '預計 ${closureDayLabel(until)}恢復'}'
       '（${closureDate(c.since)} 起）';
+}
+
+/// How long a deleted spot can be restored (#200, spot_delete_grace()).
+const spotDeleteGrace = Duration(days: 14);
+
+/// Whole days left before a spot deleted at [deletedAt] is purged, at
+/// least 0; the purge runs once a day.
+int purgeDaysLeft(DateTime deletedAt, DateTime now) {
+  final left = deletedAt.add(spotDeleteGrace).difference(now);
+  return left.isNegative ? 0 : (left.inHours / 24).ceil();
+}
+
+/// An official spot purged 14 days after deletion (#200): imports skip
+/// its id and source id until an admin releases it.
+class PurgedOfficialSpot {
+  const PurgedOfficialSpot({
+    required this.officialId,
+    required this.sourceId,
+    required this.name,
+    this.purgedAt,
+  });
+  factory PurgedOfficialSpot.fromJson(Map<String, dynamic> json) =>
+      PurgedOfficialSpot(
+        officialId: json['official_id'] as String,
+        sourceId: json['source_id'] as String? ?? '',
+        name: json['name'] as String? ?? '',
+        purgedAt: DateTime.tryParse(json['purged_at'] as String? ?? ''),
+      );
+  final String officialId, sourceId, name;
+  final DateTime? purgedAt;
 }

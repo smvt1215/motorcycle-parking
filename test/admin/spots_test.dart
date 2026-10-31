@@ -14,6 +14,8 @@ import 'package:motorcycle_parking/admin/spots/spots_controller.dart';
 import 'package:motorcycle_parking/core/town_lookup.dart';
 import 'package:motorcycle_parking/domain/location_check.dart';
 import 'package:motorcycle_parking/domain/map_viewport.dart';
+import 'package:motorcycle_parking/models/parking.dart' show Eligible;
+import 'package:motorcycle_parking/models/space_kind.dart';
 
 import 'fake_admin_gateway.dart';
 import 'fold_helpers.dart';
@@ -122,6 +124,11 @@ void main() {
       expect(await spots.save(''), isFalse);
       spots.set('name', '新的機車格');
       spots.set('space_type', 'freeMotorcycle');
+      // Both vehicles (#201).
+      expect(spots.errors.keys, containsAll(vehicleFlags));
+      expect(await spots.save(''), isFalse);
+      spots.setEligibility('scooter_allowed', Eligible.allowed);
+      spots.setEligibility('heavy_allowed', Eligible.notAllowed);
       expect(await spots.save('現場新增'), isTrue);
       final (kind, values, note) = gateway.created.single;
       expect((kind, note), (SpotKind.community, '現場新增'));
@@ -254,6 +261,8 @@ void main() {
       await Future<void>.delayed(Duration.zero);
       spots.set('name', '新的機車格');
       spots.set('space_type', 'freeMotorcycle');
+      spots.setEligibility('scooter_allowed', Eligible.allowed);
+      spots.setEligibility('heavy_allowed', Eligible.allowed);
       spots.set('lat', 25.061);
       gateway.delayedTown = Completer<void>();
       final first = spots.save('');
@@ -262,6 +271,33 @@ void main() {
       expect(await second, isFalse);
       expect(await first, isTrue);
       expect(gateway.created, hasLength(1));
+    });
+
+    test('已存成官方未標示的車種載入後仍是官方未標示，改名稱不必重選（#201）', () async {
+      gateway.spotRows[officialId]!
+        ..['heavy_allowed'] = null
+        ..['heavy_not_stated'] = true;
+      await spots.open(officialId);
+      expect(spots.eligibilityOf('heavy_allowed'), Eligible.notStated);
+      spots.set('name', '新名稱');
+      expect(spots.errors.containsKey('heavy_allowed'), isFalse);
+      expect(spots.changes, {'name': '新名稱'});
+    });
+
+    test('官方未標示的大型重機改成普大共用時一起改成可停（#201）', () async {
+      gateway.spotRows[officialId]!
+        ..['space_type'] = 'paidMotorcycle'
+        ..['facility_type'] = 'roadside'
+        ..['facility_types'] = ['roadside']
+        ..['heavy_allowed'] = null
+        ..['heavy_not_stated'] = true;
+      await spots.open(officialId);
+      spots.setKind(SpaceKind.scooterHeavy);
+      expect(spots.eligibilityOf('heavy_allowed'), Eligible.allowed);
+      expect(spots.changes['heavy_allowed'], isTrue);
+      expect(spots.changes['heavy_not_stated'], isFalse);
+      spots.setKind(SpaceKind.motorcycle);
+      expect(spots.eligibilityOf('heavy_allowed'), Eligible.notStated);
     });
 
     test('改為官方點只送管理者填的來源與資格', () async {
@@ -747,10 +783,14 @@ void main() {
       expect(find.byKey(const ValueKey('marker-$communityId')), findsOneWidget);
     });
 
-    testWidgets('隱藏點位後地圖重新載入', (tester) async {
+    testWidgets('刪除點位後地圖重新載入', (tester) async {
       await show(tester, path: '/spots/$communityId');
       final before = gateway.mapRequests.length;
-      await tester.tap(find.text('隱藏點位').last);
+      await tester.tap(find.text('刪除點位').last);
+      await tester.pumpAndSettle();
+      // Confirmed first (#200): 14 days to restore.
+      expect(find.textContaining('管理站會保留 14 天'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('confirm-delete-spot')));
       await tester.pumpAndSettle();
       expect(gateway.mapRequests.length, greaterThan(before));
     });
@@ -802,9 +842,22 @@ void main() {
         find.widgetWithText(TextFormField, '官方資料網址'),
         'https://example.test/lot',
       );
+      // Both vehicles, never reset to unconfirmed (#201).
+      await tester.tap(find.widgetWithText(FilledButton, '改為官方點'));
+      await tester.pumpAndSettle();
+      expect(find.text('請選擇普通機車能不能停'), findsOneWidget);
+      expect(gateway.promotions, isEmpty);
+      for (final (label, choice) in [('普通機車', '可停（官方明載）'), ('大型重機', '官方未標示')]) {
+        await tester.tap(find.byKey(ValueKey('promote-$label')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(choice).last);
+        await tester.pumpAndSettle();
+      }
       await tester.tap(find.widgetWithText(FilledButton, '改為官方點'));
       await tester.pumpAndSettle();
       expect(gateway.promotions.single.$2['source_name'], '臺北市政府');
+      expect(gateway.promotions.single.$2['scooter_allowed'], true);
+      expect(gateway.promotions.single.$2['heavy_not_stated'], true);
       expect(find.text('官方點（臺北市政府）'), findsOneWidget);
     });
 
@@ -844,9 +897,11 @@ void main() {
         await tester.tap(target);
         await tester.pumpAndSettle();
       }
+      await pickVehicles(tester, heavy: 'notAllowed');
       await tester.tap(find.text('建立停車點'));
       await tester.pumpAndSettle();
       expect(gateway.created.single.$2['city'], '臺北市');
+      expect(gateway.created.single.$2['heavy_allowed'], false);
       expect(gateway.created.single.$2['space_type'], 'freeMotorcycle');
       expect(find.text('已建立：新的機車格'), findsOneWidget);
       expect(find.text('社群點（社群回報整理）'), findsOneWidget);
@@ -1015,22 +1070,25 @@ void main() {
         await tester.scrollUntilVisible(button, 300, scrollable: form());
         await tester.ensureVisible(button);
         await tester.pumpAndSettle();
-        expect(find.text('尚未核驗'), findsOneWidget);
-        expect(find.text('未確認，無法核驗'), findsOneWidget);
+        // Both stated (#201), so both can be verified.
+        expect(find.text('尚未核驗'), findsNWidgets(2));
         expect(tester.getSize(button).height, greaterThanOrEqualTo(48));
         await tester.tap(button.hitTestable());
         await tester.pumpAndSettle();
         // Only the known flag is restated, unchanged.
-        expect(gateway.spotUpdates.single.$2, {'scooter_allowed': true});
+        expect(gateway.spotUpdates.single.$2, {
+          'scooter_allowed': true,
+          'heavy_allowed': false,
+        });
         expect(gateway.spotUpdates.single.$4, '核驗目前車種');
         expect(find.text('已核驗目前車種'), findsOneWidget);
         // The reloaded form starts at the top again.
         await tester.scrollUntilVisible(
-          find.textContaining('已核驗（2026-10-25）'),
+          find.byKey(const ValueKey('verify-vehicles')),
           300,
           scrollable: form(),
         );
-        expect(find.textContaining('已核驗（2026-10-25）'), findsOneWidget);
+        expect(find.textContaining('已核驗（2026-10-25）'), findsNWidgets(2));
         expect(tester.takeException(), isNull);
       });
     }
@@ -1044,6 +1102,36 @@ void main() {
       await tester.scrollUntilVisible(button, 300, scrollable: form());
       expect(tester.widget<OutlinedButton>(button).onPressed, isNull);
       expect(find.text('有未儲存的修改，請先儲存或捨棄後再核驗。'), findsOneWidget);
+    });
+
+    testWidgets('舊資料車種沒填：標要補填，補填前不能儲存或核驗（#201）', (tester) async {
+      gateway.spotRows[communityId]!['heavy_allowed'] = null;
+      await show(tester, path: '/spots/$communityId');
+      await tester.enterText(find.widgetWithText(TextFormField, '名稱'), '新名稱');
+      await tester.pumpAndSettle();
+      await openFold(tester, '可停車種');
+      expect(find.byKey(const ValueKey('need-heavy_allowed')), findsOneWidget);
+      // A community street bay: 可停 or 不可停 only.
+      expect(
+        find.byKey(const ValueKey('heavy_allowed-notStated')),
+        findsNothing,
+      );
+      final button = find.byKey(const ValueKey('verify-vehicles'));
+      await tester.scrollUntilVisible(button, 300, scrollable: form());
+      expect(tester.widget<OutlinedButton>(button).onPressed, isNull);
+      expect(find.text('兩種車都填好並儲存後才能核驗。'), findsOneWidget);
+      await tester.tap(find.text('儲存並關閉'));
+      await tester.pumpAndSettle();
+      expect(gateway.spotUpdates, isEmpty);
+      expect(find.textContaining('這是舊資料，大型重機還沒填'), findsOneWidget);
+      await pickVehicles(tester, heavy: 'notAllowed');
+      await tester.tap(find.text('儲存並關閉'));
+      await tester.pumpAndSettle();
+      // Only what changed; the stored scooter value stands.
+      expect(gateway.spotUpdates.single.$2, {
+        'name': '新名稱',
+        'heavy_allowed': false,
+      });
     });
 
     testWidgets('官方點不顯示車種核驗', (tester) async {
@@ -1061,7 +1149,7 @@ void main() {
       expect(find.byKey(const ValueKey('location-search')), findsOneWidget);
       expect(await sub('基本資訊', '還沒填'), findsOneWidget);
       expect(await sub('補充', '還沒填'), findsOneWidget);
-      expect(await sub('可停車種', '普通機車未確認・大型重機未確認'), findsOneWidget);
+      expect(await sub('可停車種', '普通機車未確認（要補填）・大型重機未確認（要補填）'), findsOneWidget);
       await openFold(tester, '基本資訊');
       // Opening one folds the other; its summary says where it is.
       expect(find.byKey(const ValueKey('location-search')), findsNothing);
@@ -1088,7 +1176,7 @@ void main() {
       await show(tester, path: '/spots/$communityId');
       expect(find.byType(DropdownButtonFormField<int>), findsNothing);
       await openFold(tester, '可停車種');
-      final heavy = find.byKey(const ValueKey('heavy_allowed-false'));
+      final heavy = find.byKey(const ValueKey('heavy_allowed-allowed'));
       expect(tester.getSize(heavy).height, greaterThanOrEqualTo(48));
       await tester.tap(heavy);
       await tester.pumpAndSettle();
@@ -1109,14 +1197,14 @@ void main() {
       expect(
         find.descendant(
           of: await revealFold(tester, '可停車種'),
-          matching: find.text('普通機車可停・大型重機不可停'),
+          matching: find.text('普通機車可停・大型重機可停'),
         ),
         findsOneWidget,
       );
       await tester.tap(find.text('儲存並關閉'));
       await tester.pumpAndSettle();
       expect(gateway.spotUpdates.single.$2, {
-        'heavy_allowed': false,
+        'heavy_allowed': true,
         'facility_types': ['underground'],
       });
     });
@@ -1158,16 +1246,25 @@ void main() {
       );
     }
 
-    testWidgets('隱藏點位後可復原', (tester) async {
+    testWidgets('刪除點位要確認，之後可復原（#200）', (tester) async {
       await show(tester, path: '/spots/$officialId');
-      await tester.tap(find.text('隱藏點位'));
+      await tester.tap(find.text('刪除點位'));
       await tester.pumpAndSettle();
-      expect(find.text('這個點位已隱藏，App 地圖上不會顯示。'), findsOneWidget);
-      expect(find.text('恢復顯示'), findsOneWidget);
+      // Cancelling deletes nothing.
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      expect(gateway.hiddenChanges, isEmpty);
+      await tester.tap(find.text('刪除點位'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('confirm-delete-spot')));
+      await tester.pumpAndSettle();
+      expect(gateway.hiddenChanges.single, (officialId, true));
+      expect(find.textContaining('這個點位已刪除，騎士看不到'), findsOneWidget);
+      expect(find.text('復原點位'), findsOneWidget);
       await tester.tap(find.text('復原'));
       await tester.pumpAndSettle();
       expect(gateway.hiddenChanges.last, (officialId, false));
-      expect(find.text('隱藏點位'), findsOneWidget);
+      expect(find.text('刪除點位'), findsOneWidget);
     });
   });
 }

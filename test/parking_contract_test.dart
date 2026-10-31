@@ -72,6 +72,13 @@ void main() {
         _wires(streetChargeOptionalWith, (v) => v.wire),
       );
       expect(cond['allow_keys'], allowKeys);
+      final eligibility = contract['eligibility']! as Map<String, Object?>;
+      expect(eligibility['not_stated'], eligibilityNotStated);
+      expect(eligibility['vehicles'], allowKeys);
+      expect(eligibility['spot_keys'], {
+        for (final MapEntry(:key, :value) in eligibilitySpotKeys.entries)
+          key: {'allowed': value.allowed, 'not_stated': value.notStated},
+      });
       expect(
         (contract['zone']! as Map<String, Object?>)['area'],
         _wires(ZoneArea.values, (v) => v.name),

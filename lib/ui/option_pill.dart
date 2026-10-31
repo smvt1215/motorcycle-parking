@@ -1,5 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../models/parking.dart';
+
 /// A pill choice shared by the app's forms and the admin site (closure
 /// canvas, decision 41): selecting one changes only its fill, its outline
 /// and the outline's weight — no check mark and no bolder text — so it
@@ -147,13 +149,72 @@ class VehicleTriState extends StatelessWidget {
   final String? keyPrefix;
 
   @override
+  Widget build(BuildContext context) => VehicleSegments<bool?>(
+    label: label,
+    value: value,
+    options: const [(null, '未確認'), (true, '可停'), (false, '不可停')],
+    onChanged: onChanged,
+    keyPrefix: keyPrefix,
+    disabled: disabled,
+  );
+}
+
+/// A vehicle's eligibility as a form states it (#201): 可停、不可停, or
+/// 官方未標示 where the official data (for a lot, its operator's notice too)
+/// does not say. Null is none picked yet, which a form never sends.
+class EligibilityChoice extends StatelessWidget {
+  const EligibilityChoice({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.onChanged,
+    this.notStated = true,
+    this.keyPrefix,
+  });
+  final String label;
+  final Eligible? value;
+  final ValueChanged<Eligible>? onChanged;
+
+  /// Whether 官方未標示 is offered: a street bay a rider reports is 可停 or
+  /// 不可停 only.
+  final bool notStated;
+  final String? keyPrefix;
+
+  @override
+  Widget build(BuildContext context) => VehicleSegments<Eligible?>(
+    label: label,
+    value: value,
+    options: [
+      for (final e in Eligible.values)
+        if (notStated || e != Eligible.notStated) (e, e.label),
+    ],
+    onChanged: onChanged == null ? null : (v) => onChanged!(v!),
+    keyPrefix: keyPrefix,
+  );
+}
+
+/// [options] as joined segments on one row, [label] beside them; the one
+/// equal to [value] is selected (none when no option is).
+class VehicleSegments<T> extends StatelessWidget {
+  const VehicleSegments({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.options,
+    required this.onChanged,
+    this.keyPrefix,
+    this.disabled = const {},
+  });
+  final String label;
+  final T value;
+  final List<(T, String)> options;
+  final ValueChanged<T>? onChanged;
+  final Set<T> disabled;
+  final String? keyPrefix;
+
+  @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    const options = <(bool?, String)>[
-      (null, '未確認'),
-      (true, '可停'),
-      (false, '不可停'),
-    ];
     return Wrap(
       spacing: 12,
       runSpacing: 4,
@@ -184,33 +245,40 @@ class VehicleTriState extends StatelessWidget {
                       height: 48,
                       child: ColoredBox(color: colors.outlineVariant),
                     ),
-                  Semantics(
-                    button: true,
-                    selected: v == value,
-                    enabled: !disabled.contains(v),
-                    child: InkWell(
-                      key: keyPrefix == null ? null : ValueKey('$keyPrefix-$v'),
-                      onTap: onChanged == null || disabled.contains(v)
-                          ? null
-                          : () => onChanged!(v),
-                      child: Container(
-                        constraints: const BoxConstraints(
-                          minHeight: 48,
-                          minWidth: 64,
-                        ),
-                        alignment: Alignment.center,
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        color: v == value ? colors.primaryContainer : null,
-                        child: Text(
-                          text,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            color: v == value
-                                ? colors.onPrimaryContainer
-                                : disabled.contains(v)
-                                ? colors.onSurface.withValues(alpha: .38)
-                                : colors.onSurface,
+                  // Narrow screens: segments share the row and their labels
+                  // wrap rather than overflow.
+                  Flexible(
+                    child: Semantics(
+                      button: true,
+                      selected: v == value,
+                      enabled: !disabled.contains(v),
+                      child: InkWell(
+                        key: keyPrefix == null
+                            ? null
+                            : ValueKey('$keyPrefix-${v is Enum ? v.name : v}'),
+                        onTap: onChanged == null || disabled.contains(v)
+                            ? null
+                            : () => onChanged!(v),
+                        child: Container(
+                          constraints: const BoxConstraints(
+                            minHeight: 48,
+                            minWidth: 64,
+                          ),
+                          alignment: Alignment.center,
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          color: v == value ? colors.primaryContainer : null,
+                          child: Text(
+                            text,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: v == value
+                                  ? colors.onPrimaryContainer
+                                  : disabled.contains(v)
+                                  ? colors.onSurface.withValues(alpha: .38)
+                                  : colors.onSurface,
+                            ),
                           ),
                         ),
                       ),

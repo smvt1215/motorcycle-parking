@@ -131,15 +131,15 @@ select set_config('app.admin_vehicle_fields','',true);
 -- Clearing a flag clears its verification.
 select pg_temp.act('admin');
 set local role authenticated;
-select lives_ok($$select admin_upsert_spot((select id::text from fx where name='lot'),'{"heavy_allowed":null}',
-  (select updated_at from community_spots where id=(select id from fx where name='lot')))$$,'an admin clears heavy access');
+select lives_ok($$select admin_upsert_spot((select id::text from fx where name='lot'),'{"heavy_not_stated":true}',
+  (select updated_at from community_spots where id=(select id from fx where name='lot')))$$,'an admin marks heavy access not stated');
 reset role;
 select is((pg_temp.spot((select id from fx where name='lot'))).heavy_verified_at,null,'an unknown flag is not verified');
 
 -- An admin-created spot is verified for the flags it sets.
 select pg_temp.act('admin');
 set local role authenticated;
-select is((admin_upsert_spot(null,'{"kind":"community","name":"核驗新增點","lat":25.05,"lng":121.55,"city":"臺北市","space_type":"offStreet","heavy_allowed":true}')
+select is((admin_upsert_spot(null,'{"scooter_not_stated":true,"kind":"community","name":"核驗新增點","lat":25.05,"lng":121.55,"city":"臺北市","space_type":"offStreet","heavy_allowed":true}')
   ->>'heavy_verified_at') is not null,true,'an admin-created flag is verified');
 reset role;
 select is((select scooter_verified_at from community_spots where name='核驗新增點'),null,'an unset flag on create is not');

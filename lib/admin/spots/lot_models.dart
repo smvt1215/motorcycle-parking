@@ -279,9 +279,11 @@ String? zoneProblem(Json zone) {
         : '「$name」的停放條件格式不正確';
   }
   final allow = condition.allow;
-  if (allow?.scooter == null || allow?.heavy == null) {
+  if (allow == null || !allow.states('scooter') || !allow.states('heavy')) {
     return '「$name」請選普通機車與大型重機可不可停';
   }
+  // 官方未標示 (#201) writes back no access, and needs none.
+  if (allow.anyNotStated) return null;
   if (legacyAccess(condition) == null) {
     return '「$name」的格位和可停車種不一致：${switch (condition.bay) {
       Bay.heavy => '重機格不能開放普通機車',

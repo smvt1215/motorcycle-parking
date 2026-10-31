@@ -9,10 +9,10 @@ $$;
 create function pg_temp.report(n integer,body jsonb,ip text default 'b',device text default 'b') returns jsonb language sql as $$
 select public.apply_report(pg_temp.uid(n),repeat(ip,64),repeat(device,64),body);
 $$;
-create temporary table target as select (pg_temp.report(1,'{"action":"create","spot":{"name":"測試點","lat":25.01,"lng":121.51,"city":"臺北市","space_type":"paidMotorcycle"}}','a','a')->>'id')::uuid as id;
+create temporary table target as select (pg_temp.report(1,'{"action":"create","spot":{"scooter_allowed":true,"heavy_allowed":true,"name":"測試點","lat":25.01,"lng":121.51,"city":"臺北市","space_type":"paidMotorcycle"}}','a','a')->>'id')::uuid as id;
 select is((select status from community_spots where id=(select id from target)),'pending','new report is pending');
-select is(pg_temp.report(2,'{"action":"create","spot":{"name":"重複點","lat":25.01001,"lng":121.51,"city":"臺北市","space_type":"paidMotorcycle"}}')->>'duplicate_id',(select id::text from target),'15m same-type duplicate prevented');
-select throws_ok($$select pg_temp.report(4,'{"action":"create","spot":{"name":"匿名","lat":25.02,"lng":121.5,"city":"臺北市","space_type":"car"}}')$$,'42501','Google or Apple sign-in required','anonymous cannot report');
+select is(pg_temp.report(2,'{"action":"create","spot":{"scooter_allowed":true,"heavy_allowed":true,"name":"重複點","lat":25.01001,"lng":121.51,"city":"臺北市","space_type":"paidMotorcycle"}}')->>'duplicate_id',(select id::text from target),'15m same-type duplicate prevented');
+select throws_ok($$select pg_temp.report(4,'{"action":"create","spot":{"scooter_allowed":true,"heavy_allowed":true,"name":"匿名","lat":25.02,"lng":121.5,"city":"臺北市","space_type":"car"}}')$$,'42501','Google or Apple sign-in required','anonymous cannot report');
 select throws_ok($$select pg_temp.report(1,jsonb_build_object('action','vote','spot_id',(select id from target),'vote','still_there'),'a','a')$$,'42501','cannot confirm own report','owner cannot confirm own report');
 select pg_temp.report(3,jsonb_build_object('action','vote','spot_id',(select id from target),'vote','still_there'),'e','e');
 select is((select qualified from spot_votes where user_id=pg_temp.uid(3) and spot_id=(select id from target)),false,'account younger than seven days is not qualified');

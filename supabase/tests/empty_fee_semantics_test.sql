@@ -35,6 +35,16 @@ with s as (insert into community_spots(user_id,name,lat,lng,city,district,space_
     '{"scooter":{"mode":"daily","amount":30}}','機車每日 30 元；大型重機費率未確認') returning id,updated_at)
   insert into fx select 'structured',id,updated_at from s;
 
+-- #201: fixtures written before eligibility was required state both
+-- vehicles (官方未標示 where they left one out), without touching updated_at.
+alter table community_spots disable trigger user;
+alter table official_heavy_spots disable trigger user;
+update community_spots set scooter_not_stated=scooter_allowed is null,heavy_not_stated=heavy_allowed is null
+  where scooter_allowed is null or heavy_allowed is null;
+update official_heavy_spots set scooter_not_stated=scooter_allowed is null,heavy_not_stated=heavy_allowed is null
+  where scooter_allowed is null or heavy_allowed is null;
+alter table community_spots enable trigger user;
+alter table official_heavy_spots enable trigger user;
 select pg_temp.act('admin');
 set local role authenticated;
 -- An admin edits the text of a fee {} spot, as the form allows.

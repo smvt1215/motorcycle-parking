@@ -14,7 +14,13 @@ import 'condition_fields.dart';
 import '../../models/fee.dart';
 import '../../models/parking.dart';
 import '../../models/parking_condition.dart'
-    show ShareKind, ZoneArea, sourceUrlMaxLength, sourceUrlPattern;
+    show
+        ShareKind,
+        ZoneArea,
+        allowKeys,
+        eligibilityNotStated,
+        sourceUrlMaxLength,
+        sourceUrlPattern;
 import '../../models/space_kind.dart';
 import '../../models/taiwan_districts.dart';
 import '../../ui/fold_section.dart';
@@ -481,6 +487,103 @@ class AccessField extends StatelessWidget {
   );
 }
 
+/// Who may park in a zone (#201): one of the posted vehicle classes, or
+/// 官方未標示 when the lot's notice (its operator's too) does not say.
+/// Required: every zone a rider adds states both vehicles.
+class ZoneAccessField extends StatelessWidget {
+  const ZoneAccessField({
+    super.key,
+    required this.zone,
+    required this.onChanged,
+  });
+  final ZoneDraft zone;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) => FormField<Object>(
+    validator: (_) =>
+        zone.access == null && !zone.notStated ? '請選擇這區的停放分類' : null,
+    builder: (field) => Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ChoiceField<Object?>(
+          label: '停放分類',
+          value: zone.notStated ? eligibilityNotStated : zone.access,
+          options: [
+            for (final access in ParkingAccess.values)
+              (access, access.description),
+            (eligibilityNotStated, Eligible.notStated.label),
+          ],
+          onChanged: (v) {
+            zone.notStated = v == eligibilityNotStated;
+            zone.access = v is ParkingAccess ? v : null;
+            field.didChange(v);
+            onChanged();
+          },
+        ),
+        if (field.errorText case final error?)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(
+              error,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ),
+      ],
+    ),
+  );
+}
+
+/// A vehicle's eligibility in a rider's new spot (#201): required. A street
+/// bay is 可停 or 不可停, with what the city's rule suggests; a lot may also
+/// say 官方未標示.
+class EligibilityField extends StatelessWidget {
+  const EligibilityField({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.notStated,
+    required this.onChanged,
+    this.keyPrefix,
+  });
+  final String label;
+  final Eligible? value;
+  final bool notStated;
+  final ValueChanged<Eligible> onChanged;
+  final String? keyPrefix;
+
+  @override
+  Widget build(BuildContext context) => FormField<Eligible>(
+    validator: (_) =>
+        value == null || (!notStated && value == Eligible.notStated)
+        ? '請選擇$label能不能停'
+        : null,
+    builder: (field) => Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        EligibilityChoice(
+          label: label,
+          value: value,
+          notStated: notStated,
+          keyPrefix: keyPrefix,
+          onChanged: (v) {
+            field.didChange(v);
+            onChanged(v);
+          },
+        ),
+        if (field.errorText case final error?)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              error,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ),
+      ],
+    ),
+  );
+}
+
 /// Which area of a lot a zone is (機車區、汽車區…), as its signs say.
 class ZoneAreaField extends StatelessWidget {
   const ZoneAreaField({
@@ -590,6 +693,9 @@ class ZoneDraft {
   final guide = TextEditingController();
   ParkingAccess? access;
 
+  /// 官方未標示 (#201): the lot's notice does not say who may park here.
+  bool notStated = false;
+
   /// 機車區、汽車區… as the lot's signs name it; null is unconfirmed.
   ZoneArea? area;
   Fee fee = const Fee();
@@ -601,7 +707,11 @@ class ZoneDraft {
 
   Map<String, Object> toJson() => {
     'name': name.text.trim(),
-    if (access case final access?) 'access': access.name,
+    if (access case final access? when !notStated) 'access': access.name,
+    if (notStated)
+      'condition': {
+        'allow': {for (final v in allowKeys) v: eligibilityNotStated},
+      },
     if (area case final area?) 'area': area.name,
     if (guide.text.trim().isNotEmpty) 'guide': guide.text.trim(),
     if (!fee.isEmpty) 'fee': fee.toJson(),
@@ -708,13 +818,7 @@ class ZoneEditor extends StatelessWidget {
                           },
                         ),
                         const SizedBox(height: 12),
-                        AccessField(
-                          value: zone.access,
-                          onChanged: (v) {
-                            zone.access = v;
-                            onChanged();
-                          },
-                        ),
+                        ZoneAccessField(zone: zone, onChanged: onChanged),
                         const SizedBox(height: 12),
                         TextFormField(
                           controller: zone.guide,
@@ -845,8 +949,10 @@ class _ReportFormState extends State<ReportForm> {
     final k? => condition.typeFor(k),
     null => null,
   };
-  late bool? scooter = defaults.scooter;
-  late bool? heavy = defaults.heavy;
+
+  /// Both required (#201); prefilled from the markings and the city's rule.
+  late Eligible? scooter = Eligible.of(defaults.scooter);
+  late Eligible? heavy = Eligible.of(defaults.heavy);
   Set<FacilityType> facilities = {};
   ParkingAccess? access;
   final zones = <ZoneDraft>[];
@@ -886,9 +992,8 @@ class _ReportFormState extends State<ReportForm> {
   /// Once the reporter sets the vehicles, a new bay kind no longer resets them.
   bool vehiclesEdited = false;
 
-  /// Vehicles whose shown value only the city's rule set. Stored, it would
-  /// outlive a change to the rule, so they are sent unconfirmed and the rule
-  /// decides them live.
+  /// Vehicles whose shown value only the city's rule set: a suggestion the
+  /// rider confirms (#201). Every vehicle is sent as picked.
   bool scooterRuled = false, heavyRuled = false;
 
   ({bool scooter, bool heavy}) get ruledOnly {
@@ -1011,8 +1116,11 @@ class _ReportFormState extends State<ReportForm> {
       if (zones.isNotEmpty)
         'parking_zones': [for (final zone in zones) zone.toJson()],
     },
-    'scooter_allowed': scooterRuled ? null : scooter,
-    'heavy_allowed': heavyRuled ? null : heavy,
+    // Both vehicles as picked (#201); 官方未標示 only for a lot.
+    if (scooter case final v? when lot || v != Eligible.notStated)
+      ...v.payload('scooter'),
+    if (heavy case final v? when lot || v != Eligible.notStated)
+      ...v.payload('heavy'),
     // A street bay's condition (design §1.2): the kind's, plus what the
     // rider adds. Its space type is always the kind picked (§1.3).
     'condition': ?switch (kind) {
@@ -1089,7 +1197,10 @@ class _ReportFormState extends State<ReportForm> {
     'name' => _Part.name,
     'lat' || 'lng' || 'city' || 'district' => _Part.location,
     'space_type' || 'condition' => _Part.kind,
-    'scooter_allowed' || 'heavy_allowed' => _Part.vehicles,
+    'scooter_allowed' ||
+    'heavy_allowed' ||
+    'scooter_not_stated' ||
+    'heavy_not_stated' => _Part.vehicles,
     'fee' => _Part.fee,
     'facility_type' ||
     'facility_types' ||
@@ -1116,9 +1227,12 @@ class _ReportFormState extends State<ReportForm> {
   /// Refills the vehicles from the markings and city rule until the
   /// reporter sets them.
   void applyDefaults() {
+    // A street bay is 可停 or 不可停: 官方未標示 goes with the lot.
+    if (!lot && scooter == Eligible.notStated) scooter = null;
+    if (!lot && heavy == Eligible.notStated) heavy = null;
     if (vehiclesEdited) return;
-    scooter = defaults.scooter;
-    heavy = defaults.heavy;
+    scooter = Eligible.of(defaults.scooter);
+    heavy = Eligible.of(defaults.heavy);
     final ruled = ruledOnly;
     scooterRuled = ruled.scooter;
     heavyRuled = ruled.heavy;
@@ -1172,11 +1286,7 @@ class _ReportFormState extends State<ReportForm> {
   ].join('・');
 
   String get vehicleSummary {
-    String word(bool? v) => switch (v) {
-      true => '可停',
-      false => '不可停',
-      null => '未確認',
-    };
+    String word(Eligible? v) => v?.label ?? '未選';
     final from = kind == null || vehiclesEdited
         ? ''
         : ruled
@@ -1526,14 +1636,16 @@ class _ReportFormState extends State<ReportForm> {
                   '${vehiclesEdited || kind == null ? '' : '已依「${kind.label}」${ruled ? '與$city的停車規則' : ''}帶入，可以修改。'}'
                   // What is sent, not what the city rule says now: a
                   // vehicle stays rule-filled after the other is edited.
-                  '${ruledVehicles.isEmpty ? '' : '${ruledVehicles.join('、')}依規則帶入，只當預設，會隨規則更新，不存成這個點的資料。'}'
-                  '現場有告示牌或地面標字時，才選「可停」。',
+                  '${ruledVehicles.isEmpty ? '' : '${ruledVehicles.join('、')}是依$city規則算出的建議值，請依現場確認。'}'
+                  '兩種車都要選才能送出；現場有告示牌或地面標字時，才選「可停」。'
+                  '${lot ? '停車場的官方資料與營運業者公告都沒寫時，選「官方未標示」。' : ''}',
                   style: TextStyle(color: colors.onSurfaceVariant),
                 ),
               ),
-              VehicleTriState(
+              EligibilityField(
                 label: '普通機車',
                 value: scooter,
+                notStated: lot,
                 keyPrefix: 'report-scooter',
                 onChanged: (v) => setState(() {
                   scooter = v;
@@ -1547,9 +1659,10 @@ class _ReportFormState extends State<ReportForm> {
                 key: const ValueKey('precheck-scooter_allowed'),
               ),
               const SizedBox(height: 8),
-              VehicleTriState(
+              EligibilityField(
                 label: '大型重機',
                 value: heavy,
+                notStated: lot,
                 keyPrefix: 'report-heavy',
                 onChanged: (v) => setState(() {
                   heavy = v;

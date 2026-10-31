@@ -71,6 +71,11 @@ const noticeConflictReason = '公告不一致，請以現場公告為準';
 const communityUncheckedReason = '社群資訊尚未查核或可能過時，請確認現場';
 const lotUncheckedReason = '場站資料未確認開放目前車種，請以入口公告為準';
 
+/// Why a lot or zone whose official data does not state [vehicle] (#201) is
+/// unconfirmed.
+String notStatedReason(VehicleType vehicle, {String where = '場站'}) =>
+    '$where官方未標示是否開放${vehicle.label}，請以入口公告為準';
+
 /// A heavy bike on a heavy-bike or car bay after the city rule ended
 /// (decision 44).
 const lawfulReason = '大型重機依法可停此格位，請勿超出格線';
@@ -253,6 +258,10 @@ enum DecisionGap {
   districtUnknown,
   scheduleUnknown,
   chargeUnknown,
+
+  /// 官方未標示 (#201): the official data (for a lot, its operator's notice
+  /// too) does not say whether the vehicle may park; judged unconfirmed.
+  notStated,
 }
 
 /// Where a decision comes from (§3.3); #91 tiers the banner by it.
@@ -1045,7 +1054,16 @@ ZoneDecision _zone(
     );
   }
   if (allowed == null) {
-    return zone(EligibilityStatus.unverified, '此分區的開放資訊未確認');
+    final notStated = vehicle == VehicleType.heavy
+        ? c.allow?.heavyNotStated ?? false
+        : c.allow?.scooterNotStated ?? false;
+    return notStated
+        ? zone(
+            EligibilityStatus.unverified,
+            notStatedReason(vehicle, where: '此分區'),
+            gaps: {DecisionGap.notStated},
+          )
+        : zone(EligibilityStatus.unverified, '此分區的開放資訊未確認');
   }
   if (vehicle == VehicleType.scooter && c.bay == Bay.car) {
     return zone(EligibilityStatus.unverified, '汽車格開放普通機車須有公告，請依入口公告');
@@ -1159,7 +1177,15 @@ ParkingDecision _lot(
     price: spot.zones.isEmpty ? lotPrice : null,
     gaps: gaps,
   );
-  if (!open) return decision(EligibilityStatus.unverified, lotUncheckedReason);
+  if (!open) {
+    return spot.notStated(vehicle)
+        ? decision(
+            EligibilityStatus.unverified,
+            notStatedReason(vehicle),
+            gaps: {DecisionGap.notStated},
+          )
+        : decision(EligibilityStatus.unverified, lotUncheckedReason);
+  }
   // The headline already says 可停 and the basis line says who checked it
   // and when (#132), so the reason only adds the reminder.
   final remind = official ? '場站資料標示可停，請確認現場公告' : '請確認現場公告';
