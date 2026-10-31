@@ -182,6 +182,24 @@ void main() {
       expect(gateway.resolved, isEmpty);
     });
 
+    test('採納刪除點位後，同一點位的其他回報一起離開佇列（#200）', () async {
+      final access = review.queue.firstWhere((r) => r.id == 'r-access');
+      await review.decide(
+        access,
+        ReviewDecision.accept,
+        '',
+        adjust: (_) => {'hidden': true},
+      );
+      await review.flush();
+      expect(gateway.resolved.single.$3, {'hidden': true});
+      expect(
+        review.queue.where((r) => r.sourceId == officialId),
+        isEmpty,
+        reason: 'r-legacy was closed with the deletion',
+      );
+      expect(review.queue.map((r) => r.id), contains('r-type'));
+    });
+
     test('時間到或下一個決定時寫入', () async {
       final reports = review.queue;
       await review.decide(reports[0], ReviewDecision.accept, '比對街景');

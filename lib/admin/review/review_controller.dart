@@ -484,7 +484,16 @@ class ReviewController extends ChangeNotifier {
         resolutionKind: held.resolutionKind,
       );
       if (generation != _generation) return;
-      reports = reports.where((r) => r.id != held.report.id).toList();
+      // Deleting the spot (#200) closes its other open reports too.
+      final deleted =
+          held.patch['hidden'] == true || held.patch['status'] == 'hidden';
+      reports = reports
+          .where(
+            (r) =>
+                r.id != held.report.id &&
+                !(deleted && r.sourceId == held.report.sourceId),
+          )
+          .toList();
       _resolved.add(held.report.id);
       savedDrafts.remove(held.report.id);
       _entryPatches.remove(held.report.id);

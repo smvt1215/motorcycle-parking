@@ -267,6 +267,83 @@ begin
 end;
 $function$;
 
+-- ---- 202610270120_history_owner_votes.sql's history entries, with the new
+-- delete and purge actions (restore_spot keeps its name).
+create or replace function public.spot_history_entries(p_source_id text)
+returns table(at timestamptz,kind text,action text,actor uuid,created boolean,changes jsonb,
+  note text,source_name text,report jsonb)
+language plpgsql stable security definer set search_path=public,extensions,pg_temp as $$
+declare
+  v_official boolean:=p_source_id like 'official:%';
+  v_raw text:=case when p_source_id like 'official:%' then substr(p_source_id,10) else p_source_id end;
+  v_table text:=case when p_source_id like 'official:%' then 'official_heavy_spots' else 'community_spots' end;
+  v_id uuid;
+begin
+  if v_raw is null or v_raw !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then return; end if;
+  v_id:=v_raw::uuid;
+  return query
+  with audited as (
+    -- Writes to the spot row itself.
+    select a.created_at,a.action,a.actor,a.before,a.after,a.note from admin_audit_log a
+    where a.target_table=v_table and a.target_id=v_id::text
+      and a.action in ('create_spot','update_spot','import_spot','convert_fee','hide_spot','delete_spot','restore_spot','purge_spot',
+        'clear_contributor_name','promote_spot')
+    union all
+    -- The official spot a community spot was promoted into starts there.
+    select a.created_at,'promoted_from',a.actor,null,a.after->'official',a.note from admin_audit_log a
+    where v_official and a.action='promote_spot' and a.after->'official'->>'id'=v_id::text
+  ),
+  decided as (
+    -- Reports an administrator accepted or rejected, with what the
+    -- acceptance changed. Reports resolved in the Dashboard before the
+    -- admin site ('closed') carry no decision and are left out.
+    select coalesce(q.resolved_at,r.created_at) as at,q.status,r.actor,r.before->'spot' as before,
+      r.after->'spot' as after,q.resolution_note,
+      jsonb_build_object('id',q.id,'status',q.status,'reason',q.reason,'field',q.field,'proposed',q.proposed,
+        'note',q.note,'evidence_url',q.evidence_url,'resolution_note',q.resolution_note,
+        'resolution_kind',q.resolution_kind,'created_at',q.created_at,'resolved_at',q.resolved_at) as report
+    from moderation_queue q
+    left join lateral (select a.created_at,a.actor,a.before,a.after from admin_audit_log a
+      where a.action='resolve_report' and a.target_table='moderation_queue' and a.target_id=q.id::text
+      order by a.created_at desc limit 1) r on true
+    where q.source_id=p_source_id and q.status in ('accepted','rejected')
+  )
+  select x.created_at,
+    case when x.action in ('import_spot','convert_fee') then 'import' else 'admin' end,
+    x.action,x.actor,
+    x.action in ('create_spot','promoted_from') or (x.action='import_spot' and x.before is null),
+    case when x.action in ('create_spot','promoted_from') or (x.action='import_spot' and x.before is null)
+      then '[]'::jsonb else public.spot_history_changes(x.before,x.after) end,
+    x.note,
+    case when x.action='import_spot' then nullif(x.after->>'source_name','') end,
+    null::jsonb
+  from audited x
+  union all
+  select d.at,'report','resolve_report',d.actor,false,
+    case when d.status='accepted' then public.spot_history_changes(d.before,d.after) else '[]'::jsonb end,
+    d.resolution_note,null,d.report
+  from decided d
+  union all
+  -- A spot a rider added through the app has no audit entry for its creation.
+  select c.created_at,case when c.contributor_role='import' then 'import' else 'report' end,'create',
+    null::uuid,true,'[]'::jsonb,'',null,null
+  from community_spots c
+  where not v_official and c.id=v_id and not exists(select 1 from admin_audit_log a
+    where a.target_table='community_spots' and a.target_id=v_id::text and a.action in ('create_spot','import_spot')
+      and a.before is null)
+  union all
+  -- Riders' own edits and votes (decision 56).
+  select e.at,case when e.kind='vote' then 'vote' else 'owner' end,
+    case when e.kind='vote' then 'vote_'||e.vote else 'owner_update' end,
+    e.actor,false,
+    case when e.after is null then '[]'::jsonb else public.spot_history_changes(e.before,e.after) end,
+    '',null,null
+  from spot_rider_events e
+  where not v_official and e.spot_id=v_id
+  order by 1 desc;
+end;
+$$;
+
 -- ---- 永久刪除: 14 days after deletion.
 create table public.purged_official_spots (
   official_id uuid primary key,

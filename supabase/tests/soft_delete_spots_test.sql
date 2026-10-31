@@ -80,6 +80,8 @@ select ok((select deleted_at is null and deleted_by is null and status='pending'
   from community_spots where id=(select id from fx where name='community')),'restored as pending');
 select is((select status from moderation_queue where reason='名稱有誤'),'rejected','its closed report is not reopened');
 select is((select count(*)::integer from admin_audit_log where action='restore_spot'),1,'restoring is audited');
+select is((select count(*)::integer from spot_history_entries((select id::text from fx where name='community'))
+  where action in ('delete_spot','restore_spot')),2,'the spot''s history lists the deletion and the restore');
 select pg_temp.act('admin');
 set local role authenticated;
 select throws_ok($$select admin_set_spot_hidden((select id::text from fx where name='community'),false,'')$$,
