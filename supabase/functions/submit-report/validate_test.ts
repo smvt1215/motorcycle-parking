@@ -705,6 +705,20 @@ Deno.test('a new spot states both vehicles; a suggestion never clears one (#201)
       throw new Error(`accepted ${JSON.stringify(proposed)}`);
     }
   }
+  // The pairs the app sends (Eligible.payload) are accepted.
+  for (
+    const proposed of [
+      { heavy_allowed: null, heavy_not_stated: true },
+      { heavy_not_stated: true },
+      { heavy_allowed: true, heavy_not_stated: false },
+      { scooter_allowed: false },
+    ]
+  ) {
+    const got = validate({ ...flag, proposed });
+    if (got !== null) {
+      throw new Error(`refused ${JSON.stringify(proposed)}: ${got}`);
+    }
+  }
 });
 
 Deno.test('a zone a suggestion changes states both vehicles once applied (#201)', () => {
