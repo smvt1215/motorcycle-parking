@@ -66,6 +66,13 @@ select availability_ingest('taipei_tcmsv',(select u from t),'[{"id":"TPSCH01","s
 select is((select publish_delay from availability_ingest_runs order by id desc limit 1),null,
   'longer than half an hour is an outage, not a delay');
 
+-- A source clock half a minute ahead (allowed) gives no negative delay.
+update t set u=now()+interval '30 seconds';
+update availability_sources set last_source_updated_at=null,same_batch_retries=1 where key='taipei_tcmsv';
+select is(availability_ingest('taipei_tcmsv',(select u from t),'[{"id":"TPSCH01","scooter":5}]',null,(select u from t))->>'outcome',
+  'ok','a batch slightly ahead of the database clock is stored');
+select is((select publish_delay from availability_ingest_runs order by id desc limit 1),null,'with no negative delay');
+
 delete from availability_ingest_runs;
 update t set u=now()-interval '25 minutes';
 update availability_sources set last_source_updated_at=null where key='taipei_tcmsv';

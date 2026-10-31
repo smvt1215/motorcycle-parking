@@ -200,8 +200,9 @@ begin
     when p_published_at between p_source_updated_at and now()+interval '1 minute'
       then least(p_published_at,now())-p_source_updated_at
     when v_source.same_batch_retries > 0 then now()-p_source_updated_at end;
-  -- Longer than half an hour is an outage, not a delay.
-  if v_sample > interval '30 minutes' then v_sample := null; end if;
+  -- Longer than half an hour is an outage, not a delay; below zero (a
+  -- source clock ahead within the minute allowed) is skew, not a delay.
+  if v_sample > interval '30 minutes' or v_sample < interval '0' then v_sample := null; end if;
 
   update public.availability_sources set last_source_updated_at=p_source_updated_at,etag=p_etag where key=p_source;
   perform public.availability_record_run(p_source,'ok','',p_source_updated_at,v_rows,v_sample);
