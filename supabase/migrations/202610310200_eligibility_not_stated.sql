@@ -521,7 +521,12 @@ begin
       -- The plans themselves must be the ones the admin was shown.
       v_conflict:=(v_report.base_spot is not null and exists(
           select 1 from jsonb_object_keys(v_patch) k
-          cross join lateral (select case when k in ('fee_plans','fee_plan') then 'fee' else k end f) m
+          -- A vehicle's flag and its not_stated count together (#201): writing
+          -- one clears the other.
+          cross join lateral (select unnest(case
+            when k in ('scooter_allowed','scooter_not_stated') then array['scooter_allowed','scooter_not_stated']
+            when k in ('heavy_allowed','heavy_not_stated') then array['heavy_allowed','heavy_not_stated']
+            when k in ('fee_plans','fee_plan') then array['fee'] else array[k] end) f) m
           where case when m.f in ('parking_zones','parking_segments') then
             -- Zones and segments by id (#188): only the entries the patch
             -- names count; a report whose snapshot lacks the list falls back
@@ -533,6 +538,8 @@ begin
             -- A report from before the set existed: its one type as the set.
             then case when v_report.base_spot->>'facility_type' is null then 'null'::jsonb
               else jsonb_build_array(v_report.base_spot->>'facility_type') end
+            -- Snapshots from before not_stated existed read it as false.
+            when m.f like '%\_not\_stated' then coalesce(v_report.base_spot->m.f,'false'::jsonb)
             else v_report.base_spot->m.f end) is distinct from (v_before->m.f) end))
         or (v_seen is not null and (v_seen->'plans') is distinct from (v_before->'fee_plans'));
       if v_conflict and not coalesce(p_force,false) then
@@ -576,7 +583,12 @@ begin
       -- The plans themselves must be the ones the admin was shown.
       v_conflict:=(v_report.base_spot is not null and exists(
           select 1 from jsonb_object_keys(v_patch) k
-          cross join lateral (select case when k in ('fee_plans','fee_plan') then 'fee' else k end f) m
+          -- A vehicle's flag and its not_stated count together (#201): writing
+          -- one clears the other.
+          cross join lateral (select unnest(case
+            when k in ('scooter_allowed','scooter_not_stated') then array['scooter_allowed','scooter_not_stated']
+            when k in ('heavy_allowed','heavy_not_stated') then array['heavy_allowed','heavy_not_stated']
+            when k in ('fee_plans','fee_plan') then array['fee'] else array[k] end) f) m
           where case when m.f in ('parking_zones','parking_segments') then
             -- Zones and segments by id (#188): only the entries the patch
             -- names count; a report whose snapshot lacks the list falls back
@@ -588,6 +600,8 @@ begin
             -- A report from before the set existed: its one type as the set.
             then case when v_report.base_spot->>'facility_type' is null then 'null'::jsonb
               else jsonb_build_array(v_report.base_spot->>'facility_type') end
+            -- Snapshots from before not_stated existed read it as false.
+            when m.f like '%\_not\_stated' then coalesce(v_report.base_spot->m.f,'false'::jsonb)
             else v_report.base_spot->m.f end) is distinct from (v_before->m.f) end))
         or (v_seen is not null and (v_seen->'plans') is distinct from (v_before->'fee_plans'));
       if v_conflict and not coalesce(p_force,false) then
