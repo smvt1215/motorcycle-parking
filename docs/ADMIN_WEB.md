@@ -355,6 +355,14 @@ python3 tool/export_rules.py --check || python3 tool/export_rules.py
 
 - 測試：`test/admin/shell_test.dart`（402×874、320×640、820×1180、矮螢幕、決定 48 與 49）、`test/location_picker_test.dart`（S1、S2、小地圖收合）。smoke 另截 iPhone 16 Pro（402×874，含 460 px 高的鍵盤模擬）與 iPad Air（820×1180）兩組。
 
+### React 改寫：基礎層
+
+2026-10-31 依設計稿畫布 Version 48 與 `admin_web/DESIGN.md` 開始改寫為 React＋Redux Toolkit（#195 P7），程式在 `admin_web/react/`，說明見該目錄的 README。
+
+- 這一層只有前端基礎：設計 token（與 DESIGN.md 自動比對）、疊牌五種狀態、A0 地圖標記、按鈕／篩選／分段／狀態標籤、三種斷點的導覽外框（桌機 96px 導覽欄、平板 64px 上方分頁、手機 56px 頂欄＋底部 4 分頁），以及 `/design` 樣式頁。
+- 各功能頁先顯示「這一頁還沒接上資料」，不放示範資料。資料層等 `admin_v1`（#195 P1–P3）完成後以 RTK Query 接上；登入（MFA aal2）、Ctrl K 搜尋與帳號選單也在那時加入。
+- Flutter 管理站照常使用，直到 React 版功能對等後才下線。
+
 ## CI／CD
 - `tool/ci_changes.py` 將 `lib/admin/` 歸入品質檢查與 admin web 建置（`flutter build web -t lib/main_admin.dart -o build/admin`），不觸發模擬器。
 - `cd-staging.yml` 部署 admin 到 staging hosting；RC tag 部署 production。

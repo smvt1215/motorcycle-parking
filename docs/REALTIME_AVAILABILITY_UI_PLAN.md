@@ -293,7 +293,7 @@ flowchart TD
 ### P2 — 官方動態 MVP
 
 - [x] 新增後端來源表、映射表、最新快照與唯讀 API／RPC；驗證 RLS（migration `202610270140_availability_p2.sql`：`availability_sources`、`availability_facilities`、`availability_mappings`、`parking_availability_latest`、`availability_ingest_runs`；App 只能呼叫 `viewport_availability(text[])`，pgTAP `availability_test.sql`）。
-- [x] 接入臺北市停管處 `TCMSV_allavailable.xml`（V2，P1 第一批）；完成即時摘要及更新時間（Edge Function `availability-ingest`，pg_cron 每 5 分鐘；上線前須依 [CD_SETUP.md](CD_SETUP.md#即時車位擷取availability-ingest) 設定 Vault 與函式密鑰）。Google 地圖的膠囊圖層另見 #139。重機剩餘數膠囊同批上線，只在有有效重機值的場站顯示，無值時不顯示也不顯示 0；已確認重機可停汽車格的場站另顯示汽車格剩餘膠囊（見 3.1）。
+- [x] 接入臺北市停管處 `TCMSV_allavailable.xml`（V2，P1 第一批）；完成即時摘要及更新時間（Edge Function `availability-ingest`，pg_cron 每分鐘檢查、依 `UPDATETIME`＋周期＋學到的公開延遲推算到時間才抓；上線前須依 [CD_SETUP.md](CD_SETUP.md#即時車位擷取availability-ingest) 設定 Vault 與函式密鑰）。Google 地圖的膠囊圖層另見 #139。重機剩餘數膠囊同批上線，只在有有效重機值的場站顯示，無值時不顯示也不顯示 0；已確認重機可停汽車格的場站另顯示汽車格剩餘膠囊（見 3.1）。
 - [ ] 路邊只做**靜態路段**（2026-10-26 使用者決定）：P1 稽核的 8 個縣市都缺少機車路段即時資料（臺北「含機車」路段為汽機車共用格、新北分車種值為佔位 0、其他縣市只有汽車），阻礙記錄於 [availability-coverage.md §4.3](availability-coverage.md#43-路邊路段與逐格v1parkingonstreetcitycity)。
 - [x] 實作 `fresh/delayed/stale/unavailable/invalid` 行為、地圖增量更新與篩選：App 連上後端時改用 `SupabaseAvailabilitySource`，地圖顯示且在前景時每 2 分鐘只重讀剩餘數（失敗加倍退避，最長 20 分鐘；背景與其他分頁暫停）；範例模式仍用固定資料。
 - **完成條件**：官方來源延遲、斷訊、0 格、缺值、跨車種都可正確顯示，沒有假即時。

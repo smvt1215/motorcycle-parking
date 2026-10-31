@@ -49,14 +49,18 @@ APP 識別碼：
 
 ### 即時車位擷取（`availability-ingest`）
 
-migration `202610270140_availability_p2.sql` 建立 pg_cron 工作 `availability-ingest`（每 5 分鐘，第 1 分起），經 pg_net 呼叫 Edge Function。三個值都只設定在各自 Supabase 專案，**不進版控**；缺任何一個時排程不呼叫（或函式回 503），App 只顯示靜態容量。
+migration `202610270140_availability_p2.sql` 建立 pg_cron 工作 `availability-ingest`，`202610310500_availability_next_update.sql` 改為每分鐘檢查一次：只在來源到了預計出資料時間（`availability_sources.next_expected_at`＝`UPDATETIME`＋更新周期＋學到的公開延遲 `publish_delay`）才經 pg_net 呼叫 Edge Function，未到時間不對外發請求。三個值都只設定在各自 Supabase 專案，**不進版控**；缺任何一個時排程不呼叫（或函式回 503），App 只顯示靜態容量。
 
 1. 產生一組隨機字串作為共用密鑰（例如 `openssl rand -hex 32`，不要貼到聊天或 issue）。
 2. Edge Function secret：`supabase secrets set AVAILABILITY_INGEST_SECRET=<密鑰> --project-ref <ref>`。
 3. Vault（SQL Editor）：`select vault.create_secret('https://<ref>.supabase.co','project_url');`、`select vault.create_secret('<密鑰>','availability_ingest_secret');`。
-4. 確認：`select outcome,source_updated_at,rows,message from availability_ingest_runs order by ran_at desc limit 5;` 應每 5 分鐘一筆 `ok`（來源未更新時為 `unchanged`）；連續失敗時 `availability_sources.next_attempt_at` 會退避（最長 1 小時）。
+4. 確認：`select outcome,source_updated_at,rows,message from availability_ingest_runs order by ran_at desc limit 5;` 應約每 5 分鐘一筆 `ok`；抓到同一批時記 `unchanged` 並在 1 分鐘後重試，連續 4 次重試仍沒有新批次才算一次失敗。連續失敗時 `availability_sources.next_attempt_at` 會退避（最長 1 小時）。`availability_sources.publish_delay` 是最近 12 批（`availability_ingest_runs.publish_delay`）的中位數。
 
 停用來源：`update availability_sources set enabled=false where key='taipei_tcmsv';`。錯誤的場站對應改 `availability_mappings.review_status='rejected'`，之後不會再自動建立。
+
+### pg_cron 執行紀錄清理（`cron-history-prune`）
+
+migration `202610310600_cron_history_prune.sql` 建立每日排程 `cron-history-prune`（`23 20 * * *` UTC＝台灣 04:23），呼叫 `public.cron_history_prune()` 刪除 `cron.job_run_details` 中 `end_time` 早於 7 天前的紀錄（尚未結束、`end_time` 為空的不刪）。不需另外設定；確認：`select jobname,schedule from cron.job where jobname='cron-history-prune';`。
 
 ## staging：Firebase 與 iOS 測試裝置
 

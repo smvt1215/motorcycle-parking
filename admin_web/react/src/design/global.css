@@ -1,0 +1,108 @@
+@import './tokens.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--color-aluminium);
+}
+
+body {
+  font-family: var(--font-body);
+  font-size: var(--text-body);
+  line-height: 1.5;
+  color: var(--color-rail-black);
+  -webkit-text-size-adjust: 100%;
+}
+
+::selection {
+  background: var(--color-reflective-yellow);
+  color: var(--color-rail-black);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: var(--color-action-blue);
+  text-underline-offset: 3px;
+}
+
+a:hover {
+  color: var(--color-action-blue-deep);
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-action-blue);
+  outline-offset: 2px;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+/* Typography roles (DESIGN.md Typography). Chinese text has three sizes only. */
+.t-headline {
+  font-size: var(--text-headline);
+  font-weight: 900;
+  line-height: 1.25;
+}
+
+.t-title {
+  font-size: var(--text-body);
+  font-weight: 700;
+}
+
+.t-label {
+  font-size: var(--text-caption);
+  font-weight: 700;
+}
+
+.t-caption {
+  font-size: var(--text-caption);
+  color: var(--color-graphite);
+}
+
+.muted {
+  color: var(--color-graphite);
+}
+
+/* Condensed numerals: counts, times, distances, coordinates, fees. */
+.num {
+  font-family: var(--font-numeral);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.num-figure {
+  font-family: var(--font-numeral);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  font-size: var(--text-figure);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}

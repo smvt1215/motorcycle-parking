@@ -129,11 +129,42 @@ jobs:
       - name: Stop local stack
         if: always() && steps.changes.outputs.run == 'true'
         run: supabase stop
+  admin-react:
+    name: 管理站 React（型別／lint／測試／建置）
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: admin_web/react
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - id: changes
+        working-directory: .
+        run: python3 tool/ci_changes.py admin_react >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.changes.outputs.run == 'true'
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: admin_web/react/package-lock.json
+      - if: steps.changes.outputs.run == 'true'
+        run: npm ci
+      - if: steps.changes.outputs.run == 'true'
+        run: npm run format:check
+      - if: steps.changes.outputs.run == 'true'
+        run: npm run lint
+      - if: steps.changes.outputs.run == 'true'
+        run: npm test
+      # build runs tsc -b first, so it also type-checks.
+      - if: steps.changes.outputs.run == 'true'
+        run: npm run build
   ci-ok:
     name: CI 全部通過
     runs-on: ubuntu-24.04
     if: always()
-    needs: [quality, backend, automation]
+    needs: [quality, backend, automation, admin-react]
     steps:
       - env:
           RESULTS: ${{ toJSON(needs) }}
