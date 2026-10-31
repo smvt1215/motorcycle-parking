@@ -39,7 +39,16 @@ class _ParkingAppState extends ConsumerState<ParkingApp> {
             onSettings: () => showSettings(context, ref.read(storeProvider)),
             child: Stack(
               children: [
-                MapPage(showControls: shell.currentIndex == 0),
+                // A page of the map tab (地圖怎麼看) covers the map: the map
+                // keeps its state (an open spot stays open behind the page)
+                // but is neither read out nor animated while covered.
+                ExcludeSemantics(
+                  excluding: mapCovered(shell.currentIndex, state.uri.path),
+                  child: TickerMode(
+                    enabled: !mapCovered(shell.currentIndex, state.uri.path),
+                    child: MapPage(showControls: shell.currentIndex == 0),
+                  ),
+                ),
                 Offstage(
                   // The map tab shows its own pages (地圖怎麼看) over the map.
                   offstage: shell.currentIndex == 0 && state.uri.path == '/map',
@@ -186,3 +195,6 @@ class _ParkingAppState extends ConsumerState<ParkingApp> {
     ),
   );
 }
+
+/// Whether a page of the map tab, such as /map/legend, covers the map.
+bool mapCovered(int tab, String path) => tab == 0 && path != '/map';

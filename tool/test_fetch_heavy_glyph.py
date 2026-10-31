@@ -22,6 +22,13 @@ class FetchHeavyGlyphTest(unittest.TestCase):
         self.assertTrue(fetch(env, self.root))
         self.assertEqual((self.root / DESTINATION).read_bytes(), SAMPLE)
 
+    def test_wrapped_base64_is_accepted(self) -> None:
+        encoded = base64.encodebytes(SAMPLE * 3).decode()
+        self.assertIn("\n", encoded)
+        env = {"HEAVY_GLYPH_SVG_BASE64": "  " + encoded.replace("\n", "\r\n") + " \t"}
+        self.assertTrue(fetch(env, self.root))
+        self.assertEqual((self.root / DESTINATION).read_bytes(), SAMPLE * 3)
+
     def test_local_file_writes_the_asset(self) -> None:
         source = self.root / "glyph.svg"
         source.write_bytes(SAMPLE)

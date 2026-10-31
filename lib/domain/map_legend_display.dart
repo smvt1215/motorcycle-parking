@@ -111,7 +111,7 @@ const legendBadgesHeading = '格位徽章：圖示＝格位類別，白圓＝專
 const legendBadgesNote = '一般機車格不掛徽章。';
 
 const legendCapsulesHeading = '空位膠囊（一律墨色）';
-const legendCapsulesNote = '無即時資料或不能停時不掛。';
+const legendCapsulesNote = '空位未知或不能停時不掛。';
 
 /// The pills, by what the legend calls them: name and meaning.
 const capsuleLegendLive = ('即時', '官方即時剩餘格數');

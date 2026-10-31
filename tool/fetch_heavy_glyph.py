@@ -22,7 +22,8 @@ MAX_BYTES = 64 * 1024
 
 
 def read_source(env: dict[str, str]) -> bytes | None:
-    encoded = env.get("HEAVY_GLYPH_SVG_BASE64", "").strip()
+    # Secrets pasted from `base64` wrap at 76 characters: drop all whitespace.
+    encoded = "".join(env.get("HEAVY_GLYPH_SVG_BASE64", "").split())
     if encoded:
         try:
             return base64.b64decode(encoded, validate=True)

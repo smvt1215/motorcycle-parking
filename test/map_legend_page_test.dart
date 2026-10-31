@@ -15,6 +15,7 @@ import 'package:motorcycle_parking/features/map/google_parking_map.dart';
 import 'package:motorcycle_parking/features/map/heavy_glyph.dart';
 import 'package:motorcycle_parking/features/map/map_legend.dart';
 import 'package:motorcycle_parking/features/map/map_legend_page.dart';
+import 'package:motorcycle_parking/features/map/map_page.dart';
 import 'package:motorcycle_parking/models/parking.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
 
@@ -35,6 +36,25 @@ class _Bundle extends CachingAssetBundle {
     return ByteData.sublistView(Uint8List.fromList(utf8.encode(text)));
   }
 }
+
+/// Records which canvas calls a painter makes.
+class _RecordingCanvas implements Canvas {
+  final calls = <Symbol>[];
+  @override
+  dynamic noSuchMethod(Invocation invocation) {
+    calls.add(invocation.memberName);
+    return null;
+  }
+}
+
+/// Every tooltip in the semantics tree.
+List<String> _tooltips(WidgetTester tester) => [
+  for (final node
+      in find.semantics
+          .byPredicate((node) => node.tooltip.isNotEmpty)
+          .evaluate())
+    node.tooltip,
+];
 
 void main() {
   group('車友回報角標', () {
@@ -126,6 +146,27 @@ void main() {
         ),
       );
       expect(tester.takeException(), isNull);
+      // The badge draws the silhouette, never the two-wheeler glyph.
+      for (final badge in [SpaceBadge.heavyOnly, SpaceBadge.shared]) {
+        final canvas = _RecordingCanvas();
+        paintSpaceBadge(
+          canvas,
+          const Rect.fromLTWH(0, 0, 19, 19),
+          badge,
+          glyph: heavyGlyph.value,
+        );
+        expect(canvas.calls, contains(#drawPicture));
+        expect(canvas.calls, isNot(contains(#drawParagraph)));
+      }
+      // Without it, the fallback glyph is drawn as text and no picture.
+      final fallback = _RecordingCanvas();
+      paintSpaceBadge(
+        fallback,
+        const Rect.fromLTWH(0, 0, 19, 19),
+        SpaceBadge.heavyOnly,
+      );
+      expect(fallback.calls, contains(#drawParagraph));
+      expect(fallback.calls, isNot(contains(#drawPicture)));
     });
   });
 
@@ -300,12 +341,20 @@ void main() {
         tester.getSize(button).height,
         platform == TargetPlatform.iOS ? 44 : 48,
       );
+      final semantics = tester.ensureSemantics();
+      expect(_tooltips(tester), contains('地圖怎麼看'));
       await tester.tap(button);
       await tester.pumpAndSettle();
       expect(find.byType(MapLegendPage), findsOneWidget);
       expect(
         router.routerDelegate.currentConfiguration.uri.path,
         '/map/legend',
+      );
+      // The covered map is neither read out nor animated.
+      expect(_tooltips(tester), isNot(contains('地圖怎麼看')));
+      expect(
+        TickerMode.valuesOf(tester.element(find.byType(MapPage))).enabled,
+        isFalse,
       );
       expect(find.text('貢獻'), findsWidgets);
       if (platform == TargetPlatform.iOS) {
@@ -322,6 +371,12 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(MapLegendPage), findsNothing);
       expect(router.routerDelegate.currentConfiguration.uri.path, '/map');
+      expect(_tooltips(tester), contains('地圖怎麼看'));
+      expect(
+        TickerMode.valuesOf(tester.element(find.byType(MapPage))).enabled,
+        isTrue,
+      );
+      semantics.dispose();
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
       debugDefaultTargetPlatformOverride = null;
