@@ -11,6 +11,7 @@ library;
 import 'dart:convert';
 
 import 'fee.dart';
+import 'parking.dart' show ParkingAccess;
 import 'parking_condition.dart';
 
 /// The id of a zone or a segment, unique in its spot. The tables' trigger
@@ -244,7 +245,35 @@ List<Map<String, Object?>>? entriesPatch(List<Object?> current, Object? patch) {
       if (entry['removed'] != true || entry.length != 2) return null;
       out.removeAt(i);
     } else {
-      out[i] = withoutNulls({...out[i], ...entry});
+      final z = withoutNulls({...out[i], ...entry});
+      // As entries_patch() in SQL: a fee sent leaves the plan it copied;
+      // an access sent without a condition brings the condition's allow,
+      // and bay, in line with it, or takes it away with the access.
+      if (entry.containsKey('fee') && !entry.containsKey('fee_plan')) {
+        z.remove('fee_plan');
+      }
+      if (entry.containsKey('access') &&
+          !entry.containsKey('condition') &&
+          z['condition'] is Map) {
+        final access = ParkingAccess.values.asNameMap()[z['access']];
+        final like = access == null ? null : conditionByAccess[access];
+        if (like == null) {
+          z.remove('condition');
+        } else {
+          final c = {
+            ...(z['condition'] as Map).cast<String, Object?>(),
+            'allow': like.allow!.toJson(),
+          };
+          if (like.bay != null && c['bay'] != like.bay!.name) {
+            c
+              ..remove('use')
+              ..remove('share')
+              ..['bay'] = like.bay!.name;
+          }
+          z['condition'] = c;
+        }
+      }
+      out[i] = z;
     }
   }
   return out;

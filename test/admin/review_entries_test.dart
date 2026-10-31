@@ -193,4 +193,54 @@ void main() {
       ['「北側」：格數 18 格→20 格；哪一側 未填→北側'],
     );
   });
+
+  test(
+    'as in SQL: a fee sent drops its plan; an access brings its condition',
+    () {
+      expect(
+        entriesPatch(
+          [
+            {
+              'id': 'a',
+              'name': 'A',
+              'fee_plan': 'p1',
+              'fee': <String, Object?>{},
+            },
+            {
+              'id': 'b',
+              'name': 'B',
+              'access': 'scooterOnly',
+              'condition': {
+                'bay': 'motorcycle',
+                'use': 'usual',
+                'limits': [
+                  {'kind': 'time_limit'},
+                ],
+                'allow': {'scooter': true, 'heavy': false},
+              },
+            },
+          ],
+          [
+            {'id': 'a', 'fee': null},
+            {'id': 'b', 'access': 'heavyOnly'},
+          ],
+        ),
+        [
+          {'id': 'a', 'name': 'A'},
+          {
+            'id': 'b',
+            'name': 'B',
+            'access': 'heavyOnly',
+            'condition': {
+              'bay': 'heavy',
+              'limits': [
+                {'kind': 'time_limit'},
+              ],
+              'allow': {'scooter': false, 'heavy': true},
+            },
+          },
+        ],
+      );
+    },
+  );
 }
