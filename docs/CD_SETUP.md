@@ -58,6 +58,10 @@ migration `202610270140_availability_p2.sql` 建立 pg_cron 工作 `availability
 
 停用來源：`update availability_sources set enabled=false where key='taipei_tcmsv';`。錯誤的場站對應改 `availability_mappings.review_status='rejected'`，之後不會再自動建立。
 
+### pg_cron 執行紀錄清理（`cron-history-prune`）
+
+migration `202610310600_cron_history_prune.sql` 建立每日排程 `cron-history-prune`（`23 20 * * *` UTC＝台灣 04:23），呼叫 `public.cron_history_prune()` 刪除 `cron.job_run_details` 中 `end_time` 早於 7 天前的紀錄（尚未結束、`end_time` 為空的不刪）。不需另外設定；確認：`select jobname,schedule from cron.job where jobname='cron-history-prune';`。
+
 ## staging：Firebase 與 iOS 測試裝置
 
 staging profile 必須是 Ad Hoc，包含受邀 iPhone 的 UDID；production profile 必須是 App Store，不能包含 `ProvisionedDevices`。
