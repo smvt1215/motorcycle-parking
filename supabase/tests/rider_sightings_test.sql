@@ -140,6 +140,9 @@ select throws_ok($$select apply_sighting('20000000-0000-4000-8000-000000000102',
 select throws_ok($$select pg_temp.sight(101,'t1','3')$$,'P0001','spot sighted within 10 minutes',
   'the same rider, the same spot: once per 10 minutes');
 select is((select count(*)::integer from rider_sightings where user_id=pg_temp.uid(101)),1,'nothing stored when refused');
+select throws_ok($$select apply_sighting(pg_temp.uid(101),repeat('0101',16),repeat('0101',16),upper(pg_temp.spot('t1')),'level','scooter',2::smallint)$$,
+  'P0001','spot sighted within 10 minutes','an id in capitals is the same spot');
+select is((select count(*)::integer from spot_sightings(array[upper(pg_temp.spot('t1'))])),1,'and reads the same result');
 -- 30 a day per account (UTC day).
 insert into rider_sightings(user_id,spot_id,kind,level,vehicle,ip_hash,device_hash,created_at)
 select pg_temp.uid(103),'00000000-0000-4000-8000-'||lpad(n::text,12,'0'),'level',0,'scooter',repeat('0103',16),repeat('0103',16),
@@ -271,6 +274,18 @@ select is((select agree+disagree from rider_sighting_scores where user_id=pg_tem
   'b2 is not judged by a sighting of b1');
 delete from rider_sightings where spot_id in (pg_temp.spot('zoned'),pg_temp.spot('street'));
 delete from rider_sighting_scores;
+
+-- ===== 解除停權 =====
+insert into rider_sighting_scores(user_id,suspended_until) values(pg_temp.uid(137),now()+interval '7 days');
+update auth.users set banned_until=now()+interval '7 days' where id=pg_temp.uid(137);
+select ok(rider_suspended(pg_temp.uid(137)),'suspended by the flood rule');
+update auth.users set banned_until=null where id=pg_temp.uid(137);
+select ok(not rider_suspended(pg_temp.uid(137)),'an admin lifting the ban lifts the sighting suspension too');
+select is((select suspended_until from rider_sighting_scores where user_id=pg_temp.uid(137)),null,'and clears it');
+update auth.users set banned_until=now()+interval '1 day' where id=pg_temp.uid(138);
+update auth.users set banned_until=now()+interval '2 days' where id=pg_temp.uid(138);
+select ok(rider_suspended(pg_temp.uid(138)),'extending a ban lifts nothing');
+update auth.users set banned_until=null where id=pg_temp.uid(138);
 
 -- ===== 7 天刪除 =====
 select pg_temp.past(131,'t16','0','8 days');

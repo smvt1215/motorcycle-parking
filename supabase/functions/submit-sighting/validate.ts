@@ -68,7 +68,8 @@ export function validate(body: Record<string, unknown>): Sighting | string {
     return 'invalid device';
   }
   return {
-    spot_id,
+    // One spelling per spot: the database compares ids as text.
+    spot_id: spot_id.toLowerCase(),
     kind: kind as Sighting['kind'],
     level: kind === 'level' ? (level as Sighting['level']) : null,
     zone_id,

@@ -82,6 +82,13 @@ Deno.test('validate: four levels or closed, two vehicles, a spot and a device', 
     validate({ ...body, spot_id: '00000000-0000-4000-8000-000000000004' }),
     { ...parsed, spot_id: '00000000-0000-4000-8000-000000000004' },
   );
+  assertEquals(
+    validate({
+      ...body,
+      spot_id: spot.toUpperCase().replace('OFFICIAL', 'official'),
+    }),
+    parsed,
+  );
   for (const level of [0, 1, 2, 3]) {
     assertEquals(validate({ ...body, level }), { ...parsed, level });
   }

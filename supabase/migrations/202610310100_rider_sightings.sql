@@ -29,7 +29,7 @@ create table public.rider_sightings (
   id bigint generated always as identity primary key,
   user_id uuid not null references auth.users(id) on delete cascade,
   -- The app's spot id: 'official:<uuid>' or a community spot's uuid.
-  spot_id text not null check (spot_id ~* '^(official:)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'),
+  spot_id text not null check (spot_id ~ '^(official:)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'),
   -- A level of the scale, or closed (the whole spot, no level).
   kind text not null check (kind in ('level','closed')),
   -- 0 很多空位, 1 還有一些, 2 快滿了, 3 已停滿.
@@ -194,6 +194,8 @@ begin
   if p_ip is null or char_length(p_ip)<>64 or p_device is null or char_length(p_device)<>64 then
     raise exception 'missing trusted identity' using errcode='22023';
   end if;
+  -- One spelling per spot: ids are compared as text everywhere below.
+  p_spot:=lower(p_spot);
   if p_kind is null or p_kind not in ('level','closed')
      or p_vehicle is null or p_vehicle not in ('scooter','heavy')
      or (p_kind='level') is distinct from (p_level is not null)
@@ -315,6 +317,9 @@ begin
 
   -- ===== 自動暫時封閉建議 =====
   if p_kind='closed' and v_suspend is null then
+    -- Two riders at once: the later waits here and then sees the earlier
+    -- one's committed sighting, so the second report meets the threshold.
+    perform pg_advisory_xact_lock(hashtextextended('sighting-closure:'||p_spot,0));
     if p_spot like 'official:%' then
       select o.closure into v_closure from public.official_heavy_spots o where o.id=substr(p_spot,10)::uuid;
     else
@@ -365,7 +370,7 @@ returns table(spot_id text,zone_id text,segment_id text,vehicle text,state text,
   low smallint,high smallint,low_riders integer,high_riders integer,latest_at timestamptz,since timestamptz)
 language sql stable security definer set search_path='' as $$
   with ids as (
-    select distinct i from unnest(p_spot_ids[1:600]) i where i is not null
+    select distinct lower(i) i from unnest(p_spot_ids[1:600]) i where i is not null
   ), recent as (
     select s.spot_id,s.zone_id,s.segment_id,s.vehicle,s.user_id,s.device_hash,s.level,s.created_at
     from public.rider_sightings s join ids on ids.i=s.spot_id
@@ -414,6 +419,21 @@ language sql stable security definer set search_path='' as $$
 $$;
 revoke all on function public.spot_sightings(text[]) from public;
 grant execute on function public.spot_sightings(text[]) to anon,authenticated;
+
+-- ===== 4b. 解除停權 =====
+-- An admin lifting a ban (Auth banned_until back to none or the past) also
+-- lifts the flood rule's suspension, which the same rule set with the ban.
+create function public.rider_sightings_unban() returns trigger
+language plpgsql security definer set search_path='' as $$
+begin
+  update public.rider_sighting_scores set suspended_until=null,updated_at=now()
+    where user_id=new.id and suspended_until is not null;
+  return new;
+end $$;
+revoke all on function public.rider_sightings_unban() from public,anon,authenticated;
+create trigger rider_sightings_unban after update of banned_until on auth.users
+  for each row when (old.banned_until>now() and (new.banned_until is null or new.banned_until<=now()))
+  execute function public.rider_sightings_unban();
 
 -- ===== 5. 保存期限 =====
 -- Raw sightings last 7 days; the scores keep only sums.
