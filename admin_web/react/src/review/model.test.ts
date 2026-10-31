@@ -2,6 +2,9 @@ import { sampleQueue } from './fixtureSource';
 import {
   applyPlan,
   diffRows,
+  editOutcome,
+  editStart,
+  needsRejectNote,
   plateOf,
   proposedMove,
   relativeTime,
@@ -142,6 +145,91 @@ describe('applyPlan', () => {
     expect(applyPlan(report({ proposed: { status: 'hidden' } }), official)).toMatchObject({
       reason: 'empty',
     });
+  });
+});
+
+describe('reject', () => {
+  it('needs a written reason only for 其他原因', () => {
+    expect(needsRejectNote('other', '  ')).toBe(true);
+    expect(needsRejectNote('other', '現場沒有標線')).toBe(false);
+    expect(needsRejectNote('wrong', '')).toBe(false);
+  });
+});
+
+describe('editStart / editOutcome (修改後套用)', () => {
+  const report2 = report({ proposed: { heavy_allowed: true, space_type: 'heavyOnly' } });
+  const spot2: ReviewSpot = {
+    ...community,
+    values: { ...community.values, heavy_allowed: false, space_type: 'freeMotorcycle', note: '' },
+  };
+
+  it('starts from the rider proposal over current values', () => {
+    const start = editStart(report2, spot2);
+    expect(start).toMatchObject({ heavy_allowed: true, space_type: 'heavyOnly', name: '路邊機車格' });
+    // Community spots hide through status, never hidden.
+    expect('hidden' in start).toBe(false);
+  });
+
+  it('sends every proposal key, and other columns only when they change', () => {
+    const values = { ...editStart(report2, spot2), heavy_allowed: false, note: '標線寫普通及大型重型機車' };
+    const outcome = editOutcome(report2, spot2, values);
+    // heavy_allowed equals the spot but was proposed: sent, so it is recorded as admin-verified.
+    expect(outcome.patch).toEqual({
+      heavy_allowed: false,
+      space_type: 'heavyOnly',
+      note: '標線寫普通及大型重型機車',
+    });
+    expect(outcome.changedFromRider).toEqual(['heavy_allowed']);
+    expect(outcome.added).toEqual(['note']);
+    expect(outcome.errors).toEqual({});
+  });
+
+  it('writes a vehicle column the admin restated, so it counts as verified (cross review, PR #216)', () => {
+    const values = { ...editStart(report2, spot2), scooter_allowed: true };
+    const spot3: ReviewSpot = { ...spot2, values: { ...spot2.values, scooter_allowed: true } };
+    expect(editOutcome(report2, spot3, values).patch).not.toHaveProperty('scooter_allowed');
+    expect(editOutcome(report2, spot3, values, new Set(['scooter_allowed'])).patch).toMatchObject({
+      scooter_allowed: true,
+    });
+  });
+
+  it('refuses values the table rejects: empty space_type or city, fee_note under a structured fee', () => {
+    const values = { ...editStart(report2, spot2), space_type: null, city: '' };
+    expect(Object.keys(editOutcome(report2, spot2, values).errors).sort()).toEqual(['city', 'space_type']);
+    const feeSpot: ReviewSpot = {
+      ...spot2,
+      values: {
+        ...spot2.values,
+        fee: { scooter: { mode: 'hourly', amount: 20 } },
+        fee_note: '機車每小時 20 元',
+      },
+    };
+    const feeValues = { ...editStart(report2, feeSpot), fee_note: '機車每小時 30 元' };
+    expect(editOutcome(report2, feeSpot, feeValues).errors).toHaveProperty('fee_note');
+    expect(applyPlan(report({ proposed: { fee_note: '每小時 30 元' } }), feeSpot)).toMatchObject({
+      ok: false,
+      reason: 'feeNote',
+    });
+  });
+
+  it('reads an emptied text field as the stored null, and accepts Dongsha latitude', () => {
+    const values = { ...editStart(report2, spot2), entrance_note: '', lat: 20.7 };
+    const outcome = editOutcome(report2, spot2, values);
+    expect(outcome.patch).not.toHaveProperty('entrance_note');
+    expect(outcome.errors).not.toHaveProperty('lat');
+  });
+
+  it('refuses an empty name, a too-long text, a bad coordinate and a cleared eligibility', () => {
+    const values = {
+      ...editStart(report2, spot2),
+      name: '  ',
+      fee_note: 'x'.repeat(201),
+      lat: 99,
+      heavy_allowed: null,
+    };
+    expect(Object.keys(editOutcome(report2, spot2, values).errors).sort()).toEqual(
+      ['fee_note', 'heavy_allowed', 'lat', 'name'].sort(),
+    );
   });
 });
 

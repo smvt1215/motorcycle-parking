@@ -235,7 +235,8 @@ export function fixtureSource(options: { now?: number; latencyMs?: number } = {}
       if (index < 0) throw new SourceError('alreadyResolved', 'already resolved');
       const [report] = queue.reports.splice(index, 1);
       const target = queue.spots[report!.sourceId];
-      if (target) Object.assign(target.values, request.patch);
+      // A rejection leaves the spot as it is.
+      if (target && request.decision === 'accepted') Object.assign(target.values, request.patch);
       resolved.push(request);
       return { reportId: request.reportId, spot: target ? structuredClone(target) : null };
     },

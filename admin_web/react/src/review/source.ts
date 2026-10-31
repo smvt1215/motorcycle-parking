@@ -1,15 +1,27 @@
-import type { ReviewQueue, ReviewSpot } from './model';
+import type { ResolutionKind, ReviewQueue, ReviewSpot } from './model';
 
-/** What the admin decided; only 「套用建議」 exists until 駁回／修改後套用 are designed. */
-export interface ResolveRequest {
-  reportId: string;
-  decision: 'accepted';
-  /** Spot columns to write; built by `applyPatch` (model.ts). */
-  patch: Record<string, unknown>;
-  note: string;
-  /** Write over a spot that changed since the report (after a reload). */
-  force: boolean;
-}
+/**
+ * What the admin decided (`admin_resolve_report`): accept with a patch
+ * (套用建議 or 修改後套用), or reject with a reason and an empty patch.
+ */
+export type ResolveRequest =
+  | {
+      reportId: string;
+      decision: 'accepted';
+      /** Spot columns to write; from `applyPlan` or `editOutcome` (model.ts). */
+      patch: Record<string, unknown>;
+      /** 修改後套用: the admin changed the rider's values. */
+      edited: boolean;
+      note: string;
+      /** Write over a spot that changed since the report (after a reload). */
+      force: boolean;
+    }
+  | {
+      reportId: string;
+      decision: 'rejected';
+      resolutionKind: ResolutionKind;
+      note: string;
+    };
 
 export interface ResolveResult {
   reportId: string;

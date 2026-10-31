@@ -1,4 +1,4 @@
-import { act, screen, within } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderApp } from '../test/renderApp';
 import { fixtureSource } from './fixtureSource';
@@ -94,6 +94,7 @@ describe('ReviewPage', () => {
         reportId: 'r-ximen',
         decision: 'accepted',
         patch: { scooter_allowed: true },
+        edited: false,
         note: '已比對停管處公告',
         force: false,
       },
@@ -213,6 +214,126 @@ describe('ReviewPage', () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  it('R opens 駁回原因; a digit picks it and Enter rejects without touching the spot', async () => {
+    const { user, source, router } = setup('/review/r-fuxing');
+    await detailTitle();
+    await user.keyboard('r');
+    const panel = screen.getByRole('region', { name: '駁回原因' });
+    // Reasons are a real radio group; nothing is chosen yet.
+    expect(within(panel).getAllByRole('radio')).toHaveLength(6);
+    await user.keyboard('{Enter}');
+    expect(within(panel).getByText('選一個駁回原因才能送出。')).toBeInTheDocument();
+    await user.keyboard('3');
+    expect(within(panel).getByRole('radio', { name: /資訊不足/ })).toBeChecked();
+    await user.keyboard('{Enter}');
+    expect(router.state.location.pathname).not.toBe('/review/r-fuxing');
+    expect(screen.getByRole('status')).toHaveTextContent('已駁回「復興南路一段 107 巷路邊機車格」');
+    await act(() => vi.advanceTimersByTimeAsync(UNDO_MS));
+    expect(source.resolved).toEqual([
+      { reportId: 'r-fuxing', decision: 'rejected', resolutionKind: 'insufficient', note: '' },
+    ]);
+  });
+
+  it('其他原因 needs a written reason before rejecting', async () => {
+    const { user, source } = setup('/review/r-fuxing');
+    await detailTitle();
+    await user.click(screen.getByRole('button', { name: /駁回/ }));
+    await user.click(screen.getByRole('radio', { name: /其他原因/ }));
+    expect(screen.getByText('選了「其他原因」，寫下為什麼駁回才能送出。')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /確定駁回/ }));
+    await act(() => vi.advanceTimersByTimeAsync(UNDO_MS));
+    expect(source.resolved).toEqual([]);
+    await user.type(screen.getByRole('textbox', { name: /處理說明/ }), 'x');
+    await user.click(screen.getByRole('button', { name: /確定駁回/ }));
+    await act(() => vi.advanceTimersByTimeAsync(UNDO_MS));
+    expect(source.resolved).toMatchObject([{ decision: 'rejected', resolutionKind: 'other', note: 'x' }]);
+  });
+
+  it('Enter on the focused 取消 cancels instead of rejecting', async () => {
+    const { user, source } = setup('/review/r-fuxing');
+    await detailTitle();
+    await user.keyboard('r');
+    await user.keyboard('1');
+    screen.getByRole('button', { name: /取消/ }).focus();
+    await user.keyboard('{Enter}');
+    expect(screen.queryByRole('region', { name: '駁回原因' })).not.toBeInTheDocument();
+    await act(() => vi.advanceTimersByTimeAsync(UNDO_MS));
+    expect(source.resolved).toEqual([]);
+  });
+
+  it('Esc closes the reject panel and keeps the report', async () => {
+    const { user, router } = setup('/review/r-fuxing');
+    await detailTitle();
+    await user.keyboard('r');
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('region', { name: '駁回原因' })).not.toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/review/r-fuxing');
+    expect(screen.getByRole('button', { name: /套用建議/ })).toBeInTheDocument();
+  });
+
+  it('E edits the values to apply; Ctrl+Enter writes the edited patch', async () => {
+    const { user, source } = setup('/review/r-fuxing');
+    await detailTitle();
+    await user.keyboard('e');
+    const plates = screen.getByRole('region', { name: '資格' });
+    // The rider suggested 可停; the reviewer decides 不可停.
+    await user.click(within(plates).getByRole('radio', { name: /不可停/ }));
+    const type = screen.getByRole('combobox', { name: '格位類型' });
+    expect(type).toHaveValue('heavyOnly');
+    expect(screen.getByText('騎士建議：重機專用格')).toBeInTheDocument();
+    expect(screen.getByRole('toolbar', { name: '修改後套用' })).toHaveTextContent('你改了騎士建議的 1 處');
+    await user.keyboard('{Control>}{Enter}{/Control}');
+    expect(screen.getByRole('status')).toHaveTextContent('已套用修改「復興南路一段 107 巷路邊機車格」');
+    await act(() => vi.advanceTimersByTimeAsync(UNDO_MS));
+    expect(source.resolved).toEqual([
+      {
+        reportId: 'r-fuxing',
+        decision: 'accepted',
+        // The proposed heavy_allowed is sent even though it equals the spot:
+        // that is what records it as admin-verified.
+        patch: { heavy_allowed: false, space_type: 'heavyOnly' },
+        edited: true,
+        note: '',
+        force: false,
+      },
+    ]);
+  });
+
+  it('refuses to save while a field the table requires is empty', async () => {
+    const { user, source } = setup('/review/r-banqiao');
+    await detailTitle();
+    await user.keyboard('e');
+    await user.clear(screen.getByRole('textbox', { name: '停車點名稱' }));
+    await user.click(screen.getByRole('button', { name: /儲存並套用/ }));
+    expect(screen.getByRole('alert')).toHaveTextContent('有欄位還不能儲存');
+    expect(screen.getByText('停車點名稱不能空白')).toBeInTheDocument();
+    await act(() => vi.advanceTimersByTimeAsync(UNDO_MS));
+    expect(source.resolved).toEqual([]);
+  });
+
+  it('offers no empty 格位類型, which the table does not allow', async () => {
+    const { user } = setup('/review/r-fuxing');
+    await detailTitle();
+    await user.keyboard('e');
+    const type = screen.getByRole('combobox', { name: '格位類型' });
+    expect(within(type).queryByRole('option', { name: '沒有' })).not.toBeInTheDocument();
+  });
+
+  it('retry sends the note as it reads now (cross review, PR #216)', async () => {
+    const { user, source } = setup(FIRST);
+    await detailTitle();
+    source.failNextResolve('network');
+    await user.keyboard('a');
+    await act(() => vi.advanceTimersByTimeAsync(UNDO_MS));
+    await user.click(within(screen.getByRole('list', { name: '待審回報' })).getByText('沒有套用，打開處理'));
+    const alert = await screen.findByRole('alert');
+    // Note typed under fake timers keeps only what React commits, so set it whole.
+    fireEvent.change(screen.getByRole('textbox', { name: /處理說明/ }), { target: { value: '補上公告' } });
+    await user.click(within(alert).getByRole('button', { name: '再試一次' }));
+    await act(() => vi.advanceTimersByTimeAsync(UNDO_MS));
+    expect(source.resolved).toMatchObject([{ reportId: 'r-ximen', note: '補上公告' }]);
   });
 
   it('shows 全部處理完了 when the queue empties', async () => {
