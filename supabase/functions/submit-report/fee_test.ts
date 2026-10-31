@@ -57,6 +57,8 @@ Deno.test('a fee note longer than 200 must be the fee text', () => {
         lng: 121.5,
         city: '臺北市',
         space_type: 'paidMotorcycle',
+        scooter_allowed: true,
+        heavy_allowed: false,
         ...spot,
       },
     });
@@ -182,6 +184,8 @@ Deno.test('a fee suggestion changes only the vehicles it names', () => {
       lng: 121.5,
       city: '臺北市',
       space_type: 'paidMotorcycle',
+      scooter_allowed: true,
+      heavy_allowed: false,
       fee: { heavy: null },
     },
   });

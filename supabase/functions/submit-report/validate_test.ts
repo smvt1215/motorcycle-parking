@@ -1,4 +1,10 @@
-import { identityHash, validate, validFee, validZones } from './validate.ts';
+import {
+  identityHash,
+  validate,
+  validFee,
+  validZones,
+  zonePatchesStated,
+} from './validate.ts';
 
 Deno.test('zones carry the same structured fee contract, car prices included', () => {
   const zone = {
@@ -28,8 +34,9 @@ Deno.test('zones carry the same structured fee contract, car prices included', (
   if (!validZones([{ ...zone, fee: { car: { mode: 'free' } } }])) {
     throw new Error('zone car fee rejected');
   }
-  if (!validZones([{ name: '舊分區' }])) {
-    throw new Error('legacy zone rejected');
+  // A new spot's zone states both vehicles (#201).
+  if (validZones([{ name: '舊分區' }])) {
+    throw new Error('a zone without eligibility accepted');
   }
 });
 const base = {
@@ -41,7 +48,8 @@ const base = {
     lng: 121,
     city: '臺北市',
     space_type: 'paidMotorcycle',
-    heavy_allowed: null,
+    scooter_allowed: true,
+    heavy_allowed: false,
   },
 };
 Deno.test('valid reports pass, wrong coordinates and oversized notes fail', () => {
@@ -93,7 +101,12 @@ Deno.test('flags may carry a structured suggestion', () => {
       {
         ...flag,
         field: '機車停放資格',
-        proposed: { heavy_allowed: true, scooter_allowed: null },
+        proposed: { heavy_allowed: true, scooter_allowed: false },
+      },
+      {
+        ...flag,
+        field: 'eligibility',
+        proposed: { heavy_not_stated: true },
       },
       { ...flag, field: '位置或其他備註', note: '入口在後巷' },
       {
@@ -527,16 +540,18 @@ Deno.test('new street spots may carry segments; zones and segments take no ids f
       space_type: 'offStreet',
       parking_zones: [{
         name: 'B1',
+        access: 'scooterOnly',
         evidence_url: 'https://example.com/b1.jpg',
       }],
     },
   };
   if (validate(lot) !== null) throw new Error('a zone notice link refused');
   for (
-    const zones of [[{ id: 'b1', name: 'B1' }], [{
+    const zones of [[{ id: 'b1', name: 'B1', access: 'scooterOnly' }], [{
       name: 'B1',
+      access: 'scooterOnly',
       evidence_url: 'http://x.tw',
-    }]]
+    }], [{ name: 'B1' }]]
   ) {
     if (
       validate({ ...lot, spot: { ...lot.spot, parking_zones: zones } }) === null
@@ -627,5 +642,92 @@ Deno.test('suggestions may change zones and segments by id (#188)', () => {
     if (validate({ ...flag, proposed }) === null) {
       throw new Error(`accepted: ${JSON.stringify(proposed)}`);
     }
+  }
+});
+
+Deno.test('a new spot states both vehicles; a suggestion never clears one (#201)', () => {
+  const spot = (extra: Record<string, unknown>) =>
+    validate({
+      ...base,
+      spot: {
+        name: '機車格',
+        lat: 25,
+        lng: 121,
+        city: '臺北市',
+        space_type: 'paidMotorcycle',
+        ...extra,
+      },
+    });
+  if (spot({ scooter_allowed: true, heavy_allowed: false }) !== null) {
+    throw new Error('a street spot with both vehicles refused');
+  }
+  for (
+    const bad of [
+      { scooter_allowed: true },
+      { scooter_allowed: true, heavy_allowed: null },
+      { scooter_allowed: true, heavy_not_stated: true },
+      { scooter_allowed: 'yes', heavy_allowed: true },
+    ]
+  ) {
+    if (spot(bad) === null) throw new Error(`accepted ${JSON.stringify(bad)}`);
+  }
+  if (
+    spot({
+      space_type: 'offStreet',
+      scooter_allowed: true,
+      heavy_not_stated: true,
+    }) !== null
+  ) throw new Error('a lot may say 官方未標示');
+  if (
+    spot({
+      space_type: 'offStreet',
+      scooter_allowed: true,
+      heavy_allowed: true,
+      heavy_not_stated: true,
+    }) === null
+  ) throw new Error('a boolean beside not_stated accepted');
+  const flag = {
+    device_id: base.device_id,
+    action: 'flag',
+    source_id: '10000000-0000-4000-8000-000000000002',
+    reason: '資格',
+    field: 'eligibility',
+  };
+  for (
+    const proposed of [
+      { scooter_allowed: null },
+      { heavy_not_stated: false },
+      { heavy_allowed: true, heavy_not_stated: true },
+      { parking_zones: [{ name: '新分區' }] },
+    ]
+  ) {
+    if (validate({ ...flag, proposed }) === null) {
+      throw new Error(`accepted ${JSON.stringify(proposed)}`);
+    }
+  }
+});
+
+Deno.test('a zone a suggestion changes states both vehicles once applied (#201)', () => {
+  const stored = [
+    { id: 'a', name: 'A', access: 'scooterOnly' },
+    { id: 'b', name: 'B' },
+  ];
+  if (!zonePatchesStated([{ id: 'a', guide: '右側' }], stored)) {
+    throw new Error('a stated zone refused');
+  }
+  if (zonePatchesStated([{ id: 'b', guide: '右側' }], stored)) {
+    throw new Error('a changed old zone left unstated');
+  }
+  if (!zonePatchesStated([{ id: 'b', access: 'heavyOnly' }], stored)) {
+    throw new Error('filling an old zone in refused');
+  }
+  if (zonePatchesStated([{ id: 'a', access: null }], stored)) {
+    throw new Error('clearing access accepted');
+  }
+  if (!zonePatchesStated([{ id: 'b', removed: true }], stored)) {
+    throw new Error('removing refused');
+  }
+  if (!zonePatchesStated([{ id: 'b', guide: 'x' }], undefined)) {
+    throw new Error('without the stored list the review decides');
   }
 });

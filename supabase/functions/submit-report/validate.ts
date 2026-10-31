@@ -50,7 +50,6 @@ const text = (max: number, min = 0) => (v: unknown) =>
 // A real string, not one coerced from an array: ['x'] must not pass as 'x'.
 const oneOf = (values: string[]) => (v: unknown) =>
   v === null || (typeof v === 'string' && values.includes(v));
-const flag = (v: unknown) => v === null || typeof v === 'boolean';
 const coordinate = (v: unknown) => typeof v === 'number' && Number.isFinite(v);
 // Whole yuan or minutes in range; never a string or a fraction.
 const whole = (v: unknown, min: number, max: number) =>
@@ -60,6 +59,10 @@ const whole = (v: unknown, min: number, max: number) =>
 // lib/models/parking_condition.dart mirrors and tool/gen_contract_sql.py turns
 // into valid_condition(). New spots and suggestions carry it (C5).
 const cond = contract.condition;
+// Eligibility (#201): true, false or not_stated; null is old data's 待確認.
+const notStated: string = contract.eligibility.not_stated;
+const eligibilityValue = (x: unknown) =>
+  typeof x === 'boolean' || x === notStated;
 const isObject = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === 'object' && !Array.isArray(v);
 const has = (o: Record<string, unknown>, k: string) => Object.hasOwn(o, k);
@@ -143,7 +146,7 @@ export function validCondition(v: unknown, zone = false): boolean {
     if (
       !isObject(allow) || Object.keys(allow).length === 0 ||
       !Object.entries(allow).every(([k, x]) =>
-        cond.allow_keys.includes(k) && typeof x === 'boolean'
+        cond.allow_keys.includes(k) && eligibilityValue(x)
       )
     ) return false;
     if (allow.scooter === true && v.bay === 'heavy') return false;
@@ -260,10 +263,74 @@ export function zoneConditionConsistent(
   zone: Record<string, unknown>,
 ): boolean {
   if (zone.condition === undefined || zone.condition === null) return true;
-  if (!isObject(zone.condition) || typeof zone.access !== 'string') {
-    return false;
+  if (!isObject(zone.condition)) return false;
+  // A zone that says not_stated (#201) writes back no access.
+  const allow = zone.condition.allow;
+  if (isObject(allow) && Object.values(allow).includes(notStated)) {
+    return (zone.access === undefined || zone.access === null) &&
+      cond.allow_keys.every((k: string) => has(allow, k));
   }
+  if (typeof zone.access !== 'string') return false;
   return zone.access === legacyAccess(zone.condition);
+}
+/**
+ * Whether a zone states both vehicles (#201): by its access, or by a
+ * condition whose allow names both. `zone_eligibility_stated()` in SQL.
+ */
+export function zoneStated(zone: Record<string, unknown>): boolean {
+  if (typeof zone.access === 'string') return true;
+  const c = zone.condition;
+  return isObject(c) && isObject(c.allow) &&
+    cond.allow_keys.every((k: string) =>
+      has(c.allow as Record<string, unknown>, k)
+    );
+}
+const vehicles: string[] = contract.eligibility.vehicles;
+/**
+ * A write's vehicle keys (#201, `eligibility_values_ok()` in SQL): each
+ * vehicle it names is true or false, or not_stated (`x_not_stated: true`
+ * with no boolean). It never clears one.
+ */
+export function eligibilityValuesOk(o: Record<string, unknown>): boolean {
+  return vehicles.every((v) => {
+    const a = o[`${v}_allowed`], n = o[`${v}_not_stated`];
+    if (a !== undefined && a !== null && typeof a !== 'boolean') return false;
+    if (n !== undefined && typeof n !== 'boolean') return false;
+    if (n === true) return a === undefined || a === null;
+    if (n === false) return typeof a === 'boolean';
+    return a !== null;
+  });
+}
+/** Whether a spot states both vehicles: true, false or not_stated. */
+export function eligibilityStated(o: Record<string, unknown>): boolean {
+  return vehicles.every((v) =>
+    typeof o[`${v}_allowed`] === 'boolean' || o[`${v}_not_stated`] === true
+  );
+}
+/**
+ * Whether each zone a suggestion's patch adds or changes states both
+ * vehicles once applied to the stored list (#201): only the zones a rider
+ * changes must be filled in. Without the stored list, only new zones are
+ * checked; the review checks the rest (`zone_patch_stated()`).
+ */
+export function zonePatchesStated(
+  patch: unknown,
+  current: unknown,
+): boolean {
+  if (!Array.isArray(patch)) return true;
+  const stored = Array.isArray(current) ? current.filter(isObject) : null;
+  return patch.filter(isObject).every((e) => {
+    if (e.removed === true) return true;
+    if (!has(e, 'id')) return zoneStated(e);
+    if (!stored) return true;
+    const old = stored.find((z) => z.id === e.id) ?? {};
+    const merged: Record<string, unknown> = { ...old };
+    for (const [k, x] of Object.entries(e)) {
+      if (x === null) delete merged[k];
+      else merged[k] = x;
+    }
+    return zoneStated(merged);
+  });
 }
 const facilityTypes: string[] = contract.placement.facility_types;
 /**
@@ -343,22 +410,34 @@ export function validSegments(v: unknown): boolean {
   return Array.isArray(v) && v.length <= seg.max_entries &&
     v.every((s) => isObject(s) && validSegmentFields(s)) && validEntryIds(v);
 }
+const riderZoneCondition = (c: unknown) =>
+  isObject(c) && Object.keys(c).length === 1 && isObject(c.allow) &&
+  cond.allow_keys.every((k: string) =>
+    has(c.allow as Record<string, unknown>, k)
+  );
 /**
  * One rider zone without its id: named, with access, area, a guide, a fee
  * and a notice link; riders send no zone condition yet.
  */
 function validRiderZone(zone: Record<string, unknown>): boolean {
   return Object.keys(zone).every((k) =>
-    ['name', 'access', 'area', 'guide', 'fee', 'evidence_url'].includes(k)
+    ['name', 'access', 'area', 'guide', 'fee', 'evidence_url', 'condition']
+      .includes(k)
   ) &&
     text(40, 1)(zone.name) &&
     (!('access' in zone) || oneOf(accessKinds)(zone.access)) &&
-    (!('guide' in zone) || text(200)(zone.guide));
+    (!('guide' in zone) || text(200)(zone.guide)) &&
+    // Riders state who may park there (#201), nothing else of a condition:
+    // an allow naming both vehicles, for 官方未標示 where access cannot.
+    (!('condition' in zone) || riderZoneCondition(zone.condition));
 }
-/** A lot's zones as riders report them: named, with access and a guide. */
+/**
+ * A lot's zones as riders report them: named, with access and a guide.
+ * Every zone of a new spot states both vehicles (#201).
+ */
 export function validZones(v: unknown): boolean {
   if (!Array.isArray(v) || v.length > 10) return false;
-  return v.every((z) => isObject(z) && validRiderZone(z)) &&
+  return v.every((z) => isObject(z) && validRiderZone(z) && zoneStated(z)) &&
     // A new spot's zones get their ids from the table's trigger.
     validZoneEntries(v);
 }
@@ -417,7 +496,10 @@ const validZonePatches = (v: unknown) =>
     v,
     (z) => validRiderZone(z) && validZoneEntries([z]),
     ['name'],
-  );
+  ) &&
+  // A new zone states both vehicles (#201); a changed one is checked on
+  // the stored list (zonePatchesStated).
+  (v as unknown[]).every((e) => !isObject(e) || has(e, 'id') || zoneStated(e));
 const validSegmentPatches = (v: unknown) =>
   validEntryPatches(v, (s) => validRiderSegment(s), ['name']);
 // Mirrors the columns admin_resolve_report may patch, plus how riders ask to
@@ -432,8 +514,11 @@ const proposedChecks: Record<string, (v: unknown) => boolean> = {
   // Free text up to 200, or the proposed fee's own text (checked below).
   fee_note: (v) => typeof v === 'string',
   note: text(500),
-  scooter_allowed: flag,
-  heavy_allowed: flag,
+  // Never cleared (#201): true or false, or not_stated below.
+  scooter_allowed: (v) => typeof v === 'boolean',
+  heavy_allowed: (v) => typeof v === 'boolean',
+  scooter_not_stated: (v) => v === true,
+  heavy_not_stated: (v) => v === true,
   facility_type: oneOf(facilityTypes),
   // null clears them, as it clears facility_type.
   facility_types: (v) => v === null || validFacilityTypes(v),
@@ -563,6 +648,7 @@ export function validate(body: Record<string, unknown>): string | null {
       return 'invalid proposed';
     }
     if (!validProposedCondition(p)) return 'invalid proposed';
+    if (!eligibilityValuesOk(p)) return 'invalid proposed';
     if (
       ('lat' in p &&
         (typeof p.lat !== 'number' || p.lat < 20 || p.lat > 27)) ||
@@ -629,10 +715,20 @@ export function validate(body: Record<string, unknown>): string | null {
       if (!spaceTypes.includes(String(s.space_type))) {
         return 'invalid space type';
       }
-      for (const key of ['heavy_allowed', 'scooter_allowed']) {
+      // Both vehicles (#201): true or false; a lot may also say
+      // not_stated (官方與營運業者都沒寫).
+      const lot = offStreetSpaceTypes.includes(String(s.space_type)) ||
+        offStreetFacilityTypes.includes(String(s.facility_type)) ||
+        (Array.isArray(s.facility_types) &&
+          s.facility_types.some((t) =>
+            offStreetFacilityTypes.includes(String(t))
+          ));
+      for (const v of vehicles) {
         if (
-          s[key] !== undefined && s[key] !== null && typeof s[key] !== 'boolean'
-        ) return `invalid ${key}`;
+          !eligibilityValuesOk(s) ||
+          !(typeof s[`${v}_allowed`] === 'boolean' ||
+            (lot && s[`${v}_not_stated`] === true))
+        ) return `invalid ${v}_allowed`;
       }
       if (s.fee !== undefined && s.fee !== null && !validFee(s.fee)) {
         return 'invalid fee';

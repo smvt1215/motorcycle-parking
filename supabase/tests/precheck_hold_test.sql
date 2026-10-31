@@ -12,7 +12,7 @@ create function pg_temp.report(n integer,body jsonb,ip text,device text) returns
 select public.apply_report(pg_temp.uid(n),repeat(ip,64),repeat(device,64),body);
 $$;
 create function pg_temp.spot(name text,lat float8,extra jsonb default '{}') returns jsonb language sql as $$
-select jsonb_build_object('action','create','spot',jsonb_build_object('name',name,'lat',lat,'lng',121.5,
+select jsonb_build_object('action','create','spot',jsonb_build_object('scooter_allowed',true,'heavy_allowed',true,'name',name,'lat',lat,'lng',121.5,
   'city','臺北市','space_type','freeMotorcycle','condition',
   '{"bay":"motorcycle","use":"share","share":"scooter_heavy","charge":"free"}'::jsonb))||extra;
 $$;
