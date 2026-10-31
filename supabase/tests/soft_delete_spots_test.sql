@@ -99,8 +99,13 @@ select ok((select status='hidden' and deleted_at is null from community_spots wh
 
 -- ===== 14 天後永久刪除 =====
 update official_heavy_spots set deleted_at=now()-interval '15 days' where id=(select id from fx where name='official');
+-- A report left open by a concurrent review is closed by the purge.
+insert into moderation_queue(source_id,reporter_id,reason,field) values
+  ((select 'official:'||id from fx where name='official'),'10000000-0000-4000-8000-000000000001','刪除後仍待審','name');
 select is(purge_deleted_spots(),1,'the purge deletes what was deleted more than 14 days ago');
 select is((select count(*)::integer from official_heavy_spots where id=(select id from fx where name='official')),0,'it is gone');
+select is((select status||'|'||resolution_note from moderation_queue where reason='刪除後仍待審'),'rejected|點位已刪除',
+  'a report still open on it is closed');
 select is((select source_id from purged_official_spots where official_id=(select id from fx where name='official')),'TP-9',
   'its ids are kept for imports');
 select is((select actor::text from admin_audit_log where action='purge_spot'),'10000000-0000-4000-8000-000000000005',

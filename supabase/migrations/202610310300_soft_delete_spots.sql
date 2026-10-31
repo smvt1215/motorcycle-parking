@@ -385,6 +385,9 @@ begin
       insert into admin_audit_log(actor,action,target_table,target_id,before,after,note)
       values(r.deleted_by,'purge_spot','community_spots',r.id::text,r.row,null,'刪除滿 14 天，永久刪除');
     end if;
+    -- Reports a concurrent review left open (the delete skipped their lock).
+    update moderation_queue set status='rejected',resolution_kind='other',resolution_note='點位已刪除',
+      resolved_at=now(),resolved_by=r.deleted_by where source_id=r.id::text and status='pending';
     delete from community_spots where id=r.id;
     n:=n+1;
   end loop;
@@ -398,6 +401,8 @@ begin
       insert into admin_audit_log(actor,action,target_table,target_id,before,after,note)
       values(r.deleted_by,'purge_spot','official_heavy_spots',r.id::text,r.row,null,'刪除滿 14 天，永久刪除');
     end if;
+    update moderation_queue set status='rejected',resolution_kind='other',resolution_note='點位已刪除',
+      resolved_at=now(),resolved_by=r.deleted_by where source_id='official:'||r.id and status='pending';
     delete from official_heavy_spots where id=r.id;
     n:=n+1;
   end loop;
