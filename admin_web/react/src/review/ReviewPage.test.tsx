@@ -251,6 +251,18 @@ describe('ReviewPage', () => {
     expect(source.resolved).toMatchObject([{ decision: 'rejected', resolutionKind: 'other', note: 'x' }]);
   });
 
+  it('Enter on the focused 取消 cancels instead of rejecting', async () => {
+    const { user, source } = setup('/review/r-fuxing');
+    await detailTitle();
+    await user.keyboard('r');
+    await user.keyboard('1');
+    screen.getByRole('button', { name: /取消/ }).focus();
+    await user.keyboard('{Enter}');
+    expect(screen.queryByRole('region', { name: '駁回原因' })).not.toBeInTheDocument();
+    await act(() => vi.advanceTimersByTimeAsync(UNDO_MS));
+    expect(source.resolved).toEqual([]);
+  });
+
   it('Esc closes the reject panel and keeps the report', async () => {
     const { user, router } = setup('/review/r-fuxing');
     await detailTitle();

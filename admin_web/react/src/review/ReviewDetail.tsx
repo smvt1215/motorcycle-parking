@@ -303,6 +303,8 @@ function ReportDetail({ reportId }: { reportId: string }) {
           event.preventDefault();
           setRejectKind(RESOLUTION_KINDS[digit - 1]!.kind);
         } else if (event.key === 'Enter') {
+          // Enter on a focused button or link (取消, 清單…) does that, not 確定駁回.
+          if (event.target instanceof HTMLElement && event.target.closest('button, a')) return;
           event.preventDefault();
           confirmReject();
         }
