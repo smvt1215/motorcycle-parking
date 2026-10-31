@@ -8,6 +8,7 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 
 import 'data/app_store.dart';
 import 'ui/adaptive/adaptive.dart';
+import 'features/map/map_legend_page.dart';
 import 'features/map/map_page.dart';
 import 'features/rules/rules_page.dart';
 import 'features/my_parking/parking_page.dart';
@@ -40,7 +41,8 @@ class _ParkingAppState extends ConsumerState<ParkingApp> {
               children: [
                 MapPage(showControls: shell.currentIndex == 0),
                 Offstage(
-                  offstage: shell.currentIndex == 0,
+                  // The map tab shows its own pages (地圖怎麼看) over the map.
+                  offstage: shell.currentIndex == 0 && state.uri.path == '/map',
                   child: Material(
                     color: shell.currentIndex == 1 || shell.currentIndex == 3
                         ? Theme.of(context).colorScheme.surface
@@ -58,6 +60,13 @@ class _ParkingAppState extends ConsumerState<ParkingApp> {
               GoRoute(
                 path: '/map',
                 builder: (context, state) => const SizedBox.shrink(),
+                routes: [
+                  GoRoute(
+                    path: 'legend',
+                    builder: (context, state) =>
+                        const MapLegendPage(fromMap: true),
+                  ),
+                ],
               ),
             ],
           ),
@@ -74,6 +83,13 @@ class _ParkingAppState extends ConsumerState<ParkingApp> {
               GoRoute(
                 path: '/parking',
                 builder: (context, state) => const ParkingPage(),
+                routes: [
+                  GoRoute(
+                    path: 'legend',
+                    builder: (context, state) =>
+                        const MapLegendPage(fromMap: false),
+                  ),
+                ],
               ),
             ],
           ),

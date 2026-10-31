@@ -55,3 +55,6 @@ flutter:
     - assets/rules/parking_rules.json
     - assets/demo/spots.json
     - assets/branding/png/splash_mark.png
+    # Licensed art fetched at build time (tool/fetch_heavy_glyph.py), never
+    # committed: only .gitkeep is tracked here.
+    - assets/private/

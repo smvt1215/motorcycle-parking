@@ -825,26 +825,24 @@ class _MapPageState extends ConsumerState<MapPage> {
                       ),
                     ),
                   ),
-                  // Reference, not a filter: a small corner button, the way
-                  // map apps place their layer and legend controls.
+                  // Reference, not a filter: a corner button under the
+                  // filters on the trailing edge (Main board: 44pt on iOS
+                  // 4 below the filters, 48dp on Android 8 below).
                   Align(
                     alignment: AlignmentDirectional.centerEnd,
                     child: Padding(
-                      padding: const EdgeInsetsDirectional.only(
-                        top: 8,
+                      padding: EdgeInsetsDirectional.only(
+                        top: isCupertino ? 4 : 8,
                         end: 16,
                       ),
                       child: SizedBox.square(
-                        dimension: 44,
+                        dimension: isCupertino ? 44 : 48,
                         child: _MapIconPill(
                           key: const ValueKey('map-legend-button'),
                           tooltip: '地圖怎麼看',
                           icon: Icons.help_outline,
-                          onTap: () => showMapLegend(
-                            context,
-                            store.vehicle,
-                            availability: store.availabilitySource.enabled,
-                          ),
+                          iconSize: 24,
+                          onTap: () => openMapLegend(context, fromMap: true),
                         ),
                       ),
                     ),
@@ -1083,10 +1081,12 @@ class _MapIconPill extends StatelessWidget {
     required this.tooltip,
     required this.icon,
     required this.onTap,
+    this.iconSize = 20,
   });
   final String tooltip;
   final IconData icon;
   final VoidCallback onTap;
+  final double iconSize;
   @override
   Widget build(BuildContext context) => Material(
     elevation: 2,
@@ -1104,7 +1104,7 @@ class _MapIconPill extends StatelessWidget {
             aspectRatio: 1,
             child: Icon(
               icon,
-              size: 20,
+              size: iconSize,
               color: Theme.of(context).colorScheme.onSurface,
             ),
           ),

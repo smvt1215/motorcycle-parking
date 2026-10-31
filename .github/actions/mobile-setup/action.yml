@@ -12,3 +12,7 @@ runs:
         cache: true
     - shell: bash
       run: flutter pub get --enforce-lockfile
+    # The licensed badge silhouette from the job's HEAVY_GLYPH_SVG_BASE64
+    # secret; builds without it draw the fallback icon.
+    - shell: bash
+      run: python3 tool/fetch_heavy_glyph.py

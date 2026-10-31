@@ -311,7 +311,7 @@ void main() {
     });
   });
 
-  testWidgets('圖例列出剩餘、延遲、已滿、暫停與沒有膠囊', (tester) async {
+  testWidgets('圖例列出即時、已滿、延遲、暫停與汽車格膠囊', (tester) async {
     useSize(tester, 390);
     await pumpMap(tester, canvasSpots, canvasCounts);
     await tester.tap(find.byKey(const ValueKey('map-legend-button')));
@@ -323,19 +323,15 @@ void main() {
       scrollable: find.byType(Scrollable).last,
     );
     for (final line in [
-      '官方即時剩餘',
+      '官方即時剩餘格數',
       '更新延遲，數字可能已變',
       '官方資料目前沒有空位',
       '場站暫停營運',
-      '沒有膠囊＝空位未知，或目前車種不可停',
+      '無即時資料或不能停時不掛。',
     ]) {
       expect(find.text(line), findsOneWidget);
     }
     expect(find.byType(CapsulePause), findsOneWidget);
-    expect(
-      tester.widget<Text>(find.text('官方資料目前沒有空位')).semanticsLabel,
-      '已滿：官方資料目前沒有空位',
-    );
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
