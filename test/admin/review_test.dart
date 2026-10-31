@@ -133,6 +133,13 @@ void main() {
         isNull,
       );
       expect(validatePatch({'heavy_not_stated': false}, official), isNotNull);
+      expect(
+        validatePatch({
+          'heavy_allowed': true,
+          'heavy_not_stated': true,
+        }, official),
+        isNotNull,
+      );
       expect(formatValue('heavy_not_stated', true), '官方未標示');
       expect(validatePatch({'lat': 30}, official), contains('緯度'));
       expect(validatePatch({'space_type': 'rocket'}, official), isNotNull);
