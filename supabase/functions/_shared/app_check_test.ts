@@ -186,3 +186,19 @@ Deno.test('only enforce refuses, and only a token that is not valid', () => {
     console.log = log;
   }
 });
+
+Deno.test('an unknown kid refetches the keys at most once a minute', async () => {
+  resetAppCheckKeys();
+  fetches = 0;
+  await verify(await token());
+  const forged = await token({ header: { kid: 'nope' } });
+  for (let i = 0; i < 5; i++) {
+    assertEquals(await verify(forged, now + 1000), {
+      status: 'invalid',
+      reason: 'kid',
+    });
+  }
+  assertEquals(fetches, 1);
+  await verify(forged, now + 61 * 1000);
+  assertEquals(fetches, 2);
+});

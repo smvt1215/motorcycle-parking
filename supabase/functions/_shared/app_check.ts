@@ -76,7 +76,15 @@ export const fetchFirebaseKeys: FetchKeys = async () => {
   return { keys: body.keys ?? [], maxAgeMs };
 };
 
-let cache: { keys: Map<string, CryptoKey>; until: number } | null = null;
+/**
+ * An unknown kid may be a rotated key, but anyone can send one: fetch again
+ * for it at most once a minute while the cached keys are still fresh.
+ */
+const unknownKidRefetchMs = 60 * 1000;
+
+let cache:
+  | { keys: Map<string, CryptoKey>; until: number; fetched: number }
+  | null = null;
 
 /** Forget the cached keys (tests). */
 export function resetAppCheckKeys() {
@@ -88,9 +96,10 @@ async function keyFor(
   fetchKeys: FetchKeys,
   now: number,
 ): Promise<CryptoKey | null> {
-  if (!cache || cache.until <= now || !cache.keys.has(kid)) {
-    // A kid we do not know may be a rotated key: fetch again, at most once
-    // per call.
+  const stale = !cache || cache.until <= now;
+  const rotated = !!cache && !cache.keys.has(kid) &&
+    now - cache.fetched >= unknownKidRefetchMs;
+  if (stale || rotated) {
     const { keys, maxAgeMs } = await fetchKeys();
     const imported = new Map<string, CryptoKey>();
     for (const jwk of keys) {
@@ -109,9 +118,10 @@ async function keyFor(
     cache = {
       keys: imported,
       until: now + Math.min(Math.max(maxAgeMs, 0), maxKeyAgeMs),
+      fetched: now,
     };
   }
-  return cache.keys.get(kid) ?? null;
+  return cache?.keys.get(kid) ?? null;
 }
 
 function base64url(part: string): Uint8Array<ArrayBuffer> {
