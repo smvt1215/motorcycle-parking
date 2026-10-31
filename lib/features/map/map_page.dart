@@ -28,6 +28,16 @@ import 'google_parking_map.dart';
 import 'osm_tiles.dart';
 import 'cluster_badge.dart';
 
+/// Whether the Google map takes gestures: shown, on top, and not under a
+/// page of the map tab. A map that does not shows its pointer interceptor
+/// on the web, so the page above gets the mouse and touches instead of the
+/// map's HTML view; its camera and selection stay as they were.
+bool mapInteractive({
+  required bool showControls,
+  required bool covered,
+  required bool routeIsCurrent,
+}) => showControls && !covered && routeIsCurrent;
+
 class MapPage extends ConsumerStatefulWidget {
   const MapPage({super.key, this.showControls = true, this.covered = false});
   final bool showControls;
@@ -455,9 +465,11 @@ class _MapPageState extends ConsumerState<MapPage> {
             center: LatLng(store.lat, store.lng),
             spots: spots,
             eligibility: store.eligible,
-            interactive:
-                widget.showControls &&
-                (ModalRoute.of(context)?.isCurrent ?? true),
+            interactive: mapInteractive(
+              showControls: widget.showControls,
+              covered: widget.covered,
+              routeIsCurrent: ModalRoute.of(context)?.isCurrent ?? true,
+            ),
             panelVisible: !widget.showControls,
             selected: open,
             onMapTap: _closeSpot,

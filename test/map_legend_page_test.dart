@@ -459,4 +459,27 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  test('圖例頁蓋住地圖時 Google 地圖停止互動，返回後恢復', () {
+    expect(
+      mapInteractive(showControls: true, covered: false, routeIsCurrent: true),
+      isTrue,
+    );
+    // Under /map/legend: off, so the web map's pointer interceptor is on.
+    expect(
+      mapInteractive(showControls: true, covered: true, routeIsCurrent: true),
+      isFalse,
+    );
+    expect(
+      mapInteractive(showControls: false, covered: false, routeIsCurrent: true),
+      isFalse,
+    );
+    expect(
+      mapInteractive(showControls: true, covered: false, routeIsCurrent: false),
+      isFalse,
+    );
+    expect(mapCovered(0, '/map/legend'), isTrue);
+    expect(mapCovered(0, '/map'), isFalse);
+    expect(mapCovered(2, '/parking/legend'), isFalse);
+  });
 }
