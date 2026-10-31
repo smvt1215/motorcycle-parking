@@ -57,7 +57,7 @@ update auth.users set raw_app_meta_data='{"role":"admin"}' where id='10000000-00
 update community_spots set note='角色變更後編輯' where id='75000000-0000-4000-8000-000000000002';
 select is((select contributor_role from community_spots where id='75000000-0000-4000-8000-000000000002'),'rider','the role is fixed when the point is created');
 create temporary table attribution_report as select (public.apply_report('10000000-0000-4000-8000-000000000001',repeat('a',64),repeat('a',64),
-  '{"action":"create","spot":{"name":"新回報使用新姓名","lat":25.098,"lng":121.618,"city":"臺北市","space_type":"offStreet","contributor_name":"假管理員","contributor_role":"admin"}}')->>'id')::uuid as id;
+  '{"action":"create","spot":{"scooter_allowed":true,"heavy_allowed":true,"name":"新回報使用新姓名","lat":25.098,"lng":121.618,"city":"臺北市","space_type":"offStreet","contributor_name":"假管理員","contributor_role":"admin"}}')->>'id')::uuid as id;
 select is((select contributor_name||'|'||contributor_role from community_spots where id=(select id from attribution_report)),'新名稱|rider','create RPC uses the server-side account name and ignores client claims');
 
 update auth.users set deleted_at=now() where id='10000000-0000-4000-8000-000000000003';
@@ -76,7 +76,7 @@ select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-00000000
 set local role authenticated;
 select throws_ok($$select public.admin_clear_contributor_name('75000000-0000-4000-8000-0000000000ff','')$$,'22023',null,'missing points are rejected');
 select is(public.admin_clear_contributor_name('75000000-0000-4000-8000-000000000001','  冒犯字眼  ')->>'contributor_name','','administrators clear a public name');
-select is(public.admin_upsert_spot(null,'{"kind":"community","name":"管理站新增","lat":25.099,"lng":121.619,"city":"臺北市","space_type":"freeMotorcycle"}')->>'contributor_role',
+select is(public.admin_upsert_spot(null,'{"scooter_allowed":true,"heavy_allowed":true,"kind":"community","name":"管理站新增","lat":25.099,"lng":121.619,"city":"臺北市","space_type":"freeMotorcycle"}')->>'contributor_role',
   'admin','admin create RPC works with the private contributor trigger');
 reset role;
 select set_config('request.jwt.claims','',true);

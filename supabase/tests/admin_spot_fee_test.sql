@@ -43,6 +43,16 @@ select ok('fee'=any(admin_spot_fields(false)),'community spots list fee as edita
 select ok('fee'=any(admin_spot_fields(true)),'official spots list fee as editable');
 
 -- Only an admin with a second factor.
+-- #201: fixtures written before eligibility was required state both
+-- vehicles (官方未標示 where they left one out), without touching updated_at.
+alter table community_spots disable trigger user;
+alter table official_heavy_spots disable trigger user;
+update community_spots set scooter_not_stated=scooter_allowed is null,heavy_not_stated=heavy_allowed is null
+  where scooter_allowed is null or heavy_allowed is null;
+update official_heavy_spots set scooter_not_stated=scooter_allowed is null,heavy_not_stated=heavy_allowed is null
+  where scooter_allowed is null or heavy_allowed is null;
+alter table community_spots enable trigger user;
+alter table official_heavy_spots enable trigger user;
 select pg_temp.act('user');
 set local role authenticated;
 select throws_ok($$select admin_upsert_spot((select id::text from fx where name='community'),
@@ -104,9 +114,9 @@ set local role authenticated;
 select is(admin_upsert_spot('official:'||(select id from fx where name='official'),
     '{"fee":{"heavy":{"mode":"free"}},"fee_note":"大型重機免費"}',(select at from fx where name='official'))->'fee',
   '{"heavy":{"mode":"free"}}'::jsonb,'an admin sets an official fee');
-select throws_ok($$select admin_upsert_spot(null,'{"kind":"official","name":"新官方費率點","lat":25.06,"lng":121.58,"city":"臺北市","space_type":"heavyOnly","source_name":"臺北市政府","source_url":"https://example.test","effective_date":"2026-10-25","fee":{"heavy":{"mode":"daily","amount":50}}}')$$,
+select throws_ok($$select admin_upsert_spot(null,'{"scooter_allowed":true,"heavy_allowed":true,"kind":"official","name":"新官方費率點","lat":25.06,"lng":121.58,"city":"臺北市","space_type":"heavyOnly","source_name":"臺北市政府","source_url":"https://example.test","effective_date":"2026-10-25","fee":{"heavy":{"mode":"daily","amount":50}}}')$$,
   '22023','fee_note must be the text of fee','a new spot with a fee needs its text, not the default');
-select is(admin_upsert_spot(null,'{"kind":"community","name":"新社群費率點","lat":25.061,"lng":121.581,"city":"臺北市","space_type":"paidMotorcycle","fee":{"scooter":{"mode":"per_visit","amount":20}},"fee_note":"機車每次 20 元（隔日是否另計未確認）；大型重機費率未確認"}')->'fee'->'scooter'->>'mode',
+select is(admin_upsert_spot(null,'{"scooter_allowed":true,"heavy_allowed":true,"kind":"community","name":"新社群費率點","lat":25.061,"lng":121.581,"city":"臺北市","space_type":"paidMotorcycle","fee":{"scooter":{"mode":"per_visit","amount":20}},"fee_note":"機車每次 20 元（隔日是否另計未確認）；大型重機費率未確認"}')->'fee'->'scooter'->>'mode',
   'per_visit','an admin creates a spot with a fee');
 reset role;
 

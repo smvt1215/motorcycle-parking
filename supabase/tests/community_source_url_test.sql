@@ -29,7 +29,7 @@ select throws_ok($$update community_spots set source_url='javascript:alert(1)' w
 -- update (validate.ts refuses it before the RPC runs).
 create temporary table target as
 select (public.apply_report('10000000-0000-4000-8000-000000000001',repeat('s',64),repeat('s',64),
-  '{"action":"create","spot":{"name":"[測試] 回報帶來源","lat":24.8,"lng":121.2,"city":"桃園市","space_type":"paidMotorcycle","source_url":"javascript:alert(1)"}}'
+  '{"action":"create","spot":{"scooter_allowed":true,"heavy_allowed":true,"name":"[測試] 回報帶來源","lat":24.8,"lng":121.2,"city":"桃園市","space_type":"paidMotorcycle","source_url":"javascript:alert(1)"}}'
 )->>'id')::uuid as id;
 select is((select source_url from community_spots where id=(select id from target)),'','a report cannot store a source link');
 select public.apply_report('10000000-0000-4000-8000-000000000001',repeat('s',64),repeat('s',64),

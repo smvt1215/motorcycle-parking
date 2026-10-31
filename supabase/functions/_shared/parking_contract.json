@@ -19,6 +19,24 @@
     "noMotorcycle",
     "heavyOnly"
   ],
+  "eligibility": {
+    "vehicles": [
+      "scooter",
+      "heavy"
+    ],
+    "not_stated": "not_stated",
+    "spot_keys": {
+      "scooter": {
+        "allowed": "scooter_allowed",
+        "not_stated": "scooter_not_stated"
+      },
+      "heavy": {
+        "allowed": "heavy_allowed",
+        "not_stated": "heavy_not_stated"
+      }
+    },
+    "comment": "停放資格（#201）：可停 true、不可停 false、官方未標示 not_stated；null（未填）只是舊資料的待確認，照常相容讀取，新寫入不再接受。分區 condition.allow 的值為 true、false 或 not_stated；有 not_stated 的分區推導不出 access（to_access），所以不可帶 access，舊版讀成待確認。點位層以 spot_keys 表示：allowed 欄為 boolean，not_stated 欄為 true 時 allowed 必為 null（舊版只讀 boolean，讀成待確認）。官方點（含匯入、升級）兩種車都必填三選一，官方（路外含營運業者公告）沒寫＝not_stated；社群新增點兩種車都必填（路邊只能 true／false，依縣市規則顯示建議值；路外可用 not_stated），新增的每一區都必填；修改建議只有改到的那一區必填，沒改到的照舊。decideParking 把 not_stated 判為不確定（與待確認相同的安全語意，重機只採官方說法）。"
+  },
   "placement": {
     "off_street_space_types": [
       "offStreet"
@@ -124,6 +142,7 @@
       "scooter",
       "heavy"
     ],
+    "allow_values": "boolean 或 eligibility.not_stated",
     "schedule": {
       "keys": [
         "days",
