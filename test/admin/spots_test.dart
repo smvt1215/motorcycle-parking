@@ -15,6 +15,7 @@ import 'package:motorcycle_parking/core/town_lookup.dart';
 import 'package:motorcycle_parking/domain/location_check.dart';
 import 'package:motorcycle_parking/domain/map_viewport.dart';
 import 'package:motorcycle_parking/models/parking.dart' show Eligible;
+import 'package:motorcycle_parking/models/space_kind.dart';
 
 import 'fake_admin_gateway.dart';
 import 'fold_helpers.dart';
@@ -281,6 +282,22 @@ void main() {
       spots.set('name', '新名稱');
       expect(spots.errors.containsKey('heavy_allowed'), isFalse);
       expect(spots.changes, {'name': '新名稱'});
+    });
+
+    test('官方未標示的大型重機改成普大共用時一起改成可停（#201）', () async {
+      gateway.spotRows[officialId]!
+        ..['space_type'] = 'paidMotorcycle'
+        ..['facility_type'] = 'roadside'
+        ..['facility_types'] = ['roadside']
+        ..['heavy_allowed'] = null
+        ..['heavy_not_stated'] = true;
+      await spots.open(officialId);
+      spots.setKind(SpaceKind.scooterHeavy);
+      expect(spots.eligibilityOf('heavy_allowed'), Eligible.allowed);
+      expect(spots.changes['heavy_allowed'], isTrue);
+      expect(spots.changes['heavy_not_stated'], isFalse);
+      spots.setKind(SpaceKind.motorcycle);
+      expect(spots.eligibilityOf('heavy_allowed'), Eligible.notStated);
     });
 
     test('改為官方點只送管理者填的來源與資格', () async {
