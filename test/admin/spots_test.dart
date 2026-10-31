@@ -272,6 +272,17 @@ void main() {
       expect(gateway.created, hasLength(1));
     });
 
+    test('已存成官方未標示的車種載入後仍是官方未標示，改名稱不必重選（#201）', () async {
+      gateway.spotRows[officialId]!
+        ..['heavy_allowed'] = null
+        ..['heavy_not_stated'] = true;
+      await spots.open(officialId);
+      expect(spots.eligibilityOf('heavy_allowed'), Eligible.notStated);
+      spots.set('name', '新名稱');
+      expect(spots.errors.containsKey('heavy_allowed'), isFalse);
+      expect(spots.changes, {'name': '新名稱'});
+    });
+
     test('改為官方點只送管理者填的來源與資格', () async {
       await spots.open(communityId);
       final id = await spots.promote({

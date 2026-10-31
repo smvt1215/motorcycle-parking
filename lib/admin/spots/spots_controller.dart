@@ -555,6 +555,10 @@ class SpotsController extends ChangeNotifier {
         'closure': copyJson(loaded.values['closure']),
         // Changed with the bay kind (setKind); a street bay's only.
         'condition': copyJson(loaded.values['condition']),
+        // 官方未標示 beside each vehicle flag (#201); not a field of its own.
+        for (final flag in vehicleFlags)
+          if (loaded.values[notStatedKey(flag)] case final bool notStated)
+            notStatedKey(flag): notStated,
       },
     };
   }
