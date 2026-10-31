@@ -829,6 +829,20 @@ void main() {
       expect(find.byKey(ValueKey('purge-days-$communityId')), findsOneWidget);
       expect(find.textContaining('天後永久刪除'), findsOneWidget);
       expect(find.text('官方資料編號 TP-9'), findsOneWidget);
+      await tester.enterText(
+        find.byKey(const ValueKey('purged-search')),
+        'TP-9',
+      );
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+      expect(find.text('官方資料編號 TP-9'), findsOneWidget);
+      await tester.enterText(find.byKey(const ValueKey('purged-search')), '無');
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+      expect(find.text('找不到符合的官方點。'), findsOneWidget);
+      await tester.enterText(find.byKey(const ValueKey('purged-search')), '');
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
       await tester.tap(
         find.byKey(
           const ValueKey('release-99999999-9999-4999-8999-999999999999'),

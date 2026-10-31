@@ -218,7 +218,8 @@ class _HiddenSpotsPageState extends State<HiddenSpotsPage> {
                             ),
                           ],
                         if (review.hiddenLoaded &&
-                            review.purged.isNotEmpty) ...[
+                            (review.purged.isNotEmpty ||
+                                review.purgedQuery.isNotEmpty)) ...[
                           Divider(height: 1, color: colors.outlineVariant),
                           Padding(
                             padding: EdgeInsets.fromLTRB(
@@ -242,6 +243,26 @@ class _HiddenSpotsPageState extends State<HiddenSpotsPage> {
                                   '匯入時會跳過這些官方資料編號。要讓下次匯入帶回來，按「解除」。',
                                   style: muted,
                                 ),
+                                const SizedBox(height: 8),
+                                ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 420,
+                                  ),
+                                  child: TextField(
+                                    key: const ValueKey('purged-search'),
+                                    decoration: const InputDecoration(
+                                      labelText: '搜尋名稱或官方資料編號',
+                                      prefixIcon: Icon(Icons.search),
+                                    ),
+                                    textInputAction: TextInputAction.search,
+                                    onSubmitted: review.searchPurged,
+                                  ),
+                                ),
+                                if (review.purged.isEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 8),
+                                    child: Text('找不到符合的官方點。', style: muted),
+                                  ),
                               ],
                             ),
                           ),

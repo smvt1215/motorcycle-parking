@@ -88,6 +88,9 @@ class ReviewController extends ChangeNotifier {
 
   /// Official spots purged after deletion, which imports skip (#200).
   List<PurgedOfficialSpot> purged = [];
+
+  /// What [purged] is narrowed by (name or source id).
+  String purgedQuery = '';
   bool hiddenLoading = false;
   bool hiddenLoaded = false;
   String? hiddenError;
@@ -195,7 +198,7 @@ class ReviewController extends ChangeNotifier {
     _notify();
     try {
       final rows = await gateway!.hiddenSpots();
-      final gone = await gateway!.purgedOfficialSpots();
+      final gone = await gateway!.purgedOfficialSpots(query: purgedQuery);
       if (generation != _generation) return;
       hidden = rows;
       purged = gone;
@@ -206,6 +209,24 @@ class ReviewController extends ChangeNotifier {
       }
     } finally {
       if (generation == _generation) hiddenLoading = false;
+      _notify();
+    }
+  }
+
+  /// Narrows the purged official spots by name or source id (#200).
+  Future<void> searchPurged(String query) async {
+    if (gateway == null) return;
+    purgedQuery = query.trim();
+    final generation = _generation;
+    try {
+      final gone = await gateway!.purgedOfficialSpots(query: purgedQuery);
+      if (generation != _generation || purgedQuery != query.trim()) return;
+      purged = gone;
+    } catch (_) {
+      if (generation == _generation) {
+        hiddenError = '已永久刪除的官方點載入失敗，請重試。';
+      }
+    } finally {
       _notify();
     }
   }

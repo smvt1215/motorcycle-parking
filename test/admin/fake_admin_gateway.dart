@@ -364,7 +364,13 @@ class FakeAdminGateway implements AdminGateway {
   final List<String> released = [];
 
   @override
-  Future<List<PurgedOfficialSpot>> purgedOfficialSpots() async => [...purged];
+  Future<List<PurgedOfficialSpot>> purgedOfficialSpots({
+    String query = '',
+  }) async => [
+    for (final p in purged)
+      if (query.isEmpty || p.name.contains(query) || p.sourceId.contains(query))
+        p,
+  ];
 
   @override
   Future<void> releasePurgedOfficial(String officialId, String note) async {

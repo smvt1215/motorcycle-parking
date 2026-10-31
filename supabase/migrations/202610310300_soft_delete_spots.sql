@@ -71,9 +71,13 @@ language plpgsql security definer set search_path='' as $$
 declare v_source text:=case when tg_table_name='official_heavy_spots' then 'official:' else '' end||new.id::text;
 begin
   if new.deleted_at is not null and old.deleted_at is null then
-    update public.moderation_queue set status='rejected',resolution_kind='other',resolution_note='點位已刪除',
+    -- A report another admin is resolving right now is left to them: it
+    -- holds that row and waits for this spot, so waiting here would
+    -- deadlock (their RPC locks the report before the spot).
+    update public.moderation_queue q set status='rejected',resolution_kind='other',resolution_note='點位已刪除',
       resolved_at=now(),resolved_by=coalesce(auth.uid(),new.deleted_by)
-      where source_id=v_source and status='pending';
+      where q.id in (select m.id from public.moderation_queue m
+        where m.source_id=v_source and m.status='pending' for update skip locked);
   end if;
   return null;
 end;
@@ -95,6 +99,11 @@ update public.community_spots c set deleted_at=now()
 update public.official_heavy_spots set deleted_at=now() where hidden;
 alter table public.community_spots enable trigger user;
 alter table public.official_heavy_spots enable trigger user;
+-- Their open reports close as a deletion's do (the trigger was off).
+update public.moderation_queue q set status='rejected',resolution_kind='other',resolution_note='點位已刪除',resolved_at=now()
+  where q.status='pending' and (
+    exists(select 1 from public.community_spots c where c.deleted_at is not null and q.source_id=c.id::text)
+    or exists(select 1 from public.official_heavy_spots o where o.deleted_at is not null and q.source_id='official:'||o.id));
 
 -- ---- Riders never see a deleted spot.
 grant select (deleted_at) on public.community_spots to anon,authenticated;

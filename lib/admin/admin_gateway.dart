@@ -71,8 +71,10 @@ abstract class AdminGateway {
   /// audited.
   Future<void> setSpotHidden(String sourceId, bool hidden, String note);
 
-  /// Official spots purged 14 days after deletion, which imports skip.
-  Future<List<PurgedOfficialSpot>> purgedOfficialSpots();
+  /// Official spots purged 14 days after deletion, which imports skip,
+  /// newest first; [query] narrows them by name or source id, so an older
+  /// one past the first 200 can still be found and released.
+  Future<List<PurgedOfficialSpot>> purgedOfficialSpots({String query = ''});
 
   /// `admin_release_purged_official`: lets an import bring one back.
   Future<void> releasePurgedOfficial(String officialId, String note);
@@ -382,12 +384,18 @@ class SupabaseAdminGateway implements AdminGateway {
   }
 
   @override
-  Future<List<PurgedOfficialSpot>> purgedOfficialSpots() async {
-    final rows = await client
+  Future<List<PurgedOfficialSpot>> purgedOfficialSpots({
+    String query = '',
+  }) async {
+    // PostgREST's or() separates on commas and parentheses: keep them out.
+    final q = query.trim().replaceAll(RegExp(r'[,()*%\\]'), ' ').trim();
+    var request = client
         .from('purged_official_spots')
-        .select('official_id,source_id,name,purged_at')
-        .order('purged_at', ascending: false)
-        .limit(200);
+        .select('official_id,source_id,name,purged_at');
+    if (q.isNotEmpty) {
+      request = request.or('name.ilike.*$q*,source_id.ilike.*$q*');
+    }
+    final rows = await request.order('purged_at', ascending: false).limit(200);
     return [for (final row in rows) PurgedOfficialSpot.fromJson(row)];
   }
 
