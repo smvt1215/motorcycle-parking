@@ -1,4 +1,5 @@
 dist
+dist-fixture
 node_modules
 artifacts
 package-lock.json
