@@ -1,0 +1,598 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-31T06:02:00+00:00",
+  "title": "Design System: 機車停車指南管理站",
+  "extensions": {
+    "colorMeta": {
+      "rail-black": {
+        "role": "neutral",
+        "displayName": "壓印黑 Rail Black",
+        "canonical": "#16181A",
+        "tonalRamp": [
+          "#0A0B0D",
+          "#232527",
+          "#404245",
+          "#5F6164",
+          "#808385",
+          "#A3A5A8",
+          "#C7C9CC",
+          "#ECEFF2"
+        ]
+      },
+      "aluminium": {
+        "role": "neutral",
+        "displayName": "鋁板灰 Aluminium",
+        "canonical": "#E4E7E9",
+        "tonalRamp": [
+          "#0A0B0D",
+          "#232527",
+          "#404244",
+          "#5F6263",
+          "#808384",
+          "#A3A5A7",
+          "#C7C9CB",
+          "#ECEFF1"
+        ]
+      },
+      "plate-white": {
+        "role": "neutral",
+        "displayName": "牌面白 Plate White",
+        "canonical": "#FAFAF6",
+        "tonalRamp": [
+          "#0B0B09",
+          "#252522",
+          "#42423F",
+          "#61615E",
+          "#82827F",
+          "#A5A5A1",
+          "#C9C9C5",
+          "#EFEFEB"
+        ]
+      },
+      "paper-white": {
+        "role": "neutral",
+        "displayName": "紙白 Paper White",
+        "canonical": "#FFFFFF",
+        "tonalRamp": [
+          "#0B0B0B",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#A5A5A5",
+          "#C9C9C9",
+          "#EEEEEE"
+        ]
+      },
+      "action-blue": {
+        "role": "primary",
+        "displayName": "操作藍 Action Blue",
+        "canonical": "#1F5FA8",
+        "tonalRamp": [
+          "#020B1A",
+          "#0C2543",
+          "#1B4371",
+          "#2B62A3",
+          "#4D84C8",
+          "#7DA8DE",
+          "#ADCCF3",
+          "#DEF0FF"
+        ]
+      },
+      "action-blue-deep": {
+        "role": "primary",
+        "displayName": "操作藍（hover）Action Blue Deep",
+        "canonical": "#164A85",
+        "tonalRamp": [
+          "#030B18",
+          "#11263F",
+          "#23436A",
+          "#366399",
+          "#5785BE",
+          "#84A8D5",
+          "#B2CCEC",
+          "#E1F0FF"
+        ]
+      },
+      "graphite": {
+        "role": "neutral",
+        "displayName": "石墨灰 Graphite",
+        "canonical": "#565C62",
+        "tonalRamp": [
+          "#0A0B0D",
+          "#232528",
+          "#3F4246",
+          "#5C6267",
+          "#7D8389",
+          "#A1A6AA",
+          "#C6C9CD",
+          "#EDEFF1"
+        ]
+      },
+      "steel": {
+        "role": "neutral",
+        "displayName": "鋼灰 Steel",
+        "canonical": "#9AA0A6",
+        "tonalRamp": [
+          "#0A0B0C",
+          "#232528",
+          "#3F4246",
+          "#5D6267",
+          "#7E8388",
+          "#A1A5AA",
+          "#C6C9CC",
+          "#EDEFF0"
+        ]
+      },
+      "rivet": {
+        "role": "neutral",
+        "displayName": "鉚釘灰 Rivet",
+        "canonical": "#C9CDD1",
+        "tonalRamp": [
+          "#090B0E",
+          "#222528",
+          "#3F4246",
+          "#5E6265",
+          "#7F8386",
+          "#A2A5A9",
+          "#C6CACE",
+          "#EBEFF3"
+        ]
+      },
+      "divider": {
+        "role": "neutral",
+        "displayName": "分隔線 Divider",
+        "canonical": "#E1E4E6",
+        "tonalRamp": [
+          "#0A0B0D",
+          "#232527",
+          "#404244",
+          "#5F6263",
+          "#808384",
+          "#A3A5A7",
+          "#C7C9CB",
+          "#ECEFF1"
+        ]
+      },
+      "section-divider": {
+        "role": "neutral",
+        "displayName": "區段分隔線 Section Divider",
+        "canonical": "#DDE0E3",
+        "tonalRamp": [
+          "#090B0D",
+          "#232527",
+          "#404245",
+          "#5F6164",
+          "#808385",
+          "#A2A5A8",
+          "#C6C9CC",
+          "#ECEFF2"
+        ]
+      },
+      "map-ground": {
+        "role": "neutral",
+        "displayName": "地圖底 Map Ground",
+        "canonical": "#D6DADD",
+        "tonalRamp": [
+          "#090C0D",
+          "#222528",
+          "#3F4245",
+          "#5E6264",
+          "#7F8386",
+          "#A2A6A8",
+          "#C6CACD",
+          "#EBEFF2"
+        ]
+      },
+      "reflective-yellow": {
+        "role": "primary",
+        "displayName": "反光黃 Reflective Yellow",
+        "canonical": "#FFF3C4",
+        "tonalRamp": [
+          "#0D0B04",
+          "#292514",
+          "#494227",
+          "#6B613C",
+          "#8C825C",
+          "#ADA587",
+          "#CFC9B4",
+          "#F2EFE2"
+        ]
+      },
+      "destructive": {
+        "role": "secondary",
+        "displayName": "刪除紅 Destructive Red",
+        "canonical": "#A3241B",
+        "tonalRamp": [
+          "#1A0302",
+          "#44110C",
+          "#72231B",
+          "#A4362B",
+          "#CB5A4C",
+          "#E3897B",
+          "#F9B6AC",
+          "#FFE4DD"
+        ]
+      },
+      "destructive-border": {
+        "role": "secondary",
+        "displayName": "刪除紅框 Destructive Border",
+        "canonical": "#D9A7A2",
+        "tonalRamp": [
+          "#110908",
+          "#32201E",
+          "#563937",
+          "#7D5552",
+          "#A07672",
+          "#BE9C98",
+          "#DBC2C0",
+          "#F9EBE9"
+        ]
+      },
+      "plate-ink": {
+        "role": "tertiary",
+        "displayName": "車牌墨 Plate Ink",
+        "canonical": "#1C1C1C",
+        "tonalRamp": [
+          "#0B0B0B",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#A5A5A5",
+          "#C9C9C9",
+          "#EEEEEE"
+        ]
+      },
+      "plate-ordinary-green": {
+        "role": "tertiary",
+        "displayName": "普通機車綠牌 Ordinary Plate Green",
+        "canonical": "#2E7D4F",
+        "tonalRamp": [
+          "#020F06",
+          "#0D2C1A",
+          "#1C4D30",
+          "#2D7148",
+          "#509369",
+          "#80B391",
+          "#B0D3BB",
+          "#E0F5E6"
+        ]
+      },
+      "plate-heavy-red": {
+        "role": "tertiary",
+        "displayName": "重機紅牌 Heavy Plate Red",
+        "canonical": "#C62828",
+        "tonalRamp": [
+          "#1D0202",
+          "#480A09",
+          "#791716",
+          "#AE2524",
+          "#D64E46",
+          "#ED8277",
+          "#FFB2A9",
+          "#FFE2DC"
+        ]
+      },
+      "plate-heavy-yellow": {
+        "role": "tertiary",
+        "displayName": "重機黃牌 Heavy Plate Yellow",
+        "canonical": "#F2C200",
+        "tonalRamp": [
+          "#130900",
+          "#342200",
+          "#593D00",
+          "#825A00",
+          "#A57C00",
+          "#C1A245",
+          "#DDC88B",
+          "#FAEECC"
+        ]
+      },
+      "marker-allowed": {
+        "role": "tertiary",
+        "displayName": "標記・可停 Marker Allowed",
+        "canonical": "#186348",
+        "tonalRamp": [
+          "#030E09",
+          "#0F2B20",
+          "#204C3A",
+          "#326F56",
+          "#549176",
+          "#83B19C",
+          "#B2D2C2",
+          "#E1F4EA"
+        ]
+      },
+      "marker-conditional": {
+        "role": "tertiary",
+        "displayName": "標記・有條件 Marker Conditional",
+        "canonical": "#865500",
+        "tonalRamp": [
+          "#130901",
+          "#342005",
+          "#5A3A0D",
+          "#835718",
+          "#A6783D",
+          "#C29E72",
+          "#DFC4A6",
+          "#FBECDA"
+        ]
+      },
+      "marker-unverified": {
+        "role": "tertiary",
+        "displayName": "標記・待確認 Marker Unverified",
+        "canonical": "#59646C",
+        "tonalRamp": [
+          "#090B0D",
+          "#212629",
+          "#3C4348",
+          "#59636A",
+          "#7A848B",
+          "#9EA6AC",
+          "#C4CACE",
+          "#EBEFF1"
+        ]
+      },
+      "marker-denied": {
+        "role": "tertiary",
+        "displayName": "標記・不可停 Marker Denied",
+        "canonical": "#A13042",
+        "tonalRamp": [
+          "#190406",
+          "#411319",
+          "#6E2630",
+          "#9E3A48",
+          "#C55D68",
+          "#DD8A90",
+          "#F4B7BA",
+          "#FFE4E5"
+        ]
+      },
+      "marker-badge-ink": {
+        "role": "tertiary",
+        "displayName": "「共」徽章墨 Marker Badge Ink",
+        "canonical": "#22282D",
+        "tonalRamp": [
+          "#0A0B0C",
+          "#232528",
+          "#3E4346",
+          "#5C6267",
+          "#7D8389",
+          "#A1A6AA",
+          "#C6CACD",
+          "#ECEFF1"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "頁名與目前點位名稱（28/900）。"
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "清單列點位名、區段標題、欄位名稱（15/700）。"
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "內文、欄位值、按鈕（15/400，按鈕 500）。"
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "欄位標籤、回報類型、狀態標籤（13/700）。"
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "時間、行政區、說明、表頭（13/400 石墨灰）。"
+      },
+      "numeral": {
+        "displayName": "Numeral",
+        "purpose": "行內數字、計數、時間、座標；跟隨所在文字字級。"
+      },
+      "numeral-figure": {
+        "displayName": "Numeral Figure",
+        "purpose": "獨立呈現的數量，例如匯入試算筆數（22px Barlow）。"
+      }
+    },
+    "shadows": [
+      {
+        "name": "float",
+        "value": "0 6px 24px rgba(22,24,26,.18)",
+        "purpose": "浮在地圖上的點位清單與表單。"
+      },
+      {
+        "name": "dialog",
+        "value": "0 18px 48px rgba(22,24,26,.35)",
+        "purpose": "置中對話框；遮罩 rgba(22,24,26,.55)。"
+      },
+      {
+        "name": "sheet",
+        "value": "0 -6px 20px rgba(22,24,26,.16)",
+        "purpose": "手機底部 sheet。"
+      },
+      {
+        "name": "sheet-alert",
+        "value": "0 -8px 24px rgba(22,24,26,.25)",
+        "purpose": "手機刪除確認 sheet。"
+      },
+      {
+        "name": "marker",
+        "value": "0 2px 6px rgba(22,24,26,.3)",
+        "purpose": "地圖標記。"
+      },
+      {
+        "name": "marker-selected-ring",
+        "value": "0 0 0 4px #16181A",
+        "purpose": "選取中的地圖標記外圈。"
+      },
+      {
+        "name": "selected-frame",
+        "value": "inset 0 0 0 2px #16181A",
+        "purpose": "選取的清單列與選項卡；是選取框，不是深度。"
+      },
+      {
+        "name": "focus-ring",
+        "value": "outline: 3px solid #1F5FA8; outline-offset: 2px",
+        "purpose": "所有可聚焦元素的焦點框。"
+      }
+    ],
+    "motion": [],
+    "breakpoints": [
+      {
+        "name": "phone",
+        "value": "<680px"
+      },
+      {
+        "name": "tablet",
+        "value": "680px–1039px"
+      },
+      {
+        "name": "desktop",
+        "value": ">=1040px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "套用建議、儲存並關閉等主要動作；只有按得下去的東西才用操作藍。",
+      "html": "<button class=\"ds-btn ds-btn-p\">套用建議 <kbd class=\"ds-kbd\">A</kbd></button>",
+      "css": ".ds-btn{min-height:48px;padding:0 18px;border-radius:6px;border:1px solid #9AA0A6;background:#fff;color:#16181A;font:500 15px 'Noto Sans TC',sans-serif;display:inline-flex;align-items:center;gap:10px;cursor:pointer}.ds-btn-p{background:#1F5FA8;border-color:#1F5FA8;color:#fff}.ds-btn-p:hover{background:#164A85;border-color:#164A85}.ds-btn:focus-visible{outline:3px solid #1F5FA8;outline-offset:2px}.ds-kbd{font:700 12px/1 'Barlow Condensed',sans-serif;border:1px solid currentColor;border-radius:3px;padding:2px 5px;opacity:.8}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "修改後套用、設定開放狀態等次要動作。",
+      "html": "<button class=\"ds-btn\">修改後套用</button>",
+      "css": ".ds-btn{min-height:48px;padding:0 18px;border-radius:6px;border:1px solid #9AA0A6;background:#fff;color:#16181A;font:500 15px 'Noto Sans TC',sans-serif;display:inline-flex;align-items:center;gap:10px;cursor:pointer}.ds-btn:hover{border-color:#16181A}.ds-btn:focus-visible{outline:3px solid #1F5FA8;outline-offset:2px}"
+    },
+    {
+      "name": "Destructive Button",
+      "kind": "button",
+      "refersTo": "button-destructive",
+      "description": "駁回、刪除點位、停權；紅字紅框，不做實心紅底。",
+      "html": "<button class=\"ds-btn ds-btn-x\">刪除點位</button>",
+      "css": ".ds-btn{min-height:48px;padding:0 18px;border-radius:6px;border:1px solid #9AA0A6;background:#fff;color:#16181A;font:500 15px 'Noto Sans TC',sans-serif;display:inline-flex;align-items:center;gap:10px;cursor:pointer}.ds-btn-x{color:#A3241B;border-color:#D9A7A2}.ds-btn-x:hover{border-color:#A3241B}.ds-btn:focus-visible{outline:3px solid #1F5FA8;outline-offset:2px}"
+    },
+    {
+      "name": "Filter Chip",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "單選篩選；選取時黑底白字，計數用 Barlow 數字。",
+      "html": "<div style=\"display:flex;gap:8px\"><button class=\"ds-chip on\" aria-pressed=\"true\">待審 <span class=\"ds-n\">12</span></button><button class=\"ds-chip\" aria-pressed=\"false\">已刪除 <span class=\"ds-n\">4</span></button></div>",
+      "css": ".ds-chip{min-height:44px;padding:0 14px;border-radius:20px;border:1px solid #9AA0A6;background:#FAFAF6;color:#16181A;font:15px 'Noto Sans TC',sans-serif;cursor:pointer}.ds-chip:hover{border-color:#16181A}.ds-chip.on{background:#16181A;border-color:#16181A;color:#fff}.ds-chip:focus-visible{outline:3px solid #1F5FA8;outline-offset:2px}.ds-n{font-family:'Barlow Condensed',sans-serif;font-variant-numeric:tabular-nums;font-weight:600}"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "48px 高欄位；改過的值反光黃底加黑框。",
+      "html": "<div style=\"display:flex;flex-direction:column;gap:12px;width:320px\"><label class=\"ds-field\"><span>名稱</span><input class=\"ds-input changed\" value=\"大安森林公園地下停車場（新生南路入口）\"></label><label class=\"ds-field\"><span>地址</span><input class=\"ds-input\" value=\"臺北市大安區新生南路二段 1 號\"></label></div>",
+      "css": ".ds-field{display:flex;flex-direction:column;gap:4px;font:700 13px 'Noto Sans TC',sans-serif;color:#16181A}.ds-input{font:15px 'Noto Sans TC',sans-serif;min-height:48px;padding:0 12px;border:1px solid #9AA0A6;border-radius:6px;background:#fff;color:#16181A;caret-color:#1F5FA8;box-sizing:border-box;width:100%}.ds-input.changed{background:#FFF3C4;border-color:#16181A}.ds-input:focus-visible{outline:3px solid #1F5FA8;outline-offset:2px}"
+    },
+    {
+      "name": "Navigation Rail",
+      "kind": "nav",
+      "refersTo": "rail",
+      "description": "桌機 96px 壓印黑導覽欄，選取項牌面白底，待審計數用小方牌。圖示為設計稿自繪的細線條。",
+      "html": "<nav class=\"ds-rail\" aria-label=\"管理功能\"><a href=\"#\" class=\"on\" aria-current=\"page\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M9 4h6v3H9zM7 5H5v15h14V5h-2\"/><path d=\"M8.5 13l2.5 2.5 4.5-5\"/></svg>審核<span class=\"ds-cnt\">12</span></a><a href=\"#\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11z\"/><circle cx=\"12\" cy=\"10\" r=\"2.2\"/></svg>點位</a><a href=\"#\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M5 4h10l4 4v12H5z\"/><path d=\"M9 12h6M9 16h6M9 8h3\"/></svg>規則</a></nav>",
+      "css": ".ds-rail{background:#16181A;width:96px;display:flex;flex-direction:column;align-items:center;padding:18px 0;gap:6px}.ds-rail a{width:80px;min-height:64px;border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font:13px 'Noto Sans TC',sans-serif;color:#C9CDD1;text-decoration:none}.ds-rail a:hover{background:#2A2D30;color:#fff}.ds-rail a.on{background:#FAFAF6;color:#16181A;font-weight:700}.ds-rail a:focus-visible{outline:3px solid #1F5FA8;outline-offset:2px}.ds-rail svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.ds-cnt{font:700 14px/1.2 'Barlow Condensed',sans-serif;background:#FAFAF6;color:#16181A;border-radius:3px;padding:0 6px}"
+    },
+    {
+      "name": "Status Tags",
+      "kind": "chip",
+      "refersTo": "tag-status-open",
+      "description": "點位開放狀態與已修改標籤：外框、反白、紅框、反光黃。",
+      "html": "<div style=\"display:flex;flex-wrap:wrap;gap:8px\"><span class=\"ds-st\">正常開放</span><span class=\"ds-st on\">施工中，到 11/14</span><span class=\"ds-st del\">已刪除，13 天後永久刪除</span><span class=\"ds-st mod\">已修改</span></div>",
+      "css": ".ds-st{display:inline-flex;align-items:center;height:20px;padding:0 7px;border:1.5px solid #16181A;border-radius:3px;background:#FAFAF6;color:#16181A;font:700 13px 'Noto Sans TC',sans-serif}.ds-st.on{background:#16181A;color:#fff}.ds-st.del{border-color:#A3241B;color:#A3241B}.ds-st.mod{background:#FFF3C4;padding:0 6px}"
+    },
+    {
+      "name": "Plate Stack",
+      "kind": "custom",
+      "refersTo": "plate-stack",
+      "description": "App 的疊牌（platesOf）：普通機車綠白、大型重機紅黃；五種狀態靠處理方式區分（全彩、缺角、灰框加 X、虛線加「?」、純虛線）。",
+      "html": "<div class=\"ds-pair\"><span role=\"img\" aria-label=\"普通機車可停\" class=\"ds-ps s\"><i></i><i></i></span><span role=\"img\" aria-label=\"普通機車有條件可停\" class=\"ds-ps s c\"><i></i><i></i></span><span role=\"img\" aria-label=\"大型重機不可停\" class=\"ds-ps h off\"><i></i><i></i></span><span role=\"img\" aria-label=\"大型重機官方未標示\" class=\"ds-ps h q\"><i></i><i></i></span><span role=\"img\" aria-label=\"大型重機待確認，舊資料\" class=\"ds-ps h q old\"><i></i><i></i></span></div>",
+      "css": ".ds-ps{position:relative;display:inline-block;width:36px;height:25px;vertical-align:middle}.ds-ps i{position:absolute;width:26px;height:17px;border-radius:3.5px;border:1.5px solid #1C1C1C;box-sizing:border-box}.ds-ps i:first-child{left:0;top:0}.ds-ps i:last-child{left:10px;top:8px;display:flex;align-items:center;justify-content:center}.ds-ps i:last-child::after{content:'';width:12px;height:3px;border-radius:1.5px;background:#1C1C1C}.ds-ps.s i:first-child{background:#2E7D4F}.ds-ps.s i:last-child{background:#fff}.ds-ps.h i:first-child{background:#C62828}.ds-ps.h i:last-child{background:#F2C200}.ds-ps.off i,.ds-ps.q i{background:transparent}.ds-ps.off i{border-color:#9AA0A6}.ds-ps.off i:last-child::after{background:#9AA0A6}.ds-ps.off::after{content:'';position:absolute;left:-3px;right:-3px;top:-2px;bottom:-2px;background:linear-gradient(to top right,transparent calc(50% - 1.1px),#565C62 calc(50% - 1.1px),#565C62 calc(50% + 1.1px),transparent calc(50% + 1.1px)),linear-gradient(to bottom right,transparent calc(50% - 1.1px),#565C62 calc(50% - 1.1px),#565C62 calc(50% + 1.1px),transparent calc(50% + 1.1px))}.ds-ps.q::after{content:'?';position:absolute;right:-6px;top:-6px;width:16px;height:16px;border-radius:8px;background:#16181A;color:#FAFAF6;font:700 12px/16px 'Barlow Condensed',sans-serif;text-align:center}.ds-ps.q i{border-style:dashed;border-color:#565C62}.ds-ps.q i:last-child::after{background:#9AA0A6}.ds-ps.q.old::after{content:none}.ds-ps.c i:last-child{clip-path:polygon(0 0,calc(100% - 7px) 0,100% 7px,100% 100%,0 100%)}.ds-pair{display:inline-flex;gap:14px;align-items:center;background:#FAFAF6;padding:12px}"
+    },
+    {
+      "name": "Queue Row",
+      "kind": "card",
+      "refersTo": "list-row",
+      "description": "審核佇列列：類型、點位名、說明，右側一對車牌；選取時紙白底加 2px 黑色 inset 框。",
+      "html": "<div style=\"width:380px\"><button class=\"ds-row on\" aria-current=\"true\"><span style=\"flex:1;min-width:0\"><span class=\"ds-kind\">停放資格</span><b>復興南路一段 107 巷路邊機車格</b><small>臺北市大安區　5 小時前</small></span><span style=\"display:flex;gap:4px\" role=\"img\" aria-label=\"普通機車可停，大型重機不可停\"><span class=\"ds-ps s\"><i></i><i></i></span><span class=\"ds-ps h off\"><i></i><i></i></span></span></button><button class=\"ds-row\"><span style=\"flex:1;min-width:0\"><span class=\"ds-kind\">點位資訊</span><b>大安森林公園地下停車場</b><small>臺北市大安區　改了費率</small></span><span style=\"display:flex;gap:4px\" role=\"img\" aria-label=\"普通機車可停，大型重機可停\"><span class=\"ds-ps s\"><i></i><i></i></span><span class=\"ds-ps h\"><i></i><i></i></span></span></button></div>",
+      "css": ".ds-ps{position:relative;display:inline-block;width:36px;height:25px;vertical-align:middle}.ds-ps i{position:absolute;width:26px;height:17px;border-radius:3.5px;border:1.5px solid #1C1C1C;box-sizing:border-box}.ds-ps i:first-child{left:0;top:0}.ds-ps i:last-child{left:10px;top:8px;display:flex;align-items:center;justify-content:center}.ds-ps i:last-child::after{content:'';width:12px;height:3px;border-radius:1.5px;background:#1C1C1C}.ds-ps.s i:first-child{background:#2E7D4F}.ds-ps.s i:last-child{background:#fff}.ds-ps.h i:first-child{background:#C62828}.ds-ps.h i:last-child{background:#F2C200}.ds-ps.off i,.ds-ps.q i{background:transparent}.ds-ps.off i{border-color:#9AA0A6}.ds-ps.off i:last-child::after{background:#9AA0A6}.ds-ps.off::after{content:'';position:absolute;left:-3px;right:-3px;top:-2px;bottom:-2px;background:linear-gradient(to top right,transparent calc(50% - 1.1px),#565C62 calc(50% - 1.1px),#565C62 calc(50% + 1.1px),transparent calc(50% + 1.1px)),linear-gradient(to bottom right,transparent calc(50% - 1.1px),#565C62 calc(50% - 1.1px),#565C62 calc(50% + 1.1px),transparent calc(50% + 1.1px))}.ds-ps.q::after{content:'?';position:absolute;right:-6px;top:-6px;width:16px;height:16px;border-radius:8px;background:#16181A;color:#FAFAF6;font:700 12px/16px 'Barlow Condensed',sans-serif;text-align:center}.ds-ps.q i{border-style:dashed;border-color:#565C62}.ds-ps.q i:last-child::after{background:#9AA0A6}.ds-ps.q.old::after{content:none}.ds-ps.c i:last-child{clip-path:polygon(0 0,calc(100% - 7px) 0,100% 7px,100% 100%,0 100%)}.ds-pair{display:inline-flex;gap:14px;align-items:center;background:#FAFAF6;padding:12px}.ds-row{display:flex;gap:14px;align-items:center;width:100%;text-align:left;border:0;border-bottom:1px solid #DDE0E3;background:#FAFAF6;padding:14px 20px;cursor:pointer;box-sizing:border-box;font-family:'Noto Sans TC',sans-serif;color:#16181A}.ds-row:hover{background:#fff}.ds-row.on{background:#fff;box-shadow:inset 0 0 0 2px #16181A}.ds-row:focus-visible{outline:3px solid #1F5FA8;outline-offset:2px}.ds-row b{display:block;font-size:15px;font-weight:700}.ds-row small{font-size:13px;color:#565C62}.ds-kind{font-size:13px;font-weight:700}"
+    },
+    {
+      "name": "Map Marker",
+      "kind": "custom",
+      "refersTo": "map-marker",
+      "description": "App A0 標記：形狀即意義（圓／圓角 10／圓角 4），3px 白框。實作時有條件、不可停、待確認放 Material Icons 的 rule／close／question_mark 白色圖示（此處只示範形狀）。",
+      "html": "<div style=\"display:flex;gap:16px;align-items:center;background:#D6DADD;padding:16px\"><span class=\"ds-mk sel\" role=\"img\" aria-label=\"可停，已選取\" style=\"background:#186348;border-radius:50%\">P</span><span class=\"ds-mk\" role=\"img\" aria-label=\"可停\" style=\"background:#186348;border-radius:50%\">P</span><span class=\"ds-mk\" role=\"img\" aria-label=\"有條件\" style=\"background:#865500;border-radius:10px\"></span><span class=\"ds-mk\" role=\"img\" aria-label=\"待確認\" style=\"background:#59646C;border-radius:10px\"></span><span class=\"ds-mk\" role=\"img\" aria-label=\"不可停\" style=\"background:#A13042;border-radius:4px\"></span></div>",
+      "css": ".ds-mk{position:relative;width:30px;height:30px;border:3px solid #FAFAF6;color:#FAFAF6;display:flex;align-items:center;justify-content:center;font:700 15px 'Barlow Condensed',sans-serif;box-shadow:0 2px 6px rgba(22,24,26,.3);box-sizing:border-box}.ds-mk.sel{width:38px;height:38px;box-shadow:0 0 0 4px #16181A}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Plate Bench",
+    "overview": "管理站是審核者的工作台，不是報表後台。每一個點位的資格，都用 App 的兩面疊牌回答：左邊普通機車、右邊大型重機。審核者打開一筆回報，第一眼看到的是「這筆會改變哪一種車能不能停」：目前的大車牌 → 建議的大車牌，然後按 A／E／R 套用、修改後套用或駁回，處理完自動跳下一筆，5 秒內可復原。\n\n材質來自路邊：壓印黑的導覽欄像車牌的壓印底框，頁面底是鋁板灰，欄位與面板是牌面白。顏色紀律很嚴：車牌的綠、白、紅、黃只出現在車牌本身；操作藍只給按得下去的東西；反光黃只標「已修改」。層級靠字重（400／700／900）與黑白反轉，不靠放大字級。密度偏高但每個可點的東西都夠大（篩選 44px、按鈕 48px），因為審核者也會用平板與手機。\n\n刻意拒絕的樣子：灰卡片堆疊的通用後台模板、彩色統計卡、把狀態只用顏色表達。",
+    "keyCharacteristics": [
+      "資格永遠成對出現：普通機車在左、大型重機在右，順序固定。",
+      "狀態用車牌的「處理方式」表達（全彩、缺角、灰框加 X、虛線加問號、純虛線），文字一定同時寫出來。",
+      "黑色 96px 導覽欄帶待審計數；選取狀態一律是黑框或黑底反白。",
+      "三級字級 28／15／13，數字用 Barlow Condensed 等寬數字。",
+      "平面為主；陰影只給浮在地圖或頁面上的東西。"
+    ],
+    "rules": [
+      {
+        "name": "The Plates-Only Rule",
+        "body": "車牌的綠、白、紅、黃只出現在車牌上。介面的成功、警告、強調一律不借用這四色。",
+        "section": "colors"
+      },
+      {
+        "name": "The Pressable Blue Rule",
+        "body": "操作藍只給按得下去的東西：主要按鈕、連結、焦點框。標題、圖示、裝飾不准用藍。",
+        "section": "colors"
+      },
+      {
+        "name": "The Yellow Means Changed Rule",
+        "body": "反光黃只代表「跟目前值不同」。它不是警告色，也不是強調色。",
+        "section": "colors"
+      },
+      {
+        "name": "The Three Sizes Rule",
+        "body": "中文字只有 28／15／13 三級。需要更強的層級時，改字重或反白（黑底白字），不要新增字級。",
+        "section": "typography"
+      },
+      {
+        "name": "The Condensed Numerals Rule",
+        "body": "數字、計數、座標、時間一律用 Barlow Condensed 等寬數字；中文永遠不用這個字體。",
+        "section": "typography"
+      },
+      {
+        "name": "The Selection Is a Frame Rule",
+        "body": "選取狀態是黑框（清單列、選項卡用 `inset 0 0 0 2px`）或黑底反白（篩選、分段按鈕、導覽項目用牌面白底黑字），不是陰影也不是藍色。",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** 每個資格都成對顯示兩面車牌，普通機車在左、大型重機在右，並在 `aria-label` 與可見文字中寫出狀態。",
+      "**Do** 用車牌處理方式區分五種狀態（全彩／缺角／灰框加 X／虛線加「?」／純虛線），不要只換顏色。",
+      "**Do** 讓所有按鈕至少 48px 高、篩選與分段按鈕至少 44px 高。",
+      "**Do** 選取狀態用 2px 黑色 inset 框或黑底反白。",
+      "**Do** 改過的值用反光黃底加「已修改」標籤，差異表預設收起沒改的欄位。",
+      "**Do** 數字一律用 Barlow Condensed 等寬數字。",
+      "**Do** 破壞性動作用刪除紅的次要按鈕，並說明保留期（刪除保留 14 天可復原）。"
+    ],
+    "donts": [
+      "**Don't** 把車牌的綠、白、紅、黃用在車牌以外的地方（成功、警告、圖表都不行）。",
+      "**Don't** 把操作藍用在不能按的東西上。",
+      "**Don't** 為中文新增 28／15／13 以外的字級來製造層級。",
+      "**Don't** 做成灰卡片堆疊、彩色統計卡的通用後台模板。",
+      "**Don't** 給平放在頁面上的面板加陰影；陰影只給浮在地圖或頁面上的東西。",
+      "**Don't** 把 App 的 IconScout 重機圖示複製進這個 repo；需要時只用文字指稱。"
+    ]
+  }
+}
