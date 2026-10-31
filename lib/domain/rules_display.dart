@@ -38,9 +38,14 @@ class _Part {
   /// The districts the rule opens this part in only; null when citywide.
   final List<String>? districts;
 
+  bool get open =>
+      status == EligibilityStatus.allowed ||
+      status == EligibilityStatus.conditional;
+
+  /// Districts are named only where the part is open there.
   String get text => switch (districts) {
-    final d? => '$name僅${d.join('、')}${rulePillLabel(status)}',
-    null => '$name${rulePillLabel(status)}',
+    final d? when open => '$name僅${d.join('、')}${rulePillLabel(status)}',
+    _ => '$name${rulePillLabel(status)}',
   };
 }
 
@@ -161,12 +166,20 @@ RuleRow _row(CityRule rule, VehicleType vehicle, BayKind kind, DateTime? now) {
   final same = parts.every(
     (p) => p.status == first.status && p.restriction == first.restriction,
   );
-  final limited = parts.any((p) => p.districts != null);
+  // Districts limit only a part that is open there; a part the data
+  // cannot judge (e.g. its rule ended) stays what it is.
+  final limited = parts.any((p) => p.districts != null && p.open);
   // Parts that disagree, or that hold in some districts only, are open
-  // with a condition: the line says which.
+  // with a condition — but only when some part really is open: the line
+  // says which. Otherwise the row stays unknown unless every part is
+  // closed.
   final status = same && !limited
       ? first.status
-      : EligibilityStatus.conditional;
+      : parts.any((p) => p.open)
+      ? EligibilityStatus.conditional
+      : parts.every((p) => p.status == EligibilityStatus.notAllowed)
+      ? EligibilityStatus.notAllowed
+      : EligibilityStatus.unverified;
   final String detail;
   if (parts.length > 1) {
     detail = same && !limited

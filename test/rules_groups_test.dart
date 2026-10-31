@@ -71,6 +71,42 @@ void main() {
     expect(list.skip(1).every((r) => r.note.isEmpty), isTrue);
   });
 
+  test('規則過期後，有行政區限制的格位不會變成有條件', () {
+    final live = rule('新北市', VehicleType.heavy);
+    final ended = CityRule(
+      city: live.city,
+      vehicle: live.vehicle,
+      allowedSpaceTypes: live.allowedSpaceTypes,
+      conditionalSpaceTypes: live.conditionalSpaceTypes,
+      districtSpaceTypes: live.districtSpaceTypes,
+      feeNote: live.feeNote,
+      exceptions: live.exceptions,
+      sourceUrl: live.sourceUrl,
+      version: live.version,
+      effectiveDate: live.effectiveDate,
+      expiresOn: DateTime(2026, 9, 1),
+    );
+    final now = DateTime.utc(2026, 10, 31, 4);
+    final rows = {
+      for (final r in ruleRows(ended, VehicleType.heavy, now: now)) r.kind: r,
+    };
+    final motorcycle = rows[BayKind.motorcycle]!;
+    // Both parts are unknown once the rule ended; neither is open in any
+    // district, so the row stays 待確認.
+    expect(motorcycle.status, EligibilityStatus.unverified);
+    expect(motorcycle.pill, '待確認');
+    expect(motorcycle.detail, '收費格、免費巷弄格都待確認');
+    expect(
+      rows.values.where((r) => r.status == EligibilityStatus.conditional),
+      everyElement(
+        isA<RuleRow>().having((r) => r.kind, 'kind', isNot(BayKind.motorcycle)),
+      ),
+    );
+    // While the rule holds, the district-limited part is open there.
+    final held = ruleRows(live, VehicleType.heavy, now: now).first;
+    expect(held.status, EligibilityStatus.conditional);
+  });
+
   test('核對日期與版本照規則資料', () {
     expect(
       ruleCheckedLine(rule('臺北市', VehicleType.heavy)),

@@ -239,19 +239,30 @@ void main() {
       }
     });
 
-    test('不能停車回報照畫板：採納後是已從地圖移除', () {
-      MyContribution gone(String status, [String? kind]) =>
-          MyContribution.fromJson({
-            ...row(
-              'g',
-              status: status,
-              field: 'gone',
-              summary: '這裡已經不能停車：格線已撤除',
-            ),
-            'resolution_kind': kind,
-          });
+    test('不能停車回報照畫板：停車點確定不在地圖上才是已從地圖移除', () {
+      MyContribution gone(
+        String status, [
+        String? kind,
+        bool visible = false,
+      ]) => MyContribution.fromJson({
+        ...row(
+          'g',
+          status: status,
+          field: 'gone',
+          summary: '這裡已經不能停車：格線已撤除',
+          visible: visible,
+        ),
+        'resolution_kind': kind,
+      });
+      // Hidden or removed: the spot is no longer public.
       expect(statusLook(gone('accepted')).label, '已從地圖移除');
       expect(statusNote(gone('accepted')), '管理員已將這個停車點從地圖移除。');
+      // A temporary closure (works, closed) keeps the spot on the map with a
+      // closure, so the adopted report reads neutrally.
+      final closure = gone('accepted', null, true);
+      expect(goneRemoved(closure), isFalse);
+      expect(statusLook(closure).label, '已採納');
+      expect(statusNote(closure), '已依你的回報處理這個停車點。');
       expect(statusLook(gone('pending')).label, '審核中');
       expect(statusNote(gone('pending')), isNull);
       expect(statusLook(gone('rejected')).label, '未採納');

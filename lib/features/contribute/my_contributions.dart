@@ -31,12 +31,12 @@ StatusLook statusLook(MyContribution item) =>
         '車友已確認',
         _accepted,
       ),
-      // The board's 不能停車回報 that was acted on: the spot came off the
-      // map, as an added spot taken off does.
-      (ContributionKind.gone, ContributionStatus.accepted) => _look(
-        '已從地圖移除',
-        _removed,
-      ),
+      // The board's 不能停車回報 that was acted on. Only a spot no longer on
+      // the public map was taken off it; a temporary closure (works,
+      // closed) keeps the spot visible, so it reads as plainly adopted.
+      (ContributionKind.gone, ContributionStatus.accepted)
+          when goneRemoved(item) =>
+        _look('已從地圖移除', _removed),
       (ContributionKind.newSpot, ContributionStatus.hidden) => _look(
         '已從地圖移除',
         _removed,
@@ -47,6 +47,15 @@ StatusLook statusLook(MyContribution item) =>
       (_, ContributionStatus.closed) => _look('已結案', _removed),
       _ => _look('處理中', _reviewing),
     };
+
+/// Whether an adopted 不能停車回報 took its spot off the map. The row has
+/// no patch: `my_contributions()` sends only whether the spot is public now
+/// (`spot_visible`). A lasting cause hides the spot; a temporary closure
+/// (#116) keeps it public with a closure, so a visible spot was not removed.
+bool goneRemoved(MyContribution item) =>
+    item.kind == ContributionKind.gone &&
+    item.status == ContributionStatus.accepted &&
+    !item.spotVisible;
 
 /// Why a report was not used, one fixed sentence per kind an admin picks
 /// (moderation_queue.resolution_kind); the admin's own note stays internal.
@@ -65,7 +74,8 @@ String? statusNote(MyContribution item) => switch ((item.kind, item.status)) {
   (ContributionKind.newSpot, ContributionStatus.pending) => '在地圖上，等其他車友確認',
   (ContributionKind.newSpot, ContributionStatus.hidden) => '管理員已將這個停車點從地圖移除。',
   (ContributionKind.suggestion, ContributionStatus.accepted) => '地圖已依你的建議更新。',
-  (ContributionKind.gone, ContributionStatus.accepted) => '管理員已將這個停車點從地圖移除。',
+  (ContributionKind.gone, ContributionStatus.accepted) =>
+    goneRemoved(item) ? '管理員已將這個停車點從地圖移除。' : '已依你的回報處理這個停車點。',
   (_, ContributionStatus.rejected) =>
     rejectionReasons[item.resolutionKind] ?? '管理員核對後沒有採用。',
   (_, ContributionStatus.closed) =>
