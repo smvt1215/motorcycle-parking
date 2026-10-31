@@ -1705,31 +1705,33 @@ class _ParkingFormState extends State<ParkingForm> {
       children: [
         SheetTitle('記錄停車'),
         const SizedBox(height: 12),
-        const Text('以目前裝置定位記錄位置。'),
+        const Text('以目前裝置定位記錄位置。位置與備註只存在這台裝置。'),
+        const SizedBox(height: 12),
         TextField(
           controller: floor,
           maxLength: 30,
-          decoration: const InputDecoration(labelText: '樓層／格位（例如 B2／A18）'),
+          decoration: const InputDecoration(
+            labelText: '樓層或區域（選填）',
+            hintText: '例：B2 重機區',
+          ),
         ),
         TextField(
           controller: note,
           maxLength: 300,
-          decoration: const InputDecoration(labelText: '備註'),
+          decoration: const InputDecoration(labelText: '備註（選填）'),
         ),
-        DropdownButtonFormField<int>(
-          initialValue: minutes,
-          decoration: const InputDecoration(labelText: '計時提醒'),
-          items: const [
-            DropdownMenuItem(value: 0, child: Text('不提醒')),
-            DropdownMenuItem(value: 30, child: Text('30 分鐘後')),
-            DropdownMenuItem(value: 60, child: Text('1 小時後')),
-            DropdownMenuItem(value: 120, child: Text('2 小時後')),
-          ],
-          onChanged: (v) => setState(() => minutes = v!),
+        const SizedBox(height: 8),
+        Text('多久後提醒我', style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 8),
+        AdaptiveSegmented<int>(
+          key: const ValueKey('parking-reminder'),
+          options: const {0: '不提醒', 30: '30 分', 60: '1 小時', 120: '2 小時'},
+          value: minutes,
+          onChanged: (v) => setState(() => minutes = v),
         ),
         const SizedBox(height: 24),
         AdaptiveButton(
-          label: saving ? '定位中…' : '儲存停車位置',
+          label: saving ? '定位中…' : '記錄停車位置',
           onPressed: saving
               ? null
               : () async {

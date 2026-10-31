@@ -435,10 +435,14 @@ void main() {
     await tester.pumpAndSettle();
     // Favorites appear once: one section, no separate shortcut to them.
     expect(find.text('我的收藏'), findsOneWidget);
+    // The legend and the account sheet are also rows of the page.
+    expect(find.text('地圖怎麼看'), findsOneWidget);
+    expect(find.text('帳號與設定'), findsOneWidget);
     // One vehicle switch: the map's pill, not the account sheet.
     await tester.tap(find.byTooltip('設定與登入'));
     await tester.pumpAndSettle();
-    expect(find.text('帳號與設定'), findsOneWidget);
+    // The page row and the sheet's title.
+    expect(find.text('帳號與設定'), findsNWidgets(2));
     expect(find.text('大型重機'), findsNothing);
     expect(find.text('範例模式'), findsOneWidget);
     await tester.tap(find.byTooltip('關閉').last);
@@ -600,6 +604,15 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('record-fab')));
     await tester.pumpAndSettle();
     expect(find.text('記錄停車'), findsOneWidget);
+    expect(find.text('樓層或區域（選填）'), findsOneWidget);
+    // The reminder is one segmented choice, not a dropdown.
+    final reminder = find.byKey(const ValueKey('parking-reminder'));
+    expect(reminder, findsOneWidget);
+    await tester.tap(
+      find.descendant(of: reminder, matching: find.text('1 小時')).first,
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(DropdownButtonFormField<int>), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
     debugDefaultTargetPlatformOverride = null;
