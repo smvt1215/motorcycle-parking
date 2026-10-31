@@ -80,14 +80,37 @@ class VehicleSelector extends StatelessWidget {
   final VehicleType value;
   final ValueChanged<VehicleType> onChanged;
   @override
+  Widget build(BuildContext context) => AdaptiveSegmented<VehicleType>(
+    options: {for (final v in VehicleType.values) v: v.label},
+    value: value,
+    onChanged: onChanged,
+  );
+}
+
+/// One choice among a few short options: the iOS segmented control, the
+/// Material connected button group elsewhere.
+class AdaptiveSegmented<T extends Object> extends StatelessWidget {
+  const AdaptiveSegmented({
+    super.key,
+    required this.options,
+    required this.value,
+    required this.onChanged,
+  });
+
+  /// Each option's value and label, in display order.
+  final Map<T, String> options;
+  final T value;
+  final ValueChanged<T> onChanged;
+  @override
   Widget build(BuildContext context) {
+    final values = options.keys.toList();
     if (nativeGlass) {
       return SizedBox(
         height: 48,
         child: CNSegmentedControl(
-          labels: VehicleType.values.map((v) => v.label).toList(),
-          selectedIndex: value.index,
-          onValueChanged: (i) => onChanged(VehicleType.values[i]),
+          labels: options.values.toList(),
+          selectedIndex: values.indexOf(value),
+          onValueChanged: (i) => onChanged(values[i]),
           color: Theme.of(context).colorScheme.primary,
         ),
       );
@@ -95,13 +118,13 @@ class VehicleSelector extends StatelessWidget {
     if (isCupertino) {
       return SizedBox(
         height: 48,
-        child: cu.CupertinoSlidingSegmentedControl<VehicleType>(
+        child: cu.CupertinoSlidingSegmentedControl<T>(
           groupValue: value,
           children: {
-            for (final v in VehicleType.values)
-              v: Padding(
+            for (final MapEntry(:key, value: label) in options.entries)
+              key: Padding(
                 padding: const EdgeInsets.all(8),
-                child: Text(v.label),
+                child: Text(label),
               ),
           },
           onValueChanged: (v) {
@@ -112,14 +135,14 @@ class VehicleSelector extends StatelessWidget {
     }
     return M3EButtonGroup(
       actions: [
-        for (final v in VehicleType.values)
-          M3EButtonGroupAction(label: Text(v.label), semanticLabel: v.label),
+        for (final label in options.values)
+          M3EButtonGroupAction(label: Text(label), semanticLabel: label),
       ],
-      selectedIndex: value.index,
+      selectedIndex: values.indexOf(value),
       selectionRequired: true,
       type: M3EButtonGroupType.connected,
       onSelectedIndexChanged: (i) {
-        if (i != null) onChanged(VehicleType.values[i]);
+        if (i != null) onChanged(values[i]);
       },
     );
   }
