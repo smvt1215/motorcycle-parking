@@ -5,7 +5,7 @@
 -- ===== 共用：parking_contract() 與輔助函式（C2、C3 都需要） =====
 create or replace function public.parking_contract() returns jsonb
 language sql immutable set search_path='' as $contract$
-  select $json${"version":1,"space_types":["paidMotorcycle","freeMotorcycle","heavyOnly","car","offStreet","disabledMotorcycle","timedMotorcycle","flexShared","evMotorcycle"],"access_kinds":["scooterOnly","scooterHeavy","heavyCar","noMotorcycle","heavyOnly"],"placement":{"off_street_space_types":["offStreet"],"off_street_facility_types":["multiStorey","underground","surface"],"facility_types":["multiStorey","underground","surface","roadside"]},"time":{"pattern":"^([01][0-9]|2[0-3]):[0-5][0-9]$","days":["all","weekday","holiday"],"weekdays":["mon","tue","wed","thu","fri","sat","sun"],"optional_pair":["from","to"]},"date":{"pattern":"^(19|[2-9][0-9])[0-9]{2}-[0-9]{2}-[0-9]{2}$"},"condition":{"keys":["bay","use","share","charge","limits","schedule","basis"],"zone_keys":["allow"],"bay":["motorcycle","heavy","car"],"use":["usual","share"],"share":{"scooter_heavy":"motorcycle","car_motorcycle":"car"},"charge":["toll","free"],"limits":{"time_limit":{"required":[],"optional":{"max_minutes":{"min":1,"max":1440}}},"special_vehicle":{"required":["vehicle"],"optional":{}},"ev_only":{"required":[],"optional":{}}},"special_vehicles":["disabled_modified"],"street_charge_optional_with":["time_limit","special_vehicle","ev_only"],"allow_keys":["scooter","heavy"],"schedule":{"keys":["days","from","to","vehicles"],"max_entries":8,"vehicles":["scooter","heavy","car"]},"basis":{"keys":["source_url","evidence_id","effective_date","expires_on"],"required_one_of":["source_url","evidence_id"],"reserved":["evidence_id"],"source_url":{"pattern":"^https://\\S+$","max_length":2048,"length_unit":"utf16"}}},"zone":{"area":["motorcycle","car","heavy","mixed"]},"conversion":{"from_space_type":{"paidMotorcycle":{"bay":"motorcycle","use":"usual","charge":"toll"},"freeMotorcycle":{"bay":"motorcycle","use":"usual","charge":"free"},"heavyOnly":{"bay":"heavy","use":"usual"},"car":{"bay":"car","use":"usual"},"offStreet":null,"disabledMotorcycle":{"bay":"motorcycle","limits":[{"kind":"special_vehicle","vehicle":"disabled_modified"}]},"timedMotorcycle":{"bay":"motorcycle","use":"usual","limits":[{"kind":"time_limit"}]},"flexShared":{"bay":"car","use":"share","share":"car_motorcycle"},"evMotorcycle":{"bay":"motorcycle","limits":[{"kind":"ev_only"}]}},"from_access":{"scooterOnly":{"bay":"motorcycle","use":"usual","allow":{"scooter":true,"heavy":false}},"scooterHeavy":{"bay":"motorcycle","use":"share","share":"scooter_heavy","allow":{"scooter":true,"heavy":true}},"heavyCar":{"bay":"car","use":"usual","allow":{"scooter":false,"heavy":true}},"heavyOnly":{"bay":"heavy","use":"usual","allow":{"scooter":false,"heavy":true}},"noMotorcycle":{"allow":{"scooter":false,"heavy":false}}},"to_space_type":[{"when":{"placement":"off_street"},"space_type":"offStreet"},{"when":{"limit":"special_vehicle"},"space_type":"disabledMotorcycle"},{"when":{"limit":"ev_only"},"space_type":"evMotorcycle"},{"when":{"share":"car_motorcycle"},"space_type":"flexShared"},{"when":{"limit":"time_limit"},"space_type":"timedMotorcycle"},{"when":{"bay":"heavy"},"space_type":"heavyOnly"},{"when":{"bay":"car"},"space_type":"car"},{"when":{"bay":"motorcycle","charge":"toll"},"space_type":"paidMotorcycle"},{"when":{"bay":"motorcycle","charge":"free"},"space_type":"freeMotorcycle"}],"to_access":"allow 與 from_access 的 allow 相同，且 from_access 有 bay 時 bay 也相同","legacy_safe":{"unsafe_keys":["schedule"],"unsafe_basis_keys":["expires_on"],"lossy_share":"scooter_heavy","lossy_limit_keys":["max_minutes"],"assumed_charge":{"timedMotorcycle":"toll"},"lossy_when_unconfirmed":["bay","use","share","charge"]}},"fee":{"max_bytes":8192,"vehicles":["scooter","heavy","car"],"follow":{"vehicles":["heavy"],"modes":["same_as_scooter","same_as_car"],"optional":{"factor_pct":{"min":100,"max":1000}}},"modes":{"free":{"required":{},"optional":{}},"posted":{"required":{},"optional":{}},"hourly":{"required":{"amount":{"min":0,"max":10000},"per_minutes":{"min":1,"max":1440}},"optional":{"unit_minutes":{"min":1,"max":"per_minutes"},"free_minutes":{"min":1,"max":1440},"daily_cap":{"min":0,"max":10000},"cap_reset":"cap_reset"}},"per_visit":{"required":{"amount":{"min":0,"max":10000}},"optional":{"max_minutes":{"min":1,"max":1440},"renew":"renew","extension":"extension"}},"daily":{"required":{"amount":{"min":0,"max":10000}},"optional":{"cap_reset":"cap_reset"}},"by_time":{"required":{"periods":"periods"},"optional":{"cross_period":"cross_period"}}},"enums":{"cap_reset":["calendar_day","rolling_24h","per_entry"],"renew":["none","midnight"],"cross_period":["each_period","entry_only"]},"extension":{"required":{"amount":{"min":0,"max":10000},"max_times":{"min":1,"max":10}},"optional":{"minutes":{"min":1,"max":1440}}},"periods":{"max_entries":6,"keys":["days","from","to","rate"],"nested_modes":["free","posted","hourly","per_visit","daily"]}},"fee_plans":{"max_entries":12,"keys":["id","name","fee"],"id_pattern":"^[a-z0-9_-]{1,20}$","name_max_length":20}}$json$::jsonb;
+  select $json${"version":1,"space_types":["paidMotorcycle","freeMotorcycle","heavyOnly","car","offStreet","disabledMotorcycle","timedMotorcycle","flexShared","evMotorcycle"],"access_kinds":["scooterOnly","scooterHeavy","heavyCar","noMotorcycle","heavyOnly"],"placement":{"off_street_space_types":["offStreet"],"off_street_facility_types":["multiStorey","underground","surface"],"facility_types":["multiStorey","underground","surface","roadside"]},"time":{"pattern":"^([01][0-9]|2[0-3]):[0-5][0-9]$","days":["all","weekday","holiday"],"weekdays":["mon","tue","wed","thu","fri","sat","sun"],"optional_pair":["from","to"]},"date":{"pattern":"^(19|[2-9][0-9])[0-9]{2}-[0-9]{2}-[0-9]{2}$"},"condition":{"keys":["bay","use","share","charge","limits","schedule","basis"],"zone_keys":["allow"],"bay":["motorcycle","heavy","car"],"use":["usual","share"],"share":{"scooter_heavy":"motorcycle","car_motorcycle":"car"},"charge":["toll","free"],"limits":{"time_limit":{"required":[],"optional":{"max_minutes":{"min":1,"max":1440}}},"special_vehicle":{"required":["vehicle"],"optional":{}},"ev_only":{"required":[],"optional":{}}},"special_vehicles":["disabled_modified"],"street_charge_optional_with":["time_limit","special_vehicle","ev_only"],"allow_keys":["scooter","heavy"],"schedule":{"keys":["days","from","to","vehicles"],"max_entries":8,"vehicles":["scooter","heavy","car"]},"basis":{"keys":["source_url","evidence_id","effective_date","expires_on"],"required_one_of":["source_url","evidence_id"],"reserved":["evidence_id"],"source_url":{"pattern":"^https://\\S+$","max_length":2048,"length_unit":"utf16"}}},"zone":{"area":["motorcycle","car","heavy","mixed"],"id_pattern":"^[a-z0-9_-]{1,32}$"},"segment":{"keys":["id","name","side","range","condition","total","guide","evidence_url"],"max_entries":30,"sides":["east","west","south","north","both"],"name_max_length":40,"range_max_length":100,"guide_max_length":500,"total":{"min":1,"max":9999}},"bay_kinds":{"order":["motorcycle","scooter_heavy","heavy","car_motorcycle","car","disabled","ev"],"rules":[{"when":{"limit":"special_vehicle"},"bay_kind":"disabled"},{"when":{"limit":"ev_only"},"bay_kind":"ev"},{"when":{"share":"car_motorcycle"},"bay_kind":"car_motorcycle"},{"when":{"share":"scooter_heavy"},"bay_kind":"scooter_heavy"},{"when":{"bay":"heavy"},"bay_kind":"heavy"},{"when":{"bay":"car"},"bay_kind":"car"},{"when":{"bay":"motorcycle"},"bay_kind":"motorcycle"}]},"conversion":{"from_space_type":{"paidMotorcycle":{"bay":"motorcycle","use":"usual","charge":"toll"},"freeMotorcycle":{"bay":"motorcycle","use":"usual","charge":"free"},"heavyOnly":{"bay":"heavy","use":"usual"},"car":{"bay":"car","use":"usual"},"offStreet":null,"disabledMotorcycle":{"bay":"motorcycle","limits":[{"kind":"special_vehicle","vehicle":"disabled_modified"}]},"timedMotorcycle":{"bay":"motorcycle","use":"usual","limits":[{"kind":"time_limit"}]},"flexShared":{"bay":"car","use":"share","share":"car_motorcycle"},"evMotorcycle":{"bay":"motorcycle","limits":[{"kind":"ev_only"}]}},"from_access":{"scooterOnly":{"bay":"motorcycle","use":"usual","allow":{"scooter":true,"heavy":false}},"scooterHeavy":{"bay":"motorcycle","use":"share","share":"scooter_heavy","allow":{"scooter":true,"heavy":true}},"heavyCar":{"bay":"car","use":"usual","allow":{"scooter":false,"heavy":true}},"heavyOnly":{"bay":"heavy","use":"usual","allow":{"scooter":false,"heavy":true}},"noMotorcycle":{"allow":{"scooter":false,"heavy":false}}},"to_space_type":[{"when":{"placement":"off_street"},"space_type":"offStreet"},{"when":{"limit":"special_vehicle"},"space_type":"disabledMotorcycle"},{"when":{"limit":"ev_only"},"space_type":"evMotorcycle"},{"when":{"share":"car_motorcycle"},"space_type":"flexShared"},{"when":{"limit":"time_limit"},"space_type":"timedMotorcycle"},{"when":{"bay":"heavy"},"space_type":"heavyOnly"},{"when":{"bay":"car"},"space_type":"car"},{"when":{"bay":"motorcycle","charge":"toll"},"space_type":"paidMotorcycle"},{"when":{"bay":"motorcycle","charge":"free"},"space_type":"freeMotorcycle"}],"to_access":"allow 與 from_access 的 allow 相同，且 from_access 有 bay 時 bay 也相同","legacy_safe":{"unsafe_keys":["schedule"],"unsafe_basis_keys":["expires_on"],"lossy_share":"scooter_heavy","lossy_limit_keys":["max_minutes"],"assumed_charge":{"timedMotorcycle":"toll"},"lossy_when_unconfirmed":["bay","use","share","charge"]}},"fee":{"max_bytes":8192,"vehicles":["scooter","heavy","car"],"follow":{"vehicles":["heavy"],"modes":["same_as_scooter","same_as_car"],"optional":{"factor_pct":{"min":100,"max":1000}}},"modes":{"free":{"required":{},"optional":{}},"posted":{"required":{},"optional":{}},"hourly":{"required":{"amount":{"min":0,"max":10000},"per_minutes":{"min":1,"max":1440}},"optional":{"unit_minutes":{"min":1,"max":"per_minutes"},"free_minutes":{"min":1,"max":1440},"daily_cap":{"min":0,"max":10000},"cap_reset":"cap_reset"}},"per_visit":{"required":{"amount":{"min":0,"max":10000}},"optional":{"max_minutes":{"min":1,"max":1440},"renew":"renew","extension":"extension"}},"daily":{"required":{"amount":{"min":0,"max":10000}},"optional":{"cap_reset":"cap_reset"}},"by_time":{"required":{"periods":"periods"},"optional":{"cross_period":"cross_period"}}},"enums":{"cap_reset":["calendar_day","rolling_24h","per_entry"],"renew":["none","midnight"],"cross_period":["each_period","entry_only"]},"extension":{"required":{"amount":{"min":0,"max":10000},"max_times":{"min":1,"max":10}},"optional":{"minutes":{"min":1,"max":1440}}},"periods":{"max_entries":6,"keys":["days","from","to","rate"],"nested_modes":["free","posted","hourly","per_visit","daily"]}},"fee_plans":{"max_entries":12,"keys":["id","name","fee"],"id_pattern":"^[a-z0-9_-]{1,20}$","name_max_length":20}}$json$::jsonb;
 $contract$;
 
 -- A whole number in range; CASE so a string returns false, not a cast error.
@@ -524,4 +524,97 @@ $$;
 create or replace function public.fee_note_max_length() returns integer
 language sql immutable set search_path='' as $$
   select 1909;
+$$;
+
+-- ===== 分區與路段：valid_zones()、valid_segments()、condition_bay_kind()（#188） =====
+
+-- An https link of at most max_length UTF-16 code units: the rule of a
+-- basis source_url, used by a zone's or a segment's evidence_url.
+create or replace function public.contract_https(p jsonb) returns boolean
+language sql immutable set search_path='' as $$
+  select coalesce(jsonb_typeof(p)='string'
+    and char_length(p#>>'{}')+regexp_count(p#>>'{}','[\U00010000-\U0010FFFF]')
+      <=(public.parking_contract()->'condition'->'basis'->'source_url'->>'max_length')::integer
+    and (p#>>'{}') ~ (public.parking_contract()->'condition'->'basis'->'source_url'->>'pattern'),false);
+$$;
+
+-- A string of at most p_max UTF-16 code units that is not blank.
+create or replace function public.contract_text(p jsonb,p_max integer) returns boolean
+language sql immutable set search_path='' as $$
+  select coalesce(jsonb_typeof(p)='string' and btrim(p#>>'{}')<>''
+    and char_length(p#>>'{}')+regexp_count(p#>>'{}','[\U00010000-\U0010FFFF]')<=p_max,false);
+$$;
+
+-- The ids of a zone or segment list (an array): each id that is present is
+-- a string of zone.id_pattern, and no two entries share one. Entries may
+-- leave it out; the tables' trigger fills it in before their checks.
+create or replace function public.contract_entry_ids(p jsonb) returns boolean
+language sql immutable set search_path='' as $$
+  select not exists(select 1 from jsonb_array_elements(p) e
+      where jsonb_typeof(e)='object' and e ? 'id' and (jsonb_typeof(e->'id') is distinct from 'string'
+        or (e->>'id') !~ (public.parking_contract()->'zone'->>'id_pattern')))
+    and (select count(e->>'id') from jsonb_array_elements(p) e where jsonb_typeof(e)='object')
+      =(select count(distinct e->>'id') from jsonb_array_elements(p) e where jsonb_typeof(e)='object');
+$$;
+
+-- A spot's parking_zones (§1.1, decision 32, #188): objects with a valid
+-- fee, area and condition (whose access agrees with it), an optional https
+-- evidence_url, and ids as contract_entry_ids() takes them.
+create or replace function public.valid_zones(p_zones jsonb) returns boolean
+language sql immutable set search_path='' as $$
+  select case when jsonb_typeof(p_zones) is distinct from 'array' then false else
+    not exists(select 1 from jsonb_array_elements(p_zones) z
+      where jsonb_typeof(z) is distinct from 'object'
+        or (z ? 'fee' and not public.valid_fee(z->'fee'))
+        or (z ? 'area' and not public.contract_str_in(z->'area',public.parking_contract()->'zone'->'area'))
+        or (z ? 'condition' and not (public.valid_condition(z->'condition',true)
+          and public.zone_condition_consistent(z)))
+        or (z ? 'evidence_url' and not public.contract_https(z->'evidence_url')))
+    and public.contract_entry_ids(p_zones) end;
+$$;
+
+-- A street spot's parking_segments (#188, segment): at most max_entries
+-- objects of the listed keys, each named, with an optional side, range,
+-- guide, number of bays, https evidence_url and a zone-style condition
+-- without allow (the city's rules decide who may park).
+create or replace function public.valid_segments(p_segments jsonb) returns boolean
+language plpgsql immutable set search_path='' as $$
+declare c jsonb:=public.parking_contract()->'segment'; s jsonb;
+begin
+  if jsonb_typeof(p_segments) is distinct from 'array'
+    or jsonb_array_length(p_segments)>(c->>'max_entries')::integer then return false; end if;
+  for s in select e from jsonb_array_elements(p_segments) e loop
+    if jsonb_typeof(s) is distinct from 'object'
+      or exists(select 1 from jsonb_object_keys(s) k where not c->'keys' ? k)
+      or not public.contract_text(s->'name',(c->>'name_max_length')::integer)
+      or (s ? 'side' and not public.contract_str_in(s->'side',c->'sides'))
+      or (s ? 'range' and not public.contract_text(s->'range',(c->>'range_max_length')::integer))
+      or (s ? 'guide' and not public.contract_text(s->'guide',(c->>'guide_max_length')::integer))
+      or (s ? 'total' and not public.contract_whole(s->'total',(c->'total'->>'min')::numeric,(c->'total'->>'max')::numeric))
+      or (s ? 'condition' and not (public.valid_condition(s->'condition',true) and not s->'condition' ? 'allow'))
+      or (s ? 'evidence_url' and not public.contract_https(s->'evidence_url'))
+    then return false; end if;
+  end loop;
+  return public.contract_entry_ids(p_segments);
+end;
+$$;
+
+-- The bay kind a condition reads as (#188, bay_kinds): the first rule that
+-- matches, or null (unconfirmed).
+create or replace function public.condition_bay_kind(p_condition jsonb) returns text
+language plpgsql immutable set search_path='' as $$
+declare r jsonb; w jsonb;
+begin
+  if jsonb_typeof(p_condition) is distinct from 'object' then return null; end if;
+  for r in select e from jsonb_array_elements(public.parking_contract()->'bay_kinds'->'rules') e loop
+    w:=r->'when';
+    if (not w ? 'limit' or exists(select 1 from jsonb_array_elements(
+        case when jsonb_typeof(p_condition->'limits')='array' then p_condition->'limits' else '[]'::jsonb end) l
+        where l->>'kind'=w->>'limit'))
+      and (not w ? 'share' or p_condition->>'share' is not distinct from w->>'share')
+      and (not w ? 'bay' or p_condition->>'bay' is not distinct from w->>'bay')
+    then return r->>'bay_kind'; end if;
+  end loop;
+  return null;
+end;
 $$;

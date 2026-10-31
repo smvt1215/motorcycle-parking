@@ -82,7 +82,8 @@ select is((admin_upsert_spot(null,'{"kind":"community","name":"新場站","lat":
 reset role;
 update community_spots set fee=parking_zones->0->'fee',fee_plan='p1',fee_note=fee_note_of(parking_zones->0->'fee')
   where id=(select id from fx where name='lot');
-update community_spots set parking_zones=jsonb_set(parking_zones,'{1}',parking_zones->0)
+-- A copy of B1 as B2's place; it gets an id of its own (#188).
+update community_spots set parking_zones=jsonb_set(parking_zones,'{1}',(parking_zones->0)-'id')
   where id=(select id from fx where name='lot');
 with s as (insert into moderation_queue(source_id,reporter_id,reason,field,proposed,base_spot)
   values((select id::text from fx where name='lot'),'10000000-0000-4000-8000-000000000002','費率','fee_note',

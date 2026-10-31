@@ -2,10 +2,13 @@ import cases from '../_shared/parking_contract_cases.json' with {
   type: 'json',
 };
 import {
+  bayKindOf,
   legacyAccess,
   legacySpaceType,
   validate,
   validCondition,
+  validSegments,
+  validZoneEntries,
   validZones,
   zoneConditionConsistent,
 } from './validate.ts';
@@ -239,4 +242,32 @@ Deno.test('reports may attach a notice link as evidence', () => {
       evidence_url: 'https://a.tw',
     }) !== 'invalid evidence_url'
   ) throw new Error('vote kept evidence');
+});
+
+// #188: zone and segment lists and the seven bay kinds, the cases Dart and
+// the generated SQL run too.
+Deno.test('shared cases: zone lists', () => {
+  if (cases.zone_lists.length === 0) throw new Error('no cases');
+  for (const { name, zones, valid } of cases.zone_lists) {
+    if (validZoneEntries(zones) !== valid) {
+      throw new Error(`${name}: expected ${valid}`);
+    }
+  }
+});
+
+Deno.test('shared cases: segment lists', () => {
+  if (cases.segment_lists.length === 0) throw new Error('no cases');
+  for (const { name, segments, valid } of cases.segment_lists) {
+    if (validSegments(segments) !== valid) {
+      throw new Error(`${name}: expected ${valid}`);
+    }
+  }
+});
+
+Deno.test('shared cases: bay kinds', () => {
+  if (cases.bay_kinds.length === 0) throw new Error('no cases');
+  for (const { name, condition, bay_kind } of cases.bay_kinds) {
+    const got = bayKindOf(condition);
+    if (got !== bay_kind) throw new Error(`${name}: got ${got}`);
+  }
 });

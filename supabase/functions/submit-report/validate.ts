@@ -35,6 +35,9 @@ const suggestionFields = [
   'gone',
   // A rider at a lapsed closure: 已經可以停 (#116).
   'reopened',
+  // A lot's zones or a street spot's segments, by id (#188).
+  'zones',
+  'segments',
   '停車點名稱',
   '格位類型',
   '收費資訊',
@@ -211,6 +214,24 @@ export function legacySpaceType(
   return null;
 }
 /**
+ * The bay kind a condition reads as (#188, `bay_kinds`): the first rule
+ * that matches, or null when it is unconfirmed. The same as
+ * `condition_bay_kind()` in SQL and `bayKindOf` in Dart.
+ */
+export function bayKindOf(c: unknown): string | null {
+  if (!isObject(c)) return null;
+  const limits = Array.isArray(c.limits) ? c.limits : [];
+  for (const { when, bay_kind } of contract.bay_kinds.rules) {
+    const w = when as Record<string, string | undefined>;
+    if (
+      (!('limit' in w) ||
+        limits.some((l) => isObject(l) && l.kind === w.limit)) &&
+      ['share', 'bay'].every((k) => !(k in w) || c[k] === w[k])
+    ) return bay_kind;
+  }
+  return null;
+}
+/**
  * The legacy `access` a zone condition is written back as (§1.3,
  * `to_access`): the `from_access` entry with the same `allow` and, when the
  * entry names a bay, the same bay; null when none matches.
@@ -265,25 +286,140 @@ const accessKinds = [
   'noMotorcycle',
   'heavyOnly',
 ];
+/** UTF-16 code units, as Dart and JS count. */
+const textWithin = (v: unknown, max: number) =>
+  typeof v === 'string' && v.trim() !== '' && v.length <= max;
+const entryIdPattern = new RegExp(contract.zone.id_pattern);
+/**
+ * The ids of a zone or segment list (#188): each id that is present is a
+ * string of `zone.id_pattern`, and no two entries share one. Entries may
+ * leave it out: the tables' trigger gives them one.
+ */
+function validEntryIds(list: unknown[]): boolean {
+  const ids = list.filter(isObject).filter((e) => has(e, 'id')).map((e) =>
+    e.id
+  );
+  return ids.every((id) => typeof id === 'string' && entryIdPattern.test(id)) &&
+    new Set(ids).size === ids.length;
+}
+/**
+ * A spot's parking_zones as the contract takes them (`valid_zones()` in
+ * SQL, `validZoneList` in Dart): objects with a valid fee, area and
+ * condition (whose access agrees with it), an optional https
+ * evidence_url, and ids as validEntryIds takes them.
+ */
+export function validZoneEntries(v: unknown): boolean {
+  if (!Array.isArray(v)) return false;
+  return v.every((z) =>
+    isObject(z) &&
+    (!has(z, 'fee') || validFee(z.fee)) &&
+    (!has(z, 'area') || inList(contract.zone.area)(z.area)) &&
+    (!has(z, 'condition') ||
+      (validCondition(z.condition, true) && zoneConditionConsistent(z))) &&
+    (!has(z, 'evidence_url') || validEvidenceUrl(z.evidence_url))
+  ) && validEntryIds(v);
+}
+const seg = contract.segment;
+/** One segment's keys other than its id, as the contract takes them. */
+function validSegmentFields(s: Record<string, unknown>): boolean {
+  return Object.keys(s).every((k) => seg.keys.includes(k)) &&
+    textWithin(s.name, seg.name_max_length) &&
+    (!has(s, 'side') || inList(seg.sides)(s.side)) &&
+    (!has(s, 'range') || textWithin(s.range, seg.range_max_length)) &&
+    (!has(s, 'guide') || textWithin(s.guide, seg.guide_max_length)) &&
+    (!has(s, 'total') || whole(s.total, seg.total.min, seg.total.max)) &&
+    (!has(s, 'condition') ||
+      (validCondition(s.condition, true) &&
+        !has(s.condition as Record<string, unknown>, 'allow'))) &&
+    (!has(s, 'evidence_url') || validEvidenceUrl(s.evidence_url));
+}
+/**
+ * A street spot's parking_segments (#188, `valid_segments()` in SQL,
+ * `validSegmentList` in Dart): at most max_entries named segments with an
+ * optional side, range, guide, number of bays, https evidence_url and a
+ * zone-style condition without allow.
+ */
+export function validSegments(v: unknown): boolean {
+  return Array.isArray(v) && v.length <= seg.max_entries &&
+    v.every((s) => isObject(s) && validSegmentFields(s)) && validEntryIds(v);
+}
+/**
+ * One rider zone without its id: named, with access, area, a guide, a fee
+ * and a notice link; riders send no zone condition yet.
+ */
+function validRiderZone(zone: Record<string, unknown>): boolean {
+  return Object.keys(zone).every((k) =>
+    ['name', 'access', 'area', 'guide', 'fee', 'evidence_url'].includes(k)
+  ) &&
+    text(40, 1)(zone.name) &&
+    (!('access' in zone) || oneOf(accessKinds)(zone.access)) &&
+    (!('guide' in zone) || text(200)(zone.guide));
+}
 /** A lot's zones as riders report them: named, with access and a guide. */
 export function validZones(v: unknown): boolean {
   if (!Array.isArray(v) || v.length > 10) return false;
-  return v.every((z) => {
-    if (!z || typeof z !== 'object' || Array.isArray(z)) return false;
-    const zone = z as Record<string, unknown>;
-    return Object.keys(zone).every((k) =>
-      ['name', 'access', 'area', 'guide', 'fee'].includes(k)
-    ) &&
-      text(40, 1)(zone.name) &&
-      (!('access' in zone) || oneOf(accessKinds)(zone.access)) &&
-      (!('area' in zone) || inList(contract.zone.area)(zone.area)) &&
-      (!('guide' in zone) || text(200)(zone.guide)) &&
-      (!('fee' in zone) || validFee(zone.fee)) &&
-      // Riders send no zone condition yet; the check keeps the DB rule in
-      // step if they ever do (202610270020).
-      zoneConditionConsistent(zone);
-  });
+  return v.every((z) => isObject(z) && validRiderZone(z)) &&
+    // A new spot's zones get their ids from the table's trigger.
+    validZoneEntries(v);
 }
+/** A rider's segment: the contract's, with no id and no basis. */
+function validRiderSegment(s: Record<string, unknown>): boolean {
+  return !has(s, 'id') && validSegmentFields(s) &&
+    (!isObject(s.condition) || !has(s.condition, 'basis'));
+}
+/** A new street spot's segments as riders report them (#188). */
+export function validRiderSegments(v: unknown): boolean {
+  return validSegments(v) &&
+    (v as unknown[]).every((s) =>
+      validRiderSegment(s as Record<string, unknown>)
+    );
+}
+/**
+ * A suggestion's zone or segment patches (#188), applied by id in
+ * `admin_resolve_report` (entries_patch()): `{id, …changed keys}` where null
+ * clears an optional key, `{id, removed: true}`, or a new entry without an
+ * id. Each id at most once. [entry] checks a new entry, and a patched one
+ * once its nulls are left out (they clear optional keys only).
+ */
+function validEntryPatches(
+  v: unknown,
+  entry: (e: Record<string, unknown>) => boolean,
+  required: string[],
+): boolean {
+  if (!Array.isArray(v) || v.length < 1 || v.length > 30) return false;
+  const ids = new Set<unknown>();
+  for (const e of v) {
+    if (!isObject(e)) return false;
+    if (!has(e, 'id')) {
+      if (has(e, 'removed') || !entry(e)) return false;
+      continue;
+    }
+    if (typeof e.id !== 'string' || !entryIdPattern.test(e.id)) return false;
+    if (ids.has(e.id)) return false;
+    ids.add(e.id);
+    if (has(e, 'removed')) {
+      if (e.removed !== true || Object.keys(e).length !== 2) return false;
+      continue;
+    }
+    const { id: _, ...rest } = e;
+    if (Object.keys(rest).length === 0) return false;
+    if (required.some((k) => has(rest, k) && rest[k] === null)) return false;
+    const kept = Object.fromEntries(
+      Object.entries(rest).filter(([, x]) => x !== null),
+    );
+    // A patch need not repeat the name; it is checked when it is sent.
+    if (!entry({ name: 'x', ...kept })) return false;
+  }
+  return true;
+}
+const validZonePatches = (v: unknown) =>
+  validEntryPatches(
+    v,
+    (z) => validRiderZone(z) && validZoneEntries([z]),
+    ['name'],
+  );
+const validSegmentPatches = (v: unknown) =>
+  validEntryPatches(v, (s) => validRiderSegment(s), ['name']);
 // Mirrors the columns admin_resolve_report may patch, plus how riders ask to
 // take a spot down: status for community spots, hidden for official ones.
 const proposedChecks: Record<string, (v: unknown) => boolean> = {
@@ -317,6 +453,9 @@ const proposedChecks: Record<string, (v: unknown) => boolean> = {
   // Works or a closure (#116): the cause and the date the notice gives;
   // null says it is over. The start and basis are the reviewer's.
   closure: validProposedClosure,
+  // Zones and segments by id (#188).
+  parking_zones: validZonePatches,
+  parking_segments: validSegmentPatches,
 };
 const locationKeys = ['lat', 'lng', 'city', 'district'];
 /** A suggested closure: `{reason: works|closed, until?: YYYY-MM-DD}` or null. */
@@ -527,6 +666,7 @@ export function validate(body: Record<string, unknown>): string | null {
           ['entrance_note', text(500)],
           ['parking_guide', text(500)],
           ['parking_zones', validZones],
+          ['parking_segments', validRiderSegments],
         ] as const
       ) {
         if (s[key] !== undefined && !check(s[key])) return `invalid ${key}`;

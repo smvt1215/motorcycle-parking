@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:motorcycle_parking/models/parking.dart';
 import 'package:motorcycle_parking/models/parking_condition.dart';
+import 'package:motorcycle_parking/models/zone_entries.dart';
 
 /// The contract and cases validate.ts and the generated SQL also use.
 const _dir = 'supabase/functions/_shared';
@@ -217,6 +218,153 @@ void main() {
             : ParkingAccess.noMotorcycle;
         expect(legacySafeStoredZone(zone, other), isFalse, reason: name);
       }
+    });
+  });
+
+  group('zones, segments and bay kinds (#188)', () {
+    test('the Dart mirror matches the zone, segment and bay kind sections', () {
+      final zone = contract['zone']! as Map<String, Object?>;
+      expect(zone['id_pattern'], entryIdPattern);
+      final segment = {...contract['segment']! as Map<String, Object?>}
+        ..remove('comment');
+      expect(segment, {
+        'keys': segmentKeys,
+        'max_entries': segmentMaxEntries,
+        'sides': _wires(RoadSide.values, (v) => v.name),
+        'name_max_length': segmentNameMaxLength,
+        'range_max_length': segmentRangeMaxLength,
+        'guide_max_length': segmentGuideMaxLength,
+        'total': {'min': segmentTotalRange.$1, 'max': segmentTotalRange.$2},
+      });
+      final kinds = contract['bay_kinds']! as Map<String, Object?>;
+      expect(kinds['order'], _wires(BayKind.values, (v) => v.wire));
+      expect(kinds['rules'], [
+        for (final r in bayKindRules)
+          {
+            'when': {
+              'limit': ?r.limit?.wire,
+              'share': ?r.share?.wire,
+              'bay': ?r.bay?.name,
+            },
+            'bay_kind': r.kind.wire,
+          },
+      ]);
+    });
+
+    test('shared cases: zone lists', () {
+      final list = (cases['zone_lists']! as List).cast<Map<String, Object?>>();
+      expect(list, isNotEmpty);
+      for (final c in list) {
+        expect(validZoneList(c['zones']), c['valid'], reason: '${c['name']}');
+      }
+    });
+
+    test('shared cases: segment lists', () {
+      final list = (cases['segment_lists']! as List)
+          .cast<Map<String, Object?>>();
+      expect(list, isNotEmpty);
+      for (final c in list) {
+        final name = '${c['name']}';
+        expect(validSegmentList(c['segments']), c['valid'], reason: name);
+        if (c['valid'] != true) continue;
+        // Read and written back, a valid list stays valid and the same.
+        final read = [
+          for (final s in c['segments']! as List)
+            ParkingSegment.fromJson(Map<String, dynamic>.from(s as Map)),
+        ];
+        final back = [for (final s in read) s.toJson()];
+        expect(validSegmentList(back), isTrue, reason: name);
+        expect(back, c['segments'], reason: name);
+      }
+    });
+
+    test('shared cases: bay kinds', () {
+      final list = (cases['bay_kinds']! as List).cast<Map<String, Object?>>();
+      expect(list, isNotEmpty);
+      for (final c in list) {
+        expect(
+          bayKindOf(ParkingCondition.fromJson(c['condition'], zone: true))
+              ?.wire,
+          c['bay_kind'],
+          reason: '${c['name']}',
+        );
+      }
+    });
+
+    test('every legacy space type reads as a bay kind', () {
+      expect(
+        {for (final t in SpaceType.values) t: bayKindOf(conditionOf(t))},
+        {
+          SpaceType.paidMotorcycle: BayKind.motorcycle,
+          SpaceType.freeMotorcycle: BayKind.motorcycle,
+          SpaceType.heavyOnly: BayKind.heavy,
+          SpaceType.car: BayKind.car,
+          SpaceType.offStreet: null,
+          SpaceType.disabledMotorcycle: BayKind.disabled,
+          SpaceType.timedMotorcycle: BayKind.motorcycle,
+          SpaceType.flexShared: BayKind.carMotorcycle,
+          SpaceType.evMotorcycle: BayKind.ev,
+        },
+      );
+    });
+
+    test('zones keep their id and notice link through the model', () {
+      final json = <String, dynamic>{
+        'id': 'b1',
+        'name': 'B1',
+        'access': 'scooterOnly',
+        'evidence_url': 'https://example.com/b1.jpg',
+      };
+      final zone = ParkingZone.fromJson(json);
+      expect(zone.id, 'b1');
+      expect(zone.evidenceUrl, 'https://example.com/b1.jpg');
+      expect(zone.toJson(), json);
+      // A zone a form has just added has no id yet; the server gives one.
+      expect(const ParkingZone(name: 'B2').toJson(), {'name': 'B2'});
+      // A link the contract refuses reads as none.
+      expect(
+        ParkingZone.fromJson({'name': 'B3', 'evidence_url': 'http://x.tw'})
+            .evidenceUrl,
+        '',
+      );
+    });
+
+    test('a spot carries its segments, favorites included', () {
+      final spot = ParkingSpot.fromJson({
+        'id': 'x',
+        'name': '南京東路三段',
+        'lat': 25.05,
+        'lng': 121.54,
+        'city': '臺北市',
+        'space_type': 'paidMotorcycle',
+        'parking_segments': [
+          {
+            'id': 's1',
+            'name': '北側一般機車格',
+            'side': 'north',
+            'total': 18,
+            'condition': {'bay': 'motorcycle', 'use': 'usual'},
+          },
+          // A segment that claims who may park is unconfirmed, not trusted.
+          {
+            'id': 's2',
+            'name': '南側',
+            'condition': {
+              'bay': 'motorcycle',
+              'allow': {'scooter': true},
+            },
+          },
+          'not a segment',
+        ],
+      });
+      expect(spot.segments.map((s) => s.id), ['s1', 's2']);
+      expect(spot.segments.first.side, RoadSide.north);
+      expect(spot.segments.first.bayKind, BayKind.motorcycle);
+      expect(spot.segments.last.condition, isNull);
+      final again = ParkingSpot.fromJson(spot.toJson());
+      expect(again.segments.map((s) => s.toJson()), [
+        for (final s in spot.segments) s.toJson(),
+      ]);
     });
   });
 

@@ -100,7 +100,7 @@ select is((select (parking_zones->0->>'fee_plan')||'|'||(fee_plans->0->>'id') fr
 insert into official_heavy_spots(name,lat,lng,city,space_type,source_url,source_name,effective_date,parking_zones)
 values('規則官方點二',25.09,121.61,'臺北市','offStreet','https://example.test/plans','臺北市政府',current_date,
   '[{"name":"機車區","fee_plan":"p7"}]');
-select is((select parking_zones||jsonb_build_array(fee_plans) from official_heavy_spots where name='規則官方點二'),
+select is((select zones_without_plans(parking_zones)||jsonb_build_array(fee_plans) from official_heavy_spots where name='規則官方點二'),
   '[{"name":"機車區"},null]'::jsonb,'a zone reference without a fee is dropped, not refused');
 -- A top-level reference to a missing plan beside no fee is still refused.
 select throws_ok($$insert into official_heavy_spots(name,lat,lng,city,space_type,source_url,source_name,effective_date,fee_plan)
@@ -129,7 +129,7 @@ update community_spots set fee_plans='[{"id":"p1","name":"機車免費","fee":{"
   parking_zones='[{"name":"B1","fee_plan":"p1","fee":{"scooter":{"mode":"free"}}}]'
   where id=(select id from lot);
 update community_spots set parking_zones=jsonb_set(parking_zones,'{0,fee_plan}','"p2"') where id=(select id from lot);
-select is((select parking_zones->0 from community_spots where id=(select id from lot)),
+select is((select (parking_zones->0)-'id' from community_spots where id=(select id from lot)),
   '{"name":"B1","fee_plan":"p2","fee":{"scooter":{"mode":"per_visit","amount":20}}}'::jsonb,'a zone switched to another plan takes its fee');
 
 -- Editing a street spot's plan keeps its fee_note the fee's sentence.
@@ -167,14 +167,14 @@ update community_spots set fee_plans='[{"id":"p1","name":"機車免費","fee":{"
     {"name":"B3","fee_plan":"p1","fee":{"scooter":{"mode":"free"}}}]'
   where id=(select id from lot);
 update community_spots set parking_zones=jsonb_set(parking_zones,'{0}',(parking_zones->0)-'fee') where id=(select id from lot);
-select is((select parking_zones->0||jsonb_build_object('plans',jsonb_array_length(fee_plans)) from community_spots where id=(select id from lot)),
+select is((select ((parking_zones->0)-'id')||jsonb_build_object('plans',jsonb_array_length(fee_plans)) from community_spots where id=(select id from lot)),
   '{"name":"B1","plans":2}'::jsonb,'a zone without a fee key drops its reference; the shared plan stays');
 update community_spots set parking_zones=jsonb_set(parking_zones,'{2,fee}','null') where id=(select id from lot);
-select is((select (parking_zones->2)||jsonb_build_object('plans',fee_plans) from community_spots where id=(select id from lot)),
+select is((select ((parking_zones->2)-'id')||jsonb_build_object('plans',fee_plans) from community_spots where id=(select id from lot)),
   '{"name":"B3","plans":[{"id":"p2","name":"機車計次","fee":{"scooter":{"mode":"per_visit","amount":20}}}]}'::jsonb,
   'a zone fee of JSON null is not filled back: both keys go, and the plan nobody uses too');
 update community_spots set parking_zones=jsonb_set(parking_zones,'{1,fee}','{}') where id=(select id from lot);
-select is((select (parking_zones->1)||jsonb_build_object('plans',fee_plans) from community_spots where id=(select id from lot)),
+select is((select ((parking_zones->1)-'id')||jsonb_build_object('plans',fee_plans) from community_spots where id=(select id from lot)),
   '{"name":"B2","fee":{},"plans":null}'::jsonb,'a zone fee of {} clears it the same way');
 
 -- 2. Zones are matched by name and area, not by place.
@@ -203,7 +203,7 @@ select is((select (parking_zones->0->>'name')||':'||(parking_zones->0->'fee'->'s
 update community_spots set fee_plans=(select plans from two_zones),parking_zones=(select zones from two_zones) where id=(select id from lot);
 update community_spots set parking_zones=jsonb_build_array(jsonb_set(parking_zones->1,'{fee_plan}','"p1"'),parking_zones->0)
   where id=(select id from lot);
-select is((select parking_zones->0 from community_spots where id=(select id from lot)),
+select is((select (parking_zones->0)-'id' from community_spots where id=(select id from lot)),
   '{"name":"B","fee_plan":"p1","fee":{"scooter":{"mode":"free"}}}'::jsonb,'a zone that switches plan while moving takes the plan''s fee');
 -- Area is part of the match: the same name in another area is a new zone,
 -- whose reference is a choice of plan.

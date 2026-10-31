@@ -577,6 +577,99 @@ create or replace function {s}.fee_note_max_length() returns integer
 language sql immutable set search_path='' as $$
   select {fee_note_max};
 $$;
+
+-- ===== 分區與路段：valid_zones()、valid_segments()、condition_bay_kind()（#188） =====
+
+-- An https link of at most max_length UTF-16 code units: the rule of a
+-- basis source_url, used by a zone's or a segment's evidence_url.
+create or replace function {s}.contract_https(p jsonb) returns boolean
+language sql immutable set search_path='' as $$
+  select coalesce(jsonb_typeof(p)='string'
+    and char_length(p#>>'{{}}')+regexp_count(p#>>'{{}}','[\U00010000-\U0010FFFF]')
+      <=({s}.parking_contract()->'condition'->'basis'->'source_url'->>'max_length')::integer
+    and (p#>>'{{}}') ~ ({s}.parking_contract()->'condition'->'basis'->'source_url'->>'pattern'),false);
+$$;
+
+-- A string of at most p_max UTF-16 code units that is not blank.
+create or replace function {s}.contract_text(p jsonb,p_max integer) returns boolean
+language sql immutable set search_path='' as $$
+  select coalesce(jsonb_typeof(p)='string' and btrim(p#>>'{{}}')<>''
+    and char_length(p#>>'{{}}')+regexp_count(p#>>'{{}}','[\U00010000-\U0010FFFF]')<=p_max,false);
+$$;
+
+-- The ids of a zone or segment list (an array): each id that is present is
+-- a string of zone.id_pattern, and no two entries share one. Entries may
+-- leave it out; the tables' trigger fills it in before their checks.
+create or replace function {s}.contract_entry_ids(p jsonb) returns boolean
+language sql immutable set search_path='' as $$
+  select not exists(select 1 from jsonb_array_elements(p) e
+      where jsonb_typeof(e)='object' and e ? 'id' and (jsonb_typeof(e->'id') is distinct from 'string'
+        or (e->>'id') !~ ({s}.parking_contract()->'zone'->>'id_pattern')))
+    and (select count(e->>'id') from jsonb_array_elements(p) e where jsonb_typeof(e)='object')
+      =(select count(distinct e->>'id') from jsonb_array_elements(p) e where jsonb_typeof(e)='object');
+$$;
+
+-- A spot's parking_zones (§1.1, decision 32, #188): objects with a valid
+-- fee, area and condition (whose access agrees with it), an optional https
+-- evidence_url, and ids as contract_entry_ids() takes them.
+create or replace function {s}.valid_zones(p_zones jsonb) returns boolean
+language sql immutable set search_path='' as $$
+  select case when jsonb_typeof(p_zones) is distinct from 'array' then false else
+    not exists(select 1 from jsonb_array_elements(p_zones) z
+      where jsonb_typeof(z) is distinct from 'object'
+        or (z ? 'fee' and not {s}.valid_fee(z->'fee'))
+        or (z ? 'area' and not {s}.contract_str_in(z->'area',{s}.parking_contract()->'zone'->'area'))
+        or (z ? 'condition' and not ({s}.valid_condition(z->'condition',true)
+          and {s}.zone_condition_consistent(z)))
+        or (z ? 'evidence_url' and not {s}.contract_https(z->'evidence_url')))
+    and {s}.contract_entry_ids(p_zones) end;
+$$;
+
+-- A street spot's parking_segments (#188, segment): at most max_entries
+-- objects of the listed keys, each named, with an optional side, range,
+-- guide, number of bays, https evidence_url and a zone-style condition
+-- without allow (the city's rules decide who may park).
+create or replace function {s}.valid_segments(p_segments jsonb) returns boolean
+language plpgsql immutable set search_path='' as $$
+declare c jsonb:={s}.parking_contract()->'segment'; s jsonb;
+begin
+  if jsonb_typeof(p_segments) is distinct from 'array'
+    or jsonb_array_length(p_segments)>(c->>'max_entries')::integer then return false; end if;
+  for s in select e from jsonb_array_elements(p_segments) e loop
+    if jsonb_typeof(s) is distinct from 'object'
+      or exists(select 1 from jsonb_object_keys(s) k where not c->'keys' ? k)
+      or not {s}.contract_text(s->'name',(c->>'name_max_length')::integer)
+      or (s ? 'side' and not {s}.contract_str_in(s->'side',c->'sides'))
+      or (s ? 'range' and not {s}.contract_text(s->'range',(c->>'range_max_length')::integer))
+      or (s ? 'guide' and not {s}.contract_text(s->'guide',(c->>'guide_max_length')::integer))
+      or (s ? 'total' and not {s}.contract_whole(s->'total',(c->'total'->>'min')::numeric,(c->'total'->>'max')::numeric))
+      or (s ? 'condition' and not ({s}.valid_condition(s->'condition',true) and not s->'condition' ? 'allow'))
+      or (s ? 'evidence_url' and not {s}.contract_https(s->'evidence_url'))
+    then return false; end if;
+  end loop;
+  return {s}.contract_entry_ids(p_segments);
+end;
+$$;
+
+-- The bay kind a condition reads as (#188, bay_kinds): the first rule that
+-- matches, or null (unconfirmed).
+create or replace function {s}.condition_bay_kind(p_condition jsonb) returns text
+language plpgsql immutable set search_path='' as $$
+declare r jsonb; w jsonb;
+begin
+  if jsonb_typeof(p_condition) is distinct from 'object' then return null; end if;
+  for r in select e from jsonb_array_elements({s}.parking_contract()->'bay_kinds'->'rules') e loop
+    w:=r->'when';
+    if (not w ? 'limit' or exists(select 1 from jsonb_array_elements(
+        case when jsonb_typeof(p_condition->'limits')='array' then p_condition->'limits' else '[]'::jsonb end) l
+        where l->>'kind'=w->>'limit'))
+      and (not w ? 'share' or p_condition->>'share' is not distinct from w->>'share')
+      and (not w ? 'bay' or p_condition->>'bay' is not distinct from w->>'bay')
+    then return r->>'bay_kind'; end if;
+  end loop;
+  return null;
+end;
+$$;
 """
 
 
@@ -694,6 +787,25 @@ def test_sql(contract, cases):
         lines.append(
             f"select is(pg_temp.valid_fee_plans({literal(c['plans'])},{plan},{fee},{literal(c.get('zones', []))}),"
             f"{'true' if c['valid'] else 'false'},{quote('fee plans: ' + c['name'])});"
+        )
+    lines.append("-- zone lists: valid_zones()")
+    for c in cases["zone_lists"]:
+        lines.append(
+            f"select is(pg_temp.valid_zones({literal(c['zones'])}),"
+            f"{'true' if c['valid'] else 'false'},{quote('zone list: ' + c['name'])});"
+        )
+    lines.append("-- segment lists: valid_segments()")
+    for c in cases["segment_lists"]:
+        lines.append(
+            f"select is(pg_temp.valid_segments({literal(c['segments'])}),"
+            f"{'true' if c['valid'] else 'false'},{quote('segment list: ' + c['name'])});"
+        )
+    lines.append("-- bay kinds: condition_bay_kind()")
+    for c in cases["bay_kinds"]:
+        want = "null::text" if c["bay_kind"] is None else quote(c["bay_kind"])
+        lines.append(
+            f"select is(pg_temp.condition_bay_kind({literal(c['condition'])}),"
+            f"{want},{quote('bay kind: ' + c['name'])});"
         )
     longest = fee_text.longest_fee(contract["fee"])
     lines.append(
