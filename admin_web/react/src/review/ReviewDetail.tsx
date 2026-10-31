@@ -166,6 +166,8 @@ const PLAN_TEXT: Record<Exclude<ApplyPlan, { ok: true }>['reason'], string> = {
   missingSpot: '找不到這個點位，可能已刪除，只能駁回。',
   structured:
     '這筆建議包含費率、停放條件、暫時封閉或分區分段，新版管理站還不能套用；可以駁回，或用目前的管理站處理。',
+  feeNote:
+    '這個點位有結構化費率，收費資訊由費率產生，不能直接套用騎士寫的文字；可以駁回，或用目前的管理站改費率。',
   empty: '這筆回報沒有可以套用到這個點位的欄位。',
 };
 
@@ -196,6 +198,8 @@ function ReportDetail({ reportId }: { reportId: string }) {
   const [mode, setMode] = useState<Mode>('view');
   const [rejectKind, setRejectKind] = useState<ResolutionKind | null>(null);
   const [editValues, setEditValues] = useState<Record<string, unknown>>({});
+  /** Fields the admin set, so a restated vehicle column is still written (verified). */
+  const [touched, setTouched] = useState<ReadonlySet<string>>(new Set());
   const [showErrors, setShowErrors] = useState(false);
   const [editMessage, setEditMessage] = useState<string | null>(null);
 
@@ -203,7 +207,7 @@ function ReportDetail({ reportId }: { reportId: string }) {
   const spot = report ? spots[report.sourceId] : undefined;
   const plan = report ? applyPlan(report, spot) : null;
   const canEdit = Boolean(spot) && !(plan && !plan.ok && plan.reason === 'structured');
-  const outcome = report && spot && mode === 'edit' ? editOutcome(report, spot, editValues) : null;
+  const outcome = report && spot && mode === 'edit' ? editOutcome(report, spot, editValues, touched) : null;
   const position = visible.findIndex((r) => r.id === reportId);
 
   const setNote = (value: string) => dispatch(noteChanged({ reportId, note: value }));
@@ -240,6 +244,7 @@ function ReportDetail({ reportId }: { reportId: string }) {
   const startEdit = () => {
     if (!report || !spot || !canEdit) return;
     setEditValues(editStart(report, spot));
+    setTouched(new Set());
     setShowErrors(false);
     setEditMessage(null);
     setMode('edit');
@@ -272,10 +277,26 @@ function ReportDetail({ reportId }: { reportId: string }) {
     setEditMessage(null);
   };
 
+  /**
+   * Resend the failed decision with the note as it reads now: the error says
+   * the note is kept, and the admin may have edited it (cross review, PR #216).
+   */
   const retry = (force: boolean) => {
     if (!failure) return;
     const request = failure.request;
-    queue(request.decision === 'accepted' ? { ...request, force } : request);
+    const current = note.trim();
+    if (request.decision === 'rejected') {
+      if (needsRejectNote(request.resolutionKind, current)) {
+        // The note 其他原因 needs was cleared since: ask for it again.
+        setRejectKind(request.resolutionKind);
+        setMode('reject');
+        setShowErrors(true);
+        return;
+      }
+      queue({ ...request, note: current });
+      return;
+    }
+    queue({ ...request, note: current, force });
   };
 
   // Shortcuts (Palette.dc.html, ReviewReject / ReviewEdit boards). Letters and
@@ -496,6 +517,7 @@ function ReportDetail({ reportId }: { reportId: string }) {
                 showErrors={showErrors}
                 onChange={(key, value) => {
                   setEditValues((current) => ({ ...current, [key]: value }));
+                  setTouched((current) => new Set(current).add(key));
                   setEditMessage(null);
                 }}
               />
@@ -617,6 +639,8 @@ function ReportDetail({ reportId }: { reportId: string }) {
             取消
           </Button>
           <div className="review-toolbar__status">
+            {/* The previous report's undo stays reachable in every mode. */}
+            <UndoNotice />
             <p className="t-caption">
               駁回後自動跳到下一筆，<span className="num">5</span> 秒內可復原；點位不會改變
             </p>
@@ -637,6 +661,7 @@ function ReportDetail({ reportId }: { reportId: string }) {
             取消修改
           </Button>
           <div className="review-toolbar__status">
+            <UndoNotice />
             <p className="t-caption">
               你改了騎士建議的 <span className="num">{outcome.changedFromRider.length}</span> 處、加了{' '}
               <span className="num">{outcome.added.length}</span> 處；套用後 <span className="num">5</span>{' '}

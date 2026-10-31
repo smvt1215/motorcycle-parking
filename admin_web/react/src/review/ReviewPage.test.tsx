@@ -1,4 +1,4 @@
-import { act, screen, within } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderApp } from '../test/renderApp';
 import { fixtureSource } from './fixtureSource';
@@ -291,7 +291,9 @@ describe('ReviewPage', () => {
       {
         reportId: 'r-fuxing',
         decision: 'accepted',
-        patch: { space_type: 'heavyOnly' },
+        // The proposed heavy_allowed is sent even though it equals the spot:
+        // that is what records it as admin-verified.
+        patch: { heavy_allowed: false, space_type: 'heavyOnly' },
         edited: true,
         note: '',
         force: false,
@@ -299,18 +301,39 @@ describe('ReviewPage', () => {
     ]);
   });
 
-  it('refuses to save an edit that changes nothing', async () => {
-    const { user, source } = setup('/review/r-fuxing');
+  it('refuses to save while a field the table requires is empty', async () => {
+    const { user, source } = setup('/review/r-banqiao');
     await detailTitle();
     await user.keyboard('e');
-    await user.click(
-      within(screen.getByRole('region', { name: '資格' })).getByRole('radio', { name: /不可停/ }),
-    );
-    await user.selectOptions(screen.getByRole('combobox', { name: '格位類型' }), 'freeMotorcycle');
+    await user.clear(screen.getByRole('textbox', { name: '停車點名稱' }));
     await user.click(screen.getByRole('button', { name: /儲存並套用/ }));
-    expect(screen.getByRole('alert')).toHaveTextContent('沒有要寫入的修改');
+    expect(screen.getByRole('alert')).toHaveTextContent('有欄位還不能儲存');
+    expect(screen.getByText('停車點名稱不能空白')).toBeInTheDocument();
     await act(() => vi.advanceTimersByTimeAsync(UNDO_MS));
     expect(source.resolved).toEqual([]);
+  });
+
+  it('offers no empty 格位類型, which the table does not allow', async () => {
+    const { user } = setup('/review/r-fuxing');
+    await detailTitle();
+    await user.keyboard('e');
+    const type = screen.getByRole('combobox', { name: '格位類型' });
+    expect(within(type).queryByRole('option', { name: '沒有' })).not.toBeInTheDocument();
+  });
+
+  it('retry sends the note as it reads now (cross review, PR #216)', async () => {
+    const { user, source } = setup(FIRST);
+    await detailTitle();
+    source.failNextResolve('network');
+    await user.keyboard('a');
+    await act(() => vi.advanceTimersByTimeAsync(UNDO_MS));
+    await user.click(within(screen.getByRole('list', { name: '待審回報' })).getByText('沒有套用，打開處理'));
+    const alert = await screen.findByRole('alert');
+    // Note typed under fake timers keeps only what React commits, so set it whole.
+    fireEvent.change(screen.getByRole('textbox', { name: /處理說明/ }), { target: { value: '補上公告' } });
+    await user.click(within(alert).getByRole('button', { name: '再試一次' }));
+    await act(() => vi.advanceTimersByTimeAsync(UNDO_MS));
+    expect(source.resolved).toMatchObject([{ reportId: 'r-ximen', note: '補上公告' }]);
   });
 
   it('shows 全部處理完了 when the queue empties', async () => {

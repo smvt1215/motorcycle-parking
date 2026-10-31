@@ -5,7 +5,9 @@ import { PlateStack } from '../ui/PlateStack';
 import {
   allowsKey,
   DIFF_FIELDS,
+  differs,
   EDIT_FIELDS,
+  hasStructuredFee,
   plateOf,
   type EditInput,
   type ReviewReport,
@@ -22,8 +24,6 @@ interface EditPanelProps {
   showErrors: boolean;
 }
 
-const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
-
 /** Shows a stored value the way the diff table does. */
 function shown(key: string, value: unknown): string {
   return DIFF_FIELDS.find((f) => f.key === key)?.format(value) ?? String(value ?? '沒有');
@@ -36,15 +36,17 @@ function FieldInput({
   onChange,
   invalid,
   describedBy,
+  disabled = false,
 }: {
   id: string;
+  disabled?: boolean;
   input: EditInput;
   value: unknown;
   onChange: (value: unknown) => void;
   invalid: boolean;
   describedBy: string;
 }) {
-  const common = { id, 'aria-invalid': invalid || undefined, 'aria-describedby': describedBy };
+  const common = { id, disabled, 'aria-invalid': invalid || undefined, 'aria-describedby': describedBy };
   switch (input.type) {
     case 'text':
       return (
@@ -63,7 +65,7 @@ function FieldInput({
           value={typeof value === 'string' ? value : ''}
           onChange={(e) => onChange(e.target.value || null)}
         >
-          <option value="">沒有</option>
+          {!input.required && <option value="">沒有</option>}
           {Object.entries(input.choices).map(([key, label]) => (
             <option key={key} value={key}>
               {label}
@@ -104,17 +106,22 @@ export function EditPanel({ report, spot, values, onChange, errors, showErrors }
     firstControl.current?.querySelector<HTMLElement>('input, select')?.focus();
   }, []);
 
-  const vehicles = VEHICLES.filter((v) => `${v}_allowed` in proposed || showAll);
+  const vehicles = VEHICLES.filter((v) => {
+    const key = `${v}_allowed`;
+    return key in proposed || showAll || (key in values && differs(key, values[key], spot.values[key]));
+  });
   const fields = EDIT_FIELDS.filter(({ key }) => {
     if (!allowsKey(spot, key) || !(key in values)) return false;
-    return showAll || key in proposed || !same(values[key], spot.values[key]);
+    return showAll || key in proposed || differs(key, values[key], spot.values[key]);
   });
   const hiddenCount =
     EDIT_FIELDS.filter(({ key }) => allowsKey(spot, key) && key in values).length - fields.length;
 
   const riderLine = (key: string) => {
     if (key in proposed) return `騎士建議：${shown(key, proposed[key])}`;
-    return same(values[key], spot.values[key]) ? '騎士沒有建議這一欄' : '騎士沒有建議這一欄；是你加的';
+    return differs(key, values[key], spot.values[key])
+      ? '騎士沒有建議這一欄；是你加的'
+      : '騎士沒有建議這一欄';
   };
 
   return (
@@ -169,7 +176,9 @@ export function EditPanel({ report, spot, values, onChange, errors, showErrors }
         </div>
         {fields.map(({ key, label, input }) => {
           const fieldId = `${id}-${key}`;
-          const changed = !same(values[key], spot.values[key]);
+          const changed = differs(key, values[key], spot.values[key]);
+          // fee_note is generated from a structured fee; the server refuses other text.
+          const locked = key === 'fee_note' && hasStructuredFee(spot);
           const error = errors[key];
           const invalid = Boolean(error) && (showErrors || changed);
           return (
@@ -209,6 +218,7 @@ export function EditPanel({ report, spot, values, onChange, errors, showErrors }
                 ) : (
                   <FieldInput
                     id={fieldId}
+                    disabled={locked}
                     input={input}
                     value={values[key]}
                     invalid={invalid}
@@ -217,7 +227,11 @@ export function EditPanel({ report, spot, values, onChange, errors, showErrors }
                   />
                 )}
                 <p id={`${fieldId}-hint`} className={invalid ? 'field-error' : 't-caption'}>
-                  {invalid ? error : riderLine(key)}
+                  {invalid
+                    ? error
+                    : locked
+                      ? '收費資訊由這個點位的結構化費率產生，不能在這裡改'
+                      : riderLine(key)}
                   {changed && !invalid && <ModifiedTag />}
                 </p>
               </div>

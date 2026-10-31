@@ -242,7 +242,7 @@ export function allowsKey(spot: ReviewSpot, key: string): boolean {
 
 export type ApplyPlan =
   | { ok: true; patch: Record<string, unknown>; ignored: string[] }
-  | { ok: false; reason: 'missingSpot' | 'structured' | 'empty'; keys: string[] };
+  | { ok: false; reason: 'missingSpot' | 'structured' | 'feeNote' | 'empty'; keys: string[] };
 
 /** What 「套用建議」 would write, or why it cannot (applicablePatch in the Flutter admin). */
 export function applyPlan(report: ReviewReport, spot: ReviewSpot | undefined): ApplyPlan {
@@ -250,6 +250,8 @@ export function applyPlan(report: ReviewReport, spot: ReviewSpot | undefined): A
   const proposed = report.proposed ?? {};
   const structured = Object.keys(proposed).filter((k) => (STRUCTURED_KEYS as readonly string[]).includes(k));
   if (structured.length) return { ok: false, reason: 'structured', keys: structured };
+  if ('fee_note' in proposed && hasStructuredFee(spot))
+    return { ok: false, reason: 'feeNote', keys: ['fee_note'] };
   const patch: Record<string, unknown> = {};
   const ignored: string[] = [];
   for (const [key, value] of Object.entries(proposed)) {
@@ -280,7 +282,7 @@ export const needsRejectNote = (kind: ResolutionKind | null, note: string) =>
 
 export type EditInput =
   | { type: 'text'; maxLength: number; required?: boolean }
-  | { type: 'choice'; choices: Record<string, string> }
+  | { type: 'choice'; choices: Record<string, string>; required?: boolean }
   | { type: 'coordinate'; min: number; max: number }
   | { type: 'visibility' };
 
@@ -291,7 +293,11 @@ export type EditInput =
  */
 export const EDIT_FIELDS: readonly { key: string; label: string; input: EditInput }[] = [
   { key: 'name', label: '停車點名稱', input: { type: 'text', maxLength: 100, required: true } },
-  { key: 'space_type', label: '格位類型', input: { type: 'choice', choices: SPACE_TYPE_LABEL } },
+  {
+    key: 'space_type',
+    label: '格位類型',
+    input: { type: 'choice', choices: SPACE_TYPE_LABEL, required: true },
+  },
   { key: 'facility_type', label: '場站類型', input: { type: 'choice', choices: FACILITY_LABEL } },
   { key: 'parking_access', label: '車種開放', input: { type: 'choice', choices: ACCESS_LABEL } },
   { key: 'fee_note', label: '收費資訊', input: { type: 'text', maxLength: 200 } },
@@ -300,9 +306,9 @@ export const EDIT_FIELDS: readonly { key: string; label: string; input: EditInpu
   { key: 'parking_guide', label: '停放方式', input: { type: 'text', maxLength: 500 } },
   { key: 'status', label: '地圖顯示', input: { type: 'visibility' } },
   { key: 'hidden', label: '地圖顯示', input: { type: 'visibility' } },
-  { key: 'lat', label: '緯度', input: { type: 'coordinate', min: 21, max: 27 } },
+  { key: 'lat', label: '緯度', input: { type: 'coordinate', min: 20, max: 27 } },
   { key: 'lng', label: '經度', input: { type: 'coordinate', min: 118, max: 123 } },
-  { key: 'city', label: '縣市', input: { type: 'text', maxLength: 30 } },
+  { key: 'city', label: '縣市', input: { type: 'text', maxLength: 30, required: true } },
   { key: 'district', label: '行政區', input: { type: 'text', maxLength: 30 } },
 ];
 
@@ -329,20 +335,59 @@ export interface EditOutcome {
 }
 
 /** The patch and checks for edited values (acceptEdited in the Flutter admin). */
+/**
+ * A spot with a structured fee keeps fee_note as the fee's generated text;
+ * admin_resolve_report refuses any other text (fee_note_matches, 22023).
+ */
+export function hasStructuredFee(spot: ReviewSpot): boolean {
+  const fee = spot.values.fee;
+  return typeof fee === 'object' && fee !== null && Object.keys(fee).length > 0;
+}
+
+/** Vehicle columns: writing one, even unchanged, records that an admin stated it (`*_verified_at`). */
+const VEHICLE_KEYS: readonly string[] = [...ELIGIBILITY_KEYS, 'parking_access'];
+
+/**
+ * Whether an edited value differs from the stored one. An emptied text field
+ * equals a stored null, so typing and deleting is not a change.
+ */
+export function differs(key: string, value: unknown, stored: unknown): boolean {
+  const field = EDIT_FIELDS.find((f) => f.key === key);
+  const blank = (v: unknown) => v === '' || v === null || v === undefined;
+  if (field?.input.type === 'text' && blank(value)) return !blank(stored);
+  return !same(value, stored);
+}
+
+/**
+ * The patch and checks for edited values (acceptEdited in the Flutter admin).
+ * Like 套用建議, every proposal key is sent with its edited value; so is a
+ * vehicle column the admin set, even to the stored value, because writing it
+ * is what marks it admin-verified (202610250080 trigger). Other columns are
+ * sent only when they differ from the spot (cross review, PR #216).
+ */
 export function editOutcome(
   report: ReviewReport,
   spot: ReviewSpot,
   values: Record<string, unknown>,
+  touched: ReadonlySet<string> = new Set(),
 ): EditOutcome {
   const proposed = report.proposed ?? {};
   const outcome: EditOutcome = { patch: {}, changedFromRider: [], added: [], errors: {} };
   for (const [key, value] of Object.entries(values)) {
     if (!allowsKey(spot, key)) continue;
     const field = EDIT_FIELDS.find((f) => f.key === key);
+    const changesSpot = differs(key, value, spot.values[key]);
     if (field?.input.type === 'text') {
       const text = typeof value === 'string' ? value : '';
       if (field.input.required && text.trim() === '') outcome.errors[key] = `${field.label}不能空白`;
       if (text.length > field.input.maxLength) outcome.errors[key] = `最多 ${field.input.maxLength} 字`;
+    }
+    if (
+      field?.input.type === 'choice' &&
+      field.input.required &&
+      (typeof value !== 'string' || value === '')
+    ) {
+      outcome.errors[key] = `要選一個${field.label}`;
     }
     if (field?.input.type === 'coordinate') {
       if (
@@ -354,17 +399,19 @@ export function editOutcome(
         outcome.errors[key] = `要在 ${field.input.min} 到 ${field.input.max} 之間`;
       }
     }
-    const changesSpot = !same(value, spot.values[key]);
+    if (key === 'fee_note' && changesSpot && hasStructuredFee(spot)) {
+      outcome.errors[key] = '這個點位有結構化費率，收費資訊由費率產生，不能在這裡改';
+    }
+    const vehicle = VEHICLE_KEYS.includes(key);
+    const sent = key in proposed || changesSpot || (vehicle && touched.has(key));
     // 「未確認」 is cancelled: eligibility that is written is 可停 or 不可停.
     // Legacy null left as it is is not written, so it does not block.
-    const eligibility = (ELIGIBILITY_KEYS as readonly string[]).includes(key);
-    if (eligibility && typeof value !== 'boolean' && (key in proposed || changesSpot)) {
+    if ((ELIGIBILITY_KEYS as readonly string[]).includes(key) && typeof value !== 'boolean' && sent) {
       outcome.errors[key] = '選可停或不可停';
     }
-    // Counted before the spot check: putting back the current value is still
-    // a change to what the rider asked for.
+    // Putting back the current value is still a change to what the rider asked for.
     if (key in proposed && !same(value, proposed[key])) outcome.changedFromRider.push(key);
-    if (!changesSpot) continue;
+    if (!sent) continue;
     outcome.patch[key] = value;
     if (!(key in proposed)) outcome.added.push(key);
   }
