@@ -2,7 +2,12 @@ import { createClient } from 'npm:@supabase/supabase-js@2.108.1';
 import { cors, readBody, response } from '../_shared/http.ts';
 import { currentSpot } from './current_spot.ts';
 import { blocking, precheck, precheckResponse, riskFlags } from './precheck.ts';
-import { identityHash, validate, zonePatchesStated } from './validate.ts';
+import {
+  identityHash,
+  spotDeletedResponse,
+  validate,
+  zonePatchesStated,
+} from './validate.ts';
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') {
@@ -56,6 +61,10 @@ Deno.serve(async (req) => {
       // are always the server's own, never a client's.
       p_payload: { ...body, risk_flags: riskFlags(issues) },
     });
+    if (rpcError?.code === 'P0410') {
+      // An admin deleted the spot (#200): nothing a rider sends reaches it.
+      return response(spotDeletedResponse, 410);
+    }
     if (rpcError) {
       return response(
         {

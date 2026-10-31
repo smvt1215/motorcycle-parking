@@ -793,3 +793,12 @@ export async function identityHash(
     (x) => x.toString(16).padStart(2, '0'),
   ).join('');
 }
+
+/**
+ * The refusal when an admin has deleted the spot (#200, `apply_report`
+ * raises P0410): the app shows `message` as it is.
+ */
+export const spotDeletedResponse = {
+  error: 'spot deleted',
+  message: '這個點已被刪除',
+};

@@ -151,6 +151,7 @@ Map<String, ReviewSpot> sampleSpots() => {
       'scooter_allowed': true,
       'heavy_allowed': null,
       'status': 'hidden',
+      'deleted_at': '2026-10-24T09:00:00Z',
     },
   ),
   officialId: const ReviewSpot(
@@ -358,6 +359,25 @@ class FakeAdminGateway implements AdminGateway {
       if (spot.hidden) spot,
   ];
 
+  /// Official spots purged after deletion (#200).
+  List<PurgedOfficialSpot> purged = [];
+  final List<String> released = [];
+
+  @override
+  Future<List<PurgedOfficialSpot>> purgedOfficialSpots({
+    String query = '',
+  }) async => [
+    for (final p in purged)
+      if (query.isEmpty || p.name.contains(query) || p.sourceId.contains(query))
+        p,
+  ];
+
+  @override
+  Future<void> releasePurgedOfficial(String officialId, String note) async {
+    released.add(officialId);
+    purged = purged.where((p) => p.officialId != officialId).toList();
+  }
+
   @override
   Future<void> setSpotHidden(String sourceId, bool hidden, String note) async {
     hiddenChanges.add((sourceId, hidden));
@@ -368,6 +388,7 @@ class FakeAdminGateway implements AdminGateway {
           'hidden': hidden
         else
           'status': hidden ? 'hidden' : 'pending',
+        'deleted_at': hidden ? '2026-10-25T00:00:00Z' : null,
         'updated_at': _bump(),
       };
     }
@@ -381,6 +402,7 @@ class FakeAdminGateway implements AdminGateway {
           'hidden': hidden
         else
           'status': hidden ? 'hidden' : 'pending',
+        'deleted_at': hidden ? '2026-10-25T00:00:00Z' : null,
       },
     );
   }

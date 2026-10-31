@@ -740,6 +740,19 @@ String? precheckHint(
   return messages.isEmpty ? null : messages.join('\n');
 }
 
+/// The sentence when an admin has deleted the spot a report names (#200):
+/// riders can no longer vote on, suggest, edit or restore it.
+const spotDeletedMessage = '這個點已被刪除';
+
+/// The rider-facing reason in a submit-report refusal the forms show as is:
+/// a precheck refusal's sentence, or [spotDeletedMessage]; null otherwise.
+String? reportRefusal(Object? details) =>
+    precheckRefusal(details) ??
+    switch (details) {
+      {'error': 'spot deleted'} => spotDeletedMessage,
+      _ => null,
+    };
+
 /// The rider-facing reason in a submit-report refusal, or null when the
 /// body is not a precheck refusal (older servers send only `error`).
 String? precheckRefusal(Object? details) => switch (details) {

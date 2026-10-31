@@ -68,6 +68,14 @@ void main() {
     expect(precheckRefusal({'error': 'precheck fix', 'message': '請改'}), '請改');
     expect(precheckRefusal({'error': 'invalid name'}), isNull);
     expect(precheckRefusal('oops'), isNull);
+    // An admin deleted the spot (#200): the forms say so.
+    expect(
+      reportRefusal({'error': 'spot deleted', 'message': '這個點已被刪除'}),
+      '這個點已被刪除',
+    );
+    expect(reportRefusal({'error': 'spot deleted'}), spotDeletedMessage);
+    expect(reportRefusal({'error': 'precheck fix', 'message': '請改'}), '請改');
+    expect(reportRefusal({'error': 'invalid report'}), isNull);
     expect(precheckRefusal(null), isNull);
   });
 }

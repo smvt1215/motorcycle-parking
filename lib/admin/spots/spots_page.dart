@@ -21,6 +21,7 @@ import '../../ui/option_pill.dart';
 import '../admin_layout.dart';
 import '../admin_theme.dart';
 import '../review/review_page.dart' show ChangeBand, reviewCompactWidth;
+import '../review/review_models.dart' show purgeDaysLeft;
 import 'closure_editor.dart';
 import 'lot_editor.dart';
 import 'spot_history_page.dart';
@@ -374,12 +375,13 @@ class _SpotsPageState extends State<SpotsPage> {
     final messenger = ScaffoldMessenger.of(context);
     final record = spots.record;
     if (record == null) return;
+    if (hide && !await _confirmDelete(record.name)) return;
     if (await spots.setHidden(hide)) {
       messenger
         ..hideCurrentSnackBar()
         ..showSnackBar(
           SnackBar(
-            content: Text('${hide ? '已隱藏' : '已恢復顯示'}：${record.name}'),
+            content: Text('${hide ? '已刪除' : '已復原'}：${record.name}'),
             action: SnackBarAction(
               label: '復原',
               onPressed: () => spots.setHidden(!hide),
@@ -387,6 +389,41 @@ class _SpotsPageState extends State<SpotsPage> {
           ),
         );
     }
+  }
+
+  /// 刪除點位 (#200): off the map at once, restorable for 14 days.
+  Future<bool> _confirmDelete(String name) async {
+    final now = DateTime.now();
+    final end = now.add(const Duration(days: 14));
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('刪除這個點位？'),
+        content: SizedBox(
+          width: 480,
+          child: Text(
+            '「$name」刪除後騎士馬上看不到。管理站會保留 14 天，這段期間可以在「已刪除」裡復原；'
+            '${end.month}/${end.day} 之後永久刪除，無法復原。這個點位還沒處理的回報會一起結案。',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            key: const ValueKey('confirm-delete-spot'),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('刪除點位'),
+          ),
+        ],
+      ),
+    );
+    return ok ?? false;
   }
 
   Future<void> _promote() async {
@@ -1117,6 +1154,7 @@ class _FormPane extends StatelessWidget {
       creating: record.isNew,
       official: record.official,
       hidden: record.hidden,
+      deleted: record.values['deleted_at'] != null,
       dirty: spots.dirty,
       busy: spots.saving,
       onSave: onSave,
@@ -1180,7 +1218,15 @@ class _FormPane extends StatelessWidget {
                   ),
                 if (record.hidden) ...[
                   const SizedBox(height: 8),
-                  const AdminNotice('這個點位已隱藏，App 地圖上不會顯示。', error: true),
+                  AdminNotice(switch (DateTime.tryParse(
+                    record.values['deleted_at'] as String? ?? '',
+                  )) {
+                    final at? =>
+                      '這個點位已刪除，騎士看不到；${purgeDaysLeft(at, DateTime.now())} 天後永久刪除，之前可以復原。',
+                    // A promoted community spot: hidden, kept with its
+                    // official copy.
+                    null => '這個社群點已改為官方點，App 地圖上不會顯示。',
+                  }, error: true),
                 ],
                 if (spots.saveError != null) ...[
                   const SizedBox(height: 12),
@@ -1915,6 +1961,7 @@ class _SpotActions extends StatelessWidget {
     required this.creating,
     required this.official,
     required this.hidden,
+    required this.deleted,
     required this.dirty,
     required this.busy,
     required this.onSave,
@@ -1923,6 +1970,10 @@ class _SpotActions extends StatelessWidget {
     required this.onPromote,
   });
   final bool compact, creating, official, hidden, dirty, busy;
+
+  /// Deleted (#200), so it can be restored; a promoted community spot is
+  /// hidden without being deleted and stays with its official copy.
+  final bool deleted;
   final VoidCallback onSave, onDiscard, onPromote;
   final ValueChanged<bool> onHide;
 
@@ -1953,7 +2004,7 @@ class _SpotActions extends StatelessWidget {
               foregroundColor: colors.error,
               side: BorderSide(color: colors.error),
             ),
-      child: Text(hidden ? '恢復顯示' : '隱藏點位'),
+      child: Text(hidden ? '復原點位' : '刪除點位'),
     );
     return LayoutBuilder(
       builder: (context, box) {
@@ -1979,7 +2030,10 @@ class _SpotActions extends StatelessWidget {
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: [...others, if (!creating) hide],
+                      children: [
+                        ...others,
+                        if (!creating && (!hidden || deleted)) hide,
+                      ],
                     ),
                   ],
                 )
@@ -1988,7 +2042,7 @@ class _SpotActions extends StatelessWidget {
                     save,
                     for (final b in others) ...[const SizedBox(width: 10), b],
                     const Spacer(),
-                    if (!creating) hide,
+                    if (!creating && (!hidden || deleted)) hide,
                   ],
                 ),
         );
