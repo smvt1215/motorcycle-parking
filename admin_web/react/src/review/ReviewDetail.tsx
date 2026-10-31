@@ -206,7 +206,10 @@ function ReportDetail({ reportId }: { reportId: string }) {
   const report = open.find((r) => r.id === reportId);
   const spot = report ? spots[report.sourceId] : undefined;
   const plan = report ? applyPlan(report, spot) : null;
-  const canEdit = Boolean(spot) && !(plan && !plan.ok && plan.reason === 'structured');
+  // Structured proposals, and rider fee text under a structured fee (whose
+  // field is locked in the editor), cannot be applied here even edited.
+  const canEdit =
+    Boolean(spot) && !(plan && !plan.ok && (plan.reason === 'structured' || plan.reason === 'feeNote'));
   const outcome = report && spot && mode === 'edit' ? editOutcome(report, spot, editValues, touched) : null;
   const position = visible.findIndex((r) => r.id === reportId);
 
