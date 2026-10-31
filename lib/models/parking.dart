@@ -1,6 +1,7 @@
 import 'closure.dart';
 import 'fee.dart';
 import 'parking_condition.dart';
+import 'zone_entries.dart';
 
 enum VehicleType { scooter, heavy }
 
@@ -135,6 +136,7 @@ String _feeNoteText(Object? value) => value is String ? value : '';
 /// These describe the source's information, not a legal eligibility decision.
 class ParkingZone {
   const ParkingZone({
+    this.id,
     required this.name,
     this.access,
     this.feeNote = '',
@@ -145,9 +147,18 @@ class ParkingZone {
     this.fee,
     this.area,
     this.condition,
+    this.evidenceUrl = '',
   });
 
+  /// The zone's stable id in its spot (#188); null until the server gives
+  /// it one (a zone a form has just added). Writers send it back, so that a
+  /// renamed zone stays the same zone.
+  final String? id;
+
   final String name, feeNote, guide;
+
+  /// A link to a photo or notice of the zone (https), or empty.
+  final String evidenceUrl;
 
   /// Rates belong to vehicles independently of whether their bays are shared.
   /// Empty means unprovided; a generic fee note is never copied into a rate.
@@ -185,6 +196,7 @@ class ParkingZone {
       ].any((v) => v.trim().isNotEmpty);
 
   factory ParkingZone.fromJson(Map<String, dynamic> json) => ParkingZone(
+    id: json['id'] is String ? json['id'] as String : null,
     name: json['name'] as String? ?? '',
     access: _optionalEnum(ParkingAccess.values, json['access']),
     feeNote: json['fee_note'] as String? ?? '',
@@ -195,9 +207,13 @@ class ParkingZone {
     fee: json['fee'] is Map ? Fee.fromJson(json['fee']) : null,
     area: _optionalEnum(ZoneArea.values, json['area']),
     condition: ParkingCondition.fromJson(json['condition'], zone: true),
+    evidenceUrl: validEntryUrl(json['evidence_url'])
+        ? json['evidence_url'] as String
+        : '',
   );
 
   Map<String, dynamic> toJson() => {
+    'id': ?id,
     'name': name,
     if (access != null) 'access': access!.name,
     if (area != null) 'area': area!.name,
@@ -208,6 +224,75 @@ class ParkingZone {
     if (heavyFeeNote.isNotEmpty) 'heavy_fee_note': heavyFeeNote,
     if (carFeeNote.isNotEmpty) 'car_fee_note': carFeeNote,
     if (fee case final fee?) 'fee': fee.toJson(),
+    if (evidenceUrl.isNotEmpty) 'evidence_url': evidenceUrl,
+  };
+}
+
+/// One stretch of a street spot's bays (#188, design canvas S3b, S4): its
+/// side, the range it covers, what is painted there and how many. Builds
+/// before segments never read them; the spot's own condition still stands
+/// for the whole spot there.
+class ParkingSegment {
+  const ParkingSegment({
+    this.id,
+    required this.name,
+    this.side,
+    this.range = '',
+    this.condition,
+    this.total,
+    this.guide = '',
+    this.evidenceUrl = '',
+  });
+
+  /// The segment's stable id in its spot; null until the server gives one.
+  final String? id;
+  final String name;
+  final RoadSide? side;
+
+  /// Where it runs, e.g. 建國北路口至松江路口; empty when not given.
+  final String range;
+
+  /// What is painted there; null is unconfirmed (or broke the contract).
+  /// Never carries `allow`: the city's rules decide who may park.
+  final ParkingCondition? condition;
+
+  /// How many bays; null is unconfirmed.
+  final int? total;
+  final String guide, evidenceUrl;
+
+  /// The bay kind painted there; null is unconfirmed.
+  BayKind? get bayKind => bayKindOf(condition);
+
+  factory ParkingSegment.fromJson(Map<String, dynamic> json) {
+    final c = json['condition'];
+    final total = json['total'];
+    return ParkingSegment(
+      id: json['id'] is String ? json['id'] as String : null,
+      name: json['name'] as String? ?? '',
+      side: _optionalEnum(RoadSide.values, json['side']),
+      range: json['range'] is String ? json['range'] as String : '',
+      condition: c is Map && c.containsKey('allow')
+          ? null
+          : ParkingCondition.fromJson(c, zone: true),
+      total: total is num && total == total.truncate() && total >= 1
+          ? total.toInt()
+          : null,
+      guide: json['guide'] is String ? json['guide'] as String : '',
+      evidenceUrl: validEntryUrl(json['evidence_url'])
+          ? json['evidence_url'] as String
+          : '',
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'id': ?id,
+    'name': name,
+    'side': ?side?.name,
+    if (range.isNotEmpty) 'range': range,
+    if (condition case final c?) 'condition': c.toJson(),
+    'total': ?total,
+    if (guide.isNotEmpty) 'guide': guide,
+    if (evidenceUrl.isNotEmpty) 'evidence_url': evidenceUrl,
   };
 }
 
@@ -265,6 +350,7 @@ class ParkingSpot {
     this.specialRules = '',
     this.photoUrls = const [],
     this.zones = const [],
+    this.segments = const [],
     this.availabilityUpdatedAt,
     this.scooterVerifiedAt,
     this.heavyVerifiedAt,
@@ -310,6 +396,10 @@ class ParkingSpot {
   final String address, roadSegment, entranceNote, parkingGuide, specialRules;
   final List<String> photoUrls;
   final List<ParkingZone> zones;
+
+  /// A street spot's segments (#188), in the order stored; empty when it
+  /// has none or the source predates them.
+  final List<ParkingSegment> segments;
   final DateTime? availabilityUpdatedAt;
 
   /// When an administrator last set this community spot's access for each
@@ -442,6 +532,10 @@ class ParkingSpot {
       zones: (j['parking_zones'] as List<dynamic>? ?? [])
           .map((zone) => ParkingZone.fromJson(zone as Map<String, dynamic>))
           .toList(),
+      segments: [
+        for (final s in j['parking_segments'] as List<dynamic>? ?? const [])
+          if (s is Map<String, dynamic>) ParkingSegment.fromJson(s),
+      ],
       availabilityUpdatedAt: DateTime.tryParse(
         j['availability_updated_at'] as String? ?? '',
       ),
@@ -527,6 +621,9 @@ class ParkingSpot {
                 ? zonesJson[i]
                 : ({...zonesJson[i]}..remove('access')),
         ],
+      // Builds before segments ignore the key; nothing to project.
+      if (segments.isNotEmpty)
+        'parking_segments': [for (final s in segments) s.toJson()],
       if (availabilityUpdatedAt != null)
         'availability_updated_at': availabilityUpdatedAt!.toIso8601String(),
       if (scooterVerifiedAt != null)

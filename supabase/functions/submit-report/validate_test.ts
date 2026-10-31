@@ -471,3 +471,161 @@ Deno.test('a closure suggestion carries its cause and a real date (#116)', () =>
     }
   }
 });
+
+Deno.test('new street spots may carry segments; zones and segments take no ids from riders (#188)', () => {
+  const street = {
+    ...base,
+    spot: {
+      ...base.spot,
+      space_type: 'paidMotorcycle',
+      condition: { bay: 'motorcycle', use: 'usual', charge: 'toll' },
+      parking_segments: [
+        {
+          name: '北側一般機車格',
+          side: 'north',
+          range: '建國北路口至松江路口',
+          total: 18,
+          condition: { bay: 'motorcycle', use: 'usual' },
+          evidence_url: 'https://example.com/n.jpg',
+        },
+        {
+          name: '南側',
+          condition: { bay: 'car', use: 'share', share: 'car_motorcycle' },
+        },
+      ],
+    },
+  };
+  if (validate(street) !== null) throw new Error('segments refused');
+  for (
+    const segments of [
+      [{ id: 's1', name: '北側' }],
+      [{
+        name: '北側',
+        condition: { bay: 'motorcycle', basis: { source_url: 'https://x.tw' } },
+      }],
+      [{
+        name: '北側',
+        condition: { bay: 'motorcycle', allow: { scooter: true } },
+      }],
+      [{ name: '' }],
+      [{ name: '北側', fee: {} }],
+      {},
+    ]
+  ) {
+    if (
+      validate({
+        ...street,
+        spot: { ...street.spot, parking_segments: segments },
+      }) ===
+        null
+    ) throw new Error(`bad segments accepted: ${JSON.stringify(segments)}`);
+  }
+  const lot = {
+    ...base,
+    spot: {
+      ...base.spot,
+      space_type: 'offStreet',
+      parking_zones: [{
+        name: 'B1',
+        evidence_url: 'https://example.com/b1.jpg',
+      }],
+    },
+  };
+  if (validate(lot) !== null) throw new Error('a zone notice link refused');
+  for (
+    const zones of [[{ id: 'b1', name: 'B1' }], [{
+      name: 'B1',
+      evidence_url: 'http://x.tw',
+    }]]
+  ) {
+    if (
+      validate({ ...lot, spot: { ...lot.spot, parking_zones: zones } }) === null
+    ) {
+      throw new Error(`bad zones accepted: ${JSON.stringify(zones)}`);
+    }
+  }
+});
+
+Deno.test('suggestions may change zones and segments by id (#188)', () => {
+  const flag = {
+    device_id: base.device_id,
+    action: 'flag',
+    source_id: '10000000-0000-4000-8000-000000000002',
+    reason: '分區：修改',
+    field: 'zones',
+  };
+  for (
+    const proposed of [
+      { parking_zones: [{ id: 'b1', guide: '走右側坡道' }] },
+      { parking_zones: [{ id: 'b1', guide: null, access: 'scooterHeavy' }] },
+      {
+        parking_zones: [{ id: 'b2', removed: true }, {
+          name: 'B3',
+          access: 'heavyOnly',
+        }],
+      },
+      {
+        parking_zones: [{
+          id: 'b1',
+          evidence_url: 'https://example.com/b1.jpg',
+        }],
+      },
+      { parking_segments: [{ id: 's1', total: 20, range: '全段' }] },
+      {
+        parking_segments: [{
+          id: 's1',
+          condition: { bay: 'car', use: 'share', share: 'car_motorcycle' },
+        }],
+      },
+      {
+        parking_segments: [{ id: 's1', removed: true }, {
+          name: '南側',
+          side: 'south',
+        }],
+      },
+    ]
+  ) {
+    const body = { ...flag, proposed };
+    if (validate(body) !== null) {
+      throw new Error(`refused: ${JSON.stringify(proposed)}`);
+    }
+  }
+  for (
+    const proposed of [
+      { parking_zones: [] },
+      { parking_zones: [{ id: 'b1' }] },
+      { parking_zones: [{ id: 'b1', name: null }] },
+      { parking_zones: [{ id: 'b1', guide: 'x' }, { id: 'b1', guide: 'y' }] },
+      { parking_zones: [{ id: 'B1', guide: 'x' }] },
+      { parking_zones: [{ id: 'b1', removed: false }] },
+      { parking_zones: [{ id: 'b1', removed: true, name: 'B1' }] },
+      { parking_zones: [{ name: 'B3', removed: true }] },
+      { parking_zones: [{ id: 'b1', access: 'all' }] },
+      { parking_zones: [{ id: 'b1', condition: { bay: 'car' } }] },
+      { parking_zones: [{ id: 'b1', evidence_url: 'http://x.tw' }] },
+      { parking_zones: [{ name: '' }] },
+      { parking_zones: { id: 'b1' } },
+      { parking_segments: [{ id: 's1', side: 'left' }] },
+      {
+        parking_segments: [{
+          id: 's1',
+          condition: { bay: 'motorcycle', allow: { heavy: true } },
+        }],
+      },
+      {
+        parking_segments: [{
+          id: 's1',
+          condition: {
+            bay: 'motorcycle',
+            basis: { source_url: 'https://x.tw' },
+          },
+        }],
+      },
+      { parking_segments: [{ id: 's1', total: 0 }] },
+    ]
+  ) {
+    if (validate({ ...flag, proposed }) === null) {
+      throw new Error(`accepted: ${JSON.stringify(proposed)}`);
+    }
+  }
+});
