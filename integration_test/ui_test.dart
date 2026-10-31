@@ -48,7 +48,9 @@ void main() {
     await selectTab(tester, 2, (rect) => rect.center.dx);
     await shoot(binding, tester, 'personal-light');
     await tapReachable(tester, find.text('停車規則'));
-    expect(find.text('停之前，先看規則'), findsOneWidget);
+    // P7: the intro, then one row per bay kind.
+    expect(find.text('停之前，先看規則。各縣市開放的格位和收費不同。'), findsOneWidget);
+    expect(find.text('一般機車格'), findsOneWidget);
     await shoot(binding, tester, 'rules-light');
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
@@ -61,9 +63,13 @@ void main() {
     await tester.pumpAndSettle();
     await shoot(binding, tester, 'map-dark');
     await selectTab(tester, 4, (rect) => rect.right - rect.width / 6);
-    expect(find.text('新增停車點'), findsOneWidget);
+    // P8: 修正附近停車點, and 新增停車點 as the iOS primary button or the
+    // Android extended FAB.
+    expect(find.text('修正附近停車點'), findsOneWidget);
+    final newSpot = find.byKey(const ValueKey('contribute-new-spot'));
+    expect(newSpot, findsOneWidget);
     await shoot(binding, tester, 'contribute-dark');
-    await tapReachable(tester, find.byTooltip('新增停車點'));
+    await pressNewSpot(tester, newSpot);
     await shoot(binding, tester, 'report-dark');
     expect(tester.takeException(), isNull);
   });
@@ -85,6 +91,18 @@ Future<void> selectTab(
     await tester.tapAt(Offset(dx(rect), rect.bottom - 50));
   }
   await tester.pumpAndSettle();
+}
+
+/// Opens 新增停車點. On iOS 26+ the button is a native glass button (a
+/// platform view test pointers never reach), so invoke its callback there;
+/// elsewhere tap it once reachable.
+Future<void> pressNewSpot(WidgetTester tester, Finder button) async {
+  if (nativeGlass) {
+    tester.widget<AdaptiveButton>(button).onPressed!();
+    await tester.pumpAndSettle();
+  } else {
+    await tapReachable(tester, button);
+  }
 }
 
 /// Taps [finder] once nothing covers it. On small screens a list row can sit

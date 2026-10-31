@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../data/app_store.dart';
+import '../../domain/account_display.dart';
 import '../../ui/adaptive/adaptive.dart';
 
 /// Start OAuth where the action is needed, without opening account settings.
@@ -10,20 +11,24 @@ class SignInButtons extends StatelessWidget {
   const SignInButtons({super.key, required this.store});
   final AppStore store;
 
+  /// iOS leads with Apple (HIG: Sign in with Apple first and prominent);
+  /// elsewhere Google is the only provider.
+  static List<OAuthProvider> get providers => isCupertino
+      ? const [OAuthProvider.apple, OAuthProvider.google]
+      : const [OAuthProvider.google];
+
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      for (final provider in [
-        OAuthProvider.google,
-        if (isCupertino) OAuthProvider.apple,
-      ]) ...[
-        if (provider == OAuthProvider.apple) const SizedBox(height: 12),
+      for (final (i, provider) in providers.indexed) ...[
+        if (i > 0) const SizedBox(height: 12),
         AdaptiveButton(
+          key: ValueKey('sign-in-${provider.name}'),
           label: provider == OAuthProvider.google
               ? '使用 Google 登入'
               : '使用 Apple 登入',
-          secondary: provider == OAuthProvider.apple,
+          secondary: i > 0,
           onPressed: () {
             FocusManager.instance.primaryFocus?.unfocus();
             runAction(context, () => store.signIn(provider));
@@ -76,9 +81,15 @@ class _SignInSheetState extends State<_SignInSheet> {
     children: [
       SheetTitle('登入'),
       const SizedBox(height: 12),
-      const Text('登入後可回報停車資訊與同步收藏。'),
+      const Text(signInIntro),
       const SizedBox(height: 24),
       SignInButtons(store: widget.store),
+      const SizedBox(height: 16),
+      Text(
+        signInNotNeeded,
+        style: Theme.of(context).textTheme.bodySmall
+            ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+      ),
     ],
   );
 }
