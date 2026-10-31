@@ -440,7 +440,13 @@ List<SignArea> _lotAreas(
       name: '',
       status: whole.status,
       restriction: whole.restriction,
-      window: openWindow(whole.status, null, vehicle, now),
+      window: openWindow(
+        whole.status,
+        spot.condition,
+        vehicle,
+        now,
+        calendar: calendar,
+      ),
       countClass: availabilityVehicle(vehicle),
     ),
   ];
@@ -536,26 +542,38 @@ VerdictAnswer _verdict(
         openNow: true,
       );
     }
-    // Every place open now closes: the latest time stands.
-    final ends = [for (final a in openNow) a.window.until];
-    final until = ends.every((e) => e != null)
-        ? (ends.cast<String>()..sort()).last
+    // Every place open now closes: the one closing last stands, compared by
+    // minutes (a slot to 隔天 02:00 closes after one to 23:00).
+    final closing = openNow.every((a) => a.window.untilMinute != null)
+        ? openNow.reduce(
+            (a, b) => b.window.untilMinute! > a.window.untilMinute! ? b : a,
+          )
         : null;
     return VerdictAnswer(
       status: EligibilityStatus.conditional,
-      restriction: limited.first.restriction,
-      until: until,
+      restriction: (closing ?? limited.first).restriction,
+      until: closing?.window.until,
       basis: basis,
       city: city,
       openNow: true,
     );
   }
   if (open.isNotEmpty) {
-    final opens = [for (final a in open) ?a.window.opensAt];
+    // The place opening first names the time and its limit.
+    final later = [
+      for (final a in open)
+        if (a.window.opensAtMinute != null) a,
+    ];
+    final first = later.isEmpty
+        ? null
+        : later.reduce(
+            (a, b) => b.window.opensAtMinute! < a.window.opensAtMinute! ? b : a,
+          );
     return VerdictAnswer(
       status: EligibilityStatus.conditional,
-      restriction: open.first.restriction ?? RuleRestriction.timeLimited,
-      opensAt: opens.firstOrNull,
+      restriction:
+          (first ?? open.first).restriction ?? RuleRestriction.timeLimited,
+      opensAt: first?.window.opensAt,
       basis: basis,
       city: city,
     );
@@ -617,30 +635,30 @@ SeatAnswer _seat(
       if (_shown(c.$1, now)) c,
   ];
   if (usable.isNotEmpty) {
-    final fresh = [
-      for (final c in usable)
-        if (c.$1.status(now) == AvailabilityStatus.fresh) c,
+    bool isFresh(int i) => usable[i].$1.status(now) == AvailabilityStatus.fresh;
+    final anyFresh = [for (var i = 0; i < usable.length; i++) i].any(isFresh);
+    // Indexes into [usable]: fresh ones when any, else every one.
+    final pool = [
+      for (var i = 0; i < usable.length; i++)
+        if (!anyFresh || isFresh(i)) i,
     ];
-    final pool = fresh.isNotEmpty ? fresh : usable;
     DateTime time(AvailabilitySnapshot s) =>
         s.sourceUpdatedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
     // Fresh first, then most free, then newer (2026-10-29); with none
     // fresh, the newest.
-    pool.sort(
-      (a, b) => fresh.isNotEmpty
-          ? b.$1.available!.compareTo(a.$1.available!) != 0
-                ? b.$1.available!.compareTo(a.$1.available!)
-                : time(b.$1).compareTo(time(a.$1))
-          : time(b.$1).compareTo(time(a.$1)),
-    );
-    final best = pool.first;
+    pool.sort((i, j) {
+      final a = usable[i].$1, b = usable[j].$1;
+      final byFree = b.available!.compareTo(a.available!);
+      return anyFresh && byFree != 0 ? byFree : time(b).compareTo(time(a));
+    });
+    final bestAt = pool.first;
+    final best = usable[bestAt];
     final more = [
-      for (final c in usable)
-        if (!identical(c, best) && c.$1.available! > 0)
-          c.$2.isEmpty ? 1 : c.$2.length,
+      for (final (i, c) in usable.indexed)
+        if (i != bestAt && c.$1.available! > 0) c.$2.isEmpty ? 1 : c.$2.length,
     ].fold<int>(0, (a, b) => a + b);
     return SeatAnswer(
-      kind: fresh.isNotEmpty ? SeatKind.live : SeatKind.delayed,
+      kind: anyFresh ? SeatKind.live : SeatKind.delayed,
       areas: best.$2.isEmpty && best.$1.vehicle == AvailabilityVehicle.car
           ? const [
               SignArea(

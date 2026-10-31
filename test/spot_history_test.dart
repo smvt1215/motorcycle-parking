@@ -207,7 +207,10 @@ void main() {
     await openDetails(tester, store, spot);
     await showField(tester, '最近更新');
     expect(find.text('費率，2026-10-27'), findsNothing);
-    expect(find.textContaining('2026-10-28'), findsOneWidget);
+    // 最近更新 reads the spot's own time; the banner's source line dates
+    // the official data the same day. The details are built in full now.
+    expect(find.text('2026-10-28 11:00'), findsOneWidget);
+    expect(find.text('依政府公開資料，更新於 2026-10-28'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.text('看更新紀錄'),
       80,

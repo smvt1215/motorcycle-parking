@@ -1,5 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
+import 'adaptive/adaptive.dart' show isCupertino;
+
 import '../domain/four_sign.dart';
 import '../domain/four_sign_display.dart';
 
@@ -53,7 +55,9 @@ class FourSignPlates extends StatelessWidget {
             key: ValueKey('four-sign-${p.face.name}'),
             plate: p,
             compact: compact,
-            current: current == p.face,
+            // Only a table of contents marks one; elsewhere no plate
+            // carries a selected state.
+            current: current == null ? null : current == p.face,
             onTap: onTap == null ? null : () => onTap!(p.face),
           ),
       ];
@@ -94,7 +98,10 @@ class _Plate extends StatelessWidget {
     this.onTap,
   });
   final SignPlate plate;
-  final bool compact, current;
+  final bool compact;
+
+  /// Whether this is the section shown; null where nothing is.
+  final bool? current;
   final VoidCallback? onTap;
 
   @override
@@ -165,7 +172,7 @@ class _Plate extends StatelessWidget {
     };
     final solid = border == null && plate.tone != PlateTone.rider;
     final small = TextStyle(
-      fontSize: compact ? 11 : 11,
+      fontSize: 11,
       height: 1.3,
       color: solid ? label.withValues(alpha: .92) : label,
     );
@@ -232,7 +239,7 @@ class _Plate extends StatelessWidget {
             )
           : content,
     );
-    if (current) {
+    if (current == true) {
       box = DecoratedBox(
         position: DecorationPosition.foreground,
         decoration: BoxDecoration(
@@ -248,12 +255,47 @@ class _Plate extends StatelessWidget {
       label: plate.semantics,
       onTap: onTap,
       excludeSemantics: true,
-      child: Material(
-        type: MaterialType.transparency,
-        child: InkWell(borderRadius: radius, onTap: onTap, child: box),
-      ),
+      // iOS dims on press (HIG); Android keeps the Material ripple.
+      child: isCupertino
+          ? _PressOpacity(onTap: onTap, child: box)
+          : Material(
+              type: MaterialType.transparency,
+              child: InkWell(borderRadius: radius, onTap: onTap, child: box),
+            ),
     );
   }
+}
+
+/// A plate that dims while pressed, as iOS buttons do.
+class _PressOpacity extends StatefulWidget {
+  const _PressOpacity({required this.child, this.onTap});
+  final Widget child;
+  final VoidCallback? onTap;
+
+  @override
+  State<_PressOpacity> createState() => _PressOpacityState();
+}
+
+class _PressOpacityState extends State<_PressOpacity> {
+  bool down = false;
+
+  void press(bool value) {
+    if (widget.onTap != null && down != value) setState(() => down = value);
+  }
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    behavior: HitTestBehavior.opaque,
+    onTap: widget.onTap,
+    onTapDown: (_) => press(true),
+    onTapUp: (_) => press(false),
+    onTapCancel: () => press(false),
+    child: AnimatedOpacity(
+      opacity: down ? .55 : 1,
+      duration: Duration(milliseconds: down ? 10 : 120),
+      child: widget.child,
+    ),
+  );
 }
 
 /// Riders' levels as 3-bar meters (A6); two side by side, slashed, when

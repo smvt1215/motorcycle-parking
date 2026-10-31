@@ -255,7 +255,7 @@ SignPlate _seatPlate(FourSign s, DateTime now) {
       return SignPlate(
         face: FourSignFace.seat,
         main: main,
-        note: shown.isNotEmpty ? '$shown\n車友・$ago' : '車友回報\n${split ?? ago}',
+        note: shown.isNotEmpty ? '$shown\n車友回報・$ago' : '車友回報\n${split ?? ago}',
         tone: PlateTone.rider,
         tag: more,
         meters: r.conflict ? [high, low!] : [r.level],

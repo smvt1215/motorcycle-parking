@@ -321,6 +321,92 @@ void main() {
       expect((evening[0].main, evening[0].note), ('限時段', '到 23:00'));
     });
 
+    test('到幾點用分鐘比，隔天 02:00 比 23:00 晚', () {
+      final late = ParkingSpot.fromJson({
+        ...lotJson,
+        'parking_zones': [
+          for (final z in lotJson['parking_zones'] as List)
+            if ((z as Map)['id'] == 'b3') z,
+          {
+            'id': 'b4',
+            'name': 'B4 夜間區',
+            'area': 'heavy',
+            'condition': {
+              'bay': 'heavy',
+              'use': 'usual',
+              'allow': {'heavy': true},
+              'schedule': [
+                {
+                  'days': 'all',
+                  'from': '20:00',
+                  'to': '02:00',
+                  'vehicles': ['heavy'],
+                },
+              ],
+            },
+          },
+        ],
+      });
+      final p = plates(late, VehicleType.heavy, night);
+      expect((p[0].main, p[0].note), ('限時段', '到 02:00'));
+    });
+
+    test('幾點起取最早開放的那一區，限制也取那一區', () {
+      final later = ParkingSpot.fromJson({
+        ...lotJson,
+        'parking_zones': [
+          {
+            'id': 'b5',
+            'name': 'B5 充電區',
+            'area': 'heavy',
+            'condition': {
+              'bay': 'heavy',
+              'use': 'usual',
+              'limits': [
+                {'kind': 'ev_only'},
+              ],
+              'allow': {'heavy': true},
+              'schedule': [
+                {
+                  'days': 'all',
+                  'from': '22:00',
+                  'to': '23:00',
+                  'vehicles': ['heavy'],
+                },
+              ],
+            },
+          },
+          for (final z in lotJson['parking_zones'] as List)
+            if ((z as Map)['id'] == 'b3') z,
+        ],
+      });
+      final sign = fourSign(later, VehicleType.heavy, rules, now: day);
+      expect(sign.verdict.opensAt, '20:00');
+      expect(sign.verdict.restriction, RuleRestriction.timeLimited);
+    });
+
+    test('沒有分區的停車場依自己的時段寫幾點起', () {
+      final noZones = ParkingSpot.fromJson({
+        ...lotJson,
+        'parking_zones': null,
+        'condition': {
+          'bay': 'car',
+          'use': 'usual',
+          'schedule': [
+            {
+              'days': 'all',
+              'from': '20:00',
+              'to': '23:00',
+              'vehicles': ['heavy'],
+            },
+          ],
+        },
+      });
+      expect(noZones.condition, isNotNull);
+      final p = plates(noZones, VehicleType.heavy, day);
+      expect((p[0].main, p[0].note), ('限時段', '20:00 起'));
+    });
+
     test('普通機車：只有 B1 可停；重機格、汽車格不算', () {
       final p = plates(lot, VehicleType.scooter, day);
       expect(p[0].main, '可停');
@@ -338,6 +424,22 @@ void main() {
         (p[2].main, p[2].note, p[2].tone),
         ('官方未標示', '依現場公告', PlateTone.dashed),
       );
+    });
+
+    test('多區車友回報：小字寫區名與「車友回報・時間」', () {
+      final p = plates(
+        lot,
+        VehicleType.heavy,
+        night,
+        riders: _Riders([
+          RiderSeat(
+            level: 2,
+            at: night.subtract(const Duration(minutes: 8)),
+            areaId: 'b2',
+          ),
+        ]),
+      );
+      expect(p[1].note, 'B2 重機專區\n車友回報・8 分鐘前');
     });
 
     test('車友回報：沒有官方數字時用量表與車友回報小字', () {

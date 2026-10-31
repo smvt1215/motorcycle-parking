@@ -121,14 +121,16 @@ class SpotPreview extends StatelessWidget {
 
 /// The preview's action bar (Main, A5, A6): 導航到入口 (a street spot:
 /// 導航) first, then 回報現場狀況 and 修改建議. One row when it fits,
-/// else the first on its own row and the other two side by side (A5).
+/// else the first on its own row and the others side by side (A5), else
+/// one per row. A null [onReport] leaves 回報現場狀況 out: until the rider
+/// sighting sheet (A7, A7b; PR-E) lands, the bar has two buttons.
 class SpotPreviewActions extends StatelessWidget {
   const SpotPreviewActions({
     super.key,
     required this.street,
     required this.onNavigate,
-    required this.onReport,
-    required this.onSuggest,
+    this.onReport,
+    this.onSuggest,
   });
   final bool street;
   final VoidCallback onNavigate;
@@ -136,6 +138,12 @@ class SpotPreviewActions extends StatelessWidget {
 
   static String navigateLabel({required bool street}) =>
       street ? '導航' : '導航到入口';
+
+  /// The secondary labels shown: 回報現場狀況 only with [report].
+  static List<String> _secondary({required bool report}) => [
+    if (report) '回報現場狀況',
+    '修改建議',
+  ];
 
   /// The room a button needs at the current text size: its label and 24
   /// on either side.
@@ -148,91 +156,107 @@ class SpotPreviewActions extends StatelessWidget {
       textDirection: TextDirection.ltr,
       maxLines: 1,
     )..layout();
-    return painter.width + 48;
+    final width = painter.width;
+    painter.dispose();
+    return width + 48;
   }
 
-  /// Whether the three buttons fit one row of [width].
+  /// Whether every button fits one row of [width].
   static bool fitsRow(
     BuildContext context,
     double width, {
-    bool street = false,
-  }) =>
-      _need(context, navigateLabel(street: street)) +
-          _need(context, '回報現場狀況') +
-          _need(context, '修改建議') +
-          16 <=
-      width;
+    required bool street,
+    required bool report,
+  }) {
+    final labels = [
+      navigateLabel(street: street),
+      ..._secondary(report: report),
+    ];
+    final need = labels.fold<double>(0, (a, l) => a + _need(context, l));
+    return need + 8 * (labels.length - 1) <= width;
+  }
 
-  /// Whether the two secondary buttons fit side by side under the first.
-  static bool fitsPair(BuildContext context, double width) =>
-      _need(context, '回報現場狀況') <= (width - 8) / 2;
+  /// Whether the secondary buttons fit side by side under the first.
+  static bool fitsPair(
+    BuildContext context,
+    double width, {
+    required bool report,
+  }) {
+    final labels = _secondary(report: report);
+    final each = (width - 8 * (labels.length - 1)) / labels.length;
+    return labels.every((l) => _need(context, l) <= each);
+  }
 
   /// Upper estimate of the bar's height at [width].
-  static double heightFor(BuildContext context, double width) {
+  static double heightFor(
+    BuildContext context,
+    double width, {
+    required bool street,
+    required bool report,
+  }) {
     final button = math.max(
       48.0,
       MediaQuery.textScalerOf(context).scale(20) + 28,
     );
-    if (fitsRow(context, width)) return button;
-    return fitsPair(context, width) ? button * 2 + 8 : button * 3 + 16;
+    if (fitsRow(context, width, street: street, report: report)) return button;
+    if (fitsPair(context, width, report: report)) return button * 2 + 8;
+    final rows = 1 + _secondary(report: report).length;
+    return button * rows + 8 * (rows - 1);
   }
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
+      final width = constraints.maxWidth;
+      final report = onReport != null;
       final navigate = AdaptiveButton(
         key: const ValueKey('spot-navigate'),
         label: navigateLabel(street: street),
         onPressed: onNavigate,
       );
-      final report = AdaptiveButton(
-        key: const ValueKey('spot-report'),
-        label: '回報現場狀況',
-        secondary: true,
-        onPressed: onReport,
-      );
-      final suggest = AdaptiveButton(
-        key: const ValueKey('spot-suggest'),
-        label: '修改建議',
-        secondary: true,
-        onPressed: onSuggest,
-      );
-      if (fitsRow(context, constraints.maxWidth, street: street)) {
+      final secondary = [
+        if (report)
+          AdaptiveButton(
+            key: const ValueKey('spot-report'),
+            label: '回報現場狀況',
+            secondary: true,
+            onPressed: onReport,
+          ),
+        AdaptiveButton(
+          key: const ValueKey('spot-suggest'),
+          label: '修改建議',
+          secondary: true,
+          onPressed: onSuggest,
+        ),
+      ];
+      List<Widget> spaced(List<Widget> items, Widget gap) => [
+        for (final (i, w) in items.indexed) ...[if (i > 0) gap, w],
+      ];
+      if (fitsRow(context, width, street: street, report: report)) {
         return Row(
-          children: [
+          children: spaced([
             Expanded(child: navigate),
-            const SizedBox(width: 8),
-            report,
-            const SizedBox(width: 8),
-            suggest,
-          ],
+            ...secondary,
+          ], const SizedBox(width: 8)),
         );
       }
-      if (!fitsPair(context, constraints.maxWidth)) {
+      if (fitsPair(context, width, report: report)) {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             navigate,
             const SizedBox(height: 8),
-            report,
-            const SizedBox(height: 8),
-            suggest,
+            Row(
+              children: spaced([
+                for (final b in secondary) Expanded(child: b),
+              ], const SizedBox(width: 8)),
+            ),
           ],
         );
       }
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          navigate,
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(child: report),
-              const SizedBox(width: 8),
-              Expanded(child: suggest),
-            ],
-          ),
-        ],
+        children: spaced([navigate, ...secondary], const SizedBox(height: 8)),
       );
     },
   );

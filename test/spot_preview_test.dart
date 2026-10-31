@@ -149,7 +149,9 @@ void main() {
         );
         expect(find.text('B2'), findsOneWidget);
         expect(find.text('20/時'), findsOneWidget);
-        for (final label in ['導航到入口', '回報現場狀況', '修改建議']) {
+        // 回報現場狀況 waits for the sighting sheet (PR-E).
+        expect(find.text('回報現場狀況'), findsNothing);
+        for (final label in ['導航到入口', '修改建議']) {
           expect(find.text(label).hitTestable(), findsOneWidget, reason: label);
           expect(tester.getSize(find.text(label)).height, greaterThan(0));
         }
@@ -161,7 +163,7 @@ void main() {
       });
     }
 
-    testWidgets('放大字級：路牌 2×2，動作列分兩排', variant: platforms, (tester) async {
+    testWidgets('放大字級：路牌 2×2，動作列不重疊', variant: platforms, (tester) async {
       final s = await store(tester, VehicleType.heavy);
       await open(tester, s, lot, scale: 1.6);
       expect(tester.takeException(), isNull);
@@ -181,8 +183,16 @@ void main() {
         findsOneWidget,
       );
       final nav = tester.getRect(find.byKey(const ValueKey('spot-navigate')));
-      final report = tester.getRect(find.byKey(const ValueKey('spot-report')));
-      expect(report.top, greaterThan(nav.bottom - 1));
+      // Two buttons now (回報現場狀況 waits for PR-E): side by side when they
+      // fit, else stacked; never overlapping.
+      final suggest = tester.getRect(
+        find.byKey(const ValueKey('spot-suggest')),
+      );
+      expect(
+        suggest.top >= nav.bottom - 1 || suggest.left >= nav.right - 1,
+        isTrue,
+      );
+      expect(find.text('修改建議').hitTestable(), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
     });
   }
@@ -197,7 +207,6 @@ void main() {
         label: '停哪裡：B2 重機專區',
         isButton: true,
         hasTapAction: true,
-        hasSelectedState: true,
       ),
     );
     expect(find.bySemanticsLabel(RegExp(r'^能不能停：可停')), findsOneWidget);
@@ -212,6 +221,36 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('four-sign-fee')));
     await tester.pumpAndSettle();
     expect(find.text('收費').hitTestable(), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  for (final (face, target) in [
+    ('where', find.text('停車資訊')),
+    ('seat', find.byKey(const ValueKey('availability-summary'))),
+  ]) {
+    testWidgets('窄螢幕大字級點 $face 路牌，捲到畫面外的段落', (tester) async {
+      final s = await store(tester, VehicleType.heavy);
+      await open(tester, s, lot, size: const Size(320, 640), scale: 1.6);
+      expect(target.hitTestable(), findsNothing);
+      // The resting sheet is short here: bring the plate up first.
+      await tester.ensureVisible(find.byKey(ValueKey('four-sign-$face')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(ValueKey('four-sign-$face')));
+      await tester.pumpAndSettle();
+      expect(target.hitTestable(), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
+  testWidgets('動作列只有兩顆時排成一列', (tester) async {
+    final s = await store(tester, VehicleType.heavy);
+    await open(tester, s, lot);
+    final nav = tester.getRect(find.byKey(const ValueKey('spot-navigate')));
+    final suggest = tester.getRect(find.byKey(const ValueKey('spot-suggest')));
+    expect(suggest.top, nav.top);
+    expect(suggest.left, greaterThan(nav.right));
+    expect(find.byKey(const ValueKey('spot-report')), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

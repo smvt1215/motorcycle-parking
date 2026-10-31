@@ -15,7 +15,13 @@ import 'parking_decision.dart';
 /// When an open place can be used: now (with the time the current slot
 /// ends, if it ends within a day), or later (with when it opens next).
 class OpenWindow {
-  const OpenWindow({required this.now, this.until, this.opensAt});
+  const OpenWindow({
+    required this.now,
+    this.until,
+    this.untilMinute,
+    this.opensAt,
+    this.opensAtMinute,
+  });
 
   /// Never open: closed, unconfirmed, or no slot opens within a week.
   static const never = OpenWindow(now: false);
@@ -28,9 +34,16 @@ class OpenWindow {
   /// 「22:00」 when [now] and the slot holding now ends within a day.
   final String? until;
 
+  /// [until] as minutes from today's 00:00 in Taiwan: past 1440 when the
+  /// slot runs past midnight (隔天 02:00 is 1560), so ends compare right.
+  final int? untilMinute;
+
   /// 「20:00」, 「明天 08:00」 or 「週一 08:00」 when not [now] and a slot
   /// opens within a week.
   final String? opensAt;
+
+  /// [opensAt] as minutes from today's 00:00 in Taiwan.
+  final int? opensAtMinute;
 }
 
 String _clock(int minute) {
@@ -91,7 +104,12 @@ OpenWindow openWindow(
         }
       }
     }
-    return OpenWindow(now: true, until: end - at < 1440 ? _clock(end) : null);
+    final within = end - at < 1440;
+    return OpenWindow(
+      now: true,
+      until: within ? _clock(end) : null,
+      untilMinute: within ? end : null,
+    );
   }
   final next = [
     for (final (start, _) in spans)
@@ -103,6 +121,7 @@ OpenWindow openWindow(
   final date = DateTime.utc(today.year, today.month, today.day + day);
   return OpenWindow(
     now: false,
+    opensAtMinute: first,
     opensAt: switch (day) {
       0 => _clock(first),
       1 => '明天 ${_clock(first)}',
@@ -135,6 +154,13 @@ class SegmentDecision {
 const segmentUncheckedReason = '此路段的格位類型未確認，請以現場標誌標線為準';
 
 /// [spot] as one segment of it: the same spot, painted as [condition].
+/// ParkingSpot has no copyWith (lib/models/parking.dart is another
+/// session's), so the fields [decideParking] reads are copied here. Left
+/// out on purpose, as no decision reads them: note, sourceUrl, sourceName,
+/// licenseNote, contributorName, contributorRole, address, roadSegment,
+/// entranceNote, parkingGuide, specialRules, photoUrls, zones (a street
+/// spot judges no zones), segments (the segment is the spot here),
+/// availabilityUpdatedAt and zonesComplete.
 ParkingSpot _asSegment(ParkingSpot spot, ParkingCondition condition) =>
     ParkingSpot(
       id: spot.id,
