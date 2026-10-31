@@ -16,7 +16,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "build:fixture": "tsc -b && vite build --mode fixture --outDir dist-fixture"
   },
   "dependencies": {
     "@reduxjs/toolkit": "2.13.0",

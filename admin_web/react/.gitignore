@@ -1,2 +1,5 @@
 dist/
+dist-fixture/
 artifacts/
+# Not a secret: only switches on the in-memory sample data.
+!.env.fixture
