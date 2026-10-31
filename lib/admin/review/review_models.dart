@@ -56,6 +56,9 @@ enum FieldInput {
   triState,
   visibility,
   hiddenFlag,
+
+  /// `scooter_not_stated`／`heavy_not_stated` (#201): 官方未標示 or not.
+  notStated,
   coordinate,
 
   /// One of [ReviewField.choices], or unset.
@@ -142,6 +145,9 @@ final reviewFields = [
   ReviewField('closure', '暫時無法停車', FieldInput.closure),
   const ReviewField('parking_zones', '分區', FieldInput.entries),
   const ReviewField('parking_segments', '路邊分段', FieldInput.entries),
+  // 官方未標示 (#201), beside a null flag; last, as riders rarely send it.
+  ReviewField('scooter_not_stated', '普通機車官方未標示', FieldInput.notStated),
+  ReviewField('heavy_not_stated', '大型重機官方未標示', FieldInput.notStated),
 ];
 
 ReviewField? reviewField(String key) =>
@@ -262,7 +268,9 @@ class ReviewReport {
     }
     if (key == 'eligibility' ||
         keys.contains('scooter_allowed') ||
-        keys.contains('heavy_allowed')) {
+        keys.contains('heavy_allowed') ||
+        keys.contains('scooter_not_stated') ||
+        keys.contains('heavy_not_stated')) {
       return ReviewKind.access;
     }
     return ReviewKind.info;
@@ -463,6 +471,7 @@ bool fitsField(ReviewField field, Object? value) => switch (field.input) {
     'hidden',
   }.contains(value),
   FieldInput.hiddenFlag => value is bool,
+  FieldInput.notStated => value is bool,
   FieldInput.coordinate => value is num,
   FieldInput.choice => value == null || field.choices.containsKey(value),
   FieldInput.multiChoice => value == null || validChoices(field, value),
@@ -553,6 +562,7 @@ String formatValue(String key, Object? value) {
       _ => '顯示（待確認）',
     },
     FieldInput.hiddenFlag => value == true ? '隱藏' : '顯示',
+    FieldInput.notStated => value == true ? '官方未標示' : '否',
     FieldInput.coordinate => value is num ? value.toStringAsFixed(6) : '未填寫',
     FieldInput.text =>
       value is String && value.trim().isNotEmpty ? value : '未填寫',
@@ -596,6 +606,22 @@ String? validatePatch(Map<String, dynamic> patch, ReviewSpot spot) {
         }
       case FieldInput.triState:
         if (value != null && value is! bool) return '${field.label}的值無效';
+        // A write never clears a vehicle (#201): 可停、不可停, or 官方未標示.
+        if (value == null &&
+            patch[key.replaceFirst('_allowed', '_not_stated')] != true) {
+          return '${field.label}請選可停或不可停，或設為官方未標示';
+        }
+        // Not both: the RPC refuses a flag beside 官方未標示.
+        if (value is bool &&
+            patch[key.replaceFirst('_allowed', '_not_stated')] == true) {
+          return '${field.label}選了可停或不可停，請把「${field.label}官方未標示」改成「否」';
+        }
+      case FieldInput.notStated:
+        if (value is! bool) return '${field.label}的值無效';
+        if (value == false &&
+            patch[key.replaceFirst('_not_stated', '_allowed')] is! bool) {
+          return '${field.label}取消時，請同時選可停或不可停';
+        }
       case FieldInput.visibility:
         if (!const {'pending', 'confirmed', 'hidden'}.contains(value)) {
           return '請選擇地圖顯示方式';

@@ -1548,6 +1548,16 @@ class _FieldEditor extends StatelessWidget {
         _ => null,
       }),
     ),
+    FieldInput.notStated => DropdownButtonFormField<bool>(
+      initialValue: value == true,
+      isExpanded: true,
+      decoration: _decoration(context),
+      items: const [
+        DropdownMenuItem(value: false, child: Text('否')),
+        DropdownMenuItem(value: true, child: Text('官方未標示')),
+      ],
+      onChanged: onChanged,
+    ),
     FieldInput.hiddenFlag => DropdownButtonFormField<bool>(
       initialValue: value == true,
       isExpanded: true,

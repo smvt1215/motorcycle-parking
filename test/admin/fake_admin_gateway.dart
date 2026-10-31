@@ -392,6 +392,9 @@ class FakeAdminGateway implements AdminGateway {
       'id': communityId,
       'source': 'community',
       'status': 'pending',
+      // Both vehicles stated (#201): an edit of old data must fill them in,
+      // which the tests that need it set up themselves.
+      'heavy_allowed': false,
       'facility_type': null,
       'parking_access': null,
       'address': '中山北路二段 1 號',

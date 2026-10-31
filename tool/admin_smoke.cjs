@@ -24,7 +24,8 @@ const reports = [
 ];
 const spot = { lat: 25.0581, lng: 121.5226, city: '臺北市', district: '中山區', fee_note: '每小時 20 元', note: '', scooter_allowed: true, heavy_allowed: null, source_name: '', updated_at: '2026-10-23T00:00:00Z',
   address: '', road_segment: '', entrance_note: '', parking_guide: '', special_rules: '', facility_type: null, parking_access: null, scooter_total: null };
-const communitySpot = { ...spot, id: communityId, name: '中山北路二段路邊機車格', space_type: 'paidMotorcycle', status: 'pending' };
+// Both vehicles stated (#201): an admin edit of old data fills them in first.
+const communitySpot = { ...spot, id: communityId, name: '中山北路二段路邊機車格', space_type: 'paidMotorcycle', status: 'pending', heavy_allowed: false };
 // The bundled rules stand in for the database; Taipei's heavy-bike rule is
 // the one edited.
 const cityRules = require('../assets/rules/parking_rules.json').map(rule => ({ district_space_types: {}, restriction: null, ...rule }));
@@ -254,7 +255,7 @@ function session(role, aal, factors = [factor]) {
             // Verifying the stored vehicle access restates it unchanged.
             const { p_source_id: sourceId, p_values: values, p_note: note } = route.request().postDataJSON();
             assert.equal(sourceId, communityId);
-            assert.deepEqual(values, { scooter_allowed: true });
+            assert.deepEqual(values, { scooter_allowed: true, heavy_allowed: false });
             assert.equal(note, '核驗目前車種');
             verified = { scooter_verified_at: '2026-10-25T01:19:36Z', updated_at: '2026-10-25T01:19:36Z' };
             return route.fulfill({ json: { ...communitySpot, ...values, ...verified }, headers: cors });

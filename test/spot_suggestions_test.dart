@@ -861,7 +861,7 @@ void main() {
     testWidgets('普大共用的大型重機選項在 ${size.width.toInt()} 寬不溢出、可點', (tester) async {
       await openSuggestion(tester, '格位類型', size: size);
       await pickKind(tester, SpaceKind.scooterHeavy);
-      for (final v in [true, false, null]) {
+      for (final v in ['allowed', 'notAllowed']) {
         final option = find.byKey(ValueKey('suggestion-share-heavy-$v'));
         await tester.ensureVisible(option);
         await tester.pumpAndSettle();
@@ -874,7 +874,7 @@ void main() {
     });
   }
 
-  testWidgets('建議普大共用時大型重機預設可停，可改回未確認（決定 60）', (tester) async {
+  testWidgets('建議普大共用時大型重機預設可停，可改成不可停、不能改回未確認（決定 60、#201）', (tester) async {
     final store = await openSuggestion(tester, '格位類型');
     await pickKind(tester, SpaceKind.scooterHeavy);
     final toll = find.descendant(
@@ -884,15 +884,23 @@ void main() {
     await tester.ensureVisible(toll);
     await tester.tap(toll);
     await tester.pumpAndSettle();
-    final unknown = find.byKey(const ValueKey('suggestion-share-heavy-null'));
-    await tester.ensureVisible(unknown);
-    await tester.tap(unknown);
-    await tester.pumpAndSettle();
-    expect(find.textContaining('大型重機從'), findsNothing);
-    await submitSuggestion(tester, '送出修改建議');
     expect(
-      store.submissions.single['proposed'],
-      isNot(contains('heavy_allowed')),
+      find.byKey(const ValueKey('suggestion-share-heavy-notStated')),
+      findsNothing,
+    );
+    final closed = find.byKey(
+      const ValueKey('suggestion-share-heavy-notAllowed'),
+    );
+    await tester.ensureVisible(closed);
+    await tester.tap(closed);
+    await tester.pumpAndSettle();
+    await submitSuggestion(tester, '送出修改建議');
+    final proposed = store.submissions.single['proposed'] as Map;
+    expect(proposed['heavy_allowed'] ?? false, false);
+    expect(
+      proposed.containsKey('heavy_allowed') &&
+          proposed['heavy_allowed'] == null,
+      isFalse,
     );
     await tester.pumpWidget(const SizedBox.shrink());
   });

@@ -219,11 +219,36 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// Both vehicles are required (#201): picks 可停 for any the form has
+  /// not filled in, leaving prefilled ones as they are.
+  Future<void> fillUnpicked(WidgetTester tester) async {
+    for (final (label, prefix) in [
+      ('普通機車', 'report-scooter'),
+      ('大型重機', 'report-heavy'),
+    ]) {
+      final choice = find.byWidgetPredicate(
+        (w) => w is EligibilityChoice && w.label == label,
+        skipOffstage: false,
+      );
+      if (choice.evaluate().isNotEmpty &&
+          tester.widget<EligibilityChoice>(choice).value != null) {
+        continue;
+      }
+      await openPart(tester, '可停車種');
+      final target = find.byKey(ValueKey('$prefix-allowed'));
+      await scrollTo(tester, target);
+      await tester.tap(target);
+      await tester.pumpAndSettle();
+    }
+  }
+
   Future<Map<String, dynamic>> send(
     WidgetTester tester,
-    RecordingStore store,
-  ) async {
+    RecordingStore store, {
+    bool fillVehicles = true,
+  }) async {
     if (!picked) await pickType(tester, SpaceType.paidMotorcycle);
+    if (fillVehicles) await fillUnpicked(tester);
     final name = find.widgetWithText(TextFormField, '停車點名稱');
     await reveal(tester, name);
     await tester.enterText(name, '測試點');
@@ -291,9 +316,9 @@ void main() {
     expect(find.textContaining('已依「停車場」帶入'), findsOneWidget);
     final spot = await send(tester, store);
     expect(spot['space_type'], 'offStreet');
-    // A lot's markings settle neither vehicle.
-    expect(spot['scooter_allowed'], isNull);
-    expect(spot['heavy_allowed'], isNull);
+    // A lot's markings settle neither vehicle: the rider picks both.
+    expect(spot['scooter_allowed'], true);
+    expect(spot['heavy_allowed'], true);
   });
 
   testWidgets('收費以結構化選項填寫，送出費率與組成的文字', (tester) async {
@@ -351,18 +376,24 @@ void main() {
     await reveal(tester, find.textContaining('與臺北市的停車規則帶入'));
     expect(find.textContaining('與臺北市的停車規則帶入'), findsOneWidget);
     await pickType(tester, SpaceType.freeMotorcycle);
-    // Shown as the rule decides, but only the markings are stored, so the
-    // spot follows the rule if it changes.
+    // The rule's value is a suggestion the rider confirms; both vehicles
+    // are sent as shown (#201).
     await openPart(tester, '可停車種');
     expect(
       tester
-          .widget<VehicleTriState>(find.widgetWithText(VehicleTriState, '大型重機'))
+          .widget<EligibilityChoice>(
+            find.widgetWithText(EligibilityChoice, '大型重機'),
+          )
           .value,
-      false,
+      Eligible.notAllowed,
     );
+    expect(find.textContaining('大型重機是依臺北市規則算出的建議值'), findsOneWidget);
+    // A street bay is 可停 or 不可停 only.
+    expect(find.byKey(const ValueKey('report-heavy-notStated')), findsNothing);
     final spot = await send(tester, store);
     expect(spot['scooter_allowed'], true);
-    expect(spot['heavy_allowed'], isNull);
+    expect(spot['heavy_allowed'], false);
+    expect(spot.containsKey('heavy_not_stated'), isFalse);
   });
 
   testWidgets('路外停車場填型式、分類、入口與分區；路邊格只有指引', (tester) async {
@@ -391,6 +422,14 @@ void main() {
       find.widgetWithText(TextFormField, '分區名稱'),
       'B2 機車區',
     );
+    // Every zone a rider adds states who may park there (#201).
+    final zoneNotStated = find.descendant(
+      of: find.byType(ZoneAccessField),
+      matching: find.text('官方未標示'),
+    );
+    await tester.ensureVisible(zoneNotStated);
+    await tester.tap(zoneNotStated);
+    await tester.pumpAndSettle();
     final entrance = find.widgetWithText(TextFormField, '入口在哪裡');
     await reveal(tester, entrance);
     await tester.enterText(entrance, '入口在松仁路側');
@@ -405,7 +444,12 @@ void main() {
     expect(spot['parking_access'], 'scooterHeavy');
     expect(spot['entrance_note'], '入口在松仁路側');
     expect(spot['parking_zones'], [
-      {'name': 'B2 機車區'},
+      {
+        'name': 'B2 機車區',
+        'condition': {
+          'allow': {'scooter': 'not_stated', 'heavy': 'not_stated'},
+        },
+      },
     ]);
     expect(spot['parking_guide'], '靠電梯');
     expect(spot['note'], '');
@@ -427,41 +471,64 @@ void main() {
     expect(spot.containsKey('facility_type'), isFalse);
   });
 
-  testWidgets('先改一個車種再換格位，另一個規則帶入的車種仍送未確認', (tester) async {
-    final store = await openForm(tester, rules: cityRules);
-    await pickType(tester, SpaceType.paidMotorcycle);
-    final scooterUnconfirmed = find.byKey(
-      const ValueKey('report-scooter-null'),
-    );
-    await reveal(tester, scooterUnconfirmed);
-    await tester.pumpAndSettle();
-    await tester.tap(scooterUnconfirmed);
-    await tester.pumpAndSettle();
-    // The rule decides heavy bikes here only before the switch, so a flag
-    // computed at submit time would wrongly send the shown value.
-    await pickType(tester, SpaceType.evMotorcycle);
+  testWidgets('停車場可選官方未標示；改回路邊格時要重選（#201）', (tester) async {
+    final store = await openForm(tester);
+    await pickType(tester, SpaceType.offStreet);
     await openPart(tester, '可停車種');
-    expect(find.textContaining('大型重機依規則帶入，只當預設'), findsOneWidget);
+    expect(find.textContaining('選「官方未標示」'), findsOneWidget);
+    final heavy = find.byKey(const ValueKey('report-heavy-notStated'));
+    await scrollTo(tester, heavy);
+    await tester.tap(heavy);
+    await tester.pumpAndSettle();
+    await pickType(tester, SpaceType.paidMotorcycle);
+    await openPart(tester, '可停車種');
+    expect(
+      tester
+          .widget<EligibilityChoice>(
+            find.widgetWithText(EligibilityChoice, '大型重機'),
+          )
+          .value,
+      isNull,
+    );
+    await pickType(tester, SpaceType.offStreet);
+    await openPart(tester, '可停車種');
+    await scrollTo(tester, heavy);
+    await tester.tap(heavy);
+    await tester.pumpAndSettle();
     final spot = await send(tester, store);
-    expect(spot['scooter_allowed'], isNull);
     expect(spot['heavy_allowed'], isNull);
+    expect(spot['heavy_not_stated'], true);
+    expect(spot['scooter_allowed'], true);
+  });
+
+  testWidgets('沒選車種不能送出（#201）', (tester) async {
+    final store = await openForm(tester);
+    await pickType(tester, SpaceType.offStreet);
+    final name = find.widgetWithText(TextFormField, '停車點名稱');
+    await reveal(tester, name);
+    await tester.enterText(name, '測試點');
+    await scrollTo(tester, find.text('送出'));
+    await tester.tap(find.text('送出'));
+    await tester.pumpAndSettle();
+    expect(store.submissions, isEmpty);
+    expect(find.text('請選擇普通機車能不能停'), findsOneWidget);
+    expect(find.text('請選擇大型重機能不能停'), findsOneWidget);
   });
 
   testWidgets('手動設定車種後，換格位不再覆蓋', (tester) async {
     final store = await openForm(tester);
     await pickType(tester, SpaceType.heavyOnly);
-    // The heavy-bike segments, not the fee menus that also read 未確認.
-    final heavyUnconfirmed = find.byKey(const ValueKey('report-heavy-null'));
-    await reveal(tester, heavyUnconfirmed);
+    final heavyClosed = find.byKey(const ValueKey('report-heavy-notAllowed'));
+    await reveal(tester, heavyClosed);
     // Heavy-only bays already read "heavy: allowed"; the reporter overrides it.
-    await tester.tap(heavyUnconfirmed);
+    await tester.tap(heavyClosed);
     await tester.pumpAndSettle();
     expect(find.textContaining('已依'), findsNothing);
     await pickType(tester, SpaceType.paidMotorcycle);
     final spot = await send(tester, store);
     expect(spot['space_type'], 'paidMotorcycle');
     expect(spot['scooter_allowed'], false);
-    expect(spot['heavy_allowed'], isNull);
+    expect(spot['heavy_allowed'], false);
   });
 
   testWidgets('依標記位置帶入縣市與行政區，並提醒 15 m 內同類型的點', (tester) async {
@@ -574,7 +641,7 @@ void main() {
   Future<void> tapSegment(WidgetTester tester, int row, String label) async {
     // The list builds lazily; come back from wherever the last step left it.
     final segment = find.descendant(
-      of: find.widgetWithText(VehicleTriState, row == 0 ? '普通機車' : '大型重機'),
+      of: find.widgetWithText(EligibilityChoice, row == 0 ? '普通機車' : '大型重機'),
       matching: find.text(label),
     );
     await reveal(tester, segment);
@@ -649,6 +716,7 @@ void main() {
     await tester.enterText(note, '夜間有管理員');
     await reveal(tester, nameField);
     await tester.enterText(nameField, '市府路機車格');
+    await fillUnpicked(tester);
     await trySend(tester);
     expect(store.submissions.single['spot']['note'], '夜間有管理員');
   });
@@ -812,6 +880,13 @@ void main() {
     await reveal(tester, zoneName);
     await tester.enterText(zoneName, 'B2 汽車區');
     await tapIn(tester, 'zone-area', '汽車區');
+    final zoneAccess = find.descendant(
+      of: find.byType(ZoneAccessField),
+      matching: find.text('大型重機與汽車共用'),
+    );
+    await reveal(tester, zoneAccess);
+    await tester.tap(zoneAccess);
+    await tester.pumpAndSettle();
     await chooseFeeMode(tester, 'scooter', 'hourly');
     await tester.enterText(feeField('amount', 'scooter'), '10');
     await tester.pumpAndSettle();
@@ -916,6 +991,7 @@ void main() {
     await openPart(tester, '格位');
     expect(find.text('請選地面畫的格位'), findsOneWidget);
     await pickType(tester, SpaceType.freeMotorcycle);
+    await fillUnpicked(tester);
     await trySend(tester);
     expect(store.submissions.single['spot']['space_type'], 'freeMotorcycle');
   });
@@ -986,13 +1062,22 @@ void main() {
     await tester.enterText(nameField, '市府路共用格');
     await tapIn(tester, 'condition-charge', '收費格');
     await openPart(tester, '可停車種');
-    final unknown = find.byKey(const ValueKey('report-heavy-null'));
-    await reveal(tester, unknown);
-    await tester.tap(unknown);
+    expect(
+      tester
+          .widget<EligibilityChoice>(
+            find.widgetWithText(EligibilityChoice, '大型重機'),
+          )
+          .value,
+      Eligible.allowed,
+    );
+    final closed = find.byKey(const ValueKey('report-heavy-notAllowed'));
+    await reveal(tester, closed);
+    await tester.tap(closed);
     await tester.pumpAndSettle();
+    await fillUnpicked(tester);
     await trySend(tester);
     final spot = store.submissions.single['spot'] as Map;
-    expect(spot['heavy_allowed'], isNull);
+    expect(spot['heavy_allowed'], false);
   });
 
   testWidgets('位置段：區只列所選縣市的行政區，換縣市清掉區', (tester) async {
@@ -1080,7 +1165,7 @@ void main() {
         }
         await openPart(tester, '可停車種');
         final segment = tester.getSize(
-          find.byKey(const ValueKey('report-heavy-true')),
+          find.byKey(const ValueKey('report-heavy-allowed')),
         );
         expect(segment.height, greaterThanOrEqualTo(48));
         for (final title in parts) {
@@ -1144,7 +1229,7 @@ void main() {
     final store = await openForm(tester);
     await pickType(tester, SpaceType.heavyOnly);
     await openPart(tester, '可停車種');
-    final scooter = find.byKey(const ValueKey('report-scooter-true'));
+    final scooter = find.byKey(const ValueKey('report-scooter-allowed'));
     await scrollTo(tester, scooter);
     await tester.tap(scooter);
     await tester.pumpAndSettle();
@@ -1154,7 +1239,10 @@ void main() {
     await trySend(tester);
     expect(store.submissions, isEmpty);
     // 可停車種 opened again, its hint in view.
-    expect(find.byKey(const ValueKey('report-scooter-true')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('report-scooter-allowed')),
+      findsOneWidget,
+    );
     expect(find.textContaining('大型重機專用格不能停普通機車'), findsWidgets);
   });
 }

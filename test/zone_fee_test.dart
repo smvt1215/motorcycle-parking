@@ -379,7 +379,10 @@ void main() {
       tester.view.physicalSize = Size(width, 900);
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
-      final zone = ZoneDraft()..name.text = 'B2';
+      // Every zone a rider adds states who may park there (#201).
+      final zone = ZoneDraft()
+        ..name.text = 'B2'
+        ..access = ParkingAccess.scooterHeavy;
       addTearDown(zone.dispose);
       final form = GlobalKey<FormState>();
       await tester.pumpWidget(
@@ -409,6 +412,7 @@ void main() {
       expect(form.currentState!.validate(), isTrue);
       expect(zone.toJson(), {
         'name': 'B2',
+        'access': 'scooterHeavy',
         'fee': {
           'heavy': {'mode': 'hourly', 'amount': 25, 'per_minutes': 60},
         },
