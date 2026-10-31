@@ -303,6 +303,15 @@ select is((select proposed from moderation_queue where source_id=pg_temp.spot('t
 select is((select field||'/'||status||'/'||coalesce(reporter_id::text,'-') from moderation_queue where source_id=pg_temp.spot('t18')),
   'gone/pending/-','held for an admin, from no single rider');
 select is((pg_temp.sight(134,'t18','closed'))->>'closure_suggested','false','an open suggestion is not repeated');
+-- An admin rejected it: the sightings it rested on do not reopen it (the
+-- clock stands still in this test, so the next one counts as before it).
+update moderation_queue set status='rejected',resolution_kind='wrong',resolved_at=now()
+  where source_id=pg_temp.spot('t18') and resolved_at is null;
+delete from rider_sightings where user_id=pg_temp.uid(134) and spot_id=pg_temp.spot('t18');
+select is((pg_temp.sight(134,'t18','closed'))->>'closure_suggested','false',
+  'after a rejection, evidence already judged does not count again');
+select is((select count(*)::integer from moderation_queue where source_id=pg_temp.spot('t18') and resolved_at is null),0,
+  'so one more rider cannot reopen it alone');
 -- Somebody saw spaces or a full bay: no suggestion.
 select pg_temp.past(132,'t19','closed','60 minutes');
 select pg_temp.past(135,'t19','3','30 minutes');

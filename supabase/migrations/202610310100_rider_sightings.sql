@@ -190,6 +190,7 @@ declare
   v_suggested boolean:=false;
   v_meters float8;
   v_scored uuid;
+  v_since timestamptz;
 begin
   if p_ip is null or char_length(p_ip)<>64 or p_device is null or char_length(p_device)<>64 then
     raise exception 'missing trusted identity' using errcode='22023';
@@ -225,6 +226,11 @@ begin
   -- Same order as apply_report: IP, then account.
   perform pg_advisory_xact_lock(hashtextextended('sighting-ip:'||p_ip,0));
   perform pg_advisory_xact_lock(hashtextextended('sighting-user:'||p_user::text,0));
+  -- Checked again under the account lock: a sighting waiting here behind the
+  -- one that set the suspension must not write or judge anyone.
+  if public.rider_suspended(p_user) then
+    raise exception 'sighting suspended' using errcode='42501';
+  end if;
   if (select count(*) from public.rider_sightings where user_id=p_user and created_at>=v_day)>=30 or
      (select count(*) from public.rider_sightings where ip_hash=p_ip and created_at>=v_day)>=100 then
     raise exception 'daily sighting limit reached' using errcode='P0001';
@@ -325,10 +331,15 @@ begin
     else
       select c.closure into v_closure from public.community_spots c where c.id=p_spot::uuid;
     end if;
+    -- Evidence an admin already judged does not count again: only sightings
+    -- after the latest resolved 已不存在／封閉 case of the spot, as
+    -- apply_report() does for 這裡已經不能停車 votes.
+    select greatest(now()-interval '2 hours',coalesce(max(q.resolved_at),'-infinity')) into v_since
+      from public.moderation_queue q where q.source_id=p_spot and q.field='gone' and q.resolved_at is not null;
     if public.closure_state(v_closure) is distinct from 'active'
        and not exists(select 1 from public.moderation_queue q where q.source_id=p_spot and q.field='gone' and q.resolved_at is null)
        and (select least(count(distinct s.user_id),count(distinct s.device_hash)) from public.rider_sightings s
-         where s.spot_id=p_spot and s.kind='closed' and s.created_at>now()-interval '2 hours'
+         where s.spot_id=p_spot and s.kind='closed' and s.created_at>v_since
            and not public.rider_suspended(s.user_id)
            and public.rider_credibility(s.user_id)>=public.rider_min_credibility())>=2
        and not exists(select 1 from public.rider_sightings s
