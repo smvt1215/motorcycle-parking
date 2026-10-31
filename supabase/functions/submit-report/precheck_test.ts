@@ -190,7 +190,7 @@ Deno.test('currentSpot reads the stored fee and condition of the spot a suggesti
   let got = await currentSpot(fake.admin, flag(id, { fee: {} }));
   if (
     got !== stored ||
-    fake.asked.join() !== `community_spots,fee,condition,${id}`
+    fake.asked.join() !== `community_spots,fee,condition,parking_zones,parking_segments,${id}`
   ) {
     throw new Error(fake.asked.join());
   }

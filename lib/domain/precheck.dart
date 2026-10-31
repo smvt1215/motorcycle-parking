@@ -7,6 +7,7 @@
 library;
 
 import '../models/fee.dart' show mergeFeeJson;
+import '../models/zone_entries.dart' show entriesPatch;
 
 /// [hold] lets the request through, flagged for stricter review (design
 /// §4.3); only [fix] and [reject] refuse it.
@@ -626,6 +627,16 @@ List<({String field, String value, bool name})> _texts(_Json body) {
 
 const _goneFields = ['gone', '點位已不存在'];
 
+/// The zone or segment list a suggestion's [patch] leaves (#188): applied
+/// by id to [current] when it is known and names only entries it has; else
+/// the patch's own entries, less those it removes.
+List<Object?> patchedEntries(Object? current, List<Object?> patch) =>
+    (current is List ? entriesPatch(current, patch) : null) ??
+    [
+      for (final e in patch)
+        if (e is! Map || e['removed'] != true) e,
+    ];
+
 /// Every stage 0 rule [body], a submit-report request, breaks. A fee
 /// suggestion changes only the vehicles it names (design §5.4), so its rules
 /// run on the fee it leaves: [current] (the spot's stored values, when
@@ -657,6 +668,10 @@ List<PrecheckIssue> precheck(
           !proposed.containsKey('condition') &&
           current?['condition'] is Map)
         'condition': current!['condition'],
+      // Zone and segment patches (#188) are judged as the lists they leave.
+      for (final key in const ['parking_zones', 'parking_segments'])
+        if (proposed[key] is List)
+          key: patchedEntries(current?[key], proposed[key]! as List<Object?>),
     };
     // Whether the suggestion's condition or fee is the spot's stored one.
     final storedPair =
