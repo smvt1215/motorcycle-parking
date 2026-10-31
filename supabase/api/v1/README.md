@@ -18,7 +18,7 @@ schema 就是版本：v1 只做加法（新增欄位、新增有預設值的參�
 2. 先 `revoke execute ... from public`，再 grant 給該有的角色（`api_v1` 通常是 `anon, authenticated, service_role`）。`supabase/tests/api_schemas_test.sql` 會擋下任何仍開放給 PUBLIC 的函式。
 3. 在 `api_v1.json` 或 `admin_v1.json` 加上 `POST /rpc/<name>`：
    - `operationId` 寫成 `<schema>_<name>`。
-   - 參數加上 `ContentProfile`。
+   - 不要把 `Content-Profile` 寫成參數：文件頂層的 `x-content-profile` 已標明 schema，用戶端的 base 會自動帶上。
    - 列出 `200` 回應，`default` 指向 `Error`。
    `tool/test_api_schema.py` 會檢查文件和 SQL 的函式完全對應。
 4. 錯誤：`raise sqlstate 'PTxyz' using message = '<穩定錯誤碼>', detail = '<json>'`，HTTP 狀態就是 xyz。用戶端依 `message` 的錯誤碼顯示文案，不解析其他文字。
@@ -31,4 +31,4 @@ PostgREST 的 RPC：`POST /rest/v1/rpc/<name>`，以 `Content-Profile: api_v1`�
 
 ## 型別
 
-領域型別（格位、條件、費率）以 `supabase/functions/_shared/parking_contract.json` 為準。這兩份 OpenAPI 文件只描述傳輸格式。TS（RTK Query）與 Dart 的型別會由這兩份文件產生，在 P1 的後續 PR 加入。
+領域型別（格位、條件、費率）以 `supabase/functions/_shared/parking_contract.json` 為準。這兩份 OpenAPI 文件只描述傳輸格式。TS（RTK Query）由這兩份文件產生：`admin_web/react` 執行 `npm run codegen`，產出 `src/api/v1/*.generated.ts`，CI 會檢查產物沒有漂移。讀取類 API（PostgREST 一律是 POST）要在 `admin_web/react/openapi-codegen.mjs` 的 `READS` 列為 query。Dart 型別在 P1 的後續 PR 加入。

@@ -58,6 +58,8 @@ PATHS = {
     "admin_react": REACT_ADMIN_PATHS + ROUTING_PATHS + (
         # src/design/tokens.test.ts checks the tokens against DESIGN.md.
         "admin_web/DESIGN.md", ".github/workflows/ci.yml",
+        # src/api/v1/*.generated.ts are generated from the API documents.
+        "supabase/api/v1/",
     ),
 }
 
