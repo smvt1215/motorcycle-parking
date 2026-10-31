@@ -363,6 +363,14 @@ python3 tool/export_rules.py --check || python3 tool/export_rules.py
 - 各功能頁先顯示「這一頁還沒接上資料」，不放示範資料。資料層等 `admin_v1`（#195 P1–P3）完成後以 RTK Query 接上；登入（MFA aal2）、Ctrl K 搜尋與帳號選單也在那時加入。
 - Flutter 管理站照常使用，直到 React 版功能對等後才下線。
 
+### React 改寫：審核頁
+
+- 佇列（最舊在上、依類型篩選，篩選寫在網址）、詳情（資格車牌目前 → 建議、差異表預設收起沒改的欄位、騎士說明、處理說明、位置與同點位其他回報）、套用建議（A）、跳過（J）。
+- 套用後自動跳下一筆，延後 5 秒才送出，期間可復原；寫入失敗的回報回到佇列並標示「沒有套用」，版本衝突要先重新讀取才能「仍然套用」。
+- 含費率、停放條件、暫時封閉、分區或路邊分段的建議先不在 React 版套用：Flutter 版送出前會在用戶端合併費率並重算收費文字，這段要先移到 #195 的共用核心。
+- 駁回（必選原因）與修改後套用不在核定畫布內，先補畫板給使用者確認再實作；「已刪除」篩選等 #200。
+- 正式建置沒有資料來源；示範資料只在 `--mode fixture`，CI 確認不會進到正式建置。
+
 ## CI／CD
 - `tool/ci_changes.py` 將 `lib/admin/` 歸入品質檢查與 admin web 建置（`flutter build web -t lib/main_admin.dart -o build/admin`），不觸發模擬器。
 - `cd-staging.yml` 部署 admin 到 staging hosting；RC tag 部署 production。
