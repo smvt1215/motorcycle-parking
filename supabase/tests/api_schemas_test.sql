@@ -50,7 +50,22 @@ select is((select (api_v1.client_config()->>'rules_version')::bigint),
   (select version from public.data_versions where key = 'rules'), 'client_config carries the rules version');
 select is((select (api_v1.client_config()->>'spots_version')::bigint),
   (select version from public.data_versions where key = 'spots'), 'client_config carries the spots version');
+select is((select api_v1.client_config()->'availability_beta_cities'), '["臺北市"]'::jsonb,
+  'the Taipei pilot is Beta');
 reset role;
+
+-- Ending or widening the Beta is data: enabled Beta sources, each city once.
+insert into public.availability_sources(key, provider, feed_url, cities, vehicles,
+  expected_interval, delayed_within, beta)
+select 'test_beta', 'x', 'https://example.test/feed', array['臺北市', '新北市'], array['scooter'],
+  expected_interval, delayed_within, true
+from public.availability_sources where key = 'taipei_tcmsv';
+select is((select api_v1.client_config()->'availability_beta_cities'), '["新北市", "臺北市"]'::jsonb,
+  'Beta cities are listed once each, by name');
+update public.availability_sources set enabled = false where key = 'test_beta';
+update public.availability_sources set beta = false where key = 'taipei_tcmsv';
+select is((select api_v1.client_config()->'availability_beta_cities'), '[]'::jsonb,
+  'no Beta left reads as an empty list, not null');
 
 select * from finish();
 rollback;

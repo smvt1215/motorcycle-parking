@@ -42,7 +42,8 @@
         "required": [
           "min_supported_app_version",
           "rules_version",
-          "spots_version"
+          "spots_version",
+          "availability_beta_cities"
         ],
         "additionalProperties": false,
         "properties": {
@@ -60,6 +61,15 @@
             "type": "integer",
             "minimum": 1,
             "description": "data_versions 的 spots 版本"
+          },
+          "availability_beta_cities": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true,
+            "description": "官方即時車位仍在 Beta 的縣市（例如 臺北市），依名稱排序；App 依此顯示 Beta 標示，結束 Beta 不需發版。沒有就是空陣列"
           }
         }
       },
