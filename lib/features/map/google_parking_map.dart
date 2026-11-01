@@ -13,6 +13,7 @@ import '../../domain/spot_clusters.dart';
 import '../../models/parking.dart';
 import '../../ui/adaptive/adaptive.dart';
 import 'cluster_badge.dart';
+import 'heavy_glyph.dart';
 import 'map_legend.dart';
 import 'google_map_style.dart';
 import 'maps_sdk.dart';
@@ -64,7 +65,12 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
   final clusterLoads = <int, Future<void>>{};
   gm.GoogleMapController? controller;
   late gm.CameraPosition camera;
-  late Future<Map<(MarkerLook, SpaceBadge?, bool), gm.BitmapDescriptor>> ready;
+  late Future<void> ready;
+
+  /// Marker bitmaps, drawn the first time a look is on screen: with six
+  /// badges the full set is a hundred PNG encodes, too many for launch.
+  final markerIcons = <MarkerKey, gm.BitmapDescriptor>{};
+  final markerLoads = <MarkerKey, Future<void>>{};
 
   /// A fixed-size dot: a ground circle in meters vanishes at street zoom.
   gm.BitmapDescriptor? locationIcon;
@@ -86,28 +92,25 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
     );
   }
 
-  Future<Map<(MarkerLook, SpaceBadge?, bool), gm.BitmapDescriptor>>
-  _prepare() async {
+  Future<void> _prepare() async {
     await initializeMapsSdk();
     await Future.wait(clusterLoads.values);
-    final variants = [
-      for (final status in EligibilityStatus.values)
-        for (final restriction in [
-          null,
-          if (status == EligibilityStatus.conditional) ...[
-            RuleRestriction.signage,
-            RuleRestriction.timeLimited,
-            RuleRestriction.evOnly,
-          ],
-        ])
-          for (final badge in [null, ...SpaceBadge.values])
-            for (final selected in [false, true])
-              ((status, restriction), badge, selected),
-    ];
-    final icons = await Future.wait(
-      variants.map((v) => _markerIcon(v.$1, v.$2, v.$3)),
-    );
-    return Map.fromIterables(variants, icons);
+  }
+
+  /// The bitmap for [key], or null while it is drawn; the map rebuilds with
+  /// the marker once it is ready. A failed draw is retried on a later build.
+  gm.BitmapDescriptor? _markerIconFor(MarkerKey key) {
+    if (markerIcons[key] case final icon?) return icon;
+    markerLoads.putIfAbsent(key, () async {
+      try {
+        final icon = await markerIcon(key.$1, key.$2, key.$3);
+        if (!mounted) return;
+        setState(() => markerIcons[key] = icon);
+      } catch (_) {
+        markerLoads.remove(key);
+      }
+    });
+    return null;
   }
 
   /// Keeps the current zoom when [zoom] is null. [abovePanel] and
@@ -245,10 +248,9 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
           onRetry: () => setState(() => ready = _prepare()),
         );
       }
-      if (!snapshot.hasData) {
+      if (snapshot.connectionState != ConnectionState.done) {
         return const Center(child: CircularProgressIndicator());
       }
-      final icons = snapshot.data!;
       final dark = Theme.of(context).brightness == Brightness.dark;
       return LayoutBuilder(
         builder: (context, constraints) {
@@ -334,9 +336,9 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
                       )
                     else
                       for (final spot in group.spots)
-                        _marker(icons, spot, selected: false),
+                        ?_marker(spot, selected: false),
                   if (widget.selected case final spot?)
-                    _marker(icons, spot, selected: true),
+                    ?_marker(spot, selected: true),
                 },
               ),
               if (kIsWeb && !widget.interactive)
@@ -361,19 +363,24 @@ extension on GoogleParkingMapState {
   /// No info window: the spot sheet carries the name and status for every
   /// spot alike. Selected spots remain separate from count markers and keep
   /// a distinct id while their appearance changes.
-  gm.Marker _marker(
-    Map<(MarkerLook, SpaceBadge?, bool), gm.BitmapDescriptor> icons,
-    ParkingSpot spot, {
+  gm.Marker? _marker(ParkingSpot spot, {required bool selected}) {
+    final icon = _markerIconFor((
+      markerLook(widget.eligibility(spot)),
+      spaceBadge(spot),
+      selected,
+    ));
+    if (icon == null) return null;
+    return _spotMarker(spot, icon, selected: selected);
+  }
+
+  gm.Marker _spotMarker(
+    ParkingSpot spot,
+    gm.BitmapDescriptor icon, {
     required bool selected,
   }) => gm.Marker(
     markerId: gm.MarkerId(selected ? 'selected:${spot.id}' : spot.id),
     position: gm.LatLng(spot.lat, spot.lng),
-    icon:
-        icons[(
-          markerLook(widget.eligibility(spot)),
-          spaceBadge(spot),
-          selected,
-        )]!,
+    icon: icon,
     anchor: const Offset(.5, .5),
     alpha: !selected && (widget.dimmed?.call(spot) ?? false) ? .45 : 1,
     zIndexInt: selected ? 500 : 0,
@@ -385,13 +392,21 @@ extension on GoogleParkingMapState {
 gm.LatLng _googlePoint(LatLng point) =>
     gm.LatLng(point.latitude, point.longitude);
 
+/// A marker bitmap's look: status and limit, corner badge, selected.
+typedef MarkerKey = (MarkerLook, SpaceBadge?, bool);
+
 /// Drawn at 2x like [SpotMarker]; a selected marker is [selectedScale]
-/// larger with a blue ring.
-Future<gm.BitmapDescriptor> _markerIcon(
+/// larger with a blue ring. A heavy-bike badge waits for the silhouette to
+/// settle, so a bitmap is never cached with the fallback by mistake.
+@visibleForTesting
+Future<gm.BitmapDescriptor> markerIcon(
   MarkerLook look,
   SpaceBadge? badge,
   bool selected,
 ) async {
+  if (badge == SpaceBadge.heavyOnly || badge == SpaceBadge.shared) {
+    await heavyGlyphSettled;
+  }
   final scale = selected ? selectedScale : 1.0;
   final side = (96 * scale).roundToDouble();
   final recorder = ui.PictureRecorder();
@@ -426,7 +441,16 @@ Future<gm.BitmapDescriptor> _markerIcon(
     Offset((96 - painter.width) / 2, (96 - painter.height) / 2),
   );
   painter.dispose();
-  if (badge != null) _paintBadge(canvas, badge);
+  if (badge != null) {
+    // A0's 19 at a 38 marker, overhanging its corner; kept inside the
+    // bitmap.
+    paintSpaceBadge(
+      canvas,
+      Rect.fromCircle(center: const Offset(78, 78), radius: 18),
+      badge,
+      glyph: heavyGlyph.value,
+    );
+  }
   final picture = recorder.endRecording();
   final image = await picture.toImage(side.toInt(), side.toInt());
   picture.dispose();
@@ -438,37 +462,6 @@ Future<gm.BitmapDescriptor> _markerIcon(
     width: side / 2,
     height: side / 2,
   );
-}
-
-/// The corner badge of [SpaceBadgeDot], at the marker's bottom right.
-void _paintBadge(Canvas canvas, SpaceBadge badge) {
-  const center = Offset(78, 78), radius = 17.0;
-  canvas.drawCircle(center, radius, Paint()..color = Colors.white);
-  canvas.drawCircle(
-    center,
-    radius,
-    Paint()
-      ..color = badgeInk
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.5,
-  );
-  final icon = spaceBadgeIcon(badge);
-  final painter = TextPainter(
-    text: TextSpan(
-      text: icon != null ? String.fromCharCode(icon.codePoint) : '共',
-      style: TextStyle(
-        color: badgeInk,
-        fontSize: icon != null ? 22 : 19,
-        fontWeight: FontWeight.w800,
-        height: 1,
-        fontFamily: icon?.fontFamily,
-        package: icon?.fontPackage,
-      ),
-    ),
-    textDirection: TextDirection.ltr,
-  )..layout();
-  painter.paint(canvas, center - Offset(painter.width / 2, painter.height / 2));
-  painter.dispose();
 }
 
 /// Blue location dot with a white ring and soft halo, 40dp across, matching

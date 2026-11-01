@@ -194,6 +194,8 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: ./.github/actions/mobile-setup
+        with:
+          heavy-glyph: ${{ secrets.HEAVY_GLYPH_SVG_BASE64 }}
       - run: python3 tool/cd_config.py staging android
       - name: Bundle the staging rules
         # The app ships assets/rules/parking_rules.json for installs that have
@@ -280,6 +282,8 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: ./.github/actions/mobile-setup
+        with:
+          heavy-glyph: ${{ secrets.HEAVY_GLYPH_SVG_BASE64 }}
       - run: python3 tool/cd_config.py staging ios
       - name: Bundle the staging rules
         # The app ships assets/rules/parking_rules.json for installs that have

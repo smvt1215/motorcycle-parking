@@ -10,12 +10,15 @@ import 'core/app_check.dart';
 import 'core/config.dart';
 import 'data/app_store.dart';
 import 'data/repositories.dart';
+import 'features/map/heavy_glyph.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   AppConfig.validate();
   // Off without the Firebase dart-defines; never delays or blocks launch.
   unawaited(AppCheck.start());
+  // The licensed badge silhouette, when this build carries it.
+  unawaited(loadHeavyGlyph());
   SupabaseClient? client;
   if (!AppConfig.demo) {
     await Supabase.initialize(

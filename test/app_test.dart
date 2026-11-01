@@ -269,11 +269,12 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('地圖怎麼看'));
     await tester.pumpAndSettle();
-    expect(find.text('有條件・限標示車格'), findsOneWidget);
+    // The legend is a page pushed over the map (P3), back to the map.
+    expect(find.text('依現場標示'), findsOneWidget);
     expect(find.textContaining('目前車種「普通機車」'), findsOneWidget);
-    await tester.tap(find.byTooltip('關閉'));
+    await tester.tap(find.byTooltip('返回'));
     await tester.pumpAndSettle();
-    expect(find.text('有條件・限標示車格'), findsNothing);
+    expect(find.text('依現場標示'), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
