@@ -49,6 +49,26 @@ class GenApiDartTest(unittest.TestCase):
             "Future<Object?> echoIdRaw({required int pId}) => _call('echo_id', {'p_id': pId});",
             text)
 
+    def test_nullable_answer_calls_the_rpc_once(self):
+        op = {"responses": {"200": {"content": {"application/json": {
+            "schema": {"type": ["integer", "null"]}}}}}}
+        text = gen.operation("next_value", op)
+        self.assertEqual(text.count("await nextValueRaw("), 1)
+        self.assertIn("return raw == null ? null : (raw as num).toInt();", text)
+
+    def test_optional_parameters_are_left_out_unless_given(self):
+        op = {"requestBody": {"content": {"application/json": {"schema": {
+            "type": "object", "required": ["p_id", "p_note"],
+            "properties": {"p_id": {"type": "integer"},
+                           "p_note": {"type": ["string", "null"]},
+                           "p_limit": {"type": "integer"}}}}}},
+            "responses": {"200": {"content": {"application/json": {
+                "schema": {"type": "boolean"}}}}}}
+        text = gen.operation("page", op)
+        self.assertIn("{required int pId, required String? pNote, int? pLimit}", text)
+        self.assertIn(
+            "{'p_id': pId, 'p_note': pNote, 'p_limit': ?pLimit}", text)
+
     def test_the_api_v1_document_generates_its_client(self):
         text = gen.generate("api_v1")
         self.assertIn("class ApiV1Client {", text)

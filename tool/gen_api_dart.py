@@ -163,21 +163,34 @@ def operation(name, op):
         required = set(props.get("required", []))
         for key, prop in props.get("properties", {}).items():
             kind, nullable = dart_type(prop, f"{name}({key})")
-            params.append((key, camel(key), kind, nullable or key not in required))
+            params.append((key, camel(key), kind, nullable, key not in required))
     response = op["responses"]["200"]["content"]["application/json"]["schema"]
     kind, nullable = dart_type(response, f"{name} response")
     returns = kind + ("?" if nullable else "")
     sig = ""
     if params:
-        sig = "{" + ", ".join(f"{'' if n else 'required '}{k}{'?' if n else ''} {f}"
-                              for _, f, k, n in params) + "}"
-    call_args = ", ".join(f"{f}: {f}" for _, f, _, _ in params)
-    body_map = ", ".join(f"{key!r}: {to_json(f, k, n)}" for key, f, k, n in params)
+        sig = "{" + ", ".join(
+            f"{'' if optional else 'required '}{k}{'?' if n or optional else ''} {f}"
+            for _, f, k, n, optional in params) + "}"
+    call_args = ", ".join(f"{f}: {f}" for _, f, _, _, _ in params)
+    # An optional parameter left out is left out of the body too, so the SQL
+    # default applies (Codex review, PR #233); a required one is always sent.
+    def entry(key, f, k, n, optional):
+        if not optional:
+            return f"{key!r}: {to_json(f, k, n)}"
+        value = to_json(f, k, False)
+        return f"{key!r}: ?{f}" if value == f else f"if ({f} != null) {key!r}: {value}"
+
+    body_map = ", ".join(entry(*param) for param in params)
     doc = op.get("summary", "")
+    # The raw answer is awaited once and then converted: converting the
+    # awaited call itself would repeat the RPC for a nullable type.
     return f"""
   /// {doc}
-  Future<{returns}> {method}({sig}) async =>
-      {from_json(f'await {method}Raw({call_args})', kind, nullable)};
+  Future<{returns}> {method}({sig}) async {{
+    final raw = await {method}Raw({call_args});
+    return {from_json('raw', kind, nullable)};
+  }}
 
   /// [{method}] as served, for callers that keep the JSON (#202).
   Future<Object?> {method}Raw({sig}) => _call({name!r}, {{{body_map}}});"""

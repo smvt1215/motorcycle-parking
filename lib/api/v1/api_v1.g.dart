@@ -49,8 +49,10 @@ class ApiV1Client {
   }
 
   /// 最低支援版本與各資料集的版本
-  Future<ClientConfig> clientConfig() async =>
-      ClientConfig.fromJson(await clientConfigRaw() as Map<String, Object?>);
+  Future<ClientConfig> clientConfig() async {
+    final raw = await clientConfigRaw();
+    return ClientConfig.fromJson(raw as Map<String, Object?>);
+  }
 
   /// [clientConfig] as served, for callers that keep the JSON (#202).
   Future<Object?> clientConfigRaw() => _call('client_config', {});
