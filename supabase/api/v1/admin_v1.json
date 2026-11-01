@@ -3,35 +3,58 @@
   "info": {
     "title": "機車停車指南 管理 API（admin_v1）",
     "version": "1.0.0",
-    "description": "只有管理員（role admin＋第二步驗證）可用的 API（#195）。每支函式是 PostgREST 的 RPC：POST /rest/v1/rpc/<name>，以 Content-Profile: admin_v1 指定 schema；非管理員一律回 403 auth.aal2_required。"
+    "description": "只有管理員（role admin＋第二步驗證）可用的 API（#195）。每支函式是 PostgREST 的 RPC：POST /rest/v1/rpc/<name>，以 Content-Profile: admin_v1 指定 schema（x-content-profile；由用戶端的 base 自動帶上，不是每支 operation 的參數）；非管理員一律回 403 auth.aal2_required。"
   },
-  "servers": [{ "url": "/rest/v1" }],
+  "x-content-profile": "admin_v1",
+  "servers": [
+    {
+      "url": "/rest/v1"
+    }
+  ],
   "paths": {},
   "components": {
-    "parameters": {
-      "ContentProfile": {
-        "name": "Content-Profile",
-        "in": "header",
-        "required": true,
-        "schema": { "const": "admin_v1" }
-      }
-    },
     "schemas": {
-      "Error": {
+      "ApiError": {
         "type": "object",
-        "required": ["code", "message"],
+        "required": [
+          "code",
+          "message"
+        ],
         "properties": {
-          "code": { "type": "string", "description": "SQLSTATE；API 自訂錯誤為 PTxyz，HTTP 狀態即 xyz" },
-          "message": { "type": "string", "description": "穩定錯誤碼，例如 auth.aal2_required；用戶端依此顯示文案" },
-          "details": { "type": ["string", "null"], "description": "JSON 字串，帶欄位等細節" },
-          "hint": { "type": ["string", "null"] }
+          "code": {
+            "type": "string",
+            "description": "SQLSTATE；API 自訂錯誤為 PTxyz，HTTP 狀態即 xyz"
+          },
+          "message": {
+            "type": "string",
+            "description": "穩定錯誤碼，例如 auth.aal2_required；用戶端依此顯示文案"
+          },
+          "details": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "JSON 字串，帶欄位等細節"
+          },
+          "hint": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
         }
       }
     },
     "responses": {
       "Error": {
         "description": "錯誤（#195 §2.4）",
-        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiError"
+            }
+          }
+        }
       }
     }
   }
