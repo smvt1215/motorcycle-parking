@@ -301,6 +301,78 @@ describe('ReviewPage', () => {
     ]);
   });
 
+  it('undoing 修改後套用 reopens the editor with the edited values (#217)', async () => {
+    const { user, source, router } = setup('/review/r-fuxing');
+    await detailTitle();
+    await user.keyboard('e');
+    await user.click(
+      within(screen.getByRole('region', { name: '資格' })).getByRole('radio', { name: /不可停/ }),
+    );
+    await user.keyboard('{Control>}{Enter}{/Control}');
+    await user.click(within(screen.getByRole('status')).getByRole('button', { name: '復原' }));
+    expect(router.state.location.pathname).toBe('/review/r-fuxing');
+    expect(screen.getByRole('toolbar', { name: '修改後套用' })).toHaveTextContent('你改了騎士建議的 1 處');
+    expect(
+      within(screen.getByRole('region', { name: '資格' })).getByRole('radio', { name: /不可停/ }),
+    ).toBeChecked();
+    // Saving again writes the same edited patch, verified fields included.
+    await user.keyboard('{Control>}{Enter}{/Control}');
+    await act(() => vi.advanceTimersByTimeAsync(UNDO_MS));
+    expect(source.resolved).toMatchObject([
+      { reportId: 'r-fuxing', edited: true, patch: { heavy_allowed: false, space_type: 'heavyOnly' } },
+    ]);
+  });
+
+  it('undoing 駁回 reopens the reasons with the chosen one and the note (#217)', async () => {
+    const { user, source, router } = setup('/review/r-fuxing');
+    await detailTitle();
+    await user.click(screen.getByRole('button', { name: /駁回/ }));
+    await user.click(screen.getByRole('radio', { name: /其他原因/ }));
+    await user.type(screen.getByRole('textbox', { name: /處理說明/ }), '現場已拆除');
+    await user.click(screen.getByRole('button', { name: /確定駁回/ }));
+    await user.click(within(screen.getByRole('status')).getByRole('button', { name: '復原' }));
+    expect(router.state.location.pathname).toBe('/review/r-fuxing');
+    const panel = screen.getByRole('region', { name: '駁回原因' });
+    expect(within(panel).getByRole('radio', { name: /其他原因/ })).toBeChecked();
+    expect(screen.getByRole('textbox', { name: /處理說明/ })).toHaveValue('現場已拆除');
+    await user.click(screen.getByRole('button', { name: /確定駁回/ }));
+    await act(() => vi.advanceTimersByTimeAsync(UNDO_MS));
+    expect(source.resolved).toEqual([
+      { reportId: 'r-fuxing', decision: 'rejected', resolutionKind: 'other', note: '現場已拆除' },
+    ]);
+  });
+
+  it('undoing from the report itself reopens the editor there (Codex review, PR #238)', async () => {
+    const { user, source, router } = setup('/review/r-fuxing');
+    await detailTitle();
+    await user.keyboard('e');
+    await user.click(
+      within(screen.getByRole('region', { name: '資格' })).getByRole('radio', { name: /不可停/ }),
+    );
+    await user.keyboard('{Control>}{Enter}{/Control}');
+    // Back to the report while its write waits, then 復原 from there.
+    await act(() => router.navigate('/review/r-fuxing'));
+    expect(screen.getByRole('heading', { name: /這筆回報正在/ })).toBeInTheDocument();
+    await user.click(within(screen.getByRole('status')).getByRole('button', { name: '復原' }));
+    expect(screen.getByRole('toolbar', { name: '修改後套用' })).toHaveTextContent('你改了騎士建議的 1 處');
+    // Cancelling and coming back later does not bring the old draft back.
+    await user.keyboard('{Escape}');
+    await act(() => router.navigate('/review/r-ximen'));
+    await act(() => router.navigate('/review/r-fuxing'));
+    expect(screen.queryByRole('toolbar', { name: '修改後套用' })).not.toBeInTheDocument();
+    await act(() => vi.advanceTimersByTimeAsync(UNDO_MS * 2));
+    expect(source.resolved).toEqual([]);
+  });
+
+  it('undoing a plain 套用 still returns to the report view', async () => {
+    const { user } = setup(FIRST);
+    await detailTitle();
+    await user.keyboard('a');
+    await user.click(within(screen.getByRole('status')).getByRole('button', { name: '復原' }));
+    expect(screen.getByRole('button', { name: /套用建議/ })).toBeInTheDocument();
+    expect(screen.queryByRole('toolbar', { name: '修改後套用' })).not.toBeInTheDocument();
+  });
+
   it('refuses to save while a field the table requires is empty', async () => {
     const { user, source } = setup('/review/r-banqiao');
     await detailTitle();
