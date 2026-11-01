@@ -476,7 +476,8 @@ class ParkingDecision {
 
   /// When parking opens again while [DecisionGap.noParkingNow] holds: the
   /// end of the 禁停 periods that run on from now (an instant; show it in
-  /// Taipei time, with the date when it is not today); null otherwise. On
+  /// Taipei time, with the date when it is not today); null otherwise, or
+  /// when 禁停 has no end within a week (always 禁停). On
   /// a street spot with segments, the earliest of the open segments'.
   final DateTime? nextParkableAt;
   final EligibilityStatus status;
@@ -774,8 +775,17 @@ LimitPeriod? _periodAt(
 /// When the 禁停 periods of [c] that hold at [now] end (#188 layer 2): the
 /// end of the span covering now, carried on through periods that start
 /// before it ends (overnight, back to back, the next day's), on the days
-/// [calendar] says; null when none holds now. Searched a week ahead.
+/// [calendar] says; null when none holds now, or when 禁停 runs on past the
+/// week searched (always 禁停).
 DateTime? noParkingUntil(
+  ParkingCondition c,
+  DateTime now,
+  HolidayCalendar calendar,
+) => _noParking(c, now, calendar)?.until;
+
+/// Whether 禁停 holds at [now], and until when (null: on past the week
+/// searched); null when it does not hold.
+({DateTime? until})? _noParking(
   ParkingCondition c,
   DateTime now,
   HolidayCalendar calendar,
@@ -799,8 +809,50 @@ DateTime? noParkingUntil(
     }
   }
   if (end == null) return null;
+  // 禁停 on to the end of the week searched: no time to give.
+  if (end >= spans.map((s) => s.$2).reduce((a, b) => a > b ? a : b)) {
+    return (until: null);
+  }
   // Taipei is UTC+8 all year.
-  return today.add(Duration(minutes: end)).subtract(const Duration(hours: 8));
+  return (
+    until: today.add(Duration(minutes: end)).subtract(const Duration(hours: 8)),
+  );
+}
+
+/// 時段性禁停 now (PM_ANS_20261101_75): an open [d] keeps its status and
+/// takes [DecisionGap.noParkingNow] and the time parking opens again.
+ParkingDecision _withNoParking(
+  ParkingDecision d,
+  ParkingCondition c,
+  DateTime now,
+  HolidayCalendar calendar,
+) {
+  if (!d.open) return d;
+  final held = _noParking(c, now, calendar);
+  return held == null
+      ? d
+      : d._with(
+          moreGaps: [DecisionGap.noParkingNow],
+          nextParkableAt: () => held.until,
+        );
+}
+
+/// The gaps of a spot judged entry by entry: every entry's, except
+/// 現在禁停, which holds only when every open entry is under it (so it
+/// always comes with a time parking opens again).
+Set<DecisionGap> _entryGaps(List<ZoneDecision> entries) {
+  final open = [
+    for (final z in entries)
+      if (z.open) z,
+  ];
+  return {
+    for (final z in entries)
+      for (final g in z.gaps)
+        if (g != DecisionGap.noParkingNow) g,
+    if (open.isNotEmpty &&
+        open.every((z) => z.gaps.contains(DecisionGap.noParkingNow)))
+      DecisionGap.noParkingNow,
+  };
 }
 
 /// 每次限停 2 小時，可延長 1 次.
@@ -988,7 +1040,7 @@ ParkingDecision _segmented(
     restriction: restriction,
     basis: basis,
     segments: segments,
-    gaps: {for (final z in segments) ...z.gaps},
+    gaps: _entryGaps(segments),
     // Every open segment under 禁停 now: parking opens with the first.
     nextParkableAt:
         open.isNotEmpty && open.every((z) => z.nextParkableAt != null)
@@ -1255,15 +1307,20 @@ ParkingDecision _street(
     );
   } else if (shareSlots != null) {
     final slots = shareSlots;
-    return done(
-      EligibilityStatus.conditional,
-      [
-        '汽機車依時段輪替使用，${slotNowText(slots, at, calendar: calendar)}；'
-            '${vehicle.label}可停時段：${slots.map(slotText).join('；')}，請看現場牌面',
-        ...timeReasons,
-      ].join('；'),
-      restriction: RuleRestriction.timeLimited,
-      by: BasisKind.notice,
+    return _withNoParking(
+      done(
+        EligibilityStatus.conditional,
+        [
+          '汽機車依時段輪替使用，${slotNowText(slots, at, calendar: calendar)}；'
+              '${vehicle.label}可停時段：${slots.map(slotText).join('；')}，請看現場牌面',
+          ...timeReasons,
+        ].join('；'),
+        restriction: RuleRestriction.timeLimited,
+        by: BasisKind.notice,
+      ),
+      c,
+      at,
+      calendar,
     );
   } else {
     final kinds = ruleKindsOf(c);
@@ -1418,17 +1475,7 @@ ParkingDecision _street(
     // take turns.
     result = result._with(reason: '${result.reason}；$_shareSignReminder');
   }
-  // 時段性禁停 now (PM_ANS_20261101_75): the status stays; a gap and the
-  // time parking opens again go with it.
-  if (result.open) {
-    if (noParkingUntil(c, at, calendar) case final until?) {
-      result = result._with(
-        moreGaps: [DecisionGap.noParkingNow],
-        nextParkableAt: () => until,
-      );
-    }
-  }
-  return result;
+  return _withNoParking(result, c, at, calendar);
 }
 
 extension on ParkingDecision {
@@ -1568,12 +1615,12 @@ ZoneDecision _zone(
     if (c.basis?.expiresOn case final end?) '試辦至 $end',
   ];
   if (limits.isNotEmpty) {
-    final until = noParkingUntil(c, at, calendar);
+    final held = _noParking(c, at, calendar);
     return zone(
       EligibilityStatus.conditional,
       limits.join('；'),
-      gaps: {if (until != null) DecisionGap.noParkingNow},
-      nextParkableAt: until,
+      gaps: {if (held != null) DecisionGap.noParkingNow},
+      nextParkableAt: held?.until,
       restriction: ev
           ? RuleRestriction.evOnly
           : slots.isNotEmpty || timed
@@ -1695,7 +1742,7 @@ ParkingDecision _lot(
           : '${[for (final z in reachable)
               if (z.status == EligibilityStatus.conditional) '${z.name.trim().isEmpty ? '未命名分區' : z.name.trim()}：${z.reason}'].join('；')}。$remind',
       restriction: limited?.restriction,
-      gaps: {for (final z in zones) ...z.gaps},
+      gaps: _entryGaps(zones),
       // Every open zone under 禁停 now: parking opens with the first.
       nextParkableAt: reachable.every((z) => z.nextParkableAt != null)
           ? reachable

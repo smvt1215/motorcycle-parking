@@ -472,6 +472,94 @@ void main() {
         expect(at(holiday, tpe(10, 27, 12)).nextParkableAt, isNull);
       });
 
+      test('永遠禁停：不給下一次可停的時間', () {
+        final d = at([
+          {'days': 'all'},
+        ], tpe(10, 27, 12));
+        expect(d.gaps, contains(DecisionGap.noParkingNow));
+        expect(d.nextParkableAt, isNull);
+      });
+
+      test('汽機車共用格的普通機車時段也帶現在禁停（交叉審查 P2）', () {
+        final d = decideParking(
+          street(
+            SpaceType.flexShared,
+            source: 'official',
+            condition: c({
+              'bay': 'car',
+              'use': 'share',
+              'share': 'car_motorcycle',
+              'charge': 'toll',
+              'schedule': [
+                {
+                  'days': 'all',
+                  'vehicles': ['scooter', 'car'],
+                },
+              ],
+              'limits': [
+                {
+                  'kind': 'no_parking',
+                  'periods': [
+                    {'days': 'all', 'from': '09:00', 'to': '12:00'},
+                  ],
+                },
+              ],
+            }),
+          ),
+          VehicleType.scooter,
+          bundled,
+          now: tpe(10, 27, 10),
+          calendar: cal,
+        );
+        expect(d.gaps, contains(DecisionGap.noParkingNow));
+        expect(d.nextParkableAt, tpe(10, 27, 12));
+      });
+
+      test('一段禁停、另一段可停：點位層不標現在禁停（交叉審查 P2）', () {
+        final spot = ParkingSpot(
+          id: 'two',
+          name: 'two',
+          lat: 25,
+          lng: 121,
+          city: '臺北市',
+          spaceType: SpaceType.paidMotorcycle,
+          condition: c({'bay': 'motorcycle', 'use': 'usual', 'charge': 'toll'}),
+          source: 'official',
+          segments: [
+            ParkingSegment.fromJson({
+              'name': 'A',
+              'condition': {
+                'allow': {'scooter': true, 'heavy': false},
+                'limits': [
+                  {
+                    'kind': 'no_parking',
+                    'periods': [
+                      {'days': 'all', 'from': '09:00', 'to': '12:00'},
+                    ],
+                  },
+                ],
+              },
+            }),
+            ParkingSegment.fromJson({
+              'name': 'B',
+              'condition': {
+                'allow': {'scooter': true, 'heavy': false},
+              },
+            }),
+          ],
+        );
+        final d = decideParking(
+          spot,
+          VehicleType.scooter,
+          bundled,
+          now: tpe(10, 27, 10),
+          calendar: cal,
+        );
+        expect(d.segments.first.gaps, contains(DecisionGap.noParkingNow));
+        expect(d.gaps, isNot(contains(DecisionGap.noParkingNow)));
+        expect(d.nextParkableAt, isNull);
+      });
+
       test('相接的禁停時段一路接到隔天才可停', () {
         final d = at([
           {'days': 'all', 'from': '20:00', 'to': '23:59'},
