@@ -227,9 +227,26 @@ select throws_ok(format('select public.account_deletion_prepare(%L)',(select req
   '42501','account.admin_cannot_self_delete','an account made admin during the cooling-off period is not deleted');
 select public.account_deletion_fail((select request_id from claimed2),'storage_failed');
 reset role;
-select is((select attempts||'|'||last_error||'|'||(claimed_at is null) from private.account_deletion_requests),'1|storage_failed|true',
-  'a failure releases the claim for the next run');
+select is((select attempts||'|'||last_error||'|'||(claimed_at is not null) from private.account_deletion_requests),'1|storage_failed|true',
+  'a failure is recorded and stays claimed for this run');
+select is((select count(*)::int from public.account_deletion_claim(5)),0,'the same run does not retry it');
 select is((select event||'/'||error from private.account_deletion_audit order by id desc limit 1),'failed/storage_failed','the failure is audited');
+
+-- 持續失敗的申請不會擋住其他到期申請。
+reset role;
+set local role authenticated;
+select pg_temp.act('10000000-0000-4000-8000-000000000003');
+select api_v1.request_account_deletion();
+reset role;
+update private.account_deletion_requests set requested_at=now()-interval '8 days',scheduled_at=now()-interval '12 hours'
+  where user_id='10000000-0000-4000-8000-000000000003';
+-- 下一天：上一次的領取已過期。
+update private.account_deletion_requests set claimed_at=now()-interval '1 day'
+  where user_id='10000000-0000-4000-8000-000000000006';
+set local role service_role;
+select is((select user_id from public.account_deletion_claim(1)),'10000000-0000-4000-8000-000000000003'::uuid,
+  'a request not yet tried goes before one that keeps failing, though due later');
+reset role;
 
 -- 排程：每天一次；vault 沒設定時不呼叫。
 select is((select schedule from cron.job where jobname='account-deletion'),'41 19 * * *','runs daily at 03:41 Taiwan time');

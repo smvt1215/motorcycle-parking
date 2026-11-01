@@ -23,12 +23,13 @@ function fake(claimed: Claimed[], options: Options = {}) {
     options.avatars ?? {},
   );
   const log: string[] = [];
+  const queue = [...claimed];
   const deps: Deps = {
     secret: 's3cret',
     claim: (limit) =>
       options.fail === 'claim'
         ? Promise.reject(new Error('db'))
-        : Promise.resolve(claimed.slice(0, limit)),
+        : Promise.resolve(queue.splice(0, limit)),
     prepare: (request) => {
       if (options.fail === 'prepare') return Promise.reject(new Error('db'));
       return Promise.resolve(
@@ -166,6 +167,25 @@ Deno.test('a failed claim deletes nothing', async () => {
   const { deps, log } = fake([a], { fail: 'claim' });
   equal((await handle(post(), deps)).status, 500, 'reported');
   equal(log, [], 'nothing');
+});
+
+Deno.test('claims batch after batch, up to five per run', async () => {
+  const many = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      request_id: `r${i}`,
+      user_id: `u${i}`,
+      source: 'app',
+    }));
+  equal(
+    await (await handle(post(), fake(many(45)).deps)).json(),
+    { executed: 45, skipped: 0, failed: 0 },
+    'three batches',
+  );
+  equal(
+    await (await handle(post(), fake(many(120)).deps)).json(),
+    { executed: 100, skipped: 0, failed: 0 },
+    'the rest wait for the next run',
+  );
 });
 
 Deno.test('sameSecret', () => {

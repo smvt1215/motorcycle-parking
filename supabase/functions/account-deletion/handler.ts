@@ -10,8 +10,8 @@
 import { response } from '../_shared/http.ts';
 
 export const avatarBucket = 'motopark-avatars';
-/** Requests handled per run; the rest wait for the next day. */
-export const batchSize = 20;
+/** Requests claimed at a time, and batches per run; the rest wait a day. */
+export const batchSize = 20, maxBatches = 5;
 /** Storage list and remove calls per account, at most this many files each. */
 const avatarPage = 100, avatarRounds = 10;
 
@@ -118,15 +118,20 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
   ) {
     return response({ error: 'forbidden' }, 403);
   }
-  let claimed: Claimed[];
-  try {
-    claimed = await deps.claim(batchSize);
-  } catch {
-    return response({ error: 'claim failed' }, 500);
-  }
   const result = { executed: 0, skipped: 0, failed: 0 };
-  // One at a time: a day's few requests need no parallelism, and the Auth
-  // and Storage APIs are not hammered.
-  for (const item of claimed) result[await deleteOne(deps, item)]++;
+  // Batch after batch while they come full. A failed request stays claimed
+  // for an hour, so this run does not claim it again.
+  for (let batch = 0; batch < maxBatches; batch++) {
+    let claimed: Claimed[];
+    try {
+      claimed = await deps.claim(batchSize);
+    } catch {
+      return response({ error: 'claim failed', ...result }, 500);
+    }
+    // One at a time: a day's few requests need no parallelism, and the
+    // Auth and Storage APIs are not hammered.
+    for (const item of claimed) result[await deleteOne(deps, item)]++;
+    if (claimed.length < batchSize) break;
+  }
   return response(result, result.failed ? 500 : 200);
 }

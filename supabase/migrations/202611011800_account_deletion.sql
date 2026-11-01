@@ -478,7 +478,8 @@ grant execute on function api_v1.cancel_account_deletion() to authenticated,serv
 
 -- ===== 3. 到期執行（只給 Edge Function account-deletion 的 service role）=====
 -- 領取到期的申請，一次最多 p_limit 筆；1 小時內領過的（另一次執行還在
--- 處理）跳過。
+-- 處理，或這次執行已失敗過）跳過。重試次數少的先領，持續失敗的申請不會
+-- 佔滿每次的批次、讓其他到期申請永遠輪不到（Codex review，PR #270）。
 create function public.account_deletion_claim(p_limit int default 20)
 returns table(request_id uuid,user_id uuid,source text)
 language sql volatile security definer set search_path='' as $$
@@ -486,7 +487,7 @@ language sql volatile security definer set search_path='' as $$
     set claimed_at=now(),attempts=r.attempts+1
   from (select d.user_id from private.account_deletion_requests d
       where d.scheduled_at<=now() and (d.claimed_at is null or d.claimed_at<=now()-interval '1 hour')
-      order by d.scheduled_at limit greatest(1,least(coalesce(p_limit,20),100))
+      order by d.attempts,d.scheduled_at limit greatest(1,least(coalesce(p_limit,20),100))
       for update skip locked) due
   where r.user_id=due.user_id
   returning r.request_id,r.user_id,r.source;
@@ -532,14 +533,15 @@ end $$;
 revoke execute on function public.account_deletion_finish(uuid,text,jsonb) from public,anon,authenticated;
 grant execute on function public.account_deletion_finish(uuid,text,jsonb) to service_role;
 
--- 失敗：放開領取，隔天重試；記錄錯誤代碼（不含個人資料）。
+-- 失敗：記錄錯誤代碼（不含個人資料）。領取時間保留，1 小時後才能再領，
+-- 所以同一次執行不會重試它；下一次每日執行再試。
 create function public.account_deletion_fail(p_request uuid,p_error text) returns void
 language plpgsql volatile security definer set search_path='' as $$
 declare
   v_source text;
   v_error text:=left(coalesce(p_error,'unknown'),200);
 begin
-  update private.account_deletion_requests r set claimed_at=null,last_error=v_error
+  update private.account_deletion_requests r set last_error=v_error
     where r.request_id=p_request returning r.source into v_source;
   if found then
     insert into private.account_deletion_audit(request_id,event,source,error)
