@@ -70,6 +70,7 @@ select throws_ok(format('select admin_v1.request_account_deletion_for(''10000000
 insert into created
   select admin_v1.request_account_deletion_for('10000000-0000-4000-8000-000000000001',(select id from sent),'已用原 email 往返確認');
 select is((select r->>'status' from created),'pending','a pending deletion is created');
+select is((select r->>'can_self_delete' from created),'true','the state says the account may be deleted');
 reset role;
 select is((select scheduled_at-requested_at from private.account_deletion_requests where user_id='10000000-0000-4000-8000-000000000001'),
   interval '7 days','with the same 7-day cooling-off period');

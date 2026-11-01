@@ -126,6 +126,10 @@ export type AdminAccountDeletion = {
   /** ISO 8601 時間。最近一次取消 */
   cancelled_at: string | null;
   cancelled_by_sign_in: boolean | null;
+  /** 帳號能不能自助申請刪除（管理員為 false） */
+  can_self_delete: boolean;
+  cannot_self_delete_reason:
+    ('account.admin_cannot_self_delete' | null) | ('account.admin_cannot_self_delete' | null);
   support_request: string;
 };
 export const {

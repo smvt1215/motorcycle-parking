@@ -404,6 +404,8 @@
           "scheduled_at",
           "cancelled_at",
           "cancelled_by_sign_in",
+          "can_self_delete",
+          "cannot_self_delete_reason",
           "support_request"
         ],
         "additionalProperties": false,
@@ -440,6 +442,20 @@
             "type": [
               "boolean",
               "null"
+            ]
+          },
+          "can_self_delete": {
+            "type": "boolean",
+            "description": "帳號能不能自助申請刪除（管理員為 false）"
+          },
+          "cannot_self_delete_reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "account.admin_cannot_self_delete",
+              null
             ]
           },
           "support_request": {

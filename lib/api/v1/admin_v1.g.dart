@@ -306,6 +306,8 @@ class AdminAccountDeletion {
     this.scheduledAt,
     this.cancelledAt,
     this.cancelledBySignIn,
+    required this.canSelfDelete,
+    this.cannotSelfDeleteReason,
     required this.supportRequest,
   });
 
@@ -324,6 +326,10 @@ class AdminAccountDeletion {
         cancelledBySignIn: json['cancelled_by_sign_in'] == null
             ? null
             : json['cancelled_by_sign_in'] as bool,
+        canSelfDelete: json['can_self_delete'] as bool,
+        cannotSelfDeleteReason: json['cannot_self_delete_reason'] == null
+            ? null
+            : json['cannot_self_delete_reason'] as String,
         supportRequest: json['support_request'] as String,
       );
 
@@ -340,6 +346,11 @@ class AdminAccountDeletion {
 
   final bool? cancelledBySignIn;
 
+  /// 帳號能不能自助申請刪除（管理員為 false）
+  final bool canSelfDelete;
+
+  final String? cannotSelfDeleteReason;
+
   final String supportRequest;
 
   Map<String, Object?> toJson() => {
@@ -348,6 +359,8 @@ class AdminAccountDeletion {
     'scheduled_at': scheduledAt,
     'cancelled_at': cancelledAt,
     'cancelled_by_sign_in': cancelledBySignIn,
+    'can_self_delete': canSelfDelete,
+    'cannot_self_delete_reason': cannotSelfDeleteReason,
     'support_request': supportRequest,
   };
 
@@ -359,6 +372,8 @@ class AdminAccountDeletion {
       other.scheduledAt == scheduledAt &&
       other.cancelledAt == cancelledAt &&
       other.cancelledBySignIn == cancelledBySignIn &&
+      other.canSelfDelete == canSelfDelete &&
+      other.cannotSelfDeleteReason == cannotSelfDeleteReason &&
       other.supportRequest == supportRequest;
 
   @override
@@ -368,6 +383,8 @@ class AdminAccountDeletion {
     scheduledAt,
     cancelledAt,
     cancelledBySignIn,
+    canSelfDelete,
+    cannotSelfDeleteReason,
     supportRequest,
   ]);
 }
