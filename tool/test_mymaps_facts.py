@@ -48,6 +48,10 @@ class VocabularyTest(unittest.TestCase):
             "重機只能停 B3 汽車區，不可停機車區": {"parking_guide": ["可停汽車格", "重機停放樓層：B3", "機車區禁止大型重機"]},
             "後排辨識、有專用格，不可停汽車格": {"entrance_note": ["後車牌辨識"], "parking_guide": ["有重機專用格", "汽車區禁止大型重機"]},
             "禁停機車格，只能停汽車格": {"parking_guide": ["機車區禁止大型重機", "可停汽車格"]},
+            # A sign not seen is no ban; another vehicle's bays are not heavy-bike bays (review on #287).
+            "旁邊機車道未標示禁止重機": {"note": ["現場未見禁止大型重機標示"]},
+            "地下二樓有收費機車專用格2格、": {},
+            "重機專用格2格，機車專用格30格": {"parking_guide": ["重機專用格 2 格"]},
             # Advice is no ban, and no permission either.
             "建議不要停汽車格": {},
             # A floor only where the bike parks now (review on #287).
