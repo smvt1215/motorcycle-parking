@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 
 import '../../data/app_store.dart';
+import '../../domain/availability_beta_display.dart';
 import '../../domain/availability_display.dart';
 import '../../domain/eligibility.dart';
 import '../../domain/map_legend_display.dart';
@@ -10,6 +11,7 @@ import '../../domain/rider_meter_display.dart';
 import '../../models/parking.dart';
 import '../../ui/adaptive/adaptive.dart';
 import 'availability_capsule.dart';
+import 'beta_tag.dart';
 import 'cluster_badge.dart';
 import 'map_legend.dart';
 
@@ -64,6 +66,7 @@ class MapLegendPage extends ConsumerWidget {
           MapLegendContent(
             vehicle: store.vehicle,
             availability: store.availabilitySource.enabled,
+            betaCities: store.availabilityBetaCities,
           ),
         ],
       ),
@@ -78,11 +81,16 @@ class MapLegendContent extends StatelessWidget {
     super.key,
     required this.vehicle,
     this.availability = false,
+    this.betaCities = const [],
   });
   final VehicleType vehicle;
 
   /// Whether this build has live counts, so the pills can appear at all.
   final bool availability;
+
+  /// The cities whose counts are in Beta: the 即時車位 Beta section
+  /// explains them again (A13: 之後可從「地圖怎麼看」重看); none without.
+  final List<String> betaCities;
 
   @override
   Widget build(BuildContext context) {
@@ -202,6 +210,37 @@ class MapLegendContent extends StatelessWidget {
               ],
             ),
           ),
+        if (availability && betaCities.isNotEmpty)
+          _Section(
+            key: const ValueKey('availability-beta-legend'),
+            heading: legendBetaHeading,
+            headingTag: const BetaTag(),
+            child: _ListRows(
+              rows: [
+                (
+                  const AvailabilityCapsuleView(
+                    capsule: AvailabilityCapsule(
+                      text: '剩 4',
+                      style: CapsuleStyle.live,
+                      semantics: '',
+                    ),
+                  ),
+                  legendBetaSource(betaCities),
+                  '',
+                ),
+                (
+                  Icon(Icons.schedule, size: 24, color: muted),
+                  betaIntroCaution,
+                  '',
+                ),
+                (
+                  const SpotMarker(look: allowed, size: 24),
+                  betaIntroEligibility,
+                  '',
+                ),
+              ],
+            ),
+          ),
         _Section(
           key: const ValueKey('rider-legend'),
           heading: legendRiderHeading,
@@ -270,10 +309,14 @@ class _Section extends StatelessWidget {
     required this.heading,
     required this.child,
     this.note,
+    this.headingTag,
   });
   final String heading;
   final String? note;
   final Widget child;
+
+  /// A tag after the heading, such as Beta.
+  final Widget? headingTag;
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -289,20 +332,29 @@ class _Section extends StatelessWidget {
                 : const EdgeInsets.symmetric(vertical: 8),
             child: Semantics(
               header: true,
-              child: Text(
-                heading,
-                style: isCupertino
-                    ? TextStyle(
-                        fontSize: 13,
-                        color: cu.CupertinoColors.secondaryLabel.resolveFrom(
-                          context,
-                        ),
-                      )
-                    : TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: colors.primary,
-                      ),
+              child: Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      heading,
+                      style: isCupertino
+                          ? TextStyle(
+                              fontSize: 13,
+                              color: cu.CupertinoColors.secondaryLabel
+                                  .resolveFrom(context),
+                            )
+                          : TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: colors.primary,
+                            ),
+                    ),
+                  ),
+                  if (headingTag case final tag?) ...[
+                    const SizedBox(width: 6),
+                    tag,
+                  ],
+                ],
               ),
             ),
           ),
@@ -387,15 +439,17 @@ class _ListRows extends StatelessWidget {
                           title,
                           style: TextStyle(fontSize: isCupertino ? 17 : 16),
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          detail,
-                          style: TextStyle(
-                            fontSize: 13,
-                            height: 1.45,
-                            color: colors.onSurfaceVariant,
+                        if (detail.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            detail,
+                            style: TextStyle(
+                              fontSize: 13,
+                              height: 1.45,
+                              color: colors.onSurfaceVariant,
+                            ),
                           ),
-                        ),
+                        ],
                       ],
                     ),
                   ),

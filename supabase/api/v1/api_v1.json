@@ -118,6 +118,28 @@
           }
         }
       }
+    },
+    "/rpc/data_versions": {
+      "post": {
+        "operationId": "api_v1_data_versions",
+        "summary": "各資料集目前的版本",
+        "description": "App 快取的每個資料集（rules、spots，之後可能增加）的版本號，數字變大就表示要重讀。版本變動時會在公開的 Realtime Broadcast topic `data_versions` 發出 event `bump`，payload 為 {key, version}。公開 topic 任何人都能送訊息，所以 Broadcast 只是提示：收到後請重新呼叫這支 API，依回傳值決定要不要重讀。不需要登入。",
+        "responses": {
+          "200": {
+            "description": "資料集 → 版本",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataVersions"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -591,6 +613,28 @@
               "null"
             ]
           }
+        }
+      },
+      "DataVersions": {
+        "type": "object",
+        "description": "資料集名稱 → 版本號（正整數）。目前有 rules、spots；新增的資料集會出現新的鍵，用戶端遇到不認識的鍵請略過",
+        "required": [
+          "rules",
+          "spots"
+        ],
+        "properties": {
+          "rules": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "spots": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "additionalProperties": {
+          "type": "integer",
+          "minimum": 1
         }
       }
     },

@@ -6,12 +6,15 @@ import 'package:google_maps_flutter/google_maps_flutter.dart' as gm;
 import 'package:latlong2/latlong.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
 
+import '../../domain/availability_display.dart';
+import '../../domain/capsule_layout.dart';
 import '../../domain/eligibility.dart';
 import '../../domain/map_viewport.dart';
 import '../../domain/map_camera.dart';
 import '../../domain/spot_clusters.dart';
 import '../../models/parking.dart';
 import '../../ui/adaptive/adaptive.dart';
+import 'availability_capsule.dart';
 import 'cluster_badge.dart';
 import 'heavy_glyph.dart';
 import 'map_legend.dart';
@@ -34,6 +37,9 @@ class GoogleParkingMap extends StatefulWidget {
     this.panelVisible = false,
     this.mapType = gm.MapType.normal,
     this.dimmed,
+    this.capsules,
+    this.primaryCapsules,
+    this.excluded = const [],
   });
 
   final LatLng center;
@@ -56,6 +62,22 @@ class GoogleParkingMap extends StatefulWidget {
   /// Spots drawn faded, such as hidden ones on the admin site.
   final bool Function(ParkingSpot)? dimmed;
 
+  /// A spot's availability pills ([markerCapsules]), drawn above its
+  /// marker; none when null, as on the admin site.
+  final List<AvailabilityCapsule> Function(ParkingSpot)? capsules;
+
+  /// The one pill a crowded marker keeps ([primaryCapsules]), given the
+  /// spot's full set; crowded markers keep none when null.
+  final List<AvailabilityCapsule> Function(
+    ParkingSpot,
+    List<AvailabilityCapsule>,
+  )?
+  primaryCapsules;
+
+  /// Spots the availability filter leaves out: grey dots in place (A0
+  /// 被篩掉), still tappable.
+  final List<ParkingSpot> excluded;
+
   @override
   State<GoogleParkingMap> createState() => GoogleParkingMapState();
 }
@@ -72,8 +94,17 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
   final markerIcons = <MarkerKey, gm.BitmapDescriptor>{};
   final markerLoads = <MarkerKey, Future<void>>{};
 
+  /// Pill rows, drawn the first time a row is on screen: the number layer
+  /// is its own marker, so a count that changes redraws only its pills
+  /// and the eligibility marker never blinks.
+  final capsuleIcons = <CapsuleKey, gm.BitmapDescriptor>{};
+  final capsuleLoads = <CapsuleKey, Future<void>>{};
+
   /// A fixed-size dot: a ground circle in meters vanishes at street zoom.
   gm.BitmapDescriptor? locationIcon;
+
+  /// The grey dot of a spot the filter leaves out.
+  gm.BitmapDescriptor? excludedIcon;
   int viewportGeneration = 0;
   Size? lastSize;
   (LatLng, double?, double, double)? pendingMove;
@@ -90,6 +121,26 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
         if (mounted) setState(() => locationIcon = icon);
       }),
     );
+    unawaited(
+      _excludedIcon().then((icon) {
+        if (mounted) setState(() => excludedIcon = icon);
+      }),
+    );
+  }
+
+  /// The bitmap for [key], or null while it is drawn, as [_markerIconFor].
+  gm.BitmapDescriptor? _capsuleIconFor(CapsuleKey key) {
+    if (capsuleIcons[key] case final icon?) return icon;
+    capsuleLoads.putIfAbsent(key, () async {
+      try {
+        final icon = await capsuleIcon(key);
+        if (!mounted) return;
+        setState(() => capsuleIcons[key] = icon);
+      } catch (_) {
+        capsuleLoads.remove(key);
+      }
+    });
+    return null;
   }
 
   Future<void> _prepare() async {
@@ -339,6 +390,21 @@ class GoogleParkingMapState extends State<GoogleParkingMap> {
                         ?_marker(spot, selected: false),
                   if (widget.selected case final spot?)
                     ?_marker(spot, selected: true),
+                  ..._capsuleMarkers(),
+                  if (excludedIcon case final icon?)
+                    for (final spot in widget.excluded)
+                      if (spot.id != widget.selected?.id)
+                        gm.Marker(
+                          markerId: gm.MarkerId('excluded:${spot.id}'),
+                          position: gm.LatLng(spot.lat, spot.lng),
+                          icon: icon,
+                          anchor: const Offset(.5, .5),
+                          zIndexInt: -2,
+                          consumeTapEvents: true,
+                          onTap: widget.interactive
+                              ? () => widget.onSpotTap(spot)
+                              : null,
+                        ),
                 },
               ),
               if (kIsWeb && !widget.interactive)
@@ -373,6 +439,49 @@ extension on GoogleParkingMapState {
     return _spotMarker(spot, icon, selected: selected);
   }
 
+  /// Pills above the single spots and the selected one, laid out by the
+  /// density rules ([layoutCapsules]) on the camera's Mercator plane: a
+  /// crowded marker keeps its primary pill, and pills that would touch the
+  /// selected spot's set hide. Each row is a marker of its own, anchored at
+  /// its spot and drawn under every eligibility marker but the selected
+  /// one's, so the marker always wins a tap or a clash.
+  List<gm.Marker> _capsuleMarkers() {
+    final of = widget.capsules;
+    if (of == null) return const [];
+    final open = widget.selected;
+    final shown = shownCapsules(
+      lone: [
+        for (final group in _clusters)
+          if (group.spots.length == 1) ...group.spots,
+      ],
+      open: open,
+      at: (spot) => worldPixel(LatLng(spot.lat, spot.lng), camera.zoom),
+      markerSize: googleMarkerSize,
+      capsulesOf: of,
+      primaryOf: (spot, all) =>
+          widget.primaryCapsules?.call(spot, all) ?? const [],
+    );
+    return [
+      for (final (spot, pills) in shown.values)
+        if (_capsuleIconFor(CapsuleKey(pills, selected: spot.id == open?.id))
+            case final icon?)
+          gm.Marker(
+            markerId: gm.MarkerId(
+              spot.id == open?.id
+                  ? 'selected-capsules:${spot.id}'
+                  : 'capsules:${spot.id}',
+            ),
+            position: gm.LatLng(spot.lat, spot.lng),
+            icon: icon,
+            anchor: const Offset(.5, 1),
+            zIndexInt: spot.id == open?.id ? 501 : -1,
+            consumeTapEvents: true,
+            // Tapping the pills is tapping the marker.
+            onTap: widget.interactive ? () => widget.onSpotTap(spot) : null,
+          ),
+    ];
+  }
+
   gm.Marker _spotMarker(
     ParkingSpot spot,
     gm.BitmapDescriptor icon, {
@@ -391,6 +500,84 @@ extension on GoogleParkingMapState {
 
 gm.LatLng _googlePoint(LatLng point) =>
     gm.LatLng(point.latitude, point.longitude);
+
+/// A row of pills above a marker, and whether that marker is selected
+/// (larger pills, set higher above its larger marker).
+@immutable
+class CapsuleKey {
+  CapsuleKey(List<AvailabilityCapsule> capsules, {required this.selected})
+    : capsules = List.unmodifiable(capsules);
+  final List<AvailabilityCapsule> capsules;
+  final bool selected;
+
+  @override
+  bool operator ==(Object other) =>
+      other is CapsuleKey &&
+      other.selected == selected &&
+      listEquals(other.capsules, capsules);
+
+  @override
+  int get hashCode => Object.hash(selected, Object.hashAll(capsules));
+}
+
+/// The Google marker's side: [markerIcon]'s 80 of 96 at 2x.
+const googleMarkerSize = 40.0;
+
+/// [key]'s pills as a bitmap whose bottom centre is its spot: the row,
+/// with room for its shadow, then [capsuleGap] and half the marker
+/// transparent below it (MapBadges board), drawn at 2x.
+@visibleForTesting
+Future<gm.BitmapDescriptor> capsuleIcon(CapsuleKey key) async {
+  final scale = key.selected ? 26 / 24 : 1.0;
+  final marker = key.selected
+      ? googleMarkerSize * selectedScale
+      : googleMarkerSize;
+  final width =
+      (capsuleRowWidth(key.capsules, scale: scale) + capsuleShadowRoom * 2)
+          .ceilToDouble();
+  final height = (capsuleShadowRoom + 24 * scale + capsuleGap + marker / 2)
+      .ceilToDouble();
+  final recorder = ui.PictureRecorder();
+  final canvas = Canvas(recorder)..scale(2);
+  paintCapsuleRow(
+    canvas,
+    Offset(capsuleShadowRoom, height - marker / 2 - capsuleGap - 24 * scale),
+    key.capsules,
+    scale: scale,
+  );
+  final picture = recorder.endRecording();
+  final image = await picture.toImage(
+    (width * 2).toInt(),
+    (height * 2).toInt(),
+  );
+  picture.dispose();
+  final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+  image.dispose();
+  return gm.BitmapDescriptor.bytes(
+    bytes!.buffer.asUint8List(),
+    imagePixelRatio: 2,
+    width: width,
+    height: height,
+  );
+}
+
+/// A grey dot 10 across in a 24 box, so it stays tappable.
+Future<gm.BitmapDescriptor> _excludedIcon() async {
+  final recorder = ui.PictureRecorder();
+  Canvas(recorder)
+      .drawCircle(const Offset(24, 24), 10, Paint()..color = excludedDotColor);
+  final picture = recorder.endRecording();
+  final image = await picture.toImage(48, 48);
+  picture.dispose();
+  final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+  image.dispose();
+  return gm.BitmapDescriptor.bytes(
+    bytes!.buffer.asUint8List(),
+    imagePixelRatio: 2,
+    width: 24,
+    height: 24,
+  );
+}
 
 /// A marker bitmap's look: status and limit, corner badge, selected.
 typedef MarkerKey = (MarkerLook, SpaceBadge?, bool);

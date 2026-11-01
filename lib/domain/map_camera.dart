@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' show Offset;
 
 import 'package:latlong2/latlong.dart';
 
@@ -23,4 +24,18 @@ LatLng shiftCenter(LatLng point, double zoom, {double dx = 0, double dy = 0}) {
       math.atan(math.exp(math.pi * (1 - 2 * shifted))) * 360 / math.pi - 90;
   final lng = point.longitude + dx / world * 360;
   return LatLng(lat, lng);
+}
+
+/// [point]'s position in Web Mercator pixels at [zoom], the plane a
+/// north-up, untilted map draws on: two points' difference is their
+/// distance on screen.
+Offset worldPixel(LatLng point, double zoom) {
+  final world = 256 * math.pow(2, zoom);
+  final sine = math.sin(
+    point.latitude.clamp(-85.0511, 85.0511) * math.pi / 180,
+  );
+  return Offset(
+    (point.longitude + 180) / 360 * world,
+    (.5 - math.log((1 + sine) / (1 - sine)) / (4 * math.pi)) * world,
+  );
 }
