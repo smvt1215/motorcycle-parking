@@ -1,9 +1,17 @@
+import 'package:flutter_svg/flutter_svg.dart' show PictureInfo;
+import 'package:go_router/go_router.dart';
+
 import '../../domain/eligibility.dart';
+import '../../domain/map_legend_display.dart';
 import '../../models/parking.dart';
+import '../../models/parking_condition.dart';
+import '../../models/zone_entries.dart';
 import '../../ui/adaptive/adaptive.dart';
-import '../../domain/availability_display.dart';
-import 'availability_capsule.dart';
+import 'heavy_glyph.dart';
+import 'map_legend_page.dart';
 import 'spot_details.dart';
+
+export '../../domain/map_legend_display.dart' show SpaceBadge;
 
 const unverifiedColor = Color(0xff59646c);
 
@@ -16,6 +24,7 @@ MarkerLook markerLook(Eligibility e) => (
   e.status == EligibilityStatus.conditional ? e.restriction : null,
 );
 
+/// Fixed design colours (A0), never the dynamic colour scheme.
 Color spotMarkerColor(EligibilityStatus status) => switch (status) {
   EligibilityStatus.allowed => allowedColor,
   EligibilityStatus.conditional => conditionalColor,
@@ -35,7 +44,8 @@ IconData spotMarkerIcon(MarkerLook look) => switch (look) {
 };
 
 /// Corner radius per 38dp marker: the shape repeats the meaning so the map
-/// does not rely on colour alone.
+/// does not rely on colour alone (A0: circle, rounded square, rounded
+/// square, square).
 double spotMarkerRadius(EligibilityStatus status) => switch (status) {
   EligibilityStatus.allowed => 19,
   EligibilityStatus.conditional => 10,
@@ -43,46 +53,125 @@ double spotMarkerRadius(EligibilityStatus status) => switch (status) {
   EligibilityStatus.notAllowed => 4,
 };
 
-/// A space's kind beyond whether it is parkable, shown as a corner badge:
-/// car bays (including heavy-and-car shared ones), heavy-only bays, and bays
-/// shared by scooters and heavy bikes.
-enum SpaceBadge { car, heavyOnly, shared, disabled }
-
+/// The spot's corner badge, from the bay kind painted there (#188's seven
+/// kinds): none for a plain 一般機車格. A lot, or a street bay that reads
+/// as a plain one, falls back to the access the spot reports, as before
+/// the kinds: 大重專用, 大汽共用 and 普大共用.
 SpaceBadge? spaceBadge(ParkingSpot spot) {
-  final access = reportedAccess(spot);
-  if (spot.spaceType == SpaceType.heavyOnly ||
-      access == ParkingAccess.heavyOnly) {
-    return SpaceBadge.heavyOnly;
+  final street = !isOffStreet(spot.spaceType, spot.facilityType);
+  final kind = street
+      ? bayKindOf(spot.condition ?? conditionOf(spot.spaceType))
+      : null;
+  if (kind != null) {
+    if (SpaceBadge.ofBay(kind) case final badge?) return badge;
   }
-  if (spot.spaceType == SpaceType.car || access == ParkingAccess.heavyCar) {
-    return SpaceBadge.car;
-  }
-  if (spot.spaceType == SpaceType.disabledMotorcycle) {
-    return SpaceBadge.disabled;
-  }
-  if (access == ParkingAccess.scooterHeavy) return SpaceBadge.shared;
-  return null;
+  return switch (reportedAccess(spot)) {
+    ParkingAccess.heavyOnly => SpaceBadge.heavyOnly,
+    ParkingAccess.heavyCar => SpaceBadge.car,
+    ParkingAccess.scooterHeavy => SpaceBadge.shared,
+    _ => null,
+  };
 }
 
-/// The car and the helmet (as on the heavy-bike vehicle pill) are icons;
-/// shared bays read 共, as painted on the ground.
+/// The badge's icon; both heavy-bike badges draw the IconScout silhouette
+/// when the build carries it ([heavyGlyph]) and Material's two-wheeler
+/// otherwise.
 IconData? spaceBadgeIcon(SpaceBadge badge) => switch (badge) {
-  SpaceBadge.car => Icons.directions_car,
-  SpaceBadge.heavyOnly => Icons.sports_motorsports,
-  SpaceBadge.shared => null,
+  SpaceBadge.heavyOnly || SpaceBadge.shared => heavyGlyphFallback,
+  SpaceBadge.car || SpaceBadge.carMotorcycle => Icons.directions_car,
   SpaceBadge.disabled => Icons.accessible,
+  SpaceBadge.ev => Icons.ev_station,
 };
 
-String spaceBadgeLabel(SpaceBadge badge) => switch (badge) {
-  SpaceBadge.car => '汽車格',
-  SpaceBadge.heavyOnly => '重機專用格',
-  SpaceBadge.shared => '普大共用格',
-  SpaceBadge.disabled => '身障機車專用格',
+String spaceBadgeLabel(SpaceBadge badge) => badge.label;
+
+/// The second colour of a shared bay's square, after the ground markings:
+/// yellow for 普大共用, light blue for 汽機車共用.
+Color? spaceBadgeAccent(SpaceBadge badge) => switch (badge) {
+  SpaceBadge.shared => const Color(0xfff2c200),
+  SpaceBadge.carMotorcycle => const Color(0xff6aaad6),
+  _ => null,
 };
+
+/// Paints [badge] filling [rect] (A0, 19 units across): a white circle for
+/// a dedicated bay, a square split white and its accent for a shared one,
+/// a 1.5 ink outline and the 12.5 icon or 13 silhouette. The Flutter marker
+/// and the Google bitmap both paint it here.
+void paintSpaceBadge(
+  Canvas canvas,
+  Rect rect,
+  SpaceBadge badge, {
+  PictureInfo? glyph,
+}) {
+  final unit = rect.width / 19;
+  final shape = RRect.fromRectAndRadius(
+    rect,
+    Radius.circular(badge.square ? 5 * unit : rect.width / 2),
+  );
+  canvas.save();
+  canvas.clipRRect(shape);
+  canvas.drawRect(rect, Paint()..color = Colors.white);
+  if (spaceBadgeAccent(badge) case final accent?) {
+    // CSS linear-gradient(135deg, white 50%, accent 50%): the lower right
+    // half, below the diagonal from top right to bottom left.
+    canvas.drawPath(
+      Path()
+        ..moveTo(rect.right, rect.top)
+        ..lineTo(rect.right, rect.bottom)
+        ..lineTo(rect.left, rect.bottom)
+        ..close(),
+      Paint()..color = accent,
+    );
+  }
+  canvas.restore();
+  final stroke = 1.5 * unit;
+  canvas.drawRRect(
+    shape.deflate(stroke / 2),
+    Paint()
+      ..color = badgeInk
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke,
+  );
+  final center = rect.center;
+  final heavy = badge == SpaceBadge.heavyOnly || badge == SpaceBadge.shared;
+  if (heavy && glyph != null) {
+    paintHeavyGlyph(
+      canvas,
+      glyph,
+      Rect.fromCenter(center: center, width: 13 * unit, height: 13 * unit),
+      badgeInk,
+    );
+    return;
+  }
+  final icon = spaceBadgeIcon(badge)!;
+  final painter = TextPainter(
+    text: TextSpan(
+      text: String.fromCharCode(icon.codePoint),
+      style: TextStyle(
+        color: badgeInk,
+        fontSize: 12.5 * unit,
+        height: 1,
+        fontFamily: icon.fontFamily,
+        package: icon.fontPackage,
+      ),
+    ),
+    textDirection: TextDirection.ltr,
+  )..layout();
+  painter.paint(canvas, center - Offset(painter.width / 2, painter.height / 2));
+  painter.dispose();
+}
 
 /// Ring and scale that mark the spot whose details are open.
 const selectedRingColor = Color(0xff1a73e8);
 const selectedScale = 1.35;
+
+/// The marker shadow (A0: 0 2px 4px rgba(0,0,0,.27)), kept as drawn
+/// before so the rules page goldens hold.
+const markerShadow = BoxShadow(
+  blurRadius: 6,
+  color: Color(0x44000000),
+  offset: Offset(0, 2),
+);
 
 class SpotMarker extends StatelessWidget {
   const SpotMarker({
@@ -91,15 +180,19 @@ class SpotMarker extends StatelessWidget {
     this.size = 38,
     this.selected = false,
     this.badge,
+    this.faded = false,
   });
   final MarkerLook look;
   final double size;
   final bool selected;
   final SpaceBadge? badge;
+
+  /// A spot reported gone: the plain marker at .45, no shadow (A0).
+  final bool faded;
   @override
   Widget build(BuildContext context) {
     final size = selected ? this.size * selectedScale : this.size;
-    final marker = Container(
+    Widget marker = Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
@@ -111,13 +204,7 @@ class SpotMarker extends StatelessWidget {
         borderRadius: BorderRadius.circular(
           size * spotMarkerRadius(look.$1) / 38,
         ),
-        boxShadow: const [
-          BoxShadow(
-            blurRadius: 6,
-            color: Color(0x44000000),
-            offset: Offset(0, 2),
-          ),
-        ],
+        boxShadow: faded ? null : const [markerShadow],
       ),
       child: Icon(
         spotMarkerIcon(look),
@@ -125,6 +212,7 @@ class SpotMarker extends StatelessWidget {
         size: size * 22 / 38,
       ),
     );
+    if (faded) marker = Opacity(opacity: .45, child: marker);
     final badge = this.badge;
     if (badge == null) return Center(child: marker);
     final dot = size * .5;
@@ -151,115 +239,34 @@ class SpaceBadgeDot extends StatelessWidget {
   final SpaceBadge badge;
   final double size;
   @override
-  Widget build(BuildContext context) {
-    final icon = spaceBadgeIcon(badge);
-    return Container(
-      width: size,
-      height: size,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        shape: BoxShape.circle,
-        border: Border.all(color: badgeInk, width: size * .08),
-      ),
-      child: icon != null
-          ? Icon(icon, size: size * .66, color: badgeInk)
-          : Text(
-              '共',
-              textScaler: TextScaler.noScaling,
-              style: TextStyle(
-                color: badgeInk,
-                fontSize: size * .6,
-                fontWeight: FontWeight.w800,
-                height: 1,
-              ),
-            ),
-    );
-  }
+  Widget build(BuildContext context) => CustomPaint(
+    key: ValueKey('space-badge-${badge.name}'),
+    size: Size.square(size),
+    painter: _SpaceBadgePainter(badge),
+  );
+}
+
+class _SpaceBadgePainter extends CustomPainter {
+  _SpaceBadgePainter(this.badge) : super(repaint: heavyGlyph);
+  final SpaceBadge badge;
+  @override
+  void paint(Canvas canvas, Size size) => paintSpaceBadge(
+    canvas,
+    Offset.zero & size,
+    badge,
+    glyph: heavyGlyph.value,
+  );
+
+  @override
+  bool shouldRepaint(_SpaceBadgePainter old) => old.badge != badge;
 }
 
 const badgeInk = Color(0xff22282d);
 
-/// Marker meanings for the selected vehicle; shape repeats the colour so the
-/// legend does not rely on colour alone.
-class MapLegend extends StatelessWidget {
-  const MapLegend({super.key, required this.vehicle});
-  final VehicleType vehicle;
-  @override
-  Widget build(BuildContext context) {
-    final entries = <(MarkerLook, String, String)>[
-      (
-        (EligibilityStatus.allowed, null),
-        '可停',
-        '法規或已查核資料確認${vehicle.label}可停放',
-      ),
-      (
-        (EligibilityStatus.conditional, RuleRestriction.signage),
-        '有條件・限標示車格',
-        '僅地面或標牌標示開放${vehicle.label}的車格可停',
-      ),
-      (
-        (EligibilityStatus.conditional, RuleRestriction.timeLimited),
-        '有條件・限時段',
-        '限時停車或汽機車彈性共用格，依牌面時段停放',
-      ),
-      (
-        (EligibilityStatus.conditional, RuleRestriction.evOnly),
-        '有條件・限電動機車',
-        '電動機車停車或充換電格，燃油機車不可停',
-      ),
-      ((EligibilityStatus.conditional, null), '有條件・其他限制', '法規開放但另有限制，詳見停車點說明'),
-      (
-        (EligibilityStatus.unverified, null),
-        '待確認',
-        '資料不足以判斷：社群回報未查核或過時、場站未標示、尚無生效規則',
-      ),
-      (
-        (EligibilityStatus.notAllowed, null),
-        '不可停',
-        '法規或已查核資料不開放${vehicle.label}停放',
-      ),
-    ];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final (look, title, detail) in entries)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Row(
-              children: [
-                ExcludeSemantics(
-                  child: SizedBox.square(
-                    dimension: 44,
-                    child: SpotMarker(look: look),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: Theme.of(context).textTheme.titleSmall,
-                      ),
-                      Text(
-                        detail,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-      ],
-    );
-  }
-}
-
+/// The first-launch introduction: the legend in a sheet over the map, as
+/// before the page (it closes with 關閉, then the launch prompts resume).
 /// [availability] adds the space-count pills, shown only where live counts
-/// exist (the example build until P2).
+/// exist.
 Future<void> showMapLegend(
   BuildContext context,
   VehicleType vehicle, {
@@ -268,159 +275,22 @@ Future<void> showMapLegend(
   context,
   (ctx) => ContentPage(
     children: [
-      SheetTitle('地圖怎麼看'),
-      const SizedBox(height: 4),
-      Text(
-        '標記依目前車種「${vehicle.label}」判斷，切換車種會即時更新。',
-        style: Theme.of(ctx).textTheme.bodyMedium,
-      ),
-      const SizedBox(height: 20),
-      MapLegend(vehicle: vehicle),
-      const SizedBox(height: 8),
-      Text('角落小圖示', style: Theme.of(ctx).textTheme.titleSmall),
-      const SizedBox(height: 12),
-      for (final (badge, detail) in const [
-        (SpaceBadge.car, '汽車格，或大型重機與汽車共用的格位'),
-        (SpaceBadge.heavyOnly, '標示大型重機專用的格位'),
-        (SpaceBadge.shared, '普通機車與大型重機共用的格位'),
-        (SpaceBadge.disabled, '限經監理站檢驗合格的身障特製機車，並持識別證或專用牌照'),
-      ])
-        Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: Row(
-            children: [
-              SizedBox.square(
-                dimension: 44,
-                child: Center(
-                  child: ExcludeSemantics(
-                    child: SpaceBadgeDot(badge: badge, size: 26),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      spaceBadgeLabel(badge),
-                      style: Theme.of(ctx).textTheme.titleSmall,
-                    ),
-                    Text(detail, style: Theme.of(ctx).textTheme.bodySmall),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      if (availability) ...[
-        const SizedBox(height: 8),
-        Text('標記上方的車位數', style: Theme.of(ctx).textTheme.titleSmall),
-        const SizedBox(height: 12),
-        const AvailabilityLegend(),
-      ],
-      const Divider(height: 32),
-      const Text('數字圓圈：附近有多個停車點，放大地圖即可展開。'),
-      const SizedBox(height: 8),
-      const Text('長按地圖：在該位置回報新的停車點。'),
-      const SizedBox(height: 16),
-      const Text('社群資訊可能有延遲，停車前請確認現場標示。'),
+      SheetTitle(legendTitle),
+      MapLegendContent(vehicle: vehicle, availability: availability),
     ],
   ),
 );
 
-/// The pill states, as on the canvas's map board: a count, a delayed
-/// count, full, closed, and no pill for an unknown space.
-class AvailabilityLegend extends StatelessWidget {
-  const AvailabilityLegend({super.key});
-  @override
-  Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    const rows = [
-      (
-        AvailabilityCapsule(
-          text: '剩 12',
-          style: CapsuleStyle.live,
-          semantics: '',
-        ),
-        '官方即時剩餘',
-      ),
-      (
-        AvailabilityCapsule(
-          text: '剩 7',
-          style: CapsuleStyle.delayed,
-          semantics: '',
-        ),
-        '更新延遲，數字可能已變',
-      ),
-      (
-        AvailabilityCapsule(
-          text: '已滿',
-          style: CapsuleStyle.full,
-          semantics: '',
-        ),
-        '官方資料目前沒有空位',
-      ),
-      (
-        AvailabilityCapsule(
-          text: '暫停',
-          style: CapsuleStyle.suspended,
-          semantics: '',
-        ),
-        '場站暫停營運',
-      ),
-    ];
-    return Column(
-      key: const ValueKey('availability-legend'),
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final (capsule, detail) in rows)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 88,
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: ExcludeSemantics(
-                      child: AvailabilityCapsuleView(capsule: capsule),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    detail,
-                    semanticsLabel: '${capsule.text}：$detail',
-                    style: text.bodySmall,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        Row(
-          children: [
-            SizedBox(
-              width: 88,
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: ExcludeSemantics(
-                  child: SizedBox.square(
-                    dimension: 24,
-                    child: SpotMarker(
-                      look: (EligibilityStatus.unverified, null),
-                      size: 22,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(child: Text('沒有膠囊＝空位未知，或目前車種不可停', style: text.bodySmall)),
-          ],
-        ),
-      ],
-    );
+/// Opens the 地圖怎麼看 page (P3) inside the current tab, so the tab bar
+/// stays: /map/legend from the map, /parking/legend from 個人中心. Both are
+/// sub-routes, so back returns to their parent tab page. Outside the app's
+/// router (tests of a single page), a plain route.
+void openMapLegend(BuildContext context, {required bool fromMap}) {
+  if (GoRouter.maybeOf(context) case final router?) {
+    router.go(fromMap ? '/map/legend' : '/parking/legend');
+    return;
   }
+  Navigator.of(context).push<void>(
+    MaterialPageRoute(builder: (_) => MapLegendPage(fromMap: fromMap)),
+  );
 }
