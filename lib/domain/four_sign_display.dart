@@ -387,10 +387,11 @@ SignPlate _feePlate(FourSign s) {
     case FeeKind.unknown:
       return const SignPlate(
         face: FourSignFace.fee,
-        main: '官方未標示',
-        note: '依現場公告',
+        // No fee written: 未提供, for official and community spots alike
+        // (user decision 2026-11-01).
+        main: '未提供',
         tone: PlateTone.dashed,
-        semantics: '怎麼算錢：官方未標示，依現場公告',
+        semantics: '怎麼算錢：未提供',
       );
   }
 }

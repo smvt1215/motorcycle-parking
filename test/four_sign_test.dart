@@ -452,10 +452,7 @@ void main() {
         'fee_note': '請依現場公告',
       });
       final p = plates(bare, VehicleType.heavy, day);
-      expect(
-        (p[2].main, p[2].note, p[2].tone),
-        ('官方未標示', '依現場公告', PlateTone.dashed),
-      );
+      expect((p[2].main, p[2].note, p[2].tone), ('未提供', '', PlateTone.dashed));
     });
 
     test('多區車友回報：小字寫區名與「車友回報・時間」', () {
