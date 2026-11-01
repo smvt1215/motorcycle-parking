@@ -1,5 +1,12 @@
 name: Mobile build setup
 description: Install the pinned Flutter SDK and locked application dependencies.
+inputs:
+  heavy-glyph:
+    description: >-
+      The licensed heavy-bike badge SVG, base64-encoded (a secret); store
+      builds pass it, every other build leaves it empty.
+    required: false
+    default: ''
 runs:
   using: composite
   steps:
@@ -12,3 +19,9 @@ runs:
         cache: true
     - shell: bash
       run: flutter pub get --enforce-lockfile
+    # The licensed badge silhouette, only in this step's environment;
+    # builds without it draw the fallback icon.
+    - shell: bash
+      env:
+        HEAVY_GLYPH_SVG_BASE64: ${{ inputs.heavy-glyph }}
+      run: python3 tool/fetch_heavy_glyph.py

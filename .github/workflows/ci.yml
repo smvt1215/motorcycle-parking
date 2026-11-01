@@ -73,7 +73,9 @@ jobs:
         if: steps.changes.outputs.run == 'true'
         run: flutter test --no-pub test/auth_flow_test.dart
       - if: steps.changes.outputs.run == 'true'
-        run: flutter build web --no-web-resources-cdn --no-wasm-dry-run
+        run: |
+          flutter build web --no-web-resources-cdn --no-wasm-dry-run
+          python3 tool/web_private_assets.py strip build/web
       - name: Build admin web entrypoint
         if: steps.changes.outputs.run == 'true'
         run: |

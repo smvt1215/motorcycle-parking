@@ -107,12 +107,17 @@ with s as (insert into moderation_queue(source_id,reporter_id,reason,field,propo
   insert into fx select 'everywhere',id from s;
 create temporary table pl as select fee_plans from community_spots where id=(select id from fx where name='lot');
 grant select on pl to authenticated;
+-- The admin page writes fee_note from its own feeNoteOf; fee_note_of is an
+-- internal helper (no EXECUTE for authenticated, #195 P0), so the expected
+-- text is worked out here, as the owner.
+create temporary table pn as select fee_note_of('{"scooter":{"mode":"per_visit","amount":30}}') as note;
+grant select on pn to authenticated;
 set local role authenticated;
 select pg_temp.act('admin');
 -- Only the spot's own use: a new plan of its own, the zones keep theirs.
 select lives_ok($$select admin_resolve_report((select id from fx where name='only_here'),'accepted',
   jsonb_build_object('fee','{"scooter":{"mode":"per_visit","amount":30}}'::jsonb,
-    'fee_note',fee_note_of('{"scooter":{"mode":"per_visit","amount":30}}'),
+    'fee_note',(select note from pn),
     'fee_plan','p3',
     'fee_plans',(select fee_plans||'[{"id":"p3","name":"全場計次","fee":{"scooter":{"mode":"per_visit","amount":30}}}]'::jsonb
       from pl),

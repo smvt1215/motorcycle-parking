@@ -265,7 +265,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('登入後才能新增與修正停車資訊。'), findsNothing);
     expect(find.byType(SignInButtons), findsNothing);
-    expect(find.text('修正現有資訊'), findsOneWidget);
+    expect(find.text('修正附近停車點'), findsOneWidget);
     expect(find.text('登入成功'), findsOneWidget);
   });
 
