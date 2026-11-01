@@ -503,6 +503,39 @@ void main() {
         expect(scooter.reason, isNot(contains('07:00–20:00')));
       });
 
+      test('臺中共用格：機車時段依有條件規則納入，保留「限標示車格」與規則說明（Codex #226）', () {
+        ParkingDecision taichung(String charge) => decideParking(
+          street(
+            SpaceType.flexShared,
+            city: '臺中市',
+            condition: c({
+              'bay': 'car',
+              'use': 'share',
+              'share': 'car_motorcycle',
+              'charge': charge,
+              'schedule': [dayCar, nightScooter],
+            }),
+          ),
+          VehicleType.heavy,
+          bundled,
+          now: at(2026, 10, 27, 22),
+        );
+        for (final charge in ['toll', 'free']) {
+          final d = taichung(charge);
+          expect(d.status, EligibilityStatus.conditional, reason: charge);
+          expect(d.restriction, RuleRestriction.signage, reason: charge);
+          expect(d.reason, contains('現在可停'), reason: charge);
+          expect(d.reason, contains('每天 20:00–隔日 07:00'), reason: charge);
+          expect(d.reason, contains('機車時段：'), reason: charge);
+          expect(d.reason, contains('大重機共用'), reason: charge);
+        }
+        // Taipei's toll bays open without that limit.
+        final taipei = shared(VehicleType.heavy, at(2026, 10, 27, 22));
+        expect(taipei.restriction, RuleRestriction.timeLimited);
+        expect(taipei.reason, isNot(contains('機車時段：')));
+        expect(taipei.reason, isNot(contains('大重機共用')));
+      });
+
       test('重機規則尚未生效（2026-10-05）：重機只列汽車時段，夜間現在不可停並給下一段', () {
         // The rule Taipei heavy bikes had before 2026-10-06: car and heavy
         // bays only, no motorcycle bays.
