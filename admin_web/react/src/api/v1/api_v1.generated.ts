@@ -14,6 +14,9 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.body,
       }),
     }),
+    apiV1DataVersions: build.query<ApiV1DataVersionsApiResponse, ApiV1DataVersionsApiArg>({
+      query: () => ({ url: `/rpc/data_versions`, method: 'POST' }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -35,6 +38,8 @@ export type ApiV1SpotsInViewportApiArg = {
     east: number;
   };
 };
+export type ApiV1DataVersionsApiResponse = /** status 200 資料集 → 版本 */ DataVersions;
+export type ApiV1DataVersionsApiArg = void;
 export type ClientConfig = {
   /** 低於這個版本的 App 一律整個擋下，必須更新才能繼續使用（使用者決定，#195 §7 第 7 題）。伺服器寧可不擋：沒有設定、格式不對或讀取失敗時回 0.1.0。App 離線或讀不到 client_config 時也不可以擋。只有 admin_v1.set_min_supported_app_version 能修改，每次修改都留稽核紀錄。 */
   min_supported_app_version: string;
@@ -151,5 +156,14 @@ export type SpotsInViewport = {
   /** 官方點這次沒有讀到（暫時無法讀取） */
   official_unavailable: boolean;
 };
-export const { useApiV1ClientConfigQuery, useApiV1CityRulesQuery, useApiV1SpotsInViewportQuery } =
-  injectedRtkApi;
+export type DataVersions = {
+  rules: number;
+  spots: number;
+  [key: string]: number;
+};
+export const {
+  useApiV1ClientConfigQuery,
+  useApiV1CityRulesQuery,
+  useApiV1SpotsInViewportQuery,
+  useApiV1DataVersionsQuery,
+} = injectedRtkApi;
