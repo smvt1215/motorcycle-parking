@@ -441,7 +441,7 @@ void main() {
     expect(find.text('地圖怎麼看'), findsOneWidget);
     expect(find.text('帳號與設定'), findsOneWidget);
     // One vehicle switch: the map's pill, not the account sheet.
-    await tester.tap(find.byTooltip('設定與登入'));
+    await tester.tap(find.byTooltip('帳號與設定'));
     await tester.pumpAndSettle();
     // The page row and the sheet's title.
     expect(find.text('帳號與設定'), findsNWidgets(2));
