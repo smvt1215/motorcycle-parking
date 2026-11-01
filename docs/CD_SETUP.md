@@ -62,6 +62,21 @@ migration `202610270140_availability_p2.sql` 建立 pg_cron 工作 `availability
 
 migration `202610310600_cron_history_prune.sql` 建立每日排程 `cron-history-prune`（`23 20 * * *` UTC＝台灣 04:23），呼叫 `public.cron_history_prune()` 刪除 `cron.job_run_details` 中 `end_time` 早於 7 天前的紀錄（尚未結束、`end_time` 為空的不刪）。不需另外設定；確認：`select jobname,schedule from cron.job where jobname='cron-history-prune';`。
 
+### 回報函式（`submit-report`、`submit-sighting`）的網路識別與 App Check
+
+兩個函式共用以下 Edge Function secrets，只設定在各自 Supabase 專案（`supabase secrets set … --project-ref <ref>`）：
+
+| Secret | 值 | 說明 |
+|---|---|---|
+| `REPORT_HASH_SECRET` | 隨機字串（`openssl rand -hex 32`） | 網路與裝置只以 HMAC-SHA256 雜湊存入資料庫，不存原始 IP |
+| `TRUSTED_IP_HEADER` | **`cf-connecting-ip`** | 每網路每日上限用的客戶端 IP 來源（#123） |
+| `APP_CHECK_MODE` | `log`（預設）／`enforce`／`off` | 只記錄期間不擋；兩個函式可分開切換（#203） |
+| `FIREBASE_PROJECT_NUMBER`、`APP_CHECK_APP_IDS` | Firebase 專案編號、Android／iOS app id（逗號分隔） | 缺一時 App Check 視為未設定（log 模式只記錄） |
+
+`TRUSTED_IP_HEADER` 必須是入口自己寫入、客戶端無法偽造的**單值** header。Supabase 託管平台前面是 Cloudflare，`CF-Connecting-IP` 由 Cloudflare 以連到它的位址覆寫，只含一個 IP（[Cloudflare HTTP headers](https://developers.cloudflare.com/fundamentals/reference/http-headers/)）。**不要設成 `x-forwarded-for`**：它的前段是客戶端自己送的，可被偽造；Cloudflare 之後若再經內部代理附加，最後一段會變成代理，所有騎士被合併成同一個網路，每網路上限被集體耗盡、不同人的確認票被當成同一網路。函式只取 header 的最後一段，值不是 IP 時回 503，不會退回其他 header。
+
+已驗證（2026-11-01，staging 唯讀查 `function_edge_logs`，只看形狀不看值）：送到 Edge Function 的請求都帶 `cf-connecting-ip` 與 `x-real-ip`，皆為單一值且兩者相同。production 上線前在 production 專案重做同一查詢確認。
+
 ## staging：Firebase 與 iOS 測試裝置
 
 staging profile 必須是 Ad Hoc，包含受邀 iPhone 的 UDID；production profile 必須是 App Store，不能包含 `ProvisionedDevices`。
