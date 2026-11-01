@@ -197,6 +197,9 @@ void main() {
       (widget) => widget is IconButton && widget.tooltip == '搜尋停車點',
     );
     expect(tester.widget<IconButton>(searchButton).onPressed, isNull);
+    // Fourth in the row, past the Beta tag: scrolled into view first.
+    await tester.ensureVisible(find.byKey(const ValueKey('space-filter')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('space-filter')));
     await tester.pumpAndSettle();
     // The seven bay kinds and the lot (#188, P1), picked several at a

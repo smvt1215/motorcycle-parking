@@ -10,16 +10,19 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/config.dart';
 import '../../data/app_store.dart';
 import '../../domain/space_filter.dart';
+import '../../domain/availability_beta_display.dart';
 import '../../domain/availability_display.dart';
 import '../../domain/capsule_layout.dart';
 import '../../domain/four_sign.dart' show fourSignVerdict;
 import '../../domain/map_filter_display.dart';
 import '../../domain/map_viewport.dart';
 import '../../domain/spot_clusters.dart';
+import '../../models/availability.dart';
 import '../../models/parking.dart';
 import '../../models/space_kind.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../report/report_sheet.dart';
+import 'availability_beta_sheet.dart';
 import 'availability_capsule.dart';
 import 'map_filter_row.dart';
 import 'map_legend.dart';
@@ -130,6 +133,14 @@ class _MapPageState extends ConsumerState<MapPage> {
   /// The picked space kinds (P1); empty is 全部格位.
   Set<SpaceKind> kinds = const {};
   bool greeted = false;
+
+  /// The launch greeting (location prompt, first-time legend) is over, so
+  /// the Beta sheet may follow without stacking on them.
+  bool greetingDone = false;
+
+  /// The Beta sheet came up in this session: dismissed without 知道了, it
+  /// waits for the next launch.
+  bool betaIntroOffered = false;
   bool promptDeferred = false;
   late final AppLifecycleListener lifecycle;
 
@@ -198,6 +209,81 @@ class _MapPageState extends ConsumerState<MapPage> {
     if (pending) {
       await store.launchLocation;
       await _promptLocation(store);
+    }
+    if (mounted) setState(() => greetingDone = true);
+  }
+
+  /// The spot whose count first shows the Beta sheet: in a Beta city,
+  /// with a pill on the map; null when the sheet should not come up now.
+  ParkingSpot? _betaIntroSpot(
+    AppStore store,
+    List<ParkingSpot> spots,
+    ParkingSpot? open,
+    DateTime now,
+  ) {
+    final cities = store.availabilityBetaCities;
+    if (!greetingDone ||
+        betaIntroOffered ||
+        promptDeferred ||
+        // Never over another sheet or dialog, such as a location prompt.
+        !(ModalRoute.of(context)?.isCurrent ?? true) ||
+        open != null ||
+        !widget.showControls ||
+        widget.covered ||
+        cities.isEmpty ||
+        !store.availabilitySource.enabled ||
+        store.availabilityBetaIntroSeen) {
+      return null;
+    }
+    return spots
+        .where(
+          (s) =>
+              inAvailabilityBeta(s.city, cities) &&
+              markerCapsules(
+                s,
+                store.availabilityOf(s),
+                store.vehicle,
+                store.decide(s),
+                now,
+              ).isNotEmpty,
+        )
+        .firstOrNull;
+  }
+
+  /// Whether an empty 「有即時空位」 result is only because no Beta city is
+  /// in view: no spot left out is in one, and none has any count at all.
+  bool _outsideBeta(
+    AppStore store,
+    List<(ParkingSpot, AvailabilityExclusion)> excluded,
+  ) {
+    final cities = store.availabilityBetaCities;
+    return cities.isNotEmpty &&
+        excluded.every(
+          (e) =>
+              !inAvailabilityBeta(e.$1.city, cities) &&
+              (e.$2 == AvailabilityExclusion.roadside ||
+                  e.$2 == AvailabilityExclusion.noData),
+        );
+  }
+
+  Future<void> _showBetaIntro(AppStore store, ParkingSpot spot) async {
+    if (!mounted) return;
+    final availability = store.availabilityOf(spot);
+    final count =
+        availability.of(availabilityVehicle(store.vehicle)) ??
+        availability.of(AvailabilityVehicle.car);
+    final choice = await showAvailabilityBetaIntro(
+      context,
+      city: spot.city,
+      provider: count?.provider ?? '官方資料',
+    );
+    switch (choice) {
+      case BetaIntroChoice.done:
+        await store.markAvailabilityBetaIntroSeen();
+      case BetaIntroChoice.legend:
+        if (mounted) openMapLegend(context, fromMap: true);
+      case null:
+        break;
     }
   }
 
@@ -439,6 +525,12 @@ class _MapPageState extends ConsumerState<MapPage> {
         .clamp(filterChipHeight, double.infinity);
     final open = widget.showControls ? selected : null;
     final covered = widget.covered;
+    if (_betaIntroSpot(store, spots, open, now) case final spot?) {
+      betaIntroOffered = true;
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => unawaited(_showBetaIntro(store, spot)),
+      );
+    }
     return PopScope(
       // Back closes the details before leaving the map; a covering page
       // handles back itself.
@@ -544,6 +636,16 @@ class _MapPageState extends ConsumerState<MapPage> {
             onSpotTap: _showSpot,
             onLongPress: (point) =>
                 showReport(context, store, point.latitude, point.longitude),
+            capsules: (s) => markerCapsules(
+              s,
+              store.availabilityOf(s),
+              store.vehicle,
+              store.decide(s),
+              now,
+            ),
+            primaryCapsules: (s, capsules) =>
+                primaryCapsules(s, store.vehicle, store.decide(s), capsules),
+            excluded: [for (final (s, _) in excluded) s],
           )
         else
           FlutterMap(
@@ -894,6 +996,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                                     : liveFilter,
                               ),
                               selected: liveFilter != AvailabilityFilter.off,
+                              beta: store.availabilityBetaCities.isNotEmpty,
                               onTap: () => setState(
                                 () => availabilityFilter =
                                     liveFilter == AvailabilityFilter.off
@@ -1010,10 +1113,14 @@ class _MapPageState extends ConsumerState<MapPage> {
                     child: _AvailabilityEmptyCard(
                       filter: liveFilter,
                       vehicle: store.vehicle,
+                      betaOnly: _outsideBeta(store, excluded)
+                          ? store.availabilityBetaCities
+                          : null,
                       excluded: [for (final (_, reason) in excluded) reason],
                       onClear: () => setState(
                         () => availabilityFilter = AvailabilityFilter.off,
                       ),
+                      onClearAll: _clearFilters,
                       onLiveOnly: liveFilter == AvailabilityFilter.live
                           ? null
                           : () => setState(
@@ -1216,18 +1323,55 @@ class _AvailabilityEmptyCard extends StatelessWidget {
     required this.vehicle,
     required this.excluded,
     required this.onClear,
+    required this.onClearAll,
     required this.onLiveOnly,
+    this.betaOnly,
   });
   final AvailabilityFilter filter;
   final VehicleType vehicle;
   final List<AvailabilityExclusion> excluded;
-  final VoidCallback onClear;
+  final VoidCallback onClear, onClearAll;
   final VoidCallback? onLiveOnly;
+
+  /// The Beta cities, when no spot in view is in one: the card says counts
+  /// are only there (A13) and offers to clear the filters.
+  final List<String>? betaOnly;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
+    if (betaOnly case final cities?) {
+      return Material(
+        key: const ValueKey('availability-empty'),
+        color: colors.surface,
+        elevation: 3,
+        shadowColor: const Color(0x33000000),
+        borderRadius: BorderRadius.circular(16),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                betaOnlyCities(cities),
+                key: const ValueKey('availability-beta-only'),
+                style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 6),
+              Text(betaOnlyCitiesDetail, style: text.bodyMedium),
+              const SizedBox(height: 12),
+              FilledButton.tonal(
+                style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
+                onPressed: onClearAll,
+                child: const Text(clearFiltersLabel),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     final counts = <AvailabilityExclusion, int>{};
     for (final reason in excluded) {
       counts[reason] = (counts[reason] ?? 0) + 1;

@@ -667,9 +667,9 @@ void main() {
       final f = fact([snap(AvailabilityVehicle.scooter)]);
       expect(
         (f.title, f.count, f.headline, f.capacity),
-        ('機車車位', 12, '剩餘', '／ 共 80 格'),
+        ('有沒有位', 12, '剩餘', '／ 共 80 格（普通機車）'),
       );
-      expect(f.caption, '17:02 更新 ・ 臺北市停管處');
+      expect(f.caption, '17:02 更新　臺北市停管處');
       expect(f.semantics, contains('剩餘 12 格'));
     });
 
@@ -700,7 +700,7 @@ void main() {
       ]);
       expect(f.count, 7);
       expect(f.headline, '剩餘，更新延遲 14 分鐘');
-      expect(f.caption, '最後更新 16:51 ・ 臺北市停管處');
+      expect(f.caption, '最後更新 16:51　臺北市停管處');
     });
 
     test('過期、異常、暫停、無資料都不顯示數字', () {
@@ -721,7 +721,7 @@ void main() {
       ]);
       expect(
         (suspended.headline, suspended.caption),
-        ('暫停營運', '來源標示場站停止服務 ・ 17:02 更新 ・ 臺北市停管處'),
+        ('暫停營運', '來源標示場站停止服務 ・ 17:02 更新　臺北市停管處'),
       );
       final none = fact([]);
       expect(
@@ -740,7 +740,7 @@ void main() {
         snap(AvailabilityVehicle.scooter, age: const Duration(minutes: 14)),
         snap(AvailabilityVehicle.heavy, available: -9),
       ], vehicle: VehicleType.heavy);
-      expect((f.title, f.count, f.headline), ('大型重機車位', null, '空位未知'));
+      expect((f.title, f.count, f.headline), ('有沒有位', null, '空位未知'));
       expect(f.caption, contains('場站未提供重機或汽車格剩餘'));
       expect(f.notes.single.text, '普通機車區剩 12 格，更新延遲 14 分鐘');
       expect(f.notes.single.caption, contains('不代表重機可用格數'));

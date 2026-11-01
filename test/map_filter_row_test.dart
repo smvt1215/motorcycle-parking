@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -116,6 +117,11 @@ void main() {
 
       testWidgets('$name 篩選列：車種、現在可停、有即時空位可點並切換', (tester) async {
         setUp(tester);
+        // The Beta tag is set in Outfit; the test font's wide glyphs would
+        // push the third chip out of a phone's width.
+        final outfit = FontLoader('Outfit')
+          ..addFont(rootBundle.load('assets/fonts/Outfit.ttf'));
+        await tester.runAsync(outfit.load);
         await _pump(tester);
         expect(_shown(), {'機車', '重機', '汽車', '場站'});
         // Main: the three chips lead, at the platform's touch height, in

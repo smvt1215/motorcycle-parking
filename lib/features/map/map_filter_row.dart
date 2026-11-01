@@ -1,6 +1,7 @@
 import '../../models/parking.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../../ui/vehicle_marks.dart' show platesOf;
+import 'beta_tag.dart';
 
 /// The filter chip's height: 44pt on iOS, 48dp on Android (Main boards).
 double get filterChipHeight => isCupertino ? 44 : 48;
@@ -16,6 +17,7 @@ class MapFilterChip extends StatelessWidget {
     this.selected = false,
     this.toggle = true,
     this.vehicle,
+    this.beta = false,
   });
   final String label;
   final VoidCallback onTap;
@@ -28,6 +30,10 @@ class MapFilterChip extends StatelessWidget {
 
   /// The class whose plates lead the chip.
   final VehicleType? vehicle;
+
+  /// A Beta tag after the label (A13): the filter reads counts still in
+  /// Beta.
+  final bool beta;
 
   @override
   Widget build(BuildContext context) {
@@ -59,9 +65,15 @@ class MapFilterChip extends StatelessWidget {
             child: ConstrainedBox(
               constraints: BoxConstraints(minHeight: filterChipHeight),
               child: Padding(
+                // The Beta chip is 13/9 (Main board), so the three
+                // leading chips stay in view on a phone.
                 padding: EdgeInsetsDirectional.only(
-                  start: vehicle == null ? 14 : 8,
-                  end: 14,
+                  start: vehicle != null
+                      ? 8
+                      : beta
+                      ? 13
+                      : 14,
+                  end: beta ? 9 : 14,
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -77,6 +89,10 @@ class MapFilterChip extends StatelessWidget {
                       const SizedBox(width: 8),
                     ],
                     Text(label, style: TextStyle(fontSize: 14, color: ink)),
+                    if (beta) ...[
+                      const SizedBox(width: 6),
+                      BetaTag(color: selected ? Colors.white : null),
+                    ],
                   ],
                 ),
               ),
