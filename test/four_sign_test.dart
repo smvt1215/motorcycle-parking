@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:motorcycle_parking/domain/eligibility.dart';
 import 'package:motorcycle_parking/domain/four_sign.dart';
 import 'package:motorcycle_parking/domain/four_sign_display.dart';
+import 'package:motorcycle_parking/domain/parking_decision.dart';
 import 'package:motorcycle_parking/domain/segment_decision.dart';
 import 'package:motorcycle_parking/models/availability.dart';
 import 'package:motorcycle_parking/models/parking.dart';
@@ -1097,19 +1098,43 @@ void main() {
           ...street.toJson(),
           'parking_segments': [segment],
         });
-    Map<String, dynamic> share(String charge, List<String> vehicles) => {
+    Map<String, dynamic> share(
+      String? charge,
+      List<String> vehicles, {
+      bool slots = true,
+      String? expires,
+    }) => {
       'id': 'x',
       'name': '汽機車共用格',
       'condition': {
         'bay': 'car',
         'use': 'share',
         'share': 'car_motorcycle',
-        'charge': charge,
-        'schedule': [
-          {'days': 'all', 'from': '20:00', 'to': '08:00', 'vehicles': vehicles},
-        ],
+        'charge': ?charge,
+        if (slots)
+          'schedule': [
+            {
+              'days': 'all',
+              'from': '20:00',
+              'to': '08:00',
+              'vehicles': vehicles,
+            },
+          ],
+        if (expires != null)
+          'basis': {
+            'source_url': 'https://example.com/notice',
+            'expires_on': expires,
+          },
       },
     };
+    ParkingSpot inCity(String city, Map<String, dynamic> segment) =>
+        ParkingSpot.fromJson({
+          ...street.toJson(),
+          'city': city,
+          'parking_segments': [segment],
+        });
+    SegmentDecision judge(ParkingSpot spot) =>
+        decideSegments(spot, VehicleType.heavy, rules, now: night).single;
 
     test('南側共用格 21:00 大型重機：寫明天 08:00 起，不算現在可停', () {
       final south = oneSegment(
@@ -1158,6 +1183,92 @@ void main() {
       expect(
         fourSign(free, VehicleType.heavy, rules, now: night).verdict.openNow,
         isFalse,
+      );
+    });
+
+    test('對齊 1：收費未定時，收費、免費機車格都對重機開放才算機車時段', () {
+      // Taipei opens only toll bays to heavy bikes; Taoyuan opens both.
+      final taipei = judge(inCity('臺北市', share(null, ['scooter'])));
+      expect((taipei.open, taipei.window.now), (false, false));
+      final taoyuan = judge(inCity('桃園市', share(null, ['scooter'])));
+      expect(taoyuan.status, EligibilityStatus.conditional);
+      expect((taoyuan.window.now, taoyuan.window.until), (true, '08:00'));
+    });
+
+    test('對齊 2：已到期的規則不開放機車時段', () {
+      final ended = [
+        for (final r in rules)
+          if (r.city == '臺北市' && r.vehicle == VehicleType.heavy)
+            CityRule(
+              city: r.city,
+              vehicle: r.vehicle,
+              allowedSpaceTypes: r.allowedSpaceTypes,
+              conditionalSpaceTypes: r.conditionalSpaceTypes,
+              feeNote: r.feeNote,
+              exceptions: r.exceptions,
+              sourceUrl: r.sourceUrl,
+              version: r.version,
+              effectiveDate: r.effectiveDate,
+              canUseTwoSpaces: r.canUseTwoSpaces,
+              expiresOn: DateTime(2026, 11, 1),
+            )
+          else
+            r,
+      ];
+      final seg = decideSegments(
+        inCity('臺北市', share('toll', ['scooter'])),
+        VehicleType.heavy,
+        ended,
+        now: night,
+      ).single;
+      expect((seg.open, seg.window.now), (false, false));
+    });
+
+    test('對齊 3：臺中有條件開放的機車時段，路牌寫有條件並帶出限制', () {
+      final spot = inCity('臺中市', share('toll', ['scooter']));
+      final seg = judge(spot);
+      expect(seg.status, EligibilityStatus.conditional);
+      expect(seg.decision.restriction, RuleRestriction.signage);
+      expect(seg.window.now, isTrue);
+      final verdict = fourSign(
+        spot,
+        VehicleType.heavy,
+        rules,
+        now: night,
+      ).verdict;
+      expect(verdict.status, EligibilityStatus.conditional);
+      expect(verdict.restriction, RuleRestriction.signage);
+      expect(verdict.openNow, isTrue);
+    });
+
+    test('對齊 4：公告不在效期內或沒有可用時段：待確認，不寫幾點起', () {
+      for (final spot in [
+        inCity('臺北市', share('toll', ['heavy'], expires: '2026-11-02')),
+        inCity('臺北市', share('free', ['scooter'])),
+      ]) {
+        final seg = judge(spot);
+        expect(seg.status, EligibilityStatus.unverified);
+        expect(seg.decision.gaps, contains(DecisionGap.scheduleUnknown));
+        expect((seg.window.now, seg.window.opensAt), (false, null));
+        final verdict = fourSign(
+          spot,
+          VehicleType.heavy,
+          rules,
+          now: night,
+        ).verdict;
+        expect(verdict.status, EligibilityStatus.unverified);
+        expect(verdict.opensAt, isNull);
+      }
+    });
+
+    test('對齊 5：沒有時段的共用格依法可停，提醒看現場牌面，不預估時段', () {
+      final spot = inCity('臺北市', share('toll', const [], slots: false));
+      final seg = judge(spot);
+      expect(seg.open, isTrue);
+      expect(seg.decision.reason, contains('現場牌面'));
+      expect(
+        (seg.window.now, seg.window.until, seg.window.opensAt),
+        (true, null, null),
       );
     });
 

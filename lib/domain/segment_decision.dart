@@ -70,7 +70,10 @@ bool scheduleSilentFor(ParkingCondition? condition, VehicleType vehicle) {
 /// where [rules] (already matched to the city and heavy bikes) open the
 /// matching motorcycle bay to heavy bikes, both kinds agreeing when the
 /// charge is unconfirmed, and the slots the notice names for heavy bikes.
-/// Keep the two in step.
+/// Keep the two in step. Only the slots: whether the bay opens at all (an
+/// ended notice, no usable slot) and the conditional rule's limit come
+/// from the decision's status and restriction. Replace this with the
+/// public helper once #188 exposes it (follow-up #247).
 List<ScheduleSlot> heavyShareSlots(
   ParkingCondition condition,
   List<CityRule> rules,
