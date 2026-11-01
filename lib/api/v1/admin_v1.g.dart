@@ -304,8 +304,6 @@ class AdminAccountDeletion {
     required this.status,
     this.requestedAt,
     this.scheduledAt,
-    this.cancelledAt,
-    this.cancelledBySignIn,
     required this.canSelfDelete,
     this.cannotSelfDeleteReason,
     required this.supportRequest,
@@ -320,12 +318,6 @@ class AdminAccountDeletion {
         scheduledAt: json['scheduled_at'] == null
             ? null
             : json['scheduled_at'] as String,
-        cancelledAt: json['cancelled_at'] == null
-            ? null
-            : json['cancelled_at'] as String,
-        cancelledBySignIn: json['cancelled_by_sign_in'] == null
-            ? null
-            : json['cancelled_by_sign_in'] as bool,
         canSelfDelete: json['can_self_delete'] as bool,
         cannotSelfDeleteReason: json['cannot_self_delete_reason'] == null
             ? null
@@ -341,11 +333,6 @@ class AdminAccountDeletion {
   /// ISO 8601 時間。最早刪除時間（申請＋7 天）
   final String? scheduledAt;
 
-  /// ISO 8601 時間。最近一次取消
-  final String? cancelledAt;
-
-  final bool? cancelledBySignIn;
-
   /// 帳號能不能自助申請刪除（管理員為 false）
   final bool canSelfDelete;
 
@@ -357,8 +344,6 @@ class AdminAccountDeletion {
     'status': status,
     'requested_at': requestedAt,
     'scheduled_at': scheduledAt,
-    'cancelled_at': cancelledAt,
-    'cancelled_by_sign_in': cancelledBySignIn,
     'can_self_delete': canSelfDelete,
     'cannot_self_delete_reason': cannotSelfDeleteReason,
     'support_request': supportRequest,
@@ -370,8 +355,6 @@ class AdminAccountDeletion {
       other.status == status &&
       other.requestedAt == requestedAt &&
       other.scheduledAt == scheduledAt &&
-      other.cancelledAt == cancelledAt &&
-      other.cancelledBySignIn == cancelledBySignIn &&
       other.canSelfDelete == canSelfDelete &&
       other.cannotSelfDeleteReason == cannotSelfDeleteReason &&
       other.supportRequest == supportRequest;
@@ -381,8 +364,6 @@ class AdminAccountDeletion {
     status,
     requestedAt,
     scheduledAt,
-    cancelledAt,
-    cancelledBySignIn,
     canSelfDelete,
     cannotSelfDeleteReason,
     supportRequest,

@@ -132,7 +132,7 @@ revoke execute on function admin_v1.resolve_support_request(uuid,text,text) from
 grant execute on function admin_v1.resolve_support_request(uuid,text,text) to authenticated;
 
 -- 管理員確認身分後代為申請刪除：與自助申請相同的 7 天冷靜期、立即隱藏
--- 名稱；管理員帳號不行（要先移除權限）。冷靜期內本人登入同樣會自動取消。
+-- 名稱；管理員帳號不行（要先移除權限）。冷靜期內本人登入後可在 App 選擇取消。
 create function admin_v1.request_account_deletion_for(p_user uuid,p_support_request uuid,p_note text default '')
 returns jsonb language plpgsql volatile security definer set search_path='' as $$
 declare
@@ -163,7 +163,6 @@ begin
     insert into private.account_deletion_requests(user_id,source,scheduled_at)
       values(p_user,'support',now()+private.account_deletion_cooling_off())
       returning request_id into v_request;
-    delete from private.account_deletion_cancellations c where c.user_id=p_user;
     insert into private.account_deletion_audit(request_id,event,source) values(v_request,'requested','support');
     update public.community_spots s set contributor_name='' where s.user_id=p_user;
   end if;

@@ -192,7 +192,7 @@
       "post": {
         "operationId": "admin_v1_request_account_deletion_for",
         "summary": "確認身分後代為申請刪除帳號（#269）",
-        "description": "依客服申請代為建立刪除申請：與自助申請相同的 7 天冷靜期、立即隱藏公開名稱；本人冷靜期內登入會自動取消。已有申請時回原申請。寫入 admin_audit_log。錯誤：400 request.invalid、404 support.not_found／account.not_found、409 support.already_resolved、403 account.admin_cannot_self_delete（管理員帳號要先移除權限）。",
+        "description": "依客服申請代為建立刪除申請：與自助申請相同的 7 天冷靜期、立即隱藏公開名稱；本人冷靜期內登入後可在 App 選擇取消。已有申請時回原申請。寫入 admin_audit_log。錯誤：400 request.invalid、404 support.not_found／account.not_found、409 support.already_resolved、403 account.admin_cannot_self_delete（管理員帳號要先移除權限）。",
         "requestBody": {
           "required": true,
           "content": {
@@ -402,8 +402,6 @@
           "status",
           "requested_at",
           "scheduled_at",
-          "cancelled_at",
-          "cancelled_by_sign_in",
           "can_self_delete",
           "cannot_self_delete_reason",
           "support_request"
@@ -430,19 +428,6 @@
               "null"
             ],
             "description": "ISO 8601 時間。最早刪除時間（申請＋7 天）"
-          },
-          "cancelled_at": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "ISO 8601 時間。最近一次取消"
-          },
-          "cancelled_by_sign_in": {
-            "type": [
-              "boolean",
-              "null"
-            ]
           },
           "can_self_delete": {
             "type": "boolean",

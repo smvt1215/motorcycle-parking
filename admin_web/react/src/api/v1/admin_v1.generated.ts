@@ -123,9 +123,6 @@ export type AdminAccountDeletion = {
   requested_at: string | null;
   /** ISO 8601 時間。最早刪除時間（申請＋7 天） */
   scheduled_at: string | null;
-  /** ISO 8601 時間。最近一次取消 */
-  cancelled_at: string | null;
-  cancelled_by_sign_in: boolean | null;
   /** 帳號能不能自助申請刪除（管理員為 false） */
   can_self_delete: boolean;
   cannot_self_delete_reason:
