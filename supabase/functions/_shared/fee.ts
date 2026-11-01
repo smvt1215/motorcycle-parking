@@ -52,8 +52,13 @@ const feeContract = contract.fee as unknown as {
   };
   modes: Record<string, Spec>;
   enums: Record<string, string[]>;
-  extension: Spec;
   periods: { max_entries: number; keys: string[]; nested_modes: string[] };
+  write: {
+    required_vehicles: string[];
+    required: Record<string, string[]>;
+    required_with: Record<string, Record<string, string>>;
+    cross_period_when: { nested_mode: string; min_periods: number };
+  };
 };
 
 /** The keys of `r` besides `mode` against a {required, optional} spec. */
@@ -74,11 +79,6 @@ function validFields(r: Json, spec: Spec, vehicle: string): boolean {
     } else if (has(feeContract.enums, field as string)) {
       const list = feeContract.enums[field as string];
       if (typeof value !== 'string' || !list.includes(value)) return false;
-    } else if (field === 'extension') {
-      if (
-        !isObject(value) || has(value, 'mode') ||
-        !validFields(value, feeContract.extension, vehicle)
-      ) return false;
     } else if (field === 'periods') {
       const p = feeContract.periods;
       if (
@@ -149,10 +149,6 @@ function money(amount: unknown, pct: number): string {
   if (rem % 10 === 0) return `${whole}.${rem / 10}`;
   return `${whole}.${String(rem).padStart(2, '0')}`;
 }
-const span = (v: unknown) => {
-  const m = int(v);
-  return m % 60 === 0 ? `${m / 60} 小時` : `${m} 分鐘`;
-};
 const every = (v: unknown) => {
   const m = int(v);
   return m === 60
@@ -170,7 +166,10 @@ const dayLabel = (mask: number) =>
     ...Array(7).keys(),
   ].filter((i) => mask & (1 << i)).map((i) => `週${dayNames[i]}`).join('、');
 
-/** One rate's words at `pct` percent, or null when it reads as unconfirmed. */
+/**
+ * One rate's words at `pct` percent, or null when it reads as unconfirmed
+ * or does not apply (not_applicable, which feeNoteOf leaves out).
+ */
 function rateText(r: unknown, pct: number): string | null {
   if (!isObject(r)) return null;
   switch (r.mode) {
@@ -178,54 +177,28 @@ function rateText(r: unknown, pct: number): string | null {
       return '免費';
     case 'hourly': {
       let t = `${every(r.per_minutes)} ${money(r.amount, pct)} 元`;
-      if (has(r, 'free_minutes')) {
-        t = `首 ${span(r.free_minutes)} 0 元，之後${t}`;
-      }
-      if (has(r, 'unit_minutes')) t += `（以 ${span(r.unit_minutes)}計）`;
       if (has(r, 'daily_cap')) {
-        const reset = resets[r.cap_reset as string] ?? '上限計算方式未確認';
-        t += `，當日上限 ${money(r.daily_cap, pct)} 元（${reset}）`;
+        t += `，當日上限 ${money(r.daily_cap, pct)} 元`;
+        const reset = resets[r.cap_reset as string];
+        if (reset) t += `（${reset}）`;
       }
       return t;
     }
     case 'per_visit': {
-      let t: string;
-      if (int(r.amount) === 0 && has(r, 'max_minutes')) {
-        t = `首 ${span(r.max_minutes)} 0 元`;
-      } else {
-        const notes: string[] = [];
-        if (has(r, 'max_minutes')) notes.push(`${span(r.max_minutes)}內`);
-        if (!has(r, 'renew')) notes.push('隔日是否另計未確認');
-        t = `每次 ${money(r.amount, pct)} 元`;
-        if (notes.length) t += `（${notes.join('，')}）`;
-        if (r.renew === 'midnight') t += '，隔日另計';
-        if (r.renew === 'none') {
-          t += has(r, 'max_minutes')
-            ? '，有效時間內只收一次'
-            : '，停多久都只收一次';
-        }
-      }
-      const ext = r.extension;
-      if (isObject(ext)) {
-        t += `，可付 ${money(ext.amount, pct)} 元延長 ${int(ext.max_times)} 次`;
-        t += has(ext, 'minutes')
-          ? `（每次 ${span(ext.minutes)}）`
-          : '（延長時間未確認）';
+      let t = `每次 ${money(r.amount, pct)} 元`;
+      if (r.renew === 'midnight') t += '，隔日另計';
+      if (r.renew === 'none') t += '，停多久都只收一次';
+      if (has(r, 'extension_amount')) {
+        t += `，延長每次 ${money(r.extension_amount, pct)} 元`;
       }
       return t;
-    }
-    case 'daily': {
-      const reset = resets[r.cap_reset as string];
-      return `每日 ${money(r.amount, pct)} 元${reset ? `（${reset}）` : ''}`;
     }
     case 'by_time': {
       // Periods grouped by the days they cover, in order of first appearance.
       const groups: { mask: number; items: string[] }[] = [];
-      let visits = 0;
       for (const p of r.periods as Json[]) {
         const text = rateText(p.rate, pct);
         if (text === null) continue;
-        if ((p.rate as Json).mode === 'per_visit') visits++;
         const time = !has(p, 'from')
           ? '全天'
           : `${p.from}–${
@@ -243,18 +216,21 @@ function rateText(r: unknown, pct: number): string | null {
         t += r.cross_period === 'each_period'
           ? '；跨時段分別計費'
           : '；依進場時段計費';
-      } else if (visits >= 2) t += '；跨時段計費方式未確認';
+      }
       return t;
     }
   }
-  return null; // posted, or a follow out of place
+  return null; // not_applicable, or a follow out of place
 }
 
 /**
  * The fee_note text of a valid fee: the known vehicles as 機車…；大型重機…；
- * 汽車…, then 大型重機費率未確認 when the heavy rate is unknown. A heavy rate
- * following another vehicle shows the amounts worked out (#140), or
- * 大型重機費率未提供 when that vehicle is unconfirmed.
+ * 汽車…, then 大型重機費率未提供 when the heavy rate is unknown
+ * (PM_ANS_20261101_55; old rates missing renew, cap_reset or cross_period
+ * say nothing of them); a vehicle
+ * that is not_applicable (#188) is left out. A heavy rate following another
+ * vehicle shows that vehicle's amounts (#140, no factor since #188), or
+ * 大型重機費率未提供 when that vehicle is unconfirmed or not applicable.
  */
 export function feeNoteOf(fee: unknown): string {
   const f = isObject(fee) ? fee : {};
@@ -265,11 +241,7 @@ export function feeNoteOf(fee: unknown): string {
     isObject(heavy) &&
     (heavy.mode === 'same_as_scooter' || heavy.mode === 'same_as_car')
   ) {
-    const target = heavy.mode === 'same_as_scooter' ? f.scooter : f.car;
-    h = rateText(
-      target,
-      has(heavy, 'factor_pct') ? int(heavy.factor_pct) : 100,
-    );
+    h = rateText(heavy.mode === 'same_as_scooter' ? f.scooter : f.car, 100);
     unprovided = h === null;
   } else h = rateText(heavy, 100);
   if (s === null && h === null && c === null && !unprovided) {
@@ -279,8 +251,49 @@ export function feeNoteOf(fee: unknown): string {
   if (s !== null) parts.push(`機車${s}`);
   if (h !== null || unprovided) parts.push(`大型重機${h ?? '費率未提供'}`);
   if (c !== null) parts.push(`汽車${c}`);
-  if (h === null && !unprovided) parts.push('大型重機費率未確認');
+  const notApplicable = isObject(heavy) && heavy.mode === 'not_applicable';
+  if (h === null && !unprovided && !notApplicable) {
+    parts.push('大型重機費率未提供');
+  }
   return parts.join('；');
+}
+
+// ---- New writes (#188 layer 2, fee.write) ----
+
+/**
+ * Whether one valid rate is complete for a new write: a per-visit rate
+ * names renew, an hourly cap its cap_reset, and a by_time rate with at
+ * least min_periods periods, one of them per visit, its cross_period; its
+ * periods' rates follow the same rules. `fee_rate_write_complete()` in SQL.
+ */
+export function rateWriteComplete(r: unknown): boolean {
+  if (!isObject(r) || typeof r.mode !== 'string') return false;
+  const w = feeContract.write;
+  const mode = r.mode;
+  if ((w.required[mode] ?? []).some((k) => !has(r, k))) return false;
+  for (const [key, when] of Object.entries(w.required_with[mode] ?? {})) {
+    if (has(r, when) && !has(r, key)) return false;
+  }
+  if (mode === 'by_time') {
+    const periods = r.periods as Json[];
+    if (!periods.every((p) => rateWriteComplete(p.rate))) return false;
+    const when = w.cross_period_when;
+    if (
+      !has(r, 'cross_period') && periods.length >= when.min_periods &&
+      periods.some((p) => (p.rate as Json).mode === when.nested_mode)
+    ) return false;
+  }
+  return true;
+}
+
+/**
+ * Whether a valid fee is complete for a new write: every required vehicle
+ * has a rate and each rate is complete. `fee_write_complete()` in SQL.
+ */
+export function feeWriteComplete(fee: unknown): boolean {
+  return isObject(fee) &&
+    feeContract.write.required_vehicles.every((v) => has(fee, v)) &&
+    Object.values(fee).every(rateWriteComplete);
 }
 
 /** The longest fee_note_of() the contract allows (§2.5). */
@@ -306,8 +319,9 @@ const planContract = contract.fee_plans;
 const utf16Length = (s: string) => s.length;
 
 /**
- * A spot's fee plans, its own plan reference and its zones' (§2.6), as
- * valid_fee_plans() checks them: at most 12 plans of {id, name, fee}, ids
+ * A spot's fee plans, its own plan reference and its zones' and segments'
+ * (§2.6, #188 layer 2), as valid_fee_plans() and valid_segment_fee_plans()
+ * check them: at most 12 plans of {id, name, fee}, ids
  * unique, names 1–20 UTF-16 code units, each fee valid and not empty. A
  * reference names an existing plan, and the spot or zone carries that
  * plan's fee as its own copy.
@@ -317,6 +331,7 @@ export function validFeePlans(
   feePlan: unknown,
   fee: unknown,
   zones: unknown,
+  segments: unknown = [],
 ): boolean {
   const byId = new Map<string, unknown>();
   if (plans !== null && plans !== undefined) {
@@ -343,10 +358,14 @@ export function validFeePlans(
   if (feePlan !== null && feePlan !== undefined && !copies(feePlan, fee)) {
     return false;
   }
-  return !Array.isArray(zones) ||
-    zones.every((z) =>
+  // Segments refer to plans as zones do (#188 layer 2,
+  // valid_segment_fee_plans() in SQL).
+  const entriesCopy = (list: unknown) =>
+    !Array.isArray(list) ||
+    list.every((z) =>
       !isObject(z) || !has(z, 'fee_plan') || copies(z.fee_plan, z.fee)
     );
+  return entriesCopy(zones) && entriesCopy(segments);
 }
 
 /** jsonb equality: the same values, object keys in any order. */
@@ -364,29 +383,10 @@ function sameJson(a: unknown, b: unknown): boolean {
   return a === b;
 }
 
-/** A rate with its amounts, caps and extension amounts at `pct` percent. */
-function scaled(rate: Json, pct: number): Json {
-  const out: Json = { ...rate };
-  for (const key of ['amount', 'daily_cap']) {
-    if (typeof out[key] === 'number') {
-      out[key] = (out[key] as number) * pct / 100;
-    }
-  }
-  if (isObject(out.extension)) {
-    out.extension = scaled(out.extension, pct);
-  }
-  if (Array.isArray(out.periods)) {
-    out.periods = out.periods.map((p) =>
-      isObject(p) && isObject(p.rate) ? { ...p, rate: scaled(p.rate, pct) } : p
-    );
-  }
-  return out;
-}
-
 /**
  * A plan's fee with a heavy follow worked out (§2.6 precheck, step 1): the
- * followed vehicle's rate at factor_pct, or no heavy rate when that vehicle
- * is unconfirmed. Other vehicles stay as they are.
+ * followed vehicle's rate (no factor since #188), or no heavy rate when that
+ * vehicle is unconfirmed or not applicable. Other vehicles stay as they are.
  */
 export function resolveFee(fee: Json): Json {
   const out: Json = { ...fee };
@@ -396,9 +396,8 @@ export function resolveFee(fee: Json): Json {
     (heavy.mode === 'same_as_scooter' || heavy.mode === 'same_as_car')
   ) {
     const target = heavy.mode === 'same_as_scooter' ? fee.scooter : fee.car;
-    const pct = typeof heavy.factor_pct === 'number' ? heavy.factor_pct : 100;
-    if (isObject(target) && target.mode !== 'posted') {
-      out.heavy = scaled(target, pct);
+    if (isObject(target) && target.mode !== 'not_applicable') {
+      out.heavy = { ...target };
     } else delete out.heavy;
   }
   return out;

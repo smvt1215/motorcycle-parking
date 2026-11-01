@@ -13,8 +13,8 @@ select set_config('request.jwt.claims',case who
 end,true);
 $$;
 
--- posted reads as unconfirmed: still a valid fee, dropped from stored ones.
-select ok(valid_fee('{"scooter":{"mode":"posted"}}'),'older builds may still send posted');
+-- posted is no longer stored (#188 layer 2); the old helper still drops it.
+select ok(not valid_fee('{"scooter":{"mode":"posted"}}'),'posted is no longer stored (#188 layer 2)');
 select is(fee_without_posted('{"scooter":{"mode":"posted"},"heavy":{"mode":"free"}}'),
   '{"heavy":{"mode":"free"}}'::jsonb,'a posted vehicle is dropped');
 select is(fee_without_posted('{"scooter":{"mode":"posted"}}'),null,'a fee left with no vehicle is null');
@@ -31,8 +31,7 @@ select ok(not has_function_privilege('anon','public.fee_without_posted(jsonb)','
 create temporary table longest(fee jsonb);
 insert into longest values((select jsonb_build_object('car',jsonb_build_object('mode','by_time','periods',jsonb_agg(
   jsonb_build_object('days',jsonb_build_array(d),'from','23:00','to','22:00','rate',
-    jsonb_build_object('mode','per_visit','amount',9999,'max_minutes',1439,
-      'extension',jsonb_build_object('amount',9999,'max_times',10,'minutes',1439))) order by n)))
+    jsonb_build_object('mode','per_visit','amount',9999,'extension_amount',9999)) order by n)))
   from unnest(array['mon','tue','wed','thu','fri','sat']) with ordinality u(d,n)));
 select cmp_ok(char_length(fee_note_of((select fee from longest))),'>',200,'a six-period sentence runs over 200');
 select cmp_ok(char_length(fee_note_of((select fee from longest))),'<=',fee_note_max_length(),'and within the bound');
@@ -64,7 +63,7 @@ select ok(not 'fee_source_text'=any(admin_spot_fields(false)) and not 'fee_sourc
 insert into official_heavy_spots(id,name,lat,lng,city,space_type,fee_note,source_url,source_name,source_id,effective_date,
     fee,fee_source_text)
   values('22000000-0000-4000-8000-000000000001','費率 v2 官方點',25.04,121.51,'臺北市','paidMotorcycle',
-    '大型重機每次 40 元（隔日是否另計未確認）','https://data.example.test/v2','臺北市政府','V2','2026-10-17',
+    '大型重機每次 40 元','https://data.example.test/v2','臺北市政府','V2','2026-10-17',
     '{"heavy":{"mode":"per_visit","amount":40}}','大型重機每次40元');
 -- #201: fixtures written before eligibility was required state both
 -- vehicles (官方未標示 where they left one out), without touching updated_at.
@@ -92,7 +91,7 @@ select is(admin_upsert_spot('official:22000000-0000-4000-8000-000000000001',
     (select updated_at from official_heavy_spots where id='22000000-0000-4000-8000-000000000001'))->>'fee_note',
   '大型重機每次 40 元，隔日另計；汽車每小時 40 元','renew and the car rate save with their sentence');
 select throws_ok($$select admin_upsert_spot('official:22000000-0000-4000-8000-000000000001',
-    '{"fee":{"heavy":{"mode":"same_as_car","factor_pct":200},"car":{"mode":"hourly","amount":40,"per_minutes":60}},
+    '{"fee":{"heavy":{"mode":"same_as_car"},"car":{"mode":"hourly","amount":40,"per_minutes":60}},
       "fee_note":"大型重機比照汽車費率"}',
     (select updated_at from official_heavy_spots where id='22000000-0000-4000-8000-000000000001'))$$,
   '22023','fee_note must be the text of fee','a follow is written as amounts, never 比照 (#140)');
@@ -117,7 +116,7 @@ select is(admin_import_apply(jsonb_build_array(jsonb_build_object(
     'overwrite',jsonb_build_array('fee','fee_note'))),current_date)->>'updated','1','an import replaces the fee');
 reset role;
 select is((select fee_note||'|'||fee_source_text from official_heavy_spots where id='22000000-0000-4000-8000-000000000001'),
-  '大型重機每次 50 元（隔日是否另計未確認）|大型重機每次50元','the file''s note becomes the source text of its fee');
+  '大型重機每次 50 元|大型重機每次50元','the file''s note becomes the source text of its fee');
 select pg_temp.act('admin');
 set local role authenticated;
 select ok(exists(select 1 from jsonb_array_elements(admin_import_preview(jsonb_build_array(jsonb_build_object(

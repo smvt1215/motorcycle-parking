@@ -187,7 +187,6 @@ class SpotsController extends ChangeNotifier {
             // A second bay in the area rests on the area's notice too.
             : {
                 'name': like['name'],
-                'area': ?like['area'],
                 if (rawBasis(like) case final basis?)
                   'condition': {'basis': basis},
               },
@@ -204,24 +203,13 @@ class SpotsController extends ChangeNotifier {
     _notify();
   }
 
-  /// Renames an area card, changes its area or its basis: every zone in it.
-  void setCard(
-    AreaCard card, {
-    String? name,
-    Object? area = _keep,
-    Object? basis = _keep,
-  }) {
+  /// Renames an area card or changes its basis: every zone in it. Zone
+  /// areas are gone (#188 layer 2); a stored one is dropped on save.
+  void setCard(AreaCard card, {String? name, Object? basis = _keep}) {
     final next = [...zones];
     for (final i in card.indexes) {
-      var z = {...next[i]};
+      var z = {...next[i]}..remove('area');
       if (name != null) z['name'] = name;
-      if (area != _keep) {
-        if (area == null) {
-          z.remove('area');
-        } else {
-          z['area'] = area;
-        }
-      }
       if (basis != _keep) z = zoneWithBasis(z, basis as Json?);
       next[i] = z;
     }
@@ -308,9 +296,19 @@ class SpotsController extends ChangeNotifier {
     if (mustStateVehicles)
       for (final flag in vehicleFlags) flag: ?eligibilityProblem(flag),
     if (lot && (record!.isNew || _edits.containsKey('fee_plans')))
-      'fee_plans': ?plansProblem(plans),
+      'fee_plans': ?plansProblem(plans, jsonList(record!.values['fee_plans'])),
     if (lot && (record!.isNew || _edits.containsKey('parking_zones')))
       'parking_zones': ?zones.map(zoneProblem).nonNulls.firstOrNull,
+    // 不適用 beside a vehicle the spot lets park (PM_ANS_20261101_55).
+    if ((record!.isNew ||
+            changed('fee') ||
+            changed('scooter_allowed') ||
+            changed('heavy_allowed')) &&
+        draft['fee'] is Fee)
+      'fee': ?notApplicableProblem((draft['fee'] as Fee).toJson(), {
+        'scooter': draft['scooter_allowed'],
+        'heavy': draft['heavy_allowed'],
+      }),
   };
 
   /// Errors the form shows: a fresh new spot is not scolded before a save.
@@ -593,8 +591,12 @@ class SpotsController extends ChangeNotifier {
     final stored = r.values['condition'];
     final storedCondition = ParkingCondition.fromJson(stored);
     // Back to the stored kind (and, for a toll or free kind, its charge): the stored
-    // type and condition as they were, schedule and limits included.
+    // type and condition as they were, schedule and limits included. A
+    // charge picked on the kind already drafted only changes the charge
+    // (#155 item 38): the draft's own edits, a time limit's minutes too,
+    // stay.
     if (!r.isNew &&
+        spaceKind != kind &&
         storedType != null &&
         SpaceKind.of(storedType, storedCondition) == kind &&
         (charge == null ||
@@ -673,22 +675,54 @@ class SpotsController extends ChangeNotifier {
       'space_type': type.name,
       'condition': condition?.toJson(),
       ..._heavyFor(kind),
+      // Segments are a street spot's only (#188 layer 2): a lot keeps its
+      // bays in zones, so they go when the spot becomes one.
+      if (kind == SpaceKind.offStreet &&
+          draft['parking_segments'] is List &&
+          (draft['parking_segments'] as List).isNotEmpty)
+        'parking_segments': const <Object?>[],
     };
     _notify();
   }
 
   /// The time limit of a 一般機車格 or 普大共用格 (#188: 限時 is no longer a
-  /// kind of its own): on adds `time_limit` with [minutes] (null leaves them
+  /// kind of its own): on adds `time_limit` with [minutes] and
+  /// [extensions] as one all-day period (null minutes leave them
   /// unconfirmed), off takes it away; the space type follows the whole
   /// condition (§1.3). A bay left with no limit and no charge is toll.
-  void setTimeLimit(bool on, {int? minutes}) {
+  void setTimeLimit(bool on, {int? minutes, int? extensions}) {
     final c = draftCondition;
     final type = SpaceType.values.asNameMap()[draft['space_type']];
     if (c == null || type == null || !(spaceKind?.asksCharge ?? false)) return;
     final limits = [
       for (final l in c.limits)
         if (l.kind != LimitKind.timeLimit) l,
-      if (on) ParkingLimit(LimitKind.timeLimit, maxMinutes: minutes),
+      // The first period's minutes and extensions (#188 layer 2): its days
+      // and times, and any later periods, stay as stored; a new limit is
+      // all day.
+      if (on)
+        minutes == null
+            ? const ParkingLimit(LimitKind.timeLimit)
+            : ParkingLimit(
+                LimitKind.timeLimit,
+                periods: [
+                  switch (timeLimit?.periods.firstOrNull) {
+                    final p? => LimitPeriod(
+                      days: p.days,
+                      from: p.from,
+                      to: p.to,
+                      maxMinutes: minutes,
+                      extensions: extensions ?? 0,
+                    ),
+                    null => LimitPeriod(
+                      days: 'all',
+                      maxMinutes: minutes,
+                      extensions: extensions ?? 0,
+                    ),
+                  },
+                  ...?timeLimit?.periods.skip(1),
+                ],
+              ),
     ]..sort((a, b) => a.kind.index.compareTo(b.kind.index));
     final next = ParkingCondition(
       bay: c.bay,

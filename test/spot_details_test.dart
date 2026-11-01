@@ -823,7 +823,8 @@ void main() {
       await showField(tester, '全場');
       // The board repeats the rate with its rule.
       expect(find.text('每次 20 元'), findsWidgets);
-      expect(find.textContaining('隔日是否另計未確認'), findsWidgets);
+      // An old rate without renew says nothing of it (Un-1).
+      expect(find.textContaining('隔日是否另計未確認'), findsNothing);
       expect(find.textContaining('費率未確認'), findsOneWidget);
       expect(find.textContaining('舊 B'), findsNothing);
       expect(find.byKey(const ValueKey('fee-extra-note')), findsNothing);

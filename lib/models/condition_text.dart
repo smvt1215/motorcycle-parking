@@ -16,12 +16,48 @@ const _slotVehicleLabels = {
 /// One period of a 汽機共用 bay: its days, its time and who may park.
 String scheduleSlotText(ScheduleSlot slot) {
   final days = FeeWords.dayLabel(FeeWords.dayMask(slot.days));
-  final time = slot.from == null || slot.to == null
-      ? '全天'
-      : '${slot.from}–${slot.to!.compareTo(slot.from!) < 0 ? '隔日 ' : ''}${slot.to}';
+  final time = _periodTime(slot.from, slot.to);
   final who = slot.vehicles.map((v) => _slotVehicleLabels[v]).join('、');
   return '$days $time $who';
 }
+
+String _periodTime(String? from, String? to) => from == null || to == null
+    ? '全天'
+    : '$from–${to.compareTo(from) < 0 ? '隔日 ' : ''}$to';
+
+/// One period of a time limit or a no-parking limit (#188 layer 2): its days
+/// and time, then for a time limit 每次限停 N，可延長 M 次 (不能延長 for 0;
+/// nothing when an old limit does not say).
+String limitPeriodText(LimitPeriod p) {
+  final when =
+      '${FeeWords.dayLabel(FeeWords.dayMask(p.days))} ${_periodTime(p.from, p.to)}';
+  if (p.maxMinutes == null) return when;
+  final ext = switch (p.extensions) {
+    null => '',
+    0 => '，不能延長',
+    final n => '，可延長 $n 次',
+  };
+  return '$when 每次限停 ${FeeWords.span(p.maxMinutes!)}$ext';
+}
+
+/// A time limit or a no-parking limit as words: 限時（…；…） or
+/// 禁停（…）; 限時 alone when the minutes are unconfirmed.
+String limitText(ParkingLimit l) => switch (l.kind) {
+  LimitKind.timeLimit => switch (l.timePeriods) {
+    [] => '限時',
+    // Every day, all day: 限停 20 分鐘（，可延長 1 次）.
+    [final p] when p.days == 'all' && p.from == null =>
+      '限停 ${FeeWords.span(p.maxMinutes!)}${switch (p.extensions) {
+        null => '',
+        0 => '，不能延長',
+        final n => '，可延長 $n 次',
+      }}',
+    final periods => '限時（${periods.map(limitPeriodText).join('；')}）',
+  },
+  LimitKind.noParking => '禁停（${l.periods.map(limitPeriodText).join('；')}）',
+  LimitKind.evOnly => '限電動機車',
+  LimitKind.specialVehicle => '限身障特製機車',
+};
 
 /// A condition as one line: charge, 普大共用, the time limit and each
 /// period, each only when known; 未提供 without one.
@@ -35,8 +71,8 @@ String conditionSummary(ParkingCondition? c) {
     },
     if (c.share == ShareKind.scooterHeavy) '普通、大型重機共用',
     for (final l in c.limits)
-      if (l.kind == LimitKind.timeLimit)
-        l.maxMinutes == null ? '限時' : '限停 ${l.maxMinutes} 分鐘',
+      if (l.kind == LimitKind.timeLimit || l.kind == LimitKind.noParking)
+        limitText(l),
     for (final slot in c.schedule) '共用時段 ${scheduleSlotText(slot)}',
   ];
   return parts.join('、');
@@ -49,13 +85,7 @@ String conditionHeadline(SpaceType type, ParkingCondition? c) {
   if (c == null) return type.label;
   final shared = c.share == ShareKind.scooterHeavy;
   final limits = [
-    for (final l in c.limits)
-      switch (l.kind) {
-        LimitKind.timeLimit =>
-          l.maxMinutes == null ? '限時' : '限時 ${l.maxMinutes} 分鐘',
-        LimitKind.evOnly => '限電動機車',
-        LimitKind.specialVehicle => '限身障特製機車',
-      },
+    for (final l in c.limits) limitText(l),
     if (c.share == ShareKind.carMotorcycle)
       c.schedule.isEmpty ? '汽機共用時段未確認' : '依告示時段汽機共用',
   ];

@@ -5,7 +5,7 @@
 -- ===== 共用：parking_contract() 與輔助函式（C2、C3 都需要） =====
 create or replace function public.parking_contract() returns jsonb
 language sql immutable set search_path='' as $contract$
-  select $json${"version":1,"space_types":["paidMotorcycle","freeMotorcycle","heavyOnly","car","offStreet","disabledMotorcycle","timedMotorcycle","flexShared","evMotorcycle"],"access_kinds":["scooterOnly","scooterHeavy","heavyCar","noMotorcycle","heavyOnly"],"eligibility":{"vehicles":["scooter","heavy"],"not_stated":"not_stated","spot_keys":{"scooter":{"allowed":"scooter_allowed","not_stated":"scooter_not_stated"},"heavy":{"allowed":"heavy_allowed","not_stated":"heavy_not_stated"}}},"placement":{"off_street_space_types":["offStreet"],"off_street_facility_types":["multiStorey","underground","surface"],"facility_types":["multiStorey","underground","surface","roadside"]},"time":{"pattern":"^([01][0-9]|2[0-3]):[0-5][0-9]$","days":["all","weekday","holiday"],"weekdays":["mon","tue","wed","thu","fri","sat","sun"],"optional_pair":["from","to"]},"date":{"pattern":"^(19|[2-9][0-9])[0-9]{2}-[0-9]{2}-[0-9]{2}$"},"condition":{"keys":["bay","use","share","charge","limits","schedule","basis"],"zone_keys":["allow"],"bay":["motorcycle","heavy","car"],"use":["usual","share"],"share":{"scooter_heavy":"motorcycle","car_motorcycle":"car"},"charge":["toll","free"],"limits":{"time_limit":{"required":[],"optional":{"max_minutes":{"min":1,"max":1440}}},"special_vehicle":{"required":["vehicle"],"optional":{}},"ev_only":{"required":[],"optional":{}}},"special_vehicles":["disabled_modified"],"street_charge_optional_with":["time_limit","special_vehicle","ev_only"],"allow_keys":["scooter","heavy"],"allow_values":"boolean 或 eligibility.not_stated","schedule":{"keys":["days","from","to","vehicles"],"max_entries":8,"vehicles":["scooter","heavy","car"]},"basis":{"keys":["source_url","evidence_id","effective_date","expires_on"],"required_one_of":["source_url","evidence_id"],"reserved":["evidence_id"],"source_url":{"pattern":"^https://\\S+$","max_length":2048,"length_unit":"utf16"}}},"zone":{"area":["motorcycle","car","heavy","mixed"],"id_pattern":"^[a-z0-9_-]{1,32}$"},"segment":{"keys":["id","name","side","range","condition","total","guide","evidence_url"],"max_entries":30,"sides":["east","west","south","north","both"],"name_max_length":40,"range_max_length":100,"guide_max_length":500,"total":{"min":1,"max":9999}},"bay_kinds":{"order":["motorcycle","scooter_heavy","heavy","car_motorcycle","car","disabled","ev"],"rules":[{"when":{"limit":"special_vehicle"},"bay_kind":"disabled"},{"when":{"limit":"ev_only"},"bay_kind":"ev"},{"when":{"share":"car_motorcycle"},"bay_kind":"car_motorcycle"},{"when":{"share":"scooter_heavy"},"bay_kind":"scooter_heavy"},{"when":{"bay":"heavy"},"bay_kind":"heavy"},{"when":{"bay":"car"},"bay_kind":"car"},{"when":{"bay":"motorcycle"},"bay_kind":"motorcycle"}]},"conversion":{"from_space_type":{"paidMotorcycle":{"bay":"motorcycle","use":"usual","charge":"toll"},"freeMotorcycle":{"bay":"motorcycle","use":"usual","charge":"free"},"heavyOnly":{"bay":"heavy","use":"usual"},"car":{"bay":"car","use":"usual"},"offStreet":null,"disabledMotorcycle":{"bay":"motorcycle","limits":[{"kind":"special_vehicle","vehicle":"disabled_modified"}]},"timedMotorcycle":{"bay":"motorcycle","use":"usual","limits":[{"kind":"time_limit"}]},"flexShared":{"bay":"car","use":"share","share":"car_motorcycle"},"evMotorcycle":{"bay":"motorcycle","limits":[{"kind":"ev_only"}]}},"from_access":{"scooterOnly":{"bay":"motorcycle","use":"usual","allow":{"scooter":true,"heavy":false}},"scooterHeavy":{"bay":"motorcycle","use":"share","share":"scooter_heavy","allow":{"scooter":true,"heavy":true}},"heavyCar":{"bay":"car","use":"usual","allow":{"scooter":false,"heavy":true}},"heavyOnly":{"bay":"heavy","use":"usual","allow":{"scooter":false,"heavy":true}},"noMotorcycle":{"allow":{"scooter":false,"heavy":false}}},"to_space_type":[{"when":{"placement":"off_street"},"space_type":"offStreet"},{"when":{"limit":"special_vehicle"},"space_type":"disabledMotorcycle"},{"when":{"limit":"ev_only"},"space_type":"evMotorcycle"},{"when":{"share":"car_motorcycle"},"space_type":"flexShared"},{"when":{"limit":"time_limit"},"space_type":"timedMotorcycle"},{"when":{"bay":"heavy"},"space_type":"heavyOnly"},{"when":{"bay":"car"},"space_type":"car"},{"when":{"bay":"motorcycle","charge":"toll"},"space_type":"paidMotorcycle"},{"when":{"bay":"motorcycle","charge":"free"},"space_type":"freeMotorcycle"}],"to_access":"allow 與 from_access 的 allow 相同，且 from_access 有 bay 時 bay 也相同","legacy_safe":{"unsafe_keys":["schedule"],"unsafe_basis_keys":["expires_on"],"lossy_share":"scooter_heavy","lossy_limit_keys":["max_minutes"],"assumed_charge":{"timedMotorcycle":"toll"},"lossy_when_unconfirmed":["bay","use","share","charge"]}},"fee":{"max_bytes":8192,"vehicles":["scooter","heavy","car"],"follow":{"vehicles":["heavy"],"modes":["same_as_scooter","same_as_car"],"optional":{"factor_pct":{"min":100,"max":1000}}},"modes":{"free":{"required":{},"optional":{}},"posted":{"required":{},"optional":{}},"hourly":{"required":{"amount":{"min":0,"max":10000},"per_minutes":{"min":1,"max":1440}},"optional":{"unit_minutes":{"min":1,"max":"per_minutes"},"free_minutes":{"min":1,"max":1440},"daily_cap":{"min":0,"max":10000},"cap_reset":"cap_reset"}},"per_visit":{"required":{"amount":{"min":0,"max":10000}},"optional":{"max_minutes":{"min":1,"max":1440},"renew":"renew","extension":"extension"}},"daily":{"required":{"amount":{"min":0,"max":10000}},"optional":{"cap_reset":"cap_reset"}},"by_time":{"required":{"periods":"periods"},"optional":{"cross_period":"cross_period"}}},"enums":{"cap_reset":["calendar_day","rolling_24h","per_entry"],"renew":["none","midnight"],"cross_period":["each_period","entry_only"]},"extension":{"required":{"amount":{"min":0,"max":10000},"max_times":{"min":1,"max":10}},"optional":{"minutes":{"min":1,"max":1440}}},"periods":{"max_entries":6,"keys":["days","from","to","rate"],"nested_modes":["free","posted","hourly","per_visit","daily"]}},"fee_plans":{"max_entries":12,"keys":["id","name","fee"],"id_pattern":"^[a-z0-9_-]{1,20}$","name_max_length":20}}$json$::jsonb;
+  select $json${"version":1,"space_types":["paidMotorcycle","freeMotorcycle","heavyOnly","car","offStreet","disabledMotorcycle","timedMotorcycle","flexShared","evMotorcycle"],"access_kinds":["scooterOnly","scooterHeavy","heavyCar","noMotorcycle","heavyOnly"],"eligibility":{"vehicles":["scooter","heavy"],"not_stated":"not_stated","spot_keys":{"scooter":{"allowed":"scooter_allowed","not_stated":"scooter_not_stated"},"heavy":{"allowed":"heavy_allowed","not_stated":"heavy_not_stated"}}},"placement":{"off_street_space_types":["offStreet"],"off_street_facility_types":["multiStorey","underground","surface"],"facility_types":["multiStorey","underground","surface","roadside"]},"time":{"pattern":"^([01][0-9]|2[0-3]):[0-5][0-9]$","days":["all","weekday","holiday"],"weekdays":["mon","tue","wed","thu","fri","sat","sun"],"optional_pair":["from","to"]},"date":{"pattern":"^(19|[2-9][0-9])[0-9]{2}-[0-9]{2}-[0-9]{2}$"},"condition":{"keys":["bay","use","share","charge","limits","schedule","basis"],"zone_keys":["allow"],"bay":["motorcycle","heavy","car"],"use":["usual","share"],"share":{"scooter_heavy":"motorcycle","car_motorcycle":"car"},"charge":["toll","free"],"limits":{"time_limit":{"required":[],"optional":{"max_minutes":{"min":1,"max":1440}},"periods":{"max_entries":8,"keys":["days","from","to","max_minutes","extensions"],"ranges":{"max_minutes":{"min":1,"max":1440},"extensions":{"min":0,"max":10}}},"exclusive":["max_minutes","periods"]},"special_vehicle":{"required":["vehicle"],"optional":{}},"ev_only":{"required":[],"optional":{}},"no_parking":{"required":["periods"],"optional":{},"periods":{"max_entries":8,"keys":["days","from","to"],"ranges":{}}}},"special_vehicles":["disabled_modified"],"street_charge_optional_with":["time_limit","special_vehicle","ev_only"],"allow_keys":["scooter","heavy"],"allow_values":"boolean 或 eligibility.not_stated","schedule":{"keys":["days","from","to","vehicles"],"max_entries":8,"vehicles":["scooter","heavy","car"]},"basis":{"keys":["source_url","evidence_id","effective_date","expires_on"],"required_one_of":["source_url","evidence_id"],"reserved":["evidence_id"],"source_url":{"pattern":"^https://\\S+$","max_length":2048,"length_unit":"utf16"}},"write":{"limits_required":{"time_limit":["periods"]}}},"zone":{"id_pattern":"^[a-z0-9_-]{1,32}$"},"segment":{"keys":["id","name","side","range","condition","total","guide","evidence_url","fee","fee_plan"],"max_entries":30,"sides":["east","west","south","north","both"],"name_max_length":40,"range_max_length":100,"guide_max_length":500,"total":{"min":1,"max":9999}},"bay_kinds":{"order":["motorcycle","scooter_heavy","heavy","car_motorcycle","car","disabled","ev"],"rules":[{"when":{"limit":"special_vehicle"},"bay_kind":"disabled"},{"when":{"limit":"ev_only"},"bay_kind":"ev"},{"when":{"share":"car_motorcycle"},"bay_kind":"car_motorcycle"},{"when":{"share":"scooter_heavy"},"bay_kind":"scooter_heavy"},{"when":{"bay":"heavy"},"bay_kind":"heavy"},{"when":{"bay":"car"},"bay_kind":"car"},{"when":{"bay":"motorcycle"},"bay_kind":"motorcycle"}]},"conversion":{"from_space_type":{"paidMotorcycle":{"bay":"motorcycle","use":"usual","charge":"toll"},"freeMotorcycle":{"bay":"motorcycle","use":"usual","charge":"free"},"heavyOnly":{"bay":"heavy","use":"usual"},"car":{"bay":"car","use":"usual"},"offStreet":null,"disabledMotorcycle":{"bay":"motorcycle","limits":[{"kind":"special_vehicle","vehicle":"disabled_modified"}]},"timedMotorcycle":{"bay":"motorcycle","use":"usual","limits":[{"kind":"time_limit"}]},"flexShared":{"bay":"car","use":"share","share":"car_motorcycle"},"evMotorcycle":{"bay":"motorcycle","limits":[{"kind":"ev_only"}]}},"from_access":{"scooterOnly":{"bay":"motorcycle","use":"usual","allow":{"scooter":true,"heavy":false}},"scooterHeavy":{"bay":"motorcycle","use":"share","share":"scooter_heavy","allow":{"scooter":true,"heavy":true}},"heavyCar":{"bay":"car","use":"usual","allow":{"scooter":false,"heavy":true}},"heavyOnly":{"bay":"heavy","use":"usual","allow":{"scooter":false,"heavy":true}},"noMotorcycle":{"allow":{"scooter":false,"heavy":false}}},"to_space_type":[{"when":{"placement":"off_street"},"space_type":"offStreet"},{"when":{"limit":"special_vehicle"},"space_type":"disabledMotorcycle"},{"when":{"limit":"ev_only"},"space_type":"evMotorcycle"},{"when":{"share":"car_motorcycle"},"space_type":"flexShared"},{"when":{"limit":"time_limit"},"space_type":"timedMotorcycle"},{"when":{"bay":"heavy"},"space_type":"heavyOnly"},{"when":{"bay":"car"},"space_type":"car"},{"when":{"bay":"motorcycle","charge":"toll"},"space_type":"paidMotorcycle"},{"when":{"bay":"motorcycle","charge":"free"},"space_type":"freeMotorcycle"}],"to_access":"allow 與 from_access 的 allow 相同，且 from_access 有 bay 時 bay 也相同","legacy_safe":{"unsafe_keys":["schedule"],"unsafe_basis_keys":["expires_on"],"lossy_share":"scooter_heavy","lossy_limit_keys":["max_minutes","periods"],"assumed_charge":{"timedMotorcycle":"toll"},"lossy_when_unconfirmed":["bay","use","share","charge"]}},"fee":{"max_bytes":8192,"vehicles":["scooter","heavy","car"],"follow":{"vehicles":["heavy"],"modes":["same_as_scooter","same_as_car"],"optional":{}},"modes":{"not_applicable":{"required":{},"optional":{}},"free":{"required":{},"optional":{}},"hourly":{"required":{"amount":{"min":0,"max":10000},"per_minutes":{"min":1,"max":1440}},"optional":{"daily_cap":{"min":0,"max":10000},"cap_reset":"cap_reset"}},"per_visit":{"required":{"amount":{"min":0,"max":10000}},"optional":{"renew":"renew","extension_amount":{"min":0,"max":10000}}},"by_time":{"required":{"periods":"periods"},"optional":{"cross_period":"cross_period"}}},"enums":{"cap_reset":["calendar_day","rolling_24h","per_entry"],"renew":["none","midnight"],"cross_period":["each_period","entry_only"]},"periods":{"max_entries":6,"keys":["days","from","to","rate"],"nested_modes":["free","hourly","per_visit"]},"read_only_modes":["daily","posted"],"write":{"required_vehicles":["scooter","heavy","car"],"required":{"per_visit":["renew"]},"required_with":{"hourly":{"cap_reset":"daily_cap"}},"cross_period_when":{"nested_mode":"per_visit","min_periods":2}}},"fee_plans":{"max_entries":12,"keys":["id","name","fee"],"id_pattern":"^[a-z0-9_-]{1,20}$","name_max_length":20}}$json$::jsonb;
 $contract$;
 
 -- A whole number in range; CASE so a string returns false, not a cast error.
@@ -64,6 +64,20 @@ $$;
 
 -- ===== 停放條件：valid_condition()、condition_space_type()（C2 複製本段與共用段） =====
 
+-- A limit's periods (#188 layer 2, condition.limits.<kind>.periods): 1 to
+-- max_entries slots of the listed keys (all but the optional from/to pair
+-- required), their days and times as a schedule slot's, each range a whole
+-- number within it.
+create or replace function public.contract_limit_periods(p jsonb,p_spec jsonb) returns boolean
+language sql immutable set search_path='' as $$
+  select case when jsonb_typeof(p)='array' then jsonb_array_length(p) between 1 and (p_spec->>'max_entries')::integer
+    and not exists(select 1 from jsonb_array_elements(p) e
+      where not public.contract_slot_keys(e,p_spec->'keys') or not public.contract_slot_times(e)
+        or exists(select 1 from jsonb_each(coalesce(p_spec->'ranges','{}'::jsonb)) r
+          where not public.contract_whole(e->r.key,(r.value->>'min')::numeric,(r.value->>'max')::numeric)))
+    else false end;
+$$;
+
 -- A bay's or a zone's condition (§1.2, §4.3), the same rules as
 -- validCondition in validate.ts and lib/models/parking_condition.dart.
 create or replace function public.valid_condition(p_condition jsonb,p_zone boolean default false) returns boolean
@@ -94,12 +108,19 @@ begin
       kinds:=kinds||(l->>'kind');
       spec:=c->'limits'->(l->>'kind');
       for f in select key,value from jsonb_each(l) loop
-        continue when f.key='kind' or spec->'required' ? f.key;
+        continue when f.key='kind';
+        -- Time periods (#188 layer 2): time_limit's and no_parking's.
+        if f.key='periods' and spec ? 'periods' then
+          if not public.contract_limit_periods(f.value,spec->'periods') then return false; end if;
+          continue;
+        end if;
+        continue when spec->'required' ? f.key;
         if not spec->'optional' ? f.key or not public.contract_whole(f.value,
             (spec->'optional'->f.key->>'min')::numeric,(spec->'optional'->f.key->>'max')::numeric)
         then return false; end if;
       end loop;
       if exists(select 1 from jsonb_array_elements_text(spec->'required') r where not l ? r) then return false; end if;
+      if spec ? 'exclusive' and l ?& array(select jsonb_array_elements_text(spec->'exclusive')) then return false; end if;
       if l ? 'vehicle' and not public.contract_str_in(l->'vehicle',c->'special_vehicles') then return false; end if;
     end loop;
   end if;
@@ -282,7 +303,7 @@ $$;
 -- ===== 費率 v2：valid_fee(p_fee)（只屬於 C3；C2 不可複製，否則會提早換掉現行的費率檢查） =====
 
 -- The keys of p (besides mode) against a {required, optional} spec: ranges
--- (max may name a sibling key), enums, extension and periods.
+-- (max may name a sibling key), enums and periods.
 create or replace function public.contract_fee_fields(p jsonb,p_spec jsonb,p_vehicle text) returns boolean
 language plpgsql immutable set search_path='' as $$
 declare fee jsonb:=public.parking_contract()->'fee'; f record; fs jsonb; hi numeric;
@@ -300,9 +321,6 @@ begin
       if not public.contract_whole(f.value,(fs->>'min')::numeric,hi) then return false; end if;
     elsif fee->'enums' ? (fs#>>'{}') then
       if not public.contract_str_in(f.value,fee->'enums'->(fs#>>'{}')) then return false; end if;
-    elsif fs#>>'{}'='extension' then
-      if jsonb_typeof(f.value) is distinct from 'object' or (f.value ? 'mode')
-        or not public.contract_fee_fields(f.value,fee->'extension',p_vehicle) then return false; end if;
     elsif fs#>>'{}'='periods' then
       if jsonb_typeof(f.value) is distinct from 'array'
         or jsonb_array_length(f.value) not between 1 and (fee->'periods'->>'max_entries')::integer
@@ -393,55 +411,34 @@ language sql immutable set search_path='' as $$
 $$;
 
 -- One rate's words at p_pct percent of its amounts, or null when it reads
--- as unconfirmed (posted, a by_time of posted periods only, a follow).
+-- as unconfirmed or does not apply (not_applicable, a follow).
 create or replace function public.fee_text_rate(p jsonb,p_pct integer) returns text
 language plpgsql immutable set search_path='' as $$
 declare
-  m text:=p->>'mode'; t text; notes text[]; e jsonb; mask integer; i integer;
-  masks integer[]:='{}'; parts text[]:='{}'; visits integer:=0;
+  m text:=p->>'mode'; t text; e jsonb; mask integer; i integer;
+  masks integer[]:='{}'; parts text[]:='{}';
 begin
   if jsonb_typeof(p) is distinct from 'object' then return null; end if;
   if m='free' then return '免費'; end if;
   if m='hourly' then
     t:=public.fee_text_every(p->'per_minutes')||' '||public.fee_text_money(p->'amount',p_pct)||' 元';
-    if p ? 'free_minutes' then t:='首 '||public.fee_text_span(p->'free_minutes')||' 0 元，之後'||t; end if;
-    if p ? 'unit_minutes' then t:=t||'（以 '||public.fee_text_span(p->'unit_minutes')||'計）'; end if;
     if p ? 'daily_cap' then
-      t:=t||'，當日上限 '||public.fee_text_money(p->'daily_cap',p_pct)||' 元（'
-        ||coalesce(public.fee_text_reset(p->>'cap_reset'),'上限計算方式未確認')||'）';
+      t:=t||'，當日上限 '||public.fee_text_money(p->'daily_cap',p_pct)||' 元'
+        ||coalesce('（'||public.fee_text_reset(p->>'cap_reset')||'）','');
     end if;
     return t;
   end if;
   if m='per_visit' then
-    if (p->>'amount')::numeric=0 and p ? 'max_minutes' then
-      t:='首 '||public.fee_text_span(p->'max_minutes')||' 0 元';
-    else
-      notes:='{}';
-      if p ? 'max_minutes' then notes:=notes||(public.fee_text_span(p->'max_minutes')||'內'); end if;
-      if not p ? 'renew' then notes:=notes||'隔日是否另計未確認'::text; end if;
-      t:='每次 '||public.fee_text_money(p->'amount',p_pct)||' 元'
-        ||case when cardinality(notes)>0 then '（'||array_to_string(notes,'，')||'）' else '' end
-        ||case p->>'renew' when 'midnight' then '，隔日另計'
-          when 'none' then case when p ? 'max_minutes' then '，有效時間內只收一次' else '，停多久都只收一次' end
-          else '' end;
-    end if;
-    if jsonb_typeof(p->'extension')='object' then
-      t:=t||'，可付 '||public.fee_text_money(p->'extension'->'amount',p_pct)||' 元延長 '
-        ||(p->'extension'->>'max_times')::numeric::integer||' 次'
-        ||case when p->'extension' ? 'minutes' then '（每次 '||public.fee_text_span(p->'extension'->'minutes')||'）'
-          else '（延長時間未確認）' end;
-    end if;
-    return t;
-  end if;
-  if m='daily' then
-    return '每日 '||public.fee_text_money(p->'amount',p_pct)||' 元'||coalesce('（'||public.fee_text_reset(p->>'cap_reset')||'）','');
+    return '每次 '||public.fee_text_money(p->'amount',p_pct)||' 元'
+      ||case p->>'renew' when 'midnight' then '，隔日另計' when 'none' then '，停多久都只收一次'
+        else '' end
+      ||case when p ? 'extension_amount' then '，延長每次 '||public.fee_text_money(p->'extension_amount',p_pct)||' 元' else '' end;
   end if;
   if m='by_time' then
     -- Periods grouped by the days they cover, in order of first appearance.
     for e in select x from jsonb_array_elements(p->'periods') x loop
       t:=public.fee_text_rate(e->'rate',p_pct);
       continue when t is null;
-      if e->'rate'->>'mode'='per_visit' then visits:=visits+1; end if;
       t:=case when e ? 'from' then (e->>'from')||'–'
           ||case when (e->>'from') collate "C"<(e->>'to') collate "C" then '' else '隔日 ' end||(e->>'to')
         else '全天' end||' '||t;
@@ -454,7 +451,6 @@ begin
       from generate_subscripts(masks,1) k);
     if p ? 'cross_period' then
       t:=t||'；'||case p->>'cross_period' when 'each_period' then '跨時段分別計費' else '依進場時段計費' end;
-    elsif visits>=2 then t:=t||'；跨時段計費方式未確認';
     end if;
     return t;
   end if;
@@ -463,9 +459,11 @@ end;
 $$;
 
 -- The fee_note text of a valid fee: known vehicles as 機車…；大型重機…；汽車…,
--- then 大型重機費率未確認 when the heavy rate is unknown; a heavy rate that
--- follows another vehicle shows the amounts worked out (#140), or
--- 大型重機費率未提供 when that vehicle is unconfirmed.
+-- then 大型重機費率未提供 when the heavy rate is unknown (PM_ANS_20261101_55;
+-- old rates missing renew, cap_reset or cross_period say nothing of them); a vehicle that is
+-- not_applicable (#188) is left out. A heavy rate that follows another
+-- vehicle shows that vehicle's amounts (#140; no factor since #188), or
+-- 大型重機費率未提供 when that vehicle is unconfirmed or not applicable.
 create or replace function public.fee_note_of(p_fee jsonb) returns text
 language plpgsql immutable set search_path='' as $$
 declare
@@ -474,8 +472,7 @@ begin
   s:=public.fee_text_rate(p_fee->'scooter',100);
   c:=public.fee_text_rate(p_fee->'car',100);
   if f in ('same_as_scooter','same_as_car') then
-    h:=public.fee_text_rate(p_fee->(case f when 'same_as_scooter' then 'scooter' else 'car' end),
-      coalesce((p_fee->'heavy'->>'factor_pct')::numeric::integer,100));
+    h:=public.fee_text_rate(p_fee->(case f when 'same_as_scooter' then 'scooter' else 'car' end),100);
     unprovided:=h is null;
   else
     h:=public.fee_text_rate(p_fee->'heavy',100);
@@ -484,9 +481,47 @@ begin
   if s is not null then parts:=parts||('機車'||s); end if;
   if h is not null or unprovided then parts:=parts||('大型重機'||coalesce(h,'費率未提供')); end if;
   if c is not null then parts:=parts||('汽車'||c); end if;
-  if h is null and not unprovided then parts:=parts||'大型重機費率未確認'::text; end if;
+  if h is null and not unprovided and f is distinct from 'not_applicable' then
+    parts:=parts||'大型重機費率未提供'::text;
+  end if;
   return array_to_string(parts,'；');
 end;
+$$;
+
+-- Whether one rate is complete for a new write (#188 layer 2, fee.write):
+-- a per-visit rate names renew, an hourly cap names its cap_reset, and a
+-- by_time rate names cross_period once it has min_periods periods with a
+-- nested_mode one; its periods' rates follow the same rules. p is valid.
+create or replace function public.fee_rate_write_complete(p jsonb) returns boolean
+language plpgsql immutable set search_path='' as $$
+declare w jsonb:=public.parking_contract()->'fee'->'write'; m text:=p->>'mode'; r record;
+begin
+  if jsonb_typeof(p) is distinct from 'object' then return false; end if;
+  if exists(select 1 from jsonb_array_elements_text(coalesce(w->'required'->m,'[]'::jsonb)) k where not p ? k) then
+    return false;
+  end if;
+  for r in select key,value from jsonb_each_text(coalesce(w->'required_with'->m,'{}'::jsonb)) loop
+    if p ? r.value and not p ? r.key then return false; end if;
+  end loop;
+  if m='by_time' then
+    if exists(select 1 from jsonb_array_elements(p->'periods') e where not public.fee_rate_write_complete(e->'rate')) then
+      return false;
+    end if;
+    if not p ? 'cross_period' and jsonb_array_length(p->'periods')>=(w->'cross_period_when'->>'min_periods')::integer
+      and exists(select 1 from jsonb_array_elements(p->'periods') e
+        where e->'rate'->>'mode'=w->'cross_period_when'->>'nested_mode') then return false; end if;
+  end if;
+  return true;
+end;
+$$;
+
+-- Whether a whole fee is complete for a new write (fee.write): every
+-- required vehicle has a rate, and each rate is complete. p_fee is valid.
+create or replace function public.fee_write_complete(p_fee jsonb) returns boolean
+language sql immutable set search_path='' as $$
+  select jsonb_typeof(p_fee)='object'
+    and p_fee ?& array(select jsonb_array_elements_text(public.parking_contract()->'fee'->'write'->'required_vehicles'))
+    and not exists(select 1 from jsonb_each(p_fee) e where not public.fee_rate_write_complete(e.value));
 $$;
 
 -- ===== 計費規則：valid_fee_plans()（C3 第二層，§2.6） =====
@@ -527,12 +562,26 @@ begin
 end;
 $$;
 
+-- A street spot's segments that refer to a fee plan (#188 layer 2): each
+-- reference names one of p_plans and the segment carries that plan's fee,
+-- as valid_fee_plans() holds zones to it.
+create or replace function public.valid_segment_fee_plans(p_plans jsonb,p_segments jsonb) returns boolean
+language sql immutable set search_path='' as $$
+  select not exists(select 1 from jsonb_array_elements(
+      case when jsonb_typeof(p_segments)='array' then p_segments else '[]'::jsonb end) g
+    where jsonb_typeof(g)='object' and g ? 'fee_plan'
+      and (jsonb_typeof(g->'fee_plan') is distinct from 'string'
+        or not exists(select 1 from jsonb_array_elements(
+            case when jsonb_typeof(p_plans)='array' then p_plans else '[]'::jsonb end) e
+          where e->>'id'=g->>'fee_plan' and e->'fee'=g->'fee')));
+$$;
+
 -- The longest fee_note_of() the contract allows (§2.5), worked out by
 -- tool/fee_text.py: the bound of both spot tables' fee_note check and of
 -- validate.ts for a note that is its fee's text.
 create or replace function public.fee_note_max_length() returns integer
 language sql immutable set search_path='' as $$
-  select 1909;
+  select 1399;
 $$;
 
 -- ===== 分區與路段：valid_zones()、valid_segments()、condition_bay_kind()（#188） =====
@@ -567,15 +616,15 @@ language sql immutable set search_path='' as $$
 $$;
 
 -- A spot's parking_zones (§1.1, decision 32, #188): objects with a valid
--- fee, area and condition (whose access agrees with it), an optional https
--- evidence_url, and ids as contract_entry_ids() takes them.
+-- fee and condition (whose access agrees with it), an optional https
+-- evidence_url, and ids as contract_entry_ids() takes them. area is gone
+-- (#188 layer 2): the tables' trigger drops it before this check.
 create or replace function public.valid_zones(p_zones jsonb) returns boolean
 language sql immutable set search_path='' as $$
   select case when jsonb_typeof(p_zones) is distinct from 'array' then false else
     not exists(select 1 from jsonb_array_elements(p_zones) z
       where jsonb_typeof(z) is distinct from 'object'
         or (z ? 'fee' and not public.valid_fee(z->'fee'))
-        or (z ? 'area' and not public.contract_str_in(z->'area',public.parking_contract()->'zone'->'area'))
         or (z ? 'condition' and not (public.valid_condition(z->'condition',true)
           and public.zone_condition_consistent(z)))
         or (z ? 'evidence_url' and not public.contract_https(z->'evidence_url')))
@@ -584,8 +633,9 @@ $$;
 
 -- A street spot's parking_segments (#188, segment): at most max_entries
 -- objects of the listed keys, each named, with an optional side, range,
--- guide, number of bays, https evidence_url and a zone-style condition
--- without allow (the city's rules decide who may park).
+-- guide, number of bays, https evidence_url, a zone-style condition (its
+-- allow says who may park there, layer 2) and its own fee and fee_plan
+-- reference (valid_segment_fee_plans() checks the reference).
 create or replace function public.valid_segments(p_segments jsonb) returns boolean
 language plpgsql immutable set search_path='' as $$
 declare c jsonb:=public.parking_contract()->'segment'; s jsonb;
@@ -600,12 +650,26 @@ begin
       or (s ? 'range' and not public.contract_text(s->'range',(c->>'range_max_length')::integer))
       or (s ? 'guide' and not public.contract_text(s->'guide',(c->>'guide_max_length')::integer))
       or (s ? 'total' and not public.contract_whole(s->'total',(c->'total'->>'min')::numeric,(c->'total'->>'max')::numeric))
-      or (s ? 'condition' and not (public.valid_condition(s->'condition',true) and not s->'condition' ? 'allow'))
+      or (s ? 'condition' and not public.valid_condition(s->'condition',true))
+      or (s ? 'fee' and not public.valid_fee(s->'fee'))
+      or (s ? 'fee_plan' and jsonb_typeof(s->'fee_plan') is distinct from 'string')
       or (s ? 'evidence_url' and not public.contract_https(s->'evidence_url'))
     then return false; end if;
   end loop;
   return public.contract_entry_ids(p_segments);
 end;
+$$;
+
+-- Whether a condition is complete for a new write (#188 layer 2,
+-- condition.write): each limit kind listed in limits_required carries its
+-- keys (time_limit its periods, not the old shapes). p_condition is valid.
+create or replace function public.condition_write_complete(p_condition jsonb) returns boolean
+language sql immutable set search_path='' as $$
+  select jsonb_typeof(p_condition)='object' and not exists(select 1 from jsonb_array_elements(
+      case when jsonb_typeof(p_condition->'limits')='array' then p_condition->'limits' else '[]'::jsonb end) l
+    cross join lateral jsonb_array_elements_text(coalesce(
+      public.parking_contract()->'condition'->'write'->'limits_required'->(l->>'kind'),'[]'::jsonb)) k
+    where not l ? k);
 $$;
 
 -- The bay kind a condition reads as (#188, bay_kinds): the first rule that

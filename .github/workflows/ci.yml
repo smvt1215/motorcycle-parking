@@ -62,6 +62,9 @@ jobs:
         run: flutter analyze --fatal-infos
       # Version policy still applies to documentation-only PRs.
       - run: python3 tool/check_version.py
+      - name: Generated API client matches supabase/api/v1
+        if: steps.changes.outputs.run == 'true'
+        run: python3 tool/gen_api_dart.py --check
       - name: Check generated seed
         if: steps.changes.outputs.run == 'true'
         run: |
@@ -123,11 +126,28 @@ jobs:
           deno check submit-report/index.ts submit-sighting/index.ts geocode/index.ts admin-users/index.ts availability-ingest/index.ts
           # availability-ingest reads its fixed feed samples.
           deno test --allow-read=.
+      - name: API response checker
+        if: steps.changes.outputs.run == 'true'
+        working-directory: supabase/api/v1
+        run: |
+          deno fmt --check
+          deno lint
+          deno test --allow-read=.
       - name: Rebuild local database and check RLS
         if: steps.changes.outputs.run == 'true'
         run: |
           supabase start > /tmp/supabase-start.log 2>&1 || { cat /tmp/supabase-start.log; exit 1; }
           supabase test db
+      # Every function in supabase/api/v1 is called on the rebuilt stack and
+      # its answer validated against the document (#195 P1).
+      - name: API responses match supabase/api/v1
+        if: steps.changes.outputs.run == 'true'
+        working-directory: supabase/api/v1
+        run: |
+          supabase status -o env > "$RUNNER_TEMP/supabase.env"
+          set -a; . "$RUNNER_TEMP/supabase.env"; set +a
+          SUPABASE_URL="$API_URL" SUPABASE_ANON_KEY="${PUBLISHABLE_KEY:-$ANON_KEY}" \
+            deno run --allow-read=. --allow-env --allow-net check_responses.ts
       - name: Stop local stack
         if: always() && steps.changes.outputs.run == 'true'
         run: supabase stop

@@ -1,5 +1,5 @@
 {
-  "comment": "parking_contract.json 的共同案例。conditions：validCondition（Deno、Flutter、SQL）；legacy：legacySpaceType（三端）與 legacySafe（Flutter），safe 為 null 表示不適用；zones：legacyAccess 與 legacySafeZone（Flutter）；zone_rows：分區的 access 與 condition 一致（zone_condition_consistent／zoneConditionConsistent，三端；決定 32，condition 皆為 validCondition 接受的分區條件）；fees：valid_fee v2 形狀（目前只有 SQL，Dart／Deno 在費率 v2 PR 接上）。legacy 名稱中的 (a)–(d) 對應設計文件 §1.3 legacySafe 可遺失的四種資訊。zone_lists：分區清單 valid_zones／validZoneList／validZoneEntries（三端，#188 id 與 evidence_url）；segment_lists：路段清單 valid_segments／validSegmentList／validSegments（三端）；bay_kinds：格位 7 類 condition_bay_kind／bayKindOf（三端），bay_kind 為 null 表示未確認。 官方未標示（#201）：allow 的值可為 not_stated，有 not_stated 的分區不可帶 access。",
+  "comment": "parking_contract.json 的共同案例。conditions：validCondition（Deno、Flutter、SQL）；legacy：legacySpaceType（三端）與 legacySafe（Flutter），safe 為 null 表示不適用；zones：legacyAccess 與 legacySafeZone（Flutter）；zone_rows：分區的 access 與 condition 一致（zone_condition_consistent／zoneConditionConsistent，三端；決定 32，condition 皆為 validCondition 接受的分區條件）；fees：valid_fee v2 形狀（目前只有 SQL，Dart／Deno 在費率 v2 PR 接上）。legacy 名稱中的 (a)–(d) 對應設計文件 §1.3 legacySafe 可遺失的四種資訊。zone_lists：分區清單 valid_zones／validZoneList／validZoneEntries（三端，#188 id 與 evidence_url）；segment_lists：路段清單 valid_segments／validSegmentList／validSegments（三端）；bay_kinds：格位 7 類 condition_bay_kind／bayKindOf（三端），bay_kind 為 null 表示未確認。 官方未標示（#201）：allow 的值可為 not_stated，有 not_stated 的分區不可帶 access。 #188 第 2 層：fee_writes：新寫入的費率完整（fee_write_complete／feeWriteComplete，三端）；condition_writes：新寫入的 condition 完整（condition_write_complete／conditionWriteComplete，三端）；segment_fee_plans：路段引用計費規則（valid_segment_fee_plans／validFeePlans 的 segments，三端）。",
   "conditions": [
     {
       "name": "收費機車格",
@@ -1281,6 +1281,373 @@
         }
       },
       "valid": false
+    },
+    {
+      "name": "限時分時段（#188 第 2 層）",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "time_limit",
+            "periods": [
+              {
+                "days": "weekday",
+                "from": "07:00",
+                "to": "20:00",
+                "max_minutes": 120,
+                "extensions": 1
+              }
+            ]
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "限時全天、不能延長",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "time_limit",
+            "periods": [
+              {
+                "days": "all",
+                "max_minutes": 30,
+                "extensions": 0
+              }
+            ]
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "限時延長次數超過 10",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "time_limit",
+            "periods": [
+              {
+                "days": "all",
+                "max_minutes": 30,
+                "extensions": 11
+              }
+            ]
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "限時時段缺延長次數",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "time_limit",
+            "periods": [
+              {
+                "days": "all",
+                "max_minutes": 30
+              }
+            ]
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "限時時段不可同時有頂層分鐘",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "time_limit",
+            "max_minutes": 30,
+            "periods": [
+              {
+                "days": "all",
+                "max_minutes": 30,
+                "extensions": 0
+              }
+            ]
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "限時時段不可是空陣列",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "time_limit",
+            "periods": []
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "限時時段只給開始時間",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "time_limit",
+            "periods": [
+              {
+                "days": "all",
+                "from": "07:00",
+                "max_minutes": 30,
+                "extensions": 0
+              }
+            ]
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "限時時段最多 8 段",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "time_limit",
+            "periods": [
+              {
+                "days": "all",
+                "max_minutes": 30,
+                "extensions": 0
+              },
+              {
+                "days": "all",
+                "max_minutes": 30,
+                "extensions": 0
+              },
+              {
+                "days": "all",
+                "max_minutes": 30,
+                "extensions": 0
+              },
+              {
+                "days": "all",
+                "max_minutes": 30,
+                "extensions": 0
+              },
+              {
+                "days": "all",
+                "max_minutes": 30,
+                "extensions": 0
+              },
+              {
+                "days": "all",
+                "max_minutes": 30,
+                "extensions": 0
+              },
+              {
+                "days": "all",
+                "max_minutes": 30,
+                "extensions": 0
+              },
+              {
+                "days": "all",
+                "max_minutes": 30,
+                "extensions": 0
+              },
+              {
+                "days": "all",
+                "max_minutes": 30,
+                "extensions": 0
+              }
+            ]
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "時段性禁停（#188 第 2 層）",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "no_parking",
+            "periods": [
+              {
+                "days": [
+                  "mon"
+                ],
+                "from": "06:00",
+                "to": "08:00"
+              }
+            ]
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "禁停假日全天",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "no_parking",
+            "periods": [
+              {
+                "days": "holiday"
+              }
+            ]
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "禁停必須有時段",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "no_parking"
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "禁停時段不帶分鐘",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "no_parking",
+            "periods": [
+              {
+                "days": "all",
+                "max_minutes": 30
+              }
+            ]
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "限時與禁停並存",
+      "zone": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "time_limit",
+            "periods": [
+              {
+                "days": "weekday",
+                "from": "07:00",
+                "to": "20:00",
+                "max_minutes": 120,
+                "extensions": 1
+              }
+            ]
+          },
+          {
+            "kind": "no_parking",
+            "periods": [
+              {
+                "days": [
+                  "mon"
+                ],
+                "from": "06:00",
+                "to": "08:00"
+              }
+            ]
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "分區帶限時與禁停",
+      "zone": true,
+      "condition": {
+        "bay": "motorcycle",
+        "allow": {
+          "scooter": true,
+          "heavy": false
+        },
+        "limits": [
+          {
+            "kind": "time_limit",
+            "periods": [
+              {
+                "days": "weekday",
+                "from": "07:00",
+                "to": "20:00",
+                "max_minutes": 120,
+                "extensions": 1
+              }
+            ]
+          },
+          {
+            "kind": "no_parking",
+            "periods": [
+              {
+                "days": [
+                  "mon"
+                ],
+                "from": "06:00",
+                "to": "08:00"
+              }
+            ]
+          }
+        ]
+      },
+      "valid": true
     }
   ],
   "legacy": [
@@ -1556,6 +1923,56 @@
       },
       "space_type": "offStreet",
       "safe": null
+    },
+    {
+      "name": "限時分時段讀成限時格（較嚴）",
+      "off_street": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "time_limit",
+            "periods": [
+              {
+                "days": "weekday",
+                "from": "07:00",
+                "to": "20:00",
+                "max_minutes": 120,
+                "extensions": 1
+              }
+            ]
+          }
+        ]
+      },
+      "space_type": "timedMotorcycle",
+      "safe": true
+    },
+    {
+      "name": "禁停舊版讀不到：不安全",
+      "off_street": false,
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "no_parking",
+            "periods": [
+              {
+                "days": [
+                  "mon"
+                ],
+                "from": "06:00",
+                "to": "08:00"
+              }
+            ]
+          }
+        ]
+      },
+      "space_type": "paidMotorcycle",
+      "safe": false
     }
   ],
   "zones": [
@@ -2074,7 +2491,7 @@
       "valid": true
     },
     {
-      "name": "v1：計次與每日",
+      "name": "v1：計次與每日：#188 第 2 層起不收",
       "fee": {
         "scooter": {
           "mode": "per_visit",
@@ -2086,10 +2503,10 @@
           "amount": 50
         }
       },
-      "valid": true
+      "valid": false
     },
     {
-      "name": "v1：免費與依現場公告",
+      "name": "v1：免費與依現場公告：#188 第 2 層起不收",
       "fee": {
         "scooter": {
           "mode": "free"
@@ -2098,7 +2515,7 @@
           "mode": "posted"
         }
       },
-      "valid": true
+      "valid": false
     },
     {
       "name": "臺北計次路段，隔日另計（§2.4）",
@@ -2123,7 +2540,7 @@
       "valid": true
     },
     {
-      "name": "臺北計時路段，半小時計、當日上限（§2.4）",
+      "name": "臺北計時路段，半小時計、當日上限（§2.4）：#188 第 2 層起不收",
       "fee": {
         "heavy": {
           "mode": "hourly",
@@ -2134,10 +2551,10 @@
           "cap_reset": "calendar_day"
         }
       },
-      "valid": true
+      "valid": false
     },
     {
-      "name": "臺北限時格首段 0 元可延長一次（§2.4）",
+      "name": "臺北限時格首段 0 元可延長一次（§2.4）：#188 第 2 層起不收",
       "fee": {
         "heavy": {
           "mode": "per_visit",
@@ -2149,10 +2566,10 @@
           }
         }
       },
-      "valid": true
+      "valid": false
     },
     {
-      "name": "試辦機車區重機比照機車 2 倍（§2.4）",
+      "name": "試辦機車區重機比照機車 2 倍（§2.4）：#188 第 2 層起不收",
       "fee": {
         "scooter": {
           "mode": "hourly",
@@ -2164,7 +2581,7 @@
           "factor_pct": 200
         }
       },
-      "valid": true
+      "valid": false
     },
     {
       "name": "試辦汽車區有汽車費率（§2.4）",
@@ -2181,7 +2598,7 @@
       "valid": true
     },
     {
-      "name": "計時有免費前段",
+      "name": "計時有免費前段：#188 第 2 層起不收",
       "fee": {
         "scooter": {
           "mode": "hourly",
@@ -2190,10 +2607,10 @@
           "free_minutes": 30
         }
       },
-      "valid": true
+      "valid": false
     },
     {
-      "name": "每日費率帶上限重算方式",
+      "name": "每日費率帶上限重算方式：#188 第 2 層起不收",
       "fee": {
         "scooter": {
           "mode": "daily",
@@ -2201,10 +2618,10 @@
           "cap_reset": "rolling_24h"
         }
       },
-      "valid": true
+      "valid": false
     },
     {
-      "name": "延長帶每次分鐘",
+      "name": "延長帶每次分鐘：#188 第 2 層起不收",
       "fee": {
         "heavy": {
           "mode": "per_visit",
@@ -2217,7 +2634,7 @@
           }
         }
       },
-      "valid": true
+      "valid": false
     },
     {
       "name": "依時段計次，跨時段另計（§2.5 範例）",
@@ -2708,7 +3125,7 @@
       "valid": false
     },
     {
-      "name": "計費單位等於計費週期",
+      "name": "計費單位等於計費週期：#188 第 2 層起不收",
       "fee": {
         "scooter": {
           "mode": "hourly",
@@ -2717,7 +3134,7 @@
           "unit_minutes": 60
         }
       },
-      "valid": true
+      "valid": false
     },
     {
       "name": "計費單位大於計費週期",
@@ -2850,14 +3267,14 @@
       "valid": false
     },
     {
-      "name": "金額寫成 20.0，視同 20",
+      "name": "金額寫成 20.0，視同 20：#188 第 2 層起不收",
       "fee": {
         "scooter": {
           "mode": "daily",
           "amount": 20.0
         }
       },
-      "valid": true
+      "valid": false
     },
     {
       "name": "金額不是整數",
@@ -2880,6 +3297,132 @@
       "name": "fee 不是物件",
       "fee": [],
       "valid": false
+    },
+    {
+      "name": "不適用（#188 第 2 層）",
+      "fee": {
+        "scooter": {
+          "mode": "hourly",
+          "amount": 20,
+          "per_minutes": 60
+        },
+        "heavy": {
+          "mode": "not_applicable"
+        },
+        "car": {
+          "mode": "not_applicable"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "不適用不帶其他鍵",
+      "fee": {
+        "heavy": {
+          "mode": "not_applicable",
+          "amount": 0
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "不適用不可放進時段",
+      "fee": {
+        "scooter": {
+          "mode": "by_time",
+          "periods": [
+            {
+              "days": "all",
+              "rate": {
+                "mode": "not_applicable"
+              }
+            }
+          ]
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "計次帶延長每次金額",
+      "fee": {
+        "heavy": {
+          "mode": "per_visit",
+          "amount": 0,
+          "renew": "none",
+          "extension_amount": 40
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "延長每次金額超出範圍",
+      "fee": {
+        "heavy": {
+          "mode": "per_visit",
+          "amount": 0,
+          "renew": "none",
+          "extension_amount": 10001
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "金額寫成 20.0，視同 20",
+      "fee": {
+        "scooter": {
+          "mode": "per_visit",
+          "amount": 20.0,
+          "renew": "midnight"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "比照不帶倍率",
+      "fee": {
+        "car": {
+          "mode": "hourly",
+          "amount": 40,
+          "per_minutes": 60
+        },
+        "heavy": {
+          "mode": "same_as_car"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "比照帶倍率：#188 第 2 層起不收",
+      "fee": {
+        "car": {
+          "mode": "hourly",
+          "amount": 40,
+          "per_minutes": 60
+        },
+        "heavy": {
+          "mode": "same_as_car",
+          "factor_pct": 100
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "時段內不可用每日",
+      "fee": {
+        "scooter": {
+          "mode": "by_time",
+          "periods": [
+            {
+              "days": "all",
+              "rate": {
+                "mode": "daily",
+                "amount": 50
+              }
+            }
+          ]
+        }
+      },
+      "valid": false
     }
   ],
   "fee_notes": [
@@ -2889,25 +3432,13 @@
       "note": "請依現場公告"
     },
     {
-      "name": "只有依現場公告：讀成未確認",
-      "fee": {
-        "scooter": {
-          "mode": "posted"
-        },
-        "heavy": {
-          "mode": "posted"
-        }
-      },
-      "note": "請依現場公告"
-    },
-    {
-      "name": "普通機車免費，大型重機未確認",
+      "name": "普通機車免費，大型重機未提供",
       "fee": {
         "scooter": {
           "mode": "free"
         }
       },
-      "note": "機車免費；大型重機費率未確認"
+      "note": "機車免費；大型重機費率未提供"
     },
     {
       "name": "只有大型重機",
@@ -2942,7 +3473,7 @@
       "note": "機車每小時 10 元；大型重機每小時 20 元；汽車每小時 40 元"
     },
     {
-      "name": "只有汽車：大型重機未確認",
+      "name": "只有汽車：大型重機未提供",
       "fee": {
         "car": {
           "mode": "hourly",
@@ -2950,7 +3481,7 @@
           "per_minutes": 30
         }
       },
-      "note": "汽車每 30 分鐘 40 元；大型重機費率未確認"
+      "note": "汽車每 30 分鐘 40 元；大型重機費率未提供"
     },
     {
       "name": "計時每 2 小時與每 90 分鐘",
@@ -2991,106 +3522,14 @@
       "note": "大型重機每次 40 元，停多久都只收一次"
     },
     {
-      "name": "計次隔日是否另計未確認（§2.5）",
+      "name": "計次沒有隔日另計（舊資料）：不寫（Un-1）",
       "fee": {
         "heavy": {
           "mode": "per_visit",
           "amount": 40
         }
       },
-      "note": "大型重機每次 40 元（隔日是否另計未確認）"
-    },
-    {
-      "name": "計次有效時間內只收一次",
-      "fee": {
-        "heavy": {
-          "mode": "per_visit",
-          "amount": 30,
-          "max_minutes": 180,
-          "renew": "none"
-        }
-      },
-      "note": "大型重機每次 30 元（3 小時內），有效時間內只收一次"
-    },
-    {
-      "name": "計次有效時間，隔日另計（§2.5）",
-      "fee": {
-        "heavy": {
-          "mode": "per_visit",
-          "amount": 30,
-          "max_minutes": 180,
-          "renew": "midnight"
-        }
-      },
-      "note": "大型重機每次 30 元（3 小時內），隔日另計"
-    },
-    {
-      "name": "計次有效時間，隔日是否另計未確認",
-      "fee": {
-        "heavy": {
-          "mode": "per_visit",
-          "amount": 30,
-          "max_minutes": 45
-        }
-      },
-      "note": "大型重機每次 30 元（45 分鐘內，隔日是否另計未確認）"
-    },
-    {
-      "name": "臺北計時路段（§2.4）",
-      "fee": {
-        "heavy": {
-          "mode": "hourly",
-          "amount": 20,
-          "per_minutes": 60,
-          "unit_minutes": 30,
-          "daily_cap": 100,
-          "cap_reset": "calendar_day"
-        }
-      },
-      "note": "大型重機每小時 20 元（以 30 分鐘計），當日上限 100 元（零時重算）"
-    },
-    {
-      "name": "臺北限時格首段 0 元可延長一次（§2.4）",
-      "fee": {
-        "heavy": {
-          "mode": "per_visit",
-          "amount": 0,
-          "max_minutes": 20,
-          "extension": {
-            "amount": 40,
-            "max_times": 1
-          }
-        }
-      },
-      "note": "大型重機首 20 分鐘 0 元，可付 40 元延長 1 次（延長時間未確認）"
-    },
-    {
-      "name": "延長帶每次分鐘",
-      "fee": {
-        "heavy": {
-          "mode": "per_visit",
-          "amount": 20,
-          "renew": "none",
-          "extension": {
-            "amount": 20,
-            "max_times": 2,
-            "minutes": 60
-          }
-        }
-      },
-      "note": "大型重機每次 20 元，停多久都只收一次，可付 20 元延長 2 次（每次 1 小時）"
-    },
-    {
-      "name": "計時有免費前段",
-      "fee": {
-        "scooter": {
-          "mode": "hourly",
-          "amount": 10,
-          "per_minutes": 60,
-          "free_minutes": 30
-        }
-      },
-      "note": "機車首 30 分鐘 0 元，之後每小時 10 元；大型重機費率未確認"
+      "note": "大型重機每次 40 元"
     },
     {
       "name": "當日上限依停滿 24 小時重算",
@@ -3103,7 +3542,7 @@
           "cap_reset": "rolling_24h"
         }
       },
-      "note": "機車每小時 10 元，當日上限 50 元（停滿 24 小時重算）；大型重機費率未確認"
+      "note": "機車每小時 10 元，當日上限 50 元（停滿 24 小時重算）；大型重機費率未提供"
     },
     {
       "name": "當日上限每次進場重算",
@@ -3116,10 +3555,10 @@
           "cap_reset": "per_entry"
         }
       },
-      "note": "機車每小時 10 元，當日上限 50 元（每次進場重算）；大型重機費率未確認"
+      "note": "機車每小時 10 元，當日上限 50 元（每次進場重算）；大型重機費率未提供"
     },
     {
-      "name": "當日上限計算方式未確認",
+      "name": "當日上限沒有重算方式（舊資料）：不寫（Un-1）",
       "fee": {
         "scooter": {
           "mode": "hourly",
@@ -3128,37 +3567,7 @@
           "daily_cap": 50
         }
       },
-      "note": "機車每小時 10 元，當日上限 50 元（上限計算方式未確認）；大型重機費率未確認"
-    },
-    {
-      "name": "每日費率與重算方式",
-      "fee": {
-        "scooter": {
-          "mode": "daily",
-          "amount": 30,
-          "cap_reset": "calendar_day"
-        },
-        "heavy": {
-          "mode": "daily",
-          "amount": 60
-        }
-      },
-      "note": "機車每日 30 元（零時重算）；大型重機每日 60 元"
-    },
-    {
-      "name": "大型重機比照機車 2 倍，寫算好的金額（#140）",
-      "fee": {
-        "scooter": {
-          "mode": "hourly",
-          "amount": 10,
-          "per_minutes": 60
-        },
-        "heavy": {
-          "mode": "same_as_scooter",
-          "factor_pct": 200
-        }
-      },
-      "note": "機車每小時 10 元；大型重機每小時 20 元"
+      "note": "機車每小時 10 元，當日上限 50 元；大型重機費率未提供"
     },
     {
       "name": "大型重機比照汽車，寫算好的金額（#140）",
@@ -3175,43 +3584,6 @@
       "note": "大型重機每小時 40 元；汽車每小時 40 元"
     },
     {
-      "name": "比照倍率套在上限與延長金額",
-      "fee": {
-        "scooter": {
-          "mode": "per_visit",
-          "amount": 15,
-          "max_minutes": 120,
-          "renew": "midnight",
-          "extension": {
-            "amount": 15,
-            "max_times": 1
-          }
-        },
-        "heavy": {
-          "mode": "same_as_scooter",
-          "factor_pct": 150
-        }
-      },
-      "note": "機車每次 15 元（2 小時內），隔日另計，可付 15 元延長 1 次（延長時間未確認）；大型重機每次 22.5 元（2 小時內），隔日另計，可付 22.5 元延長 1 次（延長時間未確認）"
-    },
-    {
-      "name": "比照倍率有兩位小數",
-      "fee": {
-        "scooter": {
-          "mode": "hourly",
-          "amount": 33,
-          "per_minutes": 60,
-          "daily_cap": 99,
-          "cap_reset": "calendar_day"
-        },
-        "heavy": {
-          "mode": "same_as_scooter",
-          "factor_pct": 125
-        }
-      },
-      "note": "機車每小時 33 元，當日上限 99 元（零時重算）；大型重機每小時 41.25 元，當日上限 123.75 元（零時重算）"
-    },
-    {
       "name": "比照的車種未確認：大型重機費率未提供",
       "fee": {
         "scooter": {
@@ -3222,19 +3594,6 @@
         }
       },
       "note": "機車免費；大型重機費率未提供"
-    },
-    {
-      "name": "比照依現場公告的車種：大型重機費率未提供",
-      "fee": {
-        "car": {
-          "mode": "posted"
-        },
-        "heavy": {
-          "mode": "same_as_car",
-          "factor_pct": 200
-        }
-      },
-      "note": "大型重機費率未提供"
     },
     {
       "name": "依時段計次，跨時段分別計費（§2.5 範例）",
@@ -3266,7 +3625,7 @@
           "cross_period": "each_period"
         }
       },
-      "note": "汽車每天：08:00–20:00 每次 30 元，停多久都只收一次；20:00–隔日 08:00 每次 50 元，隔日另計；跨時段分別計費；大型重機費率未確認"
+      "note": "汽車每天：08:00–20:00 每次 30 元，停多久都只收一次；20:00–隔日 08:00 每次 50 元，隔日另計；跨時段分別計費；大型重機費率未提供"
     },
     {
       "name": "依時段計次，依進場時段計費",
@@ -3298,10 +3657,10 @@
           "cross_period": "entry_only"
         }
       },
-      "note": "汽車每天：08:00–20:00 每次 30 元，停多久都只收一次；20:00–隔日 08:00 每次 50 元，隔日另計；依進場時段計費；大型重機費率未確認"
+      "note": "汽車每天：08:00–20:00 每次 30 元，停多久都只收一次；20:00–隔日 08:00 每次 50 元，隔日另計；依進場時段計費；大型重機費率未提供"
     },
     {
-      "name": "依時段計次，跨時段計費方式未確認",
+      "name": "依時段計次沒有跨時段（舊資料）：不寫（Un-1）",
       "fee": {
         "car": {
           "mode": "by_time",
@@ -3329,7 +3688,7 @@
           ]
         }
       },
-      "note": "汽車每天：08:00–20:00 每次 30 元，停多久都只收一次；20:00–隔日 08:00 每次 50 元，隔日另計；跨時段計費方式未確認；大型重機費率未確認"
+      "note": "汽車每天：08:00–20:00 每次 30 元，停多久都只收一次；20:00–隔日 08:00 每次 50 元，隔日另計；大型重機費率未提供"
     },
     {
       "name": "依時段只有一段計次：不寫跨時段",
@@ -3359,7 +3718,7 @@
           ]
         }
       },
-      "note": "機車每天：08:00–20:00 每小時 10 元；20:00–隔日 08:00 每次 50 元（隔日是否另計未確認）；大型重機費率未確認"
+      "note": "機車每天：08:00–20:00 每小時 10 元；20:00–隔日 08:00 每次 50 元；大型重機費率未提供"
     },
     {
       "name": "依時段只用平日與假日：分兩組（§7 第 34 項）",
@@ -3394,7 +3753,7 @@
           ]
         }
       },
-      "note": "機車平日：08:00–20:00 每小時 10 元；20:00–隔日 08:00 免費；假日：全天 免費；大型重機費率未確認"
+      "note": "機車平日：08:00–20:00 每小時 10 元；20:00–隔日 08:00 免費；假日：全天 免費；大型重機費率未提供"
     },
     {
       "name": "依時段有指定星期幾：列出那幾天",
@@ -3425,7 +3784,7 @@
           ]
         }
       },
-      "note": "機車平日：08:00–20:00 每小時 10 元；週六：全天 每次 30 元，停多久都只收一次；大型重機費率未確認"
+      "note": "機車平日：08:00–20:00 每小時 10 元；週六：全天 每次 30 元，停多久都只收一次；大型重機費率未提供"
     },
     {
       "name": "依時段指定的星期與順序無關",
@@ -3462,7 +3821,7 @@
           ]
         }
       },
-      "note": "機車週一、週三：08:00–12:00 每小時 10 元；12:00–18:00 每小時 20 元；大型重機費率未確認"
+      "note": "機車週一、週三：08:00–12:00 每小時 10 元；12:00–18:00 每小時 20 元；大型重機費率未提供"
     },
     {
       "name": "依時段的指定星期剛好是平日",
@@ -3487,59 +3846,127 @@
           ]
         }
       },
-      "note": "機車平日：全天 每小時 10 元；大型重機費率未確認"
+      "note": "機車平日：全天 每小時 10 元；大型重機費率未提供"
     },
     {
-      "name": "依時段跳過依現場公告的時段",
+      "name": "金額寫成 20.0，視同 20",
       "fee": {
-        "scooter": {
-          "mode": "by_time",
-          "periods": [
-            {
-              "days": "all",
-              "rate": {
-                "mode": "posted"
-              },
-              "from": "08:00",
-              "to": "20:00"
-            },
-            {
-              "days": "all",
-              "rate": {
-                "mode": "free"
-              },
-              "from": "20:00",
-              "to": "08:00"
-            }
-          ]
-        }
-      },
-      "note": "機車每天：20:00–隔日 08:00 免費；大型重機費率未確認"
-    },
-    {
-      "name": "依時段每段都是依現場公告：讀成未確認",
-      "fee": {
-        "scooter": {
-          "mode": "by_time",
-          "periods": [
-            {
-              "days": "all",
-              "rate": {
-                "mode": "posted"
-              }
-            }
-          ]
-        },
         "heavy": {
           "mode": "hourly",
-          "amount": 20,
-          "per_minutes": 60
+          "amount": 20.0,
+          "per_minutes": 60.0
         }
       },
       "note": "大型重機每小時 20 元"
     },
     {
-      "name": "大型重機比照依時段的汽車 2 倍",
+      "name": "不適用的車種略過（#188 第 2 層）",
+      "fee": {
+        "scooter": {
+          "mode": "hourly",
+          "amount": 20,
+          "per_minutes": 60
+        },
+        "heavy": {
+          "mode": "not_applicable"
+        },
+        "car": {
+          "mode": "not_applicable"
+        }
+      },
+      "note": "機車每小時 20 元"
+    },
+    {
+      "name": "每個車種都不適用：預設文字",
+      "fee": {
+        "scooter": {
+          "mode": "not_applicable"
+        },
+        "heavy": {
+          "mode": "not_applicable"
+        },
+        "car": {
+          "mode": "not_applicable"
+        }
+      },
+      "note": "請依現場公告"
+    },
+    {
+      "name": "大型重機不適用，不寫費率未確認",
+      "fee": {
+        "car": {
+          "mode": "hourly",
+          "amount": 40,
+          "per_minutes": 60
+        },
+        "heavy": {
+          "mode": "not_applicable"
+        }
+      },
+      "note": "汽車每小時 40 元"
+    },
+    {
+      "name": "計次延長每次金額",
+      "fee": {
+        "heavy": {
+          "mode": "per_visit",
+          "amount": 0,
+          "renew": "none",
+          "extension_amount": 40
+        }
+      },
+      "note": "大型重機每次 0 元，停多久都只收一次，延長每次 40 元"
+    },
+    {
+      "name": "計次缺隔日另計，帶延長金額",
+      "fee": {
+        "heavy": {
+          "mode": "per_visit",
+          "amount": 30,
+          "extension_amount": 30
+        }
+      },
+      "note": "大型重機每次 30 元，延長每次 30 元"
+    },
+    {
+      "name": "計次隔日另計",
+      "fee": {
+        "heavy": {
+          "mode": "per_visit",
+          "amount": 30,
+          "renew": "midnight"
+        }
+      },
+      "note": "大型重機每次 30 元，隔日另計"
+    },
+    {
+      "name": "大型重機比照機車，寫機車的金額（#140）",
+      "fee": {
+        "scooter": {
+          "mode": "hourly",
+          "amount": 10,
+          "per_minutes": 60
+        },
+        "heavy": {
+          "mode": "same_as_scooter"
+        }
+      },
+      "note": "機車每小時 10 元；大型重機每小時 10 元"
+    },
+    {
+      "name": "比照不適用的車種：大型重機費率未提供",
+      "fee": {
+        "car": {
+          "mode": "not_applicable"
+        },
+        "heavy": {
+          "mode": "same_as_car"
+        }
+      },
+      "note": "大型重機費率未提供"
+    },
+    {
+      "name": "大型重機比照依時段的汽車",
       "fee": {
         "car": {
           "mode": "by_time",
@@ -3565,22 +3992,22 @@
           ]
         },
         "heavy": {
-          "mode": "same_as_car",
-          "factor_pct": 200
+          "mode": "same_as_car"
         }
       },
-      "note": "大型重機平日：08:00–20:00 每小時 80 元；假日：全天 每小時 100 元；汽車平日：08:00–20:00 每小時 40 元；假日：全天 每小時 50 元"
+      "note": "大型重機平日：08:00–20:00 每小時 40 元；假日：全天 每小時 50 元；汽車平日：08:00–20:00 每小時 40 元；假日：全天 每小時 50 元"
     },
     {
-      "name": "金額寫成 20.0，視同 20",
+      "name": "當日上限缺重算方式",
       "fee": {
-        "heavy": {
+        "scooter": {
           "mode": "hourly",
-          "amount": 20.0,
-          "per_minutes": 60.0
+          "amount": 10,
+          "per_minutes": 60,
+          "daily_cap": 50
         }
       },
-      "note": "大型重機每小時 20 元"
+      "note": "機車每小時 10 元，當日上限 50 元；大型重機費率未提供"
     }
   ],
   "fee_plans": [
@@ -3605,8 +4032,7 @@
               "per_minutes": 60
             },
             "heavy": {
-              "mode": "same_as_scooter",
-              "factor_pct": 200
+              "mode": "same_as_scooter"
             }
           }
         },
@@ -3638,8 +4064,7 @@
               "per_minutes": 60
             },
             "heavy": {
-              "mode": "same_as_scooter",
-              "factor_pct": 200
+              "mode": "same_as_scooter"
             }
           }
         },
@@ -3673,8 +4098,7 @@
               "per_minutes": 60
             },
             "heavy": {
-              "mode": "same_as_scooter",
-              "factor_pct": 200
+              "mode": "same_as_scooter"
             }
           }
         }
@@ -3692,8 +4116,7 @@
               "per_minutes": 60
             },
             "heavy": {
-              "mode": "same_as_scooter",
-              "factor_pct": 200
+              "mode": "same_as_scooter"
             }
           }
         },
@@ -3707,8 +4130,7 @@
               "per_minutes": 60
             },
             "heavy": {
-              "mode": "same_as_scooter",
-              "factor_pct": 200
+              "mode": "same_as_scooter"
             }
           }
         }
@@ -3728,8 +4150,7 @@
               "per_minutes": 60
             },
             "heavy": {
-              "mode": "same_as_scooter",
-              "factor_pct": 200
+              "mode": "same_as_scooter"
             }
           }
         }
@@ -3742,8 +4163,7 @@
           "per_minutes": 60
         },
         "heavy": {
-          "mode": "same_as_scooter",
-          "factor_pct": 200
+          "mode": "same_as_scooter"
         }
       },
       "zones": [],
@@ -3762,8 +4182,7 @@
               "per_minutes": 60
             },
             "heavy": {
-              "mode": "same_as_scooter",
-              "factor_pct": 200
+              "mode": "same_as_scooter"
             }
           }
         },
@@ -3790,8 +4209,7 @@
           "per_minutes": 60
         },
         "heavy": {
-          "mode": "same_as_scooter",
-          "factor_pct": 200
+          "mode": "same_as_scooter"
         }
       },
       "zones": [],
@@ -3810,8 +4228,7 @@
               "per_minutes": 60
             },
             "heavy": {
-              "mode": "same_as_scooter",
-              "factor_pct": 200
+              "mode": "same_as_scooter"
             }
           }
         }
@@ -4149,8 +4566,7 @@
               "per_minutes": 60
             },
             "heavy": {
-              "mode": "same_as_scooter",
-              "factor_pct": 200
+              "mode": "same_as_scooter"
             }
           }
         }
@@ -4168,8 +4584,7 @@
               "per_minutes": 60
             },
             "heavy": {
-              "mode": "same_as_scooter",
-              "factor_pct": 200
+              "mode": "same_as_scooter"
             }
           }
         }
@@ -4189,8 +4604,7 @@
               "per_minutes": 60
             },
             "heavy": {
-              "mode": "same_as_scooter",
-              "factor_pct": 200
+              "mode": "same_as_scooter"
             }
           }
         }
@@ -4203,8 +4617,7 @@
           "per_minutes": 60
         },
         "heavy": {
-          "mode": "same_as_scooter",
-          "factor_pct": 200
+          "mode": "same_as_scooter"
         }
       },
       "zones": [],
@@ -4221,8 +4634,7 @@
           "per_minutes": 60
         },
         "heavy": {
-          "mode": "same_as_scooter",
-          "factor_pct": 200
+          "mode": "same_as_scooter"
         }
       },
       "zones": [],
@@ -4241,8 +4653,7 @@
               "per_minutes": 60
             },
             "heavy": {
-              "mode": "same_as_scooter",
-              "factor_pct": 200
+              "mode": "same_as_scooter"
             }
           }
         }
@@ -4280,8 +4691,7 @@
               "per_minutes": 60
             },
             "heavy": {
-              "mode": "same_as_scooter",
-              "factor_pct": 200
+              "mode": "same_as_scooter"
             }
           }
         }
@@ -4309,8 +4719,7 @@
               "per_minutes": 60
             },
             "heavy": {
-              "mode": "same_as_scooter",
-              "factor_pct": 200
+              "mode": "same_as_scooter"
             }
           }
         }
@@ -4342,8 +4751,7 @@
               "per_minutes": 60
             },
             "heavy": {
-              "mode": "same_as_scooter",
-              "factor_pct": 200
+              "mode": "same_as_scooter"
             }
           }
         },
@@ -4380,8 +4788,7 @@
               "per_minutes": 60
             },
             "heavy": {
-              "mode": "same_as_scooter",
-              "factor_pct": 200
+              "mode": "same_as_scooter"
             }
           }
         }
@@ -4404,8 +4811,7 @@
               "per_minutes": 60
             },
             "heavy": {
-              "mode": "same_as_scooter",
-              "factor_pct": 200
+              "mode": "same_as_scooter"
             }
           }
         }
@@ -4428,8 +4834,7 @@
               "per_minutes": 60
             },
             "heavy": {
-              "mode": "same_as_scooter",
-              "factor_pct": 200
+              "mode": "same_as_scooter"
             }
           }
         }
@@ -4452,8 +4857,7 @@
               "per_minutes": 60
             },
             "heavy": {
-              "mode": "same_as_scooter",
-              "factor_pct": 200
+              "mode": "same_as_scooter"
             }
           }
         }
@@ -4476,8 +4880,7 @@
               "per_minutes": 60
             },
             "heavy": {
-              "mode": "same_as_scooter",
-              "factor_pct": 200
+              "mode": "same_as_scooter"
             }
           }
         }
@@ -4500,8 +4903,7 @@
               "per_minutes": 60
             },
             "heavy": {
-              "mode": "same_as_scooter",
-              "factor_pct": 200
+              "mode": "same_as_scooter"
             }
           }
         }
@@ -4524,8 +4926,7 @@
               "per_minutes": 60
             },
             "heavy": {
-              "mode": "same_as_scooter",
-              "factor_pct": 200
+              "mode": "same_as_scooter"
             }
           }
         }
@@ -4547,8 +4948,7 @@
               "per_minutes": 60
             },
             "heavy": {
-              "mode": "same_as_scooter",
-              "factor_pct": 200
+              "mode": "same_as_scooter"
             }
           }
         }
@@ -4571,8 +4971,7 @@
               "per_minutes": 60
             },
             "heavy": {
-              "mode": "same_as_scooter",
-              "factor_pct": 200
+              "mode": "same_as_scooter"
             }
           },
           "note": "x"
@@ -4628,8 +5027,7 @@
               "per_minutes": 60
             },
             "heavy": {
-              "mode": "same_as_scooter",
-              "factor_pct": 200
+              "mode": "same_as_scooter"
             }
           }
         }
@@ -4652,8 +5050,7 @@
               "per_minutes": 60
             },
             "heavy": {
-              "mode": "same_as_scooter",
-              "factor_pct": 200
+              "mode": "same_as_scooter"
             }
           }
         }
@@ -4671,8 +5068,7 @@
               "per_minutes": 60
             },
             "heavy": {
-              "mode": "same_as_scooter",
-              "factor_pct": 200
+              "mode": "same_as_scooter"
             }
           }
         }
@@ -4682,7 +5078,7 @@
   ],
   "fee_projections": [
     {
-      "name": "比照先解析成金額，倍率套在金額與上限",
+      "name": "比照先解析成被比照車種的金額（無倍率，#188 第 2 層）",
       "fee": {
         "scooter": {
           "mode": "hourly",
@@ -4691,8 +5087,7 @@
           "daily_cap": 50
         },
         "heavy": {
-          "mode": "same_as_scooter",
-          "factor_pct": 150
+          "mode": "same_as_scooter"
         }
       },
       "zone": {
@@ -4715,9 +5110,9 @@
         },
         "heavy": {
           "mode": "hourly",
-          "amount": 22.5,
+          "amount": 15,
           "per_minutes": 60,
-          "daily_cap": 75
+          "daily_cap": 50
         }
       }
     },
@@ -4730,8 +5125,7 @@
           "per_minutes": 60
         },
         "heavy": {
-          "mode": "same_as_scooter",
-          "factor_pct": 200
+          "mode": "same_as_scooter"
         }
       },
       "zone": {
@@ -4747,7 +5141,7 @@
       "projected": {
         "heavy": {
           "mode": "hourly",
-          "amount": 20,
+          "amount": 10,
           "per_minutes": 60
         }
       }
@@ -4898,7 +5292,7 @@
       }
     },
     {
-      "name": "比照依時段的汽車，各段金額都套倍率",
+      "name": "比照依時段的汽車，各段照抄",
       "fee": {
         "car": {
           "mode": "by_time",
@@ -4910,17 +5304,13 @@
               "rate": {
                 "mode": "per_visit",
                 "amount": 30,
-                "extension": {
-                  "amount": 10,
-                  "max_times": 1
-                }
+                "extension_amount": 10
               }
             }
           ]
         },
         "heavy": {
-          "mode": "same_as_car",
-          "factor_pct": 200
+          "mode": "same_as_car"
         }
       },
       "zone": {
@@ -4943,11 +5333,8 @@
               "to": "20:00",
               "rate": {
                 "mode": "per_visit",
-                "amount": 60,
-                "extension": {
-                  "amount": 20,
-                  "max_times": 1
-                }
+                "amount": 30,
+                "extension_amount": 10
               }
             }
           ]
@@ -4962,10 +5349,7 @@
               "rate": {
                 "mode": "per_visit",
                 "amount": 30,
-                "extension": {
-                  "amount": 10,
-                  "max_times": 1
-                }
+                "extension_amount": 10
               }
             }
           ]
@@ -4997,6 +5381,31 @@
           "mode": "hourly",
           "amount": 40,
           "per_minutes": 60
+        }
+      }
+    },
+    {
+      "name": "比照不適用的車種：heavy 未確認",
+      "fee": {
+        "car": {
+          "mode": "not_applicable"
+        },
+        "heavy": {
+          "mode": "same_as_car"
+        }
+      },
+      "zone": {
+        "condition": {
+          "bay": "car",
+          "allow": {
+            "scooter": false,
+            "heavy": true
+          }
+        }
+      },
+      "projected": {
+        "car": {
+          "mode": "not_applicable"
         }
       }
     }
@@ -5154,7 +5563,7 @@
       "valid": true
     },
     {
-      "name": "area 不在列舉",
+      "name": "area 已移除：清單不檢查，觸發器丟掉（#188 第 2 層）",
       "zones": [
         {
           "id": "b1",
@@ -5162,7 +5571,7 @@
           "area": "bike"
         }
       ],
-      "valid": false
+      "valid": true
     },
     {
       "name": "condition 與 access 一致",
@@ -5308,7 +5717,7 @@
       "valid": true
     },
     {
-      "name": "condition 有 allow",
+      "name": "condition 可帶 allow（#188 第 2 層）",
       "segments": [
         {
           "id": "s1",
@@ -5321,7 +5730,7 @@
           }
         }
       ],
-      "valid": false
+      "valid": true
     },
     {
       "name": "condition 不合法",
@@ -5473,7 +5882,7 @@
       "valid": false
     },
     {
-      "name": "不收 fee（費率層再開）",
+      "name": "fee 可以是 {}（#188 第 2 層）",
       "segments": [
         {
           "id": "s1",
@@ -5481,7 +5890,7 @@
           "fee": {}
         }
       ],
-      "valid": false
+      "valid": true
     },
     {
       "name": "id 重複",
@@ -5707,6 +6116,99 @@
       "name": "不是陣列",
       "segments": null,
       "valid": false
+    },
+    {
+      "name": "allow 不可讓普通機車停重機格",
+      "segments": [
+        {
+          "id": "s1",
+          "name": "北側",
+          "condition": {
+            "bay": "heavy",
+            "allow": {
+              "scooter": true,
+              "heavy": true
+            }
+          }
+        }
+      ],
+      "valid": false
+    },
+    {
+      "name": "allow 可以是官方未標示",
+      "segments": [
+        {
+          "id": "s1",
+          "name": "北側",
+          "condition": {
+            "bay": "motorcycle",
+            "allow": {
+              "scooter": true,
+              "heavy": "not_stated"
+            }
+          }
+        }
+      ],
+      "valid": true
+    },
+    {
+      "name": "路段費率",
+      "segments": [
+        {
+          "id": "s1",
+          "name": "北側",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 20,
+              "per_minutes": 60
+            }
+          }
+        }
+      ],
+      "valid": true
+    },
+    {
+      "name": "路段費率形狀錯誤",
+      "segments": [
+        {
+          "id": "s1",
+          "name": "北側",
+          "fee": {
+            "scooter": {
+              "mode": "hourly"
+            }
+          }
+        }
+      ],
+      "valid": false
+    },
+    {
+      "name": "fee_plan 引用是字串",
+      "segments": [
+        {
+          "id": "s1",
+          "name": "北側",
+          "fee_plan": "p1",
+          "fee": {
+            "scooter": {
+              "mode": "free"
+            }
+          }
+        }
+      ],
+      "valid": true
+    },
+    {
+      "name": "fee_plan 不是字串",
+      "segments": [
+        {
+          "id": "s1",
+          "name": "北側",
+          "fee_plan": 1
+        }
+      ],
+      "valid": false
     }
   ],
   "bay_kinds": [
@@ -5870,6 +6372,559 @@
         }
       },
       "bay_kind": null
+    },
+    {
+      "name": "禁停不改變格位類別",
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "no_parking",
+            "periods": [
+              {
+                "days": [
+                  "mon"
+                ],
+                "from": "06:00",
+                "to": "08:00"
+              }
+            ]
+          }
+        ]
+      },
+      "bay_kind": "motorcycle"
+    }
+  ],
+  "fee_writes": [
+    {
+      "name": "三個車種都有",
+      "fee": {
+        "scooter": {
+          "mode": "hourly",
+          "amount": 20,
+          "per_minutes": 60
+        },
+        "heavy": {
+          "mode": "per_visit",
+          "amount": 30,
+          "renew": "midnight"
+        },
+        "car": {
+          "mode": "not_applicable"
+        }
+      },
+      "complete": true
+    },
+    {
+      "name": "缺汽車",
+      "fee": {
+        "scooter": {
+          "mode": "hourly",
+          "amount": 20,
+          "per_minutes": 60
+        },
+        "heavy": {
+          "mode": "per_visit",
+          "amount": 30,
+          "renew": "midnight"
+        }
+      },
+      "complete": false
+    },
+    {
+      "name": "空 fee",
+      "fee": {},
+      "complete": false
+    },
+    {
+      "name": "計次缺隔日另計",
+      "fee": {
+        "scooter": {
+          "mode": "hourly",
+          "amount": 20,
+          "per_minutes": 60
+        },
+        "heavy": {
+          "mode": "per_visit",
+          "amount": 30
+        },
+        "car": {
+          "mode": "not_applicable"
+        }
+      },
+      "complete": false
+    },
+    {
+      "name": "當日上限缺重算方式",
+      "fee": {
+        "scooter": {
+          "mode": "hourly",
+          "amount": 20,
+          "per_minutes": 60,
+          "daily_cap": 100
+        },
+        "heavy": {
+          "mode": "not_applicable"
+        },
+        "car": {
+          "mode": "not_applicable"
+        }
+      },
+      "complete": false
+    },
+    {
+      "name": "當日上限有重算方式",
+      "fee": {
+        "scooter": {
+          "mode": "hourly",
+          "amount": 20,
+          "per_minutes": 60,
+          "daily_cap": 100,
+          "cap_reset": "calendar_day"
+        },
+        "heavy": {
+          "mode": "not_applicable"
+        },
+        "car": {
+          "mode": "not_applicable"
+        }
+      },
+      "complete": true
+    },
+    {
+      "name": "兩段含計次缺跨時段",
+      "fee": {
+        "scooter": {
+          "mode": "by_time",
+          "periods": [
+            {
+              "days": "all",
+              "from": "08:00",
+              "to": "20:00",
+              "rate": {
+                "mode": "hourly",
+                "amount": 20,
+                "per_minutes": 60
+              }
+            },
+            {
+              "days": "all",
+              "from": "20:00",
+              "to": "08:00",
+              "rate": {
+                "mode": "per_visit",
+                "amount": 30,
+                "renew": "midnight"
+              }
+            }
+          ]
+        },
+        "heavy": {
+          "mode": "not_applicable"
+        },
+        "car": {
+          "mode": "not_applicable"
+        }
+      },
+      "complete": false
+    },
+    {
+      "name": "兩段含計次有跨時段",
+      "fee": {
+        "scooter": {
+          "mode": "by_time",
+          "cross_period": "entry_only",
+          "periods": [
+            {
+              "days": "all",
+              "from": "08:00",
+              "to": "20:00",
+              "rate": {
+                "mode": "hourly",
+                "amount": 20,
+                "per_minutes": 60
+              }
+            },
+            {
+              "days": "all",
+              "from": "20:00",
+              "to": "08:00",
+              "rate": {
+                "mode": "per_visit",
+                "amount": 30,
+                "renew": "midnight"
+              }
+            }
+          ]
+        },
+        "heavy": {
+          "mode": "not_applicable"
+        },
+        "car": {
+          "mode": "not_applicable"
+        }
+      },
+      "complete": true
+    },
+    {
+      "name": "一段計次不必跨時段",
+      "fee": {
+        "scooter": {
+          "mode": "by_time",
+          "periods": [
+            {
+              "days": "weekday",
+              "rate": {
+                "mode": "per_visit",
+                "amount": 30,
+                "renew": "midnight"
+              }
+            }
+          ]
+        },
+        "heavy": {
+          "mode": "not_applicable"
+        },
+        "car": {
+          "mode": "not_applicable"
+        }
+      },
+      "complete": true
+    },
+    {
+      "name": "兩段計時不必跨時段",
+      "fee": {
+        "scooter": {
+          "mode": "by_time",
+          "periods": [
+            {
+              "days": "weekday",
+              "rate": {
+                "mode": "hourly",
+                "amount": 20,
+                "per_minutes": 60
+              }
+            },
+            {
+              "days": "holiday",
+              "rate": {
+                "mode": "free"
+              }
+            }
+          ]
+        },
+        "heavy": {
+          "mode": "not_applicable"
+        },
+        "car": {
+          "mode": "not_applicable"
+        }
+      },
+      "complete": true
+    },
+    {
+      "name": "時段內計次缺隔日另計",
+      "fee": {
+        "scooter": {
+          "mode": "by_time",
+          "periods": [
+            {
+              "days": "weekday",
+              "rate": {
+                "mode": "per_visit",
+                "amount": 30
+              }
+            }
+          ]
+        },
+        "heavy": {
+          "mode": "not_applicable"
+        },
+        "car": {
+          "mode": "not_applicable"
+        }
+      },
+      "complete": false
+    },
+    {
+      "name": "比照其他車種",
+      "fee": {
+        "scooter": {
+          "mode": "hourly",
+          "amount": 20,
+          "per_minutes": 60
+        },
+        "heavy": {
+          "mode": "same_as_scooter"
+        },
+        "car": {
+          "mode": "not_applicable"
+        }
+      },
+      "complete": true
+    }
+  ],
+  "condition_writes": [
+    {
+      "name": "沒有限制",
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll"
+      },
+      "complete": true
+    },
+    {
+      "name": "限時分時段",
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "time_limit",
+            "periods": [
+              {
+                "days": "weekday",
+                "from": "07:00",
+                "to": "20:00",
+                "max_minutes": 120,
+                "extensions": 1
+              }
+            ]
+          }
+        ]
+      },
+      "complete": true
+    },
+    {
+      "name": "限時不帶欄位（舊 timedMotorcycle）",
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "limits": [
+          {
+            "kind": "time_limit"
+          }
+        ]
+      },
+      "complete": false
+    },
+    {
+      "name": "限時頂層分鐘（舊形狀）",
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "time_limit",
+            "max_minutes": 60
+          }
+        ]
+      },
+      "complete": false
+    },
+    {
+      "name": "禁停",
+      "condition": {
+        "bay": "motorcycle",
+        "use": "usual",
+        "charge": "toll",
+        "limits": [
+          {
+            "kind": "no_parking",
+            "periods": [
+              {
+                "days": [
+                  "mon"
+                ],
+                "from": "06:00",
+                "to": "08:00"
+              }
+            ]
+          }
+        ]
+      },
+      "complete": true
+    },
+    {
+      "name": "身障格",
+      "condition": {
+        "bay": "motorcycle",
+        "limits": [
+          {
+            "kind": "special_vehicle",
+            "vehicle": "disabled_modified"
+          }
+        ]
+      },
+      "complete": true
+    },
+    {
+      "name": "只有 allow 的分區",
+      "condition": {
+        "allow": {
+          "scooter": true,
+          "heavy": false
+        }
+      },
+      "complete": true
+    }
+  ],
+  "segment_fee_plans": [
+    {
+      "name": "沒有規則也沒有引用",
+      "plans": null,
+      "segments": [
+        {
+          "id": "s1",
+          "name": "北側"
+        }
+      ],
+      "valid": true
+    },
+    {
+      "name": "路段引用規則，帶規則費率的副本",
+      "plans": [
+        {
+          "id": "p1",
+          "name": "路邊計時",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 20,
+              "per_minutes": 60
+            }
+          }
+        }
+      ],
+      "segments": [
+        {
+          "id": "s1",
+          "name": "北側",
+          "fee_plan": "p1",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 20,
+              "per_minutes": 60
+            }
+          }
+        }
+      ],
+      "valid": true
+    },
+    {
+      "name": "引用不存在的規則",
+      "plans": [
+        {
+          "id": "p1",
+          "name": "路邊計時",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 20,
+              "per_minutes": 60
+            }
+          }
+        }
+      ],
+      "segments": [
+        {
+          "id": "s1",
+          "name": "北側",
+          "fee_plan": "p2",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 20,
+              "per_minutes": 60
+            }
+          }
+        }
+      ],
+      "valid": false
+    },
+    {
+      "name": "副本與規則不同",
+      "plans": [
+        {
+          "id": "p1",
+          "name": "路邊計時",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 20,
+              "per_minutes": 60
+            }
+          }
+        }
+      ],
+      "segments": [
+        {
+          "id": "s1",
+          "name": "北側",
+          "fee_plan": "p1",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 30,
+              "per_minutes": 60
+            }
+          }
+        }
+      ],
+      "valid": false
+    },
+    {
+      "name": "沒有規則卻引用",
+      "plans": null,
+      "segments": [
+        {
+          "id": "s1",
+          "name": "北側",
+          "fee_plan": "p1",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 20,
+              "per_minutes": 60
+            }
+          }
+        }
+      ],
+      "valid": false
+    },
+    {
+      "name": "路段自己寫費率",
+      "plans": [
+        {
+          "id": "p1",
+          "name": "路邊計時",
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 20,
+              "per_minutes": 60
+            }
+          }
+        }
+      ],
+      "segments": [
+        {
+          "id": "s1",
+          "name": "北側",
+          "fee": {
+            "scooter": {
+              "mode": "free"
+            }
+          }
+        }
+      ],
+      "valid": true
     }
   ]
 }

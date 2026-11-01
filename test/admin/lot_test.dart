@@ -165,12 +165,15 @@ void main() {
     });
 
     test('規則名稱、數量與比照缺值都會擋（#155 第 13 項）', () {
-      expect(plansProblem([...plans]), isNull);
+      // Stored plans are old data; a new or changed one is written whole
+      // (#188 layer 2).
+      expect(plansProblem([...plans], plans), isNull);
+      expect(plansProblem([...plans]), contains('三個車種都要選收費方式'));
       expect(
         plansProblem([
           ...plans,
           {'id': 'p3', 'name': '機車計時', 'fee': heavyHourly},
-        ]),
+        ], plans),
         contains('重複'),
       );
       expect(
@@ -225,6 +228,9 @@ void main() {
       expect(spots.dirty, isFalse);
       const fifteen = Fee(
         scooter: Rate(FeeMode.hourly, amount: 15, perMinutes: 60),
+        // Its zones let heavy bikes park: never 不適用 (PM_ANS_20261101_55).
+        heavy: Rate(FeeMode.sameAsScooter),
+        car: Rate(FeeMode.notApplicable),
       );
       spots.setPlan('p1', '機車計時', fifteen);
       expect(spots.zones[2]['fee'], fifteen.toJson());
@@ -546,7 +552,11 @@ void main() {
             field: 'fee_note',
             proposed: const {
               'fee': {
-                'scooter': {'mode': 'per_visit', 'amount': 20},
+                'scooter': {
+                  'mode': 'per_visit',
+                  'amount': 20,
+                  'renew': 'midnight',
+                },
                 'car': {'mode': 'hourly', 'amount': 40, 'per_minutes': 60},
               },
             },
@@ -613,5 +623,35 @@ void main() {
         expect((patch['fee_plans'] as List).last['name'], '機車重機汽車混合');
       });
     }
+  });
+
+  test('可停的車種不能存成「不適用」（PM_ANS_20261101_55）', () {
+    const fee = {
+      'scooter': {'mode': 'not_applicable'},
+      'heavy': {'mode': 'hourly', 'amount': 20, 'per_minutes': 60},
+      'car': {'mode': 'not_applicable'},
+    };
+    expect(
+      notApplicableProblem(fee, {'scooter': true, 'heavy': true}),
+      '普通機車可以停，收費方式不能選「不適用」',
+    );
+    expect(
+      notApplicableProblem(fee, {'scooter': false, 'heavy': true}),
+      isNull,
+    );
+    expect(
+      zoneProblem({
+        'name': 'B1',
+        'access': 'scooterHeavy',
+        'condition': {
+          'bay': 'motorcycle',
+          'use': 'share',
+          'share': 'scooter_heavy',
+          'allow': {'scooter': true, 'heavy': true},
+        },
+        'fee': fee,
+      }),
+      '「B1」普通機車可以停，收費方式不能選「不適用」',
+    );
   });
 }

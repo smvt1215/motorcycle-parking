@@ -9,12 +9,12 @@ select ok(valid_zone_fees('[{"name":"B2","fee":{"scooter":{"mode":"free"},"heavy
 select ok(valid_zone_fees('[{"name":"B2","fee":{"car":{"mode":"free"}}}]'),'zones carry car rates with fee v2');
 select ok(not valid_zone_fees('[{"name":"B2","fee":{"bus":{"mode":"free"}}}]'),'zone cannot introduce unknown vehicles');
 select ok(not valid_zone_fees('[{"name":"B2","fee":{"heavy":{"mode":"hourly","amount":20}}}]'),'zone hourly rate needs a period');
-select ok(not valid_zone_fees('[{"name":"B2","fee":{"heavy":{"mode":"daily","amount":-1}}}]'),'zone amount cannot be negative');
+select ok(not valid_zone_fees('[{"name":"B2","fee":{"heavy":{"mode":"per_visit","amount":-1,"renew":"midnight"}}}]'),'zone amount cannot be negative');
 select ok(not valid_zone_fees('[{"name":"B2","fee":{"scooter":{"mode":"same_as_car"}}}]'),'only heavy bikes follow another vehicle');
 
 create temporary table zone_target as select (public.apply_report('10000000-0000-4000-8000-000000000001',repeat('a',64),repeat('a',64),
   '{"action":"create","spot":{"scooter_allowed":true,"heavy_allowed":true,"name":"分區費率測試","lat":25.09,"lng":121.61,"city":"臺北市","space_type":"offStreet",
-    "fee":{"heavy":{"mode":"daily","amount":80}},
+    "fee":{"heavy":{"mode":"per_visit","amount":80,"renew":"midnight"}},
     "parking_zones":[{"name":"B2","access":"scooterHeavy","fee":{"scooter":{"mode":"free"},"heavy":{"mode":"hourly","amount":20,"per_minutes":30}}}]}}')->>'id')::uuid as id;
 select is((select parking_zones->0->'fee'->'heavy'->>'amount' from community_spots where id=(select id from zone_target)),'20','create RPC preserves zone fee');
 grant select on zone_target to anon,authenticated;
@@ -22,7 +22,7 @@ grant select on zone_target to anon,authenticated;
 -- A lot: street spots have no zones (202610270010_parking_conditions.sql).
 insert into official_heavy_spots(id,name,lat,lng,city,space_type,source_url,effective_date,fee,parking_zones)
 values('74000000-0000-4000-8000-000000000001','官方分區費率',25.09,121.61,'臺北市','offStreet','https://example.test/zone-fees',current_date,
-  '{"heavy":{"mode":"daily","amount":60}}','[{"name":"機車區","fee":{"heavy":{"mode":"free"}}}]');
+  '{"heavy":{"mode":"per_visit","amount":60,"renew":"midnight"}}','[{"name":"機車區","fee":{"heavy":{"mode":"free"}}}]');
 
 set local role anon;
 select is((select fee->'heavy'->>'amount' from viewport_spots_v2(25.08,121.60,25.10,121.62) where id=(select id from zone_target)),'80','v2 community viewport returns point fee');

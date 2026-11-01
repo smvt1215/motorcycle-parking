@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 import '../core/address_search.dart';
+import '../core/app_check.dart';
 import '../models/holiday_calendar.dart';
 import '../models/parking.dart';
 import '../models/spot_history.dart';
@@ -101,8 +102,12 @@ class ParkingResult {
 }
 
 class ParkingRepository {
-  ParkingRepository(this.client);
+  ParkingRepository(this.client, {AppCheckTokenSource? appCheckToken})
+    : _appCheckToken = appCheckToken ?? AppCheck.token;
   final SupabaseClient? client;
+
+  /// The App Check token sent with reports (#203); none leaves them as is.
+  final AppCheckTokenSource _appCheckToken;
   List<ParkingSpot>? _demoSpots;
 
   /// Reads [name]'s newest variant in [viewportVariants] this backend has;
@@ -191,6 +196,7 @@ class ParkingRepository {
       final res = await client!.functions.invoke(
         'submit-report',
         body: {...body, 'device_id': deviceId},
+        headers: await AppCheck.headers(_appCheckToken),
       );
       return res.data as Map<String, dynamic>;
     } on FunctionException catch (e) {

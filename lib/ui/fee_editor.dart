@@ -48,7 +48,7 @@ Fee _known(Fee fee) {
 /// is none yet; the flag marks one still being filled in.
 (String, bool) _summary(Fee fee, FeeVehicle v) {
   final rate = _rateOf(fee, v);
-  if (rate == null) return ('未確認', false);
+  if (rate == null) return ('未提供', false);
   if (!_rateValid(rate, v)) return ('還沒填完', true);
   return (_known(fee).textOf(v.wire) ?? '費率未提供', false);
 }
@@ -78,8 +78,14 @@ class FeeEditor extends StatefulWidget {
     this.errorText,
     this.showPreview = true,
     this.initialVehicle,
+    this.requireComplete = true,
   });
   final Fee value;
+
+  /// Whether a fee with any vehicle must name all three and answer every
+  /// rule (a new write, #188 layer 2). Off where an import's partial fee is
+  /// shown as it is.
+  final bool requireComplete;
   final ValueChanged<Fee> onChanged;
 
   /// A whole-fee error from the caller's own check, shown under the preview.
@@ -116,7 +122,27 @@ class _FeeEditorState extends State<FeeEditor> {
       for (final v in FeeVehicle.values)
         if (_rateOf(fee, v) case final rate? when !_rateValid(rate, v)) v.label,
     ];
-    if (bad.isNotEmpty) return '${bad.join('、')}的費率還沒填完，請填好或改回「未確認」';
+    if (bad.isNotEmpty) return '${bad.join('、')}的費率還沒填完，請填好';
+    // A fee written at all names every vehicle and answers every rule
+    // (#188 layer 2, fee.write; PM_ANS_20261101_55): 不適用 for one without
+    // bays here.
+    if (widget.requireComplete && !fee.isEmpty) {
+      final missing = [
+        for (final v in FeeVehicle.values)
+          if (_rateOf(fee, v) == null) v.label,
+      ];
+      if (missing.isNotEmpty) {
+        return '請選${missing.join('、')}的收費方式；這裡沒有這種車的格位就選「不適用」';
+      }
+      final open = [
+        for (final v in FeeVehicle.values)
+          if (_rateOf(fee, v) case final rate? when !rate.writeComplete)
+            v.label,
+      ];
+      if (open.isNotEmpty) {
+        return '${open.join('、')}還有規則沒選（跨日怎麼收、上限何時重新計算或停到下一個時段時）';
+      }
+    }
     return _followGap(fee);
   }
 
@@ -563,8 +589,9 @@ class _Legend extends StatelessWidget {
   );
 }
 
-/// A three-way choice whose last answer is 未確認 (design §2.5): a radio
-/// per answer, 未確認 chosen while nothing is known.
+/// A choice of answers, none chosen while nothing is known (design §2.5;
+/// #188 layer 2 drops the 未確認 answer: an old value without one must be
+/// answered before saving).
 class _ThreeWay extends StatelessWidget {
   const _ThreeWay({
     required this.legend,
@@ -585,18 +612,18 @@ class _ThreeWay extends StatelessWidget {
     children: [
       _Legend(legend),
       RadioGroup<String>(
-        groupValue: value ?? 'unknown',
-        onChanged: (v) => onChanged(v == 'unknown' ? null : v),
+        groupValue: value,
+        onChanged: onChanged,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            for (final (wire, text) in [...options, ('unknown', '未確認')])
+            for (final (wire, text) in options)
               // A 48 px row, the whole of it a target (canvas: one radio
               // and its words per line).
               MergeSemantics(
                 child: InkWell(
                   key: ValueKey('$keyPrefix-$wire'),
-                  onTap: () => onChanged(wire == 'unknown' ? null : wire),
+                  onTap: () => onChanged(wire),
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(minHeight: 48),
                     child: Row(
@@ -646,11 +673,11 @@ class _FieldRow extends StatelessWidget {
 }
 
 String _modeLabel(FeeMode? mode) => switch (mode) {
-  null || FeeMode.posted => '未確認',
+  null => '未提供',
+  FeeMode.notApplicable => '不適用',
   FeeMode.free => '免費',
   FeeMode.hourly => '計時',
   FeeMode.perVisit => '計次',
-  FeeMode.daily => '每日',
   FeeMode.byTime => '依時段不同',
   FeeMode.sameAsScooter || FeeMode.sameAsCar => '比照其他車種',
 };
@@ -664,15 +691,11 @@ Rate _edit(
   Object? amount = _keep,
   Object? perMinutes = _keep,
   Object? dailyCap = _keep,
-  Object? maxMinutes = _keep,
-  Object? unitMinutes = _keep,
-  Object? freeMinutes = _keep,
   Object? capReset = _keep,
   Object? renew = _keep,
-  Object? extension = _keep,
+  Object? extensionAmount = _keep,
   Object? periods = _keep,
   Object? crossPeriod = _keep,
-  Object? factorPct = _keep,
 }) {
   T? pick<T>(Object? v, T? old) => identical(v, _keep) ? old : v as T?;
   return Rate(
@@ -680,23 +703,16 @@ Rate _edit(
     amount: pick(amount, r.amount),
     perMinutes: pick(perMinutes, r.perMinutes),
     dailyCap: pick(dailyCap, r.dailyCap),
-    maxMinutes: pick(maxMinutes, r.maxMinutes),
-    unitMinutes: pick(unitMinutes, r.unitMinutes),
-    freeMinutes: pick(freeMinutes, r.freeMinutes),
     capReset: pick(capReset, r.capReset),
     renew: pick(renew, r.renew),
-    extension: pick(extension, r.extension),
+    extensionAmount: pick(extensionAmount, r.extensionAmount),
     periods: pick(periods, r.periods),
     crossPeriod: pick(crossPeriod, r.crossPeriod),
-    factorPct: pick(factorPct, r.factorPct),
   );
 }
 
 bool _simple(FeeMode? m) =>
-    m == FeeMode.free ||
-    m == FeeMode.hourly ||
-    m == FeeMode.perVisit ||
-    m == FeeMode.daily;
+    m == FeeMode.free || m == FeeMode.hourly || m == FeeMode.perVisit;
 
 /// The rate a mode starts from, keeping what [old] already has.
 Rate _switchTo(FeeMode mode, Rate? old, Fee fee) {
@@ -705,10 +721,7 @@ Rate _switchTo(FeeMode mode, Rate? old, Fee fee) {
     final known = _known(fee);
     final scooter = known.textOf('scooter') != null;
     final car = known.textOf('car') != null;
-    return Rate(
-      !scooter && car ? FeeMode.sameAsCar : FeeMode.sameAsScooter,
-      factorPct: old?.factorPct,
-    );
+    return Rate(!scooter && car ? FeeMode.sameAsCar : FeeMode.sameAsScooter);
   }
   if (mode == FeeMode.byTime) {
     return const Rate(
@@ -718,13 +731,12 @@ Rate _switchTo(FeeMode mode, Rate? old, Fee fee) {
       ],
     );
   }
+  if (mode == FeeMode.notApplicable) return const Rate(FeeMode.notApplicable);
   final base = old != null && _simple(old.mode) ? old : Rate(mode);
   return _edit(
     base,
     mode: mode,
     perMinutes: mode == FeeMode.hourly ? base.perMinutes ?? 60 : _keep,
-    // An hourly cap's reset is not a daily charge's: each mode answers it.
-    capReset: base.mode == mode ? _keep : null,
   );
 }
 
@@ -755,12 +767,12 @@ class RateEditor extends StatelessWidget {
         _Choices<FeeMode?>(
           label: '收費方式',
           values: [
+            // F1 公告牌怎麼寫 (#188 layer 2): 未確認 is gone; 不適用 first.
             for (final m in [
-              null,
+              FeeMode.notApplicable,
               FeeMode.free,
               FeeMode.hourly,
               FeeMode.perVisit,
-              FeeMode.daily,
               FeeMode.byTime,
               if (vehicle == FeeVehicle.heavy) FeeMode.sameAsScooter,
             ])
@@ -777,11 +789,20 @@ class RateEditor extends StatelessWidget {
                 final m => m.wire,
               }}',
           onSelect: (m) {
-            if (m == null) return onChanged(null);
+            if (m == null) return;
             if (m == mode || (m.follows && follows)) return;
             onChanged(_switchTo(m, value, fee));
           },
         ),
+        if (mode == null)
+          Text(
+            '這裡沒有這種車的格位就選「不適用」。',
+            key: ValueKey('fee-not-applicable-hint-$w'),
+            style: TextStyle(
+              fontSize: 12,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
         if (vehicle == FeeVehicle.heavy && !follows && !_canFollow(fee))
           Text(
             '普通機車或汽車有費率後，才能選「比照其他車種」。',
@@ -820,9 +841,6 @@ class RateEditor extends StatelessWidget {
 
 /// Billing periods offered for hourly rates, in minutes.
 const _periods = [15, 30, 60, 120, 180, 240, 360, 480, 720, 1440];
-
-/// Valid times, billing units and extensions offered, in minutes.
-const _spans = [10, 15, 20, 30, 60, 120, 180, 240, 360, 480, 720, 1440];
 
 /// [options] plus the stored [current] value when it is another valid one
 /// (the column takes any 1–1440 minutes), so it shows as chosen.
@@ -870,11 +888,8 @@ class SimpleRateFields extends StatefulWidget {
 class _SimpleRateFieldsState extends State<SimpleRateFields> {
   late final amount = TextEditingController(text: _shown(widget.rate.amount));
   late final cap = TextEditingController(text: _shown(widget.rate.dailyCap));
-  late final free = TextEditingController(
-    text: _shown(widget.rate.freeMinutes),
-  );
   late final extAmount = TextEditingController(
-    text: _shown(widget.rate.extension?.amount),
+    text: _shown(widget.rate.extensionAmount),
   );
   bool more = false;
 
@@ -887,7 +902,7 @@ class _SimpleRateFieldsState extends State<SimpleRateFields> {
     super.initState();
     // Reopened after unreadable text in an optional field: the field shows
     // empty, so the rate drops the mark too instead of staying unfinished.
-    if ((rate.dailyCap ?? 0) < 0 || (rate.freeMinutes ?? 0) < 0) {
+    if ((rate.dailyCap ?? 0) < 0 || (rate.extensionAmount ?? 0) < 0) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         emit(
@@ -895,7 +910,7 @@ class _SimpleRateFieldsState extends State<SimpleRateFields> {
             rate,
             dailyCap: (rate.dailyCap ?? 0) < 0 ? null : _keep,
             capReset: (rate.dailyCap ?? 0) < 0 ? null : _keep,
-            freeMinutes: (rate.freeMinutes ?? 0) < 0 ? null : _keep,
+            extensionAmount: (rate.extensionAmount ?? 0) < 0 ? null : _keep,
           ),
         );
       });
@@ -906,7 +921,6 @@ class _SimpleRateFieldsState extends State<SimpleRateFields> {
   void dispose() {
     amount.dispose();
     cap.dispose();
-    free.dispose();
     extAmount.dispose();
     super.dispose();
   }
@@ -962,7 +976,6 @@ class _SimpleRateFieldsState extends State<SimpleRateFields> {
 
   List<(CapReset?, String)> get resets => [
     for (final r in CapReset.values) (r, FeeWords.reset(r)!),
-    (null, '未確認'),
   ];
 
   Widget amountField(String label) => numberField(
@@ -974,34 +987,13 @@ class _SimpleRateFieldsState extends State<SimpleRateFields> {
     onChanged: (t) => emit(_edit(rate, amount: int.tryParse(t.trim()))),
   );
 
-  FeeExtension _ext({
-    Object? amount = _keep,
-    int? maxTimes,
-    Object? minutes = _keep,
-  }) {
-    final e = rate.extension!;
-    return FeeExtension(
-      amount: identical(amount, _keep) ? e.amount : amount! as int,
-      maxTimes: maxTimes ?? e.maxTimes,
-      minutes: identical(minutes, _keep) ? e.minutes : minutes as int?,
-    );
-  }
-
   /// The optional rules already set, named under 更多收費規則 so a closed
   /// section never hides data (§8.5 item 3).
   List<String> get setRules => [
-    if (rate.mode == FeeMode.hourly) ...[
-      if (rate.freeMinutes case final m? when m > 0)
-        '首 ${FeeWords.span(m)} 0 元',
-      if (rate.unitMinutes case final m? when m > 0) '以 ${FeeWords.span(m)}計',
+    if (rate.mode == FeeMode.hourly)
       if (rate.dailyCap case final c? when c >= 0) '當日上限 $c 元',
-    ],
-    if (rate.mode == FeeMode.perVisit) ...[
-      if (rate.maxMinutes case final m?) '有效時間 ${FeeWords.span(m)}',
-      if (rate.extension != null) '可延長',
-    ],
-    if (rate.mode == FeeMode.daily && rate.capReset != null)
-      FeeWords.reset(rate.capReset)!,
+    if (rate.mode == FeeMode.perVisit)
+      if (rate.extensionAmount case final a? when a >= 0) '延長每次 $a 元',
   ];
 
   @override
@@ -1017,50 +1009,13 @@ class _SimpleRateFieldsState extends State<SimpleRateFields> {
         up.add(
           _FieldRow([
             amountField('金額'),
-            dropdown<int>(
-              'per',
-              '計費時間',
-              per,
-              [
-                for (final m in _withCurrent(_periods, rate.perMinutes))
-                  (m, FeeWords.every(m)),
-              ],
-              (v) => emit(
-                _edit(
-                  rate,
-                  perMinutes: v,
-                  // A unit longer than the period is out of range.
-                  unitMinutes: (rate.unitMinutes ?? 0) > (v ?? 60)
-                      ? null
-                      : _keep,
-                ),
-              ),
-            ),
+            dropdown<int>('per', '計費時間', per, [
+              for (final m in _withCurrent(_periods, rate.perMinutes))
+                (m, FeeWords.every(m)),
+            ], (v) => emit(_edit(rate, perMinutes: v))),
           ]),
         );
         rules.addAll([
-          numberField(
-            'free',
-            '前幾分鐘 0 元',
-            free,
-            suffix: '分鐘',
-            helper: '公告寫「首 20 分鐘 0 元」時填這裡，這不是免費格',
-            validator: (v) {
-              final n = _optional(v ?? '');
-              return n == null || (n >= 1 && n <= 1440)
-                  ? null
-                  : '請填 1 到 1440 的整數';
-            },
-            onChanged: (t) => emit(_edit(rate, freeMinutes: _optional(t))),
-          ),
-          dropdown<int?>('unit', '計費單位', rate.unitMinutes, [
-            for (final m in _withCurrent(
-              _spans.where((m) => m <= per),
-              rate.unitMinutes,
-            ))
-              (m, '以 ${FeeWords.span(m)}計'),
-            (null, '未確認'),
-          ], (v) => emit(_edit(rate, unitMinutes: v))),
           _FieldRow([
             numberField(
               'cap',
@@ -1092,14 +1047,11 @@ class _SimpleRateFieldsState extends State<SimpleRateFields> {
         ]);
       case FeeMode.perVisit:
         up.addAll([
-          amountField('每次金額'),
+          amountField('首次多少錢'),
           _ThreeWay(
             legend: '跨日怎麼收',
             keyPrefix: 'fee-renew-$k',
-            options: [
-              ('midnight', '隔日另計'),
-              ('none', rate.maxMinutes == null ? '停多久都只收一次' : '有效時間內只收一次'),
-            ],
+            options: const [('midnight', '隔日另計'), ('none', '停多久都只收一次')],
             value: rate.renew?.wire,
             onChanged: (v) => emit(
               _edit(
@@ -1109,64 +1061,17 @@ class _SimpleRateFieldsState extends State<SimpleRateFields> {
             ),
           ),
         ]);
-        final ext = rate.extension;
         rules.addAll([
-          dropdown<int?>('max', '有效時間（一次可停多久）', rate.maxMinutes, [
-            for (final m in _withCurrent(_spans, rate.maxMinutes))
-              (m, FeeWords.span(m)),
-            (null, '未確認'),
-          ], (v) => emit(_edit(rate, maxMinutes: v))),
-          CheckboxListTile(
-            key: ValueKey('fee-ext-$k'),
-            value: ext != null,
-            contentPadding: EdgeInsets.zero,
-            controlAffinity: ListTileControlAffinity.leading,
-            title: const Text('可付費延長', style: TextStyle(fontSize: 14)),
-            onChanged: (on) => emit(
-              _edit(
-                rate,
-                extension: on ?? false
-                    ? FeeExtension(
-                        amount: _optional(extAmount.text) ?? -1,
-                        maxTimes: 1,
-                      )
-                    : null,
-              ),
-            ),
+          numberField(
+            'ext-amount',
+            '延長每次多少錢',
+            extAmount,
+            suffix: '元',
+            helper: '每次限停多久、可延長幾次在「限時」設定，不在費率裡',
+            validator: (v) => _yuan(v, required: false),
+            onChanged: (t) => emit(_edit(rate, extensionAmount: _optional(t))),
           ),
-          if (ext != null)
-            _FieldRow([
-              numberField(
-                'ext-amount',
-                '每次延長金額',
-                extAmount,
-                suffix: '元',
-                validator: (v) => _yuan(v, required: true),
-                onChanged: (t) => emit(
-                  _edit(rate, extension: _ext(amount: _optional(t) ?? -1)),
-                ),
-              ),
-              dropdown<int>('ext-times', '最多延長幾次', ext.maxTimes, [
-                for (var n = 1; n <= 10; n++) (n, '$n 次'),
-              ], (v) => emit(_edit(rate, extension: _ext(maxTimes: v)))),
-              dropdown<int?>('ext-minutes', '每次延長多久', ext.minutes, [
-                for (final m in _withCurrent(_spans, ext.minutes))
-                  (m, FeeWords.span(m)),
-                (null, '未確認'),
-              ], (v) => emit(_edit(rate, extension: _ext(minutes: v)))),
-            ]),
         ]);
-      case FeeMode.daily:
-        up.add(amountField('每日金額'));
-        rules.add(
-          dropdown<CapReset?>(
-            'cap-reset',
-            '何時重新計算',
-            rate.capReset,
-            resets,
-            (v) => emit(_edit(rate, capReset: v)),
-          ),
-        );
       default:
     }
     final set = setRules;
@@ -1202,27 +1107,8 @@ class _SimpleRateFieldsState extends State<SimpleRateFields> {
   }
 }
 
-String _factorText(int? pct) {
-  final p = pct ?? 100;
-  if (p % 100 == 0) return '${p ~/ 100}';
-  return p % 10 == 0
-      ? (p / 100).toStringAsFixed(1)
-      : (p / 100).toStringAsFixed(2);
-}
-
-/// The factor typed as 1–10 with at most two decimals, as `factor_pct`:
-/// null for once, -1 when out of range.
-int? _factorPct(String text) {
-  final t = text.trim();
-  if (t.isEmpty) return null;
-  if (!RegExp(r'^\d+(\.\d{1,2})?$').hasMatch(t)) return -1;
-  final pct = (double.parse(t) * 100).round();
-  if (pct < 100 || pct > 1000) return -1;
-  return pct == 100 ? null : pct;
-}
-
 /// 比照其他車種 (canvas FeeSameAs): which vehicle the heavy bike pays the
-/// same as, only one whose rate is known, and how many times it.
+/// same as, only one whose rate is known; no factor (#188 layer 2).
 class _FollowFields extends StatefulWidget {
   const _FollowFields({
     required this.rate,
@@ -1238,16 +1124,6 @@ class _FollowFields extends StatefulWidget {
 }
 
 class _FollowFieldsState extends State<_FollowFields> {
-  late final factor = TextEditingController(
-    text: _factorText(widget.rate.factorPct),
-  );
-
-  @override
-  void dispose() {
-    factor.dispose();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -1279,27 +1155,12 @@ class _FollowFieldsState extends State<_FollowFields> {
                   contentPadding: EdgeInsets.zero,
                   title: Text(v.label, style: const TextStyle(fontSize: 14)),
                   subtitle: Text(
-                    known.textOf(v.wire) ?? '費率未確認，不能選',
+                    known.textOf(v.wire) ?? '費率未提供，不能選',
                     style: const TextStyle(fontSize: 13),
                   ),
                 ),
             ],
           ),
-        ),
-        const SizedBox(height: 8),
-        TextFormField(
-          key: const ValueKey('fee-factor'),
-          controller: factor,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: InputDecoration(
-            labelText: '是${source.label}費率的幾倍',
-            suffixText: '倍',
-            errorMaxLines: 3,
-          ),
-          validator: (v) =>
-              _factorPct(v ?? '') == -1 ? '請填 1 到 10 的數字，最多兩位小數' : null,
-          onChanged: (t) =>
-              widget.onChanged(_edit(widget.rate, factorPct: _factorPct(t))),
         ),
         const SizedBox(height: 8),
         Text(
@@ -1339,15 +1200,18 @@ class _ByTimeFieldsState extends State<_ByTimeFields> {
 
   List<FeePeriod> get periods => widget.rate.periods ?? const [];
 
+  /// 停到下一個時段時 is asked once a per-visit period has another period to
+  /// cross into (#188 layer 2, C7: 有計次且時段 ≥2 段).
+  static bool _asksCross(List<FeePeriod> list) =>
+      list.length >= 2 && list.any((p) => p.rate.mode == FeeMode.perVisit);
+
   void emit(List<FeePeriod> list) {
-    final visits = list.where((p) => p.rate.mode == FeeMode.perVisit).length;
     widget.onChanged(
       _edit(
         widget.rate,
         periods: list,
-        // The choice shows only with two per-visit periods; it never stays
-        // behind once hidden.
-        crossPeriod: visits >= 2 ? _keep : null,
+        // It never stays behind once hidden.
+        crossPeriod: _asksCross(list) ? _keep : null,
       ),
     );
   }
@@ -1364,7 +1228,6 @@ class _ByTimeFieldsState extends State<_ByTimeFields> {
       ids.add(next++);
     }
     final gaps = feeGaps(list);
-    final visits = list.where((p) => p.rate.mode == FeeMode.perVisit).length;
     final maxEntries =
         (feeContract['periods']! as Map<String, Object?>)['max_entries']!
             as int;
@@ -1420,8 +1283,8 @@ class _ByTimeFieldsState extends State<_ByTimeFields> {
           _GapsNote(keyPrefix: k, gaps: gaps, brief: feeGapsBrief(list)),
           const SizedBox(height: 4),
         ],
-        Text('國定假日依當天是星期幾計費。沒有被設定包含到的日子和時間，App 顯示「費率未確認」。', style: muted),
-        if (visits >= 2) ...[
+        Text('國定假日依當天是星期幾計費。沒有被設定包含到的日子和時間，App 顯示「未提供」。', style: muted),
+        if (_asksCross(list)) ...[
           const SizedBox(height: 8),
           _ThreeWay(
             legend: '停到下一個時段時',
@@ -1576,7 +1439,7 @@ class _PeriodCardState extends State<_PeriodCard> {
     final mask = FeeWords.dayMask(p.days);
     final allDay = p.from == null && p.to == null;
     final valid = validRate(p.rate.toJson(), 'car', nested: true);
-    final summary = valid ? (Fee(car: p.rate).textOf('car') ?? '未確認') : '還沒填完';
+    final summary = valid ? (Fee(car: p.rate).textOf('car') ?? '未提供') : '還沒填完';
     final k = widget.keyPrefix;
     final dayChoice = pickDays ? 'pick' : p.days as String;
     return Container(
@@ -1719,7 +1582,6 @@ class _PeriodCardState extends State<_PeriodCard> {
                         FeeMode.free,
                         FeeMode.hourly,
                         FeeMode.perVisit,
-                        FeeMode.daily,
                       ])
                         (m, _modeLabel(m)),
                     ],

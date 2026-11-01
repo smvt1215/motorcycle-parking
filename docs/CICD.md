@@ -218,7 +218,7 @@ staging 設定已於 2026-10-24 完成，並以真實 Google 登入＋TOTP 取�
        - 對應的服務帳號只給 **Firebase App Distribution Admin** 角色。
        - 已確認 Firebase CLI 能使用這種外部帳號憑證（staging 的 APK、IPA 與管理站部署都以此認證），不需服務帳號 JSON 金鑰。
      - **IPA 不上傳為 GitHub artifact**：Ad Hoc IPA 內嵌的 provisioning profile（`embedded.mobileprovision`）的 `ProvisionedDevices` 列出**所有測試裝置的 UDID**（[Apple TN3125](https://developer.apple.com/documentation/technotes/tn3125-inside-code-signing-provisioning-profiles)），公開 repo 的 artifact 任何登入 GitHub 的人都能下載。Firebase 上的版本只有受邀的測試者看得到；原始 IPA 不放進快取，job 結束即隨 runner 銷毀。
-     - Firebase 上的版本保留 150 天後過期；APP 不需要整合 Firebase SDK。
+     - Firebase 上的版本保留 150 天後過期；App Distribution 本身不需要 Firebase SDK（APP 內的 Firebase 只用於 App Check，見下方〈App Check〉）。
    - **測試者 OTA 安裝**（在 iPhone 上完成，不需要 Mac）：
      1. 第一次：在 iPhone 的 Safari 開啟 Firebase 的邀請 email（邀請 30 天內有效），以 Google 帳號登入並接受邀請。
      2. 依頁面指示「註冊裝置」，安裝 Firebase 的描述檔；描述檔會把該 iPhone 的 UDID 回報給 Firebase，並以 email 通知專案擁有者。
@@ -310,6 +310,41 @@ staging 設定已於 2026-10-24 完成，並以真實 Google 登入＋TOTP 取�
 - 任何金鑰都不進 repo。
 - PR 的 CI 不使用任何 secret：來自 fork 的 PR 拿不到，CI 也不需要。
 - 只有 `main` 與 tag 的流程讀得到 Environment secrets。
+
+## App Check（#203）
+寫入端點以 Firebase App Check 確認請求來自自家 APP。後端驗證 `X-Firebase-AppCheck` header（`supabase/functions/_shared/app_check.ts`）；`APP_CHECK_MODE=log` 時只記錄結果、不擋請求。
+
+### dart-define
+不使用 `google-services.json`、`GoogleService-Info.plist` 或 `flutterfire configure` 產生的檔案；`tool/cd_config.py` 依平台把下列值寫進 `config/<環境>.json`，再以 `--dart-define-from-file` 帶入：
+
+| dart-define | 來源 |
+|---|---|
+| `FIREBASE_API_KEY` | Environment variable `FIREBASE_ANDROID_API_KEY`／`FIREBASE_IOS_API_KEY`（只開 App Check 與 Installations API） |
+| `FIREBASE_APP_ID` | Environment variable `FIREBASE_ANDROID_APP_ID`／`FIREBASE_IOS_APP_ID` |
+| `FIREBASE_MESSAGING_SENDER_ID` | 由 App ID 中間的專案編號取出（staging：`815509193159`） |
+| `FIREBASE_PROJECT_ID` | Environment variable `FIREBASE_PROJECT_ID`；staging 未設定時用 `motocycle-parking-guide`，production 沒有預設值 |
+| `APP_CHECK_DEBUG_TOKEN` | 選用，只給本機 debug build 指定已註冊的 debug token；不放進 repo 或 CI |
+
+- 該平台的 API key 與 App ID 都沒設定時（本機、PR CI、web、管理站、production 尚未設定）APP 不初始化 Firebase，照常運作，只是不送 token；只設定其中一項、App ID 平台不符，或缺 `FIREBASE_PROJECT_ID` 時，設定檢查會報錯。
+- `cd-staging.yml` 的 Android、iOS job 各自帶該平台的 key 與 App ID；`release.yml` 以同樣名稱讀取 production Environment，尚未設定時 production 建置停用 App Check。
+
+### Provider
+| 建置 | Android | iOS |
+|---|---|---|
+| debug | debug provider | debug provider |
+| profile／release（含 staging） | Play Integrity | App Attest（不支援時退回 DeviceCheck） |
+
+- iOS release／profile 設定使用 `ios/Runner/Runner.entitlements`（`com.apple.developer.devicecheck.appattest-environment = production`）。Apple Developer 的 App ID（staging 與 production 各一）必須啟用 **App Attest** capability，並重新產生 provisioning profile、更新 `IOS_PROFILE_BASE64`；舊 profile 沒有此 entitlement，簽章會失敗。
+- APP 取 token 最多等 3 秒（`lib/core/app_check.dart`）；失敗、逾時或未啟用時不帶 header，照常送出，由後端依模式決定。
+
+### 註冊 debug token
+1. 以 debug 模式帶入 Firebase 的 dart-define 執行 APP（例如 `--dart-define-from-file` 指向本機、不進版控的設定檔）。
+2. 第一次送出回報時，SDK 會在裝置 log 印出 debug token：Android 在 Logcat 搜尋 `DebugAppCheckProvider`；iOS 先在 Xcode scheme 的 Run → Arguments 加上 `-FIRDebugEnabled`，再於 console 搜尋 `Firebase App Check Debug Token`。也可以自己產生一組 UUID，先註冊再以 `--dart-define=APP_CHECK_DEBUG_TOKEN=<UUID>` 帶入，每次重裝都沿用同一組。
+3. 到 Firebase Console → App Check → 應用程式 → 該 APP 的選單 →「管理偵錯權杖」，加入該 token 並命名裝置。
+4. token 等同通行證：只存在個人裝置或私人密碼管理工具，不貼進 issue、PR 或 repo；裝置不再使用時從 Console 刪除。
+
+### 限制：維持 log 模式
+Play Integrity 只認得從 Google Play 安裝的 APP。staging 的 APK 經 Firebase App Distribution 側載，拿到的 token 會被判為無效；iOS Ad Hoc 版本的 App Attest 也要等 profile 更新後才有效。因此 staging 維持 `APP_CHECK_MODE=log`，等正式版從商店安裝、且 log 中有效比例足夠後，再評估改為 `enforce`。
 
 ## 供應鏈安全
 - 第三方 GitHub Action 一律**釘選到 commit SHA**（不用 `@v4` 這類可變標籤）。

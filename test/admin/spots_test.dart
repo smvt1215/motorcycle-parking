@@ -551,7 +551,48 @@ void main() {
             'use': 'usual',
             'charge': 'toll',
             'limits': [
-              {'kind': 'time_limit', 'max_minutes': 20},
+              {
+                'kind': 'time_limit',
+                'periods': [
+                  {'days': 'all', 'max_minutes': 20, 'extensions': 0},
+                ],
+              },
+            ],
+          },
+        });
+      });
+
+      testWidgets('改了限時分鐘後切換收費再切回，草稿的分鐘不會被還原（#155 第 38 項）', (tester) async {
+        gateway.spotRows[communityId]!
+          ..['space_type'] = 'timedMotorcycle'
+          ..['condition'] = {
+            'bay': 'motorcycle',
+            'use': 'usual',
+            'charge': 'toll',
+            'limits': [
+              {'kind': 'time_limit', 'max_minutes': 30},
+            ],
+          };
+        await show(tester, path: '/spots/$communityId');
+        await openFold(tester, '格位與停放條件');
+        final minutes = find.byKey(const ValueKey('spot-space-max-minutes'));
+        await tester.ensureVisible(minutes);
+        await tester.enterText(minutes, '45');
+        await tester.pumpAndSettle();
+        await tapKey(tester, 'spot-space-charge-free');
+        await tapKey(tester, 'spot-space-charge-toll');
+        expect(await save(tester), {
+          'condition': {
+            'bay': 'motorcycle',
+            'use': 'usual',
+            'charge': 'toll',
+            'limits': [
+              {
+                'kind': 'time_limit',
+                'periods': [
+                  {'days': 'all', 'max_minutes': 45, 'extensions': 0},
+                ],
+              },
             ],
           },
         });

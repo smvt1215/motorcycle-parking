@@ -81,7 +81,7 @@ ParkingSpot canvasLot({
       if (!lotWide)
         'fee': {
           'scooter': {'mode': 'hourly', 'amount': 10, 'per_minutes': 60},
-          'heavy': {'mode': 'same_as_scooter', 'factor_pct': 200},
+          'heavy': {'mode': 'same_as_scooter'},
         },
     },
     {
@@ -147,22 +147,22 @@ void main() {
       );
     });
 
-    test('首段 0 元寫首段，不寫免費；延長只寫金額次數', () {
+    test('計次 0 元不寫免費；延長寫每次金額（#188 第 2 層）', () {
       final now = feeNowOf(
         Fee.fromJson({
           'heavy': {
             'mode': 'per_visit',
             'amount': 0,
-            'max_minutes': 20,
-            'extension': {'amount': 40, 'max_times': 1},
+            'renew': 'none',
+            'extension_amount': 40,
           },
         }),
         VehicleType.heavy,
         taipei(14, 0),
       );
       expect(now.label, '大型重機費率');
-      expect(now.main.text, '首 20 分鐘 0 元');
-      expect(now.caption, '可付 40 元延長 1 次');
+      expect(now.main.text, '每次 0 元');
+      expect(now.caption, '停多久都只收一次');
       expect('$now', isNot(contains('免費')));
     });
 
@@ -453,11 +453,11 @@ void main() {
             },
           ],
         }, heavy: false),
-        heavy: const Rate(FeeMode.sameAsScooter, factorPct: 150),
+        heavy: const Rate(FeeMode.sameAsScooter),
       );
       expect(
         feeNowOf(follow, VehicleType.heavy, taipei(9, 0)).main.text,
-        '每小時 22.5 元',
+        '每小時 15 元',
       );
       final missing = feeNowOf(
         const Fee(heavy: Rate(FeeMode.sameAsCar)),
@@ -748,12 +748,13 @@ void main() {
         expect(find.text('汽車區'), findsOneWidget);
         final boards = find.byKey(const ValueKey('fee-board'));
         expect(boards, findsNWidgets(2));
-        // 機車區: the heavy bike first, its rate worked out (#140).
+        // 機車區: the heavy bike first, the scooter's rate it follows (#140;
+        // no factor since #188 layer 2).
         final moto = boards.first;
         expect(top(tester, moto, '大型重機'), lessThan(top(tester, moto, '普通機車')));
         expect(
-          find.descendant(of: moto, matching: find.text('每小時 20 元')),
-          findsOneWidget,
+          find.descendant(of: moto, matching: find.text('每小時 10 元')),
+          findsNWidgets(2),
         );
         // 汽車區: heavy and car only, the scooter excluded.
         final car = boards.last;
@@ -889,8 +890,8 @@ void main() {
           'heavy': {
             'mode': 'per_visit',
             'amount': 0,
-            'max_minutes': 20,
-            'extension': {'amount': 40, 'max_times': 1},
+            'renew': 'none',
+            'extension_amount': 40,
           },
           'car': dayNight().toJson(),
         }),
@@ -907,17 +908,11 @@ void main() {
       final board = find.byKey(const ValueKey('fee-board'));
       expect(board, findsOneWidget);
       expect(
-        find.descendant(
-          of: board,
-          matching: find.textContaining('首 20 分鐘 0 元'),
-        ),
+        find.descendant(of: board, matching: find.textContaining('每次 0 元')),
         findsOneWidget,
       );
       expect(
-        find.descendant(
-          of: board,
-          matching: find.textContaining('可付 40 元延長 1 次（延長時間未確認）'),
-        ),
+        find.descendant(of: board, matching: find.textContaining('延長每次 40 元')),
         findsOneWidget,
       );
       expect(

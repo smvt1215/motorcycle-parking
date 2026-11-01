@@ -359,8 +359,11 @@ void main() {
     await chooseFeeMode(tester, 'scooter', 'per_visit');
     await tester.enterText(feeField('amount', 'scooter'), '20');
     await tester.pumpAndSettle();
+    // 跨日怎麼收 is answered before it counts (#188 layer 2).
+    expect(find.textContaining('普通機車費率：'), findsNothing);
+    await tapFee(tester, 'fee-renew-scooter-none');
     expect(find.text('請至少修改一個車種，和目前不同才能送出'), findsNothing);
-    final change = find.text('普通機車費率：費率未確認，請依現場公告 → 每次 20 元（隔日是否另計未確認）');
+    final change = find.text('普通機車費率：費率未確認，請依現場公告 → 每次 20 元，停多久都只收一次');
     await tester.scrollUntilVisible(
       change,
       200,
@@ -373,7 +376,8 @@ void main() {
     await chooseFeeMode(tester, 'car', 'hourly');
     expect(find.textContaining(RegExp(r'(^|[^0-9])0 元')), findsNothing);
     expect(find.textContaining('汽車費率：'), findsNothing);
-    await chooseFeeMode(tester, 'car', 'unknown');
+    // Back to 維持目前 for the car.
+    await tapFee(tester, 'suggest-keep-car');
     // The form grew with the amount fields; scroll its own list to the button.
     await tester.scrollUntilVisible(
       find.text('送出修改建議'),
@@ -393,11 +397,11 @@ void main() {
     expect(body['field'], 'fee_note');
     expect(body['proposed'], {
       'fee': {
-        'scooter': {'mode': 'per_visit', 'amount': 20},
+        'scooter': {'mode': 'per_visit', 'amount': 20, 'renew': 'none'},
       },
-      'fee_note': '機車每次 20 元（隔日是否另計未確認）；大型重機費率未確認',
+      'fee_note': '機車每次 20 元，停多久都只收一次；大型重機費率未提供',
     });
-    expect(body['reason'], '收費資訊：建議「機車每次 20 元（隔日是否另計未確認）；大型重機費率未確認」');
+    expect(body['reason'], '收費資訊：建議「機車每次 20 元，停多久都只收一次；大型重機費率未提供」');
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -653,28 +657,28 @@ void main() {
     final current = ParkingSpot.fromJson({
       ...spot.toJson(),
       'fee': const Fee(
-        scooter: Rate(FeeMode.daily, amount: 30),
+        scooter: Rate(FeeMode.perVisit, amount: 30, renew: Renew.midnight),
         heavy: Rate(FeeMode.sameAsScooter),
       ).toJson(),
     });
     final store = await openSuggestion(tester, '收費資訊', selectedSpot: current);
     expect(find.text('修改建議：收費'), findsOneWidget);
-    expect(find.text('維持目前：每日 30 元'), findsNWidgets(2));
+    expect(find.text('維持目前：每次 30 元，隔日另計'), findsNWidgets(2));
     expect(find.text('維持目前：$unconfirmedFeeText'), findsOneWidget);
     await submitSuggestion(tester, '送出修改建議');
     expect(find.text('請至少修改一個車種，和目前不同才能送出'), findsOneWidget);
     expect(store.submissions, isEmpty);
     await chooseFeeMode(tester, 'heavy', 'free');
     expect(find.text('改成：免費'), findsOneWidget);
-    expect(find.text('目前：每日 30 元'), findsOneWidget);
-    expect(find.text('大型重機費率：每日 30 元 → 免費'), findsOneWidget);
+    expect(find.text('目前：每次 30 元，隔日另計'), findsOneWidget);
+    expect(find.text('大型重機費率：每次 30 元，隔日另計 → 免費'), findsOneWidget);
     expect(find.text('普通機車、汽車維持目前'), findsOneWidget);
     await submitSuggestion(tester, '送出修改建議');
     expect(store.submissions.single['proposed'], {
       'fee': {
         'heavy': {'mode': 'free'},
       },
-      'fee_note': '機車每日 30 元；大型重機免費',
+      'fee_note': '機車每次 30 元，隔日另計；大型重機免費',
     });
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -784,7 +788,12 @@ void main() {
         'use': 'usual',
         'charge': 'toll',
         'limits': [
-          {'kind': 'time_limit', 'max_minutes': 20},
+          {
+            'kind': 'time_limit',
+            'periods': [
+              {'days': 'all', 'max_minutes': 20, 'extensions': 0},
+            ],
+          },
         ],
       },
     });
@@ -952,6 +961,10 @@ void main() {
       final cap = feeField('cap', vehicle);
       await tester.ensureVisible(cap);
       await tester.enterText(cap, '100');
+      await tester.pumpAndSettle();
+      // A cap names when it starts over (#188 layer 2).
+      await tapFee(tester, 'fee-cap-reset-$vehicle');
+      await tester.tap(find.text('零時重算').last);
       await tester.pumpAndSettle();
     }
     final explanation = '說' * 450;

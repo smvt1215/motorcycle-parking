@@ -16,13 +16,16 @@ import '../fee_editor_steps.dart';
 
 /// Structured fees in the admin spot form and the review queue.
 void main() {
+  // An admin writes all three vehicles (#188 layer 2).
   const hourly = Fee(
     scooter: Rate(FeeMode.hourly, amount: 20, perMinutes: 60),
     heavy: Rate(FeeMode.sameAsScooter),
+    car: Rate(FeeMode.notApplicable),
   );
   const hourlyJson = {
     'scooter': {'mode': 'hourly', 'amount': 20, 'per_minutes': 60},
     'heavy': {'mode': 'same_as_scooter'},
+    'car': {'mode': 'not_applicable'},
   };
   const hourlyNote = '機車每小時 20 元；大型重機每小時 20 元';
 
@@ -41,37 +44,37 @@ void main() {
           'daily_cap': 100,
         },
       }),
-      '機車免費；大型重機每小時 20 元，當日上限 100 元（上限計算方式未確認）',
+      '機車免費；大型重機每小時 20 元，當日上限 100 元',
     );
     expect(
       note({
         'scooter': {'mode': 'hourly', 'amount': 10, 'per_minutes': 30},
       }),
-      '機車每 30 分鐘 10 元；大型重機費率未確認',
+      '機車每 30 分鐘 10 元；大型重機費率未提供',
     );
     expect(
       note({
         'scooter': {'mode': 'hourly', 'amount': 40, 'per_minutes': 120},
       }),
-      '機車每 2 小時 40 元；大型重機費率未確認',
+      '機車每 2 小時 40 元；大型重機費率未提供',
     );
     expect(
       note({
-        'heavy': {'mode': 'per_visit', 'amount': 50, 'max_minutes': 90},
+        'heavy': {'mode': 'per_visit', 'amount': 50},
       }),
-      '大型重機每次 50 元（90 分鐘內，隔日是否另計未確認）',
+      '大型重機每次 50 元',
     );
     expect(
       note({
-        'scooter': {'mode': 'per_visit', 'amount': 20, 'max_minutes': 360},
+        'scooter': {'mode': 'per_visit', 'amount': 20, 'renew': 'none'},
         'heavy': {'mode': 'same_as_car'},
       }),
-      '機車每次 20 元（6 小時內，隔日是否另計未確認）；大型重機費率未提供',
+      '機車每次 20 元，停多久都只收一次；大型重機費率未提供',
     );
     expect(
       note({
-        'scooter': {'mode': 'posted'},
-        'heavy': {'mode': 'posted'},
+        'scooter': {'mode': 'not_applicable'},
+        'heavy': {'mode': 'not_applicable'},
       }),
       '請依現場公告',
     );
@@ -89,7 +92,9 @@ void main() {
     expect(Fee.tryParse({'scooter': null}), isNull);
     expect(Fee.tryParse('免費'), isNull);
     expect(
-      const Fee(scooter: Rate(FeeMode.daily, amount: 10001)).valid,
+      const Fee(
+        scooter: Rate(FeeMode.perVisit, amount: 10001, renew: Renew.midnight),
+      ).valid,
       isFalse,
     );
     expect(hourly.valid, isTrue);
@@ -129,7 +134,7 @@ void main() {
       spots.setFee(const Fee());
       expect(spots.dirty, isFalse);
       spots.setFee(const Fee(scooter: Rate(FeeMode.free)));
-      expect(spots.draft['fee_note'], '機車免費；大型重機費率未確認');
+      expect(spots.draft['fee_note'], '機車免費；大型重機費率未提供');
       spots.setFee(const Fee());
       expect(spots.draft['fee_note'], legacy);
       expect(spots.changes, isEmpty);
@@ -145,6 +150,7 @@ void main() {
         const Fee(
           scooter: Rate(FeeMode.hourly, amount: 20, perMinutes: 60),
           heavy: Rate(FeeMode.sameAsScooter),
+          car: Rate(FeeMode.notApplicable),
         ),
       );
       expect(spots.dirty, isFalse);
@@ -159,7 +165,11 @@ void main() {
       expect(spots.draft['fee_note'], before);
       expect(spots.errors['fee'], contains('請填完收費金額'));
       expect(await spots.save(''), isFalse);
-      spots.setFee(const Fee(scooter: Rate(FeeMode.daily, amount: 20000)));
+      spots.setFee(
+        const Fee(
+          scooter: Rate(FeeMode.perVisit, amount: 20000, renew: Renew.midnight),
+        ),
+      );
       expect(spots.errors['fee'], contains('0 到 10000'));
       expect(gateway.spotUpdates, isEmpty);
     });
@@ -178,7 +188,7 @@ void main() {
       expect(spots.changes['fee'], {
         'scooter': {'mode': 'free'},
       });
-      expect(spots.changes['fee_note'], '機車免費；大型重機費率未確認');
+      expect(spots.changes['fee_note'], '機車免費；大型重機費率未提供');
     });
   });
 
@@ -186,6 +196,7 @@ void main() {
     final longFee = Fee.fromJson({
       'car': {
         'mode': 'by_time',
+        'cross_period': 'each_period',
         'periods': [
           for (final d in ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'])
             {
@@ -195,7 +206,8 @@ void main() {
               'rate': {
                 'mode': 'per_visit',
                 'amount': 9999,
-                'max_minutes': 1439,
+                'renew': 'midnight',
+                'extension_amount': 9999,
               },
             },
         ],
@@ -250,7 +262,7 @@ void main() {
           'car': car,
           'scooter': {'mode': 'free'},
         },
-        'fee_note': '機車免費；汽車每小時 40 元；大型重機費率未確認',
+        'fee_note': '機車免費；汽車每小時 40 元；大型重機費率未提供',
       },
     );
     ReviewReport report(Map<String, Object?> fee) => ReviewReport(
@@ -281,7 +293,7 @@ void main() {
     test('車種送 null 才清除', () {
       final proposal = initialProposal(report({'scooter': null}), spot);
       expect(proposal['fee'], {'car': car});
-      expect(proposal['fee_note'], '汽車每小時 40 元；大型重機費率未確認');
+      expect(proposal['fee_note'], '汽車每小時 40 元；大型重機費率未提供');
       final cleared = initialProposal(
         report({'scooter': null, 'car': null}),
         spot,
@@ -301,14 +313,14 @@ void main() {
     final feeReport = ReviewReport(
       id: 'r-fee',
       sourceId: communityId,
-      reason: '收費資訊：建議「每日 30 元（大型重機比照機車費率）」',
+      reason: '收費資訊：建議「每次 30 元，隔日另計（大型重機比照機車費率）」',
       field: 'fee_note',
       proposed: const {
         'fee': {
-          'scooter': {'mode': 'daily', 'amount': 30},
+          'scooter': {'mode': 'per_visit', 'amount': 30, 'renew': 'midnight'},
           'heavy': {'mode': 'same_as_scooter'},
         },
-        'fee_note': '每日 30 元（大型重機比照機車費率）',
+        'fee_note': '每次 30 元，隔日另計（大型重機比照機車費率）',
       },
       createdAt: reportTime,
     );
@@ -321,7 +333,10 @@ void main() {
       expect(patch.keys, ['fee', 'fee_note']);
       expect(ignoredKeys(feeReport.proposed!, community), isEmpty);
       expect(validatePatch(patch, community), isNull);
-      expect(formatValue('fee', patch['fee']), '機車每日 30 元；大型重機每日 30 元');
+      expect(
+        formatValue('fee', patch['fee']),
+        '機車每次 30 元，隔日另計；大型重機每次 30 元，隔日另計',
+      );
       expect(formatValue('fee', null), '未設定');
       expect(sameValue('fee', {...hourlyJson}, hourly), isTrue);
       expect(sameValue('fee', const <String, Object>{}, null), isTrue);
@@ -503,6 +518,7 @@ void main() {
           );
         }
         await choose(tester, 'heavy', 'same_as');
+        await choose(tester, 'car', 'not_applicable');
         final plate = find.byKey(const ValueKey('fee-note-plate'));
         await reach(tester, plate);
         // The app's notice board: the follow's amount worked out (#140).
@@ -543,9 +559,13 @@ void main() {
             field: 'fee_note',
             proposed: const {
               'fee': {
-                'scooter': {'mode': 'daily', 'amount': 30},
+                'scooter': {
+                  'mode': 'per_visit',
+                  'amount': 30,
+                  'renew': 'midnight',
+                },
               },
-              'fee_note': '機車每日 30 元；大型重機費率未確認',
+              'fee_note': '機車每次 30 元，隔日另計；大型重機費率未提供',
             },
             createdAt: reportTime,
           ),
@@ -559,7 +579,7 @@ void main() {
         await tester.drag(find.text('建議變更'), const Offset(0, -200));
         await tester.pumpAndSettle();
         expect(
-          find.widgetWithText(ChangeBand, '機車每日 30 元；大型重機費率未確認'),
+          find.widgetWithText(ChangeBand, '機車每次 30 元，隔日另計；大型重機費率未提供'),
           findsWidgets,
         );
         await tester.tap(find.text('修改後套用'));
@@ -573,10 +593,10 @@ void main() {
         await tester.pumpAndSettle();
         expect(gateway.resolved.single.$3, {
           'fee': {
-            'scooter': {'mode': 'daily', 'amount': 30},
+            'scooter': {'mode': 'per_visit', 'amount': 30, 'renew': 'midnight'},
             'heavy': {'mode': 'free'},
           },
-          'fee_note': '機車每日 30 元；大型重機免費',
+          'fee_note': '機車每次 30 元，隔日另計；大型重機免費',
         });
         expect(tester.takeException(), isNull);
       });
@@ -592,7 +612,7 @@ void main() {
             'daily_cap': 100,
           },
         }
-        ..['fee_note'] = '每小時 20 元，當日上限 100 元（大型重機費率未確認）';
+        ..['fee_note'] = '每小時 20 元，當日上限 100 元（大型重機費率未提供）';
       await show(tester, '/spots/$communityId', const Size(390, 844));
       final more = find.byKey(const ValueKey('fee-more-scooter'));
       await reach(tester, more);
@@ -604,7 +624,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('金額請填 0 到 10000 的整數'), findsOneWidget);
       // The plate keeps the stored text instead of a broken sentence.
-      expect(find.text('每小時 20 元，當日上限 100 元（大型重機費率未確認）'), findsOneWidget);
+      expect(find.text('每小時 20 元，當日上限 100 元（大型重機費率未提供）'), findsOneWidget);
       await tester.tap(find.text('儲存並關閉').hitTestable());
       await tester.pumpAndSettle();
       expect(gateway.spotUpdates, isEmpty);
@@ -615,9 +635,9 @@ void main() {
       gateway.spotRows[communityId]!
         ..['fee'] = {
           'scooter': {'mode': 'hourly', 'amount': 15, 'per_minutes': 90},
-          'heavy': {'mode': 'per_visit', 'amount': 50, 'max_minutes': 90},
+          'heavy': {'mode': 'per_visit', 'amount': 50, 'renew': 'none'},
         }
-        ..['fee_note'] = '機車每 90 分鐘 15 元；大型重機每次 50 元（90 分鐘內）';
+        ..['fee_note'] = '機車每 90 分鐘 15 元；大型重機每次 50 元，停多久都只收一次';
       await show(tester, '/spots/$communityId', const Size(1280, 900));
       final period = find.text('每 90 分鐘');
       await tester.scrollUntilVisible(
@@ -626,12 +646,6 @@ void main() {
         scrollable: scrollable('spot-form-'),
       );
       expect(period, findsOneWidget);
-      await choose(tester, 'heavy', 'per_visit');
-      final more = find.byKey(const ValueKey('fee-more-heavy'));
-      await reach(tester, more);
-      await tester.tap(more);
-      await tester.pumpAndSettle();
-      expect(find.text('90 分鐘'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
@@ -673,9 +687,13 @@ void main() {
           field: 'fee_note',
           proposed: const {
             'fee': {
-              'scooter': {'mode': 'daily', 'amount': 30},
+              'scooter': {
+                'mode': 'per_visit',
+                'amount': 30,
+                'renew': 'midnight',
+              },
             },
-            'fee_note': '機車每日 30 元；大型重機費率未確認',
+            'fee_note': '機車每次 30 元，隔日另計；大型重機費率未提供',
           },
           createdAt: reportTime,
         ),
@@ -684,14 +702,14 @@ void main() {
       await tester.tap(find.text('修改後套用'));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('edit-r-fee2-fee_note')), findsNothing);
-      final amount = find.widgetWithText(TextFormField, '每日金額');
+      final amount = find.widgetWithText(TextFormField, '首次多少錢');
       await tester.ensureVisible(amount);
       await tester.enterText(amount, '40');
       await tester.pumpAndSettle();
       expect(
         find.descendant(
           of: find.byKey(const ValueKey('derived-r-fee2-fee_note')),
-          matching: find.text('機車每日 40 元；大型重機費率未確認'),
+          matching: find.text('機車每次 40 元，隔日另計；大型重機費率未提供'),
         ),
         findsOneWidget,
       );

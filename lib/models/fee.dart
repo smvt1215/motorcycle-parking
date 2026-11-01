@@ -20,14 +20,12 @@ import 'parking_condition.dart'
 
 /// How a vehicle pays. Heavy bikes may also follow another vehicle's rate.
 enum FeeMode {
+  /// 不適用 (#188 layer 2): no bays for this vehicle here; riders' notice
+  /// boards leave it out.
+  notApplicable('not_applicable'),
   free('free'),
-
-  /// 依現場公告: still accepted so older builds' reports are not refused,
-  /// but read as unconfirmed (§7 item 15) and never written by new builds.
-  posted('posted'),
   hourly('hourly'),
   perVisit('per_visit'),
-  daily('daily'),
 
   /// Rates that differ by time of day and day of the week (§2.2).
   byTime('by_time'),
@@ -77,24 +75,6 @@ T? _wire<T extends Enum>(List<T> values, Object? wire, String Function(T) of) =>
     values.where((v) => of(v) == wire).firstOrNull;
 
 int? _int(Object? v) => v is num ? v.toInt() : null;
-
-/// Paid extensions of a per-visit stay: each [amount], at most [maxTimes],
-/// [minutes] each (null is unconfirmed).
-class FeeExtension {
-  const FeeExtension({
-    required this.amount,
-    required this.maxTimes,
-    this.minutes,
-  });
-  final int amount, maxTimes;
-  final int? minutes;
-
-  Map<String, Object> toJson() => {
-    'amount': amount,
-    'max_times': maxTimes,
-    'minutes': ?minutes,
-  };
-}
 
 /// One period of a by-time rate: the days (`all`, `weekday`, `holiday` or a
 /// list of weekdays), [from]–[to] (both null: all day; from > to crosses
@@ -161,16 +141,6 @@ bool _validFields(
         }
       case final String name when enums.containsKey(name):
         if (!(enums[name]! as List).contains(value)) return false;
-      case 'extension':
-        if (value is! Map ||
-            value.containsKey('mode') ||
-            !_validFields(
-              value,
-              feeContract['extension']! as Map<String, Object?>,
-              vehicle,
-            )) {
-          return false;
-        }
       case 'periods':
         final p = feeContract['periods']! as Map<String, Object?>;
         final keys = p['keys']! as List;
@@ -208,6 +178,43 @@ bool validFee(Object? json) =>
           validRate(e.value, e.key as String),
     );
 
+/// Whether a valid rate is complete for a new write (#188 layer 2,
+/// `fee_rate_write_complete()` in SQL): a per-visit rate names renew, an
+/// hourly cap its cap_reset, and a by_time rate with two or more periods,
+/// one of them per visit, its cross_period; its periods' rates the same.
+bool rateWriteComplete(Object? json) {
+  if (json is! Map || json['mode'] is! String) return false;
+  final w = feeContract['write']! as Map<String, Object?>;
+  final mode = json['mode'] as String;
+  final required = (w['required']! as Map)[mode] as List? ?? const [];
+  if (!required.every(json.containsKey)) return false;
+  final requiredWith = (w['required_with']! as Map)[mode] as Map? ?? const {};
+  for (final MapEntry(:key, :value) in requiredWith.entries) {
+    if (json.containsKey(value) && !json.containsKey(key)) return false;
+  }
+  if (mode == 'by_time') {
+    final periods = (json['periods'] as List).cast<Map<Object?, Object?>>();
+    if (!periods.every((p) => rateWriteComplete(p['rate']))) return false;
+    final when = w['cross_period_when']! as Map;
+    if (!json.containsKey('cross_period') &&
+        periods.length >= (when['min_periods'] as int) &&
+        periods.any((p) => (p['rate'] as Map)['mode'] == when['nested_mode'])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/// Whether a valid fee is complete for a new write (`fee_write_complete()`):
+/// every vehicle of `fee.write.required_vehicles` has a rate, each complete.
+/// Official imports are exempt (PM_ANS_20261101_55).
+bool feeWriteComplete(Object? json) =>
+    json is Map &&
+    ((feeContract['write']! as Map)['required_vehicles'] as List).every(
+      json.containsKey,
+    ) &&
+    json.values.every(rateWriteComplete);
+
 /// One vehicle's rate. Amounts and caps are whole yuan, periods minutes.
 class Rate {
   const Rate(
@@ -215,29 +222,22 @@ class Rate {
     this.amount,
     this.perMinutes,
     this.dailyCap,
-    this.maxMinutes,
-    this.unitMinutes,
-    this.freeMinutes,
     this.capReset,
     this.renew,
-    this.extension,
+    this.extensionAmount,
     this.periods,
     this.crossPeriod,
-    this.factorPct,
   });
   final FeeMode mode;
-  final int? amount, perMinutes, dailyCap, maxMinutes;
-
-  /// Hourly: the billing unit and the free first minutes (首段 0 元).
-  final int? unitMinutes, freeMinutes;
+  final int? amount, perMinutes, dailyCap;
   final CapReset? capReset;
   final Renew? renew;
-  final FeeExtension? extension;
+
+  /// Per visit: what each extension costs (延長每次多少錢, #188 layer 2);
+  /// how long and how many times is the condition's time limit.
+  final int? extensionAmount;
   final List<FeePeriod>? periods;
   final CrossPeriod? crossPeriod;
-
-  /// A follow's factor, 200 for twice; null is once.
-  final int? factorPct;
 
   /// The rate in [json], or null when it is not one the column accepts:
   /// an unknown mode or key, or any value out of range, optional or not.
@@ -248,25 +248,15 @@ class Rate {
 
   static Rate _build(Map<Object?, Object?> json) {
     final mode = _wire(FeeMode.values, json['mode'], (m) => m.wire)!;
-    final ext = json['extension'];
     final periods = json['periods'];
     return Rate(
       mode,
       amount: _int(json['amount']),
       perMinutes: _int(json['per_minutes']),
       dailyCap: _int(json['daily_cap']),
-      maxMinutes: _int(json['max_minutes']),
-      unitMinutes: _int(json['unit_minutes']),
-      freeMinutes: _int(json['free_minutes']),
       capReset: _wire(CapReset.values, json['cap_reset'], (v) => v.wire),
       renew: _wire(Renew.values, json['renew'], (v) => v.wire),
-      extension: ext is Map
-          ? FeeExtension(
-              amount: _int(ext['amount'])!,
-              maxTimes: _int(ext['max_times'])!,
-              minutes: _int(ext['minutes']),
-            )
-          : null,
+      extensionAmount: _int(json['extension_amount']),
       periods: periods is List
           ? [
               for (final p in periods.cast<Map<Object?, Object?>>())
@@ -285,17 +275,19 @@ class Rate {
         json['cross_period'],
         (v) => v.wire,
       ),
-      factorPct: _int(json['factor_pct']),
     );
   }
 
   /// Whether the mode has every value it needs to be shown or stored.
   bool get complete => switch (mode) {
     FeeMode.hourly => amount != null && perMinutes != null,
-    FeeMode.perVisit || FeeMode.daily => amount != null,
+    FeeMode.perVisit => amount != null,
     FeeMode.byTime => periods?.isNotEmpty ?? false,
     _ => true,
   };
+
+  /// Whether a new write may store it (#188 layer 2, [rateWriteComplete]).
+  bool get writeComplete => complete && rateWriteComplete(toJson());
 
   /// Only the keys this mode uses, as the column requires.
   Map<String, Object> toJson() => {
@@ -303,33 +295,25 @@ class Rate {
     if (mode == FeeMode.hourly) ...{
       'amount': ?amount,
       'per_minutes': ?perMinutes,
-      'unit_minutes': ?unitMinutes,
-      'free_minutes': ?freeMinutes,
       'daily_cap': ?dailyCap,
       'cap_reset': ?capReset?.wire,
     },
     if (mode == FeeMode.perVisit) ...{
       'amount': ?amount,
-      'max_minutes': ?maxMinutes,
       'renew': ?renew?.wire,
-      'extension': ?extension?.toJson(),
-    },
-    if (mode == FeeMode.daily) ...{
-      'amount': ?amount,
-      'cap_reset': ?capReset?.wire,
+      'extension_amount': ?extensionAmount,
     },
     if (mode == FeeMode.byTime) ...{
       'periods': ?periods?.map((p) => p.toJson()).toList(),
       'cross_period': ?crossPeriod?.wire,
     },
-    if (mode.follows) 'factor_pct': ?factorPct,
   };
 
   /// The rate as riders read it, e.g. 每小時 20 元，當日上限 100 元（零時重算）.
   /// A follow names what it follows (an editor label); [Fee.textOf] and
   /// [feeNoteOf] show the amounts worked out instead.
   String get text => switch (mode) {
-    FeeMode.posted => '依現場公告',
+    FeeMode.notApplicable => '不適用',
     FeeMode.sameAsScooter => '比照機車費率',
     FeeMode.sameAsCar => '比照汽車費率',
     _ => _rateText(toJson(), 100) ?? '',
@@ -348,22 +332,20 @@ class Fee {
   const Fee({this.scooter, this.heavy, this.car});
   final Rate? scooter, heavy, car;
 
-  /// The fee in [json]; vehicles whose rate is not valid, or is `posted`,
-  /// read as unconfirmed.
+  /// The fee in [json]; vehicles whose rate is not valid read as
+  /// unconfirmed (an old cached `daily` or `posted` too, #188 layer 2).
   static Fee fromJson(Object? json) => json is Map
       ? Fee(
-          scooter: _known(Rate.fromJson(json['scooter'], heavy: false)),
-          heavy: _known(Rate.fromJson(json['heavy'], heavy: true)),
-          car: _known(Rate.fromJson(json['car'], heavy: false)),
+          scooter: Rate.fromJson(json['scooter'], heavy: false),
+          heavy: Rate.fromJson(json['heavy'], heavy: true),
+          car: Rate.fromJson(json['car'], heavy: false),
         )
       : const Fee();
-
-  static Rate? _known(Rate? rate) => rate?.mode == FeeMode.posted ? null : rate;
 
   /// The fee in [json] when all of it is one the column accepts, else null.
   /// Unlike [fromJson], an unknown vehicle or a bad rate is not dropped
   /// silently, so a value from elsewhere (a report) is taken whole or not
-  /// at all. A `posted` rate is accepted and reads as unconfirmed.
+  /// at all.
   static Fee? tryParse(Object? json) =>
       json is Map && validFee(json) ? fromJson(json) : null;
 
@@ -371,6 +353,10 @@ class Fee {
 
   /// Whether every rate given has its amounts, in the column's ranges.
   bool get valid => validFee(toJson());
+
+  /// Whether a rider's or an admin's new write may store it (#188 layer 2):
+  /// valid, every vehicle given, each rate complete ([feeWriteComplete]).
+  bool get writeComplete => valid && feeWriteComplete(toJson());
 
   Map<String, Object> toJson() => {
     if (scooter case final rate?) 'scooter': rate.toJson(),
@@ -421,6 +407,7 @@ class Fee {
     final source = car ? this.car : scooter;
     final wire = car ? 'car' : 'scooter';
     if (source != null &&
+        source.mode != FeeMode.notApplicable &&
         validRate(source.toJson(), wire) &&
         _rateText(toJson()[wire], 100) != null) {
       return null;
@@ -482,8 +469,9 @@ Map<String, Object?> feeSuggestion(Fee? current, Fee edited) {
 }
 
 /// The `fee_note` text stored beside [fee] (§2.5): the known vehicles as
-/// 機車…；大型重機…；汽車…, then 大型重機費率未確認 when the heavy rate is
-/// unknown; the default note when no vehicle is known.
+/// 機車…；大型重機…；汽車…, then 大型重機費率未提供 when the heavy rate is
+/// unknown (PM_ANS_20261101_55); a vehicle that is not_applicable is left
+/// out; the default note when no vehicle is known.
 String feeNoteOf(Fee? fee) => feeNoteOfJson(fee?.toJson());
 
 /// [feeNoteOf] of a fee as JSON, as `fee_note_of()` takes it.
@@ -498,7 +486,10 @@ String feeNoteOfJson(Object? fee) {
     if (s != null) '機車$s',
     if (text != null || unprovided) '大型重機${text ?? '費率未提供'}',
     if (c != null) '汽車$c',
-    if (text == null && !unprovided) '大型重機費率未確認',
+    if (text == null &&
+        !unprovided &&
+        (f['heavy'] as Map?)?['mode'] != FeeMode.notApplicable.wire)
+      '大型重機費率未提供',
   ].join('；');
 }
 
@@ -508,7 +499,7 @@ const defaultFeeNote = '請依現場公告';
 /// The longest [feeNoteOf] the contract allows (§2.5), as
 /// supabase/functions/_shared/fee_note_limit.json holds it; the spot
 /// tables' fee_note check. Free text stays within [freeFeeNoteMaxLength].
-const feeNoteMaxLength = 1909;
+const feeNoteMaxLength = 1399;
 const freeFeeNoteMaxLength = 200;
 
 /// Whether [note] fits as a spot's fee_note beside [fee], as the tables'
@@ -526,7 +517,7 @@ bool feeNoteFits(Object? note, Fee? fee) =>
   if (heavy is Map &&
       (heavy['mode'] == 'same_as_scooter' || heavy['mode'] == 'same_as_car')) {
     final target = heavy['mode'] == 'same_as_scooter' ? f['scooter'] : f['car'];
-    final text = _rateText(target, _int(heavy['factor_pct']) ?? 100);
+    final text = _rateText(target, 100);
     return (text: text, unprovided: text == null);
   }
   return (text: _rateText(heavy, 100), unprovided: false);
@@ -581,7 +572,7 @@ String _dayLabel(int mask) => switch (mask) {
 };
 
 /// One rate's words at [pct] percent, or null when it reads as unconfirmed
-/// (posted, by_time of posted periods only, or a follow out of place).
+/// or does not apply (not_applicable, or a follow out of place).
 String? _rateText(Object? r, int pct) {
   if (r is! Map) return null;
   switch (r['mode']) {
@@ -589,55 +580,25 @@ String? _rateText(Object? r, int pct) {
       return '免費';
     case 'hourly':
       var t = '${_every(r['per_minutes'])} ${_money(r['amount'], pct)} 元';
-      if (r.containsKey('free_minutes')) {
-        t = '首 ${_span(r['free_minutes'])} 0 元，之後$t';
-      }
-      if (r.containsKey('unit_minutes')) {
-        t += '（以 ${_span(r['unit_minutes'])}計）';
-      }
       if (r.containsKey('daily_cap')) {
-        final reset = _resets[r['cap_reset']] ?? '上限計算方式未確認';
-        t += '，當日上限 ${_money(r['daily_cap'], pct)} 元（$reset）';
+        t += '，當日上限 ${_money(r['daily_cap'], pct)} 元';
+        if (_resets[r['cap_reset']] case final reset?) t += '（$reset）';
       }
       return t;
     case 'per_visit':
-      String t;
-      if (_int(r['amount']) == 0 && r.containsKey('max_minutes')) {
-        t = '首 ${_span(r['max_minutes'])} 0 元';
-      } else {
-        final notes = [
-          if (r.containsKey('max_minutes')) '${_span(r['max_minutes'])}內',
-          if (!r.containsKey('renew')) '隔日是否另計未確認',
-        ];
-        t = '每次 ${_money(r['amount'], pct)} 元';
-        if (notes.isNotEmpty) t += '（${notes.join('，')}）';
-        if (r['renew'] == 'midnight') t += '，隔日另計';
-        if (r['renew'] == 'none') {
-          t += r.containsKey('max_minutes') ? '，有效時間內只收一次' : '，停多久都只收一次';
-        }
-      }
-      final ext = r['extension'];
-      if (ext is Map) {
-        t +=
-            '，可付 ${_money(ext['amount'], pct)} 元延長 '
-            '${_int(ext['max_times'])} 次';
-        t += ext.containsKey('minutes')
-            ? '（每次 ${_span(ext['minutes'])}）'
-            : '（延長時間未確認）';
+      var t = '每次 ${_money(r['amount'], pct)} 元';
+      if (r['renew'] == 'midnight') t += '，隔日另計';
+      if (r['renew'] == 'none') t += '，停多久都只收一次';
+      if (r.containsKey('extension_amount')) {
+        t += '，延長每次 ${_money(r['extension_amount'], pct)} 元';
       }
       return t;
-    case 'daily':
-      final reset = _resets[r['cap_reset']];
-      return '每日 ${_money(r['amount'], pct)} 元'
-          '${reset == null ? '' : '（$reset）'}';
     case 'by_time':
       // Periods grouped by the days they cover, in order of first appearance.
       final groups = <int, List<String>>{};
-      var visits = 0;
       for (final p in (r['periods'] as List).cast<Map<Object?, Object?>>()) {
         final text = _rateText(p['rate'], pct);
         if (text == null) continue;
-        if ((p['rate'] as Map)['mode'] == 'per_visit') visits++;
         final from = p['from'] as String?, to = p['to'] as String?;
         final time = from == null
             ? '全天'
@@ -651,8 +612,6 @@ String? _rateText(Object? r, int pct) {
       ].join('；');
       if (r.containsKey('cross_period')) {
         t += r['cross_period'] == 'each_period' ? '；跨時段分別計費' : '；依進場時段計費';
-      } else if (visits >= 2) {
-        t += '；跨時段計費方式未確認';
       }
       return t;
   }

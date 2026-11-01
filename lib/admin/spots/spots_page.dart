@@ -2527,7 +2527,16 @@ class _SpaceKindField extends StatelessWidget {
                           value: spots.timeLimit != null,
                           onChanged: (on) => spots.setTimeLimit(
                             on,
-                            minutes: spots.timeLimit?.maxMinutes,
+                            minutes: spots
+                                .timeLimit
+                                ?.timePeriods
+                                .firstOrNull
+                                ?.maxMinutes,
+                            extensions: spots
+                                .timeLimit
+                                ?.timePeriods
+                                .firstOrNull
+                                ?.extensions,
                           ),
                         ),
                         if (spots.timeLimit case final limit?)
@@ -2535,38 +2544,97 @@ class _SpaceKindField extends StatelessWidget {
                             padding: const EdgeInsetsDirectional.only(
                               start: 44,
                             ),
-                            child: Align(
-                              alignment: AlignmentDirectional.centerStart,
-                              child: SizedBox(
-                                width: 200,
-                                child: TextFormField(
-                                  key: const ValueKey('spot-space-max-minutes'),
-                                  initialValue: limit.maxMinutes?.toString(),
-                                  keyboardType: TextInputType.number,
-                                  decoration: const InputDecoration(
-                                    labelText: '最多停幾分鐘',
-                                    helperText: '牌面沒寫就留空',
-                                    suffixText: '分鐘',
+                            child: Wrap(
+                              spacing: 16,
+                              runSpacing: 8,
+                              children: [
+                                SizedBox(
+                                  width: 200,
+                                  child: TextFormField(
+                                    key: const ValueKey(
+                                      'spot-space-max-minutes',
+                                    ),
+                                    initialValue: limit
+                                        .timePeriods
+                                        .firstOrNull
+                                        ?.maxMinutes
+                                        ?.toString(),
+                                    keyboardType: TextInputType.number,
+                                    decoration: const InputDecoration(
+                                      labelText: '每次限停幾分鐘',
+                                      helperText: '牌面沒寫就留空',
+                                      suffixText: '分鐘',
+                                    ),
+                                    autovalidateMode:
+                                        AutovalidateMode.onUserInteraction,
+                                    validator: (v) {
+                                      final text = v?.trim() ?? '';
+                                      if (text.isEmpty) return null;
+                                      final n = int.tryParse(text);
+                                      return n == null || n < 1 || n > 1440
+                                          ? '填 1 到 1440'
+                                          : null;
+                                    },
+                                    onChanged: (v) {
+                                      final n = int.tryParse(v.trim());
+                                      if (v.trim().isEmpty ||
+                                          (n != null && n >= 1 && n <= 1440)) {
+                                        spots.setTimeLimit(
+                                          true,
+                                          minutes: n,
+                                          extensions: limit
+                                              .timePeriods
+                                              .firstOrNull
+                                              ?.extensions,
+                                        );
+                                      }
+                                    },
                                   ),
-                                  autovalidateMode:
-                                      AutovalidateMode.onUserInteraction,
-                                  validator: (v) {
-                                    final text = v?.trim() ?? '';
-                                    if (text.isEmpty) return null;
-                                    final n = int.tryParse(text);
-                                    return n == null || n < 1 || n > 1440
-                                        ? '填 1 到 1440'
-                                        : null;
-                                  },
-                                  onChanged: (v) {
-                                    final n = int.tryParse(v.trim());
-                                    if (v.trim().isEmpty ||
-                                        (n != null && n >= 1 && n <= 1440)) {
-                                      spots.setTimeLimit(true, minutes: n);
-                                    }
-                                  },
                                 ),
-                              ),
+                                // #188 layer 2: how many times a stay may be
+                                // extended (0 = 不能延長).
+                                SizedBox(
+                                  width: 200,
+                                  child: TextFormField(
+                                    key: const ValueKey(
+                                      'spot-space-extensions',
+                                    ),
+                                    initialValue:
+                                        '${limit.timePeriods.firstOrNull?.extensions ?? 0}',
+                                    keyboardType: TextInputType.number,
+                                    decoration: const InputDecoration(
+                                      labelText: '可以延長幾次',
+                                      helperText: '0 表示不能延長',
+                                      suffixText: '次',
+                                    ),
+                                    autovalidateMode:
+                                        AutovalidateMode.onUserInteraction,
+                                    validator: (v) {
+                                      final n = int.tryParse(v?.trim() ?? '');
+                                      return n == null || n < 0 || n > 10
+                                          ? '填 0 到 10'
+                                          : null;
+                                    },
+                                    onChanged: (v) {
+                                      final n = int.tryParse(v.trim());
+                                      final minutes = limit
+                                          .timePeriods
+                                          .firstOrNull
+                                          ?.maxMinutes;
+                                      if (n != null &&
+                                          n >= 0 &&
+                                          n <= 10 &&
+                                          minutes != null) {
+                                        spots.setTimeLimit(
+                                          true,
+                                          minutes: minutes,
+                                          extensions: n,
+                                        );
+                                      }
+                                    },
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                       ],

@@ -29,6 +29,8 @@ const segmentKeys = [
   'total',
   'guide',
   'evidence_url',
+  'fee',
+  'fee_plan',
 ];
 const segmentMaxEntries = 30;
 const segmentNameMaxLength = 40;
@@ -149,18 +151,15 @@ bool _validIds(List<Object?> list) {
 }
 
 /// Whether [json] is a parking_zones list the contract accepts
-/// (`valid_zones()`): objects with a valid fee, area and condition (whose
-/// access agrees with it), an optional https evidence_url, and ids as
-/// above. An entry may leave its id out.
+/// (`valid_zones()`): objects with a valid fee and condition (whose access
+/// agrees with it), an optional https evidence_url, and ids as above. An
+/// entry may leave its id out; an old writer's `area` is not checked (the
+/// tables' trigger drops it, #188 layer 2).
 bool validZoneList(Object? json) {
   if (json is! List) return false;
   for (final z in json) {
     if (z is! Map) return false;
     if (z.containsKey('fee') && !validFee(z['fee'])) return false;
-    if (z.containsKey('area') &&
-        !ZoneArea.values.any((a) => a.name == z['area'])) {
-      return false;
-    }
     if (z.containsKey('condition') &&
         !(validCondition(z['condition'], zone: true) &&
             zoneConditionConsistent(z.cast<String, Object?>()))) {
@@ -175,8 +174,9 @@ bool validZoneList(Object? json) {
 
 /// Whether [json] is a parking_segments list the contract accepts
 /// (`valid_segments()`): at most [segmentMaxEntries] named segments with an
-/// optional side, range, guide, number of bays, https evidence_url and a
-/// zone-style condition without `allow`.
+/// optional side, range, guide, number of bays, https evidence_url, a
+/// zone-style condition (its `allow` says who may park, #188 layer 2) and
+/// its own fee and fee_plan reference.
 bool validSegmentList(Object? json) {
   if (json is! List || json.length > segmentMaxEntries) return false;
   for (final s in json) {
@@ -204,11 +204,12 @@ bool validSegmentList(Object? json) {
             total <= segmentTotalRange.$2)) {
       return false;
     }
-    final c = s['condition'];
     if (s.containsKey('condition') &&
-        !(validCondition(c, zone: true) && !(c as Map).containsKey('allow'))) {
+        !validCondition(s['condition'], zone: true)) {
       return false;
     }
+    if (s.containsKey('fee') && !validFee(s['fee'])) return false;
+    if (s.containsKey('fee_plan') && s['fee_plan'] is! String) return false;
     if (s.containsKey('evidence_url') && !validEntryUrl(s['evidence_url'])) {
       return false;
     }

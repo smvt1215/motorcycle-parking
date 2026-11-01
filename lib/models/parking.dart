@@ -185,7 +185,6 @@ class ParkingZone {
     this.heavyFeeNote = '',
     this.carFeeNote = '',
     this.fee,
-    this.area,
     this.condition,
     this.evidenceUrl = '',
   });
@@ -205,9 +204,6 @@ class ParkingZone {
   final String scooterFeeNote, heavyFeeNote, carFeeNote;
   final ParkingAccess? access;
   final Fee? fee;
-
-  /// The zone's area; null is unconfirmed.
-  final ZoneArea? area;
 
   /// The zone's parking condition (§1.2), or null — unconfirmed — when the
   /// zone has none or it breaks the contract. [access] stays for builds
@@ -245,7 +241,6 @@ class ParkingZone {
     heavyFeeNote: _feeNoteText(json['heavy_fee_note']),
     carFeeNote: _feeNoteText(json['car_fee_note']),
     fee: json['fee'] is Map ? Fee.fromJson(json['fee']) : null,
-    area: _optionalEnum(ZoneArea.values, json['area']),
     condition: ParkingCondition.fromJson(json['condition'], zone: true),
     evidenceUrl: validEntryUrl(json['evidence_url'])
         ? json['evidence_url'] as String
@@ -256,7 +251,6 @@ class ParkingZone {
     'id': ?id,
     'name': name,
     if (access != null) 'access': access!.name,
-    if (area != null) 'area': area!.name,
     if (condition != null) 'condition': condition!.toJson(),
     if (feeNote.isNotEmpty) 'fee_note': feeNote,
     if (guide.isNotEmpty) 'guide': guide,
@@ -282,6 +276,8 @@ class ParkingSegment {
     this.total,
     this.guide = '',
     this.evidenceUrl = '',
+    this.fee,
+    this.feePlan,
   });
 
   /// The segment's stable id in its spot; null until the server gives one.
@@ -292,9 +288,18 @@ class ParkingSegment {
   /// Where it runs, e.g. 建國北路口至松江路口; empty when not given.
   final String range;
 
-  /// What is painted there; null is unconfirmed (or broke the contract).
-  /// Never carries `allow`: the city's rules decide who may park.
+  /// What is painted there and who may park (`allow`, #188 layer 2:
+  /// eligibility goes with the bay); null is unconfirmed (or broke the
+  /// contract). Without `allow` the spot's flags and the city's rules
+  /// decide.
   final ParkingCondition? condition;
+
+  /// This segment's own rates (#188 layer 2); null takes the spot's fee
+  /// (整條路費率).
+  final Fee? fee;
+
+  /// The spot's fee plan [fee] copies; null when its own.
+  final String? feePlan;
 
   /// How many bays; null is unconfirmed.
   final int? total;
@@ -311,9 +316,7 @@ class ParkingSegment {
       name: json['name'] as String? ?? '',
       side: _optionalEnum(RoadSide.values, json['side']),
       range: json['range'] is String ? json['range'] as String : '',
-      condition: c is Map && c.containsKey('allow')
-          ? null
-          : ParkingCondition.fromJson(c, zone: true),
+      condition: ParkingCondition.fromJson(c, zone: true),
       total: total is num && total == total.truncate() && total >= 1
           ? total.toInt()
           : null,
@@ -321,6 +324,8 @@ class ParkingSegment {
       evidenceUrl: validEntryUrl(json['evidence_url'])
           ? json['evidence_url'] as String
           : '',
+      fee: json['fee'] is Map ? Fee.fromJson(json['fee']) : null,
+      feePlan: json['fee_plan'] is String ? json['fee_plan'] as String : null,
     );
   }
 
@@ -333,6 +338,8 @@ class ParkingSegment {
     'total': ?total,
     if (guide.isNotEmpty) 'guide': guide,
     if (evidenceUrl.isNotEmpty) 'evidence_url': evidenceUrl,
+    if (fee case final fee?) 'fee': fee.toJson(),
+    'fee_plan': ?feePlan,
   };
 }
 

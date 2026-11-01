@@ -102,8 +102,9 @@ select throws_ok($$select pg_temp.c('x11','offStreet',null,
 select throws_ok($$select pg_temp.c('x12','offStreet',null,
   '{"parking_zones":[{"name":"機車區","condition":{"bay":"motorcycle","use":"usual","allow":{"scooter":true}}}]}')$$,
   '23514',null,'a zone condition no access matches is refused');
-select throws_ok($$select pg_temp.c('x13','offStreet',null,'{"parking_zones":[{"name":"B1","area":"roof"}]}')$$,
-  '23514',null,'area is one of the listed areas');
+select lives_ok($$select pg_temp.c('x13','offStreet',null,'{"parking_zones":[{"name":"B1","area":"roof"}]}')$$,
+  'an old writer''s area is dropped, not refused (#188 layer 2)');
+select ok(not (select parking_zones->0 ? 'area' from community_spots where name='x13'),'the stored zone has no area');
 select throws_ok($$select pg_temp.c('x14','offStreet',null,'{"parking_zones":[{"name":"B1","condition":{}}]}')$$,
   '23514',null,'a zone never stores an empty condition');
 select throws_ok($$select pg_temp.c('x15','offStreet',null,'{"parking_zones":[{"name":"B1","fee":{"bus":{"mode":"free"}}}]}')$$,
@@ -162,7 +163,7 @@ select is(pg_temp.row('v3','時段重機格')->>'space_type','heavyOnly','v3 kee
 select is(pg_temp.row('v3','時段重機格')->>'heavy_allowed','true','v3 keeps the flags');
 select is(pg_temp.row('v3','試辦場站')->'zones_complete','true'::jsonb,'v3 returns zones_complete');
 select is(pg_temp.row('v3','試辦場站')->'parking_zones'->0->>'access','scooterHeavy','v3 keeps every zone access');
-select is(pg_temp.row('v3','試辦場站')->'parking_zones'->0->>'area','motorcycle','v3 keeps zone areas');
+select is(pg_temp.row('v3','試辦場站')->'parking_zones'->0->>'area',null,'zones carry no area (#188 layer 2)');
 select is(pg_temp.row('ov3','官方免費限時格')->'condition'->>'charge','free','official v3 returns the condition');
 select is(pg_temp.row('ov3','官方試辦場站')->'zones_complete','true'::jsonb,'official v3 returns zones_complete');
 select is(pg_temp.row('ov3','官方免費限時格')->>'scooter_allowed','true','official v3 keeps the flags');

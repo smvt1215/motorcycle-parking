@@ -13,12 +13,18 @@ Map<String, Object> hourly(int amount, [int perMinutes = 60, int? cap]) => {
   'per_minutes': perMinutes,
   'daily_cap': ?cap,
 };
-Map<String, Object> visit(int amount, [int? maxMinutes]) => {
+// A visit's hours are the condition's time limit since #188 layer 2: the
+// source text keeps them for the reviewer, the rate does not.
+Map<String, Object> visit(int amount, [int? _]) => {
   'mode': 'per_visit',
   'amount': amount,
-  'max_minutes': ?maxMinutes,
 };
-Map<String, Object> daily(int amount) => {'mode': 'daily', 'amount': amount};
+// 每日 N 元 is per visit, charged again the next day (#188 layer 2).
+Map<String, Object> daily(int amount) => {
+  'mode': 'per_visit',
+  'amount': amount,
+  'renew': 'midnight',
+};
 
 void expectReading(
   String note,

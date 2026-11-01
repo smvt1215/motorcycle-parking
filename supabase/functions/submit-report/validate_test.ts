@@ -1,5 +1,6 @@
 import {
   identityHash,
+  segmentPatchesStated,
   spotDeletedResponse,
   validate,
   validFee,
@@ -13,7 +14,14 @@ Deno.test('zones carry the same structured fee contract, car prices included', (
     access: 'scooterHeavy',
     fee: {
       scooter: { mode: 'free' },
-      heavy: { mode: 'hourly', amount: 20, per_minutes: 30, daily_cap: 100 },
+      heavy: {
+        mode: 'hourly',
+        amount: 20,
+        per_minutes: 30,
+        daily_cap: 100,
+        cap_reset: 'calendar_day',
+      },
+      car: { mode: 'not_applicable' },
     },
   };
   if (!validZones([zone])) throw new Error('valid zone fee rejected');
@@ -26,13 +34,30 @@ Deno.test('zones carry the same structured fee contract, car prices included', (
       { heavy: { mode: 'hourly', amount: 20 } },
       { heavy: { mode: 'daily', amount: -1 } },
       { heavy: { mode: 'daily', amount: 2.5 } },
+      // New writes name all three vehicles and each rate whole (#188
+      // layer 2, fee.write).
+      { scooter: { mode: 'free' }, heavy: { mode: 'free' } },
+      {
+        scooter: { mode: 'free' },
+        heavy: { mode: 'per_visit', amount: 30 },
+        car: { mode: 'free' },
+      },
     ]
   ) {
     if (validZones([{ ...zone, fee }])) {
       throw new Error('invalid zone fee accepted');
     }
   }
-  if (!validZones([{ ...zone, fee: { car: { mode: 'free' } } }])) {
+  if (
+    !validZones([{
+      ...zone,
+      fee: {
+        scooter: { mode: 'not_applicable' },
+        heavy: { mode: 'not_applicable' },
+        car: { mode: 'free' },
+      },
+    }])
+  ) {
     throw new Error('zone car fee rejected');
   }
   // A new spot's zone states both vehicles (#201).
@@ -276,10 +301,10 @@ Deno.test('fees are a rate per vehicle with known modes only', () => {
         heavy: { mode: 'same_as_car' },
       },
       {
-        scooter: { mode: 'per_visit', amount: 30, max_minutes: 360 },
-        heavy: { mode: 'daily', amount: 50 },
+        scooter: { mode: 'per_visit', amount: 30, extension_amount: 30 },
+        heavy: { mode: 'per_visit', amount: 50, renew: 'midnight' },
       },
-      { scooter: { mode: 'free' }, heavy: { mode: 'posted' } },
+      { scooter: { mode: 'free' }, heavy: { mode: 'not_applicable' } },
       { heavy: { mode: 'same_as_scooter' } },
       { car: { mode: 'free' } },
     ]
@@ -311,9 +336,26 @@ Deno.test('fees are a rate per vehicle with known modes only', () => {
       throw new Error(`bad fee accepted: ${JSON.stringify(fee)}`);
     }
   }
-  const fee = { scooter: { mode: 'daily', amount: 30 } };
+  const fee = {
+    scooter: { mode: 'per_visit', amount: 30, renew: 'midnight' },
+    heavy: { mode: 'not_applicable' },
+    car: { mode: 'not_applicable' },
+  };
   if (validate({ ...base, spot: { ...base.spot, fee } }) !== null) {
     throw new Error('create with a fee refused');
+  }
+  // A new spot names all three vehicles, each rate whole (#188 layer 2).
+  for (
+    const partial of [
+      { scooter: fee.scooter },
+      { ...fee, scooter: { mode: 'per_visit', amount: 30 } },
+      { ...fee, scooter: { mode: 'daily', amount: 30 } },
+    ]
+  ) {
+    if (
+      validate({ ...base, spot: { ...base.spot, fee: partial } }) !==
+        'invalid fee'
+    ) throw new Error(`incomplete fee accepted: ${JSON.stringify(partial)}`);
   }
   if (
     validate({
@@ -329,8 +371,15 @@ Deno.test('fees are a rate per vehicle with known modes only', () => {
     field: 'fee_note',
   };
   if (
-    validate({ ...flag, proposed: { fee, fee_note: '每日 30 元' } }) !== null
+    validate({ ...flag, proposed: { fee, fee_note: '每次 30 元' } }) !== null
   ) throw new Error('suggested fee refused');
+  // A suggestion names the vehicles it changes, each rate whole.
+  if (
+    validate({
+      ...flag,
+      proposed: { fee: { scooter: { mode: 'per_visit', amount: 30 } } },
+    }) === null
+  ) throw new Error('a per-visit rate without renew accepted');
   if (
     validate({
       ...flag,
@@ -499,12 +548,26 @@ Deno.test('new street spots may carry segments; zones and segments take no ids f
           side: 'north',
           range: '建國北路口至松江路口',
           total: 18,
-          condition: { bay: 'motorcycle', use: 'usual' },
+          condition: {
+            bay: 'motorcycle',
+            use: 'usual',
+            allow: { scooter: true, heavy: false },
+          },
           evidence_url: 'https://example.com/n.jpg',
+          fee: {
+            scooter: { mode: 'hourly', amount: 20, per_minutes: 60 },
+            heavy: { mode: 'not_applicable' },
+            car: { mode: 'not_applicable' },
+          },
         },
         {
           name: '南側',
-          condition: { bay: 'car', use: 'share', share: 'car_motorcycle' },
+          condition: {
+            bay: 'car',
+            use: 'share',
+            share: 'car_motorcycle',
+            allow: { scooter: true, heavy: 'not_stated' },
+          },
         },
       ],
     },
@@ -517,12 +580,24 @@ Deno.test('new street spots may carry segments; zones and segments take no ids f
         name: '北側',
         condition: { bay: 'motorcycle', basis: { source_url: 'https://x.tw' } },
       }],
+      // Each new segment states both vehicles (#188 layer 2).
       [{
         name: '北側',
         condition: { bay: 'motorcycle', allow: { scooter: true } },
       }],
+      [{ name: '北側' }],
       [{ name: '' }],
-      [{ name: '北側', fee: {} }],
+      // A segment's fee is written whole; plans are an admin's.
+      [{
+        name: '北側',
+        condition: { allow: { scooter: true, heavy: true } },
+        fee: {},
+      }],
+      [{
+        name: '北側',
+        condition: { allow: { scooter: true, heavy: true } },
+        fee_plan: 'p1',
+      }],
       {},
     ]
   ) {
@@ -590,13 +665,19 @@ Deno.test('suggestions may change zones and segments by id (#188)', () => {
       {
         parking_segments: [{
           id: 's1',
-          condition: { bay: 'car', use: 'share', share: 'car_motorcycle' },
+          condition: {
+            bay: 'car',
+            use: 'share',
+            share: 'car_motorcycle',
+            allow: { scooter: true, heavy: true },
+          },
         }],
       },
       {
         parking_segments: [{ id: 's1', removed: true }, {
           name: '南側',
           side: 'south',
+          condition: { allow: { scooter: true, heavy: false } },
         }],
       },
     ]
@@ -752,4 +833,38 @@ Deno.test('a deleted spot is refused with a sentence the app shows (#200)', () =
   if (spotDeletedResponse.message !== '這個點已被刪除') {
     throw new Error('message');
   }
+});
+
+Deno.test("segments are a street spot's; a changed segment states both vehicles (#188 layer 2)", () => {
+  const lot = {
+    ...base,
+    spot: {
+      ...base.spot,
+      space_type: 'offStreet',
+      parking_segments: [{
+        name: '北側',
+        condition: { allow: { scooter: true, heavy: false } },
+      }],
+    },
+  };
+  if (validate(lot) !== 'invalid parking_segments') {
+    throw new Error('a lot with segments accepted');
+  }
+  const stored = [{ id: 's1', name: '北側' }, {
+    id: 's2',
+    name: '南側',
+    condition: { allow: { scooter: true, heavy: false } },
+  }];
+  if (segmentPatchesStated([{ id: 's1', total: 3 }], stored)) {
+    throw new Error('a changed segment without eligibility accepted');
+  }
+  if (!segmentPatchesStated([{ id: 's2', total: 3 }], stored)) {
+    throw new Error('a stated segment refused');
+  }
+  if (
+    !segmentPatchesStated(
+      [{ id: 's1', condition: { allow: { scooter: false, heavy: true } } }],
+      stored,
+    )
+  ) throw new Error('a segment filled in refused');
 });

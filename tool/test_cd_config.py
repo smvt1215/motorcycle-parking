@@ -66,6 +66,50 @@ class BuildConfigurationTest(unittest.TestCase):
             with patch.dict(os.environ, env), patch("cd_config.ROOT", Path(directory)), self.assertRaises(ValueError):
                 configure_build("production", "ios")
 
+    def mobile_env(self, **extra):
+        ref = "a" * 20
+        return {"SUPABASE_PROJECT_REF": ref, "SUPABASE_URL": f"https://{ref}.supabase.co",
+                "SUPABASE_ANON_KEY": "anon", "GOOGLE_MAPS_API_KEY": "maps", **extra}
+
+    def test_app_check_options_follow_the_platform(self):
+        env = self.mobile_env(FIREBASE_IOS_API_KEY="ios-key", FIREBASE_IOS_APP_ID="1:123456:ios:abc123",
+                              FIREBASE_ANDROID_API_KEY="android-key",
+                              FIREBASE_ANDROID_APP_ID="1:123456:android:def456",
+                              FIREBASE_PROJECT_ID="demo-project")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with patch.dict(os.environ, env, clear=True), patch("cd_config.ROOT", root):
+                configure_build("staging", "ios")
+            data = json.loads((root / "config/staging.json").read_text())
+        self.assertEqual(data["FIREBASE_API_KEY"], "ios-key")
+        self.assertEqual(data["FIREBASE_APP_ID"], "1:123456:ios:abc123")
+        self.assertEqual(data["FIREBASE_MESSAGING_SENDER_ID"], "123456")
+        self.assertEqual(data["FIREBASE_PROJECT_ID"], "demo-project")
+
+    def test_missing_app_check_settings_build_without_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with patch.dict(os.environ, self.mobile_env(), clear=True), patch("cd_config.ROOT", root):
+                configure_build("production", "ios")
+            data = json.loads((root / "config/production.json").read_text())
+        self.assertFalse(any(name.startswith("FIREBASE_") for name in data))
+
+    def test_partial_or_crossed_app_check_settings_are_rejected_before_any_write(self):
+        cases = [
+            {"FIREBASE_IOS_API_KEY": "key"},
+            {"FIREBASE_IOS_APP_ID": "1:123456:ios:abc123", "FIREBASE_PROJECT_ID": "demo-project"},
+            {"FIREBASE_IOS_API_KEY": "key", "FIREBASE_IOS_APP_ID": "1:123456:android:abc123",
+             "FIREBASE_PROJECT_ID": "demo-project"},
+            {"FIREBASE_IOS_API_KEY": "key", "FIREBASE_IOS_APP_ID": "1:123456:ios:abc123"},
+        ]
+        for extra in cases:
+            with self.subTest(extra=sorted(extra)), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                with patch.dict(os.environ, self.mobile_env(**extra), clear=True), \
+                        patch("cd_config.ROOT", root), self.assertRaises(ValueError):
+                    configure_build("staging", "ios")
+                self.assertEqual(list(root.iterdir()), [])
+
 
 if __name__ == "__main__":
     unittest.main()

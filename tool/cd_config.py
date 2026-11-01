@@ -25,6 +25,30 @@ def private_file(path, data):
     path.write_bytes(data if isinstance(data, bytes) else data.encode())
 
 
+def firebase_options(platform):
+    """App Check's FirebaseOptions for one mobile platform, or none (#203).
+
+    The API key and app id are set per platform (FIREBASE_ANDROID_API_KEY,
+    FIREBASE_ANDROID_APP_ID, FIREBASE_IOS_*); without both, App Check stays
+    off and the build still succeeds. One without the other is a mistake. The
+    sender id is the project number inside the app id.
+    """
+    prefix = f"FIREBASE_{platform.upper()}_"
+    key, app_id = os.environ.get(prefix + "API_KEY", ""), os.environ.get(prefix + "APP_ID", "")
+    if not key and not app_id:
+        return {}
+    if not key or not app_id:
+        raise ValueError(f"{prefix}API_KEY and {prefix}APP_ID must be set together")
+    match = re.fullmatch(rf"1:(\d+):{platform}:[0-9a-f]+", app_id)
+    if not match:
+        raise ValueError(f"{prefix}APP_ID is not a Firebase {platform} app id")
+    project = required("FIREBASE_PROJECT_ID")
+    if not re.fullmatch(r"[a-z][a-z0-9-]{4,28}[a-z0-9]", project):
+        raise ValueError("FIREBASE_PROJECT_ID is not a Firebase project id")
+    return {"FIREBASE_API_KEY": key, "FIREBASE_APP_ID": app_id,
+            "FIREBASE_MESSAGING_SENDER_ID": match.group(1), "FIREBASE_PROJECT_ID": project}
+
+
 def configure_build(environment, platform):
     ref = required("SUPABASE_PROJECT_REF")
     url = required("SUPABASE_URL")
@@ -41,10 +65,13 @@ def configure_build(environment, platform):
         values["GOOGLE_MAPS_WEB_API_KEY"] = required("GOOGLE_MAPS_API_KEY")
         private_file(ROOT / f"config/{environment}.json", json.dumps(values))
         return
+    # Validate before writing anything, like the backend check above.
+    firebase = firebase_options(platform)
     maps = ROOT / "config/maps.local.json"
     private_file(maps, json.dumps({platform: required("GOOGLE_MAPS_API_KEY")}))
     configure(maps, ROOT)
     values.update(json.loads((ROOT / "config/maps.generated.json").read_text()))
+    values.update(firebase)
     private_file(ROOT / f"config/{environment}.json", json.dumps(values))
     if platform == "android":
         keystore = Path(os.environ["RUNNER_TEMP"]) / "upload.jks"

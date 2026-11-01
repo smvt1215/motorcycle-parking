@@ -40,7 +40,10 @@ enum Charge { toll, free }
 enum LimitKind {
   timeLimit('time_limit'),
   specialVehicle('special_vehicle'),
-  evOnly('ev_only');
+  evOnly('ev_only'),
+
+  /// 時段性禁停 (#188 layer 2): nobody may park during its periods.
+  noParking('no_parking');
 
   const LimitKind(this.wire);
   final String wire;
@@ -57,10 +60,6 @@ enum SpecialVehicle {
 
 /// Vehicles a schedule slot lets park.
 enum SlotVehicle { scooter, heavy, car }
-
-/// A lot zone's area (§1.1): 機車區, 汽車區, 重機專區 or 混合; null is
-/// unconfirmed. Off-street zones only.
-enum ZoneArea { motorcycle, car, heavy, mixed }
 
 /// Which off-street spaces and facilities place a spot off the street.
 const offStreetSpaceTypes = {SpaceType.offStreet};
@@ -109,13 +108,63 @@ const eligibilitySpotKeys = {
   'heavy': (allowed: 'heavy_allowed', notStated: 'heavy_not_stated'),
 };
 
-/// The keys each limit kind must and may carry, with whole-number ranges.
+/// A limit kind's periods (#188 layer 2, `condition.limits.<kind>.periods`):
+/// at most [maxEntries] slots of [keys] (all but the from/to pair
+/// required), each [ranges] key a whole number in range.
+typedef LimitPeriodSpec = ({
+  int maxEntries,
+  List<String> keys,
+  Map<String, (int, int)> ranges,
+});
+
+/// The keys each limit kind must and may carry, with whole-number ranges,
+/// its periods, and keys that may not appear together.
 const limitKeys =
-    <LimitKind, ({List<String> required, Map<String, (int, int)> optional})>{
-      LimitKind.timeLimit: (required: [], optional: {'max_minutes': (1, 1440)}),
-      LimitKind.specialVehicle: (required: ['vehicle'], optional: {}),
-      LimitKind.evOnly: (required: [], optional: {}),
+    <
+      LimitKind,
+      ({
+        List<String> required,
+        Map<String, (int, int)> optional,
+        LimitPeriodSpec? periods,
+        List<String> exclusive,
+      })
+    >{
+      LimitKind.timeLimit: (
+        required: [],
+        optional: {'max_minutes': (1, 1440)},
+        periods: (
+          maxEntries: 8,
+          keys: ['days', 'from', 'to', 'max_minutes', 'extensions'],
+          ranges: {'max_minutes': (1, 1440), 'extensions': (0, 10)},
+        ),
+        exclusive: ['max_minutes', 'periods'],
+      ),
+      LimitKind.specialVehicle: (
+        required: ['vehicle'],
+        optional: {},
+        periods: null,
+        exclusive: [],
+      ),
+      LimitKind.evOnly: (
+        required: [],
+        optional: {},
+        periods: null,
+        exclusive: [],
+      ),
+      LimitKind.noParking: (
+        required: ['periods'],
+        optional: {},
+        periods: (maxEntries: 8, keys: ['days', 'from', 'to'], ranges: {}),
+        exclusive: [],
+      ),
     };
+
+/// The keys a new write's limit of each kind carries (#188 layer 2,
+/// `condition.write.limits_required`): a time limit names its periods, not
+/// the old shapes.
+const limitsRequiredOnWrite = <LimitKind, List<String>>{
+  LimitKind.timeLimit: ['periods'],
+};
 
 /// A street bay on a motorcycle bay must say toll or free unless one of
 /// these limits already decides its legacy space type (§4.3).
@@ -144,24 +193,20 @@ const Map<String, Object?> feeContract = {
   'follow': {
     'vehicles': ['heavy'],
     'modes': ['same_as_scooter', 'same_as_car'],
-    'optional': {
-      'factor_pct': {'min': 100, 'max': 1000},
-    },
+    'optional': <String, Object?>{},
   },
   'modes': {
-    'free': {'required': <String, Object?>{}, 'optional': <String, Object?>{}},
-    'posted': {
+    'not_applicable': {
       'required': <String, Object?>{},
       'optional': <String, Object?>{},
     },
+    'free': {'required': <String, Object?>{}, 'optional': <String, Object?>{}},
     'hourly': {
       'required': {
         'amount': {'min': 0, 'max': 10000},
         'per_minutes': {'min': 1, 'max': 1440},
       },
       'optional': {
-        'unit_minutes': {'min': 1, 'max': 'per_minutes'},
-        'free_minutes': {'min': 1, 'max': 1440},
         'daily_cap': {'min': 0, 'max': 10000},
         'cap_reset': 'cap_reset',
       },
@@ -171,16 +216,9 @@ const Map<String, Object?> feeContract = {
         'amount': {'min': 0, 'max': 10000},
       },
       'optional': {
-        'max_minutes': {'min': 1, 'max': 1440},
         'renew': 'renew',
-        'extension': 'extension',
+        'extension_amount': {'min': 0, 'max': 10000},
       },
-    },
-    'daily': {
-      'required': {
-        'amount': {'min': 0, 'max': 10000},
-      },
-      'optional': {'cap_reset': 'cap_reset'},
     },
     'by_time': {
       'required': {'periods': 'periods'},
@@ -192,36 +230,82 @@ const Map<String, Object?> feeContract = {
     'renew': ['none', 'midnight'],
     'cross_period': ['each_period', 'entry_only'],
   },
-  'extension': {
-    'required': {
-      'amount': {'min': 0, 'max': 10000},
-      'max_times': {'min': 1, 'max': 10},
-    },
-    'optional': {
-      'minutes': {'min': 1, 'max': 1440},
-    },
-  },
   'periods': {
     'max_entries': 6,
     'keys': ['days', 'from', 'to', 'rate'],
-    'nested_modes': ['free', 'posted', 'hourly', 'per_visit', 'daily'],
+    'nested_modes': ['free', 'hourly', 'per_visit'],
+  },
+  'read_only_modes': ['daily', 'posted'],
+  'write': {
+    'required_vehicles': ['scooter', 'heavy', 'car'],
+    'required': {
+      'per_visit': ['renew'],
+    },
+    'required_with': {
+      'hourly': {'cap_reset': 'daily_cap'},
+    },
+    'cross_period_when': {'nested_mode': 'per_visit', 'min_periods': 2},
   },
 };
 
+/// One period of a time limit or a no-parking limit (#188 layer 2): the
+/// days (`all`, `weekday`, `holiday` or a list of weekdays), [from]–[to]
+/// (both null: all day; from > to crosses midnight, belonging to the day it
+/// starts), and for a time limit the minutes per stay and how many times
+/// it may be extended (each extension is another [maxMinutes]).
+class LimitPeriod {
+  const LimitPeriod({
+    required this.days,
+    this.from,
+    this.to,
+    this.maxMinutes,
+    this.extensions,
+  });
+  final Object days;
+  final String? from, to;
+  final int? maxMinutes, extensions;
+
+  Map<String, Object> toJson() => {
+    'days': days,
+    'from': ?from,
+    'to': ?to,
+    'max_minutes': ?maxMinutes,
+    'extensions': ?extensions,
+  };
+}
+
 class ParkingLimit {
-  const ParkingLimit(this.kind, {this.maxMinutes, this.vehicle});
+  const ParkingLimit(
+    this.kind, {
+    this.maxMinutes,
+    this.vehicle,
+    this.periods = const [],
+  });
   final LimitKind kind;
 
-  /// Only for [LimitKind.timeLimit]; null is unconfirmed.
+  /// Only for [LimitKind.timeLimit] in its old shape (all day; read only,
+  /// #188 layer 2); null is unconfirmed. New writes use [periods].
   final int? maxMinutes;
 
   /// Only for [LimitKind.specialVehicle], where it is required.
   final SpecialVehicle? vehicle;
 
+  /// [LimitKind.timeLimit] and [LimitKind.noParking] (#188 layer 2).
+  final List<LimitPeriod> periods;
+
+  /// The time limit's periods, an old all-day `max_minutes` read as one
+  /// period whose extensions are unknown; empty when unconfirmed.
+  List<LimitPeriod> get timePeriods => periods.isNotEmpty
+      ? periods
+      : maxMinutes == null
+      ? const []
+      : [LimitPeriod(days: 'all', maxMinutes: maxMinutes)];
+
   Map<String, Object> toJson() => {
     'kind': kind.wire,
     'max_minutes': ?maxMinutes,
     'vehicle': ?vehicle?.wire,
+    if (periods.isNotEmpty) 'periods': [for (final p in periods) p.toJson()],
   };
 }
 
@@ -345,6 +429,18 @@ class ParkingCondition {
           vehicle: SpecialVehicle.values
               .where((v) => v.wire == l['vehicle'])
               .firstOrNull,
+          periods: [
+            for (final p in (l['periods'] as List?) ?? const [])
+              LimitPeriod(
+                days: p['days'] is List
+                    ? List<String>.from(p['days'] as List)
+                    : p['days'] as String,
+                from: p['from'] as String?,
+                to: p['to'] as String?,
+                maxMinutes: (p['max_minutes'] as num?)?.toInt(),
+                extensions: (p['extensions'] as num?)?.toInt(),
+              ),
+          ],
         ),
     ]..sort((a, b) => a.kind.index.compareTo(b.kind.index));
     final basis = c['basis'] as Map?;
@@ -447,6 +543,37 @@ bool validSlotTimes(Map<Object?, Object?> slot) {
       slot['from'] != slot['to'];
 }
 
+/// A limit's periods, as `contract_limit_periods()` in SQL.
+bool _validLimitPeriods(Object? v, LimitPeriodSpec spec) =>
+    v is List &&
+    v.isNotEmpty &&
+    v.length <= spec.maxEntries &&
+    v.every(
+      (e) =>
+          e is Map &&
+          e.keys.every(spec.keys.contains) &&
+          spec.keys.every(
+            (k) => e.containsKey(k) || timeOptionalPair.contains(k),
+          ) &&
+          validSlotTimes(e) &&
+          spec.ranges.entries.every(
+            (r) => _whole(e[r.key], r.value.$1, r.value.$2),
+          ),
+    );
+
+/// Whether a valid condition is complete for a new write (#188 layer 2,
+/// `condition_write_complete()` in SQL): a time limit carries its periods.
+bool conditionWriteComplete(Object? json) {
+  if (json is! Map) return false;
+  final limits = json['limits'];
+  if (limits is! List) return true;
+  return limits.every((l) {
+    if (l is! Map) return false;
+    final kind = LimitKind.values.where((k) => k.wire == l['kind']).firstOrNull;
+    return (limitsRequiredOnWrite[kind] ?? const []).every(l.containsKey);
+  });
+}
+
 /// Whether [json] is a condition the contract accepts; the same rules as
 /// `validCondition` in validate.ts and `valid_condition()` in SQL. A zone
 /// may carry `allow` and may leave the bay unconfirmed; a street condition
@@ -492,11 +619,20 @@ bool validCondition(Object? json, {bool zone = false}) {
       if (kind == null || !kinds.add(kind)) return false;
       final spec = limitKeys[kind]!;
       for (final MapEntry(:key, :value) in l.entries) {
-        if (key == 'kind' || spec.required.contains(key)) continue;
+        if (key == 'kind') continue;
+        // Time periods (#188 layer 2): time_limit's and no_parking's.
+        if (key == 'periods' && spec.periods != null) {
+          if (!_validLimitPeriods(value, spec.periods!)) return false;
+          continue;
+        }
+        if (spec.required.contains(key)) continue;
         final range = spec.optional[key];
         if (range == null || !_whole(value, range.$1, range.$2)) return false;
       }
       if (!spec.required.every(l.containsKey)) return false;
+      if (spec.exclusive.isNotEmpty && spec.exclusive.every(l.containsKey)) {
+        return false;
+      }
       if (l.containsKey('vehicle') &&
           !SpecialVehicle.values.any((v) => v.wire == l['vehicle'])) {
         return false;
@@ -740,7 +876,7 @@ typedef LegacySafeRules = ({
 const legacyUnsafeKeys = ['schedule'];
 const legacyUnsafeBasisKeys = ['expires_on'];
 const legacyLossyShare = ShareKind.scooterHeavy;
-const legacyLossyLimitKeys = ['max_minutes'];
+const legacyLossyLimitKeys = ['max_minutes', 'periods'];
 const legacyLossyWhenUnconfirmed = ['bay', 'use', 'share', 'charge'];
 const legacyAssumedCharge = {SpaceType.timedMotorcycle: Charge.toll};
 const LegacySafeRules legacySafeRules = (

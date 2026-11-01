@@ -104,8 +104,9 @@ select lives_ok($$select admin_resolve_report((select id from moderation_queue w
 reset role;
 
 -- A suggestion for one of a vehicle's two fields conflicts with a later
--- change of the other.
-update community_spots set heavy_allowed=false,heavy_not_stated=false where id=(select id from made);
+-- change of the other. (Without zones: zones would decide the flags,
+-- #188 layer 2.)
+update community_spots set parking_zones='[]',heavy_allowed=false,heavy_not_stated=false where id=(select id from made);
 insert into moderation_queue(source_id,reporter_id,reason,field,proposed) values
   ((select id::text from made),'10000000-0000-4000-8000-000000000001','重機官方未標示','eligibility','{"heavy_not_stated":true}');
 update community_spots set heavy_allowed=true where id=(select id from made);

@@ -31,4 +31,4 @@ PostgREST 的 RPC：`POST /rest/v1/rpc/<name>`，以 `Content-Profile: api_v1`�
 
 ## 型別
 
-領域型別（格位、條件、費率）以 `supabase/functions/_shared/parking_contract.json` 為準。這兩份 OpenAPI 文件只描述傳輸格式。TS（RTK Query）由這兩份文件產生：`admin_web/react` 執行 `npm run codegen`，產出 `src/api/v1/*.generated.ts`，CI 會檢查產物沒有漂移。讀取類 API（PostgREST 一律是 POST）要在 `admin_web/react/openapi-codegen.mjs` 的 `READS` 列為 query。Dart 型別在 P1 的後續 PR 加入。
+領域型別（格位、條件、費率）以 `supabase/functions/_shared/parking_contract.json` 為準。這兩份 OpenAPI 文件只描述傳輸格式。TS（RTK Query）由這兩份文件產生：`admin_web/react` 執行 `npm run codegen`，產出 `src/api/v1/*.generated.ts`，CI 會檢查產物沒有漂移。讀取類 API（PostgREST 一律是 POST）要在 `admin_web/react/scripts/codegen.mjs` 的 `READS` 列為 query。App 的 Dart 用戶端由 `python3 tool/gen_api_dart.py` 產生 `lib/api/v1/*.g.dart`（不可變 class、`fromJson`／`toJson`、`==`／`hashCode`，不用 freezed／build_runner）；`ApiV1Client(supabase, headers: ...)` 的 `headers` 每次呼叫前取一次（App Check），每支 API 另有 `...Raw` 回傳原始 JSON。CI 以 `--check` 檢查產物沒有漂移。

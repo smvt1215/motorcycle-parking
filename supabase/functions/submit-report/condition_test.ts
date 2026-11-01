@@ -5,6 +5,7 @@ import {
   bayKindOf,
   legacyAccess,
   legacySpaceType,
+  proposedConditionComplete,
   validate,
   validCondition,
   validSegments,
@@ -63,8 +64,8 @@ Deno.test('rider zones keep their keys and stay consistent', () => {
   if (
     validZones([{ name: 'B2', condition: { allow: { scooter: true } } }])
   ) throw new Error('a zone stating one vehicle accepted');
-  // Riders send no zone condition yet: refused as an unknown key, so the
-  // consistency check never loosens what the DB refuses.
+  // Riders may send a zone condition (#188 layer 2: S5 copies limits to
+  // the zones), consistent with its access and without a basis.
   const zone = {
     name: 'B1',
     access: 'heavyCar',
@@ -72,9 +73,28 @@ Deno.test('rider zones keep their keys and stay consistent', () => {
       bay: 'car',
       use: 'usual',
       allow: { scooter: false, heavy: true },
+      limits: [{
+        kind: 'time_limit',
+        periods: [{ days: 'all', max_minutes: 120, extensions: 1 }],
+      }],
     },
   };
-  if (validZones([zone])) throw new Error('zone condition accepted');
+  if (!validZones([zone])) throw new Error('zone condition refused');
+  if (validZones([{ ...zone, access: 'scooterOnly' }])) {
+    throw new Error('an inconsistent zone condition accepted');
+  }
+  if (
+    validZones([{
+      ...zone,
+      condition: { ...zone.condition, basis: { source_url: 'https://a.tw' } },
+    }])
+  ) throw new Error('a rider zone basis accepted');
+  if (
+    validZones([{
+      ...zone,
+      condition: { ...zone.condition, limits: [{ kind: 'time_limit' }] },
+    }])
+  ) throw new Error('an old time limit shape accepted on a new write');
 });
 
 const create = (spot: Record<string, unknown>) =>
@@ -104,7 +124,22 @@ Deno.test('a new street spot may carry its condition', () => {
         bay: 'motorcycle',
         use: 'usual',
         charge: 'free',
-        limits: [{ kind: 'time_limit', max_minutes: 20 }],
+        limits: [{
+          kind: 'time_limit',
+          periods: [{ days: 'all', max_minutes: 20, extensions: 0 }],
+        }],
+      },
+    },
+    {
+      space_type: 'paidMotorcycle',
+      condition: {
+        bay: 'motorcycle',
+        use: 'usual',
+        charge: 'toll',
+        limits: [{
+          kind: 'no_parking',
+          periods: [{ days: ['mon'], from: '06:00', to: '08:00' }],
+        }],
       },
     },
     { space_type: 'paidMotorcycle', condition: null },
@@ -179,7 +214,10 @@ Deno.test('suggestions carry a condition with the space type it is stored under'
     bay: 'motorcycle',
     use: 'usual',
     charge: 'toll',
-    limits: [{ kind: 'time_limit', max_minutes: 20 }],
+    limits: [{
+      kind: 'time_limit',
+      periods: [{ days: 'weekday', max_minutes: 20, extensions: 1 }],
+    }],
   };
   const ok = [
     { space_type: 'timedMotorcycle', condition: timed },
@@ -212,19 +250,12 @@ Deno.test('suggestions carry a condition with the space type it is stored under'
   }
 });
 
-Deno.test('rider zones may name their area', () => {
-  if (
-    !validZones([{ name: 'B1', area: 'motorcycle', access: 'scooterOnly' }, {
-      name: 'B2',
-      area: 'car',
-      access: 'heavyCar',
-    }])
-  ) {
-    throw new Error('zone area rejected');
-  }
-  for (const area of ['bus', '', null, ['car']]) {
-    if (validZones([{ name: 'B1', area, access: 'scooterOnly' }])) {
-      throw new Error(`area ${JSON.stringify(area)} accepted`);
+Deno.test("an old build's zone area is let through for the DB to drop", () => {
+  // #188 layer 2 (PM_ANS_20261101_49): area is gone from the contract; old
+  // builds still send it, and the tables' trigger drops it.
+  for (const area of ['motorcycle', 'bus', null]) {
+    if (!validZones([{ name: 'B1', area, access: 'scooterOnly' }])) {
+      throw new Error(`area ${JSON.stringify(area)} refused`);
     }
   }
 });
@@ -288,5 +319,26 @@ Deno.test('shared cases: bay kinds', () => {
   for (const { name, condition, bay_kind } of cases.bay_kinds) {
     const got = bayKindOf(condition);
     if (got !== bay_kind) throw new Error(`${name}: got ${got}`);
+  }
+});
+
+Deno.test('a suggestion gives a time limit its periods, unless it keeps the stored one (#188 layer 2)', () => {
+  const old = {
+    bay: 'motorcycle',
+    use: 'usual',
+    charge: 'toll',
+    limits: [{ kind: 'time_limit', max_minutes: 30 }],
+  };
+  const proposed = { space_type: 'timedMotorcycle', condition: old };
+  if (proposedConditionComplete(proposed, { condition: { charge: 'free' } })) {
+    throw new Error('an old time limit shape accepted as new');
+  }
+  if (
+    !proposedConditionComplete(proposed, {
+      condition: { ...old, charge: 'free' },
+    })
+  ) throw new Error('the stored time limit, untouched, refused');
+  if (!proposedConditionComplete({ space_type: 'paidMotorcycle' }, undefined)) {
+    throw new Error('a suggestion without a condition refused');
   }
 });

@@ -334,6 +334,366 @@ void main() {
       );
     });
 
+    test('限時分時段：說出現在的限停時長與延長次數，不在時段內也說（#188 第 2 層）', () {
+      ParkingDecision at(DateTime when) => decideParking(
+        street(
+          SpaceType.timedMotorcycle,
+          condition: c({
+            'bay': 'motorcycle',
+            'use': 'usual',
+            'charge': 'toll',
+            'limits': [
+              {
+                'kind': 'time_limit',
+                'periods': [
+                  {
+                    'days': 'all',
+                    'from': '07:00',
+                    'to': '20:00',
+                    'max_minutes': 120,
+                    'extensions': 1,
+                  },
+                ],
+              },
+            ],
+          }),
+        ),
+        VehicleType.heavy,
+        bundled,
+        now: when,
+      );
+      // 12:00 and 22:00 Taipei.
+      final noon = at(DateTime.utc(2026, 10, 27, 4));
+      expect(noon.status, EligibilityStatus.conditional);
+      expect(noon.restriction, RuleRestriction.timeLimited);
+      expect(noon.reason, contains('現在每次限停 2 小時，可延長 1 次'));
+      expect(noon.reason, contains('限時時段：每天 07:00–20:00 每次限停 2 小時，可延長 1 次'));
+      expect(at(DateTime.utc(2026, 10, 27, 14)).reason, contains('現在不在限時時段'));
+    });
+
+    test('時段性禁停：禁停時段內說明現在不可停（#188 第 2 層）', () {
+      ParkingDecision at(DateTime when) => decideParking(
+        street(
+          SpaceType.paidMotorcycle,
+          condition: c({
+            'bay': 'motorcycle',
+            'use': 'usual',
+            'charge': 'toll',
+            'limits': [
+              {
+                'kind': 'no_parking',
+                'periods': [
+                  {
+                    'days': ['tue'],
+                    'from': '11:00',
+                    'to': '13:00',
+                  },
+                ],
+              },
+            ],
+          }),
+        ),
+        VehicleType.scooter,
+        bundled,
+        now: when,
+      );
+      final during = at(DateTime.utc(2026, 10, 27, 4));
+      expect(during.status, EligibilityStatus.conditional);
+      expect(during.restriction, RuleRestriction.timeLimited);
+      expect(during.reason, contains('現在是禁停時段，不可停放'));
+      expect(during.reason, contains('禁停時段：週二 11:00–13:00'));
+      final after = at(DateTime.utc(2026, 10, 27, 8));
+      expect(after.reason, isNot(contains('現在是禁停時段')));
+      expect(after.reason, contains('禁停時段：週二 11:00–13:00'));
+    });
+
+    group('現在禁停與下一次可停的時間（PM_ANS_20261101_75）', () {
+      // 2026-10-27 is a Tuesday; 2026-10-28 a Wednesday made a holiday here.
+      const cal = HolidayCalendar(years: {2026}, off: {'2026-10-28'});
+      ParkingDecision at(List<Map<String, Object>> periods, DateTime when) =>
+          decideParking(
+            street(
+              SpaceType.paidMotorcycle,
+              condition: c({
+                'bay': 'motorcycle',
+                'use': 'usual',
+                'charge': 'toll',
+                'limits': [
+                  {'kind': 'no_parking', 'periods': periods},
+                ],
+              }),
+            ),
+            VehicleType.scooter,
+            bundled,
+            now: when,
+            calendar: cal,
+          );
+      // Taipei time to an instant.
+      DateTime tpe(int m, int d, int h, [int min = 0]) =>
+          DateTime.utc(2026, m, d, h - 8, min);
+
+      test('禁停時段內：仍是有條件，帶現在禁停與結束時間', () {
+        final d = at([
+          {'days': 'all', 'from': '06:00', 'to': '08:00'},
+        ], tpe(10, 27, 7));
+        expect(d.status, EligibilityStatus.conditional);
+        expect(d.gaps, contains(DecisionGap.noParkingNow));
+        expect(d.nextParkableAt, tpe(10, 27, 8));
+      });
+
+      test('禁停時段外：沒有標記也沒有時間', () {
+        final d = at([
+          {'days': 'all', 'from': '06:00', 'to': '08:00'},
+        ], tpe(10, 27, 9));
+        expect(d.gaps, isNot(contains(DecisionGap.noParkingNow)));
+        expect(d.nextParkableAt, isNull);
+      });
+
+      test('跨午夜：屬開始那天，下一次可停在隔天早上', () {
+        final d = at([
+          {
+            'days': ['tue'],
+            'from': '23:00',
+            'to': '07:00',
+          },
+        ], tpe(10, 28, 2));
+        expect(d.gaps, contains(DecisionGap.noParkingNow));
+        expect(d.nextParkableAt, tpe(10, 28, 7));
+      });
+
+      test('平日／假日依國定假日：週三放假時「假日全天」禁停延續到週四 0 點', () {
+        final holiday = [
+          {'days': 'holiday'},
+        ];
+        final d = at(holiday, tpe(10, 28, 12));
+        expect(d.gaps, contains(DecisionGap.noParkingNow));
+        expect(d.nextParkableAt, tpe(10, 29, 0));
+        // The Tuesday before is a workday.
+        expect(at(holiday, tpe(10, 27, 12)).nextParkableAt, isNull);
+      });
+
+      test('永遠禁停：不給下一次可停的時間', () {
+        final d = at([
+          {'days': 'all'},
+        ], tpe(10, 27, 12));
+        expect(d.gaps, contains(DecisionGap.noParkingNow));
+        expect(d.nextParkableAt, isNull);
+      });
+
+      test('汽機車共用格的普通機車時段也帶現在禁停（交叉審查 P2）', () {
+        final d = decideParking(
+          street(
+            SpaceType.flexShared,
+            source: 'official',
+            condition: c({
+              'bay': 'car',
+              'use': 'share',
+              'share': 'car_motorcycle',
+              'charge': 'toll',
+              'schedule': [
+                {
+                  'days': 'all',
+                  'vehicles': ['scooter', 'car'],
+                },
+              ],
+              'limits': [
+                {
+                  'kind': 'no_parking',
+                  'periods': [
+                    {'days': 'all', 'from': '09:00', 'to': '12:00'},
+                  ],
+                },
+              ],
+            }),
+          ),
+          VehicleType.scooter,
+          bundled,
+          now: tpe(10, 27, 10),
+          calendar: cal,
+        );
+        expect(d.gaps, contains(DecisionGap.noParkingNow));
+        expect(d.nextParkableAt, tpe(10, 27, 12));
+      });
+
+      test('一段禁停、另一段可停：點位層不標現在禁停（交叉審查 P2）', () {
+        final spot = ParkingSpot(
+          id: 'two',
+          name: 'two',
+          lat: 25,
+          lng: 121,
+          city: '臺北市',
+          spaceType: SpaceType.paidMotorcycle,
+          condition: c({'bay': 'motorcycle', 'use': 'usual', 'charge': 'toll'}),
+          source: 'official',
+          segments: [
+            ParkingSegment.fromJson({
+              'name': 'A',
+              'condition': {
+                'allow': {'scooter': true, 'heavy': false},
+                'limits': [
+                  {
+                    'kind': 'no_parking',
+                    'periods': [
+                      {'days': 'all', 'from': '09:00', 'to': '12:00'},
+                    ],
+                  },
+                ],
+              },
+            }),
+            ParkingSegment.fromJson({
+              'name': 'B',
+              'condition': {
+                'allow': {'scooter': true, 'heavy': false},
+              },
+            }),
+          ],
+        );
+        final d = decideParking(
+          spot,
+          VehicleType.scooter,
+          bundled,
+          now: tpe(10, 27, 10),
+          calendar: cal,
+        );
+        expect(d.segments.first.gaps, contains(DecisionGap.noParkingNow));
+        expect(d.gaps, isNot(contains(DecisionGap.noParkingNow)));
+        expect(d.nextParkableAt, isNull);
+      });
+
+      test('相接的禁停時段一路接到隔天才可停', () {
+        final d = at([
+          {'days': 'all', 'from': '20:00', 'to': '23:59'},
+          {'days': 'all', 'from': '23:59', 'to': '09:00'},
+        ], tpe(10, 27, 21));
+        expect(d.nextParkableAt, tpe(10, 28, 9));
+      });
+    });
+
+    test('縣市規則有條件時，禁停時段仍寫進原因（交叉審查 P1）', () {
+      final d = decideParking(
+        street(
+          SpaceType.paidMotorcycle,
+          city: '臺中市',
+          condition: c({
+            'bay': 'motorcycle',
+            'use': 'usual',
+            'charge': 'toll',
+            'limits': [
+              {
+                'kind': 'no_parking',
+                'periods': [
+                  {
+                    'days': ['tue'],
+                    'from': '11:00',
+                    'to': '13:00',
+                  },
+                ],
+              },
+            ],
+          }),
+        ),
+        VehicleType.heavy,
+        bundled,
+        now: DateTime.utc(2026, 10, 27, 4),
+      );
+      expect(d.status, EligibilityStatus.conditional);
+      expect(d.reason, contains('現在是禁停時段，不可停放'));
+    });
+
+    test('路段只寫限制時，點位的限電動等限制仍保留（交叉審查 P1）', () {
+      final spot = ParkingSpot(
+        id: 'ev',
+        name: 'ev',
+        lat: 25,
+        lng: 121,
+        city: '臺北市',
+        spaceType: SpaceType.evMotorcycle,
+        condition: c({
+          'bay': 'motorcycle',
+          'limits': [
+            {'kind': 'ev_only'},
+          ],
+        }),
+        source: 'official',
+        segments: [
+          ParkingSegment.fromJson({
+            'name': 'A',
+            'condition': {
+              'allow': {'scooter': true, 'heavy': true},
+              'limits': [
+                {
+                  'kind': 'no_parking',
+                  'periods': [
+                    {'days': 'holiday'},
+                  ],
+                },
+              ],
+            },
+          }),
+        ],
+      );
+      final d = decideParking(spot, VehicleType.scooter, bundled, now: now);
+      expect(d.segments.single.reason, contains('限電動機車'));
+      expect(d.segments.single.reason, contains('禁停時段：假日 全天'));
+      expect(d.restriction, RuleRestriction.evOnly);
+    });
+
+    test('路邊逐段判斷：資格跟格位走，點位結論取最開放的一段（#188 第 2 層）', () {
+      ParkingSegment seg(String name, Map<String, Object?> condition) =>
+          ParkingSegment.fromJson({'name': name, 'condition': condition});
+      final spot = ParkingSpot(
+        id: 'segments',
+        name: 'segments',
+        lat: 25,
+        lng: 121,
+        city: '臺北市',
+        spaceType: SpaceType.paidMotorcycle,
+        condition: c({'bay': 'motorcycle', 'use': 'usual', 'charge': 'toll'}),
+        source: 'official',
+        segments: [
+          seg('北側', {
+            'allow': {'scooter': true, 'heavy': false},
+          }),
+          seg('南側', {
+            ...shareToll,
+            'allow': {'scooter': true, 'heavy': true},
+          }),
+          seg('西側', {
+            'allow': {'scooter': true, 'heavy': 'not_stated'},
+          }),
+        ],
+      );
+      final heavy = decideParking(spot, VehicleType.heavy, bundled, now: now);
+      expect(
+        [for (final z in heavy.segments) z.status],
+        [
+          EligibilityStatus.notAllowed,
+          EligibilityStatus.allowed,
+          EligibilityStatus.unverified,
+        ],
+      );
+      expect(heavy.segments.first.reason, '此路段標示不開放大型重機');
+      expect(heavy.segments.last.gaps, {DecisionGap.notStated});
+      expect(heavy.status, EligibilityStatus.allowed);
+      // The open segment's basis reaches the spot (交叉審查 P2).
+      expect(heavy.basis.length, greaterThan(1));
+      final closed = ParkingSpot.fromJson({
+        ...spot.toJson(),
+        'parking_segments': [
+          {
+            'name': '北側',
+            'condition': {
+              'allow': {'scooter': true, 'heavy': false},
+            },
+          },
+        ],
+      });
+      expect(
+        decideParking(closed, VehicleType.heavy, bundled, now: now).status,
+        EligibilityStatus.notAllowed,
+      );
+    });
+
     test('普大共用標示是公告；有效時比縣市規則具體，到期回到規則或待確認', () {
       ParkingDecision share(Map<String, Object?>? basis, String city) =>
           decideParking(
@@ -534,6 +894,48 @@ void main() {
         expect(taipei.restriction, RuleRestriction.timeLimited);
         expect(taipei.reason, isNot(contains('機車時段：')));
         expect(taipei.reason, isNot(contains('大重機共用')));
+      });
+
+      test('heavyShareSlotsOf：四面路牌與 decideParking 用同一份時段（#188 第 2 層）', () {
+        ParkingCondition shareOf(
+          String charge,
+          List<Map<String, Object>> slots,
+        ) => c({
+          'bay': 'car',
+          'use': 'share',
+          'share': 'car_motorcycle',
+          'charge': charge,
+          if (slots.isNotEmpty) 'schedule': slots,
+        });
+        final taipei = heavyShareSlotsOf(
+          shareOf('toll', [dayCar, nightScooter]),
+          [rule('臺北市', VehicleType.heavy)],
+          district: '',
+          now: at(2026, 10, 27, 22),
+        );
+        expect(taipei.slots, hasLength(2));
+        expect(taipei.ruleLimit, isNull);
+        expect(taipei.scheduleUnknown, isFalse);
+        expect(
+          taipei.basis.map((b) => b.kind),
+          containsAll([BasisKind.law, BasisKind.cityRule]),
+        );
+        final taichung = heavyShareSlotsOf(
+          shareOf('toll', [dayCar, nightScooter]),
+          [rule('臺中市', VehicleType.heavy)],
+          district: '',
+          now: at(2026, 10, 27, 22),
+        );
+        expect(taichung.ruleLimit?.restriction, RuleRestriction.signage);
+        expect(taichung.ruleLimit?.reason, contains('大重機共用'));
+        // Free bays: Taipei's rule opens no scooter slot.
+        final free = heavyShareSlotsOf(
+          shareOf('free', [nightScooter]),
+          [rule('臺北市', VehicleType.heavy)],
+          district: '',
+          now: at(2026, 10, 27, 22),
+        );
+        expect(free.scheduleUnknown, isTrue);
       });
 
       test('重機規則尚未生效（2026-10-05）：重機只列汽車時段，夜間現在不可停並給下一段', () {
@@ -1382,21 +1784,12 @@ void main() {
       }, VehicleType.heavy);
       expect(partial.kind, PriceKind.partial);
       expect(partial.gaps, ['隔日是否另計']);
-      final firstFree = priceAnswer({
-        'heavy': {
-          'mode': 'per_visit',
-          'amount': 0,
-          'max_minutes': 20,
-          'extension': {'amount': 40, 'max_times': 1},
-        },
-      }, VehicleType.heavy);
-      expect(firstFree.gaps, ['延長時長']);
       final followed = priceAnswer({
         'scooter': {'mode': 'hourly', 'amount': 15, 'per_minutes': 60},
-        'heavy': {'mode': 'same_as_scooter', 'factor_pct': 150},
+        'heavy': {'mode': 'same_as_scooter'},
       }, VehicleType.heavy);
       expect(followed.kind, PriceKind.known);
-      expect(followed.rate!['amount'], 22.5);
+      expect(followed.rate!['amount'], 15);
       final posted = priceAnswer({
         'heavy': {
           'mode': 'by_time',
@@ -1406,12 +1799,6 @@ void main() {
               'from': '08:00',
               'to': '20:00',
               'rate': {'mode': 'hourly', 'amount': 20, 'per_minutes': 60},
-            },
-            {
-              'days': 'all',
-              'from': '20:00',
-              'to': '08:00',
-              'rate': {'mode': 'posted'},
             },
           ],
         },
@@ -1508,7 +1895,7 @@ void main() {
           'scooter': {'mode': 'hourly', 'amount': 20, 'per_minutes': 60},
         },
         VehicleType.heavy,
-        legacyText: '機車每小時 20 元；大型重機費率未確認',
+        legacyText: '機車每小時 20 元；大型重機費率未提供',
       );
       expect(answer.kind, PriceKind.unknown);
       expect(answer.text, isNull);
