@@ -68,6 +68,72 @@ class AdminV1Client {
     'p_version': pVersion,
     'p_reason': pReason,
   });
+
+  /// 客服表單的申請（#269）
+  Future<List<SupportRequest>> supportRequests({
+    String? pStatus,
+    int? pLimit,
+  }) async {
+    final raw = await supportRequestsRaw(pStatus: pStatus, pLimit: pLimit);
+    return [
+      for (final e in raw as List)
+        SupportRequest.fromJson(e as Map<String, Object?>),
+    ];
+  }
+
+  /// [supportRequests] as served, for callers that keep the JSON (#202).
+  Future<Object?> supportRequestsRaw({String? pStatus, int? pLimit}) =>
+      _call('support_requests', {'p_status': ?pStatus, 'p_limit': ?pLimit});
+
+  /// 客服申請結案
+  Future<SupportResolution> resolveSupportRequest({
+    required String pId,
+    required String pStatus,
+    String? pNote,
+  }) async {
+    final raw = await resolveSupportRequestRaw(
+      pId: pId,
+      pStatus: pStatus,
+      pNote: pNote,
+    );
+    return SupportResolution.fromJson(raw as Map<String, Object?>);
+  }
+
+  /// [resolveSupportRequest] as served, for callers that keep the JSON (#202).
+  Future<Object?> resolveSupportRequestRaw({
+    required String pId,
+    required String pStatus,
+    String? pNote,
+  }) => _call('resolve_support_request', {
+    'p_id': pId,
+    'p_status': pStatus,
+    'p_note': ?pNote,
+  });
+
+  /// 確認身分後代為申請刪除帳號（#269）
+  Future<AdminAccountDeletion> requestAccountDeletionFor({
+    required String pUser,
+    required String pSupportRequest,
+    String? pNote,
+  }) async {
+    final raw = await requestAccountDeletionForRaw(
+      pUser: pUser,
+      pSupportRequest: pSupportRequest,
+      pNote: pNote,
+    );
+    return AdminAccountDeletion.fromJson(raw as Map<String, Object?>);
+  }
+
+  /// [requestAccountDeletionFor] as served, for callers that keep the JSON (#202).
+  Future<Object?> requestAccountDeletionForRaw({
+    required String pUser,
+    required String pSupportRequest,
+    String? pNote,
+  }) => _call('request_account_deletion_for', {
+    'p_user': pUser,
+    'p_support_request': pSupportRequest,
+    'p_note': ?pNote,
+  });
 }
 
 class MinAppVersion {
@@ -100,4 +166,206 @@ class MinAppVersion {
 
   @override
   int get hashCode => Object.hashAll([minSupportedAppVersion, changed]);
+}
+
+/// 一筆客服申請
+class SupportRequest {
+  const SupportRequest({
+    required this.id,
+    required this.kind,
+    required this.contactEmail,
+    required this.accountHint,
+    required this.message,
+    required this.status,
+    required this.createdAt,
+    this.notifiedAt,
+    this.resolvedAt,
+    required this.resolutionNote,
+    required this.deletionRequested,
+  });
+
+  factory SupportRequest.fromJson(Map<String, Object?> json) => SupportRequest(
+    id: json['id'] as String,
+    kind: json['kind'] as String,
+    contactEmail: json['contact_email'] as String,
+    accountHint: json['account_hint'] as String,
+    message: json['message'] as String,
+    status: json['status'] as String,
+    createdAt: json['created_at'] as String,
+    notifiedAt: json['notified_at'] == null
+        ? null
+        : json['notified_at'] as String,
+    resolvedAt: json['resolved_at'] == null
+        ? null
+        : json['resolved_at'] as String,
+    resolutionNote: json['resolution_note'] as String,
+    deletionRequested: json['deletion_requested'] as bool,
+  );
+
+  final String id;
+
+  final String kind;
+
+  /// 回覆用，已轉小寫
+  final String contactEmail;
+
+  /// 申請者說明的帳號線索（登入方式、當時的 email 或名稱）
+  final String accountHint;
+
+  final String message;
+
+  final String status;
+
+  /// ISO 8601 時間。送出時間
+  final String createdAt;
+
+  /// ISO 8601 時間。通知信寄出時間；沒有寄信服務時為 null
+  final String? notifiedAt;
+
+  /// ISO 8601 時間。結案時間
+  final String? resolvedAt;
+
+  final String resolutionNote;
+
+  /// 已代為建立刪除申請
+  final bool deletionRequested;
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'kind': kind,
+    'contact_email': contactEmail,
+    'account_hint': accountHint,
+    'message': message,
+    'status': status,
+    'created_at': createdAt,
+    'notified_at': notifiedAt,
+    'resolved_at': resolvedAt,
+    'resolution_note': resolutionNote,
+    'deletion_requested': deletionRequested,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SupportRequest &&
+      other.id == id &&
+      other.kind == kind &&
+      other.contactEmail == contactEmail &&
+      other.accountHint == accountHint &&
+      other.message == message &&
+      other.status == status &&
+      other.createdAt == createdAt &&
+      other.notifiedAt == notifiedAt &&
+      other.resolvedAt == resolvedAt &&
+      other.resolutionNote == resolutionNote &&
+      other.deletionRequested == deletionRequested;
+
+  @override
+  int get hashCode => Object.hashAll([
+    id,
+    kind,
+    contactEmail,
+    accountHint,
+    message,
+    status,
+    createdAt,
+    notifiedAt,
+    resolvedAt,
+    resolutionNote,
+    deletionRequested,
+  ]);
+}
+
+class SupportResolution {
+  const SupportResolution({required this.id, required this.status});
+
+  factory SupportResolution.fromJson(Map<String, Object?> json) =>
+      SupportResolution(
+        id: json['id'] as String,
+        status: json['status'] as String,
+      );
+
+  final String id;
+
+  final String status;
+
+  Map<String, Object?> toJson() => {'id': id, 'status': status};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SupportResolution && other.id == id && other.status == status;
+
+  @override
+  int get hashCode => Object.hashAll([id, status]);
+}
+
+/// 帳號的刪除申請狀態（同 api_v1 的 AccountDeletionState）與客服申請編號
+class AdminAccountDeletion {
+  const AdminAccountDeletion({
+    required this.status,
+    this.requestedAt,
+    this.scheduledAt,
+    required this.canSelfDelete,
+    this.cannotSelfDeleteReason,
+    required this.supportRequest,
+  });
+
+  factory AdminAccountDeletion.fromJson(Map<String, Object?> json) =>
+      AdminAccountDeletion(
+        status: json['status'] as String,
+        requestedAt: json['requested_at'] == null
+            ? null
+            : json['requested_at'] as String,
+        scheduledAt: json['scheduled_at'] == null
+            ? null
+            : json['scheduled_at'] as String,
+        canSelfDelete: json['can_self_delete'] as bool,
+        cannotSelfDeleteReason: json['cannot_self_delete_reason'] == null
+            ? null
+            : json['cannot_self_delete_reason'] as String,
+        supportRequest: json['support_request'] as String,
+      );
+
+  final String status;
+
+  /// ISO 8601 時間。申請時間
+  final String? requestedAt;
+
+  /// ISO 8601 時間。最早刪除時間（申請＋7 天）
+  final String? scheduledAt;
+
+  /// 帳號能不能自助申請刪除（管理員為 false）
+  final bool canSelfDelete;
+
+  final String? cannotSelfDeleteReason;
+
+  final String supportRequest;
+
+  Map<String, Object?> toJson() => {
+    'status': status,
+    'requested_at': requestedAt,
+    'scheduled_at': scheduledAt,
+    'can_self_delete': canSelfDelete,
+    'cannot_self_delete_reason': cannotSelfDeleteReason,
+    'support_request': supportRequest,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is AdminAccountDeletion &&
+      other.status == status &&
+      other.requestedAt == requestedAt &&
+      other.scheduledAt == scheduledAt &&
+      other.canSelfDelete == canSelfDelete &&
+      other.cannotSelfDeleteReason == cannotSelfDeleteReason &&
+      other.supportRequest == supportRequest;
+
+  @override
+  int get hashCode => Object.hashAll([
+    status,
+    requestedAt,
+    scheduledAt,
+    canSelfDelete,
+    cannotSelfDeleteReason,
+    supportRequest,
+  ]);
 }
