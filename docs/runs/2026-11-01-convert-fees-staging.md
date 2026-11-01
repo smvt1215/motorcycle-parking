@@ -60,10 +60,19 @@ dart run tool/convert_fees.dart --apply \
 | 桃園醫院露天汽車停車場 | community-heavy-as-car | 大型重機每小時 30 元，當日上限 150 元 |
 | 台灣聯通 台中草悟廣場-按車牌進 | community-heavy-as-car | 大型重機每小時 40 元 |
 
+## 左營 3 筆人工補正（#258）
+使用者選擇由 PM 工作階段用 Supabase MCP 呼叫 `admin_convert_fees_as` 寫入（Q258_FIX_METHOD_20261101：C），converted 3、skipped 0，#258 已關閉。
+- 點位：左營海軍眷村緯五路第一停車場（`official:2124a574-a937-52ff-a717-b74b630f1f4a`）、緯五路第二停車場（`official:9b2a65e4-9b81-5bb9-8838-a5eb0b502cbd`）、緯七路第一停車場（`official:c3935586-138c-5b64-830e-e72bf75b0f57`）。
+- 原文：「計次收費：機車每次30元（離場再停或跨日另計次收費）」。計時與月租都是汽車費率，不寫入。
+- 寫入：`{"scooter":{"mode":"per_visit","amount":30,"renew":"midnight"}}`；fee_note 重算為「機車每次 30 元，隔日另計；大型重機費率未提供」，原說明保留在 `fee_source_text`。per_visit 本來就是每次進場計一次，所以「離場再停另計」不另加備註。
+
+staging 合計寫入 189 筆（CLI 186＋人工 3）。
+
 ## production 上線時
 1. 確認 production 已部署 migration 202611011200（`admin_convert_fees_as`）。#271 會讓 CLI 在缺少這支函式時先停下。
 2. 確認匯入機器人已設成 service actor（PM_ANS_20261101_102）。
 3. 先用相同的 `--assume`／`--exclude` 預覽（不加 `--apply`），核對各類筆數，再加 `--apply` 執行。
-4. 執行後抽查，並另寫一份紀錄。
+4. 左營 3 筆照上節的 fee 一起補正（CLI 仍用 `--exclude` 排除，另以 `admin_convert_fees_as` 寫入）。
+5. 執行後抽查，並另寫一份紀錄。
 
 完整預覽與每筆清單只留在本機 scratch，不進 repo。
