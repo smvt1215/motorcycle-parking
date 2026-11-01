@@ -37,6 +37,7 @@ void main() {
     'min_supported_app_version': '0.1.0',
     'rules_version': 25,
     'spots_version': 808,
+    'availability_beta_cities': ['臺北市'],
   };
 
   test(
@@ -51,6 +52,7 @@ void main() {
           minSupportedAppVersion: '0.1.0',
           rulesVersion: 25,
           spotsVersion: 808,
+          availabilityBetaCities: ['臺北市'],
         ),
       );
       final request = requests.single;
@@ -114,6 +116,18 @@ void main() {
     expect(config.hashCode, ClientConfig.fromJson(Map.of(served)).hashCode);
     expect(
       config == ClientConfig.fromJson({...served, 'rules_version': 26}),
+      isFalse,
+    );
+    // The Beta cities compare by content, not by list identity.
+    final again = ClientConfig.fromJson({
+      ...served,
+      'availability_beta_cities': ['臺北市'],
+    });
+    expect(again, config);
+    expect(again.hashCode, config.hashCode);
+    expect(
+      config ==
+          ClientConfig.fromJson({...served, 'availability_beta_cities': []}),
       isFalse,
     );
   });

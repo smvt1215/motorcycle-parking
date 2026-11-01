@@ -63,12 +63,16 @@ class ClientConfig {
     required this.minSupportedAppVersion,
     required this.rulesVersion,
     required this.spotsVersion,
+    required this.availabilityBetaCities,
   });
 
   factory ClientConfig.fromJson(Map<String, Object?> json) => ClientConfig(
     minSupportedAppVersion: json['min_supported_app_version'] as String,
     rulesVersion: (json['rules_version'] as num).toInt(),
     spotsVersion: (json['spots_version'] as num).toInt(),
+    availabilityBetaCities: [
+      for (final e in json['availability_beta_cities'] as List) e as String,
+    ],
   );
 
   /// 低於這個版本的 App 要提示更新
@@ -80,10 +84,14 @@ class ClientConfig {
   /// data_versions 的 spots 版本
   final int spotsVersion;
 
+  /// 官方即時車位仍在 Beta 的縣市（例如 臺北市），依名稱排序；App 依此顯示 Beta 標示，結束 Beta 不需發版。沒有就是空陣列
+  final List<String> availabilityBetaCities;
+
   Map<String, Object?> toJson() => {
     'min_supported_app_version': minSupportedAppVersion,
     'rules_version': rulesVersion,
     'spots_version': spotsVersion,
+    'availability_beta_cities': availabilityBetaCities,
   };
 
   @override
@@ -91,9 +99,40 @@ class ClientConfig {
       other is ClientConfig &&
       other.minSupportedAppVersion == minSupportedAppVersion &&
       other.rulesVersion == rulesVersion &&
-      other.spotsVersion == spotsVersion;
+      other.spotsVersion == spotsVersion &&
+      _equal(other.availabilityBetaCities, availabilityBetaCities);
 
   @override
-  int get hashCode =>
-      Object.hashAll([minSupportedAppVersion, rulesVersion, spotsVersion]);
+  int get hashCode => Object.hashAll([
+    minSupportedAppVersion,
+    rulesVersion,
+    spotsVersion,
+    _hash(availabilityBetaCities),
+  ]);
 }
+
+bool _equal(Object? a, Object? b) {
+  if (a is List && b is List) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (!_equal(a[i], b[i])) return false;
+    }
+    return true;
+  }
+  if (a is Map && b is Map) {
+    if (a.length != b.length) return false;
+    for (final key in a.keys) {
+      if (!b.containsKey(key) || !_equal(a[key], b[key])) return false;
+    }
+    return true;
+  }
+  return a == b;
+}
+
+int _hash(Object? value) => switch (value) {
+  List() => Object.hashAll(value.map(_hash)),
+  Map() => Object.hashAllUnordered(
+    value.entries.map((e) => Object.hash(e.key, _hash(e.value))),
+  ),
+  _ => value.hashCode,
+};
