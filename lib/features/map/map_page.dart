@@ -28,9 +28,24 @@ import 'google_parking_map.dart';
 import 'osm_tiles.dart';
 import 'cluster_badge.dart';
 
+/// Whether the Google map takes gestures: shown, on top, and not under a
+/// page of the map tab. A map that does not shows its pointer interceptor
+/// on the web, so the page above gets the mouse and touches instead of the
+/// map's HTML view; its camera and selection stay as they were.
+bool mapInteractive({
+  required bool showControls,
+  required bool covered,
+  required bool routeIsCurrent,
+}) => showControls && !covered && routeIsCurrent;
+
 class MapPage extends ConsumerStatefulWidget {
-  const MapPage({super.key, this.showControls = true});
+  const MapPage({super.key, this.showControls = true, this.covered = false});
   final bool showControls;
+
+  /// A page of the map tab (地圖怎麼看) is on top: the open spot's sheet,
+  /// drawn on the root overlay, hides with its state kept and returns
+  /// when the page closes. Unlike [showControls], nothing is reset.
+  final bool covered;
   @override
   ConsumerState<MapPage> createState() => _MapPageState();
 }
@@ -361,11 +376,13 @@ class _MapPageState extends ConsumerState<MapPage> {
     final filterHeight = (16 + MediaQuery.textScalerOf(context).scale(15))
         .clamp(40.0, double.infinity);
     final open = widget.showControls ? selected : null;
+    final covered = widget.covered;
     return PopScope(
-      // Back closes the details before leaving the map.
-      canPop: open == null,
+      // Back closes the details before leaving the map; a covering page
+      // handles back itself.
+      canPop: open == null || covered,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _closeSpot();
+        if (!didPop && !covered) _closeSpot();
       },
       child: OverlayPortal(
         controller: sheetPortal,
@@ -377,11 +394,20 @@ class _MapPageState extends ConsumerState<MapPage> {
                 right: 0,
                 top: MediaQuery.paddingOf(overlay).top,
                 bottom: 0,
-                child: SpotSheet(
-                  key: ValueKey(open.id),
-                  store: store,
-                  spot: open,
-                  onClose: _closeSpot,
+                // Hidden, not removed, under a covering page: the sheet
+                // keeps its size and scroll for when the page closes.
+                child: Offstage(
+                  key: const ValueKey('spot-sheet-overlay'),
+                  offstage: covered,
+                  child: TickerMode(
+                    enabled: !covered,
+                    child: SpotSheet(
+                      key: ValueKey(open.id),
+                      store: store,
+                      spot: open,
+                      onClose: _closeSpot,
+                    ),
+                  ),
                 ),
               ),
         child: _layers(
@@ -439,9 +465,11 @@ class _MapPageState extends ConsumerState<MapPage> {
             center: LatLng(store.lat, store.lng),
             spots: spots,
             eligibility: store.eligible,
-            interactive:
-                widget.showControls &&
-                (ModalRoute.of(context)?.isCurrent ?? true),
+            interactive: mapInteractive(
+              showControls: widget.showControls,
+              covered: widget.covered,
+              routeIsCurrent: ModalRoute.of(context)?.isCurrent ?? true,
+            ),
             panelVisible: !widget.showControls,
             selected: open,
             onMapTap: _closeSpot,
@@ -825,26 +853,24 @@ class _MapPageState extends ConsumerState<MapPage> {
                       ),
                     ),
                   ),
-                  // Reference, not a filter: a small corner button, the way
-                  // map apps place their layer and legend controls.
+                  // Reference, not a filter: a corner button under the
+                  // filters on the trailing edge (Main board: 44pt on iOS
+                  // 4 below the filters, 48dp on Android 8 below).
                   Align(
                     alignment: AlignmentDirectional.centerEnd,
                     child: Padding(
-                      padding: const EdgeInsetsDirectional.only(
-                        top: 8,
+                      padding: EdgeInsetsDirectional.only(
+                        top: isCupertino ? 4 : 8,
                         end: 16,
                       ),
                       child: SizedBox.square(
-                        dimension: 44,
+                        dimension: isCupertino ? 44 : 48,
                         child: _MapIconPill(
                           key: const ValueKey('map-legend-button'),
                           tooltip: '地圖怎麼看',
                           icon: Icons.help_outline,
-                          onTap: () => showMapLegend(
-                            context,
-                            store.vehicle,
-                            availability: store.availabilitySource.enabled,
-                          ),
+                          iconSize: 24,
+                          onTap: () => openMapLegend(context, fromMap: true),
                         ),
                       ),
                     ),
@@ -1083,10 +1109,12 @@ class _MapIconPill extends StatelessWidget {
     required this.tooltip,
     required this.icon,
     required this.onTap,
+    this.iconSize = 20,
   });
   final String tooltip;
   final IconData icon;
   final VoidCallback onTap;
+  final double iconSize;
   @override
   Widget build(BuildContext context) => Material(
     elevation: 2,
@@ -1104,7 +1132,7 @@ class _MapIconPill extends StatelessWidget {
             aspectRatio: 1,
             child: Icon(
               icon,
-              size: 20,
+              size: iconSize,
               color: Theme.of(context).colorScheme.onSurface,
             ),
           ),
