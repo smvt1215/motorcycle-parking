@@ -20,6 +20,7 @@ schema 就是版本：v1 只做加法（新增欄位、新增有預設值的參�
    - `operationId` 寫成 `<schema>_<name>`。
    - 不要把 `Content-Profile` 寫成參數：文件頂層的 `x-content-profile` 已標明 schema，用戶端的 base 會自動帶上。
    - 列出 `200` 回應，`default` 指向 `Error`。
+   - 只給登入者用的 `api_v1` 函式（只 grant `authenticated, service_role`，例如 #215 的刪除帳號）在 operation 加 `"x-requires-sign-in": true`：`check_responses.ts` 改為檢查 anon 被拒（401 42501），不要求 200。
    `tool/test_api_schema.py` 會檢查文件和 SQL 的函式完全對應。
 4. 錯誤：`raise sqlstate 'PTxyz' using message = '<穩定錯誤碼>', detail = '<json>'`，HTTP 狀態就是 xyz。用戶端依 `message` 的錯誤碼顯示文案，不解析其他文字。
 

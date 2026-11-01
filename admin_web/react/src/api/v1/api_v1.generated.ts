@@ -17,6 +17,28 @@ const injectedRtkApi = api.injectEndpoints({
     apiV1DataVersions: build.query<ApiV1DataVersionsApiResponse, ApiV1DataVersionsApiArg>({
       query: () => ({ url: `/rpc/data_versions`, method: 'POST' }),
     }),
+    apiV1AccountDeletionStatus: build.query<
+      ApiV1AccountDeletionStatusApiResponse,
+      ApiV1AccountDeletionStatusApiArg
+    >({
+      query: () => ({ url: `/rpc/account_deletion_status`, method: 'POST' }),
+    }),
+    apiV1RequestAccountDeletion: build.mutation<
+      ApiV1RequestAccountDeletionApiResponse,
+      ApiV1RequestAccountDeletionApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/rpc/request_account_deletion`,
+        method: 'POST',
+        body: queryArg.body,
+      }),
+    }),
+    apiV1CancelAccountDeletion: build.mutation<
+      ApiV1CancelAccountDeletionApiResponse,
+      ApiV1CancelAccountDeletionApiArg
+    >({
+      query: () => ({ url: `/rpc/cancel_account_deletion`, method: 'POST' }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -40,6 +62,17 @@ export type ApiV1SpotsInViewportApiArg = {
 };
 export type ApiV1DataVersionsApiResponse = /** status 200 資料集 → 版本 */ DataVersions;
 export type ApiV1DataVersionsApiArg = void;
+export type ApiV1AccountDeletionStatusApiResponse = /** status 200 刪除申請的狀態 */ AccountDeletionState;
+export type ApiV1AccountDeletionStatusApiArg = void;
+export type ApiV1RequestAccountDeletionApiResponse = /** status 200 刪除申請的狀態 */ AccountDeletionState;
+export type ApiV1RequestAccountDeletionApiArg = {
+  body: {
+    /** 從哪裡申請：App 內（app）或 App 外的刪除網頁（web），只記在稽核 */
+    p_source?: 'app' | 'web';
+  };
+};
+export type ApiV1CancelAccountDeletionApiResponse = /** status 200 刪除申請的狀態 */ AccountDeletionState;
+export type ApiV1CancelAccountDeletionApiArg = void;
 export type ClientConfig = {
   /** 低於這個版本的 App 一律整個擋下，必須更新才能繼續使用（使用者決定，#195 §7 第 7 題）。伺服器寧可不擋：沒有設定、格式不對或讀取失敗時回 0.1.0。App 離線或讀不到 client_config 時也不可以擋。只有 admin_v1.set_min_supported_app_version 能修改，每次修改都留稽核紀錄。 */
   min_supported_app_version: string;
@@ -161,9 +194,25 @@ export type DataVersions = {
   spots: number;
   [key: string]: number;
 };
+export type AccountDeletionState = {
+  /** none：沒有申請；pending：冷靜期中，到 scheduled_at 後刪除 */
+  status: 'none' | 'pending';
+  /** ISO 8601 時間。申請時間；none 時為 null */
+  requested_at: string | null;
+  /** ISO 8601 時間。最早刪除時間（申請＋7 天），實際在之後的每日排程（台灣 03:41）執行；none 時為 null */
+  scheduled_at: string | null;
+  /** 這個帳號能不能自助申請刪除；管理員為 false（要先由其他管理員移除權限）。App 在刪除說明頁就依此提示 */
+  can_self_delete: boolean;
+  /** 不能自助刪除的原因（錯誤碼）；可以時為 null */
+  cannot_self_delete_reason:
+    ('account.admin_cannot_self_delete' | null) | ('account.admin_cannot_self_delete' | null);
+};
 export const {
   useApiV1ClientConfigQuery,
   useApiV1CityRulesQuery,
   useApiV1SpotsInViewportQuery,
   useApiV1DataVersionsQuery,
+  useApiV1AccountDeletionStatusQuery,
+  useApiV1RequestAccountDeletionMutation,
+  useApiV1CancelAccountDeletionMutation,
 } = injectedRtkApi;
