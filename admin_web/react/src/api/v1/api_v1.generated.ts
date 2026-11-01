@@ -17,6 +17,8 @@ export type ClientConfig = {
   rules_version: number;
   /** data_versions 的 spots 版本 */
   spots_version: number;
+  /** 官方即時車位仍在 Beta 的縣市（例如 臺北市），依名稱排序；App 依此顯示 Beta 標示，結束 Beta 不需發版。沒有就是空陣列 */
+  availability_beta_cities: string[];
 };
 export type ApiError = {
   /** SQLSTATE；API 自訂錯誤為 PTxyz，HTTP 狀態即 xyz */
