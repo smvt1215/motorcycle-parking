@@ -163,7 +163,8 @@ platform :android do
       ENV["ANDROID_KEYSTORE_PATH"] = File.join(ENV.fetch("RUNNER_TEMP"), "upload.jks")
       sh("flutter", "build", "appbundle", "--release", "--flavor", "production",
          "--build-name=#{ENV.fetch('RELEASE_VERSION')}", "--build-number=#{number}",
-         "--dart-define-from-file=#{root_path('config/production.json')}")
+         "--dart-define-from-file=#{root_path('config/production.json')}",
+         "--dart-define=APP_CHANNEL=#{channel}")
       binary = root_path("build/app/outputs/bundle/productionRelease/app-production-release.aab")
       record_hash("android", number, binary)
       upload_to_play_store(**play_options(credentials), aab: binary, track: target, release_status: "completed",
@@ -218,6 +219,10 @@ platform :ios do
       sh("python3", root_path("tool/ios_signing.py"), "production")
       sh("flutter", "build", "ipa", "--release", "--build-name=#{version}", "--build-number=#{number}",
          "--dart-define-from-file=#{root_path('config/production.json')}",
+         # P14 需要更新: where its button goes. Empty until set (#262).
+         "--dart-define=APP_CHANNEL=#{channel}",
+         "--dart-define=APP_STORE_ID=#{ENV.fetch('APP_STORE_APP_ID', '')}",
+         "--dart-define=TESTFLIGHT_PUBLIC_URL=#{ENV.fetch('TESTFLIGHT_PUBLIC_URL', '')}",
          "--export-options-plist=#{ENV.fetch('RUNNER_TEMP')}/ExportOptions.plist")
       binaries = Dir[root_path("build/ios/ipa/*.ipa")]
       UI.user_error!("Expected one IPA") unless binaries.length == 1

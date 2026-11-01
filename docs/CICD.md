@@ -328,6 +328,14 @@ staging 設定已於 2026-10-24 完成，並以真實 Google 登入＋TOTP 取�
 - 該平台的 API key 與 App ID 都沒設定時（本機、PR CI、web、管理站、production 尚未設定）APP 不初始化 Firebase，照常運作，只是不送 token；只設定其中一項、App ID 平台不符，或缺 `FIREBASE_PROJECT_ID` 時，設定檢查會報錯。
 - `cd-staging.yml` 的 Android、iOS job 各自帶該平台的 key 與 App ID；`release.yml` 以同樣名稱讀取 production Environment，尚未設定時 production 建置停用 App Check。
 
+另有三個 dart-define 直接寫在建置指令，決定「需要更新」畫面（P14）的按鈕開哪裡：
+
+| dart-define | 來源 |
+|---|---|
+| `APP_CHANNEL` | `release.yml` 的 `RELEASE_CHANNEL`（`beta`、`rc`、`release`，fastlane 直接帶入，不另外推算）；`cd-staging.yml` 固定為 `staging`。沒有設定（本機、PR CI）視為正式版。RC 的建置就是推上商店的那一份，所以 App 把 `rc` 當成正式版，開 App Store／Google Play |
+| `APP_STORE_ID` | 只有 iOS：Environment variable `APP_STORE_APP_ID`，未設定時為空字串 |
+| `TESTFLIGHT_PUBLIC_URL` | 只有 iOS：Environment variable `TESTFLIGHT_PUBLIC_URL`，未設定時為空字串 |
+
 ### Provider
 | 建置 | Android | iOS |
 |---|---|---|
@@ -444,6 +452,9 @@ Play Integrity 只認得從 Google Play 安裝的 APP。staging 的 APK 經 Fire
   - 建立 APP 與 bundle id。
   - 建立 API key（App Manager 權限）。
   - 建立發布憑證與 provisioning profile。
+- **「需要更新」畫面（P14）的商店連結**：iOS 建置以 dart-define 帶入，未設定時建置照常成功，按鈕改為文字。
+  - `APP_STORE_ID`：取 `production` 的 variable `APP_STORE_APP_ID`（App Store Connect 的數字 Apple ID，與上傳用的是同一個值），建立 APP 後填入即可（#262）。未設定時顯示「請到 App Store 更新」。
+  - `TESTFLIGHT_PUBLIC_URL`：`production` 的 variable，填 `TESTFLIGHT_GROUP` 群組的 TestFlight 公開連結。未設定時 beta 建置顯示「請打開 TestFlight 更新」。
 - **Supabase**：
   - 建立 staging、production 兩個專案（staging 已建立並由 CD 部署；production 於上線前另建）。
   - 產生 access token。

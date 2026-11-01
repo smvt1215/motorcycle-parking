@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_localizations/flutter_localizations.dart'
     show GlobalWidgetsLocalizations;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,6 +8,7 @@ import 'package:dynamic_color/dynamic_color.dart';
 import 'package:cupertino_ui/cupertino_ui.dart' as cu;
 import 'package:material_3_expressive/material_3_expressive.dart';
 
+import 'core/update_gate.dart';
 import 'data/app_store.dart';
 import 'ui/adaptive/adaptive.dart';
 import 'features/map/map_legend_page.dart';
@@ -18,19 +21,60 @@ import 'features/contribute/contribute_page.dart';
 import 'features/contribute/my_contributions_page.dart';
 import 'features/launch/launch_screen.dart';
 import 'features/auth/sign_in.dart';
+import 'features/update/update_required_page.dart';
 
 class ParkingApp extends ConsumerStatefulWidget {
-  const ParkingApp({super.key, this.themeMode = ThemeMode.system});
+  const ParkingApp({
+    super.key,
+    this.themeMode = ThemeMode.system,
+    this.updateGate,
+  });
   final ThemeMode themeMode;
+
+  /// Blocks the app while it is older than the backend's minimum (P14);
+  /// read through the store's client by default.
+  final UpdateGate? updateGate;
   @override
   ConsumerState<ParkingApp> createState() => _ParkingAppState();
 }
 
 class _ParkingAppState extends ConsumerState<ParkingApp> {
+  late final UpdateGate updates =
+      widget.updateGate ?? UpdateGate.forClient(ref.read(storeProvider).client);
+
+  /// Checks again whenever the app returns, e.g. from the store.
+  late final AppLifecycleListener lifecycle;
+
+  @override
+  void initState() {
+    super.initState();
+    lifecycle = AppLifecycleListener(
+      onResume: () => unawaited(updates.check()),
+    );
+    unawaited(updates.check());
+  }
+
   late final GoRouter router = GoRouter(
     initialLocation: '/map',
     observers: [CNTabBarRouteObserver()],
+    refreshListenable: updates,
+    // While blocked P14 is the only route: nothing to go back to, and its
+    // PopScope keeps the system back button and gesture on it.
+    redirect: (context, state) {
+      final blocked = updates.required != null;
+      final onUpdate = state.uri.path == updateRequiredPath;
+      if (blocked && !onUpdate) return updateRequiredPath;
+      if (!blocked && onUpdate) return '/map';
+      return null;
+    },
     routes: [
+      GoRoute(
+        path: updateRequiredPath,
+        builder: (context, state) => switch (updates.required) {
+          final requirement? => UpdateRequiredPage(requirement: requirement),
+          null => const SizedBox.shrink(),
+        },
+      ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => AnimatedBuilder(
           animation: ref.read(storeProvider),
@@ -135,6 +179,8 @@ class _ParkingAppState extends ConsumerState<ParkingApp> {
   @override
   void dispose() {
     router.dispose();
+    lifecycle.dispose();
+    if (widget.updateGate == null) updates.dispose();
     super.dispose();
   }
 
@@ -205,6 +251,9 @@ class _ParkingAppState extends ConsumerState<ParkingApp> {
     ),
   );
 }
+
+/// P14 需要更新.
+const updateRequiredPath = '/update-required';
 
 /// Whether a page of the map tab, such as /map/legend, covers the map.
 bool mapCovered(int tab, String path) => tab == 0 && path != '/map';
