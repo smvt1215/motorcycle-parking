@@ -74,16 +74,50 @@ export function postgrestBaseQuery(profile: V1Profile): BaseQueryFn<PostgrestArg
         },
       };
     }
-    const text = await response.text();
-    const json: unknown = text ? JSON.parse(text) : null;
+    // The body can fail to arrive, or be a gateway's HTML page (a 502):
+    // both still end as a V1Error that keeps the HTTP status.
+    let text: string;
+    try {
+      text = await response.text();
+    } catch (failure) {
+      return {
+        error: {
+          status: response.status,
+          code: 'client.network',
+          message: 'client.network',
+          details: failure instanceof Error ? failure.message : String(failure),
+        },
+      };
+    }
+    let json: unknown = null;
+    let parsed = true;
+    try {
+      json = text ? JSON.parse(text) : null;
+    } catch {
+      parsed = false;
+    }
     if (!response.ok) {
-      const body = (json ?? {}) as Partial<{ code: string; message: string; details: string | null }>;
+      const body = (parsed && json !== null && typeof json === 'object' ? json : {}) as Partial<{
+        code: string;
+        message: string;
+        details: string | null;
+      }>;
       return {
         error: {
           status: response.status,
           code: body.code ?? String(response.status),
           message: body.message ?? 'client.unknown',
-          details: body.details ?? null,
+          details: body.details ?? (parsed ? null : text.slice(0, 200)),
+        },
+      };
+    }
+    if (!parsed) {
+      return {
+        error: {
+          status: response.status,
+          code: 'client.bad_response',
+          message: 'client.bad_response',
+          details: text.slice(0, 200),
         },
       };
     }

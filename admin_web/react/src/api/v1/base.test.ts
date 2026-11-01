@@ -86,4 +86,41 @@ describe('postgrestBaseQuery through the generated api_v1 endpoints', () => {
     const result = await store.dispatch(apiV1.endpoints.apiV1ClientConfig.initiate());
     expect(result.error).toMatchObject({ status: 0, code: 'client.network', details: 'Failed to fetch' });
   });
+
+  it('keeps the HTTP status when a gateway answers with HTML', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('<html>502 Bad Gateway</html>', { status: 502 })),
+    );
+    const store = makeStore({ postgrest: connection() });
+    const result = await store.dispatch(apiV1.endpoints.apiV1ClientConfig.initiate());
+    expect(result.error).toEqual({
+      status: 502,
+      code: '502',
+      message: 'client.unknown',
+      details: '<html>502 Bad Gateway</html>',
+    });
+  });
+
+  it('reports a success that is not JSON as client.bad_response', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('not json', { status: 200 })),
+    );
+    const store = makeStore({ postgrest: connection() });
+    const result = await store.dispatch(apiV1.endpoints.apiV1ClientConfig.initiate());
+    expect(result.error).toMatchObject({ status: 200, code: 'client.bad_response' });
+  });
+
+  it('reports a body cut off after the headers as client.network with the status', async () => {
+    const response = new Response('{}', { status: 200 });
+    vi.spyOn(response, 'text').mockRejectedValue(new TypeError('network error'));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => response),
+    );
+    const store = makeStore({ postgrest: connection() });
+    const result = await store.dispatch(apiV1.endpoints.apiV1ClientConfig.initiate());
+    expect(result.error).toMatchObject({ status: 200, code: 'client.network', details: 'network error' });
+  });
 });
