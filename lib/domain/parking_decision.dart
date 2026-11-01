@@ -568,6 +568,76 @@ List<ScheduleSlot> _slotsFor(ParkingCondition condition, VehicleType v) => [
     if (s.vehicles.contains(_slotVehicle(v))) s,
 ];
 
+/// The slots a heavy bike may park in on a shared car bay
+/// (PM_ANS_20261031_21), in the notice's order, each once: the car slots,
+/// since car bays are painted for heavy bikes too (標誌標線號誌設置規則
+/// §190); the scooter slots only where [rules] open the matching motorcycle
+/// bay to heavy bikes (Taipei's toll bays from 2026-10-06), both kinds
+/// agreeing when the charge is unconfirmed; and the slots the notice names
+/// for heavy bikes. With the basis of each kind of slot used, and the limit
+/// a conditional rule puts on the scooter slots (Taichung: only bays marked
+/// 「大重機共用」), which holds in those slots and must reach the rider.
+({List<ScheduleSlot> slots, List<DecisionBasis> basis, RuleVerdict? ruleLimit})
+_heavyShareSlots(
+  ParkingCondition condition,
+  List<CityRule> rules,
+  String district,
+  DateTime at,
+) {
+  final verdicts = [
+    for (final k in switch (condition.charge) {
+      Charge.toll => const [SpaceType.paidMotorcycle],
+      Charge.free => const [SpaceType.freeMotorcycle],
+      null => const [SpaceType.paidMotorcycle, SpaceType.freeMotorcycle],
+    })
+      ruleVerdict(rules, k, district, now: at),
+  ];
+  // Only a rule in force that opens the bay counts: an ended, unverified,
+  // closing or district-unknown rule opens no scooter slot.
+  final ruleOpens = verdicts.every(
+    (v) =>
+        v.kind == RuleVerdictKind.open ||
+        (v.kind == RuleVerdictKind.conditional &&
+            v.restriction != RuleRestriction.unverified),
+  );
+  var byLaw = false, byRule = false, byNotice = false;
+  final slots = <ScheduleSlot>[];
+  for (final s in condition.schedule) {
+    final car = s.vehicles.contains(SlotVehicle.car);
+    final scooter = ruleOpens && s.vehicles.contains(SlotVehicle.scooter);
+    final heavy = s.vehicles.contains(SlotVehicle.heavy);
+    if (!(car || scooter || heavy)) continue;
+    slots.add(s);
+    byLaw |= car;
+    byRule |= scooter;
+    byNotice |= heavy;
+  }
+  final rule = verdicts.first.rule;
+  return (
+    slots: slots,
+    ruleLimit: byRule
+        ? verdicts
+              .where((v) => v.kind == RuleVerdictKind.conditional)
+              .firstOrNull
+        : null,
+    basis: [
+      if (byLaw) const DecisionBasis(BasisKind.law),
+      if (byRule && rule != null)
+        DecisionBasis(
+          BasisKind.cityRule,
+          rule: rule,
+          url: rule.sourceUrl,
+          date: rule.effectiveDate,
+        ),
+      if (byNotice) const DecisionBasis(BasisKind.notice),
+    ],
+  );
+}
+
+/// How the rider is reminded that a shared car bay with no slots on file
+/// still rotates by its sign.
+const _shareSignReminder = '汽機車共用格請依現場牌面時段停放';
+
 String _clockText(int minute) {
   final m = minute % 1440;
   return '${(m ~/ 60).toString().padLeft(2, '0')}:'
@@ -791,8 +861,8 @@ ParkingDecision _street(
   }
 
   // A shared car bay opens to scooters only in the slots its notice names
-  // (§7 item 1), whatever else limits it (#155 item 16); heavy bikes park
-  // on car bays by law, shared or not.
+  // (§7 item 1), whatever else limits it (#155 item 16); heavy bikes are
+  // judged as on a car bay here, and by their own slots below.
   final shareSlots = carShare && vehicle == VehicleType.scooter
       ? noticeHolds
             ? _slotsFor(c, vehicle)
@@ -923,17 +993,27 @@ ParkingDecision _street(
   // Time slots (§3.3): shown with whether they hold now (#120), which the
   // reason says without switching the status, so markers and search keep
   // the bay's standing. Heavy bikes on a car bay park by law whatever the
-  // slots say.
+  // slots say, except on a shared car bay, where they park in the car
+  // slots, the scooter slots a city rule opens to them and the slots the
+  // notice names for them (PM_ANS_20261031_21).
+  final heavyOnShare = carShare && vehicle == VehicleType.heavy;
   if (c.schedule.isNotEmpty &&
-      !(vehicle == VehicleType.heavy && c.bay == Bay.car) &&
+      !(vehicle == VehicleType.heavy && c.bay == Bay.car && !carShare) &&
       result.status != EligibilityStatus.notAllowed) {
-    final slots = noticeHolds ? _slotsFor(c, vehicle) : const <ScheduleSlot>[];
+    final share = heavyOnShare && noticeHolds
+        ? _heavyShareSlots(c, rules, spot.district, at)
+        : null;
+    final slots = !noticeHolds
+        ? const <ScheduleSlot>[]
+        : share?.slots ?? _slotsFor(c, vehicle);
     if (slots.isEmpty) {
       result = result._with(
         status: EligibilityStatus.unverified,
-        reason: noticeHolds
-            ? '公告沒有列出${vehicle.label}的開放時段，請看現場牌面'
-            : _expiredNoticeReason(c.basis!, day),
+        reason: !noticeHolds
+            ? _expiredNoticeReason(c.basis!, day)
+            : heavyOnShare
+            ? '公告沒有列出汽車時段或對${vehicle.label}開放的機車時段，請看現場牌面'
+            : '公告沒有列出${vehicle.label}的開放時段，請看現場牌面',
         restriction: () => null,
         moreGaps: [DecisionGap.scheduleUnknown],
       );
@@ -942,16 +1022,33 @@ ParkingDecision _street(
       // signage, a limit), never replace it.
       final limited = result.status == EligibilityStatus.conditional;
       final kept = result.restriction;
+      final listed = {for (final b in result.basis) b.kind};
+      // A conditional rule's limit holds in the scooter slots it opens.
+      final ruleLimit = share?.ruleLimit;
       result = result._with(
         status: EligibilityStatus.conditional,
         reason:
             '${limited ? '${result.reason}；' : ''}'
+            '${heavyOnShare ? '汽機車依時段輪替使用，' : ''}'
             '${slotNowText(slots, at, calendar: calendar)}；'
-            '${vehicle.label}可停時段：${slots.map(slotText).join('；')}，請看現場牌面',
-        restriction: () =>
-            limited && kept != null ? kept : RuleRestriction.timeLimited,
+            '${vehicle.label}可停時段：${slots.map(slotText).join('；')}，請看現場牌面'
+            '${ruleLimit == null ? '' : '；機車時段：${ruleLimit.reason}'}',
+        restriction: () => limited && kept != null
+            ? kept
+            : ruleLimit?.restriction ?? RuleRestriction.timeLimited,
+        moreBasis: [
+          for (final b in share?.basis ?? const <DecisionBasis>[])
+            if (!listed.contains(b.kind) ||
+                (b.kind == BasisKind.cityRule &&
+                    !result.basis.any((r) => r.rule == b.rule)))
+              b,
+        ],
       );
     }
+  } else if (heavyOnShare && c.schedule.isEmpty && result.open) {
+    // Judged as a car bay; its sign still says when cars and scooters
+    // take turns.
+    result = result._with(reason: '${result.reason}；$_shareSignReminder');
   }
   return result;
 }
