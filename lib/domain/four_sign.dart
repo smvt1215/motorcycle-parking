@@ -947,19 +947,19 @@ FeeAnswer _fee(
 ) {
   final spotPrice = _priceOf(spot.fee, spot.feeNote, vehicle, now, calendar);
   final List<_Price> prices;
+  final anyZoneFee = spot.zones.any((z) => z.fee != null);
+  final wholeLot = places.isEmpty || places.every((a) => a.whole);
   if (street ||
       spot.zones.isEmpty ||
-      places.isNotEmpty && places.every((a) => a.whole)) {
+      !anyZoneFee && places.isNotEmpty && wholeLot) {
     // Segments carry no rate of their own yet: the spot's covers them.
     prices = [spotPrice];
   } else {
-    // No place open (the lot's access unconfirmed keeps its zones so):
-    // every zone prices it, as spotFeeSummary reads them, so a zone's own
-    // rate still supersedes the lot's.
-    final zones = places.isEmpty
-        ? spot.zones
-        : [for (final a in places) ?a.zone];
-    final anyZoneFee = spot.zones.any((z) => z.fee != null);
+    // A zone's own rate supersedes the lot's, as spotFeeSummary and
+    // decideParking read them, whether or not the zone says who may park.
+    // No zone place open (none open, or zones without access data standing
+    // as the whole lot): every zone prices it.
+    final zones = wholeLot ? spot.zones : [for (final a in places) ?a.zone];
     prices = [
       for (final z in zones)
         z.fee != null

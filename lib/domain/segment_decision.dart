@@ -108,20 +108,43 @@ OpenWindow openWindow(
   final ruleEnd = ruleEnds.isEmpty
       ? null
       : ruleEnds.reduce((a, b) => a < b ? a : b);
+  // The notice holds from its effective day and up to, not on, its
+  // expiry day (as decideParking's notice check): slots outside it open
+  // nothing, and a night slot stops where the notice ends. So does the
+  // city rule granting the place.
+  int? ymdMinute(String? ymd) {
+    final d = ymd == null ? null : DateTime.tryParse(ymd);
+    return d == null ? null : dayMinute(d);
+  }
+
+  final from = ymdMinute(c?.basis?.effectiveDate);
+  final noticeEnd = ymdMinute(c?.basis?.expiresOn);
+  final until = noticeEnd == null
+      ? ruleEnd
+      : ruleEnd == null || noticeEnd < ruleEnd
+      ? noticeEnd
+      : ruleEnd;
+  const last = 7;
   final unslotted =
       c == null ||
       c.schedule.isEmpty ||
       street && vehicle == VehicleType.heavy && c.bay == Bay.car;
   if (unslotted) {
-    // Open all the time the rule lasts: until its expiry, when that comes
-    // within a day.
-    if (ruleEnd == null) return OpenWindow.always;
-    if (ruleEnd <= at) return OpenWindow.never;
-    final within = ruleEnd - at < 1440;
+    // Open all the time the notice and the rule hold: from the notice's
+    // effective day, until the earlier of their ends.
+    if (from == null && until == null) return OpenWindow.always;
+    if (until != null && until <= at) return OpenWindow.never;
+    if (from != null && from > at) {
+      if (until != null && until <= from || from - at >= last * 1440) {
+        return OpenWindow.never;
+      }
+      return _opensAt(from, today);
+    }
+    final within = until != null && until - at < 1440;
     return OpenWindow(
       now: true,
-      until: within ? _clock(ruleEnd) : null,
-      untilMinute: within ? ruleEnd : null,
+      until: within ? _clock(until) : null,
+      untilMinute: within ? until : null,
     );
   }
   final slots = [
@@ -132,23 +155,6 @@ OpenWindow openWindow(
   // open status here means something else opened it.
   if (slots.isEmpty) return OpenWindow.always;
   final cal = calendar ?? HolidayCalendar.current;
-  const last = 7;
-  // The notice holds from its effective day and up to, not on, its
-  // expiry day (as decideParking's notice check): slots outside it open
-  // nothing, and a night slot stops where the notice ends. So does the
-  // city rule granting the place.
-  int? ymdMinute(String? ymd) {
-    final d = ymd == null ? null : DateTime.tryParse(ymd);
-    return d == null ? null : dayMinute(d);
-  }
-
-  final from = ymdMinute(c.basis?.effectiveDate);
-  final noticeEnd = ymdMinute(c.basis?.expiresOn);
-  final until = noticeEnd == null
-      ? ruleEnd
-      : ruleEnd == null || noticeEnd < ruleEnd
-      ? noticeEnd
-      : ruleEnd;
   final spans = [
     for (final s in slots)
       for (final (start, end) in datedSpans(
@@ -189,7 +195,11 @@ OpenWindow openWindow(
       if (start > at) start,
   ];
   if (next.isEmpty) return OpenWindow.never;
-  final first = next.reduce((a, b) => a < b ? a : b);
+  return _opensAt(next.reduce((a, b) => a < b ? a : b), today);
+}
+
+/// Not open now; opens at [first], minutes from [today]'s 00:00.
+OpenWindow _opensAt(int first, DateTime today) {
   final day = first ~/ 1440;
   final date = DateTime.utc(today.year, today.month, today.day + day);
   return OpenWindow(
@@ -288,7 +298,10 @@ List<SegmentDecision> decideSegments(
     calendar: calendar,
     basis: d.basis,
   );
-  if (spot.segments.isEmpty) {
+  // Rolled back to the judgement before C4 (useParkingDecision false), a
+  // street stands as one stretch judged as [whole], so the signs never
+  // judge segments by a decision the rest of the app no longer uses.
+  if (!useParkingDecision || spot.segments.isEmpty) {
     return [
       SegmentDecision(
         segment: null,

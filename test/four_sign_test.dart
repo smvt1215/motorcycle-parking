@@ -445,7 +445,7 @@ void main() {
       expect((p[3].main, p[3].note), ('B1', '機車區'));
     });
 
-    test('沒有費率資料寫官方未標示（虛框）', () {
+    test('沒有費率資料寫未提供（虛框）', () {
       final bare = ParkingSpot.fromJson({
         ...lotJson,
         'fee': null,
@@ -1015,6 +1015,79 @@ void main() {
       final p = plates(spot, VehicleType.heavy, night);
       expect(p[0].main, isNot(contains('電動')));
       expect(p[0].semantics, isNot(contains('電動')));
+    });
+  });
+
+  group('交叉審查修正（#222）', () {
+    test('分區只有費率、沒有開放資料：路牌用分區費率，與 spotFeeSummary 一致', () {
+      final spot = ParkingSpot.fromJson({
+        ...lotJson,
+        'parking_zones': [
+          {
+            'id': 'b2',
+            'name': 'B2 重機專區',
+            'fee': {
+              'heavy': {'mode': 'hourly', 'amount': 50, 'per_minutes': 60},
+            },
+          },
+        ],
+      });
+      expect(spot.zones.single.condition, isNull);
+      final p = plates(spot, VehicleType.heavy, day);
+      expect(p[2].main, '50/時');
+      expect(p[2].main, isNot('20/時'));
+    });
+
+    ParkingCondition shareNotice({String? effective, String? expires}) =>
+        ParkingCondition.fromJson({
+          'bay': 'motorcycle',
+          'use': 'share',
+          'share': 'scooter_heavy',
+          'charge': 'toll',
+          'basis': {
+            'source_url': 'https://example.com/notice',
+            'effective_date': ?effective,
+            'expires_on': ?expires,
+          },
+        })!;
+
+    test('沒有時段、公告明天到期：21:00 寫到 00:00', () {
+      final w = openWindow(
+        EligibilityStatus.allowed,
+        shareNotice(expires: '2026-11-04'),
+        VehicleType.heavy,
+        night,
+        street: true,
+      );
+      expect((w.now, w.until, w.untilMinute), (true, '00:00', 1440));
+      final far = openWindow(
+        EligibilityStatus.allowed,
+        shareNotice(expires: '2026-11-20'),
+        VehicleType.heavy,
+        night,
+        street: true,
+      );
+      expect((far.now, far.until), (true, null));
+    });
+
+    test('沒有時段、公告尚未生效：寫幾點起，不判現在可停', () {
+      final w = openWindow(
+        EligibilityStatus.allowed,
+        shareNotice(effective: '2026-11-04'),
+        VehicleType.heavy,
+        night,
+        street: true,
+      );
+      expect((w.now, w.opensAt), (false, '明天 00:00'));
+      final later = openWindow(
+        EligibilityStatus.allowed,
+        shareNotice(effective: '2026-11-20'),
+        VehicleType.heavy,
+        night,
+        street: true,
+      );
+      // Beyond a week, as slots are read: no time given.
+      expect((later.now, later.opensAt), (false, null));
     });
   });
 

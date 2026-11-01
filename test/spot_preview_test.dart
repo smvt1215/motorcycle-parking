@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:motorcycle_parking/data/app_store.dart';
@@ -130,7 +131,7 @@ void main() {
   });
   {
     for (final MapEntry(key: name, value: size) in sizes.entries) {
-      testWidgets('$name：四面路牌一列，三顆動作鈕點得到', variant: platforms, (tester) async {
+      testWidgets('$name：四面路牌一列，兩顆動作鈕點得到', variant: platforms, (tester) async {
         final s = await store(tester, VehicleType.heavy);
         await open(tester, s, lot, size: size);
         expect(tester.takeException(), isNull);
@@ -155,10 +156,33 @@ void main() {
           expect(find.text(label).hitTestable(), findsOneWidget, reason: label);
           expect(tester.getSize(find.text(label)).height, greaterThan(0));
         }
-        final navigate = tester.getSize(
-          find.byKey(const ValueKey('spot-navigate')),
-        );
-        expect(navigate.height, greaterThanOrEqualTo(44));
+        // Touch targets: iOS 44pt, Android 48dp, for every action, the
+        // header's icon buttons and the plates themselves.
+        final minTarget = defaultTargetPlatform == TargetPlatform.iOS
+            ? 44.0
+            : 48.0;
+        void tappable(Finder f, String reason) {
+          expect(f, findsOneWidget, reason: reason);
+          final size = tester.getSize(f);
+          expect(size.height, greaterThanOrEqualTo(minTarget), reason: reason);
+          expect(size.width, greaterThanOrEqualTo(minTarget), reason: reason);
+        }
+
+        for (final key in ['spot-navigate', 'spot-suggest']) {
+          tappable(find.byKey(ValueKey(key)), key);
+        }
+        for (final tip in ['收藏停車點', '分享停車點', '關閉詳情']) {
+          tappable(
+            find.ancestor(
+              of: find.byTooltip(tip),
+              matching: find.byType(IconButton),
+            ),
+            tip,
+          );
+        }
+        for (final face in ['verdict', 'seat', 'fee', 'where']) {
+          tappable(find.byKey(ValueKey('four-sign-$face')), face);
+        }
         await tester.pumpWidget(const SizedBox.shrink());
       });
     }
