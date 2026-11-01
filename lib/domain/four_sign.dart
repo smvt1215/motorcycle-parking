@@ -586,8 +586,7 @@ VerdictAnswer _verdict(
     return VerdictAnswer(
       status: EligibilityStatus.conditional,
       // A place limited only by its hours reads as 限時段.
-      restriction:
-          (closing ?? limited.first).restriction ?? RuleRestriction.timeLimited,
+      restriction: _restrictionOf(closing ?? limited.first),
       until: closing?.window.until,
       basis: basis,
       city: city,
@@ -884,8 +883,12 @@ sealed class _Price {
 }
 
 class _RatePrice extends _Price {
-  const _RatePrice(this.rate);
+  const _RatePrice(this.rate, this.source);
   final PlateRate rate;
+
+  /// The whole rule behind [rate] and its factor: what decides whether two
+  /// places charge alike, since the plate drops terms such as free minutes.
+  final (Rate, int) source;
 }
 
 class _TextPrice extends _Price {
@@ -911,7 +914,9 @@ _Price _priceOf(
     final resolved = _resolved(fee, vehicle);
     if (resolved == null) return const _NoPrice();
     final rate = _plateRate(resolved.$1, resolved.$2, now, calendar);
-    return rate == null ? const _NoPrice() : _RatePrice(rate);
+    return rate == null
+        ? const _NoPrice()
+        : _RatePrice(rate, (resolved.$1, resolved.$2));
   }
   return _placeholder(legacy) ? const _NoPrice() : _TextPrice(legacy.trim());
 }
@@ -956,7 +961,9 @@ FeeAnswer _fee(
       if (p is _RatePrice) p.rate,
   ];
   if (rates.length == prices.length) {
-    if (rates.toSet().length == 1) {
+    // 全場同價 only when the whole rules match, not just what the plate shows.
+    final sources = {for (final p in prices) (p as _RatePrice).source};
+    if (rates.toSet().length == 1 && sources.length == 1) {
       return FeeAnswer(
         kind: FeeKind.rate,
         rate: rates.first,
@@ -977,3 +984,9 @@ FeeAnswer _fee(
   }
   return FeeAnswer(kind: FeeKind.varies, rates: rates, places: prices.length);
 }
+
+/// What limits [area]: its own restriction, else 限時段 only when its hours
+/// end it; a condition the decision words in its reasons stays plain 有條件.
+RuleRestriction? _restrictionOf(SignArea area) =>
+    area.restriction ??
+    (area.window.until != null ? RuleRestriction.timeLimited : null);

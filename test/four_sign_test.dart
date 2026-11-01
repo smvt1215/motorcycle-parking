@@ -771,6 +771,31 @@ void main() {
       expect(p[1].tone, PlateTone.dashed);
     });
 
+    test('完整費率不同時不寫全場同價（免費時長不同）', () {
+      final zones = [
+        for (final z in lotJson['parking_zones'] as List)
+          if ((z as Map<String, dynamic>)['id'] != 'b1')
+            <String, dynamic>{
+              ...z,
+              'fee': {
+                'heavy': {
+                  'mode': 'hourly',
+                  'amount': 20,
+                  'per_minutes': 60,
+                  if (z['id'] == 'b3') 'free_minutes': 30,
+                },
+              },
+            },
+      ];
+      final p = plates(
+        ParkingSpot.fromJson({...lotJson, 'parking_zones': zones}),
+        VehicleType.heavy,
+        night,
+      );
+      expect(p[3].main, '2 區');
+      expect(p[2].note, isNot(contains('全場同價')));
+    });
+
     test('首段 0 元寫「首 20 分鐘 0 元」與付費延長（parking_contract_cases）', () {
       final fee = contractFee('臺北限時格首段 0 元可延長一次（§2.4）');
       final spot = ParkingSpot.fromJson({...street.toJson(), 'fee': fee});
