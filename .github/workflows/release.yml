@@ -159,8 +159,11 @@ jobs:
       IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
       IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
       IOS_PROFILE_BASE64: ${{ secrets.IOS_PROFILE_BASE64 }}
+      # Also the App Store link of P14 需要更新 (APP_STORE_ID dart-define).
       APP_STORE_APP_ID: ${{ vars.APP_STORE_APP_ID }}
       TESTFLIGHT_GROUP: ${{ vars.TESTFLIGHT_GROUP }}
+      # P14 需要更新 opens it on a beta; empty shows words instead.
+      TESTFLIGHT_PUBLIC_URL: ${{ vars.TESTFLIGHT_PUBLIC_URL }}
       APP_STORE_KEY_ID: ${{ secrets.APP_STORE_KEY_ID }}
       APP_STORE_ISSUER_ID: ${{ secrets.APP_STORE_ISSUER_ID }}
       APP_STORE_KEY_BASE64: ${{ secrets.APP_STORE_KEY_BASE64 }}

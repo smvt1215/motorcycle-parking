@@ -7,7 +7,9 @@ permissions:
   contents: read
 concurrency:
   group: ios-${{ github.ref }}
-  cancel-in-progress: true
+  # Only a PR's newer push replaces its run. Every main push runs to the end,
+  # or CD (which waits for CI, Android and iOS) never sees a finished commit.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   release:
     name: iOS Release 建置

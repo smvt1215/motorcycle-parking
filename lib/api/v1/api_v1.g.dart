@@ -103,6 +103,36 @@ class ApiV1Client {
 
   /// [dataVersions] as served, for callers that keep the JSON (#202).
   Future<Object?> dataVersionsRaw() => _call('data_versions', {});
+
+  /// 自己帳號的刪除申請狀態
+  Future<AccountDeletionState> accountDeletionStatus() async {
+    final raw = await accountDeletionStatusRaw();
+    return AccountDeletionState.fromJson(raw as Map<String, Object?>);
+  }
+
+  /// [accountDeletionStatus] as served, for callers that keep the JSON (#202).
+  Future<Object?> accountDeletionStatusRaw() =>
+      _call('account_deletion_status', {});
+
+  /// 申請刪除自己的帳號（7 天冷靜期）
+  Future<AccountDeletionState> requestAccountDeletion({String? pSource}) async {
+    final raw = await requestAccountDeletionRaw(pSource: pSource);
+    return AccountDeletionState.fromJson(raw as Map<String, Object?>);
+  }
+
+  /// [requestAccountDeletion] as served, for callers that keep the JSON (#202).
+  Future<Object?> requestAccountDeletionRaw({String? pSource}) =>
+      _call('request_account_deletion', {'p_source': ?pSource});
+
+  /// 取消自己的刪除申請
+  Future<AccountDeletionState> cancelAccountDeletion() async {
+    final raw = await cancelAccountDeletionRaw();
+    return AccountDeletionState.fromJson(raw as Map<String, Object?>);
+  }
+
+  /// [cancelAccountDeletion] as served, for callers that keep the JSON (#202).
+  Future<Object?> cancelAccountDeletionRaw() =>
+      _call('cancel_account_deletion', {});
 }
 
 class ClientConfig {
@@ -767,6 +797,73 @@ class DataVersions {
 
   @override
   int get hashCode => Object.hashAll([rules, spots]);
+}
+
+/// 帳號刪除申請的狀態（#215）
+class AccountDeletionState {
+  const AccountDeletionState({
+    required this.status,
+    this.requestedAt,
+    this.scheduledAt,
+    required this.canSelfDelete,
+    this.cannotSelfDeleteReason,
+  });
+
+  factory AccountDeletionState.fromJson(Map<String, Object?> json) =>
+      AccountDeletionState(
+        status: json['status'] as String,
+        requestedAt: json['requested_at'] == null
+            ? null
+            : json['requested_at'] as String,
+        scheduledAt: json['scheduled_at'] == null
+            ? null
+            : json['scheduled_at'] as String,
+        canSelfDelete: json['can_self_delete'] as bool,
+        cannotSelfDeleteReason: json['cannot_self_delete_reason'] == null
+            ? null
+            : json['cannot_self_delete_reason'] as String,
+      );
+
+  /// none：沒有申請；pending：冷靜期中，到 scheduled_at 後刪除
+  final String status;
+
+  /// ISO 8601 時間。申請時間；none 時為 null
+  final String? requestedAt;
+
+  /// ISO 8601 時間。最早刪除時間（申請＋7 天），實際在之後的每日排程（台灣 03:41）執行；none 時為 null
+  final String? scheduledAt;
+
+  /// 這個帳號能不能自助申請刪除；管理員為 false（要先由其他管理員移除權限）。App 在刪除說明頁就依此提示
+  final bool canSelfDelete;
+
+  /// 不能自助刪除的原因（錯誤碼）；可以時為 null
+  final String? cannotSelfDeleteReason;
+
+  Map<String, Object?> toJson() => {
+    'status': status,
+    'requested_at': requestedAt,
+    'scheduled_at': scheduledAt,
+    'can_self_delete': canSelfDelete,
+    'cannot_self_delete_reason': cannotSelfDeleteReason,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is AccountDeletionState &&
+      other.status == status &&
+      other.requestedAt == requestedAt &&
+      other.scheduledAt == scheduledAt &&
+      other.canSelfDelete == canSelfDelete &&
+      other.cannotSelfDeleteReason == cannotSelfDeleteReason;
+
+  @override
+  int get hashCode => Object.hashAll([
+    status,
+    requestedAt,
+    scheduledAt,
+    canSelfDelete,
+    cannotSelfDeleteReason,
+  ]);
 }
 
 bool _equal(Object? a, Object? b) {

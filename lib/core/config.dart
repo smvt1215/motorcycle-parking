@@ -8,6 +8,18 @@ class AppConfig {
     defaultValue: 'tw.motopark.motorcycleparking://login-callback',
   );
   static const offlineMap = bool.fromEnvironment('OFFLINE_MAP');
+
+  /// How the build is distributed: the release workflow's RELEASE_CHANNEL
+  /// (beta, rc, release) or `staging`; empty in a local build (P14).
+  static const appChannel = String.fromEnvironment('APP_CHANNEL');
+
+  /// The App Store's numeric Apple ID; empty until the app exists (#262).
+  static const appStoreId = String.fromEnvironment('APP_STORE_ID');
+
+  /// The TestFlight public link of the beta group; empty when not set.
+  static const testflightPublicUrl = String.fromEnvironment(
+    'TESTFLIGHT_PUBLIC_URL',
+  );
   static const googleMapsWebKey = String.fromEnvironment(
     'GOOGLE_MAPS_WEB_API_KEY',
   );

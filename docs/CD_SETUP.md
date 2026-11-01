@@ -111,8 +111,9 @@ Android 的安裝檔送到 Firebase 的 `staging-android` 群組，也保留在�
 | Secret | `APP_STORE_KEY_ID` | App Store Connect API key ID |
 | Secret | `APP_STORE_ISSUER_ID` | API key issuer ID |
 | Secret | `APP_STORE_KEY_BASE64` | `.p8` 私鑰的 base64 單行編碼 |
-| Variable | `APP_STORE_APP_ID` | 本 APP 在 App Store Connect 的數字 Apple ID |
+| Variable | `APP_STORE_APP_ID` | 本 APP 在 App Store Connect 的數字 Apple ID；也以 `APP_STORE_ID` dart-define 建進 App，作為「需要更新」（P14）的 App Store 連結 |
 | Variable | `TESTFLIGHT_GROUP` | TestFlight 外部測試群組名稱（beta／RC 發給此群組） |
+| Variable | `TESTFLIGHT_PUBLIC_URL` | 上述群組的 TestFlight 公開連結（`https://testflight.apple.com/join/…`）；beta 建置的「需要更新」（P14）按鈕開它。可不設，未設定時改顯示「請打開 TestFlight 更新」 |
 | Variable | `STAGING_SUPABASE_PROJECT_REF` | staging 的 project ref（beta 建置連 staging；未設定時 beta 建置失敗，不會改連 production） |
 | Variable | `STAGING_SUPABASE_URL` | staging 的 `https://專案識別碼.supabase.co` |
 | Variable | `STAGING_SUPABASE_ANON_KEY` | staging 的公開 anon／publishable key |

@@ -167,6 +167,11 @@ staging 設定已於 2026-10-24 完成，並以真實 Google 登入＋TOTP 取�
 ### 必要檢查（main ruleset）
 - 每個 workflow 有一個彙總 job：`CI 全部通過`（`ci-ok`）、`Android 全部通過`（`android-ok`）、`iOS 全部通過`（`ios-ok`）。`needs` 該 workflow 所有 job，包含各平台的 Release、測試建置與模擬器測試，`if: always()`，任何一個失敗或被取消就失敗。
 - ruleset 只把這三個彙總 job 的顯示名稱（check 名稱）設為必要檢查。這樣新增或拆分 job 時不必改 ruleset，被路徑判斷略過的 job 也不會卡住合併。
+- **只有 PR 會取消舊的 run**：`ci.yml`、`android.yml`、`ios.yml` 的 `concurrency` 設為 `cancel-in-progress: ${{ github.event_name == 'pull_request' }}`。
+  - 同一個 PR 推了新的 commit 時，舊的 run 才會被取消。
+  - main 上已經開始的 run 一定會跑完。CD staging 要等這三個 workflow 都在同一個 main commit 上成功才會部署；iOS 模擬器約要 40 分鐘，而 main 合併的頻率比這更高。之前 main 的 push 也會被下一次 push 取消，結果 CD 一直等不到跑完的 commit，staging 從 02cf55a 之後就停止部署（#265）。
+  - GitHub 的 concurrency 群組最多保留一個排隊中的 run。所以 main 連續合併時，排隊中的舊 commit 會被更新的 commit 取代，但進行中的那個和最新的那個都會跑完。CD 依序部署跑完的 commit，最後一定會部署到最新的 main。
+  - CodeQL 照舊會取消舊的 run，因為 CD 不等它。
 - 這與 CLAUDE.md 的「全綠」定義一致：CI 通過才算全綠。
 
 ## CD：staging（每次合併到 main）
@@ -328,6 +333,14 @@ staging 設定已於 2026-10-24 完成，並以真實 Google 登入＋TOTP 取�
 - 該平台的 API key 與 App ID 都沒設定時（本機、PR CI、web、管理站、production 尚未設定）APP 不初始化 Firebase，照常運作，只是不送 token；只設定其中一項、App ID 平台不符，或缺 `FIREBASE_PROJECT_ID` 時，設定檢查會報錯。
 - `cd-staging.yml` 的 Android、iOS job 各自帶該平台的 key 與 App ID；`release.yml` 以同樣名稱讀取 production Environment，尚未設定時 production 建置停用 App Check。
 
+另有三個 dart-define 直接寫在建置指令，決定「需要更新」畫面（P14）的按鈕開哪裡：
+
+| dart-define | 來源 |
+|---|---|
+| `APP_CHANNEL` | `release.yml` 的 `RELEASE_CHANNEL`（`beta`、`rc`、`release`，fastlane 直接帶入，不另外推算）；`cd-staging.yml` 固定為 `staging`。沒有設定（本機、PR CI）視為正式版。RC 的建置就是推上商店的那一份，所以 App 把 `rc` 當成正式版，開 App Store／Google Play |
+| `APP_STORE_ID` | 只有 iOS：Environment variable `APP_STORE_APP_ID`，未設定時為空字串 |
+| `TESTFLIGHT_PUBLIC_URL` | 只有 iOS：Environment variable `TESTFLIGHT_PUBLIC_URL`，未設定時為空字串 |
+
 ### Provider
 | 建置 | Android | iOS |
 |---|---|---|
@@ -444,6 +457,9 @@ Play Integrity 只認得從 Google Play 安裝的 APP。staging 的 APK 經 Fire
   - 建立 APP 與 bundle id。
   - 建立 API key（App Manager 權限）。
   - 建立發布憑證與 provisioning profile。
+- **「需要更新」畫面（P14）的商店連結**：iOS 建置以 dart-define 帶入，未設定時建置照常成功，按鈕改為文字。
+  - `APP_STORE_ID`：取 `production` 的 variable `APP_STORE_APP_ID`（App Store Connect 的數字 Apple ID，與上傳用的是同一個值），建立 APP 後填入即可（#262）。未設定時顯示「請到 App Store 更新」。
+  - `TESTFLIGHT_PUBLIC_URL`：`production` 的 variable，填 `TESTFLIGHT_GROUP` 群組的 TestFlight 公開連結。未設定時 beta 建置顯示「請打開 TestFlight 更新」。
 - **Supabase**：
   - 建立 staging、production 兩個專案（staging 已建立並由 CD 部署；production 於上線前另建）。
   - 產生 access token。

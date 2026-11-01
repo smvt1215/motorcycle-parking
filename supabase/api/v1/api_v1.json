@@ -140,6 +140,100 @@
           }
         }
       }
+    },
+    "/rpc/account_deletion_status": {
+      "post": {
+        "operationId": "api_v1_account_deletion_status",
+        "summary": "自己帳號的刪除申請狀態",
+        "description": "要登入（不可匿名登入）。冷靜期內已登入的 session 照常可讀。App 登入後讀取：status 為 pending 時顯示確認頁（預定刪除時間 scheduled_at），讓使用者選「取消刪除」（cancel_account_deletion）或「繼續刪除」（不需呼叫，維持原申請）；can_self_delete 為 false 時在說明頁提示原因（#215）。錯誤：401 auth.sign_in_required。",
+        "x-requires-sign-in": true,
+        "responses": {
+          "200": {
+            "description": "刪除申請的狀態",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountDeletionState"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/rpc/request_account_deletion": {
+      "post": {
+        "operationId": "api_v1_request_account_deletion",
+        "summary": "申請刪除自己的帳號（7 天冷靜期）",
+        "description": "要登入，且 10 分鐘內剛完成登入（JWT amr 的時間；App 先讓使用者重新用 Google／Apple 登入）。scheduled_at＝申請＋7 天，到期後每日排程刪除。申請後立即停止公開顯示名稱。已有申請時回傳原申請，不重設日期，也不需要重新登入。冷靜期內登入不會自動取消，只有 cancel_account_deletion 會取消。錯誤：401 auth.sign_in_required、401 auth.recent_sign_in_required（details 帶 max_age_seconds）、403 account.admin_cannot_self_delete（管理員要先由別的管理員移除權限）、400 request.invalid（p_source）。",
+        "x-requires-sign-in": true,
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "p_source": {
+                    "type": "string",
+                    "enum": [
+                      "app",
+                      "web"
+                    ],
+                    "default": "app",
+                    "description": "從哪裡申請：App 內（app）或 App 外的刪除網頁（web），只記在稽核"
+                  }
+                },
+                "example": {
+                  "p_source": "app"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "刪除申請的狀態",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountDeletionState"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/rpc/cancel_account_deletion": {
+      "post": {
+        "operationId": "api_v1_cancel_account_deletion",
+        "summary": "取消自己的刪除申請",
+        "description": "要登入。冷靜期內任何時候都可以取消，取消後名稱恢復顯示；沒有申請也回成功（status none）。錯誤：401 auth.sign_in_required、409 account.deletion_in_progress（排程正在刪除這個帳號）。",
+        "x-requires-sign-in": true,
+        "responses": {
+          "200": {
+            "description": "刪除申請的狀態",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountDeletionState"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -635,6 +729,57 @@
         "additionalProperties": {
           "type": "integer",
           "minimum": 1
+        }
+      },
+      "AccountDeletionState": {
+        "type": "object",
+        "description": "帳號刪除申請的狀態（#215）",
+        "required": [
+          "status",
+          "requested_at",
+          "scheduled_at",
+          "can_self_delete",
+          "cannot_self_delete_reason"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "none",
+              "pending"
+            ],
+            "description": "none：沒有申請；pending：冷靜期中，到 scheduled_at 後刪除"
+          },
+          "requested_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ISO 8601 時間。申請時間；none 時為 null"
+          },
+          "scheduled_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ISO 8601 時間。最早刪除時間（申請＋7 天），實際在之後的每日排程（台灣 03:41）執行；none 時為 null"
+          },
+          "can_self_delete": {
+            "type": "boolean",
+            "description": "這個帳號能不能自助申請刪除；管理員為 false（要先由其他管理員移除權限）。App 在刪除說明頁就依此提示"
+          },
+          "cannot_self_delete_reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "account.admin_cannot_self_delete",
+              null
+            ],
+            "description": "不能自助刪除的原因（錯誤碼）；可以時為 null"
+          }
         }
       }
     },
