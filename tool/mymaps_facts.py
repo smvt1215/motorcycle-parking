@@ -65,7 +65,7 @@ FACTS = [
         ("entrance_note", r"後(車)?[牌排]|後方辨識", "後車牌辨識"),
         ("entrance_note", r"前(車)?[牌排]", "前車牌辨識"),
     ]),
-    ("ticket", [("entrance_note", r"按鈕(取|按)?票|取票|按鈕入場", "按鈕取票")]),
+    ("ticket", [("entrance_note", r"按鈕(取|按)?票|取票|按鈕入場|^\W*按鈕\W*$", "按鈕取票")]),
     ("staff", [("entrance_note", r"^管理員$|按鈴|對講機|管理(員|人員).{0,3}(協助|開門|開閘|引導|登記|給票|指示|抄車牌)|請(工作)?人員協助|警衛.{0,2}(協助|引導)|"
                                  r"工作人員引導|專人引導|指揮停", "需按鈴或請管理員協助")]),
     ("card", [("entrance_note", r"悠遊卡|電子票證", "悠遊卡進出")]),
@@ -173,6 +173,7 @@ BANNED = "來源回報禁止大型重機停放"
 PILOT = re.compile(r"臺北市路外停車場試辦大型重機停放機車區.*")
 SUMMARY = re.compile(r"社群補充（未經官方查核）：(.*)")
 ROADSIDE_FEE = "大型重機依路段收費方式："
+PRICE = re.compile(r"(每 \d+ 小時|每小時|每日|隔夜|每半天|每月|每次) \d+ 元")
 STANDARD_FEE = re.compile(
     r"(平日|假日|黃牌|紅牌|限假日|日間|夜間|機車區|汽車區|展期|無展期|室內|室外|機車|汽車|重機)?"
     r"(每 \d+ 小時|每小時|每日|隔夜|每半天|每月|每次) \d+ 元|免費 \d+ 小時|免費|請依現場公告")
@@ -204,8 +205,10 @@ def scrub_fee_text(text):
     parts = []
     for raw in body.split("；"):
         raw = raw.strip()
-        price = STANDARD_FEE.match(raw)
-        for part in ([price[0]] if price else []) + fee_terms(raw[price.end():] if price else raw):
+        price = STANDARD_FEE.match(raw) or PRICE.search(raw)
+        # An unknown label before a price (電子票證每日 20 元) is a fragment too; the price stays.
+        rest = raw[:price.start()] + " " + raw[price.end():] if price else raw
+        for part in ([price[0]] if price else []) + fee_terms(rest):
             if part not in parts:
                 parts.append(part)
     sentence = "；".join(parts) or "請依現場公告"
