@@ -99,8 +99,9 @@ void main() {
   group('eligibility() 包裝與舊實作一致（除設計列出的修正）', () {
     // Every legacy street kind (no condition) × vehicle × trust × rule ×
     // district × date. The only differences allowed are the design's:
-    // a timed bay whose charge is unconfirmed (§3.1 item 3) and the shared
-    // car bay (§7 item 1).
+    // a timed bay whose charge is unconfirmed (§3.1 item 3), the shared
+    // car bay (§7 item 1) and heavy bikes on heavy and car bays before a
+    // rule is in force (#232).
     final rulesUnderTest = <CityRule?>[
       null,
       ...bundled,
@@ -209,6 +210,16 @@ void main() {
                                       ? '${car.reason}；汽機車共用格請依現場牌面時段停放'
                                       : car.reason);
                         }(),
+                // The law opens them before a rule is in force (#232),
+                // to checked data.
+                SpaceType.heavyOnly || SpaceType.car
+                    when vehicle == VehicleType.heavy =>
+                  old.status == EligibilityStatus.unverified &&
+                      old.reason == noRuleReason &&
+                      ((got.status == EligibilityStatus.allowed &&
+                              got.reason == lawfulReason) ||
+                          (got.status == EligibilityStatus.unverified &&
+                              got.reason == communityUncheckedReason)),
                 _ => false,
               };
               expect(
@@ -233,6 +244,8 @@ void main() {
         'timedMotorcycle:heavy',
         'flexShared:scooter',
         'flexShared:heavy',
+        'heavyOnly:heavy',
+        'car:heavy',
       });
     });
 
@@ -939,18 +952,9 @@ void main() {
       });
 
       test('重機規則尚未生效（2026-10-05）：重機只列汽車時段，夜間現在不可停並給下一段', () {
-        // The rule Taipei heavy bikes had before 2026-10-06: car and heavy
-        // bays only, no motorcycle bays.
-        final before = CityRule.fromJson({
-          ...bundledJson.firstWhere(
-            (r) => r['city'] == '臺北市' && r['vehicle'] == 'heavy',
-          ),
-          'allowed_space_types': ['heavyOnly', 'car'],
-          'effective_date': '2026-01-01',
-          'can_use_two_spaces': false,
-        });
-        final rules = [before, rule('臺北市', VehicleType.heavy)];
-        final d = shared(VehicleType.heavy, at(2026, 10, 5, 22), rules: rules);
+        // The bundled Taipei heavy rule starts on 2026-10-06; before it the
+        // law alone opens the car slots (#232).
+        final d = shared(VehicleType.heavy, at(2026, 10, 5, 22));
         expect(d.status, EligibilityStatus.conditional);
         expect(d.reason, contains('現在不可停，明天 07:00 起可停'));
         expect(d.reason, contains('平日 07:00–20:00'));
@@ -1359,6 +1363,58 @@ void main() {
         ], now: now).status,
         EligibilityStatus.notAllowed,
       );
+    });
+
+    test('規則尚未生效或沒有規則：依法可停的格位仍可停，其他待確認（#232）', () {
+      // Before the bundled Taipei heavy rule starts (2026-10-06, Taiwan).
+      final before = DateTime.utc(2026, 10, 5, 4);
+      for (final rules in [bundled, const <CityRule>[]]) {
+        for (final type in [SpaceType.heavyOnly, SpaceType.car]) {
+          final d = decideParking(
+            street(type),
+            VehicleType.heavy,
+            rules,
+            now: before,
+          );
+          final why = '${type.name} ${rules.length}';
+          expect(d.status, EligibilityStatus.allowed, reason: why);
+          expect(d.reason, lawfulReason, reason: why);
+          expect(d.gaps, isEmpty, reason: why);
+          final kinds = [for (final b in d.basis) b.kind];
+          expect(kinds, contains(BasisKind.law), reason: why);
+          expect(kinds, isNot(contains(BasisKind.cityRule)), reason: why);
+        }
+        // What only a rule opens waits for one.
+        final paid = decideParking(
+          street(SpaceType.paidMotorcycle),
+          VehicleType.heavy,
+          rules,
+          now: before,
+        );
+        expect(paid.status, EligibilityStatus.unverified);
+        expect(paid.reason, noRuleReason);
+        // The law still closes a heavy bay to scooters.
+        expect(
+          decideParking(
+            street(SpaceType.heavyOnly),
+            VehicleType.scooter,
+            rules,
+            now: before,
+          ).status,
+          EligibilityStatus.notAllowed,
+        );
+      }
+      // Unchecked community data stays unconfirmed, as under a rule.
+      for (final when in [before, now]) {
+        final d = decideParking(
+          street(SpaceType.car, status: TrustStatus.pending),
+          VehicleType.heavy,
+          bundled,
+          now: when,
+        );
+        expect(d.status, EligibilityStatus.unverified, reason: '$when');
+        expect(d.reason, communityUncheckedReason, reason: '$when');
+      }
     });
 
     test('規則到期只讓靠公告開放的格位失效；依法可停的照原本判斷（決定 44）', () {
