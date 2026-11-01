@@ -204,11 +204,43 @@ jobs:
           npm run codegen
           git diff --exit-code -- src/api/v1
           test -z "$(git status --porcelain -- src/api/v1)"
+  public-web:
+    name: 公開網頁 React（型別／lint／測試／建置）
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: public_web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - id: changes
+        working-directory: .
+        run: python3 tool/ci_changes.py public_web >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.changes.outputs.run == 'true'
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: public_web/package-lock.json
+      - if: steps.changes.outputs.run == 'true'
+        run: npm ci
+      - if: steps.changes.outputs.run == 'true'
+        run: npm run format:check
+      - if: steps.changes.outputs.run == 'true'
+        run: npm run lint
+      # src/content.test.ts reads lib/domain/account_deletion_display.dart.
+      - if: steps.changes.outputs.run == 'true'
+        run: npm test
+      # build runs tsc -b first, so it also type-checks.
+      - if: steps.changes.outputs.run == 'true'
+        run: npm run build
   ci-ok:
     name: CI 全部通過
     runs-on: ubuntu-24.04
     if: always()
-    needs: [quality, backend, automation, admin-react]
+    needs: [quality, backend, automation, admin-react, public-web]
     steps:
       - env:
           RESULTS: ${{ toJSON(needs) }}

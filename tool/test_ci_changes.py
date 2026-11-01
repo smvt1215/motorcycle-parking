@@ -66,11 +66,19 @@ class ChangeRoutingTest(unittest.TestCase):
         self.assertEqual(self.targets("admin_web/react/src/main.tsx", "lib/main_admin.dart"),
                          {"quality", "admin_react"})
 
+    def test_public_web_runs_only_its_own_job(self):
+        for path in ("public_web/src/main.tsx", "public_web/package-lock.json"):
+            with self.subTest(path=path):
+                self.assertEqual(self.targets(path), {"public_web"})
+        # Its words are checked against the App's deletion copy.
+        self.assertEqual(self.targets("lib/domain/account_deletion_display.dart"),
+                         {"quality", "android", "ios", "public_web"})
+
     def test_seed_inputs_check_both_generation_and_database(self):
         for path in ("tool/generate_seed.py", "supabase/seed.sql"):
             with self.subTest(path=path):
                 self.assertEqual(self.targets(path), {"quality", "backend"})
-        flutter_and_backend = set(PATHS) - {"admin_react"}
+        flutter_and_backend = set(PATHS) - {"admin_react", "public_web"}
         self.assertEqual(self.targets("assets/demo/spots.json"), flutter_and_backend)
         self.assertEqual(self.targets("assets/rules/parking_rules.json"), flutter_and_backend)
 
@@ -98,7 +106,8 @@ class ChangeRoutingTest(unittest.TestCase):
             self.assertEqual(self.targets(path), set(PATHS))
 
     def test_workflows_revalidate_their_own_checks(self):
-        self.assertEqual(self.targets(".github/workflows/ci.yml"), {"quality", "backend", "admin_react"})
+        self.assertEqual(self.targets(".github/workflows/ci.yml"),
+                         {"quality", "backend", "admin_react", "public_web"})
         self.assertEqual(self.targets(".github/workflows/android.yml"), {"android"})
         self.assertEqual(self.targets(".github/workflows/ios.yml"), {"ios"})
 
