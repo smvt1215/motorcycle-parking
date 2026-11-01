@@ -4,6 +4,7 @@ import {
   type AppCheckResult,
   appCheckToken,
 } from '../_shared/app_check.ts';
+import { trustedIp } from '../_shared/client_ip.ts';
 import { cors, readBody, response } from '../_shared/http.ts';
 import { type Sighting, validate } from './validate.ts';
 
@@ -53,12 +54,6 @@ export interface Deps {
 /** The flood rule's suspension: 7 days (decision 50). */
 export const floodBan = '168h';
 export const floodNote = '騎士回報洗版，自動停權 7 天（規則評分，決定 50）';
-
-/** The client's network from the configured trusted header's last hop. */
-export function trustedIp(req: Request, header: string): string | null {
-  const ip = req.headers.get(header)?.split(',').at(-1)?.trim();
-  return ip && /^[0-9a-f:.]+$/i.test(ip) ? ip : null;
-}
 
 /** What the app reads from a refusal of the database. */
 export function refusal(error: RpcError): [string, number] {
