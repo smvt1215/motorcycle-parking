@@ -663,6 +663,48 @@ void main() {
         expect(taipei.reason, isNot(contains('大重機共用')));
       });
 
+      test('heavyShareSlotsOf：四面路牌與 decideParking 用同一份時段（#188 第 2 層）', () {
+        ParkingCondition shareOf(
+          String charge,
+          List<Map<String, Object>> slots,
+        ) => c({
+          'bay': 'car',
+          'use': 'share',
+          'share': 'car_motorcycle',
+          'charge': charge,
+          if (slots.isNotEmpty) 'schedule': slots,
+        });
+        final taipei = heavyShareSlotsOf(
+          shareOf('toll', [dayCar, nightScooter]),
+          [rule('臺北市', VehicleType.heavy)],
+          district: '',
+          now: at(2026, 10, 27, 22),
+        );
+        expect(taipei.slots, hasLength(2));
+        expect(taipei.ruleLimit, isNull);
+        expect(taipei.scheduleUnknown, isFalse);
+        expect(
+          taipei.basis.map((b) => b.kind),
+          containsAll([BasisKind.law, BasisKind.cityRule]),
+        );
+        final taichung = heavyShareSlotsOf(
+          shareOf('toll', [dayCar, nightScooter]),
+          [rule('臺中市', VehicleType.heavy)],
+          district: '',
+          now: at(2026, 10, 27, 22),
+        );
+        expect(taichung.ruleLimit?.restriction, RuleRestriction.signage);
+        expect(taichung.ruleLimit?.reason, contains('大重機共用'));
+        // Free bays: Taipei's rule opens no scooter slot.
+        final free = heavyShareSlotsOf(
+          shareOf('free', [nightScooter]),
+          [rule('臺北市', VehicleType.heavy)],
+          district: '',
+          now: at(2026, 10, 27, 22),
+        );
+        expect(free.scheduleUnknown, isTrue);
+      });
+
       test('重機規則尚未生效（2026-10-05）：重機只列汽車時段，夜間現在不可停並給下一段', () {
         // The rule Taipei heavy bikes had before 2026-10-06: car and heavy
         // bays only, no motorcycle bays.

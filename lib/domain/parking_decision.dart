@@ -579,8 +579,42 @@ List<ScheduleSlot> _slotsFor(ParkingCondition condition, VehicleType v) => [
 /// for heavy bikes. With the basis of each kind of slot used, and the limit
 /// a conditional rule puts on the scooter slots (Taichung: only bays marked
 /// 「大重機共用」), which holds in those slots and must reach the rider.
-({List<ScheduleSlot> slots, List<DecisionBasis> basis, RuleVerdict? ruleLimit})
-_heavyShareSlots(
+class HeavyShareSlots {
+  const HeavyShareSlots({
+    required this.slots,
+    required this.basis,
+    this.ruleLimit,
+  });
+
+  /// The slots heavy bikes may use, in the notice's order.
+  final List<ScheduleSlot> slots;
+
+  /// Why each kind of slot is open: the law (car slots), the city rule
+  /// (scooter slots), the notice (heavy slots).
+  final List<DecisionBasis> basis;
+
+  /// The conditional city rule that opens the scooter slots, whose reason
+  /// and restriction hold in them (Taichung's signage); null otherwise.
+  final RuleVerdict? ruleLimit;
+
+  /// No slot is open to heavy bikes: the details read
+  /// [DecisionGap.scheduleUnknown] and send the rider to the sign.
+  bool get scheduleUnknown => slots.isEmpty;
+}
+
+/// [HeavyShareSlots] of a shared car bay's [condition] for heavy bikes,
+/// under [rules] (the heavy-bike rules of the spot's city, as
+/// [matchingRules] picks them) in [district] at [now]. decideParking reads
+/// the same; the four-sided sign (lib/domain/segment_decision.dart) calls
+/// it directly. A segment's condition (#188 layer 2) goes in as it is.
+HeavyShareSlots heavyShareSlotsOf(
+  ParkingCondition condition,
+  Iterable<CityRule> rules, {
+  required String district,
+  required DateTime now,
+}) => _heavyShareSlots(condition, rules.toList(), district, now);
+
+HeavyShareSlots _heavyShareSlots(
   ParkingCondition condition,
   List<CityRule> rules,
   String district,
@@ -615,7 +649,7 @@ _heavyShareSlots(
     byNotice |= heavy;
   }
   final rule = verdicts.first.rule;
-  return (
+  return HeavyShareSlots(
     slots: slots,
     ruleLimit: byRule
         ? verdicts
