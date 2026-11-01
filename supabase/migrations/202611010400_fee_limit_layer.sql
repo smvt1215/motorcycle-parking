@@ -1178,8 +1178,10 @@ language sql immutable set search_path='' as $$
 $$;
 
 -- Keeps the spot-level flags (read by old builds and the map) in step with
--- the entries: a lot's zones, a street spot's segments. Sorts after
--- sync_not_stated() (…_eligibility) and before vehicle_verification. A
+-- the entries: a lot's zones, a street spot's segments. Named to sort
+-- after sync_not_stated() (…_eligibility) and sync_facility_types()
+-- (…_facility_types, so facility_type is the synced one) and before
+-- vehicle_verification. A
 -- write that changes a flag the entries decide, without changing the
 -- entries, is refused rather than silently undone: who may park is the
 -- bays' to say (change the segment or zone).
@@ -1212,9 +1214,9 @@ begin
   return new;
 end;
 $$;
-create trigger community_spots_eligibility_entries before insert or update on public.community_spots
+create trigger community_spots_flags_from_entries before insert or update on public.community_spots
   for each row execute function public.spot_entries_eligibility();
-create trigger official_heavy_spots_eligibility_entries before insert or update on public.official_heavy_spots
+create trigger official_heavy_spots_flags_from_entries before insert or update on public.official_heavy_spots
   for each row execute function public.spot_entries_eligibility();
 
 -- A street spot with a single segment: the spot's flags move onto it (the
