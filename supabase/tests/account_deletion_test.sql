@@ -61,7 +61,7 @@ select set_config('request.jwt.claims','{"role":"authenticated"}',true);
 select throws_ok($$select api_v1.account_deletion_status()$$,'PT401','auth.sign_in_required','no account, no status');
 
 select pg_temp.act('10000000-0000-4000-8000-000000000001');
-select is(api_v1.account_deletion_status(),'{"status":"none","requested_at":null,"scheduled_at":null,"cancelled_at":null,"cancelled_by_sign_in":null,"can_self_delete":true,"cannot_self_delete_reason":null}'::jsonb,'no request yet');
+select is(api_v1.account_deletion_status(),'{"status":"none","requested_at":null,"scheduled_at":null,"can_self_delete":true,"cannot_self_delete_reason":null}'::jsonb,'no request yet');
 select pg_temp.act('10000000-0000-4000-8000-000000000001',interval '11 minutes');
 select throws_ok($$select api_v1.request_account_deletion()$$,'PT401','auth.recent_sign_in_required','a sign-in older than 10 minutes must sign in again');
 select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
@@ -85,8 +85,6 @@ select pg_temp.act('10000000-0000-4000-8000-000000000002');
 select is((select api_v1.account_deletion_status()->>'status'),'none','another rider has no request');
 select pg_temp.act('10000000-0000-4000-8000-000000000001',interval '2 days');
 select is((select api_v1.cancel_account_deletion()->>'status'),'none','cancelling within the cooling-off period');
-select is((select api_v1.account_deletion_status()->>'cancelled_by_sign_in'),'false','the status says it was cancelled, not by signing in');
-select ok((select api_v1.account_deletion_status()->>'cancelled_at') is not null,'and when');
 select is((select api_v1.cancel_account_deletion()->>'status'),'none','cancelling without a request succeeds');
 reset role;
 select is((select contributor_name from community_spots where id='76000000-0000-4000-8000-000000000001'),'要刪的人',
@@ -101,25 +99,32 @@ select throws_ok($$select api_v1.request_account_deletion()$$,'PT403','account.a
   'an admin must lose the role first');
 reset role;
 
--- 冷靜期內的新登入自動取消；申請前的 session、換 token 都不算。
+-- 冷靜期內登入不會自動取消（PM_ANS_20261101_127）；已登入的 session 仍可查詢與取消，
+-- 其他功能（例如回報）照常可用。
 set local role authenticated;
 select pg_temp.act('10000000-0000-4000-8000-000000000001');
 select api_v1.request_account_deletion();
 reset role;
-select is((select api_v1_cancelled from (select (private.account_deletion_state('10000000-0000-4000-8000-000000000001')->>'cancelled_at') is null as api_v1_cancelled) x),
-  true,'a new request clears the last cancellation');
-insert into auth.sessions(id,user_id,created_at,updated_at) values(gen_random_uuid(),'10000000-0000-4000-8000-000000000001',now(),now());
-select is((select count(*)::int from private.account_deletion_requests),1,'a session as old as the request does not cancel it');
 update private.account_deletion_requests set requested_at=now()-interval '1 day',scheduled_at=now()+interval '6 days';
-update auth.sessions set refreshed_at=now() where user_id='10000000-0000-4000-8000-000000000001';
-select is((select count(*)::int from private.account_deletion_requests),1,'refreshing a session does not cancel it');
 insert into auth.sessions(id,user_id,created_at,updated_at) values(gen_random_uuid(),'10000000-0000-4000-8000-000000000001',now(),now());
-select is((select count(*)::int from private.account_deletion_requests),0,'signing in again cancels the request');
-select is((select private.account_deletion_state('10000000-0000-4000-8000-000000000001')->>'cancelled_by_sign_in'),'true',
-  'the status says signing in cancelled it');
+update auth.users set last_sign_in_at=now() where id='10000000-0000-4000-8000-000000000001';
+select is((select count(*)::int from private.account_deletion_requests),1,'signing in again keeps the request');
+select ok(not exists(select 1 from pg_trigger where tgrelid in ('auth.sessions'::regclass,'auth.users'::regclass)
+    and tgname ~ 'account_deletion'),'no sign-in trigger cancels a deletion');
+set local role authenticated;
+select pg_temp.act('10000000-0000-4000-8000-000000000001',interval '3 hours');
+select is((select api_v1.account_deletion_status()->>'status'),'pending','a signed-in session still reads its pending request');
+select ok((select (api_v1.account_deletion_status()->>'scheduled_at')::timestamptz>now()),'with the date it will be deleted');
+reset role;
+select lives_ok($$select public.apply_report('10000000-0000-4000-8000-000000000001',repeat('9',64),repeat('9',64),
+  '{"action":"flag","source_id":"official:x","reason":"冷靜期內的回報"}')$$,'reports still work during the cooling-off period');
+delete from moderation_queue where reason='冷靜期內的回報';
+set local role authenticated;
+select pg_temp.act('10000000-0000-4000-8000-000000000001',interval '3 hours');
+select is((select api_v1.cancel_account_deletion()->>'status'),'none','and can cancel without signing in again');
+reset role;
 select is((select contributor_name from community_spots where id='76000000-0000-4000-8000-000000000001'),'要刪的人',
-  'and the name shows again');
-delete from private.account_deletion_cancellations;
+  'cancelling shows the name again');
 delete from auth.sessions where user_id='10000000-0000-4000-8000-000000000001';
 select is((select string_agg(event||'/'||source,',' order by id) from private.account_deletion_audit),
   'requested/app,cancelled/app,requested/app,cancelled/app','requests and cancellations are audited');

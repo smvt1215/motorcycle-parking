@@ -191,10 +191,6 @@ export type AccountDeletionState = {
   requested_at: string | null;
   /** ISO 8601 時間。最早刪除時間（申請＋7 天），實際在之後的每日排程（台灣 03:41）執行；none 時為 null */
   scheduled_at: string | null;
-  /** ISO 8601 時間。最近一次取消的時間；沒有取消過或之後又申請時為 null */
-  cancelled_at: string | null;
-  /** 最近一次取消是否由新的登入自動觸發；沒有取消紀錄時為 null */
-  cancelled_by_sign_in: boolean | null;
   /** 這個帳號能不能自助申請刪除；管理員為 false（要先由其他管理員移除權限）。App 在刪除說明頁就依此提示 */
   can_self_delete: boolean;
   /** 不能自助刪除的原因（錯誤碼）；可以時為 null */
