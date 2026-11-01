@@ -76,6 +76,14 @@ jobs:
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      # Exposed schemas are a dashboard setting that db push does not change:
+      # check, read-only, that PostgREST serves the unified API (#195).
+      - name: Check the API schemas are exposed
+        if: steps.current.outputs.deploy == 'true'
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+        run: python3 tool/check_exposed_schemas.py
       - name: Record staging deployment
         id: deployed
         if: steps.current.outputs.deploy == 'true'
@@ -190,7 +198,19 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: ./.github/actions/mobile-setup
+        with:
+          heavy-glyph: ${{ secrets.HEAVY_GLYPH_SVG_BASE64 }}
       - run: python3 tool/cd_config.py staging android
+      - name: Bundle the staging rules
+        # The app ships assets/rules/parking_rules.json for installs that have
+        # never been online: build with the rules staging serves now. Only this
+        # build uses the export (never written back, PM_ANS_20261101_44); a
+        # failed export fails the build rather than ship the old file.
+        run: |
+          if ! python3 tool/export_rules.py --config config/staging.json --check; then
+            echo "::warning title=Bundled rules behind staging::assets/rules/parking_rules.json in the repo differs from staging; this build bundles the exported rules."
+          fi
+          python3 tool/export_rules.py --config config/staging.json
       - name: Build signed staging APK
         run: |
           test "$(git rev-parse --is-shallow-repository)" = false
@@ -262,7 +282,19 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: ./.github/actions/mobile-setup
+        with:
+          heavy-glyph: ${{ secrets.HEAVY_GLYPH_SVG_BASE64 }}
       - run: python3 tool/cd_config.py staging ios
+      - name: Bundle the staging rules
+        # The app ships assets/rules/parking_rules.json for installs that have
+        # never been online: build with the rules staging serves now. Only this
+        # build uses the export (never written back, PM_ANS_20261101_44); a
+        # failed export fails the build rather than ship the old file.
+        run: |
+          if ! python3 tool/export_rules.py --config config/staging.json --check; then
+            echo "::warning title=Bundled rules behind staging::assets/rules/parking_rules.json in the repo differs from staging; this build bundles the exported rules."
+          fi
+          python3 tool/export_rules.py --config config/staging.json
       - run: python3 tool/ios_signing.py staging
       - name: Build Ad Hoc IPA
         run: flutter build ipa --release --flavor staging --build-number="$IOS_BUILD_NUMBER" --dart-define-from-file=config/staging.json --export-options-plist="$RUNNER_TEMP/ExportOptions.plist"

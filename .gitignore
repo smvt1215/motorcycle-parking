@@ -44,3 +44,8 @@ graphify-out/
 .graphify_cache/
 node_modules/
 __pycache__/
+
+# Licensed third-party art: fetched at build time, never committed
+# (tool/fetch_heavy_glyph.py).
+assets/private/*
+!assets/private/.gitkeep

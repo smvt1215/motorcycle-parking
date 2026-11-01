@@ -1,4 +1,5 @@
 import { createApi, fakeBaseQuery } from '@reduxjs/toolkit/query/react';
+import type { PostgrestConnection } from '../api/v1/base';
 import type { ReviewQueue } from '../review/model';
 import {
   SourceError,
@@ -16,6 +17,8 @@ export interface ApiError {
 /** Thunk extra argument: the data source, or null when none is connected. */
 export interface AppExtra {
   source: AdminDataSource | null;
+  /** The unified API (#195) for src/api/v1; null until a backend is connected. */
+  postgrest: PostgrestConnection | null;
 }
 
 /** 「超過 10 秒還沒載入，就改顯示讀取失敗與重試」 (States.dc.html). */

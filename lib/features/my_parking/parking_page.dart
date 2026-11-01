@@ -97,11 +97,7 @@ class ParkingPage extends ConsumerWidget {
               icon: Icons.help_outline,
               title: '地圖怎麼看',
               subtitle: '標記顏色、空位數字與小圖示',
-              onTap: () => showMapLegend(
-                context,
-                store.vehicle,
-                availability: store.availabilitySource.enabled,
-              ),
+              onTap: () => openMapLegend(context, fromMap: false),
             ),
             (
               icon: Icons.settings_outlined,

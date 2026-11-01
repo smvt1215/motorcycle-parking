@@ -4,7 +4,8 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['dist', 'dist-fixture', 'node_modules', 'artifacts'] },
+  // *.generated.ts come from scripts/codegen.mjs and are checked by CI for drift.
+  { ignores: ['dist', 'dist-fixture', 'node_modules', 'artifacts', 'src/api/v1/*.generated.ts'] },
   {
     files: ['**/*.{ts,tsx}'],
     extends: [js.configs.recommended, ...tseslint.configs.recommended, reactHooks.configs.flat.recommended],
