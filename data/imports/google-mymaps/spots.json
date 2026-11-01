@@ -123,8 +123,7 @@
     ],
     "source_name": "社群回報整理",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
-    "license_note": "社群協力資料，經核驗後只收錄事實",
-    "parking_guide": "可停汽車格"
+    "license_note": "社群協力資料，經核驗後只收錄事實"
   },
   {
     "id": "6e20fb18-f896-5505-87c6-68457032bc56",
@@ -1547,7 +1546,7 @@
     "source_name": "社群回報整理",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群協力資料，經核驗後只收錄事實",
-    "parking_guide": "可停汽車格\n可停機車格"
+    "parking_guide": "機車區禁止大型重機\n可停汽車格"
   },
   {
     "id": "7b64c725-febd-586c-a467-6fc8d6f0eaa3",
@@ -1630,7 +1629,7 @@
     "last_confirmed_at": null,
     "note": "",
     "entrance_note": "需按鈴或請管理員協助",
-    "parking_guide": "重機停放樓層：B1",
+    "parking_guide": "可停汽車格",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -3495,7 +3494,7 @@
     "district": "新興區",
     "source": "import",
     "space_type": "offStreet",
-    "fee_note": "每小時 40 元（大型重機比照汽車費率）",
+    "fee_note": "每小時 40 元；按鈕取票（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
     "status": "pending",
@@ -3508,7 +3507,7 @@
       {
         "name": "汽車區",
         "access": "heavyCar",
-        "fee_note": "每小時 40 元"
+        "fee_note": "每小時 40 元；按鈕取票"
       }
     ],
     "source_name": "社群回報整理",
@@ -3644,7 +3643,7 @@
     "district": "三重區",
     "source": "import",
     "space_type": "offStreet",
-    "fee_note": "每小時 50 元（大型重機比照汽車費率）",
+    "fee_note": "每小時 50 元；按鈕取票（大型重機比照汽車費率）",
     "heavy_allowed": true,
     "scooter_allowed": null,
     "status": "pending",
@@ -3657,7 +3656,7 @@
       {
         "name": "汽車區",
         "access": "heavyCar",
-        "fee_note": "每小時 50 元"
+        "fee_note": "每小時 50 元；按鈕取票"
       }
     ],
     "source_name": "社群回報整理",
@@ -4047,7 +4046,7 @@
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
     "note": "",
-    "entrance_note": "後車牌辨識\n走汽車車道",
+    "entrance_note": "走汽車車道\n後車牌辨識",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -4266,7 +4265,7 @@
     "last_confirmed_at": null,
     "note": "",
     "entrance_note": "按鈕取票",
-    "parking_guide": "可停汽車格\n重機停放樓層：B2",
+    "parking_guide": "可停汽車格",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -4357,7 +4356,7 @@
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
     "note": "消費可折抵停車費",
-    "parking_guide": "汽車區禁止大型重機\n可停機車格\n重機停放樓層：B3",
+    "parking_guide": "可停汽車格\n重機停放樓層：B3\n機車區禁止大型重機",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -4874,7 +4873,7 @@
     "source_name": "社群回報整理",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
     "license_note": "社群協力資料，經核驗後只收錄事實",
-    "parking_guide": "有重機專用格\n可停汽車格"
+    "parking_guide": "有重機專用格\n汽車區禁止大型重機"
   },
   {
     "id": "7cf4b265-47e7-5f2a-a426-a596e7f08eeb",
@@ -5981,7 +5980,7 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
-    "note": "消費可折抵停車費\n前 30 分鐘免費",
+    "note": "前 30 分鐘免費\n消費可折抵停車費",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -6432,7 +6431,8 @@
     ],
     "source_name": "社群回報整理",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
-    "license_note": "社群協力資料，經核驗後只收錄事實"
+    "license_note": "社群協力資料，經核驗後只收錄事實",
+    "parking_guide": "機車區禁止大型重機"
   },
   {
     "id": "d8ac61ba-1643-516b-bc48-e51870c15e4c",
@@ -6452,7 +6452,7 @@
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
     "note": "",
-    "entrance_note": "無柵欄\n走機車車道",
+    "entrance_note": "走機車車道\n無柵欄",
     "parking_zones": [
       {
         "name": "機車區",
@@ -7075,7 +7075,7 @@
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
     "note": "",
-    "entrance_note": "需投幣或取代幣\n走機車車道",
+    "entrance_note": "走機車車道\n需投幣或取代幣",
     "parking_zones": [
       {
         "name": "機車區",
@@ -7877,7 +7877,7 @@
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
     "note": "",
-    "entrance_note": "悠遊卡進出\n走機車車道",
+    "entrance_note": "走機車車道\n悠遊卡進出",
     "parking_zones": [
       {
         "name": "機車區",
@@ -16851,7 +16851,6 @@
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
     "note": "",
-    "parking_guide": "停機車格可能被開單",
     "special_rules": "來源回報禁止大型重機停放",
     "source_name": "社群回報整理",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",

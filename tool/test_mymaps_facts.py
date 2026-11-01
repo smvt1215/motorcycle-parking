@@ -44,6 +44,17 @@ class VocabularyTest(unittest.TestCase):
             "沒看到禁止重機符號": {"note": ["現場未見禁止大型重機標示"]},
             "2024年9月起禁止大型重機停放": {"note": ["有禁止大型重機停放的回報"]},
             "半小時離場免費": {"note": ["前 30 分鐘免費"]},
+            # A negation before the area, and two areas in one line (review on #287).
+            "重機只能停 B3 汽車區，不可停機車區": {"parking_guide": ["可停汽車格", "重機停放樓層：B3", "機車區禁止大型重機"]},
+            "後排辨識、有專用格，不可停汽車格": {"entrance_note": ["後車牌辨識"], "parking_guide": ["有重機專用格", "汽車區禁止大型重機"]},
+            "禁停機車格，只能停汽車格": {"parking_guide": ["機車區禁止大型重機", "可停汽車格"]},
+            # Advice is no ban, and no permission either.
+            "建議不要停汽車格": {},
+            # A floor only where the bike parks now (review on #287).
+            "*原B3/B4重機停車區將於114年10月24日起調整至B2樓層-重機區": {"parking_guide": ["有重機專用格"]},
+            "如有問題，請洽B3管理室": {},
+            "重機進入後到B1登記車號，停汽車車位": {"parking_guide": ["可停汽車格"]},
+            "2025/10/24 開始試辦停至 B2 重機停車區": {"parking_guide": ["有重機專用格", "重機停放樓層：B2"]},
         }
         for line, expected in cases.items():
             with self.subTest(line=line):
