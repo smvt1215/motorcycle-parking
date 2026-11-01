@@ -307,7 +307,7 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     });
 
-    testWidgets('沒有即時資料源時不顯示膠囊與「目前有位」', (tester) async {
+    testWidgets('沒有即時資料源時不顯示膠囊與「有即時空位」', (tester) async {
       useSize(tester, 390);
       await pumpMap(tester, canvasSpots, canvasCounts, enabled: false);
       expect(find.byType(AvailabilityCapsuleView), findsNothing);
@@ -341,7 +341,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  group('目前有位篩選', () {
+  group('有即時空位篩選', () {
     testWidgets('只留新鮮有位且可停的點，其他改成灰點，未知不算已滿', (tester) async {
       useSize(tester, 390);
       await pumpMap(tester, canvasSpots, canvasCounts);
@@ -371,14 +371,14 @@ void main() {
         await tapFilter(tester);
         final card = find.byKey(const ValueKey('availability-empty'));
         expect(card, findsOneWidget);
-        expect(find.text('這個範圍沒有「大型重機目前有位」的停車點'), findsOneWidget);
+        expect(find.text('這個範圍沒有「大型重機有即時空位」的停車點'), findsOneWidget);
         expect(find.text('範圍內 4 個點都還在，只是都不符合條件：'), findsOneWidget);
         expect(find.text('場站沒有大型重機的即時資料，空位未知'), findsOneWidget);
         expect(find.text('資料更新延遲，暫不列為有位'), findsOneWidget);
         expect(find.text('大型重機不能停'), findsOneWidget);
         expect(find.textContaining('已滿'), findsNothing);
         expect(find.byType(ExcludedSpotDot), findsNWidgets(4));
-        final clear = find.text('清除「目前有位」');
+        final clear = find.text('清除「有即時空位」');
         final live = find.text('只看有即時資訊');
         for (final button in [clear, live]) {
           await tester.ensureVisible(button);

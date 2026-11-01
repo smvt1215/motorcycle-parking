@@ -1,6 +1,6 @@
 # 機車停車指南 APP（普通機車 + 大型重機）— 實作計畫
 
-> 狀態：MVP 實作與 staging 封測中。停車點以靜態資料為主（官方點＋社群點），即時車位目前只接臺北市停管處。CI（含 Android／iOS 模擬器與 CodeQL）已運作；staging 後端已部署到 Supabase 官方託管並匯入停車點（官方點 1,497 筆、社群點 630 筆）。合併到 `main` 且 CI 通過後，CD 部署 staging 後端與管理站，並把 Android APK、iOS Ad Hoc 測試版送到 Firebase App Distribution；staging 的 Android／iOS／管理站 Maps 金鑰已設定。production 環境尚未設定。各項進度見「目前進度」。最後更新：2026-10-31
+> 狀態：MVP 實作與 staging 封測中。停車點以靜態資料為主（官方點＋社群點），即時車位目前只接臺北市停管處。CI（含 Android／iOS 模擬器與 CodeQL）已運作；staging 後端已部署到 Supabase 官方託管並匯入停車點（官方點 1,497 筆、社群點 630 筆）。合併到 `main` 且 CI 通過後，CD 部署 staging 後端與管理站，並把 Android APK、iOS Ad Hoc 測試版送到 Firebase App Distribution；staging 的 Android／iOS／管理站 Maps 金鑰已設定。production 環境尚未設定。各項進度見「目前進度」。最後更新：2026-11-01
 
 ## 背景
 目標是做一個台灣用的機車停車指南 APP，同時服務「普通機車」與「大型重機（黃牌/紅牌）」騎士。
@@ -15,22 +15,26 @@
 - UI：**雙平台自適應**，iOS 依 Liquid Glass（HIG，iOS 26/27）、Android 依 Material 3 Expressive；iOS 關鍵導覽元件嵌入原生 Liquid Glass 元件（見「UI 設計規範」）
 - 第一版功能：地圖找附近停車位、停車規則指南、記住我停哪裡、使用者回報/收藏停車點
 
-## 目前進度（2026-10-31）
+## 目前進度（2026-11-01）
 - **App**：地圖範圍搜尋與篩選、車種資格判斷、縣市規則、收藏、停車紀錄。後端點位或規則變更時自動重新載入（2026-10-26）：`data_versions` 表每個資料集一列，`community_spots`／`official_heavy_spots`／`city_rules` 的敘述層觸發器每次寫入 bump 版本並經 Realtime 推送，App 收到後 1 秒內合併為一次重新載入（點位重查目前範圍、規則重讀）；回到前景與 Realtime 重新連線時再直接比對版本，補上漏掉的推送。取捨：敘述層觸發器讓每一筆回報、投票或管理站操作都推送一次，所有在線 App 各重查一次目前範圍（1 秒合併只合併同一台裝置的連續事件），封測規模可承受；用量上升時再考慮伺服器端合併或最小推送間隔。詳情依四組十二欄顯示，分區與結構化費率摘要見 [DESIGN.md](DESIGN.md)（#80）；資料來源顯示「由車友 XXX 回報」「由管理員新增」等公開回報者來源（#81、#82）。導航：iOS 先開 Google Maps App，無法開啟才改開 Apple Maps；Android 與 Web 使用 Google Maps 導航網址（#82）。帳號與設定可修改顯示名稱與頭像（#83）。
 - **停放條件與費率（stack C，2026-10-27 完成）**：停放條件三端契約與轉換層（C1）、條件欄位與舊版保守投影（C2）、費率 v2（汽車、依時段與星期、跨日與跨時段、比照換算金額）與計費規則分離（寫入時展開）、修改建議逐車種合併（C3）、停放判斷 `decideParking`（縣市規則可到期、依法可停格位不受規則到期影響、分區推導不出＝待確認）與詳情資格橫幅（C4）、App 表單與預檢組合規則、詳情分區收費公告牌與依目前時間的費率摘要（C5）、管理站計費規則與區域卡、審核頁合併差異與共用規則面板（C6）。設計見 [designs/2026-10-26-parking-conditions-and-fees.md](designs/2026-10-26-parking-conditions-and-fees.md)。
 - **社群回報**：新增停車點與修改建議改用全 App 統一的選擇元件與分段收合表單（格位分組地面標線清單含普大共用機車格、限制可複選、縣市／區選單、停車場型式可複選）；暫時封閉與施工中有預計恢復日期，伺服器依日期到期並請車友確認（#116）；點位編輯紀錄（管理站時間軸、App 簡化版，含車主修改與投票，#141）。
 - **可信度**：存在確認與車種資格解耦，舊投票不再自動隱藏（#59）；管理員核驗過的社群點車種欄位在 180 天內視為可信（#84）；詳情依據列依來源切換、確認狀態只顯示最新一筆。後續分層核實見 [社群核實計畫](COMMUNITY_VERIFICATION_PLAN.md)（P0、P1 已完成，P2–P4 未開始），遊戲化與社群審核見 [可行性研究](CONTRIBUTION_TIERS_FEASIBILITY.md)（階段 0 已完成）。
 - **管理**：[Web 管理介面](ADMIN_WEB.md) P1–P7 已完成（審核、點位、全點位地圖與上限提示、地址搜尋、規則、匯入、使用者）；全站 RWD（iPhone 16 Pro、iPad Air 等 7 尺寸）、單列頂欄＋底部導覽、矮螢幕模式、雙欄只換右欄、儲存後主動更新（#118）；點位表單分段收合與統一選擇元件。
-- **部署**：CD staging 以 `supabase db push --include-all` 補套較晚合併但編號較早的 migration（#164）。
+- **部署**：CD staging 以 `supabase db push --include-all` 補套較晚合併但編號較早的 migration（#164）。建置 Android／iOS 前先以 `tool/export_rules.py` 匯出 staging 最新縣市規則寫進內建規則檔，匯出失敗就讓建置失敗，結果不寫回 repo（#228）。staging 的 `city_rules_data` 已以內建規則檔匯入 12 條（2026-11-01，經 `admin_upsert_city_rule`，有稽核紀錄）。
+- **停放資格與刪除（2026-10-31）**：取消「未確認」，新增與修改都必須填停放資格；官方點三選一（可停／不可停／官方未標示），社群點二選一，舊資料的待確認照常讀取（#201：#205、#209）。「隱藏點位」改為「刪除點位」：立即對騎士隱藏、管理站保留 14 天可復原、之後由 `purge-deleted-spots` 永久刪除；已刪除的點只有管理員能復原（#200：#210）。
+- **權限收斂（2026-11-01）**：內部 helper 與觸發器函式收回 anon／authenticated 的 EXECUTE（#195 P0：#221、#223），staging 以 anon 驗證 App 正常。
 - **即時車位**：P2 官方動態已上線 staging（臺北停管處 XML V2，每 5 分鐘擷取，[計畫](REALTIME_AVAILABILITY_UI_PLAN.md)，#179、#180）；國定假日依人事行政總處辦公日曆表算假日，時段依目前時間判斷可不可停（#120、#182）。
-- **設計定稿 Ver.143（2026-10-31）**：[停車決策歷程重設計](https://claude.ai/artifact/Jz11USZZhRtrZMYhCqm7zB)第 143 版定案（App 每張畫板有 iOS 與 Android 兩版；詳情為四面路牌：能不能停 → 有沒有位 → 怎麼算錢 → 停哪裡）。定稿取代決定 62–64 的舊手稿，#187 與 `feat/space-taxonomy-ui` 不再沿用，改從 `main` 重做。分工與順序：
-  1. 格位 7 類與停放條件／費率契約改版（#188）：第 1 層先定分區／路段 id 與格位 7 類，再做費率（新增「不適用」、移除「未確認」、計次只有首次與延長、移除 free_minutes、依時段不同可選天）、限時（每次多久＋可延長次數＋天＋時段，共用時段可複選開放車種）、修改建議可改分區、管理站。
-  2. 騎士回報改 4 級量表、依分區／路段與車種（#189）：#184、#185 改版，接在 #188 第 1 層之上，與格位改版一起出。
-  3. App 四面路牌改版（#190）：不依賴新契約的頁面（個人中心、收藏、記錄停車、帳號設定、貢獻、圖例）先並行；格位清單、費率與限時表單、停車規則頁等 #188 合併後再接。
-  4. 分區與路段照片併入社群核實 P2（#191，未排程，先只開 `evidence_url`）。
-  - 管理站（2026-10-31）：#188 的 Flutter 管理站表單（格位、費率、限時）只做最小改動、能用就好；完整的新表單留給之後的 React＋Redux Toolkit 管理站，目前只做設計稿，未排實作。
-  - 統一 API 層（#195，2026-10-31）：App 與管理站都經有版本的 RPC／Edge Function 存取，規則集中在後端，Dart 與 TS 型別由同一份 schema 產生；目前只做架構提案，實作排在 #188 第 1 層合併之後。
-- **尚未實作**：Google 地圖剩餘數膠囊圖層（#139）、照片上傳與社群核實 P2–P4（含 #191）、依價格篩選、即時車位其他縣市資料源。審查留下的小邊界與測試缺口記在 #155、#183。
+- **設計定稿（Ver.143 定案，2026-10-31；目前 Ver.155，2026-11-01 核准）**：[停車決策歷程重設計](https://claude.ai/artifact/Jz11USZZhRtrZMYhCqm7zB)（App 每張畫板有 iOS 與 Android 兩版；詳情為四面路牌：能不能停 → 有沒有位 → 怎麼算錢 → 停哪裡）。定稿取代決定 62–64 的舊手稿，#187 與 `feat/space-taxonomy-ui` 不再沿用，改從 `main` 重做。分工與進度：
+  1. 格位 7 類與停放條件／費率契約改版（#188）：第 1 層（分區／路段 id、格位 7 類）已合併（#194、#197）。費率與限時層進行中，使用者決定記在 #188 的留言（費率 8 題、收費方式必填、費率沒寫一律顯示「未提供」、分區官方未標示分車種、車種資格改掛在每個格位條目上）。大型重機停汽機車共用格依時段判斷，臺北只有收費的共用格在機車時段可停（#226）。
+  2. 騎士回報改 4 級量表、依分區／路段與車種（#189）：後端已合併（#199，取代 #154），App 端車友回報 UI 待做。
+  3. App 四面路牌改版（#190）：個人中心與記錄停車照（#193）、個人中心與貢獻小頁（#218）、地圖標記與「地圖怎麼看」（#220）已合併；四面路牌（#222）審查中；詳情整頁、收藏卡、篩選列、平板版面與費率限時表單接在後面。Android 的 Apple 登入另開 #219。
+  4. 分區與路段照片併入社群核實 P2（#191，未排程，先只開 `evidence_url`；依賴 #119）。
+  - 管理站：#188 的 Flutter 管理站表單（格位、費率、限時）只做最小改動、能用就好；React＋Redux Toolkit 管理站已開始實作（#195 P7）：基礎層（#213）、審核頁含駁回與修改後套用（#214、#216）已合併，其餘頁面等 admin_v1 接資料。
+  - 統一 API 層（#195）：P0 權限查核完成（#221、#223）；P1 進行中：`api_v1`／`admin_v1`／`private` schema 與 `api_v1.client_config()`（#227）、RTK Query 用戶端（#229）已合併，Dart 用戶端產生器（#233）與部署後 exposed schemas 檢查（#234）審查中。已決定：傳輸層用 OpenAPI 3.1、官方點與社群點 viewport 合併為 `api_v1.spots_in_viewport`、共用 TS 核心放 `supabase/functions/_shared/core/`；提案第 7 節第 4–7 題待決定。staging 的 Data API 已開放 `api_v1`、`admin_v1`。
+- **規則離線與推播（#202）**：規則離線快取提前做（連線時把最新規則寫到手機，離線時取快取與內建檔較新的一份，#230 審查中）；推播跟 #195 一起做。
+- **回報防濫用（#203，取代 #125）**：Firebase App Check 共用模組已合併（#204，先只記錄）；App 用戶端（#231，staging 的 App Attest profile 已更新）與 submit-report 串接、台灣時間日界線、每 IP 200 筆與 IP 雜湊進行中；之後再從只記錄改為強制。
+- **尚未實作**：Google 地圖剩餘數膠囊圖層（#139）、照片上傳與社群核實 P2–P4（含 #191）、即時車位其他縣市資料源（#126 延到第 2 階段）、刪除帳號（#215，上架必要，開工前要先確認三項資料處理決定）。既有停車點的費率轉換（`fee_note` → `fee`，CLI 腳本，#235）排在 #188 費率與限時層之後，完成後才評估依價格篩選。審查留下的小邊界與測試缺口記在 #155、#183。
 
 ## 架構總覽
 ```
@@ -405,7 +409,7 @@ rate = {"mode":"free"} | {"mode":"posted"}
 ## 待準備事項
 - Google Maps 平台 API Key：staging 的 Android／iOS／管理站 Web 金鑰已設定（GitHub `staging` Environment）；production 金鑰上線前另建；本機預覽各自建立，存於不進版控的 `config/maps.local.json`。
 - CI／CD 所需的商店、Supabase 與 GitHub 設定，見 [CICD.md](CICD.md)「待準備事項」
-- Supabase：staging 專案已建立並部署（2026-10-21；GitHub `staging` Environment 已設定 Supabase 的 3 個 secret 與 2 個 variable，CI 用 Scoped token 只限 staging 專案），停車點已匯入，Google 登入已啟用（管理站 2026-10-24 驗收）。待辦：確認 Apple 登入與 Turnstile CAPTCHA；production 專案（Pro）於上線前另建。
+- Supabase：staging 專案已建立並部署（2026-10-21；GitHub `staging` Environment 已設定 Supabase 的 3 個 secret 與 2 個 variable，CI 用 Scoped token 只限 staging 專案），停車點已匯入，Google 登入已啟用（管理站 2026-10-24 驗收）。待辦：確認 Apple 登入（Android 見 #219）；production 專案（Pro）於上線前另建。原列的 Turnstile CAPTCHA 不再需要：回報防濫用改用 Firebase App Check（#203，2026-11-01 使用者決定）。
 - TDX 會員 Client ID / Secret（已取得；只在本機 `supabase/functions/.env` 供匯入核驗使用）
 - ~~雲端環境網路放行 TDX 與縣市開放資料網域~~：已改在本機執行 `tool/import_mymaps.py` 取得官方資料並核驗（2026-10-17），不再需要。
 - ~~執行順序（先 demo／本機開發，放行後再做 Phase 0 與 TDX 介接）~~：App 本體、schema、社群回報與靜態官方點匯入已完成；TDX 即時介接本階段不做。

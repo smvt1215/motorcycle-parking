@@ -1,7 +1,8 @@
 /// The map's space kind filter (PLAN.md 篩選列; #188, design canvas P1):
-/// the seven bay kinds and the lot. [freeFor] still says which bays are free
-/// for the rider: only a rate of `mode: free` or a bay marked free, never a
-/// toll bay whose first minutes cost 0 元 (design §2.3, C5).
+/// any of the seven bay kinds and the lot, none picked keeping every spot.
+/// [freeFor] still says which bays are free for the rider: only a rate of
+/// `mode: free` or a bay marked free, never a toll bay whose first minutes
+/// cost 0 元 (design §2.3, C5).
 library;
 
 import '../models/fee.dart';
@@ -70,3 +71,12 @@ bool matchesSpaceFilter(
   null => isOffStreet(spot.spaceType, spot.facilityType),
   final bay => bayKindsAt(spot).contains(bay),
 };
+
+/// Whether the multiple-choice space filter [kinds] keeps [spot] (P1): an
+/// empty set is 全部格位 and keeps every spot; otherwise any picked kind
+/// that keeps it ([matchesSpaceFilter]) does.
+bool matchesSpaceKinds(
+  ParkingSpot spot,
+  Set<SpaceKind> kinds,
+  VehicleType vehicle,
+) => kinds.isEmpty || kinds.any((k) => matchesSpaceFilter(spot, k, vehicle));

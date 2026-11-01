@@ -405,7 +405,7 @@ enum AvailabilityFilter {
   /// 「有即時資訊」: a fresh count for this vehicle, full included.
   live,
 
-  /// 「目前有位」: fresh, more than zero, and the vehicle may park.
+  /// 「有即時空位」: fresh, more than zero, and the vehicle may park.
   available,
 }
 
@@ -483,5 +483,5 @@ String exclusionReason(
 String availabilityFilterLabel(AvailabilityFilter filter) => switch (filter) {
   AvailabilityFilter.off => '即時車位',
   AvailabilityFilter.live => '有即時資訊',
-  AvailabilityFilter.available => '目前有位',
+  AvailabilityFilter.available => '有即時空位',
 };

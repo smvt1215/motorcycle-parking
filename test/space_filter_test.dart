@@ -238,4 +238,19 @@ void main() {
     expect(matchesSpaceFilter(spot, SpaceKind.carMotorcycle, scooter), isTrue);
     expect(matchesSpaceFilter(spot, SpaceKind.car, scooter), isFalse);
   });
+
+  test('複選格位：空集合等於全部格位，多選取聯集（P1）', () {
+    final paid = _spot(SpaceType.paidMotorcycle);
+    final heavyBay = _spot(SpaceType.heavyOnly);
+    final lot = _spot(SpaceType.offStreet);
+    for (final spot in [paid, heavyBay, lot]) {
+      expect(matchesSpaceKinds(spot, const {}, scooter), isTrue);
+    }
+    const picked = {SpaceKind.motorcycle, SpaceKind.offStreet};
+    expect(matchesSpaceKinds(paid, picked, scooter), isTrue);
+    expect(matchesSpaceKinds(lot, picked, scooter), isTrue);
+    expect(matchesSpaceKinds(heavyBay, picked, scooter), isFalse);
+    expect(matchesSpaceKinds(heavyBay, {SpaceKind.heavy}, heavy), isTrue);
+    expect(matchesSpaceKinds(paid, {SpaceKind.heavy}, heavy), isFalse);
+  });
 }
