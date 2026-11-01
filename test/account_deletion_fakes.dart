@@ -56,6 +56,9 @@ class FakeDeletionGateway implements AccountDeletionGateway {
   final statuses = <Object>[];
   AccountDeletionState statusFallback = deletionState();
 
+  /// Answers held back by the test, used before [statuses].
+  final statusFutures = <Future<AccountDeletionState>>[];
+
   /// Also signs the real client out, for flows that then open P11.
   Future<void> Function()? onSignOut;
   final requests = <Object>[];
@@ -78,6 +81,7 @@ class FakeDeletionGateway implements AccountDeletionGateway {
   @override
   Future<AccountDeletionState> status() {
     calls.add('status');
+    if (statusFutures.isNotEmpty) return statusFutures.removeAt(0);
     return _next(statuses, statusFallback);
   }
 

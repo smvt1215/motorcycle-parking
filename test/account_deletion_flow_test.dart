@@ -27,7 +27,7 @@ class _Store extends AppStore {
   Future<void> loadFavorites() async {}
 }
 
-Future<_Store> _signedInStore() async {
+Future<_Store> _signedInStore({String Function()? deletionStatus}) async {
   SharedPreferences.setMockInitialValues({});
   final client = SupabaseClient(
     'https://example.supabase.co',
@@ -52,6 +52,14 @@ Future<_Store> _signedInStore() async {
         );
       }
       if (request.url.path.endsWith('/logout')) return http.Response('', 204);
+      if (request.url.path.endsWith('/rpc/account_deletion_status')) {
+        return http.Response(
+          deletionStatus?.call() ?? '"none"',
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+          request: request,
+        );
+      }
       return http.Response('[]', 200);
     }),
   );
@@ -568,4 +576,77 @@ void main() {
       expect(tester.takeException(), isNull);
     }, variant: platforms);
   }
+
+  testWidgets('不覆寫 provider：store 通知後 router 與設定頁仍是同一個仍在監聽的 controller', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = phone;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    var status = 'none';
+    String body() => jsonEncode({
+      'status': status,
+      'requested_at': status == 'pending' ? pendingRequestedAt : null,
+      'scheduled_at': status == 'pending' ? pendingScheduledAt : null,
+      'can_self_delete': true,
+      'cannot_self_delete_reason': null,
+    });
+    final store = (await tester.runAsync(
+      () => _signedInStore(deletionStatus: body),
+    ))!;
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.runAsync(store.client!.dispose);
+    });
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [storeProvider.overrideWith((ref) => store)],
+        child: const ParkingApp(),
+      ),
+    );
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    await tester.pumpAndSettle();
+    final container = ProviderScope.containerOf(_appContext(tester));
+    final before = container.read(accountDeletionProvider);
+    store.notifyListeners();
+    await tester.pumpAndSettle();
+    expect(identical(container.read(accountDeletionProvider), before), isTrue);
+    // Disposed notifiers throw on addListener.
+    before.addListener(() {});
+
+    // The settings page reads the same instance.
+    showSettings(_appContext(tester), store);
+    await tester.pumpAndSettle();
+    expect(
+      identical(
+        ProviderScope.containerOf(tester.element(find.text('帳號與設定')))
+            .read(accountDeletionProvider),
+        before,
+      ),
+      isTrue,
+    );
+
+    // And it still follows the app: a resume finds the pending request and
+    // the router (listening to it) shows the choice.
+    status = 'pending';
+    for (final state in [
+      AppLifecycleState.inactive,
+      AppLifecycleState.hidden,
+      AppLifecycleState.paused,
+      AppLifecycleState.hidden,
+      AppLifecycleState.inactive,
+      AppLifecycleState.resumed,
+    ]) {
+      tester.binding.handleAppLifecycleStateChanged(state);
+    }
+    for (var i = 0; i < 5 && before.pending == null; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+    }
+    await tester.pumpAndSettle();
+    expect(before.pending?.status, 'pending');
+    expect(find.text('帳號正在等待刪除'), findsOneWidget);
+  });
 }

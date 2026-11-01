@@ -277,7 +277,10 @@ class DeletionBanner {
 
 final accountDeletionProvider =
     ChangeNotifierProvider<AccountDeletionController>((ref) {
-      final store = ref.watch(storeProvider);
+      // read, not watch: the store notifies on every change, and a rebuilt
+      // controller would leave the router and settings with different ones.
+      // The store instance itself never changes.
+      final store = ref.read(storeProvider);
       final client = store.client;
       return AccountDeletionController(
         client == null ? null : SupabaseAccountGateway(client),
@@ -333,14 +336,25 @@ class AccountDeletionController extends ChangeNotifier
 
   /// Runs [action] with the sign-in checks paused: the flow's own
   /// re-sign-in and request must not be read as a cooling-off sign-in.
+  /// Starting it invalidates a status read in flight (it may predate a
+  /// cancel or request); a check skipped meanwhile, such as a sign-in on P11
+  /// opened from the flow, runs once it ends.
   Future<T> guard<T>(Future<T> Function() action) async {
     _busy++;
+    _check++;
     try {
       return await action();
     } finally {
       _busy--;
+      if (_busy == 0 && _skipped && !_disposed) {
+        _skipped = false;
+        unawaited(check());
+      }
     }
   }
+
+  /// A check was skipped or dropped while [guard] ran.
+  bool _skipped = false;
 
   DeletionAttempt attempt() => DeletionAttempt(gateway!, clock: clock);
 
@@ -374,7 +388,11 @@ class AccountDeletionController extends ChangeNotifier
 
   Future<void> _checkOnce() async {
     final gateway = this.gateway;
-    if (gateway == null || _busy > 0) return;
+    if (gateway == null) return;
+    if (_busy > 0) {
+      _skipped = true;
+      return;
+    }
     final me = gateway.current;
     if (me == null) {
       _set(pending: null);
@@ -387,7 +405,13 @@ class AccountDeletionController extends ChangeNotifier
     } catch (_) {
       return;
     }
-    if (_disposed || check != _check || _busy > 0) return;
+    if (_disposed) return;
+    if (check != _check || _busy > 0) {
+      // Superseded by a newer check, or by a cancel or request: a guard
+      // that is still running checks again when it ends.
+      if (_busy > 0) _skipped = true;
+      return;
+    }
     if (gateway.current?.id != me.id) return;
     if (state.status != 'pending') {
       // Signed in without a request (cancelled elsewhere): no notice either.

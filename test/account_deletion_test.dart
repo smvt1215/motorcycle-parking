@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -236,8 +237,10 @@ void main() {
       final gateway = FakeDeletionGateway(current: google(signedInAt: now))
         ..statuses.add(pendingState());
       final controller = AccountDeletionController(gateway, clock: () => now);
-      await controller.guard(controller.check);
-      expect(gateway.calls, isEmpty);
+      await controller.guard(() async {
+        await controller.check();
+        expect(gateway.calls, isEmpty);
+      });
     });
 
     test('申請成功：登出、清停車紀錄、顯示提示', () async {
@@ -284,6 +287,39 @@ void main() {
       await controller.acknowledgeInProgress();
       expect(gateway.calls.last, 'signOut');
       expect(controller.pending, isNull);
+    });
+
+    test('流程中被略過的登入檢查，流程結束後補跑（例如流程開的 P11 登入）', () async {
+      final gateway = FakeDeletionGateway(current: google(signedInAt: now))
+        ..statuses.add(pendingState());
+      final controller = AccountDeletionController(gateway, clock: () => now);
+      await controller.guard(() async {
+        // A sign-in event arrives while the flow still holds the guard.
+        await controller.check();
+        expect(gateway.calls, isEmpty);
+      });
+      await pumpEventQueue();
+      expect(gateway.calls, ['status']);
+      expect(controller.pending?.status, 'pending');
+    });
+
+    test('取消成功後才回來的舊 status 不會把狀態蓋回 pending', () async {
+      final gateway = FakeDeletionGateway(current: google(signedInAt: now))
+        ..statuses.add(pendingState());
+      final controller = AccountDeletionController(gateway, clock: () => now);
+      await controller.check();
+      expect(controller.pending, isNotNull);
+      final late = Completer<AccountDeletionState>();
+      gateway.statusFutures.add(late.future);
+      final stale = controller.check();
+      await pumpEventQueue();
+      await controller.cancelPending();
+      expect(controller.pending, isNull);
+      late.complete(pendingState());
+      await stale;
+      await pumpEventQueue();
+      expect(controller.pending, isNull);
+      expect(controller.banner?.continued, isFalse);
     });
   });
 }
