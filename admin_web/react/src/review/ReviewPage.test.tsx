@@ -342,6 +342,28 @@ describe('ReviewPage', () => {
     ]);
   });
 
+  it('undoing from the report itself reopens the editor there (Codex review, PR #238)', async () => {
+    const { user, source, router } = setup('/review/r-fuxing');
+    await detailTitle();
+    await user.keyboard('e');
+    await user.click(
+      within(screen.getByRole('region', { name: '資格' })).getByRole('radio', { name: /不可停/ }),
+    );
+    await user.keyboard('{Control>}{Enter}{/Control}');
+    // Back to the report while its write waits, then 復原 from there.
+    await act(() => router.navigate('/review/r-fuxing'));
+    expect(screen.getByRole('heading', { name: /這筆回報正在/ })).toBeInTheDocument();
+    await user.click(within(screen.getByRole('status')).getByRole('button', { name: '復原' }));
+    expect(screen.getByRole('toolbar', { name: '修改後套用' })).toHaveTextContent('你改了騎士建議的 1 處');
+    // Cancelling and coming back later does not bring the old draft back.
+    await user.keyboard('{Escape}');
+    await act(() => router.navigate('/review/r-ximen'));
+    await act(() => router.navigate('/review/r-fuxing'));
+    expect(screen.queryByRole('toolbar', { name: '修改後套用' })).not.toBeInTheDocument();
+    await act(() => vi.advanceTimersByTimeAsync(UNDO_MS * 2));
+    expect(source.resolved).toEqual([]);
+  });
+
   it('undoing a plain 套用 still returns to the report view', async () => {
     const { user } = setup(FIRST);
     await detailTitle();

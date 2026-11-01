@@ -210,13 +210,27 @@ function ReportDetail({ reportId }: { reportId: string }) {
   const [touched, setTouched] = useState<ReadonlySet<string>>(
     () => new Set(draft?.mode === 'edit' ? draft.touched : []),
   );
-  useEffect(() => {
-    if (draft) dispatch(draftReopened(reportId));
-    // Read once on open; later drafts belong to a later undo.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
   const [showErrors, setShowErrors] = useState(false);
   const [editMessage, setEditMessage] = useState<string | null>(null);
+  // Undo can also land on this report while it is already open (back, then
+  // 復原; Codex review, PR #238): a new draft is taken in during render.
+  const [takenDraft, setTakenDraft] = useState(draft);
+  if (draft && draft !== takenDraft) {
+    setTakenDraft(draft);
+    setMode(draft.mode);
+    setShowErrors(false);
+    setEditMessage(null);
+    if (draft.mode === 'reject') {
+      setRejectKind(draft.kind);
+    } else {
+      setEditValues(draft.values);
+      setTouched(new Set(draft.touched));
+    }
+  }
+  // Each draft is reopened once; it then leaves the store.
+  useEffect(() => {
+    if (draft) dispatch(draftReopened(reportId));
+  }, [draft, dispatch, reportId]);
 
   const report = open.find((r) => r.id === reportId);
   const spot = report ? spots[report.sourceId] : undefined;
