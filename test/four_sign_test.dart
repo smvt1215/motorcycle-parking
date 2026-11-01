@@ -1091,6 +1091,96 @@ void main() {
     });
   });
 
+  group('交叉審查第二輪（#222，汽機車共用格依 #226 時段）', () {
+    ParkingSpot oneSegment(Map<String, dynamic> segment) =>
+        ParkingSpot.fromJson({
+          ...street.toJson(),
+          'parking_segments': [segment],
+        });
+    Map<String, dynamic> share(String charge, List<String> vehicles) => {
+      'id': 'x',
+      'name': '汽機車共用格',
+      'condition': {
+        'bay': 'car',
+        'use': 'share',
+        'share': 'car_motorcycle',
+        'charge': charge,
+        'schedule': [
+          {'days': 'all', 'from': '20:00', 'to': '08:00', 'vehicles': vehicles},
+        ],
+      },
+    };
+
+    test('南側共用格 21:00 大型重機：寫明天 08:00 起，不算現在可停', () {
+      final south = oneSegment(
+        street.segments.firstWhere((s) => s.id == 's1').toJson(),
+      );
+      final seg = decideSegments(
+        south,
+        VehicleType.heavy,
+        rules,
+        now: night,
+      ).single;
+      expect(seg.decision.reason, contains('現在不可停'));
+      expect(seg.decision.reason, contains('明天 08:00'));
+      expect((seg.window.now, seg.window.opensAt), (false, '明天 08:00'));
+      final sign = fourSign(south, VehicleType.heavy, rules, now: night);
+      expect(sign.verdict.openNow, isFalse);
+      expect(sign.verdict.opensAt, '明天 08:00');
+    });
+
+    test('臺北收費共用格只列機車時段 20:00–08:00：晚上大型重機可停', () {
+      final toll = oneSegment(share('toll', ['scooter']));
+      final seg = decideSegments(
+        toll,
+        VehicleType.heavy,
+        rules,
+        now: night,
+      ).single;
+      expect(seg.status, EligibilityStatus.conditional);
+      expect((seg.window.now, seg.window.until), (true, '08:00'));
+      expect(
+        fourSign(toll, VehicleType.heavy, rules, now: night).verdict.openNow,
+        isTrue,
+      );
+    });
+
+    test('免費共用格同樣的時段：大型重機不可停', () {
+      final free = oneSegment(share('free', ['scooter']));
+      final seg = decideSegments(
+        free,
+        VehicleType.heavy,
+        rules,
+        now: night,
+      ).single;
+      expect(seg.open, isFalse);
+      expect(seg.window.now, isFalse);
+      expect(
+        fourSign(free, VehicleType.heavy, rules, now: night).verdict.openNow,
+        isFalse,
+      );
+    });
+
+    test('依法開放的一般汽車格：不截在公告到期日', () {
+      final car = ParkingCondition.fromJson({
+        'bay': 'car',
+        'use': 'usual',
+        'basis': {
+          'source_url': 'https://example.com/notice',
+          'expires_on': '2026-11-04',
+        },
+      })!;
+      final w = openWindow(
+        EligibilityStatus.allowed,
+        car,
+        VehicleType.heavy,
+        night,
+        street: true,
+      );
+      expect((w.now, w.until), (true, null));
+    });
+  });
+
   group('官方未標示（#201、A3 不確定）', () {
     test('場站官方未標示大型重機：能不能停寫不確定／官方未標示（虛框），其他三面照常', () {
       final unstated = ParkingSpot.fromJson({

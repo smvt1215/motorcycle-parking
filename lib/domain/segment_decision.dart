@@ -63,12 +63,51 @@ bool scheduleSilentFor(ParkingCondition? condition, VehicleType vehicle) {
   return !c.schedule.any((s) => s.vehicles.contains(_slotVehicle(vehicle)));
 }
 
+/// The slots a heavy bike may park in on a shared car bay [condition] in
+/// [district] at [at], as decideParking's `_heavyShareSlots` (private to
+/// parking_decision.dart, another session's file) lists them: the car
+/// slots (car bays are painted for heavy bikes too), the scooter slots only
+/// where [rules] (already matched to the city and heavy bikes) open the
+/// matching motorcycle bay to heavy bikes, both kinds agreeing when the
+/// charge is unconfirmed, and the slots the notice names for heavy bikes.
+/// Keep the two in step.
+List<ScheduleSlot> heavyShareSlots(
+  ParkingCondition condition,
+  List<CityRule> rules,
+  String district,
+  DateTime at,
+) {
+  final verdicts = [
+    for (final k in switch (condition.charge) {
+      Charge.toll => const [SpaceType.paidMotorcycle],
+      Charge.free => const [SpaceType.freeMotorcycle],
+      null => const [SpaceType.paidMotorcycle, SpaceType.freeMotorcycle],
+    })
+      ruleVerdict(rules, k, district, now: at),
+  ];
+  final ruleOpens = verdicts.every(
+    (v) =>
+        v.kind == RuleVerdictKind.open ||
+        (v.kind == RuleVerdictKind.conditional &&
+            v.restriction != RuleRestriction.unverified),
+  );
+  return [
+    for (final s in condition.schedule)
+      if (s.vehicles.contains(SlotVehicle.car) ||
+          ruleOpens && s.vehicles.contains(SlotVehicle.scooter) ||
+          s.vehicles.contains(SlotVehicle.heavy))
+        s,
+  ];
+}
+
 /// When a place judged [status] with [condition] lets [vehicle] park,
 /// read at [now]. Only an allowed or conditional place opens; its slots
 /// for the vehicle decide when (a period across midnight belongs to the
 /// day it starts, as [decideParking] reads them). On the street a heavy
-/// bike on a car bay parks by law whatever the slots say ([street]).
-/// A city rule in the decision's [basis] that grants the place holds up to,
+/// bike on a car bay parks by law whatever the slots say ([street]),
+/// except on a shared car bay, where it parks in [heavyShareSlots], read
+/// with [rules] (matched to the spot's city and heavy bikes) in
+/// [district]. A city rule in the decision's [basis] that grants the place holds up to,
 /// not on, its expiry day (as [ruleExpired]): the window ends there too,
 /// except on a street bay the law opens to a heavy bike, which the law
 /// keeps open after the rule ends.
@@ -80,6 +119,8 @@ OpenWindow openWindow(
   bool street = false,
   HolidayCalendar? calendar,
   Iterable<DecisionBasis> basis = const [],
+  List<CityRule> rules = const [],
+  String district = '',
 }) {
   if (status != EligibilityStatus.allowed &&
       status != EligibilityStatus.conditional) {
@@ -89,13 +130,23 @@ OpenWindow openWindow(
   int dayMinute(DateTime d) =>
       DateTime.utc(d.year, d.month, d.day).difference(today).inDays * 1440;
   final c = condition;
-  // A street bay the law opens to a heavy bike (a heavy-bike or car bay,
-  // as ruleVerdict's lawful branch keeps them) stays open once its rule
-  // ends: decideParking then cites the law. Only a place the rule itself
-  // opens closes on the rule's expiry.
+  final heavy = street && vehicle == VehicleType.heavy;
+  final carShare = c?.share == ShareKind.carMotorcycle;
+  // A heavy bike on a plain car bay parks by law whatever its slots or
+  // notice say (decideParking's step 3 skips them; its notice is not what
+  // opens the bay), so nothing here ends it.
+  if (heavy && c != null && c.bay == Bay.car && !carShare) {
+    return OpenWindow.always;
+  }
+  // A street bay the law opens to a heavy bike (a heavy-bike or plain car
+  // bay, as ruleVerdict's lawful branch keeps them) stays open once its
+  // rule ends: decideParking then cites the law. Only a place the rule
+  // itself opens closes on the rule's expiry, and a shared car bay's
+  // scooter slots are such a place (one without slots judges as a car bay).
   bool lawful(CityRule rule) =>
       street &&
       c != null &&
+      !(carShare && c.schedule.isNotEmpty) &&
       rule.vehicle == VehicleType.heavy &&
       ruleKindsOf(c)
           .every((k) => k == SpaceType.heavyOnly || k == SpaceType.car);
@@ -125,10 +176,7 @@ OpenWindow openWindow(
       ? noticeEnd
       : ruleEnd;
   const last = 7;
-  final unslotted =
-      c == null ||
-      c.schedule.isEmpty ||
-      street && vehicle == VehicleType.heavy && c.bay == Bay.car;
+  final unslotted = c == null || c.schedule.isEmpty;
   if (unslotted) {
     // Open all the time the notice and the rule hold: from the notice's
     // effective day, until the earlier of their ends.
@@ -147,10 +195,12 @@ OpenWindow openWindow(
       untilMinute: within ? until : null,
     );
   }
-  final slots = [
-    for (final s in c.schedule)
-      if (s.vehicles.contains(_slotVehicle(vehicle))) s,
-  ];
+  final slots = heavy && carShare
+      ? heavyShareSlots(c, rules, district, now)
+      : [
+          for (final s in c.schedule)
+            if (s.vehicles.contains(_slotVehicle(vehicle))) s,
+        ];
   // The decision already reads a slot-less schedule as unconfirmed; an
   // open status here means something else opened it.
   if (slots.isEmpty) return OpenWindow.always;
@@ -289,6 +339,7 @@ List<SegmentDecision> decideSegments(
   final at = now ?? DateTime.now();
   final spotDecision =
       whole ?? decideParking(spot, vehicle, rules, now: at, calendar: calendar);
+  final matched = matchingRules(rules, spot, vehicle);
   OpenWindow windowOf(ParkingDecision d, ParkingCondition? c) => openWindow(
     d.status,
     c,
@@ -297,6 +348,8 @@ List<SegmentDecision> decideSegments(
     street: true,
     calendar: calendar,
     basis: d.basis,
+    rules: matched,
+    district: spot.district,
   );
   // Rolled back to the judgement before C4 (useParkingDecision false), a
   // street stands as one stretch judged as [whole], so the signs never
