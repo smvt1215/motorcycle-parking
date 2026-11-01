@@ -228,7 +228,8 @@ void main() {
       expect(spots.dirty, isFalse);
       const fifteen = Fee(
         scooter: Rate(FeeMode.hourly, amount: 15, perMinutes: 60),
-        heavy: Rate(FeeMode.notApplicable),
+        // Its zones let heavy bikes park: never 不適用 (PM_ANS_20261101_55).
+        heavy: Rate(FeeMode.sameAsScooter),
         car: Rate(FeeMode.notApplicable),
       );
       spots.setPlan('p1', '機車計時', fifteen);
