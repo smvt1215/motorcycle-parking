@@ -17,6 +17,7 @@
 --    管理員移除權限）；申請後立刻停止公開顯示名稱，取消時恢復。冷靜期內
 --    登入不會自動取消（PM_ANS_20261101_127）：App 依 account_deletion_status()
 --    顯示確認頁，使用者選「取消刪除」才呼叫 cancel_account_deletion()。
+--    申請成功即登出所有裝置（刪除 auth.sessions，PM_ANS_20261101_129）。
 
 -- ===== 1. 外鍵 =====
 alter table public.community_spots alter column user_id drop not null,
@@ -451,6 +452,11 @@ begin
   insert into private.account_deletion_audit(request_id,event,source) values(v_request,'requested',p_source);
   -- 名稱立刻從點位上拿掉（觸發器依申請重算）。
   update public.community_spots s set contributor_name='' where s.user_id=v_user;
+  -- 所有裝置登出（PM_ANS_20261101_129）：刪除 auth.sessions 就是 Supabase 文件
+  -- 說的撤銷 session，refresh token 隨外鍵一起刪除，之後換發一律失敗。已發出的
+  -- access token 是無狀態 JWT，仍可用到 exp（本專案 jwt_expiry 3600 秒）。
+  -- 冷靜期內重新登入會建立新的 session，可以查詢與取消。
+  delete from auth.sessions s where s.user_id=v_user;
   return private.account_deletion_state(v_user);
 end $$;
 revoke execute on function api_v1.request_account_deletion(text) from public;

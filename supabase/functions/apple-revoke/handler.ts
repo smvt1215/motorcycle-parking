@@ -2,11 +2,13 @@
 // for their account to be deleted (#268; App Store guideline 5.1.1(v):
 // apps offering Sign in with Apple revoke its tokens on deletion).
 //
-// The App calls it right after api_v1.request_account_deletion(), with the
-// Apple token from the fresh sign-in that request needed (the session's
-// provider_refresh_token, or provider_token). The same conditions apply as
-// for the request: the caller is signed in with Apple, signed in within 10
-// minutes, and has a pending deletion. The token goes to Apple's
+// The App calls it right before api_v1.request_account_deletion(), with the
+// Apple token from the fresh sign-in that request needs (the session's
+// provider_refresh_token, or provider_token): a successful request signs the
+// account out everywhere (#215), so a session-checked call cannot follow it.
+// The same sign-in conditions apply as for the request: the caller is signed
+// in with Apple and signed in within 10 minutes, and an admin, who may not
+// delete the account, is refused. The token goes to Apple's
 // /auth/revoke and is never stored or logged. If the rider later cancels,
 // signing in with Apple again asks them to share their Apple ID again and
 // keeps the same account.
@@ -38,8 +40,8 @@ export type AppleConfig = {
 
 export type Deps = {
   caller(token: string): Promise<Caller | null>;
-  /** api_v1.account_deletion_status() as the caller. */
-  deletionStatus(token: string): Promise<string>;
+  /** api_v1.account_deletion_status() as the caller: can_self_delete. */
+  canSelfDelete(token: string): Promise<boolean>;
   config: AppleConfig | null;
   /** Signs the ES256 client secret. */
   clientSecret(config: AppleConfig, now: Date): Promise<string>;
@@ -152,13 +154,14 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     });
   }
   if (!caller.apple) return fail('account.not_apple_sign_in', 400);
-  let status: string;
+  let allowed: boolean;
   try {
-    status = await deps.deletionStatus(token);
+    allowed = await deps.canSelfDelete(token);
   } catch {
     return fail('server.unavailable', 503);
   }
-  if (status !== 'pending') return fail('account.deletion_not_requested', 409);
+  // The deletion request would be refused, so the Apple link stays.
+  if (!allowed) return fail('account.admin_cannot_self_delete', 403);
   if (!deps.config) return fail('apple.not_configured', 503);
 
   let res: Response;
