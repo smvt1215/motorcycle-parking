@@ -97,13 +97,21 @@ class RulesCache {
 
   Future<File> _file() async => File('${(await _directory()).path}/$fileName');
 
+  /// The write in progress; the next one waits for it, so two downloads
+  /// finishing together never touch the same temporary file.
+  Future<void> _writing = Future.value();
+  int _writes = 0;
+
   /// Stores [rows]; a failure is logged and otherwise ignored, since the
-  /// rules in memory are already good.
-  Future<void> write(List<Map<String, dynamic>> rows) async {
+  /// rules in memory are already good. Writes run one after another.
+  Future<void> write(List<Map<String, dynamic>> rows) =>
+      _writing = _writing.then((_) => _write(rows, _writes++));
+
+  Future<void> _write(List<Map<String, dynamic>> rows, int n) async {
     File? temp;
     try {
       final file = await _file();
-      temp = File('${file.path}.tmp');
+      temp = File('${file.path}.$n.tmp');
       await temp.parent.create(recursive: true);
       await temp.writeAsString(
         jsonEncode({

@@ -85,11 +85,24 @@ void main() {
     expect(json['schema'], RulesCache.schema);
     expect(DateTime.parse(json['downloaded_at'] as String), downloaded);
     expect((json['rules'] as List).length, rules.length);
-    expect(File('${cacheFile().path}.tmp').existsSync(), isFalse);
+    expect(dir.listSync().where((e) => e.path.endsWith('.tmp')), isEmpty);
 
     final offline = await offlineRules(cacheIn(dir));
     expect(pick(offline.rules, '臺北市', VehicleType.heavy).feeNote, '遠端費率');
     expect(offline.cachedAt, downloaded);
+  });
+
+  test('同時寫入兩次：依序寫完，快取是完整的最後一份', () async {
+    final cache = cacheIn(dir);
+    await Future.wait([
+      for (var i = 0; i < 5; i++)
+        cache.write([
+          {'n': i, 'pad': List.filled(2000, 'x').join()},
+        ]),
+    ]);
+    final json = jsonDecode(cacheFile().readAsStringSync()) as Map;
+    expect((json['rules'] as List).single['n'], 4);
+    expect(dir.listSync().where((e) => e.path.endsWith('.tmp')), isEmpty);
   });
 
   test('再次下載以新內容取代舊快取', () async {
@@ -215,7 +228,7 @@ void main() {
   test('寫入失敗時保留舊快取', () async {
     writeCache(cacheJson([rule('臺北市', 'heavy', 5, '舊快取')]));
     // A directory where the temporary file should go makes the write fail.
-    Directory('${cacheFile().path}.tmp').createSync();
+    Directory('${cacheFile().path}.0.tmp').createSync();
     await cacheIn(dir).write([rule('臺北市', 'heavy', 6, '新快取')]);
     final offline = await offlineRules(cacheIn(dir));
     expect(pick(offline.rules, '臺北市', VehicleType.heavy).feeNote, '舊快取');
