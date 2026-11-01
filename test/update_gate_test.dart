@@ -239,7 +239,7 @@ void main() {
       expect(updateOffer(UpdateChannel.beta, ios: false, hasLink: true), (
         button: '前往 Google Play',
         fallback: null,
-        note: '這是測試版，透過 Play 內部測試安裝',
+        note: '這是測試版，透過 Google Play 測試版安裝',
       ));
     });
 

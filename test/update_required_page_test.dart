@@ -50,7 +50,7 @@ void main() {
         (
           UpdateChannel.beta,
           ios ? '前往 TestFlight' : '前往 Google Play',
-          ios ? '這是測試版，透過 TestFlight 安裝' : '這是測試版，透過 Play 內部測試安裝',
+          ios ? '這是測試版，透過 TestFlight 安裝' : '這是測試版，透過 Google Play 測試版安裝',
           ios ? Uri.parse(_testflight) : _play,
         ),
         (
@@ -109,6 +109,53 @@ void main() {
           debugDefaultTargetPlatformOverride = null;
         });
       }
+
+      testWidgets('$name 開不了連結時提示手動前往', (tester) async {
+        setUp(tester);
+        final cases = [
+          (
+            UpdateChannel.store,
+            ios ? '無法開啟商店，請手動前往 App Store' : '無法開啟商店，請手動前往 Google Play',
+          ),
+          (
+            UpdateChannel.beta,
+            ios
+                ? '無法開啟 TestFlight，請手動打開 TestFlight'
+                : '無法開啟商店，請手動前往 Google Play',
+          ),
+          (UpdateChannel.staging, '無法開啟 App Tester，請手動打開 Firebase App Tester'),
+        ];
+        for (final (i, (channel, message)) in cases.indexed) {
+          // Returning false and throwing both count as not opened.
+          final throws = i.isOdd;
+          await tester.pumpWidget(
+            MaterialApp(
+              home: UpdateRequiredPage(
+                key: ValueKey(channel),
+                requirement: _requirement,
+                channel: channel,
+                appStoreId: '6700000000',
+                testflightUrl: _testflight,
+                launch: (_) async =>
+                    throws ? throw PlatformException(code: 'x') : false,
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(find.text(message), findsNothing);
+          await tester.tap(find.byKey(const ValueKey('update-button')));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 750));
+          expect(find.text(message), findsOneWidget, reason: channel.name);
+          // Still on P14.
+          expect(find.text('需要更新'), findsOneWidget);
+          expect(tester.takeException(), isNull);
+          ScaffoldMessenger.of(tester.element(find.text('需要更新')))
+              .removeCurrentSnackBar();
+          await tester.pumpAndSettle();
+        }
+        debugDefaultTargetPlatformOverride = null;
+      });
 
       testWidgets('$name 沒有 TestFlight 連結或 App Store ID 時改顯示文字', (
         tester,

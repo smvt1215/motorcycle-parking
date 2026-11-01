@@ -16,7 +16,8 @@ typedef UriLauncher = Future<bool> Function(Uri uri);
 Future<bool> openExternally(Uri uri) async {
   try {
     return await launchUrl(uri, mode: LaunchMode.externalApplication);
-  } on PlatformException {
+  } catch (_) {
+    // A missing or unavailable handler may throw instead of returning false.
     return false;
   }
 }
@@ -75,10 +76,11 @@ class UpdateRequiredPage extends StatelessWidget {
       canPop: false,
       child: AnnotatedRegion<SystemUiOverlayStyle>(
         value: dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
-        child: Material(
+        // A Scaffold, so the open-failed message has somewhere to show.
+        child: Scaffold(
           key: const ValueKey('update-required'),
-          color: background,
-          child: SafeArea(
+          backgroundColor: background,
+          body: SafeArea(
             child: LayoutBuilder(
               builder: (context, constraints) => SingleChildScrollView(
                 child: ConstrainedBox(
@@ -109,7 +111,20 @@ class UpdateRequiredPage extends StatelessWidget {
                             _UpdateButton(
                               ios: ios,
                               label: label,
-                              onPressed: () => launch(link!),
+                              onPressed: () async {
+                                var opened = false;
+                                try {
+                                  opened = await launch(link!);
+                                } catch (_) {
+                                  // Treated as not opened.
+                                }
+                                if (!opened && context.mounted) {
+                                  showMessage(
+                                    context,
+                                    updateOpenFailed(channel, ios: ios),
+                                  );
+                                }
+                              },
                             )
                           else if (offer.fallback case final text?)
                             Text(

@@ -29,7 +29,7 @@ UpdateOffer updateOffer(
     UpdateChannel.beta => (
       '前往 Google Play',
       '請到 Google Play 更新',
-      '這是測試版，透過 Play 內部測試安裝',
+      '這是測試版，透過 Google Play 測試版安裝',
     ),
     UpdateChannel.staging => (
       '前往 App Tester',
@@ -41,3 +41,12 @@ UpdateOffer updateOffer(
       ? (button: button, fallback: null, note: note)
       : (button: null, fallback: fallback, note: note);
 }
+
+/// Shown when the button's link could not be opened.
+String updateOpenFailed(UpdateChannel channel, {required bool ios}) =>
+    switch (channel) {
+      UpdateChannel.store when ios => '無法開啟商店，請手動前往 App Store',
+      UpdateChannel.beta when ios => '無法開啟 TestFlight，請手動打開 TestFlight',
+      UpdateChannel.store || UpdateChannel.beta => '無法開啟商店，請手動前往 Google Play',
+      UpdateChannel.staging => '無法開啟 App Tester，請手動打開 Firebase App Tester',
+    };
