@@ -67,5 +67,30 @@ update public.availability_sources set beta = false where key = 'taipei_tcmsv';
 select is((select api_v1.client_config()->'availability_beta_cities'), '[]'::jsonb,
   'no Beta left reads as an empty list, not null');
 
+-- api_v1.city_rules(): every stored rule, as stored, with the overall version.
+set local role anon;
+select is((select (api_v1.city_rules()->>'rules_version')::bigint),
+  (select version from public.data_versions where key = 'rules'), 'city_rules carries the rules version');
+select is((select (api_v1.city_rules()->>'rules_version')::bigint),
+  (select (api_v1.client_config()->>'rules_version')::bigint),
+  'city_rules and client_config report the same rules version');
+select is((select jsonb_array_length(api_v1.city_rules()->'rules')),
+  (select count(*)::int from public.city_rules_v2()), 'city_rules serves every stored rule');
+select is((select api_v1.city_rules()->'rules'->0->>'city'),
+  (select city from public.city_rules_v2() limit 1), 'rules come by city, then vehicle');
+reset role;
+-- An expired rule is still served as stored, with its end date, for the App to apply.
+update public.city_rules_data set effective_date = date '2020-01-01', expires_on = date '2020-06-01'
+where city = '臺北市' and vehicle = 'scooter';
+select is((select r->>'expires_on' from jsonb_array_elements(api_v1.city_rules()->'rules') r
+  where r->>'city' = '臺北市' and r->>'vehicle' = 'scooter'), '2020-06-01',
+  'an expired rule keeps its stored values and end date');
+select is((select r->'allowed_space_types' from jsonb_array_elements(api_v1.city_rules()->'rules') r
+  where r->>'city' = '臺北市' and r->>'vehicle' = 'scooter'),
+  (select allowed_space_types from public.city_rules_data where city = '臺北市' and vehicle = 'scooter'),
+  'city_rules does not mask an expired rule (that view is for old builds)');
+delete from public.city_rules_data;
+select is((select api_v1.city_rules()->'rules'), '[]'::jsonb, 'no rules read as an empty list, not null');
+
 select * from finish();
 rollback;

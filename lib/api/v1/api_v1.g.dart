@@ -56,6 +56,15 @@ class ApiV1Client {
 
   /// [clientConfig] as served, for callers that keep the JSON (#202).
   Future<Object?> clientConfigRaw() => _call('client_config', {});
+
+  /// 全部縣市規則與整體的規則版本
+  Future<CityRules> cityRules() async {
+    final raw = await cityRulesRaw();
+    return CityRules.fromJson(raw as Map<String, Object?>);
+  }
+
+  /// [cityRules] as served, for callers that keep the JSON (#202).
+  Future<Object?> cityRulesRaw() => _call('city_rules', {});
 }
 
 class ClientConfig {
@@ -108,6 +117,172 @@ class ClientConfig {
     rulesVersion,
     spotsVersion,
     _hash(availabilityBetaCities),
+  ]);
+}
+
+class CityRules {
+  const CityRules({required this.rulesVersion, required this.rules});
+
+  factory CityRules.fromJson(Map<String, Object?> json) => CityRules(
+    rulesVersion: (json['rules_version'] as num).toInt(),
+    rules: [
+      for (final e in json['rules'] as List)
+        CityRule.fromJson(e as Map<String, Object?>),
+    ],
+  );
+
+  /// 整份規則的版本，與 client_config 的 rules_version 相同
+  final int rulesVersion;
+
+  /// 依 city、vehicle 排序；沒有規則就是空陣列
+  final List<CityRule> rules;
+
+  Map<String, Object?> toJson() => {
+    'rules_version': rulesVersion,
+    'rules': [for (final e in rules) e.toJson()],
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is CityRules &&
+      other.rulesVersion == rulesVersion &&
+      _equal(other.rules, rules);
+
+  @override
+  int get hashCode => Object.hashAll([rulesVersion, _hash(rules)]);
+}
+
+/// 一個縣市對一種車的停車規則（city_rules_data 的一列）
+class CityRule {
+  const CityRule({
+    required this.city,
+    required this.vehicle,
+    required this.allowedSpaceTypes,
+    required this.conditionalSpaceTypes,
+    required this.districtSpaceTypes,
+    required this.districts,
+    this.restriction,
+    required this.feeNote,
+    required this.exceptions,
+    required this.canUseTwoSpaces,
+    required this.effectiveDate,
+    this.expiresOn,
+    required this.sourceUrl,
+    required this.version,
+  });
+
+  factory CityRule.fromJson(Map<String, Object?> json) => CityRule(
+    city: json['city'] as String,
+    vehicle: json['vehicle'] as String,
+    allowedSpaceTypes: [
+      for (final e in json['allowed_space_types'] as List) e as String,
+    ],
+    conditionalSpaceTypes: [
+      for (final e in json['conditional_space_types'] as List) e as String,
+    ],
+    districtSpaceTypes: Map<String, Object?>.from(
+      json['district_space_types'] as Map,
+    ),
+    districts: [for (final e in json['districts'] as List) e as String],
+    restriction: json['restriction'] == null
+        ? null
+        : json['restriction'] as String,
+    feeNote: json['fee_note'] as String,
+    exceptions: json['exceptions'] as String,
+    canUseTwoSpaces: json['can_use_two_spaces'] as bool,
+    effectiveDate: json['effective_date'] as String,
+    expiresOn: json['expires_on'] == null ? null : json['expires_on'] as String,
+    sourceUrl: json['source_url'] as String,
+    version: (json['version'] as num).toInt(),
+  );
+
+  /// 縣市，或「全國」
+  final String city;
+
+  final String vehicle;
+
+  /// 可停的格位類型
+  final List<String> allowedSpaceTypes;
+
+  /// 有條件可停的格位類型
+  final List<String> conditionalSpaceTypes;
+
+  /// 只在部分行政區開放的格位類型：格位類型 → 行政區清單
+  final Map<String, Object?> districtSpaceTypes;
+
+  /// 規則適用的行政區；空陣列表示全區
+  final List<String> districts;
+
+  /// 有條件可停時的限制種類
+  final String? restriction;
+
+  final String feeNote;
+
+  final String exceptions;
+
+  final bool canUseTwoSpaces;
+
+  final String effectiveDate;
+
+  /// 從這天起（臺灣日期）規則過期；null 表示沒有期限
+  final String? expiresOn;
+
+  final String sourceUrl;
+
+  /// 這條規則的版本
+  final int version;
+
+  Map<String, Object?> toJson() => {
+    'city': city,
+    'vehicle': vehicle,
+    'allowed_space_types': allowedSpaceTypes,
+    'conditional_space_types': conditionalSpaceTypes,
+    'district_space_types': districtSpaceTypes,
+    'districts': districts,
+    'restriction': restriction,
+    'fee_note': feeNote,
+    'exceptions': exceptions,
+    'can_use_two_spaces': canUseTwoSpaces,
+    'effective_date': effectiveDate,
+    'expires_on': expiresOn,
+    'source_url': sourceUrl,
+    'version': version,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is CityRule &&
+      other.city == city &&
+      other.vehicle == vehicle &&
+      _equal(other.allowedSpaceTypes, allowedSpaceTypes) &&
+      _equal(other.conditionalSpaceTypes, conditionalSpaceTypes) &&
+      _equal(other.districtSpaceTypes, districtSpaceTypes) &&
+      _equal(other.districts, districts) &&
+      other.restriction == restriction &&
+      other.feeNote == feeNote &&
+      other.exceptions == exceptions &&
+      other.canUseTwoSpaces == canUseTwoSpaces &&
+      other.effectiveDate == effectiveDate &&
+      other.expiresOn == expiresOn &&
+      other.sourceUrl == sourceUrl &&
+      other.version == version;
+
+  @override
+  int get hashCode => Object.hashAll([
+    city,
+    vehicle,
+    _hash(allowedSpaceTypes),
+    _hash(conditionalSpaceTypes),
+    _hash(districtSpaceTypes),
+    _hash(districts),
+    restriction,
+    feeNote,
+    exceptions,
+    canUseTwoSpaces,
+    effectiveDate,
+    expiresOn,
+    sourceUrl,
+    version,
   ]);
 }
 

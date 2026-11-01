@@ -33,6 +33,28 @@
           }
         }
       }
+    },
+    "/rpc/city_rules": {
+      "post": {
+        "operationId": "api_v1_city_rules",
+        "summary": "全部縣市規則與整體的規則版本",
+        "description": "App 在 client_config 的 rules_version 比快取新時讀取（#195 P2、#202）；資料列照原樣提供，過期（expires_on）由 App 自行判斷，判斷結果一律在 App 本地計算。不需要登入。",
+        "responses": {
+          "200": {
+            "description": "規則",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CityRules"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -100,6 +122,134 @@
               "string",
               "null"
             ]
+          }
+        }
+      },
+      "CityRules": {
+        "type": "object",
+        "required": [
+          "rules_version",
+          "rules"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "rules_version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "整份規則的版本，與 client_config 的 rules_version 相同"
+          },
+          "rules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CityRule"
+            },
+            "description": "依 city、vehicle 排序；沒有規則就是空陣列"
+          }
+        }
+      },
+      "CityRule": {
+        "type": "object",
+        "description": "一個縣市對一種車的停車規則（city_rules_data 的一列）",
+        "required": [
+          "city",
+          "vehicle",
+          "allowed_space_types",
+          "conditional_space_types",
+          "district_space_types",
+          "districts",
+          "restriction",
+          "fee_note",
+          "exceptions",
+          "can_use_two_spaces",
+          "effective_date",
+          "expires_on",
+          "source_url",
+          "version"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "city": {
+            "type": "string",
+            "minLength": 1,
+            "description": "縣市，或「全國」"
+          },
+          "vehicle": {
+            "type": "string",
+            "enum": [
+              "scooter",
+              "heavy"
+            ]
+          },
+          "allowed_space_types": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "可停的格位類型"
+          },
+          "conditional_space_types": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "有條件可停的格位類型"
+          },
+          "district_space_types": {
+            "type": "object",
+            "description": "只在部分行政區開放的格位類型：格位類型 → 行政區清單"
+          },
+          "districts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "規則適用的行政區；空陣列表示全區"
+          },
+          "restriction": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "pilot_area",
+              "signage",
+              "unverified",
+              null
+            ],
+            "description": "有條件可停時的限制種類"
+          },
+          "fee_note": {
+            "type": "string"
+          },
+          "exceptions": {
+            "type": "string"
+          },
+          "can_use_two_spaces": {
+            "type": "boolean"
+          },
+          "effective_date": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          },
+          "expires_on": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "description": "從這天起（臺灣日期）規則過期；null 表示沒有期限"
+          },
+          "source_url": {
+            "type": "string",
+            "minLength": 1
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "這條規則的版本"
           }
         }
       }
