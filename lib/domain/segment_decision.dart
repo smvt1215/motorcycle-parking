@@ -69,7 +69,9 @@ bool scheduleSilentFor(ParkingCondition? condition, VehicleType vehicle) {
 /// day it starts, as [decideParking] reads them). On the street a heavy
 /// bike on a car bay parks by law whatever the slots say ([street]).
 /// A city rule in the decision's [basis] that grants the place holds up to,
-/// not on, its expiry day (as [ruleExpired]): the window ends there too.
+/// not on, its expiry day (as [ruleExpired]): the window ends there too,
+/// except on a street bay the law opens to a heavy bike, which the law
+/// keeps open after the rule ends.
 OpenWindow openWindow(
   EligibilityStatus status,
   ParkingCondition? condition,
@@ -86,15 +88,26 @@ OpenWindow openWindow(
   final (today, at) = taipeiDateMinute(now);
   int dayMinute(DateTime d) =>
       DateTime.utc(d.year, d.month, d.day).difference(today).inDays * 1440;
+  final c = condition;
+  // A street bay the law opens to a heavy bike (a heavy-bike or car bay,
+  // as ruleVerdict's lawful branch keeps them) stays open once its rule
+  // ends: decideParking then cites the law. Only a place the rule itself
+  // opens closes on the rule's expiry.
+  bool lawful(CityRule rule) =>
+      street &&
+      c != null &&
+      rule.vehicle == VehicleType.heavy &&
+      ruleKindsOf(c)
+          .every((k) => k == SpaceType.heavyOnly || k == SpaceType.car);
   final ruleEnds = [
     for (final b in basis)
       if (b.kind == BasisKind.cityRule && !b.expired)
-        if (b.rule?.expiresOn case final e?) dayMinute(e),
+        if (b.rule case final rule? when !lawful(rule))
+          if (rule.expiresOn case final e?) dayMinute(e),
   ];
   final ruleEnd = ruleEnds.isEmpty
       ? null
       : ruleEnds.reduce((a, b) => a < b ? a : b);
-  final c = condition;
   final unslotted =
       c == null ||
       c.schedule.isEmpty ||

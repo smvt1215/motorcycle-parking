@@ -910,6 +910,36 @@ void main() {
         now: day,
       ).single;
       expect((before.window.now, before.window.until), (true, null));
+
+      // A heavy-bike bay the law opens stays open past the rule's end: no
+      // 到 00:00 the night before, as 可停 after midnight.
+      final heavyBay = ParkingSpot.fromJson({
+        ...street.toJson(),
+        'parking_segments': [
+          {
+            'id': 'h',
+            'name': '北側重機專用格',
+            'condition': {'bay': 'heavy', 'use': 'usual', 'charge': 'toll'},
+          },
+        ],
+      });
+      final lawful = decideSegments(
+        heavyBay,
+        VehicleType.heavy,
+        ending,
+        now: lastNight,
+      ).single;
+      expect(
+        lawful.decision.basis.map((b) => b.rule?.expiresOn),
+        contains(DateTime(2026, 11, 8)),
+      );
+      expect((lawful.window.now, lawful.window.until), (true, null));
+      final p = fourSignPlates(
+        fourSign(heavyBay, VehicleType.heavy, ending, now: lastNight),
+        lastNight,
+      );
+      expect(p[0].main, '可停');
+      expect(p[0].note, isNot(contains('00:00')));
     });
 
     test('場站車種開放待確認：不以場站 20/時蓋過分區 50/時', () {
