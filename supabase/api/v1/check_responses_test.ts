@@ -227,3 +227,34 @@ Deno.test('a document that cannot be checked fails instead of passing', async ()
   );
   assertStringIncludes(none, 'the document gives no 200 response');
 });
+
+Deno.test('an api_v1 function that needs a sign-in must refuse anon', async () => {
+  const api = JSON.parse(
+    await Deno.readTextFile(new URL('api_v1.json', import.meta.url)),
+  );
+  api.paths = {
+    '/rpc/account_deletion_status': api.paths['/rpc/account_deletion_status'],
+  };
+  const load = (schema: string): Promise<Document> =>
+    Promise.resolve(schema === 'api_v1' ? api : { paths: {} });
+  const refused = {
+    code: '42501',
+    message: 'permission denied for function account_deletion_status',
+    details: null,
+    hint: null,
+  };
+  assertEquals(
+    await check('http://x', 'anon', answering(401, refused).fetcher, load),
+    [],
+  );
+  const [let_in] = await check(
+    'http://x',
+    'anon',
+    answering(200, { status: 'none' }).fetcher,
+    load,
+  );
+  assertStringIncludes(
+    let_in,
+    'api_v1 /rpc/account_deletion_status: anon should be refused with 401 42501, got 200',
+  );
+});

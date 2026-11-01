@@ -125,7 +125,7 @@ jobs:
         run: |
           deno fmt --check
           deno lint
-          deno check submit-report/index.ts submit-sighting/index.ts geocode/index.ts admin-users/index.ts availability-ingest/index.ts
+          deno check submit-report/index.ts submit-sighting/index.ts geocode/index.ts admin-users/index.ts availability-ingest/index.ts account-deletion/index.ts
           # availability-ingest reads its fixed feed samples.
           deno test --allow-read=.
       - name: API response checker

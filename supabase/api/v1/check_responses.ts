@@ -6,7 +6,10 @@
 //   SUPABASE_URL=http://127.0.0.1:54321 SUPABASE_ANON_KEY=... \
 //     deno run --allow-read=. --allow-env --allow-net check_responses.ts
 //
-// Calls are made as anon. api_v1 must answer 200 with the documented body.
+// Calls are made as anon. api_v1 must answer 200 with the documented body,
+// except an operation marked `x-requires-sign-in` (granted to authenticated
+// only, such as the account deletion RPCs of #215): anon must be refused
+// like admin_v1, with 401 42501.
 // admin_v1 must refuse anon with the error its document gives. anon has no
 // USAGE on admin_v1, so PostgreSQL refuses before private.require_admin()
 // runs: 42501, which PostgREST answers with 401 (cross review, PR #236).
@@ -19,6 +22,7 @@ import { Ajv2020 } from 'npm:ajv@8.17.1/dist/2020.js';
 type Response = { $ref?: string; content?: unknown };
 type Operation = {
   operationId: string;
+  'x-requires-sign-in'?: boolean;
   requestBody?: {
     content: { 'application/json': { schema: { example?: unknown } } };
   };
@@ -84,7 +88,7 @@ export async function check(
     ajv.addSchema({ ...document, $id: id });
     for (const [path, { post }] of Object.entries(document.paths)) {
       const where = `${schema} ${path}`;
-      const ok = anon === 'allowed';
+      const ok = anon === 'allowed' && post['x-requires-sign-in'] !== true;
       const status = ok ? '200' : 'default';
       const pointer = schemaPointer(post.responses?.[status], [
         'paths',

@@ -65,6 +65,36 @@ class ApiV1Client {
 
   /// [cityRules] as served, for callers that keep the JSON (#202).
   Future<Object?> cityRulesRaw() => _call('city_rules', {});
+
+  /// 自己帳號的刪除申請狀態
+  Future<AccountDeletionState> accountDeletionStatus() async {
+    final raw = await accountDeletionStatusRaw();
+    return AccountDeletionState.fromJson(raw as Map<String, Object?>);
+  }
+
+  /// [accountDeletionStatus] as served, for callers that keep the JSON (#202).
+  Future<Object?> accountDeletionStatusRaw() =>
+      _call('account_deletion_status', {});
+
+  /// 申請刪除自己的帳號（7 天冷靜期）
+  Future<AccountDeletionState> requestAccountDeletion({String? pSource}) async {
+    final raw = await requestAccountDeletionRaw(pSource: pSource);
+    return AccountDeletionState.fromJson(raw as Map<String, Object?>);
+  }
+
+  /// [requestAccountDeletion] as served, for callers that keep the JSON (#202).
+  Future<Object?> requestAccountDeletionRaw({String? pSource}) =>
+      _call('request_account_deletion', {'p_source': ?pSource});
+
+  /// 取消自己的刪除申請
+  Future<AccountDeletionState> cancelAccountDeletion() async {
+    final raw = await cancelAccountDeletionRaw();
+    return AccountDeletionState.fromJson(raw as Map<String, Object?>);
+  }
+
+  /// [cancelAccountDeletion] as served, for callers that keep the JSON (#202).
+  Future<Object?> cancelAccountDeletionRaw() =>
+      _call('cancel_account_deletion', {});
 }
 
 class ClientConfig {
@@ -283,6 +313,75 @@ class CityRule {
     expiresOn,
     sourceUrl,
     version,
+  ]);
+}
+
+/// 帳號刪除申請的狀態（#215）
+class AccountDeletionState {
+  const AccountDeletionState({
+    required this.status,
+    this.requestedAt,
+    this.scheduledAt,
+    this.cancelledAt,
+    this.cancelledBySignIn,
+  });
+
+  factory AccountDeletionState.fromJson(Map<String, Object?> json) =>
+      AccountDeletionState(
+        status: json['status'] as String,
+        requestedAt: json['requested_at'] == null
+            ? null
+            : json['requested_at'] as String,
+        scheduledAt: json['scheduled_at'] == null
+            ? null
+            : json['scheduled_at'] as String,
+        cancelledAt: json['cancelled_at'] == null
+            ? null
+            : json['cancelled_at'] as String,
+        cancelledBySignIn: json['cancelled_by_sign_in'] == null
+            ? null
+            : json['cancelled_by_sign_in'] as bool,
+      );
+
+  /// none：沒有申請；pending：冷靜期中，到 scheduled_at 後刪除
+  final String status;
+
+  /// ISO 8601 時間。申請時間；none 時為 null
+  final String? requestedAt;
+
+  /// ISO 8601 時間。最早刪除時間（申請＋7 天），實際在之後的每日排程（台灣 03:41）執行；none 時為 null
+  final String? scheduledAt;
+
+  /// ISO 8601 時間。最近一次取消的時間；沒有取消過或之後又申請時為 null
+  final String? cancelledAt;
+
+  /// 最近一次取消是否由新的登入自動觸發；沒有取消紀錄時為 null
+  final bool? cancelledBySignIn;
+
+  Map<String, Object?> toJson() => {
+    'status': status,
+    'requested_at': requestedAt,
+    'scheduled_at': scheduledAt,
+    'cancelled_at': cancelledAt,
+    'cancelled_by_sign_in': cancelledBySignIn,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is AccountDeletionState &&
+      other.status == status &&
+      other.requestedAt == requestedAt &&
+      other.scheduledAt == scheduledAt &&
+      other.cancelledAt == cancelledAt &&
+      other.cancelledBySignIn == cancelledBySignIn;
+
+  @override
+  int get hashCode => Object.hashAll([
+    status,
+    requestedAt,
+    scheduledAt,
+    cancelledAt,
+    cancelledBySignIn,
   ]);
 }
 
