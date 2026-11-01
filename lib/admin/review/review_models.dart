@@ -673,6 +673,14 @@ String? validatePatch(Map<String, dynamic> patch, ReviewSpot spot) {
           return '請填完收費金額，計時另需選計費時間';
         }
         if (!fee.valid) return '金額請填 0 到 10000 的整數';
+        // Each rate answers the rules a new write does (#188 layer 2).
+        if ([
+          fee.scooter,
+          fee.heavy,
+          fee.car,
+        ].nonNulls.any((r) => !r.writeComplete)) {
+          return '請選好跨日怎麼收、上限何時重新計算或停到下一個時段時';
+        }
         if (fee.followGap case final gap?) return gap;
     }
   }

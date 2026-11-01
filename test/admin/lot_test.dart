@@ -165,12 +165,15 @@ void main() {
     });
 
     test('規則名稱、數量與比照缺值都會擋（#155 第 13 項）', () {
-      expect(plansProblem([...plans]), isNull);
+      // Stored plans are old data; a new or changed one is written whole
+      // (#188 layer 2).
+      expect(plansProblem([...plans], plans), isNull);
+      expect(plansProblem([...plans]), contains('三個車種都要選收費方式'));
       expect(
         plansProblem([
           ...plans,
           {'id': 'p3', 'name': '機車計時', 'fee': heavyHourly},
-        ]),
+        ], plans),
         contains('重複'),
       );
       expect(
@@ -225,6 +228,8 @@ void main() {
       expect(spots.dirty, isFalse);
       const fifteen = Fee(
         scooter: Rate(FeeMode.hourly, amount: 15, perMinutes: 60),
+        heavy: Rate(FeeMode.notApplicable),
+        car: Rate(FeeMode.notApplicable),
       );
       spots.setPlan('p1', '機車計時', fifteen);
       expect(spots.zones[2]['fee'], fifteen.toJson());
@@ -546,7 +551,11 @@ void main() {
             field: 'fee_note',
             proposed: const {
               'fee': {
-                'scooter': {'mode': 'per_visit', 'amount': 20},
+                'scooter': {
+                  'mode': 'per_visit',
+                  'amount': 20,
+                  'renew': 'midnight',
+                },
                 'car': {'mode': 'hourly', 'amount': 40, 'per_minutes': 60},
               },
             },
