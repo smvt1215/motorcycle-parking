@@ -232,9 +232,18 @@ create temporary table strip_fee_o(id text,guard text,note text);
 """
 
 FEE_TAIL = """
+-- 同 202611020100：只改費率文字，不順帶依分區重算停車資格旗標。
+alter table public.community_spots disable trigger community_spots_flags_from_entries;
+alter table public.official_heavy_spots disable trigger official_heavy_spots_flags_from_entries;
+
 do $$
 declare v_c integer; v_o integer;
 begin
+  -- 沒有這批資料的資料庫不做任何更新，也不推進 data_versions。
+  if not exists(select 1 from public.community_spots c join pg_temp.strip_fee_c s on c.id=s.id::uuid)
+     and not exists(select 1 from public.official_heavy_spots o join pg_temp.strip_fee_o s on o.id=s.id::uuid) then
+    return;
+  end if;
   update public.community_spots c
     set fee_note=s.fee_note,fee_source_text=s.fee_source_text,parking_zones=s.parking_zones
     from pg_temp.strip_fee_c s
@@ -255,6 +264,8 @@ begin
   end if;
 end $$;
 
+alter table public.community_spots enable trigger community_spots_flags_from_entries;
+alter table public.official_heavy_spots enable trigger official_heavy_spots_flags_from_entries;
 drop table pg_temp.strip_fee_c;
 drop table pg_temp.strip_fee_o;
 """
