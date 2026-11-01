@@ -96,6 +96,8 @@ Deno.test('an admin function must refuse anon with a documented error', async ()
   const admin = JSON.parse(
     await Deno.readTextFile(new URL('admin_v1.json', import.meta.url)),
   );
+  // Only this test's function, whatever admin_v1.json grows to.
+  admin.paths = {};
   admin.paths['/rpc/review_queue'] = {
     post: {
       operationId: 'admin_v1_review_queue',

@@ -84,7 +84,7 @@ class ClientConfig {
     ],
   );
 
-  /// 低於這個版本的 App 要提示更新
+  /// 低於這個版本的 App 一律整個擋下，必須更新才能繼續使用（使用者決定，#195 §7 第 7 題）。伺服器寧可不擋：沒有設定、格式不對或讀取失敗時回 0.1.0。App 離線或讀不到 client_config 時也不可以擋。只有 admin_v1.set_min_supported_app_version 能修改，每次修改都留稽核紀錄。
   final String minSupportedAppVersion;
 
   /// data_versions 的 rules 版本
