@@ -1,12 +1,24 @@
 import { createAction, createSlice, type PayloadAction, type TypedStartListening } from '@reduxjs/toolkit';
 import { adminApi, type ApiError } from '../app/adminApi';
+import type { ResolutionKind } from './model';
 import type { ResolveRequest } from './source';
 
 /** 「處理完自動跳到下一筆，5 秒內可復原」 (Main.dc.html). */
 export const UNDO_MS = 5000;
 
+/**
+ * What the admin had open when they decided, so undo returns to it with the
+ * values filled in (#217): the edited 套用值, or the chosen 駁回原因.
+ * The 處理說明 is kept in `notes` either way.
+ */
+export type DecisionDraft =
+  | { mode: 'edit'; values: Record<string, unknown>; touched: string[] }
+  | { mode: 'reject'; kind: ResolutionKind };
+
 export interface QueuedDecision {
   request: ResolveRequest;
+  /** Absent for a plain 套用, which undo returns to the report view for. */
+  draft?: DecisionDraft;
   /** Spot name, for 「已套用 復興南路…」. */
   name: string;
   /**
@@ -32,6 +44,8 @@ export interface ReviewState {
   notes: Record<string, string>;
   /** Reports reloaded after a version conflict, so 「仍然套用」 may force. */
   reloaded: Record<string, true>;
+  /** Drafts of undone decisions, until the report's detail reopens them. */
+  drafts: Record<string, DecisionDraft>;
   /** Reports written in this session, for the empty state. */
   resolvedCount: number;
 }
@@ -42,6 +56,7 @@ const initialState: ReviewState = {
   failures: {},
   notes: {},
   reloaded: {},
+  drafts: {},
   resolvedCount: 0,
 };
 
@@ -60,7 +75,9 @@ export const reviewSlice = createSlice({
     },
     decisionUndone(state, action: PayloadAction<string>) {
       // Too late once the write has started: the server may already have it.
-      if (state.pending[action.payload]?.writing) return;
+      const decision = state.pending[action.payload];
+      if (decision?.writing) return;
+      if (decision?.draft) state.drafts[action.payload] = decision.draft;
       delete state.pending[action.payload];
       if (state.lastQueued === action.payload) state.lastQueued = null;
     },
@@ -85,6 +102,9 @@ export const reviewSlice = createSlice({
       // Another admin resolved it: it simply leaves the queue.
       if (error.code !== 'alreadyResolved') state.failures[reportId] = { error, request };
     },
+    draftReopened(state, action: PayloadAction<string>) {
+      delete state.drafts[action.payload];
+    },
     failureDismissed(state, action: PayloadAction<string>) {
       delete state.failures[action.payload];
     },
@@ -101,6 +121,7 @@ export const {
   decisionWriting,
   decisionCommitted,
   decisionFailed,
+  draftReopened,
   failureDismissed,
   reportReloaded,
 } = reviewSlice.actions;
