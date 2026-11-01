@@ -13,6 +13,14 @@ class GenApiDartTest(unittest.TestCase):
             ("List<Spot>", False))
         self.assertEqual(gen.dart_type({"type": "object"}, "x"), ("Map<String, Object?>", False))
 
+    def test_untyped_json_is_kept_as_is_and_compared_deeply(self):
+        self.assertEqual(gen.dart_type({"description": "jsonb"}, "x"), ("Object", True))
+        text = gen.model("Row", {"type": "object", "properties": {"fee": {"description": "jsonb"}}})
+        self.assertIn("fee: json['fee'],", text)
+        self.assertIn("final Object? fee;", text)
+        self.assertIn("_equal(other.fee, fee)", text)
+        self.assertIn("_hash(fee)", text)
+
     def test_unsupported_schemas_fail_loudly(self):
         for schema in ({"type": ["string", "integer"]}, {"$ref": "other.json#/x"},
                        {"type": "array", "items": {"type": ["string", "null"]}},
