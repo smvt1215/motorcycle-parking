@@ -299,6 +299,16 @@ class SpotsController extends ChangeNotifier {
       'fee_plans': ?plansProblem(plans, jsonList(record!.values['fee_plans'])),
     if (lot && (record!.isNew || _edits.containsKey('parking_zones')))
       'parking_zones': ?zones.map(zoneProblem).nonNulls.firstOrNull,
+    // 不適用 beside a vehicle the spot lets park (PM_ANS_20261101_55).
+    if ((record!.isNew ||
+            changed('fee') ||
+            changed('scooter_allowed') ||
+            changed('heavy_allowed')) &&
+        draft['fee'] is Fee)
+      'fee': ?notApplicableProblem((draft['fee'] as Fee).toJson(), {
+        'scooter': draft['scooter_allowed'],
+        'heavy': draft['heavy_allowed'],
+      }),
   };
 
   /// Errors the form shows: a fresh new spot is not scolded before a save.
@@ -676,17 +686,43 @@ class SpotsController extends ChangeNotifier {
   }
 
   /// The time limit of a 一般機車格 or 普大共用格 (#188: 限時 is no longer a
-  /// kind of its own): on adds `time_limit` with [minutes] (null leaves them
+  /// kind of its own): on adds `time_limit` with [minutes] and
+  /// [extensions] as one all-day period (null minutes leave them
   /// unconfirmed), off takes it away; the space type follows the whole
   /// condition (§1.3). A bay left with no limit and no charge is toll.
-  void setTimeLimit(bool on, {int? minutes}) {
+  void setTimeLimit(bool on, {int? minutes, int? extensions}) {
     final c = draftCondition;
     final type = SpaceType.values.asNameMap()[draft['space_type']];
     if (c == null || type == null || !(spaceKind?.asksCharge ?? false)) return;
     final limits = [
       for (final l in c.limits)
         if (l.kind != LimitKind.timeLimit) l,
-      if (on) ParkingLimit(LimitKind.timeLimit, maxMinutes: minutes),
+      // The first period's minutes and extensions (#188 layer 2): its days
+      // and times, and any later periods, stay as stored; a new limit is
+      // all day.
+      if (on)
+        minutes == null
+            ? const ParkingLimit(LimitKind.timeLimit)
+            : ParkingLimit(
+                LimitKind.timeLimit,
+                periods: [
+                  switch (timeLimit?.periods.firstOrNull) {
+                    final p? => LimitPeriod(
+                      days: p.days,
+                      from: p.from,
+                      to: p.to,
+                      maxMinutes: minutes,
+                      extensions: extensions ?? 0,
+                    ),
+                    null => LimitPeriod(
+                      days: 'all',
+                      maxMinutes: minutes,
+                      extensions: extensions ?? 0,
+                    ),
+                  },
+                  ...?timeLimit?.periods.skip(1),
+                ],
+              ),
     ]..sort((a, b) => a.kind.index.compareTo(b.kind.index));
     final next = ParkingCondition(
       bay: c.bay,

@@ -551,7 +551,12 @@ void main() {
             'use': 'usual',
             'charge': 'toll',
             'limits': [
-              {'kind': 'time_limit', 'max_minutes': 20},
+              {
+                'kind': 'time_limit',
+                'periods': [
+                  {'days': 'all', 'max_minutes': 20, 'extensions': 0},
+                ],
+              },
             ],
           },
         });
@@ -582,7 +587,12 @@ void main() {
             'use': 'usual',
             'charge': 'toll',
             'limits': [
-              {'kind': 'time_limit', 'max_minutes': 45},
+              {
+                'kind': 'time_limit',
+                'periods': [
+                  {'days': 'all', 'max_minutes': 45, 'extensions': 0},
+                ],
+              },
             ],
           },
         });

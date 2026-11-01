@@ -295,6 +295,11 @@ String? zoneProblem(Json zone) {
   if (allow == null || !allow.states('scooter') || !allow.states('heavy')) {
     return '「$name」請選普通機車與大型重機可不可停';
   }
+  // 不適用 for a vehicle the zone lets park (PM_ANS_20261101_55).
+  if (notApplicableProblem(zone['fee'], allow.toJson(), where: '「$name」')
+      case final problem?) {
+    return problem;
+  }
   // 官方未標示 (#201) writes back no access, and needs none.
   if (allow.anyNotStated) return null;
   if (legacyAccess(condition) == null) {
@@ -346,4 +351,22 @@ Json lotChanges(Json changed, Json draft) {
     if (draft['fee_plan'] != null) out.remove('fee_note');
   }
   return out;
+}
+
+/// Why [fee] (a stored fee, as JSON) cannot be saved beside who may park
+/// ([allow], `{scooter, heavy}` true / false / not_stated): a vehicle that
+/// may park reads 不適用 (#188 layer 2, PM_ANS_20261101_55, the precheck's
+/// `fee_not_applicable_allowed`). Null when it can.
+String? notApplicableProblem(
+  Object? fee,
+  Map<Object?, Object?> allow, {
+  String where = '',
+}) {
+  if (fee is! Map) return null;
+  for (final (key, label) in const [('scooter', '普通機車'), ('heavy', '大型重機')]) {
+    if (fee[key] case {'mode': 'not_applicable'} when allow[key] == true) {
+      return '$where$label可以停，收費方式不能選「不適用」';
+    }
+  }
+  return null;
 }
