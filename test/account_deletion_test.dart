@@ -321,5 +321,33 @@ void main() {
       expect(controller.pending, isNull);
       expect(controller.banner?.continued, isFalse);
     });
+
+    test('同帳號重新登入早於舊 status 回應：新 session 不被登出，顯示確認頁', () async {
+      final gateway = FakeDeletionGateway(
+        current: google(signedInAt: DateTime.utc(2026, 10, 30)),
+      );
+      final old = Completer<AccountDeletionState>();
+      gateway.statusFutures.add(old.future);
+      final controller = AccountDeletionController(gateway, clock: () => now);
+      addTearDown(controller.dispose);
+      controller.start();
+      await pumpEventQueue();
+      expect(gateway.calls, ['status']);
+
+      // Signed out and in again, after the request made elsewhere.
+      gateway
+        ..current = google(signedInAt: now)
+        ..statuses.add(pendingState());
+      gateway.signInEvents.add(null);
+      await pumpEventQueue();
+      old.complete(pendingState());
+      await pumpEventQueue();
+
+      expect(gateway.calls, ['status', 'status']);
+      expect(gateway.calls.contains('signOut'), isFalse);
+      expect(gateway.current, isNotNull);
+      expect(controller.notice, isNull);
+      expect(controller.pending?.status, 'pending');
+    });
   });
 }

@@ -323,7 +323,11 @@ class AccountDeletionController extends ChangeNotifier
     final gateway = this.gateway;
     if (_started || gateway == null) return;
     _started = true;
-    _signIns = gateway.signIns.listen((_) => unawaited(check()));
+    _signIns = gateway.signIns.listen((_) {
+      // A new session: a status read for the previous one no longer applies.
+      _check++;
+      unawaited(check());
+    });
     WidgetsBinding.instance.addObserver(this);
     // Not during the build that starts it.
     scheduleMicrotask(() => unawaited(check()));
@@ -412,7 +416,10 @@ class AccountDeletionController extends ChangeNotifier
       if (_busy > 0) _skipped = true;
       return;
     }
-    if (gateway.current?.id != me.id) return;
+    // The session changed meanwhile (signed out, or signed in again): its
+    // own check, queued by the sign-in, decides instead.
+    final still = gateway.current;
+    if (still?.id != me.id || still?.signedInAt != me.signedInAt) return;
     if (state.status != 'pending') {
       // Signed in without a request (cancelled elsewhere): no notice either.
       final hadNotice = notice != null;
