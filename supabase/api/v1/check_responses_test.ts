@@ -95,7 +95,7 @@ Deno.test('an admin function must refuse anon with a documented error', async ()
       : Promise.resolve({ paths: {} });
   const refused = {
     code: 'PT403',
-    message: 'auth.admin_required',
+    message: 'auth.aal2_required',
     details: null,
     hint: null,
   };
@@ -111,12 +111,28 @@ Deno.test('an admin function must refuse anon with a documented error', async ()
   );
   assertStringIncludes(
     let_in,
-    'admin_v1 /rpc/review_queue: anon should be refused, got 200',
+    'admin_v1 /rpc/review_queue: anon should be refused with 403 auth.aal2_required, got 200',
   );
+  // A function the SQL does not have, or a schema PostgREST does not serve,
+  // is an error too, but not the refusal (cross review, PR #236).
+  for (
+    const [status, error] of [
+      [404, { code: 'PGRST202', message: 'Could not find the function' }],
+      [406, { code: 'PGRST106', message: 'Invalid schema: admin_v1' }],
+    ] as const
+  ) {
+    const [wrong] = await check(
+      'http://x',
+      'anon',
+      answering(status, { ...error, details: null, hint: null }).fetcher,
+      load,
+    );
+    assertStringIncludes(wrong, `got ${status}`);
+  }
   const [bad] = await check(
     'http://x',
     'anon',
-    answering(403, { error: 'x' }).fetcher,
+    answering(403, { message: 'auth.aal2_required' }).fetcher,
     load,
   );
   assertStringIncludes(bad, "must have required property 'code'");
@@ -138,4 +154,62 @@ Deno.test('a function with parameters needs an example to be called', async () =
     load,
   );
   assertStringIncludes(problem, 'needs an example');
+});
+
+Deno.test('a function with parameters is called with its example', async () => {
+  const api = JSON.parse(
+    await Deno.readTextFile(new URL('api_v1.json', import.meta.url)),
+  );
+  api.paths['/rpc/client_config'].post.requestBody = {
+    content: {
+      'application/json': {
+        schema: {
+          type: 'object',
+          properties: { p_id: { type: 'integer' } },
+          example: { p_id: 1 },
+        },
+      },
+    },
+  };
+  const load = (schema: string): Promise<Document> =>
+    Promise.resolve(schema === 'api_v1' ? api : { paths: {} });
+  const { fetcher, seen } = answering(200, served);
+  assertEquals(await check('http://x', 'anon', fetcher, load), []);
+  assertEquals(seen[0].body, '{"p_id":1}');
+});
+
+Deno.test('a document that cannot be checked fails instead of passing', async () => {
+  const api = JSON.parse(
+    await Deno.readTextFile(new URL('api_v1.json', import.meta.url)),
+  );
+  const load = (schema: string): Promise<Document> =>
+    Promise.resolve(schema === 'api_v1' ? api : { paths: {} });
+  const config = api.components.schemas.ClientConfig.properties;
+  // A misspelt keyword would otherwise validate nothing.
+  config.rules_version = { tpye: 'integer' };
+  const [misspelt] = await check(
+    'http://x',
+    'anon',
+    answering(200, served).fetcher,
+    load,
+  );
+  assertStringIncludes(misspelt, 'does not compile');
+  config.rules_version = { type: 'integer' };
+  // No 200 body schema, and no 200 at all.
+  delete api.paths['/rpc/client_config'].post.responses['200'].content;
+  const [noBody] = await check(
+    'http://x',
+    'anon',
+    answering(200, served).fetcher,
+    load,
+  );
+  assertStringIncludes(noBody, 'does not compile');
+  delete api.paths['/rpc/client_config'].post.responses['200'];
+  const [none] = await check(
+    'http://x',
+    'anon',
+    answering(200, served).fetcher,
+    load,
+  );
+  assertStringIncludes(none, 'the document gives no 200 response');
 });
