@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../../core/config.dart';
 import '../auth/sign_in.dart';
+import '../auth/report_name_notice.dart';
 import '../../core/geo.dart';
 import '../../core/town_lookup.dart';
 import '../../data/app_store.dart';
@@ -1551,7 +1552,11 @@ class _ReportFormState extends State<ReportForm> {
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 8),
+          // Only a new spot shows its reporter's name (P16b).
+          if (widget.store.riderId != null)
+            ReportNameNotice(store: widget.store),
+          const SizedBox(height: 12),
           AdaptiveButton(
             label: sending ? '送出中…' : '送出',
             onPressed: sending || !widget.store.canReport

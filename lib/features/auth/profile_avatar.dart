@@ -2,9 +2,12 @@ import 'dart:typed_data';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../domain/contributor_name.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../../data/profile_repository.dart';
 
+/// The account photo, or the default avatar: the name's first letter or
+/// digit, else a generic person (P4, P10, P12, P16b).
 class ProfileAvatar extends StatelessWidget {
   const ProfileAvatar({
     super.key,
@@ -22,8 +25,9 @@ class ProfileAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final initial =
-        (name ?? profileDisplayName(user) ?? '').characters.firstOrNull;
+    // A letter or digit only; emoji, symbols and blank names get the
+    // generic person (P16b).
+    final initial = avatarInitial(name ?? profileDisplayName(user));
     final fallback = ColoredBox(
       color: colors.primary,
       child: Center(
@@ -34,7 +38,7 @@ class ProfileAvatar extends StatelessWidget {
                 size: size * .5,
               )
             : Text(
-                initial.toUpperCase(),
+                initial,
                 style: TextStyle(color: colors.onPrimary, fontSize: size * .4),
               ),
       ),
