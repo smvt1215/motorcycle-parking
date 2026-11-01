@@ -123,7 +123,7 @@
       "post": {
         "operationId": "api_v1_account_deletion_status",
         "summary": "自己帳號的刪除申請狀態",
-        "description": "要登入（不可匿名登入）。App 登入後讀取：status 為 pending 時顯示預定刪除時間與取消按鈕；cancelled_by_sign_in 為 true 且 cancelled_at 是新的，顯示「已取消刪除」；can_self_delete 為 false 時在說明頁提示原因（#215）。錯誤：401 auth.sign_in_required。",
+        "description": "要登入（不可匿名登入）。冷靜期內已登入的 session 照常可讀。App 登入後讀取：status 為 pending 時顯示確認頁（預定刪除時間 scheduled_at），讓使用者選「取消刪除」（cancel_account_deletion）或「繼續刪除」（不需呼叫，維持原申請）；can_self_delete 為 false 時在說明頁提示原因（#215）。錯誤：401 auth.sign_in_required。",
         "x-requires-sign-in": true,
         "responses": {
           "200": {
@@ -146,7 +146,7 @@
       "post": {
         "operationId": "api_v1_request_account_deletion",
         "summary": "申請刪除自己的帳號（7 天冷靜期）",
-        "description": "要登入，且 10 分鐘內剛完成登入（JWT amr 的時間；App 先讓使用者重新用 Google／Apple 登入）。scheduled_at＝申請＋7 天，到期後每日排程刪除。申請後立即停止公開顯示名稱。已有申請時回傳原申請，不重設日期，也不需要重新登入。冷靜期內新的登入會自動取消申請。錯誤：401 auth.sign_in_required、401 auth.recent_sign_in_required（details 帶 max_age_seconds）、403 account.admin_cannot_self_delete（管理員要先由別的管理員移除權限）、400 request.invalid（p_source）。",
+        "description": "要登入，且 10 分鐘內剛完成登入（JWT amr 的時間；App 先讓使用者重新用 Google／Apple 登入）。scheduled_at＝申請＋7 天，到期後每日排程刪除。申請後立即停止公開顯示名稱。已有申請時回傳原申請，不重設日期，也不需要重新登入。冷靜期內登入不會自動取消，只有 cancel_account_deletion 會取消。錯誤：401 auth.sign_in_required、401 auth.recent_sign_in_required（details 帶 max_age_seconds）、403 account.admin_cannot_self_delete（管理員要先由別的管理員移除權限）、400 request.invalid（p_source）。",
         "x-requires-sign-in": true,
         "requestBody": {
           "required": false,
@@ -694,8 +694,6 @@
           "status",
           "requested_at",
           "scheduled_at",
-          "cancelled_at",
-          "cancelled_by_sign_in",
           "can_self_delete",
           "cannot_self_delete_reason"
         ],
@@ -722,20 +720,6 @@
               "null"
             ],
             "description": "ISO 8601 時間。最早刪除時間（申請＋7 天），實際在之後的每日排程（台灣 03:41）執行；none 時為 null"
-          },
-          "cancelled_at": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "ISO 8601 時間。最近一次取消的時間；沒有取消過或之後又申請時為 null"
-          },
-          "cancelled_by_sign_in": {
-            "type": [
-              "boolean",
-              "null"
-            ],
-            "description": "最近一次取消是否由新的登入自動觸發；沒有取消紀錄時為 null"
           },
           "can_self_delete": {
             "type": "boolean",

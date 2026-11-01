@@ -14,8 +14,9 @@
 -- 4. 稽核：private.account_deletion_audit 只存隨機的申請編號、事件與筆數，
 --    不存 user_id、名稱或 email。
 -- 5. 待決題答案（PM_ANS_20261101_112）：管理員不能自助刪除（要先由別的
---    管理員移除權限）；申請後立刻停止公開顯示名稱，取消時恢復；冷靜期內
---    新的登入（auth.sessions 新增一列）自動取消申請。
+--    管理員移除權限）；申請後立刻停止公開顯示名稱，取消時恢復。冷靜期內
+--    登入不會自動取消（PM_ANS_20261101_127）：App 依 account_deletion_status()
+--    顯示確認頁，使用者選「取消刪除」才呼叫 cancel_account_deletion()。
 
 -- ===== 1. 外鍵 =====
 alter table public.community_spots alter column user_id drop not null,
@@ -329,16 +330,6 @@ create index account_deletion_due_idx on private.account_deletion_requests(sched
 alter table private.account_deletion_requests enable row level security;
 revoke all on private.account_deletion_requests from public,anon,authenticated,service_role;
 
--- 最近一次取消（App 依此在登入後顯示「已取消刪除」）。再申請時清除，
--- 帳號刪除時跟著刪除。
-create table private.account_deletion_cancellations (
-  user_id uuid primary key references auth.users(id) on delete cascade,
-  cancelled_at timestamptz not null default now(),
-  by_sign_in boolean not null
-);
-alter table private.account_deletion_cancellations enable row level security;
-revoke all on private.account_deletion_cancellations from public,anon,authenticated,service_role;
-
 create table private.account_deletion_audit (
   id bigint generated always as identity primary key,
   request_id uuid not null,
@@ -408,8 +399,6 @@ language sql stable security definer set search_path='' as $$
       from private.account_deletion_requests r where r.user_id=p_user),
     jsonb_build_object('status','none','requested_at',null,'scheduled_at',null))
   ||jsonb_build_object(
-    'cancelled_at',(select c.cancelled_at from private.account_deletion_cancellations c where c.user_id=p_user),
-    'cancelled_by_sign_in',(select c.by_sign_in from private.account_deletion_cancellations c where c.user_id=p_user),
     -- App 在說明頁就能提示「要先移除管理權限」（Q-APP-22）。
     'can_self_delete',not private.account_is_admin(p_user),
     'cannot_self_delete_reason',case when private.account_is_admin(p_user) then 'account.admin_cannot_self_delete' end);
@@ -417,16 +406,14 @@ $$;
 revoke execute on function private.account_deletion_state(uuid) from public,anon,authenticated,service_role;
 
 -- 取消一筆申請：刪除、稽核、恢復點位上的名稱。
-create function private.account_deletion_cancel(p private.account_deletion_requests,p_by_sign_in boolean) returns void
+create function private.account_deletion_cancel(p private.account_deletion_requests) returns void
 language plpgsql volatile security definer set search_path='' as $$
 begin
   delete from private.account_deletion_requests r where r.user_id=p.user_id;
-  insert into private.account_deletion_cancellations(user_id,by_sign_in) values(p.user_id,p_by_sign_in)
-    on conflict(user_id) do update set cancelled_at=now(),by_sign_in=excluded.by_sign_in;
   insert into private.account_deletion_audit(request_id,event,source) values(p.request_id,'cancelled',p.source);
   update public.community_spots s set contributor_name='' where s.user_id=p.user_id;
 end $$;
-revoke execute on function private.account_deletion_cancel(private.account_deletion_requests,boolean) from public,anon,authenticated,service_role;
+revoke execute on function private.account_deletion_cancel(private.account_deletion_requests) from public,anon,authenticated,service_role;
 
 create function api_v1.account_deletion_status() returns jsonb
 language plpgsql stable security definer set search_path='' as $$
@@ -461,7 +448,6 @@ begin
   insert into private.account_deletion_requests(user_id,source,scheduled_at)
     values(v_user,p_source,now()+private.account_deletion_cooling_off())
     returning request_id into v_request;
-  delete from private.account_deletion_cancellations c where c.user_id=v_user;
   insert into private.account_deletion_audit(request_id,event,source) values(v_request,'requested',p_source);
   -- 名稱立刻從點位上拿掉（觸發器依申請重算）。
   update public.community_spots s set contributor_name='' where s.user_id=v_user;
@@ -483,7 +469,7 @@ begin
     if v.claimed_at>now()-interval '1 hour' then
       raise sqlstate 'PT409' using message='account.deletion_in_progress';
     end if;
-    perform private.account_deletion_cancel(v,false);
+    perform private.account_deletion_cancel(v);
   end if;
   return private.account_deletion_state(v_user);
 end $$;
@@ -587,7 +573,7 @@ revoke all on function public.account_deletion_tick() from public,anon,authentic
 
 select cron.schedule('account-deletion','41 19 * * *','select public.account_deletion_tick()');
 
--- ===== 5. 冷靜期內的名稱與登入 =====
+-- ===== 5. 冷靜期內的名稱 =====
 -- 有刪除申請的帳號不公開名稱；其餘與 202610250050_contributor_attribution.sql 相同。
 create or replace function public.spot_contributor_name(p_spot uuid,p_user uuid,p_role text)
 returns text language sql stable security invoker set search_path='' as $$
@@ -598,28 +584,3 @@ returns text language sql stable security invoker set search_path='' as $$
       from auth.users u where u.id=p_user and u.deleted_at is null),'') end;
 $$;
 revoke execute on function public.spot_contributor_name(uuid,uuid,text) from public,anon,authenticated,service_role;
-
--- 冷靜期內的新登入就取消申請。新登入＝auth.sessions 新增一列（refresh
--- 只換 token，不會新增 session；last_sign_in_at 在舊版 refresh 也會更新，
--- 所以不用它）。申請前那次重新登入的 session 比申請早，不會觸發。
--- 這裡出錯不能讓登入失敗：例外只記警告。
-create function public.account_deletion_cancel_on_sign_in() returns trigger
-language plpgsql security definer set search_path='' as $$
-declare
-  v private.account_deletion_requests;
-begin
-  select * into v from private.account_deletion_requests r
-    where r.user_id=new.user_id and r.requested_at<coalesce(new.created_at,now())
-      and (r.claimed_at is null or r.claimed_at<=now()-interval '1 hour')
-    for update;
-  if found then
-    perform private.account_deletion_cancel(v,true);
-  end if;
-  return null;
-exception when others then
-  raise warning 'account deletion cancel on sign-in failed: %',sqlstate;
-  return null;
-end $$;
-revoke execute on function public.account_deletion_cancel_on_sign_in() from public,anon,authenticated,service_role;
-create trigger account_deletion_cancel_on_sign_in after insert on auth.sessions
-  for each row execute function public.account_deletion_cancel_on_sign_in();
