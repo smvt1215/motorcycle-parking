@@ -68,7 +68,8 @@ class AdminUser {
   );
 }
 
-/// Report activity counted against `apply_report`'s daily limit (UTC day).
+/// Report activity counted against `apply_report`'s daily limit (the day
+/// starts at midnight in Taiwan).
 class ReportLimits {
   const ReportLimits({
     required this.today,

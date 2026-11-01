@@ -779,8 +779,8 @@ class _Quota extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               full
-                  ? '今天 ${limits.today}／${limits.dailyLimit} 次，已達上限，台灣時間早上 8 點重新計算。'
-                  : '今天 ${limits.today}／${limits.dailyLimit} 次，台灣時間早上 8 點重新計算。',
+                  ? '今天 ${limits.today}／${limits.dailyLimit} 次，已達上限，台灣時間 24:00 重新計算。'
+                  : '今天 ${limits.today}／${limits.dailyLimit} 次，台灣時間 24:00 重新計算。',
               style: TextStyle(
                 fontWeight: FontWeight.w700,
                 color: full ? colors.error : null,
