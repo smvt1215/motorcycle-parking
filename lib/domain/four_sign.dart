@@ -561,12 +561,13 @@ VerdictAnswer _verdict(
     );
   }
   if (openNow.isNotEmpty) {
-    final limited = openNow
-        .where((a) => a.status == EligibilityStatus.conditional)
-        .toList();
+    // Open now with nothing that ends it: allowed, and no slot closing it
+    // (a lot allowed only 20:00–23:00 by its own hours is not all day).
+    bool unlimited(SignArea a) =>
+        a.status == EligibilityStatus.allowed && a.window.until == null;
     // One place open now without a limit is enough for 可停 (A11 card 1:
     // B2 all day beside B3 by the hour); the details list the rest.
-    if (openNow.any((a) => a.status == EligibilityStatus.allowed)) {
+    if (openNow.any(unlimited)) {
       return VerdictAnswer(
         status: EligibilityStatus.allowed,
         basis: basis,
@@ -574,6 +575,7 @@ VerdictAnswer _verdict(
         openNow: true,
       );
     }
+    final limited = openNow.where((a) => !unlimited(a)).toList();
     // Every place open now closes: the one closing last stands, compared by
     // minutes (a slot to 隔天 02:00 closes after one to 23:00).
     final closing = openNow.every((a) => a.window.untilMinute != null)
@@ -583,7 +585,9 @@ VerdictAnswer _verdict(
         : null;
     return VerdictAnswer(
       status: EligibilityStatus.conditional,
-      restriction: (closing ?? limited.first).restriction,
+      // A place limited only by its hours reads as 限時段.
+      restriction:
+          (closing ?? limited.first).restriction ?? RuleRestriction.timeLimited,
       until: closing?.window.until,
       basis: basis,
       city: city,

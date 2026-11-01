@@ -408,6 +408,37 @@ void main() {
       expect((p[0].main, p[0].note), ('限時段', '20:00 起'));
     });
 
+    test('沒有分區的停車場只在 20:00–23:00 開放：21:00 寫到 23:00，19:00 寫 20:00 起', () {
+      final hours = ParkingSpot.fromJson({
+        ...lotJson,
+        'parking_zones': null,
+        'condition': {
+          'bay': 'car',
+          'use': 'usual',
+          'schedule': [
+            {
+              'days': 'all',
+              'from': '20:00',
+              'to': '23:00',
+              'vehicles': ['heavy'],
+            },
+          ],
+        },
+      });
+      final at21 = plates(hours, VehicleType.heavy, night);
+      expect(
+        (at21[0].main, at21[0].note, at21[0].tone),
+        ('限時段', '到 23:00', PlateTone.conditional),
+      );
+      // 19:00 on the same Tuesday in Taiwan.
+      final at19 = plates(
+        hours,
+        VehicleType.heavy,
+        DateTime.utc(2026, 11, 3, 11),
+      );
+      expect((at19[0].main, at19[0].note), ('限時段', '20:00 起'));
+    });
+
     test('普通機車：只有 B1 可停；重機格、汽車格不算', () {
       final p = plates(lot, VehicleType.scooter, day);
       expect(p[0].main, '可停');
