@@ -69,6 +69,10 @@ class StripSqlTest(unittest.TestCase):
         sql = strip.migration(self.root, "fee")
         for line in COPIED + FEE_FRAGMENTS:
             self.assertNotIn(line, sql)
+        # Fee-only updates keep the eligibility flags as they are, as the text layer does.
+        for table in ("community_spots", "official_heavy_spots"):
+            self.assertIn(f"disable trigger {table}_flags_from_entries", sql)
+            self.assertIn(f"enable trigger {table}_flags_from_entries", sql)
         zones = [{"id": "z1", "name": "汽車區", "access": "heavyCar", "fee_note": "每小時 30 元；倒退掃牌"}]
         old = strip.guard("每小時 30 元；倒退掃牌（大型重機比照汽車費率）", "", strip.jsonb_text(zones))
         self.assertIn(f"('00000000-0000-4000-8000-000000000002','{old}','每小時 30 元；可能需倒車進場（大型重機比照汽車費率）',''", sql)
