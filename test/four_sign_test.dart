@@ -796,6 +796,28 @@ void main() {
       expect(p[2].note, isNot(contains('全場同價')));
     });
 
+    test('沒有分區的停車場：時段只列其他車種時，不判全天可停', () {
+      final spot = ParkingSpot.fromJson({
+        ...lotJson,
+        'parking_zones': null,
+        'condition': {
+          'bay': 'car',
+          'use': 'usual',
+          'schedule': [
+            {
+              'days': 'all',
+              'from': '08:00',
+              'to': '20:00',
+              'vehicles': ['scooter'],
+            },
+          ],
+        },
+      });
+      expect(spot.condition, isNotNull);
+      final p = plates(spot, VehicleType.heavy, day);
+      expect(p[0].main, isNot('可停'));
+    });
+
     test('首段 0 元寫「首 20 分鐘 0 元」與付費延長（parking_contract_cases）', () {
       final fee = contractFee('臺北限時格首段 0 元可延長一次（§2.4）');
       final spot = ParkingSpot.fromJson({...street.toJson(), 'fee': fee});

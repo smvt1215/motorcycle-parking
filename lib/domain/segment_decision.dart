@@ -55,6 +55,14 @@ String _clock(int minute) {
 SlotVehicle _slotVehicle(VehicleType v) =>
     v == VehicleType.heavy ? SlotVehicle.heavy : SlotVehicle.scooter;
 
+/// Whether [condition] lists opening slots, none of them for [vehicle]:
+/// such a schedule states no time [vehicle] may park.
+bool scheduleSilentFor(ParkingCondition? condition, VehicleType vehicle) {
+  final c = condition;
+  if (c == null || c.schedule.isEmpty) return false;
+  return !c.schedule.any((s) => s.vehicles.contains(_slotVehicle(vehicle)));
+}
+
 /// When a place judged [status] with [condition] lets [vehicle] park,
 /// read at [now]. Only an allowed or conditional place opens; its slots
 /// for the vehicle decide when (a period across midnight belongs to the
