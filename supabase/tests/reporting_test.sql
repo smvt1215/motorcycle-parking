@@ -60,16 +60,16 @@ select is((select count(*)::integer from spot_votes where spot_id=(select id fro
 -- Limits count every accepted action, including repeated flags.
 delete from rate_limit_events;
 do $$begin for n in 1..10 loop perform pg_temp.report(3,jsonb_build_object('action','flag','source_id','official:x','reason','測試'),'f','f');end loop;end$$;
-select throws_ok($$select pg_temp.report(3,'{"action":"flag","source_id":"official:x","reason":"測試"}','g','g')$$,'P0001','daily report limit reached','ten actions per account per UTC day');
+select throws_ok($$select pg_temp.report(3,'{"action":"flag","source_id":"official:x","reason":"測試"}','g','g')$$,'P0001','daily report limit reached','ten actions per account per Taiwan day');
 delete from rate_limit_events;
-insert into rate_limit_events(user_id,ip_hash) select pg_temp.uid(case when n<=10 then 1 when n<=20 then 2 else 6 end),repeat('z',64) from generate_series(1,30) n;
-select throws_ok($$select pg_temp.report(3,'{"action":"flag","source_id":"official:x","reason":"測試"}','z','f')$$,'P0001','daily report limit reached','thirty actions per trusted IP per UTC day');
+insert into rate_limit_events(user_id,ip_hash) select pg_temp.uid(case when n<=10 then 1 when n<=20 then 2 else 6 end),repeat('z',64) from generate_series(1,200) n;
+select throws_ok($$select pg_temp.report(3,'{"action":"flag","source_id":"official:x","reason":"測試"}','z','f')$$,'P0001','daily report limit reached','200 actions per trusted IP per Taiwan day while App Check only logs');
 delete from rate_limit_events;
 select throws_ok($$select pg_temp.report(3,'{"action":"annotation","source_id":"tdx:Taipei:park:1","heavy_access":"allowed"}','y','y')$$,'22023','invalid report action','removed annotation action is rejected');
 select ok(to_regclass('public.spot_annotations') is null and to_regprocedure('public.confirmed_annotations(text[])') is null,'annotation table and RPC are gone');
 
-select ok(not has_function_privilege('anon','public.apply_report(uuid,text,text,jsonb)','EXECUTE'),'anon cannot call privileged report RPC');
-select ok(not has_function_privilege('authenticated','public.apply_report(uuid,text,text,jsonb)','EXECUTE'),'authenticated cannot call privileged report RPC');
+select ok(not has_function_privilege('anon','public.apply_report(uuid,text,text,jsonb,boolean)','EXECUTE'),'anon cannot call privileged report RPC');
+select ok(not has_function_privilege('authenticated','public.apply_report(uuid,text,text,jsonb,boolean)','EXECUTE'),'authenticated cannot call privileged report RPC');
 select ok(not has_table_privilege('authenticated','public.rate_limit_events','SELECT'),'rate identity hashes are private');
 select ok(not has_table_privilege('anon','public.spot_votes','SELECT'),'vote identity hashes are private');
 insert into favorites(user_id,spot_id,spot) values(pg_temp.uid(1),'fav-one','{"id":"fav-one","name":"私有收藏"}');
