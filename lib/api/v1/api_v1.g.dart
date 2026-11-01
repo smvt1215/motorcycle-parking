@@ -94,6 +94,15 @@ class ApiV1Client {
     'north': north,
     'east': east,
   });
+
+  /// 各資料集目前的版本
+  Future<DataVersions> dataVersions() async {
+    final raw = await dataVersionsRaw();
+    return DataVersions.fromJson(raw as Map<String, Object?>);
+  }
+
+  /// [dataVersions] as served, for callers that keep the JSON (#202).
+  Future<Object?> dataVersionsRaw() => _call('data_versions', {});
 }
 
 class ClientConfig {
@@ -735,6 +744,29 @@ class Spot {
     contributorName,
     contributorRole,
   ]);
+}
+
+/// 資料集名稱 → 版本號（正整數）。目前有 rules、spots；新增的資料集會出現新的鍵，用戶端遇到不認識的鍵請略過
+class DataVersions {
+  const DataVersions({required this.rules, required this.spots});
+
+  factory DataVersions.fromJson(Map<String, Object?> json) => DataVersions(
+    rules: (json['rules'] as num).toInt(),
+    spots: (json['spots'] as num).toInt(),
+  );
+
+  final int rules;
+
+  final int spots;
+
+  Map<String, Object?> toJson() => {'rules': rules, 'spots': spots};
+
+  @override
+  bool operator ==(Object other) =>
+      other is DataVersions && other.rules == rules && other.spots == spots;
+
+  @override
+  int get hashCode => Object.hashAll([rules, spots]);
 }
 
 bool _equal(Object? a, Object? b) {
