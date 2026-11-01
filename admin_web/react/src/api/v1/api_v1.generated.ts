@@ -14,6 +14,9 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.body,
       }),
     }),
+    apiV1DataVersions: build.query<ApiV1DataVersionsApiResponse, ApiV1DataVersionsApiArg>({
+      query: () => ({ url: `/rpc/data_versions`, method: 'POST' }),
+    }),
     apiV1AccountDeletionStatus: build.query<
       ApiV1AccountDeletionStatusApiResponse,
       ApiV1AccountDeletionStatusApiArg
@@ -57,6 +60,8 @@ export type ApiV1SpotsInViewportApiArg = {
     east: number;
   };
 };
+export type ApiV1DataVersionsApiResponse = /** status 200 資料集 → 版本 */ DataVersions;
+export type ApiV1DataVersionsApiArg = void;
 export type ApiV1AccountDeletionStatusApiResponse = /** status 200 刪除申請的狀態 */ AccountDeletionState;
 export type ApiV1AccountDeletionStatusApiArg = void;
 export type ApiV1RequestAccountDeletionApiResponse = /** status 200 刪除申請的狀態 */ AccountDeletionState;
@@ -184,6 +189,11 @@ export type SpotsInViewport = {
   /** 官方點這次沒有讀到（暫時無法讀取） */
   official_unavailable: boolean;
 };
+export type DataVersions = {
+  rules: number;
+  spots: number;
+  [key: string]: number;
+};
 export type AccountDeletionState = {
   /** none：沒有申請；pending：冷靜期中，到 scheduled_at 後刪除 */
   status: 'none' | 'pending';
@@ -201,6 +211,7 @@ export const {
   useApiV1ClientConfigQuery,
   useApiV1CityRulesQuery,
   useApiV1SpotsInViewportQuery,
+  useApiV1DataVersionsQuery,
   useApiV1AccountDeletionStatusQuery,
   useApiV1RequestAccountDeletionMutation,
   useApiV1CancelAccountDeletionMutation,

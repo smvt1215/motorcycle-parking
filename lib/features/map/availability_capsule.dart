@@ -5,6 +5,7 @@ import '../../ui/adaptive/adaptive.dart';
 import '../../domain/availability_display.dart';
 import '../../domain/capsule_layout.dart';
 import '../../domain/rider_meter_display.dart';
+import '../../models/parking.dart';
 import 'map_legend.dart';
 
 /// Paper white behind delayed and car-bay pills, from the design palette.
@@ -52,6 +53,111 @@ double capsuleWidth(AvailabilityCapsule capsule, {double scale = 1}) {
   return width * scale;
 }
 
+/// Fill and ink of [style]'s pill.
+(Color, Color) _capsuleColors(CapsuleStyle style) => switch (style) {
+  CapsuleStyle.live => (badgeInk, Colors.white),
+  CapsuleStyle.full => (capsuleFull, badgeInk),
+  CapsuleStyle.suspended => (capsuleSuspended, Colors.white),
+  CapsuleStyle.delayed || CapsuleStyle.car => (capsulePaper, badgeInk),
+};
+
+/// The ink outline inside the white keyline: delayed 2, car bays 1.25.
+double _capsuleOutline(CapsuleStyle style) => switch (style) {
+  CapsuleStyle.delayed => 2.0,
+  CapsuleStyle.car => 1.25,
+  _ => 0.0,
+};
+
+/// Room around a painted row for the pills' shadow (6 blur, 2 down).
+const capsuleShadowRoom = 8.0;
+
+/// Paints [capsules] side by side, 4 apart, their top left at [origin],
+/// as [AvailabilityCapsuleView] draws them: for map bitmaps (Google Maps),
+/// where widgets cannot go.
+void paintCapsuleRow(
+  Canvas canvas,
+  Offset origin,
+  List<AvailabilityCapsule> capsules, {
+  double scale = 1,
+}) {
+  var x = origin.dx;
+  for (final capsule in capsules) {
+    final width = capsuleWidth(capsule, scale: scale);
+    _paintCapsule(
+      canvas,
+      Rect.fromLTWH(x, origin.dy, width, 24 * scale),
+      capsule,
+      scale,
+    );
+    x += width + 4;
+  }
+}
+
+void _paintCapsule(
+  Canvas canvas,
+  Rect box,
+  AvailabilityCapsule capsule,
+  double scale,
+) {
+  final style = capsule.style;
+  final (fill, ink) = _capsuleColors(style);
+  final outer = RRect.fromRectAndRadius(box, Radius.circular(12 * scale));
+  canvas.drawRRect(
+    outer.shift(const Offset(0, 2)),
+    Paint()
+      ..color = fill == capsulePaper
+          ? const Color(0x33000000)
+          : const Color(0x44000000)
+      ..maskFilter = MaskFilter.blur(
+        BlurStyle.normal,
+        Shadow.convertRadiusToSigma(6),
+      ),
+  );
+  canvas.drawRRect(outer, Paint()..color = Colors.white);
+  final inner = RRect.fromRectAndRadius(
+    box.deflate(2 * scale),
+    Radius.circular(10 * scale),
+  );
+  canvas.drawRRect(inner, Paint()..color = fill);
+  final outline = _capsuleOutline(style) * scale;
+  if (outline > 0) {
+    canvas.drawRRect(
+      inner.deflate(outline / 2),
+      Paint()
+        ..color = badgeInk
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = outline,
+    );
+  }
+  final (left, _) = _padding(style);
+  var x = inner.left + left * scale;
+  final middle = box.center.dy;
+  void icon(CustomPainter painter, double gap) {
+    final side = 12 * scale;
+    canvas
+      ..save()
+      ..translate(x, middle - side / 2);
+    painter.paint(canvas, Size.square(side));
+    canvas.restore();
+    x += side + gap * scale;
+  }
+
+  final delayed = style == CapsuleStyle.delayed;
+  if (style == CapsuleStyle.suspended) icon(_PausePainter(ink), 3);
+  if (style == CapsuleStyle.car) icon(_CarPainter(ink), 3);
+  if (delayed || capsule.delayed) icon(_ClockPainter(ink), delayed ? 4 : 3);
+  final text = TextPainter(
+    text: TextSpan(
+      text: capsule.text,
+      style: _capsuleText.copyWith(color: ink, fontSize: 13 * scale),
+    ),
+    textDirection: TextDirection.ltr,
+    textScaler: TextScaler.noScaling,
+  )..layout();
+  text.paint(canvas, Offset(x, middle - text.height / 2));
+  text.dispose();
+}
+
 /// Width of a row of pills with their 4 gaps.
 double capsuleRowWidth(
   List<AvailabilityCapsule> capsules, {
@@ -80,22 +186,12 @@ class AvailabilityCapsuleView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final style = capsule.style;
-    final (fill, ink) = switch (style) {
-      CapsuleStyle.live => (badgeInk, Colors.white),
-      CapsuleStyle.full => (capsuleFull, badgeInk),
-      CapsuleStyle.suspended => (capsuleSuspended, Colors.white),
-      CapsuleStyle.delayed || CapsuleStyle.car => (capsulePaper, badgeInk),
-    };
+    final (fill, ink) = _capsuleColors(style);
     // Solid pills cast .27, the outlined paper ones .2.
     final solid = fill != capsulePaper;
     final delayed = style == CapsuleStyle.delayed;
     final (left, right) = _padding(style);
-    final outline = switch (style) {
-      CapsuleStyle.live => 0.0,
-      CapsuleStyle.delayed => 2.0,
-      CapsuleStyle.car => 1.25,
-      CapsuleStyle.full || CapsuleStyle.suspended => 0.0,
-    };
+    final outline = _capsuleOutline(style);
     return Semantics(
       label: capsule.semantics,
       excludeSemantics: true,
@@ -460,4 +556,59 @@ class _RiderBars extends StatelessWidget {
       ],
     ],
   );
+}
+
+/// The pills each lone marker shows, by spot id, as both maps draw them
+/// (MapDensity): [layoutCapsules] decides per marker whether it shows its
+/// full set ([capsulesOf]), only its primary pill ([primaryOf], when
+/// crowded) or none (touching the [open] spot's set). [lone] are the spots
+/// drawn as markers of their own, not in a cluster; [open] is drawn
+/// enlarged. [at] places a spot on the screen (or any plane in screen
+/// pixels); [markerSize] is the map's marker side. Spots without pills
+/// are left out. The map draws these, and the Beta sheet waits for one.
+Map<String, (ParkingSpot, List<AvailabilityCapsule>)> shownCapsules({
+  required List<ParkingSpot> lone,
+  required ParkingSpot? open,
+  required Offset Function(ParkingSpot) at,
+  required double markerSize,
+  required List<AvailabilityCapsule> Function(ParkingSpot) capsulesOf,
+  required List<AvailabilityCapsule> Function(
+    ParkingSpot,
+    List<AvailabilityCapsule>,
+  )
+  primaryOf,
+}) {
+  final pills = {
+    for (final spot in [...lone, ?open]) spot.id: (spot, capsulesOf(spot)),
+  };
+  if (pills.values.every((p) => p.$2.isEmpty)) return const {};
+  final layout = layoutCapsules([
+    for (final (spot, capsules) in pills.values)
+      if (spot.id == open?.id)
+        CapsuleItem(
+          id: spot.id,
+          center: at(spot),
+          fullWidth: capsuleRowWidth(capsules, scale: 26 / 24),
+          markerSize: markerSize * selectedScale,
+          height: 26,
+        )
+      else
+        CapsuleItem(
+          id: spot.id,
+          center: at(spot),
+          fullWidth: capsuleRowWidth(capsules),
+          primaryWidth: capsuleRowWidth(primaryOf(spot, capsules)),
+          markerSize: markerSize,
+        ),
+  ], selected: open?.id);
+  return {
+    for (final (spot, capsules) in pills.values)
+      if (switch (layout[spot.id]) {
+            CapsuleShow.primary => primaryOf(spot, capsules),
+            CapsuleShow.none => const <AvailabilityCapsule>[],
+            _ => capsules,
+          }
+          case final shown when shown.isNotEmpty)
+        spot.id: (spot, shown),
+  };
 }

@@ -7,6 +7,7 @@ import 'package:google_maps_flutter_platform_interface/google_maps_flutter_platf
     as pi;
 import 'package:latlong2/latlong.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
+import 'package:motorcycle_parking/domain/availability_display.dart';
 import 'package:motorcycle_parking/domain/eligibility.dart';
 import 'package:motorcycle_parking/domain/map_viewport.dart';
 import 'package:motorcycle_parking/domain/spot_clusters.dart';
@@ -464,6 +465,124 @@ void addSelectionTests() {
     expect(back, isNotEmpty);
     expect(back.every((padding) => padding == map.padding.bottom), isTrue);
     await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  group('剩餘數膠囊（#139）', () {
+    const own = AvailabilityCapsule(
+      text: '剩 12',
+      style: CapsuleStyle.live,
+      semantics: '官方即時：剩 12 格',
+    );
+    const car = AvailabilityCapsule(
+      text: '剩 3',
+      style: CapsuleStyle.car,
+      semantics: '汽車格剩 3 格',
+    );
+    // At zoom 16 a pixel is about 2.15e-5 of longitude here: a and b sit
+    // 30 apart (crowded), c 400 away.
+    ParkingSpot at(String id, double dx) => ParkingSpot(
+      id: id,
+      name: '停車場$id',
+      lat: 25.03,
+      lng: 121.56 + dx * 2.15e-5,
+      city: '臺北市',
+      spaceType: SpaceType.offStreet,
+    );
+    final a = at('a', 0), b = at('b', 30), c = at('c', 400);
+    final pills = {
+      'a': [own, car],
+      'b': [own],
+      'c': [own, car],
+    };
+
+    Future<Map<String, gm.Marker>> pumpCapsules(
+      WidgetTester tester, {
+      ParkingSpot? selected,
+      Set<String> expected = const {},
+    }) async {
+      final platform = FakeMapsPlatform();
+      final previous = pi.GoogleMapsFlutterPlatform.instance;
+      pi.GoogleMapsFlutterPlatform.instance = platform;
+      addTearDown(() => pi.GoogleMapsFlutterPlatform.instance = previous);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: GoogleParkingMap(
+            center: const LatLng(25.03, 121.56),
+            spots: [a, b, c].where((s) => s.id != selected?.id).toList(),
+            selected: selected,
+            eligibility: (_) =>
+                const Eligibility(EligibilityStatus.allowed, ''),
+            interactive: true,
+            onSpotTap: (_) {},
+            onViewport: (_, _) {},
+            capsules: (s) => pills[s.id]!,
+            primaryCapsules: (s, all) => [all.first],
+            excluded: [at('x', -400)],
+          ),
+        ),
+      );
+      await pumpMap(tester);
+      Map<String, gm.Marker> markers() => {
+        for (final m
+            in tester.widget<gm.GoogleMap>(find.byType(gm.GoogleMap)).markers)
+          m.markerId.value: m,
+      };
+      // Bitmaps are drawn on the real engine, one look at a time.
+      for (var frame = 0; frame < 100; frame++) {
+        if (markers().keys.toSet().containsAll(expected)) break;
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+        await tester.pump();
+      }
+      return markers();
+    }
+
+    Future<double> widthOf(WidgetTester tester, CapsuleKey key) async =>
+        ((await tester.runAsync(() => capsuleIcon(key)))! as gm.BytesMapBitmap)
+            .width!;
+
+    testWidgets('擁擠的點只留主要膠囊，遠的照實顯示；膠囊錨在點上、畫在標記下', (tester) async {
+      final markers = await pumpCapsules(
+        tester,
+        expected: {'capsules:a', 'capsules:b', 'capsules:c', 'excluded:x'},
+      );
+      final one = await widthOf(tester, CapsuleKey([own], selected: false));
+      final two = await widthOf(
+        tester,
+        CapsuleKey([own, car], selected: false),
+      );
+      expect(two, greaterThan(one));
+      double width(String id) =>
+          (markers['capsules:$id']!.icon as gm.BytesMapBitmap).width!;
+      expect(width('a'), one);
+      expect(width('b'), one);
+      expect(width('c'), two);
+      final pill = markers['capsules:c']!;
+      expect(pill.anchor, const Offset(.5, 1));
+      expect(pill.zIndexInt, lessThan(markers['c']!.zIndexInt));
+      expect(pill.position, markers['c']!.position);
+      // The filter's grey dot, under everything.
+      expect(markers['excluded:x']!.zIndexInt, lessThan(pill.zIndexInt));
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('選取的點顯示整組並浮到最上層，會碰到它的鄰點膠囊隱藏', (tester) async {
+      final markers = await pumpCapsules(
+        tester,
+        selected: a,
+        expected: {'selected-capsules:a', 'capsules:c'},
+      );
+      final chosen = markers['selected-capsules:a']!;
+      expect(
+        (chosen.icon as gm.BytesMapBitmap).width,
+        await widthOf(tester, CapsuleKey([own, car], selected: true)),
+      );
+      expect(chosen.zIndexInt, greaterThan(markers['selected:a']!.zIndexInt));
+      expect(markers.containsKey('capsules:b'), isFalse);
+      expect(markers.containsKey('capsules:c'), isTrue);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
   });
 }
 

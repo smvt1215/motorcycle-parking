@@ -284,18 +284,23 @@ class _PressOpacityState extends State<_PressOpacity> {
   }
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
-    behavior: HitTestBehavior.opaque,
-    onTap: widget.onTap,
-    onTapDown: (_) => press(true),
-    onTapUp: (_) => press(false),
-    onTapCancel: () => press(false),
-    child: AnimatedOpacity(
-      opacity: down ? .55 : 1,
-      duration: Duration(milliseconds: down ? 10 : 120),
-      child: widget.child,
-    ),
-  );
+  Widget build(BuildContext context) {
+    // Without a tap the plate claims no gesture, so a card around it
+    // still gets the tap (Codex P2 on #263).
+    if (widget.onTap == null) return widget.child;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: widget.onTap,
+      onTapDown: (_) => press(true),
+      onTapUp: (_) => press(false),
+      onTapCancel: () => press(false),
+      child: AnimatedOpacity(
+        opacity: down ? .55 : 1,
+        duration: Duration(milliseconds: down ? 10 : 120),
+        child: widget.child,
+      ),
+    );
+  }
 }
 
 /// Riders' levels as 3-bar meters (A6); two side by side, slashed, when
