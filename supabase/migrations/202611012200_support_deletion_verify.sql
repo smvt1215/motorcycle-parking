@@ -48,8 +48,10 @@ alter table private.support_requests drop constraint support_requests_status_che
   -- 系統判斷的例外（status 'exception'）。
   add column exception text check (exception in
     ('no_account','admin_account','deletion_pending','deletion_in_progress','account_deleted')),
-  -- 建立刪除申請後寄到登入 email 的通知信寄出時間。
+  -- 建立刪除申請後寄到登入 email 的通知信寄出時間；領取時間（同時只有一個
+  -- 寄信程序處理同一筆，免得互相換掉取消連結的 token）。
   add column deletion_notified_at timestamptz,
+  add column deletion_notice_claimed_at timestamptz,
   -- 通知信裡「取消刪除」連結 token 的 SHA-256；冷靜期結束即失效。
   add column cancel_token_hash bytea check (cancel_token_hash is null or octet_length(cancel_token_hash)=32),
   add column cancel_expires_at timestamptz,
@@ -285,17 +287,27 @@ revoke execute on function public.support_request_link(uuid,text,text) from publ
 grant execute on function public.support_request_link(uuid,text,text) to service_role;
 
 -- ===== 建立刪除申請後的通知信（Edge Function support-mail 用）=====
--- 待寄：刪除申請還在（沒被取消或已執行）、還沒寄。寄到登入 email。
+-- 領取待寄的通知：刪除申請還在（沒被取消或已執行）、還沒寄、沒有別的程序在
+-- 15 分鐘內領走。領取是原子的（skip locked），同一筆不會被兩個程序同時換
+-- token 與寄送（Codex review，PR #289）；沒寄成的 15 分鐘後由下次再領。
 create function public.support_deletion_notices(p_limit int)
 returns table(id uuid,email text,scheduled_at timestamptz,apple boolean)
-language sql stable security definer set search_path='' as $$
-  select s.id,s.login_email,r.scheduled_at,
+language sql volatile security definer set search_path='' as $$
+  with picked as (
+    select s.id from private.support_requests s
+    join private.account_deletion_requests r on r.request_id=s.deletion_request_id
+    where s.deletion_notified_at is null and s.login_email is not null
+      and (s.deletion_notice_claimed_at is null or s.deletion_notice_claimed_at<=now()-interval '15 minutes')
+    order by s.created_at
+    limit greatest(1,least(coalesce(p_limit,50),200))
+    for update of s skip locked),
+  claimed as (
+    update private.support_requests s set deletion_notice_claimed_at=now()
+    from picked where s.id=picked.id
+    returning s.id,s.login_email,s.deletion_request_id)
+  select c.id,c.login_email,r.scheduled_at,
     exists(select 1 from auth.identities i where i.user_id=r.user_id and i.provider='apple')
-  from private.support_requests s
-  join private.account_deletion_requests r on r.request_id=s.deletion_request_id
-  where s.deletion_notified_at is null and s.login_email is not null
-  order by s.created_at
-  limit greatest(1,least(coalesce(p_limit,50),200));
+  from claimed c join private.account_deletion_requests r on r.request_id=c.deletion_request_id;
 $$;
 revoke execute on function public.support_deletion_notices(int) from public,anon,authenticated;
 grant execute on function public.support_deletion_notices(int) to service_role;
@@ -308,8 +320,8 @@ revoke execute on function public.support_deletion_notified(uuid) from public,an
 grant execute on function public.support_deletion_notified(uuid) to service_role;
 
 -- 通知信寄出前存「取消刪除」連結的雜湊（Edge Function 產生 token），到預計
--- 刪除時間為止有效。重寄時換新的 token（舊信沒寄成）。刪除申請已不在或已寄過
--- 時回 false，不存。
+-- 刪除時間為止有效。重寄時換新的 token（舊信沒寄成）。只給 15 分鐘內領取
+-- 的程序；刪除申請已不在、已寄過或沒領取時回 false，不存。
 create function public.support_cancel_token(p_id uuid,p_token_hash text) returns boolean
 language plpgsql volatile security definer set search_path='' as $$
 declare v_scheduled timestamptz;
@@ -320,7 +332,8 @@ begin
   select r.scheduled_at into v_scheduled
     from private.support_requests s
     join private.account_deletion_requests r on r.request_id=s.deletion_request_id
-    where s.id=p_id and s.deletion_notified_at is null;
+    where s.id=p_id and s.deletion_notified_at is null
+      and s.deletion_notice_claimed_at>now()-interval '15 minutes';
   if v_scheduled is null then return false; end if;
   update private.support_requests s
     set cancel_token_hash=decode(p_token_hash,'hex'),cancel_expires_at=v_scheduled

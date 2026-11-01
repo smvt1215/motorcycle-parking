@@ -214,7 +214,9 @@ reset role;
 
 -- ===== 建立後的通知：只寄到登入 email =====
 select is(public.support_mail_tick(),null,'without vault secrets the tick does nothing');
+select is(public.support_cancel_token(pg_temp.id('login'),pg_temp.h('early')),false,'no cancel token before the notice is claimed');
 create temporary table notices as select * from public.support_deletion_notices(50);
+select is((select count(*)::int from public.support_deletion_notices(50)),0,'a claimed notice is not handed to a second sender');
 select is((select string_agg(email||'|'||apple::text,',' order by email) from notices),
   'abc123@privaterelay.appleid.com|true,fixture1@example.test|false','to the login emails, never the contact email');
 select ok((select n.scheduled_at=r.scheduled_at from notices n join private.account_deletion_requests r
@@ -230,11 +232,15 @@ select is((pg_temp.row('login')).cancel_expires_at,(select scheduled_at from pri
 set local role service_role;
 select public.support_deletion_notified(pg_temp.id('login'));
 select is(public.support_cancel_token(pg_temp.id('login'),pg_temp.h('other')),false,'not replaced once sent');
-select is((select count(*)::int from public.support_deletion_notices(50)),1,'sent once');
+reset role;
+update private.support_requests set deletion_notice_claimed_at=now()-interval '16 minutes' where id=pg_temp.id('relay');
+set local role service_role;
+select is((select count(*)::int from public.support_deletion_notices(50)),1,'an unsent notice is claimed again after 15 minutes; a sent one never');
 reset role;
 select ok((pg_temp.row('login')).deletion_notified_at is not null,'the send is recorded');
 -- 冷靜期內取消後不再寄。
 delete from private.account_deletion_requests where user_id='10000000-0000-4000-8000-000000000003';
+update private.support_requests set deletion_notice_claimed_at=null where id=pg_temp.id('relay');
 select is((select count(*)::int from public.support_deletion_notices(50)),0,'a cancelled deletion is not notified');
 
 -- ===== 取消刪除連結 =====
