@@ -131,4 +131,45 @@ void main() {
       isFalse,
     );
   });
+
+  const rules = {
+    'rules_version': 25,
+    'rules': [
+      {
+        'city': '臺北市',
+        'vehicle': 'heavy',
+        'allowed_space_types': ['heavyOnly'],
+        'conditional_space_types': ['paidMotorcycle'],
+        'district_space_types': {
+          'freeMotorcycle': ['信義區'],
+        },
+        'districts': <String>[],
+        'restriction': 'pilot_area',
+        'fee_note': '請依現場收費公告',
+        'exceptions': '',
+        'can_use_two_spaces': false,
+        'effective_date': '2026-10-11',
+        'expires_on': null,
+        'source_url': 'https://example.test/rule',
+        'version': 3,
+      },
+    ],
+  };
+
+  test('city_rules reads every rule with the overall version', () async {
+    final api = clientAnswering(200, rules);
+    final read = await api.cityRules();
+    expect(requests.single.url.path, '/rest/v1/rpc/city_rules');
+    expect(read.rulesVersion, 25);
+    final rule = read.rules.single;
+    expect(rule.city, '臺北市');
+    expect(rule.restriction, 'pilot_area');
+    expect(rule.expiresOn, isNull);
+    expect(rule.districtSpaceTypes, {
+      'freeMotorcycle': ['信義區'],
+    });
+    expect(read.toJson(), rules);
+    // The rules cache (#202) keeps the JSON exactly as served.
+    expect(await clientAnswering(200, rules).cityRulesRaw(), rules);
+  });
 }
