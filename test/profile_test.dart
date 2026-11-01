@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -10,15 +9,13 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:motorcycle_parking/data/app_store.dart';
 import 'package:motorcycle_parking/data/profile_repository.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
+import 'package:motorcycle_parking/features/auth/profile_avatar.dart';
 import 'package:motorcycle_parking/features/auth/profile_editor.dart';
 import 'package:motorcycle_parking/features/settings/settings_page.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
 
 const userId = '10000000-0000-4000-8000-000000000001';
 const oldPath = '$userId/10000000-0000-4000-8000-000000000002.png';
-final png = base64Decode(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
-);
 
 class ProfileStore extends AppStore {
   ProfileStore(super.local, super.client);
@@ -43,9 +40,7 @@ class ProfileFixture {
   late final SupabaseClient client;
   late final ProfileStore store;
   final updates = <Map<String, dynamic>>[];
-  final uploaded = <String>[];
-  final deleted = <String>[];
-  bool failUpdate = false, failUpload = false;
+  bool failUpdate = false;
 
   Map<String, dynamic> get user => {
     'id': userId,
@@ -68,25 +63,6 @@ class ProfileFixture {
         metadata = {...metadata, ...data};
       }
       response = user;
-    } else if (request.url.path.startsWith(
-      '/storage/v1/object/$profileAvatarBucket',
-    )) {
-      if (request.method == 'DELETE') {
-        deleted.addAll(
-          (jsonDecode(request.body)['prefixes'] as List).cast<String>(),
-        );
-        response = [];
-      } else {
-        if (failUpload) {
-          return http.Response(
-            '{"message":"upload refused","statusCode":"400"}',
-            400,
-          );
-        }
-        final path = request.url.path.split('/$profileAvatarBucket/').last;
-        uploaded.add(path);
-        response = {'Key': '$profileAvatarBucket/$path'};
-      }
     } else {
       throw StateError('Unexpected ${request.method} ${request.url.path}');
     }
@@ -141,9 +117,6 @@ void main() {
     expect(profileNameError('\u200b\u2066'), isNotNull);
     expect(profileNameError('\u0085名稱'), isNotNull);
     expect(profileNameError('${'名' * 40}\u200d'), isNull);
-    expect(avatarFormat(png).contentType, 'image/png');
-    expect(() => avatarFormat(Uint8List(maxAvatarBytes + 1)), throwsStateError);
-    expect(() => avatarFormat(Uint8List.fromList([1, 2, 3])), throwsStateError);
   });
 
   test('儲存前移除隱形格式字元，和伺服器顯示名稱一致', () async {
@@ -169,66 +142,6 @@ void main() {
     expect(fixture.updates.single, {'display_name': '新名稱'});
     expect(fixture.metadata['profile_avatar_path'], oldPath);
     expect(fixture.metadata['other'], 'keep');
-    expect(fixture.uploaded, isEmpty);
-    expect(fixture.deleted, isEmpty);
-  });
-
-  test('先上傳新頭像，再儲存帳號，成功後才刪除自己舊頭像', () async {
-    final fixture = ProfileFixture(
-      metadata: {'full_name': '原始名稱', 'profile_avatar_path': oldPath},
-    );
-    await fixture.open();
-    addTearDown(fixture.close);
-    await fixture.store.updateProfile(displayName: '新名稱', avatarBytes: png);
-    final path = fixture.uploaded.single;
-    expect(ownedAvatarPath(path, userId), isTrue);
-    expect(path, isNot(oldPath));
-    expect(fixture.updates.single['profile_avatar_path'], path);
-    expect(
-      fixture.updates.single['profile_avatar_url'],
-      'https://example.supabase.co/storage/v1/object/public/$profileAvatarBucket/$path',
-    );
-    expect(fixture.deleted, [oldPath]);
-    expect(profileDisplayName(fixture.client.auth.currentUser), '新名稱');
-  });
-
-  test('帳號儲存失敗會清掉本次新照片，保留原名稱與舊照片', () async {
-    final fixture = ProfileFixture(
-      metadata: {'full_name': '原始名稱', 'profile_avatar_path': oldPath},
-    )..failUpdate = true;
-    await fixture.open();
-    addTearDown(fixture.close);
-    await expectLater(
-      fixture.store.updateProfile(displayName: '新名稱', avatarBytes: png),
-      throwsA(isA<AuthException>()),
-    );
-    expect(fixture.deleted, [fixture.uploaded.single]);
-    expect(fixture.deleted, isNot(contains(oldPath)));
-    expect(profileDisplayName(fixture.client.auth.currentUser), '原始名稱');
-  });
-
-  test('圖片上傳失敗不更新帳號，不刪其他帳號的 metadata 路徑', () async {
-    final fixture = ProfileFixture(
-      metadata: {
-        'full_name': '原始名稱',
-        'profile_avatar_path': 'other-user/object.png',
-      },
-    )..failUpload = true;
-    await fixture.open();
-    addTearDown(fixture.close);
-    await expectLater(
-      fixture.store.updateProfile(displayName: '新名稱', avatarBytes: png),
-      throwsA(isA<StorageException>()),
-    );
-    expect(fixture.updates, isEmpty);
-    expect(
-      fixture.deleted.every((path) => path.startsWith('$userId/')),
-      isTrue,
-    );
-    fixture.failUpload = false;
-    await fixture.store.updateProfile(displayName: '新名稱', removeAvatar: true);
-    expect(fixture.metadata['profile_avatar_url'], '');
-    expect(fixture.deleted, isNot(contains('other-user/object.png')));
   });
 
   Future<ProfileFixture> host(
@@ -324,13 +237,10 @@ void main() {
     });
   }
 
-  testWidgets('從相簿選擇停用並說明，沒有頭像時不顯示移除；儲存失敗保留名稱並可重試', (tester) async {
+  testWidgets('P12 不顯示從相簿選擇與上傳說明；儲存失敗保留名稱並可重試', (tester) async {
     final fixture = await host(tester, 390);
-    final pick = tester.widget<OutlinedButton>(
-      find.widgetWithText(OutlinedButton, '從相簿選擇'),
-    );
-    expect(pick.onPressed, isNull);
-    expect(find.text('照片上傳開放後才能用（社群核實 P2）。現在使用預設頭像。'), findsOneWidget);
+    expect(find.text('從相簿選擇'), findsNothing);
+    expect(find.textContaining('照片上傳'), findsNothing);
     expect(find.text('移除頭像'), findsNothing);
     final save = find.byKey(const ValueKey('profile-save'));
     expect(tester.widget<TextButton>(save).onPressed, isNull);
@@ -352,35 +262,25 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('profile-name')), findsNothing);
     expect(fixture.metadata['display_name'], '新名稱');
-    expect(fixture.uploaded, isEmpty);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('移除頭像仍可用：移除後回到預設頭像並沿用原本的移除流程', (tester) async {
-    final fixture = await host(
+  testWidgets('有登入服務大頭貼時照常顯示，不提供移除頭像', (tester) async {
+    await host(
       tester,
       390,
       metadata: {
         'full_name': '原始名稱',
-        'profile_avatar_path': oldPath,
-        'profile_avatar_url': 'https://example.test/original.png',
+        'avatar_url': 'https://example.test/provider.png',
       },
     );
+    expect(
+      tester.widget<ProfileAvatar>(find.byType(ProfileAvatar)).url,
+      'https://example.test/provider.png',
+    );
+    expect(find.text('移除頭像'), findsNothing);
     final save = find.byKey(const ValueKey('profile-save'));
     expect(tester.widget<TextButton>(save).onPressed, isNull);
-    await tester.tap(find.text('移除頭像'));
-    await tester.pump();
-    expect(find.text('移除頭像'), findsNothing);
-    expect(tester.widget<TextButton>(save).onPressed, isNotNull);
-    await tester.tap(save);
-    await tester.runAsync(
-      () async => await Future<void>.delayed(const Duration(milliseconds: 20)),
-    );
-    await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('profile-name')), findsNothing);
-    expect(fixture.metadata['profile_avatar_url'], '');
-    expect(fixture.deleted, contains(oldPath));
-    expect(fixture.uploaded, isEmpty);
   });
 
   testWidgets('設定卡提供編輯入口，名稱儲存後回到設定即時更新', (tester) async {

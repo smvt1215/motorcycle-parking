@@ -16,7 +16,7 @@
 - 第一版功能：地圖找附近停車位、停車規則指南、記住我停哪裡、使用者回報/收藏停車點
 
 ## 目前進度（2026-11-01）
-- **App**：地圖範圍搜尋與篩選、車種資格判斷、縣市規則、收藏、停車紀錄。後端點位或規則變更時自動重新載入（2026-10-26）：`data_versions` 表每個資料集一列，`community_spots`／`official_heavy_spots`／`city_rules` 的敘述層觸發器每次寫入 bump 版本並經 Realtime 推送，App 收到後 1 秒內合併為一次重新載入（點位重查目前範圍、規則重讀）；回到前景與 Realtime 重新連線時再直接比對版本，補上漏掉的推送。取捨：敘述層觸發器讓每一筆回報、投票或管理站操作都推送一次，所有在線 App 各重查一次目前範圍（1 秒合併只合併同一台裝置的連續事件），封測規模可承受；用量上升時再考慮伺服器端合併或最小推送間隔。詳情依四組十二欄顯示，分區與結構化費率摘要見 [DESIGN.md](DESIGN.md)（#80）；資料來源顯示「由車友 XXX 回報」「由管理員新增」等公開回報者來源（#81、#82）。導航：iOS 先開 Google Maps App，無法開啟才改開 Apple Maps；Android 與 Web 使用 Google Maps 導航網址（#82）。帳號與設定可修改顯示名稱與頭像（#83）。
+- **App**：地圖範圍搜尋與篩選、車種資格判斷、縣市規則、收藏、停車紀錄。後端點位或規則變更時自動重新載入（2026-10-26）：`data_versions` 表每個資料集一列，`community_spots`／`official_heavy_spots`／`city_rules` 的敘述層觸發器每次寫入 bump 版本並經 Realtime 推送，App 收到後 1 秒內合併為一次重新載入（點位重查目前範圍、規則重讀）；回到前景與 Realtime 重新連線時再直接比對版本，補上漏掉的推送。取捨：敘述層觸發器讓每一筆回報、投票或管理站操作都推送一次，所有在線 App 各重查一次目前範圍（1 秒合併只合併同一台裝置的連續事件），封測規模可承受；用量上升時再考慮伺服器端合併或最小推送間隔。詳情依四組十二欄顯示，分區與結構化費率摘要見 [DESIGN.md](DESIGN.md)（#80）；資料來源顯示「由車友 XXX 回報」「由管理員新增」等公開回報者來源（#81、#82）。導航：iOS 先開 Google Maps App，無法開啟才改開 Apple Maps；Android 與 Web 使用 Google Maps 導航網址（#82）。帳號與設定可修改顯示名稱（#83）；頭像上傳已取消（2026-11-01 使用者決定），使用名稱首字或登入服務提供的大頭貼。
 - **停放條件與費率（stack C，2026-10-27 完成）**：停放條件三端契約與轉換層（C1）、條件欄位與舊版保守投影（C2）、費率 v2（汽車、依時段與星期、跨日與跨時段、比照換算金額）與計費規則分離（寫入時展開）、修改建議逐車種合併（C3）、停放判斷 `decideParking`（縣市規則可到期、依法可停格位不受規則到期影響、分區推導不出＝待確認）與詳情資格橫幅（C4）、App 表單與預檢組合規則、詳情分區收費公告牌與依目前時間的費率摘要（C5）、管理站計費規則與區域卡、審核頁合併差異與共用規則面板（C6）。設計見 [designs/2026-10-26-parking-conditions-and-fees.md](designs/2026-10-26-parking-conditions-and-fees.md)。
 - **社群回報**：新增停車點與修改建議改用全 App 統一的選擇元件與分段收合表單（格位分組地面標線清單含普大共用機車格、限制可複選、縣市／區選單、停車場型式可複選）；暫時封閉與施工中有預計恢復日期，伺服器依日期到期並請車友確認（#116）；點位編輯紀錄（管理站時間軸、App 簡化版，含車主修改與投票，#141）。
 - **可信度**：存在確認與車種資格解耦，舊投票不再自動隱藏（#59）；管理員核驗過的社群點車種欄位在 180 天內視為可信（#84）；詳情依據列依來源切換、確認狀態只顯示最新一筆。後續分層核實見 [社群核實計畫](COMMUNITY_VERIFICATION_PLAN.md)（P0、P1 已完成，P2–P4 未開始），遊戲化與社群審核見 [可行性研究](CONTRIBUTION_TIERS_FEASIBILITY.md)（階段 0 已完成）。
@@ -164,7 +164,7 @@ lib/
     repositories.dart                 # 內建規則 JSON + Supabase city_rules 遠端覆蓋（取版本較新者）、viewport RPC 讀取停車點、本機儲存
     app_store.dart                    # App 狀態：登入、停車點、收藏同步；未設定後端時使用範例資料
     data_updates.dart                 # 訂閱後端 data_versions（Realtime）與回前景時比對版本，資料變更即重新載入
-    profile_repository.dart           # 顯示名稱與頭像（user metadata、Storage `motopark-avatars`）
+    profile_repository.dart           # 顯示名稱（user metadata）
   features/
     map/        # 地圖、群聚標記、篩選（車種、格位類型、隱藏不可停）、圖例、停車點詳情 sheet
     rules/      # 依縣市 × 車種顯示規則、生效日期、來源連結、免責聲明
@@ -172,7 +172,7 @@ lib/
     favorites/  # 收藏清單
     report/     # 新增停車點、修改建議（含「這裡已經不能停車」）
     contribute/ # 貢獻頁
-    auth/       # 登入、編輯顯示名稱與頭像
+    auth/       # 登入、編輯顯示名稱
     launch/     # 啟動畫面
 assets/rules/parking_rules.json       # 內建縣市規則（含 sourceUrl、effectiveDate）
 config/local.example.json             # 本機後端的 --dart-define-from-file 範本（實際 local.json 不進版控）
@@ -398,7 +398,7 @@ rate = {"mode":"free"} | {"mode":"posted"}
 - 寫入資料庫只經管理站「匯入」（2026-10-26，[ADMIN_WEB.md](ADMIN_WEB.md#p6-實作)）：上傳上述 `spots.json`，試算新增／更新／管理員修改過的欄位後勾選匯入，管理員修改過的欄位預設保留，並寫入稽核紀錄。原本 `--sql-owner` 產生的 `import.sql`／`official.sql` 已停用（#117）：`official.sql` 會覆寫管理員的修改，與匯入頁的做法衝突。工具產出前以匯入頁的檢查驗證 JSON，有會被拒絕的點位時結束碼為 1。
 - 限制：其餘縣市自有資料不是缺座標（基隆、屏東）就是查無資料集，改由 TDX 比對；觀光景點、量販店等未登記為路外停車場的地點仍無官方資料可比對。臺中與桃園的市府資料沒有費率。
 
-資料表在原本的 `community_spots` / `spot_votes` 之外新增：`moderation_queue`、`official_heavy_spots`（官方點，含詳情十二欄）、`rate_limit_events`、`admin_audit_log`（#55）、`contributor_name_clears`（#81，私有）；頭像存於 Storage `motopark-avatars`（#83）。`spot_annotations` 已於 2026-10-17 移除。
+資料表在原本的 `community_spots` / `spot_votes` 之外新增：`moderation_queue`、`official_heavy_spots`（官方點，含詳情十二欄）、`rate_limit_events`、`admin_audit_log`（#55）、`contributor_name_clears`（#81，私有）；Storage `motopark-avatars`（#83）仍保留，但頭像上傳已取消（2026-11-01 使用者決定），App 不再寫入。`spot_annotations` 已於 2026-10-17 移除。
 
 ## 驗證方式
 1. 使用 `.flutter-version` 指定的 Flutter SDK，執行程式分析與 Flutter 測試，包含資格判斷、搜尋、抽屜互動、Google 地圖橋接及匯入資料檢查；`tool/` 的 Python 測試涵蓋匯入工具與 CI 路徑分流。
