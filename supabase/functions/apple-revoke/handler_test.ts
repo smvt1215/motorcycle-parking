@@ -36,7 +36,7 @@ type Sent = { url: string; body: URLSearchParams };
 function fake(
   options: {
     caller?: Caller | null;
-    status?: string;
+    allowed?: boolean;
     config?: AppleConfig | null;
     apple?: Response;
     statusFails?: boolean;
@@ -46,10 +46,10 @@ function fake(
   const deps: Deps = {
     caller: () =>
       Promise.resolve(options.caller === undefined ? rider : options.caller),
-    deletionStatus: () =>
+    canSelfDelete: () =>
       options.statusFails
         ? Promise.reject(new Error('db'))
-        : Promise.resolve(options.status ?? 'pending'),
+        : Promise.resolve(options.allowed ?? true),
     config: options.config === undefined ? config : options.config,
     clientSecret: () => Promise.resolve('signed'),
     fetch: (url, init) => {
@@ -75,7 +75,7 @@ async function call(deps: Deps, req: Request) {
   return { status: res.status, body: await res.json() };
 }
 
-Deno.test('revokes the Apple token of a rider with a pending deletion', async () => {
+Deno.test('revokes the Apple token of a rider about to request deletion', async () => {
   const { deps, sent } = fake();
   equal(
     await call(deps, post({ token: 'apple-refresh' })),
@@ -119,10 +119,10 @@ Deno.test('the same conditions as the deletion request', async () => {
       'account.not_apple_sign_in',
     ],
     [
-      { status: 'none' },
+      { allowed: false },
       post({ token: 't' }),
-      409,
-      'account.deletion_not_requested',
+      403,
+      'account.admin_cannot_self_delete',
     ],
     [{ statusFails: true }, post({ token: 't' }), 503, 'server.unavailable'],
     [{ config: null }, post({ token: 't' }), 503, 'apple.not_configured'],

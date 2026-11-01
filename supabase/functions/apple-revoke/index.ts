@@ -33,7 +33,7 @@ Deno.serve((req) => {
         signedInAt: latestSignIn(claims.claims.amr),
       };
     },
-    async deletionStatus(token) {
+    async canSelfDelete(token) {
       const asCaller = createClient(url, anon, {
         auth: { persistSession: false, autoRefreshToken: false },
         global: { headers: { Authorization: `Bearer ${token}` } },
@@ -42,7 +42,8 @@ Deno.serve((req) => {
         'account_deletion_status',
       );
       if (error) throw error;
-      return String((data as { status?: unknown } | null)?.status ?? '');
+      return (data as { can_self_delete?: unknown } | null)?.can_self_delete ===
+        true;
     },
     config: appleConfig((name) => Deno.env.get(name)),
     clientSecret: signClientSecret,
