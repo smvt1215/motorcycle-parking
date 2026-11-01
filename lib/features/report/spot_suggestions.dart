@@ -776,6 +776,8 @@ class _SuggestionFormState extends State<_SuggestionForm> {
     current: {
       'fee': ?widget.spot.fee?.toJson(),
       'condition': ?widget.spot.condition?.toJson(),
+      'scooter_allowed': ?widget.spot.scooterAllowed,
+      'heavy_allowed': ?widget.spot.heavyAllowed,
     },
   );
 

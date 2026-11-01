@@ -26,7 +26,9 @@ export async function currentSpot(
   if (!uuidPattern.test(id)) return;
   const { data } = await admin
     .from(official ? 'official_heavy_spots' : 'community_spots')
-    .select('fee,condition,parking_zones,parking_segments')
+    .select(
+      'fee,condition,parking_zones,parking_segments,scooter_allowed,heavy_allowed',
+    )
     .eq('id', id)
     .maybeSingle();
   return data ?? undefined;

@@ -811,24 +811,37 @@ begin
 end;
 $$;
 
+-- The ids of the plans in p whose fee upgrades to nothing (a plan of
+-- posted rates only): they go, with every reference to them.
+create function public.fee_plans_emptied(p jsonb) returns text[]
+language sql immutable set search_path='' as $$
+  select coalesce(array(select e->>'id' from jsonb_array_elements(
+      case when jsonb_typeof(p)='array' then p else '[]'::jsonb end) e
+    where jsonb_typeof(e)='object' and public.fee_upgrade(e->'fee')='{}'::jsonb),'{}');
+$$;
+
 -- Each entry of a zone or segment list with its fee upgraded and its area
--- dropped; null when p is null.
-create function public.entries_upgrade(p jsonb) returns jsonb
+-- dropped; a reference to a plan of p_emptied goes (the entry keeps its
+-- upgraded copy of the fee); null when p is null.
+create function public.entries_upgrade(p jsonb,p_emptied text[] default '{}') returns jsonb
 language sql immutable set search_path='' as $$
   select case when jsonb_typeof(p)='array' then coalesce((select jsonb_agg(
       case when jsonb_typeof(z)<>'object' then z
-        when z ? 'fee' then jsonb_set(z-'area','{fee}',coalesce(public.fee_upgrade(z->'fee'),'{}'::jsonb))
-        else z-'area' end order by n)
+        else (case when z ? 'fee' then jsonb_set(z-'area','{fee}',coalesce(public.fee_upgrade(z->'fee'),'{}'::jsonb))
+            else z-'area' end)
+          -case when (z->>'fee_plan')=any(p_emptied) then 'fee_plan' else '' end end order by n)
       from jsonb_array_elements(p) with ordinality x(z,n)),'[]'::jsonb)
     else p end;
 $$;
 
--- A spot's fee plans with every plan's fee upgraded; null stays null.
+-- A spot's fee plans with every plan's fee upgraded, those left empty
+-- dropped; null when none is left or p is null.
 create function public.fee_plans_upgrade(p jsonb) returns jsonb
 language sql immutable set search_path='' as $$
-  select case when jsonb_typeof(p)='array' then coalesce((select jsonb_agg(
-      case when jsonb_typeof(e)='object' then jsonb_set(e,'{fee}',coalesce(public.fee_upgrade(e->'fee'),'{}'::jsonb)) else e end
-      order by n) from jsonb_array_elements(p) with ordinality x(e,n)),'[]'::jsonb)
+  select case when jsonb_typeof(p)='array' then (select jsonb_agg(
+      case when jsonb_typeof(e)='object' then jsonb_set(e,'{fee}',public.fee_upgrade(e->'fee')) else e end
+      order by n) from jsonb_array_elements(p) with ordinality x(e,n)
+      where not (jsonb_typeof(e)='object' and public.fee_upgrade(e->'fee')='{}'::jsonb))
     else p end;
 $$;
 
@@ -849,24 +862,33 @@ $$;
 
 -- Plain updates: updated_at, the data version and the history stay; the
 -- fee plans stay copies of each other because every fee is upgraded alike.
+-- A note that was the old sentence of its fee is rewritten in the same
+-- update, so the fee_note check (a long note is its fee's sentence) holds
+-- row by row. A plan left empty goes with its references.
 alter table public.community_spots disable trigger user;
 alter table public.official_heavy_spots disable trigger user;
-update public.community_spots set
-    fee=public.fee_upgrade(fee),fee_plans=public.fee_plans_upgrade(fee_plans),
-    parking_zones=public.entries_upgrade(parking_zones),parking_segments=public.entries_upgrade(parking_segments)
-  where fee is distinct from public.fee_upgrade(fee) or fee_plans is distinct from public.fee_plans_upgrade(fee_plans)
-    or parking_zones is distinct from public.entries_upgrade(parking_zones)
-    or parking_segments is distinct from public.entries_upgrade(parking_segments);
-update public.official_heavy_spots set
-    fee=public.fee_upgrade(fee),fee_plans=public.fee_plans_upgrade(fee_plans),
-    parking_zones=public.entries_upgrade(parking_zones),parking_segments=public.entries_upgrade(parking_segments)
-  where fee is distinct from public.fee_upgrade(fee) or fee_plans is distinct from public.fee_plans_upgrade(fee_plans)
-    or parking_zones is distinct from public.entries_upgrade(parking_zones)
-    or parking_segments is distinct from public.entries_upgrade(parking_segments);
-update public.community_spots c set fee_note=public.fee_note_of(c.fee)
-  from t188_generated_notes g where g.t='community' and g.id=c.id and c.fee_note is distinct from public.fee_note_of(c.fee);
-update public.official_heavy_spots o set fee_note=public.fee_note_of(o.fee)
-  from t188_generated_notes g where g.t='official' and g.id=o.id and o.fee_note is distinct from public.fee_note_of(o.fee);
+update public.community_spots c set
+    fee=public.fee_upgrade(c.fee),
+    fee_note=case when exists(select 1 from t188_generated_notes g where g.t='community' and g.id=c.id)
+      then public.fee_note_of(public.fee_upgrade(c.fee)) else c.fee_note end,
+    fee_plans=public.fee_plans_upgrade(c.fee_plans),
+    fee_plan=case when c.fee_plan=any(public.fee_plans_emptied(c.fee_plans)) then null else c.fee_plan end,
+    parking_zones=public.entries_upgrade(c.parking_zones,public.fee_plans_emptied(c.fee_plans)),
+    parking_segments=public.entries_upgrade(c.parking_segments,public.fee_plans_emptied(c.fee_plans))
+  where c.fee is distinct from public.fee_upgrade(c.fee) or c.fee_plans is distinct from public.fee_plans_upgrade(c.fee_plans)
+    or c.parking_zones is distinct from public.entries_upgrade(c.parking_zones)
+    or c.parking_segments is distinct from public.entries_upgrade(c.parking_segments);
+update public.official_heavy_spots o set
+    fee=public.fee_upgrade(o.fee),
+    fee_note=case when exists(select 1 from t188_generated_notes g where g.t='official' and g.id=o.id)
+      then public.fee_note_of(public.fee_upgrade(o.fee)) else o.fee_note end,
+    fee_plans=public.fee_plans_upgrade(o.fee_plans),
+    fee_plan=case when o.fee_plan=any(public.fee_plans_emptied(o.fee_plans)) then null else o.fee_plan end,
+    parking_zones=public.entries_upgrade(o.parking_zones,public.fee_plans_emptied(o.fee_plans)),
+    parking_segments=public.entries_upgrade(o.parking_segments,public.fee_plans_emptied(o.fee_plans))
+  where o.fee is distinct from public.fee_upgrade(o.fee) or o.fee_plans is distinct from public.fee_plans_upgrade(o.fee_plans)
+    or o.parking_zones is distinct from public.entries_upgrade(o.parking_zones)
+    or o.parking_segments is distinct from public.entries_upgrade(o.parking_segments);
 alter table public.community_spots enable trigger user;
 alter table public.official_heavy_spots enable trigger user;
 drop table t188_generated_notes;
@@ -1207,7 +1229,8 @@ revoke execute on function public.condition_write_complete(p_condition jsonb) fr
 revoke execute on function public.valid_segment_fee_plans(p_plans jsonb, p_segments jsonb) from public, anon, authenticated;
 revoke execute on function public.fee_rate_upgrade(p jsonb) from public, anon, authenticated;
 revoke execute on function public.fee_upgrade(p_fee jsonb) from public, anon, authenticated;
-revoke execute on function public.entries_upgrade(p jsonb) from public, anon, authenticated;
+revoke execute on function public.entries_upgrade(p jsonb, p_emptied text[]) from public, anon, authenticated;
+revoke execute on function public.fee_plans_emptied(p jsonb) from public, anon, authenticated;
 revoke execute on function public.fee_plans_upgrade(p jsonb) from public, anon, authenticated;
 revoke execute on function public.drop_zone_area() from public, anon, authenticated;
 revoke execute on function public.segment_fee_plans_sync(p_segments jsonb, p_plans jsonb, p_old_segments jsonb, p_same_plans boolean) from public, anon, authenticated;
