@@ -28,6 +28,8 @@ import urllib.request
 import uuid
 import xml.etree.ElementTree as ET
 
+from mymaps_facts import COMMUNITY, LICENSE, OFFICIAL_LICENSE, OPEN_DATA, facts, fee_terms
+
 KML_URL = "https://www.google.com/maps/d/kml?mid={mid}&forcekml=1"
 VIEWER_URL = "https://www.google.com/maps/d/viewer?mid={mid}"
 NLSC_URL = "https://api.nlsc.gov.tw/other/TownVillagePointQuery/{lng}/{lat}/4326"
@@ -81,12 +83,9 @@ BOILERPLATE = re.compile(r"停管處|以下簡稱|試辦期程|^停放於(汽車
 
 # My Maps icon ids used by the source map: which bay a placemark describes.
 ZONE_BY_ICON = {"1538": ("汽車區", "heavyCar"), "1632": ("機車區", "scooterHeavy"), "1633": ("重機專用格", "heavyOnly")}
-# Icon colors are the source's legend: unverified, entry caveats, special handling.
-COLOR_NOTES = {
-    "757575": "來源標示為未確認資訊",
-    "E65100": "來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）",
-    "0288D1": "來源標示為特殊收費或管理方式",
-}
+# The source's grey icon marks what it has not confirmed. Its other colours were
+# turned into vague notes before #275; they say nothing a rider can check, so they go.
+UNCONFIRMED_COLOR = "757575"
 # Layer → fee basis wording; layers absent here are not parking points.
 FEE_BASIS = {
     "汽車費率": "大型重機比照汽車費率",
@@ -100,9 +99,6 @@ FEE_BASIS = {
 }
 CREDIT = re.compile(r"(感謝|謝謝).*|.*(@ptt|@PTT).*|.*熱心回報.*|.*網友.*(回報|分享).*")
 URL = re.compile(r"https?://\S+")
-ENTRY = re.compile(r"入場|出場|進場|離場|辨識|辨析|按鈴|按鈕|取票|柵欄|閘門|車道|入口|出入口|倒退嚕|管理員")
-# Where to put the bike once inside: floors, areas, bay types, how to fit the bays.
-GUIDE = re.compile(r"停(放|在|於)|專用格|重機格|重機區|機車區|汽車區|汽車格|機車格|[BbＢ]\d|\d\s*[FＦ樓]|斜停|跨.?格|格線")
 # A retail brand only the official name carries means another business's lot.
 RETAIL = re.compile(r"(?i)全聯|家樂福|家福|好市多|costco|大潤發|愛買|ikea|宜家|麥當勞|新光三越|遠東百貨|sogo|微風")
 RETAIL_ALIAS = {"家福": "家樂福", "costco": "好市多", "宜家": "ikea"}
@@ -163,26 +159,37 @@ def clean_text(value):
 
 
 def parse_fee(text):
-    """`(平50/h|假60/h)` → 平日每小時 50 元；假日每小時 60 元."""
+    """`(平50/h|假60/h)` → 平日每小時 50 元；假日每小時 60 元.
+
+    A note riding on the fee (需按鈴, 後牌, B2限悠遊卡) is the source's own words:
+    only the fixed phrases mymaps_facts finds in it are kept (#275)."""
     if not re.search(r"\d|(?i:free)", text or ""):
         return "請依現場公告"
     prefixes = {"平": "平日", "假": "假日", "黃": "黃牌", "紅": "紅牌", "假日限定": "限假日", "日": "日間", "夜": "夜間",
                 "機": "機車區", "汽": "汽車區", "展期": "展期", "無展": "無展期"}
+    labels = {*prefixes.values(), "室內", "室外", "機車", "汽車", "重機", "全日"}
     parts = []
-    text = re.sub(r"(\d)\s*\|\s*d\b", r"\1/d", text.strip()).replace("管理員", "需管理員協助").replace("按鈴", "需按鈴")
+
+    def add(*items):
+        parts.extend(item for item in items if item and item not in parts)
+
+    text = re.sub(r"(\d)\s*\|\s*d\b", r"\1/d", text.strip())
     for raw in re.split(r"\s*[|｜;；]\s*|\s+-\s+|(?<=\d):(?=\D)", text):
         # A short label (平, 黃, 室內, 機車…) may precede the amount; known abbreviations are expanded.
         match = re.fullmatch(r"([^\d:：/]{0,4}?)\s*[:：]?\s*(\d+)\s*/?\s*(\d*)\s*([hHdD]|次|隔夜|半天|月)?(.*)", raw)
         # A number counts as a price only with a unit, or alone after a known prefix (平40);
-        # otherwise digits are part of a note (B2限悠遊卡, 後牌停5/F) and the text stays as written.
+        # otherwise digits are part of a note (B2限悠遊卡, 後牌停5/F).
         priced = match and (match[4] or (not match[5].strip(" :") and match[1].strip() in ("", *prefixes)))
         if priced:
             hours = f"每 {match[3]} 小時" if match[3] else "每小時"
             unit = {"h": hours, "d": "每日", "隔夜": "隔夜", "半天": "每半天", "月": "每月"}.get((match[4] or "").lower(), "每次")
-            label = match[1].strip()
-            parts.append(f"{prefixes.get(label, label)}{unit} {match[2]} 元{match[5].strip(' :')}")
+            label = prefixes.get(match[1].strip(), match[1].strip())
+            add(f"{label if label in labels else ''}{unit} {match[2]} 元", *fee_terms(match[5]))
         elif raw:
-            parts.append(re.sub(r"(?i)free", "免費", re.sub(r"(?i)free\s*/\s*(\d+)h", r"免費 \1 小時", raw)))
+            free = re.fullmatch(r"(?i)(.*?)free\s*(?:/\s*(\d+)\s*h)?(.*)", raw)
+            if free:
+                add(f"免費 {free[2]} 小時" if free[2] else "免費")
+            add(*fee_terms(raw))
     return "；".join(parts) or "請依現場公告"
 
 
@@ -194,7 +201,7 @@ def entry_direction(name):
     match = re.match(r"\s*([⇦⇨]+)\s*(.*)", name)
     if not match:
         return name, ""
-    return match[2], f"來源標示：{ARROWS.get(match[1], match[1])}（{match[1]}）"
+    return match[2], f"入口方向：{ARROWS.get(match[1], match[1])}"
 
 
 def split_name(name):
@@ -250,29 +257,30 @@ def normalize(mark):
         "scooter_total": None, "available": None, "note": "", "address": "", "road_segment": "",
         "entrance_note": "", "parking_guide": "", "special_rules": "", "parking_zones": [],
     }
-    entries = [line for line in lines if ENTRY.search(line)]
-    # Long lines are policy paragraphs, not on-site directions.
-    guides = [line for line in lines if line not in entries and GUIDE.search(line) and len(line) <= 60]
-    others = [line for line in lines if line not in entries + guides]
-    spot["parking_guide"] = "\n".join(guides)
+    # Descriptions are the source's own writing: only vocabulary facts are kept (#275).
+    found = facts(lines)
+    spot["parking_guide"] = "\n".join(found["parking_guide"])
+    spot["note"] = "\n".join(found["note"])
+    spot["entrance_note"] = "\n".join(filter(None, [direction, *found["entrance_note"]]))
     if layer == "路邊友善車格":
         spot["facility_type"] = "roadside"
         if mark["line"]:
             spot.update(space_type="paidMotorcycle", parking_access="scooterHeavy", scooter_allowed=True,
                         road_segment=name, name=f"{re.split(r'[(（]', name)[0]} 普大共用機車格")
         elif color == "9C27B0":
-            spot.update(space_type="car", scooter_allowed=True, special_rules=fee_text.replace("Free - ", "限時開放：").replace("Free", "免費"))
+            # `Free - 平日夜間20-7 / 假日限定`: the window after the fee is when the car bays are shared.
+            window = re.split(r"\s+-\s+", fee_text, maxsplit=1)
+            spot.update(space_type="car", scooter_allowed=True, special_rules=f"限時開放：{window[1]}" if len(window) == 2 else "")
             spot["fee_note"] = "免費"
         elif "重機專用" in name:
             spot.update(space_type="heavyOnly", parking_access="heavyOnly", scooter_allowed=False)
         else:
             spot.update(space_type="paidMotorcycle", parking_access="scooterHeavy", scooter_allowed=True)
-            road = re.match(r"(?:\S+區)?\s*(\S+?)（(.側)），停車格在(.+?)[。，]", "".join(others))
+            road = re.match(r"(?:\S+區)?\s*(\S+?)（(.側)），停車格在(.+?)[。，]", "".join(lines))
             if road:
                 spot.update(name=f"{road[1]} 普大共用機車格", road_segment=f"{road[1]}（{road[2]}）{road[3]}")
             elif name != "普通大型共用機車格" and re.search(r"[路街巷段]", name):
                 spot.update(road_segment=name, name=f"{re.split(r'[(（]', name)[0]} 普大共用機車格")
-        spot["note"] = "\n".join(entries + others)
     else:
         spot.update(space_type="offStreet", facility_type=facility_type(name))
         if layer == "禁停重機" or icon == "1898":
@@ -285,14 +293,8 @@ def normalize(mark):
             spot["parking_zones"] = [{"name": zone, **({"access": access} if access else {}), "fee_note": spot["fee_note"]}]
             if FEE_BASIS[layer]:
                 spot["fee_note"] = f"{spot['fee_note']}（{FEE_BASIS[layer]}）"
-        spot["entrance_note"] = "\n".join(filter(None, [direction, *entries]))
-        spot["note"] = "\n".join(others)
     # The source's own grey icons and 未確定 layer mark facts it has not confirmed.
-    spot["unconfirmed"] = color == "757575" or layer == "未確定"
-    caveat = COLOR_NOTES.get(color)
-    if caveat:
-        key = "entrance_note" if color == "E65100" else "note"
-        spot[key] = "\n".join(filter(None, [caveat, spot[key]]))
+    spot["unconfirmed"] = color == UNCONFIRMED_COLOR or layer == "未確定"
     return spot
 
 
@@ -617,9 +619,8 @@ def apply_official(spot, lot, meters, score, source_name):
     """Official lot fields replace community guesses; returns the change log."""
     changes = []
     if spot["name"] != lot["name"]:
+        # The pin's own name stays in the review report only; the official name identifies the lot (#275).
         changes.append(f"名稱：{spot['name']} → {lot['name']}")
-        if spot["name"] not in lot["name"]:
-            spot["note"] = "\n".join(filter(None, [f"來源原名稱：{spot['name']}", spot["note"]]))
         spot["name"] = lot["name"]
     if lot["address"]:
         spot["address"] = full_address(spot["city"], spot["district"], lot["address"])
@@ -798,7 +799,7 @@ def build(kml, mid, cache, imported_on, refresh=False, tdx_env=None):
         spot["id"] = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{VIEWER_URL.format(mid=mid)}|{mark['layer']}|{mark['name']}|{mark['points'][0]}"))
         spot.update(
             source_name="Alan大重停車記事（Google 我的地圖）", source_url=VIEWER_URL.format(mid=mid),
-            license_note="社群地圖整理之事實資訊，經官方資料比對；請以現場公告為準",
+            license_note=LICENSE,
             updated_at=f"{imported_on}T00:00:00Z", last_confirmed_at=None,
         )
         entry = {"id": spot["id"], "name": spot["name"], "city": city, "district": district, **entry}
@@ -829,8 +830,7 @@ def build(kml, mid, cache, imported_on, refresh=False, tdx_env=None):
         elif spot["unconfirmed"]:
             entry["result"] = "不錄入：來源標示未確認且未通過官方核驗"
         else:
-            community.append(spot | {"source_name": COMMUNITY_SOURCE,
-                                     "license_note": "整理自 Alan大重停車記事（Google 我的地圖）；未通過官方核驗，請以現場公告為準"})
+            community.append(spot | {"source_name": COMMUNITY_SOURCE, "license_note": LICENSE})
             entry["result"] = "社群點（待確認）"
     used = {spot["lot"]["id"] for spot in spots if spot.get("lot")}
     for lot, pilot in official_additions(lots, used, official):
@@ -879,8 +879,12 @@ def official_spot(lot, spot, pilot, lots, imported_on):
         claim = {True: "大型重機可停", False: "大型重機禁停", None: ""}[spot["heavy_allowed"]]
         areas = "、".join(f"{z['name']}（{z['fee_note']}）" if z.get("fee_note") else z["name"] for z in spot["parking_zones"]
                          if z["name"] != "機車區" or not pilot)
-        community = "；".join(filter(None, [claim, areas and f"停放區域：{areas}"]))
-        notes += [f"社群補充（未經官方查核）：{community}" if community else "", spot["note"]]
+        lines = spot["note"].splitlines()
+        matched = [line for line in lines if line.startswith("已比對")]
+        # The community's facts (vocabulary phrases) join its claims on one labelled line.
+        community = "；".join(filter(None, [claim, areas and f"停放區域：{areas}",
+                                            *(line for line in lines if line not in matched)]))
+        notes += [f"{COMMUNITY}{community}" if community else "", *matched]
     fee = re.sub(r"\s+", " ", lot["fee"]).strip()
     official = {
         "id": "official:" + str(uuid.uuid5(uuid.NAMESPACE_URL, f"{lot['url']}|{lot['id']}")),
@@ -896,12 +900,12 @@ def official_spot(lot, spot, pilot, lots, imported_on):
         "entrance_note": (spot or {}).get("entrance_note", ""), "parking_guide": (spot or {}).get("parking_guide", ""),
         "special_rules": PILOT_RULES if pilot else "", "parking_zones": zones,
         "source_name": government(city), "source_url": lot["url"],
-        "license_note": "政府資料開放授權條款第 1 版" + ("；社群補充整理自 Alan大重停車記事（Google 我的地圖）" if spot else ""),
+        "license_note": OFFICIAL_LICENSE if spot else OPEN_DATA,
         "source_id": lot["id"],
     }
     for key in ("entrance_note", "parking_guide"):
         if official[key]:
-            official[key] = "社群補充（未經官方查核）：\n" + official[key]
+            official[key] = f"{COMMUNITY}\n" + official[key]
     clip(official)
     official["address"] = official["address"][:200]
     return official
