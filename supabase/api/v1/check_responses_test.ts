@@ -9,6 +9,17 @@ const served = {
   availability_beta_cities: ['臺北市'],
 };
 
+/** The real api_v1.json with only client_config, which `served` answers. */
+async function clientConfigOnly() {
+  const api = JSON.parse(
+    await Deno.readTextFile(new URL('api_v1.json', import.meta.url)),
+  );
+  api.paths = { '/rpc/client_config': api.paths['/rpc/client_config'] };
+  return api;
+}
+const clientConfigLoad = async (schema: string): Promise<Document> =>
+  schema === 'api_v1' ? await clientConfigOnly() : { paths: {} };
+
 function answering(status: number, body: unknown) {
   const seen: { url: string; profile: string | null; body: string }[] = [];
   const fetcher = (input: string | URL | Request, init?: RequestInit) => {
@@ -29,7 +40,10 @@ function answering(status: number, body: unknown) {
 
 Deno.test('a documented answer passes and each function is called in its schema', async () => {
   const { fetcher, seen } = answering(200, served);
-  assertEquals(await check('http://127.0.0.1:54321/', 'anon', fetcher), []);
+  assertEquals(
+    await check('http://127.0.0.1:54321/', 'anon', fetcher, clientConfigLoad),
+    [],
+  );
   assertEquals(seen[0], {
     url: 'http://127.0.0.1:54321/rest/v1/rpc/client_config',
     profile: 'api_v1',
@@ -49,6 +63,7 @@ Deno.test('an answer that drifted from the document fails', async () => {
       'http://x',
       'anon',
       answering(200, body).fetcher,
+      clientConfigLoad,
     );
     assertEquals(problems.length, 1);
     assertStringIncludes(problems[0], 'api_v1 /rpc/client_config: data');
@@ -61,6 +76,7 @@ Deno.test('a public function refusing anon fails with the answer', async () => {
     'anon',
     answering(406, { code: 'PGRST106', message: 'Invalid schema: api_v1' })
       .fetcher,
+    clientConfigLoad,
   );
   assertEquals(problems.length, 1);
   assertStringIncludes(problems[0], 'anon should be allowed, got 406');
@@ -71,6 +87,7 @@ Deno.test('a body that is not JSON fails', async () => {
     'http://x',
     'anon',
     answering(502, '<html>Bad Gateway</html>').fetcher,
+    clientConfigLoad,
   );
   assertStringIncludes(problems[0], '502 is not JSON: <html>');
 });
@@ -140,9 +157,7 @@ Deno.test('an admin function must refuse anon with a documented error', async ()
 });
 
 Deno.test('a function with parameters needs an example to be called', async () => {
-  const api = JSON.parse(
-    await Deno.readTextFile(new URL('api_v1.json', import.meta.url)),
-  );
+  const api = await clientConfigOnly();
   api.paths['/rpc/client_config'].post.requestBody = {
     content: { 'application/json': { schema: { type: 'object' } } },
   };
@@ -158,9 +173,7 @@ Deno.test('a function with parameters needs an example to be called', async () =
 });
 
 Deno.test('a function with parameters is called with its example', async () => {
-  const api = JSON.parse(
-    await Deno.readTextFile(new URL('api_v1.json', import.meta.url)),
-  );
+  const api = await clientConfigOnly();
   api.paths['/rpc/client_config'].post.requestBody = {
     content: {
       'application/json': {
@@ -180,9 +193,7 @@ Deno.test('a function with parameters is called with its example', async () => {
 });
 
 Deno.test('a document that cannot be checked fails instead of passing', async () => {
-  const api = JSON.parse(
-    await Deno.readTextFile(new URL('api_v1.json', import.meta.url)),
-  );
+  const api = await clientConfigOnly();
   const load = (schema: string): Promise<Document> =>
     Promise.resolve(schema === 'api_v1' ? api : { paths: {} });
   const config = api.components.schemas.ClientConfig.properties;

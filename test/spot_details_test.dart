@@ -116,11 +116,23 @@ void usePhone(WidgetTester tester, {double width = 390}) {
 
 /// The summary row's rate as it reads, its icon dropped.
 String feeNowMain(WidgetTester tester) => tester
-    .widget<Text>(find.byKey(const ValueKey('fee-now-main')))
+    .widget<Text>(
+      find.byKey(const ValueKey('fee-now-main'), skipOffstage: false),
+    )
     .textSpan!
     .toPlainText()
     .replaceAll('\uFFFC', '')
     .trim();
+
+/// Scrolls the details until the widget keyed [key] is on screen.
+Future<void> showKey(WidgetTester tester, String key) async {
+  await tester.scrollUntilVisible(
+    find.byKey(ValueKey(key)),
+    160,
+    scrollable: detailScroll,
+  );
+  await tester.pumpAndSettle();
+}
 
 Future<void> showField(WidgetTester tester, String text) async {
   await tester.scrollUntilVisible(
@@ -137,9 +149,11 @@ Future<void> showField(WidgetTester tester, String text) async {
 String decisionText(WidgetTester tester) {
   final texts = tester
       .widgetList<Text>(
+        // The banner sits under the preview; it may be scrolled past.
         find.descendant(
-          of: find.byKey(const ValueKey('spot-decision')),
-          matching: find.byType(Text),
+          of: find.byKey(const ValueKey('spot-decision'), skipOffstage: false),
+          matching: find.byType(Text, skipOffstage: false),
+          skipOffstage: false,
         ),
       )
       .map((text) => text.data)
@@ -393,9 +407,10 @@ void main() {
         brightness: Brightness.dark,
       );
       expect(find.text('測試地下停車場'), findsOneWidget);
-      expect(find.text('地下停車場 · 臺北市內湖區'), findsOneWidget);
-      expect(find.text('無即時資料'), findsOneWidget);
-      expect(find.text('共 20 格（靜態資料）'), findsOneWidget);
+      expect(find.text('地下停車場　臺北市內湖區'), findsOneWidget);
+      // Once in the four signs' 有沒有位 plate, once in the summary.
+      expect(find.text('空位未知', skipOffstage: false), findsNWidgets(2));
+      await showField(tester, '共 20 格（靜態資料）');
       for (final field in [
         '停車資訊',
         '類型',
@@ -416,7 +431,7 @@ void main() {
       }
       expect(find.text('查核狀態'), findsNothing);
       expect(find.text('即時車位狀態'), findsNothing);
-      final navigate = find.text('導航到這裡');
+      final navigate = find.text('導航到入口');
       expect(navigate.hitTestable(), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
@@ -468,7 +483,7 @@ void main() {
         await showField(tester, '最近更新');
         expect(find.text('資料來源'), findsOneWidget);
         expect(find.text('查核狀態'), findsNothing);
-        expect(find.text('導航到這裡').hitTestable(), findsOneWidget);
+        expect(find.text('導航到入口').hitTestable(), findsOneWidget);
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
       });
@@ -554,12 +569,13 @@ void main() {
         scale: scale,
         brightness: brightness,
       );
+      await showKey(tester, 'spot-decision');
       expect(decisionText(tester), '普通機車 · 車友回報可停');
       expect(find.text('回報於 2026-03-01'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await store.setVehicle(VehicleType.heavy);
       await tester.pumpAndSettle();
-      expect(decisionText(tester), '大型重機 · 曾確認不可停');
+      expect(decisionText(tester), '大型重機 · 曾確認不能停');
       // An administrator's lapsed check, not a rider's report: the question
       // mark stays, never the people icon.
       expect(
@@ -663,12 +679,12 @@ void main() {
     expect(decisionText(tester), '普通機車 · 可停');
     await store.setVehicle(VehicleType.heavy);
     await tester.pumpAndSettle();
-    expect(decisionText(tester), '大型重機 · 不可停');
+    expect(decisionText(tester), '大型重機 · 不能停');
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('詳情名稱保留完整寬度，收藏分享移到副標操作列', (tester) async {
+  testWidgets('預覽標題列：名稱不截斷，收藏、分享和關閉並排（使用者決定 2026-10-31）', (tester) async {
     usePhone(tester);
     final store = (await tester.runAsync(createStore))!;
     addTearDown(store.dispose);
@@ -679,18 +695,14 @@ void main() {
     await openDetails(tester, store, facility());
     final title = tester.getRect(find.text('測試地下停車場'));
     expect(title.height, lessThan(40));
-    expect(title.width, greaterThan(240));
-    expect(
-      tester.getCenter(find.byTooltip('關閉詳情')).dy,
-      closeTo(title.center.dy, 24),
-    );
+    final close = tester.getCenter(find.byTooltip('關閉詳情'));
+    expect(close.dy, closeTo(title.center.dy, 24));
     for (final tooltip in ['收藏停車點', '分享停車點']) {
-      expect(
-        tester.getCenter(find.byTooltip(tooltip)).dy,
-        greaterThan(title.bottom),
-      );
+      final icon = tester.getCenter(find.byTooltip(tooltip));
+      expect(icon.dy, close.dy);
+      expect(icon.dx, greaterThan(title.right));
     }
-    expect(find.text('地下停車場 · 臺北市內湖區 · 330 公尺'), findsOneWidget);
+    expect(find.text('地下停車場　臺北市內湖區　330 m'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -699,16 +711,25 @@ void main() {
     final store = (await tester.runAsync(createStore))!;
     addTearDown(store.dispose);
     await openDetails(tester, store, roadside);
-    final action = tester.getRect(find.text('導航到這裡'));
+    final action = tester.getRect(find.text('導航'));
     await showField(tester, '位置與指引');
     expect(find.textContaining('尚未提供：停車指引'), findsNothing);
     expect(find.text('停車指引'), findsNothing);
     expect(find.text('特殊規則'), findsNothing);
     await showField(tester, '資料與查核');
-    expect(tester.getRect(find.text('導航到這裡')), action);
+    expect(tester.getRect(find.text('導航')), action);
     expect(find.text('修改建議').hitTestable(), findsOneWidget);
-    // Only 最近更新 says 未提供: this spot has no update time or history.
-    expect(find.text('未提供'), findsOneWidget);
+    // Only 最近更新 says 未提供 in the details (the fee plate above says it
+    // too): this spot has no update time or history.
+    expect(
+      find.descendant(
+        of: find
+            .ancestor(of: find.text('最近更新'), matching: find.byType(Row))
+            .first,
+        matching: find.text('未提供'),
+      ),
+      findsOneWidget,
+    );
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -741,12 +762,12 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.text(roadside.name).hitTestable(), findsOneWidget);
     await tester.scrollUntilVisible(
-      find.text('導航到這裡'),
+      find.text('導航'),
       80,
       scrollable: detailScroll,
     );
     await tester.pumpAndSettle();
-    expect(find.text('導航到這裡').hitTestable(), findsOneWidget);
+    expect(find.text('導航').hitTestable(), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -796,7 +817,7 @@ void main() {
         ],
       });
       await openDetails(tester, store, spot);
-      expect(find.text('機車費率'), findsOneWidget);
+      await showField(tester, '機車費率');
       expect(find.text('依分區計費'), findsNothing);
       expect(feeNowMain(tester), '每次 20 元');
       await showField(tester, '全場');
@@ -853,6 +874,7 @@ void main() {
         ],
       });
       await openDetails(tester, store, spot);
+      await showKey(tester, 'fee-now-main');
       expect(feeNowMain(tester), '免費');
       expect(find.text('依分區計費'), findsNothing);
       await showField(tester, '位置與指引');
@@ -1034,7 +1056,7 @@ void main() {
       expect(decisionText(tester), '大型重機 · 開放資訊待確認');
       expect(find.text('場站開放大型重機，但已知分區沒有標示可停區域，請依入口公告'), findsOneWidget);
       expect(find.text('依政府公開資料，更新於 2026-10-12'), findsOneWidget);
-      expect(find.text('B1 機車區・不可停'), findsOneWidget);
+      expect(find.text('B1 機車區・不能停'), findsOneWidget);
       expect(find.text('B2・待確認：此分區的開放資訊未確認'), findsOneWidget);
     });
 
@@ -1100,7 +1122,7 @@ void main() {
       );
       expect(decisionText(tester), '大型重機 · 開放資訊待確認');
       expect(find.text('場站與分區資料不一致，請依入口公告'), findsOneWidget);
-      expect(find.text('B1 機車區・不可停'), findsOneWidget);
+      expect(find.text('B1 機車區・不能停'), findsOneWidget);
     });
 
     testWidgets('試辦尚未生效：寫出生效日，不寫成「試辦至」', (tester) async {
