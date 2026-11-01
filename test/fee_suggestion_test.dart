@@ -18,17 +18,21 @@ void main() {
   test('a suggestion sends only what changes; a cleared vehicle is null', () {
     final edits = <FeeVehicle, Rate?>{
       FeeVehicle.scooter: current.scooter, // the same: no change
-      FeeVehicle.heavy: const Rate(FeeMode.perVisit, amount: 40),
+      FeeVehicle.heavy: const Rate(
+        FeeMode.perVisit,
+        amount: 40,
+        renew: Renew.midnight,
+      ),
       FeeVehicle.car: null,
     };
     expect(proposedFee(current, edits), {
-      'heavy': {'mode': 'per_visit', 'amount': 40},
+      'heavy': {'mode': 'per_visit', 'amount': 40, 'renew': 'midnight'},
       'car': null,
     });
     // Clearing what is not there is no change either.
     expect(proposedFee(const Fee(), {FeeVehicle.car: null}), isEmpty);
     expect(feeChangeLines(current, edits), [
-      '大型重機費率：每小時 20 元 → 每次 40 元',
+      '大型重機費率：每小時 20 元 → 每次 40 元，隔日另計',
       '汽車費率：每小時 40 元 → $unconfirmedFeeText',
     ]);
     expect(feeKeptLine(current, edits), '普通機車維持目前');
@@ -36,6 +40,13 @@ void main() {
     expect(incompleteEdits({FeeVehicle.heavy: const Rate(FeeMode.perVisit)}), [
       FeeVehicle.heavy,
     ]);
+    // A rule a new write answers is part of it (#188 layer 2).
+    expect(
+      incompleteEdits({
+        FeeVehicle.heavy: const Rate(FeeMode.perVisit, amount: 40),
+      }),
+      [FeeVehicle.heavy],
+    );
   });
 
   test('a 汽機共用 period keeps the weekdays it was stored with', () {
@@ -109,7 +120,12 @@ void main() {
       'bay': 'motorcycle',
       'use': 'usual',
       'limits': [
-        {'kind': 'time_limit', 'max_minutes': 30},
+        {
+          'kind': 'time_limit',
+          'periods': [
+            {'days': 'all', 'max_minutes': 30, 'extensions': 0},
+          ],
+        },
       ],
     });
     expect(draft.typeFor(SpaceKind.motorcycle), SpaceType.timedMotorcycle);
@@ -133,7 +149,12 @@ void main() {
       'share': 'scooter_heavy',
       'charge': 'free',
       'limits': [
-        {'kind': 'time_limit', 'max_minutes': 30},
+        {
+          'kind': 'time_limit',
+          'periods': [
+            {'days': 'all', 'max_minutes': 30, 'extensions': 0},
+          ],
+        },
       ],
     });
     expect(draft.typeFor(SpaceKind.scooterHeavy), SpaceType.timedMotorcycle);

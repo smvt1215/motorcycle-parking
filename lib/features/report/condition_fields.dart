@@ -90,6 +90,7 @@ class ConditionDraft {
         if (first?.extensions case final n?) extensions.text = '$n';
       }
     }
+    _loadedTimes = (maxMinutes.text, extensions.text);
     slots.addAll(c.schedule.map(SlotDraft.of));
     loaded = c;
   }
@@ -125,6 +126,10 @@ class ConditionDraft {
 
   /// 可以延長幾次 (#188 layer 2); 0 is 不能延長.
   final extensions = TextEditingController(text: '0');
+
+  /// The two fields as the stored time limit filled them: while they read
+  /// so, the stored limit is sent as it was, whatever its shape.
+  (String, String)? _loadedTimes;
   final slots = <SlotDraft>[];
 
   void dispose() {
@@ -158,17 +163,13 @@ class ConditionDraft {
     final minutes = int.tryParse(maxMinutes.text.trim());
     final times = int.tryParse(extensions.text.trim());
     // A time limit is sent with its period (#188 layer 2): all day, the
-    // minutes and the extensions asked here. A stored one whose first
-    // period the rider left as it was stays whole (its other periods too).
+    // minutes and the extensions asked here. A stored one the rider left as
+    // it was stays whole (its other periods too).
     final stored = same
         ? from.limits.where((l) => l.kind == LimitKind.timeLimit).firstOrNull
         : null;
-    final storedFirst = stored?.timePeriods.firstOrNull;
     final timeLimit =
-        stored != null &&
-            stored.periods.isNotEmpty &&
-            storedFirst?.maxMinutes == minutes &&
-            storedFirst?.extensions == times
+        stored != null && _loadedTimes == (maxMinutes.text, extensions.text)
         ? stored
         : minutes == null
         ? const ParkingLimit(LimitKind.timeLimit)
