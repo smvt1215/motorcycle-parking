@@ -285,6 +285,33 @@ class SegmentDecision {
   bool get openNow => window.now;
 }
 
+/// The condition [segment] of [spot] is judged by, as [decideParking]
+/// reads it (#188 layer 2, its `_segmentCondition`, private to
+/// parking_decision.dart, another session's file; keep the two in step):
+/// its own when it names a bay; one naming no bay takes the rest (the bay,
+/// its use and share, the limits it leaves out, its slots) from the
+/// spot's; none at all is the spot's.
+ParkingCondition? segmentConditionOf(ParkingSegment segment, ParkingSpot spot) {
+  final seg = segment.condition;
+  final whole = spot.condition ?? conditionOf(spot.spaceType);
+  if (seg == null) return whole;
+  if (seg.bay != null || whole == null) return seg;
+  return ParkingCondition(
+    bay: whole.bay,
+    use: whole.use,
+    share: whole.share,
+    charge: seg.charge ?? whole.charge,
+    limits: [
+      for (final l in whole.limits)
+        if (!seg.hasLimit(l.kind)) l,
+      ...seg.limits,
+    ]..sort((a, b) => a.kind.index.compareTo(b.kind.index)),
+    schedule: seg.schedule.isEmpty ? whole.schedule : seg.schedule,
+    basis: seg.basis ?? whole.basis,
+    allow: seg.allow,
+  );
+}
+
 /// [spot] with [segment] as its only segment. ParkingSpot has no copyWith
 /// (lib/models/parking.dart is another session's), so the fields
 /// [decideParking] reads are copied here. Left out on purpose, as no
