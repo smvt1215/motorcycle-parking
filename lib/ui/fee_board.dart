@@ -117,7 +117,6 @@ const feeUnconfirmed = '費率未確認';
 
 /// The board's last line when any line is unconfirmed (decision 54).
 const feeBoardPostedNote = '未確認的費率請依現場公告';
-const _timerIcon = Icons.timer_outlined;
 const _nightIcon = Icons.bedtime_outlined;
 const _extendIcon = Icons.add_circle_outline;
 
@@ -144,10 +143,12 @@ List<FeeVehicleBoard> feeBoardOf(
   // As the sentence: a heavy follow of an unknown rate still reads 未提供.
   final follows = fee.heavy?.mode.follows ?? false;
   if (known.isEmpty && !follows && first == null) return const [];
+  // A heavy bike without bays here (不適用, #188 layer 2) is left out.
+  final heavyApplies = fee.heavy?.mode != FeeMode.notApplicable;
   final shown = {
     ?first,
     for (final v in FeeVehicle.values)
-      if (known.contains(v) || v == FeeVehicle.heavy) v,
+      if (known.contains(v) || (v == FeeVehicle.heavy && heavyApplies)) v,
   };
   return [for (final v in shown) _vehicleBoard(fee, v)];
 }
@@ -158,6 +159,12 @@ FeeVehicleBoard _vehicleBoard(Fee fee, FeeVehicle vehicle) {
     FeeVehicle.heavy => fee.heavy,
     FeeVehicle.car => fee.car,
   };
+  if (rate?.mode == FeeMode.notApplicable) {
+    return FeeVehicleBoard(
+      vehicle,
+      headline: const FeeLine('不適用', tone: FeeTone.unconfirmed),
+    );
+  }
   if (fee.textOf(vehicle.wire) == null) {
     return FeeVehicleBoard(
       vehicle,
@@ -168,12 +175,11 @@ FeeVehicleBoard _vehicleBoard(Fee fee, FeeVehicle vehicle) {
       ),
     );
   }
-  var target = rate!, pct = 100;
+  var target = rate!;
   if (rate.mode.follows) {
     target = (rate.mode == FeeMode.sameAsScooter ? fee.scooter : fee.car)!;
-    pct = rate.factorPct ?? 100;
   }
-  final d = _describe(target, pct);
+  final d = _describe(target, 100);
   return FeeVehicleBoard(
     vehicle,
     headline: d.headline,
@@ -200,100 +206,27 @@ _Described _describe(Rate r, int pct) {
     case FeeMode.free:
       return _plain(const FeeLine('免費', tone: FeeTone.main));
     case FeeMode.hourly:
-      var base = '${FeeWords.every(r.perMinutes)} ${money(r.amount)} 元';
-      if (r.unitMinutes case final unit?) {
-        base += '（以 ${FeeWords.span(unit)}計）';
-      }
+      final base = '${FeeWords.every(r.perMinutes)} ${money(r.amount)} 元';
+      // An old cap without its reset says nothing of it (Un-1).
       final cap = <FeeLine>[
-        if (r.dailyCap case final cap?) ...[
+        if (r.dailyCap case final cap?)
           FeeLine(
             '當日上限 ${money(cap)} 元'
             '${r.capReset == null ? '' : '（${FeeWords.reset(r.capReset)}）'}',
           ),
-          if (r.capReset == null)
-            const FeeLine(
-              '上限計算方式未確認',
-              tone: FeeTone.unconfirmed,
-              icon: _unconfirmedIcon,
-            ),
-        ],
       ];
-      if (r.freeMinutes case final free?) {
-        return (
-          headline: null,
-          lines: [
-            FeeLine(
-              '首 ${FeeWords.span(free)} 0 元',
-              tone: FeeTone.main,
-              icon: _timerIcon,
-            ),
-            FeeLine('之後$base', tone: FeeTone.main),
-            ...cap,
-          ],
-          groups: const [],
-          footer: null,
-        );
-      }
       return _plain(FeeLine(base, tone: FeeTone.main), cap);
     case FeeMode.perVisit:
-      final ext = r.extension;
-      final extension = [
-        if (ext != null)
-          FeeLine(
-            '可付 ${money(ext.amount)} 元延長 ${ext.maxTimes} 次'
-            '${ext.minutes == null ? '（延長時間未確認）' : '（每次 ${FeeWords.span(ext.minutes!)}）'}',
-            icon: _extendIcon,
-          ),
-      ];
-      if (r.amount == 0 && r.maxMinutes != null) {
-        // 首段 0 元: a toll bay's first minutes, never written 免費 (§2.3).
-        return (
-          headline: null,
-          lines: [
-            FeeLine(
-              '首 ${FeeWords.span(r.maxMinutes!)} 0 元',
-              tone: FeeTone.main,
-              icon: _timerIcon,
-            ),
-            ...extension,
-          ],
-          groups: const [],
-          footer: null,
-        );
-      }
-      final limit = r.maxMinutes == null
-          ? ''
-          : '（${FeeWords.span(r.maxMinutes!)}內）';
-      return _plain(
-        FeeLine('每次 ${money(r.amount)} 元$limit', tone: FeeTone.main),
-        [
-          switch (r.renew) {
-            Renew.midnight => const FeeLine('隔日另計', icon: _nightIcon),
-            Renew.none => FeeLine(
-              r.maxMinutes == null ? '停多久都只收一次' : '有效時間內只收一次',
-            ),
-            null => const FeeLine(
-              '隔日是否另計未確認',
-              tone: FeeTone.unconfirmed,
-              icon: _unconfirmedIcon,
-            ),
-          },
-          ...extension,
-        ],
-      );
-    case FeeMode.daily:
-      final reset = FeeWords.reset(r.capReset);
-      return _plain(
-        FeeLine(
-          '每日 ${money(r.amount)} 元${reset == null ? '' : '（$reset）'}',
-          tone: FeeTone.main,
-        ),
-      );
+      // An old rate without renew says nothing of it (Un-1); how long a
+      // stay lasts is the condition's time limit (#188 layer 2).
+      return _plain(FeeLine('每次 ${money(r.amount)} 元', tone: FeeTone.main), [
+        if (r.renew == Renew.midnight) const FeeLine('隔日另計', icon: _nightIcon),
+        if (r.renew == Renew.none) const FeeLine('停多久都只收一次'),
+        if (r.extensionAmount case final ext?)
+          FeeLine('延長每次 ${money(ext)} 元', icon: _extendIcon),
+      ]);
     case FeeMode.byTime:
       final periods = r.periods ?? const [];
-      final visits = periods
-          .where((p) => p.rate.mode == FeeMode.perVisit)
-          .length;
       return (
         headline: null,
         lines: const [],
@@ -301,15 +234,10 @@ _Described _describe(Rate r, int pct) {
         footer: switch (r.crossPeriod) {
           CrossPeriod.eachPeriod => const FeeLine('跨時段分別計費'),
           CrossPeriod.entryOnly => const FeeLine('依進場時段計費'),
-          null when visits >= 2 => const FeeLine(
-            '跨時段計費方式未確認',
-            tone: FeeTone.unconfirmed,
-            icon: _unconfirmedIcon,
-          ),
           null => null,
         },
       );
-    case FeeMode.posted || FeeMode.sameAsScooter || FeeMode.sameAsCar:
+    case FeeMode.notApplicable || FeeMode.sameAsScooter || FeeMode.sameAsCar:
       return _plain(
         const FeeLine(
           feeUnconfirmed,

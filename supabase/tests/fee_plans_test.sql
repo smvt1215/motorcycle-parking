@@ -9,7 +9,8 @@ select no_plan();
 select is(fee_plan_name('{"scooter":{"mode":"hourly","amount":10,"per_minutes":60},"heavy":{"mode":"same_as_scooter"}}'),
   '機車重機計時','a name from the vehicles and the shared mode');
 select is(fee_plan_name('{"car":{"mode":"by_time","periods":[{"days":"all","rate":{"mode":"free"}}]}}'),'汽車時段','by_time');
-select is(fee_plan_name('{"scooter":{"mode":"free"},"heavy":{"mode":"daily","amount":30}}'),'機車重機混合','modes that differ');
+select is(fee_plan_name('{"scooter":{"mode":"free"},"heavy":{"mode":"per_visit","amount":30,"renew":"midnight"}}'),'機車重機混合','modes that differ');
+select is(fee_plan_name('{"scooter":{"mode":"free"},"heavy":{"mode":"not_applicable"},"car":{"mode":"not_applicable"}}'),'機車免費','vehicles that do not apply are left out (#188 layer 2)');
 
 -- A lot reported by a rider: the zones' fees become plans, the same fee one plan.
 create temporary table lot as select (public.apply_report('10000000-0000-4000-8000-000000000001',repeat('a',64),repeat('a',64),
@@ -66,10 +67,10 @@ select is((select fee_plans from community_spots where id=(select id from lot)),
 -- A street spot refers to its plan from the top level.
 create temporary table street as select (public.apply_report('10000000-0000-4000-8000-000000000001',repeat('b',64),repeat('b',64),
   '{"action":"create","spot":{"scooter_allowed":true,"heavy_allowed":true,"name":"路邊規則測試","lat":25.091,"lng":121.611,"city":"臺北市","space_type":"paidMotorcycle",
-    "fee":{"heavy":{"mode":"per_visit","amount":40}},"fee_note":"大型重機每次 40 元（隔日是否另計未確認）"}}')->>'id')::uuid as id;
+    "fee":{"heavy":{"mode":"per_visit","amount":40}},"fee_note":"大型重機每次 40 元"}}')->>'id')::uuid as id;
 select is((select fee_plan||'|'||(fee_plans->0->>'name')||'|'||(fee->'heavy'->>'amount') from community_spots where id=(select id from street)),
   'p1|重機計次|40','a street spot''s fee becomes its plan');
-update community_spots set fee='{"heavy":{"mode":"per_visit","amount":50}}',fee_note='大型重機每次 50 元（隔日是否另計未確認）'
+update community_spots set fee='{"heavy":{"mode":"per_visit","amount":50}}',fee_note='大型重機每次 50 元'
   where id=(select id from street);
 select is((select fee_plan||'|'||(fee_plans::text) from community_spots where id=(select id from street)),
   'p1|[{"id": "p1", "fee": {"heavy": {"mode": "per_visit", "amount": 50}}, "name": "重機計次"}]','a changed fee replaces the plan nobody else uses');
@@ -83,9 +84,9 @@ select throws_ok($$update community_spots set fee_plan='p9' where id=(select id 
 select throws_ok($$update community_spots set fee_plans='[{"id":"p1","name":"","fee":{"scooter":{"mode":"free"}}}]',fee_plan='p1'
   where id=(select id from street)$$,'23514',null,'a plan without a name is refused');
 select throws_ok($$update community_spots set fee_plans=(select jsonb_agg(jsonb_build_object('id','p'||i,'name','規則'||i,
-    'fee',jsonb_build_object('scooter',jsonb_build_object('mode','daily','amount',i)))) from generate_series(1,13) i)
+    'fee',jsonb_build_object('scooter',jsonb_build_object('mode','per_visit','amount',i,'renew','midnight')))) from generate_series(1,13) i)
   where id=(select id from street)$$,'23514',null,'at most 12 plans');
-select ok(not valid_fee_plans('[{"id":"p1","name":"機車免費","fee":{"scooter":{"mode":"free"}}}]','p1','{"scooter":{"mode":"daily","amount":5}}','[]'),
+select ok(not valid_fee_plans('[{"id":"p1","name":"機車免費","fee":{"scooter":{"mode":"free"}}}]','p1','{"scooter":{"mode":"per_visit","amount":5,"renew":"midnight"}}','[]'),
   'a copy that differs from its plan is refused');
 
 -- Promotion copies the zones (with their references) but not the plans;
@@ -133,7 +134,7 @@ select is((select (parking_zones->0)-'id' from community_spots where id=(select 
   '{"name":"B1","fee_plan":"p2","fee":{"scooter":{"mode":"per_visit","amount":20}}}'::jsonb,'a zone switched to another plan takes its fee');
 
 -- Editing a street spot's plan keeps its fee_note the fee's sentence.
-update community_spots set fee='{"heavy":{"mode":"per_visit","amount":40}}',fee_note='大型重機每次 40 元（隔日是否另計未確認）'
+update community_spots set fee='{"heavy":{"mode":"per_visit","amount":40}}',fee_note='大型重機每次 40 元'
   where id=(select id from street);
 update community_spots set fee_plans=jsonb_set(fee_plans,'{0,fee}','{"heavy":{"mode":"free"}}') where id=(select id from street);
 select is((select fee_note||'|'||(fee->'heavy'->>'mode') from community_spots where id=(select id from street)),
@@ -205,15 +206,15 @@ update community_spots set parking_zones=jsonb_build_array(jsonb_set(parking_zon
   where id=(select id from lot);
 select is((select (parking_zones->0)-'id' from community_spots where id=(select id from lot)),
   '{"name":"B","fee_plan":"p1","fee":{"scooter":{"mode":"free"}}}'::jsonb,'a zone that switches plan while moving takes the plan''s fee');
--- Area is part of the match: the same name in another area is a new zone,
--- whose reference is a choice of plan.
+-- Zones match by name (area is gone, #188 layer 2): another name is a new
+-- zone, whose reference is a choice of plan.
 update community_spots set fee_plans=(select plans from two_zones),
-  parking_zones='[{"name":"機車區","area":"motorcycle","fee_plan":"p1","fee":{"scooter":{"mode":"free"}}}]' where id=(select id from lot);
-update community_spots set parking_zones='[{"name":"機車區","area":"heavy","fee_plan":"p1","fee":{"scooter":{"mode":"per_visit","amount":30}}}]'
+  parking_zones='[{"name":"機車區","fee_plan":"p1","fee":{"scooter":{"mode":"free"}}}]' where id=(select id from lot);
+update community_spots set parking_zones='[{"name":"重機區","fee_plan":"p1","fee":{"scooter":{"mode":"per_visit","amount":30}}}]'
   where id=(select id from lot);
 select is((select parking_zones->0->'fee' from community_spots where id=(select id from lot)),
   '{"scooter":{"mode":"free"}}'::jsonb,'a zone with no stored match is new: its reference copies the plan');
--- The same name and area pair up in order.
+-- The same name pairs up in order.
 update community_spots set fee_plans=(select plans from two_zones),
   parking_zones='[{"name":"B","fee_plan":"p1","fee":{"scooter":{"mode":"free"}}},
     {"name":"B","fee_plan":"p2","fee":{"scooter":{"mode":"per_visit","amount":20}}}]' where id=(select id from lot);
@@ -232,7 +233,7 @@ do $$ begin
 exception when foreign_key_violation then
   declare d text; begin get stacked diagnostics d=pg_exception_detail; insert into caught values(d::jsonb); end;
 end $$;
-select is((select detail from caught),'{"plans":[{"id":"p2","name":"機車計次","zones":1,"spot":false}]}'::jsonb,
+select is((select detail from caught),'{"plans":[{"id":"p2","name":"機車計次","zones":1,"segments":0,"spot":false}]}'::jsonb,
   'the detail names the plan and how many zones use it');
 select is((select fee_plans->1->>'name' from community_spots where id=(select id from lot)),'機車計次','and the plan is not rebuilt');
 select lives_ok($$update community_spots set fee_plans=fee_plans-1,parking_zones=jsonb_set(parking_zones,'{1,fee_plan}','"p1"')

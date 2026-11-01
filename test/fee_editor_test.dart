@@ -16,6 +16,7 @@ void main() {
     double scale = 1,
     bool dark = false,
     FeeVehicle? open,
+    bool complete = false,
   }) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = Size(width, 1400);
@@ -46,6 +47,7 @@ void main() {
                   builder: (context, setState) => FeeEditor(
                     value: fee,
                     initialVehicle: open,
+                    requireComplete: complete,
                     onChanged: (v) => setState(() => fee = v),
                   ),
                 ),
@@ -90,18 +92,17 @@ void main() {
         expect(tester.takeException(), isNull);
         for (final key in [
           for (final m in [
-            'unknown',
+            'not_applicable',
             'free',
             'hourly',
             'per_visit',
-            'daily',
             'by_time',
             'same_as',
           ])
             'fee-mode-heavy-$m',
           'fee-row-scooter',
           'fee-row-car',
-          'fee-renew-heavy-unknown',
+          'fee-renew-heavy-midnight',
           'fee-more-heavy',
         ]) {
           expect(
@@ -144,7 +145,7 @@ void main() {
     expect(
       find.descendant(
         of: find.byKey(const ValueKey('fee-row-car')),
-        matching: find.text('未確認'),
+        matching: find.text('未提供'),
       ),
       findsOneWidget,
     );
@@ -169,115 +170,88 @@ void main() {
     expect(openVehicles(), findsOneWidget);
   });
 
-  testWidgets('收費方式沒有「依現場公告」，預設未確認，並有汽車與依時段不同', (tester) async {
+  testWidgets('收費方式 6 種：不適用在最前，沒有「未確認」與「每日」（#188 第 2 層）', (tester) async {
     await host(tester, 390, open: FeeVehicle.car);
     expect(find.text('依現場公告'), findsNothing);
-    final unknown = find.byKey(const ValueKey('fee-mode-car-unknown'));
+    for (final m in ['unknown', 'daily', 'posted']) {
+      expect(find.byKey(ValueKey('fee-mode-car-$m')), findsNothing);
+    }
     expect(
-      tester.getSemantics(unknown),
-      matchesSemantics(
-        label: '未確認',
-        isButton: true,
-        hasSelectedState: true,
-        isSelected: true,
-        hasEnabledState: true,
-        isEnabled: true,
-        isFocusable: true,
-        hasTapAction: true,
-        hasFocusAction: true,
-      ),
+      find.byKey(const ValueKey('fee-mode-car-not_applicable')),
+      findsOneWidget,
     );
+    expect(find.text('這裡沒有這種車的格位就選「不適用」。'), findsOneWidget);
     // Only heavy bikes follow another vehicle.
     expect(find.byKey(const ValueKey('fee-mode-car-same_as')), findsNothing);
     expect(find.byKey(const ValueKey('fee-mode-car-by_time')), findsOneWidget);
   });
 
-  testWidgets('計次的「跨日怎麼收」預設未確認，選項依有效時間改寫', (tester) async {
-    final (form, fee) = await host(tester, 390, open: FeeVehicle.car);
+  testWidgets('不適用的車種存成 not_applicable，公告牌不列出', (tester) async {
+    final (_, fee) = await host(tester, 390, initial: hourly10);
+    await chooseFeeMode(tester, 'heavy', 'not_applicable');
+    expect(fee().toJson()['heavy'], {'mode': 'not_applicable'});
+    // The open vehicle still reads 不適用 in the preview; riders' boards
+    // leave it out (fee_board_test).
+    expect(preview('不適用'), findsOneWidget);
+  });
+
+  testWidgets('計次的「跨日怎麼收」只有兩個答案，送出前必須選（Un-1）', (tester) async {
+    final (form, fee) = await host(
+      tester,
+      390,
+      open: FeeVehicle.car,
+      initial: const Fee(
+        scooter: Rate(FeeMode.notApplicable),
+        heavy: Rate(FeeMode.notApplicable),
+      ),
+      complete: true,
+    );
     await chooseFeeMode(tester, 'car', 'per_visit');
     await tester.enterText(feeField('amount', 'car'), '40');
     await tester.pumpAndSettle();
-    expect(form.currentState!.validate(), isTrue);
-    // Nothing chosen is unconfirmed, never 不另計 (§2.5).
-    expect(fee().toJson(), {
-      'car': {'mode': 'per_visit', 'amount': 40},
-    });
-    expect(
-      tester
-          .widget<RadioGroup<String>>(
-            find.ancestor(
-              of: find.byKey(const ValueKey('fee-renew-car-unknown')),
-              matching: find.byType(RadioGroup<String>),
-            ),
-          )
-          .groupValue,
-      'unknown',
-    );
-    expect(preview('隔日是否另計未確認'), findsOneWidget);
+    expect(find.byKey(const ValueKey('fee-renew-car-unknown')), findsNothing);
+    expect(form.currentState!.validate(), isFalse);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('汽車還有規則沒選'), findsOneWidget);
+    expect(preview('未確認'), findsNothing);
     await tapFee(tester, 'fee-renew-car-midnight');
     expect(fee().car!.renew, Renew.midnight);
     expect(preview('隔日另計'), findsOneWidget);
-    expect(preview('隔日是否另計未確認'), findsNothing);
-    // A valid time changes the second answer's words.
     expect(find.text('停多久都只收一次'), findsOneWidget);
-    await tapFee(tester, 'fee-more-car');
-    await tapFee(tester, 'fee-max-car');
-    await tester.tap(find.text('3 小時').last);
-    await tester.pumpAndSettle();
-    expect(find.text('有效時間內只收一次'), findsOneWidget);
-    await tapFee(tester, 'fee-renew-car-unknown');
-    expect(fee().car!.renew, isNull);
-    expect(fee().toJson()['car'], {
-      'mode': 'per_visit',
-      'amount': 40,
-      'max_minutes': 180,
-    });
+    expect(form.currentState!.validate(), isTrue);
   });
 
-  testWidgets('首段 0 元：計時填前幾分鐘 0 元、計次 0 元加有效時間，都不顯示免費', (tester) async {
+  testWidgets('首次 0 元與延長每次多少錢；限停時間不在費率裡（F2）', (tester) async {
     final (form, fee) = await host(tester, 390, open: FeeVehicle.heavy);
     await chooseFeeMode(tester, 'heavy', 'per_visit');
     await tester.enterText(feeField('amount', 'heavy'), '0');
+    await tapFee(tester, 'fee-renew-heavy-none');
     await tapFee(tester, 'fee-more-heavy');
-    await tapFee(tester, 'fee-max-heavy');
-    await tester.tap(find.text('20 分鐘').last);
-    await tester.pumpAndSettle();
-    await tapFee(tester, 'fee-ext-heavy');
+    expect(find.text('每次限停多久、可延長幾次在「限時」設定，不在費率裡'), findsOneWidget);
     await tester.enterText(feeField('ext-amount', 'heavy'), '40');
     await tester.pumpAndSettle();
     expect(form.currentState!.validate(), isTrue);
     expect(fee().toJson()['heavy'], {
       'mode': 'per_visit',
       'amount': 0,
-      'max_minutes': 20,
-      'extension': {'amount': 40, 'max_times': 1},
+      'renew': 'none',
+      'extension_amount': 40,
     });
-    expect(preview('首 20 分鐘 0 元'), findsOneWidget);
-    expect(preview('可付 40 元延長 1 次（延長時間未確認）'), findsOneWidget);
+    expect(preview('延長每次 40 元'), findsOneWidget);
     expect(preview('免費'), findsNothing);
-
-    await chooseFeeMode(tester, 'heavy', 'hourly');
-    await tester.enterText(feeField('amount', 'heavy'), '20');
-    await tester.enterText(feeField('free', 'heavy'), '30');
-    await tester.pumpAndSettle();
-    expect(find.text('公告寫「首 20 分鐘 0 元」時填這裡，這不是免費格'), findsOneWidget);
-    expect(preview('首 30 分鐘 0 元'), findsOneWidget);
-    expect(preview('之後每小時 20 元'), findsOneWidget);
-    expect(preview('免費'), findsNothing);
+    expect(find.byKey(const ValueKey('fee-free-heavy')), findsNothing);
   });
 
-  testWidgets('計時的計費單位、當日上限與上限重算，收合時列出已設的規則', (tester) async {
+  testWidgets('計時的當日上限與上限重算，收合時列出已設的規則', (tester) async {
     final (form, fee) = await host(tester, 390);
     await chooseFeeMode(tester, 'scooter', 'hourly');
     await tester.enterText(feeField('amount', 'scooter'), '20');
     await tapFee(tester, 'fee-more-scooter');
-    await tapFee(tester, 'fee-unit-scooter');
-    await tester.tap(find.text('以 30 分鐘計').last);
-    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('fee-unit-scooter')), findsNothing);
     await tester.enterText(feeField('cap', 'scooter'), '100');
     await tester.pumpAndSettle();
-    expect(preview('上限計算方式未確認'), findsOneWidget);
     await tapFee(tester, 'fee-cap-reset-scooter');
+    expect(find.text('未確認'), findsNothing);
     await tester.tap(find.text('零時重算').last);
     await tester.pumpAndSettle();
     expect(form.currentState!.validate(), isTrue);
@@ -285,14 +259,12 @@ void main() {
       'mode': 'hourly',
       'amount': 20,
       'per_minutes': 60,
-      'unit_minutes': 30,
       'daily_cap': 100,
       'cap_reset': 'calendar_day',
     });
-    expect(preview('每小時 20 元（以 30 分鐘計）'), findsOneWidget);
     expect(preview('當日上限 100 元（零時重算）'), findsOneWidget);
     await tapFee(tester, 'fee-more-scooter');
-    expect(find.text('已設：以 30 分鐘計、當日上限 100 元'), findsOneWidget);
+    expect(find.text('已設：當日上限 100 元'), findsOneWidget);
   });
 
   testWidgets('比照其他車種：只能選有費率的車種，App 只顯示算好的金額', (tester) async {
@@ -309,25 +281,18 @@ void main() {
       find.byKey(const ValueKey('fee-follow-car')),
     );
     expect(car.enabled, isFalse);
-    expect(find.text('費率未確認，不能選'), findsOneWidget);
+    expect(find.text('費率未提供，不能選'), findsOneWidget);
     expect(fee().heavy, const Rate(FeeMode.sameAsScooter));
     expect(find.text('普通機車的費率之後改了，大型重機會跟著變。'), findsOneWidget);
-    await tester.enterText(find.byKey(const ValueKey('fee-factor')), '2');
-    await tester.pumpAndSettle();
+    // No factor (#188 layer 2).
+    expect(find.byKey(const ValueKey('fee-factor')), findsNothing);
     expect(form.currentState!.validate(), isTrue);
-    expect(fee().toJson()['heavy'], {
-      'mode': 'same_as_scooter',
-      'factor_pct': 200,
-    });
-    expect(preview('每小時 20 元'), findsOneWidget);
+    expect(fee().toJson()['heavy'], {'mode': 'same_as_scooter'});
+    expect(preview('每小時 10 元'), findsWidgets);
     expect(preview('比照'), findsNothing);
-    await tester.enterText(find.byKey(const ValueKey('fee-factor')), '0.5');
-    expect(form.currentState!.validate(), isFalse);
-    await tester.pumpAndSettle();
-    expect(find.text('請填 1 到 10 的數字，最多兩位小數'), findsOneWidget);
   });
 
-  testWidgets('依時段不同：每段選哪幾天與時間，未涵蓋寫出來，兩段計次出現跨時段三態', (tester) async {
+  testWidgets('依時段不同：每段選哪幾天與時間，未涵蓋寫出來，有計次且兩段以上就問跨時段（C7）', (tester) async {
     final (form, fee) = await host(tester, 390, open: FeeVehicle.car);
     await chooseFeeMode(tester, 'car', 'by_time');
     // The first period is open: every day, all day, hourly.
@@ -357,13 +322,13 @@ void main() {
     await tapFee(tester, 'fee-days-car-p1-pick');
     // 指定 starts from the days the period covered: every day.
     await tapFee(tester, 'fee-day-car-p1-0');
+    // A per-visit period beside another: 停到下一個時段時 (C7).
+    expect(find.text('停到下一個時段時'), findsOneWidget);
     await tapFee(tester, 'fee-mode-car-p1-per_visit');
     await tester.enterText(feeField('amount', 'car-p1'), '50');
     await tester.pumpAndSettle();
-    // Two per-visit periods: 停到下一個時段時, unconfirmed until chosen.
-    expect(find.text('停到下一個時段時'), findsOneWidget);
     expect(fee().car!.crossPeriod, isNull);
-    expect(preview('跨時段計費方式未確認'), findsOneWidget);
+    expect(preview('跨時段計費方式未確認'), findsNothing);
     await tapFee(tester, 'fee-cross-car-each_period');
     expect(fee().car!.crossPeriod, CrossPeriod.eachPeriod);
     expect(preview('跨時段分別計費'), findsOneWidget);
@@ -388,15 +353,15 @@ void main() {
     });
     // Picked weekdays are listed day by day on the board (canvas FeeDays).
     expect(preview('週二、週三、週四、週五、週六、週日'), findsOneWidget);
-    // Removing a per-visit period drops the choice it no longer needs.
+    // One period left: the choice it no longer needs goes.
     await tapFee(tester, 'fee-period-remove-car-p1');
     expect(find.text('停到下一個時段時'), findsNothing);
     expect(fee().car!.crossPeriod, isNull);
   });
 
-  testWidgets('收合的車種沒填完也擋下送出；改回未確認即清除該車種', (tester) async {
-    final (form, fee) = await host(tester, 390);
-    await chooseFeeMode(tester, 'scooter', 'daily');
+  testWidgets('收合的車種沒填完也擋下送出', (tester) async {
+    final (form, _) = await host(tester, 390);
+    await chooseFeeMode(tester, 'scooter', 'per_visit');
     await tester.enterText(feeField('amount', 'scooter'), '20000');
     expect(form.currentState!.validate(), isFalse);
     await tester.pumpAndSettle();
@@ -406,7 +371,7 @@ void main() {
     await tapFee(tester, 'fee-row-heavy');
     expect(form.currentState!.validate(), isFalse);
     await tester.pumpAndSettle();
-    expect(find.text('普通機車的費率還沒填完，請填好或改回「未確認」'), findsOneWidget);
+    expect(find.text('普通機車的費率還沒填完，請填好'), findsOneWidget);
     expect(
       find.descendant(
         of: find.byKey(const ValueKey('fee-row-scooter')),
@@ -415,8 +380,26 @@ void main() {
       findsOneWidget,
     );
     expect(preview('普通機車的金額填好後才會顯示'), findsOneWidget);
-    await chooseFeeMode(tester, 'scooter', 'unknown');
-    expect(fee().isEmpty, isTrue);
+  });
+
+  testWidgets('填了任一車種，三個車種都要選（PM_ANS_20261101_55）', (tester) async {
+    final (form, fee) = await host(
+      tester,
+      390,
+      initial: hourly10,
+      complete: true,
+    );
+    expect(form.currentState!.validate(), isFalse);
+    await tester.pumpAndSettle();
+    expect(find.text('請選大型重機、汽車的收費方式；這裡沒有這種車的格位就選「不適用」'), findsOneWidget);
+    await chooseFeeMode(tester, 'heavy', 'not_applicable');
+    await chooseFeeMode(tester, 'car', 'not_applicable');
+    expect(form.currentState!.validate(), isTrue);
+    expect(fee().writeComplete, isTrue);
+  });
+
+  testWidgets('沒有填任何費率也可以送出', (tester) async {
+    final (form, _) = await host(tester, 390, complete: true);
     expect(form.currentState!.validate(), isTrue);
   });
 
@@ -463,7 +446,8 @@ void main() {
     );
     expect(preview('App 會顯示'), findsOneWidget);
     expect(preview('每次 40 元'), findsOneWidget);
-    expect(preview('隔日是否另計未確認'), findsOneWidget);
+    // An old rate without renew says nothing of it (Un-1).
+    expect(preview('未確認'), findsNothing);
   });
 
   testWidgets('改金額時保留其他設定與汽車費率；換收費方式只帶該方式的欄位', (tester) async {
@@ -472,7 +456,7 @@ void main() {
         'mode': 'per_visit',
         'amount': 40,
         'renew': 'midnight',
-        'extension': {'amount': 40, 'max_times': 1},
+        'extension_amount': 40,
       },
       'car': {'mode': 'hourly', 'amount': 40, 'per_minutes': 60},
     });
@@ -484,11 +468,15 @@ void main() {
       'mode': 'per_visit',
       'amount': 50,
       'renew': 'midnight',
-      'extension': {'amount': 40, 'max_times': 1},
+      'extension_amount': 40,
     });
     expect(fee().car, initial.car);
-    await chooseFeeMode(tester, 'heavy', 'daily');
-    expect(fee().heavy!.toJson(), {'mode': 'daily', 'amount': 50});
+    await chooseFeeMode(tester, 'heavy', 'hourly');
+    expect(fee().heavy!.toJson(), {
+      'mode': 'hourly',
+      'amount': 50,
+      'per_minutes': 60,
+    });
   });
 
   testWidgets('比照：沒有已知來源時不能選；被比照的車種改回未確認時擋下送出', (tester) async {
@@ -515,13 +503,13 @@ void main() {
     // Only the car has a rate, so the heavy bike follows the car.
     expect(fee().toJson()['heavy'], {'mode': 'same_as_car'});
     expect(form.currentState!.validate(), isTrue);
-    await chooseFeeMode(tester, 'car', 'unknown');
+    await chooseFeeMode(tester, 'car', 'not_applicable');
     expect(form.currentState!.validate(), isFalse);
     await tester.pumpAndSettle();
     expect(find.text('大型重機比照汽車費率，但還沒填汽車費率。請填汽車費率，或改選其他收費方式。'), findsOneWidget);
   });
 
-  testWidgets('清空當日上限一併清除重算方式；換成每日不沿用計時的重算方式', (tester) async {
+  testWidgets('清空當日上限一併清除重算方式', (tester) async {
     final (form, fee) = await host(tester, 390);
     await chooseFeeMode(tester, 'scooter', 'hourly');
     await tester.enterText(feeField('amount', 'scooter'), '10');
@@ -535,16 +523,6 @@ void main() {
     await tester.enterText(feeField('cap', 'scooter'), '');
     await tester.pumpAndSettle();
     expect(fee().scooter!.capReset, isNull);
-    // Set again, then switch to daily: the hourly cap's reset stays behind.
-    await tester.enterText(feeField('cap', 'scooter'), '50');
-    await tester.pumpAndSettle();
-    await tapFee(tester, 'fee-cap-reset-scooter');
-    await tester.tap(find.text('零時重算').last);
-    await tester.pumpAndSettle();
-    await chooseFeeMode(tester, 'scooter', 'daily');
-    expect(fee().toJson()['scooter'], {'mode': 'daily', 'amount': 10});
-    expect(preview('每日 10 元'), findsOneWidget);
-    expect(preview('零時重算'), findsNothing);
     expect(form.currentState!.validate(), isTrue);
   });
 

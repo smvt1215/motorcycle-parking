@@ -79,9 +79,10 @@ void main() {
         for (final MapEntry(:key, :value) in eligibilitySpotKeys.entries)
           key: {'allowed': value.allowed, 'not_stated': value.notStated},
       });
+      // Zone areas are gone (#188 layer 2).
       expect(
-        (contract['zone']! as Map<String, Object?>)['area'],
-        _wires(ZoneArea.values, (v) => v.name),
+        (contract['zone']! as Map<String, Object?>).containsKey('area'),
+        isFalse,
       );
       expect(cond['schedule'], {
         'keys': scheduleKeys,
@@ -91,18 +92,49 @@ void main() {
     });
 
     test('limit kinds and their keys', () {
+      Map<String, Object> ranges(Map<String, (int, int)> r) => {
+        for (final MapEntry(key: k, value: (min, max)) in r.entries)
+          k: {'min': min, 'max': max},
+      };
       expect(cond['limits'], {
         for (final MapEntry(:key, :value) in limitKeys.entries)
           key.wire: {
             'required': value.required,
-            'optional': {
-              for (final MapEntry(key: k, value: (min, max))
-                  in value.optional.entries)
-                k: {'min': min, 'max': max},
-            },
+            'optional': ranges(value.optional),
+            if (value.periods case final p?)
+              'periods': {
+                'max_entries': p.maxEntries,
+                'keys': p.keys,
+                'ranges': ranges(p.ranges),
+              },
+            if (value.exclusive.isNotEmpty) 'exclusive': value.exclusive,
           },
       });
       expect(limitKeys.keys, LimitKind.values);
+      final write = cond['write']! as Map<String, Object?>;
+      expect(write['limits_required'], {
+        for (final MapEntry(:key, :value) in limitsRequiredOnWrite.entries)
+          key.wire: value,
+      });
+    });
+
+    test('new writes: conditionWriteComplete as the shared cases expect', () {
+      final all = (cases['condition_writes']! as List)
+          .cast<Map<String, Object?>>();
+      expect(all, isNotEmpty);
+      for (final c in all) {
+        final name = c['name'] as String;
+        expect(
+          validCondition(c['condition'], zone: true),
+          isTrue,
+          reason: name,
+        );
+        expect(
+          conditionWriteComplete(c['condition']),
+          c['complete'],
+          reason: name,
+        );
+      }
     });
 
     test('basis', () {
@@ -352,7 +384,7 @@ void main() {
             'total': 18,
             'condition': {'bay': 'motorcycle', 'use': 'usual'},
           },
-          // A segment that claims who may park is unconfirmed, not trusted.
+          // A segment says who may park there (#188 layer 2).
           {
             'id': 's2',
             'name': '南側',
@@ -367,7 +399,7 @@ void main() {
       expect(spot.segments.map((s) => s.id), ['s1', 's2']);
       expect(spot.segments.first.side, RoadSide.north);
       expect(spot.segments.first.bayKind, BayKind.motorcycle);
-      expect(spot.segments.last.condition, isNull);
+      expect(spot.segments.last.condition?.allow?.scooter, isTrue);
       final again = ParkingSpot.fromJson(spot.toJson());
       expect(again.segments.map((s) => s.toJson()), [
         for (final s in spot.segments) s.toJson(),

@@ -17,7 +17,7 @@ select ok(fee_note_matches('{"fee":null,"fee_note":"每小時 20 元"}'),'as a n
 select ok(fee_note_matches('{"fee_note":"每小時 20 元"}'),'and a missing one');
 select ok(not fee_note_matches('{"fee":{"scooter":{"mode":"free"}},"fee_note":"每小時 20 元"}'),
   'a fee with a vehicle still needs its own text');
-select ok(fee_note_matches('{"fee":{"scooter":{"mode":"free"}},"fee_note":"機車免費；大型重機費率未確認"}'),
+select ok(fee_note_matches('{"fee":{"scooter":{"mode":"free"}},"fee_note":"機車免費；大型重機費率未提供"}'),
   'and takes it');
 
 create temporary table fx(name text primary key,id uuid,at timestamptz);
@@ -32,7 +32,7 @@ with s as (insert into official_heavy_spots(name,lat,lng,city,source_url,source_
   insert into fx select 'official',id,updated_at from s;
 with s as (insert into community_spots(user_id,name,lat,lng,city,district,space_type,scooter_allowed,fee,fee_note)
   values('10000000-0000-4000-8000-000000000001','有費率社群點',25.073,121.593,'臺北市','松山區','paidMotorcycle',true,
-    '{"scooter":{"mode":"daily","amount":30}}','機車每日 30 元；大型重機費率未確認') returning id,updated_at)
+    '{"scooter":{"mode":"per_visit","amount":30,"renew":"midnight"}}','機車每次 30 元，隔日另計；大型重機費率未提供') returning id,updated_at)
   insert into fx select 'structured',id,updated_at from s;
 
 -- #201: fixtures written before eligibility was required state both

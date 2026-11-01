@@ -548,6 +548,13 @@ class _SuggestionFormState extends State<_SuggestionForm> {
           if (spot.access != null) 'parking_access': null,
         },
         if (lotType) ...{
+          // Segments are a street spot's only (#188 layer 2): a lot keeps
+          // its bays in zones, so the segments go with the change.
+          if (spot.segments.any((s) => s.id != null))
+            'parking_segments': [
+              for (final s in spot.segments)
+                if (s.id case final id?) {'id': id, 'removed': true},
+            ],
           // The set alone (decision 58); the table keeps facility_type
           // as its first.
           if (facilitiesChanged)
@@ -776,6 +783,8 @@ class _SuggestionFormState extends State<_SuggestionForm> {
     current: {
       'fee': ?widget.spot.fee?.toJson(),
       'condition': ?widget.spot.condition?.toJson(),
+      'scooter_allowed': ?widget.spot.scooterAllowed,
+      'heavy_allowed': ?widget.spot.heavyAllowed,
     },
   );
 

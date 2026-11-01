@@ -17,6 +17,7 @@ import '../../models/fee.dart';
 import '../../models/fee_plan.dart';
 import '../../models/parking.dart' show ParkingAccess;
 import '../../models/parking_condition.dart';
+import 'spot_models.dart' show feeWriteProblem;
 
 typedef Json = Map<String, dynamic>;
 
@@ -102,23 +103,24 @@ String nextPlanId(List<Json> plans) {
 /// A plan name from its fee, as `fee_plan_name()` writes one: the vehicles,
 /// then the mode they share (機車計時, 重機汽車計時), 混合 when they differ.
 String planNameOf(Fee fee) {
-  final json = fee.toJson();
+  // Vehicles that do not apply are left out (#188 layer 2).
+  bool named(Rate? r) => r != null && r.mode != FeeMode.notApplicable;
   final vehicles = [
-    if (json.containsKey('scooter')) '機車',
-    if (json.containsKey('heavy')) '重機',
-    if (json.containsKey('car')) '汽車',
+    if (named(fee.scooter)) '機車',
+    if (named(fee.heavy)) '重機',
+    if (named(fee.car)) '汽車',
   ].join();
+  final rates = [fee.scooter, fee.heavy, fee.car].where(named).nonNulls;
   final modes = {
-    for (final rate in [fee.scooter, fee.heavy, fee.car].nonNulls)
+    for (final rate in rates)
       if (!rate.mode.follows) rate.mode,
   };
   final mode = switch (modes.length) {
-    0 => '比照',
+    0 => rates.isEmpty ? '不適用' : '比照',
     1 => switch (modes.single) {
       FeeMode.free => '免費',
       FeeMode.hourly => '計時',
       FeeMode.perVisit => '計次',
-      FeeMode.daily => '每日',
       FeeMode.byTime => '時段',
       _ => '未確認',
     },
@@ -141,7 +143,9 @@ String uniquePlanName(String name, List<Json> plans, {String? selfId}) {
 /// Why [plans] cannot be saved, or null: names 1–20 characters and unique,
 /// at most 12, each with a complete fee and nothing followed that is not
 /// known.
-String? plansProblem(List<Json> plans) {
+/// [stored] are the plans as saved: a plan whose fee is unchanged since is
+/// old data and is not held to the new-write rules (#188 layer 2).
+String? plansProblem(List<Json> plans, [List<Json> stored = const []]) {
   final max = feePlansContract['max_entries']! as int;
   final nameMax = feePlansContract['name_max_length']! as int;
   if (plans.length > max) return '計費規則最多 $max 條';
@@ -151,29 +155,39 @@ String? plansProblem(List<Json> plans) {
     if (name.isEmpty) return '每條計費規則都要有名稱';
     if (name.length > nameMax) return '規則名稱「$name」請在 $nameMax 個字以內';
     if (!names.add(name)) return '規則名稱「$name」重複了，請改成不同的名稱';
-    final problem = planFeeProblem(Fee.fromJson(p['fee']));
+    final unchanged = stored.any(
+      (o) =>
+          o['id'] == p['id'] &&
+          canonicalJson(o['fee']) == canonicalJson(p['fee']),
+    );
+    final problem = planFeeProblem(
+      Fee.fromJson(p['fee']),
+      newWrite: !unchanged,
+    );
     if (problem != null) return '「$name」：$problem';
   }
   return null;
 }
 
 /// Why one plan's fee cannot be saved, or null.
-String? planFeeProblem(Fee fee) {
+String? planFeeProblem(Fee fee, {bool newWrite = true}) {
   if (fee.isEmpty) return '至少要有一個車種的收費方式';
   if ([fee.scooter, fee.heavy, fee.car].nonNulls.any((r) => !r.complete)) {
     return '請填完收費金額，計時另需選計費時間';
   }
   if (!fee.valid) return '金額請填 0 到 10000 的整數';
-  return fee.followGap;
+  // A plan is written whole (#188 layer 2, PM_ANS_20261101_55).
+  if (fee.followGap case final gap?) return gap;
+  if (newWrite && !fee.writeComplete) return feeWriteProblem;
+  return null;
 }
 
 /// The zones of one area as the form shows them: zones with the same name
-/// and area are one card (design §2.6: one bay per zone, several zones per
-/// area), in the order they first appear.
+/// are one card (design §2.6: one bay per zone, several zones per area; zone
+/// areas are gone, #188 layer 2), in the order they first appear.
 class AreaCard {
-  AreaCard(this.name, this.area, this.indexes);
+  AreaCard(this.name, this.indexes);
   final String name;
-  final String? area;
 
   /// Positions in `parking_zones`.
   final List<int> indexes;
@@ -183,10 +197,9 @@ List<AreaCard> areaCards(Object? zones) {
   final cards = <AreaCard>[];
   for (final (i, z) in jsonList(zones).indexed) {
     final name = z['name'] as String? ?? '';
-    final area = z['area'] as String?;
-    final card = cards.where((c) => c.name == name && c.area == area);
+    final card = cards.where((c) => c.name == name);
     if (card.isEmpty) {
-      cards.add(AreaCard(name, area, [i]));
+      cards.add(AreaCard(name, [i]));
     } else {
       card.first.indexes.add(i);
     }

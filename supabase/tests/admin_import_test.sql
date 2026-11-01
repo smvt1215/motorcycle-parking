@@ -197,7 +197,7 @@ reset role;
 select is((select fee from official_heavy_spots where id='20000000-0000-4000-8000-000000000001'),'{"scooter":{"mode":"per_visit","amount":20}}'::jsonb,'the fee is written');
 -- The note read becomes the source text; fee_note is the fee's sentence.
 select is((select fee_note||'|'||fee_source_text from official_heavy_spots where id='20000000-0000-4000-8000-000000000001'),
-  '機車每次 20 元（隔日是否另計未確認）；大型重機費率未確認|機車每次 20 元','the note read becomes the source text');
+  '機車每次 20 元；大型重機費率未提供|機車每次 20 元','the note read becomes the source text');
 select is((select after->'fee' from admin_audit_log where action='convert_fee'),'{"scooter":{"mode":"per_visit","amount":20}}'::jsonb,'the conversion is audited');
 
 -- The spot form's fee_note check (202610260010) applies only to edits

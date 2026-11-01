@@ -41,12 +41,10 @@ bool heavyCarOpen(ParkingSpot spot, ParkingDecision decision) {
       (spot.condition?.bay == Bay.car && spot.condition?.allow?.heavy != false);
 }
 
-/// A zone of car bays: its area says so, or, with no area, its condition
-/// (or the one its access stands for) is a car bay.
+/// A zone of car bays: its condition (or the one its access stands for) is
+/// a car bay (zone areas are gone, #188 layer 2).
 bool _carArea(ParkingZone zone) =>
-    zone.area == ZoneArea.car ||
-    (zone.area == null &&
-        (zone.condition ?? zoneConditionOf(zone.access))?.bay == Bay.car);
+    (zone.condition ?? zoneConditionOf(zone.access))?.bay == Bay.car;
 
 /// 「17:02」 in local time.
 String availabilityClock(DateTime value) {

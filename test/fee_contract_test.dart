@@ -62,21 +62,23 @@ void main() {
     }
   });
 
-  test('posted reads as unconfirmed but is accepted', () {
-    final fee = Fee.tryParse({
+  test('an old posted or daily rate reads as unconfirmed (#188 layer 2)', () {
+    final fee = Fee.fromJson({
       'scooter': {'mode': 'posted'},
+      'car': {'mode': 'daily', 'amount': 30},
       'heavy': {'mode': 'hourly', 'amount': 20, 'per_minutes': 60},
-    })!;
+    });
     expect(fee.scooter, isNull);
+    expect(fee.car, isNull);
     expect(feeNoteOf(fee), '大型重機每小時 20 元');
   });
 
-  test('a heavy follow reads with its amounts worked out (#140)', () {
+  test('a heavy follow reads with the amounts it follows (#140)', () {
     final fee = Fee.fromJson({
       'scooter': {'mode': 'hourly', 'amount': 10, 'per_minutes': 60},
-      'heavy': {'mode': 'same_as_scooter', 'factor_pct': 200},
+      'heavy': {'mode': 'same_as_scooter'},
     });
-    expect(fee.textOf('heavy'), '每小時 20 元');
+    expect(fee.textOf('heavy'), '每小時 10 元');
     expect(fee.heavy!.text, '比照機車費率');
     expect(
       Fee.fromJson({
@@ -84,6 +86,17 @@ void main() {
       }).textOf('heavy'),
       isNull,
     );
+  });
+
+  test('new writes: feeWriteComplete as the shared cases expect', () {
+    final all = (cases['fee_writes']! as List).cast<Map<String, Object?>>();
+    expect(all, isNotEmpty);
+    for (final c in all) {
+      final name = c['name'] as String;
+      expect(validFee(c['fee']), isTrue, reason: name);
+      expect(feeWriteComplete(c['fee']), c['complete'], reason: name);
+      expect(Fee.fromJson(c['fee']).writeComplete, c['complete'], reason: name);
+    }
   });
 
   test('copyWith keeps the car rate the editor does not show', () {

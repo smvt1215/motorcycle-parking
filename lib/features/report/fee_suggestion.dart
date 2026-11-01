@@ -74,10 +74,14 @@ String? feeKeptLine(Fee current, FeeEdits edits) {
   return kept.isEmpty ? null : '${kept.join('、')}維持目前';
 }
 
-/// The vehicles whose suggested rate is still missing an amount.
+/// The vehicles whose suggested rate is still missing an amount, or a
+/// rule a new write answers (#188 layer 2: 跨日怎麼收, 上限何時重新計算,
+/// 停到下一個時段時).
 List<FeeVehicle> incompleteEdits(FeeEdits edits) => [
   for (final MapEntry(key: v, value: rate) in edits.entries)
-    if (rate != null && !validRate(rate.toJson(), v.wire)) v,
+    if (rate != null &&
+        !(validRate(rate.toJson(), v.wire) && rateWriteComplete(rate.toJson())))
+      v,
 ];
 
 /// 修改建議：收費 (design canvas SuggestFee): every vehicle with today's rate

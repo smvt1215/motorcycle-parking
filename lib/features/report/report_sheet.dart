@@ -16,7 +16,6 @@ import '../../models/parking.dart';
 import '../../models/parking_condition.dart'
     show
         ShareKind,
-        ZoneArea,
         allowKeys,
         eligibilityNotStated,
         sourceUrlMaxLength,
@@ -584,35 +583,6 @@ class EligibilityField extends StatelessWidget {
   );
 }
 
-/// Which area of a lot a zone is (機車區、汽車區…), as its signs say.
-class ZoneAreaField extends StatelessWidget {
-  const ZoneAreaField({
-    super.key,
-    required this.value,
-    required this.onChanged,
-  });
-  final ZoneArea? value;
-  final ValueChanged<ZoneArea?> onChanged;
-
-  @override
-  Widget build(BuildContext context) => ChoiceField<ZoneArea?>(
-    key: const ValueKey('zone-area'),
-    label: '區域',
-    value: value,
-    options: zoneAreaLabels,
-    onChanged: onChanged,
-  );
-}
-
-/// Zone areas as lots post them; null is unconfirmed.
-const zoneAreaLabels = <(ZoneArea?, String)>[
-  (null, '未確認'),
-  (ZoneArea.motorcycle, '機車區'),
-  (ZoneArea.car, '汽車區'),
-  (ZoneArea.heavy, '重機專區'),
-  (ZoneArea.mixed, '汽機車混合區'),
-];
-
 /// The notice link a rider may attach (design §1.4, §4.2): https only,
 /// kept with the report for the reviewer, never shown on the map.
 String? evidenceUrlHint(String? value) {
@@ -696,8 +666,6 @@ class ZoneDraft {
   /// 官方未標示 (#201): the lot's notice does not say who may park here.
   bool notStated = false;
 
-  /// 機車區、汽車區… as the lot's signs name it; null is unconfirmed.
-  ZoneArea? area;
   Fee fee = const Fee();
 
   void dispose() {
@@ -712,7 +680,6 @@ class ZoneDraft {
       'condition': {
         'allow': {for (final v in allowKeys) v: eligibilityNotStated},
       },
-    if (area case final area?) 'area': area.name,
     if (guide.text.trim().isNotEmpty) 'guide': guide.text.trim(),
     if (!fee.isEmpty) 'fee': fee.toJson(),
   };
@@ -808,14 +775,6 @@ class ZoneEditor extends StatelessWidget {
                           validator: (v) => (v?.trim().isEmpty ?? true)
                               ? '請填寫分區名稱，或刪除此分區'
                               : textHint(v, 40, name: true),
-                        ),
-                        const SizedBox(height: 12),
-                        ZoneAreaField(
-                          value: zone.area,
-                          onChanged: (v) {
-                            zone.area = v;
-                            onChanged();
-                          },
                         ),
                         const SizedBox(height: 12),
                         ZoneAccessField(zone: zone, onChanged: onChanged),

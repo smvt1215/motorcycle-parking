@@ -9,7 +9,7 @@ insert into official_heavy_spots(name,lat,lng,city,source_url,effective_date) va
 insert into official_heavy_spots(name,lat,lng,city,space_type,heavy_allowed,scooter_allowed,source_url,effective_date,
   source_name,source_id,address,facility_type,scooter_total,parking_zones) values
 ('[測試] 官方路外停車場',24.80,120.97,'新竹市','offStreet',null,true,'https://data.gov.tw/dataset/67771',current_date-1,
-  '新竹市政府','HSZ001','新竹市北區府後街42號','underground',12,'[{"name":"機車區","access":"scooterHeavy"}]');
+  '新竹市政府','HSZ001','新竹市北區府後街42號','underground',12,'[{"name":"機車區","access":"scooterOnly"}]');
 set local role anon;
 select is((select count(*)::integer from official_viewport_spots(24.999,121.499,25.01,121.51)),1,'only effective spots inside the viewport');
 select is((select source||'|'||space_type||'|'||status||'|'||heavy_allowed::text from official_viewport_spots(24.999,121.499,25.01,121.51)),'official|heavyOnly|confirmed|true','rows default to confirmed heavy-only official bays');
@@ -20,7 +20,7 @@ select is((select count(*)::integer from official_heavy_spots where name='[測�
 select is((select heavy_allowed is null and scooter_allowed and source_name='新竹市政府'
   from official_viewport_spots(24.79,120.96,24.81,120.98)),true,'imported lots keep unstated heavy access unknown and carry their government source');
 select is((select address||'|'||facility_type||'|'||scooter_total||'|'||(parking_zones->0->>'access') from official_viewport_spots(24.79,120.96,24.81,120.98)),
-  '新竹市北區府後街42號|underground|12|scooterHeavy','detail fields reach the map');
+  '新竹市北區府後街42號|underground|12|scooterOnly','detail fields reach the map');
 select is((select count(*)::integer from official_viewport_spots(20,118,27,123)),0,'broad queries rejected');
 select is((select count(*)::integer from official_viewport_spots(25.1,121.6,25.0,121.5)),0,'reversed bounds rejected');
 select throws_ok($$insert into official_heavy_spots(name,lat,lng,city,source_url,effective_date) values('x',25,121.5,'臺北市','https://a.gov.tw',current_date)$$,'42501',null,'clients cannot write official spots');
