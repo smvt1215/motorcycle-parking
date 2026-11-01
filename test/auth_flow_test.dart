@@ -277,6 +277,54 @@ void main() {
     expect(find.text('登入成功'), findsNothing);
   });
 
+  Future<AuthTestStore> mountFeedback(
+    WidgetTester tester,
+    ValueNotifier<bool> covered,
+  ) async {
+    final store = (await tester.runAsync(authStore))!;
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.runAsync(store.client!.dispose);
+    });
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AuthFeedback(
+          store: store,
+          suppressed: () => covered.value,
+          suppressedListenable: covered,
+          child: const SizedBox.expand(),
+        ),
+      ),
+    );
+    return store;
+  }
+
+  testWidgets('刪除帳號確認頁在前時，登入不顯示登入成功提示', (tester) async {
+    final covered = ValueNotifier(true);
+    addTearDown(covered.dispose);
+    final store = await mountFeedback(tester, covered);
+    await tester.runAsync(() => completeOAuth(store));
+    await tester.pump();
+    expect(store.canReport, isTrue);
+    expect(find.text('登入成功'), findsNothing);
+    await tester.pump(const Duration(seconds: 4));
+  });
+
+  testWidgets('登入成功提示顯示中出現刪除帳號確認頁，提示立即收起', (tester) async {
+    final covered = ValueNotifier(false);
+    addTearDown(covered.dispose);
+    final store = await mountFeedback(tester, covered);
+    await tester.runAsync(() => completeOAuth(store));
+    await tester.pump();
+    expect(find.text('登入成功'), findsOneWidget);
+    covered.value = true;
+    await tester.pump();
+    expect(find.text('登入成功'), findsNothing);
+    // The cancelled timer must not bring it back.
+    await tester.pump(const Duration(seconds: 4));
+    expect(find.text('登入成功'), findsNothing);
+  });
+
   testWidgets('從帳號設定登入保留設定頁，更新帳號而非關閉原頁', (tester) async {
     final store = await mountAuthApp(tester);
     showSettings(appContext(tester), store);
