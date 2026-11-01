@@ -24,6 +24,9 @@
 /// reader's suggestion; none is assumed by default. The report marks each
 /// spot 直接可轉換 or `依推定 <category>`, and `--apply` writes each category in
 /// its own batches, with the category in the audit note.
+/// `--exclude <source_id>` (repeatable) keeps a spot out of the conversion
+/// whatever it reads as, for one a person will fix by hand; the report lists
+/// them.
 library;
 
 import 'dart:convert';
@@ -49,6 +52,7 @@ final usage =
   --assume <類別>    也轉換該推定類別的「需人工確認」點位，採解析建議值；
                      可重複給多個類別，預設不推定。類別：
 ${feeAssumptions.map((a) => '                       ${a.id}：${a.name}').join('\n')}
+  --exclude <id>     不轉換這個點位（source_id，官方點為 official:<id>），可重複
   --apply            寫入可轉換的費率（需同時給 --actor 與 --note）
   --actor <uuid>     執行寫入的管理者帳號 id（稽核紀錄的 actor）
   --note <文字>      稽核紀錄的說明，例如 "#235 staging"
@@ -82,7 +86,11 @@ class Options {
     this.seed = 235,
     this.help = false,
     this.assume = const {},
+    this.exclude = const {},
   });
+
+  /// Spots (`--exclude <source_id>`) never converted in this run.
+  final Set<String> exclude;
   final bool apply;
 
   /// The 推定規則 categories (`--assume`) whose suggestions are converted too.
@@ -98,6 +106,7 @@ class Options {
     String? actor, note, out, input;
     var sample = 20, seed = 235;
     final assume = <String>{};
+    final exclude = <String>{};
     for (var i = 0; i < args.length; i++) {
       final arg = args[i];
       String value() {
@@ -137,6 +146,10 @@ class Options {
             );
           }
           assume.add(id);
+        case '--exclude':
+          final id = value().trim();
+          if (id.isEmpty) throw UsageException('--exclude 需要點位 id');
+          exclude.add(id);
         case '-h' || '--help':
           help = true;
         default:
@@ -172,6 +185,7 @@ class Options {
       seed: seed,
       help: help,
       assume: assume,
+      exclude: exclude,
     );
   }
 }
@@ -220,17 +234,22 @@ class SpotRow {
 }
 
 class Conversion {
-  Conversion(this.row, {Set<String> assume = const {}})
+  Conversion(this.row, {Set<String> assume = const {}, this.excluded = false})
     : reading = readFeeNote(row.feeNote, spaceType: row.spaceType) {
-    write = feeToWrite(
-      reading,
-      spaceType: row.spaceType,
-      official: row.official,
-      assumed: assume,
-    );
+    write = excluded
+        ? null
+        : feeToWrite(
+            reading,
+            spaceType: row.spaceType,
+            official: row.official,
+            assumed: assume,
+          );
   }
   final SpotRow row;
   final FeeReading reading;
+
+  /// Kept out by `--exclude`: nothing is written, whatever it reads as.
+  final bool excluded;
 
   /// The fee to write and the 推定規則 category it rests on (null when the
   /// reader is certain); null when nothing is written.
@@ -247,7 +266,11 @@ class Conversion {
 List<Conversion> readAll(
   Iterable<SpotRow> rows, {
   Set<String> assume = const {},
-}) => [for (final row in rows) Conversion(row, assume: assume)];
+  Set<String> exclude = const {},
+}) => [
+  for (final row in rows)
+    Conversion(row, assume: assume, excluded: exclude.contains(row.sourceId)),
+];
 
 /// What `--apply` sends for [conversions]: only the convertible ones, with
 /// the note and space type they were read from so the RPC skips a spot that
@@ -312,6 +335,7 @@ String previewReport(
   int sample = 20,
   int seed = 235,
   Set<String> assume = const {},
+  Set<String> exclude = const {},
 }) {
   final out = StringBuffer();
   final total = conversions.length;
@@ -350,6 +374,33 @@ String previewReport(
     if (!assume.contains(a.id)) continue;
     final n = conversions.where((c) => c.category == a.id).length;
     out.writeln('| 將寫入：依推定 ${a.id}（${_cell(a.name)}） | $n |');
+  }
+  final excluded = conversions.where((c) => c.excluded).toList()
+    ..sort((a, b) => a.row.sourceId.compareTo(b.row.sourceId));
+  final present = {for (final c in conversions) c.row.sourceId};
+  final missing = [...exclude.where((id) => !present.contains(id))]..sort();
+  if (exclude.isNotEmpty) {
+    out.writeln('| 排除（--exclude，不轉換） | ${excluded.length} |');
+  }
+
+  if (exclude.isNotEmpty) {
+    out
+      ..writeln()
+      ..writeln('## 排除的點位（--exclude，${excluded.length} 筆）')
+      ..writeln()
+      ..writeln('| 點位 id | 點位 | 原文（fee_note） | 解析判斷 |')
+      ..writeln('|---|---|---|---|');
+    for (final c in excluded) {
+      out.writeln(
+        '| ${c.row.sourceId} | ${_cell(c.row.name)} | '
+        '${_cell(_clip(c.row.feeNote))} | ${_cell(c.reading.reason)} |',
+      );
+    }
+    if (missing.isNotEmpty) {
+      out
+        ..writeln()
+        ..writeln('**找不到、未排除任何點位的 --exclude：${missing.join('、')}**');
+    }
   }
 
   out
@@ -676,7 +727,11 @@ Future<int> run(
     source = Uri.parse(url).host;
   }
 
-  final conversions = readAll(rows, assume: options.assume);
+  final conversions = readAll(
+    rows,
+    assume: options.assume,
+    exclude: options.exclude,
+  );
   var report = previewReport(
     conversions,
     at: clock(),
@@ -684,6 +739,7 @@ Future<int> run(
     sample: options.sample,
     seed: options.seed,
     assume: options.assume,
+    exclude: options.exclude,
   );
   var ok = true;
   if (options.apply) {

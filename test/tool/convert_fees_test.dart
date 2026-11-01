@@ -572,6 +572,77 @@ void main() {
     });
   });
 
+  group('排除（--exclude）：指定點位一律不轉換', () {
+    test('--exclude is repeatable and needs an id', () {
+      final o = Options.parse(['--exclude', 'a3', '--exclude', 'official:a1']);
+      expect(o.exclude, {'a3', 'official:a1'});
+      expect(Options.parse([]).exclude, isEmpty);
+      for (final args in [
+        ['--exclude'],
+        ['--exclude', ' '],
+        ['--exclude', '--apply'],
+      ]) {
+        expect(
+          () => Options.parse(args),
+          throwsA(isA<UsageException>()),
+          reason: '$args',
+        );
+      }
+    });
+
+    test('an excluded spot is neither sent nor assumed, and is listed', () {
+      final input = [
+        ...rows,
+        row('m1', '每 4 小時 30 元', spaceType: 'paidMotorcycle'),
+      ];
+      final exclude = {'a3', 'm1', 'nope'};
+      final assume = {'motorcycle-bay-unlabelled'};
+      final conversions = readAll(input, assume: assume, exclude: exclude);
+      expect(applyItems(conversions).map((i) => i['source_id']), [
+        'official:a1',
+        'official:a2',
+        'a4',
+      ]);
+      final report = previewReport(
+        conversions,
+        at: DateTime.utc(2026, 11, 1),
+        source: 's',
+        assume: assume,
+        exclude: exclude,
+      );
+      expect(report, contains('| 排除（--exclude，不轉換） | 2 |'));
+      expect(report, contains('## 排除的點位（--exclude，2 筆）'));
+      expect(report, contains('| a3 | 測試點 a3 | 每小時 30 元 | 重機專用格只有大型重機停放 |'));
+      expect(report, contains('| m1 | 測試點 m1 | 每 4 小時 30 元 | 未註明是哪一種車的費率 |'));
+      expect(report, contains('找不到、未排除任何點位的 --exclude：nope'));
+      expect(
+        previewReport(readAll(rows), at: DateTime.utc(2026), source: 's'),
+        isNot(contains('排除')),
+      );
+    });
+
+    test('--apply leaves the excluded ones out', () async {
+      final store = FakeStore(rows);
+      final code = await run(
+        ['--apply', '--actor', _actor, '--note', 'x', '--exclude', 'a4'],
+        env: const {
+          'SUPABASE_URL': 'https://example.supabase.co',
+          'SUPABASE_SERVICE_ROLE_KEY': 'k',
+        },
+        connect: (url, key) => store,
+        now: () => DateTime.utc(2026, 11, 1),
+        stdoutSink: StringBuffer(),
+        stderrSink: StringBuffer(),
+      );
+      expect(code, 0);
+      expect(store.calls.single.items.map((i) => i['source_id']), [
+        'official:a1',
+        'official:a2',
+        'a3',
+      ]);
+    });
+  });
+
   group('RestFeeStore', () {
     test(
       'reads both tables without a fee, page by page, with the key',
