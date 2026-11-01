@@ -6,6 +6,7 @@ const served = {
   min_supported_app_version: '0.1.0',
   rules_version: 25,
   spots_version: 808,
+  availability_beta_cities: ['臺北市'],
 };
 
 function answering(status: number, body: unknown) {
