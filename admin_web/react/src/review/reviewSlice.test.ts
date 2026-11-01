@@ -1,7 +1,7 @@
 import { adminApi } from '../app/adminApi';
 import { makeStore } from '../app/store';
 import { fixtureSource } from './fixtureSource';
-import { decisionQueued, decisionUndone, UNDO_MS } from './reviewSlice';
+import { decisionQueued, decisionUndone, draftReopened, UNDO_MS } from './reviewSlice';
 
 const request = (reportId: string) => ({
   reportId,
@@ -51,6 +51,23 @@ describe('undo window', () => {
     expect(source.resolved).toEqual([]);
     expect(store.getState().review.pending).toEqual({});
     expect(store.getState().review.lastQueued).toBeNull();
+  });
+
+  it('undo keeps the draft for the detail to reopen, once (#217)', () => {
+    const store = makeStore();
+    const draft = { mode: 'reject', kind: 'duplicate' } as const;
+    store.dispatch(
+      decisionQueued({
+        request: { reportId: 'r-x', decision: 'rejected', resolutionKind: 'duplicate', note: '' },
+        name: 'x',
+        draft,
+      }),
+    );
+    expect(store.getState().review.drafts).toEqual({});
+    store.dispatch(decisionUndone('r-x'));
+    expect(store.getState().review.drafts).toEqual({ 'r-x': draft });
+    store.dispatch(draftReopened('r-x'));
+    expect(store.getState().review.drafts).toEqual({});
   });
 
   it('a failed write puts the report back with its error and keeps the note', async () => {

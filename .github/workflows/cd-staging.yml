@@ -187,6 +187,10 @@ jobs:
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
       ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+      # App Check (#203): FirebaseOptions for this platform's app, read by tool/cd_config.py.
+      FIREBASE_ANDROID_API_KEY: ${{ vars.FIREBASE_ANDROID_API_KEY }}
+      FIREBASE_ANDROID_APP_ID: ${{ vars.FIREBASE_ANDROID_APP_ID }}
+      FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'motocycle-parking-guide' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -275,6 +279,10 @@ jobs:
       IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
       IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
       IOS_PROFILE_BASE64: ${{ secrets.IOS_PROFILE_BASE64 }}
+      # App Check (#203): FirebaseOptions for this platform's app, read by tool/cd_config.py.
+      FIREBASE_IOS_API_KEY: ${{ vars.FIREBASE_IOS_API_KEY }}
+      FIREBASE_IOS_APP_ID: ${{ vars.FIREBASE_IOS_APP_ID }}
+      FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'motocycle-parking-guide' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:

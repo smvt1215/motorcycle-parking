@@ -89,6 +89,7 @@ staging profile 必須是 Ad Hoc，包含受邀 iPhone 的 UDID；production pro
 | `FIREBASE_ANDROID_APP_ID` | Firebase 中 staging Android APP 的 App ID（套件名稱 `tw.motopark.motorcycle_parking.staging`） |
 | `FIREBASE_WORKLOAD_IDENTITY_PROVIDER` | Google Cloud Workload Identity Provider 的完整 resource name |
 | `FIREBASE_SERVICE_ACCOUNT` | 有 Firebase App Distribution Admin 角色的服務帳號 email |
+| `FIREBASE_ANDROID_API_KEY`、`FIREBASE_IOS_API_KEY` | App Check 用的 Firebase API key，只開 App Check 與 Installations API；可選 `FIREBASE_PROJECT_ID`（staging 預設 `motocycle-parking-guide`）。見 [CICD.md〈App Check〉](CICD.md#app-check203) |
 
 建立 Firebase iOS APP 時 bundle ID 必須是 `tw.motopark.motorcycleParking.staging`。建立測試群組 `staging-ios` 與 `staging-android`，邀請測試者；也可在 App Distribution 建立邀請連結讓測試者自行加入（iOS 測試者仍需註冊 UDID 並更新 Ad Hoc profile）。
 

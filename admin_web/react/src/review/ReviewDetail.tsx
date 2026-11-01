@@ -30,9 +30,11 @@ import {
 import { RejectPanel } from './RejectPanel';
 import {
   decisionQueued,
+  draftReopened,
   failureDismissed,
   noteChanged,
   reloadForConflict,
+  type DecisionDraft,
   type FailedDecision,
 } from './reviewSlice';
 import type { ResolveRequest } from './source';
@@ -193,15 +195,42 @@ function ReportDetail({ reportId }: { reportId: string }) {
   const failure = useAppSelector((state) => state.review.failures[reportId]);
   const reloaded = useAppSelector((state) => reportId in state.review.reloaded);
   const pendingDecision = useAppSelector((state) => state.review.pending[reportId]);
+  // An undone 修改後套用 or 駁回 comes back as it was left (#217).
+  const draft = useAppSelector((state) => state.review.drafts[reportId]);
   const noteId = useId();
 
-  const [mode, setMode] = useState<Mode>('view');
-  const [rejectKind, setRejectKind] = useState<ResolutionKind | null>(null);
-  const [editValues, setEditValues] = useState<Record<string, unknown>>({});
+  const [mode, setMode] = useState<Mode>(draft?.mode ?? 'view');
+  const [rejectKind, setRejectKind] = useState<ResolutionKind | null>(
+    draft?.mode === 'reject' ? draft.kind : null,
+  );
+  const [editValues, setEditValues] = useState<Record<string, unknown>>(
+    draft?.mode === 'edit' ? draft.values : {},
+  );
   /** Fields the admin set, so a restated vehicle column is still written (verified). */
-  const [touched, setTouched] = useState<ReadonlySet<string>>(new Set());
+  const [touched, setTouched] = useState<ReadonlySet<string>>(
+    () => new Set(draft?.mode === 'edit' ? draft.touched : []),
+  );
   const [showErrors, setShowErrors] = useState(false);
   const [editMessage, setEditMessage] = useState<string | null>(null);
+  // Undo can also land on this report while it is already open (back, then
+  // 復原; Codex review, PR #238): a new draft is taken in during render.
+  const [takenDraft, setTakenDraft] = useState(draft);
+  if (draft && draft !== takenDraft) {
+    setTakenDraft(draft);
+    setMode(draft.mode);
+    setShowErrors(false);
+    setEditMessage(null);
+    if (draft.mode === 'reject') {
+      setRejectKind(draft.kind);
+    } else {
+      setEditValues(draft.values);
+      setTouched(new Set(draft.touched));
+    }
+  }
+  // Each draft is reopened once; it then leaves the store.
+  useEffect(() => {
+    if (draft) dispatch(draftReopened(reportId));
+  }, [draft, dispatch, reportId]);
 
   const report = open.find((r) => r.id === reportId);
   const spot = report ? spots[report.sourceId] : undefined;
@@ -221,10 +250,10 @@ function ReportDetail({ reportId }: { reportId: string }) {
   };
 
   /** Queue a decision (5 s undo window) and move to the next report. */
-  const queue = (request: ResolveRequest) => {
+  const queue = (request: ResolveRequest, draft?: DecisionDraft) => {
     if (!report) return;
     const next = neighbourOf(visible, reportId);
-    dispatch(decisionQueued({ request, name: spotName(report, spot) }));
+    dispatch(decisionQueued({ request, name: spotName(report, spot), ...(draft && { draft }) }));
     navigate(next ? `/review/${next.id}${search}` : `/review${search}`);
   };
 
@@ -241,7 +270,10 @@ function ReportDetail({ reportId }: { reportId: string }) {
   const confirmReject = () => {
     setShowErrors(true);
     if (rejectKind === null || needsRejectNote(rejectKind, note)) return;
-    queue({ reportId, decision: 'rejected', resolutionKind: rejectKind, note: note.trim() });
+    queue(
+      { reportId, decision: 'rejected', resolutionKind: rejectKind, note: note.trim() },
+      { mode: 'reject', kind: rejectKind },
+    );
   };
 
   const startEdit = () => {
@@ -264,14 +296,17 @@ function ReportDetail({ reportId }: { reportId: string }) {
       setEditMessage('套用值和目前點位一樣，沒有要寫入的修改；不需要修改就用「駁回」結案。');
       return;
     }
-    queue({
-      reportId,
-      decision: 'accepted',
-      patch: outcome.patch,
-      edited: true,
-      note: note.trim(),
-      force: false,
-    });
+    queue(
+      {
+        reportId,
+        decision: 'accepted',
+        patch: outcome.patch,
+        edited: true,
+        note: note.trim(),
+        force: false,
+      },
+      { mode: 'edit', values: editValues, touched: [...touched] },
+    );
   };
 
   const cancelMode = () => {

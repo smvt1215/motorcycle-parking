@@ -1,50 +1,444 @@
 import 'dart:math' as math;
 
 import '../../models/parking.dart';
+import '../../domain/map_filter_display.dart';
 import '../../models/space_kind.dart';
 import '../../ui/adaptive/adaptive.dart';
 import 'map_legend.dart';
 
-/// Filters the map by bay kind with the same list the report forms use
-/// (#188, design canvas P1). Each option shows its ground marking and how
-/// many spots of that kind the current map view holds.
+/// Filters the map by bay kind (#188, design canvas P1): any number of the
+/// seven bay kinds and the lot, none picked being 全部格位. Each option
+/// shows its ground marking and how many spots of that kind the current
+/// map view holds; a pick applies at once and the sheet stays open.
 Future<void> showSpaceTypeSheet(
   BuildContext context, {
-  required SpaceKind? value,
+  required Set<SpaceKind> value,
   required Map<SpaceKind?, int> counts,
-  required ValueChanged<SpaceKind?> onChanged,
-}) => showAdaptiveSheet<void>(
-  context,
-  (ctx) => ContentPage(
-    children: [
-      SheetTitle('格位類型'),
-      const SizedBox(height: 4),
-      Text(
-        '只顯示選定類型的停車點，數字為目前地圖範圍內的數量。',
-        style: Theme.of(ctx).textTheme.bodyMedium
-            ?.copyWith(color: Theme.of(ctx).colorScheme.onSurfaceVariant),
-      ),
-      const SizedBox(height: 16),
-      SpaceKindOption(
-        kind: null,
-        count: counts[null] ?? 0,
-        selected: value == null,
-        onTap: () {
-          onChanged(null);
-          Navigator.pop(ctx);
-        },
-      ),
-      SpaceKindList(
-        value: value,
+  required ValueChanged<Set<SpaceKind>> onChanged,
+}) {
+  var picked = value;
+  return showAdaptiveSheet<void>(
+    context,
+    (ctx) => StatefulBuilder(
+      builder: (ctx, setState) => _SpaceKindSheet(
+        value: picked,
         counts: counts,
-        onChanged: (option) {
-          onChanged(option);
-          Navigator.pop(ctx);
+        onChanged: (kinds) {
+          setState(() => picked = kinds);
+          onChanged(kinds);
         },
       ),
-    ],
-  ),
-);
+    ),
+  );
+}
+
+class _SpaceKindSheet extends StatelessWidget {
+  const _SpaceKindSheet({
+    required this.value,
+    required this.counts,
+    required this.onChanged,
+  });
+  final Set<SpaceKind> value;
+  final Map<SpaceKind?, int> counts;
+  final ValueChanged<Set<SpaceKind>> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = _MultiPalette.of(context);
+    final text = Theme.of(context).textTheme;
+    return SafeArea(
+      child: ListView(
+        shrinkWrap: true,
+        padding: EdgeInsets.fromLTRB(0, isCupertino ? 16 : 0, 0, 34),
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        spaceKindSheetTitle,
+                        style: text.headlineSmall?.copyWith(
+                          fontSize: 22,
+                          fontWeight: isCupertino
+                              ? FontWeight.w700
+                              : FontWeight.w400,
+                          color: palette.ink,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        spaceKindSheetLead,
+                        style: TextStyle(
+                          fontSize: isCupertino ? 13 : 14,
+                          height: 1.45,
+                          color: palette.lead,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _CloseButton(palette: palette),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          SpaceKindMultiList(
+            value: value,
+            counts: counts,
+            onChanged: onChanged,
+          ),
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              spaceKindSummary(value),
+              key: const ValueKey('space-summary'),
+              style: TextStyle(fontSize: 12, color: palette.lead),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The sheet's close button: a grey 44pt circle on iOS (P1-ios), a 48dp
+/// icon button on Android, so the sheet never needs a drag to close.
+class _CloseButton extends StatelessWidget {
+  const _CloseButton({required this.palette});
+  final _MultiPalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    void close() => Navigator.pop(context);
+    if (!isCupertino) {
+      return IconButton(
+        tooltip: '關閉',
+        onPressed: close,
+        style: IconButton.styleFrom(minimumSize: const Size.square(48)),
+        icon: const Icon(Icons.close),
+      );
+    }
+    return Semantics(
+      button: true,
+      label: '關閉',
+      onTap: close,
+      excludeSemantics: true,
+      child: Tooltip(
+        message: '關閉',
+        child: Material(
+          color: palette.closeFill,
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: close,
+            child: SizedBox.square(
+              dimension: 44,
+              child: Icon(Icons.close, size: 20, color: palette.closeInk),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The colours of P1: the board's own in the light theme, the scheme's in
+/// the dark one.
+class _MultiPalette {
+  const _MultiPalette({
+    required this.ink,
+    required this.lead,
+    required this.accent,
+    required this.band,
+    required this.card,
+    required this.divider,
+    required this.pickedRow,
+    required this.allTile,
+    required this.boxEdge,
+    required this.closeFill,
+    required this.closeInk,
+  });
+
+  factory _MultiPalette.of(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    if (colors.brightness == Brightness.dark) {
+      return _MultiPalette(
+        ink: colors.onSurface,
+        lead: colors.onSurfaceVariant,
+        accent: colors.primary,
+        band: colors.surfaceContainerLow,
+        card: colors.surfaceContainerHigh,
+        divider: colors.outlineVariant,
+        pickedRow: colors.primaryContainer,
+        allTile: colors.secondaryContainer,
+        boxEdge: colors.onSurfaceVariant,
+        closeFill: colors.surfaceContainerHighest,
+        closeInk: colors.onSurface,
+      );
+    }
+    return const _MultiPalette(
+      ink: Color(0xff16313a),
+      lead: Color(0xff59646c),
+      accent: Color(0xff176273),
+      band: Color(0xfff2f2f7),
+      card: Colors.white,
+      divider: Color(0xffe5e5ea),
+      pickedRow: Color(0xffddeff3),
+      allTile: Color(0xffe3f0f2),
+      boxEdge: Color(0xff3e4a50),
+      closeFill: Color(0x1f767680),
+      closeInk: Color(0xff3c3c43),
+    );
+  }
+  final Color ink, lead, accent, band, card, divider, pickedRow, allTile;
+  final Color boxEdge, closeFill, closeInk;
+}
+
+/// The multiple-choice list of the map filter (P1): 全部格位, then the
+/// seven bay kinds and the lot in [SpaceKind] order, each a checkbox.
+/// Picking 全部格位 clears [value]; unpicking the last kind returns to it.
+/// The single-choice [SpaceKindList] stays for the forms and the admin
+/// site. iOS draws an inset grouped list with trailing checkmarks, Android
+/// full-width rows with a tinted pick and a leading-edge checkbox.
+class SpaceKindMultiList extends StatelessWidget {
+  const SpaceKindMultiList({
+    super.key,
+    required this.value,
+    required this.onChanged,
+    this.counts,
+  });
+
+  /// The picked kinds; empty is 全部格位.
+  final Set<SpaceKind> value;
+  final ValueChanged<Set<SpaceKind>> onChanged;
+
+  /// Spots of each kind in the map view, null for all; null shows none.
+  final Map<SpaceKind?, int>? counts;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = _MultiPalette.of(context);
+    final rows = <Widget>[
+      _SpaceKindCheckRow(
+        key: const ValueKey('space-multi-all'),
+        kind: null,
+        count: counts?[null],
+        checked: value.isEmpty,
+        palette: palette,
+        divider: false,
+        onTap: () => onChanged(const {}),
+      ),
+      for (final kind in SpaceKind.values)
+        _SpaceKindCheckRow(
+          key: ValueKey('space-multi-${kind.name}'),
+          kind: kind,
+          count: counts?[kind],
+          checked: value.contains(kind),
+          palette: palette,
+          divider: true,
+          onTap: () => onChanged(
+            value.contains(kind)
+                ? ({...value}..remove(kind))
+                : {...value, kind},
+          ),
+        ),
+    ];
+    final group = Semantics(
+      container: true,
+      explicitChildNodes: true,
+      label: spaceKindGroupLabel,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: rows,
+      ),
+    );
+    if (!isCupertino) return group;
+    return ColoredBox(
+      color: palette.band,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: ColoredBox(color: palette.card, child: group),
+        ),
+      ),
+    );
+  }
+}
+
+class _SpaceKindCheckRow extends StatelessWidget {
+  const _SpaceKindCheckRow({
+    super.key,
+    required this.kind,
+    required this.count,
+    required this.checked,
+    required this.palette,
+    required this.divider,
+    required this.onTap,
+  });
+
+  /// Null is 全部格位.
+  final SpaceKind? kind;
+  final int? count;
+  final bool checked;
+  final _MultiPalette palette;
+
+  /// The iOS hairline above the row.
+  final bool divider;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final kind = this.kind;
+    final label = kind?.label ?? allSpaceKindsLabel;
+    final count = this.count;
+    final cupertino = isCupertino;
+    final row = ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 60),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          children: [
+            ExcludeSemantics(
+              child: kind == null
+                  ? Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: palette.allTile,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Icon(Icons.apps, size: 24, color: palette.accent),
+                    )
+                  : GroundMarking(
+                      type: kind.markingType,
+                      shared: kind == SpaceKind.scooterHeavy,
+                      size: 44,
+                      radius: 6,
+                    ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: cupertino ? 17 : 16,
+                      color: palette.ink,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    kind?.detail ?? allSpaceKindsDetail,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 13, color: palette.lead),
+                  ),
+                ],
+              ),
+            ),
+            if (count != null) ...[
+              const SizedBox(width: 14),
+              Text(
+                '$count',
+                style: TextStyle(
+                  fontFamily: 'Outfit',
+                  fontSize: 15,
+                  color: palette.lead,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+            const SizedBox(width: 14),
+            SizedBox.square(
+              dimension: 24,
+              child: Center(
+                child: cupertino
+                    ? Visibility.maintain(
+                        visible: checked,
+                        child: Icon(
+                          Icons.check,
+                          size: 22,
+                          color: palette.accent,
+                        ),
+                      )
+                    : _CheckBox(checked: checked, palette: palette),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    return Semantics(
+      checked: checked,
+      label: spaceKindRowLabel(label, count),
+      // The child's tap is excluded with its semantics; screen readers
+      // need it here.
+      onTap: onTap,
+      excludeSemantics: true,
+      child: Material(
+        color: cupertino
+            ? palette.card
+            : checked
+            ? palette.pickedRow
+            : Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          child: cupertino && divider
+              ? DecoratedBox(
+                  decoration: BoxDecoration(
+                    border: Border(
+                      top: BorderSide(color: palette.divider, width: .5),
+                    ),
+                  ),
+                  child: row,
+                )
+              : row,
+        ),
+      ),
+    );
+  }
+}
+
+/// Android's 18dp checkbox: filled with a white check when picked, an
+/// outline otherwise.
+class _CheckBox extends StatelessWidget {
+  const _CheckBox({required this.checked, required this.palette});
+  final bool checked;
+  final _MultiPalette palette;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 18,
+    height: 18,
+    decoration: BoxDecoration(
+      color: checked ? palette.accent : Colors.transparent,
+      borderRadius: BorderRadius.circular(2),
+      border: Border.all(
+        color: checked ? palette.accent : palette.boxEdge,
+        width: 2,
+      ),
+    ),
+    child: checked
+        ? Icon(
+            Icons.check,
+            size: 14,
+            color: Theme.of(context).colorScheme.brightness == Brightness.dark
+                ? Theme.of(context).colorScheme.onPrimary
+                : Colors.white,
+          )
+        : null,
+  );
+}
 
 /// The seven bay kinds and the lot (#188, design canvas S4, P1), in
 /// [SpaceKind] order. [followUp] goes indented under the picked kind: what
@@ -222,19 +616,24 @@ class GroundMarking extends StatelessWidget {
     required this.type,
     this.size = 44,
     this.shared = false,
+    this.radius = 10,
   });
 
   /// Null with [shared] unset tiles the four street markings (全部).
   final SpaceType? type;
   final double size;
 
-  /// 普大共用機車格: plain motorcycle bays with the heavy-bike helmet.
+  /// 普大共用機車格: plain motorcycle bays with the heavy-bike badge's
+  /// fallback glyph (two_wheeler).
   final bool shared;
+
+  /// The patch's corner radius; P1 draws 6.
+  final double radius;
   @override
   Widget build(BuildContext context) => SizedBox.square(
     dimension: size,
     child: ClipRRect(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(radius),
       child: CustomPaint(painter: _MarkingPainter(type, shared: shared)),
     ),
   );
@@ -256,7 +655,8 @@ class _MarkingPainter extends CustomPainter {
     canvas.drawRect(Offset.zero & size, Paint()..color = asphalt);
     if (shared) {
       _paintType(canvas, size, SpaceType.freeMotorcycle);
-      // The helmet of the heavy-only badge over the plain bays.
+      // The heavy-only badge's fallback glyph (two_wheeler, not the
+      // licensed silhouette) over the plain bays.
       _paintGlyph(
         canvas,
         size,
@@ -318,7 +718,8 @@ class _MarkingPainter extends CustomPainter {
           Rect.fromLTWH(w * .22, h * .16, w * .56, h * .68),
           line,
         );
-        // The helmet of the map's heavy-only badge, painted in the bay.
+        // The heavy-only badge's fallback glyph (two_wheeler), painted in
+        // the bay.
         _paintGlyph(
           canvas,
           size,

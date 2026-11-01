@@ -7,16 +7,22 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 import '../core/address_search.dart';
+import '../core/app_check.dart';
 import '../models/holiday_calendar.dart';
 import '../models/parking.dart';
 import '../models/spot_history.dart';
 import '../domain/map_viewport.dart';
 import '../domain/eligibility.dart' show useParkingDecision;
 import '../domain/precheck.dart';
+import 'rules_cache.dart';
 
 class RulesRepository {
-  RulesRepository(this.client);
+  RulesRepository(this.client, {this.cache});
   final SupabaseClient? client;
+
+  /// Where downloaded rules are kept for offline use; null keeps none (the
+  /// admin site, tests).
+  final RulesCache? cache;
 
   /// Every rule as stored, expired ones and their `expires_on` included
   /// (`city_rules_v2()`, §3.2). A backend not yet migrated lacks it; its
@@ -37,31 +43,14 @@ class RulesRepository {
     }
   }
 
+  /// Bundled rules, overlaid with the backend's (see [overlayRules]). With a
+  /// [cache], a successful download is stored for offline launches.
   Future<List<CityRule>> load() async {
-    final raw = jsonDecode(
-      await rootBundle.loadString('assets/rules/parking_rules.json'),
-    ) as List<dynamic>;
-    final rules = raw
-        .map((e) => CityRule.fromJson(e as Map<String, dynamic>))
-        .toList();
-    if (client != null) {
-      final remote = await _remoteRules();
-      for (final row in remote) {
-        final r = CityRule.fromJson(row);
-        final i = rules.indexWhere(
-          (old) => old.city == r.city && old.vehicle == r.vehicle,
-        );
-        if (i < 0) {
-          rules.add(r);
-          // Admins maintain the remote rows; the bundled copy is the fallback,
-          // so a tie keeps the admin's edit (a migration leaves such a row
-          // alone rather than overwrite it).
-        } else if (r.version >= rules[i].version) {
-          rules[i] = r;
-        }
-      }
-    }
-    return rules;
+    final bundled = await bundledRuleEntries();
+    if (client == null) return [for (final e in bundled) e.rule];
+    final merged = overlayRules(bundled, parseRuleRows(await _remoteRules()));
+    await cache?.write([for (final e in merged) e.row]);
+    return [for (final e in merged) e.rule];
   }
 }
 
@@ -113,8 +102,12 @@ class ParkingResult {
 }
 
 class ParkingRepository {
-  ParkingRepository(this.client);
+  ParkingRepository(this.client, {AppCheckTokenSource? appCheckToken})
+    : _appCheckToken = appCheckToken ?? AppCheck.token;
   final SupabaseClient? client;
+
+  /// The App Check token sent with reports (#203); none leaves them as is.
+  final AppCheckTokenSource _appCheckToken;
   List<ParkingSpot>? _demoSpots;
 
   /// Reads [name]'s newest variant in [viewportVariants] this backend has;
@@ -203,6 +196,7 @@ class ParkingRepository {
       final res = await client!.functions.invoke(
         'submit-report',
         body: {...body, 'device_id': deviceId},
+        headers: await AppCheck.headers(_appCheckToken),
       );
       return res.data as Map<String, dynamic>;
     } on FunctionException catch (e) {
