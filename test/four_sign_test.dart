@@ -503,14 +503,16 @@ void main() {
       expect([for (final s in segments) s.openNow], [true, false, true]);
     });
 
-    test('大型重機在汽機車共用格依法可停（decideParking 的判定，不看機車時段）', () {
+    test('大型重機白天：北側一般機車格與南側共用格可停，北側共用格不算（#226：共用格依時段）', () {
       final segments = decideSegments(
         street,
         VehicleType.heavy,
         rules,
         now: day,
       );
-      expect([for (final s in segments) s.openNow], [true, true, true]);
+      expect([for (final s in segments) s.openNow], [true, false, true]);
+      final p = plates(street, VehicleType.heavy, day);
+      expect((p[3].main, p[3].note), ('2 段', '北側、南側'));
     });
 
     test('A6 卡 2：普通機車白天 2 段共 30 格，分 2 段', () {
