@@ -58,6 +58,8 @@ class ChangeRoutingTest(unittest.TestCase):
                 self.assertEqual(self.targets(path), {"admin_react"})
         # Its tokens are checked against DESIGN.md; the Flutter admin still reads admin_web/.
         self.assertEqual(self.targets("admin_web/DESIGN.md"), {"quality", "admin_react"})
+        # The generated API client follows the API documents (and the backend checks them).
+        self.assertEqual(self.targets("supabase/api/v1/api_v1.json"), {"backend", "admin_react"})
         self.assertEqual(self.targets("admin_web/index.html"), {"quality"})
         self.assertEqual(self.targets("admin_web/react/src/main.tsx", "lib/main_admin.dart"),
                          {"quality", "admin_react"})

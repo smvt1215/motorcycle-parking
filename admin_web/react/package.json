@@ -17,7 +17,8 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "smoke": "node scripts/smoke.mjs",
-    "build:fixture": "tsc -b && vite build --mode fixture --outDir dist-fixture"
+    "build:fixture": "tsc -b && vite build --mode fixture --outDir dist-fixture",
+    "codegen": "node scripts/codegen.mjs && prettier --write src/api/v1"
   },
   "dependencies": {
     "@reduxjs/toolkit": "2.13.0",
@@ -28,6 +29,7 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@rtk-query/codegen-openapi": "2.2.0",
     "@testing-library/jest-dom": "7.0.1",
     "@testing-library/react": "16.3.3",
     "@testing-library/user-event": "14.6.8",
