@@ -230,6 +230,18 @@ class LocalRepository {
       prefs.setString('vehicle', value.name);
   bool get legendSeen => prefs.getBool('legendSeen') ?? false;
   Future<void> setLegendSeen() => prefs.setBool('legendSeen', true);
+
+  /// The Beta cities the backend last named; null before it ever answered.
+  List<String>? get availabilityBetaCities =>
+      prefs.getStringList('availabilityBetaCities');
+  Future<void> setAvailabilityBetaCities(List<String> cities) =>
+      prefs.setStringList('availabilityBetaCities', cities);
+
+  /// The rider pressed 知道了 on the 即時車位 Beta sheet.
+  bool get availabilityBetaIntroSeen =>
+      prefs.getBool('availabilityBetaIntroSeen') ?? false;
+  Future<void> setAvailabilityBetaIntroSeen() =>
+      prefs.setBool('availabilityBetaIntroSeen', true);
   ParkedRecord? get parked {
     final s = prefs.getString('parked');
     return s == null
