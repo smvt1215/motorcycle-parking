@@ -9,6 +9,7 @@ import 'package:cupertino_ui/cupertino_ui.dart' as cu;
 import 'package:material_3_expressive/material_3_expressive.dart';
 
 import 'core/update_gate.dart';
+import 'data/account_deletion.dart';
 import 'data/app_store.dart';
 import 'ui/adaptive/adaptive.dart';
 import 'features/map/map_legend_page.dart';
@@ -16,7 +17,8 @@ import 'features/map/map_page.dart';
 import 'features/rules/rules_page.dart';
 import 'features/my_parking/parking_page.dart';
 import 'features/favorites/favorites_page.dart';
-import 'features/report/report_sheet.dart';
+import 'features/settings/account_deletion_status.dart';
+import 'features/settings/settings_page.dart';
 import 'features/contribute/contribute_page.dart';
 import 'features/contribute/my_contributions_page.dart';
 import 'features/launch/launch_screen.dart';
@@ -41,6 +43,9 @@ class ParkingApp extends ConsumerStatefulWidget {
 class _ParkingAppState extends ConsumerState<ParkingApp> {
   late final UpdateGate updates =
       widget.updateGate ?? UpdateGate.forClient(ref.read(storeProvider).client);
+  late final AccountDeletionController deletion = ref.read(
+    accountDeletionProvider,
+  );
 
   /// Checks again whenever the app returns, e.g. from the store.
   late final AppLifecycleListener lifecycle;
@@ -52,20 +57,24 @@ class _ParkingAppState extends ConsumerState<ParkingApp> {
       onResume: () => unawaited(updates.check()),
     );
     unawaited(updates.check());
+    deletion.start();
   }
 
   late final GoRouter router = GoRouter(
     initialLocation: '/map',
     observers: [CNTabBarRouteObserver()],
-    refreshListenable: updates,
+    refreshListenable: Listenable.merge([updates, deletion]),
     // While blocked P14 is the only route: nothing to go back to, and its
-    // PopScope keeps the system back button and gesture on it.
+    // PopScope keeps the system back button and gesture on it. Otherwise a
+    // pending deletion (P15b ②) and the signed-out notice (①) come before
+    // every other page (#215).
     redirect: (context, state) {
       final blocked = updates.required != null;
       final onUpdate = state.uri.path == updateRequiredPath;
       if (blocked && !onUpdate) return updateRequiredPath;
       if (!blocked && onUpdate) return '/map';
-      return null;
+      if (blocked) return null;
+      return accountDeletionRedirect(deletion, state.uri.path);
     },
     routes: [
       GoRoute(
@@ -74,6 +83,20 @@ class _ParkingAppState extends ConsumerState<ParkingApp> {
           final requirement? => UpdateRequiredPage(requirement: requirement),
           null => const SizedBox.shrink(),
         },
+      ),
+      GoRoute(
+        path: pendingDeletionPath,
+        builder: (context, state) => PendingDeletionPage(deletion: deletion),
+      ),
+      GoRoute(
+        path: deletionNoticePath,
+        builder: (context, state) => ListenableBuilder(
+          listenable: deletion,
+          builder: (context, _) => DeletionNoticePage(
+            deletion: deletion,
+            store: ref.read(storeProvider),
+          ),
+        ),
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => AnimatedBuilder(
@@ -235,10 +258,13 @@ class _ParkingAppState extends ConsumerState<ParkingApp> {
                   final store = ref.read(storeProvider);
                   return AuthFeedback(
                     store: store,
-                    child: LaunchCurtain(
-                      visible: store.starting,
-                      locating: store.locatingAtLaunch,
-                      child: child!,
+                    child: DeletionBannerOverlay(
+                      deletion: deletion,
+                      child: LaunchCurtain(
+                        visible: store.starting,
+                        locating: store.locatingAtLaunch,
+                        child: child!,
+                      ),
                     ),
                   );
                 },

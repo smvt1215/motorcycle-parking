@@ -15,6 +15,7 @@ import 'package:motorcycle_parking/data/app_store.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
 import 'package:motorcycle_parking/features/auth/sign_in.dart';
 import 'package:motorcycle_parking/features/report/report_sheet.dart';
+import 'package:motorcycle_parking/features/settings/settings_page.dart';
 import 'package:motorcycle_parking/features/report/spot_suggestions.dart';
 import 'package:motorcycle_parking/models/parking.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';

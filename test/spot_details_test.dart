@@ -221,7 +221,7 @@ void main() {
     );
   });
 
-  testWidgets('社群移除來源與內部授權文字，官方僅提供固定授權首頁', (tester) async {
+  testWidgets('社群移除來源與內部授權文字，詳情頁不再放授權連結', (tester) async {
     usePhone(tester, width: 320);
     final store = (await tester.runAsync(createStore))!;
     addTearDown(store.dispose);
@@ -236,18 +236,8 @@ void main() {
       await showField(tester, '資料與查核');
       await tester.drag(detailScroll, const Offset(0, -800));
       await tester.pumpAndSettle();
-      expect(
-        find.text('查看政府資料授權'),
-        spot.isOfficial ? findsOneWidget : findsNothing,
-        reason: source,
-      );
-      if (spot.isOfficial) {
-        final link = find.widgetWithText(TextButton, '查看政府資料授權');
-        await tester.ensureVisible(link);
-        await tester.pumpAndSettle();
-        expect(link.hitTestable(), findsOneWidget, reason: source);
-        expect(tester.getSize(link).height, greaterThanOrEqualTo(48));
-      }
+      // The license link lives in 帳號與設定 (資料來源與授權), not on spots.
+      expect(find.text('查看政府資料授權'), findsNothing, reason: source);
       expect(
         licenseLinkUri(spot),
         spot.isOfficial ? Uri.parse('https://data.gov.tw/license') : null,
