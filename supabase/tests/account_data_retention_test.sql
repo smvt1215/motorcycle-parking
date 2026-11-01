@@ -11,11 +11,11 @@ select is((select command from cron.job where jobname='account-data-retention'),
   'and calls the retention job');
 select ok(not has_function_privilege(r,'public.'||f,'execute'),r||' cannot call '||f)
 from (values ('usage_events_prune()'),('anonymized_hashes_clear()'),('admin_audit_deidentify(integer)'),
-  ('account_data_retention()'),('admin_audit_log_guard()')) fn(f)
+  ('account_data_retention()'),('admin_audit_log_guard()'),('retained_hashes_guard()')) fn(f)
 cross join (values ('anon'),('authenticated')) ro(r);
 select ok(not has_function_privilege(r,'private.'||f,'execute'),r||' cannot call private.'||f)
 from (values ('retention_usage_events()'),('retention_anonymized_hashes()'),('retention_audit_log()'),
-  ('retention_cleared_hash()'),('audit_personal_keys()'),('audit_redact(jsonb)'),('audit_redact_target(text,text)'))
+  ('audit_personal_keys()'),('audit_redact(jsonb)'),('audit_redact_target(text,text)'))
   fn(f)
 cross join (values ('anon'),('authenticated'),('service_role')) ro(r);
 
@@ -59,25 +59,85 @@ create temporary table history_before on commit drop as select count(*) as n fro
 
 select is(anonymized_hashes_clear(),'{"spot_votes":2,"report_identities":1,"rider_sightings":1}'::jsonb,
   'clears the hashes of accounts deleted more than 180 days ago');
-select is((select array_agg(left(ip_hash,1)||left(device_hash,1) order by ip_hash) from spot_votes
+select is((select array_agg(coalesce(left(ip_hash,1),'-')||coalesce(left(device_hash,1),'-') order by ip_hash nulls first) from spot_votes
     where spot_id='77000000-0000-4000-8000-000000000003'),
-  array['00','00','66','77'],'votes: past 180 days cleared to zeros; 179 days and live accounts untouched');
-select is((select array_agg(spot_id::text||':'||left(ip_hash,1)||left(device_hash,1) order by spot_id) from report_identities
+  array['--','--','66','77'],'votes: past 180 days cleared to null; 179 days and live accounts untouched');
+select is((select array_agg(spot_id::text||':'||coalesce(left(ip_hash,1),'-')||coalesce(left(device_hash,1),'-') order by spot_id) from report_identities
     where spot_id::text like '77000000-%'),
-  array['77000000-0000-4000-8000-000000000001:00','77000000-0000-4000-8000-000000000002:22','77000000-0000-4000-8000-000000000003:33'],
+  array['77000000-0000-4000-8000-000000000001:--','77000000-0000-4000-8000-000000000002:22','77000000-0000-4000-8000-000000000003:33'],
   'reported spots: only the one whose reporter left more than 180 days ago');
-select is((select array_agg(left(ip_hash,1)||left(device_hash,1) order by ip_hash) from rider_sightings
+select is((select array_agg(coalesce(left(ip_hash,1),'-')||coalesce(left(device_hash,1),'-') order by ip_hash nulls first) from rider_sightings
     where spot_id='77000000-0000-4000-8000-000000000003'),
-  array['00','99'],'sightings: only the anonymized one past 180 days');
+  array['--','99'],'sightings: only the anonymized one past 180 days');
 select is((select count(*)::int from spot_votes v join votes_before b on b.id=v.id
     where to_jsonb(v)-'ip_hash'-'device_hash'<>b.row),0,'every other vote column stays as it was');
 select is((select count(*) from spot_rider_events),(select n from history_before),'clearing writes no vote history');
 select is(anonymized_hashes_clear(),'{"spot_votes":0,"report_identities":0,"rider_sightings":0}'::jsonb,
   'running it again changes nothing');
--- 清除後的票彼此看不出不同網路：之後重算時，這些舊確認合起來最多算一個網路。
-select is((select least(count(distinct ip_hash),count(distinct device_hash))::int from spot_votes
-    where spot_id='77000000-0000-4000-8000-000000000003' and vote='still_there' and qualified),
-  2,'cleared confirmations count as one network next to a live one');
+select is(current_setting('app.hash_clear',true),'','the clearing flag is reset afterwards');
+
+-- 新寫入不能沒有雜湊：只有清除排程能設成 null。
+select throws_ok($$insert into spot_votes(spot_id,user_id,vote,qualified,weight,ip_hash,device_hash)
+    values('77000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000007','still_there',true,1,null,null)$$,
+  '23502','trusted identity hashes are required','a new vote must carry its hashes');
+select throws_ok($$insert into spot_votes(spot_id,user_id,vote,qualified,weight,ip_hash,device_hash,anonymized_at)
+    values('77000000-0000-4000-8000-000000000001',null,'still_there',true,1,null,null,now()-interval '1 year')$$,
+  '23502','trusted identity hashes are required','even one posing as an anonymized vote');
+select throws_ok($$insert into report_identities values('77000000-0000-4000-8000-000000000001',null,null)$$,
+  '23502',null,'a new reported spot must carry its hashes');
+select throws_ok($$insert into rider_sightings(user_id,spot_id,kind,level,vehicle,ip_hash,device_hash)
+    values('10000000-0000-4000-8000-000000000002','77000000-0000-4000-8000-000000000003','level',1,'scooter',null,null)$$,
+  '23502','trusted identity hashes are required','a new sighting must carry its hashes');
+select throws_ok($$update spot_votes set ip_hash=null,device_hash=null where user_id='10000000-0000-4000-8000-000000000002'
+    and spot_id='77000000-0000-4000-8000-000000000003'$$,
+  '23502','trusted identity hashes are required','an update cannot clear the hashes outside the job');
+select set_config('app.hash_clear','on',true);
+select throws_ok($$update spot_votes set ip_hash=null,device_hash=null where user_id='10000000-0000-4000-8000-000000000002'
+    and spot_id='77000000-0000-4000-8000-000000000003'$$,
+  '23514',null,'even with the flag, a live account''s vote keeps its hashes');
+select throws_ok($$update spot_votes set ip_hash=null where ip_hash=repeat('6',64)$$,
+  '23514',null,'and both hashes go together');
+select set_config('app.hash_clear','',true);
+select throws_ok($$select public.apply_report('10000000-0000-4000-8000-000000000001',null,null,
+    '{"action":"vote","spot_id":"77000000-0000-4000-8000-000000000003","vote":"still_there"}')$$,
+  '22023','missing trusted identity','the report path refuses a missing identity');
+select ok(not has_table_privilege('authenticated','public.spot_votes','insert')
+  and not has_table_privilege('authenticated','public.report_identities','insert')
+  and not has_table_privilege('authenticated','public.spot_votes','update'),'riders cannot write votes directly');
+
+-- 計票：清除過的票不算任何網路，也不會被併成同一個網路。
+insert into community_spots(id,user_id,name,lat,lng,city,space_type) values
+  ('77000000-0000-4000-8000-000000000010',null,'確認數',25.091,121.611,'臺北市','offStreet'),
+  ('77000000-0000-4000-8000-000000000011',null,'負向分數',25.092,121.612,'臺北市','offStreet');
+insert into report_identities values
+  ('77000000-0000-4000-8000-000000000010',repeat('e',64),repeat('e',64)),
+  ('77000000-0000-4000-8000-000000000011',repeat('e',64),repeat('e',64));
+update community_spots set status='confirmed' where id='77000000-0000-4000-8000-000000000011';
+insert into spot_votes(spot_id,user_id,vote,qualified,weight,ip_hash,device_hash,created_at,anonymized_at)
+select s,null,v,true,1,repeat(h,64),repeat(h,64),now()-interval '300 days',now()-interval '200 days'
+from (values ('77000000-0000-4000-8000-000000000010'::uuid,'still_there','a'),('77000000-0000-4000-8000-000000000010','still_there','b'),
+  ('77000000-0000-4000-8000-000000000011','gone','a'),('77000000-0000-4000-8000-000000000011','gone','b'),
+  ('77000000-0000-4000-8000-000000000011','gone','c'),('77000000-0000-4000-8000-000000000011','gone','d')) x(s,v,h);
+select is((anonymized_hashes_clear()->>'spot_votes')::int,6,'six old votes on the two spots cleared');
+select lives_ok($$select public.apply_report('10000000-0000-4000-8000-000000000001',repeat('1',64),repeat('1',64),
+  '{"action":"vote","spot_id":"77000000-0000-4000-8000-000000000010","vote":"still_there"}')$$,'a live confirmation');
+select is((select status from community_spots where id='77000000-0000-4000-8000-000000000010'),'pending',
+  'two cleared confirmations and one live one: the cleared ones count as no network');
+select lives_ok($$select public.apply_report('10000000-0000-4000-8000-000000000002',repeat('2',64),repeat('2',64),
+  '{"action":"vote","spot_id":"77000000-0000-4000-8000-000000000010","vote":"still_there"}')$$,'a second live confirmation');
+select is((select status from community_spots where id='77000000-0000-4000-8000-000000000010'),'confirmed',
+  'two live networks still confirm next to cleared votes');
+select lives_ok($$select public.apply_report('10000000-0000-4000-8000-000000000001',repeat('1',64),repeat('1',64),
+  '{"action":"vote","spot_id":"77000000-0000-4000-8000-000000000011","vote":"gone"}')$$,'a live "gone"');
+select lives_ok($$select public.apply_report('10000000-0000-4000-8000-000000000002',repeat('2',64),repeat('2',64),
+  '{"action":"vote","spot_id":"77000000-0000-4000-8000-000000000011","vote":"gone"}')$$,'a second live "gone"');
+select ok(not exists(select 1 from moderation_queue where source_id='77000000-0000-4000-8000-000000000011'
+    and reason='加權負向回報達門檻'),
+  'four cleared "gone" votes add nothing: two live ones stay below the threshold of 3 (merged they would reach it)');
+select lives_ok($$select public.apply_report('10000000-0000-4000-8000-000000000006',repeat('3',64),repeat('3',64),
+  '{"action":"vote","spot_id":"77000000-0000-4000-8000-000000000011","vote":"gone"}')$$,'a third live "gone"');
+select ok(exists(select 1 from moderation_queue where source_id='77000000-0000-4000-8000-000000000011'
+    and reason='加權負向回報達門檻'),'three live networks still reach it');
 
 -- ===== 3. 稽核 2 年去識別化 =====
 insert into admin_audit_log(actor,action,target_table,target_id,before,after,note,created_at) values
