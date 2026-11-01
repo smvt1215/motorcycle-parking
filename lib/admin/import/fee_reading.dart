@@ -268,7 +268,14 @@ Rate? _combine(List<({String unit, int amount, int hours})> prices) {
     );
   }
   if (prices.length == 1 && daily.length == 1) {
-    return _valid(Rate(FeeMode.daily, amount: daily.single.amount));
+    // 每日 N 元 is per visit, charged again the next day (#188 layer 2).
+    return _valid(
+      Rate(
+        FeeMode.perVisit,
+        amount: daily.single.amount,
+        renew: Renew.midnight,
+      ),
+    );
   }
   if (prices.length == 1 && visit.length == 1) {
     return _valid(Rate(FeeMode.perVisit, amount: visit.single.amount));
@@ -547,11 +554,13 @@ List<({Rate? rate, int? cap})>? _pricesIn(String piece) {
 
   int amount(Match m) => int.parse((m[1] ?? m[2])!);
   take(_cap, (m) => (rate: null, cap: int.parse(m[1]!)));
-  final later = _laterVisit.firstMatch(rest);
   rest = rest.replaceAll(_laterVisit, ' ');
   take(
     _daily,
-    (m) => (rate: Rate(FeeMode.daily, amount: amount(m)), cap: null),
+    (m) => (
+      rate: Rate(FeeMode.perVisit, amount: amount(m), renew: Renew.midnight),
+      cap: null,
+    ),
   );
   take(_halfHour, (m) {
     return (
@@ -576,25 +585,15 @@ List<({Rate? rate, int? cap})>? _pricesIn(String piece) {
     if (!piece.contains('計次')) return null;
     take(_hoursVisit, (m) {
       return (
-        rate: Rate(
-          FeeMode.perVisit,
-          amount: int.parse(m[1]!),
-          maxMinutes: int.parse(m[2]!) * 60,
-        ),
+        // How long a visit lasts is the condition's (#188 layer 2): the
+        // source text keeps it for the reviewer.
+        rate: Rate(FeeMode.perVisit, amount: int.parse(m[1]!)),
         cap: null,
       );
     });
   }
   take(_visit, (m) {
-    final hours = int.tryParse(later?[1] ?? '');
-    return (
-      rate: Rate(
-        FeeMode.perVisit,
-        amount: amount(m),
-        maxMinutes: hours == null ? null : hours * 60,
-      ),
-      cap: null,
-    );
+    return (rate: Rate(FeeMode.perVisit, amount: amount(m)), cap: null);
   });
   if (rest.contains('免費')) {
     if (_graceFree.hasMatch(piece)) return null;

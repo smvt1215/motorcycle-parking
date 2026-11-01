@@ -35,7 +35,7 @@
         "not_stated": "heavy_not_stated"
       }
     },
-    "comment": "停放資格（#201）：可停 true、不可停 false、官方未標示 not_stated；null（未填）只是舊資料的待確認，照常相容讀取，新寫入不再接受。分區 condition.allow 的值為 true、false 或 not_stated；有 not_stated 的分區推導不出 access（to_access），所以不可帶 access，舊版讀成待確認。點位層以 spot_keys 表示：allowed 欄為 boolean，not_stated 欄為 true 時 allowed 必為 null（舊版只讀 boolean，讀成待確認）。官方點（含匯入、升級）兩種車都必填三選一，官方（路外含營運業者公告）沒寫＝not_stated；社群新增點兩種車都必填（路邊只能 true／false，依縣市規則顯示建議值；路外可用 not_stated），新增的每一區都必填；修改建議只有改到的那一區必填，沒改到的照舊。decideParking 把 not_stated 判為不確定（與待確認相同的安全語意，重機只採官方說法）。"
+    "comment": "停放資格（#201）：可停 true、不可停 false、官方未標示 not_stated；null（未填）只是舊資料的待確認，照常相容讀取，新寫入不再接受。分區 condition.allow 的值為 true、false 或 not_stated；有 not_stated 的分區推導不出 access（to_access），所以不可帶 access，舊版讀成待確認。點位層以 spot_keys 表示：allowed 欄為 boolean，not_stated 欄為 true 時 allowed 必為 null（舊版只讀 boolean，讀成待確認）。官方點（含匯入、升級）兩種車都必填三選一，官方（路外含營運業者公告）沒寫＝not_stated；社群新增點兩種車都必填（路邊只能 true／false，依縣市規則顯示建議值；路外可用 not_stated），新增的每一區都必填；修改建議只有改到的那一區必填，沒改到的照舊。decideParking 把 not_stated 判為不確定（與待確認相同的安全語意，重機只採官方說法）。 資格跟格位走（#188 第 2 層）：資格放在每個條目（路外 parking_zones[]、路邊 parking_segments[]）的 condition.allow，兩種車各自三選一。點位層 scooter_allowed／heavy_allowed／*_not_stated 由 DB 觸發器從條目彙總（任一條目 true＝true；否則全部寫了而有 not_stated＝not_stated、全部 false＝false；有條目沒寫且沒有 true 時保留原值），只給舊版與地圖讀。"
   },
   "placement": {
     "off_street_space_types": [
@@ -117,7 +117,31 @@
             "min": 1,
             "max": 1440
           }
-        }
+        },
+        "periods": {
+          "max_entries": 8,
+          "keys": [
+            "days",
+            "from",
+            "to",
+            "max_minutes",
+            "extensions"
+          ],
+          "ranges": {
+            "max_minutes": {
+              "min": 1,
+              "max": 1440
+            },
+            "extensions": {
+              "min": 0,
+              "max": 10
+            }
+          }
+        },
+        "exclusive": [
+          "max_minutes",
+          "periods"
+        ]
       },
       "special_vehicle": {
         "required": [
@@ -128,6 +152,21 @@
       "ev_only": {
         "required": [],
         "optional": {}
+      },
+      "no_parking": {
+        "required": [
+          "periods"
+        ],
+        "optional": {},
+        "periods": {
+          "max_entries": 8,
+          "keys": [
+            "days",
+            "from",
+            "to"
+          ],
+          "ranges": {}
+        }
       }
     },
     "special_vehicles": [
@@ -177,17 +216,20 @@
         "length_unit": "utf16",
         "comment": "max_length 以 UTF-16 code unit 計（BMP 以外的字元算 2），與 Dart String.length、JS length 相同；SQL 另外加計。"
       }
-    }
+    },
+    "write": {
+      "limits_required": {
+        "time_limit": [
+          "periods"
+        ]
+      },
+      "comment": "新寫入規則（#188 第 2 層）：新增或改到的 condition 的 time_limit 必須帶 periods（不收舊形狀：頂層 max_minutes 或不帶欄位）。存放與讀取仍接受舊形狀：頂層 max_minutes 讀成 periods:[{days:all,max_minutes:N}]、延長次數未知；{kind:time_limit} 不帶欄位＝有限時、時長未確認。條目（路外分區、路邊路段）新增或改到時，allow 兩種車都必填（分區可用 access 代替）。"
+    },
+    "comment": "limits（#188 第 2 層）：time_limit 的 periods 每段 {days, from?, to?, max_minutes, extensions}，與 schedule 同一套 days／from／to 規則（跨午夜屬開始那天，決定 47）；extensions 是可延長幾次（0＝不能延長），延長一次＝再一個 max_minutes。頂層 max_minutes 是舊形狀，與 periods 不可並存。no_parking 是時段性禁停：periods 每段 {days, from?, to?}，時段內誰都不能停；平日／假日依國定假日日曆。每種 kind 在一個 condition 內最多一條；S5 的「管哪幾區／段」把同一條複製到各分區或路段的 condition。 periods 的每段只能有 keys 列出的鍵，除了 from／to 這一對（同時省略＝全天）都必填；ranges 是整數範圍。"
   },
   "zone": {
-    "area": [
-      "motorcycle",
-      "car",
-      "heavy",
-      "mixed"
-    ],
     "id_pattern": "^[a-z0-9_-]{1,32}$",
-    "comment": "parking_zones[] 的區域（§1.1）：機車區、汽車區、重機專區、混合；未填即省略鍵。只用在路外分區。分區的 condition 以 condition 段的規則加 zone_keys 檢查。分區有 condition 時，allow 必填（scooter、heavy 兩鍵），且 access 必須等於轉換層由 condition 推導的值（to_access）；推導不出或不一致，DB 拒絕寫入（決定 32，zone_condition_consistent）。沒有 condition 的分區不檢查，由 access 推導。舊版只讀 access，所以分區有 condition 時，只有 condition 為 legacy-safe 且 access 等於 to_access，該分區才算 legacy-safe。 穩定 id（#188）：分區與路段的 id 在點位內唯一、符合 id_pattern；新增時由 DB 觸發器產生（寫入端可省略），修改時保留（寫入端照原樣送回；沒送 id 的舊寫入端由觸發器以名稱比對沿用舊 id）。表上每個分區與路段都必須有 id；驗證函式本身允許省略，好讓新增前先檢查。evidence_url：選填的佐證連結，與 condition.basis.source_url 同規則（https、UTF-16 長度上限）；照片上傳屬社群核實 P2。"
+    "comment": "parking_zones[]（§1.1）只用在路外分區。區域 area 已移除（#188 第 2 層）：舊寫入端送來的 area 由 DB 觸發器丟掉、不拒絕（過渡期，PM_ANS_20261101_49），最低支援版本超過本層後改成拒絕。分區的 condition 以 condition 段的規則加 zone_keys 檢查。分區有 condition 時，allow 必填（scooter、heavy 兩鍵），且 access 必須等於轉換層由 condition 推導的值（to_access）；推導不出或不一致，DB 拒絕寫入（決定 32，zone_condition_consistent）。沒有 condition 的分區不檢查，由 access 推導。舊版只讀 access，所以分區有 condition 時，只有 condition 為 legacy-safe 且 access 等於 to_access，該分區才算 legacy-safe。 穩定 id（#188）：分區與路段的 id 在點位內唯一、符合 id_pattern；新增時由 DB 觸發器產生（寫入端可省略），修改時保留（寫入端照原樣送回；沒送 id 的舊寫入端由觸發器以名稱比對沿用舊 id（分區只比名稱，路段比名稱與 side））。表上每個分區與路段都必須有 id；驗證函式本身允許省略，好讓新增前先檢查。evidence_url：選填的佐證連結，與 condition.basis.source_url 同規則（https、UTF-16 長度上限）；照片上傳屬社群核實 P2。"
   },
   "segment": {
     "keys": [
@@ -198,7 +240,9 @@
       "condition",
       "total",
       "guide",
-      "evidence_url"
+      "evidence_url",
+      "fee",
+      "fee_plan"
     ],
     "max_entries": 30,
     "sides": [
@@ -215,7 +259,7 @@
       "min": 1,
       "max": 9999
     },
-    "comment": "路邊分段 parking_segments[]（#188，設計稿 S3b、S4）：路邊點位依路段分開記，每段一個物件。id 與分區同規則（zone.id_pattern）；name 必填（去頭尾空白後非空，UTF-16 長度上限 name_max_length）；side 哪一側；range 選填的範圍描述（例：建國北路口至松江路口）；total 格數；guide 怎麼找到這段；evidence_url 與分區同規則。condition 以分區規則（zone=true：bay 可未確認、不必寫 charge）檢查，但不可有 allow：可停車種依縣市規則判斷，路段不另開放或排除。路段沒有 legacy space_type，舊版不讀。"
+    "comment": "路邊分段 parking_segments[]（#188，設計稿 S3b、S4）：只用在路邊點位，路外點位的 parking_segments 必須是 []（第 2 層）。每段一個物件。id 與分區同規則（zone.id_pattern）；name 必填（去頭尾空白後非空，UTF-16 長度上限 name_max_length）；side 哪一側；range 選填的範圍描述（例：建國北路口至松江路口）；total 格數；guide 怎麼找到這段；evidence_url 與分區同規則。condition 以分區規則（zone=true：bay 可未確認、不必寫 charge）檢查，可帶 allow（第 2 層：車種資格跟格位走，可停 true／不能停 false／官方未標示 not_stated）。fee 與 fee_plan 是這段自己的費率（第 2 層），與分區同規則；沒有 fee 的路段沿用點位頂層 fee（整條路費率）。路段沒有 legacy space_type，舊版不讀。"
   },
   "bay_kinds": {
     "order": [
@@ -427,7 +471,7 @@
     ],
     "to_access": "allow 與 from_access 的 allow 相同，且 from_access 有 bay 時 bay 也相同",
     "legacy_safe": {
-      "comment": "conditionOf(legacySpaceType(c)) 與 c 比較時可以遺失的資訊（§1.3）：(a) share=scooter_heavy 讀回 usual；(b) 沒有 expires_on 的 basis；(c) time_limit.max_minutes；(d) lossy_when_unconfirmed 中讀回後為未確認的面向，但 assumed_charge 列出的舊值除外（舊版把限時格當收費格，charge 只能是該值或未確認）。unsafe_keys 與 unsafe_basis_keys 出現即不安全。分區：condition 依 to_access 對到 access，再由 from_access 讀回，可遺失 (b) 與 (d)；有 limits 也不安全（from_access 沒有 limits）。",
+      "comment": "conditionOf(legacySpaceType(c)) 與 c 比較時可以遺失的資訊（§1.3）：(a) share=scooter_heavy 讀回 usual；(b) 沒有 expires_on 的 basis；(c) time_limit 的 max_minutes 與 periods（舊版讀成全天限時，較嚴）；(d) lossy_when_unconfirmed 中讀回後為未確認的面向，但 assumed_charge 列出的舊值除外（舊版把限時格當收費格，charge 只能是該值或未確認）。unsafe_keys 與 unsafe_basis_keys 出現即不安全。分區：condition 依 to_access 對到 access，再由 from_access 讀回，可遺失 (b) 與 (d)；有 limits 也不安全（from_access 沒有 limits）。",
       "unsafe_keys": [
         "schedule"
       ],
@@ -436,7 +480,8 @@
       ],
       "lossy_share": "scooter_heavy",
       "lossy_limit_keys": [
-        "max_minutes"
+        "max_minutes",
+        "periods"
       ],
       "assumed_charge": {
         "timedMotorcycle": "toll"
@@ -464,19 +509,14 @@
         "same_as_scooter",
         "same_as_car"
       ],
-      "optional": {
-        "factor_pct": {
-          "min": 100,
-          "max": 1000
-        }
-      }
+      "optional": {}
     },
     "modes": {
-      "free": {
+      "not_applicable": {
         "required": {},
         "optional": {}
       },
-      "posted": {
+      "free": {
         "required": {},
         "optional": {}
       },
@@ -492,14 +532,6 @@
           }
         },
         "optional": {
-          "unit_minutes": {
-            "min": 1,
-            "max": "per_minutes"
-          },
-          "free_minutes": {
-            "min": 1,
-            "max": 1440
-          },
           "daily_cap": {
             "min": 0,
             "max": 10000
@@ -515,23 +547,11 @@
           }
         },
         "optional": {
-          "max_minutes": {
-            "min": 1,
-            "max": 1440
-          },
           "renew": "renew",
-          "extension": "extension"
-        }
-      },
-      "daily": {
-        "required": {
-          "amount": {
+          "extension_amount": {
             "min": 0,
             "max": 10000
           }
-        },
-        "optional": {
-          "cap_reset": "cap_reset"
         }
       },
       "by_time": {
@@ -558,24 +578,6 @@
         "entry_only"
       ]
     },
-    "extension": {
-      "required": {
-        "amount": {
-          "min": 0,
-          "max": 10000
-        },
-        "max_times": {
-          "min": 1,
-          "max": 10
-        }
-      },
-      "optional": {
-        "minutes": {
-          "min": 1,
-          "max": 1440
-        }
-      }
-    },
     "periods": {
       "max_entries": 6,
       "keys": [
@@ -586,16 +588,39 @@
       ],
       "nested_modes": [
         "free",
-        "posted",
         "hourly",
-        "per_visit",
-        "daily"
+        "per_visit"
       ]
     },
-    "comment": "max_bytes 是資料表的保險上限（pg_column_size），刻意大於契約允許的最大費率（tool/fee_text.py 的 largest_fee，三端共同測試），所以合法形狀的費率不會因大小被任何一端拒絕。"
+    "comment": "max_bytes 是資料表的保險上限（pg_column_size），刻意大於契約允許的最大費率（tool/fee_text.py 的 largest_fee，三端共同測試），所以合法形狀的費率不會因大小被任何一端拒絕。第 2 層（#188）：新增 not_applicable（不適用：這裡沒有這種車的格位，fee_note 略過該車種，不可放進時段）；計時移除 free_minutes、unit_minutes；計次移除 max_minutes、extension 物件，改 extension_amount（延長每次多少錢；限停時長與延長次數在 condition 的 time_limit）；比照移除 factor_pct（無倍率）。read_only_modes（daily、posted）只出現在舊快取，DB 不再收（202611010400 migration 已轉換：daily→per_visit＋renew midnight，posted→移除該車種），讀取端讀成未確認。 新寫入規則（#188 第 2 層，fee_write_complete()）：required_vehicles 的車種都要有 rate（【可調】PM 仍在問使用者；官方匯入不檢查）；計次必填 renew；計時有 daily_cap 就必填 cap_reset；by_time 有任一段是 nested_mode 且段數 ≥ min_periods 時必填 cross_period；時段內的 rate 也照同樣規則。舊資料的缺值（renew、cap_reset、cross_period、車種）存放與讀取照舊接受，騎士端不顯示、不推定，只在編輯時強制選。",
+    "read_only_modes": [
+      "daily",
+      "posted"
+    ],
+    "write": {
+      "required_vehicles": [
+        "scooter",
+        "heavy",
+        "car"
+      ],
+      "required": {
+        "per_visit": [
+          "renew"
+        ]
+      },
+      "required_with": {
+        "hourly": {
+          "cap_reset": "daily_cap"
+        }
+      },
+      "cross_period_when": {
+        "nested_mode": "per_visit",
+        "min_periods": 2
+      }
+    }
   },
   "fee_plans": {
-    "comment": "點位層的計費規則（§2.6）：每條 {id, name, fee}，最多 max_entries 條；id 在點位內唯一，name 只給管理員辨識（UTF-16 code unit 計長），fee 沿用 fee 段的 v2 契約且不可為 {}。點位頂層 fee_plan 與分區 parking_zones[].fee_plan 引用規則 id；引用不存在＝拒絕。引用規則的點位或分區，其 fee 是規則 fee 的副本（給舊版讀），必須相同。",
+    "comment": "點位層的計費規則（§2.6）：每條 {id, name, fee}，最多 max_entries 條；id 在點位內唯一，name 只給管理員辨識（UTF-16 code unit 計長），fee 沿用 fee 段的 v2 契約且不可為 {}。點位頂層 fee_plan 與分區 parking_zones[].fee_plan 引用規則 id；引用不存在＝拒絕。引用規則的點位或分區，其 fee 是規則 fee 的副本（給舊版讀），必須相同。 路段 parking_segments[].fee_plan 同分區規則（第 2 層，valid_segment_fee_plans()）。",
     "max_entries": 12,
     "keys": [
       "id",

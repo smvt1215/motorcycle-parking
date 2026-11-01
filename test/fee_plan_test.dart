@@ -33,6 +33,19 @@ void main() {
     }
   });
 
+  test('segments refer to plans as zones do (#188 layer 2)', () {
+    final all = (cases['segment_fee_plans']! as List)
+        .cast<Map<String, Object?>>();
+    expect(all, isNotEmpty);
+    for (final c in all) {
+      expect(
+        validFeePlans(c['plans'], null, null, const [], c['segments']),
+        c['valid'],
+        reason: c['name'] as String,
+      );
+    }
+  });
+
   test('a plan projected onto a zone, as the shared cases expect', () {
     final all = (cases['fee_projections']! as List)
         .cast<Map<String, Object?>>();

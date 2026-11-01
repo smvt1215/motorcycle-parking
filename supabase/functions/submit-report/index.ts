@@ -4,6 +4,7 @@ import { currentSpot } from './current_spot.ts';
 import { blocking, precheck, precheckResponse, riskFlags } from './precheck.ts';
 import {
   identityHash,
+  segmentPatchesStated,
   spotDeletedResponse,
   validate,
   zonePatchesStated,
@@ -44,11 +45,16 @@ Deno.serve(async (req) => {
     // Contradictions and personal data come back with what to change; the
     // client's own precheck is only a hint and is never trusted.
     const current = await currentSpot(admin, body);
-    // A zone the suggestion changes states both vehicles once applied (#201).
+    // A zone or segment the suggestion changes states both vehicles once
+    // applied (#201; segments since #188 layer 2).
     const proposed = body.proposed as Record<string, unknown> | undefined;
     if (
       proposed &&
-      !zonePatchesStated(proposed.parking_zones, current?.parking_zones)
+      (!zonePatchesStated(proposed.parking_zones, current?.parking_zones) ||
+        !segmentPatchesStated(
+          proposed.parking_segments,
+          current?.parking_segments,
+        ))
     ) return response({ error: 'invalid proposed' }, 400);
     const issues = precheck(body, current);
     const refused = blocking(issues);

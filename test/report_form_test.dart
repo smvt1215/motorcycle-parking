@@ -321,20 +321,23 @@ void main() {
     expect(spot['heavy_allowed'], true);
   });
 
-  testWidgets('收費以結構化選項填寫，送出費率與組成的文字', (tester) async {
+  testWidgets('收費以結構化選項填寫，三個車種都選，送出費率與組成的文字', (tester) async {
     final store = await openForm(tester);
     // The rider's vehicle (普通機車) opens first.
-    final daily = find.byKey(const ValueKey('fee-mode-scooter-daily'));
-    await reveal(tester, daily);
-    await tapFee(tester, 'fee-mode-scooter-daily');
+    final visit = find.byKey(const ValueKey('fee-mode-scooter-per_visit'));
+    await reveal(tester, visit);
+    await tapFee(tester, 'fee-mode-scooter-per_visit');
     await tester.enterText(feeField('amount', 'scooter'), '30');
+    await tapFee(tester, 'fee-renew-scooter-midnight');
     await chooseFeeMode(tester, 'heavy', 'same_as');
+    await chooseFeeMode(tester, 'car', 'not_applicable');
     final spot = await send(tester, store);
     expect(spot['fee'], {
-      'scooter': {'mode': 'daily', 'amount': 30},
+      'scooter': {'mode': 'per_visit', 'amount': 30, 'renew': 'midnight'},
       'heavy': {'mode': 'same_as_scooter'},
+      'car': {'mode': 'not_applicable'},
     });
-    expect(spot['fee_note'], '機車每日 30 元；大型重機每日 30 元');
+    expect(spot['fee_note'], '機車每次 30 元，隔日另計；大型重機每次 30 元，隔日另計');
   });
 
   testWidgets('沒有填收費時不送 fee，文字維持請依現場公告', (tester) async {
@@ -774,22 +777,26 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('臺北限時格：收費、限停 20 分鐘、首 20 分鐘 0 元不被預檢攔下，條件一起送出', (tester) async {
+  testWidgets('臺北限時格：收費、限停 20 分鐘可延長 1 次、計次 0 元不被預檢攔下，條件一起送出', (tester) async {
     final store = await openForm(tester);
     await pickType(tester, SpaceType.timedMotorcycle);
     await tapIn(tester, 'condition-charge', '收費格');
     final minutes = find.byKey(const ValueKey('condition-max-minutes'));
     await reveal(tester, minutes);
     await tester.enterText(minutes, '20');
+    await tester.enterText(
+      find.byKey(const ValueKey('condition-extensions')),
+      '1',
+    );
     await tester.pumpAndSettle();
     await openPart(tester, '收費（選填）');
-    await chooseFeeMode(tester, 'heavy', 'per_visit');
-    await tester.enterText(feeField('amount', 'heavy'), '0');
-    await tester.pumpAndSettle();
-    await tapFee(tester, 'fee-more-heavy');
-    await tapFee(tester, 'fee-max-heavy');
-    await tester.tap(find.text('20 分鐘').last);
-    await tester.pumpAndSettle();
+    for (final v in ['scooter', 'heavy']) {
+      await chooseFeeMode(tester, v, 'per_visit');
+      await tester.enterText(feeField('amount', v), '0');
+      await tester.pumpAndSettle();
+      await tapFee(tester, 'fee-renew-$v-none');
+    }
+    await chooseFeeMode(tester, 'car', 'not_applicable');
     expect(find.byIcon(Icons.error_outline), findsNothing);
     final spot = await send(tester, store);
     expect(spot['space_type'], 'timedMotorcycle');
@@ -798,38 +805,29 @@ void main() {
       'use': 'usual',
       'charge': 'toll',
       'limits': [
-        {'kind': 'time_limit', 'max_minutes': 20},
+        {
+          'kind': 'time_limit',
+          'periods': [
+            {'days': 'all', 'max_minutes': 20, 'extensions': 1},
+          ],
+        },
       ],
     });
     expect((spot['fee'] as Map)['heavy'], {
       'mode': 'per_visit',
       'amount': 0,
-      'max_minutes': 20,
+      'renew': 'none',
     });
   });
 
-  testWidgets('限停分鐘與計次有效時間不同時，在收費下方說明怎麼改', (tester) async {
+  testWidgets('限時格要填最多停幾分鐘才能送出（#188 第 2 層）', (tester) async {
     final store = await openForm(tester);
     await pickType(tester, SpaceType.timedMotorcycle);
-    final minutes = find.byKey(const ValueKey('condition-max-minutes'));
-    await reveal(tester, minutes);
-    await tester.enterText(minutes, '20');
-    await tester.pumpAndSettle();
-    await openPart(tester, '收費（選填）');
-    await chooseFeeMode(tester, 'heavy', 'per_visit');
-    await tester.enterText(feeField('amount', 'heavy'), '0');
-    await tapFee(tester, 'fee-more-heavy');
-    await tapFee(tester, 'fee-max-heavy');
-    await tester.tap(find.text('30 分鐘').last);
-    await tester.pumpAndSettle();
-    expect(
-      find.textContaining('限時 20 分鐘，和大型重機計次的有效時間 30 分鐘不同'),
-      findsOneWidget,
-    );
     await reveal(tester, nameField);
     await tester.enterText(nameField, '市府路限時格');
     await trySend(tester);
     expect(store.submissions, isEmpty);
+    expect(find.text('填 1 到 1440'), findsOneWidget);
   });
 
   testWidgets('收費格選免費時說明改用首段 0 元，不能送出', (tester) async {
@@ -870,8 +868,8 @@ void main() {
     );
   });
 
-  testWidgets('分區填區域；汽車區填普通機車費率時提示附公告，仍可送出', (tester) async {
-    final store = await openForm(tester);
+  testWidgets('分區可停的車種不能選「不適用」（PM_ANS_20261101_55）', (tester) async {
+    await openForm(tester);
     await pickType(tester, SpaceType.offStreet);
     await reveal(tester, find.text('新增分區'));
     await tester.tap(find.text('新增分區'));
@@ -879,7 +877,8 @@ void main() {
     final zoneName = find.widgetWithText(TextFormField, '分區名稱');
     await reveal(tester, zoneName);
     await tester.enterText(zoneName, 'B2 汽車區');
-    await tapIn(tester, 'zone-area', '汽車區');
+    // Zone areas are gone (#188 layer 2).
+    expect(find.byKey(const ValueKey('zone-area')), findsNothing);
     final zoneAccess = find.descendant(
       of: find.byType(ZoneAccessField),
       matching: find.text('大型重機與汽車共用'),
@@ -887,14 +886,9 @@ void main() {
     await reveal(tester, zoneAccess);
     await tester.tap(zoneAccess);
     await tester.pumpAndSettle();
-    await chooseFeeMode(tester, 'scooter', 'hourly');
-    await tester.enterText(feeField('amount', 'scooter'), '10');
+    await chooseFeeMode(tester, 'heavy', 'not_applicable');
     await tester.pumpAndSettle();
-    expect(find.textContaining('汽車區通常不開放普通機車'), findsOneWidget);
-    final spot = await send(tester, store);
-    final zone = (spot['parking_zones'] as List).single as Map;
-    expect(zone['area'], 'car');
-    expect(spot.containsKey('condition'), isFalse);
+    expect(find.textContaining('大型重機在這裡可以停，收費方式不能選「不適用」'), findsOneWidget);
   });
 
   for (final (width, scale, brightness) in [
@@ -1006,7 +1000,7 @@ void main() {
     expect(
       find.descendant(
         of: find.byKey(const ValueKey('report-preview')),
-        matching: find.textContaining('有條件・限時 20 分鐘'),
+        matching: find.textContaining('有條件・限停 20 分鐘，不能延長'),
       ),
       findsOneWidget,
     );
@@ -1020,8 +1014,14 @@ void main() {
       'bay': 'motorcycle',
       'use': 'usual',
       'charge': 'toll',
+      // A time limit is sent with its period (#188 layer 2).
       'limits': [
-        {'kind': 'time_limit', 'max_minutes': 20},
+        {
+          'kind': 'time_limit',
+          'periods': [
+            {'days': 'all', 'max_minutes': 20, 'extensions': 0},
+          ],
+        },
       ],
     });
   });

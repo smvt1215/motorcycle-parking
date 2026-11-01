@@ -82,8 +82,8 @@ select ok((select entries_have_ids(parking_segments) from community_spots where 
   'every segment gets an id');
 select is((select condition_bay_kind(parking_segments->1->'condition') from community_spots where id=(select id from fx where name='street')),
   'car_motorcycle','a segment''s condition reads as its bay kind');
-select throws_ok($$update community_spots set parking_segments='[{"name":"北側","condition":{"bay":"motorcycle","allow":{"scooter":true}}}]'
-  where id=(select id from fx where name='street')$$,'23514',null,'a segment condition takes no allow');
+select throws_ok($$update community_spots set parking_segments='[{"name":"北側","condition":{"bay":"heavy","allow":{"scooter":true}}}]'
+  where id=(select id from fx where name='street')$$,'23514',null,'a segment allow cannot let scooters onto a heavy bay (#188 layer 2)');
 select throws_ok($$update community_spots set parking_segments='[{"name":" "}]'
   where id=(select id from fx where name='street')$$,'23514',null,'a segment needs a name');
 create temporary table sids as select parking_segments->0->>'id' n,parking_segments->1->>'id' s
@@ -119,7 +119,7 @@ select lives_ok($$select admin_upsert_spot((select id::text from fx where name='
     jsonb_build_object('id',(select n from sids),'name','北側','side','north','evidence_url','https://x.tw/n.jpg'))),
   (select at from v),'')$$,'admins write segments');
 select throws_ok($$select admin_upsert_spot((select id::text from fx where name='street'),
-  '{"parking_segments":[{"name":"北側","fee":{}}]}',(select updated_at from community_spots where id=(select id from fx where name='street')),'')$$,
+  '{"parking_segments":[{"name":"北側","fee":{"bus":{"mode":"free"}}}]}',(select updated_at from community_spots where id=(select id from fx where name='street')),'')$$,
   '22023','invalid parking_segments','an invalid segment list is named');
 reset role;
 select is((select parking_segments->0->>'id' from community_spots where id=(select id from fx where name='street')),(select n from sids),

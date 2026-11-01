@@ -1,6 +1,8 @@
 import contract from '../_shared/parking_contract.json' with { type: 'json' };
 import {
+  feeWriteComplete,
   freeFeeNoteMaxLength,
+  rateWriteComplete,
   subset,
   validFee,
   validFeeNote,
@@ -8,7 +10,7 @@ import {
   validSlotTimes,
 } from '../_shared/fee.ts';
 
-export { validFee, validSlotTimes };
+export { feeWriteComplete, rateWriteComplete, validFee, validSlotTimes };
 
 const spaceTypes = [
   'paidMotorcycle',
@@ -75,6 +77,50 @@ const realDate = (v: unknown) => {
 };
 const inList = (list: string[]) => (v: unknown) =>
   typeof v === 'string' && list.includes(v);
+type Range = { min: number; max: number };
+type LimitSpec = {
+  required: string[];
+  optional: Record<string, Range>;
+  periods?: {
+    max_entries: number;
+    keys: string[];
+    ranges: Record<string, Range>;
+  };
+  exclusive?: string[];
+};
+/**
+ * A limit's periods (#188 layer 2, `contract_limit_periods()` in SQL): 1 to
+ * max_entries slots of the listed keys, all but the optional from/to pair
+ * required, days and times as a schedule slot's, each range a whole number.
+ */
+function validLimitPeriods(
+  v: unknown,
+  spec: NonNullable<LimitSpec['periods']>,
+): boolean {
+  return Array.isArray(v) && v.length >= 1 && v.length <= spec.max_entries &&
+    v.every((e) =>
+      isObject(e) && Object.keys(e).every((k) => spec.keys.includes(k)) &&
+      spec.keys.every((k) =>
+        has(e, k) || contract.time.optional_pair.includes(k)
+      ) &&
+      validSlotTimes(e) &&
+      Object.entries(spec.ranges).every(([k, r]) => whole(e[k], r.min, r.max))
+    );
+}
+const limitsRequired = cond.write.limits_required as Record<string, string[]>;
+/**
+ * Whether a valid condition is complete for a new write (#188 layer 2,
+ * `condition_write_complete()` in SQL): time_limit carries its periods,
+ * not the old shapes.
+ */
+export function conditionWriteComplete(c: unknown): boolean {
+  if (!isObject(c)) return false;
+  const limits = Array.isArray(c.limits) ? c.limits : [];
+  return limits.every((l) =>
+    isObject(l) &&
+    (limitsRequired[l.kind as string] ?? []).every((k) => has(l, k))
+  );
+}
 /**
  * A condition the contract accepts. A zone may carry `allow` and leave its
  * bay unconfirmed; a street condition names its bay and, on a motorcycle
@@ -102,13 +148,7 @@ export function validCondition(v: unknown, zone = false): boolean {
   if (has(v, 'share') !== (v.use === 'share')) return false;
   if (has(v, 'share') && v.bay !== shares[v.share as string]) return false;
 
-  const limitSpecs = cond.limits as Record<
-    string,
-    {
-      required: string[];
-      optional: Record<string, { min: number; max: number }>;
-    }
-  >;
+  const limitSpecs = cond.limits as unknown as Record<string, LimitSpec>;
   const kinds = new Set<string>();
   if (has(v, 'limits')) {
     const limits = v.limits;
@@ -124,13 +164,20 @@ export function validCondition(v: unknown, zone = false): boolean {
       if (!spec || kinds.has(l.kind)) return false;
       kinds.add(l.kind);
       for (const [key, value] of Object.entries(l)) {
-        if (key === 'kind' || spec.required.includes(key)) continue;
+        if (key === 'kind') continue;
+        // Time periods (#188 layer 2): time_limit's and no_parking's.
+        if (key === 'periods' && spec.periods) {
+          if (!validLimitPeriods(value, spec.periods)) return false;
+          continue;
+        }
+        if (spec.required.includes(key)) continue;
         const range = Object.hasOwn(spec.optional, key)
           ? spec.optional[key]
           : undefined;
         if (!range || !whole(value, range.min, range.max)) return false;
       }
       if (!spec.required.every((k) => has(l, k))) return false;
+      if (spec.exclusive?.every((k) => has(l, k))) return false;
       if (has(l, 'vehicle') && !inList(cond.special_vehicles)(l.vehicle)) {
         return false;
       }
@@ -316,12 +363,13 @@ export function eligibilityStated(o: Record<string, unknown>): boolean {
 export function zonePatchesStated(
   patch: unknown,
   current: unknown,
+  stated: (e: Record<string, unknown>) => boolean = zoneStated,
 ): boolean {
   if (!Array.isArray(patch)) return true;
   const stored = Array.isArray(current) ? current.filter(isObject) : null;
   return patch.filter(isObject).every((e) => {
     if (e.removed === true) return true;
-    if (!has(e, 'id')) return zoneStated(e);
+    if (!has(e, 'id')) return stated(e);
     if (!stored) return true;
     const old = stored.find((z) => z.id === e.id) ?? {};
     const merged: Record<string, unknown> = { ...old };
@@ -329,9 +377,16 @@ export function zonePatchesStated(
       if (x === null) delete merged[k];
       else merged[k] = x;
     }
-    return zoneStated(merged);
+    return stated(merged);
   });
 }
+/**
+ * [zonePatchesStated] for segments (#188 layer 2): each segment a
+ * suggestion adds or changes states both vehicles once applied, so a rider
+ * who changes a segment fills in who may park there.
+ */
+export const segmentPatchesStated = (patch: unknown, current: unknown) =>
+  zonePatchesStated(patch, current, segmentStated);
 const facilityTypes: string[] = contract.placement.facility_types;
 /**
  * The facility types of one spot (decision 58): one or more distinct types
@@ -371,16 +426,16 @@ function validEntryIds(list: unknown[]): boolean {
 }
 /**
  * A spot's parking_zones as the contract takes them (`valid_zones()` in
- * SQL, `validZoneList` in Dart): objects with a valid fee, area and
- * condition (whose access agrees with it), an optional https
- * evidence_url, and ids as validEntryIds takes them.
+ * SQL, `validZoneList` in Dart): objects with a valid fee and condition
+ * (whose access agrees with it), an optional https evidence_url, and ids
+ * as validEntryIds takes them. An old writer's `area` (#188 layer 2) is
+ * not checked: the tables' trigger drops it.
  */
 export function validZoneEntries(v: unknown): boolean {
   if (!Array.isArray(v)) return false;
   return v.every((z) =>
     isObject(z) &&
     (!has(z, 'fee') || validFee(z.fee)) &&
-    (!has(z, 'area') || inList(contract.zone.area)(z.area)) &&
     (!has(z, 'condition') ||
       (validCondition(z.condition, true) && zoneConditionConsistent(z))) &&
     (!has(z, 'evidence_url') || validEvidenceUrl(z.evidence_url))
@@ -395,29 +450,36 @@ function validSegmentFields(s: Record<string, unknown>): boolean {
     (!has(s, 'range') || textWithin(s.range, seg.range_max_length)) &&
     (!has(s, 'guide') || textWithin(s.guide, seg.guide_max_length)) &&
     (!has(s, 'total') || whole(s.total, seg.total.min, seg.total.max)) &&
-    (!has(s, 'condition') ||
-      (validCondition(s.condition, true) &&
-        !has(s.condition as Record<string, unknown>, 'allow'))) &&
+    (!has(s, 'condition') || validCondition(s.condition, true)) &&
+    (!has(s, 'fee') || validFee(s.fee)) &&
+    (!has(s, 'fee_plan') || typeof s.fee_plan === 'string') &&
     (!has(s, 'evidence_url') || validEvidenceUrl(s.evidence_url));
 }
 /**
  * A street spot's parking_segments (#188, `valid_segments()` in SQL,
  * `validSegmentList` in Dart): at most max_entries named segments with an
- * optional side, range, guide, number of bays, https evidence_url and a
- * zone-style condition without allow.
+ * optional side, range, guide, number of bays, https evidence_url, a
+ * zone-style condition (its allow says who may park, #188 layer 2) and its
+ * own fee and fee_plan reference.
  */
 export function validSegments(v: unknown): boolean {
   return Array.isArray(v) && v.length <= seg.max_entries &&
     v.every((s) => isObject(s) && validSegmentFields(s)) && validEntryIds(v);
 }
-const riderZoneCondition = (c: unknown) =>
-  isObject(c) && Object.keys(c).length === 1 && isObject(c.allow) &&
-  cond.allow_keys.every((k: string) =>
-    has(c.allow as Record<string, unknown>, k)
-  );
 /**
- * One rider zone without its id: named, with access, area, a guide, a fee
- * and a notice link; riders send no zone condition yet.
+ * A rider's zone condition (#188 layer 2): the contract's zone condition
+ * without a basis (a notice travels as evidence_url), complete for a new
+ * write. Who may park is checked with the zone (zoneStated).
+ */
+const riderZoneCondition = (c: unknown) =>
+  validCondition(c, true) && !has(c as Record<string, unknown>, 'basis') &&
+  conditionWriteComplete(c);
+/** A fee written whole (a zone's, a segment's): valid and complete. */
+const riderEntryFee = (f: unknown) => validFee(f) && feeWriteComplete(f);
+/**
+ * One rider zone without its id: named, with access, a guide, a fee, a
+ * notice link and a condition. An old build's `area` is let through and
+ * dropped by the tables' trigger (#188 layer 2, PM_ANS_20261101_49).
  */
 function validRiderZone(zone: Record<string, unknown>): boolean {
   return Object.keys(zone).every((k) =>
@@ -427,8 +489,7 @@ function validRiderZone(zone: Record<string, unknown>): boolean {
     text(40, 1)(zone.name) &&
     (!('access' in zone) || oneOf(accessKinds)(zone.access)) &&
     (!('guide' in zone) || text(200)(zone.guide)) &&
-    // Riders state who may park there (#201), nothing else of a condition:
-    // an allow naming both vehicles, for 官方未標示 where access cannot.
+    (!('fee' in zone) || riderEntryFee(zone.fee)) &&
     (!('condition' in zone) || riderZoneCondition(zone.condition));
 }
 /**
@@ -441,16 +502,36 @@ export function validZones(v: unknown): boolean {
     // A new spot's zones get their ids from the table's trigger.
     validZoneEntries(v);
 }
-/** A rider's segment: the contract's, with no id and no basis. */
+/**
+ * A rider's segment: the contract's, with no id, no basis and no fee plan
+ * (plans are an admin's); its condition and fee complete for a new write.
+ */
 function validRiderSegment(s: Record<string, unknown>): boolean {
-  return !has(s, 'id') && validSegmentFields(s) &&
-    (!isObject(s.condition) || !has(s.condition, 'basis'));
+  return !has(s, 'id') && !has(s, 'fee_plan') && validSegmentFields(s) &&
+    (!isObject(s.condition) ||
+      (!has(s.condition, 'basis') && conditionWriteComplete(s.condition))) &&
+    (!has(s, 'fee') || feeWriteComplete(s.fee));
 }
-/** A new street spot's segments as riders report them (#188). */
+/**
+ * Whether a segment states both vehicles (#188 layer 2: eligibility goes
+ * with the bay): its condition's allow names scooter and heavy.
+ */
+export function segmentStated(s: Record<string, unknown>): boolean {
+  const c = s.condition;
+  return isObject(c) && isObject(c.allow) &&
+    cond.allow_keys.every((k: string) =>
+      has(c.allow as Record<string, unknown>, k)
+    );
+}
+/**
+ * A new street spot's segments as riders report them (#188): each states
+ * both vehicles (layer 2).
+ */
 export function validRiderSegments(v: unknown): boolean {
   return validSegments(v) &&
     (v as unknown[]).every((s) =>
-      validRiderSegment(s as Record<string, unknown>)
+      validRiderSegment(s as Record<string, unknown>) &&
+      segmentStated(s as Record<string, unknown>)
     );
 }
 /**
@@ -501,7 +582,16 @@ const validZonePatches = (v: unknown) =>
   // the stored list (zonePatchesStated).
   (v as unknown[]).every((e) => !isObject(e) || has(e, 'id') || zoneStated(e));
 const validSegmentPatches = (v: unknown) =>
-  validEntryPatches(v, (s) => validRiderSegment(s), ['name']);
+  validEntryPatches(v, (s) => validRiderSegment(s), ['name']) &&
+  // A new segment states both vehicles (#188 layer 2); a changed one is
+  // checked on the stored list (segmentPatchesStated).
+  (v as unknown[]).every((e) =>
+    !isObject(e) ||
+    (has(e, 'id')
+      // A condition sent replaces the stored one: it states both itself.
+      ? !isObject(e.condition) || segmentStated(e)
+      : segmentStated(e))
+  );
 // Mirrors the columns admin_resolve_report may patch, plus how riders ask to
 // take a spot down: status for community spots, hidden for official ones.
 const proposedChecks: Record<string, (v: unknown) => boolean> = {
@@ -530,7 +620,12 @@ const proposedChecks: Record<string, (v: unknown) => boolean> = {
   parking_guide: text(500),
   special_rules: text(500),
   // Merged per vehicle: null clears a vehicle, one left out keeps its rate.
-  fee: validProposedFee,
+  // Each rate it names complete for a new write (#188 layer 2).
+  fee: (v) =>
+    validProposedFee(v) &&
+    Object.values(v as Record<string, unknown>).every((r) =>
+      r === null || rateWriteComplete(r)
+    ),
   // Checked with the space type beside it (validProposedCondition).
   condition: (v) => v === null || isObject(v),
   status: (v) => v === 'hidden',
@@ -583,6 +678,7 @@ function validProposedCondition(p: Record<string, unknown>): boolean {
   if (offStreetSpaceTypes.includes(type)) return false;
   return validCondition(p.condition) &&
     !Object.hasOwn(p.condition as object, 'basis') &&
+    conditionWriteComplete(p.condition) &&
     legacySpaceType(p.condition as Record<string, unknown>, false) === type;
 }
 const withoutCleared = (fee: unknown) =>
@@ -731,7 +827,11 @@ export function validate(body: Record<string, unknown>): string | null {
             (lot && s[`${v}_not_stated`] === true))
         ) return `invalid ${v}_allowed`;
       }
-      if (s.fee !== undefined && s.fee !== null && !validFee(s.fee)) {
+      // A new spot's fee is complete (#188 layer 2, fee.write).
+      if (
+        s.fee !== undefined && s.fee !== null &&
+        !(validFee(s.fee) && feeWriteComplete(s.fee))
+      ) {
         return 'invalid fee';
       }
       // The bay's condition (docs/designs/2026-10-26-parking-conditions-and-fees.md
@@ -750,6 +850,7 @@ export function validate(body: Record<string, unknown>): string | null {
         if (
           offStreet || !validCondition(s.condition) ||
           Object.hasOwn(s.condition as object, 'basis') ||
+          !conditionWriteComplete(s.condition) ||
           legacySpaceType(s.condition as Record<string, unknown>, false) !==
             s.space_type
         ) return 'invalid condition';
@@ -768,6 +869,11 @@ export function validate(body: Record<string, unknown>): string | null {
       ) {
         if (s[key] !== undefined && !check(s[key])) return `invalid ${key}`;
       }
+      // Segments are a street spot's only (#188 layer 2).
+      if (
+        lot && Array.isArray(s.parking_segments) &&
+        s.parking_segments.length > 0
+      ) return 'invalid parking_segments';
     }
   }
   return null;

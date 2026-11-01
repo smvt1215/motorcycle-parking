@@ -419,9 +419,9 @@ void main() {
         );
         await tapVisible(tester, find.text('讀取尚未轉換的點位'));
         await reveal(tester, find.text('可轉換 1 筆'));
-        await reveal(tester, find.text('機車每次 20 元（隔日是否另計未確認）；大型重機費率未確認'));
+        await reveal(tester, find.text('機車每次 20 元；大型重機費率未提供'));
         await tapVisible(tester, find.text('需人工確認 1 筆'));
-        await reveal(tester, find.text('機車每 4 小時 30 元；大型重機費率未確認'));
+        await reveal(tester, find.text('機車每 4 小時 30 元；大型重機費率未提供'));
         await tapVisible(tester, find.text('可轉換 1 筆'));
         await tapVisible(tester, find.text('寫入 1 筆費率'));
         expect(

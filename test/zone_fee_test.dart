@@ -24,7 +24,9 @@ ParkingSpot lot({Fee? fee, List<ParkingZone> zones = const []}) => ParkingSpot(
 void main() {
   test('點位和分區結構化費率隨收藏完整往返，舊字串保持原值', () {
     final original = lot(
-      fee: const Fee(scooter: Rate(FeeMode.daily, amount: 30)),
+      fee: const Fee(
+        scooter: Rate(FeeMode.perVisit, amount: 30, renew: Renew.midnight),
+      ),
       zones: const [
         ParkingZone(
           name: 'B2',
@@ -69,7 +71,7 @@ void main() {
         {
           'name': 'B2',
           'fee': <String, Object>{},
-          'fee_note': '每日 20 元',
+          'fee_note': '每次 20 元，隔日另計',
           'heavy_fee_note': '舊重機免費',
         },
       ],
@@ -111,14 +113,16 @@ void main() {
     const partial = ParkingZone(
       name: 'B2',
       access: ParkingAccess.scooterHeavy,
-      heavyFeeNote: '舊重機每日 50 元',
+      heavyFeeNote: '舊重機每次 50 元，隔日另計',
       fee: Fee(scooter: Rate(FeeMode.free)),
     );
     expect(spotFeeSummary(lot(zones: [partial]), VehicleType.scooter), '免費');
     expect(
       spotFeeSummary(
         lot(
-          fee: const Fee(heavy: Rate(FeeMode.daily, amount: 90)),
+          fee: const Fee(
+            heavy: Rate(FeeMode.perVisit, amount: 90, renew: Renew.midnight),
+          ),
           zones: [partial],
         ),
         VehicleType.heavy,
@@ -160,12 +164,12 @@ void main() {
         lot(
           fee: const Fee(
             scooter: Rate(FeeMode.hourly, amount: 20, perMinutes: 60),
-            heavy: Rate(FeeMode.sameAsScooter, factorPct: 200),
+            heavy: Rate(FeeMode.sameAsScooter),
           ),
         ),
         VehicleType.heavy,
       ),
-      '每小時 40 元',
+      '每小時 20 元',
     );
     expect(
       spotFeeSummary(
@@ -237,7 +241,8 @@ void main() {
       expect(find.text('B2'), findsOneWidget);
       expect(find.text('免費'), findsOneWidget);
       expect(find.text('每 30 分鐘 20 元'), findsOneWidget);
-      expect(find.textContaining('上限計算方式未確認'), findsOneWidget);
+      // An old cap without its reset says nothing of it (Un-1).
+      expect(find.textContaining('上限計算方式未確認'), findsNothing);
       expect(find.textContaining('不應重複'), findsNothing);
       expect(tester.takeException(), isNull);
     });
@@ -355,17 +360,17 @@ void main() {
       final spot = lot(
         fee: const Fee(
           scooter: Rate(FeeMode.hourly, amount: 10, perMinutes: 60),
-          heavy: Rate(FeeMode.sameAsScooter, factorPct: 200),
+          heavy: Rate(FeeMode.sameAsScooter),
           car: Rate(FeeMode.hourly, amount: 40, perMinutes: 60),
         ),
         zones: const [
           ParkingZone(name: '機車區', access: ParkingAccess.scooterHeavy),
         ],
       );
-      expect(spotFeeSummary(spot, VehicleType.heavy), '每小時 20 元');
+      // No factor since #188 layer 2: the scooter's own rate.
+      expect(spotFeeSummary(spot, VehicleType.heavy), '每小時 10 元');
       await pumpFees(tester, width, spot);
-      expect(find.text('每小時 10 元'), findsOneWidget);
-      expect(find.text('每小時 20 元'), findsOneWidget);
+      expect(find.text('每小時 10 元'), findsNWidgets(2));
       // The lot's car rate is listed once, not again in every zone.
       expect(find.text('每小時 40 元'), findsOneWidget);
       expect(find.textContaining('比照'), findsNothing);
@@ -409,12 +414,18 @@ void main() {
       await tester.pumpAndSettle();
       await tester.enterText(feeField('amount', 'heavy'), '25');
       await tester.pumpAndSettle();
+      // A zone's fee names all three vehicles (#188 layer 2).
+      expect(form.currentState!.validate(), isFalse);
+      await chooseFeeMode(tester, 'scooter', 'free');
+      await chooseFeeMode(tester, 'car', 'not_applicable');
       expect(form.currentState!.validate(), isTrue);
       expect(zone.toJson(), {
         'name': 'B2',
         'access': 'scooterHeavy',
         'fee': {
+          'scooter': {'mode': 'free'},
           'heavy': {'mode': 'hourly', 'amount': 25, 'per_minutes': 60},
+          'car': {'mode': 'not_applicable'},
         },
       });
       expect(tester.takeException(), isNull);

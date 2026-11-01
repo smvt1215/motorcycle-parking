@@ -329,15 +329,21 @@
       "expect": []
     },
     {
-      "name": "heavy follows an unconfirmed scooter rate",
+      "name": "heavy follows a scooter rate that does not apply (and scooters may park)",
       "body": {
         "action": "create",
         "spot": {
           "name": "機車格",
           "space_type": "paidMotorcycle",
           "fee": {
+            "scooter": {
+              "mode": "not_applicable"
+            },
             "heavy": {
               "mode": "same_as_scooter"
+            },
+            "car": {
+              "mode": "not_applicable"
             }
           },
           "scooter_allowed": true,
@@ -345,7 +351,8 @@
         }
       },
       "expect": [
-        "fee_follows_missing_scooter@fee.heavy"
+        "fee_follows_missing_scooter@fee.heavy",
+        "fee_not_applicable_allowed@fee.scooter"
       ]
     },
     {
@@ -357,11 +364,15 @@
           "space_type": "paidMotorcycle",
           "fee": {
             "scooter": {
-              "mode": "daily",
-              "amount": 30
+              "mode": "per_visit",
+              "amount": 30,
+              "renew": "midnight"
             },
             "heavy": {
               "mode": "same_as_scooter"
+            },
+            "car": {
+              "mode": "not_applicable"
             }
           },
           "scooter_allowed": true,
@@ -387,7 +398,11 @@
               "mode": "hourly",
               "amount": 40,
               "per_minutes": 60,
-              "daily_cap": 30
+              "daily_cap": 30,
+              "cap_reset": "calendar_day"
+            },
+            "car": {
+              "mode": "not_applicable"
             }
           },
           "scooter_allowed": true,
@@ -400,7 +415,7 @@
       ]
     },
     {
-      "name": "cap equal to the amount passes; a zero per visit without a valid time is free (§2.3)",
+      "name": "cap equal to the amount passes; a zero per visit on a bay without a time limit is free (§2.3)",
       "body": {
         "action": "create",
         "spot": {
@@ -411,11 +426,16 @@
               "mode": "hourly",
               "amount": 20,
               "per_minutes": 60,
-              "daily_cap": 20
+              "daily_cap": 20,
+              "cap_reset": "calendar_day"
             },
             "heavy": {
               "mode": "per_visit",
-              "amount": 0
+              "amount": 0,
+              "renew": "none"
+            },
+            "car": {
+              "mode": "not_applicable"
             }
           },
           "scooter_allowed": true,
@@ -441,8 +461,14 @@
             {
               "name": "B2",
               "fee": {
+                "scooter": {
+                  "mode": "not_applicable"
+                },
                 "heavy": {
                   "mode": "same_as_scooter"
+                },
+                "car": {
+                  "mode": "not_applicable"
                 }
               },
               "access": "scooterHeavy"
@@ -453,7 +479,8 @@
         }
       },
       "expect": [
-        "fee_follows_missing_scooter@parking_zones.1.fee.heavy"
+        "fee_follows_missing_scooter@parking_zones.1.fee.heavy",
+        "fee_not_applicable_allowed@parking_zones.1.fee.scooter"
       ]
     },
     {
@@ -494,7 +521,8 @@
               "mode": "hourly",
               "amount": 30,
               "per_minutes": 60,
-              "daily_cap": 10
+              "daily_cap": 10,
+              "cap_reset": "calendar_day"
             }
           },
           "fee_note": "每小時 30 元，當日上限 10 元"
@@ -974,7 +1002,7 @@
       ]
     },
     {
-      "name": "Taipei timed bay: first 20 minutes 0 元 with a 20-minute limit is not free and passes (§2.3)",
+      "name": "Taipei timed bay: 0 元 per visit on a 20-minute limit is not free and passes (§2.3, #188 layer 2)",
       "body": {
         "action": "create",
         "spot": {
@@ -987,19 +1015,30 @@
             "limits": [
               {
                 "kind": "time_limit",
-                "max_minutes": 20
+                "periods": [
+                  {
+                    "days": "all",
+                    "max_minutes": 20,
+                    "extensions": 1
+                  }
+                ]
               }
             ]
           },
           "fee": {
+            "scooter": {
+              "mode": "per_visit",
+              "amount": 0,
+              "renew": "none"
+            },
             "heavy": {
               "mode": "per_visit",
               "amount": 0,
-              "max_minutes": 20,
-              "extension": {
-                "amount": 40,
-                "max_times": 1
-              }
+              "renew": "none",
+              "extension_amount": 40
+            },
+            "car": {
+              "mode": "not_applicable"
             }
           },
           "scooter_allowed": true,
@@ -1009,7 +1048,7 @@
       "expect": []
     },
     {
-      "name": "a zero daily rate is free",
+      "name": "a zero per visit without a time limit is free",
       "body": {
         "action": "create",
         "spot": {
@@ -1017,8 +1056,17 @@
           "space_type": "paidMotorcycle",
           "fee": {
             "scooter": {
-              "mode": "daily",
-              "amount": 0
+              "mode": "per_visit",
+              "amount": 0,
+              "renew": "midnight"
+            },
+            "heavy": {
+              "mode": "hourly",
+              "amount": 20,
+              "per_minutes": 60
+            },
+            "car": {
+              "mode": "not_applicable"
             }
           },
           "scooter_allowed": true,
@@ -1030,18 +1078,25 @@
       ]
     },
     {
-      "name": "a zero hourly rate after free minutes is not the zero-hourly rule",
+      "name": "a zero hourly car rate is the zero-hourly rule (free_minutes is gone, #188 layer 2)",
       "body": {
         "action": "create",
         "spot": {
           "name": "信義路五段機車格",
           "space_type": "car",
           "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 20,
+              "per_minutes": 60
+            },
+            "heavy": {
+              "mode": "same_as_car"
+            },
             "car": {
               "mode": "hourly",
               "amount": 0,
-              "per_minutes": 60,
-              "free_minutes": 30
+              "per_minutes": 60
             }
           },
           "condition": {
@@ -1052,7 +1107,9 @@
           "heavy_allowed": true
         }
       },
-      "expect": []
+      "expect": [
+        "fee_hourly_zero@fee.car"
+      ]
     },
     {
       "name": "a free 普大共用 bay waits for a notice (hold)",
@@ -1073,6 +1130,9 @@
             },
             "heavy": {
               "mode": "free"
+            },
+            "car": {
+              "mode": "not_applicable"
             }
           },
           "scooter_allowed": true,
@@ -1104,6 +1164,9 @@
               "mode": "hourly",
               "amount": 20,
               "per_minutes": 60
+            },
+            "car": {
+              "mode": "not_applicable"
             }
           },
           "scooter_allowed": true,
@@ -1132,6 +1195,9 @@
             },
             "heavy": {
               "mode": "same_as_scooter"
+            },
+            "car": {
+              "mode": "not_applicable"
             }
           },
           "scooter_allowed": true,
@@ -1157,10 +1223,13 @@
               "mode": "per_visit",
               "amount": 20,
               "renew": "midnight",
-              "extension": {
-                "amount": 20,
-                "max_times": 1
-              }
+              "extension_amount": 20
+            },
+            "scooter": {
+              "mode": "free"
+            },
+            "car": {
+              "mode": "not_applicable"
             }
           },
           "scooter_allowed": true,
@@ -1188,6 +1257,14 @@
           "fee": {
             "scooter": {
               "mode": "free"
+            },
+            "heavy": {
+              "mode": "hourly",
+              "amount": 20,
+              "per_minutes": 60
+            },
+            "car": {
+              "mode": "not_applicable"
             }
           },
           "scooter_allowed": true,
@@ -1233,6 +1310,14 @@
                   }
                 }
               ]
+            },
+            "heavy": {
+              "mode": "hourly",
+              "amount": 20,
+              "per_minutes": 60
+            },
+            "car": {
+              "mode": "not_applicable"
             }
           },
           "scooter_allowed": true,
@@ -1257,6 +1342,14 @@
               "mode": "hourly",
               "amount": 10,
               "per_minutes": 60
+            },
+            "heavy": {
+              "mode": "hourly",
+              "amount": 20,
+              "per_minutes": 60
+            },
+            "car": {
+              "mode": "not_applicable"
             }
           },
           "scooter_allowed": false,
@@ -1284,6 +1377,16 @@
               "mode": "hourly",
               "amount": 40,
               "per_minutes": 60
+            },
+            "scooter": {
+              "mode": "hourly",
+              "amount": 20,
+              "per_minutes": 60
+            },
+            "heavy": {
+              "mode": "hourly",
+              "amount": 20,
+              "per_minutes": 60
             }
           },
           "scooter_allowed": true,
@@ -1295,7 +1398,7 @@
       ]
     },
     {
-      "name": "zone areas: a car rate in the motorcycle area, a scooter rate in the car area (hold)",
+      "name": "a car rate on a motorcycle-bay zone (zone areas are gone, #188 layer 2)",
       "body": {
         "action": "create",
         "spot": {
@@ -1305,32 +1408,31 @@
           "parking_zones": [
             {
               "name": "B1 機車區",
-              "area": "motorcycle",
-              "fee": {
-                "car": {
-                  "mode": "hourly",
-                  "amount": 40,
-                  "per_minutes": 60
+              "access": "scooterHeavy",
+              "condition": {
+                "bay": "motorcycle",
+                "use": "share",
+                "share": "scooter_heavy",
+                "allow": {
+                  "scooter": true,
+                  "heavy": true
                 }
               },
-              "access": "scooterHeavy"
-            },
-            {
-              "name": "B2 汽車區",
-              "area": "car",
               "fee": {
                 "scooter": {
                   "mode": "hourly",
                   "amount": 10,
                   "per_minutes": 60
                 },
+                "heavy": {
+                  "mode": "same_as_scooter"
+                },
                 "car": {
                   "mode": "hourly",
                   "amount": 40,
                   "per_minutes": 60
                 }
-              },
-              "access": "scooterHeavy"
+              }
             }
           ],
           "scooter_allowed": true,
@@ -1338,12 +1440,11 @@
         }
       },
       "expect": [
-        "motorcycle_bay_car_fee@parking_zones.0.fee.car",
-        "car_area_scooter_fee@parking_zones.1.fee.scooter"
+        "motorcycle_bay_car_fee@parking_zones.0.fee.car"
       ]
     },
     {
-      "name": "a time limit and a per-visit valid time that differ",
+      "name": "a time-limited bay where heavy bikes may park cannot say their rate does not apply (PM_ANS_20261101_55)",
       "body": {
         "action": "create",
         "spot": {
@@ -1356,15 +1457,27 @@
             "limits": [
               {
                 "kind": "time_limit",
-                "max_minutes": 20
+                "periods": [
+                  {
+                    "days": "all",
+                    "max_minutes": 20,
+                    "extensions": 1
+                  }
+                ]
               }
             ]
           },
           "fee": {
-            "heavy": {
+            "scooter": {
               "mode": "per_visit",
               "amount": 0,
-              "max_minutes": 30
+              "renew": "none"
+            },
+            "heavy": {
+              "mode": "not_applicable"
+            },
+            "car": {
+              "mode": "not_applicable"
             }
           },
           "scooter_allowed": true,
@@ -1372,11 +1485,11 @@
         }
       },
       "expect": [
-        "time_limit_mismatch@fee.heavy"
+        "fee_not_applicable_allowed@fee.heavy"
       ]
     },
     {
-      "name": "heavy follows an unconfirmed car rate",
+      "name": "heavy follows a car rate that does not apply",
       "body": {
         "action": "create",
         "spot": {
@@ -1389,6 +1502,14 @@
           "fee": {
             "heavy": {
               "mode": "same_as_car"
+            },
+            "scooter": {
+              "mode": "hourly",
+              "amount": 20,
+              "per_minutes": 60
+            },
+            "car": {
+              "mode": "not_applicable"
             }
           },
           "scooter_allowed": true,
@@ -1400,7 +1521,7 @@
       ]
     },
     {
-      "name": "a crossing rule with one per-visit period",
+      "name": "a crossing rule without a per-visit period that crosses into another (C7, #188 layer 2)",
       "body": {
         "action": "create",
         "spot": {
@@ -1421,20 +1542,21 @@
                   "to": "20:00",
                   "rate": {
                     "mode": "per_visit",
-                    "amount": 30
-                  }
-                },
-                {
-                  "days": "all",
-                  "from": "20:00",
-                  "to": "08:00",
-                  "rate": {
-                    "mode": "hourly",
-                    "amount": 20,
-                    "per_minutes": 60
+                    "amount": 30,
+                    "renew": "midnight"
                   }
                 }
               ]
+            },
+            "scooter": {
+              "mode": "hourly",
+              "amount": 20,
+              "per_minutes": 60
+            },
+            "heavy": {
+              "mode": "hourly",
+              "amount": 20,
+              "per_minutes": 60
             }
           },
           "scooter_allowed": true,
@@ -1461,7 +1583,8 @@
               "mode": "hourly",
               "amount": 40,
               "per_minutes": 60,
-              "daily_cap": 30
+              "daily_cap": 30,
+              "cap_reset": "calendar_day"
             },
             "heavy": {
               "mode": "by_time",
@@ -1477,6 +1600,11 @@
                   }
                 }
               ]
+            },
+            "scooter": {
+              "mode": "hourly",
+              "amount": 20,
+              "per_minutes": 60
             }
           },
           "scooter_allowed": true,
@@ -1702,7 +1830,13 @@
             {
               "name": "北側",
               "guide": "車主 0912345678",
-              "range": "建國北路口至松江路口"
+              "range": "建國北路口至松江路口",
+              "condition": {
+                "allow": {
+                  "scooter": true,
+                  "heavy": true
+                }
+              }
             }
           ],
           "scooter_allowed": true,
@@ -1730,7 +1864,13 @@
           "parking_segments": [
             {
               "name": "南側",
-              "range": "管理室 (02)2345-6789"
+              "range": "管理室 (02)2345-6789",
+              "condition": {
+                "allow": {
+                  "scooter": true,
+                  "heavy": false
+                }
+              }
             }
           ]
         }
@@ -1850,6 +1990,267 @@
       "expect": [
         "street_lot_details@proposed.parking_zones"
       ]
+    },
+    {
+      "name": "a free 普大共用 segment waits for a notice too (#155 item 39)",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "信義路五段機車格",
+          "space_type": "paidMotorcycle",
+          "condition": {
+            "bay": "motorcycle",
+            "use": "usual",
+            "charge": "toll"
+          },
+          "parking_segments": [
+            {
+              "name": "北側",
+              "condition": {
+                "bay": "motorcycle",
+                "use": "share",
+                "share": "scooter_heavy",
+                "charge": "free",
+                "allow": {
+                  "scooter": true,
+                  "heavy": true
+                }
+              }
+            }
+          ],
+          "scooter_allowed": true,
+          "heavy_allowed": true
+        }
+      },
+      "expect": [
+        "share_free_needs_basis@parking_segments.0.condition.charge"
+      ],
+      "blocking": false
+    },
+    {
+      "name": "a segment's fee is checked with its own condition (#188 layer 2)",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "信義路五段機車格",
+          "space_type": "paidMotorcycle",
+          "condition": {
+            "bay": "motorcycle",
+            "use": "usual",
+            "charge": "toll"
+          },
+          "parking_segments": [
+            {
+              "name": "北側",
+              "condition": {
+                "bay": "motorcycle",
+                "use": "usual",
+                "charge": "free",
+                "allow": {
+                  "scooter": true,
+                  "heavy": false
+                }
+              },
+              "fee": {
+                "scooter": {
+                  "mode": "hourly",
+                  "amount": 20,
+                  "per_minutes": 60
+                },
+                "heavy": {
+                  "mode": "not_applicable"
+                },
+                "car": {
+                  "mode": "not_applicable"
+                }
+              }
+            }
+          ],
+          "scooter_allowed": true,
+          "heavy_allowed": false
+        }
+      },
+      "expect": [
+        "charge_free_rate@parking_segments.0.fee.scooter"
+      ]
+    },
+    {
+      "name": "a segment suggestion's free 普大共用 condition waits for a notice (#155 item 39)",
+      "body": {
+        "action": "flag",
+        "source_id": "10000000-0000-4000-8000-000000000002",
+        "reason": "路段：修改",
+        "field": "segments",
+        "proposed": {
+          "parking_segments": [
+            {
+              "id": "s1",
+              "condition": {
+                "bay": "motorcycle",
+                "use": "share",
+                "share": "scooter_heavy",
+                "charge": "free",
+                "allow": {
+                  "scooter": true,
+                  "heavy": true
+                }
+              }
+            }
+          ]
+        }
+      },
+      "current": {
+        "parking_segments": [
+          {
+            "id": "s1",
+            "name": "北側"
+          }
+        ]
+      },
+      "expect": [
+        "share_free_needs_basis@proposed.parking_segments.0.condition.charge"
+      ],
+      "blocking": false
+    },
+    {
+      "name": "a zone suggestion is not refused for another zone's stored rate (#155 item 40)",
+      "body": {
+        "action": "flag",
+        "source_id": "10000000-0000-4000-8000-000000000002",
+        "reason": "分區：修改",
+        "field": "zones",
+        "proposed": {
+          "parking_zones": [
+            {
+              "id": "b2",
+              "guide": "走右側坡道"
+            }
+          ]
+        }
+      },
+      "current": {
+        "parking_zones": [
+          {
+            "id": "b1",
+            "name": "B1",
+            "access": "scooterOnly",
+            "fee": {
+              "scooter": {
+                "mode": "hourly",
+                "amount": 0,
+                "per_minutes": 60
+              }
+            }
+          },
+          {
+            "id": "b2",
+            "name": "B2",
+            "access": "scooterOnly"
+          }
+        ]
+      },
+      "expect": []
+    },
+    {
+      "name": "the zone a suggestion changes is still checked (#155 item 40)",
+      "body": {
+        "action": "flag",
+        "source_id": "10000000-0000-4000-8000-000000000002",
+        "reason": "分區：修改",
+        "field": "zones",
+        "proposed": {
+          "parking_zones": [
+            {
+              "id": "b2",
+              "fee": {
+                "scooter": {
+                  "mode": "hourly",
+                  "amount": 0,
+                  "per_minutes": 60
+                },
+                "heavy": {
+                  "mode": "not_applicable"
+                },
+                "car": {
+                  "mode": "not_applicable"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "current": {
+        "parking_zones": [
+          {
+            "id": "b1",
+            "name": "B1",
+            "access": "scooterOnly"
+          },
+          {
+            "id": "b2",
+            "name": "B2",
+            "access": "scooterOnly"
+          }
+        ]
+      },
+      "expect": [
+        "fee_hourly_zero@proposed.parking_zones.1.fee.scooter"
+      ]
+    },
+    {
+      "name": "a per-visit period beside an hourly one asks how a stay crosses (C7, #188 layer 2)",
+      "body": {
+        "action": "create",
+        "spot": {
+          "name": "信義路五段機車格",
+          "space_type": "car",
+          "condition": {
+            "bay": "car",
+            "use": "usual"
+          },
+          "fee": {
+            "scooter": {
+              "mode": "hourly",
+              "amount": 20,
+              "per_minutes": 60
+            },
+            "heavy": {
+              "mode": "hourly",
+              "amount": 20,
+              "per_minutes": 60
+            },
+            "car": {
+              "mode": "by_time",
+              "cross_period": "each_period",
+              "periods": [
+                {
+                  "days": "all",
+                  "from": "08:00",
+                  "to": "20:00",
+                  "rate": {
+                    "mode": "per_visit",
+                    "amount": 30,
+                    "renew": "midnight"
+                  }
+                },
+                {
+                  "days": "all",
+                  "from": "20:00",
+                  "to": "08:00",
+                  "rate": {
+                    "mode": "hourly",
+                    "amount": 20,
+                    "per_minutes": 60
+                  }
+                }
+              ]
+            }
+          },
+          "scooter_allowed": true,
+          "heavy_allowed": true
+        }
+      },
+      "expect": []
     }
   ]
 }

@@ -102,23 +102,24 @@ String nextPlanId(List<Json> plans) {
 /// A plan name from its fee, as `fee_plan_name()` writes one: the vehicles,
 /// then the mode they share (機車計時, 重機汽車計時), 混合 when they differ.
 String planNameOf(Fee fee) {
-  final json = fee.toJson();
+  // Vehicles that do not apply are left out (#188 layer 2).
+  bool named(Rate? r) => r != null && r.mode != FeeMode.notApplicable;
   final vehicles = [
-    if (json.containsKey('scooter')) '機車',
-    if (json.containsKey('heavy')) '重機',
-    if (json.containsKey('car')) '汽車',
+    if (named(fee.scooter)) '機車',
+    if (named(fee.heavy)) '重機',
+    if (named(fee.car)) '汽車',
   ].join();
+  final rates = [fee.scooter, fee.heavy, fee.car].where(named).nonNulls;
   final modes = {
-    for (final rate in [fee.scooter, fee.heavy, fee.car].nonNulls)
+    for (final rate in rates)
       if (!rate.mode.follows) rate.mode,
   };
   final mode = switch (modes.length) {
-    0 => '比照',
+    0 => rates.isEmpty ? '不適用' : '比照',
     1 => switch (modes.single) {
       FeeMode.free => '免費',
       FeeMode.hourly => '計時',
       FeeMode.perVisit => '計次',
-      FeeMode.daily => '每日',
       FeeMode.byTime => '時段',
       _ => '未確認',
     },

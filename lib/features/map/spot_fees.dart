@@ -56,7 +56,7 @@ String _short(String text) => text.replaceFirst(RegExp(r'（[^（）]*）$'), ''
   }!;
   if (!rate.mode.follows) return (rate, 100);
   final target = rate.mode == FeeMode.sameAsScooter ? fee.scooter : fee.car;
-  return (target!, rate.factorPct ?? 100);
+  return (target!, 100);
 }
 
 /// [vehicle]'s rate in [fee] at [now]: a by_time rate's current period

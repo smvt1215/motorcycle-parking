@@ -28,7 +28,7 @@ void main() {
     // Clearing what is not there is no change either.
     expect(proposedFee(const Fee(), {FeeVehicle.car: null}), isEmpty);
     expect(feeChangeLines(current, edits), [
-      '大型重機費率：每小時 20 元 → 每次 40 元（隔日是否另計未確認）',
+      '大型重機費率：每小時 20 元 → 每次 40 元',
       '汽車費率：每小時 40 元 → $unconfirmedFeeText',
     ]);
     expect(feeKeptLine(current, edits), '普通機車維持目前');

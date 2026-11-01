@@ -1161,21 +1161,12 @@ void main() {
       }, VehicleType.heavy);
       expect(partial.kind, PriceKind.partial);
       expect(partial.gaps, ['隔日是否另計']);
-      final firstFree = priceAnswer({
-        'heavy': {
-          'mode': 'per_visit',
-          'amount': 0,
-          'max_minutes': 20,
-          'extension': {'amount': 40, 'max_times': 1},
-        },
-      }, VehicleType.heavy);
-      expect(firstFree.gaps, ['延長時長']);
       final followed = priceAnswer({
         'scooter': {'mode': 'hourly', 'amount': 15, 'per_minutes': 60},
-        'heavy': {'mode': 'same_as_scooter', 'factor_pct': 150},
+        'heavy': {'mode': 'same_as_scooter'},
       }, VehicleType.heavy);
       expect(followed.kind, PriceKind.known);
-      expect(followed.rate!['amount'], 22.5);
+      expect(followed.rate!['amount'], 15);
       final posted = priceAnswer({
         'heavy': {
           'mode': 'by_time',
@@ -1185,12 +1176,6 @@ void main() {
               'from': '08:00',
               'to': '20:00',
               'rate': {'mode': 'hourly', 'amount': 20, 'per_minutes': 60},
-            },
-            {
-              'days': 'all',
-              'from': '20:00',
-              'to': '08:00',
-              'rate': {'mode': 'posted'},
             },
           ],
         },
@@ -1287,7 +1272,7 @@ void main() {
           'scooter': {'mode': 'hourly', 'amount': 20, 'per_minutes': 60},
         },
         VehicleType.heavy,
-        legacyText: '機車每小時 20 元；大型重機費率未確認',
+        legacyText: '機車每小時 20 元；大型重機費率未提供',
       );
       expect(answer.kind, PriceKind.unknown);
       expect(answer.text, isNull);

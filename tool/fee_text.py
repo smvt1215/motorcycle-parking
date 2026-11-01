@@ -8,13 +8,18 @@ in supabase/functions/_shared/fee.ts; parking_contract_cases.json pins them
 for all four. Rules:
 
 - The known vehicles in the order 機車, 大型重機, 汽車, joined by 「；」,
-  then 大型重機費率未確認 when the heavy rate is unknown; no known vehicle
+  then 大型重機費率未提供 when the heavy rate is unknown; no known vehicle
   at all: 請依現場公告.
-- A missing vehicle, a `posted` rate and a `by_time` rate whose every
-  period is `posted` read as unconfirmed.
-- Heavy bikes following another vehicle show the amounts worked out
-  (factor_pct applied to amount, daily_cap and extension amount), never
-  「比照」; when the followed vehicle is unconfirmed: 大型重機費率未提供.
+- A missing vehicle reads as unconfirmed; a `not_applicable` one (#188:
+  no bays for it here) is left out. A missing heavy rate ends the sentence
+  with 大型重機費率未提供 (PM_ANS_20261101_55: missing values read 未提供).
+- Old rates missing renew, cap_reset or cross_period say nothing of them
+  (Un-1: never shown, never assumed).
+- Heavy bikes following another vehicle show the amounts of that vehicle
+  (no factor since #188), never 「比照」; when the followed vehicle is
+  unconfirmed or not applicable: 大型重機費率未提供.
+- Per visit: 每次 N 元, then 隔日另計 / 停多久都只收一次 (renew), then
+  延長每次 N 元 (extension_amount).
 - by_time lists periods grouped by the set of days they cover, in order of
   first appearance; each group is labelled 每天, 平日, 假日 or the days it
   names (週一、週三), then a colon. A last clause states how a stay
@@ -31,8 +36,9 @@ RESET = {
     "per_entry": "每次進場重算",
 }
 CROSS = {"each_period": "跨時段分別計費", "entry_only": "依進場時段計費"}
-CROSS_UNCONFIRMED = "跨時段計費方式未確認"
+HEAVY_UNPROVIDED = "大型重機費率未提供"
 DEFAULT_NOTE = "請依現場公告"
+NOT_APPLICABLE = "not_applicable"
 
 
 def _int(v):
@@ -86,7 +92,8 @@ def period_time(p):
 
 
 def rate_text(r, pct=100):
-    """One rate's words, or None when it reads as unconfirmed."""
+    """One rate's words, or None when it reads as unconfirmed or does not
+    apply (not_applicable, which fee_note_of() leaves out)."""
     if not isinstance(r, dict):
         return None
     mode = r.get("mode")
@@ -94,40 +101,20 @@ def rate_text(r, pct=100):
         return "免費"
     if mode == "hourly":
         text = f"{every(r['per_minutes'])} {money(r['amount'], pct)} 元"
-        if "free_minutes" in r:
-            text = f"首 {span(r['free_minutes'])} 0 元，之後{text}"
-        if "unit_minutes" in r:
-            text += f"（以 {span(r['unit_minutes'])}計）"
         if "daily_cap" in r:
-            reset = RESET.get(r.get("cap_reset"), "上限計算方式未確認")
-            text += f"，當日上限 {money(r['daily_cap'], pct)} 元（{reset}）"
+            text += f"，當日上限 {money(r['daily_cap'], pct)} 元"
+            if r.get("cap_reset") in RESET:
+                text += f"（{RESET[r['cap_reset']]}）"
         return text
     if mode == "per_visit":
-        if _int(r["amount"]) == 0 and "max_minutes" in r:
-            text = f"首 {span(r['max_minutes'])} 0 元"
-        else:
-            notes = []
-            if "max_minutes" in r:
-                notes.append(f"{span(r['max_minutes'])}內")
-            renew = r.get("renew")
-            if renew is None:
-                notes.append("隔日是否另計未確認")
-            text = f"每次 {money(r['amount'], pct)} 元"
-            if notes:
-                text += "（" + "，".join(notes) + "）"
-            if renew == "midnight":
-                text += "，隔日另計"
-            elif renew == "none":
-                text += "，有效時間內只收一次" if "max_minutes" in r else "，停多久都只收一次"
-        ext = r.get("extension")
-        if isinstance(ext, dict):
-            text += f"，可付 {money(ext['amount'], pct)} 元延長 {_int(ext['max_times'])} 次"
-            text += f"（每次 {span(ext['minutes'])}）" if "minutes" in ext else "（延長時間未確認）"
-        return text
-    if mode == "daily":
-        text = f"每日 {money(r['amount'], pct)} 元"
-        if r.get("cap_reset") in RESET:
-            text += f"（{RESET[r['cap_reset']]}）"
+        text = f"每次 {money(r['amount'], pct)} 元"
+        renew = r.get("renew")
+        if renew == "midnight":
+            text += "，隔日另計"
+        elif renew == "none":
+            text += "，停多久都只收一次"
+        if "extension_amount" in r:
+            text += f"，延長每次 {money(r['extension_amount'], pct)} 元"
         return text
     if mode == "by_time":
         periods = [(p, rate_text(p["rate"], pct)) for p in r["periods"]]
@@ -147,13 +134,14 @@ def rate_text(r, pct=100):
         for mask, items in groups:
             parts.append(day_label(mask) + "：" + "；".join(items))
         text = "；".join(parts)
-        visits = sum(1 for p, _ in periods if p["rate"].get("mode") == "per_visit")
         if "cross_period" in r:
             text += "；" + CROSS[r["cross_period"]]
-        elif visits >= 2:
-            text += "；" + CROSS_UNCONFIRMED
         return text
-    return None  # posted, a follow out of place, or unknown
+    return None  # not_applicable, a follow out of place, or unknown
+
+
+def _applies(rate):
+    return not (isinstance(rate, dict) and rate.get("mode") == NOT_APPLICABLE)
 
 
 def fee_note_of(fee):
@@ -165,7 +153,7 @@ def fee_note_of(fee):
     h, unprovided = None, False
     if isinstance(heavy, dict) and heavy.get("mode") in ("same_as_scooter", "same_as_car"):
         target = fee.get("scooter" if heavy["mode"] == "same_as_scooter" else "car")
-        h = rate_text(target, _int(heavy.get("factor_pct", 100)))
+        h = rate_text(target)
         unprovided = h is None
     else:
         h = rate_text(heavy)
@@ -178,8 +166,8 @@ def fee_note_of(fee):
         parts.append("大型重機" + ("費率未提供" if unprovided else h))
     if c is not None:
         parts.append("汽車" + c)
-    if h is None and not unprovided:
-        parts.append("大型重機費率未確認")
+    if h is None and not unprovided and _applies(heavy):
+        parts.append(HEAVY_UNPROVIDED)
     return "；".join(parts)
 
 
@@ -189,16 +177,14 @@ def _nested_candidates(fee_contract, amount):
     """The longest-reading choices for one period's rate, per mode."""
     hi = {k: v["max"] for k, v in fee_contract["modes"]["hourly"]["required"].items()}
     minutes = 1439  # the longest span within 1–1440 (「1439 分鐘」)
-    ext = {"amount": amount, "max_times": fee_contract["extension"]["required"]["max_times"]["max"],
-           "minutes": minutes}
-    out = [
-        {"mode": "hourly", "amount": amount, "per_minutes": minutes, "unit_minutes": minutes,
-         "free_minutes": minutes, "daily_cap": amount},
-        {"mode": "daily", "amount": amount, "cap_reset": "rolling_24h"},
-        {"mode": "free"},
-    ]
+    out = [{"mode": "free"}]
+    for reset in (None, "calendar_day", "rolling_24h", "per_entry"):
+        r = {"mode": "hourly", "amount": amount, "per_minutes": minutes, "daily_cap": amount}
+        if reset:
+            r["cap_reset"] = reset
+        out.append(r)
     for renew in (None, "none", "midnight"):
-        r = {"mode": "per_visit", "amount": amount, "max_minutes": minutes, "extension": ext}
+        r = {"mode": "per_visit", "amount": amount, "extension_amount": amount}
         if renew:
             r["renew"] = renew
         out.append(r)
@@ -233,19 +219,10 @@ def _longest_by_time(fee_contract, amount, pct):
 
 def longest_fee(fee_contract):
     """A valid fee whose sentence is as long as any the contract allows:
-    every vehicle by_time, the heavy one following the car at a factor that
-    leaves two decimals on each amount (9999 × 999% = 99890.01)."""
+    every vehicle by_time with the longest periods (no follow: it reads the
+    same amounts as the vehicle it follows, without a factor since #188)."""
     amount = fee_contract["modes"]["per_visit"]["required"]["amount"]["max"]
-    pct = fee_contract["follow"]["optional"]["factor_pct"]["max"] - 1
-    candidates = [
-        {"scooter": _longest_by_time(fee_contract, amount, 100),
-         "heavy": _longest_by_time(fee_contract, amount, 100),
-         "car": _longest_by_time(fee_contract, amount, 100)},
-        {"scooter": _longest_by_time(fee_contract, amount, 100),
-         "heavy": {"mode": "same_as_car", "factor_pct": pct},
-         "car": _longest_by_time(fee_contract, amount - 1, pct)},
-    ]
-    return max(candidates, key=lambda f: len(fee_note_of(f)))
+    return {v: _longest_by_time(fee_contract, amount, 100) for v in fee_contract["vehicles"]}
 
 
 def fee_note_max_length(fee_contract):
@@ -265,10 +242,9 @@ def largest_fee(fee_contract):
     amount = whole(fee_contract["modes"]["per_visit"]["required"]["amount"]["max"])
     minutes = whole(1440)
     rates = [
-        {"mode": "per_visit", "amount": amount, "max_minutes": minutes, "renew": "midnight",
-         "extension": {"amount": amount, "max_times": whole(10), "minutes": minutes}},
-        {"mode": "hourly", "amount": amount, "per_minutes": minutes, "unit_minutes": minutes,
-         "free_minutes": minutes, "daily_cap": amount, "cap_reset": "calendar_day"},
+        {"mode": "per_visit", "amount": amount, "renew": "midnight", "extension_amount": amount},
+        {"mode": "hourly", "amount": amount, "per_minutes": minutes, "daily_cap": amount,
+         "cap_reset": "calendar_day"},
     ]
     def by_time(rate):
         return {"mode": "by_time", "cross_period": "each_period", "periods": [

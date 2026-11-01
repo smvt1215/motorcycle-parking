@@ -593,8 +593,12 @@ class SpotsController extends ChangeNotifier {
     final stored = r.values['condition'];
     final storedCondition = ParkingCondition.fromJson(stored);
     // Back to the stored kind (and, for a toll or free kind, its charge): the stored
-    // type and condition as they were, schedule and limits included.
+    // type and condition as they were, schedule and limits included. A
+    // charge picked on the kind already drafted only changes the charge
+    // (#155 item 38): the draft's own edits, a time limit's minutes too,
+    // stay.
     if (!r.isNew &&
+        spaceKind != kind &&
         storedType != null &&
         SpaceKind.of(storedType, storedCondition) == kind &&
         (charge == null ||

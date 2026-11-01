@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../../models/fee.dart';
+import '../../models/condition_text.dart' show limitText;
 import '../../models/fee_plan.dart' show projectZoneFee;
 import '../../models/parking.dart' show Eligible;
 import '../../models/parking_condition.dart';
@@ -769,13 +770,7 @@ class _BayRow extends StatelessWidget {
         ? top
         : null;
     final other = [
-      for (final l in c.limits)
-        switch (l.kind) {
-          LimitKind.timeLimit =>
-            l.maxMinutes == null ? '限時' : '限停 ${l.maxMinutes} 分鐘',
-          LimitKind.evOnly => '限電動機車',
-          LimitKind.specialVehicle => '限身障特製機車',
-        },
+      for (final l in c.limits) limitText(l),
       if (c.schedule.isNotEmpty) '共用時段 ${c.schedule.length} 段',
     ];
     // 可停／不可停／官方未標示 (#201); none picked is unconfirmed, which a

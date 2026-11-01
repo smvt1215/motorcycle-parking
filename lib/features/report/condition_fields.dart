@@ -1,5 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../../models/condition_text.dart' show limitText;
 import '../../ui/option_pill.dart';
 import '../../models/parking.dart';
 import '../../models/fee.dart' show FeeWords;
@@ -7,7 +8,7 @@ import '../../models/parking_condition.dart';
 import '../../models/space_kind.dart';
 
 export '../../models/condition_text.dart'
-    show conditionHeadline, conditionSummary;
+    show conditionHeadline, conditionSummary, limitText;
 
 /// The limits a rider may add to a kind beyond its own (C6 canvas AppForm
 /// 「還有其他限制嗎？」): a motorcycle bay's sign may add a time limit. Each
@@ -83,8 +84,10 @@ class ConditionDraft {
     charge = c.charge;
     for (final l in c.limits) {
       if (extraLimits(loadedKind!).contains(l.kind)) extras.add(l.kind);
-      if (l.kind == LimitKind.timeLimit && l.maxMinutes != null) {
-        maxMinutes.text = '${l.maxMinutes}';
+      if (l.kind == LimitKind.timeLimit) {
+        final first = l.timePeriods.firstOrNull;
+        if (first?.maxMinutes case final m?) maxMinutes.text = '$m';
+        if (first?.extensions case final n?) extensions.text = '$n';
       }
     }
     slots.addAll(c.schedule.map(SlotDraft.of));
@@ -119,10 +122,14 @@ class ConditionDraft {
   /// [extraLimits] offers for the kind are sent.
   final extras = <LimitKind>{};
   final maxMinutes = TextEditingController();
+
+  /// 可以延長幾次 (#188 layer 2); 0 is 不能延長.
+  final extensions = TextEditingController(text: '0');
   final slots = <SlotDraft>[];
 
   void dispose() {
     maxMinutes.dispose();
+    extensions.dispose();
     for (final s in slots) {
       s.dispose();
     }
@@ -149,6 +156,28 @@ class ConditionDraft {
     final same = kind == loadedKind;
     final from = same ? loaded ?? base : base;
     final minutes = int.tryParse(maxMinutes.text.trim());
+    final times = int.tryParse(extensions.text.trim());
+    // A time limit is sent with its period (#188 layer 2): all day, the
+    // minutes and the extensions asked here. A stored one whose first
+    // period the rider left as it was stays whole (its other periods too).
+    final stored = same
+        ? from.limits.where((l) => l.kind == LimitKind.timeLimit).firstOrNull
+        : null;
+    final storedFirst = stored?.timePeriods.firstOrNull;
+    final timeLimit =
+        stored != null &&
+            stored.periods.isNotEmpty &&
+            storedFirst?.maxMinutes == minutes &&
+            storedFirst?.extensions == times
+        ? stored
+        : minutes == null
+        ? const ParkingLimit(LimitKind.timeLimit)
+        : ParkingLimit(
+            LimitKind.timeLimit,
+            periods: [
+              LimitPeriod(days: 'all', maxMinutes: minutes, extensions: times),
+            ],
+          );
     final (use, share) = switch (kind) {
       SpaceKind.scooterHeavy => (BayUse.share, ShareKind.scooterHeavy),
       SpaceKind.motorcycle => (BayUse.usual, null),
@@ -165,7 +194,7 @@ class ConditionDraft {
         for (final k in LimitKind.values)
           if (base.hasLimit(k) || (offered.contains(k) && extras.contains(k)))
             k == LimitKind.timeLimit
-                ? ParkingLimit(LimitKind.timeLimit, maxMinutes: minutes)
+                ? timeLimit
                 : base.limits.where((l) => l.kind == k).firstOrNull ??
                       ParkingLimit(k)
           // A stored limit the form cannot show stays as it is.
@@ -208,8 +237,8 @@ class ConditionDraft {
       if (asksCharge(kind) && c?.charge != null)
         c!.charge == Charge.toll ? '收費' : '免費',
       for (final l in c?.limits ?? const <ParkingLimit>[])
-        if (l.kind == LimitKind.timeLimit)
-          l.maxMinutes == null ? '限時' : '限時 ${l.maxMinutes} 分鐘',
+        if (l.kind == LimitKind.timeLimit || l.kind == LimitKind.noParking)
+          limitText(l),
     ].join('・');
   }
 }
@@ -259,10 +288,9 @@ class ConditionFields extends StatelessWidget {
                 isDense: true,
               ),
               autovalidateMode: AutovalidateMode.onUserInteraction,
+              // A time limit is written with its minutes (#188 layer 2).
               validator: (v) {
-                final text = v?.trim() ?? '';
-                if (text.isEmpty) return null;
-                final n = int.tryParse(text);
+                final n = int.tryParse(v?.trim() ?? '');
                 return n == null || n < 1 || n > 1440 ? '填 1 到 1440' : null;
               },
               onChanged: (_) => onChanged(),
@@ -270,11 +298,40 @@ class ConditionFields extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           const Padding(padding: EdgeInsets.only(top: 14), child: Text('分鐘')),
+        ],
+      ),
+    );
+    Widget extensionTimes() => Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(padding: EdgeInsets.only(top: 14), child: Text('可以延長')),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 72,
+            child: TextFormField(
+              key: const ValueKey('condition-extensions'),
+              controller: draft.extensions,
+              keyboardType: TextInputType.number,
+              textAlign: TextAlign.end,
+              decoration: const InputDecoration(
+                errorMaxLines: 3,
+                isDense: true,
+              ),
+              autovalidateMode: AutovalidateMode.onUserInteraction,
+              validator: (v) {
+                final n = int.tryParse(v?.trim() ?? '');
+                return n == null || n < 0 || n > 10 ? '填 0 到 10' : null;
+              },
+              onChanged: (_) => onChanged(),
+            ),
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Padding(
               padding: const EdgeInsets.only(top: 14),
-              child: Text('牌面沒寫就留空', style: muted),
+              child: Text('次（0＝不能延長）', style: muted),
             ),
           ),
         ],
@@ -342,7 +399,10 @@ class ConditionFields extends StatelessWidget {
             if (draft.extras.contains(LimitKind.timeLimit))
               Padding(
                 padding: const EdgeInsetsDirectional.only(start: 44),
-                child: minutes(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [minutes(), extensionTimes()],
+                ),
               ),
           ],
         ],

@@ -63,8 +63,16 @@ bool _validPlan(Map<Object?, Object?> p, Set<String> seen) {
 }
 
 /// Whether a spot's fee plans, its own plan reference ([feePlan], with the
-/// [fee] it carries) and its [zones]' are what `valid_fee_plans()` accepts.
-bool validFeePlans(Object? plans, Object? feePlan, Object? fee, Object? zones) {
+/// [fee] it carries) and its [zones]' and [segments]' are what
+/// `valid_fee_plans()` and `valid_segment_fee_plans()` (#188 layer 2)
+/// accept.
+bool validFeePlans(
+  Object? plans,
+  Object? feePlan,
+  Object? fee,
+  Object? zones, [
+  Object? segments,
+]) {
   final byId = <String, Object?>{};
   if (plans != null) {
     if (plans is! List ||
@@ -80,13 +88,15 @@ bool validFeePlans(Object? plans, Object? feePlan, Object? fee, Object? zones) {
   bool copies(Object? id, Object? copy) =>
       id is String && byId.containsKey(id) && _same(copy, byId[id]);
   if (feePlan != null && !copies(feePlan, fee)) return false;
-  return zones is! List ||
-      zones.every(
+  bool entriesCopy(Object? list) =>
+      list is! List ||
+      list.every(
         (z) =>
             z is! Map ||
             !z.containsKey('fee_plan') ||
             copies(z['fee_plan'], z['fee']),
       );
+  return entriesCopy(zones) && entriesCopy(segments);
 }
 
 /// jsonb equality: the same values, object keys in any order.
@@ -101,45 +111,21 @@ bool _same(Object? a, Object? b) => switch ((a, b)) {
   _ => a == b,
 };
 
-Map<String, Object?> _scaled(Map<Object?, Object?> rate, int pct) {
-  final out = <String, Object?>{
-    for (final MapEntry(:key, :value) in rate.entries) key! as String: value,
-  };
-  for (final key in ['amount', 'daily_cap']) {
-    if (out[key] case final num v) {
-      final r = v * pct / 100;
-      out[key] = r == r.truncate() ? r.toInt() : r;
-    }
-  }
-  if (out['extension'] case final Map<Object?, Object?> ext) {
-    out['extension'] = _scaled(ext, pct);
-  }
-  if (out['periods'] case final List<Object?> periods) {
-    out['periods'] = [
-      for (final p in periods)
-        if (p case {'rate': final Map<Object?, Object?> rate})
-          {...p, 'rate': _scaled(rate, pct)}
-        else
-          p,
-    ];
-  }
-  return out;
-}
-
 /// A plan's fee with a heavy follow worked out (§2.6 precheck, step 1): the
-/// followed vehicle's rate at factor_pct — amounts may then have decimals —
-/// or no heavy rate when that vehicle is unconfirmed.
+/// followed vehicle's rate (no factor since #188 layer 2), or no heavy rate
+/// when that vehicle is unconfirmed or not applicable.
 Map<String, Object?> resolveFee(Map<Object?, Object?> fee) {
   final out = <String, Object?>{
     for (final MapEntry(:key, :value) in fee.entries) key! as String: value,
   };
-  if (fee['heavy']
-      case {'mode': final String mode} && final Map<Object?, Object?> heavy
+  if (fee['heavy'] case {'mode': final String mode}
       when mode == 'same_as_scooter' || mode == 'same_as_car') {
     final target = fee[mode == 'same_as_scooter' ? 'scooter' : 'car'];
-    final pct = (heavy['factor_pct'] as num?)?.toInt() ?? 100;
-    if (target is Map && target['mode'] != 'posted') {
-      out['heavy'] = _scaled(target, pct);
+    if (target is Map && target['mode'] != 'not_applicable') {
+      out['heavy'] = {
+        for (final MapEntry(:key, :value) in target.entries)
+          key! as String: value,
+      };
     } else {
       out.remove('heavy');
     }

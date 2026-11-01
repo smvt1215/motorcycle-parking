@@ -23,36 +23,21 @@ FeeVehicleBoard boardOf(Map<String, Object?> json, FeeVehicle v) =>
     feeBoardOf(Fee.fromJson(json)).firstWhere((b) => b.vehicle == v);
 
 void main() {
-  test('首段 0 元寫「首 20 分鐘 0 元」，不寫免費（§2.3）', () {
+  test('計次 0 元寫每次 0 元與延長金額，不寫免費（§2.3，#188 第 2 層）', () {
     final toll = boardOf({
       'heavy': {
         'mode': 'per_visit',
         'amount': 0,
-        'max_minutes': 20,
-        'extension': {'amount': 40, 'max_times': 1},
+        'renew': 'none',
+        'extension_amount': 40,
       },
     }, FeeVehicle.heavy);
-    expect(toll.headline, isNull);
+    expect(toll.headline!.text, '每次 0 元');
     expect(toll.lines, [
-      const FeeLine(
-        '首 20 分鐘 0 元',
-        tone: FeeTone.main,
-        icon: Icons.timer_outlined,
-      ),
-      const FeeLine('可付 40 元延長 1 次（延長時間未確認）', icon: Icons.add_circle_outline),
+      const FeeLine('停多久都只收一次'),
+      const FeeLine('延長每次 40 元', icon: Icons.add_circle_outline),
     ]);
-    final hourly = boardOf({
-      'scooter': {
-        'mode': 'hourly',
-        'amount': 10,
-        'per_minutes': 60,
-        'free_minutes': 30,
-      },
-    }, FeeVehicle.scooter);
-    expect(texts(hourly), '首 30 分鐘 0 元|之後每小時 10 元');
-    for (final b in [toll, hourly]) {
-      expect(texts(b), isNot(contains('免費')));
-    }
+    expect(texts(toll), isNot(contains('免費')));
     // Only a free rate reads 免費.
     expect(
       texts(
@@ -64,41 +49,37 @@ void main() {
     );
   });
 
-  test('計次的跨日三態：未填寫成未確認，不推定不另計（§2.5）', () {
-    String renew(Map<String, Object?> rate) =>
-        boardOf({'car': rate}, FeeVehicle.car).lines.first.text;
-    expect(renew({'mode': 'per_visit', 'amount': 40}), '隔日是否另計未確認');
+  test('計次的跨日：舊資料沒填時不顯示、不推定（Un-1）', () {
+    String lines(Map<String, Object?> rate) =>
+        texts(boardOf({'car': rate}, FeeVehicle.car));
+    expect(lines({'mode': 'per_visit', 'amount': 40}), '每次 40 元');
     expect(
-      boardOf({
-        'car': {'mode': 'per_visit', 'amount': 40},
-      }, FeeVehicle.car).lines.first.tone,
-      FeeTone.unconfirmed,
+      lines({'mode': 'per_visit', 'amount': 40, 'renew': 'midnight'}),
+      '每次 40 元|隔日另計',
     );
     expect(
-      renew({'mode': 'per_visit', 'amount': 40, 'renew': 'midnight'}),
-      '隔日另計',
+      lines({'mode': 'per_visit', 'amount': 40, 'renew': 'none'}),
+      '每次 40 元|停多久都只收一次',
     );
-    expect(
-      renew({'mode': 'per_visit', 'amount': 40, 'renew': 'none'}),
-      '停多久都只收一次',
-    );
-    expect(
-      renew({
-        'mode': 'per_visit',
-        'amount': 30,
-        'max_minutes': 180,
-        'renew': 'none',
+  });
+
+  test('不適用的車種不上公告牌', () {
+    final boards = feeBoardOf(
+      Fee.fromJson({
+        'scooter': {'mode': 'free'},
+        'heavy': {'mode': 'not_applicable'},
+        'car': {'mode': 'not_applicable'},
       }),
-      '有效時間內只收一次',
     );
+    expect([for (final b in boards) b.vehicle], [FeeVehicle.scooter]);
   });
 
   test('比照只顯示算好的金額，被比照的車種未確認時寫未提供（#140）', () {
     final double = boardOf({
       'scooter': {'mode': 'hourly', 'amount': 10, 'per_minutes': 60},
-      'heavy': {'mode': 'same_as_scooter', 'factor_pct': 200},
+      'heavy': {'mode': 'same_as_scooter'},
     }, FeeVehicle.heavy);
-    expect(double.headline!.text, '每小時 20 元');
+    expect(double.headline!.text, '每小時 10 元');
     expect(texts(double), isNot(contains('比照')));
     final missing = boardOf({
       'heavy': {'mode': 'same_as_car'},
@@ -158,8 +139,8 @@ void main() {
       [for (final r in everyDay.groups.single.rows) r.time],
       ['08:00–20:00', '20:00–隔日 08:00'],
     );
-    expect(everyDay.footer!.text, '跨時段計費方式未確認');
-    expect(everyDay.footer!.tone, FeeTone.unconfirmed);
+    // An old rate without cross_period says nothing of it (Un-1).
+    expect(everyDay.footer, isNull);
   });
 
   test('跨午夜時段算開始那天：分組與其他時間依實際涵蓋（決定 47）', () {
@@ -373,8 +354,8 @@ void main() {
                   'heavy': {
                     'mode': 'per_visit',
                     'amount': 0,
-                    'max_minutes': 20,
-                    'extension': {'amount': 40, 'max_times': 1},
+                    'renew': 'none',
+                    'extension_amount': 40,
                   },
                   'car': {
                     'mode': 'by_time',
@@ -406,7 +387,7 @@ void main() {
       );
       expect(tester.takeException(), isNull);
       expect(
-        find.textContaining('首 20 分鐘 0 元', findRichText: true),
+        find.textContaining('延長每次 40 元', findRichText: true),
         findsOneWidget,
       );
       expect(find.text('20:00–隔日 08:00'), findsOneWidget);

@@ -81,7 +81,6 @@ void main() {
   final trialZone = ParkingZone(
     name: '機車區',
     access: ParkingAccess.scooterHeavy,
-    area: ZoneArea.motorcycle,
     condition: zone({
       'bay': 'motorcycle',
       'use': 'share',
@@ -98,7 +97,6 @@ void main() {
   final carZone = ParkingZone(
     name: '汽車區',
     access: ParkingAccess.heavyCar,
-    area: ZoneArea.car,
     condition: zone({
       'bay': 'car',
       'use': 'usual',
@@ -192,7 +190,6 @@ void main() {
         ],
       });
       expect(lot.zonesComplete, isTrue);
-      expect(lot.zones.single.area, ZoneArea.car);
       expect(lot.zones.single.condition, carZone.condition);
       expect(lot.zones.single.guide, 'B2');
     });
@@ -216,7 +213,6 @@ void main() {
       });
       expect(s.condition, isNull);
       expect(s.zones.single.condition, isNull);
-      expect(s.zones.single.area, isNull);
     });
 
     test('old JSON without the new keys reads as before', () {
@@ -249,7 +245,6 @@ void main() {
       expect(s.condition, isNull);
       expect(s.zonesComplete, isFalse);
       expect(s.zones.single.condition, isNull);
-      expect(s.zones.single.area, isNull);
       expect(s.isLegacySafe, isTrue);
       // Written again, it is what this build wrote before: no new keys.
       final again = s.toJson();

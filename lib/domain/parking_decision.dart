@@ -353,28 +353,22 @@ String _feeVehicle(VehicleType v) =>
 void _rateGaps(Map<Object?, Object?> rate, Set<String> gaps) {
   switch (rate['mode']) {
     case 'per_visit':
-      // 首段 0 元 (0 with a valid time) is never renewed (§2.5).
-      final firstFree = rate['amount'] == 0 && rate['max_minutes'] != null;
-      if (!firstFree && !rate.containsKey('renew')) gaps.add('隔日是否另計');
-      if (rate['extension'] case final Map<Object?, Object?> ext
-          when !ext.containsKey('minutes')) {
-        gaps.add('延長時長');
-      }
+      if (!rate.containsKey('renew')) gaps.add('隔日是否另計');
     case 'hourly' when rate.containsKey('daily_cap'):
-      if (!rate.containsKey('cap_reset')) gaps.add('上限計算方式');
-    case 'daily':
       if (!rate.containsKey('cap_reset')) gaps.add('上限計算方式');
     case 'by_time':
       final periods = (rate['periods'] as List?) ?? const [];
       var visits = 0;
       for (final p in periods) {
         if (p case {'rate': final Map<Object?, Object?> r}) {
-          if (r['mode'] == 'posted') gaps.add('部分時段費率');
           if (r['mode'] == 'per_visit') visits++;
           _rateGaps(r, gaps);
         }
       }
-      if (visits >= 2 && !rate.containsKey('cross_period')) {
+      // Asked once a per-visit period has another to cross into (C7).
+      if (visits >= 1 &&
+          periods.length >= 2 &&
+          !rate.containsKey('cross_period')) {
         gaps.add('跨時段如何計費');
       }
       // A time no period covers is unconfirmed (§2.2), as a posted one is
