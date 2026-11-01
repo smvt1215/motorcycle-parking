@@ -3,7 +3,8 @@ import { appCheckConfig, verifyAppCheck } from '../_shared/app_check.ts';
 import { trustedIp } from '../_shared/client_ip.ts';
 import { response } from '../_shared/http.ts';
 import { identityHash } from '../submit-report/validate.ts';
-import { handle, silentNotifier } from './handler.ts';
+import { handle } from './handler.ts';
+import { resendConfig, resendNotifier } from './resend.ts';
 
 Deno.serve((req) => {
   const url = Deno.env.get('SUPABASE_URL'),
@@ -46,9 +47,9 @@ Deno.serve((req) => {
       const { error } = await db.rpc('support_request_notified', { p_id: id });
       if (error) throw error;
     },
-    // The mail service is still to be chosen (T269_Q4_MAILER); until then
+    // Resend (T269_Q4_MAILER); without its settings nothing is sent and
     // the admin page is where new requests show.
-    notifier: silentNotifier,
+    notifier: resendNotifier(resendConfig((name) => Deno.env.get(name))),
     adminUrl: (id) => `${adminBase.replace(/\/$/, '')}/${id}`,
   });
 });
