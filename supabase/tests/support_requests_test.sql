@@ -69,6 +69,10 @@ select throws_ok(format('select admin_v1.request_account_deletion_for(''10000000
   'PT403','account.admin_cannot_self_delete','not for an admin account');
 select throws_ok(format('select admin_v1.request_account_deletion_for(''10000000-0000-4000-8000-0000000000ff'',%L)',(select id from sent)),
   'PT404','account.not_found','unknown account');
+reset role;
+insert into auth.sessions(id,user_id,created_at,updated_at) values(gen_random_uuid(),'10000000-0000-4000-8000-000000000001',now(),now());
+set local role authenticated;
+select pg_temp.act('admin');
 insert into created
   select admin_v1.request_account_deletion_for('10000000-0000-4000-8000-000000000001',(select id from sent),'已用原 email 往返確認');
 select is((select r->>'status' from created),'pending','a pending deletion is created');
@@ -77,6 +81,7 @@ reset role;
 select is((select scheduled_at-requested_at from private.account_deletion_requests where user_id='10000000-0000-4000-8000-000000000001'),
   interval '7 days','with the same 7-day cooling-off period');
 select is((select source from private.account_deletion_requests where user_id='10000000-0000-4000-8000-000000000001'),'support','from support');
+select is((select count(*)::int from auth.sessions where user_id='10000000-0000-4000-8000-000000000001'),0,'and signed out everywhere');
 select is((select count(*)::int from community_spots where user_id='10000000-0000-4000-8000-000000000001' and contributor_name<>''),0,
   'the name stops showing');
 select ok((select deletion_request_id is not null from private.support_requests where id=(select id from sent)),'linked to the support request');

@@ -166,6 +166,8 @@ begin
       returning request_id into v_request;
     insert into private.account_deletion_audit(request_id,event,source) values(v_request,'requested','support');
     update public.community_spots s set contributor_name='' where s.user_id=p_user;
+    -- 與自助申請相同：所有裝置登出。
+    delete from auth.sessions s where s.user_id=p_user;
   end if;
   update private.support_requests s set deletion_request_id=v_request where s.id=p_support_request;
   -- 稽核只記帳號 id（與停權稽核相同）與客服申請編號。
