@@ -83,6 +83,18 @@ void main() {
     );
     platform.idle.add(pi.CameraIdleEvent(platform.id));
     await tester.pumpAndSettle();
+    // Spot bitmaps are drawn the first time their look is on screen, on the
+    // real engine; each marker appears once its bitmap is ready.
+    for (var frame = 0; frame < 50; frame++) {
+      final markers = tester
+          .widget<gm.GoogleMap>(find.byType(gm.GoogleMap))
+          .markers;
+      if (markers.length == 6) break;
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump();
+    }
     final expanded = tester.widget<gm.GoogleMap>(find.byType(gm.GoogleMap));
     expect(expanded.markers, hasLength(6));
     expect(
