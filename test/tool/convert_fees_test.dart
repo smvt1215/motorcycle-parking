@@ -7,6 +7,7 @@ import 'package:http/testing.dart';
 import 'package:motorcycle_parking/admin/import/fee_reading.dart';
 
 import '../../tool/convert_fees.dart';
+import '../../tool/fee_assumptions.dart';
 
 const _actor = '40000000-0000-4000-8000-000000000001';
 
@@ -379,6 +380,195 @@ void main() {
       expect(code, 0);
       expect(report.readAsStringSync(), contains('- 資料來源：檔案 rows.json'));
       expect(report.readAsStringSync(), contains('| 可轉換 | 4 |'));
+    });
+  });
+
+  group('推定規則（--assume）：逐類核准，預設不推定', () {
+    final assumable = [
+      row('m1', '每 4 小時 30 元', spaceType: 'paidMotorcycle'),
+      row('m2', '每 4 小時 30 元'),
+      row('o1', '免費', official: true),
+      row('k1', '免費', spaceType: 'car'),
+      row('s1', '臨停：20元/時，月租：3000元/月。機車免費。', official: true),
+      row('h1', '每小時50元。大型重機每小時30元', official: true),
+      row('e1', '免費（大型重機停汽車區）'),
+      row('e2', '免費（大型重機另訂費率）'),
+      ...rows,
+    ];
+
+    test('every 需人工確認 suggestion falls in at most one category', () {
+      final categories = {
+        for (final c in readAll(assumable))
+          c.row.sourceId: assumptionOf(
+            c.reading,
+            spaceType: c.row.spaceType,
+            official: c.row.official,
+          ),
+      };
+      expect(categories, {
+        'm1': 'motorcycle-bay-unlabelled',
+        'm2': null, // an unlabelled community lot may be the car rate
+        'official:o1': 'official-lot-unlabelled',
+        'k1': 'car-bay-unlabelled',
+        'official:s1': 'official-scooter-beside-unlabelled',
+        'official:h1': 'official-heavy-beside-unlabelled',
+        'e1': 'community-heavy-car-area',
+        'e2': 'community-heavy-own-rate',
+        'official:a1': null,
+        'official:a2': null,
+        'a3': null,
+        'a4': null,
+        'b1': null,
+        'b2': null,
+        'official:b3': null,
+        'c1': 'community-heavy-as-car',
+        'official:c2': null, // no suggestion
+      });
+    });
+
+    test('nothing is assumed without --assume', () {
+      final ids = applyItems(readAll(assumable))
+          .map((i) => i['source_id'])
+          .toList();
+      expect(ids, ['official:a1', 'official:a2', 'a3', 'a4']);
+      expect(
+        readFeeNote('每 4 小時 30 元', spaceType: 'paidMotorcycle').verdict,
+        FeeVerdict.manual,
+      );
+    });
+
+    test('only the listed categories are converted, with the suggestion', () {
+      final conversions = readAll(
+        assumable,
+        assume: {'motorcycle-bay-unlabelled', 'official-lot-unlabelled'},
+      );
+      final written = {
+        for (final c in conversions)
+          if (c.convertible) c.row.sourceId: c.basis,
+      };
+      expect(written, {
+        'm1': '依推定 motorcycle-bay-unlabelled',
+        'official:o1': '依推定 official-lot-unlabelled',
+        'official:a1': '直接可轉換',
+        'official:a2': '直接可轉換',
+        'a3': '直接可轉換',
+        'a4': '直接可轉換',
+      });
+      final m1 = applyItems(conversions.where((c) => c.row.sourceId == 'm1'))
+          .single;
+      expect(m1['fee'], {
+        'scooter': {'mode': 'hourly', 'amount': 30, 'per_minutes': 240},
+      });
+    });
+
+    test('--assume takes known categories only, repeatable', () {
+      final o = Options.parse([
+        '--assume',
+        'motorcycle-bay-unlabelled',
+        '--assume',
+        'car-bay-unlabelled',
+      ]);
+      expect(o.assume, {'motorcycle-bay-unlabelled', 'car-bay-unlabelled'});
+      expect(Options.parse([]).assume, isEmpty);
+      for (final args in [
+        ['--assume'],
+        ['--assume', 'all'],
+        ['--assume', 'motorcycle-bay'],
+      ]) {
+        expect(
+          () => Options.parse(args),
+          throwsA(isA<UsageException>()),
+          reason: '$args',
+        );
+      }
+      expect(
+        () => Options.parse([
+          '--apply',
+          '--actor',
+          _actor,
+          '--note',
+          'x' * 490,
+          '--assume',
+          'motorcycle-bay-unlabelled',
+        ]),
+        throwsA(isA<UsageException>()),
+      );
+    });
+
+    test('the report marks each spot direct or assumed', () {
+      final assume = {'motorcycle-bay-unlabelled'};
+      final report = previewReport(
+        readAll(assumable, assume: assume),
+        at: DateTime.utc(2026, 11, 1),
+        source: 's',
+        assume: assume,
+      );
+      expect(report, contains('- 推定類別（--assume）：motorcycle-bay-unlabelled'));
+      expect(report, contains('| 將寫入：直接可轉換 | 4 |'));
+      expect(
+        report,
+        contains('| 將寫入：依推定 motorcycle-bay-unlabelled（機車格的費率未註明車種） | 1 |'),
+      );
+      expect(report, contains('## 將寫入的點位（5 筆）'));
+      expect(
+        report,
+        contains('| m1 | 社群 臺北市 中正區 測試點 m1 | 依推定 motorcycle-bay-unlabelled |'),
+      );
+      expect(report, contains('| a3 | 社群 臺北市 中正區 測試點 a3 | 直接可轉換 |'));
+      final plain = previewReport(
+        readAll(assumable),
+        at: DateTime.utc(2026, 11, 1),
+        source: 's',
+      );
+      expect(plain, contains('- 推定類別（--assume）：無（預設不推定）'));
+      expect(plain, isNot(contains('依推定')));
+    });
+
+    test('--apply writes each category in its own batches, noted', () async {
+      final store = FakeStore(assumable);
+      final out = StringBuffer();
+      final code = await run(
+        [
+          '--apply',
+          '--actor',
+          _actor,
+          '--note',
+          '#235 staging',
+          '--assume',
+          'official-lot-unlabelled',
+          '--assume',
+          'motorcycle-bay-unlabelled',
+        ],
+        env: const {
+          'SUPABASE_URL': 'https://example.supabase.co',
+          'SUPABASE_SERVICE_ROLE_KEY': 'k',
+        },
+        connect: (url, key) => store,
+        now: () => DateTime.utc(2026, 11, 1),
+        stdoutSink: out,
+        stderrSink: StringBuffer(),
+      );
+      expect(code, 0);
+      expect(store.calls.map((c) => c.note), [
+        '#235 staging',
+        '#235 staging（依推定 motorcycle-bay-unlabelled）',
+        '#235 staging（依推定 official-lot-unlabelled）',
+      ]);
+      expect(
+        store.calls.map((c) => [for (final i in c.items) i['source_id']]),
+        [
+          ['official:a1', 'official:a2', 'a3', 'a4'],
+          ['m1'],
+          ['official:o1'],
+        ],
+      );
+      // FakeStore skips the first item of every call.
+      expect(out.toString(), contains('- 可轉換：6；寫入：3；略過：3'));
+      expect(out.toString(), contains('  - 直接可轉換：寫入 3'));
+      expect(
+        out.toString(),
+        contains('  - 依推定 motorcycle-bay-unlabelled：寫入 0'),
+      );
     });
   });
 

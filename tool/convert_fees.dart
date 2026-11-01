@@ -18,6 +18,12 @@
 ///
 /// `--input rows.json` reads the spots from a file (the shape [SpotRow.fromJson]
 /// takes) instead of the database, for a preview only.
+///
+/// `--assume <category>` (repeatable) also converts the 需人工確認 spots of a
+/// 推定規則 category an admin approved (tool/fee_assumptions.dart), with the
+/// reader's suggestion; none is assumed by default. The report marks each
+/// spot 直接可轉換 or `依推定 <category>`, and `--apply` writes each category in
+/// its own batches, with the category in the audit note.
 library;
 
 import 'dart:convert';
@@ -28,7 +34,10 @@ import 'package:http/http.dart' as http;
 import 'package:motorcycle_parking/admin/import/fee_reading.dart';
 import 'package:motorcycle_parking/models/fee.dart';
 
-const usage = '''
+import 'fee_assumptions.dart';
+
+final usage =
+    '''
 用法：dart run tool/convert_fees.dart [選項]
 
 預設只讀取並產生預覽報告，不寫入資料庫。
@@ -37,6 +46,9 @@ const usage = '''
   --input <檔案>     從 JSON 檔讀取點位，不連資料庫（只能預覽）
   --sample <N>       抽樣筆數（預設 20）
   --seed <N>         抽樣亂數種子（預設 235）
+  --assume <類別>    也轉換該推定類別的「需人工確認」點位，採解析建議值；
+                     可重複給多個類別，預設不推定。類別：
+${feeAssumptions.map((a) => '                       ${a.id}：${a.name}').join('\n')}
   --apply            寫入可轉換的費率（需同時給 --actor 與 --note）
   --actor <uuid>     執行寫入的管理者帳號 id（稽核紀錄的 actor）
   --note <文字>      稽核紀錄的說明，例如 "#235 staging"
@@ -69,8 +81,12 @@ class Options {
     this.sample = 20,
     this.seed = 235,
     this.help = false,
+    this.assume = const {},
   });
   final bool apply;
+
+  /// The 推定規則 categories (`--assume`) whose suggestions are converted too.
+  final Set<String> assume;
   final String? actor, note, out, input;
   final int sample, seed;
   final bool help;
@@ -81,6 +97,7 @@ class Options {
     var apply = false, help = false;
     String? actor, note, out, input;
     var sample = 20, seed = 235;
+    final assume = <String>{};
     for (var i = 0; i < args.length; i++) {
       final arg = args[i];
       String value() {
@@ -112,6 +129,14 @@ class Options {
           sample = number();
         case '--seed':
           seed = number();
+        case '--assume':
+          final id = value();
+          if (!feeAssumptionIds.contains(id)) {
+            throw UsageException(
+              '不認得的推定類別：$id（可用：${feeAssumptionIds.join('、')}）',
+            );
+          }
+          assume.add(id);
         case '-h' || '--help':
           help = true;
         default:
@@ -128,6 +153,12 @@ class Options {
       if (input != null) {
         throw UsageException('--apply 必須讀取資料庫的現況，不能搭配 --input');
       }
+      // The audit note carries the category, so it must still fit.
+      for (final id in assume) {
+        if (auditNote(note.trim(), id).length > 500) {
+          throw UsageException('--note 加上推定類別「$id」後超過 500 字');
+        }
+      }
     } else if (actor != null || note != null) {
       throw UsageException('--actor、--note 只在 --apply 時使用');
     }
@@ -140,6 +171,7 @@ class Options {
       sample: sample,
       seed: seed,
       help: help,
+      assume: assume,
     );
   }
 }
@@ -188,29 +220,53 @@ class SpotRow {
 }
 
 class Conversion {
-  Conversion(this.row)
-    : reading = readFeeNote(row.feeNote, spaceType: row.spaceType);
+  Conversion(this.row, {Set<String> assume = const {}})
+    : reading = readFeeNote(row.feeNote, spaceType: row.spaceType) {
+    write = feeToWrite(
+      reading,
+      spaceType: row.spaceType,
+      official: row.official,
+      assumed: assume,
+    );
+  }
   final SpotRow row;
   final FeeReading reading;
-  bool get convertible => reading.verdict == FeeVerdict.convertible;
+
+  /// The fee to write and the 推定規則 category it rests on (null when the
+  /// reader is certain); null when nothing is written.
+  late final ({Fee fee, String? category})? write;
+
+  /// Written: certain, or the suggestion of an approved category.
+  bool get convertible => write != null;
+  String? get category => write?.category;
+
+  /// 直接可轉換, or `依推定 <category>`.
+  String get basis => category == null ? '直接可轉換' : '依推定 $category';
 }
 
-List<Conversion> readAll(Iterable<SpotRow> rows) => [
-  for (final row in rows) Conversion(row),
-];
+List<Conversion> readAll(
+  Iterable<SpotRow> rows, {
+  Set<String> assume = const {},
+}) => [for (final row in rows) Conversion(row, assume: assume)];
 
-/// What `--apply` sends: only the convertible ones, with the note and space
-/// type they were read from so the RPC skips a spot that changed since.
+/// What `--apply` sends for [conversions]: only the convertible ones, with
+/// the note and space type they were read from so the RPC skips a spot that
+/// changed since.
 List<Map<String, Object?>> applyItems(Iterable<Conversion> conversions) => [
   for (final c in conversions)
-    if (c.convertible && c.reading.fee != null)
+    if (c.write case final w?)
       {
         'source_id': c.row.sourceId,
         'fee_note': c.row.feeNote,
         'space_type': c.row.spaceType,
-        'fee': c.reading.fee!.toJson(),
+        'fee': w.fee.toJson(),
       },
 ];
+
+/// The audit note of a batch: the admin's note, and the 推定規則 category
+/// when the batch rests on one.
+String auditNote(String note, String? category) =>
+    category == null ? note : '$note（依推定 $category）';
 
 const verdictLabel = {
   FeeVerdict.convertible: '可轉換',
@@ -255,6 +311,7 @@ String previewReport(
   required String source,
   int sample = 20,
   int seed = 235,
+  Set<String> assume = const {},
 }) {
   final out = StringBuffer();
   final total = conversions.length;
@@ -270,6 +327,10 @@ String previewReport(
     ..writeln('- 產生時間：${at.toUtc().toIso8601String()}')
     ..writeln('- 資料來源：$source')
     ..writeln('- 解析規則：lib/admin/import/fee_reading.dart（readFeeNote）')
+    ..writeln(
+      '- 推定類別（--assume）：${assume.isEmpty ? '無（預設不推定）' : [for (final a in feeAssumptions)
+              if (assume.contains(a.id)) a.id].join('、')}',
+    )
     ..writeln('- 本報告為唯讀預覽，未寫入資料庫。')
     ..writeln()
     ..writeln('## 總覽')
@@ -282,6 +343,13 @@ String previewReport(
     ..writeln('| 不同的 fee_note 寫法 | $distinct |');
   for (final v in FeeVerdict.values) {
     out.writeln('| ${verdictLabel[v]} | ${count(v)} |');
+  }
+  final direct = conversions.where((c) => c.convertible && c.category == null);
+  out.writeln('| 將寫入：直接可轉換 | ${direct.length} |');
+  for (final a in feeAssumptions) {
+    if (!assume.contains(a.id)) continue;
+    final n = conversions.where((c) => c.category == a.id).length;
+    out.writeln('| 將寫入：依推定 ${a.id}（${_cell(a.name)}） | $n |');
   }
 
   out
@@ -329,7 +397,7 @@ String previewReport(
   if (convertible.isNotEmpty) {
     final shapes = <String, int>{};
     for (final c in convertible) {
-      final shape = feeShape(c.reading.fee!);
+      final shape = feeShape(c.write!.fee);
       shapes[shape] = (shapes[shape] ?? 0) + 1;
     }
     final sorted = shapes.entries.toList()
@@ -353,22 +421,42 @@ String previewReport(
     ..sort((a, b) => a.row.sourceId.compareTo(b.row.sourceId))
     ..shuffle(Random(seed));
   final picked = pool.take(sample).toList();
+  String where(Conversion c) => [
+    c.row.official ? '官方' : '社群',
+    c.row.city,
+    c.row.district,
+  ].whereType<String>().join(' ');
   out
     ..writeln('## 隨機抽樣（可轉換 ${picked.length} 筆，種子 $seed）')
     ..writeln()
-    ..writeln('| # | 點位 | 原文（fee_note） | 轉換結果 | 轉換後 fee_note |')
-    ..writeln('|---:|---|---|---|---|');
+    ..writeln('| # | 點位 | 依據 | 原文（fee_note） | 轉換結果 | 轉換後 fee_note |')
+    ..writeln('|---:|---|---|---|---|---|');
   for (final (i, c) in picked.indexed) {
-    final fee = c.reading.fee!;
-    final where = [
-      c.row.official ? '官方' : '社群',
-      c.row.city,
-      c.row.district,
-    ].whereType<String>().join(' ');
+    final fee = c.write!.fee;
     out.writeln(
-      '| ${i + 1} | ${_cell('$where ${c.row.name}')} | '
+      '| ${i + 1} | ${_cell('${where(c)} ${c.row.name}')} | ${c.basis} | '
       '${_cell(c.row.feeNote)} | `${jsonEncode(fee.toJson())}` | '
       '${_cell(feeNoteOf(fee))} |',
+    );
+  }
+
+  // Every spot to be written, so an admin can check each assumed one.
+  final listed = [...convertible]
+    ..sort((a, b) {
+      final n = (a.category ?? '').compareTo(b.category ?? '');
+      return n != 0 ? n : a.row.sourceId.compareTo(b.row.sourceId);
+    });
+  out
+    ..writeln()
+    ..writeln('## 將寫入的點位（${listed.length} 筆）')
+    ..writeln()
+    ..writeln('| 點位 id | 點位 | 依據 | 原文（fee_note） | 轉換結果 |')
+    ..writeln('|---|---|---|---|---|');
+  for (final c in listed) {
+    out.writeln(
+      '| ${c.row.sourceId} | ${_cell('${where(c)} ${c.row.name}')} | '
+      '${c.basis} | ${_cell(_clip(c.row.feeNote))} | '
+      '`${jsonEncode(c.write!.fee.toJson())}` |',
     );
   }
   return out.toString();
@@ -471,7 +559,9 @@ class RestFeeStore implements FeeStore {
 
 /// Writes the convertible fees in batches; the run log in Markdown, and
 /// whether every batch went through. A failed batch stops the run, and the
-/// log still lists what the earlier batches wrote.
+/// log still lists what the earlier batches wrote. The certain fees go
+/// first, then each 推定規則 category in its own batches, so every audit row
+/// says which category, if any, its fee rests on ([auditNote]).
 Future<({String log, bool ok})> applyReport(
   FeeStore store,
   List<Conversion> conversions, {
@@ -479,21 +569,41 @@ Future<({String log, bool ok})> applyReport(
   required String note,
   required DateTime at,
 }) async {
-  final items = applyItems(conversions);
-  var converted = 0;
+  final groups = <String?, List<Conversion>>{null: []};
+  for (final a in feeAssumptions) {
+    groups[a.id] = [];
+  }
+  for (final c in conversions) {
+    if (c.convertible) groups[c.category]!.add(c);
+  }
+  final total = groups.values.fold(0, (n, g) => n + g.length);
+  var converted = 0, sent = 0, batchNo = 0;
+  final written = <String?, int>{};
   final skipped = <Map<String, Object?>>[];
   String? failure;
-  for (var i = 0; i < items.length; i += batchSize) {
-    final batch = items.sublist(i, min(i + batchSize, items.length));
-    try {
-      final result = await store.convert(actor, batch, note);
-      converted += (result['converted']! as num).toInt();
-      skipped.addAll(
-        (result['skipped']! as List<Object?>).cast<Map<String, Object?>>(),
-      );
-    } on Exception catch (e) {
-      failure = '第 ${i ~/ batchSize + 1} 批（第 ${i + 1} 筆起）失敗，之後未送出：$e';
-      break;
+  send:
+  for (final MapEntry(key: category, value: group) in groups.entries) {
+    final items = applyItems(group);
+    for (var i = 0; i < items.length; i += batchSize) {
+      final batch = items.sublist(i, min(i + batchSize, items.length));
+      batchNo++;
+      try {
+        final result = await store.convert(
+          actor,
+          batch,
+          auditNote(note, category),
+        );
+        final n = (result['converted']! as num).toInt();
+        converted += n;
+        written[category] = (written[category] ?? 0) + n;
+        skipped.addAll(
+          (result['skipped']! as List<Object?>).cast<Map<String, Object?>>(),
+        );
+      } on Exception catch (e) {
+        failure = '第 $batchNo 批（第 ${sent + 1} 筆起）失敗，之後未送出：$e';
+        break send;
+      }
+      sent += batch.length;
     }
   }
   final out = StringBuffer()
@@ -502,8 +612,11 @@ Future<({String log, bool ok})> applyReport(
     ..writeln('- 執行時間：${at.toUtc().toIso8601String()}')
     ..writeln('- 執行者（actor）：$actor')
     ..writeln('- 說明：${_cell(note)}')
-    ..writeln('- 可轉換：${items.length}；寫入：$converted；略過：${skipped.length}')
-    ..writeln();
+    ..writeln('- 可轉換：$total；寫入：$converted；略過：${skipped.length}');
+  for (final MapEntry(key: category, value: n) in written.entries) {
+    out.writeln('  - ${category == null ? '直接可轉換' : '依推定 $category'}：寫入 $n');
+  }
+  out.writeln();
   if (failure != null) out.writeln('**${_cell(failure)}**\n');
   if (skipped.isNotEmpty) {
     out
@@ -563,13 +676,14 @@ Future<int> run(
     source = Uri.parse(url).host;
   }
 
-  final conversions = readAll(rows);
+  final conversions = readAll(rows, assume: options.assume);
   var report = previewReport(
     conversions,
     at: clock(),
     source: source,
     sample: options.sample,
     seed: options.seed,
+    assume: options.assume,
   );
   var ok = true;
   if (options.apply) {
