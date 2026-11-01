@@ -719,8 +719,17 @@ void main() {
     await showField(tester, '資料與查核');
     expect(tester.getRect(find.text('導航')), action);
     expect(find.text('修改建議').hitTestable(), findsOneWidget);
-    // Only 最近更新 says 未提供: this spot has no update time or history.
-    expect(find.text('未提供'), findsOneWidget);
+    // Only 最近更新 says 未提供 in the details (the fee plate above says it
+    // too): this spot has no update time or history.
+    expect(
+      find.descendant(
+        of: find
+            .ancestor(of: find.text('最近更新'), matching: find.byType(Row))
+            .first,
+        matching: find.text('未提供'),
+      ),
+      findsOneWidget,
+    );
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
