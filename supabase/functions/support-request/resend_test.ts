@@ -1,8 +1,11 @@
 import {
+  caseReceiptMail,
   confirmMail,
   deletionNoticeMail,
   noticeMail,
+  privacyConfirmMail,
   receiptMail,
+  replyMail,
   resendConfig,
   resendNotifier,
   resendSender,
@@ -205,4 +208,111 @@ Deno.test('the deletion notice carries the one-time cancel link', () => {
     false,
     'none without the page',
   );
+});
+
+Deno.test('sendMail sets the Reply-To and gives back the Resend id', async () => {
+  const seen: RequestInit[] = [];
+  const got = await sendMail(
+    config,
+    { to: ['rider@x.tw'], subject: 's', text: 't', replyTo: 'reply+abc@x.tw' },
+    'support-reply/1',
+    (_url, init) => {
+      seen.push(init!);
+      return Promise.resolve(Response.json({ id: 're_1' }));
+    },
+  );
+  equal(got, 're_1', 'id');
+  equal(
+    JSON.parse(String(seen[0].body)).reply_to,
+    'reply+abc@x.tw',
+    'reply_to',
+  );
+  equal(
+    await sendMail(
+      config,
+      { to: ['rider@x.tw'], subject: 's', text: 't' },
+      'k',
+      () => Promise.resolve(new Response('not json')),
+    ),
+    null,
+    'no id',
+  );
+});
+
+Deno.test('every mail says to reply to it, not to write to support@ (#295)', () => {
+  for (
+    const { text } of [
+      receiptMail(id),
+      receiptMail(id, 'privacy'),
+      confirmMail('https://site.test/c#token=abc'),
+      privacyConfirmMail('https://site.test/c#token=abc'),
+      statusMail('2026-11-08T07:30:00Z'),
+      deletionNoticeMail('2026-11-08T07:30:00Z', false),
+      caseReceiptMail(id, 'general', 'https://site.test/case#token=abc'),
+      replyMail(id, '已更正', 'https://site.test/case#token=abc'),
+    ]
+  ) {
+    equal(text.includes('直接回覆這封信'), true, text.slice(0, 20));
+    equal(text.includes('寄信到'), false, 'no 寄信到');
+  }
+});
+
+Deno.test('a case mail: the text, the code and the case link', () => {
+  const link = 'https://site.test/case#token=abc';
+  const receipt = caseReceiptMail(id, 'data_issue', link);
+  equal(receipt.subject.includes('資料錯誤或侵權'), true, 'kind');
+  equal(receipt.text.includes(link), true, 'link');
+  equal(receipt.text.includes('S-20000000'), true, 'code');
+  const reply = replyMail(id, '您好，已更正。', link);
+  equal(reply.text.startsWith('您好，已更正。'), true, 'the answer first');
+  equal(
+    reply.text.includes(link) && reply.text.includes('30 天'),
+    true,
+    'link',
+  );
+  equal(reply.subject, '【機車停車指南】客服回覆 S-20000000', 'subject');
+  equal(replyMail(id, 'x', null).text.includes('#token='), false, 'no page');
+});
+
+Deno.test('the privacy confirmation: the link, 24 hours, only to this inbox', () => {
+  const { text } = privacyConfirmMail('https://site.test/v#token=abc');
+  for (
+    const part of [
+      'https://site.test/v#token=abc',
+      '24 小時',
+      '只會寄到這個信箱',
+      '不是我申請的',
+    ]
+  ) equal(text.includes(part), true, part);
+});
+
+Deno.test('the state mail carries the one-time cancel link', () => {
+  const link = 'https://site.test/cancel#token=abc';
+  equal(
+    statusMail('2026-11-08T07:30:00Z', link).text.includes(link),
+    true,
+    'link',
+  );
+  equal(
+    statusMail('2026-11-08T07:30:00Z').text.includes('#token='),
+    false,
+    'none',
+  );
+});
+
+Deno.test('a reply notice says so, with its own idempotency key', async () => {
+  const seen: RequestInit[] = [];
+  await resendNotifier(config, (_url, init) => {
+    seen.push(init!);
+    return Promise.resolve(Response.json({ id: 're_2' }));
+  }).notify({ id, adminUrl: 'https://admin.test/x', replyId: 'm1' });
+  equal(
+    new Headers(seen[0].headers).get('idempotency-key'),
+    'support-reply/m1',
+    'per reply',
+  );
+  const body = JSON.parse(String(seen[0].body));
+  equal(body.subject.includes('新回覆'), true, 'subject');
+  equal(body.text.includes('https://admin.test/x'), true, 'link');
+  equal(noticeMail(id, 'u').text.includes('新的客服案件'), true, 'new case');
 });

@@ -58,3 +58,55 @@ export async function parseConfirmToken(
   if (bytes.length !== secretBytes) return null;
   return { id, hash: await sha256Hex(bytes) };
 }
+
+// The Reply-To address of a support mail (#295): reply+<token>@<domain>,
+// the token being 20 random bytes in lower-case base32 (32 characters, safe
+// in an address's local part whatever its case handling). Only the SHA-256
+// of the token's text reaches the database; support-inbound looks the case
+// up by that hash.
+const base32 = 'abcdefghijklmnopqrstuvwxyz234567';
+const replyText = /^[a-z2-7]{32}$/;
+
+export const replyDomain = 'motoparking.smvtstudio.com';
+
+/** A new reply token and the hash to store. */
+export async function newReplyToken(
+  random: (bytes: Uint8Array) => Uint8Array = (b) => crypto.getRandomValues(b),
+): Promise<Secret> {
+  const bytes = random(new Uint8Array(20));
+  let bits = 0, value = 0, token = '';
+  for (const byte of bytes) {
+    value = (value << 8) | byte;
+    bits += 8;
+    while (bits >= 5) {
+      token += base32[(value >>> (bits - 5)) & 31];
+      bits -= 5;
+    }
+  }
+  return { secret: token, hash: await replyTokenHash(token) };
+}
+
+/** The SHA-256 of a reply token's text, in hex. */
+export const replyTokenHash = (token: string) =>
+  sha256Hex(new TextEncoder().encode(token));
+
+export const replyAddress = (token: string, domain = replyDomain) =>
+  `reply+${token}@${domain}`;
+
+/**
+ * The token of a reply+<token>@<domain> address (any case); null for any
+ * other address.
+ */
+export function parseReplyAddress(
+  address: unknown,
+  domain = replyDomain,
+): string | null {
+  if (typeof address !== 'string' || address.length > 254) return null;
+  const a = address.trim().toLowerCase();
+  const at = a.lastIndexOf('@');
+  if (at < 0 || a.slice(at + 1) !== domain) return null;
+  const local = a.slice(0, at);
+  if (!local.startsWith('reply+')) return null;
+  const token = local.slice('reply+'.length);
+  return replyText.test(token) ? token : null;
+}

@@ -20,6 +20,12 @@
 // with results pending (with scheduled_at), cancelled, not_pending (already
 // cancelled), account_deleting.
 //
+// A personal data request (#295) uses the same link: confirm records that
+// the login email's owner asked (result verified) and the case waits for
+// the administrators' answer, which goes only to that login email. Every
+// answer carries the request's kind (account_deletion or privacy), so the
+// page (https://motoparking.smvtstudio.com/support/verify) words itself.
+//
 // Results for a good confirmation token: pending (view), deletion_requested (with
 // scheduled_at), denied, resolved, account_deletion_pending (with
 // scheduled_at), account_deleting, unavailable (an admin account). The
@@ -42,12 +48,14 @@ export type LinkResult =
   | {
     result:
       | 'pending'
+      | 'verified'
       | 'deletion_requested'
       | 'denied'
       | 'resolved'
       | 'account_deletion_pending'
       | 'account_deleting'
       | 'unavailable';
+    kind: 'account_deletion' | 'privacy';
     submitted_at: string;
     contact_email: string;
     scheduled_at: string | null;
@@ -126,6 +134,7 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
   if (found.result === 'invalid') return fail('support.link_invalid', 400);
   return response({
     result: found.result,
+    kind: found.kind,
     submitted_at: found.submitted_at,
     contact_email: maskEmail(found.contact_email),
     scheduled_at: found.scheduled_at ?? null,

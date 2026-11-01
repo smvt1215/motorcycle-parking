@@ -8,6 +8,13 @@
 // 202611012200_support_deletion_verify.sql) calls public.support_mail_tick(),
 // which posts here through pg_net with the shared SUPPORT_MAIL_SECRET;
 // pg_cron does the same every 15 minutes for notices that were not sent.
+//
+// It also sends the administrators' answers to cases (#295):
+// admin_v1.reply_support_request queues one and calls support_mail_tick().
+// Each try gets a new case link (30 days) and a new Reply-To
+// reply+<token>@ token, whose hashes are stored before the mail goes; the
+// result (Resend's id, or why it failed) is kept on the message, and a failed
+// one is retried up to 5 times.
 import { response } from '../_shared/http.ts';
 import type { Secret } from '../_shared/support_token.ts';
 import { sameSecret } from '../account-deletion/handler.ts';
@@ -22,6 +29,15 @@ export type Notice = {
   scheduled_at: string;
   /** The account signs in with Apple: the notice says how to stop that. */
   apple: boolean;
+};
+
+/** A queued answer to a case (#295). */
+export type Outbound = {
+  id: string;
+  request_id: string;
+  /** The case email: the contact email, or a privacy request's login email. */
+  to_email: string;
+  body: string;
 };
 
 export type Deps = {
@@ -44,6 +60,37 @@ export type Deps = {
     tokenHash: string,
   ): Promise<boolean>;
   notified(id: string): Promise<void>;
+  /** Claims queued answers (#295). */
+  outbound(limit: number): Promise<Outbound[]>;
+  /** A new reply token for the Reply-To. */
+  newReplyToken(): Promise<Secret>;
+  /** Stores the link's and the reply token's hashes; false when unclaimed. */
+  setCaseTokens(
+    id: string,
+    linkHash: string,
+    replyHash: string,
+  ): Promise<boolean>;
+  /** The case page with the token; null when not configured. */
+  caseLink(requestId: string, secret: string): string | null;
+  /** reply+<token>@ the reply domain. */
+  replyAddress(token: string): string;
+  /**
+   * Sends one answer: Resend's id (null when it gives none), or false when
+   * no mail service is configured.
+   */
+  sendAnswer(
+    answer: Outbound,
+    caseLink: string | null,
+    replyTo: string,
+    tokenHash: string,
+  ): Promise<string | null | false>;
+  /** Records the result; error is a short reason, never an address. */
+  answered(
+    id: string,
+    sent: boolean,
+    resendId: string | null,
+    error: string | null,
+  ): Promise<void>;
 };
 
 export async function handle(req: Request, deps: Deps): Promise<Response> {
@@ -82,5 +129,54 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
       console.error(`support-mail: notice failed for ${notice.id}`);
     }
   }
-  return response({ sent, failed, skipped });
+  const answers = await sendAnswers(deps).catch(() => null);
+  if (!answers) return response({ error: 'server.unavailable' }, 503);
+  return response({ sent, failed, skipped, answers });
+}
+
+/** A short reason for the record: never an address or the text. */
+const reason = (error: unknown) => {
+  const message = (error as { message?: unknown })?.message;
+  return typeof message === 'string' && /^resend \d{3}$/.test(message)
+    ? message
+    : 'send failed';
+};
+
+async function sendAnswers(deps: Deps) {
+  const answers = await deps.outbound(batchSize);
+  let sent = 0, failed = 0, skipped = 0;
+  for (const answer of answers) {
+    try {
+      const link = await deps.newSecret(), reply = await deps.newReplyToken();
+      if (!(await deps.setCaseTokens(answer.id, link.hash, reply.hash))) {
+        skipped++;
+        continue;
+      }
+      let resendId: string | null | false;
+      try {
+        resendId = await deps.sendAnswer(
+          answer,
+          deps.caseLink(answer.request_id, link.secret),
+          deps.replyAddress(reply.secret),
+          link.hash,
+        );
+      } catch (error) {
+        failed++;
+        console.error(`support-mail: answer failed for ${answer.id}`);
+        await deps.answered(answer.id, false, null, reason(error));
+        continue;
+      }
+      if (resendId === false) {
+        // No mail service: left claimed, retried after 15 minutes.
+        skipped++;
+        continue;
+      }
+      await deps.answered(answer.id, true, resendId, null);
+      sent++;
+    } catch {
+      failed++;
+      console.error(`support-mail: answer failed for ${answer.id}`);
+    }
+  }
+  return { sent, failed, skipped };
 }
