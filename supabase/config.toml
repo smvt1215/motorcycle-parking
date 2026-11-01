@@ -440,6 +440,11 @@ verify_jwt = false
 # pg_cron calls it with the shared AVAILABILITY_INGEST_SECRET header, not a JWT.
 verify_jwt = false
 
+[functions.apple-revoke]
+# Verifies the caller itself (live session, Apple identity, recent sign-in),
+# as admin-users does (#268).
+verify_jwt = false
+
 [functions.account-deletion]
 # pg_cron calls it once a day with the shared ACCOUNT_DELETION_SECRET header,
 # not a JWT (#215).
