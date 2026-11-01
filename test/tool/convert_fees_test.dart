@@ -40,8 +40,11 @@ final rows = [
 ];
 
 class FakeStore implements FeeStore {
-  FakeStore(this.rows);
+  FakeStore(this.rows, {this.failOn});
   final List<SpotRow> rows;
+
+  /// The call (0-based) that fails, as a network error would.
+  final int? failOn;
   final calls =
       <({String actor, List<Map<String, Object?>> items, String note})>[];
 
@@ -55,6 +58,9 @@ class FakeStore implements FeeStore {
     String note,
   ) async {
     calls.add((actor: actor, items: items, note: note));
+    if (calls.length - 1 == failOn) {
+      throw const HttpException('寫入失敗：HTTP 500');
+    }
     return {
       'converted': items.length - 1,
       'skipped': [
@@ -281,7 +287,7 @@ void main() {
       expect(store.calls.single.note, '#235 staging');
       expect(store.calls.single.items, hasLength(4));
       expect(out.toString(), contains('# 費率轉換執行紀錄'));
-      expect(out.toString(), contains('- 送出：4；寫入：3；略過：1'));
+      expect(out.toString(), contains('- 可轉換：4；寫入：3；略過：1'));
       expect(out.toString(), contains('| official:a1 | 費率說明已變更，請重新讀取 |'));
       expect(out.toString(), isNot(contains('secret-key')));
     });
@@ -300,6 +306,28 @@ void main() {
         stderrSink: StringBuffer(),
       );
       expect(store.calls.map((c) => c.items.length), [500, 500, 1]);
+    });
+
+    test('a failed batch stops the run and keeps the log', () async {
+      final many = [
+        for (var i = 0; i < 1001; i++) row('m$i', '機車計次20元;', official: true),
+      ];
+      final store = FakeStore(many, failOn: 1);
+      final out = StringBuffer();
+      final err = StringBuffer();
+      final code = await run(
+        ['--apply', '--actor', _actor, '--note', 'x'],
+        env: env,
+        connect: (url, key) => store,
+        now: at,
+        stdoutSink: out,
+        stderrSink: err,
+      );
+      expect(code, 1);
+      expect(store.calls, hasLength(2));
+      expect(out.toString(), contains('- 可轉換：1001；寫入：499；略過：1'));
+      expect(out.toString(), contains('第 2 批（第 501 筆起）失敗，之後未送出'));
+      expect(err.toString(), contains('寫入未完成'));
     });
 
     test('missing credentials or bad flags stop before reading', () async {
@@ -374,7 +402,7 @@ void main() {
                   'status': i == 0 ? 'hidden' : 'active',
                 },
             ],
-            ('community_spots', _) => [
+            ('community_spots', 1000) => [
               {
                 'id': 'c-last',
                 'name': 'n',
@@ -382,7 +410,7 @@ void main() {
                 'status': 'active',
               },
             ],
-            _ => [
+            ('official_heavy_spots', 0) => [
               {
                 'id': 'o1',
                 'name': '官方',
@@ -390,6 +418,7 @@ void main() {
                 'hidden': true,
               },
             ],
+            _ => <Map<String, Object?>>[],
           };
           return http.Response.bytes(utf8.encode(jsonEncode(body)), 200);
         });
@@ -402,7 +431,20 @@ void main() {
         expect(rows.first.hidden, isTrue);
         expect(rows.last.sourceId, 'official:o1');
         expect(rows.last.hidden, isTrue);
-        expect(requests, hasLength(3));
+        // Each table until an empty page, offsets by rows received.
+        expect(
+          requests.map(
+            (r) =>
+                '${r.url.pathSegments.last}@${r.url.queryParameters['offset']}',
+          ),
+          [
+            'community_spots@0',
+            'community_spots@1000',
+            'community_spots@1001',
+            'official_heavy_spots@0',
+            'official_heavy_spots@1',
+          ],
+        );
         for (final r in requests) {
           expect(r.method, 'GET');
           expect(r.url.queryParameters['fee'], 'is.null');

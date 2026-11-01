@@ -402,7 +402,7 @@ class RestFeeStore implements FeeStore {
 
   Future<List<Map<String, Object?>>> _all(String table, String select) async {
     final rows = <Map<String, Object?>>[];
-    for (var offset = 0; ; offset += _page) {
+    for (var offset = 0; ;) {
       final uri = Uri.parse('$url/rest/v1/$table').replace(
         queryParameters: {
           'select': select,
@@ -421,7 +421,9 @@ class RestFeeStore implements FeeStore {
       final page = (jsonDecode(utf8.decode(res.bodyBytes)) as List<Object?>)
           .cast<Map<String, Object?>>();
       rows.addAll(page);
-      if (page.length < _page) return rows;
+      // Until an empty page: the server may cap a page below [_page].
+      if (page.isEmpty) return rows;
+      offset += page.length;
     }
   }
 
@@ -467,8 +469,10 @@ class RestFeeStore implements FeeStore {
   }
 }
 
-/// Writes the convertible fees in batches; the run log in Markdown.
-Future<String> applyReport(
+/// Writes the convertible fees in batches; the run log in Markdown, and
+/// whether every batch went through. A failed batch stops the run, and the
+/// log still lists what the earlier batches wrote.
+Future<({String log, bool ok})> applyReport(
   FeeStore store,
   List<Conversion> conversions, {
   required String actor,
@@ -478,13 +482,19 @@ Future<String> applyReport(
   final items = applyItems(conversions);
   var converted = 0;
   final skipped = <Map<String, Object?>>[];
+  String? failure;
   for (var i = 0; i < items.length; i += batchSize) {
     final batch = items.sublist(i, min(i + batchSize, items.length));
-    final result = await store.convert(actor, batch, note);
-    converted += (result['converted']! as num).toInt();
-    skipped.addAll(
-      (result['skipped']! as List<Object?>).cast<Map<String, Object?>>(),
-    );
+    try {
+      final result = await store.convert(actor, batch, note);
+      converted += (result['converted']! as num).toInt();
+      skipped.addAll(
+        (result['skipped']! as List<Object?>).cast<Map<String, Object?>>(),
+      );
+    } on Exception catch (e) {
+      failure = '第 ${i ~/ batchSize + 1} 批（第 ${i + 1} 筆起）失敗，之後未送出：$e';
+      break;
+    }
   }
   final out = StringBuffer()
     ..writeln('# 費率轉換執行紀錄')
@@ -492,8 +502,9 @@ Future<String> applyReport(
     ..writeln('- 執行時間：${at.toUtc().toIso8601String()}')
     ..writeln('- 執行者（actor）：$actor')
     ..writeln('- 說明：${_cell(note)}')
-    ..writeln('- 送出：${items.length}；寫入：$converted；略過：${skipped.length}')
+    ..writeln('- 可轉換：${items.length}；寫入：$converted；略過：${skipped.length}')
     ..writeln();
+  if (failure != null) out.writeln('**${_cell(failure)}**\n');
   if (skipped.isNotEmpty) {
     out
       ..writeln('| 點位 | 略過原因 |')
@@ -502,7 +513,7 @@ Future<String> applyReport(
       out.writeln('| ${s['source_id']} | ${_cell('${s['reason']}')} |');
     }
   }
-  return out.toString();
+  return (log: out.toString(), ok: failure == null);
 }
 
 Future<int> run(
@@ -560,9 +571,17 @@ Future<int> run(
     sample: options.sample,
     seed: options.seed,
   );
+  var ok = true;
   if (options.apply) {
-    report +=
-        '\n${await applyReport(store!, conversions, actor: options.actor!, note: options.note!, at: clock())}';
+    final result = await applyReport(
+      store!,
+      conversions,
+      actor: options.actor!,
+      note: options.note!,
+      at: clock(),
+    );
+    report += '\n${result.log}';
+    ok = result.ok;
   }
   if (options.out case final path?) {
     File(path).writeAsStringSync(report);
@@ -570,7 +589,8 @@ Future<int> run(
   } else {
     outSink.write(report);
   }
-  return 0;
+  if (!ok) errSink.writeln('寫入未完成，請看報告的執行紀錄');
+  return ok ? 0 : 1;
 }
 
 Future<void> main(List<String> args) async {
