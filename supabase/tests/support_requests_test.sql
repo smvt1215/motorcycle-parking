@@ -107,7 +107,11 @@ select is((select after->>'status' from admin_audit_log where action='resolve_su
 update private.support_requests set resolved_at=now()-interval '181 days',created_at=now()-interval '200 days' where id=(select id from sent);
 select is(public.support_requests_prune(),1,'resolved requests go after 180 days');
 select is((select count(*)::int from private.support_requests where status='open')>0,true,'open requests stay');
-select is((select schedule from cron.job where jobname='support-requests-prune'),'53 19 * * *','pruned daily');
+-- 202611012100 起由 account-data-retention 每日呼叫（#267）。
+select ok(not exists(select 1 from cron.job where jobname='support-requests-prune'),'no separate job any more');
+select ok((select command from cron.job where jobname='account-data-retention')='select public.account_data_retention()'
+  and position('support_requests_prune()' in pg_get_functiondef('public.account_data_retention()'::regprocedure))>0,
+  'pruned daily by the retention job');
 
 select * from finish();
 rollback;
