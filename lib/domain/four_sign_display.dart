@@ -145,7 +145,7 @@ String _num(num v) {
   return '$whole.${rem.toString().padLeft(2, '0')}';
 }
 
-/// A rate in the plate's short form: 20/時, 10/30分, 30/次, 100/日, 免費.
+/// A rate in the plate's short form: 20/時, 10/30分, 30/次, 免費.
 String plateRateText(PlateRate r) => switch (r.mode) {
   FeeMode.free => '免費',
   FeeMode.hourly =>
@@ -156,7 +156,6 @@ String plateRateText(PlateRate r) => switch (r.mode) {
     r.firstMinutes != null
         ? '首 ${_span(r.firstMinutes!)} 0 元'
         : '${_num(r.amount ?? 0)}/次',
-  FeeMode.daily => '${_num(r.amount ?? 0)}/日',
   _ => '',
 };
 
@@ -356,26 +355,13 @@ SignPlate _feePlate(FourSign s) {
       );
     case FeeKind.varies:
       final main = s.street ? '依路段' : '依分區';
-      final hourly =
-          fee.rates.isNotEmpty &&
-          fee.rates.length == fee.places &&
-          fee.rates.every((r) => r.hourly && r.amount != null);
-      var note = '';
-      if (hourly) {
-        final amounts = [for (final r in fee.rates) r.amount!]..sort();
-        note = amounts.first == amounts.last
-            ? '${_num(amounts.first)}/時'
-            : '${_num(amounts.first)}–${_num(amounts.last)}/時';
-      }
+      final (note, spoken) = _rateRange(fee) ?? ('', '');
       return SignPlate(
         face: FourSignFace.fee,
         main: main,
         note: note,
         tone: PlateTone.line,
-        semantics: [
-          '怎麼算錢：$main',
-          if (note.isNotEmpty) '每小時 ${note.replaceAll('/時', '')} 元',
-        ].join('，'),
+        semantics: ['怎麼算錢：$main', ?(spoken.isEmpty ? null : spoken)].join('，'),
       );
     case FeeKind.text:
       return SignPlate(
@@ -396,6 +382,42 @@ SignPlate _feePlate(FourSign s) {
   }
 }
 
+/// The range of rates that differ by place (依路段 20–30/時), on the plate
+/// and spoken; only when every place has a rate charged the same way (the
+/// same mode and unit), else null: a missing rate or another way of
+/// charging leaves 依路段／依分區 alone.
+(String, String)? _rateRange(FeeAnswer fee) {
+  final rates = fee.rates;
+  if (rates.isEmpty || rates.length != fee.places) return null;
+  final first = rates.first;
+  if (!rates.every(
+    (r) =>
+        r.mode == first.mode &&
+        r.perMinutes == first.perMinutes &&
+        r.firstMinutes == first.firstMinutes,
+  )) {
+    return null;
+  }
+  final amounts = [for (final r in rates) r.amount ?? 0]..sort();
+  final range = amounts.first == amounts.last
+      ? _num(amounts.first)
+      : '${_num(amounts.first)}–${_num(amounts.last)}';
+  return switch (first.mode) {
+    FeeMode.free => ('免費', '免費'),
+    FeeMode.hourly when first.perMinutes == 60 => ('$range/時', '每小時 $range 元'),
+    FeeMode.hourly => (
+      '$range/${first.perMinutes}分',
+      '每 ${first.perMinutes} 分鐘 $range 元',
+    ),
+    FeeMode.perVisit when first.firstMinutes != null => (
+      plateRateText(first),
+      _spokenRate(first),
+    ),
+    FeeMode.perVisit => ('$range/次', '每次 $range 元'),
+    _ => null,
+  };
+}
+
 String _spokenRate(PlateRate r) => switch (r.mode) {
   FeeMode.free => '免費',
   FeeMode.hourly =>
@@ -406,7 +428,6 @@ String _spokenRate(PlateRate r) => switch (r.mode) {
     r.firstMinutes != null
         ? '首 ${_span(r.firstMinutes!)} 0 元'
         : '每次 ${_num(r.amount ?? 0)} 元',
-  FeeMode.daily => '每日 ${_num(r.amount ?? 0)} 元',
   _ => plateRateText(r),
 };
 

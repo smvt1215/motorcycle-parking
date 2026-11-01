@@ -39,6 +39,8 @@ class SignArea {
     this.total,
     this.countClass,
     this.zone,
+    this.segment,
+    this.condition,
   });
 
   /// The zone's or segment's stable id; null for the whole spot.
@@ -65,6 +67,14 @@ class SignArea {
 
   /// The lot zone this place is; null for a segment or the whole spot.
   final ParkingZone? zone;
+
+  /// The street segment this place is; null for a zone or the whole spot.
+  final ParkingSegment? segment;
+
+  /// The condition the place is judged by (a segment's as [decideParking]
+  /// fills it from the spot's); its time limit gives a per-visit rate's
+  /// stay and extensions. Null when unconfirmed.
+  final ParkingCondition? condition;
 
   bool get whole => id == null && name.isEmpty;
   bool get open =>
@@ -232,16 +242,21 @@ class PlateRate {
   });
   final FeeMode mode;
 
-  /// A per-visit rate whose first stretch costs 0 (首 20 分鐘 0 元, §2.3):
-  /// its length; never read as free.
+  /// A per-visit rate of 0 on a place with a time limit (首 20 分鐘 0 元,
+  /// #188 layer 2 「計次 0 元」): the stay the time limit allows now; never
+  /// read as free.
   final int? firstMinutes;
 
-  /// A per-visit rate's paid extension (可付 40 元延長 1 次).
-  final num? extensionAmount;
+  /// A per-visit rate's paid extension (可付 40 元延長 1 次): what each
+  /// costs (the rate's `extension_amount`) and how many times the place's
+  /// time limit allows now; null when either is unstated or none is
+  /// allowed.
+  final int? extensionAmount;
   final int? extensionTimes;
 
-  /// Worked out from a follow's factor; may have decimals.
-  final num? amount, dailyCap;
+  /// Heavy bikes following another vehicle's rate pay it as it is (#188
+  /// layer 2 removed the factor).
+  final int? amount, dailyCap;
   final int? perMinutes;
 
   /// The current period of a by_time rate.
@@ -390,37 +405,27 @@ FourSign fourSign(
   );
 }
 
-BayKind? _zoneBay(ParkingZone z) {
-  final c = z.condition ?? zoneConditionOf(z.access);
-  return bayKindOf(c) ??
-      switch (z.area) {
-        ZoneArea.heavy => BayKind.heavy,
-        ZoneArea.car => BayKind.car,
-        ZoneArea.motorcycle => BayKind.motorcycle,
-        _ => null,
-      };
-}
+ParkingCondition? _zoneCondition(ParkingZone z) =>
+    z.condition ?? zoneConditionOf(z.access);
+
+/// What is painted in a zone: its condition's bay alone (#188 layer 2
+/// removed `area`); null when unconfirmed.
+BayKind? _zoneBay(ParkingZone z) => bayKindOf(_zoneCondition(z));
 
 /// Whose official count describes a zone's bays for [vehicle] (Taipei
 /// sends one count per scooter, heavy bike and car for the whole lot,
-/// decision 2026-10-29): heavy bays the heavy count, car bays the car
-/// count (heavy bikes only, as [heavyCarOpen] reads them), motorcycle bays
-/// the scooter count for scooters. A heavy bike on motorcycle bays has no
-/// count of its own: the scooter count never stands for it.
-AvailabilityVehicle? _countClass(ParkingZone z, VehicleType vehicle) {
-  final bay = (z.condition ?? zoneConditionOf(z.access))?.bay;
-  final area = z.area;
-  final heavy = bay == Bay.heavy || (bay == null && area == ZoneArea.heavy);
-  final car = area == ZoneArea.car || (area == null && bay == Bay.car);
-  final moto =
-      bay == Bay.motorcycle || (bay == null && area == ZoneArea.motorcycle);
-  return switch (vehicle) {
-    VehicleType.heavy when heavy => AvailabilityVehicle.heavy,
-    VehicleType.heavy when car => AvailabilityVehicle.car,
-    VehicleType.scooter when moto && !car => AvailabilityVehicle.scooter,
-    _ => null,
-  };
-}
+/// decision 2026-10-29), read from the zone's bay: heavy bays the heavy
+/// count, car bays the car count (heavy bikes only, as [heavyCarOpen]
+/// reads them), motorcycle bays the scooter count for scooters. A heavy
+/// bike on motorcycle bays has no count of its own: the scooter count
+/// never stands for it. A zone whose bay is unconfirmed has none.
+AvailabilityVehicle? _countClass(ParkingZone z, VehicleType vehicle) =>
+    switch ((vehicle, _zoneCondition(z)?.bay)) {
+      (VehicleType.heavy, Bay.heavy) => AvailabilityVehicle.heavy,
+      (VehicleType.heavy, Bay.car) => AvailabilityVehicle.car,
+      (VehicleType.scooter, Bay.motorcycle) => AvailabilityVehicle.scooter,
+      _ => null,
+    };
 
 List<SignArea> _lotAreas(
   ParkingSpot spot,
@@ -453,9 +458,10 @@ List<SignArea> _lotAreas(
             bayKind: _zoneBay(zone),
             countClass: _countClass(zone, vehicle),
             zone: zone,
+            condition: _zoneCondition(zone),
             window: openWindow(
               status,
-              zone.condition ?? zoneConditionOf(zone.access),
+              _zoneCondition(zone),
               vehicle,
               now,
               calendar: calendar,
@@ -487,6 +493,7 @@ List<SignArea> _lotAreas(
         basis: whole.basis,
       ),
       countClass: availabilityVehicle(vehicle),
+      condition: spot.condition,
     ),
   ];
 }
@@ -513,6 +520,10 @@ List<SignArea> _streetAreas(
       status: s.status,
       restriction: s.decision.restriction,
       window: s.window,
+      segment: s.segment,
+      condition: s.segment == null
+          ? spot.condition ?? conditionOf(spot.spaceType)
+          : segmentConditionOf(s.segment!, spot),
       bayKind:
           s.segment?.bayKind ??
           (s.segment == null
@@ -792,33 +803,44 @@ SeatAnswer _seat(
   );
 }
 
-/// [vehicle]'s rate in [fee] with a follow worked out: the rate and the
-/// factor; null when unconfirmed.
-(Rate, int)? _resolved(Fee fee, VehicleType vehicle) {
+/// [vehicle]'s rate in [fee], a heavy follow read as the rate it follows
+/// (same_as_scooter, same_as_car; no factor since #188 layer 2); null when
+/// unconfirmed or not applicable (不適用), or when it follows one that is.
+Rate? _resolved(Fee fee, VehicleType vehicle) {
   final key = vehicle == VehicleType.heavy ? 'heavy' : 'scooter';
   if (fee.textOf(key) == null) return null;
   final rate = vehicle == VehicleType.heavy ? fee.heavy : fee.scooter;
-  if (rate == null) return null;
-  if (!rate.mode.follows) return (rate, 100);
-  final target = rate.mode == FeeMode.sameAsScooter ? fee.scooter : fee.car;
-  if (target == null) return null;
-  return (target, rate.factorPct ?? 100);
+  if (rate == null || !rate.mode.follows) return rate;
+  return rate.mode == FeeMode.sameAsScooter ? fee.scooter : fee.car;
 }
 
-num? _times(int? amount, int pct) {
-  if (amount == null) return null;
-  final v = amount * pct;
-  return v % 100 == 0 ? v ~/ 100 : v / 100;
+/// The period of [condition]'s time limit that holds at [now], as
+/// decideParking reads it (an old all-day `max_minutes` as one period);
+/// null when there is none, or none holds now.
+LimitPeriod? _stayAt(
+  ParkingCondition? condition,
+  DateTime now,
+  HolidayCalendar calendar,
+) {
+  final (today, at) = taipeiDateMinute(now);
+  for (final l in condition?.limits ?? const <ParkingLimit>[]) {
+    if (l.kind != LimitKind.timeLimit) continue;
+    for (final p in l.timePeriods) {
+      final spans = datedSpans(p.days, p.from, p.to, today, calendar);
+      if (spans.any((s) => s.$1 <= at && at < s.$2)) return p;
+    }
+  }
+  return null;
 }
 
-/// [rate] (worked out by [pct]) as it holds at [now]; null when it is not
-/// one the plate can state (依現場公告, or no period of a by_time rate
+/// [rate] as it holds at [now] on a place judged by [condition]; null
+/// when it is not one the plate can state (no period of a by_time rate
 /// holds now).
 PlateRate? _plateRate(
   Rate rate,
-  int pct,
+  ParkingCondition? condition,
   DateTime now,
-  HolidayCalendar? calendar, {
+  HolidayCalendar calendar, {
   String? from,
   String? to,
 }) {
@@ -828,33 +850,28 @@ PlateRate? _plateRate(
     case FeeMode.hourly:
       return PlateRate(
         FeeMode.hourly,
-        amount: _times(rate.amount, pct),
+        amount: rate.amount,
         perMinutes: rate.perMinutes,
-        dailyCap: _times(rate.dailyCap, pct),
+        dailyCap: rate.dailyCap,
         from: from,
         to: to,
       );
     case FeeMode.perVisit:
-      final ext = rate.extension;
+      // How long one visit and each extension lasts is the place's time
+      // limit now (#188 layer 2): 0 元 for that stay reads 首段 0 元.
+      final stay = _stayAt(condition, now, calendar);
+      final times = stay?.extensions ?? 0;
+      final extensible = rate.extensionAmount != null && times > 0;
       return PlateRate(
         rate.mode,
-        amount: _times(rate.amount, pct),
-        // 首段 0 元 (0 with a valid time), as the fee texts read it.
-        firstMinutes: rate.amount == 0 ? rate.maxMinutes : null,
-        extensionAmount: ext == null ? null : _times(ext.amount, pct),
-        extensionTimes: ext?.maxTimes,
-        from: from,
-        to: to,
-      );
-    case FeeMode.daily:
-      return PlateRate(
-        rate.mode,
-        amount: _times(rate.amount, pct),
+        amount: rate.amount,
+        firstMinutes: rate.amount == 0 ? stay?.maxMinutes : null,
+        extensionAmount: extensible ? rate.extensionAmount : null,
+        extensionTimes: extensible ? times : null,
         from: from,
         to: to,
       );
     case FeeMode.byTime:
-      final cal = calendar ?? HolidayCalendar.current;
       final (today, at) = taipeiDateMinute(now);
       FeePeriod? best;
       int? since;
@@ -866,7 +883,7 @@ PlateRate? _plateRate(
           p.from,
           p.to,
           today,
-          cal,
+          calendar,
         )) {
           final elapsed = at - start;
           if (elapsed >= 0 && at < end && (since == null || elapsed < since)) {
@@ -877,13 +894,13 @@ PlateRate? _plateRate(
       if (best == null) return null;
       return _plateRate(
         best.rate,
-        pct,
+        condition,
         now,
         calendar,
         from: best.from,
         to: best.to,
       );
-    case FeeMode.posted || FeeMode.sameAsScooter || FeeMode.sameAsCar:
+    case FeeMode.notApplicable || FeeMode.sameAsScooter || FeeMode.sameAsCar:
       return null;
   }
 }
@@ -897,9 +914,9 @@ class _RatePrice extends _Price {
   const _RatePrice(this.rate, this.source);
   final PlateRate rate;
 
-  /// The whole rule behind [rate] and its factor: what decides whether two
-  /// places charge alike, since the plate drops terms such as free minutes.
-  final (Rate, int) source;
+  /// The whole rule behind [rate]: what decides whether two places charge
+  /// alike, since the plate drops terms such as a cap's reset.
+  final Rate source;
 }
 
 class _TextPrice extends _Price {
@@ -918,16 +935,15 @@ _Price _priceOf(
   Fee? fee,
   String legacy,
   VehicleType vehicle,
+  ParkingCondition? condition,
   DateTime now,
-  HolidayCalendar? calendar,
+  HolidayCalendar calendar,
 ) {
   if (fee != null) {
     final resolved = _resolved(fee, vehicle);
     if (resolved == null) return const _NoPrice();
-    final rate = _plateRate(resolved.$1, resolved.$2, now, calendar);
-    return rate == null
-        ? const _NoPrice()
-        : _RatePrice(rate, (resolved.$1, resolved.$2));
+    final rate = _plateRate(resolved, condition, now, calendar);
+    return rate == null ? const _NoPrice() : _RatePrice(rate, resolved);
   }
   return _placeholder(legacy) ? const _NoPrice() : _TextPrice(legacy.trim());
 }
@@ -945,31 +961,49 @@ FeeAnswer _fee(
   DateTime now,
   HolidayCalendar? calendar,
 ) {
-  final spotPrice = _priceOf(spot.fee, spot.feeNote, vehicle, now, calendar);
+  final cal = calendar ?? HolidayCalendar.current;
+  _Price spotPrice(ParkingCondition? condition) =>
+      _priceOf(spot.fee, spot.feeNote, vehicle, condition, now, cal);
+  final wholeSpot = places.isEmpty || places.every((a) => a.whole);
   final List<_Price> prices;
-  final anyZoneFee = spot.zones.any((z) => z.fee != null);
-  final wholeLot = places.isEmpty || places.every((a) => a.whole);
-  if (street ||
-      spot.zones.isEmpty ||
-      !anyZoneFee && places.isNotEmpty && wholeLot) {
-    // Segments carry no rate of their own yet: the spot's covers them.
-    prices = [spotPrice];
+  if (street) {
+    // A segment's own rate, else the whole road's (#188 layer 2, C3), as
+    // decideParking prices it: read segment by segment. No segment open
+    // (or none at all): every segment prices it.
+    final segments = wholeSpot
+        ? [for (final s in spot.segments) (s, segmentConditionOf(s, spot))]
+        : [
+            for (final a in places)
+              if (a.segment case final s?) (s, a.condition),
+          ];
+    prices = segments.isEmpty
+        ? [spotPrice(spot.condition ?? conditionOf(spot.spaceType))]
+        : [
+            for (final (s, c) in segments)
+              s.fee != null
+                  ? _priceOf(s.fee, '', vehicle, c, now, cal)
+                  : spotPrice(c),
+          ];
+  } else if (spot.zones.isEmpty) {
+    prices = [spotPrice(spot.condition)];
   } else {
-    // A zone's own rate supersedes the lot's, as spotFeeSummary and
-    // decideParking read them, whether or not the zone says who may park.
-    // No zone place open (none open, or zones without access data standing
-    // as the whole lot): every zone prices it.
-    final zones = wholeLot ? spot.zones : [for (final a in places) ?a.zone];
+    // A zone's own rate, else the lot-wide one (#188 layer 2, C2), as
+    // decideParking prices it; only with no structured rate anywhere does
+    // a zone read its own text, then the lot's. No zone place open (none
+    // open, or zones without access data standing as the whole lot):
+    // every zone prices it.
+    final anyZoneFee = spot.zones.any((z) => z.fee != null);
+    final zones = wholeSpot ? spot.zones : [for (final a in places) ?a.zone];
     prices = [
       for (final z in zones)
         z.fee != null
-            ? _priceOf(z.fee, '', vehicle, now, calendar)
-            : !anyZoneFee && spot.fee != null
-            ? spotPrice
+            ? _priceOf(z.fee, '', vehicle, _zoneCondition(z), now, cal)
+            : spot.fee != null
+            ? spotPrice(_zoneCondition(z))
             : switch (_zoneLegacy(z, vehicle)) {
                 final t when !_placeholder(t) => _TextPrice(t.trim()),
                 _ when anyZoneFee => const _NoPrice(),
-                _ => spotPrice,
+                _ => spotPrice(_zoneCondition(z)),
               },
     ];
   }

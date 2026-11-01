@@ -63,44 +63,42 @@ bool scheduleSilentFor(ParkingCondition? condition, VehicleType vehicle) {
   return !c.schedule.any((s) => s.vehicles.contains(_slotVehicle(vehicle)));
 }
 
-/// The slots a heavy bike may park in on a shared car bay [condition] in
-/// [district] at [at], as decideParking's `_heavyShareSlots` (private to
-/// parking_decision.dart, another session's file) lists them: the car
-/// slots (car bays are painted for heavy bikes too), the scooter slots only
-/// where [rules] (already matched to the city and heavy bikes) open the
-/// matching motorcycle bay to heavy bikes, both kinds agreeing when the
-/// charge is unconfirmed, and the slots the notice names for heavy bikes.
-/// Keep the two in step. Only the slots: whether the bay opens at all (an
-/// ended notice, no usable slot) and the conditional rule's limit come
-/// from the decision's status and restriction. Replace this with the
-/// public helper once #188 exposes it (follow-up #247).
-List<ScheduleSlot> heavyShareSlots(
-  ParkingCondition condition,
-  List<CityRule> rules,
-  String district,
-  DateTime at,
-) {
-  final verdicts = [
-    for (final k in switch (condition.charge) {
-      Charge.toll => const [SpaceType.paidMotorcycle],
-      Charge.free => const [SpaceType.freeMotorcycle],
-      null => const [SpaceType.paidMotorcycle, SpaceType.freeMotorcycle],
-    })
-      ruleVerdict(rules, k, district, now: at),
-  ];
-  final ruleOpens = verdicts.every(
-    (v) =>
-        v.kind == RuleVerdictKind.open ||
-        (v.kind == RuleVerdictKind.conditional &&
-            v.restriction != RuleRestriction.unverified),
-  );
-  return [
-    for (final s in condition.schedule)
-      if (s.vehicles.contains(SlotVehicle.car) ||
-          ruleOpens && s.vehicles.contains(SlotVehicle.scooter) ||
-          s.vehicles.contains(SlotVehicle.heavy))
-        s,
-  ];
+/// Half-open minute ranges, from today's 00:00 in Taiwan, that stand for
+/// no bound: before anything and after anything a window reads.
+const _past = -1 << 40, _future = 1 << 40;
+
+/// [spans] merged where they touch or overlap, in order.
+List<(int, int)> _union(Iterable<(int, int)> spans) {
+  final sorted = [
+    for (final s in spans)
+      if (s.$1 < s.$2) s,
+  ]..sort((a, b) => a.$1.compareTo(b.$1));
+  final out = <(int, int)>[];
+  for (final s in sorted) {
+    if (out.isNotEmpty && s.$1 <= out.last.$2) {
+      if (s.$2 > out.last.$2) out.last = (out.last.$1, s.$2);
+    } else {
+      out.add(s);
+    }
+  }
+  return out;
+}
+
+/// [spans] with every minute of [cuts] (both merged) taken out.
+List<(int, int)> _subtract(List<(int, int)> spans, List<(int, int)> cuts) {
+  if (cuts.isEmpty) return spans;
+  final out = <(int, int)>[];
+  for (final (start, end) in spans) {
+    var from = start;
+    for (final (cutStart, cutEnd) in cuts) {
+      if (cutEnd <= from || cutStart >= end) continue;
+      if (cutStart > from) out.add((from, cutStart));
+      from = cutEnd;
+      if (from >= end) break;
+    }
+    if (from < end) out.add((from, end));
+  }
+  return out;
 }
 
 /// When a place judged [status] with [condition] lets [vehicle] park,
@@ -108,12 +106,14 @@ List<ScheduleSlot> heavyShareSlots(
 /// for the vehicle decide when (a period across midnight belongs to the
 /// day it starts, as [decideParking] reads them). On the street a heavy
 /// bike on a car bay parks by law whatever the slots say ([street]),
-/// except on a shared car bay, where it parks in [heavyShareSlots], read
-/// with [rules] (matched to the spot's city and heavy bikes) in
-/// [district]. A city rule in the decision's [basis] that grants the place holds up to,
-/// not on, its expiry day (as [ruleExpired]): the window ends there too,
-/// except on a street bay the law opens to a heavy bike, which the law
-/// keeps open after the rule ends.
+/// shared car bays without slots too (#248); on a shared car bay with
+/// slots it parks in [heavyShareSlotsOf]'s, read with [rules] (matched to
+/// the spot's city and heavy bikes) in [district]. A city rule in the
+/// decision's [basis] that grants the place holds up to, not on, its
+/// expiry day (as [ruleExpired]): the window ends there too, except on a
+/// street bay the law opens to a heavy bike, which the law keeps open
+/// after the rule ends. The condition's 禁停 periods (#188 layer 2) close
+/// it for everyone, as [decideParking]'s 現在禁停 reads them.
 OpenWindow openWindow(
   EligibilityStatus status,
   ParkingCondition? condition,
@@ -130,26 +130,39 @@ OpenWindow openWindow(
     return OpenWindow.never;
   }
   final (today, at) = taipeiDateMinute(now);
+  final cal = calendar ?? HolidayCalendar.current;
+  const last = 7;
+  final c = condition;
+  final banned = _union([
+    for (final l in c?.limits ?? const <ParkingLimit>[])
+      if (l.kind == LimitKind.noParking)
+        for (final p in l.periods)
+          ...datedSpans(p.days, p.from, p.to, today, cal, last: last),
+  ]);
+  OpenWindow read(Iterable<(int, int)> open) =>
+      _windowOf(_subtract(_union(open), banned), at, today, last);
   int dayMinute(DateTime d) =>
       DateTime.utc(d.year, d.month, d.day).difference(today).inDays * 1440;
-  final c = condition;
   final heavy = street && vehicle == VehicleType.heavy;
   final carShare = c?.share == ShareKind.carMotorcycle;
-  // A heavy bike on a plain car bay parks by law whatever its slots or
-  // notice say (decideParking's step 3 skips them; its notice is not what
-  // opens the bay), so nothing here ends it.
-  if (heavy && c != null && c.bay == Bay.car && !carShare) {
-    return OpenWindow.always;
+  final slotted = c != null && c.schedule.isNotEmpty;
+  // A heavy bike on a car bay parks by law whatever its slots or notice
+  // say (decideParking's step 3 skips them; its notice is not what opens
+  // the bay), so nothing here ends it. A shared car bay without slots is
+  // judged as a car bay too (#248); only its slots, when it lists them,
+  // limit heavy bikes.
+  if (heavy && c != null && c.bay == Bay.car && !(carShare && slotted)) {
+    return read(const [(_past, _future)]);
   }
   // A street bay the law opens to a heavy bike (a heavy-bike or plain car
   // bay, as ruleVerdict's lawful branch keeps them) stays open once its
   // rule ends: decideParking then cites the law. Only a place the rule
   // itself opens closes on the rule's expiry, and a shared car bay's
-  // scooter slots are such a place (one without slots judges as a car bay).
+  // scooter slots are such a place.
   bool lawful(CityRule rule) =>
       street &&
       c != null &&
-      !(carShare && c.schedule.isNotEmpty) &&
+      !(carShare && slotted) &&
       rule.vehicle == VehicleType.heavy &&
       ruleKindsOf(c)
           .every((k) => k == SpaceType.heavyOnly || k == SpaceType.car);
@@ -178,37 +191,21 @@ OpenWindow openWindow(
       : ruleEnd == null || noticeEnd < ruleEnd
       ? noticeEnd
       : ruleEnd;
-  const last = 7;
-  final unslotted = c == null || c.schedule.isEmpty;
-  if (unslotted) {
+  if (!slotted) {
     // Open all the time the notice and the rule hold: from the notice's
     // effective day, until the earlier of their ends.
-    if (from == null && until == null) return OpenWindow.always;
-    if (until != null && until <= at) return OpenWindow.never;
-    if (from != null && from > at) {
-      if (until != null && until <= from || from - at >= last * 1440) {
-        return OpenWindow.never;
-      }
-      return _opensAt(from, today);
-    }
-    final within = until != null && until - at < 1440;
-    return OpenWindow(
-      now: true,
-      until: within ? _clock(until) : null,
-      untilMinute: within ? until : null,
-    );
+    return read([(from ?? _past, until ?? _future)]);
   }
   final slots = heavy && carShare
-      ? heavyShareSlots(c, rules, district, now)
+      ? heavyShareSlotsOf(c, rules, district: district, now: now).slots
       : [
           for (final s in c.schedule)
             if (s.vehicles.contains(_slotVehicle(vehicle))) s,
         ];
   // The decision already reads a slot-less schedule as unconfirmed; an
   // open status here means something else opened it.
-  if (slots.isEmpty) return OpenWindow.always;
-  final cal = calendar ?? HolidayCalendar.current;
-  final spans = [
+  if (slots.isEmpty) return read(const [(_past, _future)]);
+  return read([
     for (final s in slots)
       for (final (start, end) in datedSpans(
         s.days,
@@ -222,33 +219,22 @@ OpenWindow openWindow(
           from != null && start < from ? from : start,
           until != null && end > until ? until : end,
         ),
-  ].where((s) => s.$1 < s.$2).toList()..sort((a, b) => a.$1.compareTo(b.$1));
-  final holding = spans.where((s) => s.$1 <= at && at < s.$2).toList();
-  if (holding.isNotEmpty) {
-    // Slots that touch or overlap run on as one.
-    var end = holding.map((s) => s.$2).reduce((a, b) => a > b ? a : b);
-    for (var grew = true; grew;) {
-      grew = false;
-      for (final (start, stop) in spans) {
-        if (start <= end && stop > end) {
-          end = stop;
-          grew = true;
-        }
-      }
-    }
-    final within = end - at < 1440;
-    return OpenWindow(
-      now: true,
-      until: within ? _clock(end) : null,
-      untilMinute: within ? end : null,
-    );
+  ]);
+}
+
+/// The window [open] (merged spans, minutes from [today]'s 00:00) gives
+/// at [at]: open now until the span holding it ends, else opening at the
+/// next span within [last] days.
+OpenWindow _windowOf(List<(int, int)> open, int at, DateTime today, int last) {
+  final holding = open.where((s) => s.$1 <= at && at < s.$2).firstOrNull;
+  if (holding != null) {
+    final end = holding.$2;
+    if (end - at >= 1440) return OpenWindow.always;
+    return OpenWindow(now: true, until: _clock(end), untilMinute: end);
   }
-  final next = [
-    for (final (start, _) in spans)
-      if (start > at) start,
-  ];
-  if (next.isEmpty) return OpenWindow.never;
-  return _opensAt(next.reduce((a, b) => a < b ? a : b), today);
+  final next = open.where((s) => s.$1 > at).firstOrNull?.$1;
+  if (next == null || next - at >= last * 1440) return OpenWindow.never;
+  return _opensAt(next, today);
 }
 
 /// Not open now; opens at [first], minutes from [today]'s 00:00.
@@ -286,18 +272,41 @@ class SegmentDecision {
   bool get openNow => window.now;
 }
 
-/// The reason a segment whose painted condition is unconfirmed reads.
-const segmentUncheckedReason = '此路段的格位類型未確認，請以現場標誌標線為準';
+/// The condition [segment] of [spot] is judged by, as [decideParking]
+/// reads it (#188 layer 2, its `_segmentCondition`, private to
+/// parking_decision.dart, another session's file; keep the two in step):
+/// its own when it names a bay; one naming no bay takes the rest (the bay,
+/// its use and share, the limits it leaves out, its slots) from the
+/// spot's; none at all is the spot's.
+ParkingCondition? segmentConditionOf(ParkingSegment segment, ParkingSpot spot) {
+  final seg = segment.condition;
+  final whole = spot.condition ?? conditionOf(spot.spaceType);
+  if (seg == null) return whole;
+  if (seg.bay != null || whole == null) return seg;
+  return ParkingCondition(
+    bay: whole.bay,
+    use: whole.use,
+    share: whole.share,
+    charge: seg.charge ?? whole.charge,
+    limits: [
+      for (final l in whole.limits)
+        if (!seg.hasLimit(l.kind)) l,
+      ...seg.limits,
+    ]..sort((a, b) => a.kind.index.compareTo(b.kind.index)),
+    schedule: seg.schedule.isEmpty ? whole.schedule : seg.schedule,
+    basis: seg.basis ?? whole.basis,
+    allow: seg.allow,
+  );
+}
 
-/// [spot] as one segment of it: the same spot, painted as [condition].
-/// ParkingSpot has no copyWith (lib/models/parking.dart is another
-/// session's), so the fields [decideParking] reads are copied here. Left
-/// out on purpose, as no decision reads them: note, sourceUrl, sourceName,
-/// licenseNote, contributorName, contributorRole, address, roadSegment,
-/// entranceNote, parkingGuide, specialRules, photoUrls, zones (a street
-/// spot judges no zones), segments (the segment is the spot here),
-/// availabilityUpdatedAt and zonesComplete.
-ParkingSpot _asSegment(ParkingSpot spot, ParkingCondition condition) =>
+/// [spot] with [segment] as its only segment. ParkingSpot has no copyWith
+/// (lib/models/parking.dart is another session's), so the fields
+/// [decideParking] reads are copied here. Left out on purpose, as no
+/// decision reads them: note, sourceUrl, sourceName, licenseNote,
+/// contributorName, contributorRole, address, roadSegment, entranceNote,
+/// parkingGuide, specialRules, photoUrls, zones (a street spot judges no
+/// zones), availabilityUpdatedAt and zonesComplete.
+ParkingSpot _withSegment(ParkingSpot spot, ParkingSegment segment) =>
     ParkingSpot(
       id: spot.id,
       name: spot.name,
@@ -312,6 +321,8 @@ ParkingSpot _asSegment(ParkingSpot spot, ParkingCondition condition) =>
       available: spot.available,
       heavyAllowed: spot.heavyAllowed,
       scooterAllowed: spot.scooterAllowed,
+      scooterNotStated: spot.scooterNotStated,
+      heavyNotStated: spot.heavyNotStated,
       status: spot.status,
       updatedAt: spot.updatedAt,
       lastConfirmedAt: spot.lastConfirmedAt,
@@ -322,15 +333,19 @@ ParkingSpot _asSegment(ParkingSpot spot, ParkingCondition condition) =>
       access: spot.access,
       scooterVerifiedAt: spot.scooterVerifiedAt,
       heavyVerifiedAt: spot.heavyVerifiedAt,
-      condition: condition,
+      condition: spot.condition,
+      segments: [segment],
       closure: spot.closure,
     );
 
 /// [vehicle]'s decision on each segment of the street [spot] at [now], in
 /// the spot's order. A spot without segments stands as one segment judged
 /// as itself ([whole], when the caller has it, else [decideParking]), so
-/// a street never reads empty. A segment whose condition is unconfirmed
-/// is unconfirmed; it never borrows the spot's.
+/// a street never reads empty. Each segment is [decideParking] of the spot
+/// with that segment alone (#188 layer 2 judges a street segment by
+/// segment), so its status and restriction are the ones the spot's
+/// decision lists for it in [ParkingDecision.segments], and its basis is
+/// its own.
 List<SegmentDecision> decideSegments(
   ParkingSpot spot,
   VehicleType vehicle,
@@ -340,8 +355,6 @@ List<SegmentDecision> decideSegments(
   ParkingDecision? whole,
 }) {
   final at = now ?? DateTime.now();
-  final spotDecision =
-      whole ?? decideParking(spot, vehicle, rules, now: at, calendar: calendar);
   final matched = matchingRules(rules, spot, vehicle);
   OpenWindow windowOf(ParkingDecision d, ParkingCondition? c) => openWindow(
     d.status,
@@ -358,60 +371,32 @@ List<SegmentDecision> decideSegments(
   // street stands as one stretch judged as [whole], so the signs never
   // judge segments by a decision the rest of the app no longer uses.
   if (!useParkingDecision || spot.segments.isEmpty) {
+    final d =
+        whole ??
+        decideParking(spot, vehicle, rules, now: at, calendar: calendar);
     return [
       SegmentDecision(
         segment: null,
-        decision: spotDecision,
-        window: windowOf(
-          spotDecision,
-          spot.condition ?? conditionOf(spot.spaceType),
-        ),
+        decision: d,
+        window: windowOf(d, spot.condition ?? conditionOf(spot.spaceType)),
       ),
     ];
   }
   return [
     for (final s in spot.segments)
-      if (s.condition case final c?)
-        () {
-          // The segment is the spot painted as the segment: works and the
-          // spot's own data close it as they close the spot.
-          final d = decideParking(
-            _asSegment(spot, c),
-            vehicle,
-            rules,
-            now: at,
-            calendar: calendar,
-          );
-          return SegmentDecision(
-            segment: s,
-            decision: d,
-            window: windowOf(d, c),
-          );
-        }()
-      else
-        () {
-          // No painted condition: judged as the spot with an empty one, so
-          // what closes the spot itself (works, its own explicit 不可停)
-          // still closes the segment, and otherwise the bay reads
-          // unconfirmed. Missing bay data never weakens a prohibition.
-          final d = decideParking(
-            _asSegment(spot, const ParkingCondition()),
-            vehicle,
-            rules,
-            now: at,
-            calendar: calendar,
-          );
-          return SegmentDecision(
-            segment: s,
-            decision: d.status == EligibilityStatus.notAllowed
-                ? d
-                : ParkingDecision(
-                    EligibilityStatus.unverified,
-                    segmentUncheckedReason,
-                    basis: d.basis,
-                  ),
-            window: OpenWindow.never,
-          );
-        }(),
+      () {
+        final d = decideParking(
+          _withSegment(spot, s),
+          vehicle,
+          rules,
+          now: at,
+          calendar: calendar,
+        );
+        return SegmentDecision(
+          segment: s,
+          decision: d,
+          window: windowOf(d, segmentConditionOf(s, spot)),
+        );
+      }(),
   ];
 }

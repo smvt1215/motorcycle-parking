@@ -37,7 +37,6 @@ void main() {
       {
         'id': 'b1',
         'name': 'B1 機車區',
-        'area': 'motorcycle',
         'condition': {
           'bay': 'motorcycle',
           'use': 'usual',
@@ -47,7 +46,6 @@ void main() {
       {
         'id': 'b2',
         'name': 'B2 重機專區',
-        'area': 'heavy',
         'condition': {
           'bay': 'heavy',
           'use': 'usual',

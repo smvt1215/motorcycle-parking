@@ -10,6 +10,7 @@ import 'package:motorcycle_parking/domain/segment_decision.dart';
 import 'package:motorcycle_parking/models/availability.dart';
 import 'package:motorcycle_parking/models/parking.dart';
 import 'package:motorcycle_parking/models/parking_condition.dart';
+import 'package:motorcycle_parking/models/zone_entries.dart';
 
 /// The four signs (canvas Ver.143 Main, A3, A6, A11) on the demo data of
 /// FIX-DECISIONS: 松壽地下停車場 and 南京東路三段路邊機車格.
@@ -57,7 +58,6 @@ void main() {
       {
         'id': 'b1',
         'name': 'B1 機車區',
-        'area': 'motorcycle',
         'condition': {
           'bay': 'motorcycle',
           'use': 'usual',
@@ -67,7 +67,6 @@ void main() {
       {
         'id': 'b2',
         'name': 'B2 重機專區',
-        'area': 'heavy',
         'condition': {
           'bay': 'heavy',
           'use': 'usual',
@@ -77,7 +76,6 @@ void main() {
       {
         'id': 'b3',
         'name': 'B3 汽車區',
-        'area': 'car',
         'condition': {
           'bay': 'car',
           'use': 'share',
@@ -332,7 +330,6 @@ void main() {
           {
             'id': 'b4',
             'name': 'B4 夜間區',
-            'area': 'heavy',
             'condition': {
               'bay': 'heavy',
               'use': 'usual',
@@ -360,7 +357,6 @@ void main() {
           {
             'id': 'b5',
             'name': 'B5 充電區',
-            'area': 'heavy',
             'condition': {
               'bay': 'heavy',
               'use': 'usual',
@@ -550,21 +546,23 @@ void main() {
       expect(p[1].main, '空位未知');
     });
 
-    test('段條件未確認的段不借用點位條件', () {
-      final unknown = ParkingSpot.fromJson({
+    test('段沒有自己的條件：照 decideParking 沿用點位條件（#188 第 2 層）', () {
+      final bare = ParkingSpot.fromJson({
         ...street.toJson(),
         'parking_segments': [
           {'id': 'x', 'name': '東側'},
         ],
       });
       final segments = decideSegments(
-        unknown,
+        bare,
         VehicleType.scooter,
         rules,
         now: day,
       );
-      expect(segments.single.status, EligibilityStatus.unverified);
-      expect(plates(unknown, VehicleType.scooter, day)[0].main, '待確認');
+      final decided = decideParking(bare, VehicleType.scooter, rules, now: day);
+      expect(segments.single.status, decided.segments.single.status);
+      expect(segments.single.status, EligibilityStatus.allowed);
+      expect(plates(bare, VehicleType.scooter, day)[0].main, '可停');
     });
   });
 
@@ -606,22 +604,33 @@ void main() {
       expect(p[1].semantics, isNot(contains('另')));
     });
 
-    test('比照倍率有兩位小數：保留 41.25、123.75（parking_contract_cases）', () {
-      final cases =
-          (jsonDecode(
-                File('supabase/functions/_shared/parking_contract_cases.json')
-                    .readAsStringSync(),
-              ) as Map<String, dynamic>).values
-              .whereType<List<dynamic>>()
-              .expand((l) => l)
-              .whereType<Map<String, dynamic>>()
-              .where((c) => c['name'] == '比照倍率有兩位小數');
-      final fee = cases.single['fee'] as Map<String, dynamic>;
-      final spot = ParkingSpot.fromJson({...lotJson, 'fee': fee});
-      final p = plates(spot, VehicleType.heavy, day);
-      expect((p[2].main, p[2].note), ('41.25/時', '上限 123.75'));
-      expect(p[2].semantics, contains('每小時 41.25 元'));
-      expect(p[2].semantics, contains('當日上限 123.75 元'));
+    Map<String, dynamic> caseFee(String name) =>
+        ((jsonDecode(
+                  File('supabase/functions/_shared/parking_contract_cases.json')
+                      .readAsStringSync(),
+                ) as Map<String, dynamic>).values
+                .whereType<List<dynamic>>()
+                .expand((l) => l)
+                .whereType<Map<String, dynamic>>()
+                .firstWhere((c) => c['name'] == name && c['fee'] is Map)['fee']
+            as Map<String, dynamic>);
+
+    test('比照其他車種沒有倍率：照被比照車種的金額（parking_contract_cases）', () {
+      final car = ParkingSpot.fromJson({
+        ...lotJson,
+        'parking_zones': null,
+        'fee': caseFee('比照不帶倍率'),
+      });
+      final p = plates(car, VehicleType.heavy, day);
+      expect((p[2].main, p[2].semantics), ('40/時', '怎麼算錢：每小時 40 元'));
+      // Following a vehicle that is not_applicable: no rate to read.
+      final none = ParkingSpot.fromJson({
+        ...lotJson,
+        'parking_zones': null,
+        'fee': caseFee('比照不適用的車種：大型重機費率未提供'),
+      });
+      final q = plates(none, VehicleType.heavy, day);
+      expect((q[2].main, q[2].tone), ('未提供', PlateTone.dashed));
     });
 
     ParkingCondition notice(
@@ -729,7 +738,6 @@ void main() {
           {
             'id': 'b1',
             'name': 'B1 普大共用區',
-            'area': 'motorcycle',
             'condition': {
               'bay': 'motorcycle',
               'use': 'share',
@@ -740,7 +748,6 @@ void main() {
           {
             'id': 'b2',
             'name': 'B2 重機專區',
-            'area': 'heavy',
             'condition': {
               'bay': 'heavy',
               'use': 'usual',
@@ -774,7 +781,7 @@ void main() {
       expect(p[1].tone, PlateTone.dashed);
     });
 
-    test('完整費率不同時不寫全場同價（免費時長不同）', () {
+    test('完整費率不同時不寫全場同價（上限重算方式不同）', () {
       final zones = [
         for (final z in lotJson['parking_zones'] as List)
           if ((z as Map<String, dynamic>)['id'] != 'b1')
@@ -785,7 +792,8 @@ void main() {
                   'mode': 'hourly',
                   'amount': 20,
                   'per_minutes': 60,
-                  if (z['id'] == 'b3') 'free_minutes': 30,
+                  'daily_cap': 100,
+                  'cap_reset': z['id'] == 'b3' ? 'rolling_24h' : 'calendar_day',
                 },
               },
             },
@@ -821,16 +829,61 @@ void main() {
       expect(p[0].main, isNot('可停'));
     });
 
-    test('首段 0 元寫「首 20 分鐘 0 元」與付費延長（parking_contract_cases）', () {
-      final fee = contractFee('臺北限時格首段 0 元可延長一次（§2.4）');
-      final spot = ParkingSpot.fromJson({...street.toJson(), 'fee': fee});
-      final one = ParkingSpot.fromJson({
-        ...spot.toJson(),
-        'parking_segments': [street.segments.first.toJson()],
-      });
-      final p = plates(one, VehicleType.heavy, day);
+    test('計次 0 元：首段時長與延長次數讀限時，延長金額讀費率（#188 第 2 層）', () {
+      // per_visit 0 with extension_amount 40; the time limit says 20
+      // minutes, extendable once.
+      final fee = contractFee('計次帶延長每次金額');
+      Map<String, dynamic> segment(List<Map<String, Object>>? periods) => {
+        ...street.segments.first.toJson(),
+        'condition': {
+          'bay': 'motorcycle',
+          'use': 'usual',
+          'charge': 'toll',
+          if (periods != null)
+            'limits': [
+              {'kind': 'time_limit', 'periods': periods},
+            ],
+        },
+      };
+      ParkingSpot one(List<Map<String, Object>>? periods) =>
+          ParkingSpot.fromJson({
+            ...street.toJson(),
+            'fee': fee,
+            'parking_segments': [segment(periods)],
+          });
+      final p = plates(
+        one([
+          {'days': 'all', 'max_minutes': 20, 'extensions': 1},
+        ]),
+        VehicleType.heavy,
+        day,
+      );
       expect((p[2].main, p[2].note), ('首 20 分鐘 0 元', '可付 40 元延長 1 次'));
       expect(p[2].semantics, '怎麼算錢：首 20 分鐘 0 元，可付 40 元延長 1 次');
+      // Not extendable: no extension line.
+      final fixed = plates(
+        one([
+          {'days': 'all', 'max_minutes': 20, 'extensions': 0},
+        ]),
+        VehicleType.heavy,
+        day,
+      );
+      expect((fixed[2].main, fixed[2].note), ('首 20 分鐘 0 元', ''));
+      // The limit holds only 07:00–09:00: at 14:20 no stay to name.
+      final off = plates(
+        one([
+          {
+            'days': 'all',
+            'from': '07:00',
+            'to': '09:00',
+            'max_minutes': 20,
+            'extensions': 1,
+          },
+        ]),
+        VehicleType.heavy,
+        day,
+      );
+      expect((off[2].main, off[2].note), ('0/次', ''));
     });
   });
 
@@ -953,7 +1006,6 @@ void main() {
           {
             'id': 'h',
             'name': 'B2 重機專區',
-            'area': 'heavy',
             'condition': {
               'bay': 'heavy',
               'use': 'usual',
@@ -980,7 +1032,6 @@ void main() {
           {
             'id': 'a',
             'name': 'A 充電區',
-            'area': 'heavy',
             'condition': {
               'bay': 'heavy',
               'use': 'usual',
@@ -993,7 +1044,6 @@ void main() {
           {
             'id': 'b',
             'name': 'B 重機區',
-            'area': 'heavy',
             'condition': {
               'bay': 'heavy',
               'use': 'usual',
@@ -1320,7 +1370,6 @@ void main() {
           {
             'id': 'b2',
             'name': 'B2 重機專區',
-            'area': 'heavy',
             'condition': {
               'bay': 'heavy',
               'use': 'usual',
@@ -1342,6 +1391,284 @@ void main() {
       });
       final p = plates(community, VehicleType.heavy, day);
       expect((p[0].main, p[0].tone), ('待確認', PlateTone.unverified));
+    });
+  });
+
+  group('配合 #188 第 2 層（路段費率、限時分時段、禁停）與 #247、#248', () {
+    ParkingSpot withSegments(List<Map<String, dynamic>> segments) =>
+        ParkingSpot.fromJson({
+          ...street.toJson(),
+          'parking_segments': segments,
+        });
+    Map<String, dynamic> share(List<String> vehicles, {bool slots = true}) => {
+      'id': 'x',
+      'name': '汽機車共用格',
+      'condition': {
+        'bay': 'car',
+        'use': 'share',
+        'share': 'car_motorcycle',
+        'charge': 'toll',
+        'basis': {
+          'source_url': 'https://example.com/notice',
+          'expires_on': '2026-11-04',
+        },
+        if (slots)
+          'schedule': [
+            {
+              'days': 'all',
+              'from': '20:00',
+              'to': '08:00',
+              'vehicles': vehicles,
+            },
+          ],
+      },
+    };
+
+    test('#247：共用格的重機時段取自 heavyShareSlotsOf，整天每小時與 decideParking 一致', () {
+      for (final vehicles in [
+        ['scooter'],
+        ['car'],
+        ['heavy'],
+        ['scooter', 'car'],
+      ]) {
+        final spot = withSegments([share(vehicles)]);
+        final condition = spot.segments.single.condition!;
+        final matched = matchingRules(rules, spot, VehicleType.heavy);
+        for (var h = 0; h < 24; h++) {
+          // 2026-11-03 h:30 in Taiwan.
+          final at = DateTime.utc(2026, 11, 2, 16, 30).add(Duration(hours: h));
+          final seg = decideSegments(
+            spot,
+            VehicleType.heavy,
+            rules,
+            now: at,
+          ).single;
+          final decided = decideParking(
+            spot,
+            VehicleType.heavy,
+            rules,
+            now: at,
+          ).segments.single;
+          expect(seg.status, decided.status, reason: '$vehicles $h:30');
+          expect(seg.decision.restriction, decided.restriction);
+          final slots = heavyShareSlotsOf(
+            condition,
+            matched,
+            district: spot.district,
+            now: at,
+          ).slots;
+          expect(slots, isNotEmpty);
+          final nowText = slotNowText(slots, at);
+          expect(
+            seg.window.now,
+            decided.open && nowText.startsWith('現在可停'),
+            reason: '$vehicles $h:30',
+          );
+          expect(seg.window.now, decided.reason.contains('現在可停'));
+        }
+      }
+    });
+
+    test('#248：大型重機在沒有時段的共用格，與一般汽車格一樣是 OpenWindow.always', () {
+      final shareBay = ParkingCondition.fromJson(
+        share(const [], slots: false)['condition'],
+        zone: true,
+      )!;
+      final carBay = ParkingCondition.fromJson({
+        'bay': 'car',
+        'use': 'usual',
+        'basis': {
+          'source_url': 'https://example.com/notice',
+          'expires_on': '2026-11-04',
+        },
+      }, zone: true)!;
+      for (final c in [shareBay, carBay]) {
+        expect(
+          openWindow(
+            EligibilityStatus.allowed,
+            c,
+            VehicleType.heavy,
+            night,
+            street: true,
+          ),
+          same(OpenWindow.always),
+        );
+      }
+      // Before and after the notice ends, decideParking keeps it open by
+      // law, and the sign says open all the time, as on a car bay.
+      final spot = withSegments([share(const [], slots: false)]);
+      for (final at in [night, DateTime.utc(2026, 11, 4, 6)]) {
+        final seg = decideSegments(
+          spot,
+          VehicleType.heavy,
+          rules,
+          now: at,
+        ).single;
+        final decided = decideParking(
+          spot,
+          VehicleType.heavy,
+          rules,
+          now: at,
+        ).segments.single;
+        expect(decided.open, isTrue);
+        expect(seg.status, decided.status);
+        expect(seg.window, same(OpenWindow.always));
+        final sign = fourSign(spot, VehicleType.heavy, rules, now: at);
+        expect((sign.verdict.openNow, sign.verdict.until), (true, null));
+      }
+    });
+
+    test('分區格位類別只看 condition 的 bay，沒有 bay 就不推算', () {
+      final spot = ParkingSpot.fromJson({
+        ...lotJson,
+        'parking_zones': [
+          {
+            'id': 'h',
+            'name': 'B2 重機專區',
+            'condition': {
+              'bay': 'heavy',
+              'use': 'usual',
+              'allow': {'heavy': true},
+            },
+          },
+          {
+            'id': 'u',
+            'name': 'B9 未標示區',
+            'condition': {
+              'allow': {'heavy': true},
+            },
+          },
+        ],
+      });
+      final areas = fourSign(
+        spot,
+        VehicleType.heavy,
+        rules,
+        now: day,
+      ).where.areas;
+      expect(
+        {for (final a in areas) a.id: a.bayKind},
+        {'h': BayKind.heavy, 'u': null},
+      );
+      expect(
+        {for (final a in areas) a.id: a.countClass},
+        {'h': AvailabilityVehicle.heavy, 'u': null},
+      );
+    });
+
+    group('路段自己的費率逐段讀（普通機車 14:20：北側一般格與南側共用格開放）', () {
+      ParkingSpot priced(Map<String, Object>? scooter) => ParkingSpot.fromJson({
+        ...street.toJson(),
+        'parking_segments': [
+          for (final s in street.segments)
+            {
+              ...s.toJson(),
+              if (s.id == 'n1' && scooter != null)
+                'fee': {
+                  'scooter': scooter,
+                  'heavy': {'mode': 'not_applicable'},
+                },
+            },
+        ],
+      });
+
+      test('收費方式相同：依路段，寫範圍', () {
+        final p = plates(
+          priced({'mode': 'hourly', 'amount': 30, 'per_minutes': 60}),
+          VehicleType.scooter,
+          day,
+        );
+        expect((p[2].main, p[2].note), ('依路段', '20–30/時'));
+        expect(p[2].semantics, '怎麼算錢：依路段，每小時 20–30 元');
+      });
+
+      test('收費方式不同：只寫依路段', () {
+        final p = plates(
+          priced({'mode': 'per_visit', 'amount': 30, 'renew': 'none'}),
+          VehicleType.scooter,
+          day,
+        );
+        expect((p[2].main, p[2].note), ('依路段', ''));
+        expect(p[2].semantics, '怎麼算錢：依路段');
+      });
+
+      test('一段缺值：不寫範圍；全部缺值：未提供', () {
+        final missing = ParkingSpot.fromJson({
+          ...priced(null).toJson(),
+          'parking_segments': [
+            for (final s in street.segments)
+              {
+                ...s.toJson(),
+                if (s.id == 'n1')
+                  'fee': {
+                    'heavy': {'mode': 'free'},
+                  },
+              },
+          ],
+        });
+        final p = plates(missing, VehicleType.scooter, day);
+        expect((p[2].main, p[2].note), ('依路段', ''));
+        final none = ParkingSpot.fromJson({
+          ...missing.toJson(),
+          'fee': {
+            'heavy': {'mode': 'free'},
+          },
+        });
+        final q = plates(none, VehicleType.scooter, day);
+        expect((q[2].main, q[2].tone), ('未提供', PlateTone.dashed));
+      });
+
+      test('每段同一費率：不寫依路段', () {
+        final p = plates(
+          priced({'mode': 'hourly', 'amount': 20, 'per_minutes': 60}),
+          VehicleType.scooter,
+          day,
+        );
+        expect(p[2].main, '20/時');
+      });
+    });
+
+    test('禁停時段：路牌現在不能停、寫幾點起，與 decideParking 的現在禁停一致', () {
+      final spot = withSegments([
+        {
+          'id': 'n1',
+          'name': '北側一般機車格',
+          'side': 'north',
+          'condition': {
+            'bay': 'motorcycle',
+            'use': 'usual',
+            'charge': 'toll',
+            'limits': [
+              {
+                'kind': 'no_parking',
+                'periods': [
+                  {'days': 'all', 'from': '14:00', 'to': '15:00'},
+                ],
+              },
+            ],
+          },
+        },
+      ]);
+      final decided = decideParking(spot, VehicleType.scooter, rules, now: day);
+      expect(decided.gaps, contains(DecisionGap.noParkingNow));
+      expect(decided.nextParkableAt, DateTime.utc(2026, 11, 3, 7));
+      final seg = decideSegments(
+        spot,
+        VehicleType.scooter,
+        rules,
+        now: day,
+      ).single;
+      expect((seg.window.now, seg.window.opensAt), (false, '15:00'));
+      final sign = fourSign(spot, VehicleType.scooter, rules, now: day);
+      expect((sign.verdict.openNow, sign.verdict.opensAt), (false, '15:00'));
+      // At 13:30 it is open until 禁停 starts.
+      final before = decideSegments(
+        spot,
+        VehicleType.scooter,
+        rules,
+        now: DateTime.utc(2026, 11, 3, 5, 30),
+      ).single;
+      expect((before.window.now, before.window.until), (true, '14:00'));
     });
   });
 
