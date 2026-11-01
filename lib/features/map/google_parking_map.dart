@@ -449,61 +449,36 @@ extension on GoogleParkingMapState {
     final of = widget.capsules;
     if (of == null) return const [];
     final open = widget.selected;
-    final pills = {
-      for (final spot in [
+    final shown = shownCapsules(
+      lone: [
         for (final group in _clusters)
           if (group.spots.length == 1) ...group.spots,
-        ?open,
-      ])
-        spot.id: (spot, of(spot)),
-    };
-    if (pills.values.every((p) => p.$2.isEmpty)) return const [];
-    List<AvailabilityCapsule> primary(ParkingSpot spot) =>
-        widget.primaryCapsules?.call(spot, pills[spot.id]!.$2) ?? const [];
-    final zoom = camera.zoom;
-    final layout = layoutCapsules([
-      for (final (spot, capsules) in pills.values)
-        if (spot.id == open?.id)
-          CapsuleItem(
-            id: spot.id,
-            center: worldPixel(LatLng(spot.lat, spot.lng), zoom),
-            fullWidth: capsuleRowWidth(capsules, scale: 26 / 24),
-            markerSize: googleMarkerSize * selectedScale,
-            height: 26,
-          )
-        else
-          CapsuleItem(
-            id: spot.id,
-            center: worldPixel(LatLng(spot.lat, spot.lng), zoom),
-            fullWidth: capsuleRowWidth(capsules),
-            primaryWidth: capsuleRowWidth(primary(spot)),
-            markerSize: googleMarkerSize,
-          ),
-    ], selected: open?.id);
+      ],
+      open: open,
+      at: (spot) => worldPixel(LatLng(spot.lat, spot.lng), camera.zoom),
+      markerSize: googleMarkerSize,
+      capsulesOf: of,
+      primaryOf: (spot, all) =>
+          widget.primaryCapsules?.call(spot, all) ?? const [],
+    );
     return [
-      for (final (spot, capsules) in pills.values)
-        if (switch (layout[spot.id]) {
-              CapsuleShow.primary => primary(spot),
-              CapsuleShow.none => const <AvailabilityCapsule>[],
-              _ => capsules,
-            }
-            case final shown when shown.isNotEmpty)
-          if (_capsuleIconFor(CapsuleKey(shown, selected: spot.id == open?.id))
-              case final icon?)
-            gm.Marker(
-              markerId: gm.MarkerId(
-                spot.id == open?.id
-                    ? 'selected-capsules:${spot.id}'
-                    : 'capsules:${spot.id}',
-              ),
-              position: gm.LatLng(spot.lat, spot.lng),
-              icon: icon,
-              anchor: const Offset(.5, 1),
-              zIndexInt: spot.id == open?.id ? 501 : -1,
-              consumeTapEvents: true,
-              // Tapping the pills is tapping the marker.
-              onTap: widget.interactive ? () => widget.onSpotTap(spot) : null,
+      for (final (spot, pills) in shown.values)
+        if (_capsuleIconFor(CapsuleKey(pills, selected: spot.id == open?.id))
+            case final icon?)
+          gm.Marker(
+            markerId: gm.MarkerId(
+              spot.id == open?.id
+                  ? 'selected-capsules:${spot.id}'
+                  : 'capsules:${spot.id}',
             ),
+            position: gm.LatLng(spot.lat, spot.lng),
+            icon: icon,
+            anchor: const Offset(.5, 1),
+            zIndexInt: spot.id == open?.id ? 501 : -1,
+            consumeTapEvents: true,
+            // Tapping the pills is tapping the marker.
+            onTap: widget.interactive ? () => widget.onSpotTap(spot) : null,
+          ),
     ];
   }
 

@@ -12,9 +12,9 @@ import '../../data/app_store.dart';
 import '../../domain/space_filter.dart';
 import '../../domain/availability_beta_display.dart';
 import '../../domain/availability_display.dart';
-import '../../domain/capsule_layout.dart';
 import '../../domain/four_sign.dart' show fourSignVerdict;
 import '../../domain/map_filter_display.dart';
+import '../../domain/map_camera.dart' show worldPixel;
 import '../../domain/map_viewport.dart';
 import '../../domain/spot_clusters.dart';
 import '../../models/availability.dart';
@@ -237,30 +237,42 @@ class _MapPageState extends ConsumerState<MapPage> {
         store.availabilityBetaIntroSeen) {
       return null;
     }
-    // Only a pill the map draws: a lot folded into a cluster shows none,
-    // and a crowded one keeps only its primary pill.
-    return [
-          for (final group in clusterSpots(spots, zoom))
-            if (group.spots.length == 1) group.spots.single,
-        ]
-        .where(
-          (s) =>
-              inAvailabilityBeta(s.city, cities) &&
-              primaryCapsules(
-                s,
-                store.vehicle,
-                store.decide(s),
-                markerCapsules(
-                  s,
-                  store.availabilityOf(s),
-                  store.vehicle,
-                  store.decide(s),
-                  now,
-                ),
-              ).isNotEmpty,
-        )
+    // Only a pill the map draws, by the maps' own rules: a lot folded
+    // into a cluster shows none, a crowded one only its primary pill.
+    final shown = shownCapsules(
+      lone: [
+        for (final group in clusterSpots(spots, zoom))
+          if (group.spots.length == 1) group.spots.single,
+      ],
+      open: null,
+      at: (s) => worldPixel(LatLng(s.lat, s.lng), zoom),
+      markerSize: AppConfig.useGoogleMaps ? googleMarkerSize : 38,
+      capsulesOf: (s) => _capsulesOf(store, s, now),
+      primaryOf: (s, capsules) => _primaryOf(store, s, capsules),
+    );
+    return shown.values
+        .map((p) => p.$1)
+        .where((s) => inAvailabilityBeta(s.city, cities))
         .firstOrNull;
   }
+
+  List<AvailabilityCapsule> _capsulesOf(
+    AppStore store,
+    ParkingSpot s,
+    DateTime now,
+  ) => markerCapsules(
+    s,
+    store.availabilityOf(s),
+    store.vehicle,
+    store.decide(s),
+    now,
+  );
+
+  List<AvailabilityCapsule> _primaryOf(
+    AppStore store,
+    ParkingSpot s,
+    List<AvailabilityCapsule> capsules,
+  ) => primaryCapsules(s, store.vehicle, store.decide(s), capsules);
 
   /// The map's zoom, or null before it has laid out.
   double? get _mapZoom {
@@ -656,15 +668,8 @@ class _MapPageState extends ConsumerState<MapPage> {
             onSpotTap: _showSpot,
             onLongPress: (point) =>
                 showReport(context, store, point.latitude, point.longitude),
-            capsules: (s) => markerCapsules(
-              s,
-              store.availabilityOf(s),
-              store.vehicle,
-              store.decide(s),
-              now,
-            ),
-            primaryCapsules: (s, capsules) =>
-                primaryCapsules(s, store.vehicle, store.decide(s), capsules),
+            capsules: (s) => _capsulesOf(store, s, now),
+            primaryCapsules: (s, capsules) => _primaryOf(store, s, capsules),
             excluded: [for (final (s, _) in excluded) s],
           )
         else
@@ -728,65 +733,20 @@ class _MapPageState extends ConsumerState<MapPage> {
                   );
                   // Crowded markers keep only the rider's own count, and
                   // pills that would touch the open spot's set hide.
-                  final pills = {
-                    for (final s in [
+                  final pills = shownCapsules(
+                    lone: [
                       for (final group in groups)
                         if (group.spots.length == 1) ...group.spots,
-                      ?open,
-                    ])
-                      s.id: (
-                        s,
-                        markerCapsules(
-                          s,
-                          store.availabilityOf(s),
-                          store.vehicle,
-                          store.decide(s),
-                          now,
-                        ),
-                      ),
-                  };
-                  final layout = layoutCapsules([
-                    for (final (s, capsules) in pills.values)
-                      if (s.id == open?.id)
-                        CapsuleItem(
-                          id: s.id,
-                          center: camera.latLngToScreenOffset(
-                            LatLng(s.lat, s.lng),
-                          ),
-                          fullWidth: capsuleRowWidth(capsules, scale: 26 / 24),
-                          markerSize: 38 * selectedScale,
-                          height: 26,
-                        )
-                      else
-                        CapsuleItem(
-                          id: s.id,
-                          center: camera.latLngToScreenOffset(
-                            LatLng(s.lat, s.lng),
-                          ),
-                          fullWidth: capsuleRowWidth(capsules),
-                          primaryWidth: capsuleRowWidth(
-                            primaryCapsules(
-                              s,
-                              store.vehicle,
-                              store.decide(s),
-                              capsules,
-                            ),
-                          ),
-                        ),
-                  ], selected: open?.id);
-                  List<AvailabilityCapsule> shown(ParkingSpot s) {
-                    final capsules = pills[s.id]?.$2 ?? const [];
-                    return switch (layout[s.id]) {
-                      CapsuleShow.primary => primaryCapsules(
-                        s,
-                        store.vehicle,
-                        store.decide(s),
-                        capsules,
-                      ),
-                      CapsuleShow.none => const [],
-                      _ => capsules,
-                    };
-                  }
+                    ],
+                    open: open,
+                    at: (s) =>
+                        camera.latLngToScreenOffset(LatLng(s.lat, s.lng)),
+                    markerSize: 38,
+                    capsulesOf: (s) => _capsulesOf(store, s, now),
+                    primaryOf: (s, capsules) => _primaryOf(store, s, capsules),
+                  );
+                  List<AvailabilityCapsule> shown(ParkingSpot s) =>
+                      pills[s.id]?.$2 ?? const [];
 
                   return MarkerLayer(
                     markers: [

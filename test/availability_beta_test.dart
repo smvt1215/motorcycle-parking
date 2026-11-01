@@ -8,6 +8,7 @@ import 'package:motorcycle_parking/data/app_store.dart';
 import 'package:motorcycle_parking/data/availability_repository.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
 import 'package:motorcycle_parking/domain/availability_beta_display.dart';
+import 'package:motorcycle_parking/domain/eligibility.dart';
 import 'package:motorcycle_parking/features/map/beta_tag.dart';
 import 'package:motorcycle_parking/features/map/map_filter_row.dart';
 import 'package:motorcycle_parking/features/map/map_legend_page.dart';
@@ -25,7 +26,13 @@ import 'availability_fixtures.dart';
 const _lat = 25.0339, _lng = 121.5623;
 
 /// A heavy-bike lot in [city] at the map centre.
-ParkingSpot _lot(String id, String city, {double dx = 0}) => ParkingSpot(
+ParkingSpot _lot(
+  String id,
+  String city, {
+  double dx = 0,
+  bool? heavy = true,
+  String source = 'official',
+}) => ParkingSpot(
   id: id,
   name: '測試停車場 $id',
   lat: _lat,
@@ -34,10 +41,10 @@ ParkingSpot _lot(String id, String city, {double dx = 0}) => ParkingSpot(
   district: '測試區',
   spaceType: SpaceType.offStreet,
   facilityType: FacilityType.underground,
-  source: 'official',
+  source: source,
   status: TrustStatus.confirmed,
   scooterAllowed: true,
-  heavyAllowed: true,
+  heavyAllowed: heavy,
   scooterTotal: 80,
   updatedAt: DateTime(2026, 10, 20),
 );
@@ -416,6 +423,21 @@ void main() {
         await tester.pumpAndSettle();
         expect(_intro, findsNothing);
         expect(store.availabilityBetaIntroSeen, isFalse);
+        await tester.pumpWidget(const SizedBox.shrink());
+      }, variant: TargetPlatformVariant.only(platform));
+
+      testWidgets('$name 待確認但不擁擠的點照樣畫出剩餘數，也會滑出說明', (tester) async {
+        setUp(tester);
+        final lot = _lot('uv', '臺北市', heavy: null, source: 'community');
+        final store = (await tester.runAsync(
+          () => _store(
+            [lot],
+            [count('uv', AvailabilityVehicle.heavy, total: 24, available: 6)],
+          ),
+        ))!;
+        expect(store.eligible(lot).status, EligibilityStatus.unverified);
+        await _pumpApp(tester, store);
+        expect(_intro, findsOneWidget);
         await tester.pumpWidget(const SizedBox.shrink());
       }, variant: TargetPlatformVariant.only(platform));
 

@@ -5,6 +5,7 @@ import '../../ui/adaptive/adaptive.dart';
 import '../../domain/availability_display.dart';
 import '../../domain/capsule_layout.dart';
 import '../../domain/rider_meter_display.dart';
+import '../../models/parking.dart';
 import 'map_legend.dart';
 
 /// Paper white behind delayed and car-bay pills, from the design palette.
@@ -555,4 +556,59 @@ class _RiderBars extends StatelessWidget {
       ],
     ],
   );
+}
+
+/// The pills each lone marker shows, by spot id, as both maps draw them
+/// (MapDensity): [layoutCapsules] decides per marker whether it shows its
+/// full set ([capsulesOf]), only its primary pill ([primaryOf], when
+/// crowded) or none (touching the [open] spot's set). [lone] are the spots
+/// drawn as markers of their own, not in a cluster; [open] is drawn
+/// enlarged. [at] places a spot on the screen (or any plane in screen
+/// pixels); [markerSize] is the map's marker side. Spots without pills
+/// are left out. The map draws these, and the Beta sheet waits for one.
+Map<String, (ParkingSpot, List<AvailabilityCapsule>)> shownCapsules({
+  required List<ParkingSpot> lone,
+  required ParkingSpot? open,
+  required Offset Function(ParkingSpot) at,
+  required double markerSize,
+  required List<AvailabilityCapsule> Function(ParkingSpot) capsulesOf,
+  required List<AvailabilityCapsule> Function(
+    ParkingSpot,
+    List<AvailabilityCapsule>,
+  )
+  primaryOf,
+}) {
+  final pills = {
+    for (final spot in [...lone, ?open]) spot.id: (spot, capsulesOf(spot)),
+  };
+  if (pills.values.every((p) => p.$2.isEmpty)) return const {};
+  final layout = layoutCapsules([
+    for (final (spot, capsules) in pills.values)
+      if (spot.id == open?.id)
+        CapsuleItem(
+          id: spot.id,
+          center: at(spot),
+          fullWidth: capsuleRowWidth(capsules, scale: 26 / 24),
+          markerSize: markerSize * selectedScale,
+          height: 26,
+        )
+      else
+        CapsuleItem(
+          id: spot.id,
+          center: at(spot),
+          fullWidth: capsuleRowWidth(capsules),
+          primaryWidth: capsuleRowWidth(primaryOf(spot, capsules)),
+          markerSize: markerSize,
+        ),
+  ], selected: open?.id);
+  return {
+    for (final (spot, capsules) in pills.values)
+      if (switch (layout[spot.id]) {
+            CapsuleShow.primary => primaryOf(spot, capsules),
+            CapsuleShow.none => const <AvailabilityCapsule>[],
+            _ => capsules,
+          }
+          case final shown when shown.isNotEmpty)
+        spot.id: (spot, shown),
+  };
 }
