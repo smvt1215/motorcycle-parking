@@ -9,6 +9,7 @@ import 'package:motorcycle_parking/data/availability_repository.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
 import 'package:motorcycle_parking/domain/availability_beta_display.dart';
 import 'package:motorcycle_parking/features/map/beta_tag.dart';
+import 'package:motorcycle_parking/features/map/map_filter_row.dart';
 import 'package:motorcycle_parking/features/map/map_legend_page.dart';
 import 'package:motorcycle_parking/features/map/spot_sheet.dart';
 import 'package:motorcycle_parking/models/availability.dart';
@@ -176,6 +177,16 @@ void main() {
       expect(inAvailabilityBeta('', ['臺北市']), isFalse);
       expect(betaOnlyCities(['臺北市', '臺中市']), '即時空位目前只有臺北市、臺中市');
     });
+
+    test('圖例來源依縣市對照機關，查不到時寫「縣市官方」', () {
+      expect(betaCityProvider('臺北市'), '臺北市停管處');
+      expect(betaCityProvider('台北市'), '臺北市停管處');
+      expect(betaCityProvider('臺中市'), '臺中市官方');
+      expect(
+        legendBetaSource(['臺北市', '臺中市']),
+        '停車場上方的數字是臺北市停管處、臺中市官方提供的剩餘車位，大約每 5 分鐘更新。',
+      );
+    });
   });
 
   const sizes = [Size(390, 844), Size(820, 1180), Size(1180, 820)];
@@ -260,8 +271,15 @@ void main() {
           ),
           findsOneWidget,
         );
-        // Not 知道了: the sheet may come back on a later launch.
-        expect(store.availabilityBetaIntroSeen, isFalse);
+        expect(
+          find.descendant(
+            of: section,
+            matching: find.textContaining('臺北市停管處提供的剩餘車位'),
+          ),
+          findsOneWidget,
+        );
+        // Reading the legend counts as read, like 知道了.
+        expect(store.availabilityBetaIntroSeen, isTrue);
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
       }, variant: TargetPlatformVariant.only(platform));
@@ -370,6 +388,96 @@ void main() {
         expect(find.byType(BetaTag, skipOffstage: false), findsNothing);
         await tester.pumpWidget(const SizedBox.shrink());
         store.dispose();
+      }, variant: TargetPlatformVariant.only(platform));
+
+      testWidgets('$name 滑掉說明不算看過；剩餘數都在群聚圈裡時不出現', (tester) async {
+        setUp(tester);
+        // Five Taipei lots a few pixels apart fold into one cluster: no
+        // pill is drawn, so no sheet.
+        final crowd = [
+          for (var i = 0; i < 5; i++) _lot('c$i', '臺北市', dx: i * 4.0),
+        ];
+        final clustered = (await tester.runAsync(
+          () => _store(crowd, [
+            for (var i = 0; i < 5; i++)
+              count('c$i', AvailabilityVehicle.heavy, total: 24, available: 6),
+          ]),
+        ))!;
+        await _pumpApp(tester, clustered);
+        expect(_intro, findsNothing);
+        await tester.pumpWidget(const SizedBox.shrink());
+
+        final store = (await tester.runAsync(
+          () => _store([_taipei], _counts),
+        ))!;
+        await _pumpApp(tester, store);
+        expect(_intro, findsOneWidget);
+        await tester.tapAt(const Offset(10, 10));
+        await tester.pumpAndSettle();
+        expect(_intro, findsNothing);
+        expect(store.availabilityBetaIntroSeen, isFalse);
+        await tester.pumpWidget(const SizedBox.shrink());
+      }, variant: TargetPlatformVariant.only(platform));
+
+      testWidgets('$name 重機只有汽車格剩餘時，詳情仍帶 Beta 說明', (tester) async {
+        setUp(tester);
+        final lot = ParkingSpot(
+          id: 'hc',
+          name: '測試停車場 hc',
+          lat: _lat,
+          lng: _lng,
+          city: '臺北市',
+          district: '測試區',
+          spaceType: SpaceType.offStreet,
+          facilityType: FacilityType.underground,
+          source: 'official',
+          status: TrustStatus.confirmed,
+          scooterAllowed: true,
+          heavyAllowed: true,
+          access: ParkingAccess.heavyCar,
+          scooterTotal: 80,
+          updatedAt: DateTime(2026, 10, 20),
+        );
+        final store = (await tester.runAsync(
+          () => _store(
+            [lot],
+            [count('hc', AvailabilityVehicle.car, total: 50, available: 30)],
+            prefs: {'availabilityBetaIntroSeen': true},
+          ),
+        ))!;
+        await _openDetails(tester, store);
+        expect(_seatText(tester), contains('汽車格剩餘 30'));
+        expect(
+          find.byKey(
+            const ValueKey('availability-beta-note'),
+            skipOffstage: false,
+          ),
+          findsOneWidget,
+        );
+        await tester.pumpWidget(const SizedBox.shrink());
+        store.dispose();
+      }, variant: TargetPlatformVariant.only(platform));
+
+      testWidgets('$name 深色模式選取篩選時 Beta 標籤跟 chip 字色', (tester) async {
+        setUp(tester);
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: ThemeData(brightness: Brightness.dark),
+            home: Scaffold(
+              body: MapFilterChip(
+                label: '有即時空位',
+                selected: true,
+                beta: true,
+                onTap: () {},
+              ),
+            ),
+          ),
+        );
+        final colors = ThemeData(brightness: Brightness.dark).colorScheme;
+        expect(
+          tester.widget<BetaTag>(find.byType(BetaTag)).color,
+          colors.onInverseSurface,
+        );
       }, variant: TargetPlatformVariant.only(platform));
     }
   }

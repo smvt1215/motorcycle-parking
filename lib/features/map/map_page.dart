@@ -222,7 +222,9 @@ class _MapPageState extends ConsumerState<MapPage> {
     DateTime now,
   ) {
     final cities = store.availabilityBetaCities;
-    if (!greetingDone ||
+    final zoom = _mapZoom;
+    if (zoom == null ||
+        !greetingDone ||
         betaIntroOffered ||
         promptDeferred ||
         // Never over another sheet or dialog, such as a location prompt.
@@ -235,19 +237,39 @@ class _MapPageState extends ConsumerState<MapPage> {
         store.availabilityBetaIntroSeen) {
       return null;
     }
-    return spots
+    // Only a pill the map draws: a lot folded into a cluster shows none,
+    // and a crowded one keeps only its primary pill.
+    return [
+          for (final group in clusterSpots(spots, zoom))
+            if (group.spots.length == 1) group.spots.single,
+        ]
         .where(
           (s) =>
               inAvailabilityBeta(s.city, cities) &&
-              markerCapsules(
+              primaryCapsules(
                 s,
-                store.availabilityOf(s),
                 store.vehicle,
                 store.decide(s),
-                now,
+                markerCapsules(
+                  s,
+                  store.availabilityOf(s),
+                  store.vehicle,
+                  store.decide(s),
+                  now,
+                ),
               ).isNotEmpty,
         )
         .firstOrNull;
+  }
+
+  /// The map's zoom, or null before it has laid out.
+  double? get _mapZoom {
+    if (AppConfig.useGoogleMaps) return googleMap.currentState?.camera.zoom;
+    try {
+      return controller.camera.zoom;
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Whether an empty 「有即時空位」 result is only because no Beta city is
@@ -277,13 +299,11 @@ class _MapPageState extends ConsumerState<MapPage> {
       city: spot.city,
       provider: count?.provider ?? '官方資料',
     );
-    switch (choice) {
-      case BetaIntroChoice.done:
-        await store.markAvailabilityBetaIntroSeen();
-      case BetaIntroChoice.legend:
-        if (mounted) openMapLegend(context, fromMap: true);
-      case null:
-        break;
+    // Either choice counts as read; only a sheet swiped away comes back
+    // on the next launch.
+    if (choice != null) await store.markAvailabilityBetaIntroSeen();
+    if (choice == BetaIntroChoice.legend && mounted) {
+      openMapLegend(context, fromMap: true);
     }
   }
 

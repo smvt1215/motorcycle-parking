@@ -52,8 +52,19 @@ const betaOnlyCitiesDetail = '這個範圍的停車點都還在，只是沒有�
 String betaDetailNote(List<String> cities) =>
     '${betaOnlyCities(cities)}，還在試點，抵達時請以現場為準。';
 
-/// The legend's 即時車位 section (P3), named by the cities rather than a
-/// provider, since no spot is in view.
+/// Who counts in each Beta city, for the legend, which has no spot whose
+/// count names its provider.
+const availabilityBetaProviders = {'臺北市': '臺北市停管處'};
+
+/// [city]'s counting agency, or 「{city}官方」 when the table has none.
+String betaCityProvider(String city) =>
+    availabilityBetaProviders.entries
+        .where((e) => _city(e.key) == _city(city))
+        .firstOrNull
+        ?.value ??
+    '$city官方';
+
+/// The legend's 即時車位 section (P3).
 const legendBetaHeading = '即時車位';
 String legendBetaSource(List<String> cities) =>
-    '停車場上方的數字是${betaCitiesText(cities)}官方提供的剩餘車位，大約每 5 分鐘更新。';
+    betaIntroSource(cities.map(betaCityProvider).join('、'));

@@ -18,7 +18,8 @@ class SpotSeatSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final beta = fact.count == null ? null : betaCities;
+    // Any official count shown, the rider's own or another class's line.
+    final beta = fact.count == null && fact.notes.isEmpty ? null : betaCities;
     final colors = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     final muted = text.labelSmall?.copyWith(color: colors.onSurfaceVariant);

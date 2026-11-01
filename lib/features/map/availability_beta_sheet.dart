@@ -11,7 +11,7 @@ enum BetaIntroChoice {
   /// 知道了: never shown again.
   done,
 
-  /// 看「地圖怎麼看」: the legend opens next.
+  /// 看「地圖怎麼看」: the legend opens next; also never shown again.
   legend,
 }
 

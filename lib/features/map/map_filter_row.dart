@@ -91,7 +91,7 @@ class MapFilterChip extends StatelessWidget {
                     Text(label, style: TextStyle(fontSize: 14, color: ink)),
                     if (beta) ...[
                       const SizedBox(width: 6),
-                      BetaTag(color: selected ? Colors.white : null),
+                      BetaTag(color: selected ? ink : null),
                     ],
                   ],
                 ),
