@@ -62,7 +62,7 @@ insert into pg_temp.strip_text(tbl,id,guard,note,entrance_note,parking_guide,spe
   ('0f6fcda7-8a7e-5841-8fda-0637457b1234','1f884498f47e04cd798245f58467525d','消費可折抵停車費','走汽車車道','有重機專用格',''),
   ('0f9530ab-0c6d-538d-aba3-ef8f9be9504c','24094019478b503e0947da4d6aaea496','','','',''),
   ('0fa409c8-3c7c-5643-940d-519449fa2c25','515b211851cb6ea2fd3a92e264325a62','','悠遊卡進出','',''),
-  ('0fc80488-14dd-56f2-b753-d7aa617b6fa0','3927e6a0d498f76483297032ed501b8f','現場未見禁止大型重機標示','機車車道禁止或不建議大型重機','',''),
+  ('0fc80488-14dd-56f2-b753-d7aa617b6fa0','3927e6a0d498f76483297032ed501b8f','現場未見禁止大型重機標示','','',''),
   ('100f89d1-7938-55ce-96a9-c13e16a90f33','8b43cde221cdd47e3e36e260fe8defb0','','','',''),
   ('104a162e-fda6-523b-9fa1-c5ac18a7a6fd','9ae4e573629bf77b3894efd698f17cd9','','','',''),
   ('110366a6-eda1-5a1f-850c-58eec2e45415','01d56a8bbe81b1fc15ab34caa679d0f4','','走機車車道
@@ -442,8 +442,7 @@ insert into pg_temp.strip_text(tbl,id,guard,note,entrance_note,parking_guide,spe
   ('b4fb6c37-c4b9-5433-9b07-d0f7d1931e31','8b43cde221cdd47e3e36e260fe8defb0','','','',''),
   ('b50a74c7-c848-579d-b630-2ace54eab0fc','5fc40235bc4674865a209674af545875','車位不多','','重機專用格 2 格以上
 可停汽車格
-可停機車格
-重機專用格 2 格',''),
+可停機車格',''),
   ('b56eb666-f8aa-5a8b-90c7-fa080e3f861b','65dce71c536ec04d5a5fbac7ecae77ad','','','',''),
   ('b6829364-dd17-50ba-8aa1-148c369542bf','8b43cde221cdd47e3e36e260fe8defb0','','','',''),
   ('b6ed47fb-8af6-503d-8763-6476295ce391','15b28b64f907f96471b3b108532c1d40','','前車牌辨識','',''),
