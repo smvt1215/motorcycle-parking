@@ -24,7 +24,7 @@ class Eligibility {
       null => '有條件',
     },
     EligibilityStatus.unverified => '待確認',
-    EligibilityStatus.notAllowed => '不可停',
+    EligibilityStatus.notAllowed => '不能停',
   };
 }
 

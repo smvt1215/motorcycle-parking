@@ -5,6 +5,10 @@ import 'package:motorcycle_parking/data/app_store.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
 import 'package:motorcycle_parking/models/parking.dart';
 import 'package:motorcycle_parking/models/spot_history.dart';
+import 'package:motorcycle_parking/domain/eligibility_display.dart'
+    show formatSpotDate;
+import 'package:motorcycle_parking/features/map/spot_details.dart'
+    show formatSpotTime;
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
 
 import 'spot_details_test.dart'
@@ -207,7 +211,12 @@ void main() {
     await openDetails(tester, store, spot);
     await showField(tester, '最近更新');
     expect(find.text('費率，2026-10-27'), findsNothing);
-    expect(find.textContaining('2026-10-28'), findsOneWidget);
+    // 最近更新 reads the spot's own time; the banner's source line dates
+    // the official data the same day. The details are built in full now.
+    final updated = DateTime.parse('2026-10-28T03:00:00Z');
+    // Local time, as the app shows it (CI runs in UTC).
+    expect(find.text(formatSpotTime(updated)), findsOneWidget);
+    expect(find.text('依政府公開資料，更新於 ${formatSpotDate(updated)}'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.text('看更新紀錄'),
       80,

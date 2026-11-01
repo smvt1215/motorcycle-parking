@@ -166,7 +166,7 @@ void main() {
         availabilityNow,
       );
       expect(heavy.count, isNull, reason: '機車 12 不能變成重機的數字');
-      expect(heavy.headline, '無即時資料');
+      expect(heavy.headline, '空位未知');
       final full = availabilityFact(
         b,
         result[b.id]!,
