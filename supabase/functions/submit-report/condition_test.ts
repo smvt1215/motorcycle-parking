@@ -5,6 +5,7 @@ import {
   bayKindOf,
   legacyAccess,
   legacySpaceType,
+  proposedConditionComplete,
   validate,
   validCondition,
   validSegments,
@@ -241,14 +242,6 @@ Deno.test('suggestions carry a condition with the space type it is stored under'
     },
     { space_type: 'timedMotorcycle', condition: { ...timed, bay: 'bus' } },
     { space_type: 'timedMotorcycle', condition: 'timed' },
-    // New writes give a time limit its periods (#188 layer 2).
-    {
-      space_type: 'timedMotorcycle',
-      condition: {
-        ...timed,
-        limits: [{ kind: 'time_limit', max_minutes: 20 }],
-      },
-    },
   ];
   for (const proposed of bad) {
     if (flag(proposed) !== 'invalid proposed') {
@@ -326,5 +319,26 @@ Deno.test('shared cases: bay kinds', () => {
   for (const { name, condition, bay_kind } of cases.bay_kinds) {
     const got = bayKindOf(condition);
     if (got !== bay_kind) throw new Error(`${name}: got ${got}`);
+  }
+});
+
+Deno.test('a suggestion gives a time limit its periods, unless it keeps the stored one (#188 layer 2)', () => {
+  const old = {
+    bay: 'motorcycle',
+    use: 'usual',
+    charge: 'toll',
+    limits: [{ kind: 'time_limit', max_minutes: 30 }],
+  };
+  const proposed = { space_type: 'timedMotorcycle', condition: old };
+  if (proposedConditionComplete(proposed, { condition: { charge: 'free' } })) {
+    throw new Error('an old time limit shape accepted as new');
+  }
+  if (
+    !proposedConditionComplete(proposed, {
+      condition: { ...old, charge: 'free' },
+    })
+  ) throw new Error('the stored time limit, untouched, refused');
+  if (!proposedConditionComplete({ space_type: 'paidMotorcycle' }, undefined)) {
+    throw new Error('a suggestion without a condition refused');
   }
 });

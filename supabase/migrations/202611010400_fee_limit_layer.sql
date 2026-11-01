@@ -877,7 +877,10 @@ update public.community_spots c set
     parking_segments=public.entries_upgrade(c.parking_segments,public.fee_plans_emptied(c.fee_plans))
   where c.fee is distinct from public.fee_upgrade(c.fee) or c.fee_plans is distinct from public.fee_plans_upgrade(c.fee_plans)
     or c.parking_zones is distinct from public.entries_upgrade(c.parking_zones)
-    or c.parking_segments is distinct from public.entries_upgrade(c.parking_segments);
+    or c.parking_segments is distinct from public.entries_upgrade(c.parking_segments)
+    -- A fee whose shape stays but whose sentence changes (#188 layer 2).
+    or (exists(select 1 from t188_generated_notes g where g.t='community' and g.id=c.id)
+      and c.fee_note is distinct from public.fee_note_of(public.fee_upgrade(c.fee)));
 update public.official_heavy_spots o set
     fee=public.fee_upgrade(o.fee),
     fee_note=case when exists(select 1 from t188_generated_notes g where g.t='official' and g.id=o.id)
@@ -888,7 +891,10 @@ update public.official_heavy_spots o set
     parking_segments=public.entries_upgrade(o.parking_segments,public.fee_plans_emptied(o.fee_plans))
   where o.fee is distinct from public.fee_upgrade(o.fee) or o.fee_plans is distinct from public.fee_plans_upgrade(o.fee_plans)
     or o.parking_zones is distinct from public.entries_upgrade(o.parking_zones)
-    or o.parking_segments is distinct from public.entries_upgrade(o.parking_segments);
+    or o.parking_segments is distinct from public.entries_upgrade(o.parking_segments)
+    -- A fee whose shape stays but whose sentence changes (#188 layer 2).
+    or (exists(select 1 from t188_generated_notes g where g.t='official' and g.id=o.id)
+      and o.fee_note is distinct from public.fee_note_of(public.fee_upgrade(o.fee)));
 alter table public.community_spots enable trigger user;
 alter table public.official_heavy_spots enable trigger user;
 drop table t188_generated_notes;
@@ -1173,7 +1179,10 @@ $$;
 
 -- Keeps the spot-level flags (read by old builds and the map) in step with
 -- the entries: a lot's zones, a street spot's segments. Sorts after
--- sync_not_stated() (…_eligibility) and before vehicle_verification.
+-- sync_not_stated() (…_eligibility) and before vehicle_verification. A
+-- write that changes a flag the entries decide, without changing the
+-- entries, is refused rather than silently undone: who may park is the
+-- bays' to say (change the segment or zone).
 create function public.spot_entries_eligibility() returns trigger
 language plpgsql set search_path='' as $$
 declare
@@ -1182,7 +1191,20 @@ declare
   v_complete boolean:=case when v_off then coalesce(new.zones_complete,false) else true end;
   s text:=public.entries_eligibility(v_entries,'scooter',v_complete);
   h text:=public.entries_eligibility(v_entries,'heavy',v_complete);
+  v_same boolean:=tg_op='UPDATE' and v_entries is not distinct from
+    (case when v_off then old.parking_zones else old.parking_segments end);
 begin
+  if v_same and (
+    ((new.scooter_allowed is distinct from old.scooter_allowed or new.scooter_not_stated is distinct from old.scooter_not_stated)
+      and s is not null and s is distinct from
+        (case when new.scooter_not_stated then 'not_stated' else new.scooter_allowed::text end))
+    or ((new.heavy_allowed is distinct from old.heavy_allowed or new.heavy_not_stated is distinct from old.heavy_not_stated)
+      and h is not null and h is distinct from
+        (case when new.heavy_not_stated then 'not_stated' else new.heavy_allowed::text end))) then
+    raise exception 'eligibility follows the bays' using errcode='22023',
+      detail=jsonb_build_object('scooter',s,'heavy',h)::text,
+      hint='change who may park on the segment or zone';
+  end if;
   if s in ('true','false') then new.scooter_allowed:=s::boolean; new.scooter_not_stated:=false;
   elsif s='not_stated' then new.scooter_allowed:=null; new.scooter_not_stated:=true; end if;
   if h in ('true','false') then new.heavy_allowed:=h::boolean; new.heavy_not_stated:=false;

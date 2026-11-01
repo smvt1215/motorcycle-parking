@@ -675,6 +675,12 @@ class SpotsController extends ChangeNotifier {
       'space_type': type.name,
       'condition': condition?.toJson(),
       ..._heavyFor(kind),
+      // Segments are a street spot's only (#188 layer 2): a lot keeps its
+      // bays in zones, so they go when the spot becomes one.
+      if (kind == SpaceKind.offStreet &&
+          draft['parking_segments'] is List &&
+          (draft['parking_segments'] as List).isNotEmpty)
+        'parking_segments': const <Object?>[],
     };
     _notify();
   }
