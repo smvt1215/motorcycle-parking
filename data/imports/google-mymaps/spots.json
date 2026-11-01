@@ -4386,7 +4386,7 @@
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
     "note": "車位不多",
-    "parking_guide": "重機專用格 2 格以上\n可停汽車格\n可停機車格\n重機專用格 2 格",
+    "parking_guide": "重機專用格 2 格以上\n可停汽車格\n可停機車格",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -9884,7 +9884,6 @@
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
     "note": "現場未見禁止大型重機標示",
-    "entrance_note": "機車車道禁止或不建議大型重機",
     "parking_zones": [
       {
         "name": "機車區",
