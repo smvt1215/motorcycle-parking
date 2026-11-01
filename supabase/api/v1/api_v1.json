@@ -56,6 +56,69 @@
         }
       }
     },
+    "/rpc/spots_in_viewport": {
+      "post": {
+        "operationId": "api_v1_spots_in_viewport",
+        "summary": "地圖範圍內的官方點與社群點",
+        "description": "官方點（source=official，id 以 official: 開頭）與社群點合併回傳，各最多 500 筆。篩選與欄位沿用 official_viewport_spots_v3 與 viewport_spots_v3。不帶判斷結果，判斷一律在 App 本地計算（#195 §7 第 4 題）；即時空位另以 viewport_availability 讀取。範圍不合法（north≤south、east≤west 或任一邊超過 0.5°）時回空清單。官方那層讀取失敗時只略過官方點，並回 official_unavailable: true。不需要登入。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "south",
+                  "west",
+                  "north",
+                  "east"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "south": {
+                    "type": "number",
+                    "description": "WGS84 度"
+                  },
+                  "west": {
+                    "type": "number",
+                    "description": "WGS84 度"
+                  },
+                  "north": {
+                    "type": "number",
+                    "description": "WGS84 度"
+                  },
+                  "east": {
+                    "type": "number",
+                    "description": "WGS84 度"
+                  }
+                },
+                "example": {
+                  "south": 25.02,
+                  "west": 121.55,
+                  "north": 25.05,
+                  "east": 121.58
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "範圍內的點",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpotsInViewport"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/rpc/account_deletion_status": {
       "post": {
         "operationId": "api_v1_account_deletion_status",
@@ -344,6 +407,283 @@
             "type": "integer",
             "minimum": 1,
             "description": "這條規則的版本"
+          }
+        }
+      },
+      "SpotsInViewport": {
+        "type": "object",
+        "required": [
+          "spots",
+          "truncated",
+          "official_unavailable"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "spots": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Spot"
+            },
+            "description": "官方點在前、社群點在後，各依 id 排序"
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "任一層超過 500 筆，請縮小範圍"
+          },
+          "official_unavailable": {
+            "type": "boolean",
+            "description": "官方點這次沒有讀到（暫時無法讀取）"
+          }
+        }
+      },
+      "Spot": {
+        "type": "object",
+        "description": "地圖上的一個停車點（官方或社群）",
+        "required": [
+          "id",
+          "source",
+          "name",
+          "lat",
+          "lng"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "官方點為 official: 加上 uuid"
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "description": "official、community 或其他資料來源"
+          },
+          "source_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "license_note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "lat": {
+            "type": "number"
+          },
+          "lng": {
+            "type": "number"
+          },
+          "city": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "district": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "space_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fee_note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scooter_total": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "available": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "scooter_allowed": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "heavy_allowed": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "scooter_not_stated": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "heavy_not_stated": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "updated_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ISO 8601 時間"
+          },
+          "last_confirmed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ISO 8601 時間"
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ISO 8601 時間"
+          },
+          "scooter_verified_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ISO 8601 時間"
+          },
+          "heavy_verified_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ISO 8601 時間"
+          },
+          "facility_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "facility_types": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "parking_access": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "address": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "road_segment": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "entrance_note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "parking_guide": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "special_rules": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "photo_urls": {
+            "description": "照片網址清單"
+          },
+          "parking_zones": {
+            "description": "分區清單；形狀見 supabase/functions/_shared/parking_contract.json 的 zone"
+          },
+          "fee": {
+            "description": "費率；形狀見 supabase/functions/_shared/parking_contract.json 的 fee"
+          },
+          "condition": {
+            "description": "路邊格位的條件；形狀見 supabase/functions/_shared/parking_contract.json 的 condition"
+          },
+          "parking_segments": {
+            "description": "路段清單；形狀見 supabase/functions/_shared/parking_contract.json 的 segment"
+          },
+          "zones_complete": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "closure": {
+            "description": "暫停使用的資訊"
+          },
+          "closure_state": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "contributor_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "contributor_role": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },

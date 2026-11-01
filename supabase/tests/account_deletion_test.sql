@@ -1,4 +1,4 @@
--- 刪除帳號（#215；202611011800_account_deletion.sql）。
+-- 刪除帳號（#215；202611011900_account_deletion.sql）。
 begin;
 create extension if not exists pgtap with schema extensions;
 set search_path=public,extensions;

@@ -1,5 +1,5 @@
 // account-deletion: deletes the accounts whose 7-day cooling-off period has
-// passed (#215; migration 202611011800_account_deletion.sql). pg_cron calls
+// passed (#215; migration 202611011900_account_deletion.sql). pg_cron calls
 // it once a day with the shared ACCOUNT_DELETION_SECRET; nobody else can.
 //
 // For each due request: count what is kept anonymous (for the audit), remove

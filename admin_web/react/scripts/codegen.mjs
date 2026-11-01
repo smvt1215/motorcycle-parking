@@ -15,7 +15,7 @@ process.chdir(root);
 // Read-only API functions are listed here as queries (cached, refetchable),
 // by their generated endpoint name.
 const READS = {
-  api_v1: ['apiV1ClientConfig', 'apiV1CityRules', 'apiV1AccountDeletionStatus'],
+  api_v1: ['apiV1ClientConfig', 'apiV1CityRules', 'apiV1SpotsInViewport', 'apiV1AccountDeletionStatus'],
   admin_v1: [],
 };
 

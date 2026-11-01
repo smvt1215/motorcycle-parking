@@ -66,6 +66,35 @@ class ApiV1Client {
   /// [cityRules] as served, for callers that keep the JSON (#202).
   Future<Object?> cityRulesRaw() => _call('city_rules', {});
 
+  /// 地圖範圍內的官方點與社群點
+  Future<SpotsInViewport> spotsInViewport({
+    required double south,
+    required double west,
+    required double north,
+    required double east,
+  }) async {
+    final raw = await spotsInViewportRaw(
+      south: south,
+      west: west,
+      north: north,
+      east: east,
+    );
+    return SpotsInViewport.fromJson(raw as Map<String, Object?>);
+  }
+
+  /// [spotsInViewport] as served, for callers that keep the JSON (#202).
+  Future<Object?> spotsInViewportRaw({
+    required double south,
+    required double west,
+    required double north,
+    required double east,
+  }) => _call('spots_in_viewport', {
+    'south': south,
+    'west': west,
+    'north': north,
+    'east': east,
+  });
+
   /// 自己帳號的刪除申請狀態
   Future<AccountDeletionState> accountDeletionStatus() async {
     final raw = await accountDeletionStatusRaw();
@@ -313,6 +342,428 @@ class CityRule {
     expiresOn,
     sourceUrl,
     version,
+  ]);
+}
+
+class SpotsInViewport {
+  const SpotsInViewport({
+    required this.spots,
+    required this.truncated,
+    required this.officialUnavailable,
+  });
+
+  factory SpotsInViewport.fromJson(Map<String, Object?> json) =>
+      SpotsInViewport(
+        spots: [
+          for (final e in json['spots'] as List)
+            Spot.fromJson(e as Map<String, Object?>),
+        ],
+        truncated: json['truncated'] as bool,
+        officialUnavailable: json['official_unavailable'] as bool,
+      );
+
+  /// 官方點在前、社群點在後，各依 id 排序
+  final List<Spot> spots;
+
+  /// 任一層超過 500 筆，請縮小範圍
+  final bool truncated;
+
+  /// 官方點這次沒有讀到（暫時無法讀取）
+  final bool officialUnavailable;
+
+  Map<String, Object?> toJson() => {
+    'spots': [for (final e in spots) e.toJson()],
+    'truncated': truncated,
+    'official_unavailable': officialUnavailable,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SpotsInViewport &&
+      _equal(other.spots, spots) &&
+      other.truncated == truncated &&
+      other.officialUnavailable == officialUnavailable;
+
+  @override
+  int get hashCode =>
+      Object.hashAll([_hash(spots), truncated, officialUnavailable]);
+}
+
+/// 地圖上的一個停車點（官方或社群）
+class Spot {
+  const Spot({
+    required this.id,
+    required this.source,
+    this.sourceName,
+    this.sourceUrl,
+    this.licenseNote,
+    required this.name,
+    required this.lat,
+    required this.lng,
+    this.city,
+    this.district,
+    this.spaceType,
+    this.feeNote,
+    this.note,
+    this.scooterTotal,
+    this.available,
+    this.scooterAllowed,
+    this.heavyAllowed,
+    this.scooterNotStated,
+    this.heavyNotStated,
+    this.status,
+    this.updatedAt,
+    this.lastConfirmedAt,
+    this.createdAt,
+    this.scooterVerifiedAt,
+    this.heavyVerifiedAt,
+    this.facilityType,
+    this.facilityTypes,
+    this.parkingAccess,
+    this.address,
+    this.roadSegment,
+    this.entranceNote,
+    this.parkingGuide,
+    this.specialRules,
+    this.photoUrls,
+    this.parkingZones,
+    this.fee,
+    this.condition,
+    this.parkingSegments,
+    this.zonesComplete,
+    this.closure,
+    this.closureState,
+    this.contributorName,
+    this.contributorRole,
+  });
+
+  factory Spot.fromJson(Map<String, Object?> json) => Spot(
+    id: json['id'] as String,
+    source: json['source'] as String,
+    sourceName: json['source_name'] == null
+        ? null
+        : json['source_name'] as String,
+    sourceUrl: json['source_url'] == null ? null : json['source_url'] as String,
+    licenseNote: json['license_note'] == null
+        ? null
+        : json['license_note'] as String,
+    name: json['name'] as String,
+    lat: (json['lat'] as num).toDouble(),
+    lng: (json['lng'] as num).toDouble(),
+    city: json['city'] == null ? null : json['city'] as String,
+    district: json['district'] == null ? null : json['district'] as String,
+    spaceType: json['space_type'] == null ? null : json['space_type'] as String,
+    feeNote: json['fee_note'] == null ? null : json['fee_note'] as String,
+    note: json['note'] == null ? null : json['note'] as String,
+    scooterTotal: json['scooter_total'] == null
+        ? null
+        : (json['scooter_total'] as num).toInt(),
+    available: json['available'] == null
+        ? null
+        : (json['available'] as num).toInt(),
+    scooterAllowed: json['scooter_allowed'] == null
+        ? null
+        : json['scooter_allowed'] as bool,
+    heavyAllowed: json['heavy_allowed'] == null
+        ? null
+        : json['heavy_allowed'] as bool,
+    scooterNotStated: json['scooter_not_stated'] == null
+        ? null
+        : json['scooter_not_stated'] as bool,
+    heavyNotStated: json['heavy_not_stated'] == null
+        ? null
+        : json['heavy_not_stated'] as bool,
+    status: json['status'] == null ? null : json['status'] as String,
+    updatedAt: json['updated_at'] == null ? null : json['updated_at'] as String,
+    lastConfirmedAt: json['last_confirmed_at'] == null
+        ? null
+        : json['last_confirmed_at'] as String,
+    createdAt: json['created_at'] == null ? null : json['created_at'] as String,
+    scooterVerifiedAt: json['scooter_verified_at'] == null
+        ? null
+        : json['scooter_verified_at'] as String,
+    heavyVerifiedAt: json['heavy_verified_at'] == null
+        ? null
+        : json['heavy_verified_at'] as String,
+    facilityType: json['facility_type'] == null
+        ? null
+        : json['facility_type'] as String,
+    facilityTypes: json['facility_types'] == null
+        ? null
+        : [for (final e in json['facility_types'] as List) e as String],
+    parkingAccess: json['parking_access'] == null
+        ? null
+        : json['parking_access'] as String,
+    address: json['address'] == null ? null : json['address'] as String,
+    roadSegment: json['road_segment'] == null
+        ? null
+        : json['road_segment'] as String,
+    entranceNote: json['entrance_note'] == null
+        ? null
+        : json['entrance_note'] as String,
+    parkingGuide: json['parking_guide'] == null
+        ? null
+        : json['parking_guide'] as String,
+    specialRules: json['special_rules'] == null
+        ? null
+        : json['special_rules'] as String,
+    photoUrls: json['photo_urls'],
+    parkingZones: json['parking_zones'],
+    fee: json['fee'],
+    condition: json['condition'],
+    parkingSegments: json['parking_segments'],
+    zonesComplete: json['zones_complete'] == null
+        ? null
+        : json['zones_complete'] as bool,
+    closure: json['closure'],
+    closureState: json['closure_state'] == null
+        ? null
+        : json['closure_state'] as String,
+    contributorName: json['contributor_name'] == null
+        ? null
+        : json['contributor_name'] as String,
+    contributorRole: json['contributor_role'] == null
+        ? null
+        : json['contributor_role'] as String,
+  );
+
+  /// 官方點為 official: 加上 uuid
+  final String id;
+
+  /// official、community 或其他資料來源
+  final String source;
+
+  final String? sourceName;
+
+  final String? sourceUrl;
+
+  final String? licenseNote;
+
+  final String name;
+
+  final double lat;
+
+  final double lng;
+
+  final String? city;
+
+  final String? district;
+
+  final String? spaceType;
+
+  final String? feeNote;
+
+  final String? note;
+
+  final int? scooterTotal;
+
+  final int? available;
+
+  final bool? scooterAllowed;
+
+  final bool? heavyAllowed;
+
+  final bool? scooterNotStated;
+
+  final bool? heavyNotStated;
+
+  final String? status;
+
+  /// ISO 8601 時間
+  final String? updatedAt;
+
+  /// ISO 8601 時間
+  final String? lastConfirmedAt;
+
+  /// ISO 8601 時間
+  final String? createdAt;
+
+  /// ISO 8601 時間
+  final String? scooterVerifiedAt;
+
+  /// ISO 8601 時間
+  final String? heavyVerifiedAt;
+
+  final String? facilityType;
+
+  final List<String>? facilityTypes;
+
+  final String? parkingAccess;
+
+  final String? address;
+
+  final String? roadSegment;
+
+  final String? entranceNote;
+
+  final String? parkingGuide;
+
+  final String? specialRules;
+
+  /// 照片網址清單
+  final Object? photoUrls;
+
+  /// 分區清單；形狀見 supabase/functions/_shared/parking_contract.json 的 zone
+  final Object? parkingZones;
+
+  /// 費率；形狀見 supabase/functions/_shared/parking_contract.json 的 fee
+  final Object? fee;
+
+  /// 路邊格位的條件；形狀見 supabase/functions/_shared/parking_contract.json 的 condition
+  final Object? condition;
+
+  /// 路段清單；形狀見 supabase/functions/_shared/parking_contract.json 的 segment
+  final Object? parkingSegments;
+
+  final bool? zonesComplete;
+
+  /// 暫停使用的資訊
+  final Object? closure;
+
+  final String? closureState;
+
+  final String? contributorName;
+
+  final String? contributorRole;
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'source': source,
+    'source_name': sourceName,
+    'source_url': sourceUrl,
+    'license_note': licenseNote,
+    'name': name,
+    'lat': lat,
+    'lng': lng,
+    'city': city,
+    'district': district,
+    'space_type': spaceType,
+    'fee_note': feeNote,
+    'note': note,
+    'scooter_total': scooterTotal,
+    'available': available,
+    'scooter_allowed': scooterAllowed,
+    'heavy_allowed': heavyAllowed,
+    'scooter_not_stated': scooterNotStated,
+    'heavy_not_stated': heavyNotStated,
+    'status': status,
+    'updated_at': updatedAt,
+    'last_confirmed_at': lastConfirmedAt,
+    'created_at': createdAt,
+    'scooter_verified_at': scooterVerifiedAt,
+    'heavy_verified_at': heavyVerifiedAt,
+    'facility_type': facilityType,
+    'facility_types': facilityTypes,
+    'parking_access': parkingAccess,
+    'address': address,
+    'road_segment': roadSegment,
+    'entrance_note': entranceNote,
+    'parking_guide': parkingGuide,
+    'special_rules': specialRules,
+    'photo_urls': photoUrls,
+    'parking_zones': parkingZones,
+    'fee': fee,
+    'condition': condition,
+    'parking_segments': parkingSegments,
+    'zones_complete': zonesComplete,
+    'closure': closure,
+    'closure_state': closureState,
+    'contributor_name': contributorName,
+    'contributor_role': contributorRole,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is Spot &&
+      other.id == id &&
+      other.source == source &&
+      other.sourceName == sourceName &&
+      other.sourceUrl == sourceUrl &&
+      other.licenseNote == licenseNote &&
+      other.name == name &&
+      other.lat == lat &&
+      other.lng == lng &&
+      other.city == city &&
+      other.district == district &&
+      other.spaceType == spaceType &&
+      other.feeNote == feeNote &&
+      other.note == note &&
+      other.scooterTotal == scooterTotal &&
+      other.available == available &&
+      other.scooterAllowed == scooterAllowed &&
+      other.heavyAllowed == heavyAllowed &&
+      other.scooterNotStated == scooterNotStated &&
+      other.heavyNotStated == heavyNotStated &&
+      other.status == status &&
+      other.updatedAt == updatedAt &&
+      other.lastConfirmedAt == lastConfirmedAt &&
+      other.createdAt == createdAt &&
+      other.scooterVerifiedAt == scooterVerifiedAt &&
+      other.heavyVerifiedAt == heavyVerifiedAt &&
+      other.facilityType == facilityType &&
+      _equal(other.facilityTypes, facilityTypes) &&
+      other.parkingAccess == parkingAccess &&
+      other.address == address &&
+      other.roadSegment == roadSegment &&
+      other.entranceNote == entranceNote &&
+      other.parkingGuide == parkingGuide &&
+      other.specialRules == specialRules &&
+      _equal(other.photoUrls, photoUrls) &&
+      _equal(other.parkingZones, parkingZones) &&
+      _equal(other.fee, fee) &&
+      _equal(other.condition, condition) &&
+      _equal(other.parkingSegments, parkingSegments) &&
+      other.zonesComplete == zonesComplete &&
+      _equal(other.closure, closure) &&
+      other.closureState == closureState &&
+      other.contributorName == contributorName &&
+      other.contributorRole == contributorRole;
+
+  @override
+  int get hashCode => Object.hashAll([
+    id,
+    source,
+    sourceName,
+    sourceUrl,
+    licenseNote,
+    name,
+    lat,
+    lng,
+    city,
+    district,
+    spaceType,
+    feeNote,
+    note,
+    scooterTotal,
+    available,
+    scooterAllowed,
+    heavyAllowed,
+    scooterNotStated,
+    heavyNotStated,
+    status,
+    updatedAt,
+    lastConfirmedAt,
+    createdAt,
+    scooterVerifiedAt,
+    heavyVerifiedAt,
+    facilityType,
+    _hash(facilityTypes),
+    parkingAccess,
+    address,
+    roadSegment,
+    entranceNote,
+    parkingGuide,
+    specialRules,
+    _hash(photoUrls),
+    _hash(parkingZones),
+    _hash(fee),
+    _hash(condition),
+    _hash(parkingSegments),
+    zonesComplete,
+    _hash(closure),
+    closureState,
+    contributorName,
+    contributorRole,
   ]);
 }
 
