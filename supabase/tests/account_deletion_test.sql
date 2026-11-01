@@ -99,8 +99,26 @@ select throws_ok($$select api_v1.request_account_deletion()$$,'PT403','account.a
   'an admin must lose the role first');
 reset role;
 
+-- 申請成功即登出所有裝置（PM_ANS_20261101_129）：session 與 refresh token 都刪除，
+-- 別人的不受影響。
+insert into auth.sessions(id,user_id,created_at,updated_at) values
+  ('7a000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001',now(),now()),
+  ('7a000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000001',now(),now()),
+  ('7a000000-0000-4000-8000-000000000003','10000000-0000-4000-8000-000000000002',now(),now());
+insert into auth.refresh_tokens(token,user_id,revoked,session_id,created_at,updated_at) values
+  ('t215-old-1','10000000-0000-4000-8000-000000000001',false,'7a000000-0000-4000-8000-000000000001',now(),now()),
+  ('t215-old-2','10000000-0000-4000-8000-000000000001',false,'7a000000-0000-4000-8000-000000000002',now(),now()),
+  ('t215-other','10000000-0000-4000-8000-000000000002',false,'7a000000-0000-4000-8000-000000000003',now(),now());
 -- 冷靜期內登入不會自動取消（PM_ANS_20261101_127）；已登入的 session 仍可查詢與取消，
 -- 其他功能（例如回報）照常可用。
+set local role authenticated;
+select pg_temp.act('10000000-0000-4000-8000-000000000001');
+select api_v1.request_account_deletion();
+reset role;
+select is((select count(*)::int from auth.sessions where user_id='10000000-0000-4000-8000-000000000001'),0,
+  'requesting signs the account out everywhere');
+select is((select count(*)::int from auth.refresh_tokens where token like 't215-old-%'),0,'its refresh tokens are gone');
+select is((select count(*)::int from auth.refresh_tokens where token='t215-other'),1,'other accounts stay signed in');
 set local role authenticated;
 select pg_temp.act('10000000-0000-4000-8000-000000000001');
 select api_v1.request_account_deletion();
