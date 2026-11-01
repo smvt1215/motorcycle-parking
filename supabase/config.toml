@@ -454,3 +454,13 @@ verify_jwt = false
 # pg_cron calls it once a day with the shared ACCOUNT_DELETION_SECRET header,
 # not a JWT (#215).
 verify_jwt = false
+
+[functions.support-confirm]
+# The one-time link of the support confirmation mail (#285): no sign-in;
+# the 32-byte random token itself is the credential.
+verify_jwt = false
+
+[functions.support-mail]
+# pg_cron and public.support_request_link call it through pg_net with the
+# shared SUPPORT_MAIL_SECRET header, not a JWT (#285).
+verify_jwt = false
