@@ -176,6 +176,12 @@ select is((select string_agg(x,',' order by x) from (
   'report,sighting,spot,vote','each kept row records when it became anonymous (#267 counts its retention from then)');
 select is((select count(*)::int from spot_votes where spot_id='76000000-0000-4000-8000-000000000001' and anonymized_at is not null),0,
   'other riders'' rows are not marked');
+-- 匿名化的目擊不顯示（可信度查不到，當 0）。
+select is(public.rider_credibility(null),0::numeric,'an anonymous sighting has no credibility');
+insert into rider_sightings(user_id,spot_id,kind,level,vehicle,ip_hash,device_hash,anonymized_at)
+values(null,'76000000-0000-4000-8000-000000000002','level',3,'scooter',repeat('f',64),repeat('f',64),now());
+select is((select count(*)::int from public.spot_sightings(array['76000000-0000-4000-8000-000000000002'])),0,
+  'anonymous sightings do not count in the live result');
 select is((select count(*)::int from rider_sighting_scores where user_id='10000000-0000-4000-8000-000000000001'),0,'the score is deleted');
 select is((select count(*)::int from favorites where user_id='10000000-0000-4000-8000-000000000001'),0,'favorites are deleted');
 select is((select count(*)::int from rate_limit_events where user_id='10000000-0000-4000-8000-000000000001'),0,'rate-limit events are deleted');

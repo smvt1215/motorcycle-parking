@@ -77,6 +77,17 @@ alter table public.rider_sightings alter column user_id drop not null,
   add constraint rider_sightings_user_id_fkey foreign key (user_id)
     references auth.users(id) on delete set null;
 
+-- 匿名化的目擊沒有可信度可查（分數表已隨帳號刪除）：可信度當 0，不顯示、
+-- 不算入自動封閉建議，免得刪帳號反而讓原本低分或停權者的回報重新生效
+-- （Codex review，PR #270）。其餘與 202610310100_rider_sightings.sql 相同。
+create or replace function public.rider_credibility(p_user uuid) returns numeric
+language sql stable set search_path='' as $$
+  select case when p_user is null then 0::numeric
+    else coalesce((select (s.agree+2)/(s.agree+s.disagree+s.penalty+4)
+      from public.rider_sighting_scores s where s.user_id=p_user),0.5) end;
+$$;
+revoke all on function public.rider_credibility(uuid) from public,anon,authenticated;
+
 -- 限流紀錄是個人資料，跟著帳號刪除。
 alter table public.rate_limit_events
   drop constraint rate_limit_events_user_id_fkey,
