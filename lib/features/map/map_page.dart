@@ -13,6 +13,7 @@ import '../../domain/space_filter.dart';
 import '../../domain/availability_display.dart';
 import '../../domain/capsule_layout.dart';
 import '../../domain/eligibility.dart';
+import '../../domain/map_filter_display.dart';
 import '../../domain/map_viewport.dart';
 import '../../domain/spot_clusters.dart';
 import '../../models/parking.dart';
@@ -20,6 +21,7 @@ import '../../models/space_kind.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../report/report_sheet.dart';
 import 'availability_capsule.dart';
+import 'map_filter_row.dart';
 import 'map_legend.dart';
 import 'space_type_sheet.dart';
 import 'spot_sheet.dart';
@@ -55,9 +57,12 @@ class _MapPageState extends ConsumerState<MapPage> {
   final googleMap = GlobalKey<GoogleParkingMapState>();
   final searchController = TextEditingController();
   final searchFocus = FocusNode();
+
+  /// 「現在可停」: hides the spots judged 不能停 for the vehicle, keeping
+  /// the conditional and unconfirmed ones (PLAN.md 篩選列).
   bool hideDenied = false;
 
-  /// 「目前有位」 or 「有即時資訊」; only offered while live counts exist.
+  /// 「有即時空位」 or 「有即時資訊」; only offered while live counts exist.
   AvailabilityFilter availabilityFilter = AvailabilityFilter.off;
   bool searchResultsSuppressed = false;
 
@@ -71,7 +76,9 @@ class _MapPageState extends ConsumerState<MapPage> {
 
   /// Kept for dispose, where `ref` can no longer be read.
   late final launchStore = ref.read(storeProvider);
-  SpaceKind? type;
+
+  /// The picked space kinds (P1); empty is 全部格位.
+  Set<SpaceKind> kinds = const {};
   bool greeted = false;
   bool promptDeferred = false;
   late final AppLifecycleListener lifecycle;
@@ -231,7 +238,7 @@ class _MapPageState extends ConsumerState<MapPage> {
   }
 
   void _clearFilters() => setState(() {
-    type = null;
+    kinds = const {};
     hideDenied = false;
     availabilityFilter = AvailabilityFilter.off;
   });
@@ -242,7 +249,7 @@ class _MapPageState extends ConsumerState<MapPage> {
         .toList();
     showSpaceTypeSheet(
       context,
-      value: type,
+      value: kinds,
       counts: {
         null: inView.length,
         for (final option in SpaceKind.values)
@@ -250,7 +257,9 @@ class _MapPageState extends ConsumerState<MapPage> {
               .where((s) => matchesSpaceFilter(s, option, store.vehicle))
               .length,
       },
-      onChanged: (option) => setState(() => type = option),
+      onChanged: (picked) {
+        if (mounted) setState(() => kinds = picked);
+      },
     );
   }
 
@@ -333,7 +342,7 @@ class _MapPageState extends ConsumerState<MapPage> {
     final spots = visible
         .where(
           (s) =>
-              (type == null || matchesSpaceFilter(s, type!, store.vehicle)) &&
+              matchesSpaceKinds(s, kinds, store.vehicle) &&
               // Pending reports reach notAllowed only through legal rules
               // (see eligibility()), so hiding them here is intended.
               (!hideDenied ||
@@ -371,10 +380,11 @@ class _MapPageState extends ConsumerState<MapPage> {
     ]..sort((a, b) => a.$1 != b.$1 ? a.$1 - b.$1 : a.$2 - b.$2);
     final matches = [for (final (_, _, s) in ranked) s];
     final filtered =
-        type != null || hideDenied || liveFilter != AvailabilityFilter.off;
+        kinds.isNotEmpty || hideDenied || liveFilter != AvailabilityFilter.off;
     final searchHeight = 32 + MediaQuery.textScalerOf(context).scale(20);
-    final filterHeight = (16 + MediaQuery.textScalerOf(context).scale(15))
-        .clamp(40.0, double.infinity);
+    // 44pt on iOS, 48dp on Android (Main boards), taller with larger text.
+    final filterHeight = (16 + MediaQuery.textScalerOf(context).scale(14))
+        .clamp(filterChipHeight, double.infinity);
     final open = widget.showControls ? selected : null;
     final covered = widget.covered;
     return PopScope(
@@ -804,37 +814,31 @@ class _MapPageState extends ConsumerState<MapPage> {
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          _MapPill(
+                          // Main: 車種, 現在可停, 有即時空位; the space
+                          // kinds (P1) and clearing follow.
+                          MapFilterChip(
+                            key: const ValueKey('vehicle-filter'),
                             label: store.vehicle.label,
-                            showChevron: true,
-                            icon: store.vehicle == VehicleType.heavy
-                                ? Icons.sports_motorsports_outlined
-                                : Icons.two_wheeler,
+                            vehicle: store.vehicle,
+                            selected: true,
+                            toggle: false,
                             onTap: () => openVehicleSelector(store),
                           ),
-                          _MapPill(
-                            label: type?.label ?? '全部格位',
-                            icon: Icons.local_parking_outlined,
-                            showChevron: true,
-                            selected: type != null,
-                            onTap: () => _openSpaceSelector(store),
-                          ),
-                          _MapPill(
-                            label: '隱藏不可停',
-                            icon: Icons.block,
+                          MapFilterChip(
+                            key: const ValueKey('parkable-filter'),
+                            label: parkableNowLabel,
                             selected: hideDenied,
                             onTap: () =>
                                 setState(() => hideDenied = !hideDenied),
                           ),
                           if (store.availabilitySource.enabled)
-                            _MapPill(
+                            MapFilterChip(
                               key: const ValueKey('availability-filter'),
                               label: availabilityFilterLabel(
                                 liveFilter == AvailabilityFilter.off
                                     ? AvailabilityFilter.available
                                     : liveFilter,
                               ),
-                              icon: Icons.event_available_outlined,
                               selected: liveFilter != AvailabilityFilter.off,
                               onTap: () => setState(
                                 () => availabilityFilter =
@@ -843,10 +847,18 @@ class _MapPageState extends ConsumerState<MapPage> {
                                     : AvailabilityFilter.off,
                               ),
                             ),
+                          MapFilterChip(
+                            key: const ValueKey('space-filter'),
+                            label: spaceKindChipLabel(kinds),
+                            selected: kinds.isNotEmpty,
+                            toggle: false,
+                            onTap: () => _openSpaceSelector(store),
+                          ),
                           if (filtered)
-                            _MapPill(
-                              label: '清除篩選',
-                              icon: Icons.filter_alt_off_outlined,
+                            MapFilterChip(
+                              key: const ValueKey('clear-filters'),
+                              label: clearFiltersLabel,
+                              toggle: false,
                               onTap: _clearFilters,
                             ),
                         ],
@@ -1142,71 +1154,7 @@ class _MapIconPill extends StatelessWidget {
   );
 }
 
-class _MapPill extends StatelessWidget {
-  const _MapPill({
-    super.key,
-    required this.label,
-    required this.icon,
-    required this.onTap,
-    this.selected = false,
-    this.showChevron = false,
-  });
-  final String label;
-  final IconData icon;
-  final VoidCallback onTap;
-  final bool selected;
-  final bool showChevron;
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: Material(
-        elevation: 2,
-        shadowColor: const Color(0x33000000),
-        color: selected ? colors.primaryContainer : colors.surface,
-        borderRadius: BorderRadius.circular(24),
-        child: Semantics(
-          button: true,
-          selected: selected,
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(24),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    icon,
-                    size: 20,
-                    color: selected
-                        ? colors.onPrimaryContainer
-                        : colors.onSurface,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                      color: selected
-                          ? colors.onPrimaryContainer
-                          : colors.onSurface,
-                    ),
-                  ),
-                  if (showChevron) const Icon(Icons.expand_more, size: 20),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Explains an empty 「目前有位」 result: the spots are there, they just
+/// Explains an empty 「有即時空位」 result: the spots are there, they just
 /// have no free space this vehicle can use, and why.
 class _AvailabilityEmptyCard extends StatelessWidget {
   const _AvailabilityEmptyCard({
@@ -1304,8 +1252,8 @@ class _AvailabilityEmptyCard extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               filter == AvailabilityFilter.available
-                  ? '「目前有位」只列資料新鮮、車種相符、剩餘大於 0、且目前車種可停或有條件可停的點。未知、過期、延遲與不可停都不算。'
-                  : '「有即時資訊」只列資料新鮮、車種相符的點，已滿也算。未知、過期與延遲都不算。',
+                  ? '「$label」只列資料新鮮、車種相符、剩餘大於 0、且目前車種可停或有條件可停的點。未知、過期、延遲與不可停都不算。'
+                  : '「$label」只列資料新鮮、車種相符的點，已滿也算。未知、過期與延遲都不算。',
               style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant),
             ),
           ],
