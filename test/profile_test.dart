@@ -237,11 +237,12 @@ void main() {
     });
   }
 
-  testWidgets('P12 不顯示從相簿選擇與上傳說明；儲存失敗保留名稱並可重試', (tester) async {
+  testWidgets('P12 不顯示從相簿選擇與上傳說明，沒有頭像時不顯示移除；儲存失敗保留名稱並可重試', (tester) async {
     final fixture = await host(tester, 390);
     expect(find.text('從相簿選擇'), findsNothing);
     expect(find.textContaining('照片上傳'), findsNothing);
     expect(find.text('移除頭像'), findsNothing);
+    expect(find.text('移除頭像會改回名稱首字。'), findsNothing);
     final save = find.byKey(const ValueKey('profile-save'));
     expect(tester.widget<TextButton>(save).onPressed, isNull);
     await tester.enterText(find.byKey(const ValueKey('profile-name')), '新名稱');
@@ -265,22 +266,40 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('有登入服務大頭貼時照常顯示，不提供移除頭像', (tester) async {
-    await host(
+  testWidgets('有登入服務大頭貼時照常顯示；移除後改回名稱首字並保留其他欄位', (tester) async {
+    final fixture = await host(
       tester,
       390,
       metadata: {
         'full_name': '原始名稱',
         'avatar_url': 'https://example.test/provider.png',
+        'other': 'keep',
       },
     );
-    expect(
-      tester.widget<ProfileAvatar>(find.byType(ProfileAvatar)).url,
-      'https://example.test/provider.png',
-    );
-    expect(find.text('移除頭像'), findsNothing);
+    ProfileAvatar avatar() =>
+        tester.widget<ProfileAvatar>(find.byType(ProfileAvatar));
+    expect(avatar().url, 'https://example.test/provider.png');
     final save = find.byKey(const ValueKey('profile-save'));
     expect(tester.widget<TextButton>(save).onPressed, isNull);
+    expect(find.text('移除頭像會改回名稱首字。'), findsOneWidget);
+    await tester.tap(find.text('移除頭像'));
+    await tester.pump();
+    expect(find.text('移除頭像'), findsNothing);
+    expect(find.text('移除頭像會改回名稱首字。'), findsNothing);
+    expect(avatar().url, '');
+    expect(tester.widget<TextButton>(save).onPressed, isNotNull);
+    await tester.tap(save);
+    await tester.runAsync(
+      () async => await Future<void>.delayed(const Duration(milliseconds: 20)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('profile-name')), findsNothing);
+    expect(fixture.updates.single, {
+      'display_name': '原始名稱',
+      'profile_avatar_url': '',
+    });
+    expect(fixture.metadata['other'], 'keep');
+    expect(profileAvatarUrl(fixture.client.auth.currentUser), isNull);
   });
 
   testWidgets('設定卡提供編輯入口，名稱儲存後回到設定即時更新', (tester) async {

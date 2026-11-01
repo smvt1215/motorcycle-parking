@@ -7,9 +7,9 @@ import 'profile_avatar.dart';
 Future<void> showProfileEditor(BuildContext context, AppStore store) =>
     showAdaptiveSheet<void>(context, (_) => ProfileEditor(store: store));
 
-/// 編輯個人資料 (P12): the editor changes the name only. Avatar uploads were
-/// cancelled (2026-11-01); the avatar is the name's first character or the
-/// sign-in provider's picture.
+/// 編輯個人資料 (P12): the editor changes the name and can remove the
+/// sign-in provider's picture. Avatar uploads were cancelled (2026-11-01);
+/// the avatar is the name's first character or the provider's picture.
 class ProfileEditor extends StatefulWidget {
   const ProfileEditor({super.key, required this.store});
   final AppStore store;
@@ -21,9 +21,10 @@ class _ProfileEditorState extends State<ProfileEditor> {
   final form = GlobalKey<FormState>();
   late final user = widget.store.client?.auth.currentUser;
   late final name = TextEditingController(text: profileDisplayName(user) ?? '');
-  bool saving = false;
+  bool saving = false, remove = false;
   String? error;
   bool get changed =>
+      remove ||
       normalizeProfileName(name.text) != (profileDisplayName(user) ?? '');
 
   @override
@@ -42,7 +43,10 @@ class _ProfileEditorState extends State<ProfileEditor> {
       if (widget.store.client?.auth.currentUser?.id != user?.id) {
         throw StateError('帳號已變更，請重新開啟個人資料');
       }
-      await widget.store.updateProfile(displayName: name.text);
+      await widget.store.updateProfile(
+        displayName: name.text,
+        removeAvatar: remove,
+      );
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
@@ -130,11 +134,27 @@ class _ProfileEditorState extends State<ProfileEditor> {
                   children: [
                     Center(
                       child: ProfileAvatar(
-                        url: profileAvatarUrl(user),
+                        url: remove ? '' : profileAvatarUrl(user),
                         name: name.text,
                         size: 96,
                       ),
                     ),
+                    if (!remove && profileAvatarUrl(user) != null) ...[
+                      Center(
+                        child: TextButton(
+                          key: const ValueKey('profile-remove-avatar'),
+                          onPressed: saving
+                              ? null
+                              : () => setState(() => remove = true),
+                          child: const Text(profileRemoveAvatar),
+                        ),
+                      ),
+                      Text(
+                        profileRemoveAvatarHint,
+                        textAlign: TextAlign.center,
+                        style: quiet,
+                      ),
+                    ],
                     const SizedBox(height: 20),
                     TextFormField(
                       key: const ValueKey('profile-name'),

@@ -906,10 +906,14 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     await client?.auth.signOut();
   }
 
-  Future<void> updateProfile({required String displayName}) async {
+  Future<void> updateProfile({
+    required String displayName,
+    bool removeAvatar = false,
+  }) async {
     final backend = client;
     if (backend == null) throw StateError('請先登入再編輯個人資料');
-    await ProfileRepository(backend).update(displayName: displayName);
+    await ProfileRepository(backend)
+        .update(displayName: displayName, removeAvatar: removeAvatar);
     if (!_disposed) notifyListeners();
   }
 

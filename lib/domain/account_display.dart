@@ -2,4 +2,6 @@
 const signInIntro = '登入後可回報停車資訊與同步收藏。';
 const signInNotNeeded = '瀏覽地圖與記錄停車位置不需登入。';
 
+const profileRemoveAvatar = '移除頭像';
+const profileRemoveAvatarHint = '移除頭像會改回名稱首字。';
 const profileNameHelper = '你回報的停車點會顯示這個名稱。';

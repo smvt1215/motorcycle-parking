@@ -44,18 +44,28 @@ String? profileNameError(String value) {
 
 /// Saves the display name in user metadata. Avatar uploads were cancelled
 /// (2026-11-01): the avatar is the name's first character or the sign-in
-/// provider's picture, read by [profileAvatarUrl].
+/// provider's picture, read by [profileAvatarUrl]. [removeAvatar] hides the
+/// provider's picture so the name's first character shows instead.
 class ProfileRepository {
   ProfileRepository(this.client);
   final SupabaseClient client;
 
-  Future<void> update({required String displayName}) async {
+  Future<void> update({
+    required String displayName,
+    bool removeAvatar = false,
+  }) async {
     final issue = profileNameError(displayName);
     if (issue != null) throw StateError(issue);
     final user = client.auth.currentUser;
     if (user == null || user.isAnonymous) throw StateError('請先登入再編輯個人資料');
     await client.auth.updateUser(
-      UserAttributes(data: {'display_name': normalizeProfileName(displayName)}),
+      UserAttributes(
+        data: {
+          'display_name': normalizeProfileName(displayName),
+          // An explicit empty value prevents falling back to a provider avatar.
+          if (removeAvatar) 'profile_avatar_url': '',
+        },
+      ),
     );
   }
 }
