@@ -76,6 +76,14 @@ jobs:
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      # Exposed schemas are a dashboard setting that db push does not change:
+      # check, read-only, that PostgREST serves the unified API (#195).
+      - name: Check the API schemas are exposed
+        if: steps.current.outputs.deploy == 'true'
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+        run: python3 tool/check_exposed_schemas.py
       - name: Record staging deployment
         id: deployed
         if: steps.current.outputs.deploy == 'true'
