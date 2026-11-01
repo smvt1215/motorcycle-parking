@@ -73,12 +73,24 @@ def raise_minimum(url, key, version, reason, opener=urllib.request.urlopen):
 PLAY_API = "https://androidpublisher.googleapis.com/androidpublisher/v3/applications/"
 
 
+def android_build(asset_names):
+    """The Android build number among a release's assets, or None.
+
+    CD numbers builds itself (tool/cd_gate.py) and a store release reuses
+    the RC binary, so pubspec's +build is not the versionCode; the GitHub
+    Release records the one published as sha256-android-<number>.txt
+    (tool/release_notes.py; Codex review, PR #259).
+    """
+    numbers = {int(m[1]) for name in asset_names
+               if (m := re.fullmatch(r"sha256-android-(\d+)\.txt", name))}
+    return numbers.pop() if len(numbers) == 1 else None
+
+
 def release_version_code(version):
-    """The versionCode of release vX.Y.Z: the build number in its tagged pubspec."""
-    result = subprocess.run(["git", "show", f"v{version}:pubspec.yaml"], cwd=ROOT,
-                            capture_output=True, text=True)
-    match = re.search(r"^version:\s*\d+\.\d+\.\d+\+(\d+)", result.stdout, re.M)
-    return int(match[1]) if result.returncode == 0 and match else None
+    """The versionCode published for release vX.Y.Z, from its GitHub Release."""
+    result = subprocess.run(["gh", "release", "view", f"v{version}", "--json", "assets",
+                             "--jq", ".assets[].name"], cwd=ROOT, capture_output=True, text=True)
+    return android_build(result.stdout.split()) if result.returncode == 0 else None
 
 
 def play_token(service_account_json):
@@ -155,7 +167,8 @@ def main(argv=None, opener=urllib.request.urlopen, token=play_token):
         if account:
             code = release_version_code(version)
             if code is None:
-                print(f"::error::no release tag v{version} with a pubspec build number")
+                print(f"::error::GitHub Release v{version} records no single Android build "
+                      "(sha256-android-<number>.txt); publish the release first")
                 return 1
             try:
                 live, shown = play_rollout(args.require_play, code, token(account), opener)

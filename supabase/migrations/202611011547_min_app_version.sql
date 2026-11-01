@@ -15,6 +15,10 @@ create table private.app_version_policy (
   id boolean primary key default true check (id),
   min_supported_app_version text not null
     check (min_supported_app_version ~ '^[0-9]+\.[0-9]+\.[0-9]+$'),
+  -- The newest config/app_compat.json mark CD has acted on. CD acts on a
+  -- mark once, so a deploy with the same mark never undoes an admin's
+  -- rollback (Codex review, PR #259).
+  last_cd_mark text check (last_cd_mark ~ '^[0-9]+\.[0-9]+\.[0-9]+$'),
   updated_at timestamptz not null default now()
 );
 alter table private.app_version_policy enable row level security;
@@ -84,9 +88,14 @@ grant execute on function api_v1.client_config() to anon, authenticated, service
 
 -- The one write path. Returns the minimum now in force.
 --   admin (aal2):     any x.y.z, up or down; p_reason required.
---   CD (service_role): raise only; lowering or equal is a no-op returning the
---                      current value; p_reason names the run. Audited as the
---                      fixed actor 00000000-0000-0000-0000-0000000000cd.
+--   CD (service_role): p_version is the compatibility mark. A mark CD has
+--                      already acted on, or an older one, changes nothing (so
+--                      an admin's rollback stands); a newer mark is recorded
+--                      and raises the minimum unless it is already higher.
+--                      p_reason names the run. Audited as the fixed actor
+--                      00000000-0000-0000-0000-0000000000cd.
+-- Calls are serialised, so the comparison, the write and the audit see one
+-- state (Codex review, PR #259).
 create function admin_v1.set_min_supported_app_version(p_version text, p_reason text)
 returns jsonb
 language plpgsql
@@ -97,7 +106,8 @@ as $$
 declare
   v_cd boolean := (select auth.role()) = 'service_role';
   v_actor uuid;
-  v_before text := private.min_supported_app_version();
+  v_before text;
+  v_last_mark text;
 begin
   if not v_cd then
     perform private.require_admin();
@@ -110,9 +120,21 @@ begin
     raise sqlstate 'PT400' using message = 'app_version.reason_required',
       detail = jsonb_build_object('field', 'p_reason')::text;
   end if;
-  if v_cd and private.semver_key(p_version) <= private.semver_key(v_before) then
-    -- CD never lowers, and an unchanged mark changes nothing.
-    return jsonb_build_object('min_supported_app_version', v_before, 'changed', false);
+  perform pg_advisory_xact_lock(hashtext('private.app_version_policy'));
+  v_before := private.min_supported_app_version();
+  if v_cd then
+    select last_cd_mark into v_last_mark from private.app_version_policy where id;
+    if v_last_mark is not null
+        and private.semver_key(p_version) <= private.semver_key(v_last_mark) then
+      return jsonb_build_object('min_supported_app_version', v_before, 'changed', false);
+    end if;
+    insert into private.app_version_policy(id, min_supported_app_version, last_cd_mark)
+    values (true, v_before, p_version)
+    on conflict (id) do update set last_cd_mark = excluded.last_cd_mark;
+    if private.semver_key(p_version) <= private.semver_key(v_before) then
+      -- CD never lowers.
+      return jsonb_build_object('min_supported_app_version', v_before, 'changed', false);
+    end if;
   end if;
   if p_version = v_before then
     return jsonb_build_object('min_supported_app_version', v_before, 'changed', false);

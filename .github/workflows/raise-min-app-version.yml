@@ -32,8 +32,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: main
-          # Release tags give the versionCode of the marked version.
-          fetch-depth: 0
           persist-credentials: false
       - name: Install the Play API client
         run: python3 -m pip install --quiet "google-auth==2.38.0" "requests==2.32.3"
@@ -44,6 +42,8 @@ jobs:
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
           PLAY_CONFIRMED: ${{ inputs.play_confirmed }}
+          # Reads the published Android build from the GitHub Release.
+          GH_TOKEN: ${{ github.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           key=$(curl -fsS -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \

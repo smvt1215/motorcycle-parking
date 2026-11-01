@@ -63,6 +63,27 @@ select is(admin_v1.set_min_supported_app_version('1.9.0', 'run 2')->>'changed', 
 select is(admin_v1.set_min_supported_app_version('1.10.0', 'run 3')->>'changed', 'false', 'an unchanged mark changes nothing');
 select is(pg_temp.audits(), 3::bigint, 'a no-op leaves no audit row');
 select is(pg_temp.served(), '1.10.0', 'the minimum stays at the highest raise');
+
+-- An admin's rollback stands through later deploys of the same mark
+-- (Codex review, PR #259); only a newer mark raises again.
+select pg_temp.act('admin');
+select is(admin_v1.set_min_supported_app_version('1.0.0', '1.10.0 有問題，先放行舊版')->>'changed', 'true',
+  'an admin rolls back');
+select pg_temp.act('cd');
+select is(admin_v1.set_min_supported_app_version('1.10.0', 'run 4')->>'changed', 'false',
+  'a deploy with the same mark does not undo the rollback');
+select is(pg_temp.served(), '1.0.0', 'the rollback stands');
+select is(admin_v1.set_min_supported_app_version('1.11.0', 'run 5')->>'changed', 'true',
+  'a newer mark raises again');
+-- A newer mark below an admin's higher minimum is recorded, not lowered to.
+select pg_temp.act('admin');
+select is(admin_v1.set_min_supported_app_version('3.0.0', '強制更新')->>'changed', 'true',
+  'an admin raises above the marks');
+select pg_temp.act('cd');
+select is(admin_v1.set_min_supported_app_version('1.12.0', 'run 6')->>'changed', 'false',
+  'CD never lowers below an admin''s higher minimum');
+select is(pg_temp.served(), '3.0.0', 'the admin''s minimum stays');
+select is((select last_cd_mark from private.app_version_policy), '1.12.0', 'the mark is still recorded');
 select set_config('request.jwt.claims', '', true);
 
 -- Fail open: missing, malformed or unreadable never blocks anyone.

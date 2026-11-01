@@ -136,6 +136,13 @@ class RaiseMinAppVersionTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("Google Play is unchecked", out)
 
+    def test_the_published_android_build_comes_from_the_release(self):
+        self.assertEqual(raiser.android_build(
+            ["sha256-android-4321.txt", "sha256-ios-4321.txt", "app.aab"]), 4321)
+        self.assertIsNone(raiser.android_build(["sha256-ios-9.txt"]), "no Android build")
+        self.assertIsNone(raiser.android_build(
+            ["sha256-android-1.txt", "sha256-android-2.txt"]), "ambiguous builds are refused")
+
     def test_missing_settings_exit_2(self):
         with mock.patch.dict("os.environ", {}, clear=True), \
                 contextlib.redirect_stderr(io.StringIO()):

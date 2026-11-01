@@ -392,12 +392,12 @@ Play Integrity 只認得從 Google Play 安裝的 APP。staging 的 APK 經 Fire
 - 這個 PR 沒有同時調整 pubspec 版本時，會在 PR 上顯示警告，提醒確認這一版確實是不相容的那一版。
 
 **何時生效**：
-- **staging**：`cd-staging.yml` 部署後端後立刻調高，讓 Firebase 封測版和後端同時推出。檔案沒有改，就不會有任何變動。
+- **staging**：`cd-staging.yml` 部署後端後立刻調高，讓 Firebase 封測版和後端同時推出。CD 對每個標記只處理一次（資料表記錄 `last_cd_mark`），所以檔案沒有改時不會有任何變動；管理員手動回退後，之後用同一個標記部署也不會把值調回去，只有更新的標記才會再調高。
 - **production**：部署當下不會調高。release 結束時，摘要會提醒這件事。等這一版在 App Store 與 Google Play 都上架後，手動執行 workflow「Raise production minimum App version」（`raise-min-app-version.yml`）。這個 workflow：
   1. 要經過 `production` environment 的人工核准。
   2. 用 App Store 的公開查詢 API 確認 `tw.motopark.motorcycleParking` 的版本已經 ≥ 標記的版本。
   3. 確認 Google Play：
-     - 已設定 `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`：用 Play Developer API 建一個暫時的 edit，讀 production track，最後一律刪除該 edit、不 commit。這一版的 versionCode（取自 tag `vX.Y.Z` 當時 pubspec 的 build number）必須是 `completed`，或 `inProgress` 且 `userFraction` 為 1；分階段推出還沒到 100% 時不放行，訊息會寫出目前的比例。
+     - 已設定 `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`：用 Play Developer API 建一個暫時的 edit，讀 production track，最後一律刪除該 edit、不 commit。這一版的 versionCode 取自 GitHub Release `vX.Y.Z` 的附件 `sha256-android-<number>.txt`，也就是實際上架的 Android 建置。CD 自己產生 build number，正式版沿用 RC 的建置，所以不能用 pubspec 的 build number。這個 versionCode必須是 `completed`，或 `inProgress` 且 `userFraction` 為 1；分階段推出還沒到 100% 時不放行，訊息會寫出目前的比例。
      - 還沒有服務帳號：由核准人勾選 `play_confirmed`。
      - 執行結果會寫明用的是哪一種確認方式。
   4. 兩個商店都確認後，呼叫 `admin_v1.set_min_supported_app_version()` 調高。
