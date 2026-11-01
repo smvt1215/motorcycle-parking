@@ -13,6 +13,7 @@
 library;
 
 import '../models/closure.dart';
+import '../models/condition_text.dart' show limitPeriodText;
 import '../models/fee.dart';
 import '../models/fee_plan.dart';
 import '../models/holiday_calendar.dart';
@@ -456,12 +457,18 @@ class ParkingDecision {
     this.restriction,
     this.basis = const [],
     this.zones = const [],
+    this.segments = const [],
     this.price,
     this.gaps = const {},
   });
   final EligibilityStatus status;
   final String reason;
   final RuleRestriction? restriction;
+
+  /// A street spot's segments, each judged with its own condition, who it
+  /// lets park and its own fee or the whole road's (#188 layer 2:
+  /// eligibility goes with the bay).
+  final List<ZoneDecision> segments;
 
   /// Sources, most decisive first: the data's own (official, admin,
   /// report), then the rule or law, then notices.
@@ -495,6 +502,7 @@ class ParkingDecision {
     restriction: restriction == null ? this.restriction : restriction(),
     basis: [...basis, ...moreBasis],
     zones: zones ?? this.zones,
+    segments: segments,
     price: price ?? this.price,
     gaps: {...gaps, ...moreGaps},
   );
@@ -620,6 +628,58 @@ const _disabledReason =
     '並持專用停車位識別證或掛專用牌照，才可停放';
 const _evReason = '限電動機車停放或充換電，燃油機車不可停';
 const _timedReason = '限時停車：請依現場牌面的時段與時限停放，超時須移車';
+
+/// The period of [periods] that holds at [now], if any: 平日 and 假日
+/// follow [calendar], and a period across midnight belongs to the day it
+/// starts (decision 47).
+LimitPeriod? _periodAt(
+  List<LimitPeriod> periods,
+  DateTime now,
+  HolidayCalendar calendar,
+) {
+  final (today, at) = taipeiDateMinute(now);
+  for (final p in periods) {
+    final spans = datedSpans(p.days, p.from, p.to, today, calendar);
+    if (spans.any((s) => s.$1 <= at && at < s.$2)) return p;
+  }
+  return null;
+}
+
+/// 每次限停 2 小時，可延長 1 次.
+String _stayText(LimitPeriod p) {
+  final stay = '每次限停 ${FeeWords.span(p.maxMinutes!)}';
+  return switch (p.extensions) {
+    null => stay,
+    0 => '$stay，不能延長',
+    final n => '$stay，可延長 $n 次',
+  };
+}
+
+/// Whether [c] limits how long or when anyone parks (#188 layer 2): a time
+/// limit or 時段性禁停.
+bool _timeBound(ParkingCondition c) =>
+    c.hasLimit(LimitKind.timeLimit) || c.hasLimit(LimitKind.noParking);
+
+/// The time limit and 時段性禁停 of [c] as reasons (#188 layer 2): what holds
+/// at [now], then every period. An old time limit without its periods
+/// reads as before; 禁停 holds for everyone.
+List<String> _timeReasons(
+  ParkingCondition c,
+  DateTime now,
+  HolidayCalendar calendar,
+) => [
+  for (final l in c.limits)
+    if (l.kind == LimitKind.timeLimit)
+      l.timePeriods.isEmpty
+          ? _timedReason
+          : '限時停車：${switch (_periodAt(l.timePeriods, now, calendar)) {
+              final p? when p.maxMinutes != null => '現在${_stayText(p)}',
+              _ => '現在不在限時時段',
+            }}；限時時段：${l.timePeriods.map(limitPeriodText).join('；')}，超時須移車'
+    else if (l.kind == LimitKind.noParking)
+      '${_periodAt(l.periods, now, calendar) == null ? '' : '現在是禁停時段，不可停放；'}'
+          '禁停時段：${l.periods.map(limitPeriodText).join('；')}',
+];
 const _carBayReason = '汽車格為小型車及大型重機停放線，普通機車停放屬車種不依規定';
 
 /// Whether [vehicle] may park at [spot] under [rules] at [now] (§3.2),
@@ -673,10 +733,23 @@ ParkingDecision decideParking(
     vehicle,
     legacyText: spot.feeNote,
   );
+  final matched = matchingRules(rules, spot, vehicle);
+  if (spot.segments.isNotEmpty) {
+    return _segmented(
+      spot,
+      vehicle,
+      matched,
+      at,
+      day,
+      trusted,
+      source,
+      cal,
+    )._with(price: price);
+  }
   final decision = _street(
     spot,
     vehicle,
-    matchingRules(rules, spot, vehicle),
+    matched,
     at,
     day,
     trusted,
@@ -684,6 +757,156 @@ ParkingDecision decideParking(
     cal,
   );
   return decision._with(price: price);
+}
+
+/// A street spot judged segment by segment (#188 layer 2), as a lot is
+/// zone by zone: each segment's allow first (a trusted 不能停 closes it,
+/// 官方未標示 leaves it unconfirmed), then its own condition (else the
+/// spot's) under the city's rules. The spot is as open as its most open
+/// segment.
+ParkingDecision _segmented(
+  ParkingSpot spot,
+  VehicleType vehicle,
+  List<CityRule> rules,
+  DateTime at,
+  String day,
+  bool trusted,
+  DecisionBasis source,
+  HolidayCalendar calendar,
+) {
+  final segments = [
+    for (final seg in spot.segments)
+      _segment(seg, spot, vehicle, rules, at, day, trusted, source, calendar),
+  ];
+  String named(ZoneDecision z) =>
+      '${z.name.trim().isEmpty ? '未命名路段' : z.name.trim()}：${z.reason}';
+  final open = [
+    for (final z in segments)
+      if (z.open) z,
+  ];
+  final EligibilityStatus status;
+  final String reason;
+  final RuleRestriction? restriction;
+  if (open.isNotEmpty) {
+    final limited = open
+        .where((z) => z.status == EligibilityStatus.conditional)
+        .firstOrNull;
+    status = limited == null
+        ? EligibilityStatus.allowed
+        : EligibilityStatus.conditional;
+    reason = segments.length == 1
+        ? segments.single.reason
+        : open.map(named).join('；');
+    restriction = limited?.restriction;
+  } else if (segments.every((z) => z.status == EligibilityStatus.notAllowed)) {
+    status = EligibilityStatus.notAllowed;
+    reason = segments.length == 1
+        ? segments.single.reason
+        : '各路段都不開放${vehicle.label}';
+    restriction = null;
+  } else {
+    status = EligibilityStatus.unverified;
+    reason = segments.length == 1
+        ? segments.single.reason
+        : segments.map(named).join('；');
+    restriction = null;
+  }
+  return ParkingDecision(
+    status,
+    reason,
+    restriction: restriction,
+    basis: [source],
+    segments: segments,
+    gaps: {for (final z in segments) ...z.gaps},
+  );
+}
+
+/// A segment's condition as judged: its own, with what it leaves out
+/// (the bay, its use, the charge, limits and slots) taken from the spot's
+/// when it names no bay of its own; null takes the spot's whole.
+ParkingCondition? _segmentCondition(
+  ParkingCondition? seg,
+  ParkingCondition? spot,
+) {
+  if (seg == null || seg.bay != null || spot == null) return seg;
+  return ParkingCondition(
+    bay: spot.bay,
+    use: spot.use,
+    share: spot.share,
+    charge: seg.charge ?? spot.charge,
+    limits: seg.limits.isEmpty ? spot.limits : seg.limits,
+    schedule: seg.schedule.isEmpty ? spot.schedule : seg.schedule,
+    basis: seg.basis ?? spot.basis,
+    allow: seg.allow,
+  );
+}
+
+ZoneDecision _segment(
+  ParkingSegment seg,
+  ParkingSpot spot,
+  VehicleType vehicle,
+  List<CityRule> rules,
+  DateTime at,
+  String day,
+  bool trusted,
+  DecisionBasis source,
+  HolidayCalendar calendar,
+) {
+  final allow = seg.condition?.allow;
+  final allowed = vehicle == VehicleType.heavy ? allow?.heavy : allow?.scooter;
+  final notStated = vehicle == VehicleType.heavy
+      ? allow?.heavyNotStated ?? false
+      : allow?.scooterNotStated ?? false;
+  // The segment's own rate, else the whole road's (C3).
+  final price = priceAnswer(
+    (seg.fee ?? spot.fee)?.toJson(),
+    vehicle,
+    legacyText: seg.fee == null ? spot.feeNote : '',
+  );
+  ZoneDecision z(
+    EligibilityStatus status,
+    String reason, {
+    RuleRestriction? restriction,
+    Set<DecisionGap> gaps = const {},
+  }) => ZoneDecision(
+    name: seg.name,
+    status: status,
+    reason: reason,
+    restriction: restriction,
+    price:
+        status == EligibilityStatus.allowed ||
+            status == EligibilityStatus.conditional
+        ? price
+        : null,
+    gaps: gaps,
+  );
+  if (allowed == false) {
+    return trusted
+        ? z(EligibilityStatus.notAllowed, '此路段標示不開放${vehicle.label}')
+        : z(EligibilityStatus.unverified, communityUncheckedReason);
+  }
+  if (notStated) {
+    return z(
+      EligibilityStatus.unverified,
+      notStatedReason(vehicle, where: '此路段'),
+      gaps: {DecisionGap.notStated},
+    );
+  }
+  final d = _street(
+    spot,
+    vehicle,
+    rules,
+    at,
+    day,
+    trusted,
+    source,
+    calendar,
+    condition: _segmentCondition(
+      seg.condition,
+      spot.condition ?? conditionOf(spot.spaceType),
+    ),
+  );
+  return z(d.status, d.reason, restriction: d.restriction, gaps: d.gaps);
 }
 
 /// Who states [vehicle]'s access at [spot] (step 0): government data, an
@@ -719,9 +942,10 @@ ParkingDecision _street(
   String day,
   bool trusted,
   DecisionBasis source,
-  HolidayCalendar calendar,
-) {
-  final c = spot.condition ?? conditionOf(spot.spaceType);
+  HolidayCalendar calendar, {
+  ParkingCondition? condition,
+}) {
+  final c = condition ?? spot.condition ?? conditionOf(spot.spaceType);
   if (c == null) {
     return ParkingDecision(
       EligibilityStatus.unverified,
@@ -757,7 +981,8 @@ ParkingDecision _street(
   final carShare = c.share == ShareKind.carMotorcycle;
   final special = c.hasLimit(LimitKind.specialVehicle);
   final ev = c.hasLimit(LimitKind.evOnly);
-  final timed = c.hasLimit(LimitKind.timeLimit);
+  final timed = _timeBound(c);
+  final timeReasons = _timeReasons(c, at, calendar);
   // Step 1. The bay's own class first: no limit or notice opens a heavy bay
   // to scooters, nor a car bay unless a city rule does.
   if (c.bay == Bay.heavy && vehicle == VehicleType.scooter) {
@@ -815,7 +1040,7 @@ ParkingDecision _street(
       [
         if (special) _disabledReason,
         if (ev) _evReason,
-        if (timed) _timedReason,
+        ...timeReasons,
       ].join('；'),
       restriction: ev
           ? RuleRestriction.evOnly
@@ -831,7 +1056,7 @@ ParkingDecision _street(
       [
         '汽機車依時段輪替使用，${slotNowText(slots, at, calendar: calendar)}；'
             '${vehicle.label}可停時段：${slots.map(slotText).join('；')}，請看現場牌面',
-        if (timed) _timedReason,
+        ...timeReasons,
       ].join('；'),
       restriction: RuleRestriction.timeLimited,
       by: BasisKind.notice,
@@ -908,7 +1133,7 @@ ParkingDecision _street(
     if (result.status == EligibilityStatus.allowed && timed) {
       result = result._with(
         status: EligibilityStatus.conditional,
-        reason: _timedReason,
+        reason: timeReasons.join('；'),
         restriction: () => RuleRestriction.timeLimited,
       );
     }
@@ -1064,7 +1289,7 @@ ZoneDecision _zone(
   }
   // Every limit, the slots and a trial's end date are kept together.
   final ev = c.hasLimit(LimitKind.evOnly);
-  final timed = c.hasLimit(LimitKind.timeLimit);
+  final timed = _timeBound(c);
   final slots = _slotsFor(c, vehicle);
   if (c.schedule.isNotEmpty && slots.isEmpty) {
     return zone(
@@ -1079,7 +1304,7 @@ ZoneDecision _zone(
     if (slots.isNotEmpty)
       '${slotNowText(slots, at, calendar: calendar)}；'
           '可停時段：${slots.map(slotText).join('；')}',
-    if (timed) _timedReason,
+    ..._timeReasons(c, at, calendar),
     // A trial with an end date: open while it lasts, and the rider should
     // know it ends.
     if (c.basis?.expiresOn case final end?) '試辦至 $end',
@@ -1137,11 +1362,11 @@ ParkingDecision _lot(
         day,
         z.fee != null
             ? priceAnswer(z.fee!.toJson(), vehicle)
-            // §3.2 step 4: the lot's structured rate when no zone has one;
-            // only with no structured rate anywhere does a zone read its
-            // own text (as the details list it zone by zone), then the
-            // lot's.
-            : !anyZoneFee && spot.fee != null
+            // C2 (#188 layer 2): a zone without its own rate takes the
+            // lot-wide one; only with no structured rate anywhere does a
+            // zone read its own text (as the details list it zone by
+            // zone), then the lot's.
+            : spot.fee != null
             ? lotPrice
             : switch (_zoneLegacyText(z, vehicle)) {
                 final text? => PriceAnswer.unknown(text),

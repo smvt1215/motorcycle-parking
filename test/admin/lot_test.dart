@@ -614,4 +614,34 @@ void main() {
       });
     }
   });
+
+  test('可停的車種不能存成「不適用」（PM_ANS_20261101_55）', () {
+    const fee = {
+      'scooter': {'mode': 'not_applicable'},
+      'heavy': {'mode': 'hourly', 'amount': 20, 'per_minutes': 60},
+      'car': {'mode': 'not_applicable'},
+    };
+    expect(
+      notApplicableProblem(fee, {'scooter': true, 'heavy': true}),
+      '普通機車可以停，收費方式不能選「不適用」',
+    );
+    expect(
+      notApplicableProblem(fee, {'scooter': false, 'heavy': true}),
+      isNull,
+    );
+    expect(
+      zoneProblem({
+        'name': 'B1',
+        'access': 'scooterHeavy',
+        'condition': {
+          'bay': 'motorcycle',
+          'use': 'share',
+          'share': 'scooter_heavy',
+          'allow': {'scooter': true, 'heavy': true},
+        },
+        'fee': fee,
+      }),
+      '「B1」普通機車可以停，收費方式不能選「不適用」',
+    );
+  });
 }
