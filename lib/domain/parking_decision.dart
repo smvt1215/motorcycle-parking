@@ -78,7 +78,7 @@ String notStatedReason(VehicleType vehicle, {String where = '場站'}) =>
     '$where官方未標示是否開放${vehicle.label}，請以入口公告為準';
 
 /// A heavy bike on a heavy-bike or car bay after the city rule ended
-/// (decision 44).
+/// (decision 44), or before one is in force (#232).
 const lawfulReason = '大型重機依法可停此格位，請勿超出格線';
 
 /// `YYYY-MM-DD` of [time] in Taiwan, the day `expires_on` is compared with,
@@ -1339,7 +1339,17 @@ ParkingDecision _street(
           : done(EligibilityStatus.unverified, communityUncheckedReason);
     } else {
       final verdicts = [
-        for (final k in kinds) ruleVerdict(rules, k, spot.district, now: at),
+        for (final k in kinds)
+          switch (ruleVerdict(rules, k, spot.district, now: at)) {
+            // The law opens heavy and car bays to heavy bikes (§3.2 step 1)
+            // before a city rule is in force too, as after one ends
+            // (decision 44, #232).
+            RuleVerdict(kind: RuleVerdictKind.noRule)
+                when vehicle == VehicleType.heavy &&
+                    (k == SpaceType.heavyOnly || k == SpaceType.car) =>
+              const RuleVerdict(RuleVerdictKind.open, lawfulReason),
+            final v => v,
+          },
       ];
       final judged = [for (final v in verdicts) _fromVerdict(v, trusted)];
       final first = judged.first;
@@ -1354,8 +1364,11 @@ ParkingDecision _street(
           more: [
             // An ended rule a lawful bay is still judged by (decision 44)
             // is not its basis any more: the law is.
+            // So is a lawful bay no rule is in force for yet (#232).
             if (v.rule case final rule?
                 when v.kind != RuleVerdictKind.expired && ruleExpired(rule, at))
+              const DecisionBasis(BasisKind.law)
+            else if (v.rule == null && v.kind == RuleVerdictKind.open)
               const DecisionBasis(BasisKind.law)
             else if (v.rule case final rule?)
               DecisionBasis(
