@@ -5,6 +5,7 @@ import '../../data/app_store.dart';
 import '../../models/availability.dart';
 import '../../models/parking.dart';
 import '../../models/spot_history.dart';
+import '../../domain/availability_beta_display.dart';
 import '../../domain/availability_display.dart';
 import '../../domain/eligibility.dart';
 import '../../domain/eligibility_display.dart';
@@ -27,6 +28,7 @@ import 'spot_details.dart';
 import 'spot_fees.dart';
 import 'spot_photos.dart';
 import 'spot_preview.dart';
+import 'spot_seat_section.dart';
 import 'parking_access_view.dart';
 import 'vehicle_sheet.dart' show SmallPlateStack, platesOf;
 
@@ -351,6 +353,7 @@ class _SpotSheetState extends State<SpotSheet> {
                                     availability: store.availabilityOf(spot),
                                     decision: decision,
                                     now: now,
+                                    betaCities: store.availabilityBetaCities,
                                   ),
                                 ),
                                 if (feedback != null)
@@ -815,12 +818,16 @@ class _SpotSummary extends StatelessWidget {
     required this.availability,
     required this.decision,
     required this.now,
+    this.betaCities = const [],
   });
   final ParkingSpot spot;
   final VehicleType vehicle;
   final SpotAvailability availability;
   final ParkingDecision decision;
   final DateTime now;
+
+  /// The cities whose counts are in Beta.
+  final List<String> betaCities;
   @override
   Widget build(BuildContext context) {
     final legacy = spot.available;
@@ -861,7 +868,7 @@ class _SpotSummary extends StatelessWidget {
         final facts = [
           FeeNowSummary(now: fee),
           if (live)
-            _AvailabilitySummary(
+            SpotSeatSection(
               fact: availabilityFact(
                 spot,
                 availability,
@@ -869,6 +876,9 @@ class _SpotSummary extends StatelessWidget {
                 decision,
                 now,
               ),
+              betaCities: inAvailabilityBeta(spot.city, betaCities)
+                  ? betaCities
+                  : null,
             )
           else
             _SummaryFact(
@@ -891,89 +901,6 @@ class _SpotSummary extends StatelessWidget {
                 ],
               );
       },
-    );
-  }
-}
-
-/// The availability half of the summary: a large count beside 「剩餘」 and
-/// the capacity, or the reason there is none. Ink only, never a status
-/// colour, so it never competes with the eligibility banner.
-class _AvailabilitySummary extends StatelessWidget {
-  const _AvailabilitySummary({required this.fact});
-  final AvailabilityFact fact;
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
-    final muted = text.labelSmall?.copyWith(color: colors.onSurfaceVariant);
-    const figures = [FontFeature.tabularFigures()];
-    return Semantics(
-      key: const ValueKey('availability-summary'),
-      label: fact.semantics,
-      excludeSemantics: true,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(fact.title, style: muted),
-          const SizedBox(height: 4),
-          if (fact.count case final count?)
-            Text.rich(
-              TextSpan(
-                children: [
-                  TextSpan(
-                    text: '$count',
-                    style: text.headlineMedium?.copyWith(
-                      fontSize: 30,
-                      fontWeight: FontWeight.w600,
-                      height: 1.1,
-                      fontFeatures: figures,
-                    ),
-                  ),
-                  TextSpan(
-                    text: ' ${fact.headline}',
-                    style: text.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  if (fact.capacity case final capacity?)
-                    TextSpan(
-                      text: ' $capacity',
-                      style: text.bodySmall?.copyWith(
-                        color: colors.onSurfaceVariant,
-                        fontFeatures: figures,
-                      ),
-                    ),
-                ],
-              ),
-              key: const ValueKey('availability-count'),
-            )
-          else
-            Text(
-              fact.headline,
-              key: const ValueKey('availability-headline'),
-              style: text.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-                height: 1.4,
-              ),
-            ),
-          if (fact.caption.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(fact.caption, style: muted),
-          ],
-          for (final note in fact.notes) ...[
-            const SizedBox(height: 10),
-            Text(
-              note.text,
-              style: text.bodySmall?.copyWith(
-                fontWeight: FontWeight.w600,
-                fontFeatures: figures,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(note.caption, style: muted),
-          ],
-        ],
-      ),
     );
   }
 }

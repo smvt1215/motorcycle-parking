@@ -6,12 +6,14 @@ import 'package:flutter_riverpod/legacy.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../api/v1/api_v1.g.dart' show ApiV1Client;
 import '../core/config.dart';
 import '../core/notifications.dart';
 import '../core/geo.dart';
 import '../core/location_access.dart';
 import '../core/navigation.dart' as navigation;
 import '../core/town_lookup.dart';
+import '../domain/availability_beta_display.dart';
 import '../domain/eligibility.dart';
 import '../domain/parking_decision.dart';
 import '../domain/eligibility_display.dart';
@@ -72,6 +74,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     DataUpdates? dataUpdates,
     AvailabilitySource? availabilitySource,
     Duration? availabilityPoll,
+    Future<List<String>> Function()? availabilityBetaCities,
     DateTime Function()? clock,
   }) : parking = parkingRepository ?? ParkingRepository(client),
        // Official counts from the backend; the example build has fake ones.
@@ -84,6 +87,15 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
        availabilityPoll =
            availabilityPoll ??
            (client == null ? null : defaultAvailabilityPoll),
+       // The example build has no backend to ask: the stored or default
+       // cities hold.
+       _loadBetaCities =
+           availabilityBetaCities ??
+           (client == null
+               ? null
+               : () async => (await ApiV1Client(
+                   client,
+                 ).clientConfig()).availabilityBetaCities),
        clock = clock ?? DateTime.now,
        rulesRepository =
            rulesRepository ??
@@ -111,6 +123,40 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   final ContributionsRepository contributions;
   final DataUpdates updates;
   final AvailabilitySource availabilitySource;
+
+  /// Reads which cities' counts are in Beta (`api_v1.client_config()`).
+  final Future<List<String>> Function()? _loadBetaCities;
+
+  /// The cities whose official counts are in Beta: the backend's last
+  /// answer, or [defaultAvailabilityBetaCities] before it ever answered.
+  /// Empty when no city is in Beta, and nothing says Beta.
+  List<String> get availabilityBetaCities =>
+      local.availabilityBetaCities ?? defaultAvailabilityBetaCities;
+
+  /// Asks the backend again; offline, an older backend without the field
+  /// (a TypeError while parsing) or any other failure keeps the last
+  /// answer. Never throws.
+  Future<void> refreshAvailabilityBeta() async {
+    final load = _loadBetaCities;
+    if (load == null || _disposed) return;
+    try {
+      final cities = await load();
+      if (_disposed) return;
+      final stored = local.availabilityBetaCities;
+      if (stored != null && listEquals(stored, cities)) return;
+      await local.setAvailabilityBetaCities(cities);
+      if (!_disposed) notifyListeners();
+    } catch (_) {
+      // Keep the last answer.
+    }
+  }
+
+  /// Whether the rider pressed 知道了 on the Beta sheet.
+  bool get availabilityBetaIntroSeen => local.availabilityBetaIntroSeen;
+  Future<void> markAvailabilityBetaIntroSeen() async {
+    await local.setAvailabilityBetaIntroSeen();
+    if (!_disposed) notifyListeners();
+  }
 
   /// The time freshness is judged against; tests pin it.
   final DateTime Function() clock;
@@ -251,6 +297,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     starting = locatingAtLaunch = true;
     introduceLegend = !local.legendSeen;
     listenForUpdates();
+    unawaited(refreshAvailabilityBeta());
     final location = launchLocation = (locator ?? locateOnLaunch)();
     notifyListeners();
     unawaited(
@@ -318,6 +365,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
       case AppLifecycleState.resumed:
         _foreground = true;
         unawaited(checkForUpdates());
+        unawaited(refreshAvailabilityBeta());
         _resumeAvailability();
       case AppLifecycleState.paused:
       case AppLifecycleState.hidden:

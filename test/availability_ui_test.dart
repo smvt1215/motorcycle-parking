@@ -208,7 +208,10 @@ void main() {
       await tester.pumpAndSettle();
       final sheet = find.byKey(const ValueKey('parking-spot-sheet'));
       final before = tester.element(sheet);
-      expect(summaryText(tester), startsWith('機車車位｜12 剩餘 ／ 共 80 格｜17:02 更新'));
+      expect(
+        summaryText(tester),
+        startsWith('有沒有位｜12 剩餘 ／ 共 80 格（普通機車）｜17:02 更新'),
+      );
       counts[0] = count(
         'fresh',
         AvailabilityVehicle.scooter,
@@ -223,7 +226,10 @@ void main() {
         isTrue,
         reason: '沒有重建整個面板',
       );
-      expect(summaryText(tester), startsWith('機車車位｜9 剩餘 ／ 共 80 格｜17:04 更新'));
+      expect(
+        summaryText(tester),
+        startsWith('有沒有位｜9 剩餘 ／ 共 80 格（普通機車）｜17:04 更新'),
+      );
       expect(capsule('剩 9'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
     });
@@ -417,11 +423,11 @@ void main() {
     final cases = <String, (List<AvailabilitySnapshot>, String)>{
       '新鮮': (
         [count('fresh', AvailabilityVehicle.scooter)],
-        '12 剩餘 ／ 共 80 格｜17:02 更新 ・ 臺北市停管處',
+        '12 剩餘 ／ 共 80 格（普通機車）｜17:02 更新　臺北市停管處',
       ),
       '已滿': (
         [count('fresh', AvailabilityVehicle.scooter, available: 0)],
-        '0 剩餘，已滿 ／ 共 80 格',
+        '0 剩餘，已滿 ／ 共 80 格（普通機車）',
       ),
       '延遲': (
         [
@@ -432,7 +438,7 @@ void main() {
             minutes: 14,
           ),
         ],
-        '7 剩餘，更新延遲 14 分鐘 ／ 共 80 格｜最後更新 16:51 ・ 臺北市停管處',
+        '7 剩餘，更新延遲 14 分鐘 ／ 共 80 格（普通機車）｜最後更新 16:51　臺北市停管處',
       ),
       '過期': (
         [count('fresh', AvailabilityVehicle.scooter, minutes: 40)],
@@ -459,7 +465,7 @@ void main() {
         final store = await detailStore(tester, lot, counts);
         await openDetails(tester, store, lot);
         expect(summaryText(tester), contains(expected));
-        expect(summaryText(tester), startsWith('機車車位'));
+        expect(summaryText(tester), startsWith('有沒有位'));
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
       });
@@ -472,7 +478,7 @@ void main() {
         count('h', AvailabilityVehicle.scooter, minutes: 14),
       ], vehicle: VehicleType.heavy);
       await openDetails(tester, store, heavyLot);
-      expect(summaryText(tester), startsWith('大型重機車位｜空位未知'));
+      expect(summaryText(tester), startsWith('有沒有位｜空位未知'));
       expect(summaryText(tester), contains('普通機車區剩 12 格，更新延遲 14 分鐘'));
       expect(summaryText(tester), contains('不代表重機可用格數'));
       await tester.pumpWidget(const SizedBox.shrink());
@@ -487,7 +493,7 @@ void main() {
         ),
       ], vehicle: VehicleType.heavy);
       await openDetails(tester, store, heavyCarLot);
-      expect(summaryText(tester), contains('3 剩餘 ／ 共 12 格'));
+      expect(summaryText(tester), contains('3 剩餘 ／ 共 12 格（大型重機）'));
       expect(summaryText(tester), contains('汽車格剩餘 30，更新延遲 14 分鐘'));
       expect(summaryText(tester), isNot(contains('共用')));
       expect(summaryText(tester), isNot(contains('費率')));
@@ -524,7 +530,7 @@ void main() {
           find.byKey(const ValueKey('availability-summary')),
         );
         expect(summary.right, lessThanOrEqualTo(width));
-        expect(find.bySemanticsLabel(RegExp('大型重機車位，剩餘 3 格')), findsOneWidget);
+        expect(find.bySemanticsLabel(RegExp('有沒有位，剩餘 3 格')), findsOneWidget);
         expect(find.text('導航到入口').hitTestable(), findsOneWidget);
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
