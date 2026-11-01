@@ -831,6 +831,161 @@ void main() {
     });
   });
 
+  group('審查修正（#222 第六輪）', () {
+    test('資格來自有到期日的縣市規則：時段截在規則到期之前', () {
+      // The Taipei heavy rule ends on 2026-11-08 (Sunday).
+      final ending = [
+        for (final r in rules)
+          if (r.city == '臺北市' && r.vehicle == VehicleType.heavy)
+            CityRule(
+              city: r.city,
+              vehicle: r.vehicle,
+              allowedSpaceTypes: r.allowedSpaceTypes,
+              conditionalSpaceTypes: r.conditionalSpaceTypes,
+              feeNote: r.feeNote,
+              exceptions: r.exceptions,
+              sourceUrl: r.sourceUrl,
+              version: r.version,
+              effectiveDate: r.effectiveDate,
+              canUseTwoSpaces: r.canUseTwoSpaces,
+              expiresOn: DateTime(2026, 11, 8),
+            )
+          else
+            r,
+      ];
+      ParkingSpot monday(Map<String, dynamic>? schedule) =>
+          ParkingSpot.fromJson({
+            ...street.toJson(),
+            'parking_segments': [
+              {
+                'id': 'm',
+                'name': '北側收費機車格',
+                'condition': {
+                  'bay': 'motorcycle',
+                  'use': 'usual',
+                  'charge': 'toll',
+                  'schedule': ?schedule == null ? null : [schedule],
+                },
+              },
+            ],
+          });
+      final slotted = monday({
+        'days': ['mon'],
+        'from': '20:00',
+        'to': '23:00',
+        'vehicles': ['heavy'],
+      });
+      final kept = decideSegments(slotted, VehicleType.heavy, rules, now: day);
+      expect(kept.single.window.opensAt, '週一 20:00');
+      final ended = decideSegments(
+        slotted,
+        VehicleType.heavy,
+        ending,
+        now: day,
+      ).single;
+      expect(
+        ended.decision.basis.map((b) => b.rule?.expiresOn),
+        contains(DateTime(2026, 11, 8)),
+      );
+      expect((ended.window.now, ended.window.opensAt), (false, null));
+
+      // A bay open all day reads 到 00:00 on the rule's last day; the day
+      // it ends is not part of it.
+      final allDay = monday(null);
+      final lastNight = DateTime.utc(2026, 11, 7, 13);
+      final last = decideSegments(
+        allDay,
+        VehicleType.heavy,
+        ending,
+        now: lastNight,
+      ).single;
+      expect(
+        (last.window.now, last.window.until, last.window.untilMinute),
+        (true, '00:00', 1440),
+      );
+      final before = decideSegments(
+        allDay,
+        VehicleType.heavy,
+        ending,
+        now: day,
+      ).single;
+      expect((before.window.now, before.window.until), (true, null));
+    });
+
+    test('場站車種開放待確認：不以場站 20/時蓋過分區 50/時', () {
+      final spot = ParkingSpot.fromJson({
+        ...lotJson,
+        'heavy_allowed': null,
+        'parking_zones': [
+          {
+            'id': 'h',
+            'name': 'B2 重機專區',
+            'area': 'heavy',
+            'condition': {
+              'bay': 'heavy',
+              'use': 'usual',
+              'allow': {'heavy': true},
+            },
+            'fee': {
+              'heavy': {'mode': 'hourly', 'amount': 50, 'per_minutes': 60},
+            },
+          },
+        ],
+      });
+      final sign = fourSign(spot, VehicleType.heavy, rules, now: day);
+      expect(sign.verdict.status, isNot(EligibilityStatus.allowed));
+      final p = plates(spot, VehicleType.heavy, day);
+      final fee = p.firstWhere((x) => x.semantics.startsWith('怎麼算錢'));
+      expect(fee.main, isNot('20/時'));
+      expect(fee.main, '50/時');
+    });
+
+    test('各分區限制不同：不以一區的「限電動」代表整場', () {
+      final spot = ParkingSpot.fromJson({
+        ...lotJson,
+        'parking_zones': [
+          {
+            'id': 'a',
+            'name': 'A 充電區',
+            'area': 'heavy',
+            'condition': {
+              'bay': 'heavy',
+              'use': 'usual',
+              'limits': [
+                {'kind': 'ev_only'},
+              ],
+              'allow': {'heavy': true},
+            },
+          },
+          {
+            'id': 'b',
+            'name': 'B 重機區',
+            'area': 'heavy',
+            'condition': {
+              'bay': 'heavy',
+              'use': 'usual',
+              'allow': {'heavy': true},
+              'schedule': [
+                {
+                  'days': 'all',
+                  'from': '20:00',
+                  'to': '23:00',
+                  'vehicles': ['heavy'],
+                },
+              ],
+            },
+          },
+        ],
+      });
+      final sign = fourSign(spot, VehicleType.heavy, rules, now: night);
+      expect(sign.verdict.status, EligibilityStatus.conditional);
+      expect(sign.verdict.restriction, isNull);
+      final p = plates(spot, VehicleType.heavy, night);
+      expect(p[0].main, isNot(contains('電動')));
+      expect(p[0].semantics, isNot(contains('電動')));
+    });
+  });
+
   group('官方未標示（#201、A3 不確定）', () {
     test('場站官方未標示大型重機：能不能停寫不確定／官方未標示（虛框），其他三面照常', () {
       final unstated = ParkingSpot.fromJson({

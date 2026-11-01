@@ -68,6 +68,8 @@ bool scheduleSilentFor(ParkingCondition? condition, VehicleType vehicle) {
 /// for the vehicle decide when (a period across midnight belongs to the
 /// day it starts, as [decideParking] reads them). On the street a heavy
 /// bike on a car bay parks by law whatever the slots say ([street]).
+/// A city rule in the decision's [basis] that grants the place holds up to,
+/// not on, its expiry day (as [ruleExpired]): the window ends there too.
 OpenWindow openWindow(
   EligibilityStatus status,
   ParkingCondition? condition,
@@ -75,15 +77,39 @@ OpenWindow openWindow(
   DateTime now, {
   bool street = false,
   HolidayCalendar? calendar,
+  Iterable<DecisionBasis> basis = const [],
 }) {
   if (status != EligibilityStatus.allowed &&
       status != EligibilityStatus.conditional) {
     return OpenWindow.never;
   }
+  final (today, at) = taipeiDateMinute(now);
+  int dayMinute(DateTime d) =>
+      DateTime.utc(d.year, d.month, d.day).difference(today).inDays * 1440;
+  final ruleEnds = [
+    for (final b in basis)
+      if (b.kind == BasisKind.cityRule && !b.expired)
+        if (b.rule?.expiresOn case final e?) dayMinute(e),
+  ];
+  final ruleEnd = ruleEnds.isEmpty
+      ? null
+      : ruleEnds.reduce((a, b) => a < b ? a : b);
   final c = condition;
-  if (c == null || c.schedule.isEmpty) return OpenWindow.always;
-  if (street && vehicle == VehicleType.heavy && c.bay == Bay.car) {
-    return OpenWindow.always;
+  final unslotted =
+      c == null ||
+      c.schedule.isEmpty ||
+      street && vehicle == VehicleType.heavy && c.bay == Bay.car;
+  if (unslotted) {
+    // Open all the time the rule lasts: until its expiry, when that comes
+    // within a day.
+    if (ruleEnd == null) return OpenWindow.always;
+    if (ruleEnd <= at) return OpenWindow.never;
+    final within = ruleEnd - at < 1440;
+    return OpenWindow(
+      now: true,
+      until: within ? _clock(ruleEnd) : null,
+      untilMinute: within ? ruleEnd : null,
+    );
   }
   final slots = [
     for (final s in c.schedule)
@@ -93,19 +119,23 @@ OpenWindow openWindow(
   // open status here means something else opened it.
   if (slots.isEmpty) return OpenWindow.always;
   final cal = calendar ?? HolidayCalendar.current;
-  final (today, at) = taipeiDateMinute(now);
   const last = 7;
   // The notice holds from its effective day and up to, not on, its
   // expiry day (as decideParking's notice check): slots outside it open
-  // nothing, and a night slot stops where the notice ends.
-  int? dayMinute(String? ymd) {
+  // nothing, and a night slot stops where the notice ends. So does the
+  // city rule granting the place.
+  int? ymdMinute(String? ymd) {
     final d = ymd == null ? null : DateTime.tryParse(ymd);
-    if (d == null) return null;
-    return DateTime.utc(d.year, d.month, d.day).difference(today).inDays * 1440;
+    return d == null ? null : dayMinute(d);
   }
 
-  final from = dayMinute(c.basis?.effectiveDate);
-  final until = dayMinute(c.basis?.expiresOn);
+  final from = ymdMinute(c.basis?.effectiveDate);
+  final noticeEnd = ymdMinute(c.basis?.expiresOn);
+  final until = noticeEnd == null
+      ? ruleEnd
+      : ruleEnd == null || noticeEnd < ruleEnd
+      ? noticeEnd
+      : ruleEnd;
   final spans = [
     for (final s in slots)
       for (final (start, end) in datedSpans(
@@ -236,8 +266,15 @@ List<SegmentDecision> decideSegments(
   final at = now ?? DateTime.now();
   final spotDecision =
       whole ?? decideParking(spot, vehicle, rules, now: at, calendar: calendar);
-  OpenWindow windowOf(ParkingDecision d, ParkingCondition? c) =>
-      openWindow(d.status, c, vehicle, at, street: true, calendar: calendar);
+  OpenWindow windowOf(ParkingDecision d, ParkingCondition? c) => openWindow(
+    d.status,
+    c,
+    vehicle,
+    at,
+    street: true,
+    calendar: calendar,
+    basis: d.basis,
+  );
   if (spot.segments.isEmpty) {
     return [
       SegmentDecision(

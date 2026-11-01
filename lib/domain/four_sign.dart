@@ -459,6 +459,7 @@ List<SignArea> _lotAreas(
               vehicle,
               now,
               calendar: calendar,
+              basis: whole.basis,
             ),
           );
         }(),
@@ -483,6 +484,7 @@ List<SignArea> _lotAreas(
         vehicle,
         now,
         calendar: calendar,
+        basis: whole.basis,
       ),
       countClass: availabilityVehicle(vehicle),
     ),
@@ -583,7 +585,6 @@ VerdictAnswer _verdict(
         openNow: true,
       );
     }
-    final limited = openNow.where((a) => !unlimited(a)).toList();
     // Every place open now closes: the one closing last stands, compared by
     // minutes (a slot to 隔天 02:00 closes after one to 23:00).
     final closing = openNow.every((a) => a.window.untilMinute != null)
@@ -593,8 +594,10 @@ VerdictAnswer _verdict(
         : null;
     return VerdictAnswer(
       status: EligibilityStatus.conditional,
-      // A place limited only by its hours reads as 限時段.
-      restriction: _restrictionOf(closing ?? limited.first),
+      // A place limited only by its hours reads as 限時段. Places limited
+      // differently (one 限電動 all day, one open to all 20–23) share no
+      // limit: plain 有條件, never one place's limit standing for all.
+      restriction: {for (final a in openNow) _restrictionOf(a)}.singleOrNull,
       until: closing?.window.until,
       basis: basis,
       city: city,
@@ -944,23 +947,30 @@ FeeAnswer _fee(
 ) {
   final spotPrice = _priceOf(spot.fee, spot.feeNote, vehicle, now, calendar);
   final List<_Price> prices;
-  if (street || places.every((a) => a.whole) || spot.zones.isEmpty) {
+  if (street ||
+      spot.zones.isEmpty ||
+      places.isNotEmpty && places.every((a) => a.whole)) {
     // Segments carry no rate of their own yet: the spot's covers them.
     prices = [spotPrice];
   } else {
+    // No place open (the lot's access unconfirmed keeps its zones so):
+    // every zone prices it, as spotFeeSummary reads them, so a zone's own
+    // rate still supersedes the lot's.
+    final zones = places.isEmpty
+        ? spot.zones
+        : [for (final a in places) ?a.zone];
     final anyZoneFee = spot.zones.any((z) => z.fee != null);
     prices = [
-      for (final a in places)
-        if (a.zone case final z?)
-          z.fee != null
-              ? _priceOf(z.fee, '', vehicle, now, calendar)
-              : !anyZoneFee && spot.fee != null
-              ? spotPrice
-              : switch (_zoneLegacy(z, vehicle)) {
-                  final t when !_placeholder(t) => _TextPrice(t.trim()),
-                  _ when anyZoneFee => const _NoPrice(),
-                  _ => spotPrice,
-                },
+      for (final z in zones)
+        z.fee != null
+            ? _priceOf(z.fee, '', vehicle, now, calendar)
+            : !anyZoneFee && spot.fee != null
+            ? spotPrice
+            : switch (_zoneLegacy(z, vehicle)) {
+                final t when !_placeholder(t) => _TextPrice(t.trim()),
+                _ when anyZoneFee => const _NoPrice(),
+                _ => spotPrice,
+              },
     ];
   }
   if (prices.isEmpty) return const FeeAnswer(kind: FeeKind.unknown);
