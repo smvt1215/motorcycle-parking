@@ -80,18 +80,15 @@
                 "additionalProperties": false,
                 "properties": {
                   "p_status": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
+                    "type": "string",
                     "enum": [
                       "open",
                       "done",
                       "rejected",
-                      null
+                      "all"
                     ],
                     "default": "open",
-                    "description": "只列這個狀態；null 列全部"
+                    "description": "只列這個狀態；all 列全部"
                   },
                   "p_limit": {
                     "type": "integer",

@@ -80,12 +80,13 @@ revoke execute on function public.support_request_notified(uuid) from public,ano
 grant execute on function public.support_request_notified(uuid) to service_role;
 
 -- ===== 管理站（admin_v1）=====
--- 列出申請：預設待處理，新的在前。
+-- 列出申請：預設待處理，新的在前；'all' 列全部（不用 null，產生的用戶端分不出
+-- 「沒給」與「給 null」，Codex review，PR #277）。
 create function admin_v1.support_requests(p_status text default 'open',p_limit int default 50)
 returns jsonb language plpgsql stable security definer set search_path='' as $$
 begin
   perform private.require_admin();
-  if p_status is not null and p_status not in ('open','done','rejected') then
+  if p_status is null or p_status not in ('open','done','rejected','all') then
     raise sqlstate 'PT400' using message='request.invalid', detail='{"field":"p_status"}';
   end if;
   if p_limit is null or p_limit not between 1 and 200 then
@@ -97,7 +98,7 @@ begin
       'resolved_at',s.resolved_at,'resolution_note',s.resolution_note,
       'deletion_requested',s.deletion_request_id is not null) order by s.created_at desc)
     from (select * from private.support_requests s
-      where p_status is null or s.status=p_status order by s.created_at desc limit p_limit) s),'[]'::jsonb);
+      where p_status='all' or s.status=p_status order by s.created_at desc limit p_limit) s),'[]'::jsonb);
 end $$;
 revoke execute on function admin_v1.support_requests(text,int) from public;
 grant execute on function admin_v1.support_requests(text,int) to authenticated;

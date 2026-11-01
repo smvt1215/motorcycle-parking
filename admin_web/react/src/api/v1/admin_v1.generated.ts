@@ -54,8 +54,8 @@ export type AdminV1SetMinSupportedAppVersionApiArg = {
 export type AdminV1SupportRequestsApiResponse = /** status 200 申請 */ SupportRequest[];
 export type AdminV1SupportRequestsApiArg = {
   body: {
-    /** 只列這個狀態；null 列全部 */
-    p_status?: ('open' | 'done' | 'rejected' | null) | ('open' | 'done' | 'rejected' | null);
+    /** 只列這個狀態；all 列全部 */
+    p_status?: 'open' | 'done' | 'rejected' | 'all';
     p_limit?: number;
   };
 };

@@ -61,6 +61,8 @@ update private.support_requests set created_at=now()+interval '1 minute' where i
 set local role authenticated;
 select is((select admin_v1.support_requests('open',1)->0->>'contact_email'),'rider@example.test','newest first, with the email to reply to');
 select throws_ok($$select admin_v1.support_requests('weird')$$,'PT400','request.invalid','unknown status');
+select throws_ok($$select admin_v1.support_requests(null)$$,'PT400','request.invalid','null is not a status');
+select is((select jsonb_array_length(admin_v1.support_requests('all',200))),9,'all lists every status');
 
 -- 代建刪除申請：7 天冷靜期、名稱隱藏、管理員不行。
 select throws_ok(format('select admin_v1.request_account_deletion_for(''10000000-0000-4000-8000-000000000005'',%L)',(select id from sent)),
