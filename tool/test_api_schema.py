@@ -1,9 +1,10 @@
 """The API documents (supabase/api/v1/*.json) and the SQL agree (#195 P1).
 
 Every function a migration creates in api_v1 or admin_v1 has exactly one
-operation, `POST /rpc/<name>` with operationId `<schema>_<name>` and the
-schema's Content-Profile header, and every operation names a function that
-exists. The documents are OpenAPI 3.1 and only reference what they define.
+operation, `POST /rpc/<name>` with operationId `<schema>_<name>`, and every
+operation names a function that exists. The schema is chosen by the
+Content-Profile header, named once per document as `x-content-profile`: the
+generated clients' base adds it, so operations do not take it. The documents are OpenAPI 3.1 and only reference what they define.
 """
 import json
 from pathlib import Path
@@ -53,8 +54,7 @@ class ApiSchemaTest(unittest.TestCase):
             with self.subTest(schema=schema):
                 doc = document(schema)
                 self.assertEqual(doc["openapi"], "3.1.0")
-                self.assertEqual(
-                    doc["components"]["parameters"]["ContentProfile"]["schema"], {"const": schema})
+                self.assertEqual(doc["x-content-profile"], schema)
 
     def test_every_sql_function_has_one_operation_and_back(self):
         functions = sql_functions()
@@ -76,7 +76,9 @@ class ApiSchemaTest(unittest.TestCase):
                     self.assertEqual(set(item), {"post"}, "PostgREST RPCs are POST")
                     op = item["post"]
                     self.assertEqual(op["operationId"], f"{schema}_{name}")
-                    self.assertIn({"$ref": "#/components/parameters/ContentProfile"}, op["parameters"])
+                    self.assertNotIn("Content-Profile",
+                                     [p.get("name") for p in op.get("parameters", [])],
+                                     "the client base sends Content-Profile")
                     self.assertIn("200", op["responses"])
                     self.assertEqual(op["responses"]["default"], {"$ref": "#/components/responses/Error"})
 

@@ -3,43 +3,47 @@
   "info": {
     "title": "機車停車指南 公開 API（api_v1）",
     "version": "1.0.0",
-    "description": "App 與管理站共用的公開 API（#195）。每支函式是 PostgREST 的 RPC：POST /rest/v1/rpc/<name>，以 Content-Profile: api_v1 指定 schema。v1 只做加法，破壞性變更開 api_v2。"
+    "description": "App 與管理站共用的公開 API（#195）。每支函式是 PostgREST 的 RPC：POST /rest/v1/rpc/<name>，以 Content-Profile: api_v1 指定 schema（x-content-profile；由用戶端的 base 自動帶上，不是每支 operation 的參數）。v1 只做加法，破壞性變更開 api_v2。"
   },
-  "servers": [{ "url": "/rest/v1" }],
+  "x-content-profile": "api_v1",
+  "servers": [
+    {
+      "url": "/rest/v1"
+    }
+  ],
   "paths": {
     "/rpc/client_config": {
       "post": {
         "operationId": "api_v1_client_config",
         "summary": "最低支援版本與各資料集的版本",
         "description": "App 啟動、回到前景、恢復連線時讀取（#195 §2.1、#202）。不需要登入。",
-        "parameters": [{ "$ref": "#/components/parameters/ContentProfile" }],
-        "requestBody": {
-          "required": false,
-          "content": { "application/json": { "schema": { "type": "object", "additionalProperties": false } } }
-        },
         "responses": {
           "200": {
             "description": "版本資訊",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ClientConfig" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientConfig"
+                }
+              }
+            }
           },
-          "default": { "$ref": "#/components/responses/Error" }
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       }
     }
   },
   "components": {
-    "parameters": {
-      "ContentProfile": {
-        "name": "Content-Profile",
-        "in": "header",
-        "required": true,
-        "schema": { "const": "api_v1" }
-      }
-    },
     "schemas": {
       "ClientConfig": {
         "type": "object",
-        "required": ["min_supported_app_version", "rules_version", "spots_version"],
+        "required": [
+          "min_supported_app_version",
+          "rules_version",
+          "spots_version"
+        ],
         "additionalProperties": false,
         "properties": {
           "min_supported_app_version": {
@@ -47,25 +51,59 @@
             "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
             "description": "低於這個版本的 App 要提示更新"
           },
-          "rules_version": { "type": "integer", "minimum": 1, "description": "data_versions 的 rules 版本" },
-          "spots_version": { "type": "integer", "minimum": 1, "description": "data_versions 的 spots 版本" }
+          "rules_version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "data_versions 的 rules 版本"
+          },
+          "spots_version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "data_versions 的 spots 版本"
+          }
         }
       },
-      "Error": {
+      "ApiError": {
         "type": "object",
-        "required": ["code", "message"],
+        "required": [
+          "code",
+          "message"
+        ],
         "properties": {
-          "code": { "type": "string", "description": "SQLSTATE；API 自訂錯誤為 PTxyz，HTTP 狀態即 xyz" },
-          "message": { "type": "string", "description": "穩定錯誤碼，例如 auth.aal2_required；用戶端依此顯示文案" },
-          "details": { "type": ["string", "null"], "description": "JSON 字串，帶欄位等細節" },
-          "hint": { "type": ["string", "null"] }
+          "code": {
+            "type": "string",
+            "description": "SQLSTATE；API 自訂錯誤為 PTxyz，HTTP 狀態即 xyz"
+          },
+          "message": {
+            "type": "string",
+            "description": "穩定錯誤碼，例如 auth.aal2_required；用戶端依此顯示文案"
+          },
+          "details": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "JSON 字串，帶欄位等細節"
+          },
+          "hint": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
         }
       }
     },
     "responses": {
       "Error": {
         "description": "錯誤（#195 §2.4）",
-        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiError"
+            }
+          }
+        }
       }
     }
   }
