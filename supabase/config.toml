@@ -445,6 +445,11 @@ verify_jwt = false
 # as admin-users does (#268).
 verify_jwt = false
 
+[functions.support-request]
+# The public support form (#269): no sign-in; App Check (reCAPTCHA
+# Enterprise web provider) and per-network/email limits instead.
+verify_jwt = false
+
 [functions.account-deletion]
 # pg_cron calls it once a day with the shared ACCOUNT_DELETION_SECRET header,
 # not a JWT (#215).

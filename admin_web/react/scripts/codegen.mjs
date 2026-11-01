@@ -16,7 +16,7 @@ process.chdir(root);
 // by their generated endpoint name.
 const READS = {
   api_v1: ['apiV1ClientConfig', 'apiV1CityRules', 'apiV1SpotsInViewport', 'apiV1AccountDeletionStatus'],
-  admin_v1: [],
+  admin_v1: ['adminV1SupportRequests'],
 };
 
 const PROFILES = [
