@@ -40,6 +40,8 @@ PATHS = {
         "supabase/functions/_shared/fee_note_limit.json",
         # test/parking_decision_test.dart runs the shared rule verdicts.
         "supabase/functions/_shared/rule_verdict_cases.json",
+        # lib/api/v1/*.g.dart are generated from the API documents.
+        "supabase/api/v1/", "tool/gen_api_dart.py",
     ),
     "android": APP_PATHS + ROUTING_PATHS + (
         "android/", ".github/workflows/android.yml", ".github/actions/mobile-setup/",
