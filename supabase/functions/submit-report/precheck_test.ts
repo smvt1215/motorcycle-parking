@@ -191,7 +191,7 @@ Deno.test('currentSpot reads the stored fee and condition of the spot a suggesti
   if (
     got !== stored ||
     fake.asked.join() !==
-      `community_spots,fee,condition,parking_zones,parking_segments,${id}`
+      `community_spots,fee,condition,parking_zones,parking_segments,scooter_allowed,heavy_allowed,${id}`
   ) {
     throw new Error(fake.asked.join());
   }

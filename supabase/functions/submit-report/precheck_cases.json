@@ -2251,6 +2251,36 @@
         }
       },
       "expect": []
+    },
+    {
+      "name": "a fee suggestion of 不適用 for a vehicle the stored spot lets park is held (#188 layer 2)",
+      "body": {
+        "action": "flag",
+        "source_id": "3f1c2a4e-0000-4000-8000-000000000002",
+        "field": "fee_note",
+        "reason": "收費資訊",
+        "proposed": {
+          "fee": {
+            "heavy": {
+              "mode": "not_applicable"
+            }
+          }
+        }
+      },
+      "current": {
+        "fee": {
+          "scooter": {
+            "mode": "hourly",
+            "amount": 10,
+            "per_minutes": 60
+          }
+        },
+        "heavy_allowed": true
+      },
+      "expect": [
+        "fee_not_applicable_allowed@proposed.fee.heavy"
+      ],
+      "blocking": false
     }
   ]
 }

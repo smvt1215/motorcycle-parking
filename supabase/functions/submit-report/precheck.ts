@@ -471,6 +471,13 @@ export function precheck(body: Json, current?: Json): PrecheckIssue[] {
         ...(!('condition' in proposed) && object(current?.condition)
           ? { condition: current.condition }
           : {}),
+        // Who may park, for 不適用 (#188 layer 2): the stored flags unless
+        // the suggestion changes them.
+        ...Object.fromEntries(
+          ['scooter_allowed', 'heavy_allowed'].filter((k) =>
+            !(k in proposed) && current?.[k] !== undefined
+          ).map((k) => [k, current![k]]),
+        ),
       }
       : proposed;
   // Zone and segment patches (#188) are judged as the lists they leave,

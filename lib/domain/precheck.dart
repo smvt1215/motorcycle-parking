@@ -712,6 +712,12 @@ List<PrecheckIssue> precheck(
           !proposed.containsKey('condition') &&
           current?['condition'] is Map)
         'condition': current!['condition'],
+      // Who may park, for 不適用 (#188 layer 2): the stored flags unless
+      // the suggestion changes them.
+      if (judged)
+        for (final key in const ['scooter_allowed', 'heavy_allowed'])
+          if (!proposed.containsKey(key) && current?.containsKey(key) == true)
+            key: current![key],
       // Zone and segment patches (#188) are judged as the lists they leave.
       for (final key in const ['parking_zones', 'parking_segments'])
         if (proposed[key] is List)
