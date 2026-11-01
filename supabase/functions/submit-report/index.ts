@@ -11,6 +11,7 @@ import { currentSpot } from './current_spot.ts';
 import { blocking, precheck, precheckResponse, riskFlags } from './precheck.ts';
 import {
   identityHash,
+  proposedConditionComplete,
   segmentPatchesStated,
   spotDeletedResponse,
   validate,
@@ -66,7 +67,8 @@ Deno.serve(async (req) => {
     const proposed = body.proposed as Record<string, unknown> | undefined;
     if (
       proposed &&
-      (!zonePatchesStated(proposed.parking_zones, current?.parking_zones) ||
+      (!proposedConditionComplete(proposed, current) ||
+        !zonePatchesStated(proposed.parking_zones, current?.parking_zones) ||
         !segmentPatchesStated(
           proposed.parking_segments,
           current?.parking_segments,

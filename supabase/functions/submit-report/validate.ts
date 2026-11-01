@@ -111,16 +111,27 @@ const limitsRequired = cond.write.limits_required as Record<string, string[]>;
 /**
  * Whether a valid condition is complete for a new write (#188 layer 2,
  * `condition_write_complete()` in SQL): time_limit carries its periods,
- * not the old shapes.
+ * not the old shapes. A limit a suggestion keeps exactly as [stored] has
+ * it (old data the rider did not touch) passes.
  */
-export function conditionWriteComplete(c: unknown): boolean {
+export function conditionWriteComplete(c: unknown, stored?: unknown): boolean {
   if (!isObject(c)) return false;
   const limits = Array.isArray(c.limits) ? c.limits : [];
+  const kept = isObject(stored) && Array.isArray(stored.limits)
+    ? stored.limits.map((l) => JSON.stringify(sortKeys(l)))
+    : [];
   return limits.every((l) =>
     isObject(l) &&
-    (limitsRequired[l.kind as string] ?? []).every((k) => has(l, k))
+    ((limitsRequired[l.kind as string] ?? []).every((k) => has(l, k)) ||
+      kept.includes(JSON.stringify(sortKeys(l))))
   );
 }
+const sortKeys = (v: unknown): unknown =>
+  Array.isArray(v) ? v.map(sortKeys) : isObject(v)
+    ? Object.fromEntries(
+      Object.keys(v).sort().map((k) => [k, sortKeys(v[k])]),
+    )
+    : v;
 /**
  * A condition the contract accepts. A zone may carry `allow` and leave its
  * bay unconfirmed; a street condition names its bay and, on a motorcycle
@@ -385,6 +396,16 @@ export function zonePatchesStated(
  * suggestion adds or changes states both vehicles once applied, so a rider
  * who changes a segment fills in who may park there.
  */
+/**
+ * Whether a suggestion's condition is complete for a new write (#188 layer
+ * 2): every limit in the new shape, or kept as the spot stores it.
+ */
+export const proposedConditionComplete = (
+  proposed: Record<string, unknown> | undefined,
+  current: Record<string, unknown> | undefined,
+) =>
+  !proposed || !isObject(proposed.condition) ||
+  conditionWriteComplete(proposed.condition, current?.condition);
 export const segmentPatchesStated = (patch: unknown, current: unknown) =>
   zonePatchesStated(patch, current, segmentStated);
 const facilityTypes: string[] = contract.placement.facility_types;
@@ -676,9 +697,10 @@ function validProposedCondition(p: Record<string, unknown>): boolean {
   // A lot drops a stored street condition; it never carries one.
   if (p.condition === null) return true;
   if (offStreetSpaceTypes.includes(type)) return false;
+  // Its completeness is checked against the stored condition, which only
+  // the handler reads (proposedConditionComplete).
   return validCondition(p.condition) &&
     !Object.hasOwn(p.condition as object, 'basis') &&
-    conditionWriteComplete(p.condition) &&
     legacySpaceType(p.condition as Record<string, unknown>, false) === type;
 }
 const withoutCleared = (fee: unknown) =>

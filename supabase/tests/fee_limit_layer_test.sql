@@ -76,6 +76,8 @@ update community_spots set parking_segments='[{"name":"南側","condition":{"all
   where id=(select id from fx where name='street');
 select is((select array[scooter_allowed::text,coalesce(heavy_allowed::text,'null'),heavy_not_stated::text] from community_spots
   where id=(select id from fx where name='street')),array['false','null','true'],'every segment stating it: not_stated, else false');
+select throws_ok($$update community_spots set scooter_allowed=true where id=(select id from fx where name='street')$$,
+  '22023','eligibility follows the bays','a flag the segments decide is not changed alone');
 update community_spots set parking_segments='[{"name":"南側"}]',scooter_allowed=true
   where id=(select id from fx where name='street');
 select is((select scooter_allowed from community_spots where id=(select id from fx where name='street')),true,
