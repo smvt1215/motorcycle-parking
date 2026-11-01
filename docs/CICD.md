@@ -167,6 +167,11 @@ staging 設定已於 2026-10-24 完成，並以真實 Google 登入＋TOTP 取�
 ### 必要檢查（main ruleset）
 - 每個 workflow 有一個彙總 job：`CI 全部通過`（`ci-ok`）、`Android 全部通過`（`android-ok`）、`iOS 全部通過`（`ios-ok`）。`needs` 該 workflow 所有 job，包含各平台的 Release、測試建置與模擬器測試，`if: always()`，任何一個失敗或被取消就失敗。
 - ruleset 只把這三個彙總 job 的顯示名稱（check 名稱）設為必要檢查。這樣新增或拆分 job 時不必改 ruleset，被路徑判斷略過的 job 也不會卡住合併。
+- **只有 PR 會取消舊的 run**：`ci.yml`、`android.yml`、`ios.yml` 的 `concurrency` 設為 `cancel-in-progress: ${{ github.event_name == 'pull_request' }}`。
+  - 同一個 PR 推了新的 commit 時，舊的 run 才會被取消。
+  - main 上已經開始的 run 一定會跑完。CD staging 要等這三個 workflow 都在同一個 main commit 上成功才會部署；iOS 模擬器約要 40 分鐘，而 main 合併的頻率比這更高。之前 main 的 push 也會被下一次 push 取消，結果 CD 一直等不到跑完的 commit，staging 從 02cf55a 之後就停止部署（#265）。
+  - GitHub 的 concurrency 群組最多保留一個排隊中的 run。所以 main 連續合併時，排隊中的舊 commit 會被更新的 commit 取代，但進行中的那個和最新的那個都會跑完。CD 依序部署跑完的 commit，最後一定會部署到最新的 main。
+  - CodeQL 照舊會取消舊的 run，因為 CD 不等它。
 - 這與 CLAUDE.md 的「全綠」定義一致：CI 通過才算全綠。
 
 ## CD：staging（每次合併到 main）
