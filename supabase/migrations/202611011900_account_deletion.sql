@@ -383,6 +383,13 @@ language sql stable set search_path='' as $$
 $$;
 revoke execute on function private.signed_in_within(interval) from public,anon,authenticated,service_role;
 
+-- 管理員（app metadata，使用者自己改不了）。
+create function private.account_is_admin(p_user uuid) returns boolean
+language sql stable security definer set search_path='' as $$
+  select exists(select 1 from auth.users u where u.id=p_user and u.raw_app_meta_data->>'role'='admin');
+$$;
+revoke execute on function private.account_is_admin(uuid) from public,anon,authenticated,service_role;
+
 create function private.account_deletion_state(p_user uuid) returns jsonb
 language sql stable security definer set search_path='' as $$
   select coalesce(
@@ -391,16 +398,12 @@ language sql stable security definer set search_path='' as $$
     jsonb_build_object('status','none','requested_at',null,'scheduled_at',null))
   ||jsonb_build_object(
     'cancelled_at',(select c.cancelled_at from private.account_deletion_cancellations c where c.user_id=p_user),
-    'cancelled_by_sign_in',(select c.by_sign_in from private.account_deletion_cancellations c where c.user_id=p_user));
+    'cancelled_by_sign_in',(select c.by_sign_in from private.account_deletion_cancellations c where c.user_id=p_user),
+    -- App 在說明頁就能提示「要先移除管理權限」（Q-APP-22）。
+    'can_self_delete',not private.account_is_admin(p_user),
+    'cannot_self_delete_reason',case when private.account_is_admin(p_user) then 'account.admin_cannot_self_delete' end);
 $$;
 revoke execute on function private.account_deletion_state(uuid) from public,anon,authenticated,service_role;
-
--- 管理員（app metadata，使用者自己改不了）。
-create function private.account_is_admin(p_user uuid) returns boolean
-language sql stable security definer set search_path='' as $$
-  select exists(select 1 from auth.users u where u.id=p_user and u.raw_app_meta_data->>'role'='admin');
-$$;
-revoke execute on function private.account_is_admin(uuid) from public,anon,authenticated,service_role;
 
 -- 取消一筆申請：刪除、稽核、恢復點位上的名稱。
 create function private.account_deletion_cancel(p private.account_deletion_requests,p_by_sign_in boolean) returns void

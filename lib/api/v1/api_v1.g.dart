@@ -775,6 +775,8 @@ class AccountDeletionState {
     this.scheduledAt,
     this.cancelledAt,
     this.cancelledBySignIn,
+    required this.canSelfDelete,
+    this.cannotSelfDeleteReason,
   });
 
   factory AccountDeletionState.fromJson(Map<String, Object?> json) =>
@@ -792,6 +794,10 @@ class AccountDeletionState {
         cancelledBySignIn: json['cancelled_by_sign_in'] == null
             ? null
             : json['cancelled_by_sign_in'] as bool,
+        canSelfDelete: json['can_self_delete'] as bool,
+        cannotSelfDeleteReason: json['cannot_self_delete_reason'] == null
+            ? null
+            : json['cannot_self_delete_reason'] as String,
       );
 
   /// none：沒有申請；pending：冷靜期中，到 scheduled_at 後刪除
@@ -809,12 +815,20 @@ class AccountDeletionState {
   /// 最近一次取消是否由新的登入自動觸發；沒有取消紀錄時為 null
   final bool? cancelledBySignIn;
 
+  /// 這個帳號能不能自助申請刪除；管理員為 false（要先由其他管理員移除權限）。App 在刪除說明頁就依此提示
+  final bool canSelfDelete;
+
+  /// 不能自助刪除的原因（錯誤碼）；可以時為 null
+  final String? cannotSelfDeleteReason;
+
   Map<String, Object?> toJson() => {
     'status': status,
     'requested_at': requestedAt,
     'scheduled_at': scheduledAt,
     'cancelled_at': cancelledAt,
     'cancelled_by_sign_in': cancelledBySignIn,
+    'can_self_delete': canSelfDelete,
+    'cannot_self_delete_reason': cannotSelfDeleteReason,
   };
 
   @override
@@ -824,7 +838,9 @@ class AccountDeletionState {
       other.requestedAt == requestedAt &&
       other.scheduledAt == scheduledAt &&
       other.cancelledAt == cancelledAt &&
-      other.cancelledBySignIn == cancelledBySignIn;
+      other.cancelledBySignIn == cancelledBySignIn &&
+      other.canSelfDelete == canSelfDelete &&
+      other.cannotSelfDeleteReason == cannotSelfDeleteReason;
 
   @override
   int get hashCode => Object.hashAll([
@@ -833,6 +849,8 @@ class AccountDeletionState {
     scheduledAt,
     cancelledAt,
     cancelledBySignIn,
+    canSelfDelete,
+    cannotSelfDeleteReason,
   ]);
 }
 
