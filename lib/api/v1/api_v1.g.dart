@@ -773,8 +773,6 @@ class AccountDeletionState {
     required this.status,
     this.requestedAt,
     this.scheduledAt,
-    this.cancelledAt,
-    this.cancelledBySignIn,
     required this.canSelfDelete,
     this.cannotSelfDeleteReason,
   });
@@ -788,12 +786,6 @@ class AccountDeletionState {
         scheduledAt: json['scheduled_at'] == null
             ? null
             : json['scheduled_at'] as String,
-        cancelledAt: json['cancelled_at'] == null
-            ? null
-            : json['cancelled_at'] as String,
-        cancelledBySignIn: json['cancelled_by_sign_in'] == null
-            ? null
-            : json['cancelled_by_sign_in'] as bool,
         canSelfDelete: json['can_self_delete'] as bool,
         cannotSelfDeleteReason: json['cannot_self_delete_reason'] == null
             ? null
@@ -809,12 +801,6 @@ class AccountDeletionState {
   /// ISO 8601 時間。最早刪除時間（申請＋7 天），實際在之後的每日排程（台灣 03:41）執行；none 時為 null
   final String? scheduledAt;
 
-  /// ISO 8601 時間。最近一次取消的時間；沒有取消過或之後又申請時為 null
-  final String? cancelledAt;
-
-  /// 最近一次取消是否由新的登入自動觸發；沒有取消紀錄時為 null
-  final bool? cancelledBySignIn;
-
   /// 這個帳號能不能自助申請刪除；管理員為 false（要先由其他管理員移除權限）。App 在刪除說明頁就依此提示
   final bool canSelfDelete;
 
@@ -825,8 +811,6 @@ class AccountDeletionState {
     'status': status,
     'requested_at': requestedAt,
     'scheduled_at': scheduledAt,
-    'cancelled_at': cancelledAt,
-    'cancelled_by_sign_in': cancelledBySignIn,
     'can_self_delete': canSelfDelete,
     'cannot_self_delete_reason': cannotSelfDeleteReason,
   };
@@ -837,8 +821,6 @@ class AccountDeletionState {
       other.status == status &&
       other.requestedAt == requestedAt &&
       other.scheduledAt == scheduledAt &&
-      other.cancelledAt == cancelledAt &&
-      other.cancelledBySignIn == cancelledBySignIn &&
       other.canSelfDelete == canSelfDelete &&
       other.cannotSelfDeleteReason == cannotSelfDeleteReason;
 
@@ -847,8 +829,6 @@ class AccountDeletionState {
     status,
     requestedAt,
     scheduledAt,
-    cancelledAt,
-    cancelledBySignIn,
     canSelfDelete,
     cannotSelfDeleteReason,
   ]);
