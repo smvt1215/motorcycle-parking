@@ -197,13 +197,17 @@ void main() {
       (widget) => widget is IconButton && widget.tooltip == '搜尋停車點',
     );
     expect(tester.widget<IconButton>(searchButton).onPressed, isNull);
-    await tester.tap(find.text('全部格位'));
+    await tester.tap(find.byKey(const ValueKey('space-filter')));
     await tester.pumpAndSettle();
-    // The seven bay kinds and the lot (#188, P1).
+    // The seven bay kinds and the lot (#188, P1), picked several at a
+    // time; the sheet stays open until closed.
     expect(find.text('一般機車格'), findsOneWidget);
     expect(find.text('普大共用格'), findsOneWidget);
-    await tester.tap(find.text('一般機車格'));
+    await tester.tap(find.byKey(const ValueKey('space-multi-motorcycle')));
     await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('關閉'));
+    await tester.pumpAndSettle();
+    expect(find.text('一般機車格'), findsOneWidget);
     final input = find.byKey(const ValueKey('parking-search'));
     await tester.enterText(input, '[範例]');
     await tester.pumpAndSettle();
@@ -226,7 +230,7 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
-  testWidgets('隱藏不可停篩選、搜尋依可停程度排序，並可開啟地圖圖例', (tester) async {
+  testWidgets('現在可停篩選、搜尋依可停程度排序，並可開啟地圖圖例', (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(390, 844);
     addTearDown(tester.view.resetPhysicalSize);
@@ -254,9 +258,9 @@ void main() {
     expect(find.textContaining('不可停 · 汽車格'), findsOneWidget);
     await tester.tapAt(const Offset(30, 550));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('隱藏不可停'));
+    await tester.ensureVisible(find.text('現在可停'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('隱藏不可停'));
+    await tester.tap(find.text('現在可停'));
     await tester.pumpAndSettle();
     await tester.tap(input);
     await tester.pumpAndSettle();
