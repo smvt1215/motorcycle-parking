@@ -11,7 +11,62 @@
       "url": "/rest/v1"
     }
   ],
-  "paths": {},
+  "paths": {
+    "/rpc/set_min_supported_app_version": {
+      "post": {
+        "operationId": "admin_v1_set_min_supported_app_version",
+        "summary": "設定 App 的最低支援版本",
+        "description": "唯一能修改 client_config.min_supported_app_version 的途徑，每次修改都寫入 admin_audit_log。管理員（aal2）可以調高或調低；CD（service_role）只能調高，調低或相同時不動，並回 changed: false，p_reason 帶上 run 的網址。調高前要先確認新版已在 App Store 與 Google Play 上架。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "p_version",
+                  "p_reason"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "p_version": {
+                    "type": "string",
+                    "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+                    "description": "新的最低版本 x.y.z"
+                  },
+                  "p_reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 400,
+                    "description": "原因；CD 帶上 run 的網址"
+                  }
+                },
+                "example": {
+                  "p_version": "0.1.0",
+                  "p_reason": "contract check"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "目前生效的最低版本",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MinAppVersion"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    }
+  },
   "components": {
     "schemas": {
       "ApiError": {
@@ -41,6 +96,25 @@
               "string",
               "null"
             ]
+          }
+        }
+      },
+      "MinAppVersion": {
+        "type": "object",
+        "required": [
+          "min_supported_app_version",
+          "changed"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "min_supported_app_version": {
+            "type": "string",
+            "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+            "description": "目前生效的最低版本"
+          },
+          "changed": {
+            "type": "boolean",
+            "description": "這次呼叫是否改了值"
           }
         }
       }
