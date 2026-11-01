@@ -175,6 +175,19 @@ void main() {
           await _tap(tester, chip);
           expect(_shown(), expected, reason: '$at');
         }
+        // Without touching the filter: time alone moves the map across a
+        // boundary. 22:59:30 still shows the night lot; at 23:00 it closes.
+        now = DateTime.utc(2026, 11, 3, 14, 59, 30);
+        await _tap(tester, chip);
+        await _tap(tester, chip);
+        expect(_shown(), {'全天', '禁停', '夜間'});
+        now = DateTime.utc(2026, 11, 3, 15);
+        await tester.pump(const Duration(seconds: 30));
+        await tester.pumpAndSettle();
+        expect(_shown(), {'全天', '禁停'});
+        // Turned off, nothing is left ticking.
+        await _tap(tester, chip);
+        expect(_shown(), _ids.toSet());
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
         debugDefaultTargetPlatformOverride = null;

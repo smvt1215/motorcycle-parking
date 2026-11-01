@@ -69,6 +69,29 @@ class _MapPageState extends ConsumerState<MapPage> {
   final _parkableNowCache = Map<ParkingSpot, bool>.identity();
   Object? _parkableNowKey;
 
+  /// Rebuilds at the next whole minute while 「現在可停」 is on, so spots
+  /// come and go as slots and 禁停 periods begin and end even when nothing
+  /// else (a live count poll, a pan) rebuilds the map. Slots and 禁停
+  /// periods start and end on whole minutes, the cache's step.
+  Timer? _parkableNowTick;
+
+  void _tickParkableNow(DateTime now) {
+    if (_parkableNowTick != null) return;
+    final ms = now.millisecondsSinceEpoch % Duration.millisecondsPerMinute;
+    _parkableNowTick = Timer(
+      Duration(milliseconds: Duration.millisecondsPerMinute - ms),
+      () {
+        _parkableNowTick = null;
+        if (mounted && parkableNowOnly) setState(() {});
+      },
+    );
+  }
+
+  void _stopParkableNow() {
+    _parkableNowTick?.cancel();
+    _parkableNowTick = null;
+  }
+
   bool _parkableNow(AppStore store, ParkingSpot spot, DateTime now) {
     final key = (
       store.vehicle,
@@ -267,6 +290,7 @@ class _MapPageState extends ConsumerState<MapPage> {
   void _clearFilters() => setState(() {
     kinds = const {};
     parkableNowOnly = false;
+    _stopParkableNow();
     availabilityFilter = AvailabilityFilter.off;
   });
 
@@ -338,6 +362,7 @@ class _MapPageState extends ConsumerState<MapPage> {
 
   @override
   void dispose() {
+    _stopParkableNow();
     launchStore.removeListener(_afterLaunch);
     lifecycle.dispose();
     controller.dispose();
@@ -367,6 +392,7 @@ class _MapPageState extends ConsumerState<MapPage> {
       (s) => store.viewport.contains(s.lat, s.lng),
     );
     final now = store.clock();
+    if (parkableNowOnly) _tickParkableNow(now);
     final spots = visible
         .where(
           (s) =>
@@ -854,9 +880,10 @@ class _MapPageState extends ConsumerState<MapPage> {
                             key: const ValueKey('parkable-filter'),
                             label: parkableNowLabel,
                             selected: parkableNowOnly,
-                            onTap: () => setState(
-                              () => parkableNowOnly = !parkableNowOnly,
-                            ),
+                            onTap: () => setState(() {
+                              parkableNowOnly = !parkableNowOnly;
+                              if (!parkableNowOnly) _stopParkableNow();
+                            }),
                           ),
                           if (store.availabilitySource.enabled)
                             MapFilterChip(

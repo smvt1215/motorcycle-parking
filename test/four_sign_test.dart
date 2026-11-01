@@ -1772,11 +1772,9 @@ void main() {
   });
 
   group('現在可停依時段、現在禁停路牌（#244）', () {
-    ParkingSpot banned(
-      String from,
-      String to, {
-      List<Map<String, String>> more = const [],
-    }) => ParkingSpot.fromJson({
+    /// A toll motorcycle bay under 禁停 [from]–[to] every day; all day when
+    /// both are left out (the contract's whole-day form).
+    ParkingSpot banned(String? from, String? to) => ParkingSpot.fromJson({
       ...street.toJson(),
       'parking_segments': [
         {
@@ -1791,8 +1789,7 @@ void main() {
               {
                 'kind': 'no_parking',
                 'periods': [
-                  {'days': 'all', 'from': from, 'to': to},
-                  ...more,
+                  {'days': 'all', 'from': ?from, 'to': ?to},
                 ],
               },
             ],
@@ -1830,13 +1827,8 @@ void main() {
     });
 
     test('整週都禁停、算不出可停時間：小字與朗讀寫看現場公告', () {
-      final spot = banned(
-        '00:00',
-        '12:00',
-        more: [
-          {'days': 'all', 'from': '12:00', 'to': '00:00'},
-        ],
-      );
+      // All day: 禁停 with no from and to (the contract's whole-day form).
+      final spot = banned(null, null);
       final decided = decideParking(spot, VehicleType.scooter, rules, now: day);
       expect(decided.gaps, contains(DecisionGap.noParkingNow));
       expect(decided.nextParkableAt, isNull);
@@ -1851,6 +1843,60 @@ void main() {
         ('現在禁停', '看現場公告', PlateTone.conditional),
       );
       expect(p[0].semantics, '能不能停：現在禁停，看現場公告');
+    });
+
+    test('禁停結束時已沒有開放時段（公告明天到期）：不寫禁停結束時間，寫看現場公告', () {
+      // Open 10:00–12:00 on the notice that ends tomorrow, 禁停 11:00–15:00;
+      // read at 11:30, 禁停 ends at 15:00 but nothing opens after it.
+      final spot = ParkingSpot.fromJson({
+        ...street.toJson(),
+        'parking_segments': [
+          {
+            'id': 's1',
+            'name': '南側汽機車共用格',
+            'side': 'south',
+            'condition': {
+              'bay': 'car',
+              'use': 'share',
+              'share': 'car_motorcycle',
+              'charge': 'toll',
+              'basis': {
+                'source_url': 'https://example.com/notice',
+                'expires_on': '2026-11-04',
+              },
+              'schedule': [
+                {
+                  'days': 'all',
+                  'from': '10:00',
+                  'to': '12:00',
+                  'vehicles': ['scooter'],
+                },
+              ],
+              'limits': [
+                {
+                  'kind': 'no_parking',
+                  'periods': [
+                    {'days': 'all', 'from': '11:00', 'to': '15:00'},
+                  ],
+                },
+              ],
+            },
+          },
+        ],
+      });
+      final at = DateTime.utc(2026, 11, 3, 3, 30);
+      final decided = decideParking(spot, VehicleType.scooter, rules, now: at);
+      expect(decided.gaps, contains(DecisionGap.noParkingNow));
+      expect(decided.nextParkableAt, DateTime.utc(2026, 11, 3, 7));
+      final sign = fourSign(spot, VehicleType.scooter, rules, now: at);
+      expect(
+        (sign.verdict.noParkingNow, sign.verdict.parkableAt),
+        (true, null),
+      );
+      final p = plates(spot, VehicleType.scooter, at);
+      expect((p[0].main, p[0].note), ('現在禁停', '看現場公告'));
+      expect(p[0].note, isNot(contains('15:00')));
+      expect(p[0].semantics, isNot(contains('15:00')));
     });
 
     test('可停時間依臺北日期：今天、明天、其他日子寫週幾', () {

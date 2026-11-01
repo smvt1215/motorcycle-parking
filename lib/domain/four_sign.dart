@@ -684,25 +684,18 @@ VerdictAnswer _verdict(
             (a, b) => b.window.opensAtMinute! < a.window.opensAtMinute! ? b : a,
           );
     // 現在禁停 (#244): every open place is under a 禁停 period now. The
-    // vehicle parks again when the period ends, or later when the first
-    // place's own slots open later still (the window already leaves 禁停
-    // out, so it never opens sooner).
+    // vehicle parks again when the first place opens: its window already
+    // leaves 禁停 out, so it never opens before 禁停 ends. When no place
+    // opens again within the week (its slots or notice end first), when
+    // is unknown: the end of 禁停 alone opens nothing.
     final banned = whole.gaps.contains(DecisionGap.noParkingNow);
     DateTime? parkableAt;
-    if (banned) {
+    if (banned && first != null) {
       final (today, _) = taipeiDateMinute(now);
       // Taipei is UTC+8 all year.
-      final opens = first == null
-          ? null
-          : today
-                .add(Duration(minutes: first.window.opensAtMinute!))
-                .subtract(const Duration(hours: 8));
-      final ends = whole.nextParkableAt;
-      parkableAt = ends == null || opens == null
-          ? opens ?? ends
-          : opens.isAfter(ends)
-          ? opens
-          : ends;
+      parkableAt = today
+          .add(Duration(minutes: first.window.opensAtMinute!))
+          .subtract(const Duration(hours: 8));
     }
     return VerdictAnswer(
       status: EligibilityStatus.conditional,
