@@ -1051,28 +1051,37 @@ ParkingDecision _segmented(
   );
 }
 
-/// A segment's condition as judged: its own, with what it leaves out
-/// (the bay, its use, the charge, limits and slots) taken from the spot's
-/// when it names no bay of its own; null takes the spot's whole.
-ParkingCondition? _segmentCondition(
-  ParkingCondition? seg,
-  ParkingCondition? spot,
-) {
-  if (seg == null || seg.bay != null || spot == null) return seg;
+/// The condition [segment] of [spot] is judged by, the one [decideParking]
+/// uses for that segment.
+///
+/// - No condition on the segment: the spot's whole condition (its own, else
+///   the one its `space_type` stands for); null when neither is known.
+/// - The segment names its own bay, or the spot's condition is unknown:
+///   the segment's condition as is.
+/// - Otherwise the segment's condition with what it leaves out taken from
+///   the spot's: the bay, its use and share always; the charge and the
+///   slots when the segment has none; limits by kind, the segment's
+///   replacing the spot's of the same kind while the others (限電動, 身障)
+///   stay; the basis when the segment has none.
+/// - `allow` is always the segment's: who may park is stated per segment,
+///   never inherited from the spot.
+ParkingCondition? segmentConditionOf(ParkingSegment segment, ParkingSpot spot) {
+  final whole = spot.condition ?? conditionOf(spot.spaceType);
+  final seg = segment.condition;
+  if (seg == null) return whole;
+  if (seg.bay != null || whole == null) return seg;
   return ParkingCondition(
-    bay: spot.bay,
-    use: spot.use,
-    share: spot.share,
-    charge: seg.charge ?? spot.charge,
-    // By kind: the segment's own replace the spot's of the same kind; the
-    // others (限電動, 身障) stay as the bay has them.
+    bay: whole.bay,
+    use: whole.use,
+    share: whole.share,
+    charge: seg.charge ?? whole.charge,
     limits: [
-      for (final l in spot.limits)
+      for (final l in whole.limits)
         if (!seg.hasLimit(l.kind)) l,
       ...seg.limits,
     ]..sort((a, b) => a.kind.index.compareTo(b.kind.index)),
-    schedule: seg.schedule.isEmpty ? spot.schedule : seg.schedule,
-    basis: seg.basis ?? spot.basis,
+    schedule: seg.schedule.isEmpty ? whole.schedule : seg.schedule,
+    basis: seg.basis ?? whole.basis,
     allow: seg.allow,
   );
 }
@@ -1145,10 +1154,7 @@ ParkingCondition? _segmentCondition(
     trusted,
     source,
     calendar,
-    condition: _segmentCondition(
-      seg.condition,
-      spot.condition ?? conditionOf(spot.spaceType),
-    ),
+    condition: segmentConditionOf(seg, spot),
   );
   return (
     zone: z(

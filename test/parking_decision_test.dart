@@ -707,6 +707,284 @@ void main() {
       );
     });
 
+    group('segmentConditionOf：路段條件與點位條件的合成', () {
+      ParkingSegment seg(Map<String, Object?>? condition) =>
+          ParkingSegment.fromJson({'name': 'A', 'condition': ?condition});
+      ParkingSpot spotWith(
+        Map<String, Object?>? condition, {
+        SpaceType type = SpaceType.paidMotorcycle,
+      }) => street(type, condition: condition == null ? null : c(condition));
+
+      test('路段寫了自己的格位：照路段的條件，不從點位補', () {
+        final spot = spotWith({
+          'bay': 'motorcycle',
+          'use': 'usual',
+          'charge': 'toll',
+          'limits': [
+            {'kind': 'ev_only'},
+          ],
+          'basis': basisOk,
+        });
+        final s = seg({
+          'bay': 'car',
+          'use': 'usual',
+          'allow': {'scooter': false, 'heavy': true},
+        });
+        final got = segmentConditionOf(s, spot)!;
+        expect(got.toJson(), s.condition!.toJson());
+        expect(got.charge, isNull);
+        expect(got.limits, isEmpty);
+        expect(got.basis, isNull);
+      });
+
+      test('路段沒有條件：取點位的條件，點位也沒有時取 space_type 的', () {
+        final spot = spotWith({
+          'bay': 'motorcycle',
+          'use': 'usual',
+          'charge': 'free',
+        });
+        expect(
+          segmentConditionOf(seg(null), spot)!.toJson(),
+          spot.condition!.toJson(),
+        );
+        expect(
+          segmentConditionOf(
+            seg(null),
+            spotWith(null, type: SpaceType.heavyOnly),
+          )!.toJson(),
+          conditionOf(SpaceType.heavyOnly)!.toJson(),
+        );
+        expect(
+          segmentConditionOf(
+            seg(null),
+            spotWith(null, type: SpaceType.offStreet),
+          ),
+          isNull,
+        );
+      });
+
+      test('路段沒寫格位：格位、用途、收費、時段與依據由點位補', () {
+        final spot = spotWith({
+          ...shareToll,
+          'schedule': [
+            {
+              'days': 'all',
+              'from': '08:00',
+              'to': '20:00',
+              'vehicles': ['scooter', 'heavy'],
+            },
+          ],
+          'basis': basisOk,
+        });
+        final got = segmentConditionOf(
+          seg({
+            'allow': {'scooter': true, 'heavy': true},
+          }),
+          spot,
+        )!;
+        expect(got.bay, Bay.motorcycle);
+        expect(got.use, BayUse.share);
+        expect(got.share, ShareKind.scooterHeavy);
+        expect(got.charge, Charge.toll);
+        expect(
+          [for (final x in got.schedule) x.toJson()],
+          [for (final x in spot.condition!.schedule) x.toJson()],
+        );
+        expect(got.basis?.toJson(), spot.condition!.basis!.toJson());
+        expect(got.allow?.heavy, isTrue);
+      });
+
+      test('路段自己的收費、時段與依據優先於點位的', () {
+        final spot = spotWith({
+          'bay': 'motorcycle',
+          'use': 'usual',
+          'charge': 'toll',
+          'schedule': [
+            {
+              'days': 'all',
+              'from': '08:00',
+              'to': '20:00',
+              'vehicles': ['scooter'],
+            },
+          ],
+          'basis': basisOk,
+        });
+        final own = seg({
+          'charge': 'free',
+          'schedule': [
+            {
+              'days': 'all',
+              'from': '00:00',
+              'to': '23:59',
+              'vehicles': ['scooter', 'heavy'],
+            },
+          ],
+          'basis': basisEnded,
+        });
+        final got = segmentConditionOf(own, spot)!;
+        expect(got.bay, Bay.motorcycle);
+        expect(got.charge, Charge.free);
+        expect(
+          [for (final x in got.schedule) x.toJson()],
+          [for (final x in own.condition!.schedule) x.toJson()],
+        );
+        expect(got.basis?.toJson(), own.condition!.basis!.toJson());
+      });
+
+      test('限制依種類合併：同種由路段取代，限電動、身障特製車不被蓋掉', () {
+        final spot = spotWith({
+          'bay': 'motorcycle',
+          'use': 'usual',
+          'limits': [
+            {'kind': 'time_limit', 'max_minutes': 60},
+            {'kind': 'special_vehicle', 'vehicle': 'disabled_modified'},
+            {'kind': 'ev_only'},
+          ],
+        });
+        final got = segmentConditionOf(
+          seg({
+            'limits': [
+              {'kind': 'time_limit', 'max_minutes': 120},
+              {
+                'kind': 'no_parking',
+                'periods': [
+                  {'days': 'holiday'},
+                ],
+              },
+            ],
+          }),
+          spot,
+        )!;
+        expect(
+          [for (final l in got.limits) l.kind],
+          [
+            LimitKind.timeLimit,
+            LimitKind.specialVehicle,
+            LimitKind.evOnly,
+            LimitKind.noParking,
+          ],
+        );
+        expect(got.limits.first.maxMinutes, 120);
+        expect(got.limits[1].vehicle, SpecialVehicle.disabledModified);
+      });
+
+      test('allow 一律取路段的：路段沒寫就是沒寫，不從點位繼承', () {
+        final spot = spotWith({
+          'bay': 'motorcycle',
+          'use': 'usual',
+          'charge': 'free',
+        });
+        expect(
+          segmentConditionOf(
+            seg({
+              'allow': {'scooter': true, 'heavy': false},
+            }),
+            spot,
+          )!.allow?.heavy,
+          isFalse,
+        );
+        expect(
+          segmentConditionOf(seg({'charge': 'toll'}), spot)!.allow,
+          isNull,
+        );
+      });
+
+      test('decideParking 逐段判斷用的就是 segmentConditionOf 的結果', () {
+        // A segment that names no bay is judged on the spot's 限電動 bay.
+        final spot = ParkingSpot(
+          id: 'ev',
+          name: 'ev',
+          lat: 25,
+          lng: 121,
+          city: '臺北市',
+          spaceType: SpaceType.evMotorcycle,
+          condition: c({
+            'bay': 'motorcycle',
+            'limits': [
+              {'kind': 'ev_only'},
+            ],
+          }),
+          source: 'official',
+          segments: [
+            seg({
+              'allow': {'scooter': true, 'heavy': true},
+            }),
+          ],
+        );
+        final merged = segmentConditionOf(spot.segments.single, spot)!;
+        expect(merged.hasLimit(LimitKind.evOnly), isTrue);
+        final d = decideParking(spot, VehicleType.scooter, bundled, now: now);
+        expect(d.restriction, RuleRestriction.evOnly);
+      });
+    });
+
+    test('分段路邊點在重機規則生效前：汽車格段、重機專用格段依法可停，機車格段待確認（#255）', () {
+      ParkingSegment seg(String name, Map<String, Object?> condition) =>
+          ParkingSegment.fromJson({'name': name, 'condition': condition});
+      ParkingSpot spotOf(List<ParkingSegment> segments) => ParkingSpot(
+        id: 'segments-before',
+        name: 'segments-before',
+        lat: 25,
+        lng: 121,
+        city: '臺北市',
+        spaceType: SpaceType.paidMotorcycle,
+        condition: c({'bay': 'motorcycle', 'use': 'usual', 'charge': 'toll'}),
+        source: 'official',
+        segments: segments,
+      );
+      final spot = spotOf([
+        seg('汽車格', {'bay': 'car', 'use': 'usual', 'charge': 'toll'}),
+        seg('重機專用格', {'bay': 'heavy', 'use': 'usual'}),
+        seg('收費機車格', {'charge': 'toll'}),
+      ]);
+      // The bundled Taipei heavy rule starts 2026-10-06 (Taiwan).
+      final before = DateTime.utc(2026, 10, 5, 4);
+      final d = decideParking(spot, VehicleType.heavy, bundled, now: before);
+      expect(
+        [for (final z in d.segments) z.status],
+        [
+          EligibilityStatus.allowed,
+          EligibilityStatus.allowed,
+          EligibilityStatus.unverified,
+        ],
+      );
+      expect(d.segments[0].reason, lawfulReason);
+      expect(d.segments[1].reason, lawfulReason);
+      expect(d.segments[2].reason, noRuleReason);
+      // The spot is as open as its open segments, on the law alone.
+      expect(d.status, EligibilityStatus.allowed);
+      expect(d.reason, '汽車格：$lawfulReason；重機專用格：$lawfulReason');
+      final kinds = [for (final b in d.basis) b.kind];
+      expect(kinds, contains(BasisKind.law));
+      expect(kinds, isNot(contains(BasisKind.cityRule)));
+      // The same segments judged alone agree with the spot's segments.
+      for (final (i, s) in spot.segments.indexed) {
+        final one = decideParking(
+          spotOf([s]),
+          VehicleType.heavy,
+          bundled,
+          now: before,
+        );
+        expect(one.status, d.segments[i].status, reason: s.name);
+        expect(one.reason, d.segments[i].reason, reason: s.name);
+      }
+
+      // Once the rule is in force the 收費機車格 opens too, under the rule.
+      final after = decideParking(spot, VehicleType.heavy, bundled, now: now);
+      expect(
+        [for (final z in after.segments) z.status],
+        [
+          EligibilityStatus.allowed,
+          EligibilityStatus.allowed,
+          EligibilityStatus.allowed,
+        ],
+      );
+      expect(after.status, EligibilityStatus.allowed);
+      expect([
+        for (final b in after.basis) b.kind,
+      ], contains(BasisKind.cityRule));
+    });
+
     test('普大共用標示是公告；有效時比縣市規則具體，到期回到規則或待確認', () {
       ParkingDecision share(Map<String, Object?>? basis, String city) =>
           decideParking(
