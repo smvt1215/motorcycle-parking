@@ -1628,6 +1628,105 @@ void main() {
       });
     });
 
+    test('共用格時段：只有靠規則借用的機車時段截在規則到期日（Codex P2）', () {
+      // The Taipei heavy rule ends on 2026-11-08 (Sunday).
+      final ending = [
+        for (final r in rules)
+          if (r.city == '臺北市' && r.vehicle == VehicleType.heavy)
+            CityRule(
+              city: r.city,
+              vehicle: r.vehicle,
+              allowedSpaceTypes: r.allowedSpaceTypes,
+              conditionalSpaceTypes: r.conditionalSpaceTypes,
+              feeNote: r.feeNote,
+              exceptions: r.exceptions,
+              sourceUrl: r.sourceUrl,
+              version: r.version,
+              effectiveDate: r.effectiveDate,
+              canUseTwoSpaces: r.canUseTwoSpaces,
+              expiresOn: DateTime(2026, 11, 8),
+            )
+          else
+            r,
+      ];
+      // 2026-11-07 21:00 in Taiwan, the rule's last night.
+      final lastNight = DateTime.utc(2026, 11, 7, 13);
+      ParkingSpot slots(List<String> vehicles) => withSegments([
+        {
+          'id': 'x',
+          'name': '汽機車共用格',
+          'condition': {
+            'bay': 'car',
+            'use': 'share',
+            'share': 'car_motorcycle',
+            'charge': 'toll',
+            'schedule': [
+              {
+                'days': 'all',
+                'from': '20:00',
+                'to': '08:00',
+                'vehicles': vehicles,
+              },
+            ],
+          },
+        },
+      ]);
+      SegmentDecision judge(ParkingSpot spot) => decideSegments(
+        spot,
+        VehicleType.heavy,
+        ending,
+        now: lastNight,
+      ).single;
+      // Car slots stand on the law, heavy slots on the notice: on to 08:00.
+      for (final vehicles in [
+        ['car'],
+        ['heavy'],
+      ]) {
+        final seg = judge(slots(vehicles));
+        expect(seg.open, isTrue, reason: '$vehicles');
+        expect(
+          (seg.window.now, seg.window.until),
+          (true, '08:00'),
+          reason: '$vehicles',
+        );
+      }
+      // Scooter slots borrowed through the rule end with it.
+      final borrowed = judge(slots(['scooter']));
+      expect(borrowed.open, isTrue);
+      expect((borrowed.window.now, borrowed.window.until), (true, '00:00'));
+    });
+
+    test('場站有只寫費率的分區：整場時段只列普通機車時，大型重機不判可停（Codex P2）', () {
+      final spot = ParkingSpot.fromJson({
+        ...lotJson,
+        'parking_zones': [
+          {
+            'id': 'f',
+            'name': 'B1',
+            'fee': {
+              'heavy': {'mode': 'hourly', 'amount': 30, 'per_minutes': 60},
+            },
+          },
+        ],
+        'condition': {
+          'bay': 'car',
+          'use': 'usual',
+          'schedule': [
+            {
+              'days': 'all',
+              'from': '08:00',
+              'to': '20:00',
+              'vehicles': ['scooter'],
+            },
+          ],
+        },
+      });
+      expect(spot.zones.single.condition, isNull);
+      final p = plates(spot, VehicleType.heavy, day);
+      expect(p[0].main, isNot('可停'));
+      expect(p[0].main, '待確認');
+    });
+
     test('禁停時段：路牌現在不能停、寫幾點起，與 decideParking 的現在禁停一致', () {
       final spot = withSegments([
         {

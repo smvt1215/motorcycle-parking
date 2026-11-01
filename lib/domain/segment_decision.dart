@@ -205,8 +205,18 @@ OpenWindow openWindow(
   // The decision already reads a slot-less schedule as unconfirmed; an
   // open status here means something else opened it.
   if (slots.isEmpty) return read(const [(_past, _future)]);
-  return read([
-    for (final s in slots)
+  // On a shared car bay a heavy bike's slots stand on different grounds:
+  // the car slots on the law, the slots naming heavy bikes on the notice,
+  // and only the scooter slots on the city rule. HeavyShareSlots gives the
+  // grounds per kind, not per slot, so a slot is read by its vehicles: one
+  // for scooters alone is borrowed through the rule and ends with it; the
+  // others end only with the notice.
+  bool borrowed(ScheduleSlot s) =>
+      !s.vehicles.contains(SlotVehicle.car) &&
+      !s.vehicles.contains(SlotVehicle.heavy);
+  List<(int, int)> spansOf(ScheduleSlot s) {
+    final stop = heavy && carShare && !borrowed(s) ? noticeEnd : until;
+    return [
       for (final (start, end) in datedSpans(
         s.days,
         s.from,
@@ -217,9 +227,12 @@ OpenWindow openWindow(
       ))
         (
           from != null && start < from ? from : start,
-          until != null && end > until ? until : end,
+          stop != null && end > stop ? stop : end,
         ),
-  ]);
+    ];
+  }
+
+  return read([for (final s in slots) ...spansOf(s)]);
 }
 
 /// The window [open] (merged spans, minutes from [today]'s 00:00) gives

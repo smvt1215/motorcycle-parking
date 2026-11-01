@@ -473,11 +473,9 @@ List<SignArea> _lotAreas(
   }
   // A whole lot's decision does not read its own slots: a schedule that
   // lists none for this vehicle states no time it may park (待確認), not
-  // all day.
-  final silent =
-      lotOpen &&
-      whole.zones.isEmpty &&
-      scheduleSilentFor(spot.condition, vehicle);
+  // all day. So whenever the lot stands as one place, also beside zones
+  // that say nothing (only a fee, no access data).
+  final silent = lotOpen && scheduleSilentFor(spot.condition, vehicle);
   final status = silent ? EligibilityStatus.unverified : whole.status;
   return [
     SignArea(
