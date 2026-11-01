@@ -13,10 +13,15 @@ import '../models/spot_history.dart';
 import '../domain/map_viewport.dart';
 import '../domain/eligibility.dart' show useParkingDecision;
 import '../domain/precheck.dart';
+import 'rules_cache.dart';
 
 class RulesRepository {
-  RulesRepository(this.client);
+  RulesRepository(this.client, {this.cache});
   final SupabaseClient? client;
+
+  /// Where downloaded rules are kept for offline use; null keeps none (the
+  /// admin site, tests).
+  final RulesCache? cache;
 
   /// Every rule as stored, expired ones and their `expires_on` included
   /// (`city_rules_v2()`, §3.2). A backend not yet migrated lacks it; its
@@ -37,31 +42,14 @@ class RulesRepository {
     }
   }
 
+  /// Bundled rules, overlaid with the backend's (see [overlayRules]). With a
+  /// [cache], a successful download is stored for offline launches.
   Future<List<CityRule>> load() async {
-    final raw = jsonDecode(
-      await rootBundle.loadString('assets/rules/parking_rules.json'),
-    ) as List<dynamic>;
-    final rules = raw
-        .map((e) => CityRule.fromJson(e as Map<String, dynamic>))
-        .toList();
-    if (client != null) {
-      final remote = await _remoteRules();
-      for (final row in remote) {
-        final r = CityRule.fromJson(row);
-        final i = rules.indexWhere(
-          (old) => old.city == r.city && old.vehicle == r.vehicle,
-        );
-        if (i < 0) {
-          rules.add(r);
-          // Admins maintain the remote rows; the bundled copy is the fallback,
-          // so a tie keeps the admin's edit (a migration leaves such a row
-          // alone rather than overwrite it).
-        } else if (r.version >= rules[i].version) {
-          rules[i] = r;
-        }
-      }
-    }
-    return rules;
+    final bundled = await bundledRuleEntries();
+    if (client == null) return [for (final e in bundled) e.rule];
+    final merged = overlayRules(bundled, parseRuleRows(await _remoteRules()));
+    await cache?.write([for (final e in merged) e.row]);
+    return [for (final e in merged) e.rule];
   }
 }
 
