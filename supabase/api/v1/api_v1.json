@@ -123,7 +123,7 @@
       "post": {
         "operationId": "api_v1_account_deletion_status",
         "summary": "自己帳號的刪除申請狀態",
-        "description": "要登入（不可匿名登入）。App 登入後讀取：status 為 pending 時顯示預定刪除時間與取消按鈕；cancelled_by_sign_in 為 true 且 cancelled_at 是新的，顯示「已取消刪除」（#215）。錯誤：401 auth.sign_in_required。",
+        "description": "要登入（不可匿名登入）。App 登入後讀取：status 為 pending 時顯示預定刪除時間與取消按鈕；cancelled_by_sign_in 為 true 且 cancelled_at 是新的，顯示「已取消刪除」；can_self_delete 為 false 時在說明頁提示原因（#215）。錯誤：401 auth.sign_in_required。",
         "x-requires-sign-in": true,
         "responses": {
           "200": {
@@ -695,7 +695,9 @@
           "requested_at",
           "scheduled_at",
           "cancelled_at",
-          "cancelled_by_sign_in"
+          "cancelled_by_sign_in",
+          "can_self_delete",
+          "cannot_self_delete_reason"
         ],
         "additionalProperties": false,
         "properties": {
@@ -734,6 +736,21 @@
               "null"
             ],
             "description": "最近一次取消是否由新的登入自動觸發；沒有取消紀錄時為 null"
+          },
+          "can_self_delete": {
+            "type": "boolean",
+            "description": "這個帳號能不能自助申請刪除；管理員為 false（要先由其他管理員移除權限）。App 在刪除說明頁就依此提示"
+          },
+          "cannot_self_delete_reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "account.admin_cannot_self_delete",
+              null
+            ],
+            "description": "不能自助刪除的原因（錯誤碼）；可以時為 null"
           }
         }
       }
