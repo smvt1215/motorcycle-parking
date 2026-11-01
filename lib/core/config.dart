@@ -12,6 +12,18 @@ class AppConfig {
   /// 隱私權政策與服務條款（#275）的網址；空字串時設定頁不顯示該列。
   static const privacyPolicyUrl = String.fromEnvironment('PRIVACY_POLICY_URL');
   static const termsUrl = String.fromEnvironment('TERMS_URL');
+
+  /// How the build is distributed: the release workflow's RELEASE_CHANNEL
+  /// (beta, rc, release) or `staging`; empty in a local build (P14).
+  static const appChannel = String.fromEnvironment('APP_CHANNEL');
+
+  /// The App Store's numeric Apple ID; empty until the app exists (#262).
+  static const appStoreId = String.fromEnvironment('APP_STORE_ID');
+
+  /// The TestFlight public link of the beta group; empty when not set.
+  static const testflightPublicUrl = String.fromEnvironment(
+    'TESTFLIGHT_PUBLIC_URL',
+  );
   static const googleMapsWebKey = String.fromEnvironment(
     'GOOGLE_MAPS_WEB_API_KEY',
   );
