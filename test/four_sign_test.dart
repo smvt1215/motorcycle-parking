@@ -1772,7 +1772,11 @@ void main() {
   });
 
   group('現在可停依時段、現在禁停路牌（#244）', () {
-    ParkingSpot banned(String from, String to) => ParkingSpot.fromJson({
+    ParkingSpot banned(
+      String from,
+      String to, {
+      List<Map<String, String>> more = const [],
+    }) => ParkingSpot.fromJson({
       ...street.toJson(),
       'parking_segments': [
         {
@@ -1788,6 +1792,7 @@ void main() {
                 'kind': 'no_parking',
                 'periods': [
                   {'days': 'all', 'from': from, 'to': to},
+                  ...more,
                 ],
               },
             ],
@@ -1824,10 +1829,35 @@ void main() {
       expect(p[0].semantics, '能不能停：現在禁停，明天 09:00 起可停');
     });
 
-    test('可停時間依臺北日期：今天、明天、其他日子寫月/日', () {
+    test('整週都禁停、算不出可停時間：小字與朗讀寫看現場公告', () {
+      final spot = banned(
+        '00:00',
+        '12:00',
+        more: [
+          {'days': 'all', 'from': '12:00', 'to': '00:00'},
+        ],
+      );
+      final decided = decideParking(spot, VehicleType.scooter, rules, now: day);
+      expect(decided.gaps, contains(DecisionGap.noParkingNow));
+      expect(decided.nextParkableAt, isNull);
+      final sign = fourSign(spot, VehicleType.scooter, rules, now: day);
+      expect(
+        (sign.verdict.noParkingNow, sign.verdict.parkableAt),
+        (true, null),
+      );
+      final p = plates(spot, VehicleType.scooter, day);
+      expect(
+        (p[0].main, p[0].note, p[0].tone),
+        ('現在禁停', '看現場公告', PlateTone.conditional),
+      );
+      expect(p[0].semantics, '能不能停：現在禁停，看現場公告');
+    });
+
+    test('可停時間依臺北日期：今天、明天、其他日子寫週幾', () {
       expect(parkableAtText(DateTime.utc(2026, 11, 3, 7), day), '15:00');
       expect(parkableAtText(DateTime.utc(2026, 11, 4, 1), day), '明天 09:00');
-      expect(parkableAtText(DateTime.utc(2026, 11, 5, 1), day), '11/5 09:00');
+      // Further on, the weekday, as 「HH:MM 起」 reads (11/5 is a Thursday).
+      expect(parkableAtText(DateTime.utc(2026, 11, 5, 1), day), '週四 09:00');
       // 00:30 on 11/4 in Taiwan is still 11/3 in UTC.
       expect(
         parkableAtText(DateTime.utc(2026, 11, 3, 16, 30), day),
@@ -1923,6 +1953,70 @@ void main() {
       expect(shown(DateTime.utc(2026, 11, 3, 2)), {'lot', 'banned'});
       expect(shown(day), {'lot'});
       expect(shown(night), {'lot', 'night-lot', 'banned'});
+    });
+
+    test('#247：逐段判斷時，四面路牌與 decideParking().segments 一致', () {
+      // Segments with their own bay, without a condition, and naming no bay
+      // (taking the rest from the spot's), as segmentConditionOf merges.
+      final spot = ParkingSpot.fromJson({
+        ...street.toJson(),
+        'condition': {
+          'bay': 'motorcycle',
+          'use': 'usual',
+          'charge': 'toll',
+          'limits': [
+            {
+              'kind': 'no_parking',
+              'periods': [
+                {'days': 'all', 'from': '07:00', 'to': '09:00'},
+              ],
+            },
+          ],
+        },
+        'parking_segments': [
+          ...street.toJson()['parking_segments'] as List<dynamic>,
+          {'id': 'p1', 'name': '沿用點位條件', 'side': 'south'},
+          {
+            'id': 'p2',
+            'name': '只寫禁停',
+            'side': 'south',
+            'condition': {
+              'limits': [
+                {
+                  'kind': 'no_parking',
+                  'periods': [
+                    {'days': 'all', 'from': '12:00', 'to': '16:00'},
+                  ],
+                },
+              ],
+            },
+          },
+        ],
+      });
+      for (final vehicle in VehicleType.values) {
+        for (var h = 0; h < 24; h++) {
+          final at = DateTime.utc(2026, 11, 2, 16, 30).add(Duration(hours: h));
+          final decided = decideParking(spot, vehicle, rules, now: at);
+          final segs = decideSegments(spot, vehicle, rules, now: at);
+          expect(segs, hasLength(decided.segments.length));
+          for (final (i, seg) in segs.indexed) {
+            final zone = decided.segments[i];
+            final reason = '${vehicle.name} $h:30 ${zone.name}';
+            expect(seg.segment!.name, zone.name, reason: reason);
+            expect(seg.status, zone.status, reason: reason);
+            expect(seg.decision.restriction, zone.restriction, reason: reason);
+            if (zone.gaps.contains(DecisionGap.noParkingNow)) {
+              expect(seg.openNow, isFalse, reason: reason);
+            }
+          }
+          final sign = fourSign(spot, vehicle, rules, now: at).verdict;
+          expect(
+            sign.noParkingNow,
+            decided.gaps.contains(DecisionGap.noParkingNow) && !sign.openNow,
+            reason: '${vehicle.name} $h:30',
+          );
+        }
+      }
     });
   });
 

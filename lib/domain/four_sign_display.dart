@@ -173,8 +173,12 @@ String? _extensionText(PlateRate r) =>
 /// 現在禁停's title on the 能不能停 plate (#244).
 const noParkingNowLabel = '現在禁停';
 
-/// When [at] (an instant) falls in Taipei, read at [now]: 「09:00」 today,
-/// 「明天 09:00」, else with its date, 「11/5 09:00」.
+/// 現在禁停's note when no time parking opens again is known (禁停 runs
+/// past the week searched).
+const noParkingUnknownNote = '看現場公告';
+
+/// When [at] (an instant) falls in Taipei, read at [now], as 「HH:MM 起」
+/// reads: 「09:00」 today, 「明天 09:00」, else 「週三 09:00」.
 String parkableAtText(DateTime at, DateTime now) {
   final (today, _) = taipeiDateMinute(now);
   final (day, minute) = taipeiDateMinute(at);
@@ -184,7 +188,7 @@ String parkableAtText(DateTime at, DateTime now) {
   return switch (day.difference(today).inDays) {
     0 => clock,
     1 => '明天 $clock',
-    _ => '${day.month}/${day.day} $clock',
+    _ => '週${'一二三四五六日'[day.weekday - 1]} $clock',
   };
 }
 
@@ -194,18 +198,15 @@ SignPlate _verdictPlate(FourSign s, DateTime now) {
   // 現在禁停 (#244): painted amber as 有條件 (the status stays
   // conditional), titled apart, with when parking opens again.
   if (v.status == EligibilityStatus.conditional && v.noParkingNow) {
-    final at = v.parkableAt == null
-        ? null
+    final note = v.parkableAt == null
+        ? noParkingUnknownNote
         : '${parkableAtText(v.parkableAt!, now)} 起可停';
     return SignPlate(
       face: FourSignFace.verdict,
       main: noParkingNowLabel,
-      note: at ?? basis,
+      note: note,
       tone: PlateTone.conditional,
-      semantics: [
-        '能不能停：$noParkingNowLabel',
-        if (at != null) at else if (basis.isNotEmpty) basis,
-      ].join('，'),
+      semantics: '能不能停：$noParkingNowLabel，$note',
     );
   }
   final (tone, main, note) = switch (v.status) {
