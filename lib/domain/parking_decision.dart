@@ -878,10 +878,23 @@ ParkingDecision _segmented(
   DecisionBasis source,
   HolidayCalendar calendar,
 ) {
-  final segments = [
+  final judged = [
     for (final seg in spot.segments)
       _segment(seg, spot, vehicle, rules, at, day, trusted, source, calendar),
   ];
+  final segments = [for (final j in judged) j.zone];
+  // Each open segment's own basis (the rule, the law, its notice), once.
+  final basis = <DecisionBasis>[source];
+  for (final j in judged) {
+    if (!j.zone.open) continue;
+    for (final b in j.basis) {
+      if (!basis.any(
+        (x) => x.kind == b.kind && x.rule == b.rule && x.url == b.url,
+      )) {
+        basis.add(b);
+      }
+    }
+  }
   String named(ZoneDecision z) =>
       '${z.name.trim().isEmpty ? '未命名路段' : z.name.trim()}：${z.reason}';
   final open = [
@@ -919,7 +932,7 @@ ParkingDecision _segmented(
     status,
     reason,
     restriction: restriction,
-    basis: [source],
+    basis: basis,
     segments: segments,
     gaps: {for (final z in segments) ...z.gaps},
   );
@@ -938,14 +951,20 @@ ParkingCondition? _segmentCondition(
     use: spot.use,
     share: spot.share,
     charge: seg.charge ?? spot.charge,
-    limits: seg.limits.isEmpty ? spot.limits : seg.limits,
+    // By kind: the segment's own replace the spot's of the same kind; the
+    // others (限電動, 身障) stay as the bay has them.
+    limits: [
+      for (final l in spot.limits)
+        if (!seg.hasLimit(l.kind)) l,
+      ...seg.limits,
+    ]..sort((a, b) => a.kind.index.compareTo(b.kind.index)),
     schedule: seg.schedule.isEmpty ? spot.schedule : seg.schedule,
     basis: seg.basis ?? spot.basis,
     allow: seg.allow,
   );
 }
 
-ZoneDecision _segment(
+({ZoneDecision zone, List<DecisionBasis> basis}) _segment(
   ParkingSegment seg,
   ParkingSpot spot,
   VehicleType vehicle,
@@ -985,15 +1004,21 @@ ZoneDecision _segment(
     gaps: gaps,
   );
   if (allowed == false) {
-    return trusted
-        ? z(EligibilityStatus.notAllowed, '此路段標示不開放${vehicle.label}')
-        : z(EligibilityStatus.unverified, communityUncheckedReason);
+    return (
+      zone: trusted
+          ? z(EligibilityStatus.notAllowed, '此路段標示不開放${vehicle.label}')
+          : z(EligibilityStatus.unverified, communityUncheckedReason),
+      basis: const <DecisionBasis>[],
+    );
   }
   if (notStated) {
-    return z(
-      EligibilityStatus.unverified,
-      notStatedReason(vehicle, where: '此路段'),
-      gaps: {DecisionGap.notStated},
+    return (
+      zone: z(
+        EligibilityStatus.unverified,
+        notStatedReason(vehicle, where: '此路段'),
+        gaps: {DecisionGap.notStated},
+      ),
+      basis: const <DecisionBasis>[],
     );
   }
   final d = _street(
@@ -1010,7 +1035,13 @@ ZoneDecision _segment(
       spot.condition ?? conditionOf(spot.spaceType),
     ),
   );
-  return z(d.status, d.reason, restriction: d.restriction, gaps: d.gaps);
+  return (
+    zone: z(d.status, d.reason, restriction: d.restriction, gaps: d.gaps),
+    basis: [
+      for (final b in d.basis)
+        if (b.kind != source.kind) b,
+    ],
+  );
 }
 
 /// Who states [vehicle]'s access at [spot] (step 0): government data, an
@@ -1240,6 +1271,17 @@ ParkingDecision _street(
         reason: timeReasons.join('；'),
         restriction: () => RuleRestriction.timeLimited,
       );
+    } else if (result.status == EligibilityStatus.conditional) {
+      // A rule's own condition (Taichung's signage) keeps its restriction;
+      // the bay's periods of time limit and 禁停 still reach the rider
+      // (#188 layer 2). An old time limit reads as it always has.
+      final added = [
+        for (final r in timeReasons)
+          if (r != _timedReason && !result.reason.contains(r)) r,
+      ];
+      if (added.isNotEmpty) {
+        result = result._with(reason: '${result.reason}；${added.join('；')}');
+      }
     }
   }
 

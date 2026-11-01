@@ -407,6 +407,75 @@ void main() {
       expect(after.reason, contains('禁停時段：週二 11:00–13:00'));
     });
 
+    test('縣市規則有條件時，禁停時段仍寫進原因（交叉審查 P1）', () {
+      final d = decideParking(
+        street(
+          SpaceType.paidMotorcycle,
+          city: '臺中市',
+          condition: c({
+            'bay': 'motorcycle',
+            'use': 'usual',
+            'charge': 'toll',
+            'limits': [
+              {
+                'kind': 'no_parking',
+                'periods': [
+                  {
+                    'days': ['tue'],
+                    'from': '11:00',
+                    'to': '13:00',
+                  },
+                ],
+              },
+            ],
+          }),
+        ),
+        VehicleType.heavy,
+        bundled,
+        now: DateTime.utc(2026, 10, 27, 4),
+      );
+      expect(d.status, EligibilityStatus.conditional);
+      expect(d.reason, contains('現在是禁停時段，不可停放'));
+    });
+
+    test('路段只寫限制時，點位的限電動等限制仍保留（交叉審查 P1）', () {
+      final spot = ParkingSpot(
+        id: 'ev',
+        name: 'ev',
+        lat: 25,
+        lng: 121,
+        city: '臺北市',
+        spaceType: SpaceType.evMotorcycle,
+        condition: c({
+          'bay': 'motorcycle',
+          'limits': [
+            {'kind': 'ev_only'},
+          ],
+        }),
+        source: 'official',
+        segments: [
+          ParkingSegment.fromJson({
+            'name': 'A',
+            'condition': {
+              'allow': {'scooter': true, 'heavy': true},
+              'limits': [
+                {
+                  'kind': 'no_parking',
+                  'periods': [
+                    {'days': 'holiday'},
+                  ],
+                },
+              ],
+            },
+          }),
+        ],
+      );
+      final d = decideParking(spot, VehicleType.scooter, bundled, now: now);
+      expect(d.segments.single.reason, contains('限電動機車'));
+      expect(d.segments.single.reason, contains('禁停時段：假日 全天'));
+      expect(d.restriction, RuleRestriction.evOnly);
+    });
+
     test('路邊逐段判斷：資格跟格位走，點位結論取最開放的一段（#188 第 2 層）', () {
       ParkingSegment seg(String name, Map<String, Object?> condition) =>
           ParkingSegment.fromJson({'name': name, 'condition': condition});
@@ -444,6 +513,8 @@ void main() {
       expect(heavy.segments.first.reason, '此路段標示不開放大型重機');
       expect(heavy.segments.last.gaps, {DecisionGap.notStated});
       expect(heavy.status, EligibilityStatus.allowed);
+      // The open segment's basis reaches the spot (交叉審查 P2).
+      expect(heavy.basis.length, greaterThan(1));
       final closed = ParkingSpot.fromJson({
         ...spot.toJson(),
         'parking_segments': [

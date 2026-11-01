@@ -697,19 +697,30 @@ class SpotsController extends ChangeNotifier {
     final limits = [
       for (final l in c.limits)
         if (l.kind != LimitKind.timeLimit) l,
-      // All day, with the minutes and extensions asked (#188 layer 2); a
-      // stored limit of several periods stays until the admin edits these.
+      // The first period's minutes and extensions (#188 layer 2): its days
+      // and times, and any later periods, stay as stored; a new limit is
+      // all day.
       if (on)
         minutes == null
             ? const ParkingLimit(LimitKind.timeLimit)
             : ParkingLimit(
                 LimitKind.timeLimit,
                 periods: [
-                  LimitPeriod(
-                    days: 'all',
-                    maxMinutes: minutes,
-                    extensions: extensions ?? 0,
-                  ),
+                  switch (timeLimit?.periods.firstOrNull) {
+                    final p? => LimitPeriod(
+                      days: p.days,
+                      from: p.from,
+                      to: p.to,
+                      maxMinutes: minutes,
+                      extensions: extensions ?? 0,
+                    ),
+                    null => LimitPeriod(
+                      days: 'all',
+                      maxMinutes: minutes,
+                      extensions: extensions ?? 0,
+                    ),
+                  },
+                  ...?timeLimit?.periods.skip(1),
                 ],
               ),
     ]..sort((a, b) => a.kind.index.compareTo(b.kind.index));
