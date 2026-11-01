@@ -16,13 +16,16 @@ import '../fee_editor_steps.dart';
 
 /// Structured fees in the admin spot form and the review queue.
 void main() {
+  // An admin writes all three vehicles (#188 layer 2).
   const hourly = Fee(
     scooter: Rate(FeeMode.hourly, amount: 20, perMinutes: 60),
     heavy: Rate(FeeMode.sameAsScooter),
+    car: Rate(FeeMode.notApplicable),
   );
   const hourlyJson = {
     'scooter': {'mode': 'hourly', 'amount': 20, 'per_minutes': 60},
     'heavy': {'mode': 'same_as_scooter'},
+    'car': {'mode': 'not_applicable'},
   };
   const hourlyNote = '機車每小時 20 元；大型重機每小時 20 元';
 
@@ -147,6 +150,7 @@ void main() {
         const Fee(
           scooter: Rate(FeeMode.hourly, amount: 20, perMinutes: 60),
           heavy: Rate(FeeMode.sameAsScooter),
+          car: Rate(FeeMode.notApplicable),
         ),
       );
       expect(spots.dirty, isFalse);
@@ -192,6 +196,7 @@ void main() {
     final longFee = Fee.fromJson({
       'car': {
         'mode': 'by_time',
+        'cross_period': 'each_period',
         'periods': [
           for (final d in ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'])
             {
@@ -513,6 +518,7 @@ void main() {
           );
         }
         await choose(tester, 'heavy', 'same_as');
+        await choose(tester, 'car', 'not_applicable');
         final plate = find.byKey(const ValueKey('fee-note-plate'));
         await reach(tester, plate);
         // The app's notice board: the follow's amount worked out (#140).

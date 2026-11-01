@@ -1,7 +1,10 @@
+import 'dart:math' as math;
+
 import '../../ui/adaptive/adaptive.dart';
 
 import '../../domain/availability_display.dart';
 import '../../domain/capsule_layout.dart';
+import '../../domain/rider_meter_display.dart';
 import 'map_legend.dart';
 
 /// Paper white behind delayed and car-bay pills, from the design palette.
@@ -334,29 +337,127 @@ class MarkerWithCapsules extends StatelessWidget {
   }
 }
 
-/// A spot the 「目前有位」 filter leaves out: a small grey dot in place, so
-/// riders see the spots are there but have no space. Not the faded full
-/// marker, which means a spot reported gone.
+/// A spot the filters leave out: a small grey dot in place (A0 被篩掉),
+/// so riders see the spots are there. Not the faded full marker, which
+/// means a spot reported gone.
 class ExcludedSpotDot extends StatelessWidget {
   const ExcludedSpotDot({super.key});
   @override
   Widget build(BuildContext context) => Center(
     child: Container(
       key: const ValueKey('excluded-spot-dot'),
-      width: 14,
-      height: 14,
-      decoration: BoxDecoration(
-        color: unverifiedColor,
+      width: 10,
+      height: 10,
+      decoration: const BoxDecoration(
+        color: excludedDotColor,
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 2),
-        boxShadow: const [
-          BoxShadow(
-            blurRadius: 3,
-            color: Color(0x33000000),
-            offset: Offset(0, 1),
-          ),
-        ],
       ),
     ),
+  );
+}
+
+const excludedDotColor = Color(0xff9aa6ac);
+
+/// Ink and grounds of the rider-report badge (A0).
+const riderMeterInk = Color(0xff16313a),
+    riderMeterGround = Color(0xffeef2f3),
+    riderMeterSlash = Color(0xff59646c);
+
+/// The rider-report badge (A0 車友回報角標): a white-keyed light grey pill
+/// with a 3-bar meter, or, when reports disagree, the two extremes split by
+/// a slash. It sits where the space pill would; [riderMeterShown] keeps it
+/// off spots with an official pill.
+class RiderMeterBadge extends StatelessWidget {
+  const RiderMeterBadge({super.key, required this.meter, this.scale = 1});
+  final RiderMeter meter;
+  final double scale;
+
+  @override
+  Widget build(BuildContext context) {
+    final other = meter.other;
+    final barWidth = other == null ? 6.0 : 4.0;
+    return Semantics(
+      label: meter.semantics,
+      excludeSemantics: true,
+      child: Container(
+        height: 24 * scale,
+        padding: EdgeInsets.all(2 * scale),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12 * scale),
+          boxShadow: const [
+            BoxShadow(
+              blurRadius: 6,
+              color: Color(0x33000000),
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Container(
+          padding: EdgeInsets.fromLTRB(
+            8 * scale,
+            3 * scale,
+            8 * scale,
+            3 * scale,
+          ),
+          decoration: BoxDecoration(
+            color: riderMeterGround,
+            borderRadius: BorderRadius.circular(10 * scale),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              _RiderBars(bars: meter.level.bars, width: barWidth, scale: scale),
+              if (other != null) ...[
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 4 * scale),
+                  child: Transform.rotate(
+                    angle: 20 * math.pi / 180,
+                    child: Container(
+                      width: 1.5 * scale,
+                      height: 14 * scale,
+                      color: riderMeterSlash,
+                    ),
+                  ),
+                ),
+                _RiderBars(bars: other.bars, width: barWidth, scale: scale),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Three rising bars, [bars] of them filled.
+class _RiderBars extends StatelessWidget {
+  const _RiderBars({
+    required this.bars,
+    required this.width,
+    required this.scale,
+  });
+  final int bars;
+  final double width, scale;
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.end,
+    children: [
+      for (final (i, height) in const [6.0, 10.0, 14.0].indexed) ...[
+        if (i > 0) SizedBox(width: 2 * scale),
+        Container(
+          key: ValueKey('rider-bar-$i-${i < bars ? 'filled' : 'empty'}'),
+          width: width * scale,
+          height: height * scale,
+          decoration: BoxDecoration(
+            color: i < bars ? riderMeterInk : Colors.white,
+            borderRadius: BorderRadius.circular(1.5 * scale),
+            border: Border.all(color: riderMeterInk, width: 1.25 * scale),
+          ),
+        ),
+      ],
+    ],
   );
 }

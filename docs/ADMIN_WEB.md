@@ -238,7 +238,7 @@ OpenStreetMap Nominatim 免金鑰，但實測台灣門牌與路口都查不到�
 - `admin_upsert_city_rule(p_city, p_vehicle, p_values, p_base_version, p_note)`（`202610260240`）：`is_admin()`；縣市限全國與 22 縣市；只接受規則欄位（`version` 由伺服器遞增）；格位種類限原本五種（#51 前的 App 讀不懂其他種類）；同一種類不可同時可停與有條件；有條件路邊格位必須有限制類型（`23514`），有限制類型必須有有條件路邊格位；內容與目前版本相同時拒絕。`p_base_version` 必須等於目前版本（新規則為 null），否則 `40001`。同一 transaction 內把被取代的列寫入 `city_rules_history`、寫稽核紀錄（完整修改前後列與發布說明）。
 - `city_rules_history`（`city`、`vehicle`、`version`、`row jsonb`、`replaced_at`、`replaced_by`；`(city, vehicle, version)` 唯一）：只由 RPC 寫入、不可修改或刪除，僅 admin（`aal2`）可讀；供法規預審引擎（[CONTRIBUTION_TIERS_FEASIBILITY.md](CONTRIBUTION_TIERS_FEASIBILITY.md) §5.7、§10 第 16 點，2026-10-25 決定採歷史表）還原「當時版本說什麼」。
 - **直接寫入已收回**（2026-10-26 使用者決定）：同一 migration 移除 `city_rules` 的 `admin_rules` 寫入 policy，並收回 `authenticated` 的 insert／update／delete；admin 只能經規則頁（`admin_upsert_city_rule`）改規則，每次修改都有版本、稽核與歷史。所有人照舊可讀。緊急時仍可用 service role（Dashboard SQL），但不會留稽核與歷史，也不遞增版本，事後應補發一版。
-- `tool/export_rules.py`：以 anon key 讀 `city_rules`（`SUPABASE_URL`／`SUPABASE_ANON_KEY` 環境變數，或 `--config`，預設 `config/staging.json`），依內建檔的格式與順序寫回 `assets/rules/parking_rules.json`（新規則依縣市順序附在後面，空的 `district_space_types` 與 null 的 `restriction` 不寫入）。內建檔有但資料庫沒有、或內建版本較新時停止並說明，需先修正資料庫。`--check` 只比對、不寫入（不一致時結束碼 1），`--input` 可改讀匯出的列。App 發版前執行：
+- `tool/export_rules.py`：以 anon key 讀 `city_rules`（`SUPABASE_URL`／`SUPABASE_ANON_KEY` 環境變數，或 `--config`，預設 `config/staging.json`），依內建檔的格式與順序寫回 `assets/rules/parking_rules.json`（新規則依縣市順序附在後面，空的 `district_space_types` 與 null 的 `restriction` 不寫入）。內建檔有但資料庫沒有，或內建版本較新且內容不同時，停止並說明，需先修正資料庫；內建版本較新但內容相同時（例如 staging 從內建檔匯入、版本從 1 起算），照資料庫的版本匯出。`--check` 只比對、不寫入（不一致時結束碼 1），`--input` 可改讀匯出的列。App 發版前執行：
 
 ```bash
 python3 tool/export_rules.py --check || python3 tool/export_rules.py

@@ -400,9 +400,16 @@ String? validateSpotField(SpotField field, Object? value, {Fee? fee}) {
       if (rates.any((r) => !r.complete)) return '請填完收費金額，計時另需選計費時間';
       if (!value.valid) return '金額請填 0 到 10000 的整數';
       if (value.followGap case final gap?) return gap;
+      // An admin's fee is written whole (#188 layer 2, PM_ANS_20261101_55).
+      if (!value.isEmpty && !value.writeComplete) return feeWriteProblem;
   }
   return null;
 }
+
+/// Why a fee an admin writes is not whole (#188 layer 2, fee.write).
+const feeWriteProblem =
+    '三個車種都要選收費方式（沒有這種車的格位就選「不適用」），'
+    '並選好跨日怎麼收、上限何時重新計算或停到下一個時段時';
 
 /// The stored `fee` as the form edits it: null when the spot has none, or
 /// when it names no vehicle (the app reads `{}` as a lot-wide fee with both

@@ -502,14 +502,6 @@ class LotAreasSection extends StatelessWidget {
   }
 }
 
-const _areaLabels = <(String?, String)>[
-  (null, '未確認'),
-  ('motorcycle', '機車區'),
-  ('car', '汽車區'),
-  ('heavy', '重機專區'),
-  ('mixed', '汽機車混合區'),
-];
-
 class _AreaCard extends StatefulWidget {
   const _AreaCard({
     super.key,
@@ -589,34 +581,11 @@ class _AreaCardState extends State<_AreaCard> {
             ),
             onChanged: (v) => spots.setCard(card, name: v),
           );
-          final areaField = DropdownButtonFormField<String?>(
-            key: ValueKey('area-kind-${widget.index}'),
-            initialValue: card.area,
-            isExpanded: true,
-            decoration: const InputDecoration(labelText: '區域'),
-            items: [
-              for (final (value, label) in _areaLabels)
-                DropdownMenuItem(value: value, child: Text(label)),
-            ],
-            onChanged: (v) => spots.setCard(card, area: v),
-          );
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (wide)
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(flex: 3, child: nameField),
-                    const SizedBox(width: 12),
-                    Expanded(flex: 2, child: areaField),
-                  ],
-                )
-              else ...[
-                nameField,
-                const SizedBox(height: 8),
-                areaField,
-              ],
+              // Zone areas are gone (#188 layer 2): the name is the card.
+              nameField,
               const SizedBox(height: 12),
               Text(
                 '依據',

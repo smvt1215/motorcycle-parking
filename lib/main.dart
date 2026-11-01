@@ -9,10 +9,13 @@ import 'app.dart';
 import 'core/config.dart';
 import 'data/app_store.dart';
 import 'data/repositories.dart';
+import 'features/map/heavy_glyph.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   AppConfig.validate();
+  // The licensed badge silhouette, when this build carries it.
+  unawaited(loadHeavyGlyph());
   SupabaseClient? client;
   if (!AppConfig.demo) {
     await Supabase.initialize(

@@ -1,5 +1,12 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.108.1';
+import {
+  appCheckConfig,
+  appCheckMode,
+  verifyAppCheck,
+} from '../_shared/app_check.ts';
+import { trustedIp } from '../_shared/client_ip.ts';
 import { cors, readBody, response } from '../_shared/http.ts';
+import { appCheckGate } from './app_check_gate.ts';
 import { currentSpot } from './current_spot.ts';
 import { blocking, precheck, precheckResponse, riskFlags } from './precheck.ts';
 import {
@@ -25,10 +32,9 @@ Deno.serve(async (req) => {
   if (!url || !key || !secret || !header) {
     return response({ error: 'report service not configured' }, 503);
   }
-  // Configure only a header overwritten/appended by the trusted ingress gateway.
-  // Last hop avoids trusting client-prepended X-Forwarded-For values.
-  const ip = req.headers.get(header)?.split(',').at(-1)?.trim();
-  if (!ip || !/^[0-9a-f:.]+$/i.test(ip)) {
+  // TRUSTED_IP_HEADER is cf-connecting-ip on Supabase (docs/CD_SETUP.md).
+  const ip = trustedIp(req, header);
+  if (!ip) {
     return response({ error: 'trusted client IP unavailable' }, 503);
   }
   const admin = createClient(url, key, {
@@ -38,6 +44,16 @@ Deno.serve(async (req) => {
   if (error || !data.user || data.user.is_anonymous) {
     return response({ error: 'Google or Apple sign-in required' }, 401);
   }
+  // App Check (#203): APP_CHECK_MODE log (the default) only records the
+  // verdict; enforce refuses a request without a valid token.
+  const appCheck = appCheckConfig((name) => Deno.env.get(name));
+  const gate = await appCheckGate(
+    req,
+    appCheckMode(Deno.env.get('APP_CHECK_MODE')),
+    (token) =>
+      appCheck ? verifyAppCheck(token, appCheck) : Promise.resolve(null),
+  );
+  if (gate.refused) return response({ error: 'app check required' }, 401);
   try {
     const body = await readBody(req);
     const invalid = validate(body);
@@ -66,6 +82,8 @@ Deno.serve(async (req) => {
       // A hold goes through flagged for stricter review (§4.3); the flags
       // are always the server's own, never a client's.
       p_payload: { ...body, risk_flags: riskFlags(issues) },
+      // The network's daily cap holds until App Check is enforced (#203).
+      p_ip_capped: gate.ipCapped,
     });
     if (rpcError?.code === 'P0410') {
       // An admin deleted the spot (#200): nothing a rider sends reaches it.

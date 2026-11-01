@@ -673,6 +673,14 @@ String? validatePatch(Map<String, dynamic> patch, ReviewSpot spot) {
           return '請填完收費金額，計時另需選計費時間';
         }
         if (!fee.valid) return '金額請填 0 到 10000 的整數';
+        // Each rate answers the rules a new write does (#188 layer 2).
+        if ([
+          fee.scooter,
+          fee.heavy,
+          fee.car,
+        ].nonNulls.any((r) => !r.writeComplete)) {
+          return '請選好跨日怎麼收、上限何時重新計算或停到下一個時段時';
+        }
         if (fee.followGap case final gap?) return gap;
     }
   }
@@ -727,6 +735,9 @@ const riskFlagLabels = {
   'heavy_bay_scooter_fee': '重機格填了普通機車費率',
   'motorcycle_bay_car_fee': '機車格填了汽車費率',
   'time_limit_mismatch': '限時與計次的有效時間不同',
+  // Set by apply_report, not the precheck: once App Check is enforced, a
+  // network past 200 reports a day is a risk signal (#203).
+  'ip_busy': '同一網路今天已送出超過 200 筆回報，請留意是否為腳本',
 };
 
 /// precheck_rules.json `stored_pair_hold`: rules between a bay's condition

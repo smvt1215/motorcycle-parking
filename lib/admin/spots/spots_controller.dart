@@ -187,7 +187,6 @@ class SpotsController extends ChangeNotifier {
             // A second bay in the area rests on the area's notice too.
             : {
                 'name': like['name'],
-                'area': ?like['area'],
                 if (rawBasis(like) case final basis?)
                   'condition': {'basis': basis},
               },
@@ -204,24 +203,13 @@ class SpotsController extends ChangeNotifier {
     _notify();
   }
 
-  /// Renames an area card, changes its area or its basis: every zone in it.
-  void setCard(
-    AreaCard card, {
-    String? name,
-    Object? area = _keep,
-    Object? basis = _keep,
-  }) {
+  /// Renames an area card or changes its basis: every zone in it. Zone
+  /// areas are gone (#188 layer 2); a stored one is dropped on save.
+  void setCard(AreaCard card, {String? name, Object? basis = _keep}) {
     final next = [...zones];
     for (final i in card.indexes) {
-      var z = {...next[i]};
+      var z = {...next[i]}..remove('area');
       if (name != null) z['name'] = name;
-      if (area != _keep) {
-        if (area == null) {
-          z.remove('area');
-        } else {
-          z['area'] = area;
-        }
-      }
       if (basis != _keep) z = zoneWithBasis(z, basis as Json?);
       next[i] = z;
     }
@@ -308,7 +296,7 @@ class SpotsController extends ChangeNotifier {
     if (mustStateVehicles)
       for (final flag in vehicleFlags) flag: ?eligibilityProblem(flag),
     if (lot && (record!.isNew || _edits.containsKey('fee_plans')))
-      'fee_plans': ?plansProblem(plans),
+      'fee_plans': ?plansProblem(plans, jsonList(record!.values['fee_plans'])),
     if (lot && (record!.isNew || _edits.containsKey('parking_zones')))
       'parking_zones': ?zones.map(zoneProblem).nonNulls.firstOrNull,
     // 不適用 beside a vehicle the spot lets park (PM_ANS_20261101_55).
