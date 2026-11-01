@@ -6,8 +6,11 @@ import 'package:motorcycle_parking/app.dart';
 import 'package:motorcycle_parking/core/geo.dart';
 import 'package:motorcycle_parking/data/app_store.dart';
 import 'package:motorcycle_parking/domain/favorites_display.dart';
+import 'package:motorcycle_parking/domain/four_sign.dart';
+import 'package:motorcycle_parking/domain/four_sign_display.dart';
 import 'package:motorcycle_parking/features/favorites/favorite_card.dart';
 import 'package:motorcycle_parking/features/favorites/favorites_page.dart';
+import 'package:motorcycle_parking/features/map/spot_sheet.dart';
 import 'package:motorcycle_parking/features/my_parking/parking_page.dart';
 import 'package:motorcycle_parking/models/parking.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
@@ -74,6 +77,36 @@ void main() {
     expect(favoritesCount(3, byDistance: true), '3 個停車點，依距離排序');
     expect(rulesLinkSubtitle(VehicleType.heavy), '臺北市・大型重機');
   });
+
+  for (final platform in [TargetPlatform.iOS, TargetPlatform.android]) {
+    testWidgets('沒有 onTap 的路牌不吃手勢，外層收得到點擊（${platform.name}）', (tester) async {
+      debugDefaultTargetPlatformOverride = platform;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      var taps = 0;
+      const plate = SignPlate(
+        face: FourSignFace.fee,
+        tone: PlateTone.line,
+        main: '免費',
+        semantics: '怎麼算錢：免費',
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Material(
+            child: InkWell(
+              onTap: () => taps++,
+              child: const SizedBox(
+                width: 200,
+                child: FourSignPlates(plates: [plate, plate]),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('免費').first);
+      expect(taps, 1);
+      debugDefaultTargetPlatformOverride = null;
+    });
+  }
 
   for (final platform in [TargetPlatform.iOS, TargetPlatform.android]) {
     for (final size in const [
@@ -185,6 +218,27 @@ void main() {
         await tester.pumpWidget(const SizedBox.shrink());
         debugDefaultTargetPlatformOverride = null;
       });
+
+      for (final path in ['/parking', '/favorites']) {
+        testWidgets('點收藏卡的路牌本身開詳情（$path，$where）', (tester) async {
+          _setUp(tester, platform, size);
+          final (store, picked) = await _store(tester);
+          await _pump(tester, store, path);
+          expect(find.byType(SpotSheet), findsNothing);
+          final plate = find.descendant(
+            of: find.byKey(ValueKey('favorite-plates-${picked[0].id}')),
+            matching: find.byKey(const ValueKey('four-sign-fee')),
+          );
+          await tester.ensureVisible(plate);
+          await tester.pumpAndSettle();
+          await tester.tap(plate);
+          await tester.pumpAndSettle();
+          expect(find.byType(SpotSheet), findsOneWidget);
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox.shrink());
+          debugDefaultTargetPlatformOverride = null;
+        });
+      }
 
       testWidgets('我的收藏空狀態可去探索（$where）', (tester) async {
         _setUp(tester, platform, size);

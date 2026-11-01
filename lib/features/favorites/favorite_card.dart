@@ -117,6 +117,9 @@ class FavoriteCard extends StatelessWidget {
               builder: (context, now) => FourSignPlates(
                 key: ValueKey('favorite-plates-${spot.id}'),
                 compact: true,
+                // Each plate opens the spot, as the card does: a plate is
+                // a button, so it takes the tap itself.
+                onTap: (_) => showSpot(context, store, spot),
                 plates: fourSignPlates(
                   fourSign(
                     spot,
