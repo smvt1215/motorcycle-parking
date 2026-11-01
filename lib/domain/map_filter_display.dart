@@ -4,7 +4,8 @@ library;
 
 import '../models/space_kind.dart';
 
-/// 「現在可停」: hides the spots judged 不能停 for the rider's vehicle.
+/// 「現在可停」: keeps only the spots the rider's vehicle may park in now
+/// (#244): the four signs' 能不能停 open now.
 const parkableNowLabel = '現在可停';
 
 /// Clears every filter but the vehicle.

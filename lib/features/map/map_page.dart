@@ -12,7 +12,7 @@ import '../../data/app_store.dart';
 import '../../domain/space_filter.dart';
 import '../../domain/availability_display.dart';
 import '../../domain/capsule_layout.dart';
-import '../../domain/eligibility.dart';
+import '../../domain/four_sign.dart' show fourSignVerdict;
 import '../../domain/map_filter_display.dart';
 import '../../domain/map_viewport.dart';
 import '../../domain/spot_clusters.dart';
@@ -58,9 +58,59 @@ class _MapPageState extends ConsumerState<MapPage> {
   final searchController = TextEditingController();
   final searchFocus = FocusNode();
 
-  /// 「現在可停」: hides the spots judged 不能停 for the vehicle, keeping
-  /// the conditional and unconfirmed ones (PLAN.md 篩選列).
-  bool hideDenied = false;
+  /// 「現在可停」: keeps only the spots the vehicle may park in now (#244),
+  /// as the four signs' 能不能停 reads them: not 不能停, 待確認, 現在禁停
+  /// or open only later.
+  bool parkableNowOnly = false;
+
+  /// [_parkableNow]'s answers per spot, for [_parkableNowKey]: the vehicle,
+  /// the rules and the minute they were read for. The filter reads every
+  /// spot in view on each build, so each is judged once a minute.
+  final _parkableNowCache = Map<ParkingSpot, bool>.identity();
+  Object? _parkableNowKey;
+
+  /// Rebuilds at the next whole minute while 「現在可停」 is on, so spots
+  /// come and go as slots and 禁停 periods begin and end even when nothing
+  /// else (a live count poll, a pan) rebuilds the map. Slots and 禁停
+  /// periods start and end on whole minutes, the cache's step.
+  Timer? _parkableNowTick;
+
+  void _tickParkableNow(DateTime now) {
+    if (_parkableNowTick != null) return;
+    final ms = now.millisecondsSinceEpoch % Duration.millisecondsPerMinute;
+    _parkableNowTick = Timer(
+      Duration(milliseconds: Duration.millisecondsPerMinute - ms),
+      () {
+        _parkableNowTick = null;
+        if (mounted && parkableNowOnly) setState(() {});
+      },
+    );
+  }
+
+  void _stopParkableNow() {
+    _parkableNowTick?.cancel();
+    _parkableNowTick = null;
+  }
+
+  bool _parkableNow(AppStore store, ParkingSpot spot, DateTime now) {
+    final key = (
+      store.vehicle,
+      store.rules,
+      now.millisecondsSinceEpoch ~/ Duration.millisecondsPerMinute,
+    );
+    if (key != _parkableNowKey) {
+      _parkableNowCache.clear();
+      _parkableNowKey = key;
+    }
+    return _parkableNowCache[spot] ??= fourSignVerdict(
+      spot,
+      store.vehicle,
+      store.rules,
+      now: now,
+      // The marker's and the sheet's decision, so the three agree.
+      decision: store.decide(spot),
+    ).openNow;
+  }
 
   /// 「有即時空位」 or 「有即時資訊」; only offered while live counts exist.
   AvailabilityFilter availabilityFilter = AvailabilityFilter.off;
@@ -239,7 +289,8 @@ class _MapPageState extends ConsumerState<MapPage> {
 
   void _clearFilters() => setState(() {
     kinds = const {};
-    hideDenied = false;
+    parkableNowOnly = false;
+    _stopParkableNow();
     availabilityFilter = AvailabilityFilter.off;
   });
 
@@ -311,6 +362,7 @@ class _MapPageState extends ConsumerState<MapPage> {
 
   @override
   void dispose() {
+    _stopParkableNow();
     launchStore.removeListener(_afterLaunch);
     lifecycle.dispose();
     controller.dispose();
@@ -339,19 +391,17 @@ class _MapPageState extends ConsumerState<MapPage> {
     final visible = store.spots.where(
       (s) => store.viewport.contains(s.lat, s.lng),
     );
+    final now = store.clock();
+    if (parkableNowOnly) _tickParkableNow(now);
     final spots = visible
         .where(
           (s) =>
               matchesSpaceKinds(s, kinds, store.vehicle) &&
-              // Pending reports reach notAllowed only through legal rules
-              // (see eligibility()), so hiding them here is intended.
-              (!hideDenied ||
-                  store.eligible(s).status != EligibilityStatus.notAllowed),
+              (!parkableNowOnly || _parkableNow(store, s, now)),
         )
         .toList();
     // Spots an availability filter leaves out stay on the map as grey dots,
     // with the reason kept for the empty-result card.
-    final now = store.clock();
     final liveFilter = store.availabilitySource.enabled
         ? availabilityFilter
         : AvailabilityFilter.off;
@@ -380,7 +430,9 @@ class _MapPageState extends ConsumerState<MapPage> {
     ]..sort((a, b) => a.$1 != b.$1 ? a.$1 - b.$1 : a.$2 - b.$2);
     final matches = [for (final (_, _, s) in ranked) s];
     final filtered =
-        kinds.isNotEmpty || hideDenied || liveFilter != AvailabilityFilter.off;
+        kinds.isNotEmpty ||
+        parkableNowOnly ||
+        liveFilter != AvailabilityFilter.off;
     final searchHeight = 32 + MediaQuery.textScalerOf(context).scale(20);
     // 44pt on iOS, 48dp on Android (Main boards), taller with larger text.
     final filterHeight = (16 + MediaQuery.textScalerOf(context).scale(14))
@@ -827,9 +879,11 @@ class _MapPageState extends ConsumerState<MapPage> {
                           MapFilterChip(
                             key: const ValueKey('parkable-filter'),
                             label: parkableNowLabel,
-                            selected: hideDenied,
-                            onTap: () =>
-                                setState(() => hideDenied = !hideDenied),
+                            selected: parkableNowOnly,
+                            onTap: () => setState(() {
+                              parkableNowOnly = !parkableNowOnly;
+                              if (!parkableNowOnly) _stopParkableNow();
+                            }),
                           ),
                           if (store.availabilitySource.enabled)
                             MapFilterChip(

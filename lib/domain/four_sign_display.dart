@@ -5,6 +5,7 @@
 library;
 
 import '../models/fee.dart';
+import '../models/holiday_calendar.dart' show taipeiDateMinute;
 import '../models/parking.dart';
 import '../models/space_kind.dart';
 import 'eligibility.dart';
@@ -169,9 +170,45 @@ String? _extensionText(PlateRate r) =>
     ? null
     : '可付 ${_num(r.extensionAmount!)} 元延長 ${r.extensionTimes} 次';
 
-SignPlate _verdictPlate(FourSign s) {
+/// 現在禁停's title on the 能不能停 plate (#244).
+const noParkingNowLabel = '現在禁停';
+
+/// 現在禁停's note when no time parking opens again is known (禁停 runs
+/// past the week searched).
+const noParkingUnknownNote = '看現場公告';
+
+/// When [at] (an instant) falls in Taipei, read at [now], as 「HH:MM 起」
+/// reads: 「09:00」 today, 「明天 09:00」, else 「週三 09:00」.
+String parkableAtText(DateTime at, DateTime now) {
+  final (today, _) = taipeiDateMinute(now);
+  final (day, minute) = taipeiDateMinute(at);
+  final clock =
+      '${(minute ~/ 60).toString().padLeft(2, '0')}:'
+      '${(minute % 60).toString().padLeft(2, '0')}';
+  return switch (day.difference(today).inDays) {
+    0 => clock,
+    1 => '明天 $clock',
+    _ => '週${'一二三四五六日'[day.weekday - 1]} $clock',
+  };
+}
+
+SignPlate _verdictPlate(FourSign s, DateTime now) {
   final v = s.verdict;
   final basis = _basisNote(v);
+  // 現在禁停 (#244): painted amber as 有條件 (the status stays
+  // conditional), titled apart, with when parking opens again.
+  if (v.status == EligibilityStatus.conditional && v.noParkingNow) {
+    final note = v.parkableAt == null
+        ? noParkingUnknownNote
+        : '${parkableAtText(v.parkableAt!, now)} 起可停';
+    return SignPlate(
+      face: FourSignFace.verdict,
+      main: noParkingNowLabel,
+      note: note,
+      tone: PlateTone.conditional,
+      semantics: '能不能停：$noParkingNowLabel，$note',
+    );
+  }
   final (tone, main, note) = switch (v.status) {
     EligibilityStatus.allowed => (PlateTone.allowed, '可停', basis),
     EligibilityStatus.conditional => (
@@ -487,9 +524,9 @@ SignPlate _wherePlate(FourSign s) {
 /// The plates [sign] shows at [now], in the rider's order; only the
 /// 能不能停 plate when the vehicle may not park.
 List<SignPlate> fourSignPlates(FourSign sign, DateTime now) {
-  if (sign.denied) return [_verdictPlate(sign)];
+  if (sign.denied) return [_verdictPlate(sign, now)];
   return [
-    _verdictPlate(sign),
+    _verdictPlate(sign, now),
     _seatPlate(sign, now),
     _feePlate(sign),
     _wherePlate(sign),

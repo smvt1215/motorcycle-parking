@@ -93,6 +93,8 @@ class VerdictAnswer {
     this.city,
     this.openNow = false,
     this.notStated = false,
+    this.noParkingNow = false,
+    this.parkableAt,
   });
 
   /// The four signs' status: [decideParking]'s, except that only places
@@ -116,6 +118,15 @@ class VerdictAnswer {
   /// 官方未標示 (#201): an unverified answer because the official data
   /// names the vehicle without saying whether it may park (A3 不確定).
   final bool notStated;
+
+  /// 現在禁停 (#244): a 時段性禁停 period holds now on every open place
+  /// ([DecisionGap.noParkingNow]); the status stays conditional.
+  final bool noParkingNow;
+
+  /// While [noParkingNow]: when the vehicle may park again, an instant in
+  /// UTC (shown in Taipei time); null when no time within the week is
+  /// known.
+  final DateTime? parkableAt;
 }
 
 enum SeatKind {
@@ -371,17 +382,14 @@ FourSign fourSign(
       decision ??
       decideParking(spot, vehicle, rules, now: now, calendar: calendar);
   final street = !spot.isFacility;
-  final areas = street
-      ? _streetAreas(spot, vehicle, rules, whole, now, calendar)
-      : _lotAreas(spot, vehicle, whole, now, calendar);
-  final openNow = [
-    for (final a in areas)
-      if (a.window.now) a,
-  ];
-  final open = [
-    for (final a in areas)
-      if (a.open) a,
-  ];
+  final (:areas, :openNow, :open) = _areasOf(
+    spot,
+    vehicle,
+    rules,
+    whole,
+    now,
+    calendar,
+  );
   final counted = openNow.isNotEmpty ? openNow : open;
   final verdict = _verdict(spot, now, whole, areas, openNow, open, street);
   return FourSign(
@@ -402,6 +410,57 @@ FourSign fourSign(
           ? areas.single.bayKind
           : null,
     ),
+  );
+}
+
+/// [fourSign]'s 能不能停 alone, without the other three faces: what the
+/// map's 「現在可停」 filter reads for every spot in view (#244), so it
+/// costs only the decision and the places' windows.
+VerdictAnswer fourSignVerdict(
+  ParkingSpot spot,
+  VehicleType vehicle,
+  Iterable<CityRule> rules, {
+  required DateTime now,
+  ParkingDecision? decision,
+  HolidayCalendar? calendar,
+}) {
+  final whole =
+      decision ??
+      decideParking(spot, vehicle, rules, now: now, calendar: calendar);
+  final (:areas, :openNow, :open) = _areasOf(
+    spot,
+    vehicle,
+    rules,
+    whole,
+    now,
+    calendar,
+  );
+  return _verdict(spot, now, whole, areas, openNow, open, !spot.isFacility);
+}
+
+/// The places of [spot] for [vehicle], those open now, and those open at
+/// all.
+({List<SignArea> areas, List<SignArea> openNow, List<SignArea> open}) _areasOf(
+  ParkingSpot spot,
+  VehicleType vehicle,
+  Iterable<CityRule> rules,
+  ParkingDecision whole,
+  DateTime now,
+  HolidayCalendar? calendar,
+) {
+  final areas = spot.isFacility
+      ? _lotAreas(spot, vehicle, whole, now, calendar)
+      : _streetAreas(spot, vehicle, rules, whole, now, calendar);
+  return (
+    areas: areas,
+    openNow: [
+      for (final a in areas)
+        if (a.window.now) a,
+    ],
+    open: [
+      for (final a in areas)
+        if (a.open) a,
+    ],
   );
 }
 
@@ -624,6 +683,20 @@ VerdictAnswer _verdict(
         : later.reduce(
             (a, b) => b.window.opensAtMinute! < a.window.opensAtMinute! ? b : a,
           );
+    // 現在禁停 (#244): every open place is under a 禁停 period now. The
+    // vehicle parks again when the first place opens: its window already
+    // leaves 禁停 out, so it never opens before 禁停 ends. When no place
+    // opens again within the week (its slots or notice end first), when
+    // is unknown: the end of 禁停 alone opens nothing.
+    final banned = whole.gaps.contains(DecisionGap.noParkingNow);
+    DateTime? parkableAt;
+    if (banned && first != null) {
+      final (today, _) = taipeiDateMinute(now);
+      // Taipei is UTC+8 all year.
+      parkableAt = today
+          .add(Duration(minutes: first.window.opensAtMinute!))
+          .subtract(const Duration(hours: 8));
+    }
     return VerdictAnswer(
       status: EligibilityStatus.conditional,
       restriction:
@@ -631,6 +704,8 @@ VerdictAnswer _verdict(
       opensAt: first?.window.opensAt,
       basis: basis,
       city: city,
+      noParkingNow: banned,
+      parkableAt: parkableAt,
     );
   }
   return VerdictAnswer(
