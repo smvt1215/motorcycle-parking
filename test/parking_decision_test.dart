@@ -177,26 +177,38 @@ void main() {
                   got.status == EligibilityStatus.unverified &&
                       got.reason == '無法確認此格是收費格或免費格，請看現場牌面',
                 // Scooters only in the posted slots; heavy bikes as on any
-                // car bay.
+                // car bay (a legacy shared bay has no slots on file), told
+                // to follow the sign's slots where they may park
+                // (PM_ANS_20261031_21).
                 SpaceType.flexShared =>
                   vehicle == VehicleType.scooter
                       ? got.status == EligibilityStatus.unverified
-                      : got.reason ==
-                            eligibility(
-                              street(
-                                SpaceType.car,
-                                city: spot.city,
-                                district: spot.district,
-                                status: spot.status,
-                                source: spot.source,
-                                confirmed: spot.lastConfirmedAt,
-                                heavy: spot.heavyAllowed,
-                                scooter: spot.scooterAllowed,
-                              ),
-                              vehicle,
-                              r,
-                              now: at,
-                            ).reason,
+                      : () {
+                          final car = eligibility(
+                            street(
+                              SpaceType.car,
+                              city: spot.city,
+                              district: spot.district,
+                              status: spot.status,
+                              source: spot.source,
+                              confirmed: spot.lastConfirmedAt,
+                              heavy: spot.heavyAllowed,
+                              scooter: spot.scooterAllowed,
+                            ),
+                            vehicle,
+                            r,
+                            now: at,
+                          );
+                          final open =
+                              car.status == EligibilityStatus.allowed ||
+                              car.status == EligibilityStatus.conditional;
+                          return got.status == car.status &&
+                              got.restriction == car.restriction &&
+                              got.reason ==
+                                  (open
+                                      ? '${car.reason}；汽機車共用格請依現場牌面時段停放'
+                                      : car.reason);
+                        }(),
                 _ => false,
               };
               expect(
@@ -421,7 +433,216 @@ void main() {
       expect(none.status, EligibilityStatus.unverified);
       expect(none.gaps, {DecisionGap.scheduleUnknown});
       expect(none.reason, '公告沒有列出普通機車的開放時段，請看現場牌面');
-      expect(flex([], VehicleType.heavy).status, EligibilityStatus.allowed);
+      // Heavy bikes park in the car slots (PM_ANS_20261031_21): a working
+      // Tuesday noon is inside 平日 07:00–20:00.
+      final heavy = flex([], VehicleType.heavy);
+      expect(heavy.status, EligibilityStatus.conditional);
+      expect(heavy.restriction, RuleRestriction.timeLimited);
+      expect(heavy.reason, contains('現在可停'));
+      expect(heavy.reason, contains('平日 07:00–20:00'));
+      expect(heavy.reason, contains('假日全天'));
+    });
+
+    group('大型重機停汽機車共用格：汽車時段＋縣市規則開放的機車時段＋公告寫明的時段（PM_ANS_20261031_21）', () {
+      DateTime at(int y, int m, int d, int h) =>
+          DateTime.utc(y, m, d, h).subtract(const Duration(hours: 8));
+      final dayCar = {
+        'days': 'weekday',
+        'from': '07:00',
+        'to': '20:00',
+        'vehicles': ['car'],
+      };
+      final nightScooter = {
+        'days': 'all',
+        'from': '20:00',
+        'to': '07:00',
+        'vehicles': ['scooter'],
+      };
+      ParkingDecision shared(
+        VehicleType v,
+        DateTime when, {
+        String? charge = 'toll',
+        List<Map<String, Object>>? schedule,
+        List<Map<String, Object>> limits = const [],
+        List<CityRule>? rules,
+      }) => decideParking(
+        street(
+          SpaceType.flexShared,
+          condition: c({
+            'bay': 'car',
+            'use': 'share',
+            'share': 'car_motorcycle',
+            'charge': ?charge,
+            if (limits.isNotEmpty) 'limits': limits,
+            if ((schedule ?? [dayCar, nightScooter]) case final slots
+                when slots.isNotEmpty)
+              'schedule': slots,
+          }),
+        ),
+        v,
+        rules ?? bundled,
+        now: when,
+      );
+
+      test('臺北收費共用格、重機規則已生效：重機白天夜間都可停並列出兩段，普通機車只列夜間', () {
+        final noon = at(2026, 10, 27, 12), night = at(2026, 10, 27, 22);
+        for (final when in [noon, night]) {
+          final d = shared(VehicleType.heavy, when);
+          expect(d.status, EligibilityStatus.conditional);
+          expect(d.restriction, RuleRestriction.timeLimited);
+          expect(d.reason, contains('現在可停'));
+          expect(d.reason, contains('平日 07:00–20:00'));
+          expect(d.reason, contains('每天 20:00–隔日 07:00'));
+          final kinds = d.basis.map((b) => b.kind).toList();
+          expect(kinds, contains(BasisKind.cityRule));
+        }
+        final scooter = shared(VehicleType.scooter, noon);
+        expect(scooter.status, EligibilityStatus.conditional);
+        expect(scooter.reason, contains('現在不可停，20:00 起可停'));
+        expect(scooter.reason, contains('每天 20:00–隔日 07:00'));
+        expect(scooter.reason, isNot(contains('07:00–20:00')));
+      });
+
+      test('臺中共用格：機車時段依有條件規則納入，保留「限標示車格」與規則說明（Codex #226）', () {
+        ParkingDecision taichung(String charge) => decideParking(
+          street(
+            SpaceType.flexShared,
+            city: '臺中市',
+            condition: c({
+              'bay': 'car',
+              'use': 'share',
+              'share': 'car_motorcycle',
+              'charge': charge,
+              'schedule': [dayCar, nightScooter],
+            }),
+          ),
+          VehicleType.heavy,
+          bundled,
+          now: at(2026, 10, 27, 22),
+        );
+        for (final charge in ['toll', 'free']) {
+          final d = taichung(charge);
+          expect(d.status, EligibilityStatus.conditional, reason: charge);
+          expect(d.restriction, RuleRestriction.signage, reason: charge);
+          expect(d.reason, contains('現在可停'), reason: charge);
+          expect(d.reason, contains('每天 20:00–隔日 07:00'), reason: charge);
+          expect(d.reason, contains('機車時段：'), reason: charge);
+          expect(d.reason, contains('大重機共用'), reason: charge);
+        }
+        // Taipei's toll bays open without that limit.
+        final taipei = shared(VehicleType.heavy, at(2026, 10, 27, 22));
+        expect(taipei.restriction, RuleRestriction.timeLimited);
+        expect(taipei.reason, isNot(contains('機車時段：')));
+        expect(taipei.reason, isNot(contains('大重機共用')));
+      });
+
+      test('重機規則尚未生效（2026-10-05）：重機只列汽車時段，夜間現在不可停並給下一段', () {
+        // The rule Taipei heavy bikes had before 2026-10-06: car and heavy
+        // bays only, no motorcycle bays.
+        final before = CityRule.fromJson({
+          ...bundledJson.firstWhere(
+            (r) => r['city'] == '臺北市' && r['vehicle'] == 'heavy',
+          ),
+          'allowed_space_types': ['heavyOnly', 'car'],
+          'effective_date': '2026-01-01',
+          'can_use_two_spaces': false,
+        });
+        final rules = [before, rule('臺北市', VehicleType.heavy)];
+        final d = shared(VehicleType.heavy, at(2026, 10, 5, 22), rules: rules);
+        expect(d.status, EligibilityStatus.conditional);
+        expect(d.reason, contains('現在不可停，明天 07:00 起可停'));
+        expect(d.reason, contains('平日 07:00–20:00'));
+        expect(d.reason, isNot(contains('20:00–隔日 07:00')));
+        expect(d.basis.map((b) => b.kind), contains(BasisKind.law));
+      });
+
+      test('免費共用格：臺北重機規則不含免費機車格，重機只列汽車時段', () {
+        final d = shared(
+          VehicleType.heavy,
+          at(2026, 10, 27, 22),
+          charge: 'free',
+        );
+        expect(d.status, EligibilityStatus.conditional);
+        expect(d.reason, contains('現在不可停'));
+        expect(d.reason, contains('平日 07:00–20:00'));
+        expect(d.reason, isNot(contains('20:00–隔日 07:00')));
+      });
+
+      test('收費或免費未確認：兩種格的規則不一致，機車時段不納入', () {
+        final d = shared(VehicleType.heavy, at(2026, 10, 27, 22), charge: null);
+        expect(d.reason, isNot(contains('20:00–隔日 07:00')));
+        expect(d.reason, contains('平日 07:00–20:00'));
+      });
+
+      test('公告直接寫大型重機的時段照公告納入', () {
+        final d = shared(
+          VehicleType.heavy,
+          at(2026, 10, 27, 22),
+          charge: 'free',
+          schedule: [
+            dayCar,
+            {
+              'days': 'all',
+              'from': '20:00',
+              'to': '07:00',
+              'vehicles': ['scooter', 'heavy'],
+            },
+          ],
+        );
+        expect(d.status, EligibilityStatus.conditional);
+        expect(d.reason, contains('現在可停'));
+        expect(d.reason, contains('每天 20:00–隔日 07:00'));
+        expect(d.basis.map((b) => b.kind), contains(BasisKind.notice));
+      });
+
+      test('只有機車時段、規則未對重機開放：重機待確認', () {
+        final d = shared(
+          VehicleType.heavy,
+          at(2026, 10, 27, 22),
+          charge: 'free',
+          schedule: [nightScooter],
+        );
+        expect(d.status, EligibilityStatus.unverified);
+        expect(d.gaps, contains(DecisionGap.scheduleUnknown));
+        expect(d.reason, contains('開放的機車時段'));
+      });
+
+      test('沒有時段資料：重機照汽車格依法可停，提醒依現場牌面時段', () {
+        final d = shared(
+          VehicleType.heavy,
+          at(2026, 10, 27, 22),
+          schedule: const [],
+        );
+        expect(d.status, EligibilityStatus.allowed);
+        expect(d.reason, endsWith('汽機車共用格請依現場牌面時段停放'));
+      });
+
+      test('身障／充電共用格：重機維持有條件，限制與時段都保留（P7 回歸）', () {
+        for (final limit in [
+          {'kind': 'special_vehicle', 'vehicle': 'disabled_modified'},
+          {'kind': 'ev_only'},
+        ]) {
+          for (final schedule in [
+            const <Map<String, Object>>[],
+            [dayCar, nightScooter],
+          ]) {
+            final d = shared(
+              VehicleType.heavy,
+              at(2026, 10, 27, 22),
+              schedule: schedule,
+              limits: [limit],
+            );
+            expect(d.status, EligibilityStatus.conditional, reason: '$limit');
+            expect(
+              d.reason,
+              contains(limit['kind'] == 'ev_only' ? '限電動機車' : '特製機車'),
+            );
+            if (schedule.isNotEmpty) {
+              expect(d.reason, contains('每天 20:00–隔日 07:00'));
+            }
+          }
+        }
+      });
     });
 
     test('時段：目前車種沒有出現在任何時段就是待確認', () {
