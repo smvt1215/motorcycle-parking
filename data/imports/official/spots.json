@@ -1946,7 +1946,7 @@
     "source_url": "https://tcgbusfs.blob.core.windows.net/blobtcmsv/TCMSV_alldesc.json",
     "license_note": "政府資料開放授權條款第 1 版；社群協力資料，經核驗後只收錄事實",
     "source_id": "TPE1402",
-    "parking_guide": "社群補充（未經官方查核）：\n可停汽車格\n可停機車格"
+    "parking_guide": "社群補充（未經官方查核）：\n機車區禁止大型重機\n可停汽車格"
   },
   {
     "id": "official:2fd9d180-6079-5413-8b07-3868c3168a49",
@@ -2870,7 +2870,7 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": "2026-10-17T00:00:00Z",
-    "note": "社群補充（未經官方查核）：大型重機可停；停放區域：汽車區（每小時 20 元）\n已比對新北市路外公共停車場資訊（新北市政府交通局）（010130）",
+    "note": "社群補充（未經官方查核）：大型重機可停；停放區域：汽車區（每小時 20 元；按鈕取票）\n已比對新北市路外公共停車場資訊（新北市政府交通局）（010130）",
     "address": "新北市板橋區智樂路6號B1~B3",
     "entrance_note": "社群補充（未經官方查核）：\n按鈕取票",
     "source_name": "新北市政府",
@@ -4067,8 +4067,7 @@
     "source_name": "臺北市政府",
     "source_url": "https://tcgbusfs.blob.core.windows.net/blobtcmsv/TCMSV_alldesc.json",
     "license_note": "政府資料開放授權條款第 1 版；社群協力資料，經核驗後只收錄事實",
-    "source_id": "TPE1171",
-    "parking_guide": "社群補充（未經官方查核）：\n重機停放樓層：B3"
+    "source_id": "TPE1171"
   },
   {
     "id": "official:ca52e473-cb83-5cd9-a882-bc46e57ad86a",
@@ -4673,7 +4672,7 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": "2026-10-17T00:00:00Z",
-    "note": "社群補充（未經官方查核）：大型重機可停；停放區域：汽車區（每小時 30 元）\n已比對桃園市停車率（路外、路邊）（TYC0135）",
+    "note": "社群補充（未經官方查核）：大型重機可停；停放區域：汽車區（每小時 30 元；按鈕取票）\n已比對桃園市停車率（路外、路邊）（TYC0135）",
     "entrance_note": "社群補充（未經官方查核）：\n按鈕取票",
     "source_name": "桃園市政府",
     "source_url": "https://data.gov.tw/dataset/173678",
@@ -6134,7 +6133,7 @@
     "note": "社群補充（未經官方查核）：大型重機可停；停放區域：重機專用格（每小時 30 元；需按鈴或請管理員協助）\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0421）",
     "address": "臺北市信義區忠孝東路5段666號地下1至3層",
     "entrance_note": "社群補充（未經官方查核）：\n後車牌辨識",
-    "parking_guide": "社群補充（未經官方查核）：\n重機專用格 5 格\n重機停放樓層：B1",
+    "parking_guide": "社群補充（未經官方查核）：\n重機專用格 5 格",
     "parking_zones": [
       {
         "name": "重機專用格",
@@ -8783,7 +8782,7 @@
     "note": "社群補充（未經官方查核）：大型重機可停；停放區域：重機專用格（每日 40 元）\n已比對臺北市停車場資訊（臺北市停車管理工程處）（TPE0910）",
     "address": "臺北市中正區市民大道3段2號地下1至6層",
     "entrance_note": "社群補充（未經官方查核）：\n走機車車道",
-    "parking_guide": "社群補充（未經官方查核）：\n有重機專用格\n重機停放樓層：B3\n重機停放樓層：B2",
+    "parking_guide": "社群補充（未經官方查核）：\n有重機專用格\n重機停放樓層：B2",
     "source_name": "臺北市政府",
     "source_url": "https://tcgbusfs.blob.core.windows.net/blobtcmsv/TCMSV_alldesc.json",
     "license_note": "政府資料開放授權條款第 1 版；社群協力資料，經核驗後只收錄事實",
@@ -9725,7 +9724,7 @@
     "available": null,
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": "2026-10-17T00:00:00Z",
-    "note": "社群補充（未經官方查核）：大型重機可停；停放區域：機車區（每日 30 元；悠遊卡進出）\n已比對桃園市停車率（路外、路邊）（TYC0192）",
+    "note": "社群補充（未經官方查核）：大型重機可停；停放區域：機車區（每日 30 元；每日 20 元；悠遊卡進出）\n已比對桃園市停車率（路外、路邊）（TYC0192）",
     "entrance_note": "社群補充（未經官方查核）：\n悠遊卡進出\n後車牌辨識\n需按鈴或請管理員協助",
     "source_name": "桃園市政府",
     "source_url": "https://data.gov.tw/dataset/173678",
@@ -11031,8 +11030,7 @@
     "source_name": "臺北市政府",
     "source_url": "https://tcgbusfs.blob.core.windows.net/blobtcmsv/TCMSV_alldesc.json",
     "license_note": "政府資料開放授權條款第 1 版；社群協力資料，經核驗後只收錄事實",
-    "source_id": "TPE1277",
-    "parking_guide": "社群補充（未經官方查核）：\n重機停放樓層：B1"
+    "source_id": "TPE1277"
   },
   {
     "id": "official:b6301ddc-5d24-5d82-b957-b6c4b0778969",

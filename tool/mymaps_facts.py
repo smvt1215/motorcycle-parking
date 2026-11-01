@@ -49,15 +49,22 @@ def first_minutes_free(line):
     return f"前 {minutes} 分鐘免費"
 
 
-def floor(line):
-    match = re.search(r"(?<![A-Za-z])([BbＢ])\s*(\d)(?!\d)", line)
-    if not match or not re.search(r"重機|大重|專用", line):
+def floor(clause):
+    """One basement floor where the clause parks the bike; a former floor (原B3), a desk to
+    report to (到B1登記) or two floors in one clause say nothing certain."""
+    floors = {m[1] for m in re.finditer(r"(?<![A-Za-z])[BbＢ]\s*(\d)(?!\d)", clause)}
+    if len(floors) != 1 or not re.search(r"重機|大重|專用", clause) or re.search(r"原|舊|以前|曾|登記|繳費|管理室|服務台", clause):
         return ""
-    return f"重機停放樓層：B{match[2]}"
+    return f"重機停放樓層：B{floors.pop()}"
 
 
 # (field, pattern or function, phrase). In one group only the first match counts,
-# so a negation (無後牌辨識) is tried before the plain fact (後牌辨識).
+# so a negation (無後牌辨識) is tried before the plain fact (後牌辨識). A DROP phrase
+# ends the group with no fact: advice against an area (不要停汽車格) is no ban.
+# Rules see one clause at a time, so 只能停汽車區，不可停機車區 is two statements.
+DROP = "\0"
+BANNED_FROM = r"(不可|不能|禁止|禁停|不得|不給|無法)\s*(停|進入|進)?\s*(放|在|於)?"
+ADVISED_AGAINST = r"不要|勿|不建議|別"
 FACTS = [
     ("plate", [
         ("entrance_note", r"(僅|只)有?前(車)?[牌排]", "只辨識前車牌"),
@@ -85,13 +92,15 @@ FACTS = [
         ("parking_guide", r"專用格|重機格|重機(專用|專屬)(停車)?(區|格位|空間)|重機停車區|重機辨識區|重機區|大重(專用|區)|重機專用|專用空間", "有重機專用格"),
     ]),
     ("car_area", [
-        ("parking_guide", r"汽車(區|格|停車場|停車區).{0,3}(禁|不可|不給)", "汽車區禁止大型重機"),
-        ("parking_guide", r"可.{0,2}停.{0,3}汽車|停汽車(格|區|位|停車)|汽車格.{0,3}都可停|大台.{0,4}汽車格", "可停汽車格"),
+        ("parking_guide", rf"{BANNED_FROM}.{{0,3}}汽車|汽車(區|格|停車場|停車區|位).{{0,3}}(禁|不可|不能|不給)", "汽車區禁止大型重機"),
+        ("parking_guide", rf"{ADVISED_AGAINST}.{{0,4}}汽車", DROP),
+        ("parking_guide", r"可.{0,2}停.{0,3}汽車|只能停.{0,6}汽車|停汽車車?(格|區|位|停車)|汽車格.{0,3}都可停|大台.{0,4}汽車格", "可停汽車格"),
     ]),
     ("scooter_area", [
         ("parking_guide", r"機車(區|格|停車場|停車區).{0,6}(開單|警告|罰)", "停機車格可能被開單"),
-        ("parking_guide", r"機車(區|格|停車場|停車區).{0,4}(禁|不可|不給)", "機車區禁止大型重機"),
-        ("parking_guide", r"可.{0,2}停.{0,3}機車|停機車(格|區|位|停車)|機車格.{0,3}都可停|機車格汽車格都可停", "可停機車格"),
+        ("parking_guide", rf"{BANNED_FROM}.{{0,3}}機車|機車(區|格|停車場|停車區|位).{{0,4}}(禁|不可|不能|不給)", "機車區禁止大型重機"),
+        ("parking_guide", rf"{ADVISED_AGAINST}.{{0,4}}機車", DROP),
+        ("parking_guide", r"可.{0,2}停.{0,3}機車|只能停.{0,6}機車|停機車車?(格|區|位|停車)|機車格.{0,3}都可停|機車格汽車格都可停", "可停機車格"),
     ]),
     ("angle", [("parking_guide", r"斜停\s*(兩|2)\s*格", "可斜停兩格")]),
     ("floor", [("parking_guide", floor, None)]),
@@ -113,6 +122,8 @@ FACTS = [
 FIELDS = ("note", "entrance_note", "parking_guide")
 
 
+# Clause boundaries inside one source line.
+CLAUSE = re.compile(r"[，,。；;／/、]|但|\.\s|\s-\s|…+")
 # A line that hedges (不確定是否有重機專用格, 理論上可停) states no fact.
 HEDGE = re.compile(r"不確定|不知道|待確認|待踩點|好像|應該|理論上|可能可以|不清楚|[?？]")
 
@@ -128,20 +139,21 @@ def facts(lines):
             continue
         if HEDGE.search(line):
             continue
-        for _, rules in FACTS:
-            for field, rule, phrase in rules:
-                text = rule(line) if callable(rule) else (phrase if re.search(rule, line) else "")
-                if text:
-                    if text not in found[field]:
-                        found[field].append(text)
-                    break
+        for clause in filter(None, (c.strip() for c in CLAUSE.split(line))):
+            for _, rules in FACTS:
+                for field, rule, phrase in rules:
+                    text = rule(clause) if callable(rule) else (phrase if re.search(rule, clause) else "")
+                    if text:
+                        if text != DROP and text not in found[field]:
+                            found[field].append(text)
+                        break
     # A bay count says more than 有重機專用格.
     if any(re.fullmatch(r"重機專用格 \d+ 格(以上)?", f) for f in found["parking_guide"]):
         found["parking_guide"] = [f for f in found["parking_guide"] if f != "有重機專用格"]
     return found
 
 
-VOCABULARY = {phrase: field for _, rules in FACTS for field, rule, phrase in rules if phrase}
+VOCABULARY = {phrase: field for _, rules in FACTS for field, rule, phrase in rules if phrase and phrase != DROP}
 FACT_FORMS = [(re.compile(p), field) for p, field in ((r"重機專用格 \d+ 格(以上)?", "parking_guide"),
                                                       (r"前 \d+ 分鐘免費", "note"), (r"重機停放樓層：B\d", "parking_guide"))]
 
