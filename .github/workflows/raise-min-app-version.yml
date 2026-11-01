@@ -1,0 +1,56 @@
+name: Raise production minimum App version
+
+# Run by hand once an incompatible release (config/app_compat.json on main)
+# is live in both stores (docs/CICD.md). Production never raises at deploy
+# time. The production environment's approval gates the run; the job then
+# checks the App Store (lookup API) and Google Play (Play Developer API
+# through a discarded edit, or the approver's confirmation while no service
+# account is set up) before calling the audited admin_v1 function, which
+# only raises.
+on:
+  workflow_dispatch:
+    inputs:
+      play_confirmed:
+        description: 沒有設定 Play 服務帳號時：我已確認 Google Play 的 production 已 100% 推出這一版
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: raise-min-app-version
+  cancel-in-progress: false
+
+jobs:
+  raise:
+    name: Raise after both stores list the release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: production
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: main
+          # Release tags give the versionCode of the marked version.
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install the Play API client
+        run: python3 -m pip install --quiet "google-auth==2.38.0" "requests==2.32.3"
+      - name: Check both stores, then raise
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          PLAY_CONFIRMED: ${{ inputs.play_confirmed }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          key=$(curl -fsS -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/api-keys?reveal=true" \
+            | jq -r '.[] | select(.name == "service_role") | .api_key // empty')
+          if [ -z "$key" ]; then echo "::error::no service_role key for the project"; exit 1; fi
+          echo "::add-mask::$key"
+          SUPABASE_SERVICE_KEY="$key" python3 tool/raise_min_app_version.py \
+            --require-app-store tw.motopark.motorcycleParking \
+            --require-play tw.motopark.motorcycle_parking

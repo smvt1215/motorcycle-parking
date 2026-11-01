@@ -371,6 +371,37 @@ Play Integrity 只認得從 Google Play 安裝的 APP。staging 的 APK 經 Fire
 - migration 只能往前，不寫 down migration；出錯時用新的 migration 修正。
 - 每個 migration 都必須能在 CI 從零套用成功（`supabase start`）。
 
+## 最低支援版本（不相容的發版，#195 P2）
+`api_v1.client_config()` 會回傳 `min_supported_app_version`。版本低於它的 App 會**整個擋下**，必須更新才能繼續使用（使用者決定）。這個值一旦設錯，所有人都打不開 App，所以：
+- 伺服器寧可不擋：沒有設定、格式不對或讀取失敗時，一律回 `0.1.0`。
+- App 離線或讀不到 `client_config` 時，也不可以擋。
+- 只有 `admin_v1.set_min_supported_app_version()` 能修改這個值，每次修改都會寫入 `admin_audit_log`：
+  - 管理員可以調高或調低。調低（例如發現新版有問題，要讓舊版回來）只能由管理員手動操作。
+  - CD 只能調高，稽核紀錄的 actor 是 `00000000-0000-0000-0000-0000000000cd`，並附上 run 的網址。
+
+**哪種改動算不相容**：舊版 App 在新後端上會壞掉或資料會被拒絕的改動。例如：
+- 舊版送出的回報被新的驗證規則拒絕。
+- 舊版讀取的欄位被移除，或改了語意。
+- 規則或資料的格式變了，舊版解析不了。
+
+依「資料庫 migration 規則」先擴充、後收斂的改動，不算不相容，不必標記。
+
+**怎麼標記**：在造成不相容的那個 PR 裡，把 `config/app_compat.json` 的 `min_supported_app_version` 改成這一版的 pubspec 版本（`x.y.z`，不含 build number）。PR 審查時會在 diff 上看到這個改動。CI 的 `tool/check_app_compat.py` 會檢查：
+- 值必須是 `x.y.z`，而且不能大於 pubspec 的版本。
+- 只能調高，而且只能調成這一版的 pubspec 版本。要調低就由管理員手動處理，不要改這個檔案。
+- 這個 PR 沒有同時調整 pubspec 版本時，會在 PR 上顯示警告，提醒確認這一版確實是不相容的那一版。
+
+**何時生效**：
+- **staging**：`cd-staging.yml` 部署後端後立刻調高，讓 Firebase 封測版和後端同時推出。檔案沒有改，就不會有任何變動。
+- **production**：部署當下不會調高。release 結束時，摘要會提醒這件事。等這一版在 App Store 與 Google Play 都上架後，手動執行 workflow「Raise production minimum App version」（`raise-min-app-version.yml`）。這個 workflow：
+  1. 要經過 `production` environment 的人工核准。
+  2. 用 App Store 的公開查詢 API 確認 `tw.motopark.motorcycleParking` 的版本已經 ≥ 標記的版本。
+  3. 確認 Google Play：
+     - 已設定 `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`：用 Play Developer API 建一個暫時的 edit，讀 production track，最後一律刪除該 edit、不 commit。這一版的 versionCode（取自 tag `vX.Y.Z` 當時 pubspec 的 build number）必須是 `completed`，或 `inProgress` 且 `userFraction` 為 1；分階段推出還沒到 100% 時不放行，訊息會寫出目前的比例。
+     - 還沒有服務帳號：由核准人勾選 `play_confirmed`。
+     - 執行結果會寫明用的是哪一種確認方式。
+  4. 兩個商店都確認後，呼叫 `admin_v1.set_min_supported_app_version()` 調高。
+
 ## 回復與應變
 - **Android**：在 Play Console 暫停分階段推出，修正後發新版本。
 - **iOS**：暫停分階段發布，修正後送審新版本。
@@ -398,8 +429,9 @@ Play Integrity 只認得從 Google Play 安裝的 APP。staging 的 APK 經 Fire
 ## 待準備事項（CI／CD 專屬）
 - **Google Play Console**：
   - 建立 APP 並啟用 Play App Signing。
-  - 建立服務帳號並授權發布。
+  - 建立服務帳號並授權發布。同一個服務帳號（`production` 的 `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`）也讓「Raise production minimum App version」能讀取 production track；這個用途只需要讀取 release 的權限。
   - 手動上傳第一個正式版建置，之後才能由 CD 以 API 上傳。
+- **`production` environment**：設定必要的核准人（required reviewers）。「Raise production minimum App version」要靠這道人工核准，才能調高最低支援版本。
 - **Apple Developer（staging 測試 IPA）**（已完成：staging Ad Hoc IPA 已由 CD 建置並送到 Firebase；新增測試裝置時仍需更新 profile）：
   - 註冊 staging bundle id（正式 bundle id 加 `.staging`）。
   - 註冊測試者 iPhone 的 UDID（可由 Firebase 收集，見上方「測試者 OTA 安裝」）。

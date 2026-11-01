@@ -214,3 +214,14 @@ jobs:
           ANDROID_BUILD: ${{ needs.android.outputs.build }}
           IOS_BUILD: ${{ needs.ios.outputs.build }}
         run: python3 tool/release_notes.py publish "$RELEASE_TAG"
+      # An incompatible release (config/app_compat.json) is not enforced here:
+      # once both stores list it, run "Raise production minimum App version"
+      # (docs/CICD.md).
+      - name: Remind to raise the production minimum App version
+        run: |
+          mark=$(python3 -c 'import json;print(json.load(open("config/app_compat.json"))["min_supported_app_version"])')
+          {
+            echo "### 最低支援版本"
+            echo "config/app_compat.json 標記的最低版本是 \`$mark\`。"
+            echo "如果這一版有不相容變更，等 App Store 與 Google Play 都上架後，手動執行 workflow「Raise production minimum App version」。"
+          } >> "$GITHUB_STEP_SUMMARY"

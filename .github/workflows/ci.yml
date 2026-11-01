@@ -62,6 +62,8 @@ jobs:
         run: flutter analyze --fatal-infos
       # Version policy still applies to documentation-only PRs.
       - run: python3 tool/check_version.py
+      # The incompatible-release mark is checked against the PR base too.
+      - run: python3 tool/check_app_compat.py
       - name: Generated API client matches supabase/api/v1
         if: steps.changes.outputs.run == 'true'
         run: python3 tool/gen_api_dart.py --check
