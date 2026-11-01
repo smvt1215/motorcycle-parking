@@ -68,7 +68,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('個人中心').last);
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('設定與登入'));
+    await tester.tap(find.byTooltip('帳號與設定'));
     await tester.pumpAndSettle();
     final version = find.byKey(const ValueKey('app-version'));
     expect(

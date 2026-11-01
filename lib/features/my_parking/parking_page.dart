@@ -3,14 +3,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data/app_store.dart';
+import '../../domain/favorites_display.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../../ui/map_panel.dart';
+import '../auth/profile_avatar.dart';
+import '../favorites/favorite_card.dart';
 import '../map/map_legend.dart';
-import '../map/spot_sheet.dart';
 import '../report/report_sheet.dart';
 
-/// Favorites shown here; the rest are one tap away on the favorites page.
-const _favoritePreview = 3;
+/// Favorites shown here, nearest first; the rest are one tap away on the
+/// favorites page (canvas v157 P4).
+const _favoritePreview = 2;
 
 /// Where the bike is first (needed right away), then favorites, then the
 /// rules. Each appears once: favorites have one section, not a list and a
@@ -21,29 +24,31 @@ class ParkingPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final store = ref.watch(storeProvider);
     final colors = Theme.of(context).colorScheme;
-    final favorites = store.favorites;
+    final favorites = favoritesByDistance(store);
+    final user = store.client?.auth.currentUser;
+    final signedIn = user != null && !user.isAnonymous;
     return MapPanel(
       title: '個人中心',
-      trailing: IconButton.filledTonal(
-        tooltip: '設定與登入',
+      trailing: IconButton(
+        key: const ValueKey('account-avatar'),
+        tooltip: accountSettingsLabel,
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints.tightFor(width: 48, height: 48),
         onPressed: () => showSettings(context, store),
-        icon: const Icon(Icons.person_outline),
+        icon: ProfileAvatar(user: signedIn ? user : null, size: 44),
       ),
       children: [
         _ParkedCard(store: store),
-        const SizedBox(height: 28),
-        _SectionHeader(
-          title: '我的收藏',
-          count: favorites.length,
-          action: favorites.isEmpty
-              ? null
-              : TextButton(
-                  key: const ValueKey('all-favorites'),
-                  onPressed: () => context.go('/favorites'),
-                  child: const Text('查看全部 ›'),
-                ),
+        const SizedBox(height: 24),
+        Padding(
+          padding: EdgeInsets.fromLTRB(isCupertino ? 16 : 0, 0, 0, 8),
+          child: Text(
+            favoritesTitle,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: isCupertino ? colors.onSurfaceVariant : colors.primary,
+            ),
+          ),
         ),
-        const SizedBox(height: 4),
         if (favorites.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 16),
@@ -51,46 +56,33 @@ class ParkingPage extends ConsumerWidget {
               children: [
                 Icon(Icons.bookmark_outline, size: 32, color: colors.primary),
                 const SizedBox(width: 16),
-                const Expanded(child: Text('還沒有收藏。在地圖點選停車點，再按「收藏」。')),
+                const Expanded(
+                  child: Text('$favoritesEmptyTitle。$favoritesEmptyBody'),
+                ),
               ],
             ),
+          )
+        else ...[
+          _FavoritePreview(
+            store: store,
+            entries: favorites.take(_favoritePreview).toList(),
           ),
-        for (final spot in favorites.take(_favoritePreview))
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: ExcludeSemantics(
-              child: SizedBox.square(
-                dimension: 40,
-                child: SpotMarker(
-                  look: markerLook(store.eligible(spot)),
-                  badge: spaceBadge(spot),
-                  size: 32,
-                ),
-              ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: _TextLink(
+              key: const ValueKey('all-favorites'),
+              label: showAllFavorites(favorites.length),
+              onPressed: () => context.go('/favorites'),
             ),
-            title: Text(
-              spot.name,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            subtitle: Text(
-              '${spot.city}${spot.district} · ${store.eligibleLabel(spot)}',
-            ),
-            trailing: IconButton(
-              tooltip: '取消收藏',
-              icon: const Icon(Icons.bookmark),
-              onPressed: () =>
-                  runAction(context, () => store.toggleFavorite(spot)),
-            ),
-            onTap: () => showSpot(context, store, spot),
           ),
+        ],
         const SizedBox(height: 24),
         _MoreLinks(
           links: [
             (
-              icon: Icons.fact_check_outlined,
+              icon: Icons.menu_book_outlined,
               title: '停車規則',
-              subtitle: '各縣市 × 普通機車／大型重機',
+              subtitle: rulesLinkSubtitle(store.vehicle),
               onTap: () => context.go('/rules'),
             ),
             (
@@ -112,38 +104,63 @@ class ParkingPage extends ConsumerWidget {
   }
 }
 
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.title, this.count, this.action});
-  final String title;
-  final int? count;
-  final Widget? action;
+/// The nearest favourites as cards: one inset group on iOS (P4-ios), a
+/// plain list on Android (P4-android).
+class _FavoritePreview extends StatelessWidget {
+  const _FavoritePreview({required this.store, required this.entries});
+  final AppStore store;
+  final List<FavoriteEntry> entries;
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return Row(
-      children: [
-        Text(
-          title,
-          style: Theme.of(context).textTheme.titleLarge
-              ?.copyWith(fontWeight: FontWeight.w600),
+    final cards = [
+      for (final (i, e) in entries.indexed) ...[
+        if (i > 0 && isCupertino)
+          Divider(height: 1, indent: 16, color: colors.outlineVariant),
+        FavoriteCard(
+          key: ValueKey('favorite-${e.spot.id}'),
+          store: store,
+          entry: e,
+          padding: isCupertino
+              ? const EdgeInsets.fromLTRB(16, 12, 16, 12)
+              : const EdgeInsets.symmetric(vertical: 10),
         ),
-        if (count case final count? when count > 0) ...[
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              color: colors.secondaryContainer,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(
-              '$count',
-              style: TextStyle(color: colors.onSecondaryContainer),
-            ),
-          ),
-        ],
-        const Spacer(),
-        ?action,
       ],
+    ];
+    final list = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: cards,
+    );
+    if (!isCupertino) return list;
+    return Material(
+      color: colors.surfaceContainerLowest,
+      borderRadius: BorderRadius.circular(12),
+      clipBehavior: Clip.antiAlias,
+      child: list,
+    );
+  }
+}
+
+/// A text link at least a touch target tall.
+class _TextLink extends StatelessWidget {
+  const _TextLink({super.key, required this.label, required this.onPressed});
+  final String label;
+  final VoidCallback onPressed;
+  @override
+  Widget build(BuildContext context) {
+    final child = Text(label);
+    if (isCupertino) {
+      return cu.CupertinoButton(
+        minimumSize: const Size(44, 44),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        onPressed: onPressed,
+        child: child,
+      );
+    }
+    return TextButton(
+      style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+      onPressed: onPressed,
+      child: child,
     );
   }
 }

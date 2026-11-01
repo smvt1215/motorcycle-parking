@@ -215,4 +215,15 @@ void main() {
       expect(read, SpotsInViewport.fromJson(viewport));
     },
   );
+
+  test('data_versions reads the versions and ignores new datasets', () async {
+    final api = clientAnswering(200, {
+      'rules': 25,
+      'spots': 808,
+      'holidays': 3,
+    });
+    final read = await api.dataVersions();
+    expect(requests.single.url.path, '/rest/v1/rpc/data_versions');
+    expect(read, const DataVersions(rules: 25, spots: 808));
+  });
 }

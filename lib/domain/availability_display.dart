@@ -223,7 +223,7 @@ class AvailabilityFact {
     this.notes = const [],
   });
 
-  /// 「機車車位」 or 「大型重機車位」.
+  /// 「有沒有位」, the four signs' name for it (A14).
   final String title;
 
   /// The large number, only for a fresh or delayed count.
@@ -233,7 +233,8 @@ class AvailabilityFact {
   /// (「空位未知」).
   final String headline;
 
-  /// 「／ 共 80 格」 after a number; empty otherwise.
+  /// 「／ 共 80 格（普通機車）」 after a number, naming whose bays; null
+  /// otherwise.
   final String? capacity;
   final String caption;
   final List<AvailabilityNote> notes;
@@ -242,7 +243,7 @@ class AvailabilityFact {
   String get semantics => [
     title,
     if (count != null) '$headline $count 格' else headline,
-    if (capacity != null) '共 ${capacity!.replaceAll(RegExp(r'[^0-9]'), '')} 格',
+    if (capacity != null) capacity!.replaceFirst('／ ', ''),
     caption,
     for (final note in notes) '${note.text}，${note.caption}',
   ].join('，');
@@ -265,7 +266,9 @@ AvailabilityFact availabilityFact(
   DateTime now,
 ) {
   final eligibility = decision.status;
-  final title = vehicle == VehicleType.scooter ? '機車車位' : '大型重機車位';
+  const title = '有沒有位';
+  String? capacity(AvailabilitySnapshot own) =>
+      own.total == null ? null : '／ 共 ${own.total} 格（${vehicle.label}）';
   // No count where the rider may not park, so it never reads as an
   // invitation (canvas v30).
   if (eligibility == EligibilityStatus.notAllowed) {
@@ -285,7 +288,7 @@ AvailabilityFact availabilityFact(
   final status = own?.status(now) ?? AvailabilityStatus.unavailable;
   final source = own == null
       ? ''
-      : '${availabilityClock(own.sourceUpdatedAt ?? now)} 更新 ・ ${own.provider}';
+      : '${availabilityClock(own.sourceUpdatedAt ?? now)} 更新　${own.provider}';
   switch (status) {
     case AvailabilityStatus.fresh:
       final full = own!.available == 0;
@@ -293,7 +296,7 @@ AvailabilityFact availabilityFact(
         title: title,
         count: own.available,
         headline: full ? '剩餘，已滿' : '剩餘',
-        capacity: '／ 共 ${own.total} 格',
+        capacity: capacity(own),
         caption: source,
         notes: notes,
       );
@@ -304,9 +307,9 @@ AvailabilityFact availabilityFact(
         headline:
             '剩餘${own.available == 0 ? '，已滿' : ''}，'
             '更新延遲 ${own.ageMinutes(now)} 分鐘',
-        capacity: '／ 共 ${own.total} 格',
+        capacity: capacity(own),
         caption:
-            '最後更新 ${availabilityClock(own.sourceUpdatedAt!)} ・ '
+            '最後更新 ${availabilityClock(own.sourceUpdatedAt!)}　'
             '${own.provider}',
         notes: notes,
       );
