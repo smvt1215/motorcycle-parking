@@ -172,4 +172,47 @@ void main() {
     // The rules cache (#202) keeps the JSON exactly as served.
     expect(await clientAnswering(200, rules).cityRulesRaw(), rules);
   });
+
+  test(
+    'spots_in_viewport sends the box and keeps contract JSON as served',
+    () async {
+      const viewport = {
+        'spots': [
+          {
+            'id': 'official:1',
+            'source': 'official',
+            'name': '官方點',
+            'lat': 25.04,
+            'lng': 121.51,
+            'fee': {
+              'scooter': {'mode': 'free'},
+            },
+            'parking_segments': null,
+          },
+        ],
+        'truncated': false,
+        'official_unavailable': false,
+      };
+      final api = clientAnswering(200, viewport);
+      final read = await api.spotsInViewport(
+        south: 25.03,
+        west: 121.5,
+        north: 25.06,
+        east: 121.53,
+      );
+      expect(jsonDecode(requests.single.body), {
+        'south': 25.03,
+        'west': 121.5,
+        'north': 25.06,
+        'east': 121.53,
+      });
+      final spot = read.spots.single;
+      expect(spot.id, 'official:1');
+      expect(spot.fee, {
+        'scooter': {'mode': 'free'},
+      });
+      expect(read.officialUnavailable, isFalse);
+      expect(read, SpotsInViewport.fromJson(viewport));
+    },
+  );
 }
