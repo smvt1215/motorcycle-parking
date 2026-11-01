@@ -263,6 +263,12 @@ enum DecisionGap {
   /// 官方未標示 (#201): the official data (for a lot, its operator's notice
   /// too) does not say whether the vehicle may park; judged unconfirmed.
   notStated,
+
+  /// 現在禁停 (#188 layer 2, PM_ANS_20261101_75): a 時段性禁停 period holds
+  /// now. The status stays conditional; the decision's `nextParkableAt`
+  /// says when parking opens again, and the App (#190) decides how to show
+  /// it.
+  noParkingNow,
 }
 
 /// Where a decision comes from (§3.3); #91 tiers the banner by it.
@@ -429,8 +435,13 @@ class ZoneDecision {
     this.price,
     this.gaps = const {},
     this.hasData = true,
+    this.nextParkableAt,
   });
   final String name;
+
+  /// When parking opens again while [DecisionGap.noParkingNow] holds (an
+  /// instant; show it in Taipei time); null otherwise.
+  final DateTime? nextParkableAt;
   final EligibilityStatus status;
   final RuleRestriction? restriction;
   final String reason;
@@ -460,7 +471,14 @@ class ParkingDecision {
     this.segments = const [],
     this.price,
     this.gaps = const {},
+    this.nextParkableAt,
   });
+
+  /// When parking opens again while [DecisionGap.noParkingNow] holds: the
+  /// end of the 禁停 periods that run on from now (an instant; show it in
+  /// Taipei time, with the date when it is not today); null otherwise. On
+  /// a street spot with segments, the earliest of the open segments'.
+  final DateTime? nextParkableAt;
   final EligibilityStatus status;
   final String reason;
   final RuleRestriction? restriction;
@@ -496,6 +514,7 @@ class ParkingDecision {
     Iterable<DecisionGap> moreGaps = const [],
     PriceAnswer? price,
     List<ZoneDecision>? zones,
+    DateTime? Function()? nextParkableAt,
   }) => ParkingDecision(
     status ?? this.status,
     reason ?? this.reason,
@@ -505,6 +524,9 @@ class ParkingDecision {
     segments: segments,
     price: price ?? this.price,
     gaps: {...gaps, ...moreGaps},
+    nextParkableAt: nextParkableAt == null
+        ? this.nextParkableAt
+        : nextParkableAt(),
   );
 }
 
@@ -749,6 +771,38 @@ LimitPeriod? _periodAt(
   return null;
 }
 
+/// When the 禁停 periods of [c] that hold at [now] end (#188 layer 2): the
+/// end of the span covering now, carried on through periods that start
+/// before it ends (overnight, back to back, the next day's), on the days
+/// [calendar] says; null when none holds now. Searched a week ahead.
+DateTime? noParkingUntil(
+  ParkingCondition c,
+  DateTime now,
+  HolidayCalendar calendar,
+) {
+  final periods = [
+    for (final l in c.limits)
+      if (l.kind == LimitKind.noParking) ...l.periods,
+  ];
+  if (periods.isEmpty) return null;
+  final (today, at) = taipeiDateMinute(now);
+  final spans = [
+    for (final p in periods)
+      ...datedSpans(p.days, p.from, p.to, today, calendar, last: 7),
+  ]..sort((a, b) => a.$1.compareTo(b.$1));
+  int? end;
+  for (final (start, stop) in spans) {
+    if (end == null) {
+      if (start <= at && at < stop) end = stop;
+    } else if (start <= end && stop > end) {
+      end = stop;
+    }
+  }
+  if (end == null) return null;
+  // Taipei is UTC+8 all year.
+  return today.add(Duration(minutes: end)).subtract(const Duration(hours: 8));
+}
+
 /// 每次限停 2 小時，可延長 1 次.
 String _stayText(LimitPeriod p) {
   final stay = '每次限停 ${FeeWords.span(p.maxMinutes!)}';
@@ -935,6 +989,13 @@ ParkingDecision _segmented(
     basis: basis,
     segments: segments,
     gaps: {for (final z in segments) ...z.gaps},
+    // Every open segment under 禁停 now: parking opens with the first.
+    nextParkableAt:
+        open.isNotEmpty && open.every((z) => z.nextParkableAt != null)
+        ? open
+              .map((z) => z.nextParkableAt!)
+              .reduce((a, b) => a.isBefore(b) ? a : b)
+        : null,
   );
 }
 
@@ -991,8 +1052,10 @@ ParkingCondition? _segmentCondition(
     String reason, {
     RuleRestriction? restriction,
     Set<DecisionGap> gaps = const {},
+    DateTime? nextParkableAt,
   }) => ZoneDecision(
     name: seg.name,
+    nextParkableAt: nextParkableAt,
     status: status,
     reason: reason,
     restriction: restriction,
@@ -1036,7 +1099,13 @@ ParkingCondition? _segmentCondition(
     ),
   );
   return (
-    zone: z(d.status, d.reason, restriction: d.restriction, gaps: d.gaps),
+    zone: z(
+      d.status,
+      d.reason,
+      restriction: d.restriction,
+      gaps: d.gaps,
+      nextParkableAt: d.nextParkableAt,
+    ),
     basis: [
       for (final b in d.basis)
         if (b.kind != source.kind) b,
@@ -1280,7 +1349,11 @@ ParkingDecision _street(
           if (r != _timedReason && !result.reason.contains(r)) r,
       ];
       if (added.isNotEmpty) {
-        result = result._with(reason: '${result.reason}；${added.join('；')}');
+        // A rule's sentence may end with 。: no 。； in between.
+        final kept = result.reason.endsWith('。')
+            ? result.reason.substring(0, result.reason.length - 1)
+            : result.reason;
+        result = result._with(reason: '$kept；${added.join('；')}');
       }
     }
   }
@@ -1344,6 +1417,16 @@ ParkingDecision _street(
     // Judged as a car bay; its sign still says when cars and scooters
     // take turns.
     result = result._with(reason: '${result.reason}；$_shareSignReminder');
+  }
+  // 時段性禁停 now (PM_ANS_20261101_75): the status stays; a gap and the
+  // time parking opens again go with it.
+  if (result.open) {
+    if (noParkingUntil(c, at, calendar) case final until?) {
+      result = result._with(
+        moreGaps: [DecisionGap.noParkingNow],
+        nextParkableAt: () => until,
+      );
+    }
   }
   return result;
 }
@@ -1413,12 +1496,14 @@ ZoneDecision _zone(
     String reason, {
     RuleRestriction? restriction,
     Set<DecisionGap> gaps = const {},
+    DateTime? nextParkableAt,
   }) => ZoneDecision(
     name: name,
     status: status,
     reason: reason,
     restriction: restriction,
     notice: notice,
+    nextParkableAt: nextParkableAt,
     price:
         status == EligibilityStatus.allowed ||
             status == EligibilityStatus.conditional
@@ -1483,9 +1568,12 @@ ZoneDecision _zone(
     if (c.basis?.expiresOn case final end?) '試辦至 $end',
   ];
   if (limits.isNotEmpty) {
+    final until = noParkingUntil(c, at, calendar);
     return zone(
       EligibilityStatus.conditional,
       limits.join('；'),
+      gaps: {if (until != null) DecisionGap.noParkingNow},
+      nextParkableAt: until,
       restriction: ev
           ? RuleRestriction.evOnly
           : slots.isNotEmpty || timed
@@ -1560,6 +1648,7 @@ ParkingDecision _lot(
     String reason, {
     RuleRestriction? restriction,
     Set<DecisionGap> gaps = const {},
+    DateTime? nextParkableAt,
   }) => ParkingDecision(
     status,
     reason,
@@ -1568,6 +1657,7 @@ ParkingDecision _lot(
     zones: zones,
     price: spot.zones.isEmpty ? lotPrice : null,
     gaps: gaps,
+    nextParkableAt: nextParkableAt,
   );
   if (!open) {
     return spot.notStated(vehicle)
@@ -1606,6 +1696,12 @@ ParkingDecision _lot(
               if (z.status == EligibilityStatus.conditional) '${z.name.trim().isEmpty ? '未命名分區' : z.name.trim()}：${z.reason}'].join('；')}。$remind',
       restriction: limited?.restriction,
       gaps: {for (final z in zones) ...z.gaps},
+      // Every open zone under 禁停 now: parking opens with the first.
+      nextParkableAt: reachable.every((z) => z.nextParkableAt != null)
+          ? reachable
+                .map((z) => z.nextParkableAt!)
+                .reduce((a, b) => a.isBefore(b) ? a : b)
+          : null,
     );
   }
   // Open to the vehicle, but no listed zone is (§7 item 6): never inferred

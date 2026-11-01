@@ -407,6 +407,80 @@ void main() {
       expect(after.reason, contains('禁停時段：週二 11:00–13:00'));
     });
 
+    group('現在禁停與下一次可停的時間（PM_ANS_20261101_75）', () {
+      // 2026-10-27 is a Tuesday; 2026-10-28 a Wednesday made a holiday here.
+      const cal = HolidayCalendar(years: {2026}, off: {'2026-10-28'});
+      ParkingDecision at(List<Map<String, Object>> periods, DateTime when) =>
+          decideParking(
+            street(
+              SpaceType.paidMotorcycle,
+              condition: c({
+                'bay': 'motorcycle',
+                'use': 'usual',
+                'charge': 'toll',
+                'limits': [
+                  {'kind': 'no_parking', 'periods': periods},
+                ],
+              }),
+            ),
+            VehicleType.scooter,
+            bundled,
+            now: when,
+            calendar: cal,
+          );
+      // Taipei time to an instant.
+      DateTime tpe(int m, int d, int h, [int min = 0]) =>
+          DateTime.utc(2026, m, d, h - 8, min);
+
+      test('禁停時段內：仍是有條件，帶現在禁停與結束時間', () {
+        final d = at([
+          {'days': 'all', 'from': '06:00', 'to': '08:00'},
+        ], tpe(10, 27, 7));
+        expect(d.status, EligibilityStatus.conditional);
+        expect(d.gaps, contains(DecisionGap.noParkingNow));
+        expect(d.nextParkableAt, tpe(10, 27, 8));
+      });
+
+      test('禁停時段外：沒有標記也沒有時間', () {
+        final d = at([
+          {'days': 'all', 'from': '06:00', 'to': '08:00'},
+        ], tpe(10, 27, 9));
+        expect(d.gaps, isNot(contains(DecisionGap.noParkingNow)));
+        expect(d.nextParkableAt, isNull);
+      });
+
+      test('跨午夜：屬開始那天，下一次可停在隔天早上', () {
+        final d = at([
+          {
+            'days': ['tue'],
+            'from': '23:00',
+            'to': '07:00',
+          },
+        ], tpe(10, 28, 2));
+        expect(d.gaps, contains(DecisionGap.noParkingNow));
+        expect(d.nextParkableAt, tpe(10, 28, 7));
+      });
+
+      test('平日／假日依國定假日：週三放假時「假日全天」禁停延續到週四 0 點', () {
+        final holiday = [
+          {'days': 'holiday'},
+        ];
+        final d = at(holiday, tpe(10, 28, 12));
+        expect(d.gaps, contains(DecisionGap.noParkingNow));
+        expect(d.nextParkableAt, tpe(10, 29, 0));
+        // The Tuesday before is a workday.
+        expect(at(holiday, tpe(10, 27, 12)).nextParkableAt, isNull);
+      });
+
+      test('相接的禁停時段一路接到隔天才可停', () {
+        final d = at([
+          {'days': 'all', 'from': '20:00', 'to': '23:59'},
+          {'days': 'all', 'from': '23:59', 'to': '09:00'},
+        ], tpe(10, 27, 21));
+        expect(d.nextParkableAt, tpe(10, 28, 9));
+      });
+    });
+
     test('縣市規則有條件時，禁停時段仍寫進原因（交叉審查 P1）', () {
       final d = decideParking(
         street(
