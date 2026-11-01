@@ -94,13 +94,13 @@ Deno.test('an admin function must refuse anon with a documented error', async ()
       ? Promise.resolve(admin)
       : Promise.resolve({ paths: {} });
   const refused = {
-    code: 'PT403',
-    message: 'auth.aal2_required',
+    code: '42501',
+    message: 'permission denied for schema admin_v1',
     details: null,
     hint: null,
   };
   assertEquals(
-    await check('http://x', 'anon', answering(403, refused).fetcher, load),
+    await check('http://x', 'anon', answering(401, refused).fetcher, load),
     [],
   );
   const [let_in] = await check(
@@ -111,7 +111,7 @@ Deno.test('an admin function must refuse anon with a documented error', async ()
   );
   assertStringIncludes(
     let_in,
-    'admin_v1 /rpc/review_queue: anon should be refused with 403 auth.aal2_required, got 200',
+    'admin_v1 /rpc/review_queue: anon should be refused with 401 42501, got 200',
   );
   // A function the SQL does not have, or a schema PostgREST does not serve,
   // is an error too, but not the refusal (cross review, PR #236).
@@ -132,10 +132,10 @@ Deno.test('an admin function must refuse anon with a documented error', async ()
   const [bad] = await check(
     'http://x',
     'anon',
-    answering(403, { message: 'auth.aal2_required' }).fetcher,
+    answering(401, { code: '42501' }).fetcher,
     load,
   );
-  assertStringIncludes(bad, "must have required property 'code'");
+  assertStringIncludes(bad, "must have required property 'message'");
 });
 
 Deno.test('a function with parameters needs an example to be called', async () => {

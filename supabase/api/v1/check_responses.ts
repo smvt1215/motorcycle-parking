@@ -7,9 +7,12 @@
 //     deno run --allow-read=. --allow-env --allow-net check_responses.ts
 //
 // Calls are made as anon. api_v1 must answer 200 with the documented body.
-// admin_v1 must refuse anon the way private.require_admin() does (403
-// auth.aal2_required), with the error its document gives: any other error,
-// such as 404 for a function the SQL does not have, fails.
+// admin_v1 must refuse anon with the error its document gives. anon has no
+// USAGE on admin_v1, so PostgreSQL refuses before private.require_admin()
+// runs: 42501, which PostgREST answers with 401 (cross review, PR #236).
+// Any other error, such as 404 PGRST202 for a function the SQL does not
+// have, fails. require_admin's own 403 for a signed-in non-admin is not
+// checked here yet (#249).
 // An operation with parameters is called with its request schema's `example`.
 import { Ajv2020 } from 'npm:ajv@8.17.1/dist/2020.js';
 
@@ -25,8 +28,8 @@ export type Document = { paths: Record<string, { post: Operation }> };
 
 const SCHEMAS = { api_v1: 'allowed', admin_v1: 'refused' } as const;
 const DIR = new URL('.', import.meta.url);
-/** How private.require_admin() refuses anyone who is not a signed-in admin. */
-const REFUSAL = { status: 403, message: 'auth.aal2_required' };
+/** How PostgREST refuses anon a schema it has no USAGE on. */
+const REFUSAL = { status: 401, code: '42501' };
 // Keys of an OpenAPI document that are not JSON Schema keywords. Strict mode
 // stays on so a misspelt keyword or an unknown format fails instead of
 // quietly validating nothing (cross review, PR #236); add new keys here.
@@ -58,7 +61,7 @@ function schemaPointer(response: Response | undefined, at: string[]) {
 function refusedAsAdmin(status: number, body: unknown) {
   return status === REFUSAL.status &&
     typeof body === 'object' && body !== null &&
-    (body as { message?: unknown }).message === REFUSAL.message;
+    (body as { code?: unknown }).code === REFUSAL.code;
 }
 
 const readDocument = async (schema: string) =>
@@ -143,7 +146,7 @@ export async function check(
       }
       if (!ok && !refusedAsAdmin(response.status, body)) {
         problems.push(
-          `${where}: anon should be refused with ${REFUSAL.status} ${REFUSAL.message}, got ${shown}`,
+          `${where}: anon should be refused with ${REFUSAL.status} ${REFUSAL.code}, got ${shown}`,
         );
         continue;
       }
