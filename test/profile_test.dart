@@ -11,7 +11,7 @@ import 'package:motorcycle_parking/data/app_store.dart';
 import 'package:motorcycle_parking/data/profile_repository.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
 import 'package:motorcycle_parking/features/auth/profile_editor.dart';
-import 'package:motorcycle_parking/features/report/report_sheet.dart';
+import 'package:motorcycle_parking/features/settings/settings_page.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
 
 const userId = '10000000-0000-4000-8000-000000000001';

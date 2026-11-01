@@ -1,12 +1,10 @@
 import 'dart:async';
 
-import '../../core/app_version.dart';
 import '../../core/config.dart';
 import '../auth/sign_in.dart';
 import '../../core/geo.dart';
 import '../../core/town_lookup.dart';
 import '../../data/app_store.dart';
-import '../../data/profile_repository.dart';
 import '../../domain/eligibility.dart';
 import '../../domain/location_check.dart';
 import '../../domain/precheck.dart';
@@ -28,165 +26,8 @@ import '../../ui/address_search_field.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../../ui/fee_editor.dart';
 import '../../ui/location_picker.dart';
-import '../../ui/version_text.dart';
 import '../map/space_type_sheet.dart';
 import '../map/vehicle_sheet.dart';
-import '../auth/profile_avatar.dart';
-import '../auth/profile_editor.dart';
-
-Future<void> showSettings(BuildContext context, AppStore store) =>
-    showAdaptiveSheet<void>(
-      context,
-      (ctx) => ContentPage(
-        children: [
-          // The vehicle is switched beside what it changes: the map's
-          // vehicle pill (and the rules page filter), not here.
-          SheetTitle('帳號與設定'),
-          const SizedBox(height: 16),
-          AnimatedBuilder(
-            animation: store,
-            builder: (ctx, _) => _AccountCard(store: store),
-          ),
-          const SizedBox(height: 28),
-          Text(
-            '關於',
-            style: Theme.of(ctx).textTheme.titleSmall
-                ?.copyWith(color: Theme.of(ctx).colorScheme.primary),
-          ),
-          const SizedBox(height: 4),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.description_outlined),
-            title: const Text('授權資訊'),
-            subtitle: const Text('App 使用的開放原始碼套件'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => runAction(ctx, () async {
-              final version = await AppVersion.current;
-              if (!ctx.mounted) return;
-              showLicensePage(
-                context: ctx,
-                applicationName: '機車停車指南',
-                applicationVersion: version.label,
-              );
-            }),
-          ),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.info_outline),
-            title: const Text('版本'),
-            // Selectable, so testers can paste the exact build into feedback.
-            subtitle: VersionText(
-              selectable: true,
-              textAlign: TextAlign.start,
-              style: Theme.of(ctx).textTheme.bodyMedium
-                  ?.copyWith(color: Theme.of(ctx).colorScheme.onSurfaceVariant),
-            ),
-          ),
-        ],
-      ),
-    );
-
-/// Who is signed in and what that unlocks: sample data, signed out, or the
-/// signed-in account with sign-out.
-class _AccountCard extends StatelessWidget {
-  const _AccountCard({required this.store});
-  final AppStore store;
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
-    final user = store.client?.auth.currentUser;
-    final signedIn = user != null && !user.isAnonymous;
-    final name = profileDisplayName(user);
-    final email = user?.email;
-    final (title, detail) = store.demo
-        ? ('範例模式', '目前使用範例資料。回報只用於功能測試，請勿依範例資料停車。')
-        : !signedIn
-        ? ('尚未登入', '登入後可回報停車點與同步收藏。瀏覽與記錄停車位置不需登入。')
-        // A name heads the card with the email under it; else the email.
-        : (
-            name ?? email ?? '已登入',
-            (name != null ? email : null) ?? '回報與收藏已同步到帳號',
-          );
-    return Material(
-      color: colors.surfaceContainerHigh,
-      borderRadius: BorderRadius.circular(24),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                if (signedIn)
-                  Semantics(
-                    button: true,
-                    label: '編輯頭像',
-                    child: InkWell(
-                      onTap: () => showProfileEditor(context, store),
-                      customBorder: const CircleBorder(),
-                      child: ProfileAvatar(user: user),
-                    ),
-                  )
-                else
-                  CircleAvatar(
-                    radius: 24,
-                    backgroundColor: colors.surfaceContainerHighest,
-                    foregroundColor: colors.onSurfaceVariant,
-                    child: Icon(
-                      store.demo
-                          ? Icons.science_outlined
-                          : Icons.person_outline,
-                    ),
-                  ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Text(
-                    title,
-                    key: const ValueKey('account-title'),
-                    style: text.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                if (signedIn)
-                  IconButton(
-                    tooltip: '編輯個人資料',
-                    icon: const Icon(Icons.edit_outlined),
-                    onPressed: () => showProfileEditor(context, store),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              detail,
-              style: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
-            ),
-            if (!store.demo && !signedIn) ...[
-              const SizedBox(height: 16),
-              SignInButtons(store: store),
-            ],
-            if (signedIn) ...[
-              const SizedBox(height: 8),
-              Align(
-                alignment: AlignmentDirectional.centerEnd,
-                child: TextButton(
-                  onPressed: () => runAction(context, () async {
-                    await store.signOut();
-                    if (context.mounted) Navigator.pop(context);
-                  }),
-                  child: const Text('登出'),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 /// All 22 municipalities, so a report is never forced into a nearby city.
 const taiwanCities = [
