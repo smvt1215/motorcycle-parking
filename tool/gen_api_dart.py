@@ -55,6 +55,9 @@ def dart_type(schema, where):
     """The Dart type for a property schema, and whether it may be null."""
     if "$ref" in schema:
         return ref_name(schema["$ref"]), False
+    if "type" not in schema:
+        # Any JSON (a jsonb column whose shape lives in parking_contract.json).
+        return "Object", True
     kind = schema.get("type")
     nullable = False
     if isinstance(kind, list):
@@ -78,12 +81,16 @@ def dart_type(schema, where):
 
 def from_json(expr, kind, nullable):
     """Dart that reads `expr` (an Object?) as `kind`."""
+    if kind == "Object":
+        return expr
     if nullable:
         return f"{expr} == null ? null : {from_json(expr, kind, False)}"
     if kind == "int":
         return f"({expr} as num).toInt()"
     if kind == "double":
         return f"({expr} as num).toDouble()"
+    if kind == "Object":
+        return expr
     if kind in ("String", "bool"):
         return f"{expr} as {kind}"
     if kind == "Map<String, Object?>":
@@ -100,7 +107,7 @@ def to_json(expr, kind, nullable):
         item = to_json("e", inner, False)
         body = expr if item == "e" else f"[for (final e in {expr}) {item}]"
         return f"{expr}?.map((e) => {item}).toList()" if nullable and item != "e" else body
-    if kind in ("String", "bool", "int", "double", "Map<String, Object?>"):
+    if kind in ("String", "bool", "int", "double", "Map<String, Object?>", "Object"):
         return expr
     return f"{expr}?.toJson()" if nullable else f"{expr}.toJson()"
 
@@ -142,12 +149,12 @@ def model(name, schema):
     lines.append("  bool operator ==(Object other) =>")
     checks = " &&\n      ".join(
         [f"other is {name}"]
-        + [f"_equal(other.{f}, {f})" if k.startswith(("List<", "Map<")) else f"other.{f} == {f}"
+        + [f"_equal(other.{f}, {f})" if k.startswith(("List<", "Map<")) or k == "Object" else f"other.{f} == {f}"
            for _, f, k, _, _ in fields])
     lines.append(f"      {checks};")
     lines.append("")
     lines.append("  @override")
-    hashed = ", ".join(f"_hash({f})" if k.startswith(("List<", "Map<")) else f for _, f, k, _, _ in fields)
+    hashed = ", ".join(f"_hash({f})" if k.startswith(("List<", "Map<")) or k == "Object" else f for _, f, k, _, _ in fields)
     lines.append(f"  int get hashCode => Object.hashAll([{hashed}]);")
     lines.append("}")
     return "\n".join(lines)
