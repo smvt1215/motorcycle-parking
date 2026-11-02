@@ -1,0 +1,562 @@
+import 'dart:convert';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:motorcycle_parking/data/app_store.dart';
+import 'package:motorcycle_parking/data/hidden_riders.dart';
+import 'package:motorcycle_parking/data/repositories.dart';
+import 'package:motorcycle_parking/domain/hidden_riders_display.dart';
+import 'package:motorcycle_parking/features/hidden_riders/hidden_riders_page.dart';
+import 'package:motorcycle_parking/features/hidden_riders/hide_rider.dart';
+import 'package:motorcycle_parking/features/settings/settings_page.dart';
+import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
+
+import 't280_harness.dart';
+
+/// Three hidden riders: 阿明 newest, Ken, then one without a public name.
+Map<String, Object> threeHidden() => {
+  HiddenRiders.storageKey: jsonEncode([
+    {
+      'handle': handleK,
+      'name': 'Ken',
+      'spot_name': '松壽路口機車格',
+      'hidden_at': DateTime(2026, 10, 30, 9).toIso8601String(),
+    },
+    {
+      'handle': handleU,
+      'name': '',
+      'spot_name': '永吉路巷口機車格',
+      'hidden_at': DateTime(2026, 10, 12, 9).toIso8601String(),
+    },
+    {
+      'handle': handleA,
+      'name': '阿明',
+      'spot_name': '市府轉運站機車區',
+      'hidden_at': DateTime(2026, 11, 1, 9).toIso8601String(),
+    },
+  ]),
+};
+
+/// The account's list, in memory, with a switch to fail like offline.
+class FakeAccountList implements HiddenRidersStore {
+  FakeAccountList([List<HiddenRider> rows = const []]) : rows = [...rows];
+  List<HiddenRider> rows;
+  bool offline = false;
+  final calls = <String>[];
+
+  void _check(String call) {
+    calls.add(call);
+    if (offline) throw Exception('offline');
+  }
+
+  @override
+  Future<List<HiddenRider>> list() async {
+    _check('list');
+    return [...rows];
+  }
+
+  @override
+  Future<List<HiddenRider>> merge(List<HiddenRider> items) async {
+    _check('merge');
+    return rows = unionRiders(rows, items);
+  }
+
+  @override
+  Future<void> remove(String handle) async {
+    _check('remove');
+    rows = [
+      for (final r in rows)
+        if (r.handle != handle) r,
+    ];
+  }
+}
+
+/// Signed out in a build that has a backend: P17c shows the guest card.
+class GuestStore extends AppStore {
+  GuestStore(LocalRepository local) : super(local, null);
+  @override
+  bool get demo => false;
+}
+
+HiddenRider rider(String handle, String name, DateTime at) =>
+    HiddenRider(handle: handle, name: name, spotName: '某處', hiddenAt: at);
+
+void main() {
+  group('HiddenRiders 本機清單', () {
+    test('存代號、名稱、點位名稱與日期，最新的在前，重新讀取仍在', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      var now = DateTime(2026, 11, 1, 9);
+      final hidden = HiddenRiders(prefs, clock: () => now);
+      await hidden.hide(handle: handleK, name: ' Ken ', spotName: '松壽路口');
+      now = DateTime(2026, 11, 2, 9);
+      await hidden.hide(handle: handleA, name: '阿明', spotName: '市府轉運站');
+      expect(hidden.riders.map((r) => r.handle), [handleA, handleK]);
+      expect(hidden.riders.last.name, 'Ken');
+      // Hiding again keeps the first row.
+      await hidden.hide(handle: handleA, name: '改名', spotName: '別處');
+      expect(hidden.byHandle(handleA)!.name, '阿明');
+
+      final again = HiddenRiders(prefs);
+      expect(again.riders, hidden.riders);
+      expect(again.isHidden(handleA), isTrue);
+      expect(again.isHidden(null), isFalse);
+      expect(again.isHidden(''), isFalse);
+    });
+
+    test('只用代號比對：改名後仍維持隱藏', () async {
+      SharedPreferences.setMockInitialValues({});
+      final hidden = HiddenRiders(await SharedPreferences.getInstance());
+      await hidden.hide(handle: handleA, name: '阿明', spotName: '市府');
+      // Whatever the rider is now called, the handle still matches.
+      expect(hidden.isHidden(handleA), isTrue);
+      expect(hidden.isHidden(handleK), isFalse);
+    });
+
+    test('解除隱藏回傳那一列，復原放回原日期', () async {
+      SharedPreferences.setMockInitialValues(threeHidden());
+      final hidden = HiddenRiders(await SharedPreferences.getInstance());
+      final removed = await hidden.unhide(handleA);
+      expect(removed!.name, '阿明');
+      expect(hidden.isHidden(handleA), isFalse);
+      expect(await hidden.unhide(handleA), isNull);
+      await hidden.restore(removed);
+      expect(hidden.riders.first, removed);
+    });
+
+    test('自己的代號會被移除', () async {
+      SharedPreferences.setMockInitialValues(threeHidden());
+      final hidden = HiddenRiders(await SharedPreferences.getInstance());
+      var notified = 0;
+      hidden.addListener(() => notified++);
+      await hidden.forget([handleK]);
+      expect(hidden.riders.map((r) => r.handle), [handleA, handleU]);
+      await hidden.forget(['not-there']);
+      expect(notified, 1);
+    });
+
+    test('損壞的儲存不會讓整份清單消失或當機', () async {
+      SharedPreferences.setMockInitialValues({
+        HiddenRiders.storageKey: jsonEncode([
+          {'handle': handleA, 'name': '阿明'},
+          {'name': '沒有代號'},
+          42,
+        ]),
+      });
+      final hidden = HiddenRiders(await SharedPreferences.getInstance());
+      expect(hidden.riders.map((r) => r.handle), [handleA]);
+      SharedPreferences.setMockInitialValues({
+        HiddenRiders.storageKey: '{not json',
+      });
+      expect(
+        HiddenRiders(await SharedPreferences.getInstance()).isEmpty,
+        isTrue,
+      );
+    });
+  });
+
+  test('文案：沒有名稱用「這位車友」，手機與平板用詞不同', () {
+    final unnamed = HiddenRider(
+      handle: handleU,
+      name: '',
+      spotName: '永吉路巷口機車格',
+      hiddenAt: DateTime(2026, 10, 12),
+    );
+    final named = HiddenRider(
+      handle: handleA,
+      name: '阿明',
+      spotName: '市府轉運站機車區',
+      hiddenAt: DateTime(2026, 11, 1),
+    );
+    expect(hiddenRiderTitle(unnamed), '未公開名稱的車友');
+    expect(hiddenRiderSubtitle(unnamed), '在「永吉路巷口機車格」隱藏・10 月 12 日');
+    expect(hiddenRiderSubtitle(named), '隱藏時的名稱・在「市府轉運站機車區」隱藏・11 月 1 日');
+    expect(unhideLabel('阿明'), '解除隱藏 阿明');
+    expect(unhideLabel(''), '解除隱藏 這位車友');
+    expect(hiddenToast(''), '已隱藏這位車友');
+    expect(moreActionsLabel(byRider: true), '這筆回報：更多動作');
+    expect(moreActionsLabel(byRider: false), '這筆資料：更多動作');
+    expect(
+      hideRiderConfirmBody('阿明'),
+      '阿明新增的停車點和名稱都不會再顯示，你登入的每台裝置都會同步。'
+      '可以在「帳號與設定」的「已隱藏的車友」解除。',
+    );
+    expect(hideRiderConfirmBody(''), startsWith('這位車友新增'));
+  });
+
+  group('P17c 已隱藏的車友', () {
+    for (final platform in platforms) {
+      for (final (name, size) in layouts) {
+        testWidgetsOn('${platform.name} $name：三列、朗讀標籤、解除與復原', (tester) async {
+          setUpView(tester, platform, size);
+          final store = (await tester.runAsync(
+            () => storeWith(threeHidden()),
+          ))!;
+          final semantics = tester.ensureSemantics();
+          await tester.pumpWidget(app(HiddenRidersPage(store: store)));
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          expect(find.text(hiddenRidersIntro), findsOneWidget);
+          // The sample build has no account: the synced foot shows.
+          expect(find.text(hiddenRidersFootnote), findsOneWidget);
+          // Newest first; the unnamed row says so.
+          final aY = tester.getTopLeft(find.text('阿明')).dy;
+          final kY = tester.getTopLeft(find.text('Ken')).dy;
+          final uY = tester.getTopLeft(find.text(unnamedRider)).dy;
+          expect(aY < kY && kY < uY, isTrue);
+          expect(find.bySemanticsLabel('解除隱藏 阿明'), findsOneWidget);
+          expect(find.bySemanticsLabel('解除隱藏 這位車友'), findsOneWidget);
+          final button = tester.getSize(
+            find.byKey(const ValueKey('unhide-$handleA')),
+          );
+          expect(
+            button.height,
+            greaterThanOrEqualTo(platform == TargetPlatform.iOS ? 44 : 48),
+          );
+
+          await tester.tap(find.byKey(const ValueKey('unhide-$handleA')));
+          await tester.pumpAndSettle();
+          expect(store.hiddenRiders.isHidden(handleA), isFalse);
+          expect(find.text('阿明'), findsNothing);
+          expect(find.text('已解除隱藏阿明'), findsOneWidget);
+          await tester.tap(find.byKey(const ValueKey('undo-toast-action')));
+          await tester.pumpAndSettle();
+          expect(store.hiddenRiders.isHidden(handleA), isTrue);
+          expect(find.text('阿明'), findsOneWidget);
+          semantics.dispose();
+        });
+      }
+      testWidgetsOn('${platform.name} 空狀態', (tester) async {
+        setUpView(tester, platform, const Size(390, 844));
+        final store = (await tester.runAsync(() => storeWith({})))!;
+        await tester.pumpWidget(app(HiddenRidersPage(store: store)));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('hidden-riders-empty')),
+          findsOneWidget,
+        );
+        expect(find.text(hiddenRidersEmptyTitle), findsOneWidget);
+        expect(find.text(hiddenRidersEmptyBody), findsOneWidget);
+      });
+    }
+
+    testWidgetsOn('大字 2.0：不溢出、按鈕移到名稱下方', (tester) async {
+      setUpView(tester, TargetPlatform.android, const Size(390, 844));
+      final store = (await tester.runAsync(() => storeWith(threeHidden())))!;
+      await tester.pumpWidget(app(HiddenRidersPage(store: store), scale: 2));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      final name = tester.getBottomLeft(find.text('阿明'));
+      final button = tester.getTopLeft(
+        find.byKey(const ValueKey('unhide-$handleA')),
+      );
+      expect(button.dy, greaterThan(name.dy));
+    });
+  });
+
+  group('復原提示', () {
+    Future<void> pumpToast(
+      WidgetTester tester, {
+      required String text,
+      bool accessible = false,
+      double scale = 1,
+    }) async {
+      await tester.pumpWidget(
+        app(
+          Scaffold(
+            body: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => showUndoToast(
+                  ScaffoldMessenger.of(context),
+                  MediaQuery.of(context),
+                  text: text,
+                  icon: Icons.visibility_off_outlined,
+                  onUndo: () {},
+                ),
+                child: const Text('show'),
+              ),
+            ),
+          ),
+          accessible: accessible,
+          scale: scale,
+        ),
+      );
+      await tester.tap(find.text('show'));
+      await tester.pumpAndSettle();
+    }
+
+    for (final platform in platforms) {
+      testWidgetsOn('${platform.name} 約 8 秒後消失', (tester) async {
+        setUpView(tester, platform, const Size(390, 844));
+        await pumpToast(tester, text: '已隱藏阿明');
+        expect(find.text('已隱藏阿明'), findsOneWidget);
+        await tester.pump(const Duration(seconds: 7));
+        expect(find.text('已隱藏阿明'), findsOneWidget);
+        await tester.pump(const Duration(seconds: 2));
+        await tester.pumpAndSettle();
+        expect(find.text('已隱藏阿明'), findsNothing);
+      });
+
+      testWidgetsOn('${platform.name} 螢幕閱讀器開著時不自動消失', (tester) async {
+        setUpView(tester, platform, const Size(390, 844));
+        await pumpToast(tester, text: '已隱藏阿明', accessible: true);
+        await tester.pump(const Duration(seconds: 30));
+        await tester.pumpAndSettle();
+        expect(find.text('已隱藏阿明'), findsOneWidget);
+      });
+    }
+
+    testWidgetsOn('長名稱與大字：名稱最多兩行，「復原」換到下一行', (tester) async {
+      setUpView(tester, TargetPlatform.iOS, const Size(390, 844));
+      await pumpToast(tester, text: '已隱藏重機騎士阿明的週末松山信義區巡禮小隊長兼攝影', scale: 2);
+      expect(tester.takeException(), isNull);
+      final text = find.byKey(const ValueKey('undo-toast-text'));
+      expect(tester.widget<Text>(text).maxLines, 2);
+      final undo = find.byKey(const ValueKey('undo-toast-action'));
+      expect(
+        tester.getTopLeft(undo).dy,
+        greaterThanOrEqualTo(tester.getBottomLeft(text).dy - 1),
+      );
+    });
+
+    testWidgetsOn('短名稱：「復原」與名稱同一行', (tester) async {
+      setUpView(tester, TargetPlatform.android, const Size(390, 844));
+      await pumpToast(tester, text: '已隱藏阿明');
+      final text = find.byKey(const ValueKey('undo-toast-text'));
+      final undo = find.byKey(const ValueKey('undo-toast-action'));
+      expect(
+        tester.getCenter(undo).dy,
+        moreOrLessEquals(tester.getCenter(text).dy, epsilon: 2),
+      );
+    });
+  });
+
+  group('確認對話框', () {
+    for (final platform in platforms) {
+      for (final (name, size) in layouts) {
+        testWidgetsOn('${platform.name} $name：文字與按鈕', (tester) async {
+          setUpView(tester, platform, size);
+          bool? answer;
+          await tester.pumpWidget(
+            app(
+              Scaffold(
+                body: Builder(
+                  builder: (context) => TextButton(
+                    onPressed: () async =>
+                        answer = await confirmHideRider(context, '阿明'),
+                    child: const Text('ask'),
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.tap(find.text('ask'));
+          await tester.pumpAndSettle();
+          expect(find.text(hideRiderConfirmTitle), findsOneWidget);
+          expect(find.text(hideRiderConfirmBody('阿明')), findsOneWidget);
+          await tester.tap(find.text(hideRiderConfirm));
+          await tester.pumpAndSettle();
+          expect(answer, isTrue);
+        });
+      }
+    }
+  });
+
+  group('P10 帳號與設定', () {
+    for (final platform in platforms) {
+      testWidgetsOn('${platform.name} 未登入也顯示「已隱藏的車友」與「聯絡我們」', (tester) async {
+        setUpView(tester, platform, const Size(390, 844));
+        final store = (await tester.runAsync(() => storeWith(threeHidden())))!;
+        await tester.pumpWidget(
+          app(
+            Scaffold(
+              body: Builder(
+                builder: (context) => TextButton(
+                  onPressed: () => showSettings(context, store),
+                  child: const Text('settings'),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.text('settings'));
+        await tester.pumpAndSettle();
+        expect(store.riderId, isNull);
+        expect(find.text(settingsPrivacyGroup), findsOneWidget);
+        expect(find.text(settingsHiddenRiders), findsOneWidget);
+        expect(find.text('登入後會同步到你的帳號'), findsOneWidget);
+        expect(find.text('3 位'), findsOneWidget);
+        await tester.scrollUntilVisible(
+          find.byKey(const ValueKey('settings-contact')),
+          100,
+          scrollable: find.byType(Scrollable).last,
+        );
+        expect(find.text(settingsContact), findsOneWidget);
+        expect(find.text(settingsContactDetail), findsOneWidget);
+
+        await tester.scrollUntilVisible(
+          find.byKey(const ValueKey('settings-hidden-riders')),
+          -100,
+          scrollable: find.byType(Scrollable).last,
+        );
+        await tester.tap(find.byKey(const ValueKey('settings-hidden-riders')));
+        await tester.pumpAndSettle();
+        expect(find.byType(HiddenRidersPage), findsOneWidget);
+      });
+    }
+  });
+
+  group('跟著帳號同步（v174）', () {
+    late SharedPreferences prefs;
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      prefs = await SharedPreferences.getInstance();
+    });
+
+    test('登入時取聯集，同一個人保留較早的日期', () async {
+      final account = FakeAccountList([
+        rider(handleA, '阿明', DateTime.utc(2026, 10, 1)),
+        rider(handleK, 'Ken', DateTime.utc(2026, 10, 5)),
+      ]);
+      var now = DateTime.utc(2026, 11, 1);
+      final hidden = HiddenRiders(prefs, remote: account, clock: () => now);
+      // As a guest: 阿明 again (later) and someone new.
+      await hidden.hide(handle: handleA, name: '阿明', spotName: '市府');
+      now = DateTime.utc(2026, 11, 2);
+      await hidden.hide(handle: handleU, name: '', spotName: '永吉路');
+      expect(account.calls, isEmpty);
+
+      await hidden.signedIn();
+      expect(hidden.riders.map((r) => r.handle), [handleU, handleK, handleA]);
+      expect(hidden.byHandle(handleA)!.hiddenAt, DateTime.utc(2026, 10, 1));
+      expect(account.rows.map((r) => r.handle).toSet(), {
+        handleA,
+        handleK,
+        handleU,
+      });
+      // The device keeps a copy for the next launch.
+      expect(HiddenRiders(prefs).length, 3);
+    });
+
+    test('登出清掉這台裝置的副本，帳號清單還在', () async {
+      final account = FakeAccountList([
+        rider(handleA, '阿明', DateTime.utc(2026, 10, 1)),
+      ]);
+      final hidden = HiddenRiders(prefs, remote: account);
+      await hidden.signedIn();
+      expect(hidden.isHidden(handleA), isTrue);
+      await hidden.signedOut();
+      expect(hidden.isEmpty, isTrue);
+      expect(HiddenRiders(prefs).isEmpty, isTrue);
+      expect(account.rows, hasLength(1));
+    });
+
+    test('未登入時新增的隱藏存在本機，再登入時併入帳號', () async {
+      final account = FakeAccountList([
+        rider(handleA, '阿明', DateTime.utc(2026, 10, 1)),
+      ]);
+      final hidden = HiddenRiders(prefs, remote: account);
+      await hidden.signedIn();
+      await hidden.signedOut();
+      await hidden.hide(handle: handleK, name: 'Ken', spotName: '松壽');
+      expect(account.rows.map((r) => r.handle), [handleA]);
+      // Kept on the device while signed out.
+      expect(HiddenRiders(prefs).isHidden(handleK), isTrue);
+      await hidden.signedIn();
+      expect(hidden.riders.map((r) => r.handle).toSet(), {handleA, handleK});
+      expect(account.rows.map((r) => r.handle).toSet(), {handleA, handleK});
+    });
+
+    test('登入後新增、解除都同步到帳號', () async {
+      final account = FakeAccountList();
+      final hidden = HiddenRiders(prefs, remote: account);
+      await hidden.signedIn();
+      await hidden.hide(handle: handleA, name: '阿明', spotName: '市府');
+      await hidden.sync();
+      expect(account.rows.map((r) => r.handle), [handleA]);
+      await hidden.unhide(handleA);
+      await hidden.sync();
+      expect(account.rows, isEmpty);
+    });
+
+    test('同步失敗：保留本機清單、不擋操作，下次再送', () async {
+      final account = FakeAccountList()..offline = true;
+      final hidden = HiddenRiders(prefs, remote: account);
+      await hidden.signedIn();
+      await hidden.hide(handle: handleA, name: '阿明', spotName: '市府');
+      await hidden.sync();
+      expect(hidden.isHidden(handleA), isTrue);
+      expect(account.rows, isEmpty);
+      account.offline = false;
+      await hidden.sync();
+      expect(account.rows.map((r) => r.handle), [handleA]);
+      expect(hidden.isHidden(handleA), isTrue);
+    });
+
+    test('沒有帳號清單（API 未上線）時登入登出都不動本機清單', () async {
+      final hidden = HiddenRiders(prefs);
+      await hidden.hide(handle: handleA, name: '阿明', spotName: '市府');
+      await hidden.signedIn();
+      await hidden.signedOut();
+      expect(hidden.isHidden(handleA), isTrue);
+    });
+
+    test('上限 500 筆', () async {
+      var t = 0;
+      final hidden = HiddenRiders(
+        prefs,
+        clock: () => DateTime.utc(2026).add(Duration(seconds: t++)),
+      );
+      for (var i = 0; i < hiddenRidersLimit; i++) {
+        await hidden.hide(
+          handle: i.toRadixString(16).padLeft(32, '0'),
+          name: '',
+          spotName: '',
+        );
+      }
+      expect(
+        () => hidden.hide(handle: handleA, name: '阿明', spotName: ''),
+        throwsA(isA<HiddenRidersFull>()),
+      );
+    });
+
+    test('API 欄位：name_at_hide、spot_name_at_hide、hidden_at', () {
+      final row = HiddenRider.fromApi({
+        'handle': handleA,
+        'name_at_hide': '阿明',
+        'spot_name_at_hide': '市府',
+        'hidden_at': '2026-11-01T01:00:00Z',
+      })!;
+      expect(row.name, '阿明');
+      expect(row.spotName, '市府');
+      expect(row.toApi(), {
+        'handle': handleA,
+        'name_at_hide': '阿明',
+        'spot_name_at_hide': '市府',
+        'hidden_at': '2026-11-01T01:00:00.000Z',
+      });
+    });
+  });
+
+  for (final platform in platforms) {
+    testWidgetsOn('${platform.name} P17c ④ 沒登入：提醒卡與登入按鈕', (tester) async {
+      setUpView(tester, platform, const Size(390, 844));
+      final store = (await tester.runAsync(() async {
+        SharedPreferences.setMockInitialValues(threeHidden());
+        return GuestStore(
+          LocalRepository(await SharedPreferences.getInstance()),
+        );
+      }))!;
+      await tester.pumpWidget(app(HiddenRidersPage(store: store)));
+      await tester.pumpAndSettle();
+      expect(find.text(hiddenRidersGuestNote), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('hidden-riders-sign-in')),
+        findsOneWidget,
+      );
+      expect(find.text(hiddenRidersFootnote), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  }
+}

@@ -9,11 +9,13 @@ import '../../data/account_deletion.dart';
 import '../../data/app_store.dart';
 import '../../data/profile_repository.dart';
 import '../../domain/account_deletion_display.dart';
+import '../../domain/hidden_riders_display.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../../ui/version_text.dart';
 import '../auth/profile_avatar.dart';
 import '../auth/profile_editor.dart';
 import '../auth/sign_in.dart';
+import '../hidden_riders/hidden_riders_page.dart';
 import '../map/spot_details.dart' show openDataLicenseUri;
 import 'account_deletion_page.dart';
 
@@ -48,6 +50,34 @@ Future<void> showSettings(BuildContext context, AppStore store) {
         AnimatedBuilder(
           animation: store,
           builder: (ctx, _) => _AccountCard(store: store),
+        ),
+        const SizedBox(height: 28),
+        // Shown signed in or not: a guest list stays on the device (P10).
+        _GroupTitle(settingsPrivacyGroup),
+        const SizedBox(height: 4),
+        ListenableBuilder(
+          listenable: store.hiddenRiders,
+          builder: (ctx, _) => ListTile(
+            key: const ValueKey('settings-hidden-riders'),
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.visibility_off_outlined),
+            title: const Text(settingsHiddenRiders),
+            subtitle: const Text(settingsHiddenRidersDetail),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (!store.hiddenRiders.isEmpty)
+                  Text(
+                    settingsHiddenRidersCount(store.hiddenRiders.length),
+                    style: TextStyle(
+                      color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                const Icon(Icons.chevron_right),
+              ],
+            ),
+            onTap: () => openHiddenRiders(ctx, store),
+          ),
         ),
         const SizedBox(height: 28),
         Text(
@@ -95,6 +125,15 @@ Future<void> showSettings(BuildContext context, AppStore store) {
             title: settingsTerms,
             uri: uri,
           ),
+        // Signed in or not: Apple 1.2 asks for a way to reach us.
+        _LinkTile(
+          key: const ValueKey('settings-contact'),
+          icon: Icons.support_agent,
+          title: settingsContact,
+          subtitle: settingsContactDetail,
+          uri: Uri.parse(supportUrl),
+          mode: LaunchMode.inAppBrowserView,
+        ),
         ListTile(
           contentPadding: EdgeInsets.zero,
           leading: const Icon(Icons.info_outline),
@@ -119,6 +158,21 @@ Future<void> showSettings(BuildContext context, AppStore store) {
   );
 }
 
+/// A group's heading in 帳號與設定.
+class _GroupTitle extends StatelessWidget {
+  const _GroupTitle(this.title);
+  final String title;
+  @override
+  Widget build(BuildContext context) => Semantics(
+    header: true,
+    child: Text(
+      title,
+      style: Theme.of(context).textTheme.titleSmall
+          ?.copyWith(color: Theme.of(context).colorScheme.primary),
+    ),
+  );
+}
+
 /// A row that opens [uri] in the browser.
 class _LinkTile extends StatelessWidget {
   const _LinkTile({
@@ -127,20 +181,28 @@ class _LinkTile extends StatelessWidget {
     required this.title,
     required this.uri,
     this.subtitle,
+    this.mode = LaunchMode.externalApplication,
   });
   final IconData icon;
   final String title;
   final String? subtitle;
   final Uri uri;
+
+  /// The browser it opens in; 聯絡我們 stays in the app.
+  final LaunchMode mode;
   @override
   Widget build(BuildContext context) => ListTile(
     contentPadding: EdgeInsets.zero,
     leading: Icon(icon),
     title: Text(title),
     subtitle: subtitle == null ? null : Text(subtitle!),
-    trailing: const Icon(Icons.open_in_new),
+    trailing: Icon(
+      mode == LaunchMode.inAppBrowserView
+          ? Icons.chevron_right
+          : Icons.open_in_new,
+    ),
     onTap: () => runAction(context, () async {
-      if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (!await launchUrl(uri, mode: mode)) {
         throw StateError('無法開啟$title');
       }
     }),

@@ -20,12 +20,15 @@ import '../domain/eligibility_display.dart';
 import '../domain/location_check.dart';
 import '../domain/map_viewport.dart';
 import '../domain/rules_display.dart';
+import '../domain/spot_contributor.dart';
 import '../models/availability.dart';
 import '../models/holiday_calendar.dart';
 import '../models/parking.dart';
 import 'availability_repository.dart';
 import 'contributions_repository.dart';
 import 'data_updates.dart';
+import 'favorite_handles.dart';
+import 'hidden_riders.dart';
 import 'repositories.dart';
 import 'rules_cache.dart';
 import 'profile_repository.dart';
@@ -76,7 +79,10 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     Duration? availabilityPoll,
     Future<List<String>> Function()? availabilityBetaCities,
     DateTime Function()? clock,
-  }) : parking = parkingRepository ?? ParkingRepository(client),
+    FavoriteHandles? favoriteHandles,
+  }) : favoriteHandlesSource =
+           favoriteHandles ?? const PendingFavoriteHandles(),
+       parking = parkingRepository ?? ParkingRepository(client),
        // Official counts from the backend; the example build has fake ones.
        availabilitySource =
            availabilitySource ??
@@ -110,7 +116,20 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
        updates = dataUpdates ?? DataUpdates(client) {
     vehicle = local.vehicle;
     parked = local.parked;
+    hiddenRiders = HiddenRiders(
+      local.prefs,
+      clock: this.clock,
+      // The account's list once its RPCs ship (#280 L2).
+      remote: hiddenRidersSyncEnabled && client != null
+          ? RemoteHiddenRidersStore(client!)
+          : null,
+    )..addListener(_hiddenRidersChanged);
     _auth = client?.auth.onAuthStateChange.listen((_) {
+      // Signing in joins the device list to the account's; signing out
+      // clears the device's copy.
+      unawaited(
+        riderId == null ? hiddenRiders.signedOut() : hiddenRiders.signedIn(),
+      );
       unawaited(loadFavorites());
       notifyListeners();
     });
@@ -123,6 +142,79 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   final ContributionsRepository contributions;
   final DataUpdates updates;
   final AvailabilitySource availabilitySource;
+
+  /// Riders hidden on this device (#280); their spots leave [spots].
+  late final HiddenRiders hiddenRiders;
+
+  void _hiddenRidersChanged() {
+    if (_disposed) return;
+    _spots = _withoutHidden(_loadedSpots);
+    notifyListeners();
+  }
+
+  /// Reads the contributor handles of saved favourites, whose snapshots
+  /// never keep them (#280 L2 `spots_by_ids`; nothing until it ships).
+  final FavoriteHandles favoriteHandlesSource;
+
+  /// The handles [favoriteHandlesSource] returned, by spot id.
+  Map<String, String> favoriteHandles = const {};
+
+  /// [spot]'s contributor handle: its own, else the loaded copy's, else a
+  /// favourite's looked-up one; null when none is known.
+  String? handleOf(ParkingSpot spot) =>
+      riderHandle(spot) ?? _loadedHandles[spot.id] ?? favoriteHandles[spot.id];
+
+  /// Handles of the spots last loaded, hidden ones included, by spot id.
+  Map<String, String> _loadedHandles = const {};
+
+  /// Whether [spot]'s rider is hidden on this device; never the rider's
+  /// own spot.
+  bool riderHidden(ParkingSpot spot) =>
+      !isOwnSpot(spot) && hiddenRiders.isHidden(handleOf(spot));
+
+  /// Every spot loaded for the viewport, hidden riders' included.
+  List<ParkingSpot> _loadedSpots = [];
+  List<ParkingSpot> _spots = [];
+
+  /// The loaded spots without hidden riders' ones: what the map, its
+  /// clusters, search and the nearby lists show (#280).
+  List<ParkingSpot> get spots => _spots;
+  set spots(List<ParkingSpot> value) {
+    _loadedSpots = value;
+    _loadedHandles = {for (final s in value) s.id: ?riderHandle(s)};
+    _spots = _withoutHidden(value);
+    // Hidden as a guest, then signed in: one's own handle leaves the list.
+    final own = [
+      for (final s in value)
+        if (isOwnSpot(s)) ?riderHandle(s),
+    ];
+    if (own.isNotEmpty) unawaited(hiddenRiders.forget(own));
+  }
+
+  /// [all] without hidden riders' spots; the same list when none is.
+  List<ParkingSpot> _withoutHidden(List<ParkingSpot> all) {
+    if (hiddenRiders.isEmpty) return all;
+    final kept = [
+      for (final s in all)
+        if (!hiddenFromLists(s, hiddenRiders)) s,
+    ];
+    return kept.length == all.length ? all : kept;
+  }
+
+  /// Looks up the favourites' handles; a failure keeps the last ones.
+  Future<void> _loadFavoriteHandles() async {
+    final ids = [
+      for (final s in favorites)
+        if (communitySpotSources.contains(s.source)) s.id,
+    ];
+    if (ids.isEmpty) {
+      favoriteHandles = const {};
+      return;
+    }
+    try {
+      favoriteHandles = await favoriteHandlesSource.handlesFor(ids);
+    } catch (_) {}
+  }
 
   /// Reads which cities' counts are in Beta (`api_v1.client_config()`).
   final Future<List<String>> Function()? _loadBetaCities;
@@ -209,7 +301,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   bool _loadedOnce = false;
   late VehicleType vehicle;
   ParkedRecord? parked;
-  List<ParkingSpot> spots = [], favorites = [];
+  List<ParkingSpot> favorites = [];
   List<CityRule> rules = [];
   double lat = 25.0339, lng = 121.5623;
   double mapLat = 25.0339, mapLng = 121.5623;
@@ -825,6 +917,8 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
         // Keep the saved snapshots when the check itself fails.
       }
     }
+    await _loadFavoriteHandles();
+    if (key != favoritesKey || _disposed) return;
     notifyListeners();
   }
 
@@ -845,6 +939,10 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
       favorites.removeWhere((s) => s.id == spot.id);
     } else {
       favorites.add(spot);
+      // The snapshot drops the handle: keep the one in hand.
+      if (handleOf(spot) case final handle?) {
+        favoriteHandles = {...favoriteHandles, spot.id: handle};
+      }
     }
     await local.setFavorites(favoritesKey, favorites);
     notifyListeners();
@@ -876,7 +974,9 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
           'source': 'community',
         });
         parking.addDemo(spot);
-        if (viewport.contains(spot.lat, spot.lng)) spots.add(spot);
+        if (viewport.contains(spot.lat, spot.lng)) {
+          spots = [..._loadedSpots, spot];
+        }
         notifyListeners();
       }
       return '範例回報已送出（只用於本次測試）';
@@ -927,6 +1027,9 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     if (_observingLifecycle) WidgetsBinding.instance.removeObserver(this);
     unawaited(_auth?.cancel());
     unawaited(_updates?.cancel());
+    hiddenRiders
+      ..removeListener(_hiddenRidersChanged)
+      ..dispose();
     super.dispose();
   }
 }

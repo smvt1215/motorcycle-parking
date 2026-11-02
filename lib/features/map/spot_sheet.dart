@@ -12,8 +12,11 @@ import '../../domain/eligibility_display.dart';
 import '../../domain/four_sign.dart';
 import '../../domain/four_sign_display.dart';
 import '../../domain/parking_decision.dart';
+import '../../domain/hidden_riders_display.dart' show contentHeldNote;
+import '../../domain/spot_contributor.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../auth/sign_in.dart';
+import '../hidden_riders/spot_more_menu.dart';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
@@ -272,6 +275,9 @@ class _SpotSheetState extends State<SpotSheet> {
                                     ),
                                   ),
                                 ),
+                                // A hidden rider's spot opened from a
+                                // list, not the map (P17d).
+                                HiddenSpotBanner(store: store, spot: spot),
                                 SpotPreview(
                                   spot: spot,
                                   plates: plates,
@@ -404,11 +410,13 @@ class _SpotSheetState extends State<SpotSheet> {
                                         spot.entranceNote.trim().isNotEmpty)
                                       _DetailField(
                                         label: '入口',
+                                        held: heldForOwner(spot, 'text'),
                                         value: spot.entranceNote,
                                       ),
                                     if (spot.parkingGuide.trim().isNotEmpty)
                                       _DetailField(
                                         label: '停車指引',
+                                        held: heldForOwner(spot, 'text'),
                                         value: spot.parkingGuide,
                                       ),
                                     _DetailField(
@@ -425,6 +433,7 @@ class _SpotSheetState extends State<SpotSheet> {
                                     if (spot.specialRules.trim().isNotEmpty)
                                       _DetailField(
                                         label: '特殊規則',
+                                        held: heldForOwner(spot, 'text'),
                                         value: spot.specialRules,
                                       ),
                                   ],
@@ -446,6 +455,7 @@ class _SpotSheetState extends State<SpotSheet> {
                                     if (spot.note.trim().isNotEmpty)
                                       _DetailField(
                                         label: '備註',
+                                        held: heldForOwner(spot, 'text'),
                                         value: spot.note,
                                       ),
                                   ],
@@ -456,9 +466,16 @@ class _SpotSheetState extends State<SpotSheet> {
                                   children: [
                                     _DetailField(
                                       label: '資料來源',
+                                      held: heldForOwner(spot, 'rider_name'),
                                       value: sourceSummary(
                                         spot,
                                         demo: store.demo,
+                                      ),
+                                      // 隱藏這位車友, 檢舉內容不當 (P17a).
+                                      trailing: SpotMoreButton(
+                                        store: store,
+                                        spot: spot,
+                                        onClose: () => close(ctx),
                                       ),
                                     ),
                                     if (!spot.isOfficial)
@@ -990,27 +1007,62 @@ class _DetailSection extends StatelessWidget {
   }
 }
 
+/// 部分內容審核中, in amber beside a held field's title (P17b ⑪).
+class ContentHeldNote extends StatelessWidget {
+  const ContentHeldNote({super.key});
+  @override
+  Widget build(BuildContext context) => Row(
+    key: const ValueKey('content-held'),
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      const Icon(Icons.schedule, size: 14, color: conditionalColor),
+      const SizedBox(width: 4),
+      Flexible(
+        child: Text(
+          contentHeldNote,
+          style: Theme.of(context).textTheme.bodySmall
+              ?.copyWith(color: conditionalColor, fontWeight: FontWeight.w600),
+        ),
+      ),
+    ],
+  );
+}
+
 class _DetailField extends StatelessWidget {
   const _DetailField({
     required this.label,
     required this.value,
     this.secondary = '',
     this.action,
+    this.trailing,
+    this.held = false,
   });
+
+  /// The contributor's own text under review (P17b ⑪).
+  final bool held;
 
   final String label, value, secondary;
 
   /// A link or toggle under the value (看更新紀錄, 還有 N 項).
   final Widget? action;
 
+  /// A button at the row's end (資料來源's ⋯).
+  final Widget? trailing;
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final labelWidget = Text(
+    final labelText = Text(
       label,
       style: Theme.of(context).textTheme.bodySmall
           ?.copyWith(color: colors.onSurfaceVariant),
     );
+    final labelWidget = held
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [labelText, const ContentHeldNote()],
+          )
+        : labelText;
     final valueWidget = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1037,17 +1089,29 @@ class _DetailField extends StatelessWidget {
         builder: (context, constraints) {
           if (constraints.maxWidth < 300 ||
               MediaQuery.textScalerOf(context).scale(14) > 18) {
-            return Column(
+            final stacked = Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [labelWidget, const SizedBox(height: 6), valueWidget],
             );
+            return trailing == null
+                ? stacked
+                : Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: stacked),
+                      trailing!,
+                    ],
+                  );
           }
           return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: trailing == null
+                ? CrossAxisAlignment.start
+                : CrossAxisAlignment.center,
             children: [
               SizedBox(width: 76, child: labelWidget),
               const SizedBox(width: 12),
               Expanded(child: valueWidget),
+              ?trailing,
             ],
           );
         },
