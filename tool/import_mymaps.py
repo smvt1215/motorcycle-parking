@@ -28,7 +28,7 @@ import urllib.request
 import uuid
 import xml.etree.ElementTree as ET
 
-from mymaps_facts import COMMUNITY, LICENSE, OFFICIAL_LICENSE, OPEN_DATA, facts, fee_terms
+from mymaps_facts import COMMUNITY, LICENSE, OFFICIAL_LICENSE, OPEN_DATA, apply_manual, facts, fee_terms
 
 KML_URL = "https://www.google.com/maps/d/kml?mid={mid}&forcekml=1"
 VIEWER_URL = "https://www.google.com/maps/d/viewer?mid={mid}"
@@ -830,7 +830,9 @@ def build(kml, mid, cache, imported_on, refresh=False, tdx_env=None):
         elif spot["unconfirmed"]:
             entry["result"] = "不錄入：來源標示未確認且未通過官方核驗"
         else:
-            community.append(spot | {"source_name": COMMUNITY_SOURCE, "license_note": LICENSE})
+            # The source map's address is attribution too; community spots name no source (#275).
+            # Pin names that carried comments get their hand-written names (mymaps_facts.MANUAL).
+            community.append(apply_manual(spot | {"source_name": COMMUNITY_SOURCE, "source_url": "", "license_note": LICENSE}))
             entry["result"] = "社群點（待確認）"
     used = {spot["lot"]["id"] for spot in spots if spot.get("lot")}
     for lot, pilot in official_additions(lots, used, official):

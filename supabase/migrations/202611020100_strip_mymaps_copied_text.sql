@@ -6,7 +6,7 @@
 --      的 scrub_spot）：短事實行改寫成固定詞彙，其餘照抄行、「來源原名稱：…」與圖示
 --      顏色轉成的句子刪除；只剩「社群補充（未經官方查核）：」標頭的欄位整欄清空。
 --   2. license_note 只寫「社群協力資料，經核驗後只收錄事實」（官方點前面保留政府
---      資料開放授權條款）。
+--      資料開放授權條款）；社群點的 source_url（來源地圖網址）清空。
 -- 下方的值由 tool/mymaps_strip_sql.py 從清除前的唯讀備份（不進版控）產生，只含新值。
 -- 每列以舊值的 md5 比對，備份後被改過的列（或沒有這批資料的資料庫）不會被改。
 -- 管理員編輯過的點位（admin_audit_log 有 update_spot）的這四欄不在此處理，另案人工
@@ -1844,8 +1844,8 @@ begin
       and md5(concat_ws(chr(31),coalesce(o.note,''),coalesce(o.entrance_note,''),coalesce(o.parking_guide,''),
         coalesce(o.special_rules,'')))=s.guard;
   get diagnostics v_o=row_count;
-  -- 資料來源聲明不加註來源名稱。
-  update public.community_spots set license_note='社群協力資料，經核驗後只收錄事實'
+  -- 資料來源聲明不加註來源名稱，社群點也不留來源地圖的網址（PM_ANS_20261102_157）。
+  update public.community_spots set license_note='社群協力資料，經核驗後只收錄事實',source_url=''
     where source='import' and license_note like '整理自 Alan大重停車記事%';
   get diagnostics v_lc=row_count;
   update public.official_heavy_spots set license_note=case
@@ -1858,7 +1858,7 @@ begin
     values('00000000-0000-0000-0000-0000000000de','strip_copied_text','spots','275',null,
       jsonb_build_object('community_spots',v_c,'official_heavy_spots',v_o,
         'license_community',v_lc,'license_official',v_lo,
-        'fields',jsonb_build_array('note','entrance_note','parking_guide','special_rules','license_note')),
+        'fields',jsonb_build_array('note','entrance_note','parking_guide','special_rules','license_note','source_url')),
       '我的地圖照抄文字清除，只留固定詞彙的事實（#275）');
   end if;
 end $$;

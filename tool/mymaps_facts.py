@@ -165,8 +165,47 @@ def facts(lines):
 
 
 VOCABULARY = {phrase: field for _, rules in FACTS for field, rule, phrase in rules if phrase and phrase != DROP}
-FACT_FORMS = [(re.compile(p), field) for p, field in ((r"重機專用格 \d+ 格(以上)?", "parking_guide"),
-                                                      (r"前 \d+ 分鐘免費", "note"), (r"重機停放樓層：B\d", "parking_guide"))]
+FACT_FORMS = [(re.compile(p), field) for p, field in (
+    (r"重機專用格 \d+ 格(以上)?", "parking_guide"), (r"前 \d+ 分鐘免費", "note"), (r"重機停放樓層：B\d", "parking_guide"),
+    # Fixed sentences for facts the pin names carried (MANUAL below); no structured field holds them.
+    (r"入口位於\S{1,20}", "entrance_note"), (r"進場辨識後車牌，出場辨識前車牌", "entrance_note"),
+    (r"營業時間 \d\d:\d\d–\d\d:\d\d", "note"), (r"24 小時營業", "note"), (r"重機月租每 \d+ 日 \d+ 元", "note"),
+    (r"有月租方案", "note"))]
+GUESTS_ONLY = "限住宿或消費客人停放"
+
+# Community spots whose pin name carried comments or rules (COMMUNITY_NAMES＝A, PM_ANS_20261102_157):
+# the name is rewritten by hand and the facts in it become fixed sentences.
+MANUAL = {
+    "033a3826-d3dd-522a-990f-6066414d3d96": ("綠川東街14號 收費停車場", {}),
+    "12a51015-95ef-5dec-83f7-8dc68ede31f1": ("城市車旅 社頭停車場", {"entrance_note": ["進場辨識後車牌，出場辨識前車牌"]}),
+    "27a66a2c-2f14-5334-a985-060837c13537": ("歐特儀 市民廣場地下停車場", {}),
+    "3788b13c-4088-5133-9a87-42de2b76f2d7": ("中山收費停車場", {"entrance_note": ["走機車車道"], "parking_guide": ["可停汽車格"]}),
+    "49e333f9-0fd3-5519-990d-89829e7463e5": ("白沙灣遊客中心第一停車場", {}),
+    "6049f04f-b466-5435-8dee-a7849e7f6611": ("白沙灣遊客中心第二停車場", {}),
+    "54277bc0-8c80-5eb8-acd2-a9026b2d1875": ("舊社捷運站地下停車場", {}),
+    "79dd300d-d87c-5c22-b09b-8a48ec7c2d6b": ("板橋怡寶大樓停車場", {"note": ["營業時間 07:00–24:00"]}),
+    "8a8a51bc-c0e7-55bd-8436-ff9646ca3d96": ("台灣聯通停車場 石潭場", {"note": ["重機月租每 30 日 1500 元"]}),
+    "afbb3886-d70a-5e79-95b5-9167a1f31917": ("屏東夜市復興停車場（謙正巷入口）", {"note": ["不可過夜停放"]}),
+    "f1826b77-f20b-5f40-9f13-5366fc6ff0c7": ("屏東夜市復興停車場（自由路入口）", {"note": ["不可過夜停放"]}),
+    "bbe52090-0902-546f-a527-1bc02b747125": ("秀泰生活嘉義店停車場", {"entrance_note": ["需按鈴或請管理員協助"]}),
+    "f9bc1271-72ee-5a0e-9f85-b143fa1da16d": ("PIT147 重機停車", {"note": ["有月租方案"]}),
+    "a09367d0-f2b7-5deb-9ea8-7adfc41d7cab": ("佳音168Parking停車場", {"entrance_note": ["悠遊卡進出"]}),
+    "ca58918b-524e-55ec-9670-5400d642f5ce": ("板橋凱撒大飯店停車場", {"special_rules": [GUESTS_ONLY]}),
+    "ecd18f14-6bec-5ddd-91af-7236c2874df1": ("中正運動中心機車停車場（平面）", {"entrance_note": ["入口位於仁愛路"]}),
+    "4453c864-593e-5003-9c77-7b7cafa3d8d6": ("臨海新路棧西停車場", {"note": ["24 小時營業"]}),
+}
+
+
+def apply_manual(spot):
+    """The hand-written name and fixed sentences of a MANUAL community spot; other spots are returned as they are."""
+    if spot.get("id") not in MANUAL:
+        return spot
+    name, lines = MANUAL[spot["id"]]
+    spot = dict(spot, name=name)
+    for field, extra in lines.items():
+        current = split_lines(spot.get(field))
+        spot[field] = "\n".join(current + [line for line in extra if line not in current])
+    return spot
 
 
 def fact_field(text):
@@ -204,7 +243,7 @@ TEMPLATE = {
     "note": (MATCHED,),
     "entrance_note": (DIRECTION,),
     "parking_guide": (),
-    "special_rules": (TIMED, re.compile(BANNED), PILOT),
+    "special_rules": (TIMED, re.compile(BANNED), PILOT, re.compile(GUESTS_ONLY)),
 }
 
 
@@ -324,6 +363,9 @@ def rewrite_file(path, official):
             elif key == "note":
                 spot["note"] = ""
         spot["license_note"] = license_note(spot.get("license_note"), official)
+        if not official:
+            spot.pop("source_url", None)  # the source map's address is attribution too
+            spot.update(apply_manual(spot))
     Path(path).write_text(json.dumps(spots, ensure_ascii=False, indent=2) + "\n")
     return len(spots)
 

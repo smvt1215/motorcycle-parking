@@ -16,6 +16,8 @@ select is((select count(*)::int from public.community_spots where license_note l
   'no community spot names the source map');
 select is((select count(*)::int from public.official_heavy_spots where license_note like '%Alan%'), 0,
   'no official spot names the source map');
+select is((select count(*)::int from public.community_spots where source_url like '%google.com/maps/d/%'), 0,
+  'no community spot links the source map');
 
 -- A spot updated afterwards still follows its bays (the trigger is back).
 insert into auth.users(id,instance_id,aud,role,email) values
