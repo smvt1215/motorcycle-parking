@@ -44,6 +44,11 @@ Deno.test("trusts only Cloudflare's Authentication-Results", () => {
         'mx.cloudflare.net; dkim=fail header.d=x; dkim=pass header.d=example.test; dmarc=pass; spf=softfail smtp.mailfrom=example.test',
     },
     { key: 'authentication-results', value: 'evil.test; spf=pass; dkim=pass' },
+    {
+      key: 'authentication-results',
+      value:
+        'mx.cloudflare.net; dkim=none; dmarc=fail; spf=fail smtp.mailfrom="x;dkim=pass"@evil.test (comment; dkim=pass)',
+    },
   ];
   equal(
     authResults(headers),
@@ -51,7 +56,12 @@ Deno.test("trusts only Cloudflare's Authentication-Results", () => {
     'the topmost of Cloudflare',
   );
   equal(
-    authResults(headers.slice(1)),
+    authResults(headers.slice(2)),
+    { spf: 'fail', dkim: 'none', dmarc: 'fail' },
+    'text inside quotes or comments is not a result',
+  );
+  equal(
+    authResults(headers.slice(1, 2)),
     { spf: null, dkim: null, dmarc: null },
     'a forged one counts as none',
   );

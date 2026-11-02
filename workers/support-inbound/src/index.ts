@@ -47,7 +47,14 @@ export default {
     }
     // At most 5 MB, read once: hashed for filing it once, then parsed.
     const raw = await new Response(message.raw).arrayBuffer();
-    const parsed = await PostalMime.parse(raw);
+    let parsed;
+    try {
+      parsed = await PostalMime.parse(raw);
+    } catch {
+      // A broken mail stays broken: bounce it rather than have it retried.
+      message.setReject('This message could not be read');
+      return;
+    }
     const res = await fetch(
       await signedRequest(
         env.SUPPORT_INBOUND_URL,
@@ -62,8 +69,14 @@ export default {
       ),
     );
     await res.body?.cancel();
-    // 5xx: throw, so the mail is retried; 4xx (a mail we cannot take): bounce.
-    if (res.status >= 500) throw new Error(`support-inbound ${res.status}`);
-    if (!res.ok) message.setReject('This message could not be filed');
+    // Only a 400 (a mail support-inbound cannot take) bounces. Anything else
+    // (a 401/403 from a secret out of step or a clock off, a 404 before the
+    // function is deployed, a 5xx) is thrown, so the sending server retries
+    // instead of the mail being lost (cross review, PR #306).
+    if (res.status === 400) {
+      message.setReject('This message could not be filed');
+      return;
+    }
+    if (!res.ok) throw new Error(`support-inbound ${res.status}`);
   },
 };

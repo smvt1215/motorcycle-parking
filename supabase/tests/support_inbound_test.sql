@@ -81,6 +81,19 @@ select pg_temp.mail('c'||n,'reply-r5','writer@example.test') from generate_serie
 select is(pg_temp.mail('c11','reply-r5','writer@example.test'),'{"result":"rate_limited"}','ten replies a day per case');
 reset role;
 
+-- 冒名（可疑）的信不吃掉被冒名者的額度；可疑的另有上限。
+select pg_temp.mail('f'||n,null,'victim@example.test','x','fail','none','fail') from generate_series(1,3) n;
+select is(pg_temp.mail('f4',null,'victim@example.test','x','fail','none','fail'),'{"result":"rate_limited"}','three suspicious a day per sender');
+select is(pg_temp.mail('v1',null,'victim@example.test')->>'result','created','the real owner can still write');
+reset role;
+set local role service_role;
+select is(public.support_request_submit('general','victim@example.test',null,'','表單',repeat('9',64),pg_temp.h('fv'),'',null,pg_temp.h('fr'))->>'mail',
+  'case','and use the form');
+select pg_temp.mail('g'||n,null,'spam'||n||'@example.test','x','fail','none','fail') from generate_series(1,50) n;
+select is(pg_temp.mail('g51',null,'spam51@example.test','x','fail','none','fail'),'{"result":"rate_limited"}',
+  'fifty suspicious a day in all');
+reset role;
+
 -- ===== 保存期 =====
 update private.support_inbound_keys set created_at=now()-interval '31 days' where key_hash=decode(pg_temp.h('msg-new'),'hex');
 select ok(public.support_requests_prune()>=0,'prune runs');

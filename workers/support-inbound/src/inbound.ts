@@ -47,7 +47,12 @@ export function authResults(
   );
   if (!header) return { spf: null, dkim: null, dmarc: null };
   const found: Record<string, string[]> = { spf: [], dkim: [], dmarc: [] };
-  for (const part of header.value.split(';').slice(1)) {
+  // Quoted strings and comments carry sender-chosen text (smtp.mailfrom can
+  // be "x;dkim=pass"@evil.test): dropped before splitting (cross review,
+  // PR #306).
+  const value = header.value.replace(/"(?:[^"\\]|\\.)*"/g, '""')
+    .replace(/\((?:[^()\\]|\\.)*\)/g, '');
+  for (const part of value.split(';').slice(1)) {
     const m = /^\s*(spf|dkim|dmarc)\s*=\s*([a-z]+)/i.exec(part);
     if (m) found[m[1].toLowerCase()].push(m[2].toLowerCase());
   }

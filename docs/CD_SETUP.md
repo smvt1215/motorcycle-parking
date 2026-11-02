@@ -98,7 +98,7 @@ migration `202610310600_cron_history_prune.sql` 建立每日排程 `cron-history
 
 ### 收信：Cloudflare Email Routing＋Email Worker（`support-inbound`，#295）
 
-`support@` 與 `reply+<token>@motoparking.smvtstudio.com` 的信由 Cloudflare Email Routing 交給 Email Worker（原始碼 `workers/support-inbound/`），Worker 在記憶體解析後只把寄件人、收件人、主旨、純文字內文、Cloudflare 的 Authentication-Results 中的 SPF／DKIM 結果與附件檔名，以 HMAC-SHA256 簽章 POST 給 Edge Function `support-inbound`。原始信件不儲存、不轉寄。`ops@` 只是 Email Routing 的轉寄規則，不經 Worker。
+`support@` 與 `reply+<token>@motoparking.smvtstudio.com` 的信由 Cloudflare Email Routing 交給 Email Worker（原始碼 `workers/support-inbound/`），Worker 在記憶體解析後只把寄件人、收件人、主旨、純文字內文、Cloudflare 的 Authentication-Results 中的 SPF／DKIM／DMARC 結果與附件檔名，以 HMAC-SHA256 簽章 POST 給 Edge Function `support-inbound`。原始信件不儲存、不轉寄。`ops@` 只是 Email Routing 的轉寄規則，不經 Worker。
 
 **共用密鑰**（只放 secret，不進版控）：
 

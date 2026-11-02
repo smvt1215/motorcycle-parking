@@ -7,7 +7,7 @@
 //   x-support-signature  hex HMAC-SHA256 of `<timestamp>.<body>`
 //
 // The raw mail never reaches us: only the addresses, the subject, the plain
-// text, the SPF and DKIM results of Cloudflare's Authentication-Results and
+// text, the SPF, DKIM and DMARC results of Cloudflare's Authentication-Results and
 // the attachments' file names. public.support_inbound() (migration
 // 202611020200_support_inbound.sql) files it:
 //

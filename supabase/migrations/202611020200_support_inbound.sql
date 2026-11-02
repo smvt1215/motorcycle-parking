@@ -15,7 +15,9 @@
 --    別人；只有 DMARC 檢查通過驗證的網域與 From 對齊（Codex review，PR #306）。
 --    附件只記檔名。
 -- 4. 次數上限：每個寄件人開新案件每台灣日 3 筆、30 天 10 筆（與表單的聯絡
---    email 合計）；每案件的回信與案件連結補充合計每台灣日 10 則、總計 50
+--    email 合計，但可疑的信不算進去，免得冒名寄信就用光別人的表單額度）；
+--    可疑的新案件另外每個寄件人每台灣日 3 筆、全部每台灣日 50 筆（換寄件人
+--    也灌不爆 ops@ 的通知與 Resend 額度；交叉審查，PR #306）；每案件的回信與案件連結補充合計每台灣日 10 則、總計 50
 --    則（private.support_add_inbound）。
 -- 5. 同一封信只收一次：鍵是 Message-ID，沒有時是原始信件的 SHA-256（Worker
 --    計算，重新投遞也相同）；只存 SHA-256，30 天後清掉。
@@ -96,11 +98,21 @@ begin
     end if;
   end if;
 
-  -- 新案件：每個寄件人每台灣日 3 筆、30 天 10 筆（與表單的聯絡 email 合計）。
+  -- 新案件：每個寄件人每台灣日 3 筆、30 天 10 筆（與表單的聯絡 email 合計，
+  -- 可疑的信不算）；可疑的另外每個寄件人每日 3 筆、全部每日 50 筆。
   perform pg_advisory_xact_lock(hashtextextended('support-email:'||v_from,0));
-  if (select count(*) from private.support_requests s where s.contact_email=v_from and s.created_at>=v_day)>=3
-     or (select count(*) from private.support_requests s
-       where s.contact_email=v_from and s.created_at>=now()-interval '30 days')>=10 then
+  if v_suspicious then
+    perform pg_advisory_xact_lock(hashtextextended('support-suspicious',0));
+    if (select count(*) from private.support_requests s where s.suspicious and s.source='email'
+          and s.contact_email=v_from and s.created_at>=v_day)>=3
+       or (select count(*) from private.support_requests s where s.suspicious and s.source='email'
+          and s.created_at>=v_day)>=50 then
+      return jsonb_build_object('result','rate_limited');
+    end if;
+  elsif (select count(*) from private.support_requests s where s.contact_email=v_from and not s.suspicious
+         and s.created_at>=v_day)>=3
+     or (select count(*) from private.support_requests s where s.contact_email=v_from and not s.suspicious
+       and s.created_at>=now()-interval '30 days')>=10 then
     return jsonb_build_object('result','rate_limited');
   end if;
   insert into private.support_requests(kind,source,contact_email,subject,message,mail_spf,mail_dkim,
