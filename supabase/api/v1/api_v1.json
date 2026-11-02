@@ -234,6 +234,183 @@
           }
         }
       }
+    },
+    "/rpc/spots_by_ids": {
+      "post": {
+        "operationId": "api_v1_spots_by_ids",
+        "summary": "依 id 讀多個停車點（收藏頁）",
+        "description": "一次最多 200 個 id：社群點用 uuid，官方點用 official:<uuid>。看不到（被隱藏、刪除、官方點未生效）或認不得的 id（例如舊版 tdx: 收藏）不回傳，重複的 id 只回一次。每列和 spots_in_viewport 相同，含 contributor_handle 與 is_own（依登入身分）；官方點在前、社群點在後，各依 id 排序。不需要登入。錯誤：400 request.too_many_ids（超過 200 個）。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "ids"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "ids": {
+                    "type": "array",
+                    "maxItems": 200,
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "停車點 id"
+                  }
+                },
+                "example": {
+                  "ids": [
+                    "00000000-0000-4000-8000-000000000000",
+                    "official:00000000-0000-4000-8000-000000000000"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "依 id 讀多個停車點（收藏頁）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpotsByIds"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/rpc/hidden_riders_list": {
+      "post": {
+        "operationId": "api_v1_hidden_riders_list",
+        "summary": "自己隱藏的車友",
+        "description": "要登入（不可匿名登入）。只回自己的清單，依隱藏時間新到舊。錯誤：401 auth.sign_in_required。",
+        "x-requires-sign-in": true,
+        "responses": {
+          "200": {
+            "description": "自己隱藏的車友",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HiddenRiders"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/rpc/hidden_riders_merge": {
+      "post": {
+        "operationId": "api_v1_hidden_riders_merge",
+        "summary": "把隱藏的車友併入帳號",
+        "description": "要登入（不可匿名登入）。登入後上傳本機清單取聯集，也用來新增一筆。同一代號保留較早的 hidden_at 與當時的名稱。一次最多 500 筆；hidden_at 不可晚於現在 5 分鐘以上。合併後超過每帳號 500 筆時整批不寫入。不檢查代號是否存在。回傳合併後的完整清單。錯誤：400 request.invalid（detail.field）、400 hidden_riders.too_many（detail.limit）、401 auth.sign_in_required。",
+        "x-requires-sign-in": true,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "items"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "items": {
+                    "type": "array",
+                    "maxItems": 500,
+                    "items": {
+                      "$ref": "#/components/schemas/HiddenRider"
+                    }
+                  }
+                },
+                "example": {
+                  "items": [
+                    {
+                      "handle": "3fa8c1d27b9e40a6c55d0e1f2a3b4c5d",
+                      "name_at_hide": "阿明",
+                      "spot_name_at_hide": "市府轉運站機車區",
+                      "hidden_at": "2026-11-02T10:00:00+08:00"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "把隱藏的車友併入帳號",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HiddenRiders"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/rpc/hidden_riders_remove": {
+      "post": {
+        "operationId": "api_v1_hidden_riders_remove",
+        "summary": "解除隱藏一位車友",
+        "description": "要登入（不可匿名登入）。從自己的清單移除一個代號；不在清單裡也成功。回傳移除後的完整清單。錯誤：400 request.invalid、401 auth.sign_in_required。",
+        "x-requires-sign-in": true,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "handle"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "handle": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{32}$"
+                  }
+                },
+                "example": {
+                  "handle": "3fa8c1d27b9e40a6c55d0e1f2a3b4c5d"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "解除隱藏一位車友",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HiddenRiders"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -791,6 +968,74 @@
               null
             ],
             "description": "不能自助刪除的原因（錯誤碼）；可以時為 null"
+          }
+        }
+      },
+      "SpotsByIds": {
+        "type": "object",
+        "required": [
+          "spots"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "spots": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Spot"
+            },
+            "description": "看得到的點；官方點在前、社群點在後，各依 id 排序"
+          }
+        }
+      },
+      "HiddenRider": {
+        "type": "object",
+        "required": [
+          "handle",
+          "hidden_at"
+        ],
+        "additionalProperties": false,
+        "description": "一位隱藏的車友（#280）",
+        "properties": {
+          "handle": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$",
+            "description": "contributor_handle"
+          },
+          "name_at_hide": {
+            "type": "string",
+            "maxLength": 40,
+            "description": "隱藏當下看到的車友名稱；沒有名稱時空字串"
+          },
+          "spot_name_at_hide": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "隱藏時所在的點位名稱"
+          },
+          "hidden_at": {
+            "type": "string",
+            "description": "ISO 8601 時間"
+          }
+        }
+      },
+      "HiddenRiders": {
+        "type": "object",
+        "required": [
+          "items",
+          "limit"
+        ],
+        "additionalProperties": false,
+        "description": "自己隱藏的車友（#280）",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HiddenRider"
+            },
+            "description": "依 hidden_at 新到舊"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "每帳號上限（500）"
           }
         }
       }

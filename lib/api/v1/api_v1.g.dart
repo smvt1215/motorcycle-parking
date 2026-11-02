@@ -133,6 +133,49 @@ class ApiV1Client {
   /// [cancelAccountDeletion] as served, for callers that keep the JSON (#202).
   Future<Object?> cancelAccountDeletionRaw() =>
       _call('cancel_account_deletion', {});
+
+  /// 依 id 讀多個停車點（收藏頁）
+  Future<SpotsByIds> spotsByIds({required List<String> ids}) async {
+    final raw = await spotsByIdsRaw(ids: ids);
+    return SpotsByIds.fromJson(raw as Map<String, Object?>);
+  }
+
+  /// [spotsByIds] as served, for callers that keep the JSON (#202).
+  Future<Object?> spotsByIdsRaw({required List<String> ids}) =>
+      _call('spots_by_ids', {'ids': ids});
+
+  /// 自己隱藏的車友
+  Future<HiddenRiders> hiddenRidersList() async {
+    final raw = await hiddenRidersListRaw();
+    return HiddenRiders.fromJson(raw as Map<String, Object?>);
+  }
+
+  /// [hiddenRidersList] as served, for callers that keep the JSON (#202).
+  Future<Object?> hiddenRidersListRaw() => _call('hidden_riders_list', {});
+
+  /// 把隱藏的車友併入帳號
+  Future<HiddenRiders> hiddenRidersMerge({
+    required List<HiddenRider> items,
+  }) async {
+    final raw = await hiddenRidersMergeRaw(items: items);
+    return HiddenRiders.fromJson(raw as Map<String, Object?>);
+  }
+
+  /// [hiddenRidersMerge] as served, for callers that keep the JSON (#202).
+  Future<Object?> hiddenRidersMergeRaw({required List<HiddenRider> items}) =>
+      _call('hidden_riders_merge', {
+        'items': [for (final e in items) e.toJson()],
+      });
+
+  /// 解除隱藏一位車友
+  Future<HiddenRiders> hiddenRidersRemove({required String handle}) async {
+    final raw = await hiddenRidersRemoveRaw(handle: handle);
+    return HiddenRiders.fromJson(raw as Map<String, Object?>);
+  }
+
+  /// [hiddenRidersRemove] as served, for callers that keep the JSON (#202).
+  Future<Object?> hiddenRidersRemoveRaw({required String handle}) =>
+      _call('hidden_riders_remove', {'handle': handle});
 }
 
 class ClientConfig {
@@ -882,6 +925,116 @@ class AccountDeletionState {
     canSelfDelete,
     cannotSelfDeleteReason,
   ]);
+}
+
+class SpotsByIds {
+  const SpotsByIds({required this.spots});
+
+  factory SpotsByIds.fromJson(Map<String, Object?> json) => SpotsByIds(
+    spots: [
+      for (final e in json['spots'] as List)
+        Spot.fromJson(e as Map<String, Object?>),
+    ],
+  );
+
+  /// 看得到的點；官方點在前、社群點在後，各依 id 排序
+  final List<Spot> spots;
+
+  Map<String, Object?> toJson() => {
+    'spots': [for (final e in spots) e.toJson()],
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SpotsByIds && _equal(other.spots, spots);
+
+  @override
+  int get hashCode => Object.hashAll([_hash(spots)]);
+}
+
+/// 一位隱藏的車友（#280）
+class HiddenRider {
+  const HiddenRider({
+    required this.handle,
+    this.nameAtHide,
+    this.spotNameAtHide,
+    required this.hiddenAt,
+  });
+
+  factory HiddenRider.fromJson(Map<String, Object?> json) => HiddenRider(
+    handle: json['handle'] as String,
+    nameAtHide: json['name_at_hide'] == null
+        ? null
+        : json['name_at_hide'] as String,
+    spotNameAtHide: json['spot_name_at_hide'] == null
+        ? null
+        : json['spot_name_at_hide'] as String,
+    hiddenAt: json['hidden_at'] as String,
+  );
+
+  /// contributor_handle
+  final String handle;
+
+  /// 隱藏當下看到的車友名稱；沒有名稱時空字串
+  final String? nameAtHide;
+
+  /// 隱藏時所在的點位名稱
+  final String? spotNameAtHide;
+
+  /// ISO 8601 時間
+  final String hiddenAt;
+
+  Map<String, Object?> toJson() => {
+    'handle': handle,
+    'name_at_hide': nameAtHide,
+    'spot_name_at_hide': spotNameAtHide,
+    'hidden_at': hiddenAt,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is HiddenRider &&
+      other.handle == handle &&
+      other.nameAtHide == nameAtHide &&
+      other.spotNameAtHide == spotNameAtHide &&
+      other.hiddenAt == hiddenAt;
+
+  @override
+  int get hashCode =>
+      Object.hashAll([handle, nameAtHide, spotNameAtHide, hiddenAt]);
+}
+
+/// 自己隱藏的車友（#280）
+class HiddenRiders {
+  const HiddenRiders({required this.items, required this.limit});
+
+  factory HiddenRiders.fromJson(Map<String, Object?> json) => HiddenRiders(
+    items: [
+      for (final e in json['items'] as List)
+        HiddenRider.fromJson(e as Map<String, Object?>),
+    ],
+    limit: (json['limit'] as num).toInt(),
+  );
+
+  /// 依 hidden_at 新到舊
+  final List<HiddenRider> items;
+
+  /// 每帳號上限（500）
+  final int limit;
+
+  Map<String, Object?> toJson() => {
+    'items': [for (final e in items) e.toJson()],
+    'limit': limit,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is HiddenRiders &&
+      _equal(other.items, items) &&
+      other.limit == limit;
+
+  @override
+  int get hashCode => Object.hashAll([_hash(items), limit]);
 }
 
 bool _equal(Object? a, Object? b) {
