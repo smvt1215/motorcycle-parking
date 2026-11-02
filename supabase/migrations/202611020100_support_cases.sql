@@ -277,13 +277,15 @@ begin
   perform pg_advisory_xact_lock(hashtextextended('support-email:'||least(v_contact,v_login),0));
   perform pg_advisory_xact_lock(hashtextextended('support-email:'||greatest(v_contact,v_login),0));
   -- 每網路 5 筆；每個登入 email 3 筆（重送也算）；每個聯絡 email 3 筆、
-  -- 30 天內 10 筆（回條）。各類型合計。
+  -- 30 天內 10 筆（回條）。各類型合計；冒名嫌疑的來信（suspicious，#295
+  -- 第 2 層）不算，免得冒名寄信就用光別人的表單額度。
   if (select count(*) from private.support_requests s where s.ip_hash=p_ip_hash and s.created_at>=v_day)>=5
      or (v_verify and (select count(*) from private.support_requests s
        where s.login_email=v_login and s.created_at>=v_day)>=3)
-     or (select count(*) from private.support_requests s where s.contact_email=v_contact and s.created_at>=v_day)>=3
+     or (select count(*) from private.support_requests s where s.contact_email=v_contact and not s.suspicious
+       and s.created_at>=v_day)>=3
      or (select count(*) from private.support_requests s
-       where s.contact_email=v_contact and s.created_at>=now()-interval '30 days')>=10 then
+       where s.contact_email=v_contact and not s.suspicious and s.created_at>=now()-interval '30 days')>=10 then
     raise exception 'support.rate_limited' using errcode='P0001';
   end if;
   v_id:=gen_random_uuid();
