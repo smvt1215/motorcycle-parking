@@ -1,0 +1,52 @@
+/* Tokens of the public pages: the App's brand (lib/ui/adaptive/adaptive.dart,
+   Outfit + Noto Sans TC), as approved on canvas 5YXW7ZGBPs5qof2d1BEKAB. */
+:root {
+  --brand: #176273;
+  --brand-deep: #154b58;
+  --brand-mist: #c9eaf2;
+  --surface: #f9fbfc;
+  --paper: #ffffff;
+  --ink: #1d2b30;
+  --ink-soft: #3e4f55;
+  --ink-muted: #4a5a60;
+  --line: #d5e2e6;
+  --line-strong: #b8c8cd;
+  --danger: #a3241b;
+  --danger-tint: #ffe7e4;
+  --lane-yellow: #f2c200;
+  --on-dark-soft: #d5e2e6;
+  --font: 'Noto Sans TC', 'Outfit', system-ui, sans-serif;
+  --font-figure: 'Outfit', 'Noto Sans TC', sans-serif;
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font);
+  -webkit-text-size-adjust: 100%;
+}
+
+a {
+  color: var(--brand);
+}
+a:hover {
+  color: var(--brand-deep);
+}
+
+:focus-visible {
+  outline: 3px solid var(--brand);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
