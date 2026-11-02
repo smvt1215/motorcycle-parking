@@ -45,6 +45,13 @@ function fake(
           ? (kind === 'privacy' ? 'verified' : 'deletion_requested')
           : 'denied',
         kind,
+        ...(kind === 'privacy'
+          ? {
+            privacy_right: 'copy' as const,
+            subject: '',
+            message: '請給我複本',
+          }
+          : {}),
         submitted_at: at,
         contact_email: 'rider@example.tw',
         scheduled_at: action === 'confirm' && kind !== 'privacy' ? later : null,
@@ -75,6 +82,9 @@ const shown = (
   body: {
     result,
     kind,
+    privacy_right: kind === 'privacy' ? 'copy' : null,
+    subject: kind === 'privacy' ? '' : null,
+    message: kind === 'privacy' ? '請給我複本' : null,
     submitted_at: at,
     contact_email: 'r***@e***.tw',
     scheduled_at: scheduled,

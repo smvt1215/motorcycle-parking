@@ -56,6 +56,10 @@ export type LinkResult =
       | 'account_deleting'
       | 'unavailable';
     kind: 'account_deletion' | 'privacy';
+    /** A privacy request's item, subject and text; null for a deletion. */
+    privacy_right?: 'access' | 'correction' | 'copy' | null;
+    subject?: string | null;
+    message?: string | null;
     submitted_at: string;
     contact_email: string;
     scheduled_at: string | null;
@@ -135,6 +139,10 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
   return response({
     result: found.result,
     kind: found.kind,
+    // What the owner of the login email is confirming (Codex review, #301).
+    privacy_right: found.privacy_right ?? null,
+    subject: found.subject ?? null,
+    message: found.message ?? null,
     submitted_at: found.submitted_at,
     contact_email: maskEmail(found.contact_email),
     scheduled_at: found.scheduled_at ?? null,

@@ -82,6 +82,8 @@ select is((select r->>'mail' from sent where k='pnone'),null,'no account: only t
 select is((select status||'|'||exception from private.support_requests where id=pg_temp.id('pnone')),'exception|no_account','recorded as an exception');
 set local role service_role;
 select is(public.support_request_link(pg_temp.id('p'),pg_temp.h('tok-p'),'view')->>'kind','privacy','the page knows the kind');
+select is((select r->>'privacy_right'||'|'||(r->>'message') from (select public.support_request_link(pg_temp.id('p'),pg_temp.h('tok-p'),'view') r) x),
+  'copy|請給我資料複本','and shows what is being confirmed');
 select is(public.support_request_link(pg_temp.id('p'),pg_temp.h('tok-p'),'view')->>'result','pending','opening changes nothing');
 reset role;
 
@@ -109,6 +111,7 @@ reset role;
 set local role service_role;
 insert into sent values('del',public.support_request_submit('account_deletion','c2@example.test','fixture2@example.test','','',
   repeat('6',64),pg_temp.h('tok-del')));
+select is(public.support_request_link(pg_temp.id('del'),pg_temp.h('tok-del'),'view')->>'message',null,'a deletion shows no text');
 reset role;
 set local role authenticated;
 select pg_temp.act('admin');
