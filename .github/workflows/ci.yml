@@ -127,9 +127,19 @@ jobs:
         run: |
           deno fmt --check
           deno lint
-          deno check submit-report/index.ts submit-sighting/index.ts geocode/index.ts admin-users/index.ts availability-ingest/index.ts account-deletion/index.ts apple-revoke/index.ts support-request/index.ts support-confirm/index.ts support-mail/index.ts support-case/index.ts
+          deno check submit-report/index.ts submit-sighting/index.ts geocode/index.ts admin-users/index.ts availability-ingest/index.ts account-deletion/index.ts apple-revoke/index.ts support-request/index.ts support-confirm/index.ts support-mail/index.ts support-case/index.ts support-inbound/index.ts
           # availability-ingest reads its fixed feed samples.
           deno test --allow-read=.
+      # The support-inbound Email Worker (#295): its pure part is tested with
+      # Deno, against the Edge Function's signature check.
+      - name: Email Worker checks
+        if: steps.changes.outputs.run == 'true'
+        working-directory: workers/support-inbound
+        run: |
+          deno fmt --check
+          deno lint
+          deno check src/index.ts
+          deno test --allow-read=../..
       - name: API response checker
         if: steps.changes.outputs.run == 'true'
         working-directory: supabase/api/v1

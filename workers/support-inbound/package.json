@@ -1,0 +1,14 @@
+{
+  "name": "support-inbound",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "postal-mime": "4.0.8"
+  },
+  "devDependencies": {
+    "wrangler": "4.151.1"
+  }
+}

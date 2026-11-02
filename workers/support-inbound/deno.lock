@@ -1,0 +1,22 @@
+{
+  "version": "5",
+  "specifiers": {
+    "npm:postal-mime@4.0.8": "4.0.8"
+  },
+  "npm": {
+    "postal-mime@4.0.8": {
+      "integrity": "sha512-nnAgc4a9hn7zYuQmX4C7LU+fN47kR5S8cE8zvB/vZ2NimNDbaj+ISZJ9qe3CKIfn2uOTwwz4nQeIyljvdFNgOA=="
+    }
+  },
+  "workspace": {
+    "dependencies": [
+      "npm:postal-mime@4.0.8"
+    ],
+    "packageJson": {
+      "dependencies": [
+        "npm:postal-mime@4.0.8",
+        "npm:wrangler@4.151.1"
+      ]
+    }
+  }
+}

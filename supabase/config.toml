@@ -469,3 +469,8 @@ verify_jwt = false
 # The case link of the support mails (#295): no sign-in; the 32-byte random
 # token itself is the credential.
 verify_jwt = false
+
+[functions.support-inbound]
+# The Email Worker (workers/support-inbound) posts mail signed with HMAC
+# under SUPPORT_INBOUND_SECRET, not a JWT (#295).
+verify_jwt = false
