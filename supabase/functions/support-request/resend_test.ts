@@ -2,6 +2,7 @@ import {
   caseReceiptMail,
   confirmMail,
   deletionNoticeMail,
+  formUrl,
   inboundReceiptMail,
   noticeMail,
   privacyConfirmMail,
@@ -331,13 +332,13 @@ Deno.test('the receipt of a mail to support@ points identity requests to the for
     'case lines',
   );
   equal(
-    plain.split('\n').includes('https://motoparking.smvtstudio.com/support'),
+    plain.split('\n').some((line) => line === formUrl),
     false,
     'no form link',
   );
   const identity = inboundReceiptMail(id, link, true).text;
   equal(
-    identity.split('\n').includes('https://motoparking.smvtstudio.com/support'),
+    identity.split('\n').some((line) => line === formUrl),
     true,
     'form',
   );
