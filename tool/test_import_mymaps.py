@@ -38,13 +38,16 @@ class FeeTest(unittest.TestCase):
             "黃60/d | 紅100/d": "黃牌每日 60 元；紅牌每日 100 元",
             "30/d | 1200/隔夜": "每日 30 元；隔夜 1200 元",
             "20/h|60|d": "每小時 20 元；每日 60 元",
-            "40/h - 管理員": "每小時 40 元；需管理員協助",
+            "40/h - 管理員": "每小時 40 元；需按鈴或請管理員協助",
             "平30/h;200/d | 假40/h": "平日每小時 30 元；每日 200 元；假日每小時 40 元",
-            "20/h - B2限悠遊卡": "每小時 20 元；B2限悠遊卡",
+            "20/h - B2限悠遊卡": "每小時 20 元；悠遊卡進出",
             "50/半天": "每半天 50 元", "30/d | 600/月": "每日 30 元；每月 600 元",
-            "40/d - 後牌停5/F": "每日 40 元；後牌停5/F",
+            "40/d - 後牌停5/F": "每日 40 元；後車牌辨識",
             "free": "免費", "30/H": "每小時 30 元", "機車30/d": "機車每日 30 元",
             "室內30/h | 室外20/h": "室內每小時 30 元；室外每小時 20 元",
+            # Notes riding on the fee keep only vocabulary facts (#275).
+            "60/h左車道進": "每小時 60 元", "Free-機車": "免費", "30/d | 營業時間": "每日 30 元",
+            "40/h - 倒退掃牌": "每小時 40 元；可能需倒車進場", "Free | 窄車道": "免費；車道較窄",
         }
         for raw, expected in cases.items():
             with self.subTest(raw=raw):
@@ -62,7 +65,7 @@ class FeeTest(unittest.TestCase):
         self.assertEqual(spot["name"], "中林站 市民大道停車場")
         self.assertTrue(spot["fee_note"].startswith("每小時 30 元；每日 200 元"))
         self.assertIn("東西向皆可進入", spot["entrance_note"])
-        self.assertEqual(entry_direction("⇦ (禁止)Times 台北地下街停車場"), ("(禁止)Times 台北地下街停車場", "來源標示：往西方向進入（⇦）"))
+        self.assertEqual(entry_direction("⇦ (禁止)Times 台北地下街停車場"), ("(禁止)Times 台北地下街停車場", "入口方向：往西方向進入"))
 
 
 class NormalizeTest(unittest.TestCase):
@@ -75,9 +78,9 @@ class NormalizeTest(unittest.TestCase):
         self.assertEqual(spot["space_type"], "offStreet")
         self.assertEqual(spot["parking_zones"], [{"name": "重機專用格", "access": "heavyOnly", "fee_note": "每小時 40 元"}])
         self.assertEqual(spot["fee_note"], "每小時 40 元（重機專用格比照汽車費率）")
-        self.assertEqual(spot["entrance_note"], "汽車道入場")
-        self.assertEqual(spot["parking_guide"], "B2 有重機專用格三格")
-        self.assertEqual(spot["note"], "週末人多")
+        self.assertEqual(spot["entrance_note"], "走汽車車道")
+        self.assertEqual(spot["parking_guide"], "重機專用格 3 格\n重機停放樓層：B2")
+        self.assertEqual(spot["note"], "")  # 週末人多 is no vocabulary fact
         self.assertEqual(spot["facility_type"], "underground")
         self.assertIs(spot["heavy_allowed"], True)
 
@@ -88,7 +91,8 @@ class NormalizeTest(unittest.TestCase):
         unknown = normalize(mark("未確定", "(20/h)社子國小地下停車場", color="757575"))
         self.assertIsNone(unknown["heavy_allowed"])
         self.assertNotIn("access", unknown["parking_zones"][0])
-        self.assertIn("未確認", unknown["note"])
+        self.assertTrue(unknown["unconfirmed"])
+        self.assertEqual(unknown["note"], "")  # the icon colour is no longer turned into a note (#275)
 
     def test_roadside_layer_variants(self):
         heavy = normalize(mark("路邊友善車格", "(30/4h)安和路重機專用格", icon="1644"))
@@ -308,15 +312,17 @@ class OfficialSpotTest(unittest.TestCase):
            "source": "新竹市公有停車場相關資訊", "url": "https://data.gov.tw/dataset/67771"}
 
     def test_community_heavy_claims_never_become_official_access(self):
-        spot = {"city": "新竹市", "district": "北區", "lat": 24.8073, "lng": 120.9698, "heavy_allowed": True, "note": "週末人多",
-                "address": "", "entrance_note": "機車道入場", "parking_guide": "", "facility_type": None,
+        spot = {"city": "新竹市", "district": "北區", "lat": 24.8073, "lng": 120.9698, "heavy_allowed": True,
+                "note": "車道較窄\n已比對新竹市公有停車場相關資訊（HSZ001）", "address": "", "entrance_note": "走機車車道", "parking_guide": "", "facility_type": None,
                 "parking_zones": [{"name": "汽車區", "access": "heavyCar", "fee_note": "每小時 20 元"}]}
         official = official_spot(self.LOT, spot, None, {}, "2026-10-17")
         self.assertEqual((official["source"], official["status"], official["source_name"]), ("official", "confirmed", "新竹市政府"))
         self.assertIsNone(official["heavy_allowed"])
         self.assertIs(official["scooter_allowed"], True)
         self.assertEqual(official["parking_zones"], [])
-        self.assertIn("社群補充（未經官方查核）：大型重機可停；停放區域：汽車區（每小時 20 元）", official["note"])
+        self.assertEqual(official["note"], "社群補充（未經官方查核）：大型重機可停；停放區域：汽車區（每小時 20 元）；車道較窄\n"
+                                           "已比對新竹市公有停車場相關資訊（HSZ001）")
+        self.assertEqual(official["license_note"], "政府資料開放授權條款第 1 版；社群協力資料，經核驗後只收錄事實")
         self.assertTrue(official["entrance_note"].startswith("社群補充（未經官方查核）"))
         self.assertEqual((official["lat"], official["lng"]), (24.8073, 120.9698))
 
@@ -459,7 +465,10 @@ class ImportedDataTest(unittest.TestCase):
     def check_common(self, s):
         self.assertTrue(1 <= len(s["name"]) <= 100 and len(s["fee_note"]) <= 200 and len(s["note"]) <= 500)
         self.assertTrue(20 <= s["lat"] <= 27 and 118 <= s["lng"] <= 123 and s["city"] and s["district"])
-        self.assertTrue(s["source_url"].startswith("https://"))
+        if s["source"] == "official":
+            self.assertTrue(s["source_url"].startswith("https://"))
+        else:
+            self.assertNotIn("source_url", s)  # community spots name no source (#275)
         for key, values in self.ENUMS.items():
             if key in s:
                 self.assertIn(s[key], values)
