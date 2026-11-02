@@ -569,8 +569,8 @@ begin
     where m.id=p_message and m.delivery_status='sending' and m.claimed_at>now()-interval '15 minutes'
     for update;
   if v_request is null then return false; end if;
-  -- 上一次沒寄成的 token 不再有效。
-  delete from private.support_case_tokens k where k.message_id=p_message;
+  -- 上一次的 token 不刪：寄送結果不確定（逾時、連線中斷）時，信可能已經送達
+  -- （Codex review，PR #301）。沒送達的 token 不在任何人手上，留著無害。
   insert into private.support_case_tokens(token_hash,request_id,kind,message_id,expires_at)
     values(decode(p_link_hash,'hex'),v_request,'link',p_message,now()+interval '30 days'),
           (decode(p_reply_hash,'hex'),v_request,'reply',p_message,null);
@@ -580,7 +580,8 @@ revoke execute on function public.support_outbound_tokens(uuid,text,text) from p
 grant execute on function public.support_outbound_tokens(uuid,text,text) to service_role;
 
 -- 寄送結果：sent（Resend 的 id）或 failed（錯誤摘要，不含 email 或內容）。
--- 沒寄成的 token 刪掉（信不在任何人手上）。
+-- 失敗也保留這次的 token：逾時或連線中斷時信可能已經送達（Codex review，
+-- PR #301），隨案件一起刪除。
 create function public.support_outbound_result(p_message uuid,p_sent boolean,p_resend_id text default null,
   p_error text default null) returns void
 language plpgsql volatile security definer set search_path='' as $$
@@ -593,7 +594,6 @@ begin
     update private.support_messages m
       set delivery_status='failed',send_error=left(coalesce(nullif(p_error,''),'failed'),200)
       where m.id=p_message and m.delivery_status='sending';
-    delete from private.support_case_tokens k where k.message_id=p_message;
   end if;
 end $$;
 revoke execute on function public.support_outbound_result(uuid,boolean,text,text) from public,anon,authenticated;

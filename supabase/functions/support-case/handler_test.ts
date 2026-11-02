@@ -147,3 +147,20 @@ Deno.test('refusals', async () => {
     'POST only',
   );
 });
+
+Deno.test('4000 astral characters fit the request size limit', async () => {
+  const made = await newSecret();
+  const token = confirmToken(id, made.secret);
+  const { deps, calls } = fake(() => ({
+    result: 'received',
+    message_id: 'm1',
+    reopened: false,
+  }));
+  const message = '🏍'.repeat(4000);
+  equal(
+    (await call(deps, post({ token, action: 'reply', message }))).status,
+    200,
+    'accepted',
+  );
+  equal(calls.length, 1, 'filed');
+});

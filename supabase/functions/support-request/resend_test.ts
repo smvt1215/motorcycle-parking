@@ -314,7 +314,11 @@ Deno.test('a reply notice says so, with its own idempotency key', async () => {
   );
   const body = JSON.parse(String(seen[0].body));
   equal(body.subject.includes('新回覆'), true, 'subject');
-  equal(body.text.includes('https://admin.test/x'), true, 'link');
+  equal(
+    body.text.split('\n').includes('處理：https://admin.test/x'),
+    true,
+    'link line',
+  );
   equal(noticeMail(id, 'u').text.includes('新的客服案件'), true, 'new case');
 });
 

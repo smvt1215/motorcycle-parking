@@ -51,6 +51,12 @@ export type Deps = {
 // deno-lint-ignore no-control-regex
 const control = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
 
+/**
+ * 4000 characters of text, each up to 12 code units once JSON-escaped (an
+ * astral character as two \u escapes), and the other fields.
+ */
+export const maxBodyLength = 64 * 1024;
+
 const fail = (error: string, status: number) => response({ error }, status);
 
 export async function handle(req: Request, deps: Deps): Promise<Response> {
@@ -59,7 +65,7 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
 
   let body: Record<string, unknown>;
   try {
-    body = await readBody(req);
+    body = await readBody(req, maxBodyLength);
   } catch {
     return fail('request.invalid', 400);
   }

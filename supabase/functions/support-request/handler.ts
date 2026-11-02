@@ -209,6 +209,12 @@ export function parse(body: Record<string, unknown>): Submission | null {
   };
 }
 
+/**
+ * 4000 characters of text, each up to 12 code units once JSON-escaped (an
+ * astral character as two \u escapes), and the other fields.
+ */
+export const maxBodyLength = 64 * 1024;
+
 const fail = (error: string, status: number) => response({ error }, status);
 
 /** Runs one mail; logs only the request id, never an address or a link. */
@@ -232,7 +238,7 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
 
   let body: Record<string, unknown>;
   try {
-    body = await readBody(req);
+    body = await readBody(req, maxBodyLength);
   } catch {
     return fail('request.invalid', 400);
   }

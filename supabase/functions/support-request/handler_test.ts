@@ -439,3 +439,16 @@ Deno.test('parse the case kinds', () => {
     equal(parse({ ...question, kind })?.kind, kind, kind);
   }
 });
+
+Deno.test('the longest allowed form fits the request size limit', async () => {
+  const { deps } = fake({ mail: 'case' });
+  const body = {
+    ...question,
+    contact_email: 'rider@example.test',
+    subject: '長'.repeat(120),
+    account_hint: '長'.repeat(200),
+    message: '🏍'.repeat(4000),
+  };
+  equal(JSON.stringify(body).length > 8192, true, 'over the default');
+  equal((await call(deps, post(body))).status, 200, 'accepted');
+});
