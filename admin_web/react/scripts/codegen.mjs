@@ -21,6 +21,8 @@ const READS = {
     'apiV1SpotsInViewport',
     'apiV1DataVersions',
     'apiV1AccountDeletionStatus',
+    'apiV1SpotsByIds',
+    'apiV1HiddenRidersList',
   ],
   admin_v1: ['adminV1SupportRequests'],
 };
