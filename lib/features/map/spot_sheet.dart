@@ -281,6 +281,11 @@ class _SpotSheetState extends State<SpotSheet> {
                                 SpotPreview(
                                   spot: spot,
                                   plates: plates,
+                                  // The spot's own name held for review:
+                                  // under the title (PM to confirm).
+                                  titleNote: heldForOwner(spot, 'spot_name')
+                                      ? const ContentHeldNote()
+                                      : null,
                                   subtitle: previewSubtitle(
                                     spot,
                                     meters: store.located
