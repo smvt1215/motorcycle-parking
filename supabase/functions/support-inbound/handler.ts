@@ -17,7 +17,8 @@
 //                    case (one closed longer ago is linked as related_to)
 //
 // A new case's sender gets a receipt with the case link and a Reply-To of
-// its own, unless SPF or DKIM did not pass (no mail for a forged sender).
+// its own, unless SPF, DKIM or DMARC did not pass (no mail for a forged
+// sender).
 // When the mail reads like an account deletion or a personal data request,
 // the receipt says mail cannot prove who owns an account and points to the
 // form, whose one-time link goes only to the login email (#285). ops@
@@ -54,9 +55,13 @@ export type Inbound = {
   text: string;
   spf: string | null;
   dkim: string | null;
+  /** DMARC: the authenticated domain matches From (Codex review, PR #306). */
+  dmarc: string | null;
   attachments: string[];
   /** The Message-ID header, for filing a mail once. */
   message_id: string | null;
+  /** The raw mail's SHA-256, the same on every delivery of it. */
+  raw_sha256: string | null;
 };
 
 export type Filed =
@@ -174,12 +179,17 @@ export function parse(body: unknown): Inbound | null {
     text: str(b.text, 4000),
     spf: result(b.spf),
     dkim: result(b.dkim),
+    dmarc: result(b.dmarc),
     attachments: Array.isArray(b.attachments)
       ? b.attachments.slice(0, 20).map((a) => str(a, 200).trim()).filter((a) =>
         a !== ''
       )
       : [],
     message_id: str(b.message_id, 998).trim() || null,
+    raw_sha256: typeof b.raw_sha256 === 'string' &&
+        /^[0-9a-f]{64}$/.test(b.raw_sha256)
+      ? b.raw_sha256
+      : null,
   };
 }
 
@@ -211,8 +221,15 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     if (!token) return fail('support.unknown_recipient', 400);
     replyHash = await replyTokenHash(token);
   }
-  // A mail without a Message-ID is filed once per signed post.
-  const keyHash = await sha256Hex(mail.message_id ?? `sig:${signature}`);
+  // The same mail is filed once: by its Message-ID, or else by the digest of
+  // the raw mail, which a redelivery repeats (a signature does not).
+  const keyHash = await sha256Hex(
+    mail.message_id
+      ? `id:${mail.message_id}`
+      : mail.raw_sha256
+      ? `raw:${mail.raw_sha256}`
+      : `sig:${signature}`,
+  );
 
   let link: Secret, reply: Secret, filed: Filed;
   try {

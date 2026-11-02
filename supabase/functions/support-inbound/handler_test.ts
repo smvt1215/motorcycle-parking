@@ -65,8 +65,10 @@ const mail = {
   text: '費用不對',
   spf: 'pass',
   dkim: 'pass',
+  dmarc: 'pass',
   attachments: ['a.pdf'],
   message_id: '<m1@example.test>',
+  raw_sha256: 'd'.repeat(64),
 };
 
 async function post(
@@ -242,4 +244,24 @@ Deno.test('parse keeps only what the case needs', () => {
   );
   equal(got?.attachments[0], 'a.pdf', 'trimmed');
   equal(parse(null), null, 'not an object');
+});
+
+Deno.test('a mail without a Message-ID is filed once by its raw digest', async () => {
+  const keys: string[] = [];
+  const { deps } = fake(created);
+  deps.file = (_m, _r, keyHash) => {
+    keys.push(keyHash);
+    return Promise.resolve({ result: 'duplicate' });
+  };
+  const body = { ...mail, message_id: null };
+  await call(deps, await post(body, { ts: now }));
+  await call(deps, await post(body, { ts: now - 10 }));
+  equal(keys[0], keys[1], 'the same key across deliveries');
+  await call(deps, await post({ ...body, raw_sha256: 'e'.repeat(64) }));
+  equal(keys[2] === keys[0], false, 'another mail, another key');
+});
+
+Deno.test('parse keeps DMARC and a well-formed digest only', () => {
+  equal(parse({ ...mail, dmarc: 'fail' })?.dmarc, 'fail', 'dmarc');
+  equal(parse({ ...mail, raw_sha256: 'nope' })?.raw_sha256, null, 'digest');
 });

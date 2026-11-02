@@ -9,13 +9,16 @@
 --    - 案件 open：接到同一案件。
 --    - 已結案（done、rejected）30 天內：重新開啟同一案件。
 --    - 結案超過 30 天或系統判定的終止狀態：開新案件，related_to 指向舊案。
--- 3. SPF／DKIM 由 Worker 取 Cloudflare 自己加的 Authentication-Results；
+-- 3. SPF／DKIM／DMARC 由 Worker 取 Cloudflare 自己加的 Authentication-Results；
 --    任一沒有 pass 就標記可疑（suspicious），不寄回條（避免替冒名寄件人
---    產生回信）。附件只記檔名。
+--    產生回信）。SPF、DKIM 可能都對寄件人自己的網域 pass，信頭 From 卻是
+--    別人；只有 DMARC 檢查通過驗證的網域與 From 對齊（Codex review，PR #306）。
+--    附件只記檔名。
 -- 4. 次數上限：每個寄件人開新案件每台灣日 3 筆、30 天 10 筆（與表單的聯絡
 --    email 合計）；每案件的回信與案件連結補充合計每台灣日 10 則、總計 50
 --    則（private.support_add_inbound）。
--- 5. 同一封信（Message-ID）只收一次；鍵只存 SHA-256，30 天後清掉。
+-- 5. 同一封信只收一次：鍵是 Message-ID，沒有時是原始信件的 SHA-256（Worker
+--    計算，重新投遞也相同）；只存 SHA-256，30 天後清掉。
 -- 6. 刪除帳號與個資權利請求從 email 進來不算本人確認：Edge Function 依內容
 --    判斷後，在回條中請對方改用客服表單、由登入 email 的一次性連結確認
 --    （和帳號有關的信只寄到登入 email，#285）。
@@ -38,7 +41,8 @@ comment on table private.support_inbound_keys is
 --   duplicate   同一封信已收過
 --   rate_limited 超過次數上限，不登錄
 create function public.support_inbound(p_reply_hash text,p_from text,p_subject text,p_body text,
-  p_spf text,p_dkim text,p_attachments text[],p_key_hash text,p_link_hash text,p_new_reply_hash text)
+  p_spf text,p_dkim text,p_attachments text[],p_key_hash text,p_link_hash text,p_new_reply_hash text,
+  p_dmarc text default null)
 returns jsonb language plpgsql volatile security definer set search_path='' as $$
 declare
   v_from text:=lower(btrim(coalesce(p_from,'')));
@@ -63,7 +67,7 @@ begin
      or (p_reply_hash is not null and p_reply_hash !~ '^[0-9a-f]{64}$') then
     raise exception 'request.invalid' using errcode='22023';
   end if;
-  v_suspicious:=coalesce(v_spf,'')<>'pass' or coalesce(v_dkim,'')<>'pass';
+  v_suspicious:=coalesce(v_spf,'')<>'pass' or coalesce(v_dkim,'')<>'pass' or coalesce(p_dmarc,'')<>'pass';
   if v_body='' then v_body:='（沒有純文字內容）'; end if;
   -- 同一封信只收一次。
   insert into private.support_inbound_keys(key_hash) values(decode(p_key_hash,'hex'))
@@ -110,9 +114,9 @@ begin
 exception when check_violation or not_null_violation or unique_violation then
   raise exception 'request.invalid' using errcode='22023';
 end $$;
-revoke execute on function public.support_inbound(text,text,text,text,text,text,text[],text,text,text)
+revoke execute on function public.support_inbound(text,text,text,text,text,text,text[],text,text,text,text)
   from public,anon,authenticated;
-grant execute on function public.support_inbound(text,text,text,text,text,text,text[],text,text,text)
+grant execute on function public.support_inbound(text,text,text,text,text,text,text[],text,text,text,text)
   to service_role;
 
 -- 保存期：與 202611020100 相同，另外清掉 30 天前的收信鍵。

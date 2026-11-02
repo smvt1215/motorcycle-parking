@@ -2,6 +2,7 @@ import {
   accepts,
   authResults,
   payload,
+  rawDigest,
   sign,
   signedRequest,
 } from './inbound.ts';
@@ -46,38 +47,44 @@ Deno.test("trusts only Cloudflare's Authentication-Results", () => {
   ];
   equal(
     authResults(headers),
-    { spf: 'softfail', dkim: 'pass' },
+    { spf: 'softfail', dkim: 'pass', dmarc: 'pass' },
     'the topmost of Cloudflare',
   );
   equal(
     authResults(headers.slice(1)),
-    { spf: null, dkim: null },
+    { spf: null, dkim: null, dmarc: null },
     'a forged one counts as none',
   );
-  equal(authResults([]), { spf: null, dkim: null }, 'none');
+  equal(authResults([]), { spf: null, dkim: null, dmarc: null }, 'none');
   equal(
     authResults([{
       key: 'Authentication-Results',
       value: 'mx.example; spf=pass',
     }], 'mx.example'),
-    { spf: 'pass', dkim: null },
+    { spf: 'pass', dkim: null, dmarc: null },
     'another authserv-id when configured',
   );
 });
 
 Deno.test('the payload carries no raw mail and attachments by name', () => {
   equal(
-    payload('Support@MotoParking.smvtstudio.com', 'bounce@example.test', {
-      headers: [{
-        key: 'authentication-results',
-        value: 'mx.cloudflare.net; spf=pass; dkim=pass',
-      }],
-      from: { address: 'Writer@Example.test' },
-      subject: '費用',
-      messageId: '<m1@example.test>',
-      text: '內容',
-      attachments: [{ filename: 'a.pdf' }, { filename: null }],
-    }),
+    payload(
+      'Support@MotoParking.smvtstudio.com',
+      'bounce@example.test',
+      {
+        headers: [{
+          key: 'authentication-results',
+          value: 'mx.cloudflare.net; spf=pass; dkim=pass; dmarc=fail',
+        }],
+        from: { address: 'Writer@Example.test' },
+        subject: '費用',
+        messageId: '<m1@example.test>',
+        text: '內容',
+        attachments: [{ filename: 'a.pdf' }, { filename: null }],
+      },
+      undefined,
+      'd'.repeat(64),
+    ),
     {
       to: 'support@motoparking.smvtstudio.com',
       from: 'writer@example.test',
@@ -85,8 +92,10 @@ Deno.test('the payload carries no raw mail and attachments by name', () => {
       text: '內容',
       spf: 'pass',
       dkim: 'pass',
+      dmarc: 'fail',
       attachments: ['a.pdf'],
       message_id: '<m1@example.test>',
+      raw_sha256: 'd'.repeat(64),
     },
     'payload',
   );
@@ -119,4 +128,10 @@ Deno.test('the signature is the one support-inbound checks', async () => {
     false,
     'keyed',
   );
+});
+
+Deno.test('the same raw mail always has the same digest', async () => {
+  const raw = new TextEncoder().encode('Subject: x\r\n\r\nbody').buffer;
+  equal(await rawDigest(raw), await rawDigest(raw.slice(0)), 'stable');
+  equal((await rawDigest(raw)).length, 64, 'hex SHA-256');
 });

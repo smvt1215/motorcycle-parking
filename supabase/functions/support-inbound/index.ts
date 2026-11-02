@@ -48,6 +48,7 @@ Deno.serve((req) => {
         p_key_hash: keyHash,
         p_link_hash: linkHash,
         p_new_reply_hash: newReplyHash,
+        p_dmarc: mail.dmarc,
       });
       if (error) throw error;
       return data as Filed;

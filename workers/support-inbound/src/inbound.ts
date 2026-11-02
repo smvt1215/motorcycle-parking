@@ -20,12 +20,19 @@ export function accepts(to: string): boolean {
 }
 
 export type Header = { key: string; value: string };
-export type AuthResults = { spf: string | null; dkim: string | null };
+export type AuthResults = {
+  spf: string | null;
+  dkim: string | null;
+  dmarc: string | null;
+};
 
 /**
- * SPF and DKIM from the topmost Authentication-Results whose authserv-id is
- * Cloudflare's. A sender can write its own Authentication-Results below it,
- * so any other is ignored; none at all gives nulls (suspicious).
+ * SPF, DKIM and DMARC from the topmost Authentication-Results whose
+ * authserv-id is Cloudflare's. A sender can write its own
+ * Authentication-Results below it, so any other is ignored; none at all
+ * gives nulls (suspicious). SPF and DKIM can pass for the sender's own
+ * domain while the From header names someone else; only DMARC checks that
+ * the authenticated domain matches From (Codex review, PR #306).
  */
 export function authResults(
   headers: Header[],
@@ -36,16 +43,17 @@ export function authResults(
     h.value.split(';')[0].trim().split(/\s+/)[0].toLowerCase() ===
       authservId.toLowerCase()
   );
-  if (!header) return { spf: null, dkim: null };
-  const found: Record<string, string[]> = { spf: [], dkim: [] };
+  if (!header) return { spf: null, dkim: null, dmarc: null };
+  const found: Record<string, string[]> = { spf: [], dkim: [], dmarc: [] };
   for (const part of header.value.split(';').slice(1)) {
-    const m = /^\s*(spf|dkim)\s*=\s*([a-z]+)/i.exec(part);
+    const m = /^\s*(spf|dkim|dmarc)\s*=\s*([a-z]+)/i.exec(part);
     if (m) found[m[1].toLowerCase()].push(m[2].toLowerCase());
   }
   return {
     spf: found.spf[0] ?? null,
     // One passing signature is enough.
     dkim: found.dkim.includes('pass') ? 'pass' : found.dkim[0] ?? null,
+    dmarc: found.dmarc[0] ?? null,
   };
 }
 
@@ -64,8 +72,9 @@ export function payload(
   envelopeFrom: string,
   parsed: Parsed,
   authservId = defaultAuthservId,
+  rawSha256: string | null = null,
 ) {
-  const { spf, dkim } = authResults(parsed.headers, authservId);
+  const { spf, dkim, dmarc } = authResults(parsed.headers, authservId);
   return {
     to: to.trim().toLowerCase(),
     // The header From is who the case belongs to; DKIM and SPF say how far
@@ -75,11 +84,21 @@ export function payload(
     text: (parsed.text ?? '').slice(0, 4000),
     spf,
     dkim,
+    dmarc,
     attachments: parsed.attachments.slice(0, 20).map((a) =>
       (a.filename ?? '').slice(0, 200)
     ).filter((name) => name !== ''),
     message_id: parsed.messageId ?? null,
+    // The same mail delivered again has the same digest, so a mail without
+    // a Message-ID is still filed once (Codex review, PR #306).
+    raw_sha256: rawSha256,
   };
+}
+
+/** The hex SHA-256 of the raw mail. */
+export async function rawDigest(raw: ArrayBuffer): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', raw));
+  return [...digest].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 const encoder = new TextEncoder();

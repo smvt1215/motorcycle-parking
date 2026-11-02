@@ -13,6 +13,7 @@ import {
   defaultAuthservId,
   maxRawSize,
   payload,
+  rawDigest,
   signedRequest,
 } from './inbound.ts';
 
@@ -44,7 +45,9 @@ export default {
       // A temporary failure: the sending server retries later.
       throw new Error('support-inbound is not configured');
     }
-    const parsed = await PostalMime.parse(message.raw);
+    // At most 5 MB, read once: hashed for filing it once, then parsed.
+    const raw = await new Response(message.raw).arrayBuffer();
+    const parsed = await PostalMime.parse(raw);
     const res = await fetch(
       await signedRequest(
         env.SUPPORT_INBOUND_URL,
@@ -54,6 +57,7 @@ export default {
           message.from,
           parsed,
           env.AUTHSERV_ID || defaultAuthservId,
+          await rawDigest(raw),
         ),
       ),
     );

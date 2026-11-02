@@ -10,17 +10,18 @@ $$;
 create temporary table got(k text,r jsonb);
 grant all on got to public;
 -- 一封信：k 當 Message-ID 與 token 的種子。
-create function pg_temp.mail(k text,reply text,sender text,body text default '內容',spf text default 'pass',dkim text default 'pass')
+create function pg_temp.mail(k text,reply text,sender text,body text default '內容',spf text default 'pass',dkim text default 'pass',
+  dmarc text default 'pass')
 returns jsonb language sql as $$
   insert into got values(k,public.support_inbound(case when reply is null then null else pg_temp.h(reply) end,
-    sender,'主旨 '||k,body,spf,dkim,array['a.pdf',''],pg_temp.h('msg-'||k),pg_temp.h('link-'||k),pg_temp.h('reply-'||k)))
+    sender,'主旨 '||k,body,spf,dkim,array['a.pdf',''],pg_temp.h('msg-'||k),pg_temp.h('link-'||k),pg_temp.h('reply-'||k),dmarc))
   returning r;
 $$;
 create function pg_temp.id(k text) returns uuid language sql as $$ select (r->>'id')::uuid from got where got.k=$1 $$;
 
-select ok(has_function_privilege('service_role','public.support_inbound(text,text,text,text,text,text,text[],text,text,text)','execute'),'the Edge Function files mail');
-select ok(not has_function_privilege('authenticated','public.support_inbound(text,text,text,text,text,text,text[],text,text,text)','execute'),'riders cannot');
-select ok(not has_function_privilege('anon','public.support_inbound(text,text,text,text,text,text,text[],text,text,text)','execute'),'nor anon');
+select ok(has_function_privilege('service_role','public.support_inbound(text,text,text,text,text,text,text[],text,text,text,text)','execute'),'the Edge Function files mail');
+select ok(not has_function_privilege('authenticated','public.support_inbound(text,text,text,text,text,text,text[],text,text,text,text)','execute'),'riders cannot');
+select ok(not has_function_privilege('anon','public.support_inbound(text,text,text,text,text,text,text[],text,text,text,text)','execute'),'nor anon');
 select ok(not has_table_privilege('service_role','private.support_inbound_keys','select'),'the keys are internal');
 
 set local role service_role;
@@ -36,6 +37,8 @@ select is(public.support_inbound(null,'writer@example.test','x','y','pass','pass
   '{"result":"duplicate"}','the same message once only');
 select is(pg_temp.mail('spoof',null,'other@example.test','x','fail','none')->>'suspicious','true','SPF or DKIM not passing is suspicious');
 select is(pg_temp.mail('soft',null,'other2@example.test','x','pass','fail')->>'suspicious','true','either one');
+select is(pg_temp.mail('align',null,'other4@example.test','x','pass','pass','fail')->>'suspicious','true',
+  'SPF and DKIM pass for another domain than From: DMARC fails');
 select is(pg_temp.mail('empty',null,'other3@example.test','  ')->>'result','created','an empty text is kept');
 reset role;
 select is((select message from private.support_requests where id=pg_temp.id('empty')),'（沒有純文字內容）','marked');
