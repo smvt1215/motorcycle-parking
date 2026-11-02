@@ -37,11 +37,12 @@ class AdaptiveButton extends StatelessWidget {
   final bool secondary;
   @override
   Widget build(BuildContext context) {
+    // Large text wraps the label instead of overflowing the button.
     final child = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         if (icon != null) ...[Icon(icon), const SizedBox(width: 8)],
-        Text(label),
+        Flexible(child: Text(label, textAlign: TextAlign.center)),
       ],
     );
     return ConstrainedBox(
