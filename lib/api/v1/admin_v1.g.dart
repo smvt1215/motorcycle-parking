@@ -69,12 +69,19 @@ class AdminV1Client {
     'p_reason': pReason,
   });
 
-  /// 客服表單的申請（#269）
+  /// 客服案件列表（#269、#295）
   Future<List<SupportRequest>> supportRequests({
     String? pStatus,
+    String? pKind,
+    bool? pAwaitingAdmin,
     int? pLimit,
   }) async {
-    final raw = await supportRequestsRaw(pStatus: pStatus, pLimit: pLimit);
+    final raw = await supportRequestsRaw(
+      pStatus: pStatus,
+      pKind: pKind,
+      pAwaitingAdmin: pAwaitingAdmin,
+      pLimit: pLimit,
+    );
     return [
       for (final e in raw as List)
         SupportRequest.fromJson(e as Map<String, Object?>),
@@ -82,8 +89,17 @@ class AdminV1Client {
   }
 
   /// [supportRequests] as served, for callers that keep the JSON (#202).
-  Future<Object?> supportRequestsRaw({String? pStatus, int? pLimit}) =>
-      _call('support_requests', {'p_status': ?pStatus, 'p_limit': ?pLimit});
+  Future<Object?> supportRequestsRaw({
+    String? pStatus,
+    String? pKind,
+    bool? pAwaitingAdmin,
+    int? pLimit,
+  }) => _call('support_requests', {
+    'p_status': ?pStatus,
+    'p_kind': ?pKind,
+    'p_awaiting_admin': ?pAwaitingAdmin,
+    'p_limit': ?pLimit,
+  });
 
   /// 客服申請結案
   Future<SupportResolution> resolveSupportRequest({
@@ -109,6 +125,31 @@ class AdminV1Client {
     'p_status': pStatus,
     'p_note': ?pNote,
   });
+
+  /// 客服案件詳情（#295）
+  Future<SupportRequestDetail> supportRequest({required String pId}) async {
+    final raw = await supportRequestRaw(pId: pId);
+    return SupportRequestDetail.fromJson(raw as Map<String, Object?>);
+  }
+
+  /// [supportRequest] as served, for callers that keep the JSON (#202).
+  Future<Object?> supportRequestRaw({required String pId}) =>
+      _call('support_request', {'p_id': pId});
+
+  /// 回覆客服案件（#295）
+  Future<SupportMessage> replySupportRequest({
+    required String pId,
+    required String pBody,
+  }) async {
+    final raw = await replySupportRequestRaw(pId: pId, pBody: pBody);
+    return SupportMessage.fromJson(raw as Map<String, Object?>);
+  }
+
+  /// [replySupportRequest] as served, for callers that keep the JSON (#202).
+  Future<Object?> replySupportRequestRaw({
+    required String pId,
+    required String pBody,
+  }) => _call('reply_support_request', {'p_id': pId, 'p_body': pBody});
 }
 
 class MinAppVersion {
@@ -143,7 +184,7 @@ class MinAppVersion {
   int get hashCode => Object.hashAll([minSupportedAppVersion, changed]);
 }
 
-/// 一筆客服申請
+/// 一筆客服案件（#269、#285、#295）
 class SupportRequest {
   const SupportRequest({
     required this.id,
@@ -165,6 +206,18 @@ class SupportRequest {
     this.deletionNotifiedAt,
     this.cancelledAt,
     this.supersededBy,
+    required this.source,
+    required this.subject,
+    this.privacyRight,
+    required this.dueAt,
+    this.replyTo,
+    required this.canReply,
+    required this.messageCount,
+    this.lastMessageAt,
+    required this.awaitingAdmin,
+    required this.suspicious,
+    this.reopenedAt,
+    this.relatedTo,
   });
 
   factory SupportRequest.fromJson(Map<String, Object?> json) => SupportRequest(
@@ -203,13 +256,32 @@ class SupportRequest {
     supersededBy: json['superseded_by'] == null
         ? null
         : json['superseded_by'] as String,
+    source: json['source'] as String,
+    subject: json['subject'] as String,
+    privacyRight: json['privacy_right'] == null
+        ? null
+        : json['privacy_right'] as String,
+    dueAt: json['due_at'] as String,
+    replyTo: json['reply_to'] == null ? null : json['reply_to'] as String,
+    canReply: json['can_reply'] as bool,
+    messageCount: (json['message_count'] as num).toInt(),
+    lastMessageAt: json['last_message_at'] == null
+        ? null
+        : json['last_message_at'] as String,
+    awaitingAdmin: json['awaiting_admin'] as bool,
+    suspicious: json['suspicious'] as bool,
+    reopenedAt: json['reopened_at'] == null
+        ? null
+        : json['reopened_at'] as String,
+    relatedTo: json['related_to'] == null ? null : json['related_to'] as String,
   );
 
   final String id;
 
+  /// general 一般問題、data_issue 資料錯誤或侵權、complaint 檢舉與申訴、privacy 個資權利請求、account_deletion 刪除帳號（#285）
   final String kind;
 
-  /// 聯絡用 email，已轉小寫；只寄固定回條（#285）。回覆時不要透露是否找到帳號
+  /// 聯絡用 email，已轉小寫。一般案件的回覆寄到這裡；刪除帳號與個資權利請求只寄固定回條（#285）。回覆時不要透露是否找到帳號
   final String contactEmail;
 
   /// 申請者說明的帳號線索（登入方式、當時的 email 或名稱）
@@ -217,7 +289,7 @@ class SupportRequest {
 
   final String message;
 
-  /// open：已寄確認信，等登入信箱的主人確認；done：已確認並建立刪除申請（或客服結案）；rejected：客服結案；voided：申請者按「不是我申請的」，或重送後被取代；expired：確認連結過期；exception：系統例外，只記錄（見 exception）。open 以外都有 resolved_at
+  /// open：處理中（刪除帳號與個資權利請求未確認時是等登入信箱的主人確認）；done／rejected：客服結案（30 天內使用者補充或回信會重新開啟）；done 也是刪除帳號已確認並建立申請；voided：申請者按「不是我申請的」，或重送後被取代；expired：確認連結過期；exception：系統例外，只記錄（見 exception）。open 以外都有 resolved_at
   final String status;
 
   /// ISO 8601 時間。送出時間
@@ -234,7 +306,7 @@ class SupportRequest {
   /// 已建立刪除申請
   final bool deletionRequested;
 
-  /// 申請者填的帳號登入 email，已轉小寫，只用來比對帳號；確認信與通知信只寄到這裡（#285）。#285 之前的申請為 null
+  /// 申請者填的帳號登入 email（刪除帳號與個資權利請求），已轉小寫；確認信、通知信與個資權利請求的回覆只寄到這裡（#285、#295）。其他類型為 null
   final String? loginEmail;
 
   /// 送出時登入 email 正好是一個帳號的（auth.users 或 auth.identities，不分大小寫，含 Apple 隱藏的電子郵件）
@@ -243,7 +315,7 @@ class SupportRequest {
   /// 對到的帳號；沒對到或帳號已刪除時為 null
   final String? matchedUser;
 
-  /// ISO 8601 時間。登入信箱的主人在確認頁按「是我」的時間
+  /// ISO 8601 時間。登入信箱的主人在確認頁按「是我」的時間；個資權利請求要有它才能回覆
   final String? emailConfirmedAt;
 
   /// 系統例外的原因（status 為 exception 時）：no_account 沒對到帳號、admin_account 管理員帳號、deletion_pending 已在冷靜期（已寄狀態信到登入 email）、deletion_in_progress 正在刪除、account_deleted 已刪除。不建立刪除申請
@@ -257,6 +329,42 @@ class SupportRequest {
 
   /// 重送時取代這筆的申請（status 為 voided）
   final String? supersededBy;
+
+  /// web 客服表單、email 寄到 support@ 的信
+  final String source;
+
+  /// 主旨（email 來源為信件主旨；表單可為空字串）
+  final String subject;
+
+  /// 個資權利請求的項目：access 查詢、correction 更正、copy 複本；其他類型為 null
+  final String? privacyRight;
+
+  /// ISO 8601 時間。回覆期限：送出（或重新開啟）後 5 個工作天結束（台灣時間；依 public.holidays，補班日算工作日）
+  final String dueAt;
+
+  /// 客服回覆會寄到的地址；不能回覆時 null（刪除帳號、個資權利請求未確認）
+  final String? replyTo;
+
+  /// 現在可以回覆：open 且 reply_to 不是 null
+  final bool canReply;
+
+  /// 往來則數（不含原始內容）
+  final int messageCount;
+
+  /// ISO 8601 時間。最後一則往來的時間
+  final String? lastMessageAt;
+
+  /// 等客服回覆：可以回覆，且還沒有往來或最後一則是使用者的
+  final bool awaitingAdmin;
+
+  /// 原始信件或任一封回信的 SPF／DKIM 未通過
+  final bool suspicious;
+
+  /// ISO 8601 時間。最近一次因使用者補充或回信重新開啟的時間
+  final String? reopenedAt;
+
+  /// 結案超過 30 天後收到回信而開的新案件：指向舊案
+  final String? relatedTo;
 
   Map<String, Object?> toJson() => {
     'id': id,
@@ -278,6 +386,18 @@ class SupportRequest {
     'deletion_notified_at': deletionNotifiedAt,
     'cancelled_at': cancelledAt,
     'superseded_by': supersededBy,
+    'source': source,
+    'subject': subject,
+    'privacy_right': privacyRight,
+    'due_at': dueAt,
+    'reply_to': replyTo,
+    'can_reply': canReply,
+    'message_count': messageCount,
+    'last_message_at': lastMessageAt,
+    'awaiting_admin': awaitingAdmin,
+    'suspicious': suspicious,
+    'reopened_at': reopenedAt,
+    'related_to': relatedTo,
   };
 
   @override
@@ -301,7 +421,19 @@ class SupportRequest {
       other.exception == exception &&
       other.deletionNotifiedAt == deletionNotifiedAt &&
       other.cancelledAt == cancelledAt &&
-      other.supersededBy == supersededBy;
+      other.supersededBy == supersededBy &&
+      other.source == source &&
+      other.subject == subject &&
+      other.privacyRight == privacyRight &&
+      other.dueAt == dueAt &&
+      other.replyTo == replyTo &&
+      other.canReply == canReply &&
+      other.messageCount == messageCount &&
+      other.lastMessageAt == lastMessageAt &&
+      other.awaitingAdmin == awaitingAdmin &&
+      other.suspicious == suspicious &&
+      other.reopenedAt == reopenedAt &&
+      other.relatedTo == relatedTo;
 
   @override
   int get hashCode => Object.hashAll([
@@ -324,6 +456,18 @@ class SupportRequest {
     deletionNotifiedAt,
     cancelledAt,
     supersededBy,
+    source,
+    subject,
+    privacyRight,
+    dueAt,
+    replyTo,
+    canReply,
+    messageCount,
+    lastMessageAt,
+    awaitingAdmin,
+    suspicious,
+    reopenedAt,
+    relatedTo,
   ]);
 }
 
@@ -349,3 +493,212 @@ class SupportResolution {
   @override
   int get hashCode => Object.hashAll([id, status]);
 }
+
+/// 案件的一則往來（#295）。詳情的第一則是原始內容（id 為案件編號、channel 為來源 web 或 email）
+class SupportMessage {
+  const SupportMessage({
+    required this.id,
+    required this.direction,
+    required this.channel,
+    required this.body,
+    required this.createdAt,
+    this.author,
+    this.fromEmail,
+    required this.suspicious,
+    this.spf,
+    this.dkim,
+    required this.attachments,
+    this.toEmail,
+    this.deliveryStatus,
+    required this.attempts,
+    this.sentAt,
+    this.sendError,
+  });
+
+  factory SupportMessage.fromJson(Map<String, Object?> json) => SupportMessage(
+    id: json['id'] as String,
+    direction: json['direction'] as String,
+    channel: json['channel'] as String,
+    body: json['body'] as String,
+    createdAt: json['created_at'] as String,
+    author: json['author'] == null ? null : json['author'] as String,
+    fromEmail: json['from_email'] == null ? null : json['from_email'] as String,
+    suspicious: json['suspicious'] as bool,
+    spf: json['spf'] == null ? null : json['spf'] as String,
+    dkim: json['dkim'] == null ? null : json['dkim'] as String,
+    attachments: [for (final e in json['attachments'] as List) e as String],
+    toEmail: json['to_email'] == null ? null : json['to_email'] as String,
+    deliveryStatus: json['delivery_status'] == null
+        ? null
+        : json['delivery_status'] as String,
+    attempts: (json['attempts'] as num).toInt(),
+    sentAt: json['sent_at'] == null ? null : json['sent_at'] as String,
+    sendError: json['send_error'] == null ? null : json['send_error'] as String,
+  );
+
+  final String id;
+
+  /// in 使用者、out 客服回覆
+  final String direction;
+
+  /// web 表單原始內容、email 信件（原始或回信）、case_link 案件連結的補充、admin 管理站回覆
+  final String channel;
+
+  final String body;
+
+  /// ISO 8601 時間
+  final String createdAt;
+
+  /// 回覆的管理員（out）
+  final String? author;
+
+  /// 信件的寄件人（channel email）
+  final String? fromEmail;
+
+  /// SPF 或 DKIM 未通過
+  final bool suspicious;
+
+  /// Authentication-Results 的 SPF 結果（channel email）
+  final String? spf;
+
+  /// Authentication-Results 的 DKIM 結果（channel email）
+  final String? dkim;
+
+  /// 附件檔名；內容不收
+  final List<String> attachments;
+
+  /// 收件人（out）
+  final String? toEmail;
+
+  /// 寄送狀態（out）：queued 待寄、sending 寄送中、sent 已寄出、failed 失敗（attempts 未滿 5 次會自動重試）
+  final String? deliveryStatus;
+
+  /// 寄送次數（out）
+  final int attempts;
+
+  /// ISO 8601 時間。寄出時間（out）
+  final String? sentAt;
+
+  /// 最後一次寄送失敗的原因（out）
+  final String? sendError;
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'direction': direction,
+    'channel': channel,
+    'body': body,
+    'created_at': createdAt,
+    'author': author,
+    'from_email': fromEmail,
+    'suspicious': suspicious,
+    'spf': spf,
+    'dkim': dkim,
+    'attachments': attachments,
+    'to_email': toEmail,
+    'delivery_status': deliveryStatus,
+    'attempts': attempts,
+    'sent_at': sentAt,
+    'send_error': sendError,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SupportMessage &&
+      other.id == id &&
+      other.direction == direction &&
+      other.channel == channel &&
+      other.body == body &&
+      other.createdAt == createdAt &&
+      other.author == author &&
+      other.fromEmail == fromEmail &&
+      other.suspicious == suspicious &&
+      other.spf == spf &&
+      other.dkim == dkim &&
+      _equal(other.attachments, attachments) &&
+      other.toEmail == toEmail &&
+      other.deliveryStatus == deliveryStatus &&
+      other.attempts == attempts &&
+      other.sentAt == sentAt &&
+      other.sendError == sendError;
+
+  @override
+  int get hashCode => Object.hashAll([
+    id,
+    direction,
+    channel,
+    body,
+    createdAt,
+    author,
+    fromEmail,
+    suspicious,
+    spf,
+    dkim,
+    _hash(attachments),
+    toEmail,
+    deliveryStatus,
+    attempts,
+    sentAt,
+    sendError,
+  ]);
+}
+
+/// 案件詳情與往來紀錄（#295）
+class SupportRequestDetail {
+  const SupportRequestDetail({required this.request, required this.messages});
+
+  factory SupportRequestDetail.fromJson(Map<String, Object?> json) =>
+      SupportRequestDetail(
+        request: SupportRequest.fromJson(
+          json['request'] as Map<String, Object?>,
+        ),
+        messages: [
+          for (final e in json['messages'] as List)
+            SupportMessage.fromJson(e as Map<String, Object?>),
+        ],
+      );
+
+  final SupportRequest request;
+
+  /// 舊到新；第一則是原始內容
+  final List<SupportMessage> messages;
+
+  Map<String, Object?> toJson() => {
+    'request': request.toJson(),
+    'messages': [for (final e in messages) e.toJson()],
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SupportRequestDetail &&
+      other.request == request &&
+      _equal(other.messages, messages);
+
+  @override
+  int get hashCode => Object.hashAll([request, _hash(messages)]);
+}
+
+bool _equal(Object? a, Object? b) {
+  if (a is List && b is List) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (!_equal(a[i], b[i])) return false;
+    }
+    return true;
+  }
+  if (a is Map && b is Map) {
+    if (a.length != b.length) return false;
+    for (final key in a.keys) {
+      if (!b.containsKey(key) || !_equal(a[key], b[key])) return false;
+    }
+    return true;
+  }
+  return a == b;
+}
+
+int _hash(Object? value) => switch (value) {
+  List() => Object.hashAll(value.map(_hash)),
+  Map() => Object.hashAllUnordered(
+    value.entries.map((e) => Object.hash(e.key, _hash(e.value))),
+  ),
+  _ => value.hashCode,
+};

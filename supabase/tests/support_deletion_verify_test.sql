@@ -202,14 +202,14 @@ select pg_temp.act('user');
 select throws_ok($$select admin_v1.support_requests('exception')$$,'PT403','auth.aal2_required','riders cannot list');
 select pg_temp.act('admin');
 select is((select x->>'account_matched'||'|'||coalesce(x->>'matched_user','-')||'|'||(x->>'exception')||'|'||(x->>'login_email')
-  from jsonb_array_elements(admin_v1.support_requests('all',200)) x where x->>'id'=pg_temp.id('none')::text),
+  from jsonb_array_elements(admin_v1.support_requests('all',p_limit=>200)) x where x->>'id'=pg_temp.id('none')::text),
   'false|-|no_account|nobody@example.test','an unmatched request, with the reason');
 select ok((select x->>'matched_user'='10000000-0000-4000-8000-000000000002' and x->>'email_confirmed_at' is not null
     and x->>'deletion_requested'='true' and x->>'status'='done' and x->>'exception' is null
-  from jsonb_array_elements(admin_v1.support_requests('done',200)) x where x->>'id'=pg_temp.id('login')::text),
+  from jsonb_array_elements(admin_v1.support_requests('done',p_limit=>200)) x where x->>'id'=pg_temp.id('login')::text),
   'a confirmed request and its deletion');
-select is((select jsonb_array_length(admin_v1.support_requests('exception',200))),8+11,'the exceptions have their own list (8 above, 11 contact-limit ones)');
-select is((select jsonb_array_length(admin_v1.support_requests('voided',200))),3,'and the voided ones');
+select is((select jsonb_array_length(admin_v1.support_requests('exception',p_limit=>200))),8+11,'the exceptions have their own list (8 above, 11 contact-limit ones)');
+select is((select jsonb_array_length(admin_v1.support_requests('voided',p_limit=>200))),3,'and the voided ones');
 reset role;
 
 -- ===== 建立後的通知：只寄到登入 email =====

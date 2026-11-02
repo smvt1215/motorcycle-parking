@@ -22,7 +22,7 @@ const READS = {
     'apiV1DataVersions',
     'apiV1AccountDeletionStatus',
   ],
-  admin_v1: ['adminV1SupportRequests'],
+  admin_v1: ['adminV1SupportRequests', 'adminV1SupportRequest'],
 };
 
 const PROFILES = [

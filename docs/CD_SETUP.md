@@ -77,6 +77,24 @@ migration `202610310600_cron_history_prune.sql` 建立每日排程 `cron-history
 
 已驗證（2026-11-01，staging 唯讀查 `function_edge_logs`，只看形狀不看值）：送到 Edge Function 的請求都帶 `cf-connecting-ip` 與 `x-real-ip`，皆為單一值且兩者相同。production 上線前在 production 專案重做同一查詢確認。
 
+### 客服案件（`support-request`、`support-confirm`、`support-case`、`support-mail`）
+
+客服表單、本人確認、取消刪除、案件補充與寄信（#269、#285、#295）共用以下 Edge Function secrets，只設定在各自 Supabase 專案（`supabase secrets set … --project-ref <ref>`）。三個網頁網址都在 `/support` 底下，token 放在 `#token=…`（fragment，不進伺服器紀錄）：
+
+| Secret | 值（production） | 用途 |
+|---|---|---|
+| `RESEND_API_KEY` | Resend API key | 寄信；缺少時不寄信，案件仍在管理站 |
+| `SUPPORT_MAIL_FROM` | `機車停車指南 <support@motoparking.smvtstudio.com>` | 寄件人（Resend 已驗證的網域；網域的 click tracking 要關閉） |
+| `SUPPORT_MAIL_TO` | `ops@motoparking.smvtstudio.com` | 新案件與使用者回覆的通知，只含案件編號與管理站連結 |
+| `ADMIN_SUPPORT_URL` | 管理站案件頁，例如 `https://<管理站>/support` | 通知信的連結（後面接案件編號） |
+| `SUPPORT_CONFIRM_URL` | `https://motoparking.smvtstudio.com/support/verify` | 本人確認頁（刪除帳號與個資權利請求共用） |
+| `SUPPORT_CANCEL_URL` | `https://motoparking.smvtstudio.com/support/cancel` | 取消刪除頁（刪除通知信與狀態信） |
+| `SUPPORT_CASE_URL` | `https://motoparking.smvtstudio.com/support/case` | 案件補充頁（回條與客服回覆信） |
+| `SUPPORT_MAIL_SECRET` | 隨機字串（`openssl rand -hex 32`） | pg_cron／pg_net 呼叫 `support-mail` 的共用密鑰；Vault 另存 `support_mail_secret` |
+| `SUPPORT_APP_CHECK_APP_IDS` | 網頁的 Firebase App Check app id | 表單的防機器人 |
+
+客服回覆信的 Reply-To 是 `reply+<token>@motoparking.smvtstudio.com`（token 只存雜湊）；收信由 Cloudflare Email Routing＋Email Worker 轉進 `support-inbound`（#295 第 2 層）。確認寄送：`select delivery_status,attempts,send_error from private.support_messages where direction='out' order by created_at desc limit 5;`。
+
 ## staging：Firebase 與 iOS 測試裝置
 
 staging profile 必須是 Ad Hoc，包含受邀 iPhone 的 UDID；production profile 必須是 App Store，不能包含 `ProvisionedDevices`。
