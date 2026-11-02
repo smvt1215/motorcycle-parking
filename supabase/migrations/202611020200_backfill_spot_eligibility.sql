@@ -22,6 +22,10 @@ create function private.backfill_spot_eligibility() returns jsonb
 language plpgsql security definer set search_path='' as $$
 declare v_c integer:=0; v_o integer:=0;
 begin
+  -- Hold off other writers before reading the entries: a write between the
+  -- read and the update would otherwise be overwritten with the old value
+  -- while the triggers are off.
+  lock table public.community_spots,public.official_heavy_spots in share row exclusive mode;
   create temporary table backfill_flags(tbl text,id uuid,s text,h text) on commit drop;
   insert into pg_temp.backfill_flags(tbl,id,s,h)
   select x.tbl,x.id,x.s,x.h from (
