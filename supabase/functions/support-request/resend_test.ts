@@ -2,6 +2,7 @@ import {
   caseReceiptMail,
   confirmMail,
   deletionNoticeMail,
+  inboundReceiptMail,
   noticeMail,
   privacyConfirmMail,
   receiptMail,
@@ -315,4 +316,26 @@ Deno.test('a reply notice says so, with its own idempotency key', async () => {
   equal(body.subject.includes('新回覆'), true, 'subject');
   equal(body.text.includes('https://admin.test/x'), true, 'link');
   equal(noticeMail(id, 'u').text.includes('新的客服案件'), true, 'new case');
+});
+
+Deno.test('the receipt of a mail to support@ points identity requests to the form', () => {
+  const link = 'https://site.test/case#token=abc';
+  const plain = inboundReceiptMail(id, link, false).text;
+  equal(
+    plain.includes(link) && plain.includes('直接回覆這封信'),
+    true,
+    'case lines',
+  );
+  equal(
+    plain.includes('/support\n') || plain.endsWith('/support'),
+    false,
+    'no form link',
+  );
+  const identity = inboundReceiptMail(id, link, true).text;
+  equal(
+    identity.includes('https://motoparking.smvtstudio.com/support'),
+    true,
+    'form',
+  );
+  equal(identity.includes('登入 email'), true, 'the login email decides');
 });

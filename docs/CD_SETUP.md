@@ -77,7 +77,7 @@ migration `202610310600_cron_history_prune.sql` 建立每日排程 `cron-history
 
 已驗證（2026-11-01，staging 唯讀查 `function_edge_logs`，只看形狀不看值）：送到 Edge Function 的請求都帶 `cf-connecting-ip` 與 `x-real-ip`，皆為單一值且兩者相同。production 上線前在 production 專案重做同一查詢確認。
 
-### 客服案件（`support-request`、`support-confirm`、`support-case`、`support-mail`）
+### 客服案件（`support-request`、`support-confirm`、`support-case`、`support-mail`、`support-inbound`）
 
 客服表單、本人確認、取消刪除、案件補充與寄信（#269、#285、#295）共用以下 Edge Function secrets，只設定在各自 Supabase 專案（`supabase secrets set … --project-ref <ref>`）。三個網頁網址都在 `/support` 底下，token 放在 `#token=…`（fragment，不進伺服器紀錄）：
 
@@ -92,8 +92,49 @@ migration `202610310600_cron_history_prune.sql` 建立每日排程 `cron-history
 | `SUPPORT_CASE_URL` | `https://motoparking.smvtstudio.com/support/case` | 案件補充頁（回條與客服回覆信） |
 | `SUPPORT_MAIL_SECRET` | 隨機字串（`openssl rand -hex 32`） | pg_cron／pg_net 呼叫 `support-mail` 的共用密鑰；Vault 另存 `support_mail_secret` |
 | `SUPPORT_APP_CHECK_APP_IDS` | 網頁的 Firebase App Check app id | 表單的防機器人 |
+| `SUPPORT_INBOUND_SECRET` | 隨機字串（`openssl rand -hex 32`） | Email Worker 呼叫 `support-inbound` 的 HMAC 共用密鑰（Worker 另存同一個值，見下節） |
 
 客服回覆信的 Reply-To 是 `reply+<token>@motoparking.smvtstudio.com`（token 只存雜湊）；收信由 Cloudflare Email Routing＋Email Worker 轉進 `support-inbound`（#295 第 2 層）。確認寄送：`select delivery_status,attempts,send_error from private.support_messages where direction='out' order by created_at desc limit 5;`。
+
+### 收信：Cloudflare Email Routing＋Email Worker（`support-inbound`，#295）
+
+`support@` 與 `reply+<token>@motoparking.smvtstudio.com` 的信由 Cloudflare Email Routing 交給 Email Worker（原始碼 `workers/support-inbound/`），Worker 在記憶體解析後只把寄件人、收件人、主旨、純文字內文、Cloudflare 的 Authentication-Results 中的 SPF／DKIM 結果與附件檔名，以 HMAC-SHA256 簽章 POST 給 Edge Function `support-inbound`。原始信件不儲存、不轉寄。`ops@` 只是 Email Routing 的轉寄規則，不經 Worker。
+
+**共用密鑰**（只放 secret，不進版控）：
+
+1. 產生：`openssl rand -hex 32`（不要貼到聊天或 issue）。
+2. Supabase：`supabase secrets set SUPPORT_INBOUND_SECRET=<密鑰> --project-ref <ref>`。
+3. Worker：`npx wrangler secret put SUPPORT_INBOUND_SECRET`（在 `workers/support-inbound` 執行，貼上同一個密鑰）。
+
+**部署 Worker（目前手動，由使用者執行）**：
+
+1. 使用者在 Cloudflare 建立 API token：權限 Account › Workers Scripts › Edit、Zone › Email Routing Rules › Edit（限 smvtstudio.com），存在本機 `CLOUDFLARE_API_TOKEN`；帳號 ID 存 `CLOUDFLARE_ACCOUNT_ID`。
+2. `cd workers/support-inbound && npm ci`
+3. `npx wrangler deploy --var SUPPORT_INBOUND_URL:https://<ref>.supabase.co/functions/v1/support-inbound`（production 與 staging 各一個 Worker 時加 `--name support-inbound-staging`）。
+4. 只想檢查打包：`npx wrangler deploy --dry-run --outdir /tmp/support-inbound`。
+
+之後若要改成 CD：在 `cd-staging.yml` 的 backend 部署之後加一個 job，用 GitHub Environment secret `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID` 執行同一個 `wrangler deploy`（`cloudflare/wrangler-action`，版本釘 SHA）。目前只有 production 網域收信，先手動部署。
+
+**Email Routing 設定（使用者在 Cloudflare 儀表板）**：
+
+1. smvtstudio.com › Email › Email Routing：啟用，並在 Settings › Subdomains 加入 `motoparking.smvtstudio.com`（儀表板會自動新增下表的 MX 與 SPF）。
+2. 開啟 **Subaddressing**，讓 `reply+<token>@` 符合 `reply@` 的規則。
+3. Routing rules：`support@motoparking.smvtstudio.com` → Send to a Worker `support-inbound`；`reply@motoparking.smvtstudio.com` → Send to a Worker `support-inbound`；`ops@motoparking.smvtstudio.com` → Send to an email（使用者個人信箱，需先驗證目的地）。
+4. Catch-all：Drop（其他地址一律不收）。
+5. 第一封真信進來後確認 Authentication-Results 的 authserv-id 是 `mx.cloudflare.net`（Worker 變數 `AUTHSERV_ID`）；不是的話改變數，否則所有信都會被標成可疑。
+
+**DNS 紀錄清單（motoparking.smvtstudio.com，NS 在 Cloudflare）**：
+
+| 名稱 | 類型 | 值 | 來源 |
+|---|---|---|---|
+| `motoparking` | MX | `route1.mx.cloudflare.net`、`route2.mx.cloudflare.net`、`route3.mx.cloudflare.net`（優先序依 Cloudflare 自動新增的值） | Email Routing 收信 |
+| `motoparking` | TXT | `v=spf1 include:_spf.mx.cloudflare.net include:amazonses.com ~all` | SPF 同時涵蓋 Cloudflare Email Routing 與 Resend；一個名稱只能有一筆 SPF，Email Routing 自動加的那筆要改成這個值 |
+| `send.motoparking` | MX | `10 feedback-smtp.<Resend 區域>.amazonses.com` | Resend（退信回報，Return-Path 網域） |
+| `send.motoparking` | TXT | `v=spf1 include:amazonses.com ~all` | Resend 的 SPF（Return-Path 網域） |
+| `resend._domainkey.motoparking` | TXT | Resend 儀表板顯示的 `p=…` 公鑰 | Resend 的 DKIM |
+| `_dmarc.motoparking` | TXT | 先 `v=DMARC1; p=none; rua=mailto:ops@motoparking.smvtstudio.com; adkim=r; aspf=r`，確認報告無誤（約 2–4 週）後改 `p=quarantine` | DMARC 建議值 |
+
+Resend 網域的 click tracking 維持關閉（一次性連結不可被改寫）。確認收信：`select source,suspicious,created_at from private.support_requests where source='email' order by created_at desc limit 5;`。
 
 ## staging：Firebase 與 iOS 測試裝置
 

@@ -1,0 +1,19 @@
+{
+  "imports": {
+    "postal-mime": "npm:postal-mime@4.0.8"
+  },
+  "fmt": {
+    "singleQuote": true,
+    "exclude": [
+      "node_modules",
+      ".wrangler"
+    ]
+  },
+  "lint": {
+    "exclude": [
+      "node_modules",
+      ".wrangler"
+    ]
+  },
+  "nodeModulesDir": "none"
+}

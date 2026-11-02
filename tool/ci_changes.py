@@ -52,7 +52,7 @@ PATHS = {
         ".github/actions/mobile-setup/", "tool/retry_command.py",
     ),
     "backend": ROUTING_PATHS + (
-        "supabase/", ".supabase-version", ".github/workflows/ci.yml",
+        "supabase/", ".supabase-version", ".github/workflows/ci.yml", "workers/",
         "tool/generate_seed.py", "assets/demo/", "assets/rules/",
         # Regenerates the contract SQL and checks it for drift.
         "tool/gen_contract_sql.py", "tool/fee_text.py",
