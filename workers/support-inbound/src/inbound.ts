@@ -9,14 +9,16 @@ export const defaultAuthservId = 'mx.cloudflare.net';
 /** Larger mail is refused; attachments are not taken anyway. */
 export const maxRawSize = 5 * 1024 * 1024;
 
-const reply = new RegExp(
-  `^reply\\+[a-z2-7]{32}@${domain.replaceAll('.', '\\.')}$`,
-);
+const replyLocal = /^reply\+[a-z2-7]{32}$/;
 
 /** support@ or reply+<token>@: the only addresses this Worker takes. */
 export function accepts(to: string): boolean {
   const a = to.trim().toLowerCase();
-  return a === supportInbox || reply.test(a);
+  if (a === supportInbox) return true;
+  const at = a.lastIndexOf('@');
+  // The domain is compared as a whole string, never as a pattern.
+  return at > 0 && a.slice(at + 1) === domain &&
+    replyLocal.test(a.slice(0, at));
 }
 
 export type Header = { key: string; value: string };

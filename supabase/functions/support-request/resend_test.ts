@@ -331,13 +331,13 @@ Deno.test('the receipt of a mail to support@ points identity requests to the for
     'case lines',
   );
   equal(
-    plain.includes('/support\n') || plain.endsWith('/support'),
+    plain.split('\n').includes('https://motoparking.smvtstudio.com/support'),
     false,
     'no form link',
   );
   const identity = inboundReceiptMail(id, link, true).text;
   equal(
-    identity.includes('https://motoparking.smvtstudio.com/support'),
+    identity.split('\n').includes('https://motoparking.smvtstudio.com/support'),
     true,
     'form',
   );
