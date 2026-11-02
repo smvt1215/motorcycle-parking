@@ -61,6 +61,7 @@ class VocabularyTest(unittest.TestCase):
             "只有前車牌辨識 必須倒車入場出場": {"entrance_note": ["只辨識前車牌", "可能需倒車進場"]},
             "這邊忘記是後牌辨識還是悠遊卡進出": {},
             "重機後牌辨識似乎沒啟用，通常要管理員才能進": {},
+            "只能停汽車格，停機車格會被管理員貼告示": {"parking_guide": ["可停汽車格", "停機車格可能被開單"]},
             # Advice is no ban, and no permission either.
             "建議不要停汽車格": {},
             # A floor only where the bike parks now (review on #287).
