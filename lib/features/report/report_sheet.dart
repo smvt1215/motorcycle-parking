@@ -3,6 +3,7 @@ import 'dart:async';
 import '../../core/config.dart';
 import '../auth/sign_in.dart';
 import '../auth/report_name_notice.dart';
+import '../../domain/consent_display.dart';
 import '../../core/geo.dart';
 import '../../core/town_lookup.dart';
 import '../../data/app_store.dart';
@@ -1280,17 +1281,15 @@ class _ReportFormState extends State<ReportForm> {
           // The same close as every sheet, at the top of a long form.
           SheetTitle('新增停車點'),
           const SizedBox(height: 8),
-          Text(
-            '新增的停車點會顯示於地圖，回報資訊待管理者確認；停放資格請依現場標示。',
-            style: TextStyle(color: colors.onSurfaceVariant),
-          ),
-          if (!widget.store.canReport) ...[
-            const SizedBox(height: 16),
-            SignInPrompt(
-              store: widget.store,
-              message: '使用 Google 或 Apple 登入後才能送出回報。',
-            ),
-          ],
+          // Signed out, the sign-in card carries the same sentence (P16b),
+          // so it is not shown twice.
+          if (widget.store.canReport)
+            Text(
+              '新增的停車點會顯示於地圖，回報資訊待管理者確認；停放資格請依現場標示。',
+              style: TextStyle(color: colors.onSurfaceVariant),
+            )
+          else
+            SignInPrompt(store: widget.store, message: newSpotSignInMessage),
           const SizedBox(height: 6),
           _locationPart(context),
           _part(

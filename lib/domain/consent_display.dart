@@ -30,3 +30,6 @@ const nameNoticeSetName = '設定名稱';
 
 /// The sentence read out, with the whole name.
 String nameNoticeSpoken(String name) => '$nameNoticeLead$name$nameNoticeTail';
+
+/// The new-spot form's sign-in card when signed out (P16b).
+const newSpotSignInMessage = '送出前需要登入。新增的停車點會顯示於地圖，資訊待管理者確認。';

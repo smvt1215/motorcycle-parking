@@ -462,6 +462,9 @@ void main() {
       expect(find.byType(SignInConsent), findsOneWidget);
       // Signed out: no name notice until sign-in.
       expect(find.byKey(const ValueKey('report-name-notice')), findsNothing);
+      // P16b wording on the card, and the intro line is not repeated.
+      expect(find.text(newSpotSignInMessage), findsOneWidget);
+      expect(find.text('新增的停車點會顯示於地圖，回報資訊待管理者確認；停放資格請依現場標示。'), findsNothing);
     });
   });
 
