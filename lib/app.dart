@@ -258,6 +258,10 @@ class _ParkingAppState extends ConsumerState<ParkingApp> {
                   final store = ref.read(storeProvider);
                   return AuthFeedback(
                     store: store,
+                    // No 登入成功 over P15b ②／①: those pages own the screen.
+                    suppressed: () =>
+                        accountDeletionRedirect(deletion, '/map') != null,
+                    suppressedListenable: deletion,
                     child: DeletionBannerOverlay(
                       deletion: deletion,
                       child: LaunchCurtain(

@@ -97,10 +97,21 @@ class _SignInSheetState extends State<_SignInSheet> {
 /// Above the navigator, so feedback stays visible over an open report sheet.
 /// Only a signed-out → signed-in transition produces a toast; normal refreshes
 /// and an already-restored session do not repeat it or change navigation.
+/// While [suppressed] is true (a full-screen page such as the pending
+/// account-deletion choice is in front) the toast is not shown, and it hides
+/// as soon as [suppressedListenable] reports that such a page appeared.
 class AuthFeedback extends StatefulWidget {
-  const AuthFeedback({super.key, required this.store, required this.child});
+  const AuthFeedback({
+    super.key,
+    required this.store,
+    required this.child,
+    this.suppressed,
+    this.suppressedListenable,
+  });
   final AppStore store;
   final Widget child;
+  final bool Function()? suppressed;
+  final Listenable? suppressedListenable;
 
   @override
   State<AuthFeedback> createState() => _AuthFeedbackState();
@@ -116,6 +127,15 @@ class _AuthFeedbackState extends State<AuthFeedback> {
     super.initState();
     signedIn = widget.store.canReport;
     widget.store.addListener(_onAuthChanged);
+    widget.suppressedListenable?.addListener(_onSuppressedChanged);
+  }
+
+  bool get _suppressed => widget.suppressed?.call() ?? false;
+
+  void _onSuppressedChanged() {
+    if (!visible || !_suppressed) return;
+    timer?.cancel();
+    setState(() => visible = false);
   }
 
   void _onAuthChanged() {
@@ -123,7 +143,7 @@ class _AuthFeedbackState extends State<AuthFeedback> {
     if (next == signedIn) return;
     signedIn = next;
     timer?.cancel();
-    setState(() => visible = next);
+    setState(() => visible = next && !_suppressed);
     if (next) {
       timer = Timer(const Duration(seconds: 3), () {
         if (mounted) setState(() => visible = false);
@@ -134,6 +154,10 @@ class _AuthFeedbackState extends State<AuthFeedback> {
   @override
   void didUpdateWidget(AuthFeedback oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.suppressedListenable != widget.suppressedListenable) {
+      oldWidget.suppressedListenable?.removeListener(_onSuppressedChanged);
+      widget.suppressedListenable?.addListener(_onSuppressedChanged);
+    }
     if (oldWidget.store != widget.store) {
       oldWidget.store.removeListener(_onAuthChanged);
       widget.store.addListener(_onAuthChanged);
@@ -147,6 +171,7 @@ class _AuthFeedbackState extends State<AuthFeedback> {
   void dispose() {
     timer?.cancel();
     widget.store.removeListener(_onAuthChanged);
+    widget.suppressedListenable?.removeListener(_onSuppressedChanged);
     super.dispose();
   }
 
