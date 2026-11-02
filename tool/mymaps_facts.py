@@ -78,8 +78,16 @@ FACTS = [
     ("card", [("entrance_note", r"悠遊卡|電子票證", "悠遊卡進出")]),
     ("keypad", [("entrance_note", r"鍵盤輸入", "鍵盤輸入車號")]),
     ("coin", [("entrance_note", r"代幣|投幣|投十元|取幣", "需投幣或取代幣")]),
-    ("reverse", [("entrance_note", r"倒退|倒車", "可能需倒車進場")]),
-    ("cash", [("entrance_note", r"人工(收費|繳費)|管(理)?(員)?室繳費|現金繳費|手動開單", "人工繳費")]),
+    ("reverse", [
+        # A warning (有倒車的危險) is no instruction to back in (#298).
+        ("entrance_note", r"(倒車|倒退).{0,3}(危險|風險)|(小心|注意).{0,4}(倒車|倒退)", DROP),
+        ("entrance_note", r"倒退嚕|倒退.{0,2}(掃|進|入|照|出)|倒車.{0,2}(進|入|掃|照|出)", "可能需倒車進場"),
+    ]),
+    # Paying cash says nothing about staff, and 無現金繳費 says the opposite (#298).
+    ("cash", [
+        ("entrance_note", r"(無|不收|不接受|不能用?)現金", DROP),
+        ("entrance_note", r"人工(收費|繳費)|管(理)?(員)?室繳費|手動開單|(管理員|警衛).{0,3}收費", "人工繳費"),
+    ]),
     ("gate", [("entrance_note", r"(無|沒有)(柵欄|閘門|出入口管制)|無管制", "無柵欄")]),
     ("lane", [
         ("entrance_note", r"(未標示|未見|沒看到|無|沒有).{0,2}禁", DROP),  # 機車道未標示禁止重機: no ban
@@ -128,7 +136,7 @@ FIELDS = ("note", "entrance_note", "parking_guide")
 # Clause boundaries inside one source line.
 CLAUSE = re.compile(r"[，,。；;／/、]|但|\.\s|\s-\s|…+")
 # A line that hedges (不確定是否有重機專用格, 理論上可停) states no fact.
-HEDGE = re.compile(r"不確定|不知道|待確認|待踩點|好像|應該|理論上|可能可以|不清楚|[?？]")
+HEDGE = re.compile(r"不確定|不知道|待確認|待踩點|好像|應該|理論上|可能可以|不清楚|忘記|似乎|也許|或許|大概|不一定|聽說|[?？]")
 
 
 def facts(lines):
