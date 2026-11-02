@@ -339,7 +339,9 @@ grant execute on function public.support_request_submit(text,text,text,text,text
 -- ===== 6. 本人確認連結：個資權利請求 =====
 -- 202611012200 的 support_request_link 加上 privacy：confirm 記下確認時間，
 -- 案件仍 open 等客服回覆（result verified）；deny 一樣作廢。回傳多 kind，
--- 讓確認頁換文案。刪除帳號的行為不變。
+-- 讓確認頁換文案；個資權利請求另回請求的項目、主旨與內容，讓信箱主人看清楚
+-- 自己確認的是哪一筆（Codex review，PR #301；持有 token 的人就是登入信箱的
+-- 主人）。刪除帳號的行為不變。
 create or replace function public.support_request_link(p_id uuid,p_token_hash text,p_action text)
 returns jsonb language plpgsql volatile security definer set search_path='' as $$
 declare
@@ -425,6 +427,9 @@ begin
     end if;
   end if;
   return jsonb_build_object('result',v_result,'kind',r.kind,'submitted_at',r.created_at,'contact_email',r.contact_email,
+    'privacy_right',r.privacy_right,
+    'subject',case when r.kind='privacy' then r.subject end,
+    'message',case when r.kind='privacy' then r.message end,
     'scheduled_at',case when v_result in ('deletion_requested','account_deletion_pending') then
       (select d.scheduled_at from private.account_deletion_requests d where d.user_id=r.matched_user) end);
 end $$;
