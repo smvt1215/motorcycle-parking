@@ -3532,7 +3532,6 @@
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
     "note": "",
-    "entrance_note": "人工繳費",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -3563,7 +3562,6 @@
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
     "note": "",
-    "entrance_note": "後車牌辨識",
     "parking_zones": [
       {
         "name": "汽車區",
@@ -3905,7 +3903,8 @@
     ],
     "source_name": "社群回報整理",
     "source_url": "https://www.google.com/maps/d/viewer?mid=1ORD5DnL6yqrCrtQJYB9TeTgOOlvo-Yc",
-    "license_note": "社群協力資料，經核驗後只收錄事實"
+    "license_note": "社群協力資料，經核驗後只收錄事實",
+    "entrance_note": "人工繳費"
   },
   {
     "id": "ff6aa5c0-641a-58d1-91de-27f33baef519",
@@ -7847,7 +7846,6 @@
     "updated_at": "2026-10-17T00:00:00Z",
     "last_confirmed_at": null,
     "note": "車位不多",
-    "entrance_note": "後車牌辨識\n悠遊卡進出",
     "parking_zones": [
       {
         "name": "機車區",
