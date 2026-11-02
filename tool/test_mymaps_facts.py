@@ -52,6 +52,15 @@ class VocabularyTest(unittest.TestCase):
             "旁邊機車道未標示禁止重機": {"note": ["現場未見禁止大型重機標示"]},
             "地下二樓有收費機車專用格2格、": {},
             "重機專用格2格，機車專用格30格": {"parking_guide": ["重機專用格 2 格"]},
+            # #298: no cash is no staff, a warning is no instruction, guesses are no facts.
+            "汽車費率 30h,半小時計費 鍵盤輸入 無現金繳費": {"entrance_note": ["鍵盤輸入車號"]},
+            "現金繳費": {},
+            "人工收費，露天停車場。": {"entrance_note": ["人工繳費"]},
+            "設計不良，按鈕處在斜坡上，有倒車的危險": {"note": ["進出有斜坡"]},
+            "汽車費率 20h 倒退嚕": {"entrance_note": ["可能需倒車進場"]},
+            "只有前車牌辨識 必須倒車入場出場": {"entrance_note": ["只辨識前車牌", "可能需倒車進場"]},
+            "這邊忘記是後牌辨識還是悠遊卡進出": {},
+            "重機後牌辨識似乎沒啟用，通常要管理員才能進": {},
             # Advice is no ban, and no permission either.
             "建議不要停汽車格": {},
             # A floor only where the bike parks now (review on #287).
