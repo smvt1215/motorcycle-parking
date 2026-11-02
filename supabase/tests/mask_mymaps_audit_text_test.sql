@@ -8,7 +8,7 @@ select no_plan();
 
 insert into public.admin_audit_log(actor,action,target_table,target_id,before,after,note) values
   ('10000000-0000-4000-8000-000000000005','update_spot','community_spots','20000000-0000-4000-8000-0000000000b1',
-   '{"note":"猴子很多東西要收好","entrance_note":"","fee_note":"免費；需按鈴","license_note":"整理自 Alan大重停車記事（Google 我的地圖）","status":"pending"}',
+   '{"note":"猴子很多東西要收好","entrance_note":"","fee_note":"免費；需按鈴","license_note":"整理自 Alan大重停車記事（Google 我的地圖）","status":"pending","fee":{"scooter":{"mode":"free"}},"parking_zones":[{"id":"z1","name":"汽車區","fee_note":"免費；需按鈴"},{"id":"z2","name":"機車區"}]}',
    '{"note":"猴子很多東西要收好","entrance_note":"後牌辨析","fee_note":"免費","license_note":"整理自 Alan大重停車記事（Google 我的地圖）","status":"confirmed"}',
    'x'),
   ('10000000-0000-4000-8000-000000000005','update_spot','community_spots','20000000-0000-4000-8000-0000000000b2',
@@ -27,8 +27,8 @@ select set_config('app.audit_mask_mymaps','',true);
 
 select is(public.admin_audit_mask_mymaps_text(), 1, 'only the spot entry with the source credit is masked');
 select is((select before from public.admin_audit_log where target_id='20000000-0000-4000-8000-0000000000b1'),
-  '{"note":"（已遮蔽：我的地圖照抄文字，#275）","entrance_note":"","fee_note":"免費；需按鈴","license_note":"（已遮蔽：我的地圖照抄文字，#275）","status":"pending"}'::jsonb,
-  'text keys are masked, empty ones and the other keys stay');
+  '{"note":"（已遮蔽：我的地圖照抄文字，#275）","entrance_note":"","fee_note":"（已遮蔽：我的地圖照抄文字，#275）","license_note":"（已遮蔽：我的地圖照抄文字，#275）","status":"pending","fee":{"scooter":{"mode":"free"}},"parking_zones":[{"id":"z1","name":"汽車區","fee_note":"（已遮蔽：我的地圖照抄文字，#275）"},{"id":"z2","name":"機車區"}]}'::jsonb,
+  'text keys and zone fee notes are masked; empty ones, the structured fee and the other keys stay');
 select is((select after->>'entrance_note' from public.admin_audit_log where target_id='20000000-0000-4000-8000-0000000000b1'),
   '（已遮蔽：我的地圖照抄文字，#275）', 'after is masked too');
 select is((select note from public.admin_audit_log where target_id='20000000-0000-4000-8000-0000000000b1'), 'x', 'the entry note stays');

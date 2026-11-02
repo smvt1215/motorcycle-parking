@@ -5,8 +5,9 @@
 --   1. 對象：target_table 是點位表、before 或 after 含清除前的來源署名「Alan大重停車
 --      記事」（清除前每個匯入點的 license_note 都有；清除後新寫的稽核不會再有）。
 --   2. 遮蔽：before／after 的 note、entrance_note、parking_guide、special_rules、
---      license_note 非空時換成固定文字；其他鍵（費率、旗標、座標、時間…）照留，
---      變更紀錄仍看得出改了哪些欄位。
+--      license_note、source_url、fee_note、fee_source_text 非空時換成固定文字，
+--      parking_zones 各區的 fee_note 也換掉（PM_ANS_20261102_157）；其他鍵（結構化
+--      費率 fee、旗標、座標、時間…）照留，變更紀錄仍看得出改了哪些欄位。
 --   3. 不可修改的觸發器只另外放行「把一列改成它的遮蔽結果」：只有
 --      public.admin_audit_mask_mymaps_text() 在交易內設 app.audit_mask_mymaps，
 --      其他欄位不變、該列真的含署名。其他修改、刪除、truncate 仍然禁止。
@@ -14,24 +15,35 @@
 
 create function private.audit_mymaps_keys() returns text[]
 language sql immutable security definer set search_path='' as $$
-  select array['note','entrance_note','parking_guide','special_rules','license_note']
+  select array['note','entrance_note','parking_guide','special_rules','license_note','source_url',
+    'fee_note','fee_source_text']
 $$;
 create function private.audit_mymaps_masked() returns text
 language sql immutable security definer set search_path='' as $$ select '（已遮蔽：我的地圖照抄文字，#275）' $$;
 
--- 點位快照是一層的物件；其他形狀原樣回傳。
+-- 一個文字值：非空字串換成固定文字。
+create function private.audit_mask_text(p jsonb) returns jsonb
+language sql immutable security definer set search_path='' as $$
+  select case when jsonb_typeof(p)='string' and p<>'""'::jsonb then to_jsonb(private.audit_mymaps_masked()) else p end
+$$;
+-- 點位快照是一層的物件，parking_zones 是分區物件的陣列；其他形狀原樣回傳。
 create function private.audit_mask_mymaps(p jsonb) returns jsonb
 language sql immutable security definer set search_path='' as $$
   select case when jsonb_typeof(p)='object' then (select jsonb_object_agg(e.key,
-      case when e.key=any(private.audit_mymaps_keys()) and jsonb_typeof(e.value)='string' and e.value<>'""'::jsonb
-        then to_jsonb(private.audit_mymaps_masked()) else e.value end)
+      case when e.key=any(private.audit_mymaps_keys()) then private.audit_mask_text(e.value)
+        when e.key='parking_zones' and jsonb_typeof(e.value)='array' then (
+          select coalesce(jsonb_agg(case when jsonb_typeof(z.value)='object' and z.value ? 'fee_note'
+              then jsonb_set(z.value,'{fee_note}',private.audit_mask_text(z.value->'fee_note')) else z.value end
+            order by z.ord),'[]'::jsonb)
+          from jsonb_array_elements(e.value) with ordinality z(value,ord))
+        else e.value end)
     from jsonb_each(p) e) else p end
 $$;
 create function private.audit_has_mymaps(p jsonb) returns boolean
 language sql immutable security definer set search_path='' as $$
   select coalesce(strpos(p::text,'Alan大重停車記事')>0,false)
 $$;
-revoke execute on function private.audit_mymaps_keys(),private.audit_mymaps_masked(),
+revoke execute on function private.audit_mymaps_keys(),private.audit_mymaps_masked(),private.audit_mask_text(jsonb),
   private.audit_mask_mymaps(jsonb),private.audit_has_mymaps(jsonb)
   from public,anon,authenticated,service_role;
 
