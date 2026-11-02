@@ -389,6 +389,8 @@ class ParkingSpot {
     this.licenseNote = '',
     this.contributorName = '',
     this.contributorRole = '',
+    this.contributorHandle,
+    this.isOwn = false,
     this.facilityType,
     this.facilityTypes = const [],
     this.access,
@@ -415,6 +417,17 @@ class ParkingSpot {
   /// keep it. The role describes who added the point; it never grants app
   /// permissions.
   final String contributorName, contributorRole;
+
+  /// The contributor's public handle (#280), for hiding a rider on this
+  /// device only: never an account id. Null when the account never showed
+  /// a name, for admin-added and imported spots, deleted accounts and
+  /// official spots. Live data like [contributorName]: [toJson] leaves it
+  /// out, so favorites never keep it.
+  final String? contributorHandle;
+
+  /// Whether the signed-in account added this spot (#280); false signed out.
+  /// Follows the session the row was read with, so [toJson] leaves it out.
+  final bool isOwn;
   final Fee? fee;
   final double lat, lng;
   final SpaceType spaceType;
@@ -512,10 +525,15 @@ class ParkingSpot {
   }
 
   /// A saved favorite as a spot. Favorites never keep the contributor's
-  /// name: it follows the account and can be cleared, so a stored copy
-  /// would go stale. Copies saved by earlier builds are ignored here too.
-  static Iterable<ParkingSpot> favorite(Object? row) =>
-      known({...row as Map<String, dynamic>}..remove('contributor_name'));
+  /// name, handle or ownership: they follow the account and can change, so
+  /// a stored copy would go stale. Copies saved by earlier builds are
+  /// ignored here too.
+  static Iterable<ParkingSpot> favorite(Object? row) => known(
+    {...row as Map<String, dynamic>}
+      ..remove('contributor_name')
+      ..remove('contributor_handle')
+      ..remove('is_own'),
+  );
 
   /// A snapshot's exact kind (see [toJson]: `exact_v2`, then `exact`), else
   /// its `space_type`; null when this build knows none of them.
@@ -579,6 +597,10 @@ class ParkingSpot {
           const {'rider', 'admin', 'import'}.contains(j['contributor_role'])
           ? j['contributor_role'] as String
           : '',
+      contributorHandle: j['contributor_handle'] is String
+          ? j['contributor_handle'] as String
+          : null,
+      isOwn: j['is_own'] == true,
       facilityType:
           facilityTypesOf(j['facility_types']).firstOrNull ??
           _optionalEnum(FacilityType.values, j['facility_type']),
