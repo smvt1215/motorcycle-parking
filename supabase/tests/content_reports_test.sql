@@ -75,6 +75,14 @@ select throws_ok($$select public.apply_report(pg_temp.uid(7),repeat('t',64),repe
   '{"action":"flag","source_id":"79000000-0000-4000-8000-000000000003","reason":"x","field":"inappropriate","proposed":{"target":"text","name":"改名"}}')$$,
   '22023','invalid report target','a target beside a value to apply');
 select throws_ok($$select pg_temp.flag(7,'79000000-0000-4000-8000-000000000003','other','   ')$$,'22023','other needs a note','other needs a note');
+select throws_ok(format('select pg_temp.flag(7,%L,%L,%L)','79000000-0000-4000-8000-000000000003','other',E'\n\u3000 '),'22023','other needs a note',
+  'line breaks and full-width spaces are blank too');
+select throws_ok($$select public.apply_report(pg_temp.uid(7),repeat('t',64),repeat('t',64),
+  '{"action":"flag","source_id":"79000000-0000-4000-8000-000000000003","reason":"x","field":"inappropriate","proposed":{}}')$$,
+  '22023','invalid report target','an empty proposed');
+select throws_ok($$select public.apply_report(pg_temp.uid(7),repeat('t',64),repeat('t',64),
+  '{"action":"flag","source_id":"79000000-0000-4000-8000-000000000003","reason":"x","field":"inappropriate","proposed":{"target":null}}')$$,
+  '22023','invalid report target','a null target');
 select lives_ok($$select pg_temp.flag(7,'79000000-0000-4000-8000-000000000003','other','在推銷東西')$$,'other with a note');
 
 -- 其他回報不受影響：相同摘要的一般建議仍以 (source_id,reason) 去重。

@@ -46,12 +46,14 @@ begin
   if v_owner is not distinct from new.reporter_id then
     raise exception 'cannot report own spot' using errcode='42501';
   end if;
+  -- coalesce: an empty object or a null target must not slip through as NULL.
   if jsonb_typeof(new.proposed) is distinct from 'object'
-     or (select array_agg(k) from jsonb_object_keys(new.proposed) k)<>array['target']
-     or not (new.proposed->>'target')=any(private.inappropriate_targets()) then
+     or new.proposed-'target'<>'{}'::jsonb
+     or not coalesce((new.proposed->>'target')=any(private.inappropriate_targets()),false) then
     raise exception 'invalid report target' using errcode='22023';
   end if;
-  if new.proposed->>'target'='other' and btrim(new.note)='' then
+  -- Blank as TS and Dart trim() see it: line breaks and U+3000 too.
+  if new.proposed->>'target'='other' and coalesce(new.note,'') ~ '^[[:space:]\u3000\u00a0\ufeff]*$' then
     raise exception 'other needs a note' using errcode='22023';
   end if;
   if exists(select 1 from public.moderation_queue q where q.source_id=new.source_id
@@ -99,7 +101,12 @@ language plpgsql security definer set search_path='' as $$
 begin
   if new.field='inappropriate' then
     insert into private.report_notices(queue_id) values(new.id) on conflict do nothing;
-    perform public.report_mail_tick();
+    -- A failing call (pg_net, vault) must not fail the report: the notice
+    -- stays and the schedule sends it.
+    begin
+      perform public.report_mail_tick();
+    exception when others then null;
+    end;
   end if;
   return null;
 end;
