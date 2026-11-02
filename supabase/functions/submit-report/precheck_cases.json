@@ -2281,6 +2281,97 @@
         "fee_not_applicable_allowed@proposed.fee.heavy"
       ],
       "blocking": false
+    },
+    {
+      "name": "an inappropriate report names one of the five targets (#280)",
+      "body": {
+        "action": "flag",
+        "source_id": "10000000-0000-4000-8000-000000000002",
+        "reason": "內容不當",
+        "field": "inappropriate",
+        "proposed": {
+          "target": "rider_name"
+        },
+        "note": "名字裡有辱罵字眼。"
+      },
+      "expect": []
+    },
+    {
+      "name": "an inappropriate report with no target asks for one (#280)",
+      "body": {
+        "action": "flag",
+        "source_id": "10000000-0000-4000-8000-000000000002",
+        "reason": "內容不當",
+        "field": "inappropriate"
+      },
+      "expect": [
+        "inappropriate_target@proposed.target"
+      ],
+      "blocking": true
+    },
+    {
+      "name": "an unknown target asks for one of the five (#280)",
+      "body": {
+        "action": "flag",
+        "source_id": "10000000-0000-4000-8000-000000000002",
+        "reason": "內容不當",
+        "field": "inappropriate",
+        "proposed": {
+          "target": "photo"
+        }
+      },
+      "expect": [
+        "inappropriate_target@proposed.target"
+      ],
+      "blocking": true
+    },
+    {
+      "name": "other needs a note (#280)",
+      "body": {
+        "action": "flag",
+        "source_id": "10000000-0000-4000-8000-000000000002",
+        "reason": "內容不當",
+        "field": "inappropriate",
+        "proposed": {
+          "target": "other"
+        },
+        "note": "   "
+      },
+      "expect": [
+        "inappropriate_note_required@note"
+      ],
+      "blocking": true
+    },
+    {
+      "name": "other with a note may be sent (#280)",
+      "body": {
+        "action": "flag",
+        "source_id": "10000000-0000-4000-8000-000000000002",
+        "reason": "內容不當",
+        "field": "inappropriate",
+        "proposed": {
+          "target": "other"
+        },
+        "note": "這段文字在推銷東西。"
+      },
+      "expect": []
+    },
+    {
+      "name": "the note is still checked for personal data (#280)",
+      "body": {
+        "action": "flag",
+        "source_id": "10000000-0000-4000-8000-000000000002",
+        "reason": "內容不當",
+        "field": "inappropriate",
+        "proposed": {
+          "target": "impersonation"
+        },
+        "note": "他公開了 a.person@example.com"
+      },
+      "expect": [
+        "pii_email@note"
+      ],
+      "blocking": true
     }
   ]
 }

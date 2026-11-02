@@ -35,7 +35,7 @@ typedef PrecheckRule = ({
   List<PrecheckPattern> patterns,
 });
 
-const precheckVersion = 2;
+const precheckVersion = 3;
 
 const precheckPlaceholders = {
   '測試',
@@ -190,6 +190,16 @@ const Map<String, PrecheckRule> precheckRules = {
   'gone_with_changes': (
     action: PrecheckAction.fix,
     message: '回報「這裡已經不能停車」時不能同時修改其他資料。請只送出這筆回報，其他修改另外提出建議。',
+    patterns: [],
+  ),
+  'inappropriate_target': (
+    action: PrecheckAction.fix,
+    message: '請選擇哪裡不當：車友名稱、停車點名稱、說明文字、個人資料或冒充他人，或其他。',
+    patterns: [],
+  ),
+  'inappropriate_note_required': (
+    action: PrecheckAction.fix,
+    message: '選「其他」時，請寫下哪裡不當。',
     patterns: [],
   ),
   'placeholder_name': (
@@ -671,6 +681,16 @@ List<({String field, String value, bool name})> _texts(_Json body) {
 
 const _goneFields = ['gone', '點位已不存在'];
 
+/// What an inappropriate-content report (#280) points at: 車友名稱、停車點
+/// 名稱、說明文字、個人資料或冒充他人、其他.
+const inappropriateTargets = [
+  'rider_name',
+  'spot_name',
+  'text',
+  'impersonation',
+  'other',
+];
+
 /// The zone or segment list a suggestion's [patch] leaves (#188): applied
 /// by id to [current] when it is known and names only entries it has; else
 /// the patch's own entries, less those it removes.
@@ -751,6 +771,18 @@ List<PrecheckIssue> precheck(
           (k) => k != 'hidden' && k != 'status' && k != 'closure',
         )) {
       out.add(_issue('gone_with_changes', 'proposed'));
+    }
+  }
+  if (action == 'flag' && body['field'] == 'inappropriate') {
+    // validate.ts holds the shape ({target} only, a note of at most 500):
+    // the form caps the note at 500.
+    final p = body['proposed'];
+    if (p is! Map || !inappropriateTargets.contains(p['target'])) {
+      out.add(_issue('inappropriate_target', 'proposed.target'));
+    }
+    final note = body['note'] is String ? body['note'] as String : '';
+    if (p is Map && p['target'] == 'other' && note.trim().isEmpty) {
+      out.add(_issue('inappropriate_note_required', 'note'));
     }
   }
   for (final (:field, :value, :name) in _texts(body)) {

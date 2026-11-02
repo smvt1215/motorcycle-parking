@@ -91,6 +91,10 @@ Deno.serve(async (req) => {
       // An admin deleted the spot (#200): nothing a rider sends reaches it.
       return response(spotDeletedResponse, 410);
     }
+    if (rpcError?.code === 'P0409') {
+      // One open inappropriate-content report per rider and spot (#280).
+      return response({ error: 'duplicate report' }, 409);
+    }
     if (rpcError) {
       return response(
         {

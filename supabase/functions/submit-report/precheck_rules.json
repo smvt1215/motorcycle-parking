@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "placeholders": [
     "測試",
     "測試用",
@@ -125,6 +125,14 @@
     "gone_with_changes": {
       "action": "fix",
       "message": "回報「這裡已經不能停車」時不能同時修改其他資料。請只送出這筆回報，其他修改另外提出建議。"
+    },
+    "inappropriate_target": {
+      "action": "fix",
+      "message": "請選擇哪裡不當：車友名稱、停車點名稱、說明文字、個人資料或冒充他人，或其他。"
+    },
+    "inappropriate_note_required": {
+      "action": "fix",
+      "message": "選「其他」時，請寫下哪裡不當。"
     },
     "placeholder_name": {
       "action": "fix",
