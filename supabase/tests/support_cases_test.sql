@@ -141,7 +141,8 @@ select public.support_outbound_result((select id from claimed),false,null,'resen
 reset role;
 select is((select delivery_status||'|'||attempts||'|'||send_error from private.support_messages where id=(select id from claimed)),
   'failed|1|resend 500','a failure is kept');
-select is((select count(*)::int from private.support_case_tokens where message_id=(select id from claimed)),0,'its tokens are dropped');
+select is((select count(*)::int from private.support_case_tokens where message_id=(select id from claimed)),2,
+  'its tokens stay: the mail may have gone out (a timeout)');
 update private.support_messages set claimed_at=now()-interval '16 minutes' where id=(select id from claimed);
 set local role service_role;
 select is((select count(*)::int from public.support_outbound_claim(10)),1,'retried after 15 minutes');
@@ -151,7 +152,10 @@ select public.support_outbound_result((select id from claimed),true,'re_123',nul
 reset role;
 select is((select delivery_status||'|'||attempts||'|'||resend_id from private.support_messages where id=(select id from claimed)),
   'sent|2|re_123','sent, with the Resend id');
-select is((select count(*)::int from private.support_case_tokens where message_id=(select id from claimed)),2,'its link and reply token');
+select is((select count(*)::int from private.support_case_tokens where message_id=(select id from claimed)),4,'both tries'' links and reply tokens');
+set local role service_role;
+select is(public.support_case_link(pg_temp.id('g'),pg_temp.h('link-r1'),'view')->>'result','ok','the first try''s link still works');
+reset role;
 
 -- ===== 案件連結 =====
 set local role service_role;
