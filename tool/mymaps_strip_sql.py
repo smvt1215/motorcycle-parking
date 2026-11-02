@@ -10,6 +10,8 @@ a database never had) is left alone.
   --layer fee   fee_note and fee_source_text without a structured fee, zone fee notes,
                 and the fee parentheses in official notes (mymaps_facts.scrub_fee_text),
                 computed on top of the text layer
+  --layer manual  the hand-written names of mymaps_facts.MANUAL (on top of the text layer)
+                and ADMIN_FIXES for spots an administrator had edited (on their current values)
 
 Spots an administrator has edited (an update_spot audit entry) are skipped and
 listed in the migration's header, for review by hand.
@@ -19,7 +21,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from mymaps_facts import scrub_fee_text, scrub_spot, scrub_summary_fees
+from mymaps_facts import MANUAL, apply_manual, scrub_fee_text, scrub_spot, scrub_summary_fees
 
 TEXT = ("note", "entrance_note", "parking_guide", "special_rules")
 SEP = "\x1f"  # chr(31) in SQL
@@ -83,6 +85,38 @@ def fee_changes(spot, official):
         if zones != (spot.get("parking_zones") or []):
             new["parking_zones"] = zones
     return new or None
+
+
+# Spots an administrator had edited, which the text layer leaves alone: the values the
+# user approved (PM_ANS_20261102_157). None means the text layer's own rewrite of that field.
+# 吉林路汽機車共用車格 (9b0e52fb) waits for a decision on structured time bans and is not here.
+ADMIN_FIXES = {
+    "69cba8d0-8ab6-5fe7-99e8-17ad4a98767f": {"entrance_note": "走機車車道\n入口位於敬業四路右側"},
+    "0fce7fc1-0704-55f0-ac0a-977c18abfbdb": {"note": None, "entrance_note": "", "parking_guide": ""},
+    "517015fc-b75f-527b-824c-8dac7f864750": {"note": "", "entrance_note": "無柵欄"},
+    "e282b9c1-c077-583e-b074-130c11b2db78": {"note": None, "entrance_note": None, "parking_guide": None, "special_rules": None},
+}
+MANUAL_FIELDS = ("name", *TEXT)
+
+
+def manual_rows(community, official):
+    """(table, id, guard of the current name and text, new name and text) for MANUAL and ADMIN_FIXES."""
+    rows = []
+    for table, spots, is_official in (("c", community, False), ("o", official, True)):
+        for spot in spots:
+            if spot["id"] in ADMIN_FIXES:
+                current = spot  # the text layer skipped it
+                rewrite = scrub_spot(spot, is_official)
+                new = dict(current) | {k: rewrite[k] if v is None else v for k, v in ADMIN_FIXES[spot["id"]].items()}
+            elif not is_official and spot["id"] in MANUAL:
+                current = after_text(spot, False)
+                new = apply_manual(current)
+            else:
+                continue
+            if any((new.get(k) or "") != (current.get(k) or "") for k in MANUAL_FIELDS):
+                rows.append((table, spot["id"], guard(*(current.get(k) for k in MANUAL_FIELDS)),
+                             {k: new.get(k) or "" for k in MANUAL_FIELDS}, {k: current.get(k) or "" for k in MANUAL_FIELDS}))
+    return rows
 
 
 def summary(value, limit=40):
@@ -271,6 +305,72 @@ drop table pg_temp.strip_fee_o;
 """
 
 
+MANUAL_HEAD = """-- 我的地圖匯入點的人工修正（#275，PM_ANS_20261102_157），接 202611020100～0120：
+--   1. 夾帶評論的 17 個社群點名稱改寫（tool/mymaps_facts.py 的 MANUAL）；名稱中的
+--      事實沒有結構化欄位可放，寫成固定句（入口位於…、營業時間、月租、限住宿或
+--      消費客人停放、不可過夜停放…）。repo 的 JSON 已用同一份清單改寫。
+--   2. 管理員編輯過、清除時排除的點位，照使用者確認的值寫入（tool/mymaps_strip_sql.py
+--      的 ADMIN_FIXES）。吉林路汽機車共用車格（9b0e52fb）等時段禁停的結構化決定，
+--      本次不動。
+-- 每列以名稱與四個文字欄位現值的 md5 比對，被改過的列不會被改。
+-- 稽核：每個點位一筆 manual_fix_text（before／after 只有改到的欄位，不含原文），
+-- 並另寫一筆摘要。
+
+create temporary table manual_fix(tbl text,id text,guard text,name text,note text,entrance_note text,parking_guide text,special_rules text,
+  changed jsonb);
+
+"""
+
+MANUAL_TAIL = """
+alter table public.community_spots disable trigger community_spots_flags_from_entries;
+alter table public.official_heavy_spots disable trigger official_heavy_spots_flags_from_entries;
+
+do $$
+declare v_c integer; v_o integer;
+begin
+  if not exists(select 1 from public.community_spots c join pg_temp.manual_fix s on s.tbl='c' and c.id=s.id::uuid)
+     and not exists(select 1 from public.official_heavy_spots o join pg_temp.manual_fix s on s.tbl='o' and o.id=s.id::uuid) then
+    return;
+  end if;
+  with done as (
+    update public.community_spots c
+      set name=s.name,note=s.note,entrance_note=s.entrance_note,parking_guide=s.parking_guide,special_rules=s.special_rules
+      from pg_temp.manual_fix s
+      where s.tbl='c' and c.id=s.id::uuid and c.source='import'
+        and md5(concat_ws(chr(31),coalesce(c.name,''),coalesce(c.note,''),coalesce(c.entrance_note,''),
+          coalesce(c.parking_guide,''),coalesce(c.special_rules,'')))=s.guard
+      returning c.id,s.changed
+  ), logged as (
+    insert into public.admin_audit_log(actor,action,target_table,target_id,before,after,note)
+    select '00000000-0000-0000-0000-0000000000de','manual_fix_text','community_spots',d.id::text,null,d.changed,
+      '我的地圖匯入點人工修正（#275，PM_ANS_20261102_157）' from done d
+    returning 1
+  ) select count(*)::int into v_c from logged;
+  with done as (
+    update public.official_heavy_spots o
+      set name=s.name,note=s.note,entrance_note=s.entrance_note,parking_guide=s.parking_guide,special_rules=s.special_rules
+      from pg_temp.manual_fix s
+      where s.tbl='o' and o.id=s.id::uuid
+        and md5(concat_ws(chr(31),coalesce(o.name,''),coalesce(o.note,''),coalesce(o.entrance_note,''),
+          coalesce(o.parking_guide,''),coalesce(o.special_rules,'')))=s.guard
+      returning o.id,s.changed
+  ), logged as (
+    insert into public.admin_audit_log(actor,action,target_table,target_id,before,after,note)
+    select '00000000-0000-0000-0000-0000000000de','manual_fix_text','official_heavy_spots',d.id::text,null,d.changed,
+      '我的地圖匯入點人工修正（#275，PM_ANS_20261102_157）' from done d
+    returning 1
+  ) select count(*)::int into v_o from logged;
+  insert into public.admin_audit_log(actor,action,target_table,target_id,before,after,note)
+  values('00000000-0000-0000-0000-0000000000de','manual_fix_text_summary','spots','275',null,
+    jsonb_build_object('community_spots',v_c,'official_heavy_spots',v_o),'我的地圖匯入點人工修正摘要（#275）');
+end $$;
+
+alter table public.community_spots enable trigger community_spots_flags_from_entries;
+alter table public.official_heavy_spots enable trigger official_heavy_spots_flags_from_entries;
+drop table pg_temp.manual_fix;
+"""
+
+
 def insert(table, columns, rows, select="v.*", prefix=""):
     if not rows:
         return f"-- {table}: 0\n"
@@ -287,6 +387,16 @@ def migration(backup, layer):
         columns = "tbl,id,guard,note,entrance_note,parking_guide,special_rules"
         return (TEXT_HEAD.format(edited=lines) + insert("strip_text", columns, rows_c, prefix="'c',")
                 + insert("strip_text", columns, rows_o, prefix="'o',") + TEXT_TAIL)
+    if layer == "manual":
+        rows = []
+        for table, spot_id, old, new, current in manual_rows(community, official):
+            # The audit after-image: only the changed fields, all of them our own words.
+            changed = {k: new[k] for k in MANUAL_FIELDS if new[k] != current[k]}
+            rows.append(f"  ('{table}','{spot_id}','{old}',{','.join(literal(new[k]) for k in MANUAL_FIELDS)},"
+                        f"{literal(json.dumps(changed, ensure_ascii=False))})")
+        return (MANUAL_HEAD + insert("manual_fix", "tbl,id,guard,name,note,entrance_note,parking_guide,special_rules,changed",
+                                     rows, select="v.column1,v.column2,v.column3,v.column4,v.column5,v.column6,v.column7,"
+                                                  "v.column8,v.column9::jsonb") + MANUAL_TAIL)
     rows_c, rows_o = fee_sql(community, official, edited)
     return (FEE_HEAD.format(edited=lines)
             + insert("strip_fee_c", "id,guard,fee_note,fee_source_text,parking_zones", rows_c,
@@ -297,7 +407,7 @@ def migration(backup, layer):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--backup", type=Path, required=True, help="directory of the read-only dump (not in the repo)")
-    parser.add_argument("--layer", choices=("text", "fee"), required=True)
+    parser.add_argument("--layer", choices=("text", "fee", "manual"), required=True)
     parser.add_argument("--list-edited", action="store_true", help="print the administrator-edited spots instead")
     parser.add_argument("--output", type=Path, help="migration file to write")
     args = parser.parse_args()

@@ -83,6 +83,22 @@ class StripSqlTest(unittest.TestCase):
         self.assertIn(f"('00000000-0000-4000-8000-000000000011','{strip.guard(text)}',"
                       f"'{COMMUNITY}大型重機可停；停放區域：汽車區（每小時 30 元；可能需倒車進場）\n已比對臺中市路外剩餘車位（TXG1）')", sql)
 
+    def test_manual_layer_renames_and_applies_admin_fixes(self):
+        manual_id = next(iter(strip.MANUAL))
+        admin_id = "517015fc-b75f-527b-824c-8dac7f864750"
+        rows_c = self.rows_c + [community(manual_id, name="來源原名 - 猴子很多", entrance_note="機車區無柵欄"),
+                                community(admin_id, name="松江路25巷38號", note="免付費 無出入口管制 汽機車共用車格1900-0700")]
+        root = self.backup(rows_c, self.rows_o, self.audits + [{"action": "update_spot", "target_id": admin_id}])
+        sql = strip.migration(root, "manual")
+        self.assertNotIn("猴子很多", sql)
+        self.assertNotIn("免付費", sql)
+        name = strip.MANUAL[manual_id][0]
+        # The guard is the name and text after the text layer, which already rewrote 機車區無柵欄.
+        self.assertIn(f"('c','{manual_id}','{strip.guard('來源原名 - 猴子很多', '', '無柵欄', '', '')}',{strip.literal(name)}", sql)
+        self.assertIn(f"('c','{admin_id}','{strip.guard('松江路25巷38號', '免付費 無出入口管制 汽機車共用車格1900-0700', '', '', '')}',"
+                      "'松江路25巷38號','','無柵欄','',''", sql)
+        self.assertIn("disable trigger community_spots_flags_from_entries", sql)
+
     def test_guards_match_postgres(self):
         self.assertEqual(strip.guard("a", None, "b"), hashlib.md5("a\x1f\x1fb".encode()).hexdigest())
         # jsonb sorts keys by length, then bytes, and prints ", " / ": ".
