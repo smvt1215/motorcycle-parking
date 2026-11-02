@@ -6,7 +6,7 @@ import unittest
 
 from import_mymaps import normalize, official_spot
 from mymaps_facts import (
-    COMMUNITY, LICENSE, OFFICIAL_LICENSE, OPEN_DATA, facts, fact_field, is_fact, kept_template, license_note, scrub_fee_text,
+    MANUAL, apply_manual, COMMUNITY, LICENSE, OFFICIAL_LICENSE, OPEN_DATA, facts, fact_field, is_fact, kept_template, license_note, scrub_fee_text,
     scrub_spot, scrub_summary_fees, split_lines,
 )
 
@@ -204,6 +204,19 @@ class ToolOutputTest(unittest.TestCase):
         self.assertEqual(official["parking_guide"], f"{COMMUNITY}\n重機專用格 4 格以上")
 
 
+class ManualTest(unittest.TestCase):
+    def test_commented_names_are_rewritten_with_their_facts(self):
+        spots = {s["id"]: s for s in json.loads(COMMUNITY_DATA.read_text())}
+        for spot_id, (name, lines) in MANUAL.items():
+            with self.subTest(spot=spot_id):
+                self.assertEqual(spots[spot_id]["name"], name)
+                for field, extra in lines.items():
+                    for line in extra:
+                        self.assertIn(line, split_lines(spots[spot_id].get(field)))
+        self.assertEqual(spots["ca58918b-524e-55ec-9670-5400d642f5ce"]["special_rules"], "限住宿或消費客人停放")
+        self.assertEqual(apply_manual({"id": "x", "name": "y"}), {"id": "x", "name": "y"})
+
+
 class CommittedDataTest(unittest.TestCase):
     def test_committed_text_is_only_facts_and_templates(self):
         for path, official in ((COMMUNITY_DATA, False), (OFFICIAL_DATA, True)):
@@ -214,6 +227,7 @@ class CommittedDataTest(unittest.TestCase):
                         self.assertIn(spot["license_note"], (OPEN_DATA, OFFICIAL_LICENSE))
                     else:
                         self.assertEqual(spot["license_note"], LICENSE)
+                        self.assertNotIn("source_url", spot)
                         for fee in [spot["fee_note"]] + [z["fee_note"] for z in spot.get("parking_zones", []) if "fee_note" in z]:
                             self.assertEqual(scrub_fee_text(fee), fee)
                     for key in TEXT:

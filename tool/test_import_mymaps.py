@@ -465,7 +465,10 @@ class ImportedDataTest(unittest.TestCase):
     def check_common(self, s):
         self.assertTrue(1 <= len(s["name"]) <= 100 and len(s["fee_note"]) <= 200 and len(s["note"]) <= 500)
         self.assertTrue(20 <= s["lat"] <= 27 and 118 <= s["lng"] <= 123 and s["city"] and s["district"])
-        self.assertTrue(s["source_url"].startswith("https://"))
+        if s["source"] == "official":
+            self.assertTrue(s["source_url"].startswith("https://"))
+        else:
+            self.assertNotIn("source_url", s)  # community spots name no source (#275)
         for key, values in self.ENUMS.items():
             if key in s:
                 self.assertIn(s[key], values)
