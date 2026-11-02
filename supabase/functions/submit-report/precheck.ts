@@ -442,6 +442,14 @@ function texts(body: Json): { field: string; value: string; name: boolean }[] {
 }
 
 const goneFields = ['gone', '點位已不存在'];
+// What an inappropriate-content report (#280) points at.
+export const inappropriateTargets = [
+  'rider_name',
+  'spot_name',
+  'text',
+  'impersonation',
+  'other',
+];
 
 /**
  * Every stage 0 rule the request breaks; empty when it may go on. A fee
@@ -520,6 +528,17 @@ export function precheck(body: Json, current?: Json): PrecheckIssue[] {
         k !== 'hidden' && k !== 'status' && k !== 'closure'
       )
     ) out.push(issue('gone_with_changes', 'proposed'));
+  }
+  if (body.action === 'flag' && body.field === 'inappropriate') {
+    const p = body.proposed;
+    // validate() holds the shape ({target} only, a note of at most 500).
+    if (!object(p) || !inappropriateTargets.includes(p.target as string)) {
+      out.push(issue('inappropriate_target', 'proposed.target'));
+    }
+    const note = typeof body.note === 'string' ? body.note : '';
+    if (object(p) && p.target === 'other' && note.trim() === '') {
+      out.push(issue('inappropriate_note_required', 'note'));
+    }
   }
   for (const { field, value, name } of texts(body)) {
     for (const code of textRules(value)) out.push(issue(code, field));

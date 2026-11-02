@@ -40,6 +40,8 @@ const suggestionFields = [
   // A lot's zones or a street spot's segments, by id (#188).
   'zones',
   'segments',
+  // Inappropriate content (#280): proposed is {target} only.
+  'inappropriate',
   '停車點名稱',
   '格位類型',
   '收費資訊',
@@ -740,9 +742,28 @@ export function validate(body: Record<string, unknown>): string | null {
     body.action === 'flag' && body.field !== undefined &&
     (typeof body.field !== 'string' || !suggestionFields.includes(body.field))
   ) return 'invalid field';
+  // An inappropriate-content report (#280) is about a community spot's
+  // content; proposed names what, never a value to apply. Which target and
+  // the note 其他 needs are precheck rules (inappropriate_target,
+  // inappropriate_note_required); apply_report holds them too.
+  if (body.action === 'flag' && body.field === 'inappropriate') {
+    if (!uuid.test(String(body.source_id))) return 'invalid source id';
+    const p = body.proposed as Record<string, unknown> | undefined;
+    if (
+      p !== undefined &&
+      (!p || typeof p !== 'object' || Array.isArray(p) ||
+        Object.keys(p).some((k) => k !== 'target') ||
+        (p.target !== undefined &&
+          (typeof p.target !== 'string' || p.target.length > 40)))
+    ) return 'invalid proposed';
+    if (body.evidence_url !== undefined) return 'invalid evidence_url';
+  }
   // A suggested value set: only columns an admin can apply as a patch, each
   // with the type and length its table allows.
-  if (body.action === 'flag' && body.proposed !== undefined) {
+  if (
+    body.action === 'flag' && body.field !== 'inappropriate' &&
+    body.proposed !== undefined
+  ) {
     const p = body.proposed as Record<string, unknown>;
     if (!p || typeof p !== 'object' || Array.isArray(p)) {
       return 'invalid proposed';
