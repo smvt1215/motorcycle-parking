@@ -63,11 +63,15 @@ def floor(clause):
 # ends the group with no fact: advice against an area (不要停汽車格) is no ban.
 # Rules see one clause at a time, so 只能停汽車區，不可停機車區 is two statements.
 DROP = "\0"
-BANNED_FROM = r"(禁停|禁止\S{0,3}?(停|進入|進)?|(不可|不能|不得|不給|無法|不允許|不准)\S{0,3}?(停|進入|進))\s*(放|在|於)?"
+# The words between a ban and its verb stay inside one phrase: punctuation (無法停車（停普通機車格）)
+# ends it, so a bracketed aside is never read as the banned area.
+_GAP = r"[^\s（）()，,、。；;]{0,3}?"
+BANNED_FROM = rf"(禁停|禁止{_GAP}(停|進入|進)?|(不可|不能|不得|不給|無法|不允許|不准){_GAP}(停|進入|進))\s*(放|在|於)?"
 # A negation just before (or inside) a plain fact turns it around (沒有按鈴, 不能用悠遊卡,
 # 機車格不會開單): the group then states nothing. Rules whose phrase is itself a negation
 # (無柵欄, 機車區禁止大型重機…) are written for these words and are not checked.
-NEGATION = re.compile(r"不|沒|無|未|別|勿")
+# 不限、無論、不管 widen rather than negate (不限車種可停機車格).
+NEGATION = re.compile(r"不(?!限|論|管)|沒|無(?!論|限)|未|別|勿")
 ADVISED_AGAINST = r"不要|勿|不建議|別"
 FACTS = [
     ("plate", [
@@ -165,7 +169,7 @@ def facts(lines):
                         match = re.search(rule, clause)
                         text = phrase if match else ""
                         if match and phrase not in NEGATIVE_PHRASES and NEGATION.search(
-                                clause[max(0, match.start() - 4):match.end()]):
+                                clause[max(0, match.start() - 3):match.end()]):
                             text = DROP
                     if text:
                         if text != DROP and text not in found[field]:
