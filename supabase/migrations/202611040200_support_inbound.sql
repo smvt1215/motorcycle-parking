@@ -131,7 +131,7 @@ revoke execute on function public.support_inbound(text,text,text,text,text,text,
 grant execute on function public.support_inbound(text,text,text,text,text,text,text[],text,text,text,text)
   to service_role;
 
--- 保存期：與 202611020100 相同，另外清掉 30 天前的收信鍵。
+-- 保存期：與 202611040100 相同，另外清掉 30 天前的收信鍵。
 create or replace function public.support_requests_prune() returns integer
 language plpgsql volatile security definer set search_path='' as $$
 declare v_count integer;

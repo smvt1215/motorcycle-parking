@@ -9,7 +9,7 @@
 // The raw mail never reaches us: only the addresses, the subject, the plain
 // text, the SPF, DKIM and DMARC results of Cloudflare's Authentication-Results and
 // the attachments' file names. public.support_inbound() (migration
-// 202611020200_support_inbound.sql) files it:
+// 202611040200_support_inbound.sql) files it:
 //
 //   support@         a new general case from email
 //   reply+<token>@   the case of the token when the sender is its email (a

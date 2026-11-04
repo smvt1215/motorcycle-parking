@@ -1,4 +1,4 @@
--- 收信進客服案件（#295 第 2 層；202611020200_support_inbound.sql）。
+-- 收信進客服案件（#295 第 2 層；202611040200_support_inbound.sql）。
 begin;
 create extension if not exists pgtap with schema extensions;
 set search_path=public,extensions;
