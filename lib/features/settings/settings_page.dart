@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/app_version.dart';
-import '../../core/config.dart';
+import '../../core/policy_links.dart';
 import '../../data/account_deletion.dart';
 import '../../data/app_store.dart';
 import '../../data/profile_repository.dart';
@@ -17,13 +17,8 @@ import '../auth/sign_in.dart';
 import '../map/spot_details.dart' show openDataLicenseUri;
 import 'account_deletion_page.dart';
 
-/// The privacy policy and terms URLs (#275); from `--dart-define`, and
-/// replaceable in tests. An empty URL hides its row.
-@visibleForTesting
-({String privacy, String terms}) policyUrls = (
-  privacy: AppConfig.privacyPolicyUrl,
-  terms: AppConfig.termsUrl,
-);
+// An empty policy URL hides its row; tests replace [policyUrls].
+export '../../core/policy_links.dart' show policyUrls;
 
 /// 帳號與設定 (P10): the account, 關於 (version, licenses, data sources,
 /// privacy policy and terms) and, signed in, 刪除帳號 in its own group.
