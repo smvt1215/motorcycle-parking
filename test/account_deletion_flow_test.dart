@@ -242,6 +242,18 @@ void main() {
     expect(find.text('隱私權政策'), findsNothing);
   });
 
+  testWidgets('P10：網址不是 http(s) 時也不顯示，和登入頁同一套判斷', (tester) async {
+    policyUrls = (privacy: 'example.com/privacy', terms: 'mailto:a@b.tw');
+    final app = await _mount(
+      tester,
+      FakeDeletionGateway(current: google(signedInAt: now)),
+    );
+    showSettings(_appContext(tester), app.store);
+    await tester.pumpAndSettle();
+    expect(find.text('服務條款'), findsNothing);
+    expect(find.text('隱私權政策'), findsNothing);
+  });
+
   for (final size in sizes) {
     testWidgets('P15a 說明頁 ${size.width.toInt()}×${size.height.toInt()}：'
         '列出資料處理且按鈕可點', (tester) async {
