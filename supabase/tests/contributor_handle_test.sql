@@ -81,6 +81,19 @@ values('78000000-0000-4000-8000-000000000008','10000000-0000-4000-8000-000000000
 select ok(not exists(select 1 from private.contributor_handle_holders where user_id='10000000-0000-4000-8000-000000000003'),
   'a name shown only on a hidden spot was never public');
 
+-- 刪除後復原（status 由 hidden 回 pending、deleted_at 由觸發器清掉）也會記入。
+update auth.users set raw_user_meta_data='{}' where id='10000000-0000-4000-8000-000000000003';
+update community_spots set status='pending' where id='78000000-0000-4000-8000-000000000008';
+update community_spots set status='hidden' where id='78000000-0000-4000-8000-000000000008';
+select ok((select deleted_at is not null from community_spots where id='78000000-0000-4000-8000-000000000008'),'hiding deletes it');
+update auth.users set raw_user_meta_data='{"display_name":"復原者"}' where id='10000000-0000-4000-8000-000000000003';
+update community_spots set status='pending' where id='78000000-0000-4000-8000-000000000008';
+select is((select deleted_at is null and contributor_name='復原者' from community_spots where id='78000000-0000-4000-8000-000000000008'),true,
+  'the restored spot shows the name again');
+select matches(pg_temp.handle('78000000-0000-4000-8000-000000000008'),'^[0-9a-f]{32}$','and restoring it records the public name');
+select is((select handle from private.contributor_handle_holders where user_id='10000000-0000-4000-8000-000000000003'),
+  private.contributor_handle('10000000-0000-4000-8000-000000000003'),'the stored handle is the HMAC of the account');
+
 -- ===== is_own =====
 set local role authenticated;
 select pg_temp.act('10000000-0000-4000-8000-000000000001');
