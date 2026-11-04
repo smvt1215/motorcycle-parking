@@ -63,6 +63,16 @@ class HiddenRidersPage extends StatelessWidget {
                   children: [
                     Text(hiddenRidersIntro, style: muted),
                     const SizedBox(height: 16),
+                    // The account refused the list past 500 (not drawn on
+                    // the canvas): the device keeps it.
+                    if (hidden.accountFull) ...[
+                      Text(
+                        hiddenRidersFull,
+                        key: const ValueKey('hidden-riders-full'),
+                        style: text.bodyMedium?.copyWith(color: colors.error),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     if (riders.isEmpty)
                       const _Empty()
                     else

@@ -6,6 +6,7 @@ import 'package:motorcycle_parking/data/app_store.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
 import 'package:motorcycle_parking/domain/content_report_display.dart';
 import 'package:motorcycle_parking/domain/hidden_riders_display.dart';
+import 'package:motorcycle_parking/domain/precheck.dart' show reportRefusal;
 import 'package:motorcycle_parking/domain/spot_contributor.dart';
 import 'package:motorcycle_parking/features/content_report/content_report.dart';
 import 'package:motorcycle_parking/features/map/spot_sheet.dart';
@@ -128,6 +129,21 @@ Future<void> send(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+/// submit-report's 400 for a note with a phone number (Codex #315).
+const piiBody = {
+  'error': 'precheck reject',
+  'action': 'reject',
+  'message': '內容含有電話號碼。為保護個人資料，請刪除電話號碼再送出。',
+  'issues': [
+    {
+      'rule': 'pii_phone',
+      'action': 'reject',
+      'field': 'note',
+      'message': '內容含有電話號碼。為保護個人資料，請刪除電話號碼再送出。',
+    },
+  ],
+};
+
 void main() {
   test('送出格式照 API 草案：flag、inappropriate、proposed.target、note', () {
     expect(
@@ -208,6 +224,72 @@ void main() {
     ]) {
       expect(text, isNot(contains('24 小時')));
     }
+  });
+
+  test('附註以 UTF-16 長度限制 500（伺服器的算法）', () {
+    const limit = Utf16LengthLimit(500);
+    final ok = limit.formatEditUpdate(
+      TextEditingValue.empty,
+      TextEditingValue(text: 'a' * 500),
+    );
+    expect(ok.text.length, 500);
+    final emoji = limit.formatEditUpdate(
+      TextEditingValue.empty,
+      TextEditingValue(text: 'a' * 499 + '😀'),
+    );
+    expect(emoji.text, 'a' * 499);
+  });
+
+  test('附註或摘要被拒：400 且 issues 有 note／reason 才算，網址另有一句', () {
+    expect(
+      noteRefusalMessage(ReportRefused(reportRefusal(piiBody)!, piiBody)),
+      contentReportNotePersonal,
+    );
+    expect(
+      noteRefusalMessage(
+        const FunctionException(status: 400, details: piiBody),
+      ),
+      contentReportNotePersonal,
+    );
+    Map<String, Object> refusal(String rule, String field) => {
+      'error': 'precheck reject',
+      'action': 'reject',
+      'message': 'x',
+      'issues': [
+        {'rule': rule, 'action': 'reject', 'field': field, 'message': 'x'},
+      ],
+    };
+    expect(
+      noteRefusalMessage(
+        FunctionException(status: 400, details: refusal('pii_email', 'reason')),
+      ),
+      contentReportNotePersonal,
+    );
+    expect(
+      noteRefusalMessage(
+        FunctionException(status: 400, details: refusal('ad_url', 'note')),
+      ),
+      contentReportNoteLink,
+    );
+    expect(
+      noteRefusalMessage(
+        FunctionException(status: 400, details: refusal('pii_email', 'name')),
+      ),
+      isNull,
+    );
+    expect(
+      noteRefusalMessage(
+        const FunctionException(
+          status: 400,
+          details: {'error': 'invalid note'},
+        ),
+      ),
+      isNull,
+    );
+    expect(
+      noteRefusalMessage(FunctionException(status: 500, details: piiBody)),
+      isNull,
+    );
   });
 
   group('P17b 檢舉表單', () {
@@ -314,6 +396,69 @@ void main() {
         await send(tester);
         expect(store.sent.single['proposed'], {'target': 'text'});
         expect(find.text(contentReportSentTitle), findsOneWidget);
+      });
+
+      testWidgetsOn('${platform.name} 附註含個資被拒：顯示提示、內容保留', (tester) async {
+        setUpView(tester, platform, const Size(390, 844));
+        final store = (await tester.runAsync(reportStore))!
+          // What ParkingRepository.report throws for that 400.
+          ..failWith = ReportRefused(reportRefusal(piiBody)!, piiBody);
+        await openReport(tester, store, riderSpot);
+        // The helper under the note says it before sending.
+        expect(find.text(contentReportNotePersonal), findsOneWidget);
+        await pick(tester, ContentReportTarget.personalData);
+        await tester.enterText(
+          find.byKey(const ValueKey('content-report-note')),
+          '他的電話 0912-345-678',
+        );
+        await send(tester);
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('content-report-failure')),
+            matching: find.text(contentReportNotePersonal),
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('他的電話 0912-345-678'), findsOneWidget);
+        expect(submitEnabled(tester), isTrue);
+      });
+
+      testWidgetsOn('${platform.name} 附註含網址被拒：顯示網址提示', (tester) async {
+        setUpView(tester, platform, const Size(390, 844));
+        const body = {
+          'error': 'precheck reject',
+          'action': 'reject',
+          'message': '請刪除網址再送出。',
+          'issues': [
+            {
+              'rule': 'ad_url',
+              'action': 'reject',
+              'field': 'note',
+              'message': '請刪除網址再送出。',
+            },
+          ],
+        };
+        final store = (await tester.runAsync(reportStore))!
+          ..failWith = const FunctionException(status: 400, details: body);
+        await openReport(tester, store, riderSpot);
+        await pick(tester, ContentReportTarget.description);
+        await send(tester);
+        expect(find.text(contentReportNoteLink), findsOneWidget);
+        expect(submitEnabled(tester), isTrue);
+      });
+
+      testWidgetsOn('${platform.name} 其他 400：一般失敗、內容保留', (tester) async {
+        setUpView(tester, platform, const Size(390, 844));
+        final store = (await tester.runAsync(reportStore))!
+          ..failWith = const FunctionException(
+            status: 400,
+            details: {'error': 'invalid proposed'},
+          );
+        await openReport(tester, store, riderSpot);
+        await pick(tester, ContentReportTarget.spotName);
+        await send(tester);
+        expect(find.text(contentReportFailed), findsOneWidget);
+        expect(submitEnabled(tester), isTrue);
       });
 
       testWidgetsOn('${platform.name} 沒登入：登入提示、送出停用', (tester) async {

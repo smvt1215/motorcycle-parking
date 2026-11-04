@@ -201,7 +201,7 @@ class ParkingRepository {
       return res.data as Map<String, dynamic>;
     } on FunctionException catch (e) {
       if (reportRefusal(e.details) case final message?) {
-        throw StateError(message);
+        throw ReportRefused(message, e.details);
       }
       rethrow;
     }
@@ -219,6 +219,13 @@ class ParkingRepository {
     }
     return geocodeSearch(client!.functions, query, lat: lat, lng: lng);
   }
+}
+
+/// A report the server refused with a sentence for the form ([message]);
+/// [details] keeps its body, e.g. a precheck's `issues` with each field.
+class ReportRefused extends StateError {
+  ReportRefused(super.message, this.details);
+  final Object? details;
 }
 
 class LocalRepository {

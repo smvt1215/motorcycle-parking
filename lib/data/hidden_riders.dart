@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../api/v1/api_v1.g.dart' show ApiV1Exception;
+
 /// One hidden rider (#280, P17a, P17c). Matching uses only
 /// [handle], the backend's public contributor handle; the rest is what the
 /// rider saw when hiding, so the list can say who it was after a rename.
@@ -83,6 +85,17 @@ class HiddenRider {
 
 /// The most riders one list holds, on the device and in the account.
 const hiddenRidersLimit = 500;
+
+/// The longest name and spot name the account list takes; longer ones
+/// are cut when stored, so a merge is never refused for them.
+const hiddenRiderNameMax = 40, hiddenRiderSpotNameMax = 100;
+
+/// [text] trimmed and cut to [max] characters (code points, as the
+/// database counts them).
+String _cut(String text, int max) {
+  final t = text.trim();
+  return t.runes.length <= max ? t : String.fromCharCodes(t.runes.take(max));
+}
 
 /// Thrown when hiding would pass [hiddenRidersLimit].
 class HiddenRidersFull extends StateError {
@@ -168,28 +181,43 @@ class RemoteHiddenRidersStore implements HiddenRidersStore {
   RemoteHiddenRidersStore(this.client);
   final SupabaseClient client;
 
-  Future<Object?> _call(String name, [Map<String, dynamic>? params]) =>
-      client.schema('api_v1').rpc<Object?>(name, params: params);
+  // TODO(#280): use the generated ApiV1Client methods once
+  // hidden_riders_* are in supabase/api/v1/api_v1.json (backend #315).
+  Future<Object?> _call(String name, [Map<String, dynamic>? params]) async {
+    try {
+      return await client.schema('api_v1').rpc<Object?>(name, params: params);
+    } on PostgrestException catch (e) {
+      // The API's stable code is the message (#195 §2.4).
+      if (e.message == 'hidden_riders.too_many') throw HiddenRidersFull();
+      throw ApiV1Exception(
+        code: e.code,
+        message: e.message,
+        details: e.details,
+      );
+    }
+  }
 
-  static List<HiddenRider> _rows(Object? rows) => _sorted([
-    if (rows is List)
+  /// `{items: [...], limit: 500}`, as all three RPCs answer.
+  static List<HiddenRider> _items(Object? body) => _sorted([
+    if (body case {'items': final List<dynamic> rows})
       for (final row in rows) ?HiddenRider.fromApi(row),
   ]);
 
   @override
   Future<List<HiddenRider>> list() async =>
-      _rows(await _call('hidden_riders_list'));
+      _items(await _call('hidden_riders_list'));
 
   @override
-  Future<List<HiddenRider>> merge(List<HiddenRider> items) async => _rows(
+  Future<List<HiddenRider>> merge(List<HiddenRider> items) async => _items(
     await _call('hidden_riders_merge', {
       'items': [for (final r in items) r.toApi()],
     }),
   );
 
   @override
-  Future<void> remove(String handle) =>
-      _call('hidden_riders_remove', {'handle': handle});
+  Future<void> remove(String handle) async {
+    await _call('hidden_riders_remove', {'handle': handle});
+  }
 }
 
 /// Whether the account list is used; off until the #280 L2 RPCs ship.
@@ -226,6 +254,12 @@ class HiddenRiders extends ChangeNotifier {
   /// Handles added or removed here that the account has not taken yet.
   late Set<String> _pendingAdds, _pendingRemoves;
   Future<void>? _syncing;
+
+  /// The account refused the last merge: it would pass
+  /// [hiddenRidersLimit] (`hidden_riders.too_many`). The device list is
+  /// kept and sent again on the next [sync].
+  bool get accountFull => _accountFull;
+  bool _accountFull = false;
 
   Future<void> _save() async {
     notifyListeners();
@@ -264,8 +298,8 @@ class HiddenRiders extends ChangeNotifier {
     if (_riders.length >= hiddenRidersLimit) throw HiddenRidersFull();
     final rider = HiddenRider(
       handle: handle,
-      name: name.trim(),
-      spotName: spotName.trim(),
+      name: _cut(name, hiddenRiderNameMax),
+      spotName: _cut(spotName, hiddenRiderSpotNameMax),
       hiddenAt: clock(),
     );
     await _add(rider);
@@ -337,6 +371,7 @@ class HiddenRiders extends ChangeNotifier {
   Future<void> signedOut() async {
     if (remote == null || !_account) return;
     _account = false;
+    _accountFull = false;
     _pendingAdds.clear();
     _pendingRemoves.clear();
     await _savePending();
@@ -373,7 +408,11 @@ class HiddenRiders extends ChangeNotifier {
         ]))
           if (!_pendingRemoves.contains(r.handle)) r,
       ]);
+      _accountFull = false;
       await _save();
+    } on HiddenRidersFull {
+      _accountFull = true;
+      notifyListeners();
     } catch (_) {
       // Offline or the RPCs are not there yet: keep the device list.
     } finally {

@@ -46,6 +46,13 @@ const contentReportNoteMax = 500;
 String contentReportNoteLabel({required bool required}) =>
     required ? '附註（必填，最多 500 字）' : '附註（選填，最多 500 字）';
 const contentReportNoteHint = '例：哪幾個字、哪一段';
+
+/// Under the note, and the error when the server refuses one with an email
+/// or a phone number (T280_Q_REPORT_NOTE_PII = A).
+const contentReportNotePersonal = '不用貼出個資，選類別即可';
+
+/// The error when the server refuses a note with a link (`ad_url`).
+const contentReportNoteLink = '附註不能放網址連結';
 const contentReportNoteMissing = '選「其他」時，請寫下哪裡不當。';
 const contentReportFailed = '檢舉沒有送出，內容還在，請確認網路後再送一次。';
 

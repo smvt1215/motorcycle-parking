@@ -1,8 +1,11 @@
 import 'dart:async';
 
+import 'package:flutter/services.dart'
+    show TextInputFormatter, TextEditingValue;
 import 'package:supabase_flutter/supabase_flutter.dart' show FunctionException;
 
 import '../../data/app_store.dart';
+import '../../data/repositories.dart' show ReportRefused;
 import '../../domain/content_report_display.dart';
 import '../../domain/hidden_riders_display.dart';
 import '../../domain/spot_contributor.dart';
@@ -22,6 +25,29 @@ ContentReportOutcome? contentReportRefusal(Object error) => switch (error) {
   FunctionException(status: 429) => ContentReportOutcome.limit,
   _ => null,
 };
+
+/// The sentence for a 400 whose precheck `issues` name the `note` or
+/// the `reason` (Codex #315): a link ([contentReportNoteLink] for
+/// `ad_url`), else personal data ([contentReportNotePersonal]); null for
+/// any other refusal, which other 400s are (they carry no issues).
+String? noteRefusalMessage(Object error) {
+  final details = switch (error) {
+    ReportRefused(:final details) => details,
+    FunctionException(status: 400, :final details) => details,
+    _ => null,
+  };
+  if (details case {'issues': final List<dynamic> issues}) {
+    final rules = [
+      for (final issue in issues)
+        if (issue case {'field': 'note' || 'reason'}) '${issue['rule']}',
+    ];
+    if (rules.isEmpty) return null;
+    return rules.contains('ad_url')
+        ? contentReportNoteLink
+        : contentReportNotePersonal;
+  }
+  return null;
+}
 
 /// The flag sent for an inappropriate-content report (#280): `field`
 /// `inappropriate`, what is wrong in `proposed.target`, and the note.
@@ -120,13 +146,16 @@ class _ContentReportSheetState extends State<ContentReportSheet> {
       );
       result = ContentReportOutcome.sent;
     } on StateError catch (e) {
-      // A precheck refusal carries its own sentence.
-      error = widget.store.canReport
-          ? e.message.toString()
-          : contentReportSignIn;
+      // A precheck refusal carries its own sentence; personal data in the
+      // note gets the form's own.
+      error = !widget.store.canReport
+          ? contentReportSignIn
+          : noteRefusalMessage(e) ?? e.message.toString();
     } catch (e) {
       result = contentReportRefusal(e);
-      if (result == null) error = contentReportFailed;
+      if (result == null) {
+        error = noteRefusalMessage(e) ?? contentReportFailed;
+      }
     }
     if (!mounted) return;
     setState(() {
@@ -238,14 +267,17 @@ class _ContentReportSheetState extends State<ContentReportSheet> {
         TextField(
           key: const ValueKey('content-report-note'),
           controller: note,
-          maxLength: contentReportNoteMax,
+          // The server counts UTF-16 units (`invalid note` past 500), which
+          // the default limit (characters) would let an emoji pass.
+          inputFormatters: const [Utf16LengthLimit(contentReportNoteMax)],
           minLines: 2,
           maxLines: 5,
-          onChanged: (_) {
-            if (noteMissing) setState(() {});
-          },
+          onChanged: (_) => setState(() {}),
           decoration: InputDecoration(
+            counterText: '${note.text.length}/$contentReportNoteMax',
             hintText: contentReportNoteHint,
+            helperText: contentReportNotePersonal,
+            helperMaxLines: 2,
             filled: true,
             border: const OutlineInputBorder(),
             errorText: error,
@@ -509,6 +541,31 @@ class _TargetTile extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Keeps a field within [max] UTF-16 units, as the server counts; a paste
+/// is cut between whole characters.
+class Utf16LengthLimit extends TextInputFormatter {
+  const Utf16LengthLimit(this.max);
+  final int max;
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    if (newValue.text.length <= max) return newValue;
+    final kept = StringBuffer();
+    for (final char in newValue.text.characters) {
+      if (kept.length + char.length > max) break;
+      kept.write(char);
+    }
+    final text = kept.toString();
+    return TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
     );
   }
 }

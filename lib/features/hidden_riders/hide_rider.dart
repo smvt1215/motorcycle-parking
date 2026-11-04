@@ -61,6 +61,20 @@ Future<bool> hideRider(
       text: hiddenToast(name),
       onUndo: () => unawaited(store.hiddenRiders.unhide(handle)),
     );
+    // The account may refuse the list past 500: say so once it answers;
+    // the device keeps the rider hidden.
+    final hidden = store.hiddenRiders;
+    if (hidden.followsAccount) {
+      unawaited(
+        hidden.sync().then((_) {
+          if (hidden.accountFull) {
+            messenger
+              ..hideCurrentSnackBar()
+              ..showSnackBar(const SnackBar(content: Text(hiddenRidersFull)));
+          }
+        }),
+      );
+    }
   }
   return true;
 }

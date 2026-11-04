@@ -1,9 +1,14 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show SupabaseClient;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:motorcycle_parking/data/app_store.dart';
+import 'package:motorcycle_parking/data/favorite_handles.dart';
+import 'package:motorcycle_parking/api/v1/api_v1.g.dart' show ApiV1Exception;
 import 'package:motorcycle_parking/data/hidden_riders.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
 import 'package:motorcycle_parking/domain/hidden_riders_display.dart';
@@ -81,6 +86,34 @@ class GuestStore extends AppStore {
 
 HiddenRider rider(String handle, String name, DateTime at) =>
     HiddenRider(handle: handle, name: name, spotName: '某處', hiddenAt: at);
+
+/// A client whose PostgREST calls [answer] handles: (rpc name, body).
+SupabaseClient apiClient(
+  http.Response Function(String name, Object? body) answer,
+) => SupabaseClient(
+  'https://example.supabase.co',
+  'test-key',
+  httpClient: MockClient((request) async {
+    final name = request.url.pathSegments.last;
+    final r = answer(
+      name,
+      request.body.isEmpty ? null : jsonDecode(request.body),
+    );
+    // PostgREST parsing reads the request back from the response.
+    return http.Response(
+      r.body,
+      r.statusCode,
+      headers: r.headers,
+      request: request,
+    );
+  }),
+);
+
+http.Response jsonResponse(Object body, [int status = 200]) => http.Response(
+  jsonEncode(body),
+  status,
+  headers: {'content-type': 'application/json; charset=utf-8'},
+);
 
 void main() {
   group('HiddenRiders 本機清單', () {
@@ -558,5 +591,139 @@ void main() {
       expect(find.text(hiddenRidersFootnote), findsNothing);
       expect(tester.takeException(), isNull);
     });
+  }
+
+  group('後端形狀（#315）', () {
+    test('三支 RPC 回 {items, limit}，欄位對得上', () async {
+      final calls = <String, Object?>{};
+      final store = RemoteHiddenRidersStore(
+        apiClient((name, body) {
+          calls[name] = body;
+          return jsonResponse({
+            'items': [
+              {
+                'handle': handleA,
+                'name_at_hide': '阿明',
+                'spot_name_at_hide': '市府',
+                'hidden_at': '2026-11-01T01:00:00Z',
+              },
+            ],
+            'limit': 500,
+          });
+        }),
+      );
+      expect((await store.list()).single.name, '阿明');
+      final merged = await store.merge([
+        rider(handleK, 'Ken', DateTime.utc(2026, 11, 2)),
+      ]);
+      expect(merged.single.handle, handleA);
+      expect(calls['hidden_riders_merge'], {
+        'items': [
+          {
+            'handle': handleK,
+            'name_at_hide': 'Ken',
+            'spot_name_at_hide': '某處',
+            'hidden_at': '2026-11-02T00:00:00.000Z',
+          },
+        ],
+      });
+      await store.remove(handleA);
+      expect(calls['hidden_riders_remove'], {'handle': handleA});
+    });
+
+    test('hidden_riders.too_many 變成上限錯誤，其他錯誤帶穩定代碼', () async {
+      final full = RemoteHiddenRidersStore(
+        apiClient(
+          (_, _) => jsonResponse({
+            'code': 'PT400',
+            'message': 'hidden_riders.too_many',
+            'details': {'limit': 500},
+          }, 400),
+        ),
+      );
+      expect(() => full.merge([]), throwsA(isA<HiddenRidersFull>()));
+      final signedOut = RemoteHiddenRidersStore(
+        apiClient(
+          (_, _) => jsonResponse({
+            'code': 'PT401',
+            'message': 'auth.sign_in_required',
+          }, 401),
+        ),
+      );
+      expect(
+        () => signedOut.list(),
+        throwsA(
+          isA<ApiV1Exception>().having(
+            (e) => e.message,
+            'message',
+            'auth.sign_in_required',
+          ),
+        ),
+      );
+    });
+
+    test('帳號拒收超過 500 位：本機清單保留，標示上限，下次再送', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final account = _FullAccount();
+      final hidden = HiddenRiders(prefs, remote: account);
+      await hidden.hide(handle: handleA, name: '阿明', spotName: '市府');
+      await hidden.signedIn();
+      expect(hidden.accountFull, isTrue);
+      expect(hidden.isHidden(handleA), isTrue);
+      account.full = false;
+      await hidden.sync();
+      expect(hidden.accountFull, isFalse);
+      expect(account.rows.single.handle, handleA);
+    });
+
+    test('名稱最多 40 字、點位名稱最多 100 字，存的時候就截斷', () async {
+      SharedPreferences.setMockInitialValues({});
+      final hidden = HiddenRiders(await SharedPreferences.getInstance());
+      final row = await hidden.hide(
+        handle: handleA,
+        name: '阿' * 41,
+        spotName: '😀' * 101,
+      );
+      expect(row.name.runes.length, 40);
+      expect(row.spotName.runes.length, 100);
+    });
+
+    test('spots_by_ids：每批最多 200 筆，讀出 contributor_handle', () async {
+      final batches = <int>[];
+      final source = RemoteFavoriteHandles(
+        apiClient((name, body) {
+          expect(name, 'spots_by_ids');
+          final ids = ((body! as Map)['ids'] as List).cast<String>();
+          batches.add(ids.length);
+          return jsonResponse({
+            'spots': [
+              for (final id in ids)
+                {
+                  'id': id,
+                  'contributor_handle': id == 'b' ? null : handleA,
+                  'is_own': false,
+                },
+            ],
+          });
+        }),
+      );
+      final ids = ['a', 'b', for (var i = 0; i < 448; i++) 'id$i'];
+      final handles = await source.handlesFor(ids);
+      expect(batches, [200, 200, 50]);
+      expect(handles['a'], handleA);
+      expect(handles.containsKey('b'), isFalse);
+      expect(handles, hasLength(449));
+    });
+  });
+}
+
+/// An account list that refuses merges as `hidden_riders.too_many`.
+class _FullAccount extends FakeAccountList {
+  bool full = true;
+  @override
+  Future<List<HiddenRider>> merge(List<HiddenRider> items) async {
+    if (full) throw HiddenRidersFull();
+    return super.merge(items);
   }
 }

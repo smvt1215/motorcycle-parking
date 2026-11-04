@@ -81,7 +81,10 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     DateTime Function()? clock,
     FavoriteHandles? favoriteHandles,
   }) : favoriteHandlesSource =
-           favoriteHandles ?? const PendingFavoriteHandles(),
+           favoriteHandles ??
+           (spotsByIdsEnabled && client != null
+               ? RemoteFavoriteHandles(client)
+               : const PendingFavoriteHandles()),
        parking = parkingRepository ?? ParkingRepository(client),
        // Official counts from the backend; the example build has fake ones.
        availabilitySource =
