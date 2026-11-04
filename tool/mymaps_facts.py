@@ -63,7 +63,11 @@ def floor(clause):
 # ends the group with no fact: advice against an area (不要停汽車格) is no ban.
 # Rules see one clause at a time, so 只能停汽車區，不可停機車區 is two statements.
 DROP = "\0"
-BANNED_FROM = r"(不可|不能|禁止|禁停|不得|不給|無法)\s*(停|進入|進)?\s*(放|在|於)?"
+BANNED_FROM = r"(禁停|禁止\S{0,3}?(停|進入|進)?|(不可|不能|不得|不給|無法|不允許|不准)\S{0,3}?(停|進入|進))\s*(放|在|於)?"
+# A negation just before (or inside) a plain fact turns it around (沒有按鈴, 不能用悠遊卡,
+# 機車格不會開單): the group then states nothing. Rules whose phrase is itself a negation
+# (無柵欄, 機車區禁止大型重機…) are written for these words and are not checked.
+NEGATION = re.compile(r"不|沒|無|未|別|勿")
 ADVISED_AGAINST = r"不要|勿|不建議|別"
 FACTS = [
     ("plate", [
@@ -155,7 +159,14 @@ def facts(lines):
         for clause in filter(None, (c.strip() for c in CLAUSE.split(line))):
             for _, rules in FACTS:
                 for field, rule, phrase in rules:
-                    text = rule(clause) if callable(rule) else (phrase if re.search(rule, clause) else "")
+                    if callable(rule):
+                        text = rule(clause)
+                    else:
+                        match = re.search(rule, clause)
+                        text = phrase if match else ""
+                        if match and phrase not in NEGATIVE_PHRASES and NEGATION.search(
+                                clause[max(0, match.start() - 4):match.end()]):
+                            text = DROP
                     if text:
                         if text != DROP and text not in found[field]:
                             found[field].append(text)
@@ -166,6 +177,9 @@ def facts(lines):
     return found
 
 
+NEGATIVE_PHRASES = {DROP, "只辨識前車牌", "無後車牌辨識", "無柵欄", "機車車道禁止或不建議大型重機", "無重機專用格",
+                    "汽車區禁止大型重機", "機車區禁止大型重機", "現場未見禁止大型重機標示",
+                    "有禁止大型重機停放的回報", "非 24 小時營業", "不可過夜停放", "車位不多", "天花板較低"}
 VOCABULARY = {phrase: field for _, rules in FACTS for field, rule, phrase in rules if phrase and phrase != DROP}
 FACT_FORMS = [(re.compile(p), field) for p, field in (
     (r"重機專用格 \d+ 格(以上)?", "parking_guide"), (r"前 \d+ 分鐘免費", "note"), (r"重機停放樓層：B\d", "parking_guide"),

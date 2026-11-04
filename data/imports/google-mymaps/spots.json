@@ -2877,7 +2877,7 @@
     ],
     "source_name": "社群回報整理",
     "license_note": "社群協力資料，經核驗後只收錄事實",
-    "parking_guide": "有重機專用格\n可停汽車格"
+    "parking_guide": "有重機專用格"
   },
   {
     "id": "f6d46025-56a6-50cb-850c-90c5e18f61cf",
@@ -7627,7 +7627,8 @@
       }
     ],
     "source_name": "社群回報整理",
-    "license_note": "社群協力資料，經核驗後只收錄事實"
+    "license_note": "社群協力資料，經核驗後只收錄事實",
+    "parking_guide": "機車區禁止大型重機"
   },
   {
     "id": "be67684f-99d9-535c-a153-580585b5fc06",
