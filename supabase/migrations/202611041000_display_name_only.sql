@@ -18,8 +18,8 @@ returns text language sql immutable set search_path='' as $$
       -- are removed so a name cannot be reordered, disguised or made invisible;
       -- whitespace, full-width included, collapses to one space.
       select btrim(regexp_replace(regexp_replace(p_metadata->>'display_name',
-        '[­؀-؅؜۝܏࢐࢑࣢᠎​-‏‪-‮⁠-⁤⁦-⁯﻿￹-￻\U000110BD\U000110CD\U00013430-\U0001343F\U0001BCA0-\U0001BCA3\U0001D173-\U0001D17A\U000E0001\U000E0020-\U000E007F]',
-        '','g'),'[[:cntrl:][:space:]   -     　]+',' ','g')) as cleaned
+        '[\u00AD\u0600-\u0605\u061C\u06DD\u070F\u0890\u0891\u08E2\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u206F\uFEFF\uFFF9-\uFFFB\U000110BD\U000110CD\U00013430-\U0001343F\U0001BCA0-\U0001BCA3\U0001D173-\U0001D17A\U000E0001\U000E0020-\U000E007F]',
+        '','g'),'[[:cntrl:][:space:]\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]+',' ','g')) as cleaned
       where jsonb_typeof(p_metadata->'display_name')='string'
     ) c where cleaned<>''
   ),'');

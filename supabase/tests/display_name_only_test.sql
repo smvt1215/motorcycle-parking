@@ -8,9 +8,9 @@ select is(contributor_display_name('{"display_name":"阿明"}'),'阿明','a disp
 select is(contributor_display_name('{"display_name":"  阿明  ","full_name":"王大明"}'),'阿明','trimmed, and it wins over full_name');
 select is(contributor_display_name('{"display_name":""}'),'','an empty string is no name');
 select is(contributor_display_name('{"display_name":"   "}'),'','spaces only are no name');
-select is(contributor_display_name(jsonb_build_object('display_name',E'　　')),'','full-width spaces only are no name');
-select is(contributor_display_name(jsonb_build_object('display_name',E'　阿　明　')),'阿 明','full-width spaces are trimmed and collapse');
-select is(contributor_display_name(jsonb_build_object('display_name',E'\n\t ​')),'','control, no-break and zero-width only are no name');
+select is(contributor_display_name(jsonb_build_object('display_name',E'\u3000\u3000')),'','full-width spaces only are no name');
+select is(contributor_display_name(jsonb_build_object('display_name',E'\u3000阿\u3000明\u3000')),'阿 明','full-width spaces are trimmed and collapse');
+select is(contributor_display_name(jsonb_build_object('display_name',E'\n\t\u00A0\u200B')),'','control, no-break and zero-width only are no name');
 select is(contributor_display_name('{"full_name":"王大明"}'),'','full_name alone is not a public name');
 select is(contributor_display_name('{"name":"王大明"}'),'','name alone is not a public name');
 select is(contributor_display_name('{"display_name":"","full_name":"王大明","name":"王大明"}'),'',
@@ -38,7 +38,7 @@ select is(public.spot_contributor_handle('7e000000-0000-4000-8000-000000000001')
 
 -- 重算：遷移前用 full_name 回退寫下的快照，改回新規則（點位更新時間不變）。
 alter table community_spots disable trigger community_spots_contributor;
-update community_spots set contributor_name='王大明' where id='7e000000-0000-4000-8000-000000000001';
+update community_spots set contributor_name='王大明',updated_at='2026-01-01T00:00:00Z' where id='7e000000-0000-4000-8000-000000000001';
 alter table community_spots enable trigger community_spots_contributor;
 create temporary table before_recompute as select updated_at from community_spots where id='7e000000-0000-4000-8000-000000000001';
 update public.community_spots s set contributor_name=''
@@ -51,9 +51,9 @@ select is((select count(*)::int from community_spots s
 select is((select handle from private.contributor_handle_holders where user_id='10000000-0000-4000-8000-000000000006'),(select handle from h),
   'the recompute leaves handles alone');
 
--- 管理站帳號清單走同一支函式。
+-- 管理站帳號清單（admin_users、admin_user_detail）呼叫的就是這支函式。
 select is((select contributor_display_name(u.raw_user_meta_data) from auth.users u where u.id='10000000-0000-4000-8000-000000000006'),'',
-  'the admin user list shows no name either');
+  'the function the admin user list calls gives no name either');
 
 select * from finish();
 rollback;
