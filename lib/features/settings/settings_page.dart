@@ -74,16 +74,14 @@ Future<void> showSettings(BuildContext context, AppStore store) {
           subtitle: settingsDataLicenseDetail,
           uri: openDataLicenseUri,
         ),
-        if (Uri.tryParse(policyUrls.privacy) case final uri?
-            when policyUrls.privacy.isNotEmpty)
+        if (policyUri(policyUrls.privacy) case final uri?)
           _LinkTile(
             key: const ValueKey('settings-privacy'),
             icon: Icons.shield_outlined,
             title: settingsPrivacyPolicy,
             uri: uri,
           ),
-        if (Uri.tryParse(policyUrls.terms) case final uri?
-            when policyUrls.terms.isNotEmpty)
+        if (policyUri(policyUrls.terms) case final uri?)
           _LinkTile(
             key: const ValueKey('settings-terms'),
             icon: Icons.gavel_outlined,
