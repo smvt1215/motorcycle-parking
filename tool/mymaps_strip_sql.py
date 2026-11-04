@@ -105,6 +105,8 @@ MANUAL_FIELDS = ("name", *TEXT)
 
 def manual_rows(community, official):
     """(table, id, guard of the current name and text, new name and text) for MANUAL and ADMIN_FIXES."""
+    # A spot is either renamed or an administrator's, never both: the two take different bases.
+    assert not set(MANUAL) & set(ADMIN_FIXES), "a spot is in both MANUAL and ADMIN_FIXES"
     rows = []
     for table, spots, is_official in (("c", community, False), ("o", official, True)):
         for spot in spots:
@@ -365,9 +367,11 @@ begin
       '我的地圖匯入點人工修正（#275，PM_ANS_20261102_157）' from done d
     returning 1
   ) select count(*)::int into v_o from logged;
-  insert into public.admin_audit_log(actor,action,target_table,target_id,before,after,note)
-  values('00000000-0000-0000-0000-0000000000de','manual_fix_text_summary','spots','275',null,
-    jsonb_build_object('community_spots',v_c,'official_heavy_spots',v_o),'我的地圖匯入點人工修正摘要（#275）');
+  if v_c+v_o>0 then
+    insert into public.admin_audit_log(actor,action,target_table,target_id,before,after,note)
+    values('00000000-0000-0000-0000-0000000000de','manual_fix_text_summary','spots','275',null,
+      jsonb_build_object('community_spots',v_c,'official_heavy_spots',v_o),'我的地圖匯入點人工修正摘要（#275）');
+  end if;
 end $$;
 
 alter table public.community_spots enable trigger community_spots_flags_from_entries;
