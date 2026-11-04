@@ -489,6 +489,7 @@ class Spot {
     this.contributorRole,
     this.contributorHandle,
     this.isOwn,
+    this.contentHeld,
   });
 
   factory Spot.fromJson(Map<String, Object?> json) => Spot(
@@ -583,6 +584,9 @@ class Spot {
         ? null
         : json['contributor_handle'] as String,
     isOwn: json['is_own'] == null ? null : json['is_own'] as bool,
+    contentHeld: json['content_held'] == null
+        ? null
+        : [for (final e in json['content_held'] as List) e as String],
   );
 
   /// 官方點為 official: 加上 uuid
@@ -690,6 +694,9 @@ class Spot {
   /// 已登入且這個點是自己新增的（#280）；未登入、官方點一律 false。依呼叫時的登入身分計算。
   final bool? isOwn;
 
+  /// 因內容不當檢舉而暫時遮蔽的部分（#280）：rider_name（contributor_name 回空字串，代號照回）、spot_name（name 回「名稱審核中」）、text（note、entrance_note、parking_guide、special_rules 回空字串）。投稿者本人（is_own）看到原文，仍回這個欄位。官方點沒有這個欄位。
+  final List<String>? contentHeld;
+
   Map<String, Object?> toJson() => {
     'id': id,
     'source': source,
@@ -736,6 +743,7 @@ class Spot {
     'contributor_role': contributorRole,
     'contributor_handle': contributorHandle,
     'is_own': isOwn,
+    'content_held': contentHeld,
   };
 
   @override
@@ -785,7 +793,8 @@ class Spot {
       other.contributorName == contributorName &&
       other.contributorRole == contributorRole &&
       other.contributorHandle == contributorHandle &&
-      other.isOwn == isOwn;
+      other.isOwn == isOwn &&
+      _equal(other.contentHeld, contentHeld);
 
   @override
   int get hashCode => Object.hashAll([
@@ -834,6 +843,7 @@ class Spot {
     contributorRole,
     contributorHandle,
     isOwn,
+    _hash(contentHeld),
   ]);
 }
 
