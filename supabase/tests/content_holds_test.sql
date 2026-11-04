@@ -173,6 +173,73 @@ select pg_temp.act('other');
 select throws_ok(format('select admin_v1.content_report(%L)',(select id from ids where k='text')),'PT403','auth.aal2_required','riders cannot read reports');
 reset role;
 
+-- ===== 重疊的檢舉：keep 移除的文字不會在另一筆還原時回來 =====
+insert into community_spots(id,user_id,name,lat,lng,city,space_type,scooter_allowed,heavy_allowed,status,note,entrance_note)
+values('7d000000-0000-4000-8000-000000000001',pg_temp.uid(1),'重疊點',23.401,120.401,'雲林縣','freeMotorcycle',true,false,'pending','不當備註','入口');
+delete from rate_limit_events;
+select pg_temp.flag(2,'7d000000-0000-4000-8000-000000000001','text','m');
+select pg_temp.flag(7,'7d000000-0000-4000-8000-000000000001','impersonation','n');
+set local role authenticated;
+select pg_temp.act('admin');
+select is((admin_v1.resolve_content_report((select id::text from moderation_queue where reporter_id=pg_temp.uid(2) and source_id='7d000000-0000-4000-8000-000000000001'),
+  'keep',(select updated_at from community_spots where id='7d000000-0000-4000-8000-000000000001')))->'spot'->>'note','',
+  'keep removes the text even while another report still hides it');
+select is((admin_v1.resolve_content_report((select id::text from moderation_queue where reporter_id=pg_temp.uid(7) and source_id='7d000000-0000-4000-8000-000000000001'),
+  'restore',(select updated_at from community_spots where id='7d000000-0000-4000-8000-000000000001'),null,'wrong'))->>'status','rejected',
+  'the other report is rejected');
+select throws_ok(format('select admin_v1.resolve_content_report(%L,''edit'',now(),''{"name":"名稱審核中"}'')',
+  (select id from moderation_queue where reporter_id=pg_temp.uid(7) and source_id='7d000000-0000-4000-8000-000000000001')),
+  'PT400','content_report.invalid_patch','the placeholder is not a name');
+reset role;
+select is((select note||'|'||entrance_note||'|'||name||'|'||cardinality(content_held) from community_spots where id='7d000000-0000-4000-8000-000000000001'),
+  '||重疊點|0','the removed text stays removed, the rest comes back');
+
+-- ===== 刪除點位：遮蔽保留，復原時重新送審 =====
+insert into community_spots(id,user_id,name,lat,lng,city,space_type,scooter_allowed,heavy_allowed,status,note)
+values('7d000000-0000-4000-8000-000000000002',pg_temp.uid(1),'會被刪的點',23.402,120.402,'雲林縣','freeMotorcycle',true,false,'pending','不當');
+select pg_temp.flag(2,'7d000000-0000-4000-8000-000000000002','text','o');
+update community_spots set status='hidden' where id='7d000000-0000-4000-8000-000000000002';
+select is((select status||'|'||resolution_note from moderation_queue where reporter_id=pg_temp.uid(2) and source_id='7d000000-0000-4000-8000-000000000002'),
+  'rejected|點位已刪除','deleting closes the report');
+select is((select note from community_spots where id='7d000000-0000-4000-8000-000000000002'),'','but the text stays hidden');
+update community_spots set status='pending' where id='7d000000-0000-4000-8000-000000000002';
+select is((select status from moderation_queue where reporter_id=pg_temp.uid(2) and source_id='7d000000-0000-4000-8000-000000000002'),
+  'pending','restoring sends it back for review');
+select is((select note||'|'||array_to_string(content_held,',') from community_spots where id='7d000000-0000-4000-8000-000000000002'),'|text',
+  'and keeps it hidden');
+
+-- ===== reviewed_content 只在這次的部分都被審過時跳過 =====
+select pg_temp.flag(6,'7d000000-0000-4000-8000-000000000001','impersonation','p');
+select is((select held from moderation_queue where reporter_id=pg_temp.uid(6) and source_id='7d000000-0000-4000-8000-000000000001'),true,
+  'a rejected impersonation report covers it; but the text changed since (removed), so it hides');
+-- held 不能由寫入者指定。
+insert into moderation_queue(source_id,reporter_id,reason,field,proposed,note,held)
+values('7d000000-0000-4000-8000-000000000002',pg_temp.uid(3),'x','inappropriate','{"target":"other"}','x',true);
+select is((select held from moderation_queue where reporter_id=pg_temp.uid(3) and source_id='7d000000-0000-4000-8000-000000000002'),false,
+  'held is the server''s, never the writer''s');
+
+-- ===== 投稿者硬刪除的點：只能結案 =====
+insert into community_spots(id,user_id,name,lat,lng,city,space_type,scooter_allowed,heavy_allowed,status,note)
+values('7d000000-0000-4000-8000-000000000003',pg_temp.uid(1),'會被硬刪的點',23.403,120.403,'雲林縣','freeMotorcycle',true,false,'pending','不當');
+select pg_temp.flag(7,'7d000000-0000-4000-8000-000000000003','text','q');
+delete from community_spots where id='7d000000-0000-4000-8000-000000000003';
+set local role authenticated;
+select pg_temp.act('admin');
+select is((admin_v1.content_report((select id::text from moderation_queue where reporter_id=pg_temp.uid(7) and source_id='7d000000-0000-4000-8000-000000000003')))->'current'->'name',
+  'null'::jsonb,'a hard-deleted spot has no current content');
+select throws_ok(format('select admin_v1.resolve_content_report(%L,''edit'',now(),''{"note":"x"}'')',
+  (select id from moderation_queue where reporter_id=pg_temp.uid(7) and source_id='7d000000-0000-4000-8000-000000000003')),
+  'PT404','content_report.spot_not_found','and cannot be edited');
+select is((admin_v1.resolve_content_report((select id::text from moderation_queue where reporter_id=pg_temp.uid(7) and source_id='7d000000-0000-4000-8000-000000000003'),
+  'keep',now()))->'spot','{"id":"7d000000-0000-4000-8000-000000000003"}'::jsonb,'but can be closed');
+reset role;
+
+-- ===== 檢舉雜湊的保留期限 =====
+select is((select schedule from cron.job where jobname='content-report-identities-prune'),'47 20 * * *','identities are pruned daily');
+update private.content_report_identities set created_at=now()-interval '200 days'
+  where queue_id=(select id from moderation_queue where reporter_id=pg_temp.uid(2) and source_id='7d000000-0000-4000-8000-000000000001');
+select ok(public.content_report_identities_prune()>=1,'old identities go');
+
 -- ===== 不立即隱藏的規則 =====
 insert into community_spots(id,user_id,name,lat,lng,city,space_type,scooter_allowed,heavy_allowed,status,note)
 select ('7c000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid,pg_temp.uid(1),'規則點'||n,23.5+n*0.001,120.5,'雲林縣','freeMotorcycle',true,false,'pending','備註'
@@ -209,8 +276,9 @@ select is((select array_to_string(risk_flags,',') from moderation_queue where re
 delete from rate_limit_events;
 update moderation_queue set held=true,created_at=now() where field='inappropriate' and source_id like '7c000000%' and not held
   and reporter_id<>pg_temp.uid(6);
-insert into moderation_queue(source_id,reporter_id,reason,field,proposed,note,held)
-select '7c000000-0000-4000-8000-0000000000'||(10+n),pg_temp.uid(5),'x','inappropriate','{"target":"other"}','x',true from generate_series(1,20) n;
+insert into moderation_queue(source_id,reporter_id,reason,field,proposed,note)
+select '7c000000-0000-4000-8000-0000000000'||(10+n),pg_temp.uid(5),'x','inappropriate','{"target":"other"}','x' from generate_series(1,20) n;
+update moderation_queue set held=true where reporter_id=pg_temp.uid(5) and source_id like '7c000000%' and proposed->>'target'='other';
 select pg_temp.flag(5,'7c000000-0000-4000-8000-000000000007','text','i');
 select is((select array_to_string(risk_flags,',') from moderation_queue where reporter_id=pg_temp.uid(5) and source_id='7c000000-0000-4000-8000-000000000007'),
   'hold_skipped_global_fuse','past 20 immediate hides in 24 hours, reports only wait');

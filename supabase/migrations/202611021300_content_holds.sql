@@ -141,16 +141,17 @@ begin
 end $$;
 revoke execute on function private.content_hold_apply(uuid,text[]) from public,anon,authenticated,service_role;
 
--- 放回沒有處理中檢舉遮蔽的部分：原文（管理員 keep／edit 時已先改過 original）。
+-- 放回沒有處理中檢舉遮蔽的部分：holds 裡的原文（管理員 keep／edit 時已先改成處理後的內容）。
 create function private.content_hold_release(p_spot uuid) returns text[]
 language plpgsql security definer set search_path='' as $$
 declare v_free text[]; r record;
 begin
+  -- 先鎖點位，同時寫入的檢舉才不會在算完之後又加進來。
+  perform 1 from public.community_spots where id=p_spot for update;
   select array_agg(h.part) into v_free from private.content_holds h where h.spot_id=p_spot
     and not exists(select 1 from public.moderation_queue q where q.source_id=p_spot::text and q.field='inappropriate'
       and q.held and q.resolved_at is null and h.part=any(private.content_hold_parts(q.proposed->>'target')));
   if v_free is null then return '{}'; end if;
-  perform 1 from public.community_spots where id=p_spot for update;
   perform set_config('app.content_hold','1',true);
   for r in select * from private.content_holds x where x.spot_id=p_spot and x.part=any(v_free) loop
     if r.part='spot_name' then
@@ -202,8 +203,10 @@ begin
     return 'new_account';
   end if;
   -- 上次遮蔽同一部分的檢舉被駁回後，這些部分沒變：等人工審核。
+  -- 只採計管理員審過、涵蓋這次全部部分的駁回（點位刪除時的自動結案不算）。
   select * into v_last from public.moderation_queue q where q.source_id=p_new.source_id and q.field='inappropriate'
-    and q.status='rejected' and private.content_hold_parts(q.proposed->>'target') && v_parts
+    and q.status='rejected' and q.resolution_note is distinct from '點位已刪除'
+    and private.content_hold_parts(q.proposed->>'target') @> v_parts
     order by q.resolved_at desc limit 1;
   if v_last.id is not null then
     select * into s from public.community_spots where id=p_new.source_id::uuid;
@@ -251,13 +254,13 @@ begin
           and not exists(select 1 from public.contributor_name_clears c where c.spot_id=s.id)
           and not exists(select 1 from private.account_deletion_requests r where r.user_id=s.user_id)),'{}'::jsonb);
   end if;
+  new.held:=false;
   if new.field is distinct from 'inappropriate' then return new; end if;
   if cardinality(private.content_hold_parts(new.proposed->>'target'))=0 then return new; end if;
   v_skip:=private.content_hold_skip(new,nullif(current_setting('app.report_ip',true),''),
     nullif(current_setting('app.report_device',true),''));
-  if v_skip is null then
-    new.held:=true;
-  else
+  new.held:=v_skip is null;
+  if v_skip is not null then
     new.risk_flags:=array_append(new.risk_flags,'hold_skipped_'||v_skip);
   end if;
   return new;
@@ -294,7 +297,9 @@ create trigger moderation_inappropriate_after after insert on public.moderation_
 create function public.moderation_inappropriate_resolved() returns trigger
 language plpgsql security definer set search_path='' as $$
 begin
-  if new.field='inappropriate' and new.held and old.resolved_at is null and new.resolved_at is not null then
+  -- 點位刪除時的自動結案不放回：刪除的點 14 天內可能復原（復原時重新送審）。
+  if new.field='inappropriate' and new.held and old.resolved_at is null and new.resolved_at is not null
+     and not exists(select 1 from public.community_spots c where c.id=new.source_id::uuid and c.deleted_at is not null) then
     perform private.content_hold_release(new.source_id::uuid);
   end if;
   return null;
@@ -302,6 +307,37 @@ end $$;
 revoke execute on function public.moderation_inappropriate_resolved() from public,anon,authenticated,service_role;
 create trigger moderation_inappropriate_resolved after update on public.moderation_queue
   for each row execute function public.moderation_inappropriate_resolved();
+
+-- 復原刪除的點：刪除時自動結案、觸發過遮蔽的檢舉重新送審（遮蔽照舊）；
+-- 沒有可重新送審的就放回。
+create function public.community_spots_content_hold_restored() returns trigger
+language plpgsql security definer set search_path='' as $$
+begin
+  if old.deleted_at is not null and new.deleted_at is null and cardinality(new.content_held)>0 then
+    update public.moderation_queue q set status='pending',resolved_at=null,resolved_by=null,
+        resolution_kind=null,resolution_note=''
+      where q.source_id=new.id::text and q.field='inappropriate' and q.held
+        and q.resolution_note='點位已刪除' and q.resolved_at>=old.deleted_at;
+    perform private.content_hold_release(new.id);
+  end if;
+  return null;
+end $$;
+revoke execute on function public.community_spots_content_hold_restored() from public,anon,authenticated,service_role;
+create trigger community_spots_content_hold_restored after update on public.community_spots
+  for each row execute function public.community_spots_content_hold_restored();
+
+-- 檢舉的網路與裝置雜湊：只用在 24 小時的規則與處理中的同網路標記。結案滿
+-- 30 天、或建立滿 180 天就刪（#267 的保留原則）。
+create function public.content_report_identities_prune() returns integer
+language sql security definer set search_path='' as $$
+  with d as (delete from private.content_report_identities i
+    where i.created_at<now()-interval '180 days'
+       or exists(select 1 from public.moderation_queue q where q.id=i.queue_id and q.resolved_at<now()-interval '30 days')
+    returning 1)
+  select count(*)::int from d
+$$;
+revoke execute on function public.content_report_identities_prune() from public,anon,authenticated;
+select cron.schedule('content-report-identities-prune','47 20 * * *','select public.content_report_identities_prune()');
 
 -- 通知分種類：new（每筆新檢舉）、fuse（全站保險絲）。
 alter table private.report_notices add column kind text not null default 'new' check (kind in ('new','fuse'));
@@ -561,10 +597,14 @@ begin
     'id',q.id::text,'status',q.status,'spot_id',q.source_id,'target',q.proposed->>'target',
     'created_at',q.created_at,'spot_updated_at',s.updated_at,'spot_deleted',s.id is null or s.deleted_at is not null,
     'content_held',coalesce(to_jsonb(s.content_held),'[]'::jsonb),
-    'snapshot',jsonb_build_object('name',q.base_spot->'name','contributor_name',q.base_spot->'contributor_name',
-      'note',q.base_spot->'note','entrance_note',q.base_spot->'entrance_note',
-      'parking_guide',q.base_spot->'parking_guide','special_rules',q.base_spot->'special_rules'),
-    'current',private.spot_admin_content(s.id),
+    'snapshot',(select jsonb_build_object('name',b->'name','contributor_name',b->'contributor_name',
+      'note',b->'note','entrance_note',b->'entrance_note','parking_guide',b->'parking_guide','special_rules',b->'special_rules')
+      from (select coalesce((select m.base_spot from public.moderation_queue m where m.source_id=q.source_id
+        and m.field='inappropriate' and m.proposed->>'target'=q.proposed->>'target'
+        and (m.id=q.id or (q.resolved_at is null and m.resolved_at is null))
+        order by m.created_at limit 1),'{}'::jsonb) b) x),
+    'current',coalesce(private.spot_admin_content(s.id),jsonb_build_object('name',null,'contributor_name',null,
+      'note',null,'entrance_note',null,'parking_guide',null,'special_rules',null)),
     'editable_fields',to_jsonb(private.content_editable_fields()),
     'reports',(select coalesce(jsonb_agg(jsonb_build_object('id',m.id::text,'created_at',m.created_at,'note',m.note,
         'held',m.held,'risk_flags',to_jsonb(m.risk_flags),
@@ -604,6 +644,7 @@ begin
      or exists(select 1 from jsonb_each(v_patch) e where not e.key=any(private.content_editable_fields())
        or jsonb_typeof(e.value)<>'string' or btrim(e.value#>>'{}')=''
        or char_length(e.value#>>'{}')>case when e.key='name' then 100 else 500 end)
+     or btrim(coalesce(v_patch->>'name',''))=private.content_hold_placeholder()
      or (p_action='restore' and v_patch<>'{}'::jsonb)
      or (p_action='edit' and v_patch='{}'::jsonb) then
     raise sqlstate 'PT400' using message='content_report.invalid_patch';
@@ -619,7 +660,22 @@ begin
   if q.id is null then raise sqlstate 'PT404' using message='content_report.not_found'; end if;
   if q.resolved_at is not null then raise sqlstate 'PT409' using message='content_report.already_resolved'; end if;
   select * into s from public.community_spots c where c.id=q.source_id::uuid for update;
-  if s.id is null then raise sqlstate 'PT404' using message='content_report.spot_not_found'; end if;
+  -- 投稿者已刪除的點：只結案（restore 或 keep，不改內容），spot 只回 id。
+  if s.id is null then
+    if p_action='edit' or v_patch<>'{}'::jsonb then
+      raise sqlstate 'PT404' using message='content_report.spot_not_found';
+    end if;
+    v_status:=case when p_action='restore' then 'rejected' else 'accepted' end;
+    select array_agg(m.id) into v_ids from public.moderation_queue m where m.source_id=q.source_id
+      and m.field='inappropriate' and m.resolved_at is null and m.proposed->>'target'=q.proposed->>'target';
+    update public.moderation_queue m set status=v_status,resolved_at=now(),resolved_by=auth.uid(),resolution_note=v_note,
+      resolution_kind=case when p_action='restore' then p_reason end where m.id=any(v_ids);
+    insert into public.admin_audit_log(actor,action,target_table,target_id,before,after,note)
+      values(auth.uid(),'resolve_content_report','community_spots',q.source_id,
+        jsonb_build_object('reports',to_jsonb(v_ids),'spot','deleted'),
+        jsonb_build_object('action',p_action,'status',v_status,'reason',p_reason),v_note);
+    return jsonb_build_object('status',v_status,'resolved_count',cardinality(v_ids),'spot',jsonb_build_object('id',q.source_id));
+  end if;
   if s.updated_at is distinct from p_expected_updated_at then
     raise sqlstate 'PT409' using message='content_report.stale',
       detail=jsonb_build_object('updated_at',s.updated_at)::text;
@@ -646,7 +702,14 @@ begin
     end if;
   end if;
   v_final:=v_final||v_patch;
-  -- 還被其他檢舉遮蔽的部分，新值由 community_spots_content_hold 收進 holds。
+  -- 還被其他檢舉遮蔽的部分：處理後的內容直接寫進 holds（不能靠觸發器比對新舊值：
+  -- 移除後的空字串和替代內容一樣），點位上維持替代內容；其餘直接寫在點位上。
+  update private.content_holds h set original=jsonb_build_object('name',v_final->>'name')
+    where h.spot_id=s.id and h.part='spot_name' and v_final ? 'name';
+  update private.content_holds h set original=coalesce(h.original,'{}'::jsonb)
+      ||(select coalesce(jsonb_object_agg(e.key,e.value),'{}'::jsonb) from jsonb_each(v_final) e
+         where e.key=any(private.content_text_fields()))
+    where h.spot_id=s.id and h.part='text';
   update public.community_spots c set
     name=coalesce(v_final->>'name',c.name),note=coalesce(v_final->>'note',c.note),
     entrance_note=coalesce(v_final->>'entrance_note',c.entrance_note),

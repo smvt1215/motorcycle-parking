@@ -192,7 +192,7 @@
       "post": {
         "operationId": "admin_v1_content_report",
         "summary": "一筆內容不當檢舉（#280）",
-        "description": "同一點、同一 target、處理中的檢舉合成一組回傳（已結案的只回自己）。只回結構化欄位。snapshot 是第一則檢舉當下的內容（伺服器快照）；current 是點位目前的原文（遮蔽中的部分取暫存的原文，不是替代內容）；spot_updated_at 給 resolve_content_report 當樂觀鎖。錯誤：400 request.invalid、403 auth.aal2_required、404 content_report.not_found。",
+        "description": "同一點、同一 target、處理中的檢舉合成一組回傳（已結案的只回自己）。只回結構化欄位。snapshot 是組內最早一則檢舉當下的內容（伺服器快照）；current 是點位目前的原文（投稿者已刪除點位時各欄位都是 null，spot_deleted 為 true）（遮蔽中的部分取暫存的原文，不是替代內容）；spot_updated_at 給 resolve_content_report 當樂觀鎖。錯誤：400 request.invalid、403 auth.aal2_required、404 content_report.not_found。",
         "requestBody": {
           "required": true,
           "content": {
@@ -237,7 +237,7 @@
       "post": {
         "operationId": "admin_v1_resolve_content_report",
         "summary": "處理內容不當檢舉（#280）",
-        "description": "restore：檢舉不成立，原文放回，p_reason 必填（既有駁回原因 wrong、duplicate、insufficient、outdated、abuse、other；other 要 p_note）。keep：維持隱藏或移除——車友名稱永久清除、點名改成 p_patch.name（target 含 spot_name 時必填）、文字移除（p_patch 可另給新文字）。edit：以 p_patch 改內容後解除。同一點、同一 target 的處理中檢舉一起結案；還被其他檢舉遮蔽的部分維持遮蔽。p_patch 只接受 name（1–100 字）、note、entrance_note、parking_guide、special_rules（最多 500 字）且不可空白。都寫 admin_audit_log。錯誤：400 request.invalid、400 content_report.invalid_patch、400 content_report.reason_required、400 content_report.name_required、403 auth.aal2_required、404 content_report.not_found、409 content_report.already_resolved、409 content_report.stale（detail.updated_at）。",
+        "description": "restore：檢舉不成立，原文放回，p_reason 必填（既有駁回原因 wrong、duplicate、insufficient、outdated、abuse、other；other 要 p_note）。keep：維持隱藏或移除——車友名稱永久清除、點名改成 p_patch.name（target 含 spot_name 時必填）、文字移除（p_patch 可另給新文字）。edit：以 p_patch 改內容後解除。同一點、同一 target 的處理中檢舉一起結案；還被其他檢舉遮蔽的部分維持遮蔽。p_patch 只接受 name（1–100 字）、note、entrance_note、parking_guide、special_rules（最多 500 字）且不可空白，name 不可是「名稱審核中」。遮蔽中的點採納舊審核頁的修改建議時，base_spot 是原文、點位上是替代內容，會回 40001，需要強制套用。都寫 admin_audit_log。錯誤：400 request.invalid、400 content_report.invalid_patch、400 content_report.reason_required、400 content_report.name_required、403 auth.aal2_required、404 content_report.not_found、404 content_report.spot_not_found（投稿者已刪除點位時只能 restore 或不帶 p_patch 的 keep，只結案，spot 只有 id）、409 content_report.already_resolved、409 content_report.stale（detail.updated_at）。",
         "requestBody": {
           "required": true,
           "content": {
