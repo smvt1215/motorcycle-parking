@@ -248,7 +248,7 @@ alter table public.official_heavy_spots enable trigger official_heavy_spots_flag
 drop table pg_temp.strip_text;
 """
 
-FEE_HEAD = """-- 我的地圖費率片段清除（#275，接 202611020100）：費率簡寫夾帶的原文片段（需按鈴、
+FEE_HEAD = """-- 我的地圖費率片段清除（#275，接 202611040100）：費率簡寫夾帶的原文片段（需按鈴、
 -- 後牌、B2限悠遊卡…）對得上 tool/mymaps_facts.py 詞彙表的轉成固定詞，其餘刪除。
 --   - community_spots：沒有結構化 fee 的 fee_note（有 fee 時 fee_note 是 fee_note_of(fee)
 --     產生的句子，不動）、fee_source_text、parking_zones 各區的 fee_note。
@@ -256,7 +256,7 @@ FEE_HEAD = """-- 我的地圖費率片段清除（#275，接 202611020100）：�
 --   官方費率文字、試辦費率與臺北市路邊收費句子是官方或工具自己的句子，不動。
 -- fee 不變，所以 spot_fee_source_text() 不會清掉 fee_source_text；parking_zones 只改
 -- fee_note，區域 id 與其他鍵保留。
--- 下方的值由 tool/mymaps_strip_sql.py --layer fee 產生，以 202611020100 清除後的值為準，
+-- 下方的值由 tool/mymaps_strip_sql.py --layer fee 產生，以 202611040100 清除後的值為準，
 -- 每列以舊值的 md5 比對。管理員編輯過的點位不處理：
 {edited}
 
@@ -266,7 +266,7 @@ create temporary table strip_fee_o(id text,guard text,note text);
 """
 
 FEE_TAIL = """
--- 同 202611020100：只改費率文字，不順帶依分區重算停車資格旗標。
+-- 同 202611040100：只改費率文字，不順帶依分區重算停車資格旗標。
 alter table public.community_spots disable trigger community_spots_flags_from_entries;
 alter table public.official_heavy_spots disable trigger official_heavy_spots_flags_from_entries;
 

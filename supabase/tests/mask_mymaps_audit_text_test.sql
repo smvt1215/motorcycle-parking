@@ -1,4 +1,4 @@
--- 稽核紀錄中的我的地圖照抄文字遮蔽（#275；202611020120_mask_mymaps_audit_text.sql）：
+-- 稽核紀錄中的我的地圖照抄文字遮蔽（#275；202611040120_mask_mymaps_audit_text.sql）：
 -- 只有 admin_audit_mask_mymaps_text() 能把含來源署名的點位稽核改成遮蔽結果，
 -- 其他欄位照留；其他修改仍然禁止。
 begin;

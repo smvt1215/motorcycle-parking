@@ -7,9 +7,9 @@ import 'profile_avatar.dart';
 Future<void> showProfileEditor(BuildContext context, AppStore store) =>
     showAdaptiveSheet<void>(context, (_) => ProfileEditor(store: store));
 
-/// 編輯個人資料 (P12). Avatar uploads count as photos and stay off until
-/// photo uploads open (社群核實 P2): the editor changes the name and can
-/// remove the avatar the account has, which falls back to the default.
+/// 編輯個人資料 (P12): the editor changes the name and can remove the
+/// sign-in provider's picture. Avatar uploads were cancelled (2026-11-01);
+/// the avatar is the name's first character or the provider's picture.
 class ProfileEditor extends StatefulWidget {
   const ProfileEditor({super.key, required this.store});
   final AppStore store;
@@ -139,26 +139,7 @@ class _ProfileEditorState extends State<ProfileEditor> {
                         size: 96,
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    Center(
-                      child: Semantics(
-                        label: profilePhotoSemantics,
-                        button: true,
-                        enabled: false,
-                        excludeSemantics: true,
-                        child: isCupertino
-                            ? TextButton.icon(
-                                onPressed: null,
-                                icon: const Icon(Icons.photo_library_outlined),
-                                label: const Text(profilePhotoLabel),
-                              )
-                            : const OutlinedButton(
-                                onPressed: null,
-                                child: Text(profilePhotoLabel),
-                              ),
-                      ),
-                    ),
-                    if (!remove && profileAvatarUrl(user) != null)
+                    if (!remove && profileAvatarUrl(user) != null) ...[
                       Center(
                         child: TextButton(
                           key: const ValueKey('profile-remove-avatar'),
@@ -168,12 +149,12 @@ class _ProfileEditorState extends State<ProfileEditor> {
                           child: const Text(profileRemoveAvatar),
                         ),
                       ),
-                    const SizedBox(height: 4),
-                    Text(
-                      profilePhotoDisabled,
-                      textAlign: TextAlign.center,
-                      style: quiet,
-                    ),
+                      Text(
+                        profileRemoveAvatarHint,
+                        textAlign: TextAlign.center,
+                        style: quiet,
+                      ),
+                    ],
                     const SizedBox(height: 20),
                     TextFormField(
                       key: const ValueKey('profile-name'),

@@ -1,8 +1,16 @@
 import {
+  confirmMail,
+  deletionNoticeMail,
   noticeMail,
+  receiptMail,
   resendConfig,
   resendNotifier,
+  resendSender,
   resendUrl,
+  sendMail,
+  statusMail,
+  supportCode,
+  taiwanTime,
 } from './resend.ts';
 
 function equal(actual: unknown, expected: unknown, message: string) {
@@ -86,4 +94,115 @@ Deno.test('a refused send throws, so the request stays unmarked', async () => {
     threw = true;
   }
   equal(threw, true, 'throws');
+});
+
+Deno.test('mail to riders needs only the key and the sender', () => {
+  const env: Record<string, string> = {
+    RESEND_API_KEY: 're_test',
+    SUPPORT_MAIL_FROM: 'MotoPark <support@x.tw>',
+  };
+  equal(resendSender((n) => env[n]), {
+    apiKey: 're_test',
+    from: 'MotoPark <support@x.tw>',
+  }, 'set');
+  equal(
+    resendSender((n) => (n === 'SUPPORT_MAIL_FROM' ? ' ' : env[n])),
+    null,
+    'no sender',
+  );
+});
+
+Deno.test('sendMail sends to the given address with the idempotency key', async () => {
+  const seen: RequestInit[] = [];
+  await sendMail(
+    config,
+    { to: ['rider@x.tw'], subject: 's', text: 't' },
+    'support-confirm/1',
+    (_url, init) => {
+      seen.push(init!);
+      return Promise.resolve(Response.json({}));
+    },
+  );
+  equal(
+    new Headers(seen[0].headers).get('idempotency-key'),
+    'support-confirm/1',
+    'key',
+  );
+  equal(JSON.parse(String(seen[0].body)), {
+    from: config.from,
+    to: ['rider@x.tw'],
+    subject: 's',
+    text: 't',
+  }, 'body');
+});
+
+Deno.test('the confirmation mail: the link, 24 hours, once, 5 working days', () => {
+  const { text } = confirmMail('https://site.test/c#token=abc');
+  for (
+    const part of [
+      '不是我申請的',
+      'https://site.test/c#token=abc',
+      '24 小時',
+      '只能使用一次',
+      '5 個工作天',
+      'support@motoparking.smvtstudio.com',
+      'https://motoparking.smvtstudio.com',
+    ]
+  ) equal(text.includes(part), true, part);
+});
+
+Deno.test('the deletion notice: the date in Taiwan time and how to cancel', () => {
+  equal(taiwanTime('2026-11-08T07:30:00Z'), '2026/11/08 15:30', 'UTC+8');
+  equal(taiwanTime('2026-11-08T17:05:00Z'), '2026/11/09 01:05', 'next day');
+  const { text } = deletionNoticeMail('2026-11-08T07:30:00Z', false);
+  equal(text.includes('2026/11/08 15:30'), true, 'date');
+  equal(text.includes('使用 Apple 登入'), false, 'no Apple steps');
+  equal(
+    deletionNoticeMail('2026-11-08T07:30:00Z', true).text.includes(
+      '「使用 Apple 登入」自行移除',
+    ),
+    true,
+    'Apple steps for an Apple account',
+  );
+  equal(/登入 App 選「取消刪除」/.test(text), true, 'cancel');
+  equal(text.includes('7 天內'), true, 'within 7 days');
+});
+
+Deno.test('the receipt carries only the code, the same for any request', () => {
+  equal(supportCode(id), 'S-20000000', 'code');
+  const a = receiptMail(id),
+    b = receiptMail('abcdef12-0000-4000-8000-000000000009');
+  equal(a.text.includes('S-20000000'), true, 'code in the text');
+  equal(
+    a.text.replaceAll('S-20000000', 'X'),
+    b.text.replaceAll('S-ABCDEF12', 'X'),
+    'nothing else differs',
+  );
+  equal(a.text.includes('5 個工作天'), true, '5 working days');
+  equal(
+    /找到帳號/.test(a.text) && !/已找到|沒有找到|找不到/.test(a.text),
+    true,
+    'never says',
+  );
+});
+
+Deno.test('the state mail: already asked for, when, and how to cancel', () => {
+  const { text } = statusMail('2026-11-08T07:30:00Z');
+  equal(text.includes('2026/11/08 15:30'), true, 'date');
+  equal(text.includes('不需要再申請'), true, 'no need to ask again');
+  equal(/登入 App 選「取消刪除」/.test(text), true, 'cancel');
+});
+
+Deno.test('the deletion notice carries the one-time cancel link', () => {
+  const link = 'https://site.test/cancel#token=abc';
+  equal(
+    deletionNoticeMail('2026-11-08T07:30:00Z', false, link).text.includes(link),
+    true,
+    'link',
+  );
+  equal(
+    deletionNoticeMail('2026-11-08T07:30:00Z', false).text.includes('#token='),
+    false,
+    'none without the page',
+  );
 });
