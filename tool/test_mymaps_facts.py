@@ -62,6 +62,21 @@ class VocabularyTest(unittest.TestCase):
             "我忘記是前牌還是悠遊卡": {},
             "重機的車牌辨識似乎沒開，要找管理員": {},
             "只能停汽車區，停機車區會被警衛貼告示": {"parking_guide": ["可停汽車格", "停機車格可能被開單"]},
+            # A negation before or inside a plain fact states nothing (review on #287).
+            "沒有按鈴": {},
+            "不能用悠遊卡": {},
+            "無安全帽櫃": {},
+            "沒有折抵": {},
+            "機車格不會開單": {},
+            "不要走機車道": {},
+            "重機不可走汽車道": {},
+            # 不准／不允許 + 停 is a ban; a bracketed aside after the verb is not the banned area.
+            "不准停機車格": {"parking_guide": ["機車區禁止大型重機"]},
+            "某系統不允許重機停機車格": {"parking_guide": ["機車區禁止大型重機"]},
+            "較大的重機無法停車（停普通機車格）": {},
+            # 不限、無論 widen, they do not negate.
+            "不限車種可停機車格": {"parking_guide": ["可停機車格"]},
+            "無論如何可停汽車格": {"parking_guide": ["可停汽車格"]},
             # Advice is no ban, and no permission either.
             "建議不要停汽車格": {},
             # A floor only where the bike parks now (review on #287).
