@@ -6,12 +6,16 @@
 --    空白 U+3000）後為空，就是沒有公開名稱；App 清空名稱時存空字串。
 -- 2. 既有點位上的 contributor_name 一次重算（只改值不同的列，點位的更新時間
 --    不變）。管理站帳號清單、編輯紀錄的名稱都呼叫同一支函式，一起改變。
--- 3. 代號（#280；使用者決定 PM_ANS_20261104_178＝B）：目前沒有非空
---    display_name 的帳號（只靠 full_name／name 回退才「公開」過），一次刪除它們
---    的 private.contributor_handle_holders，不再回傳代號。只在這次遷移做：之後
---    設過名稱再清空的人照 #280 保留代號（不會再被刪）。之後本人自己
---    設定名稱時，community_spots_handle_holder 觸發器重新記入；代號由帳號以
---    HMAC 算出、密鑰不輪替，所以拿回的是同一個代號，別人舊的隱藏清單恢復有效。
+-- 3. 代號（#280；使用者決定 PM_ANS_20261104_178＝B、_179＝B）：
+--    a. 一次清除：從來沒有自己設定過 display_name（metadata 沒有這個字串鍵，
+--       名稱只是後端從 Google 姓名帶出來）的帳號，刪除 private.contributor_handle_holders。
+--       自己清空過（display_name 是空字串）或名稱被管理員清除（contributor_name_clears，
+--       含檢舉結案「維持隱藏」）的帳號不刪：拿過代號就一直保留，不能靠改名或被清名
+--       繞過別人的封鎖。只在這次遷移做。
+--    b. 新的寫入路徑：auth.users 的 user_metadata 變成非空、不像 email 的 display_name 時（本人經
+--       Supabase Auth 更新自己的資料；別人與用戶端都不能替他寫），不需要有看得到的
+--       點就記入。代號由帳號以 HMAC 算出、密鑰不輪替，記回的是同一個代號，別人舊的
+--       隱藏清單恢復有效。已經設定過名稱的帳號一併補記。
 
 -- 202610250050_contributor_attribution.sql 的清理規則，只取 display_name。
 create or replace function public.contributor_display_name(p_metadata jsonb)
@@ -34,6 +38,29 @@ revoke execute on function public.contributor_display_name(jsonb) from public,an
 update public.community_spots s set contributor_name=''
   where s.contributor_name is distinct from public.spot_contributor_name(s.id,s.user_id,s.contributor_role);
 
--- 只靠回退名稱拿到的代號（目前沒有自己設定的公開名稱）。
+-- a. 從來沒有自己設定過 display_name 的帳號：刪除代號紀錄。
 delete from private.contributor_handle_holders h
-  where public.contributor_display_name((select u.raw_user_meta_data from auth.users u where u.id=h.user_id))='';
+  where not exists(select 1 from auth.users u where u.id=h.user_id
+    and jsonb_typeof(u.raw_user_meta_data->'display_name')='string');
+
+-- b. 本人設定非空 display_name：記入代號（不需要有看得到的點）。
+create function public.contributor_handle_on_name() returns trigger
+language plpgsql security definer set search_path='' as $$
+begin
+  -- 像 email 的名稱不算公開名稱（#280）。
+  if private.contributor_name_public(public.contributor_display_name(new.raw_user_meta_data))
+     and new.deleted_at is null and not new.is_anonymous then
+    perform private.contributor_handle_hold(new.id);
+  end if;
+  return null;
+end $$;
+revoke execute on function public.contributor_handle_on_name() from public,anon,authenticated,service_role;
+create trigger contributor_handle_on_name after insert or update of raw_user_meta_data on auth.users
+  for each row execute function public.contributor_handle_on_name();
+
+-- 已經設定過名稱的帳號一併補記。
+insert into private.contributor_handle_holders(user_id,handle)
+select u.id,private.contributor_handle(u.id) from auth.users u
+where private.contributor_name_public(public.contributor_display_name(u.raw_user_meta_data))
+  and u.deleted_at is null and not u.is_anonymous
+on conflict do nothing;
