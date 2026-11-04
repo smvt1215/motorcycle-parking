@@ -1,4 +1,4 @@
--- 客服案件系統（#295；202611020100_support_cases.sql）。
+-- 客服案件系統（#295；202611040100_support_cases.sql）。
 begin;
 create extension if not exists pgtap with schema extensions;
 set search_path=public,extensions;

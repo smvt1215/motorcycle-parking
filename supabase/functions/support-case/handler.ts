@@ -9,7 +9,7 @@
 //          case closed within 30 days opens again; after that the link
 //          says to fill in the form again (support.case_closed).
 //
-// public.support_case_link() (migration 202611020100_support_cases.sql) does
+// public.support_case_link() (migration 202611040100_support_cases.sql) does
 // the work: the token is `<case id>.<secret>`, only the secret's SHA-256 is
 // stored, a link lasts 30 days and takes 5 replies, a case 10 a Taiwan day
 // and 50 in all. Every bad token is the same 400. A reply tells ops@
