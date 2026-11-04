@@ -6,12 +6,15 @@
 --    contributor_name 非空且不含 @（和 App contributorSummary() 判斷「像
 --    email」一致）。發生過一次就記在 private.contributor_handle_holders，
 --    之後改名、名稱空白或像 email、被管理員清除都照樣有代號，直到刪除帳號
---    （on delete cascade）。只記「有沒有」，不記名稱。
+--    （on delete cascade）。不記名稱。
 -- 2. 代號＝HMAC-SHA256(uid, 伺服器密鑰) 的前 128 bit（32 個小寫 hex），密鑰
---    在 private.contributor_handle_key，不輪替。讀取時才算、不快取在點位
---    上：點位整列會被快照進 moderation_queue.base_spot、admin_audit_log 等
---    處，快取欄位會讓代號在帳號刪除後還留著、可以串連。帳號一刪（user_id
---    set null、holders cascade）就算不出來。從不回傳 uid。
+--    在 private.contributor_handle_key，不輪替。代號在記入 holders 時算好存在
+--    那一列（讀取時不必每列算 HMAC），不快取在點位上：點位整列會被快照進
+--    moderation_queue.base_spot、admin_audit_log 等處，存在點位上會讓代號在
+--    帳號刪除後還留著、可以串連。帳號一刪（user_id set null、holders
+--    cascade）就再也查不到。從不回傳 uid。
+--    記入由 AFTER 觸發器看最後落地的列（復原刪除的點時 deleted_at 由排在後面
+--    的 BEFORE 觸發器才清掉）。
 -- 3. is_own：已登入且投稿者是自己；未登入一律 false。
 -- 4. public_spots 最後加 contributor_handle、is_own 兩欄，viewport_spots_v3
 --    （App 目前讀的）與 api_v1.spots_in_viewport 一起有；官方點補 null／false。
@@ -29,8 +32,10 @@ create table private.contributor_handle_key (
 insert into private.contributor_handle_key(key) values(extensions.gen_random_bytes(32));
 revoke all on private.contributor_handle_key from public,anon,authenticated,service_role;
 
+-- 代號在寫入時算好存在這裡（帳號刪除時一併 cascade），讀取時不必每列算 HMAC。
 create table private.contributor_handle_holders (
   user_id uuid primary key references auth.users(id) on delete cascade,
+  handle text not null unique check (handle ~ '^[0-9a-f]{32}$'),
   first_public_at timestamptz not null default now()
 );
 revoke all on private.contributor_handle_holders from public,anon,authenticated,service_role;
@@ -39,7 +44,7 @@ comment on table private.contributor_handle_holders is
 
 -- 名稱算不算公開：非空、不含 @。
 create function private.contributor_name_public(p_name text) returns boolean
-language sql immutable security definer set search_path='' as $$
+language sql immutable set search_path='' as $$
   select coalesce(btrim(p_name),'')<>'' and position('@' in p_name)=0
 $$;
 revoke execute on function private.contributor_name_public(text) from public,anon,authenticated,service_role;
@@ -52,38 +57,43 @@ language sql stable security definer set search_path='' as $$
 $$;
 revoke execute on function private.contributor_handle(uuid) from public,anon,authenticated,service_role;
 
--- ===== 2. 寫入路徑：既有的 community_spots_contributor 觸發器 =====
--- 所有寫入（新增、改名同步、管理員復原、匯入）都經過它；其餘與
--- 202610250050_contributor_attribution.sql 相同。
-create or replace function public.community_spot_contributor() returns trigger
+create function private.contributor_handle_hold(p_user uuid) returns void
+language sql security definer set search_path='' as $$
+  insert into private.contributor_handle_holders(user_id,handle)
+  select p_user,private.contributor_handle(p_user) where p_user is not null
+  on conflict do nothing
+$$;
+revoke execute on function private.contributor_handle_hold(uuid) from public,anon,authenticated,service_role;
+
+-- ===== 2. 寫入路徑：community_spots 的 AFTER 觸發器 =====
+-- 看最後落地的列（BEFORE 觸發器依名稱執行，復原時 deleted_at 由排在後面的
+-- community_spots_soft_delete 才清掉）。所有寫入（新增、改名同步
+-- sync_contributor_names 觸發的更新、管理員復原、匯入）都經過它。
+create function public.community_spot_handle_holder() returns trigger
 language plpgsql security definer set search_path='' as $$
 begin
-  if tg_op='INSERT' then
-    new.contributor_role:=public.spot_contributor_role(new.user_id,new.source);
-  else
-    new.contributor_role:=old.contributor_role;
-  end if;
-  new.contributor_name:=public.spot_contributor_name(new.id,new.user_id,new.contributor_role);
   if new.user_id is not null and new.contributor_role='rider' and new.status<>'hidden'
      and new.deleted_at is null and private.contributor_name_public(new.contributor_name) then
-    insert into private.contributor_handle_holders(user_id) values(new.user_id) on conflict do nothing;
+    perform private.contributor_handle_hold(new.user_id);
   end if;
-  return new;
+  return null;
 end;
 $$;
-revoke execute on function public.community_spot_contributor() from public,anon,authenticated,service_role;
+revoke execute on function public.community_spot_handle_holder() from public,anon,authenticated,service_role;
+create trigger community_spots_handle_holder after insert or update on public.community_spots
+  for each row execute function public.community_spot_handle_holder();
 
 -- ===== 3. 回填 =====
 -- 目前公開的名稱。
-insert into private.contributor_handle_holders(user_id)
-select distinct s.user_id from public.community_spots s
+insert into private.contributor_handle_holders(user_id,handle)
+select u,private.contributor_handle(u) from (select distinct s.user_id as u from public.community_spots s
 where s.user_id is not null and s.contributor_role='rider' and s.status<>'hidden'
-  and s.deleted_at is null and private.contributor_name_public(s.contributor_name)
+  and s.deleted_at is null and private.contributor_name_public(s.contributor_name)) x
 on conflict do nothing;
 -- 以前公開過、後來被管理員清除或改掉的名稱：稽核紀錄與回報快照裡的前後值。
 -- 只會多給代號，不會少給（拿過就一直保留）。
-insert into private.contributor_handle_holders(user_id)
-select distinct s.user_id
+insert into private.contributor_handle_holders(user_id,handle)
+select u,private.contributor_handle(u) from (select distinct s.user_id as u
 from public.community_spots s
 join (
   select a.target_id as spot_id, v.name
@@ -96,13 +106,13 @@ join (
 ) past on past.spot_id=s.id::text
 where s.user_id is not null and s.contributor_role='rider'
   and private.contributor_name_public(past.name)
-  and past.name<>private.audit_redacted_name()
+  and past.name<>private.audit_redacted_name()) x
 on conflict do nothing;
 
 -- ===== 4. 給 public_spots 的兩支函式（例外：anon／authenticated 可執行） =====
 create function public.spot_contributor_handle(p_spot uuid) returns text
 language sql stable security definer set search_path='' as $$
-  select private.contributor_handle(s.user_id)
+  select h.handle
   from public.community_spots s
   join private.contributor_handle_holders h on h.user_id=s.user_id
   where s.id=p_spot and s.contributor_role='rider' and s.status<>'hidden' and s.deleted_at is null
