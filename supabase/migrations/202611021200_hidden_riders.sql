@@ -68,9 +68,15 @@ begin
   if v_bad then
     raise sqlstate 'PT400' using message='request.invalid', detail='{"field":"items"}';
   end if;
-  if exists(select 1 from jsonb_array_elements(items) e
+  -- 格式對但值不合法（2 月 30 日、時區 +99:00）也是 request.invalid。
+  begin
+    v_bad:=exists(select 1 from jsonb_array_elements(items) e
       where (e->>'hidden_at')::timestamptz>now()+interval '5 minutes'
-         or (e->>'hidden_at')::timestamptz<'2026-01-01T00:00:00Z') then
+         or (e->>'hidden_at')::timestamptz<'2026-01-01T00:00:00Z');
+  exception when invalid_datetime_format or datetime_field_overflow or invalid_time_zone_displacement_value then
+    v_bad:=true;
+  end;
+  if v_bad then
     raise sqlstate 'PT400' using message='request.invalid', detail='{"field":"hidden_at"}';
   end if;
   perform pg_advisory_xact_lock(hashtextextended('hidden-riders:'||v_user::text,0));

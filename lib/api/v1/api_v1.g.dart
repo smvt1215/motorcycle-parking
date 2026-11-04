@@ -991,7 +991,7 @@ class HiddenRider {
   /// 隱藏時所在的點位名稱
   final String? spotNameAtHide;
 
-  /// ISO 8601 時間
+  /// ISO 8601 時間；2026-01-01T00:00:00Z 起，不可晚於現在 5 分鐘以上
   final String hiddenAt;
 
   Map<String, Object?> toJson() => {
