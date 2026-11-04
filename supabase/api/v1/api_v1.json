@@ -314,7 +314,7 @@
       "post": {
         "operationId": "api_v1_hidden_riders_merge",
         "summary": "把隱藏的車友併入帳號",
-        "description": "要登入（不可匿名登入）。登入後上傳本機清單取聯集，也用來新增一筆。同一代號保留較早的 hidden_at 與當時的名稱。一次最多 500 筆；hidden_at 不可晚於現在 5 分鐘以上。合併後超過每帳號 500 筆時整批不寫入。不檢查代號是否存在。回傳合併後的完整清單。錯誤：400 request.invalid（detail.field）、400 hidden_riders.too_many（detail.limit）、401 auth.sign_in_required。",
+        "description": "要登入（不可匿名登入）。登入後上傳本機清單取聯集，也用來新增一筆。同一代號保留較早的 hidden_at 與當時的名稱。一次最多 500 筆；hidden_at 是 ISO 8601 時間，不可早於 2026-01-01T00:00:00Z、不可晚於現在 5 分鐘以上。合併後超過每帳號 500 筆時整批不寫入。不檢查代號是否存在。回傳合併後的完整清單。錯誤：400 request.invalid（detail.field）、400 hidden_riders.too_many（detail.limit）、401 auth.sign_in_required。",
         "x-requires-sign-in": true,
         "requestBody": {
           "required": true,
@@ -1013,7 +1013,7 @@
           },
           "hidden_at": {
             "type": "string",
-            "description": "ISO 8601 時間"
+            "description": "ISO 8601 時間；2026-01-01T00:00:00Z 起，不可晚於現在 5 分鐘以上"
           }
         }
       },

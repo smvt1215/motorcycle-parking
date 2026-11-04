@@ -270,7 +270,7 @@ export type HiddenRider = {
   name_at_hide?: string;
   /** 隱藏時所在的點位名稱 */
   spot_name_at_hide?: string;
-  /** ISO 8601 時間 */
+  /** ISO 8601 時間；2026-01-01T00:00:00Z 起，不可晚於現在 5 分鐘以上 */
   hidden_at: string;
 };
 export type HiddenRiders = {

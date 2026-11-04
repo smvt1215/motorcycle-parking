@@ -57,6 +57,12 @@ select throws_ok($$select api_v1.hidden_riders_merge(jsonb_build_array(pg_temp.i
 select throws_ok($$select api_v1.hidden_riders_merge(jsonb_build_array(pg_temp.item(5,'2099-01-01T00:00:00Z')))$$,
   'PT400','request.invalid','not in the future');
 select throws_ok($$select api_v1.hidden_riders_remove('nope')$$,'PT400','request.invalid','remove checks the handle');
+select throws_ok($$select api_v1.hidden_riders_merge(jsonb_build_array(pg_temp.item(5,'2026-02-30T00:00:00Z')))$$,
+  'PT400','request.invalid','an impossible date');
+select throws_ok($$select api_v1.hidden_riders_merge(jsonb_build_array(pg_temp.item(5,'2026-10-01T00:00:00+99:00')))$$,
+  'PT400','request.invalid','an impossible time zone');
+select throws_ok($$select api_v1.hidden_riders_merge(jsonb_build_array(pg_temp.item(5,'2025-10-01T00:00:00Z')))$$,
+  'PT400','request.invalid','before 2026');
 
 -- 上限 500：超過時整批不寫入。
 select is(jsonb_array_length(api_v1.hidden_riders_merge((select jsonb_agg(pg_temp.item(1000+n,'2026-10-01T00:00:00Z')) from generate_series(1,498) n))->'items'),500,
@@ -95,13 +101,16 @@ values('7a000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000
 insert into official_heavy_spots(id,name,lat,lng,city,space_type,source_url,source_name,effective_date)
 values('7a000000-0000-4000-8000-000000000003','收藏官方',23.903,120.903,'雲林縣','offStreet','https://example.test/f','雲林縣政府',current_date),
   ('7a000000-0000-4000-8000-000000000004','未生效官方',23.904,120.904,'雲林縣','offStreet','https://example.test/g','雲林縣政府',current_date+1);
+insert into official_heavy_spots(id,name,lat,lng,city,space_type,source_url,source_name,effective_date,hidden)
+values('7a000000-0000-4000-8000-000000000005','隱藏官方',23.905,120.905,'雲林縣','offStreet','https://example.test/h','雲林縣政府',current_date,true);
 set local role anon;
 select pg_temp.act('');
 create temporary table byids as select api_v1.spots_by_ids(array['7a000000-0000-4000-8000-000000000001','7a000000-0000-4000-8000-000000000002',
-  'official:7a000000-0000-4000-8000-000000000003','official:7a000000-0000-4000-8000-000000000004','tdx:Taipei:1','nope',
+  'official:7a000000-0000-4000-8000-000000000003','official:7a000000-0000-4000-8000-000000000004',
+  'official:7a000000-0000-4000-8000-000000000005','tdx:Taipei:1','nope',
   '7a000000-0000-4000-8000-000000000001']) as r;
 select is((select string_agg(e->>'name',',' order by n) from byids,jsonb_array_elements(r->'spots') with ordinality x(e,n)),'收藏官方,收藏一',
-  'visible spots come back once, official first; hidden, not yet effective and unknown ids do not');
+  'visible spots come back once, official first; hidden (community and official), not yet effective and unknown ids do not');
 select is((select e->>'id' from byids,jsonb_array_elements(r->'spots') e where e->>'name'='收藏官方'),
   'official:7a000000-0000-4000-8000-000000000003','official ids keep their prefix');
 select is((select array_agg(k order by k) from byids,jsonb_array_elements(r->'spots') e,jsonb_object_keys(e) k where e->>'name'='收藏官方'),
