@@ -31,44 +31,44 @@ class VocabularyTest(unittest.TestCase):
     def test_short_fact_lines_become_fixed_phrases(self):
         cases = {
             "按鈕取票": {"entrance_note": ["按鈕取票"]},
-            "機車區無柵欄": {"entrance_note": ["無柵欄"]},
-            "有六格重機專用格": {"parking_guide": ["重機專用格 6 格"]},
-            "專用2 格 或以上": {"parking_guide": ["重機專用格 2 格以上"]},
+            "機車區沒有柵欄": {"entrance_note": ["無柵欄"]},
+            "有七格重機專用格": {"parking_guide": ["重機專用格 7 格"]},
+            "專用3 格 或以上": {"parking_guide": ["重機專用格 3 格以上"]},
             "後牌辨析": {"entrance_note": ["後車牌辨識"]},
-            "推車吧少年 僅有前牌辨識": {"entrance_note": ["只辨識前車牌"]},
-            "汽車費率、無後方辨識": {"entrance_note": ["無後車牌辨識"]},
-            "汽車道按鈴請人員協助進入": {"entrance_note": ["需按鈴或請管理員協助", "走汽車車道"]},
+            "推著車走 僅有前牌辨識": {"entrance_note": ["只辨識前車牌"]},
+            "汽車價、無後方辨識": {"entrance_note": ["無後車牌辨識"]},
+            "汽車道按鈴請人員開門進入": {"entrance_note": ["需按鈴或請管理員協助", "走汽車車道"]},
             "無出入口管制": {"entrance_note": ["無柵欄"]},
-            "機車, B1有大重專用格6格": {"parking_guide": ["重機專用格 6 格", "重機停放樓層：B1"]},
-            "消費50元折1小時 跟店員拿代幣": {"entrance_note": ["需投幣或取代幣"], "note": ["消費可折抵停車費"]},
-            "沒看到禁止重機符號": {"note": ["現場未見禁止大型重機標示"]},
-            "2024年9月起禁止大型重機停放": {"note": ["有禁止大型重機停放的回報"]},
-            "半小時離場免費": {"note": ["前 30 分鐘免費"]},
+            "機車, B2有大重專用格5格": {"parking_guide": ["重機專用格 5 格", "重機停放樓層：B2"]},
+            "消費滿100元折2小時 向櫃台拿代幣": {"entrance_note": ["需投幣或取代幣"], "note": ["消費可折抵停車費"]},
+            "沒看到禁止重機的牌子": {"note": ["現場未見禁止大型重機標示"]},
+            "2023年5月起禁止大型重機停放": {"note": ["有禁止大型重機停放的回報"]},
+            "前半小時免費": {"note": ["前 30 分鐘免費"]},
             # A negation before the area, and two areas in one line (review on #287).
-            "重機只能停 B3 汽車區，不可停機車區": {"parking_guide": ["可停汽車格", "重機停放樓層：B3", "機車區禁止大型重機"]},
-            "後排辨識、有專用格，不可停汽車格": {"entrance_note": ["後車牌辨識"], "parking_guide": ["有重機專用格", "汽車區禁止大型重機"]},
-            "禁停機車格，只能停汽車格": {"parking_guide": ["機車區禁止大型重機", "可停汽車格"]},
+            "重機只能停 B2 汽車區，不可停機車區": {"parking_guide": ["可停汽車格", "重機停放樓層：B2", "機車區禁止大型重機"]},
+            "車牌後排辨識、有專用格，不能停汽車格": {"entrance_note": ["後車牌辨識"], "parking_guide": ["有重機專用格", "汽車區禁止大型重機"]},
+            "禁停機車區，只能停汽車區": {"parking_guide": ["機車區禁止大型重機", "可停汽車格"]},
             # A sign not seen is no ban; another vehicle's bays are not heavy-bike bays (review on #287).
-            "旁邊機車道未標示禁止重機": {"note": ["現場未見禁止大型重機標示"]},
-            "地下二樓有收費機車專用格2格、": {},
+            "對面機車道未標示禁止重機": {"note": ["現場未見禁止大型重機標示"]},
+            "一樓有機車專用格3格、": {},
             "重機專用格2格，機車專用格30格": {"parking_guide": ["重機專用格 2 格"]},
             # #298: no cash is no staff, a warning is no instruction, guesses are no facts.
-            "汽車費率 30h,半小時計費 鍵盤輸入 無現金繳費": {"entrance_note": ["鍵盤輸入車號"]},
+            "汽車費率 40h,每半小時計 鍵盤輸入 無現金繳費": {"entrance_note": ["鍵盤輸入車號"]},
             "現金繳費": {},
-            "人工收費，露天停車場。": {"entrance_note": ["人工繳費"]},
-            "設計不良，按鈕處在斜坡上，有倒車的危險": {"note": ["進出有斜坡"]},
-            "汽車費率 20h 倒退嚕": {"entrance_note": ["可能需倒車進場"]},
-            "只有前車牌辨識 必須倒車入場出場": {"entrance_note": ["只辨識前車牌", "可能需倒車進場"]},
-            "這邊忘記是後牌辨識還是悠遊卡進出": {},
-            "重機後牌辨識似乎沒啟用，通常要管理員才能進": {},
-            "只能停汽車格，停機車格會被管理員貼告示": {"parking_guide": ["可停汽車格", "停機車格可能被開單"]},
+            "人工收費，室內停車場。": {"entrance_note": ["人工繳費"]},
+            "繳費機設在斜坡上，有倒車的危險": {"note": ["進出有斜坡"]},
+            "汽車費率 25h 倒退嚕": {"entrance_note": ["可能需倒車進場"]},
+            "僅有前車牌辨識 必須倒車進出場": {"entrance_note": ["只辨識前車牌", "可能需倒車進場"]},
+            "我忘記是前牌還是悠遊卡": {},
+            "重機的車牌辨識似乎沒開，要找管理員": {},
+            "只能停汽車區，停機車區會被警衛貼告示": {"parking_guide": ["可停汽車格", "停機車格可能被開單"]},
             # Advice is no ban, and no permission either.
             "建議不要停汽車格": {},
             # A floor only where the bike parks now (review on #287).
-            "*原B3/B4重機停車區將於114年10月24日起調整至B2樓層-重機區": {"parking_guide": ["有重機專用格"]},
+            "原B5/B6重機區已於去年改到B4樓層-重機區": {"parking_guide": ["有重機專用格"]},
             "如有問題，請洽B3管理室": {},
-            "重機進入後到B1登記車號，停汽車車位": {"parking_guide": ["可停汽車格"]},
-            "2025/10/24 開始試辦停至 B2 重機停車區": {"parking_guide": ["有重機專用格", "重機停放樓層：B2"]},
+            "進場後到B2登記車號，停汽車車位": {"parking_guide": ["可停汽車格"]},
+            "2024/03/01 起改停 B3 重機停車區": {"parking_guide": ["有重機專用格", "重機停放樓層：B3"]},
         }
         for line, expected in cases.items():
             with self.subTest(line=line):
@@ -76,9 +76,9 @@ class VocabularyTest(unittest.TestCase):
                 self.assertEqual({k: v for k, v in found.items() if v}, expected)
 
     def test_other_lines_are_dropped_without_a_trace(self):
-        for line in ("猴子很多東西要收好", "2024/04更新", "勇者可以挑戰機車區", "***感謝Ding",
-                     "為提升路邊停車空間使用效率，台中市政府自115年起試辦",
-                     "不確定是否有重機專用格 但是大型停車場 我都直接停汽車格", "理論上可停"):
+        for line in ("停車場旁有很多野狗", "2023/01更新", "膽大的人可以試試機車區", "***感謝某位車友",
+                     "為了提高路邊車位周轉率，市府自去年起試辦",
+                     "不確定有沒有重機格，我都停汽車格", "理論上可停"):
             with self.subTest(line=line):
                 self.assertEqual(facts([line]), {"note": [], "entrance_note": [], "parking_guide": []})
 
@@ -97,13 +97,13 @@ class FeeTextTest(unittest.TestCase):
     def test_fragments_keep_only_fixed_words(self):
         cases = {
             "免費；需按鈴（大型重機停汽車區）": "免費；需按鈴或請管理員協助（大型重機停汽車區）",
-            "每小時 20 元；B2限悠遊卡（大型重機比照汽車費率）": "每小時 20 元；悠遊卡進出（大型重機比照汽車費率）",
+            "每小時 25 元；B3限悠遊卡（大型重機比照汽車費率）": "每小時 25 元；悠遊卡進出（大型重機比照汽車費率）",
             "平日每小時 20 元；假日每小時 40 元-後牌": "平日每小時 20 元；假日每小時 40 元；後車牌辨識",
-            "每小時 60 元左車道進": "每小時 60 元",
-            "每日 60 元起可能要留鑰匙（大型重機另訂費率）": "每日 60 元（大型重機另訂費率）",
-            "每小時 200 元；消費折抵；人工註記": "每小時 200 元；消費可折抵停車費",
+            "每小時 50 元右車道進": "每小時 50 元",
+            "每日 50 元起要押證件（大型重機另訂費率）": "每日 50 元（大型重機另訂費率）",
+            "每小時 100 元；消費折抵；手寫登記": "每小時 100 元；消費可折抵停車費",
             "營業時間": "請依現場公告",
-            "每日 30 元；電子票證每日 20 元": "每日 30 元；每日 20 元；悠遊卡進出",
+            "每日 40 元；電子票證每日 25 元": "每日 40 元；每日 25 元；悠遊卡進出",
             "每小時 30 元-按鈕": "每小時 30 元；按鈕取票",
             "請依現場公告": "請依現場公告",
             "平日每小時 30 元；假日每小時 50 元": "平日每小時 30 元；假日每小時 50 元",
@@ -125,10 +125,10 @@ class FeeTextTest(unittest.TestCase):
 class ScrubSpotTest(unittest.TestCase):
     def test_community_spot(self):
         old = {
-            "note": "來源標示為特殊收費或管理方式\n消費50元折1小時 跟店員拿代幣\n猴子很多",
-            "entrance_note": "來源標示：往西方向進入（⇦）\n來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）\n機車區無柵欄",
-            "parking_guide": "露天重機專用格\n勇者可以挑戰機車區",
-            "special_rules": "來源回報禁止大型重機停放\n一～五 07～09禁停大重機",
+            "note": "來源標示為特殊收費或管理方式\n消費滿100元折2小時 向櫃台拿代幣\n猴子很多",
+            "entrance_note": "來源標示：往西方向進入（⇦）\n來源標示進出場需注意（可能無後車牌辨識，需按鈴或請管理員協助）\n機車區沒有柵欄",
+            "parking_guide": "戶外重機專用格\n膽大的人可以試試機車區",
+            "special_rules": "來源回報禁止大型重機停放\n一～五 06～08禁停大重機",
         }
         self.assertEqual(scrub_spot(old, official=False), {
             "note": "消費可折抵停車費",
@@ -138,15 +138,15 @@ class ScrubSpotTest(unittest.TestCase):
         })
 
     def test_timed_shared_bays_keep_their_window(self):
-        self.assertEqual(scrub_spot({"special_rules": "20/d - 平日夜間18-8 / 假日限定"}, official=False)["special_rules"],
-                         "限時開放：平日夜間18-8 / 假日限定")
+        self.assertEqual(scrub_spot({"special_rules": "15/d - 平日夜間21-6 / 假日限定"}, official=False)["special_rules"],
+                         "限時開放：平日夜間21-6 / 假日限定")
 
     def test_official_spot(self):
         old = {
-            "note": f"{COMMUNITY}大型重機可停；停放區域：汽車區（每小時 30 元）\n來源原名稱：綠川東街14號(*收費亭 不是times)\n"
-                    "來源標示為未確認資訊\n用餐住宿比照汽車折抵\n已比對臺北市停車場資訊（TPE0997）",
-            "entrance_note": f"{COMMUNITY}\n汽車費率 20h 後牌辨析 / 慢慢都開始改成後",
-            "parking_guide": f"{COMMUNITY}\n先前已問過客服人員，機車停車場是",
+            "note": f"{COMMUNITY}大型重機可停；停放區域：汽車區（每小時 30 元）\n來源原名稱：某某街1號(*收費亭 不是某品牌)\n"
+                    "來源標示為未確認資訊\n住宿可以折抵\n已比對臺北市停車場資訊（TPE0997）",
+            "entrance_note": f"{COMMUNITY}\n汽車費率 25h 後牌辨析 / 之後可能會改",
+            "parking_guide": f"{COMMUNITY}\n之前打給客服，對方說機車場是",
             "special_rules": "臺北市路外停車場試辦大型重機停放機車區（各期 6 個月）：依現場標誌斜停",
         }
         self.assertEqual(scrub_spot(old, official=True), {
@@ -171,8 +171,8 @@ class ScrubSpotTest(unittest.TestCase):
 
 
 class ToolOutputTest(unittest.TestCase):
-    DESCRIPTION = ("汽車費率 20h 後牌辨析<br>有專用格4格以上，進場後順時鐘繞行，接近出口處右側可看到專用格<br>"
-                   "重機獨立費率 黃牌60/DAY 紅牌100/DAY 阿嬤在入口引導<br>猴子很多東西要收好<br>不管汽車或大型重機統一費率 30h 有人看守")
+    DESCRIPTION = ("汽車費率 25h 後牌辨析<br>設有專用格3格以上，進場後逆時針繞行，出口前左側可見專用格<br>"
+                   "重機另訂費率 黃牌50/DAY 紅牌90/DAY 阿伯在入口揮手<br>停車場旁有很多野狗<br>汽機車一律同價 25h 有人顧")
 
     def mark(self, layer, color="7CB342", icon="1538"):
         return {"layer": layer, "name": "(30/h - 需按鈴限專用格)測試停車場", "description": self.DESCRIPTION, "icon": icon,
@@ -202,7 +202,7 @@ class ToolOutputTest(unittest.TestCase):
         self.assertEqual(official["license_note"], OFFICIAL_LICENSE)
         self.assertEqual(official["entrance_note"], f"{COMMUNITY}\n後車牌辨識")
         self.assertIn("汽車區（每小時 30 元；需按鈴或請管理員協助）", official["note"])
-        self.assertEqual(official["parking_guide"], f"{COMMUNITY}\n重機專用格 4 格以上")
+        self.assertEqual(official["parking_guide"], f"{COMMUNITY}\n重機專用格 3 格以上")
 
 
 class ManualTest(unittest.TestCase):
