@@ -217,7 +217,7 @@ void main() {
   }
 
   for (final platform in platforms) {
-    testWidgets('P12 編輯個人資料：導覽列儲存、相簿停用（${platform.name}）', (tester) async {
+    testWidgets('P12 編輯個人資料：導覽列儲存、不顯示從相簿選擇（${platform.name}）', (tester) async {
       setView(tester, const Size(390, 844));
       final store = await createStore([]);
       await tester.pumpWidget(
@@ -233,11 +233,9 @@ void main() {
       final save = find.byKey(const ValueKey('profile-save'));
       expect(find.descendant(of: save, matching: find.text('儲存')), findsOne);
       expect(tester.getSize(save).height, greaterThanOrEqualTo(44));
-      expect(find.text('從相簿選擇'), findsOneWidget);
+      expect(find.text('從相簿選擇'), findsNothing);
       expect(find.text('移除頭像'), findsNothing);
-      expect(find.text('照片上傳開放後才能用（社群核實 P2）。現在使用預設頭像。'), findsOneWidget);
-      await tester.tap(find.text('從相簿選擇'), warnIfMissed: false);
-      await tester.pump();
+      expect(find.textContaining('照片上傳'), findsNothing);
       expect(tester.takeException(), isNull);
     }, variant: TargetPlatformVariant.only(platform));
   }

@@ -1,3 +1,4 @@
+import '../../domain/contributor_name.dart';
 import '../../models/fee.dart';
 import '../../models/parking.dart';
 import '../../models/parking_condition.dart';
@@ -52,9 +53,14 @@ bool spotFeeIsVehicleRate(ParkingSpot spot) => hasZoneFees(spot)
     : spot.fee != null ||
           (spot.zones.length == 1 && spot.zones.single.hasVehicleFees);
 
-/// Details link to the official license, never to imported community maps.
+/// 政府資料開放授權條款: the license official data is used under, linked from
+/// 帳號與設定's 資料來源與授權.
+final openDataLicenseUri = Uri.https('data.gov.tw', '/license');
+
+/// The license link for a spot's data: official spots only, never imported
+/// community maps.
 Uri? licenseLinkUri(ParkingSpot spot) =>
-    spot.isOfficial ? Uri.https('data.gov.tw', '/license') : null;
+    spot.isOfficial ? openDataLicenseUri : null;
 
 String regionSummary(ParkingSpot spot) =>
     '${spot.city.trim()}${spot.district.trim()}';
@@ -148,7 +154,8 @@ String contributorSummary(ParkingSpot spot) {
   if (spot.contributorRole == 'import' || spot.source == 'import') {
     return '由管理員自其他社群統整後匯入';
   }
-  final name = spot.contributorName.trim();
-  // Email is an account identifier, not a public reporter name.
-  return name.isEmpty || name.contains('@') ? '由車友回報' : '由車友 $name 回報';
+  // An email-shaped name is an account identifier, not a public reporter
+  // name; the same rule as the new spot form's name notice (P16b).
+  final name = publicContributorName(spot.contributorName);
+  return name == null ? '由車友回報' : '由車友 $name 回報';
 }

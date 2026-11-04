@@ -21,6 +21,9 @@ ADMIN_PATHS = (
 # The React admin rewrite (#195 P7) has its own Node toolchain and job; it
 # cannot reach the Flutter app, the mobile builds or the database.
 REACT_ADMIN_PATHS = ("admin_web/react/",)
+# The public pages (account deletion, support) have their own Node app and job,
+# deployed apart from the admin; they reach nothing else either.
+PUBLIC_WEB_PATHS = ("public_web/",)
 ROUTING_PATHS = (
     "tool/ci_changes.py", "tool/test_ci_changes.py", ".github/workflows/codeql.yml",
 )
@@ -62,6 +65,11 @@ PATHS = {
         "admin_web/DESIGN.md", ".github/workflows/ci.yml",
         # src/api/v1/*.generated.ts are generated from the API documents.
         "supabase/api/v1/",
+    ),
+    "public_web": PUBLIC_WEB_PATHS + ROUTING_PATHS + (
+        ".github/workflows/ci.yml",
+        # src/content.test.ts checks the page's words against the App's.
+        "lib/domain/account_deletion_display.dart",
     ),
 }
 

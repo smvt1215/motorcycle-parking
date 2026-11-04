@@ -70,7 +70,7 @@
       "post": {
         "operationId": "admin_v1_support_requests",
         "summary": "客服表單的申請（#269）",
-        "description": "無法登入者從 App 外刪除網頁送出的申請，新的在前。含聯絡 email 供管理員回覆；不要轉貼到其他地方。",
+        "description": "無法登入者從 App 外刪除網頁送出的申請，新的在前；唯讀紀錄與例外清單（#285）。登入信箱的主人在確認頁按「是我」後由系統直接建立刪除申請，管理員不代為申請。含 email 供客服回覆一般問題；不要轉貼到其他地方，也不要告訴對方是否找到帳號。",
         "requestBody": {
           "required": false,
           "content": {
@@ -85,6 +85,9 @@
                       "open",
                       "done",
                       "rejected",
+                      "voided",
+                      "expired",
+                      "exception",
                       "all"
                     ],
                     "default": "open",
@@ -129,7 +132,7 @@
       "post": {
         "operationId": "admin_v1_resolve_support_request",
         "summary": "客服申請結案",
-        "description": "done（已處理）或 rejected（無法確認身分等）。寫入 admin_audit_log（不記 email 與內容）。結案 180 天後自動刪除。錯誤：400 request.invalid、404 support.not_found、409 support.already_resolved。",
+        "description": "done（已處理）或 rejected（無法確認身分等）。寫入 admin_audit_log（不記 email 與內容）。結案 180 天後自動刪除。錯誤：400 request.invalid、404 support.not_found、409 support.already_resolved。 只用於一般客服問題與還在 open（已寄確認信）的申請；系統判定的終止狀態不能結案（#285）。",
         "requestBody": {
           "required": true,
           "content": {
@@ -175,66 +178,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SupportResolution"
-                }
-              }
-            }
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        }
-      }
-    },
-    "/rpc/request_account_deletion_for": {
-      "post": {
-        "operationId": "admin_v1_request_account_deletion_for",
-        "summary": "確認身分後代為申請刪除帳號（#269）",
-        "description": "依客服申請代為建立刪除申請：與自助申請相同的 7 天冷靜期、立即隱藏公開名稱；本人冷靜期內登入後可在 App 選擇取消。已有申請時回原申請。寫入 admin_audit_log。錯誤：400 request.invalid、404 support.not_found／account.not_found、409 support.already_resolved、403 account.admin_cannot_self_delete（管理員帳號要先移除權限）。",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "p_user",
-                  "p_support_request"
-                ],
-                "additionalProperties": false,
-                "properties": {
-                  "p_user": {
-                    "type": "string",
-                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                    "description": "要刪除的帳號"
-                  },
-                  "p_support_request": {
-                    "type": "string",
-                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                    "description": "客服申請編號"
-                  },
-                  "p_note": {
-                    "type": "string",
-                    "maxLength": 500,
-                    "default": "",
-                    "description": "如何確認身分"
-                  }
-                },
-                "example": {
-                  "p_user": "00000000-0000-4000-8000-000000000000",
-                  "p_support_request": "00000000-0000-4000-8000-000000000000",
-                  "p_note": ""
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "刪除申請的狀態",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AdminAccountDeletion"
                 }
               }
             }
@@ -311,7 +254,15 @@
           "notified_at",
           "resolved_at",
           "resolution_note",
-          "deletion_requested"
+          "deletion_requested",
+          "login_email",
+          "account_matched",
+          "matched_user",
+          "email_confirmed_at",
+          "exception",
+          "deletion_notified_at",
+          "cancelled_at",
+          "superseded_by"
         ],
         "additionalProperties": false,
         "properties": {
@@ -327,7 +278,7 @@
           },
           "contact_email": {
             "type": "string",
-            "description": "回覆用，已轉小寫"
+            "description": "聯絡用 email，已轉小寫；只寄固定回條（#285）。回覆時不要透露是否找到帳號"
           },
           "account_hint": {
             "type": "string",
@@ -341,8 +292,12 @@
             "enum": [
               "open",
               "done",
-              "rejected"
-            ]
+              "rejected",
+              "voided",
+              "expired",
+              "exception"
+            ],
+            "description": "open：已寄確認信，等登入信箱的主人確認；done：已確認並建立刪除申請（或客服結案）；rejected：客服結案；voided：申請者按「不是我申請的」，或重送後被取代；expired：確認連結過期；exception：系統例外，只記錄（見 exception）。open 以外都有 resolved_at"
           },
           "created_at": {
             "type": "string",
@@ -360,14 +315,77 @@
               "string",
               "null"
             ],
-            "description": "ISO 8601 時間。結案時間"
+            "description": "ISO 8601 時間。結束時間（系統判定或客服結案）；滿 180 天後刪除"
           },
           "resolution_note": {
             "type": "string"
           },
           "deletion_requested": {
             "type": "boolean",
-            "description": "已代為建立刪除申請"
+            "description": "已建立刪除申請"
+          },
+          "login_email": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "申請者填的帳號登入 email，已轉小寫，只用來比對帳號；確認信與通知信只寄到這裡（#285）。#285 之前的申請為 null"
+          },
+          "account_matched": {
+            "type": "boolean",
+            "description": "送出時登入 email 正好是一個帳號的（auth.users 或 auth.identities，不分大小寫，含 Apple 隱藏的電子郵件）"
+          },
+          "matched_user": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "description": "對到的帳號；沒對到或帳號已刪除時為 null"
+          },
+          "email_confirmed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ISO 8601 時間。登入信箱的主人在確認頁按「是我」的時間"
+          },
+          "exception": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "no_account",
+              "admin_account",
+              "deletion_pending",
+              "deletion_in_progress",
+              "account_deleted",
+              null
+            ],
+            "description": "系統例外的原因（status 為 exception 時）：no_account 沒對到帳號、admin_account 管理員帳號、deletion_pending 已在冷靜期（已寄狀態信到登入 email）、deletion_in_progress 正在刪除、account_deleted 已刪除。不建立刪除申請"
+          },
+          "deletion_notified_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ISO 8601 時間。建立刪除申請後寄到登入 email 的通知信寄出時間"
+          },
+          "cancelled_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ISO 8601 時間。以通知信的「取消刪除」連結取消的時間（#285）"
+          },
+          "superseded_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "description": "重送時取代這筆的申請（status 為 voided）"
           }
         }
       },
@@ -389,60 +407,6 @@
               "done",
               "rejected"
             ]
-          }
-        }
-      },
-      "AdminAccountDeletion": {
-        "type": "object",
-        "description": "帳號的刪除申請狀態（同 api_v1 的 AccountDeletionState）與客服申請編號",
-        "required": [
-          "status",
-          "requested_at",
-          "scheduled_at",
-          "can_self_delete",
-          "cannot_self_delete_reason",
-          "support_request"
-        ],
-        "additionalProperties": false,
-        "properties": {
-          "status": {
-            "type": "string",
-            "enum": [
-              "none",
-              "pending"
-            ]
-          },
-          "requested_at": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "ISO 8601 時間。申請時間"
-          },
-          "scheduled_at": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "ISO 8601 時間。最早刪除時間（申請＋7 天）"
-          },
-          "can_self_delete": {
-            "type": "boolean",
-            "description": "帳號能不能自助申請刪除（管理員為 false）"
-          },
-          "cannot_self_delete_reason": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "enum": [
-              "account.admin_cannot_self_delete",
-              null
-            ]
-          },
-          "support_request": {
-            "type": "string",
-            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
           }
         }
       }
