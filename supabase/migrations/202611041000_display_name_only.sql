@@ -6,8 +6,12 @@
 --    空白 U+3000）後為空，就是沒有公開名稱；App 清空名稱時存空字串。
 -- 2. 既有點位上的 contributor_name 一次重算（只改值不同的列，點位的更新時間
 --    不變）。管理站帳號清單、編輯紀錄的名稱都呼叫同一支函式，一起改變。
--- 3. 代號（#280）：private.contributor_handle_holders 不動。過去只靠 full_name
---    回退而「公開」過名稱的帳號照樣保留代號；這是待決的取捨（見 PR 說明）。
+-- 3. 代號（#280；使用者決定 PM_ANS_20261104_178＝B）：目前沒有非空
+--    display_name 的帳號（只靠 full_name／name 回退才「公開」過），一次刪除它們
+--    的 private.contributor_handle_holders，不再回傳代號。只在這次遷移做：之後
+--    設過名稱再清空的人照 #280 保留代號（不會再被刪）。之後本人自己
+--    設定名稱時，community_spots_handle_holder 觸發器重新記入；代號由帳號以
+--    HMAC 算出、密鑰不輪替，所以拿回的是同一個代號，別人舊的隱藏清單恢復有效。
 
 -- 202610250050_contributor_attribution.sql 的清理規則，只取 display_name。
 create or replace function public.contributor_display_name(p_metadata jsonb)
@@ -29,3 +33,7 @@ revoke execute on function public.contributor_display_name(jsonb) from public,an
 -- 重算：觸發器 community_spots_contributor 依新規則重算 contributor_name。
 update public.community_spots s set contributor_name=''
   where s.contributor_name is distinct from public.spot_contributor_name(s.id,s.user_id,s.contributor_role);
+
+-- 只靠回退名稱拿到的代號（目前沒有自己設定的公開名稱）。
+delete from private.contributor_handle_holders h
+  where public.contributor_display_name((select u.raw_user_meta_data from auth.users u where u.id=h.user_id))='';
