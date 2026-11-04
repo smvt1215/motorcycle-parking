@@ -22,7 +22,7 @@ class ReportNameNotice extends StatelessWidget {
           ? null
           : store.client?.auth.currentUser;
       if (user == null) return const SizedBox.shrink();
-      final name = publicContributorName(profileDisplayName(user));
+      final name = publicContributorName(profilePublicName(user));
       return _Notice(
         name: name,
         avatarUrl: profileAvatarUrl(user),

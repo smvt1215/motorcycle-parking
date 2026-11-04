@@ -333,7 +333,10 @@ void main() {
     await tester.runAsync(() => completeOAuth(store));
     await tester.pumpAndSettle();
     expect(find.text('帳號與設定'), findsOneWidget);
-    expect(find.text('測試騎士'), findsOneWidget);
+    // #319: a Google name alone is not public; the card asks to set one.
+    expect(find.text('尚未設定名稱'), findsOneWidget);
+    expect(find.text('設定名稱'), findsOneWidget);
+    expect(find.text('測試騎士'), findsNothing);
     expect(find.text('尚未登入'), findsNothing);
     expect(find.text('登出'), findsOneWidget);
     expect(find.text('登入成功'), findsOneWidget);
