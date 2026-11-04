@@ -400,6 +400,13 @@ void main() {
         profileNameSuggestion(user({'full_name': '陳小明'}, provider: 'apple')),
         isNull,
       );
+      // A display_name key that is null or not a string still counts as
+      // set: no suggestion, and no public name either.
+      for (final odd in [null, 3, true]) {
+        final u = user({'display_name': odd, 'full_name': '陳小明'});
+        expect(profileNameSuggestion(u), isNull, reason: '$odd');
+        expect(profilePublicName(u), isNull, reason: '$odd');
+      }
     });
 
     test('清空名稱時寫入空字串', () async {
