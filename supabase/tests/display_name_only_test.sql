@@ -77,10 +77,21 @@ values('7e000000-0000-4000-8000-000000000003','10000000-0000-4000-8000-000000000
 insert into contributor_name_clears(spot_id,cleared_by) values('7e000000-0000-4000-8000-000000000003','10000000-0000-4000-8000-000000000005');
 update community_spots set note='清除後' where id='7e000000-0000-4000-8000-000000000003';
 select is((select contributor_name from community_spots where id='7e000000-0000-4000-8000-000000000003'),'','(setup) an admin cleared the name');
--- 遷移的刪除：只刪從來沒有自己設定過 display_name 的帳號。
+-- 帳號 2 只有 Google 姓名、靠回退名稱拿過代號，之後名稱被管理員清除。
+update auth.users set raw_user_meta_data='{"full_name":"張被清"}' where id='10000000-0000-4000-8000-000000000002';
+insert into private.contributor_handle_holders(user_id,handle)
+values('10000000-0000-4000-8000-000000000002',private.contributor_handle('10000000-0000-4000-8000-000000000002')) on conflict do nothing;
+insert into community_spots(id,user_id,name,lat,lng,city,space_type,scooter_allowed,heavy_allowed,status)
+values('7e000000-0000-4000-8000-000000000004','10000000-0000-4000-8000-000000000002','回退又被清名',23.304,120.304,'雲林縣','freeMotorcycle',true,false,'pending');
+insert into contributor_name_clears(spot_id,cleared_by) values('7e000000-0000-4000-8000-000000000004','10000000-0000-4000-8000-000000000005');
+-- 遷移的刪除：只刪從來沒有自己設定過 display_name、名稱也沒被管理員清除過的帳號。
 delete from private.contributor_handle_holders h
   where not exists(select 1 from auth.users u where u.id=h.user_id
-    and jsonb_typeof(u.raw_user_meta_data->'display_name')='string');
+      and jsonb_typeof(u.raw_user_meta_data->'display_name')='string')
+    and not exists(select 1 from public.community_spots s join public.contributor_name_clears c on c.spot_id=s.id
+      where s.user_id=h.user_id);
+select ok(exists(select 1 from private.contributor_handle_holders where user_id='10000000-0000-4000-8000-000000000002'),
+  'a Google-name-only rider whose name an admin cleared keeps the handle');
 select ok(exists(select 1 from private.contributor_handle_holders where user_id='10000000-0000-4000-8000-000000000003'),
   'a rider who cleared their own name keeps the handle');
 select is(public.spot_contributor_handle('7e000000-0000-4000-8000-000000000003'),private.contributor_handle('10000000-0000-4000-8000-000000000001'),
@@ -117,10 +128,12 @@ update auth.users set raw_user_meta_data='{"display_name":"匿名"}' where id='1
 select ok(not exists(select 1 from private.contributor_handle_holders where user_id='10000000-0000-4000-8000-000000000004'),
   'an anonymous sign-in gets no handle');
 -- 像 email 的名稱不記（#280）。
-delete from private.contributor_handle_holders where user_id='10000000-0000-4000-8000-000000000002';
-update auth.users set raw_user_meta_data='{"display_name":"a@b.test"}' where id='10000000-0000-4000-8000-000000000002';
-select ok(not exists(select 1 from private.contributor_handle_holders where user_id='10000000-0000-4000-8000-000000000002'),
+update auth.users set raw_user_meta_data='{"display_name":"a@b.test"}' where id='10000000-0000-4000-8000-000000000006';
+delete from private.contributor_handle_holders where user_id='10000000-0000-4000-8000-000000000006';
+update auth.users set raw_user_meta_data='{"display_name":"c@d.test"}' where id='10000000-0000-4000-8000-000000000006';
+select ok(not exists(select 1 from private.contributor_handle_holders where user_id='10000000-0000-4000-8000-000000000006'),
   'an email-like name gives no handle');
+update auth.users set raw_user_meta_data='{"full_name":"王大明","display_name":""}' where id='10000000-0000-4000-8000-000000000006';
 -- 新帳號註冊時就帶 display_name 也記入；只有 Google 姓名的不記。
 select ok(exists(select 1 from pg_trigger where tgname='contributor_handle_on_name' and tgrelid='auth.users'::regclass),
   'the trigger watches account metadata');

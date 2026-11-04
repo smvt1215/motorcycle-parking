@@ -9,8 +9,8 @@
 -- 3. 代號（#280；使用者決定 PM_ANS_20261104_178＝B、_179＝B）：
 --    a. 一次清除：從來沒有自己設定過 display_name（metadata 沒有這個字串鍵，
 --       名稱只是後端從 Google 姓名帶出來）的帳號，刪除 private.contributor_handle_holders。
---       自己清空過（display_name 是空字串）或名稱被管理員清除（contributor_name_clears，
---       含檢舉結案「維持隱藏」）的帳號不刪：拿過代號就一直保留，不能靠改名或被清名
+--       自己清空過（display_name 是空字串）或名稱被管理員清除過（contributor_name_clears，
+--       含檢舉結案「維持隱藏」；不論有沒有 display_name）的帳號不刪：拿過代號就一直保留，不能靠改名或被清名
 --       繞過別人的封鎖。只在這次遷移做。
 --    b. 新的寫入路徑：auth.users 的 user_metadata 變成非空、不像 email 的 display_name 時（本人經
 --       Supabase Auth 更新自己的資料；別人與用戶端都不能替他寫），不需要有看得到的
@@ -39,9 +39,13 @@ update public.community_spots s set contributor_name=''
   where s.contributor_name is distinct from public.spot_contributor_name(s.id,s.user_id,s.contributor_role);
 
 -- a. 從來沒有自己設定過 display_name 的帳號：刪除代號紀錄。
+-- 名稱被管理員清除過的帳號（contributor_name_clears，含檢舉結案「維持隱藏」）
+-- 不論有沒有 display_name 都保留。
 delete from private.contributor_handle_holders h
   where not exists(select 1 from auth.users u where u.id=h.user_id
-    and jsonb_typeof(u.raw_user_meta_data->'display_name')='string');
+      and jsonb_typeof(u.raw_user_meta_data->'display_name')='string')
+    and not exists(select 1 from public.community_spots s join public.contributor_name_clears c on c.spot_id=s.id
+      where s.user_id=h.user_id);
 
 -- b. 本人設定非空 display_name：記入代號（不需要有看得到的點）。
 create function public.contributor_handle_on_name() returns trigger
@@ -55,7 +59,9 @@ begin
   return null;
 end $$;
 revoke execute on function public.contributor_handle_on_name() from public,anon,authenticated,service_role;
-create trigger contributor_handle_on_name after insert or update of raw_user_meta_data on auth.users
+-- Google、Apple 登入時合併進 metadata 的鍵不含 display_name；日後若接入會帶
+-- display_name 的登入方式，要重新評估。匿名帳號轉正式帳號時也檢查一次。
+create trigger contributor_handle_on_name after insert or update of raw_user_meta_data,is_anonymous on auth.users
   for each row execute function public.contributor_handle_on_name();
 
 -- 已經設定過名稱的帳號一併補記。
