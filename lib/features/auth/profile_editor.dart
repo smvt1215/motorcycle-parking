@@ -42,6 +42,10 @@ class _ProfileEditorState extends State<ProfileEditor> {
           suggestion != null ||
           (user?.userMetadata?.containsKey('display_name') ?? false));
 
+  /// No public name to show (② ③ or a blank field): the avatar falls back
+  /// to the generic person, not a letter.
+  bool get _noPublicName => _suggesting || _blankPrivate || _typed.isEmpty;
+
   @override
   void dispose() {
     name.dispose();
@@ -158,7 +162,7 @@ class _ProfileEditorState extends State<ProfileEditor> {
                       child: ProfileAvatar(
                         url: remove ? '' : profileAvatarUrl(user),
                         // No public name (② ③): the generic person.
-                        name: _suggesting || _blankPrivate ? '' : name.text,
+                        name: _noPublicName ? '' : name.text,
                         size: 96,
                       ),
                     ),
@@ -183,7 +187,9 @@ class _ProfileEditorState extends State<ProfileEditor> {
                         ),
                       ),
                       Text(
-                        profileRemoveAvatarHint,
+                        _noPublicName
+                            ? profileRemoveAvatarHintDefault
+                            : profileRemoveAvatarHint,
                         textAlign: TextAlign.center,
                         style: quiet,
                       ),
