@@ -89,8 +89,12 @@ def fee_changes(spot, official):
 
 # Spots an administrator had edited, which the text layer leaves alone: the values the
 # user approved (PM_ANS_20261102_157). None means the text layer's own rewrite of that field.
-# 吉林路汽機車共用車格 (9b0e52fb) waits for a decision on structured time bans and is not here.
+# 吉林路汽機車共用車格 (9b0e52fb): no_parking has no vehicle key, so the heavy-bike ban stays a
+# fixed sentence until the contract can say it (PM_ANS_20261104_174); its fee_note
+# 每次 20 元（24 小時內） stays as it is, since per_visit cannot say 24 hours.
+JILIN_BAN = "平日（週一至週五）07:00–09:00 禁止大型重機停放"
 ADMIN_FIXES = {
+    "9b0e52fb-4c50-590b-9d8f-f100ea38178e": {"special_rules": JILIN_BAN},
     "69cba8d0-8ab6-5fe7-99e8-17ad4a98767f": {"entrance_note": "走機車車道\n入口位於敬業四路右側"},
     "0fce7fc1-0704-55f0-ac0a-977c18abfbdb": {"note": None, "entrance_note": "", "parking_guide": ""},
     "517015fc-b75f-527b-824c-8dac7f864750": {"note": "", "entrance_note": "無柵欄"},
@@ -305,13 +309,14 @@ drop table pg_temp.strip_fee_o;
 """
 
 
-MANUAL_HEAD = """-- 我的地圖匯入點的人工修正（#275，PM_ANS_20261102_157），接 202611020100～0120：
+MANUAL_HEAD = """-- 我的地圖匯入點的人工修正（#275，PM_ANS_20261102_157），接 202611040100～0120：
 --   1. 夾帶評論的 17 個社群點名稱改寫（tool/mymaps_facts.py 的 MANUAL）；名稱中的
 --      事實沒有結構化欄位可放，寫成固定句（入口位於…、營業時間、月租、限住宿或
 --      消費客人停放、不可過夜停放…）。repo 的 JSON 已用同一份清單改寫。
 --   2. 管理員編輯過、清除時排除的點位，照使用者確認的值寫入（tool/mymaps_strip_sql.py
---      的 ADMIN_FIXES）。吉林路汽機車共用車格（9b0e52fb）等時段禁停的結構化決定，
---      本次不動。
+--      的 ADMIN_FIXES）。吉林路汽機車共用車格（9b0e52fb）的大型重機時段禁停寫成固定句
+--      （契約的 no_parking 沒有車種，擴充後再轉結構化）；它的 fee_note「每次 20 元
+--      （24 小時內）」照留，不寫結構化 fee（PM_ANS_20261104_174）。
 -- 每列以名稱與四個文字欄位現值的 md5 比對，被改過的列不會被改。
 -- 稽核：每個點位一筆 manual_fix_text（before／after 只有改到的欄位，不含原文），
 -- 並另寫一筆摘要。

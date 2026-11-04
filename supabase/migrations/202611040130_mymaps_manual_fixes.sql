@@ -1,10 +1,11 @@
--- 我的地圖匯入點的人工修正（#275，PM_ANS_20261102_157），接 202611020100～0120：
+-- 我的地圖匯入點的人工修正（#275，PM_ANS_20261102_157），接 202611040100～0120：
 --   1. 夾帶評論的 17 個社群點名稱改寫（tool/mymaps_facts.py 的 MANUAL）；名稱中的
 --      事實沒有結構化欄位可放，寫成固定句（入口位於…、營業時間、月租、限住宿或
 --      消費客人停放、不可過夜停放…）。repo 的 JSON 已用同一份清單改寫。
 --   2. 管理員編輯過、清除時排除的點位，照使用者確認的值寫入（tool/mymaps_strip_sql.py
---      的 ADMIN_FIXES）。吉林路汽機車共用車格（9b0e52fb）等時段禁停的結構化決定，
---      本次不動。
+--      的 ADMIN_FIXES）。吉林路汽機車共用車格（9b0e52fb）的大型重機時段禁停寫成固定句
+--      （契約的 no_parking 沒有車種，擴充後再轉結構化）；它的 fee_note「每次 20 元
+--      （24 小時內）」照留，不寫結構化 fee（PM_ANS_20261104_174）。
 -- 每列以名稱與四個文字欄位現值的 md5 比對，被改過的列不會被改。
 -- 稽核：每個點位一筆 manual_fix_text（before／after 只有改到的欄位，不含原文），
 -- 並另寫一筆摘要。
@@ -12,7 +13,7 @@
 create temporary table manual_fix(tbl text,id text,guard text,name text,note text,entrance_note text,parking_guide text,special_rules text,
   changed jsonb);
 
--- manual_fix: 21
+-- manual_fix: 22
 insert into pg_temp.manual_fix(tbl,id,guard,name,note,entrance_note,parking_guide,special_rules,changed) select v.column1,v.column2,v.column3,v.column4,v.column5,v.column6,v.column7,v.column8,v.column9::jsonb from (values
   ('c','033a3826-d3dd-522a-990f-6066414d3d96','4a14f8ad212c47b68b576fbdcfe35b1e','綠川東街14號 收費停車場','','','','','{"name": "綠川東街14號 收費停車場"}'),
   ('c','12a51015-95ef-5dec-83f7-8dc68ede31f1','14a95d276637ea502f7dc06b33d0fd0f','城市車旅 社頭停車場','','進場辨識後車牌，出場辨識前車牌','','','{"name": "城市車旅 社頭停車場", "entrance_note": "進場辨識後車牌，出場辨識前車牌"}'),
@@ -27,6 +28,7 @@ insert into pg_temp.manual_fix(tbl,id,guard,name,note,entrance_note,parking_guid
 入口位於敬業四路右側','','','{"entrance_note": "走機車車道\n入口位於敬業四路右側"}'),
   ('c','79dd300d-d87c-5c22-b09b-8a48ec7c2d6b','1dcb7c273a9d1bc6fefb3f6fdf1c8ac4','板橋怡寶大樓停車場','營業時間 07:00–24:00','按鈕取票','','來源回報禁止大型重機停放','{"name": "板橋怡寶大樓停車場", "note": "營業時間 07:00–24:00"}'),
   ('c','8a8a51bc-c0e7-55bd-8436-ff9646ca3d96','d137f883db80c991d225b633ed232513','台灣聯通停車場 石潭場','重機月租每 30 日 1500 元','後車牌辨識','','','{"name": "台灣聯通停車場 石潭場", "note": "重機月租每 30 日 1500 元"}'),
+  ('c','9b0e52fb-4c50-590b-9d8f-f100ea38178e','c394d3b27f32aeca93a658731c8cc18a','吉林路汽機車共用車格','','','','平日（週一至週五）07:00–09:00 禁止大型重機停放','{"special_rules": "平日（週一至週五）07:00–09:00 禁止大型重機停放"}'),
   ('c','a09367d0-f2b7-5deb-9ea8-7adfc41d7cab','ee67a6a15d5f1488d80a20aa9310b7e8','佳音168Parking停車場','','悠遊卡進出','','','{"name": "佳音168Parking停車場"}'),
   ('c','afbb3886-d70a-5e79-95b5-9167a1f31917','2b75002811f13f1e690e716b17dbb392','屏東夜市復興停車場（謙正巷入口）','不可過夜停放','按鈕取票','','','{"name": "屏東夜市復興停車場（謙正巷入口）"}'),
   ('c','bbe52090-0902-546f-a527-1bc02b747125','d76a3838add9bfe90eba11d2b2af8943','秀泰生活嘉義店停車場','','需按鈴或請管理員協助','','','{"name": "秀泰生活嘉義店停車場"}'),

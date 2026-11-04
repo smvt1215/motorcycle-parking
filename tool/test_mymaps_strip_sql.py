@@ -99,6 +99,20 @@ class StripSqlTest(unittest.TestCase):
                       "'松江路25巷38號','','無柵欄','',''", sql)
         self.assertIn("disable trigger community_spots_flags_from_entries", sql)
 
+    def test_jilin_ban_is_a_fixed_sentence_and_its_fee_note_stays(self):
+        jilin = "9b0e52fb-4c50-590b-9d8f-f100ea38178e"
+        old = "一～五 07～09禁停大重機"
+        rows_c = self.rows_c + [community(jilin, name="吉林路汽機車共用車格", special_rules=old,
+                                          fee_note="每次 20 元（24 小時內）（大型重機比照機車費率）")]
+        root = self.backup(rows_c, self.rows_o, self.audits + [{"action": "update_spot", "target_id": jilin}])
+        sql = strip.migration(root, "manual")
+        self.assertNotIn(old, sql)
+        self.assertIn(f"('c','{jilin}','{strip.guard('吉林路汽機車共用車格', '', '', '', old)}','吉林路汽機車共用車格','','','',"
+                      f"{strip.literal(strip.JILIN_BAN)}", sql)
+        # Fee notes are not columns of this layer, and the fee layer skips edited spots.
+        self.assertNotIn("fee_note=", sql)
+        self.assertNotIn(f"'{jilin}'", strip.migration(root, "fee"))
+
     def test_guards_match_postgres(self):
         self.assertEqual(strip.guard("a", None, "b"), hashlib.md5("a\x1f\x1fb".encode()).hexdigest())
         # jsonb sorts keys by length, then bytes, and prints ", " / ": ".
