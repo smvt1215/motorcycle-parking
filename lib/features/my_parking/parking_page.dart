@@ -10,6 +10,7 @@ import '../auth/profile_avatar.dart';
 import '../favorites/favorite_card.dart';
 import '../map/map_legend.dart';
 import '../report/report_sheet.dart';
+import '../settings/settings_page.dart';
 
 /// Favorites shown here, nearest first; the rest are one tap away on the
 /// favorites page (canvas v157 P4).

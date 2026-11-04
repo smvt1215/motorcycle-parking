@@ -15,7 +15,6 @@ import '../../domain/parking_decision.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../auth/sign_in.dart';
 
-import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:pointer_interceptor/pointer_interceptor.dart';
@@ -143,7 +142,6 @@ class _SpotSheetState extends State<SpotSheet> {
 
   Widget _buildDetails(BuildContext context) {
     final store = widget.store, spot = widget.spot;
-    final sourceUri = licenseLinkUri(spot);
     final colors = Theme.of(context).colorScheme;
     final photos = SpotPhotos.usable(spot.photoUrls);
     // Tablets keep a phone-width sheet instead of spanning the screen.
@@ -154,7 +152,7 @@ class _SpotSheetState extends State<SpotSheet> {
         // Over a Google map on the web, the sheet must take its own clicks.
         child: PointerInterceptor(
           intercepting: kIsWeb,
-          child: _sheet(context, store, spot, sourceUri, colors, photos),
+          child: _sheet(context, store, spot, colors, photos),
         ),
       ),
     );
@@ -164,7 +162,6 @@ class _SpotSheetState extends State<SpotSheet> {
     BuildContext context,
     AppStore store,
     ParkingSpot spot,
-    Uri? sourceUri,
     ColorScheme colors,
     List<String> photos,
   ) {
@@ -472,16 +469,6 @@ class _SpotSheetState extends State<SpotSheet> {
                                       spot: spot,
                                       history: history,
                                     ),
-                                    if (sourceUri != null)
-                                      TextButton(
-                                        onPressed: () =>
-                                            runAction(ctx, () async {
-                                              if (!await launchUrl(sourceUri)) {
-                                                throw StateError('無法開啟資料授權');
-                                              }
-                                            }),
-                                        child: const Text('查看政府資料授權'),
-                                      ),
                                     if (spot.stale) ...[
                                       const SizedBox(height: 8),
                                       const _DetailRow(

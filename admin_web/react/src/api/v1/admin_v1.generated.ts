@@ -28,16 +28,6 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.body,
       }),
     }),
-    adminV1RequestAccountDeletionFor: build.mutation<
-      AdminV1RequestAccountDeletionForApiResponse,
-      AdminV1RequestAccountDeletionForApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/rpc/request_account_deletion_for`,
-        method: 'POST',
-        body: queryArg.body,
-      }),
-    }),
   }),
   overrideExisting: false,
 });
@@ -55,7 +45,7 @@ export type AdminV1SupportRequestsApiResponse = /** status 200 申請 */ Support
 export type AdminV1SupportRequestsApiArg = {
   body: {
     /** 只列這個狀態；all 列全部 */
-    p_status?: 'open' | 'done' | 'rejected' | 'all';
+    p_status?: 'open' | 'done' | 'rejected' | 'voided' | 'expired' | 'exception' | 'all';
     p_limit?: number;
   };
 };
@@ -64,18 +54,6 @@ export type AdminV1ResolveSupportRequestApiArg = {
   body: {
     p_id: string;
     p_status: 'done' | 'rejected';
-    p_note?: string;
-  };
-};
-export type AdminV1RequestAccountDeletionForApiResponse =
-  /** status 200 刪除申請的狀態 */ AdminAccountDeletion;
-export type AdminV1RequestAccountDeletionForApiArg = {
-  body: {
-    /** 要刪除的帳號 */
-    p_user: string;
-    /** 客服申請編號 */
-    p_support_request: string;
-    /** 如何確認身分 */
     p_note?: string;
   };
 };
@@ -97,41 +75,61 @@ export type ApiError = {
 export type SupportRequest = {
   id: string;
   kind: 'account_deletion';
-  /** 回覆用，已轉小寫 */
+  /** 聯絡用 email，已轉小寫；只寄固定回條（#285）。回覆時不要透露是否找到帳號 */
   contact_email: string;
   /** 申請者說明的帳號線索（登入方式、當時的 email 或名稱） */
   account_hint: string;
   message: string;
-  status: 'open' | 'done' | 'rejected';
+  /** open：已寄確認信，等登入信箱的主人確認；done：已確認並建立刪除申請（或客服結案）；rejected：客服結案；voided：申請者按「不是我申請的」，或重送後被取代；expired：確認連結過期；exception：系統例外，只記錄（見 exception）。open 以外都有 resolved_at */
+  status: 'open' | 'done' | 'rejected' | 'voided' | 'expired' | 'exception';
   /** ISO 8601 時間。送出時間 */
   created_at: string;
   /** ISO 8601 時間。通知信寄出時間；沒有寄信服務時為 null */
   notified_at: string | null;
-  /** ISO 8601 時間。結案時間 */
+  /** ISO 8601 時間。結束時間（系統判定或客服結案）；滿 180 天後刪除 */
   resolved_at: string | null;
   resolution_note: string;
-  /** 已代為建立刪除申請 */
+  /** 已建立刪除申請 */
   deletion_requested: boolean;
+  /** 申請者填的帳號登入 email，已轉小寫，只用來比對帳號；確認信與通知信只寄到這裡（#285）。#285 之前的申請為 null */
+  login_email: string | null;
+  /** 送出時登入 email 正好是一個帳號的（auth.users 或 auth.identities，不分大小寫，含 Apple 隱藏的電子郵件） */
+  account_matched: boolean;
+  /** 對到的帳號；沒對到或帳號已刪除時為 null */
+  matched_user: string | null;
+  /** ISO 8601 時間。登入信箱的主人在確認頁按「是我」的時間 */
+  email_confirmed_at: string | null;
+  /** 系統例外的原因（status 為 exception 時）：no_account 沒對到帳號、admin_account 管理員帳號、deletion_pending 已在冷靜期（已寄狀態信到登入 email）、deletion_in_progress 正在刪除、account_deleted 已刪除。不建立刪除申請 */
+  exception:
+    | (
+        | 'no_account'
+        | 'admin_account'
+        | 'deletion_pending'
+        | 'deletion_in_progress'
+        | 'account_deleted'
+        | null
+      )
+    | (
+        | 'no_account'
+        | 'admin_account'
+        | 'deletion_pending'
+        | 'deletion_in_progress'
+        | 'account_deleted'
+        | null
+      );
+  /** ISO 8601 時間。建立刪除申請後寄到登入 email 的通知信寄出時間 */
+  deletion_notified_at: string | null;
+  /** ISO 8601 時間。以通知信的「取消刪除」連結取消的時間（#285） */
+  cancelled_at: string | null;
+  /** 重送時取代這筆的申請（status 為 voided） */
+  superseded_by: string | null;
 };
 export type SupportResolution = {
   id: string;
   status: 'done' | 'rejected';
 };
-export type AdminAccountDeletion = {
-  status: 'none' | 'pending';
-  /** ISO 8601 時間。申請時間 */
-  requested_at: string | null;
-  /** ISO 8601 時間。最早刪除時間（申請＋7 天） */
-  scheduled_at: string | null;
-  /** 帳號能不能自助申請刪除（管理員為 false） */
-  can_self_delete: boolean;
-  cannot_self_delete_reason:
-    ('account.admin_cannot_self_delete' | null) | ('account.admin_cannot_self_delete' | null);
-  support_request: string;
-};
 export const {
   useAdminV1SetMinSupportedAppVersionMutation,
   useAdminV1SupportRequestsQuery,
   useAdminV1ResolveSupportRequestMutation,
-  useAdminV1RequestAccountDeletionForMutation,
 } = injectedRtkApi;
