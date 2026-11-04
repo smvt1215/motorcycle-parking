@@ -8,9 +8,10 @@
 --      license_note、source_url、fee_note、fee_source_text 非空時換成固定文字，
 --      parking_zones 各區的 fee_note 也換掉（PM_ANS_20261102_157）；其他鍵（結構化
 --      費率 fee、旗標、座標、時間…）照留，變更紀錄仍看得出改了哪些欄位。
---   3. 不可修改的觸發器只另外放行「把一列改成它的遮蔽結果」：只有
---      public.admin_audit_mask_mymaps_text() 在交易內設 app.audit_mask_mymaps，
---      其他欄位不變、該列真的含署名。其他修改、刪除、truncate 仍然禁止。
+--   3. 不可修改的觸發器另外放行一種修改：交易內設有 app.audit_mask_mymaps 時，若
+--      新的一列正好是舊列的遮蔽結果（其他欄位不變、舊列確實含署名），就放行。
+--      這個旗標只有 public.admin_audit_mask_mymaps_text() 會設定；就算別人設了，
+--      能做的也只有同一個遮蔽。其他修改、刪除、truncate 仍然禁止。
 --   4. 執行一次並另寫一筆稽核（只記筆數與 id 範圍）。之後再呼叫找不到要遮蔽的列。
 
 create function private.audit_mymaps_keys() returns text[]
