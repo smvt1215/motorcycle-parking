@@ -114,7 +114,9 @@ Future<void> showSettings(BuildContext context, AppStore store) {
   );
 }
 
-/// A row that opens [uri] in the browser.
+/// A row that opens [uri] in the in-app browser (SFSafariViewController,
+/// Chrome Custom Tabs), the same as sign-in's consent links: closing it
+/// returns to settings.
 class _LinkTile extends StatelessWidget {
   const _LinkTile({
     super.key,
@@ -135,7 +137,7 @@ class _LinkTile extends StatelessWidget {
     subtitle: subtitle == null ? null : Text(subtitle!),
     trailing: const Icon(Icons.open_in_new),
     onTap: () => runAction(context, () async {
-      if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (!await launchUrl(uri, mode: LaunchMode.inAppBrowserView)) {
         throw StateError('無法開啟$title');
       }
     }),
