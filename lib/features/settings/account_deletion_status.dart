@@ -220,7 +220,7 @@ class DeletionNoticePage extends StatelessWidget {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            appleRevokeFailedBody,
+                            appleRevokeFailedBodyFor(ios: isCupertino),
                             style: text.bodySmall?.copyWith(
                               color: colors.onTertiaryContainer,
                             ),

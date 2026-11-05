@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:motorcycle_parking/data/account_deletion.dart';
 import 'package:motorcycle_parking/domain/account_deletion_display.dart';
@@ -155,6 +156,78 @@ void main() {
       await attempt.submit();
       expect(gateway.calls.last, 'request');
       expect(attempt.appleRevokeFailed, isTrue);
+    });
+
+    group('Android 的 Apple 帳號（#219）', () {
+      setUp(() => debugDefaultTargetPlatformOverride = TargetPlatform.android);
+      tearDown(() => debugDefaultTargetPlatformOverride = null);
+
+      test('剛登入也一律再用 Apple 登入，撤銷這次登入拿到的 token 再申請', () async {
+        final gateway = FakeDeletionGateway(current: apple(signedInAt: now))
+          ..reauths.add(apple(signedInAt: now, token: 'android-rt'));
+        final attempt = DeletionAttempt(gateway, clock: () => now);
+        expect(attempt.needsReauth, isTrue);
+        await expectLater(attempt.submit(), throwsA(isA<ReauthRequired>()));
+        await attempt.reauthenticate();
+        expect(attempt.needsReauth, isFalse);
+        await attempt.submit();
+        expect(gateway.calls, [
+          'reauth:apple',
+          'revoke:android-rt:refresh_token',
+          'request',
+        ]);
+        expect(attempt.appleRevokeFailed, isFalse);
+      });
+
+      test('只拿到 access token 時用 access_token 撤銷', () async {
+        final gateway = FakeDeletionGateway(current: apple(signedInAt: now))
+          ..reauths.add(
+            AccountIdentity(
+              id: 'rider',
+              apple: true,
+              signedInAt: now,
+              appleToken: 'android-at',
+              appleTokenHint: 'access_token',
+            ),
+          );
+        final attempt = DeletionAttempt(gateway, clock: () => now);
+        await attempt.reauthenticate();
+        await attempt.submit();
+        expect(gateway.calls, [
+          'reauth:apple',
+          'revoke:android-at:access_token',
+          'request',
+        ]);
+      });
+
+      test('沒拿到 provider token 或撤銷失敗：不擋申請，記下撤銷失敗', () async {
+        for (final setUpGateway in [
+          (FakeDeletionGateway g) => g.reauths.add(
+            AccountIdentity(id: 'rider', apple: true, signedInAt: now),
+          ),
+          (FakeDeletionGateway g) =>
+              g.revokes.add(Exception('apple.revoke_failed')),
+        ]) {
+          final gateway = FakeDeletionGateway(current: apple(signedInAt: now));
+          setUpGateway(gateway);
+          final attempt = DeletionAttempt(gateway, clock: () => now);
+          await attempt.reauthenticate();
+          await attempt.submit();
+          expect(gateway.calls.first, 'reauth:apple');
+          expect(gateway.calls.last, 'request');
+          expect(attempt.appleRevokeFailed, isTrue);
+        }
+      });
+
+      test('撤銷失敗的提示指向 Apple 帳號網站，iOS 維持設定路徑', () {
+        expect(
+          appleRevokeFailedBodyFor(ios: false),
+          '帳號仍會照常刪除。你可以到 Apple 帳號網站（account.apple.com）的'
+          '「登入與安全性 > 使用 Apple 登入」停止本 App 使用。',
+        );
+        expect(appleRevokeFailedBodyFor(ios: true), appleRevokeFailedBody);
+        expect(appleRevokeFailedBody, isNot(contains('account.apple.com')));
+      });
     });
 
     test('apple-revoke 回管理員時停止，不申請', () async {
