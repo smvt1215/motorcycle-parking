@@ -348,8 +348,14 @@ class FourSign {
     required this.seat,
     required this.fee,
     required this.where,
+    this.areas = const [],
   });
   final VehicleType vehicle;
+
+  /// Every place of the spot as judged for [vehicle], open or not, in the
+  /// spot's order: the full-page details list the ones closed to it
+  /// (「另有 B1…不能停」) and those open later beside the ones open now.
+  final List<SignArea> areas;
 
   /// A street spot (segments), not a lot (zones).
   final bool street;
@@ -410,6 +416,7 @@ FourSign fourSign(
           ? areas.single.bayKind
           : null,
     ),
+    areas: areas,
   );
 }
 
