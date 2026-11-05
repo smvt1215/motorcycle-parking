@@ -13,7 +13,13 @@ export type Outcome =
   | { kind: 'continued'; scheduledAt: string | null }
   | { kind: 'wrongAccount'; maskedEmail: string | null }
   | { kind: 'noAccount'; provider: Provider; email: string | null }
-  | { kind: 'signInIncomplete' };
+  | { kind: 'signInIncomplete' }
+  /** The sign-in check refused: too many attempts from this network. */
+  | { kind: 'rateLimited' }
+  /** The sign-in could not reach the backend. */
+  | { kind: 'network' }
+  /** The backend could not check the sign-in (down, or App Check failed). */
+  | { kind: 'unavailable' };
 
 export function OutcomePanel({
   outcome,
@@ -72,5 +78,45 @@ export function OutcomePanel({
           </FlowActions>
         </FlowPanel>
       );
+    case 'rateLimited':
+      return (
+        <Simple title={t.rateLimitedTitle} body={t.rateLimitedBody} action={t.ok} onDismiss={onDismiss} />
+      );
+    case 'network':
+      return (
+        <Simple
+          title={t.networkFailedTitle}
+          body={t.networkFailedBody}
+          action={t.networkRetry}
+          onDismiss={onDismiss}
+        />
+      );
+    case 'unavailable':
+      return (
+        <Simple title={t.genericErrorTitle} body={t.genericErrorBody} action={t.ok} onDismiss={onDismiss} />
+      );
   }
+}
+
+function Simple({
+  title,
+  body,
+  action,
+  onDismiss,
+}: {
+  title: string;
+  body: string;
+  action: string;
+  onDismiss: () => void;
+}) {
+  return (
+    <FlowPanel title={title}>
+      <p>{body}</p>
+      <FlowActions>
+        <button type="button" className="flow-button flow-button--primary" onClick={onDismiss}>
+          {action}
+        </button>
+      </FlowActions>
+    </FlowPanel>
+  );
 }

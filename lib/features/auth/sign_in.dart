@@ -1,6 +1,8 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -17,10 +19,13 @@ class SignInButtons extends StatelessWidget {
   final AppStore store;
 
   /// iOS leads with Apple (HIG: Sign in with Apple first and prominent);
-  /// elsewhere Google is the only provider.
+  /// Android lists Google first, then Apple through the same web OAuth flow
+  /// (P11 Android, #219). The web build keeps Google only, as before.
   static List<OAuthProvider> get providers => isCupertino
       ? const [OAuthProvider.apple, OAuthProvider.google]
-      : const [OAuthProvider.google];
+      : kIsWeb
+      ? const [OAuthProvider.google]
+      : const [OAuthProvider.google, OAuthProvider.apple];
 
   @override
   Widget build(BuildContext context) => Column(
@@ -32,8 +37,9 @@ class SignInButtons extends StatelessWidget {
         MergeSemantics(
           child: Semantics(
             hint: consentHint,
-            child: AdaptiveButton(
+            child: ProviderSignInButton(
               key: ValueKey('sign-in-${provider.name}'),
+              apple: provider == OAuthProvider.apple,
               label: provider == OAuthProvider.google
                   ? '使用 Google 登入'
                   : '使用 Apple 登入',
@@ -50,6 +56,69 @@ class SignInButtons extends StatelessWidget {
       const SignInConsent(),
     ],
   );
+}
+
+/// A sign-in button for one provider. On iOS (and for Google everywhere)
+/// it is the app's [AdaptiveButton]; Apple elsewhere follows Apple's brand
+/// rules instead: black fill, white label and the Apple logo, at least
+/// 48dp tall (P11 Android, P15a ⑤ Android, #219).
+class ProviderSignInButton extends StatelessWidget {
+  const ProviderSignInButton({
+    super.key,
+    required this.apple,
+    required this.label,
+    required this.onPressed,
+    this.secondary = false,
+  });
+  final bool apple;
+  final String label;
+  final VoidCallback? onPressed;
+
+  /// Passed to [AdaptiveButton]; Apple's branded button has one style.
+  final bool secondary;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!apple || isCupertino) {
+      return AdaptiveButton(
+        label: label,
+        secondary: secondary,
+        onPressed: onPressed,
+      );
+    }
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 48),
+      child: M3EButton(
+        onPressed: onPressed,
+        decoration: M3EButtonDecoration(
+          backgroundColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.disabled)
+                ? Colors.black.withValues(alpha: .38)
+                : Colors.black,
+          ),
+          foregroundColor: const WidgetStatePropertyAll(Colors.white),
+          overlayColor: WidgetStatePropertyAll(
+            Colors.white.withValues(alpha: .12),
+          ),
+        ),
+        // Large text wraps the label instead of overflowing the button.
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.apple, color: Colors.white),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                label,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// 登入即表示你已年滿 18 歲，並同意〈服務條款〉與〈隱私權政策〉 (P16a).

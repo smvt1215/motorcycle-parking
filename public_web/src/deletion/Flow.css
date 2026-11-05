@@ -82,6 +82,26 @@
   margin-top: 8px;
 }
 
+/* A note after the request (the App's apple-revoke-failed box). */
+.flow-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--brand-mist);
+  color: var(--ink);
+}
+.flow-notice h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+.flow-notice p {
+  font-size: 14px;
+}
+
 .flow-button {
   min-height: 48px;
   padding: 0 20px;

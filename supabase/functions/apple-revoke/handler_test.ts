@@ -7,6 +7,8 @@ import {
   latestSignIn,
   revokeUrl,
   signClientSecret,
+  tokenUrl,
+  webRedirectUri,
 } from './handler.ts';
 
 function equal(actual: unknown, expected: unknown, message: string) {
@@ -24,14 +26,28 @@ const config: AppleConfig = {
   keyId: 'KEY1234567',
   privateKey: 'pem',
   clientId: 'tw.motopark.signin',
+  redirectUri: 'https://site.test/account-deletion',
 };
 const rider: Caller = {
   id: '10000000-0000-4000-8000-000000000001',
   apple: true,
+  appleSubjects: ['apple-sub-1'],
   signedInAt: nowSeconds - 60,
 };
 
 type Sent = { url: string; body: URLSearchParams };
+
+const unsignedIdToken = (sub: string) =>
+  `e30.${btoa(JSON.stringify({ sub })).replace(/=+$/, '')}.sig`;
+const tokenAnswer = (patch: Record<string, unknown> = {}) =>
+  Response.json({
+    access_token: 'apple-access',
+    refresh_token: 'apple-refresh-from-code',
+    id_token: unsignedIdToken('apple-sub-1'),
+    token_type: 'Bearer',
+    expires_in: 3600,
+    ...patch,
+  });
 
 function fake(
   options: {
@@ -39,6 +55,8 @@ function fake(
     allowed?: boolean;
     config?: AppleConfig | null;
     apple?: Response;
+    /** Apple's /auth/token answer. */
+    token?: Response;
     statusFails?: boolean;
   } = {},
 ) {
@@ -54,6 +72,9 @@ function fake(
     clientSecret: () => Promise.resolve('signed'),
     fetch: (url, init) => {
       sent.push({ url, body: init.body as URLSearchParams });
+      if (url === tokenUrl) {
+        return Promise.resolve(options.token ?? tokenAnswer());
+      }
       return Promise.resolve(
         options.apple ?? new Response('', { status: 200 }),
       );
@@ -113,7 +134,7 @@ Deno.test('the same conditions as the deletion request', async () => {
       'auth.recent_sign_in_required',
     ],
     [
-      { caller: { ...rider, apple: false } },
+      { caller: { ...rider, apple: false, appleSubjects: [] } },
       post({ token: 't' }),
       400,
       'account.not_apple_sign_in',
@@ -167,6 +188,144 @@ Deno.test('a network failure is reported', async () => {
   );
 });
 
+Deno.test('an authorization code is exchanged, then its refresh token revoked', async () => {
+  const { deps, sent } = fake();
+  equal(
+    await call(deps, post({ authorization_code: 'code-1' })),
+    { status: 200, body: { revoked: true } },
+    'revoked',
+  );
+  equal(sent.map((s) => s.url), [tokenUrl, revokeUrl], 'exchange, revoke');
+  equal(
+    Object.fromEntries(sent[0].body),
+    {
+      client_id: 'tw.motopark.signin',
+      client_secret: 'signed',
+      code: 'code-1',
+      grant_type: 'authorization_code',
+      redirect_uri: 'https://site.test/account-deletion',
+    },
+    'token request',
+  );
+  equal(
+    Object.fromEntries(sent[1].body),
+    {
+      client_id: 'tw.motopark.signin',
+      client_secret: 'signed',
+      token: 'apple-refresh-from-code',
+      token_type_hint: 'refresh_token',
+    },
+    'revoke request',
+  );
+});
+
+Deno.test('without a refresh token the access token is revoked', async () => {
+  const { deps, sent } = fake({
+    token: tokenAnswer({ refresh_token: undefined }),
+  });
+  equal(
+    (await call(deps, post({ authorization_code: 'c' }))).status,
+    200,
+    'status',
+  );
+  equal(sent[1].body.get('token'), 'apple-access', 'access token');
+  equal(sent[1].body.get('token_type_hint'), 'access_token', 'hint');
+});
+
+Deno.test('an expired or used code: apple.code_exchange_failed', async () => {
+  const { deps, sent } = fake({
+    token: Response.json({ error: 'invalid_grant' }, { status: 400 }),
+  });
+  equal(
+    await call(deps, post({ authorization_code: 'old' })),
+    {
+      status: 502,
+      body: {
+        error: 'apple.code_exchange_failed',
+        apple_error: 'invalid_grant',
+      },
+    },
+    'refused',
+  );
+  equal(sent.length, 1, 'nothing revoked');
+  const offline = fake();
+  offline.deps.fetch = () => Promise.reject(new TypeError('offline'));
+  equal(
+    (await call(offline.deps, post({ authorization_code: 'c' }))).body.error,
+    'apple.code_exchange_failed',
+    'network',
+  );
+  const empty = fake({
+    token: tokenAnswer({ refresh_token: undefined, access_token: undefined }),
+  });
+  equal(
+    (await call(empty.deps, post({ authorization_code: 'c' }))).body,
+    { error: 'apple.code_exchange_failed', apple_error: 'no_token' },
+    'no token in the answer',
+  );
+});
+
+Deno.test("another Apple ID's code revokes nothing", async () => {
+  const { deps, sent } = fake({
+    token: tokenAnswer({ id_token: unsignedIdToken('someone-else') }),
+  });
+  equal(
+    await call(deps, post({ authorization_code: 'c' })),
+    { status: 400, body: { error: 'apple.code_account_mismatch' } },
+    'mismatch',
+  );
+  equal(sent.length, 1, 'no revoke');
+  const noIdToken = fake({ token: tokenAnswer({ id_token: undefined }) });
+  equal(
+    (await call(noIdToken.deps, post({ authorization_code: 'c' }))).body.error,
+    'apple.code_account_mismatch',
+    'no id token',
+  );
+});
+
+Deno.test('a code keeps the sign-in conditions and is not mixed with a token', async () => {
+  const cases: [Parameters<typeof fake>[0], Request, number, string][] = [
+    [
+      { caller: { ...rider, signedInAt: nowSeconds - 601 } },
+      post({ authorization_code: 'c' }),
+      401,
+      'auth.recent_sign_in_required',
+    ],
+    [
+      { caller: { ...rider, apple: false, appleSubjects: [] } },
+      post({ authorization_code: 'c' }),
+      400,
+      'account.not_apple_sign_in',
+    ],
+    [
+      { allowed: false },
+      post({ authorization_code: 'c' }),
+      403,
+      'account.admin_cannot_self_delete',
+    ],
+    [
+      {},
+      post({ authorization_code: 'c', token: 't' }),
+      400,
+      'request.invalid',
+    ],
+    [{}, post({ authorization_code: '' }), 400, 'request.invalid'],
+    [{}, post({ authorization_code: 7 }), 400, 'request.invalid'],
+    [
+      {},
+      post({ authorization_code: 'x'.repeat(1025) }),
+      400,
+      'request.invalid',
+    ],
+  ];
+  for (const [options, req, status, error] of cases) {
+    const { deps, sent } = fake(options);
+    const res = await call(deps, req);
+    equal([res.status, res.body.error], [status, error], error);
+    equal(sent.length, 0, `${error}: Apple not called`);
+  }
+});
+
 Deno.test('latestSignIn reads the newest non-anonymous amr entry', () => {
   equal(
     latestSignIn([
@@ -190,8 +349,21 @@ Deno.test('appleConfig needs all four values', () => {
   } as Record<string, string>;
   equal(
     appleConfig((n) => env[n]),
-    { teamId: 'T', keyId: 'K', privateKey: 'P', clientId: 'C' },
+    {
+      teamId: 'T',
+      keyId: 'K',
+      privateKey: 'P',
+      clientId: 'C',
+      redirectUri: webRedirectUri,
+    },
     'all set',
+  );
+  equal(
+    appleConfig((n) =>
+      n === 'APPLE_WEB_REDIRECT_URI' ? 'https://other.test/x' : env[n]
+    )?.redirectUri,
+    'https://other.test/x',
+    'redirect URI from the environment',
   );
   equal(
     appleConfig((n) => (n === 'APPLE_KEY_ID' ? undefined : env[n])),

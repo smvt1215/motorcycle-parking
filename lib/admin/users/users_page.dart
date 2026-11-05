@@ -667,8 +667,8 @@ class _StatusBlock extends StatelessWidget {
             Icons.block,
             '停權中',
             user.bannedIndefinitely
-                ? '直到管理者解除。這段期間無法登入，也無法送出回報與投票。'
-                : '至 ${_when(user.bannedUntil!)}。這段期間無法登入，也無法送出回報與投票。',
+                ? '直到管理者解除。這段期間仍可登入、管理和刪除帳號，但不能送出回報、確認、檢舉和現場回報，也不能新增停車點或修改名稱、頭像。'
+                : '至 ${_when(user.bannedUntil!)}。這段期間仍可登入、管理和刪除帳號，但不能送出回報、確認、檢舉和現場回報，也不能新增停車點或修改名稱、頭像。',
           )
         : user.isAdmin
         ? (
@@ -933,9 +933,7 @@ class _BanDialogState extends State<_BanDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              lift
-                  ? '解除後這個帳號可以重新登入並回報。'
-                  : '停權後這個帳號無法登入，也無法送出回報與投票；已回報的停車點維持不變。',
+              lift ? '解除後這個帳號可以重新送出回報和新增內容。' : '停權後這個帳號仍可登入、管理和刪除帳號，但不能送出回報、確認、檢舉和現場回報，也不能新增停車點或修改名稱、頭像；已回報的停車點維持不變。',
             ),
             if (!lift) ...[
               const SizedBox(height: 16),

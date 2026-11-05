@@ -11,43 +11,39 @@ export interface Caller {
 export interface Target {
   id: string;
   admin: boolean;
-  /** ISO time; null or past when not banned. */
-  bannedUntil: string | null;
 }
 
-export interface BanRecord {
+/** One suspension change, written with its audit entry in one call. */
+export interface SuspensionChange {
   actor: string;
   user: string;
-  action: 'ban_user' | 'unban_user';
-  before: string | null;
-  after: string | null;
-  duration: string;
+  action: 'ban' | 'unban';
+  /** 7d, 30d or indefinite; null to lift it. */
+  duration: string | null;
   note: string;
 }
 
 export interface Deps {
   caller(token: string): Promise<Caller | null>;
   target(id: string): Promise<Target | null>;
-  /** Auth Admin API `ban_duration`; returns the new `banned_until`. */
-  setBan(id: string, duration: string): Promise<string | null>;
-  record(entry: BanRecord): Promise<void>;
-  now(): Date;
+  /**
+   * public.admin_set_user_suspension() (#331): an App-level suspension in
+   * private.user_suspensions, not an Auth ban, so the account can still sign
+   * in and delete itself. Returns the new `banned_until` (null when lifted;
+   * 9999-12-31 when indefinite).
+   */
+  suspend(change: SuspensionChange): Promise<string | null>;
 }
 
-/** The choices the admin page offers; Go durations for `ban_duration`. */
-export const durations: Record<string, string> = {
-  '7d': '168h',
-  '30d': '720h',
-  // About 100 years: until an admin lifts it.
-  'indefinite': '876000h',
-};
+/** The choices the admin page offers. */
+export const durations = ['7d', '30d', 'indefinite'];
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export interface BanRequest {
   action: 'ban' | 'unban';
   userId: string;
-  duration: string;
+  duration: string | null;
   reason: string;
 }
 
@@ -62,27 +58,13 @@ export function parse(body: Record<string, unknown>): BanRequest | string {
     return 'a reason of 1–500 characters is required';
   }
   if (action === 'ban') {
-    if (typeof duration !== 'string' || !Object.hasOwn(durations, duration)) {
+    if (typeof duration !== 'string' || !durations.includes(duration)) {
       return 'invalid duration';
     }
-    return { action, userId, duration: durations[duration], reason: note };
+    return { action, userId, duration, reason: note };
   }
-  return { action, userId, duration: 'none', reason: note };
+  return { action, userId, duration: null, reason: note };
 }
-
-/** What restores [before] if the audit entry cannot be written. */
-export function restoreDuration(before: string | null, now: Date): string {
-  if (!before) return 'none';
-  const ms = Date.parse(before) - now.getTime();
-  return ms > 0 ? `${Math.ceil(ms / 3_600_000)}h` : 'none';
-}
-
-/** The same ban end, whatever the timestamp's notation. */
-export const sameBan = (a: string | null, b: string | null) =>
-  a === null || b === null ? a === b : Date.parse(a) === Date.parse(b);
-
-const active = (until: string | null, now: Date) =>
-  until !== null && Date.parse(until) > now.getTime();
 
 export async function handle(req: Request, deps: Deps): Promise<Response> {
   try {
@@ -122,47 +104,17 @@ async function serve(req: Request, deps: Deps): Promise<Response> {
   if (target.admin) {
     return response({ error: 'administrators cannot be banned here' }, 403);
   }
-  const now = deps.now();
-  const before = active(target.bannedUntil, now) ? target.bannedUntil : null;
   let after: string | null;
   try {
-    after = await deps.setBan(target.id, request.duration);
-  } catch {
-    return response({ error: 'the ban could not be changed' }, 502);
-  }
-  if (!active(after, now)) after = null;
-  try {
-    await deps.record({
+    after = await deps.suspend({
       actor: caller.id,
       user: target.id,
-      action: request.action === 'ban' ? 'ban_user' : 'unban_user',
-      before,
-      after,
+      action: request.action,
       duration: request.duration,
       note: request.reason,
     });
   } catch {
-    // Every ban change is audited: undo one that cannot be, unless another
-    // request changed the ban since; its newer value is kept.
-    try {
-      const latest = await deps.target(target.id);
-      const current = latest && active(latest.bannedUntil, now)
-        ? latest.bannedUntil
-        : null;
-      if (!sameBan(current, after)) {
-        return response(
-          { error: 'audit failed; a newer change was kept' },
-          500,
-        );
-      }
-      await deps.setBan(target.id, restoreDuration(before, now));
-    } catch {
-      return response(
-        { error: 'audit failed and the change could not be undone' },
-        500,
-      );
-    }
-    return response({ error: 'audit failed; the change was undone' }, 500);
+    return response({ error: 'the ban could not be changed' }, 502);
   }
   return response({ user_id: target.id, banned_until: after });
 }

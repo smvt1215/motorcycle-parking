@@ -16,6 +16,8 @@ export 'package:material_ui/material_ui.dart';
 export 'package:cupertino_native_better/cupertino_native_better.dart'
     show CNTabBarRouteObserver;
 
+export 'form_components.dart';
+
 bool get isCupertino => !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
 bool get nativeGlass => isCupertino && PlatformVersion.isIOS26OrLater;
 const brand = Color(0xff176273);
