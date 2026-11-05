@@ -97,6 +97,18 @@
   background: #000000;
   color: #ffffff;
 }
+/* Google draws its button (at most 400px wide) inside this box, centred
+   when the column is wider; the box keeps its height while it loads. */
+.signin-google {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 44px;
+  min-width: 0;
+}
+.signin-google > .signin-button {
+  width: 100%;
+}
 
 .deletion-cannot {
   display: flex;

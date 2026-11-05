@@ -1,7 +1,16 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, vi } from 'vitest';
-import { apiError, fakeAuth, noRequest, openSite, pendingUntil, rider, stubApi } from '../test/site';
+import {
+  apiError,
+  fakeAuth,
+  noRequest,
+  openSite,
+  pendingUntil,
+  rider,
+  stubApi,
+  type Answer,
+} from '../test/site';
 import * as t from './text';
 
 // 2026-11-12T02:00Z is 10:00 on 12 November in Taiwan.
@@ -309,5 +318,126 @@ describe('the session', () => {
     openSite('/account-deletion', auth);
     await waitFor(() => expect(auth.signOut).toHaveBeenCalled());
     expect(await screen.findByRole('heading', { level: 1, name: '刪除你的帳號' })).toBeInTheDocument();
+  });
+});
+
+describe('sign-in check answers', () => {
+  it.each([
+    [{ kind: 'rateLimited' } as const, t.rateLimitedTitle, t.rateLimitedBody, t.ok],
+    [
+      { kind: 'unavailable', network: true } as const,
+      t.networkFailedTitle,
+      t.networkFailedBody,
+      t.networkRetry,
+    ],
+    [{ kind: 'unavailable', network: false } as const, t.genericErrorTitle, t.genericErrorBody, t.ok],
+  ])('%j says so and leads back to the sign-in', async (result, title, body, action) => {
+    const auth = fakeAuth();
+    openSite('/account-deletion', auth);
+    auth.next = result;
+    await userEvent.click(screen.getByRole('button', { name: '使用 Google 登入' }));
+    await heading(title);
+    expect(screen.getByText(body)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: action }));
+    expect(await screen.findByRole('heading', { level: 1, name: '刪除你的帳號' })).toBeInTheDocument();
+  });
+});
+
+describe('Apple riders (#268)', () => {
+  const appleRider = { ...rider, id: 'u-apple', provider: 'apple' as const };
+
+  async function confirm(auth: ReturnType<typeof fakeAuth>, request: Answer | Answer[]) {
+    const calls = stubApi({
+      account_deletion_status: { body: noRequest },
+      request_account_deletion: request,
+    });
+    openSite('/account-deletion', auth);
+    await heading(t.confirmTitle);
+    await userEvent.click(screen.getByRole('checkbox', { name: t.confirmCheck }));
+    await userEvent.click(screen.getByRole('button', { name: t.confirmAction }));
+    return calls;
+  }
+
+  it('revokes Apple’s grant right before the request, not at sign-in', async () => {
+    const auth = fakeAuth();
+    stubApi({ account_deletion_status: { body: noRequest } });
+    openSite('/account-deletion', auth);
+    auth.next = { kind: 'signedIn', user: appleRider };
+    await userEvent.click(screen.getByRole('button', { name: '使用 Apple 登入' }));
+    await heading(t.confirmTitle);
+    expect(auth.revokeApple).not.toHaveBeenCalled();
+  });
+
+  it('a revoked grant: the request goes, with no notice', async () => {
+    const auth = fakeAuth(appleRider);
+    const calls = await confirm(auth, { body: pendingUntil(scheduled) });
+    await heading(t.requestedTitle);
+    expect(auth.revokeApple).toHaveBeenCalledTimes(1);
+    expect(calls.filter((c) => c.fn === 'request_account_deletion')).toHaveLength(1);
+    expect(screen.queryByText(t.appleRevokeFailedTitle)).toBeNull();
+  });
+
+  it('a grant Apple did not revoke: the request still goes, then the App’s notice', async () => {
+    const auth = fakeAuth(appleRider);
+    auth.nextRevoke = { kind: 'notRevoked' };
+    const calls = await confirm(auth, { body: pendingUntil(scheduled) });
+    await heading(t.requestedTitle);
+    expect(calls.filter((c) => c.fn === 'request_account_deletion')).toHaveLength(1);
+    const notice = screen.getByRole('region', { name: t.appleRevokeFailedTitle });
+    expect(notice).toHaveTextContent(t.appleRevokeFailedBody);
+  });
+
+  it('no fresh code: signs in with Apple again, then revokes and sends', async () => {
+    const auth = fakeAuth(appleRider);
+    auth.revokeApple.mockResolvedValueOnce({ kind: 'signInNeeded' });
+    const calls = await confirm(auth, { body: pendingUntil(scheduled) });
+    await heading(t.reauthTitle);
+    expect(screen.getByText(t.reauthBodyApple)).toBeInTheDocument();
+    expect(calls.filter((c) => c.fn === 'request_account_deletion')).toHaveLength(0);
+    expect(screen.queryByRole('button', { name: '使用 Google 登入' })).toBeNull();
+
+    auth.next = { kind: 'signedIn', user: appleRider };
+    await userEvent.click(screen.getByRole('button', { name: '使用 Apple 登入' }));
+    expect(auth.signIn).toHaveBeenCalledWith('apple', { reauthFor: appleRider });
+    await heading(t.requestedTitle);
+    expect(auth.revokeApple).toHaveBeenCalledTimes(2);
+    expect(calls.filter((c) => c.fn === 'request_account_deletion')).toHaveLength(1);
+  });
+
+  it('another Apple ID on signing in again: nothing revoked, nothing sent', async () => {
+    const auth = fakeAuth(appleRider);
+    auth.revokeApple.mockResolvedValueOnce({ kind: 'signInNeeded' });
+    const calls = await confirm(auth, { body: pendingUntil(scheduled) });
+    await heading(t.reauthTitle);
+    auth.next = { kind: 'wrongAccount', email: 'other@icloud.com' };
+    await userEvent.click(screen.getByRole('button', { name: '使用 Apple 登入' }));
+    await heading(t.wrongAccountTitle);
+    expect(auth.revokeApple).toHaveBeenCalledTimes(1);
+    expect(auth.signOut).not.toHaveBeenCalled();
+    expect(calls.filter((c) => c.fn === 'request_account_deletion')).toHaveLength(0);
+  });
+
+  it('a retry after a lost connection does not revoke again', async () => {
+    const auth = fakeAuth(appleRider);
+    await confirm(auth, ['network', { body: pendingUntil(scheduled) }]);
+    await heading(t.networkFailedTitle);
+    await userEvent.click(screen.getByRole('button', { name: t.networkRetry }));
+    await heading(t.requestedTitle);
+    expect(auth.revokeApple).toHaveBeenCalledTimes(1);
+  });
+
+  it('an administrator found by the revoke is told why, and nothing is sent', async () => {
+    const auth = fakeAuth(appleRider);
+    auth.nextRevoke = { kind: 'refused', error: 'account.admin_cannot_self_delete' };
+    const calls = await confirm(auth, { body: pendingUntil(scheduled) });
+    await heading(t.adminCannotDeleteTitle);
+    expect(calls.filter((c) => c.fn === 'request_account_deletion')).toHaveLength(0);
+  });
+
+  it('a Google rider is never revoked', async () => {
+    const auth = fakeAuth(rider);
+    await confirm(auth, { body: pendingUntil(scheduled) });
+    await heading(t.requestedTitle);
+    expect(auth.revokeApple).not.toHaveBeenCalled();
   });
 });

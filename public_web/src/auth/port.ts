@@ -19,21 +19,64 @@ export type SignInResult =
   | { kind: 'noAccount'; email: string | null }
   /** Signing in again for `reauthFor`, the rider picked another identity; the session is unchanged. */
   | { kind: 'wrongAccount'; email: string | null }
-  /** Closed, refused or failed at the provider. */
+  /** Too many sign-in checks from this network (the backend allows 30 an hour). */
+  | { kind: 'rateLimited' }
+  /** The check or the sign-in could not be reached (`network`) or is down. */
+  | { kind: 'unavailable'; network: boolean }
+  /** Closed, refused or failed at the provider, or a token the backend refused. */
   | { kind: 'cancelled' };
 
+/** How revoking Apple's grant before the request ended. */
+export type AppleRevoke =
+  | { kind: 'revoked' }
+  /** No usable authorization code on this page (none, used, or older than about 4.5 minutes): sign in with Apple again. */
+  | { kind: 'signInNeeded' }
+  /** Apple or the network did not revoke it; the request still goes, and the rider is told afterwards. */
+  | { kind: 'notRevoked' }
+  /** The API stopped it, with its error code (e.g. `auth.recent_sign_in_required`, `account.admin_cannot_self_delete`). */
+  | { kind: 'refused'; error: string };
+
+export interface SignInOptions {
+  /**
+   * Sign in again as this user to prove it is them (the request needs a
+   * sign-in in the last 10 minutes). Another identity ends as
+   * `wrongAccount` and the session does not change.
+   */
+  reauthFor?: SignedInUser;
+}
+
+export interface GoogleButtonOptions extends SignInOptions {
+  /** The button's width in CSS pixels. */
+  width: number;
+  /** Called after each sign-in through the button has ended. */
+  onResult: (result: SignInResult) => void;
+}
+
 /**
- * Sign-in as the pages use it. The backend's ID-token sign-in implements it
- * (pending T_DEL_WEB_Q1); tests and the smoke build hand in fakes. Until
- * then a build has none, and the page offers the support form only.
+ * Sign-in as the pages use it. Production signs in with the provider's ID
+ * token (src/auth/idTokenAuth.ts); tests and the smoke build hand in
+ * fakes. A build without the sign-in settings has none, and the page
+ * offers the support form only.
  */
 export interface AuthPort {
   /**
-   * Signs in with the provider's own dialog. With `reauthFor`, the rider
-   * signs in again as that user to prove it is them (the request needs a
-   * sign-in in the last 10 minutes).
+   * Puts the Google button in `container`: Google issues ID tokens only
+   * through its own button. Returns the function that removes it.
    */
-  signIn(provider: Provider, options?: { reauthFor?: SignedInUser }): Promise<SignInResult>;
+  mountGoogleButton(container: HTMLElement, options: GoogleButtonOptions): () => void;
+  /**
+   * Gets Apple's sign-in ready (script, nonce), so that `signInWithApple`
+   * can open the popup straight from the click. Safe to call repeatedly.
+   */
+  prepareApple(): void;
+  /** Opens Apple's popup; call it synchronously inside the click handler. */
+  signInWithApple(options?: SignInOptions): Promise<SignInResult>;
+  /**
+   * Revokes the Apple grant with the authorization code of the latest
+   * Apple sign-in on this page. Only right before the request: a rider who
+   * signs in to cancel keeps Sign in with Apple.
+   */
+  revokeApple(): Promise<AppleRevoke>;
   /** Signs out on this browser only; other devices were signed out by the request. */
   signOut(): Promise<void>;
   /** The access token for API calls, or null when signed out. */
