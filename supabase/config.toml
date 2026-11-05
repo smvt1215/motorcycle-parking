@@ -445,6 +445,11 @@ verify_jwt = false
 # as admin-users does (#268).
 verify_jwt = false
 
+[functions.deletion-precheck]
+# The account deletion page asks before signing in (#270): no sign-in; App
+# Check (reCAPTCHA Enterprise web provider) and a per-network limit instead.
+verify_jwt = false
+
 [functions.support-request]
 # The public support form (#269): no sign-in; App Check (reCAPTCHA
 # Enterprise web provider) and per-network/email limits instead.
@@ -463,4 +468,9 @@ verify_jwt = false
 [functions.support-mail]
 # pg_cron and public.support_request_link call it through pg_net with the
 # shared SUPPORT_MAIL_SECRET header, not a JWT (#285).
+verify_jwt = false
+
+[functions.report-mail]
+# pg_cron and new inappropriate-content reports call it through pg_net with
+# the shared REPORT_MAIL_SECRET header, not a JWT (#280).
 verify_jwt = false

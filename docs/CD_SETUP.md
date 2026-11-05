@@ -77,6 +77,29 @@ migration `202610310600_cron_history_prune.sql` 建立每日排程 `cron-history
 
 已驗證（2026-11-01，staging 唯讀查 `function_edge_logs`，只看形狀不看值）：送到 Edge Function 的請求都帶 `cf-connecting-ip` 與 `x-real-ip`，皆為單一值且兩者相同。production 上線前在 production 專案重做同一查詢確認。
 
+### 內容不當檢舉通知信（`report-mail`）
+
+migration `202611021100_content_reports.sql` 在每筆新的內容不當檢舉（#280）寫入待寄通知，並建立每 5 分鐘的 pg_cron 工作 `report-mail`，經 pg_net 呼叫 Edge Function `report-mail` 寄信到 `SUPPORT_MAIL_TO`（ops@）。信件只含檢舉編號與管理站審核頁連結。以下只設定在各自 Supabase 專案，**不進版控**；缺任何一個時不寄信，通知留著等下次：
+
+1. 共用密鑰（`openssl rand -hex 32`）：`supabase secrets set REPORT_MAIL_SECRET=<密鑰> --project-ref <ref>`，Vault：`select vault.create_secret('<密鑰>','report_mail_secret');`（`project_url` 與即時車位共用）。
+2. `supabase secrets set ADMIN_REVIEW_URL=https://<管理站網址>/review --project-ref <ref>`（信中連結為 `<ADMIN_REVIEW_URL>/<檢舉編號>`）。
+3. `RESEND_API_KEY`、`SUPPORT_MAIL_FROM`、`SUPPORT_MAIL_TO` 與客服表單共用。
+4. 確認：`select count(*) filter (where sent_at is null) from private.report_notices;` 應在 5 分鐘內歸零。
+
+### 刪除帳號網頁（`deletion-precheck`、`apple-revoke`）
+
+網頁（#270）以 Google／Apple 登入後申請刪除帳號，登入不可建立新帳號，呼叫順序：`deletion-precheck` → `supabase.auth.signInWithIdToken` → `apple-revoke`（Apple 才呼叫，帶 `authorization_code`）→ `api_v1.request_account_deletion(p_source 'web')`。migration `202611051000_deletion_precheck.sql` 建立每網路頻率限制與帳號查詢 helper（只給 service_role）。以下只設定在各自 Supabase 專案，**不進版控**：
+
+| Secret | 值 | 說明 |
+|---|---|---|
+| `GOOGLE_WEB_CLIENT_ID` | Supabase Google provider 接受的 **web** OAuth client ID（多個以逗號分隔） | Google ID token 的 `aud`；網頁的 Google Identity Services 用同一個 client ID |
+| `APPLE_CLIENT_ID` | Services ID `tw.motopark.motorcycleParking.web` | 與 `apple-revoke` 共用，也是 Apple ID token 的 `aud` |
+| `APPLE_WEB_REDIRECT_URI` | 預設 `https://motoparking.smvtstudio.com/account-deletion`，不同時才設 | 換 authorization code 時送給 Apple 的 `redirect_uri`，須與網頁 `AppleID.auth.init` 的 `redirectURI` 及 Services ID 的 Return URL 相同 |
+| `SUPPORT_APP_CHECK_APP_IDS`、`FIREBASE_PROJECT_NUMBER` | 與客服表單共用 | 同一個網站、同一個 Firebase web app，不另設 |
+| `REPORT_HASH_SECRET`、`TRUSTED_IP_HEADER` | 與回報函式共用 | IP 只以 HMAC 存入，每網路一小時 30 次 |
+
+`APPLE_TEAM_ID`、`APPLE_KEY_ID`、`APPLE_PRIVATE_KEY` 與 App 的 Apple 撤銷共用。Apple Developer 的 Services ID 須加上 Return URL `https://motoparking.smvtstudio.com/account-deletion`。
+
 ## staging：Firebase 與 iOS 測試裝置
 
 staging profile 必須是 Ad Hoc，包含受邀 iPhone 的 UDID；production profile 必須是 App Store，不能包含 `ProvisionedDevices`。
