@@ -69,6 +69,8 @@ export function DeletionFlow({
   const appleRevoke = useRef({ attempted: false, failed: false });
   const [revoking, setRevoking] = useState(false);
   const continuing = useRef(false);
+  // The same, for the screen: both choices stay disabled until it is done.
+  const [continuingNow, setContinuingNow] = useState(false);
 
   async function signOut(outcome: Outcome | null = null) {
     onOutcome(outcome);
@@ -140,8 +142,10 @@ export function DeletionFlow({
    * answer, the rider is signed out (the App's continuePending).
    */
   async function continuePending(scheduledAt: string | null) {
-    if (continuing.current) return;
+    // One choice at a time: a cancel in flight, or this already running.
+    if (continuing.current || cancelState.isLoading) return;
     continuing.current = true;
+    setContinuingNow(true);
     if (user.provider === 'apple') {
       try {
         await auth.revokeApple();
@@ -151,9 +155,12 @@ export function DeletionFlow({
     }
     await signOut({ kind: 'continued', scheduledAt });
     continuing.current = false;
+    setContinuingNow(false);
   }
 
   async function cancelDeletion() {
+    // While 繼續刪除 is revoking and signing out, cancelling would contradict it.
+    if (continuing.current) return;
     try {
       await cancel().unwrap();
       setStep({ kind: 'cancelled' });
@@ -389,7 +396,7 @@ export function DeletionFlow({
     return (
       <Pending
         scheduledAt={status.data.scheduled_at}
-        busy={cancelState.isLoading}
+        working={cancelState.isLoading ? 'cancel' : continuingNow ? 'continue' : null}
         onCancel={() => void cancelDeletion()}
         onContinue={() => void continuePending(status.data?.scheduled_at ?? null)}
       />
@@ -487,15 +494,17 @@ function Confirm({
  */
 function Pending({
   scheduledAt,
-  busy,
+  working,
   onCancel,
   onContinue,
 }: {
   scheduledAt: string | null;
-  busy: boolean;
+  /** The choice being carried out: both are disabled until it is done. */
+  working: 'cancel' | 'continue' | null;
   onCancel: () => void;
   onContinue: () => void;
 }) {
+  const busy = working !== null;
   return (
     <FlowPanel title={t.pendingTitle}>
       <p>{t.pendingBody}</p>
@@ -506,7 +515,7 @@ function Pending({
           aria-disabled={busy}
           onClick={() => !busy && onCancel()}
         >
-          <span className="flow-choice-title">{busy ? t.sending : t.pendingCancel}</span>
+          <span className="flow-choice-title">{working === 'cancel' ? t.sending : t.pendingCancel}</span>
           <span className="flow-choice-detail">{t.pendingCancelDetail}</span>
         </button>
         <button
@@ -515,7 +524,7 @@ function Pending({
           aria-disabled={busy}
           onClick={() => !busy && onContinue()}
         >
-          <span className="flow-choice-title">{t.pendingContinue}</span>
+          <span className="flow-choice-title">{working === 'continue' ? t.sending : t.pendingContinue}</span>
           <span className="flow-choice-detail">
             {t.pendingContinueDetail(deletionDateLabel(scheduledAt))}
           </span>

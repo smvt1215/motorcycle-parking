@@ -454,6 +454,34 @@ describe('Apple riders (#268)', () => {
     expect(calls.map((c) => c.fn)).toEqual(['account_deletion_status']);
   });
 
+  it('while 繼續刪除 revokes, neither choice can be taken again', async () => {
+    const auth = fakeAuth(appleRider);
+    let finish: (value: { kind: 'revoked' }) => void = () => {};
+    auth.revokeApple.mockImplementationOnce(() => new Promise((resolve) => (finish = resolve)));
+    const calls = stubApi({
+      account_deletion_status: { body: pendingUntil(scheduled) },
+      cancel_account_deletion: { body: noRequest },
+    });
+    openSite('/account-deletion', auth);
+    await heading(t.pendingTitle);
+    await userEvent.click(screen.getByRole('button', { name: /繼續刪除/ }));
+
+    const cancel = screen.getByRole('button', { name: /取消刪除/ });
+    expect(cancel).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('button', { name: new RegExp(t.sending) })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    await userEvent.click(cancel);
+    await settle();
+    expect(calls.map((c) => c.fn)).not.toContain('cancel_account_deletion');
+
+    finish({ kind: 'revoked' });
+    await heading(t.continuedTitle);
+    expect(auth.revokeApple).toHaveBeenCalledTimes(1);
+    expect(auth.signOut).toHaveBeenCalledTimes(1);
+  });
+
   it('繼續刪除 never revokes for a Google rider', async () => {
     const auth = fakeAuth(rider);
     stubApi({ account_deletion_status: { body: pendingUntil(scheduled) } });
