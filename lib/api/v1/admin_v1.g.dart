@@ -150,6 +150,53 @@ class AdminV1Client {
     required String pId,
     required String pBody,
   }) => _call('reply_support_request', {'p_id': pId, 'p_body': pBody});
+
+  /// 一筆內容不當檢舉（#280）
+  Future<ContentReport> contentReport({required String pId}) async {
+    final raw = await contentReportRaw(pId: pId);
+    return ContentReport.fromJson(raw as Map<String, Object?>);
+  }
+
+  /// [contentReport] as served, for callers that keep the JSON (#202).
+  Future<Object?> contentReportRaw({required String pId}) =>
+      _call('content_report', {'p_id': pId});
+
+  /// 處理內容不當檢舉（#280）
+  Future<ContentReportResolution> resolveContentReport({
+    required String pId,
+    required String pAction,
+    required String pExpectedUpdatedAt,
+    ContentReportPatch? pPatch,
+    String? pReason,
+    String? pNote,
+  }) async {
+    final raw = await resolveContentReportRaw(
+      pId: pId,
+      pAction: pAction,
+      pExpectedUpdatedAt: pExpectedUpdatedAt,
+      pPatch: pPatch,
+      pReason: pReason,
+      pNote: pNote,
+    );
+    return ContentReportResolution.fromJson(raw as Map<String, Object?>);
+  }
+
+  /// [resolveContentReport] as served, for callers that keep the JSON (#202).
+  Future<Object?> resolveContentReportRaw({
+    required String pId,
+    required String pAction,
+    required String pExpectedUpdatedAt,
+    ContentReportPatch? pPatch,
+    String? pReason,
+    String? pNote,
+  }) => _call('resolve_content_report', {
+    'p_id': pId,
+    'p_action': pAction,
+    'p_expected_updated_at': pExpectedUpdatedAt,
+    if (pPatch != null) 'p_patch': pPatch.toJson(),
+    'p_reason': ?pReason,
+    'p_note': ?pNote,
+  });
 }
 
 class MinAppVersion {
@@ -675,6 +722,446 @@ class SupportRequestDetail {
 
   @override
   int get hashCode => Object.hashAll([request, _hash(messages)]);
+}
+
+class ContentReportText {
+  const ContentReportText({
+    this.name,
+    this.contributorName,
+    this.note,
+    this.entranceNote,
+    this.parkingGuide,
+    this.specialRules,
+  });
+
+  factory ContentReportText.fromJson(Map<String, Object?> json) =>
+      ContentReportText(
+        name: json['name'] == null ? null : json['name'] as String,
+        contributorName: json['contributor_name'] == null
+            ? null
+            : json['contributor_name'] as String,
+        note: json['note'] == null ? null : json['note'] as String,
+        entranceNote: json['entrance_note'] == null
+            ? null
+            : json['entrance_note'] as String,
+        parkingGuide: json['parking_guide'] == null
+            ? null
+            : json['parking_guide'] as String,
+        specialRules: json['special_rules'] == null
+            ? null
+            : json['special_rules'] as String,
+      );
+
+  final String? name;
+
+  final String? contributorName;
+
+  final String? note;
+
+  final String? entranceNote;
+
+  final String? parkingGuide;
+
+  final String? specialRules;
+
+  Map<String, Object?> toJson() => {
+    'name': name,
+    'contributor_name': contributorName,
+    'note': note,
+    'entrance_note': entranceNote,
+    'parking_guide': parkingGuide,
+    'special_rules': specialRules,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is ContentReportText &&
+      other.name == name &&
+      other.contributorName == contributorName &&
+      other.note == note &&
+      other.entranceNote == entranceNote &&
+      other.parkingGuide == parkingGuide &&
+      other.specialRules == specialRules;
+
+  @override
+  int get hashCode => Object.hashAll([
+    name,
+    contributorName,
+    note,
+    entranceNote,
+    parkingGuide,
+    specialRules,
+  ]);
+}
+
+class ContentReport {
+  const ContentReport({
+    required this.id,
+    required this.status,
+    required this.spotId,
+    required this.target,
+    required this.createdAt,
+    this.spotUpdatedAt,
+    this.spotDeleted,
+    required this.contentHeld,
+    required this.snapshot,
+    required this.current,
+    required this.editableFields,
+    required this.reports,
+  });
+
+  factory ContentReport.fromJson(Map<String, Object?> json) => ContentReport(
+    id: json['id'] as String,
+    status: json['status'] as String,
+    spotId: json['spot_id'] as String,
+    target: json['target'] as String,
+    createdAt: json['created_at'] as String,
+    spotUpdatedAt: json['spot_updated_at'] == null
+        ? null
+        : json['spot_updated_at'] as String,
+    spotDeleted: json['spot_deleted'] == null
+        ? null
+        : json['spot_deleted'] as bool,
+    contentHeld: [for (final e in json['content_held'] as List) e as String],
+    snapshot: ContentReportText.fromJson(
+      json['snapshot'] as Map<String, Object?>,
+    ),
+    current: ContentReportText.fromJson(
+      json['current'] as Map<String, Object?>,
+    ),
+    editableFields: [
+      for (final e in json['editable_fields'] as List) e as String,
+    ],
+    reports: [
+      for (final e in json['reports'] as List)
+        ContentReportEntry.fromJson(e as Map<String, Object?>),
+    ],
+  );
+
+  final String id;
+
+  final String status;
+
+  final String spotId;
+
+  final String target;
+
+  final String createdAt;
+
+  final String? spotUpdatedAt;
+
+  final bool? spotDeleted;
+
+  final List<String> contentHeld;
+
+  final ContentReportText snapshot;
+
+  final ContentReportText current;
+
+  final List<String> editableFields;
+
+  final List<ContentReportEntry> reports;
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'status': status,
+    'spot_id': spotId,
+    'target': target,
+    'created_at': createdAt,
+    'spot_updated_at': spotUpdatedAt,
+    'spot_deleted': spotDeleted,
+    'content_held': contentHeld,
+    'snapshot': snapshot.toJson(),
+    'current': current.toJson(),
+    'editable_fields': editableFields,
+    'reports': [for (final e in reports) e.toJson()],
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is ContentReport &&
+      other.id == id &&
+      other.status == status &&
+      other.spotId == spotId &&
+      other.target == target &&
+      other.createdAt == createdAt &&
+      other.spotUpdatedAt == spotUpdatedAt &&
+      other.spotDeleted == spotDeleted &&
+      _equal(other.contentHeld, contentHeld) &&
+      other.snapshot == snapshot &&
+      other.current == current &&
+      _equal(other.editableFields, editableFields) &&
+      _equal(other.reports, reports);
+
+  @override
+  int get hashCode => Object.hashAll([
+    id,
+    status,
+    spotId,
+    target,
+    createdAt,
+    spotUpdatedAt,
+    spotDeleted,
+    _hash(contentHeld),
+    snapshot,
+    current,
+    _hash(editableFields),
+    _hash(reports),
+  ]);
+}
+
+class ContentReportResolution {
+  const ContentReportResolution({
+    required this.status,
+    required this.resolvedCount,
+    required this.spot,
+  });
+
+  factory ContentReportResolution.fromJson(Map<String, Object?> json) =>
+      ContentReportResolution(
+        status: json['status'] as String,
+        resolvedCount: (json['resolved_count'] as num).toInt(),
+        spot: ContentReportSpot.fromJson(json['spot'] as Map<String, Object?>),
+      );
+
+  final String status;
+
+  final int resolvedCount;
+
+  final ContentReportSpot spot;
+
+  Map<String, Object?> toJson() => {
+    'status': status,
+    'resolved_count': resolvedCount,
+    'spot': spot.toJson(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is ContentReportResolution &&
+      other.status == status &&
+      other.resolvedCount == resolvedCount &&
+      other.spot == spot;
+
+  @override
+  int get hashCode => Object.hashAll([status, resolvedCount, spot]);
+}
+
+class ContentReportEntry {
+  const ContentReportEntry({
+    required this.id,
+    required this.createdAt,
+    required this.note,
+    required this.held,
+    required this.riskFlags,
+    required this.sameNetwork,
+  });
+
+  factory ContentReportEntry.fromJson(Map<String, Object?> json) =>
+      ContentReportEntry(
+        id: json['id'] as String,
+        createdAt: json['created_at'] as String,
+        note: json['note'] as String,
+        held: json['held'] as bool,
+        riskFlags: [for (final e in json['risk_flags'] as List) e as String],
+        sameNetwork: json['same_network'] as bool,
+      );
+
+  final String id;
+
+  final String createdAt;
+
+  final String note;
+
+  /// 這則是否觸發立即暫時隱藏
+  final bool held;
+
+  /// 含 hold_skipped_<規則>
+  final List<String> riskFlags;
+
+  /// 和組內其他處理中的檢舉來自同一網路
+  final bool sameNetwork;
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'created_at': createdAt,
+    'note': note,
+    'held': held,
+    'risk_flags': riskFlags,
+    'same_network': sameNetwork,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is ContentReportEntry &&
+      other.id == id &&
+      other.createdAt == createdAt &&
+      other.note == note &&
+      other.held == held &&
+      _equal(other.riskFlags, riskFlags) &&
+      other.sameNetwork == sameNetwork;
+
+  @override
+  int get hashCode => Object.hashAll([
+    id,
+    createdAt,
+    note,
+    held,
+    _hash(riskFlags),
+    sameNetwork,
+  ]);
+}
+
+class ContentReportSpot {
+  const ContentReportSpot({
+    this.id,
+    this.updatedAt,
+    this.contentHeld,
+    this.name,
+    this.contributorName,
+    this.note,
+    this.entranceNote,
+    this.parkingGuide,
+    this.specialRules,
+  });
+
+  factory ContentReportSpot.fromJson(Map<String, Object?> json) =>
+      ContentReportSpot(
+        id: json['id'] == null ? null : json['id'] as String,
+        updatedAt: json['updated_at'] == null
+            ? null
+            : json['updated_at'] as String,
+        contentHeld: json['content_held'] == null
+            ? null
+            : [for (final e in json['content_held'] as List) e as String],
+        name: json['name'] == null ? null : json['name'] as String,
+        contributorName: json['contributor_name'] == null
+            ? null
+            : json['contributor_name'] as String,
+        note: json['note'] == null ? null : json['note'] as String,
+        entranceNote: json['entrance_note'] == null
+            ? null
+            : json['entrance_note'] as String,
+        parkingGuide: json['parking_guide'] == null
+            ? null
+            : json['parking_guide'] as String,
+        specialRules: json['special_rules'] == null
+            ? null
+            : json['special_rules'] as String,
+      );
+
+  final String? id;
+
+  final String? updatedAt;
+
+  final List<String>? contentHeld;
+
+  final String? name;
+
+  final String? contributorName;
+
+  final String? note;
+
+  final String? entranceNote;
+
+  final String? parkingGuide;
+
+  final String? specialRules;
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'updated_at': updatedAt,
+    'content_held': contentHeld,
+    'name': name,
+    'contributor_name': contributorName,
+    'note': note,
+    'entrance_note': entranceNote,
+    'parking_guide': parkingGuide,
+    'special_rules': specialRules,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is ContentReportSpot &&
+      other.id == id &&
+      other.updatedAt == updatedAt &&
+      _equal(other.contentHeld, contentHeld) &&
+      other.name == name &&
+      other.contributorName == contributorName &&
+      other.note == note &&
+      other.entranceNote == entranceNote &&
+      other.parkingGuide == parkingGuide &&
+      other.specialRules == specialRules;
+
+  @override
+  int get hashCode => Object.hashAll([
+    id,
+    updatedAt,
+    _hash(contentHeld),
+    name,
+    contributorName,
+    note,
+    entranceNote,
+    parkingGuide,
+    specialRules,
+  ]);
+}
+
+/// restore 不可給；edit 必填；keep 選填（target 含 spot_name 時要有 name）
+class ContentReportPatch {
+  const ContentReportPatch({
+    this.name,
+    this.note,
+    this.entranceNote,
+    this.parkingGuide,
+    this.specialRules,
+  });
+
+  factory ContentReportPatch.fromJson(Map<String, Object?> json) =>
+      ContentReportPatch(
+        name: json['name'] == null ? null : json['name'] as String,
+        note: json['note'] == null ? null : json['note'] as String,
+        entranceNote: json['entrance_note'] == null
+            ? null
+            : json['entrance_note'] as String,
+        parkingGuide: json['parking_guide'] == null
+            ? null
+            : json['parking_guide'] as String,
+        specialRules: json['special_rules'] == null
+            ? null
+            : json['special_rules'] as String,
+      );
+
+  final String? name;
+
+  final String? note;
+
+  final String? entranceNote;
+
+  final String? parkingGuide;
+
+  final String? specialRules;
+
+  Map<String, Object?> toJson() => {
+    'name': name,
+    'note': note,
+    'entrance_note': entranceNote,
+    'parking_guide': parkingGuide,
+    'special_rules': specialRules,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is ContentReportPatch &&
+      other.name == name &&
+      other.note == note &&
+      other.entranceNote == entranceNote &&
+      other.parkingGuide == parkingGuide &&
+      other.specialRules == specialRules;
+
+  @override
+  int get hashCode =>
+      Object.hashAll([name, note, entranceNote, parkingGuide, specialRules]);
 }
 
 bool _equal(Object? a, Object? b) {

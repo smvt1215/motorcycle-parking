@@ -469,3 +469,8 @@ verify_jwt = false
 # The case link of the support mails (#295): no sign-in; the 32-byte random
 # token itself is the credential.
 verify_jwt = false
+
+[functions.report-mail]
+# pg_cron and new inappropriate-content reports call it through pg_net with
+# the shared REPORT_MAIL_SECRET header, not a JWT (#280).
+verify_jwt = false

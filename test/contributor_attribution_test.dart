@@ -104,4 +104,47 @@ void main() {
       isNot(contains('contributor_name')),
     );
   });
+
+  test('公開代號與 is_own 只在即時資料，收藏與序列化都不保存（#280）', () {
+    const handle = '3fa8c1d27b9e40a6c55d0e1f2a3b4c5d';
+    final parsed = ParkingSpot.fromJson({
+      ...spot.toJson(),
+      'contributor_handle': handle,
+      'is_own': true,
+    });
+    expect(parsed.contributorHandle, handle);
+    expect(parsed.isOwn, isTrue);
+    final saved = parsed.toJson();
+    expect(saved.containsKey('contributor_handle'), isFalse);
+    expect(saved.containsKey('is_own'), isFalse);
+    final legacy = {
+      ...spot.toJson(),
+      'contributor_handle': handle,
+      'is_own': true,
+    };
+    final restored = ParkingSpot.favorite(legacy).single;
+    expect(restored.contributorHandle, isNull);
+    expect(restored.isOwn, isFalse);
+    expect(legacy['contributor_handle'], handle, reason: '不改動傳入的資料');
+  });
+
+  test('缺少或型別不對的代號與 is_own 視為沒有', () {
+    final missing = ParkingSpot.fromJson(spot.toJson());
+    expect(missing.contributorHandle, isNull);
+    expect(missing.isOwn, isFalse);
+    final malformed = ParkingSpot.fromJson({
+      ...spot.toJson(),
+      'contributor_handle': 42,
+      'is_own': 'true',
+    });
+    expect(malformed.contributorHandle, isNull);
+    expect(malformed.isOwn, isFalse);
+    final nulls = ParkingSpot.fromJson({
+      ...spot.toJson(),
+      'contributor_handle': null,
+      'is_own': null,
+    });
+    expect(nulls.contributorHandle, isNull);
+    expect(nulls.isOwn, isFalse);
+  });
 }

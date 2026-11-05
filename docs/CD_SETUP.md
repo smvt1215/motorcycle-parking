@@ -95,6 +95,15 @@ migration `202610310600_cron_history_prune.sql` 建立每日排程 `cron-history
 
 客服回覆信的 Reply-To 是 `reply+<token>@motoparking.smvtstudio.com`（token 只存雜湊）；收信由 Cloudflare Email Routing＋Email Worker 轉進 `support-inbound`（#295 第 2 層）。確認寄送：`select delivery_status,attempts,send_error from private.support_messages where direction='out' order by created_at desc limit 5;`。
 
+### 內容不當檢舉通知信（`report-mail`）
+
+migration `202611021100_content_reports.sql` 在每筆新的內容不當檢舉（#280）寫入待寄通知，並建立每 5 分鐘的 pg_cron 工作 `report-mail`，經 pg_net 呼叫 Edge Function `report-mail` 寄信到 `SUPPORT_MAIL_TO`（ops@）。信件只含檢舉編號與管理站審核頁連結。以下只設定在各自 Supabase 專案，**不進版控**；缺任何一個時不寄信，通知留著等下次：
+
+1. 共用密鑰（`openssl rand -hex 32`）：`supabase secrets set REPORT_MAIL_SECRET=<密鑰> --project-ref <ref>`，Vault：`select vault.create_secret('<密鑰>','report_mail_secret');`（`project_url` 與即時車位共用）。
+2. `supabase secrets set ADMIN_REVIEW_URL=https://<管理站網址>/review --project-ref <ref>`（信中連結為 `<ADMIN_REVIEW_URL>/<檢舉編號>`）。
+3. `RESEND_API_KEY`、`SUPPORT_MAIL_FROM`、`SUPPORT_MAIL_TO` 與客服表單共用。
+4. 確認：`select count(*) filter (where sent_at is null) from private.report_notices;` 應在 5 分鐘內歸零。
+
 ## staging：Firebase 與 iOS 測試裝置
 
 staging profile 必須是 Ad Hoc，包含受邀 iPhone 的 UDID；production profile 必須是 App Store，不能包含 `ProvisionedDevices`。
