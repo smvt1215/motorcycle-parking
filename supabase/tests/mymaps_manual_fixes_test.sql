@@ -1,4 +1,4 @@
--- 我的地圖匯入點的人工修正（#275；202611040130_mymaps_manual_fixes.sql）：
+-- 我的地圖匯入點的人工修正（#275；202611050130_mymaps_manual_fixes.sql）：
 -- 觸發器恢復、暫存表不留下；沒有這批資料的資料庫不寫任何稽核。
 -- 逐列的新值由 tool/test_mymaps_strip_sql.py 與 staging 備份的本機演練驗證。
 begin;

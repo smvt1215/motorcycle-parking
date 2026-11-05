@@ -1,4 +1,4 @@
--- 我的地圖照抄文字清除（#275；202611040100_strip_mymaps_copied_text.sql）：
+-- 我的地圖照抄文字清除（#275；202611050100_strip_mymaps_copied_text.sql）：
 -- 清除後觸發器恢復、暫存表不留下、沒有點位再以來源地圖署名。逐列的新值由
 -- tool/test_mymaps_strip_sql.py 與 staging 備份的本機演練驗證。
 begin;

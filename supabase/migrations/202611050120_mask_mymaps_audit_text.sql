@@ -1,4 +1,4 @@
--- 稽核紀錄中的我的地圖照抄文字遮蔽（#275，AUDIT_SCRUB＝A）：202611040100／0110
+-- 稽核紀錄中的我的地圖照抄文字遮蔽（#275，AUDIT_SCRUB＝A）：202611050100／0110
 -- 清掉點位上的原文之後，admin_audit_log 仍有 22 筆（staging：update_spot 18、
 -- hide_spot 2、restore_spot 2）的 before／after 帶著當時的原文。比照 #267 的去識別化
 -- 例外：
