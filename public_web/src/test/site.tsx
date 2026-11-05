@@ -5,19 +5,35 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { vi } from 'vitest';
 import { makeStore } from '../app/store';
 import { AuthProvider } from '../auth/AuthContext';
-import type { AuthPort, SignedInUser, SignInResult } from '../auth/port';
+import type {
+  AppleRevoke,
+  AuthPort,
+  Provider as ProviderName,
+  SignedInUser,
+  SignInOptions,
+  SignInResult,
+} from '../auth/port';
 import { routes } from '../routes';
 
-type SignIn = AuthPort['signIn'];
+/** How the fake ends a sign-in through either button; tests read its calls. */
+type SignIn = (provider: ProviderName, options?: SignInOptions) => Promise<SignInResult>;
 
 /** A sign-in the test drives: who is signed in, how the next sign-in ends, what the page asked for. */
 export interface FakeAuth extends AuthPort {
+  /** Every sign-in through the Google or the Apple button. */
   signIn: ReturnType<typeof vi.fn<SignIn>>;
   signOut: ReturnType<typeof vi.fn<() => Promise<void>>>;
+  revokeApple: ReturnType<typeof vi.fn<() => Promise<AppleRevoke>>>;
   /** How the next sign-in ends; a `signedIn` result also signs that user in. */
   next: SignInResult;
+  /** How revoking Apple's grant ends. */
+  nextRevoke: AppleRevoke;
 }
 
+/**
+ * Stands in for the production sign-in. Its Google button is a plain
+ * button with Google's label, where production has Google's own.
+ */
 export function fakeAuth(initial: SignedInUser | null = null): FakeAuth {
   let user = initial;
   const listeners = new Set<(user: SignedInUser | null) => void>();
@@ -27,11 +43,30 @@ export function fakeAuth(initial: SignedInUser | null = null): FakeAuth {
   };
   const auth: FakeAuth = {
     next: { kind: 'cancelled' },
+    nextRevoke: { kind: 'revoked' },
     signIn: vi.fn<SignIn>(async () => {
       const result = auth.next;
       if (result.kind === 'signedIn') act(() => change(result.user));
       return result;
     }),
+    mountGoogleButton(container, { reauthFor, onResult }) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'signin-button signin-button--google';
+      button.textContent = '使用 Google 登入';
+      button.addEventListener('click', () => {
+        void (reauthFor ? auth.signIn('google', { reauthFor }) : auth.signIn('google')).then((result) =>
+          act(() => onResult(result)),
+        );
+      });
+      container.append(button);
+      return { resize() {}, unmount: () => button.remove() };
+    },
+    prepareApple() {},
+    signInWithApple(options) {
+      return options ? auth.signIn('apple', options) : auth.signIn('apple');
+    },
+    revokeApple: vi.fn(async () => auth.nextRevoke),
     signOut: vi.fn(async () => act(() => change(null))),
     accessToken: async () => (user ? `token-${user.id}` : null),
     onChange(listener) {
