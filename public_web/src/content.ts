@@ -5,8 +5,6 @@
 
 export const developer = '小哲資訊工作室（H.C. CHEN）';
 export const appName = '機車停車指南';
-/** The sender of our mail; the pages offer the support form, not a mail link (#295). */
-export const supportEmail = 'support@motoparking.smvtstudio.com';
 
 export const intro =
   '刪除前，先看看你的資料會怎麼處理。申請後有 7 天冷靜期，這段期間登入時，可以選擇取消刪除。';
@@ -14,7 +12,7 @@ export const intro =
 export const coolingOffHeading = '7 天冷靜期';
 /** The cooling-off as it runs; a sequence, so the page draws it in order. */
 export const coolingOffSteps = [
-  { when: '送出當下', what: '名稱立刻隱藏，停車點上不再顯示；這支手機和其他裝置都會登出' },
+  { when: '送出當下', what: '名稱立刻隱藏，停車點上不再顯示；所有裝置都會登出' },
   { when: '7 天內', what: '登入 App 或這個網頁時，可以選擇取消刪除；取消後名稱恢復' },
   { when: '7 天後', what: '刪除，之後就無法復原' },
 ] as const;

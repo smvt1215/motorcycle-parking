@@ -11,7 +11,7 @@ update auth.users set raw_app_meta_data='{"role":"user","provider":"google"}',
   raw_user_meta_data='{"display_name":42,"full_name":"  王小明  "}'
   where id='10000000-0000-4000-8000-000000000002';
 update auth.users set raw_app_meta_data='{"role":"user"}',
-  raw_user_meta_data=jsonb_build_object('name',repeat('車',60))
+  raw_user_meta_data=jsonb_build_object('display_name',repeat('車',60))
   where id='10000000-0000-4000-8000-000000000003';
 update auth.users set raw_user_meta_data='{}',email='private-contributor@example.test'
   where id='10000000-0000-4000-8000-000000000004';
@@ -30,7 +30,7 @@ values('75000000-0000-4000-8000-000000000006','10000000-0000-4000-8000-000000000
 
 select is((select contributor_name from community_spots where id='75000000-0000-4000-8000-000000000001'),'小 哲 🛵','custom name is trimmed to a single line');
 select is((select contributor_role from community_spots where id='75000000-0000-4000-8000-000000000001'),'rider','user metadata and supplied row fields cannot claim admin');
-select is((select contributor_name from community_spots where id='75000000-0000-4000-8000-000000000002'),'王小明','wrong metadata type falls back to provider full name');
+select is((select contributor_name from community_spots where id='75000000-0000-4000-8000-000000000002'),'','a display_name that is not text is no name, never the provider full name (#319)');
 select is((select char_length(contributor_name) from community_spots where id='75000000-0000-4000-8000-000000000003'),40,'names are bounded by Unicode characters');
 select is((select contributor_name from community_spots where id='75000000-0000-4000-8000-000000000004'),'','missing names never fall back to email');
 update auth.users set raw_user_meta_data=jsonb_build_object('display_name',E'\u202E官方\u200B管理員\u2066\uFEFF\U000E0041')
@@ -38,7 +38,7 @@ update auth.users set raw_user_meta_data=jsonb_build_object('display_name',E'\u2
 select is((select contributor_name from community_spots where id='75000000-0000-4000-8000-000000000004'),'官方管理員','format characters cannot reorder or hide parts of a name');
 update auth.users set raw_user_meta_data=jsonb_build_object('display_name',E'\u200B\u200D\u2060 \u00AD','full_name','備援姓名')
   where id='10000000-0000-4000-8000-000000000004';
-select is((select contributor_name from community_spots where id='75000000-0000-4000-8000-000000000004'),'備援姓名','an invisible custom name falls back to the provider name');
+select is((select contributor_name from community_spots where id='75000000-0000-4000-8000-000000000004'),'','an invisible custom name is no name, never the provider name (#319)');
 update auth.users set raw_user_meta_data='{}' where id='10000000-0000-4000-8000-000000000004';
 select is((select contributor_name from community_spots where id='75000000-0000-4000-8000-000000000004'),'','removing every name clears the public name');
 select is((select contributor_role||'|'||contributor_name from community_spots where id='75000000-0000-4000-8000-000000000005'),'admin|','trusted admin identity needs no public personal name');

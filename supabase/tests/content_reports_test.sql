@@ -102,7 +102,7 @@ select lives_ok(format('select public.report_mail_sent(%L)',(select id from firs
 select ok(not exists(select 1 from public.report_mail_pending(200) p where p.id=(select id from first_report)),'a sent notice is not read again');
 reset role;
 select ok(not has_function_privilege('authenticated','public.report_mail_pending(integer)','execute')
-  and not has_function_privilege('anon','public.report_mail_sent(uuid)','execute')
+  and not has_function_privilege('anon','public.report_mail_sent(uuid,text)','execute')
   and not has_function_privilege('authenticated','public.report_mail_tick()','execute'),'riders cannot read or mark notices');
 select is(public.report_mail_tick(),null,'without the vault secret the tick does nothing');
 select is((select schedule from cron.job where jobname='report-mail'),'*/5 * * * *','report-mail runs every 5 minutes');
