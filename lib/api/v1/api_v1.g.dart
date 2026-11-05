@@ -444,6 +444,8 @@ class Spot {
     this.closureState,
     this.contributorName,
     this.contributorRole,
+    this.contributorHandle,
+    this.isOwn,
   });
 
   factory Spot.fromJson(Map<String, Object?> json) => Spot(
@@ -534,6 +536,10 @@ class Spot {
     contributorRole: json['contributor_role'] == null
         ? null
         : json['contributor_role'] as String,
+    contributorHandle: json['contributor_handle'] == null
+        ? null
+        : json['contributor_handle'] as String,
+    isOwn: json['is_own'] == null ? null : json['is_own'] as bool,
   );
 
   /// 官方點為 official: 加上 uuid
@@ -635,6 +641,12 @@ class Spot {
 
   final String? contributorRole;
 
+  /// 投稿者的公開代號（#280），只用來在本機「隱藏這位車友」。帳號公開過名稱（車友新增的點上出現過非空、不含 @ 的名稱）就一直回傳，直到刪除帳號；之後改名、名稱空白或像 email、被管理員清除照樣回傳。從沒公開過名稱、管理員新增或匯入、已匿名化與官方點為 null。同一帳號的點代號相同，不輪替；不是使用者 ID。
+  final String? contributorHandle;
+
+  /// 已登入且這個點是自己新增的（#280）；未登入、官方點一律 false。依呼叫時的登入身分計算。
+  final bool? isOwn;
+
   Map<String, Object?> toJson() => {
     'id': id,
     'source': source,
@@ -679,6 +691,8 @@ class Spot {
     'closure_state': closureState,
     'contributor_name': contributorName,
     'contributor_role': contributorRole,
+    'contributor_handle': contributorHandle,
+    'is_own': isOwn,
   };
 
   @override
@@ -726,7 +740,9 @@ class Spot {
       _equal(other.closure, closure) &&
       other.closureState == closureState &&
       other.contributorName == contributorName &&
-      other.contributorRole == contributorRole;
+      other.contributorRole == contributorRole &&
+      other.contributorHandle == contributorHandle &&
+      other.isOwn == isOwn;
 
   @override
   int get hashCode => Object.hashAll([
@@ -773,6 +789,8 @@ class Spot {
     closureState,
     contributorName,
     contributorRole,
+    contributorHandle,
+    isOwn,
   ]);
 }
 

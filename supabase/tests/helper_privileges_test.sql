@@ -55,7 +55,10 @@ from (values
   ('legacy_projection(jsonb)'), ('condition_legacy_safe_spot(boolean,jsonb,jsonb)'), ('zone_legacy_safe(jsonb)'),
   ('condition_legacy_safe(jsonb,boolean)'), ('condition_legacy_access(jsonb)'), ('condition_off_street(text,text)'),
   ('condition_space_type(jsonb,boolean)'), ('parking_contract()'),
-  ('closure_state(jsonb)'), ('closure_ends_on(jsonb)'), ('closure_date(text)')
+  ('closure_state(jsonb)'), ('closure_ends_on(jsonb)'), ('closure_date(text)'),
+  -- public_spots (a security invoker view) calls these definers (#280); each
+  -- applies the view's visibility itself.
+  ('spot_contributor_handle(uuid)'), ('spot_is_own(uuid)')
 ) api(sig);
 
 -- A spot the viewports return, so their helper chains actually run for anon.

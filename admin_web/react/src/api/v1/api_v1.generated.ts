@@ -180,6 +180,10 @@ export type Spot = {
   closure_state?: string | null;
   contributor_name?: string | null;
   contributor_role?: string | null;
+  /** 投稿者的公開代號（#280），只用來在本機「隱藏這位車友」。帳號公開過名稱（車友新增的點上出現過非空、不含 @ 的名稱）就一直回傳，直到刪除帳號；之後改名、名稱空白或像 email、被管理員清除照樣回傳。從沒公開過名稱、管理員新增或匯入、已匿名化與官方點為 null。同一帳號的點代號相同，不輪替；不是使用者 ID。 */
+  contributor_handle?: string | null;
+  /** 已登入且這個點是自己新增的（#280）；未登入、官方點一律 false。依呼叫時的登入身分計算。 */
+  is_own?: boolean;
 };
 export type SpotsInViewport = {
   /** 官方點在前、社群點在後，各依 id 排序 */
