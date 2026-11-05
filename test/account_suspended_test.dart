@@ -475,6 +475,58 @@ void main() {
       expect(tester.takeException(), isNull);
     }, variant: platforms);
 
+    for (final size in sizes) {
+      testWidgets('到期日未知：不顯示日期那一行，'
+          '${size.width.toInt()}×${size.height.toInt()} 字級 2.0', (
+        tester,
+      ) async {
+        _size(tester, size, text: 2);
+        await tester.pumpWidget(
+          _host(
+            (c) => showAdaptiveSheet<void>(
+              c,
+              (_) => const _Form(AccountSuspended.untilUnknown()),
+            ),
+          ),
+        );
+        await tester.tap(find.byKey(const ValueKey('open')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('form-send')));
+        await tester.pumpAndSettle();
+        expect(find.text(suspendedTitle), findsOneWidget);
+        expect(find.text(suspendedStillAllowed), findsOneWidget);
+        expect(find.byKey(const ValueKey('suspended-until')), findsNothing);
+        expect(find.textContaining('直到另行通知'), findsNothing);
+        expect(tester.takeException(), isNull);
+        final dismiss = find.byKey(const ValueKey('suspended-dismiss'));
+        await tester.ensureVisible(dismiss);
+        await tester.pumpAndSettle();
+        await tester.tap(dismiss);
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('suspended-panel')), findsNothing);
+      }, variant: platforms);
+    }
+
+    test('未知和無限期分開', () {
+      const open = AccountSuspended(null);
+      const unknown = AccountSuspended.untilUnknown();
+      expect(open.untilKnown, isTrue);
+      expect(open.until, isNull);
+      expect(unknown.untilKnown, isFalse);
+      expect(unknown.until, isNull);
+      // The backend's null is indefinite, never unknown.
+      expect(
+        accountSuspendedFrom(
+          const FunctionException(
+            status: 403,
+            details: {'error': 'account.suspended', 'until': null},
+          ),
+        )!.untilKnown,
+        isTrue,
+      );
+      expect(accountSuspendedFrom(unknown)!.untilKnown, isFalse);
+    });
+
     testWidgets('聯絡我們用 App 內瀏覽器開客服頁', (tester) async {
       final calls = <MethodCall>[];
       final messenger =
@@ -712,7 +764,7 @@ void main() {
       expect(find.byKey(const ValueKey('suspended-panel')), findsNothing);
     });
 
-    testWidgets('狀態一直讀不到、名稱沒存進去：顯示面板（無到期日）並改回舊名稱', (tester) async {
+    testWidgets('狀態一直讀不到、名稱沒存進去：顯示面板（不寫日期）並改回舊名稱', (tester) async {
       final backend = _Backend(keepProfile: true);
       await mount(
         tester,
@@ -727,7 +779,12 @@ void main() {
         await tester.pumpAndSettle();
       }
       expect(find.byKey(const ValueKey('suspended-panel')), findsOneWidget);
-      expect(find.text('直到另行通知。'), findsOneWidget);
+      // No date line: unknown is not indefinite.
+      expect(find.text(suspendedTitle), findsOneWidget);
+      expect(find.text(suspendedStillAllowed), findsOneWidget);
+      expect(find.byKey(const ValueKey('suspended-until')), findsNothing);
+      expect(find.textContaining('直到另行通知'), findsNothing);
+      expect(find.textContaining('為止'), findsNothing);
       await tester.tap(find.byKey(const ValueKey('suspended-dismiss')));
       await tester.pumpAndSettle();
       expect(find.text('阿哲'), findsWidgets);

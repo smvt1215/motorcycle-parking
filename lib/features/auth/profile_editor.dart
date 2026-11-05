@@ -86,7 +86,11 @@ class _ProfileEditorState extends State<ProfileEditor> {
           name.text = profileDisplayName(user) ?? '';
           remove = false;
         });
-        await showSuspendedSheet(context, suspended.until);
+        await showSuspendedSheet(
+          context,
+          suspended.until,
+          untilKnown: suspended.untilKnown,
+        );
         return;
       }
       if (mounted) {

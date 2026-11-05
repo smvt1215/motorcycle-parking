@@ -8,11 +8,22 @@ import '../api/v1/api_v1.g.dart' show ApiV1Exception;
 /// only the App's writes stop; browsing, favourites and account deletion
 /// carry on. [until] is when it ends; null means until further notice.
 class AccountSuspended implements Exception {
-  const AccountSuspended(this.until);
+  const AccountSuspended(this.until) : untilKnown = true;
+
+  /// The end could not be learnt (a profile that kept its old values while
+  /// the status cannot be read): nothing is said about when it ends, so it
+  /// is not mistaken for an indefinite suspension.
+  const AccountSuspended.untilUnknown() : until = null, untilKnown = false;
+
   final DateTime? until;
 
+  /// Whether [until] is the backend's answer; false for [untilUnknown].
+  final bool untilKnown;
+
   @override
-  String toString() => 'AccountSuspended(until: $until)';
+  String toString() => untilKnown
+      ? 'AccountSuspended(until: $until)'
+      : 'AccountSuspended(until: unknown)';
 }
 
 const _suspendedCode = 'account.suspended';

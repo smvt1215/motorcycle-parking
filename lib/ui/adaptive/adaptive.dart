@@ -452,7 +452,13 @@ Future<void> runAction(
     if (context.mounted) await showLocationPrompt(context, e.issue);
   } catch (e) {
     if (accountSuspendedFrom(e) case final suspended?) {
-      if (context.mounted) await showSuspendedSheet(context, suspended.until);
+      if (context.mounted) {
+        await showSuspendedSheet(
+          context,
+          suspended.until,
+          untilKnown: suspended.untilKnown,
+        );
+      }
     } else if (context.mounted) {
       showMessage(
         context,

@@ -93,7 +93,7 @@ class ProfileRepository {
             data?['display_name'] != name ||
             (removeAvatar && data?['profile_avatar_url'] != '');
         // When it ends is unknown here.
-        if (kept) refused = const AccountSuspended(null);
+        if (kept) refused = const AccountSuspended.untilUnknown();
       } catch (_) {
         // Nothing more to tell; the save stands as answered.
       }

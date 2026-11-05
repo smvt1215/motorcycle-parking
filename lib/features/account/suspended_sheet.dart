@@ -17,13 +17,30 @@ Color suspendedFill(BuildContext context) =>
 
 /// The shared panel (P18a ① ②) for a write refused because the account is
 /// suspended: over the form, which keeps what was filled in; 知道了 returns
-/// to it. Does not say why the account was suspended.
-Future<void> showSuspendedSheet(BuildContext context, DateTime? until) =>
-    showAdaptiveSheet<void>(context, (_) => SuspendedPanel(until: until));
+/// to it. Does not say why the account was suspended. Without
+/// [untilKnown] the line saying when it ends is left out.
+Future<void> showSuspendedSheet(
+  BuildContext context,
+  DateTime? until, {
+  bool untilKnown = true,
+}) => showAdaptiveSheet<void>(
+  context,
+  (_) => SuspendedPanel(until: until, untilKnown: untilKnown),
+);
 
 class SuspendedPanel extends StatelessWidget {
-  const SuspendedPanel({super.key, required this.until});
+  const SuspendedPanel({
+    super.key,
+    required this.until,
+    this.untilKnown = true,
+  });
+
+  /// When it ends; null is until further notice.
   final DateTime? until;
+
+  /// False when when it ends is unknown: no date line at all, so it does
+  /// not read as indefinite.
+  final bool untilKnown;
 
   @override
   Widget build(BuildContext context) {
@@ -71,16 +88,19 @@ class SuspendedPanel extends StatelessWidget {
                     header: true,
                     child: Text(suspendedTitle, style: title),
                   ),
-                  const SizedBox(height: 14),
-                  Text(
-                    suspendedUntilSentence(until),
-                    key: const ValueKey('suspended-until'),
-                    style: body,
-                  ),
+                  if (untilKnown) ...[
+                    const SizedBox(height: 14),
+                    Text(
+                      suspendedUntilSentence(until),
+                      key: const ValueKey('suspended-until'),
+                      style: body,
+                    ),
+                  ],
                 ],
               ),
             ),
           ),
+          if (!untilKnown) const SizedBox(height: 14),
           Text(suspendedStillAllowed, style: body),
           const SizedBox(height: 14),
           const Align(
