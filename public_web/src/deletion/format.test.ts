@@ -1,4 +1,4 @@
-import { accountLine, deletionDateLabel, maskEmail } from './format';
+import { accountLine, deletionDateLabel, isPrivateRelay, maskEmail } from './format';
 
 describe('deletionDateLabel', () => {
   it('is the calendar day in Taiwan', () => {
@@ -23,6 +23,14 @@ describe('the account line', () => {
     expect(accountLine('apple', 'x1y2@privaterelay.appleid.com')).toBe(
       '以 Apple 登入：隱藏的電子郵件（x1y2@privaterelay.appleid.com）',
     );
+  });
+
+  it('takes only Apple’s own relay domain for a hidden address', () => {
+    expect(isPrivateRelay('x1y2@privaterelay.appleid.com')).toBe(true);
+    expect(isPrivateRelay('x1y2@PrivateRelay.AppleID.com')).toBe(true);
+    expect(isPrivateRelay('x1y2@evilprivaterelay.appleid.com')).toBe(false);
+    expect(isPrivateRelay('privaterelay.appleid.com')).toBe(false);
+    expect(isPrivateRelay(null)).toBe(false);
   });
 
   it('masks an address as the App does', () => {

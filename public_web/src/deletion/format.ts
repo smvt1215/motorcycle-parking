@@ -22,9 +22,10 @@ export function maskEmail(email: string): string {
   return `${email[0]}••••${email.slice(at)}`;
 }
 
-/** Apple's 「隱藏我的電子郵件」 relay address. */
+/** Apple's 「隱藏我的電子郵件」 relay address: exactly that domain, not one ending in it. */
 export function isPrivateRelay(email: string | null): boolean {
-  return email?.endsWith('privaterelay.appleid.com') ?? false;
+  const at = email?.lastIndexOf('@') ?? -1;
+  return at > 0 && email!.slice(at + 1).toLowerCase() === 'privaterelay.appleid.com';
 }
 
 /** The board's identity line: 「以 Google 登入：r…@gmail.com」. */
