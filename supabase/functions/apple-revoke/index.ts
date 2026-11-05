@@ -30,6 +30,9 @@ Deno.serve((req) => {
       return {
         id: data.user.id,
         apple: (data.user.identities ?? []).some((i) => i.provider === 'apple'),
+        // UserIdentity.id is the provider's user id (auth.identities.provider_id).
+        appleSubjects: (data.user.identities ?? [])
+          .filter((i) => i.provider === 'apple').map((i) => i.id),
         signedInAt: latestSignIn(claims.claims.amr),
       };
     },
