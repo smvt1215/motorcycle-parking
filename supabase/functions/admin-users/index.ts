@@ -13,8 +13,8 @@ Deno.serve((req) => {
   });
   return handle(req, {
     async caller(token) {
-      // getUser asks the Auth server: the session is live and not banned,
-      // and the role is the account's current one, not a stale token's.
+      // getUser asks the Auth server: the session is live, and the role is
+      // the account's current one, not a stale token's.
       const { data, error } = await admin.auth.getUser(token);
       if (error || !data.user) return null;
       // aal exists only in the token; getClaims verifies its signature.
@@ -37,28 +37,21 @@ Deno.serve((req) => {
       return {
         id: data.user.id,
         admin: data.user.app_metadata?.role === 'admin',
-        bannedUntil: data.user.banned_until ?? null,
       };
     },
-    async setBan(id, duration) {
-      const { data, error } = await admin.auth.admin.updateUserById(id, {
-        ban_duration: duration,
+    async suspend(change) {
+      const { data, error } = await admin.rpc('admin_set_user_suspension', {
+        p_actor: change.actor,
+        p_user: change.user,
+        p_action: change.action,
+        p_duration: change.duration,
+        p_note: change.note,
       });
-      if (error || !data.user) throw error ?? new Error('no user');
-      return data.user.banned_until ?? null;
+      if (error || !data || typeof data !== 'object') {
+        throw error ?? new Error('no suspension');
+      }
+      const after = (data as Record<string, unknown>).after;
+      return typeof after === 'string' ? after : null;
     },
-    async record(entry) {
-      const { error } = await admin.rpc('admin_record_user_ban', {
-        p_actor: entry.actor,
-        p_user: entry.user,
-        p_action: entry.action,
-        p_before: entry.before,
-        p_after: entry.after,
-        p_duration: entry.duration,
-        p_note: entry.note,
-      });
-      if (error) throw error;
-    },
-    now: () => new Date(),
   });
 });
