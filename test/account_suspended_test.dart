@@ -23,6 +23,7 @@ const userId = '10000000-0000-4000-8000-000000000001';
 
 /// 2026 年 11 月 12 日 14:00 in Taiwan.
 final until = DateTime.utc(2026, 11, 12, 6);
+const untilIso = '2026-11-12T06:00:00Z';
 
 const sizes = [Size(390, 844), Size(820, 1180), Size(1180, 820)];
 const platforms = TargetPlatformVariant({
@@ -371,13 +372,20 @@ void main() {
       });
       expect(status.suspended, isTrue);
       expect(status.until, until);
+      final none = AccountStatus.fromJson({
+        'suspended': false,
+        'suspended_until': null,
+      });
+      expect(none.suspended, isFalse);
+      expect(none.until, isNull);
+      // Taiwan's offset is read as the same instant.
       expect(
-        AccountStatus.fromJson([
-          {'suspended': false, 'suspended_until': null},
-        ]).suspended,
-        isFalse,
+        const AccountStatus(
+          suspended: true,
+          suspendedUntil: '2026-11-12T14:00:00+08:00',
+        ).until,
+        until,
       );
-      expect(() => AccountStatus.fromJson([]), throwsFormatException);
     });
 
     test('讀取失敗或換帳號時狀態變成未知，不擋任何事', () async {
@@ -385,7 +393,7 @@ void main() {
       String? user = userId;
       final status = AccountStatusController(() async {
         if (fail) throw Exception('offline');
-        return AccountStatus(suspended: true, until: until);
+        return AccountStatus(suspended: true, suspendedUntil: untilIso);
       }, userId: () => user);
       await status.refresh();
       expect(status.suspension?.until, until);
@@ -604,7 +612,7 @@ void main() {
           var reads = 0;
           final status = _status(() async {
             reads++;
-            return AccountStatus(suspended: true, until: until);
+            return AccountStatus(suspended: true, suspendedUntil: untilIso);
           });
           final backend = await mount(tester, status, size: size, text: text);
           // Opening P10 reads the status.
@@ -685,7 +693,8 @@ void main() {
         testWidgets('名稱唯讀、儲存與移除頭像停用：${size.width.toInt()}×'
             '${size.height.toInt()} 字級 $text', (tester) async {
           final status = _status(
-            () async => AccountStatus(suspended: true, until: until),
+            () async =>
+                AccountStatus(suspended: true, suspendedUntil: untilIso),
           );
           await status.refresh();
           await mount(tester, status: status, size: size, text: text);

@@ -4,48 +4,29 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../api/v1/api_v1.g.dart' show AccountStatus, ApiV1Client;
 import '../core/app_check.dart';
 import 'app_store.dart';
 
+export '../api/v1/api_v1.g.dart' show AccountStatus;
 export 'account_suspended.dart';
 
-/// What `api_v1.my_account_status()` (authenticated only) says about the
-/// signed-in account.
-// TODO(#331): #332 合併後改用 AccountStatus（lib/api/v1/api_v1.g.dart）。
-@immutable
-class AccountStatus {
-  const AccountStatus({required this.suspended, this.until});
-
-  /// The RPC's `{suspended, suspended_until}`; a one-row list is read the
-  /// same. Throws [FormatException] for anything else.
-  factory AccountStatus.fromJson(Object? json) {
-    final row = json is List && json.length == 1 ? json.single : json;
-    if (row case {'suspended': final bool suspended}) {
-      final until = row['suspended_until'];
-      return AccountStatus(
-        suspended: suspended,
-        until: until is String ? DateTime.tryParse(until)?.toUtc() : null,
-      );
-    }
-    throw FormatException('my_account_status', json);
-  }
-
-  final bool suspended;
-
+/// When [AccountStatus] (`api_v1.my_account_status()`, authenticated only)
+/// says the suspension ends.
+extension AccountStatusUntil on AccountStatus {
   /// Null while suspended means until further notice.
-  final DateTime? until;
+  DateTime? get until => switch (suspendedUntil) {
+    final String value => DateTime.tryParse(value)?.toUtc(),
+    null => null,
+  };
 }
 
-// TODO(#331): #332 合併後改用 ApiV1Client 的 myAccountStatus。
 /// Reads `api_v1.my_account_status()` with the App Check header when there
 /// is a token (#203).
-Future<AccountStatus> readMyAccountStatus(SupabaseClient client) async {
-  var request = client.schema('api_v1').rpc<Object?>('my_account_status');
-  for (final header in (await AppCheck.headers() ?? const {}).entries) {
-    request = request.setHeader(header.key, header.value);
-  }
-  return AccountStatus.fromJson(await request);
-}
+Future<AccountStatus> readMyAccountStatus(SupabaseClient client) => ApiV1Client(
+  client,
+  headers: () async => await AppCheck.headers() ?? const {},
+).myAccountStatus();
 
 final accountStatusProvider = ChangeNotifierProvider<AccountStatusController>((
   ref,
