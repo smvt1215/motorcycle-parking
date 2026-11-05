@@ -77,6 +77,11 @@ class VocabularyTest(unittest.TestCase):
             # 不限、無論 widen, they do not negate.
             "不限車種可停機車格": {"parking_guide": ["可停機車格"]},
             "無論如何可停汽車格": {"parking_guide": ["可停汽車格"]},
+            # A negation four characters before the fact still counts; 沒車時 is a condition.
+            "無法使用悠遊卡": {},
+            "沒有提供折抵": {},
+            "沒有設置安全帽櫃": {},
+            "沒車時也可停汽車格": {"parking_guide": ["可停汽車格"]},
             # Advice is no ban, and no permission either.
             "建議不要停汽車格": {},
             # A floor only where the bike parks now (review on #287).
