@@ -701,6 +701,10 @@ void main() {
               for (final id in ids)
                 {
                   'id': id,
+                  'source': 'community',
+                  'name': '點 $id',
+                  'lat': 25.03,
+                  'lng': 121.56,
                   'contributor_handle': id == 'b' ? null : handleA,
                   'is_own': false,
                 },

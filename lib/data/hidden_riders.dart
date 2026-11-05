@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../api/v1/api_v1.g.dart' show ApiV1Exception;
+import '../api/v1/api_v1.g.dart' as api_v1;
 
 /// One hidden rider (#280, P17a, P17c). Matching uses only
 /// [handle], the backend's public contributor handle; the rest is what the
@@ -178,50 +178,58 @@ class LocalHiddenRidersStore implements HiddenRidersStore {
 /// The account's list through `api_v1` (#280 L2): only these three RPCs
 /// reach it.
 class RemoteHiddenRidersStore implements HiddenRidersStore {
-  RemoteHiddenRidersStore(this.client);
-  final SupabaseClient client;
+  RemoteHiddenRidersStore(SupabaseClient client)
+    : api = api_v1.ApiV1Client(client);
+  final api_v1.ApiV1Client api;
 
-  // TODO(#280): use the generated ApiV1Client methods once
-  // hidden_riders_* are in supabase/api/v1/api_v1.json (backend #315).
-  Future<Object?> _call(String name, [Map<String, dynamic>? params]) async {
+  /// [call], with `hidden_riders.too_many` as [HiddenRidersFull].
+  static Future<api_v1.HiddenRiders> _guard(
+    Future<api_v1.HiddenRiders> Function() call,
+  ) async {
     try {
-      return await client.schema('api_v1').rpc<Object?>(name, params: params);
-    } on PostgrestException catch (e) {
-      // The API's stable code is the message (#195 §2.4).
+      return await call();
+    } on api_v1.ApiV1Exception catch (e) {
       if (e.message == 'hidden_riders.too_many') throw HiddenRidersFull();
-      throw ApiV1Exception(
-        code: e.code,
-        message: e.message,
-        details: e.details,
-      );
+      rethrow;
     }
   }
 
-  /// `{items: [...], limit: 500}`, as all three RPCs answer.
-  static List<HiddenRider> _items(Object? body) => _sorted([
-    if (body case {'items': final List<dynamic> rows})
-      for (final row in rows) ?HiddenRider.fromApi(row),
+  static List<HiddenRider> _items(api_v1.HiddenRiders body) => _sorted([
+    for (final r in body.items)
+      ?HiddenRider.fromJson({
+        'handle': r.handle,
+        'name': r.nameAtHide,
+        'spot_name': r.spotNameAtHide,
+        'hidden_at': r.hiddenAt,
+      }),
   ]);
 
   @override
   Future<List<HiddenRider>> list() async =>
-      _items(await _call('hidden_riders_list'));
+      _items(await _guard(api.hiddenRidersList));
 
   @override
   Future<List<HiddenRider>> merge(List<HiddenRider> items) async => _items(
-    await _call('hidden_riders_merge', {
-      'items': [for (final r in items) r.toApi()],
-    }),
+    await _guard(
+      () => api.hiddenRidersMerge(
+        items: [
+          for (final r in items)
+            api_v1.HiddenRider(
+              handle: r.handle,
+              nameAtHide: r.name,
+              spotNameAtHide: r.spotName,
+              hiddenAt: r.hiddenAt.toUtc().toIso8601String(),
+            ),
+        ],
+      ),
+    ),
   );
 
   @override
   Future<void> remove(String handle) async {
-    await _call('hidden_riders_remove', {'handle': handle});
+    await _guard(() => api.hiddenRidersRemove(handle: handle));
   }
 }
-
-/// Whether the account list is used; off until the #280 L2 RPCs ship.
-const hiddenRidersSyncEnabled = bool.fromEnvironment('HIDDEN_RIDERS_SYNC');
 
 /// The hidden riders (#280). Signed out, the list lives on this device;
 /// signed in, it follows the account ([remote]) with this device keeping a
@@ -261,8 +269,22 @@ class HiddenRiders extends ChangeNotifier {
   bool get accountFull => _accountFull;
   bool _accountFull = false;
 
+  bool _disposed = false;
+
+  /// Sign-in and sync finish on their own time, possibly after the store
+  /// that owns this list is gone.
+  void _notify() {
+    if (!_disposed) notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+
   Future<void> _save() async {
-    notifyListeners();
+    _notify();
     await local.write(_riders);
   }
 
@@ -376,7 +398,7 @@ class HiddenRiders extends ChangeNotifier {
     _pendingRemoves.clear();
     await _savePending();
     _riders = [];
-    notifyListeners();
+    _notify();
     await local.clear();
   }
 
@@ -412,7 +434,7 @@ class HiddenRiders extends ChangeNotifier {
       await _save();
     } on HiddenRidersFull {
       _accountFull = true;
-      notifyListeners();
+      _notify();
     } catch (_) {
       // Offline or the RPCs are not there yet: keep the device list.
     } finally {

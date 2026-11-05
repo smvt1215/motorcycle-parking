@@ -6,11 +6,14 @@ import '../models/parking.dart';
 
 /// The public contributor handle; null when the spot has none (never had a
 /// public name, an admin or import, a deleted account, an official spot).
-String? riderHandle(ParkingSpot spot) => null;
+String? riderHandle(ParkingSpot spot) {
+  final handle = spot.contributorHandle;
+  return spot.isOfficial || handle == null || handle.isEmpty ? null : handle;
+}
 
 /// Whether the signed-in account added [spot] (`is_own`); false for
 /// guests and whenever the backend does not say.
-bool isOwnSpot(ParkingSpot spot) => false;
+bool isOwnSpot(ParkingSpot spot) => spot.isOwn;
 
 /// Whether a rider, not an admin or an import, added [spot].
 bool addedByRider(ParkingSpot spot) =>
@@ -57,7 +60,8 @@ bool hiddenFromLists(ParkingSpot spot, HiddenRiders hidden) =>
 
 /// The fields of [spot] held for review after a report (`content_held`:
 /// `rider_name`, `spot_name`, `text`; #280 L3). Empty until the model
-/// reads it.
+/// reads it: [ParkingSpot] has no such field yet (L3 left it out of the
+/// model), so nothing shows.
 Set<String> contentHeld(ParkingSpot spot) => const {};
 
 /// Whether the contributor, looking at their own spot, should see that

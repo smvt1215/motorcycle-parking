@@ -82,9 +82,9 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     FavoriteHandles? favoriteHandles,
   }) : favoriteHandlesSource =
            favoriteHandles ??
-           (spotsByIdsEnabled && client != null
-               ? RemoteFavoriteHandles(client)
-               : const PendingFavoriteHandles()),
+           (client == null
+               ? const NoFavoriteHandles()
+               : RemoteFavoriteHandles(client)),
        parking = parkingRepository ?? ParkingRepository(client),
        // Official counts from the backend; the example build has fake ones.
        availabilitySource =
@@ -122,18 +122,23 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     hiddenRiders = HiddenRiders(
       local.prefs,
       clock: this.clock,
-      // The account's list once its RPCs ship (#280 L2).
-      remote: hiddenRidersSyncEnabled && client != null
-          ? RemoteHiddenRidersStore(client!)
-          : null,
+      // Signed in, the list follows the account (#280).
+      remote: client == null ? null : RemoteHiddenRidersStore(client!),
     )..addListener(_hiddenRidersChanged);
-    _auth = client?.auth.onAuthStateChange.listen((_) {
+    _auth = client?.auth.onAuthStateChange.listen((state) {
       // Signing in joins the device list to the account's; signing out
       // clears the device's copy.
       unawaited(
         riderId == null ? hiddenRiders.signedOut() : hiddenRiders.signedIn(),
       );
       unawaited(loadFavorites());
+      // `is_own` follows the session a row was read with (#280): read the
+      // map again once someone signs in or out.
+      if (_loadedOnce &&
+          (state.event == AuthChangeEvent.signedIn ||
+              state.event == AuthChangeEvent.signedOut)) {
+        unawaited(refresh());
+      }
       notifyListeners();
     });
   }
@@ -156,7 +161,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   /// Reads the contributor handles of saved favourites, whose snapshots
-  /// never keep them (#280 L2 `spots_by_ids`; nothing until it ships).
+  /// never keep them (#280 `spots_by_ids`).
   final FavoriteHandles favoriteHandlesSource;
 
   /// The handles [favoriteHandlesSource] returned, by spot id.
