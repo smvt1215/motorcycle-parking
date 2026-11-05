@@ -677,7 +677,7 @@ void main() {
       final handle = tester.ensureSemantics();
       expect(
         tester.getSemantics(toggle),
-        containsSemantics(
+        isSemantics(
           isButton: true,
           hasTapAction: true,
           hasExpandedState: true,
