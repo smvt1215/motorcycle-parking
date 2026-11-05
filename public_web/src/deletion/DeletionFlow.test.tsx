@@ -9,6 +9,11 @@ const scheduled = '2026-11-12T02:00:00Z';
 
 afterEach(() => vi.unstubAllGlobals());
 
+/** Lets pending API calls (thunk, token, fetch) run to the end. */
+async function settle() {
+  await new Promise((resolve) => setTimeout(resolve, 50));
+}
+
 async function heading(name: string) {
   return screen.findByRole('heading', { level: 1, name });
 }
@@ -69,7 +74,10 @@ describe('confirming the request (PhoneConfirm)', () => {
     expect(action).toHaveAttribute('aria-disabled', 'true');
     expect(action).toHaveAccessibleDescription(t.confirmCheckHint);
     await userEvent.click(action);
+    // Let a wrongly sent request reach fetch before checking it did not.
+    await settle();
     expect(calls.map((c) => c.fn)).toEqual(['account_deletion_status']);
+    expect(screen.getByRole('heading', { level: 1, name: t.confirmTitle })).toBeInTheDocument();
     expect(calls[0]!.token).toBe('Bearer token-u-1');
   });
 
@@ -100,6 +108,7 @@ describe('confirming the request (PhoneConfirm)', () => {
     openSite('/account-deletion', auth);
     await heading(t.confirmTitle);
     await userEvent.click(screen.getByRole('button', { name: t.confirmCancel }));
+    await settle();
     expect(auth.signOut).toHaveBeenCalled();
     expect(calls.map((c) => c.fn)).toEqual(['account_deletion_status']);
   });
@@ -181,6 +190,57 @@ describe('confirming the request (PhoneConfirm)', () => {
     openSite('/account-deletion', fakeAuth(rider));
     await heading(t.adminCannotDeleteTitle);
     expect(screen.queryByRole('button', { name: t.confirmAction })).toBeNull();
+  });
+});
+
+describe('other answers to the request', () => {
+  async function send(answer: Parameters<typeof stubApi>[0][string]) {
+    stubApi({ account_deletion_status: { body: noRequest }, request_account_deletion: answer });
+    openSite('/account-deletion', fakeAuth(rider));
+    await heading(t.confirmTitle);
+    await userEvent.click(screen.getByRole('checkbox', { name: t.confirmCheck }));
+    await userEvent.click(screen.getByRole('button', { name: t.confirmAction }));
+  }
+
+  it('an administrator found only at sending is told why', async () => {
+    await send(apiError(403, 'account.admin_cannot_self_delete'));
+    await heading(t.adminCannotDeleteTitle);
+  });
+
+  it('anything else is a plain error, not a retry that cannot help', async () => {
+    await send(apiError(400, 'request.invalid'));
+    await heading(t.genericErrorTitle);
+    expect(screen.queryByRole('button', { name: t.networkRetry })).toBeNull();
+  });
+
+  it('a session that ended before sending signs the page out', async () => {
+    const auth = fakeAuth(rider);
+    stubApi({
+      account_deletion_status: { body: noRequest },
+      request_account_deletion: apiError(401, 'auth.sign_in_required'),
+    });
+    openSite('/account-deletion', auth);
+    await heading(t.confirmTitle);
+    await userEvent.click(screen.getByRole('checkbox', { name: t.confirmCheck }));
+    await userEvent.click(screen.getByRole('button', { name: t.confirmAction }));
+    await waitFor(() => expect(auth.signOut).toHaveBeenCalled());
+  });
+
+  it('「登入以取消刪除」 goes straight to the cooling-off choice while signed in', async () => {
+    const auth = fakeAuth(rider);
+    stubApi({
+      account_deletion_status: [{ body: noRequest }, { body: pendingUntil(scheduled) }],
+      request_account_deletion: { body: pendingUntil(scheduled) },
+    });
+    openSite('/account-deletion', auth);
+    await heading(t.confirmTitle);
+    await userEvent.click(screen.getByRole('checkbox', { name: t.confirmCheck }));
+    await userEvent.click(screen.getByRole('button', { name: t.confirmAction }));
+    await heading(t.requestedTitle);
+    await userEvent.click(screen.getByRole('button', { name: t.requestedSignIn }));
+    await heading(t.pendingTitle);
+    expect(auth.signOut).not.toHaveBeenCalled();
+    expect(auth.signIn).not.toHaveBeenCalled();
   });
 });
 

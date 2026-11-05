@@ -5,7 +5,9 @@ import { useAuth } from '../auth/AuthContext';
 import type { Provider, SignInResult } from '../auth/port';
 import * as c from '../content';
 import { DeletionFlow } from '../deletion/DeletionFlow';
+import { FlowPanel } from '../deletion/FlowPanel';
 import { OutcomePanel, type Outcome } from '../deletion/Outcome';
+import { checking } from '../deletion/text';
 import { Site } from '../ui/Site';
 import './AccountDeletion.css';
 
@@ -37,7 +39,17 @@ export function AccountDeletion() {
     return <OutcomePanel outcome={outcome} onDismiss={() => setOutcome(null)} />;
   }
   if (session.phase === 'signedIn' && session.user && auth) {
-    return <DeletionFlow user={session.user} auth={auth} onOutcome={setOutcome} />;
+    // Keyed by account: another account starts the flow afresh.
+    return <DeletionFlow key={session.user.id} user={session.user} auth={auth} onOutcome={setOutcome} />;
+  }
+  if (session.phase === 'loading' && auth) {
+    return (
+      <FlowPanel title={checking}>
+        <p className="flow-note" role="status">
+          {checking}
+        </p>
+      </FlowPanel>
+    );
   }
   return (
     <Explanation

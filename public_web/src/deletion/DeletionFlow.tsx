@@ -37,7 +37,9 @@ function v1Error(failure: unknown): V1Error | null {
 
 /** Network trouble: no answer, or one that never arrived whole. */
 function isNetwork(error: V1Error | null): boolean {
-  return error !== null && (error.status === 0 || error.message === 'client.network');
+  // A build without a backend is not a connection that a retry could fix.
+  if (error === null || error.message === 'client.not_connected') return false;
+  return error.status === 0 || error.message === 'client.network';
 }
 
 /**
@@ -62,7 +64,13 @@ export function DeletionFlow({
 
   async function signOut(outcome: Outcome | null = null) {
     onOutcome(outcome);
-    await auth.signOut();
+    try {
+      await auth.signOut();
+    } catch {
+      // Still signed in here: drop the outcome and say something went wrong.
+      onOutcome(null);
+      setStep({ kind: 'generic' });
+    }
   }
 
   async function submit() {
@@ -105,8 +113,10 @@ export function DeletionFlow({
     }
     switch (result.kind) {
       case 'signedIn':
-        if (result.user.id === user.id) await submit();
-        else await signOut({ kind: 'wrongAccount', maskedEmail: maskOrNull(result.user.email) });
+        if (result.user.id === user.id) {
+          setStep({ kind: 'status' });
+          await submit();
+        } else await signOut({ kind: 'wrongAccount', maskedEmail: maskOrNull(result.user.email) });
         return;
       case 'wrongAccount':
       case 'noAccount':
@@ -122,7 +132,7 @@ export function DeletionFlow({
   // token outlives it by up to an hour): back to signed out.
   const signedOutElsewhere = status.isError && v1Error(status.error)?.message === 'auth.sign_in_required';
   useEffect(() => {
-    if (signedOutElsewhere) void signOut();
+    if (signedOutElsewhere) auth.signOut().catch(() => setStep({ kind: 'generic' }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signedOutElsewhere]);
 
@@ -143,9 +153,13 @@ export function DeletionFlow({
             type="button"
             className="flow-button"
             onClick={() => {
-              // Signed in again during the cooling-off, the rider gets the choice.
-              const provider = user.provider;
-              void signOut().then(() => auth.signIn(provider));
+              // The App signs out and asks for a sign-in here. On the web the
+              // rider is still signed in on this page (the token outlives the
+              // request by up to an hour), so the cooling-off choice follows
+              // directly; once the token has ended the status says so and the
+              // page signs out.
+              setStep({ kind: 'status' });
+              void status.refetch();
             }}
           >
             {t.requestedSignIn}
@@ -275,7 +289,8 @@ export function DeletionFlow({
     }
     return <Notice title={t.genericErrorTitle} body={t.genericErrorBody} onOk={() => void signOut()} />;
   }
-  if (!status.data || requestState.isLoading) {
+  // isFetching: a refetch must not show the last answer (e.g. 'none' before the request).
+  if (!status.data || status.isFetching || requestState.isLoading) {
     return <Checking label={requestState.isLoading ? t.sending : t.checking} />;
   }
   if (step.kind === 'admin' || !status.data.can_self_delete) {
