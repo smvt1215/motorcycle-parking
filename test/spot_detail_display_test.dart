@@ -365,4 +365,91 @@ void main() {
     expect(known.detail, contains('可付 40 元延長 1 次'));
     expect(known.detail, isNot(contains('延長每次')));
   });
+
+  test('稍後開放的分區寫完整費率條件，白天看得到隔日另計（Codex P2 第 3 輪）', () {
+    final zones = [
+      for (final z
+          in (detailLotJson['parking_zones'] as List)
+              .cast<Map<String, dynamic>>())
+        z['id'] == 'b3'
+            ? {
+                ...z,
+                'fee': {
+                  'heavy': {
+                    'mode': 'per_visit',
+                    'amount': 30,
+                    'renew': 'midnight',
+                    'extension_amount': 10,
+                  },
+                },
+              }
+            : z,
+    ];
+    final spot = ParkingSpot.fromJson(lot(zones));
+    final later = feeSection(
+      sign(spot, VehicleType.heavy, detailDay),
+      spot,
+      detailDay,
+    ).later.single;
+    expect(later, contains('每次 30 元，隔日另計，延長每次 10 元'));
+  });
+
+  test('時段費率沒涵蓋的時間寫其他時間未提供', () {
+    final spot = ParkingSpot.fromJson({
+      ...detailBayJson,
+      'fee': {
+        'scooter': {
+          'mode': 'by_time',
+          'periods': [
+            {
+              'days': 'weekday',
+              'from': '08:00',
+              'to': '20:00',
+              'rate': {'mode': 'hourly', 'amount': 20, 'per_minutes': 60},
+            },
+          ],
+        },
+        'heavy': {'mode': 'same_as_scooter'},
+      },
+    });
+    final card = feeSection(
+      sign(spot, VehicleType.scooter, detailDay),
+      spot,
+      detailDay,
+    ).cards.single;
+    expect(card.main, '每小時 20 元');
+    expect(card.others, contains(('其他時間', '未提供')));
+  });
+
+  test('身障特製機車的資格限制留在規則列，說明只在規則列說完時才省略（Codex P2 第 3 輪）', () {
+    final spot = ParkingSpot.fromJson({
+      ...detailBayJson,
+      'space_type': 'disabledMotorcycle',
+      'condition': {
+        'bay': 'motorcycle',
+        'use': 'usual',
+        'charge': 'free',
+        'limits': [
+          {'kind': 'special_vehicle', 'vehicle': 'disabled_modified'},
+        ],
+      },
+    });
+    final s = sign(spot, VehicleType.scooter, detailDay);
+    final rules = detailRules(s, spot);
+    expect(
+      rules.where((r) => r.kind == DetailRuleKind.special).single.text,
+      contains('身障特製機車'),
+    );
+    expect(rules.first.label, '限定');
+    expect(rulesCover('身障專用格：須是經監理站檢驗合格的特製機車', rules), isTrue);
+    // A reason the rows do not carry keeps the explanation.
+    expect(rulesCover('身障專用格：須是特製機車；此路段施工中', rules), isFalse);
+    expect(rulesCover('任何說明', const []), isFalse);
+    // An unlabelled part continues the clause before it.
+    final limits = detailRules(
+      sign(detailLot, VehicleType.heavy, detailDay),
+      detailLot,
+    );
+    expect(rulesCover('禁停時段：每天 23:00–隔日 07:00；假日 全天', limits), isTrue);
+  });
 }

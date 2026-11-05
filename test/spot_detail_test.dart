@@ -221,7 +221,10 @@ void main() {
       expect(find.text('23:00–隔日 07:00、假日 全天'), findsOneWidget);
       expect(find.text('B1 機車區（一般機車格）'), findsOneWidget);
       expect(
-        find.text('另有 B3 汽車區（汽機車共用格），20:00–23:00 才開放大型重機，同樣每小時 20 元。'),
+        find.text(
+          '另有 B3 汽車區（汽機車共用格），20:00–23:00 才開放大型重機，'
+          '同樣每小時 20 元，當日上限 100 元（零時重算）。',
+        ),
         findsOneWidget,
       );
       expect(find.text('請以現場公告為準'), findsOneWidget);
@@ -742,5 +745,37 @@ void main() {
       );
       await tester.pumpWidget(const SizedBox.shrink());
     });
+  });
+
+  testWidgets('Beta 城市的分區場站：逐區空位列也帶 Beta 說明（Codex P2 第 3 輪）', (tester) async {
+    final store = await detailStore(
+      tester,
+      VehicleType.heavy,
+      now: detailNight,
+    );
+    store.availability = {
+      'songshou': SpotAvailability([
+        AvailabilitySnapshot(
+          spotId: 'songshou',
+          vehicle: AvailabilityVehicle.heavy,
+          provider: '臺北市停管處',
+          window: AvailabilityWindow.taipei,
+          total: 40,
+          available: 4,
+          sourceUpdatedAt: detailNight.subtract(const Duration(minutes: 2)),
+        ),
+      ]),
+    };
+    // 臺北市 is a Beta city by default.
+    expect(store.availabilityBetaCities, contains('臺北市'));
+    await openDetail(tester, store, detailLot);
+    await show(tester, 'availability-beta-note');
+    expect(find.text('Beta'), findsWidgets);
+    // No count shown, no Beta line.
+    store.availability = const {};
+    store.notifyListeners();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('availability-beta-note')), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 }

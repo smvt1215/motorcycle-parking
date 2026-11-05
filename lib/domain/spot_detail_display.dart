@@ -83,6 +83,9 @@ enum DetailRuleKind {
   /// 共用: when a bay shared with cars opens to motorcycles.
   shared,
 
+  /// 限定: who alone may park (身障特製機車, 電動機車).
+  special,
+
   /// 僅限: who the place is for when no motorcycle may park (A2b).
   only,
 
@@ -100,6 +103,7 @@ class DetailRule {
     DetailRuleKind.limit => '限時',
     DetailRuleKind.noParking => '禁停',
     DetailRuleKind.shared => '共用',
+    DetailRuleKind.special => '限定',
     DetailRuleKind.only => '僅限',
     DetailRuleKind.motorcycle => '機車',
   };
@@ -121,6 +125,50 @@ List<String> _limitTexts(ParkingCondition? c) => [
       else
         for (final p in l.timePeriods) limitWords(p),
 ];
+
+/// Who alone may park, in the decision's words (parking_decision.dart's
+/// reasons for these limits).
+List<String> _specialTexts(ParkingCondition? c) => [
+  if (c?.hasLimit(LimitKind.specialVehicle) ?? false)
+    '身障特製機車：須是經監理站檢驗合格的特製機車，且身障者本人騎乘或同行，'
+        '並持專用停車位識別證或掛專用牌照，才可停放',
+  if (c?.hasLimit(LimitKind.evOnly) ?? false) '限電動機車停放或充換電，燃油機車不可停',
+];
+
+/// Whether the rows under the verdict card say all [explanation] says, so
+/// the card need not repeat it: each of its parts is a limit, a 禁停
+/// period, an opening time or a 限定 the rows list. Anything else keeps the
+/// whole explanation on the card.
+bool rulesCover(String explanation, List<DetailRule> rules) {
+  if (rules.isEmpty) return false;
+  final parts = explanation
+      .split(RegExp('[；。]'))
+      .map((t) => t.trim())
+      .where((t) => t.isNotEmpty);
+  final kinds = {for (final r in rules) r.kind};
+  bool covered(String part) =>
+      (kinds.contains(DetailRuleKind.limit) &&
+          (part.contains('限時') || part.contains('限停'))) ||
+      (kinds.contains(DetailRuleKind.noParking) && part.contains('禁停')) ||
+      (kinds.contains(DetailRuleKind.special) &&
+          (part.contains('身障') || part.contains('電動'))) ||
+      part.contains('可停時段') ||
+      part.contains('起可停') ||
+      part.contains('請確認現場公告');
+  // A day or time without its own label (「假日 全天」 after 「禁停時段：
+  // …」) continues the clause before it; any other text stands alone.
+  var previous = false;
+  for (final part in parts) {
+    final continues =
+        previous &&
+        !part.contains('：') &&
+        RegExp('^(每天|平日|假日|週|[0-9])').hasMatch(part);
+    final ok = continues || covered(part);
+    if (!ok) return false;
+    previous = ok;
+  }
+  return true;
+}
 
 List<String> _noParkingTexts(ParkingCondition? c) => [
   for (final l in c?.limits ?? const <ParkingLimit>[])
@@ -173,6 +221,7 @@ List<DetailRule> detailRules(FourSign s, ParkingSpot spot) {
   }
 
   return [
+    ?rule(DetailRuleKind.special, _specialTexts),
     ?rule(DetailRuleKind.limit, _limitTexts),
     ?rule(DetailRuleKind.noParking, _noParkingTexts),
     ?rule(DetailRuleKind.shared, _sharedTexts),
@@ -376,7 +425,12 @@ class SeatRow {
     required this.official,
     this.officialNote = '',
     this.areas = const [],
+    this.counted = false,
   });
+
+  /// Whether [official] is an official count (剩 N 格, 已滿), which a
+  /// Beta city's note goes with.
+  final bool counted;
 
   /// The place the row is about; the first of [areas] when it stands for
   /// several.
@@ -460,6 +514,7 @@ List<SeatRow> seatRows(
         ].where((t) => t.isNotEmpty).join('・'),
         official: row.official,
         officialNote: row.officialNote,
+        counted: row.counted,
       ),
     );
   }
@@ -496,6 +551,7 @@ SeatRow _seatRow(
       name: detailPlaceName(a),
       sub: sub,
       official: snapshot.available == 0 ? '已滿' : '剩 ${snapshot.available} 格',
+      counted: true,
       officialNote: [
         if (delayed) '更新延遲',
         if (at != null) agoText(at, now),
@@ -629,16 +685,28 @@ String rateWords(Rate r, {int? firstMinutes}) => switch (r.mode) {
   _ => '',
 };
 
-/// A period's rate with all its terms, in the words the notice board's
-/// period lines use ([Rate.text]): 「每次 30 元，隔日另計」, 「每小時 20
-/// 元，當日上限 100 元（零時重算）」.
-String periodWords(Rate r) => r.text;
+/// A rate with all its terms, in the notice board's order and words (as
+/// [Rate.text]): 「每次 30 元，隔日另計」, 「每小時 20 元，當日上限 100 元
+/// （零時重算）」. With the place's time limit holding then ([stay]), a
+/// 0 元 visit reads its free stay and an extension its count. Every price
+/// the details write as one line goes through here, so no term drops.
+String rateFullWords(Rate r, {LimitPeriod? stay}) => [
+  rateWords(r, firstMinutes: stay?.maxMinutes),
+  ..._extras(r, stay),
+].where((t) => t.isNotEmpty).join('，');
+
+/// Whether some minute of the week has no period of a time-of-day rate.
+bool _uncovered(List<FeePeriod> periods) => feeWeekCoverage([
+  for (final p in periods) (days: p.days, from: p.from, to: p.to),
+]).contains(false);
 
 /// What else a rate says: a cap, a paid extension, how a visit renews.
 List<String> _extras(Rate r, LimitPeriod? stay) => [
   if (r.mode == FeeMode.hourly && r.dailyCap != null)
     '當日上限 ${FeeWords.money(r.dailyCap)} 元'
         '${FeeWords.reset(r.capReset) == null ? '' : '（${FeeWords.reset(r.capReset)}）'}',
+  if (r.mode == FeeMode.perVisit && r.renew == Renew.midnight) '隔日另計',
+  if (r.mode == FeeMode.perVisit && r.renew == Renew.none) '停多久都只收一次',
   // The amount of an extension is the rate's; how many the time limit
   // allows is known only with it (none at 0, where the limit says so).
   if (r.mode == FeeMode.perVisit && r.extensionAmount != null)
@@ -647,8 +715,6 @@ List<String> _extras(Rate r, LimitPeriod? stay) => [
       0 => null,
       final n => '可付 ${FeeWords.money(r.extensionAmount)} 元延長 $n 次',
     },
-  if (r.mode == FeeMode.perVisit && r.renew == Renew.none) '停多久都只收一次',
-  if (r.mode == FeeMode.perVisit && r.renew == Renew.midnight) '隔日另計',
 ];
 
 /// One card of 怎麼算錢 (A2, A8, A10).
@@ -716,15 +782,14 @@ String _priceWords(DetailPrice p, ParkingCondition? c, DateTime now) {
   final r = p.rate;
   if (r == null) return '未提供';
   if (r.mode != FeeMode.byTime) {
-    return rateWords(
-      r,
-      firstMinutes: _stayAt(c, now, HolidayCalendar.current)?.maxMinutes,
-    );
+    return rateFullWords(r, stay: _stayAt(c, now, HolidayCalendar.current));
   }
   final periods = r.periods ?? const <FeePeriod>[];
-  return periods
-      .map((p) => '${_when(p.days, p.from, p.to)} ${rateWords(p.rate)}')
-      .join('；');
+  return [
+    for (final p in periods)
+      '${_when(p.days, p.from, p.to)} ${rateFullWords(p.rate)}',
+    if (_uncovered(periods)) '其他時間未提供',
+  ].join('；');
 }
 
 FeeCard _card(
@@ -794,9 +859,17 @@ FeeCard _card(
       if (!identical(p, holding))
         (
           _when(p.days, p.from, p.to),
-          p.rate.mode == FeeMode.byTime ? '' : periodWords(p.rate),
+          p.rate.mode == FeeMode.byTime ? '' : rateFullWords(p.rate),
         ),
+    // Hours no period covers state no rate (the board's 其他時間).
+    if (_uncovered(periods)) ('其他時間', '未提供'),
   ];
+  // 平日／假日 read by the weekday when the calendar lacks the year.
+  final fellBack = calendarFellBack(
+    [for (final p in periods) p.days],
+    today,
+    cal,
+  );
   final cross = switch (r.crossPeriod) {
     CrossPeriod.eachPeriod => '跨時段分別計費',
     null => null,
@@ -808,7 +881,7 @@ FeeCard _card(
       vehicleHeader: vehicleHeader,
       main: '未提供',
       unknown: true,
-      detail: [?cross].join(),
+      detail: [?cross, if (fellBack) holidayFallbackNote].join('；'),
       others: others,
       closedTimes: closedTimes,
       note: note,
@@ -822,6 +895,7 @@ FeeCard _card(
       [...lead, _when(holding.days, holding.from, holding.to)].join('，'),
       ..._extras(holding.rate, stay),
       ?cross,
+      if (fellBack) holidayFallbackNote,
     ].join('；'),
     others: others,
     closedTimes: closedTimes,

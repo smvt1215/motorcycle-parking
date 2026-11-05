@@ -571,6 +571,9 @@ class _SpotSheetState extends State<SpotSheet> {
         note: seatRowsNote(sign),
         // 車友回報 under each place goes here (#189).
         riderRow: null,
+        betaCities: inAvailabilityBeta(spot.city, store.availabilityBetaCities)
+            ? store.availabilityBetaCities
+            : null,
       );
     } else if (live) {
       seat = SpotSeatSection(
@@ -633,10 +636,11 @@ class _SpotSheetState extends State<SpotSheet> {
               // stays only where no row does.
               explanation: selected != null
                   ? selectedNote(sign, selected)
-                  : rules.isNotEmpty &&
-                        (sign.verdict.status == EligibilityStatus.allowed ||
+                  // Dropped only where the rows below say all of it.
+                  : (sign.verdict.status == EligibilityStatus.allowed ||
                             sign.verdict.status ==
-                                EligibilityStatus.conditional)
+                                EligibilityStatus.conditional) &&
+                        rulesCover(display.explanation, rules)
                   ? ''
                   : display.explanation,
               basis: display.basis,

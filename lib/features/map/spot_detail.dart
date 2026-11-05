@@ -8,6 +8,8 @@ import '../../models/zone_entries.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../../ui/detail_tokens.dart';
 import '../../ui/four_sign_plates.dart';
+import '../../domain/availability_beta_display.dart';
+import 'beta_tag.dart';
 import 'spot_photos.dart';
 import 'vehicle_sheet.dart' show SmallPlateStack, platesOf;
 
@@ -405,6 +407,7 @@ class DetailRulesView extends StatelessWidget {
       DetailRuleKind.limit => (Icons.timer_outlined, c.conditional),
       DetailRuleKind.noParking => (Icons.block, c.denied),
       DetailRuleKind.shared => (Icons.directions_car_outlined, c.link),
+      DetailRuleKind.special => (Icons.info_outline, c.conditional),
       DetailRuleKind.only => (Icons.directions_car_outlined, c.ink),
       DetailRuleKind.motorcycle => (Icons.block, c.denied),
     };
@@ -495,9 +498,14 @@ class SeatRowsView extends StatelessWidget {
     required this.rows,
     required this.note,
     this.riderRow,
+    this.betaCities,
   });
   final List<SeatRow> rows;
   final String note;
+
+  /// The Beta cities, when the spot is in one; null otherwise. Shown, as
+  /// the whole lot's 有沒有位 does, once any row reads an official count.
+  final List<String>? betaCities;
   final Widget? Function(SignArea area)? riderRow;
 
   @override
@@ -538,6 +546,35 @@ class SeatRowsView extends StatelessWidget {
               ),
               ?riderRow?.call(row.area),
             ],
+          ),
+        ],
+        if (betaCities case final beta? when rows.any((r) => r.counted)) ...[
+          const SizedBox(height: 12),
+          Semantics(
+            container: true,
+            label: '$betaTagLabel，${betaDetailNote(beta)}',
+            excludeSemantics: true,
+            child: Row(
+              key: const ValueKey('availability-beta-note'),
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(top: 1),
+                  child: BetaTag(),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    betaDetailNote(beta),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: c.muted,
+                      height: 1.45,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
         const SizedBox(height: 12),
