@@ -1,4 +1,4 @@
--- 我的地圖費率片段清除（#275；202611040110_strip_mymaps_fee_fragments.sql）：
+-- 我的地圖費率片段清除（#275；202611050110_strip_mymaps_fee_fragments.sql）：
 -- 清除後觸發器恢復、暫存表不留下；沒有這批資料的資料庫不推進 data_versions。
 -- 逐列的新值由 tool/test_mymaps_strip_sql.py 與 staging 備份的本機演練驗證。
 begin;
