@@ -133,6 +133,49 @@ class ApiV1Client {
   /// [cancelAccountDeletion] as served, for callers that keep the JSON (#202).
   Future<Object?> cancelAccountDeletionRaw() =>
       _call('cancel_account_deletion', {});
+
+  /// 依 id 讀多個停車點（收藏頁）
+  Future<SpotsByIds> spotsByIds({required List<String> ids}) async {
+    final raw = await spotsByIdsRaw(ids: ids);
+    return SpotsByIds.fromJson(raw as Map<String, Object?>);
+  }
+
+  /// [spotsByIds] as served, for callers that keep the JSON (#202).
+  Future<Object?> spotsByIdsRaw({required List<String> ids}) =>
+      _call('spots_by_ids', {'ids': ids});
+
+  /// 自己隱藏的車友
+  Future<HiddenRiders> hiddenRidersList() async {
+    final raw = await hiddenRidersListRaw();
+    return HiddenRiders.fromJson(raw as Map<String, Object?>);
+  }
+
+  /// [hiddenRidersList] as served, for callers that keep the JSON (#202).
+  Future<Object?> hiddenRidersListRaw() => _call('hidden_riders_list', {});
+
+  /// 把隱藏的車友併入帳號
+  Future<HiddenRiders> hiddenRidersMerge({
+    required List<HiddenRider> items,
+  }) async {
+    final raw = await hiddenRidersMergeRaw(items: items);
+    return HiddenRiders.fromJson(raw as Map<String, Object?>);
+  }
+
+  /// [hiddenRidersMerge] as served, for callers that keep the JSON (#202).
+  Future<Object?> hiddenRidersMergeRaw({required List<HiddenRider> items}) =>
+      _call('hidden_riders_merge', {
+        'items': [for (final e in items) e.toJson()],
+      });
+
+  /// 解除隱藏一位車友
+  Future<HiddenRiders> hiddenRidersRemove({required String handle}) async {
+    final raw = await hiddenRidersRemoveRaw(handle: handle);
+    return HiddenRiders.fromJson(raw as Map<String, Object?>);
+  }
+
+  /// [hiddenRidersRemove] as served, for callers that keep the JSON (#202).
+  Future<Object?> hiddenRidersRemoveRaw({required String handle}) =>
+      _call('hidden_riders_remove', {'handle': handle});
 }
 
 class ClientConfig {
@@ -444,6 +487,9 @@ class Spot {
     this.closureState,
     this.contributorName,
     this.contributorRole,
+    this.contributorHandle,
+    this.isOwn,
+    this.contentHeld,
   });
 
   factory Spot.fromJson(Map<String, Object?> json) => Spot(
@@ -534,6 +580,13 @@ class Spot {
     contributorRole: json['contributor_role'] == null
         ? null
         : json['contributor_role'] as String,
+    contributorHandle: json['contributor_handle'] == null
+        ? null
+        : json['contributor_handle'] as String,
+    isOwn: json['is_own'] == null ? null : json['is_own'] as bool,
+    contentHeld: json['content_held'] == null
+        ? null
+        : [for (final e in json['content_held'] as List) e as String],
   );
 
   /// 官方點為 official: 加上 uuid
@@ -635,6 +688,15 @@ class Spot {
 
   final String? contributorRole;
 
+  /// 投稿者的公開代號（#280），只用來在本機「隱藏這位車友」。帳號公開過名稱（車友新增的點上出現過非空、不含 @ 的名稱）就一直回傳，直到刪除帳號；之後改名、名稱空白或像 email、被管理員清除照樣回傳。從沒公開過名稱、管理員新增或匯入、已匿名化與官方點為 null。同一帳號的點代號相同，不輪替；不是使用者 ID。
+  final String? contributorHandle;
+
+  /// 已登入且這個點是自己新增的（#280）；未登入、官方點一律 false。依呼叫時的登入身分計算。
+  final bool? isOwn;
+
+  /// 因內容不當檢舉而暫時遮蔽的部分（#280）：rider_name（contributor_name 回空字串，代號照回）、spot_name（name 回「名稱審核中」）、text（note、entrance_note、parking_guide、special_rules 回空字串）。投稿者本人（is_own）看到原文，仍回這個欄位。官方點沒有這個欄位。
+  final List<String>? contentHeld;
+
   Map<String, Object?> toJson() => {
     'id': id,
     'source': source,
@@ -679,6 +741,9 @@ class Spot {
     'closure_state': closureState,
     'contributor_name': contributorName,
     'contributor_role': contributorRole,
+    'contributor_handle': contributorHandle,
+    'is_own': isOwn,
+    'content_held': contentHeld,
   };
 
   @override
@@ -726,7 +791,10 @@ class Spot {
       _equal(other.closure, closure) &&
       other.closureState == closureState &&
       other.contributorName == contributorName &&
-      other.contributorRole == contributorRole;
+      other.contributorRole == contributorRole &&
+      other.contributorHandle == contributorHandle &&
+      other.isOwn == isOwn &&
+      _equal(other.contentHeld, contentHeld);
 
   @override
   int get hashCode => Object.hashAll([
@@ -773,6 +841,9 @@ class Spot {
     closureState,
     contributorName,
     contributorRole,
+    contributorHandle,
+    isOwn,
+    _hash(contentHeld),
   ]);
 }
 
@@ -864,6 +935,116 @@ class AccountDeletionState {
     canSelfDelete,
     cannotSelfDeleteReason,
   ]);
+}
+
+class SpotsByIds {
+  const SpotsByIds({required this.spots});
+
+  factory SpotsByIds.fromJson(Map<String, Object?> json) => SpotsByIds(
+    spots: [
+      for (final e in json['spots'] as List)
+        Spot.fromJson(e as Map<String, Object?>),
+    ],
+  );
+
+  /// 看得到的點；官方點在前、社群點在後，各依 id 排序
+  final List<Spot> spots;
+
+  Map<String, Object?> toJson() => {
+    'spots': [for (final e in spots) e.toJson()],
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SpotsByIds && _equal(other.spots, spots);
+
+  @override
+  int get hashCode => Object.hashAll([_hash(spots)]);
+}
+
+/// 一位隱藏的車友（#280）
+class HiddenRider {
+  const HiddenRider({
+    required this.handle,
+    this.nameAtHide,
+    this.spotNameAtHide,
+    required this.hiddenAt,
+  });
+
+  factory HiddenRider.fromJson(Map<String, Object?> json) => HiddenRider(
+    handle: json['handle'] as String,
+    nameAtHide: json['name_at_hide'] == null
+        ? null
+        : json['name_at_hide'] as String,
+    spotNameAtHide: json['spot_name_at_hide'] == null
+        ? null
+        : json['spot_name_at_hide'] as String,
+    hiddenAt: json['hidden_at'] as String,
+  );
+
+  /// contributor_handle
+  final String handle;
+
+  /// 隱藏當下看到的車友名稱；沒有名稱時空字串
+  final String? nameAtHide;
+
+  /// 隱藏時所在的點位名稱
+  final String? spotNameAtHide;
+
+  /// ISO 8601 時間；2026-01-01T00:00:00Z 起，不可晚於現在 5 分鐘以上
+  final String hiddenAt;
+
+  Map<String, Object?> toJson() => {
+    'handle': handle,
+    'name_at_hide': nameAtHide,
+    'spot_name_at_hide': spotNameAtHide,
+    'hidden_at': hiddenAt,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is HiddenRider &&
+      other.handle == handle &&
+      other.nameAtHide == nameAtHide &&
+      other.spotNameAtHide == spotNameAtHide &&
+      other.hiddenAt == hiddenAt;
+
+  @override
+  int get hashCode =>
+      Object.hashAll([handle, nameAtHide, spotNameAtHide, hiddenAt]);
+}
+
+/// 自己隱藏的車友（#280）
+class HiddenRiders {
+  const HiddenRiders({required this.items, required this.limit});
+
+  factory HiddenRiders.fromJson(Map<String, Object?> json) => HiddenRiders(
+    items: [
+      for (final e in json['items'] as List)
+        HiddenRider.fromJson(e as Map<String, Object?>),
+    ],
+    limit: (json['limit'] as num).toInt(),
+  );
+
+  /// 依 hidden_at 新到舊
+  final List<HiddenRider> items;
+
+  /// 每帳號上限（500）
+  final int limit;
+
+  Map<String, Object?> toJson() => {
+    'items': [for (final e in items) e.toJson()],
+    'limit': limit,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is HiddenRiders &&
+      _equal(other.items, items) &&
+      other.limit == limit;
+
+  @override
+  int get hashCode => Object.hashAll([_hash(items), limit]);
 }
 
 bool _equal(Object? a, Object? b) {
