@@ -1,0 +1,162 @@
+/* The signed-in steps (canvas DesktopFlow): one column, 560px at most,
+   centred under the header; the two pending choices sit side by side from
+   680px and stack below. */
+.flow {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 32px 16px 40px;
+}
+.flow h1 {
+  margin: 0;
+  font-size: 26px;
+  line-height: 1.35;
+  font-weight: 900;
+}
+/* Focus lands on the heading only so screen readers announce the step; it
+   is not a control, so it draws no ring (Chromium shows one for a
+   programmatic focus on load). */
+.flow h1:focus,
+.flow h1:focus-visible {
+  outline: none;
+}
+.flow p,
+.flow li {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.75;
+}
+
+.flow-account {
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+.flow-note {
+  font-size: 14px !important;
+  color: var(--ink-muted);
+}
+
+.flow-link {
+  align-self: flex-start;
+  padding: 12px 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.flow-rows {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.flow-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 48px;
+  padding: 12px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--paper);
+  font-size: 15px;
+  line-height: 1.6;
+  cursor: pointer;
+}
+.flow-check input {
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  flex: none;
+  accent-color: var(--danger);
+}
+
+.flow-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.flow-button {
+  min-height: 48px;
+  padding: 0 20px;
+  border-radius: 10px;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.flow-button--primary {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: #ffffff;
+}
+.flow-button--danger {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: #ffffff;
+}
+.flow-button[aria-disabled='true'],
+.flow-choice[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.flow-choices {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+.flow-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 48px;
+  padding: 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.flow-choice:hover:not([aria-disabled='true']) {
+  border-color: var(--brand);
+}
+.flow-choice-title {
+  font-size: 17px;
+  font-weight: 700;
+}
+.flow-choice-detail {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+@media (min-width: 680px) {
+  .flow {
+    padding: 56px 0 64px;
+  }
+  .flow h1 {
+    font-size: 30px;
+  }
+  .flow-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .flow-actions > * {
+    flex: 1 1 200px;
+  }
+  .flow-choices {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

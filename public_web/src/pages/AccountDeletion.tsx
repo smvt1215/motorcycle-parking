@@ -1,15 +1,61 @@
+import { useState } from 'react';
 import { Link } from 'react-router';
+import { useAppSelector } from '../app/store';
+import { useAuth } from '../auth/AuthContext';
+import type { Provider, SignInResult } from '../auth/port';
 import * as c from '../content';
+import { DeletionFlow } from '../deletion/DeletionFlow';
+import { OutcomePanel, type Outcome } from '../deletion/Outcome';
 import { Site } from '../ui/Site';
 import './AccountDeletion.css';
 
+/** What a sign-in from the explanation leaves to say; signed in, the flow takes over. */
+function outcomeOf(provider: Provider, result: SignInResult): Outcome | null {
+  switch (result.kind) {
+    case 'signedIn':
+      return null;
+    case 'noAccount':
+      return { kind: 'noAccount', provider, email: result.email };
+    case 'wrongAccount':
+    case 'cancelled':
+      return { kind: 'signInIncomplete' };
+  }
+}
+
 /**
- * /account-deletion, the page Google Play links to (canvas boards Main,
- * Tablet and PhoneSignedOut). The actions come once: right of the
- * explanation on a desktop, under the introduction below 1040px. Signing in
- * arrives with the request flow; the buttons are wired there.
+ * /account-deletion, the page Google Play links to. Signed out it explains
+ * (canvas boards Main, Tablet and PhoneSignedOut) and offers sign-in once:
+ * right of the explanation on a desktop, under the introduction below
+ * 1040px. Signed in it runs the deletion flow (DeletionFlow).
  */
 export function AccountDeletion() {
+  const auth = useAuth();
+  const session = useAppSelector((state) => state.session);
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
+
+  if (outcome && session.phase !== 'signedIn') {
+    return <OutcomePanel outcome={outcome} onDismiss={() => setOutcome(null)} />;
+  }
+  if (session.phase === 'signedIn' && session.user && auth) {
+    return <DeletionFlow user={session.user} auth={auth} onOutcome={setOutcome} />;
+  }
+  return (
+    <Explanation
+      onSignIn={
+        auth
+          ? (provider) => {
+              void auth
+                .signIn(provider)
+                .then((result) => setOutcome(outcomeOf(provider, result)))
+                .catch(() => setOutcome({ kind: 'signInIncomplete' }));
+            }
+          : null
+      }
+    />
+  );
+}
+
+function Explanation({ onSignIn }: { onSignIn: ((provider: Provider) => void) | null }) {
   return (
     <Site aside={<Link to="/support">沒辦法登入？</Link>}>
       <div className="deletion">
@@ -24,15 +70,26 @@ export function AccountDeletion() {
               <h2 id="signin-h">{c.signInHeading}</h2>
               <p>{c.signInBody}</p>
             </div>
-            {/* Official Google / Apple button styles; wired with the request flow. */}
-            <div className="deletion-signin-buttons">
-              <button type="button" className="signin-button signin-button--google">
-                使用 Google 登入
-              </button>
-              <button type="button" className="signin-button signin-button--apple">
-                使用 Apple 登入
-              </button>
-            </div>
+            {/* Shapes of the official Google / Apple buttons. Without a backend
+                (a local preview) there is nothing to sign in to. */}
+            {onSignIn ? (
+              <div className="deletion-signin-buttons">
+                <button
+                  type="button"
+                  className="signin-button signin-button--google"
+                  onClick={() => onSignIn('google')}
+                >
+                  使用 Google 登入
+                </button>
+                <button
+                  type="button"
+                  className="signin-button signin-button--apple"
+                  onClick={() => onSignIn('apple')}
+                >
+                  使用 Apple 登入
+                </button>
+              </div>
+            ) : null}
           </section>
           <section aria-labelledby="cannot-h" className="deletion-cannot">
             <h2 id="cannot-h">{c.cannotSignInHeading}</h2>
@@ -44,7 +101,8 @@ export function AccountDeletion() {
         <div className="deletion-details">
           <section aria-labelledby="cooling-h" className="deletion-section">
             <h2 id="cooling-h">{c.coolingOffHeading}</h2>
-            <ol className="lane">
+            {/* role="list": Safari drops the list semantics of a styled list. */}
+            <ol className="lane" role="list">
               {c.coolingOffSteps.map((step, i) => (
                 <li key={step.when} className={i === c.coolingOffSteps.length - 1 ? 'lane-end' : undefined}>
                   <span className="lane-when">{step.when}</span>
