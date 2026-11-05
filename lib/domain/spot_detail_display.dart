@@ -801,8 +801,17 @@ String _priceWords(DetailPrice p, ParkingCondition? c, DateTime now) {
     for (final p in periods)
       '${_when(p.days, p.from, p.to)} ${rateFullWords(p.rate)}',
     if (_uncovered(periods)) '其他時間未提供',
+    ?_crossWords(r.crossPeriod),
   ].join('；');
 }
+
+/// How a stay crossing periods is charged, in the card's words; null when
+/// unconfirmed.
+String? _crossWords(CrossPeriod? cross) => switch (cross) {
+  CrossPeriod.eachPeriod => '跨時段分別計費',
+  CrossPeriod.entryOnly => '依進場時段計費',
+  null => null,
+};
 
 FeeCard _card(
   DetailPrice price,
@@ -882,11 +891,7 @@ FeeCard _card(
     today,
     cal,
   );
-  final cross = switch (r.crossPeriod) {
-    CrossPeriod.eachPeriod => '跨時段分別計費',
-    null => null,
-    _ => '依進場時段計費',
-  };
+  final cross = _crossWords(r.crossPeriod);
   if (holding == null) {
     return FeeCard(
       header: header,

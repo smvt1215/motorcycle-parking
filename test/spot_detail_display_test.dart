@@ -513,4 +513,50 @@ void main() {
       '每次 15 元',
     );
   });
+
+  test('稍後開放分區的時段費率保留跨時段計費方式（Codex P2）', () {
+    String later(String cross) {
+      final zones = [
+        for (final z
+            in (detailLotJson['parking_zones'] as List)
+                .cast<Map<String, dynamic>>())
+          z['id'] == 'b3'
+              ? {
+                  ...z,
+                  'fee': {
+                    'heavy': {
+                      'mode': 'by_time',
+                      'cross_period': cross,
+                      'periods': [
+                        {
+                          'days': 'all',
+                          'from': '20:00',
+                          'to': '22:00',
+                          'rate': {'mode': 'per_visit', 'amount': 30},
+                        },
+                        {
+                          'days': 'all',
+                          'from': '22:00',
+                          'to': '20:00',
+                          'rate': {'mode': 'per_visit', 'amount': 30},
+                        },
+                      ],
+                    },
+                  },
+                }
+              : z,
+      ];
+      final spot = ParkingSpot.fromJson(lot(zones));
+      return feeSection(
+        sign(spot, VehicleType.heavy, detailDay),
+        spot,
+        detailDay,
+      ).later.single;
+    }
+
+    final each = later('each_period'), entry = later('entry_only');
+    expect(each, contains('跨時段分別計費'));
+    expect(entry, contains('依進場時段計費'));
+    expect(each, isNot(entry));
+  });
 }
