@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/app_version.dart';
-import '../../core/config.dart';
+import '../../core/policy_links.dart';
 import '../../data/account_deletion.dart';
 import '../../data/app_store.dart';
 import '../../data/profile_repository.dart';
@@ -19,13 +19,8 @@ import '../hidden_riders/hidden_riders_page.dart';
 import '../map/spot_details.dart' show openDataLicenseUri;
 import 'account_deletion_page.dart';
 
-/// The privacy policy and terms URLs (#275); from `--dart-define`, and
-/// replaceable in tests. An empty URL hides its row.
-@visibleForTesting
-({String privacy, String terms}) policyUrls = (
-  privacy: AppConfig.privacyPolicyUrl,
-  terms: AppConfig.termsUrl,
-);
+// An empty policy URL hides its row; tests replace [policyUrls].
+export '../../core/policy_links.dart' show policyUrls;
 
 /// 帳號與設定 (P10): the account, 關於 (version, licenses, data sources,
 /// privacy policy and terms) and, signed in, 刪除帳號 in its own group.
@@ -109,16 +104,14 @@ Future<void> showSettings(BuildContext context, AppStore store) {
           subtitle: settingsDataLicenseDetail,
           uri: openDataLicenseUri,
         ),
-        if (Uri.tryParse(policyUrls.privacy) case final uri?
-            when policyUrls.privacy.isNotEmpty)
+        if (policyUri(policyUrls.privacy) case final uri?)
           _LinkTile(
             key: const ValueKey('settings-privacy'),
             icon: Icons.shield_outlined,
             title: settingsPrivacyPolicy,
             uri: uri,
           ),
-        if (Uri.tryParse(policyUrls.terms) case final uri?
-            when policyUrls.terms.isNotEmpty)
+        if (policyUri(policyUrls.terms) case final uri?)
           _LinkTile(
             key: const ValueKey('settings-terms'),
             icon: Icons.gavel_outlined,
@@ -132,7 +125,6 @@ Future<void> showSettings(BuildContext context, AppStore store) {
           title: settingsContact,
           subtitle: settingsContactDetail,
           uri: Uri.parse(supportUrl),
-          mode: LaunchMode.inAppBrowserView,
         ),
         ListTile(
           contentPadding: EdgeInsets.zero,
@@ -173,7 +165,9 @@ class _GroupTitle extends StatelessWidget {
   );
 }
 
-/// A row that opens [uri] in the browser.
+/// A row that opens [uri] in the in-app browser (SFSafariViewController,
+/// Chrome Custom Tabs), the same as sign-in's consent links: closing it
+/// returns to settings.
 class _LinkTile extends StatelessWidget {
   const _LinkTile({
     super.key,
@@ -181,28 +175,21 @@ class _LinkTile extends StatelessWidget {
     required this.title,
     required this.uri,
     this.subtitle,
-    this.mode = LaunchMode.externalApplication,
   });
   final IconData icon;
   final String title;
   final String? subtitle;
   final Uri uri;
 
-  /// The browser it opens in; 聯絡我們 stays in the app.
-  final LaunchMode mode;
   @override
   Widget build(BuildContext context) => ListTile(
     contentPadding: EdgeInsets.zero,
     leading: Icon(icon),
     title: Text(title),
     subtitle: subtitle == null ? null : Text(subtitle!),
-    trailing: Icon(
-      mode == LaunchMode.inAppBrowserView
-          ? Icons.chevron_right
-          : Icons.open_in_new,
-    ),
+    trailing: const Icon(Icons.chevron_right),
     onTap: () => runAction(context, () async {
-      if (!await launchUrl(uri, mode: mode)) {
+      if (!await launchUrl(uri, mode: LaunchMode.inAppBrowserView)) {
         throw StateError('無法開啟$title');
       }
     }),
