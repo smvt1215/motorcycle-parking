@@ -46,7 +46,7 @@ class _Store extends AppStore {
 /// A Supabase account whose name P12 can change; [signedIn] false leaves
 /// the client without a session.
 class _Account {
-  _Account({this.metadata = const {'full_name': '阿哲'}});
+  _Account({this.metadata = const {'display_name': '阿哲'}});
   Map<String, dynamic> metadata;
   late final SupabaseClient client = SupabaseClient(
     'https://example.supabase.co',
@@ -631,8 +631,12 @@ void main() {
 
     for (final (title, metadata) in [
       ('沒有名稱', <String, dynamic>{}),
-      ('只有空白', {'full_name': '   '}),
-      ('email 名稱', {'full_name': 'rider@example.com'}),
+      ('只有空白', {'display_name': '   '}),
+      ('只有全形空白', {'display_name': '\u3000\u3000'}),
+      ('email 名稱', {'display_name': 'rider@example.com'}),
+      // #319: a Google name alone is not public; P12 only suggests it.
+      ('只有 Google 姓名', {'full_name': '阿哲', 'name': '阿哲'}),
+      ('清空過名稱', {'display_name': '', 'full_name': '阿哲'}),
     ]) {
       testWidgets('$title：只顯示由車友回報、通用人像、設定名稱', (tester) async {
         _view(tester, const Size(390, 844));
@@ -641,6 +645,7 @@ void main() {
         expect(find.text(nameNoticeSetName), findsOneWidget);
         expect(find.byIcon(Icons.person_outline), findsOneWidget);
         expect(find.textContaining('rider'), findsNothing);
+        expect(find.textContaining('阿哲'), findsNothing);
       });
     }
 
@@ -648,7 +653,7 @@ void main() {
       final semantics = tester.ensureSemantics();
       const long = '重機騎士阿哲的週末松山信義區巡禮小隊長兼團購主揪';
       _view(tester, const Size(390, 844));
-      await notice(tester, metadata: {'full_name': long});
+      await notice(tester, metadata: {'display_name': long});
       expect(noticeText(tester), '停車點會公開顯示「由車友 重機騎士阿哲的週末松山信義區巡禮小隊長兼… 回報」');
       expect(
         tester
