@@ -445,6 +445,11 @@ verify_jwt = false
 # as admin-users does (#268).
 verify_jwt = false
 
+[functions.deletion-precheck]
+# The account deletion page asks before signing in (#270): no sign-in; App
+# Check (reCAPTCHA Enterprise web provider) and a per-network limit instead.
+verify_jwt = false
+
 [functions.support-request]
 # The public support form (#269): no sign-in; App Check (reCAPTCHA
 # Enterprise web provider) and per-network/email limits instead.
