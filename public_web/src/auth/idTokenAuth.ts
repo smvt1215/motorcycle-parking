@@ -178,9 +178,25 @@ export function createIdTokenAuth(deps: IdTokenAuthDeps): AuthPort {
   }
 
   return {
-    mountGoogleButton(container, { reauthFor, width, onResult }) {
+    mountGoogleButton(container, { reauthFor, width: initialWidth, onResult }) {
       let alive = true;
+      let width = initialWidth;
       let current: Nonce | null = null;
+      let ready: GoogleIdApi | null = null;
+      const draw = () => {
+        if (!alive || !ready) return;
+        container.replaceChildren();
+        ready.renderButton(container, {
+          type: 'standard',
+          theme: 'outline',
+          size: 'large',
+          text: 'signin_with',
+          shape: 'pill',
+          logo_alignment: 'center',
+          width,
+          locale: 'zh_TW',
+        });
+      };
       if (!reauthFor) warmAppCheck();
       const arm = async () => {
         const [api, next] = await Promise.all([deps.google(), nonce()]);
@@ -208,23 +224,23 @@ export function createIdTokenAuth(deps: IdTokenAuthDeps): AuthPort {
             );
           },
         });
-        container.replaceChildren();
-        api.renderButton(container, {
-          type: 'standard',
-          theme: 'outline',
-          size: 'large',
-          text: 'signin_with',
-          shape: 'pill',
-          logo_alignment: 'center',
-          width,
-          locale: 'zh_TW',
-        });
+        ready = api;
+        draw();
       };
       // Without Google's script there is no button; Apple and the support form remain.
       arm().catch(() => undefined);
-      return () => {
-        alive = false;
-        container.replaceChildren();
+      return {
+        // Only drawn again: initialize() would replace the callback and the
+        // nonce of a sign-in already under way.
+        resize(next) {
+          if (next === width) return;
+          width = next;
+          draw();
+        },
+        unmount() {
+          alive = false;
+          container.replaceChildren();
+        },
       };
     },
 

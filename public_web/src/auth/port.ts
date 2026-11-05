@@ -45,6 +45,17 @@ export interface SignInOptions {
   reauthFor?: SignedInUser;
 }
 
+/** A mounted Google button. */
+export interface GoogleButtonMount {
+  /**
+   * Draws the button at a new width. The sign-in set up for it (callback,
+   * nonce) stays, so a sign-in already under way still reports its result.
+   */
+  resize(width: number): void;
+  /** Removes the button; results of a sign-in still under way are dropped. */
+  unmount(): void;
+}
+
 export interface GoogleButtonOptions extends SignInOptions {
   /** The button's width in CSS pixels. */
   width: number;
@@ -61,9 +72,9 @@ export interface GoogleButtonOptions extends SignInOptions {
 export interface AuthPort {
   /**
    * Puts the Google button in `container`: Google issues ID tokens only
-   * through its own button. Returns the function that removes it.
+   * through its own button.
    */
-  mountGoogleButton(container: HTMLElement, options: GoogleButtonOptions): () => void;
+  mountGoogleButton(container: HTMLElement, options: GoogleButtonOptions): GoogleButtonMount;
   /**
    * Gets Apple's sign-in ready (script, nonce), so that `signInWithApple`
    * can open the popup straight from the click. Safe to call repeatedly.

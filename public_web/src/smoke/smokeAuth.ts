@@ -35,7 +35,7 @@ export function smokeAuth(): AuthPort {
       button.textContent = '使用 Google 登入';
       button.addEventListener('click', () => void signIn().then(onResult));
       container.append(button);
-      return () => button.remove();
+      return { resize() {}, unmount: () => button.remove() };
     },
     prepareApple() {},
     signInWithApple: signIn,

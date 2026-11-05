@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { signInButton } from '../deletion/text';
-import type { AuthPort, SignedInUser, SignInResult } from './port';
+import type { AuthPort, GoogleButtonMount, SignedInUser, SignInResult } from './port';
 
 /** Google draws its button between 200 and 400px wide. */
 const MIN_WIDTH = 200;
@@ -42,15 +42,27 @@ export function GoogleButton({
     return () => observer.disconnect();
   }, []);
 
+  // Mounted once per sign-in setup; a new width only draws it again, so a
+  // sign-in under way when the column changes still reports its result.
+  const mount = useRef<GoogleButtonMount | null>(null);
+  const mounted = width !== null;
   useEffect(() => {
     const element = box.current;
-    if (!element || width === null) return;
-    return auth.mountGoogleButton(element, {
+    if (!element || !mounted) return;
+    const current = auth.mountGoogleButton(element, {
       reauthFor,
-      width,
+      width: clampWidth(element.clientWidth),
       onResult: (result) => latest.current(result),
     });
-  }, [auth, reauthFor, width]);
+    mount.current = current;
+    return () => {
+      mount.current = null;
+      current.unmount();
+    };
+  }, [auth, reauthFor, mounted]);
+  useEffect(() => {
+    if (width !== null) mount.current?.resize(width);
+  }, [width]);
 
   return <div ref={box} className="signin-google" />;
 }

@@ -298,17 +298,36 @@ describe('Google', () => {
     expect(results[0]).toMatchObject({ kind: 'signedIn', user: { id: 'u-1' } });
   });
 
+  it('a new width only redraws: a sign-in under way still reports, with its own nonce', async () => {
+    const world = setup({
+      answers: { 'deletion-precheck': [{ status: 200, body: { has_account: false } }] },
+    });
+    const results: SignInResult[] = [];
+    const mount = world.auth.mountGoogleButton(document.createElement('div'), {
+      width: 300,
+      onResult: (result) => results.push(result),
+    });
+    await settle();
+    const initialized = vi.mocked(world.google.api.initialize).mock.calls.length;
+    mount.resize(360);
+    expect(vi.mocked(world.google.api.initialize).mock.calls.length).toBe(initialized);
+    expect(vi.mocked(world.google.api.renderButton).mock.calls.at(-1)?.[1]).toMatchObject({ width: 360 });
+    world.google.press(idToken({ sub: 'g-1', email: 'new@gmail.com' }));
+    await settle();
+    expect(results).toEqual([{ kind: 'noAccount', email: 'new@gmail.com' }]);
+  });
+
   it('stops reporting once the button is gone', async () => {
     const world = setup({
       answers: { 'deletion-precheck': [{ status: 200, body: { has_account: false } }] },
     });
     const results: SignInResult[] = [];
-    const unmount = world.auth.mountGoogleButton(document.createElement('div'), {
+    const mount = world.auth.mountGoogleButton(document.createElement('div'), {
       width: 300,
       onResult: (result) => results.push(result),
     });
     await settle();
-    unmount();
+    mount.unmount();
     world.google.press(idToken({ sub: 'g-1' }));
     await settle();
     expect(results).toEqual([]);

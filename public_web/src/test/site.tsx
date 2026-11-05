@@ -60,7 +60,7 @@ export function fakeAuth(initial: SignedInUser | null = null): FakeAuth {
         );
       });
       container.append(button);
-      return () => button.remove();
+      return { resize() {}, unmount: () => button.remove() };
     },
     prepareApple() {},
     signInWithApple(options) {
