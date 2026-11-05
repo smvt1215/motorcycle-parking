@@ -27,7 +27,7 @@ class ProfileAvatar extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     // A letter or digit only; emoji, symbols and blank names get the
     // generic person (P16b).
-    final initial = avatarInitial(name ?? profileDisplayName(user));
+    final initial = avatarInitial(name ?? profilePublicName(user));
     final fallback = ColoredBox(
       color: colors.primary,
       child: Center(
