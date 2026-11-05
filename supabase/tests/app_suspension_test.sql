@@ -129,8 +129,14 @@ select admin_set_user_suspension('10000000-0000-4000-8000-000000000005','1000000
 update auth.users set raw_user_meta_data='{"display_name":"新名","profile_avatar_url":"","full_name":"乙"}'
   where id='10000000-0000-4000-8000-000000000002';
 select is((select raw_user_meta_data from auth.users where id='10000000-0000-4000-8000-000000000002'),
-  '{"display_name":"舊名","profile_avatar_url":"https://x/a.jpg","full_name":"乙"}'::jsonb,
-  'a suspended account keeps its name and avatar; other keys update');
+  '{"display_name":"舊名","profile_avatar_url":"https://x/a.jpg","full_name":"甲"}'::jsonb,
+  'a suspended account keeps its name and avatar');
+-- The fallbacks the name and avatar fall back to are kept too; other keys update.
+update auth.users set raw_user_meta_data=raw_user_meta_data||'{"name":"丙","avatar_url":"https://x/b.jpg","picture":"https://x/c.jpg","locale":"zh-TW"}'
+  where id='10000000-0000-4000-8000-000000000002';
+select is((select raw_user_meta_data from auth.users where id='10000000-0000-4000-8000-000000000002'),
+  '{"display_name":"舊名","profile_avatar_url":"https://x/a.jpg","full_name":"甲","locale":"zh-TW"}'::jsonb,
+  'full_name, name, avatar_url and picture cannot change either; other keys update');
 update auth.users set raw_user_meta_data=raw_user_meta_data-'display_name'-'profile_avatar_url'
   where id='10000000-0000-4000-8000-000000000002';
 select is((select raw_user_meta_data->>'display_name' from auth.users where id='10000000-0000-4000-8000-000000000002'),'舊名',

@@ -186,8 +186,13 @@ create trigger rider_sightings_suspension before insert on public.rider_sighting
 
 -- ===== 6. 名稱與頭像 =====
 -- App 用 supabase.auth.updateUser 寫 user_metadata 的 display_name、
--- profile_avatar_url。停權中這兩個鍵的變更不生效：保留舊值（原本沒有就
--- 拿掉），不丟錯誤；其他鍵（登入時 Google／Apple 合併的資料）照常更新。
+-- profile_avatar_url。停權中顯示名稱與頭像用到的鍵都不能變更：除了這兩個，
+-- 還有它們的備用鍵 full_name、name（App 的 profileDisplayName() 與
+-- contributor_display_name()）和 avatar_url、picture（App 的
+-- profileAvatarUrl()），否則停權者可以改備用鍵來換名稱、頭像或投稿署名
+-- （Codex review，PR #332）。有變更就保留舊值（原本沒有就拿掉），不丟錯誤；
+-- 其他鍵照常更新。代價是停權期間 Google／Apple 登入不會同步這些鍵，解除後
+-- 下次登入就會同步。
 -- BEFORE 觸發器先於 contributor_attribution 的 AFTER 觸發器（與 #327 的
 -- contributor_handle_on_name），它們看到的就是保留後的名稱。
 create function public.suspended_profile_freeze() returns trigger
@@ -195,7 +200,7 @@ language plpgsql security definer set search_path='' as $$
 declare k text;
 begin
   if not public.is_suspended(new.id) then return new; end if;
-  foreach k in array array['display_name','profile_avatar_url'] loop
+  foreach k in array array['display_name','full_name','name','profile_avatar_url','avatar_url','picture'] loop
     if coalesce(old.raw_user_meta_data,'{}'::jsonb)->k is distinct from coalesce(new.raw_user_meta_data,'{}'::jsonb)->k then
       new.raw_user_meta_data:=case when coalesce(old.raw_user_meta_data,'{}'::jsonb) ? k
         then jsonb_set(coalesce(new.raw_user_meta_data,'{}'::jsonb),array[k],old.raw_user_meta_data->k)
