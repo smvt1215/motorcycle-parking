@@ -72,6 +72,8 @@ PATHS = {
         "lib/domain/account_deletion_display.dart",
         # src/api/api_v1.generated.ts is generated from it.
         "supabase/api/v1/api_v1.json",
+        # src/hosting.test.ts checks the public site's CSP against what it loads.
+        "firebase.json",
     ),
 }
 

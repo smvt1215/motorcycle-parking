@@ -1,44 +1,35 @@
 import {
-  type BanRecord,
   type Caller,
   type Deps,
   handle,
-  restoreDuration,
-  sameBan,
+  type SuspensionChange,
 } from './handler.ts';
 
 const adminId = '10000000-0000-4000-8000-000000000005';
 const riderId = '10000000-0000-4000-8000-000000000001';
-const now = new Date('2026-10-25T00:00:00Z');
 
-function fake(caller: Caller | null, options: { recordFails?: boolean } = {}) {
-  const bans: string[] = [];
-  const records: BanRecord[] = [];
-  /** What the Auth server holds for the rider now. */
-  const state = { riderBan: null as string | null };
+function fake(caller: Caller | null, options: { suspendFails?: boolean } = {}) {
+  /** What admin_set_user_suspension() was asked to do. */
+  const bans: SuspensionChange[] = [];
   const deps: Deps = {
     caller: () => Promise.resolve(caller),
     target: (id) =>
       Promise.resolve(
         id === riderId
-          ? { id, admin: false, bannedUntil: state.riderBan }
+          ? { id, admin: false }
           : id === adminId || id === '10000000-0000-4000-8000-000000000009'
-          ? { id, admin: true, bannedUntil: null }
+          ? { id, admin: true }
           : null,
       ),
-    setBan: (_id, duration) => {
-      bans.push(duration);
-      state.riderBan = duration === 'none' ? null : '2026-11-01T00:00:00Z';
-      return Promise.resolve(state.riderBan);
+    suspend: (change) => {
+      if (options.suspendFails) return Promise.reject(new Error('db down'));
+      bans.push(change);
+      return Promise.resolve(
+        change.action === 'ban' ? '2026-11-01T00:00:00+00:00' : null,
+      );
     },
-    record: (entry) => {
-      if (options.recordFails) return Promise.reject(new Error('db down'));
-      records.push(entry);
-      return Promise.resolve();
-    },
-    now: () => now,
   };
-  return { deps, bans, records, state };
+  return { deps, bans };
 }
 
 const post = (body: unknown, token = 'token') =>
@@ -60,14 +51,14 @@ function assert(condition: boolean, message: string) {
 }
 
 Deno.test('a rider is refused and nothing is banned', async () => {
-  const { deps, bans, records } = fake({
+  const { deps, bans } = fake({
     id: riderId,
     admin: false,
     aal: 'aal2',
   });
   const res = await handle(post(ban), deps);
   assert(res.status === 403, `status ${res.status}`);
-  assert(bans.length === 0 && records.length === 0, 'rider changed a ban');
+  assert(bans.length === 0, 'rider changed a ban');
 });
 
 Deno.test('an admin without a second factor is refused', async () => {
@@ -88,67 +79,51 @@ Deno.test('a missing or rejected token is refused', async () => {
 });
 
 Deno.test('a ban is applied and audited with the admin and reason', async () => {
-  const { deps, bans, records } = fake(admin);
+  const { deps, bans } = fake(admin);
   const res = await handle(post({ ...ban, reason: '  洗版回報  ' }), deps);
   assert(res.status === 200, `status ${res.status}`);
   const body = await res.json();
-  assert(body.banned_until === '2026-11-01T00:00:00Z', 'banned_until');
-  assert(bans.join() === '168h', `durations ${bans}`);
-  const [entry] = records;
   assert(
-    records.length === 1 && entry.actor === adminId && entry.user === riderId &&
-      entry.action === 'ban_user' && entry.note === '洗版回報' &&
-      entry.duration === '168h' && entry.before === null,
-    JSON.stringify(records),
+    body.user_id === riderId &&
+      body.banned_until === '2026-11-01T00:00:00+00:00',
+    JSON.stringify(body),
+  );
+  const [entry] = bans;
+  assert(
+    bans.length === 1 && entry.actor === adminId && entry.user === riderId &&
+      entry.action === 'ban' && entry.note === '洗版回報' &&
+      entry.duration === '7d',
+    JSON.stringify(bans),
   );
 });
 
-Deno.test('lifting a ban is audited too', async () => {
-  const { deps, bans, records } = fake(admin);
+Deno.test('every duration the admin page offers', async () => {
+  for (const duration of ['7d', '30d', 'indefinite']) {
+    const { deps, bans } = fake(admin);
+    const res = await handle(post({ ...ban, duration }), deps);
+    assert(res.status === 200, `${duration}: ${res.status}`);
+    assert(bans[0]?.duration === duration, JSON.stringify(bans));
+  }
+});
+
+Deno.test('lifting a ban answers no end', async () => {
+  const { deps, bans } = fake(admin);
   const res = await handle(
     post({ action: 'unban', user_id: riderId, reason: '申訴成立' }),
     deps,
   );
   assert(res.status === 200, `status ${res.status}`);
-  assert(bans.join() === 'none', `durations ${bans}`);
+  assert((await res.json()).banned_until === null, 'banned_until');
   assert(
-    records[0]?.action === 'unban_user' && records[0].after === null,
-    'record',
+    bans[0]?.action === 'unban' && bans[0].duration === null,
+    JSON.stringify(bans),
   );
 });
 
-Deno.test('a ban the audit cannot record is undone', async () => {
-  const { deps, bans, records } = fake(admin, { recordFails: true });
+Deno.test('a suspension the database refuses changes nothing', async () => {
+  const { deps } = fake(admin, { suspendFails: true });
   const res = await handle(post(ban), deps);
-  assert(res.status === 500, `status ${res.status}`);
-  assert(bans.join() === '168h,none', `durations ${bans}`);
-  assert(records.length === 0, 'recorded');
-});
-
-Deno.test('a newer ban from another admin is not undone', async () => {
-  const { deps, bans, state } = fake(admin);
-  // Another admin lifts the ban between this write and its failed audit.
-  deps.record = () => {
-    state.riderBan = null;
-    return Promise.reject(new Error('db down'));
-  };
-  const res = await handle(post(ban), deps);
-  assert(res.status === 500, `status ${res.status}`);
-  assert(
-    (await res.json()).error === 'audit failed; a newer change was kept',
-    'error',
-  );
-  assert(bans.join() === '168h', `durations ${bans}`);
-  assert(state.riderBan === null, "the other admin's change was overwritten");
-});
-
-Deno.test('the same ban end in another notation still counts as ours', () => {
-  assert(
-    sameBan('2026-11-01T00:00:00Z', '2026-11-01T00:00:00.000000Z'),
-    'same',
-  );
-  assert(!sameBan('2026-11-01T00:00:00Z', null), 'null');
-  assert(sameBan(null, null), 'both null');
+  assert(res.status === 502, `status ${res.status}`);
 });
 
 Deno.test('invalid requests are refused before any change', async () => {
@@ -189,10 +164,4 @@ Deno.test('an unexpected failure answers with CORS headers', async () => {
   const res = await handle(post(ban), deps);
   assert(res.status === 503, `status ${res.status}`);
   assert(res.headers.get('access-control-allow-origin') === '*', 'cors');
-});
-
-Deno.test('restoring a previous ban keeps at least its remaining time', () => {
-  assert(restoreDuration(null, now) === 'none', 'none');
-  assert(restoreDuration('2026-10-24T00:00:00Z', now) === 'none', 'past');
-  assert(restoreDuration('2026-10-25T01:30:00Z', now) === '2h', 'rounded up');
 });

@@ -16,7 +16,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
+      # The backend and admin site: CI passed on the latest main, not yet deployed.
       deploy: ${{ steps.gate.outputs.deploy }}
+      # The App builds: CI, Android and iOS all passed, and the backend is
+      # deployed earlier or by this run.
+      apps: ${{ steps.gate.outputs.apps }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -27,18 +31,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
         run: python3 tool/cd_gate.py staging --sha "$SOURCE_SHA"
-  deploy:
-    name: Staging backend deploy
+  # Which App builds are set up. Test builds are optional until signing is set
+  # up: a platform with none of its settings is skipped, while a partly
+  # configured one still runs and fails on the missing values.
+  mobile:
+    name: Staging App settings
     needs: gate
-    if: needs.gate.outputs.deploy == 'true'
+    if: needs.gate.outputs.apps == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 5
     environment: staging
-    concurrency:
-      group: cd-staging
-      cancel-in-progress: false
     outputs:
-      deployed: ${{ steps.deployed.outputs.deployed }}
       android: ${{ steps.mobile.outputs.android }}
       ios: ${{ steps.mobile.outputs.ios }}
     steps:
@@ -46,8 +49,6 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
           persist-credentials: false
-      # Test builds are optional until signing is set up: a platform with none of its settings is skipped,
-      # while a partly configured one still runs and fails on the missing values.
       - id: mobile
         env:
           GOOGLE_MAPS_ANDROID_API_KEY: ${{ secrets.GOOGLE_MAPS_ANDROID_API_KEY }}
@@ -62,6 +63,23 @@ jobs:
           IOS_PROFILE_BASE64: ${{ secrets.IOS_PROFILE_BASE64 }}
           FIREBASE_IOS_APP_ID: ${{ vars.FIREBASE_IOS_APP_ID }}
         run: python3 tool/cd_mobile_setup.py >> "$GITHUB_OUTPUT"
+  deploy:
+    name: Staging backend deploy
+    needs: gate
+    if: needs.gate.outputs.deploy == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    environment: staging
+    concurrency:
+      group: cd-staging
+      cancel-in-progress: false
+    outputs:
+      deployed: ${{ steps.deployed.outputs.deployed }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
       - id: current
         env:
           GH_TOKEN: ${{ github.token }}
@@ -181,10 +199,103 @@ jobs:
       - name: Remove generated configuration
         if: always() && steps.setup.outputs.enabled == 'true'
         run: rm -f config/staging.json
+  # The public pages (account deletion, support; public_web/) on their own
+  # Hosting site with the custom domain motoparking.smvtstudio.com, following
+  # the backend like the admin site. Until the site is set (staging variable
+  # FIREBASE_PUBLIC_HOSTING_SITE) the job does nothing.
+  public-web:
+    name: Staging public Hosting
+    needs: deploy
+    if: needs.deploy.outputs.deployed == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: staging
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    concurrency:
+      group: cd-staging-public
+      cancel-in-progress: false
+    env:
+      FIREBASE_PUBLIC_HOSTING_SITE: ${{ vars.FIREBASE_PUBLIC_HOSTING_SITE }}
+    steps:
+      - name: Check Hosting setup
+        id: setup
+        run: |
+          if [ -z "$FIREBASE_PUBLIC_HOSTING_SITE" ]; then
+            echo 'Public Hosting is not enabled: set staging FIREBASE_PUBLIC_HOSTING_SITE after creating the site.' >> "$GITHUB_STEP_SUMMARY"
+            echo 'enabled=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'enabled=true' >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        if: steps.setup.outputs.enabled == 'true'
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.setup.outputs.enabled == 'true'
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: public_web/package-lock.json
+      - name: Build public site
+        if: steps.setup.outputs.enabled == 'true'
+        working-directory: public_web
+        env:
+          VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+          VITE_GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_WEB_CLIENT_ID }}
+          VITE_APPLE_SERVICES_ID: ${{ vars.APPLE_WEB_SERVICES_ID }}
+          VITE_FIREBASE_API_KEY: ${{ secrets.FIREBASE_PUBLIC_WEB_API_KEY }}
+          VITE_FIREBASE_APP_ID: ${{ vars.FIREBASE_PUBLIC_WEB_APP_ID }}
+          VITE_FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'motocycle-parking-guide' }}
+          VITE_RECAPTCHA_SITE_KEY: ${{ vars.RECAPTCHA_PUBLIC_WEB_SITE_KEY }}
+        run: |
+          # A deployed site without sign-in would hide the request from riders:
+          # every sign-in setting must be present.
+          for name in VITE_SUPABASE_URL VITE_SUPABASE_PUBLISHABLE_KEY VITE_GOOGLE_CLIENT_ID VITE_APPLE_SERVICES_ID \
+                      VITE_FIREBASE_API_KEY VITE_FIREBASE_APP_ID VITE_FIREBASE_PROJECT_ID VITE_RECAPTCHA_SITE_KEY; do
+            if [ -z "${!name}" ]; then echo "::error::missing $name for the public site"; exit 1; fi
+          done
+          npm ci
+          npm run build
+          if grep -rl motopark-smoke dist; then echo '::error::smoke sign-in in the build'; exit 1; fi
+      - if: steps.setup.outputs.enabled == 'true'
+        run: npm install --global firebase-tools@15.33.0
+      - id: current
+        if: steps.setup.outputs.enabled == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: python3 tool/cd_gate.py latest --sha "$SOURCE_SHA"
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        if: steps.current.outputs.deploy == 'true'
+        with:
+          workload_identity_provider: ${{ vars.FIREBASE_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.FIREBASE_SERVICE_ACCOUNT }}
+          create_credentials_file: true
+      - name: Deploy public Hosting
+        if: steps.current.outputs.deploy == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          firebase target:apply hosting public-staging "$FIREBASE_PUBLIC_HOSTING_SITE" --project staging --non-interactive
+          # Check again after exchanging OIDC credentials and preparing the target.
+          python3 tool/cd_gate.py latest --sha "$SOURCE_SHA" > "$RUNNER_TEMP/latest.log"
+          if grep -q 'Skipped:' "$RUNNER_TEMP/latest.log"; then exit 0; fi
+          firebase deploy --only hosting:public-staging --project staging --non-interactive
   android-apk:
     name: Staging Android APK
-    needs: deploy
-    if: needs.deploy.outputs.deployed == 'true' && needs.deploy.outputs.android == 'true'
+    # After this run's deploy job, if it ran and did not fail. Whether the
+    # backend of this SHA is actually deployed (by this run or an earlier
+    # one) is checked in the job, after its queue (cd_gate.py app).
+    needs: [gate, mobile, deploy]
+    if: >-
+      always() && needs.gate.outputs.apps == 'true' && needs.mobile.outputs.android == 'true' &&
+      needs.deploy.result != 'failure' && needs.deploy.result != 'cancelled'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     environment: staging
@@ -252,7 +363,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
-        run: python3 tool/cd_gate.py latest --sha "$SOURCE_SHA"
+        run: python3 tool/cd_gate.py app --platform android --sha "$SOURCE_SHA"
       - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
         if: steps.current.outputs.deploy == 'true'
         with:
@@ -277,8 +388,13 @@ jobs:
         run: rm -f "$RUNNER_TEMP/upload.jks" config/staging.json config/maps.local.json config/maps.generated.json android/maps.properties
   ios-ipa:
     name: Staging iOS IPA
-    needs: deploy
-    if: needs.deploy.outputs.deployed == 'true' && needs.deploy.outputs.ios == 'true'
+    # After this run's deploy job, if it ran and did not fail. Whether the
+    # backend of this SHA is actually deployed (by this run or an earlier
+    # one) is checked in the job, after its queue (cd_gate.py app).
+    needs: [gate, mobile, deploy]
+    if: >-
+      always() && needs.gate.outputs.apps == 'true' && needs.mobile.outputs.ios == 'true' &&
+      needs.deploy.result != 'failure' && needs.deploy.result != 'cancelled'
     runs-on: macos-26
     timeout-minutes: 60
     environment: staging
@@ -332,7 +448,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
-        run: python3 tool/cd_gate.py latest --sha "$SOURCE_SHA"
+        run: python3 tool/cd_gate.py app --platform ios --sha "$SOURCE_SHA"
       - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
         if: steps.current.outputs.deploy == 'true'
         with:

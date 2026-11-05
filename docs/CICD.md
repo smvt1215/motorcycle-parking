@@ -1,6 +1,6 @@
 # CI／CD 規劃
 
-> 狀態：CI 與 CD staging／release workflows 已實作。CD staging 已就緒：`staging` Environment 的 Supabase、簽章、Maps 金鑰與 Firebase 設定已完成，main 的 CI、Android、iOS 都成功後部署 staging 後端與管理站，並把 Android APK、iOS Ad Hoc IPA 送到 Firebase App Distribution（2026-10-25 `b827aab` 五個 job 皆成功）。`production` Environment 已設定核准者，但尚未設定任何 secret 或 variable，也尚未推送版本 tag，release workflow 還沒有實際執行過。CodeQL 改採五類語言 Advanced Setup，AI Scan 維持停用。商店與 production 的外部設定依 [CD_SETUP.md](CD_SETUP.md) 完成。最後更新：2026-10-25。整體計畫見 [PLAN.md](PLAN.md)。
+> 狀態：CI 與 CD staging／release workflows 已實作。CD staging 已就緒：`staging` Environment 的 Supabase、簽章、Maps 金鑰與 Firebase 設定已完成，main 的 CI 成功後部署 staging 後端與管理站，CI、Android、iOS 都成功後把 Android APK、iOS Ad Hoc IPA 送到 Firebase App Distribution（2026-10-25 `b827aab` 五個 job 皆成功）。`production` Environment 已設定核准者，但尚未設定任何 secret 或 variable，也尚未推送版本 tag，release workflow 還沒有實際執行過。CodeQL 改採五類語言 Advanced Setup，AI Scan 維持停用。商店與 production 的外部設定依 [CD_SETUP.md](CD_SETUP.md) 完成。最後更新：2026-10-25。整體計畫見 [PLAN.md](PLAN.md)。
 
 ## 決策摘要
 - 平台：**GitHub Actions**（公開 repo 使用 GitHub 標準 runner 不收費，含 macOS）。
@@ -48,7 +48,7 @@ PR ──► CI（檢查 + 測試）──► 全綠 ──► Squash merge 到 
 | `ios.yml` | PR、push 到 `main` | macOS | production／staging 真機 Release 設定檢查（僅 PR）＋一次模擬器測試 App 建置，iOS 26／27 共用測試產物執行與截圖（見 PLAN.md「UI 設計規範 › 驗證」） |
 | `codeql.yml` | PR、push 到 `main`、每週、手動 | Linux + macOS | Actions、JavaScript／TypeScript、Python、Java／Kotlin、Swift 安全分析；原生 PR 掃描依相關路徑執行 |
 | `actions-cleanup.yml` | 每週日（UTC 19:17）、手動（可選 dry-run） | Linux | 清理 Actions 執行紀錄與快取（規則見下方「Actions 清理」） |
-| `cd-staging.yml` | `main` 上的三條 CI 都成功後（`workflow_run`） | Linux + macOS | 部署 staging 後端、產生 Android 測試 APK 與 iOS 測試 IPA（不上傳商店） |
+| `cd-staging.yml` | `main` 上的 CI、Android、iOS 任一條完成時（`workflow_run`） | Linux + macOS | CI 成功就部署 staging 後端與管理站；三條都成功才產生 Android 測試 APK 與 iOS 測試 IPA（不上傳商店） |
 | `release.yml` | 推送 tag `v*` | Linux + macOS | beta：以 staging 後端設定建置；RC：部署 production 後端並建置；兩者上傳 TestFlight 與 Play 測試軌道、建立 GitHub prerelease；正式版：把 RC 建置推上 App Store 與 Play production、建立 GitHub Release |
 
 Workflow 依平台分工：跨平台檢查放 `ci.yml`，各平台的建置與模擬器測試放各自的 workflow，並共用同一套路徑判斷（只改文件時略過）。
@@ -103,6 +103,28 @@ staging 設定已於 2026-10-24 完成，並以真實 Google 登入＋TOTP 取�
 | 管理帳號 | 以 service role 將 `app_metadata.role` 設為 `admin`（service role 不放到網站）；需登記至少兩個驗證器 App |
 
 `cd-staging.yml` 只由 `workflow_run` 觸發；只需重新部署管理站時，重跑最新 main 的 CD staging 中「Staging admin Hosting」單一 job，避免重新發送 APK／IPA。改用自訂網域時，需同步更新 Maps 金鑰 referrer 與 Supabase Redirect URLs。
+
+### 公開網頁（staging）
+
+刪除帳號說明、客服表單等公開頁面（`public_web/`）部署在另一個 Hosting 網站，自訂網域是 `motoparking.smvtstudio.com`。公測期間連 staging 後端，RC 時改連 production（#304）。
+
+- job「Staging public Hosting」跟著後端部署，條件和管理站相同；staging variable `FIREBASE_PUBLIC_HOSTING_SITE` 沒設定時什麼都不做。
+- `firebase.json` 的 `public-staging` target：所有路徑都改寫到 `/index.html`；CSP 只允許 Google Identity Services、Sign in with Apple JS、reCAPTCHA Enterprise／App Check 與 Supabase；不送 `noindex`，因為這是公開頁面；`/assets/**` 長期快取，其餘不快取。
+- 建置時的設定都來自 `staging` Environment，缺任何一個 job 就失敗，不會部署出沒有登入功能的網站：
+
+| `public_web` 環境變數 | staging 設定 | 種類 |
+| --- | --- | --- |
+| `VITE_SUPABASE_URL` | `SUPABASE_URL` | variable（既有） |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | `SUPABASE_ANON_KEY` | variable（既有） |
+| `VITE_GOOGLE_CLIENT_ID` | `GOOGLE_WEB_CLIENT_ID` | variable |
+| `VITE_APPLE_SERVICES_ID` | `APPLE_WEB_SERVICES_ID` | variable |
+| `VITE_FIREBASE_API_KEY` | `FIREBASE_PUBLIC_WEB_API_KEY` | secret（「Motopark public web Firebase」金鑰） |
+| `VITE_FIREBASE_APP_ID` | `FIREBASE_PUBLIC_WEB_APP_ID` | variable |
+| `VITE_FIREBASE_PROJECT_ID` | `FIREBASE_PROJECT_ID`（預設 `motocycle-parking-guide`） | variable（既有） |
+| `VITE_RECAPTCHA_SITE_KEY` | `RECAPTCHA_PUBLIC_WEB_SITE_KEY` | variable |
+
+- 自訂網域：Firebase Hosting 加上網域後，會給 TXT（驗證擁有權）和 A 紀錄，加到 Cloudflare 的 DNS。這兩筆紀錄要設成 **DNS only（不經 Cloudflare proxy）**，Firebase 才能簽發憑證。
+- 只需重新部署公開網頁時，重跑最新 main 的 CD staging 中「Staging public Hosting」單一 job。
 
 ### Actions 清理
 
@@ -169,7 +191,7 @@ staging 設定已於 2026-10-24 完成，並以真實 Google 登入＋TOTP 取�
 - ruleset 只把這三個彙總 job 的顯示名稱（check 名稱）設為必要檢查。這樣新增或拆分 job 時不必改 ruleset，被路徑判斷略過的 job 也不會卡住合併。
 - **只有 PR 會取消舊的 run**：`ci.yml`、`android.yml`、`ios.yml` 的 `concurrency` 設為 `cancel-in-progress: ${{ github.event_name == 'pull_request' }}`。
   - 同一個 PR 推了新的 commit 時，舊的 run 才會被取消。
-  - main 上已經開始的 run 一定會跑完。CD staging 要等這三個 workflow 都在同一個 main commit 上成功才會部署；iOS 模擬器約要 40 分鐘，而 main 合併的頻率比這更高。之前 main 的 push 也會被下一次 push 取消，結果 CD 一直等不到跑完的 commit，staging 從 02cf55a 之後就停止部署（#265）。
+  - main 上已經開始的 run 一定會跑完。CD staging 的 App 建置要等這三個 workflow 都在同一個 main commit 上成功（後端只等 CI，見下節）；iOS 模擬器約要 40 分鐘，而 main 合併的頻率比這更高。之前 main 的 push 也會被下一次 push 取消，結果 CD 一直等不到跑完的 commit，staging 從 02cf55a 之後就停止部署（#265）。
   - GitHub 的 concurrency 群組最多保留一個排隊中的 run。所以 main 連續合併時，排隊中的舊 commit 會被更新的 commit 取代，但進行中的那個和最新的那個都會跑完。CD 依序部署跑完的 commit，最後一定會部署到最新的 main。
   - CodeQL 照舊會取消舊的 run，因為 CD 不等它。
 - 這與 CLAUDE.md 的「全綠」定義一致：CI 通過才算全綠。
@@ -179,7 +201,11 @@ staging 設定已於 2026-10-24 完成，並以真實 Google 登入＋TOTP 取�
 0. **等 CI 全部成功才開始**：
    - 不用 `push` 觸發，因為那會和 CI 同時跑，CI 失敗前就可能已部署。
    - 改用 `workflow_run` 監聽 `ci.yml`、`ios.yml`、`android.yml` 在 `main` 上完成。
-   - 第一個 job 以 GitHub API 查詢該 commit（`workflow_run.head_sha`）三個彙總檢查的結果：全部成功才繼續；仍有未完成的就結束，交給最後完成的那條 CI 觸發的執行；任何一個失敗就停止。
+   - 第一個 job 以 GitHub API 查詢該 commit（`workflow_run.head_sha`）彙總檢查的結果，分成兩個判斷（使用者 2026-11-05 決定）：
+     - **後端與管理站只等 CI**：`CI 全部通過`（含後端測試）成功、而且這個 SHA 還沒有成功的後端部署，就部署 staging 後端（migration、Edge Function）與管理站 Hosting，不等 Android 和 iOS。CI 約 10 分鐘，被新的合併蓋過的機會比等 iOS 的 30～60 分鐘小很多；之前等三條都完成時，連續合併讓 staging 好幾次都沒能部署。CI 失敗就停止。
+     - **App 建置等三條**：`CI 全部通過`、`Android 全部通過`、`iOS 全部通過` 都成功，而且這個 SHA 的後端已部署（較早的執行，或這次執行剛部署），才產生 Android APK 與 iOS IPA。Android 或 iOS 失敗只停止 App 建置，不擋後端。
+     - 仍有未完成的就交給之後完成的那條觸發的執行：通常 CI 先完成並部署後端，iOS 完成時那次執行只建置 App。
+     - production／release 的條件不變，仍要三條都成功且 staging 後端已實際部署。
    - 部署的程式碼一律 checkout `workflow_run.head_sha`，不用當下 `main` 的最新 commit。
    - **所有 staging 部署排成一列**：部署 job 的 `concurrency` 使用固定群組 `cd-staging`（設在 job 層級，檢查 job 不排隊），不取消進行中的執行，所以任何時刻最多只有一個 staging 部署在跑。
      - 依 GitHub 的行為，排隊中的執行只保留最新一個，中間的 commit 會被略過，這是預期行為。
@@ -195,14 +221,14 @@ staging 設定已於 2026-10-24 完成，並以真實 Google 登入＋TOTP 取�
    - `supabase functions deploy --prune --yes` 部署 Edge Function，並刪除遠端已不在 repo 的函式（例如已移除的 `tdx-parking`）
    - 這些步驟可重複執行，重跑時再套用一次也不會出錯。
 2. **Android 測試 APK**（不上傳商店）：
-   - `android-apk` 為獨立 job，等待後端實際完成部署，使用 `cd-staging-android` 佇列，不阻擋下一次後端部署。正式發版的 staging 成功判定只看後端 job 的實際部署紀錄。
+   - `android-apk` 為獨立 job，在閘門判斷 App 建置可以進行、且後端已實際部署（這次執行部署，或較早的執行已部署而這次的部署 job 略過）時執行，使用 `cd-staging-android` 佇列，不阻擋下一次後端部署。取得佇列後再確認仍是 main 最新 commit，且沒有其他執行已發佈過這個 SHA 的 APK（每條 workflow 完成都可能觸發一次執行），避免重複通知測試者。正式發版的 staging 成功判定只看後端 job 的實際部署紀錄。
    - 以 `--dart-define` 帶入 staging 的 Supabase URL／anon key，`flutter build apk --release`。
    - APK 同時保留為 workflow artifact，並以 `firebase appdistribution:distribute --app <Firebase Android App ID> --groups staging-android` 發佈；與 iOS 共用同一個 OIDC provider 與服務帳號，發佈前再次確認仍是 main 最新 commit。測試者可透過 Firebase 邀請連結自行加入 `staging-android` 群組，不需註冊裝置。
    - 使用獨立的 applicationId 後綴 `.staging`、APP 名稱加上「β」、圖示加上測試標記，可以和商店版並存，一眼分得出來。
    - 以專用的 staging 簽章金鑰簽署，和正式版上傳金鑰分開。
    - 上傳為 workflow artifact（保留 30 天），下載後直接安裝到手機測試。
 3. **iOS 測試 IPA**（Ad Hoc 簽章，經 Firebase App Distribution OTA 安裝，不上傳 TestFlight）：
-   - 獨立的 job `ios-ipa`（macOS runner），`needs` 部署 job，且只在部署 job 回報**實際完成部署**時執行；部署被略過（不是 `main` 最新的 commit）就不建置，避免產生連到舊後端狀態的安裝檔。
+   - 獨立的 job `ios-ipa`（macOS runner），條件與 `android-apk` 相同：三條都成功、後端已實際部署才執行；不是 `main` 最新的 commit 就不建置，避免產生連到舊後端狀態的安裝檔。取得佇列後同樣確認沒有其他執行已發佈過這個 SHA 的 IPA。
      - 使用自己的 `concurrency` 群組 `cd-staging-ios`（不取消進行中的執行），不和後端部署共用佇列，建置 IPA 不會擋住下一次後端部署。
      - 發佈到 Firebase 前再確認一次 `workflow_run.head_sha` 仍是 `main` 最新的 commit，不是就略過發佈（較新的 commit 會發佈自己的版本），避免較舊的建置晚完成而成為測試者看到的最新版。
      - 正式發版的「已部署到 staging」檢查只看部署 job；IPA 建置或發佈失敗會讓這次執行顯示失敗並需要修正，但不影響後端已部署的判斷。

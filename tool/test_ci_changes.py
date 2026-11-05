@@ -42,9 +42,11 @@ class ChangeRoutingTest(unittest.TestCase):
     def test_admin_inputs_skip_mobile_but_keep_quality(self):
         for path in ("lib/admin/admin_app.dart", "lib/main_admin.dart",
                      "test/admin/auth_test.dart", "admin_web/index.html",
-                     "firebase.json", ".firebaserc", "tool/prepare_admin_web.py", "tool/admin_smoke.cjs"):
+                     ".firebaserc", "tool/prepare_admin_web.py", "tool/admin_smoke.cjs"):
             with self.subTest(path=path):
                 self.assertEqual(self.targets(path), {"quality"})
+        # firebase.json also holds the public site's Hosting (its CSP is tested there).
+        self.assertEqual(self.targets("firebase.json"), {"quality", "public_web"})
         self.assertEqual(self.targets("lib/admin/admin_app.dart", "lib/models/parking.dart"),
                          {"quality", "android", "ios"})
         self.assertEqual(self.targets("lib/main_admin.dart.old"), {"quality", "android", "ios"})

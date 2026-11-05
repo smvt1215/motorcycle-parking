@@ -108,7 +108,11 @@ function session(role, aal, factors = [factor]) {
 (async () => {
   assert((await fs.readFile(path.join(build, 'main.dart.js'), 'utf8')).includes('admin-smoke.supabase.co'), 'Build with the documented smoke Supabase URL before running this test');
   await fs.mkdir(output, { recursive: true });
-  const headers = JSON.parse(await fs.readFile(path.join(root, 'firebase.json'), 'utf8')).hosting.headers[0].headers;
+  // firebase.json lists one Hosting entry per site; the admin site's is admin-staging.
+  const hosting = JSON.parse(await fs.readFile(path.join(root, 'firebase.json'), 'utf8')).hosting;
+  const admin = [].concat(hosting).find((site) => site.target === 'admin-staging');
+  assert(admin, 'firebase.json has no admin-staging Hosting entry');
+  const headers = admin.headers[0].headers;
   const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.wasm': 'application/wasm', '.json': 'application/json', '.ttf': 'font/ttf', '.otf': 'font/otf', '.svg': 'image/svg+xml', '.png': 'image/png' };
   const server = http.createServer(async (req, res) => {
     try {
