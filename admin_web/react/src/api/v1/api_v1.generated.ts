@@ -39,6 +39,33 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/rpc/cancel_account_deletion`, method: 'POST' }),
     }),
+    apiV1SpotsByIds: build.query<ApiV1SpotsByIdsApiResponse, ApiV1SpotsByIdsApiArg>({
+      query: (queryArg) => ({
+        url: `/rpc/spots_by_ids`,
+        method: 'POST',
+        body: queryArg.body,
+      }),
+    }),
+    apiV1HiddenRidersList: build.query<ApiV1HiddenRidersListApiResponse, ApiV1HiddenRidersListApiArg>({
+      query: () => ({ url: `/rpc/hidden_riders_list`, method: 'POST' }),
+    }),
+    apiV1HiddenRidersMerge: build.mutation<ApiV1HiddenRidersMergeApiResponse, ApiV1HiddenRidersMergeApiArg>({
+      query: (queryArg) => ({
+        url: `/rpc/hidden_riders_merge`,
+        method: 'POST',
+        body: queryArg.body,
+      }),
+    }),
+    apiV1HiddenRidersRemove: build.mutation<
+      ApiV1HiddenRidersRemoveApiResponse,
+      ApiV1HiddenRidersRemoveApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/rpc/hidden_riders_remove`,
+        method: 'POST',
+        body: queryArg.body,
+      }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -73,6 +100,27 @@ export type ApiV1RequestAccountDeletionApiArg = {
 };
 export type ApiV1CancelAccountDeletionApiResponse = /** status 200 刪除申請的狀態 */ AccountDeletionState;
 export type ApiV1CancelAccountDeletionApiArg = void;
+export type ApiV1SpotsByIdsApiResponse = /** status 200 依 id 讀多個停車點（收藏頁） */ SpotsByIds;
+export type ApiV1SpotsByIdsApiArg = {
+  body: {
+    /** 停車點 id */
+    ids: string[];
+  };
+};
+export type ApiV1HiddenRidersListApiResponse = /** status 200 自己隱藏的車友 */ HiddenRiders;
+export type ApiV1HiddenRidersListApiArg = void;
+export type ApiV1HiddenRidersMergeApiResponse = /** status 200 把隱藏的車友併入帳號 */ HiddenRiders;
+export type ApiV1HiddenRidersMergeApiArg = {
+  body: {
+    items: HiddenRider[];
+  };
+};
+export type ApiV1HiddenRidersRemoveApiResponse = /** status 200 解除隱藏一位車友 */ HiddenRiders;
+export type ApiV1HiddenRidersRemoveApiArg = {
+  body: {
+    handle: string;
+  };
+};
 export type ClientConfig = {
   /** 低於這個版本的 App 一律整個擋下，必須更新才能繼續使用（使用者決定，#195 §7 第 7 題）。伺服器寧可不擋：沒有設定、格式不對或讀取失敗時回 0.1.0。App 離線或讀不到 client_config 時也不可以擋。只有 admin_v1.set_min_supported_app_version 能修改，每次修改都留稽核紀錄。 */
   min_supported_app_version: string;
@@ -180,6 +228,10 @@ export type Spot = {
   closure_state?: string | null;
   contributor_name?: string | null;
   contributor_role?: string | null;
+  /** 投稿者的公開代號（#280），只用來在本機「隱藏這位車友」。帳號公開過名稱（車友新增的點上出現過非空、不含 @ 的名稱）就一直回傳，直到刪除帳號；之後改名、名稱空白或像 email、被管理員清除照樣回傳。從沒公開過名稱、管理員新增或匯入、已匿名化與官方點為 null。同一帳號的點代號相同，不輪替；不是使用者 ID。 */
+  contributor_handle?: string | null;
+  /** 已登入且這個點是自己新增的（#280）；未登入、官方點一律 false。依呼叫時的登入身分計算。 */
+  is_own?: boolean;
 };
 export type SpotsInViewport = {
   /** 官方點在前、社群點在後，各依 id 排序 */
@@ -207,6 +259,26 @@ export type AccountDeletionState = {
   cannot_self_delete_reason:
     ('account.admin_cannot_self_delete' | null) | ('account.admin_cannot_self_delete' | null);
 };
+export type SpotsByIds = {
+  /** 看得到的點；官方點在前、社群點在後，各依 id 排序 */
+  spots: Spot[];
+};
+export type HiddenRider = {
+  /** contributor_handle */
+  handle: string;
+  /** 隱藏當下看到的車友名稱；沒有名稱時空字串 */
+  name_at_hide?: string;
+  /** 隱藏時所在的點位名稱 */
+  spot_name_at_hide?: string;
+  /** ISO 8601 時間；2026-01-01T00:00:00Z 起，不可晚於現在 5 分鐘以上 */
+  hidden_at: string;
+};
+export type HiddenRiders = {
+  /** 依 hidden_at 新到舊 */
+  items: HiddenRider[];
+  /** 每帳號上限（500） */
+  limit: number;
+};
 export const {
   useApiV1ClientConfigQuery,
   useApiV1CityRulesQuery,
@@ -215,4 +287,8 @@ export const {
   useApiV1AccountDeletionStatusQuery,
   useApiV1RequestAccountDeletionMutation,
   useApiV1CancelAccountDeletionMutation,
+  useApiV1SpotsByIdsQuery,
+  useApiV1HiddenRidersListQuery,
+  useApiV1HiddenRidersMergeMutation,
+  useApiV1HiddenRidersRemoveMutation,
 } = injectedRtkApi;
