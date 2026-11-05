@@ -21,8 +21,10 @@ const READS = {
     'apiV1SpotsInViewport',
     'apiV1DataVersions',
     'apiV1AccountDeletionStatus',
+    'apiV1SpotsByIds',
+    'apiV1HiddenRidersList',
   ],
-  admin_v1: ['adminV1SupportRequests', 'adminV1SupportRequest'],
+  admin_v1: ['adminV1SupportRequests', 'adminV1SupportRequest', 'adminV1ContentReport'],
 };
 
 const PROFILES = [

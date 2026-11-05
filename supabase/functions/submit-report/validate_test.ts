@@ -868,3 +868,47 @@ Deno.test("segments are a street spot's; a changed segment states both vehicles 
     )
   ) throw new Error('a segment filled in refused');
 });
+
+Deno.test('an inappropriate-content report names a target on a community spot (#280)', () => {
+  const report = {
+    action: 'flag',
+    device_id: '10000000-0000-4000-8000-000000000001',
+    source_id: '10000000-0000-4000-8000-000000000002',
+    reason: '內容不當：車友名稱',
+    field: 'inappropriate',
+    proposed: { target: 'rider_name' },
+    note: '名字裡有辱罵字眼。',
+  };
+  const ok = (body: Record<string, unknown>, label: string) => {
+    const error = validate(body);
+    if (error) throw new Error(`${label}: ${error}`);
+  };
+  const fails = (body: Record<string, unknown>, want: string) => {
+    if (validate(body) !== want) {
+      throw new Error(`${JSON.stringify(body)}: ${validate(body)}`);
+    }
+  };
+  ok(report, 'a report');
+  ok({ ...report, proposed: undefined }, 'no target is a precheck hint');
+  ok({ ...report, proposed: { target: 'photo' } }, 'an unknown target too');
+  fails({
+    ...report,
+    source_id: 'official:10000000-0000-4000-8000-000000000002',
+  }, 'invalid source id');
+  fails({ ...report, source_id: 'tdx:Taipei:park:1' }, 'invalid source id');
+  fails(
+    { ...report, proposed: { target: 'text', name: '新名稱' } },
+    'invalid proposed',
+  );
+  fails({ ...report, proposed: { target: 1 } }, 'invalid proposed');
+  fails(
+    { ...report, proposed: { target: 'x'.repeat(41) } },
+    'invalid proposed',
+  );
+  fails({ ...report, proposed: ['rider_name'] }, 'invalid proposed');
+  fails({ ...report, note: '字'.repeat(501) }, 'invalid note');
+  fails(
+    { ...report, evidence_url: 'https://example.test/a' },
+    'invalid evidence_url',
+  );
+});
