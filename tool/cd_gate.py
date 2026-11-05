@@ -10,8 +10,17 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 CI = {"ci.yml": "CI 全部通過", "android.yml": "Android 全部通過", "ios.yml": "iOS 全部通過"}
+# The staging backend and admin site wait for CI only (its backend tests
+# included); the App builds also wait for Android and iOS, so an iOS run of
+# 30–60 minutes no longer holds back the backend (user decision 2026-11-05).
+BACKEND_CI = {"ci.yml": CI["ci.yml"]}
 DEPLOY_JOB = "Staging backend deploy"
 DEPLOY_PROOF = "Record staging deployment"
+# Each App job and the step whose success means its build reached testers.
+APP_JOBS = {
+    "android": ("Staging Android APK", "Distribute APK to invited testers"),
+    "ios": ("Staging iOS IPA", "Distribute IPA to invited testers"),
+}
 
 
 class GitHub:
@@ -42,8 +51,8 @@ class GitHub:
     def latest_main(self, sha):
         return self.get("commits/main")["sha"] == sha
 
-    def ci_ready(self, sha):
-        for workflow, check in CI.items():
+    def ci_ready(self, sha, workflows=CI):
+        for workflow, check in workflows.items():
             runs = list(self.pages(f"actions/workflows/{workflow}/runs", "workflow_runs",
                                    head_sha=sha, branch="main", event="push"))
             if not runs:
@@ -88,12 +97,71 @@ class GitHub:
         return False
 
     def staging_ready(self, sha):
-        if not self.ci_ready(sha):
+        """Whether to deploy the staging backend (and admin site) now: CI has
+        passed and no earlier run has deployed this SHA."""
+        if not self.ci_ready(sha, BACKEND_CI):
             return False
         if self.staging_deployed(sha, fail_if_missing=False):
             print("Skipped: this SHA already has a successful staging backend deployment")
             return False
         return True
+
+    def apps_ready(self, sha):
+        """Whether CI, Android and iOS have all passed for the App builds. A
+        failed Android or iOS run stops only the App builds (it is red on main
+        already), not the backend."""
+        try:
+            return self.ci_ready(sha)
+        except ValueError as error:
+            print(f"No staging App builds: {error}")
+            return False
+
+    def staging_decision(self, sha):
+        """(backend, apps) for a staging run of this SHA, the latest main.
+        Apps follow a backend deployed earlier or by this same run."""
+        backend = self.staging_ready(sha)
+        apps = self.apps_ready(sha) and (backend or self.staging_deployed(sha, fail_if_missing=False))
+        return backend, apps
+
+    def staging_outputs(self, sha):
+        """The gate's outputs: `deploy` for the backend and admin site, `apps`
+        for the App builds; neither unless this SHA is the latest main."""
+        if not self.latest_main(sha):
+            print("Skipped: source SHA is no longer the latest main")
+            return {"deploy": "false", "apps": "false"}
+        backend, apps = self.staging_decision(sha)
+        return {"deploy": str(backend).lower(), "apps": str(apps).lower()}
+
+    def app_ready(self, sha, platform, current_run):
+        """Inside an App job, after its platform queue: still the latest main,
+        the backend of this SHA actually deployed (by this run or an earlier
+        one: a run whose own deploy found it done must still build), and no
+        other run has distributed this build yet."""
+        if not self.latest_main(sha):
+            print("Skipped: source SHA is no longer the latest main")
+            return False
+        if not self.staging_deployed(sha, fail_if_missing=False):
+            print("Skipped: this SHA has no successful staging backend deployment")
+            return False
+        if self.app_distributed(sha, platform, current_run):
+            print(f"Skipped: this SHA's {platform} build was already distributed")
+            return False
+        return True
+
+    def app_distributed(self, sha, platform, current_run):
+        """Whether another CD staging run already sent this SHA's build for
+        the platform to testers (each finished workflow can start a run)."""
+        job_name, proof = APP_JOBS[platform]
+        for run in self.pages("actions/workflows/cd-staging.yml/runs", "workflow_runs", head_sha=sha):
+            if run["id"] == current_run:
+                continue
+            for job in self.pages(f"actions/runs/{run['id']}/jobs", "jobs", filter="all"):
+                if job["name"] == job_name and any(
+                    step["name"] == proof and step["conclusion"] == "success"
+                    for step in job.get("steps", [])
+                ):
+                    return True
+        return False
 
     def release_succeeded(self, tag, sha):
         """The tag's own release.yml run (its latest attempt) must have
@@ -184,8 +252,9 @@ def build_number(count, attempt, channel="rc"):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=["staging", "latest", "release"])
+    parser.add_argument("mode", choices=["staging", "app", "latest", "release"])
     parser.add_argument("--sha", required=True)
+    parser.add_argument("--platform", choices=sorted(APP_JOBS), help="app mode: android or ios")
     parser.add_argument("--wait", type=int, default=0)
     args = parser.parse_args()
     api = GitHub()
@@ -225,6 +294,18 @@ def main():
             for key, value in release_outputs.items():
                 output(key, value)
             return
+    if args.mode == "staging":
+        for key, value in api.staging_outputs(args.sha).items():
+            output(key, value)
+        return
+    if args.mode == "app":
+        # Inside an App job, after its platform queue: still the latest main,
+        # and no other run has distributed this build yet.
+        if not args.platform:
+            raise ValueError("app mode needs --platform")
+        ready = api.app_ready(args.sha, args.platform, int(os.environ["GITHUB_RUN_ID"]))
+        output("deploy", str(ready).lower())
+        return
     while True:
         current = api.latest_main(args.sha)
         if not current:
@@ -233,8 +314,7 @@ def main():
             output("deploy", "false")
             print("Skipped: source SHA is no longer the latest main")
             return
-        ready = (args.mode == "latest" or
-                 (api.staging_ready(args.sha) if args.mode == "staging" else api.ci_ready(args.sha)))
+        ready = args.mode == "latest" or api.ci_ready(args.sha)
         if ready and args.mode == "release":
             ready = api.staging_deployed(args.sha)
         if ready:

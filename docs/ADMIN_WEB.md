@@ -89,7 +89,7 @@
    - `admin_upsert_city_rule`：伺服器遞增 `version`，檢查 `restriction`；發布前把現列複製到 `city_rules_history`（P5 已實作）。
    - `admin_import_preview`／`admin_import_apply`：接收 `spots.json`，先試算差異再套用，取代 SQL Editor（P6 已實作，見下方「P6 實作」）。
    - `admin_fee_backlog`／`admin_convert_fees`：列出尚無結構化費率的點位，寫入管理者確認的費率（P6）。
-6. 停權使用者需 Auth Admin API：Edge Function `admin-users` 先驗證呼叫者為 admin 且 `aal2`，再用 service role 執行（P7 已實作，見下方「P7 實作」）。
+6. 停權使用者：Edge Function `admin-users` 先驗證呼叫者為 admin 且 `aal2`，再用 service role 執行（P7 已實作，見下方「P7 實作」；#331 起是 App 層級停權，不再用 Auth ban）。
 7. 地址定位：Edge Function `geocode` 包裝 Google Geocoding API，金鑰只在 function secret `GOOGLE_GEOCODING_API_KEY`，不進前端與 App，後台與 App 共用。2026-10-25 比較後決定（見「P4b 實作」）。
 8. pgTAP：一般使用者被拒、admin 沒有 `aal2` 被拒、套用與結案同一 transaction、稽核紀錄不可修改。
 
@@ -273,10 +273,11 @@ python3 tool/export_rules.py --check || python3 tool/export_rules.py
 - **搜尋**（`admin_users(p_query, p_limit)`，security definer，先檢查 `is_admin()`）：完整的使用者 id、完整 email（不分大小寫精確比對）或顯示名稱的一部分（萬用字元視為一般文字）；空白時列出最近 30 天有回報的帳號，最近回報的在前，最多 100 筆。顯示名稱沿用 `contributor_display_name()`。
 - **email 遮蔽**（2026-10-25 確認）：只顯示部分字元（如 `sm***@gmail.com`），遮蔽在資料庫函式內完成，完整 email 不經 API 或畫面；需要找特定騎士時以完整 email 精確搜尋。
 - **詳情**（`admin_user_detail(p_user)`）：今天的回報次數與每日上限（`apply_report` 的 10 次／帳號，UTC 日界＝台灣時間早上 8 點），近 7／30 天次數、網路位置數、近 30 天同網路位置的其他帳號數；最近 30 筆回報時間只附 6 碼網路代號（`ip_hash` 前綴，只能分辨是否同一網路，完整雜湊不離開資料庫）。回報統計：新增的社群點（含已隱藏）、仍在／已不存在投票、修改建議依狀態。另列此帳號新增的社群點與 App 上顯示的公開名稱，以及停權紀錄。這些是 P7 自己的查詢，不依賴 ④a 的 `admin_review_baseline`。
-- **停權／解除停權**：Edge Function `admin-users`（`verify_jwt = false`，函式自行驗證）。`getUser` 確認 session 仍有效、未被停權，且帳號目前的 `app_metadata.role` 是 admin；`getClaims` 驗證 token 簽章並讀 `aal`，必須是 `aal2`（與 `is_admin()` 相同）。之後以 service role 呼叫 Auth Admin API `updateUserById(id, { ban_duration })`：7 天＝`168h`、30 天＝`720h`、直到解除＝`876000h`，解除為 `none`。不能停權自己或其他管理者。原因必填（1–500 字）。Auth 會拒絕被停權帳號的登入、token 更新與 `/user`，因此 `submit-report` 的 `getUser` 立即擋下回報與投票。
-- **稽核**：停權變更後由 Edge Function 呼叫 `admin_record_user_ban`（只授權 service role）寫入 `admin_audit_log`（`target_table='auth.users'`，前後的 `banned_until`、期間、原因）。Auth API 與資料庫無法同一 transaction：稽核寫入失敗時函式把停權狀態還原（原本有停權則還原剩餘時數，無條件進位到小時）並回錯誤；還原前重新讀取帳號，若停權狀態已不是本次寫入的值（另一位管理者同時變更），保留較新的變更、不還原。
+- **停權／解除停權**：Edge Function `admin-users`（`verify_jwt = false`，函式自行驗證）。`getUser` 確認 session 仍有效，且帳號目前的 `app_metadata.role` 是 admin；`getClaims` 驗證 token 簽章並讀 `aal`，必須是 `aal2`（與 `is_admin()` 相同）。之後以 service role 呼叫 `admin_set_user_suspension(p_actor, p_user, p_action, p_duration, p_note)`：期間 `7d`、`30d`、`indefinite`（直到解除），解除為 `unban`。不能停權自己或其他管理者。原因必填（1–500 字）。回傳形狀維持 `{user_id, banned_until}`；無限期的 `banned_until` 是 `9999-12-31T00:00:00Z`（管理站把 10 年以上視為無限期）。
+  - #331 起停權是 App 層級旗標（`private.user_suspensions`），**不是** Supabase Auth ban：停權中的帳號照常登入、瀏覽、管理與刪除自己的帳號；被擋下的只有 App 的寫入（新增點位、修改建議、目擊、檢舉、確認點位、改名稱與頭像），回 `account.suspended`（形狀見 `supabase/api/v1/README.md`）。`submit-sighting` 的洗版規則（7 天）同一個交易內停權帳號，只延長、不縮短管理員給的停權。
+- **稽核**：`admin_set_user_suspension` 在同一個交易內寫停權與 `admin_audit_log`（`target_table='auth.users'`，前後的 `banned_until`、期間、原因），不會有「停權成功但稽核失敗」的情況。帳號刪除時停權列跟著刪除，稽核紀錄照 #267 保留 2 年後去識別化。
 - **清除公開名稱**：詳情先列最新 50 個社群點，「載入更早的點位」以 `admin_user_spots(p_user, p_offset)` 分頁（依建立時間，清除名稱不會改變順序）；逐點以 `admin_clear_contributor_name`（#81）清除，原因選填、寫入稽核紀錄；清除後即使改名也不再顯示。停權後背景重新讀取停權紀錄時，若期間又有停權或清除操作，舊的讀取結果會被捨棄，不覆蓋較新的畫面狀態。
-- 測試：pgTAP `admin_users_test.sql`（一般使用者、無 `aal2` 的 admin、anon 被拒；搜尋與遮蔽；統計；只有 service role 能寫停權紀錄、稽核不可修改）；deno `admin-users/handler_test.ts`（非 admin、無 `aal2`、無 token 被拒且不呼叫 Auth；停權與解除寫稽核；稽核失敗還原；輸入驗證；不能停權自己或管理者）；widget test `test/admin/users_test.dart`。
+- 測試：pgTAP `admin_users_test.sql`（一般使用者、無 `aal2` 的 admin、anon 被拒；搜尋與遮蔽；統計；只有 service role 能停權、停權與稽核同一交易、稽核不可修改）、`app_suspension_test.sql`（#331：每支寫入函式都擋、放行清單、名稱與頭像）；deno `admin-users/handler_test.ts`（非 admin、無 `aal2`、無 token 被拒且不停權；停權與解除；輸入驗證；不能停權自己或管理者）；widget test `test/admin/users_test.dart`。
 
 ### C6b 點位表單計費規則與審核頁（stack C）
 
