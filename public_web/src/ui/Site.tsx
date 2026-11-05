@@ -24,22 +24,26 @@ export function Site({ children, aside }: { children: ReactNode; aside?: ReactNo
   return (
     <div className="site">
       <header className="site-header">
-        <Link to="/account-deletion" className="site-brand">
-          <Mark />
-          <span className="site-brand-text">
-            <span className="site-brand-name">{appName}</span>
-            <span className="site-brand-developer">{developer}</span>
-          </span>
-        </Link>
-        {aside}
+        <div className="site-header-inner">
+          <Link to="/account-deletion" className="site-brand">
+            <Mark />
+            <span className="site-brand-text">
+              <span className="site-brand-name">{appName}</span>
+              <span className="site-brand-developer">{developer}</span>
+            </span>
+          </Link>
+          {aside}
+        </div>
       </header>
       <main className="site-main">{children}</main>
       <footer className="site-footer">
-        <span>{footerNote}</span>
-        <a href="/privacy">隱私權政策</a>
-        <a href="/terms">服務條款</a>
-        {/* Questions go through the support form, never a mail link (#295). */}
-        <Link to="/support">聯絡我們</Link>
+        <div className="site-footer-inner">
+          <span>{footerNote}</span>
+          <a href="/privacy">隱私權政策</a>
+          <a href="/terms">服務條款</a>
+          {/* Questions go through the support form, never a mail link (#295). */}
+          <Link to="/support">聯絡我們</Link>
+        </div>
       </footer>
     </div>
   );
