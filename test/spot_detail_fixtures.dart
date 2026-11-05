@@ -24,7 +24,7 @@ const _hourly20 = {
   'cap_reset': 'calendar_day',
 };
 
-final detailLot = ParkingSpot.fromJson({
+final detailLotJson = <String, dynamic>{
   'id': 'songshou',
   'name': '松壽地下停車場',
   'lat': 25.036,
@@ -101,9 +101,10 @@ final detailLot = ParkingSpot.fromJson({
       },
     },
   ],
-});
+};
+final detailLot = ParkingSpot.fromJson(detailLotJson);
 
-final detailStreet = ParkingSpot.fromJson({
+final detailStreetJson = <String, dynamic>{
   'id': 'nanjing',
   'name': '南京東路三段路邊機車格',
   'lat': 25.052,
@@ -225,10 +226,11 @@ final detailStreet = ParkingSpot.fromJson({
       },
     },
   ],
-});
+};
+final detailStreet = ParkingSpot.fromJson(detailStreetJson);
 
 /// A street bay with no segments: the spot stands as one.
-final detailBay = ParkingSpot.fromJson({
+final detailBayJson = <String, dynamic>{
   'id': 'plain-bay',
   'name': '民生東路路邊機車格',
   'lat': 25.058,
@@ -244,10 +246,11 @@ final detailBay = ParkingSpot.fromJson({
     'scooter': {'mode': 'hourly', 'amount': 20, 'per_minutes': 60},
     'heavy': {'mode': 'same_as_scooter'},
   },
-});
+};
+final detailBay = ParkingSpot.fromJson(detailBayJson);
 
 /// A lot only cars may use (A2b): neither motorcycle may park anywhere.
-final detailCarLot = ParkingSpot.fromJson({
+final detailCarLotJson = <String, dynamic>{
   'id': 'car-lot',
   'name': '測試汽車停車場',
   'lat': 25.04,
@@ -285,7 +288,8 @@ final detailCarLot = ParkingSpot.fromJson({
       },
     },
   ],
-});
+};
+final detailCarLot = ParkingSpot.fromJson(detailCarLotJson);
 
 Future<AppStore> detailStore(
   WidgetTester tester,

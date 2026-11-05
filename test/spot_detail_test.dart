@@ -564,7 +564,7 @@ void main() {
   testWidgets('不能停的點：目錄只剩一面路牌，判定卡寫不能停', (tester) async {
     final store = await detailStore(tester, VehicleType.scooter);
     final heavyBay = ParkingSpot.fromJson({
-      ...detailBay.toJson(),
+      ...detailBayJson,
       'id': 'heavy-only',
       'space_type': 'heavyOnly',
       'parking_segments': <Object>[],
@@ -727,7 +727,7 @@ void main() {
     testWidgets('只有目前車種不能停時照舊：主按鈕、不收合', (tester) async {
       final store = await detailStore(tester, VehicleType.scooter);
       final heavyBay = ParkingSpot.fromJson({
-        ...detailBay.toJson(),
+        ...detailBayJson,
         'id': 'heavy-only-2',
         'space_type': 'heavyOnly',
       });

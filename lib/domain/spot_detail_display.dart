@@ -179,24 +179,37 @@ List<DetailRule> detailRules(FourSign s, ParkingSpot spot) {
   ];
 }
 
-/// When [a] opens to [vehicle], as its slots say (「20:00–23:00」); else
-/// when the window says it opens next (「20:00 起」); empty when unknown.
+/// When [a] next opens to [vehicle], read from its window, which leaves
+/// out 禁停 periods and the notice's own dates: 「20:00–23:00」 when a slot
+/// starting then is the whole story (no 禁停, no notice end to cut it),
+/// else 「20:00 起」; empty when no time within the week is known.
 String openHours(SignArea a, VehicleType vehicle) {
-  final slots = [
-    for (final slot in a.condition?.schedule ?? const <ScheduleSlot>[])
-      if (slot.vehicles.contains(_slot(vehicle)))
-        _when(slot.days, slot.from, slot.to),
-  ];
-  if (slots.isNotEmpty) return _list(slots);
-  return a.window.opensAt == null ? '' : '${a.window.opensAt} 起';
+  final opensAt = a.window.opensAt;
+  if (opensAt == null) return '';
+  final c = a.condition;
+  final clock = opensAt.split(' ').last;
+  final plain =
+      opensAt == clock &&
+      c != null &&
+      c.basis?.expiresOn == null &&
+      !c.hasLimit(LimitKind.noParking);
+  if (plain) {
+    final slots = [
+      for (final slot in c.schedule)
+        if (slot.vehicles.contains(_slot(vehicle)) && slot.from == clock)
+          _when(slot.days, slot.from, slot.to),
+    ];
+    if (slots.isNotEmpty) return _list(slots);
+  }
+  return '$opensAt 起';
 }
 
 /// 「20:00–23:00 才開放大型重機」 for a place open later; empty when it is
-/// open now or never.
+/// open now, never, or opens at no known time.
 String laterWords(SignArea a, VehicleType vehicle) {
   if (!a.open || a.window.now) return '';
   final hours = openHours(a, vehicle);
-  if (hours.isEmpty) return '現在不能停';
+  if (hours.isEmpty) return '';
   return hours.endsWith('起')
       ? '$hours開放${vehicle.label}'
       : '$hours 才開放${vehicle.label}';
@@ -362,8 +375,15 @@ class SeatRow {
     required this.sub,
     required this.official,
     this.officialNote = '',
+    this.areas = const [],
   });
+
+  /// The place the row is about; the first of [areas] when it stands for
+  /// several.
   final SignArea area;
+
+  /// The places sharing one official count; empty for a single place.
+  final List<SignArea> areas;
   final String name, sub;
 
   /// 「剩 4 格」, 「已滿」, 「共 18 格」, 「空位未知」, 「暫停營運」.
@@ -387,7 +407,7 @@ String placeState(SignArea a, VehicleType vehicle, {bool street = false}) {
     return limit == null ? '有條件' : '有條件：$limit';
   }
   final later = laterWords(a, vehicle);
-  if (later.isEmpty || later == '現在不能停') return later;
+  if (later.isEmpty) return '';
   return street ? '$later，現在不能停' : later;
 }
 
@@ -404,10 +424,46 @@ List<SeatRow> seatRows(
   DateTime now,
 ) {
   if (!hasPlaces(s)) return const [];
-  return [
+  final open = [
     for (final a in s.areas)
-      if (a.open) _seatRow(s, a, availability, now),
+      if (a.open) a,
   ];
+  final rows = <SeatRow>[];
+  final listed = <SignArea>{};
+  for (final a in open) {
+    if (!listed.add(a)) continue;
+    // A lot's official count is one per vehicle class for the whole lot:
+    // zones sharing a class share it, so they share one row, never each
+    // its own copy of the number (as four_sign's 有沒有位 merges them).
+    final shared = !s.street && a.countClass != null
+        ? [
+            for (final b in open)
+              if (b.countClass == a.countClass) b,
+          ]
+        : [a];
+    listed.addAll(shared);
+    final row = _seatRow(s, a, availability, now);
+    if (shared.length == 1) {
+      rows.add(row);
+      continue;
+    }
+    rows.add(
+      SeatRow(
+        area: a,
+        areas: shared,
+        name: _list(shared.map(detailPlaceName)),
+        sub: [
+          _list(
+            shared.map((b) => bayLabel(b.bayKind)).where((t) => t.isNotEmpty),
+          ),
+          '${shared.length} 區共用同一個官方數字',
+        ].where((t) => t.isNotEmpty).join('・'),
+        official: row.official,
+        officialNote: row.officialNote,
+      ),
+    );
+  }
+  return rows;
 }
 
 SeatRow _seatRow(
@@ -573,6 +629,11 @@ String rateWords(Rate r, {int? firstMinutes}) => switch (r.mode) {
   _ => '',
 };
 
+/// A period's rate with all its terms, in the words the notice board's
+/// period lines use ([Rate.text]): 「每次 30 元，隔日另計」, 「每小時 20
+/// 元，當日上限 100 元（零時重算）」.
+String periodWords(Rate r) => r.text;
+
 /// What else a rate says: a cap, a paid extension, how a visit renews.
 List<String> _extras(Rate r, LimitPeriod? stay) => [
   if (r.mode == FeeMode.hourly && r.dailyCap != null)
@@ -729,7 +790,7 @@ FeeCard _card(
       if (!identical(p, holding))
         (
           _when(p.days, p.from, p.to),
-          p.rate.mode == FeeMode.byTime ? '' : rateWords(p.rate),
+          p.rate.mode == FeeMode.byTime ? '' : periodWords(p.rate),
         ),
   ];
   final cross = switch (r.crossPeriod) {
@@ -784,13 +845,35 @@ FeeSection feeSection(
     for (final a in s.areas)
       if (a.open && !a.window.now) a,
   ];
-  final named = hasPlaces(s);
+  var named = hasPlaces(s);
   // Places priced: those open now, else those open later, else all.
-  final priced = openNow.isNotEmpty
+  var priced = openNow.isNotEmpty
       ? openNow
       : openLater.isNotEmpty
       ? openLater
       : s.areas;
+  // A lot whose zones say nothing of access stands as one place, yet its
+  // zones may still carry their own rates: each zone prices it, as the
+  // 怎麼算錢 plate reads them, never the lot's rate in their place.
+  if (!s.street &&
+      spot.zones.isNotEmpty &&
+      priced.isNotEmpty &&
+      priced.every((a) => a.whole)) {
+    final whole = priced.first;
+    priced = [
+      for (final z in spot.zones)
+        SignArea(
+          id: z.id,
+          name: z.name.trim().isEmpty ? '分區' : z.name.trim(),
+          status: whole.status,
+          window: whole.window,
+          zone: z,
+          condition: z.condition ?? zoneConditionOf(z.access),
+          bayKind: bayKindOf(z.condition ?? zoneConditionOf(z.access)),
+        ),
+    ];
+    named = true;
+  }
   final current = openNow.isNotEmpty;
   final prices = [for (final a in priced) placePrice(spot, a, v)];
   final closed = [
@@ -820,7 +903,14 @@ FeeSection feeSection(
   final allSame =
       priced.length > 1 &&
       prices.toSet().length == 1 &&
-      {for (final a in priced) _noParkingTexts(a.condition).join()}.length == 1;
+      // The stay a time limit allows (and its extensions) shapes a card's
+      // amount and extension line: places differing there keep their own.
+      {
+            for (final a in priced)
+              '${_noParkingTexts(a.condition).join()}|'
+                  '${_limitTexts(a.condition).join()}',
+          }.length ==
+          1;
   if (!named || allSame || priced.isEmpty) {
     final area = priced.isEmpty
         ? const SignArea(
@@ -943,7 +1033,7 @@ WhereCard _whereCard(FourSign s, ParkingSpot spot, SignArea a) {
     sub: sub,
     state: later.isEmpty
         ? ''
-        : s.street && later != '現在不能停'
+        : s.street
         ? '$later，現在不能停'
         : later,
     later: later.isNotEmpty,
