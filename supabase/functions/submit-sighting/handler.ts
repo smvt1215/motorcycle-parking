@@ -6,16 +6,22 @@ import {
 } from '../_shared/app_check.ts';
 import { trustedIp } from '../_shared/client_ip.ts';
 import { cors, readBody, response } from '../_shared/http.ts';
+import {
+  suspendedRefusal,
+  suspendedResponse,
+  type Suspension,
+} from '../_shared/suspension.ts';
 import { type Sighting, validate } from './validate.ts';
 
 /** An error the database raised, as supabase-js reports it. */
 export interface RpcError {
   code?: string;
   message?: string;
+  details?: string | null;
 }
 
 export interface Deps {
-  /** The account behind a token the Auth server accepts (live, not banned). */
+  /** The account behind a token the Auth server accepts. */
   user(token: string): Promise<{ id: string; anonymous: boolean } | null>;
   /** Keyed hash of a network or device, as submit-report stores them. */
   hash(value: string): Promise<string>;
@@ -33,8 +39,8 @@ export interface Deps {
   }): Promise<
     { data?: Record<string, unknown> | null; error?: RpcError | null }
   >;
-  /** Auth Admin API ban, as the admin-users function sets it. */
-  ban(user: string, duration: string): Promise<string | null>;
+  /** public.suspension_status() with the service role (#331). */
+  suspension(user: string): Promise<Suspension>;
   /**
    * The App Check verdict on the request's token (#203); null when App Check
    * is not configured.
@@ -42,18 +48,7 @@ export interface Deps {
   appCheck?(token: string | null): Promise<AppCheckResult | null>;
   /** APP_CHECK_MODE: off, log (the default) or enforce. */
   appCheckMode?: AppCheckMode;
-  /** admin_record_user_ban(): every ban change is audited. */
-  record(entry: {
-    user: string;
-    after: string | null;
-    duration: string;
-    note: string;
-  }): Promise<void>;
 }
-
-/** The flood rule's suspension: 7 days (decision 50). */
-export const floodBan = '168h';
-export const floodNote = '騎士回報洗版，自動停權 7 天（規則評分，決定 50）';
 
 /** What the app reads from a refusal of the database. */
 export function refusal(error: RpcError): [string, number] {
@@ -105,6 +100,10 @@ export async function handle(
         return response({ error: 'app check required' }, 401);
       }
     }
+    // A suspended account still signs in and manages itself; only App
+    // writes are refused (#331).
+    const status = await deps.suspension(user.id);
+    if (status.suspended) return suspendedResponse(status.until);
     let sighting: Sighting | string;
     try {
       sighting = validate(await readBody(req));
@@ -122,24 +121,21 @@ export async function handle(
       ipCapped: mode !== 'enforce',
     });
     if (error) {
-      const [message, status] = refusal(error);
-      return response({ error: message }, status);
+      const suspended = suspendedRefusal(error);
+      if (suspended) return suspendedResponse(suspended.until);
+      const [message, code] = refusal(error);
+      return response({ error: message }, code);
     }
     if (typeof data?.suspended_until === 'string') {
-      // The database already refuses this rider's sightings for 7 days; the
-      // ban extends that to the whole account, as an admin's would.
+      // The flood rule suspended the account for 7 days in the same
+      // transaction (#331); a longer suspension an admin set is kept.
+      let until: string | null = data.suspended_until;
       try {
-        const after = await deps.ban(user.id, floodBan);
-        await deps.record({
-          user: user.id,
-          after,
-          duration: '7d',
-          note: floodNote,
-        });
+        until = (await deps.suspension(user.id)).until;
       } catch {
-        // The sighting refusal holds without it.
+        // The suspension holds; the rule's own end is close enough.
       }
-      return response({ error: 'sighting suspended' }, 403);
+      return suspendedResponse(until);
     }
     return response({
       accepted: true,

@@ -78,6 +78,32 @@ const SCREENS = [
     heading: '再登入一次',
   },
   {
+    name: 'rate-limited',
+    signedIn: false,
+    signIn: { kind: 'rateLimited' },
+    steps: ['signIn'],
+    heading: '暫時無法登入',
+  },
+  {
+    name: 'requested-apple-not-revoked',
+    signedIn: true,
+    user: 'apple',
+    appleRevoke: { kind: 'notRevoked' },
+    api: { account_deletion_status: { body: none }, request_account_deletion: { body: pending } },
+    steps: ['check', 'delete'],
+    heading: '已申請刪除帳號',
+    visible: 'Apple 登入授權沒有撤銷',
+  },
+  {
+    name: 'reauth-apple',
+    signedIn: true,
+    user: 'apple',
+    appleRevoke: { kind: 'signInNeeded' },
+    api: { account_deletion_status: { body: none } },
+    steps: ['check', 'delete'],
+    heading: '再登入一次',
+  },
+  {
     name: 'pending',
     signedIn: true,
     api: { account_deletion_status: { body: pending } },
@@ -134,6 +160,7 @@ await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
 
 const rider = { id: 'u-smoke', email: 'rider@gmail.com', provider: 'google' };
+const appleRider = { id: 'u-smoke-apple', email: 'abc123@privaterelay.appleid.com', provider: 'apple' };
 
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch();
@@ -143,11 +170,16 @@ for (const viewport of VIEWPORTS) {
     const context = await browser.newContext({ viewport, locale: 'zh-TW' });
     // The smoke build signs in with src/smoke/smokeAuth.ts, which reads these.
     await context.addInitScript(
-      ([user, signIn]) => {
+      ([user, signIn, appleRevoke]) => {
         if (user) localStorage.setItem('motopark-smoke-user', user);
         if (signIn) localStorage.setItem('motopark-smoke-sign-in', signIn);
+        if (appleRevoke) localStorage.setItem('motopark-smoke-apple-revoke', appleRevoke);
       },
-      [screen.signedIn ? JSON.stringify(rider) : null, screen.signIn ? JSON.stringify(screen.signIn) : null],
+      [
+        screen.signedIn ? JSON.stringify(screen.user === 'apple' ? appleRider : rider) : null,
+        screen.signIn ? JSON.stringify(screen.signIn) : null,
+        screen.appleRevoke ? JSON.stringify(screen.appleRevoke) : null,
+      ],
     );
     const page = await context.newPage();
     await page.route('**/rest/v1/rpc/*', (route) => {
@@ -171,6 +203,7 @@ for (const viewport of VIEWPORTS) {
         if (step === 'signIn') await page.getByRole('button', { name: '使用 Google 登入' }).click();
       }
       await page.getByRole('heading', { level: 1, name: screen.heading }).waitFor({ timeout: 5000 });
+      if (screen.visible) await page.getByText(screen.visible).waitFor({ timeout: 5000 });
       const overflow = await page.evaluate(
         () => globalThis.document.documentElement.scrollWidth - globalThis.innerWidth,
       );

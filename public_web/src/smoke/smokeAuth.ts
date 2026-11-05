@@ -1,12 +1,14 @@
-import type { AuthPort, SignedInUser, SignInResult } from '../auth/port';
+import type { AppleRevoke, AuthPort, SignedInUser, SignInResult } from '../auth/port';
 
 /**
  * Sign-in for `npm run smoke` only (main.tsx loads it in the smoke build;
- * production builds drop it). The script stores who is signed in and how
- * the next sign-in ends before the page loads.
+ * production builds drop it). The script stores who is signed in, how the
+ * next sign-in ends and how revoking Apple's grant ends before the page
+ * loads. The Google button is a plain one of the same size as Google's.
  */
 export const SMOKE_USER = 'motopark-smoke-user';
 export const SMOKE_SIGN_IN = 'motopark-smoke-sign-in';
+export const SMOKE_APPLE_REVOKE = 'motopark-smoke-apple-revoke';
 
 function read<T>(key: string): T | null {
   const raw = localStorage.getItem(key);
@@ -20,11 +22,25 @@ export function smokeAuth(): AuthPort {
     user = next;
     listeners.forEach((listener) => listener(next));
   };
+  async function signIn(): Promise<SignInResult> {
+    const result = read<SignInResult>(SMOKE_SIGN_IN) ?? { kind: 'cancelled' };
+    if (result.kind === 'signedIn') change(result.user);
+    return result;
+  }
   return {
-    async signIn() {
-      const result = read<SignInResult>(SMOKE_SIGN_IN) ?? { kind: 'cancelled' };
-      if (result.kind === 'signedIn') change(result.user);
-      return result;
+    mountGoogleButton(container, { onResult }) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'signin-button signin-button--google';
+      button.textContent = '使用 Google 登入';
+      button.addEventListener('click', () => void signIn().then(onResult));
+      container.append(button);
+      return { resize() {}, unmount: () => button.remove() };
+    },
+    prepareApple() {},
+    signInWithApple: signIn,
+    async revokeApple() {
+      return read<AppleRevoke>(SMOKE_APPLE_REVOKE) ?? { kind: 'revoked' };
     },
     async signOut() {
       change(null);
