@@ -277,4 +277,92 @@ void main() {
       expect(laterWords(b3, VehicleType.heavy), '20:00–23:00 才開放大型重機');
     });
   });
+
+  test('稍後開放的分區另有費率時，不寫全場同價（Codex P2 第 2 輪）', () {
+    // B2 on the lot's 20 元; B3 opens 20:00–23:00 at its own 50 元.
+    final zones = [
+      for (final z
+          in (detailLotJson['parking_zones'] as List)
+              .cast<Map<String, dynamic>>())
+        z['id'] == 'b3'
+            ? {
+                ...z,
+                'fee': {
+                  'heavy': {'mode': 'hourly', 'amount': 50, 'per_minutes': 60},
+                },
+              }
+            : z,
+    ];
+    final spot = ParkingSpot.fromJson(lot(zones));
+    final fees = feeSection(
+      sign(spot, VehicleType.heavy, detailDay),
+      spot,
+      detailDay,
+    );
+    expect(fees.cards.map((c) => c.main), ['每小時 20 元']);
+    expect(fees.sameNote, '');
+    expect(fees.later.single, contains('每小時 50 元'));
+    expect(fees.later.single, isNot(contains('同樣')));
+    // At night both are open: two cards, neither says 同價.
+    final night = feeSection(
+      sign(spot, VehicleType.heavy, detailNight),
+      spot,
+      detailNight,
+    );
+    expect(night.cards.map((c) => c.main), ['每小時 20 元', '每小時 50 元']);
+    expect(night.cards.every((c) => c.note.isEmpty), isTrue);
+    // The demo lot, one rate everywhere, still reads 全場同價.
+    expect(
+      feeSection(
+        sign(detailLot, VehicleType.heavy, detailDay),
+        detailLot,
+        detailDay,
+      ).sameNote,
+      '全場同價',
+    );
+  });
+
+  test('計次延長：沒有限停資料也寫延長每次金額，次數已知才寫次數（Codex P2 第 2 輪）', () {
+    Map<String, dynamic> bay({Map<String, dynamic>? condition}) => {
+      ...detailBayJson,
+      'fee': {
+        'scooter': {'mode': 'per_visit', 'amount': 0, 'extension_amount': 40},
+        'heavy': {'mode': 'same_as_scooter'},
+      },
+      'condition': ?condition,
+    };
+    final plain = ParkingSpot.fromJson(bay());
+    final card = feeSection(
+      sign(plain, VehicleType.scooter, detailDay),
+      plain,
+      detailDay,
+    ).cards.single;
+    expect(card.detail, contains('延長每次 40 元'));
+    expect(card.detail, isNot(contains('可付')));
+    final limited = ParkingSpot.fromJson(
+      bay(
+        condition: {
+          'bay': 'motorcycle',
+          'use': 'usual',
+          'charge': 'toll',
+          'limits': [
+            {
+              'kind': 'time_limit',
+              'periods': [
+                {'days': 'all', 'max_minutes': 120, 'extensions': 1},
+              ],
+            },
+          ],
+        },
+      ),
+    );
+    final known = feeSection(
+      sign(limited, VehicleType.scooter, detailDay),
+      limited,
+      detailDay,
+    ).cards.single;
+    expect(known.main, '首 2 小時 0 元');
+    expect(known.detail, contains('可付 40 元延長 1 次'));
+    expect(known.detail, isNot(contains('延長每次')));
+  });
 }

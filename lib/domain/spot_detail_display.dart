@@ -639,10 +639,14 @@ List<String> _extras(Rate r, LimitPeriod? stay) => [
   if (r.mode == FeeMode.hourly && r.dailyCap != null)
     '當日上限 ${FeeWords.money(r.dailyCap)} 元'
         '${FeeWords.reset(r.capReset) == null ? '' : '（${FeeWords.reset(r.capReset)}）'}',
-  if (r.mode == FeeMode.perVisit &&
-      r.extensionAmount != null &&
-      (stay?.extensions ?? 0) > 0)
-    '可付 ${FeeWords.money(r.extensionAmount)} 元延長 ${stay!.extensions} 次',
+  // The amount of an extension is the rate's; how many the time limit
+  // allows is known only with it (none at 0, where the limit says so).
+  if (r.mode == FeeMode.perVisit && r.extensionAmount != null)
+    ?switch (stay?.extensions) {
+      null => '延長每次 ${FeeWords.money(r.extensionAmount)} 元',
+      0 => null,
+      final n => '可付 ${FeeWords.money(r.extensionAmount)} 元延長 $n 次',
+    },
   if (r.mode == FeeMode.perVisit && r.renew == Renew.none) '停多久都只收一次',
   if (r.mode == FeeMode.perVisit && r.renew == Renew.midnight) '隔日另計',
 ];
@@ -876,6 +880,13 @@ FeeSection feeSection(
   }
   final current = openNow.isNotEmpty;
   final prices = [for (final a in priced) placePrice(spot, a, v)];
+  // 全場同價 only when every place open to the vehicle, now or later,
+  // charges alike: a zone opening later on its own rate makes it untrue.
+  final everySame =
+      {
+        for (final a in [...priced, ...openLater]) placePrice(spot, a, v),
+      }.length ==
+      1;
   final closed = [
     for (final a in s.areas)
       if (a.status == EligibilityStatus.notAllowed && !a.whole) _nameWithBay(a),
@@ -931,7 +942,11 @@ FeeSection feeSection(
           header: vehicleHeader,
           vehicleHeader: true,
           current: current,
-          note: allSame ? (s.street ? '各路段同價' : '全場同價') : '',
+          note: !allSame
+              ? ''
+              : everySame
+              ? (s.street ? '各路段同價' : '全場同價')
+              : (s.street ? '現在可停的路段同價' : '現在開放的分區同價'),
         ),
       ],
       closed: closed,
@@ -944,7 +959,8 @@ FeeSection feeSection(
       priced.length == 1 &&
       priced.single.zone?.fee == null &&
       spot.fee != null &&
-      spot.zones.length > 1;
+      spot.zones.length > 1 &&
+      everySame;
   return FeeSection(
     title: title,
     cards: [
