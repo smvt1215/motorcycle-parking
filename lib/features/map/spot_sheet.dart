@@ -93,6 +93,9 @@ class _SpotSheetState extends State<SpotSheet> {
   /// The street segment the rider chose in 停哪裡 (A10): 能不能停 reads it.
   String? selectedSegment;
 
+  /// Where no motorcycle may park (A2b): 有沒有位 and 怎麼算錢 opened.
+  bool unfolded = false;
+
   /// 複製 just copied the address.
   bool copied = false;
   Timer? copiedTimer;
@@ -169,6 +172,7 @@ class _SpotSheetState extends State<SpotSheet> {
     if (old.spot.id != widget.spot.id) {
       history = _history();
       selectedSegment = null;
+      unfolded = false;
     }
   }
 
@@ -333,15 +337,32 @@ class _SpotSheetState extends State<SpotSheet> {
               .where((a) => a.id != null && a.id == selectedSegment)
               .firstOrNull
         : null;
+    // Neither vehicle may park here (A2b): one plate, whichever is chosen.
+    final notParkable =
+        sign.denied &&
+        fourSignVerdict(
+              spot,
+              vehicle == VehicleType.heavy
+                  ? VehicleType.scooter
+                  : VehicleType.heavy,
+              store.rules,
+              now: now,
+            ).status ==
+            EligibilityStatus.notAllowed;
+    final signPlates = fourSignPlates(sign, now);
     final plates = [
-      for (final p in fourSignPlates(sign, now))
-        if (p.face == FourSignFace.verdict && selected != null)
-          selectedVerdictPlate(sign, selected)
-        else
-          p,
+      if (notParkable)
+        notParkablePlate(signPlates.first)
+      else
+        for (final p in signPlates)
+          if (p.face == FourSignFace.verdict && selected != null)
+            selectedVerdictPlate(sign, selected)
+          else
+            p,
     ];
     final actions = SpotPreviewActions(
       street: !spot.isFacility,
+      navigateSecondary: notParkable,
       onNavigate: () => runAction(ctx, () => navigateTo(spot.lat, spot.lng)),
       // 回報現場狀況 stays hidden until the rider sighting sheet (A7, A7b;
       // PR-E) gives it somewhere to go.
@@ -368,6 +389,7 @@ class _SpotSheetState extends State<SpotSheet> {
       selected,
       photos,
       now,
+      notParkable: notParkable,
     );
     return LayoutBuilder(
       builder: (ctx, constraints) {
@@ -504,8 +526,9 @@ class _SpotSheetState extends State<SpotSheet> {
     SpotAvailability availability,
     SignArea? selected,
     List<String> photos,
-    DateTime now,
-  ) {
+    DateTime now, {
+    required bool notParkable,
+  }) {
     final vehicle = store.vehicle;
     final display = eligibilityDisplay(
       spot,
@@ -591,50 +614,81 @@ class _SpotSheetState extends State<SpotSheet> {
               onStillClosed: () =>
                   runAction(ctx, () => showGoneReport(ctx, store, spot)),
             ),
-          VerdictCard(
-            status: selected?.status ?? sign.verdict.status,
-            headline:
-                verdictHeadline(sign, selected: selected) ??
-                undecidedHeadline(vehicle, display.label),
-            // The rows below say what limits it; the decision's reason
-            // stays only where no row does.
-            explanation: selected != null
-                ? selectedNote(sign, selected)
-                : rules.isNotEmpty &&
-                      (sign.verdict.status == EligibilityStatus.allowed ||
-                          sign.verdict.status == EligibilityStatus.conditional)
-                ? ''
-                : display.explanation,
-            basis: display.basis,
-            notices: display.notices,
-            reported: display.reported && !display.lapsed,
-            banned: selected == null && sign.verdict.noParkingNow,
-          ),
-          if (rules.isNotEmpty) DetailRulesView(rules: rules, vehicle: vehicle),
+          if (notParkable)
+            // A2b: one red conclusion for both vehicles, and why.
+            VerdictCard(
+              status: EligibilityStatus.notAllowed,
+              headline: notParkableHeadline,
+              explanation: notParkableExplanation,
+              basis: display.basis,
+              notices: display.notices,
+            )
+          else
+            VerdictCard(
+              status: selected?.status ?? sign.verdict.status,
+              headline:
+                  verdictHeadline(sign, selected: selected) ??
+                  undecidedHeadline(vehicle, display.label),
+              // The rows below say what limits it; the decision's reason
+              // stays only where no row does.
+              explanation: selected != null
+                  ? selectedNote(sign, selected)
+                  : rules.isNotEmpty &&
+                        (sign.verdict.status == EligibilityStatus.allowed ||
+                            sign.verdict.status ==
+                                EligibilityStatus.conditional)
+                  ? ''
+                  : display.explanation,
+              basis: display.basis,
+              notices: display.notices,
+              reported: display.reported && !display.lapsed,
+              banned: selected == null && sign.verdict.noParkingNow,
+            ),
+          if (notParkable)
+            DetailRulesView(
+              rules: notParkableRules(sign, spot, decision.eligibility.reason),
+              vehicle: vehicle,
+              scope: false,
+            )
+          else if (rules.isNotEmpty)
+            DetailRulesView(rules: rules, vehicle: vehicle),
         ],
       ),
-      DetailSection(
-        key: sections[FourSignFace.seat],
-        title: rows.isEmpty || (spot.isFacility && !live)
-            ? '有沒有位'
-            : '有沒有位（${vehicle.label}能停的$unit）',
-        gap: 8,
-        children: [seat],
-      ),
-      DetailSection(
-        key: sections[FourSignFace.fee],
-        title: fees.title,
-        children: [
-          FeeSectionView(
-            section: fees,
-            vehicle: vehicle,
-            extraNote: _additionalFeeNote(spot),
-          ),
-        ],
-      ),
+      // A2b: 有沒有位 and 怎麼算錢 folded into one row, opened in place.
+      if (notParkable)
+        DetailSection(
+          title: '有沒有位・怎麼算錢',
+          children: [
+            NotParkableFold(
+              expanded: unfolded,
+              onToggle: () => setState(() => unfolded = !unfolded),
+            ),
+          ],
+        ),
+      if (!notParkable || unfolded) ...[
+        DetailSection(
+          key: sections[FourSignFace.seat],
+          title: rows.isEmpty || (spot.isFacility && !live)
+              ? '有沒有位'
+              : '有沒有位（${vehicle.label}能停的$unit）',
+          gap: 8,
+          children: [seat],
+        ),
+        DetailSection(
+          key: sections[FourSignFace.fee],
+          title: fees.title,
+          children: [
+            FeeSectionView(
+              section: fees,
+              vehicle: vehicle,
+              extraNote: _additionalFeeNote(spot),
+            ),
+          ],
+        ),
+      ],
       DetailSection(
         key: sections[FourSignFace.where],
-        title: '停哪裡（${vehicle.label}）',
+        title: notParkable ? '停哪裡' : '停哪裡（${vehicle.label}）',
         trailing: photos.isEmpty ? null : '點照片可放大',
         last: true,
         children: [

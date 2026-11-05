@@ -370,9 +370,13 @@ class DetailRulesView extends StatelessWidget {
     super.key,
     required this.rules,
     required this.vehicle,
+    this.scope = true,
   });
   final List<DetailRule> rules;
   final VehicleType vehicle;
+
+  /// Whether to say 「只列 X 適用的規定」 (not where no vehicle may park).
+  final bool scope;
 
   @override
   Widget build(BuildContext context) {
@@ -386,11 +390,12 @@ class DetailRulesView extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: 10),
             child: MergeSemantics(child: _ruleRow(r, c, large)),
           ),
-        Text(
-          '只列${vehicle.label}適用的規定',
-          key: const ValueKey('detail-rules-scope'),
-          style: TextStyle(fontSize: 12, color: c.muted),
-        ),
+        if (scope)
+          Text(
+            '只列${vehicle.label}適用的規定',
+            key: const ValueKey('detail-rules-scope'),
+            style: TextStyle(fontSize: 12, color: c.muted),
+          ),
       ],
     );
   }
@@ -400,6 +405,8 @@ class DetailRulesView extends StatelessWidget {
       DetailRuleKind.limit => (Icons.timer_outlined, c.conditional),
       DetailRuleKind.noParking => (Icons.block, c.denied),
       DetailRuleKind.shared => (Icons.directions_car_outlined, c.link),
+      DetailRuleKind.only => (Icons.directions_car_outlined, c.ink),
+      DetailRuleKind.motorcycle => (Icons.block, c.denied),
     };
     final label = Text(
       r.label,
@@ -1164,6 +1171,90 @@ class WhereView extends StatelessWidget {
             ),
           ],
         ),
+      ],
+    );
+  }
+}
+
+/// 有沒有位・怎麼算錢 folded into one row where no motorcycle may park
+/// (A2b): the main message is not drowned by a car's spaces and rates, yet
+/// the data stays one tap away, opened in place.
+class NotParkableFold extends StatelessWidget {
+  const NotParkableFold({
+    super.key,
+    required this.expanded,
+    required this.onToggle,
+  });
+  final bool expanded;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = DetailColors.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Semantics(
+          button: true,
+          expanded: expanded,
+          child: Material(
+            type: MaterialType.transparency,
+            child: InkWell(
+              key: const ValueKey('detail-fold-toggle'),
+              onTap: onToggle,
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                constraints: BoxConstraints(minHeight: isCupertino ? 44 : 48),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: c.border),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.visibility_off_outlined, color: c.muted),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            notParkableFoldTitle,
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: c.ink,
+                              height: 1.4,
+                            ),
+                          ),
+                          Text(
+                            notParkableFoldSub,
+                            style: TextStyle(fontSize: 12, color: c.muted),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Icon(
+                      expanded ? Icons.expand_less : Icons.expand_more,
+                      color: c.ink,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        if (!expanded) ...[
+          const SizedBox(height: 8),
+          Text(
+            notParkableFoldHint,
+            style: TextStyle(fontSize: 12, color: c.muted, height: 1.45),
+          ),
+        ],
       ],
     );
   }

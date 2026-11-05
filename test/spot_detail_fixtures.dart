@@ -246,6 +246,47 @@ final detailBay = ParkingSpot.fromJson({
   },
 });
 
+/// A lot only cars may use (A2b): neither motorcycle may park anywhere.
+final detailCarLot = ParkingSpot.fromJson({
+  'id': 'car-lot',
+  'name': '測試汽車停車場',
+  'lat': 25.04,
+  'lng': 121.56,
+  'city': '臺北市',
+  'district': '信義區',
+  'address': '臺北市信義區測試路 1 號',
+  'space_type': 'offStreet',
+  'facility_type': 'underground',
+  'source': 'official',
+  'scooter_allowed': false,
+  'heavy_allowed': false,
+  'entrance_note': '側門車道，只供汽車進出',
+  'note': '機車請改停對面的機車停車場。',
+  'fee': {
+    'car': {'mode': 'hourly', 'amount': 40, 'per_minutes': 60},
+  },
+  'parking_zones': [
+    {
+      'id': 'c1',
+      'name': 'B1 汽車區',
+      'condition': {
+        'bay': 'car',
+        'use': 'usual',
+        'allow': {'scooter': false, 'heavy': false},
+      },
+    },
+    {
+      'id': 'c2',
+      'name': 'B2 汽車區',
+      'condition': {
+        'bay': 'car',
+        'use': 'usual',
+        'allow': {'scooter': false, 'heavy': false},
+      },
+    },
+  ],
+});
+
 Future<AppStore> detailStore(
   WidgetTester tester,
   VehicleType vehicle, {

@@ -614,4 +614,133 @@ void main() {
     );
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  group('整個點都不能停（A2b）', () {
+    for (final vehicle in VehicleType.values) {
+      testWidgets(
+        '${vehicle.label}：單面路牌、紅色結論卡、原因列，導航改次要樣式',
+        variant: platforms,
+        (tester) async {
+          final store = await detailStore(tester, vehicle);
+          await openDetail(tester, store, detailCarLot);
+          expect(tester.takeException(), isNull);
+          expect(toc('seat'), findsNothing);
+          expect(
+            find.descendant(of: toc('verdict'), matching: find.text('不能停')),
+            findsOneWidget,
+          );
+          expect(text(tester, 'spot-decision-label'), '這裡機車不能停');
+          expect(text(tester, 'spot-decision-explanation'), '普通機車、大型重機都不能停。');
+          expect(text(tester, 'detail-rule-only'), '汽車；全場只有汽車格');
+          expect(
+            find.byKey(const ValueKey('detail-rule-motorcycle')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('detail-rules-scope')),
+            findsNothing,
+          );
+          // 導航 in the secondary style, only here.
+          expect(
+            tester
+                .widget<AdaptiveButton>(
+                  find.byKey(const ValueKey('spot-navigate')),
+                )
+                .secondary,
+            isTrue,
+          );
+          // 停哪裡, the address and the notes stay.
+          await show(tester, 'detail-coordinates');
+          expect(find.text('側門車道，只供汽車進出'), findsOneWidget);
+          expect(find.text('停哪裡'), findsOneWidget);
+          await tester.scrollUntilVisible(
+            find.text('補充說明'),
+            200,
+            scrollable: detailScrollable,
+          );
+          expect(find.text('資料與查核'), findsOneWidget);
+          await tester.pumpWidget(const SizedBox.shrink());
+        },
+      );
+    }
+
+    testWidgets('有沒有位與怎麼算錢收合成一行，點開原地展開，再點收合', variant: platforms, (
+      tester,
+    ) async {
+      final store = await detailStore(tester, VehicleType.heavy);
+      await openDetail(tester, store, detailCarLot);
+      expect(find.text('這裡不能停，空位和費率不顯示'), findsOneWidget);
+      expect(find.byKey(const ValueKey('detail-fee-card-0')), findsNothing);
+      expect(find.textContaining('有沒有位（'), findsNothing);
+      final toggle = find.byKey(const ValueKey('detail-fold-toggle'));
+      expect(tester.getSize(toggle).height, greaterThanOrEqualTo(minTarget()));
+      final handle = tester.ensureSemantics();
+      expect(
+        tester.getSemantics(toggle),
+        containsSemantics(
+          isButton: true,
+          hasTapAction: true,
+          hasExpandedState: true,
+          isExpanded: false,
+        ),
+      );
+      handle.dispose();
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      // Opened in place: under the fold row, above 停哪裡.
+      expect(find.byKey(const ValueKey('detail-fee-card-0')), findsOneWidget);
+      expect(
+        tester.getRect(find.text('怎麼算錢')).top,
+        greaterThan(tester.getRect(toggle).bottom),
+      );
+      expect(
+        tester.getRect(find.text('怎麼算錢')).top,
+        lessThan(tester.getRect(find.text('停哪裡')).top),
+      );
+      expect(find.byIcon(Icons.expand_less), findsOneWidget);
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('detail-fee-card-0')), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('大字 2.0 不溢出，展開後也點得到動作列', variant: platforms, (tester) async {
+      final store = await detailStore(tester, VehicleType.scooter);
+      await openDetail(tester, store, detailCarLot, scale: 2);
+      expect(tester.takeException(), isNull);
+      await show(tester, 'detail-fold-toggle');
+      await tester.tap(find.byKey(const ValueKey('detail-fold-toggle')));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('spot-navigate')),
+        200,
+        scrollable: detailScrollable,
+      );
+      expect(
+        find.byKey(const ValueKey('spot-navigate')).hitTestable(),
+        findsOneWidget,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('只有目前車種不能停時照舊：主按鈕、不收合', (tester) async {
+      final store = await detailStore(tester, VehicleType.scooter);
+      final heavyBay = ParkingSpot.fromJson({
+        ...detailBay.toJson(),
+        'id': 'heavy-only-2',
+        'space_type': 'heavyOnly',
+      });
+      await openDetail(tester, store, heavyBay);
+      expect(text(tester, 'spot-decision-label'), '普通機車不能停');
+      expect(find.byKey(const ValueKey('detail-fold-toggle')), findsNothing);
+      expect(
+        tester
+            .widget<AdaptiveButton>(find.byKey(const ValueKey('spot-navigate')))
+            .secondary,
+        isFalse,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  });
 }

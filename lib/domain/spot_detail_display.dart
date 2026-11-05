@@ -82,6 +82,12 @@ enum DetailRuleKind {
 
   /// 共用: when a bay shared with cars opens to motorcycles.
   shared,
+
+  /// 僅限: who the place is for when no motorcycle may park (A2b).
+  only,
+
+  /// 機車: why motorcycles may not park (A2b).
+  motorcycle,
 }
 
 /// One row under the verdict card (A2, A10).
@@ -94,6 +100,8 @@ class DetailRule {
     DetailRuleKind.limit => '限時',
     DetailRuleKind.noParking => '禁停',
     DetailRuleKind.shared => '共用',
+    DetailRuleKind.only => '僅限',
+    DetailRuleKind.motorcycle => '機車',
   };
 }
 
@@ -284,6 +292,64 @@ SignPlate selectedVerdictPlate(FourSign s, SignArea a) {
     semantics: '能不能停：$main，目前選定的${detailPlaceName(a)}',
   );
 }
+
+// 整個點都不能停 (A2b) -------------------------------------------------------
+
+/// The verdict card's headline when neither vehicle may park (A2b).
+const notParkableHeadline = '這裡機車不能停';
+
+/// The line under it.
+const notParkableExplanation = '普通機車、大型重機都不能停。';
+
+/// 能不能停's single plate when neither vehicle may park (A2b): 不能停,
+/// whichever vehicle is chosen, with what it rests on.
+SignPlate notParkablePlate(SignPlate plate) => SignPlate(
+  face: FourSignFace.verdict,
+  main: '不能停',
+  note: plate.note,
+  tone: PlateTone.denied,
+  semantics: [
+    '能不能停：不能停，普通機車和大型重機都不能停',
+    if (plate.note.isNotEmpty) plate.note,
+  ].join('，'),
+);
+
+/// Why neither vehicle may park (A2b): 僅限 汽車 when every bay is a car's,
+/// 禁停 全天 when a no-parking limit covers every day, and the decision's
+/// own reason under 機車.
+List<DetailRule> notParkableRules(FourSign s, ParkingSpot spot, String reason) {
+  final bays = [
+    for (final z in spot.zones)
+      bayKindOf(z.condition ?? zoneConditionOf(z.access)),
+    for (final a in s.areas)
+      if (a.segment != null || (s.street && a.whole)) a.bayKind,
+  ];
+  final carOnly =
+      bays.isNotEmpty && bays.every((b) => b == BayKind.car) ||
+      bays.isEmpty && spot.condition?.bay == Bay.car;
+  final conditions = [spot.condition, for (final a in s.areas) a.condition];
+  final allDay = conditions.any(
+    (c) => (c?.limits ?? const <ParkingLimit>[]).any(
+      (l) =>
+          l.kind == LimitKind.noParking &&
+          l.periods.any(
+            (p) => p.days == 'all' && p.from == null && p.to == null,
+          ),
+    ),
+  );
+  return [
+    if (carOnly)
+      DetailRule(DetailRuleKind.only, bays.length > 1 ? '汽車；全場只有汽車格' : '汽車'),
+    if (allDay) const DetailRule(DetailRuleKind.noParking, '全天'),
+    if (reason.trim().isNotEmpty)
+      DetailRule(DetailRuleKind.motorcycle, reason.trim()),
+  ];
+}
+
+/// The folded 有沒有位・怎麼算錢 row (A2b): what it says, and what it hides.
+const notParkableFoldTitle = '這裡不能停，空位和費率不顯示';
+const notParkableFoldSub = '有沒有位、怎麼算錢';
+const notParkableFoldHint = '點一下展開，看這裡的空位與費率（資料照常保留）。';
 
 // ② 有沒有位 ---------------------------------------------------------------
 
