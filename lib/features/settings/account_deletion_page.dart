@@ -670,8 +670,9 @@ class _ReauthSheetState extends State<_ReauthSheet> {
           ),
         ),
         const SizedBox(height: 16),
-        AdaptiveButton(
+        ProviderSignInButton(
           key: const ValueKey('reauth-sign-in'),
+          apple: me.apple,
           label: reauthButton(apple: me.apple),
           secondary: true,
           onPressed: busy ? null : () => unawaited(_signIn()),

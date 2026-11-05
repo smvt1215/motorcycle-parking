@@ -10,6 +10,7 @@ import '../api/v1/api_v1.g.dart';
 import '../core/app_check.dart';
 import '../core/config.dart';
 import 'app_store.dart';
+import 'profile_repository.dart';
 
 export '../api/v1/api_v1.g.dart' show AccountDeletionState;
 
@@ -553,11 +554,10 @@ class SupabaseAccountGateway implements AccountDeletionGateway {
         user.appMetadata['provider'] == 'apple';
     final refresh = session.providerRefreshToken,
         access = session.providerToken;
-    final metadata = user.userMetadata ?? const {};
     return AccountIdentity(
       id: user.id,
       email: user.email,
-      name: (metadata['full_name'] ?? metadata['name']) as String?,
+      name: profilePublicName(user),
       apple: apple,
       signedInAt: signedInAtFromJwt(session.accessToken),
       appleToken: refresh ?? access,
