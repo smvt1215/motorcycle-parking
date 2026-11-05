@@ -10,14 +10,21 @@ import { sameSecret } from '../account-deletion/handler.ts';
 /** Notices sent per call; the rest wait for the next. */
 export const batchSize = 50;
 
+/**
+ * new: a new report; fuse: the site-wide limit on immediate hides tripped
+ * (#280 layer 3), later reports only wait for review.
+ */
+export type NoticeKind = 'new' | 'fuse';
+export type Notice = { id: string; kind: NoticeKind };
+
 export type Deps = {
   /** REPORT_MAIL_SECRET; empty when unset. */
   secret: string;
-  /** The ids of reports not yet notified, oldest first. */
-  pending(limit: number): Promise<string[]>;
+  /** The notices not yet sent, oldest first. */
+  pending(limit: number): Promise<Notice[]>;
   /** False when no mail service or admin link is configured: not sent. */
-  send(id: string): Promise<boolean>;
-  sent(id: string): Promise<void>;
+  send(notice: Notice): Promise<boolean>;
+  sent(notice: Notice): Promise<void>;
 };
 
 export async function handle(req: Request, deps: Deps): Promise<Response> {
@@ -28,25 +35,27 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
   ) {
     return response({ error: 'auth.forbidden' }, 403);
   }
-  let ids: string[];
+  let notices: Notice[];
   try {
-    ids = await deps.pending(batchSize);
+    notices = await deps.pending(batchSize);
   } catch {
     return response({ error: 'server.unavailable' }, 503);
   }
   let sent = 0, failed = 0, skipped = 0;
-  for (const id of ids) {
+  for (const notice of notices) {
     try {
-      if (!(await deps.send(id))) {
+      if (!(await deps.send(notice))) {
         skipped++;
         continue;
       }
-      await deps.sent(id);
+      await deps.sent(notice);
       sent++;
     } catch {
       // Unmarked, so the next call retries.
       failed++;
-      console.error(`report-mail: notice failed for ${id}`);
+      console.error(
+        `report-mail: ${notice.kind} notice failed for ${notice.id}`,
+      );
     }
   }
   return response({ sent, failed, skipped });
@@ -63,6 +72,21 @@ export function reportNoticeMail(id: string, adminUrl: string) {
       `處理：${adminUrl}`,
       '',
       '檢舉內容只在管理站顯示，本信不含點位、內容或任何人的資料。',
+    ].join('\n'),
+  };
+}
+
+/** The site-wide limit tripped: later reports wait for review, unhidden. */
+export function fuseNoticeMail(id: string, adminUrl: string) {
+  return {
+    subject: '【機車停車指南】內容不當檢舉：立即暫時隱藏已達每日上限',
+    text: [
+      '過去 24 小時內，因檢舉而立即暫時隱藏的內容已達 20 次。之後的檢舉不會立即隱藏，只進審核，請盡快確認是否有人集體檢舉。',
+      '',
+      `觸發的檢舉編號：${id}`,
+      `處理：${adminUrl}`,
+      '',
+      '本信不含點位、內容或任何人的資料。',
     ].join('\n'),
   };
 }
