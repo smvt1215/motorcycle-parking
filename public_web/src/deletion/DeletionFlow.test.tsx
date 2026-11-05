@@ -434,6 +434,37 @@ describe('Apple riders (#268)', () => {
     expect(calls.filter((c) => c.fn === 'request_account_deletion')).toHaveLength(0);
   });
 
+  it.each([
+    ['revoked', () => Promise.resolve({ kind: 'revoked' } as const)],
+    ['signInNeeded', () => Promise.resolve({ kind: 'signInNeeded' } as const)],
+    ['notRevoked', () => Promise.resolve({ kind: 'notRevoked' } as const)],
+    ['refused', () => Promise.resolve({ kind: 'refused', error: 'auth.recent_sign_in_required' } as const)],
+    ['thrown', () => Promise.reject(new Error('offline'))],
+  ])('繼續刪除 revokes the new grant once, then signs out whatever it answers (%s)', async (_, answer) => {
+    const auth = fakeAuth(appleRider);
+    auth.revokeApple.mockImplementationOnce(answer);
+    const calls = stubApi({ account_deletion_status: { body: pendingUntil(scheduled) } });
+    openSite('/account-deletion', auth);
+    await heading(t.pendingTitle);
+    await userEvent.click(screen.getByRole('button', { name: /繼續刪除/ }));
+    await heading(t.continuedTitle);
+    expect(auth.revokeApple).toHaveBeenCalledTimes(1);
+    expect(auth.signOut).toHaveBeenCalledTimes(1);
+    expect(auth.signIn).not.toHaveBeenCalled();
+    expect(calls.map((c) => c.fn)).toEqual(['account_deletion_status']);
+  });
+
+  it('繼續刪除 never revokes for a Google rider', async () => {
+    const auth = fakeAuth(rider);
+    stubApi({ account_deletion_status: { body: pendingUntil(scheduled) } });
+    openSite('/account-deletion', auth);
+    await heading(t.pendingTitle);
+    await userEvent.click(screen.getByRole('button', { name: /繼續刪除/ }));
+    await heading(t.continuedTitle);
+    expect(auth.revokeApple).not.toHaveBeenCalled();
+    expect(auth.signOut).toHaveBeenCalledTimes(1);
+  });
+
   it('a Google rider is never revoked', async () => {
     const auth = fakeAuth(rider);
     await confirm(auth, { body: pendingUntil(scheduled) });

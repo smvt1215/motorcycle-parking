@@ -68,6 +68,7 @@ export function DeletionFlow({
   // App's DeletionAttempt).
   const appleRevoke = useRef({ attempted: false, failed: false });
   const [revoking, setRevoking] = useState(false);
+  const continuing = useRef(false);
 
   async function signOut(outcome: Outcome | null = null) {
     onOutcome(outcome);
@@ -131,6 +132,25 @@ export function DeletionFlow({
       else if (isNetwork(error)) setStep({ kind: 'network', retry: () => void submit() });
       else setStep({ kind: 'generic' });
     }
+  }
+
+  /**
+   * 繼續刪除: the request stays. A sign-in with Apple during the cooling-off
+   * is a new grant, so it is revoked first, best effort: whatever the
+   * answer, the rider is signed out (the App's continuePending).
+   */
+  async function continuePending(scheduledAt: string | null) {
+    if (continuing.current) return;
+    continuing.current = true;
+    if (user.provider === 'apple') {
+      try {
+        await auth.revokeApple();
+      } catch {
+        // Nothing stops signing out here.
+      }
+    }
+    await signOut({ kind: 'continued', scheduledAt });
+    continuing.current = false;
   }
 
   async function cancelDeletion() {
@@ -371,7 +391,7 @@ export function DeletionFlow({
         scheduledAt={status.data.scheduled_at}
         busy={cancelState.isLoading}
         onCancel={() => void cancelDeletion()}
-        onContinue={() => void signOut({ kind: 'continued', scheduledAt: status.data?.scheduled_at ?? null })}
+        onContinue={() => void continuePending(status.data?.scheduled_at ?? null)}
       />
     );
   }

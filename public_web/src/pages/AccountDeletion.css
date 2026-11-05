@@ -80,8 +80,10 @@
 /* Shapes of the official Google / Apple buttons; their marks come from the
    providers' own assets when sign-in is wired. */
 .signin-button {
-  height: 52px;
-  border-radius: 26px;
+  /* Google's large button is 40px tall and cannot grow: both rows are
+     44px (the touch target), Google's centred in its box. */
+  height: 44px;
+  border-radius: 22px;
   font: inherit;
   font-size: 16px;
   font-weight: 500;
@@ -97,8 +99,8 @@
   background: #000000;
   color: #ffffff;
 }
-/* Google draws its button (at most 400px wide) inside this box, centred
-   when the column is wider; the box keeps its height while it loads. */
+/* Google draws its button (at most 400px wide, 40px tall) inside this box,
+   centred both ways; the box keeps the row at 44px, also while it loads. */
 .signin-google {
   display: flex;
   justify-content: center;
