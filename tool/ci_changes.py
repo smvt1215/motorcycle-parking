@@ -70,6 +70,8 @@ PATHS = {
         ".github/workflows/ci.yml",
         # src/content.test.ts checks the page's words against the App's.
         "lib/domain/account_deletion_display.dart",
+        # src/api/api_v1.generated.ts is generated from it.
+        "supabase/api/v1/api_v1.json",
     ),
 }
 

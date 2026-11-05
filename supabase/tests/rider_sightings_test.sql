@@ -288,16 +288,23 @@ delete from rider_sightings where spot_id in (pg_temp.spot('zoned'),pg_temp.spot
 delete from rider_sighting_scores;
 
 -- ===== 解除停權 =====
+-- The flood rule's suspension also suspends the account (#331); an admin
+-- lifting the account's suspension lifts the sighting suspension too.
 insert into rider_sighting_scores(user_id,suspended_until) values(pg_temp.uid(137),now()+interval '7 days');
-update auth.users set banned_until=now()+interval '7 days' where id=pg_temp.uid(137);
 select ok(rider_suspended(pg_temp.uid(137)),'suspended by the flood rule');
-update auth.users set banned_until=null where id=pg_temp.uid(137);
+select ok(is_suspended(pg_temp.uid(137)),'the flood rule suspends the account');
+select is((select action||'|'||actor from admin_audit_log where target_id=pg_temp.uid(137)::text),
+  'ban_user|00000000-0000-0000-0000-000000000000','the rule''s suspension is audited as the system');
+select admin_set_user_suspension('10000000-0000-4000-8000-000000000005',pg_temp.uid(137),'unban',null,'申訴成立');
 select ok(not rider_suspended(pg_temp.uid(137)),'an admin lifting the ban lifts the sighting suspension too');
 select is((select suspended_until from rider_sighting_scores where user_id=pg_temp.uid(137)),null,'and clears it');
-update auth.users set banned_until=now()+interval '1 day' where id=pg_temp.uid(138);
-update auth.users set banned_until=now()+interval '2 days' where id=pg_temp.uid(138);
-select ok(rider_suspended(pg_temp.uid(138)),'extending a ban lifts nothing');
-update auth.users set banned_until=null where id=pg_temp.uid(138);
+-- The rule never shortens a longer suspension an admin set.
+select admin_set_user_suspension('10000000-0000-4000-8000-000000000005',pg_temp.uid(138),'ban','30d','洗版');
+insert into rider_sighting_scores(user_id,suspended_until) values(pg_temp.uid(138),now()+interval '7 days')
+  on conflict(user_id) do update set suspended_until=excluded.suspended_until;
+select ok((select until>now()+interval '29 days' from private.user_suspensions where user_id=pg_temp.uid(138)),
+  'the flood rule keeps a longer suspension');
+select admin_set_user_suspension('10000000-0000-4000-8000-000000000005',pg_temp.uid(138),'unban',null,'解除');
 
 -- ===== 7 天刪除 =====
 select pg_temp.past(131,'t16','0','8 days');
@@ -347,7 +354,11 @@ select ok(((pg_temp.sight(102,'t12','0'))->>'suspended_until')::timestamptz=now(
   '12 in 10 minutes: suspended for 7 days');
 select throws_ok($$select pg_temp.sight(102,'t13','0')$$,'42501','sighting suspended','a suspended rider cannot report');
 select pg_temp.past(139,'t14','0','2 minutes');
+-- A sighting it sent before the suspension (a suspended account can no
+-- longer write one, #331).
+alter table rider_sightings disable trigger rider_sightings_suspension;
 select pg_temp.past(102,'t14','3','1 minute');
+alter table rider_sightings enable trigger rider_sightings_suspension;
 select is(pg_temp.shown('t14'),'L0','nor is shown');
 -- Taipei to Kaohsiung in a minute: a jump lowers the weight; three in a
 -- day suspend.
@@ -371,9 +382,9 @@ select is((select jump from rider_sightings where user_id=pg_temp.uid(105) and s
 -- An admin is only lowered, never suspended here.
 select pg_temp.past(140,'t'||n,'0',(n*40||' seconds')::interval) from generate_series(1,11) n;
 select is((pg_temp.sight(140,'t12','0'))->>'suspended_until',null,'an admin is not suspended');
--- An account an admin banned cannot report either.
-update auth.users set banned_until=now()+interval '1 day' where id=pg_temp.uid(106);
-select throws_ok($$select pg_temp.sight(106,'t1','0')$$,'42501','sighting suspended','a banned account cannot report');
+-- An account an admin suspended cannot report either (#331).
+select admin_set_user_suspension('10000000-0000-4000-8000-000000000005',pg_temp.uid(106),'ban','7d','洗版');
+select throws_ok($$select pg_temp.sight(106,'t1','0')$$,'42501','sighting suspended','a suspended account cannot report');
 
 select * from finish();
 rollback;

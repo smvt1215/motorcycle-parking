@@ -33,6 +33,7 @@ describe('the web says what the App says about deletion', () => {
   });
 
   it('describes the abuse hash the same way', () => {
+    expect(content.hashBody.startsWith(dartString('deletionHashTitle'))).toBe(true);
     expect(content.hashBody).toContain(dartString('deletionHashDetail'));
     expect(content.hashHeading).toBe(dartString('deletionHashHeading'));
   });

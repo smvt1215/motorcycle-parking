@@ -4,11 +4,9 @@ import {
   appCheckMode,
   verifyAppCheck,
 } from '../_shared/app_check.ts';
+import { readSuspension } from '../_shared/suspension.ts';
 import { identityHash } from '../submit-report/validate.ts';
 import { handle } from './handler.ts';
-
-/** The audit log's actor for bans the rules make, not an admin. */
-const systemActor = '00000000-0000-0000-0000-000000000000';
 
 Deno.serve((req) => {
   const url = Deno.env.get('SUPABASE_URL'),
@@ -45,24 +43,7 @@ Deno.serve((req) => {
       });
       return { data, error };
     },
-    async ban(user, duration) {
-      const { data, error } = await admin.auth.admin.updateUserById(user, {
-        ban_duration: duration,
-      });
-      if (error || !data.user) throw error ?? new Error('no user');
-      return data.user.banned_until ?? null;
-    },
-    async record({ user, after, duration, note }) {
-      const { error } = await admin.rpc('admin_record_user_ban', {
-        p_actor: systemActor,
-        p_user: user,
-        p_action: 'ban_user',
-        p_before: null,
-        p_after: after,
-        p_duration: duration,
-        p_note: note,
-      });
-      if (error) throw error;
-    },
+    suspension: (user) =>
+      readSuspension(admin.rpc('suspension_status', { uid: user })),
   }, header ?? null);
 });
