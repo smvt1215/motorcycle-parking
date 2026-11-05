@@ -128,10 +128,8 @@ migration `202610310600_cron_history_prune.sql` 建立每日排程 `cron-history
 | 名稱 | 類型 | 值 | 來源 |
 |---|---|---|---|
 | `motoparking` | MX | `route1.mx.cloudflare.net`、`route2.mx.cloudflare.net`、`route3.mx.cloudflare.net`（優先序依 Cloudflare 自動新增的值） | Email Routing 收信 |
-| `motoparking` | TXT | `v=spf1 include:_spf.mx.cloudflare.net include:amazonses.com ~all` | SPF 同時涵蓋 Cloudflare Email Routing 與 Resend；一個名稱只能有一筆 SPF，Email Routing 自動加的那筆要改成這個值 |
-| `send.motoparking` | MX | `10 feedback-smtp.<Resend 區域>.amazonses.com` | Resend（退信回報，Return-Path 網域） |
-| `send.motoparking` | TXT | `v=spf1 include:amazonses.com ~all` | Resend 的 SPF（Return-Path 網域） |
-| `resend._domainkey.motoparking` | TXT | Resend 儀表板顯示的 `p=…` 公鑰 | Resend 的 DKIM |
+| `motoparking` | TXT | `v=spf1 include:_spf.mx.cloudflare.net ~all`（Email Routing 自動新增，維持原樣） | Email Routing。**不要**加 `include:amazonses.com`：Resend 寄信的 envelope 網域是自己的子網域，有自己的 SPF，DMARC 由 DKIM 與該子網域 SPF 對齊通過；主網域加 amazonses 等於放行所有 SES 使用者。Worker 不寄信，不需要主網域 SPF |
+| Resend 儀表板列出的紀錄 | CNAME／TXT | 依 Resend 網域頁面（staging 目前是 `send`／`rsend` 的 CNAME 與 `resend._domainkey`） | Resend 寄信（Return-Path 與 DKIM） |
 | `_dmarc.motoparking` | TXT | 先 `v=DMARC1; p=none; rua=mailto:ops@motoparking.smvtstudio.com; adkim=r; aspf=r`，確認報告無誤（約 2–4 週）後改 `p=quarantine` | DMARC 建議值 |
 
 Resend 網域的 click tracking 維持關閉（一次性連結不可被改寫）。確認收信：`select source,suspicious,created_at from private.support_requests where source='email' order by created_at desc limit 5;`。
