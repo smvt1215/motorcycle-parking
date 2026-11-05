@@ -78,8 +78,9 @@ reset role;
 update auth.users set raw_user_meta_data='{"display_name":"只在隱藏點"}' where id='10000000-0000-4000-8000-000000000003';
 insert into community_spots(id,user_id,name,lat,lng,city,space_type,scooter_allowed,heavy_allowed,status)
 values('78000000-0000-4000-8000-000000000008','10000000-0000-4000-8000-000000000003','隱藏',23.708,120.708,'雲林縣','freeMotorcycle',true,false,'hidden');
-select ok(not exists(select 1 from private.contributor_handle_holders where user_id='10000000-0000-4000-8000-000000000003'),
-  'a name shown only on a hidden spot was never public');
+-- #319（PM_ANS_20261104_179）起，本人設定名稱就記入，不需要有看得到的點。
+select ok(exists(select 1 from private.contributor_handle_holders where user_id='10000000-0000-4000-8000-000000000003'),
+  'a name the rider set counts even when it shows only on a hidden spot (#319)');
 
 -- 刪除後復原（status 由 hidden 回 pending、deleted_at 由觸發器清掉）也會記入。
 update auth.users set raw_user_meta_data='{}' where id='10000000-0000-4000-8000-000000000003';

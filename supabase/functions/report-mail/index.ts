@@ -1,7 +1,12 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.108.1';
 import { response } from '../_shared/http.ts';
 import { resendConfig, sendMail } from '../support-request/resend.ts';
-import { handle, reportNoticeMail } from './handler.ts';
+import {
+  fuseNoticeMail,
+  handle,
+  type Notice,
+  reportNoticeMail,
+} from './handler.ts';
 
 Deno.serve((req) => {
   const url = Deno.env.get('SUPABASE_URL'),
@@ -23,20 +28,24 @@ Deno.serve((req) => {
         p_limit: limit,
       });
       if (error) throw error;
-      return ((data ?? []) as { id: string }[]).map((r) => r.id);
+      return (data ?? []) as Notice[];
     },
-    async send(id) {
+    async send({ id, kind }) {
       if (!config || !reviewBase) return false;
+      const mail = kind === 'fuse' ? fuseNoticeMail : reportNoticeMail;
       await sendMail(
         config,
-        { to: config.to, ...reportNoticeMail(id, `${reviewBase}/${id}`) },
+        { to: config.to, ...mail(id, `${reviewBase}/${id}`) },
         // A retry of the same notice is not sent twice (kept 24 hours).
-        `content-report/${id}`,
+        `content-report/${kind}/${id}`,
       );
       return true;
     },
-    async sent(id) {
-      const { error } = await db.rpc('report_mail_sent', { p_id: id });
+    async sent({ id, kind }) {
+      const { error } = await db.rpc('report_mail_sent', {
+        p_id: id,
+        p_kind: kind,
+      });
       if (error) throw error;
     },
   });
