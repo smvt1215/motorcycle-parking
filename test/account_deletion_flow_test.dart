@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -15,6 +16,7 @@ import 'package:motorcycle_parking/app.dart';
 import 'package:motorcycle_parking/data/account_deletion.dart';
 import 'package:motorcycle_parking/data/app_store.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
+import 'package:motorcycle_parking/domain/account_deletion_display.dart';
 import 'package:motorcycle_parking/features/settings/account_deletion_page.dart';
 import 'package:motorcycle_parking/features/settings/settings_page.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
@@ -387,28 +389,93 @@ void main() {
     }, variant: platforms);
   }
 
-  testWidgets('Apple：一律再用 Apple 登入，撤銷失敗不擋，完成畫面多一張提示卡', (tester) async {
-    final gateway = FakeDeletionGateway(current: apple(signedInAt: now))
-      ..revokes.add(Exception('apple.revoke_failed'));
+  // P15a ⑤ and P15c ⑤ on both platforms (#219): Android shows Apple's
+  // black button and points to account.apple.com instead of iOS Settings.
+  for (final size in const [phone, Size(820, 1180)]) {
+    for (final scale in const [1.0, 2.0]) {
+      testWidgets('Apple ${size.width.toInt()}×${size.height.toInt()} '
+          '字型 ${(scale * 100).toInt()}%：一律再用 Apple 登入，'
+          '撤銷失敗不擋，完成畫面多一張提示卡', (tester) async {
+        tester.platformDispatcher.textScaleFactorTestValue = scale;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        final ios = debugDefaultTargetPlatformOverride == TargetPlatform.iOS;
+        final gateway = FakeDeletionGateway(current: apple(signedInAt: now))
+          ..revokes.add(Exception('apple.revoke_failed'));
+        final app = await _mount(tester, gateway, size: size);
+        await _openPage(tester, app);
+        await _tapSubmit(tester);
+        await _confirm(tester);
+        expect(find.textContaining('撤銷「使用 Apple 登入」的授權'), findsOneWidget);
+        expect(find.text('Apple ID・隱藏的電子郵件'), findsOneWidget);
+        final button = find.byKey(const ValueKey('reauth-sign-in'));
+        await tester.ensureVisible(button);
+        await tester.pumpAndSettle();
+        expect(button.hitTestable(), findsOneWidget);
+        expect(
+          tester.getSize(button).height,
+          greaterThanOrEqualTo(ios ? 44 : 48),
+        );
+        expect(
+          find.descendant(of: button, matching: find.text('使用 Apple 登入')),
+          findsOneWidget,
+        );
+        final branded = find.descendant(
+          of: button,
+          matching: find.byType(M3EButton),
+        );
+        if (ios) {
+          expect(branded, findsNothing);
+        } else {
+          final decoration = tester.widget<M3EButton>(branded).decoration!;
+          expect(decoration.backgroundColor!.resolve({}), Colors.black);
+          expect(
+            find.descendant(of: button, matching: find.byIcon(Icons.apple)),
+            findsOneWidget,
+          );
+        }
+        await tester.tap(button);
+        await tester.pumpAndSettle();
+        expect(gateway.calls, [
+          'status',
+          'status',
+          'reauth:apple',
+          'revoke:apple-rt:refresh_token',
+          'request',
+          'signOut',
+        ]);
+        // Large text can push the card below the fold of the notice list.
+        final card = find.byKey(const ValueKey('apple-revoke-failed'));
+        await tester.scrollUntilVisible(
+          card,
+          200,
+          scrollable: find.byType(Scrollable).last,
+        );
+        expect(card, findsOneWidget);
+        expect(find.text(appleRevokeFailedBodyFor(ios: ios)), findsOneWidget);
+        expect(
+          find.textContaining('account.apple.com'),
+          ios ? findsNothing : findsOneWidget,
+        );
+        expect(
+          find.textContaining('使用 Apple 登入」，選取本 App'),
+          ios ? findsOneWidget : findsNothing,
+        );
+        expect(tester.takeException(), isNull);
+      }, variant: platforms);
+    }
+  }
+
+  testWidgets('Apple 撤銷成功：不顯示撤銷失敗提示卡', (tester) async {
+    final gateway = FakeDeletionGateway(current: apple(signedInAt: now));
     final app = await _mount(tester, gateway);
     await _openPage(tester, app);
     await _tapSubmit(tester);
     await _confirm(tester);
-    expect(find.textContaining('撤銷「使用 Apple 登入」的授權'), findsOneWidget);
-    expect(find.text('Apple ID・隱藏的電子郵件'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('reauth-sign-in')));
     await tester.pumpAndSettle();
-    expect(gateway.calls, [
-      'status',
-      'status',
-      'reauth:apple',
-      'revoke:apple-rt:refresh_token',
-      'request',
-      'signOut',
-    ]);
-    expect(find.byKey(const ValueKey('apple-revoke-failed')), findsOneWidget);
-    expect(find.textContaining('使用 Apple 登入」，選取本 App'), findsOneWidget);
-    expect(tester.takeException(), isNull);
+    expect(gateway.calls, containsAllInOrder(['reauth:apple', 'request']));
+    expect(find.text('已申請刪除帳號'), findsOneWidget);
+    expect(find.byKey(const ValueKey('apple-revoke-failed')), findsNothing);
   }, variant: platforms);
 
   testWidgets('網路失敗：顯示沒有送出，重試成功', (tester) async {
