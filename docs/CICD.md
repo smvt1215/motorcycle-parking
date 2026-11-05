@@ -104,6 +104,28 @@ staging 設定已於 2026-10-24 完成，並以真實 Google 登入＋TOTP 取�
 
 `cd-staging.yml` 只由 `workflow_run` 觸發；只需重新部署管理站時，重跑最新 main 的 CD staging 中「Staging admin Hosting」單一 job，避免重新發送 APK／IPA。改用自訂網域時，需同步更新 Maps 金鑰 referrer 與 Supabase Redirect URLs。
 
+### 公開網頁（staging）
+
+刪除帳號說明、客服表單等公開頁面（`public_web/`）部署在另一個 Hosting 網站，自訂網域是 `motoparking.smvtstudio.com`。公測期間連 staging 後端，RC 時改連 production（#304）。
+
+- job「Staging public Hosting」跟著後端部署，條件和管理站相同；staging variable `FIREBASE_PUBLIC_HOSTING_SITE` 沒設定時什麼都不做。
+- `firebase.json` 的 `public-staging` target：所有路徑都改寫到 `/index.html`；CSP 只允許 Google Identity Services、Sign in with Apple JS、reCAPTCHA Enterprise／App Check 與 Supabase；不送 `noindex`，因為這是公開頁面；`/assets/**` 長期快取，其餘不快取。
+- 建置時的設定都來自 `staging` Environment，缺任何一個 job 就失敗，不會部署出沒有登入功能的網站：
+
+| `public_web` 環境變數 | staging 設定 | 種類 |
+| --- | --- | --- |
+| `VITE_SUPABASE_URL` | `SUPABASE_URL` | variable（既有） |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | `SUPABASE_ANON_KEY` | variable（既有） |
+| `VITE_GOOGLE_CLIENT_ID` | `GOOGLE_WEB_CLIENT_ID` | variable |
+| `VITE_APPLE_SERVICES_ID` | `APPLE_WEB_SERVICES_ID` | variable |
+| `VITE_FIREBASE_API_KEY` | `FIREBASE_PUBLIC_WEB_API_KEY` | secret（「Motopark public web Firebase」金鑰） |
+| `VITE_FIREBASE_APP_ID` | `FIREBASE_PUBLIC_WEB_APP_ID` | variable |
+| `VITE_FIREBASE_PROJECT_ID` | `FIREBASE_PROJECT_ID`（預設 `motocycle-parking-guide`） | variable（既有） |
+| `VITE_RECAPTCHA_SITE_KEY` | `RECAPTCHA_PUBLIC_WEB_SITE_KEY` | variable |
+
+- 自訂網域：Firebase Hosting 加上網域後，會給 TXT（驗證擁有權）和 A 紀錄，加到 Cloudflare 的 DNS。這兩筆紀錄要設成 **DNS only（不經 Cloudflare proxy）**，Firebase 才能簽發憑證。
+- 只需重新部署公開網頁時，重跑最新 main 的 CD staging 中「Staging public Hosting」單一 job。
+
 ### Actions 清理
 
 - `tool/actions_cleanup.py` 刪除已完成且超過 7 天的執行紀錄，以及已關閉 PR、已刪除分支的快取。
