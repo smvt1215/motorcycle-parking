@@ -1,5 +1,5 @@
 dist
-dist-fixture
+dist-smoke
 node_modules
 artifacts
 package-lock.json
