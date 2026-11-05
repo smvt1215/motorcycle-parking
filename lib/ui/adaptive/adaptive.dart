@@ -8,6 +8,8 @@ import 'package:cupertino_native_better/cupertino_native_better.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 
 import '../../core/location_access.dart';
+import '../../data/account_suspended.dart';
+import '../../features/account/suspended_sheet.dart';
 import '../../models/parking.dart';
 
 export 'package:material_ui/material_ui.dart';
@@ -436,6 +438,10 @@ Future<T?> showAdaptiveSheet<T>(
 void showMessage(BuildContext context, String message) =>
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(message)));
+
+/// Runs [action], reporting a failure: a write refused because the account
+/// is suspended (#331) shows the shared panel over the current view, which
+/// keeps what was filled in; other failures a short message.
 Future<void> runAction(
   BuildContext context,
   Future<void> Function() action,
@@ -445,7 +451,9 @@ Future<void> runAction(
   } on LocationAccessError catch (e) {
     if (context.mounted) await showLocationPrompt(context, e.issue);
   } catch (e) {
-    if (context.mounted) {
+    if (accountSuspendedFrom(e) case final suspended?) {
+      if (context.mounted) await showSuspendedSheet(context, suspended.until);
+    } else if (context.mounted) {
       showMessage(
         context,
         e is StateError ? e.message.toString() : '操作失敗，請確認連線後重試',
