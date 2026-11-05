@@ -127,7 +127,7 @@ jobs:
         run: |
           deno fmt --check
           deno lint
-          deno check submit-report/index.ts submit-sighting/index.ts geocode/index.ts admin-users/index.ts availability-ingest/index.ts account-deletion/index.ts apple-revoke/index.ts support-request/index.ts support-confirm/index.ts support-mail/index.ts report-mail/index.ts
+          deno check submit-report/index.ts submit-sighting/index.ts geocode/index.ts admin-users/index.ts availability-ingest/index.ts account-deletion/index.ts apple-revoke/index.ts deletion-precheck/index.ts support-request/index.ts support-confirm/index.ts support-mail/index.ts report-mail/index.ts
           # availability-ingest reads its fixed feed samples.
           deno test --allow-read=.
       - name: API response checker
@@ -236,6 +236,22 @@ jobs:
       # build runs tsc -b first, so it also type-checks.
       - if: steps.changes.outputs.run == 'true'
         run: npm run build
+      - name: Production bundle carries no smoke sign-in
+        if: steps.changes.outputs.run == 'true'
+        run: |
+          status=0
+          grep -rl motopark-smoke dist || status=$?
+          if [ "$status" -eq 0 ]; then
+            echo 'src/smoke/smokeAuth.ts leaked into the production build.'
+            exit 1
+          fi
+          [ "$status" -eq 1 ]
+      - name: Generated API client matches supabase/api/v1
+        if: steps.changes.outputs.run == 'true'
+        run: |
+          npm run codegen
+          git diff --exit-code -- src/api
+          test -z "$(git status --porcelain -- src/api)"
   ci-ok:
     name: CI 全部通過
     runs-on: ubuntu-24.04

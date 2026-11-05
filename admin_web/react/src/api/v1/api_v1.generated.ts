@@ -237,6 +237,8 @@ export type Spot = {
   contributor_handle?: string | null;
   /** 已登入且這個點是自己新增的（#280）；未登入、官方點一律 false。依呼叫時的登入身分計算。 */
   is_own?: boolean;
+  /** 因內容不當檢舉而暫時遮蔽的部分（#280）：rider_name（contributor_name 回空字串，代號照回）、spot_name（name 回「名稱審核中」）、text（note、entrance_note、parking_guide、special_rules 回空字串）。投稿者本人（is_own）看到原文，仍回這個欄位。官方點沒有這個欄位。 */
+  content_held?: ('rider_name' | 'spot_name' | 'text')[] | null;
 };
 export type SpotsInViewport = {
   /** 官方點在前、社群點在後，各依 id 排序 */

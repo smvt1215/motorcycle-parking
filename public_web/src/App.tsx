@@ -1,16 +1,20 @@
-import { createBrowserRouter, Navigate, RouterProvider, type RouteObject } from 'react-router';
-import { AccountDeletion } from './pages/AccountDeletion';
-import { NotFound } from './pages/NotFound';
+import { useState } from 'react';
+import { Provider } from 'react-redux';
+import { createBrowserRouter, RouterProvider } from 'react-router';
+import type { AppStore } from './app/store';
+import { AuthProvider } from './auth/AuthContext';
+import type { AuthPort } from './auth/port';
+import { routes } from './routes';
 
-/** The public site's paths (PM_ANS_20261101_124): more join as their pages land. */
-export const routes: RouteObject[] = [
-  { path: '/', element: <Navigate to="/account-deletion" replace /> },
-  { path: '/account-deletion', element: <AccountDeletion /> },
-  { path: '*', element: <NotFound /> },
-];
-
-const router = createBrowserRouter(routes);
-
-export function App() {
-  return <RouterProvider router={router} />;
+/** The site: the store and sign-in around the browser router. */
+export function App({ store, auth }: { store: AppStore; auth: AuthPort | null }) {
+  // Made on first render, not when the module loads (tests import routes alone).
+  const [router] = useState(() => createBrowserRouter(routes));
+  return (
+    <Provider store={store}>
+      <AuthProvider auth={auth}>
+        <RouterProvider router={router} />
+      </AuthProvider>
+    </Provider>
+  );
 }

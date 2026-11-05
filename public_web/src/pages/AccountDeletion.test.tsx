@@ -1,12 +1,9 @@
-import { render, screen, within } from '@testing-library/react';
-import { createMemoryRouter, RouterProvider } from 'react-router';
-import { routes } from '../App';
+import { screen, within } from '@testing-library/react';
 import * as c from '../content';
+import { openSite } from '../test/site';
 
 function open(path: string) {
-  const router = createMemoryRouter(routes, { initialEntries: [path] });
-  render(<RouterProvider router={router} />);
-  return router;
+  return openSite(path).router;
 }
 
 describe('/account-deletion', () => {
