@@ -235,6 +235,29 @@
         }
       }
     },
+    "/rpc/my_account_status": {
+      "post": {
+        "operationId": "api_v1_my_account_status",
+        "summary": "自己帳號的停權狀態",
+        "description": "要登入。停權（#331）只擋 App 的寫入：新增停車點、修改建議（含「已經不能停」）、車友回報、檢舉、確認點位、改名稱與頭像；登入、瀏覽、隱藏的車友、刪除與取消刪除帳號照常。App 讀它來事先顯示停權說明與到期日。寫入被擋時：Edge Function 回 403 {\"error\":\"account.suspended\",\"until\":<ISO|null>}；api_v1 函式回 403，message 為 account.suspended，details 為 {\"until\":<ISO|null>}。停權中用 auth.updateUser 改 display_name、profile_avatar_url 不會報錯，但資料庫保留舊值。錯誤：401 auth.sign_in_required。",
+        "x-requires-sign-in": true,
+        "responses": {
+          "200": {
+            "description": "停權狀態",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountStatus"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/rpc/spots_by_ids": {
       "post": {
         "operationId": "api_v1_spots_by_ids",
@@ -968,6 +991,28 @@
               null
             ],
             "description": "不能自助刪除的原因（錯誤碼）；可以時為 null"
+          }
+        }
+      },
+      "AccountStatus": {
+        "type": "object",
+        "description": "帳號的停權狀態（#331）",
+        "required": [
+          "suspended",
+          "suspended_until"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "suspended": {
+            "type": "boolean",
+            "description": "是否停權中；停權中 App 的寫入一律回 account.suspended"
+          },
+          "suspended_until": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ISO 8601 時間。停權到期時間；無限期或沒有停權時為 null"
           }
         }
       },

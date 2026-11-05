@@ -134,6 +134,15 @@ class ApiV1Client {
   Future<Object?> cancelAccountDeletionRaw() =>
       _call('cancel_account_deletion', {});
 
+  /// 自己帳號的停權狀態
+  Future<AccountStatus> myAccountStatus() async {
+    final raw = await myAccountStatusRaw();
+    return AccountStatus.fromJson(raw as Map<String, Object?>);
+  }
+
+  /// [myAccountStatus] as served, for callers that keep the JSON (#202).
+  Future<Object?> myAccountStatusRaw() => _call('my_account_status', {});
+
   /// 依 id 讀多個停車點（收藏頁）
   Future<SpotsByIds> spotsByIds({required List<String> ids}) async {
     final raw = await spotsByIdsRaw(ids: ids);
@@ -925,6 +934,38 @@ class AccountDeletionState {
     canSelfDelete,
     cannotSelfDeleteReason,
   ]);
+}
+
+/// 帳號的停權狀態（#331）
+class AccountStatus {
+  const AccountStatus({required this.suspended, this.suspendedUntil});
+
+  factory AccountStatus.fromJson(Map<String, Object?> json) => AccountStatus(
+    suspended: json['suspended'] as bool,
+    suspendedUntil: json['suspended_until'] == null
+        ? null
+        : json['suspended_until'] as String,
+  );
+
+  /// 是否停權中；停權中 App 的寫入一律回 account.suspended
+  final bool suspended;
+
+  /// ISO 8601 時間。停權到期時間；無限期或沒有停權時為 null
+  final String? suspendedUntil;
+
+  Map<String, Object?> toJson() => {
+    'suspended': suspended,
+    'suspended_until': suspendedUntil,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is AccountStatus &&
+      other.suspended == suspended &&
+      other.suspendedUntil == suspendedUntil;
+
+  @override
+  int get hashCode => Object.hashAll([suspended, suspendedUntil]);
 }
 
 class SpotsByIds {

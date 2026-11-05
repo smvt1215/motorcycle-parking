@@ -1,4 +1,4 @@
-import { type Deps, floodBan, floodNote, handle, refusal } from './handler.ts';
+import { type Deps, handle, refusal } from './handler.ts';
 import { validate } from './validate.ts';
 
 /** Deep equality by JSON, enough for these plain values. */
@@ -54,8 +54,8 @@ function fake(
 ) {
   const calls = {
     applied: [] as unknown[],
-    bans: [] as string[],
-    records: [] as unknown[],
+    /** What suspension_status() answers, in order; then not suspended. */
+    suspensions: [] as { suspended: boolean; until: string | null }[],
   };
   const deps: Deps = {
     user: () => Promise.resolve(user),
@@ -64,14 +64,10 @@ function fake(
       calls.applied.push(args);
       return Promise.resolve(result);
     },
-    ban: (_id, duration) => {
-      calls.bans.push(duration);
-      return Promise.resolve('2026-11-03T00:00:00Z');
-    },
-    record: (entry) => {
-      calls.records.push(entry);
-      return Promise.resolve();
-    },
+    suspension: () =>
+      Promise.resolve(
+        calls.suspensions.shift() ?? { suspended: false, until: null },
+      ),
   };
   return { deps, calls };
 }
@@ -257,29 +253,82 @@ Deno.test('refusals keep their meaning', () => {
   ]);
 });
 
-Deno.test('a flood suspension bans the account for 7 days and is audited', async () => {
+Deno.test('a suspended account is refused before the database (#331)', async () => {
+  const { deps, calls } = fake();
+  calls.suspensions.push({ suspended: true, until: '2026-11-12T00:00:00Z' });
+  const res = await handle(request(), deps, 'x-real-ip');
+  assertEquals(res.status, 403);
+  assertEquals(await res.json(), {
+    error: 'account.suspended',
+    until: '2026-11-12T00:00:00Z',
+  });
+  assertEquals(calls.applied.length, 0);
+});
+
+Deno.test('an indefinite suspension has no end', async () => {
+  const { deps, calls } = fake();
+  calls.suspensions.push({ suspended: true, until: null });
+  const res = await handle(request(), deps, 'x-real-ip');
+  assertEquals(await res.json(), { error: 'account.suspended', until: null });
+});
+
+Deno.test('the suspension check failing refuses the sighting', async () => {
+  const { deps, calls } = fake();
+  deps.suspension = () => Promise.reject(new Error('db down'));
+  const res = await handle(request(), deps, 'x-real-ip');
+  assertEquals(res.status, 503);
+  assertEquals(calls.applied.length, 0);
+});
+
+Deno.test('the database refusing a suspended account gives the same answer', async () => {
+  const { deps } = fake({
+    error: {
+      code: 'PT403',
+      message: 'account.suspended',
+      details: '{"until": "2026-11-12T00:00:00+00:00"}',
+    },
+  });
+  const res = await handle(request(), deps, 'x-real-ip');
+  assertEquals(res.status, 403);
+  assertEquals(await res.json(), {
+    error: 'account.suspended',
+    until: '2026-11-12T00:00:00+00:00',
+  });
+});
+
+Deno.test('a flood suspension answers with the account suspension', async () => {
   const { deps, calls } = fake({
     data: { accepted: true, suspended_until: '2026-11-03T00:00:00Z' },
   });
+  // Not suspended when it starts; the database suspends it in the same
+  // transaction, and an admin's longer suspension is kept.
+  calls.suspensions.push(
+    { suspended: false, until: null },
+    { suspended: true, until: '2026-12-01T00:00:00Z' },
+  );
   const res = await handle(request(), deps, 'x-real-ip');
   assertEquals(res.status, 403);
-  assertEquals(await res.json(), { error: 'sighting suspended' });
-  assertEquals(calls.bans, [floodBan]);
-  assertEquals(calls.records, [{
-    user: rider,
-    after: '2026-11-03T00:00:00Z',
-    duration: '7d',
-    note: floodNote,
-  }]);
+  assertEquals(await res.json(), {
+    error: 'account.suspended',
+    until: '2026-12-01T00:00:00Z',
+  });
 });
 
-Deno.test('a failed ban still answers suspended (the database refuses)', async () => {
+Deno.test("a flood suspension falls back to the rule's own end", async () => {
   const { deps } = fake({
     data: { accepted: true, suspended_until: '2026-11-03T00:00:00Z' },
   });
-  deps.ban = () => Promise.reject(new Error('auth down'));
+  let n = 0;
+  deps.suspension = () =>
+    n++ === 0
+      ? Promise.resolve({ suspended: false, until: null })
+      : Promise.reject(new Error('db down'));
   const res = await handle(request(), deps, 'x-real-ip');
   assertEquals(res.status, 403);
+  assertEquals(await res.json(), {
+    error: 'account.suspended',
+    until: '2026-11-03T00:00:00Z',
+  });
 });
 
 Deno.test('a closure suggestion is reported back', async () => {

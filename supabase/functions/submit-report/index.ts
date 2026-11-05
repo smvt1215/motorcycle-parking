@@ -6,6 +6,11 @@ import {
 } from '../_shared/app_check.ts';
 import { trustedIp } from '../_shared/client_ip.ts';
 import { cors, readBody, response } from '../_shared/http.ts';
+import {
+  readSuspension,
+  suspendedRefusal,
+  suspendedResponse,
+} from '../_shared/suspension.ts';
 import { appCheckGate } from './app_check_gate.ts';
 import { currentSpot } from './current_spot.ts';
 import { blocking, precheck, precheckResponse, riskFlags } from './precheck.ts';
@@ -55,6 +60,16 @@ Deno.serve(async (req) => {
       appCheck ? verifyAppCheck(token, appCheck) : Promise.resolve(null),
   );
   if (gate.refused) return response({ error: 'app check required' }, 401);
+  // A suspended account still signs in and manages itself; only App writes
+  // are refused (#331). apply_report() refuses it again in the database.
+  try {
+    const status = await readSuspension(
+      admin.rpc('suspension_status', { uid: data.user.id }),
+    );
+    if (status.suspended) return suspendedResponse(status.until);
+  } catch {
+    return response({ error: 'report service unavailable' }, 503);
+  }
   try {
     const body = await readBody(req);
     const invalid = validate(body);
@@ -87,6 +102,8 @@ Deno.serve(async (req) => {
       // The network's daily cap holds until App Check is enforced (#203).
       p_ip_capped: gate.ipCapped,
     });
+    const suspended = suspendedRefusal(rpcError);
+    if (suspended) return suspendedResponse(suspended.until);
     if (rpcError?.code === 'P0410') {
       // An admin deleted the spot (#200): nothing a rider sends reaches it.
       return response(spotDeletedResponse, 410);
