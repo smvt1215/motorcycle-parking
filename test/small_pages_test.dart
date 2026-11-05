@@ -203,16 +203,17 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('瀏覽地圖與記錄停車位置不需登入。'), findsOneWidget);
       final google = find.text('使用 Google 登入');
+      final apple = find.text('使用 Apple 登入');
       expect(google, findsOneWidget);
-      if (platform == TargetPlatform.iOS) {
-        final apple = find.text('使用 Apple 登入');
-        expect(
-          tester.getTopLeft(apple).dy,
-          lessThan(tester.getTopLeft(google).dy),
-        );
-      } else {
-        expect(find.text('使用 Apple 登入'), findsNothing);
-      }
+      expect(apple, findsOneWidget);
+      // iOS leads with Apple; Android lists Google first (#219).
+      final (first, second) = platform == TargetPlatform.iOS
+          ? (apple, google)
+          : (google, apple);
+      expect(
+        tester.getTopLeft(first).dy,
+        lessThan(tester.getTopLeft(second).dy),
+      );
     }, variant: TargetPlatformVariant.only(platform));
   }
 

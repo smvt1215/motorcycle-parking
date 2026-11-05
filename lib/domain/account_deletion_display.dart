@@ -78,6 +78,15 @@ const appleRevokeFailedTitle = 'Apple 登入授權沒有撤銷';
 const appleRevokeFailedBody =
     '帳號仍會照常刪除。你可以到「設定 > 你的姓名 > 使用 Apple 登入」，選取本 App 後點一下「刪除」，停止本 App 使用。';
 
+/// Android has no Settings path for Apple's grant, so it points to the
+/// Apple Account website instead (P15c ⑤ Android, #219).
+const appleRevokeFailedBodyWeb =
+    '帳號仍會照常刪除。你可以到 Apple 帳號網站（account.apple.com）的「登入與安全性 > 使用 Apple 登入」停止本 App 使用。';
+
+/// The 撤銷失敗 card's body for this platform: iOS Settings, else the website.
+String appleRevokeFailedBodyFor({required bool ios}) =>
+    ios ? appleRevokeFailedBody : appleRevokeFailedBodyWeb;
+
 // P15b ② 冷靜期內登入
 const pendingTitle = '帳號正在等待刪除';
 const pendingBody = '你在冷靜期內登入了。要繼續使用這個帳號，還是維持刪除申請？';

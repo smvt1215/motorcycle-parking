@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -327,6 +328,96 @@ void main() {
         debugDefaultTargetPlatformOverride = null;
       });
     }
+
+    // P11 Android (#219): Google, then Apple in Apple's black brand style;
+    // iOS keeps Apple first in the app's own button style.
+    for (final platform in _platforms) {
+      final ios = platform == TargetPlatform.iOS;
+      for (final size in const [Size(390, 844), Size(820, 1180)]) {
+        for (final scale in const [1.0, 2.0]) {
+          final where =
+              '${platform.name} ${size.width.toInt()}×${size.height.toInt()} '
+              '字型 ${(scale * 100).toInt()}%';
+          testWidgets('登入方式與順序（$where）', (tester) async {
+            debugDefaultTargetPlatformOverride = platform;
+            _view(tester, size);
+            await openSignIn(tester, scale: scale);
+            _noOverflow(tester);
+            expect(
+              SignInButtons.providers,
+              ios
+                  ? const [OAuthProvider.apple, OAuthProvider.google]
+                  : const [OAuthProvider.google, OAuthProvider.apple],
+            );
+            final google = find.byKey(const ValueKey('sign-in-google'));
+            final apple = find.byKey(const ValueKey('sign-in-apple'));
+            expect(google, findsOneWidget);
+            expect(apple, findsOneWidget);
+            final (first, second) = ios ? (apple, google) : (google, apple);
+            expect(
+              tester.getTopLeft(second).dy,
+              greaterThanOrEqualTo(tester.getBottomLeft(first).dy),
+            );
+            final screen = tester.view.physicalSize.height;
+            for (final button in [google, apple]) {
+              expect(
+                tester.getSize(button).height,
+                greaterThanOrEqualTo(ios ? 44 : 48),
+              );
+              expect(
+                tester.getBottomLeft(button).dy,
+                lessThanOrEqualTo(screen),
+              );
+              expect(button.hitTestable(), findsOneWidget);
+            }
+            final branded = find.descendant(
+              of: apple,
+              matching: find.byType(M3EButton),
+            );
+            if (ios) {
+              expect(branded, findsNothing);
+              expect(
+                find.descendant(of: apple, matching: find.byIcon(Icons.apple)),
+                findsNothing,
+              );
+            } else {
+              final decoration = tester.widget<M3EButton>(branded).decoration!;
+              expect(decoration.backgroundColor!.resolve({}), Colors.black);
+              expect(decoration.foregroundColor!.resolve({}), Colors.white);
+              expect(
+                find.descendant(of: apple, matching: find.byIcon(Icons.apple)),
+                findsOneWidget,
+              );
+            }
+            debugDefaultTargetPlatformOverride = null;
+          });
+        }
+      }
+    }
+
+    testWidgets('Android 按 Apple 登入走 Apple OAuth', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      final calls = <MethodCall>[];
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      const channel = MethodChannel('plugins.flutter.io/url_launcher');
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        return true;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      _view(tester, const Size(390, 844));
+      await openSignIn(tester);
+      await tester.tap(find.byKey(const ValueKey('sign-in-apple')));
+      await tester.pumpAndSettle();
+      final urls = [
+        for (final c in calls)
+          if ((c.arguments as Map?)?['url'] case final String url) url,
+      ];
+      expect(urls, hasLength(1));
+      expect(Uri.parse(urls.single).queryParameters['provider'], 'apple');
+      debugDefaultTargetPlatformOverride = null;
+    });
 
     testWidgets('按鈕與同意文字本身放不下時整張 sheet 捲動', (tester) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.android;
