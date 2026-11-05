@@ -74,6 +74,13 @@ export type Parsed = {
 };
 
 /** The JSON for support-inbound: no raw mail, attachments by name only. */
+/** [text] cut to [max] code points: slicing UTF-16 units could split an
+ * emoji's surrogate pair, and the lone half then fails the RPC's JSON on
+ * every retry (Codex review, PR #306). */
+export function clip(text: string, max: number): string {
+  return text.length <= max ? text : [...text].slice(0, max).join('');
+}
+
 export function payload(
   to: string,
   envelopeFrom: string,
@@ -87,13 +94,13 @@ export function payload(
     // The header From is who the case belongs to; DKIM and SPF say how far
     // to trust it.
     from: (parsed.from?.address || envelopeFrom).trim().toLowerCase(),
-    subject: (parsed.subject ?? '').slice(0, 200),
-    text: (parsed.text ?? '').slice(0, 4000),
+    subject: clip(parsed.subject ?? '', 200),
+    text: clip(parsed.text ?? '', 4000),
     spf,
     dkim,
     dmarc,
     attachments: parsed.attachments.slice(0, 20).map((a) =>
-      (a.filename ?? '').slice(0, 200)
+      clip(a.filename ?? '', 200)
     ).filter((name) => name !== ''),
     message_id: parsed.messageId ?? null,
     // The same mail delivered again has the same digest, so a mail without

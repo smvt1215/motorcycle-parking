@@ -1,6 +1,7 @@
 import {
   accepts,
   authResults,
+  clip,
   payload,
   rawDigest,
   sign,
@@ -144,4 +145,29 @@ Deno.test('the same raw mail always has the same digest', async () => {
   const raw = new TextEncoder().encode('Subject: x\r\n\r\nbody').buffer;
   equal(await rawDigest(raw), await rawDigest(raw.slice(0)), 'stable');
   equal((await rawDigest(raw)).length, 64, 'hex SHA-256');
+});
+
+Deno.test('cuts long fields at code points, never inside an emoji', () => {
+  const body = 'a'.repeat(3999) + '😀' + 'b';
+  const out = payload('support@motoparking.smvtstudio.com', 'x@example.test', {
+    headers: [],
+    subject: 's'.repeat(199) + '😀😀',
+    text: body,
+    attachments: [{ filename: 'f'.repeat(199) + '😀.pdf' }],
+  });
+  equal([...out.text].length, 4000, 'text length in code points');
+  equal(out.text.endsWith('😀'), true, 'the emoji is kept whole');
+  equal(out.subject, 's'.repeat(199) + '😀', 'subject');
+  equal(out.attachments, ['f'.repeat(199) + '😀'], 'attachment name');
+  equal(
+    /[\ud800-\udbff](?![\udc00-\udfff])/.test(out.text),
+    false,
+    'no lone high surrogate',
+  );
+  equal(
+    JSON.parse(JSON.stringify(out)).text,
+    out.text,
+    'round-trips through JSON',
+  );
+  equal(clip('短', 200), '短', 'short text is unchanged');
 });
