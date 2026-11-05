@@ -464,3 +464,8 @@ verify_jwt = false
 # pg_cron and public.support_request_link call it through pg_net with the
 # shared SUPPORT_MAIL_SECRET header, not a JWT (#285).
 verify_jwt = false
+
+[functions.report-mail]
+# pg_cron and new inappropriate-content reports call it through pg_net with
+# the shared REPORT_MAIL_SECRET header, not a JWT (#280).
+verify_jwt = false

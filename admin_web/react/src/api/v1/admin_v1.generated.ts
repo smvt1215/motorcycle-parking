@@ -28,6 +28,23 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.body,
       }),
     }),
+    adminV1ContentReport: build.query<AdminV1ContentReportApiResponse, AdminV1ContentReportApiArg>({
+      query: (queryArg) => ({
+        url: `/rpc/content_report`,
+        method: 'POST',
+        body: queryArg.body,
+      }),
+    }),
+    adminV1ResolveContentReport: build.mutation<
+      AdminV1ResolveContentReportApiResponse,
+      AdminV1ResolveContentReportApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/rpc/resolve_content_report`,
+        method: 'POST',
+        body: queryArg.body,
+      }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -54,6 +71,26 @@ export type AdminV1ResolveSupportRequestApiArg = {
   body: {
     p_id: string;
     p_status: 'done' | 'rejected';
+    p_note?: string;
+  };
+};
+export type AdminV1ContentReportApiResponse = /** status 200 一筆內容不當檢舉（#280） */ ContentReport;
+export type AdminV1ContentReportApiArg = {
+  body: {
+    p_id: string;
+  };
+};
+export type AdminV1ResolveContentReportApiResponse =
+  /** status 200 處理內容不當檢舉（#280） */ ContentReportResolution;
+export type AdminV1ResolveContentReportApiArg = {
+  body: {
+    p_id: string;
+    p_action: 'restore' | 'keep' | 'edit';
+    /** content_report 的 spot_updated_at */
+    p_expected_updated_at: string;
+    p_patch?: ContentReportPatch;
+    /** 只有 restore 要給 */
+    p_reason?: 'wrong' | 'duplicate' | 'insufficient' | 'outdated' | 'abuse' | 'other';
     p_note?: string;
   };
 };
@@ -128,8 +165,66 @@ export type SupportResolution = {
   id: string;
   status: 'done' | 'rejected';
 };
+export type ContentReportText = {
+  name?: string | null;
+  contributor_name?: string | null;
+  note?: string | null;
+  entrance_note?: string | null;
+  parking_guide?: string | null;
+  special_rules?: string | null;
+};
+export type ContentReportEntry = {
+  id: string;
+  created_at: string;
+  note: string;
+  /** 這則是否觸發立即暫時隱藏 */
+  held: boolean;
+  /** 含 hold_skipped_<規則> */
+  risk_flags: string[];
+  /** 和組內其他處理中的檢舉來自同一網路 */
+  same_network: boolean;
+};
+export type ContentReport = {
+  id: string;
+  status: 'pending' | 'accepted' | 'rejected' | 'closed';
+  spot_id: string;
+  target: 'rider_name' | 'spot_name' | 'text' | 'impersonation' | 'other';
+  created_at: string;
+  spot_updated_at?: string | null;
+  spot_deleted?: boolean;
+  content_held: ('rider_name' | 'spot_name' | 'text')[];
+  snapshot: ContentReportText;
+  current: ContentReportText;
+  editable_fields: string[];
+  reports: ContentReportEntry[];
+};
+export type ContentReportSpot = {
+  id?: string;
+  updated_at?: string;
+  content_held?: ('rider_name' | 'spot_name' | 'text')[];
+  name?: string | null;
+  contributor_name?: string | null;
+  note?: string | null;
+  entrance_note?: string | null;
+  parking_guide?: string | null;
+  special_rules?: string | null;
+};
+export type ContentReportResolution = {
+  status: 'accepted' | 'rejected';
+  resolved_count: number;
+  spot: ContentReportSpot;
+};
+export type ContentReportPatch = {
+  name?: string;
+  note?: string;
+  entrance_note?: string;
+  parking_guide?: string;
+  special_rules?: string;
+};
 export const {
   useAdminV1SetMinSupportedAppVersionMutation,
   useAdminV1SupportRequestsQuery,
   useAdminV1ResolveSupportRequestMutation,
+  useAdminV1ContentReportQuery,
+  useAdminV1ResolveContentReportMutation,
 } = injectedRtkApi;
