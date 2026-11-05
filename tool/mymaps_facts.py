@@ -70,8 +70,9 @@ BANNED_FROM = rf"(禁停|禁止{_GAP}(停|進入|進)?|(不可|不能|不得|不
 # A negation just before (or inside) a plain fact turns it around (沒有按鈴, 不能用悠遊卡,
 # 機車格不會開單): the group then states nothing. Rules whose phrase is itself a negation
 # (無柵欄, 機車區禁止大型重機…) are written for these words and are not checked.
-# 不限、無論、不管 widen rather than negate (不限車種可停機車格).
-NEGATION = re.compile(r"不(?!限|論|管)|沒|無(?!論|限)|未|別|勿")
+# 不限、無論、不管 widen rather than negate (不限車種可停機車格), and 無車時／沒車時 is a
+# condition (重機專格無車時也可停汽車格), not a negation.
+NEGATION = re.compile(r"不(?!限|論|管)|沒(?!有?車的?時)|無(?!論|限|車的?時)|未|別|勿")
 ADVISED_AGAINST = r"不要|勿|不建議|別"
 FACTS = [
     ("plate", [
@@ -169,7 +170,7 @@ def facts(lines):
                         match = re.search(rule, clause)
                         text = phrase if match else ""
                         if match and phrase not in NEGATIVE_PHRASES and NEGATION.search(
-                                clause[max(0, match.start() - 3):match.end()]):
+                                clause[max(0, match.start() - 4):match.end()]):
                             text = DROP
                     if text:
                         if text != DROP and text not in found[field]:
