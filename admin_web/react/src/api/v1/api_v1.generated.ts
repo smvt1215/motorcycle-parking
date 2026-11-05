@@ -39,6 +39,9 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/rpc/cancel_account_deletion`, method: 'POST' }),
     }),
+    apiV1MyAccountStatus: build.query<ApiV1MyAccountStatusApiResponse, ApiV1MyAccountStatusApiArg>({
+      query: () => ({ url: `/rpc/my_account_status`, method: 'POST' }),
+    }),
     apiV1SpotsByIds: build.query<ApiV1SpotsByIdsApiResponse, ApiV1SpotsByIdsApiArg>({
       query: (queryArg) => ({
         url: `/rpc/spots_by_ids`,
@@ -100,6 +103,8 @@ export type ApiV1RequestAccountDeletionApiArg = {
 };
 export type ApiV1CancelAccountDeletionApiResponse = /** status 200 刪除申請的狀態 */ AccountDeletionState;
 export type ApiV1CancelAccountDeletionApiArg = void;
+export type ApiV1MyAccountStatusApiResponse = /** status 200 停權狀態 */ AccountStatus;
+export type ApiV1MyAccountStatusApiArg = void;
 export type ApiV1SpotsByIdsApiResponse = /** status 200 依 id 讀多個停車點（收藏頁） */ SpotsByIds;
 export type ApiV1SpotsByIdsApiArg = {
   body: {
@@ -261,6 +266,12 @@ export type AccountDeletionState = {
   cannot_self_delete_reason:
     ('account.admin_cannot_self_delete' | null) | ('account.admin_cannot_self_delete' | null);
 };
+export type AccountStatus = {
+  /** 是否停權中；停權中 App 的寫入一律回 account.suspended */
+  suspended: boolean;
+  /** ISO 8601 時間。停權到期時間；無限期或沒有停權時為 null */
+  suspended_until: string | null;
+};
 export type SpotsByIds = {
   /** 看得到的點；官方點在前、社群點在後，各依 id 排序 */
   spots: Spot[];
@@ -289,6 +300,7 @@ export const {
   useApiV1AccountDeletionStatusQuery,
   useApiV1RequestAccountDeletionMutation,
   useApiV1CancelAccountDeletionMutation,
+  useApiV1MyAccountStatusQuery,
   useApiV1SpotsByIdsQuery,
   useApiV1HiddenRidersListQuery,
   useApiV1HiddenRidersMergeMutation,

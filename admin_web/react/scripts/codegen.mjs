@@ -23,6 +23,7 @@ const READS = {
     'apiV1AccountDeletionStatus',
     'apiV1SpotsByIds',
     'apiV1HiddenRidersList',
+    'apiV1MyAccountStatus',
   ],
   admin_v1: ['adminV1SupportRequests', 'adminV1SupportRequest', 'adminV1ContentReport'],
 };

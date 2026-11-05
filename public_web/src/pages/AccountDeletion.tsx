@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import { useAppSelector } from '../app/store';
 import { useAuth } from '../auth/AuthContext';
-import type { Provider, SignInResult } from '../auth/port';
+import type { AuthPort, Provider, SignInResult } from '../auth/port';
+import { AppleButton, GoogleButton } from '../auth/SignInButtons';
 import * as c from '../content';
 import { DeletionFlow } from '../deletion/DeletionFlow';
 import { FlowPanel } from '../deletion/FlowPanel';
@@ -18,6 +19,10 @@ function outcomeOf(provider: Provider, result: SignInResult): Outcome | null {
       return null;
     case 'noAccount':
       return { kind: 'noAccount', provider, email: result.email };
+    case 'rateLimited':
+      return { kind: 'rateLimited' };
+    case 'unavailable':
+      return { kind: result.network ? 'network' : 'unavailable' };
     case 'wrongAccount':
     case 'cancelled':
       return { kind: 'signInIncomplete' };
@@ -53,13 +58,11 @@ export function AccountDeletion() {
   }
   return (
     <Explanation
-      onSignIn={
+      signIn={
         auth
-          ? (provider) => {
-              void auth
-                .signIn(provider)
-                .then((result) => setOutcome(outcomeOf(provider, result)))
-                .catch(() => setOutcome({ kind: 'signInIncomplete' }));
+          ? {
+              auth,
+              onResult: (provider, result) => setOutcome(outcomeOf(provider, result)),
             }
           : null
       }
@@ -67,7 +70,13 @@ export function AccountDeletion() {
   );
 }
 
-function Explanation({ onSignIn }: { onSignIn: ((provider: Provider) => void) | null }) {
+/** The sign-in buttons' port, and where each finished sign-in goes. */
+interface ExplanationSignIn {
+  auth: AuthPort;
+  onResult: (provider: Provider, result: SignInResult) => void;
+}
+
+function Explanation({ signIn }: { signIn: ExplanationSignIn | null }) {
   return (
     <Site aside={<Link to="/support">沒辦法登入？</Link>}>
       <div className="deletion">
@@ -82,24 +91,22 @@ function Explanation({ onSignIn }: { onSignIn: ((provider: Provider) => void) | 
               <h2 id="signin-h">{c.signInHeading}</h2>
               <p>{c.signInBody}</p>
             </div>
-            {/* Shapes of the official Google / Apple buttons. Without a backend
-                (a local preview) there is nothing to sign in to. */}
-            {onSignIn ? (
+            {/* Google draws its own button; Apple's follows its shape. Without
+                the sign-in settings (a local preview) there is nothing to sign
+                in to. */}
+            {signIn ? (
               <div className="deletion-signin-buttons">
-                <button
-                  type="button"
-                  className="signin-button signin-button--google"
-                  onClick={() => onSignIn('google')}
-                >
-                  使用 Google 登入
-                </button>
-                <button
-                  type="button"
-                  className="signin-button signin-button--apple"
-                  onClick={() => onSignIn('apple')}
-                >
-                  使用 Apple 登入
-                </button>
+                <GoogleButton auth={signIn.auth} onResult={(result) => signIn.onResult('google', result)} />
+                <AppleButton
+                  auth={signIn.auth}
+                  onClick={() => {
+                    // Synchronously from the click: Apple's popup needs it.
+                    signIn.auth
+                      .signInWithApple()
+                      .then((result) => signIn.onResult('apple', result))
+                      .catch(() => signIn.onResult('apple', { kind: 'cancelled' }));
+                  }}
+                />
               </div>
             ) : null}
           </section>

@@ -1,11 +1,12 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import {
   useApiV1AccountDeletionStatusQuery,
   useApiV1CancelAccountDeletionMutation,
   useApiV1RequestAccountDeletionMutation,
 } from '../api/api_v1.generated';
 import type { V1Error } from '../api/base';
-import type { AuthPort, SignedInUser } from '../auth/port';
+import type { AuthPort, SignedInUser, SignInResult } from '../auth/port';
+import { AppleButton, GoogleButton } from '../auth/SignInButtons';
 import { accountLine, deletionDateLabel, maskEmail } from './format';
 import { FlowActions, FlowPanel } from './FlowPanel';
 import type { Outcome } from './Outcome';
@@ -17,7 +18,8 @@ type Step =
   | { kind: 'reauth' }
   | { kind: 'reauthIncomplete' }
   | { kind: 'wrongAccount'; maskedEmail: string | null }
-  | { kind: 'requested'; scheduledAt: string | null }
+  | { kind: 'requested'; scheduledAt: string | null; appleRevokeFailed: boolean }
+  | { kind: 'rateLimited' }
   | { kind: 'cancelled' }
   | { kind: 'inProgress' }
   | { kind: 'admin' }
@@ -61,6 +63,14 @@ export function DeletionFlow({
   const [request, requestState] = useApiV1RequestAccountDeletionMutation();
   const [cancel, cancelState] = useApiV1CancelAccountDeletionMutation();
   const [step, setStep] = useState<Step>({ kind: 'status' });
+  // Apple's grant is revoked once per Apple sign-in, right before the
+  // request; a retry after a failed request does not revoke again (as the
+  // App's DeletionAttempt).
+  const appleRevoke = useRef({ attempted: false, failed: false });
+  const [revoking, setRevoking] = useState(false);
+  const continuing = useRef(false);
+  // The same, for the screen: both choices stay disabled until it is done.
+  const [continuingNow, setContinuingNow] = useState(false);
 
   async function signOut(outcome: Outcome | null = null) {
     onOutcome(outcome);
@@ -73,10 +83,49 @@ export function DeletionFlow({
     }
   }
 
+  /** Revokes Apple's grant first; false when the flow went elsewhere. */
+  async function revokeAppleFirst(): Promise<boolean> {
+    if (user.provider !== 'apple' || appleRevoke.current.attempted) return true;
+    setRevoking(true);
+    let result;
+    try {
+      result = await auth.revokeApple();
+    } catch {
+      result = { kind: 'notRevoked' } as const;
+    } finally {
+      setRevoking(false);
+    }
+    switch (result.kind) {
+      case 'revoked':
+      case 'notRevoked':
+        appleRevoke.current = { attempted: true, failed: result.kind === 'notRevoked' };
+        return true;
+      case 'signInNeeded':
+        // A fresh authorization code comes only with a new Apple sign-in.
+        setStep({ kind: 'reauth' });
+        return false;
+      case 'refused':
+        if (result.error === 'auth.recent_sign_in_required') setStep({ kind: 'reauth' });
+        else if (result.error === 'account.admin_cannot_self_delete') setStep({ kind: 'admin' });
+        else if (result.error === 'auth.sign_in_required') await signOut();
+        else {
+          // Anything else did not revoke; the request still goes (the App's way).
+          appleRevoke.current = { attempted: true, failed: true };
+          return true;
+        }
+        return false;
+    }
+  }
+
   async function submit() {
+    if (!(await revokeAppleFirst())) return;
     try {
       const state = await request({ body: { p_source: 'web' } }).unwrap();
-      setStep({ kind: 'requested', scheduledAt: state.scheduled_at });
+      setStep({
+        kind: 'requested',
+        scheduledAt: state.scheduled_at,
+        appleRevokeFailed: user.provider === 'apple' && appleRevoke.current.failed,
+      });
     } catch (failure) {
       const error = v1Error(failure);
       if (error?.message === 'auth.recent_sign_in_required') setStep({ kind: 'reauth' });
@@ -87,7 +136,31 @@ export function DeletionFlow({
     }
   }
 
+  /**
+   * 繼續刪除: the request stays. A sign-in with Apple during the cooling-off
+   * is a new grant, so it is revoked first, best effort: whatever the
+   * answer, the rider is signed out (the App's continuePending).
+   */
+  async function continuePending(scheduledAt: string | null) {
+    // One choice at a time: a cancel in flight, or this already running.
+    if (continuing.current || cancelState.isLoading) return;
+    continuing.current = true;
+    setContinuingNow(true);
+    if (user.provider === 'apple') {
+      try {
+        await auth.revokeApple();
+      } catch {
+        // Nothing stops signing out here.
+      }
+    }
+    await signOut({ kind: 'continued', scheduledAt });
+    continuing.current = false;
+    setContinuingNow(false);
+  }
+
   async function cancelDeletion() {
+    // While 繼續刪除 is revoking and signing out, cancelling would contradict it.
+    if (continuing.current) return;
     try {
       await cancel().unwrap();
       setStep({ kind: 'cancelled' });
@@ -104,16 +177,12 @@ export function DeletionFlow({
    * Signing in again proves it is the rider: the same account sends the
    * request straight away (reauthFootnote); another one changes nothing.
    */
-  async function reauthenticate() {
-    let result;
-    try {
-      result = await auth.signIn(user.provider, { reauthFor: user });
-    } catch {
-      result = { kind: 'cancelled' } as const;
-    }
+  async function reauthenticated(result: SignInResult) {
     switch (result.kind) {
       case 'signedIn':
         if (result.user.id === user.id) {
+          // A new Apple sign-in brings a new code: revoke with that one.
+          appleRevoke.current = { attempted: false, failed: false };
           setStep({ kind: 'status' });
           await submit();
         } else await signOut({ kind: 'wrongAccount', maskedEmail: maskOrNull(result.user.email) });
@@ -121,6 +190,13 @@ export function DeletionFlow({
       case 'wrongAccount':
       case 'noAccount':
         setStep({ kind: 'wrongAccount', maskedEmail: maskOrNull(result.email) });
+        return;
+      case 'rateLimited':
+        setStep({ kind: 'rateLimited' });
+        return;
+      case 'unavailable':
+        if (result.network) setStep({ kind: 'network', retry: () => setStep({ kind: 'reauth' }) });
+        else setStep({ kind: 'reauthIncomplete' });
         return;
       case 'cancelled':
         setStep({ kind: 'reauthIncomplete' });
@@ -145,6 +221,12 @@ export function DeletionFlow({
             <li key={row}>{row}</li>
           ))}
         </ul>
+        {step.appleRevokeFailed ? (
+          <section className="flow-notice" aria-labelledby="apple-revoke-h">
+            <h2 id="apple-revoke-h">{t.appleRevokeFailedTitle}</h2>
+            <p>{t.appleRevokeFailedBody}</p>
+          </section>
+        ) : null}
         <FlowActions>
           <button type="button" className="flow-button flow-button--primary" onClick={() => void signOut()}>
             {t.requestedDone}
@@ -171,16 +253,23 @@ export function DeletionFlow({
   if (step.kind === 'reauth') {
     return (
       <FlowPanel title={t.reauthTitle}>
-        <p>{t.reauthBody}</p>
+        <p>{user.provider === 'apple' ? t.reauthBodyApple : t.reauthBody}</p>
         <p className="flow-account">{accountLine(user.provider, user.email)}</p>
         <FlowActions>
-          <button
-            type="button"
-            className={`signin-button signin-button--${user.provider}`}
-            onClick={() => void reauthenticate()}
-          >
-            {t.signInButton(user.provider)}
-          </button>
+          {user.provider === 'apple' ? (
+            <AppleButton
+              auth={auth}
+              onClick={() => {
+                // Synchronously from the click: Apple's popup needs it.
+                auth
+                  .signInWithApple({ reauthFor: user })
+                  .catch(() => ({ kind: 'cancelled' }) as const)
+                  .then((result) => reauthenticated(result));
+              }}
+            />
+          ) : (
+            <GoogleButton auth={auth} reauthFor={user} onResult={(result) => void reauthenticated(result)} />
+          )}
           <button type="button" className="flow-button" onClick={() => setStep({ kind: 'status' })}>
             {t.reauthCancel}
           </button>
@@ -260,6 +349,11 @@ export function DeletionFlow({
       </FlowPanel>
     );
   }
+  if (step.kind === 'rateLimited') {
+    return (
+      <Notice title={t.rateLimitedTitle} body={t.rateLimitedBody} onOk={() => setStep({ kind: 'reauth' })} />
+    );
+  }
   if (step.kind === 'generic') {
     return <Notice title={t.genericErrorTitle} body={t.genericErrorBody} onOk={() => void signOut()} />;
   }
@@ -290,8 +384,8 @@ export function DeletionFlow({
     return <Notice title={t.genericErrorTitle} body={t.genericErrorBody} onOk={() => void signOut()} />;
   }
   // isFetching: a refetch must not show the last answer (e.g. 'none' before the request).
-  if (!status.data || status.isFetching || requestState.isLoading) {
-    return <Checking label={requestState.isLoading ? t.sending : t.checking} />;
+  if (!status.data || status.isFetching || requestState.isLoading || revoking) {
+    return <Checking label={requestState.isLoading || revoking ? t.sending : t.checking} />;
   }
   if (step.kind === 'admin' || !status.data.can_self_delete) {
     return (
@@ -302,9 +396,9 @@ export function DeletionFlow({
     return (
       <Pending
         scheduledAt={status.data.scheduled_at}
-        busy={cancelState.isLoading}
+        working={cancelState.isLoading ? 'cancel' : continuingNow ? 'continue' : null}
         onCancel={() => void cancelDeletion()}
-        onContinue={() => void signOut({ kind: 'continued', scheduledAt: status.data?.scheduled_at ?? null })}
+        onContinue={() => void continuePending(status.data?.scheduled_at ?? null)}
       />
     );
   }
@@ -400,15 +494,17 @@ function Confirm({
  */
 function Pending({
   scheduledAt,
-  busy,
+  working,
   onCancel,
   onContinue,
 }: {
   scheduledAt: string | null;
-  busy: boolean;
+  /** The choice being carried out: both are disabled until it is done. */
+  working: 'cancel' | 'continue' | null;
   onCancel: () => void;
   onContinue: () => void;
 }) {
+  const busy = working !== null;
   return (
     <FlowPanel title={t.pendingTitle}>
       <p>{t.pendingBody}</p>
@@ -419,7 +515,7 @@ function Pending({
           aria-disabled={busy}
           onClick={() => !busy && onCancel()}
         >
-          <span className="flow-choice-title">{busy ? t.sending : t.pendingCancel}</span>
+          <span className="flow-choice-title">{working === 'cancel' ? t.sending : t.pendingCancel}</span>
           <span className="flow-choice-detail">{t.pendingCancelDetail}</span>
         </button>
         <button
@@ -428,7 +524,7 @@ function Pending({
           aria-disabled={busy}
           onClick={() => !busy && onContinue()}
         >
-          <span className="flow-choice-title">{t.pendingContinue}</span>
+          <span className="flow-choice-title">{working === 'continue' ? t.sending : t.pendingContinue}</span>
           <span className="flow-choice-detail">
             {t.pendingContinueDetail(deletionDateLabel(scheduledAt))}
           </span>

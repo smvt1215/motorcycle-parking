@@ -24,6 +24,20 @@ schema 就是版本：v1 只做加法（新增欄位、新增有預設值的參�
    `tool/test_api_schema.py` 會檢查文件和 SQL 的函式完全對應。
 4. 錯誤：`raise sqlstate 'PTxyz' using message = '<穩定錯誤碼>', detail = '<json>'`，HTTP 狀態就是 xyz。用戶端依 `message` 的錯誤碼顯示文案，不解析其他文字。
 
+## 停權：`account.suspended`（#331）
+
+停權是 App 層級旗標（`private.user_suspensions`），不是 Supabase Auth ban：停權中的帳號照常登入、瀏覽、管理帳號、申請與取消刪除帳號，也照常會被到期刪除。被擋下的只有 App 的寫入：新增停車點、修改建議（含「已經不能停」）、車友回報目擊、檢舉（flag 與內容不當）、確認點位／投票、改名稱與頭像。
+
+| 從哪裡被擋 | 形狀 |
+|---|---|
+| Edge Function（`submit-report`、`submit-sighting`） | HTTP 403 `{"error":"account.suspended","until":"<ISO 8601>"\|null}` |
+| api_v1 函式、資料庫防線 | HTTP 403，`code` `PT403`、`message` `account.suspended`、`details` 為 JSON 字串 `{"until":"<ISO 8601>"\|null}` |
+| 名稱與頭像（`auth.updateUser` 的 `display_name`、`profile_avatar_url`） | 不報錯，資料庫保留舊值；頭像 Storage 的上傳與刪除被 RLS 拒絕 |
+
+`until` 為 `null` 代表無限期（直到管理員解除）。App 可先以 `api_v1.my_account_status()` 讀 `{suspended, suspended_until}`。
+
+新增會寫入的 api_v1 函式時，開頭先呼叫 `private.require_not_suspended(<呼叫者>)`；只影響自己、屬於帳號管理的函式改列進 `supabase/tests/app_suspension_test.sql` 的放行清單 `pg_temp.suspension_allowed()`。測試列出 api_v1 所有 volatile 函式，兩者都不是就失敗。
+
 ## 呼叫方式
 
 PostgREST 的 RPC：`POST /rest/v1/rpc/<name>`，以 `Content-Profile: api_v1`（或 `admin_v1`）指定 schema。Supabase SDK 用 `supabase.schema('api_v1').rpc('<name>')`。

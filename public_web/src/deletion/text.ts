@@ -24,6 +24,8 @@ export const checking = '正在確認帳號…';
 
 export const reauthTitle = '再登入一次';
 export const reauthBody = '為了確認是你本人，請用目前的帳號再登入一次。';
+/** Apple riders: the sign-in also gives the code that revokes Apple's grant. */
+export const reauthBodyApple = '為了確認是你本人，並撤銷「使用 Apple 登入」的授權，請再用 Apple 登入一次。';
 export const reauthFootnote = '登入後會直接送出刪除申請。';
 export const reauthCancel = '取消';
 export function signInButton(provider: 'google' | 'apple'): string {
@@ -45,6 +47,9 @@ export function wrongAccountBody(maskedEmail: string | null): string {
 export const genericErrorTitle = '發生錯誤';
 export const genericErrorBody = '發生錯誤，請稍後再試。';
 export const ok = '好';
+// Web only: the sign-in check allows 30 attempts an hour per network.
+export const rateLimitedTitle = '暫時無法登入';
+export const rateLimitedBody = '嘗試登入的次數太多，請稍後再試。';
 
 export const requestedTitle = '已申請刪除帳號';
 export function scheduledLine(dateLabel: string): string {
@@ -57,6 +62,10 @@ export const requestedRows = [
 ] as const;
 export const requestedDone = '完成';
 export const requestedSignIn = '登入以取消刪除';
+/** Apple's grant was not revoked; the request went ahead anyway (P15c ⑤). */
+export const appleRevokeFailedTitle = 'Apple 登入授權沒有撤銷';
+export const appleRevokeFailedBody =
+  '帳號仍會照常刪除。你可以到「設定 > 你的姓名 > 使用 Apple 登入」，選取本 App 後點一下「刪除」，停止本 App 使用。';
 
 export const pendingTitle = '帳號正在等待刪除';
 export const pendingBody = '你在冷靜期內登入了。要繼續使用這個帳號，還是維持刪除申請？';
