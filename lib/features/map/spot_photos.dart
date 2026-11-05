@@ -131,6 +131,8 @@ class SpotPhotoThumbs extends StatelessWidget {
     Widget tile(int index, Widget child, String label) => Semantics(
       button: true,
       label: label,
+      // The InkWell below is excluded: assistive taps come here.
+      onTap: () => showSpotPhotoViewer(context, photos, index),
       excludeSemantics: true,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(8),
@@ -308,6 +310,7 @@ class _SpotPhotoViewerState extends State<SpotPhotoViewer> {
                         button: true,
                         selected: i == index,
                         label: '第 ${i + 1} 張照片',
+                        onTap: () => go(i),
                         excludeSemantics: true,
                         child: GestureDetector(
                           key: ValueKey('spot-photo-pick-$i'),

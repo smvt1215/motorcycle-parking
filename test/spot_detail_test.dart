@@ -1,4 +1,5 @@
-import 'package:flutter/foundation.dart' show defaultTargetPlatform;
+import 'package:flutter/foundation.dart'
+    show debugDefaultTargetPlatformOverride, defaultTargetPlatform;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:motorcycle_parking/features/map/spot_sheet.dart';
@@ -777,5 +778,36 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('availability-beta-note')), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('輔助功能點得到返回鍵、照片縮圖與檢視器縮圖（Codex P2 第 4 輪）', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final handle = tester.ensureSemantics();
+    final store = await detailStore(tester, VehicleType.heavy);
+    await openDetail(tester, store, detailLot);
+    await show(tester, 'spot-photo-thumb-1');
+    tester.semantics.tap(find.semantics.byLabel('放大照片：第 2 張'));
+    await tester.pumpAndSettle();
+    expect(find.text('2 / 5'), findsOneWidget);
+    tester.semantics.tap(find.semantics.byLabel('第 4 張照片'));
+    await tester.pumpAndSettle();
+    expect(find.text('4 / 5'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('spot-photo-close')));
+    await tester.pumpAndSettle();
+    // 「+2」 too.
+    await show(tester, 'spot-photo-thumb-3');
+    tester.semantics.tap(find.semantics.byLabel('放大照片：另 2 張'));
+    await tester.pumpAndSettle();
+    expect(find.text('4 / 5'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('spot-photo-close')));
+    await tester.pumpAndSettle();
+    // 返回 (iOS chevron and 返回) closes the details.
+    tester.semantics.tap(find.semantics.byLabel('返回地圖（關閉詳情）'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('parking-spot-sheet')), findsNothing);
+    handle.dispose();
+    await tester.pumpWidget(const SizedBox.shrink());
+    debugDefaultTargetPlatformOverride = null;
   });
 }

@@ -1028,9 +1028,19 @@ _Price _priceOf(
   return _placeholder(legacy) ? const _NoPrice() : _TextPrice(legacy.trim());
 }
 
-String _zoneLegacy(ParkingZone z, VehicleType vehicle) {
+/// A zone's old text for [vehicle], kept to that vehicle (spot_fees.dart's
+/// `_zoneLegacy`): with any per-vehicle text, a vehicle without its own
+/// has none (未提供), never the general note; the general note only when
+/// no vehicle has its own and it does not repeat the car's. Null when
+/// other vehicles have text and this one has none: 未提供, with no
+/// fallback.
+String? _zoneLegacy(ParkingZone z, VehicleType vehicle) {
   final own = vehicle == VehicleType.heavy ? z.heavyFeeNote : z.scooterFeeNote;
-  return own.trim().isNotEmpty ? own : z.feeNote;
+  if (!_placeholder(z.scooterFeeNote) || !_placeholder(z.heavyFeeNote)) {
+    return _placeholder(own) ? null : own;
+  }
+  final note = z.feeNote.trim();
+  return note == z.carFeeNote.trim() ? '' : note;
 }
 
 FeeAnswer _fee(
@@ -1081,6 +1091,7 @@ FeeAnswer _fee(
             : spot.fee != null
             ? spotPrice(_zoneCondition(z))
             : switch (_zoneLegacy(z, vehicle)) {
+                null => const _NoPrice(),
                 final t when !_placeholder(t) => _TextPrice(t.trim()),
                 _ when anyZoneFee => const _NoPrice(),
                 _ => spotPrice(_zoneCondition(z)),

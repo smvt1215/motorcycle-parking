@@ -642,15 +642,27 @@ DetailPrice placePrice(ParkingSpot spot, SignArea a, VehicleType vehicle) {
   if (a.zone case final z?) {
     if (z.fee case final fee?) return _rateOf(fee, vehicle);
     if (spot.fee case final fee?) return _rateOf(fee, vehicle);
-    final own = vehicle == VehicleType.heavy
-        ? z.heavyFeeNote
-        : z.scooterFeeNote;
-    final legacy = own.trim().isNotEmpty ? own : z.feeNote;
-    if (!_placeholder(legacy)) return DetailPrice(text: legacy.trim());
+    if (zoneLegacyPrice(z, vehicle) case final legacy?) return legacy;
     if (spot.zones.any((z) => z.fee != null)) return const DetailPrice();
     return _text(spot.feeNote);
   }
   return spot.fee == null ? _text(spot.feeNote) : _rateOf(spot.fee!, vehicle);
+}
+
+/// A zone's old text price for [vehicle], kept to that vehicle (as
+/// spot_fees.dart's `_zoneLegacy`): with any per-vehicle text, a vehicle
+/// without its own reads 未提供, never the zone's general note; the
+/// general note stands only when no vehicle has its own, and never when it
+/// repeats the car's. Null when the zone states nothing at all.
+DetailPrice? zoneLegacyPrice(ParkingZone z, VehicleType vehicle) {
+  bool has(String t) => !_placeholder(t);
+  final own = vehicle == VehicleType.heavy ? z.heavyFeeNote : z.scooterFeeNote;
+  if (has(z.scooterFeeNote) || has(z.heavyFeeNote)) {
+    return has(own) ? DetailPrice(text: own.trim()) : const DetailPrice();
+  }
+  final note = z.feeNote.trim();
+  if (has(note) && note != z.carFeeNote.trim()) return DetailPrice(text: note);
+  return null;
 }
 
 /// The period of [c]'s time limit holding at [now]; null when none does.

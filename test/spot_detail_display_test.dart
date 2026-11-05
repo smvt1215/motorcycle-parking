@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:motorcycle_parking/domain/eligibility.dart';
 import 'package:motorcycle_parking/domain/four_sign.dart';
+import 'package:motorcycle_parking/domain/four_sign_display.dart';
 import 'package:motorcycle_parking/domain/spot_detail_display.dart';
 import 'package:motorcycle_parking/models/availability.dart';
 import 'package:motorcycle_parking/models/parking.dart';
@@ -451,5 +452,65 @@ void main() {
       detailLot,
     );
     expect(rulesCover('禁停時段：每天 23:00–隔日 07:00；假日 全天', limits), isTrue);
+  });
+
+  test('舊費率文字依車種隔離：只有普通機車的文字時，重機不借用（Codex P2 第 4 輪）', () {
+    final spot = ParkingSpot.fromJson({
+      ...detailLotJson,
+      'fee': null,
+      'fee_note': '',
+      'parking_zones': [
+        {
+          'id': 'z',
+          'name': '機車區',
+          'scooter_fee_note': '每次 10 元',
+          'fee_note': '每次 10 元',
+          'condition': {
+            'bay': 'motorcycle',
+            'use': 'share',
+            'share': 'scooter_heavy',
+            'allow': {'scooter': true, 'heavy': true},
+          },
+        },
+      ],
+    });
+    String main(VehicleType v) =>
+        feeSection(sign(spot, v, detailDay), spot, detailDay).cards.single.main;
+    expect(main(VehicleType.scooter), '每次 10 元');
+    expect(main(VehicleType.heavy), '未提供');
+    // The plate keeps to the vehicle too.
+    String plate(VehicleType v) => fourSignPlates(
+      sign(spot, v, detailDay),
+      detailDay,
+    ).firstWhere((p) => p.face == FourSignFace.fee).main;
+    expect(plate(VehicleType.scooter), '每次 10 元');
+    expect(plate(VehicleType.heavy), isNot('每次 10 元'));
+    // With no per-vehicle text, the zone's note stands for both.
+    final general = ParkingSpot.fromJson({
+      ...detailLotJson,
+      'fee': null,
+      'fee_note': '',
+      'parking_zones': [
+        {
+          'id': 'z',
+          'name': '機車區',
+          'fee_note': '每次 15 元',
+          'condition': {
+            'bay': 'motorcycle',
+            'use': 'share',
+            'share': 'scooter_heavy',
+            'allow': {'scooter': true, 'heavy': true},
+          },
+        },
+      ],
+    });
+    expect(
+      feeSection(
+        sign(general, VehicleType.heavy, detailDay),
+        general,
+        detailDay,
+      ).cards.single.main,
+      '每次 15 元',
+    );
   });
 }

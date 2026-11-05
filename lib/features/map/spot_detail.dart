@@ -53,6 +53,8 @@ class SpotDetailHeader extends StatelessWidget {
         ? Semantics(
             button: true,
             label: '返回地圖（關閉詳情）',
+            // The InkWell below is excluded: assistive taps come here.
+            onTap: onBack,
             excludeSemantics: true,
             child: InkWell(
               key: const ValueKey('spot-detail-back'),
