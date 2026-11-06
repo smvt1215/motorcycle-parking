@@ -14,9 +14,9 @@ $$;
 -- ===== 權限 =====
 select ok(not has_table_privilege('authenticated','private.support_requests','select'),'riders cannot read support requests');
 select ok(not has_table_privilege('service_role','private.support_requests','select'),'only the functions touch the table');
-select ok(not has_function_privilege('anon','public.support_request_submit(text,text,text,text,text,text,text)','execute'),'anon cannot submit directly');
-select ok(not has_function_privilege('authenticated','public.support_request_submit(text,text,text,text,text,text,text)','execute'),'riders cannot submit directly');
-select ok(has_function_privilege('service_role','public.support_request_submit(text,text,text,text,text,text,text)','execute'),'the Edge Function submits');
+select ok(not has_function_privilege('anon','public.support_request_submit(text,text,text,text,text,text,text,text,text,text)','execute'),'anon cannot submit directly');
+select ok(not has_function_privilege('authenticated','public.support_request_submit(text,text,text,text,text,text,text,text,text,text)','execute'),'riders cannot submit directly');
+select ok(has_function_privilege('service_role','public.support_request_submit(text,text,text,text,text,text,text,text,text,text)','execute'),'the Edge Function submits');
 select ok(not has_function_privilege('authenticated','public.support_requests_prune()','execute'),'riders cannot prune');
 
 -- ===== 送出與頻率限制 =====
@@ -57,15 +57,15 @@ select pg_temp.act('admin');
 -- 這裡的 email 都對不到帳號：系統記成例外（#285；對帳號與確認連結見
 -- support_deletion_verify_test.sql）。
 select is((select jsonb_array_length(admin_v1.support_requests())),0,'none waits for confirmation');
-select is((select jsonb_array_length(admin_v1.support_requests('exception',200))),9,'lists the exceptions');
+select is((select jsonb_array_length(admin_v1.support_requests('exception',p_limit=>200))),9,'lists the exceptions');
 reset role;
 update private.support_requests set created_at=now()+interval '1 minute' where id=(select id from sent);
 set local role authenticated;
-select is((select admin_v1.support_requests('all',1)->0->>'contact_email'),'rider@example.test','newest first, with the email to reply to');
-select is((select admin_v1.support_requests('all',1)->0->>'exception'),'no_account','with the reason');
+select is((select admin_v1.support_requests('all',p_limit=>1)->0->>'contact_email'),'rider@example.test','newest first, with the email to reply to');
+select is((select admin_v1.support_requests('all',p_limit=>1)->0->>'exception'),'no_account','with the reason');
 select throws_ok($$select admin_v1.support_requests('weird')$$,'PT400','request.invalid','unknown status');
 select throws_ok($$select admin_v1.support_requests(null)$$,'PT400','request.invalid','null is not a status');
-select is((select jsonb_array_length(admin_v1.support_requests('all',200))),9,'all lists every status');
+select is((select jsonb_array_length(admin_v1.support_requests('all',p_limit=>200))),9,'all lists every status');
 select ok(not exists(select 1 from pg_proc where proname='request_account_deletion_for'),'administrators no longer ask for deletion');
 
 -- 結案：只對待確認的申請。

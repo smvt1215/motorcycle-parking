@@ -3,10 +3,17 @@ import { appCheckConfig, verifyAppCheck } from '../_shared/app_check.ts';
 import { trustedIp } from '../_shared/client_ip.ts';
 import { response } from '../_shared/http.ts';
 import { identityHash } from '../submit-report/validate.ts';
-import { confirmToken, newSecret } from '../_shared/support_token.ts';
+import {
+  confirmToken,
+  newReplyToken,
+  newSecret,
+  replyAddress,
+} from '../_shared/support_token.ts';
 import { handle, type RiderMailer, silentRiderMailer } from './handler.ts';
 import {
+  caseReceiptMail,
   confirmMail,
+  privacyConfirmMail,
   receiptMail,
   resendConfig,
   resendNotifier,
@@ -23,10 +30,13 @@ Deno.serve((req) => {
     secret = Deno.env.get('REPORT_HASH_SECRET'),
     header = Deno.env.get('TRUSTED_IP_HEADER'),
     adminBase = Deno.env.get('ADMIN_SUPPORT_URL'),
-    // The site's confirmation page (#285), e.g.
-    // https://motoparking.smvtstudio.com/account-deletion/confirm; the token
-    // goes in the fragment, so it reaches no server log.
-    confirmBase = Deno.env.get('SUPPORT_CONFIRM_URL')?.trim();
+    // The site's pages (#285, #295; docs/CD_SETUP.md): the confirmation
+    // page https://motoparking.smvtstudio.com/support/verify, the cancel page
+    // …/support/cancel and the case page …/support/case. The token goes in
+    // the fragment, so it reaches no server log.
+    confirmBase = Deno.env.get('SUPPORT_CONFIRM_URL')?.trim(),
+    cancelBase = Deno.env.get('SUPPORT_CANCEL_URL')?.trim(),
+    caseBase = Deno.env.get('SUPPORT_CASE_URL')?.trim();
   // The web page's App Check app ids, apart from the App's
   // (APP_CHECK_APP_IDS): only the deletion page may use this form.
   const appCheck = appCheckConfig((name) =>
@@ -44,26 +54,39 @@ Deno.serve((req) => {
   const sender = resendSender(env);
   const mailer: RiderMailer = sender
     ? {
-      async receipt({ id, email }) {
+      async receipt({ id, email, kind }) {
         await sendMail(
           sender,
-          { to: [email], ...receiptMail(id) },
+          { to: [email], ...receiptMail(id, kind) },
           `support-receipt/${id}`,
         );
         return true;
       },
-      async confirm({ id, email, link }) {
+      async caseReceipt({ id, email, kind, link, replyTo }) {
         await sendMail(
           sender,
-          { to: [email], ...confirmMail(link) },
+          { to: [email], replyTo, ...caseReceiptMail(id, kind, link) },
+          `support-receipt/${id}`,
+        );
+        return true;
+      },
+      async confirm({ id, email, link, kind }) {
+        await sendMail(
+          sender,
+          {
+            to: [email],
+            ...(kind === 'privacy'
+              ? privacyConfirmMail(link)
+              : confirmMail(link)),
+          },
           `support-confirm/${id}`,
         );
         return true;
       },
-      async status({ id, email, scheduledAt }) {
+      async status({ id, email, scheduledAt, cancelLink }) {
         await sendMail(
           sender,
-          { to: [email], ...statusMail(scheduledAt) },
+          { to: [email], ...statusMail(scheduledAt, cancelLink) },
           `support-status/${id}`,
         );
         return true;
@@ -78,7 +101,8 @@ Deno.serve((req) => {
       return ip ? await identityHash(secret, `ip:${ip}`) : null;
     },
     secret: () => newSecret(),
-    async submit(s, network, tokenHash) {
+    replyToken: () => newReplyToken(),
+    async submit(s, network, tokenHash, replyHash) {
       const { data, error } = await db.rpc('support_request_submit', {
         p_kind: s.kind,
         p_contact_email: s.contactEmail,
@@ -87,6 +111,9 @@ Deno.serve((req) => {
         p_message: s.message,
         p_ip_hash: network,
         p_token_hash: tokenHash,
+        p_subject: s.subject,
+        p_privacy_right: s.privacyRight,
+        p_reply_hash: replyHash,
       });
       if (error) throw error;
       const row = data as {
@@ -96,7 +123,10 @@ Deno.serve((req) => {
       };
       return {
         id: String(row.id),
-        mail: row.mail === 'confirm' || row.mail === 'status' ? row.mail : null,
+        mail: row.mail === 'confirm' || row.mail === 'status' ||
+            row.mail === 'case'
+          ? row.mail
+          : null,
         scheduledAt: row.scheduled_at ?? null,
       };
     },
@@ -110,6 +140,11 @@ Deno.serve((req) => {
     mailer,
     confirmLink: (id, secret) =>
       confirmBase ? `${confirmBase}#token=${confirmToken(id, secret)}` : null,
+    cancelLink: (id, secret) =>
+      cancelBase ? `${cancelBase}#token=${confirmToken(id, secret)}` : null,
+    caseLink: (id, secret) =>
+      caseBase ? `${caseBase}#token=${confirmToken(id, secret)}` : null,
+    replyAddress: (token) => replyAddress(token),
     background: (task) => EdgeRuntime.waitUntil(task),
     adminUrl: (id) => `${adminBase.replace(/\/$/, '')}/${id}`,
   });

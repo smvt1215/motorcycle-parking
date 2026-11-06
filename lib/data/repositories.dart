@@ -15,6 +15,7 @@ import '../models/spot_history.dart';
 import '../domain/map_viewport.dart';
 import '../domain/eligibility.dart' show useParkingDecision;
 import '../domain/precheck.dart';
+import 'account_suspended.dart';
 import 'rules_cache.dart';
 
 class RulesRepository {
@@ -201,7 +202,8 @@ class ParkingRepository {
   }
 
   /// Sends a report; a precheck refusal, or one for a spot an admin deleted
-  /// (#200), becomes a [StateError] carrying the sentence the forms show.
+  /// (#200), becomes a [StateError] carrying the sentence the forms show,
+  /// and a suspended account's refusal (#331) an [AccountSuspended].
   Future<Map<String, dynamic>> report(Map<String, dynamic> body) async {
     final deviceId = await _deviceId();
     try {
@@ -212,6 +214,7 @@ class ParkingRepository {
       );
       return res.data as Map<String, dynamic>;
     } on FunctionException catch (e) {
+      if (accountSuspendedFrom(e) case final suspended?) throw suspended;
       if (reportRefusal(e.details) case final message?) {
         throw ReportRefused(message, e.details);
       }
