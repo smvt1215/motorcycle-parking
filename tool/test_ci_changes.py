@@ -78,6 +78,9 @@ class ChangeRoutingTest(unittest.TestCase):
         # Its words are checked against the App's deletion copy.
         self.assertEqual(self.targets("lib/domain/account_deletion_display.dart"),
                          {"quality", "android", "ios", "public_web"})
+        # The support pages' words are checked against the mails.
+        self.assertEqual(self.targets("supabase/functions/support-request/resend.ts"),
+                         {"backend", "public_web"})
 
     def test_seed_inputs_check_both_generation_and_database(self):
         for path in ("tool/generate_seed.py", "supabase/seed.sql"):

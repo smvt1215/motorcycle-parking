@@ -1,0 +1,174 @@
+/* The support form and the one-time link pages (canvas PhoneSupport,
+   PhoneVerify, PhoneCancel), inside the flow's single column (.flow). */
+
+.support-warning {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--paper);
+  border: 1px solid var(--ink);
+  font-size: 14px !important;
+  line-height: 1.7 !important;
+}
+
+.support-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: 8px;
+}
+
+.support-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.support-field label,
+.support-choices legend {
+  font-size: 15px;
+  font-weight: 700;
+}
+.support-field-note {
+  font-weight: 400;
+  color: var(--ink-muted);
+}
+.support-field input,
+.support-field textarea {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--line-strong);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+}
+.support-field input {
+  height: 48px;
+  padding: 0 12px;
+}
+.support-field textarea {
+  padding: 10px 12px;
+  resize: vertical;
+}
+.support-field input[aria-invalid='true'] {
+  border: 2px solid var(--danger);
+}
+.support-field-error {
+  font-size: 14px;
+  color: var(--danger);
+}
+.support-field-help {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink-muted);
+}
+
+.support-choices {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.support-choices legend {
+  padding: 0 0 6px;
+}
+.support-choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  font-size: 15px;
+  cursor: pointer;
+}
+.support-choice input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--brand);
+}
+
+.support-fine {
+  font-size: 13px !important;
+  line-height: 1.6 !important;
+  color: var(--ink-muted);
+}
+/* A 44px tall hit area, as on the board, kept inline so the sentence flows:
+   inline padding does not push the lines apart. */
+.support-fine a {
+  padding: 12px 2px;
+}
+
+/* Stacked at every width: on the canvas only the cooling-off page's two
+   choices sit side by side (note t3). */
+.support-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.support-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px;
+  border-radius: 12px;
+}
+.support-box h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+.support-box p {
+  font-size: 14px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.support-box--done {
+  background: var(--brand-mist);
+  color: var(--brand-deep);
+}
+.support-box--error {
+  background: var(--danger-tint);
+  color: #7a1a13;
+}
+.support-box--muted {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+  font-size: 14px !important;
+  line-height: 1.7 !important;
+}
+
+.support-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.support-rows {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 8px 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  font-size: 15px;
+  line-height: 1.6;
+}
+.support-rows > div {
+  display: contents;
+}
+.support-rows dt {
+  color: var(--ink-soft);
+}
+.support-rows dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}

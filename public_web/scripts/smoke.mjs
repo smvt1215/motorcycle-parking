@@ -1,6 +1,6 @@
 // RWD smoke for the public pages. Needs `npm run build:smoke` first: a build
 // pointed at a backend that does not exist, served from dist-smoke/ with an
-// SPA fallback. Each screen of the deletion flow is opened at the target
+// SPA fallback. Each screen of the deletion flow and the support pages is opened at the target
 // widths (rwd rule: phone, 680–1040, desktop, past 1440), signed in with the
 // smoke build's fake sign-in and API answers from page.route; the page must not
 // scroll sideways, and a screenshot is saved for review.
@@ -39,6 +39,17 @@ const pending = {
 const error = (status, message) => ({
   status,
   body: { code: `PT${status}`, message, details: null, hint: null },
+});
+
+const supportId = '1a2b3c4d-0000-4000-8000-000000000001';
+const linkToken = `${supportId}.${'A'.repeat(42)}w`;
+const confirmAnswer = (result, scheduledAt = null) => ({
+  body: {
+    result,
+    submitted_at: '2026-11-06T07:05:00Z',
+    contact_email: 'r***@e***.com',
+    scheduled_at: scheduledAt,
+  },
 });
 
 /**
@@ -137,6 +148,107 @@ const SCREENS = [
     },
     heading: '管理員帳號無法自行刪除',
   },
+  // The support form and its one-time links (no sign-in; the smoke build's
+  // App Check token is fixed, and the Edge Functions answer from page.route).
+  { name: 'support-form', signedIn: false, path: '/support', heading: '用登入 email 申請刪除' },
+  {
+    name: 'support-errors',
+    signedIn: false,
+    path: '/support',
+    steps: ['submit'],
+    heading: '用登入 email 申請刪除',
+    visible: '請填寫聯絡用 email',
+  },
+  {
+    name: 'support-received',
+    signedIn: false,
+    path: '/support',
+    functions: { 'support-request': { body: { received: true, id: supportId } } },
+    steps: ['fillForm', 'submit'],
+    heading: '已收到申請，編號 S-1A2B3C4D',
+  },
+  {
+    name: 'support-rate-limited',
+    signedIn: false,
+    path: '/support',
+    functions: { 'support-request': { status: 429, body: { error: 'support.rate_limited' } } },
+    steps: ['fillForm', 'submit'],
+    heading: '用登入 email 申請刪除',
+    visible: '送出太多次了',
+  },
+  {
+    name: 'support-app-check',
+    signedIn: false,
+    path: '/support',
+    functions: { 'support-request': { status: 401, body: { error: 'app_check.required' } } },
+    steps: ['fillForm', 'submit'],
+    heading: '用登入 email 申請刪除',
+    visible: '沒辦法確認是真人送出',
+  },
+  {
+    name: 'support-network',
+    signedIn: false,
+    path: '/support',
+    functions: { 'support-request': 'abort' },
+    steps: ['fillForm', 'submit'],
+    heading: '用登入 email 申請刪除',
+    visible: '網路連線有問題，申請沒有送出。',
+  },
+  {
+    name: 'verify',
+    signedIn: false,
+    path: `/support/verify#token=${linkToken}`,
+    functions: { 'support-confirm': [confirmAnswer('pending')] },
+    heading: '是你申請刪除帳號的嗎？',
+  },
+  {
+    name: 'verify-requested',
+    signedIn: false,
+    path: `/support/verify#token=${linkToken}`,
+    functions: {
+      'support-confirm': [
+        confirmAnswer('pending'),
+        confirmAnswer('deletion_requested', '2026-11-13T07:05:00Z'),
+      ],
+    },
+    steps: ['confirmLink'],
+    heading: '已申請刪除帳號',
+  },
+  {
+    name: 'verify-denied',
+    signedIn: false,
+    path: `/support/verify#token=${linkToken}`,
+    functions: { 'support-confirm': [confirmAnswer('pending'), confirmAnswer('denied')] },
+    steps: ['denyLink'],
+    heading: '已作廢這次申請',
+  },
+  {
+    name: 'verify-invalid',
+    signedIn: false,
+    path: `/support/verify#token=${linkToken}`,
+    functions: { 'support-confirm': [{ status: 400, body: { error: 'support.link_invalid' } }] },
+    heading: '連結無效',
+  },
+  {
+    name: 'cancel-link',
+    signedIn: false,
+    path: `/support/cancel#token=${linkToken}`,
+    functions: { 'support-confirm': [{ body: { result: 'pending', scheduled_at: '2026-11-13T07:05:00Z' } }] },
+    heading: '要取消刪除帳號嗎？',
+  },
+  {
+    name: 'cancel-link-done',
+    signedIn: false,
+    path: `/support/cancel#token=${linkToken}`,
+    functions: {
+      'support-confirm': [
+        { body: { result: 'pending', scheduled_at: '2026-11-13T07:05:00Z' } },
+        { body: { result: 'cancelled', scheduled_at: null } },
+      ],
+    },
+    steps: ['cancelLink'],
+    heading: '已取消刪除帳號',
+  },
 ];
 
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml' };
@@ -193,14 +305,41 @@ for (const viewport of VIEWPORTS) {
         body: JSON.stringify(answer.body),
       });
     });
+    // The support Edge Functions: a list of answers is used in turn (the last repeats).
+    const used = {};
+    await page.route('**/functions/v1/*', (route) => {
+      if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 200, body: 'ok' });
+      const fn = new URL(route.request().url()).pathname.split('/').pop();
+      const listed = screen.functions?.[fn];
+      const list = Array.isArray(listed) ? listed : [listed];
+      const answer = list[Math.min(used[fn] ?? 0, list.length - 1)];
+      used[fn] = (used[fn] ?? 0) + 1;
+      if (answer === 'abort') return route.abort('internetdisconnected');
+      if (!answer) return route.fulfill({ status: 500, body: '{}' });
+      return route.fulfill({
+        status: answer.status ?? 200,
+        contentType: 'application/json',
+        body: JSON.stringify(answer.body),
+      });
+    });
     const label = `${viewport.name}/${screen.name}`;
     try {
-      await page.goto(`${base}/account-deletion`);
+      await page.goto(`${base}${screen.path ?? '/account-deletion'}`);
       for (const step of screen.steps ?? []) {
         if (step === 'check') await page.getByRole('checkbox').check();
         if (step === 'delete') await page.getByRole('button', { name: '刪除帳號' }).click();
         if (step === 'cancelDeletion') await page.getByRole('button', { name: /取消刪除/ }).click();
         if (step === 'signIn') await page.getByRole('button', { name: '使用 Google 登入' }).click();
+        if (step === 'fillForm') {
+          await page.getByLabel(/帳號的登入 email/).fill('rider.old@gmail.com');
+          await page.getByRole('radio', { name: 'Google' }).check();
+          await page.getByLabel(/聯絡用 email/).fill('me@example.com');
+          await page.getByLabel(/為什麼沒辦法登入/).fill('換了手機，忘記當初用哪個帳號登入');
+        }
+        if (step === 'submit') await page.getByRole('button', { name: '寄確認信' }).click();
+        if (step === 'confirmLink') await page.getByRole('button', { name: '是我，申請刪除帳號' }).click();
+        if (step === 'denyLink') await page.getByRole('button', { name: '不是我申請的' }).click();
+        if (step === 'cancelLink') await page.getByRole('button', { name: '取消刪除' }).click();
       }
       await page.getByRole('heading', { level: 1, name: screen.heading }).waitFor({ timeout: 5000 });
       if (screen.visible) await page.getByText(screen.visible).waitFor({ timeout: 5000 });

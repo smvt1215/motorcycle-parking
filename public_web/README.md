@@ -6,13 +6,15 @@
 
 ## 路徑
 
-| 路徑                                  | 內容                                   | 狀態       |
-| ------------------------------------- | -------------------------------------- | ---------- |
-| `/account-deletion`                   | 刪除帳號說明（Google Play 連結的頁面） | 已完成     |
-| `/account-deletion`（登入後）         | 確認、送出、冷靜期內登入的選擇（#270） | 已完成     |
-| `/`                                   | 轉到 `/account-deletion`               | 已完成     |
-| `/support`、確認連結、取消連結        | 客服表單與一次性連結（#285／#289）     | 後端合併後 |
-| `/privacy`、`/terms`、`/data-sources` | 政策頁                                 | 之後       |
+| 路徑                                  | 內容                                   | 狀態   |
+| ------------------------------------- | -------------------------------------- | ------ |
+| `/account-deletion`                   | 刪除帳號說明（Google Play 連結的頁面） | 已完成 |
+| `/account-deletion`（登入後）         | 確認、送出、冷靜期內登入的選擇（#270） | 已完成 |
+| `/`                                   | 轉到 `/account-deletion`               | 已完成 |
+| `/support`                            | 客服表單（沒辦法登入時申請刪除）       | 已完成 |
+| `/support/verify#token=…`             | 確認信的一次性連結（#285）             | 已完成 |
+| `/support/cancel#token=…`             | 通知信的「取消刪除」連結（#289）       | 已完成 |
+| `/privacy`、`/terms`、`/data-sources` | 政策頁                                 | 之後   |
 
 ## 登入與 API
 
@@ -42,9 +44,16 @@ Apple 的 Return URL 是 `${網站來源}/account-deletion`，正式站必須是
 
 版面檢查用的 smoke 建置（`--mode smoke`）改用 `src/smoke/smokeAuth.ts` 的假登入。正式建置不會包含它，CI 會檢查。
 
+## 客服表單與一次性連結
+
+- `/support` 呼叫 Edge Function `support-request`，附 Firebase App Check token（`x-firebase-appcheck`，和刪除帳號頁同一個 Firebase 網頁 app，所以 staging 的 `SUPPORT_APP_CHECK_APP_IDS` 要列這個 app id）。不需要登入。建置缺少 Supabase 或任何一個 App Check 設定時，不提供表單，只顯示「客服表單暫時無法使用」。不論有沒有對應的帳號，送出成功的畫面都一樣。
+- `/support/verify` 與 `/support/cancel` 從網址的 fragment（`#token=<申請 id>.<秘密>`）讀出 token，讀到後立刻以 replace 導航把 fragment 從網址列拿掉（不留在瀏覽紀錄，也不會出現在 referrer）。打開頁面只送 `view`（不改變任何東西，信件掃描自動開啟也沒關係），要按下「是我，申請刪除帳號」「不是我申請的」「取消刪除」才會送出對應的動作，都 POST 到 `support-confirm`。這兩頁不需要 App Check。
+- 後端寄出的連結由 `SUPPORT_CONFIRM_URL`、`SUPPORT_CANCEL_URL` 決定，要設成 `${網站來源}/support/verify` 與 `${網站來源}/support/cancel`。
+- smoke 建置的表單用固定的 App Check token，Edge Function 的回應由 `scripts/smoke.mjs` 的 `page.route` 提供。
+
 ## 文案
 
-和 App 共用的字句：說明頁（會刪除、會保留、防濫用雜湊）放在 `src/content.ts`，登入後的流程放在 `src/deletion/text.ts`。`src/content.test.ts` 和 `src/deletion/text.test.ts` 會讀取 `lib/domain/account_deletion_display.dart`，比對兩邊的內容，App 改了這裡沒改，CI 就會失敗。網頁和 App 說法不同的地方，在常數的註解寫明原因。
+和 App 共用的字句：說明頁（會刪除、會保留、防濫用雜湊）放在 `src/content.ts`，登入後的流程放在 `src/deletion/text.ts`，客服表單與一次性連結放在 `src/support/text.ts`（`src/support/text.test.ts` 會讀取 `supabase/functions/support-request/resend.ts`，比對申請編號、寄件人、按鈕名稱與連結效期）。`src/content.test.ts` 和 `src/deletion/text.test.ts` 會讀取 `lib/domain/account_deletion_display.dart`，比對兩邊的內容，App 改了這裡沒改，CI 就會失敗。網頁和 App 說法不同的地方，在常數的註解寫明原因。
 
 聯絡一律走 `/support` 的客服表單，網頁上不提供 `mailto:` 連結（#295：案件在管理站列管）。
 

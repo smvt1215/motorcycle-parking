@@ -1,11 +1,25 @@
-import type { SignInEnv } from '../app/env';
+import type { AppCheckEnv } from '../app/env';
 
 /**
  * Firebase App Check tokens for `deletion-precheck` (reCAPTCHA Enterprise,
  * the same web app as the support form). Firebase loads on first use, in a
- * chunk of its own; tokens refresh themselves from then on.
+ * chunk of its own; tokens refresh themselves from then on. The sign-in and
+ * the support form share one getter per web app: Firebase allows one app of
+ * a name.
  */
-export function appCheckTokens(env: Pick<SignInEnv, 'firebase' | 'recaptchaSiteKey'>): () => Promise<string> {
+export function appCheckTokens(env: AppCheckEnv): () => Promise<string> {
+  const key = `${env.firebase.appId} ${env.recaptchaSiteKey}`;
+  let getter = getters.get(key);
+  if (!getter) {
+    getter = newAppCheckTokens(env);
+    getters.set(key, getter);
+  }
+  return getter;
+}
+
+const getters = new Map<string, () => Promise<string>>();
+
+function newAppCheckTokens(env: AppCheckEnv): () => Promise<string> {
   let started: Promise<{
     instance: import('firebase/app-check').AppCheck;
     getToken: typeof import('firebase/app-check').getToken;
