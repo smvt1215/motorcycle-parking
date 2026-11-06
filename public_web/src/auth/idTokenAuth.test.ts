@@ -317,6 +317,23 @@ describe('Google', () => {
     expect(results).toEqual([{ kind: 'noAccount', email: 'new@gmail.com' }]);
   });
 
+  it('says it is checking once Google has answered, before the result', async () => {
+    const world = setup({
+      answers: { 'deletion-precheck': [{ status: 200, body: { has_account: false } }] },
+    });
+    const events: string[] = [];
+    world.auth.mountGoogleButton(document.createElement('div'), {
+      width: 300,
+      onChecking: () => events.push('checking'),
+      onResult: (result) => events.push(result.kind),
+    });
+    await settle();
+    expect(events).toEqual([]);
+    world.google.press(idToken({ sub: 'g-1' }));
+    await settle();
+    expect(events).toEqual(['checking', 'noAccount']);
+  });
+
   it('stops reporting once the button is gone', async () => {
     const world = setup({
       answers: { 'deletion-precheck': [{ status: 200, body: { has_account: false } }] },
@@ -370,10 +387,25 @@ describe('Apple', () => {
   it('a closed popup is a sign-in that did not finish', async () => {
     const world = setup();
     await ready(world);
-    const pending = world.auth.signInWithApple();
+    const onChecking = vi.fn();
+    const pending = world.auth.signInWithApple({ onChecking });
     world.apple.close();
     expect(await pending).toEqual({ kind: 'cancelled' });
     expect(world.http.calls).toEqual([]);
+    expect(onChecking).not.toHaveBeenCalled();
+  });
+
+  it('says it is checking once Apple has answered, before the sign-in check', async () => {
+    const world = setup({
+      answers: { 'deletion-precheck': [{ status: 200, body: { has_account: false } }] },
+    });
+    await ready(world);
+    const onChecking = vi.fn(() => expect(world.http.calls).toEqual([]));
+    const pending = world.auth.signInWithApple({ onChecking });
+    expect(onChecking).not.toHaveBeenCalled();
+    world.apple.answer(appleAnswer('a-1'));
+    await pending;
+    expect(onChecking).toHaveBeenCalledTimes(1);
   });
 
   async function signedInWithApple(answers: Record<string, Answer[]>) {

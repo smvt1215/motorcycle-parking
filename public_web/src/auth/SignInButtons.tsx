@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { signInButton } from '../deletion/text';
+import { checking, checkingHint, signInButton } from '../deletion/text';
 import type { AuthPort, GoogleButtonMount, SignedInUser, SignInResult } from './port';
 
 /** Google draws its button between 200 and 400px wide. */
@@ -18,18 +18,22 @@ function clampWidth(width: number): number {
 export function GoogleButton({
   auth,
   reauthFor,
+  onChecking,
   onResult,
 }: {
   auth: AuthPort;
   reauthFor?: SignedInUser;
+  onChecking?: () => void;
   onResult: (result: SignInResult) => void;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState<number | null>(null);
   // The latest callback, without drawing the button again for a new one.
   const latest = useRef(onResult);
+  const latestChecking = useRef(onChecking);
   useLayoutEffect(() => {
     latest.current = onResult;
+    latestChecking.current = onChecking;
   });
 
   useLayoutEffect(() => {
@@ -52,6 +56,7 @@ export function GoogleButton({
     const current = auth.mountGoogleButton(element, {
       reauthFor,
       width: clampWidth(element.clientWidth),
+      onChecking: () => latestChecking.current?.(),
       onResult: (result) => latest.current(result),
     });
     mount.current = current;
@@ -65,6 +70,28 @@ export function GoogleButton({
   }, [width]);
 
   return <div ref={box} className="signin-google" />;
+}
+
+/** In place of the buttons while the sign-in is being checked (canvas SignInLoading). */
+export function SignInChecking() {
+  return (
+    <div className="signin-checking" role="status">
+      <svg className="signin-checking-ring" width="28" height="28" viewBox="0 0 28 28" aria-hidden="true">
+        <circle cx="14" cy="14" r="11" fill="none" stroke="var(--line)" strokeWidth="3.5" />
+        <path
+          d="M14 3a11 11 0 0 1 11 11"
+          fill="none"
+          stroke="var(--brand)"
+          strokeWidth="3.5"
+          strokeLinecap="round"
+        />
+      </svg>
+      <span className="signin-checking-text">
+        <strong>{checking}</strong>
+        <span>{checkingHint}</span>
+      </span>
+    </div>
+  );
 }
 
 /**

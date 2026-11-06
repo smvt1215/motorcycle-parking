@@ -21,6 +21,8 @@ export const reauthNote = '如果超過 10 分鐘沒登入，送出前會請你�
 export const signOut = '登出';
 /** Web only: while the page reads the account's deletion status. */
 export const checking = '正在確認帳號…';
+/** Web only: under it while a sign-in is being checked (canvas SignInLoading). */
+export const checkingHint = '請稍候，不要關閉這個頁面。';
 
 export const reauthTitle = '再登入一次';
 export const reauthBody = '為了確認是你本人，請用目前的帳號再登入一次。';

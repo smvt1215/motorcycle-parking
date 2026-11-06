@@ -48,6 +48,13 @@ const error = (status, message) => ({
 const SCREENS = [
   { name: 'explanation', signedIn: false, heading: '刪除你的帳號' },
   {
+    name: 'signin-checking',
+    signedIn: false,
+    signIn: { kind: 'hold' },
+    steps: ['signIn'],
+    heading: '刪除你的帳號',
+  },
+  {
     name: 'no-account',
     signedIn: false,
     signIn: { kind: 'noAccount', email: 'new.rider@gmail.com' },

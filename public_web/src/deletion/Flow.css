@@ -75,6 +75,9 @@
   accent-color: var(--danger);
 }
 
+.flow-actions[hidden] {
+  display: none;
+}
 .flow-actions {
   display: flex;
   flex-direction: column;

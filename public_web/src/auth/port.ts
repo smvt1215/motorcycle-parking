@@ -43,6 +43,8 @@ export interface SignInOptions {
    * `wrongAccount` and the session does not change.
    */
   reauthFor?: SignedInUser;
+  /** The provider has answered: the check and the sign-in are under way. */
+  onChecking?: () => void;
 }
 
 /** A mounted Google button. */

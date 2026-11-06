@@ -178,7 +178,7 @@ export function createIdTokenAuth(deps: IdTokenAuthDeps): AuthPort {
   }
 
   return {
-    mountGoogleButton(container, { reauthFor, width: initialWidth, onResult }) {
+    mountGoogleButton(container, { reauthFor, onChecking, width: initialWidth, onResult }) {
       let alive = true;
       let width = initialWidth;
       let current: Nonce | null = null;
@@ -218,6 +218,7 @@ export function createIdTokenAuth(deps: IdTokenAuthDeps): AuthPort {
               if (alive) onResult(result);
             };
             if (!response.credential || !raw) return finish({ kind: 'cancelled' });
+            if (alive) onChecking?.();
             complete('google', response.credential, raw, reauthFor ? { reauthFor } : undefined).then(
               finish,
               () => finish({ kind: 'cancelled' }),
@@ -265,6 +266,7 @@ export function createIdTokenAuth(deps: IdTokenAuthDeps): AuthPort {
           const idToken = response.authorization?.id_token;
           const code = response.authorization?.code;
           if (!idToken) return { kind: 'cancelled' };
+          options?.onChecking?.();
           const result = await complete('apple', idToken, ready.nonce.raw, options);
           if (result.kind === 'signedIn') appleCode = code ? { code, at: deps.now() } : null;
           return result;
