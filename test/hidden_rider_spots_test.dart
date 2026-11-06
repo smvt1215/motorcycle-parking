@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -59,9 +61,12 @@ final ken = spot(
 class FixedParking extends ParkingRepository {
   FixedParking(this.spots) : super(null);
   List<ParkingSpot> spots;
+  ParkingSpot? latest;
   @override
   Future<ParkingResult> inViewport(MapViewport bounds) async =>
       ParkingResult(spots);
+  @override
+  Future<ParkingSpot?> byId(String id) async => latest;
 }
 
 class FixedHandles implements FavoriteHandles {
@@ -87,6 +92,33 @@ Future<AppStore> storeOf(
   );
   await store.init();
   return store;
+}
+
+/// Answers a look-up only when told to.
+class GatedHandles implements FavoriteHandles {
+  final answer = Completer<Map<String, FavoriteFacts>>();
+  @override
+  Future<Map<String, FavoriteFacts>> handlesFor(List<String> ids) =>
+      answer.future;
+}
+
+/// A store whose signed-in account the test switches, and whose reports
+/// reach the backend (the sample build's never do).
+class AccountStore extends AppStore {
+  AccountStore(
+    LocalRepository local,
+    ParkingRepository parking,
+    FavoriteHandles handles,
+  ) : super(local, null, parkingRepository: parking, favoriteHandles: handles);
+  String account = 'rider-a';
+  @override
+  String get favoritesKey => account;
+  @override
+  Future<String> submit(Map<String, dynamic> body) async {
+    reportsSent++;
+    notifyListeners();
+    return 'ok';
+  }
 }
 
 void main() {
@@ -555,5 +587,76 @@ void main() {
       expect(find.byKey(const ValueKey('parking-spot-sheet')), findsNothing);
       expect(find.text('已隱藏阿明'), findsOneWidget);
     });
+  });
+
+  group('Codex 第 2 輪', () {
+    test('A 的收藏查詢未回應就換成 B：不覆寫 B 的資料，也不解除 B 的隱藏', () async {
+      SharedPreferences.setMockInitialValues({});
+      final handles = GatedHandles();
+      final saved = spot('fav', '收藏的機車格');
+      final store = AccountStore(
+        LocalRepository(await SharedPreferences.getInstance()),
+        FixedParking(const []),
+        handles,
+      );
+      await store.local.setFavorites('rider-a', [saved]);
+      final loading = store.loadFavorites();
+      await pumpEventQueue();
+      // Now B, who hid that very handle.
+      store.account = 'rider-b';
+      await store.hiddenRiders.hide(handle: handleA, name: '阿明', spotName: '');
+      handles.answer.complete({'fav': (handle: handleA, isOwn: true)});
+      await loading;
+      await pumpEventQueue();
+      expect(store.favoriteHandles, isEmpty);
+      expect(store.favoriteOwn, isEmpty);
+      expect(store.hiddenRiders.isHidden(handleA), isTrue);
+    });
+
+    for (final platform in platforms) {
+      testWidgetsOn('${platform.name} 檢舉成功回到詳情：改讀最新點位', (tester) async {
+        setUpView(tester, platform, const Size(390, 844));
+        final parking = FixedParking([amin]);
+        final store = (await tester.runAsync(() async {
+          SharedPreferences.setMockInitialValues({});
+          return AccountStore(
+            LocalRepository(await SharedPreferences.getInstance()),
+            parking,
+            const NoFavoriteHandles(),
+          );
+        }))!;
+        await tester.pumpWidget(
+          app(
+            Scaffold(
+              body: Builder(
+                builder: (context) => TextButton(
+                  onPressed: () => showSpot(context, store, amin),
+                  child: const Text('details'),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.text('details'));
+        await tester.pumpAndSettle();
+        expect(find.text('阿明的機車格'), findsWidgets);
+        // The backend now hides the reported name.
+        parking.latest = spot('a', '名稱審核中', handle: handleA);
+        final sheet = find.byKey(const ValueKey('parking-spot-sheet'));
+        final context = tester.element(sheet);
+        unawaited(showContentReport(context, store, amin));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const ValueKey('content-report-spot_name')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('content-report-submit')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('content-report-done')));
+        await tester.pumpAndSettle();
+        expect(find.text('名稱審核中'), findsWidgets);
+        expect(find.text('阿明的機車格'), findsNothing);
+      });
+    }
   });
 }

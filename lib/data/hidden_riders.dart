@@ -345,14 +345,24 @@ class HiddenRiders extends ChangeNotifier {
     await _add(rider);
   }
 
+  /// The list and the pending change move together, before anything
+  /// awaits: a sync answering meanwhile must see both.
   Future<void> _add(HiddenRider rider) async {
+    final generation = _generation;
+    final account = followsAccount;
     _riders = _sorted([..._riders, rider]);
+    if (account) {
+      _pendingRemoves.remove(rider.handle);
+      _pendingAdds.add(rider.handle);
+    }
     await _save();
-    if (!followsAccount) return;
-    _pendingRemoves.remove(rider.handle);
-    _pendingAdds.add(rider.handle);
+    if (account) await _afterChange(generation);
+  }
+
+  Future<void> _afterChange(int generation) async {
+    if (generation != _generation) return;
     await _savePending();
-    unawaited(sync());
+    if (generation == _generation) unawaited(sync());
   }
 
   /// Unhides [handle]; returns the removed row for 復原, or null.
@@ -364,16 +374,18 @@ class HiddenRiders extends ChangeNotifier {
   }
 
   Future<void> _drop(Set<String> handles) async {
+    final generation = _generation;
+    final account = followsAccount;
     _riders = [
       for (final r in _riders)
         if (!handles.contains(r.handle)) r,
     ];
+    if (account) {
+      _pendingAdds.removeAll(handles);
+      _pendingRemoves.addAll(handles);
+    }
     await _save();
-    if (!followsAccount) return;
-    _pendingAdds.removeAll(handles);
-    _pendingRemoves.addAll(handles);
-    await _savePending();
-    unawaited(sync());
+    if (account) await _afterChange(generation);
   }
 
   /// Drops the signed-in rider's own handles: a guest may have hidden
@@ -439,9 +451,15 @@ class HiddenRiders extends ChangeNotifier {
       _dirty = true;
       return running;
     }
+    final generation = _generation;
     late final Future<void> run;
-    run = _syncAll(_generation).whenComplete(() {
-      if (identical(_syncing, run)) _syncing = null;
+    run = _syncAll(generation).whenComplete(() {
+      if (!identical(_syncing, run)) return;
+      _syncing = null;
+      // Asked for between the last round and this line.
+      if (_dirty && generation == _generation && !_disposed) {
+        unawaited(sync());
+      }
     });
     return _syncing = run;
   }

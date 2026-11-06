@@ -137,8 +137,13 @@ class SpotPreviewActions extends StatelessWidget {
     required this.onNavigate,
     this.onReport,
     this.onSuggest,
+    this.navigateSecondary = false,
   });
   final bool street;
+
+  /// 導航 in the secondary style, where no motorcycle may park (A2b): the
+  /// bar does not urge the rider toward a place they cannot park.
+  final bool navigateSecondary;
   final VoidCallback onNavigate;
   final VoidCallback? onReport, onSuggest;
 
@@ -218,6 +223,7 @@ class SpotPreviewActions extends StatelessWidget {
       final navigate = AdaptiveButton(
         key: const ValueKey('spot-navigate'),
         label: navigateLabel(street: street),
+        secondary: navigateSecondary,
         onPressed: onNavigate,
       );
       final secondary = [

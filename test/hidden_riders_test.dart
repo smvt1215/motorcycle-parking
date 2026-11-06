@@ -805,6 +805,51 @@ void main() {
       expect(HiddenRiders(prefs).isHidden(handleA), isFalse);
     });
 
+    test('merge 進行中隱藏新車友，回應在存檔期間抵達：那筆留著並補送', () async {
+      final account = GatedAccount();
+      final hidden = HiddenRiders(prefs, remote: account);
+      final signing = hidden.signedIn('rider-1');
+      await account.waiting(); // the first list
+      account.release();
+      await signing;
+      await hidden.hide(handle: handleA, name: '阿明', spotName: '市府');
+      await account.waiting(); // merge of 阿明 in flight
+      // Hide 新車友 and let the merge answer before its save finishes.
+      final hiding = hidden.hide(handle: handleK, name: 'Ken', spotName: '松壽');
+      account.release();
+      await hiding;
+      expect(hidden.isHidden(handleK), isTrue);
+      await account.waiting(); // the next round sends Ken
+      account.release();
+      await pumpEventQueue();
+      expect(hidden.isHidden(handleK), isTrue);
+      expect(hidden.isHidden(handleA), isTrue);
+      expect(account.rows.map((r) => r.handle).toSet(), {handleA, handleK});
+      expect(prefs.getStringList('hiddenRidersPendingAdds'), isEmpty);
+    });
+
+    test('merge 進行中解除隱藏，回應在存檔期間抵達：那筆不會回來', () async {
+      final account = GatedAccount();
+      final hidden = HiddenRiders(prefs, remote: account);
+      final signing = hidden.signedIn('rider-1');
+      await account.waiting();
+      account.release();
+      await signing;
+      await hidden.hide(handle: handleA, name: '阿明', spotName: '市府');
+      await account.waiting(); // merge of 阿明 in flight
+      final unhiding = hidden.unhide(handleA);
+      account.release();
+      await unhiding;
+      expect(hidden.isHidden(handleA), isFalse);
+      await account.waiting(); // remove
+      account.release();
+      await account.waiting(); // list
+      account.release();
+      await pumpEventQueue();
+      expect(hidden.isHidden(handleA), isFalse);
+      expect(account.rows, isEmpty);
+    });
+
     test('換帳號登入：上一個帳號留下的快取不會併進來', () async {
       final account = FakeAccountList([
         rider(handleA, '阿明', DateTime.utc(2026, 10, 1)),

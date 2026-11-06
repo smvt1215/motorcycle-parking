@@ -225,8 +225,22 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     return kept.length == all.length ? all : kept;
   }
 
-  /// Looks up the favourites' handles; a failure keeps the last ones.
+  /// Numbers each look-up: only the newest may land.
+  int _favoriteFactsRead = 0;
+
+  /// The account [favoriteHandles] and [favoriteOwn] were read for.
+  String? _favoriteFactsKey;
+
+  /// Looks up the favourites' handles; a failure keeps the last ones. An
+  /// answer for another account, or an older look-up, is dropped: it must
+  /// not change this account's facts or hidden list.
   Future<void> _loadFavoriteHandles() async {
+    final key = favoritesKey, read = ++_favoriteFactsRead;
+    if (key != _favoriteFactsKey) {
+      _favoriteFactsKey = key;
+      favoriteHandles = const {};
+      favoriteOwn = const {};
+    }
     final ids = [
       for (final s in favorites)
         if (communitySpotSources.contains(s.source)) s.id,
@@ -238,6 +252,9 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     }
     try {
       final facts = await favoriteHandlesSource.handlesFor(ids);
+      if (_disposed || read != _favoriteFactsRead || key != favoritesKey) {
+        return;
+      }
       favoriteHandles = {
         for (final MapEntry(:key, :value) in facts.entries) key: ?value.handle,
       };

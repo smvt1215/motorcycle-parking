@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import '../../core/geo.dart';
@@ -11,10 +12,16 @@ import '../../domain/eligibility.dart';
 import '../../domain/eligibility_display.dart';
 import '../../domain/four_sign.dart';
 import '../../domain/four_sign_display.dart';
-import '../../domain/parking_decision.dart';
 import '../../domain/hidden_riders_display.dart' show contentHeldNote;
+import '../../domain/parking_decision.dart';
 import '../../domain/spot_contributor.dart';
+import '../../domain/spot_detail_display.dart';
 import '../../ui/adaptive/adaptive.dart';
+import '../../ui/detail_tokens.dart';
+import '../../ui/four_sign_plates.dart';
+
+import 'package:flutter/rendering.dart' show RenderAbstractViewport;
+
 import '../auth/sign_in.dart';
 import '../hidden_riders/spot_more_menu.dart';
 
@@ -24,15 +31,13 @@ import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../report/spot_suggestions.dart';
-import 'map_legend.dart';
 import 'closure_card.dart';
 import 'spot_details.dart';
 import 'spot_fees.dart';
 import 'spot_photos.dart';
 import 'spot_preview.dart';
+import 'spot_detail.dart';
 import 'spot_seat_section.dart';
-import 'parking_access_view.dart';
-import 'vehicle_sheet.dart' show SmallPlateStack, platesOf;
 
 /// Peek height: the preview (name, the four signs and the actions), with
 /// the map left visible above, the way map apps open a place.
@@ -54,12 +59,17 @@ class SpotSheet extends StatefulWidget {
     required this.store,
     required this.spot,
     this.onClose,
+    this.sourceActions,
   });
   final AppStore store;
   final ParkingSpot spot;
 
   /// Closes an embedded sheet; a modal sheet pops its route by default.
   final VoidCallback? onClose;
+
+  /// Actions on the spot's source, at the foot of 資料與查核 (where #280's
+  /// ⋯ menu goes); null shows none.
+  final Widget? sourceActions;
   @override
   State<SpotSheet> createState() => _SpotSheetState();
 }
@@ -70,12 +80,38 @@ class _SpotSheetState extends State<SpotSheet> {
 
   final extent = DraggableScrollableController();
 
-  /// Where each plate leads in the details below the preview (A3, decision
-  /// 10). PR-D's full-page details replace these sections.
+  /// Each plate's section in the details (A2, decision 10).
   final sections = {for (final face in FourSignFace.values) face: GlobalKey()};
+
+  /// Pulled up to the full page (A2): the pinned header with the table of
+  /// contents replaces the preview.
+  bool full = false;
+
+  /// The section the table of contents marks.
+  FourSignFace current = FourSignFace.verdict;
+
+  /// A jump under way: the mark stays on its target while the page moves.
+  FourSignFace? jumping;
+
+  /// The street segment the rider chose in 停哪裡 (A10): 能不能停 reads it.
+  String? selectedSegment;
+
+  /// Where no motorcycle may park (A2b): 有沒有位 and 怎麼算錢 opened.
+  bool unfolded = false;
+
+  /// 複製 just copied the address.
+  bool copied = false;
+  Timer? copiedTimer;
+
+  /// The scroll the section mark follows.
+  ScrollController? spied;
 
   /// Opens the details at [face]'s section.
   Future<void> showSection(FourSignFace face) async {
+    setState(() {
+      current = face;
+      jumping = face;
+    });
     if (extent.isAttached && extent.size < 1) {
       await extent.animateTo(
         1,
@@ -83,17 +119,87 @@ class _SpotSheetState extends State<SpotSheet> {
         curve: Curves.easeOutCubic,
       );
     }
+    // The page swaps the preview for its header once full.
+    await WidgetsBinding.instance.endOfFrame;
     final target = sections[face]!.currentContext;
-    if (target == null || !target.mounted) return;
-    await Scrollable.ensureVisible(
-      target,
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeOutCubic,
-    );
+    if (target != null && target.mounted) {
+      await Scrollable.ensureVisible(
+        target,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOutCubic,
+      );
+    }
+    jumping = null;
+  }
+
+  /// Marks the section at the top of the page as the rider scrolls.
+  void spy() {
+    final scroll = spied;
+    if (jumping != null || !full || scroll == null || !scroll.hasClients) {
+      return;
+    }
+    final position = scroll.position;
+    var active = FourSignFace.verdict;
+    for (final face in FourSignFace.values) {
+      final box = sections[face]!.currentContext?.findRenderObject();
+      if (box == null || !box.attached) continue;
+      final viewport = RenderAbstractViewport.maybeOf(box);
+      if (viewport == null) continue;
+      if (position.pixels + 12 >= viewport.getOffsetToReveal(box, 0).offset) {
+        active = face;
+      }
+    }
+    if (active != current) setState(() => current = active);
+  }
+
+  Future<void> copyLocation() async {
+    await Clipboard.setData(ClipboardData(text: copiedLocation(shown)));
+    if (!mounted) return;
+    setState(() => copied = true);
+    copiedTimer?.cancel();
+    copiedTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => copied = false);
+    });
   }
 
   /// The spot's latest public changes (#141), read once per spot.
   late Future<List<HistoryEntry>> history = _history();
+
+  /// The spot as last read back after a report (#280): a content report
+  /// hides what it names at once, so the opened copy goes stale.
+  ParkingSpot? reread;
+
+  /// What the sheet shows: [reread], else the spot it was opened with.
+  ParkingSpot get shown => reread ?? widget.spot;
+
+  late int _reports;
+
+  @override
+  void initState() {
+    super.initState();
+    _reports = widget.store.reportsSent;
+    widget.store.addListener(_storeChanged);
+  }
+
+  void _storeChanged() {
+    if (widget.store.reportsSent == _reports) return;
+    _reports = widget.store.reportsSent;
+    unawaited(_reread());
+  }
+
+  /// Reads the spot again; one that cannot be read keeps the copy shown.
+  Future<void> _reread() async {
+    final id = widget.spot.id;
+    final ParkingSpot? latest;
+    try {
+      latest = await widget.store.parking.byId(id);
+    } catch (_) {
+      return;
+    }
+    if (mounted && latest != null && widget.spot.id == id) {
+      setState(() => reread = latest);
+    }
+  }
 
   Future<List<HistoryEntry>> _history() => widget.store.parking
       .history(widget.spot.id)
@@ -102,7 +208,12 @@ class _SpotSheetState extends State<SpotSheet> {
   @override
   void didUpdateWidget(SpotSheet old) {
     super.didUpdateWidget(old);
-    if (old.spot.id != widget.spot.id) history = _history();
+    if (old.spot.id != widget.spot.id) {
+      reread = null;
+      history = _history();
+      selectedSegment = null;
+      unfolded = false;
+    }
   }
 
   Offset? start;
@@ -110,7 +221,7 @@ class _SpotSheetState extends State<SpotSheet> {
   bool closing = false;
   String? feedback;
   Future<void> share(BuildContext buttonContext) async {
-    final spot = widget.spot;
+    final spot = shown;
     final text =
         '${spot.name}\nhttps://www.google.com/maps/search/?api=1&query=${spot.lat},${spot.lng}';
     final box = buttonContext.findRenderObject() as RenderBox;
@@ -133,6 +244,9 @@ class _SpotSheetState extends State<SpotSheet> {
 
   @override
   void dispose() {
+    widget.store.removeListener(_storeChanged);
+    spied?.removeListener(spy);
+    copiedTimer?.cancel();
     extent.dispose();
     super.dispose();
   }
@@ -144,7 +258,7 @@ class _SpotSheetState extends State<SpotSheet> {
   );
 
   Widget _buildDetails(BuildContext context) {
-    final store = widget.store, spot = widget.spot;
+    final store = widget.store, spot = shown;
     final colors = Theme.of(context).colorScheme;
     final photos = SpotPhotos.usable(spot.photoUrls);
     // Tablets keep a phone-width sheet instead of spanning the screen.
@@ -168,387 +282,560 @@ class _SpotSheetState extends State<SpotSheet> {
     ColorScheme colors,
     List<String> photos,
   ) {
-    return DraggableScrollableSheet(
-      key: const ValueKey('parking-spot-sheet'),
-      controller: extent,
-      initialChildSize: spotSheetPeek,
-      minChildSize: spotSheetPeek,
-      maxChildSize: 1,
-      snap: true,
-      shouldCloseOnMinExtent: false,
-      expand: false,
-      builder: (ctx, scroll) => Listener(
-        onPointerDown: (event) {
-          start = event.position;
-          dismissGesture =
-              extent.isAttached &&
-              extent.size <= spotSheetPeek + .001 &&
-              scroll.hasClients &&
-              scroll.offset <= 0;
-        },
-        onPointerMove: (event) {
-          if (start == null || !dismissGesture || closing) return;
-          final delta = event.position - start!;
-          if (delta.dy > 80 && delta.dy > delta.dx.abs() * 1.2) {
-            closing = true;
-            close(ctx);
+    return NotificationListener<DraggableScrollableNotification>(
+      onNotification: (n) {
+        final pulled = n.extent >= .999;
+        if (pulled != full) setState(() => full = pulled);
+        return false;
+      },
+      child: DraggableScrollableSheet(
+        key: const ValueKey('parking-spot-sheet'),
+        controller: extent,
+        initialChildSize: spotSheetPeek,
+        minChildSize: spotSheetPeek,
+        maxChildSize: 1,
+        snap: true,
+        shouldCloseOnMinExtent: false,
+        expand: false,
+        builder: (ctx, scroll) {
+          if (!identical(spied, scroll)) {
+            spied?.removeListener(spy);
+            spied = scroll..addListener(spy);
           }
-        },
-        onPointerUp: (_) {
-          start = null;
-          dismissGesture = false;
-        },
-        onPointerCancel: (_) {
-          start = null;
-          dismissGesture = false;
-        },
-        child: Material(
-          color: Theme.of(ctx).colorScheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-          clipBehavior: Clip.antiAlias,
-          child: AnimatedBuilder(
-            animation: store,
-            builder: (ctx, _) => MinuteTicker(
-              // Each minute too: whether a time slot holds now is part of
-              // the decision (#120), not only the rate.
-              clock: store.clock,
-              builder: (ctx, _) {
-                final decision = store.decide(spot);
-                final eligibility = decision.eligibility;
-                final extraFee = _additionalFeeNote(spot);
-                final actions = SpotPreviewActions(
-                  street: !spot.isFacility,
-                  onNavigate: () =>
-                      runAction(ctx, () => navigateTo(spot.lat, spot.lng)),
-                  // 回報現場狀況 stays hidden until the rider sighting
-                  // sheet (A7, A7b; PR-E) gives it somewhere to go.
-                  onReport: null,
-                  onSuggest: () => runAction(ctx, () async {
-                    final wasHidden = store.riderHidden(spot);
-                    await showSpotSuggestions(ctx, store, spot);
-                    // The rider was hidden from a content report there
-                    // (#280): the details close, as after ⋯'s 隱藏.
-                    if (ctx.mounted && !wasHidden && store.riderHidden(spot)) {
-                      close(ctx);
-                    }
-                  }),
-                );
-                final now = store.clock();
-                final plates = fourSignPlates(
-                  fourSign(
-                    spot,
-                    store.vehicle,
-                    store.rules,
-                    now: now,
-                    availability: store.availabilityOf(spot),
-                    decision: decision,
-                  ),
-                  now,
-                );
-                return LayoutBuilder(
-                  builder: (ctx, constraints) {
-                    // A short sheet (landscape, large text) keeps the actions
-                    // in the scrolling list so the header is never squeezed out.
-                    final pinned =
-                        constraints.maxHeight -
-                            _footerHeight(
-                              ctx,
-                              constraints.maxWidth - 40,
-                              street: !spot.isFacility,
-                              report: false,
-                            ) >=
-                        _minDetailHeight;
-                    return Column(
-                      children: [
-                        Expanded(
-                          // Not lazy: a plate can open any section at
-                          // once, however far down it sits.
-                          child: SingleChildScrollView(
-                            controller: scroll,
-                            padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Center(
-                                  child: Container(
-                                    width: 40,
-                                    height: 4,
-                                    margin: const EdgeInsets.only(bottom: 16),
-                                    decoration: BoxDecoration(
-                                      color: Theme.of(ctx).colorScheme.outline,
-                                      borderRadius: BorderRadius.circular(2),
-                                    ),
-                                  ),
-                                ),
-                                // A hidden rider's spot opened from a
-                                // list, not the map (P17d).
-                                HiddenSpotBanner(store: store, spot: spot),
-                                SpotPreview(
-                                  spot: spot,
-                                  plates: plates,
-                                  // The spot's own name held for review:
-                                  // under the title (PM to confirm).
-                                  titleNote: heldForOwner(spot, 'spot_name')
-                                      ? const ContentHeldNote()
-                                      : null,
-                                  subtitle: previewSubtitle(
-                                    spot,
-                                    meters: store.located
-                                        ? distanceMeters(
-                                            store.lat,
-                                            store.lng,
-                                            spot.lat,
-                                            spot.lng,
-                                          )
-                                        : null,
-                                  ),
-                                  favorite: store.favorites.any(
-                                    (s) => s.id == spot.id,
-                                  ),
-                                  onFavorite: () => runAction(
-                                    ctx,
-                                    () => store.toggleFavorite(spot),
-                                  ),
-                                  onShare: share,
-                                  onClose: () => close(ctx),
-                                  onPlate: showSection,
-                                ),
-                                const SizedBox(height: 20),
-                                Divider(
-                                  height: 1,
-                                  color: colors.outlineVariant,
-                                ),
-                                const SizedBox(height: 14),
-                                // Works or a closure (#116), above the verdict:
-                                // it overrides it while it holds.
-                                if (spot.closure case final closure?) ...[
-                                  ClosureCard(
-                                    closure: closure,
-                                    now: store.clock(),
-                                    onReopened: () => runAction(ctx, () async {
-                                      final message = await reportReopened(
-                                        store,
-                                        spot,
-                                      );
-                                      if (ctx.mounted) {
-                                        ScaffoldMessenger.of(ctx).showSnackBar(
-                                          SnackBar(content: Text(message)),
-                                        );
-                                      }
-                                    }),
-                                    onStillClosed: () => runAction(
-                                      ctx,
-                                      () => showGoneReport(ctx, store, spot),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 14),
-                                ],
-                                _SpotDecision(
-                                  key: sections[FourSignFace.verdict],
-                                  vehicle: store.vehicle,
-                                  eligibility: eligibility,
-                                  display: eligibilityDisplay(
-                                    spot,
-                                    store.vehicle,
-                                    eligibility,
-                                    decision: decision,
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                // Ticks each minute: the rate follows the
-                                // period the rider is in (decision 26).
-                                MinuteTicker(
-                                  key: sections[FourSignFace.seat],
-                                  clock: store.clock,
-                                  builder: (_, now) => _SpotSummary(
-                                    spot: spot,
-                                    vehicle: store.vehicle,
-                                    availability: store.availabilityOf(spot),
-                                    decision: decision,
-                                    now: now,
-                                    betaCities: store.availabilityBetaCities,
-                                  ),
-                                ),
-                                if (feedback != null)
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 12),
-                                    child: Text(feedback!),
-                                  ),
-                                _DetailSection(
-                                  key: sections[FourSignFace.fee],
-                                  title: '收費',
-                                  icon: Icons.payments_outlined,
-                                  children: [
-                                    SpotFees(
-                                      spot: spot,
-                                      vehicle: store.vehicle,
-                                      decision: decideParking(
-                                        spot,
-                                        store.vehicle,
-                                        [?store.ruleFor(spot)],
-                                        now: store.clock(),
-                                      ),
-                                      extraNote: extraFee,
-                                    ),
-                                  ],
-                                ),
-                                _DetailSection(
-                                  key: sections[FourSignFace.where],
-                                  title: '停車資訊',
-                                  icon: Icons.local_parking_outlined,
-                                  children: [
-                                    _DetailField(
-                                      label: '類型',
-                                      value: facilitySummary(spot),
-                                    ),
-                                    Text(
-                                      spot.zones.isEmpty ? '停放車種' : '分區',
-                                      style: Theme.of(ctx).textTheme.bodySmall
-                                          ?.copyWith(
-                                            color: colors.onSurfaceVariant,
-                                          ),
-                                    ),
-                                    const SizedBox(height: 10),
-                                    ParkingAccessView(spot: spot),
-                                  ],
-                                ),
-                                _DetailSection(
-                                  title: '位置與指引',
-                                  icon: Icons.near_me_outlined,
-                                  children: [
-                                    if (spot.isFacility &&
-                                        spot.entranceNote.trim().isNotEmpty)
-                                      _DetailField(
-                                        label: '入口',
-                                        held: heldForOwner(spot, 'text'),
-                                        value: spot.entranceNote,
-                                      ),
-                                    if (spot.parkingGuide.trim().isNotEmpty)
-                                      _DetailField(
-                                        label: '停車指引',
-                                        held: heldForOwner(spot, 'text'),
-                                        value: spot.parkingGuide,
-                                      ),
-                                    _DetailField(
-                                      label: '位置',
-                                      value: [
-                                        if (spot.address.trim().isNotEmpty)
-                                          spot.address,
-                                        if (spot.roadSegment.trim().isNotEmpty)
-                                          spot.roadSegment,
-                                      ].join('\n'),
-                                      secondary:
-                                          'GPS ${spot.lat.toStringAsFixed(6)}, ${spot.lng.toStringAsFixed(6)}',
-                                    ),
-                                    if (spot.specialRules.trim().isNotEmpty)
-                                      _DetailField(
-                                        label: '特殊規則',
-                                        held: heldForOwner(spot, 'text'),
-                                        value: spot.specialRules,
-                                      ),
-                                  ],
-                                ),
-                                _DetailSection(
-                                  title: '現場補充',
-                                  icon: Icons.photo_camera_outlined,
-                                  children: [
-                                    Text(
-                                      '照片',
-                                      style: Theme.of(ctx).textTheme.labelLarge,
-                                    ),
-                                    const SizedBox(height: 8),
-                                    SpotPhotos(
-                                      urls: spot.photoUrls,
-                                      strip: photos.isNotEmpty,
-                                    ),
-                                    const SizedBox(height: 14),
-                                    if (spot.note.trim().isNotEmpty)
-                                      _DetailField(
-                                        label: '備註',
-                                        held: heldForOwner(spot, 'text'),
-                                        value: spot.note,
-                                      ),
-                                  ],
-                                ),
-                                _DetailSection(
-                                  title: '資料與查核',
-                                  icon: Icons.verified_outlined,
-                                  children: [
-                                    _DetailField(
-                                      label: '資料來源',
-                                      held: heldForOwner(spot, 'rider_name'),
-                                      value: sourceSummary(
-                                        spot,
-                                        demo: store.demo,
-                                      ),
-                                      // 隱藏這位車友, 檢舉內容不當 (P17a).
-                                      trailing: SpotMoreButton(
-                                        store: store,
-                                        spot: spot,
-                                        onClose: () => close(ctx),
-                                      ),
-                                    ),
-                                    if (!spot.isOfficial)
-                                      _ConfirmationField(
-                                        lines: confirmationLines(spot),
-                                      ),
-                                    _LatestUpdateField(
-                                      spot: spot,
-                                      history: history,
-                                    ),
-                                    if (spot.stale) ...[
-                                      const SizedBox(height: 8),
-                                      const _DetailRow(
-                                        icon: Icons.info_outline,
-                                        text: '停放資訊可能過時，請確認現場公告。',
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                                if (!store.canReport)
-                                  TextButton(
-                                    onPressed: () => showSignIn(ctx, store),
-                                    child: const Text('登入後提出修改建議'),
-                                  ),
-                                if (!pinned) ...[
-                                  const SizedBox(height: 16),
-                                  actions,
-                                ],
-                              ],
-                            ),
-                          ),
-                        ),
-                        if (pinned)
-                          DecoratedBox(
-                            decoration: BoxDecoration(
-                              color: colors.surface,
-                              border: Border(
-                                top: BorderSide(color: colors.outlineVariant),
-                              ),
-                            ),
-                            child: SafeArea(
-                              top: false,
-                              child: Padding(
-                                padding: const EdgeInsets.fromLTRB(
-                                  20,
-                                  12,
-                                  20,
-                                  12,
-                                ),
-                                child: actions,
-                              ),
-                            ),
-                          ),
-                      ],
-                    );
-                  },
-                );
-              },
+          return Listener(
+            onPointerDown: (event) {
+              start = event.position;
+              dismissGesture =
+                  extent.isAttached &&
+                  extent.size <= spotSheetPeek + .001 &&
+                  scroll.hasClients &&
+                  scroll.offset <= 0;
+            },
+            onPointerMove: (event) {
+              if (start == null || !dismissGesture || closing) return;
+              final delta = event.position - start!;
+              if (delta.dy > 80 && delta.dy > delta.dx.abs() * 1.2) {
+                closing = true;
+                close(ctx);
+              }
+            },
+            onPointerUp: (_) {
+              start = null;
+              dismissGesture = false;
+            },
+            onPointerCancel: (_) {
+              start = null;
+              dismissGesture = false;
+            },
+            child: Material(
+              color: Theme.of(ctx).colorScheme.surface,
+              // The full page is square; the preview floats over the map.
+              borderRadius: BorderRadius.vertical(
+                top: Radius.circular(full ? 0 : 28),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: AnimatedBuilder(
+                animation: store,
+                builder: (ctx, _) => MinuteTicker(
+                  // Each minute too: whether a time slot holds now is part
+                  // of the decision (#120), not only the rate.
+                  clock: store.clock,
+                  builder: (ctx, now) =>
+                      _content(ctx, scroll, store, spot, photos, now),
+                ),
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
+  }
+
+  Widget _content(
+    BuildContext ctx,
+    ScrollController scroll,
+    AppStore store,
+    ParkingSpot spot,
+    List<String> photos,
+    DateTime now,
+  ) {
+    final colors = Theme.of(ctx).colorScheme;
+    final vehicle = store.vehicle;
+    final decision = store.decide(spot);
+    final availability = store.availabilityOf(spot);
+    final sign = fourSign(
+      spot,
+      vehicle,
+      store.rules,
+      now: now,
+      availability: availability,
+      decision: decision,
+    );
+    // A chosen segment (A10) decides 能不能停; the other plates stay the
+    // street's overview (user decision 2026-10-31).
+    final selected = sign.street
+        ? sign.areas
+              .where((a) => a.id != null && a.id == selectedSegment)
+              .firstOrNull
+        : null;
+    // Neither vehicle may park here (A2b): one plate, whichever is chosen.
+    final notParkable =
+        sign.denied &&
+        fourSignVerdict(
+              spot,
+              vehicle == VehicleType.heavy
+                  ? VehicleType.scooter
+                  : VehicleType.heavy,
+              store.rules,
+              now: now,
+            ).status ==
+            EligibilityStatus.notAllowed;
+    final signPlates = fourSignPlates(sign, now);
+    final plates = [
+      if (notParkable)
+        notParkablePlate(signPlates.first)
+      else
+        for (final p in signPlates)
+          if (p.face == FourSignFace.verdict && selected != null)
+            selectedVerdictPlate(sign, selected)
+          else
+            p,
+    ];
+    final actions = SpotPreviewActions(
+      street: !spot.isFacility,
+      navigateSecondary: notParkable,
+      onNavigate: () => runAction(ctx, () => navigateTo(spot.lat, spot.lng)),
+      // 回報現場狀況 stays hidden until the rider sighting sheet (A7, A7b;
+      // PR-E) gives it somewhere to go.
+      onReport: null,
+      onSuggest: () => runAction(ctx, () async {
+        final wasHidden = store.riderHidden(spot);
+        await showSpotSuggestions(ctx, store, spot);
+        // The rider was hidden from a content report there (#280): the
+        // details close, as after ⋯'s 隱藏.
+        if (ctx.mounted && !wasHidden && store.riderHidden(spot)) close(ctx);
+      }),
+    );
+    final subtitle = previewSubtitle(
+      spot,
+      meters: store.located
+          ? distanceMeters(store.lat, store.lng, spot.lat, spot.lng)
+          : null,
+    );
+    final favorite = store.favorites.any((s) => s.id == spot.id);
+    void toggleFavorite() => runAction(ctx, () => store.toggleFavorite(spot));
+    final body = _body(
+      ctx,
+      store,
+      spot,
+      sign,
+      plates,
+      decision,
+      availability,
+      selected,
+      photos,
+      now,
+      notParkable: notParkable,
+    );
+    return LayoutBuilder(
+      builder: (ctx, constraints) {
+        final width = constraints.maxWidth - (full ? 32 : 40);
+        final footer = _footerHeight(
+          ctx,
+          width,
+          street: !spot.isFacility,
+          report: false,
+        );
+        // A short sheet (landscape, large text) keeps the actions in the
+        // scrolling list so the header is never squeezed out.
+        final pinned = constraints.maxHeight - footer >= _minDetailHeight;
+        // Likewise the full page's header: pinned while the page keeps
+        // room to read below it.
+        final headerPinned =
+            full &&
+            pinned &&
+            constraints.maxHeight - footer - _headerHeight(ctx, spot, width) >=
+                _minDetailHeight;
+        // The spot's own name held for review (P17b ⑪): under the title.
+        final titleNote = heldForOwner(spot, 'spot_name')
+            ? const ContentHeldNote()
+            : null;
+        final header = SpotDetailHeader(
+          spot: spot,
+          titleNote: titleNote,
+          subtitle: subtitle,
+          plates: plates,
+          current: current,
+          favorite: favorite,
+          onFavorite: toggleFavorite,
+          onShare: share,
+          onBack: () => close(ctx),
+          onPlate: showSection,
+        );
+        return Column(
+          children: [
+            if (headerPinned)
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: colors.surface,
+                  border: Border(
+                    bottom: BorderSide(color: DetailColors.of(ctx).divider),
+                  ),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x14000000),
+                      blurRadius: 6,
+                      offset: Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+                  child: header,
+                ),
+              ),
+            Expanded(
+              // Not lazy: a plate can open any section at once, however
+              // far down it sits.
+              child: SingleChildScrollView(
+                controller: scroll,
+                padding: full
+                    ? const EdgeInsets.fromLTRB(16, 0, 16, 24)
+                    : const EdgeInsets.fromLTRB(20, 10, 20, 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (!full) ...[
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          margin: const EdgeInsets.only(bottom: 16),
+                          decoration: BoxDecoration(
+                            color: colors.outline,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                      // A hidden rider's spot opened from a list (P17d).
+                      HiddenSpotBanner(store: store, spot: spot),
+                      SpotPreview(
+                        spot: spot,
+                        titleNote: titleNote,
+                        plates: plates,
+                        subtitle: subtitle,
+                        favorite: favorite,
+                        onFavorite: toggleFavorite,
+                        onShare: share,
+                        onClose: () => close(ctx),
+                        onPlate: showSection,
+                      ),
+                      const SizedBox(height: 14),
+                      Divider(height: 1, color: colors.outlineVariant),
+                    ] else if (!headerPinned) ...[
+                      const SizedBox(height: 6),
+                      header,
+                      Divider(height: 1, color: DetailColors.of(ctx).divider),
+                    ],
+                    if (full) ...[
+                      const SizedBox(height: 12),
+                      HiddenSpotBanner(store: store, spot: spot),
+                    ],
+                    ...body,
+                    if (!pinned) ...[const SizedBox(height: 16), actions],
+                  ],
+                ),
+              ),
+            ),
+            if (pinned)
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: colors.surface,
+                  border: Border(top: BorderSide(color: colors.outlineVariant)),
+                ),
+                child: SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      full ? 16 : 20,
+                      10,
+                      full ? 16 : 20,
+                      10,
+                    ),
+                    child: actions,
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// The four sections (A2), then the notes the canvas leaves out and the
+  /// sources in small print (user decision 2026-10-31).
+  List<Widget> _body(
+    BuildContext ctx,
+    AppStore store,
+    ParkingSpot spot,
+    FourSign sign,
+    List<SignPlate> plates,
+    ParkingDecision decision,
+    SpotAvailability availability,
+    SignArea? selected,
+    List<String> photos,
+    DateTime now, {
+    required bool notParkable,
+  }) {
+    final vehicle = store.vehicle;
+    final display = eligibilityDisplay(
+      spot,
+      vehicle,
+      decision.eligibility,
+      decision: decision,
+    );
+    final rules = detailRules(sign, spot);
+    final rows = seatRows(sign, availability, now);
+    final fees = feeSection(sign, spot, now);
+    final cards = whereCards(sign, spot);
+    final (address, coordinates) = addressAndCoordinates(spot);
+    final unit = detailUnit(sign);
+    final seatPlate = plates
+        .where((p) => p.face == FourSignFace.seat)
+        .firstOrNull;
+    final legacy = spot.available;
+    // Live counts come from snapshots; a lot's own legacy count is shown
+    // the old way only when no snapshot exists for it.
+    final live =
+        spot.isFacility &&
+        (!availability.isEmpty || legacy == null || legacy < 0);
+    final Widget seat;
+    if (spot.isFacility && !live) {
+      // A lot's own legacy count, where no snapshot exists for it.
+      final total = spot.scooterTotal;
+      final at =
+          spot.availabilityUpdatedAt ??
+          (spot.source == 'tdx' ? spot.updatedAt : null);
+      seat = SeatWholeView(
+        main: legacy == 0 ? '已滿' : '剩 $legacy 格',
+        explanation: [
+          if (total != null && total >= legacy!) '共 $total 格',
+          at == null ? '車位時間未提供' : formatSpotTime(at),
+        ].join('・'),
+      );
+    } else if (rows.isNotEmpty) {
+      seat = SeatRowsView(
+        rows: rows,
+        note: seatRowsNote(sign),
+        // 車友回報 under each place goes here (#189).
+        riderRow: null,
+        betaCities: inAvailabilityBeta(spot.city, store.availabilityBetaCities)
+            ? store.availabilityBetaCities
+            : null,
+      );
+    } else if (live) {
+      seat = SpotSeatSection(
+        fact: availabilityFact(spot, availability, vehicle, decision, now),
+        betaCities: inAvailabilityBeta(spot.city, store.availabilityBetaCities)
+            ? store.availabilityBetaCities
+            : null,
+      );
+    } else {
+      seat = SeatWholeView(
+        main: seatPlate?.main ?? '空位未知',
+        explanation: seatExplanation(sign),
+      );
+    }
+    final selectable =
+        sign.street && cards.where((c) => c.area.id != null).length > 1;
+    final small = Theme.of(ctx).textTheme;
+    return [
+      if (feedback != null)
+        Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: Text(feedback!),
+        ),
+      DetailSection(
+        key: sections[FourSignFace.verdict],
+        title: '能不能停',
+        children: [
+          // Works or a closure (#116), above the verdict: it overrides it
+          // while it holds.
+          if (spot.closure case final closure?)
+            ClosureCard(
+              closure: closure,
+              now: now,
+              onReopened: () => runAction(ctx, () async {
+                final message = await reportReopened(store, spot);
+                if (ctx.mounted) {
+                  ScaffoldMessenger.of(ctx)
+                      .showSnackBar(SnackBar(content: Text(message)));
+                }
+              }),
+              onStillClosed: () =>
+                  runAction(ctx, () => showGoneReport(ctx, store, spot)),
+            ),
+          if (notParkable)
+            // A2b: one red conclusion for both vehicles, and why.
+            VerdictCard(
+              status: EligibilityStatus.notAllowed,
+              headline: notParkableHeadline,
+              explanation: notParkableExplanation,
+              basis: display.basis,
+              notices: display.notices,
+            )
+          else
+            VerdictCard(
+              status: selected?.status ?? sign.verdict.status,
+              headline:
+                  verdictHeadline(sign, selected: selected) ??
+                  undecidedHeadline(vehicle, display.label),
+              // The rows below say what limits it; the decision's reason
+              // stays only where no row does.
+              explanation: selected != null
+                  ? selectedNote(sign, selected)
+                  // Dropped only where the rows below say all of it.
+                  : (sign.verdict.status == EligibilityStatus.allowed ||
+                            sign.verdict.status ==
+                                EligibilityStatus.conditional) &&
+                        rulesCover(display.explanation, rules)
+                  ? ''
+                  : display.explanation,
+              basis: display.basis,
+              notices: display.notices,
+              reported: display.reported && !display.lapsed,
+              banned: selected == null && sign.verdict.noParkingNow,
+            ),
+          if (notParkable)
+            DetailRulesView(
+              rules: notParkableRules(sign, spot, decision.eligibility.reason),
+              vehicle: vehicle,
+              scope: false,
+            )
+          else if (rules.isNotEmpty)
+            DetailRulesView(rules: rules, vehicle: vehicle),
+        ],
+      ),
+      // A2b: 有沒有位 and 怎麼算錢 folded into one row, opened in place.
+      if (notParkable)
+        DetailSection(
+          title: '有沒有位・怎麼算錢',
+          children: [
+            NotParkableFold(
+              expanded: unfolded,
+              onToggle: () => setState(() => unfolded = !unfolded),
+            ),
+          ],
+        ),
+      if (!notParkable || unfolded) ...[
+        DetailSection(
+          key: sections[FourSignFace.seat],
+          title: rows.isEmpty || (spot.isFacility && !live)
+              ? '有沒有位'
+              : '有沒有位（${vehicle.label}能停的$unit）',
+          gap: 8,
+          children: [seat],
+        ),
+        DetailSection(
+          key: sections[FourSignFace.fee],
+          title: fees.title,
+          children: [
+            FeeSectionView(
+              section: fees,
+              vehicle: vehicle,
+              extraNote: _additionalFeeNote(spot),
+            ),
+          ],
+        ),
+      ],
+      DetailSection(
+        key: sections[FourSignFace.where],
+        title: notParkable ? '停哪裡' : '停哪裡（${vehicle.label}）',
+        trailing: photos.isEmpty ? null : '點照片可放大',
+        last: true,
+        children: [
+          WhereView(
+            cards: cards,
+            heldNote: heldForOwner(spot, 'text')
+                ? const ContentHeldNote()
+                : null,
+            entrance: spot.isFacility ? spot.entranceNote.trim() : '',
+            guide: spot.parkingGuide.trim(),
+            photos: photos,
+            closedNote: closedNote(sign),
+            pendingNote: pendingNote(sign),
+            selectedId: selected?.id,
+            onSelect: selectable
+                ? (id) => setState(() => selectedSegment = id)
+                : null,
+            address: address,
+            coordinates: coordinates,
+            onCopy: () => runAction(ctx, copyLocation),
+            copied: copied,
+          ),
+        ],
+      ),
+      // Not drawn on the canvas: kept as before until decided.
+      if (spot.specialRules.trim().isNotEmpty || spot.note.trim().isNotEmpty)
+        _DetailSection(
+          title: '補充說明',
+          icon: Icons.notes_outlined,
+          children: [
+            if (spot.specialRules.trim().isNotEmpty)
+              _DetailField(
+                label: '特殊規則',
+                value: spot.specialRules,
+                held: heldForOwner(spot, 'text'),
+              ),
+            if (spot.note.trim().isNotEmpty)
+              _DetailField(
+                label: '備註',
+                value: spot.note,
+                held: heldForOwner(spot, 'text'),
+              ),
+          ],
+        ),
+      // Sources and history in small print, after the address (user
+      // decision 2026-10-31).
+      Theme(
+        data: Theme.of(ctx).copyWith(
+          textTheme: small.copyWith(
+            bodyMedium: small.bodySmall,
+            titleMedium: small.titleSmall,
+            labelLarge: small.labelMedium,
+          ),
+        ),
+        child: _DetailSection(
+          title: '資料與查核',
+          icon: Icons.verified_outlined,
+          children: [
+            _DetailField(
+              label: '資料來源',
+              value: sourceSummary(spot, demo: store.demo),
+              held: heldForOwner(spot, 'rider_name'),
+            ),
+            if (!spot.isOfficial)
+              _ConfirmationField(lines: confirmationLines(spot)),
+            _LatestUpdateField(spot: spot, history: history),
+            // 隱藏這位車友, 檢舉內容不當 (P17a).
+            widget.sourceActions ??
+                Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: SpotMoreButton(
+                    store: store,
+                    spot: spot,
+                    onClose: () => close(ctx),
+                  ),
+                ),
+          ],
+        ),
+      ),
+      if (!store.canReport)
+        TextButton(
+          onPressed: () => showSignIn(ctx, store),
+          child: const Text('登入後提出修改建議'),
+        ),
+    ];
   }
 }
 
@@ -580,381 +867,8 @@ String _additionalFeeNote(ParkingSpot spot) {
   return note;
 }
 
-class _SpotDecision extends StatelessWidget {
-  const _SpotDecision({
-    super.key,
-    required this.vehicle,
-    required this.eligibility,
-    required this.display,
-  });
-  final VehicleType vehicle;
-  final Eligibility eligibility;
-  final EligibilityDisplay display;
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
-    final color = spotMarkerColor(eligibility.status);
-    // The marker's colour and shape, so the banner reads like the map; a
-    // rider's claim swaps the question mark for people, never for a tick.
-    final icon = display.reported && !display.lapsed
-        ? Icons.groups_outlined
-        : spotMarkerIcon(markerLook(eligibility));
-    return MergeSemantics(
-      child: Container(
-        key: const ValueKey('spot-decision'),
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: .08),
-          border: Border(left: BorderSide(color: color, width: 3)),
-          borderRadius: const BorderRadius.only(
-            topRight: Radius.circular(12),
-            bottomRight: Radius.circular(12),
-          ),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(
-                  spotMarkerRadius(eligibility.status) * .8,
-                ),
-              ),
-              child: Icon(icon, size: 20, color: Colors.white),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Riders know their class by plate colour.
-                  Row(
-                    children: [
-                      ExcludeSemantics(
-                        // Both plates of the class, as in the vehicle
-                        // picker: one colour alone names only half of it.
-                        child: SmallPlateStack(
-                          key: const ValueKey('spot-decision-plate'),
-                          plates: platesOf(vehicle),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Flexible(
-                        child: Text(
-                          vehicle.label,
-                          style: text.labelMedium?.copyWith(
-                            color: colors.onSurfaceVariant,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    display.label,
-                    key: const ValueKey('spot-decision-label'),
-                    style: text.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      height: 1.3,
-                    ),
-                  ),
-                  if (display.explanation.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      display.explanation,
-                      style: text.bodySmall?.copyWith(
-                        color: colors.onSurfaceVariant,
-                        height: 1.45,
-                      ),
-                    ),
-                  ],
-                  if (display.basis case final basis?) ...[
-                    const SizedBox(height: 6),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(top: 1),
-                          child: Icon(
-                            display.reported
-                                ? Icons.schedule
-                                : Icons.verified_user_outlined,
-                            size: 16,
-                            color: colors.onSurfaceVariant,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            basis,
-                            key: const ValueKey('spot-decision-basis'),
-                            style: text.bodySmall?.copyWith(
-                              color: colors.onSurface,
-                              height: 1.45,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                  for (final (i, notice) in display.notices.indexed) ...[
-                    const SizedBox(height: 4),
-                    _BannerLine(
-                      key: ValueKey('spot-decision-notice-$i'),
-                      // An ended notice changes the icon and says so in
-                      // words; amber only adds to that (§8.7 C4).
-                      icon: notice.expired
-                          ? Icons.event_busy_outlined
-                          : Icons.calendar_today_outlined,
-                      iconColor: notice.expired
-                          ? conditionalColor
-                          : colors.onSurfaceVariant,
-                      text: notice.text,
-                    ),
-                  ],
-                  if (display.zones.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    for (final (i, zone) in display.zones.indexed)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: _ZoneRow(
-                          key: ValueKey('spot-zone-$i'),
-                          zone: zone,
-                        ),
-                      ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// One line under the banner's headline: an icon and wrapping text.
-class _BannerLine extends StatelessWidget {
-  const _BannerLine({
-    super.key,
-    required this.icon,
-    required this.iconColor,
-    required this.text,
-  });
-  final IconData icon;
-  final Color iconColor;
-  final String text;
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 1),
-          child: Icon(icon, size: 16, color: iconColor),
-        ),
-        const SizedBox(width: 6),
-        Expanded(
-          child: Text(
-            text,
-            style: Theme.of(context).textTheme.bodySmall
-                ?.copyWith(color: colors.onSurface, height: 1.45),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// A zone's eligibility under the banner (逐區資格): the map marker's small
-/// shape and colour, the zone's name and its status in words. Regular
-/// weight, so the banner's conclusion stays the only bold line.
-class _ZoneRow extends StatelessWidget {
-  const _ZoneRow({super.key, required this.zone});
-  final ZoneLine zone;
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
-    final color = spotMarkerColor(zone.status);
-    // Why it is conditional or unknown, less what the notice lines say.
-    final detail =
-        zone.reason.isNotEmpty &&
-            (zone.status == EligibilityStatus.conditional ||
-                zone.status == EligibilityStatus.unverified)
-        ? '：${zone.reason}'
-        : '';
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 2),
-          child: Container(
-            width: 16,
-            height: 16,
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(
-                spotMarkerRadius(zone.status) * .4,
-              ),
-            ),
-            child: Icon(
-              spotMarkerIcon((zone.status, zone.restriction)),
-              size: 11,
-              color: Colors.white,
-            ),
-          ),
-        ),
-        const SizedBox(width: 6),
-        Expanded(
-          child: Text(
-            '${zone.name}・${zone.label}$detail',
-            style: text.bodySmall?.copyWith(
-              color: colors.onSurface,
-              height: 1.45,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _SpotSummary extends StatelessWidget {
-  const _SpotSummary({
-    required this.spot,
-    required this.vehicle,
-    required this.availability,
-    required this.decision,
-    required this.now,
-    this.betaCities = const [],
-  });
-  final ParkingSpot spot;
-  final VehicleType vehicle;
-  final SpotAvailability availability;
-  final ParkingDecision decision;
-  final DateTime now;
-
-  /// The cities whose counts are in Beta.
-  final List<String> betaCities;
-  @override
-  Widget build(BuildContext context) {
-    final legacy = spot.available;
-    // Live counts come from snapshots; a spot's own legacy count is shown
-    // the old way only when no snapshot exists for it.
-    final live =
-        spot.isFacility &&
-        (!availability.isEmpty || legacy == null || legacy < 0);
-    // The rate at this moment (decision 26); the full board is below.
-    final fee = spotFeeNow(spot, vehicle, now);
-    final available = spot.available;
-    final availabilityTime =
-        spot.availabilityUpdatedAt ??
-        (spot.source == 'tdx' && spot.spaceType == SpaceType.offStreet
-            ? spot.updatedAt
-            : null);
-    final availabilityCaption =
-        spot.isFacility && available != null && available >= 0
-        ? availabilityTime == null
-              ? '車位時間未提供'
-              : formatSpotTime(availabilityTime)
-        : null;
-    final total = spot.scooterTotal;
-    final capacity = total != null && available != null && total >= available
-        ? ' / $total 格'
-        : '';
-    final second = spot.isFacility
-        ? (available == null || available < 0
-              ? '尚無即時資料'
-              : '$available 格$capacity')
-        : spot.spaceType.label;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final stacked =
-            constraints.maxWidth < 300 ||
-            MediaQuery.textScalerOf(context).scale(14) > 18 ||
-            fee.main.text.length + (fee.caption?.length ?? 0) > 48;
-        final facts = [
-          FeeNowSummary(now: fee),
-          if (live)
-            SpotSeatSection(
-              fact: availabilityFact(
-                spot,
-                availability,
-                vehicle,
-                decision,
-                now,
-              ),
-              betaCities: inAvailabilityBeta(spot.city, betaCities)
-                  ? betaCities
-                  : null,
-            )
-          else
-            _SummaryFact(
-              label: spot.isFacility ? '機車剩餘' : '地面格位',
-              value: second,
-              caption: availabilityCaption,
-            ),
-        ];
-        return stacked
-            ? Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [facts[0], const SizedBox(height: 12), facts[1]],
-              )
-            : Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: facts[0]),
-                  const SizedBox(width: 20),
-                  Expanded(child: facts[1]),
-                ],
-              );
-      },
-    );
-  }
-}
-
-class _SummaryFact extends StatelessWidget {
-  const _SummaryFact({required this.label, required this.value, this.caption});
-  final String label, value;
-  final String? caption;
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(
-        label,
-        style: Theme.of(context).textTheme.labelSmall
-            ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
-      ),
-      const SizedBox(height: 4),
-      Text(
-        value,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        style: Theme.of(context).textTheme.bodyMedium
-            ?.copyWith(fontWeight: FontWeight.w600, height: 1.4),
-      ),
-      if (caption != null) ...[
-        const SizedBox(height: 4),
-        Text(
-          caption!,
-          style: Theme.of(context).textTheme.labelSmall
-              ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
-        ),
-      ],
-    ],
-  );
-}
-
 class _DetailSection extends StatelessWidget {
   const _DetailSection({
-    super.key,
     required this.title,
     required this.icon,
     required this.children,
@@ -1044,7 +958,6 @@ class _DetailField extends StatelessWidget {
     required this.value,
     this.secondary = '',
     this.action,
-    this.trailing,
     this.held = false,
   });
 
@@ -1055,9 +968,6 @@ class _DetailField extends StatelessWidget {
 
   /// A link or toggle under the value (看更新紀錄, 還有 N 項).
   final Widget? action;
-
-  /// A button at the row's end (資料來源's ⋯).
-  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -1099,29 +1009,17 @@ class _DetailField extends StatelessWidget {
         builder: (context, constraints) {
           if (constraints.maxWidth < 300 ||
               MediaQuery.textScalerOf(context).scale(14) > 18) {
-            final stacked = Column(
+            return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [labelWidget, const SizedBox(height: 6), valueWidget],
             );
-            return trailing == null
-                ? stacked
-                : Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(child: stacked),
-                      trailing!,
-                    ],
-                  );
           }
           return Row(
-            crossAxisAlignment: trailing == null
-                ? CrossAxisAlignment.start
-                : CrossAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               SizedBox(width: 76, child: labelWidget),
               const SizedBox(width: 12),
               Expanded(child: valueWidget),
-              ?trailing,
             ],
           );
         },
@@ -1205,6 +1103,8 @@ class _LatestUpdateField extends StatelessWidget {
             : updated == null
             ? '未提供'
             : formatSpotTime(updated),
+        // An old spot says so under its date, in the small print.
+        secondary: spot.stale ? '停放資訊可能過時，請確認現場公告。' : '',
         action: latest == null
             ? null
             : TextButton(
@@ -1297,29 +1197,32 @@ class _HistoryItem extends StatelessWidget {
   }
 }
 
-class _DetailRow extends StatelessWidget {
-  const _DetailRow({required this.icon, required this.text});
-  final IconData icon;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) => Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Icon(
-        icon,
-        size: 20,
-        color: Theme.of(context).colorScheme.onSurfaceVariant,
-      ),
-      const SizedBox(width: 10),
-      Expanded(child: Text(text)),
-    ],
-  );
-}
-
 /// Room the scrolling details keep above a pinned action footer: the drag
 /// handle, the name and the start of the eligibility summary.
 const _minDetailHeight = 160.0;
+
+/// Upper estimate of the full page's header at [width]: 返回, the name,
+/// the subtitle and the table of contents.
+double _headerHeight(BuildContext context, ParkingSpot spot, double width) {
+  final scale = MediaQuery.textScalerOf(context);
+  final target = isCupertino ? 44.0 : 48.0;
+  final nameWidth = isCupertino ? width : width - target * 3 - 8;
+  final painter = TextPainter(
+    text: TextSpan(
+      text: spot.name,
+      style: TextStyle(fontSize: scale.scale(20), height: 1.3),
+    ),
+    textDirection: TextDirection.ltr,
+  )..layout(maxWidth: nameWidth.clamp(1, double.infinity));
+  final name = painter.height;
+  painter.dispose();
+  final title = name + scale.scale(13) * 1.4 * 2 + 2;
+  final top = isCupertino ? target + 2 + title : math.max(target, title + 10);
+  final rows = FourSignPlates.gridFor(context, width) ? 2 : 1;
+  final plate =
+      math.max(target, scale.scale(11) * 1.3 + scale.scale(14) * 1.25 + 8) + 8;
+  return 6 + top + 10 + rows * plate + (rows - 1) * 8 + 6;
+}
 
 /// Upper estimate of the pinned footer: border, 24 padding, the safe area and
 /// one or two rows of buttons at the current text size.
