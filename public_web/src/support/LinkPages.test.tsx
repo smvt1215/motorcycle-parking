@@ -120,6 +120,17 @@ describe('the confirmation link', () => {
     expect(document.querySelector('a[href^="mailto:"]')).toBeNull();
   });
 
+  it('never shows the deletion page for a privacy request link', async () => {
+    stubFunctions({
+      'support-confirm': {
+        body: { result: 'pending', kind: 'privacy', submitted_at: submitted, contact_email: 'r***@e***.com' },
+      },
+    });
+    openSite(`/support/verify#token=${token}`);
+    await heading(t.verifyInvalidTitle);
+    expect(screen.queryByRole('heading', { level: 1, name: t.verifyTitle })).toBeNull();
+  });
+
   it('says the link is invalid when a used token meets the confirmation', async () => {
     stubFunctions({ 'support-confirm': [confirmAnswer('pending'), linkInvalid] });
     openSite(`/support/verify#token=${token}`);

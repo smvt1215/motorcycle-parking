@@ -138,6 +138,11 @@ export function createSupportClient(config: SupportClientConfig): SupportPort {
       return { kind: 'network' };
     }
     const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+    // Only deletion links have pages so far: a privacy request's link (#295)
+    // must not land on the deletion wording.
+    if (response.ok && typeof body?.kind === 'string' && body.kind !== 'account_deletion') {
+      return { kind: 'invalid' };
+    }
     if (response.ok && typeof body?.result === 'string' && known.includes(body.result)) {
       return {
         kind: 'answer',
