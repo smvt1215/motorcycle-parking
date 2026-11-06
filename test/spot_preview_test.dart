@@ -239,16 +239,17 @@ void main() {
   testWidgets('點怎麼算錢路牌，詳情展開並捲到收費', (tester) async {
     final s = await store(tester, VehicleType.heavy);
     await open(tester, s, lot);
-    expect(find.text('收費').hitTestable(), findsNothing);
+    final fees = find.text('怎麼算錢（大型重機現在可停的分區）');
+    expect(fees.hitTestable(), findsNothing);
     await tester.tap(find.byKey(const ValueKey('four-sign-fee')));
     await tester.pumpAndSettle();
-    expect(find.text('收費').hitTestable(), findsOneWidget);
+    expect(fees.hitTestable(), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
   for (final (face, target) in [
-    ('where', find.text('停車資訊')),
-    ('seat', find.byKey(const ValueKey('availability-summary'))),
+    ('where', find.text('停哪裡（大型重機）')),
+    ('seat', find.text('有沒有位（大型重機能停的分區）')),
   ]) {
     testWidgets('窄螢幕大字級點 $face 路牌，捲到畫面外的段落', (tester) async {
       final s = await store(tester, VehicleType.heavy);
@@ -280,7 +281,13 @@ void main() {
     final s = await store(tester, VehicleType.scooter);
     await open(tester, s, street);
     expect(find.text('導航').hitTestable(), findsOneWidget);
-    expect(find.text('普通機車不能停'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('four-sign-verdict')),
+        matching: find.text('普通機車不能停'),
+      ),
+      findsOneWidget,
+    );
     expect(find.byKey(const ValueKey('four-sign-seat')), findsNothing);
     final verdict = plate(tester, 'verdict');
     expect(verdict.width, greaterThan(300));
