@@ -476,9 +476,19 @@ class ReportTest(unittest.TestCase):
         self.assertEqual(community, {"id": "c1", "city": "新北市", "district": "板橋區", "result": "社群點（待確認）"})
         self.assertEqual(set(dropped), {"id", "city", "district", "result"})
 
-    def test_an_official_spot_without_a_lot_keeps_its_official_name(self):
-        row = import_mymaps.report_row({**self.OFFICIAL, "official_name": None, "official_id": None, "name": "平陽街停車場"})
-        self.assertEqual(row["official_name"], "平陽街停車場")
+    def test_a_pilot_site_is_named_by_the_official_list_never_by_its_mark(self):
+        entry = {**self.OFFICIAL, "name": "阿明的停車場", "pilot": "平陽街機車臨時平面停車場"}
+        del entry["official_name"], entry["official_id"]
+        self.assertEqual(import_mymaps.report_row(entry)["official_name"], "平陽街機車臨時平面停車場")
+
+    def test_an_official_row_without_an_official_name_falls_back_to_its_id(self):
+        entry = {**self.OFFICIAL, "name": "阿明的停車場"}
+        del entry["official_name"], entry["official_id"]
+        rows = [import_mymaps.report_row(entry)]
+        self.assertNotIn("official_name", rows[0])
+        text = "\n".join(import_mymaps.review_sections(rows, []))
+        self.assertNotIn("阿明", text)
+        self.assertIn("| official:1 |", text)
 
     def test_reports_carry_no_source_name(self):
         report = self.rows()

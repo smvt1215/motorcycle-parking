@@ -961,8 +961,9 @@ def report_row(entry):
     """What the committed reports keep of a build entry (#324): the spot id and official facts.
     The source map's own names and folders never go in; an official spot is named by its official name."""
     row = {key: entry[key] for key in ("id", "city", "district", "result")}
-    if entry["result"].startswith("官方點"):
-        row["official_name"] = entry.get("official_name") or entry["name"]
+    # A pilot site's name comes from the official list; a mark's own name is never a stand-in.
+    if entry["result"].startswith("官方點") and (official_name := entry.get("official_name") or entry.get("pilot")):
+        row["official_name"] = official_name
     row |= {key: entry[key] for key in ("official_id", "distance_m", "name_score", "pilot", "changes") if key in entry}
     if entry.get("merged"):
         row["merged"] = len(entry["merged"])
@@ -986,7 +987,7 @@ def review_sections(report, skipped):
     lines += [f"- {r.get('official_name') or r['id']}（{r['city']}{r['district']}）：{c}" for r in report for c in r.get("changes", []) if c.startswith(("待人工確認", "座標"))] or ["- 無"]
     lines += ["", "## 核驗修正", "", "| 點位 | 官方編號 | 距離 | 修正 |", "| --- | --- | --- | --- |"]
     distance_text = lambda r: "—" if r.get("distance_m") is None else f"{r['distance_m']} m"
-    lines += [f"| {cell(r['official_name'])} | {cell(r.get('official_id') or r.get('pilot', ''))} | {distance_text(r)} | "
+    lines += [f"| {cell(r.get('official_name') or r['id'])} | {cell(r.get('official_id') or r.get('pilot', ''))} | {distance_text(r)} | "
               f"{cell('；'.join(c for c in r.get('changes', []) if not c.startswith('地址')))} |" for r in verified]
     lines += ["", "## 不錄入", ""] + ([f"- {r['id']}" for r in dropped] or ["- 無"])
     reasons = Counter(skip_reason(s) for s in skipped)
