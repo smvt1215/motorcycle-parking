@@ -153,6 +153,27 @@ class ApiV1Client {
   Future<Object?> spotsByIdsRaw({required List<String> ids}) =>
       _call('spots_by_ids', {'ids': ids});
 
+  /// 依 id 讀騎士回報的彙整（地圖、詳情）
+  Future<SpotSightings> spotSightings({
+    required List<String> pSpotIds,
+    int? pWindowMinutes,
+  }) async {
+    final raw = await spotSightingsRaw(
+      pSpotIds: pSpotIds,
+      pWindowMinutes: pWindowMinutes,
+    );
+    return SpotSightings.fromJson(raw as Map<String, Object?>);
+  }
+
+  /// [spotSightings] as served, for callers that keep the JSON (#202).
+  Future<Object?> spotSightingsRaw({
+    required List<String> pSpotIds,
+    int? pWindowMinutes,
+  }) => _call('spot_sightings', {
+    'p_spot_ids': pSpotIds,
+    'p_window_minutes': ?pWindowMinutes,
+  });
+
   /// 自己隱藏的車友
   Future<HiddenRiders> hiddenRidersList() async {
     final raw = await hiddenRidersListRaw();
@@ -1001,6 +1022,147 @@ class SpotsByIds {
 
   @override
   int get hashCode => Object.hashAll([_hash(spots)]);
+}
+
+/// 一個點位、分區或路段、車種的車友回報彙整（#189）
+class SpotSighting {
+  const SpotSighting({
+    required this.spotId,
+    this.zoneId,
+    this.segmentId,
+    required this.vehicle,
+    required this.level,
+    required this.count,
+    required this.low,
+    required this.high,
+    required this.lowRiders,
+    required this.highRiders,
+    required this.latestAt,
+    required this.conflicting,
+  });
+
+  factory SpotSighting.fromJson(Map<String, Object?> json) => SpotSighting(
+    spotId: json['spot_id'] as String,
+    zoneId: json['zone_id'] == null ? null : json['zone_id'] as String,
+    segmentId: json['segment_id'] == null ? null : json['segment_id'] as String,
+    vehicle: json['vehicle'] as String,
+    level: (json['level'] as num).toInt(),
+    count: (json['count'] as num).toInt(),
+    low: (json['low'] as num).toInt(),
+    high: (json['high'] as num).toInt(),
+    lowRiders: (json['low_riders'] as num).toInt(),
+    highRiders: (json['high_riders'] as num).toInt(),
+    latestAt: json['latest_at'] as String,
+    conflicting: json['conflicting'] as bool,
+  );
+
+  /// 停車點 id
+  final String spotId;
+
+  /// 分區 id；不是分區的回報為 null
+  final String? zoneId;
+
+  /// 路段 id；不是路段的回報為 null
+  final String? segmentId;
+
+  /// 車種
+  final String vehicle;
+
+  /// 加權中位數：0 很多空位、1 還有一些、2 快滿了、3 已停滿。說法不一時畫兩端用 low、high，不用這個值
+  final int level;
+
+  /// 列入彙整的車友人數：每人、每裝置各算最新一筆，不含停權與可信度不足者
+  final int count;
+
+  /// 回報中最小的 level（較空的一端）
+  final int low;
+
+  /// 回報中最大的 level（較滿的一端）
+  final int high;
+
+  /// 說 low 那一級的車友人數
+  final int lowRiders;
+
+  /// 說 high 那一級的車友人數
+  final int highRiders;
+
+  /// ISO 8601 時間。列入彙整的最新一筆回報
+  final String latestAt;
+
+  /// 說法不一：中位數前後一級內的權重未達 70%
+  final bool conflicting;
+
+  Map<String, Object?> toJson() => {
+    'spot_id': spotId,
+    'zone_id': zoneId,
+    'segment_id': segmentId,
+    'vehicle': vehicle,
+    'level': level,
+    'count': count,
+    'low': low,
+    'high': high,
+    'low_riders': lowRiders,
+    'high_riders': highRiders,
+    'latest_at': latestAt,
+    'conflicting': conflicting,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SpotSighting &&
+      other.spotId == spotId &&
+      other.zoneId == zoneId &&
+      other.segmentId == segmentId &&
+      other.vehicle == vehicle &&
+      other.level == level &&
+      other.count == count &&
+      other.low == low &&
+      other.high == high &&
+      other.lowRiders == lowRiders &&
+      other.highRiders == highRiders &&
+      other.latestAt == latestAt &&
+      other.conflicting == conflicting;
+
+  @override
+  int get hashCode => Object.hashAll([
+    spotId,
+    zoneId,
+    segmentId,
+    vehicle,
+    level,
+    count,
+    low,
+    high,
+    lowRiders,
+    highRiders,
+    latestAt,
+    conflicting,
+  ]);
+}
+
+class SpotSightings {
+  const SpotSightings({required this.sightings});
+
+  factory SpotSightings.fromJson(Map<String, Object?> json) => SpotSightings(
+    sightings: [
+      for (final e in json['sightings'] as List)
+        SpotSighting.fromJson(e as Map<String, Object?>),
+    ],
+  );
+
+  /// 依 spot_id、zone_id、segment_id、vehicle 排序
+  final List<SpotSighting> sightings;
+
+  Map<String, Object?> toJson() => {
+    'sightings': [for (final e in sightings) e.toJson()],
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SpotSightings && _equal(other.sightings, sightings);
+
+  @override
+  int get hashCode => Object.hashAll([_hash(sightings)]);
 }
 
 /// 一位隱藏的車友（#280）

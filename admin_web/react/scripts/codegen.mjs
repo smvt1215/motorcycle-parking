@@ -22,6 +22,7 @@ const READS = {
     'apiV1DataVersions',
     'apiV1AccountDeletionStatus',
     'apiV1SpotsByIds',
+    'apiV1SpotSightings',
     'apiV1HiddenRidersList',
     'apiV1MyAccountStatus',
   ],
