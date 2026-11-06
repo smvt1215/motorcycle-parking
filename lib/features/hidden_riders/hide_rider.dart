@@ -50,7 +50,19 @@ Future<bool> hideRider(
   if (!context.mounted) return false;
   final messenger = ScaffoldMessenger.maybeOf(context);
   final media = MediaQuery.of(context);
-  await store.hiddenRiders.hide(handle: handle, name: name, spotName: spotName);
+  try {
+    await store.hiddenRiders.hide(
+      handle: handle,
+      name: name,
+      spotName: spotName,
+    );
+  } on HiddenRidersFull {
+    // The device list is at 500 already: nothing hidden, say why.
+    messenger
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(const SnackBar(content: Text(hiddenRidersFull)));
+    return false;
+  }
   onHidden?.call();
   if (messenger != null) {
     showUndoToast(

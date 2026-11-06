@@ -128,9 +128,10 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     _auth = client?.auth.onAuthStateChange.listen((state) {
       // Signing in joins the device list to the account's; signing out
       // clears the device's copy.
-      unawaited(
-        riderId == null ? hiddenRiders.signedOut() : hiddenRiders.signedIn(),
-      );
+      unawaited(switch (riderId) {
+        null => hiddenRiders.signedOut(),
+        final id => hiddenRiders.signedIn(id),
+      });
       unawaited(loadFavorites());
       // `is_own` follows the session a row was read with (#280): read the
       // map again once someone signs in or out.
@@ -167,18 +168,29 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   /// The handles [favoriteHandlesSource] returned, by spot id.
   Map<String, String> favoriteHandles = const {};
 
+  /// Favourites the signed-in account added, from [favoriteHandlesSource].
+  Set<String> favoriteOwn = const {};
+
   /// [spot]'s contributor handle: its own, else the loaded copy's, else a
   /// favourite's looked-up one; null when none is known.
   String? handleOf(ParkingSpot spot) =>
       riderHandle(spot) ?? _loadedHandles[spot.id] ?? favoriteHandles[spot.id];
 
+  /// Whether the signed-in account added [spot]: its own `is_own`, else
+  /// the loaded copy's, else a favourite's looked up (snapshots drop it).
+  bool ownSpot(ParkingSpot spot) =>
+      isOwnSpot(spot) ||
+      _loadedOwn.contains(spot.id) ||
+      favoriteOwn.contains(spot.id);
+
   /// Handles of the spots last loaded, hidden ones included, by spot id.
   Map<String, String> _loadedHandles = const {};
+  Set<String> _loadedOwn = const {};
 
   /// Whether [spot]'s rider is hidden on this device; never the rider's
   /// own spot.
   bool riderHidden(ParkingSpot spot) =>
-      !isOwnSpot(spot) && hiddenRiders.isHidden(handleOf(spot));
+      !ownSpot(spot) && hiddenRiders.isHidden(handleOf(spot));
 
   /// Every spot loaded for the viewport, hidden riders' included.
   List<ParkingSpot> _loadedSpots = [];
@@ -190,6 +202,10 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   set spots(List<ParkingSpot> value) {
     _loadedSpots = value;
     _loadedHandles = {for (final s in value) s.id: ?riderHandle(s)};
+    _loadedOwn = {
+      for (final s in value)
+        if (isOwnSpot(s)) s.id,
+    };
     _spots = _withoutHidden(value);
     // Hidden as a guest, then signed in: one's own handle leaves the list.
     final own = [
@@ -217,10 +233,24 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     ];
     if (ids.isEmpty) {
       favoriteHandles = const {};
+      favoriteOwn = const {};
       return;
     }
     try {
-      favoriteHandles = await favoriteHandlesSource.handlesFor(ids);
+      final facts = await favoriteHandlesSource.handlesFor(ids);
+      favoriteHandles = {
+        for (final MapEntry(:key, :value) in facts.entries) key: ?value.handle,
+      };
+      favoriteOwn = {
+        for (final MapEntry(:key, :value) in facts.entries)
+          if (value.isOwn) key,
+      };
+      // One's own favourite: one's own handle leaves the hidden list.
+      final own = [
+        for (final fact in facts.values)
+          if (fact.isOwn) ?fact.handle,
+      ];
+      if (own.isNotEmpty) unawaited(hiddenRiders.forget(own));
     } catch (_) {}
   }
 
@@ -951,6 +981,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
       if (handleOf(spot) case final handle?) {
         favoriteHandles = {...favoriteHandles, spot.id: handle};
       }
+      if (ownSpot(spot)) favoriteOwn = {...favoriteOwn, spot.id};
     }
     await local.setFavorites(favoritesKey, favorites);
     notifyListeners();

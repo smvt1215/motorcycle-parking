@@ -38,10 +38,15 @@ bool canReportContent(ParkingSpot spot) => !spot.isOfficial && !isOwnSpot(spot);
 /// The ⋯ menu beside 資料來源 (P17a ⑤, P17d ②); [show] false means no ⋯.
 typedef SpotMenu = ({bool show, bool byRider, bool hide, bool unhide});
 
-/// [handle] overrides the spot's own, for a favourite's snapshot whose
-/// handle was looked up.
-SpotMenu spotMenu(ParkingSpot spot, HiddenRiders hidden, {String? handle}) {
-  if (!canReportContent(spot)) {
+/// [handle] and [own] override the spot's own, for a favourite's snapshot
+/// whose facts were looked up.
+SpotMenu spotMenu(
+  ParkingSpot spot,
+  HiddenRiders hidden, {
+  String? handle,
+  bool own = false,
+}) {
+  if (own || !canReportContent(spot)) {
     return (show: false, byRider: false, hide: false, unhide: false);
   }
   handle ??= riderHandle(spot);

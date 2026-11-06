@@ -222,6 +222,7 @@ class _RiderRow extends StatelessWidget {
       button: true,
       label: unhideLabel(rider.name),
       excludeSemantics: true,
+      onTap: onUnhide,
       child: OutlinedButton(
         key: ValueKey('unhide-${rider.handle}'),
         onPressed: onUnhide,

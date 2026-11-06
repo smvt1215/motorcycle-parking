@@ -223,10 +223,15 @@ class _SpotSheetState extends State<SpotSheet> {
                   // 回報現場狀況 stays hidden until the rider sighting
                   // sheet (A7, A7b; PR-E) gives it somewhere to go.
                   onReport: null,
-                  onSuggest: () => runAction(
-                    ctx,
-                    () => showSpotSuggestions(ctx, store, spot),
-                  ),
+                  onSuggest: () => runAction(ctx, () async {
+                    final wasHidden = store.riderHidden(spot);
+                    await showSpotSuggestions(ctx, store, spot);
+                    // The rider was hidden from a content report there
+                    // (#280): the details close, as after ⋯'s 隱藏.
+                    if (ctx.mounted && !wasHidden && store.riderHidden(spot)) {
+                      close(ctx);
+                    }
+                  }),
                 );
                 final now = store.clock();
                 final plates = fourSignPlates(

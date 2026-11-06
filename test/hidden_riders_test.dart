@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -460,7 +461,7 @@ void main() {
       await hidden.hide(handle: handleU, name: '', spotName: '永吉路');
       expect(account.calls, isEmpty);
 
-      await hidden.signedIn();
+      await hidden.signedIn('rider-1');
       expect(hidden.riders.map((r) => r.handle), [handleU, handleK, handleA]);
       expect(hidden.byHandle(handleA)!.hiddenAt, DateTime.utc(2026, 10, 1));
       expect(account.rows.map((r) => r.handle).toSet(), {
@@ -477,7 +478,7 @@ void main() {
         rider(handleA, '阿明', DateTime.utc(2026, 10, 1)),
       ]);
       final hidden = HiddenRiders(prefs, remote: account);
-      await hidden.signedIn();
+      await hidden.signedIn('rider-1');
       expect(hidden.isHidden(handleA), isTrue);
       await hidden.signedOut();
       expect(hidden.isEmpty, isTrue);
@@ -490,13 +491,13 @@ void main() {
         rider(handleA, '阿明', DateTime.utc(2026, 10, 1)),
       ]);
       final hidden = HiddenRiders(prefs, remote: account);
-      await hidden.signedIn();
+      await hidden.signedIn('rider-1');
       await hidden.signedOut();
       await hidden.hide(handle: handleK, name: 'Ken', spotName: '松壽');
       expect(account.rows.map((r) => r.handle), [handleA]);
       // Kept on the device while signed out.
       expect(HiddenRiders(prefs).isHidden(handleK), isTrue);
-      await hidden.signedIn();
+      await hidden.signedIn('rider-1');
       expect(hidden.riders.map((r) => r.handle).toSet(), {handleA, handleK});
       expect(account.rows.map((r) => r.handle).toSet(), {handleA, handleK});
     });
@@ -504,7 +505,7 @@ void main() {
     test('登入後新增、解除都同步到帳號', () async {
       final account = FakeAccountList();
       final hidden = HiddenRiders(prefs, remote: account);
-      await hidden.signedIn();
+      await hidden.signedIn('rider-1');
       await hidden.hide(handle: handleA, name: '阿明', spotName: '市府');
       await hidden.sync();
       expect(account.rows.map((r) => r.handle), [handleA]);
@@ -516,7 +517,7 @@ void main() {
     test('同步失敗：保留本機清單、不擋操作，下次再送', () async {
       final account = FakeAccountList()..offline = true;
       final hidden = HiddenRiders(prefs, remote: account);
-      await hidden.signedIn();
+      await hidden.signedIn('rider-1');
       await hidden.hide(handle: handleA, name: '阿明', spotName: '市府');
       await hidden.sync();
       expect(hidden.isHidden(handleA), isTrue);
@@ -530,7 +531,7 @@ void main() {
     test('沒有帳號清單（API 未上線）時登入登出都不動本機清單', () async {
       final hidden = HiddenRiders(prefs);
       await hidden.hide(handle: handleA, name: '阿明', spotName: '市府');
-      await hidden.signedIn();
+      await hidden.signedIn('rider-1');
       await hidden.signedOut();
       expect(hidden.isHidden(handleA), isTrue);
     });
@@ -668,7 +669,7 @@ void main() {
       final account = _FullAccount();
       final hidden = HiddenRiders(prefs, remote: account);
       await hidden.hide(handle: handleA, name: '阿明', spotName: '市府');
-      await hidden.signedIn();
+      await hidden.signedIn('rider-1');
       expect(hidden.accountFull, isTrue);
       expect(hidden.isHidden(handleA), isTrue);
       account.full = false;
@@ -715,10 +716,173 @@ void main() {
       final ids = ['a', 'b', for (var i = 0; i < 448; i++) 'id$i'];
       final handles = await source.handlesFor(ids);
       expect(batches, [200, 200, 50]);
-      expect(handles['a'], handleA);
-      expect(handles.containsKey('b'), isFalse);
-      expect(handles, hasLength(449));
+      expect(handles['a'], (handle: handleA, isOwn: false));
+      expect(handles['b'], (handle: null, isOwn: false));
+      expect(handles, hasLength(450));
     });
+  });
+
+  group('同步的時序（Codex 第 1 輪）', () {
+    late SharedPreferences prefs;
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      prefs = await SharedPreferences.getInstance();
+    });
+
+    test('重新啟動：同一帳號的快取不整份 merge，以帳號清單為準', () async {
+      final account = FakeAccountList([
+        rider(handleA, '阿明', DateTime.utc(2026, 10, 1)),
+      ]);
+      final first = HiddenRiders(prefs, remote: account);
+      await first.signedIn('rider-1');
+      expect(first.isHidden(handleA), isTrue);
+      // Unhidden on another device meanwhile.
+      account.rows = [];
+      account.calls.clear();
+      final relaunched = HiddenRiders(prefs, remote: account);
+      expect(relaunched.isHidden(handleA), isTrue); // the cache, at once
+      await relaunched.signedIn('rider-1');
+      expect(account.calls, ['list']);
+      expect(relaunched.isHidden(handleA), isFalse);
+      expect(account.rows, isEmpty);
+    });
+
+    test('重新啟動：只送還沒同步的異動', () async {
+      final account = FakeAccountList()..offline = true;
+      final first = HiddenRiders(prefs, remote: account);
+      await first.signedIn('rider-1');
+      await first.hide(handle: handleK, name: 'Ken', spotName: '松壽');
+      await first.sync();
+      expect(account.rows, isEmpty);
+      account
+        ..offline = false
+        ..calls.clear();
+      final relaunched = HiddenRiders(prefs, remote: account);
+      await relaunched.signedIn('rider-1');
+      expect(account.calls, ['merge']);
+      expect(account.rows.map((r) => r.handle), [handleK]);
+    });
+
+    test('同步進行中又有異動：這一輪結束後接著送完', () async {
+      final account = GatedAccount();
+      final hidden = HiddenRiders(prefs, remote: account);
+      final signing = hidden.signedIn('rider-1');
+      await account.waiting(); // the first list
+      account.release();
+      await signing;
+      await hidden.hide(handle: handleA, name: '阿明', spotName: '市府');
+      await account.waiting(); // merge of 阿明 in flight
+      // 復原 before the merge answers.
+      await hidden.unhide(handleA);
+      account.release();
+      await account.waiting(); // the next round: remove
+      account.release();
+      await account.waiting(); // then list
+      account.release();
+      await pumpEventQueue();
+      expect(account.calls, ['list', 'merge', 'remove', 'list']);
+      expect(account.rows, isEmpty);
+      expect(hidden.isHidden(handleA), isFalse);
+      expect(prefs.getStringList('hiddenRidersPendingRemoves'), isEmpty);
+      expect(prefs.getStringList('hiddenRidersPendingAdds'), isEmpty);
+    });
+
+    test('A 的同步未回應就登出改登入 B：A 的回應不會寫進 B 的清單', () async {
+      final accountA = [rider(handleA, '阿明', DateTime.utc(2026, 10, 1))];
+      final account = GatedAccount();
+      final hidden = HiddenRiders(prefs, remote: account);
+      final signingA = hidden.signedIn('rider-a');
+      await account.waiting(); // A's list in flight
+      await hidden.signedOut();
+      final signingB = hidden.signedIn('rider-b');
+      // A's answer arrives now, while B is signed in.
+      account.release(accountA);
+      await signingA;
+      await account.waiting(); // B's own list
+      account.release(const []);
+      await signingB;
+      expect(hidden.isHidden(handleA), isFalse);
+      expect(HiddenRiders(prefs).isHidden(handleA), isFalse);
+    });
+
+    test('換帳號登入：上一個帳號留下的快取不會併進來', () async {
+      final account = FakeAccountList([
+        rider(handleA, '阿明', DateTime.utc(2026, 10, 1)),
+      ]);
+      final first = HiddenRiders(prefs, remote: account);
+      await first.signedIn('rider-a');
+      // The app quit before the sign-out reached the list.
+      account.rows = [];
+      final next = HiddenRiders(prefs, remote: account);
+      await next.signedIn('rider-b');
+      expect(next.isEmpty, isTrue);
+      expect(account.rows, isEmpty);
+    });
+  });
+
+  group('本機 500 位上限', () {
+    for (final platform in platforms) {
+      testWidgetsOn('${platform.name} 確認後顯示上限提示，回傳未隱藏', (tester) async {
+        setUpView(tester, platform, const Size(390, 844));
+        final store = (await tester.runAsync(() async {
+          final s = await storeWith({});
+          var t = 0;
+          for (var i = 0; i < hiddenRidersLimit; i++) {
+            await s.hiddenRiders.restore(
+              HiddenRider(
+                handle: i.toRadixString(16).padLeft(32, '0'),
+                name: '',
+                spotName: '',
+                hiddenAt: DateTime.utc(2026).add(Duration(seconds: t++)),
+              ),
+            );
+          }
+          return s;
+        }))!;
+        bool? result;
+        var closed = false;
+        await tester.pumpWidget(
+          app(
+            Scaffold(
+              body: Builder(
+                builder: (context) => TextButton(
+                  onPressed: () async => result = await hideRider(
+                    context,
+                    store,
+                    handle: handleA,
+                    name: '阿明',
+                    spotName: '市府',
+                    onHidden: () => closed = true,
+                  ),
+                  child: const Text('hide'),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.text('hide'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(hideRiderConfirm));
+        await tester.pumpAndSettle();
+        expect(result, isFalse);
+        expect(closed, isFalse);
+        expect(find.text(hiddenRidersFull), findsOneWidget);
+        expect(store.hiddenRiders.isHidden(handleA), isFalse);
+        expect(tester.takeException(), isNull);
+      });
+    }
+  });
+
+  testWidgetsOn('P17c 解除隱藏：螢幕閱讀器點兩下也有作用', (tester) async {
+    setUpView(tester, TargetPlatform.android, const Size(390, 844));
+    final store = (await tester.runAsync(() => storeWith(threeHidden())))!;
+    final semantics = tester.ensureSemantics();
+    await tester.pumpWidget(app(HiddenRidersPage(store: store)));
+    await tester.pumpAndSettle();
+    tester.semantics.tap(find.semantics.byLabel('解除隱藏 阿明'));
+    await tester.pumpAndSettle();
+    expect(store.hiddenRiders.isHidden(handleA), isFalse);
+    semantics.dispose();
   });
 }
 
@@ -729,5 +893,51 @@ class _FullAccount extends FakeAccountList {
   Future<List<HiddenRider>> merge(List<HiddenRider> items) async {
     if (full) throw HiddenRidersFull();
     return super.merge(items);
+  }
+}
+
+/// An account list whose every call waits for [release].
+class GatedAccount extends FakeAccountList {
+  final _gates = <Completer<List<HiddenRider>?>>[];
+  final _arrived = StreamController<void>.broadcast();
+  int _made = 0, _seen = 0;
+
+  /// Resolves once a call is waiting that [waiting] has not seen yet.
+  Future<void> waiting() async {
+    while (_made <= _seen) {
+      await _arrived.stream.first;
+    }
+    _seen++;
+  }
+
+  /// Answers the oldest waiting call, with [rows] as the account's list.
+  void release([List<HiddenRider>? rows]) => _gates.removeAt(0).complete(rows);
+
+  Future<List<HiddenRider>?> _gate() {
+    final gate = Completer<List<HiddenRider>?>();
+    _gates.add(gate);
+    _made++;
+    _arrived.add(null);
+    return gate.future;
+  }
+
+  @override
+  Future<List<HiddenRider>> list() async {
+    final rows = await _gate();
+    if (rows != null) return rows;
+    return super.list();
+  }
+
+  @override
+  Future<List<HiddenRider>> merge(List<HiddenRider> items) async {
+    final rows = await _gate();
+    if (rows != null) return rows;
+    return super.merge(items);
+  }
+
+  @override
+  Future<void> remove(String handle) async {
+    await _gate();
+    return super.remove(handle);
   }
 }

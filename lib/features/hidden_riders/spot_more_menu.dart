@@ -31,6 +31,7 @@ class SpotMoreButton extends StatelessWidget {
       spot,
       store.hiddenRiders,
       handle: store.handleOf(spot),
+      own: store.ownSpot(spot),
     );
     if (!menu.show) return const SizedBox.shrink();
     final label = moreActionsLabel(byRider: menu.byRider);
@@ -59,47 +60,77 @@ class SpotMoreButton extends StatelessWidget {
               ],
             ),
     );
-    return Semantics(
-      label: label,
-      button: true,
-      excludeSemantics: true,
-      child: PopupMenuButton<_SpotAction>(
-        key: const ValueKey('spot-more'),
-        tooltip: label,
-        icon: Icon(isCupertino ? Icons.more_horiz : Icons.more_vert),
-        iconColor: colors.primary,
-        constraints: const BoxConstraints(minWidth: 200),
-        style: IconButton.styleFrom(
-          minimumSize: Size(isCupertino ? 44 : 48, isCupertino ? 44 : 48),
+    List<PopupMenuEntry<_SpotAction>> items(BuildContext ctx) => [
+      if (isCupertino)
+        PopupMenuItem<_SpotAction>(
+          enabled: false,
+          height: 32,
+          child: Text(
+            moreActionsTitle(byRider: menu.byRider),
+            style: Theme.of(ctx).textTheme.bodySmall
+                ?.copyWith(color: colors.onSurfaceVariant),
+          ),
         ),
-        onSelected: (action) => unawaited(_run(context, action)),
-        itemBuilder: (ctx) => [
-          if (isCupertino)
-            PopupMenuItem<_SpotAction>(
-              enabled: false,
-              height: 32,
-              child: Text(
-                moreActionsTitle(byRider: menu.byRider),
-                style: Theme.of(ctx).textTheme.bodySmall
-                    ?.copyWith(color: colors.onSurfaceVariant),
-              ),
+      if (menu.hide)
+        item(_SpotAction.hide, hideRiderAction, Icons.visibility_off_outlined),
+      if (menu.unhide)
+        item(_SpotAction.unhide, unhideRiderAction, Icons.visibility_outlined),
+      item(_SpotAction.report, reportContentAction, Icons.flag_outlined),
+    ];
+    // The menu opens the same way from a tap and from a screen reader's
+    // activation of the merged label.
+    return Builder(
+      builder: (buttonContext) {
+        void open() => unawaited(_open(buttonContext, items));
+        return Semantics(
+          label: label,
+          button: true,
+          excludeSemantics: true,
+          onTap: open,
+          child: IconButton(
+            key: const ValueKey('spot-more'),
+            tooltip: label,
+            icon: Icon(isCupertino ? Icons.more_horiz : Icons.more_vert),
+            color: colors.primary,
+            constraints: BoxConstraints(
+              minWidth: isCupertino ? 44 : 48,
+              minHeight: isCupertino ? 44 : 48,
             ),
-          if (menu.hide)
-            item(
-              _SpotAction.hide,
-              hideRiderAction,
-              Icons.visibility_off_outlined,
-            ),
-          if (menu.unhide)
-            item(
-              _SpotAction.unhide,
-              unhideRiderAction,
-              Icons.visibility_outlined,
-            ),
-          item(_SpotAction.report, reportContentAction, Icons.flag_outlined),
-        ],
-      ),
+            onPressed: open,
+          ),
+        );
+      },
     );
+  }
+
+  /// Opens the menu under the button, as [PopupMenuButton] places it.
+  Future<void> _open(
+    BuildContext buttonContext,
+    List<PopupMenuEntry<_SpotAction>> Function(BuildContext) items,
+  ) async {
+    final button = buttonContext.findRenderObject()! as RenderBox;
+    final overlay =
+        Navigator.of(buttonContext).overlay!.context.findRenderObject()!
+            as RenderBox;
+    final position = RelativeRect.fromRect(
+      Rect.fromPoints(
+        button.localToGlobal(Offset.zero, ancestor: overlay),
+        button.localToGlobal(
+          button.size.bottomRight(Offset.zero),
+          ancestor: overlay,
+        ),
+      ),
+      Offset.zero & overlay.size,
+    );
+    final action = await showMenu<_SpotAction>(
+      context: buttonContext,
+      position: position,
+      constraints: const BoxConstraints(minWidth: 200),
+      items: items(buttonContext),
+    );
+    if (action != null && buttonContext.mounted) {
+      await _run(buttonContext, action);
+    }
   }
 
   Future<void> _run(BuildContext context, _SpotAction action) async {
@@ -196,19 +227,23 @@ class UnhideButton extends StatelessWidget {
   final String name;
 
   @override
-  Widget build(BuildContext context) => Semantics(
-    button: true,
-    label: unhideLabel(name),
-    excludeSemantics: true,
-    child: OutlinedButton(
-      key: ValueKey('unhide-$handle'),
-      onPressed: () =>
-          unawaited(unhideRider(context, store.hiddenRiders, handle)),
-      style: OutlinedButton.styleFrom(
-        minimumSize: Size(isCupertino ? 44 : 48, isCupertino ? 44 : 48),
-        padding: const EdgeInsets.symmetric(horizontal: 14),
+  Widget build(BuildContext context) {
+    void unhide() =>
+        unawaited(unhideRider(context, store.hiddenRiders, handle));
+    return Semantics(
+      button: true,
+      label: unhideLabel(name),
+      excludeSemantics: true,
+      onTap: unhide,
+      child: OutlinedButton(
+        key: ValueKey('unhide-$handle'),
+        onPressed: unhide,
+        style: OutlinedButton.styleFrom(
+          minimumSize: Size(isCupertino ? 44 : 48, isCupertino ? 44 : 48),
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+        ),
+        child: const Text(unhideRiderAction),
       ),
-      child: const Text(unhideRiderAction),
-    ),
-  );
+    );
+  }
 }

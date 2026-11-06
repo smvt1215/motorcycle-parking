@@ -6,9 +6,11 @@ import 'package:motorcycle_parking/app.dart';
 import 'package:motorcycle_parking/data/app_store.dart';
 import 'package:motorcycle_parking/data/favorite_handles.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
+import 'package:motorcycle_parking/domain/content_report_display.dart';
 import 'package:motorcycle_parking/domain/hidden_riders_display.dart';
 import 'package:motorcycle_parking/domain/map_viewport.dart';
 import 'package:motorcycle_parking/domain/spot_contributor.dart';
+import 'package:motorcycle_parking/features/content_report/content_report.dart';
 import 'package:motorcycle_parking/features/contribute/contribute_page.dart';
 import 'package:motorcycle_parking/features/favorites/favorites_page.dart';
 import 'package:motorcycle_parking/features/map/spot_sheet.dart';
@@ -63,11 +65,12 @@ class FixedParking extends ParkingRepository {
 }
 
 class FixedHandles implements FavoriteHandles {
-  const FixedHandles(this.handles);
+  const FixedHandles(this.handles, {this.own = const {}});
   final Map<String, String> handles;
+  final Set<String> own;
   @override
-  Future<Map<String, String>> handlesFor(List<String> ids) async => {
-    for (final id in ids) id: ?handles[id],
+  Future<Map<String, FavoriteFacts>> handlesFor(List<String> ids) async => {
+    for (final id in ids) id: (handle: handles[id], isOwn: own.contains(id)),
   };
 }
 
@@ -395,6 +398,162 @@ void main() {
         store.favorites.single.toJson(),
         isNot(contains('contributor_handle')),
       );
+    });
+  });
+
+  group('Codex 第 1 輪', () {
+    for (final platform in platforms) {
+      testWidgetsOn('${platform.name} 自己的收藏：查回 is_own，詳情沒有 ⋯，代號移出清單', (
+        tester,
+      ) async {
+        setUpView(tester, platform, const Size(390, 844));
+        final saved = spot('mine', '我新增的機車格', lat: 24.5, lng: 121.0);
+        final store = (await tester.runAsync(() async {
+          final s = await storeOf(
+            const [],
+            favoriteHandles: const FixedHandles(
+              {'mine': handleA},
+              own: {'mine'},
+            ),
+          );
+          // Hidden as a guest before signing in.
+          await s.hiddenRiders.hide(handle: handleA, name: '我', spotName: '');
+          await s.local.setFavorites(s.favoritesKey, [saved]);
+          await s.loadFavorites();
+          await Future<void>.delayed(Duration.zero);
+          return s;
+        }))!;
+        expect(store.ownSpot(saved), isTrue);
+        expect(store.hiddenRiders.isHidden(handleA), isFalse);
+        expect(
+          spotMenu(saved, store.hiddenRiders, own: store.ownSpot(saved)).show,
+          isFalse,
+        );
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [storeProvider.overrideWith((ref) => store)],
+            child: app(const Scaffold(body: FavoritesPage())),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('我新增的機車格'));
+        await tester.pumpAndSettle();
+        await tester.drag(
+          find.byKey(const ValueKey('parking-spot-sheet')),
+          const Offset(0, -600),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('spot-more')), findsNothing);
+      });
+
+      testWidgetsOn('${platform.name} ⋯ 與解除隱藏：螢幕閱讀器點兩下也有作用', (tester) async {
+        setUpView(tester, platform, const Size(390, 844));
+        final store = (await tester.runAsync(() => storeOf([amin])))!;
+        final semantics = tester.ensureSemantics();
+        await tester.pumpWidget(
+          app(
+            Scaffold(
+              body: Builder(
+                builder: (context) => TextButton(
+                  onPressed: () => showSpot(context, store, amin),
+                  child: const Text('details'),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.text('details'));
+        await tester.pumpAndSettle();
+        await tester.drag(
+          find.byKey(const ValueKey('parking-spot-sheet')),
+          const Offset(0, -600),
+        );
+        await tester.pumpAndSettle();
+        await tester.scrollUntilVisible(
+          find.byKey(const ValueKey('spot-more')),
+          200,
+          scrollable: find
+              .descendant(
+                of: find.byKey(const ValueKey('parking-spot-sheet')),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        );
+        tester.semantics.tap(find.semantics.byLabel('這筆回報：更多動作'));
+        await tester.pumpAndSettle();
+        expect(find.text(hideRiderAction), findsOneWidget);
+        expect(find.text(reportContentAction), findsOneWidget);
+        // Close the menu, hide from elsewhere, then unhide by activation.
+        await tester.tapAt(const Offset(5, 5));
+        await tester.pumpAndSettle();
+        await tester.runAsync(
+          () => store.hiddenRiders.hide(
+            handle: handleA,
+            name: '阿明',
+            spotName: amin.name,
+          ),
+        );
+        await tester.pumpAndSettle();
+        tester.semantics.tap(find.semantics.byLabel('解除隱藏 阿明'));
+        await tester.pumpAndSettle();
+        expect(store.hiddenRiders.isHidden(handleA), isFalse);
+        semantics.dispose();
+      });
+    }
+
+    testWidgetsOn('修改建議 › 內容不當 → 隱藏：修改建議和詳情都關閉', (tester) async {
+      setUpView(tester, TargetPlatform.android, const Size(390, 844));
+      final store = (await tester.runAsync(() => storeOf([amin, ken])))!;
+      await tester.pumpWidget(
+        app(
+          Scaffold(
+            body: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => showSpot(context, store, amin),
+                child: const Text('details'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('details'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('修改建議').last);
+      await tester.pumpAndSettle();
+      final row = find.byKey(const ValueKey('suggest-content-report'));
+      // Pinned once: the title scrolls away with the list.
+      final list = tester.element(
+        find
+            .ancestor(
+              of: find.text('提出修改建議'),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.scrollUntilVisible(
+        row,
+        200,
+        scrollable: find.byElementPredicate((e) => e == list),
+      );
+      await Scrollable.ensureVisible(tester.element(row), alignment: .5);
+      await tester.pumpAndSettle();
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+      expect(find.byType(ContentReportSheet), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('content-report-spot_name')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('content-report-submit')));
+      await tester.pumpAndSettle();
+      expect(find.text(contentReportSentTitle), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('content-report-hide')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(hideRiderConfirm));
+      await tester.pumpAndSettle();
+      expect(store.hiddenRiders.isHidden(handleA), isTrue);
+      expect(find.byType(ContentReportSheet), findsNothing);
+      expect(find.text('提出修改建議'), findsNothing);
+      expect(find.byKey(const ValueKey('parking-spot-sheet')), findsNothing);
+      expect(find.text('已隱藏阿明'), findsOneWidget);
     });
   });
 }

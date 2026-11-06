@@ -242,7 +242,7 @@ Future<void> showSpotSuggestions(
                 ),
               ),
               // #280 P17b ①: same rule as the details' ⋯ menu.
-              if (canReportContent(spot)) ...[
+              if (canReportContent(spot) && !store.ownSpot(spot)) ...[
                 const SizedBox(height: 20),
                 Semantics(
                   header: true,
@@ -269,7 +269,14 @@ Future<void> showSpotSuggestions(
                     title: const Text(contentProblemRow),
                     subtitle: const Text(contentProblemDetail),
                     trailing: const Icon(Icons.chevron_right),
-                    onTap: () => showContentReport(ctx, store, spot),
+                    // Hidden from the result: this list closes, and the
+                    // details behind it close as they see the rider hidden.
+                    onTap: () async {
+                      if (await showContentReport(ctx, store, spot) &&
+                          ctx.mounted) {
+                        Navigator.pop(ctx);
+                      }
+                    },
                   ),
                 ),
               ],

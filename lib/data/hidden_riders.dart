@@ -247,6 +247,9 @@ class HiddenRiders extends ChangeNotifier {
   static const storageKey = LocalHiddenRidersStore.storageKey;
   static const _pendingAddsKey = 'hiddenRidersPendingAdds';
   static const _pendingRemovesKey = 'hiddenRidersPendingRemoves';
+
+  /// The account the device's copy belongs to; absent for a guest list.
+  static const ownerKey = 'hiddenRidersAccount';
   final SharedPreferences prefs;
   final DateTime Function() clock;
   final LocalHiddenRidersStore local;
@@ -255,13 +258,21 @@ class HiddenRiders extends ChangeNotifier {
   final HiddenRidersStore? remote;
   late List<HiddenRider> _riders;
 
-  /// Signed in to an account whose list this follows.
-  bool _account = false;
-  bool get followsAccount => _account && remote != null;
+  /// The signed-in account whose list this follows; null signed out.
+  String? _account;
+  bool get followsAccount => _account != null && remote != null;
 
-  /// Handles added or removed here that the account has not taken yet.
+  /// Bumped on every sign-in and sign-out: an answer for an older one is
+  /// dropped, so one account's list never lands in another's.
+  int _generation = 0;
+
+  /// Handles added or removed here that the account has not taken yet;
+  /// kept across launches.
   late Set<String> _pendingAdds, _pendingRemoves;
   Future<void>? _syncing;
+
+  /// A change arrived while a sync ran: it runs another round.
+  bool _dirty = false;
 
   /// The account refused the last merge: it would pass
   /// [hiddenRidersLimit] (`hidden_riders.too_many`). The device list is
@@ -376,43 +387,81 @@ class HiddenRiders extends ChangeNotifier {
     });
   }
 
-  /// Signed in: this device's list joins the account's (a union, each
-  /// handle keeping its earliest date), and the account's list rules from
-  /// then on. A failure keeps the device list and tries again next time.
-  Future<void> signedIn() async {
-    if (remote == null || _account) return;
-    _account = true;
-    // Everything kept as a guest goes up once.
-    _pendingAdds.addAll(_riders.map((r) => r.handle));
+  /// Signed in as [account]. A guest list joins the account's once (a
+  /// union, each handle keeping its earliest date); the device's copy of
+  /// this same account (a relaunch) only sends what is still pending,
+  /// then takes the account's list, so riders unhidden on another device
+  /// stay unhidden. A copy left by another account is dropped.
+  Future<void> signedIn(String account) async {
+    if (remote == null || _account == account) return;
+    _generation++;
+    _syncing = null;
+    _account = account;
+    final owner = prefs.getString(ownerKey);
+    if (owner == null) {
+      // A guest list goes up once.
+      _pendingAdds.addAll(_riders.map((r) => r.handle));
+    } else if (owner != account) {
+      _riders = [];
+      _pendingAdds.clear();
+      _pendingRemoves.clear();
+      await _save();
+    }
+    await prefs.setString(ownerKey, account);
     await _savePending();
     await sync();
   }
 
   /// Signed out: the device's copy is cleared so the next person on a
   /// shared device neither sees nor keeps it; the account still has it.
+  /// A sync still running for the account is dropped.
   Future<void> signedOut() async {
-    if (remote == null || !_account) return;
-    _account = false;
+    if (remote == null) return;
+    if (_account == null && prefs.getString(ownerKey) == null) return;
+    _generation++;
+    _syncing = null;
+    _account = null;
     _accountFull = false;
     _pendingAdds.clear();
     _pendingRemoves.clear();
-    await _savePending();
     _riders = [];
     _notify();
+    await prefs.remove(ownerKey);
+    await _savePending();
     await local.clear();
   }
 
-  /// Sends what the account has not taken yet, then reads its list. Never
-  /// throws; one run at a time.
-  Future<void> sync() =>
-      _syncing ??= _sync().whenComplete(() => _syncing = null);
+  /// Sends what the account has not taken yet, then reads its list; runs
+  /// again while changes keep arriving. Never throws; one run at a time
+  /// per sign-in.
+  Future<void> sync() {
+    if (_syncing case final running?) {
+      _dirty = true;
+      return running;
+    }
+    late final Future<void> run;
+    run = _syncAll(_generation).whenComplete(() {
+      if (identical(_syncing, run)) _syncing = null;
+    });
+    return _syncing = run;
+  }
 
-  Future<void> _sync() async {
+  Future<void> _syncAll(int generation) async {
+    do {
+      _dirty = false;
+      if (!await _sync(generation)) return;
+    } while (_dirty && generation == _generation);
+  }
+
+  /// One round; false when it failed or the account changed.
+  Future<bool> _sync(int generation) async {
     final store = remote;
-    if (store == null || !_account) return;
+    bool current() => generation == _generation && _account != null;
+    if (store == null || !current()) return false;
     try {
       for (final handle in [..._pendingRemoves]) {
         await store.remove(handle);
+        if (!current()) return false;
         _pendingRemoves.remove(handle);
       }
       final adds = [
@@ -420,8 +469,10 @@ class HiddenRiders extends ChangeNotifier {
           if (_pendingAdds.contains(r.handle)) r,
       ];
       final all = adds.isEmpty ? await store.list() : await store.merge(adds);
+      if (!current()) return false;
+      // The account has these now, whatever happened here meanwhile: a
+      // later removal is pending on its own.
       _pendingAdds.removeAll(adds.map((r) => r.handle));
-      if (!_account) return;
       // Changes made while this ran stay on top of the account's answer.
       _riders = _sorted([
         for (final r in unionRiders(all, [
@@ -432,13 +483,18 @@ class HiddenRiders extends ChangeNotifier {
       ]);
       _accountFull = false;
       await _save();
+      await _savePending();
+      return true;
     } on HiddenRidersFull {
+      if (!current()) return false;
       _accountFull = true;
       _notify();
-    } catch (_) {
-      // Offline or the RPCs are not there yet: keep the device list.
-    } finally {
       await _savePending();
+      return false;
+    } catch (_) {
+      // Offline: keep the device list and what is pending.
+      if (current()) await _savePending();
+      return false;
     }
   }
 }
