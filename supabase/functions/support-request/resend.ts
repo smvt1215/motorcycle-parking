@@ -167,6 +167,44 @@ export function caseReceiptMail(id: string, kind: Kind, link: string | null) {
   };
 }
 
+/** The support form (#295). */
+export const formUrl = `${siteUrl}/support`;
+
+/**
+ * The receipt of a mail to support@ (#295 layer 2). When it reads like an
+ * account deletion or a personal data request, it says that mail cannot show
+ * who owns an account: the form and the login email's one-time link do, and
+ * mail about the account only goes to the login email (#285).
+ */
+export function inboundReceiptMail(
+  id: string,
+  link: string | null,
+  identity: boolean,
+) {
+  const receipt = caseReceiptMail(id, 'general', link);
+  return {
+    subject: receipt.subject,
+    text: [
+      `已收到你寄到 ${supportAddress} 的信，已登錄為客服案件 ${
+        supportCode(id)
+      }。`,
+      '客服會在 5 個工作天內回覆到這個信箱。',
+      ...(identity
+        ? [
+          '',
+          '如果你要刪除帳號，或查詢、更正、取得個人資料的複本：從 email 寄來的申請無法確認你是帳號本人，請改用客服表單，選「刪除帳號」或「個資權利請求」並填寫帳號的登入 email。',
+          '系統會寄一次性的確認連結到那個登入 email，和帳號有關的信也只會寄到那裡：',
+          formUrl,
+        ]
+        : []),
+      '',
+      ...caseLines(link),
+      '',
+      siteUrl,
+    ].join('\n'),
+  };
+}
+
 /** An administrator's answer (#295): the text, then how to add to it. */
 export function replyMail(id: string, body: string, link: string | null) {
   return {
