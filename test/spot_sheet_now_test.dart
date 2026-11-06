@@ -66,11 +66,12 @@ void main() {
     );
     await tester.tap(find.text('開啟點位'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('現在不可停，20:00 起可停'), findsWidgets);
+    expect(find.textContaining('現在不能停，20:00 起可停'), findsWidgets);
     now = now.add(const Duration(seconds: 30));
     await tester.pump(const Duration(seconds: 30));
-    expect(find.textContaining('現在不可停'), findsNothing);
-    expect(find.textContaining('現在可停'), findsWidgets);
+    expect(find.textContaining('現在不能停'), findsNothing);
+    // Open now until 07:00: 有條件 (the plate reads 到 07:00).
+    expect(find.text('大型重機現在有條件'), findsWidgets);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 }

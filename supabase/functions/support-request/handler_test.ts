@@ -20,7 +20,7 @@ function fake(
     network?: string | null;
     submitError?: string;
     notifier?: Notifier;
-    mail?: 'confirm' | 'status' | null;
+    mail?: 'confirm' | 'status' | 'case' | null;
     mailer?: RiderMailer;
     confirmBase?: string | null;
   } = {},
@@ -40,11 +40,17 @@ function fake(
       ),
     secret: () =>
       Promise.resolve({ secret: 'S'.repeat(43), hash: 'h'.repeat(64) }),
-    submit: (s, network, tokenHash) => {
+    replyToken: () =>
+      Promise.resolve({ secret: 'r'.repeat(32), hash: 'q'.repeat(64) }),
+    submit: (s, network, tokenHash, replyHash) => {
       if (options.submitError) {
         return Promise.reject({ message: options.submitError });
       }
-      log.push(`submit ${JSON.stringify(s)} ${network.length} ${tokenHash}`);
+      log.push(
+        `submit ${JSON.stringify(s)} ${network.length} ${tokenHash}${
+          replyHash ? ` ${replyHash}` : ''
+        }`,
+      );
       return Promise.resolve({
         id,
         mail: options.mail ?? null,
@@ -66,6 +72,10 @@ function fake(
         log.push(`receipt ${JSON.stringify(m)}`);
         return Promise.resolve(true);
       },
+      caseReceipt: (m) => {
+        log.push(`caseReceipt ${JSON.stringify(m)}`);
+        return Promise.resolve(true);
+      },
       confirm: (m) => {
         log.push(`confirm ${JSON.stringify(m)}`);
         return Promise.resolve(true);
@@ -81,6 +91,9 @@ function fake(
         : `${
           options.confirmBase ?? 'https://site.test/confirm'
         }#token=${x}.${secret}`,
+    cancelLink: (x, secret) => `https://site.test/cancel#token=${x}.${secret}`,
+    caseLink: (x, secret) => `https://site.test/case#token=${x}.${secret}`,
+    replyAddress: (token) => `reply+${token}@site.test`,
     background: (task) => {
       log.push('background');
       tasks.push(task);
@@ -108,7 +121,8 @@ async function call(deps: Deps, req: Request) {
   return { status: res.status, body: await res.json() };
 }
 
-const receipt = `receipt {"id":"${id}","email":"helper@contact.test"}`;
+const receipt =
+  `receipt {"id":"${id}","email":"helper@contact.test","kind":"account_deletion"}`;
 const notice = [
   `notify {"id":"${id}","adminUrl":"https://admin.test/support/${id}"}`,
   `notified ${id}`,
@@ -123,7 +137,7 @@ Deno.test('stores the request, sends the receipt and notifies with only its id a
   );
   await settle();
   equal(log, [
-    `submit {"kind":"account_deletion","contactEmail":"helper@contact.test","loginEmail":"rider@example.test","hint":"Google","message":"想刪除帳號"} 64 ${
+    `submit {"kind":"account_deletion","contactEmail":"helper@contact.test","loginEmail":"rider@example.test","privacyRight":null,"subject":"","hint":"Google","message":"想刪除帳號"} 64 ${
       'h'.repeat(64)
     }`,
     receipt,
@@ -142,7 +156,7 @@ Deno.test('a login email gets the one-time link; the contact email only the rece
     receipt,
     `confirm {"id":"${id}","email":"rider@example.test","link":"https://site.test/confirm#token=${id}.${
       'S'.repeat(43)
-    }"}`,
+    }","kind":"account_deletion"}`,
     'background',
     ...notice,
   ], 'confirmation to the login email');
@@ -179,7 +193,9 @@ Deno.test('a match and a miss answer alike and send the contact email the same',
   equal(
     state.log.filter((l) => l.startsWith('status')),
     [
-      `status {"id":"${id}","email":"rider@example.test","scheduledAt":"2026-11-08T07:30:00Z"}`,
+      `status {"id":"${id}","email":"rider@example.test","scheduledAt":"2026-11-08T07:30:00Z","cancelLink":"https://site.test/cancel#token=${id}.${
+        'S'.repeat(43)
+      }"}`,
     ],
     'the owner of an account in the cooling-off period hears its state',
   );
@@ -198,11 +214,19 @@ Deno.test('failed or unconfigured mail never logs an address or the link', async
   try {
     for (
       const options of [
-        { mailer: { receipt: refuse, confirm: refuse, status: refuse } },
+        {
+          mailer: {
+            receipt: refuse,
+            caseReceipt: refuse,
+            confirm: refuse,
+            status: refuse,
+          },
+        },
         { confirmBase: null },
         {
           mailer: {
             receipt: () => Promise.resolve(false),
+            caseReceipt: () => Promise.resolve(false),
             confirm: () => Promise.resolve(false),
             status: () => Promise.resolve(false),
           },
@@ -303,6 +327,8 @@ Deno.test('parse', () => {
     kind: 'account_deletion',
     contactEmail: 'a@b.tw',
     loginEmail: 'l@b.tw',
+    privacyRight: null,
+    subject: '',
     hint: '',
     message: '',
   }, 'minimal');
@@ -318,4 +344,111 @@ Deno.test('parse', () => {
   equal(parse({}), null, 'emails required');
   equal(parse({ contact_email: 'a@b.tw' }), null, 'login email required');
   equal(parse({ login_email: 'a@b.tw' }), null, 'contact email required');
+});
+
+const question = {
+  kind: 'general',
+  contact_email: ' Asker@Contact.TEST ',
+  subject: '  費用\n錯誤  ',
+  message: '停車點的費用不對',
+};
+
+Deno.test('a general case: the receipt carries the case link and the reply address', async () => {
+  const { deps, log, settle } = fake({ mail: 'case' });
+  equal(
+    await call(deps, post(question)),
+    { status: 200, body: { received: true, id } },
+    'same answer',
+  );
+  await settle();
+  equal(log, [
+    `submit {"kind":"general","contactEmail":"asker@contact.test","loginEmail":null,"privacyRight":null,"subject":"費用 錯誤","hint":"","message":"停車點的費用不對"} 64 ${
+      'h'.repeat(64)
+    } ${'q'.repeat(64)}`,
+    `caseReceipt {"id":"${id}","email":"asker@contact.test","kind":"general","link":"https://site.test/case#token=${id}.${
+      'S'.repeat(43)
+    }","replyTo":"reply+${'r'.repeat(32)}@site.test"}`,
+    'background',
+    ...notice,
+  ], 'the case link and reply token are made and only their hashes stored');
+});
+
+Deno.test('a privacy request is confirmed by the login email like a deletion', async () => {
+  const { deps, log, settle } = fake({ mail: 'confirm' });
+  await call(deps, post({ ...form, kind: 'privacy', privacy_right: 'copy' }));
+  await settle();
+  equal(
+    log.filter((l) => l.startsWith('confirm') || l.startsWith('receipt')),
+    [
+      `receipt {"id":"${id}","email":"helper@contact.test","kind":"privacy"}`,
+      `confirm {"id":"${id}","email":"rider@example.test","link":"https://site.test/confirm#token=${id}.${
+        'S'.repeat(43)
+      }","kind":"privacy"}`,
+    ],
+    'the fixed receipt and the link to the login email',
+  );
+  equal(log[0].includes(' q'), false, 'no reply token');
+});
+
+Deno.test('parse the case kinds', () => {
+  equal(parse(question)?.loginEmail, null, 'a question has no login email');
+  equal(
+    parse({ ...question, login_email: 'x@y.tw' }),
+    null,
+    'and may not send one',
+  );
+  equal(parse({ ...question, message: '' }), null, 'a question needs its text');
+  equal(
+    parse({ ...question, message: '長'.repeat(4000) })?.message.length,
+    4000,
+    '4000 characters',
+  );
+  equal(parse({ ...question, message: '長'.repeat(4001) }), null, 'not more');
+  equal(parse({ ...question, subject: 'x'.repeat(121) }), null, 'subject');
+  equal(
+    parse({ ...question, privacy_right: 'copy' }),
+    null,
+    'only a privacy request names a right',
+  );
+  equal(
+    parse({ ...form, kind: 'privacy' }),
+    null,
+    'a privacy request names the right',
+  );
+  equal(
+    parse({ ...form, kind: 'privacy', privacy_right: 'delete' }),
+    null,
+    'one of access, correction, copy',
+  );
+  equal(
+    parse({ ...form, kind: 'privacy', privacy_right: 'access' })?.privacyRight,
+    'access',
+    'access',
+  );
+  equal(
+    parse({
+      ...form,
+      kind: 'privacy',
+      privacy_right: 'access',
+      login_email: '',
+    }),
+    null,
+    'a privacy request needs the login email',
+  );
+  for (const kind of ['data_issue', 'complaint']) {
+    equal(parse({ ...question, kind })?.kind, kind, kind);
+  }
+});
+
+Deno.test('the longest allowed form fits the request size limit', async () => {
+  const { deps } = fake({ mail: 'case' });
+  const body = {
+    ...question,
+    contact_email: 'rider@example.test',
+    subject: '長'.repeat(120),
+    account_hint: '長'.repeat(200),
+    message: '🏍'.repeat(4000),
+  };
+  equal(JSON.stringify(body).length > 8192, true, 'over the default');
+  equal((await call(deps, post(body))).status, 200, 'accepted');
 });

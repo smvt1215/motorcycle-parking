@@ -1,7 +1,11 @@
 import {
   confirmToken,
+  newReplyToken,
   newSecret,
   parseConfirmToken,
+  parseReplyAddress,
+  replyAddress,
+  replyTokenHash,
   secretBytes,
 } from './support_token.ts';
 
@@ -56,4 +60,51 @@ Deno.test('malformed tokens are refused', async () => {
       `ABCDEF00-0000-4000-8000-000000000001.${good}`,
     ]
   ) equal(await parseConfirmToken(token), null, String(token));
+});
+
+Deno.test('a reply token fits an address and hashes its text', async () => {
+  const made = await newReplyToken();
+  equal(/^[a-z2-7]{32}$/.test(made.secret), true, '32 base32 characters');
+  equal(made.hash, await replyTokenHash(made.secret), 'hash of the text');
+  const zero = await newReplyToken((b) => b.fill(0));
+  equal(zero.secret, 'a'.repeat(32), 'zero bytes');
+  // SHA-256 of 32 ASCII "a".
+  equal(
+    zero.hash,
+    '3ba3f5f43b92602683c19aee62a20342b084dd5971ddd33808d81a328879a547',
+    'the database gets the SHA-256 of the text',
+  );
+});
+
+Deno.test('only reply+<token>@ our domain is a reply address', () => {
+  const token = 'abcdefghijklmnopqrstuvwxyz234567';
+  equal(
+    parseReplyAddress(replyAddress(token)),
+    token,
+    'round trip',
+  );
+  equal(
+    parseReplyAddress(
+      ` Reply+${token.toUpperCase()}@MotoParking.SmvtStudio.com `,
+    ),
+    token,
+    'any case',
+  );
+  equal(
+    parseReplyAddress('support@motoparking.smvtstudio.com'),
+    null,
+    'support@',
+  );
+  equal(parseReplyAddress(`reply+${token}@evil.test`), null, 'another domain');
+  equal(
+    parseReplyAddress(`reply+${token}x@motoparking.smvtstudio.com`),
+    null,
+    'too long',
+  );
+  equal(
+    parseReplyAddress(`reply+${token.slice(1)}1@motoparking.smvtstudio.com`),
+    null,
+    'not base32',
+  );
+  equal(parseReplyAddress(42), null, 'not a string');
 });

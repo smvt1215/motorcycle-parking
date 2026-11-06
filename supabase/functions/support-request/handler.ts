@@ -22,22 +22,59 @@
 // period its login email gets a mail saying so. The mails go out in the
 // background and the answer is the same in every case, so neither the form
 // nor the contact inbox tells whether an account exists.
+//
+// Cases (#295): the form also takes a general question (general), a data
+// error or infringement (data_issue), a report or appeal (complaint) and a
+// personal data request (privacy: access, correction or copy). A general
+// kind has only the contact email: its receipt carries the case link (the
+// one-time secret, 30 days) and a Reply-To reply+<token>@ (only the hashes
+// are stored), so the rider can add to the same case. A privacy request
+// works as the deletion does: only the login email's owner, through the
+// one-time link, makes it answerable, and the answers go only there; the
+// contact email gets the fixed receipt.
 import { cors, readBody, response } from '../_shared/http.ts';
 import type { AppCheckResult } from '../_shared/app_check.ts';
 import type { Secret } from '../_shared/support_token.ts';
 
+export const kinds = [
+  'general',
+  'data_issue',
+  'complaint',
+  'privacy',
+  'account_deletion',
+] as const;
+export type Kind = typeof kinds[number];
+export const privacyRights = ['access', 'correction', 'copy'] as const;
+export type PrivacyRight = typeof privacyRights[number];
+/** The kinds whose identity the login email's owner confirms (#285). */
+export const verified = (kind: Kind) =>
+  kind === 'account_deletion' || kind === 'privacy';
+
 export type Submission = {
-  kind: 'account_deletion';
+  kind: Kind;
   contactEmail: string;
-  loginEmail: string;
+  /** Only for account_deletion and privacy. */
+  loginEmail: string | null;
+  /** Only for privacy. */
+  privacyRight: PrivacyRight | null;
+  subject: string;
   hint: string;
   message: string;
 };
 
-/** How administrators hear about a new request; replaceable (T269_Q4_MAILER). */
+/**
+ * How administrators hear about a new case or a rider's reply (#295);
+ * replaceable (T269_Q4_MAILER). Only the case id and the admin page link.
+ */
+export type Notice = {
+  id: string;
+  adminUrl: string;
+  /** A rider's reply (its message id); a new case without. */
+  replyId?: string;
+};
 export interface Notifier {
   /** False when no mail service is configured: nothing was sent. */
-  notify(notice: { id: string; adminUrl: string }): Promise<boolean>;
+  notify(notice: Notice): Promise<boolean>;
 }
 
 /** No mail service yet: requests still show on the admin page. */
@@ -45,20 +82,41 @@ export const silentNotifier: Notifier = {
   notify: () => Promise.resolve(false),
 };
 
-/** Mail to the person who filled in the form (#285). */
+/** Mail to the person who filled in the form (#285, #295). */
 export interface RiderMailer {
   /** The fixed receipt to the contact email. False: nothing was sent. */
-  receipt(mail: { id: string; email: string }): Promise<boolean>;
+  receipt(mail: { id: string; email: string; kind: Kind }): Promise<boolean>;
+  /** A general case's receipt: the case link and the reply address. */
+  caseReceipt(
+    mail: {
+      id: string;
+      email: string;
+      kind: Kind;
+      link: string | null;
+      replyTo: string;
+    },
+  ): Promise<boolean>;
   /** The one-time link to the login email. False: nothing was sent. */
-  confirm(mail: { id: string; email: string; link: string }): Promise<boolean>;
-  /** The account is already in the cooling-off period: when it goes. */
+  confirm(
+    mail: { id: string; email: string; link: string; kind: Kind },
+  ): Promise<boolean>;
+  /**
+   * The account is already in the cooling-off period: when it goes, and a
+   * one-time 取消刪除 link (null when the cancel page is not configured).
+   */
   status(
-    mail: { id: string; email: string; scheduledAt: string },
+    mail: {
+      id: string;
+      email: string;
+      scheduledAt: string;
+      cancelLink: string | null;
+    },
   ): Promise<boolean>;
 }
 
 export const silentRiderMailer: RiderMailer = {
   receipt: () => Promise.resolve(false),
+  caseReceipt: () => Promise.resolve(false),
   confirm: () => Promise.resolve(false),
   status: () => Promise.resolve(false),
 };
@@ -66,7 +124,7 @@ export const silentRiderMailer: RiderMailer = {
 /** What the database stored, and which mail the login email gets. */
 export type Submitted = {
   id: string;
-  mail: 'confirm' | 'status' | null;
+  mail: 'confirm' | 'status' | 'case' | null;
   /** The deletion time, with mail 'status'. */
   scheduledAt: string | null;
 };
@@ -78,16 +136,25 @@ export type Deps = {
   networkHash(req: Request): Promise<string | null>;
   /** A new one-time secret and its hash, made for every request. */
   secret(): Promise<Secret>;
+  /** A new reply token (#295), for a general case. */
+  replyToken(): Promise<Secret>;
   submit(
     s: Submission,
     networkHash: string,
     tokenHash: string,
+    replyHash: string | null,
   ): Promise<Submitted>;
   notified(id: string): Promise<void>;
   notifier: Notifier;
   mailer: RiderMailer;
   /** The confirmation page with the token; null when it is not configured. */
   confirmLink(id: string, secret: string): string | null;
+  /** The 取消刪除 page with the token; null when it is not configured. */
+  cancelLink(id: string, secret: string): string | null;
+  /** The case page with the token; null when it is not configured. */
+  caseLink(id: string, secret: string): string | null;
+  /** reply+<token>@ the reply domain. */
+  replyAddress(token: string): string;
   /** Runs a task after the answer (EdgeRuntime.waitUntil). */
   background(task: Promise<unknown>): void;
   /** The admin page of one request, e.g. https://admin.example/support/<id>. */
@@ -106,16 +173,47 @@ const address = (value: unknown) => {
 };
 
 export function parse(body: Record<string, unknown>): Submission | null {
-  const kind = body.kind ?? 'account_deletion';
-  const contactEmail = address(body.contact_email),
-    loginEmail = address(body.login_email);
-  const hint = clean(body.account_hint), message = clean(body.message);
+  const kind = (body.kind ?? 'account_deletion') as Kind;
+  if (!kinds.includes(kind)) return null;
+  const contactEmail = address(body.contact_email);
+  const loginEmail = verified(kind) ? address(body.login_email) : null;
+  const privacyRight = kind === 'privacy'
+    ? (privacyRights.includes(body.privacy_right as PrivacyRight)
+      ? body.privacy_right as PrivacyRight
+      : null)
+    : null;
+  const hint = clean(body.account_hint),
+    message = clean(body.message),
+    subject = clean(body.subject).replace(/\s+/g, ' ');
   if (
-    kind !== 'account_deletion' || !contactEmail || !loginEmail ||
-    [...hint].length > 200 || [...message].length > 1000
+    !contactEmail || (verified(kind) && !loginEmail) ||
+    // Only the kinds that use them may send them.
+    (!verified(kind) && body.login_email !== undefined &&
+      body.login_email !== null && body.login_email !== '') ||
+    (kind === 'privacy') !== (privacyRight !== null) ||
+    (kind !== 'privacy' && body.privacy_right !== undefined &&
+      body.privacy_right !== null) ||
+    [...hint].length > 200 || [...subject].length > 120 ||
+    [...message].length > (kind === 'account_deletion' ? 1000 : 4000) ||
+    // A question needs its text.
+    (!verified(kind) && message === '')
   ) return null;
-  return { kind, contactEmail, loginEmail, hint, message };
+  return {
+    kind,
+    contactEmail,
+    loginEmail,
+    privacyRight,
+    subject,
+    hint,
+    message,
+  };
 }
+
+/**
+ * 4000 characters of text, each up to 12 code units once JSON-escaped (an
+ * astral character as two \u escapes), and the other fields.
+ */
+export const maxBodyLength = 64 * 1024;
 
 const fail = (error: string, status: number) => response({ error }, status);
 
@@ -140,7 +238,7 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
 
   let body: Record<string, unknown>;
   try {
-    body = await readBody(req);
+    body = await readBody(req, maxBodyLength);
   } catch {
     return fail('request.invalid', 400);
   }
@@ -148,10 +246,16 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
   if (!submission) return fail('request.invalid', 400);
 
   // Made whether or not the email matches, so both take the same steps.
-  let secret: Secret, submitted: Submitted;
+  let secret: Secret, reply: Secret | null = null, submitted: Submitted;
   try {
     secret = await deps.secret();
-    submitted = await deps.submit(submission, network, secret.hash);
+    if (!verified(submission.kind)) reply = await deps.replyToken();
+    submitted = await deps.submit(
+      submission,
+      network,
+      secret.hash,
+      reply?.hash ?? null,
+    );
   } catch (error) {
     const message = (error as { message?: unknown })?.message;
     if (message === 'support.rate_limited') {
@@ -161,15 +265,26 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     return fail('server.unavailable', 503);
   }
   const { id } = submitted;
+  const { kind } = submission;
+  const loginEmail = submission.loginEmail ?? '';
   // In the background, so a match does not answer later than a miss.
   const mails = [
-    mail(
-      'receipt',
-      id,
-      () => deps.mailer.receipt({ id, email: submission.contactEmail }),
-    ),
+    submitted.mail === 'case' && reply
+      ? mail('receipt', id, () =>
+        deps.mailer.caseReceipt({
+          id,
+          email: submission.contactEmail,
+          kind,
+          link: deps.caseLink(id, secret.secret),
+          replyTo: deps.replyAddress(reply.secret),
+        }))
+      : mail(
+        'receipt',
+        id,
+        () => deps.mailer.receipt({ id, email: submission.contactEmail, kind }),
+      ),
   ];
-  if (submitted.mail === 'confirm') {
+  if (submitted.mail === 'confirm' && loginEmail) {
     const link = deps.confirmLink(id, secret.secret);
     mails.push(
       mail(
@@ -177,18 +292,27 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
         id,
         () =>
           link
-            ? deps.mailer.confirm({ id, email: submission.loginEmail, link })
+            ? deps.mailer.confirm({ id, email: loginEmail, link, kind })
             : Promise.resolve(false),
       ),
     );
-  } else if (submitted.mail === 'status' && submitted.scheduledAt) {
+  } else if (
+    submitted.mail === 'status' && submitted.scheduledAt && loginEmail
+  ) {
     const scheduledAt = submitted.scheduledAt;
+    // The stored secret is the cancel link's (#295).
+    const cancelLink = deps.cancelLink(id, secret.secret);
     mails.push(
       mail(
         'state mail',
         id,
         () =>
-          deps.mailer.status({ id, email: submission.loginEmail, scheduledAt }),
+          deps.mailer.status({
+            id,
+            email: loginEmail,
+            scheduledAt,
+            cancelLink,
+          }),
       ),
     );
   }

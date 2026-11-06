@@ -1,0 +1,12 @@
+# support-inbound Email Worker (#295). Deploy: docs/CD_SETUP.md.
+# The secret SUPPORT_INBOUND_SECRET is set with `wrangler secret put`.
+name = "support-inbound"
+main = "src/index.ts"
+compatibility_date = "2026-10-15"
+workers_dev = false
+
+[vars]
+# https://<project ref>.supabase.co/functions/v1/support-inbound; set per
+# environment at deploy (`--var SUPPORT_INBOUND_URL:...`).
+SUPPORT_INBOUND_URL = ""
+AUTHSERV_ID = "mx.cloudflare.net"
