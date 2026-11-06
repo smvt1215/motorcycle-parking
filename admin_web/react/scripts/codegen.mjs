@@ -25,7 +25,7 @@ const READS = {
     'apiV1HiddenRidersList',
     'apiV1MyAccountStatus',
   ],
-  admin_v1: ['adminV1SupportRequests', 'adminV1ContentReport'],
+  admin_v1: ['adminV1SupportRequests', 'adminV1SupportRequest', 'adminV1ContentReport'],
 };
 
 const PROFILES = [
