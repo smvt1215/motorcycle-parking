@@ -23,6 +23,29 @@ function useLinkToken() {
   return token;
 }
 
+/**
+ * A number that changes when another link is opened in a tab already on the
+ * page: only the fragment changes then, with no reload. Used as a key, the
+ * page starts over with that token instead of acting on the previous
+ * request. Dropping the fragment from the address changes nothing.
+ */
+function useLinkKey() {
+  const { hash } = useLocation();
+  const [seen, setSeen] = useState({ hash, key: 0 });
+  if (hash !== seen.hash) setSeen({ hash, key: hash ? seen.key + 1 : seen.key });
+  return hash && hash !== seen.hash ? seen.key + 1 : seen.key;
+}
+
+/** /support/verify (the confirmation mail's link). */
+export function VerifyPage() {
+  return <VerifyLink key={useLinkKey()} />;
+}
+
+/** /support/cancel (the status mail's link). */
+export function CancelPage() {
+  return <CancelLink key={useLinkKey()} />;
+}
+
 type Answered<R> = Extract<LinkAnswer<R>, { kind: 'answer' }>;
 type Phase<R, A> =
   | { kind: 'loading' }
@@ -134,7 +157,7 @@ function Message({ title, body, refill = false }: { title: string; body: string;
  * PhoneVerify): shows the request, and asks for the deletion only when the
  * owner presses 「是我，申請刪除帳號」.
  */
-export function VerifyPage() {
+function VerifyLink() {
   const support = useSupport();
   const link = useLinkToken();
   const { phase, busy, run } = useLink<ConfirmResult, ConfirmAction>(
@@ -212,7 +235,7 @@ export function VerifyPage() {
  * board PhoneCancel): shows the deletion time, and cancels only when the
  * owner presses 「取消刪除」.
  */
-export function CancelPage() {
+function CancelLink() {
   const support = useSupport();
   const link = useLinkToken();
   const { phase, busy, run } = useLink<CancelResult, CancelAction>(

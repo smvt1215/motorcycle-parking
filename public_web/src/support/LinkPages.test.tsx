@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, vi } from 'vitest';
 import { openSite, stubFunctions, type Answer } from '../test/site';
@@ -186,6 +186,39 @@ describe('the confirmation link', () => {
   it('cannot do anything without a backend', async () => {
     openSite(`/support/verify#token=${token}`, null, null);
     await heading(t.linkErrorTitle);
+  });
+});
+
+describe('another link in the same tab', () => {
+  const other = `1a2b3c4d-0000-4000-8000-000000000003.${'B'.repeat(42)}w`;
+
+  it('starts over with the new token, and actions go to the new request', async () => {
+    const calls = stubFunctions({ 'support-confirm': confirmAnswer('pending') });
+    const { router } = openSite(`/support/verify#token=${token}`);
+    await heading(t.verifyTitle);
+    await waitFor(() => expect(router.state.location.hash).toBe(''));
+
+    await act(() => router.navigate(`/support/verify#token=${other}`));
+    await waitFor(() =>
+      expect(calls.at(-1)!.body).toEqual({ link: 'confirm', token: other, action: 'view' }),
+    );
+    await waitFor(() => expect(router.state.location.hash).toBe(''));
+    await heading(t.verifyTitle);
+    expect(screen.getByText('S-1A2B3C4D')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: t.verifyConfirm }));
+    await waitFor(() =>
+      expect(calls.at(-1)!.body).toEqual({ link: 'confirm', token: other, action: 'confirm' }),
+    );
+    expect(calls.filter((c) => (c.body as { token: string }).token === token)).toHaveLength(1);
+  });
+
+  it('dropping the token from the address does not reopen the link', async () => {
+    const calls = stubFunctions({ 'support-confirm': confirmAnswer('pending') });
+    openSite(`/support/verify#token=${token}`);
+    await heading(t.verifyTitle);
+    await settle();
+    expect(calls).toHaveLength(1);
   });
 });
 
