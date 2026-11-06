@@ -50,6 +50,7 @@ describe('the support form', () => {
       'href',
       '/account-deletion',
     );
+    expect(screen.getByText(t.otherQuestions)).toBeInTheDocument();
     expect(document.querySelector('a[href^="mailto:"]')).toBeNull();
   });
 

@@ -11,6 +11,8 @@ export const formIntro = {
   after:
     '（包含 Apple 的「隱藏的電子郵件」）。你打開信裡的連結並按下確認，就會立即申請刪除，之後一樣有 7 天冷靜期。',
 };
+/** Until #295's kinds join the form (user, 2026-11-08): text, never a mail link. */
+export const otherQuestions = '其他問題（不是刪除帳號）請寫信到 ops@motoparking.smvtstudio.com。';
 export const formWarning = '那個信箱已經收不到信的話，我們無法確認是你，也就無法用這個方式刪除。';
 
 export const loginLabel = '帳號的登入 email';

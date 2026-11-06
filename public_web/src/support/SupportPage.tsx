@@ -167,6 +167,7 @@ function SupportForm({
           {t.submit}
         </button>
       </div>
+      <p className="support-fine">{t.otherQuestions}</p>
       <p className="support-fine">
         {t.recaptcha.before}
         <a href="https://policies.google.com/privacy">{t.recaptcha.privacy}</a>
