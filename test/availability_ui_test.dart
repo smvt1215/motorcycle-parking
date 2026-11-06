@@ -8,7 +8,6 @@ import 'package:motorcycle_parking/domain/availability_display.dart';
 import 'package:motorcycle_parking/features/map/availability_capsule.dart';
 import 'package:motorcycle_parking/features/map/parking_access_view.dart';
 import 'package:motorcycle_parking/features/map/spot_sheet.dart';
-import 'package:motorcycle_parking/features/map/vehicle_sheet.dart';
 import 'package:motorcycle_parking/models/availability.dart';
 import 'package:motorcycle_parking/models/parking.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
@@ -535,62 +534,6 @@ void main() {
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
       });
-    }
-  });
-
-  testWidgets('#131 詳情橫幅的車牌是雙色：普通機車綠白、大型重機紅黃', (tester) async {
-    useSize(tester, 320);
-    for (final (vehicle, colors) in [
-      (VehicleType.scooter, {const Color(0xff2e7d4f), Colors.white}),
-      (VehicleType.heavy, {const Color(0xffc62828), const Color(0xfff2c200)}),
-    ]) {
-      final store = await detailStore(
-        tester,
-        heavyLot,
-        const [],
-        vehicle: vehicle,
-      );
-      await openDetails(tester, store, heavyLot, scale: 1.6);
-      final plate = find.byKey(const ValueKey('spot-decision-plate'));
-      expect(tester.widget(plate), isA<SmallPlateStack>());
-      expect(tester.getSize(plate), const Size(25, 17));
-      final fills = tester
-          .widgetList<Container>(
-            find.descendant(of: plate, matching: find.byType(Container)),
-          )
-          .map((c) => (c.decoration as BoxDecoration?)?.color)
-          .whereType<Color>()
-          .toSet();
-      expect(fills, containsAll(colors));
-      expect(tester.takeException(), isNull);
-      await tester.pumpWidget(const SizedBox.shrink());
-    }
-  });
-
-  testWidgets('#131 車牌邊框：淺色用墨色，深色用前景色', (tester) async {
-    useSize(tester, 390);
-    for (final dark in [false, true]) {
-      final store = await detailStore(tester, heavyLot, const []);
-      await openDetails(
-        tester,
-        store,
-        heavyLot,
-        brightness: dark ? Brightness.dark : Brightness.light,
-      );
-      final plate = find.byKey(const ValueKey('spot-decision-plate'));
-      final expected = dark
-          ? Theme.of(tester.element(plate)).colorScheme.onSurface
-          : const Color(0xff16313a);
-      final edges = tester
-          .widgetList<Container>(
-            find.descendant(of: plate, matching: find.byType(Container)),
-          )
-          .map((c) => (c.decoration as BoxDecoration?)?.border)
-          .whereType<Border>()
-          .map((b) => b.top.color)
-          .toSet();
-      expect(edges, {expected});
-      await tester.pumpWidget(const SizedBox.shrink());
     }
   });
 

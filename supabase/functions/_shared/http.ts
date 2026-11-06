@@ -6,9 +6,16 @@ export const cors = {
 };
 export const response = (data: unknown, status = 200) =>
   Response.json(data, { status, headers: cors });
-export async function readBody(req: Request): Promise<Record<string, unknown>> {
+/**
+ * The JSON object of a request, at most maxLength UTF-16 code units (8192 by
+ * default; forms with long text pass more, #295).
+ */
+export async function readBody(
+  req: Request,
+  maxLength = 8192,
+): Promise<Record<string, unknown>> {
   const text = await req.text();
-  if (text.length > 8192) throw new Error('request too large');
+  if (text.length > maxLength) throw new Error('request too large');
   const value = JSON.parse(text);
   if (!value || Array.isArray(value) || typeof value !== 'object') {
     throw new Error('invalid body');

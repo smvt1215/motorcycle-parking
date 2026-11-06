@@ -1,4 +1,4 @@
-import { type Deps, handle, type Notice } from './handler.ts';
+import { type Deps, handle, type Notice, type Outbound } from './handler.ts';
 
 function equal(actual: unknown, expected: unknown, message: string) {
   const a = JSON.stringify(actual), e = JSON.stringify(expected);
@@ -18,6 +18,9 @@ function fake(
     send?: (n: Notice) => Promise<boolean>;
     stored?: boolean;
     cancelBase?: string | null;
+    answers?: Outbound[];
+    sendAnswer?: (a: Outbound) => Promise<string | null | false>;
+    tokensStored?: boolean;
   } = {},
 ) {
   const log: string[] = [];
@@ -53,6 +56,29 @@ function fake(
       log.push(`notified ${id}`);
       return Promise.resolve();
     },
+    outbound: (limit) => {
+      if (options.answers) log.push(`outbound ${limit}`);
+      return Promise.resolve(options.answers ?? []);
+    },
+    newReplyToken: () =>
+      Promise.resolve({ secret: 'r'.repeat(32), hash: 'q'.repeat(64) }),
+    setCaseTokens: (id, link, reply) => {
+      log.push(`caseTokens ${id} ${link.slice(0, 3)} ${reply.slice(0, 3)}`);
+      return Promise.resolve(options.tokensStored ?? true);
+    },
+    caseLink: (requestId, secret) =>
+      `https://site.test/case#token=${requestId}.${secret}`,
+    replyAddress: (token) => `reply+${token}@site.test`,
+    sendAnswer: options.sendAnswer
+      ? (a) => options.sendAnswer!(a)
+      : (a, link, replyTo, hash) => {
+        log.push(`answer ${a.to_email} ${link} ${replyTo} ${hash.slice(0, 3)}`);
+        return Promise.resolve('re_1');
+      },
+    answered: (id, sent, resendId, error) => {
+      log.push(`answered ${id} ${sent} ${resendId} ${error}`);
+      return Promise.resolve();
+    },
   };
   return { deps, log };
 }
@@ -72,7 +98,12 @@ Deno.test('stores a cancel link, sends each notice with it and marks it', async 
   const { deps, log } = fake();
   equal(await call(deps, post('s3cret')), {
     status: 200,
-    body: { sent: 2, failed: 0, skipped: 0 },
+    body: {
+      sent: 2,
+      failed: 0,
+      skipped: 0,
+      answers: { sent: 0, failed: 0, skipped: 0 },
+    },
   }, 'sent');
   const [a, b] = [notice(1).id, notice(2).id];
   equal(log, [
@@ -98,6 +129,7 @@ Deno.test('a deletion that is gone is skipped', async () => {
     sent: 0,
     failed: 0,
     skipped: 2,
+    answers: { sent: 0, failed: 0, skipped: 0 },
   }, 'skipped');
   equal(log.some((l) => l.startsWith('send')), false, 'nothing sent');
 });
@@ -117,6 +149,7 @@ Deno.test('a failed send stays for the next call, without the email in the log',
       sent: 1,
       failed: 1,
       skipped: 0,
+      answers: { sent: 0, failed: 0, skipped: 0 },
     }, 'counts');
     equal(log.includes(`notified ${notice(1).id}`), false, 'not marked');
   } finally {
@@ -135,6 +168,7 @@ Deno.test('without a mail service nothing is marked', async () => {
     sent: 0,
     failed: 0,
     skipped: 2,
+    answers: { sent: 0, failed: 0, skipped: 0 },
   }, 'skipped');
   equal(log.some((l) => l.startsWith('notified')), false, 'not marked');
 });
@@ -154,4 +188,66 @@ Deno.test('only with the shared secret', async () => {
     405,
     'POST only',
   );
+});
+
+const answer = (n: number): Outbound => ({
+  id: `30000000-0000-4000-8000-00000000000${n}`,
+  request_id: `40000000-0000-4000-8000-00000000000${n}`,
+  to_email: `a${n}@x.tw`,
+  body: '已更正',
+});
+
+Deno.test('answers go with a new case link and Reply-To, and the result is kept', async () => {
+  const { deps, log } = fake({ answers: [answer(1)] });
+  equal((await call(deps, post('s3cret'))).body.answers, {
+    sent: 1,
+    failed: 0,
+    skipped: 0,
+  }, 'sent');
+  const a = answer(1);
+  equal(log.slice(-4), [
+    'outbound 50',
+    `caseTokens ${a.id} 333 qqq`,
+    `answer a1@x.tw https://site.test/case#token=${a.request_id}.${
+      '3'.repeat(43)
+    } reply+${'r'.repeat(32)}@site.test 333`,
+    `answered ${a.id} true re_1 null`,
+  ], 'steps');
+});
+
+Deno.test('a failed answer is recorded without the address or text', async () => {
+  const errors: string[] = [];
+  const original = console.error;
+  console.error = (...args: unknown[]) => errors.push(args.join(' '));
+  try {
+    const { deps, log } = fake({
+      answers: [answer(1), answer(2)],
+      sendAnswer: (a) =>
+        a.id === answer(1).id
+          ? Promise.reject(new Error('resend 500'))
+          : Promise.reject(new Error('a2@x.tw refused')),
+    });
+    equal((await call(deps, post('s3cret'))).body.answers, {
+      sent: 0,
+      failed: 2,
+      skipped: 0,
+    }, 'counts');
+    equal(
+      log.filter((l) => l.startsWith('answered')),
+      [
+        `answered ${answer(1).id} false null resend 500`,
+        `answered ${answer(2).id} false null send failed`,
+      ],
+      'a short reason only',
+    );
+  } finally {
+    console.error = original;
+  }
+  equal(errors.some((e) => e.includes('@')), false, 'no email logged');
+});
+
+Deno.test('an answer no longer claimed is skipped', async () => {
+  const { deps, log } = fake({ answers: [answer(1)], tokensStored: false });
+  equal((await call(deps, post('s3cret'))).body.answers.skipped, 1, 'skipped');
+  equal(log.some((l) => l.startsWith('answer ')), false, 'not sent');
 });

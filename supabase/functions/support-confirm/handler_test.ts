@@ -10,7 +10,11 @@ const id = '20000000-0000-4000-8000-000000000001';
 const at = '2026-11-01T10:00:00Z', later = '2026-11-08T10:05:00Z';
 
 /** A database with one request: view keeps it, confirm or deny ends it. */
-function fake(hash: string, fail = false) {
+function fake(
+  hash: string,
+  fail = false,
+  kind: 'account_deletion' | 'privacy' = 'account_deletion',
+) {
   const calls: string[] = [];
   let state: 'pending' | 'used' = 'pending';
   let cancelled = false;
@@ -38,11 +42,19 @@ function fake(hash: string, fail = false) {
         result: action === 'view'
           ? 'pending'
           : action === 'confirm'
-          ? 'deletion_requested'
+          ? (kind === 'privacy' ? 'verified' : 'deletion_requested')
           : 'denied',
+        kind,
+        ...(kind === 'privacy'
+          ? {
+            privacy_right: 'copy' as const,
+            subject: '',
+            message: '請給我複本',
+          }
+          : {}),
         submitted_at: at,
         contact_email: 'rider@example.tw',
-        scheduled_at: action === 'confirm' ? later : null,
+        scheduled_at: action === 'confirm' && kind !== 'privacy' ? later : null,
       });
     },
   };
@@ -61,10 +73,18 @@ async function call(deps: Deps, req: Request) {
 }
 
 const invalid = { status: 400, body: { error: 'support.link_invalid' } };
-const shown = (result: string, scheduled: string | null = null) => ({
+const shown = (
+  result: string,
+  scheduled: string | null = null,
+  kind = 'account_deletion',
+) => ({
   status: 200,
   body: {
     result,
+    kind,
+    privacy_right: kind === 'privacy' ? 'copy' : null,
+    subject: kind === 'privacy' ? '' : null,
+    message: kind === 'privacy' ? '請給我複本' : null,
     submitted_at: at,
     contact_email: 'r***@e***.tw',
     scheduled_at: scheduled,
@@ -208,4 +228,21 @@ Deno.test('the cancel link: view shows, cancel cancels once', async () => {
       JSON.stringify(body),
     );
   }
+});
+
+Deno.test('a privacy request: the page knows the kind; confirm verifies', async () => {
+  const made = await newSecret();
+  const token = confirmToken(id, made.secret);
+  const { deps } = fake(made.hash, false, 'privacy');
+  equal(
+    await call(deps, post({ token })),
+    shown('pending', null, 'privacy'),
+    'view',
+  );
+  equal(
+    await call(deps, post({ token, action: 'confirm' })),
+    shown('verified', null, 'privacy'),
+    'verified',
+  );
+  equal(await call(deps, post({ token, action: 'confirm' })), invalid, 'once');
 });

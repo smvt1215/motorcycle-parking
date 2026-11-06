@@ -444,8 +444,12 @@ class _MapPageState extends ConsumerState<MapPage> {
       final box = context.findRenderObject() as RenderBox;
       final gap =
           screen.height - box.localToGlobal(Offset(0, box.size.height)).dy;
+      // The sheet opens above the tab bar.
+      final bar = gap + MediaQuery.paddingOf(context).bottom;
       final panel =
-          (screen.height - MediaQuery.paddingOf(context).top) * spotSheetPeek;
+          bar +
+          (screen.height - MediaQuery.paddingOf(context).top - bar) *
+              spotSheetPeek;
       final mapPadding = AppConfig.useGoogleMaps
           ? 8 + MediaQuery.paddingOf(context).bottom
           : 0;
@@ -563,6 +567,58 @@ class _MapPageState extends ConsumerState<MapPage> {
         (_) => unawaited(_showBetaIntro(store, spot)),
       );
     }
+    // The tab bar stays in view under the details (A2, FIX-DECISIONS): the
+    // sheet opens in the root overlay, so it ends where the bar starts. On
+    // iOS the map runs behind the floating bar and the padding holds it;
+    // on Android the page already ends above it.
+    return LayoutBuilder(
+      builder: (context, constraints) => _page(
+        context,
+        store,
+        colors,
+        tabBarInset: tabBarInset,
+        barInset: constraints.maxHeight.isFinite
+            ? (MediaQuery.sizeOf(context).height - constraints.maxHeight).clamp(
+                    0.0,
+                    double.infinity,
+                  ) +
+                  tabBarInset
+            : tabBarInset,
+        darkMap: darkMap,
+        spots: spots,
+        excluded: excluded,
+        liveFilter: liveFilter,
+        now: now,
+        matches: matches,
+        query: query,
+        filtered: filtered,
+        searchHeight: searchHeight,
+        filterHeight: filterHeight,
+        open: open,
+        covered: covered,
+      ),
+    );
+  }
+
+  Widget _page(
+    BuildContext context,
+    AppStore store,
+    ColorScheme colors, {
+    required double tabBarInset,
+    required double barInset,
+    required bool darkMap,
+    required List<ParkingSpot> spots,
+    required List<(ParkingSpot, AvailabilityExclusion)> excluded,
+    required AvailabilityFilter liveFilter,
+    required DateTime now,
+    required List<ParkingSpot> matches,
+    required String query,
+    required bool filtered,
+    required double searchHeight,
+    required double filterHeight,
+    required ParkingSpot? open,
+    required bool covered,
+  }) {
     return PopScope(
       // Back closes the details before leaving the map; a covering page
       // handles back itself.
@@ -579,7 +635,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                 left: 0,
                 right: 0,
                 top: MediaQuery.paddingOf(overlay).top,
-                bottom: 0,
+                bottom: barInset,
                 // Hidden, not removed, under a covering page: the sheet
                 // keeps its size and scroll for when the page closes.
                 child: Offstage(
@@ -587,11 +643,16 @@ class _MapPageState extends ConsumerState<MapPage> {
                   offstage: covered,
                   child: TickerMode(
                     enabled: !covered,
-                    child: SpotSheet(
-                      key: ValueKey(open.id),
-                      store: store,
-                      spot: open,
-                      onClose: _closeSpot,
+                    // The bar below holds the home indicator's inset.
+                    child: MediaQuery.removePadding(
+                      context: overlay,
+                      removeBottom: barInset > 0,
+                      child: SpotSheet(
+                        key: ValueKey(open.id),
+                        store: store,
+                        spot: open,
+                        onClose: _closeSpot,
+                      ),
                     ),
                   ),
                 ),
