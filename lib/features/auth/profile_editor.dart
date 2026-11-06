@@ -7,9 +7,9 @@ import 'profile_avatar.dart';
 Future<void> showProfileEditor(BuildContext context, AppStore store) =>
     showAdaptiveSheet<void>(context, (_) => ProfileEditor(store: store));
 
-/// 編輯個人資料 (P12): the editor changes the name and can remove the
-/// sign-in provider's picture. Avatar uploads were cancelled (2026-11-01);
-/// the avatar is the name's first character or the provider's picture.
+/// 編輯個人資料 (P12): the editor changes the name. Avatar uploads were
+/// cancelled (2026-11-01) and sign-in providers' pictures are not used
+/// (2026-11-07), so the avatar is only the name's first character.
 class ProfileEditor extends StatefulWidget {
   const ProfileEditor({super.key, required this.store});
   final AppStore store;
@@ -25,10 +25,10 @@ class _ProfileEditorState extends State<ProfileEditor> {
   // (②); saving it, even unchanged, makes it public. 取消 keeps it unset.
   late final suggestion = profileNameSuggestion(user);
   late final name = TextEditingController(text: public ?? suggestion ?? '');
-  bool saving = false, remove = false;
+  bool saving = false;
   String? error;
   String get _typed => normalizeProfileName(name.text);
-  bool get changed => remove || _typed != (public ?? '') || suggestion != null;
+  bool get changed => _typed != (public ?? '') || suggestion != null;
 
   /// ② the untouched suggestion; nothing is public yet.
   bool get _suggesting => suggestion != null && _typed == suggestion;
@@ -62,10 +62,7 @@ class _ProfileEditorState extends State<ProfileEditor> {
       if (widget.store.client?.auth.currentUser?.id != user?.id) {
         throw StateError('帳號已變更，請重新開啟個人資料');
       }
-      await widget.store.updateProfile(
-        displayName: name.text,
-        removeAvatar: remove,
-      );
+      await widget.store.updateProfile(displayName: name.text);
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
@@ -160,7 +157,6 @@ class _ProfileEditorState extends State<ProfileEditor> {
                   children: [
                     Center(
                       child: ProfileAvatar(
-                        url: remove ? '' : profileAvatarUrl(user),
                         // No public name (② ③): the generic person.
                         name: _noPublicName ? '' : name.text,
                         size: 96,
@@ -176,24 +172,6 @@ class _ProfileEditorState extends State<ProfileEditor> {
                           style: quiet,
                         ),
                       ),
-                    if (!remove && profileAvatarUrl(user) != null) ...[
-                      Center(
-                        child: TextButton(
-                          key: const ValueKey('profile-remove-avatar'),
-                          onPressed: saving
-                              ? null
-                              : () => setState(() => remove = true),
-                          child: const Text(profileRemoveAvatar),
-                        ),
-                      ),
-                      Text(
-                        _noPublicName
-                            ? profileRemoveAvatarHintDefault
-                            : profileRemoveAvatarHint,
-                        textAlign: TextAlign.center,
-                        style: quiet,
-                      ),
-                    ],
                     const SizedBox(height: 20),
                     TextFormField(
                       key: const ValueKey('profile-name'),

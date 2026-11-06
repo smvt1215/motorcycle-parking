@@ -2,11 +2,6 @@
 const signInIntro = '登入後可回報停車資訊與同步收藏。';
 const signInNotNeeded = '瀏覽地圖與記錄停車位置不需登入。';
 
-const profileRemoveAvatar = '移除頭像';
-const profileRemoveAvatarHint = '移除頭像會改回名稱首字。';
-
-/// The remove-avatar hint while there is no public name (P12 ② ③).
-const profileRemoveAvatarHintDefault = '移除頭像會改回預設頭像。';
 const profileNameHelper = '你新增的停車點會顯示這個名稱。';
 
 /// P12 ②: no saved name yet; the field holds the Google name as a suggestion.
