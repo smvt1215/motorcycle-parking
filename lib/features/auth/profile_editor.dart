@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../data/account_status.dart';
 import '../../data/app_store.dart';
 import '../../domain/account_display.dart';
@@ -9,14 +11,24 @@ import '../../ui/adaptive/adaptive.dart';
 import '../../data/profile_repository.dart';
 import 'profile_avatar.dart';
 
-Future<void> showProfileEditor(
-  BuildContext context,
-  AppStore store, {
-  AccountStatusController? status,
-}) => showAdaptiveSheet<void>(
-  context,
-  (_) => ProfileEditor(store: store, status: status),
-);
+/// Opens P12 from any entry (P10, the new spot form's name notice): the
+/// suspension (#331 ④) comes from [accountStatusProvider], so every entry
+/// gets the read-only name.
+Future<void> showProfileEditor(BuildContext context, AppStore store) {
+  AccountStatusController? status;
+  try {
+    status = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(accountStatusProvider);
+  } catch (_) {
+    // Outside the app's ProviderScope (some tests): no suspension check.
+  }
+  return showAdaptiveSheet<void>(
+    context,
+    (_) => ProfileEditor(store: store, status: status),
+  );
+}
 
 /// 編輯個人資料 (P12): the editor changes the name and can remove the
 /// sign-in provider's picture. Avatar uploads were cancelled (2026-11-01);

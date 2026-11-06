@@ -252,8 +252,7 @@ class _AccountCard extends StatelessWidget {
                     button: true,
                     label: '編輯頭像',
                     child: InkWell(
-                      onTap: () =>
-                          showProfileEditor(context, store, status: status),
+                      onTap: () => showProfileEditor(context, store),
                       customBorder: const CircleBorder(),
                       child: ProfileAvatar(user: user),
                     ),
@@ -285,8 +284,7 @@ class _AccountCard extends StatelessWidget {
                   IconButton(
                     tooltip: '編輯個人資料',
                     icon: const Icon(Icons.edit_outlined),
-                    onPressed: () =>
-                        showProfileEditor(context, store, status: status),
+                    onPressed: () => showProfileEditor(context, store),
                   ),
               ],
             ),
@@ -305,8 +303,7 @@ class _AccountCard extends StatelessWidget {
                 alignment: AlignmentDirectional.centerStart,
                 child: TextButton(
                   key: const ValueKey('account-set-name'),
-                  onPressed: () =>
-                      showProfileEditor(context, store, status: status),
+                  onPressed: () => showProfileEditor(context, store),
                   style: TextButton.styleFrom(
                     minimumSize: Size.square(isCupertino ? 44 : 48),
                     tapTargetSize: MaterialTapTargetSize.padded,

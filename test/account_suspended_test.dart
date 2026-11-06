@@ -16,6 +16,7 @@ import 'package:motorcycle_parking/data/repositories.dart';
 import 'package:motorcycle_parking/domain/account_status_display.dart';
 import 'package:motorcycle_parking/features/account/suspended_sheet.dart';
 import 'package:motorcycle_parking/features/auth/profile_editor.dart';
+import 'package:motorcycle_parking/features/auth/report_name_notice.dart';
 import 'package:motorcycle_parking/features/settings/settings_page.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
 
@@ -681,11 +682,65 @@ void main() {
         await tester.runAsync(b.close);
       });
       await tester.pumpWidget(
-        _host((c) => showProfileEditor(c, b.store, status: status)),
+        ProviderScope(
+          overrides: [accountStatusProvider.overrideWith((ref) => status)],
+          child: _host((c) => showProfileEditor(c, b.store)),
+        ),
       );
       await tester.tap(find.byKey(const ValueKey('open')));
       await tester.pumpAndSettle();
       return b;
+    }
+
+    for (final size in sizes) {
+      testWidgets('從新增停車點的名稱提示開 P12，停權時同樣唯讀：'
+          '${size.width.toInt()}×${size.height.toInt()}', (tester) async {
+        _size(tester, size);
+        final status = _status(
+          () async => AccountStatus(suspended: true, suspendedUntil: untilIso),
+        );
+        await status.refresh();
+        final b = _Backend();
+        await tester.runAsync(b.open);
+        addTearDown(() async {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.runAsync(b.close);
+        });
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [accountStatusProvider.overrideWith((ref) => status)],
+            child: MaterialApp(
+              builder: (context, child) =>
+                  // ignore: deprecated_member_use
+                  MaterialUiCompatibilityBridge(child: child!),
+              home: Scaffold(
+                body: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: ReportNameNotice(store: b.store),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('report-name-edit')));
+        await tester.pumpAndSettle();
+        final field = tester.widget<TextField>(
+          find.descendant(
+            of: find.byKey(const ValueKey('profile-name')),
+            matching: find.byType(TextField),
+          ),
+        );
+        expect(field.enabled, isFalse);
+        expect(
+          tester
+              .widget<TextButton>(find.byKey(const ValueKey('profile-save')))
+              .onPressed,
+          isNull,
+        );
+        expect(find.text(suspendedNameNote(until)), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      }, variant: platforms);
     }
 
     for (final size in sizes) {
