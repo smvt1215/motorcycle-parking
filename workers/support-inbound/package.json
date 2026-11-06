@@ -9,6 +9,6 @@
     "postal-mime": "4.0.8"
   },
   "devDependencies": {
-    "wrangler": "4.151.1"
+    "wrangler": "4.158.0"
   }
 }
