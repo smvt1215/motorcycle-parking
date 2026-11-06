@@ -3,8 +3,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:motorcycle_parking/models/closure.dart';
 import 'package:motorcycle_parking/core/town_lookup.dart';
+import 'package:motorcycle_parking/data/account_suspended.dart';
 import 'package:motorcycle_parking/data/app_store.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
+import 'package:motorcycle_parking/features/account/suspended_sheet.dart';
 import 'package:motorcycle_parking/features/map/spot_sheet.dart';
 import 'package:motorcycle_parking/features/report/report_sheet.dart';
 import 'package:motorcycle_parking/features/report/fee_suggestion.dart';
@@ -31,6 +33,9 @@ class RecordingStore extends AppStore {
   final submissions = <Map<String, dynamic>>[];
   bool failNext = false;
 
+  /// Thrown by the next [submit] instead of succeeding.
+  Object? throwNext;
+
   /// What the reverse lookup answers, offline.
   Town? town = const Town('臺北市', '信義區');
 
@@ -46,6 +51,10 @@ class RecordingStore extends AppStore {
   @override
   Future<String> submit(Map<String, dynamic> body) async {
     submissions.add(body);
+    if (throwNext case final error?) {
+      throwNext = null;
+      throw error;
+    }
     if (failNext) {
       failNext = false;
       throw StateError('連線失敗，請重試');
@@ -214,6 +223,43 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('提出修改建議'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('停權時送出修改建議顯示停權面板，不顯示一般錯誤（#331）', (tester) async {
+    final store = (await tester.runAsync(createStore))!;
+    addTearDown(store.dispose);
+    await openDetails(tester, store);
+    await tester.ensureVisible(find.text('修改建議'));
+    await tester.tap(find.text('修改建議'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('停車點名稱'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('suggestion-input')),
+      '市府路機車格',
+    );
+    store.throwNext = AccountSuspended(DateTime.utc(2099, 1, 2));
+    await tester.tap(find.text('送出修改建議'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SuspendedPanel), findsOneWidget);
+    expect(find.byKey(const ValueKey('suspended-until')), findsOneWidget);
+    expect(find.textContaining('請確認網路'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  test('「這裡又可以停了」把停權交給 runAction，其他錯誤仍回訊息（#331）', () async {
+    SharedPreferences.setMockInitialValues({});
+    final store = RecordingStore(
+      LocalRepository(await SharedPreferences.getInstance()),
+    );
+    addTearDown(store.dispose);
+    store.throwNext = const AccountSuspended(null);
+    await expectLater(
+      reportReopened(store, spot),
+      throwsA(isA<AccountSuspended>()),
+    );
+    store.throwNext = Exception('offline');
+    expect(await reportReopened(store, spot), '回報沒有送出，請確認網路後再試一次。');
   });
 
   testWidgets('未回報點位維持顯示，不存在只能由修改建議送交審核', (tester) async {
@@ -1441,7 +1487,10 @@ void main() {
   });
 
   group('暫時封閉（#116）', () {
-    final today = taiwanToday(DateTime.now());
+    // One instant for the group: `today` and a later DateTime.now() fall on
+    // different days when the run crosses Taiwan's midnight.
+    final now = DateTime.now();
+    final today = taiwanToday(now);
     ParkingSpot closed(SpotClosure closure) => ParkingSpot(
       id: spot.id,
       name: spot.name,
@@ -1457,25 +1506,25 @@ void main() {
         'reason': 'works',
         'since': closureDate(today.subtract(const Duration(days: 7))),
       })!;
-      expect(c.stateOn(DateTime.now()), ClosureState.active);
+      expect(c.stateOn(now), ClosureState.active);
       final older = SpotClosure.fromJson({
         'reason': 'works',
         'since': closureDate(today.subtract(const Duration(days: 8))),
       })!;
-      expect(older.stateOn(DateTime.now()), ClosureState.expired);
+      expect(older.stateOn(now), ClosureState.expired);
       // Read as active, then the date passes: it lapses all the same.
       expect(
         SpotClosure.fromJson({
           'reason': 'works',
           'since': '2020-01-01',
-        }, state: 'active')!.stateOn(DateTime.now()),
+        }, state: 'active')!.stateOn(now),
         ClosureState.expired,
       );
       expect(
         SpotClosure.fromJson({
           'reason': 'works',
           'since': closureDate(today),
-        }, state: 'active')!.stateOn(DateTime.now()),
+        }, state: 'active')!.stateOn(now),
         ClosureState.active,
       );
       // Favorites keep it, without the judgement.
