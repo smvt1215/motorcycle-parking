@@ -624,7 +624,14 @@ void main() {
             findsOneWidget,
           );
           expect(find.text(suspendedCardDetail), findsOneWidget);
-          expect(find.text(suspendedContactShort), findsOneWidget);
+          // 關於 has its own 聯絡我們 row (#280): this one is the card's.
+          expect(
+            find.descendant(
+              of: find.byKey(const ValueKey('suspended-card')),
+              matching: find.text(suspendedContactShort),
+            ),
+            findsOneWidget,
+          );
           expect(tester.takeException(), isNull);
         }, variant: platforms);
       }
