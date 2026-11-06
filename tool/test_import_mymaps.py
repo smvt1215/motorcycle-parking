@@ -455,6 +455,55 @@ class MainTest(unittest.TestCase):
         self.assertIn("official/spots.json", written)
 
 
+class ReportTest(unittest.TestCase):
+    OFFICIAL = {"id": "official:1", "name": "x", "city": "臺北市", "district": "大安區", "layer": "汽車費率", "source_name": "(30/h)阿明的點",
+                "result": "官方點", "official_id": "A1", "official_name": "大安森林公園停車場", "distance_m": 12, "name_score": 0.9,
+                "changes": ["名稱：改用官方名稱", "待人工確認：距官方位置 200 公尺，保留來源座標"], "merged": ["(40/d)阿明的點二"]}
+    COMMUNITY = {"id": "c1", "name": "阿明的店", "city": "新北市", "district": "板橋區", "layer": "重機友善店家", "source_name": "(Free)阿明的店",
+                 "result": "社群點（待確認）"}
+    DROPPED = {"id": "d1", "name": "阿明的巷子", "city": "新北市", "district": "板橋區", "layer": "汽車費率", "source_name": "(Free/3h)阿明的巷子",
+               "result": "不錄入：來源標示未確認且未通過官方核驗"}
+    SKIPPED = ["重機友善店家｜阿明咖啡", "汽車費率｜阿明二號（與同一場站合併）", "汽車費率｜阿明三號（與同一場站合併）"]
+
+    def rows(self):
+        return [import_mymaps.report_row(e) for e in (self.OFFICIAL, self.COMMUNITY, self.DROPPED)]
+
+    def test_rows_keep_ids_and_official_names_only(self):
+        official, community, dropped = self.rows()
+        self.assertEqual(official, {"id": "official:1", "city": "臺北市", "district": "大安區", "result": "官方點",
+                                    "official_name": "大安森林公園停車場", "official_id": "A1", "distance_m": 12, "name_score": 0.9,
+                                    "changes": self.OFFICIAL["changes"], "merged": 1})
+        self.assertEqual(community, {"id": "c1", "city": "新北市", "district": "板橋區", "result": "社群點（待確認）"})
+        self.assertEqual(set(dropped), {"id", "city", "district", "result"})
+
+    def test_an_official_spot_without_a_lot_keeps_its_official_name(self):
+        row = import_mymaps.report_row({**self.OFFICIAL, "official_name": None, "official_id": None, "name": "平陽街停車場"})
+        self.assertEqual(row["official_name"], "平陽街停車場")
+
+    def test_reports_carry_no_source_name(self):
+        report = self.rows()
+        text = json.dumps(report, ensure_ascii=False) + "\n".join(import_mymaps.review_sections(report, self.SKIPPED))
+        self.assertNotIn("阿明", text)
+        self.assertNotIn("汽車費率", text)
+        self.assertNotIn("重機友善店家", text)
+
+    def test_sections_name_spots_by_official_name_or_id(self):
+        lines = import_mymaps.review_sections(self.rows(), self.SKIPPED)
+        self.assertIn("- 大安森林公園停車場（臺北市大安區）：待人工確認：距官方位置 200 公尺，保留來源座標", lines)
+        self.assertIn("| 大安森林公園停車場 | A1 | 12 m | 名稱：改用官方名稱；待人工確認：距官方位置 200 公尺，保留來源座標 |", lines)
+        self.assertIn("- d1", lines)
+        self.assertIn("- 與同一場站合併：2", lines)
+        self.assertIn("- 來源分類不匯入：1", lines)
+
+    def test_a_pins_own_brackets_are_not_a_reason(self):
+        self.assertEqual(import_mymaps.skip_reason("重機友善店家｜阿明餐廳（最後點餐1930）"), "來源分類不匯入")
+        self.assertEqual(import_mymaps.skip_reason("汽車費率｜阿明（二店）（座標不在臺灣行政區內）"), "座標不在臺灣行政區內")
+
+    def test_empty_sections_say_so(self):
+        lines = import_mymaps.review_sections([], [])
+        self.assertEqual(lines.count("- 無"), 3)
+
+
 class ImportedDataTest(unittest.TestCase):
     ENUMS = {
         "space_type": {"paidMotorcycle", "freeMotorcycle", "heavyOnly", "car", "offStreet"},

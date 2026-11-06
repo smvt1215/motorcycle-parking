@@ -619,8 +619,8 @@ def apply_official(spot, lot, meters, score, source_name):
     """Official lot fields replace community guesses; returns the change log."""
     changes = []
     if spot["name"] != lot["name"]:
-        # The pin's own name stays in the review report only; the official name identifies the lot (#275).
-        changes.append(f"名稱：{spot['name']} → {lot['name']}")
+        # The pin's own name stays out of the reports too: the official name identifies the lot (#275, #324).
+        changes.append("名稱：改用官方名稱")
         spot["name"] = lot["name"]
     if lot["address"]:
         spot["address"] = full_address(spot["city"], spot["district"], lot["address"])
@@ -957,6 +957,43 @@ def official_additions(lots, used, placed=()):
 
 
 
+def report_row(entry):
+    """What the committed reports keep of a build entry (#324): the spot id and official facts.
+    The source map's own names and folders never go in; an official spot is named by its official name."""
+    row = {key: entry[key] for key in ("id", "city", "district", "result")}
+    if entry["result"].startswith("官方點"):
+        row["official_name"] = entry.get("official_name") or entry["name"]
+    row |= {key: entry[key] for key in ("official_id", "distance_m", "name_score", "pilot", "changes") if key in entry}
+    if entry.get("merged"):
+        row["merged"] = len(entry["merged"])
+    return row
+
+
+SKIP_REASONS = ("與同一場站合併", "座標不在臺灣行政區內", "行政區查詢失敗，未匯入；重跑會再查詢")
+
+
+def skip_reason(skipped):
+    """Why a mark was skipped, from this tool's own words only: a pin's name can end in brackets too."""
+    return next((reason for reason in SKIP_REASONS if skipped.endswith(f"（{reason}）")), "來源分類不匯入")
+
+
+def review_sections(report, skipped):
+    """The report's sections that go row by row, from [report_row] rows."""
+    from collections import Counter
+    verified = [r for r in report if r.get("result") == "官方點"]
+    dropped = [r for r in report if r.get("result", "").startswith("不錄入")]
+    lines = ["## 需人工確認", ""]
+    lines += [f"- {r.get('official_name') or r['id']}（{r['city']}{r['district']}）：{c}" for r in report for c in r.get("changes", []) if c.startswith(("待人工確認", "座標"))] or ["- 無"]
+    lines += ["", "## 核驗修正", "", "| 點位 | 官方編號 | 距離 | 修正 |", "| --- | --- | --- | --- |"]
+    distance_text = lambda r: "—" if r.get("distance_m") is None else f"{r['distance_m']} m"
+    lines += [f"| {cell(r['official_name'])} | {cell(r.get('official_id') or r.get('pilot', ''))} | {distance_text(r)} | "
+              f"{cell('；'.join(c for c in r.get('changes', []) if not c.startswith('地址')))} |" for r in verified]
+    lines += ["", "## 不錄入", ""] + ([f"- {r['id']}" for r in dropped] or ["- 無"])
+    reasons = Counter(skip_reason(s) for s in skipped)
+    lines += ["", "## 略過或合併", ""] + ([f"- {reason}：{count}" for reason, count in reasons.most_common()] or ["- 無"])
+    return lines
+
+
 def summary_markdown(official, community, report, skipped, imported_on, failed=(), sources=None):
     from collections import Counter
     verified = [r for r in report if r.get("result") == "官方點"]
@@ -977,15 +1014,8 @@ def summary_markdown(official, community, report, skipped, imported_on, failed=(
     lines += ["", "## 官方點重機資格", "",
               f"- 官方明載可停：{sum(s['heavy_allowed'] is True for s in official)}（臺北市大型重機格與 36 處路外試辦場域）",
               f"- 未記載（App 顯示有條件）：{sum(s['heavy_allowed'] is None for s in official)}；我的地圖的重機回報列於備註「社群補充」",
-              "", "## 需人工確認", ""]
-    lines += [f"- {r['name']}（{r['city']}{r['district']}）：{c}" for r in report for c in r.get("changes", []) if c.startswith(("待人工確認", "座標"))] or ["- 無"]
-    lines += ["", "## 核驗修正", "", "| 點位 | 官方編號 | 距離 | 修正 |", "| --- | --- | --- | --- |"]
-    distance_text = lambda r: "—" if r.get("distance_m") is None else f"{r['distance_m']} m"
-    lines += [f"| {cell(r['source_name'])} | {cell(r.get('official_id') or r.get('pilot', ''))} | {distance_text(r)} | "
-              f"{cell('；'.join(c for c in r.get('changes', []) if not c.startswith('地址')))} |" for r in verified]
-    lines += ["", "## 不錄入", ""] + [f"- {r['layer']}｜{r['source_name']}" for r in dropped] or ["- 無"]
-    lines += ["", "## 略過或合併", ""] + [f"- {s}" for s in skipped]
-    return "\n".join(lines) + "\n"
+              ""]
+    return "\n".join(lines + review_sections(report, skipped)) + "\n"
 
 
 # What the Admin Web import page accepts, as admin_import_plan() in
@@ -1058,6 +1088,7 @@ def main():
     args = parser.parse_args()
     kml = args.kml or fetch(KML_URL.format(mid=args.mid), args.cache / f"{args.mid}.kml", args.refresh)
     official, community, report, skipped, failed, sources = build(kml, args.mid, args.cache, args.date, args.refresh, args.tdx_env)
+    report = [report_row(entry) for entry in report]
     for directory in (args.output, args.official_output):
         directory.mkdir(parents=True, exist_ok=True)
     (args.official_output / "spots.json").write_text(json.dumps(official, ensure_ascii=False, indent=2) + "\n")
