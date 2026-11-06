@@ -9,6 +9,7 @@ import '../../data/account_deletion.dart';
 import '../../data/app_store.dart';
 import '../../data/profile_repository.dart';
 import '../../domain/account_deletion_display.dart';
+import '../../domain/account_display.dart';
 import '../../domain/hidden_riders_display.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../../ui/version_text.dart';
@@ -273,17 +274,16 @@ class _AccountCard extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     final user = store.client?.auth.currentUser;
     final signedIn = user != null && !user.isAnonymous;
-    final name = profileDisplayName(user);
+    // Only the name the rider saved is public (#319); a Google name alone
+    // is not, so the card says 尚未設定名稱 and offers 設定名稱.
+    final name = profilePublicName(user);
     final email = user?.email;
     final (title, detail) = store.demo
         ? ('範例模式', '目前使用範例資料。回報只用於功能測試，請勿依範例資料停車。')
         : !signedIn
         ? ('尚未登入', '登入後可回報停車點與同步收藏。瀏覽與記錄停車位置不需登入。')
-        // A name heads the card with the email under it; else the email.
-        : (
-            name ?? email ?? '已登入',
-            (name != null ? email : null) ?? '回報與收藏已同步到帳號',
-          );
+        // The name, or 尚未設定名稱, heads the card with the email under it.
+        : (name ?? settingsNameUnset, email ?? '回報與收藏已同步到帳號');
     return Material(
       color: colors.surfaceContainerHigh,
       borderRadius: BorderRadius.circular(24),
@@ -340,6 +340,21 @@ class _AccountCard extends StatelessWidget {
               detail,
               style: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
             ),
+            if (signedIn && !store.demo && name == null) ...[
+              const SizedBox(height: 4),
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: TextButton(
+                  key: const ValueKey('account-set-name'),
+                  onPressed: () => showProfileEditor(context, store),
+                  style: TextButton.styleFrom(
+                    minimumSize: Size.square(isCupertino ? 44 : 48),
+                    tapTargetSize: MaterialTapTargetSize.padded,
+                  ),
+                  child: const Text(settingsSetName),
+                ),
+              ),
+            ],
             if (!store.demo && !signedIn) ...[
               const SizedBox(height: 16),
               SignInButtons(store: store),

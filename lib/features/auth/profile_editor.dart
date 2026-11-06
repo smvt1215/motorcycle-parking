@@ -20,12 +20,31 @@ class ProfileEditor extends StatefulWidget {
 class _ProfileEditorState extends State<ProfileEditor> {
   final form = GlobalKey<FormState>();
   late final user = widget.store.client?.auth.currentUser;
-  late final name = TextEditingController(text: profileDisplayName(user) ?? '');
+  late final public = profilePublicName(user);
+  // Only a rider who has never saved a name gets the Google name prefilled
+  // (②); saving it, even unchanged, makes it public. 取消 keeps it unset.
+  late final suggestion = profileNameSuggestion(user);
+  late final name = TextEditingController(text: public ?? suggestion ?? '');
   bool saving = false, remove = false;
   String? error;
-  bool get changed =>
-      remove ||
-      normalizeProfileName(name.text) != (profileDisplayName(user) ?? '');
+  String get _typed => normalizeProfileName(name.text);
+  bool get changed => remove || _typed != (public ?? '') || suggestion != null;
+
+  /// ② the untouched suggestion; nothing is public yet.
+  bool get _suggesting => suggestion != null && _typed == suggestion;
+
+  /// ③ a blank field that saving turns into no public name: a saved name or
+  /// the suggestion was cleared, or the rider cleared the name before
+  /// (display_name saved blank, so no suggestion comes back).
+  bool get _blankPrivate =>
+      _typed.isEmpty &&
+      (public != null ||
+          suggestion != null ||
+          (user?.userMetadata?.containsKey('display_name') ?? false));
+
+  /// No public name to show (② ③ or a blank field): the avatar falls back
+  /// to the generic person, not a letter.
+  bool get _noPublicName => _suggesting || _blankPrivate || _typed.isEmpty;
 
   @override
   void dispose() {
@@ -116,6 +135,13 @@ class _ProfileEditorState extends State<ProfileEditor> {
     final colors = Theme.of(context).colorScheme;
     final quiet = Theme.of(context).textTheme.bodySmall
         ?.copyWith(color: colors.onSurfaceVariant);
+    // Under the avatar: 尚未設定公開名稱 while nothing is public and saving
+    // would not change that by itself; 儲存後不公開名稱 when saving clears it.
+    final caption = _blankPrivate && (public != null || suggestion != null)
+        ? profileNameClearing
+        : _suggesting || _blankPrivate
+        ? profileNameUnset
+        : null;
     return PopScope(
       canPop: !saving,
       child: Padding(
@@ -135,10 +161,21 @@ class _ProfileEditorState extends State<ProfileEditor> {
                     Center(
                       child: ProfileAvatar(
                         url: remove ? '' : profileAvatarUrl(user),
-                        name: name.text,
+                        // No public name (② ③): the generic person.
+                        name: _noPublicName ? '' : name.text,
                         size: 96,
                       ),
                     ),
+                    if (caption case final caption?)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          caption,
+                          key: const ValueKey('profile-name-state'),
+                          textAlign: TextAlign.center,
+                          style: quiet,
+                        ),
+                      ),
                     if (!remove && profileAvatarUrl(user) != null) ...[
                       Center(
                         child: TextButton(
@@ -150,7 +187,9 @@ class _ProfileEditorState extends State<ProfileEditor> {
                         ),
                       ),
                       Text(
-                        profileRemoveAvatarHint,
+                        _noPublicName
+                            ? profileRemoveAvatarHintDefault
+                            : profileRemoveAvatarHint,
                         textAlign: TextAlign.center,
                         style: quiet,
                       ),
@@ -161,10 +200,15 @@ class _ProfileEditorState extends State<ProfileEditor> {
                       controller: name,
                       enabled: !saving,
                       maxLength: 40,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: '顯示名稱',
-                        helperText: profileNameHelper,
-                        border: OutlineInputBorder(),
+                        helperText: _suggesting
+                            ? profileNameSuggestionHelper
+                            : _blankPrivate
+                            ? profileNameClearedHelper
+                            : profileNameHelper,
+                        helperMaxLines: 4,
+                        border: const OutlineInputBorder(),
                       ),
                       validator: (value) => profileNameError(value ?? ''),
                       onChanged: (_) => setState(() {}),
