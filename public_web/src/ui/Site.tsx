@@ -20,7 +20,16 @@ function Mark() {
 }
 
 /** Header, page and footer shared by every public page. */
-export function Site({ children, aside }: { children: ReactNode; aside?: ReactNode }) {
+export function Site({
+  children,
+  aside,
+  current,
+}: {
+  children: ReactNode;
+  aside?: ReactNode;
+  /** The footer link of the page being shown, marked as the current page. */
+  current?: string;
+}) {
   return (
     <div className="site">
       <header className="site-header">
@@ -39,7 +48,10 @@ export function Site({ children, aside }: { children: ReactNode; aside?: ReactNo
       <footer className="site-footer">
         <div className="site-footer-inner">
           <span>{footerNote}</span>
-          <a href="/privacy">隱私權政策</a>
+          <Link to="/privacy" aria-current={current === '隱私權政策' ? 'page' : undefined}>
+            隱私權政策
+          </Link>
+          <Link to="/account-deletion">刪除帳號</Link>
           <a href="/terms">服務條款</a>
           {/* Questions go through the support form, never a mail link (#295). */}
           <Link to="/support">聯絡我們</Link>
