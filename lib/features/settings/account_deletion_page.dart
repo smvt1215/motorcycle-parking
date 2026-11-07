@@ -249,7 +249,7 @@ class _AccountDeletionPageState extends State<AccountDeletionPage> {
             for (final item in deletionKept)
               _Row(icon: Icons.person_off_outlined, title: item),
           ],
-          note: deletionKeptNote,
+          note: '$deletionKeptNote\n$deletionSuspensionNote',
         ),
         const _Section(
           title: deletionHashHeading,
