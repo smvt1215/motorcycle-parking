@@ -31,6 +31,8 @@ export interface QueuedDecision {
 export interface FailedDecision {
   error: ApiError;
   request: ResolveRequest;
+  /** Carried from the queue, so undoing a retry still reopens the editor (#245). */
+  draft?: DecisionDraft;
 }
 
 export interface ReviewState {
@@ -94,13 +96,16 @@ export const reviewSlice = createSlice({
       if (state.lastQueued === id) state.lastQueued = null;
       state.resolvedCount += 1;
     },
-    decisionFailed(state, action: PayloadAction<FailedDecision>) {
+    decisionFailed(state, action: PayloadAction<Omit<FailedDecision, 'draft'>>) {
       const { request, error } = action.payload;
       const reportId = request.reportId;
+      const draft = state.pending[reportId]?.draft;
       delete state.pending[reportId];
       if (state.lastQueued === reportId) state.lastQueued = null;
       // Another admin resolved it: it simply leaves the queue.
-      if (error.code !== 'alreadyResolved') state.failures[reportId] = { error, request };
+      if (error.code !== 'alreadyResolved') {
+        state.failures[reportId] = { error, request, ...(draft && { draft }) };
+      }
     },
     draftReopened(state, action: PayloadAction<string>) {
       delete state.drafts[action.payload];
