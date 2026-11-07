@@ -413,7 +413,6 @@ const _entryKeyLabels = {
   'fee': '費率',
   'fee_note': '費率原文',
   'fee_plan': '計費規則',
-  'fee_note': '費率文字',
   'condition': '格位',
   'evidence_url': '公告連結',
   'side': '哪一側',

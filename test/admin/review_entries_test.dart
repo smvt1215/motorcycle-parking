@@ -245,12 +245,12 @@ void main() {
       (
         {'id': 'b1', 'fee': fee, 'fee_note': null},
         {'id': 'b1', 'name': 'B1', 'access': 'scooterOnly', 'fee': fee},
-        '費率原文 舊文字→未填',
+        '費率原文 舊文字→已移除',
       ),
       (
         {'id': 'b1', 'fee': null, 'fee_note': null},
         {'id': 'b1', 'name': 'B1', 'access': 'scooterOnly'},
-        '費率原文 舊文字→未填',
+        '費率原文 舊文字→已移除',
       ),
     ]) {
       final proposal = initialProposal(
