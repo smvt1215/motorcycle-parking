@@ -408,15 +408,26 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   SpotAvailability availabilityOf(ParkingSpot spot) =>
       availability[spot.id] ?? SpotAvailability.none;
 
-  /// The loaded [spots] and the favourites out of view: the cards read the
-  /// same answers as the map, official counts first (P4, P6).
+  /// The loaded [spots], then the favourites and open sheets' spots out of
+  /// view: the cards and details read the same answers as the map, official
+  /// counts first (P4, P6).
   List<ParkingSpot> _watched(List<ParkingSpot> spots) {
     final ids = {for (final spot in spots) spot.id};
     return [
       ...spots,
-      for (final spot in favorites)
+      for (final spot in [...favorites, ..._following])
         if (ids.add(spot.id)) spot,
     ];
+  }
+
+  /// With the map covered, what is left to keep up to date: the favourite
+  /// cards and any open sheet, which polling reads on its own.
+  bool get _readsWanted =>
+      _mapShown || favorites.isNotEmpty || _following.isNotEmpty;
+
+  /// The map is covered and there may be new favourites to keep up to date.
+  void _favoritesChanged() {
+    if (!_mapShown) _resumeAvailability();
   }
 
   /// Riders' summaries of the [_watched] spots over [sightingMapWindow], by
@@ -468,6 +479,8 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
       _followedNear = _followedWide = const {};
     }
     _following.add(spot);
+    // A sheet opened over a covered map still has to stay up to date.
+    if (!_mapShown) _resumeAvailability();
     return readFollowedSightings();
   }
 
@@ -515,7 +528,8 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
         ..add(_SentSighting(report, clock(), riderId));
     }
     notifyListeners();
-    await readFollowedSightings();
+    // What others say follows on its own: it never holds up the sent report.
+    unawaited(readFollowedSightings());
   }
 
   /// The summaries of [spots], or null when the read fails.
@@ -735,23 +749,20 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  /// Whether the map is on screen (another tab covers it otherwise); counts
-  /// are only polled while it is.
+  /// Whether the map is on screen (another tab covers it otherwise). While
+  /// it is not, polling keeps only favourites and open sheets up to date.
   void setMapShown(bool shown) {
     if (_mapShown == shown) return;
     _mapShown = shown;
-    if (shown) {
-      _resumeAvailability();
-    } else {
-      _stopAvailability();
-    }
+    _stopAvailability();
+    _resumeAvailability();
   }
 
   /// Back on screen: reads at once when the last read is a poll interval
   /// old, otherwise waits out the rest of it.
   void _resumeAvailability() {
     final poll = availabilityPoll;
-    if (poll == null || !_foreground || !_mapShown) return;
+    if (poll == null || !_foreground || !_readsWanted) return;
     final at = _availabilityReadAt;
     final since = at == null ? null : DateTime.now().difference(at);
     if (since == null || since >= poll) {
@@ -776,7 +787,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     if (delay == null ||
         _disposed ||
         !_foreground ||
-        !_mapShown ||
+        !_readsWanted ||
         !availabilitySource.enabled) {
       return;
     }
@@ -802,13 +813,15 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   /// stale), and backs off.
   Future<void> pollAvailability() async {
     _availabilityTimer?.cancel();
-    if (_disposed || !availabilitySource.enabled || spots.isEmpty) return;
-    final request = _request, read = ++_availabilityRead;
     final current = spots;
+    // With the map covered, only what is still on screen.
+    final reading = _watched(_mapShown ? current : const []);
+    if (_disposed || !availabilitySource.enabled || reading.isEmpty) return;
+    final request = _request, read = ++_availabilityRead;
     unawaited(readFollowedSightings());
     final (counts, sighted) = await (
-      _readAvailability(_watched(current)),
-      _readSightings(_watched(current)),
+      _readAvailability(reading),
+      _readSightings(reading),
     ).wait;
     if (_disposed ||
         request != _request ||
@@ -816,8 +829,20 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
         !identical(current, spots)) {
       return;
     }
-    availability = counts ?? _keptAvailability(current);
-    sightings = sighted ?? _keptSightings(current);
+    // A read replaces what it covered; the rest stays for when the map
+    // comes back.
+    final readIds = {for (final spot in reading) spot.id};
+    final sightedIds = {for (final id in readIds) id.toLowerCase()};
+    availability = {
+      for (final MapEntry(:key, :value) in _keptAvailability(current).entries)
+        if (counts == null || !readIds.contains(key)) key: value,
+      ...?counts,
+    };
+    sightings = {
+      for (final MapEntry(:key, :value) in _keptSightings(current).entries)
+        if (sighted == null || !sightedIds.contains(key)) key: value,
+      ...?sighted,
+    };
     // Also on failure: the ages shown move on.
     notifyListeners();
     _scheduleAvailability();
@@ -1134,6 +1159,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     // Retired snapshots are dropped before anything is shown or awaited.
     final saved = local.favorites(key);
     favorites = withoutRetiredFavorites(saved);
+    _favoritesChanged();
     if (favorites.length != saved.length) {
       await local.setFavorites(key, favorites);
     }
@@ -1147,6 +1173,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
         final loaded = withoutRetiredFavorites(all);
         if (key != favoritesKey) return;
         favorites = loaded;
+        _favoritesChanged();
         favoritesWarning = null;
         await local.setFavorites(key, loaded);
         final retired = [
@@ -1230,6 +1257,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
         favoriteHandles = {...favoriteHandles, spot.id: handle};
       }
       if (ownSpot(spot)) favoriteOwn = {...favoriteOwn, spot.id};
+      _favoritesChanged();
     }
     await local.setFavorites(favoritesKey, favorites);
     notifyListeners();

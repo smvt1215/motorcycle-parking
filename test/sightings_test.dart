@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' as ui;
 
@@ -147,6 +148,34 @@ class ExpiredStore extends AppStore {
     session = true;
     notifyListeners();
   }
+}
+
+/// Records the ids each read asks for.
+class RecordingCounts extends AvailabilitySource {
+  RecordingCounts(this.reads);
+  final List<List<String>> reads;
+  @override
+  bool get enabled => true;
+  @override
+  Future<Map<String, SpotAvailability>> forSpots(
+    List<ParkingSpot> spots,
+  ) async {
+    reads.add([for (final s in spots) s.id]);
+    return const {};
+  }
+}
+
+/// Once [stalled], reads never answer, as on a stalled connection.
+class StalledReads extends FakeSightings {
+  StalledReads(super.rows);
+  bool stalled = false;
+  @override
+  Future<Map<String, List<SpotSighting>>> forSpots(
+    List<ParkingSpot> spots, {
+    required int windowMinutes,
+  }) => stalled
+      ? Completer<Map<String, List<SpotSighting>>>().future
+      : super.forSpots(spots, windowMinutes: windowMinutes);
 }
 
 class GuestStore extends AppStore {
@@ -491,19 +520,43 @@ void main() {
       await tester.runAsync(() => store.followSightings(lot));
       expect(store.riderSeats(30).of(lotId), isEmpty);
       source.rows = [row(lotId, zone: 'b2', at: detailDay)];
-      await tester.runAsync(
-        () => store.submitSighting(
+      await tester.runAsync(() async {
+        await store.submitSighting(
           const SightingReport.level(
             spotId: lotId,
             vehicle: VehicleType.heavy,
             level: 2,
             zoneId: 'b2',
           ),
-        ),
-      );
+        );
+        await store.readFollowedSightings();
+      });
       expect(source.sent, hasLength(1));
       expect(store.riderSeats(30).of(lotId), hasLength(1));
       expect(store.riderMeter(lot), const RiderMeter(RiderLevel.some));
+    });
+
+    testWidgets('寫入成功後讀取卡住或失敗：送出照樣完成，自己的回報照樣顯示', (tester) async {
+      const report = SightingReport.level(
+        spotId: lotId,
+        vehicle: VehicleType.heavy,
+        level: 2,
+        zoneId: 'b2',
+      );
+      for (final source in [StalledReads(const []), FailingReads(const [])]) {
+        final store = await sightedStore(tester, source);
+        if (source is StalledReads) source.stalled = true;
+        unawaited(store.followSightings(lot));
+        final done = await tester.runAsync(
+          () => store
+              .submitSighting(report)
+              .then((_) => true)
+              .timeout(const Duration(seconds: 2), onTimeout: () => false),
+        );
+        expect(done, isTrue);
+        expect(source.sent, hasLength(1));
+        expect(store.riderSeats(15).of(lotId), hasLength(1));
+      }
     });
 
     testWidgets('蓋在上面的卡片關閉：交還給下面那張，重新讀取', (tester) async {
@@ -1246,7 +1299,10 @@ void main() {
         level: 2,
         zoneId: 'b2',
       );
-      await tester.runAsync(() => store.submitSighting(report));
+      await tester.runAsync(() async {
+        await store.submitSighting(report);
+        await store.readFollowedSightings();
+      });
       expect(store.riderSeats(15).of(lotId).single.level, 2);
       store.vehicle = VehicleType.scooter;
       expect(store.riderSeats(15).of(lotId), isEmpty);
@@ -1440,6 +1496,96 @@ void main() {
       store.favorites = [];
       await tester.runAsync(store.refresh);
       expect(store.sightings, isNot(contains(lotId)));
+    });
+
+    group('地圖被蓋住時', () {
+      ParkingSpot other(int i) => ParkingSpot.fromJson({
+        ...detailLotJson,
+        'id': 'official:33333333-3333-4333-8333-33333333333$i',
+      });
+
+      Future<(AppStore, RecordingSightings, List<List<String>>)> covered(
+        WidgetTester tester, {
+        Duration? poll,
+      }) async {
+        final seen = <String>{};
+        final source = RecordingSightings(seen, const []);
+        final reads = <List<String>>[];
+        final counts = RecordingCounts(reads);
+        final store = (await tester.runAsync(() async {
+          SharedPreferences.setMockInitialValues({'vehicle': 'heavy'});
+          final s = AppStore(
+            LocalRepository(await SharedPreferences.getInstance()),
+            null,
+            sightingsSource: source,
+            availabilitySource: counts,
+            availabilityPoll: poll,
+            clock: () => detailDay,
+          );
+          await s.init();
+          return s;
+        }))!;
+        if (poll == null) addTearDown(store.dispose);
+        store.vehicle = VehicleType.heavy;
+        store.spots = [other(1)];
+        store.availability = {
+          other(1).id: SpotAvailability([
+            count(AvailabilityVehicle.heavy, available: 3, at: detailDay),
+          ]),
+        };
+        return (store, source, reads);
+      }
+
+      testWidgets('收藏點照常更新，只讀收藏點，畫面上其他點的資料留著', (tester) async {
+        final (store, source, reads) = await covered(tester);
+        store.favorites = [lot];
+        store.setMapShown(false);
+        reads.clear();
+        source.seen.clear();
+        source.rows = [row(lotId, zone: 'b2', at: ago)];
+        await tester.runAsync(store.pollAvailability);
+        expect(reads.single, [lotId]);
+        expect(source.seen, {lotId});
+        expect(store.riderSeats(15).of(lotId), hasLength(1));
+        expect(store.availability, contains(other(1).id));
+      });
+
+      testWidgets('開啟中的詳情照常更新，即使不是收藏', (tester) async {
+        final (store, source, reads) = await covered(tester);
+        store.setMapShown(false);
+        await tester.runAsync(() => store.followSightings(lot));
+        reads.clear();
+        source.rows = [row(lotId, zone: 'b2', at: ago)];
+        await tester.runAsync(store.pollAvailability);
+        expect(reads.single, [lotId]);
+        await tester.runAsync(store.readFollowedSightings);
+        expect(store.riderSeats(30).of(lotId), hasLength(1));
+      });
+
+      testWidgets('沒有收藏也沒有開詳情：不讀', (tester) async {
+        final (store, _, reads) = await covered(tester);
+        store.setMapShown(false);
+        reads.clear();
+        await tester.runAsync(store.pollAvailability);
+        expect(reads, isEmpty);
+      });
+
+      testWidgets('輪詢不會停：收藏點到時間就再讀一次', (tester) async {
+        final (store, _, reads) = await covered(
+          tester,
+          poll: const Duration(milliseconds: 20),
+        );
+        store.favorites = [lot];
+        await tester.runAsync(() async {
+          store.setMapShown(false);
+          reads.clear();
+          await Future<void>.delayed(const Duration(milliseconds: 200));
+          expect(reads.length, greaterThanOrEqualTo(2));
+          expect(reads.expand((r) => r).toSet(), {lotId});
+          store.setMapShown(true);
+          store.dispose();
+        });
+      });
     });
 
     testWidgets('超過 15 分鐘：卡片和地圖一樣不顯示', (tester) async {

@@ -108,6 +108,26 @@ void main() {
       return (sent, result);
     }
 
+    test('超過 600 個官方點也全部讀完：每批最多 300 個，收藏不被截掉', () async {
+      final many = [
+        for (var i = 0; i < 950; i++)
+          ParkingSpot.fromJson({
+            ...a.toJson(),
+            'id': 'official:00000000-0000-4000-8000-${'$i'.padLeft(12, '0')}',
+            'source': 'official',
+          }),
+      ];
+      final (sent, _) = await read([...many, many.last], []);
+      final batches = [
+        for (final b in sent)
+          ((b! as Map)['p_spot_ids'] as List).cast<String>(),
+      ];
+      expect(batches.map((b) => b.length), [300, 300, 300, 50]);
+      final ids = batches.expand((b) => b).toSet();
+      expect(ids, hasLength(950));
+      expect(ids, contains(many.last.id));
+    });
+
     test('只送官方點；社群點永遠不會有官方「剩 N」', () async {
       final (sent, _) = await read([a, community, b], []);
       expect(sent, [
