@@ -25,6 +25,7 @@ function fake(filed: Filed, options: { secret?: string } = {}) {
   const receipts: unknown[] = [];
   const notices: Notice[] = [];
   const tasks: Promise<unknown>[] = [];
+  const marked: string[] = [];
   const deps: Deps = {
     secret: options.secret ?? secret,
     now: () => now,
@@ -53,9 +54,20 @@ function fake(filed: Filed, options: { secret?: string } = {}) {
       },
     },
     adminUrl: (x) => `https://admin.test/support/${x}`,
+    notified: (x) => {
+      marked.push(x);
+      return Promise.resolve();
+    },
     background: (task) => tasks.push(task),
   };
-  return { deps, calls, receipts, notices, settle: () => Promise.all(tasks) };
+  return {
+    deps,
+    calls,
+    receipts,
+    notices,
+    marked,
+    settle: () => Promise.all(tasks),
+  };
 }
 
 const mail = {
@@ -264,4 +276,45 @@ Deno.test('a mail without a Message-ID is filed once by its raw digest', async (
 Deno.test('parse keeps DMARC and a well-formed digest only', () => {
   equal(parse({ ...mail, dmarc: 'fail' })?.dmarc, 'fail', 'dmarc');
   equal(parse({ ...mail, raw_sha256: 'nope' })?.raw_sha256, null, 'digest');
+});
+
+Deno.test('a new case is marked notified once its notice goes', async () => {
+  const created = fake({
+    result: 'created',
+    id,
+    related_to: null,
+    suspicious: false,
+  });
+  await call(created.deps, await post(mail));
+  await created.settle();
+  equal(created.marked, [id], 'new case');
+  const appended = fake({
+    result: 'appended',
+    id,
+    message_id: 'm',
+    reopened: false,
+    suspicious: false,
+  });
+  await call(appended.deps, await post(mail));
+  await appended.settle();
+  equal(appended.marked, [], 'a reply is not the case notice');
+  const silent = fake({
+    result: 'created',
+    id,
+    related_to: null,
+    suspicious: false,
+  });
+  silent.deps.notifier = { notify: () => Promise.resolve(false) };
+  await call(silent.deps, await post(mail));
+  await silent.settle();
+  equal(silent.marked, [], 'nothing sent, nothing marked');
+});
+
+Deno.test('the auth trace keeps only its safe characters', () => {
+  equal(
+    parse({ ...mail, auth_trace: 'a.test | spf=none(smtp.helo)<b>"x@y"' })
+      ?.auth_trace,
+    'a.test | spf=none(smtp.helo)bxy',
+    'filtered',
+  );
 });

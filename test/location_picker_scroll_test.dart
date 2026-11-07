@@ -127,10 +127,7 @@ void main() {
         expect(list.pixels, greaterThan(150), reason: '上滑捲動表單');
         expect(log.pans, 0);
         // The fields right after the map come into view.
-        expect(
-          find.text('依地圖位置自動帶入，可以改。選了縣市後，「區」只列這個縣市的行政區。').hitTestable(),
-          findsOneWidget,
-        );
+        expect(find.text('依地圖位置自動帶入，可以改。').hitTestable(), findsOneWidget);
 
         list.jumpTo(0);
         await tester.pumpAndSettle();

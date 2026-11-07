@@ -20,6 +20,8 @@ import 'package:motorcycle_parking/features/favorites/favorites_page.dart';
 import 'package:motorcycle_parking/features/map/spot_detail.dart';
 import 'package:motorcycle_parking/features/map/spot_preview.dart';
 import 'package:motorcycle_parking/features/map/spot_sheet.dart';
+import 'package:motorcycle_parking/features/report/form_parts.dart';
+import 'package:motorcycle_parking/features/report/spot_suggestions.dart';
 import 'package:motorcycle_parking/models/parking.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
 
@@ -596,7 +598,7 @@ void main() {
       final list = tester.element(
         find
             .ancestor(
-              of: find.text('提出修改建議'),
+              of: find.byType(EntrySection).first,
               matching: find.byType(Scrollable),
             )
             .first,
@@ -622,7 +624,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(store.hiddenRiders.isHidden(handleA), isTrue);
       expect(find.byType(ContentReportSheet), findsNothing);
-      expect(find.text('提出修改建議'), findsNothing);
+      expect(find.byType(SuggestionListPage), findsNothing);
       expect(find.byKey(const ValueKey('parking-spot-sheet')), findsNothing);
       expect(find.text('已隱藏阿明'), findsOneWidget);
     });

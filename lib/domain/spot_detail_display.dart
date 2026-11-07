@@ -661,20 +661,26 @@ String seatRowsNote(FourSign s) => s.street
 
 // ③ 怎麼算錢 ---------------------------------------------------------------
 
-/// A place's price: a structured rate, legacy text, or none (未提供).
+/// A place's price: a structured rate, legacy text, 不適用, or none (未提供).
 class DetailPrice {
-  const DetailPrice({this.rate, this.text});
+  const DetailPrice({this.rate, this.text, this.notApplicable = false});
   final Rate? rate;
   final String? text;
 
-  bool get none => rate == null && text == null;
+  /// The fee marks the vehicle 不適用; never read as none.
+  final bool notApplicable;
+
+  bool get none => rate == null && text == null && !notApplicable;
 
   @override
   bool operator ==(Object other) =>
-      other is DetailPrice && other.rate == rate && other.text == text;
+      other is DetailPrice &&
+      other.rate == rate &&
+      other.text == text &&
+      other.notApplicable == notApplicable;
 
   @override
-  int get hashCode => Object.hash(rate, text);
+  int get hashCode => Object.hash(rate, text, notApplicable);
 }
 
 bool _placeholder(String text) =>
@@ -698,6 +704,9 @@ Rate? _resolved(Fee fee, VehicleType vehicle) {
 }
 
 DetailPrice _rateOf(Fee fee, VehicleType vehicle) {
+  if (feeNotApplicable(fee, vehicle)) {
+    return const DetailPrice(notApplicable: true);
+  }
   final rate = _resolved(fee, vehicle);
   return rate == null ? const DetailPrice() : DetailPrice(rate: rate);
 }
@@ -820,8 +829,11 @@ class FeeCard {
   /// amount).
   final bool vehicleHeader;
 
-  /// 「每小時 20 元」; 未提供 when no source states it.
+  /// 「每小時 20 元」; 未提供 when no source states it; 不適用 when the fee
+  /// says so.
   final String main;
+
+  /// No amount to read ([main] is 未提供 or 不適用): drawn muted.
   final bool unknown;
 
   /// 「現在適用，全天；當日上限 100 元」.
@@ -863,7 +875,7 @@ class FeeSection {
 String _priceWords(DetailPrice p, ParkingCondition? c, DateTime now) {
   if (p.text != null) return p.text!;
   final r = p.rate;
-  if (r == null) return '未提供';
+  if (r == null) return p.notApplicable ? '不適用' : '未提供';
   if (r.mode != FeeMode.byTime) {
     return rateFullWords(r, stay: _stayAt(c, now, HolidayCalendar.current));
   }
@@ -911,7 +923,7 @@ FeeCard _card(
     return FeeCard(
       header: header,
       vehicleHeader: vehicleHeader,
-      main: '未提供',
+      main: price.notApplicable ? '不適用' : '未提供',
       unknown: true,
       closedTimes: closedTimes,
       note: note,
@@ -1104,7 +1116,8 @@ FeeSection feeSection(
           header: vehicleHeader,
           vehicleHeader: true,
           current: current,
-          note: !allSame
+          // 不適用 is no price to call the same.
+          note: !allSame || prices.first.notApplicable
               ? ''
               : everySame
               ? (s.street ? '各路段同價' : '全場同價')
@@ -1122,7 +1135,8 @@ FeeSection feeSection(
       priced.single.zone?.fee == null &&
       spot.fee != null &&
       spot.zones.length > 1 &&
-      everySame;
+      everySame &&
+      !prices.single.notApplicable;
   return FeeSection(
     title: title,
     cards: [

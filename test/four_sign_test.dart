@@ -623,14 +623,14 @@ void main() {
       });
       final p = plates(car, VehicleType.heavy, day);
       expect((p[2].main, p[2].semantics), ('40/時', '怎麼算錢：每小時 40 元'));
-      // Following a vehicle that is not_applicable: no rate to read.
+      // Following a vehicle that is not_applicable: not applicable either.
       final none = ParkingSpot.fromJson({
         ...lotJson,
         'parking_zones': null,
         'fee': caseFee('比照不適用的車種：大型重機費率未提供'),
       });
       final q = plates(none, VehicleType.heavy, day);
-      expect((q[2].main, q[2].tone), ('未提供', PlateTone.dashed));
+      expect((q[2].main, q[2].tone), ('不適用', PlateTone.line));
     });
 
     ParkingCondition notice(
@@ -1391,6 +1391,113 @@ void main() {
       });
       final p = plates(community, VehicleType.heavy, day);
       expect((p[0].main, p[0].tone), ('待確認', PlateTone.unverified));
+    });
+  });
+
+  group('費率不適用（騎士端不寫成未提供）', () {
+    const na = {'mode': 'not_applicable'};
+    const hourly = {'mode': 'hourly', 'amount': 20, 'per_minutes': 60};
+    Map<String, dynamic> zone(String id, Map<String, dynamic>? fee) => {
+      'id': id,
+      'name': '$id 區',
+      'fee': ?fee,
+    };
+    ParkingSpot zoned(List<Map<String, dynamic>> zones) => ParkingSpot.fromJson(
+      {...lotJson, 'fee': null, 'fee_note': '', 'parking_zones': zones},
+    );
+    SignPlate feeOf(ParkingSpot spot, VehicleType vehicle) => plates(
+      spot,
+      vehicle,
+      day,
+    ).firstWhere((p) => p.face == FourSignFace.fee);
+
+    test('單區：標成不適用的車種寫不適用，用實線中性樣式；另一車種照常', () {
+      final spot = ParkingSpot.fromJson({
+        ...lotJson,
+        'parking_zones': null,
+        'fee': {'scooter': hourly, 'heavy': na},
+      });
+      final p = feeOf(spot, VehicleType.heavy);
+      expect((p.main, p.note, p.tone), ('不適用', '', PlateTone.line));
+      expect(p.semantics, '怎麼算錢：不適用');
+      expect(feeOf(spot, VehicleType.scooter).main, '20/時');
+    });
+
+    test('比照到不適用：比照機車、比照汽車都寫不適用', () {
+      for (final fee in const [
+        {
+          'scooter': na,
+          'heavy': {'mode': 'same_as_scooter'},
+        },
+        {
+          'scooter': hourly,
+          'heavy': {'mode': 'same_as_car'},
+          'car': na,
+        },
+      ]) {
+        final spot = ParkingSpot.fromJson({
+          ...lotJson,
+          'parking_zones': null,
+          'fee': fee,
+        });
+        expect(feeOf(spot, VehicleType.heavy).main, '不適用');
+      }
+    });
+
+    test('比照到沒有資料的車種、整筆沒有費率：維持未提供（虛框）', () {
+      final follow = ParkingSpot.fromJson({
+        ...lotJson,
+        'parking_zones': null,
+        'fee': {
+          'heavy': {'mode': 'same_as_scooter'},
+        },
+      });
+      final none = ParkingSpot.fromJson({
+        ...lotJson,
+        'parking_zones': null,
+        'fee': {'scooter': hourly},
+      });
+      for (final spot in [follow, none]) {
+        final p = feeOf(spot, VehicleType.heavy);
+        expect((p.main, p.tone), ('未提供', PlateTone.dashed));
+      }
+    });
+
+    test('多區全部不適用：寫不適用，不寫全場同價', () {
+      final spot = zoned([
+        zone('A', {'heavy': na}),
+        zone('B', {
+          'heavy': {'mode': 'same_as_scooter'},
+          'scooter': na,
+        }),
+      ]);
+      final p = feeOf(spot, VehicleType.heavy);
+      expect((p.main, p.note), ('不適用', ''));
+    });
+
+    test('多區混合：不適用不當成未提供、同價或文字，一律依分區', () {
+      final mixes = [
+        // 不適用＋未提供。
+        [
+          zone('A', {'heavy': na}),
+          zone('B', {'scooter': hourly}),
+        ],
+        // 不適用＋費率：費率範圍也不以偏概全。
+        [
+          zone('A', {'heavy': na}),
+          zone('B', {'heavy': hourly}),
+        ],
+      ];
+      for (final zones in mixes) {
+        final p = feeOf(zoned(zones), VehicleType.heavy);
+        expect((p.main, p.note), ('依分區', ''));
+      }
+      // 不適用＋舊文字：不把文字當全場的答案。
+      final text = zoned([
+        zone('A', {'heavy': na}),
+        {'id': 'B', 'name': 'B 區', 'heavy_fee_note': '每次 30 元'},
+      ]);
+      expect(feeOf(text, VehicleType.heavy).main, '依分區');
     });
   });
 
