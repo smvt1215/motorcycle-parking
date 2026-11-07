@@ -76,12 +76,12 @@ kbd {
   opacity: 0.8;
 }
 
-/* Chips: 44px pills; the only capsule shape in the system. */
+/* Chips: 48px pills; the only capsule shape in the system. */
 .chip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 44px;
+  min-height: 48px;
   padding: 0 14px;
   border: 1px solid var(--color-steel);
   border-radius: var(--radius-chip);
@@ -120,7 +120,7 @@ kbd {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  min-height: 44px;
+  min-height: 48px;
   padding: 0 16px;
   border: 0;
   background: var(--color-plate-white);
