@@ -220,7 +220,7 @@ void main() {
         expect(find.text(betaIntroSource('臺北市停管處')), findsOneWidget);
         expect(find.text(betaIntroCaution), findsOneWidget);
         expect(find.text(betaIntroEligibility), findsOneWidget);
-        expect(find.textContaining('回報現場狀況'), findsNothing);
+        expect(find.textContaining('回報現場狀況'), findsOneWidget);
         expect(find.textContaining('試辦'), findsNothing);
         final done = find.byKey(const ValueKey('beta-intro-done'));
         expect(tester.getSize(done).height, greaterThanOrEqualTo(44));
