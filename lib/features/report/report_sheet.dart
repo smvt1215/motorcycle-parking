@@ -626,7 +626,8 @@ class _ReportFormState extends State<ReportForm> {
       scrollTo('name');
     } else if (kindProblem != null) {
       scrollTo('kind');
-    } else if (whereProblem != null) {
+    } else if (whereProblem != null || !fields) {
+      // Past 停哪裡 only the optional fields are left to fix.
       scrollTo('where');
     }
     return fields && kindProblem == null && whereProblem == null;

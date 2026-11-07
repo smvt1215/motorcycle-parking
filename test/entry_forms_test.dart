@@ -337,6 +337,14 @@ void main() {
       expect(patch['total'], 12);
     });
 
+    test('沒有 id 的舊條目不進 patch，不會被當成新增', () {
+      final old = EntryDraft.ofZone(
+        const ParkingZone(name: '舊區', access: ParkingAccess.scooterOnly),
+      )..guide = '改了也不送';
+      expect(old.editable, isFalse);
+      expect(entriesPatchOf([old]), isEmpty);
+    });
+
     test('新增多段時自動命名不重複', () {
       EntryDraft bay() => EntryDraft.create(EntryType.segment)
         ..kind = SpaceKind.car

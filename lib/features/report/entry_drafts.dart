@@ -496,11 +496,14 @@ List<Map<String, Object?>> entriesOf(List<EntryDraft> drafts) {
 /// entries changed. A zone's condition goes with the access it derives, or
 /// a null that clears it (decision 32).
 List<Map<String, Object?>> entriesPatchOf(List<EntryDraft> drafts) {
-  final current = [for (final d in drafts) ?d.original];
+  final current = [
+    for (final d in drafts)
+      if (d.editable) ?d.original,
+  ];
   final next = <Map<String, Object?>>[];
   final taken = <String>[];
   for (final d in drafts) {
-    if (d.removed) continue;
+    if (d.removed || !d.editable) continue;
     if (d.wholeSpot && !d.changed) continue;
     final json = d.toJson([..._others(drafts, d), ...taken]);
     taken.add(json['name']! as String);
