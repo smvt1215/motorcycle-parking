@@ -53,6 +53,10 @@ Deno.serve((req) => {
       if (error) throw error;
       return data as Filed;
     },
+    async notified(id) {
+      const { error } = await db.rpc('support_request_notified', { p_id: id });
+      if (error) throw error;
+    },
     async receipt({ id, email, link, replyTo, identity }) {
       if (!sender) return false;
       await sendMail(
