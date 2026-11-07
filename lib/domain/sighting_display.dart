@@ -7,6 +7,7 @@ import 'four_sign.dart';
 const sightingTitle = '回報現場狀況';
 const sightingSubmit = '送出回報';
 const sightingSending = '送出中…';
+const sightingSignInAgain = '重新登入';
 const sightingCancel = '取消';
 const sightingLevelQuestion = '現在現場怎麼樣？選一個';
 const sightingClosedLabel = '無法停車／施工中';

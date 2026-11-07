@@ -428,6 +428,11 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   /// Numbers each read of the followed spot: only the newest may land.
   int _followRead = 0;
 
+  /// What this rider sent, shown at once (A7c) wherever no summary covers
+  /// the place yet: a summary leaves out a rider of low credibility, and
+  /// the read may lag or fail. They age out like any report.
+  final _sent = <_SentSighting>[];
+
   /// The reports of the last [windowMinutes] for the chosen vehicle: the
   /// map and the preview read [sightingMapWindow], the details
   /// [sightingDetailWindow]. They age out on screen by their own time.
@@ -489,10 +494,21 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     } catch (_) {}
   }
 
-  /// Sends a rider's sighting and reads the spot again, so what riders say
-  /// now shows at once.
+  /// Sends a rider's sighting; it shows at once, and the spot is read
+  /// again for what other riders say.
   Future<void> submitSighting(SightingReport report) async {
     await sightingsSource.submit(report);
+    if (!report.closed) {
+      _sent
+        ..removeWhere(
+          (s) =>
+              s.report.spotId == report.spotId &&
+              s.report.vehicle == report.vehicle &&
+              s.report.areaId == report.areaId,
+        )
+        ..add(_SentSighting(report, clock(), riderId));
+    }
+    notifyListeners();
     await readFollowedSightings();
   }
 
@@ -1271,6 +1287,14 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     await client?.auth.signOut();
   }
 
+  /// Drops a session the backend no longer accepts, so signing in can start
+  /// over (A7c). A failure leaves it as it was.
+  Future<void> endExpiredSession() async {
+    try {
+      await client?.auth.signOut(scope: SignOutScope.local);
+    } catch (_) {}
+  }
+
   Future<void> updateProfile({required String displayName}) async {
     final backend = client;
     if (backend == null) throw StateError('請先登入再編輯個人資料');
@@ -1317,14 +1341,35 @@ class _StoreRiderSeats implements RiderSeats {
                   ? store._followedWide[id]
                   : store._followedNear[id]) ??
               store.sightings[id];
-    if (rows == null) return const [];
-    final now = store.clock();
-    final oldest = now.subtract(Duration(minutes: windowMinutes));
-    return [
-      for (final row in rows)
+    final oldest = store.clock().subtract(Duration(minutes: windowMinutes));
+    final seats = [
+      for (final row in rows ?? const <SpotSighting>[])
         if (row.vehicle == store.vehicle.name)
           if (riderSeatOf(row) case final seat? when seat.at.isAfter(oldest))
             seat,
     ];
+    final covered = {for (final seat in seats) seat.areaId};
+    return [
+      ...seats,
+      for (final sent in store._sent)
+        if (sent.report.spotId.toLowerCase() == id &&
+            sent.report.vehicle == store.vehicle &&
+            sent.rider == store.riderId &&
+            sent.at.isAfter(oldest) &&
+            !covered.contains(sent.report.areaId))
+          RiderSeat(
+            level: sent.report.level!,
+            at: sent.at,
+            areaId: sent.report.areaId,
+          ),
+    ];
   }
+}
+
+/// A report this rider sent, and who was signed in.
+class _SentSighting {
+  const _SentSighting(this.report, this.at, this.rider);
+  final SightingReport report;
+  final DateTime at;
+  final String? rider;
 }

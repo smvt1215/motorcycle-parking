@@ -60,6 +60,9 @@ class SightingReport {
   final bool closed;
   final String? zoneId, segmentId;
 
+  /// The zone or segment it is about; null for the whole spot.
+  String? get areaId => zoneId ?? segmentId;
+
   /// The body of submit-sighting, without its `device_id`.
   Map<String, Object?> toJson() => {
     'spot_id': spotId,

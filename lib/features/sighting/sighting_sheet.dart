@@ -12,6 +12,7 @@ import '../../models/sighting.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../../ui/detail_tokens.dart';
 import '../account/suspended_sheet.dart';
+import '../auth/sign_in.dart';
 import '../report/report_sheet.dart' show SignInPrompt;
 
 /// Opens 回報現場狀況 for [spot] (A7, A7b), judged by [sign]; says so once it
@@ -67,6 +68,10 @@ class _SightingSheetState extends State<SightingSheet> {
   bool sending = false;
   String? error;
 
+  /// The backend no longer takes this session: the button signs in again
+  /// (A7c ⑥), and what was chosen stays.
+  bool expired = false;
+
   bool get street => !widget.spot.isFacility;
   bool get whole => widget.places.isEmpty;
   bool get closed => choice != null && choice!.level == null;
@@ -93,6 +98,7 @@ class _SightingSheetState extends State<SightingSheet> {
     setState(() {
       sending = true;
       error = null;
+      expired = false;
     });
     try {
       await widget.store.submitSighting(report);
@@ -105,14 +111,30 @@ class _SightingSheetState extends State<SightingSheet> {
         return;
       }
       if (mounted) {
-        setState(
-          () => error = e is SightingRefused
+        setState(() {
+          expired = e is SightingRefused && e.reason == SightingRefusal.signIn;
+          error = e is SightingRefused
               ? sightingRefusalText(e.reason, street: street, whole: whole)
-              : sightingFailed,
-        );
+              : sightingFailed;
+        });
       }
     } finally {
       if (mounted) setState(() => sending = false);
+    }
+  }
+
+  /// Signs in again over the panel, which keeps what was chosen; dismissing
+  /// the sign-in leaves the message and this button.
+  Future<void> signInAgain() async {
+    final store = widget.store;
+    await store.endExpiredSession();
+    if (!mounted) return;
+    await showSignIn(context, store);
+    if (mounted && store.canReport) {
+      setState(() {
+        expired = false;
+        error = null;
+      });
     }
   }
 
@@ -137,7 +159,7 @@ class _SightingSheetState extends State<SightingSheet> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (!widget.store.canReport) ...[
+                if (!widget.store.canReport && !expired) ...[
                   SignInPrompt(store: widget.store, message: sightingSignIn),
                   const SizedBox(height: 12),
                 ],
@@ -215,21 +237,21 @@ class _SightingSheetState extends State<SightingSheet> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (error case final message?) ...[
-                Semantics(
-                  liveRegion: true,
-                  child: Text(
-                    message,
-                    key: const ValueKey('sighting-error'),
-                    style: TextStyle(fontSize: 14, color: c.denied),
-                  ),
-                ),
+                _Alert(message: message),
                 const SizedBox(height: 8),
               ],
-              AdaptiveButton(
-                key: const ValueKey('sighting-submit'),
-                label: sending ? sightingSending : sightingSubmit,
-                onPressed: ready ? submit : null,
-              ),
+              if (expired)
+                AdaptiveButton(
+                  key: const ValueKey('sighting-sign-in'),
+                  label: sightingSignInAgain,
+                  onPressed: signInAgain,
+                )
+              else
+                AdaptiveButton(
+                  key: const ValueKey('sighting-submit'),
+                  label: sending ? sightingSending : sightingSubmit,
+                  onPressed: ready ? submit : null,
+                ),
             ],
           ),
         ),
@@ -290,6 +312,45 @@ class _SightingSheetState extends State<SightingSheet> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Why a report did not go (A7c): red, right above the button, read out as
+/// it appears.
+class _Alert extends StatelessWidget {
+  const _Alert({required this.message});
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = DetailColors.of(context);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final ink = dark ? c.denied : const Color(0xff7a1f2e);
+    return Semantics(
+      container: true,
+      liveRegion: true,
+      child: Container(
+        key: const ValueKey('sighting-error'),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: dark ? c.deniedTint : const Color(0xfffbeaec),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.error, size: 20, color: ink),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                message,
+                style: TextStyle(fontSize: 13, height: 1.5, color: ink),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

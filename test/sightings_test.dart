@@ -21,6 +21,7 @@ import 'package:motorcycle_parking/domain/rider_meter_display.dart';
 import 'package:motorcycle_parking/domain/sighting_display.dart';
 import 'package:motorcycle_parking/domain/spot_detail_display.dart';
 import 'package:motorcycle_parking/features/account/suspended_sheet.dart';
+import 'package:motorcycle_parking/features/auth/sign_in.dart';
 import 'package:motorcycle_parking/features/favorites/favorite_card.dart';
 import 'package:motorcycle_parking/features/map/availability_capsule.dart';
 import 'package:motorcycle_parking/features/map/spot_detail.dart';
@@ -125,6 +126,26 @@ class RecordingSightings extends FakeSightings {
     if (fail) return Future.error(Exception('offline'));
     seen.addAll(spots.map((s) => s.id));
     return super.forSpots(spots, windowMinutes: windowMinutes);
+  }
+}
+
+/// A session the backend stopped accepting, then a sign-in.
+class ExpiredStore extends AppStore {
+  ExpiredStore(super.local, super.client, {super.sightingsSource, super.clock});
+  bool session = true;
+  int ended = 0;
+  @override
+  bool get canReport => session;
+  @override
+  Future<void> endExpiredSession() async {
+    ended++;
+    session = false;
+    notifyListeners();
+  }
+
+  void signedInAgain() {
+    session = true;
+    notifyListeners();
   }
 }
 
@@ -1055,6 +1076,207 @@ void main() {
       await send(tester);
       expect(source.sent, hasLength(1));
       expect(find.byKey(const ValueKey('sighting-sheet')), findsNothing);
+    });
+
+    testWidgetsOn('訊息放在送出按鈕正上方，朗讀會唸出', (tester) async {
+      final source = FakeSightings(const [])..failure = Exception('offline');
+      final store = await sightedStore(tester, source);
+      await openPanel(tester, store, lot);
+      await tester.tap(find.byKey(const ValueKey('sighting-level-some')));
+      await tester.pumpAndSettle();
+      await send(tester);
+      final alert = find.byKey(const ValueKey('sighting-error'));
+      final button = find.byKey(const ValueKey('sighting-submit'));
+      expect(
+        tester.getRect(alert).bottom,
+        lessThan(tester.getRect(button).top),
+      );
+      expect(
+        tester.getRect(button).top - tester.getRect(alert).bottom,
+        lessThanOrEqualTo(16),
+      );
+      final semantics = tester.widget<Semantics>(
+        find.ancestor(of: alert, matching: find.byType(Semantics)).first,
+      );
+      expect(semantics.properties.liveRegion, isTrue);
+    });
+
+    for (final (reason, text) in const [
+      (SightingRefusal.dailyLimit, '今天的回報次數已達上限，明天再回報。'),
+      (SightingRefusal.spotGone, '這個地點的資料已更新，請重新打開後再回報。'),
+    ]) {
+      testWidgetsOn('$text 面板不關，按鈕保留', (tester) async {
+        final source = FakeSightings(const [])
+          ..failure = SightingRefused(reason);
+        final store = await sightedStore(tester, source);
+        await openPanel(tester, store, lot);
+        await tester.tap(find.byKey(const ValueKey('sighting-level-some')));
+        await tester.pumpAndSettle();
+        await send(tester);
+        expect(find.text(text), findsOneWidget);
+        expect(submit(tester).onPressed, isNotNull);
+      });
+    }
+
+    test('10 分鐘內回報過：依地點寫這一段、這一區、這裡', () {
+      String text({required bool street, required bool whole}) =>
+          sightingRefusalText(
+            SightingRefusal.tooSoon,
+            street: street,
+            whole: whole,
+          );
+      expect(text(street: true, whole: false), startsWith('這一段 10 分鐘內'));
+      expect(text(street: false, whole: false), startsWith('這一區 10 分鐘內'));
+      expect(text(street: true, whole: true), startsWith('這裡 10 分鐘內'));
+    });
+
+    group('登入失效', () {
+      Future<ExpiredStore> expiredStore(
+        WidgetTester tester,
+        FakeSightings source,
+      ) async {
+        final store = (await tester.runAsync(() async {
+          SharedPreferences.setMockInitialValues({'vehicle': 'heavy'});
+          final s = ExpiredStore(
+            LocalRepository(await SharedPreferences.getInstance()),
+            null,
+            sightingsSource: source,
+            clock: () => detailNight,
+          );
+          await s.init();
+          return s;
+        }))!;
+        store.vehicle = VehicleType.heavy;
+        addTearDown(store.dispose);
+        return store;
+      }
+
+      final signIn = find.byKey(const ValueKey('sighting-sign-in'));
+
+      Future<(ExpiredStore, FakeSightings)> refused(WidgetTester tester) async {
+        final source = FakeSightings(const [])
+          ..failure = const SightingRefused(SightingRefusal.signIn);
+        final store = await expiredStore(tester, source);
+        await openPanel(tester, store, lot);
+        await tester.tap(find.byKey(const ValueKey('sighting-place-1')));
+        await tester.tap(find.byKey(const ValueKey('sighting-level-some')));
+        await tester.pumpAndSettle();
+        await send(tester);
+        return (store, source);
+      }
+
+      for (final platform in platforms) {
+        testWidgetsOn('${platform.name}：按鈕改成重新登入，登入後回到面板，內容保留', (tester) async {
+          setUpView(tester, platform, const Size(390, 844));
+          final (store, source) = await refused(tester);
+          expect(find.text('登入已失效，請重新登入後再回報。'), findsOneWidget);
+          expect(signIn, findsOneWidget);
+          expect(find.text(sightingSignInAgain), findsWidgets);
+          expect(find.byKey(const ValueKey('sighting-submit')), findsNothing);
+          // No second sign-in prompt beside the message.
+          expect(find.byType(SignInPrompt), findsNothing);
+          await tester.tap(signIn);
+          await tester.pumpAndSettle();
+          expect(store.ended, 1);
+          expect(find.byType(SignInSheet), findsOneWidget);
+          source.failure = null;
+          store.signedInAgain();
+          await tester.pumpAndSettle();
+          expect(find.byType(SignInSheet), findsNothing);
+          expect(find.byKey(const ValueKey('sighting-sheet')), findsOneWidget);
+          expect(find.byKey(const ValueKey('sighting-error')), findsNothing);
+          // What was chosen is still there: it goes without choosing again.
+          await send(tester);
+          expect(source.sent.single.zoneId, 'b3');
+          expect(source.sent.single.level, 2);
+        });
+      }
+
+      testWidgetsOn('取消登入：訊息和重新登入按鈕都留著', (tester) async {
+        final (store, _) = await refused(tester);
+        await tester.tap(signIn);
+        await tester.pumpAndSettle();
+        await tester.tapAt(const Offset(195, 20));
+        await tester.pumpAndSettle();
+        expect(store.canReport, isFalse);
+        expect(find.byKey(const ValueKey('sighting-sheet')), findsOneWidget);
+        expect(signIn, findsOneWidget);
+        expect(find.byKey(const ValueKey('sighting-error')), findsOneWidget);
+      });
+    });
+
+    testWidgetsOn('成功：回報立刻出現在卡片上，即使彙整沒有列入', (tester) async {
+      final source = FakeSightings(const []);
+      final store = await sightedStore(tester, source);
+      await openPanel(tester, store, lot);
+      await tester.tap(find.byKey(const ValueKey('sighting-level-some')));
+      await tester.pumpAndSettle();
+      await send(tester);
+      expect(find.text(sightingSent), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('four-sign-seat')),
+          matching: find.text('還有一些'),
+        ),
+        findsOneWidget,
+      );
+      expect(store.riderMeter(lot), const RiderMeter(RiderLevel.some));
+    });
+
+    testWidgets('自己的回報：彙整有那一區就用彙整，換車種不顯示，時窗過了消失', (tester) async {
+      var now = detailDay;
+      final source = FakeSightings(const []);
+      final store = (await tester.runAsync(() async {
+        SharedPreferences.setMockInitialValues({'vehicle': 'heavy'});
+        final s = AppStore(
+          LocalRepository(await SharedPreferences.getInstance()),
+          null,
+          sightingsSource: source,
+          clock: () => now,
+        );
+        await s.init();
+        return s;
+      }))!;
+      addTearDown(store.dispose);
+      store.vehicle = VehicleType.heavy;
+      await tester.runAsync(() => store.followSightings(lot));
+      const report = SightingReport.level(
+        spotId: lotId,
+        vehicle: VehicleType.heavy,
+        level: 2,
+        zoneId: 'b2',
+      );
+      await tester.runAsync(() => store.submitSighting(report));
+      expect(store.riderSeats(15).of(lotId).single.level, 2);
+      store.vehicle = VehicleType.scooter;
+      expect(store.riderSeats(15).of(lotId), isEmpty);
+      store.vehicle = VehicleType.heavy;
+      source.rows = [row(lotId, zone: 'b2', level: 3, count: 4, at: now)];
+      await tester.runAsync(store.readFollowedSightings);
+      final seats = store.riderSeats(15).of(lotId);
+      expect(seats.single.level, 0);
+      expect(seats.single.riders, 4);
+      source.rows = const [];
+      await tester.runAsync(store.readFollowedSightings);
+      now = now.add(const Duration(minutes: 16));
+      expect(store.riderSeats(15).of(lotId), isEmpty);
+      expect(store.riderSeats(30).of(lotId), hasLength(1));
+      now = now.add(const Duration(minutes: 15));
+      expect(store.riderSeats(30).of(lotId), isEmpty);
+    });
+
+    testWidgets('無法停車不算空位回報，卡片不顯示', (tester) async {
+      final source = FakeSightings(const []);
+      final store = await sightedStore(tester, source);
+      await tester.runAsync(
+        () => store.submitSighting(
+          const SightingReport.closed(
+            spotId: lotId,
+            vehicle: VehicleType.heavy,
+          ),
+        ),
+      );
+      expect(store.riderSeats(15).of(lotId), isEmpty);
     });
 
     testWidgetsOn('停權：跳停權面板，回報內容保留', (tester) async {
