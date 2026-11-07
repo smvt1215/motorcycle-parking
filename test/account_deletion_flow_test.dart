@@ -280,6 +280,7 @@ void main() {
             )
             .first,
       );
+      expect(find.textContaining(deletionSuspensionNote), findsOneWidget);
       expect(find.text('保留匿名的防濫用雜湊'), findsOneWidget);
       expect(find.textContaining('保留 180 天後刪除'), findsOneWidget);
       expect(button.hitTestable(), findsOneWidget);

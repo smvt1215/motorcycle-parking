@@ -29,6 +29,9 @@ const deletionDeleted = [
 const deletionKeptHeading = '會保留，但改為匿名';
 const deletionKept = ['你新增的停車點', '修改建議與回報（審核中的照常審核）', '投票與現場回報'];
 const deletionKeptNote = '這些內容不會再連到你，也不顯示你的名稱。';
+
+/// Same words as public_web's retention list and the privacy policy (#355).
+const deletionSuspensionNote = '停權中的帳號刪除後，同一個 Google 或 Apple 帳號重新登入時，停權會繼續。';
 const deletionHashHeading = '防濫用紀錄';
 const deletionHashTitle = '保留匿名的防濫用雜湊';
 const deletionHashDetail = '由 IP 和裝置算出的雜湊值，只用來計票和防止洗票，不含你的帳號或名稱；保留 180 天後刪除。';

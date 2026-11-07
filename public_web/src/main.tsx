@@ -1,10 +1,12 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
-import { backendEnv } from './app/env';
+import { backendEnv, supportEnv } from './app/env';
 import { productionSignIn } from './app/signIn';
 import { makeStore } from './app/store';
+import { appCheckTokens } from './auth/appCheck';
 import type { AuthPort } from './auth/port';
+import { createSupportClient, type SupportPort } from './support/client';
 import './styles.css';
 
 const env = backendEnv(import.meta.env);
@@ -20,6 +22,28 @@ async function signIn(): Promise<AuthPort | null> {
   return productionSignIn(import.meta.env, window.location.origin);
 }
 
+/**
+ * The support pages' backend: the one-time links need only the backend, the
+ * form also App Check. The smoke build has no App Check settings; it uses a
+ * fixed token the smoke script's backend accepts.
+ */
+function support(): SupportPort | null {
+  const settings = supportEnv(import.meta.env);
+  if (!settings) return null;
+  const appCheckToken =
+    import.meta.env.MODE === 'smoke'
+      ? async () => 'smoke-app-check'
+      : settings.appCheck
+        ? appCheckTokens(settings.appCheck)
+        : null;
+  return createSupportClient({
+    supabaseUrl: settings.backend.url,
+    publishableKey: settings.backend.publishableKey,
+    appCheckToken,
+    fetch: (input, init) => fetch(input, init),
+  });
+}
+
 void signIn().then((auth) => {
   const store = makeStore({
     postgrest:
@@ -29,7 +53,7 @@ void signIn().then((auth) => {
   });
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
-      <App store={store} auth={auth} />
+      <App store={store} auth={auth} support={support()} />
     </StrictMode>,
   );
 });

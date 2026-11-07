@@ -52,3 +52,31 @@ export function signInEnv(env: ImportMetaEnv): SignInEnv | null {
     recaptchaSiteKey,
   };
 }
+
+/** App Check for the support form: the same Firebase web app as the sign-in check. */
+export type AppCheckEnv = Pick<SignInEnv, 'firebase' | 'recaptchaSiteKey'>;
+
+/** What the support pages need; the form also needs App Check, the one-time links do not. */
+export interface SupportEnv {
+  backend: BackendEnv;
+  /** Null when any App Check setting is missing: the form is then not offered. */
+  appCheck: AppCheckEnv | null;
+}
+
+/** The support settings, or null without a backend (a local preview). */
+export function supportEnv(env: ImportMetaEnv): SupportEnv | null {
+  const backend = backendEnv(env);
+  if (!backend) return null;
+  const value = (raw: string | undefined) => raw?.trim() || null;
+  const apiKey = value(env.VITE_FIREBASE_API_KEY);
+  const appId = value(env.VITE_FIREBASE_APP_ID);
+  const projectId = value(env.VITE_FIREBASE_PROJECT_ID);
+  const recaptchaSiteKey = value(env.VITE_RECAPTCHA_SITE_KEY);
+  return {
+    backend,
+    appCheck:
+      apiKey && appId && projectId && recaptchaSiteKey
+        ? { firebase: { apiKey, appId, projectId }, recaptchaSiteKey }
+        : null,
+  };
+}

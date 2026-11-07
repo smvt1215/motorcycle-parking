@@ -14,6 +14,8 @@ import type {
   SignInResult,
 } from '../auth/port';
 import { routes } from '../routes';
+import { createSupportClient, type SupportPort } from '../support/client';
+import { SupportContext } from '../support/SupportContext';
 
 /** How the fake ends a sign-in through either button; tests read its calls. */
 type SignIn = (provider: ProviderName, options?: SignInOptions) => Promise<SignInResult>;
@@ -149,8 +151,68 @@ export function pendingUntil(scheduledAt: string) {
   return { ...noRequest, status: 'pending', requested_at: '2026-11-05T02:00:00Z', scheduled_at: scheduledAt };
 }
 
+/**
+ * The support pages' client against the test backend, calling the global
+ * fetch (stub it with stubFunctions). `appCheck` is the App Check getter, or
+ * null for a build without App Check settings.
+ */
+export function testSupport(
+  appCheck: (() => Promise<string>) | null = async () => 'app-check-token',
+): SupportPort {
+  return createSupportClient({
+    supabaseUrl: 'https://api.test',
+    publishableKey: 'anon',
+    appCheckToken: appCheck,
+    fetch: (input, init) => fetch(input, init),
+  });
+}
+
+/** A call to an Edge Function, as stubFunctions saw it. */
+export interface FunctionCall {
+  fn: string;
+  body: Record<string, unknown> | null;
+  headers: Headers;
+}
+
+/**
+ * Stubs fetch for the Edge Functions (/functions/v1/<name>). Each name
+ * takes one answer, or a list used in turn (the last repeats).
+ */
+export function stubFunctions(answers: Record<string, Answer | Answer[]>) {
+  const calls: FunctionCall[] = [];
+  const used: Record<string, number> = {};
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      const fn = url.slice(url.lastIndexOf('/') + 1);
+      calls.push({
+        fn,
+        body: init?.body ? JSON.parse(String(init.body)) : null,
+        headers: new Headers(init?.headers),
+      });
+      const listed = answers[fn];
+      if (!listed) throw new Error(`no answer for ${fn}`);
+      const list = Array.isArray(listed) ? listed : [listed];
+      const index = Math.min(used[fn] ?? 0, list.length - 1);
+      used[fn] = (used[fn] ?? 0) + 1;
+      const answer = list[index]!;
+      if (answer === 'network') throw new TypeError('Failed to fetch');
+      return new Response(JSON.stringify(answer.body), {
+        status: answer.status ?? 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }),
+  );
+  return calls;
+}
+
 /** Renders the site at `path` with a store, the given sign-in and a test backend. */
-export function openSite(path: string, auth: AuthPort | null = fakeAuth()) {
+export function openSite(
+  path: string,
+  auth: AuthPort | null = fakeAuth(),
+  support: SupportPort | null = testSupport(),
+) {
   const store = makeStore({
     postgrest: auth
       ? { url: 'https://api.test', anonKey: 'anon', accessToken: () => auth.accessToken() }
@@ -160,7 +222,9 @@ export function openSite(path: string, auth: AuthPort | null = fakeAuth()) {
   render(
     <Provider store={store}>
       <AuthProvider auth={auth}>
-        <RouterProvider router={router} />
+        <SupportContext.Provider value={support}>
+          <RouterProvider router={router} />
+        </SupportContext.Provider>
       </AuthProvider>
     </Provider>,
   );
