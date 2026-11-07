@@ -99,6 +99,28 @@ void main() {
       expect(feeBoardHasUnconfirmed(boards), isFalse);
     });
 
+    test('比照不適用的車種時寫不適用，不寫費率未提供', () {
+      for (final fee in const [
+        Fee(
+          scooter: na,
+          heavy: Rate(FeeMode.sameAsScooter),
+          car: Rate(FeeMode.free),
+        ),
+        Fee(
+          scooter: Rate(FeeMode.free),
+          heavy: Rate(FeeMode.sameAsCar),
+          car: na,
+        ),
+      ]) {
+        final board = feeBoardOf(
+          fee,
+          vehicles: const [FeeVehicle.heavy],
+        ).single;
+        expect(board.headline!.text, '不適用');
+        expect(feeBoardHasUnconfirmed([board]), isFalse);
+      }
+    });
+
     test('三種車都不適用時列出不適用，不寫未確認', () {
       final boards = feeBoardOf(const Fee(scooter: na, heavy: na, car: na));
       expect(boards.map((b) => b.headline!.text).toSet(), {'不適用'});

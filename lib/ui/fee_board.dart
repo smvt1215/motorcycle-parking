@@ -169,7 +169,14 @@ Rate? _rateOf(Fee fee, FeeVehicle vehicle) => switch (vehicle) {
 
 FeeVehicleBoard _vehicleBoard(Fee fee, FeeVehicle vehicle) {
   final rate = _rateOf(fee, vehicle);
-  if (rate?.mode == FeeMode.notApplicable) {
+  // A follow of a vehicle without bays here (old data; [Fee.followGap]
+  // refuses new ones) has no bays to price either.
+  final followed = switch (rate?.mode) {
+    FeeMode.sameAsScooter => fee.scooter,
+    FeeMode.sameAsCar => fee.car,
+    _ => rate,
+  };
+  if (followed?.mode == FeeMode.notApplicable) {
     // Stated, not unconfirmed: it asks for no 未確認 closing line.
     return FeeVehicleBoard(vehicle, headline: const FeeLine('不適用'));
   }
