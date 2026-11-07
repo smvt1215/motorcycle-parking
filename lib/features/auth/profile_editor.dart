@@ -1,18 +1,45 @@
+import 'dart:async';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../data/account_status.dart';
 import '../../data/app_store.dart';
 import '../../domain/account_display.dart';
+import '../../domain/account_status_display.dart';
+import '../account/suspended_sheet.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../../data/profile_repository.dart';
 import 'profile_avatar.dart';
 
-Future<void> showProfileEditor(BuildContext context, AppStore store) =>
-    showAdaptiveSheet<void>(context, (_) => ProfileEditor(store: store));
+/// Opens P12 from any entry (P10, the new spot form's name notice): the
+/// suspension (#331 ④) comes from [accountStatusProvider], so every entry
+/// gets the read-only name.
+Future<void> showProfileEditor(BuildContext context, AppStore store) {
+  AccountStatusController? status;
+  try {
+    status = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(accountStatusProvider);
+  } catch (_) {
+    // Outside the app's ProviderScope (some tests): no suspension check.
+  }
+  return showAdaptiveSheet<void>(
+    context,
+    (_) => ProfileEditor(store: store, status: status),
+  );
+}
 
 /// 編輯個人資料 (P12): the editor changes the name and can remove the
 /// sign-in provider's picture. Avatar uploads were cancelled (2026-11-01);
 /// the avatar is the name's first character or the provider's picture.
 class ProfileEditor extends StatefulWidget {
-  const ProfileEditor({super.key, required this.store});
+  const ProfileEditor({super.key, required this.store, this.status});
   final AppStore store;
+
+  /// While it says the account is suspended (#331 ④), the name is read
+  /// only and nothing can be saved.
+  final AccountStatusController? status;
   @override
   State<ProfileEditor> createState() => _ProfileEditorState();
 }
@@ -46,8 +73,21 @@ class _ProfileEditorState extends State<ProfileEditor> {
   /// to the generic person, not a letter.
   bool get _noPublicName => _suggesting || _blankPrivate || _typed.isEmpty;
 
+  AccountStatus? get suspension => widget.status?.suspension;
+
+  void _statusChanged() => setState(() {});
+
+  @override
+  void initState() {
+    super.initState();
+    widget.status?.addListener(_statusChanged);
+    // Read on opening: a suspension makes the name read only (④).
+    if (widget.status case final status?) unawaited(status.refresh());
+  }
+
   @override
   void dispose() {
+    widget.status?.removeListener(_statusChanged);
     name.dispose();
     super.dispose();
   }
@@ -68,6 +108,22 @@ class _ProfileEditorState extends State<ProfileEditor> {
       );
       if (mounted) Navigator.pop(context);
     } catch (e) {
+      // The status was unknown on opening: the shared panel (#331).
+      if (accountSuspendedFrom(e) case final suspended?) {
+        unawaited(widget.status?.refresh());
+        if (!mounted) return;
+        // The profile kept its old values: show them again.
+        setState(() {
+          name.text = public ?? suggestion ?? '';
+          remove = false;
+        });
+        await showSuspendedSheet(
+          context,
+          suspended.until,
+          untilKnown: suspended.untilKnown,
+        );
+        return;
+      }
       if (mounted) {
         setState(
           () => error = e is StateError
@@ -93,7 +149,7 @@ class _ProfileEditorState extends State<ProfileEditor> {
     );
     final saveButton = TextButton(
       key: const ValueKey('profile-save'),
-      onPressed: saving || !changed ? null : save,
+      onPressed: saving || !changed || suspension != null ? null : save,
       child: Text(
         saving ? '儲存中…' : '儲存',
         style: TextStyle(fontWeight: isCupertino ? FontWeight.w600 : null),
@@ -180,7 +236,7 @@ class _ProfileEditorState extends State<ProfileEditor> {
                       Center(
                         child: TextButton(
                           key: const ValueKey('profile-remove-avatar'),
-                          onPressed: saving
+                          onPressed: saving || suspension != null
                               ? null
                               : () => setState(() => remove = true),
                           child: const Text(profileRemoveAvatar),
@@ -198,11 +254,13 @@ class _ProfileEditorState extends State<ProfileEditor> {
                     TextFormField(
                       key: const ValueKey('profile-name'),
                       controller: name,
-                      enabled: !saving,
+                      enabled: !saving && suspension == null,
                       maxLength: 40,
                       decoration: InputDecoration(
                         labelText: '顯示名稱',
-                        helperText: _suggesting
+                        helperText: suspension != null
+                            ? null
+                            : _suggesting
                             ? profileNameSuggestionHelper
                             : _blankPrivate
                             ? profileNameClearedHelper
@@ -213,6 +271,20 @@ class _ProfileEditorState extends State<ProfileEditor> {
                       validator: (value) => profileNameError(value ?? ''),
                       onChanged: (_) => setState(() {}),
                     ),
+                    if (suspension case final suspension?)
+                      Column(
+                        key: const ValueKey('profile-suspended'),
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            suspendedNameNote(suspension.until),
+                            style: quiet,
+                          ),
+                          const SuspendedContactLink(
+                            label: suspendedContactShort,
+                          ),
+                        ],
+                      ),
                     if (user?.email case final email?)
                       Padding(
                         padding: const EdgeInsets.only(top: 8),

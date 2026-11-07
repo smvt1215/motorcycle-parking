@@ -6,12 +6,14 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/app_version.dart';
 import '../../core/policy_links.dart';
 import '../../data/account_deletion.dart';
+import '../../data/account_status.dart';
 import '../../data/app_store.dart';
 import '../../data/profile_repository.dart';
 import '../../domain/account_deletion_display.dart';
 import '../../domain/account_display.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../../ui/version_text.dart';
+import '../account/suspended_sheet.dart';
 import '../auth/profile_avatar.dart';
 import '../auth/profile_editor.dart';
 import '../auth/sign_in.dart';
@@ -25,13 +27,17 @@ export '../../core/policy_links.dart' show policyUrls;
 /// privacy policy and terms) and, signed in, 刪除帳號 in its own group.
 Future<void> showSettings(BuildContext context, AppStore store) {
   AccountDeletionController? deletion;
+  AccountStatusController? status;
   try {
-    deletion = ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(accountDeletionProvider);
+    final container = ProviderScope.containerOf(context, listen: false);
+    deletion = container.read(accountDeletionProvider);
+    // A suspension shows as a card under the account (#331 ③).
+    final read = container.read(accountStatusProvider);
+    status = read;
+    unawaited(read.refresh());
   } catch (_) {
-    // Outside the app's ProviderScope (some tests): no deletion entry.
+    // Outside the app's ProviderScope (some tests): no deletion entry and
+    // no suspension card.
   }
   return showAdaptiveSheet<void>(
     context,
@@ -42,8 +48,8 @@ Future<void> showSettings(BuildContext context, AppStore store) {
         SheetTitle('帳號與設定'),
         const SizedBox(height: 16),
         AnimatedBuilder(
-          animation: store,
-          builder: (ctx, _) => _AccountCard(store: store),
+          animation: Listenable.merge([store, ?status]),
+          builder: (ctx, _) => _AccountCard(store: store, status: status),
         ),
         const SizedBox(height: 28),
         Text(
@@ -212,8 +218,9 @@ class _DeleteAccountGroup extends StatelessWidget {
 /// Who is signed in and what that unlocks: sample data, signed out, or the
 /// signed-in account with sign-out.
 class _AccountCard extends StatelessWidget {
-  const _AccountCard({required this.store});
+  const _AccountCard({required this.store, this.status});
   final AppStore store;
+  final AccountStatusController? status;
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -286,6 +293,10 @@ class _AccountCard extends StatelessWidget {
               detail,
               style: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
             ),
+            if (status?.suspension case final suspension? when signedIn) ...[
+              const SizedBox(height: 12),
+              SuspendedNoticeCard(until: suspension.until, now: store.clock()),
+            ],
             if (signedIn && !store.demo && name == null) ...[
               const SizedBox(height: 4),
               Align(
