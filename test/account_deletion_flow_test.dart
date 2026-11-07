@@ -8,7 +8,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -17,6 +16,7 @@ import 'package:motorcycle_parking/data/account_deletion.dart';
 import 'package:motorcycle_parking/data/app_store.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
 import 'package:motorcycle_parking/domain/account_deletion_display.dart';
+import 'package:motorcycle_parking/features/auth/brand_sign_in_button.dart';
 import 'package:motorcycle_parking/features/settings/account_deletion_page.dart';
 import 'package:motorcycle_parking/features/settings/settings_page.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
@@ -355,7 +355,24 @@ void main() {
     expect(find.text('再登入一次'), findsOneWidget);
     expect(find.text('r••••@gmail.com・Google'), findsOneWidget);
     expect(gateway.calls.contains('request'), isFalse);
-    await tester.tap(find.byKey(const ValueKey('reauth-sign-in')));
+    // P15a ④: Google's white outlined brand button with the G.
+    final reauth = find.byKey(const ValueKey('reauth-sign-in'));
+    final surface = tester.widget<Material>(
+      find.descendant(
+        of: reauth,
+        matching: find.byKey(const ValueKey('brand-sign-in-surface')),
+      ),
+    );
+    expect(surface.color, const Color(0xffffffff));
+    expect(
+      (surface.shape! as StadiumBorder).side.color,
+      const Color(0xff747775),
+    );
+    expect(
+      find.descendant(of: reauth, matching: find.byType(GoogleLogo)),
+      findsOneWidget,
+    );
+    await tester.tap(reauth);
     await tester.pumpAndSettle();
     expect(gateway.calls, containsAllInOrder(['reauth:google', 'request']));
     expect(find.text('已申請刪除帳號'), findsOneWidget);
@@ -419,20 +436,19 @@ void main() {
           find.descendant(of: button, matching: find.text('使用 Apple 登入')),
           findsOneWidget,
         );
-        final branded = find.descendant(
-          of: button,
-          matching: find.byType(M3EButton),
+        // P15a ⑤: Apple's black brand button with its logo on both platforms.
+        final surface = tester.widget<Material>(
+          find.descendant(
+            of: button,
+            matching: find.byKey(const ValueKey('brand-sign-in-surface')),
+          ),
         );
-        if (ios) {
-          expect(branded, findsNothing);
-        } else {
-          final decoration = tester.widget<M3EButton>(branded).decoration!;
-          expect(decoration.backgroundColor!.resolve({}), Colors.black);
-          expect(
-            find.descendant(of: button, matching: find.byIcon(Icons.apple)),
-            findsOneWidget,
-          );
-        }
+        expect(surface.color, const Color(0xff000000));
+        expect(
+          find.descendant(of: button, matching: find.byType(AppleLogo)),
+          findsOneWidget,
+        );
+        expect(find.byIcon(Icons.apple), findsNothing);
         await tester.tap(button);
         await tester.pumpAndSettle();
         expect(gateway.calls, [
