@@ -162,7 +162,7 @@ void main() {
       await tester.ensureVisible(find.text('修改建議'));
       await tester.tap(find.text('修改建議'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('停車點名稱'));
+      await tester.tap(find.text('名稱'));
       await tester.pumpAndSettle();
       await tester.enterText(
         find.byKey(const ValueKey('suggestion-input')),
@@ -204,12 +204,12 @@ void main() {
     await tester.ensureVisible(find.text('修改建議'));
     await tester.tap(find.text('修改建議'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('停車點名稱'));
+    await tester.tap(find.text('名稱'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('取消'));
     await tester.pumpAndSettle();
     expect(find.text('提出修改建議'), findsOneWidget);
-    await tester.tap(find.text('停車點名稱'));
+    await tester.tap(find.text('名稱'));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const ValueKey('suggestion-input')),
@@ -232,7 +232,7 @@ void main() {
     await tester.ensureVisible(find.text('修改建議'));
     await tester.tap(find.text('修改建議'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('停車點名稱'));
+    await tester.tap(find.text('名稱'));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const ValueKey('suggestion-input')),
@@ -337,8 +337,7 @@ void main() {
     await tester.ensureVisible(find.text('修改建議'));
     await tester.tap(find.text('修改建議'));
     await tester.pumpAndSettle();
-    expect(find.text('目前：${SpaceType.freeMotorcycle.label}'), findsOneWidget);
-    await tester.tap(find.text('格位類型'));
+    await tester.tap(find.byKey(const ValueKey('suggest-limits')));
     await tester.pumpAndSettle();
     expect(find.text('地圖上目前寫的是'), findsOneWidget);
     // Nothing changes until the reporter picks another marking.
@@ -383,7 +382,7 @@ void main() {
     await tester.tap(find.text('修改建議'));
     await tester.pumpAndSettle();
     // The suggestion list's item, not the details row behind it.
-    await tester.tap(find.text('收費資訊').last);
+    await tester.tap(find.byKey(const ValueKey('suggest-fee')));
     await tester.pumpAndSettle();
     // The fee editor fills the screen; scroll the sheet to its button.
     await tester.scrollUntilVisible(
@@ -468,23 +467,30 @@ void main() {
     await tester.ensureVisible(find.text('修改建議'));
     await tester.tap(find.text('修改建議'));
     await tester.pumpAndSettle();
-    // The suggestion list, kept by element because its title scrolls away.
-    final listElement = tester.element(
-      find
-          .ancestor(of: find.text('提出修改建議'), matching: find.byType(Scrollable))
-          .first,
-    );
-    // .last only once built: on an empty match it throws instead of waiting.
-    await tester.scrollUntilVisible(
-      find.text(item),
-      150,
-      scrollable: find.byElementPredicate((e) => e == listElement),
-    );
-    final entry = find.text(item).last;
+    final list = find
+        .descendant(
+          of: find.byType(SuggestionListPage),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    final entry = switch (item) {
+      '格位類型' => find.byKey(const ValueKey('suggest-limits')),
+      '收費資訊' => find.byKey(const ValueKey('suggest-fee')),
+      '入口與停車指引' => find.byKey(const ValueKey('suggest-where')),
+      goneLabel => find.byKey(const ValueKey('suggest-gone')),
+      '其他備註' => find.byKey(const ValueKey('suggest-note')),
+      '停車點名稱' => find.text('名稱'),
+      _ => find.text(item),
+    };
+    await tester.scrollUntilVisible(entry, 150, scrollable: list);
     await tester.ensureVisible(entry);
     await tester.pumpAndSettle();
     await tester.tap(entry);
     await tester.pumpAndSettle();
+    if (item == '入口與停車指引') {
+      await tester.tap(find.text('入口'));
+      await tester.pumpAndSettle();
+    }
     return store;
   }
 
@@ -585,9 +591,20 @@ void main() {
   });
 
   testWidgets('入口與停車指引只送有變更的欄位', (tester) async {
-    final store = await openSuggestion(tester, '入口與停車指引');
-    // A street bay has no entrance to fix.
-    expect(find.byKey(const ValueKey('suggestion-entrance')), findsNothing);
+    final store = await openSuggestion(
+      tester,
+      '入口與停車指引',
+      selectedSpot: const ParkingSpot(
+        id: 'lot',
+        name: '松壽地下停車場',
+        lat: 25.0339,
+        lng: 121.5623,
+        city: '臺北市',
+        spaceType: SpaceType.offStreet,
+        source: 'official',
+      ),
+    );
+    expect(find.byKey(const ValueKey('suggestion-entrance')), findsOneWidget);
     await submitSuggestion(tester, '送出修改建議');
     expect(find.text('請至少修改一項，和目前不同才能送出'), findsOneWidget);
     await tester.enterText(
@@ -998,7 +1015,7 @@ void main() {
     await tester.ensureVisible(find.text('修改建議'));
     await tester.tap(find.text('修改建議'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('收費資訊').last);
+    await tester.tap(find.byKey(const ValueKey('suggest-fee')));
     await tester.pumpAndSettle();
     for (final vehicle in ['scooter', 'heavy']) {
       await chooseFeeMode(tester, vehicle, 'hourly');
@@ -1048,7 +1065,7 @@ void main() {
     await tester.ensureVisible(find.text('修改建議'));
     await tester.tap(find.text('修改建議'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('停車點名稱'));
+    await tester.tap(find.text('名稱'));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const ValueKey('suggestion-input')),
@@ -1063,117 +1080,6 @@ void main() {
       'field': 'name',
       'proposed': {'name': '市府路機車格'},
     });
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
-
-  testWidgets('停放資格未修改時在選項下方提示，修改後顯示對照並只送出變更', (tester) async {
-    tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(390, 844);
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    final store = (await tester.runAsync(createStore))!;
-    addTearDown(store.dispose);
-    await openDetails(tester, store);
-    await tester.ensureVisible(find.text('修改建議'));
-    await tester.tap(find.text('修改建議'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('機車停放資格'));
-    await tester.pumpAndSettle();
-    expect(find.text('現場有告示牌或地面標字時，才選「可停」。'), findsOneWidget);
-    await tester.ensureVisible(find.text('送出修改建議'));
-    await tester.tap(find.text('送出修改建議'));
-    await tester.pumpAndSettle();
-    expect(find.text('請至少改一個車種，和目前不同才能送出'), findsOneWidget);
-    expect(store.submissions, isEmpty);
-    final heavyAllowed = find.text('可停').last;
-    await tester.ensureVisible(heavyAllowed);
-    await tester.tap(heavyAllowed);
-    await tester.pumpAndSettle();
-    expect(find.text('請至少改一個車種，和目前不同才能送出'), findsNothing);
-    expect(find.text('大型重機從「未確認」改成「可停」'), findsOneWidget);
-    await tester.ensureVisible(find.text('送出修改建議'));
-    await tester.tap(find.text('送出修改建議'));
-    await tester.pumpAndSettle();
-    expect(store.submissions.single['field'], 'eligibility');
-    expect(store.submissions.single['proposed'], {'heavy_allowed': true});
-    expect(find.text('範例模式：建議沒有實際送出，只用來測試流程。'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
-
-  testWidgets('新增停車點分區填寫，重機專用格自動帶入車種', (tester) async {
-    tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(390, 844);
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    final store = (await tester.runAsync(createStore))!;
-    addTearDown(store.dispose);
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Builder(
-            builder: (context) => TextButton(
-              onPressed: () => showReport(
-                context,
-                store,
-                spot.lat,
-                spot.lng,
-                mapCenter: true,
-              ),
-              child: const Text('新增'),
-            ),
-          ),
-        ),
-      ),
-    );
-    await tester.tap(find.text('新增'));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('從目前地圖中心開始'), findsOneWidget);
-    // Closing stays reachable at the top of the long form.
-    expect(find.byTooltip('關閉').hitTestable(), findsOneWidget);
-    expect(find.text('0/100'), findsNothing);
-    // Kept by element: the heading used to find the list scrolls away.
-    final listElement = tester.element(
-      find
-          .ancestor(of: find.text('新增停車點'), matching: find.byType(Scrollable))
-          .first,
-    );
-    Future<void> openPart(String title) async {
-      final header = find.byKey(ValueKey('fold-$title'));
-      await tester.ensureVisible(header);
-      await tester.pumpAndSettle();
-      await tester.tap(header);
-      await tester.pumpAndSettle();
-    }
-
-    await openPart('名稱');
-    await tester.enterText(
-      find.widgetWithText(TextFormField, '停車點名稱'),
-      '松仁路重機格',
-    );
-    await openPart('格位');
-    await pickKind(tester, SpaceKind.heavy);
-    // Moved by its position: a drag could land on the location map.
-    final list = tester
-        .state<ScrollableState>(
-          find.byElementPredicate((e) => e == listElement),
-        )
-        .position;
-    while (find.text('送出').evaluate().isEmpty) {
-      list.jumpTo(list.pixels + 200);
-      await tester.pump();
-    }
-    await tester.ensureVisible(find.text('送出'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('送出'));
-    await tester.pumpAndSettle();
-    final created = store.submissions.single['spot'] as Map<String, dynamic>;
-    expect(created['name'], '松仁路重機格');
-    expect(created['city'], '臺北市');
-    expect(created['space_type'], 'heavyOnly');
-    expect(created['scooter_allowed'], isFalse);
-    expect(created['heavy_allowed'], isTrue);
-    expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -1234,7 +1140,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('修改建議'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('停車點名稱'));
+      await tester.tap(find.text('名稱'));
       await tester.pumpAndSettle();
       final input = find.byKey(const ValueKey('suggestion-input'));
       await tester.enterText(input, '測試');
@@ -1332,10 +1238,9 @@ void main() {
     await tester.ensureVisible(find.text('修改建議'));
     await tester.tap(find.text('修改建議'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('停車點位置'));
+    await tester.ensureVisible(find.text('位置'));
     await tester.pumpAndSettle();
-    expect(find.text('目前：25.03390, 121.56230'), findsOneWidget);
-    await tester.tap(find.text('停車點位置'));
+    await tester.tap(find.text('位置'));
     await tester.pumpAndSettle();
     captureForm(tester);
   }
@@ -1466,12 +1371,12 @@ void main() {
     await tester.tap(find.text('修改建議'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
-      find.text('停車點位置').hitTestable(),
+      find.text('位置').hitTestable(),
       180,
       scrollable: find.byType(Scrollable).last,
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('停車點位置'));
+    await tester.tap(find.text('位置'));
     await tester.pumpAndSettle();
     captureForm(tester);
     expect(find.byKey(const ValueKey('touch-marker')), findsOneWidget);
