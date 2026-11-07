@@ -1047,6 +1047,156 @@ void main() {
       });
     }
   });
+
+  group('讀回其他裝置的變更（Codex 第 6 輪）', () {
+    late DateTime now;
+
+    /// Signed in, in sync, nothing pending; the account has 阿明.
+    Future<(AppStore, FakeAccountList, FakeUpdates)> synced() async {
+      SharedPreferences.setMockInitialValues({});
+      now = DateTime.utc(2026, 11, 8, 9);
+      final account = FakeAccountList([
+        rider(handleA, '阿明', DateTime.utc(2026, 10, 1)),
+      ]);
+      final updates = FakeUpdates();
+      final store = AppStore(
+        LocalRepository(await SharedPreferences.getInstance()),
+        null,
+        dataUpdates: updates,
+        hiddenRidersAccount: account,
+        clock: () => now,
+      )..listenForUpdates();
+      await store.hiddenRiders.signedIn('rider-1');
+      account.calls.clear();
+      return (store, account, updates);
+    }
+
+    test('回到前景，超過節流時間：套用另一台裝置的變更', () async {
+      final (store, account, _) = await synced();
+      // Another device: 阿明 unhidden, Ken hidden.
+      account.rows = [rider(handleK, 'Ken', DateTime.utc(2026, 11, 7))];
+      now = now.add(HiddenRiders.readBackInterval);
+      store.didChangeAppLifecycleState(AppLifecycleState.resumed);
+      await pumpEventQueue();
+      expect(account.calls, ['list']);
+      expect(store.hiddenRiders.isHidden(handleA), isFalse);
+      expect(store.hiddenRiders.isHidden(handleK), isTrue);
+    });
+
+    test('節流時間內回到前景：不發請求，超過後才讀', () async {
+      final (store, account, _) = await synced();
+      now = now.add(HiddenRiders.readBackInterval - const Duration(seconds: 1));
+      store.didChangeAppLifecycleState(AppLifecycleState.resumed);
+      await pumpEventQueue();
+      expect(account.calls, isEmpty);
+      now = now.add(const Duration(seconds: 1));
+      store.didChangeAppLifecycleState(AppLifecycleState.resumed);
+      await pumpEventQueue();
+      expect(account.calls, ['list']);
+      // That read counts: the next foreground is quiet again.
+      account.calls.clear();
+      store.didChangeAppLifecycleState(AppLifecycleState.resumed);
+      await pumpEventQueue();
+      expect(account.calls, isEmpty);
+    });
+
+    test('有待送的異動：節流時間內回到前景也送', () async {
+      final (store, account, _) = await synced();
+      account.offline = true;
+      await store.hiddenRiders.hide(handle: handleK, name: 'Ken', spotName: '');
+      await pumpEventQueue();
+      account
+        ..offline = false
+        ..calls.clear();
+      store.didChangeAppLifecycleState(AppLifecycleState.resumed);
+      await pumpEventQueue();
+      expect(account.calls, ['merge']);
+    });
+
+    test('讀回失敗不算讀過：下次回到前景再讀', () async {
+      final (store, account, _) = await synced();
+      now = now.add(HiddenRiders.readBackInterval);
+      account.offline = true;
+      store.didChangeAppLifecycleState(AppLifecycleState.resumed);
+      await pumpEventQueue();
+      expect(store.hiddenRiders.isHidden(handleA), isTrue);
+      account
+        ..offline = false
+        ..calls.clear();
+      store.didChangeAppLifecycleState(AppLifecycleState.resumed);
+      await pumpEventQueue();
+      expect(account.calls, ['list']);
+    });
+
+    test('Realtime 重新加入：沒有待送就只補送，不讀回', () async {
+      final (_, account, updates) = await synced();
+      now = now.add(const Duration(hours: 1));
+      updates.join();
+      await pumpEventQueue();
+      expect(account.calls, isEmpty);
+    });
+
+    test('未登入：回到前景、打開清單都不發請求', () async {
+      SharedPreferences.setMockInitialValues({});
+      final account = FakeAccountList();
+      final store = AppStore(
+        LocalRepository(await SharedPreferences.getInstance()),
+        null,
+        hiddenRidersAccount: account,
+      );
+      store.didChangeAppLifecycleState(AppLifecycleState.resumed);
+      await store.hiddenRiders.readBack();
+      await pumpEventQueue();
+      expect(account.calls, isEmpty);
+    });
+
+    test('讀回途中換帳號：舊帳號的回應丟棄', () async {
+      SharedPreferences.setMockInitialValues({});
+      final account = GatedAccount();
+      final hidden = HiddenRiders(
+        await SharedPreferences.getInstance(),
+        remote: account,
+      );
+      final first = hidden.signedIn('rider-a');
+      await account.waiting();
+      account.release(const []);
+      await first;
+      unawaited(hidden.readBack());
+      await account.waiting(); // A's read in flight
+      await hidden.signedOut();
+      final second = hidden.signedIn('rider-b');
+      account.release([rider(handleA, '阿明', DateTime.utc(2026, 10, 1))]);
+      await account.waiting(); // B's own list
+      account.release(const []);
+      await second;
+      expect(hidden.isHidden(handleA), isFalse);
+    });
+
+    for (final platform in platforms) {
+      testWidgetsOn('${platform.name} 打開已隱藏的車友：一律讀回，節流不適用', (tester) async {
+        setUpView(tester, platform, const Size(390, 844));
+        final (store, account, _) = (await tester.runAsync(synced))!;
+        account.rows = [rider(handleK, 'Ken', DateTime.utc(2026, 11, 7))];
+        await tester.pumpWidget(
+          app(
+            Scaffold(
+              body: Builder(
+                builder: (context) => TextButton(
+                  onPressed: () => openHiddenRiders(context, store),
+                  child: const Text('open'),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.text('open'));
+        await tester.pumpAndSettle();
+        expect(account.calls, ['list']);
+        expect(find.text('Ken'), findsOneWidget);
+        expect(find.text('阿明'), findsNothing);
+      });
+    }
+  });
 }
 
 /// An account list that refuses merges as `hidden_riders.too_many`.

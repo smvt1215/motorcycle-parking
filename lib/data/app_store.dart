@@ -569,7 +569,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
       case AppLifecycleState.resumed:
         _foreground = true;
         unawaited(checkForUpdates());
-        unawaited(hiddenRiders.syncPending());
+        unawaited(hiddenRiders.foregrounded());
         unawaited(refreshAvailabilityBeta());
         _resumeAvailability();
       case AppLifecycleState.paused:

@@ -262,6 +262,12 @@ class HiddenRiders extends ChangeNotifier {
   String? _account;
   bool get followsAccount => _account != null && remote != null;
 
+  /// How long a read of the account's list holds in the foreground.
+  static const readBackInterval = Duration(minutes: 5);
+
+  /// When the account's list last answered; null until it did.
+  DateTime? _lastRead;
+
   /// Bumped on every sign-in and sign-out: an answer for an older one is
   /// dropped, so one account's list never lands in another's.
   int _generation = 0;
@@ -411,6 +417,7 @@ class HiddenRiders extends ChangeNotifier {
     if (_account == account) return syncPending();
     _generation++;
     _syncing = null;
+    _lastRead = null;
     _account = account;
     final owner = prefs.getString(ownerKey);
     if (owner == null) {
@@ -435,6 +442,7 @@ class HiddenRiders extends ChangeNotifier {
     if (_account == null && prefs.getString(ownerKey) == null) return;
     _generation++;
     _syncing = null;
+    _lastRead = null;
     _account = null;
     _accountFull = false;
     _pendingAdds.clear();
@@ -446,14 +454,31 @@ class HiddenRiders extends ChangeNotifier {
     await local.clear();
   }
 
+  bool get _hasPending => _pendingAdds.isNotEmpty || _pendingRemoves.isNotEmpty;
+
   /// [sync] when something waits to go up, or nothing: for the moments the
-  /// network may be back (the app in the foreground, Realtime rejoining,
-  /// 已隱藏的車友 opening), where a request for nothing would be waste.
+  /// network may be back (Realtime rejoining, the same account's sign-in
+  /// event), where a request for nothing would be waste.
   Future<void> syncPending() async {
-    if (!followsAccount || (_pendingAdds.isEmpty && _pendingRemoves.isEmpty)) {
-      return;
+    if (followsAccount && _hasPending) await sync();
+  }
+
+  /// Takes the account's list, which another device may have changed:
+  /// 已隱藏的車友 opening shows what the account has.
+  Future<void> readBack() async {
+    if (followsAccount) await sync();
+  }
+
+  /// The app came to the foreground: as [readBack], at most once per
+  /// [readBackInterval] unless something waits to go up.
+  Future<void> foregrounded() async {
+    if (!followsAccount) return;
+    final last = _lastRead;
+    if (_hasPending ||
+        last == null ||
+        clock().difference(last) >= readBackInterval) {
+      await sync();
     }
-    await sync();
   }
 
   /// Sends what the account has not taken yet, then reads its list; runs
@@ -513,6 +538,7 @@ class HiddenRiders extends ChangeNotifier {
           if (!_pendingRemoves.contains(r.handle)) r,
       ]);
       _accountFull = false;
+      _lastRead = clock();
       await _save();
       await _savePending();
       return true;

@@ -11,8 +11,8 @@ import 'hide_rider.dart';
 
 /// Opens 已隱藏的車友 (P17c) over 帳號與設定.
 Future<void> openHiddenRiders(BuildContext context, AppStore store) {
-  // What the list shows should be what the account has.
-  unawaited(store.hiddenRiders.syncPending());
+  // What the list shows should be what the account has now.
+  unawaited(store.hiddenRiders.readBack());
   return Navigator.of(context, rootNavigator: true).push(
     isCupertino
         ? cu.CupertinoPageRoute<void>(
