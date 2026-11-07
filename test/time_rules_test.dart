@@ -157,6 +157,35 @@ void main() {
     ]);
   });
 
+  test('移除再新增一模一樣的規定：沒有差異，也沒有 patch', () {
+    final rules = rulesOf(drafts);
+    final limit = rules.firstWhere((r) => r.kind == RuleKind.limit);
+    limit.removed = true;
+    rules.add(
+      TimeRule.create()
+        ..days = 'weekday'
+        ..from = '07:00'
+        ..to = '20:00'
+        ..minutes = 120
+        ..extensions = 1,
+    );
+    expect(ruleChanges(rules, drafts, '全場'), isEmpty);
+    applyRules(rules, drafts);
+    expect(entriesPatchOf(drafts), isEmpty);
+  });
+
+  test('只有一區時點選該區等於全場，沒有差異', () {
+    final one = [
+      EntryDraft.ofZone(_zone('b1', [_limit])),
+    ];
+    final rules = rulesOf(one);
+    rules.single
+      ..all = false
+      ..scope = {one.single.token};
+    expect(ruleChanges(rules, one, '全場'), isEmpty);
+    expect(rules.single.all, isTrue);
+  });
+
   test('欄位檢查', () {
     final rule = TimeRule.create();
     expect(ruleProblems(rule, '區'), {'time': '請選開始和結束時間，或按「全天」'});
@@ -196,6 +225,31 @@ void main() {
     rules.single.minutes = 60;
     applyRules(rules, [old]);
     expect(old.signs!.single.periods.single.extensions, 0);
+  });
+
+  test('點位 condition：沒有改到規定時保留既有限時與禁停', () {
+    const spot = ParkingSpot(
+      id: 'official:bare',
+      name: '巷口',
+      lat: 25,
+      lng: 121,
+      city: '臺北市',
+      spaceType: SpaceType.timedMotorcycle,
+      source: 'official',
+      condition: ParkingCondition(
+        bay: Bay.motorcycle,
+        use: BayUse.usual,
+        limits: [_limit, _night],
+      ),
+    );
+    final d = EntryDraft.ofSpot(spot);
+    final p = spotRulesProposal(spot, d, free: false);
+    final c = p['condition']! as Map<String, Object?>;
+    expect((c['limits']! as List).map((l) => (l as Map)['kind']), [
+      'time_limit',
+      'no_parking',
+    ]);
+    expect(p['space_type'], 'timedMotorcycle');
   });
 
   test('沒有路段的路邊點送點位 condition 與對應的 space_type', () {

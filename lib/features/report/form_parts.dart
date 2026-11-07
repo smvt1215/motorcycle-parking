@@ -1066,9 +1066,9 @@ class ScopeChips extends StatelessWidget {
   final String semanticLabel;
 
   void _toggle(Object id) {
-    if (all) return onChanged(false, {id});
-    final next = {...value};
-    next.contains(id) ? next.remove(id) : next.add(id);
+    final next = all ? {id} : {...value};
+    if (!all) next.contains(id) ? next.remove(id) : next.add(id);
+    // Every entry named is everything, a spot of one entry too.
     if (next.length == items.length) return onChanged(true, const {});
     onChanged(false, next);
   }

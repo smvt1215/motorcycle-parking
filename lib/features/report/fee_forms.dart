@@ -11,6 +11,7 @@ import '../../models/parking.dart';
 import '../../models/parking_condition.dart';
 import '../../models/space_kind.dart';
 import '../../ui/adaptive/adaptive.dart';
+import '../../ui/fee_board.dart' show feePeriodTime;
 import '../../ui/fee_editor.dart';
 import 'entry_drafts.dart';
 import 'entry_pages.dart';
@@ -56,6 +57,53 @@ EntryTag feeTag(Fee fee, FeeVehicle v) {
   );
 }
 
+/// F0's tag for a zone with no rates of its own: 沿用全場：20/時, what it
+/// pays now; 未提供 with no rates to follow (F1b).
+EntryTag followTag(EntryDraft d, Fee fee) {
+  final why = whyNotApplicable(d);
+  final shown = [
+    for (final v in FeeVehicle.values)
+      if (!why.containsKey(v))
+        if (rateBrief(fee, v) case final brief
+            when brief != '不適用' && brief != '未提供')
+          (v, brief),
+  ];
+  if (shown.isEmpty) {
+    return const EntryTag('未提供', tone: EntryTagTone.unknown);
+  }
+  final same = shown.every((e) => e.$2 == shown.first.$2);
+  return EntryTag(
+    same
+        ? '沿用全場：${shown.first.$2}'
+        : '沿用全場：${[for (final (v, b) in shown) '${_shortNames[v]} $b'].join('、')}',
+  );
+}
+
+/// [fee] line by line for F1b: a time-of-day rate by period, a vehicle by
+/// name when more than one applies.
+List<String> ownFeeLines(Fee fee) {
+  final vehicles = [
+    for (final v in FeeVehicle.values)
+      if (fee.textOf(v.wire) != null) v,
+  ];
+  return [
+    for (final v in vehicles)
+      for (final line in _rateLines(fee, v))
+        vehicles.length > 1 ? '${v.label} $line' : line,
+  ];
+}
+
+List<String> _rateLines(Fee fee, FeeVehicle v) {
+  final rate = rateOf(fee, v);
+  if (rate?.mode != FeeMode.byTime) return [fee.textOf(v.wire)!];
+  return [
+    for (final p in rate!.periods ?? const <FeePeriod>[])
+      '${FeeWords.dayLabel(FeeWords.dayMask(p.days))} '
+          '${feePeriodTime(p.from, p.to)} '
+          '${Fee(car: p.rate).textOf('car') ?? '未提供'}',
+  ];
+}
+
 /// Why each vehicle does not apply to [d]'s bay.
 Map<FeeVehicle, String> whyNotApplicable(EntryDraft d) {
   final bay = d.kind?.label;
@@ -80,8 +128,17 @@ Map<FeeVehicle, String> whyNotApplicable(EntryDraft d) {
 Fee startFee(EntryDraft d, Fee spot) {
   if (d.fee case final own? when !own.isEmpty) return own;
   final why = whyNotApplicable(d);
-  Rate? rate(FeeVehicle v) =>
-      why.containsKey(v) ? const Rate(FeeMode.notApplicable) : rateOf(spot, v);
+  // What a heavy bike follows may not apply here: it starts from the amounts.
+  Rate? rate(FeeVehicle v) {
+    if (why.containsKey(v)) return const Rate(FeeMode.notApplicable);
+    final own = rateOf(spot, v);
+    return switch (own?.mode) {
+      FeeMode.sameAsScooter => spot.scooter,
+      FeeMode.sameAsCar => spot.car,
+      _ => own,
+    };
+  }
+
   return Fee(
     scooter: rate(FeeVehicle.scooter),
     heavy: rate(FeeVehicle.heavy),
@@ -246,7 +303,8 @@ class _FeeZonesPageState extends State<FeeZonesPage> {
       if (draft == null) {
         widget.onSpotFee?.call(next);
       } else {
-        draft.fee = next;
+        // F1b gives back nothing: the zone follows the lot again.
+        draft.fee = next.isEmpty ? null : next;
       }
     });
   }
@@ -277,7 +335,10 @@ class _FeeZonesPageState extends State<FeeZonesPage> {
                 title: d.displayName,
                 subtitle: d.kind?.label,
                 tags: [
-                  for (final v in FeeVehicle.values) feeTag(d.fee ?? fee, v),
+                  if (d.fee case final own?)
+                    for (final v in FeeVehicle.values) feeTag(own, v)
+                  else
+                    followTag(d, fee),
                 ],
                 onTap: d.editable ? () => open(d) : null,
               ),
@@ -352,9 +413,26 @@ class _FeeEditPageState extends State<FeeEditPage> {
   bool sending = false;
   String? refusal;
 
+  /// F1b: the rider is confirming a return to the spot's rates. What the
+  /// editor holds stays, for 取消，繼續編輯.
+  bool reverting = false;
+
   bool get adding => widget.spot == null;
   bool get street => widget.type == EntryType.segment;
   String get wholeWord => street ? '整條路' : '全場';
+
+  /// What the entry has of its own, which F1b can take away.
+  Fee? get own => switch (draft?.fee) {
+    final fee? when !fee.isEmpty => fee,
+    _ => null,
+  };
+
+  String get wholeText => wholeFeeText(widget.spotFee, widget.spot?.feeNote);
+
+  /// F1b's button: 路邊沒有「全場」的說法.
+  String get revertLabel => street ? '改回沿用整條路費率' : '改回沿用全場';
+  String get revertTitle => street ? '將改回沿用整條路費率' : '將改回沿用全場';
+  String get followWords => street ? '沿用整條路' : '沿用全場';
 
   /// The vehicles the rider changed, one line each (C6).
   List<ChangeLine> get lines {
@@ -385,6 +463,7 @@ class _FeeEditPageState extends State<FeeEditPage> {
   String get intro {
     final whole = wholeFeeText(widget.spotFee, widget.spot?.feeNote);
     final name = draft?.displayName;
+    if (own != null) return '$name 目前有自己的費率；$wholeWord$whole。';
     final tail = adding ? '完成後回到新增停車點。' : '送出前還沒生效。';
     return name == null
         ? '這裡改$wholeWord費率，沒有另設費率的${widget.type.unit}會一起變。$tail'
@@ -395,6 +474,20 @@ class _FeeEditPageState extends State<FeeEditPage> {
     final spot = widget.spot!;
     final d = draft;
     final changes = lines;
+    if (reverting) {
+      return {
+        'action': 'flag',
+        'source_id': spot.id,
+        'reason': reportSummary('費率：${d!.displayName} 自訂 → $followWords'),
+        'field': widget.type.field,
+        'proposed': {
+          widget.type.key: [
+            // null clears it, its fee plan too (`entries_patch()`).
+            {'id': d.id, 'fee': null},
+          ],
+        },
+      };
+    }
     return {
       'action': 'flag',
       'source_id': spot.id,
@@ -414,7 +507,7 @@ class _FeeEditPageState extends State<FeeEditPage> {
 
   /// What the server's precheck refuses in these rates.
   String? get problem {
-    if (fee.isEmpty) return null;
+    if (fee.isEmpty || (reverting && adding)) return null;
     final d = draft;
     if (adding || d == null) {
       final c = d?.condition.toJson();
@@ -440,7 +533,12 @@ class _FeeEditPageState extends State<FeeEditPage> {
 
   Future<void> submit() async {
     final d = draft;
-    if (!(form.currentState?.validate() ?? false)) return;
+    // A look at F1 leaves the entry as it was, unfilled vehicles or not.
+    if (adding && !reverting && lines.isEmpty) {
+      Navigator.of(context).pop();
+      return;
+    }
+    if (!reverting && !(form.currentState?.validate() ?? false)) return;
     if (!adding && d != null && !d.stated) {
       setState(() => refusal = unstatedEntryNote(d));
       return;
@@ -450,7 +548,8 @@ class _FeeEditPageState extends State<FeeEditPage> {
       return;
     }
     if (adding) {
-      Navigator.of(context).pop(fee);
+      // An empty fee: 這一區不帶費率.
+      Navigator.of(context).pop(reverting ? const Fee() : fee);
       return;
     }
     setState(() => sending = true);
@@ -474,64 +573,233 @@ class _FeeEditPageState extends State<FeeEditPage> {
           label: Text(label),
         );
 
+  /// F1b ② to ⑤: what the entry pays now, what it would follow.
+  Widget _confirm(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final muted = TextStyle(fontSize: 12, color: colors.onSurfaceVariant);
+    final whole = wholeText;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Read out first when the page turns to this.
+        Semantics(
+          key: const ValueKey('fee-revert-confirm'),
+          container: true,
+          liveRegion: true,
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              border: Border.all(color: brand, width: 1.5),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    const ExcludeSemantics(
+                      child: Icon(Icons.undo, size: 22, color: brand),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        revertTitle,
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text('目前自己的費率', style: muted),
+                const SizedBox(height: 4),
+                Text(
+                  ownFeeLines(own!).join('；\n'),
+                  style: TextStyle(
+                    fontSize: 15,
+                    height: 1.5,
+                    color: colors.onSurfaceVariant,
+                    decoration: TextDecoration.lineThrough,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text('$wholeWord費率', style: muted),
+                const SizedBox(height: 4),
+                Text(
+                  whole == '未提供' ? '$wholeWord未提供' : whole,
+                  style: const TextStyle(
+                    fontSize: 17,
+                    height: 1.45,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Center(
+          child: _TextAction(
+            key: const ValueKey('fee-revert-cancel'),
+            label: '取消，繼續編輯',
+            onPressed: () => setState(() {
+              reverting = false;
+              refusal = null;
+            }),
+          ),
+        ),
+        if (!adding) ...[
+          const SizedBox(height: 8),
+          Divider(color: colors.outlineVariant),
+          const SizedBox(height: 8),
+          const FormLabel('你要改的內容'),
+          const SizedBox(height: 6),
+          ChangeSummary(
+            title: draft!.displayName,
+            lines: [ChangeLine(label: '費率', from: '自訂', to: followWords)],
+          ),
+        ],
+        if (refusal != null) ...[
+          const SizedBox(height: 12),
+          FormInfoNote(
+            icon: Icons.error_outline,
+            text: refusal!,
+            tone: FormNoteTone.error,
+          ),
+        ],
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final d = draft;
     final changes = lines;
-    final count = changes.length;
+    final count = reverting ? 1 : changes.length;
+    final d = draft;
     final subject = d == null
         ? widget.spotName
         : '${widget.spotName} ${d.displayName}';
-    return Form(
-      key: form,
-      child: FormPage(
-        header: FormHeader(
-          title: '費率',
-          subtitle: '怎麼算錢・$subject',
-          leading: FormHeaderLeading.back,
-        ),
-        footer: SubmitBar(
-          label: adding ? '完成' : '送出 $count 項建議',
-          note: adding ? null : '管理員審核後才會更新地圖',
-          sending: sending,
-          onPressed: adding || count > 0 ? submit : null,
-        ),
-        children: [
-          Text(intro),
-          const SizedBox(height: 12),
-          FeeEditor(
-            value: fee,
-            initialVehicle: firstVehicle,
-            errorText: refusal,
-            onChanged: (v) => setState(() {
-              fee = v;
-              refusal = null;
-            }),
-            form: FeeFormStyle(
-              original: adding ? null : start,
-              why: d == null ? const {} : whyNotApplicable(d),
-              closed: closedFor(
-                d == null ? widget.drafts : [d],
-                street: street,
-                store: widget.store,
-                district: widget.district,
-              ),
-              addButton: _addButton,
-              now: widget.now,
-              summary: adding || changes.isEmpty
-                  ? null
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        const FormLabel('你要改的內容'),
-                        const SizedBox(height: 6),
-                        ChangeSummary(lines: changes),
-                      ],
-                    ),
-            ),
+    return PopScope(
+      // Back from F1b's confirmation returns to the editor.
+      canPop: !reverting,
+      onPopInvokedWithResult: (popped, _) {
+        if (!popped && reverting) setState(() => reverting = false);
+      },
+      child: Form(
+        key: form,
+        child: FormPage(
+          header: FormHeader(
+            title: '費率',
+            subtitle: '怎麼算錢・$subject',
+            leading: FormHeaderLeading.back,
           ),
-        ],
+          footer: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (own != null && !reverting)
+                Center(
+                  child: _TextAction(
+                    key: const ValueKey('fee-revert'),
+                    label: revertLabel,
+                    icon: Icons.undo,
+                    onPressed: () => setState(() {
+                      reverting = true;
+                      refusal = null;
+                    }),
+                  ),
+                ),
+              SubmitBar(
+                label: adding ? '完成' : '送出 $count 項建議',
+                note: !adding
+                    ? '管理員審核後才會更新地圖'
+                    : reverting
+                    ? '回到清單，這一${widget.type.unit}不帶費率'
+                    : null,
+                sending: sending,
+                onPressed: adding || count > 0 ? submit : null,
+              ),
+            ],
+          ),
+          children: [
+            if (reverting) _confirm(context),
+            Visibility(
+              visible: !reverting,
+              maintainState: true,
+              child: _body(context, changes),
+            ),
+          ],
+        ),
       ),
     );
   }
+
+  Widget _body(BuildContext context, List<ChangeLine> changes) {
+    final d = draft;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(intro),
+        const SizedBox(height: 12),
+        FeeEditor(
+          value: fee,
+          initialVehicle: firstVehicle,
+          errorText: refusal,
+          onChanged: (v) => setState(() {
+            fee = v;
+            refusal = null;
+          }),
+          form: FeeFormStyle(
+            original: adding ? null : start,
+            why: d == null ? const {} : whyNotApplicable(d),
+            closed: closedFor(
+              d == null ? widget.drafts : [d],
+              street: street,
+              store: widget.store,
+              district: widget.district,
+            ),
+            addButton: _addButton,
+            now: widget.now,
+            summary: adding || changes.isEmpty
+                ? null
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const FormLabel('你要改的內容'),
+                      const SizedBox(height: 6),
+                      ChangeSummary(lines: changes),
+                    ],
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// F1b's text buttons, 44 tall on iOS and 48 on Android.
+class _TextAction extends StatelessWidget {
+  const _TextAction({
+    super.key,
+    required this.label,
+    required this.onPressed,
+    this.icon,
+  });
+  final String label;
+  final IconData? icon;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => TextButton.icon(
+    style: TextButton.styleFrom(
+      foregroundColor: brand,
+      minimumSize: Size(48, isCupertino ? 44 : 48),
+      textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+    ),
+    onPressed: onPressed,
+    icon: icon == null ? null : Icon(icon, size: 20),
+    label: Text(label),
+  );
 }

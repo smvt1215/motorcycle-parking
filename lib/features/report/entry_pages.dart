@@ -30,14 +30,34 @@ bool noFeeText(String text) =>
 /// 全場費率 or 整條路費率 in words: the rates, the stored text, or 未提供.
 String wholeFeeText(Fee? rates, String? text) {
   if (rates != null && !rates.isEmpty) {
-    // 全場同價 reads once, as a sign does, without the rule in brackets.
-    final same = rates.scooter == rates.heavy && rates.heavy == rates.car;
-    if (same && rates.scooter?.mode == FeeMode.hourly) {
-      return rates.textOf('scooter')!.replaceFirst(RegExp(r'（.*）$'), '');
-    }
-    return feeNoteOf(rates);
+    return _samePrice(rates) ?? feeNoteOf(rates);
   }
   return text == null || noFeeText(text) ? '未提供' : text;
+}
+
+/// 全場同價 read once, as a sign does, without the rule in brackets: every
+/// vehicle that applies pays the same, a follow as what it follows. Null
+/// when they differ, a vehicle has no rate, or the rate goes by the hour of
+/// day.
+String? _samePrice(Fee fee) {
+  Rate? paid(Rate? r) => switch (r?.mode) {
+    FeeMode.sameAsScooter => fee.scooter,
+    FeeMode.sameAsCar => fee.car,
+    _ => r,
+  };
+  final rates = [fee.scooter, paid(fee.heavy), fee.car];
+  if (rates.contains(null)) return null;
+  final applied = [
+    for (final r in rates)
+      if (r!.mode != FeeMode.notApplicable) r,
+  ];
+  if (applied.isEmpty ||
+      applied.first.mode == FeeMode.byTime ||
+      applied.any((r) => r != applied.first)) {
+    return null;
+  }
+  final text = applied.first.text.replaceFirst(RegExp(r'（.*）$'), '');
+  return text.isEmpty ? null : text;
 }
 
 /// On the card of a street spot without segments: what sending it does.

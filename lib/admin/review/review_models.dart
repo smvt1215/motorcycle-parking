@@ -413,13 +413,15 @@ const _entryKeyLabels = {
   'fee': '費率',
   'fee_plan': '計費規則',
   'condition': '格位',
-  'evidence_url': '照片連結',
+  'evidence_url': '公告連結',
   'side': '哪一側',
   'range': '範圍',
   'total': '格數',
 };
 
-String _entryValue(String key, Object? v) => switch ((key, v)) {
+String _entryValue(String key, Object? v, String whole) => switch ((key, v)) {
+  // An entry without rates pays the spot's (F1b).
+  ('fee', null) => '沿用$whole',
   (_, null) => '未填',
   ('access', final String a) => ParkingAccess.values.asNameMap()[a]?.label ?? a,
   ('fee', _) => reviewFee(v)?.summary ?? '未設定',
@@ -434,8 +436,13 @@ String _entryValue(String key, Object? v) => switch ((key, v)) {
 };
 
 /// What [next] changes in [current] (a zone or segment list), one line per
-/// change: 新增, 撤除, or each changed key of an entry, 舊→新.
-List<String> entriesChangeLines(Object? current, Object? next) {
+/// change: 新增, 撤除, or each changed key of an entry, 舊→新. [whole] names
+/// the rates an entry without its own follows: 全場, or a street's 整條路.
+List<String> entriesChangeLines(
+  Object? current,
+  Object? next, {
+  String whole = '全場',
+}) {
   if (next is! List) return const [];
   final now = jsonList(current);
   String nameOf(Map<Object?, Object?> e) =>
@@ -453,7 +460,7 @@ List<String> entriesChangeLines(Object? current, Object? next) {
       else
         '${nameOf(byId[change['id']]!)}：${[for (final k in change.keys)
           if (k != 'id') '${_entryKeyLabels[k] ?? k} '
-                '${_entryValue(k, byId[change['id']]![k])}→${_entryValue(k, change[k])}'].join('；')}',
+                '${_entryValue(k, byId[change['id']]![k], whole)}→${_entryValue(k, change[k], whole)}'].join('；')}',
   ];
 }
 

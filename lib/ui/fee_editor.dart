@@ -1258,7 +1258,8 @@ class _SimpleRateFieldsState extends State<SimpleRateFields> {
     'amount',
     label,
     amount,
-    suffix: '元',
+    // F1 and F2 say 元 in the label.
+    suffix: widget.form ? null : '元',
     validator: (v) => _yuan(v, required: true),
     onChanged: (t) => emit(_edit(rate, amount: int.tryParse(t.trim()))),
   );
@@ -1779,7 +1780,7 @@ class _ByTimeFieldsState extends State<_ByTimeFields> {
           _GapsNote(keyPrefix: k, gaps: gaps, brief: feeGapsBrief(list)),
           const SizedBox(height: 4),
         ],
-        Text('國定假日依當天是星期幾計費。沒有被設定包含到的日子和時間，App 顯示「未提供」。', style: muted),
+        Text('假日含國定假日。沒有被設定包含到的日子和時間，App 顯示「未提供」。', style: muted),
         if (_asksCross(list) && form != null) ...[
           const SizedBox(height: 8),
           _PickSegments(

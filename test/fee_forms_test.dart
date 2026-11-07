@@ -2,14 +2,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:motorcycle_parking/data/account_suspended.dart';
 import 'package:motorcycle_parking/data/app_store.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
+import 'package:motorcycle_parking/domain/precheck.dart';
 import 'package:motorcycle_parking/features/auth/sign_in.dart';
 import 'package:motorcycle_parking/features/report/entry_drafts.dart';
+import 'package:motorcycle_parking/features/report/entry_pages.dart';
 import 'package:motorcycle_parking/features/report/fee_forms.dart';
 import 'package:motorcycle_parking/features/report/spot_suggestions.dart';
 import 'package:motorcycle_parking/features/report/time_rules_page.dart';
 import 'package:motorcycle_parking/models/fee.dart';
 import 'package:motorcycle_parking/models/parking.dart';
 import 'package:motorcycle_parking/models/parking_condition.dart';
+import 'package:motorcycle_parking/models/zone_entries.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
 import 'package:motorcycle_parking/ui/fee_editor.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -107,6 +110,74 @@ const _street = ParkingSpot(
       id: 's1',
       name: '靠松江路口',
       side: RoadSide.north,
+      condition: ParkingCondition(
+        bay: Bay.motorcycle,
+        use: BayUse.usual,
+        charge: Charge.toll,
+        allow: ZoneAllow(scooter: true, heavy: false),
+      ),
+    ),
+  ],
+);
+
+const _inherit = ParkingSpot(
+  id: 'official:inherit',
+  name: '沿用停車場',
+  lat: 25.03,
+  lng: 121.56,
+  city: '臺北市',
+  spaceType: SpaceType.offStreet,
+  source: 'official',
+  fee: Fee(scooter: _plain, heavy: _plain, car: _plain),
+  zones: [
+    ParkingZone(
+      id: 'b9',
+      name: 'B9 沿用區',
+      condition: ParkingCondition(
+        bay: Bay.motorcycle,
+        use: BayUse.usual,
+        allow: ZoneAllow(scooter: true, heavy: true),
+      ),
+    ),
+  ],
+);
+
+const _oneZone = ParkingSpot(
+  id: 'official:one',
+  name: '單區停車場',
+  lat: 25.03,
+  lng: 121.56,
+  city: '臺北市',
+  spaceType: SpaceType.offStreet,
+  source: 'official',
+  zones: [
+    ParkingZone(
+      id: 'b1',
+      name: 'B1',
+      condition: ParkingCondition(
+        bay: Bay.motorcycle,
+        use: BayUse.usual,
+        limits: [_night],
+        allow: ZoneAllow(scooter: true, heavy: true),
+      ),
+    ),
+  ],
+);
+
+const _ownSegment = ParkingSpot(
+  id: 'official:own',
+  name: '南京東路',
+  lat: 25.05,
+  lng: 121.54,
+  city: '臺北市',
+  spaceType: SpaceType.paidMotorcycle,
+  source: 'official',
+  segments: [
+    ParkingSegment(
+      id: 's1',
+      name: '靠松江路口',
+      side: RoadSide.north,
+      fee: Fee(scooter: _plain, heavy: _na, car: _na),
       condition: ParkingCondition(
         bay: Bay.motorcycle,
         use: BayUse.usual,
@@ -241,6 +312,237 @@ void main() {
       final drafts = [for (final z in _lot.zones) EntryDraft.ofZone(z)];
       expect(closedFor(drafts, street: false, store: store), isEmpty);
     });
+  });
+
+  group('F1b 純函式', () {
+    test('entriesPatch：{id, fee: null} 移除 fee 與 fee_plan，其他鍵不動', () {
+      final out = entriesPatch(
+        [
+          {
+            'id': 'b2',
+            'name': 'B2',
+            'guide': '走右側',
+            'fee': _lot.zones[1].fee!.toJson(),
+            'fee_plan': 'plan-1',
+          },
+          {
+            'id': 'b3',
+            'name': 'B3',
+            'fee': {
+              'scooter': {'mode': 'free'},
+            },
+          },
+        ],
+        [
+          {'id': 'b2', 'fee': null},
+        ],
+      );
+      expect(out, [
+        {'id': 'b2', 'name': 'B2', 'guide': '走右側'},
+        {
+          'id': 'b3',
+          'name': 'B3',
+          'fee': {
+            'scooter': {'mode': 'free'},
+          },
+        },
+      ]);
+    });
+
+    test('沿用全場標籤帶實際費率；全場沒有費率寫未提供', () {
+      final d = EntryDraft.ofZone(_lot.zones[1]);
+      expect(followTag(d, _lot.fee!).text, '沿用全場：20/時');
+      expect(followTag(d, const Fee()).text, '未提供');
+      expect(
+        followTag(
+          EntryDraft.ofZone(_lot.zones[2]),
+          const Fee(
+            scooter: _plain,
+            heavy: Rate(FeeMode.free),
+            car: Rate(FeeMode.free),
+          ),
+        ).text,
+        '沿用全場：普機 20/時、重機 免費、汽車 免費',
+      );
+    });
+
+    test('toJson 沒有自己的費率時移除 fee，patch 是 fee: null', () {
+      final d = EntryDraft.ofZone(_lot.zones[1])..fee = null;
+      final others = EntryDraft.ofZone(_lot.zones[0]);
+      expect(entriesPatchOf([others, d]), [
+        {'id': 'b2', 'fee': null},
+      ]);
+    });
+
+    test('比照的車種在這區不適用時，起始值解成實際費率（比照普機、比照汽車）', () {
+      final bay = EntryDraft.ofZone(_lot.zones[1]);
+      final d = bay.copy()..fee = null;
+      final scooter = startFee(
+        d,
+        const Fee(
+          scooter: _plain,
+          heavy: Rate(FeeMode.sameAsScooter),
+          car: _na,
+        ),
+      );
+      expect(scooter.scooter, _na);
+      expect(scooter.heavy, _plain);
+      final car = startFee(
+        d,
+        const Fee(scooter: _na, heavy: Rate(FeeMode.sameAsCar), car: _plain),
+      );
+      expect(car.car, _na);
+      expect(car.heavy, _plain);
+      expect(precheckBlocking(precheckFee(car.toJson())), isEmpty);
+    });
+
+    test('全場同價：不適用以外相同就讀一次，比照算進去', () {
+      expect(
+        wholeFeeText(const Fee(scooter: _hourly, heavy: _hourly, car: _na), ''),
+        '每小時 20 元，當日上限 100 元',
+      );
+      expect(
+        wholeFeeText(
+          const Fee(
+            scooter: _plain,
+            heavy: Rate(FeeMode.sameAsScooter),
+            car: _plain,
+          ),
+          '',
+        ),
+        '每小時 20 元',
+      );
+      // A vehicle with no rate is not the same price.
+      expect(
+        wholeFeeText(const Fee(scooter: _plain, heavy: _plain), ''),
+        contains('大型重機'),
+      );
+    });
+
+    test('自己的費率依時段分行', () {
+      expect(
+        ownFeeLines(
+          const Fee(
+            scooter: _na,
+            heavy: Rate(
+              FeeMode.byTime,
+              periods: [
+                FeePeriod(
+                  days: 'weekday',
+                  from: '07:00',
+                  to: '20:00',
+                  rate: Rate(FeeMode.hourly, amount: 30, perMinutes: 60),
+                ),
+              ],
+            ),
+            car: _na,
+          ),
+        ),
+        ['平日 07:00–20:00 每小時 30 元'],
+      );
+    });
+  });
+
+  group('F1b', () {
+    Future<void> openZone(WidgetTester tester, String name) async {
+      await pump(tester, _lot);
+      await tapKey(tester, 'suggest-fee');
+      await tapText(tester, name);
+    }
+
+    testWidgets('按下後留在 F1，送出才算數，送 {id, fee: null}（C6）', (tester) async {
+      await openZone(tester, 'B2 重機專區');
+      expect(find.text('送出 0 項建議'), findsOneWidget);
+      await tapKey(tester, 'fee-revert');
+      expect(store.sent, isEmpty);
+      expect(find.text('將改回沿用全場'), findsOneWidget);
+      expect(find.text('目前自己的費率'), findsOneWidget);
+      expect(find.text('全場費率'), findsOneWidget);
+      expect(find.text('你要改的內容'), findsOneWidget);
+      expect(find.byKey(const ValueKey('fee-revert')), findsNothing);
+      await tester.tap(submit('送出 1 項建議'));
+      await tester.pumpAndSettle();
+      final body = store.sent.single;
+      expect(body['field'], 'zones');
+      expect((body['proposed'] as Map)['parking_zones'], [
+        {'id': 'b2', 'fee': null},
+      ]);
+      expect(body['reason'], '費率：B2 重機專區 自訂 → 沿用全場');
+    });
+
+    testWidgets('取消與返回都回到編輯，已改的內容不變', (tester) async {
+      await openZone(tester, 'B2 重機專區');
+      await chooseFeeMode(tester, 'heavy', 'free');
+      expect(find.text('送出 1 項建議'), findsOneWidget);
+      await tapKey(tester, 'fee-revert');
+      await tapKey(tester, 'fee-revert-cancel');
+      expect(find.text('將改回沿用全場'), findsNothing);
+      expect(find.text('送出 1 項建議'), findsOneWidget);
+      await tapKey(tester, 'fee-revert');
+      await tester.tap(find.byKey(const ValueKey('form-header-leading')).last);
+      await tester.pumpAndSettle();
+      expect(find.byType(FeeEditor), findsOneWidget);
+      expect(find.text('將改回沿用全場'), findsNothing);
+      expect(find.text('送出 1 項建議'), findsOneWidget);
+    });
+
+    testWidgets('沒有自己費率的分區與全場卡都沒有這顆按鈕', (tester) async {
+      await pump(tester, _inherit);
+      await tapKey(tester, 'suggest-fee');
+      expect(find.text('沿用全場：20/時'), findsOneWidget);
+      await tapText(tester, 'B9 沿用區');
+      expect(find.byType(FeeEditor), findsOneWidget);
+      expect(find.byKey(const ValueKey('fee-revert')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('form-header-leading')).last);
+      await tester.pumpAndSettle();
+      await tapText(tester, '全場費率');
+      expect(find.byKey(const ValueKey('fee-revert')), findsNothing);
+    });
+
+    testWidgets('路段寫沿用整條路；整條路沒有費率寫整條路未提供', (tester) async {
+      await pump(tester, _ownSegment);
+      await tapKey(tester, 'suggest-fee');
+      await tapText(tester, '費率');
+      expect(find.text('改回沿用整條路費率'), findsOneWidget);
+      await tapKey(tester, 'fee-revert');
+      expect(find.text('將改回沿用整條路費率'), findsOneWidget);
+      expect(find.text('整條路費率'), findsOneWidget);
+      expect(find.text('整條路未提供'), findsOneWidget);
+      await tester.tap(submit('送出 1 項建議'));
+      await tester.pumpAndSettle();
+      final body = store.sent.single;
+      expect(body['field'], 'segments');
+      expect((body['proposed'] as Map)['parking_segments'], [
+        {'id': 's1', 'fee': null},
+      ]);
+      expect(body['reason'], contains('自訂 → 沿用整條路'));
+    });
+
+    for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
+      for (final (width, scale) in const [
+        (320.0, 1.6),
+        (390.0, 1.6),
+        (700.0, 1.0),
+        (1040.0, 1.0),
+      ]) {
+        testWidgets('F1b 在 $width 寬 $scale 倍 ${platform.name} 不溢出', (
+          tester,
+        ) async {
+          await pump(tester, _lot, width: width, scale: scale);
+          await tapKey(tester, 'suggest-fee');
+          await tapText(tester, 'B2 重機專區');
+          await tapKey(tester, 'fee-revert');
+          expect(tester.takeException(), isNull);
+          final size = tester.getSize(
+            find.byKey(const ValueKey('fee-revert-cancel')),
+          );
+          expect(
+            size.height,
+            greaterThanOrEqualTo(platform == TargetPlatform.iOS ? 44 : 48),
+          );
+        }, variant: TargetPlatformVariant({platform}));
+      }
+    }
   });
 
   group('F0', () {
@@ -431,6 +733,26 @@ void main() {
       final patch = (body['proposed'] as Map)['parking_segments'] as List;
       final c = (patch.single as Map)['condition'] as Map;
       expect((c['limits'] as List).single['kind'], 'time_limit');
+    });
+
+    testWidgets('只有一區時點該區不算修改，按鈕維持 0 項', (tester) async {
+      await pump(tester, _oneZone);
+      await tapKey(tester, 'suggest-limits');
+      await tapKey(tester, 'rule-card-0');
+      await tapKey(tester, 'rule-scope-0');
+      expect(find.text('送出 0 項建議'), findsOneWidget);
+    });
+
+    testWidgets('S5 停權開共用面板，內容保留', (tester) async {
+      store.refuse = const AccountSuspended(null);
+      await pump(tester, _lot);
+      await tapKey(tester, 'suggest-limits');
+      await tapKey(tester, 'rule-card-0');
+      await tapText(tester, '現場沒有這條規定了');
+      await tester.tap(submit('送出 1 項建議'));
+      await tester.pumpAndSettle();
+      expect(find.text('帳號暫時不能送出內容'), findsOneWidget);
+      expect(store.sent, isEmpty);
     });
 
     testWidgets('沒有分區的路外點：限時列停用並說明', (tester) async {

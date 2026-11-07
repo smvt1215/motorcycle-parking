@@ -5,6 +5,8 @@
 /// sends a patch by id (`entriesDiff`, C6). Pure Dart.
 library;
 
+import 'dart:convert';
+
 import '../../models/fee.dart';
 import '../../models/parking.dart';
 import '../../models/parking_condition.dart';
@@ -436,13 +438,25 @@ class EntryDraft {
         if (legacyAccess(c) case final access?) out['access'] = access.name;
       }
     }
-    if (fee case final fee? when !fee.isEmpty) out['fee'] = fee.toJson();
+    // Without its own rates it follows the spot's again (F1b).
+    if (fee case final fee? when !fee.isEmpty) {
+      out['fee'] = fee.toJson();
+    } else {
+      out.remove('fee');
+    }
     return out;
+  }
+
+  bool get _feeChanged {
+    if (isNew) return false;
+    final now = fee == null || fee!.isEmpty ? null : fee!.toJson();
+    return jsonEncode(now) != jsonEncode(original!['fee']);
   }
 
   /// Whether the rider changed anything.
   bool get changed {
-    if (removed) return true;
+    // S5's rules and F1's rates, which have no line of their own here.
+    if (removed || signs != null || slots != null || _feeChanged) return true;
     if (wholeSpot) {
       return kind != _loadedKind ||
           scooter != _loadedScooter ||

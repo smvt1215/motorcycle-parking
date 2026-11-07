@@ -144,6 +144,19 @@ class TimeRule {
     if (kind == RuleKind.share) [for (final v in vehicles) v.name]..sort(),
   ]);
 
+  /// Whether [other] says the same as this, covering the same entries.
+  bool sameAs(TimeRule other) =>
+      _periodKey == other._periodKey && _sameScope(other);
+
+  /// Naming every entry of [drafts] is covering them all.
+  void normalize(List<EntryDraft> drafts) {
+    if (all || drafts.isEmpty) return;
+    if (drafts.every((d) => scope.contains(d.token))) {
+      all = true;
+      scope = {};
+    }
+  }
+
   bool _sameScope(TimeRule other) =>
       all == other.all &&
       (all ||
@@ -365,9 +378,25 @@ List<ChangeLine> ruleChanges(
   String allWord,
 ) {
   String whole(TimeRule r) => ruleSummary(r, drafts, allWord);
+  for (final r in rules) {
+    r.normalize(drafts);
+  }
+  // A rule taken out and written again as it was changes nothing.
+  final added = [
+    for (final r in rules)
+      if (r.isNew && !r.removed) r,
+  ];
+  final same = <TimeRule>{};
+  for (final r in rules) {
+    if (r.isNew || !r.removed) continue;
+    final twin = added.where((a) => !same.contains(a) && a.sameAs(r.loaded!));
+    if (twin.isNotEmpty) same.addAll([r, twin.first]);
+  }
   return [
     for (final r in rules)
-      if (r.isNew)
+      if (same.contains(r))
+        ...const <ChangeLine>[]
+      else if (r.isNew)
         if (r.removed)
           ...const <ChangeLine>[]
         else
@@ -424,7 +453,13 @@ Map<String, Object?> spotRulesProposal(
     limits: [
       for (final l in base?.limits ?? const <ParkingLimit>[])
         if (l.kind != LimitKind.timeLimit && l.kind != LimitKind.noParking) l,
-      ...?d.signs,
+      ...d.signs ??
+          [
+            for (final l in base?.limits ?? const <ParkingLimit>[])
+              if (l.kind == LimitKind.timeLimit ||
+                  l.kind == LimitKind.noParking)
+                ?writableLimit(l),
+          ],
     ],
     schedule: d.slots ?? base?.schedule ?? const [],
   );

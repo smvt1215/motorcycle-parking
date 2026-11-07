@@ -84,7 +84,16 @@ class _TimeRulesPageState extends State<TimeRulesPage> {
     showErrors = false;
   });
 
-  List<ChangeLine> get lines => ruleChanges(rules, drafts, allWord);
+  /// 你要改的內容, empty when the rules come to what is stored: the count
+  /// is what the patch holds.
+  List<ChangeLine> get lines {
+    final changes = ruleChanges(rules, drafts, allWord);
+    if (adding || changes.isEmpty) return changes;
+    applyRules(rules, drafts);
+    return drafts.any((d) => d.signs != null || d.slots != null)
+        ? changes
+        : const [];
+  }
 
   /// Opens the first rule that cannot go and says why.
   bool check() {

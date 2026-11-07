@@ -1046,7 +1046,11 @@ class _DiffTable extends StatelessWidget {
           [
             formatValue(key, value),
             if (reviewField(key)?.input == FieldInput.entries)
-              ...entriesChangeLines(current, value),
+              ...entriesChangeLines(
+                current,
+                value,
+                whole: key == 'parking_segments' ? '整條路' : '全場',
+              ),
           ].join('\n'),
         ),
       );

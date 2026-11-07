@@ -872,7 +872,8 @@ class _ReportFormState extends State<ReportForm> {
       if (draft == null) {
         fee = next;
       } else {
-        draft.fee = next;
+        // F1b gives back nothing: the entry follows the spot again.
+        draft.fee = next.isEmpty ? null : next;
       }
     });
   }
