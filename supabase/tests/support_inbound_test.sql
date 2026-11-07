@@ -94,6 +94,14 @@ select is(pg_temp.mail('g51',null,'spam51@example.test','x','fail','none','fail'
   'fifty suspicious a day in all');
 reset role;
 
+-- ===== DMARC 存下來（#295）=====
+select pg_temp.mail('auth1',null,'auth1@example.test','內容','none','pass','pass');
+select is((select mail_dmarc from private.support_requests where id=pg_temp.id('auth1')),'pass','the case keeps the DMARC result');
+select is((select mail_spf||'/'||mail_dkim from private.support_requests where id=pg_temp.id('auth1')),'none/pass','the case keeps SPF and DKIM as they came');
+select ok((select suspicious from private.support_requests where id=pg_temp.id('auth1')),'the rule is unchanged: SPF none is still suspicious');
+select pg_temp.mail('auth2',null,'auth2@example.test','內容','pass','pass','bogus');
+select is((select mail_dmarc from private.support_requests where id=pg_temp.id('auth2')),null,'an unknown DMARC result is not stored');
+
 -- ===== 保存期 =====
 update private.support_inbound_keys set created_at=now()-interval '31 days' where key_hash=decode(pg_temp.h('msg-new'),'hex');
 select ok(public.support_requests_prune()>=0,'prune runs');
