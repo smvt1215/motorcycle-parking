@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -16,6 +15,7 @@ import 'package:motorcycle_parking/data/app_store.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
 import 'package:motorcycle_parking/domain/consent_display.dart';
 import 'package:motorcycle_parking/domain/contributor_name.dart';
+import 'package:motorcycle_parking/features/auth/brand_sign_in_button.dart';
 import 'package:motorcycle_parking/features/auth/profile_avatar.dart';
 import 'package:motorcycle_parking/features/auth/report_name_notice.dart';
 import 'package:motorcycle_parking/features/auth/sign_in.dart';
@@ -209,12 +209,10 @@ void main() {
   });
 
   group('ProfileAvatar', () {
-    Future<void> avatar(WidgetTester tester, {String? name, String? url}) =>
+    Future<void> avatar(WidgetTester tester, {String? name}) =>
         tester.pumpWidget(
           MaterialApp(
-            home: Center(
-              child: ProfileAvatar(name: name, url: url),
-            ),
+            home: Center(child: ProfileAvatar(name: name)),
           ),
         );
 
@@ -238,13 +236,6 @@ void main() {
         expect(find.byType(Text), findsNothing);
       });
     }
-
-    testWidgets('有照片時先顯示照片', (tester) async {
-      await avatar(tester, name: '阿哲', url: 'https://example.test/a.png');
-      final image = tester.widget<Image>(find.byType(Image));
-      expect(image.image, isA<NetworkImage>());
-      expect(find.text('阿'), findsNothing);
-    });
   });
 
   group('登入同意條款（P16a）', () {
@@ -329,8 +320,8 @@ void main() {
       });
     }
 
-    // P11 Android (#219): Google, then Apple in Apple's black brand style;
-    // iOS keeps Apple first in the app's own button style.
+    // P11 (#219): iOS leads with Apple, Android with Google; both draw the
+    // providers' brand buttons.
     for (final platform in _platforms) {
       final ios = platform == TargetPlatform.iOS;
       for (final size in const [Size(390, 844), Size(820, 1180)]) {
@@ -370,25 +361,32 @@ void main() {
               );
               expect(button.hitTestable(), findsOneWidget);
             }
-            final branded = find.descendant(
-              of: apple,
-              matching: find.byType(M3EButton),
+            // Both platforms use the providers' own brand styles (light).
+            Material surface(Finder button) => tester.widget<Material>(
+              find.descendant(
+                of: button,
+                matching: find.byKey(const ValueKey('brand-sign-in-surface')),
+              ),
             );
-            if (ios) {
-              expect(branded, findsNothing);
-              expect(
-                find.descendant(of: apple, matching: find.byIcon(Icons.apple)),
-                findsNothing,
-              );
-            } else {
-              final decoration = tester.widget<M3EButton>(branded).decoration!;
-              expect(decoration.backgroundColor!.resolve({}), Colors.black);
-              expect(decoration.foregroundColor!.resolve({}), Colors.white);
-              expect(
-                find.descendant(of: apple, matching: find.byIcon(Icons.apple)),
-                findsOneWidget,
-              );
-            }
+            expect(surface(apple).color, const Color(0xff000000));
+            expect(
+              (surface(apple).shape! as StadiumBorder).side.style,
+              BorderStyle.none,
+            );
+            expect(surface(google).color, const Color(0xffffffff));
+            expect(
+              (surface(google).shape! as StadiumBorder).side.color,
+              const Color(0xff747775),
+            );
+            expect(
+              find.descendant(of: apple, matching: find.byType(AppleLogo)),
+              findsOneWidget,
+            );
+            expect(
+              find.descendant(of: google, matching: find.byType(GoogleLogo)),
+              findsOneWidget,
+            );
+            expect(find.byIcon(Icons.apple), findsNothing);
             debugDefaultTargetPlatformOverride = null;
           });
         }
