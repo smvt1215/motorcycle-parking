@@ -3,6 +3,8 @@ import { AccountDeletion } from './pages/AccountDeletion';
 import { NotFound } from './pages/NotFound';
 import { CancelPage, VerifyPage } from './support/LinkPages';
 import { SupportPage } from './support/SupportPage';
+import { PolicyPage } from './pages/Policy';
+import { privacy } from './legal/policies';
 
 /** The public site's paths (PM_ANS_20261101_124): more join as their pages land. */
 export const routes: RouteObject[] = [
@@ -11,5 +13,6 @@ export const routes: RouteObject[] = [
   { path: '/support', element: <SupportPage /> },
   { path: '/support/verify', element: <VerifyPage /> },
   { path: '/support/cancel', element: <CancelPage /> },
+  { path: '/privacy', element: <PolicyPage policy={privacy} /> },
   { path: '*', element: <NotFound /> },
 ];

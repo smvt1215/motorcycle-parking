@@ -22,23 +22,26 @@ export function smokeAuth(): AuthPort {
     user = next;
     listeners.forEach((listener) => listener(next));
   };
-  async function signIn(): Promise<SignInResult> {
-    const result = read<SignInResult>(SMOKE_SIGN_IN) ?? { kind: 'cancelled' };
+  async function signIn(onChecking?: () => () => boolean): Promise<SignInResult> {
+    const result = read<SignInResult | { kind: 'hold' }>(SMOKE_SIGN_IN) ?? { kind: 'cancelled' };
+    onChecking?.();
+    // Stays in the checking state, for its screenshot.
+    if (result.kind === 'hold') return new Promise(() => {});
     if (result.kind === 'signedIn') change(result.user);
     return result;
   }
   return {
-    mountGoogleButton(container, { onResult }) {
+    mountGoogleButton(container, { onChecking, onResult }) {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'signin-button signin-button--google';
       button.textContent = '使用 Google 登入';
-      button.addEventListener('click', () => void signIn().then(onResult));
+      button.addEventListener('click', () => void signIn(onChecking).then(onResult));
       container.append(button);
       return { resize() {}, unmount: () => button.remove() };
     },
     prepareApple() {},
-    signInWithApple: signIn,
+    signInWithApple: (options) => signIn(options?.onChecking),
     async revokeApple() {
       return read<AppleRevoke>(SMOKE_APPLE_REVOKE) ?? { kind: 'revoked' };
     },

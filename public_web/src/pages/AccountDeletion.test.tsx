@@ -30,6 +30,9 @@ describe('/account-deletion', () => {
     ).toEqual([...c.kept]);
     expect(screen.getByRole('region', { name: c.retentionHeading })).toHaveTextContent('180 天');
     expect(screen.getByRole('region', { name: c.hashHeading })).toHaveTextContent('180 天後刪除');
+    expect(screen.getByRole('region', { name: c.retentionHeading })).toHaveTextContent(
+      '停權中的帳號刪除後，同一個 Google 或 Apple 帳號重新登入時，停權會繼續。',
+    );
   });
 
   it('shows the cooling-off as a sequence ending in deletion', () => {

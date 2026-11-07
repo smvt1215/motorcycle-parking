@@ -6,15 +6,18 @@
 
 ## 路徑
 
-| 路徑                                  | 內容                                   | 狀態   |
-| ------------------------------------- | -------------------------------------- | ------ |
-| `/account-deletion`                   | 刪除帳號說明（Google Play 連結的頁面） | 已完成 |
-| `/account-deletion`（登入後）         | 確認、送出、冷靜期內登入的選擇（#270） | 已完成 |
-| `/`                                   | 轉到 `/account-deletion`               | 已完成 |
-| `/support`                            | 客服表單（沒辦法登入時申請刪除）       | 已完成 |
-| `/support/verify#token=…`             | 確認信的一次性連結（#285）             | 已完成 |
-| `/support/cancel#token=…`             | 通知信的「取消刪除」連結（#289）       | 已完成 |
-| `/privacy`、`/terms`、`/data-sources` | 政策頁                                 | 之後   |
+| 路徑                          | 內容                                   | 狀態   |
+| ----------------------------- | -------------------------------------- | ------ |
+| `/account-deletion`           | 刪除帳號說明（Google Play 連結的頁面） | 已完成 |
+| `/account-deletion`（登入後） | 確認、送出、冷靜期內登入的選擇（#270） | 已完成 |
+| `/`                           | 轉到 `/account-deletion`               | 已完成 |
+| `/support`                    | 客服表單（沒辦法登入時申請刪除）       | 已完成 |
+| `/support/verify#token=…`     | 確認信的一次性連結（#285）             | 已完成 |
+| `/support/cancel#token=…`     | 通知信的「取消刪除」連結（#289）       | 已完成 |
+| `/privacy`                    | 隱私權政策                             | 已完成 |
+| `/terms`、`/data-sources`     | 政策頁                                 | 之後   |
+
+政策內容放在 `src/legal/*.md`，版本和日期放在 `src/legal/policies.ts`。改稿時換 Markdown，並更新這兩個值。
 
 ## 登入與 API
 
