@@ -121,7 +121,8 @@ bool _hasEntries(ParkingSpot spot) =>
 /// to leave room for the zone count beside it (S1).
 String entranceHead(String note) {
   final head = note.split(RegExp('[，,、。]')).first.trim();
-  return head.length <= 10 ? head : '${head.substring(0, 10)}…';
+  final letters = head.characters;
+  return letters.length <= 10 ? head : '${letters.take(10)}…';
 }
 
 /// What the spot's limits say today (S1, S3), or 未填.

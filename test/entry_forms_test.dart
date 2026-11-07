@@ -375,6 +375,30 @@ void main() {
       expect(c.limits.single.kind, LimitKind.timeLimit);
     });
 
+    test('沒動整段也新增路段時，整段一起成為第一段，不失效', () {
+      final whole = EntryDraft.ofSpot(_bare);
+      final added = EntryDraft.create(EntryType.segment)
+        ..side = RoadSide.north
+        ..kind = SpaceKind.carMotorcycle
+        ..scooter = Eligible.allowed
+        ..heavy = Eligible.notAllowed;
+      final drafts = [whole, added];
+      expect(whole.changed, isFalse);
+      expect(entrySent(whole, drafts), isTrue);
+      final lines = entryLines(whole, drafts);
+      expect(lines.single.label, '第一段');
+      final patch = entriesPatchOf(drafts);
+      expect(patch, hasLength(2));
+      expect(patch.first.containsKey('id'), isFalse);
+      expect(patch.first['condition'], isNotNull);
+      expect(patch.map((e) => e['name']).toSet(), hasLength(2));
+      // A removed new segment, or nothing new, leaves the spot as it is.
+      added.removed = true;
+      expect(entrySent(whole, drafts), isFalse);
+      expect(entryLines(whole, drafts), isEmpty);
+      expect(entriesPatchOf([whole]), isEmpty);
+    });
+
     test('沒有路段的路邊點當一段：沒改不送，改了以新增一段送出', () {
       final d = EntryDraft.ofSpot(_bare);
       expect(d.kind, SpaceKind.motorcycle);
@@ -416,7 +440,12 @@ void main() {
         ..total = '6';
       expect(d.rowLabel, '北側　汽機車共用格・6 格');
       d.name = '靠松江路口';
-      expect(d.rowLabel, '靠松江路口　汽機車共用格・6 格');
+      expect(d.rowLabel, '北側　靠松江路口　汽機車共用格・6 格');
+      // A name that only repeats the bay is not said twice.
+      d.name = '汽機車共用格';
+      expect(d.rowLabel, '北側　汽機車共用格・6 格');
+      d.side = null;
+      expect(d.rowLabel, '汽機車共用格・6 格');
       expect(entranceHead('松壽路側車道下坡，機車走右側'), '松壽路側車道下坡');
       expect(entranceHead('一二三四五六七八九十一二'), '一二三四五六七八九十…');
     });

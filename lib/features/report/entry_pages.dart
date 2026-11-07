@@ -376,7 +376,7 @@ class _EntryListPageState extends State<EntryListPage> {
           tags: segmentTags(d),
           onTap: d.editable ? () => open(d) : null,
         ),
-        ColoredBox(
+        Material(
           color: Theme.of(context).colorScheme.surfaceContainerLow,
           child: Semantics(
             label: onFee == null
@@ -653,15 +653,15 @@ class _EntryEditPageState extends State<EntryEditPage> {
   /// The entries that go: those changed.
   List<EntryDraft> get changed => [
     for (final d in drafts)
-      if (d.changed) d,
+      if (entrySent(d, drafts)) d,
   ];
 
-  int get items => changed.fold(0, (n, d) => n + d.changeLines().length);
+  int get items => changed.fold(0, (n, d) => n + entryLines(d, drafts).length);
 
   Map<String, Object?> body() {
     final lines = [
       for (final d in changed)
-        for (final l in d.changeLines())
+        for (final l in entryLines(d, drafts))
           '${d.displayName} ${l.label}：${l.from} → ${l.to}',
     ];
     return {
@@ -788,7 +788,7 @@ class _EntryEditPageState extends State<EntryEditPage> {
                 title: d.rowLabel,
                 value: d.removed
                     ? '將撤除'
-                    : d.changed
+                    : entrySent(d, drafts)
                     ? '已修改'
                     : '沒有改',
                 onTap: d.editable
@@ -818,7 +818,7 @@ class _EntryEditPageState extends State<EntryEditPage> {
               padding: const EdgeInsets.only(top: 6),
               child: ChangeSummary(
                 title: d.displayName,
-                lines: d.changeLines(),
+                lines: entryLines(d, drafts),
               ),
             ),
         ],

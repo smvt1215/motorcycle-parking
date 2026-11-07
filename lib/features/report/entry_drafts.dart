@@ -293,13 +293,20 @@ class EntryDraft {
     if (type == EntryType.segment && total.isNotEmpty) '$total 格',
   ].join('・');
 
-  /// A collapsed row: 北側　汽機車共用格・6 格; a name the rider gave goes
-  /// first instead of the side.
+  /// A collapsed row: 北側　汽機車共用格・6 格. The side always leads; a
+  /// name follows it unless it only repeats the bay.
   String get rowLabel {
-    final head = name.trim().isNotEmpty
-        ? name.trim()
-        : side?.label ?? (type == EntryType.zone ? displayName : '');
-    return [head, detail].where((t) => t.isNotEmpty).join('　');
+    final named = name.trim();
+    final bay = kind?.label ?? '';
+    final repeats = bay.isNotEmpty && named.contains(bay);
+    return [
+      ?side?.label,
+      if (named.isNotEmpty && !repeats)
+        named
+      else if (named.isEmpty && side == null && type == EntryType.zone)
+        displayName,
+      detail,
+    ].where((t) => t.isNotEmpty).join('　');
   }
 
   /// The map's words for this entry as loaded, whatever the form holds now
@@ -487,6 +494,23 @@ class ChangeLine {
   final String label, from, to;
 }
 
+/// Whether [d] goes with a suggestion on [drafts]. A whole-spot entry goes
+/// with any new segment even when untouched: once a spot has segments,
+/// decisions read only those, so its bay, limits and periods must become
+/// the first one rather than lapse.
+bool entrySent(EntryDraft d, List<EntryDraft> drafts) =>
+    d.changed ||
+    (d.wholeSpot && drafts.any((o) => !o.wholeSpot && !o.removed && o.isNew));
+
+/// 你要改的內容 for [d] among [drafts]: an untouched whole-spot entry that
+/// goes as the first segment says so, so the summary and count show it.
+List<ChangeLine> entryLines(EntryDraft d, List<EntryDraft> drafts) {
+  final lines = d.changeLines();
+  return lines.isEmpty && entrySent(d, drafts)
+      ? const [ChangeLine(label: '第一段', from: '沒有', to: '沿用目前的內容')]
+      : lines;
+}
+
 /// The names [draft] must not take: the other entries' as they will read.
 Iterable<String> _others(List<EntryDraft> drafts, EntryDraft draft) => [
   for (final d in drafts)
@@ -521,7 +545,7 @@ List<Map<String, Object?>> entriesPatchOf(List<EntryDraft> drafts) {
   final taken = <String>[];
   for (final d in drafts) {
     if (d.removed || !d.editable) continue;
-    if (d.wholeSpot && !d.changed) continue;
+    if (d.wholeSpot && !entrySent(d, drafts)) continue;
     final json = d.toJson([..._others(drafts, d), ...taken]);
     taken.add(json['name']! as String);
     next.add(json);
