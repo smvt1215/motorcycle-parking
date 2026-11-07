@@ -29,7 +29,14 @@ bool noFeeText(String text) =>
 
 /// 全場費率 or 整條路費率 in words: the rates, the stored text, or 未提供.
 String wholeFeeText(Fee? rates, String? text) {
-  if (rates != null && !rates.isEmpty) return feeNoteOf(rates);
+  if (rates != null && !rates.isEmpty) {
+    // 全場同價 reads once, as a sign does, without the rule in brackets.
+    final same = rates.scooter == rates.heavy && rates.heavy == rates.car;
+    if (same && rates.scooter?.mode == FeeMode.hourly) {
+      return rates.textOf('scooter')!.replaceFirst(RegExp(r'（.*）$'), '');
+    }
+    return feeNoteOf(rates);
+  }
   return text == null || noFeeText(text) ? '未提供' : text;
 }
 

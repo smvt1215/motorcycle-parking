@@ -1166,7 +1166,8 @@ class DaysPicker extends StatelessWidget {
           label: '自選星期',
           container: true,
           child: LayoutBuilder(
-            builder: (context, box) => box.maxWidth < _touch * 7 + gap * 6
+            // The tiles keep their height; on a 390 phone seven fit at 44 wide.
+            builder: (context, box) => box.maxWidth < 44 * 7 + gap * 6
                 ? Wrap(
                     spacing: gap,
                     runSpacing: gap,

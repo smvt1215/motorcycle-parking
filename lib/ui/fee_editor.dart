@@ -468,8 +468,8 @@ class _FormClosedVehicle extends StatelessWidget {
               children: [
                 ExcludeSemantics(child: VehicleMark(vehicle)),
                 const SizedBox(width: 10),
-                Flexible(
-                  flex: 2,
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 96),
                   child: Text(
                     vehicle.label,
                     maxLines: 1,
@@ -483,7 +483,6 @@ class _FormClosedVehicle extends StatelessWidget {
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  flex: 5,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
@@ -2005,7 +2004,7 @@ class _PeriodCardState extends State<_PeriodCard> {
                       ),
                       if (!widget.open) ...[
                         const SizedBox(width: 8),
-                        Flexible(
+                        Expanded(
                           child: Text(
                             _brief,
                             textAlign: TextAlign.end,
@@ -2961,7 +2960,7 @@ class _FormPreview extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        Flexible(
+                        Expanded(
                           child: Text(
                             '${vehicle.label}不能停',
                             textAlign: TextAlign.end,

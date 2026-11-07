@@ -373,8 +373,17 @@ class _FeeEditPageState extends State<FeeEditPage> {
     ];
   }
 
+  /// The rider's vehicle, unless it has no bays here.
+  FeeVehicle get firstVehicle {
+    final own = FeeVehicle.of(widget.store.vehicle);
+    bool applies(FeeVehicle v) => rateOf(fee, v)?.mode != FeeMode.notApplicable;
+    return applies(own)
+        ? own
+        : FeeVehicle.values.where(applies).firstOrNull ?? own;
+  }
+
   String get intro {
-    final whole = widget.spotFee.isEmpty ? '未提供' : feeNoteOf(widget.spotFee);
+    final whole = wholeFeeText(widget.spotFee, widget.spot?.feeNote);
     final name = draft?.displayName;
     final tail = adding ? '完成後回到新增停車點。' : '送出前還沒生效。';
     return name == null
@@ -492,7 +501,7 @@ class _FeeEditPageState extends State<FeeEditPage> {
           const SizedBox(height: 12),
           FeeEditor(
             value: fee,
-            initialVehicle: FeeVehicle.of(widget.store.vehicle),
+            initialVehicle: firstVehicle,
             errorText: refusal,
             onChanged: (v) => setState(() {
               fee = v;
