@@ -8,6 +8,7 @@ import '../../core/town_lookup.dart';
 import '../../data/account_suspended.dart';
 import '../../data/app_store.dart';
 import '../../domain/location_check.dart';
+import '../../domain/content_report_display.dart';
 import '../../domain/precheck.dart';
 import '../../models/closure.dart';
 import '../../models/fee.dart';
@@ -15,6 +16,7 @@ import '../../models/parking.dart';
 import '../../models/parking_condition.dart';
 import '../../models/space_kind.dart';
 import '../account/suspended_sheet.dart';
+import '../content_report/content_report.dart';
 import '../map/space_type_sheet.dart';
 import '../../ui/option_pill.dart';
 import '../../ui/address_search_field.dart';
@@ -240,6 +242,45 @@ Future<void> showSpotSuggestions(
                   ),
                 ),
               ),
+              // #280 P17b ①: same rule as the details' ⋯ menu.
+              if (store.canReportContent(spot)) ...[
+                const SizedBox(height: 20),
+                Semantics(
+                  header: true,
+                  child: Text(
+                    contentProblemGroup,
+                    style: Theme.of(ctx).textTheme.titleSmall,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Material(
+                  color: Theme.of(ctx).colorScheme.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(24),
+                  clipBehavior: Clip.antiAlias,
+                  child: ListTile(
+                    key: const ValueKey('suggest-content-report'),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 8,
+                    ),
+                    leading: Icon(
+                      Icons.flag_outlined,
+                      color: Theme.of(ctx).colorScheme.primary,
+                    ),
+                    title: const Text(contentProblemRow),
+                    subtitle: const Text(contentProblemDetail),
+                    trailing: const Icon(Icons.chevron_right),
+                    // Hidden from the result: this list closes, and the
+                    // details behind it close as they see the rider hidden.
+                    onTap: () async {
+                      if (await showContentReport(ctx, store, spot) &&
+                          ctx.mounted) {
+                        Navigator.pop(ctx);
+                      }
+                    },
+                  ),
+                ),
+              ],
             ],
           ),
         ),

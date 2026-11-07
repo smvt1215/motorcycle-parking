@@ -35,8 +35,13 @@ class SpotPreview extends StatelessWidget {
     required this.onShare,
     required this.onClose,
     this.onPlate,
+    this.titleNote,
   });
   final ParkingSpot spot;
+
+  /// A line under the name (P17b ⑪: the contributor's own name held for
+  /// review).
+  final Widget? titleNote;
   final List<SignPlate> plates;
   final String subtitle;
   final bool favorite;
@@ -69,6 +74,7 @@ class SpotPreview extends StatelessWidget {
                         height: 1.3,
                       ),
                     ),
+                    ?titleNote,
                     const SizedBox(height: 2),
                     Text(
                       subtitle,

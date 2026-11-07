@@ -12,6 +12,7 @@ import '../../domain/eligibility.dart';
 import '../../domain/eligibility_display.dart';
 import '../../domain/four_sign.dart';
 import '../../domain/four_sign_display.dart';
+import '../../domain/hidden_riders_display.dart' show contentHeldNote;
 import '../../domain/parking_decision.dart';
 import '../../domain/spot_detail_display.dart';
 import '../../ui/adaptive/adaptive.dart';
@@ -21,6 +22,7 @@ import '../../ui/four_sign_plates.dart';
 import 'package:flutter/rendering.dart' show RenderAbstractViewport;
 
 import '../auth/sign_in.dart';
+import '../hidden_riders/spot_more_menu.dart';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
@@ -150,7 +152,7 @@ class _SpotSheetState extends State<SpotSheet> {
   }
 
   Future<void> copyLocation() async {
-    await Clipboard.setData(ClipboardData(text: copiedLocation(widget.spot)));
+    await Clipboard.setData(ClipboardData(text: copiedLocation(shown)));
     if (!mounted) return;
     setState(() => copied = true);
     copiedTimer?.cancel();
@@ -162,6 +164,56 @@ class _SpotSheetState extends State<SpotSheet> {
   /// The spot's latest public changes (#141), read once per spot.
   late Future<List<HistoryEntry>> history = _history();
 
+  /// The spot as last read back (#280): whoever opened the sheet handed a
+  /// snapshot (a favourite's keeps no `is_own`, handle or held fields, and
+  /// a content report changes what it names), so it is read again on
+  /// opening, after a report and when the account changes.
+  ParkingSpot? reread;
+
+  /// What the sheet shows: [reread], else the spot it was opened with.
+  ParkingSpot get shown => reread ?? widget.spot;
+
+  late int _reports;
+
+  /// Who the shown copy was read for: `is_own` and held text follow them.
+  late String? _account;
+
+  /// Numbers each read-back: only the newest may land.
+  int _reads = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _reports = widget.store.reportsSent;
+    _account = widget.store.riderId;
+    widget.store.addListener(_storeChanged);
+    unawaited(_reread());
+  }
+
+  void _storeChanged() {
+    final store = widget.store;
+    if (store.reportsSent == _reports && store.riderId == _account) return;
+    _reports = store.reportsSent;
+    _account = store.riderId;
+    unawaited(_reread());
+  }
+
+  /// Reads the spot again and swaps it in, nothing cleared first. One that
+  /// cannot be read (offline, a TDX spot) keeps the copy shown, whose
+  /// `is_own` [AppStore.ownSpot] no longer trusts across accounts.
+  Future<void> _reread() async {
+    final id = widget.spot.id, read = ++_reads;
+    final ParkingSpot? latest;
+    try {
+      latest = await widget.store.latestSpot(id);
+    } catch (_) {
+      return;
+    }
+    if (mounted && latest != null && widget.spot.id == id && read == _reads) {
+      setState(() => reread = latest);
+    }
+  }
+
   Future<List<HistoryEntry>> _history() => widget.store.parking
       .history(widget.spot.id)
       .catchError((Object _) => const <HistoryEntry>[]);
@@ -170,6 +222,8 @@ class _SpotSheetState extends State<SpotSheet> {
   void didUpdateWidget(SpotSheet old) {
     super.didUpdateWidget(old);
     if (old.spot.id != widget.spot.id) {
+      reread = null;
+      unawaited(_reread());
       history = _history();
       selectedSegment = null;
       unfolded = false;
@@ -181,7 +235,7 @@ class _SpotSheetState extends State<SpotSheet> {
   bool closing = false;
   String? feedback;
   Future<void> share(BuildContext buttonContext) async {
-    final spot = widget.spot;
+    final spot = shown;
     final text =
         '${spot.name}\nhttps://www.google.com/maps/search/?api=1&query=${spot.lat},${spot.lng}';
     final box = buttonContext.findRenderObject() as RenderBox;
@@ -204,6 +258,7 @@ class _SpotSheetState extends State<SpotSheet> {
 
   @override
   void dispose() {
+    widget.store.removeListener(_storeChanged);
     spied?.removeListener(spy);
     copiedTimer?.cancel();
     extent.dispose();
@@ -217,7 +272,7 @@ class _SpotSheetState extends State<SpotSheet> {
   );
 
   Widget _buildDetails(BuildContext context) {
-    final store = widget.store, spot = widget.spot;
+    final store = widget.store, spot = shown;
     final colors = Theme.of(context).colorScheme;
     final photos = SpotPhotos.usable(spot.photoUrls);
     // Tablets keep a phone-width sheet instead of spanning the screen.
@@ -367,8 +422,13 @@ class _SpotSheetState extends State<SpotSheet> {
       // 回報現場狀況 stays hidden until the rider sighting sheet (A7, A7b;
       // PR-E) gives it somewhere to go.
       onReport: null,
-      onSuggest: () =>
-          runAction(ctx, () => showSpotSuggestions(ctx, store, spot)),
+      onSuggest: () => runAction(ctx, () async {
+        final wasHidden = store.riderHidden(spot);
+        await showSpotSuggestions(ctx, store, spot);
+        // The rider was hidden from a content report there (#280): the
+        // details close, as after ⋯'s 隱藏.
+        if (ctx.mounted && !wasHidden && store.riderHidden(spot)) close(ctx);
+      }),
     );
     final subtitle = previewSubtitle(
       spot,
@@ -410,8 +470,13 @@ class _SpotSheetState extends State<SpotSheet> {
             pinned &&
             constraints.maxHeight - footer - _headerHeight(ctx, spot, width) >=
                 _minDetailHeight;
+        // The spot's own name held for review (P17b ⑪): under the title.
+        final titleNote = store.heldForOwner(spot, 'spot_name')
+            ? const ContentHeldNote()
+            : null;
         final header = SpotDetailHeader(
           spot: spot,
+          titleNote: titleNote,
           subtitle: subtitle,
           plates: plates,
           current: current,
@@ -466,8 +531,11 @@ class _SpotSheetState extends State<SpotSheet> {
                           ),
                         ),
                       ),
+                      // A hidden rider's spot opened from a list (P17d).
+                      HiddenSpotBanner(store: store, spot: spot),
                       SpotPreview(
                         spot: spot,
+                        titleNote: titleNote,
                         plates: plates,
                         subtitle: subtitle,
                         favorite: favorite,
@@ -482,6 +550,10 @@ class _SpotSheetState extends State<SpotSheet> {
                       const SizedBox(height: 6),
                       header,
                       Divider(height: 1, color: DetailColors.of(ctx).divider),
+                    ],
+                    if (full) ...[
+                      const SizedBox(height: 12),
+                      HiddenSpotBanner(store: store, spot: spot),
                     ],
                     ...body,
                     if (!pinned) ...[const SizedBox(height: 16), actions],
@@ -698,6 +770,9 @@ class _SpotSheetState extends State<SpotSheet> {
         children: [
           WhereView(
             cards: cards,
+            heldNote: store.heldForOwner(spot, 'text')
+                ? const ContentHeldNote()
+                : null,
             entrance: spot.isFacility ? spot.entranceNote.trim() : '',
             guide: spot.parkingGuide.trim(),
             photos: photos,
@@ -721,9 +796,17 @@ class _SpotSheetState extends State<SpotSheet> {
           icon: Icons.notes_outlined,
           children: [
             if (spot.specialRules.trim().isNotEmpty)
-              _DetailField(label: '特殊規則', value: spot.specialRules),
+              _DetailField(
+                label: '特殊規則',
+                value: spot.specialRules,
+                held: store.heldForOwner(spot, 'text'),
+              ),
             if (spot.note.trim().isNotEmpty)
-              _DetailField(label: '備註', value: spot.note),
+              _DetailField(
+                label: '備註',
+                value: spot.note,
+                held: store.heldForOwner(spot, 'text'),
+              ),
           ],
         ),
       // Sources and history in small print, after the address (user
@@ -743,11 +826,21 @@ class _SpotSheetState extends State<SpotSheet> {
             _DetailField(
               label: '資料來源',
               value: sourceSummary(spot, demo: store.demo),
+              held: store.heldForOwner(spot, 'rider_name'),
             ),
             if (!spot.isOfficial)
               _ConfirmationField(lines: confirmationLines(spot)),
             _LatestUpdateField(spot: spot, history: history),
-            ?widget.sourceActions,
+            // 隱藏這位車友, 檢舉內容不當 (P17a).
+            widget.sourceActions ??
+                Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: SpotMoreButton(
+                    store: store,
+                    spot: spot,
+                    onClose: () => close(ctx),
+                  ),
+                ),
           ],
         ),
       ),
@@ -852,13 +945,38 @@ class _DetailSection extends StatelessWidget {
   }
 }
 
+/// 部分內容審核中, in amber beside a held field's title (P17b ⑪).
+class ContentHeldNote extends StatelessWidget {
+  const ContentHeldNote({super.key});
+  @override
+  Widget build(BuildContext context) => Row(
+    key: const ValueKey('content-held'),
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      const Icon(Icons.schedule, size: 14, color: conditionalColor),
+      const SizedBox(width: 4),
+      Flexible(
+        child: Text(
+          contentHeldNote,
+          style: Theme.of(context).textTheme.bodySmall
+              ?.copyWith(color: conditionalColor, fontWeight: FontWeight.w600),
+        ),
+      ),
+    ],
+  );
+}
+
 class _DetailField extends StatelessWidget {
   const _DetailField({
     required this.label,
     required this.value,
     this.secondary = '',
     this.action,
+    this.held = false,
   });
+
+  /// The contributor's own text under review (P17b ⑪).
+  final bool held;
 
   final String label, value, secondary;
 
@@ -868,11 +986,17 @@ class _DetailField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final labelWidget = Text(
+    final labelText = Text(
       label,
       style: Theme.of(context).textTheme.bodySmall
           ?.copyWith(color: colors.onSurfaceVariant),
     );
+    final labelWidget = held
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [labelText, const ContentHeldNote()],
+          )
+        : labelText;
     final valueWidget = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
