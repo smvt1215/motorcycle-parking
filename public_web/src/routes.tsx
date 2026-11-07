@@ -1,6 +1,7 @@
 import { Navigate, type RouteObject } from 'react-router';
 import { AccountDeletion } from './pages/AccountDeletion';
 import { NotFound } from './pages/NotFound';
+import { CasePage } from './support/CasePage';
 import { CancelPage, VerifyPage } from './support/LinkPages';
 import { SupportPage } from './support/SupportPage';
 import { PolicyPage } from './pages/Policy';
@@ -13,6 +14,7 @@ export const routes: RouteObject[] = [
   { path: '/support', element: <SupportPage /> },
   { path: '/support/verify', element: <VerifyPage /> },
   { path: '/support/cancel', element: <CancelPage /> },
+  { path: '/support/case', element: <CasePage /> },
   { path: '/privacy', element: <PolicyPage policy={privacy} /> },
   { path: '*', element: <NotFound /> },
 ];

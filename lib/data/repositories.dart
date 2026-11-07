@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
+import '../api/v1/api_v1.g.dart' show ApiV1Client;
 import '../core/address_search.dart';
 import '../core/app_check.dart';
 import '../models/holiday_calendar.dart';
@@ -167,6 +168,17 @@ class ParkingRepository {
 
   void addDemo(ParkingSpot spot) => (_demoSpots ??= []).add(spot);
 
+  /// [id] as the backend shows it now (`api_v1.spots_by_ids`, the rows a
+  /// viewport returns); null without a backend or once it cannot be read.
+  Future<ParkingSpot?> byId(String id) async {
+    if (client == null) return null;
+    final body = await ApiV1Client(client!).spotsByIdsRaw(ids: [id]);
+    if (body case {'spots': final List<dynamic> rows}) {
+      return rows.expand(ParkingSpot.known).firstOrNull;
+    }
+    return null;
+  }
+
   /// The spot's latest public changes (`spot_history`, #141), newest
   /// first; none without a backend (demo) or for a spot that has no
   /// history there (TDX, hidden).
@@ -204,7 +216,7 @@ class ParkingRepository {
     } on FunctionException catch (e) {
       if (accountSuspendedFrom(e) case final suspended?) throw suspended;
       if (reportRefusal(e.details) case final message?) {
-        throw StateError(message);
+        throw ReportRefused(message, e.details);
       }
       rethrow;
     }
@@ -222,6 +234,13 @@ class ParkingRepository {
     }
     return geocodeSearch(client!.functions, query, lat: lat, lng: lng);
   }
+}
+
+/// A report the server refused with a sentence for the form ([message]);
+/// [details] keeps its body, e.g. a precheck's `issues` with each field.
+class ReportRefused extends StateError {
+  ReportRefused(super.message, this.details);
+  final Object? details;
 }
 
 class LocalRepository {

@@ -26,6 +26,7 @@ const TITLES: Record<string, string> = {
   '/support': '聯絡我們',
   '/support/verify': '確認申請',
   '/support/cancel': '取消刪除帳號',
+  '/support/case': '客服案件',
 };
 
 export function pageTitle(pathname: string): string {

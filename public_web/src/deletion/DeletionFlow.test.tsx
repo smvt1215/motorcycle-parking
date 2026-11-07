@@ -54,7 +54,10 @@ describe('signed out', () => {
     await heading(t.noAccountTitle);
     expect(screen.getByText(t.noAccountBody('new@gmail.com'))).toBeInTheDocument();
     expect(screen.getByText(t.noAccountHint('google'))).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: t.noAccountSupport })).toHaveAttribute('href', '/support');
+    expect(screen.getByRole('link', { name: t.noAccountSupport })).toHaveAttribute(
+      'href',
+      '/support?kind=account_deletion',
+    );
     expect(calls).toEqual([]);
     await userEvent.click(screen.getByRole('button', { name: t.noAccountRetry }));
     expect(await screen.findByRole('heading', { level: 1, name: '刪除你的帳號' })).toBeInTheDocument();
