@@ -55,5 +55,7 @@ export const cannotSignInHeading = '沒辦法登入？';
 export const cannotSignInBody =
   '例如換了手機、忘記當初用哪個帳號登入。填寫客服表單後，我們會寄確認信到帳號的登入 email，你在信裡的連結按下確認，就會立即申請刪除。那個信箱收不到信的話，就無法用這個方式刪除。';
 export const supportFormLink = '填寫客服表單';
+/** The support form with 刪除帳號 chosen, for riders on the deletion pages. */
+export const deletionSupportPath = '/support?kind=account_deletion';
 
 export const footerNote = '只想改收藏或登出？在 App 的「帳號與設定」裡就能處理，不必刪除帳號。';

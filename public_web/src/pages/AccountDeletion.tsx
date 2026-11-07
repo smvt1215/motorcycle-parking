@@ -113,7 +113,7 @@ function SignInChoices({ signIn }: { signIn: ExplanationSignIn }) {
 
 function Explanation({ signIn }: { signIn: ExplanationSignIn | null }) {
   return (
-    <Site aside={<Link to="/support">沒辦法登入？</Link>}>
+    <Site aside={<Link to={c.deletionSupportPath}>{c.cannotSignInHeading}</Link>}>
       <div className="deletion">
         <div className="deletion-intro">
           <h1>刪除你的帳號</h1>
@@ -134,7 +134,7 @@ function Explanation({ signIn }: { signIn: ExplanationSignIn | null }) {
           <section aria-labelledby="cannot-h" className="deletion-cannot">
             <h2 id="cannot-h">{c.cannotSignInHeading}</h2>
             <p>{c.cannotSignInBody}</p>
-            <Link to="/support">{c.supportFormLink}</Link>
+            <Link to={c.deletionSupportPath}>{c.supportFormLink}</Link>
           </section>
         </aside>
 

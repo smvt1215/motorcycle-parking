@@ -1,5 +1,162 @@
-/* The support form and the one-time link pages (canvas PhoneSupport,
-   PhoneVerify, PhoneCancel), inside the flow's single column (.flow). */
+/* The support form (canvas SupportKinds, PhoneSupportKinds, and PhoneSupport
+   for the deletion form), the one-time link pages (PhoneVerify, PhoneCancel,
+   inside the flow's single column .flow) and the case page (PhoneCase). */
+
+/* The kinds above the form; side by side from 1040px, the kinds left. */
+.support-desk {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 28px 16px 32px;
+}
+.support-desk-kinds,
+.support-desk-intro {
+  display: flex;
+  flex-direction: column;
+}
+.support-desk-kinds {
+  gap: 20px;
+  min-width: 0;
+}
+.support-desk-intro {
+  gap: 8px;
+}
+.support-desk-intro h1 {
+  margin: 0;
+  font-size: 30px;
+  line-height: 1.3;
+  font-weight: 900;
+}
+/* Focus lands here only so screen readers announce the page (as .flow h1). */
+.support-desk-intro h1:focus,
+.support-desk-intro h1:focus-visible {
+  outline: none;
+}
+.support-desk-intro p {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.75;
+  color: var(--ink-soft);
+}
+
+.support-kinds {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.support-kinds legend {
+  padding: 0 0 8px;
+  font-size: 16px;
+  font-weight: 700;
+}
+.support-kind {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 48px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  cursor: pointer;
+}
+.support-kind--on {
+  /* The thicker border must not move the text. */
+  padding: 13px;
+  border: 2px solid var(--brand);
+  background: var(--brand-tint);
+}
+.support-kind input {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 2px 0 0;
+  border: 2px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--paper);
+  appearance: none;
+  cursor: pointer;
+}
+.support-kind input:checked {
+  border: 6px solid var(--brand);
+}
+.support-kind b {
+  display: block;
+  font-size: 16px;
+  font-weight: 700;
+}
+.support-kind span span {
+  display: block;
+  margin-top: 2px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+.support-desk-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+.support-desk-form > h2 {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 700;
+}
+.support-desk-form p {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.75;
+}
+/* Kept for screen readers on a phone, where the board has no heading. */
+@media (max-width: 679px) {
+  .support-desk-title {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+@media (min-width: 680px) {
+  .support-desk-form {
+    padding: 28px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--paper);
+  }
+}
+@media (min-width: 1040px) {
+  .support-desk {
+    display: grid;
+    grid-template-columns: minmax(0, 440px) minmax(0, 560px);
+    column-gap: 64px;
+    align-items: start;
+    justify-content: center;
+    max-width: none;
+    padding: 56px 40px;
+  }
+  .support-desk-kinds {
+    position: sticky;
+    top: 24px;
+  }
+  .support-desk-intro h1 {
+    font-size: 40px;
+    line-height: 1.25;
+  }
+  .support-desk-intro p {
+    font-size: 16px;
+  }
+}
 
 .support-warning {
   padding: 12px 14px;
@@ -49,7 +206,8 @@
   padding: 10px 12px;
   resize: vertical;
 }
-.support-field input[aria-invalid='true'] {
+.support-field input[aria-invalid='true'],
+.support-field textarea[aria-invalid='true'] {
   border: 2px solid var(--danger);
 }
 .support-field-error {
@@ -73,6 +231,9 @@
 }
 .support-choices legend {
   padding: 0 0 6px;
+}
+.support-choices--cards {
+  gap: 8px;
 }
 .support-choice {
   display: flex;
@@ -170,5 +331,42 @@
 }
 .support-rows dd {
   margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.support-case-facts {
+  color: var(--ink-soft);
+  font-size: 14px !important;
+}
+.support-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.support-message {
+  max-width: 86%;
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+}
+.support-message--mine {
+  align-self: flex-end;
+  background: var(--brand-mist);
+}
+.support-message--theirs {
+  align-self: flex-start;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+.support-message-when {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+/* Someone's text: their line breaks stay, and a long word cannot widen the page. */
+.support-message-body {
+  white-space: pre-wrap;
   overflow-wrap: anywhere;
 }

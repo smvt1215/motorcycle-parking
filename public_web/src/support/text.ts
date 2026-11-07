@@ -1,7 +1,83 @@
-// Copy of the support pages, verbatim from the approved canvas (version 20):
-// PhoneSupport (the form), PhoneVerify (the confirmation link) and
-// PhoneCancel (the deletion notice's 取消刪除 link). Where the page says
-// something the boards do not, the constant's comment says why.
+// Copy of the support pages, verbatim from the approved canvas: version 32's
+// SupportKinds and PhoneSupportKinds (the kinds and their form) and PhoneCase
+// (the case page), version 20's PhoneSupport (the deletion form), PhoneVerify
+// (the confirmation link) and PhoneCancel (the deletion notice's 取消刪除
+// link). Where the page says something the boards do not, the constant's
+// comment says why. These pages name no reply time (user, #295): the boards'
+// 「5 個工作天」 sentence is left out.
+
+// ===== The kinds (SupportKinds) =====
+export const supportTitle = '聯絡我們';
+export const supportIntro = '先選你要詢問的類型。';
+export const kindLegend = '要詢問什麼';
+export const kindOptions = [
+  { value: 'general', label: '一般問題', description: 'App 怎麼用、帳號或其他問題。' },
+  { value: 'data_issue', label: '資料錯誤或侵權', description: '停車點資料有誤，或內容侵害你的權利。' },
+  { value: 'complaint', label: '檢舉與申訴', description: '檢舉不當內容，或對處理結果提出申訴。' },
+  {
+    value: 'privacy',
+    label: '個資權利請求',
+    description: '查閱、更正或取得你的個人資料。要用帳號的登入 email 確認。',
+  },
+  { value: 'account_deletion', label: '刪除帳號', description: '沒辦法登入時，用登入 email 申請。' },
+] as const;
+
+/**
+ * What the mails call each kind (kindNames in support-request/resend.ts): the
+ * case page's heading and a general receipt. The form's choice says 刪除帳號.
+ */
+export const kindNames: Record<string, string> = {
+  general: '一般問題',
+  data_issue: '資料錯誤或侵權',
+  complaint: '檢舉與申訴',
+  privacy: '個資權利請求',
+  account_deletion: '刪除帳號申請',
+};
+
+// ===== The other kinds' form (SupportKinds, PhoneSupportKinds) =====
+export const caseContactNote = '（必填）';
+export const caseContactHelp = '我們會回覆到這裡，信裡也有案件連結。';
+export const subjectLabel = '主旨';
+export const subjectNote = '（必填，最多 120 字）';
+export const subjectMax = 120;
+export const contentLabel = '內容';
+export const contentNote = '（必填，最多 4,000 字）';
+export const contentHelp = '請不要填寫密碼或其他人的個人資料。';
+export const contentMax = 4000;
+export const caseSubmit = '送出';
+export const privacyLoginNote = '（必填）';
+export const privacyLoginHelp = '確認信只寄到這裡，資料也只寄到這裡。';
+export const privacyRightLegend = '要做什麼';
+export const privacyRightOptions = [
+  { value: 'access', label: '查閱我的資料' },
+  { value: 'correction', label: '更正我的資料' },
+  { value: 'copy', label: '取得資料副本' },
+] as const;
+
+/** Not on a board, which shows no empty state for these fields. */
+export const subjectMissing = '請填寫主旨';
+export const contentMissing = '請填寫內容';
+export const privacyRightMissing = '請選擇要做什麼';
+/** Not on a board: text from another kind, longer than the deletion form takes. */
+export const messageTooLong = '最多 1,000 字，請縮短內容';
+
+/** Not on a board: a general kind's receipt, in the mail's words (caseReceiptMail). */
+export function caseReceivedTitle(name: string, code: string): string {
+  return `已收到你的${name}，案件編號 ${code}`;
+}
+export const caseReceivedBody = [
+  '我們會回覆到你填的聯絡用 email，信裡也有案件連結。',
+  '要補充內容，請打開收件回條裡的案件連結（30 天內有效），或直接回覆那封信。沒收到回條？請檢查垃圾郵件。',
+] as const;
+
+/** Not on a board: the deletion receipt's words for a privacy request. */
+export function privacyReceivedTitle(code: string): string {
+  return `已收到請求，編號 ${code}`;
+}
+export const privacyReceivedBody = [
+  '如果這個登入 email 有對應的帳號，確認信會寄到該信箱，寄件人是 support@motoparking.smvtstudio.com。連結 24 小時內有效、只能使用一次；你在連結頁按下確認後，客服才會處理，資料也只會寄到那個信箱。',
+  '聯絡用 email 只會收到一封收件回條。沒收到確認信？請檢查垃圾郵件，或確認填的是 App 的登入 email。重新送出後，舊的確認連結會作廢。',
+] as const;
 
 // ===== The form (PhoneSupport) =====
 export const formTitle = '用登入 email 申請刪除';
@@ -11,8 +87,6 @@ export const formIntro = {
   after:
     '（包含 Apple 的「隱藏的電子郵件」）。你打開信裡的連結並按下確認，就會立即申請刪除，之後一樣有 7 天冷靜期。',
 };
-/** Until #295's kinds join the form (user, 2026-11-08): text, never a mail link. */
-export const otherQuestions = '其他問題（不是刪除帳號）請寫信到 ops@motoparking.smvtstudio.com。';
 export const formWarning = '那個信箱已經收不到信的話，我們無法確認是你，也就無法用這個方式刪除。';
 
 export const loginLabel = '帳號的登入 email';
@@ -69,12 +143,16 @@ export const appCheckBody =
   '重新整理頁面後再送出一次。仍然失敗的話，請改用其他瀏覽器，或關閉阻擋腳本的擴充功能。';
 export const rateLimitedTitle = '送出太多次了';
 /**
- * The board names the network and login email limits; the backend also
- * limits the contact email (3 a day, 10 in 30 days), so this says all of
- * them (202611012200_support_deletion_verify.sql).
+ * The limits of account_deletion and privacy. The board names the network
+ * and login email limits; the backend also limits the contact email (3 a
+ * day, 10 in 30 days), so this says all of them (support_request_submit in
+ * 202611040100_support_cases.sql).
  */
 export const rateLimitedBody =
   '每個網路每天最多送出 5 次，同一個登入 email 或聯絡用 email 每天最多 3 次，同一個聯絡用 email 30 天內最多 10 次（以台灣時間計算，重新送出也算一次）。請明天再試；已送出的申請會照常處理。';
+/** Not on a board: the kinds with only a contact email have no login email limit. */
+export const caseRateLimitedBody =
+  '每個網路每天最多送出 5 次，同一個聯絡用 email 每天最多 3 次、30 天內最多 10 次（以台灣時間計算，所有類型合計）。請明天再試；已送出的內容會照常處理。';
 export const networkTitle = '沒有送出';
 export const networkBody = '網路連線有問題，申請沒有送出。請確認連線後再試一次，填好的內容會保留。';
 /** Not on the board: the backend could not take the request (503, or a refused body). */
@@ -145,6 +223,26 @@ export const deletingBody = '刪除已經開始，無法取消。';
 export const adminTitle = '管理員帳號無法用這個方式刪除';
 export const adminBody = '請先請其他管理員移除你的管理員權限，再重新填寫客服表單。';
 
+// ===== A privacy request's confirmation link =====
+// Not on a board (user, #295): PhoneVerify's layout and voice, in the words
+// of the privacy confirmation mail (privacyConfirmMail). 帳號已經刪除 is the
+// board's own state.
+export const privacyVerifyTitle = '是你提出個資權利請求的嗎？';
+export const privacyAccountLabel = '請求的帳號';
+export const privacyRightLabel = '要做什麼';
+export const privacySubjectLabel = '主旨';
+export const privacyMessageLabel = '內容';
+export const privacyVerifyBody = '按下確認後，客服才會處理這筆請求，資料也只會寄到帳號的登入 email。';
+export const privacyVerifyConfirm = '是我，確認這筆請求';
+export const privacyDenyNote = '選「不是我申請的」會作廢這次請求，帳號不會有任何變動，也不會再寄信。';
+export const privacyVerifiedTitle = '已確認個資權利請求';
+export const privacyVerifiedBody = '客服會處理這筆請求，資料只會寄到帳號的登入 email。';
+export const privacyDeniedTitle = '已作廢這次請求';
+export const privacyResolvedTitle = '這次請求已經關閉';
+export const privacyResolvedBody = '客服已經處理完這次請求，連結不再有效。需要的話請重新填寫客服表單。';
+export const privacyAccountGoneTitle = '帳號已經刪除';
+export const privacyAccountGoneBody = '這個帳號已經刪除，沒有其他資料需要處理。';
+
 // ===== The cancel link (PhoneCancel) =====
 export const cancelTitle = '要取消刪除帳號嗎？';
 export const scheduledLabel = '預計刪除';
@@ -170,3 +268,53 @@ export const notPendingBody = '每個取消連結只能使用一次，刪除已�
 export const cancelInvalidTitle = '連結無效';
 export const cancelInvalidBody =
   '每個取消連結只能使用一次，冷靜期結束後也會失效。冷靜期內能登入 App 的話，也可以在 App 裡取消。';
+
+// ===== The case page (PhoneCase) =====
+export const caseCodeLabel = '案件編號';
+export function caseSubmittedOn(dateLabel: string): string {
+  return `${dateLabel}送出`;
+}
+/**
+ * Plain words for the backend's states. Riders see done and rejected alike,
+ * as the backend treats them (support_reopenable). The board has 處理中 and
+ * 已結案; the rest are not on it.
+ */
+export const caseStatuses: Record<string, string> = {
+  open: '處理中',
+  done: '已結案',
+  rejected: '已結案',
+  voided: '已作廢',
+  expired: '已過期',
+  exception: '已結束',
+};
+/** Not on a board: a kind this page does not know. */
+export const caseFallbackTitle = '客服案件';
+export const threadLabel = '對話紀錄';
+export const fromRider = '你';
+export const fromSupport = '客服';
+export const replyLabel = '回覆';
+export const replyNote = '（最多 4,000 字）';
+export const replyHelp = '也可以直接回覆客服寄給你的信。';
+export const replyMax = 4000;
+export const replySubmit = '送出回覆';
+/** Not on the board. */
+export const replyMissing = '請填寫回覆內容';
+export const replySentTitle = '已送出回覆';
+export const replySentBody = '我們會回覆到你的 email。';
+export const replyReopened = '這個案件已重新開啟。';
+export const caseClosedTitle = '這個案件已結案';
+export const caseClosedBody = { before: '結案超過 30 天，沒辦法再回覆。有新問題請', after: '。' };
+export const caseInvalidTitle = '連結無效';
+export const caseInvalidBody = {
+  before: '連結可能已過期（30 天）。請使用最新一封信裡的連結，或',
+  after: '。',
+};
+export const caseRefill = '重新填寫表單';
+export const replyLimitTitle = '回覆次數已達上限';
+export const replyLimitBody = '今天沒辦法再回覆了，請明天再試。';
+/** Not on a board: the case is open, but this link's 5 replies are used up. */
+export const linkUsedTitle = '這個連結沒辦法再回覆';
+export const linkUsedBody = '這個連結的回覆次數已用完。請使用最新一封信裡的連結，或直接回覆客服寄給你的信。';
+/** Not on a board: the form's failures, about the reply. */
+export const replyNetworkBody = '網路連線有問題，回覆沒有送出。請確認連線後再試一次，填好的內容會保留。';
+export const replyUnavailableBody = '發生錯誤，回覆沒有送出。請稍後再試一次，填好的內容會保留。';

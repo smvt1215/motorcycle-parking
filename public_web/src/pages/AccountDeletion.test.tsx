@@ -50,7 +50,10 @@ describe('/account-deletion', () => {
     expect(screen.getAllByRole('button', { name: '使用 Google 登入' })).toHaveLength(1);
     expect(screen.getAllByRole('button', { name: '使用 Apple 登入' })).toHaveLength(1);
     const cannot = screen.getByRole('region', { name: c.cannotSignInHeading });
-    expect(within(cannot).getByRole('link', { name: c.supportFormLink })).toHaveAttribute('href', '/support');
+    expect(within(cannot).getByRole('link', { name: c.supportFormLink })).toHaveAttribute(
+      'href',
+      '/support?kind=account_deletion',
+    );
     expect(cannot).toHaveTextContent('那個信箱收不到信的話，就無法用這個方式刪除');
   });
 
