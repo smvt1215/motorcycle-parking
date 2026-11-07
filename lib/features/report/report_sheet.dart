@@ -591,7 +591,7 @@ class _ReportFormState extends State<ReportForm> {
       if (facilities.isNotEmpty) ...facilityPayload(facilities),
       if (zones.isNotEmpty) 'parking_zones': entriesOf(zones),
     } else if (segments.isNotEmpty)
-      'parking_segments': entriesOf(segments),
+      'parking_segments': entriesOf(segments, spotFee: fee),
     ...?rollUp((d) => d.scooter)?.payload('scooter'),
     ...?rollUp((d) => d.heavy)?.payload('heavy'),
   };
@@ -619,14 +619,27 @@ class _ReportFormState extends State<ReportForm> {
         }
       });
 
+  /// The first entry that cannot go, as a new city may have emptied what a
+  /// vehicle was given by default: which one, and what it needs.
+  String? get entryProblem {
+    for (final d in entries) {
+      if (entryProblems(d).values.firstOrNull case final problem?) {
+        return '「${d.displayName}」：$problem';
+      }
+    }
+    return null;
+  }
+
   /// Checks every field; scrolls to the first that fails.
   bool validateAll() {
     final fields = form.currentState?.validate() ?? false;
     setState(() {
       kindProblem = offStreet == null ? '請選這是哪一種停車點' : null;
-      whereProblem = offStreet != null && entries.isEmpty
+      whereProblem = offStreet == null
+          ? null
+          : entries.isEmpty
           ? '請填停哪裡：至少一${lot ? '區' : '段'}，兩種車都要選'
-          : null;
+          : entryProblem;
       pruneRules();
       rulesProblem = whereProblem != null
           ? null
@@ -1074,13 +1087,9 @@ class _ReportFormState extends State<ReportForm> {
             validator: (v) => textHint(v, 500),
           ),
           const SizedBox(height: 16),
-          const FormLabel('照片（選填）'),
-          const SizedBox(height: 8),
-          PhotoUnavailableField(
-            evidence: EvidenceUrlField(
-              controller: evidence,
-              onChanged: (_) => setState(() {}),
-            ),
+          EvidenceUrlField(
+            controller: evidence,
+            onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 16),
           // Signed out, the sign-in card carries the same sentence (P16b).

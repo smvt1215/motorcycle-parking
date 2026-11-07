@@ -16,6 +16,7 @@ import 'package:motorcycle_parking/features/account/suspended_sheet.dart';
 import 'package:motorcycle_parking/features/report/form_parts.dart';
 import 'package:motorcycle_parking/features/report/report_sheet.dart';
 import 'package:motorcycle_parking/domain/location_check.dart';
+import 'package:motorcycle_parking/models/fee.dart';
 import 'package:motorcycle_parking/models/parking.dart';
 import 'package:motorcycle_parking/models/space_kind.dart';
 import 'package:motorcycle_parking/models/zone_entries.dart';
@@ -468,6 +469,84 @@ void main() {
     });
   });
 
+  testWidgets('換縣市清掉帶入的資格時擋下送出，指出要補的路段（Codex #360）', (tester) async {
+    final store = await openForm(tester, rules: cityRules);
+    await scrollTo(tester, nameField);
+    await tester.enterText(nameField, '南京東路');
+    await tapKey(tester, 'spot-kind-street');
+    await tapKey(tester, 'n1-where');
+    await tester.tap(find.text('新增一段'));
+    await tester.pumpAndSettle();
+    // 臺北市 fills both vehicles in; the rider keeps them.
+    await tapKey(tester, 'bay-motorcycle');
+    await tester.tap(find.widgetWithText(AdaptiveButton, '完成'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('form-header-leading')).last);
+    await tester.pumpAndSettle();
+
+    final city = find.byWidgetPredicate(
+      (w) =>
+          w is DropdownButtonFormField<String> &&
+          '${w.key}'.contains('report-city'),
+    );
+    await scrollTo(tester, city);
+    await tester.tap(city);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('臺中市').last);
+    await tester.pumpAndSettle();
+
+    await pressSend(tester);
+    expect(store.submissions, isEmpty);
+    expect(find.textContaining('「一般機車格」：請選擇大型重機能不能停'), findsOneWidget);
+
+    await tapKey(tester, 'n1-where');
+    await tester.tap(find.textContaining('一般機車格').first);
+    await tester.pumpAndSettle();
+    await tapKey(tester, 'entry-heavy-notAllowed');
+    await tester.tap(find.widgetWithText(AdaptiveButton, '完成'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('form-header-leading')).last);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('請選擇大型重機'), findsNothing);
+    await pressSend(tester);
+    final spot = store.submissions.single['spot'] as Map<String, dynamic>;
+    final segment = (spot['parking_segments'] as List).single as Map;
+    expect((segment['condition'] as Map)['allow'], {
+      'scooter': true,
+      'heavy': false,
+    });
+  });
+
+  testWidgets('整條路費率寫成沒另設費率路段的 charge（Codex #360）', (tester) async {
+    final store = await openForm(tester);
+    await scrollTo(tester, nameField);
+    await tester.enterText(nameField, '南京東路');
+    await tapKey(tester, 'spot-kind-street');
+    await tapKey(tester, 'n1-fee');
+    await tester.tap(find.text('整條路費率'));
+    await tester.pumpAndSettle();
+    tester
+        .widget<FeeEditor>(find.byType(FeeEditor))
+        .onChanged(
+          const Fee(
+            scooter: Rate(FeeMode.free),
+            heavy: Rate(FeeMode.sameAsScooter),
+            car: Rate(FeeMode.notApplicable),
+          ),
+        );
+    await tester.pump();
+    await tester.tap(find.widgetWithText(AdaptiveButton, '完成'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('form-header-leading')).last);
+    await tester.pumpAndSettle();
+    await addSegment(tester);
+    await pressSend(tester);
+    final spot = store.submissions.single['spot'] as Map<String, dynamic>;
+    final segment = (spot['parking_segments'] as List).single as Map;
+    expect((segment['condition'] as Map)['charge'], 'free');
+    expect(spot['space_type'], 'freeMotorcycle');
+  });
+
   testWidgets('B3 汽機車共用格、普機可停可以送出，分區不帶 access（#356）', (tester) async {
     final store = await openForm(tester);
     await addZone(
@@ -691,6 +770,15 @@ void main() {
     final segment = (spot['parking_segments'] as List).single as Map;
     expect((segment['fee'] as Map)['scooter'], {'mode': 'free'});
     expect((segment['fee'] as Map)['car'], {'mode': 'not_applicable'});
+  });
+
+  testWidgets('N1 沒有停用的照片格，只留公告連結', (tester) async {
+    await openForm(tester);
+    final link = find.byKey(const ValueKey('evidence-url'));
+    await scrollTo(tester, link);
+    expect(link, findsOneWidget);
+    expect(find.byIcon(Icons.add_a_photo_outlined), findsNothing);
+    expect(find.textContaining('照片'), findsNothing);
   });
 
   testWidgets('路外的入口欄換成路邊的怎麼找到格位', (tester) async {

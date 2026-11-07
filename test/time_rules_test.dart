@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:motorcycle_parking/features/report/entry_drafts.dart';
 import 'package:motorcycle_parking/features/report/time_rules.dart';
+import 'package:motorcycle_parking/models/fee.dart';
 import 'package:motorcycle_parking/models/parking.dart';
 import 'package:motorcycle_parking/models/parking_condition.dart';
 
@@ -184,6 +185,36 @@ void main() {
       ..scope = {one.single.token};
     expect(ruleChanges(rules, one, '全場'), isEmpty);
     expect(rules.single.all, isTrue);
+  });
+
+  test('路段改規定時，沒有收費資訊的格位依費率補 charge', () {
+    final segment = EntryDraft.ofSegment(
+      const ParkingSegment(
+        id: 's1',
+        name: '北側',
+        condition: ParkingCondition(
+          bay: Bay.motorcycle,
+          use: BayUse.usual,
+          allow: _allow,
+        ),
+      ),
+    );
+    final rules = [
+      TimeRule.create()
+        ..kind = RuleKind.noParking
+        ..allDay = true,
+    ];
+    applyRules(rules, [segment]);
+    final patch = entriesPatchOf(
+      [segment],
+      spotFee: const Fee(
+        scooter: Rate(FeeMode.free),
+        heavy: Rate(FeeMode.free),
+        car: Rate(FeeMode.notApplicable),
+      ),
+    );
+    final c = patch.single['condition']! as Map<String, Object?>;
+    expect(c['charge'], 'free');
   });
 
   test('欄位檢查', () {

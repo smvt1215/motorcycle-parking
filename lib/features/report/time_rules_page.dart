@@ -126,7 +126,7 @@ class _TimeRulesPageState extends State<TimeRulesPage> {
         return null;
       }
     }
-    return {widget.type.key: entriesPatchOf(drafts)};
+    return {widget.type.key: entriesPatchOf(drafts, spotFee: widget.spot!.fee)};
   }
 
   Future<void> submit() async {

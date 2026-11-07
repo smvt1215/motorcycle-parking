@@ -2,12 +2,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:motorcycle_parking/data/account_suspended.dart';
 import 'package:motorcycle_parking/data/app_store.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
+import 'package:motorcycle_parking/domain/parking_decision.dart';
 import 'package:motorcycle_parking/features/account/suspended_sheet.dart';
 import 'package:motorcycle_parking/features/auth/sign_in.dart';
 import 'package:motorcycle_parking/features/report/entry_drafts.dart';
 import 'package:motorcycle_parking/features/report/entry_pages.dart';
 import 'package:motorcycle_parking/features/report/form_parts.dart';
 import 'package:motorcycle_parking/features/report/spot_suggestions.dart';
+import 'package:motorcycle_parking/models/fee.dart';
 import 'package:motorcycle_parking/models/parking.dart';
 import 'package:motorcycle_parking/models/parking_condition.dart';
 import 'package:motorcycle_parking/models/space_kind.dart';
@@ -437,6 +439,253 @@ void main() {
       expect(patch['total'], 12);
     });
 
+    group('路段繼承點位條件（Codex #360）', () {
+      const noParking = ParkingLimit(
+        LimitKind.noParking,
+        periods: [LimitPeriod(days: 'all', from: '07:00', to: '09:00')],
+      );
+      const inherited = ParkingSpot(
+        id: 'official:inherit',
+        name: '巷口',
+        lat: 25,
+        lng: 121,
+        city: '臺北市',
+        spaceType: SpaceType.paidMotorcycle,
+        condition: ParkingCondition(
+          bay: Bay.motorcycle,
+          use: BayUse.usual,
+          charge: Charge.toll,
+          limits: [noParking],
+        ),
+        segments: [
+          ParkingSegment(
+            id: 's',
+            name: '北側',
+            total: 8,
+            condition: ParkingCondition(
+              allow: ZoneAllow(scooter: true, heavy: false),
+            ),
+          ),
+        ],
+      );
+
+      test('格位讀繼承值；沒改不送，只改格數不寫 condition', () {
+        final d = draftsOf(inherited, EntryType.segment).single;
+        expect(d.kind, SpaceKind.motorcycle);
+        expect(d.changed, isFalse);
+        expect(entriesPatchOf([d]), isEmpty);
+        expect(entryProblems(d), isEmpty);
+        d.total = '9';
+        expect(d.changeLines().map((l) => l.label), ['共幾格']);
+        expect(entriesPatchOf([d]).single, {'id': 's', 'total': 9});
+      });
+
+      test('改車種時繼承的限制寫進路段，不因帶了 bay 而消失', () {
+        final d = draftsOf(inherited, EntryType.segment).single
+          ..heavy = Eligible.allowed;
+        final patch = entriesPatchOf([d]).single;
+        expect(
+          validSegmentList([
+            {'name': '北側', ...patch},
+          ]),
+          isTrue,
+        );
+        final c = ParkingCondition.fromJson(patch['condition'], zone: true)!;
+        const after = ParkingSpot(
+          id: 'official:inherit',
+          name: '巷口',
+          lat: 25,
+          lng: 121,
+          city: '臺北市',
+          spaceType: SpaceType.paidMotorcycle,
+        );
+        final read = segmentConditionOf(
+          ParkingSegment(id: 's', name: '北側', condition: c),
+          after,
+        )!;
+        expect(read.bay, Bay.motorcycle);
+        expect(read.charge, Charge.toll);
+        expect(read.hasLimit(LimitKind.noParking), isTrue);
+      });
+
+      test('不帶點位時仍只讀路段自己的條件', () {
+        final d = EntryDraft.ofSegment(inherited.segments.single);
+        expect(d.kind, isNull);
+      });
+    });
+
+    group('路段費率寫成 charge（Codex #360）', () {
+      const hourly = Rate(FeeMode.hourly, amount: 20, perMinutes: 60);
+      const free = Rate(FeeMode.free);
+      EntryDraft fresh(SpaceKind kind) => EntryDraft.create(EntryType.segment)
+        ..kind = kind
+        ..scooter = Eligible.allowed
+        ..heavy = Eligible.allowed;
+
+      test('新路段依自己的費率，沒有再依整條路費率', () {
+        const road = Fee(
+          scooter: free,
+          heavy: free,
+          car: Rate(FeeMode.notApplicable),
+        );
+        final own = fresh(SpaceKind.motorcycle)
+          ..fee = const Fee(
+            scooter: hourly,
+            heavy: Rate(FeeMode.sameAsScooter),
+            car: Rate(FeeMode.notApplicable),
+          );
+        final plain = fresh(SpaceKind.scooterHeavy)..side = RoadSide.north;
+        final sent = entriesOf([own, plain], spotFee: road);
+        final charges = [
+          for (final e in sent) (e['condition'] as Map)['charge'],
+        ];
+        expect(charges, ['toll', 'free']);
+        expect(validSegmentList(sent), isTrue);
+        final read = ParkingCondition.fromJson(
+          sent.first['condition'],
+          zone: true,
+        )!;
+        expect(ruleKindsOf(read), [SpaceType.paidMotorcycle]);
+      });
+
+      test('說不準時不寫：沒費率、兩車不同、不是機車格', () {
+        expect(fresh(SpaceKind.motorcycle).condition.charge, isNull);
+        expect(chargeOfFee(const Fee()), isNull);
+        expect(chargeOfFee(const Fee(scooter: free, heavy: hourly)), isNull);
+        final car = fresh(SpaceKind.carMotorcycle)
+          ..fee = const Fee(scooter: hourly);
+        expect(car.conditionUnder(null).charge, isNull);
+      });
+
+      test('依時段的費率只要有一段收費就是收費格；比照汽車看汽車費率', () {
+        const byTime = Rate(
+          FeeMode.byTime,
+          periods: [
+            FeePeriod(days: 'all', from: '08:00', to: '20:00', rate: hourly),
+            FeePeriod(days: 'all', from: '20:00', to: '08:00', rate: free),
+          ],
+        );
+        expect(chargeOfFee(const Fee(scooter: byTime)), Charge.toll);
+        expect(
+          chargeOfFee(
+            const Fee(
+              scooter: Rate(FeeMode.notApplicable),
+              heavy: Rate(FeeMode.sameAsCar),
+              car: free,
+            ),
+          ),
+          Charge.free,
+        );
+      });
+
+      test('已存的 charge 不被費率蓋過；S4 新增段用點位費率', () {
+        final d = EntryDraft.ofSpot(_bare)..fee = const Fee(scooter: hourly);
+        expect(d.condition.charge, Charge.free);
+        final added = fresh(SpaceKind.motorcycle);
+        final patch = entriesPatchOf([
+          added,
+        ], spotFee: const Fee(scooter: hourly)).single;
+        expect((patch['condition'] as Map)['charge'], 'toll');
+      });
+    });
+
+    test('格位沒變時保留 ev_only 等非時間限制，換格位才用新格位的（Codex #360）', () {
+      final d = EntryDraft.ofSegment(
+        const ParkingSegment(
+          id: 's',
+          name: '南側',
+          condition: ParkingCondition(
+            bay: Bay.motorcycle,
+            limits: [
+              ParkingLimit(
+                LimitKind.specialVehicle,
+                vehicle: SpecialVehicle.disabledModified,
+              ),
+              ParkingLimit(LimitKind.evOnly),
+            ],
+            allow: ZoneAllow(scooter: true, heavy: false),
+          ),
+        ),
+      )..heavy = Eligible.allowed;
+      expect(d.kind, SpaceKind.disabled);
+      final c = ParkingCondition.fromJson(
+        entriesPatchOf([d]).single['condition'],
+        zone: true,
+      )!;
+      expect(c.hasLimit(LimitKind.specialVehicle), isTrue);
+      expect(c.hasLimit(LimitKind.evOnly), isTrue);
+      d.kind = SpaceKind.motorcycle;
+      expect(d.condition.limits, isEmpty);
+    });
+
+    group('整段帶入點位的條件與格數（Codex #360）', () {
+      const counted = ParkingSpot(
+        id: 'official:counted',
+        name: '巷口機車格',
+        lat: 25.05,
+        lng: 121.54,
+        city: '臺北市',
+        spaceType: SpaceType.freeMotorcycle,
+        source: 'official',
+        scooterAllowed: true,
+        heavyAllowed: false,
+        scooterTotal: 12,
+      );
+
+      test('沒改不算改動，只改指引時第一段帶原格數與收費性質', () {
+        final d = EntryDraft.ofSpot(counted);
+        expect(d.total, '12');
+        expect(d.changed, isFalse);
+        expect(d.changeLines(), isEmpty);
+        expect(entriesPatchOf([d]), isEmpty);
+        expect(d.storedDetail, contains('共 12 格'));
+        d.guide = '騎樓旁';
+        expect(d.changeLines().map((l) => l.label), ['指引']);
+        final patch = entriesPatchOf([d]).single;
+        expect(patch['total'], 12);
+        expect((patch['condition'] as Map)['charge'], 'free');
+        expect(validSegmentList([patch]), isTrue);
+      });
+
+      test('沒動整段也新增路段時第一段照樣帶格數', () {
+        final whole = EntryDraft.ofSpot(counted);
+        final added = EntryDraft.create(EntryType.segment)
+          ..kind = SpaceKind.carMotorcycle
+          ..scooter = Eligible.allowed
+          ..heavy = Eligible.notAllowed;
+        final drafts = [whole, added];
+        expect(entryLines(whole, drafts).single.label, '第一段');
+        expect(entriesPatchOf(drafts).first['total'], 12);
+      });
+
+      test('改格數或清掉都算改動；複本保留比對基準', () {
+        final d = EntryDraft.ofSpot(counted).copy();
+        expect(d.changed, isFalse);
+        d.total = '';
+        final line = d.changeLines().single;
+        expect((line.label, line.from, line.to), ('共幾格', '12', '未填'));
+        expect(entriesPatchOf([d]).single.containsKey('total'), isFalse);
+        d.total = '15';
+        expect(d.changeLines().single.from, '12');
+      });
+
+      test('路段裝不下的格數不帶入，整段仍可送', () {
+        final d = EntryDraft.ofSpot(
+          const ParkingSpot(
+            id: 'official:zero',
+            name: '巷口',
+            lat: 25,
+            lng: 121,
+            city: '臺北市',
+            spaceType: SpaceType.paidMotorcycle,
+            scooterTotal: 0,
+          ),
+        );
+        expect(d.total, isEmpty);
+        expect(d.changed, isFalse);
+      });
+    });
+
     test('沒有 id 的舊條目不進 patch，不會被當成新增', () {
       final old = EntryDraft.ofZone(
         const ParkingZone(name: '舊區', access: ParkingAccess.scooterOnly),
@@ -759,6 +1008,10 @@ void main() {
         find.byKey(const ValueKey('entry-scooter-notStated')),
         findsNothing,
       );
+      // No disabled photo cell: only the notice link is left.
+      expect(find.byKey(const ValueKey('evidence-url')), findsOneWidget);
+      expect(find.byIcon(Icons.add_a_photo_outlined), findsNothing);
+      expect(find.text('照片'), findsNothing);
       expect(
         tester
             .widget<TextField>(find.byKey(const ValueKey('entry-name')))

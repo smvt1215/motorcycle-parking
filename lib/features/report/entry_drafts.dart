@@ -7,6 +7,7 @@ library;
 
 import 'dart:convert';
 
+import '../../domain/parking_decision.dart' show segmentConditionOf;
 import '../../models/fee.dart';
 import '../../models/parking.dart';
 import '../../models/parking_condition.dart';
@@ -135,6 +136,30 @@ ParkingLimit? writableLimit(ParkingLimit limit) {
   );
 }
 
+/// What [fee] says a motorcycle bay charges: toll or free when the vehicles
+/// parking there agree, a rate by time being toll if any period is. Null when
+/// it says neither or they differ; that stays unconfirmed (`ruleKindsOf`).
+Charge? chargeOfFee(Fee fee) {
+  Charge? of(Rate? rate) => switch (rate?.mode) {
+    null || FeeMode.notApplicable => null,
+    FeeMode.free => Charge.free,
+    FeeMode.hourly || FeeMode.perVisit => Charge.toll,
+    FeeMode.byTime => _chargeOfPeriods([
+      for (final p in rate!.periods ?? const <FeePeriod>[]) of(p.rate),
+    ]),
+    FeeMode.sameAsScooter => of(fee.scooter),
+    FeeMode.sameAsCar => of(fee.car),
+  };
+  final charges = {?of(fee.scooter), ?of(fee.heavy)};
+  return charges.length == 1 ? charges.single : null;
+}
+
+Charge? _chargeOfPeriods(List<Charge?> periods) => periods.contains(Charge.toll)
+    ? Charge.toll
+    : periods.contains(Charge.free)
+    ? Charge.free
+    : null;
+
 /// One zone or segment as a form holds it.
 class EntryDraft {
   EntryDraft.create(this.type) : original = null, stored = null;
@@ -152,11 +177,15 @@ class EntryDraft {
   }
 
   /// [segment] as stored; a name C3 would give shows as blank, so a new side
-  /// or bay names it again.
-  EntryDraft.ofSegment(ParkingSegment segment)
+  /// or bay names it again. What it inherits from [spot] reads as decisions
+  /// read it: nothing is sent for it until the rider changes the condition,
+  /// which then states all of it, as a bay stops the inheriting.
+  EntryDraft.ofSegment(ParkingSegment segment, {ParkingSpot? spot})
     : type = EntryType.segment,
       original = segment.toJson(),
-      stored = segment.condition {
+      stored = spot == null
+          ? segment.condition
+          : segmentConditionOf(segment, spot) {
     side = segment.side;
     guide = segment.guide;
     evidence = segment.evidenceUrl;
@@ -176,16 +205,22 @@ class EntryDraft {
 
   /// The whole of a street spot without segments, as the one segment it has
   /// been so far (GAP risk 7): nothing changes until the rider does, and it
-  /// is then sent as a new segment, with the spot's limits and periods, as
-  /// decisions then read the segment.
+  /// is then sent as a new segment, with the spot's limits, periods and
+  /// count, as decisions and the seat plate then read the segment.
   EntryDraft.ofSpot(ParkingSpot spot)
     : type = EntryType.segment,
       original = null,
-      stored = spot.condition {
+      stored = spot.condition ?? conditionOf(spot.spaceType) {
     kind = SpaceKind.of(spot.spaceType, spot.condition);
     scooter = Eligible.of(spot.scooterAllowed);
     heavy = Eligible.of(spot.heavyAllowed);
     guide = spot.parkingGuide;
+    // A count no segment can carry would only block the form.
+    if (spot.scooterTotal case final count?
+        when count >= segmentTotalRange.$1 && count <= segmentTotalRange.$2) {
+      total = '$count';
+    }
+    _loadedTotal = total;
     wholeSpot = true;
     _loadedKind = kind;
     _loadedScooter = scooter;
@@ -220,7 +255,8 @@ class EntryDraft {
       _loadedName = d._loadedName,
       _loadedFrom = d._loadedFrom,
       _loadedTo = d._loadedTo,
-      _loadedGuide = d._loadedGuide;
+      _loadedGuide = d._loadedGuide,
+      _loadedTotal = d._loadedTotal;
 
   final EntryType type;
 
@@ -258,6 +294,7 @@ class EntryDraft {
   SpaceKind? _loadedKind;
   Eligible? _loadedScooter, _loadedHeavy;
   String _loadedName = '', _loadedFrom = '', _loadedTo = '', _loadedGuide = '';
+  String _loadedTotal = '';
 
   void _load() {
     final c = stored;
@@ -272,6 +309,7 @@ class EntryDraft {
     _loadedHeavy = heavy;
     _loadedName = name;
     _loadedGuide = guide;
+    _loadedTotal = total;
   }
 
   static Eligible? _eligible(ParkingCondition? c, String vehicle) {
@@ -336,10 +374,9 @@ class EntryDraft {
   /// [storedLabel] for a segment: where it runs, how many, who may park.
   String get storedDetail {
     final range = original?['range'] as String? ?? '';
-    final count = original?['total'];
     return [
       if (range.isNotEmpty) range,
-      if (count != null) '共 $count 格',
+      if (_loadedTotal.isNotEmpty) '共 $_loadedTotal 格',
       if (_loadedScooter != null && _loadedHeavy != null)
         '普通機車${_loadedScooter!.label}、大型重機${_loadedHeavy!.label}',
     ].join('，');
@@ -379,7 +416,11 @@ class EntryDraft {
   /// The condition sent: every facet this form does not show stays as
   /// stored while the bay does (limits and periods go on across bays, a
   /// schedule only on a shared car bay), never a basis (§1.4).
-  ParkingCondition get condition {
+  ParkingCondition get condition => conditionUnder(null);
+
+  /// [condition] with the charge a street bay's rates say, its own or else
+  /// [spotFee], when nothing stored says it: the bay forms do not ask it.
+  ParkingCondition conditionUnder(Fee? spotFee) {
     final kind = this.kind;
     final same = kind == _loadedKind;
     final bay = kind == null ? const ParkingCondition() : bayConditionOf(kind);
@@ -392,12 +433,28 @@ class EntryDraft {
             if (l.kind == LimitKind.timeLimit || l.kind == LimitKind.noParking)
               ?writableLimit(l),
         ];
+    // Any other limit is the bay's: those stored stay while the bay does.
+    final fixed = same && old != null
+        ? [
+            for (final l in old.limits)
+              if (l.kind != LimitKind.timeLimit &&
+                  l.kind != LimitKind.noParking)
+                l,
+          ]
+        : bay.limits;
+    final rates = fee ?? spotFee;
     return ParkingCondition(
       bay: kept?.bay ?? bay.bay,
       use: kept?.use ?? bay.use,
       share: kept?.share ?? bay.share,
-      charge: old?.charge,
-      limits: [...bay.limits, ...signs],
+      charge:
+          old?.charge ??
+          (type == EntryType.segment &&
+                  kind?.asksCharge == true &&
+                  rates != null
+              ? chargeOfFee(rates)
+              : null),
+      limits: [...fixed, ...signs],
       schedule:
           slots ??
           (same || kind == SpaceKind.carMotorcycle
@@ -412,8 +469,9 @@ class EntryDraft {
     );
   }
 
-  /// The entry as it would be stored; [taken] names C3 must avoid.
-  Map<String, Object?> toJson(Iterable<String> taken) {
+  /// The entry as it would be stored; [taken] names C3 must avoid, and
+  /// [spotFee] is the rates it falls back on.
+  Map<String, Object?> toJson(Iterable<String> taken, {Fee? spotFee}) {
     final text = name.trim();
     final out = <String, Object?>{...?original};
     if (type == EntryType.zone) {
@@ -431,7 +489,7 @@ class EntryDraft {
         ? out.remove('evidence_url')
         : out['evidence_url'] = evidence.trim();
     if (isNew || _conditionChanged) {
-      final c = condition;
+      final c = conditionUnder(spotFee);
       out['condition'] = c.toJson();
       if (type == EntryType.zone) {
         out.remove('access');
@@ -465,7 +523,7 @@ class EntryDraft {
           name.trim().isNotEmpty ||
           from.trim().isNotEmpty ||
           to.trim().isNotEmpty ||
-          total.trim().isNotEmpty ||
+          total.trim() != _loadedTotal ||
           evidence.trim().isNotEmpty ||
           side != null;
     }
@@ -497,7 +555,7 @@ class EntryDraft {
           _ => '',
         }, side?.label ?? ''),
         ?line('範圍', original?['range'] as String? ?? '', range),
-        ?line('共幾格', '${original?['total'] ?? ''}', total.trim()),
+        ?line('共幾格', _loadedTotal, total.trim()),
       ],
       ?line('格位', _loadedKind?.label ?? '', kind?.label ?? ''),
       if (scooter != _loadedScooter)
@@ -559,11 +617,12 @@ Iterable<String> _others(List<EntryDraft> drafts, EntryDraft draft) => [
 ];
 
 /// [drafts] as sent with a new spot: each with its name, none with an id.
-List<Map<String, Object?>> entriesOf(List<EntryDraft> drafts) {
+/// [spotFee] is the rates an entry without its own takes.
+List<Map<String, Object?>> entriesOf(List<EntryDraft> drafts, {Fee? spotFee}) {
   final out = <Map<String, Object?>>[];
   final taken = <String>[];
   for (final d in drafts) {
-    final json = d.toJson([..._others(drafts, d), ...taken]);
+    final json = d.toJson([..._others(drafts, d), ...taken], spotFee: spotFee);
     taken.add(json['name']! as String);
     out.add(json);
   }
@@ -574,7 +633,10 @@ List<Map<String, Object?>> entriesOf(List<EntryDraft> drafts) {
 /// entries changed. A zone's condition goes with the access it derives, as
 /// the check reads the two together; with none derived, a stored access is
 /// cleared by the diff's null and no key is sent otherwise (#356).
-List<Map<String, Object?>> entriesPatchOf(List<EntryDraft> drafts) {
+List<Map<String, Object?>> entriesPatchOf(
+  List<EntryDraft> drafts, {
+  Fee? spotFee,
+}) {
   final current = [
     for (final d in drafts)
       if (d.editable) ?d.original,
@@ -590,7 +652,7 @@ List<Map<String, Object?>> entriesPatchOf(List<EntryDraft> drafts) {
       taken.add(d.original!['name'] as String);
       continue;
     }
-    final json = d.toJson([..._others(drafts, d), ...taken]);
+    final json = d.toJson([..._others(drafts, d), ...taken], spotFee: spotFee);
     taken.add(json['name']! as String);
     next.add(json);
   }
