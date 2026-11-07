@@ -39,18 +39,11 @@ String hashNonce(String rawNonce) =>
 /// What a native panel hands back.
 @immutable
 class NativeCredential {
-  const NativeCredential({
-    required this.idToken,
-    this.authorizationCode,
-    this.fullName,
-  });
+  const NativeCredential({required this.idToken, this.authorizationCode});
   final String idToken;
 
   /// Apple's one-time code, for `apple-revoke`.
   final String? authorizationCode;
-
-  /// Apple sends the name only on the first sign-in.
-  final String? fullName;
 }
 
 /// The native panels; [PluginNativeIdentity] in the app, a fake in tests.
@@ -58,18 +51,6 @@ class NativeCredential {
 abstract interface class NativeIdentity {
   Future<NativeCredential> apple(String hashedNonce);
   Future<NativeCredential> google(String hashedNonce);
-}
-
-/// Apple's name parts as one name: family name first without a space for
-/// Chinese names, given name first otherwise.
-String? appleFullName(String? given, String? family) {
-  final parts = [
-    for (final part in [given, family])
-      if (part != null && part.trim().isNotEmpty) part.trim(),
-  ];
-  if (parts.isEmpty) return null;
-  final latin = parts.every((p) => RegExp(r'^[\x00-ɏ]+$').hasMatch(p));
-  return latin ? parts.join(' ') : parts.reversed.join();
 }
 
 /// [NativeIdentity] over `sign_in_with_apple` and `google_sign_in`.
@@ -95,10 +76,11 @@ class PluginNativeIdentity implements NativeIdentity {
     }
     final idToken = credential.identityToken;
     if (idToken == null) throw const AuthException('Apple 沒有回傳 ID token');
+    // Apple's name is dropped here: names are never saved for the rider
+    // (#319), and a non-empty display_name counts as choosing to publish.
     return NativeCredential(
       idToken: idToken,
       authorizationCode: credential.authorizationCode,
-      fullName: appleFullName(credential.givenName, credential.familyName),
     );
   }
 
@@ -205,14 +187,6 @@ class AuthFlow {
     );
     _appleCode = credential.authorizationCode;
     _appleCodeAt = clock();
-    final name = credential.fullName;
-    if (name == null) return;
-    try {
-      // Only P12's suggestion: it becomes public once the rider saves it.
-      await client.auth.updateUser(UserAttributes(data: {'full_name': name}));
-    } catch (_) {
-      // The sign-in stands; the rider can type a name.
-    }
   }
 
   Future<void> _signInGoogle() async {

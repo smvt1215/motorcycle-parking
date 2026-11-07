@@ -86,7 +86,7 @@ class _Backend {
           'email': '$userId@example.com',
           'created_at': '2026-10-01T00:00:00Z',
           'app_metadata': {'provider': 'apple'},
-          'user_metadata': {'full_name': '陳阿哲'},
+          'user_metadata': <String, dynamic>{},
         });
       }
       if (path.endsWith('/functions/v1/apple-revoke')) {
@@ -131,19 +131,6 @@ void main() {
     );
   });
 
-  group('appleFullName', () {
-    test('中文姓在前不加空白，拉丁字母名在前', () {
-      expect(appleFullName('阿哲', '陳'), '陳阿哲');
-      expect(appleFullName('Ada', 'Lovelace'), 'Ada Lovelace');
-    });
-
-    test('只有一邊或都沒有', () {
-      expect(appleFullName(null, 'Lovelace'), 'Lovelace');
-      expect(appleFullName(' ', null), isNull);
-      expect(appleFullName(null, null), isNull);
-    });
-  });
-
   group('AuthFlow', () {
     late _Backend backend;
     late FakeNativeIdentity identity;
@@ -177,13 +164,32 @@ void main() {
       expect(backend.userBodies, isEmpty);
     });
 
-    test('Apple 首次登入給的姓名存成 full_name，只當建議值', () async {
+    test('Apple 原生登入拿到姓名時直接丟棄，不呼叫 updateUser', () async {
       onPlatform(TargetPlatform.iOS);
-      identity.appleResults.add(
-        const NativeCredential(idToken: 'id', fullName: '陳阿哲'),
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      const channel = MethodChannel(
+        'com.aboutyou.dart_packages.sign_in_with_apple',
       );
-      await flow.signIn(OAuthProvider.apple);
-      expect(backend.userBodies.single['data'], {'full_name': '陳阿哲'});
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        return {
+          'type': 'appleid',
+          'userIdentifier': 'apple-sub',
+          'givenName': '阿哲',
+          'familyName': '陳',
+          'email': 'x@privaterelay.appleid.com',
+          'authorizationCode': 'code-1',
+          'identityToken': 'apple-id-token',
+          'state': null,
+        };
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      final plugin = AuthFlow(backend.client, identity: PluginNativeIdentity());
+      await plugin.signIn(OAuthProvider.apple);
+      expect(backend.tokenBodies.single['id_token'], 'apple-id-token');
+      expect(plugin.appleCode, 'code-1');
+      expect(backend.userBodies, isEmpty);
+      expect(jsonEncode(backend.tokenBodies.single), isNot(contains('阿哲')));
     });
 
     for (final platform in [TargetPlatform.iOS, TargetPlatform.android]) {
