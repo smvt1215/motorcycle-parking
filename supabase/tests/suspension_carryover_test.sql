@@ -191,6 +191,33 @@ select pg_temp.new_user(18);
 select lives_ok($$select pg_temp.link(18,'google','sub-broken')$$,'a broken carryover does not fail the sign-in');
 rollback to savepoint broken;
 
+-- ===== 寫入出錯不擋刪除 =====
+create function pg_temp.banned_user(n int,sub text) returns void language sql as $$
+  select pg_temp.new_user(n); select pg_temp.link(n,'google',sub); select pg_temp.ban(n,'7d');
+$$;
+-- The HMAC cannot run: the key table is gone.
+savepoint broken;
+select pg_temp.banned_user(20,'sub-nokey');
+drop table private.suspension_carryover_key;
+select lives_ok($$select pg_temp.drop_user(20)$$,'a failing HMAC does not fail the deletion');
+select ok(not exists(select 1 from auth.users where id=pg_temp.u(20)),'the account is deleted');
+select ok(not exists(select 1 from private.user_suspensions where user_id=pg_temp.u(20)),'and its suspension cascades');
+rollback to savepoint broken;
+-- The HMAC gives null: the key row is gone, so the insert breaks the primary key.
+savepoint broken;
+select pg_temp.banned_user(21,'sub-nullkey');
+delete from private.suspension_carryover_key;
+select lives_ok($$select pg_temp.drop_user(21)$$,'a failing write does not fail the deletion');
+select ok(not exists(select 1 from auth.users where id=pg_temp.u(21)),'the account is deleted');
+rollback to savepoint broken;
+-- The table cannot be written.
+savepoint broken;
+select pg_temp.banned_user(22,'sub-notable');
+drop table private.suspension_carryover;
+select lives_ok($$select pg_temp.drop_user(22)$$,'a missing table does not fail the deletion');
+select ok(not exists(select 1 from auth.users where id=pg_temp.u(22)),'the account is deleted');
+rollback to savepoint broken;
+
 -- ===== suspension_set 的 until =====
 select pg_temp.new_user(19);
 select throws_ok($$select private.suspension_set(private.suspension_system_actor(),pg_temp.u(19),'until','x')$$,

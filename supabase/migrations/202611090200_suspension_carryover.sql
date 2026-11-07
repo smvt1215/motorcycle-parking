@@ -7,8 +7,9 @@
 --   * 寫入：auth.users 的 BEFORE DELETE 觸發器。外鍵 cascade 是刪除之後才執行
 --     的內部觸發器，這時 identities 與 user_suspensions 都還在。自助刪除與客服
 --     刪除都走 account-deletion 的 auth.admin.deleteUser(user, false)（硬刪除），
---     直接 delete from auth.users 也涵蓋。寫入失敗時這次刪除會失敗，由
---     account-deletion 下次重試（不會靜靜放掉停權）。
+--     直接 delete from auth.users 也涵蓋。寫入出錯時只記錄 warning、刪除照常
+--     繼續：使用者刪除帳號的權利優先於防重新註冊，而且這裡只影響停權中的帳號
+--     （coordinator 決定，#355）。
 --     軟刪除（should_soft_delete）不會觸發，專案沒有使用。
 --   * 恢復：auth.identities 的 AFTER INSERT 觸發器。新帳號與連結既有帳號（同
 --     email 自動連結）都經過這裡：Auth 先建 auth.users，再於同一交易建
@@ -121,20 +122,26 @@ revoke execute on function private.suspension_set(uuid,uuid,text,text,boolean,ti
   from public,anon,authenticated,service_role;
 
 -- ===== 3. 刪除帳號時寫入 =====
--- return old：BEFORE DELETE 回 null 會取消刪除。
+-- return old：BEFORE DELETE 回 null 會取消刪除。例外區塊內出錯不擋刪除；
+-- warning 只記 SQLSTATE，不含身分資料。
 create function public.suspension_carryover_capture() returns trigger
 language plpgsql security definer set search_path='' as $$
 declare v_until timestamptz;
 begin
-  select s.until into v_until from private.user_suspensions s
-    where s.user_id=old.id and (s.until is null or s.until>now());
-  if not found then return old; end if;
-  insert into private.suspension_carryover(identity_hash,until,expires_at)
-  select private.suspension_carryover_hash(i.provider,i.provider_id),v_until,
-    coalesce(v_until,now()+private.retention_suspension_carryover())
-  from auth.identities i
-  where i.user_id=old.id and i.provider in ('google','apple')
-  on conflict(identity_hash) do update set until=excluded.until,expires_at=excluded.expires_at,created_at=now();
+  begin
+    select s.until into v_until from private.user_suspensions s
+      where s.user_id=old.id and (s.until is null or s.until>now());
+    if found then
+      insert into private.suspension_carryover(identity_hash,until,expires_at)
+      select private.suspension_carryover_hash(i.provider,i.provider_id),v_until,
+        coalesce(v_until,now()+private.retention_suspension_carryover())
+      from auth.identities i
+      where i.user_id=old.id and i.provider in ('google','apple')
+      on conflict(identity_hash) do update set until=excluded.until,expires_at=excluded.expires_at,created_at=now();
+    end if;
+  exception when others then
+    raise warning 'suspension_carryover_capture failed: %',sqlstate;
+  end;
   return old;
 end $$;
 revoke execute on function public.suspension_carryover_capture() from public,anon,authenticated,service_role;
