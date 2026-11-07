@@ -257,7 +257,7 @@ List<EntryDraft> draftsOf(ParkingSpot spot, EntryType type) =>
     ? [for (final z in spot.zones) EntryDraft.ofZone(z)]
     : spot.segments.isEmpty
     ? [EntryDraft.ofSpot(spot)]
-    : [for (final s in spot.segments) EntryDraft.ofSegment(s)];
+    : [for (final s in spot.segments) EntryDraft.ofSegment(s, spot: spot)];
 
 /// S1b 停哪裡 and S3b 路段與格位.
 class EntryListPage extends StatefulWidget {
@@ -671,7 +671,9 @@ class _EntryEditPageState extends State<EntryEditPage> {
         '${zones ? '分區與格位' : '路段與格位'}：${lines.join('；')}',
       ),
       'field': widget.type.field,
-      'proposed': {widget.type.key: entriesPatchOf(drafts)},
+      'proposed': {
+        widget.type.key: entriesPatchOf(drafts, spotFee: widget.spot!.fee),
+      },
     };
   }
 
@@ -1156,13 +1158,9 @@ class _EntryCardState extends State<_EntryCard> {
               onChanged: (v) => widget.onChanged(() => d.guide = v),
             ),
             gap(),
-            FormLabel('照片', aside: zone ? '選填，拍格位或標線' : '選填，拍格位或標誌'),
-            gap(8),
-            PhotoUnavailableField(
-              evidence: EvidenceUrlField(
-                controller: evidence,
-                onChanged: (v) => widget.onChanged(() => d.evidence = v),
-              ),
+            EvidenceUrlField(
+              controller: evidence,
+              onChanged: (v) => widget.onChanged(() => d.evidence = v),
             ),
           ],
           if (!widget.adding && !d.isNew) ...[

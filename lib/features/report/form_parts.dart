@@ -582,58 +582,6 @@ class EligibilitySegments extends StatelessWidget {
   }
 }
 
-/// The disabled photo button with why it is off, and an optional notice
-/// link under it. Photos are not counted in a form's items.
-class PhotoUnavailableField extends StatelessWidget {
-  const PhotoUnavailableField({
-    super.key,
-    this.caption = '照片上傳開放後才能用（社群核實 P2）。現在可以附告示牌或官方公告的網址。',
-    this.evidence,
-  });
-  final String caption;
-
-  /// The notice link field, built by the form so it joins its [Form].
-  final Widget? evidence;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            Semantics(
-              button: true,
-              enabled: false,
-              label: '新增照片（尚未開放）',
-              excludeSemantics: true,
-              child: CustomPaint(
-                painter: _DashedBorder(color: colors.outline, radius: 12),
-                child: SizedBox.square(
-                  dimension: 64,
-                  child: Icon(
-                    Icons.add_a_photo_outlined,
-                    color: colors.onSurface.withValues(alpha: .38),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                caption,
-                style: TextStyle(fontSize: 13, color: colors.onSurfaceVariant),
-              ),
-            ),
-          ],
-        ),
-        if (evidence != null) ...[const SizedBox(height: 8), evidence!],
-      ],
-    );
-  }
-}
-
 /// 你要改的內容 for one entry: its name, then each value struck through and
 /// its new one.
 class ChangeSummary extends StatelessWidget {
