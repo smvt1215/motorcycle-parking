@@ -1,8 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
+import { deletionSupportPath } from '../content';
 import { deletionDateLabel } from '../deletion/format';
 import { FlowPanel } from '../deletion/FlowPanel';
-import type { CancelAction, CancelResult, ConfirmAction, ConfirmResult, LinkAnswer } from './client';
+import type {
+  CancelAction,
+  CancelResult,
+  ConfirmAction,
+  ConfirmAnswer,
+  LinkAnswer,
+  LinkOutcome,
+  PrivacyDetails,
+} from './client';
 import { linkToken, submittedLabel, supportCode } from './format';
 import { useSupport } from './SupportContext';
 import * as t from './text';
@@ -13,7 +22,7 @@ import './Support.css';
  * dropped from the address bar (a replace, so not in the history either)
  * so the token is left in no history entry, bookmark or referrer.
  */
-function useLinkToken() {
+export function useLinkToken() {
   const location = useLocation();
   const navigate = useNavigate();
   const [token] = useState(() => linkToken(location.hash));
@@ -29,7 +38,7 @@ function useLinkToken() {
  * page starts over with that token instead of acting on the previous
  * request. Dropping the fragment from the address changes nothing.
  */
-function useLinkKey() {
+export function useLinkKey() {
   const { hash } = useLocation();
   const [seen, setSeen] = useState({ hash, key: 0 });
   if (hash !== seen.hash) setSeen({ hash, key: hash ? seen.key + 1 : seen.key });
@@ -46,11 +55,11 @@ export function CancelPage() {
   return <CancelLink key={useLinkKey()} />;
 }
 
-type Answered<R> = Extract<LinkAnswer<R>, { kind: 'answer' }>;
-type Phase<R, A> =
+type Answered<L> = Extract<L, { kind: 'answer' }>;
+type Phase<L, A> =
   | { kind: 'loading' }
   | { kind: 'invalid' }
-  | { kind: 'answer'; answer: Answered<R> }
+  | { kind: 'answer'; answer: Answered<L> }
   /** No answer, or a failed one: `action` is what 重試 sends again. */
   | { kind: 'failed'; network: boolean; action: A };
 
@@ -59,12 +68,12 @@ type Phase<R, A> =
  * scanners that open links do no harm), every other action only from a
  * button.
  */
-function useLink<R extends string, A extends string>(
-  call: ((token: string, action: A) => Promise<LinkAnswer<R>>) | null,
+export function useLink<L extends LinkOutcome, A extends string>(
+  call: ((token: string, action: A) => Promise<L>) | null,
   token: string | null,
   view: A,
 ) {
-  const [phase, setPhase] = useState<Phase<R, A>>(() =>
+  const [phase, setPhase] = useState<Phase<L, A>>(() =>
     !token
       ? { kind: 'invalid' }
       : !call
@@ -79,7 +88,7 @@ function useLink<R extends string, A extends string>(
       const answer = await call(token, action);
       setBusy(false);
       if (answer.kind === 'answer') {
-        setPhase({ kind: 'answer', answer });
+        setPhase({ kind: 'answer', answer: answer as Answered<L> });
       } else if (answer.kind === 'invalid') {
         setPhase({ kind: 'invalid' });
       } else {
@@ -111,7 +120,7 @@ function Rows({ rows }: { rows: [string, string][] }) {
   );
 }
 
-function Loading() {
+export function Loading() {
   return (
     <FlowPanel title={t.loading}>
       <p className="flow-note" role="status">
@@ -121,7 +130,7 @@ function Loading() {
   );
 }
 
-function Failed({ network, onRetry, busy }: { network: boolean; onRetry: () => void; busy: boolean }) {
+export function Failed({ network, onRetry, busy }: { network: boolean; onRetry: () => void; busy: boolean }) {
   return (
     <FlowPanel title={network ? t.linkNetworkTitle : t.linkErrorTitle}>
       <p role="alert">{network ? t.linkNetworkBody : t.linkErrorBody}</p>
@@ -139,12 +148,13 @@ function Failed({ network, onRetry, busy }: { network: boolean; onRetry: () => v
   );
 }
 
-function Message({ title, body, refill = false }: { title: string; body: string; refill?: boolean }) {
+/** `refill`: where 重新填寫客服表單 goes, on the pages that offer it. */
+function Message({ title, body, refill }: { title: string; body: string; refill?: string }) {
   return (
     <FlowPanel title={title}>
       <p>{body}</p>
       {refill ? (
-        <Link to="/support" className="flow-link">
+        <Link to={refill} className="flow-link">
           {t.refillForm}
         </Link>
       ) : null}
@@ -155,23 +165,34 @@ function Message({ title, body, refill = false }: { title: string; body: string;
 /**
  * /support/verify#token=…, the confirmation mail's link (canvas board
  * PhoneVerify): shows the request, and asks for the deletion only when the
- * owner presses 「是我，申請刪除帳號」.
+ * owner presses 「是我，申請刪除帳號」. A privacy request has its own words.
  */
 function VerifyLink() {
   const support = useSupport();
   const link = useLinkToken();
-  const { phase, busy, run } = useLink<ConfirmResult, ConfirmAction>(
+  const { phase, busy, run } = useLink<ConfirmAnswer, ConfirmAction>(
     support?.confirmLink ?? null,
     link?.token ?? null,
     'view',
   );
   if (phase.kind === 'loading') return <Loading />;
   if (phase.kind === 'invalid')
-    return <Message title={t.verifyInvalidTitle} body={t.verifyInvalidBody} refill />;
+    return <Message title={t.verifyInvalidTitle} body={t.verifyInvalidBody} refill="/support" />;
   if (phase.kind === 'failed') {
     return <Failed network={phase.network} busy={busy} onRetry={() => void run(phase.action)} />;
   }
   const { answer } = phase;
+  if (answer.privacy) {
+    return (
+      <PrivacyVerify
+        answer={answer}
+        privacy={answer.privacy}
+        code={supportCode(link!.id)}
+        busy={busy}
+        run={run}
+      />
+    );
+  }
   const date = deletionDateLabel(answer.scheduledAt);
   switch (answer.result) {
     case 'pending':
@@ -220,13 +241,87 @@ function VerifyLink() {
     case 'denied':
       return <Message title={t.deniedTitle} body={t.deniedBody} />;
     case 'resolved':
-      return <Message title={t.resolvedTitle} body={t.resolvedBody} refill />;
+      return <Message title={t.resolvedTitle} body={t.resolvedBody} refill={deletionSupportPath} />;
     case 'account_deletion_pending':
       return <Message title={t.alreadyPendingTitle} body={t.alreadyPendingBody(date)} />;
     case 'account_deleting':
       return <Message title={t.deletingTitle} body={t.deletingBody} />;
     case 'unavailable':
       return <Message title={t.adminTitle} body={t.adminBody} />;
+  }
+}
+
+/**
+ * A privacy request's confirmation (PhoneVerify's layout): shows what the
+ * owner of the login email is confirming, and records that they asked only
+ * when they press the button.
+ */
+function PrivacyVerify({
+  answer,
+  privacy,
+  code,
+  busy,
+  run,
+}: {
+  answer: Extract<ConfirmAnswer, { kind: 'answer'; privacy: PrivacyDetails }>;
+  privacy: PrivacyDetails;
+  code: string;
+  busy: boolean;
+  run: (action: ConfirmAction) => Promise<void>;
+}) {
+  switch (answer.result) {
+    case 'pending': {
+      const right = t.privacyRightOptions.find((option) => option.value === privacy.right);
+      return (
+        <FlowPanel title={t.privacyVerifyTitle}>
+          <Rows
+            rows={[
+              [t.codeLabel, code],
+              [t.submittedAtLabel, submittedLabel(answer.submittedAt) ?? '—'],
+              [t.contactEmailLabel, answer.contactEmail ?? '—'],
+              [t.privacyAccountLabel, t.accountValue],
+              [t.privacyRightLabel, right?.label ?? '—'],
+              [t.privacySubjectLabel, privacy.subject || '—'],
+              [t.privacyMessageLabel, privacy.message || '—'],
+            ]}
+          />
+          <p>{t.privacyVerifyBody}</p>
+          <div className="support-actions">
+            <button
+              type="button"
+              className="flow-button flow-button--primary"
+              aria-disabled={busy || undefined}
+              onClick={() => !busy && void run('confirm')}
+            >
+              {t.privacyVerifyConfirm}
+            </button>
+            <button
+              type="button"
+              className="flow-button"
+              aria-disabled={busy || undefined}
+              onClick={() => !busy && void run('deny')}
+            >
+              {t.verifyDeny}
+            </button>
+          </div>
+          <p className="flow-note">{t.privacyDenyNote}</p>
+        </FlowPanel>
+      );
+    }
+    case 'verified':
+      return (
+        <FlowPanel title={t.privacyVerifiedTitle}>
+          <p role="status">{t.privacyVerifiedBody}</p>
+        </FlowPanel>
+      );
+    case 'denied':
+      return <Message title={t.privacyDeniedTitle} body={t.deniedBody} />;
+    case 'resolved':
+      return (
+        <Message title={t.privacyResolvedTitle} body={t.privacyResolvedBody} refill="/support?kind=privacy" />
+      );
+    case 'account_deleting':
+      return <Message title={t.privacyAccountGoneTitle} body={t.privacyAccountGoneBody} />;
   }
 }
 
@@ -238,7 +333,7 @@ function VerifyLink() {
 function CancelLink() {
   const support = useSupport();
   const link = useLinkToken();
-  const { phase, busy, run } = useLink<CancelResult, CancelAction>(
+  const { phase, busy, run } = useLink<LinkAnswer<CancelResult>, CancelAction>(
     support?.cancelLink ?? null,
     link?.token ?? null,
     'view',
