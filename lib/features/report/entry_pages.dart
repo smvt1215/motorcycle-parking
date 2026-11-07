@@ -23,6 +23,9 @@ import 'form_parts.dart';
 import 'report_sheet.dart';
 import 'spot_suggestions.dart' show reportSummary;
 
+/// On the card of a street spot without segments: what sending it does.
+const firstSegmentNote = '送出後會建立這條路的第一個路段，其他路段要另外補上。';
+
 /// A form's pages pushed inside its sheet (S1b, S2…): the sheet stays while
 /// its pages step forward and back, and system back steps first.
 class FormFlow extends StatefulWidget {
@@ -160,7 +163,7 @@ EntryTag vehicleTag(
 
 /// A segment's tags (S3b): who may park, then what limits it.
 List<EntryTag> segmentTags(EntryDraft draft) {
-  final c = draft.isNew ? null : draft.stored;
+  final c = draft.stored;
   return [
     if (draft.scooter == Eligible.allowed && draft.heavy == Eligible.allowed)
       const EntryTag('普機・重機可停')
@@ -337,7 +340,11 @@ class _EntryListPageState extends State<EntryListPage> {
               : (d.name.trim().isEmpty
                     ? (d.kind?.label ?? '路段')
                     : d.name.trim()),
-          subtitle: range.isEmpty ? null : range,
+          subtitle: d.wholeSpot
+              ? '$range\n$firstSegmentNote'
+              : range.isEmpty
+              ? null
+              : range,
           tags: segmentTags(d),
           onTap: d.editable ? () => open(d) : null,
         ),
@@ -511,7 +518,7 @@ Map<String, String> entryProblems(EntryDraft draft) {
     if (draft.kind == null) 'kind': '請選地面畫的格位',
     if (missing(draft.scooter)) 'scooter': '請選擇普通機車能不能停',
     if (missing(draft.heavy)) 'heavy': '請選擇大型重機能不能停',
-    'bay': ?bayAllowProblem(draft.type, draft.kind, draft.scooter, draft.heavy),
+    'bay': ?bayAllowProblem(draft.kind, draft.scooter),
     'guide': ?textHint(draft.guide, draft.type.guideMax),
     if (draft.range.length > segmentRangeMaxLength)
       'range': '「從」和「到」合起來最多 $segmentRangeMaxLength 個字元'
@@ -1059,8 +1066,7 @@ class _EntryCardState extends State<_EntryCard> {
               }),
             ),
             // Before sending too: the pick cannot go as it stands.
-            if (bayAllowProblem(d.type, d.kind, d.scooter, d.heavy)
-                case final error?) ...[
+            if (bayAllowProblem(d.kind, d.scooter) case final error?) ...[
               gap(8),
               FormInfoNote(
                 key: const ValueKey('entry-bay-problem'),

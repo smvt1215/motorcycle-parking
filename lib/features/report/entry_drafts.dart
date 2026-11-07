@@ -72,31 +72,13 @@ ParkingCondition bayConditionOf(SpaceKind kind) {
   );
 }
 
-/// Why a bay of [kind] cannot be written with these vehicles, or null: the
-/// one place the form holds what the contract refuses (decision 32 for a
-/// zone: its condition must derive an `access`; a heavy bay never takes
-/// scooters). Wording follows the admin site's `zoneProblem`.
-String? bayAllowProblem(
-  EntryType type,
-  SpaceKind? kind,
-  Eligible? scooter,
-  Eligible? heavy,
-) {
-  if (kind == null || scooter == null || heavy == null) return null;
-  if (kind == SpaceKind.heavy && scooter == Eligible.allowed) {
-    return '重機專用格不能開放普通機車。普通機車請改選不可停，或改選地面畫的格位。';
-  }
-  if (type == EntryType.segment) return null;
-  if (scooter == Eligible.notStated || heavy == Eligible.notStated) return null;
-  final condition = ParkingCondition(
-    bay: bayConditionOf(kind).bay,
-    allow: ZoneAllow(scooter: scooter.flag, heavy: heavy.flag),
-  );
-  if (legacyAccess(condition) != null) return null;
-  return condition.bay == Bay.car
-      ? '汽車格和汽機車共用格目前只能登錄「只開放大型重機」或「機車都不可停」。'
-      : '機車格只開放大型重機時，請把格位改成重機專用格。';
-}
+/// Why a bay of [kind] cannot take these vehicles, or null: a heavy bay
+/// never takes scooters (`validCondition`). Any other pick can be written;
+/// a zone without a derived `access` simply carries none (#356).
+String? bayAllowProblem(SpaceKind? kind, Eligible? scooter) =>
+    kind == SpaceKind.heavy && scooter == Eligible.allowed
+    ? '重機專用格不能開放普通機車。普通機車請改選不可停，或改選地面畫的格位。'
+    : null;
 
 /// The name a segment takes when left blank (C3): 「{側}・{格位}」, the bay
 /// alone without a side, and 2, 3… after it when [taken] has that name.
@@ -192,11 +174,12 @@ class EntryDraft {
 
   /// The whole of a street spot without segments, as the one segment it has
   /// been so far (GAP risk 7): nothing changes until the rider does, and it
-  /// is then sent as a new segment.
+  /// is then sent as a new segment, with the spot's limits and periods, as
+  /// decisions then read the segment.
   EntryDraft.ofSpot(ParkingSpot spot)
     : type = EntryType.segment,
       original = null,
-      stored = null {
+      stored = spot.condition {
     kind = SpaceKind.of(spot.spaceType, spot.condition);
     scooter = Eligible.of(spot.scooterAllowed);
     heavy = Eligible.of(spot.heavyAllowed);
@@ -493,8 +476,9 @@ List<Map<String, Object?>> entriesOf(List<EntryDraft> drafts) {
 }
 
 /// The patch a suggestion sends for [drafts] (`entries_patch()`): only the
-/// entries changed. A zone's condition goes with the access it derives, or
-/// a null that clears it (decision 32).
+/// entries changed. A zone's condition goes with the access it derives, as
+/// the check reads the two together; with none derived, a stored access is
+/// cleared by the diff's null and no key is sent otherwise (#356).
 List<Map<String, Object?>> entriesPatchOf(List<EntryDraft> drafts) {
   final current = [
     for (final d in drafts)
@@ -509,13 +493,12 @@ List<Map<String, Object?>> entriesPatchOf(List<EntryDraft> drafts) {
     taken.add(json['name']! as String);
     next.add(json);
   }
-  final zones = drafts.firstOrNull?.type == EntryType.zone;
   return [
     for (final change in entriesDiff(current, next))
-      if (zones && change.containsKey('condition') && change.containsKey('id'))
+      if (change.containsKey('id') && change.containsKey('condition'))
         {
           ...change,
-          'access': next.firstWhere((e) => e['id'] == change['id'])['access'],
+          'access': ?next.firstWhere((e) => e['id'] == change['id'])['access'],
         }
       else
         change,

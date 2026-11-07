@@ -474,6 +474,9 @@ void main() {
         )
         .first;
     final entry = switch (item) {
+      '格位類型' when selectedSpot.spaceType == SpaceType.offStreet => find.byKey(
+        const ValueKey('suggest-facility'),
+      ),
       '格位類型' => find.byKey(const ValueKey('suggest-limits')),
       '收費資訊' => find.byKey(const ValueKey('suggest-fee')),
       '入口與停車指引' => find.byKey(const ValueKey('suggest-where')),

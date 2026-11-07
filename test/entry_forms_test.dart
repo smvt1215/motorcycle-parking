@@ -213,57 +213,107 @@ void main() {
       expect(d.changed, isFalse);
     });
 
-    test('bayAllowProblem 擋下 contract 推導不出 access 的組合', () {
-      String? zone(SpaceKind k, Eligible s, Eligible h) =>
-          bayAllowProblem(EntryType.zone, k, s, h);
+    test('只有重機專用格開放普機是矛盾；其他組合都寫得進 contract（#356）', () {
       expect(
-        zone(SpaceKind.carMotorcycle, Eligible.allowed, Eligible.allowed),
-        contains('汽機車共用格'),
-      );
-      expect(
-        zone(SpaceKind.motorcycle, Eligible.notAllowed, Eligible.allowed),
+        bayAllowProblem(SpaceKind.heavy, Eligible.allowed),
         contains('重機專用格'),
       );
-      expect(
-        zone(SpaceKind.heavy, Eligible.allowed, Eligible.allowed),
-        contains('重機專用格'),
-      );
-      // Every allowed pick also derives what the contract wants.
       for (final kind in BayKindGrid.kinds) {
         for (final s in Eligible.values) {
           for (final h in Eligible.values) {
-            if (zone(kind, s, h) != null) continue;
-            final d = EntryDraft.create(EntryType.zone)
-              ..name = 'B1'
-              ..kind = kind
-              ..scooter = s
-              ..heavy = h;
-            expect(
-              validZoneList([d.toJson(const [])]),
-              isTrue,
-              reason: '$kind $s $h',
+            if (bayAllowProblem(kind, s) != null) continue;
+            final zone =
+                (EntryDraft.create(EntryType.zone)
+                      ..name = 'B1'
+                      ..kind = kind
+                      ..scooter = s
+                      ..heavy = h)
+                    .toJson(const []);
+            expect(validZoneList([zone]), isTrue, reason: '$kind $s $h');
+            final derived = legacyAccess(
+              ParkingCondition.fromJson(zone['condition'], zone: true),
             );
+            expect(zone['access'], derived?.name, reason: '$kind $s $h');
+            expect(zone.containsKey('access'), derived != null);
+            if (s == Eligible.notStated || h == Eligible.notStated) continue;
+            final segment =
+                (EntryDraft.create(EntryType.segment)
+                      ..kind = kind
+                      ..scooter = s
+                      ..heavy = h)
+                    .toJson(const []);
+            expect(validSegmentList([segment]), isTrue, reason: '$kind $s $h');
           }
         }
       }
-      // Segments carry no access: only the heavy bay stays refused.
-      expect(
-        bayAllowProblem(
-          EntryType.segment,
-          SpaceKind.carMotorcycle,
-          Eligible.allowed,
-          Eligible.allowed,
+    });
+
+    test('B3 汽機車共用格、普機可停：舊資料的 access 清掉，沒有就不帶', () {
+      final stored =
+          EntryDraft.ofZone(
+              const ParkingZone(
+                id: 'b3',
+                name: 'B3 汽車區',
+                access: ParkingAccess.heavyCar,
+                condition: ParkingCondition(
+                  bay: Bay.car,
+                  use: BayUse.usual,
+                  allow: ZoneAllow(scooter: false, heavy: true),
+                ),
+              ),
+            )
+            ..kind = SpaceKind.carMotorcycle
+            ..scooter = Eligible.allowed;
+      final cleared = entriesPatchOf([stored]).single;
+      expect(cleared.containsKey('access'), isTrue);
+      expect(cleared['access'], isNull);
+      final fresh = EntryDraft.ofZone(
+        const ParkingZone(
+          id: 'b4',
+          name: 'B4',
+          condition: ParkingCondition(
+            bay: Bay.car,
+            use: BayUse.share,
+            share: ShareKind.carMotorcycle,
+            allow: ZoneAllow(scooterNotStated: true, heavy: true),
+          ),
         ),
-        isNull,
-      );
-      for (final kind in BayKindGrid.kinds) {
-        if (kind == SpaceKind.heavy) continue;
-        final d = EntryDraft.create(EntryType.segment)
-          ..kind = kind
-          ..scooter = Eligible.allowed
-          ..heavy = Eligible.notAllowed;
-        expect(validSegmentList([d.toJson(const [])]), isTrue, reason: '$kind');
-      }
+      )..scooter = Eligible.allowed;
+      expect(entriesPatchOf([fresh]).single.containsKey('access'), isFalse);
+    });
+
+    test('整段當第一個路段時帶上點位的限時與共用時段，不帶 basis', () {
+      final d = EntryDraft.ofSpot(
+        const ParkingSpot(
+          id: 'official:timed',
+          name: '巷口',
+          lat: 25,
+          lng: 121,
+          city: '臺北市',
+          spaceType: SpaceType.timedMotorcycle,
+          scooterAllowed: true,
+          heavyAllowed: false,
+          condition: ParkingCondition(
+            bay: Bay.motorcycle,
+            use: BayUse.usual,
+            limits: [
+              ParkingLimit(
+                LimitKind.timeLimit,
+                periods: [
+                  LimitPeriod(days: 'all', maxMinutes: 20, extensions: 1),
+                ],
+              ),
+            ],
+            basis: ConditionBasis(sourceUrl: 'https://example.com/a'),
+          ),
+        ),
+      )..total = '6';
+      final patch = entriesPatchOf([d]).single;
+      expect(validSegmentList([patch]), isTrue);
+      final c = patch['condition'] as Map;
+      expect((c['limits'] as List).single, containsPair('kind', 'time_limit'));
+      expect(c.containsKey('basis'), isFalse);
+      expect(c['allow'], {'scooter': true, 'heavy': false});
     });
 
     test('改分區資格帶上 access；改成官方未標示清掉 access', () {
@@ -368,6 +418,14 @@ void main() {
       }
       expect(find.text('松壽路側車道下坡・2 區'), findsOneWidget);
       expect(find.text('可停車種'), findsNothing);
+      // The rest of a lot's limits wait for S5.
+      expect(
+        tester
+            .widget<EntryRow>(find.byKey(const ValueKey('suggest-limits')))
+            .onTap,
+        isNull,
+      );
+      expect(find.text('場站型式'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
@@ -376,6 +434,7 @@ void main() {
       expect(find.text('可停車種'), findsOneWidget);
       expect(find.text('路段與格位'), findsOneWidget);
       expect(find.text('1 段'), findsOneWidget);
+      expect(find.text('場站型式'), findsNothing);
       expect(find.text('入口、分區與格位、可停車種'), findsNothing);
     });
 
@@ -447,15 +506,33 @@ void main() {
       expect(find.byType(FormFlow), findsNothing);
     });
 
-    testWidgets('格位和資格的組合送不出去時行內說明並擋下', (tester) async {
+    testWidgets('重機專用格開放普機時行內說明並擋下', (tester) async {
+      final store = await open(tester, _lot);
+      await openZone(tester, 'B1 機車區');
+      await tapKey(tester, 'bay-heavy');
+      expect(find.byKey(const ValueKey('entry-bay-problem')), findsOneWidget);
+      await tester.tap(find.widgetWithText(AdaptiveButton, '送出 1 項建議'));
+      await tester.pumpAndSettle();
+      expect(store.sent, isEmpty);
+    });
+
+    testWidgets('B3 汽機車共用格、普機可停可以送出，不帶 access（#356）', (tester) async {
       final store = await open(tester, _lot);
       await openZone(tester, 'B1 機車區');
       await tapKey(tester, 'bay-carMotorcycle');
       await tapKey(tester, 'entry-heavy-allowed');
-      expect(find.byKey(const ValueKey('entry-bay-problem')), findsOneWidget);
+      expect(find.byKey(const ValueKey('entry-bay-problem')), findsNothing);
       await tester.tap(find.widgetWithText(AdaptiveButton, '送出 2 項建議'));
       await tester.pumpAndSettle();
-      expect(store.sent, isEmpty);
+      final patch =
+          ((store.sent.single['proposed'] as Map)['parking_zones'] as List)
+              .single;
+      expect((patch['condition'] as Map)['share'], 'car_motorcycle');
+      expect((patch['condition'] as Map)['allow'], {
+        'scooter': true,
+        'heavy': true,
+      });
+      expect(patch['access'], isNull);
     });
 
     testWidgets('這區已撤除可取消，算一項；新增一區要填名稱和兩種車', (tester) async {
@@ -529,7 +606,7 @@ void main() {
     testWidgets('沒有路段的路邊點顯示整段，進 S4 新增', (tester) async {
       final store = await open(tester, _bare);
       await tapKey(tester, 'suggest-where');
-      expect(find.text('整個停車點'), findsOneWidget);
+      expect(find.textContaining(firstSegmentNote), findsOneWidget);
       await tapText(tester, '一般機車格');
       await tester.enterText(find.byKey(const ValueKey('entry-total')), '8');
       await tester.pumpAndSettle();
@@ -545,6 +622,27 @@ void main() {
         'scooter': true,
         'heavy': false,
       });
+    });
+
+    testWidgets('S4 停權時開共用面板，內容保留（#331）', (tester) async {
+      final store = await open(tester, _street);
+      store.refuse = const AccountSuspended(null);
+      await tapKey(tester, 'suggest-where');
+      await tapText(tester, '一般機車格');
+      await tester.enterText(
+        find.byKey(const ValueKey('entry-guide')),
+        '靠建國北路口',
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(AdaptiveButton, '送出 1 項建議'));
+      await tester.pumpAndSettle();
+      expect(find.byType(SuspendedPanel), findsOneWidget);
+      await tester.tap(find.text('知道了'));
+      await tester.pumpAndSettle();
+      expect(find.byType(SuspendedPanel), findsNothing);
+      expect(find.text('靠建國北路口'), findsOneWidget);
+      expect(find.text('送出 1 項建議'), findsOneWidget);
+      expect(store.sent, isEmpty);
     });
 
     testWidgets('S4 只有可停、不可停；改範圍合成字串；留空沿用自動名稱', (tester) async {

@@ -6,13 +6,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:motorcycle_parking/core/town_lookup.dart';
+import 'package:motorcycle_parking/data/account_suspended.dart';
 import 'package:motorcycle_parking/data/app_store.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
+import 'package:motorcycle_parking/features/account/suspended_sheet.dart';
 import 'package:motorcycle_parking/features/report/form_parts.dart';
 import 'package:motorcycle_parking/features/report/report_sheet.dart';
 import 'package:motorcycle_parking/domain/location_check.dart';
 import 'package:motorcycle_parking/models/parking.dart';
 import 'package:motorcycle_parking/models/space_kind.dart';
+import 'package:motorcycle_parking/models/zone_entries.dart';
 import 'package:motorcycle_parking/ui/fee_editor.dart';
 import 'package:motorcycle_parking/ui/location_picker.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
@@ -20,6 +23,9 @@ import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
 class RecordingStore extends AppStore {
   RecordingStore(LocalRepository local) : super(local, null);
   final submissions = <Map<String, dynamic>>[];
+
+  /// Thrown by [submit] instead of succeeding.
+  Object? refuse;
 
   /// What the reverse lookup answers; null means at sea.
   Town? town = const Town('臺北市', '信義區');
@@ -47,6 +53,7 @@ class RecordingStore extends AppStore {
 
   @override
   Future<String> submit(Map<String, dynamic> body) async {
+    if (refuse case final error?) throw error;
     submissions.add(body);
     return '已送交審核';
   }
@@ -427,6 +434,44 @@ void main() {
       'use': 'usual',
       'allow': {'scooter': true, 'heavy': false},
     });
+  });
+
+  testWidgets('B3 汽機車共用格、普機可停可以送出，分區不帶 access（#356）', (tester) async {
+    final store = await openForm(tester);
+    await addZone(
+      tester,
+      name: 'B3 汽車區',
+      kind: SpaceKind.carMotorcycle,
+      heavy: Eligible.allowed,
+    );
+    await scrollTo(tester, nameField);
+    await tester.enterText(nameField, '松壽地下停車場');
+    await tester.pump();
+    await pressSend(tester);
+    final spot = store.submissions.single['spot'] as Map<String, dynamic>;
+    final zone = (spot['parking_zones'] as List).single as Map;
+    expect((zone['condition'] as Map)['share'], 'car_motorcycle');
+    expect(zone.containsKey('access'), isFalse);
+    expect(validZoneList(spot['parking_zones']), isTrue);
+  });
+
+  testWidgets('停權時開共用面板，表單內容保留（#331）', (tester) async {
+    final store = await openForm(tester);
+    store.refuse = const AccountSuspended(null);
+    await addSegment(tester);
+    await scrollTo(tester, nameField);
+    await tester.enterText(nameField, '南京東路');
+    await tester.pump();
+    await pressSend(tester);
+    expect(find.byType(SuspendedPanel), findsOneWidget);
+    await tester.tap(find.text('知道了'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SuspendedPanel), findsNothing);
+    expect(find.text('南京東路'), findsOneWidget);
+    expect(find.text('1 段'), findsOneWidget);
+    store.refuse = null;
+    await pressSend(tester);
+    expect(store.submissions, hasLength(1));
   });
 
   testWidgets('路外：場站型式、入口、分區，官方未標示彙總成 not_stated', (tester) async {

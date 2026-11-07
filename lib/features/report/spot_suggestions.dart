@@ -208,6 +208,11 @@ class SuggestionListPage extends StatelessWidget {
     );
   }
 
+  /// The present form of a bay's kind and conditions, a lot's facility types
+  /// among them.
+  void _kindForm(BuildContext context) =>
+      _form(context, 'space_type', '格位類型', spot.spaceType.label);
+
   /// The present fee form, until PR10's F0 and F1.
   void _feeForm(BuildContext context) =>
       _form(context, 'fee_note', '收費資訊', spot.feeNote);
@@ -246,6 +251,16 @@ class SuggestionListPage extends StatelessWidget {
                 onTap: () =>
                     _form(context, 'location', '停車點位置', locationSummary(spot)),
               ),
+              if (!street)
+                EntryRow(
+                  key: const ValueKey('suggest-facility'),
+                  leading: const Icon(Icons.apartment_outlined),
+                  title: '場站型式',
+                  value: spot.facilities.isEmpty
+                      ? '未填'
+                      : facilityTypesLabel(spot.facilities),
+                  onTap: () => _kindForm(context),
+                ),
             ],
           ),
           const SizedBox(height: 14),
@@ -267,11 +282,10 @@ class SuggestionListPage extends StatelessWidget {
                 leading: const Icon(Icons.schedule),
                 title: '限時／禁停／共用時段',
                 subtitle: street ? '現場標誌寫的' : null,
-                value: limitSummary(spot),
-                // The present form of the bay's kind and conditions, until
-                // PR10's S5 and S5b.
-                onTap: () =>
-                    _form(context, 'space_type', '格位類型', spot.spaceType.label),
+                value: street ? limitSummary(spot) : '即將開放',
+                // A street keeps the present form until PR10's S5b; a lot's
+                // limits are its zones', so its row waits for S5.
+                onTap: street ? () => _kindForm(context) : null,
               ),
             ],
           ),
