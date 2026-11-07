@@ -84,26 +84,26 @@ interface ExplanationSignIn {
  */
 function SignInChoices({ signIn }: { signIn: ExplanationSignIn }) {
   const progress = useSignInChecking(() => signIn.onResult('google', { kind: 'cancelled' }));
-  const finish = (provider: Provider, result: SignInResult) => {
-    if (progress.settle()) signIn.onResult(provider, result);
-  };
   return (
     <>
       {progress.checking ? <SignInChecking /> : null}
       <div className="deletion-signin-buttons" hidden={progress.checking}>
         <GoogleButton
           auth={signIn.auth}
-          onChecking={progress.start}
-          onResult={(result) => finish('google', result)}
+          attempt={progress.attempt}
+          onResult={(result) => signIn.onResult('google', result)}
         />
         <AppleButton
           auth={signIn.auth}
           onClick={() => {
+            const attempt = progress.attempt();
             // Synchronously from the click: Apple's popup needs it.
             signIn.auth
-              .signInWithApple({ onChecking: progress.start })
-              .then((result) => finish('apple', result))
-              .catch(() => finish('apple', { kind: 'cancelled' }));
+              .signInWithApple({ onChecking: attempt.onChecking })
+              .catch(() => ({ kind: 'cancelled' }) as const)
+              .then((result) => {
+                if (attempt.accept()) signIn.onResult('apple', result);
+              });
           }}
         />
       </div>

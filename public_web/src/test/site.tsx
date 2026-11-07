@@ -26,6 +26,8 @@ export interface FakeAuth extends AuthPort {
   revokeApple: ReturnType<typeof vi.fn<() => Promise<AppleRevoke>>>;
   /** While set, a sign-in stays in the checking state until the promise resolves. */
   hold: Promise<void> | null;
+  /** Apple's sign-in ends at once, without the provider answering. */
+  popupFails: boolean;
   /** How the next sign-in ends; a `signedIn` result also signs that user in. */
   next: SignInResult;
   /** How revoking Apple's grant ends. */
@@ -44,12 +46,13 @@ export function fakeAuth(initial: SignedInUser | null = null): FakeAuth {
     listeners.forEach((listener) => listener(next));
   };
   /** The provider answers: the page is told, and `hold` keeps the sign-in open. */
-  async function answered(onChecking?: () => void) {
-    if (onChecking) act(onChecking);
+  async function answered(onChecking?: () => () => boolean) {
+    if (onChecking) act(() => void onChecking());
     if (auth.hold) await auth.hold;
   }
   const auth: FakeAuth = {
     hold: null,
+    popupFails: false,
     next: { kind: 'cancelled' },
     nextRevoke: { kind: 'revoked' },
     signIn: vi.fn<SignIn>(async () => {
@@ -72,6 +75,8 @@ export function fakeAuth(initial: SignedInUser | null = null): FakeAuth {
     },
     prepareApple() {},
     async signInWithApple(options) {
+      // The popup could not open (Apple's script is getting ready again).
+      if (auth.popupFails) return { kind: 'cancelled' };
       await answered(options?.onChecking);
       return options?.reauthFor
         ? auth.signIn('apple', { reauthFor: options.reauthFor })

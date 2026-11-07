@@ -22,7 +22,7 @@ export function smokeAuth(): AuthPort {
     user = next;
     listeners.forEach((listener) => listener(next));
   };
-  async function signIn(onChecking?: () => void): Promise<SignInResult> {
+  async function signIn(onChecking?: () => () => boolean): Promise<SignInResult> {
     const result = read<SignInResult | { kind: 'hold' }>(SMOKE_SIGN_IN) ?? { kind: 'cancelled' };
     onChecking?.();
     // Stays in the checking state, for its screenshot.

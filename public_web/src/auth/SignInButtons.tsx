@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { checking, checkingHint, signInButton } from '../deletion/text';
 import type { AuthPort, GoogleButtonMount, SignedInUser, SignInResult } from './port';
+import type { SignInAttempt } from './useSignInChecking';
 
 /** Google draws its button between 200 and 400px wide. */
 const MIN_WIDTH = 200;
@@ -18,22 +19,23 @@ function clampWidth(width: number): number {
 export function GoogleButton({
   auth,
   reauthFor,
-  onChecking,
+  attempt,
   onResult,
 }: {
   auth: AuthPort;
   reauthFor?: SignedInUser;
-  onChecking?: () => void;
+  /** Starts tracking a press of the button (useSignInChecking). */
+  attempt: () => SignInAttempt;
   onResult: (result: SignInResult) => void;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState<number | null>(null);
   // The latest callback, without drawing the button again for a new one.
   const latest = useRef(onResult);
-  const latestChecking = useRef(onChecking);
+  const latestAttempt = useRef(attempt);
   useLayoutEffect(() => {
     latest.current = onResult;
-    latestChecking.current = onChecking;
+    latestAttempt.current = attempt;
   });
 
   useLayoutEffect(() => {
@@ -53,11 +55,19 @@ export function GoogleButton({
   useEffect(() => {
     const element = box.current;
     if (!element || !mounted) return;
+    let pressed: SignInAttempt | null = null;
     const current = auth.mountGoogleButton(element, {
       reauthFor,
       width: clampWidth(element.clientWidth),
-      onChecking: () => latestChecking.current?.(),
-      onResult: (result) => latest.current(result),
+      onChecking: () => {
+        pressed = latestAttempt.current();
+        return pressed.onChecking();
+      },
+      onResult: (result) => {
+        const ended = pressed;
+        pressed = null;
+        if (ended?.accept() ?? true) latest.current(result);
+      },
     });
     mount.current = current;
     return () => {

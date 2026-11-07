@@ -365,6 +365,38 @@ describe('while a sign-in is being checked (SignInLoading)', () => {
     expect(screen.getByRole('heading', { level: 1, name: t.signInIncompleteTitle })).toBeInTheDocument();
   });
 
+  it('a timed-out Apple re-sign-in stays expired, even after a retry has ended', async () => {
+    const appleUser = { ...rider, provider: 'apple' as const };
+    const auth = fakeAuth(appleUser);
+    auth.nextRevoke = { kind: 'signInNeeded' };
+    const calls = stubApi({
+      account_deletion_status: { body: noRequest },
+      request_account_deletion: { body: pendingUntil(scheduled) },
+    });
+    openSite('/account-deletion', auth);
+    await heading(t.confirmTitle);
+    await userEvent.click(screen.getByRole('checkbox', { name: t.confirmCheck }));
+    await userEvent.click(screen.getByRole('button', { name: t.confirmAction }));
+    await heading(t.reauthTitle);
+
+    const release = held(auth);
+    auth.next = { kind: 'signedIn', user: appleUser };
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByRole('button', { name: '使用 Apple 登入' }));
+    await act(() => vi.advanceTimersByTimeAsync(30_000));
+    fireEvent.click(screen.getByRole('button', { name: t.signInRetry }));
+
+    // The retry ends at once; the first attempt then succeeds, too late.
+    auth.popupFails = true;
+    fireEvent.click(screen.getByRole('button', { name: '使用 Apple 登入' }));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    release();
+    await act(() => vi.advanceTimersByTimeAsync(0));
+
+    expect(calls.filter((c) => c.fn === 'request_account_deletion')).toEqual([]);
+    expect(screen.queryByRole('heading', { level: 1, name: t.requestedTitle })).toBeNull();
+  });
+
   it('checks a re-sign-in the same way, and can try again after the time is up', async () => {
     const auth = fakeAuth(rider);
     stubApi({

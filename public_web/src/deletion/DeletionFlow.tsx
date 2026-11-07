@@ -264,12 +264,14 @@ export function DeletionFlow({
             <AppleButton
               auth={auth}
               onClick={() => {
+                const attempt = progress.attempt();
                 // Synchronously from the click: Apple's popup needs it.
                 auth
-                  .signInWithApple({ reauthFor: user, onChecking: progress.start })
+                  .signInWithApple({ reauthFor: user, onChecking: attempt.onChecking })
                   .catch(() => ({ kind: 'cancelled' }) as const)
                   .then((result) => {
-                    if (progress.settle()) void reauthenticated(result);
+                    // A sign-in the page gave up on must not send the request.
+                    if (attempt.accept()) void reauthenticated(result);
                   });
               }}
             />
@@ -277,10 +279,8 @@ export function DeletionFlow({
             <GoogleButton
               auth={auth}
               reauthFor={user}
-              onChecking={progress.start}
-              onResult={(result) => {
-                if (progress.settle()) void reauthenticated(result);
-              }}
+              attempt={progress.attempt}
+              onResult={(result) => void reauthenticated(result)}
             />
           )}
           <button type="button" className="flow-button" onClick={() => setStep({ kind: 'status' })}>
