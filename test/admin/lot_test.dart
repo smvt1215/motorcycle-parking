@@ -98,15 +98,25 @@ void main() {
       );
       expect(z['access'], 'scooterHeavy');
       expect(zoneProblem(z), isNull);
-      final bad = zoneWithCondition(
+      // Nothing to write back (#190): saved without an access.
+      final noAccess = zoneWithCondition(
         {'name': 'A', 'access': 'scooterOnly'},
         const ParkingCondition(
           bay: Bay.car,
           allow: ZoneAllow(scooter: true, heavy: true),
         ),
       );
-      expect(bad.containsKey('access'), isFalse);
-      expect(zoneProblem(bad), contains('汽車格'));
+      expect(noAccess.containsKey('access'), isFalse);
+      expect(zoneProblem(noAccess), isNull);
+      expect(zoneConditionConsistent(noAccess), isTrue);
+      final bad = zoneWithCondition(
+        {'name': 'A'},
+        const ParkingCondition(
+          bay: Bay.heavy,
+          allow: ZoneAllow(scooter: true, heavy: true),
+        ),
+      );
+      expect(zoneProblem(bad), contains('格式不正確'), reason: '重機格不開放普機');
       final unknown = zoneWithCondition(
         {'name': 'A'},
         const ParkingCondition(
