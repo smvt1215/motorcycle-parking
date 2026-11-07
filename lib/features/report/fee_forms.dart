@@ -796,7 +796,9 @@ class _TextAction extends StatelessWidget {
     style: TextButton.styleFrom(
       foregroundColor: brand,
       minimumSize: Size(48, isCupertino ? 44 : 48),
-      textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+      // From the theme: a bare style would drop its font family.
+      textStyle: Theme.of(context).textTheme.labelLarge
+          ?.copyWith(fontSize: 15, fontWeight: FontWeight.w600),
     ),
     onPressed: onPressed,
     icon: icon == null ? null : Icon(icon, size: 20),

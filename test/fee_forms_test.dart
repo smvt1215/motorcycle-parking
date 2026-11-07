@@ -142,6 +142,71 @@ const _inherit = ParkingSpot(
   ],
 );
 
+const _mixedInherit = ParkingSpot(
+  id: 'official:mixed',
+  name: '沿用停車場',
+  lat: 25.03,
+  lng: 121.56,
+  city: '臺北市',
+  spaceType: SpaceType.offStreet,
+  source: 'official',
+  fee: Fee(
+    scooter: _plain,
+    heavy: Rate(FeeMode.free),
+    car: Rate(
+      FeeMode.byTime,
+      periods: [FeePeriod(days: 'all', rate: Rate(FeeMode.free))],
+    ),
+  ),
+  zones: [
+    ParkingZone(
+      id: 'b3',
+      name: 'B3 汽車區',
+      condition: ParkingCondition(
+        bay: Bay.car,
+        use: BayUse.share,
+        share: ShareKind.carMotorcycle,
+        allow: ZoneAllow(scooter: true, heavy: true),
+      ),
+    ),
+  ],
+);
+
+const _ruleStreet = ParkingSpot(
+  id: 'official:rules',
+  name: '南京東路三段路邊機車格',
+  lat: 25.05,
+  lng: 121.54,
+  city: '臺北市',
+  spaceType: SpaceType.paidMotorcycle,
+  source: 'official',
+  segments: [
+    ParkingSegment(
+      id: 's1',
+      name: '北側・一般機車格',
+      side: RoadSide.north,
+      condition: ParkingCondition(
+        bay: Bay.motorcycle,
+        use: BayUse.usual,
+        charge: Charge.toll,
+        limits: [_night],
+        allow: ZoneAllow(scooter: true, heavy: true),
+      ),
+    ),
+    ParkingSegment(
+      id: 's2',
+      name: '南側・汽機車共用格',
+      side: RoadSide.south,
+      condition: ParkingCondition(
+        bay: Bay.car,
+        use: BayUse.share,
+        share: ShareKind.carMotorcycle,
+        allow: ZoneAllow(scooter: true, heavy: true),
+      ),
+    ),
+  ],
+);
+
 const _oneZone = ParkingSpot(
   id: 'official:one',
   name: '單區停車場',
@@ -546,6 +611,24 @@ void main() {
   });
 
   group('F0', () {
+    for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
+      for (final (width, scale) in const [
+        (320.0, 1.6),
+        (390.0, 1.6),
+        (700.0, 1.0),
+        (1040.0, 1.0),
+      ]) {
+        testWidgets('長的沿用標籤在 $width 寬 $scale 倍 ${platform.name} 不溢出', (
+          tester,
+        ) async {
+          await pump(tester, _mixedInherit, width: width, scale: scale);
+          await tapKey(tester, 'suggest-fee');
+          expect(find.text('沿用全場：普機 20/時、重機 免費、汽車 依時段'), findsOneWidget);
+          expect(tester.takeException(), isNull);
+        }, variant: TargetPlatformVariant({platform}));
+      }
+    }
+
     testWidgets('每區三種車都有標籤，B3 補汽車 未提供，全場卡進 F1', (tester) async {
       await pump(tester, _lot);
       await tapKey(tester, 'suggest-fee');
@@ -770,6 +853,29 @@ void main() {
       );
       expect(find.text('先新增分區'), findsOneWidget);
     });
+
+    for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
+      for (final (width, scale) in const [
+        (320.0, 1.6),
+        (390.0, 1.6),
+        (700.0, 1.0),
+        (1040.0, 1.0),
+      ]) {
+        testWidgets('S5b 在 $width 寬 $scale 倍 ${platform.name} 不溢出', (
+          tester,
+        ) async {
+          await pump(tester, _ruleStreet, width: width, scale: scale);
+          await tapKey(tester, 'suggest-limits');
+          expect(find.text('管哪幾段？　可複選'), findsNothing);
+          await tapKey(tester, 'rule-card-0');
+          expect(find.text('管哪幾段？　可複選'), findsOneWidget);
+          expect(tester.takeException(), isNull);
+          await tapText(tester, '新增一條規定');
+          await tapKey(tester, 'rule-kind');
+          expect(tester.takeException(), isNull);
+        }, variant: TargetPlatformVariant({platform}));
+      }
+    }
 
     for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
       for (final (width, scale) in const [

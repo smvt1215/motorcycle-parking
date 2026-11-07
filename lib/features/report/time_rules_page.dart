@@ -455,11 +455,6 @@ class _RuleFields extends StatelessWidget {
           error('vehicles'),
         ],
         gap(),
-        const PhotoUnavailableField(
-          caption: '照片上傳開放後才能用（社群核實 P2）',
-          semanticLabel: '新增告示牌照片（尚未開放）',
-        ),
-        gap(),
         RemoveEntryButton(
           label: '現場沒有這條規定了',
           icon: Icons.delete_outline,
