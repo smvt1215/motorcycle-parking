@@ -59,6 +59,7 @@ const confirmAnswer = (result, scheduledAt = null) => ({
 const SCREENS = [
   { name: 'explanation', signedIn: false, heading: '刪除你的帳號' },
   { name: 'privacy', path: '/privacy', signedIn: false, heading: '隱私權政策' },
+  { name: 'terms', path: '/terms', signedIn: false, heading: '服務條款' },
   {
     name: 'signin-checking',
     signedIn: false,

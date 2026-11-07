@@ -15,7 +15,8 @@
 | `/support/verify#token=…`     | 確認信的一次性連結（#285）             | 已完成 |
 | `/support/cancel#token=…`     | 通知信的「取消刪除」連結（#289）       | 已完成 |
 | `/privacy`                    | 隱私權政策                             | 已完成 |
-| `/terms`、`/data-sources`     | 政策頁                                 | 之後   |
+| `/terms`                      | 服務條款                               | 已完成 |
+| `/data-sources`               | 資料來源與授權                         | 之後   |
 
 政策內容放在 `src/legal/*.md`，版本和日期放在 `src/legal/policies.ts`。改稿時換 Markdown，並更新這兩個值。
 

@@ -23,6 +23,7 @@ function Mark() {
 const TITLES: Record<string, string> = {
   '/account-deletion': '刪除帳號',
   '/privacy': '隱私權政策',
+  '/terms': '服務條款',
   '/support': '聯絡我們',
   '/support/verify': '確認申請',
   '/support/cancel': '取消刪除帳號',
@@ -75,7 +76,9 @@ export function Site({
             隱私權政策
           </Link>
           <Link to="/account-deletion">刪除帳號</Link>
-          <a href="/terms">服務條款</a>
+          <Link to="/terms" aria-current={current === '服務條款' ? 'page' : undefined}>
+            服務條款
+          </Link>
           {/* Questions go through the support form, never a mail link (#295). */}
           <Link to="/support">聯絡我們</Link>
         </div>
