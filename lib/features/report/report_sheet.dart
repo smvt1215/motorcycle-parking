@@ -18,12 +18,14 @@ import '../../models/taiwan_districts.dart';
 import '../../ui/option_pill.dart';
 import '../../ui/address_search_field.dart';
 import '../../ui/adaptive/adaptive.dart';
-import '../../ui/fee_editor.dart' show FeeVehicle;
 import '../../ui/location_picker.dart';
 import '../map/vehicle_sheet.dart';
 import 'entry_drafts.dart';
+import 'fee_forms.dart';
 import 'entry_pages.dart';
 import 'form_parts.dart';
+import 'time_rules.dart';
+import 'time_rules_page.dart';
 
 export 'report_rules.dart';
 
@@ -443,8 +445,11 @@ class _ReportFormState extends State<ReportForm> {
   final zones = <EntryDraft>[], segments = <EntryDraft>[];
   List<EntryDraft> get entries => lot ? zones : segments;
 
-  /// Problems the last 送出 found in the kind cards and 停哪裡.
-  String? kindProblem, whereProblem;
+  /// 能不能停 (S5, S5b), copied into the entries when sent.
+  List<TimeRule> rules = [];
+
+  /// Problems the last 送出 found in the kind cards, 停哪裡 and 能不能停.
+  String? kindProblem, whereProblem, rulesProblem;
 
   final anchors = {
     for (final part in const ['location', 'name', 'kind', 'where'])
@@ -565,7 +570,12 @@ class _ReportFormState extends State<ReportForm> {
   }
 
   /// The spot as it will be sent.
-  Map<String, Object?> spotPayload() => {
+  Map<String, Object?> spotPayload() {
+    applyRules(rules, entries);
+    return _spotPayload();
+  }
+
+  Map<String, Object?> _spotPayload() => {
     'name': name.text.trim(),
     'lat': lat,
     'lng': lng,
@@ -617,6 +627,12 @@ class _ReportFormState extends State<ReportForm> {
       whereProblem = offStreet != null && entries.isEmpty
           ? '請填停哪裡：至少一${lot ? '區' : '段'}，兩種車都要選'
           : null;
+      pruneRules();
+      rulesProblem = whereProblem != null
+          ? null
+          : rules.any((r) => !r.all && r.scope.isEmpty)
+          ? '有規定沒有選管哪幾${lot ? '區' : '段'}，請到這裡選好或刪除'
+          : rulesOverflow(rules, entries);
     });
     final locationOk = city != null && inTaiwanBounds(lat, lng);
     if (!locationOk) {
@@ -626,11 +642,14 @@ class _ReportFormState extends State<ReportForm> {
       scrollTo('name');
     } else if (kindProblem != null) {
       scrollTo('kind');
-    } else if (whereProblem != null || !fields) {
+    } else if (whereProblem != null || rulesProblem != null || !fields) {
       // Past 停哪裡 only the optional fields are left to fix.
       scrollTo('where');
     }
-    return fields && kindProblem == null && whereProblem == null;
+    return fields &&
+        kindProblem == null &&
+        whereProblem == null &&
+        rulesProblem == null;
   }
 
   Future<void> submit() async {
@@ -831,31 +850,80 @@ class _ReportFormState extends State<ReportForm> {
     drafts: entries,
     fee: () => fee,
     onChanged: () => setState(() => whereProblem = null),
-    onSpotFee: lot ? null : editFee,
-    onEntryFee: lot
-        ? null
-        : (context, draft) async {
-            final next = await showFeeDraftPage(
-              context,
-              subtitle: draft.displayName,
-              value: draft.fee ?? const Fee(),
-              vehicle: FeeVehicle.of(widget.store.vehicle),
-            );
-            if (next != null) {
-              setState(() => draft.fee = next.isEmpty ? null : next);
-            }
-          },
+    onSpotFee: lot ? null : (context) => editFee(context),
+    onEntryFee: lot ? null : editFee,
   );
 
-  /// 全場費率 or 整條路費率, on the page PR10's F1 replaces.
-  Future<void> editFee(BuildContext context) async {
-    final next = await showFeeDraftPage(
+  /// 全場費率 or 整條路費率, or an entry's own rates, on F1 (C14).
+  Future<void> editFee(BuildContext context, [EntryDraft? draft]) async {
+    applyRules(rules, entries);
+    final next = await openFeePage(
       context,
-      subtitle: subtitle,
-      value: fee,
-      vehicle: FeeVehicle.of(widget.store.vehicle),
+      store: widget.store,
+      spotName: subtitle,
+      type: lot ? EntryType.zone : EntryType.segment,
+      drafts: entries,
+      spotFee: fee,
+      draft: draft,
+      district: district,
     );
-    if (next != null) setState(() => fee = next);
+    if (next == null) return;
+    setState(() {
+      if (draft == null) {
+        fee = next;
+      } else {
+        draft.fee = next;
+      }
+    });
+  }
+
+  /// F0: a lot's zones and its 全場費率.
+  Future<void> openFee() async {
+    applyRules(rules, entries);
+    await Navigator.of(context).push<void>(
+      formRoute(
+        FeeZonesPage(
+          store: widget.store,
+          spotName: subtitle,
+          drafts: entries,
+          spotFee: () => fee,
+          wholeText: () => wholeFeeText(fee, null),
+          district: district,
+          onSpotFee: (v) => setState(() => fee = v),
+        ),
+      ),
+    );
+    if (mounted) setState(() {});
+  }
+
+  /// Entries taken out since leave the rules that named them.
+  void pruneRules() {
+    final tokens = {for (final d in entries) d.token};
+    for (final r in rules) {
+      r.scope.retainAll(tokens);
+    }
+  }
+
+  /// S5 or S5b; 完成 keeps the rules here until N1 sends (C14).
+  Future<void> openRules() async {
+    pruneRules();
+    final next = await Navigator.of(context).push<List<TimeRule>>(
+      formRoute(
+        TimeRulesPage(
+          store: widget.store,
+          type: lot ? EntryType.zone : EntryType.segment,
+          subtitle: subtitle,
+          drafts: entries,
+          rules: rules,
+        ),
+      ),
+    );
+    if (next != null) {
+      setState(() {
+        rules = next;
+        rulesProblem = null;
+      });
+    }
   }
 
   void openWhere() =>
@@ -864,7 +932,8 @@ class _ReportFormState extends State<ReportForm> {
 
   String get feeSummary {
     if (!fee.isEmpty) return feeNoteOf(fee);
-    return !lot && segments.any((d) => d.fee != null) ? '依路段' : '未填';
+    if (!entries.any((d) => d.fee != null)) return '未填';
+    return lot ? '依分區' : '依路段';
   }
 
   Widget _buildForm(BuildContext context) {
@@ -943,13 +1012,14 @@ class _ReportFormState extends State<ReportForm> {
           EntrySection(
             footer: '「有沒有位」不用填，由官方即時資料和車友回報提供。',
             rows: [
-              // S5 and S5b come with PR10.
-              const EntryRow(
-                key: ValueKey('n1-rules'),
-                leading: Icon(Icons.fact_check_outlined),
+              EntryRow(
+                key: const ValueKey('n1-rules'),
+                leading: const Icon(Icons.fact_check_outlined),
                 title: '能不能停',
-                subtitle: '限時／禁停／共用時段',
-                value: '即將開放',
+                subtitle: picked ? '限時／禁停／共用時段' : '先選這是哪一種停車點',
+                value: rules.isEmpty ? '未填' : '已填',
+                problem: rulesProblem,
+                onTap: picked ? openRules : null,
               ),
               EntryRow(
                 key: const ValueKey('n1-fee'),
@@ -964,7 +1034,7 @@ class _ReportFormState extends State<ReportForm> {
                 onTap: !picked
                     ? null
                     : lot
-                    ? () => editFee(context)
+                    ? openFee
                     : openWhere,
               ),
               EntryRow(

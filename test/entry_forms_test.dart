@@ -473,13 +473,6 @@ void main() {
       }
       expect(find.text('松壽路側車道下坡・2 區'), findsOneWidget);
       expect(find.text('可停車種'), findsNothing);
-      // The rest of a lot's limits wait for S5.
-      expect(
-        tester
-            .widget<EntryRow>(find.byKey(const ValueKey('suggest-limits')))
-            .onTap,
-        isNull,
-      );
       expect(find.text('場站型式'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });

@@ -587,9 +587,10 @@ class PhotoUnavailableField extends StatelessWidget {
   const PhotoUnavailableField({
     super.key,
     this.caption = '照片上傳開放後才能用（社群核實 P2）。現在可以附告示牌或官方公告的網址。',
+    this.semanticLabel = '新增照片（尚未開放）',
     this.evidence,
   });
-  final String caption;
+  final String caption, semanticLabel;
 
   /// The notice link field, built by the form so it joins its [Form].
   final Widget? evidence;
@@ -605,7 +606,7 @@ class PhotoUnavailableField extends StatelessWidget {
             Semantics(
               button: true,
               enabled: false,
-              label: '新增照片（尚未開放）',
+              label: semanticLabel,
               excludeSemantics: true,
               child: CustomPaint(
                 painter: _DashedBorder(color: colors.outline, radius: 12),
@@ -859,6 +860,332 @@ class FormLabel extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+/// One rule of S5 or a card that folds the same way: its icon, title and
+/// summary in a row of 60 at least, and [child] while [open]. Long summaries
+/// wrap; the title does not (C17).
+class RuleFoldCard extends StatelessWidget {
+  const RuleFoldCard({
+    super.key,
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.summary,
+    this.badge,
+    this.badgeColor,
+    required this.open,
+    required this.onToggle,
+    required this.child,
+  });
+  final IconData icon;
+  final Color iconColor;
+  final String title, summary;
+
+  /// 修改中, 將移除; a new spot shows none (C14).
+  final String? badge;
+  final Color? badgeColor;
+  final bool open;
+  final VoidCallback onToggle;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Material(
+      color: colors.surface,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: open ? brand : colors.outlineVariant,
+          width: open ? 1.5 : 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Semantics(
+            button: true,
+            expanded: open,
+            child: InkWell(
+              onTap: onToggle,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 60),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 10, 8),
+                  child: Row(
+                    children: [
+                      ExcludeSemantics(child: Icon(icon, color: iconColor)),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            Text(
+                              summary,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: colors.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (badge != null) ...[
+                        const SizedBox(width: 8),
+                        Text(
+                          badge!,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: badgeColor ?? colors.primary,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(width: 4),
+                      Icon(
+                        open ? Icons.expand_less : Icons.expand_more,
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (open) ...[
+            Divider(height: 1, color: colors.outlineVariant),
+            Padding(padding: const EdgeInsets.all(12), child: child),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// A tile that is on or off: a day, a preset, an entry a rule covers.
+class ChoiceTile extends StatelessWidget {
+  const ChoiceTile({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.exclusive = false,
+    this.tooltip,
+    this.radius = 10,
+  });
+  final String label;
+  final bool selected, exclusive;
+  final VoidCallback onTap;
+  final String? tooltip;
+  final double radius;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final shape = BorderRadius.circular(radius);
+    return Semantics(
+      button: true,
+      inMutuallyExclusiveGroup: exclusive,
+      selected: exclusive ? selected : null,
+      toggled: exclusive ? null : selected,
+      label: tooltip ?? label,
+      excludeSemantics: true,
+      child: Material(
+        color: selected ? colors.primaryContainer : colors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: shape,
+          side: BorderSide(
+            color: selected ? brand : colors.outlineVariant,
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: _touch, minWidth: _touch),
+            child: Center(
+              widthFactor: 1,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                child: Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+                    color: selected
+                        ? colors.onPrimaryContainer
+                        : colors.onSurface,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 管哪幾區 and 管哪幾段: everything, or some entries. From everything, a tap
+/// on one entry leaves that one; picking the last one is everything again.
+class ScopeChips extends StatelessWidget {
+  const ScopeChips({
+    super.key,
+    required this.allLabel,
+    required this.items,
+    required this.all,
+    required this.value,
+    required this.onChanged,
+    required this.semanticLabel,
+  });
+  final String allLabel;
+
+  /// Each entry with its chip: B1 機車區・一般機車格.
+  final List<(Object, String)> items;
+  final bool all;
+  final Set<Object> value;
+  final void Function(bool all, Set<Object> value) onChanged;
+  final String semanticLabel;
+
+  void _toggle(Object id) {
+    if (all) return onChanged(false, {id});
+    final next = {...value};
+    next.contains(id) ? next.remove(id) : next.add(id);
+    if (next.length == items.length) return onChanged(true, const {});
+    onChanged(false, next);
+  }
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: semanticLabel,
+    container: true,
+    child: Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        ChoiceTile(
+          key: const ValueKey('rule-scope-all'),
+          label: allLabel,
+          selected: all,
+          radius: 22,
+          onTap: () => onChanged(!all, const {}),
+        ),
+        for (final (i, (id, text)) in items.indexed)
+          ChoiceTile(
+            key: ValueKey('rule-scope-$i'),
+            label: text,
+            selected: !all && value.contains(id),
+            radius: 22,
+            onTap: () => _toggle(id),
+          ),
+      ],
+    ),
+  );
+}
+
+const _weekNames = '一二三四五六日';
+const _weekWires = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+/// 哪幾天 (S5): 每天、平日、假日, or weekdays picked one by one. [days] is
+/// the contract's: `all`, `weekday`, `holiday` or a list of weekdays.
+class DaysPicker extends StatelessWidget {
+  const DaysPicker({super.key, required this.days, required this.onChanged});
+  final Object days;
+  final ValueChanged<Object> onChanged;
+
+  void _toggle(String day) {
+    final now = days is List ? days as List<String> : const <String>[];
+    final next = now.contains(day)
+        ? [...now.where((d) => d != day)]
+        : [
+            for (final d in _weekWires)
+              if (d == day || now.contains(d)) d,
+          ];
+    onChanged(next);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    const gap = 4.0;
+    final picked = days is List ? days as List<String> : const <String>[];
+    Widget preset(String wire, String label) => ChoiceTile(
+      key: ValueKey('rule-days-$wire'),
+      label: label,
+      selected: days == wire,
+      exclusive: true,
+      onTap: () => onChanged(wire),
+    );
+    Widget day(int i) => ChoiceTile(
+      key: ValueKey('rule-day-$i'),
+      label: _weekNames[i],
+      tooltip: '週${_weekNames[i]}',
+      selected: picked.contains(_weekWires[i]),
+      onTap: () => _toggle(_weekWires[i]),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Semantics(
+          label: '常用天數',
+          container: true,
+          child: Row(
+            children: [
+              Expanded(child: preset('all', '每天')),
+              const SizedBox(width: 8),
+              Expanded(child: preset('weekday', '平日')),
+              const SizedBox(width: 8),
+              Expanded(child: preset('holiday', '假日')),
+            ],
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          '或自選星期',
+          style: TextStyle(fontSize: 13, color: colors.onSurfaceVariant),
+        ),
+        const SizedBox(height: 4),
+        Semantics(
+          label: '自選星期',
+          container: true,
+          child: LayoutBuilder(
+            builder: (context, box) => box.maxWidth < _touch * 7 + gap * 6
+                ? Wrap(
+                    spacing: gap,
+                    runSpacing: gap,
+                    children: [
+                      for (var i = 0; i < 7; i++)
+                        SizedBox(width: _touch, child: day(i)),
+                    ],
+                  )
+                : Row(
+                    children: [
+                      for (var i = 0; i < 7; i++) ...[
+                        if (i > 0) const SizedBox(width: gap),
+                        Expanded(child: day(i)),
+                      ],
+                    ],
+                  ),
+          ),
+        ),
+      ],
     );
   }
 }
