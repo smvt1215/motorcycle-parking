@@ -310,6 +310,68 @@
         }
       }
     },
+    "/rpc/spot_sightings": {
+      "post": {
+        "operationId": "api_v1_spot_sightings",
+        "summary": "依 id 讀騎士回報的彙整（地圖、詳情）",
+        "description": "一次最多 600 個 id：社群點用 uuid，官方點用 official:<uuid>。依點位、分區或路段、車種各回一列，只有時間窗內有車友回報的才回傳；格式不符或沒有回報的 id 不回傳，重複的 id 只回一次。無法停車／施工中的回報不列入。不需要登入。錯誤：400 request.too_many_ids（超過 600 個）、400 request.invalid（p_window_minutes 不是 15 或 30）。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "p_spot_ids"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "p_spot_ids": {
+                    "type": "array",
+                    "maxItems": 600,
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "停車點 id"
+                  },
+                  "p_window_minutes": {
+                    "type": "integer",
+                    "enum": [
+                      15,
+                      30
+                    ],
+                    "default": 30,
+                    "description": "只看最近幾分鐘：地圖 15，詳情 30"
+                  }
+                },
+                "example": {
+                  "p_spot_ids": [
+                    "00000000-0000-4000-8000-000000000000",
+                    "official:00000000-0000-4000-8000-000000000000"
+                  ],
+                  "p_window_minutes": 15
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "依 id 讀騎士回報的彙整（地圖、詳情）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpotSightings"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/rpc/hidden_riders_list": {
       "post": {
         "operationId": "api_v1_hidden_riders_list",
@@ -1044,6 +1106,110 @@
               "$ref": "#/components/schemas/Spot"
             },
             "description": "看得到的點；官方點在前、社群點在後，各依 id 排序"
+          }
+        }
+      },
+      "SpotSighting": {
+        "type": "object",
+        "required": [
+          "spot_id",
+          "zone_id",
+          "segment_id",
+          "vehicle",
+          "level",
+          "count",
+          "low",
+          "high",
+          "low_riders",
+          "high_riders",
+          "latest_at",
+          "conflicting"
+        ],
+        "additionalProperties": false,
+        "description": "一個點位、分區或路段、車種的車友回報彙整（#189）",
+        "properties": {
+          "spot_id": {
+            "type": "string",
+            "description": "停車點 id"
+          },
+          "zone_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "分區 id；不是分區的回報為 null"
+          },
+          "segment_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "路段 id；不是路段的回報為 null"
+          },
+          "vehicle": {
+            "type": "string",
+            "enum": [
+              "scooter",
+              "heavy"
+            ],
+            "description": "車種"
+          },
+          "level": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3,
+            "description": "加權中位數：0 很多空位、1 還有一些、2 快滿了、3 已停滿。說法不一時畫兩端用 low、high，不用這個值"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "列入彙整的車友人數：每人、每裝置各算最新一筆，不含停權與可信度不足者"
+          },
+          "low": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3,
+            "description": "回報中最小的 level（較空的一端）"
+          },
+          "high": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3,
+            "description": "回報中最大的 level（較滿的一端）"
+          },
+          "low_riders": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "說 low 那一級的車友人數"
+          },
+          "high_riders": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "說 high 那一級的車友人數"
+          },
+          "latest_at": {
+            "type": "string",
+            "description": "ISO 8601 時間。列入彙整的最新一筆回報"
+          },
+          "conflicting": {
+            "type": "boolean",
+            "description": "說法不一：中位數前後一級內的權重未達 70%"
+          }
+        }
+      },
+      "SpotSightings": {
+        "type": "object",
+        "required": [
+          "sightings"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "sightings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpotSighting"
+            },
+            "description": "依 spot_id、zone_id、segment_id、vehicle 排序"
           }
         }
       },
