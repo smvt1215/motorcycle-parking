@@ -145,7 +145,7 @@ String limitSummary(ParkingSpot spot) {
 /// read as a range (依路段 20–30/時), mixed ones as 依路段
 /// (PM_ANS_20261101_56).
 String feeSummary(ParkingSpot spot) {
-  final whole = spot.feeNote.isEmpty ? '未提供' : spot.feeNote;
+  final whole = noFeeText(spot.feeNote) ? '未提供' : spot.feeNote;
   if (!spot.segments.any((s) => s.fee != null)) return whole;
   final rates = [
     for (final s in spot.segments) (s.fee ?? spot.fee)?.toJson()['scooter'],

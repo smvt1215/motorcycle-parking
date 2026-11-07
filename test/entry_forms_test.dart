@@ -634,6 +634,8 @@ void main() {
       final store = await open(tester, _bare);
       await tapKey(tester, 'suggest-where');
       expect(find.textContaining(firstSegmentNote), findsOneWidget);
+      // 費率沒寫一律未提供.
+      expect(find.text('未提供'), findsNWidgets(2));
       await tapText(tester, '一般機車格');
       await tester.enterText(find.byKey(const ValueKey('entry-total')), '8');
       await tester.pumpAndSettle();

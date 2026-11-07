@@ -23,6 +23,11 @@ import 'form_parts.dart';
 import 'report_sheet.dart';
 import 'spot_suggestions.dart' show reportSummary;
 
+/// Whether stored fee text says nothing: 費率沒寫一律未提供
+/// (PM_ANS_20261101_56).
+bool noFeeText(String text) =>
+    const {'', '依現場公告', defaultFeeNote, '費率未確認'}.contains(text.trim());
+
 /// On the card of a street spot without segments: what sending it does.
 const firstSegmentNote = '改了送出後，這裡會成為這條路的第一段；其他段請用「新增一段」補上。';
 
@@ -329,7 +334,7 @@ class _EntryListPageState extends State<EntryListPage> {
     final fee = args.spot?.feeNote;
     final rates = args.fee();
     if (!rates.isEmpty) return feeNoteOf(rates);
-    return fee == null || fee.isEmpty ? '未提供' : fee;
+    return fee == null || noFeeText(fee) ? '未提供' : fee;
   }
 
   Widget _zoneRow(EntryDraft d) => EntryRow(
