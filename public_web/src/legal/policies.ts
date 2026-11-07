@@ -2,6 +2,7 @@
 // revision (e.g. after the lawyer's review) only swaps the file and bumps the
 // version and dates here.
 import privacyText from './privacy.md?raw';
+import termsText from './terms.md?raw';
 
 export interface Policy {
   title: string;
@@ -11,6 +12,8 @@ export interface Policy {
   effective: string;
   updated: string;
   markdown: string;
+  /** The notice above the text until the professional review is done (user, 2026-11-07). */
+  notice: string;
 }
 
 /** User decisions 2026-11-07 (PM_ANS Q_PRIVACY_PAGE): version 1.0, dated the day it goes live. */
@@ -20,11 +23,20 @@ export const privacy: Policy = {
   effective: '2026-11-07',
   updated: '2026-11-07',
   markdown: privacyText,
+  notice:
+    '這份政策尚待專業人士審閱，之後可能調整。調整時會更新版本與生效日期，並在「十二、政策修改」說明改了什麼。',
 };
 
-/** The notice above every policy until the professional review is done (user, 2026-11-07). */
-export const reviewNotice =
-  '這份政策尚待專業人士審閱，之後可能調整。調整時會更新版本與生效日期，並在「十二、政策修改」說明改了什麼。';
+/** The privacy policy's layout and the same notice (PM 2026-11-07). */
+export const terms: Policy = {
+  title: '服務條款',
+  version: '1.0',
+  effective: '2026-11-07',
+  updated: '2026-11-07',
+  markdown: termsText,
+  notice:
+    '這份條款尚待專業人士審閱，之後可能調整。調整時會更新版本與生效日期，並依「第 11 條　條款修改」通知你。',
+};
 
 /** 「2026 年 11 月 7 日」 */
 export function dateLabel(iso: string): string {

@@ -70,6 +70,7 @@ describe('the title in the browser tab', () => {
   it.each([
     ['/account-deletion', '刪除帳號｜機車停車指南'],
     ['/privacy', '隱私權政策｜機車停車指南'],
+    ['/terms', '服務條款｜機車停車指南'],
     ['/support', '聯絡我們｜機車停車指南'],
     ['/support/verify', '確認申請｜機車停車指南'],
     ['/support/cancel', '取消刪除帳號｜機車停車指南'],
