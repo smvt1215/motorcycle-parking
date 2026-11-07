@@ -274,9 +274,9 @@ $$;
 -- Whether a zone's access agrees with its condition (§1.3, decision 32): a
 -- zone without a condition is not checked here; one with a condition has an
 -- allow naming both vehicles, and its access is the one the condition writes
--- back. A condition that writes back no access is inconsistent, except one
--- whose allow says not_stated for a vehicle (#201): it has no access to
--- write back, so the zone carries none.
+-- back. A condition that writes back no access (a car bay scooters may park
+-- in, #190; or an allow saying not_stated for a vehicle, #201) has none to
+-- write back, so the zone carries none and old builds read it as unconfirmed.
 create or replace function public.zone_condition_consistent(p_zone jsonb) returns boolean
 language sql immutable set search_path='' as $$
   select coalesce(jsonb_typeof(p_zone->'condition'),'null')='null'
@@ -285,6 +285,10 @@ language sql immutable set search_path='' as $$
         where e.value=(public.parking_contract()->'eligibility'->'not_stated'))
       then coalesce(jsonb_typeof(p_zone->'access'),'null')='null'
         and p_zone->'condition'->'allow' ?& array['scooter','heavy']
+      when jsonb_typeof(p_zone->'condition'->'allow')='object'
+        and p_zone->'condition'->'allow' ?& array['scooter','heavy']
+        and public.condition_legacy_access(p_zone->'condition') is null
+      then coalesce(jsonb_typeof(p_zone->'access'),'null')='null'
       else jsonb_typeof(p_zone->'access')='string'
         and coalesce((p_zone->>'access')=public.condition_legacy_access(p_zone->'condition'),false) end;
 $$;

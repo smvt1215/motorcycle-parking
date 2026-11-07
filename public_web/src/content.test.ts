@@ -32,6 +32,10 @@ describe('the web says what the App says about deletion', () => {
     expect(content.keptHeading).toBe(dartString('deletionKeptHeading'));
   });
 
+  it('says the same about a suspension surviving deletion', () => {
+    expect(content.retention).toContain(dartString('deletionSuspensionNote'));
+  });
+
   it('describes the abuse hash the same way', () => {
     expect(content.hashBody.startsWith(dartString('deletionHashTitle'))).toBe(true);
     expect(content.hashBody).toContain(dartString('deletionHashDetail'));
