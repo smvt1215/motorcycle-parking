@@ -5,7 +5,7 @@ import { CasePage } from './support/CasePage';
 import { CancelPage, VerifyPage } from './support/LinkPages';
 import { SupportPage } from './support/SupportPage';
 import { PolicyPage } from './pages/Policy';
-import { privacy } from './legal/policies';
+import { privacy, terms } from './legal/policies';
 
 /** The public site's paths (PM_ANS_20261101_124): more join as their pages land. */
 export const routes: RouteObject[] = [
@@ -16,5 +16,6 @@ export const routes: RouteObject[] = [
   { path: '/support/cancel', element: <CancelPage /> },
   { path: '/support/case', element: <CasePage /> },
   { path: '/privacy', element: <PolicyPage policy={privacy} /> },
+  { path: '/terms', element: <PolicyPage policy={terms} /> },
   { path: '*', element: <NotFound /> },
 ];
