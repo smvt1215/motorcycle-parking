@@ -350,7 +350,22 @@ class SuggestionListPage extends StatelessWidget {
           EntrySection(
             header: '能不能停',
             rows: [
-              if (street)
+              // TDX spots have no entries to patch, so theirs is the
+              // spot-level form.
+              if (!_hasEntries(spot))
+                EntryRow(
+                  key: const ValueKey('suggest-eligibility'),
+                  leading: const Icon(Icons.fact_check_outlined),
+                  title: '可停車種',
+                  value: eligibilitySummary(spot),
+                  onTap: () => _form(
+                    context,
+                    'eligibility',
+                    '可停車種',
+                    eligibilitySummary(spot),
+                  ),
+                )
+              else if (street)
                 EntryRow(
                   key: const ValueKey('suggest-vehicles'),
                   leading: const Icon(Icons.fact_check_outlined),
@@ -592,6 +607,24 @@ class _SuggestionFormState extends State<_SuggestionForm> {
   /// The space type sent: the one the suggested condition converts to.
   SpaceType get type => condition.typeFor(kind);
 
+  /// The spot's eligibility today; null is old data's 未確認, which a
+  /// suggestion never sends back (#201).
+  late final Eligible? currentScooter = Eligible.of(
+    widget.spot.scooterAllowed,
+    notStated: widget.spot.scooterNotStated,
+  );
+  late final Eligible? currentHeavy = Eligible.of(
+    widget.spot.heavyAllowed,
+    notStated: widget.spot.heavyNotStated,
+  );
+  late Eligible? scooter = currentScooter;
+  late Eligible? heavy = currentHeavy;
+
+  /// Whether 官方未標示 is offered: a lot's official data or its operator's
+  /// notice may leave a vehicle out; a street bay is 可停 or 不可停.
+  bool get lotSpot =>
+      isOffStreet(widget.spot.spaceType, widget.spot.facilityType);
+
   /// The bay's condition as the rider corrects it with the kind.
   late final condition = ConditionDraft.of(
     widget.spot.condition,
@@ -653,6 +686,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
   String get fieldKey => widget.fieldKey;
   bool get unavailable => fieldKey == 'gone';
   bool get typeField => fieldKey == 'space_type';
+  bool get eligibilityField => fieldKey == 'eligibility';
   bool get guideField => fieldKey == 'guide';
   bool get locationField => fieldKey == 'location';
 
@@ -707,7 +741,8 @@ class _SuggestionFormState extends State<_SuggestionForm> {
       widget.spot.entranceNote.isNotEmpty;
 
   /// Structured fields submit the chosen value; the note becomes optional.
-  bool get structured => typeField || guideField || locationField;
+  bool get structured =>
+      typeField || eligibilityField || guideField || locationField;
 
   /// The longest text the spot column takes, so an applied value fits.
   int get maxLength => fieldKey == 'name' ? 100 : 450;
@@ -733,8 +768,9 @@ class _SuggestionFormState extends State<_SuggestionForm> {
           '${text.isEmpty ? '' : '；說明：$text'}';
     }
     if (!structured) return '${widget.label}：$text';
-    final value =
-        '${kind.label}${shareHeavyChanged ? '，大型重機${_yesNo(shareHeavy)}' : ''}';
+    final value = typeField
+        ? '${kind.label}${shareHeavyChanged ? '，大型重機${_yesNo(shareHeavy)}' : ''}'
+        : _eligibility(scooter, heavy);
     return '${widget.label}：建議「$value」${text.isEmpty ? '' : '；說明：$text'}';
   }
 
@@ -805,6 +841,13 @@ class _SuggestionFormState extends State<_SuggestionForm> {
           'city': town.city,
           'district': town.district,
         },
+      };
+    }
+    if (eligibilityField) {
+      return {
+        if (scooter case final v? when v != currentScooter)
+          ...v.payload('scooter'),
+        if (heavy case final v? when v != currentHeavy) ...v.payload('heavy'),
       };
     }
     if (unavailable) {
@@ -887,6 +930,15 @@ class _SuggestionFormState extends State<_SuggestionForm> {
           line('入口', shown(spot.entranceNote), shown(entrance.text.trim())),
         if (guide.text.trim() != spot.parkingGuide)
           line('停車指引', shown(spot.parkingGuide), shown(guide.text.trim())),
+      ];
+    }
+    // Only the vehicles that change, so riders need not compare two lists.
+    if (eligibilityField) {
+      return [
+        if (scooter != currentScooter)
+          line('普通機車', _word(currentScooter), _word(scooter)),
+        if (heavy != currentHeavy)
+          line('大型重機', _word(currentHeavy), _word(heavy)),
       ];
     }
     if (unavailable || text.isEmpty) return const [];
@@ -1172,6 +1224,49 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                           }),
                         ),
                       ],
+                      fieldError(context, state.errorText),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+              ],
+              if (eligibilityField) ...[
+                FormField<(Eligible?, Eligible?)>(
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  validator: (_) =>
+                      scooter == currentScooter && heavy == currentHeavy
+                      ? '請至少改一個車種，和目前不同才能送出'
+                      : null,
+                  builder: (state) => Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: Text(
+                          '現場有告示牌或地面標字時，才選「可停」。',
+                          style: TextStyle(color: colors.onSurfaceVariant),
+                        ),
+                      ),
+                      EligibilityChoice(
+                        label: '普通機車',
+                        value: scooter,
+                        notStated: lotSpot,
+                        keyPrefix: 'suggestion-scooter',
+                        onChanged: (v) {
+                          setState(() => scooter = v);
+                          state.didChange((scooter, heavy));
+                        },
+                      ),
+                      EligibilityChoice(
+                        label: '大型重機',
+                        value: heavy,
+                        notStated: lotSpot,
+                        keyPrefix: 'suggestion-heavy',
+                        onChanged: (v) {
+                          setState(() => heavy = v);
+                          state.didChange((scooter, heavy));
+                        },
+                      ),
                       fieldError(context, state.errorText),
                     ],
                   ),

@@ -570,6 +570,12 @@ List<Map<String, Object?>> entriesPatchOf(List<EntryDraft> drafts) {
   for (final d in drafts) {
     if (d.removed || !d.editable) continue;
     if (d.wholeSpot && !entrySent(d, drafts)) continue;
+    // An entry left alone stays as stored: toJson would state its allow.
+    if (!d.isNew && !d.changed) {
+      next.add(d.original!);
+      taken.add(d.original!['name'] as String);
+      continue;
+    }
     final json = d.toJson([..._others(drafts, d), ...taken]);
     taken.add(json['name']! as String);
     next.add(json);

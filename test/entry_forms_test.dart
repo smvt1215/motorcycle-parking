@@ -104,6 +104,18 @@ const _street = ParkingSpot(
   segments: [_segment],
 );
 
+const _tdx = ParkingSpot(
+  id: 'tdx:lot',
+  name: '市府停車場',
+  lat: 25.05,
+  lng: 121.54,
+  city: '臺北市',
+  spaceType: SpaceType.offStreet,
+  source: 'tdx',
+  scooterAllowed: true,
+  heavyAllowed: true,
+);
+
 const _bare = ParkingSpot(
   id: 'official:bare',
   name: '巷口機車格',
@@ -373,6 +385,20 @@ void main() {
       expect(c.schedule, isEmpty);
       expect(c.share, isNull);
       expect(c.limits.single.kind, LimitKind.timeLimit);
+    });
+
+    test('沒改的路段不進 patch，也不補 allow（Codex #360）', () {
+      final untouched = EntryDraft.ofSegment(
+        const ParkingSegment(id: 'a', name: '舊段'),
+      );
+      final edited =
+          EntryDraft.ofSegment(const ParkingSegment(id: 'b', name: '改的段'))
+            ..kind = SpaceKind.carMotorcycle
+            ..scooter = Eligible.allowed
+            ..heavy = Eligible.notAllowed;
+      final patch = entriesPatchOf([untouched, edited]);
+      expect(patch.map((e) => e['id']), ['b']);
+      expect(entriesPatchOf([untouched]), isEmpty);
     });
 
     test('沒動整段也新增路段時，整段一起成為第一段，不失效', () {
@@ -650,6 +676,35 @@ void main() {
       expect(find.text('整條路費率'), findsOneWidget);
       expect(find.text('新增一段'), findsOneWidget);
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('TDX 點沒有分區，可停車種走點位層表單（Codex #360）', (tester) async {
+      final store = await open(tester, _tdx);
+      expect(find.byKey(const ValueKey('suggest-vehicles')), findsNothing);
+      await tapKey(tester, 'suggest-eligibility');
+      await tapKey(tester, 'suggestion-heavy-notAllowed');
+      await tapText(tester, '送出修改建議');
+      expect(store.sent.single['field'], 'eligibility');
+      expect((store.sent.single['proposed'] as Map)['heavy_allowed'], isFalse);
+    });
+
+    testWidgets('大字級的格位清單同樣只有七種，沒有停車場（Codex #360）', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(textScaler: TextScaler.linear(1.6)),
+            child: Scaffold(
+              body: SingleChildScrollView(
+                child: BayKindGrid(value: null, onChanged: (_) {}),
+              ),
+            ),
+          ),
+        ),
+      );
+      for (final kind in BayKindGrid.kinds) {
+        expect(find.byKey(ValueKey('bay-${kind.name}')), findsOneWidget);
+      }
+      expect(find.byKey(const ValueKey('bay-offStreet')), findsNothing);
     });
 
     testWidgets('沒有路段的路邊點顯示整段，進 S4 新增', (tester) async {

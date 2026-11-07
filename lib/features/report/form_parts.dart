@@ -357,6 +357,7 @@ class BayKindGrid extends StatelessWidget {
       return SpaceKindList(
         value: value,
         keyPrefix: 'bay',
+        kinds: kinds,
         onChanged: onChanged,
       );
     }

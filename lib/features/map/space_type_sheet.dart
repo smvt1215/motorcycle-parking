@@ -452,9 +452,13 @@ class SpaceKindList extends StatelessWidget {
     this.followUp,
     this.keyPrefix = 'space',
     this.reveal = 0,
+    this.kinds = SpaceKind.values,
   });
   final SpaceKind? value;
   final ValueChanged<SpaceKind> onChanged;
+
+  /// The kinds offered, every one unless a form narrows them.
+  final List<SpaceKind> kinds;
 
   /// Spots of each kind in the map view (the filter); null shows none.
   final Map<SpaceKind?, int>? counts;
@@ -471,7 +475,7 @@ class SpaceKindList extends StatelessWidget {
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      for (final kind in SpaceKind.values) ...[
+      for (final kind in kinds) ...[
         SpaceKindOption(
           targetKey: ValueKey('$keyPrefix-${kind.name}'),
           kind: kind,
