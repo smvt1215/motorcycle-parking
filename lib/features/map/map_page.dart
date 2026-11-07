@@ -43,6 +43,13 @@ bool mapInteractive({
   required bool routeIsCurrent,
 }) => showControls && !covered && routeIsCurrent;
 
+/// Whether the map paints the sheet's ground behind the tab bar while a
+/// sheet is open (A1b): only where the map runs behind a floating bar
+/// ([tabBarInset] above 0: iOS; Android's opaque bar ends the page above
+/// it), and not on a tablet (T1, T2: the details are a side panel).
+bool sheetBarBacking({required double tabBarInset, required Size screen}) =>
+    tabBarInset > 0 && screen.shortestSide < 600;
+
 class MapPage extends ConsumerStatefulWidget {
   const MapPage({super.key, this.showControls = true, this.covered = false});
   final bool showControls;
@@ -250,7 +257,9 @@ class _MapPageState extends ConsumerState<MapPage> {
       capsulesOf: (s) => _capsulesOf(store, s, now),
       primaryOf: (s, capsules) => _primaryOf(store, s, capsules),
     );
+    // The Beta is about official counts: a riders' badge never brings it up.
     return shown.values
+        .where((p) => p.$2.any(officialCapsule))
         .map((p) => p.$1)
         .where((s) => inAvailabilityBeta(s.city, cities))
         .firstOrNull;
@@ -266,6 +275,7 @@ class _MapPageState extends ConsumerState<MapPage> {
     store.vehicle,
     store.decide(s),
     now,
+    rider: store.riderMeter(s),
   );
 
   List<AvailabilityCapsule> _primaryOf(
@@ -657,22 +667,48 @@ class _MapPageState extends ConsumerState<MapPage> {
                   ),
                 ),
               ),
-        child: _layers(
-          context,
-          store,
-          colors,
-          darkMap: darkMap,
-          tabBarInset: tabBarInset,
-          spots: spots,
-          excluded: excluded,
-          liveFilter: liveFilter,
-          now: now,
-          matches: matches,
-          query: query,
-          filtered: filtered,
-          searchHeight: searchHeight,
-          filterHeight: filterHeight,
-          open: open,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            _layers(
+              context,
+              store,
+              colors,
+              darkMap: darkMap,
+              tabBarInset: tabBarInset,
+              spots: spots,
+              excluded: excluded,
+              liveFilter: liveFilter,
+              now: now,
+              matches: matches,
+              query: query,
+              filtered: filtered,
+              searchHeight: searchHeight,
+              filterHeight: filterHeight,
+              open: open,
+            ),
+            // Under the floating tab bar, the sheet's own ground runs to the
+            // screen's edge; it comes and goes with the sheet, in the same
+            // frame (A1b).
+            if (open != null &&
+                !covered &&
+                sheetBarBacking(
+                  tabBarInset: tabBarInset,
+                  screen: MediaQuery.sizeOf(context),
+                ))
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                height: tabBarInset,
+                child: IgnorePointer(
+                  child: ColoredBox(
+                    key: const ValueKey('sheet-bar-backing'),
+                    color: colors.surface,
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -697,13 +733,7 @@ class _MapPageState extends ConsumerState<MapPage> {
   }) {
     final openCapsules = open == null
         ? const <AvailabilityCapsule>[]
-        : markerCapsules(
-            open,
-            store.availabilityOf(open),
-            store.vehicle,
-            store.decide(open),
-            now,
-          );
+        : _capsulesOf(store, open, now);
     return Stack(
       children: [
         if (AppConfig.useGoogleMaps)

@@ -18,6 +18,7 @@ const capsulePaper = Color(0xfff9fbfc);
   CapsuleStyle.car => (8, 9),
   CapsuleStyle.full => (10, 9),
   CapsuleStyle.suspended => (8, 9),
+  CapsuleStyle.rider => (8, 8),
 };
 
 /// Light grey behind 「已滿」 and deep purple behind 「暫停」 (canvas v30).
@@ -35,6 +36,9 @@ const _capsuleText = TextStyle(
 
 /// The pill's width at [scale], for laying out crowded markers.
 double capsuleWidth(AvailabilityCapsule capsule, {double scale = 1}) {
+  if (capsule.meter case final meter?) {
+    return (_riderContentWidth(meter) + (2 + 8) * 2) * scale;
+  }
   final painter = TextPainter(
     text: TextSpan(text: capsule.text, style: _capsuleText),
     textDirection: TextDirection.ltr,
@@ -47,6 +51,7 @@ double capsuleWidth(AvailabilityCapsule capsule, {double scale = 1}) {
     CapsuleStyle.car => 12 + 3 + (capsule.delayed ? 12 + 3 : 0),
     CapsuleStyle.full => 0.0,
     CapsuleStyle.suspended => 12 + 3,
+    CapsuleStyle.rider => 0.0,
   };
   final width = 4 + left + right + icons + painter.width;
   painter.dispose();
@@ -59,6 +64,7 @@ double capsuleWidth(AvailabilityCapsule capsule, {double scale = 1}) {
   CapsuleStyle.full => (capsuleFull, badgeInk),
   CapsuleStyle.suspended => (capsuleSuspended, Colors.white),
   CapsuleStyle.delayed || CapsuleStyle.car => (capsulePaper, badgeInk),
+  CapsuleStyle.rider => (riderMeterGround, riderMeterInk),
 };
 
 /// The ink outline inside the white keyline: delayed 2, car bays 1.25.
@@ -105,7 +111,7 @@ void _paintCapsule(
   canvas.drawRRect(
     outer.shift(const Offset(0, 2)),
     Paint()
-      ..color = fill == capsulePaper
+      ..color = fill == capsulePaper || style == CapsuleStyle.rider
           ? const Color(0x33000000)
           : const Color(0x44000000)
       ..maskFilter = MaskFilter.blur(
@@ -128,6 +134,10 @@ void _paintCapsule(
         ..style = PaintingStyle.stroke
         ..strokeWidth = outline,
     );
+  }
+  if (capsule.meter case final meter?) {
+    _paintRiderMeter(canvas, inner.outerRect, meter, scale);
+    return;
   }
   final (left, _) = _padding(style);
   var x = inner.left + left * scale;
@@ -185,6 +195,9 @@ class AvailabilityCapsuleView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (capsule.meter case final meter?) {
+      return RiderMeterBadge(meter: meter, scale: scale);
+    }
     final style = capsule.style;
     final (fill, ink) = _capsuleColors(style);
     // Solid pills cast .27, the outlined paper ones .2.
@@ -471,7 +484,7 @@ class RiderMeterBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final other = meter.other;
-    final barWidth = other == null ? 6.0 : 4.0;
+    final barWidth = other == null ? _riderBarWidth : _riderBarWidthSplit;
     return Semantics(
       label: meter.semantics,
       excludeSemantics: true,
@@ -525,6 +538,73 @@ class RiderMeterBadge extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Bar width of a meter alone, and of each of two.
+const _riderBarWidth = 6.0, _riderBarWidthSplit = 4.0;
+
+/// The meters' width at scale 1: three bars 2 apart, and for two meters a
+/// slash with 4 either side.
+double _riderContentWidth(RiderMeter meter) => meter.other == null
+    ? _riderBarWidth * 3 + 2 * 2
+    : (_riderBarWidthSplit * 3 + 2 * 2) * 2 + 4 * 2 + 1.5;
+
+/// [RiderMeterBadge]'s meters, on a canvas (Google Maps bitmaps).
+void _paintRiderMeter(
+  Canvas canvas,
+  Rect inner,
+  RiderMeter meter,
+  double scale,
+) {
+  final other = meter.other;
+  final bottom = inner.bottom - 3 * scale;
+  void bars(int filled, double left, double width) {
+    for (final (i, height) in const [6.0, 10.0, 14.0].indexed) {
+      final rect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(
+          left + i * (width + 2) * scale,
+          bottom - height * scale,
+          width * scale,
+          height * scale,
+        ),
+        Radius.circular(1.5 * scale),
+      );
+      final stroke = 1.25 * scale;
+      canvas
+        ..drawRRect(
+          rect,
+          Paint()..color = i < filled ? riderMeterInk : Colors.white,
+        )
+        ..drawRRect(
+          rect.deflate(stroke / 2),
+          Paint()
+            ..color = riderMeterInk
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = stroke,
+        );
+    }
+  }
+
+  final left = inner.left + 8 * scale;
+  final width = other == null ? _riderBarWidth : _riderBarWidthSplit;
+  bars(meter.level.bars, left, width);
+  if (other == null) return;
+  final meterWidth = (width * 3 + 2 * 2) * scale;
+  final slash = Offset(left + meterWidth + 4.75 * scale, bottom - 7 * scale);
+  canvas
+    ..save()
+    ..translate(slash.dx, slash.dy)
+    ..rotate(20 * math.pi / 180)
+    ..drawRect(
+      Rect.fromCenter(
+        center: Offset.zero,
+        width: 1.5 * scale,
+        height: 14 * scale,
+      ),
+      Paint()..color = riderMeterSlash,
+    )
+    ..restore();
+  bars(other.bars, left + meterWidth + 9.5 * scale, width);
 }
 
 /// Three rising bars, [bars] of them filled.

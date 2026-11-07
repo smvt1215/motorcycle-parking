@@ -4,6 +4,7 @@ import '../../domain/four_sign.dart';
 import '../../domain/four_sign_display.dart';
 import '../../models/parking.dart';
 import '../../ui/adaptive/adaptive.dart';
+import '../../ui/detail_tokens.dart';
 import '../../ui/four_sign_plates.dart';
 import 'spot_details.dart';
 
@@ -36,8 +37,17 @@ class SpotPreview extends StatelessWidget {
     required this.onClose,
     this.onPlate,
     this.titleNote,
+    this.besideRow,
+    this.disagrees = false,
   });
   final ParkingSpot spot;
+
+  /// The report beside an official count, or the lapsed count beside a
+  /// report (A11).
+  final SeatBesideRow? besideRow;
+
+  /// Show [riderDisagreesNote] under it (A11 card 4).
+  final bool disagrees;
 
   /// A line under the name (P17b ⑪: the contributor's own name held for
   /// review).
@@ -120,7 +130,94 @@ class SpotPreview extends StatelessWidget {
           plates: plates,
           onTap: onPlate,
         ),
+        if (besideRow case final row?) ...[
+          const SizedBox(height: 8),
+          SeatBesideLine(row: row),
+        ],
+        if (disagrees) ...[const SizedBox(height: 8), const _DisagreesNote()],
       ],
+    );
+  }
+}
+
+/// What stands beside the 有沒有位 answer (A11): the riders' report with its
+/// meter, or the official count past its window, tagged with whose it is.
+class SeatBesideLine extends StatelessWidget {
+  const SeatBesideLine({super.key, required this.row});
+  final SeatBesideRow row;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = DetailColors.of(context);
+    return Semantics(
+      container: true,
+      label: row.semantics,
+      excludeSemantics: true,
+      child: Container(
+        key: const ValueKey('seat-beside-row'),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: c.chip,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            if (row.official)
+              Icon(Icons.history, size: 18, color: c.muted)
+            else
+              RiderMeters(levels: row.meters, ink: c.ink, paper: c.chip),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                row.text,
+                style: TextStyle(fontSize: 13, color: c.ink, height: 1.4),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+              decoration: BoxDecoration(
+                border: Border.all(color: row.official ? c.ink : c.border),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                row.tag,
+                style: TextStyle(fontSize: 11, color: c.ink),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DisagreesNote extends StatelessWidget {
+  const _DisagreesNote();
+
+  @override
+  Widget build(BuildContext context) {
+    final c = DetailColors.of(context);
+    return Container(
+      key: const ValueKey('seat-disagrees'),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: c.conditionalTint,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_outline, size: 18, color: c.conditional),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              riderDisagreesNote,
+              style: TextStyle(fontSize: 13, color: c.conditional, height: 1.5),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -128,8 +225,8 @@ class SpotPreview extends StatelessWidget {
 /// The preview's action bar (Main, A5, A6): 導航到入口 (a street spot:
 /// 導航) first, then 回報現場狀況 and 修改建議. One row when it fits,
 /// else the first on its own row and the others side by side (A5), else
-/// one per row. A null [onReport] leaves 回報現場狀況 out: until the rider
-/// sighting sheet (A7, A7b; PR-E) lands, the bar has two buttons.
+/// one per row. A null [onReport] leaves 回報現場狀況 out, where the rider has
+/// nothing to report on (see `sightingPlaces`).
 class SpotPreviewActions extends StatelessWidget {
   const SpotPreviewActions({
     super.key,

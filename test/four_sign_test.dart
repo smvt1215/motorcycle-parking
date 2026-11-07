@@ -452,7 +452,7 @@ void main() {
       expect((p[2].main, p[2].note, p[2].tone), ('未提供', '', PlateTone.dashed));
     });
 
-    test('多區車友回報：小字寫區名與「車友回報・時間」', () {
+    test('多區車友回報：小字寫區名與「車友・時間」（A6）', () {
       final p = plates(
         lot,
         VehicleType.heavy,
@@ -465,7 +465,7 @@ void main() {
           ),
         ]),
       );
-      expect(p[1].note, 'B2 重機專區\n車友回報・8 分鐘前');
+      expect(p[1].note, 'B2 重機專區\n車友・8 分鐘前');
     });
 
     test('車友回報：沒有官方數字時用量表與車友回報小字', () {

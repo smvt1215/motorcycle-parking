@@ -3,6 +3,7 @@ import '../models/parking.dart';
 import '../models/parking_condition.dart';
 import 'eligibility.dart';
 import 'parking_decision.dart';
+import 'rider_meter_display.dart';
 
 /// How a count reads on the map and in the details. Whether a rider may
 /// park and whether a space is free are separate: nothing here looks at
@@ -69,6 +70,9 @@ enum CapsuleStyle {
 
   /// Deep purple with a pause sign: the source says the lot is closed.
   suspended,
+
+  /// Light grey with a meter: riders' reports (A0), not an official count.
+  rider,
 }
 
 /// One pill above a marker.
@@ -78,7 +82,17 @@ class AvailabilityCapsule {
     required this.style,
     required this.semantics,
     this.delayed = false,
-  });
+  }) : meter = null;
+
+  /// The riders' badge, where a space pill would sit (A0).
+  AvailabilityCapsule.rider(RiderMeter this.meter)
+    : text = meter.label,
+      style = CapsuleStyle.rider,
+      semantics = meter.semantics,
+      delayed = false;
+
+  /// What [CapsuleStyle.rider] draws.
+  final RiderMeter? meter;
   final String text;
   final CapsuleStyle style;
 
@@ -96,11 +110,20 @@ class AvailabilityCapsule {
       other.text == text &&
       other.style == style &&
       other.semantics == semantics &&
-      other.delayed == delayed;
+      other.delayed == delayed &&
+      other.meter == meter;
 
   @override
-  int get hashCode => Object.hash(text, style, semantics, delayed);
+  int get hashCode => Object.hash(text, style, semantics, delayed, meter);
 }
+
+/// Whether [capsule] is an official count, not the riders' badge.
+bool officialCapsule(AvailabilityCapsule capsule) =>
+    capsule.style != CapsuleStyle.rider;
+
+/// Whether a rider badge may show beside [capsules]: never next to an
+/// official pill, which rider reports do not override.
+bool riderMeterShown(List<AvailabilityCapsule> capsules) => capsules.isEmpty;
 
 String _count(int available) => available == 0 ? '已滿' : '剩 $available';
 
@@ -108,19 +131,35 @@ String _count(int available) => available == 0 ? '已滿' : '剩 $available';
 /// unknown (no data, stale, invalid), so a missing pill never reads as
 /// zero. A car-bay pill joins only for heavy bikes where [decision] opens
 /// car bays to them ([heavyCarOpen]), while its count is fresh or delayed.
-/// [decision] is [vehicle]'s [decideParking] result.
+/// [decision] is [vehicle]'s [decideParking] result. [rider] is the riders'
+/// badge for the place 有沒有位 picks (A0): it stands only where no official
+/// pill does, street spots included.
 List<AvailabilityCapsule> markerCapsules(
+  ParkingSpot spot,
+  SpotAvailability availability,
+  VehicleType vehicle,
+  ParkingDecision decision,
+  DateTime now, {
+  RiderMeter? rider,
+}) {
+  final eligibility = decision.status;
+  // A count where the rider may not park only invites them in (canvas v30).
+  if (eligibility == EligibilityStatus.notAllowed) return const [];
+  final capsules = spot.isFacility
+      ? _officialCapsules(spot, availability, vehicle, decision, now)
+      : const <AvailabilityCapsule>[];
+  return rider != null && riderMeterShown(capsules)
+      ? [AvailabilityCapsule.rider(rider)]
+      : capsules;
+}
+
+List<AvailabilityCapsule> _officialCapsules(
   ParkingSpot spot,
   SpotAvailability availability,
   VehicleType vehicle,
   ParkingDecision decision,
   DateTime now,
 ) {
-  final eligibility = decision.status;
-  // A count where the rider may not park only invites them in (canvas v30).
-  if (!spot.isFacility || eligibility == EligibilityStatus.notAllowed) {
-    return const [];
-  }
   final own = availability.of(availabilityVehicle(vehicle));
   final capsules = <AvailabilityCapsule>[
     if (own != null)

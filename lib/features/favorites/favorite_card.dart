@@ -5,6 +5,7 @@ import '../../domain/four_sign.dart';
 import '../../domain/four_sign_display.dart';
 import '../../domain/hidden_riders_display.dart';
 import '../../models/parking.dart';
+import '../../models/sighting.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../../ui/four_sign_plates.dart';
 import '../hidden_riders/spot_more_menu.dart' show UnhideButton;
@@ -150,6 +151,7 @@ class FavoriteCard extends StatelessWidget {
               store.rules,
               now: now,
               availability: store.availabilityOf(spot),
+              riders: store.riderSeats(sightingMapWindow),
               decision: store.decide(spot),
             ),
             now,
