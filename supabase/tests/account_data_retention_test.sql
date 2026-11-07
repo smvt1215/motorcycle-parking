@@ -224,7 +224,7 @@ select is((select count(*)::int from admin_audit_log where action='deidentify_au
 
 -- ===== 4. 每日排程 =====
 select is((select array_agg(k order by k) from jsonb_object_keys(account_data_retention()) k),
-  array['anonymized_hashes','audit_log','support_requests','usage_events'],'the daily job runs every step');
+  array['anonymized_hashes','audit_log','support_requests','suspension_carryover','usage_events'],'the daily job runs every step');
 
 select * from finish();
 rollback;

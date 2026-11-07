@@ -147,4 +147,43 @@ void main() {
     expect(nulls.contributorHandle, isNull);
     expect(nulls.isOwn, isFalse);
   });
+
+  test('content_held 只在即時資料，收藏與序列化都不保存（#280 L3）', () {
+    final parsed = ParkingSpot.fromJson({
+      ...spot.toJson(),
+      'content_held': ['rider_name', 'text'],
+    });
+    expect(parsed.contentHeld, {'rider_name', 'text'});
+    expect(parsed.toJson().containsKey('content_held'), isFalse);
+    final legacy = {
+      ...spot.toJson(),
+      'content_held': ['spot_name'],
+    };
+    expect(ParkingSpot.favorite(legacy).single.contentHeld, isEmpty);
+    expect(legacy['content_held'], ['spot_name'], reason: '不改動傳入的資料');
+  });
+
+  test('缺少、null、型別不對或未知的 content_held 視為沒有', () {
+    expect(ParkingSpot.fromJson(spot.toJson()).contentHeld, isEmpty);
+    for (final bad in <Object?>[
+      null,
+      'text',
+      42,
+      {'text': true},
+    ]) {
+      expect(
+        ParkingSpot.fromJson({...spot.toJson(), 'content_held': bad})
+            .contentHeld,
+        isEmpty,
+        reason: '$bad',
+      );
+    }
+    expect(
+      ParkingSpot.fromJson({
+        ...spot.toJson(),
+        'content_held': ['text', 'photo', 7, null, 'text'],
+      }).contentHeld,
+      {'text'},
+    );
+  });
 }

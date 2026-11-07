@@ -391,6 +391,7 @@ class ParkingSpot {
     this.contributorRole = '',
     this.contributorHandle,
     this.isOwn = false,
+    this.contentHeld = const {},
     this.facilityType,
     this.facilityTypes = const [],
     this.access,
@@ -428,6 +429,14 @@ class ParkingSpot {
   /// Whether the signed-in account added this spot (#280); false signed out.
   /// Follows the session the row was read with, so [toJson] leaves it out.
   final bool isOwn;
+
+  /// What of this spot is held for review after a report (#280 L3):
+  /// `rider_name`, `spot_name` and/or `text`, from `content_held`. Live data
+  /// like [isOwn]: [toJson] leaves it out, so favorites never keep it.
+  /// Unknown values are dropped; empty when nothing is held.
+  final Set<String> contentHeld;
+
+  static const contentHeldKinds = {'rider_name', 'spot_name', 'text'};
   final Fee? fee;
   final double lat, lng;
   final SpaceType spaceType;
@@ -532,7 +541,8 @@ class ParkingSpot {
     {...row as Map<String, dynamic>}
       ..remove('contributor_name')
       ..remove('contributor_handle')
-      ..remove('is_own'),
+      ..remove('is_own')
+      ..remove('content_held'),
   );
 
   /// A snapshot's exact kind (see [toJson]: `exact_v2`, then `exact`), else
@@ -601,6 +611,11 @@ class ParkingSpot {
           ? j['contributor_handle'] as String
           : null,
       isOwn: j['is_own'] == true,
+      contentHeld: {
+        if (j['content_held'] case final List<dynamic> held)
+          for (final h in held)
+            if (h is String && contentHeldKinds.contains(h)) h,
+      },
       facilityType:
           facilityTypesOf(j['facility_types']).firstOrNull ??
           _optionalEnum(FacilityType.values, j['facility_type']),

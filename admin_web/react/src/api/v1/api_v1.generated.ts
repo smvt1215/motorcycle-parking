@@ -49,6 +49,13 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.body,
       }),
     }),
+    apiV1SpotSightings: build.query<ApiV1SpotSightingsApiResponse, ApiV1SpotSightingsApiArg>({
+      query: (queryArg) => ({
+        url: `/rpc/spot_sightings`,
+        method: 'POST',
+        body: queryArg.body,
+      }),
+    }),
     apiV1HiddenRidersList: build.query<ApiV1HiddenRidersListApiResponse, ApiV1HiddenRidersListApiArg>({
       query: () => ({ url: `/rpc/hidden_riders_list`, method: 'POST' }),
     }),
@@ -110,6 +117,16 @@ export type ApiV1SpotsByIdsApiArg = {
   body: {
     /** 停車點 id */
     ids: string[];
+  };
+};
+export type ApiV1SpotSightingsApiResponse =
+  /** status 200 依 id 讀騎士回報的彙整（地圖、詳情） */ SpotSightings;
+export type ApiV1SpotSightingsApiArg = {
+  body: {
+    /** 停車點 id */
+    p_spot_ids: string[];
+    /** 只看最近幾分鐘：地圖 15，詳情 30 */
+    p_window_minutes?: 15 | 30;
   };
 };
 export type ApiV1HiddenRidersListApiResponse = /** status 200 自己隱藏的車友 */ HiddenRiders;
@@ -276,6 +293,36 @@ export type SpotsByIds = {
   /** 看得到的點；官方點在前、社群點在後，各依 id 排序 */
   spots: Spot[];
 };
+export type SpotSighting = {
+  /** 停車點 id */
+  spot_id: string;
+  /** 分區 id；不是分區的回報為 null */
+  zone_id: string | null;
+  /** 路段 id；不是路段的回報為 null */
+  segment_id: string | null;
+  /** 車種 */
+  vehicle: 'scooter' | 'heavy';
+  /** 加權中位數：0 很多空位、1 還有一些、2 快滿了、3 已停滿。說法不一時畫兩端用 low、high，不用這個值 */
+  level: number;
+  /** 列入彙整的車友人數：每人、每裝置各算最新一筆，不含停權與可信度不足者 */
+  count: number;
+  /** 回報中最小的 level（較空的一端） */
+  low: number;
+  /** 回報中最大的 level（較滿的一端） */
+  high: number;
+  /** 說 low 那一級的車友人數 */
+  low_riders: number;
+  /** 說 high 那一級的車友人數 */
+  high_riders: number;
+  /** ISO 8601 時間。列入彙整的最新一筆回報 */
+  latest_at: string;
+  /** 說法不一：中位數前後一級內的權重未達 70% */
+  conflicting: boolean;
+};
+export type SpotSightings = {
+  /** 依 spot_id、zone_id、segment_id、vehicle 排序 */
+  sightings: SpotSighting[];
+};
 export type HiddenRider = {
   /** contributor_handle */
   handle: string;
@@ -302,6 +349,7 @@ export const {
   useApiV1CancelAccountDeletionMutation,
   useApiV1MyAccountStatusQuery,
   useApiV1SpotsByIdsQuery,
+  useApiV1SpotSightingsQuery,
   useApiV1HiddenRidersListQuery,
   useApiV1HiddenRidersMergeMutation,
   useApiV1HiddenRidersRemoveMutation,
