@@ -16,6 +16,7 @@ import '../../models/parking.dart';
 import '../../models/parking_condition.dart';
 import '../../models/space_kind.dart';
 import '../account/suspended_sheet.dart';
+import '../auth/sign_in.dart';
 import '../content_report/content_report.dart';
 import '../map/space_type_sheet.dart';
 import '../../ui/option_pill.dart';
@@ -23,8 +24,12 @@ import '../../ui/address_search_field.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../../ui/fee_editor.dart';
 import '../../ui/location_picker.dart';
+import '../../models/condition_text.dart' show scheduleSlotText;
 import 'condition_fields.dart';
+import 'entry_drafts.dart';
+import 'entry_pages.dart';
 import 'fee_suggestion.dart';
+import 'form_parts.dart';
 import 'report_sheet.dart';
 
 String _yesNo(bool? value) => switch (value) {
@@ -44,61 +49,6 @@ String _word(Eligible? value) => value?.label ?? '未確認';
 
 String _eligibility(Eligible? scooter, Eligible? heavy) =>
     '普通機車${_word(scooter)} · 大型重機${_word(heavy)}';
-
-/// A correctable field: the stable key sent as `field` (docs/ADMIN_WEB.md),
-/// the label people read, and the value shown today.
-typedef SuggestionField = ({
-  String key,
-  String label,
-  IconData icon,
-  String current,
-});
-
-/// The fields a suggestion can correct, with the value currently shown.
-List<SuggestionField> suggestionFields(ParkingSpot spot) => [
-  (
-    key: 'name',
-    label: '停車點名稱',
-    icon: Icons.storefront_outlined,
-    current: spot.name,
-  ),
-  (
-    key: 'space_type',
-    label: '格位類型',
-    icon: Icons.category_outlined,
-    current: spot.spaceType.label,
-  ),
-  (
-    key: 'fee_note',
-    label: '收費資訊',
-    icon: Icons.payments_outlined,
-    current: spot.feeNote,
-  ),
-  (
-    key: 'eligibility',
-    label: '機車停放資格',
-    icon: Icons.two_wheeler,
-    current: eligibilitySummary(spot),
-  ),
-  (
-    key: 'guide',
-    label: '入口與停車指引',
-    icon: Icons.signpost_outlined,
-    current: guideSummary(spot),
-  ),
-  (
-    key: 'location',
-    label: '停車點位置',
-    icon: Icons.edit_location_alt_outlined,
-    current: locationSummary(spot),
-  ),
-  (
-    key: 'note',
-    label: '其他備註',
-    icon: Icons.notes_outlined,
-    current: spot.note.isEmpty ? '未提供' : spot.note,
-  ),
-];
 
 /// Where the spot is as shown today: its address or road, else coordinates.
 String locationSummary(ParkingSpot spot) => spot.address.isNotEmpty
@@ -159,135 +109,314 @@ Future<void> showSpotSuggestions(
   ParkingSpot spot,
 ) => showAdaptiveSheet<void>(
   context,
-  (ctx) => SizedBox(
-    height: MediaQuery.sizeOf(ctx).height * .74,
-    child: Column(
-      children: [
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
-            children: [
-              SheetTitle('提出修改建議'),
-              const SizedBox(height: 8),
-              Text(
-                spot.name,
-                style: TextStyle(
-                  color: Theme.of(ctx).colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Text('選一項你在現場看到不一樣的資訊。審核通過後才會更新地圖。'),
-              const SizedBox(height: 20),
-              Material(
-                color: Theme.of(ctx).colorScheme.surfaceContainerLow,
-                borderRadius: BorderRadius.circular(24),
-                clipBehavior: Clip.antiAlias,
-                child: Column(
-                  children: [
-                    for (final (i, item) in suggestionFields(spot).indexed) ...[
-                      if (i > 0)
-                        const Divider(height: 1, indent: 20, endIndent: 20),
-                      ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 8,
-                        ),
-                        leading: Icon(
-                          item.icon,
-                          color: Theme.of(ctx).colorScheme.primary,
-                        ),
-                        title: Text(item.label),
-                        subtitle: Text(
-                          '目前：${item.current}',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () => _showSuggestionForm(
-                          ctx,
-                          store,
-                          spot,
-                          fieldKey: item.key,
-                          label: item.label,
-                          current: item.current,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-              Material(
-                color: Theme.of(ctx).colorScheme.surfaceContainerLow,
-                borderRadius: BorderRadius.circular(24),
-                clipBehavior: Clip.antiAlias,
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 8,
-                  ),
-                  leading: Icon(
-                    Icons.location_off_outlined,
-                    color: Theme.of(ctx).colorScheme.primary,
-                  ),
-                  title: const Text(goneLabel),
-                  subtitle: const Text('格線撤除、施工或封閉'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _showSuggestionForm(
-                    ctx,
-                    store,
-                    spot,
-                    fieldKey: 'gone',
-                    label: goneLabel,
-                  ),
-                ),
-              ),
-              // #280 P17b ①: same rule as the details' ⋯ menu.
-              if (store.canReportContent(spot)) ...[
-                const SizedBox(height: 20),
-                Semantics(
-                  header: true,
-                  child: Text(
-                    contentProblemGroup,
-                    style: Theme.of(ctx).textTheme.titleSmall,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Material(
-                  color: Theme.of(ctx).colorScheme.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(24),
-                  clipBehavior: Clip.antiAlias,
-                  child: ListTile(
-                    key: const ValueKey('suggest-content-report'),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 8,
-                    ),
-                    leading: Icon(
-                      Icons.flag_outlined,
-                      color: Theme.of(ctx).colorScheme.primary,
-                    ),
-                    title: const Text(contentProblemRow),
-                    subtitle: const Text(contentProblemDetail),
-                    trailing: const Icon(Icons.chevron_right),
-                    // Hidden from the result: this list closes, and the
-                    // details behind it close as they see the rider hidden.
-                    onTap: () async {
-                      if (await showContentReport(ctx, store, spot) &&
-                          ctx.mounted) {
-                        Navigator.pop(ctx);
-                      }
-                    },
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ],
-    ),
+  (ctx) => FormFlow(
+    child: SuggestionListPage(store: store, spot: spot),
   ),
 );
+
+/// Whether suggestions can name [spot]'s zones and segments: TDX spots have
+/// no row to patch.
+bool _hasEntries(ParkingSpot spot) =>
+    spot.source == 'official' || communitySpotSources.contains(spot.source);
+
+/// The start of an entrance note, up to its first comma and short enough
+/// to leave room for the zone count beside it (S1).
+String entranceHead(String note) {
+  final head = note.split(RegExp('[，,、。]')).first.trim();
+  final letters = head.characters;
+  return letters.length <= 10 ? head : '${letters.take(10)}…';
+}
+
+/// What the spot's limits say today (S1, S3), or 未填.
+String limitSummary(ParkingSpot spot) {
+  if (spot.segments.length > 1) return '各段不同';
+  final c =
+      spot.segments.firstOrNull?.condition ??
+      spot.condition ??
+      spot.zones.firstOrNull?.condition;
+  final parts = [
+    for (final l in c?.limits ?? const <ParkingLimit>[])
+      if (l.kind == LimitKind.timeLimit || l.kind == LimitKind.noParking)
+        limitText(l),
+    for (final slot in c?.schedule ?? const <ScheduleSlot>[])
+      scheduleSlotText(slot),
+  ];
+  return parts.isEmpty ? '未填' : parts.join('、');
+}
+
+/// What the spot charges today (S1, S3): segments of one way of charging
+/// read as a range (依路段 20–30/時), mixed ones as 依路段
+/// (PM_ANS_20261101_56).
+String feeSummary(ParkingSpot spot) {
+  final whole = noFeeText(spot.feeNote) ? '未提供' : spot.feeNote;
+  if (!spot.segments.any((s) => s.fee != null)) return whole;
+  final rates = [
+    for (final s in spot.segments) (s.fee ?? spot.fee)?.toJson()['scooter'],
+  ];
+  final amounts = [
+    for (final r in rates)
+      if (r case {'mode': 'hourly', 'amount': final num a, 'per_minutes': 60})
+        a,
+  ]..sort();
+  if (amounts.length < rates.length || amounts.isEmpty) return '依路段';
+  final low = amounts.first, high = amounts.last;
+  return low == high ? '依路段 $low/時' : '依路段 $low–$high/時';
+}
+
+/// 提出修改建議 for [spot] (S1, S3): what the map says, grouped as the four
+/// signs read. Each row opens its own page, which sends its own suggestion
+/// (C6). Lots and streets differ only in the rows of 停哪裡.
+class SuggestionListPage extends StatelessWidget {
+  const SuggestionListPage({
+    super.key,
+    required this.store,
+    required this.spot,
+  });
+  final AppStore store;
+  final ParkingSpot spot;
+
+  bool get street => !isOffStreet(spot.spaceType, spot.facilityType);
+
+  void _form(
+    BuildContext context,
+    String key,
+    String label, [
+    String? current,
+  ]) => _showSuggestionForm(
+    context,
+    store,
+    spot,
+    fieldKey: key,
+    label: label,
+    current: current,
+    inFlow: true,
+  );
+
+  void _openEntries(BuildContext context) {
+    final type = street ? EntryType.segment : EntryType.zone;
+    if (!_hasEntries(spot)) {
+      _form(context, 'guide', '入口與停車指引', guideSummary(spot));
+      return;
+    }
+    Navigator.of(context).push<void>(
+      formRoute(
+        EntryListPage(
+          args: EntryListArgs(
+            store: store,
+            type: type,
+            subtitle: spot.name,
+            city: spot.city.isEmpty ? null : spot.city,
+            district: spot.district,
+            spot: spot,
+            fee: () => spot.fee ?? const Fee(),
+            onSpotFee: (context) async => _feeForm(context),
+          ),
+          onEntrance: street
+              ? null
+              : () => _form(context, 'guide', '入口與停車指引', guideSummary(spot)),
+        ),
+      ),
+    );
+  }
+
+  /// The present form of a bay's kind and conditions, a lot's facility types
+  /// among them.
+  void _kindForm(BuildContext context, [String label = '格位類型']) =>
+      _form(context, 'space_type', label, spot.spaceType.label);
+
+  /// The present fee form, until PR10's F0 and F1.
+  void _feeForm(BuildContext context) =>
+      _form(context, 'fee_note', '收費資訊', spot.feeNote);
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final zones = spot.zones.length;
+    final entrance = entranceHead(spot.entranceNote);
+    final hasSegments = spot.segments.length > 1;
+    return ListenableBuilder(
+      listenable: store,
+      builder: (context, _) => FormPage(
+        header: FormHeader(
+          title: '提出修改建議',
+          subtitle: spot.name,
+          leading: FormHeaderLeading.cancel,
+          onLeading: () => closeFlow(context),
+        ),
+        children: [
+          Text(street ? '哪一項跟現場不一樣？右邊是地圖上目前寫的。' : '哪一項跟現場不一樣？點進去改，右邊是地圖上目前寫的。'),
+          const SizedBox(height: 14),
+          EntrySection(
+            header: '基本資料',
+            rows: [
+              EntryRow(
+                leading: const Icon(Icons.label_outline),
+                title: '名稱',
+                value: spot.name,
+                onTap: () => _form(context, 'name', '停車點名稱', spot.name),
+              ),
+              EntryRow(
+                leading: const Icon(Icons.pin_drop_outlined),
+                title: '位置',
+                value: '拖曳標記',
+                onTap: () =>
+                    _form(context, 'location', '停車點位置', locationSummary(spot)),
+              ),
+              if (!street)
+                EntryRow(
+                  key: const ValueKey('suggest-facility'),
+                  leading: const Icon(Icons.apartment_outlined),
+                  title: '場站型式',
+                  value: spot.facilities.isEmpty
+                      ? '未填'
+                      : facilityTypesLabel(spot.facilities),
+                  onTap: () => _kindForm(context, '場站型式'),
+                ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          EntrySection(
+            header: '能不能停',
+            rows: [
+              // TDX spots have no entries to patch, so theirs is the
+              // spot-level form.
+              if (!_hasEntries(spot))
+                EntryRow(
+                  key: const ValueKey('suggest-eligibility'),
+                  leading: const Icon(Icons.fact_check_outlined),
+                  title: '可停車種',
+                  value: eligibilitySummary(spot),
+                  onTap: () => _form(
+                    context,
+                    'eligibility',
+                    '可停車種',
+                    eligibilitySummary(spot),
+                  ),
+                )
+              else if (street)
+                EntryRow(
+                  key: const ValueKey('suggest-vehicles'),
+                  leading: const Icon(Icons.fact_check_outlined),
+                  title: '可停車種',
+                  subtitle:
+                      '依${spot.city.isEmpty ? '縣市' : spot.city}規則帶入建議，可在各路段裡改',
+                  value: hasSegments ? '各段不同' : eligibilitySummary(spot),
+                  onTap: () => _openEntries(context),
+                ),
+              EntryRow(
+                key: const ValueKey('suggest-limits'),
+                leading: const Icon(Icons.schedule),
+                title: '限時／禁停／共用時段',
+                subtitle: street ? '現場標誌寫的' : null,
+                value: street ? limitSummary(spot) : '即將開放',
+                // A street keeps the present form until PR10's S5b; a lot's
+                // limits are its zones', so its row waits for S5.
+                onTap: street ? () => _kindForm(context) : null,
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          EntrySection(
+            header: '怎麼算錢',
+            rows: [
+              EntryRow(
+                key: const ValueKey('suggest-fee'),
+                leading: const Icon(Icons.payments_outlined),
+                title: '費率',
+                subtitle: street ? '每一段各自一組' : null,
+                value: feeSummary(spot),
+                onTap: () => _feeForm(context),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          EntrySection(
+            header: '停哪裡',
+            rows: [
+              EntryRow(
+                key: const ValueKey('suggest-where'),
+                leading: const Icon(Icons.grid_view),
+                title: street ? '路段與格位' : '入口、分區與格位、可停車種',
+                subtitle: street ? '東西南北側各自分段，一段可有不同格位' : null,
+                value: street
+                    ? (spot.segments.isEmpty
+                          ? '未填'
+                          : '${spot.segments.length} 段')
+                    : [
+                        if (entrance.isNotEmpty) entrance,
+                        if (zones > 0) '$zones 區',
+                      ].join('・').ifEmpty('未填'),
+                onTap: () => _openEntries(context),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          EntrySection(
+            header: '這裡不能停車了',
+            rows: [
+              EntryRow(
+                key: const ValueKey('suggest-gone'),
+                leading: Icon(Icons.block, color: colors.error),
+                title: goneLabel,
+                subtitle: '格線撤除、改為其他用途、施工或封閉',
+                onTap: () => _form(context, 'gone', goneLabel),
+              ),
+            ],
+          ),
+          // #280 P17b ①: same rule as the details' ⋯ menu.
+          if (store.canReportContent(spot)) ...[
+            const SizedBox(height: 14),
+            EntrySection(
+              header: contentProblemGroup,
+              rows: [
+                EntryRow(
+                  key: const ValueKey('suggest-content-report'),
+                  leading: const Icon(Icons.flag_outlined),
+                  title: contentProblemRow,
+                  subtitle: contentProblemDetail,
+                  // Hidden from the result: this list closes, and the
+                  // details behind it close as they see the rider hidden.
+                  onTap: () async {
+                    if (await showContentReport(context, store, spot) &&
+                        context.mounted) {
+                      closeFlow(context);
+                    }
+                  },
+                ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 14),
+          EntrySection(
+            header: '其他',
+            rows: [
+              EntryRow(
+                key: const ValueKey('suggest-note'),
+                leading: const Icon(Icons.notes_outlined),
+                title: '其他備註',
+                value: spot.note.isEmpty ? '未提供' : spot.note,
+                onTap: () => _form(
+                  context,
+                  'note',
+                  '其他備註',
+                  spot.note.isEmpty ? '未提供' : spot.note,
+                ),
+              ),
+            ],
+          ),
+          if (!store.canReport) ...[
+            const SizedBox(height: 14),
+            SignInPrompt(store: store, message: '送出前需要登入，建議會由管理員審核。'),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+extension on String {
+  String ifEmpty(String other) => isEmpty ? other : this;
+}
 
 /// The 這裡已經不能停車 report, from a lapsed closure's 還是不能停.
 Future<void> showGoneReport(
@@ -332,6 +461,7 @@ Future<void> _showSuggestionForm(
   required String fieldKey,
   required String label,
   String? current,
+  bool inFlow = false,
 }) async {
   var submitted = false;
   await showAdaptiveSheet<void>(
@@ -347,7 +477,9 @@ Future<void> _showSuggestionForm(
   );
   // Any dismissal after success (Done, close, back or drag) closes the picker
   // too. Cancelling or a failed request keeps it available for another edit.
-  if (submitted && context.mounted) Navigator.pop(context);
+  if (submitted && context.mounted) {
+    inFlow ? closeFlow(context) : Navigator.pop(context);
+  }
 }
 
 class _SuggestionForm extends StatefulWidget {
@@ -389,6 +521,10 @@ class _SuggestionFormState extends State<_SuggestionForm> {
   /// The space type sent: the one the suggested condition converts to.
   SpaceType get type => condition.typeFor(kind);
 
+  /// The spot's rates today; a suggestion names only the vehicles it
+  /// changes (design §5.4), so the others keep theirs.
+  Fee get currentFee => widget.spot.fee ?? const Fee();
+
   /// The spot's eligibility today; null is old data's 未確認, which a
   /// suggestion never sends back (#201).
   late final Eligible? currentScooter = Eligible.of(
@@ -406,10 +542,6 @@ class _SuggestionFormState extends State<_SuggestionForm> {
   /// notice may leave a vehicle out; a street bay is 可停 or 不可停.
   bool get lotSpot =>
       isOffStreet(widget.spot.spaceType, widget.spot.facilityType);
-
-  /// The spot's rates today; a suggestion names only the vehicles it
-  /// changes (design §5.4), so the others keep theirs.
-  Fee get currentFee => widget.spot.fee ?? const Fee();
 
   /// The vehicles the rider changes: a new rate, or null for 改成未確認.
   FeeEdits feeEdits = {};
@@ -1042,6 +1174,49 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                 ),
                 const SizedBox(height: 20),
               ],
+              if (eligibilityField) ...[
+                FormField<(Eligible?, Eligible?)>(
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  validator: (_) =>
+                      scooter == currentScooter && heavy == currentHeavy
+                      ? '請至少改一個車種，和目前不同才能送出'
+                      : null,
+                  builder: (state) => Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: Text(
+                          '現場有告示牌或地面標字時，才選「可停」。',
+                          style: TextStyle(color: colors.onSurfaceVariant),
+                        ),
+                      ),
+                      EligibilityChoice(
+                        label: '普通機車',
+                        value: scooter,
+                        notStated: lotSpot,
+                        keyPrefix: 'suggestion-scooter',
+                        onChanged: (v) {
+                          setState(() => scooter = v);
+                          state.didChange((scooter, heavy));
+                        },
+                      ),
+                      EligibilityChoice(
+                        label: '大型重機',
+                        value: heavy,
+                        notStated: lotSpot,
+                        keyPrefix: 'suggestion-heavy',
+                        onChanged: (v) {
+                          setState(() => heavy = v);
+                          state.didChange((scooter, heavy));
+                        },
+                      ),
+                      fieldError(context, state.errorText),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+              ],
               if (guideField) ...[
                 FormField<(String, String)>(
                   autovalidateMode: AutovalidateMode.onUserInteraction,
@@ -1159,49 +1334,6 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                 ),
                 const SizedBox(height: 20),
               ],
-              if (eligibilityField) ...[
-                FormField<(Eligible?, Eligible?)>(
-                  autovalidateMode: AutovalidateMode.onUserInteraction,
-                  validator: (_) =>
-                      scooter == currentScooter && heavy == currentHeavy
-                      ? '請至少改一個車種，和目前不同才能送出'
-                      : null,
-                  builder: (state) => Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 16),
-                        child: Text(
-                          '現場有告示牌或地面標字時，才選「可停」。',
-                          style: TextStyle(color: colors.onSurfaceVariant),
-                        ),
-                      ),
-                      EligibilityChoice(
-                        label: '普通機車',
-                        value: scooter,
-                        notStated: lotSpot,
-                        keyPrefix: 'suggestion-scooter',
-                        onChanged: (v) {
-                          setState(() => scooter = v);
-                          state.didChange((scooter, heavy));
-                        },
-                      ),
-                      EligibilityChoice(
-                        label: '大型重機',
-                        value: heavy,
-                        notStated: lotSpot,
-                        keyPrefix: 'suggestion-heavy',
-                        onChanged: (v) {
-                          setState(() => heavy = v);
-                          state.didChange((scooter, heavy));
-                        },
-                      ),
-                      fieldError(context, state.errorText),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
-              ],
               if (feeField) ...[
                 FormField<FeeEdits>(
                   autovalidateMode: AutovalidateMode.onUserInteraction,
@@ -1314,9 +1446,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                       : '正確的${widget.label}',
                   hintText: switch (fieldKey) {
                     'gone' => '例：格線已塗銷，改成人行道',
-                    'space_type' ||
-                    'eligibility' ||
-                    'guide' => '例：入口告示寫「大型重機可停」',
+                    'space_type' || 'guide' => '例：入口告示寫「大型重機可停」',
                     'location' => '例：格位在對面的便利商店前',
                     'name' => '例：信義路五段收費機車格',
                     'fee_note' => '例：入口收費牌寫「機車每次 20 元」',
@@ -1399,7 +1529,12 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                     : unavailable
                     ? '送出回報'
                     : '送出修改建議',
-                onPressed: sending || !widget.store.canReport ? null : submit,
+                onPressed: sending
+                    ? null
+                    : widget.store.canReport
+                    ? submit
+                    // C2: back here with everything still filled in.
+                    : () => showSignIn(context, widget.store),
               ),
               TextButton(
                 onPressed: sending ? null : () => Navigator.pop(context),
