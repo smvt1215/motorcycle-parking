@@ -1,4 +1,5 @@
 import { Link } from 'react-router';
+import { deletionSupportPath } from '../content';
 import type { Provider } from '../auth/port';
 import { deletionDateLabel } from './format';
 import { FlowActions, FlowPanel } from './FlowPanel';
@@ -62,7 +63,7 @@ export function OutcomePanel({
               {t.noAccountRetry}
             </button>
           </FlowActions>
-          <Link to="/support" className="flow-link">
+          <Link to={deletionSupportPath} className="flow-link">
             {t.noAccountSupport}
           </Link>
         </FlowPanel>

@@ -2,7 +2,7 @@
 
 機車停車指南對外的網頁：刪除帳號說明與申請、客服表單、隱私權政策等。和管理站（`admin_web/react`）用同一套工具鏈（React 19、Redux Toolkit、React Router、Vite、Vitest），但是**另一個網站**：不打包管理站的程式碼，部署到自己的 Firebase Hosting 網站，網址是 `motoparking.smvtstudio.com`。
 
-設計稿（已核准，版本 20）：https://claude.ai/artifact/5YXW7ZGBPs5qof2d1BEKAB
+設計稿（已核准，刪除帳號版本 20、客服案件版本 32）：https://claude.ai/artifact/5YXW7ZGBPs5qof2d1BEKAB
 
 ## 路徑
 
@@ -11,9 +11,11 @@
 | `/account-deletion`           | 刪除帳號說明（Google Play 連結的頁面） | 已完成 |
 | `/account-deletion`（登入後） | 確認、送出、冷靜期內登入的選擇（#270） | 已完成 |
 | `/`                           | 轉到 `/account-deletion`               | 已完成 |
-| `/support`                    | 客服表單（沒辦法登入時申請刪除）       | 已完成 |
-| `/support/verify#token=…`     | 確認信的一次性連結（#285）             | 已完成 |
+| `/support`                    | 聯絡我們：五種類型的客服表單（#295）   | 已完成 |
+| `/support?kind=…`             | 同上，先選好類型（不認得的值會忽略）   | 已完成 |
+| `/support/verify#token=…`     | 確認信的一次性連結（#285、#295）       | 已完成 |
 | `/support/cancel#token=…`     | 通知信的「取消刪除」連結（#289）       | 已完成 |
+| `/support/case#token=…`       | 案件頁：往來紀錄與回覆（#295）         | 已完成 |
 | `/privacy`                    | 隱私權政策                             | 已完成 |
 | `/terms`、`/data-sources`     | 政策頁                                 | 之後   |
 
@@ -49,8 +51,10 @@ Apple 的 Return URL 是 `${網站來源}/account-deletion`，正式站必須是
 
 ## 客服表單與一次性連結
 
+- `/support` 有五種類型：一般問題、資料錯誤或侵權、檢舉與申訴（只有聯絡用 email，回條附案件連結）、個資權利請求與刪除帳號（要登入 email，由信箱主人按一次性連結確認）。切換類型時，兩邊都有的欄位會保留。刪除帳號頁的連結用 `/support?kind=account_deletion`。
 - `/support` 呼叫 Edge Function `support-request`，附 Firebase App Check token（`x-firebase-appcheck`，和刪除帳號頁同一個 Firebase 網頁 app，所以 staging 的 `SUPPORT_APP_CHECK_APP_IDS` 要列這個 app id）。不需要登入。建置缺少 Supabase 或任何一個 App Check 設定時，不提供表單，只顯示「客服表單暫時無法使用」。不論有沒有對應的帳號，送出成功的畫面都一樣。
-- `/support/verify` 與 `/support/cancel` 從網址的 fragment（`#token=<申請 id>.<秘密>`）讀出 token，讀到後立刻以 replace 導航把 fragment 從網址列拿掉（不留在瀏覽紀錄，也不會出現在 referrer）。打開頁面只送 `view`（不改變任何東西，信件掃描自動開啟也沒關係），要按下「是我，申請刪除帳號」「不是我申請的」「取消刪除」才會送出對應的動作，都 POST 到 `support-confirm`。這兩頁不需要 App Check。
+- `/support/verify`、`/support/cancel` 與 `/support/case` 從網址的 fragment（`#token=<申請 id>.<秘密>`）讀出 token，讀到後立刻以 replace 導航把 fragment 從網址列拿掉（不留在瀏覽紀錄，也不會出現在 referrer）。打開頁面只送 `view`（不改變任何東西，信件掃描自動開啟也沒關係），要按下「是我，申請刪除帳號」「不是我申請的」「取消刪除」才會送出對應的動作，都 POST 到 `support-confirm`。個資權利請求用同一頁，依 `support-confirm` 回傳的 `kind` 換文案。這幾頁不需要 App Check。
+- `/support/case` POST 到 `support-case`：打開頁面只送 `view`，按下「送出回覆」才送 `reply`。往來內容是使用者輸入的文字，一律當純文字顯示。後端的連結由 `SUPPORT_CASE_URL` 決定，要設成 `${網站來源}/support/case`。
 - 後端寄出的連結由 `SUPPORT_CONFIRM_URL`、`SUPPORT_CANCEL_URL` 決定，要設成 `${網站來源}/support/verify` 與 `${網站來源}/support/cancel`。
 - smoke 建置的表單用固定的 App Check token，Edge Function 的回應由 `scripts/smoke.mjs` 的 `page.route` 提供。
 
