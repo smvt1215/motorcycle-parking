@@ -317,6 +317,26 @@ describe('Google', () => {
     expect(results).toEqual([{ kind: 'noAccount', email: 'new@gmail.com' }]);
   });
 
+  it('says it is checking once Google has answered, before the result', async () => {
+    const world = setup({
+      answers: { 'deletion-precheck': [{ status: 200, body: { has_account: false } }] },
+    });
+    const events: string[] = [];
+    world.auth.mountGoogleButton(document.createElement('div'), {
+      width: 300,
+      onChecking: () => {
+        events.push('checking');
+        return () => false;
+      },
+      onResult: (result) => events.push(result.kind),
+    });
+    await settle();
+    expect(events).toEqual([]);
+    world.google.press(idToken({ sub: 'g-1' }));
+    await settle();
+    expect(events).toEqual(['checking', 'noAccount']);
+  });
+
   it('stops reporting once the button is gone', async () => {
     const world = setup({
       answers: { 'deletion-precheck': [{ status: 200, body: { has_account: false } }] },
@@ -370,10 +390,77 @@ describe('Apple', () => {
   it('a closed popup is a sign-in that did not finish', async () => {
     const world = setup();
     await ready(world);
-    const pending = world.auth.signInWithApple();
+    const onChecking = vi.fn(() => () => false);
+    const pending = world.auth.signInWithApple({ onChecking });
     world.apple.close();
     expect(await pending).toEqual({ kind: 'cancelled' });
     expect(world.http.calls).toEqual([]);
+    expect(onChecking).not.toHaveBeenCalled();
+  });
+
+  it('never signs in once the page has given up, even if the identity has an account', async () => {
+    const world = setup({
+      answers: { 'deletion-precheck': [{ status: 200, body: { has_account: true } }] },
+    });
+    world.signsInAs(user('apple', 'a-1'));
+    await ready(world);
+    const pending = world.auth.signInWithApple({ onChecking: () => () => true });
+    world.apple.answer(appleAnswer('a-1'));
+    expect(await pending).toEqual({ kind: 'cancelled' });
+    expect(world.client.signInWithIdToken).not.toHaveBeenCalled();
+  });
+
+  it('signs out a sign-in that was already on its way when the page gave up', async () => {
+    const world = setup({
+      answers: { 'deletion-precheck': [{ status: 200, body: { has_account: true } }] },
+    });
+    world.signsInAs(user('apple', 'a-1'));
+    await ready(world);
+    let gaveUp = false;
+    world.client.signInWithIdToken.mockImplementationOnce(async () => {
+      gaveUp = true;
+      return { data: { user: user('apple', 'a-1'), session: null }, error: null } as never;
+    });
+    const pending = world.auth.signInWithApple({ onChecking: () => () => gaveUp });
+    world.apple.answer(appleAnswer('a-1'));
+    expect(await pending).toEqual({ kind: 'cancelled' });
+    expect(world.client.signOut).toHaveBeenCalledWith({ scope: 'local' });
+    // Its authorization code is not kept for a request nobody made.
+    expect(await world.auth.revokeApple()).toEqual({ kind: 'signInNeeded' });
+  });
+
+  it('a re-sign-in the page gave up on keeps the session it has', async () => {
+    const me = user('apple', 'a-1');
+    const world = setup({ signedIn: me });
+    await ready(world);
+    let gaveUp = false;
+    world.client.signInWithIdToken.mockImplementationOnce(async () => {
+      gaveUp = true;
+      return { data: { user: me, session: null }, error: null } as never;
+    });
+    const pending = world.auth.signInWithApple({
+      reauthFor: signedInUser(me),
+      onChecking: () => () => gaveUp,
+    });
+    world.apple.answer(appleAnswer('a-1'));
+    expect(await pending).toEqual({ kind: 'cancelled' });
+    expect(world.client.signOut).not.toHaveBeenCalled();
+  });
+
+  it('says it is checking once Apple has answered, before the sign-in check', async () => {
+    const world = setup({
+      answers: { 'deletion-precheck': [{ status: 200, body: { has_account: false } }] },
+    });
+    await ready(world);
+    const onChecking = vi.fn(() => {
+      expect(world.http.calls).toEqual([]);
+      return () => false;
+    });
+    const pending = world.auth.signInWithApple({ onChecking });
+    expect(onChecking).not.toHaveBeenCalled();
+    world.apple.answer(appleAnswer('a-1'));
+    await pending;
+    expect(onChecking).toHaveBeenCalledTimes(1);
   });
 
   async function signedInWithApple(answers: Record<string, Answer[]>) {

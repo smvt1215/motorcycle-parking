@@ -49,6 +49,13 @@ const SCREENS = [
   { name: 'explanation', signedIn: false, heading: '刪除你的帳號' },
   { name: 'privacy', path: '/privacy', signedIn: false, heading: '隱私權政策' },
   {
+    name: 'signin-checking',
+    signedIn: false,
+    signIn: { kind: 'hold' },
+    steps: ['signIn'],
+    heading: '刪除你的帳號',
+  },
+  {
     name: 'no-account',
     signedIn: false,
     signIn: { kind: 'noAccount', email: 'new.rider@gmail.com' },

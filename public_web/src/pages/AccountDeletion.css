@@ -71,6 +71,42 @@
 .deletion-signin-text p {
   color: var(--ink-soft);
 }
+.deletion-signin-buttons[hidden] {
+  display: none;
+}
+.signin-checking {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  /* The height of the two buttons, so nothing below moves. */
+  min-height: 100px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.signin-checking-ring {
+  flex: none;
+  animation: signin-checking-turn 0.9s linear infinite;
+}
+@keyframes signin-checking-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.signin-checking-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+.signin-checking-text strong {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
+}
 .deletion-signin-buttons {
   display: flex;
   flex-direction: column;

@@ -6,7 +6,8 @@ import {
 } from '../api/api_v1.generated';
 import type { V1Error } from '../api/base';
 import type { AuthPort, SignedInUser, SignInResult } from '../auth/port';
-import { AppleButton, GoogleButton } from '../auth/SignInButtons';
+import { AppleButton, GoogleButton, SignInChecking } from '../auth/SignInButtons';
+import { useSignInChecking } from '../auth/useSignInChecking';
 import { accountLine, deletionDateLabel, maskEmail } from './format';
 import { FlowActions, FlowPanel } from './FlowPanel';
 import type { Outcome } from './Outcome';
@@ -63,6 +64,7 @@ export function DeletionFlow({
   const [request, requestState] = useApiV1RequestAccountDeletionMutation();
   const [cancel, cancelState] = useApiV1CancelAccountDeletionMutation();
   const [step, setStep] = useState<Step>({ kind: 'status' });
+  const progress = useSignInChecking(() => setStep({ kind: 'reauthIncomplete' }));
   // Apple's grant is revoked once per Apple sign-in, right before the
   // request; a retry after a failed request does not revoke again (as the
   // App's DeletionAttempt).
@@ -255,20 +257,31 @@ export function DeletionFlow({
       <FlowPanel title={t.reauthTitle}>
         <p>{user.provider === 'apple' ? t.reauthBodyApple : t.reauthBody}</p>
         <p className="flow-account">{accountLine(user.provider, user.email)}</p>
-        <FlowActions>
+        {progress.checking ? <SignInChecking /> : null}
+        {/* Hidden, not removed: removing Google's button would drop the sign-in under way. */}
+        <FlowActions hidden={progress.checking}>
           {user.provider === 'apple' ? (
             <AppleButton
               auth={auth}
               onClick={() => {
+                const attempt = progress.attempt();
                 // Synchronously from the click: Apple's popup needs it.
                 auth
-                  .signInWithApple({ reauthFor: user })
+                  .signInWithApple({ reauthFor: user, onChecking: attempt.onChecking })
                   .catch(() => ({ kind: 'cancelled' }) as const)
-                  .then((result) => reauthenticated(result));
+                  .then((result) => {
+                    // A sign-in the page gave up on must not send the request.
+                    if (attempt.accept()) void reauthenticated(result);
+                  });
               }}
             />
           ) : (
-            <GoogleButton auth={auth} reauthFor={user} onResult={(result) => void reauthenticated(result)} />
+            <GoogleButton
+              auth={auth}
+              reauthFor={user}
+              attempt={progress.attempt}
+              onResult={(result) => void reauthenticated(result)}
+            />
           )}
           <button type="button" className="flow-button" onClick={() => setStep({ kind: 'status' })}>
             {t.reauthCancel}

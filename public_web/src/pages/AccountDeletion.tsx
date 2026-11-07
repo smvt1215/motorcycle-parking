@@ -3,7 +3,8 @@ import { Link } from 'react-router';
 import { useAppSelector } from '../app/store';
 import { useAuth } from '../auth/AuthContext';
 import type { AuthPort, Provider, SignInResult } from '../auth/port';
-import { AppleButton, GoogleButton } from '../auth/SignInButtons';
+import { AppleButton, GoogleButton, SignInChecking } from '../auth/SignInButtons';
+import { useSignInChecking } from '../auth/useSignInChecking';
 import * as c from '../content';
 import { DeletionFlow } from '../deletion/DeletionFlow';
 import { FlowPanel } from '../deletion/FlowPanel';
@@ -76,6 +77,40 @@ interface ExplanationSignIn {
   onResult: (provider: Provider, result: SignInResult) => void;
 }
 
+/**
+ * The two buttons, or the checking state once a provider has answered. The
+ * buttons stay mounted, hidden: removing Google's would drop the sign-in
+ * under way.
+ */
+function SignInChoices({ signIn }: { signIn: ExplanationSignIn }) {
+  const progress = useSignInChecking(() => signIn.onResult('google', { kind: 'cancelled' }));
+  return (
+    <>
+      {progress.checking ? <SignInChecking /> : null}
+      <div className="deletion-signin-buttons" hidden={progress.checking}>
+        <GoogleButton
+          auth={signIn.auth}
+          attempt={progress.attempt}
+          onResult={(result) => signIn.onResult('google', result)}
+        />
+        <AppleButton
+          auth={signIn.auth}
+          onClick={() => {
+            const attempt = progress.attempt();
+            // Synchronously from the click: Apple's popup needs it.
+            signIn.auth
+              .signInWithApple({ onChecking: attempt.onChecking })
+              .catch(() => ({ kind: 'cancelled' }) as const)
+              .then((result) => {
+                if (attempt.accept()) signIn.onResult('apple', result);
+              });
+          }}
+        />
+      </div>
+    </>
+  );
+}
+
 function Explanation({ signIn }: { signIn: ExplanationSignIn | null }) {
   return (
     <Site aside={<Link to="/support">沒辦法登入？</Link>}>
@@ -94,21 +129,7 @@ function Explanation({ signIn }: { signIn: ExplanationSignIn | null }) {
             {/* Google draws its own button; Apple's follows its shape. Without
                 the sign-in settings (a local preview) there is nothing to sign
                 in to. */}
-            {signIn ? (
-              <div className="deletion-signin-buttons">
-                <GoogleButton auth={signIn.auth} onResult={(result) => signIn.onResult('google', result)} />
-                <AppleButton
-                  auth={signIn.auth}
-                  onClick={() => {
-                    // Synchronously from the click: Apple's popup needs it.
-                    signIn.auth
-                      .signInWithApple()
-                      .then((result) => signIn.onResult('apple', result))
-                      .catch(() => signIn.onResult('apple', { kind: 'cancelled' }));
-                  }}
-                />
-              </div>
-            ) : null}
+            {signIn ? <SignInChoices signIn={signIn} /> : null}
           </section>
           <section aria-labelledby="cannot-h" className="deletion-cannot">
             <h2 id="cannot-h">{c.cannotSignInHeading}</h2>
