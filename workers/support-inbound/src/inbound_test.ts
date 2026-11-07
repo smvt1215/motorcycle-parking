@@ -1,6 +1,7 @@
 import {
   accepts,
   authResults,
+  authTrace,
   clip,
   payload,
   rawDigest,
@@ -105,6 +106,7 @@ Deno.test('the payload carries no raw mail and attachments by name', () => {
       dkim: 'pass',
       dmarc: 'fail',
       attachments: ['a.pdf'],
+      auth_trace: 'mx.cloudflare.net | spf=pass();dkim=pass();dmarc=fail()',
       message_id: '<m1@example.test>',
       raw_sha256: 'd'.repeat(64),
     },
@@ -170,4 +172,24 @@ Deno.test('cuts long fields at code points, never inside an emoji', () => {
     'round-trips through JSON',
   );
   equal(clip('短', 200), '短', 'short text is unchanged');
+});
+
+Deno.test('the auth trace has methods and property names, no address', () => {
+  const trace = authTrace([
+    { key: 'Authentication-Results', value: 'other.test; spf=pass' },
+    {
+      key: 'authentication-results',
+      value: 'mx.cloudflare.net; spf=none (no record) smtp.helo=mail.a.test; ' +
+        'spf=pass smtp.mailfrom=writer@a.test; dkim=pass header.d=a.test; ' +
+        'dmarc=pass header.from=a.test',
+    },
+  ]);
+  equal(
+    trace,
+    'other.test,mx.cloudflare.net | spf=none(smtp.helo);' +
+      'spf=pass(smtp.mailfrom);dkim=pass(header.d);dmarc=pass(header.from)',
+    'trace',
+  );
+  equal(trace.includes('writer'), false, 'no address');
+  equal(trace.includes('a.test'), false, 'no domain');
 });
