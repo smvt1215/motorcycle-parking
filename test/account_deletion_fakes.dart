@@ -67,6 +67,9 @@ class FakeDeletionGateway implements AccountDeletionGateway {
 
   /// Who signs in on [reauthenticate]; null throws [ReauthIncomplete].
   final reauths = <AccountIdentity?>[];
+
+  /// Thrown by [reauthenticate] before [reauths] is read.
+  final reauthFailures = <Object>[];
   AccountIdentity? previous;
 
   Future<T> _next<T>(List<Object> queue, T fallback) async {
@@ -107,9 +110,19 @@ class FakeDeletionGateway implements AccountDeletionGateway {
   }
 
   @override
+  Future<void> revokeAppleCode(String code) async {
+    calls.add('revoke-code:$code');
+    if (revokes.isNotEmpty) {
+      final next = revokes.removeAt(0);
+      if (next is! bool) throw next;
+    }
+  }
+
+  @override
   Future<AccountIdentity> reauthenticate({required bool apple}) async {
     calls.add(apple ? 'reauth:apple' : 'reauth:google');
     previous = current;
+    if (reauthFailures.isNotEmpty) throw reauthFailures.removeAt(0);
     final next = reauths.isEmpty ? current : reauths.removeAt(0);
     if (next == null) throw const ReauthIncomplete();
     current = next;
@@ -137,6 +150,19 @@ AccountIdentity google({DateTime? signedInAt, String id = 'rider'}) =>
       name: '阿哲',
       signedInAt: signedInAt,
     );
+
+/// An iOS native Apple sign-in: a one-time code, no provider token.
+AccountIdentity nativeApple({
+  DateTime? signedInAt,
+  String? code = 'apple-code',
+}) => AccountIdentity(
+  id: 'rider',
+  email: 'x@privaterelay.appleid.com',
+  name: '阿哲',
+  apple: true,
+  signedInAt: signedInAt,
+  appleCode: code,
+);
 
 AccountIdentity apple({DateTime? signedInAt, String token = 'apple-rt'}) =>
     AccountIdentity(

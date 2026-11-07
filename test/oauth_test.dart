@@ -11,8 +11,10 @@ import 'package:motorcycle_parking/data/repositories.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
-    test('$platform Google 登入使用系統瀏覽器與 App callback', () async {
+  // iOS and Android Google sign in natively: native_sign_in_test.dart. The
+  // browser path stays for Android Apple, and for any platform without one.
+  for (final platform in [TargetPlatform.android, TargetPlatform.linux]) {
+    test('$platform Apple 登入使用系統瀏覽器與 App callback', () async {
       debugDefaultTargetPlatformOverride = platform;
       addTearDown(() => debugDefaultTargetPlatformOverride = null);
       final messenger =
@@ -37,12 +39,12 @@ void main() {
       final store = AppStore(LocalRepository(local), client);
       addTearDown(client.dispose);
       addTearDown(store.dispose);
-      await store.signIn(OAuthProvider.google);
+      await store.signIn(OAuthProvider.apple);
       final launch = calls.singleWhere((call) => call.method == 'launch');
       final args = launch.arguments as Map;
       final url = Uri.parse(args['url'] as String);
       expect(url.host, 'example.supabase.co');
-      expect(url.queryParameters['provider'], 'google');
+      expect(url.queryParameters['provider'], 'apple');
       expect(url.queryParameters['redirect_to'], AppConfig.redirectUrl);
       expect(args['useSafariVC'], isFalse);
       expect(args['useWebView'], isFalse);

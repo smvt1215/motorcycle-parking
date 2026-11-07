@@ -374,6 +374,7 @@ staging 設定已於 2026-10-24 完成，並以真實 Google 登入＋TOTP 取�
 | profile／release（含 staging） | Play Integrity | App Attest（不支援時退回 DeviceCheck） |
 
 - iOS release／profile 設定使用 `ios/Runner/Runner.entitlements`（`com.apple.developer.devicecheck.appattest-environment = production`）。Apple Developer 的 App ID（staging 與 production 各一）必須啟用 **App Attest** capability，並重新產生 provisioning profile、更新 `IOS_PROFILE_BASE64`；舊 profile 沒有此 entitlement，簽章會失敗。
+- 原生 Sign in with Apple（#352）同樣寫在 `Runner.entitlements`（`com.apple.developer.applesignin`），debug 用 `Runner-Debug.entitlements`。兩個 App ID 都要啟用 **Sign in with Apple** capability，再重新產生 provisioning profile、更新 `IOS_PROFILE_BASE64`。
 - APP 取 token 最多等 3 秒（`lib/core/app_check.dart`）；失敗、逾時或未啟用時不帶 header，照常送出，由後端依模式決定。
 
 ### 註冊 debug token
