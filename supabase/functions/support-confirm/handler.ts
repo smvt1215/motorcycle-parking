@@ -5,7 +5,7 @@
 //   view     opening the link: shows the request (submitted time, masked
 //            contact email) and changes nothing, since mail scanners open
 //            links on their own
-//   confirm  "是我，請申請刪除": asks for the deletion right away (source
+//   confirm  "是我，申請刪除帳號": asks for the deletion right away (source
 //            'support', the App's 7-day cooling-off period, signed out
 //            everywhere, name hidden), then the notice goes to the login
 //            email (PM_ANS_20261101_133)
