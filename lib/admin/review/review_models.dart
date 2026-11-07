@@ -411,6 +411,7 @@ const _entryKeyLabels = {
   'area': '區域',
   'guide': '指引',
   'fee': '費率',
+  'fee_note': '費率原文',
   'fee_plan': '計費規則',
   'condition': '格位',
   'evidence_url': '照片連結',

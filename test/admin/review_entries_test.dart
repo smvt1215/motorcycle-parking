@@ -197,6 +197,64 @@ void main() {
     );
   });
 
+  test('a fee change clears the zone\'s old fee_note, as in SQL (F1d)', () {
+    final spot = ReviewSpot(
+      sourceId: '10000000-0000-4000-8000-000000000002',
+      official: false,
+      values: {
+        'name': '松壽地下停車場',
+        'parking_zones': [
+          {
+            'id': 'b1',
+            'name': 'B1',
+            'access': 'scooterOnly',
+            'fee_note': '舊文字',
+            'fee': {
+              'scooter': {'mode': 'free'},
+            },
+          },
+        ],
+      },
+    );
+    const fee = {
+      'scooter': {'mode': 'hourly', 'amount': 20, 'per_minutes': 60},
+    };
+    for (final (sent, expected, line) in [
+      (
+        {'id': 'b1', 'fee': fee, 'fee_note': null},
+        {'id': 'b1', 'name': 'B1', 'access': 'scooterOnly', 'fee': fee},
+        '費率原文 舊文字→未填',
+      ),
+      (
+        {'id': 'b1', 'fee': null, 'fee_note': null},
+        {'id': 'b1', 'name': 'B1', 'access': 'scooterOnly'},
+        '費率原文 舊文字→未填',
+      ),
+    ]) {
+      final proposal = initialProposal(
+        report({
+          'parking_zones': [sent],
+        }),
+        spot,
+      );
+      expect(proposal['parking_zones'], [expected]);
+      expect(
+        entriesChangeLines(
+          spot.values['parking_zones'],
+          proposal['parking_zones'],
+        ).single,
+        contains(line),
+      );
+      final wire = wirePatch(applicablePatch(proposal, spot), spot: spot);
+      final patch = (wire['parking_zones'] as List).single as Map;
+      expect(patch.containsKey('fee_note'), isTrue);
+      expect(patch['fee_note'], isNull);
+      expect(entriesPatch(spot.values['parking_zones'] as List, [patch]), [
+        expected,
+      ]);
+    }
+  });
+
   test(
     'as in SQL: a fee sent drops its plan; an access brings its condition',
     () {
