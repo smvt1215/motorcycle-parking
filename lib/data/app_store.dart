@@ -23,6 +23,7 @@ import '../domain/rules_display.dart';
 import '../models/availability.dart';
 import '../models/holiday_calendar.dart';
 import '../models/parking.dart';
+import 'auth_flow.dart';
 import 'availability_repository.dart';
 import 'contributions_repository.dart';
 import 'data_updates.dart';
@@ -76,7 +77,9 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     Duration? availabilityPoll,
     Future<List<String>> Function()? availabilityBetaCities,
     DateTime Function()? clock,
-  }) : parking = parkingRepository ?? ParkingRepository(client),
+    AuthFlow? authFlow,
+  }) : authFlow = authFlow ?? (client == null ? null : AuthFlow(client)),
+       parking = parkingRepository ?? ParkingRepository(client),
        // Official counts from the backend; the example build has fake ones.
        availabilitySource =
            availabilitySource ??
@@ -117,6 +120,9 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   }
   final LocalRepository local;
   final SupabaseClient? client;
+
+  /// Null in the example build: no accounts there.
+  final AuthFlow? authFlow;
   final ParkingRepository parking;
   final RulesRepository rulesRepository;
   final HolidayRepository holidayRepository;
@@ -889,17 +895,13 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
         : '回報已送出，等待管理者確認';
   }
 
+  /// Signs in. Closing a native panel is no failure, so nothing to report.
   Future<void> signIn(OAuthProvider provider) async {
-    await client!.auth.signInWithOAuth(
-      provider,
-      redirectTo: kIsWeb
-          ? Uri.base.replace(fragment: '', query: '').toString()
-          : AppConfig.redirectUrl,
-      // An in-app Safari view can remain blank above the app after callback.
-      authScreenLaunchMode: kIsWeb
-          ? LaunchMode.platformDefault
-          : LaunchMode.externalApplication,
-    );
+    try {
+      await authFlow!.signIn(provider);
+    } on SignInCancelled {
+      return;
+    }
   }
 
   Future<void> signOut() async {

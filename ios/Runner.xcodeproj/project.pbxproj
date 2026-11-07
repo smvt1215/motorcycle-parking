@@ -381,6 +381,9 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				APP_DISPLAY_NAME = "機車停車指南";
 				OAUTH_SCHEME = tw.motopark.motorcycleparking;
+				GOOGLE_IOS_CLIENT_ID = "815509193159-0hc535hc87f073p8kc6rjq1cdrihuosv.apps.googleusercontent.com";
+				GOOGLE_REVERSED_CLIENT_ID = "com.googleusercontent.apps.815509193159-0hc535hc87f073p8kc6rjq1cdrihuosv";
+				GOOGLE_SERVER_CLIENT_ID = "815509193159-ov6pl4uler43hqnpgd31ict71mpmmqe4.apps.googleusercontent.com";
 				CLANG_ENABLE_MODULES = YES;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				ENABLE_BITCODE = NO;
@@ -565,9 +568,13 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				APP_DISPLAY_NAME = "機車停車指南";
 				OAUTH_SCHEME = tw.motopark.motorcycleparking;
+				GOOGLE_IOS_CLIENT_ID = "815509193159-0hc535hc87f073p8kc6rjq1cdrihuosv.apps.googleusercontent.com";
+				GOOGLE_REVERSED_CLIENT_ID = "com.googleusercontent.apps.815509193159-0hc535hc87f073p8kc6rjq1cdrihuosv";
+				GOOGLE_SERVER_CLIENT_ID = "815509193159-ov6pl4uler43hqnpgd31ict71mpmmqe4.apps.googleusercontent.com";
 				CLANG_ENABLE_MODULES = YES;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				ENABLE_BITCODE = NO;
+				CODE_SIGN_ENTITLEMENTS = "Runner/Runner-Debug.entitlements";
 				INFOPLIST_FILE = "Runner/Info-Debug.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -589,6 +596,9 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				APP_DISPLAY_NAME = "機車停車指南";
 				OAUTH_SCHEME = tw.motopark.motorcycleparking;
+				GOOGLE_IOS_CLIENT_ID = "815509193159-0hc535hc87f073p8kc6rjq1cdrihuosv.apps.googleusercontent.com";
+				GOOGLE_REVERSED_CLIENT_ID = "com.googleusercontent.apps.815509193159-0hc535hc87f073p8kc6rjq1cdrihuosv";
+				GOOGLE_SERVER_CLIENT_ID = "815509193159-ov6pl4uler43hqnpgd31ict71mpmmqe4.apps.googleusercontent.com";
 				CLANG_ENABLE_MODULES = YES;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				ENABLE_BITCODE = NO;
@@ -665,6 +675,9 @@
 			buildSettings = {
 				APP_DISPLAY_NAME = "機車停車指南 α";
 				OAUTH_SCHEME = tw.motopark.motorcycleparking.staging;
+				GOOGLE_IOS_CLIENT_ID = "815509193159-hqlhpomr6s1v67i2j305unb07g1bkp7d.apps.googleusercontent.com";
+				GOOGLE_REVERSED_CLIENT_ID = "com.googleusercontent.apps.815509193159-hqlhpomr6s1v67i2j305unb07g1bkp7d";
+				GOOGLE_SERVER_CLIENT_ID = "815509193159-ov6pl4uler43hqnpgd31ict71mpmmqe4.apps.googleusercontent.com";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIconStaging;
 				CLANG_ENABLE_MODULES = YES;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
@@ -855,10 +868,14 @@
 			buildSettings = {
 				APP_DISPLAY_NAME = "機車停車指南 α";
 				OAUTH_SCHEME = tw.motopark.motorcycleparking.staging;
+				GOOGLE_IOS_CLIENT_ID = "815509193159-hqlhpomr6s1v67i2j305unb07g1bkp7d.apps.googleusercontent.com";
+				GOOGLE_REVERSED_CLIENT_ID = "com.googleusercontent.apps.815509193159-hqlhpomr6s1v67i2j305unb07g1bkp7d";
+				GOOGLE_SERVER_CLIENT_ID = "815509193159-ov6pl4uler43hqnpgd31ict71mpmmqe4.apps.googleusercontent.com";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIconStaging;
 				CLANG_ENABLE_MODULES = YES;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				ENABLE_BITCODE = NO;
+				CODE_SIGN_ENTITLEMENTS = "Runner/Runner-Debug.entitlements";
 				INFOPLIST_FILE = "Runner/Info-Debug.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -879,6 +896,9 @@
 			buildSettings = {
 				APP_DISPLAY_NAME = "機車停車指南 α";
 				OAUTH_SCHEME = tw.motopark.motorcycleparking.staging;
+				GOOGLE_IOS_CLIENT_ID = "815509193159-hqlhpomr6s1v67i2j305unb07g1bkp7d.apps.googleusercontent.com";
+				GOOGLE_REVERSED_CLIENT_ID = "com.googleusercontent.apps.815509193159-hqlhpomr6s1v67i2j305unb07g1bkp7d";
+				GOOGLE_SERVER_CLIENT_ID = "815509193159-ov6pl4uler43hqnpgd31ict71mpmmqe4.apps.googleusercontent.com";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIconStaging;
 				CLANG_ENABLE_MODULES = YES;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
