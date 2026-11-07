@@ -85,14 +85,14 @@ select throws_ok($$select api_v1.spot_sightings('{}',-15)$$,'PT400','request.inv
 select throws_ok($$select api_v1.spot_sightings('{}',null)$$,'PT400','request.invalid','as is null');
 
 -- ===== id =====
-select is(api_v1.spot_sightings('{}'),'{"sightings":[]}'::jsonb,'no ids, no rows');
-select is(api_v1.spot_sightings(null),'{"sightings":[]}'::jsonb,'null is none');
+select is(api_v1.spot_sightings('{}'),'{"sightings":[],"closures":[]}'::jsonb,'no ids, no rows');
+select is(api_v1.spot_sightings(null),'{"sightings":[],"closures":[]}'::jsonb,'null is none');
 select is(jsonb_array_length(api_v1.spot_sightings((select array_agg(gen_random_uuid()::text) from generate_series(1,600)))->'sightings'),0,
   '600 ids are allowed');
 select throws_ok($$select api_v1.spot_sightings((select array_agg(gen_random_uuid()::text) from generate_series(1,601)))$$,
   'PT400','request.too_many_ids','601 are not');
 select is(api_v1.spot_sightings(array['nope','tdx:Taipei:1','official:nope','',null,'7b000000-0000-4000-8000']),
-  '{"sightings":[]}'::jsonb,'ids of another format are skipped, as spots_by_ids does');
+  '{"sightings":[],"closures":[]}'::jsonb,'ids of another format are skipped, as spots_by_ids does');
 select is(pg_temp.rows(array['nope',pg_temp.spot(1)]),'-/-/scooter:0:2','without affecting the good ones');
 select is(pg_temp.rows(array[pg_temp.spot(1),pg_temp.spot(1),upper(pg_temp.spot(1))]),'-/-/scooter:0:2',
   'a repeated id, in either case, comes back once');

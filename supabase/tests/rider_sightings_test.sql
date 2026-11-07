@@ -263,8 +263,6 @@ select pg_temp.sight(101,'zoned','0',zone=>'b1');
 select throws_ok($$select pg_temp.sight(102,'zoned','1',zone=>'b9')$$,'22023','area not found','a zone of the spot, by its id');
 select throws_ok($$select pg_temp.sight(102,'zoned','1',segment=>'north')$$,'22023','area not found','and a segment only of its own');
 select throws_ok($$select pg_temp.sight(102,'zoned','1',zone=>'b1',segment=>'north')$$,'22023','invalid sighting','a zone or a segment, not both');
-select throws_ok($$select apply_sighting(pg_temp.uid(102),repeat('0102',16),repeat('0102',16),pg_temp.spot('zoned'),'closed','scooter',null,'b1')$$,
-  '22023','invalid sighting','無法停車 is the whole spot, not a zone');
 select pg_temp.sight(102,'zoned','3',zone=>'b2');
 select is((select string_agg(coalesce(zone_id,'-')||':'||state||level,',' order by zone_id) from spot_sightings(array[pg_temp.spot('zoned')])),
   'b1:level0,b2:level3','each zone has its own result');

@@ -1140,29 +1140,115 @@ class SpotSighting {
   ]);
 }
 
+/// 車友回報無法停車／施工中的分區、路段或整點（#189）。zone_id、segment_id 都是 null 表示整點。分區或路段不在點位現有清單時不回傳
+class SpotClosure {
+  const SpotClosure({
+    required this.spotId,
+    this.zoneId,
+    this.segmentId,
+    required this.riders,
+    required this.confirmed,
+    required this.latestAt,
+    required this.derived,
+  });
+
+  factory SpotClosure.fromJson(Map<String, Object?> json) => SpotClosure(
+    spotId: json['spot_id'] as String,
+    zoneId: json['zone_id'] == null ? null : json['zone_id'] as String,
+    segmentId: json['segment_id'] == null ? null : json['segment_id'] as String,
+    riders: (json['riders'] as num).toInt(),
+    confirmed: json['confirmed'] as bool,
+    latestAt: json['latest_at'] as String,
+    derived: json['derived'] as bool,
+  );
+
+  /// 停車點 id
+  final String spotId;
+
+  /// 分區 id；不是分區的列為 null
+  final String? zoneId;
+
+  /// 路段 id；不是路段的列為 null
+  final String? segmentId;
+
+  /// 回報關閉的獨立車友人數（帳號與裝置取較小者），不含停權與可信度不足者；分區、路段的列也算整點的回報；整點在所有分區或路段都確認時算全部回報
+  final int riders;
+
+  /// 回報人數達 2。true 才影響能不能停，false 只顯示有車友回報
+  final bool confirmed;
+
+  /// ISO 8601 時間。列入的最新一筆回報
+  final String latestAt;
+
+  /// 整點列才可能是 true：沒有人直接回報整點，由所有分區或路段都確認而來
+  final bool derived;
+
+  Map<String, Object?> toJson() => {
+    'spot_id': spotId,
+    'zone_id': zoneId,
+    'segment_id': segmentId,
+    'riders': riders,
+    'confirmed': confirmed,
+    'latest_at': latestAt,
+    'derived': derived,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SpotClosure &&
+      other.spotId == spotId &&
+      other.zoneId == zoneId &&
+      other.segmentId == segmentId &&
+      other.riders == riders &&
+      other.confirmed == confirmed &&
+      other.latestAt == latestAt &&
+      other.derived == derived;
+
+  @override
+  int get hashCode => Object.hashAll([
+    spotId,
+    zoneId,
+    segmentId,
+    riders,
+    confirmed,
+    latestAt,
+    derived,
+  ]);
+}
+
 class SpotSightings {
-  const SpotSightings({required this.sightings});
+  const SpotSightings({required this.sightings, required this.closures});
 
   factory SpotSightings.fromJson(Map<String, Object?> json) => SpotSightings(
     sightings: [
       for (final e in json['sightings'] as List)
         SpotSighting.fromJson(e as Map<String, Object?>),
     ],
+    closures: [
+      for (final e in json['closures'] as List)
+        SpotClosure.fromJson(e as Map<String, Object?>),
+    ],
   );
 
   /// 依 spot_id、zone_id、segment_id、vehicle 排序
   final List<SpotSighting> sightings;
 
+  /// 依 spot_id、zone_id、segment_id 排序；同一個分區、路段或整點只有一列
+  final List<SpotClosure> closures;
+
   Map<String, Object?> toJson() => {
     'sightings': [for (final e in sightings) e.toJson()],
+    'closures': [for (final e in closures) e.toJson()],
   };
 
   @override
   bool operator ==(Object other) =>
-      other is SpotSightings && _equal(other.sightings, sightings);
+      other is SpotSightings &&
+      _equal(other.sightings, sightings) &&
+      _equal(other.closures, closures);
 
   @override
-  int get hashCode => Object.hashAll([_hash(sightings)]);
+  int get hashCode => Object.hashAll([_hash(sightings), _hash(closures)]);
 }
 
 /// 一位隱藏的車友（#280）
