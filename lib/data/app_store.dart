@@ -402,7 +402,18 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   SpotAvailability availabilityOf(ParkingSpot spot) =>
       availability[spot.id] ?? SpotAvailability.none;
 
-  /// Riders' summaries of the loaded spots over [sightingMapWindow], by
+  /// The loaded [spots] and the favourites out of view: the cards read the
+  /// same answers as the map, official counts first (P4, P6).
+  List<ParkingSpot> _watched(List<ParkingSpot> spots) {
+    final ids = {for (final spot in spots) spot.id};
+    return [
+      ...spots,
+      for (final spot in favorites)
+        if (ids.add(spot.id)) spot,
+    ];
+  }
+
+  /// Riders' summaries of the [_watched] spots over [sightingMapWindow], by
   /// lower-case spot id; read and polled with [availability].
   Map<String, List<SpotSighting>> sightings = const {};
 
@@ -500,9 +511,9 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  /// The last summaries of the spots still loaded, for when a read fails.
+  /// The last summaries of the spots still watched, for when a read fails.
   Map<String, List<SpotSighting>> _keptSightings(List<ParkingSpot> spots) {
-    final ids = {for (final spot in spots) spot.id.toLowerCase()};
+    final ids = {for (final spot in _watched(spots)) spot.id.toLowerCase()};
     return {
       for (final MapEntry(:key, :value) in sightings.entries)
         if (ids.contains(key)) key: value,
@@ -774,8 +785,8 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     final current = spots;
     unawaited(readFollowedSightings());
     final (counts, sighted) = await (
-      _readAvailability(current),
-      _readSightings(current),
+      _readAvailability(_watched(current)),
+      _readSightings(_watched(current)),
     ).wait;
     if (_disposed ||
         request != _request ||
@@ -805,9 +816,9 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  /// The last counts of the spots still loaded, for when a read fails.
+  /// The last counts of the spots still watched, for when a read fails.
   Map<String, SpotAvailability> _keptAvailability(List<ParkingSpot> spots) {
-    final ids = {for (final spot in spots) spot.id};
+    final ids = {for (final spot in _watched(spots)) spot.id};
     return {
       for (final MapEntry(:key, :value) in availability.entries)
         if (ids.contains(key)) key: value,
@@ -905,8 +916,8 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
       // view (they age by source time) and never empties the map.
       final read = ++_availabilityRead;
       final (counts, sighted) = await (
-        _readAvailability(result.spots),
-        _readSightings(result.spots),
+        _readAvailability(_watched(result.spots)),
+        _readSightings(_watched(result.spots)),
       ).wait;
       if (_disposed || request != _request) return;
       // A poll started since read these same spots later: its result wins,

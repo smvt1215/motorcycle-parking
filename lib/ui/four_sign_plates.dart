@@ -233,7 +233,7 @@ class _Plate extends StatelessWidget {
           Text(plate.question, style: small),
           const SizedBox(height: 4),
           if (plate.meters.isNotEmpty) ...[
-            RiderMeters(levels: plate.meters),
+            RiderMeters(levels: plate.meters, compact: compact),
             const SizedBox(height: 4),
           ],
           Text(plate.main, style: big),
@@ -422,60 +422,68 @@ class _PressOpacityState extends State<_PressOpacity> {
 
 /// Riders' levels as 3-bar meters (A6); two side by side, slashed, when
 /// reports disagree. [ink] and [paper] default to the plates' fixed colours,
-/// which sit on a light ground in both themes.
+/// which sit on a light ground in both themes. [compact] is the favourite
+/// cards' smaller meter (P4, P6).
 class RiderMeters extends StatelessWidget {
   const RiderMeters({
     super.key,
     required this.levels,
     this.ink = PlateColors.ink,
     this.paper = PlateColors.paper,
+    this.compact = false,
   });
   final List<int> levels;
   final Color ink, paper;
+  final bool compact;
 
   Widget _meter(int level, double width) => Row(
     mainAxisSize: MainAxisSize.min,
     crossAxisAlignment: CrossAxisAlignment.end,
     children: [
-      for (final (i, h) in const [6.0, 10.0, 14.0].indexed) ...[
+      for (final (i, h) in (compact ? _smallBars : _bars).indexed) ...[
         if (i > 0) SizedBox(width: width < 8 ? 2 : 3),
         Container(
           width: width,
           height: h,
           decoration: BoxDecoration(
             color: i < level ? ink : paper,
-            borderRadius: const BorderRadius.all(Radius.circular(2)),
-            border: Border.all(color: ink, width: 1.5),
+            borderRadius: BorderRadius.all(Radius.circular(compact ? 1 : 2)),
+            border: Border.all(color: ink, width: compact ? 1.25 : 1.5),
           ),
         ),
       ],
     ],
   );
 
+  static const _bars = [6.0, 10.0, 14.0], _smallBars = [5.0, 8.0, 11.0];
+
   @override
-  Widget build(BuildContext context) => SizedBox(
-    height: 14,
-    child: levels.length == 1
-        ? _meter(levels.single, 8)
-        : Row(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              _meter(levels.first, 6),
-              const SizedBox(width: 5),
-              Transform.rotate(
-                angle: .35,
-                child: Container(
-                  width: 1.5,
-                  height: 14,
-                  color: PlateColors.muted,
+  Widget build(BuildContext context) {
+    final height = compact ? _smallBars.last : _bars.last;
+    return SizedBox(
+      height: height,
+      child: levels.length == 1
+          ? _meter(levels.single, compact ? 5 : 8)
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                _meter(levels.first, compact ? 4 : 6),
+                const SizedBox(width: 5),
+                Transform.rotate(
+                  angle: .35,
+                  child: Container(
+                    width: 1.5,
+                    height: height,
+                    color: PlateColors.muted,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 5),
-              _meter(levels.last, 6),
-            ],
-          ),
-  );
+                const SizedBox(width: 5),
+                _meter(levels.last, compact ? 4 : 6),
+              ],
+            ),
+    );
+  }
 }
 
 class DashedBorder extends CustomPainter {

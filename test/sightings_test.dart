@@ -8,6 +8,7 @@ import 'package:motorcycle_parking/api/v1/api_v1.g.dart' show SpotSighting;
 import 'package:motorcycle_parking/core/app_check.dart';
 import 'package:motorcycle_parking/data/account_suspended.dart';
 import 'package:motorcycle_parking/data/app_store.dart';
+import 'package:motorcycle_parking/data/availability_repository.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
 import 'package:motorcycle_parking/data/sightings_repository.dart';
 import 'package:motorcycle_parking/domain/availability_beta_display.dart';
@@ -20,6 +21,7 @@ import 'package:motorcycle_parking/domain/rider_meter_display.dart';
 import 'package:motorcycle_parking/domain/sighting_display.dart';
 import 'package:motorcycle_parking/domain/spot_detail_display.dart';
 import 'package:motorcycle_parking/features/account/suspended_sheet.dart';
+import 'package:motorcycle_parking/features/favorites/favorite_card.dart';
 import 'package:motorcycle_parking/features/map/availability_capsule.dart';
 import 'package:motorcycle_parking/features/map/spot_detail.dart';
 import 'package:motorcycle_parking/features/map/spot_preview.dart';
@@ -29,6 +31,7 @@ import 'package:motorcycle_parking/models/availability.dart';
 import 'package:motorcycle_parking/models/parking.dart';
 import 'package:motorcycle_parking/models/sighting.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
+import 'package:motorcycle_parking/ui/four_sign_plates.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -109,6 +112,22 @@ class FailingReads extends FakeSightings {
   }) => Future.error(Exception('offline'));
 }
 
+/// Records the ids asked for; [fail] makes reads fail.
+class RecordingSightings extends FakeSightings {
+  RecordingSightings(this.seen, super.rows);
+  final Set<String> seen;
+  bool fail = false;
+  @override
+  Future<Map<String, List<SpotSighting>>> forSpots(
+    List<ParkingSpot> spots, {
+    required int windowMinutes,
+  }) {
+    if (fail) return Future.error(Exception('offline'));
+    seen.addAll(spots.map((s) => s.id));
+    return super.forSpots(spots, windowMinutes: windowMinutes);
+  }
+}
+
 class GuestStore extends AppStore {
   GuestStore(super.local, super.client, {super.sightingsSource, super.clock});
   @override
@@ -128,6 +147,7 @@ Future<AppStore> sightedStore(
   DateTime? now,
   VehicleType vehicle = VehicleType.heavy,
   bool guest = false,
+  AvailabilitySource? counts,
 }) async {
   final at = now ?? detailDay;
   final store = (await tester.runAsync(() async {
@@ -135,7 +155,13 @@ Future<AppStore> sightedStore(
     final local = LocalRepository(await SharedPreferences.getInstance());
     final s = guest
         ? GuestStore(local, null, sightingsSource: source, clock: () => at)
-        : AppStore(local, null, sightingsSource: source, clock: () => at);
+        : AppStore(
+            local,
+            null,
+            sightingsSource: source,
+            availabilitySource: counts,
+            clock: () => at,
+          );
     await s.init();
     return s;
   }))!;
@@ -1083,6 +1109,130 @@ void main() {
       expect(find.byType(SeatBesideLine), findsOneWidget);
       expect(find.text('車友 8 分鐘前：已停滿（3 人）'), findsOneWidget);
       expect(find.text(riderDisagreesNote), findsOneWidget);
+    });
+  });
+
+  group('收藏卡', () {
+    final ago = detailDay.subtract(const Duration(minutes: 8));
+    final fresh = detailDay.subtract(const Duration(minutes: 2));
+
+    Future<void> pumpCard(
+      WidgetTester tester,
+      AppStore store, {
+      Size size = const Size(390, 844),
+      double scale = 1,
+      bool dark = false,
+    }) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = size;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(
+            brightness: dark ? Brightness.dark : Brightness.light,
+          ),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: TextScaler.linear(scale)),
+            child: child!,
+          ),
+          home: Scaffold(
+            body: ListView(
+              children: [
+                for (final e in favoritesByDistance(store))
+                  FavoriteCard(store: store, entry: e, detailed: true),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+    }
+
+    Finder onSeatPlate(Finder matching) => find.descendant(
+      of: find.byKey(const ValueKey('four-sign-seat')),
+      matching: matching,
+    );
+
+    for (final platform in platforms) {
+      for (final (name, size) in layouts) {
+        for (final (scale, dark) in [(1.0, false), (2.0, false), (1.0, true)]) {
+          testWidgetsOn(
+            '${platform.name} $name ${scale}x ${dark ? '深色' : '淺色'}：'
+            '畫面外的收藏點也有車友回報',
+            (tester) async {
+              setUpView(tester, platform, size);
+              final source = FakeSightings([
+                row(lotId, zone: 'b2', level: 1, at: ago),
+              ]);
+              final store = await sightedStore(tester, source);
+              store.favorites = [lot];
+              await tester.runAsync(store.refresh);
+              await pumpCard(
+                tester,
+                store,
+                size: size,
+                scale: scale,
+                dark: dark,
+              );
+              expect(onSeatPlate(find.text('還有一些')), findsOneWidget);
+              expect(onSeatPlate(find.byType(RiderMeters)), findsOneWidget);
+              expect(tester.takeException(), isNull);
+            },
+          );
+        }
+      }
+    }
+
+    testWidgets('官方優先：畫面外的收藏點也讀官方數字，不被車友回報蓋過', (tester) async {
+      final source = FakeSightings([row(lotId, zone: 'b2', at: ago)]);
+      final store = await sightedStore(
+        tester,
+        source,
+        counts: FakeAvailabilitySource(
+          () => [count(AvailabilityVehicle.heavy, available: 4, at: fresh)],
+        ),
+      );
+      store.favorites = [lot];
+      await tester.runAsync(store.refresh);
+      expect(store.spots.map((s) => s.id), isNot(contains(lotId)));
+      await pumpCard(tester, store);
+      expect(onSeatPlate(find.text('剩 4 格')), findsOneWidget);
+      expect(onSeatPlate(find.byType(RiderMeters)), findsNothing);
+    });
+
+    testWidgets('讀取涵蓋收藏點，官方與車友都是；失敗時保留收藏點的舊資料', (tester) async {
+      final seen = <String>{};
+      final source = RecordingSightings(seen, [
+        row(lotId, zone: 'b2', at: ago),
+      ]);
+      final store = await sightedStore(tester, source);
+      store.favorites = [lot];
+      seen.clear();
+      await tester.runAsync(store.refresh);
+      expect(seen, contains(lotId));
+      expect(store.sightings, contains(lotId));
+      source.fail = true;
+      await tester.runAsync(store.refresh);
+      expect(store.sightings, contains(lotId));
+      store.favorites = [];
+      await tester.runAsync(store.refresh);
+      expect(store.sightings, isNot(contains(lotId)));
+    });
+
+    testWidgets('超過 15 分鐘：卡片和地圖一樣不顯示', (tester) async {
+      final source = FakeSightings([
+        row(
+          lotId,
+          zone: 'b2',
+          at: detailDay.subtract(const Duration(minutes: 20)),
+        ),
+      ]);
+      final store = await sightedStore(tester, source);
+      store.favorites = [lot];
+      await tester.runAsync(store.refresh);
+      await pumpCard(tester, store);
+      expect(onSeatPlate(find.byType(RiderMeters)), findsNothing);
     });
   });
 
