@@ -98,20 +98,14 @@ class ProfileFixture {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('自訂名稱與頭像優先，明確移除不重新使用提供者照片', () async {
+  test('自訂名稱優先，不用提供者名稱當建議', () async {
     final fixture = ProfileFixture(
-      metadata: {
-        'display_name': '自訂名稱',
-        'full_name': '提供者名稱',
-        'avatar_url': 'https://example.test/provider.png',
-        'profile_avatar_url': '',
-      },
+      metadata: {'display_name': '自訂名稱', 'full_name': '提供者名稱'},
     );
     await fixture.open();
     addTearDown(fixture.close);
     expect(profilePublicName(fixture.client.auth.currentUser), '自訂名稱');
     expect(profileNameSuggestion(fixture.client.auth.currentUser), isNull);
-    expect(profileAvatarUrl(fixture.client.auth.currentUser), isNull);
     // Blank is valid (#319): saving it clears the public name.
     expect(profileNameError(''), isNull);
     expect(profileNameError('  '), isNull);
@@ -242,12 +236,10 @@ void main() {
     });
   }
 
-  testWidgets('P12 不顯示從相簿選擇與上傳說明，沒有頭像時不顯示移除；儲存失敗保留名稱並可重試', (tester) async {
+  testWidgets('P12 不顯示從相簿選擇與上傳說明；儲存失敗保留名稱並可重試', (tester) async {
     final fixture = await host(tester, 390);
     expect(find.text('從相簿選擇'), findsNothing);
     expect(find.textContaining('照片上傳'), findsNothing);
-    expect(find.text('移除頭像'), findsNothing);
-    expect(find.text('移除頭像會改回名稱首字。'), findsNothing);
     final save = find.byKey(const ValueKey('profile-save'));
     // The Google name is only a suggestion: saving it unchanged is allowed.
     expect(tester.widget<TextButton>(save).onPressed, isNotNull);
@@ -272,62 +264,92 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('有登入服務大頭貼時照常顯示；移除後改回名稱首字並保留其他欄位', (tester) async {
-    final fixture = await host(
-      tester,
-      390,
-      metadata: {
-        'full_name': '原始名稱',
-        'avatar_url': 'https://example.test/provider.png',
-        'other': 'keep',
-      },
-    );
-    ProfileAvatar avatar() =>
-        tester.widget<ProfileAvatar>(find.byType(ProfileAvatar));
-    expect(avatar().url, 'https://example.test/provider.png');
-    final save = find.byKey(const ValueKey('profile-save'));
-    expect(tester.widget<TextButton>(save).onPressed, isNotNull);
-    // ② no public name yet: removing goes back to the default avatar.
-    expect(find.text(profileRemoveAvatarHintDefault), findsOneWidget);
-    expect(find.text(profileRemoveAvatarHint), findsNothing);
-    await tester.tap(find.text('移除頭像'));
-    await tester.pump();
-    expect(find.text('移除頭像'), findsNothing);
-    expect(find.text(profileRemoveAvatarHintDefault), findsNothing);
-    expect(avatar().url, '');
-    expect(tester.widget<TextButton>(save).onPressed, isNotNull);
-    await tester.tap(save);
-    await tester.runAsync(
-      () async => await Future<void>.delayed(const Duration(milliseconds: 20)),
-    );
-    await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('profile-name')), findsNothing);
-    expect(fixture.updates.single, {
-      'display_name': '原始名稱',
-      'profile_avatar_url': '',
-    });
-    expect(fixture.metadata['other'], 'keep');
-    expect(profileAvatarUrl(fixture.client.auth.currentUser), isNull);
-  });
+  group('登入服務大頭貼一律不使用', () {
+    const provider = 'https://example.test/provider.png';
 
-  testWidgets('移除頭像說明依公開名稱切換：有名稱回首字，清空後回預設頭像', (tester) async {
-    await host(
-      tester,
-      390,
-      metadata: {
-        'display_name': '阿哲',
-        'avatar_url': 'https://example.test/provider.png',
-      },
-    );
-    expect(find.text(profileRemoveAvatarHint), findsOneWidget);
-    expect(find.text(profileRemoveAvatarHintDefault), findsNothing);
-    await tester.enterText(find.byKey(const ValueKey('profile-name')), '');
-    await tester.pump();
-    expect(find.text(profileRemoveAvatarHint), findsNothing);
-    expect(find.text(profileRemoveAvatarHintDefault), findsOneWidget);
-    await tester.enterText(find.byKey(const ValueKey('profile-name')), '小林');
-    await tester.pump();
-    expect(find.text(profileRemoveAvatarHint), findsOneWidget);
+    for (final key in ['avatar_url', 'picture', 'profile_avatar_url']) {
+      testWidgets('metadata 有 $key 時 ProfileAvatar 只顯示首字', (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Center(
+              child: ProfileAvatar(
+                user: User(
+                  id: userId,
+                  appMetadata: const {},
+                  userMetadata: {'display_name': '阿哲', key: provider},
+                  aud: 'authenticated',
+                  createdAt: '2026-11-07T00:00:00Z',
+                ),
+              ),
+            ),
+          ),
+        );
+        expect(find.text('阿'), findsOneWidget);
+        expect(find.byType(Image), findsNothing);
+      });
+
+      testWidgets('metadata 有 $key、沒有公開名稱時顯示通用人像', (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Center(
+              child: ProfileAvatar(
+                user: User(
+                  id: userId,
+                  appMetadata: const {},
+                  userMetadata: {'full_name': '原始名稱', key: provider},
+                  aud: 'authenticated',
+                  createdAt: '2026-11-07T00:00:00Z',
+                ),
+              ),
+            ),
+          ),
+        );
+        expect(find.byIcon(Icons.person_outline), findsOneWidget);
+        expect(find.byType(Image), findsNothing);
+      });
+    }
+
+    testWidgets('P12 沒有移除頭像，存檔只寫 display_name 並保留其他欄位', (tester) async {
+      final fixture = await host(
+        tester,
+        390,
+        metadata: {
+          'display_name': '阿哲',
+          'avatar_url': provider,
+          'picture': provider,
+          'other': 'keep',
+        },
+      );
+      expect(find.text('移除頭像'), findsNothing);
+      expect(find.byKey(const ValueKey('profile-remove-avatar')), findsNothing);
+      expect(find.textContaining('頭像'), findsNothing);
+      expect(find.byType(Image), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(ProfileAvatar),
+          matching: find.text('阿'),
+        ),
+        findsOneWidget,
+      );
+      await tester.enterText(find.byKey(const ValueKey('profile-name')), '小林');
+      await tester.pump();
+      expect(
+        find.descendant(
+          of: find.byType(ProfileAvatar),
+          matching: find.text('小'),
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey('profile-save')));
+      await tester.runAsync(
+        () async =>
+            await Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pumpAndSettle();
+      expect(fixture.updates.single, {'display_name': '小林'});
+      expect(fixture.metadata['avatar_url'], provider);
+      expect(fixture.metadata['other'], 'keep');
+    });
   });
 
   testWidgets('設定卡提供編輯入口，名稱儲存後回到設定即時更新', (tester) async {

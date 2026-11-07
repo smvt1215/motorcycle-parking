@@ -209,12 +209,10 @@ void main() {
   });
 
   group('ProfileAvatar', () {
-    Future<void> avatar(WidgetTester tester, {String? name, String? url}) =>
+    Future<void> avatar(WidgetTester tester, {String? name}) =>
         tester.pumpWidget(
           MaterialApp(
-            home: Center(
-              child: ProfileAvatar(name: name, url: url),
-            ),
+            home: Center(child: ProfileAvatar(name: name)),
           ),
         );
 
@@ -238,13 +236,6 @@ void main() {
         expect(find.byType(Text), findsNothing);
       });
     }
-
-    testWidgets('有照片時先顯示照片', (tester) async {
-      await avatar(tester, name: '阿哲', url: 'https://example.test/a.png');
-      final image = tester.widget<Image>(find.byType(Image));
-      expect(image.image, isA<NetworkImage>());
-      expect(find.text('阿'), findsNothing);
-    });
   });
 
   group('登入同意條款（P16a）', () {
