@@ -96,7 +96,8 @@ function CaseThread({
           { direction: 'in', body: message, createdAt: new Date().toISOString() },
         ]);
         if (result.reopened) setStatus('open');
-        setDraft('');
+        // Only what was sent: text added while it was on its way stays.
+        setDraft((current) => (current.trim() === message ? '' : current));
         setTried(false);
         setSent({ reopened: result.reopened });
         break;

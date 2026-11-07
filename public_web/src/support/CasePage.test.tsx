@@ -146,6 +146,28 @@ describe('the case page', () => {
     expect(screen.getByRole('log').lastElementChild!.textContent).toContain('還是\n找不到');
   });
 
+  it('keeps what was typed while the reply was on its way', async () => {
+    stubFunctions({ 'support-case': [caseAnswer(), received(false)] });
+    openSite(path);
+    await heading('一般問題');
+    const stubbed = globalThis.fetch;
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    vi.stubGlobal('fetch', async (...args: Parameters<typeof fetch>) => {
+      await gate;
+      return stubbed(...args);
+    });
+    await userEvent.type(box(), '還是找不到');
+    await userEvent.click(send());
+    await userEvent.type(box(), '，另外');
+    await act(async () => {
+      release();
+      await settle();
+    });
+    await screen.findByText('還是找不到');
+    expect(box()).toHaveValue('還是找不到，另外');
+  });
+
   it('needs some text', async () => {
     const calls = stubFunctions({ 'support-case': caseAnswer() });
     openSite(path);
