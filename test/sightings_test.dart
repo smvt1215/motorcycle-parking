@@ -10,6 +10,7 @@ import 'package:motorcycle_parking/data/account_suspended.dart';
 import 'package:motorcycle_parking/data/app_store.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
 import 'package:motorcycle_parking/data/sightings_repository.dart';
+import 'package:motorcycle_parking/domain/availability_beta_display.dart';
 import 'package:motorcycle_parking/domain/availability_display.dart';
 import 'package:motorcycle_parking/domain/eligibility.dart';
 import 'package:motorcycle_parking/domain/four_sign.dart';
@@ -96,6 +97,16 @@ class FakeSightings extends SightingsSource {
     if (failure case final error?) throw error;
     sent.add(report);
   }
+}
+
+/// Reads fail, as offline; what is already on the map stays.
+class FailingReads extends FakeSightings {
+  FailingReads(super.rows);
+  @override
+  Future<Map<String, List<SpotSighting>>> forSpots(
+    List<ParkingSpot> spots, {
+    required int windowMinutes,
+  }) => Future.error(Exception('offline'));
 }
 
 class GuestStore extends AppStore {
@@ -446,6 +457,35 @@ void main() {
       expect(source.sent, hasLength(1));
       expect(store.riderSeats(30).of(lotId), hasLength(1));
       expect(store.riderMeter(lot), const RiderMeter(RiderLevel.some));
+    });
+
+    testWidgets('蓋在上面的卡片關閉：交還給下面那張，重新讀取', (tester) async {
+      final source = FakeSightings([row(lotId, zone: 'b2', at: detailDay)]);
+      final store = await sightedStore(tester, source);
+      await tester.runAsync(() async {
+        await store.followSightings(lot);
+        await store.followSightings(street);
+      });
+      expect(store.riderSeats(30).of(lotId), isEmpty);
+      await tester.runAsync(() async {
+        store.unfollowSightings(street);
+        await store.readFollowedSightings();
+      });
+      expect(store.riderSeats(30).of(lotId), hasLength(1));
+      // The same spot twice: closing one keeps the other's data.
+      await tester.runAsync(() => store.followSightings(lot));
+      store.unfollowSightings(lot);
+      expect(store.riderSeats(30).of(lotId), hasLength(1));
+    });
+
+    testWidgets('詳情讀取失敗：地圖讀到的回報照常顯示，不寫成沒有回報', (tester) async {
+      final source = FailingReads(const []);
+      final store = await sightedStore(tester, source);
+      store.sightings = {
+        lotId: [row(lotId, zone: 'b2', at: detailDay)],
+      };
+      await tester.runAsync(() => store.followSightings(lot));
+      expect(store.riderSeats(30).of(lotId), hasLength(1));
     });
 
     testWidgets('範例建置沒有後端：不讀，送出不報錯', (tester) async {
@@ -927,6 +967,20 @@ void main() {
       expect(sent.toJson()['level'], 2);
     });
 
+    testWidgetsOn('iOS：取消鈕、送出後關閉並提示', (tester) async {
+      setUpView(tester, TargetPlatform.iOS, const Size(390, 844));
+      final source = FakeSightings(const []);
+      final store = await sightedStore(tester, source);
+      await openPanel(tester, store, lot);
+      expect(find.text(sightingCancel), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('sighting-level-some')));
+      await tester.pumpAndSettle();
+      await send(tester);
+      expect(find.byKey(const ValueKey('sighting-sheet')), findsNothing);
+      expect(find.text(sightingSent), findsOneWidget);
+      expect(source.sent.single.level, 2);
+    });
+
     testWidgetsOn('路邊：送 segment_id', (tester) async {
       final source = FakeSightings(const []);
       final store = await sightedStore(tester, source);
@@ -1122,6 +1176,11 @@ void main() {
       ], detailNight);
       expect(line.main, '還有一些');
       expect(line.note, startsWith('B3'));
+    });
+
+    test('Beta 文案指向回報按鈕（A13、A14）', () {
+      expect(betaIntroCaution, endsWith('看到不一樣，可以在詳情按「回報現場狀況」。'));
+      expect(betaDetailNote(['臺北市']), endsWith('數字跟現場不一樣，請按下方「回報現場狀況」。'));
     });
 
     test('Beta 城市：只有車友回報時不是官方數字，不帶 Beta', () {

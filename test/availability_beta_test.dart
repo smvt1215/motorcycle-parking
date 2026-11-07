@@ -363,7 +363,7 @@ void main() {
         expect(
           _seatText(tester),
           '有沒有位｜6 剩餘 ／ 共 24 格（大型重機）｜17:02 更新　臺北市停管處｜'
-          'Beta｜即時空位目前只有臺北市，還在試點，抵達時請以現場為準。',
+          'Beta｜即時空位目前只有臺北市，還在試點，抵達時請以現場為準。數字跟現場不一樣，請按下方「回報現場狀況」。',
         );
         final count = tester.widget<Text>(
           find.byKey(const ValueKey('availability-count'), skipOffstage: false),
@@ -374,7 +374,7 @@ void main() {
         expect(
           find.bySemanticsLabel(
             '有沒有位，剩餘 6 格，共 24 格（大型重機），17:02 更新　臺北市停管處，'
-            'Beta，即時空位目前只有臺北市，還在試點，抵達時請以現場為準。',
+            'Beta，即時空位目前只有臺北市，還在試點，抵達時請以現場為準。數字跟現場不一樣，請按下方「回報現場狀況」。',
           ),
           findsOneWidget,
         );

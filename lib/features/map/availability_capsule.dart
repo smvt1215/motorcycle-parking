@@ -111,7 +111,7 @@ void _paintCapsule(
   canvas.drawRRect(
     outer.shift(const Offset(0, 2)),
     Paint()
-      ..color = fill == capsulePaper
+      ..color = fill == capsulePaper || style == CapsuleStyle.rider
           ? const Color(0x33000000)
           : const Color(0x44000000)
       ..maskFilter = MaskFilter.blur(

@@ -406,9 +406,11 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   /// lower-case spot id; read and polled with [availability].
   Map<String, List<SpotSighting>> sightings = const {};
 
-  /// The spot an open sheet shows, and its summaries over both windows: the
-  /// details list a longer window, and it may be a spot out of view.
-  ParkingSpot? _followed;
+  /// The spots open sheets show, the top one last, and its summaries over
+  /// both windows: the details list a longer window, and it may be a spot
+  /// out of view. A sheet opened over another hands it back on closing.
+  final _following = <ParkingSpot>[];
+  ParkingSpot? get _followed => _following.lastOrNull;
   Map<String, List<SpotSighting>> _followedNear = const {},
       _followedWide = const {};
 
@@ -443,15 +445,19 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     if (_followed?.id != spot.id) {
       _followedNear = _followedWide = const {};
     }
-    _followed = spot;
+    _following.add(spot);
     return readFollowedSightings();
   }
 
   void unfollowSightings(ParkingSpot spot) {
-    if (_followed?.id != spot.id) return;
-    _followed = null;
+    final at = _following.lastIndexWhere((s) => s.id == spot.id);
+    if (at < 0) return;
+    final top = at == _following.length - 1;
+    _following.removeAt(at);
+    if (!top || _followed?.id == spot.id) return;
     _followRead++;
     _followedNear = _followedWide = const {};
+    unawaited(readFollowedSightings());
   }
 
   /// Reads the followed spot again; a failed read keeps what it had, which
@@ -1292,11 +1298,14 @@ class _StoreRiderSeats implements RiderSeats {
   List<RiderSeat> of(String spotId) {
     final id = spotId.toLowerCase();
     final followed = store._followed?.id.toLowerCase() == id;
+    // Until a followed read lands, or when it fails, the viewport's rows
+    // still say what riders reported.
     final rows = !followed
         ? store.sightings[id]
-        : windowMinutes == sightingDetailWindow
-        ? store._followedWide[id]
-        : store._followedNear[id] ?? store.sightings[id];
+        : (windowMinutes == sightingDetailWindow
+                  ? store._followedWide[id]
+                  : store._followedNear[id]) ??
+              store.sightings[id];
     if (rows == null) return const [];
     final now = store.clock();
     final oldest = now.subtract(Duration(minutes: windowMinutes));
