@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
-import { Link } from 'react-router';
+import { useEffect, type ReactNode } from 'react';
+import { Link, useLocation } from 'react-router';
 import { appName, developer, footerNote } from '../content';
 import './Site.css';
 
@@ -30,6 +30,11 @@ export function Site({
   /** The footer link of the page being shown, marked as the current page. */
   current?: string;
 }) {
+  // A new page opens at its top; a link to a section keeps its place.
+  const { pathname, hash } = useLocation();
+  useEffect(() => {
+    if (!hash) window.scrollTo(0, 0);
+  }, [pathname, hash]);
   return (
     <div className="site">
       <header className="site-header">

@@ -1,4 +1,6 @@
-import { screen, within } from '@testing-library/react';
+import { act, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { vi } from 'vitest';
 import { dateLabel, privacy, reviewNotice, sectionId, sections } from '../legal/policies';
 import { openSite } from '../test/site';
 
@@ -74,12 +76,32 @@ describe('/privacy', () => {
   });
 });
 
+describe('arriving at the policy', () => {
+  it('opens at its top from another page, and a section link keeps its place', async () => {
+    const scrollTo = vi.mocked(window.scrollTo);
+    const { router } = openSite('/account-deletion', null);
+    scrollTo.mockClear();
+    await userEvent.click(within(screen.getByRole('contentinfo')).getByRole('link', { name: '隱私權政策' }));
+    expect(screen.getByRole('heading', { level: 1, name: '隱私權政策' })).toBeInTheDocument();
+    expect(scrollTo).toHaveBeenCalledWith(0, 0);
+
+    scrollTo.mockClear();
+    await act(() => router.navigate('/privacy#section-3'));
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+});
+
 describe('the published text', () => {
   it('carries no draft marks or internal references', () => {
     for (const mark of ['待確認', '待專業人士審閱', '起草', 'Q275', '依據']) {
       expect(privacy.markdown).not.toContain(mark);
     }
     expect(privacy.markdown).not.toMatch(/#\d{2,}/);
+  });
+
+  it('says what the mail service handles, and when Apple is not revoked', () => {
+    expect(privacy.markdown).toContain('寄到帳號登入 email 的確認信、刪除帳號通知與取消連結');
+    expect(privacy.markdown).toContain('透過客服表單申請時，我們無法代為撤銷');
   });
 
   it('keeps the decisions: no postal address, no push, no OpenStreetMap', () => {
