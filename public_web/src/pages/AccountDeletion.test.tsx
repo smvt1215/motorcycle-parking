@@ -70,6 +70,8 @@ describe('the title in the browser tab', () => {
     ['/support', '聯絡我們｜機車停車指南'],
     ['/support/verify', '確認申請｜機車停車指南'],
     ['/support/cancel', '取消刪除帳號｜機車停車指南'],
+    ['/privacy/', '隱私權政策｜機車停車指南'],
+    ['/Privacy', '隱私權政策｜機車停車指南'],
     ['/nope', '找不到這個頁面｜機車停車指南'],
   ])('%s', (path, title) => {
     open(path);

@@ -29,7 +29,9 @@ const TITLES: Record<string, string> = {
 };
 
 export function pageTitle(pathname: string): string {
-  return `${TITLES[pathname] ?? '找不到這個頁面'}｜${appName}`;
+  // As the router matches: any case, with or without a trailing slash.
+  const path = pathname.toLowerCase().replace(/\/+$/, '');
+  return `${TITLES[path] ?? '找不到這個頁面'}｜${appName}`;
 }
 
 /** Header, page and footer shared by every public page. */
