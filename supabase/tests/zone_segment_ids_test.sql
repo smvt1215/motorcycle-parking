@@ -226,6 +226,52 @@ select is((select parking_zones->0 from community_spots where id=(select id from
 select is((select parking_zones->1->'condition'->'allow' from community_spots where id=(select id from fx where name='lot')),
   '{"scooter":false,"heavy":true}'::jsonb,'the condition follows the new access');
 
+-- ===== 核准費率修改時清掉分區的舊 fee_note（F1d） =====
+select is(entries_patch('[{"id":"a","name":"A","fee_note":"舊文字","fee_plan":"p1","fee":{"scooter":{"mode":"free"}}}]',
+  '[{"id":"a","fee":{"scooter":{"mode":"hourly","amount":20,"per_minutes":60}},"fee_note":null}]'),
+  '[{"id":"a","name":"A","fee":{"scooter":{"mode":"hourly","amount":20,"per_minutes":60}}}]'::jsonb,
+  'a new fee with a null fee_note takes the old text and the plan away');
+select is(entries_patch('[{"id":"a","name":"A","fee_note":"舊文字","fee":{"scooter":{"mode":"free"}}}]',
+  '[{"id":"a","fee":null,"fee_note":null}]'),'[{"id":"a","name":"A"}]'::jsonb,
+  'a cleared fee with a null fee_note leaves neither');
+select is(entries_patch('[{"id":"a","name":"A"}]','[{"id":"a","fee":null,"fee_note":null}]'),
+  '[{"id":"a","name":"A"}]'::jsonb,'a zone with neither stays as it is');
+select ok(not entries_patch_conflict('[{"id":"a","name":"A","fee_note":"舊文字"}]','[{"id":"a","name":"A","fee_note":"舊文字"}]',
+  '[{"id":"a","fee":null,"fee_note":null}]'),'clearing an unchanged zone''s fee_note is no conflict');
+
+-- Through the review, as the app sends it: a new fee, then a cleared one,
+-- each on a zone with an old fee_note, one of them on a plan.
+reset role;
+update community_spots set fee_plans='[{"id":"p1","name":"機車計時","fee":{"scooter":{"mode":"hourly","amount":10,"per_minutes":60}}}]',
+  parking_zones='[{"id":"d1","name":"D1","access":"scooterOnly","fee_note":"舊文字一","fee":{"scooter":{"mode":"free"}}},
+    {"id":"d2","name":"D2","access":"scooterOnly","fee_note":"舊文字二","fee_plan":"p1","fee":{"scooter":{"mode":"hourly","amount":10,"per_minutes":60}}}]'
+  where id=(select id from fx where name='lot');
+insert into moderation_queue(source_id,reporter_id,reason,field,proposed)
+  values((select id::text from fx where name='lot'),'10000000-0000-4000-8000-000000000001','分區改費率','zones',
+    '{"parking_zones":[{"id":"d1","fee":{"scooter":{"mode":"hourly","amount":20,"per_minutes":60}},"fee_note":null}]}'),
+  ((select id::text from fx where name='lot'),'10000000-0000-4000-8000-000000000002','分區清費率','zones',
+    '{"parking_zones":[{"id":"d2","fee":null,"fee_note":null}]}');
+insert into fx select 'report3',id from moderation_queue where reason='分區改費率';
+insert into fx select 'report4',id from moderation_queue where reason='分區清費率';
+select is((select proposed->'parking_zones'->0->'fee_note' from moderation_queue where id=(select id from fx where name='report3')),
+  'null'::jsonb,'the suggestion keeps its null fee_note for the review');
+set local role authenticated;
+select pg_temp.act('admin');
+select lives_ok($$select admin_resolve_report((select id from fx where name='report3'),'accepted',
+  (select jsonb_build_object('parking_zones',proposed->'parking_zones') from moderation_queue where id=(select id from fx where name='report3')))$$,
+  'a new zone fee with a null fee_note applies');
+select lives_ok($$select admin_resolve_report((select id from fx where name='report4'),'accepted',
+  (select jsonb_build_object('parking_zones',proposed->'parking_zones') from moderation_queue where id=(select id from fx where name='report4')))$$,
+  'a cleared zone fee with a null fee_note applies, the other zone''s change no conflict');
+reset role;
+-- The spot has plans, so fee_plans_sync() takes the new fee into one.
+select is((select (parking_zones->0)-'fee_plan'::text from community_spots where id=(select id from fx where name='lot')),
+  '{"id":"d1","name":"D1","access":"scooterOnly","fee":{"scooter":{"mode":"hourly","amount":20,"per_minutes":60}}}'::jsonb,
+  'approved new fee: the zone has the fee and no fee_note');
+select is((select parking_zones->1 from community_spots where id=(select id from fx where name='lot')),
+  '{"id":"d2","name":"D2","access":"scooterOnly"}'::jsonb,
+  'approved clear: the zone has no fee, plan or fee_note');
+
 -- ===== 升級為官方點時採用管理員給的路段 =====
 set local role authenticated;
 select pg_temp.act('admin');

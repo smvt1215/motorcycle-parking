@@ -379,6 +379,24 @@ void main() {
     expect(find.text('已申請刪除帳號'), findsOneWidget);
   }, variant: platforms);
 
+  testWidgets('再登入面板：關掉原生面板不顯示錯誤，按鈕可以再按', (tester) async {
+    final gateway = FakeDeletionGateway(current: google(signedInAt: null))
+      ..reauthFailures.add(const ReauthCancelled())
+      ..reauths.add(google(signedInAt: now));
+    final app = await _mount(tester, gateway);
+    await _openPage(tester, app);
+    await _tapSubmit(tester);
+    await _confirm(tester);
+    final button = find.byKey(const ValueKey('reauth-sign-in'));
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('reauth-error')), findsNothing);
+    expect(gateway.calls.contains('request'), isFalse);
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+    expect(gateway.calls, containsAllInOrder(['reauth:google', 'request']));
+  }, variant: platforms);
+
   for (final size in sizes) {
     testWidgets('再登入面板 ${size.width.toInt()}×${size.height.toInt()}：'
         '沒完成與登入成別的帳號都留在面板顯示錯誤', (tester) async {

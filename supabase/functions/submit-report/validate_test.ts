@@ -912,3 +912,40 @@ Deno.test('an inappropriate-content report names a target on a community spot (#
     'invalid evidence_url',
   );
 });
+
+Deno.test('a zone fee suggestion may clear the zone fee_note (F1d)', () => {
+  const flag = (parking_zones: unknown) => ({
+    ...base,
+    action: 'flag',
+    source_id: '00000000-0000-4000-8000-000000000001',
+    field: 'zones',
+    reason: '費率有誤',
+    proposed: { parking_zones },
+    spot: undefined,
+  });
+  const fee = {
+    scooter: { mode: 'hourly', amount: 20, per_minutes: 60 },
+    heavy: { mode: 'free' },
+    car: { mode: 'not_applicable' },
+  };
+  for (
+    const patch of [
+      { id: 'b1', fee, fee_note: null },
+      { id: 'b1', fee: null, fee_note: null },
+    ]
+  ) {
+    const body = flag([patch]);
+    if (validate(body) !== null) {
+      throw new Error(`refused: ${JSON.stringify(patch)}`);
+    }
+    // The null reaches the review, not only the check.
+    const sent = body.proposed.parking_zones as Record<string, unknown>[];
+    if (!Object.hasOwn(sent[0], 'fee_note')) throw new Error('null dropped');
+    const stored = [{ id: 'b1', access: 'scooterOnly', fee_note: '舊文字' }];
+    if (!zonePatchesStated([patch], stored)) throw new Error('not stated');
+  }
+  // Only clearing: a rider cannot write a zone's fee_note.
+  if (validate(flag([{ id: 'b1', fee, fee_note: '原文' }])) === null) {
+    throw new Error('a zone fee_note text was accepted');
+  }
+});
