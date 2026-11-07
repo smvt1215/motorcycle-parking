@@ -19,6 +19,19 @@ function Mark() {
   );
 }
 
+/** What each path is called, in the browser's tab and in search results. */
+const TITLES: Record<string, string> = {
+  '/account-deletion': '刪除帳號',
+  '/privacy': '隱私權政策',
+  '/support': '聯絡我們',
+  '/support/verify': '確認申請',
+  '/support/cancel': '取消刪除帳號',
+};
+
+export function pageTitle(pathname: string): string {
+  return `${TITLES[pathname] ?? '找不到這個頁面'}｜${appName}`;
+}
+
 /** Header, page and footer shared by every public page. */
 export function Site({
   children,
@@ -32,6 +45,9 @@ export function Site({
 }) {
   // A new page opens at its top; a link to a section keeps its place.
   const { pathname, hash } = useLocation();
+  useEffect(() => {
+    document.title = pageTitle(pathname);
+  }, [pathname]);
   useEffect(() => {
     if (!hash) window.scrollTo(0, 0);
   }, [pathname, hash]);
