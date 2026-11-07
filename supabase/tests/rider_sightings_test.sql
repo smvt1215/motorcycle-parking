@@ -117,7 +117,7 @@ select set_config('request.jwt.claims','{"sub":"20000000-0000-4000-8000-00000000
 select is((select count(*)::integer from rider_sightings),1,'a rider reads their own sighting');
 reset role;
 select is((select string_agg(a,',' order by a) from unnest(
-  (select proargnames from pg_proc where proname='spot_sightings')) a where a not like 'p\_%'),
+  (select proargnames from pg_proc where proname='spot_sightings' and pronamespace='public'::regnamespace)) a where a not like 'p\_%'),
   'high,high_riders,latest_at,level,low,low_riders,segment_id,since,spot_id,state,vehicle,zone_id',
   'the result has no rider, no device and no single sighting');
 
