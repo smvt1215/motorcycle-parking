@@ -34,13 +34,10 @@ export function useSignInChecking(onTimeout: () => void) {
     if (timer.current !== null) clearTimeout(timer.current);
     timer.current = null;
   }, []);
-  useEffect(
-    () => () => {
-      clear();
-      waitingFor.current = null;
-    },
-    [clear],
-  );
+  // Only the timer stops. A sign-in that succeeds unmounts this page before
+  // signInWithIdToken returns (the session arrives first); it must not then
+  // read as given up, or the rider would be signed straight out again.
+  useEffect(() => clear, [clear]);
 
   const attempt = useCallback((): SignInAttempt => {
     const self = {};
