@@ -932,8 +932,9 @@ ParkingAccess? legacyAccess(ParkingCondition? zone) {
 /// §1.3; `zone_condition_consistent()` in SQL, `zoneConditionConsistent` in
 /// validate.ts): a zone without a condition is unchecked; one with a
 /// condition carries an `allow` naming both vehicles and the access it
-/// writes back. The DB refuses any other zone, so anything that writes a
-/// zone condition writes `access` as `legacyAccess(condition)`.
+/// writes back, or none when it writes back none. The DB refuses any other
+/// zone, so anything that writes a zone condition writes `access` as
+/// `legacyAccess(condition)`, leaving it out when that is null.
 bool zoneConditionConsistent(Map<String, Object?> zone) {
   final json = zone['condition'];
   if (json == null) return true;
@@ -943,7 +944,14 @@ bool zoneConditionConsistent(Map<String, Object?> zone) {
     return zone['access'] == null && allowKeys.every(allow.states);
   }
   final access = legacyAccess(condition);
-  return access != null && zone['access'] == access.name;
+  // A condition that writes back no access (#190): the zone carries none.
+  if (access == null) {
+    final allow = condition?.allow;
+    return zone['access'] == null &&
+        allow != null &&
+        allowKeys.every(allow.states);
+  }
+  return zone['access'] == access.name;
 }
 
 /// [value] with map keys sorted, so equal JSON compares equal as text.

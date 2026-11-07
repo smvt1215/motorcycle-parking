@@ -316,8 +316,8 @@ export function legacyAccess(c: Record<string, unknown>): string | null {
 /**
  * Whether a zone's access agrees with its condition (decision 32, §1.3): a
  * zone without a condition is unchecked; one with a condition carries an
- * `allow` naming both vehicles and the access it writes back. The same rule
- * as `zone_condition_consistent()` in SQL.
+ * `allow` naming both vehicles and the access it writes back, or none when
+ * it writes back none. The same rule as `zone_condition_consistent()` in SQL.
  */
 export function zoneConditionConsistent(
   zone: Record<string, unknown>,
@@ -330,8 +330,14 @@ export function zoneConditionConsistent(
     return (zone.access === undefined || zone.access === null) &&
       cond.allow_keys.every((k: string) => has(allow, k));
   }
-  if (typeof zone.access !== 'string') return false;
-  return zone.access === legacyAccess(zone.condition);
+  // A condition that writes back no access (#190): the zone carries none.
+  const access = legacyAccess(zone.condition);
+  if (access === null) {
+    return (zone.access === undefined || zone.access === null) &&
+      isObject(allow) &&
+      cond.allow_keys.every((k: string) => has(allow, k));
+  }
+  return zone.access === access;
 }
 /**
  * Whether a zone states both vehicles (#201): by its access, or by a

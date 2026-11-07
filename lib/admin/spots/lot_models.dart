@@ -227,8 +227,7 @@ Object? rawBasis(Json zone) =>
     zone['condition'] is Map ? (zone['condition'] as Map)['basis'] : null;
 
 /// [zone] with [condition] written as decision 32 asks: `access` is what
-/// the condition derives, or dropped when it derives none (the form then
-/// refuses to save, see [zoneProblem]).
+/// the condition derives, or dropped when it derives none.
 Json zoneWithCondition(Json zone, ParkingCondition condition) {
   // Nothing known is no condition: the contract refuses an empty one.
   if (condition.toJson().isEmpty) {
@@ -300,15 +299,8 @@ String? zoneProblem(Json zone) {
       case final problem?) {
     return problem;
   }
-  // 官方未標示 (#201) writes back no access, and needs none.
-  if (allow.anyNotStated) return null;
-  if (legacyAccess(condition) == null) {
-    return '「$name」的格位和可停車種不一致：${switch (condition.bay) {
-      Bay.heavy => '重機格不能開放普通機車',
-      Bay.car => '汽車格目前只能登錄「只開放大型重機」或「機車都不可停」',
-      _ => '機車格只開放大型重機時，請把格位改成重機格',
-    }}';
-  }
+  // An allow with no access to write back is stored without one (#190); a
+  // heavy bay letting scooters in never parses, so it stops above.
   return null;
 }
 
