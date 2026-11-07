@@ -7,6 +7,7 @@ import 'package:motorcycle_parking/features/auth/sign_in.dart';
 import 'package:motorcycle_parking/features/report/entry_drafts.dart';
 import 'package:motorcycle_parking/features/report/entry_pages.dart';
 import 'package:motorcycle_parking/features/report/fee_forms.dart';
+import 'package:motorcycle_parking/features/report/fee_suggestion.dart';
 import 'package:motorcycle_parking/features/report/spot_suggestions.dart';
 import 'package:motorcycle_parking/features/report/time_rules_page.dart';
 import 'package:motorcycle_parking/models/fee.dart';
@@ -201,6 +202,29 @@ const _ruleStreet = ParkingSpot(
         bay: Bay.car,
         use: BayUse.share,
         share: ShareKind.carMotorcycle,
+        allow: ZoneAllow(scooter: true, heavy: true),
+      ),
+    ),
+  ],
+);
+
+const _noted = ParkingSpot(
+  id: 'official:noted',
+  name: '松壽地下停車場',
+  lat: 25.03,
+  lng: 121.56,
+  city: '臺北市',
+  spaceType: SpaceType.offStreet,
+  source: 'official',
+  fee: Fee(scooter: _plain, heavy: _plain, car: _plain),
+  zones: [
+    ParkingZone(
+      id: 'b1',
+      name: 'B1 機車區',
+      feeNote: '平日每小時 30 元；假日每小時 50 元；需按鈴或請管理員協助，平日每日 60 元；假日每次 80 元',
+      condition: ParkingCondition(
+        bay: Bay.motorcycle,
+        use: BayUse.usual,
         allow: ZoneAllow(scooter: true, heavy: true),
       ),
     ),
@@ -605,6 +629,299 @@ void main() {
             size.height,
             greaterThanOrEqualTo(platform == TargetPlatform.iOS ? 44 : 48),
           );
+        }, variant: TargetPlatformVariant({platform}));
+      }
+    }
+  });
+
+  group('F1c', () {
+    Future<void> changeCar(WidgetTester tester) async {
+      await pump(tester, _lot);
+      await tapKey(tester, 'suggest-fee');
+      await tapText(tester, '全場費率');
+    }
+
+    final link = find.byKey(const ValueKey('evidence-url'));
+
+    testWidgets('跟著摘要出現，文字保留；連結放頂層並補 https', (tester) async {
+      await changeCar(tester);
+      expect(link, findsNothing);
+      await chooseFeeMode(tester, 'car', 'free');
+      expect(link, findsOneWidget);
+      expect(
+        tester.getTopLeft(link).dy,
+        lessThan(tester.getTopLeft(find.text('你要改的內容')).dy),
+      );
+      await tester.ensureVisible(link);
+      await tester.enterText(link, 'a.gov.tw/x。');
+      await tester.pumpAndSettle();
+      await chooseFeeMode(tester, 'car', 'hourly');
+      await tester.enterText(feeField('amount', 'car'), '20');
+      await tester.pumpAndSettle();
+      expect(find.text('送出 0 項建議'), findsOneWidget);
+      expect(link, findsNothing);
+      await chooseFeeMode(tester, 'car', 'free');
+      expect(find.text('a.gov.tw/x。'), findsOneWidget);
+      await tester.tap(submit('送出 1 項建議'));
+      await tester.pumpAndSettle();
+      final body = store.sent.single;
+      expect(body['evidence_url'], 'https://a.gov.tw/x');
+      expect((body['proposed'] as Map).containsKey('evidence_url'), isFalse);
+    });
+
+    testWidgets('格式錯誤按送出不送，顯示錯誤', (tester) async {
+      await changeCar(tester);
+      await chooseFeeMode(tester, 'car', 'free');
+      await tester.ensureVisible(link);
+      await tester.enterText(link, '松壽路公告');
+      await tester.pumpAndSettle();
+      expect(find.text('這看起來不是網址，請貼上公告頁的網址'), findsOneWidget);
+      await tester.tap(submit('送出 1 項建議'));
+      await tester.pumpAndSettle();
+      expect(store.sent, isEmpty);
+    });
+
+    testWidgets('F1b 確認畫面也有連結', (tester) async {
+      await pump(tester, _lot);
+      await tapKey(tester, 'suggest-fee');
+      await tapText(tester, 'B2 重機專區');
+      await tapKey(tester, 'fee-revert');
+      await tester.enterText(link, 'https://a.gov.tw/x');
+      await tester.pumpAndSettle();
+      await tester.tap(submit('送出 1 項建議'));
+      await tester.pumpAndSettle();
+      expect(store.sent.single['evidence_url'], 'https://a.gov.tw/x');
+    });
+
+    testWidgets('S5 有改動才顯示，連結放頂層', (tester) async {
+      await pump(tester, _lot);
+      await tapKey(tester, 'suggest-limits');
+      expect(link, findsNothing);
+      await tapKey(tester, 'rule-card-0');
+      await tapText(tester, '現場沒有這條規定了');
+      await tester.ensureVisible(link);
+      await tester.enterText(link, 'example.gov.tw:8080/x');
+      await tester.pumpAndSettle();
+      await tester.tap(submit('送出 1 項建議'));
+      await tester.pumpAndSettle();
+      expect(
+        store.sent.single['evidence_url'],
+        'https://example.gov.tw:8080/x',
+      );
+    });
+
+    test('貼沒有協定的相同網址不算修改', () {
+      final d = EntryDraft.ofZone(
+        const ParkingZone(
+          id: 'b1',
+          name: 'B1',
+          evidenceUrl: 'https://a.gov.tw/x',
+          access: ParkingAccess.scooterOnly,
+        ),
+      )..evidence = 'a.gov.tw/x';
+      expect(d.changeLines(), isEmpty);
+      expect(d.changed, isFalse);
+      d.evidence = 'a.gov.tw/y';
+      expect(d.toJson(const [])['evidence_url'], 'https://a.gov.tw/y');
+    });
+
+    for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
+      for (final (width, scale) in const [
+        (320.0, 1.6),
+        (390.0, 1.6),
+        (700.0, 1.0),
+        (1040.0, 1.0),
+      ]) {
+        testWidgets('公告連結在 $width 寬 $scale 倍 ${platform.name} 不溢出', (
+          tester,
+        ) async {
+          await pump(tester, _lot, width: width, scale: scale);
+          await tapKey(tester, 'suggest-fee');
+          await tapText(tester, '全場費率');
+          await chooseFeeMode(tester, 'car', 'free');
+          await tester.ensureVisible(link);
+          await tester.enterText(link, 'user@example.com');
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+        }, variant: TargetPlatformVariant({platform}));
+      }
+    }
+  });
+
+  group('不適用', () {
+    testWidgets('F1 收合與預覽寫不適用，不含未確認', (tester) async {
+      await pump(tester, _lot);
+      await tapKey(tester, 'suggest-fee');
+      await tapText(tester, 'B1 機車區');
+      await tapKey(tester, 'fee-row-car');
+      expect(find.textContaining('不適用'), findsWidgets);
+      expect(find.textContaining('未確認'), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('fee-preview')),
+          matching: find.text('不適用'),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('F0、F1b 不含未確認', (tester) async {
+      await pump(tester, _lot);
+      await tapKey(tester, 'suggest-fee');
+      expect(find.text('汽車 不適用'), findsWidgets);
+      expect(find.textContaining('未確認'), findsNothing);
+      await tapText(tester, 'B2 重機專區');
+      await tapKey(tester, 'fee-revert');
+      expect(find.textContaining('未確認'), findsNothing);
+    });
+
+    testWidgets('比照的來源不適用時寫不適用，不是費率未提供', (tester) async {
+      await pump(tester, _lot);
+      await tapKey(tester, 'suggest-fee');
+      await tapText(tester, 'B3 汽車區');
+      await chooseFeeMode(tester, 'car', 'not_applicable');
+      await chooseFeeMode(tester, 'heavy', 'same_as');
+      expect(find.text('不適用，不能選'), findsOneWidget);
+    });
+
+    test('差異摘要寫不適用', () {
+      expect(rateText(const Fee(car: _na), FeeVehicle.car), '不適用');
+      expect(rateText(const Fee(), FeeVehicle.car), '未提供');
+    });
+  });
+
+  group('F1d', () {
+    const long = '平日每小時 30 元；假日每小時 50 元；需按鈴或請管理員協助，平日每日 60 元；假日每次 80 元';
+
+    test('預設字不算這區寫的；有費率時也不算', () {
+      ParkingZone zone(String note, [Fee? fee]) => ParkingZone(
+        id: 'z',
+        name: 'Z',
+        feeNote: note,
+        fee: fee,
+        access: ParkingAccess.scooterOnly,
+      );
+      String? of(ParkingZone z) => zoneFeeNote(EntryDraft.ofZone(z));
+      expect(of(zone('免費')), '免費');
+      expect(of(zone(' 需按鈴 ')), '需按鈴');
+      for (final text in ['', '請依現場公告', '請以現場公告為準']) {
+        expect(of(zone(text)), isNull, reason: text);
+      }
+      expect(of(zone('免費', _lot.fee)), isNull);
+    });
+
+    test('entriesPatch 與 precheck 接受 fee_note: null', () {
+      final stored = [
+        {
+          'id': 'b1',
+          'name': 'B1',
+          'access': 'scooterOnly',
+          'fee_note': long,
+          'fee_plan': 'p',
+        },
+      ];
+      expect(
+        entriesPatch(stored, [
+          {'id': 'b1', 'fee': null, 'fee_note': null},
+        ]),
+        [
+          {'id': 'b1', 'name': 'B1', 'access': 'scooterOnly'},
+        ],
+      );
+      final rate = _lot.fee!.toJson();
+      expect(
+        entriesPatch(stored, [
+          {'id': 'b1', 'fee': rate, 'fee_note': null},
+        ]),
+        [
+          {'id': 'b1', 'name': 'B1', 'access': 'scooterOnly', 'fee': rate},
+        ],
+      );
+      for (final fee in [null, rate]) {
+        final body = {
+          'action': 'flag',
+          'source_id': 'official:lot',
+          'field': 'zones',
+          'reason': '費率',
+          'proposed': {
+            'parking_zones': [
+              {'id': 'b1', 'fee': fee, 'fee_note': null},
+            ],
+          },
+        };
+        expect(
+          precheckBlocking(precheck(body, current: {'parking_zones': stored})),
+          isEmpty,
+        );
+      }
+    });
+
+    testWidgets('F0 顯示這區寫，朗讀完整，不標沿用全場', (tester) async {
+      await pump(tester, _noted);
+      await tapKey(tester, 'suggest-fee');
+      expect(find.textContaining('這區寫：'), findsOneWidget);
+      expect(find.textContaining('沿用全場：'), findsNothing);
+      expect(
+        find.byWidgetPredicate(
+          (w) => w is Semantics && w.properties.label == '這區寫，$long',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('F1 顯示完整文字；改費率送 fee 與 fee_note: null', (tester) async {
+      await pump(tester, _noted);
+      await tapKey(tester, 'suggest-fee');
+      await tapText(tester, 'B1 機車區');
+      expect(find.byKey(const ValueKey('fee-note-block')), findsOneWidget);
+      expect(find.text(long), findsOneWidget);
+      expect(find.text('下面填好費率送出後，這段文字會移除。'), findsOneWidget);
+      expect(find.text('送出 0 項建議'), findsOneWidget);
+      await chooseFeeMode(tester, 'scooter', 'free');
+      await chooseFeeMode(tester, 'heavy', 'free');
+      expect(find.text('送出 1 項建議'), findsOneWidget);
+      await tester.tap(submit('送出 1 項建議'));
+      await tester.pumpAndSettle();
+      final patch =
+          (store.sent.single['proposed'] as Map)['parking_zones'] as List;
+      final entry = patch.single as Map;
+      expect(entry['id'], 'b1');
+      expect((entry['fee'] as Map)['scooter'], {'mode': 'free'});
+      expect(entry.containsKey('fee_note'), isTrue);
+      expect(entry['fee_note'], isNull);
+    });
+
+    testWidgets('改回沿用全場：確認卡寫明會移除，送 fee 與 fee_note 都 null', (tester) async {
+      await pump(tester, _noted);
+      await tapKey(tester, 'suggest-fee');
+      await tapText(tester, 'B1 機車區');
+      await tapKey(tester, 'fee-revert');
+      expect(find.text('目前這區寫的'), findsOneWidget);
+      expect(find.text('整段文字都會移除，包含費率以外的說明。'), findsOneWidget);
+      await tester.tap(submit('送出 1 項建議'));
+      await tester.pumpAndSettle();
+      expect((store.sent.single['proposed'] as Map)['parking_zones'], [
+        {'id': 'b1', 'fee': null, 'fee_note': null},
+      ]);
+    });
+
+    for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
+      for (final (width, scale) in const [
+        (320.0, 1.6),
+        (390.0, 1.6),
+        (700.0, 1.0),
+        (1040.0, 1.0),
+      ]) {
+        testWidgets('F1d 在 $width 寬 $scale 倍 ${platform.name} 不溢出', (
+          tester,
+        ) async {
+          await pump(tester, _noted, width: width, scale: scale);
+          await tapKey(tester, 'suggest-fee');
+          expect(tester.takeException(), isNull);
+          await tapText(tester, 'B1 機車區');
+          expect(tester.takeException(), isNull);
+          await tapKey(tester, 'fee-revert');
+          expect(tester.takeException(), isNull);
         }, variant: TargetPlatformVariant({platform}));
       }
     }

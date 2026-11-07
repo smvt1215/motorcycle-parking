@@ -17,6 +17,7 @@ import 'entry_drafts.dart';
 import 'entry_pages.dart';
 import 'fee_suggestion.dart';
 import 'form_parts.dart';
+import 'report_sheet.dart' show EvidenceUrlField;
 import 'spot_suggestions.dart' show reportSummary;
 
 /// [fee]'s [v] in a few words for F0's tags: 20/時・上限 100, 不適用, 未提供.
@@ -77,6 +78,16 @@ EntryTag followTag(EntryDraft d, Fee fee) {
         ? '沿用全場：${shown.first.$2}'
         : '沿用全場：${[for (final (v, b) in shown) '${_shortNames[v]} $b'].join('、')}',
   );
+}
+
+/// What a zone with no rates has written instead, the stored `fee_note`
+/// riders read, or null when it says nothing (F1d). Segments have none.
+String? zoneFeeNote(EntryDraft d) {
+  if (d.type != EntryType.zone || (d.fee != null && !d.fee!.isEmpty)) {
+    return null;
+  }
+  final text = (d.original?['fee_note'] as String? ?? '').trim();
+  return noFeeText(text) ? null : text;
 }
 
 /// [fee] line by line for F1b: a time-of-day rate by period, a vehicle by
@@ -313,7 +324,9 @@ class _FeeZonesPageState extends State<FeeZonesPage> {
   Widget build(BuildContext context) {
     final fee = widget.spotFee();
     final whole = widget.wholeText();
-    final own = widget.drafts.any((d) => d.fee != null);
+    final own = widget.drafts.any(
+      (d) => d.fee != null || zoneFeeNote(d) != null,
+    );
     return FormPage(
       header: FormHeader(
         title: '費率',
@@ -334,10 +347,14 @@ class _FeeZonesPageState extends State<FeeZonesPage> {
                 leading: entryMarking(d.kind),
                 title: d.displayName,
                 subtitle: d.kind?.label,
+                quote: switch (zoneFeeNote(d)) {
+                  final note? => ('這區寫', note),
+                  null => null,
+                },
                 tags: [
                   if (d.fee case final own?)
                     for (final v in FeeVehicle.values) feeTag(own, v)
-                  else
+                  else if (zoneFeeNote(d) == null)
                     followTag(d, fee),
                 ],
                 onTap: d.editable ? () => open(d) : null,
@@ -413,6 +430,27 @@ class _FeeEditPageState extends State<FeeEditPage> {
   bool sending = false;
   String? refusal;
 
+  /// F1c: blank each time, kept while the summary comes and goes.
+  final link = TextEditingController();
+  final linkForm = GlobalKey<FormState>();
+
+  @override
+  void dispose() {
+    link.dispose();
+    super.dispose();
+  }
+
+  /// The link as sent, on the report itself.
+  Map<String, Object?> get linkBody => {
+    if (link.text.trim().isNotEmpty) 'evidence_url': evidenceUrlOf(link.text),
+  };
+
+  Widget get linkField => SuggestionLink(
+    form: linkForm,
+    controller: link,
+    field: EvidenceUrlField(controller: link),
+  );
+
   /// F1b: the rider is confirming a return to the spot's rates. What the
   /// editor holds stays, for 取消，繼續編輯.
   bool reverting = false;
@@ -426,6 +464,14 @@ class _FeeEditPageState extends State<FeeEditPage> {
     final fee? when !fee.isEmpty => fee,
     _ => null,
   };
+
+  /// The text this zone has instead of rates (F1d), as loaded.
+  late final String? note = draft == null || adding
+      ? null
+      : zoneFeeNote(draft!);
+
+  /// Whether F1b can take something away.
+  bool get canRevert => own != null || note != null;
 
   String get wholeText => wholeFeeText(widget.spotFee, widget.spot?.feeNote);
 
@@ -444,10 +490,23 @@ class _FeeEditPageState extends State<FeeEditPage> {
       return f.textOf(v.wire) ?? '未提供';
     }
 
-    return [
+    final changed = [
       for (final v in FeeVehicle.values)
-        if (rateOf(fee, v) != rateOf(start, v))
-          ChangeLine(label: v.label, from: text(start, v), to: text(fee, v)),
+        if (rateOf(fee, v) != rateOf(start, v)) v,
+    ];
+    // F1d: the rates replace the text as one change.
+    if (note case final note? when changed.isNotEmpty) {
+      return [
+        ChangeLine(
+          label: '費率',
+          from: note,
+          to: [for (final v in changed) '${v.label} ${text(fee, v)}'].join('、'),
+        ),
+      ];
+    }
+    return [
+      for (final v in changed)
+        ChangeLine(label: v.label, from: text(start, v), to: text(fee, v)),
     ];
   }
 
@@ -464,11 +523,16 @@ class _FeeEditPageState extends State<FeeEditPage> {
     final whole = wholeFeeText(widget.spotFee, widget.spot?.feeNote);
     final name = draft?.displayName;
     if (own != null) return '$name 目前有自己的費率；$wholeWord$whole。';
+    if (note != null) return '$wholeWord$whole。';
     final tail = adding ? '完成後回到新增停車點。' : '送出前還沒生效。';
     return name == null
         ? '這裡改$wholeWord費率，沒有另設費率的${widget.type.unit}會一起變。$tail'
         : '目前$wholeWord費率：$whole。這裡另設 $name 的費率，$tail';
   }
+
+  /// Whether the zone stores any fee text, its rates' own too.
+  bool get hasStoredNote =>
+      ((draft?.original?['fee_note'] as String?) ?? '').isNotEmpty;
 
   Map<String, Object?> body() {
     final spot = widget.spot!;
@@ -480,10 +544,17 @@ class _FeeEditPageState extends State<FeeEditPage> {
         'source_id': spot.id,
         'reason': reportSummary('費率：${d!.displayName} 自訂 → $followWords'),
         'field': widget.type.field,
+        ...linkBody,
         'proposed': {
           widget.type.key: [
             // null clears it, its fee plan too (`entries_patch()`).
-            {'id': d.id, 'fee': null},
+            {
+              'id': d.id,
+              'fee': null,
+              // Riders read this text when there are no rates: it goes too,
+              // or the zone would not follow the lot.
+              if (hasStoredNote) 'fee_note': null,
+            },
           ],
         },
       };
@@ -495,11 +566,16 @@ class _FeeEditPageState extends State<FeeEditPage> {
         '費率：${[for (final l in changes) '${l.label} ${l.from} → ${l.to}'].join('；')}',
       ),
       'field': d == null ? 'fee_note' : widget.type.field,
+      ...linkBody,
       'proposed': d == null
           ? feeProposal(widget.spotFee, fee)
           : {
               widget.type.key: [
-                {'id': d.id, 'fee': fee.toJson()},
+                {
+                  'id': d.id,
+                  'fee': fee.toJson(),
+                  if (note != null) 'fee_note': null,
+                },
               ],
             },
     };
@@ -539,6 +615,7 @@ class _FeeEditPageState extends State<FeeEditPage> {
       return;
     }
     if (!reverting && !(form.currentState?.validate() ?? false)) return;
+    if (!SuggestionLink.check(linkForm)) return;
     if (!adding && d != null && !d.stated) {
       setState(() => refusal = unstatedEntryNote(d));
       return;
@@ -613,10 +690,10 @@ class _FeeEditPageState extends State<FeeEditPage> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                Text('目前自己的費率', style: muted),
+                Text(note == null ? '目前自己的費率' : '目前這區寫的', style: muted),
                 const SizedBox(height: 4),
                 Text(
-                  ownFeeLines(own!).join('；\n'),
+                  note ?? ownFeeLines(own!).join('；\n'),
                   style: TextStyle(
                     fontSize: 15,
                     height: 1.5,
@@ -635,6 +712,10 @@ class _FeeEditPageState extends State<FeeEditPage> {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
+                if (note != null) ...[
+                  const SizedBox(height: 12),
+                  Text('整段文字都會移除，包含費率以外的說明。', style: muted),
+                ],
               ],
             ),
           ),
@@ -652,6 +733,7 @@ class _FeeEditPageState extends State<FeeEditPage> {
         ),
         if (!adding) ...[
           const SizedBox(height: 8),
+          linkField,
           Divider(color: colors.outlineVariant),
           const SizedBox(height: 8),
           const FormLabel('你要改的內容'),
@@ -699,7 +781,7 @@ class _FeeEditPageState extends State<FeeEditPage> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (own != null && !reverting)
+              if (canRevert && !reverting)
                 Center(
                   child: _TextAction(
                     key: const ValueKey('fee-revert'),
@@ -743,6 +825,10 @@ class _FeeEditPageState extends State<FeeEditPage> {
       children: [
         Text(intro),
         const SizedBox(height: 12),
+        if (note case final note? when changes.isEmpty) ...[
+          _NoteBlock(note),
+          const SizedBox(height: 12),
+        ],
         FeeEditor(
           value: fee,
           initialVehicle: firstVehicle,
@@ -762,19 +848,59 @@ class _FeeEditPageState extends State<FeeEditPage> {
             ),
             addButton: _addButton,
             now: widget.now,
-            summary: adding || changes.isEmpty
+            // Two fields would share a key: F1b shows its own while this
+            // page stays mounted behind it.
+            summary: adding || changes.isEmpty || reverting
                 ? null
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      linkField,
                       const FormLabel('你要改的內容'),
                       const SizedBox(height: 6),
-                      ChangeSummary(lines: changes),
+                      ChangeSummary(
+                        title: note == null ? null : d?.displayName,
+                        lines: changes,
+                      ),
                     ],
                   ),
           ),
         ),
       ],
+    );
+  }
+}
+
+/// F1d: what the zone says now, whole, and what sending does to it.
+class _NoteBlock extends StatelessWidget {
+  const _NoteBlock(this.note);
+  final String note;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final muted = TextStyle(
+      fontSize: 12,
+      height: 1.5,
+      color: colors.onSurfaceVariant,
+    );
+    return Container(
+      key: const ValueKey('fee-note-block'),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('目前這區寫的', style: muted),
+          const SizedBox(height: 4),
+          Text(note, style: const TextStyle(fontSize: 15, height: 1.5)),
+          const SizedBox(height: 4),
+          Text('下面填好費率送出後，這段文字會移除。', style: muted),
+        ],
+      ),
     );
   }
 }

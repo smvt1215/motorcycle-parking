@@ -183,6 +183,54 @@ const sourceUrlPattern = r'^https://\S+$';
 
 /// In UTF-16 code units, as `String.length` counts; SQL counts the same.
 const sourceUrlMaxLength = 2048;
+
+/// Why a pasted notice link cannot go.
+enum EvidenceUrlIssue { notUrl, http, tooLong }
+
+final _urlScheme = RegExp(r'^[a-zA-Z][a-zA-Z0-9+.-]*:');
+final _domainPort = RegExp(r'^[^:/?#]*\.[^:/?#]*:\d+([/?#]|$)');
+
+/// A notice link as a rider pastes it (#190 F1c): spaces and closing
+/// Chinese punctuation go, `https://` is added or lower-cased, and what is
+/// left must be a host with a dot. [url] is empty for nothing typed and null
+/// with an [issue]. `example.gov.tw:8080/x` is a domain and its port, any
+/// other `x:` a scheme, which only https passes. The one reading every form
+/// uses, so `a.gov.tw/x` and `https://a.gov.tw/x` are the same link.
+({String? url, EvidenceUrlIssue? issue}) normalizeEvidenceUrl(String? input) {
+  ({String? url, EvidenceUrlIssue? issue}) refuse(EvidenceUrlIssue issue) =>
+      (url: null, issue: issue);
+  var text = (input ?? '').trim().replaceFirst(RegExp(r'[。，、）]+$'), '').trim();
+  if (text.isEmpty) return (url: '', issue: null);
+  if (RegExp(r'\s').hasMatch(text)) return refuse(EvidenceUrlIssue.notUrl);
+  final lower = text.toLowerCase();
+  if (lower.startsWith('http://')) return refuse(EvidenceUrlIssue.http);
+  if (lower.startsWith('https://')) {
+    text = 'https://${text.substring(8)}';
+  } else if (_urlScheme.hasMatch(text) && !_domainPort.hasMatch(text)) {
+    return refuse(EvidenceUrlIssue.notUrl);
+  } else {
+    text = 'https://$text';
+  }
+  final uri = Uri.tryParse(text);
+  final host = uri?.host ?? '';
+  if (uri == null ||
+      uri.userInfo.isNotEmpty ||
+      host.contains('@') ||
+      !host.contains('.') ||
+      host.split('.').any((part) => part.isEmpty) ||
+      !RegExp(sourceUrlPattern).hasMatch(text)) {
+    return refuse(EvidenceUrlIssue.notUrl);
+  }
+  if (text.length > sourceUrlMaxLength) {
+    return refuse(EvidenceUrlIssue.tooLong);
+  }
+  return (url: text, issue: null);
+}
+
+/// [input] as it is stored: the link, or the text itself when it is not one
+/// (a form's check refuses it before it goes).
+String evidenceUrlOf(String? input) =>
+    normalizeEvidenceUrl(input).url ?? (input ?? '').trim();
 const sourceUrlLengthUnit = 'utf16';
 
 /// The rule data of the fee contract (§2.2), mirrored as the JSON holds it.

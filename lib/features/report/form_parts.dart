@@ -83,8 +83,13 @@ class EntryRow extends StatelessWidget {
     this.tags = const [],
     this.destructive = false,
     this.problem,
+    this.quote,
     this.onTap,
   });
+
+  /// A stored text with what it is: (這區寫, the text). At most two lines
+  /// on screen; a screen reader hears all of it.
+  final (String, String)? quote;
   final Widget? leading;
   final String title;
   final String? subtitle, value;
@@ -121,6 +126,26 @@ class EntryRow extends StatelessWidget {
       if (tags.isNotEmpty) ...[
         const SizedBox(height: 6),
         Wrap(spacing: 6, runSpacing: 4, children: tags),
+      ],
+      if (quote case (final label, final text)?) ...[
+        const SizedBox(height: 2),
+        Semantics(
+          label: '$label，$text',
+          excludeSemantics: true,
+          child: Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(text: '$label：', style: muted),
+                TextSpan(
+                  text: text,
+                  style: TextStyle(fontSize: 13, color: colors.onSurface),
+                ),
+              ],
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
       ],
       if (problem != null) ...[
         const SizedBox(height: 4),
@@ -682,6 +707,43 @@ class RemoveEntryButton extends StatelessWidget {
       ],
     );
   }
+}
+
+/// The notice link a suggestion carries (F1c), with its own [Form] so a page
+/// checks it alone. Above 你要改的內容, and only with it.
+class SuggestionLink extends StatelessWidget {
+  const SuggestionLink({
+    super.key,
+    required this.form,
+    required this.controller,
+    required this.field,
+  });
+  final GlobalKey<FormState> form;
+  final TextEditingController controller;
+
+  /// The field itself, built by the form that owns it.
+  final Widget field;
+
+  /// False, with the error shown and the field in view, when the link
+  /// cannot go.
+  static bool check(GlobalKey<FormState> form) {
+    if (form.currentState?.validate() ?? true) return true;
+    final at = form.currentContext;
+    if (at != null) {
+      Scrollable.ensureVisible(
+        at,
+        alignment: .2,
+        duration: const Duration(milliseconds: 250),
+      );
+    }
+    return false;
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: Form(key: form, child: field),
+  );
 }
 
 /// 路外停車場 or 路邊格位 as two cards (N1); neither until the rider picks.

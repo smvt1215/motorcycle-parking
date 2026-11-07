@@ -412,6 +412,7 @@ const _entryKeyLabels = {
   'guide': '指引',
   'fee': '費率',
   'fee_plan': '計費規則',
+  'fee_note': '費率文字',
   'condition': '格位',
   'evidence_url': '公告連結',
   'side': '哪一側',
@@ -422,6 +423,7 @@ const _entryKeyLabels = {
 String _entryValue(String key, Object? v, String whole) => switch ((key, v)) {
   // An entry without rates pays the spot's (F1b).
   ('fee', null) => '沿用$whole',
+  ('fee_note', null) => '已移除',
   (_, null) => '未填',
   ('access', final String a) => ParkingAccess.values.asNameMap()[a]?.label ?? a,
   ('fee', _) => reviewFee(v)?.summary ?? '未設定',

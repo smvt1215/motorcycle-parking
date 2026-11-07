@@ -487,7 +487,7 @@ class EntryDraft {
     guide.trim().isEmpty ? out.remove('guide') : out['guide'] = guide.trim();
     evidence.trim().isEmpty
         ? out.remove('evidence_url')
-        : out['evidence_url'] = evidence.trim();
+        : out['evidence_url'] = evidenceUrlOf(evidence);
     if (isNew || _conditionChanged) {
       final c = conditionUnder(spotFee);
       out['condition'] = c.toJson();
@@ -573,8 +573,8 @@ class EntryDraft {
       ?line('指引', _loadedGuide, guide.trim()),
       ?line(
         '公告連結',
-        original?['evidence_url'] as String? ?? '',
-        evidence.trim(),
+        evidenceUrlOf(original?['evidence_url'] as String?),
+        evidenceUrlOf(evidence),
       ),
     ];
   }

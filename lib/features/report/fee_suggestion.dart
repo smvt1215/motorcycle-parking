@@ -45,7 +45,9 @@ Map<String, Object?> proposedFee(Fee current, FeeEdits edits) => {
 
 /// One vehicle's rate as riders read it in [fee], or [unconfirmedFeeText].
 String rateText(Fee fee, FeeVehicle v) =>
-    fee.riderText(v.wire) ?? unconfirmedFeeText;
+    rateOf(fee, v)?.mode == FeeMode.notApplicable
+    ? '不適用'
+    : fee.riderText(v.wire) ?? unconfirmedFeeText;
 
 /// The lines of 你要改的內容: one per changed vehicle, from today's rate to
 /// the suggested one. A rate not filled in yet is left out, so it never

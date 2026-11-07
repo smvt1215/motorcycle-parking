@@ -1008,7 +1008,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
       // The text is the value itself for name and fee suggestions.
       if (value == null || structured || unavailable) 'note': note.text.trim(),
       if (typeField && evidence.text.trim().isNotEmpty)
-        'evidence_url': evidence.text.trim(),
+        'evidence_url': evidenceUrlOf(evidence.text),
     };
   }
 

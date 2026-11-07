@@ -24,8 +24,13 @@ import 'spot_suggestions.dart' show reportSummary;
 
 /// Whether stored fee text says nothing: 費率沒寫一律未提供
 /// (PM_ANS_20261101_56).
-bool noFeeText(String text) =>
-    const {'', '依現場公告', defaultFeeNote, '費率未確認'}.contains(text.trim());
+bool noFeeText(String text) => const {
+  '',
+  '依現場公告',
+  '請以現場公告為準',
+  defaultFeeNote,
+  '費率未確認',
+}.contains(text.trim());
 
 /// 全場費率 or 整條路費率 in words: the rates, the stored text, or 未提供.
 String wholeFeeText(Fee? rates, String? text) {

@@ -93,7 +93,7 @@ class FeeFormStyle {
   /// (C7), and then nothing is greyed.
   final Map<FeeVehicle, FeeClosedWeek> closed;
 
-  /// 你要改的內容, above the preview.
+  /// The notice link and 你要改的內容, under the preview (F1c).
   final Widget? summary;
 
   /// The row that adds a period.
@@ -334,12 +334,11 @@ class _FeeEditorState extends State<FeeEditor> {
                 ),
                 const SizedBox(height: 8),
               ],
-              if (form.summary case final summary?) ...[
-                const SizedBox(height: 6),
-                summary,
-                const SizedBox(height: 8),
-              ],
               if (preview != null) ...[const SizedBox(height: 6), preview],
+              if (form.summary case final summary?) ...[
+                const SizedBox(height: 14),
+                summary,
+              ],
               ...trailing,
             ],
           );
@@ -1604,7 +1603,10 @@ class _FollowFieldsState extends State<_FollowFields> {
                   contentPadding: EdgeInsets.zero,
                   title: Text(v.label, style: const TextStyle(fontSize: 14)),
                   subtitle: Text(
-                    known.textOf(v.wire) ?? '費率未提供，不能選',
+                    known.textOf(v.wire) ??
+                        (_rateOf(widget.fee, v)?.mode == FeeMode.notApplicable
+                            ? '不適用，不能選'
+                            : '費率未提供，不能選'),
                     style: const TextStyle(fontSize: 13),
                   ),
                 ),

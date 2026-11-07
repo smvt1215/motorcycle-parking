@@ -12,7 +12,7 @@ import '../../domain/precheck.dart';
 import '../../models/fee.dart';
 import '../../models/parking.dart';
 import '../../models/parking_condition.dart'
-    show sourceUrlMaxLength, sourceUrlPattern;
+    show EvidenceUrlIssue, evidenceUrlOf, normalizeEvidenceUrl;
 import '../../models/space_kind.dart';
 import '../../models/taiwan_districts.dart';
 import '../../ui/option_pill.dart';
@@ -303,14 +303,13 @@ class AccessField extends StatelessWidget {
 
 /// The notice link a rider may attach (design §1.4, §4.2): https only,
 /// kept with the report for the reviewer, never shown on the map.
-String? evidenceUrlHint(String? value) {
-  final text = value?.trim() ?? '';
-  if (text.isEmpty) return null;
-  if (!RegExp(sourceUrlPattern).hasMatch(text)) {
-    return '請貼上以 https:// 開頭的公告網址';
-  }
-  return text.length > sourceUrlMaxLength ? '網址太長，請貼上公告頁的網址' : null;
-}
+String? evidenceUrlHint(String? value) =>
+    switch (normalizeEvidenceUrl(value).issue) {
+      null => null,
+      EvidenceUrlIssue.notUrl => '這看起來不是網址，請貼上公告頁的網址',
+      EvidenceUrlIssue.http => '請改用 https:// 開頭的網址',
+      EvidenceUrlIssue.tooLong => '網址太長，請貼上公告頁的網址',
+    };
 
 /// The optional notice link field, the same in every report form.
 class EvidenceUrlField extends StatelessWidget {
@@ -319,17 +318,17 @@ class EvidenceUrlField extends StatelessWidget {
   final ValueChanged<String>? onChanged;
 
   @override
-  Widget build(BuildContext context) => TextFormField(
-    key: const ValueKey('evidence-url'),
-    controller: controller,
-    keyboardType: TextInputType.url,
-    decoration: const InputDecoration(
-      hintText: '公告連結 https://（選填）',
-      errorMaxLines: 3,
+  Widget build(BuildContext context) => Semantics(
+    label: '公告連結，選填',
+    child: TextFormField(
+      key: const ValueKey('evidence-url'),
+      controller: controller,
+      keyboardType: TextInputType.url,
+      decoration: const InputDecoration(hintText: '公告連結（選填）', errorMaxLines: 3),
+      autovalidateMode: AutovalidateMode.onUserInteraction,
+      validator: evidenceUrlHint,
+      onChanged: onChanged,
     ),
-    autovalidateMode: AutovalidateMode.onUserInteraction,
-    validator: evidenceUrlHint,
-    onChanged: onChanged,
   );
 }
 
@@ -452,7 +451,7 @@ class _ReportFormState extends State<ReportForm> {
   String? kindProblem, whereProblem, rulesProblem;
 
   final anchors = {
-    for (final part in const ['location', 'name', 'kind', 'where'])
+    for (final part in const ['location', 'name', 'kind', 'where', 'evidence'])
       part: GlobalKey(),
   };
 
@@ -600,7 +599,8 @@ class _ReportFormState extends State<ReportForm> {
   Map<String, Object?> body() => {
     'action': 'create',
     'spot': spotPayload(),
-    if (evidence.text.trim().isNotEmpty) 'evidence_url': evidence.text.trim(),
+    if (evidence.text.trim().isNotEmpty)
+      'evidence_url': evidenceUrlOf(evidence.text),
   };
 
   /// What the server's precheck would refuse, or hold, in the report as it
@@ -655,7 +655,11 @@ class _ReportFormState extends State<ReportForm> {
       scrollTo('name');
     } else if (kindProblem != null) {
       scrollTo('kind');
-    } else if (whereProblem != null || rulesProblem != null || !fields) {
+    } else if (whereProblem != null || rulesProblem != null) {
+      scrollTo('where');
+    } else if (evidenceUrlHint(evidence.text) != null) {
+      scrollTo('evidence');
+    } else if (!fields) {
       // Past 停哪裡 only the optional fields are left to fix.
       scrollTo('where');
     }
@@ -1087,9 +1091,12 @@ class _ReportFormState extends State<ReportForm> {
             validator: (v) => textHint(v, 500),
           ),
           const SizedBox(height: 16),
-          EvidenceUrlField(
-            controller: evidence,
-            onChanged: (_) => setState(() {}),
+          KeyedSubtree(
+            key: anchors['evidence'],
+            child: EvidenceUrlField(
+              controller: evidence,
+              onChanged: (_) => setState(() {}),
+            ),
           ),
           const SizedBox(height: 16),
           // Signed out, the sign-in card carries the same sentence (P16b).

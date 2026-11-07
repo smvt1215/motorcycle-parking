@@ -8,12 +8,13 @@ import '../../data/app_store.dart';
 import '../../domain/precheck.dart';
 import '../../models/fee.dart' show FeeMode;
 import '../../models/parking.dart';
-import '../../models/parking_condition.dart' show SlotVehicle;
+import '../../models/parking_condition.dart' show SlotVehicle, evidenceUrlOf;
 import '../../ui/adaptive/adaptive.dart';
 import '../../ui/time_range_field.dart';
 import 'entry_drafts.dart';
 import 'entry_pages.dart';
 import 'form_parts.dart';
+import 'report_sheet.dart' show EvidenceUrlField;
 import 'spot_suggestions.dart' show reportSummary;
 import 'time_rules.dart';
 
@@ -62,6 +63,16 @@ class _TimeRulesPageState extends State<TimeRulesPage> {
   int? open;
   bool showErrors = false, sending = false;
   String? refusal;
+
+  /// F1c: blank each time, kept while the summary comes and goes.
+  final link = TextEditingController();
+  final linkForm = GlobalKey<FormState>();
+
+  @override
+  void dispose() {
+    link.dispose();
+    super.dispose();
+  }
 
   bool get adding => widget.spot == null;
   bool get zones => widget.type == EntryType.zone;
@@ -130,7 +141,7 @@ class _TimeRulesPageState extends State<TimeRulesPage> {
   }
 
   Future<void> submit() async {
-    if (!check()) return;
+    if (!check() || !SuggestionLink.check(linkForm)) return;
     final proposed = proposal();
     if (proposed == null) return;
     final spot = widget.spot!;
@@ -141,6 +152,7 @@ class _TimeRulesPageState extends State<TimeRulesPage> {
         '$_s5Title：${[for (final l in lines) '${l.label}：${l.from} → ${l.to}'].join('；')}',
       ),
       'field': wholeSpot ? 'space_type' : widget.type.field,
+      if (link.text.trim().isNotEmpty) 'evidence_url': evidenceUrlOf(link.text),
       'proposed': proposed,
     };
     final blocking = precheckBlocking(
@@ -261,6 +273,11 @@ class _TimeRulesPageState extends State<TimeRulesPage> {
         AddEntryButton(label: '新增一條規定', onPressed: add),
         if (!adding && changes.isNotEmpty) ...[
           const SizedBox(height: 16),
+          SuggestionLink(
+            form: linkForm,
+            controller: link,
+            field: EvidenceUrlField(controller: link),
+          ),
           Divider(color: colors.outlineVariant),
           const SizedBox(height: 8),
           const FormLabel('你要改的內容'),
