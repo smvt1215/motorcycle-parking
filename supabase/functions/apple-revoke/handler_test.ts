@@ -2,6 +2,7 @@ import {
   type AppleConfig,
   appleConfig,
   type Caller,
+  defaultBundleIds,
   type Deps,
   handle,
   latestSignIn,
@@ -27,6 +28,7 @@ const config: AppleConfig = {
   privateKey: 'pem',
   clientId: 'tw.motopark.signin',
   redirectUri: 'https://site.test/account-deletion',
+  bundleIds: ['tw.app', 'tw.app.staging'],
 };
 const rider: Caller = {
   id: '10000000-0000-4000-8000-000000000001',
@@ -326,6 +328,70 @@ Deno.test('a code keeps the sign-in conditions and is not mixed with a token', a
   }
 });
 
+Deno.test('a native code is exchanged and revoked under its bundle ID (#352)', async () => {
+  const subs: string[] = [];
+  const { deps, sent } = fake();
+  deps.clientSecret = (c) => {
+    subs.push(c.clientId);
+    return Promise.resolve('signed');
+  };
+  equal(
+    await call(
+      deps,
+      post({ authorization_code: 'code-1', bundle_id: 'tw.app.staging' }),
+    ),
+    { status: 200, body: { revoked: true } },
+    'revoked',
+  );
+  equal(sent.map((s) => s.url), [tokenUrl, revokeUrl], 'exchange, revoke');
+  equal(
+    Object.fromEntries(sent[0].body),
+    {
+      client_id: 'tw.app.staging',
+      client_secret: 'signed',
+      code: 'code-1',
+      grant_type: 'authorization_code',
+    },
+    'token request, no redirect_uri',
+  );
+  equal(sent[1].body.get('client_id'), 'tw.app.staging', 'revoke client');
+  equal(subs, ['tw.app.staging', 'tw.app.staging'], 'client secret sub');
+});
+
+Deno.test('only an allowed bundle ID, only with a code (#352)', async () => {
+  const cases: [unknown, string][] = [
+    [{ authorization_code: 'c', bundle_id: 'tw.other' }, 'not on the list'],
+    [{ authorization_code: 'c', bundle_id: '' }, 'empty'],
+    [{ authorization_code: 'c', bundle_id: 7 }, 'not a string'],
+    [{ authorization_code: 'c', bundle_id: 'x'.repeat(256) }, 'too long'],
+    [{ token: 't', bundle_id: 'tw.app' }, 'with a token'],
+  ];
+  for (const [body, name] of cases) {
+    const { deps, sent } = fake();
+    equal(
+      await call(deps, post(body)),
+      { status: 400, body: { error: 'request.invalid' } },
+      name,
+    );
+    equal(sent.length, 0, `${name}: nothing reaches Apple`);
+  }
+});
+
+Deno.test("a native code still has to be this account's", async () => {
+  const { deps, sent } = fake({
+    token: tokenAnswer({ id_token: unsignedIdToken('someone-else') }),
+  });
+  equal(
+    (await call(
+      deps,
+      post({ authorization_code: 'c', bundle_id: 'tw.app' }),
+    )).body.error,
+    'apple.code_account_mismatch',
+    'mismatch',
+  );
+  equal(sent.map((s) => s.url), [tokenUrl], 'nothing revoked');
+});
+
 Deno.test('latestSignIn reads the newest non-anonymous amr entry', () => {
   equal(
     latestSignIn([
@@ -355,8 +421,20 @@ Deno.test('appleConfig needs all four values', () => {
       privateKey: 'P',
       clientId: 'C',
       redirectUri: webRedirectUri,
+      bundleIds: defaultBundleIds,
     },
     'all set',
+  );
+  equal(
+    appleConfig((n) => n === 'APPLE_BUNDLE_IDS' ? ' tw.a , tw.b,, ' : env[n])
+      ?.bundleIds,
+    ['tw.a', 'tw.b'],
+    'bundle IDs from the environment',
+  );
+  equal(
+    appleConfig((n) => n === 'APPLE_BUNDLE_IDS' ? ' , ' : env[n])?.bundleIds,
+    defaultBundleIds,
+    'an empty list falls back',
   );
   equal(
     appleConfig((n) =>

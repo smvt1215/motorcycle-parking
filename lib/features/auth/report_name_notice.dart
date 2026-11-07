@@ -25,7 +25,6 @@ class ReportNameNotice extends StatelessWidget {
       final name = publicContributorName(profilePublicName(user));
       return _Notice(
         name: name,
-        avatarUrl: profileAvatarUrl(user),
         onEdit: () => showProfileEditor(context, store),
       );
     },
@@ -33,15 +32,10 @@ class ReportNameNotice extends StatelessWidget {
 }
 
 class _Notice extends StatelessWidget {
-  const _Notice({
-    required this.name,
-    required this.avatarUrl,
-    required this.onEdit,
-  });
+  const _Notice({required this.name, required this.onEdit});
 
   /// The public name, or null when the spot shows only 由車友回報.
   final String? name;
-  final String? avatarUrl;
   final VoidCallback onEdit;
 
   static const _avatar = 28.0, _gap = 8.0;
@@ -88,7 +82,6 @@ class _Notice extends StatelessWidget {
     );
     final avatar = ExcludeSemantics(
       child: ProfileAvatar(
-        url: avatarUrl ?? '',
         // A private name shows the generic person, never its letter.
         name: name ?? '',
         size: _avatar,
