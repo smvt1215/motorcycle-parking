@@ -138,26 +138,18 @@ void main() {
       final store = await mountAuthApp(tester);
       showReport(appContext(tester), store, authSpot.lat, authSpot.lng);
       await tester.pumpAndSettle();
-      // The location section (map, search, GPS) comes first; the name field
-      // may be below the list's build range.
       final form = find
           .descendant(
             of: find.byType(ReportForm),
             matching: find.byType(Scrollable),
           )
           .first;
-      final name = find.widgetWithText(TextFormField, '停車點名稱');
-      final namePart = find.byKey(const ValueKey('fold-名稱'));
-      await tester.scrollUntilVisible(namePart, 300, scrollable: form);
-      await tester.tap(namePart);
-      await tester.pumpAndSettle();
+      final name = find.widgetWithText(TextFormField, '名稱');
+      await tester.scrollUntilVisible(name, 300, scrollable: form);
       await tester.enterText(name, '尚未送出的停車點');
-      // The sign-in prompt sits just above the name field.
-      await tester.scrollUntilVisible(
-        find.text('使用 Google 登入'),
-        -100,
-        scrollable: form,
-      );
+      // 送出 opens P11 (C2); the form stays under it.
+      await tester.tap(find.widgetWithText(AdaptiveButton, '送出'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('使用 Google 登入'));
       await tester.pumpAndSettle();
       expect(find.text('帳號與設定'), findsNothing);
@@ -172,17 +164,6 @@ void main() {
       expect(find.byType(SignInPrompt), findsNothing);
       expect(find.text('帳號與設定'), findsNothing);
       expect(find.byKey(const ValueKey('auth-success-toast')), findsOneWidget);
-      final scrollable = find
-          .descendant(
-            of: find.byType(ReportForm),
-            matching: find.byType(Scrollable),
-          )
-          .first;
-      await tester.scrollUntilVisible(
-        find.text('送出'),
-        300,
-        scrollable: scrollable,
-      );
       expect(
         tester
             .widget<AdaptiveButton>(find.widgetWithText(AdaptiveButton, '送出'))
@@ -208,7 +189,7 @@ void main() {
     final store = await mountAuthApp(tester);
     showSpotSuggestions(appContext(tester), store, authSpot);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('停車點名稱'));
+    await tester.tap(find.text('名稱'));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const ValueKey('suggestion-input')),
@@ -218,7 +199,8 @@ void main() {
       tester
           .widget<AdaptiveButton>(find.widgetWithText(AdaptiveButton, '送出修改建議'))
           .onPressed,
-      isNull,
+      isNotNull,
+      reason: 'C2: signed out it opens P11',
     );
     await tester.runAsync(() => completeOAuth(store));
     await tester.pumpAndSettle();

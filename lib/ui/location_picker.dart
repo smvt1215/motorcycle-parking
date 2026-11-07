@@ -24,9 +24,14 @@ class LocationMapView {
     this.originLat,
     this.originLng,
     this.touchMarker = false,
+    this.zoomControls = true,
   });
   final double lat, lng;
   final double? originLat, originLng;
+
+  /// The map's own zoom buttons; off where controls float on the map, as
+  /// Android's sit in the same corner. Pinching still zooms.
+  final bool zoomControls;
 
   /// The marker was dragged, or the map tapped, to a new position.
   final void Function(double lat, double lng) onMove;
@@ -66,6 +71,7 @@ class LocationPicker extends StatefulWidget {
     this.fills = const {},
     this.collapsed = false,
     this.expandButton = false,
+    this.overlayControls = false,
   });
 
   final double lat, lng;
@@ -103,6 +109,10 @@ class LocationPicker extends StatefulWidget {
   /// 「放大地圖調整」beside the search under the map (C6 canvas
   /// AppFormLocation), opening the same full-screen map as [collapsed].
   final bool expandButton;
+
+  /// Search, 放大地圖 and 移到我的位置 float on the map (#190 N1) instead of
+  /// sitting under it.
+  final bool overlayControls;
 
   @override
   State<LocationPicker> createState() => _LocationPickerState();
@@ -259,12 +269,115 @@ class _LocationPickerState extends State<LocationPicker>
       found != null &&
       distanceMeters(found!.lat, found!.lng, widget.lat, widget.lng) < 0.5;
 
+  /// The controls floating on the map: 44 on iOS, 48 elsewhere.
+  List<Widget> _overlayButtons(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final size = defaultTargetPlatform == TargetPlatform.iOS ? 44.0 : 48.0;
+    Widget round(String key, String tip, IconData icon, VoidCallback? onTap) =>
+        Tooltip(
+          message: tip,
+          child: Semantics(
+            button: true,
+            label: tip,
+            excludeSemantics: true,
+            child: Material(
+              key: ValueKey(key),
+              color: colors.surface,
+              shape: const CircleBorder(),
+              elevation: 2,
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: onTap,
+                child: SizedBox.square(
+                  dimension: size,
+                  child: Icon(icon, size: 22, color: colors.onSurface),
+                ),
+              ),
+            ),
+          ),
+        );
+    return [
+      Positioned(
+        top: 8,
+        left: 8,
+        right: 8,
+        child: Row(
+          children: [
+            Expanded(
+              child: widget.onSearch == null
+                  ? const SizedBox.shrink()
+                  : Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: Semantics(
+                        button: true,
+                        label: '搜尋地址',
+                        excludeSemantics: true,
+                        child: Material(
+                          key: const ValueKey('location-search'),
+                          color: colors.surface,
+                          elevation: 2,
+                          shape: const StadiumBorder(),
+                          child: InkWell(
+                            customBorder: const StadiumBorder(),
+                            onTap: search,
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(
+                                minHeight: size,
+                                minWidth: double.infinity,
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.search,
+                                      size: 20,
+                                      color: colors.onSurfaceVariant,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      '搜尋地址',
+                                      style: TextStyle(
+                                        color: colors.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+            ),
+            const SizedBox(width: 8),
+            round('location-expand', '放大地圖', Icons.open_in_full, openMap),
+          ],
+        ),
+      ),
+      if (widget.onLocate != null)
+        Positioned(
+          right: 8,
+          bottom: 8,
+          child: round(
+            'location-locate',
+            locating ? '定位中…' : '移到我的位置',
+            Icons.my_location,
+            locating ? null : locate,
+          ),
+        ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
     final colors = Theme.of(context).colorScheme;
     final lat = widget.lat, lng = widget.lng;
     final originLat = widget.originLat, originLng = widget.originLng;
+    final overlay = widget.overlayControls;
     if (widget.collapsed) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -312,6 +425,7 @@ class _LocationPickerState extends State<LocationPicker>
       originLng: originLng,
       onMove: widget.onChanged,
       touchMarker: widget.touchMarker,
+      zoomControls: !overlay,
     );
     void step({int north = 0, int east = 0}) {
       final (a, b) = nudge(lat, lng, north: north, east: east);
@@ -321,7 +435,7 @@ class _LocationPickerState extends State<LocationPicker>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (widget.onSearch != null && !widget.expandButton) ...[
+        if (widget.onSearch != null && !widget.expandButton && !overlay) ...[
           OutlinedButton.icon(
             key: const ValueKey('location-search'),
             style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
@@ -342,12 +456,26 @@ class _LocationPickerState extends State<LocationPicker>
             borderRadius: BorderRadius.circular(10),
             child: SizedBox(
               height: widget.height,
-              child: (widget.mapBuilder ?? googleLocationMap)(context, view),
+              child: overlay
+                  ? Stack(
+                      children: [
+                        Positioned.fill(
+                          child: (widget.mapBuilder ?? googleLocationMap)(
+                            context,
+                            view,
+                          ),
+                        ),
+                        ..._overlayButtons(context),
+                      ],
+                    )
+                  : (widget.mapBuilder ?? googleLocationMap)(context, view),
             ),
           ),
         ),
         const SizedBox(height: 8),
-        if (widget.expandButton) ...[
+        if (overlay) ...[
+          if (atFound) _FoundNote(found: found!, fills: widget.fills),
+        ] else if (widget.expandButton) ...[
           Row(
             children: [
               Expanded(
@@ -378,27 +506,28 @@ class _LocationPickerState extends State<LocationPicker>
           if (atFound) _FoundNote(found: found!, fills: widget.fills),
           const SizedBox(height: 8),
         ],
-        Wrap(
-          spacing: 16,
-          runSpacing: 4,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Text(
-              '${lat.toStringAsFixed(6)}, ${lng.toStringAsFixed(6)}',
-              style: const TextStyle(
-                fontFeatures: [FontFeature.tabularFigures()],
-              ),
-            ),
-            if (moved != null)
+        if (!overlay)
+          Wrap(
+            spacing: 16,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
               Text(
-                moved < 0.5
-                    ? '在原位置'
-                    : '距原位置 ${moved.toStringAsFixed(moved < 10 ? 1 : 0)} m',
-                style: TextStyle(color: colors.onSurfaceVariant),
+                '${lat.toStringAsFixed(6)}, ${lng.toStringAsFixed(6)}',
+                style: const TextStyle(
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
               ),
-          ],
-        ),
-        if (widget.onLocate != null)
+              if (moved != null)
+                Text(
+                  moved < 0.5
+                      ? '在原位置'
+                      : '距原位置 ${moved.toStringAsFixed(moved < 10 ? 1 : 0)} m',
+                  style: TextStyle(color: colors.onSurfaceVariant),
+                ),
+            ],
+          ),
+        if (widget.onLocate != null && !overlay)
           Align(
             alignment: AlignmentDirectional.centerStart,
             child: TextButton.icon(
@@ -849,7 +978,7 @@ class _GoogleLocationMapState extends State<_GoogleLocationMap> {
           // The touch marker projects through an unrotated, flat camera.
           rotateGesturesEnabled: !v.touchMarker,
           tiltGesturesEnabled: !v.touchMarker,
-          zoomControlsEnabled: true,
+          zoomControlsEnabled: v.zoomControls,
           mapToolbarEnabled: false,
           myLocationButtonEnabled: false,
           webGestureHandling: gm.WebGestureHandling.greedy,
