@@ -405,7 +405,10 @@ class HiddenRiders extends ChangeNotifier {
   /// then takes the account's list, so riders unhidden on another device
   /// stay unhidden. A copy left by another account is dropped.
   Future<void> signedIn(String account) async {
-    if (remote == null || _account == account) return;
+    if (remote == null) return;
+    // The same account again (a refreshed token, a resumed session): the
+    // list stays, and only what is waiting goes up.
+    if (_account == account) return syncPending();
     _generation++;
     _syncing = null;
     _account = account;
@@ -441,6 +444,16 @@ class HiddenRiders extends ChangeNotifier {
     await prefs.remove(ownerKey);
     await _savePending();
     await local.clear();
+  }
+
+  /// [sync] when something waits to go up, or nothing: for the moments the
+  /// network may be back (the app in the foreground, Realtime rejoining,
+  /// 已隱藏的車友 opening), where a request for nothing would be waste.
+  Future<void> syncPending() async {
+    if (!followsAccount || (_pendingAdds.isEmpty && _pendingRemoves.isEmpty)) {
+      return;
+    }
+    await sync();
   }
 
   /// Sends what the account has not taken yet, then reads its list; runs

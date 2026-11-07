@@ -80,6 +80,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     Future<List<String>> Function()? availabilityBetaCities,
     DateTime Function()? clock,
     FavoriteHandles? favoriteHandles,
+    HiddenRidersStore? hiddenRidersAccount,
   }) : favoriteHandlesSource =
            favoriteHandles ??
            (client == null
@@ -124,7 +125,9 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
       local.prefs,
       clock: this.clock,
       // Signed in, the list follows the account (#280).
-      remote: client == null ? null : RemoteHiddenRidersStore(client!),
+      remote:
+          hiddenRidersAccount ??
+          (client == null ? null : RemoteHiddenRidersStore(client!)),
     )..addListener(_hiddenRidersChanged);
     _auth = client?.auth.onAuthStateChange.listen((state) {
       // Signing in joins the device list to the account's; signing out
@@ -529,7 +532,11 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
         .watch(
           // Each (re)join compares versions, since a dropped connection
           // replays nothing.
-          onSubscribed: () => unawaited(checkForUpdates()),
+          onSubscribed: () {
+            unawaited(checkForUpdates());
+            // A rejoin means the network is back.
+            unawaited(hiddenRiders.syncPending());
+          },
         )
         .listen(
           (version) => _noteVersion(version, changed: true),
@@ -562,6 +569,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
       case AppLifecycleState.resumed:
         _foreground = true;
         unawaited(checkForUpdates());
+        unawaited(hiddenRiders.syncPending());
         unawaited(refreshAvailabilityBeta());
         _resumeAvailability();
       case AppLifecycleState.paused:

@@ -18,6 +18,7 @@ import 'package:motorcycle_parking/features/hidden_riders/hide_rider.dart';
 import 'package:motorcycle_parking/features/settings/settings_page.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
 
+import 'data_updates_test.dart' show FakeUpdates;
 import 't280_harness.dart';
 
 /// Three hidden riders: 阿明 newest, Ken, then one without a public name.
@@ -928,6 +929,123 @@ void main() {
     await tester.pumpAndSettle();
     expect(store.hiddenRiders.isHidden(handleA), isFalse);
     semantics.dispose();
+  });
+
+  group('同步失敗後自動補送（Codex 第 5 輪）', () {
+    /// Signed in and offline, with [handleA] waiting to go up.
+    Future<(AppStore, FakeAccountList, FakeUpdates)> waiting() async {
+      SharedPreferences.setMockInitialValues({});
+      final account = FakeAccountList();
+      final updates = FakeUpdates();
+      final store = AppStore(
+        LocalRepository(await SharedPreferences.getInstance()),
+        null,
+        dataUpdates: updates,
+        hiddenRidersAccount: account,
+      )..listenForUpdates();
+      await store.hiddenRiders.signedIn('rider-1');
+      account.offline = true;
+      await store.hiddenRiders.hide(
+        handle: handleA,
+        name: '阿明',
+        spotName: '市府',
+      );
+      await pumpEventQueue();
+      expect(account.rows, isEmpty);
+      account
+        ..offline = false
+        ..calls.clear();
+      return (store, account, updates);
+    }
+
+    test('App 回到前景：補送', () async {
+      final (store, account, _) = await waiting();
+      store.didChangeAppLifecycleState(AppLifecycleState.resumed);
+      await pumpEventQueue();
+      expect(account.rows.map((r) => r.handle), [handleA]);
+      expect(account.calls, ['merge']);
+    });
+
+    test('恢復連線（Realtime 重新加入）：補送', () async {
+      final (_, account, updates) = await waiting();
+      updates.join();
+      await pumpEventQueue();
+      expect(account.rows.map((r) => r.handle), [handleA]);
+    });
+
+    test('離線時解除隱藏：回到前景補送刪除', () async {
+      final (store, account, _) = await waiting();
+      store.didChangeAppLifecycleState(AppLifecycleState.resumed);
+      await pumpEventQueue();
+      account.offline = true;
+      await store.hiddenRiders.unhide(handleA);
+      await pumpEventQueue();
+      expect(account.rows, hasLength(1));
+      account.offline = false;
+      store.didChangeAppLifecycleState(AppLifecycleState.resumed);
+      await pumpEventQueue();
+      expect(account.rows, isEmpty);
+    });
+
+    test('沒有待送的異動：回到前景、恢復連線都不發請求', () async {
+      final (store, account, updates) = await waiting();
+      store.didChangeAppLifecycleState(AppLifecycleState.resumed);
+      await pumpEventQueue();
+      account.calls.clear();
+      store.didChangeAppLifecycleState(AppLifecycleState.resumed);
+      updates.join();
+      await pumpEventQueue();
+      expect(account.calls, isEmpty);
+    });
+
+    test('同一帳號的登入事件：只送待送的，不重新初始化清單', () async {
+      final (store, account, _) = await waiting();
+      final before = store.hiddenRiders.riders;
+      await store.hiddenRiders.signedIn('rider-1');
+      expect(account.calls, ['merge']);
+      expect(store.hiddenRiders.riders, before);
+      // Nothing left: the same event sends nothing, and reads nothing.
+      account.calls.clear();
+      await store.hiddenRiders.signedIn('rider-1');
+      expect(account.calls, isEmpty);
+    });
+
+    test('未登入：回到前景不發請求', () async {
+      SharedPreferences.setMockInitialValues({});
+      final account = FakeAccountList();
+      final store = AppStore(
+        LocalRepository(await SharedPreferences.getInstance()),
+        null,
+        hiddenRidersAccount: account,
+      );
+      await store.hiddenRiders.hide(handle: handleA, name: '', spotName: '');
+      store.didChangeAppLifecycleState(AppLifecycleState.resumed);
+      await pumpEventQueue();
+      expect(account.calls, isEmpty);
+    });
+
+    for (final platform in platforms) {
+      testWidgetsOn('${platform.name} 打開已隱藏的車友：補送', (tester) async {
+        setUpView(tester, platform, const Size(390, 844));
+        final (store, account, _) = (await tester.runAsync(waiting))!;
+        await tester.pumpWidget(
+          app(
+            Scaffold(
+              body: Builder(
+                builder: (context) => TextButton(
+                  onPressed: () => openHiddenRiders(context, store),
+                  child: const Text('open'),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.text('open'));
+        await tester.pumpAndSettle();
+        expect(find.byType(HiddenRidersPage), findsOneWidget);
+        expect(account.rows.map((r) => r.handle), [handleA]);
+      });
+    }
   });
 }
 
