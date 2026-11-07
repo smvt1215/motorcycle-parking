@@ -30,23 +30,18 @@ String publicRiderName(ParkingSpot spot) {
   return name.contains('@') ? '' : name;
 }
 
-/// Whether [spot] can be reported as inappropriate: community content
-/// (rider-added, admin-added or imported), not official data and not the
-/// rider's own spot (P17a ⑤, P17b).
-bool canReportContent(ParkingSpot spot) => !spot.isOfficial && !isOwnSpot(spot);
-
 /// The ⋯ menu beside 資料來源 (P17a ⑤, P17d ②); [show] false means no ⋯.
 typedef SpotMenu = ({bool show, bool byRider, bool hide, bool unhide});
 
-/// [handle] and [own] override the spot's own, for a favourite's snapshot
-/// whose facts were looked up.
+/// [handle] and [own] override the spot's own: [AppStore] knows better for
+/// a snapshot that cannot keep them, or that an earlier session read.
 SpotMenu spotMenu(
   ParkingSpot spot,
   HiddenRiders hidden, {
   String? handle,
-  bool own = false,
+  bool? own,
 }) {
-  if (own || !canReportContent(spot)) {
+  if (spot.isOfficial || (own ?? isOwnSpot(spot))) {
     return (show: false, byRider: false, hide: false, unhide: false);
   }
   handle ??= riderHandle(spot);
@@ -59,17 +54,8 @@ SpotMenu spotMenu(
   );
 }
 
-/// Whether the map, its clusters, search and nearby lists leave [spot] out.
-bool hiddenFromLists(ParkingSpot spot, HiddenRiders hidden) =>
-    !isOwnSpot(spot) && hidden.isHidden(riderHandle(spot));
-
 /// The fields of [spot] held for review after a report (`content_held`:
 /// `rider_name`, `spot_name`, `text`; #280 L3). Empty until the model
 /// reads it: [ParkingSpot] has no such field yet (L3 left it out of the
 /// model), so nothing shows.
 Set<String> contentHeld(ParkingSpot spot) => const {};
-
-/// Whether the contributor, looking at their own spot, should see that
-/// [field] is under review (P17b ⑪); others see it already hidden.
-bool heldForOwner(ParkingSpot spot, String field) =>
-    isOwnSpot(spot) && contentHeld(spot).contains(field);

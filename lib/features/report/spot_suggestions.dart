@@ -10,7 +10,6 @@ import '../../data/app_store.dart';
 import '../../domain/location_check.dart';
 import '../../domain/content_report_display.dart';
 import '../../domain/precheck.dart';
-import '../../domain/spot_contributor.dart';
 import '../../models/closure.dart';
 import '../../models/fee.dart';
 import '../../models/parking.dart';
@@ -244,7 +243,7 @@ Future<void> showSpotSuggestions(
                 ),
               ),
               // #280 P17b ①: same rule as the details' ⋯ menu.
-              if (canReportContent(spot) && !store.ownSpot(spot)) ...[
+              if (store.canReportContent(spot)) ...[
                 const SizedBox(height: 20),
                 Semantics(
                   header: true,

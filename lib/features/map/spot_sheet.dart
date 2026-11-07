@@ -14,7 +14,6 @@ import '../../domain/four_sign.dart';
 import '../../domain/four_sign_display.dart';
 import '../../domain/hidden_riders_display.dart' show contentHeldNote;
 import '../../domain/parking_decision.dart';
-import '../../domain/spot_contributor.dart';
 import '../../domain/spot_detail_display.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../../ui/detail_tokens.dart';
@@ -174,29 +173,39 @@ class _SpotSheetState extends State<SpotSheet> {
 
   late int _reports;
 
+  /// Who the shown copy was read for: `is_own` and held text follow them.
+  late String? _account;
+
+  /// Numbers each read-back: only the newest may land.
+  int _reads = 0;
+
   @override
   void initState() {
     super.initState();
     _reports = widget.store.reportsSent;
+    _account = widget.store.riderId;
     widget.store.addListener(_storeChanged);
   }
 
   void _storeChanged() {
-    if (widget.store.reportsSent == _reports) return;
-    _reports = widget.store.reportsSent;
+    final store = widget.store;
+    if (store.reportsSent == _reports && store.riderId == _account) return;
+    _reports = store.reportsSent;
+    _account = store.riderId;
     unawaited(_reread());
   }
 
-  /// Reads the spot again; one that cannot be read keeps the copy shown.
+  /// Reads the spot again; one that cannot be read keeps the copy shown,
+  /// whose `is_own` [AppStore.ownSpot] no longer trusts across accounts.
   Future<void> _reread() async {
-    final id = widget.spot.id;
+    final id = widget.spot.id, read = ++_reads;
     final ParkingSpot? latest;
     try {
-      latest = await widget.store.parking.byId(id);
+      latest = await widget.store.latestSpot(id);
     } catch (_) {
       return;
     }
-    if (mounted && latest != null && widget.spot.id == id) {
+    if (mounted && latest != null && widget.spot.id == id && read == _reads) {
       setState(() => reread = latest);
     }
   }
@@ -457,7 +466,7 @@ class _SpotSheetState extends State<SpotSheet> {
             constraints.maxHeight - footer - _headerHeight(ctx, spot, width) >=
                 _minDetailHeight;
         // The spot's own name held for review (P17b ⑪): under the title.
-        final titleNote = heldForOwner(spot, 'spot_name')
+        final titleNote = store.heldForOwner(spot, 'spot_name')
             ? const ContentHeldNote()
             : null;
         final header = SpotDetailHeader(
@@ -756,7 +765,7 @@ class _SpotSheetState extends State<SpotSheet> {
         children: [
           WhereView(
             cards: cards,
-            heldNote: heldForOwner(spot, 'text')
+            heldNote: store.heldForOwner(spot, 'text')
                 ? const ContentHeldNote()
                 : null,
             entrance: spot.isFacility ? spot.entranceNote.trim() : '',
@@ -785,13 +794,13 @@ class _SpotSheetState extends State<SpotSheet> {
               _DetailField(
                 label: '特殊規則',
                 value: spot.specialRules,
-                held: heldForOwner(spot, 'text'),
+                held: store.heldForOwner(spot, 'text'),
               ),
             if (spot.note.trim().isNotEmpty)
               _DetailField(
                 label: '備註',
                 value: spot.note,
-                held: heldForOwner(spot, 'text'),
+                held: store.heldForOwner(spot, 'text'),
               ),
           ],
         ),
@@ -812,7 +821,7 @@ class _SpotSheetState extends State<SpotSheet> {
             _DetailField(
               label: '資料來源',
               value: sourceSummary(spot, demo: store.demo),
-              held: heldForOwner(spot, 'rider_name'),
+              held: store.heldForOwner(spot, 'rider_name'),
             ),
             if (!spot.isOfficial)
               _ConfirmationField(lines: confirmationLines(spot)),

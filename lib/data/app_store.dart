@@ -119,6 +119,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
        updates = dataUpdates ?? DataUpdates(client) {
     vehicle = local.vehicle;
     parked = local.parked;
+    _ownAccount = riderId;
     hiddenRiders = HiddenRiders(
       local.prefs,
       clock: this.clock,
@@ -176,16 +177,60 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   String? handleOf(ParkingSpot spot) =>
       riderHandle(spot) ?? _loadedHandles[spot.id] ?? favoriteHandles[spot.id];
 
-  /// Whether the signed-in account added [spot]: its own `is_own`, else
-  /// the loaded copy's, else a favourite's looked up (snapshots drop it).
-  bool ownSpot(ParkingSpot spot) =>
-      isOwnSpot(spot) ||
-      _loadedOwn.contains(spot.id) ||
-      favoriteOwn.contains(spot.id);
+  /// Whether the signed-in account added [spot]. `is_own` holds only for
+  /// the session a row was read with, and an opened spot can outlive that
+  /// session: what this session read decides, and a copy from an earlier
+  /// session counts as someone else's until it is read again.
+  bool ownSpot(ParkingSpot spot) {
+    _followAccount();
+    return favoriteOwn.contains(spot.id) ||
+        (_ownRead[spot.id] ?? (_sameSession && isOwnSpot(spot)));
+  }
+
+  /// `is_own` as this session read it, by spot id; never cleared by a
+  /// viewport moving on, so an open spot keeps its answer.
+  Map<String, bool> _ownRead = {};
+
+  /// False once the account changed: copies made before may say anything.
+  bool _sameSession = true;
+  late String? _ownAccount;
+
+  /// Forgets what was read for another account, whichever path notices
+  /// first.
+  void _followAccount() {
+    final account = riderId;
+    if (account == _ownAccount) return;
+    _ownAccount = account;
+    _sameSession = false;
+    _ownRead = {};
+    _favoriteFactsKey = null;
+    _favoriteFactsRead++;
+    favoriteHandles = const {};
+    favoriteOwn = const {};
+  }
+
+  /// Whether a content report can be sent for [spot]: community content,
+  /// not official data and not the rider's own (P17a ⑤, P17b).
+  bool canReportContent(ParkingSpot spot) => !spot.isOfficial && !ownSpot(spot);
+
+  /// Whether the contributor, looking at their own spot, should see that
+  /// [field] is under review (P17b ⑪); others see it already hidden.
+  bool heldForOwner(ParkingSpot spot, String field) =>
+      ownSpot(spot) && contentHeld(spot).contains(field);
+
+  /// [id] as the backend shows it now, for this session; null when it
+  /// cannot be read or the account changed meanwhile.
+  Future<ParkingSpot?> latestSpot(String id) async {
+    final account = riderId;
+    final spot = await parking.byId(id);
+    if (spot == null || account != riderId) return null;
+    _followAccount();
+    _ownRead[id] = isOwnSpot(spot);
+    return spot;
+  }
 
   /// Handles of the spots last loaded, hidden ones included, by spot id.
   Map<String, String> _loadedHandles = const {};
-  Set<String> _loadedOwn = const {};
 
   /// Whether [spot]'s rider is hidden on this device; never the rider's
   /// own spot.
@@ -200,12 +245,12 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   /// clusters, search and the nearby lists show (#280).
   List<ParkingSpot> get spots => _spots;
   set spots(List<ParkingSpot> value) {
+    _followAccount();
     _loadedSpots = value;
     _loadedHandles = {for (final s in value) s.id: ?riderHandle(s)};
-    _loadedOwn = {
-      for (final s in value)
-        if (isOwnSpot(s)) s.id,
-    };
+    for (final s in value) {
+      _ownRead[s.id] = isOwnSpot(s);
+    }
     _spots = _withoutHidden(value);
     // Hidden as a guest, then signed in: one's own handle leaves the list.
     final own = [
@@ -220,7 +265,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     if (hiddenRiders.isEmpty) return all;
     final kept = [
       for (final s in all)
-        if (!hiddenFromLists(s, hiddenRiders)) s,
+        if (!riderHidden(s)) s,
     ];
     return kept.length == all.length ? all : kept;
   }
@@ -235,6 +280,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   /// answer for another account, or an older look-up, is dropped: it must
   /// not change this account's facts or hidden list.
   Future<void> _loadFavoriteHandles() async {
+    _followAccount();
     final key = favoritesKey, read = ++_favoriteFactsRead;
     if (key != _favoriteFactsKey) {
       _favoriteFactsKey = key;
@@ -252,6 +298,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     }
     try {
       final facts = await favoriteHandlesSource.handlesFor(ids);
+      _followAccount();
       if (_disposed || read != _favoriteFactsRead || key != favoritesKey) {
         return;
       }
@@ -703,11 +750,17 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     _viewportTimer?.cancel();
     final request = ++_request;
     final bounds = viewport;
+    final account = riderId;
     loading = true;
     notifyListeners();
     try {
       final result = await parking.inViewport(bounds);
       if (_disposed || request != _request) return;
+      // `is_own` was read for the account that asked (#280): ask again.
+      if (account != riderId) {
+        unawaited(refresh());
+        return;
+      }
       spots = result.spots;
       _loadedOnce = true;
       // A failed count read keeps the last counts of the spots still in

@@ -349,7 +349,9 @@ class _ContentReportSheetState extends State<ContentReportSheet> {
     };
     final handle = widget.store.handleOf(widget.spot);
     final canHide =
-        handle != null && !widget.store.hiddenRiders.isHidden(handle);
+        handle != null &&
+        !widget.store.ownSpot(widget.spot) &&
+        !widget.store.hiddenRiders.isHidden(handle);
     return ListView(
       key: ValueKey('content-report-${result.name}'),
       padding: const EdgeInsets.fromLTRB(20, 32, 20, 24),

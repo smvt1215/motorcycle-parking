@@ -114,6 +114,8 @@ class AccountStore extends AppStore {
   @override
   String get favoritesKey => account;
   @override
+  String? get riderId => account;
+  @override
   Future<String> submit(Map<String, dynamic> body) async {
     reportsSent++;
     notifyListeners();
@@ -200,7 +202,6 @@ void main() {
         });
         expect(riderHandle(s), isNull);
         expect(isOwnSpot(s), isFalse);
-        expect(canReportContent(s), isTrue);
       }
     });
   });
@@ -656,6 +657,162 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text('名稱審核中'), findsWidgets);
         expect(find.text('阿明的機車格'), findsNothing);
+      });
+    }
+  });
+
+  group('Codex 第 3 輪：換帳號', () {
+    final mine = spot(
+      'm',
+      '我新增的機車格',
+      handle: handleA,
+      contributor: '阿明',
+      own: true,
+    );
+
+    Future<AccountStore> accountStore(FixedParking parking) async {
+      SharedPreferences.setMockInitialValues({});
+      return AccountStore(
+        LocalRepository(await SharedPreferences.getInstance()),
+        parking,
+        const NoFavoriteHandles(),
+      );
+    }
+
+    test('舊快照的 isOwn 不屬於新帳號：查到最新資料前都不算自己的', () async {
+      final parking = FixedParking([mine]);
+      final store = await accountStore(parking);
+      await store.refresh();
+      expect(store.ownSpot(mine), isTrue);
+      expect(store.canReportContent(mine), isFalse);
+
+      store.account = 'rider-b';
+      expect(store.ownSpot(mine), isFalse);
+      expect(store.canReportContent(mine), isTrue);
+      expect(
+        spotMenu(mine, store.hiddenRiders, own: store.ownSpot(mine)).hide,
+        isTrue,
+      );
+      await store.hiddenRiders.hide(handle: handleA, name: '阿明', spotName: '');
+      expect(store.riderHidden(mine), isTrue);
+      // The rows still loaded are A's: B's hiding applies to them too.
+      expect(store.spots, isEmpty);
+    });
+
+    test('同一個帳號：視野移開後，開著的點仍算自己的', () async {
+      final parking = FixedParking([mine]);
+      final store = await accountStore(parking);
+      await store.refresh();
+      parking.spots = const [];
+      await store.refresh();
+      expect(store.ownSpot(mine), isTrue);
+    });
+
+    test('從別的帳號的讀取回來時才換帳號：結果不寫入', () async {
+      final parking = FixedParking([mine])..latest = mine;
+      final store = await accountStore(parking);
+      final reading = store.latestSpot('m');
+      store.account = 'rider-b';
+      expect(await reading, isNull);
+      expect(store.ownSpot(mine), isFalse);
+    });
+
+    for (final platform in platforms) {
+      testWidgetsOn('${platform.name} A 開著自己的點，換 B：⋯ 出現，B 的隱藏生效', (
+        tester,
+      ) async {
+        setUpView(tester, platform, const Size(390, 844));
+        final parking = FixedParking([mine]);
+        final store = (await tester.runAsync(() async {
+          final s = await accountStore(parking);
+          await s.refresh();
+          return s;
+        }))!;
+        await tester.pumpWidget(
+          app(
+            Scaffold(
+              body: Builder(
+                builder: (context) => TextButton(
+                  onPressed: () => showSpot(context, store, mine),
+                  child: const Text('details'),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.text('details'));
+        await tester.pumpAndSettle();
+        final sheet = find.byKey(const ValueKey('parking-spot-sheet'));
+        await tester.drag(sheet, const Offset(0, -600));
+        await tester.pumpAndSettle();
+        final more = find.byKey(const ValueKey('spot-more'));
+        expect(more, findsNothing);
+
+        // Signed out and in as B; B reads the same spot, not as its own.
+        parking
+          ..spots = [spot('m', '我新增的機車格', handle: handleA, contributor: '阿明')]
+          ..latest = spot('m', '我新增的機車格', handle: handleA, contributor: '阿明');
+        store.account = 'rider-b';
+        store.notifyListeners();
+        await tester.pumpAndSettle();
+        await tester.scrollUntilVisible(
+          more,
+          200,
+          scrollable: find
+              .descendant(of: sheet, matching: find.byType(Scrollable))
+              .first,
+        );
+        await tester.tap(more);
+        await tester.pumpAndSettle();
+        expect(find.text(hideRiderAction), findsOneWidget);
+        expect(find.text(reportContentAction), findsOneWidget);
+        await tester.tap(find.text(hideRiderAction));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(hideRiderConfirm));
+        await tester.pumpAndSettle();
+        expect(store.hiddenRiders.isHidden(handleA), isTrue);
+        expect(store.riderHidden(mine), isTrue);
+      });
+
+      testWidgetsOn('${platform.name} 讀不回來：舊快照的 isOwn 仍當成 false', (
+        tester,
+      ) async {
+        setUpView(tester, platform, const Size(390, 844));
+        final parking = FixedParking([mine]);
+        final store = (await tester.runAsync(() async {
+          final s = await accountStore(parking);
+          await s.refresh();
+          return s;
+        }))!;
+        await tester.pumpWidget(
+          app(
+            Scaffold(
+              body: Builder(
+                builder: (context) => TextButton(
+                  onPressed: () => showSpot(context, store, mine),
+                  child: const Text('details'),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.text('details'));
+        await tester.pumpAndSettle();
+        final sheet = find.byKey(const ValueKey('parking-spot-sheet'));
+        await tester.drag(sheet, const Offset(0, -600));
+        await tester.pumpAndSettle();
+        store.account = 'rider-b';
+        store.notifyListeners();
+        await tester.pumpAndSettle();
+        final more = find.byKey(const ValueKey('spot-more'));
+        await tester.scrollUntilVisible(
+          more,
+          200,
+          scrollable: find
+              .descendant(of: sheet, matching: find.byType(Scrollable))
+              .first,
+        );
+        expect(more, findsOneWidget);
       });
     }
   });
