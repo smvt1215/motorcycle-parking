@@ -537,7 +537,7 @@ class _ReportFormState extends State<ReportForm> {
   /// The city's rule may open or close bays for a vehicle.
   void applyDefaults() {
     for (final d in segments) {
-      d.applyDefaults(widget.store.rules, city);
+      d.applyDefaults(widget.store.rules, city, district: district);
     }
   }
 
@@ -827,6 +827,7 @@ class _ReportFormState extends State<ReportForm> {
     type: lot ? EntryType.zone : EntryType.segment,
     subtitle: subtitle,
     city: city,
+    district: district,
     drafts: entries,
     fee: () => fee,
     onChanged: () => setState(() => whereProblem = null),

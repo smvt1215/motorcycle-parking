@@ -24,7 +24,7 @@ import 'report_sheet.dart';
 import 'spot_suggestions.dart' show reportSummary;
 
 /// On the card of a street spot without segments: what sending it does.
-const firstSegmentNote = '送出後會建立這條路的第一個路段，其他路段要另外補上。';
+const firstSegmentNote = '改了送出後，這裡會成為這條路的第一段；其他段請用「新增一段」補上。';
 
 /// A form's pages pushed inside its sheet (S1b, S2…): the sheet stays while
 /// its pages step forward and back, and system back steps first.
@@ -179,6 +179,23 @@ List<EntryTag> segmentTags(EntryDraft draft) {
   ];
 }
 
+/// A list icon on a light patch, as wide as a marking.
+class _IconTile extends StatelessWidget {
+  const _IconTile(this.icon);
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 44,
+    height: 44,
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(10),
+    ),
+    child: Icon(icon),
+  );
+}
+
 Widget _marking(SpaceKind? kind) => kind == null
     ? const SizedBox(width: 44, height: 44, child: Icon(Icons.grid_view))
     : GroundMarking(
@@ -194,6 +211,7 @@ class EntryListArgs {
     required this.type,
     required this.subtitle,
     required this.city,
+    this.district = '',
     this.spot,
     this.drafts,
     this.onChanged,
@@ -205,6 +223,9 @@ class EntryListArgs {
   final EntryType type;
   final String subtitle;
   final String? city;
+
+  /// The spot's district, which a city's rule may name.
+  final String district;
 
   /// The spot a suggestion is about; null in a new spot.
   final ParkingSpot? spot;
@@ -262,6 +283,7 @@ class _EntryListPageState extends State<EntryListPage> {
             store: args.store,
             type: type,
             city: args.city,
+            district: args.district,
             subtitle: args.subtitle,
             drafts: [edit],
             adding: true,
@@ -292,6 +314,7 @@ class _EntryListPageState extends State<EntryListPage> {
           store: args.store,
           type: type,
           city: args.city,
+          district: args.district,
           subtitle: args.subtitle,
           spot: args.spot,
           drafts: all,
@@ -348,13 +371,18 @@ class _EntryListPageState extends State<EntryListPage> {
           tags: segmentTags(d),
           onTap: d.editable ? () => open(d) : null,
         ),
-        Semantics(
-          label: '改${d.displayName}的費率，目前 $fee',
-          child: EntryRow(
-            leading: const Icon(Icons.payments_outlined),
-            title: '費率',
-            value: fee,
-            onTap: onFee == null ? null : () => _entryFee(onFee, d),
+        ColoredBox(
+          color: Theme.of(context).colorScheme.surfaceContainerLow,
+          child: Semantics(
+            label: onFee == null
+                ? '費率，目前 $fee'
+                : '改${d.displayName}的費率，目前 $fee',
+            child: EntryRow(
+              leading: const Icon(Icons.payments_outlined),
+              title: '費率',
+              value: fee,
+              onTap: onFee == null ? null : () => _entryFee(onFee, d),
+            ),
           ),
         ),
       ],
@@ -432,7 +460,7 @@ class _EntryListPageState extends State<EntryListPage> {
             EntrySection(
               rows: [
                 EntryRow(
-                  leading: const Icon(Icons.login),
+                  leading: const _IconTile(Icons.login),
                   title: '入口',
                   subtitle: spot.entranceNote.isEmpty
                       ? '未填'
@@ -453,7 +481,7 @@ class _EntryListPageState extends State<EntryListPage> {
             child: EntrySection(
               rows: [
                 EntryRow(
-                  leading: const Icon(Icons.add_road),
+                  leading: const _IconTile(Icons.add_road),
                   title: '整條路費率',
                   subtitle: '$whole\n沒有另設費率的路段用整條路費率',
                   onTap: args.onSpotFee == null
@@ -544,6 +572,7 @@ class EntryEditPage extends StatefulWidget {
     required this.city,
     required this.subtitle,
     required this.drafts,
+    this.district = '',
     this.spot,
     this.openIndex = 0,
     this.adding = false,
@@ -552,6 +581,7 @@ class EntryEditPage extends StatefulWidget {
   final AppStore store;
   final EntryType type;
   final String? city;
+  final String district;
   final String subtitle;
   final List<EntryDraft> drafts;
 
@@ -682,25 +712,18 @@ class _EntryEditPageState extends State<EntryEditPage> {
     );
   }
 
-  String get mapNote {
+  /// 地圖上目前寫的, from what was loaded: it stays put while the rider
+  /// edits. Null with nothing on the map yet.
+  String? get mapNote {
     if (zones) {
       final all = [
         for (final d in drafts)
-          if (!d.isNew)
-            d.kind == null
-                ? d.displayName
-                : '${d.displayName}（${d.kind!.label}）',
+          if (!d.isNew) d.storedLabel,
       ];
-      return '地圖上目前寫的：${all.join('、')}。改你確定的那一區就好。';
+      return all.isEmpty ? null : '地圖上目前寫的：${all.join('、')}。改你確定的那一區就好。';
     }
-    final d = current;
-    final parts = [
-      if (d.isNew && !d.wholeSpot) '還沒有路段' else if (d.range.isNotEmpty) d.range,
-      if (d.total.isNotEmpty) '共 ${d.total} 格',
-      if (d.scooter != null && d.heavy != null)
-        '普通機車${d.scooter!.label}、大型重機${d.heavy!.label}',
-    ];
-    return '地圖上目前寫的：${parts.join('，')}。改你確定的就好。';
+    final detail = current.storedDetail;
+    return detail.isEmpty ? null : '地圖上目前寫的：$detail。改你確定的就好。';
   }
 
   @override
@@ -718,7 +741,7 @@ class _EntryEditPageState extends State<EntryEditPage> {
     return FormPage(
       header: FormHeader(
         title: zones ? '分區與格位' : current.displayName,
-        subtitle: widget.subtitle,
+        subtitle: '停哪裡・${widget.subtitle}',
         leading: FormHeaderLeading.back,
       ),
       footer: SubmitBar(
@@ -736,8 +759,8 @@ class _EntryEditPageState extends State<EntryEditPage> {
             : submit,
       ),
       children: [
-        if (!adding && (!zones || drafts.any((d) => !d.isNew))) ...[
-          FormInfoNote(icon: Icons.map_outlined, text: mapNote),
+        if (mapNote case final note? when !adding) ...[
+          FormInfoNote(icon: Icons.map_outlined, text: note),
           const SizedBox(height: 12),
         ],
         _EntryCard(
@@ -746,6 +769,7 @@ class _EntryEditPageState extends State<EntryEditPage> {
           adding: adding,
           canDelete: widget.canDelete,
           city: widget.city,
+          district: widget.district,
           rules: widget.store.rules,
           showErrors: showErrors,
           onChanged: update,
@@ -756,8 +780,7 @@ class _EntryEditPageState extends State<EntryEditPage> {
           EntrySection(
             rows: [
               EntryRow(
-                title: d.displayName,
-                subtitle: d.detail.isEmpty ? null : d.detail,
+                title: d.rowLabel,
                 value: d.removed
                     ? '將撤除'
                     : d.changed
@@ -815,6 +838,7 @@ class _EntryCard extends StatefulWidget {
     required this.adding,
     required this.canDelete,
     required this.city,
+    required this.district,
     required this.rules,
     required this.showErrors,
     required this.onChanged,
@@ -823,6 +847,7 @@ class _EntryCard extends StatefulWidget {
   final EntryDraft draft;
   final bool adding, canDelete, showErrors;
   final String? city;
+  final String district;
   final List<CityRule> rules;
   final ValueChanged<VoidCallback> onChanged;
   final VoidCallback onDelete;
@@ -852,17 +877,16 @@ class _EntryCardState extends State<_EntryCard> {
   /// A city's suggestion for this bay, in words; null when it has none.
   String? get suggestion {
     final kind = d.kind;
-    final city = widget.city;
-    if (zone || kind == null || city == null) return null;
-    final s = bayDefaults(widget.rules, kind, city);
-    if (s.scooter == null && s.heavy == null) return null;
-    String word(bool v) => v ? '可停' : '不可停';
-    final vehicles = [
-      if (s.scooter case final v?) '普通機車${word(v)}',
-      if (s.heavy case final v?) '大型重機${word(v)}',
-    ].join('、');
+    if (zone || kind == null) return null;
+    final words = baySuggestion(
+      widget.rules,
+      kind,
+      widget.city,
+      district: widget.district,
+    );
+    if (words == null) return null;
     final filled = d.isNew && !d.vehiclesEdited;
-    return '依$city規則建議：${kind.label}，$vehicles。${filled ? '已先帶入，' : ''}現場不同再改。';
+    return '$words。${filled ? '已先帶入，' : ''}現場不同再改。';
   }
 
   @override
@@ -1002,7 +1026,13 @@ class _EntryCardState extends State<_EntryCard> {
               value: d.kind,
               onChanged: (v) => widget.onChanged(() {
                 d.kind = v;
-                if (!zone) d.applyDefaults(widget.rules, widget.city);
+                if (!zone) {
+                  d.applyDefaults(
+                    widget.rules,
+                    widget.city,
+                    district: widget.district,
+                  );
+                }
               }),
             ),
             if (errors['kind'] case final error?)
@@ -1042,28 +1072,50 @@ class _EntryCardState extends State<_EntryCard> {
               ),
               gap(8),
             ],
-            EligibilitySegments(
-              vehicle: VehicleType.scooter,
-              value: d.scooter,
-              notStated: zone,
-              error: errors['scooter'],
-              keyPrefix: 'entry-scooter',
-              onChanged: (v) => widget.onChanged(() {
-                d.scooter = v;
-                d.vehiclesEdited = true;
-              }),
-            ),
-            gap(10),
-            EligibilitySegments(
-              vehicle: VehicleType.heavy,
-              value: d.heavy,
-              notStated: zone,
-              error: errors['heavy'],
-              keyPrefix: 'entry-heavy',
-              onChanged: (v) => widget.onChanged(() {
-                d.heavy = v;
-                d.vehiclesEdited = true;
-              }),
+            LayoutBuilder(
+              builder: (context, box) {
+                final scooter = EligibilitySegments(
+                  vehicle: VehicleType.scooter,
+                  value: d.scooter,
+                  notStated: zone,
+                  error: errors['scooter'],
+                  keyPrefix: 'entry-scooter',
+                  onChanged: (v) => widget.onChanged(() {
+                    d.scooter = v;
+                    d.vehiclesEdited = true;
+                  }),
+                );
+                final heavy = EligibilitySegments(
+                  vehicle: VehicleType.heavy,
+                  value: d.heavy,
+                  notStated: zone,
+                  error: errors['heavy'],
+                  keyPrefix: 'entry-heavy',
+                  onChanged: (v) => widget.onChanged(() {
+                    d.heavy = v;
+                    d.vehiclesEdited = true;
+                  }),
+                );
+                // A street bay's two choices fit side by side (S4); a lot's
+                // three, narrow screens and large text do not.
+                final wide =
+                    !zone &&
+                    box.maxWidth >= 300 &&
+                    MediaQuery.textScalerOf(context).scale(16) <= 20;
+                return wide
+                    ? Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: scooter),
+                          const SizedBox(width: 10),
+                          Expanded(child: heavy),
+                        ],
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [scooter, gap(10), heavy],
+                      );
+              },
             ),
             // Before sending too: the pick cannot go as it stands.
             if (bayAllowProblem(d.kind, d.scooter) case final error?) ...[

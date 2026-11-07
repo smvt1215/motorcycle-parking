@@ -95,6 +95,55 @@ class EntryRow extends StatelessWidget {
   final String? problem;
   final VoidCallback? onTap;
 
+  Widget _value(TextStyle style) => Text(
+    value!,
+    textAlign: TextAlign.end,
+    maxLines: 3,
+    overflow: TextOverflow.ellipsis,
+    style: style,
+  );
+
+  Widget _column(TextStyle muted, ColorScheme colors) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        title,
+        style: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+          color: destructive ? colors.error : colors.onSurface,
+        ),
+      ),
+      if (subtitle != null) ...[
+        const SizedBox(height: 2),
+        Text(subtitle!, style: muted),
+      ],
+      if (tags.isNotEmpty) ...[
+        const SizedBox(height: 6),
+        Wrap(spacing: 6, runSpacing: 4, children: tags),
+      ],
+      if (problem != null) ...[
+        const SizedBox(height: 4),
+        Text(problem!, style: TextStyle(fontSize: 13, color: colors.error)),
+      ],
+    ],
+  );
+
+  /// A short title hugs its text and leaves the row to the value, which is
+  /// often a whole sentence of rates.
+  Widget _titleAndValue(TextStyle muted, ColorScheme colors) => LayoutBuilder(
+    builder: (context, box) => Row(
+      children: [
+        ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: box.maxWidth * .55),
+          child: _column(muted, colors),
+        ),
+        const SizedBox(width: 8),
+        Expanded(child: _value(muted)),
+      ],
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -116,49 +165,18 @@ class EntryRow extends StatelessWidget {
                   const SizedBox(width: 12),
                 ],
                 Expanded(
-                  flex: 3,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: destructive ? colors.error : colors.onSurface,
+                  child: value != null && subtitle == null && tags.isEmpty
+                      ? _titleAndValue(muted, colors)
+                      : Row(
+                          children: [
+                            Expanded(flex: 3, child: _column(muted, colors)),
+                            if (value != null) ...[
+                              const SizedBox(width: 8),
+                              Expanded(flex: 2, child: _value(muted)),
+                            ],
+                          ],
                         ),
-                      ),
-                      if (subtitle != null) ...[
-                        const SizedBox(height: 2),
-                        Text(subtitle!, style: muted),
-                      ],
-                      if (tags.isNotEmpty) ...[
-                        const SizedBox(height: 6),
-                        Wrap(spacing: 6, runSpacing: 4, children: tags),
-                      ],
-                      if (problem != null) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          problem!,
-                          style: TextStyle(fontSize: 13, color: colors.error),
-                        ),
-                      ],
-                    ],
-                  ),
                 ),
-                if (value != null) ...[
-                  const SizedBox(width: 8),
-                  Expanded(
-                    flex: 2,
-                    child: Text(
-                      value!,
-                      textAlign: TextAlign.end,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: muted,
-                    ),
-                  ),
-                ],
                 if (enabled)
                   Padding(
                     padding: const EdgeInsets.only(left: 4),

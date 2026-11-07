@@ -25,8 +25,9 @@ import '../../models/space_kind.dart';
 ({bool? scooter, bool? heavy}) ruledEligibility(
   List<CityRule> rules,
   SpaceType type,
-  String? city,
-) {
+  String? city, {
+  String district = '',
+}) {
   bool? decide(VehicleType vehicle) {
     if (city == null) return null;
     final rule =
@@ -41,6 +42,7 @@ import '../../models/space_kind.dart';
       lat: 0,
       lng: 0,
       city: city,
+      district: district,
       spaceType: type,
       source: 'official',
     );
@@ -62,10 +64,11 @@ import '../../models/space_kind.dart';
 ({bool? scooter, bool? heavy}) defaultEligibility(
   List<CityRule> rules,
   SpaceType type,
-  String? city,
-) {
+  String? city, {
+  String district = '',
+}) {
   final marked = markedEligibility(type);
-  final ruled = ruledEligibility(rules, type, city);
+  final ruled = ruledEligibility(rules, type, city, district: district);
   return (
     scooter: marked.scooter ?? ruled.scooter,
     heavy: marked.heavy ?? ruled.heavy,
@@ -77,8 +80,49 @@ import '../../models/space_kind.dart';
 ({bool? scooter, bool? heavy}) bayDefaults(
   List<CityRule> rules,
   SpaceKind kind,
-  String? city,
-) {
-  final d = defaultEligibility(rules, kind.baseType, city);
+  String? city, {
+  String district = '',
+}) {
+  final d = defaultEligibility(rules, kind.baseType, city, district: district);
   return kind == SpaceKind.scooterHeavy ? (scooter: d.scooter, heavy: true) : d;
+}
+
+/// What the city's rule suggests for a bay of [kind] (S4), in words: toll
+/// and free 機車格 can differ, and the bay forms do not ask which, so the
+/// sentence names both then. A free bay whose district is not known yet
+/// says nothing, as the rule may open it there (新北 板橋、新店). Null with
+/// nothing to suggest.
+String? baySuggestion(
+  List<CityRule> rules,
+  SpaceKind kind,
+  String? city, {
+  String district = '',
+}) {
+  if (city == null) return null;
+  final d = bayDefaults(rules, kind, city, district: district);
+  final vehicles = switch ((d.scooter, d.heavy)) {
+    (null, null) => null,
+    (true, true) => '普通機車、大型重機都可停',
+    (false, false) => '普通機車、大型重機都不可停',
+    (final s, final h) => [
+      if (s != null) '普通機車${s ? '可停' : '不可停'}',
+      if (h != null) '大型重機${h ? '可停' : '不可停'}',
+    ].join('、'),
+  };
+  if (vehicles == null) return null;
+  if (kind != SpaceKind.motorcycle) return '依$city規則建議：${kind.label}，$vehicles';
+  final free = defaultEligibility(
+    rules,
+    SpaceType.freeMotorcycle,
+    city,
+    district: district,
+  );
+  final closed = [
+    if (d.scooter == true && free.scooter == false) '普通機車',
+    if (d.heavy == true && free.heavy == false) '大型重機',
+  ];
+  return closed.isEmpty
+      ? '依$city規則建議：${kind.label}，$vehicles'
+      : '依$city規則建議：收費的${kind.label}，$vehicles'
+            '（免費巷弄機車格${closed.join('、')}不能停）';
 }

@@ -395,6 +395,32 @@ void main() {
       expect(entriesPatchOf([old]), isEmpty);
     });
 
+    test('地圖上目前寫的讀載入值，編輯中不跟著變', () {
+      final d = EntryDraft.ofSegment(_segment);
+      final before = d.storedDetail;
+      d
+        ..scooter = Eligible.notAllowed
+        ..total = '3'
+        ..from = '別處';
+      expect(d.storedDetail, before);
+      expect(before, contains('建國北路口至松江路口'));
+      expect(before, contains('共 18 格'));
+      final zone = EntryDraft.ofZone(_lot.zones[0])..kind = SpaceKind.car;
+      expect(zone.storedLabel, 'B1 機車區（一般機車格）');
+    });
+
+    test('收合列用側別，有自訂名稱才用名稱；入口取第一個逗號前', () {
+      final d = EntryDraft.create(EntryType.segment)
+        ..side = RoadSide.north
+        ..kind = SpaceKind.carMotorcycle
+        ..total = '6';
+      expect(d.rowLabel, '北側　汽機車共用格・6 格');
+      d.name = '靠松江路口';
+      expect(d.rowLabel, '靠松江路口　汽機車共用格・6 格');
+      expect(entranceHead('松壽路側車道下坡，機車走右側'), '松壽路側車道下坡');
+      expect(entranceHead('一二三四五六七八九十一二'), '一二三四五六七八九十…');
+    });
+
     test('新增多段時自動命名不重複', () {
       EntryDraft bay() => EntryDraft.create(EntryType.segment)
         ..kind = SpaceKind.car
@@ -446,6 +472,7 @@ void main() {
       expect(find.text('送出前需要登入，建議會由管理員審核。'), findsOneWidget);
       await tapKey(tester, 'suggest-where');
       await tapText(tester, 'B1 機車區');
+      expect(find.text('停哪裡・松壽地下停車場'), findsOneWidget);
       await tapKey(tester, 'entry-heavy-allowed');
       await tester.tap(find.widgetWithText(AdaptiveButton, '送出 1 項建議'));
       await tester.pumpAndSettle();
@@ -708,6 +735,14 @@ void main() {
         expect(tester.takeException(), isNull);
         await tapText(tester, '一般機車格');
         expect(tester.takeException(), isNull);
+        final scooter = tester.getCenter(
+          find.byKey(const ValueKey('entry-scooter-allowed')),
+        );
+        final heavy = tester.getCenter(
+          find.byKey(const ValueKey('entry-heavy-allowed')),
+        );
+        // Side by side once there is room (S4); stacked at 320 and large text.
+        expect(scooter.dy == heavy.dy, size.width > 320 && scale == 1);
       }, variant: TargetPlatformVariant({platform}));
     }
   }

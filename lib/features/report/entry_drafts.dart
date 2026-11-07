@@ -287,11 +287,40 @@ class EntryDraft {
     return '新的分區';
   }
 
-  /// 北側 汽機車共用格・6 格, as the collapsed row reads.
+  /// 汽機車共用格・6 格.
   String get detail => [
     ?kind?.label,
     if (type == EntryType.segment && total.isNotEmpty) '$total 格',
   ].join('・');
+
+  /// A collapsed row: 北側　汽機車共用格・6 格; a name the rider gave goes
+  /// first instead of the side.
+  String get rowLabel {
+    final head = name.trim().isNotEmpty
+        ? name.trim()
+        : side?.label ?? (type == EntryType.zone ? displayName : '');
+    return [head, detail].where((t) => t.isNotEmpty).join('　');
+  }
+
+  /// The map's words for this entry as loaded, whatever the form holds now
+  /// (S2's and S4's 地圖上目前寫的).
+  String get storedLabel {
+    final kind = _loadedKind?.label;
+    final stored = original?['name'] as String? ?? '';
+    return kind == null ? stored : '$stored（$kind）';
+  }
+
+  /// [storedLabel] for a segment: where it runs, how many, who may park.
+  String get storedDetail {
+    final range = original?['range'] as String? ?? '';
+    final count = original?['total'];
+    return [
+      if (range.isNotEmpty) range,
+      if (count != null) '共 $count 格',
+      if (_loadedScooter != null && _loadedHeavy != null)
+        '普通機車${_loadedScooter!.label}、大型重機${_loadedHeavy!.label}',
+    ].join('，');
+  }
 
   /// `range` as sent: the stored words while 從 and 到 read as they did.
   String get range => from == _loadedFrom && to == _loadedTo && !isNew
@@ -299,9 +328,13 @@ class EntryDraft {
       : composeRange(from, to);
 
   /// The eligibility a new [kind] suggests until the rider picks (S4).
-  void applyDefaults(List<CityRule> rules, String? city) {
+  void applyDefaults(
+    List<CityRule> rules,
+    String? city, {
+    String district = '',
+  }) {
     if (vehiclesEdited || kind == null) return;
-    final d = bayDefaults(rules, kind!, city);
+    final d = bayDefaults(rules, kind!, city, district: district);
     scooter = Eligible.of(d.scooter);
     heavy = Eligible.of(d.heavy);
   }

@@ -24,9 +24,14 @@ class LocationMapView {
     this.originLat,
     this.originLng,
     this.touchMarker = false,
+    this.zoomControls = true,
   });
   final double lat, lng;
   final double? originLat, originLng;
+
+  /// The map's own zoom buttons; off where controls float on the map, as
+  /// Android's sit in the same corner. Pinching still zooms.
+  final bool zoomControls;
 
   /// The marker was dragged, or the map tapped, to a new position.
   final void Function(double lat, double lng) onMove;
@@ -420,6 +425,7 @@ class _LocationPickerState extends State<LocationPicker>
       originLng: originLng,
       onMove: widget.onChanged,
       touchMarker: widget.touchMarker,
+      zoomControls: !overlay,
     );
     void step({int north = 0, int east = 0}) {
       final (a, b) = nudge(lat, lng, north: north, east: east);
@@ -972,7 +978,7 @@ class _GoogleLocationMapState extends State<_GoogleLocationMap> {
           // The touch marker projects through an unrotated, flat camera.
           rotateGesturesEnabled: !v.touchMarker,
           tiltGesturesEnabled: !v.touchMarker,
-          zoomControlsEnabled: true,
+          zoomControlsEnabled: v.zoomControls,
           mapToolbarEnabled: false,
           myLocationButtonEnabled: false,
           webGestureHandling: gm.WebGestureHandling.greedy,

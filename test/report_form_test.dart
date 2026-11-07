@@ -399,6 +399,35 @@ void main() {
     expect(spot['lng'] as double, greaterThan(121.5623));
   });
 
+  group('S4 的縣市規則說明', () {
+    String? say(String city, {String district = ''}) => baySuggestion(
+      cityRules,
+      SpaceKind.motorcycle,
+      city,
+      district: district,
+    );
+
+    test('臺北：收費和免費不同時寫出免費巷弄那句', () {
+      expect(say('臺北市'), '依臺北市規則建議：收費的一般機車格，普通機車、大型重機都可停（免費巷弄機車格大型重機不能停）');
+    });
+
+    test('新北：板橋、新店的免費格開放，其他行政區不開放，行政區未知時不寫', () {
+      expect(say('新北市', district: '板橋區'), isNot(contains('免費巷弄')));
+      expect(say('新北市', district: '新店區'), isNot(contains('免費巷弄')));
+      expect(say('新北市', district: '三重區'), contains('免費巷弄機車格大型重機不能停'));
+      expect(say('新北市'), isNot(contains('免費巷弄')));
+    });
+
+    test('收費和免費一樣的縣市不寫；普大共用格、沒有縣市也不寫', () {
+      expect(say('桃園市'), isNot(contains('免費巷弄')));
+      expect(
+        baySuggestion(cityRules, SpaceKind.scooterHeavy, '臺北市'),
+        isNot(contains('免費巷弄')),
+      );
+      expect(baySuggestion(cityRules, SpaceKind.motorcycle, null), isNull);
+    });
+  });
+
   testWidgets('依標記位置帶入縣市與行政區，並提醒 15 m 內同類型的點', (tester) async {
     final store = await openForm(tester);
     expect(store.lookups, [(25.0339, 121.5623)]);

@@ -117,6 +117,13 @@ Future<void> showSpotSuggestions(
 bool _hasEntries(ParkingSpot spot) =>
     spot.source == 'official' || communitySpotSources.contains(spot.source);
 
+/// The start of an entrance note, up to its first comma and short enough
+/// to leave room for the zone count beside it (S1).
+String entranceHead(String note) {
+  final head = note.split(RegExp('[，,、。]')).first.trim();
+  return head.length <= 10 ? head : '${head.substring(0, 10)}…';
+}
+
 /// What the spot's limits say today (S1, S3), or 未填.
 String limitSummary(ParkingSpot spot) {
   if (spot.segments.length > 1) return '各段不同';
@@ -196,6 +203,7 @@ class SuggestionListPage extends StatelessWidget {
             type: type,
             subtitle: spot.name,
             city: spot.city.isEmpty ? null : spot.city,
+            district: spot.district,
             spot: spot,
             fee: () => spot.fee ?? const Fee(),
             onSpotFee: (context) async => _feeForm(context),
@@ -210,8 +218,8 @@ class SuggestionListPage extends StatelessWidget {
 
   /// The present form of a bay's kind and conditions, a lot's facility types
   /// among them.
-  void _kindForm(BuildContext context) =>
-      _form(context, 'space_type', '格位類型', spot.spaceType.label);
+  void _kindForm(BuildContext context, [String label = '格位類型']) =>
+      _form(context, 'space_type', label, spot.spaceType.label);
 
   /// The present fee form, until PR10's F0 and F1.
   void _feeForm(BuildContext context) =>
@@ -221,7 +229,7 @@ class SuggestionListPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final zones = spot.zones.length;
-    final entrance = spot.entranceNote;
+    final entrance = entranceHead(spot.entranceNote);
     final hasSegments = spot.segments.length > 1;
     return ListenableBuilder(
       listenable: store,
@@ -233,7 +241,7 @@ class SuggestionListPage extends StatelessWidget {
           onLeading: () => closeFlow(context),
         ),
         children: [
-          const Text('哪一項跟現場不一樣？點進去改，右邊是地圖上目前寫的。'),
+          Text(street ? '哪一項跟現場不一樣？右邊是地圖上目前寫的。' : '哪一項跟現場不一樣？點進去改，右邊是地圖上目前寫的。'),
           const SizedBox(height: 14),
           EntrySection(
             header: '基本資料',
@@ -259,7 +267,7 @@ class SuggestionListPage extends StatelessWidget {
                   value: spot.facilities.isEmpty
                       ? '未填'
                       : facilityTypesLabel(spot.facilities),
-                  onTap: () => _kindForm(context),
+                  onTap: () => _kindForm(context, '場站型式'),
                 ),
             ],
           ),
