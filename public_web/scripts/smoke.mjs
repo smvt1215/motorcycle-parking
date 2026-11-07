@@ -43,12 +43,51 @@ const error = (status, message) => ({
 
 const supportId = '1a2b3c4d-0000-4000-8000-000000000001';
 const linkToken = `${supportId}.${'A'.repeat(42)}w`;
+const caseLink = `/support/case#token=${linkToken}`;
+const deletionForm = '/support?kind=account_deletion';
 const confirmAnswer = (result, scheduledAt = null) => ({
   body: {
     result,
+    kind: 'account_deletion',
     submitted_at: '2026-11-06T07:05:00Z',
     contact_email: 'r***@e***.com',
     scheduled_at: scheduledAt,
+  },
+});
+
+const privacyAnswer = (result) => ({
+  body: {
+    result,
+    kind: 'privacy',
+    privacy_right: 'copy',
+    subject: '想取得我的資料副本',
+    message: `想取得帳號的全部資料。\n${'很長的一段沒有空白的文字'.repeat(12)}`,
+    submitted_at: '2026-11-06T07:05:00Z',
+    contact_email: 'r***@e***.com',
+    scheduled_at: null,
+  },
+});
+const caseAnswer = (overrides = {}) => ({
+  body: {
+    result: 'ok',
+    code: 'S-1A2B3C4D',
+    kind: 'general',
+    status: 'open',
+    submitted_at: '2026-11-08T06:02:00Z',
+    can_reply: true,
+    messages: [
+      {
+        direction: 'in',
+        body: '收藏的停車點換手機後不見了，要怎麼找回來？\n第二行<b>不是標記</b>',
+        created_at: '2026-11-08T06:02:00Z',
+      },
+      {
+        direction: 'out',
+        body: `收藏會跟著帳號同步，請確認新手機是用同一個帳號登入。${'x'.repeat(300)}`,
+        created_at: '2026-11-09T02:30:00Z',
+      },
+    ],
+    ...overrides,
   },
 });
 
@@ -159,19 +198,66 @@ const SCREENS = [
   },
   // The support form and its one-time links (no sign-in; the smoke build's
   // App Check token is fixed, and the Edge Functions answer from page.route).
-  { name: 'support-form', signedIn: false, path: '/support', heading: '用登入 email 申請刪除' },
+  { name: 'support-form', signedIn: false, path: '/support', heading: '聯絡我們', visible: '送出' },
+  {
+    name: 'support-privacy',
+    signedIn: false,
+    path: '/support?kind=privacy',
+    heading: '聯絡我們',
+    visible: '查閱我的資料',
+  },
+  {
+    name: 'support-privacy-errors',
+    signedIn: false,
+    path: '/support?kind=privacy',
+    steps: ['submitCase'],
+    heading: '聯絡我們',
+    visible: '請選擇要做什麼',
+  },
+  {
+    name: 'support-case-received',
+    signedIn: false,
+    path: '/support',
+    functions: { 'support-request': { body: { received: true, id: supportId } } },
+    steps: ['fillCase', 'submitCase'],
+    heading: '已收到你的一般問題，案件編號 S-1A2B3C4D',
+  },
+  {
+    name: 'support-privacy-received',
+    signedIn: false,
+    path: '/support?kind=privacy',
+    functions: { 'support-request': { body: { received: true, id: supportId } } },
+    steps: ['fillPrivacy', 'submitCase'],
+    heading: '已收到請求，編號 S-1A2B3C4D',
+  },
+  {
+    name: 'support-case-rate-limited',
+    signedIn: false,
+    path: '/support',
+    functions: { 'support-request': { status: 429, body: { error: 'support.rate_limited' } } },
+    steps: ['fillCase', 'submitCase'],
+    heading: '聯絡我們',
+    visible: '送出太多次了',
+  },
+  {
+    name: 'support-deletion',
+    signedIn: false,
+    path: deletionForm,
+    heading: '聯絡我們',
+    visible: '用登入 email 申請刪除',
+  },
   {
     name: 'support-errors',
     signedIn: false,
-    path: '/support',
+    path: deletionForm,
     steps: ['submit'],
-    heading: '用登入 email 申請刪除',
+    heading: '聯絡我們',
     visible: '請填寫聯絡用 email',
   },
   {
     name: 'support-received',
     signedIn: false,
-    path: '/support',
+    path: deletionForm,
     functions: { 'support-request': { body: { received: true, id: supportId } } },
     steps: ['fillForm', 'submit'],
     heading: '已收到申請，編號 S-1A2B3C4D',
@@ -179,28 +265,28 @@ const SCREENS = [
   {
     name: 'support-rate-limited',
     signedIn: false,
-    path: '/support',
+    path: deletionForm,
     functions: { 'support-request': { status: 429, body: { error: 'support.rate_limited' } } },
     steps: ['fillForm', 'submit'],
-    heading: '用登入 email 申請刪除',
+    heading: '聯絡我們',
     visible: '送出太多次了',
   },
   {
     name: 'support-app-check',
     signedIn: false,
-    path: '/support',
+    path: deletionForm,
     functions: { 'support-request': { status: 401, body: { error: 'app_check.required' } } },
     steps: ['fillForm', 'submit'],
-    heading: '用登入 email 申請刪除',
+    heading: '聯絡我們',
     visible: '沒辦法確認是真人送出',
   },
   {
     name: 'support-network',
     signedIn: false,
-    path: '/support',
+    path: deletionForm,
     functions: { 'support-request': 'abort' },
     steps: ['fillForm', 'submit'],
-    heading: '用登入 email 申請刪除',
+    heading: '聯絡我們',
     visible: '網路連線有問題，申請沒有送出。',
   },
   {
@@ -237,6 +323,96 @@ const SCREENS = [
     path: `/support/verify#token=${linkToken}`,
     functions: { 'support-confirm': [{ status: 400, body: { error: 'support.link_invalid' } }] },
     heading: '連結無效',
+  },
+  {
+    name: 'verify-privacy',
+    signedIn: false,
+    path: `/support/verify#token=${linkToken}`,
+    functions: { 'support-confirm': [privacyAnswer('pending')] },
+    heading: '是你提出個資權利請求的嗎？',
+  },
+  {
+    name: 'verify-privacy-verified',
+    signedIn: false,
+    path: `/support/verify#token=${linkToken}`,
+    functions: { 'support-confirm': [privacyAnswer('pending'), privacyAnswer('verified')] },
+    steps: ['confirmPrivacy'],
+    heading: '已確認個資權利請求',
+  },
+  {
+    name: 'verify-privacy-denied',
+    signedIn: false,
+    path: `/support/verify#token=${linkToken}`,
+    functions: { 'support-confirm': [privacyAnswer('pending'), privacyAnswer('denied')] },
+    steps: ['denyLink'],
+    heading: '已作廢這次請求',
+  },
+  {
+    name: 'case',
+    signedIn: false,
+    path: caseLink,
+    functions: { 'support-case': [caseAnswer()] },
+    heading: '一般問題',
+    visible: '送出回覆',
+  },
+  {
+    name: 'case-reply-sent',
+    signedIn: false,
+    path: caseLink,
+    functions: { 'support-case': [caseAnswer(), { body: { result: 'received', reopened: true } }] },
+    steps: ['fillReply', 'sendReply'],
+    heading: '一般問題',
+    visible: '這個案件已重新開啟。',
+  },
+  {
+    name: 'case-closed',
+    signedIn: false,
+    path: caseLink,
+    functions: { 'support-case': [caseAnswer({ status: 'done', can_reply: false })] },
+    heading: '一般問題',
+    visible: '這個案件已結案',
+  },
+  {
+    name: 'case-link-used',
+    signedIn: false,
+    path: caseLink,
+    functions: { 'support-case': [caseAnswer({ can_reply: false })] },
+    heading: '一般問題',
+    visible: '這個連結沒辦法再回覆',
+  },
+  {
+    name: 'case-rate-limited',
+    signedIn: false,
+    path: caseLink,
+    functions: {
+      'support-case': [caseAnswer(), { status: 429, body: { error: 'support.rate_limited' } }],
+    },
+    steps: ['fillReply', 'sendReply'],
+    heading: '一般問題',
+    visible: '回覆次數已達上限',
+  },
+  {
+    name: 'case-reply-network',
+    signedIn: false,
+    path: caseLink,
+    functions: { 'support-case': [caseAnswer(), 'abort'] },
+    steps: ['fillReply', 'sendReply'],
+    heading: '一般問題',
+    visible: '網路連線有問題，回覆沒有送出。',
+  },
+  {
+    name: 'case-invalid',
+    signedIn: false,
+    path: caseLink,
+    functions: { 'support-case': [{ status: 400, body: { error: 'support.link_invalid' } }] },
+    heading: '連結無效',
+  },
+  {
+    name: 'case-failed',
+    signedIn: false,
+    path: caseLink,
+    functions: { 'support-case': ['abort'] },
+    heading: '沒有送出',
   },
   {
     name: 'cancel-link',
@@ -346,12 +522,25 @@ for (const viewport of VIEWPORTS) {
           await page.getByLabel(/為什麼沒辦法登入/).fill('換了手機，忘記當初用哪個帳號登入');
         }
         if (step === 'submit') await page.getByRole('button', { name: '寄確認信' }).click();
+        if (step === 'fillCase' || step === 'fillPrivacy') {
+          await page.getByLabel(/聯絡用 email/).fill('me@example.com');
+          await page.getByLabel(/主旨/).fill('收藏不見了');
+          await page.getByLabel(/內容/).fill('換手機後收藏的停車點不見了');
+        }
+        if (step === 'fillPrivacy') {
+          await page.getByLabel(/帳號的登入 email/).fill('rider.old@gmail.com');
+          await page.getByRole('radio', { name: '取得資料副本' }).check();
+        }
+        if (step === 'submitCase') await page.getByRole('button', { name: '送出', exact: true }).click();
+        if (step === 'confirmPrivacy') await page.getByRole('button', { name: '是我，確認這筆請求' }).click();
+        if (step === 'fillReply') await page.getByLabel(/回覆/).fill('已經確認過了，還是找不到');
+        if (step === 'sendReply') await page.getByRole('button', { name: '送出回覆' }).click();
         if (step === 'confirmLink') await page.getByRole('button', { name: '是我，申請刪除帳號' }).click();
         if (step === 'denyLink') await page.getByRole('button', { name: '不是我申請的' }).click();
         if (step === 'cancelLink') await page.getByRole('button', { name: '取消刪除' }).click();
       }
       await page.getByRole('heading', { level: 1, name: screen.heading }).waitFor({ timeout: 5000 });
-      if (screen.visible) await page.getByText(screen.visible).waitFor({ timeout: 5000 });
+      if (screen.visible) await page.getByText(screen.visible).first().waitFor({ timeout: 5000 });
       const overflow = await page.evaluate(
         () => globalThis.document.documentElement.scrollWidth - globalThis.innerWidth,
       );

@@ -26,6 +26,36 @@ describe('the pages say what the mails say', () => {
     expect(mails).toContain(`選「${t.cancelButton}」`);
   });
 
+  it('names each kind the way the mails do', () => {
+    const names = mails.match(/export const kindNames[^{]*\{([^}]+)\}/)?.[1];
+    expect(names).toBeTruthy();
+    const listed = [...names!.matchAll(/(\w+): '([^']+)'/g)].map(([, key, name]) => [key, name]);
+    expect(Object.entries(t.kindNames).sort()).toEqual(listed.sort());
+  });
+
+  it('says what the privacy confirmation mail says', () => {
+    expect(mails).toContain('按「是我」');
+    expect(t.privacyVerifyConfirm.startsWith('是我')).toBe(true);
+    expect(mails).toContain('資料也只會寄到這個信箱');
+    expect(t.privacyVerifyBody).toContain('資料也只會寄到帳號的登入 email');
+    const address = mails.match(/export const supportAddress = '([^']+)';/)?.[1];
+    expect(t.privacyReceivedBody[0]).toContain(`寄件人是 ${address}`);
+  });
+
+  it('gives the case link the same lifetime', () => {
+    expect(mails).toContain('或打開案件連結（30 天內有效）');
+    expect(t.caseReceivedBody[1]).toContain('案件連結（30 天內有效）');
+    expect(t.caseInvalidBody.before).toContain('（30 天）');
+  });
+
+  it('names no reply time on the pages', () => {
+    const copy = Object.values(t)
+      .flat()
+      .map((value) => JSON.stringify(value))
+      .join('');
+    expect(copy).not.toContain('工作天');
+  });
+
   it('gives the confirmation link the same lifetime', () => {
     expect(mails).toContain('請在 24 小時內打開下面的連結');
     expect(t.receivedBody[0]).toContain('連結 24 小時內有效、只能使用一次');

@@ -50,7 +50,10 @@ describe('/account-deletion', () => {
     expect(screen.getAllByRole('button', { name: '使用 Google 登入' })).toHaveLength(1);
     expect(screen.getAllByRole('button', { name: '使用 Apple 登入' })).toHaveLength(1);
     const cannot = screen.getByRole('region', { name: c.cannotSignInHeading });
-    expect(within(cannot).getByRole('link', { name: c.supportFormLink })).toHaveAttribute('href', '/support');
+    expect(within(cannot).getByRole('link', { name: c.supportFormLink })).toHaveAttribute(
+      'href',
+      '/support?kind=account_deletion',
+    );
     expect(cannot).toHaveTextContent('那個信箱收不到信的話，就無法用這個方式刪除');
   });
 
@@ -71,6 +74,7 @@ describe('the title in the browser tab', () => {
     ['/support', '聯絡我們｜機車停車指南'],
     ['/support/verify', '確認申請｜機車停車指南'],
     ['/support/cancel', '取消刪除帳號｜機車停車指南'],
+    ['/support/case', '客服案件｜機車停車指南'],
     ['/privacy/', '隱私權政策｜機車停車指南'],
     ['/Privacy', '隱私權政策｜機車停車指南'],
     ['/nope', '找不到這個頁面｜機車停車指南'],

@@ -18,7 +18,27 @@ const down: Answer = { status: 503, body: { error: 'server.unavailable' } };
 
 function confirmAnswer(result: string, scheduledAt: string | null = null): Answer {
   return {
-    body: { result, submitted_at: submitted, contact_email: 'r***@e***.com', scheduled_at: scheduledAt },
+    body: {
+      result,
+      kind: 'account_deletion',
+      submitted_at: submitted,
+      contact_email: 'r***@e***.com',
+      scheduled_at: scheduledAt,
+    },
+  };
+}
+function privacyAnswer(result: string): Answer {
+  return {
+    body: {
+      result,
+      kind: 'privacy',
+      privacy_right: 'copy',
+      subject: '想要資料副本',
+      message: '請給我\n全部資料',
+      submitted_at: submitted,
+      contact_email: 'r***@e***.com',
+      scheduled_at: null,
+    },
   };
 }
 function cancelAnswer(result: string, scheduledAt: string | null = null): Answer {
@@ -98,6 +118,16 @@ describe('the confirmation link', () => {
     expect(screen.queryByRole('button', { name: t.verifyConfirm })).toBeNull();
   });
 
+  it('sends a closed request back to the deletion form', async () => {
+    stubFunctions({ 'support-confirm': confirmAnswer('resolved') });
+    openSite(`/support/verify#token=${token}`);
+    await heading(t.resolvedTitle);
+    expect(screen.getByRole('link', { name: t.refillForm })).toHaveAttribute(
+      'href',
+      '/support?kind=account_deletion',
+    );
+  });
+
   it.each([
     ['account_deletion_pending', scheduled, t.alreadyPendingTitle],
     ['account_deleting', null, t.deletingTitle],
@@ -120,15 +150,26 @@ describe('the confirmation link', () => {
     expect(document.querySelector('a[href^="mailto:"]')).toBeNull();
   });
 
-  it('never shows the deletion page for a privacy request link', async () => {
+  it('shows no page for a kind it does not know, or a result of the other kind', async () => {
     stubFunctions({
-      'support-confirm': {
-        body: { result: 'pending', kind: 'privacy', submitted_at: submitted, contact_email: 'r***@e***.com' },
-      },
+      'support-confirm': [
+        { body: { result: 'pending', kind: 'something_new', submitted_at: submitted } },
+        { body: { result: 'deletion_requested', kind: 'privacy', submitted_at: submitted } },
+        { body: { result: 'verified', kind: 'account_deletion', submitted_at: submitted } },
+      ],
     });
     openSite(`/support/verify#token=${token}`);
-    await heading(t.verifyInvalidTitle);
+    await heading(t.linkErrorTitle);
     expect(screen.queryByRole('heading', { level: 1, name: t.verifyTitle })).toBeNull();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: t.retry }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: t.retry })).not.toHaveAttribute('aria-disabled'),
+    );
+    await heading(t.linkErrorTitle);
+    await user.click(screen.getByRole('button', { name: t.retry }));
+    await settle();
+    await heading(t.linkErrorTitle);
   });
 
   it('says the link is invalid when a used token meets the confirmation', async () => {
@@ -186,6 +227,72 @@ describe('the confirmation link', () => {
   it('cannot do anything without a backend', async () => {
     openSite(`/support/verify#token=${token}`, null, null);
     await heading(t.linkErrorTitle);
+  });
+});
+
+describe('the confirmation link of a privacy request', () => {
+  it('shows what is being confirmed on opening, and changes nothing', async () => {
+    const calls = stubFunctions({ 'support-confirm': privacyAnswer('pending') });
+    const { router } = openSite(`/support/verify#token=${token}`);
+    const h1 = await heading(t.privacyVerifyTitle);
+    await waitFor(() => expect(h1).toHaveFocus());
+    expect(router.state.location.hash).toBe('');
+    const rows = document.querySelector('dl')!;
+    expect(rows).toHaveTextContent(`${t.codeLabel}${code}`);
+    expect(rows).toHaveTextContent(`${t.submittedAtLabel}11 月 6 日 15:05`);
+    expect(rows).toHaveTextContent(`${t.contactEmailLabel}r***@e***.com`);
+    expect(rows).toHaveTextContent(`${t.privacyRightLabel}取得資料副本`);
+    expect(rows).toHaveTextContent(`${t.privacySubjectLabel}想要資料副本`);
+    expect(screen.getByText(/請給我/)).toHaveStyle({ whiteSpace: 'pre-wrap' });
+    expect(screen.getByText(t.privacyVerifyBody)).toBeInTheDocument();
+    expect(screen.getByText(t.privacyDenyNote)).toBeInTheDocument();
+    expect(screen.queryByText(t.verifyBody)).toBeNull();
+    expect(screen.queryByRole('button', { name: t.verifyConfirm })).toBeNull();
+    await settle();
+    expect(calls.map((call) => call.body!.action)).toEqual(['view']);
+  });
+
+  it('confirms only from the button', async () => {
+    const calls = stubFunctions({
+      'support-confirm': [privacyAnswer('pending'), privacyAnswer('verified')],
+    });
+    openSite(`/support/verify#token=${token}`);
+    await heading(t.privacyVerifyTitle);
+    expect(calls.map((call) => call.body!.action)).toEqual(['view']);
+    await userEvent.setup().click(screen.getByRole('button', { name: t.privacyVerifyConfirm }));
+    const h1 = await heading(t.privacyVerifiedTitle);
+    await waitFor(() => expect(h1).toHaveFocus());
+    expect(screen.getByRole('status')).toHaveTextContent(t.privacyVerifiedBody);
+    expect(calls.map((call) => call.body!.action)).toEqual(['view', 'confirm']);
+    expect(calls[1]!.body).toEqual({ link: 'confirm', token, action: 'confirm' });
+  });
+
+  it('voids the request only from 「不是我申請的」', async () => {
+    const calls = stubFunctions({ 'support-confirm': [privacyAnswer('pending'), privacyAnswer('denied')] });
+    openSite(`/support/verify#token=${token}`);
+    await heading(t.privacyVerifyTitle);
+    await userEvent.setup().click(screen.getByRole('button', { name: t.verifyDeny }));
+    await heading(t.privacyDeniedTitle);
+    expect(screen.getByText(t.deniedBody)).toBeInTheDocument();
+    expect(calls.map((call) => call.body!.action)).toEqual(['view', 'deny']);
+  });
+
+  it.each([
+    ['resolved', t.privacyResolvedTitle, t.privacyResolvedBody],
+    ['account_deleting', t.privacyAccountGoneTitle, t.privacyAccountGoneBody],
+  ])('says %s, without the buttons', async (result, title, body) => {
+    stubFunctions({ 'support-confirm': privacyAnswer(result) });
+    openSite(`/support/verify#token=${token}`);
+    await heading(title);
+    expect(screen.getByText(body)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: t.privacyVerifyConfirm })).toBeNull();
+  });
+
+  it('sends a closed request back to the privacy form', async () => {
+    stubFunctions({ 'support-confirm': privacyAnswer('resolved') });
+    openSite(`/support/verify#token=${token}`);
+    await heading(t.privacyResolvedTitle);
+    expect(screen.getByRole('link', { name: t.refillForm })).toHaveAttribute('href', '/support?kind=privacy');
   });
 });
 
