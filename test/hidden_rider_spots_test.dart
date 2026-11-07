@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:motorcycle_parking/app.dart';
 import 'package:motorcycle_parking/data/app_store.dart';
+import 'package:motorcycle_parking/data/contributions_repository.dart';
 import 'package:motorcycle_parking/data/favorite_handles.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
 import 'package:motorcycle_parking/domain/content_report_display.dart';
@@ -14,6 +15,7 @@ import 'package:motorcycle_parking/domain/map_viewport.dart';
 import 'package:motorcycle_parking/domain/spot_contributor.dart';
 import 'package:motorcycle_parking/features/content_report/content_report.dart';
 import 'package:motorcycle_parking/features/contribute/contribute_page.dart';
+import 'package:motorcycle_parking/features/contribute/my_contributions.dart';
 import 'package:motorcycle_parking/features/favorites/favorites_page.dart';
 import 'package:motorcycle_parking/features/map/spot_detail.dart';
 import 'package:motorcycle_parking/features/map/spot_preview.dart';
@@ -21,6 +23,7 @@ import 'package:motorcycle_parking/features/map/spot_sheet.dart';
 import 'package:motorcycle_parking/models/parking.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
 
+import 'my_contributions_test.dart' show FakeContributions, row, now;
 import 't280_harness.dart';
 
 const handleA = '3fa8c1d27b9e40a6c55d0e1f2a3b4c5d';
@@ -68,11 +71,19 @@ class FixedParking extends ParkingRepository {
   FixedParking(this.spots) : super(null);
   List<ParkingSpot> spots;
   ParkingSpot? latest;
+
+  /// Offline: every read back fails.
+  bool offline = false;
+  final reads = <String>[];
   @override
   Future<ParkingResult> inViewport(MapViewport bounds) async =>
       ParkingResult(spots);
   @override
-  Future<ParkingSpot?> byId(String id) async => latest;
+  Future<ParkingSpot?> byId(String id) async {
+    reads.add(id);
+    if (offline) throw Exception('offline');
+    return latest;
+  }
 }
 
 class FixedHandles implements FavoriteHandles {
@@ -114,8 +125,15 @@ class AccountStore extends AppStore {
   AccountStore(
     LocalRepository local,
     ParkingRepository parking,
-    FavoriteHandles handles,
-  ) : super(local, null, parkingRepository: parking, favoriteHandles: handles);
+    FavoriteHandles handles, {
+    ContributionsRepository? contributions,
+  }) : super(
+         local,
+         null,
+         parkingRepository: parking,
+         favoriteHandles: handles,
+         contributionsRepository: contributions,
+       );
   String account = 'rider-a';
   @override
   String get favoritesKey => account;
@@ -127,6 +145,20 @@ class AccountStore extends AppStore {
     notifyListeners();
     return 'ok';
   }
+}
+
+/// [AccountStore] past the sample build's gate on 我的貢獻.
+class ContributorAccountStore extends AccountStore {
+  ContributorAccountStore(
+    super.local,
+    super.parking,
+    super.handles, {
+    super.contributions,
+  });
+  @override
+  bool get demo => false;
+  @override
+  bool get canReport => true;
 }
 
 void main() {
@@ -946,6 +978,192 @@ void main() {
       expect(store.heldForOwner(mine, 'spot_name'), isFalse);
       store.account = 'rider-b';
       expect(store.heldForOwner(mine, 'text'), isFalse);
+    });
+  });
+
+  group('Codex 第 4 輪：每次打開都重讀', () {
+    final sheet = find.byKey(const ValueKey('parking-spot-sheet'));
+    final more = find.byKey(const ValueKey('spot-more'));
+    final held = find.byKey(const ValueKey('content-held'));
+    Finder inSheet(String text) =>
+        find.descendant(of: sheet, matching: find.text(text));
+
+    Future<void> pumpFavorites(WidgetTester tester, AppStore store) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [storeProvider.overrideWith((ref) => store)],
+          child: app(const Scaffold(body: FavoritesPage())),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    Future<AppStore> favoriteStore(
+      FixedParking parking,
+      ParkingSpot saved,
+    ) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = AppStore(
+        LocalRepository(await SharedPreferences.getInstance()),
+        null,
+        parkingRepository: parking,
+      );
+      await store.init();
+      store.favorites = [saved];
+      return store;
+    }
+
+    final saved = spot('fav', '收藏的舊名稱', lat: 24.5, lng: 121.0);
+
+    for (final platform in platforms) {
+      testWidgetsOn('${platform.name} 地圖開啟時重讀', (tester) async {
+        setUpView(tester, platform, const Size(390, 844));
+        final parking = FixedParking([ken]);
+        final store = (await tester.runAsync(() async {
+          SharedPreferences.setMockInitialValues({});
+          final s = AppStore(
+            LocalRepository(await SharedPreferences.getInstance()),
+            null,
+            parkingRepository: parking,
+          );
+          await s.init();
+          return s;
+        }))!;
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [storeProvider.overrideWith((ref) => store)],
+            child: const ParkingApp(),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pumpAndSettle();
+        parking.latest = spot('k', 'Ken 改過的名稱', handle: handleK);
+        final input = find.byKey(const ValueKey('parking-search'));
+        await tester.tap(input);
+        await tester.enterText(input, '機車格');
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Ken 的機車格').last);
+        await tester.pumpAndSettle();
+        expect(parking.reads, ['k']);
+        expect(inSheet('Ken 改過的名稱'), findsWidgets);
+      });
+
+      testWidgetsOn('${platform.name} 收藏檢舉後關掉再開：顯示遮蔽後的內容', (tester) async {
+        setUpView(tester, platform, const Size(390, 844));
+        final parking = FixedParking(const []);
+        final store = (await tester.runAsync(
+          () => favoriteStore(parking, saved),
+        ))!;
+        await pumpFavorites(tester, store);
+        await tester.tap(find.text('收藏的舊名稱'));
+        await tester.pumpAndSettle();
+        expect(parking.reads, ['fav']);
+        expect(inSheet('收藏的舊名稱'), findsWidgets);
+        Navigator.of(tester.element(sheet)).pop();
+        await tester.pumpAndSettle();
+        // The report held the name meanwhile.
+        parking.latest = spot('fav', '名稱審核中', lat: 24.5, lng: 121.0);
+        await tester.tap(find.text('收藏的舊名稱'));
+        await tester.pumpAndSettle();
+        expect(parking.reads, ['fav', 'fav']);
+        expect(inSheet('名稱審核中'), findsWidgets);
+        expect(inSheet('收藏的舊名稱'), findsNothing);
+      });
+
+      testWidgetsOn('${platform.name} 本人從收藏開啟自己的點：沒有 ⋯、有審核中標示', (tester) async {
+        setUpView(tester, platform, const Size(390, 844));
+        final parking = FixedParking(const [])
+          ..latest = spot(
+            'fav',
+            '收藏的舊名稱',
+            handle: handleA,
+            own: true,
+            held: const {'text'},
+            note: '原文備註',
+            lat: 24.5,
+            lng: 121.0,
+          );
+        final store = (await tester.runAsync(
+          () => favoriteStore(parking, saved),
+        ))!;
+        await pumpFavorites(tester, store);
+        await tester.tap(find.text('收藏的舊名稱'));
+        await tester.pumpAndSettle();
+        expect(store.ownSpot(saved), isTrue);
+        expect(more, findsNothing);
+        expect(held, findsWidgets);
+        expect(inSheet('原文備註'), findsOneWidget);
+      });
+
+      testWidgetsOn('${platform.name} 換帳號後從我的貢獻開啟自己的點：沒有 ⋯、有審核中標示', (
+        tester,
+      ) async {
+        setUpView(tester, platform, const Size(390, 1600));
+        final own = spot(
+          'o',
+          '我的機車格',
+          handle: handleA,
+          own: true,
+          held: const {'text'},
+          note: '原文備註',
+        );
+        final parking = FixedParking([own])..latest = own;
+        final store = (await tester.runAsync(() async {
+          SharedPreferences.setMockInitialValues({});
+          return ContributorAccountStore(
+            LocalRepository(await SharedPreferences.getInstance()),
+            parking,
+            const NoFavoriteHandles(),
+            contributions: FakeContributions([
+              [row('c', spotId: 'o', spotName: '我的機車格')],
+            ]),
+          );
+        }))!;
+        store.account = 'rider-b';
+        // The session changed, and the row came from a viewport read.
+        expect(store.ownSpot(own), isFalse);
+        await tester.pumpWidget(
+          app(
+            Scaffold(
+              body: ListView(
+                children: [MyContributionsSection(store: store, now: now)],
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byType(ContributionRow));
+        await tester.pumpAndSettle();
+        expect(parking.reads, ['o']);
+        expect(store.ownSpot(own), isTrue);
+        expect(more, findsNothing);
+        expect(held, findsWidgets);
+      });
+
+      testWidgetsOn('${platform.name} 讀取失敗：維持快照，不顯示錯誤', (tester) async {
+        setUpView(tester, platform, const Size(390, 844));
+        final parking = FixedParking(const [])..offline = true;
+        final store = (await tester.runAsync(
+          () => favoriteStore(parking, saved),
+        ))!;
+        await pumpFavorites(tester, store);
+        await tester.tap(find.text('收藏的舊名稱'));
+        await tester.pumpAndSettle();
+        expect(parking.reads, ['fav']);
+        expect(inSheet('收藏的舊名稱'), findsWidgets);
+        expect(find.byType(SnackBar), findsNothing);
+        expect(tester.takeException(), isNull);
+      });
+    }
+
+    test('收藏查回的 is_own 也登記進這個工作階段', () async {
+      final store = await storeOf(
+        const [],
+        favoriteHandles: const FixedHandles({'fav': handleA}, own: {'fav'}),
+      );
+      await store.local.setFavorites(store.favoritesKey, [saved]);
+      await store.loadFavorites();
+      expect(store.ownSpot(saved), isTrue);
     });
   });
 }

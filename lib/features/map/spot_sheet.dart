@@ -164,8 +164,10 @@ class _SpotSheetState extends State<SpotSheet> {
   /// The spot's latest public changes (#141), read once per spot.
   late Future<List<HistoryEntry>> history = _history();
 
-  /// The spot as last read back after a report (#280): a content report
-  /// hides what it names at once, so the opened copy goes stale.
+  /// The spot as last read back (#280): whoever opened the sheet handed a
+  /// snapshot (a favourite's keeps no `is_own`, handle or held fields, and
+  /// a content report changes what it names), so it is read again on
+  /// opening, after a report and when the account changes.
   ParkingSpot? reread;
 
   /// What the sheet shows: [reread], else the spot it was opened with.
@@ -185,6 +187,7 @@ class _SpotSheetState extends State<SpotSheet> {
     _reports = widget.store.reportsSent;
     _account = widget.store.riderId;
     widget.store.addListener(_storeChanged);
+    unawaited(_reread());
   }
 
   void _storeChanged() {
@@ -195,8 +198,9 @@ class _SpotSheetState extends State<SpotSheet> {
     unawaited(_reread());
   }
 
-  /// Reads the spot again; one that cannot be read keeps the copy shown,
-  /// whose `is_own` [AppStore.ownSpot] no longer trusts across accounts.
+  /// Reads the spot again and swaps it in, nothing cleared first. One that
+  /// cannot be read (offline, a TDX spot) keeps the copy shown, whose
+  /// `is_own` [AppStore.ownSpot] no longer trusts across accounts.
   Future<void> _reread() async {
     final id = widget.spot.id, read = ++_reads;
     final ParkingSpot? latest;
@@ -219,6 +223,7 @@ class _SpotSheetState extends State<SpotSheet> {
     super.didUpdateWidget(old);
     if (old.spot.id != widget.spot.id) {
       reread = null;
+      unawaited(_reread());
       history = _history();
       selectedSegment = null;
       unfolded = false;

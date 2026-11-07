@@ -302,6 +302,9 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
       if (_disposed || read != _favoriteFactsRead || key != favoritesKey) {
         return;
       }
+      for (final MapEntry(:key, :value) in facts.entries) {
+        _ownRead[key] = value.isOwn;
+      }
       favoriteHandles = {
         for (final MapEntry(:key, :value) in facts.entries) key: ?value.handle,
       };
