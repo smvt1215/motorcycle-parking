@@ -641,6 +641,7 @@ class _EntryEditPageState extends State<EntryEditPage> {
   late EntryDraft current;
   bool showErrors = false, sending = false;
   String? refusal;
+  final linkForm = GlobalKey<FormState>();
 
   bool get adding => widget.adding;
   bool get zones => widget.type == EntryType.zone;
@@ -713,10 +714,20 @@ class _EntryEditPageState extends State<EntryEditPage> {
   bool check() {
     final list = adding ? [current] : changed;
     for (final d in list) {
-      if (!d.removed && entryProblems(d).isNotEmpty) {
+      final problems = entryProblems(d);
+      if (!d.removed && problems.isNotEmpty) {
         setState(() {
           current = d;
           showErrors = true;
+        });
+        // The link says its own error; alone, it is what to scroll to.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          if (problems.keys.first == 'evidence') {
+            SuggestionLink.check(linkForm);
+          } else {
+            linkForm.currentState?.validate();
+          }
         });
         return false;
       }
@@ -811,6 +822,7 @@ class _EntryEditPageState extends State<EntryEditPage> {
           district: widget.district,
           rules: widget.store.rules,
           showErrors: showErrors,
+          linkForm: linkForm,
           onChanged: update,
           onDelete: delete,
         ),
@@ -880,9 +892,11 @@ class _EntryCard extends StatefulWidget {
     required this.district,
     required this.rules,
     required this.showErrors,
+    required this.linkForm,
     required this.onChanged,
     required this.onDelete,
   });
+  final GlobalKey<FormState> linkForm;
   final EntryDraft draft;
   final bool adding, canDelete, showErrors;
   final String? city;
@@ -1190,9 +1204,13 @@ class _EntryCardState extends State<_EntryCard> {
               onChanged: (v) => widget.onChanged(() => d.guide = v),
             ),
             gap(),
-            EvidenceUrlField(
+            SuggestionLink(
+              form: widget.linkForm,
               controller: evidence,
-              onChanged: (v) => widget.onChanged(() => d.evidence = v),
+              field: EvidenceUrlField(
+                controller: evidence,
+                onChanged: (v) => widget.onChanged(() => d.evidence = v),
+              ),
             ),
           ],
           if (!widget.adding && !d.isNew) ...[

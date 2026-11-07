@@ -617,6 +617,25 @@ class ChangeSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    // A label column keeps wrapped lines under the change; large text needs
+    // the width more.
+    final wide = MediaQuery.textScalerOf(context).scale(16) <= 20;
+    TextSpan change(ChangeLine line) => TextSpan(
+      children: [
+        TextSpan(
+          text: line.from,
+          style: TextStyle(
+            color: colors.onSurfaceVariant,
+            decoration: TextDecoration.lineThrough,
+          ),
+        ),
+        const TextSpan(text: '　→　'),
+        TextSpan(
+          text: line.to,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+      ],
+    );
     return Semantics(
       container: true,
       child: Column(
@@ -636,25 +655,22 @@ class ChangeSummary extends StatelessWidget {
               child: Semantics(
                 label: '${line.label}從${line.from}改成${line.to}',
                 excludeSemantics: true,
-                child: Text.rich(
-                  TextSpan(
-                    children: [
-                      TextSpan(text: '${line.label}　'),
-                      TextSpan(
-                        text: line.from,
-                        style: TextStyle(
-                          color: colors.onSurfaceVariant,
-                          decoration: TextDecoration.lineThrough,
+                child: wide
+                    ? Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(width: 64, child: Text(line.label)),
+                          Expanded(child: Text.rich(change(line))),
+                        ],
+                      )
+                    : Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(text: '${line.label}　'),
+                            change(line),
+                          ],
                         ),
                       ),
-                      const TextSpan(text: '　→　'),
-                      TextSpan(
-                        text: line.to,
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                    ],
-                  ),
-                ),
               ),
             ),
         ],

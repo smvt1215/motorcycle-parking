@@ -8,6 +8,7 @@ import 'package:motorcycle_parking/features/report/entry_drafts.dart';
 import 'package:motorcycle_parking/features/report/entry_pages.dart';
 import 'package:motorcycle_parking/features/report/fee_forms.dart';
 import 'package:motorcycle_parking/features/report/fee_suggestion.dart';
+import 'package:motorcycle_parking/features/report/form_parts.dart';
 import 'package:motorcycle_parking/features/report/spot_suggestions.dart';
 import 'package:motorcycle_parking/features/report/time_rules_page.dart';
 import 'package:motorcycle_parking/models/fee.dart';
@@ -709,6 +710,27 @@ void main() {
         'https://example.gov.tw:8080/x',
       );
     });
+
+    for (final (scale, column) in const [(1.0, true), (1.6, false)]) {
+      testWidgets('摘要 $scale 倍${column ? '用標籤欄' : '不用標籤欄'}', (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: MediaQuery(
+              data: MediaQueryData(textScaler: TextScaler.linear(scale)),
+              child: const Scaffold(
+                body: ChangeSummary(
+                  lines: [ChangeLine(label: '費率', from: '每小時 20 元', to: '免費')],
+                ),
+              ),
+            ),
+          ),
+        );
+        expect(
+          find.byWidgetPredicate((w) => w is SizedBox && w.width == 64),
+          column ? findsOneWidget : findsNothing,
+        );
+      });
+    }
 
     test('貼沒有協定的相同網址不算修改', () {
       final d = EntryDraft.ofZone(
