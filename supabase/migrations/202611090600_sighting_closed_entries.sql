@@ -9,12 +9,22 @@
 --    沒有分區或路段的點位，規則和原本相同。
 -- 2. 每日上限、10 分鐘限制、洗版規則本來就依 zone_id、segment_id 或全部
 --    kind 計算，不用改。closed 不評分、不被評分，也不改。
--- 3. public.spot_sightings() 和 api_v1.spot_sightings() 只算 kind='level'，
---    舊版 App 的行為不變。
+-- 3. public.spot_sightings() 只算 kind='level'，舊版 App 的行為不變。
+-- 4. api_v1.spot_sightings() 的 sightings 不變，新增 closures：哪一區、哪一段
+--    或整點被回報關閉，見 private.rider_closure_summary()。
 
 alter table public.rider_sightings drop constraint rider_sightings_check1;
 comment on column public.rider_sightings.kind is
   'level：四級量表；closed：無法停車／施工中。兩者都可帶 zone_id 或 segment_id，都不帶表示整點（#189）。';
+
+-- 關閉回報的兩個門檻集中在這裡。
+-- How long a closed sighting holds in what the app reads.
+create function private.sighting_closed_window() returns interval
+language sql immutable set search_path='' as $$ select interval '2 hours' $$;
+-- How many independent riders confirm a closure.
+create function private.sighting_closed_min_riders() returns integer
+language sql immutable set search_path='' as $$ select 2 $$;
+revoke all on function private.sighting_closed_window(),private.sighting_closed_min_riders() from public,anon,authenticated;
 
 -- Whether all of a spot is closed by what riders said since p_since: every
 -- zone and segment it has now (or the spot itself when it has neither) has
@@ -37,7 +47,7 @@ returns boolean language sql stable set search_path='' as $$
       and not public.rider_suspended(s.user_id)
       and public.rider_credibility(s.user_id)>=public.rider_min_credibility()
   )
-  select bool_and(n.riders>=2) from targets t
+  select bool_and(n.riders>=private.sighting_closed_min_riders()) from targets t
   cross join lateral (
     select least(count(distinct a.user_id),count(distinct a.device_hash)) riders from said a
     where (a.zone_id is null and a.segment_id is null)
@@ -249,3 +259,130 @@ begin
   return jsonb_build_object('id',v_id,'accepted',true,'closure_suggested',v_suggested,
     'suspended_until',v_suspend);
 end $$;
+
+-- What is reported closed now, per spot of p_spot_ids (visible ones), zone or
+-- segment, both null for the whole spot. One row per place:
+--   counted    closed sightings in sighting_closed_window(), credible and not
+--              suspended, of a zone or segment the spot still has, or of the
+--              whole spot; a later credible level of the same place or of
+--              the whole spot takes one back, and a level of any part takes
+--              back a sighting of the whole spot
+--   a zone's or segment's row exists when a sighting names it; riders counts
+--              those and the whole-spot ones, as sighting_spot_closed() does
+--   the whole spot's row exists when a sighting names it (derived false) or
+--              every zone and segment is confirmed (derived true when none
+--              names it); with every part confirmed it sums up all of them
+--   riders     users or devices, whichever is fewer
+--   confirmed  riders reach sighting_closed_min_riders()
+-- Callers bound p_spot_ids.
+create function private.rider_closure_summary(p_spot_ids text[])
+returns table(spot_id text,zone_id text,segment_id text,riders integer,confirmed boolean,
+  latest_at timestamptz,derived boolean)
+language sql stable security definer set search_path='' as $$
+  with ids as (
+    select distinct lower(i) i from unnest(p_spot_ids) i where i is not null
+  ), said as (
+    select s.spot_id,s.kind,s.zone_id,s.segment_id,s.user_id,s.device_hash,s.created_at
+    from public.rider_sightings s join ids on ids.i=s.spot_id
+    where s.created_at>now()-private.sighting_closed_window() and s.created_at<=now()
+      and not public.rider_suspended(s.user_id)
+      and public.rider_credibility(s.user_id)>=public.rider_min_credibility()
+  ), spots as (
+    select p.spot_id,e.zones,e.segments
+    from (select distinct d.spot_id from said d where d.kind='closed') p
+    cross join lateral public.sighting_spot_entries(p.spot_id) e
+    where e.zones is not null
+  ), places as (
+    select p.spot_id,z->>'id' zone_id,null::text segment_id from spots p
+      cross join lateral jsonb_array_elements(p.zones) z
+    union all
+    select p.spot_id,null,g->>'id' from spots p
+      cross join lateral jsonb_array_elements(p.segments) g
+    union all
+    select p.spot_id,null,null from spots p
+  ), counted as (
+    -- Each place with the closed sightings that hold for it.
+    select t.spot_id,t.zone_id,t.segment_id,c.user_id,c.device_hash,c.created_at,
+      c.zone_id is not distinct from t.zone_id and c.segment_id is not distinct from t.segment_id own
+    from places t join said c on c.spot_id=t.spot_id and c.kind='closed'
+      and ((c.zone_id is null and c.segment_id is null)
+        or (c.zone_id is not distinct from t.zone_id and c.segment_id is not distinct from t.segment_id))
+    where not exists(select 1 from said l
+      where l.spot_id=c.spot_id and l.kind='level' and l.created_at>c.created_at
+        and ((t.zone_id is null and t.segment_id is null)
+          or (l.zone_id is null and l.segment_id is null)
+          or (l.zone_id is not distinct from t.zone_id and l.segment_id is not distinct from t.segment_id)))
+  ), per_place as (
+    select c.spot_id,c.zone_id,c.segment_id,
+      least(count(distinct c.user_id),count(distinct c.device_hash))::integer riders,
+      max(c.created_at) latest_at,bool_or(c.own) named
+    from counted c group by 1,2,3
+  ), per_spot as (
+    -- Every zone and segment confirmed, and all that was said of the spot.
+    select p.spot_id,
+      not exists(select 1 from places t
+        left join per_place r on r.spot_id=t.spot_id and r.zone_id is not distinct from t.zone_id
+          and r.segment_id is not distinct from t.segment_id
+        where t.spot_id=p.spot_id and (t.zone_id is not null or t.segment_id is not null)
+          and coalesce(r.riders,0)<private.sighting_closed_min_riders())
+      and exists(select 1 from places t where t.spot_id=p.spot_id
+        and (t.zone_id is not null or t.segment_id is not null)) all_closed,
+      (select least(count(distinct c.user_id),count(distinct c.device_hash))::integer from counted c where c.spot_id=p.spot_id) riders,
+      (select max(c.created_at) from counted c where c.spot_id=p.spot_id) latest_at
+    from spots p
+  )
+  select r.spot_id,r.zone_id,r.segment_id,r.riders,r.riders>=private.sighting_closed_min_riders(),r.latest_at,false
+  from per_place r
+  where r.named and (r.zone_id is not null or r.segment_id is not null)
+  union all
+  select p.spot_id,null,null,
+    case when p.all_closed then p.riders else w.riders end,
+    p.all_closed or w.riders>=private.sighting_closed_min_riders(),
+    case when p.all_closed then p.latest_at else w.latest_at end,
+    p.all_closed and not coalesce(w.named,false)
+  from per_spot p
+  left join per_place w on w.spot_id=p.spot_id and w.zone_id is null and w.segment_id is null
+  where p.all_closed or coalesce(w.named,false)
+  order by 1,2,3;
+$$;
+revoke all on function private.rider_closure_summary(text[]) from public,anon,authenticated;
+
+-- sightings 與時間窗不變（202611090100_api_spot_sightings.sql）；closures 固定看
+-- sighting_closed_window()，不受 p_window_minutes 影響。
+create or replace function api_v1.spot_sightings(p_spot_ids text[],p_window_minutes integer default 30)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  v_ids text[];
+begin
+  if p_window_minutes is null or p_window_minutes not in (15, 30) then
+    raise sqlstate 'PT400' using message = 'request.invalid', detail = '{"field":"p_window_minutes"}';
+  end if;
+  if coalesce(cardinality(p_spot_ids), 0) > 600 then
+    raise sqlstate 'PT400' using message = 'request.too_many_ids', detail = '{"limit":600}';
+  end if;
+  v_ids := array(
+    select i from unnest(p_spot_ids) i
+    where i ~* '^(official:)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  );
+  return jsonb_build_object('sightings', (
+    select coalesce(jsonb_agg(jsonb_build_object(
+        'spot_id', s.spot_id, 'zone_id', s.zone_id, 'segment_id', s.segment_id, 'vehicle', s.vehicle,
+        'level', s.level, 'count', s.riders, 'low', s.low, 'high', s.high,
+        'low_riders', s.low_riders, 'high_riders', s.high_riders,
+        'latest_at', s.latest_at, 'conflicting', s.state = 'conflict'
+      ) order by s.spot_id, s.zone_id, s.segment_id, s.vehicle), '[]'::jsonb)
+    from private.rider_sighting_summary(v_ids, p_window_minutes) s
+  ), 'closures', (
+    select coalesce(jsonb_agg(jsonb_build_object(
+        'spot_id', c.spot_id, 'zone_id', c.zone_id, 'segment_id', c.segment_id,
+        'riders', c.riders, 'confirmed', c.confirmed, 'latest_at', c.latest_at, 'derived', c.derived
+      ) order by c.spot_id, c.zone_id, c.segment_id), '[]'::jsonb)
+    from private.rider_closure_summary(v_ids) c
+  ));
+end;
+$$;

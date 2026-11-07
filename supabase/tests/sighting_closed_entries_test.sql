@@ -79,7 +79,7 @@ select pg_temp.sight(204,'lot2',zone=>'b1');
 select is((select string_agg(coalesce(zone_id,'-')||':'||level,',') from spot_sightings(array[pg_temp.spot('lot2')])),'b1:1',
   'the old read shows the level only');
 select is(api_v1.spot_sightings(array[pg_temp.spot('lot2')])->'sightings'->0->>'level','1','and so does api_v1');
-select is(jsonb_array_length(api_v1.spot_sightings(array[pg_temp.spot('lot1')])->'sightings'),0,'closed alone shows nothing');
+select is(jsonb_array_length(api_v1.spot_sightings(array[pg_temp.spot('lot1')])->'sightings'),0,'closed stays out of sightings');
 
 -- ===== 整點只有全部關閉才算 =====
 -- lot3: b1 by two riders is not the spot; b2 by two more is.
@@ -113,6 +113,129 @@ select pg_temp.sight(220,'street',segment=>'north');
 select pg_temp.sight(221,'street',segment=>'south');
 select is((pg_temp.sight(222,'street',segment=>'south'))->>'closure_suggested','true','north by 201 and 220, south by 221 and 222');
 select is(pg_temp.queued('street'),1,'one case to review');
+
+-- ===== api_v1 closures =====
+-- 'zone or -:riders:c/u:d/u' per row, c for confirmed, d for derived.
+create function pg_temp.closures(spot text,minutes integer default 30) returns text language sql stable as $$
+  select coalesce(string_agg(coalesce(c->>'zone_id',c->>'segment_id','-')||':'||(c->>'riders')||':'
+      ||case when (c->>'confirmed')::boolean then 'c' else 'u' end||case when (c->>'derived')::boolean then 'd' else '' end,
+      ',' order by c->>'zone_id',c->>'segment_id'),'none')
+  from jsonb_array_elements(api_v1.spot_sightings(array[pg_temp.spot(spot)],minutes)->'closures') c;
+$$;
+-- A sighting made earlier (the clock is fixed inside the transaction).
+create function pg_temp.past(n integer,spot text,ago interval,what text default 'closed',zone text default null,
+  segment text default null) returns void language sql as $$
+  insert into rider_sightings(user_id,spot_id,kind,level,zone_id,segment_id,vehicle,ip_hash,device_hash,created_at)
+  values(pg_temp.uid(n),pg_temp.spot(spot),case when what='closed' then 'closed' else 'level' end,
+    case when what='closed' then null else what::smallint end,zone,segment,'scooter',
+    repeat(lpad(n::text,4,'0'),16),repeat(lpad(n::text,4,'0'),16),now()-ago);
+$$;
+create function pg_temp.fresh(name text,spec text) returns void language plpgsql as $$
+declare v uuid;
+begin
+  insert into community_spots(user_id,name,lat,lng,city,space_type,status,parking_zones)
+  values('10000000-0000-4000-8000-000000000001',name,25.055,121.522,'臺北市','offStreet','confirmed',spec::jsonb)
+  returning id into v;
+  insert into fx values(name,v::text);
+end $$;
+select pg_temp.fresh('c1','[{"id":"b1","name":"B1","access":"scooterOnly"},{"id":"b2","name":"B2","access":"heavyOnly"}]');
+select pg_temp.fresh('c2','[{"id":"b1","name":"B1","access":"scooterOnly"},{"id":"b2","name":"B2","access":"heavyOnly"}]');
+select pg_temp.fresh('c3','[{"id":"b1","name":"B1","access":"scooterOnly"},{"id":"b2","name":"B2","access":"heavyOnly"}]');
+select pg_temp.fresh('c4','[{"id":"b1","name":"B1","access":"scooterOnly"},{"id":"b2","name":"B2","access":"heavyOnly"}]');
+select pg_temp.fresh('c5','[{"id":"b1","name":"B1","access":"scooterOnly"},{"id":"b2","name":"B2","access":"heavyOnly"}]');
+select pg_temp.fresh('c6','[{"id":"b1","name":"B1","access":"scooterOnly"},{"id":"b2","name":"B2","access":"heavyOnly"}]');
+
+select is(pg_temp.closures('lot2'),'b1:1:u','one rider on one zone: named, not confirmed');
+select is(pg_temp.closures('lot3'),'b1:2:c,b2:2:c,-:4:cd','every zone confirmed: a derived whole-spot row, all riders');
+select is(pg_temp.closures('lot4'),'-:2:c','the whole spot said directly');
+select is(pg_temp.closures('plain'),'-:1:u','a spot without zones');
+select is(pg_temp.closures('street'),'north:2:c,south:2:c,-:4:cd','segments the same');
+select is(pg_temp.closures('one'),'b1:2:c,-:2:cd','the only zone closed');
+select is(jsonb_array_length(api_v1.spot_sightings(array[pg_temp.spot('lot1'),pg_temp.spot('lot1')])->'closures'),2,
+  'a repeated id gives its rows once');
+select is(pg_temp.closures('lot3',15),pg_temp.closures('lot3',30),'p_window_minutes does not touch closures');
+select is((select array_agg(k order by k) from jsonb_object_keys(api_v1.spot_sightings(array[pg_temp.spot('lot2')])->'closures'->0) k),
+  array['confirmed','derived','latest_at','riders','segment_id','spot_id','zone_id'],'only these keys: nothing about who');
+
+-- One row per place: a direct whole-spot row takes the derived one in.
+select pg_temp.past(201,'c1','100 minutes');
+select pg_temp.past(202,'c1','90 minutes',zone=>'b1');
+select pg_temp.past(203,'c1','80 minutes',zone=>'b1');
+select pg_temp.past(204,'c1','70 minutes',zone=>'b2');
+select pg_temp.past(205,'c1','60 minutes',zone=>'b2');
+select is(pg_temp.closures('c1'),'b1:3:c,b2:3:c,-:5:c','said directly and derived: one row, not derived, all riders');
+select is((select count(*)::integer from jsonb_array_elements(api_v1.spot_sightings(array[pg_temp.spot('c1')])->'closures') c
+    where c->>'zone_id' is null and c->>'segment_id' is null),1,'one whole-spot row');
+select is((api_v1.spot_sightings(array[pg_temp.spot('c1')])->'closures'->2->>'latest_at')::timestamptz,now()-interval '60 minutes',
+  'its latest_at is the newest of them all');
+-- The same rider on two places counts once.
+select pg_temp.past(206,'c2','50 minutes',zone=>'b1');
+select pg_temp.past(206,'c2','40 minutes',zone=>'b2');
+select pg_temp.past(207,'c2','30 minutes',zone=>'b1');
+select pg_temp.past(207,'c2','20 minutes',zone=>'b2');
+select is(pg_temp.closures('c2'),'b1:2:c,b2:2:c,-:2:cd','each rider once in the whole-spot row');
+-- A whole-spot rider alone does not make a zone's row.
+select pg_temp.past(208,'c3','50 minutes');
+select pg_temp.past(209,'c3','40 minutes',zone=>'b1');
+select is(pg_temp.closures('c3'),'b1:2:c,-:1:u','the zone counts the whole-spot rider, b2 has no row');
+
+-- Older than the window.
+select pg_temp.past(210,'c4','121 minutes',zone=>'b1');
+select pg_temp.past(211,'c4','119 minutes',zone=>'b2');
+select is(pg_temp.closures('c4'),'b2:1:u','two hours, whatever the request''s window');
+
+-- Taken back by a later credible level: of the same place or the whole spot.
+select pg_temp.past(212,'c5','60 minutes',zone=>'b1');
+select pg_temp.past(213,'c5','50 minutes',zone=>'b1');
+select pg_temp.past(214,'c5','60 minutes',zone=>'b2');
+select pg_temp.past(215,'c5','50 minutes',zone=>'b2');
+select pg_temp.past(216,'c5','40 minutes','1',zone=>'b1');
+select is(pg_temp.closures('c5'),'b2:2:c','a level of b1 takes b1 back, not b2, and the spot is no longer all closed');
+select pg_temp.past(217,'c5','30 minutes');
+delete from rider_sightings where user_id=pg_temp.uid(217);
+select pg_temp.past(218,'c5','30 minutes','0');
+select is(pg_temp.closures('c5'),'none','a whole-spot level takes back every zone');
+select pg_temp.past(219,'c5','20 minutes',zone=>'b2');
+select is(pg_temp.closures('c5'),'b2:1:u','a closed sighting after the level holds');
+-- A level before the closed sightings takes nothing back; a low-credit one neither.
+select pg_temp.past(220,'c6','70 minutes','2',zone=>'b1');
+select pg_temp.past(221,'c6','60 minutes',zone=>'b1');
+insert into rider_sighting_scores(user_id,disagree) values(pg_temp.uid(222),10);
+select pg_temp.past(222,'c6','50 minutes','0',zone=>'b1');
+select is(pg_temp.closures('c6'),'b1:1:u','only a later, credible level takes it back');
+-- A level of a part takes back a whole-spot sighting.
+select pg_temp.past(223,'c6','40 minutes');
+select pg_temp.past(224,'c6','30 minutes','1',zone=>'b2');
+select is(pg_temp.closures('c6'),'b1:2:c','the whole spot''s row goes once a part has a level; for b1 the sighting still counts');
+
+-- Suspended and low-credit riders are left out.
+insert into rider_sighting_scores(user_id,disagree) values(pg_temp.uid(225),10);
+select pg_temp.past(225,'c6','10 minutes',zone=>'b1');
+select is(pg_temp.closures('c6'),'b1:2:c','a low-credit rider does not count');
+
+-- A zone removed or renamed: its rows go, and the rest may complete the spot.
+update community_spots set parking_zones='[{"id":"b2","name":"B2","access":"heavyOnly"}]' where id=pg_temp.spot('c2')::uuid;
+select is(pg_temp.closures('c2'),'b2:2:c,-:2:cd','a removed zone has no row');
+update community_spots set parking_zones='[{"id":"b3","name":"B2","access":"heavyOnly"}]' where id=pg_temp.spot('c2')::uuid;
+select is(pg_temp.closures('c2'),'none','nor has an old id after a rename, and the new one says nothing');
+update community_spots set status='hidden' where id=pg_temp.spot('lot4')::uuid;
+select is(pg_temp.closures('lot4'),'none','a hidden spot has none');
+
+-- ===== 權限 =====
+grant select on fx to anon,authenticated;
+grant execute on function pg_temp.spot(text) to anon,authenticated;
+set local role anon;
+select lives_ok($$select api_v1.spot_sightings(array[pg_temp.spot('lot3')])$$,'anon reads closures through api_v1');
+select throws_ok($$select * from private.rider_closure_summary(array[pg_temp.spot('lot3')])$$,'42501',null,'not the summary itself');
+select throws_ok($$select private.sighting_closed_window()$$,'42501',null,'nor the window');
+reset role;
+set local role authenticated;
+select throws_ok($$select * from private.rider_closure_summary(array[pg_temp.spot('lot3')])$$,'42501',null,'nor a signed-in rider');
+reset role;
+select is((select count(*)::integer from pg_proc p join pg_namespace n on n.oid=p.pronamespace,
+    unnest(array['rider_closure_summary','sighting_spot_closed','sighting_closed_window','sighting_closed_min_riders']) f
+    where n.nspname='private' and p.proname=f and (has_function_privilege('anon',p.oid,'execute')
+      or has_function_privilege('authenticated',p.oid,'execute'))),0,'the private helpers are closed to clients');
 
 select * from finish();
 rollback;
