@@ -331,10 +331,10 @@ function ReportDetail({ reportId }: { reportId: string }) {
         setShowErrors(true);
         return;
       }
-      queue({ ...request, note: current });
+      queue({ ...request, note: current }, failure.draft);
       return;
     }
-    queue({ ...request, note: current, force });
+    queue({ ...request, note: current, force }, failure.draft);
   };
 
   // Shortcuts (Palette.dc.html, ReviewReject / ReviewEdit boards). Letters and

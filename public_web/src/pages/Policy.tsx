@@ -2,7 +2,7 @@ import { Children, isValidElement, type ReactNode } from 'react';
 import Markdown, { type Components } from 'react-markdown';
 import { Link } from 'react-router';
 import remarkGfm from 'remark-gfm';
-import { dateLabel, reviewNotice, sectionId, sections, type Policy } from '../legal/policies';
+import { dateLabel, sectionId, sections, type Policy } from '../legal/policies';
 import { Site } from '../ui/Site';
 import './Policy.css';
 
@@ -34,6 +34,7 @@ export function PolicyPage({ policy }: { policy: Policy }) {
     // text, never a mail link (#295).
     a({ href, children }) {
       if (!href || href.startsWith('mailto:')) return <>{children}</>;
+      if (href.startsWith('/')) return <Link to={href}>{children}</Link>;
       if (href.startsWith('https://motoparking.smvtstudio.com/')) {
         return <Link to={new URL(href).pathname}>{children}</Link>;
       }
@@ -92,7 +93,7 @@ export function PolicyPage({ policy }: { policy: Policy }) {
               </div>
             </dl>
             <p className="policy-notice" role="note">
-              {reviewNotice}
+              {policy.notice}
             </p>
           </div>
           <details className="policy-toc policy-toc--top" open>

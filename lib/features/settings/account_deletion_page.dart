@@ -585,6 +585,8 @@ class _ReauthSheetState extends State<_ReauthSheet> {
     } on SignInRequired {
       if (mounted) Navigator.pop(context, _ReauthResult.signInRequired);
       return;
+    } on ReauthCancelled {
+      // Closing the panel is the rider's choice, not a failure.
     } catch (_) {
       error = reauthIncomplete;
     }

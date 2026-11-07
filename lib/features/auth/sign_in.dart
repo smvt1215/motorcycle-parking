@@ -12,15 +12,15 @@ import '../../domain/consent_display.dart';
 import '../../ui/adaptive/adaptive.dart';
 import 'brand_sign_in_button.dart';
 
-/// Start OAuth where the action is needed, without opening account settings.
+/// Start sign-in where the action is needed, without opening account settings.
 /// The consent (P16a) sits right under the buttons wherever they appear.
 class SignInButtons extends StatelessWidget {
   const SignInButtons({super.key, required this.store});
   final AppStore store;
 
   /// iOS leads with Apple (HIG: Sign in with Apple first and prominent);
-  /// Android lists Google first, then Apple through the same web OAuth flow
-  /// (P11 Android, #219). The web build keeps Google only, as before.
+  /// Android lists Google first, then Apple through the web OAuth flow
+  /// (P11 Android, #219, #352). The web build keeps Google only, as before.
   static List<OAuthProvider> get providers => isCupertino
       ? const [OAuthProvider.apple, OAuthProvider.google]
       : kIsWeb
