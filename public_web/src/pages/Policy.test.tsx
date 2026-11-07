@@ -1,7 +1,7 @@
 import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
-import { dateLabel, privacy, reviewNotice, sectionId, sections } from '../legal/policies';
+import { dateLabel, privacy, sectionId, sections, terms } from '../legal/policies';
 import { openSite } from '../test/site';
 
 function open() {
@@ -14,7 +14,7 @@ describe('/privacy', () => {
     expect(screen.getByRole('heading', { level: 1, name: '隱私權政策' })).toBeInTheDocument();
     expect(screen.getByText(privacy.version)).toBeInTheDocument();
     expect(screen.getAllByText(dateLabel(privacy.effective)).length).toBeGreaterThan(0);
-    expect(screen.getByRole('note')).toHaveTextContent(reviewNotice);
+    expect(screen.getByRole('note')).toHaveTextContent(privacy.notice);
   });
 
   it('names who collects and how to reach them', () => {
@@ -73,6 +73,47 @@ describe('/privacy', () => {
       name: 'https://motoparking.smvtstudio.com/account-deletion',
     });
     expect(inText).toHaveAttribute('href', '/account-deletion');
+  });
+});
+
+describe('/terms', () => {
+  it('uses the policy layout with its own notice, version and footer mark', () => {
+    openSite('/terms', null);
+    expect(screen.getByRole('heading', { level: 1, name: '服務條款' })).toBeInTheDocument();
+    expect(screen.getByText(terms.version)).toBeInTheDocument();
+    expect(screen.getByRole('note').textContent).toBe(terms.notice);
+    const footer = screen.getByRole('contentinfo');
+    expect(within(footer).getByRole('link', { name: '服務條款' })).toHaveAttribute('aria-current', 'page');
+    expect(document.querySelector('a[href^="mailto:"]')).toBeNull();
+  });
+
+  it('lists all twelve articles and links the privacy policy inside the site', () => {
+    openSite('/terms', null);
+    const titles = sections(terms.markdown);
+    expect(titles).toHaveLength(12);
+    expect(titles[1]).toContain('停車判斷僅供參考');
+    expect(within(screen.getByRole('main')).getByRole('link', { name: '隱私權政策' })).toHaveAttribute(
+      'href',
+      '/privacy',
+    );
+  });
+
+  it('carries no draft marks or internal references, and the decisions hold', () => {
+    // 「待確認」 appears once, as the App's label for community spots.
+    expect(terms.markdown.split('待確認')).toHaveLength(2);
+    for (const mark of ['待專業人士', '待律師', '起草', 'Q275', '顯示名稱', '.md']) {
+      expect(terms.markdown).not.toContain(mark);
+    }
+    expect(terms.markdown).not.toMatch(/#\d{2,}/);
+    expect(terms.markdown).toContain('至少 7 天');
+    expect(terms.markdown).toContain('停權期間仍可登入、管理和刪除帳號');
+    expect(terms.markdown).toContain('你可以在停車點詳情檢舉不當內容');
+    expect(terms.markdown).toContain('類型選「檢舉與申訴」');
+    expect(terms.markdown).toContain('ops@motoparking.smvtstudio.com');
+    expect(terms.markdown).toContain('臺灣臺北地方法院');
+    expect(terms.markdown).toContain('前兩項不適用');
+    expect(terms.markdown).not.toContain('新臺幣');
+    expect(terms.markdown).not.toContain('地址：');
   });
 });
 
