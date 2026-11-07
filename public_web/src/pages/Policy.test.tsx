@@ -104,6 +104,14 @@ describe('the published text', () => {
     expect(privacy.markdown).toContain('透過客服表單申請時，我們無法代為撤銷');
   });
 
+  it('says what stays for a suspended account, without calling it anonymous', () => {
+    const sentence =
+      '如果帳號刪除時仍在停權中，我們會保留一組無法直接辨識你的雜湊值和停權到期日，直到停權結束（無限期停權最多保留 180 天），只用來在同一個 Google 或 Apple 帳號重新登入時維持停權。';
+    expect(privacy.markdown).toContain(sentence);
+    expect(sentence).not.toContain('匿名');
+    expect(privacy.markdown).toContain('保留到停權結束；無限期停權最多 180 天');
+  });
+
   it('keeps the decisions: no postal address, no push, no OpenStreetMap', () => {
     expect(privacy.markdown).not.toContain('地址：');
     expect(privacy.markdown).not.toContain('推播 token');
