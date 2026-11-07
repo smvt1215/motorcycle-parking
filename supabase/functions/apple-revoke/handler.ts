@@ -23,6 +23,12 @@
 // identity, or nothing is revoked. Neither the code nor the tokens are stored
 // or logged.
 //
+// A code belongs to the client it was issued to, so it is exchanged and
+// revoked under that id (#352): iOS native sign-in's under the App's bundle
+// ID, which the App sends as `bundle_id` and APPLE_BUNDLE_IDS allows (default
+// defaultBundleIds), without a redirect URI. Trying each id in turn is no
+// option: a code works once.
+//
 // Secrets, from the environment only (listed in #262): APPLE_TEAM_ID,
 // APPLE_KEY_ID, APPLE_PRIVATE_KEY (the .p8 PEM) and APPLE_CLIENT_ID (the
 // Services ID the Supabase Apple provider signs in with); APPLE_WEB_REDIRECT_URI
@@ -35,6 +41,11 @@ export const tokenUrl = 'https://appleid.apple.com/auth/token';
 export const webRedirectUri =
   'https://motoparking.smvtstudio.com/account-deletion';
 export const appleAudience = 'https://appleid.apple.com';
+/** The iOS Apps' bundle IDs: production, and staging's. */
+export const defaultBundleIds = [
+  'tw.motopark.motorcycleParking',
+  'tw.motopark.motorcycleParking.staging',
+];
 /** As api_v1.request_account_deletion(): the sign-in must be this recent. */
 export const reauthWindowSeconds = 600;
 
@@ -55,6 +66,8 @@ export type AppleConfig = {
   clientId: string;
   /** redirect_uri for authorization codes from the deletion page. */
   redirectUri: string;
+  /** The bundle IDs a native authorization code may name (#352). */
+  bundleIds: string[];
 };
 
 export type Deps = {
@@ -76,8 +89,17 @@ export function appleConfig(
     privateKey = env('APPLE_PRIVATE_KEY')?.trim(),
     clientId = env('APPLE_CLIENT_ID')?.trim();
   const redirectUri = env('APPLE_WEB_REDIRECT_URI')?.trim() || webRedirectUri;
+  const bundleIds = (env('APPLE_BUNDLE_IDS') ?? '').split(',')
+    .map((id) => id.trim()).filter((id) => id !== '');
   if (!teamId || !keyId || !privateKey || !clientId) return null;
-  return { teamId, keyId, privateKey, clientId, redirectUri };
+  return {
+    teamId,
+    keyId,
+    privateKey,
+    clientId,
+    redirectUri,
+    bundleIds: bundleIds.length > 0 ? bundleIds : defaultBundleIds,
+  };
 }
 
 /** The latest `timestamp` in a JWT amr claim; 0 when there is none. */
@@ -168,9 +190,13 @@ function idTokenSubject(idToken: unknown): string | null {
 
 type Revocable = { token: string; hint: 'refresh_token' | 'access_token' };
 
-/** Exchanges a one-time authorization code for a token to revoke. */
+/**
+ * Exchanges a one-time authorization code for a token to revoke. A native
+ * code was issued without a redirect URI, so none is sent for one.
+ */
 async function exchange(
   code: string,
+  native: boolean,
   caller: Caller,
   config: AppleConfig,
   deps: Deps,
@@ -186,7 +212,7 @@ async function exchange(
         client_secret: secret,
         code,
         grant_type: 'authorization_code',
-        redirect_uri: config.redirectUri,
+        ...(native ? {} : { redirect_uri: config.redirectUri }),
       }),
       signal: AbortSignal.timeout(15_000),
     });
@@ -231,17 +257,21 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
   } catch {
     return fail('request.invalid', 400);
   }
-  // Either an Apple token (the App) or an authorization code (the page).
-  const code = body.authorization_code;
+  // Either an Apple token (the App) or an authorization code (the page, or
+  // iOS native sign-in with its bundle_id).
+  const code = body.authorization_code, bundleId = body.bundle_id;
   const appleToken = body.token, hint = body.token_type_hint ?? 'refresh_token';
   if (code !== undefined) {
     if (
       typeof code !== 'string' || code.length < 1 || code.length > 1024 ||
-      appleToken !== undefined || body.token_type_hint !== undefined
+      appleToken !== undefined || body.token_type_hint !== undefined ||
+      (bundleId !== undefined &&
+        (typeof bundleId !== 'string' || bundleId.length > 255))
     ) {
       return fail('request.invalid', 400);
     }
   } else if (
+    bundleId !== undefined ||
     typeof appleToken !== 'string' || appleToken.length < 1 ||
     appleToken.length > 4096 ||
     (hint !== 'refresh_token' && hint !== 'access_token')
@@ -268,10 +298,16 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
   // The deletion request would be refused, so the Apple link stays.
   if (!allowed) return fail('account.admin_cannot_self_delete', 403);
   if (!deps.config) return fail('apple.not_configured', 503);
+  const native = typeof bundleId === 'string';
+  if (native && !deps.config.bundleIds.includes(bundleId)) {
+    return fail('request.invalid', 400);
+  }
+  // The client the code was issued to: the secret's sub follows clientId.
+  const client = native ? { ...deps.config, clientId: bundleId } : deps.config;
 
   let revocable: Revocable;
   if (typeof code === 'string') {
-    const exchanged = await exchange(code, caller, deps.config, deps);
+    const exchanged = await exchange(code, native, caller, client, deps);
     if (exchanged instanceof Response) return exchanged;
     revocable = exchanged;
   } else {
@@ -283,12 +319,12 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
 
   let res: Response;
   try {
-    const secret = await deps.clientSecret(deps.config, deps.now());
+    const secret = await deps.clientSecret(client, deps.now());
     res = await deps.fetch(revokeUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
-        client_id: deps.config.clientId,
+        client_id: client.clientId,
         client_secret: secret,
         token: revocable.token,
         token_type_hint: revocable.hint,

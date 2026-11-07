@@ -152,6 +152,7 @@ migration `202611021100_content_reports.sql` 在每筆新的內容不當檢舉�
 | `GOOGLE_WEB_CLIENT_ID` | Supabase Google provider 接受的 **web** OAuth client ID（多個以逗號分隔） | Google ID token 的 `aud`；網頁的 Google Identity Services 用同一個 client ID |
 | `APPLE_CLIENT_ID` | Services ID `tw.motopark.motorcycleParking.web` | 與 `apple-revoke` 共用，也是 Apple ID token 的 `aud` |
 | `APPLE_WEB_REDIRECT_URI` | 預設 `https://motoparking.smvtstudio.com/account-deletion`，不同時才設 | 換 authorization code 時送給 Apple 的 `redirect_uri`，須與網頁 `AppleID.auth.init` 的 `redirectURI` 及 Services ID 的 Return URL 相同 |
+| `APPLE_BUNDLE_IDS` | 預設 `tw.motopark.motorcycleParking,tw.motopark.motorcycleParking.staging`，不同時才設 | iOS 原生登入的授權碼可使用的 bundle ID（#352）；換 token、撤銷與 client secret 的 sub 都用 App 帶來的 `bundle_id`，不是秘密 |
 | `SUPPORT_APP_CHECK_APP_IDS`、`FIREBASE_PROJECT_NUMBER` | 與客服表單共用 | 同一個網站、同一個 Firebase web app，不另設 |
 | `REPORT_HASH_SECRET`、`TRUSTED_IP_HEADER` | 與回報函式共用 | IP 只以 HMAC 存入，每網路一小時 30 次 |
 

@@ -24,7 +24,7 @@ export const deletedHeading = '會刪除';
  */
 export const deleted = [
   '帳號與登入資訊',
-  '顯示名稱和頭像',
+  '顯示名稱',
   '收藏',
   '可信度分數',
   '使用紀錄（地址查詢、次數限制）',

@@ -774,14 +774,6 @@ void main() {
                 .onPressed,
             isNull,
           );
-          expect(
-            tester
-                .widget<TextButton>(
-                  find.byKey(const ValueKey('profile-remove-avatar')),
-                )
-                .onPressed,
-            isNull,
-          );
           expect(find.text(suspendedNameNote(until)), findsOneWidget);
           expect(find.text(suspendedContactShort), findsOneWidget);
           expect(tester.takeException(), isNull);

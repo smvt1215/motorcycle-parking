@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show setEquals;
 
 import '../../core/geo.dart';
 import '../../core/town_lookup.dart';
+import '../../data/account_suspended.dart';
 import '../../data/app_store.dart';
 import '../../domain/location_check.dart';
 import '../../domain/content_report_display.dart';
@@ -15,6 +16,7 @@ import '../../models/fee.dart';
 import '../../models/parking.dart';
 import '../../models/parking_condition.dart';
 import '../../models/space_kind.dart';
+import '../account/suspended_sheet.dart';
 import '../content_report/content_report.dart';
 import '../map/space_type_sheet.dart';
 import '../../ui/option_pill.dart';
@@ -314,6 +316,9 @@ Future<String> reportReopened(AppStore store, ParkingSpot spot) async {
       'proposed': {'closure': null},
     });
     return '謝謝回報，審核後會更新地圖。';
+  } on AccountSuspended {
+    // Not a message for the snack bar: runAction opens the suspended panel.
+    rethrow;
   } on StateError catch (e) {
     return e.message.toString();
   } catch (_) {
@@ -856,6 +861,12 @@ class _SuggestionFormState extends State<_SuggestionForm> {
         setState(() => sent = true);
       }
     } catch (e) {
+      if (accountSuspendedFrom(e) case final s?) {
+        if (mounted) {
+          await showSuspendedSheet(context, s.until, untilKnown: s.untilKnown);
+        }
+        return;
+      }
       if (mounted) {
         setState(
           () => error = e is StateError
