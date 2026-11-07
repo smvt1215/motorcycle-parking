@@ -164,14 +164,16 @@ void main() {
       expect(backend.userBodies, isEmpty);
     });
 
-    test('Apple 原生登入拿到姓名時直接丟棄，不呼叫 updateUser', () async {
+    test('Apple 原生登入只要 email；仍拿到姓名時直接丟棄，不呼叫 updateUser', () async {
       onPlatform(TargetPlatform.iOS);
       final messenger =
           TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
       const channel = MethodChannel(
         'com.aboutyou.dart_packages.sign_in_with_apple',
       );
+      final requests = <Map<dynamic, dynamic>>[];
       messenger.setMockMethodCallHandler(channel, (call) async {
+        requests.add((call.arguments as List).single as Map);
         return {
           'type': 'appleid',
           'userIdentifier': 'apple-sub',
@@ -190,6 +192,7 @@ void main() {
       expect(plugin.appleCode, 'code-1');
       expect(backend.userBodies, isEmpty);
       expect(jsonEncode(backend.tokenBodies.single), isNot(contains('阿哲')));
+      expect(requests.single['scopes'], ['email'], reason: '只向 Apple 要 email');
     });
 
     for (final platform in [TargetPlatform.iOS, TargetPlatform.android]) {

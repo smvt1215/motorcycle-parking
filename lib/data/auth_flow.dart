@@ -62,10 +62,8 @@ class PluginNativeIdentity implements NativeIdentity {
     final AuthorizationCredentialAppleID credential;
     try {
       credential = await SignInWithApple.getAppleIDCredential(
-        scopes: const [
-          AppleIDAuthorizationScopes.email,
-          AppleIDAuthorizationScopes.fullName,
-        ],
+        // Email only: names are never saved for the rider (#319).
+        scopes: const [AppleIDAuthorizationScopes.email],
         nonce: hashedNonce,
       );
     } on SignInWithAppleAuthorizationException catch (e) {
@@ -76,8 +74,8 @@ class PluginNativeIdentity implements NativeIdentity {
     }
     final idToken = credential.identityToken;
     if (idToken == null) throw const AuthException('Apple 沒有回傳 ID token');
-    // Apple's name is dropped here: names are never saved for the rider
-    // (#319), and a non-empty display_name counts as choosing to publish.
+    // Any name Apple still sends is dropped: a non-empty display_name counts
+    // as choosing to publish it.
     return NativeCredential(
       idToken: idToken,
       authorizationCode: credential.authorizationCode,
