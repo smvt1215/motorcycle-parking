@@ -10,6 +10,8 @@
 /// Pure Dart.
 library;
 
+import 'dart:math' as math;
+
 import '../models/availability.dart';
 import '../models/closure.dart';
 import '../models/fee.dart';
@@ -159,6 +161,7 @@ class RiderSeat {
     this.otherLevel,
     this.highCount,
     this.lowCount,
+    this.riders = 1,
   });
 
   /// 0 已停滿, 1 快滿了, 2 還有一些, 3 很多空位.
@@ -174,14 +177,20 @@ class RiderSeat {
   /// The zone or segment it is about; null for the whole spot.
   final String? areaId;
 
+  /// How many riders it sums up.
+  final int riders;
+
   bool get conflict => otherLevel != null;
+
+  /// The most space it can be counted on for: when reports disagree, the
+  /// fuller end, so they never rank above a report that agrees on space.
+  int get least => conflict ? math.min(level, otherLevel!) : level;
 }
 
-/// Where riders' reports come from. PR-E (#185 rework) gives the store's;
-/// until then nothing reports.
+/// Where riders' reports come from (the store's, for one time window).
 abstract interface class RiderSeats {
-  /// The reports about [spotId] the preview may show (the caller filters
-  /// them by age), one per place.
+  /// The reports about [spotId] for the current vehicle (the caller
+  /// filters them by age), one per place.
   List<RiderSeat> of(String spotId);
 }
 
@@ -205,6 +214,10 @@ class SeatAnswer {
     this.counted = 0,
     this.more = 0,
     this.rider,
+    this.beside,
+    this.besideArea,
+    this.disagrees = false,
+    this.lapsed,
   });
   final SeatKind kind;
 
@@ -221,6 +234,19 @@ class SeatAnswer {
   /// Other places with space (「另 N 區有位」).
   final int more;
   final RiderSeat? rider;
+
+  /// A report shown beside an official count, which it never replaces
+  /// (A11), and the place it is about.
+  final RiderSeat? beside;
+  final SignArea? besideArea;
+
+  /// [beside] and a fresh official count of the same place are more than
+  /// one level apart (A11 card 4). Neither is judged right.
+  final bool disagrees;
+
+  /// The official count past its window, beside a [SeatKind.rider] answer
+  /// (A11 card 3).
+  final AvailabilitySnapshot? lapsed;
 }
 
 enum FeeKind {
@@ -727,6 +753,64 @@ bool _shown(AvailabilitySnapshot s, DateTime now) =>
     s.status(now) == AvailabilityStatus.fresh ||
     s.status(now) == AvailabilityStatus.delayed;
 
+/// The reports [riders] holds about [places], best first: most space, then
+/// newest. A report about a place the rider may not park in now is left
+/// out; one about the whole spot stays.
+List<(SignArea?, RiderSeat)> _rankedReports(
+  ParkingSpot spot,
+  RiderSeats riders,
+  List<SignArea> places,
+) {
+  final byPlace = <SignArea?, RiderSeat>{};
+  for (final r in riders.of(spot.id)) {
+    final place = places
+        .where((a) => r.areaId != null && a.id == r.areaId)
+        .firstOrNull;
+    if (place == null && r.areaId != null) continue;
+    final known = byPlace[place];
+    if (known == null || r.at.isAfter(known.at)) byPlace[place] = r;
+  }
+  return [for (final e in byPlace.entries) (e.key, e.value)]..sort(
+    (a, b) => b.$2.least != a.$2.least
+        ? b.$2.least.compareTo(a.$2.least)
+        : b.$2.at.compareTo(a.$2.at),
+  );
+}
+
+/// [available] of [total] on the riders' scale, by the buckets the backend
+/// scores riders with (`sighting_official_level`).
+int officialLevel(int available, int total) {
+  if (available <= 0) return 0;
+  final share = available / total;
+  return share > .5
+      ? 3
+      : share >= .2
+      ? 2
+      : 1;
+}
+
+/// Whether the report of [place] and the fresh count [official] of
+/// [counted] say different things: a report that agrees on a level, of the
+/// one place the count describes, more than a level from it (±1 matches,
+/// decision 2026-10-29).
+bool _disagree(
+  AvailabilitySnapshot official,
+  List<SignArea> counted,
+  SignArea? place,
+  RiderSeat report,
+  DateTime now,
+) {
+  final total = official.capacity;
+  if (total == null ||
+      report.conflict ||
+      official.status(now) != AvailabilityStatus.fresh ||
+      counted.length > 1 ||
+      (place != null && !counted.contains(place))) {
+    return false;
+  }
+  return (officialLevel(official.available!, total) - report.level).abs() > 1;
+}
+
 SeatAnswer _seat(
   ParkingSpot spot,
   VehicleType vehicle,
@@ -799,6 +883,12 @@ SeatAnswer _seat(
         if (i != bestAt && usable[i].$1.available! > 0)
           usable[i].$2.isEmpty ? 1 : usable[i].$2.length,
     ].fold<int>(0, (a, b) => a + b);
+    // The report beside the count: of the place the count is about when
+    // there is one, else the best (A11 cards 1, 2, 4).
+    final ranked = _rankedReports(spot, riders, places);
+    final beside =
+        ranked.where((r) => best.$2.contains(r.$1)).firstOrNull ??
+        ranked.firstOrNull;
     return SeatAnswer(
       kind: anyFresh ? SeatKind.live : SeatKind.delayed,
       areas: best.$2.isEmpty && best.$1.vehicle == AvailabilityVehicle.car
@@ -815,38 +905,32 @@ SeatAnswer _seat(
       total: best.$1.capacity,
       at: best.$1.sourceUpdatedAt,
       more: more,
+      beside: beside?.$2,
+      besideArea: beside?.$1,
+      disagrees:
+          beside != null &&
+          _disagree(best.$1, best.$2, beside.$1, beside.$2, now),
     );
   }
   // Riders' reports, where no official count shows (A11 card 3).
-  final reports = riders.of(spot.id);
-  if (reports.isNotEmpty) {
-    final byPlace = <SignArea?, RiderSeat>{};
-    for (final r in reports) {
-      final place = places
-          .where((a) => r.areaId != null && a.id == r.areaId)
-          .firstOrNull;
-      // A report about a place the rider may not park in now is not
-      // shown; one about the whole spot is.
-      if (place == null && r.areaId != null) continue;
-      final known = byPlace[place];
-      if (known == null || r.at.isAfter(known.at)) byPlace[place] = r;
-    }
-    if (byPlace.isNotEmpty) {
-      final ranked = byPlace.entries.toList()
-        ..sort(
-          (a, b) => b.value.level != a.value.level
-              ? b.value.level.compareTo(a.value.level)
-              : b.value.at.compareTo(a.value.at),
-        );
-      final best = ranked.first;
-      return SeatAnswer(
-        kind: SeatKind.rider,
-        areas: [?best.key],
-        rider: best.value,
-        at: best.value.at,
-        more: ranked.skip(1).where((e) => e.value.level > 0).length,
-      );
-    }
+  final ranked = _rankedReports(spot, riders, places);
+  if (ranked.isNotEmpty) {
+    final (place, report) = ranked.first;
+    final lapsed = [
+      for (final c in counts)
+        if (c.$1.status(now) == AvailabilityStatus.stale &&
+            c.$1.available != null &&
+            c.$1.sourceUpdatedAt != null)
+          c.$1,
+    ]..sort((a, b) => b.sourceUpdatedAt!.compareTo(a.sourceUpdatedAt!));
+    return SeatAnswer(
+      kind: SeatKind.rider,
+      areas: [?place],
+      rider: report,
+      at: report.at,
+      more: ranked.skip(1).where((r) => r.$2.least > 0).length,
+      lapsed: lapsed.firstOrNull,
+    );
   }
   // Only how many bays: the places open now added up (A6 card 2).
   if (spot.isFacility) {

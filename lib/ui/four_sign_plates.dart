@@ -233,7 +233,7 @@ class _Plate extends StatelessWidget {
           Text(plate.question, style: small),
           const SizedBox(height: 4),
           if (plate.meters.isNotEmpty) ...[
-            _Meters(levels: plate.meters),
+            RiderMeters(levels: plate.meters),
             const SizedBox(height: 4),
           ],
           Text(plate.main, style: big),
@@ -275,7 +275,7 @@ class _Plate extends StatelessWidget {
       ),
       child: dashed
           ? CustomPaint(
-              painter: _DashedBorder(color: border!),
+              painter: DashedBorder(color: border!),
               child: content,
             )
           : content,
@@ -344,7 +344,7 @@ extension on _Plate {
       ),
       child: dashed
           ? CustomPaint(
-              painter: _DashedBorder(color: border!, radius: 8),
+              painter: DashedBorder(color: border!, radius: 8),
               child: content,
             )
           : content,
@@ -421,10 +421,17 @@ class _PressOpacityState extends State<_PressOpacity> {
 }
 
 /// Riders' levels as 3-bar meters (A6); two side by side, slashed, when
-/// reports disagree.
-class _Meters extends StatelessWidget {
-  const _Meters({required this.levels});
+/// reports disagree. [ink] and [paper] default to the plates' fixed colours,
+/// which sit on a light ground in both themes.
+class RiderMeters extends StatelessWidget {
+  const RiderMeters({
+    super.key,
+    required this.levels,
+    this.ink = PlateColors.ink,
+    this.paper = PlateColors.paper,
+  });
   final List<int> levels;
+  final Color ink, paper;
 
   Widget _meter(int level, double width) => Row(
     mainAxisSize: MainAxisSize.min,
@@ -436,9 +443,9 @@ class _Meters extends StatelessWidget {
           width: width,
           height: h,
           decoration: BoxDecoration(
-            color: i < level ? PlateColors.ink : PlateColors.paper,
+            color: i < level ? ink : paper,
             borderRadius: const BorderRadius.all(Radius.circular(2)),
-            border: Border.all(color: PlateColors.ink, width: 1.5),
+            border: Border.all(color: ink, width: 1.5),
           ),
         ),
       ],
@@ -471,8 +478,8 @@ class _Meters extends StatelessWidget {
   );
 }
 
-class _DashedBorder extends CustomPainter {
-  const _DashedBorder({required this.color, this.radius = 10});
+class DashedBorder extends CustomPainter {
+  const DashedBorder({required this.color, this.radius = 10});
   final Color color;
   final double radius;
 
@@ -496,6 +503,6 @@ class _DashedBorder extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_DashedBorder old) =>
+  bool shouldRepaint(DashedBorder old) =>
       old.color != color || old.radius != radius;
 }

@@ -415,8 +415,8 @@ const notParkableFoldHint = '點一下展開，看這裡的空位與費率（資
 
 // ② 有沒有位 ---------------------------------------------------------------
 
-/// One place's row (A10, A12): the official count or total, and room for
-/// riders' reports below it (#189).
+/// One place's row (A10, A12): the official count or total; riders' reports
+/// sit beside it ([seatRiderLine]).
 class SeatRow {
   const SeatRow({
     required this.area,
@@ -426,7 +426,11 @@ class SeatRow {
     this.officialNote = '',
     this.areas = const [],
     this.counted = false,
+    this.delayed = false,
   });
+
+  /// [official] is the count past its window (amber, A12).
+  final bool delayed;
 
   /// Whether [official] is an official count (剩 N 格, 已滿), which a
   /// Beta city's note goes with.
@@ -515,6 +519,7 @@ List<SeatRow> seatRows(
         official: row.official,
         officialNote: row.officialNote,
         counted: row.counted,
+        delayed: row.delayed,
       ),
     );
   }
@@ -552,6 +557,7 @@ SeatRow _seatRow(
       sub: sub,
       official: snapshot.available == 0 ? '已滿' : '剩 ${snapshot.available} 格',
       counted: true,
+      delayed: delayed,
       officialNote: [
         if (delayed) '更新延遲',
         if (at != null) agoText(at, now),
@@ -568,14 +574,78 @@ SeatRow _seatRow(
   );
 }
 
+/// 車友回報 in the details (A10, A12): the meter and level, and how old and
+/// from how many.
+class SeatRiderLine {
+  const SeatRiderLine({
+    required this.main,
+    required this.note,
+    required this.semantics,
+    this.meters = const [],
+  });
+  final String main, note, semantics;
+
+  /// Empty for 沒有回報.
+  final List<int> meters;
+}
+
+/// A place with no report in the details' window.
+const seatNoRiderLine = SeatRiderLine(
+  main: '沒有回報',
+  note: '近 30 分鐘沒有人回報',
+  semantics: '車友回報：沒有回報，近 30 分鐘沒有人回報',
+);
+
+/// [report] as [SeatRiderLine]; [name] leads the note where a row stands
+/// for several places.
+SeatRiderLine riderLineOf(RiderSeat report, DateTime now, {String name = ''}) {
+  final split = riderSplit(report);
+  final ago = agoText(report.at, now);
+  final note = [
+    if (name.isNotEmpty) name,
+    ago,
+    split ?? '${report.riders} 人',
+  ].join('・');
+  return SeatRiderLine(
+    main: riderLabel(report),
+    note: note,
+    meters: riderMeters(report),
+    semantics: '車友回報：${riderLabel(report)}，${note.replaceAll('・', '，')}',
+  );
+}
+
+/// 車友回報 of [row], from the details' [reports]. A row of several places
+/// reads the one with the most space and names it, as the plate does.
+SeatRiderLine seatRiderLine(
+  SeatRow row,
+  List<RiderSeat> reports,
+  DateTime now,
+) {
+  final places = row.areas.isEmpty ? [row.area] : row.areas;
+  final held = [
+    for (final r in reports)
+      for (final a in places)
+        if (a.id == r.areaId) (a, r),
+  ];
+  if (held.isEmpty) return seatNoRiderLine;
+  held.sort(
+    (a, b) => b.$2.least != a.$2.least
+        ? b.$2.least.compareTo(a.$2.least)
+        : b.$2.at.compareTo(a.$2.at),
+  );
+  final (place, report) = held.first;
+  return riderLineOf(
+    report,
+    now,
+    name: places.length > 1 ? detailPlaceName(place) : '',
+  );
+}
+
 /// The words under 有沒有位's answer when the spot stands as one.
-String seatExplanation(FourSign s, {bool riders = false}) {
+String seatExplanation(FourSign s) {
   switch (s.seat.kind) {
     case SeatKind.unknown:
-      return [
-        '官方沒有提供即時數字；空位未知不代表已滿。',
-        riders ? '可以看車友回報（列出 30 分鐘內的）或到場再找車位。' : '可以到場再找車位。',
-      ].join();
+      return '官方沒有提供即時數字；空位未知不代表已滿。可以看車友回報（列出 30 分鐘內的）或到場再找車位。';
     case SeatKind.total:
       return '「共幾格」是總數，不是剩餘；官方沒有提供即時空位。';
     case SeatKind.live || SeatKind.delayed || SeatKind.suspended:
@@ -585,8 +655,9 @@ String seatExplanation(FourSign s, {bool riders = false}) {
 }
 
 /// The note under the rows (A10): what the counts mean.
-String seatRowsNote(FourSign s) =>
-    s.street ? '路邊格沒有官方即時空位，「共幾格」是總數，不是剩餘。' : '官方是停管處公開的剩餘格數；沒有數字的區，空位未知不代表已滿。';
+String seatRowsNote(FourSign s) => s.street
+    ? '路邊格沒有官方即時空位，「共幾格」是總數，不是剩餘。車友回報是騎士回報的大概狀況，這裡列出 30 分鐘內的，30 分鐘後消失；地圖角標只看 15 分鐘內。'
+    : '官方是停管處公開的剩餘格數；沒有數字的區，空位未知不代表已滿。車友回報是騎士回報的大概狀況，30 分鐘後消失，不代表現在一定有位。';
 
 // ③ 怎麼算錢 ---------------------------------------------------------------
 

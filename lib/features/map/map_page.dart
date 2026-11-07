@@ -250,7 +250,9 @@ class _MapPageState extends ConsumerState<MapPage> {
       capsulesOf: (s) => _capsulesOf(store, s, now),
       primaryOf: (s, capsules) => _primaryOf(store, s, capsules),
     );
+    // The Beta is about official counts: a riders' badge never brings it up.
     return shown.values
+        .where((p) => p.$2.any(officialCapsule))
         .map((p) => p.$1)
         .where((s) => inAvailabilityBeta(s.city, cities))
         .firstOrNull;
@@ -266,6 +268,7 @@ class _MapPageState extends ConsumerState<MapPage> {
     store.vehicle,
     store.decide(s),
     now,
+    rider: store.riderMeter(s),
   );
 
   List<AvailabilityCapsule> _primaryOf(
@@ -697,13 +700,7 @@ class _MapPageState extends ConsumerState<MapPage> {
   }) {
     final openCapsules = open == null
         ? const <AvailabilityCapsule>[]
-        : markerCapsules(
-            open,
-            store.availabilityOf(open),
-            store.vehicle,
-            store.decide(open),
-            now,
-          );
+        : _capsulesOf(store, open, now);
     return Stack(
       children: [
         if (AppConfig.useGoogleMaps)

@@ -192,20 +192,11 @@ class ParkingRepository {
     );
   }
 
-  Future<String> _deviceId() async {
-    final prefs = await SharedPreferences.getInstance();
-    final existing = prefs.getString('device_id');
-    if (existing != null) return existing;
-    final value = const Uuid().v4();
-    await prefs.setString('device_id', value);
-    return value;
-  }
-
   /// Sends a report; a precheck refusal, or one for a spot an admin deleted
   /// (#200), becomes a [StateError] carrying the sentence the forms show,
   /// and a suspended account's refusal (#331) an [AccountSuspended].
   Future<Map<String, dynamic>> report(Map<String, dynamic> body) async {
-    final deviceId = await _deviceId();
+    final deviceId = await reportDeviceId();
     try {
       final res = await client!.functions.invoke(
         'submit-report',
@@ -234,6 +225,17 @@ class ParkingRepository {
     }
     return geocodeSearch(client!.functions, query, lat: lat, lng: lng);
   }
+}
+
+/// This install's id, sent with every report and sighting; the server only
+/// keeps its keyed hash.
+Future<String> reportDeviceId() async {
+  final prefs = await SharedPreferences.getInstance();
+  final existing = prefs.getString('device_id');
+  if (existing != null) return existing;
+  final value = const Uuid().v4();
+  await prefs.setString('device_id', value);
+  return value;
 }
 
 /// A report the server refused with a sentence for the form ([message]);

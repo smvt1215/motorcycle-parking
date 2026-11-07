@@ -14,7 +14,9 @@ import '../../domain/four_sign.dart';
 import '../../domain/four_sign_display.dart';
 import '../../domain/hidden_riders_display.dart' show contentHeldNote;
 import '../../domain/parking_decision.dart';
+import '../../domain/sighting_display.dart';
 import '../../domain/spot_detail_display.dart';
+import '../../models/sighting.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../../ui/detail_tokens.dart';
 import '../../ui/four_sign_plates.dart';
@@ -30,6 +32,7 @@ import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../report/spot_suggestions.dart';
+import '../sighting/sighting_sheet.dart';
 import 'closure_card.dart';
 import 'spot_details.dart';
 import 'spot_fees.dart';
@@ -188,6 +191,7 @@ class _SpotSheetState extends State<SpotSheet> {
     _account = widget.store.riderId;
     widget.store.addListener(_storeChanged);
     unawaited(_reread());
+    unawaited(widget.store.followSightings(widget.spot));
   }
 
   void _storeChanged() {
@@ -227,6 +231,8 @@ class _SpotSheetState extends State<SpotSheet> {
       history = _history();
       selectedSegment = null;
       unfolded = false;
+      widget.store.unfollowSightings(old.spot);
+      unawaited(widget.store.followSightings(widget.spot));
     }
   }
 
@@ -259,6 +265,7 @@ class _SpotSheetState extends State<SpotSheet> {
   @override
   void dispose() {
     widget.store.removeListener(_storeChanged);
+    widget.store.unfollowSightings(widget.spot);
     spied?.removeListener(spy);
     copiedTimer?.cancel();
     extent.dispose();
@@ -377,14 +384,19 @@ class _SpotSheetState extends State<SpotSheet> {
     final vehicle = store.vehicle;
     final decision = store.decide(spot);
     final availability = store.availabilityOf(spot);
-    final sign = fourSign(
+    FourSign signOver(int window) => fourSign(
       spot,
       vehicle,
       store.rules,
       now: now,
       availability: availability,
+      riders: store.riderSeats(window),
       decision: decision,
     );
+    // The details read riders' reports of 30 minutes, the preview's plates
+    // those of 15 (A6, A10).
+    final detail = signOver(sightingDetailWindow);
+    final sign = full ? detail : signOver(sightingMapWindow);
     // A chosen segment (A10) decides 能不能停; the other plates stay the
     // street's overview (user decision 2026-10-31).
     final selected = sign.street
@@ -415,13 +427,18 @@ class _SpotSheetState extends State<SpotSheet> {
           else
             p,
     ];
+    // Only where it has a place to go (A7, A7b); see [sightingPlaces].
+    final reportable = sightableSpot(spot.id) && sightingPlaces(detail) != null;
     final actions = SpotPreviewActions(
       street: !spot.isFacility,
       navigateSecondary: notParkable,
       onNavigate: () => runAction(ctx, () => navigateTo(spot.lat, spot.lng)),
-      // 回報現場狀況 stays hidden until the rider sighting sheet (A7, A7b;
-      // PR-E) gives it somewhere to go.
-      onReport: null,
+      onReport: reportable
+          ? () => runAction(
+              ctx,
+              () => showSightingSheet(ctx, store, spot, detail),
+            )
+          : null,
       onSuggest: () => runAction(ctx, () async {
         final wasHidden = store.riderHidden(spot);
         await showSpotSuggestions(ctx, store, spot);
@@ -442,7 +459,7 @@ class _SpotSheetState extends State<SpotSheet> {
       ctx,
       store,
       spot,
-      sign,
+      detail,
       plates,
       decision,
       availability,
@@ -458,7 +475,7 @@ class _SpotSheetState extends State<SpotSheet> {
           ctx,
           width,
           street: !spot.isFacility,
-          report: false,
+          report: reportable,
         );
         // A short sheet (landscape, large text) keeps the actions in the
         // scrolling list so the header is never squeezed out.
@@ -543,6 +560,8 @@ class _SpotSheetState extends State<SpotSheet> {
                         onShare: share,
                         onClose: () => close(ctx),
                         onPlate: showSection,
+                        besideRow: seatBesideRow(sign, now),
+                        disagrees: sign.seat.disagrees,
                       ),
                       const SizedBox(height: 14),
                       Divider(height: 1, color: colors.outlineVariant),
@@ -623,6 +642,14 @@ class _SpotSheetState extends State<SpotSheet> {
     final live =
         spot.isFacility &&
         (!availability.isEmpty || legacy == null || legacy < 0);
+    // A spot standing as one: its report under the answer, or as the answer.
+    final report = sign.seat.rider ?? sign.seat.beside;
+    final wholeReport = rows.isEmpty && report != null
+        ? SeatRiderBox(
+            key: const ValueKey('detail-seat-rider'),
+            line: riderLineOf(report, now),
+          )
+        : null;
     final Widget seat;
     if (spot.isFacility && !live) {
       // A lot's own legacy count, where no snapshot exists for it.
@@ -637,12 +664,17 @@ class _SpotSheetState extends State<SpotSheet> {
           at == null ? '車位時間未提供' : formatSpotTime(at),
         ].join('・'),
       );
+    } else if (rows.isEmpty && sign.seat.kind == SeatKind.rider) {
+      seat = wholeReport!;
     } else if (rows.isNotEmpty) {
       seat = SeatRowsView(
         rows: rows,
         note: seatRowsNote(sign),
-        // 車友回報 under each place goes here (#189).
-        riderRow: null,
+        riderLine: (row) => seatRiderLine(
+          row,
+          store.riderSeats(sightingDetailWindow).of(spot.id),
+          now,
+        ),
         betaCities: inAvailabilityBeta(spot.city, store.availabilityBetaCities)
             ? store.availabilityBetaCities
             : null,
@@ -748,7 +780,11 @@ class _SpotSheetState extends State<SpotSheet> {
               ? '有沒有位'
               : '有沒有位（${vehicle.label}能停的$unit）',
           gap: 8,
-          children: [seat],
+          children: [
+            seat,
+            if (wholeReport != null && !identical(seat, wholeReport))
+              wholeReport,
+          ],
         ),
         DetailSection(
           key: sections[FourSignFace.fee],
