@@ -1,5 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'account_status.dart';
+
 /// The name new spots show publicly: only the name the rider saved
 /// (display_name), cleaned like the server does. Blank, whitespace-only
 /// (including the full-width space U+3000) or missing means no public name,
@@ -82,14 +84,49 @@ class ProfileRepository {
     if (issue != null) throw StateError(issue);
     final user = client.auth.currentUser;
     if (user == null || user.isAnonymous) throw StateError('請先登入再編輯個人資料');
+    final name = normalizeProfileName(displayName);
     await client.auth.updateUser(
       UserAttributes(
         data: {
-          'display_name': normalizeProfileName(displayName),
+          'display_name': name,
           // An explicit empty value prevents falling back to a provider avatar.
           if (removeAvatar) 'profile_avatar_url': '',
         },
       ),
     );
+    await _checkSaved(name: name, removeAvatar: removeAvatar);
+  }
+
+  /// A suspended account's profile keeps its old values without an error
+  /// (#331), and `updateUser` answers with the values it was sent, so ask
+  /// again: suspended per `my_account_status`, or, when that cannot be
+  /// read, the stored profile without the change, throws [AccountSuspended]
+  /// after taking the stored profile back into the session.
+  Future<void> _checkSaved({
+    required String name,
+    required bool removeAvatar,
+  }) async {
+    AccountSuspended? refused;
+    try {
+      final status = await readMyAccountStatus(client);
+      if (status.suspended) refused = AccountSuspended(status.until);
+    } catch (_) {
+      try {
+        final data = (await client.auth.getUser()).user?.userMetadata;
+        final kept =
+            data?['display_name'] != name ||
+            (removeAvatar && data?['profile_avatar_url'] != '');
+        // When it ends is unknown here.
+        if (kept) refused = const AccountSuspended.untilUnknown();
+      } catch (_) {
+        // Nothing more to tell; the save stands as answered.
+      }
+    }
+    if (refused == null) return;
+    try {
+      // The session still holds the values sent; the server's come back.
+      await client.auth.refreshSession();
+    } catch (_) {}
+    throw refused;
   }
 }

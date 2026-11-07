@@ -674,7 +674,6 @@ class _ReauthSheetState extends State<_ReauthSheet> {
           key: const ValueKey('reauth-sign-in'),
           apple: me.apple,
           label: reauthButton(apple: me.apple),
-          secondary: true,
           onPressed: busy ? null : () => unawaited(_signIn()),
         ),
         if (!isCupertino) ...[
