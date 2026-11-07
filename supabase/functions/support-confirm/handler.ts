@@ -5,7 +5,7 @@
 //   view     opening the link: shows the request (submitted time, masked
 //            contact email) and changes nothing, since mail scanners open
 //            links on their own
-//   confirm  "是我，請申請刪除": asks for the deletion right away (source
+//   confirm  "是我，申請刪除帳號": asks for the deletion right away (source
 //            'support', the App's 7-day cooling-off period, signed out
 //            everywhere, name hidden), then the notice goes to the login
 //            email (PM_ANS_20261101_133)
@@ -19,6 +19,12 @@
 //
 // with results pending (with scheduled_at), cancelled, not_pending (already
 // cancelled), account_deleting.
+//
+// A personal data request (#295) uses the same link: confirm records that
+// the login email's owner asked (result verified) and the case waits for
+// the administrators' answer, which goes only to that login email. Every
+// answer carries the request's kind (account_deletion or privacy), so the
+// page (https://motoparking.smvtstudio.com/support/verify) words itself.
 //
 // Results for a good confirmation token: pending (view), deletion_requested (with
 // scheduled_at), denied, resolved, account_deletion_pending (with
@@ -42,12 +48,18 @@ export type LinkResult =
   | {
     result:
       | 'pending'
+      | 'verified'
       | 'deletion_requested'
       | 'denied'
       | 'resolved'
       | 'account_deletion_pending'
       | 'account_deleting'
       | 'unavailable';
+    kind: 'account_deletion' | 'privacy';
+    /** A privacy request's item, subject and text; null for a deletion. */
+    privacy_right?: 'access' | 'correction' | 'copy' | null;
+    subject?: string | null;
+    message?: string | null;
     submitted_at: string;
     contact_email: string;
     scheduled_at: string | null;
@@ -126,6 +138,11 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
   if (found.result === 'invalid') return fail('support.link_invalid', 400);
   return response({
     result: found.result,
+    kind: found.kind,
+    // What the owner of the login email is confirming (Codex review, #301).
+    privacy_right: found.privacy_right ?? null,
+    subject: found.subject ?? null,
+    message: found.message ?? null,
     submitted_at: found.submitted_at,
     contact_email: maskEmail(found.contact_email),
     scheduled_at: found.scheduled_at ?? null,

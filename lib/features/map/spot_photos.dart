@@ -79,43 +79,7 @@ class _PhotoTile extends StatelessWidget {
       child: Tooltip(
         message: '放大照片 ${index + 1}',
         child: InkWell(
-          onTap: () => showDialog<void>(
-            context: context,
-            builder: (context) => Dialog.fullscreen(
-              child: SafeArea(
-                child: Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Row(
-                        children: [
-                          Expanded(child: Text('照片 ${index + 1}')),
-                          IconButton(
-                            tooltip: '關閉照片',
-                            onPressed: () => Navigator.pop(context),
-                            icon: const Icon(Icons.close),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      child: InteractiveViewer(
-                        minScale: 1,
-                        maxScale: 4,
-                        child: Center(
-                          child: _Photo(
-                            url: photos[index],
-                            fit: BoxFit.contain,
-                            label: '停車點照片 ${index + 1}',
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+          onTap: () => showSpotPhotoViewer(context, photos, index),
           child: _Photo(
             url: photos[index],
             fit: BoxFit.cover,
@@ -149,4 +113,235 @@ class _Photo extends StatelessWidget {
       ),
     ),
   );
+}
+
+/// The details' photos as 64-point thumbnails (A2): up to [max], the last
+/// one standing for the rest (「+2」) when there are more. Each opens the
+/// full-screen viewer at that photo.
+class SpotPhotoThumbs extends StatelessWidget {
+  const SpotPhotoThumbs({super.key, required this.photos, this.max = 4});
+  final List<String> photos;
+  final int max;
+
+  @override
+  Widget build(BuildContext context) {
+    final shown = photos.length > max ? max - 1 : photos.length;
+    final rest = photos.length - shown;
+    final side = isCupertino ? 64.0 : 64.0;
+    Widget tile(int index, Widget child, String label) => Semantics(
+      button: true,
+      label: label,
+      // The InkWell below is excluded: assistive taps come here.
+      onTap: () => showSpotPhotoViewer(context, photos, index),
+      excludeSemantics: true,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Material(
+          color: const Color(0xffdde5dc),
+          child: InkWell(
+            key: ValueKey('spot-photo-thumb-$index'),
+            onTap: () => showSpotPhotoViewer(context, photos, index),
+            child: SizedBox.square(dimension: side, child: child),
+          ),
+        ),
+      ),
+    );
+    return Wrap(
+      key: const ValueKey('spot-photo-thumbs'),
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        for (var i = 0; i < shown; i++)
+          tile(
+            i,
+            _Photo(url: photos[i], fit: BoxFit.cover, label: ''),
+            '放大照片：第 ${i + 1} 張',
+          ),
+        if (rest > 0)
+          tile(
+            shown,
+            Center(
+              child: Text(
+                '+$rest',
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xff16313a),
+                ),
+              ),
+            ),
+            '放大照片：另 $rest 張',
+          ),
+      ],
+    );
+  }
+}
+
+/// Opens [photos] full screen at [initial] (A9): black, 關閉 at the top
+/// left, 「1 / 4」, swipe between them, pinch to zoom, and a row of
+/// thumbnails to jump. Captions wait for a contract (who took it, when,
+/// which zone), so none is shown.
+Future<void> showSpotPhotoViewer(
+  BuildContext context,
+  List<String> photos,
+  int initial,
+) => Navigator.of(context, rootNavigator: true).push(
+  PageRouteBuilder<void>(
+    fullscreenDialog: true,
+    barrierLabel: '照片',
+    pageBuilder: (context, _, _) =>
+        SpotPhotoViewer(photos: photos, initial: initial),
+    transitionsBuilder: (context, animation, _, child) =>
+        FadeTransition(opacity: animation, child: child),
+  ),
+);
+
+class SpotPhotoViewer extends StatefulWidget {
+  const SpotPhotoViewer({super.key, required this.photos, this.initial = 0});
+  final List<String> photos;
+  final int initial;
+
+  @override
+  State<SpotPhotoViewer> createState() => _SpotPhotoViewerState();
+}
+
+class _SpotPhotoViewerState extends State<SpotPhotoViewer> {
+  late final pages = PageController(initialPage: widget.initial);
+  late int index = widget.initial;
+
+  @override
+  void dispose() {
+    pages.dispose();
+    super.dispose();
+  }
+
+  void go(int i) => pages.animateToPage(
+    i,
+    duration: const Duration(milliseconds: 220),
+    curve: Curves.easeOutCubic,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final photos = widget.photos;
+    const white = Color(0xffffffff);
+    final target = isCupertino ? 44.0 : 48.0;
+    return Theme(
+      data: Theme.of(context).copyWith(brightness: Brightness.dark),
+      child: Material(
+        key: const ValueKey('spot-photo-viewer'),
+        color: const Color(0xff000000),
+        child: SafeArea(
+          child: Column(
+            children: [
+              SizedBox(
+                height: 56,
+                child: Row(
+                  children: [
+                    const SizedBox(width: 4),
+                    IconButton(
+                      key: const ValueKey('spot-photo-close'),
+                      tooltip: '關閉',
+                      constraints: BoxConstraints.tightFor(
+                        width: target,
+                        height: target,
+                      ),
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close, color: white),
+                    ),
+                    Expanded(
+                      child: Center(
+                        child: Semantics(
+                          liveRegion: true,
+                          label: '第 ${index + 1} 張，共 ${photos.length} 張',
+                          excludeSemantics: true,
+                          child: Text(
+                            '${index + 1} / ${photos.length}',
+                            key: const ValueKey('spot-photo-count'),
+                            style: const TextStyle(
+                              color: white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Balances the close button so the count stays centred.
+                    SizedBox(width: target + 4),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: PageView.builder(
+                  key: const ValueKey('spot-photo-pages'),
+                  controller: pages,
+                  itemCount: photos.length,
+                  onPageChanged: (i) => setState(() => index = i),
+                  itemBuilder: (context, i) => InteractiveViewer(
+                    minScale: 1,
+                    maxScale: 4,
+                    child: Center(
+                      child: _Photo(
+                        url: photos[i],
+                        fit: BoxFit.contain,
+                        label: '停車點照片 ${i + 1}',
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              if (photos.length > 1)
+                SizedBox(
+                  height: 72,
+                  child: Semantics(
+                    label: '照片列表',
+                    container: true,
+                    child: ListView.separated(
+                      key: const ValueKey('spot-photo-strip-viewer'),
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      itemCount: photos.length,
+                      separatorBuilder: (_, _) => const SizedBox(width: 8),
+                      itemBuilder: (context, i) => Semantics(
+                        button: true,
+                        selected: i == index,
+                        label: '第 ${i + 1} 張照片',
+                        onTap: () => go(i),
+                        excludeSemantics: true,
+                        child: GestureDetector(
+                          key: ValueKey('spot-photo-pick-$i'),
+                          onTap: () => go(i),
+                          child: Container(
+                            width: 56,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: i == index ? white : Colors.transparent,
+                                width: 2,
+                              ),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: _Photo(
+                                url: photos[i],
+                                fit: BoxFit.cover,
+                                label: '',
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

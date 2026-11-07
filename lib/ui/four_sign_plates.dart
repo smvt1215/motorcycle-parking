@@ -19,6 +19,11 @@ abstract final class PlateColors {
   static const delayedPaper = Color(0xfffbf3e4);
   static const delayedNote = Color(0xff6b4500);
   static const riderPaper = Color(0xffeef2f3);
+
+  /// Outlined plates on the dark details page (A4).
+  static const darkInk = Color(0xffe6eef0);
+  static const darkMuted = Color(0xffa3b4ba);
+  static const darkLine = Color(0xff4a5d64);
 }
 
 /// The four signs as a row of plates (Main, A3, A6), or 2×2 at large text
@@ -34,6 +39,7 @@ class FourSignPlates extends StatelessWidget {
     this.onTap,
     this.current,
     this.compact = false,
+    this.dense = false,
   });
   final List<SignPlate> plates;
   final ValueChanged<FourSignFace>? onTap;
@@ -41,6 +47,12 @@ class FourSignPlates extends StatelessWidget {
 
   /// Smaller type, for list cards (P4, P6).
   final bool compact;
+
+  /// The full-page details' table of contents (A2, A4): each plate only
+  /// its question and answer, as tall as a touch target (iOS 44, Android
+  /// 48), with a bar under the one shown in place of an outline. Outlined
+  /// plates follow the theme's brightness; solid ones keep their colours.
+  final bool dense;
 
   /// Whether the plates go 2×2: large text, or too narrow for four.
   static bool gridFor(BuildContext context, double width) =>
@@ -55,13 +67,18 @@ class FourSignPlates extends StatelessWidget {
             key: ValueKey('four-sign-${p.face.name}'),
             plate: p,
             compact: compact,
+            dense: dense,
             // Only a table of contents marks one; elsewhere no plate
             // carries a selected state.
             current: current == null ? null : current == p.face,
             onTap: onTap == null ? null : () => onTap!(p.face),
           ),
       ];
-      if (tiles.length == 1) return tiles.single;
+      if (tiles.length == 1) {
+        // The dense plate stretches to its row; alone it takes its own
+        // height.
+        return dense ? IntrinsicHeight(child: tiles.single) : tiles.single;
+      }
       final grid = gridFor(context, constraints.maxWidth);
       final gap = grid ? 8.0 : 6.0;
       Widget row(List<Widget> items) => IntrinsicHeight(
@@ -95,10 +112,11 @@ class _Plate extends StatelessWidget {
     required this.plate,
     required this.compact,
     required this.current,
+    this.dense = false,
     this.onTap,
   });
   final SignPlate plate;
-  final bool compact;
+  final bool compact, dense;
 
   /// Whether this is the section shown; null where nothing is.
   final bool? current;
@@ -106,7 +124,7 @@ class _Plate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (
+    var (
       Color fill,
       Color fg,
       Color label,
@@ -170,19 +188,42 @@ class _Plate extends StatelessWidget {
         false,
       ),
     };
+    final dark = dense && Theme.of(context).brightness == Brightness.dark;
+    if (dark && (border != null || plate.tone == PlateTone.rider)) {
+      // A4: outlined plates sit on the dark page, not on white paper.
+      (fill, fg, label, border) = switch (plate.tone) {
+        PlateTone.dashed => (
+          Colors.transparent,
+          PlateColors.darkInk,
+          PlateColors.darkMuted,
+          PlateColors.darkMuted,
+        ),
+        PlateTone.delayed => (fill, fg, label, border),
+        _ => (
+          Colors.transparent,
+          PlateColors.darkInk,
+          PlateColors.darkMuted,
+          PlateColors.darkLine,
+        ),
+      };
+    }
     final solid = border == null && plate.tone != PlateTone.rider;
     final small = TextStyle(
       fontSize: 11,
+      fontWeight: dense ? FontWeight.w500 : null,
       height: 1.3,
       color: solid ? label.withValues(alpha: .92) : label,
     );
     final big = TextStyle(
-      fontSize: compact ? 15 : 16,
+      fontSize: dense ? 14 : (compact ? 15 : 16),
       fontWeight: FontWeight.w700,
       height: 1.25,
       color: fg,
     );
-    const radius = BorderRadius.all(Radius.circular(10));
+    final radius = BorderRadius.all(Radius.circular(dense ? 8 : 10));
+    if (dense) {
+      return _densePlate(context, fill, fg, border, dashed, small, big, radius);
+    }
     final content = Padding(
       padding: const EdgeInsets.fromLTRB(6, 8, 6, 10),
       child: Column(
@@ -261,6 +302,82 @@ class _Plate extends StatelessWidget {
           : Material(
               type: MaterialType.transparency,
               child: InkWell(borderRadius: radius, onTap: onTap, child: box),
+            ),
+    );
+  }
+}
+
+extension on _Plate {
+  /// The table of contents' plate (A2): the question over the answer, one
+  /// line each, a touch target tall, and the bar under the one shown.
+  Widget _densePlate(
+    BuildContext context,
+    Color fill,
+    Color fg,
+    Color? border,
+    bool dashed,
+    TextStyle small,
+    TextStyle big,
+    BorderRadius radius,
+  ) {
+    final content = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(plate.question, style: small),
+          Text(plate.main, style: big),
+        ],
+      ),
+    );
+    final box = Container(
+      constraints: BoxConstraints(minHeight: isCupertino ? 44 : 48),
+      alignment: AlignmentDirectional.centerStart,
+      decoration: BoxDecoration(
+        color: fill,
+        borderRadius: radius,
+        border: border != null && !dashed
+            ? Border.all(color: border, width: 1.5)
+            : null,
+      ),
+      child: dashed
+          ? CustomPaint(
+              painter: _DashedBorder(color: border!, radius: 8),
+              child: content,
+            )
+          : content,
+    );
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final tile = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(child: box),
+        const SizedBox(height: 5),
+        Container(
+          key: current == true ? const ValueKey('four-sign-current') : null,
+          height: 3,
+          decoration: BoxDecoration(
+            color: current == true
+                ? (dark ? PlateColors.darkInk : PlateColors.ink)
+                : Colors.transparent,
+            borderRadius: const BorderRadius.all(Radius.circular(2)),
+          ),
+        ),
+      ],
+    );
+    return Semantics(
+      button: onTap != null,
+      selected: current,
+      label: plate.semantics,
+      onTap: onTap,
+      excludeSemantics: true,
+      child: isCupertino
+          ? _PressOpacity(onTap: onTap, child: tile)
+          : Material(
+              type: MaterialType.transparency,
+              child: InkWell(borderRadius: radius, onTap: onTap, child: tile),
             ),
     );
   }
@@ -355,8 +472,9 @@ class _Meters extends StatelessWidget {
 }
 
 class _DashedBorder extends CustomPainter {
-  const _DashedBorder({required this.color});
+  const _DashedBorder({required this.color, this.radius = 10});
   final Color color;
+  final double radius;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -367,7 +485,7 @@ class _DashedBorder extends CustomPainter {
       ..strokeWidth = w;
     final rect = RRect.fromRectAndRadius(
       (Offset.zero & size).deflate(w / 2),
-      const Radius.circular(10),
+      Radius.circular(radius),
     );
     final path = Path()..addRRect(rect);
     for (final metric in path.computeMetrics()) {
@@ -378,5 +496,6 @@ class _DashedBorder extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_DashedBorder old) => old.color != color;
+  bool shouldRepaint(_DashedBorder old) =>
+      old.color != color || old.radius != radius;
 }

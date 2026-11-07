@@ -90,9 +90,14 @@ void main() {
       Navigator.of(sheetContext),
       same(Navigator.of(sheetContext, rootNavigator: true)),
     );
+    // The details end where the tab bar starts: it stays in view and
+    // usable (A2, FIX-DECISIONS).
     final sheetRect = tester.getRect(find.byType(DraggableScrollableSheet));
-    expect(sheetRect.bottom, closeTo(tester.view.physicalSize.height, 1));
-    expect(find.text('個人中心').hitTestable(), findsNothing);
+    final bar = tester.getRect(find.text('個人中心').last);
+    expect(sheetRect.bottom, lessThanOrEqualTo(bar.top));
+    expect(sheetRect.bottom, lessThan(tester.view.physicalSize.height));
+    expect(find.text('個人中心').hitTestable(), findsOneWidget);
+    final room = sheetRect.bottom;
     await tester.drag(
       find.byType(DraggableScrollableSheet),
       const Offset(0, -550),
@@ -114,7 +119,7 @@ void main() {
     expect(find.byKey(const ValueKey('parking-spot-sheet')), findsOneWidget);
     expect(
       tester.getRect(find.byKey(const ValueKey('parking-spot-sheet'))).height,
-      closeTo(tester.view.physicalSize.height * .42, 1),
+      closeTo(room * .42, 1),
     );
     // The map above stays undimmed, as in map apps.
     expect(
