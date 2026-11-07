@@ -4,6 +4,7 @@ import 'package:flutter/services.dart'
     show TextInputFormatter, TextEditingValue;
 import 'package:supabase_flutter/supabase_flutter.dart' show FunctionException;
 
+import '../../data/account_suspended.dart';
 import '../../data/app_store.dart';
 import '../../data/repositories.dart' show ReportRefused;
 import '../../domain/content_report_display.dart';
@@ -11,6 +12,7 @@ import '../../domain/hidden_riders_display.dart';
 import '../../domain/spot_contributor.dart';
 import '../../models/parking.dart';
 import '../../ui/adaptive/adaptive.dart';
+import '../account/suspended_sheet.dart';
 import '../hidden_riders/hide_rider.dart';
 import '../report/report_sheet.dart' show SignInPrompt;
 
@@ -139,6 +141,7 @@ class _ContentReportSheetState extends State<ContentReportSheet> {
       failure = null;
     });
     ContentReportOutcome? result;
+    AccountSuspended? suspended;
     String? error;
     try {
       await widget.store.submit(
@@ -152,17 +155,26 @@ class _ContentReportSheetState extends State<ContentReportSheet> {
           ? contentReportSignIn
           : noteRefusalMessage(e) ?? e.message.toString();
     } catch (e) {
-      result = contentReportRefusal(e);
-      if (result == null) {
-        error = noteRefusalMessage(e) ?? contentReportFailed;
+      // First: a suspended account is no connection failure (#331).
+      suspended = accountSuspendedFrom(e);
+      if (suspended == null) {
+        result = contentReportRefusal(e);
+        if (result == null) {
+          error = noteRefusalMessage(e) ?? contentReportFailed;
+        }
       }
     }
     if (!mounted) return;
+    // Send works again before the panel opens, and what was filled in stays
+    // for when 知道了 returns here.
     setState(() {
       sending = false;
       outcome = result;
       failure = error;
     });
+    if (suspended case final s?) {
+      await showSuspendedSheet(context, s.until, untilKnown: s.untilKnown);
+    }
   }
 
   Future<void> _hide() async {

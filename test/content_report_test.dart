@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show FunctionException;
 
+import 'package:motorcycle_parking/data/account_suspended.dart';
 import 'package:motorcycle_parking/data/app_store.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
 import 'package:motorcycle_parking/domain/content_report_display.dart';
@@ -446,6 +447,49 @@ void main() {
         expect(find.text(contentReportNoteLink), findsOneWidget);
         expect(submitEnabled(tester), isTrue);
       });
+
+      for (final (name, refusal) in <(String, Object)>[
+        (
+          '403 account.suspended',
+          const FunctionException(
+            status: 403,
+            details: {
+              'error': 'account.suspended',
+              'until': '2026-12-01T00:00:00Z',
+            },
+          ),
+        ),
+        ('AccountSuspended', AccountSuspended(DateTime.utc(2026, 12))),
+      ]) {
+        testWidgetsOn('${platform.name} 帳號停權（$name）：停權面板、內容保留', (tester) async {
+          setUpView(tester, platform, const Size(390, 844));
+          final store = (await tester.runAsync(reportStore))!
+            ..failWith = refusal;
+          await openReport(tester, store, riderSpot);
+          await pick(tester, ContentReportTarget.description);
+          await tester.enterText(
+            find.byKey(const ValueKey('content-report-note')),
+            '備註有髒話',
+          );
+          await send(tester);
+          expect(find.byKey(const ValueKey('suspended-panel')), findsOneWidget);
+          expect(find.byKey(const ValueKey('suspended-until')), findsOneWidget);
+          final dismiss = find.byKey(const ValueKey('suspended-dismiss'));
+          await tester.ensureVisible(dismiss);
+          await tester.tap(dismiss);
+          await tester.pumpAndSettle();
+          // Back on the form, as filled in, and it can be sent again.
+          expect(find.byKey(const ValueKey('suspended-panel')), findsNothing);
+          expect(find.byType(ContentReportSheet), findsOneWidget);
+          expect(find.text('備註有髒話'), findsOneWidget);
+          expect(find.text(contentReportFailed), findsNothing);
+          expect(submitEnabled(tester), isTrue);
+          store.failWith = null;
+          await send(tester);
+          expect(store.sent.single['proposed'], {'target': 'text'});
+          expect(find.text(contentReportSentTitle), findsOneWidget);
+        });
+      }
 
       testWidgetsOn('${platform.name} 其他 400：一般失敗、內容保留', (tester) async {
         setUpView(tester, platform, const Size(390, 844));
