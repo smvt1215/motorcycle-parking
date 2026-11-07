@@ -981,8 +981,12 @@ class WhereView extends StatelessWidget {
     this.selectedId,
     this.onSelect,
     this.copied = false,
+    this.heldNote,
   });
   final List<WhereCard> cards;
+
+  /// Above the places: the contributor's own text under review (P17b ⑪).
+  final Widget? heldNote;
   final String entrance, guide, closedNote, pendingNote, address, coordinates;
   final List<String> photos;
 
@@ -1059,6 +1063,7 @@ class WhereView extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (heldNote case final note?) ...[note, const SizedBox(height: 8)],
         if (entrance.isNotEmpty) ...[
           row(
             key: const ValueKey('detail-where-entrance'),
