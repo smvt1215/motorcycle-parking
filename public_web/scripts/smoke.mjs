@@ -47,6 +47,14 @@ const error = (status, message) => ({
  */
 const SCREENS = [
   { name: 'explanation', signedIn: false, heading: '刪除你的帳號' },
+  { name: 'privacy', path: '/privacy', signedIn: false, heading: '隱私權政策' },
+  {
+    name: 'signin-checking',
+    signedIn: false,
+    signIn: { kind: 'hold' },
+    steps: ['signIn'],
+    heading: '刪除你的帳號',
+  },
   {
     name: 'no-account',
     signedIn: false,
@@ -195,7 +203,7 @@ for (const viewport of VIEWPORTS) {
     });
     const label = `${viewport.name}/${screen.name}`;
     try {
-      await page.goto(`${base}/account-deletion`);
+      await page.goto(`${base}${screen.path ?? '/account-deletion'}`);
       for (const step of screen.steps ?? []) {
         if (step === 'check') await page.getByRole('checkbox').check();
         if (step === 'delete') await page.getByRole('button', { name: '刪除帳號' }).click();

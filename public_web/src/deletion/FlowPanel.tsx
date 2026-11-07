@@ -35,6 +35,10 @@ export function FlowPanel({
 }
 
 /** The buttons under a step: the main action first, stacked on a phone. */
-export function FlowActions({ children }: { children: ReactNode }) {
-  return <div className="flow-actions">{children}</div>;
+export function FlowActions({ children, hidden }: { children: ReactNode; hidden?: boolean }) {
+  return (
+    <div className="flow-actions" hidden={hidden}>
+      {children}
+    </div>
+  );
 }

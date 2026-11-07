@@ -266,7 +266,7 @@ void main() {
       );
       await _openPage(tester, app);
       expect(app.gateway.calls.where((c) => c == 'status'), hasLength(2));
-      for (final text in ['7 天後才會刪除', '顯示名稱和頭像', '這支手機上的停車紀錄']) {
+      for (final text in ['7 天後才會刪除', '顯示名稱', '這支手機上的停車紀錄']) {
         expect(find.text(text), findsOneWidget, reason: text);
       }
       final button = find.byKey(const ValueKey('deletion-submit'));

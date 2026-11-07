@@ -133,6 +133,7 @@ export function createIdTokenAuth(deps: IdTokenAuthDeps): AuthPort {
     idToken: string,
     rawNonce: string,
     options: SignInOptions | undefined,
+    gaveUp: () => boolean,
   ): Promise<SignInResult> {
     const claims = idTokenClaims(idToken);
     const reauthFor = options?.reauthFor;
@@ -148,12 +149,22 @@ export function createIdTokenAuth(deps: IdTokenAuthDeps): AuthPort {
       ) {
         return { kind: 'wrongAccount', email: claims.email };
       }
-      return signInWithToken(provider, idToken, rawNonce);
+      if (gaveUp()) return { kind: 'cancelled' };
+      // Same account: a late sign-in only refreshes the session it has.
+      const result = await signInWithToken(provider, idToken, rawNonce);
+      return gaveUp() ? { kind: 'cancelled' } : result;
     }
     const checked = await precheck(provider, idToken, rawNonce);
     if ('result' in checked) return checked.result;
     if (!checked.hasAccount) return { kind: 'noAccount', email: claims.email };
-    return signInWithToken(provider, idToken, rawNonce);
+    if (gaveUp()) return { kind: 'cancelled' };
+    const result = await signInWithToken(provider, idToken, rawNonce);
+    if (result.kind === 'signedIn' && gaveUp()) {
+      // Already on its way when the page gave up: nobody is waiting for it.
+      await client.signOut({ scope: 'local' }).catch(() => undefined);
+      return { kind: 'cancelled' };
+    }
+    return result;
   }
 
   function prepareApple() {
@@ -178,7 +189,7 @@ export function createIdTokenAuth(deps: IdTokenAuthDeps): AuthPort {
   }
 
   return {
-    mountGoogleButton(container, { reauthFor, width: initialWidth, onResult }) {
+    mountGoogleButton(container, { reauthFor, onChecking, width: initialWidth, onResult }) {
       let alive = true;
       let width = initialWidth;
       let current: Nonce | null = null;
@@ -218,7 +229,8 @@ export function createIdTokenAuth(deps: IdTokenAuthDeps): AuthPort {
               if (alive) onResult(result);
             };
             if (!response.credential || !raw) return finish({ kind: 'cancelled' });
-            complete('google', response.credential, raw, reauthFor ? { reauthFor } : undefined).then(
+            const gaveUp = (alive ? onChecking?.() : undefined) ?? (() => false);
+            complete('google', response.credential, raw, reauthFor ? { reauthFor } : undefined, gaveUp).then(
               finish,
               () => finish({ kind: 'cancelled' }),
             );
@@ -265,7 +277,8 @@ export function createIdTokenAuth(deps: IdTokenAuthDeps): AuthPort {
           const idToken = response.authorization?.id_token;
           const code = response.authorization?.code;
           if (!idToken) return { kind: 'cancelled' };
-          const result = await complete('apple', idToken, ready.nonce.raw, options);
+          const gaveUp = options?.onChecking?.() ?? (() => false);
+          const result = await complete('apple', idToken, ready.nonce.raw, options, gaveUp);
           if (result.kind === 'signedIn') appleCode = code ? { code, at: deps.now() } : null;
           return result;
         } catch {

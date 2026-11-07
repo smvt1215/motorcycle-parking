@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, vi } from 'vitest';
 import {
@@ -318,6 +318,106 @@ describe('the session', () => {
     openSite('/account-deletion', auth);
     await waitFor(() => expect(auth.signOut).toHaveBeenCalled());
     expect(await screen.findByRole('heading', { level: 1, name: '刪除你的帳號' })).toBeInTheDocument();
+  });
+});
+
+describe('while a sign-in is being checked (SignInLoading)', () => {
+  afterEach(() => vi.useRealTimers());
+
+  function held(auth: ReturnType<typeof fakeAuth>) {
+    let release = () => {};
+    auth.hold = new Promise((resolve) => {
+      release = () => resolve();
+    });
+    return () => release();
+  }
+
+  it('says so in place of the buttons, then the result takes over', async () => {
+    const auth = fakeAuth();
+    stubApi({ account_deletion_status: { body: noRequest } });
+    const release = held(auth);
+    auth.next = { kind: 'signedIn', user: rider };
+    openSite('/account-deletion', auth);
+    fireEvent.click(screen.getByRole('button', { name: '使用 Apple 登入' }));
+    const status = await screen.findByRole('status');
+    expect(status).toHaveTextContent(t.checking);
+    expect(status).toHaveTextContent(t.checkingHint);
+    expect(document.querySelector('.deletion-signin-buttons')).toHaveAttribute('hidden');
+    // Hidden, not removed: Google's button holds the sign-in under way.
+    expect(document.querySelector('.signin-google')).not.toBeNull();
+    release();
+    await heading(t.confirmTitle);
+  });
+
+  it('gives up after 30 seconds, and a later answer changes nothing', async () => {
+    vi.useFakeTimers();
+    const auth = fakeAuth();
+    const release = held(auth);
+    auth.next = { kind: 'noAccount', email: 'late@gmail.com' };
+    openSite('/account-deletion', auth);
+    fireEvent.click(screen.getByRole('button', { name: '使用 Google 登入' }));
+    await act(() => vi.advanceTimersByTimeAsync(29_999));
+    expect(screen.getByRole('status')).toHaveTextContent(t.checking);
+    await act(() => vi.advanceTimersByTimeAsync(1));
+    expect(screen.getByRole('heading', { level: 1, name: t.signInIncompleteTitle })).toBeInTheDocument();
+    release();
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(screen.getByRole('heading', { level: 1, name: t.signInIncompleteTitle })).toBeInTheDocument();
+  });
+
+  it('a timed-out Apple re-sign-in stays expired, even after a retry has ended', async () => {
+    const appleUser = { ...rider, provider: 'apple' as const };
+    const auth = fakeAuth(appleUser);
+    auth.nextRevoke = { kind: 'signInNeeded' };
+    const calls = stubApi({
+      account_deletion_status: { body: noRequest },
+      request_account_deletion: { body: pendingUntil(scheduled) },
+    });
+    openSite('/account-deletion', auth);
+    await heading(t.confirmTitle);
+    await userEvent.click(screen.getByRole('checkbox', { name: t.confirmCheck }));
+    await userEvent.click(screen.getByRole('button', { name: t.confirmAction }));
+    await heading(t.reauthTitle);
+
+    const release = held(auth);
+    auth.next = { kind: 'signedIn', user: appleUser };
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByRole('button', { name: '使用 Apple 登入' }));
+    await act(() => vi.advanceTimersByTimeAsync(30_000));
+    fireEvent.click(screen.getByRole('button', { name: t.signInRetry }));
+
+    // The retry ends at once; the first attempt then succeeds, too late.
+    auth.popupFails = true;
+    fireEvent.click(screen.getByRole('button', { name: '使用 Apple 登入' }));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    release();
+    await act(() => vi.advanceTimersByTimeAsync(0));
+
+    expect(calls.filter((c) => c.fn === 'request_account_deletion')).toEqual([]);
+    expect(screen.queryByRole('heading', { level: 1, name: t.requestedTitle })).toBeNull();
+  });
+
+  it('checks a re-sign-in the same way, and can try again after the time is up', async () => {
+    const auth = fakeAuth(rider);
+    stubApi({
+      account_deletion_status: { body: noRequest },
+      request_account_deletion: apiError(401, 'auth.recent_sign_in_required'),
+    });
+    openSite('/account-deletion', auth);
+    await heading(t.confirmTitle);
+    await userEvent.click(screen.getByRole('checkbox', { name: t.confirmCheck }));
+    await userEvent.click(screen.getByRole('button', { name: t.confirmAction }));
+    await heading(t.reauthTitle);
+    held(auth);
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByRole('button', { name: '使用 Google 登入' }));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(screen.getByRole('status')).toHaveTextContent(t.checking);
+    expect(document.querySelector('.flow-actions')).toHaveAttribute('hidden');
+    await act(() => vi.advanceTimersByTimeAsync(30_000));
+    expect(screen.getByRole('heading', { level: 1, name: t.signInIncompleteTitle })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: t.signInRetry }));
+    expect(screen.getByRole('heading', { level: 1, name: t.reauthTitle })).toBeInTheDocument();
   });
 });
 

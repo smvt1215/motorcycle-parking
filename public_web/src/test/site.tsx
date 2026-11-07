@@ -24,6 +24,10 @@ export interface FakeAuth extends AuthPort {
   signIn: ReturnType<typeof vi.fn<SignIn>>;
   signOut: ReturnType<typeof vi.fn<() => Promise<void>>>;
   revokeApple: ReturnType<typeof vi.fn<() => Promise<AppleRevoke>>>;
+  /** While set, a sign-in stays in the checking state until the promise resolves. */
+  hold: Promise<void> | null;
+  /** Apple's sign-in ends at once, without the provider answering. */
+  popupFails: boolean;
   /** How the next sign-in ends; a `signedIn` result also signs that user in. */
   next: SignInResult;
   /** How revoking Apple's grant ends. */
@@ -41,7 +45,14 @@ export function fakeAuth(initial: SignedInUser | null = null): FakeAuth {
     user = next;
     listeners.forEach((listener) => listener(next));
   };
+  /** The provider answers: the page is told, and `hold` keeps the sign-in open. */
+  async function answered(onChecking?: () => () => boolean) {
+    if (onChecking) act(() => void onChecking());
+    if (auth.hold) await auth.hold;
+  }
   const auth: FakeAuth = {
+    hold: null,
+    popupFails: false,
     next: { kind: 'cancelled' },
     nextRevoke: { kind: 'revoked' },
     signIn: vi.fn<SignIn>(async () => {
@@ -49,22 +60,27 @@ export function fakeAuth(initial: SignedInUser | null = null): FakeAuth {
       if (result.kind === 'signedIn') act(() => change(result.user));
       return result;
     }),
-    mountGoogleButton(container, { reauthFor, onResult }) {
+    mountGoogleButton(container, { reauthFor, onChecking, onResult }) {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'signin-button signin-button--google';
       button.textContent = '使用 Google 登入';
       button.addEventListener('click', () => {
-        void (reauthFor ? auth.signIn('google', { reauthFor }) : auth.signIn('google')).then((result) =>
-          act(() => onResult(result)),
-        );
+        void answered(onChecking)
+          .then(() => (reauthFor ? auth.signIn('google', { reauthFor }) : auth.signIn('google')))
+          .then((result) => act(() => onResult(result)));
       });
       container.append(button);
       return { resize() {}, unmount: () => button.remove() };
     },
     prepareApple() {},
-    signInWithApple(options) {
-      return options ? auth.signIn('apple', options) : auth.signIn('apple');
+    async signInWithApple(options) {
+      // The popup could not open (Apple's script is getting ready again).
+      if (auth.popupFails) return { kind: 'cancelled' };
+      await answered(options?.onChecking);
+      return options?.reauthFor
+        ? auth.signIn('apple', { reauthFor: options.reauthFor })
+        : auth.signIn('apple');
     },
     revokeApple: vi.fn(async () => auth.nextRevoke),
     signOut: vi.fn(async () => act(() => change(null))),

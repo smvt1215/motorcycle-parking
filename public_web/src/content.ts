@@ -24,7 +24,7 @@ export const deletedHeading = '會刪除';
  */
 export const deleted = [
   '帳號與登入資訊',
-  '顯示名稱和頭像',
+  '顯示名稱',
   '收藏',
   '可信度分數',
   '使用紀錄（地址查詢、次數限制）',
@@ -44,6 +44,7 @@ export const retention = [
   '帳號資料：7 天後刪除；備份會在 7 天內一併清除。',
   '匿名內容：繼續公開，供其他騎士使用。',
   '客服申請與處理紀錄：結案、作廢、自動結束、例外或已申請刪除之後，保留 180 天。',
+  '停權中的帳號刪除後，同一個 Google 或 Apple 帳號重新登入時，停權會繼續。',
 ] as const;
 
 export const signInHeading = '先登入，確認是你';
