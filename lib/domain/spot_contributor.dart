@@ -55,7 +55,5 @@ SpotMenu spotMenu(
 }
 
 /// The fields of [spot] held for review after a report (`content_held`:
-/// `rider_name`, `spot_name`, `text`; #280 L3). Empty until the model
-/// reads it: [ParkingSpot] has no such field yet (L3 left it out of the
-/// model), so nothing shows.
-Set<String> contentHeld(ParkingSpot spot) => const {};
+/// `rider_name`, `spot_name`, `text`; #280 L3).
+Set<String> contentHeld(ParkingSpot spot) => spot.contentHeld;

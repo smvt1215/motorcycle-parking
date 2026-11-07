@@ -15,6 +15,8 @@ import 'package:motorcycle_parking/domain/spot_contributor.dart';
 import 'package:motorcycle_parking/features/content_report/content_report.dart';
 import 'package:motorcycle_parking/features/contribute/contribute_page.dart';
 import 'package:motorcycle_parking/features/favorites/favorites_page.dart';
+import 'package:motorcycle_parking/features/map/spot_detail.dart';
+import 'package:motorcycle_parking/features/map/spot_preview.dart';
 import 'package:motorcycle_parking/features/map/spot_sheet.dart';
 import 'package:motorcycle_parking/models/parking.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
@@ -34,6 +36,8 @@ ParkingSpot spot(
   bool own = false,
   double lat = 25.0339,
   double lng = 121.5623,
+  Set<String> held = const {},
+  String note = '',
 }) => ParkingSpot(
   id: id,
   name: name,
@@ -46,6 +50,8 @@ ParkingSpot spot(
   contributorRole: role,
   contributorHandle: handle,
   isOwn: own,
+  contentHeld: held,
+  note: note,
 );
 
 final amin = spot('a', '阿明的機車格', handle: handleA, contributor: '阿明');
@@ -815,5 +821,131 @@ void main() {
         expect(more, findsOneWidget);
       });
     }
+  });
+
+  group('P17b ⑪ 本人看到審核中標示', () {
+    final held = find.byKey(const ValueKey('content-held'));
+
+    Future<void> open(
+      WidgetTester tester,
+      AppStore store,
+      ParkingSpot s,
+    ) async {
+      await tester.pumpWidget(
+        app(
+          Scaffold(
+            body: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => showSpot(context, store, s),
+                child: const Text('details'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('details'));
+      await tester.pumpAndSettle();
+    }
+
+    for (final platform in platforms) {
+      testWidgetsOn('${platform.name} 本人：文字審核中，原文照舊加小字', (tester) async {
+        setUpView(tester, platform, const Size(390, 844));
+        final store = (await tester.runAsync(() => storeOf(const [])))!;
+        await open(
+          tester,
+          store,
+          spot(
+            'o',
+            '我的機車格',
+            handle: handleA,
+            own: true,
+            held: const {'text'},
+            note: '晚上十點後鐵門會拉下一半',
+          ),
+        );
+        // A plain Column, so the note exists however far down it is.
+        expect(find.text('晚上十點後鐵門會拉下一半'), findsOneWidget);
+        expect(held, findsWidgets);
+        expect(find.text(contentHeldNote), findsWidgets);
+        expect(tester.takeException(), isNull);
+      });
+
+      testWidgetsOn('${platform.name} 本人：名稱審核中，小字在標題下方', (tester) async {
+        setUpView(tester, platform, const Size(390, 844));
+        final store = (await tester.runAsync(() => storeOf(const [])))!;
+        await open(
+          tester,
+          store,
+          spot(
+            'o',
+            '我的機車格',
+            handle: handleA,
+            own: true,
+            held: const {'spot_name'},
+          ),
+        );
+        final inPreview = find.descendant(
+          of: find.byType(SpotPreview),
+          matching: held,
+        );
+        expect(inPreview, findsOneWidget);
+        final title = find.descendant(
+          of: find.byType(SpotPreview),
+          matching: find.text('我的機車格'),
+        );
+        expect(
+          tester.getTopLeft(inPreview).dy,
+          greaterThanOrEqualTo(tester.getBottomLeft(title).dy - 1),
+        );
+        // The full page's header carries it too.
+        await tester.drag(
+          find.byKey(const ValueKey('parking-spot-sheet')),
+          const Offset(0, -700),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.descendant(of: find.byType(SpotDetailHeader), matching: held),
+          findsOneWidget,
+        );
+      });
+
+      testWidgetsOn('${platform.name} 別人看不到標示', (tester) async {
+        setUpView(tester, platform, const Size(390, 844));
+        final store = (await tester.runAsync(() => storeOf(const [])))!;
+        await open(
+          tester,
+          store,
+          spot(
+            'x',
+            '名稱審核中',
+            handle: handleA,
+            held: const {'rider_name', 'spot_name', 'text'},
+            note: '別人的備註',
+          ),
+        );
+        expect(held, findsNothing);
+        expect(find.text(contentHeldNote), findsNothing);
+      });
+    }
+
+    test('換帳號後舊快照不再算本人的審核中內容', () async {
+      SharedPreferences.setMockInitialValues({});
+      final store = AccountStore(
+        LocalRepository(await SharedPreferences.getInstance()),
+        FixedParking(const []),
+        const NoFavoriteHandles(),
+      );
+      final mine = spot(
+        'o',
+        '我的機車格',
+        handle: handleA,
+        own: true,
+        held: const {'text'},
+      );
+      expect(store.heldForOwner(mine, 'text'), isTrue);
+      expect(store.heldForOwner(mine, 'spot_name'), isFalse);
+      store.account = 'rider-b';
+      expect(store.heldForOwner(mine, 'text'), isFalse);
+    });
   });
 }
