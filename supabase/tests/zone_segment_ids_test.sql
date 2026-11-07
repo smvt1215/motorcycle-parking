@@ -265,7 +265,7 @@ select lives_ok($$select admin_resolve_report((select id from fx where name='rep
   'a cleared zone fee with a null fee_note applies, the other zone''s change no conflict');
 reset role;
 -- The spot has plans, so fee_plans_sync() takes the new fee into one.
-select is((select parking_zones->0-'fee_plan' from community_spots where id=(select id from fx where name='lot')),
+select is((select (parking_zones->0)-'fee_plan'::text from community_spots where id=(select id from fx where name='lot')),
   '{"id":"d1","name":"D1","access":"scooterOnly","fee":{"scooter":{"mode":"hourly","amount":20,"per_minutes":60}}}'::jsonb,
   'approved new fee: the zone has the fee and no fee_note');
 select is((select parking_zones->1 from community_spots where id=(select id from fx where name='lot')),
