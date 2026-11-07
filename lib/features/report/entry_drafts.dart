@@ -5,6 +5,8 @@
 /// sends a patch by id (`entriesDiff`, C6). Pure Dart.
 library;
 
+import 'dart:convert';
+
 import '../../domain/parking_decision.dart' show segmentConditionOf;
 import '../../models/fee.dart';
 import '../../models/parking.dart';
@@ -122,7 +124,7 @@ String composeRange(String from, String to) {
 /// A stored [ParkingLimit] as a new write takes it (#188 layer 2): with its
 /// periods. An old all-day one becomes a period that does not extend; one
 /// without minutes says nothing a write can keep.
-ParkingLimit? _writable(ParkingLimit limit) {
+ParkingLimit? writableLimit(ParkingLimit limit) {
   if (limit.kind != LimitKind.timeLimit || limit.periods.isNotEmpty) {
     return limit;
   }
@@ -244,6 +246,9 @@ class EntryDraft {
       removed = d.removed,
       vehiclesEdited = d.vehiclesEdited,
       fee = d.fee,
+      token = d.token,
+      signs = d.signs,
+      slots = d.slots,
       _loadedKind = d._loadedKind,
       _loadedScooter = d._loadedScooter,
       _loadedHeavy = d._loadedHeavy,
@@ -277,6 +282,14 @@ class EntryDraft {
 
   /// Its own rates; null takes the spot's (#242).
   Fee? fee;
+
+  /// Names this entry across its copies: 管哪幾區 keeps it (S5).
+  Object token = Object();
+
+  /// The 限時 and 禁停 limits, and the 共用時段, S5 and S5b set; null keeps
+  /// the stored ones.
+  List<ParkingLimit>? signs;
+  List<ScheduleSlot>? slots;
 
   SpaceKind? _loadedKind;
   Eligible? _loadedScooter, _loadedHeavy;
@@ -312,6 +325,9 @@ class EntryDraft {
 
   bool get isNew => original == null;
   String? get id => original?['id'] as String?;
+
+  /// Whether it says who may park: a changed entry must (#201, layer 2).
+  bool get stated => scooter != null && heavy != null;
 
   /// A stored entry without an id cannot be patched (the table gives every
   /// entry one, so only old caches read so).
@@ -387,6 +403,8 @@ class EntryDraft {
       kind != _loadedKind ||
       scooter != _loadedScooter ||
       heavy != _loadedHeavy ||
+      signs != null ||
+      slots != null ||
       // A segment without `allow` states both once it changes (#188 layer 2).
       (type == EntryType.segment && _segmentUnstated);
 
@@ -408,11 +426,13 @@ class EntryDraft {
     final bay = kind == null ? const ParkingCondition() : bayConditionOf(kind);
     final old = stored;
     final kept = same ? old : null;
-    final signs = [
-      for (final l in old?.limits ?? const <ParkingLimit>[])
-        if (l.kind == LimitKind.timeLimit || l.kind == LimitKind.noParking)
-          ?_writable(l),
-    ];
+    final signs =
+        this.signs ??
+        [
+          for (final l in old?.limits ?? const <ParkingLimit>[])
+            if (l.kind == LimitKind.timeLimit || l.kind == LimitKind.noParking)
+              ?writableLimit(l),
+        ];
     // Any other limit is the bay's: those stored stay while the bay does.
     final fixed = same && old != null
         ? [
@@ -435,9 +455,11 @@ class EntryDraft {
               ? chargeOfFee(rates)
               : null),
       limits: [...fixed, ...signs],
-      schedule: same || kind == SpaceKind.carMotorcycle
-          ? old?.schedule ?? const []
-          : const [],
+      schedule:
+          slots ??
+          (same || kind == SpaceKind.carMotorcycle
+              ? old?.schedule ?? const []
+              : const []),
       allow: ZoneAllow(
         scooter: scooter?.flag,
         heavy: heavy?.flag,
@@ -465,7 +487,7 @@ class EntryDraft {
     guide.trim().isEmpty ? out.remove('guide') : out['guide'] = guide.trim();
     evidence.trim().isEmpty
         ? out.remove('evidence_url')
-        : out['evidence_url'] = evidence.trim();
+        : out['evidence_url'] = evidenceUrlOf(evidence);
     if (isNew || _conditionChanged) {
       final c = conditionUnder(spotFee);
       out['condition'] = c.toJson();
@@ -474,13 +496,25 @@ class EntryDraft {
         if (legacyAccess(c) case final access?) out['access'] = access.name;
       }
     }
-    if (fee case final fee? when !fee.isEmpty) out['fee'] = fee.toJson();
+    // Without its own rates it follows the spot's again (F1b).
+    if (fee case final fee? when !fee.isEmpty) {
+      out['fee'] = fee.toJson();
+    } else {
+      out.remove('fee');
+    }
     return out;
+  }
+
+  bool get _feeChanged {
+    if (isNew) return false;
+    final now = fee == null || fee!.isEmpty ? null : fee!.toJson();
+    return jsonEncode(now) != jsonEncode(original!['fee']);
   }
 
   /// Whether the rider changed anything.
   bool get changed {
-    if (removed) return true;
+    // S5's rules and F1's rates, which have no line of their own here.
+    if (removed || signs != null || slots != null || _feeChanged) return true;
     if (wholeSpot) {
       return kind != _loadedKind ||
           scooter != _loadedScooter ||
@@ -539,12 +573,16 @@ class EntryDraft {
       ?line('指引', _loadedGuide, guide.trim()),
       ?line(
         '公告連結',
-        original?['evidence_url'] as String? ?? '',
-        evidence.trim(),
+        evidenceUrlOf(original?['evidence_url'] as String?),
+        evidenceUrlOf(evidence),
       ),
     ];
   }
 }
+
+/// Why [d] cannot take a change from a page that does not ask who may park.
+String unstatedEntryNote(EntryDraft d) =>
+    '「${d.displayName}」還沒寫哪些車種可停，請先到「停哪裡」補上，再改這裡。';
 
 /// One row of 你要改的內容.
 class ChangeLine {

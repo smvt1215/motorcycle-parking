@@ -83,8 +83,13 @@ class EntryRow extends StatelessWidget {
     this.tags = const [],
     this.destructive = false,
     this.problem,
+    this.quote,
     this.onTap,
   });
+
+  /// A stored text with what it is: (這區寫, the text). At most two lines
+  /// on screen; a screen reader hears all of it.
+  final (String, String)? quote;
   final Widget? leading;
   final String title;
   final String? subtitle, value;
@@ -121,6 +126,26 @@ class EntryRow extends StatelessWidget {
       if (tags.isNotEmpty) ...[
         const SizedBox(height: 6),
         Wrap(spacing: 6, runSpacing: 4, children: tags),
+      ],
+      if (quote case (final label, final text)?) ...[
+        const SizedBox(height: 2),
+        Semantics(
+          label: '$label，$text',
+          excludeSemantics: true,
+          child: Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(text: '$label：', style: muted),
+                TextSpan(
+                  text: text,
+                  style: TextStyle(fontSize: 13, color: colors.onSurface),
+                ),
+              ],
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
       ],
       if (problem != null) ...[
         const SizedBox(height: 4),
@@ -592,6 +617,25 @@ class ChangeSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    // A label column keeps wrapped lines under the change; large text needs
+    // the width more.
+    final wide = MediaQuery.textScalerOf(context).scale(16) <= 20;
+    TextSpan change(ChangeLine line) => TextSpan(
+      children: [
+        TextSpan(
+          text: line.from,
+          style: TextStyle(
+            color: colors.onSurfaceVariant,
+            decoration: TextDecoration.lineThrough,
+          ),
+        ),
+        const TextSpan(text: '　→　'),
+        TextSpan(
+          text: line.to,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+      ],
+    );
     return Semantics(
       container: true,
       child: Column(
@@ -611,25 +655,22 @@ class ChangeSummary extends StatelessWidget {
               child: Semantics(
                 label: '${line.label}從${line.from}改成${line.to}',
                 excludeSemantics: true,
-                child: Text.rich(
-                  TextSpan(
-                    children: [
-                      TextSpan(text: '${line.label}　'),
-                      TextSpan(
-                        text: line.from,
-                        style: TextStyle(
-                          color: colors.onSurfaceVariant,
-                          decoration: TextDecoration.lineThrough,
+                child: wide
+                    ? Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(width: 64, child: Text(line.label)),
+                          Expanded(child: Text.rich(change(line))),
+                        ],
+                      )
+                    : Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(text: '${line.label}　'),
+                            change(line),
+                          ],
                         ),
                       ),
-                      const TextSpan(text: '　→　'),
-                      TextSpan(
-                        text: line.to,
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                    ],
-                  ),
-                ),
               ),
             ),
         ],
@@ -682,6 +723,43 @@ class RemoveEntryButton extends StatelessWidget {
       ],
     );
   }
+}
+
+/// The notice link a suggestion carries (F1c), with its own [Form] so a page
+/// checks it alone. Above 你要改的內容, and only with it.
+class SuggestionLink extends StatelessWidget {
+  const SuggestionLink({
+    super.key,
+    required this.form,
+    required this.controller,
+    required this.field,
+  });
+  final GlobalKey<FormState> form;
+  final TextEditingController controller;
+
+  /// The field itself, built by the form that owns it.
+  final Widget field;
+
+  /// False, with the error shown and the field in view, when the link
+  /// cannot go.
+  static bool check(GlobalKey<FormState> form) {
+    if (form.currentState?.validate() ?? true) return true;
+    final at = form.currentContext;
+    if (at != null) {
+      Scrollable.ensureVisible(
+        at,
+        alignment: .2,
+        duration: const Duration(milliseconds: 250),
+      );
+    }
+    return false;
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: Form(key: form, child: field),
+  );
 }
 
 /// 路外停車場 or 路邊格位 as two cards (N1); neither until the rider picks.
@@ -808,6 +886,333 @@ class FormLabel extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+/// One rule of S5 or a card that folds the same way: its icon, title and
+/// summary in a row of 60 at least, and [child] while [open]. Long summaries
+/// wrap; the title does not (C17).
+class RuleFoldCard extends StatelessWidget {
+  const RuleFoldCard({
+    super.key,
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.summary,
+    this.badge,
+    this.badgeColor,
+    required this.open,
+    required this.onToggle,
+    required this.child,
+  });
+  final IconData icon;
+  final Color iconColor;
+  final String title, summary;
+
+  /// 修改中, 將移除; a new spot shows none (C14).
+  final String? badge;
+  final Color? badgeColor;
+  final bool open;
+  final VoidCallback onToggle;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Material(
+      color: colors.surface,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: open ? brand : colors.outlineVariant,
+          width: open ? 1.5 : 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Semantics(
+            button: true,
+            expanded: open,
+            child: InkWell(
+              onTap: onToggle,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 60),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 10, 8),
+                  child: Row(
+                    children: [
+                      ExcludeSemantics(child: Icon(icon, color: iconColor)),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            Text(
+                              summary,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: colors.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (badge != null) ...[
+                        const SizedBox(width: 8),
+                        Text(
+                          badge!,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: badgeColor ?? colors.primary,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(width: 4),
+                      Icon(
+                        open ? Icons.expand_less : Icons.expand_more,
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (open) ...[
+            Divider(height: 1, color: colors.outlineVariant),
+            Padding(padding: const EdgeInsets.all(12), child: child),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// A tile that is on or off: a day, a preset, an entry a rule covers.
+class ChoiceTile extends StatelessWidget {
+  const ChoiceTile({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.exclusive = false,
+    this.tooltip,
+    this.radius = 10,
+  });
+  final String label;
+  final bool selected, exclusive;
+  final VoidCallback onTap;
+  final String? tooltip;
+  final double radius;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final shape = BorderRadius.circular(radius);
+    return Semantics(
+      button: true,
+      inMutuallyExclusiveGroup: exclusive,
+      selected: exclusive ? selected : null,
+      toggled: exclusive ? null : selected,
+      label: tooltip ?? label,
+      excludeSemantics: true,
+      child: Material(
+        color: selected ? colors.primaryContainer : colors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: shape,
+          side: BorderSide(
+            color: selected ? brand : colors.outlineVariant,
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: _touch, minWidth: _touch),
+            child: Center(
+              widthFactor: 1,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                child: Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+                    color: selected
+                        ? colors.onPrimaryContainer
+                        : colors.onSurface,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 管哪幾區 and 管哪幾段: everything, or some entries. From everything, a tap
+/// on one entry leaves that one; picking the last one is everything again.
+class ScopeChips extends StatelessWidget {
+  const ScopeChips({
+    super.key,
+    required this.allLabel,
+    required this.items,
+    required this.all,
+    required this.value,
+    required this.onChanged,
+    required this.semanticLabel,
+  });
+  final String allLabel;
+
+  /// Each entry with its chip: B1 機車區・一般機車格.
+  final List<(Object, String)> items;
+  final bool all;
+  final Set<Object> value;
+  final void Function(bool all, Set<Object> value) onChanged;
+  final String semanticLabel;
+
+  void _toggle(Object id) {
+    final next = all ? {id} : {...value};
+    if (!all) next.contains(id) ? next.remove(id) : next.add(id);
+    // Every entry named is everything, a spot of one entry too.
+    if (next.length == items.length) return onChanged(true, const {});
+    onChanged(false, next);
+  }
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: semanticLabel,
+    container: true,
+    child: Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        ChoiceTile(
+          key: const ValueKey('rule-scope-all'),
+          label: allLabel,
+          selected: all,
+          radius: 22,
+          onTap: () => onChanged(!all, const {}),
+        ),
+        for (final (i, (id, text)) in items.indexed)
+          ChoiceTile(
+            key: ValueKey('rule-scope-$i'),
+            label: text,
+            selected: !all && value.contains(id),
+            radius: 22,
+            onTap: () => _toggle(id),
+          ),
+      ],
+    ),
+  );
+}
+
+const _weekNames = '一二三四五六日';
+const _weekWires = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+/// 哪幾天 (S5): 每天、平日、假日, or weekdays picked one by one. [days] is
+/// the contract's: `all`, `weekday`, `holiday` or a list of weekdays.
+class DaysPicker extends StatelessWidget {
+  const DaysPicker({super.key, required this.days, required this.onChanged});
+  final Object days;
+  final ValueChanged<Object> onChanged;
+
+  void _toggle(String day) {
+    final now = days is List ? days as List<String> : const <String>[];
+    final next = now.contains(day)
+        ? [...now.where((d) => d != day)]
+        : [
+            for (final d in _weekWires)
+              if (d == day || now.contains(d)) d,
+          ];
+    onChanged(next);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    const gap = 4.0;
+    final picked = days is List ? days as List<String> : const <String>[];
+    Widget preset(String wire, String label) => ChoiceTile(
+      key: ValueKey('rule-days-$wire'),
+      label: label,
+      selected: days == wire,
+      exclusive: true,
+      onTap: () => onChanged(wire),
+    );
+    Widget day(int i) => ChoiceTile(
+      key: ValueKey('rule-day-$i'),
+      label: _weekNames[i],
+      tooltip: '週${_weekNames[i]}',
+      selected: picked.contains(_weekWires[i]),
+      onTap: () => _toggle(_weekWires[i]),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Semantics(
+          label: '常用天數',
+          container: true,
+          child: Row(
+            children: [
+              Expanded(child: preset('all', '每天')),
+              const SizedBox(width: 8),
+              Expanded(child: preset('weekday', '平日')),
+              const SizedBox(width: 8),
+              Expanded(child: preset('holiday', '假日')),
+            ],
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          '或自選星期',
+          style: TextStyle(fontSize: 13, color: colors.onSurfaceVariant),
+        ),
+        const SizedBox(height: 4),
+        Semantics(
+          label: '自選星期',
+          container: true,
+          child: LayoutBuilder(
+            // The tiles keep their height; on a 390 phone seven fit at 44 wide.
+            builder: (context, box) => box.maxWidth < 44 * 7 + gap * 6
+                ? Wrap(
+                    spacing: gap,
+                    runSpacing: gap,
+                    children: [
+                      for (var i = 0; i < 7; i++)
+                        SizedBox(width: _touch, child: day(i)),
+                    ],
+                  )
+                : Row(
+                    children: [
+                      for (var i = 0; i < 7; i++) ...[
+                        if (i > 0) const SizedBox(width: gap),
+                        Expanded(child: day(i)),
+                      ],
+                    ],
+                  ),
+          ),
+        ),
+      ],
     );
   }
 }

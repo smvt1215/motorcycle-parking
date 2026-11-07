@@ -14,7 +14,6 @@ import '../../models/parking_condition.dart';
 import '../../models/space_kind.dart';
 import '../../models/zone_entries.dart';
 import '../../ui/adaptive/adaptive.dart';
-import '../../ui/fee_editor.dart';
 import '../account/suspended_sheet.dart';
 import '../auth/sign_in.dart';
 import '../map/space_type_sheet.dart';
@@ -25,8 +24,46 @@ import 'spot_suggestions.dart' show reportSummary;
 
 /// Whether stored fee text says nothing: 費率沒寫一律未提供
 /// (PM_ANS_20261101_56).
-bool noFeeText(String text) =>
-    const {'', '依現場公告', defaultFeeNote, '費率未確認'}.contains(text.trim());
+bool noFeeText(String text) => const {
+  '',
+  '依現場公告',
+  '請以現場公告為準',
+  defaultFeeNote,
+  '費率未確認',
+}.contains(text.trim());
+
+/// 全場費率 or 整條路費率 in words: the rates, the stored text, or 未提供.
+String wholeFeeText(Fee? rates, String? text) {
+  if (rates != null && !rates.isEmpty) {
+    return _samePrice(rates) ?? feeNoteOf(rates);
+  }
+  return text == null || noFeeText(text) ? '未提供' : text;
+}
+
+/// 全場同價 read once, as a sign does, without the rule in brackets: every
+/// vehicle that applies pays the same, a follow as what it follows. Null
+/// when they differ, a vehicle has no rate, or the rate goes by the hour of
+/// day.
+String? _samePrice(Fee fee) {
+  Rate? paid(Rate? r) => switch (r?.mode) {
+    FeeMode.sameAsScooter => fee.scooter,
+    FeeMode.sameAsCar => fee.car,
+    _ => r,
+  };
+  final rates = [fee.scooter, paid(fee.heavy), fee.car];
+  if (rates.contains(null)) return null;
+  final applied = [
+    for (final r in rates)
+      if (r!.mode != FeeMode.notApplicable) r,
+  ];
+  if (applied.isEmpty ||
+      applied.first.mode == FeeMode.byTime ||
+      applied.any((r) => r != applied.first)) {
+    return null;
+  }
+  final text = applied.first.text.replaceFirst(RegExp(r'（.*）$'), '');
+  return text.isEmpty ? null : text;
+}
 
 /// On the card of a street spot without segments: what sending it does.
 const firstSegmentNote = '改了送出後，這裡會成為這條路的第一段；其他段請用「新增一段」補上。';
@@ -185,8 +222,8 @@ List<EntryTag> segmentTags(EntryDraft draft) {
 }
 
 /// A list icon on a light patch, as wide as a marking.
-class _IconTile extends StatelessWidget {
-  const _IconTile(this.icon);
+class EntryIconTile extends StatelessWidget {
+  const EntryIconTile(this.icon, {super.key});
   final IconData icon;
 
   @override
@@ -201,7 +238,7 @@ class _IconTile extends StatelessWidget {
   );
 }
 
-Widget _marking(SpaceKind? kind) => kind == null
+Widget entryMarking(SpaceKind? kind) => kind == null
     ? const SizedBox(width: 44, height: 44, child: Icon(Icons.grid_view))
     : GroundMarking(
         type: kind.markingType,
@@ -243,7 +280,7 @@ class EntryListArgs {
   final Fee Function() fee;
   final Future<void> Function(BuildContext context)? onSpotFee;
 
-  /// A segment's 費率 row; null only shows it (PR10's F1 opens it).
+  /// A segment's 費率 row (F1).
   final Future<void> Function(BuildContext context, EntryDraft draft)?
   onEntryFee;
 
@@ -330,15 +367,10 @@ class _EntryListPageState extends State<EntryListPage> {
   }
 
   /// 整條路費率 in words: the rates, a spot's stored text, or 未提供.
-  String get _wholeFee {
-    final fee = args.spot?.feeNote;
-    final rates = args.fee();
-    if (!rates.isEmpty) return feeNoteOf(rates);
-    return fee == null || noFeeText(fee) ? '未提供' : fee;
-  }
+  String get _wholeFee => wholeFeeText(args.fee(), args.spot?.feeNote);
 
   Widget _zoneRow(EntryDraft d) => EntryRow(
-    leading: _marking(d.kind),
+    leading: entryMarking(d.kind),
     title: d.displayName,
     subtitle: d.kind?.label,
     tags: [
@@ -362,7 +394,7 @@ class _EntryListPageState extends State<EntryListPage> {
     return EntrySection(
       rows: [
         EntryRow(
-          leading: _marking(d.kind),
+          leading: entryMarking(d.kind),
           title: d.wholeSpot
               ? (d.kind?.label ?? '整段')
               : (d.name.trim().isEmpty
@@ -465,7 +497,7 @@ class _EntryListPageState extends State<EntryListPage> {
             EntrySection(
               rows: [
                 EntryRow(
-                  leading: const _IconTile(Icons.login),
+                  leading: const EntryIconTile(Icons.login),
                   title: '入口',
                   subtitle: spot.entranceNote.isEmpty
                       ? '未填'
@@ -486,7 +518,7 @@ class _EntryListPageState extends State<EntryListPage> {
             child: EntrySection(
               rows: [
                 EntryRow(
-                  leading: const _IconTile(Icons.add_road),
+                  leading: const EntryIconTile(Icons.add_road),
                   title: '整條路費率',
                   subtitle: '$whole\n沒有另設費率的路段用整條路費率',
                   onTap: args.onSpotFee == null
@@ -609,6 +641,7 @@ class _EntryEditPageState extends State<EntryEditPage> {
   late EntryDraft current;
   bool showErrors = false, sending = false;
   String? refusal;
+  final linkForm = GlobalKey<FormState>();
 
   bool get adding => widget.adding;
   bool get zones => widget.type == EntryType.zone;
@@ -681,10 +714,20 @@ class _EntryEditPageState extends State<EntryEditPage> {
   bool check() {
     final list = adding ? [current] : changed;
     for (final d in list) {
-      if (!d.removed && entryProblems(d).isNotEmpty) {
+      final problems = entryProblems(d);
+      if (!d.removed && problems.isNotEmpty) {
         setState(() {
           current = d;
           showErrors = true;
+        });
+        // The link says its own error; alone, it is what to scroll to.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          if (problems.keys.first == 'evidence') {
+            SuggestionLink.check(linkForm);
+          } else {
+            linkForm.currentState?.validate();
+          }
         });
         return false;
       }
@@ -779,6 +822,7 @@ class _EntryEditPageState extends State<EntryEditPage> {
           district: widget.district,
           rules: widget.store.rules,
           showErrors: showErrors,
+          linkForm: linkForm,
           onChanged: update,
           onDelete: delete,
         ),
@@ -848,9 +892,11 @@ class _EntryCard extends StatefulWidget {
     required this.district,
     required this.rules,
     required this.showErrors,
+    required this.linkForm,
     required this.onChanged,
     required this.onDelete,
   });
+  final GlobalKey<FormState> linkForm;
   final EntryDraft draft;
   final bool adding, canDelete, showErrors;
   final String? city;
@@ -1158,9 +1204,13 @@ class _EntryCardState extends State<_EntryCard> {
               onChanged: (v) => widget.onChanged(() => d.guide = v),
             ),
             gap(),
-            EvidenceUrlField(
+            SuggestionLink(
+              form: widget.linkForm,
               controller: evidence,
-              onChanged: (v) => widget.onChanged(() => d.evidence = v),
+              field: EvidenceUrlField(
+                controller: evidence,
+                onChanged: (v) => widget.onChanged(() => d.evidence = v),
+              ),
             ),
           ],
           if (!widget.adding && !d.isNew) ...[
@@ -1184,69 +1234,6 @@ class _EntryCardState extends State<_EntryCard> {
               onPressed: widget.onDelete,
             ),
           ],
-        ],
-      ),
-    );
-  }
-}
-
-/// A rate page for what PR10's F0 and F1 will replace: the fee editor, and
-/// 完成 hands the rates back. The new spot's draft keeps them (C14).
-Future<Fee?> showFeeDraftPage(
-  BuildContext context, {
-  required String subtitle,
-  required Fee value,
-  FeeVehicle? vehicle,
-}) => Navigator.of(context).push<Fee>(
-  formRoute(_FeeDraftPage(subtitle: subtitle, value: value, vehicle: vehicle)),
-);
-
-class _FeeDraftPage extends StatefulWidget {
-  const _FeeDraftPage({
-    required this.subtitle,
-    required this.value,
-    required this.vehicle,
-  });
-  final String subtitle;
-  final Fee value;
-  final FeeVehicle? vehicle;
-
-  @override
-  State<_FeeDraftPage> createState() => _FeeDraftPageState();
-}
-
-class _FeeDraftPageState extends State<_FeeDraftPage> {
-  final form = GlobalKey<FormState>();
-  late Fee fee = widget.value;
-
-  @override
-  Widget build(BuildContext context) {
-    final hint = fee.isEmpty
-        ? null
-        : precheckBlocking(precheckFee(fee.toJson())).firstOrNull?.message;
-    return Form(
-      key: form,
-      child: FormPage(
-        header: FormHeader(
-          title: '費率',
-          subtitle: widget.subtitle,
-          leading: FormHeaderLeading.back,
-        ),
-        footer: SubmitBar(
-          label: '完成',
-          onPressed: () {
-            if (form.currentState?.validate() ?? false) {
-              if (hint == null) Navigator.of(context).pop(fee);
-            }
-          },
-        ),
-        children: [
-          FeeEditor(
-            value: fee,
-            initialVehicle: widget.vehicle,
-            errorText: hint,
-            onChanged: (v) => setState(() => fee = v),
-          ),
         ],
       ),
     );
