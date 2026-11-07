@@ -280,9 +280,9 @@ $$;
 -- Whether a zone's access agrees with its condition (§1.3, decision 32): a
 -- zone without a condition is not checked here; one with a condition has an
 -- allow naming both vehicles, and its access is the one the condition writes
--- back. A condition that writes back no access is inconsistent, except one
--- whose allow says not_stated for a vehicle (#201): it has no access to
--- write back, so the zone carries none.
+-- back. A condition that writes back no access (a car bay scooters may park
+-- in, #190; or an allow saying not_stated for a vehicle, #201) has none to
+-- write back, so the zone carries none and old builds read it as unconfirmed.
 create or replace function pg_temp.zone_condition_consistent(p_zone jsonb) returns boolean
 language sql immutable set search_path='' as $$
   select coalesce(jsonb_typeof(p_zone->'condition'),'null')='null'
@@ -291,6 +291,10 @@ language sql immutable set search_path='' as $$
         where e.value=(pg_temp.parking_contract()->'eligibility'->'not_stated'))
       then coalesce(jsonb_typeof(p_zone->'access'),'null')='null'
         and p_zone->'condition'->'allow' ?& array['scooter','heavy']
+      when jsonb_typeof(p_zone->'condition'->'allow')='object'
+        and p_zone->'condition'->'allow' ?& array['scooter','heavy']
+        and pg_temp.condition_legacy_access(p_zone->'condition') is null
+      then coalesce(jsonb_typeof(p_zone->'access'),'null')='null'
       else jsonb_typeof(p_zone->'access')='string'
         and coalesce((p_zone->>'access')=pg_temp.condition_legacy_access(p_zone->'condition'),false) end;
 $$;
@@ -913,8 +917,12 @@ select is(pg_temp.zone_condition_consistent($j${"name":"B1","access":"scooterOnl
 select is(pg_temp.zone_condition_consistent($j${"name":"B1","condition":{"bay":"motorcycle","use":"usual","allow":{"scooter":true,"heavy":false}}}$j$::jsonb),false,'zone row: 缺 access');
 select is(pg_temp.zone_condition_consistent($j${"name":"B1","access":"scooterHeavy","condition":{"bay":"motorcycle","use":"usual","allow":{"scooter":true,"heavy":false}}}$j$::jsonb),false,'zone row: access 與 allow 不一致');
 select is(pg_temp.zone_condition_consistent($j${"name":"B2","access":"heavyCar","condition":{"bay":"heavy","use":"usual","allow":{"scooter":false,"heavy":true}}}$j$::jsonb),false,'zone row: access 與 bay 不一致（重機專區寫成汽車區）');
-select is(pg_temp.zone_condition_consistent($j${"name":"B1","access":"heavyOnly","condition":{"bay":"motorcycle","use":"usual","allow":{"scooter":false,"heavy":true}}}$j$::jsonb),false,'zone row: 推導不出 access：機車格只開放大型重機');
-select is(pg_temp.zone_condition_consistent($j${"name":"B1","access":"heavyCar","condition":{"allow":{"scooter":false,"heavy":true}}}$j$::jsonb),false,'zone row: 推導不出 access：bay 未填而開放大型重機');
+select is(pg_temp.zone_condition_consistent($j${"name":"B1","access":"heavyOnly","condition":{"bay":"motorcycle","use":"usual","allow":{"scooter":false,"heavy":true}}}$j$::jsonb),false,'zone row: 推導不出 access 卻帶 access：機車格只開放大型重機');
+select is(pg_temp.zone_condition_consistent($j${"name":"B1","access":"heavyCar","condition":{"allow":{"scooter":false,"heavy":true}}}$j$::jsonb),false,'zone row: 推導不出 access 卻帶 access：bay 未填而開放大型重機');
+select is(pg_temp.zone_condition_consistent($j${"name":"汽車區","area":"car","condition":{"bay":"car","use":"usual","allow":{"scooter":true,"heavy":true}}}$j$::jsonb),true,'zone row: 推導不出 access 就不帶：汽車格普機可停（#190 B3）');
+select is(pg_temp.zone_condition_consistent($j${"name":"汽車區","area":"car","access":"heavyCar","condition":{"bay":"car","use":"usual","allow":{"scooter":true,"heavy":true}}}$j$::jsonb),false,'zone row: 推導不出 access 卻帶 access：汽車格普機可停');
+select is(pg_temp.zone_condition_consistent($j${"name":"B1","condition":{"bay":"motorcycle","use":"usual","allow":{"scooter":false,"heavy":true}}}$j$::jsonb),true,'zone row: 推導不出 access 就不帶：機車格只開放大型重機（#190）');
+select is(pg_temp.zone_condition_consistent($j${"name":"B1","condition":{"bay":"motorcycle","use":"usual","allow":{"heavy":true}}}$j$::jsonb),false,'zone row: 推導不出 access 也要寫明兩種車');
 select is(pg_temp.zone_condition_consistent($j${"name":"B1","access":null,"condition":{"bay":"motorcycle","use":"usual","allow":{"scooter":true,"heavy":false}}}$j$::jsonb),false,'zone row: access 不是字串');
 select is(pg_temp.zone_condition_consistent($j${"name":"B1","condition":{"allow":{"scooter":true,"heavy":"not_stated"}}}$j$::jsonb),true,'zone row: 官方未標示：不帶 access');
 select is(pg_temp.zone_condition_consistent($j${"name":"B1","access":"scooterOnly","condition":{"allow":{"scooter":true,"heavy":"not_stated"}}}$j$::jsonb),false,'zone row: 官方未標示卻帶 access');

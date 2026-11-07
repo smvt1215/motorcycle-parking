@@ -113,7 +113,7 @@
 
 分區沒有 `condition` 時，由既有 `access` 推導，明確排除一律寫進 `allow`，不會在轉換中遺失：`scooterOnly`→機車格 usual，`allow={scooter:true,heavy:false}`；`scooterHeavy`→機車格 share=scooter_heavy，`allow={scooter:true,heavy:true}`；`heavyCar`→汽車格 usual，`allow={scooter:false,heavy:true}`（大型重機依法可停汽車格）；`heavyOnly`→重機格 usual，`allow={scooter:false,heavy:true}`；`noMotorcycle`→bay 未填，`allow={scooter:false,heavy:false}`；null→未確認。反向推導 `access` 時也先看 `allow`，所以兩者一一對應。`access` 保留為舊版相容欄位，有 `condition` 時由轉換層推導寫回，不另外編輯。
 
-**分區 `access` 與 `condition` 一致（決定 32，DB 拒絕）**：分區有 `condition` 時，`allow` 必填且同時寫明 `scooter` 與 `heavy`，`access` 必須等於由 `allow`（`from_access` 有 bay 時再比對 bay）推導的值（`to_access`）。缺 `allow`、只寫一個車種、推導不出 `access`（例如機車格只開放大型重機）、缺 `access` 或與推導值不同，DB 一律拒絕寫入（`valid_zones()` 呼叫 `zone_condition_consistent()`，202610270020）。沒有 `condition` 的分區維持現狀：不檢查，由 `access` 推導。三端以 `parking_contract_cases.json` 的 `zone_rows` 共同案例比對；寫入分區 `condition` 的路徑（C6 分區編輯、匯入）一律寫入 `allow`，並由 `legacyAccess` 寫回 `access`。
+**分區 `access` 與 `condition` 一致（決定 32，DB 拒絕）**：分區有 `condition` 時，`allow` 必填且同時寫明 `scooter` 與 `heavy`，`access` 必須等於由 `allow`（`from_access` 有 bay 時再比對 bay）推導的值（`to_access`）；推導不出時（例如汽車格普機可停、機車格只開放大型重機，#190）分區不帶 `access`，比照官方未標示，舊版讀成未確認。缺 `allow`、只寫一個車種、該帶卻缺 `access`、帶了與推導值不同，或推導不出卻帶 `access`，DB 一律拒絕寫入（`valid_zones()` 呼叫 `zone_condition_consistent()`，202610270020）。沒有 `condition` 的分區維持現狀：不檢查，由 `access` 推導。三端以 `parking_contract_cases.json` 的 `zone_rows` 共同案例比對；寫入分區 `condition` 的路徑（C6 分區編輯、匯入）一律寫入 `allow`，並由 `legacyAccess` 寫回 `access`。
 
 **寫入：`legacySpaceType(condition, placement)`（有 `condition` 的資料）**
 
@@ -486,7 +486,7 @@ SQL 不能在執行時讀 JSON，所以由 `tool/gen_contract_sql.py` 從契約�
 | 路邊點帶 `parking_zones` 或 `zones_complete` | DB | 拒絕 | 同 #94 `street_lot_details` |
 | 有 `condition` 但 `space_type ≠ legacySpaceType(condition)` | DB | 拒絕 | 避免雙份狀態 |
 | `use='share'` 缺 `share`，或 `use='usual'` 帶 `share` | DB | 拒絕 | |
-| 分區有 `condition` 但缺 `allow`、`allow` 未同時寫明 `scooter` 與 `heavy`，或 `access` 不等於由 `allow`（＋bay）推導的值、推導不出 | DB | 拒絕 | 決定 32：避免分區的雙份狀態；舊版只讀 `access`（§1.3） |
+| 分區有 `condition` 但缺 `allow`、`allow` 未同時寫明 `scooter` 與 `heavy`，或 `access` 不等於由 `allow`（＋bay）推導的值（推導不出時須不帶 `access`） | DB | 拒絕 | 決定 32：避免分區的雙份狀態；舊版只讀 `access`（§1.3） |
 | 頂層 `condition` 帶 `allow`；`allow.scooter=true` 而 bay=heavy；限制 `kind` 不在列舉，或 `vehicle` 出現在 `special_vehicle` 以外 | DB | 拒絕 | 路邊沿用既有車種旗標；限制類型與車型分鍵（§1.1） |
 | 路邊點的 `condition` 缺 `bay`；或 bay=motorcycle、沒有 `time_limit`／`special_vehicle`／`ev_only`、也沒有 `charge` | DB | 拒絕 | 推導不出 `space_type`（§1.3） |
 | `share='scooter_heavy'` 但 bay ≠ motorcycle；`share='car_motorcycle'` 但 bay ≠ car | DB | 拒絕 | 需求 4 |
