@@ -3,6 +3,7 @@ import rulesFile from './precheck_rules.json' with { type: 'json' };
 import {
   blocking,
   isPlaceholder,
+  patchedEntries,
   precheck,
   precheckResponse,
   riskFlags,
@@ -222,5 +223,42 @@ Deno.test('currentSpot reads the stored fee and condition of the spot a suggesti
     ) {
       throw new Error(JSON.stringify(body));
     }
+  }
+});
+
+Deno.test('a zone patch clears the fee_note as entries_patch() does (F1d)', () => {
+  const fee = {
+    scooter: { mode: 'hourly', amount: 20, per_minutes: 60 },
+    heavy: { mode: 'free' },
+    car: { mode: 'not_applicable' },
+  };
+  const zones = [{
+    id: 'b1',
+    name: 'B1',
+    access: 'scooterOnly',
+    fee_note: '舊文字',
+    fee: { scooter: { mode: 'free' } },
+  }];
+  const rest = { id: 'b1', name: 'B1', access: 'scooterOnly' };
+  for (
+    const [patch, left] of [
+      [{ id: 'b1', fee, fee_note: null }, { ...rest, fee }],
+      [{ id: 'b1', fee: null, fee_note: null }, rest],
+    ] as const
+  ) {
+    const got = patchedEntries(zones, [patch]);
+    if (JSON.stringify(got) !== JSON.stringify([left])) {
+      throw new Error(JSON.stringify(got));
+    }
+    const issues = precheck(
+      {
+        action: 'flag',
+        source_id: '3f1c2a4e-0000-4000-8000-000000000002',
+        reason: '費率有誤',
+        proposed: { parking_zones: [patch] },
+      },
+      { parking_zones: zones },
+    );
+    if (blocking(issues).length) throw new Error(JSON.stringify(issues));
   }
 });
