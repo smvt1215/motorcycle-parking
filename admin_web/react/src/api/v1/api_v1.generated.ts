@@ -319,9 +319,27 @@ export type SpotSighting = {
   /** 說法不一：中位數前後一級內的權重未達 70% */
   conflicting: boolean;
 };
+export type SpotClosure = {
+  /** 停車點 id */
+  spot_id: string;
+  /** 分區 id；不是分區的列為 null */
+  zone_id: string | null;
+  /** 路段 id；不是路段的列為 null */
+  segment_id: string | null;
+  /** 回報關閉的獨立車友人數（帳號與裝置取較小者），不含停權與可信度不足者；分區、路段的列也算整點的回報；整點在所有分區或路段都確認時算全部回報 */
+  riders: number;
+  /** 回報人數達 2。true 才影響能不能停，false 只顯示有車友回報 */
+  confirmed: boolean;
+  /** ISO 8601 時間。列入的最新一筆回報 */
+  latest_at: string;
+  /** 整點列才可能是 true：沒有人直接回報整點，由所有分區或路段都確認而來 */
+  derived: boolean;
+};
 export type SpotSightings = {
   /** 依 spot_id、zone_id、segment_id、vehicle 排序 */
   sightings: SpotSighting[];
+  /** 依 spot_id、zone_id、segment_id 排序；同一個分區、路段或整點只有一列 */
+  closures: SpotClosure[];
 };
 export type HiddenRider = {
   /** contributor_handle */

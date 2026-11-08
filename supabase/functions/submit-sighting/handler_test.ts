@@ -96,10 +96,28 @@ Deno.test('validate: four levels or closed, two vehicles, a spot and a device', 
     validate({ ...body, kind: 'closed', level: undefined }),
     { ...parsed, kind: 'closed', level: null },
   );
-  // Closed is the whole spot: no level, no zone.
+  // Closed has no level; it may name a zone or a segment, not both.
   assertEquals(validate({ ...body, kind: 'closed' }), 'invalid level');
   assertEquals(
     validate({ ...body, kind: 'closed', level: null, zone_id: 'b2' }),
+    { ...parsed, kind: 'closed', level: null, zone_id: 'b2' },
+  );
+  assertEquals(
+    validate({ ...body, kind: 'closed', level: null, segment_id: 'north' }),
+    { ...parsed, kind: 'closed', level: null, segment_id: 'north' },
+  );
+  assertEquals(
+    validate({
+      ...body,
+      kind: 'closed',
+      level: null,
+      zone_id: 'b2',
+      segment_id: 'north',
+    }),
+    'invalid area',
+  );
+  assertEquals(
+    validate({ ...body, kind: 'closed', level: null, zone_id: 'B2' }),
     'invalid area',
   );
   assertEquals(validate({ ...body, kind: 'available' }), 'invalid kind');
