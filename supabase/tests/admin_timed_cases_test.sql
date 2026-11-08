@@ -53,13 +53,13 @@ insert into private.support_messages(request_id,direction,channel,body,to_email,
   ('5a000000-0000-4000-8000-00000000000b','out','admin','回覆','b@example.test','sent',1,now()),
   ('5a000000-0000-4000-8000-00000000000c','out','admin','回覆','c@example.test','failed',5,now());
 
-update auth.users set created_at=now()-interval '30 days' where id in (pg_temp.uid(2),pg_temp.uid(3),pg_temp.uid(4));
+update auth.users set created_at=now()-interval '30 days' where id in (pg_temp.uid(2),pg_temp.uid(3),pg_temp.uid(6));
 insert into community_spots(id,user_id,name,lat,lng,city,space_type,scooter_allowed,heavy_allowed,status,note)
 values('7c000000-0000-4000-8000-000000000001',pg_temp.uid(1),'檢舉的點',23.611,120.611,'雲林縣','freeMotorcycle',true,false,'pending','備註原文'),
   ('7c000000-0000-4000-8000-000000000002',pg_temp.uid(1),'其他原因的點',23.612,120.612,'雲林縣','freeMotorcycle',true,false,'pending','');
 select pg_temp.flag(2,'7c000000-0000-4000-8000-000000000001','text','p');
 select pg_temp.flag(3,'7c000000-0000-4000-8000-000000000001','text','q');
-select pg_temp.flag(4,'7c000000-0000-4000-8000-000000000002','other','s');
+select pg_temp.flag(6,'7c000000-0000-4000-8000-000000000002','other','s');
 create temporary table first_text as select id::text id from moderation_queue
   where field='inappropriate' and source_id='7c000000-0000-4000-8000-000000000001' order by created_at,id limit 1;
 grant select on first_text to authenticated;
