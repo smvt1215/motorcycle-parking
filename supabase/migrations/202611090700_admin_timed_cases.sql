@@ -186,7 +186,7 @@ language plpgsql stable security definer set search_path='' as $$
 declare v jsonb;
 begin
   perform private.require_admin();
-  with rows as (select * from private.timed_case_rows())
+  with c as (select * from private.timed_case_rows())
   select jsonb_build_object(
     'all',count(*) filter (where bucket<>'waiting'),
     'overdue',count(*) filter (where bucket='overdue'),
@@ -195,11 +195,11 @@ begin
     'waiting',count(*) filter (where bucket='waiting'),
     'send_failed',count(*) filter (where state='send_failed'),
     'by_kind',coalesce((select jsonb_object_agg(k,n) from (
-        select type k,count(*) n from rows where bucket<>'waiting' group by type
+        select type k,count(*) n from c where bucket<>'waiting' group by type
         union all
-        select type||':'||kind,count(*) from rows where bucket<>'waiting' group by type,kind) x),'{}'::jsonb),
+        select type||':'||kind,count(*) from c where bucket<>'waiting' group by type,kind) x),'{}'::jsonb),
     'as_of',now())
-  into v from rows;
+  into v from c;
   return v;
 end $$;
 revoke execute on function admin_v1.timed_case_counts() from public;
