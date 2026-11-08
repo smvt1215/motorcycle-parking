@@ -197,6 +197,44 @@ class AdminV1Client {
     'p_reason': ?pReason,
     'p_note': ?pNote,
   });
+
+  /// 待處理：有期限的客服案件與內容檢舉（v43）
+  Future<TimedCasePage> timedCases({
+    String? pKind,
+    String? pBucket,
+    Object? pCursor,
+    int? pLimit,
+  }) async {
+    final raw = await timedCasesRaw(
+      pKind: pKind,
+      pBucket: pBucket,
+      pCursor: pCursor,
+      pLimit: pLimit,
+    );
+    return TimedCasePage.fromJson(raw as Map<String, Object?>);
+  }
+
+  /// [timedCases] as served, for callers that keep the JSON (#202).
+  Future<Object?> timedCasesRaw({
+    String? pKind,
+    String? pBucket,
+    Object? pCursor,
+    int? pLimit,
+  }) => _call('timed_cases', {
+    'p_kind': ?pKind,
+    'p_bucket': ?pBucket,
+    'p_cursor': ?pCursor,
+    'p_limit': ?pLimit,
+  });
+
+  /// 待處理的計數（導覽徽章、分頁）
+  Future<TimedCaseCounts> timedCaseCounts() async {
+    final raw = await timedCaseCountsRaw();
+    return TimedCaseCounts.fromJson(raw as Map<String, Object?>);
+  }
+
+  /// [timedCaseCounts] as served, for callers that keep the JSON (#202).
+  Future<Object?> timedCaseCountsRaw() => _call('timed_case_counts', {});
 }
 
 class MinAppVersion {
@@ -1170,6 +1208,275 @@ class ContentReportPatch {
   @override
   int get hashCode =>
       Object.hashAll([name, note, entranceNote, parkingGuide, specialRules]);
+}
+
+/// keyset 游標：上一頁的 next_cursor 原樣帶回
+class TimedCaseCursor {
+  const TimedCaseCursor({
+    required this.rank,
+    required this.dueAt,
+    required this.id,
+  });
+
+  factory TimedCaseCursor.fromJson(Map<String, Object?> json) =>
+      TimedCaseCursor(
+        rank: (json['rank'] as num).toInt(),
+        dueAt: json['due_at'] as String,
+        id: json['id'] as String,
+      );
+
+  final int rank;
+
+  final String dueAt;
+
+  final String id;
+
+  Map<String, Object?> toJson() => {'rank': rank, 'due_at': dueAt, 'id': id};
+
+  @override
+  bool operator ==(Object other) =>
+      other is TimedCaseCursor &&
+      other.rank == rank &&
+      other.dueAt == dueAt &&
+      other.id == id;
+
+  @override
+  int get hashCode => Object.hashAll([rank, dueAt, id]);
+}
+
+/// 一件有期限、要處理的事（客服案件或一組內容檢舉）；不含使用者文字與 email
+class TimedCase {
+  const TimedCase({
+    required this.id,
+    required this.type,
+    required this.kind,
+    required this.state,
+    required this.dueAt,
+    required this.bucket,
+    required this.rank,
+    this.version,
+    required this.lastActivityAt,
+    required this.suspicious,
+    this.reportCount,
+    this.hiddenParts,
+    this.spotId,
+  });
+
+  factory TimedCase.fromJson(Map<String, Object?> json) => TimedCase(
+    id: json['id'] as String,
+    type: json['type'] as String,
+    kind: json['kind'] as String,
+    state: json['state'] as String,
+    dueAt: json['due_at'] as String,
+    bucket: json['bucket'] as String,
+    rank: (json['rank'] as num).toInt(),
+    version: json['version'] == null ? null : json['version'] as String,
+    lastActivityAt: json['last_activity_at'] as String,
+    suspicious: json['suspicious'] as bool,
+    reportCount: json['report_count'] == null
+        ? null
+        : (json['report_count'] as num).toInt(),
+    hiddenParts: json['hidden_parts'] == null
+        ? null
+        : [for (final e in json['hidden_parts'] as List) e as String],
+    spotId: json['spot_id'] == null ? null : json['spot_id'] as String,
+  );
+
+  /// 客服＝案件 id（admin_v1.support_request 的 p_id）；檢舉＝組內最早一則的 id（admin_v1.content_report 的 p_id）
+  final String id;
+
+  final String type;
+
+  /// 客服＝案件類型（general、data_issue、complaint、privacy、account_deletion）；檢舉＝target（rider_name、spot_name、text、impersonation、other）
+  final String kind;
+
+  /// 客服：send_failed 最後一則回覆寄送失敗且不再自動重試；system 不能回覆（刪除帳號、個資請求未確認本人），由系統處理；awaiting_admin 等客服回覆；awaiting_user 等對方。檢舉：spot_deleted 點位已被刪除；held 被檢舉的部分遮蔽中；open 沒有遮蔽（other，或命中不立即隱藏的規則）
+  final String state;
+
+  /// 期限：5 個工作天結束（台灣時間，依 public.holidays；補班日算工作日）。客服從送出或重新開啟起算，檢舉從組內最早一則起算
+  final String dueAt;
+
+  /// waiting＝awaiting_user、system；其餘依期限（today＝今天結束前到期，台灣時間）
+  final String bucket;
+
+  /// 排序第一鍵：send_failed 0、overdue 1、today／later 2、waiting 3
+  final int rank;
+
+  /// 之後的寫入帶回比對（不符回 409）。客服＝案件狀態與最後一則往來紀錄的時間；檢舉＝點位 updated_at（點位已刪除時 null）
+  final String? version;
+
+  final String lastActivityAt;
+
+  /// 客服：寄件人未通過驗證的信；檢舉一律 false
+  final bool suspicious;
+
+  /// 檢舉：組內處理中的檢舉數；客服 null
+  final int? reportCount;
+
+  /// 檢舉：目前遮蔽中的部分（空陣列＝沒有遮蔽，不要顯示「放回 App」）；客服 null
+  final List<String>? hiddenParts;
+
+  /// 檢舉的點位；客服 null
+  final String? spotId;
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'type': type,
+    'kind': kind,
+    'state': state,
+    'due_at': dueAt,
+    'bucket': bucket,
+    'rank': rank,
+    'version': version,
+    'last_activity_at': lastActivityAt,
+    'suspicious': suspicious,
+    'report_count': reportCount,
+    'hidden_parts': hiddenParts,
+    'spot_id': spotId,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is TimedCase &&
+      other.id == id &&
+      other.type == type &&
+      other.kind == kind &&
+      other.state == state &&
+      other.dueAt == dueAt &&
+      other.bucket == bucket &&
+      other.rank == rank &&
+      other.version == version &&
+      other.lastActivityAt == lastActivityAt &&
+      other.suspicious == suspicious &&
+      other.reportCount == reportCount &&
+      _equal(other.hiddenParts, hiddenParts) &&
+      other.spotId == spotId;
+
+  @override
+  int get hashCode => Object.hashAll([
+    id,
+    type,
+    kind,
+    state,
+    dueAt,
+    bucket,
+    rank,
+    version,
+    lastActivityAt,
+    suspicious,
+    reportCount,
+    _hash(hiddenParts),
+    spotId,
+  ]);
+}
+
+class TimedCasePage {
+  const TimedCasePage({required this.items, this.nextCursor});
+
+  factory TimedCasePage.fromJson(Map<String, Object?> json) => TimedCasePage(
+    items: [
+      for (final e in json['items'] as List)
+        TimedCase.fromJson(e as Map<String, Object?>),
+    ],
+    nextCursor: json['next_cursor'],
+  );
+
+  final List<TimedCase> items;
+
+  /// 還有下一頁時的游標；沒有時 null
+  final Object? nextCursor;
+
+  Map<String, Object?> toJson() => {
+    'items': [for (final e in items) e.toJson()],
+    'next_cursor': nextCursor,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is TimedCasePage &&
+      _equal(other.items, items) &&
+      _equal(other.nextCursor, nextCursor);
+
+  @override
+  int get hashCode => Object.hashAll([_hash(items), _hash(nextCursor)]);
+}
+
+/// all＝overdue＋today＋later（waiting 另計）；send_failed 也算在 all 與它的 bucket 裡。取不到時用戶端顯示未知，不要顯示 0
+class TimedCaseCounts {
+  const TimedCaseCounts({
+    required this.all,
+    required this.overdue,
+    required this.today,
+    required this.later,
+    required this.waiting,
+    required this.sendFailed,
+    required this.byKind,
+    required this.asOf,
+  });
+
+  factory TimedCaseCounts.fromJson(Map<String, Object?> json) =>
+      TimedCaseCounts(
+        all: (json['all'] as num).toInt(),
+        overdue: (json['overdue'] as num).toInt(),
+        today: (json['today'] as num).toInt(),
+        later: (json['later'] as num).toInt(),
+        waiting: (json['waiting'] as num).toInt(),
+        sendFailed: (json['send_failed'] as num).toInt(),
+        byKind: Map<String, Object?>.from(json['by_kind'] as Map),
+        asOf: json['as_of'] as String,
+      );
+
+  final int all;
+
+  final int overdue;
+
+  final int today;
+
+  final int later;
+
+  final int waiting;
+
+  final int sendFailed;
+
+  /// 只算 all 的列；鍵是 support、report、`support:<類型>`、`report:<target>`，0 筆的鍵不出現
+  final Map<String, Object?> byKind;
+
+  final String asOf;
+
+  Map<String, Object?> toJson() => {
+    'all': all,
+    'overdue': overdue,
+    'today': today,
+    'later': later,
+    'waiting': waiting,
+    'send_failed': sendFailed,
+    'by_kind': byKind,
+    'as_of': asOf,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is TimedCaseCounts &&
+      other.all == all &&
+      other.overdue == overdue &&
+      other.today == today &&
+      other.later == later &&
+      other.waiting == waiting &&
+      other.sendFailed == sendFailed &&
+      _equal(other.byKind, byKind) &&
+      other.asOf == asOf;
+
+  @override
+  int get hashCode => Object.hashAll([
+    all,
+    overdue,
+    today,
+    later,
+    waiting,
+    sendFailed,
+    _hash(byKind),
+    asOf,
+  ]);
 }
 
 bool _equal(Object? a, Object? b) {
