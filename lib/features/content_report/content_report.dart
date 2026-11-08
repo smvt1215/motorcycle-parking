@@ -290,10 +290,15 @@ class _ContentReportSheetState extends State<ContentReportSheet> {
               spotName: spot.name,
             ),
             selected: target == t,
-            onTap: () => setState(() {
-              target = t;
-              noteMissing = false;
-            }),
+            onTap: () {
+              // Picking a reason puts the keyboard away (iPhone report,
+              // 2026-11-08): Zhuyin has no key for it.
+              FocusManager.instance.primaryFocus?.unfocus();
+              setState(() {
+                target = t;
+                noteMissing = false;
+              });
+            },
           ),
         const SizedBox(height: 12),
         Text(

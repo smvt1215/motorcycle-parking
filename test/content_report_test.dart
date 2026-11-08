@@ -410,6 +410,69 @@ void main() {
         });
       }
 
+      // iPhone report (2026-11-08): picking a reason while typing the
+      // note left the keyboard up.
+      for (final (name, size) in layouts) {
+        testWidgetsOn('${platform.name} $name：打字中點檢舉項目會收起鍵盤並選取', (
+          tester,
+        ) async {
+          setUpView(tester, platform, size);
+          final store = (await tester.runAsync(reportStore))!;
+          await openReport(tester, store, riderSpot);
+          final noteField = find.byKey(const ValueKey('content-report-note'));
+          await tester.showKeyboard(noteField);
+          bool focused() => tester
+              .widget<EditableText>(find.byType(EditableText))
+              .focusNode
+              .hasFocus;
+          expect(focused(), isTrue);
+          await pick(tester, ContentReportTarget.spotName);
+          expect(focused(), isFalse);
+          expect(submitEnabled(tester), isTrue);
+          await tester.showKeyboard(noteField);
+          expect(focused(), isTrue);
+          await pick(tester, ContentReportTarget.other);
+          expect(focused(), isFalse);
+          expect(
+            find.text(contentReportNoteLabel(required: true)),
+            findsOneWidget,
+          );
+          expect(tester.takeException(), isNull);
+        });
+      }
+
+      // iPhone report (2026-11-08): closing the keyboard dropped the form
+      // and bounced it back. Each frame of the keyboard going down moves
+      // 送出檢舉 down with it, never past it and never back up.
+      testWidgetsOn('${platform.name} 收鍵盤時送出檢舉跟著鍵盤上緣往下，不跳動', (tester) async {
+        const size = Size(390, 844);
+        setUpView(tester, platform, size);
+        final store = (await tester.runAsync(reportStore))!;
+        await openReport(tester, store, riderSpot);
+        await pick(tester, ContentReportTarget.other);
+        final noteField = find.byKey(const ValueKey('content-report-note'));
+        await tester.showKeyboard(noteField);
+        tester.view.viewInsets = const FakeViewPadding(bottom: 336);
+        addTearDown(tester.view.resetViewInsets);
+        await tester.pumpAndSettle();
+        final title = tester.getRect(find.text(contentReportTitle));
+        var last = tester.getRect(submitButton).bottom;
+        for (var inset = 336.0; inset >= 0; inset -= 24) {
+          tester.view.viewInsets = FakeViewPadding(bottom: inset);
+          await tester.pump(const Duration(milliseconds: 16));
+          final bottom = tester.getRect(submitButton).bottom;
+          expect(bottom, greaterThanOrEqualTo(last), reason: 'inset $inset');
+          expect(bottom, lessThanOrEqualTo(size.height - inset));
+          // The title stays where it was.
+          expect(tester.getRect(find.text(contentReportTitle)), title);
+          last = bottom;
+        }
+        tester.view.viewInsets = FakeViewPadding.zero;
+        await tester.pumpAndSettle();
+        expect(tester.getRect(submitButton).bottom, greaterThanOrEqualTo(last));
+        expect(tester.takeException(), isNull);
+      });
+
       testWidgetsOn('${platform.name} 選「其他」但附註空白：顯示錯誤、不送出', (tester) async {
         setUpView(tester, platform, const Size(390, 844));
         final store = (await tester.runAsync(reportStore))!;
