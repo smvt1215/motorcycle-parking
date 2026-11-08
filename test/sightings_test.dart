@@ -511,7 +511,11 @@ void main() {
         ['b1'],
       );
       store.unfollowSightings(lot);
-      expect(store.riderSeats(sightingDetailWindow).of(lotId), isEmpty);
+      // Closed: the map keeps the 15-minute answer the sheet read.
+      expect(
+        store.riderSeats(sightingMapWindow).of(lotId).map((s) => s.areaId),
+        ['b1'],
+      );
     });
 
     testWidgets('送出後重讀；讀取失敗保留舊的', (tester) async {
@@ -560,12 +564,20 @@ void main() {
     });
 
     testWidgets('蓋在上面的卡片關閉：交還給下面那張，重新讀取', (tester) async {
-      final source = FakeSightings([row(lotId, zone: 'b2', at: detailDay)]);
+      final source = FakeSightings(const []);
       final store = await sightedStore(tester, source);
       await tester.runAsync(() async {
         await store.followSightings(lot);
         await store.followSightings(street);
       });
+      // Only in the details' window: what the card below reads again.
+      source.rows = [
+        row(
+          lotId,
+          zone: 'b2',
+          at: detailDay.subtract(const Duration(minutes: 20)),
+        ),
+      ];
       expect(store.riderSeats(30).of(lotId), isEmpty);
       await tester.runAsync(() async {
         store.unfollowSightings(street);
@@ -576,6 +588,31 @@ void main() {
       await tester.runAsync(() => store.followSightings(lot));
       store.unfollowSightings(lot);
       expect(store.riderSeats(30).of(lotId), hasLength(1));
+    });
+
+    testWidgets('關閉卡片：地圖留著卡片讀到的最新回報，讀到沒有回報就清掉舊的', (tester) async {
+      final source = FakeSightings(const []);
+      final store = await sightedStore(tester, source);
+      final older = detailDay.subtract(const Duration(minutes: 5));
+      store.sightings = {
+        lotId: [row(lotId, zone: 'b2', level: 0, at: older)],
+        streetId: [row(streetId, zone: 'b1', at: detailDay)],
+      };
+      source.rows = [row(lotId, zone: 'b2', level: 3, at: detailDay)];
+      await tester.runAsync(() => store.followSightings(lot));
+      store.unfollowSightings(lot);
+      expect(
+        store.riderSeats(sightingMapWindow).of(lotId).map((s) => s.level),
+        [riderLevelFromBackend(3)],
+      );
+      expect(store.sightings[streetId], hasLength(1));
+
+      source.rows = const [];
+      await tester.runAsync(() => store.followSightings(lot));
+      store.unfollowSightings(lot);
+      expect(store.riderSeats(sightingMapWindow).of(lotId), isEmpty);
+      expect(store.sightings.containsKey(lotId), isFalse);
+      expect(store.sightings[streetId], hasLength(1));
     });
 
     testWidgets('詳情讀取失敗：地圖讀到的回報照常顯示，不寫成沒有回報', (tester) async {

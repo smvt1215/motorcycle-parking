@@ -509,6 +509,14 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
       if (_disposed || read != _followRead) return;
       _followedNear = near;
       _followedWide = wide;
+      // The map's window too: closing the sheet keeps the newest answer
+      // instead of going back to the viewport's older one.
+      final id = spot.id.toLowerCase();
+      sightings = {
+        for (final MapEntry(:key, :value) in sightings.entries)
+          if (key != id) key: value,
+        id: ?near[id],
+      };
       notifyListeners();
     } catch (_) {}
   }
