@@ -185,6 +185,30 @@ void main() {
   });
   tearDown(() => policyUrls = (privacy: '', terms: ''));
 
+  // User-approved words (2026-11-08): Apple always signs in again.
+  for (final (account, identity, note) in [
+    ('Google', google(signedInAt: now), deletionReauthNote),
+    ('Apple', apple(signedInAt: now), deletionReauthNoteApple),
+  ]) {
+    testWidgets('P15a：送出按鈕下的再登入說明依帳號（$account）', (tester) async {
+      final app = await _mount(tester, FakeDeletionGateway(current: identity));
+      await _openPage(tester, app);
+      final noteFinder = find.byKey(const ValueKey('deletion-reauth-note'));
+      await tester.scrollUntilVisible(
+        noteFinder,
+        300,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const ValueKey('deletion-scroll')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      expect(tester.widget<Text>(noteFinder).data, note);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('P10：刪除帳號獨立一組，隱私權政策、服務條款與資料來源列', (tester) async {
     policyUrls = (
       privacy: 'https://example.com/privacy',
@@ -441,7 +465,8 @@ void main() {
         await _openPage(tester, app);
         await _tapSubmit(tester);
         await _confirm(tester);
-        expect(find.textContaining('撤銷「使用 Apple 登入」的授權'), findsOneWidget);
+        // The sheet's own words; the page note under it also names the revoke.
+        expect(find.text(reauthBodyApple), findsOneWidget);
         expect(find.text('Apple ID・隱藏的電子郵件'), findsOneWidget);
         final button = find.byKey(const ValueKey('reauth-sign-in'));
         await tester.ensureVisible(button);
