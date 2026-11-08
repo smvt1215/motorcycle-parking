@@ -195,6 +195,14 @@ class _LocationPickerState extends State<LocationPicker>
     });
   }
 
+  /// Rounded corners for the map, except over the native Google map on
+  /// iOS: there the rounded clip of the native view left everything after
+  /// the map in this form undrawn (blank, though still tappable) on iPhone
+  /// while Android showed it (reports, 2026-11-08). Square corners there.
+  Widget _clip(Widget map) => isCupertino && widget.mapBuilder == null
+      ? map
+      : ClipRRect(borderRadius: BorderRadius.circular(10), child: map);
+
   /// The map, kept but not drawn while the address search is open over it.
   /// On iOS the Google map is a native view; with a sheet and the keyboard
   /// over it, iOS drew parts of this page over the search panel and left
@@ -480,9 +488,8 @@ class _LocationPickerState extends State<LocationPicker>
         ],
         Semantics(
           label: '位置地圖：拖曳標記選擇位置，拖曳地圖空白處可平移',
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: SizedBox(
+          child: _clip(
+            SizedBox(
               height: widget.height,
               child: overlay
                   ? Stack(
