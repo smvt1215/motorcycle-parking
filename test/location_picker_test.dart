@@ -1,12 +1,16 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:google_maps_flutter_platform_interface/google_maps_flutter_platform_interface.dart'
+    as pi;
 import 'package:material_ui/material_ui.dart';
 import 'package:motorcycle_parking/core/address_search.dart';
 import 'package:motorcycle_parking/core/geo.dart';
 import 'package:motorcycle_parking/core/town_lookup.dart';
 import 'package:motorcycle_parking/domain/location_check.dart';
 import 'package:motorcycle_parking/ui/location_picker.dart';
+
+import 'google_map_test.dart' show FakeMapsPlatform;
 
 const _xml = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <townVillageItem>
@@ -543,6 +547,10 @@ void main() {
             tester.view.physicalSize = Size(width, 900);
             addTearDown(tester.view.resetPhysicalSize);
             addTearDown(tester.view.resetDevicePixelRatio);
+            // The native map against a fake platform, no plugin channel.
+            final previous = pi.GoogleMapsFlutterPlatform.instance;
+            pi.GoogleMapsFlutterPlatform.instance = FakeMapsPlatform();
+            addTearDown(() => pi.GoogleMapsFlutterPlatform.instance = previous);
             await tester.pumpWidget(
               MaterialApp(
                 home: Scaffold(
