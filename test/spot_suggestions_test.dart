@@ -115,7 +115,9 @@ Future<void> openDetails(
       builder: (context, child) => MediaQuery(
         data: MediaQuery.of(context)
             .copyWith(textScaler: TextScaler.linear(scale)),
-        child: child!,
+        // The app's bridge for CNBottomSheet's Material localizations.
+        // ignore: deprecated_member_use
+        child: MaterialUiCompatibilityBridge(child: child!),
       ),
       home: Scaffold(
         body: Builder(
@@ -148,6 +150,38 @@ Future<void> showInSheet(WidgetTester tester, Finder finder) async {
 }
 
 void main() {
+  test('位置卡寫縣市、區與地址，不寫經緯度', () {
+    ParkingSpot at({
+      String city = '臺北市',
+      String district = '中山區',
+      String address = '',
+      String road = '',
+    }) => ParkingSpot(
+      id: 'a',
+      name: 'x',
+      lat: 25.05,
+      lng: 121.52,
+      city: city,
+      district: district,
+      address: address,
+      roadSegment: road,
+      spaceType: SpaceType.freeMotorcycle,
+    );
+    expect(locationSummary(at()), '目前位置：臺北市中山區');
+    expect(locationSummary(at(district: '')), '目前位置：臺北市');
+    expect(locationSummary(at(city: '', district: '')), '目前位置：縣市與區未提供');
+    expect(locationSummary(at(address: '南京東路二段 1 號')), '臺北市中山區 南京東路二段 1 號');
+    expect(
+      locationSummary(at(address: '臺北市中山區南京東路二段 1 號')),
+      '臺北市中山區南京東路二段 1 號',
+    );
+    expect(locationSummary(at(address: '中山區南京東路二段 1 號')), '臺北市中山區南京東路二段 1 號');
+    expect(
+      locationSummary(at(road: '林森北路（長安東路至南京東路）')),
+      '臺北市中山區 林森北路（長安東路至南京東路）',
+    );
+  });
+
   for (final dismissal in ['完成', '關閉', '返回', '下滑']) {
     testWidgets('建議成功後以$dismissal離開，同時關閉父面板', (tester) async {
       tester.view.devicePixelRatio = 1;
@@ -1005,9 +1039,13 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  Future<void> openLocation(WidgetTester tester, RecordingStore store) async {
+  Future<void> openLocation(
+    WidgetTester tester,
+    RecordingStore store, {
+    Size size = const Size(390, 844),
+  }) async {
     tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(390, 844);
+    tester.view.physicalSize = size;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await openDetails(tester, store);
@@ -1019,6 +1057,29 @@ void main() {
     await tester.tap(find.text('位置'));
     await tester.pumpAndSettle();
     captureForm(tester);
+  }
+
+  // N1's floating controls at phone and tablet widths, both platforms.
+  for (final size in const [Size(390, 844), Size(820, 1180), Size(1180, 820)]) {
+    testWidgets(
+      '位置不正確：地圖疊加控制在 ${size.width.toInt()}×${size.height.toInt()} 可點、不溢出',
+      (tester) async {
+        final store = (await tester.runAsync(createStore))!;
+        addTearDown(store.dispose);
+        await openLocation(tester, store, size: size);
+        for (final key in ['location-expand', 'location-locate']) {
+          await reveal(tester, find.byKey(ValueKey(key)));
+          expect(find.byKey(ValueKey(key)).hitTestable(), findsOneWidget);
+        }
+        expect(find.text('目前位置：臺北市'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      variant: TargetPlatformVariant({
+        TargetPlatform.iOS,
+        TargetPlatform.android,
+      }),
+    );
   }
 
   Future<void> sendSuggestion(WidgetTester tester) async {
@@ -1035,7 +1096,21 @@ void main() {
       addTearDown(store.dispose);
       if (!found) store.town = null;
       await openLocation(tester, store);
-      expect(find.text('在原位置'), findsOneWidget);
+      // N1's map (#190): the place by name, the controls on the map, and
+      // no coordinates or full-width search above it.
+      expect(find.text('目前位置：臺北市'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(Form).last,
+          matching: find.textContaining('25.03'),
+        ),
+        findsNothing,
+      );
+      expect(find.text('搜尋門牌、路段或路口'), findsNothing);
+      // No backend here, so no search; the rest float on the map.
+      for (final key in ['location-expand', 'location-locate']) {
+        expect(find.byKey(ValueKey(key)), findsOneWidget);
+      }
       await sendSuggestion(tester);
       expect(find.text('請把標記拖到停車格的實際位置，和目前不同才能送出'), findsOneWidget);
       expect(store.submissions, isEmpty);
@@ -1047,7 +1122,13 @@ void main() {
       await tester.pump(const Duration(milliseconds: 700));
       await tester.pumpAndSettle();
       expect(find.textContaining('請把標記拖到'), findsNothing);
-      expect(find.textContaining('距原位置'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(Form).last,
+          matching: find.textContaining('25.03'),
+        ),
+        findsNothing,
+      );
       expect(find.textContaining('位置往北移動約'), findsOneWidget);
       expect(
         find.textContaining('行政區從「未提供」改成「信義區」'),
@@ -1090,8 +1171,8 @@ void main() {
       ..town = const Town('新北市', '板橋區')
       ..fix = const LocationFix(25.0369, 121.5623, 6);
     await openLocation(tester, store);
-    await reveal(tester, find.text('移到我的位置'));
-    await tester.tap(find.text('移到我的位置'));
+    await reveal(tester, find.byKey(const ValueKey('location-locate')));
+    await tester.tap(find.byKey(const ValueKey('location-locate')));
     await tester.pump(const Duration(milliseconds: 700));
     await tester.pumpAndSettle();
     expect(find.text('GPS 精準度約 ±6 m'), findsOneWidget);
