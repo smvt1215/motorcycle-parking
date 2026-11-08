@@ -114,6 +114,17 @@ bool submitEnabled(WidgetTester tester) {
 
 Future<void> pick(WidgetTester tester, ContentReportTarget target) async {
   final tile = find.byKey(ValueKey('content-report-${target.wire}'));
+  // Built lazily: on a short sheet the tile may not exist until scrolled to.
+  await tester.scrollUntilVisible(
+    tile,
+    100,
+    scrollable: find
+        .descendant(
+          of: find.byKey(const ValueKey('content-report-form')),
+          matching: find.byType(Scrollable),
+        )
+        .first,
+  );
   await centre(tester, tile);
   await tester.tap(tile);
   await tester.pumpAndSettle();
@@ -326,6 +337,76 @@ void main() {
           await tester.tap(find.byKey(const ValueKey('content-report-done')));
           await tester.pumpAndSettle();
           expect(find.byType(ContentReportSheet), findsNothing);
+        });
+      }
+
+      // iPhone report (2026-11-08): the keyboard covered the note and
+      // 送出檢舉 after picking 其他. A phone on its side (Codex #379) leaves
+      // only ~170 pt above its keyboard.
+      for (final (name, size, inset) in [
+        for (final (name, size) in layouts) (name, size, 300.0),
+        ('phone landscape', const Size(844, 390), 216.0),
+      ]) {
+        testWidgetsOn('${platform.name} $name：鍵盤出現時附註欄與送出檢舉在鍵盤上方', (
+          tester,
+        ) async {
+          setUpView(tester, platform, size);
+          final store = (await tester.runAsync(reportStore))!;
+          await openReport(tester, store, riderSpot);
+          await pick(tester, ContentReportTarget.other);
+          final noteField = find.byKey(const ValueKey('content-report-note'));
+          await tester.showKeyboard(noteField);
+          tester.view.viewInsets = FakeViewPadding(bottom: inset);
+          addTearDown(tester.view.resetViewInsets);
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+
+          final keyboardTop = size.height - inset;
+          // The focused field scrolled clear of the keyboard.
+          final field = tester.getRect(find.byType(EditableText));
+          expect(field.top, greaterThanOrEqualTo(0), reason: '$field');
+          expect(
+            field.bottom,
+            lessThanOrEqualTo(keyboardTop),
+            reason: '$field',
+          );
+          if (size.height > size.width) {
+            // Pinned right above the keyboard, under the field.
+            final submit = tester.getRect(submitButton);
+            expect(
+              submit.bottom,
+              lessThanOrEqualTo(keyboardTop),
+              reason: '$submit',
+            );
+            expect(field.bottom, lessThanOrEqualTo(submit.top));
+          }
+          // A phone on its side: too short to pin, so it scrolls to it.
+          await tester.ensureVisible(submitButton);
+          await tester.pumpAndSettle();
+          expect(
+            tester.getRect(submitButton).bottom,
+            lessThanOrEqualTo(keyboardTop),
+          );
+          expect(submitButton.hitTestable(), findsOneWidget);
+          await tester.ensureVisible(noteField);
+          await tester.pumpAndSettle();
+          await tester.enterText(noteField, '其他原因');
+          await tester.pumpAndSettle();
+
+          // No dismiss key on Zhuyin: a tap on the form's blank part puts
+          // the keyboard away, and 送出檢舉 still sends.
+          bool focused() => tester
+              .widget<EditableText>(find.byType(EditableText))
+              .focusNode
+              .hasFocus;
+          expect(focused(), isTrue);
+          // The form's margin beside the field.
+          final beside = tester.getRect(noteField);
+          await tester.tapAt(Offset(beside.left - 10, beside.center.dy));
+          await tester.pumpAndSettle();
+          expect(focused(), isFalse);
+          await send(tester);
+          expect(store.sent.single['note'], '其他原因');
         });
       }
 
