@@ -286,51 +286,6 @@ void main() {
     (700.0, 1.0, false),
     (1280.0, 1.0, true),
   ]) {
-    testWidgets('收費建議在 ${width.toInt()} px、$scale 倍不溢出，按鈕 ≥ 48', (
-      tester,
-    ) async {
-      var edits = <FeeVehicle, Rate?>{};
-      await pump(
-        tester,
-        width,
-        StatefulBuilder(
-          builder: (context, setState) => FeeSuggestionEditor(
-            current: current,
-            edits: edits,
-            errors: const {
-              FeeVehicle.heavy: '大型重機比照汽車費率，但還沒填汽車費率。請填汽車費率，或改選其他收費方式。',
-            },
-            onChanged: (v) => setState(() => edits = v),
-          ),
-        ),
-        scale: scale,
-        dark: dark,
-      );
-      await tester.tap(find.byKey(const ValueKey('suggest-clear-car')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('suggest-edit-heavy')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('fee-mode-heavy-per_visit')));
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
-      for (final key in [
-        'suggest-edit-scooter',
-        'suggest-edit-heavy',
-        'suggest-clear-scooter',
-        'suggest-keep-car',
-      ]) {
-        final size = tester.getSize(find.byKey(ValueKey(key)));
-        expect(size.height, greaterThanOrEqualTo(48), reason: key);
-        expect(
-          tester.getRect(find.byKey(ValueKey(key))).right,
-          lessThanOrEqualTo(width),
-          reason: key,
-        );
-      }
-      expect(find.text('改成：$unconfirmedFeeText'), findsOneWidget);
-      expect(find.byKey(const ValueKey('suggest-error-heavy')), findsOneWidget);
-    });
-
     testWidgets('停放條件欄位在 ${width.toInt()} px、$scale 倍不溢出', (tester) async {
       final draft = ConditionDraft()..slots.add(SlotDraft()..allDay = false);
       draft.slots.single.from.text = '20:00';

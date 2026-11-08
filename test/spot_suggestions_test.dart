@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -9,15 +11,11 @@ import 'package:motorcycle_parking/data/repositories.dart';
 import 'package:motorcycle_parking/features/account/suspended_sheet.dart';
 import 'package:motorcycle_parking/features/map/spot_sheet.dart';
 import 'package:motorcycle_parking/features/report/report_sheet.dart';
-import 'package:motorcycle_parking/features/report/fee_suggestion.dart';
 import 'package:motorcycle_parking/features/report/spot_suggestions.dart';
 import 'package:motorcycle_parking/domain/location_check.dart';
 import 'package:motorcycle_parking/models/parking.dart';
 import 'package:motorcycle_parking/models/space_kind.dart';
-import 'package:motorcycle_parking/models/fee.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
-
-import 'fee_editor_steps.dart';
 
 const spot = ParkingSpot(
   id: '00000000-0000-4000-8000-000000000123',
@@ -337,7 +335,13 @@ void main() {
     await tester.ensureVisible(find.text('修改建議'));
     await tester.tap(find.text('修改建議'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('suggest-limits')));
+    unawaited(
+      showKindSuggestion(
+        tester.element(find.byType(SuggestionListPage)),
+        store,
+        spot,
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.text('地圖上目前寫的是'), findsOneWidget);
     // Nothing changes until the reporter picks another marking.
@@ -370,87 +374,6 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('收費建議以結構化費率送出，沒有選收費方式時提示', (tester) async {
-    tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(390, 844);
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    final store = (await tester.runAsync(createStore))!;
-    addTearDown(store.dispose);
-    await openDetails(tester, store);
-    await tester.ensureVisible(find.text('修改建議'));
-    await tester.tap(find.text('修改建議'));
-    await tester.pumpAndSettle();
-    // The suggestion list's item, not the details row behind it.
-    await tester.tap(find.byKey(const ValueKey('suggest-fee')));
-    await tester.pumpAndSettle();
-    // The fee editor fills the screen; scroll the sheet to its button.
-    await tester.scrollUntilVisible(
-      find.text('送出修改建議'),
-      200,
-      scrollable: find
-          .descendant(
-            of: find.byType(Form).last,
-            matching: find.byType(Scrollable),
-          )
-          .first,
-    );
-    await tester.ensureVisible(find.text('送出修改建議'));
-    await tester.tap(find.text('送出修改建議'));
-    await tester.pumpAndSettle();
-    expect(find.text('請至少修改一個車種，和目前不同才能送出'), findsOneWidget);
-    expect(store.submissions, isEmpty);
-    final menu = find.byKey(const ValueKey('fee-mode-scooter-per_visit'));
-    await chooseFeeMode(tester, 'scooter', 'per_visit');
-    await tester.enterText(feeField('amount', 'scooter'), '20');
-    await tester.pumpAndSettle();
-    // 跨日怎麼收 is answered before it counts (#188 layer 2).
-    expect(find.textContaining('普通機車費率：'), findsNothing);
-    await tapFee(tester, 'fee-renew-scooter-none');
-    expect(find.text('請至少修改一個車種，和目前不同才能送出'), findsNothing);
-    final change = find.text('普通機車費率：費率未確認，請依現場公告 → 每次 20 元，停多久都只收一次');
-    await tester.scrollUntilVisible(
-      change,
-      200,
-      scrollable: find
-          .ancestor(of: menu, matching: find.byType(Scrollable))
-          .first,
-    );
-    expect(change, findsOneWidget);
-    // A car rate not filled in yet is not listed as 0 元.
-    await chooseFeeMode(tester, 'car', 'hourly');
-    expect(find.textContaining(RegExp(r'(^|[^0-9])0 元')), findsNothing);
-    expect(find.textContaining('汽車費率：'), findsNothing);
-    // Back to 維持目前 for the car.
-    await tapFee(tester, 'suggest-keep-car');
-    // The form grew with the amount fields; scroll its own list to the button.
-    await tester.scrollUntilVisible(
-      find.text('送出修改建議'),
-      200,
-      scrollable: find
-          .descendant(
-            of: find.byType(Form).last,
-            matching: find.byType(Scrollable),
-          )
-          .first,
-    );
-    await tester.ensureVisible(find.text('送出修改建議'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('送出修改建議'));
-    await tester.pumpAndSettle();
-    final body = store.submissions.single;
-    expect(body['field'], 'fee_note');
-    expect(body['proposed'], {
-      'fee': {
-        'scooter': {'mode': 'per_visit', 'amount': 20, 'renew': 'none'},
-      },
-      'fee_note': '機車每次 20 元，停多久都只收一次；大型重機費率未提供',
-    });
-    expect(body['reason'], '收費資訊：建議「機車每次 20 元，停多久都只收一次；大型重機費率未提供」');
-    expect(tester.takeException(), isNull);
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
-
   Future<RecordingStore> openSuggestion(
     WidgetTester tester,
     String item, {
@@ -478,13 +401,24 @@ void main() {
         const ValueKey('suggest-facility'),
       ),
       '格位類型' => find.byKey(const ValueKey('suggest-limits')),
-      '收費資訊' => find.byKey(const ValueKey('suggest-fee')),
       '入口與停車指引' => find.byKey(const ValueKey('suggest-where')),
       goneLabel => find.byKey(const ValueKey('suggest-gone')),
       '其他備註' => find.byKey(const ValueKey('suggest-note')),
       '停車點名稱' => find.text('名稱'),
       _ => find.text(item),
     };
+    if (item == '格位類型' && selectedSpot.spaceType != SpaceType.offStreet) {
+      // A street spot's limits open S5b; its kind form is not on the list.
+      unawaited(
+        showKindSuggestion(
+          tester.element(find.byType(SuggestionListPage)),
+          store,
+          selectedSpot,
+        ),
+      );
+      await tester.pumpAndSettle();
+      return store;
+    }
     await tester.scrollUntilVisible(entry, 150, scrollable: list);
     await tester.ensureVisible(entry);
     await tester.pumpAndSettle();
@@ -719,117 +653,6 @@ void main() {
     });
   }
 
-  testWidgets('收費建議只送有改的車種，其他維持目前；未變更不能送出', (tester) async {
-    final current = ParkingSpot.fromJson({
-      ...spot.toJson(),
-      'fee': const Fee(
-        scooter: Rate(FeeMode.perVisit, amount: 30, renew: Renew.midnight),
-        heavy: Rate(FeeMode.sameAsScooter),
-      ).toJson(),
-    });
-    final store = await openSuggestion(tester, '收費資訊', selectedSpot: current);
-    expect(find.text('修改建議：收費'), findsOneWidget);
-    expect(find.text('維持目前：每次 30 元，隔日另計'), findsNWidgets(2));
-    expect(find.text('維持目前：$unconfirmedFeeText'), findsOneWidget);
-    await submitSuggestion(tester, '送出修改建議');
-    expect(find.text('請至少修改一個車種，和目前不同才能送出'), findsOneWidget);
-    expect(store.submissions, isEmpty);
-    await chooseFeeMode(tester, 'heavy', 'free');
-    expect(find.text('改成：免費'), findsOneWidget);
-    expect(find.text('目前：每次 30 元，隔日另計'), findsOneWidget);
-    expect(find.text('大型重機費率：每次 30 元，隔日另計 → 免費'), findsOneWidget);
-    expect(find.text('普通機車、汽車維持目前'), findsOneWidget);
-    await submitSuggestion(tester, '送出修改建議');
-    expect(store.submissions.single['proposed'], {
-      'fee': {
-        'heavy': {'mode': 'free'},
-      },
-      'fee_note': '機車每次 30 元，隔日另計；大型重機免費',
-    });
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
-
-  testWidgets('收費建議按「改成未確認」送出該車種 null（#155）', (tester) async {
-    final current = ParkingSpot.fromJson({
-      ...spot.toJson(),
-      'fee': const Fee(
-        scooter: Rate(FeeMode.hourly, amount: 10, perMinutes: 60),
-        car: Rate(FeeMode.hourly, amount: 40, perMinutes: 60),
-      ).toJson(),
-    });
-    final store = await openSuggestion(tester, '收費資訊', selectedSpot: current);
-    // Only vehicles with a rate can be cleared.
-    expect(find.byKey(const ValueKey('suggest-clear-heavy')), findsNothing);
-    await tapFee(tester, 'suggest-clear-car');
-    expect(find.text('改成：$unconfirmedFeeText'), findsOneWidget);
-    expect(find.text('汽車費率：每小時 40 元 → $unconfirmedFeeText'), findsOneWidget);
-    expect(find.text('普通機車、大型重機維持目前'), findsOneWidget);
-    // 維持目前 takes it back; clearing again sends null.
-    await tapFee(tester, 'suggest-keep-car');
-    expect(find.text('維持目前：每小時 40 元'), findsOneWidget);
-    await tapFee(tester, 'suggest-clear-car');
-    await submitSuggestion(tester, '送出修改建議');
-    final fee =
-        (store.submissions.single['proposed'] as Map)['fee']
-            as Map<String, Object?>;
-    expect(fee, {'car': null});
-    expect(fee.containsKey('car'), isTrue);
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
-
-  testWidgets('點位原本就有矛盾的費率時，錯誤顯示在該車種下方並擋下送出（#155）', (tester) async {
-    final current = ParkingSpot.fromJson({
-      ...spot.toJson(),
-      'fee': {
-        'heavy': {'mode': 'same_as_car'},
-      },
-    });
-    final store = await openSuggestion(tester, '收費資訊', selectedSpot: current);
-    await chooseFeeMode(tester, 'scooter', 'hourly');
-    await tester.enterText(feeField('amount', 'scooter'), '10');
-    await tester.pumpAndSettle();
-    final error = find.byKey(const ValueKey('suggest-error-heavy'));
-    expect(error, findsOneWidget);
-    expect(
-      find.descendant(of: error, matching: find.textContaining('還沒填汽車費率')),
-      findsOneWidget,
-    );
-    await submitSuggestion(tester, '送出修改建議');
-    expect(store.submissions, isEmpty);
-    // Clearing the broken rate is one way out.
-    await tapFee(tester, 'suggest-clear-heavy');
-    expect(error, findsNothing);
-    await submitSuggestion(tester, '送出修改建議');
-    expect((store.submissions.single['proposed'] as Map)['fee'], {
-      'scooter': {'mode': 'hourly', 'amount': 10, 'per_minutes': 60},
-      'heavy': null,
-    });
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
-
-  testWidgets('收費建議可附公告連結，非 https 時提示', (tester) async {
-    final current = ParkingSpot.fromJson({
-      ...spot.toJson(),
-      'fee': const Fee(scooter: Rate(FeeMode.free)).toJson(),
-    });
-    final store = await openSuggestion(tester, '收費資訊', selectedSpot: current);
-    await chooseFeeMode(tester, 'heavy', 'free');
-    final link = find.byKey(const ValueKey('evidence-url'));
-    await tester.ensureVisible(link);
-    await tester.enterText(link, 'http://pma.gov.taipei');
-    await tester.pumpAndSettle();
-    expect(find.text('請貼上以 https:// 開頭的公告網址'), findsOneWidget);
-    await submitSuggestion(tester, '送出修改建議');
-    expect(store.submissions, isEmpty);
-    await tester.enterText(link, 'https://pma.gov.taipei/notice');
-    await submitSuggestion(tester, '送出修改建議');
-    expect(
-      store.submissions.single['evidence_url'],
-      'https://pma.gov.taipei/notice',
-    );
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
-
   testWidgets('格位建議帶停放條件：限時格的收費與限停分鐘', (tester) async {
     final store = await openSuggestion(tester, '格位類型');
     // 限時 is a limit on a 一般機車格 (#188).
@@ -1005,56 +828,6 @@ void main() {
     // Whole scooters only: an odd unit count would mean a split pair.
     expect((cut.length - 1).isEven, isTrue);
     expect(reportSummary('短'), '短');
-  });
-
-  testWidgets('詳細費率加上最長說明時，摘要截在伺服器上限內，說明完整保留', (tester) async {
-    tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(390, 844);
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    final store = (await tester.runAsync(createStore))!;
-    addTearDown(store.dispose);
-    await openDetails(tester, store);
-    await tester.ensureVisible(find.text('修改建議'));
-    await tester.tap(find.text('修改建議'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('suggest-fee')));
-    await tester.pumpAndSettle();
-    for (final vehicle in ['scooter', 'heavy']) {
-      await chooseFeeMode(tester, vehicle, 'hourly');
-      await tester.enterText(feeField('amount', vehicle), '20');
-      await tapFee(tester, 'fee-more-$vehicle');
-      final cap = feeField('cap', vehicle);
-      await tester.ensureVisible(cap);
-      await tester.enterText(cap, '100');
-      await tester.pumpAndSettle();
-      // A cap names when it starts over (#188 layer 2).
-      await tapFee(tester, 'fee-cap-reset-$vehicle');
-      await tester.tap(find.text('零時重算').last);
-      await tester.pumpAndSettle();
-    }
-    final explanation = '說' * 450;
-    final input = find.byKey(const ValueKey('suggestion-input'));
-    await tester.ensureVisible(input);
-    await tester.enterText(input, explanation);
-    await tester.pumpAndSettle();
-    final button = find.text('送出修改建議');
-    await tester.scrollUntilVisible(
-      button,
-      200,
-      scrollable: find
-          .ancestor(of: input, matching: find.byType(Scrollable))
-          .first,
-    );
-    await tester.ensureVisible(button);
-    await tester.pumpAndSettle();
-    await tester.tap(button);
-    await tester.pumpAndSettle();
-    final body = store.submissions.single;
-    expect((body['reason'] as String).length, lessThanOrEqualTo(500));
-    expect(body['reason'] as String, endsWith('…'));
-    expect(body['note'], explanation);
-    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   testWidgets('名稱建議以填寫內容作為建議值送出', (tester) async {

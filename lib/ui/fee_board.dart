@@ -142,28 +142,43 @@ List<FeeVehicleBoard> feeBoardOf(
   ];
   // As the sentence: a heavy follow of an unknown rate still reads 未提供.
   final follows = fee.heavy?.mode.follows ?? false;
-  if (known.isEmpty && !follows && first == null) return const [];
+  final closed = [
+    for (final v in FeeVehicle.values)
+      if (_rateOf(fee, v)?.mode == FeeMode.notApplicable) v,
+  ];
+  if (known.isEmpty && !follows && first == null && closed.isEmpty) {
+    return const [];
+  }
   // A heavy bike without bays here (不適用, #188 layer 2) is left out.
   final heavyApplies = fee.heavy?.mode != FeeMode.notApplicable;
   final shown = {
     ?first,
     for (final v in FeeVehicle.values)
       if (known.contains(v) || (v == FeeVehicle.heavy && heavyApplies)) v,
+    // Nothing else to show: say so rather than reading as unconfirmed.
+    if (known.isEmpty) ...closed,
   };
   return [for (final v in shown) _vehicleBoard(fee, v)];
 }
 
+Rate? _rateOf(Fee fee, FeeVehicle vehicle) => switch (vehicle) {
+  FeeVehicle.scooter => fee.scooter,
+  FeeVehicle.heavy => fee.heavy,
+  FeeVehicle.car => fee.car,
+};
+
 FeeVehicleBoard _vehicleBoard(Fee fee, FeeVehicle vehicle) {
-  final rate = switch (vehicle) {
-    FeeVehicle.scooter => fee.scooter,
-    FeeVehicle.heavy => fee.heavy,
-    FeeVehicle.car => fee.car,
+  final rate = _rateOf(fee, vehicle);
+  // A follow of a vehicle without bays here (old data; [Fee.followGap]
+  // refuses new ones) has no bays to price either.
+  final followed = switch (rate?.mode) {
+    FeeMode.sameAsScooter => fee.scooter,
+    FeeMode.sameAsCar => fee.car,
+    _ => rate,
   };
-  if (rate?.mode == FeeMode.notApplicable) {
-    return FeeVehicleBoard(
-      vehicle,
-      headline: const FeeLine('不適用', tone: FeeTone.unconfirmed),
-    );
+  if (followed?.mode == FeeMode.notApplicable) {
+    // Stated, not unconfirmed: it asks for no 未確認 closing line.
+    return FeeVehicleBoard(vehicle, headline: const FeeLine('不適用'));
   }
   if (fee.textOf(vehicle.wire) == null) {
     return FeeVehicleBoard(
@@ -237,7 +252,9 @@ _Described _describe(Rate r, int pct) {
           null => null,
         },
       );
-    case FeeMode.notApplicable || FeeMode.sameAsScooter || FeeMode.sameAsCar:
+    case FeeMode.notApplicable:
+      return _plain(const FeeLine('不適用'));
+    case FeeMode.sameAsScooter || FeeMode.sameAsCar:
       return _plain(
         const FeeLine(
           feeUnconfirmed,

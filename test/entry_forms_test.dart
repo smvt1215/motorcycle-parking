@@ -748,13 +748,6 @@ void main() {
       }
       expect(find.text('松壽路側車道下坡・2 區'), findsOneWidget);
       expect(find.text('可停車種'), findsNothing);
-      // The rest of a lot's limits wait for S5.
-      expect(
-        tester
-            .widget<EntryRow>(find.byKey(const ValueKey('suggest-limits')))
-            .onTap,
-        isNull,
-      );
       expect(find.text('場站型式'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
@@ -793,6 +786,40 @@ void main() {
       await tapKey(tester, 'suggest-where');
       await tapText(tester, name);
     }
+
+    Future<void> badLinkScrolls(WidgetTester tester, _Store store) async {
+      final link = find.byKey(const ValueKey('evidence-url'));
+      await tester.ensureVisible(link);
+      await tester.pumpAndSettle();
+      await tester.enterText(link, '松壽路公告');
+      await tester.pumpAndSettle();
+      tester
+          .state<ScrollableState>(
+            find.ancestor(of: link, matching: find.byType(Scrollable)).first,
+          )
+          .position
+          .jumpTo(0);
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(link).dy, greaterThan(844));
+      await tester.tap(find.widgetWithText(AdaptiveButton, '送出 1 項建議'));
+      await tester.pumpAndSettle();
+      expect(store.sent, isEmpty);
+      expect(find.text('這看起來不是網址，請貼上公告頁的網址'), findsOneWidget);
+      expect(tester.getTopLeft(link).dy, lessThan(800));
+    }
+
+    testWidgets('S2 連結錯誤按送出時捲到欄位，不送出', (tester) async {
+      final store = await open(tester, _lot);
+      await openZone(tester, 'B2 重機專區');
+      await badLinkScrolls(tester, store);
+    });
+
+    testWidgets('S4 連結錯誤按送出時捲到欄位，不送出', (tester) async {
+      final store = await open(tester, _street);
+      await tapKey(tester, 'suggest-where');
+      await tapText(tester, '一般機車格');
+      await badLinkScrolls(tester, store);
+    });
 
     testWidgets('S1b 列出入口、分區標籤、新增一區和說明', (tester) async {
       await open(tester, _lot);

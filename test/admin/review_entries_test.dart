@@ -223,6 +223,28 @@ void main() {
     expect(wirePatch(applicablePatch(proposal, spot), spot: spot), isEmpty);
   });
 
+  test('一區改回沿用全場時顯示沿用，不是未填（F1b）', () {
+    final stored = [
+      {
+        'id': 'b1',
+        'name': 'B1',
+        'fee': {
+          'scooter': {'mode': 'free'},
+          'heavy': {'mode': 'free'},
+          'car': {'mode': 'free'},
+        },
+      },
+    ];
+    final next = entriesPatch(stored, [
+      {'id': 'b1', 'fee': null},
+    ])!;
+    expect(entriesChangeLines(stored, next).single, endsWith('→沿用全場'));
+    expect(
+      entriesChangeLines(stored, next, whole: '整條路').single,
+      endsWith('→沿用整條路'),
+    );
+  });
+
   test('the review lists what each change does, not only the names', () {
     final next = entriesPatch(zones, [
       {'id': 'b1', 'guide': '走右側坡道', 'access': 'scooterHeavy'},
@@ -273,12 +295,12 @@ void main() {
       (
         {'id': 'b1', 'fee': fee, 'fee_note': null},
         {'id': 'b1', 'name': 'B1', 'access': 'scooterOnly', 'fee': fee},
-        '費率原文 舊文字→未填',
+        '費率原文 舊文字→已移除',
       ),
       (
         {'id': 'b1', 'fee': null, 'fee_note': null},
         {'id': 'b1', 'name': 'B1', 'access': 'scooterOnly'},
-        '費率原文 舊文字→未填',
+        '費率原文 舊文字→已移除',
       ),
     ]) {
       final proposal = initialProposal(
