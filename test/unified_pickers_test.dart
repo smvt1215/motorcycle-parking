@@ -138,4 +138,48 @@ void main() {
       findsOne,
     );
   });
+
+  // iPhone report (2026-11-08): picking a kind while a field above kept the
+  // keyboard up did not put it away.
+  for (final platform in [TargetPlatform.iOS, TargetPlatform.android]) {
+    for (final width in const [390.0, 820.0]) {
+      testWidgets('格位種類：打字中點選項會收起鍵盤（${platform.name} ${width.toInt()} 寬）', (
+        tester,
+      ) async {
+        tester.view.devicePixelRatio = 1;
+        tester.view.physicalSize = Size(width, 1400);
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        SpaceKind? picked;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: StatefulBuilder(
+                builder: (context, setState) => ListView(
+                  children: [
+                    const TextField(key: ValueKey('field'), maxLines: 3),
+                    SpaceKindList(
+                      value: picked,
+                      onChanged: (k) => setState(() => picked = k),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.showKeyboard(find.byKey(const ValueKey('field')));
+        bool focused() => tester
+            .widget<EditableText>(find.byType(EditableText))
+            .focusNode
+            .hasFocus;
+        expect(focused(), isTrue);
+        final kind = SpaceKind.values.first;
+        await tester.tap(find.byKey(ValueKey('space-${kind.name}')));
+        await tester.pumpAndSettle();
+        expect(picked, kind);
+        expect(focused(), isFalse);
+      }, variant: TargetPlatformVariant({platform}));
+    }
+  }
 }

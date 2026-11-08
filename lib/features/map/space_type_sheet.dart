@@ -481,7 +481,11 @@ class SpaceKindList extends StatelessWidget {
           kind: kind,
           count: counts?[kind],
           selected: kind == value,
-          onTap: () => onChanged(kind),
+          // A pick puts away a keyboard left open by a field above.
+          onTap: () {
+            FocusManager.instance.primaryFocus?.unfocus();
+            onChanged(kind);
+          },
         ),
         if (kind == value && followUp != null)
           Padding(
