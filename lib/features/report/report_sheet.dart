@@ -444,8 +444,17 @@ class _ReportFormState extends State<ReportForm> {
   final zones = <EntryDraft>[], segments = <EntryDraft>[];
   List<EntryDraft> get entries => lot ? zones : segments;
 
-  /// 能不能停 (S5, S5b), copied into the entries when sent.
-  List<TimeRule> rules = [];
+  /// 能不能停 (S5, S5b), copied into the entries when sent. Kept per kind
+  /// like the entries, so a change of mind leaves the other kind's scopes.
+  List<TimeRule> zoneRules = [], segmentRules = [];
+  List<TimeRule> get rules => lot ? zoneRules : segmentRules;
+  set rules(List<TimeRule> next) {
+    if (lot) {
+      zoneRules = next;
+    } else {
+      segmentRules = next;
+    }
+  }
 
   /// Problems the last 送出 found in the kind cards, 停哪裡 and 能不能停.
   String? kindProblem, whereProblem, rulesProblem;

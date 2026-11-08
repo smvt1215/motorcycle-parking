@@ -585,7 +585,7 @@ class _FeeEditPageState extends State<FeeEditPage> {
   String? get problem {
     if (fee.isEmpty || (reverting && adding)) return null;
     final d = draft;
-    if (adding || d == null) {
+    if (adding) {
       final c = d?.condition.toJson();
       return precheckBlocking(
         precheckFee(
@@ -599,8 +599,14 @@ class _FeeEditPageState extends State<FeeEditPage> {
     return precheckBlocking(
       precheck(
         body(),
+        // The spot as stored, so 全場、整條路 rates are judged with its own
+        // time limit and who may park, as the server judges them (§4.3).
         current: {
           'fee': ?spot.fee?.toJson(),
+          if (spot.spaceType != SpaceType.offStreet)
+            'condition': ?spot.condition?.toJson(),
+          'scooter_allowed': ?spot.scooterAllowed,
+          'heavy_allowed': ?spot.heavyAllowed,
           widget.type.key: [for (final e in widget.drafts) ?e.original],
         },
       ),
@@ -839,6 +845,8 @@ class _FeeEditPageState extends State<FeeEditPage> {
           }),
           form: FeeFormStyle(
             original: adding ? null : start,
+            // 全場、整條路 send only the vehicles changed (feeProposal).
+            patch: !adding && d == null,
             why: d == null ? const {} : whyNotApplicable(d),
             closed: closedFor(
               d == null ? widget.drafts : [d],

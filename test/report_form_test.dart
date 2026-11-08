@@ -695,6 +695,38 @@ void main() {
     expect(validZoneList(spot['parking_zones']), isTrue);
   });
 
+  testWidgets('切到路邊再看能不能停，切回路外時分區的規定範圍還在（#365 Codex）', (tester) async {
+    final store = await openForm(tester);
+    await addZone(tester);
+    await addZone(tester, name: 'B3 機車區');
+    await tapKey(tester, 'n1-rules');
+    await tester.tap(find.text('新增一條規定'));
+    await tester.pumpAndSettle();
+    await tapKey(tester, 'rule-all-day');
+    await tapKey(tester, 'rule-scope-all');
+    await tapKey(tester, 'rule-scope-0');
+    await tester.tap(find.widgetWithText(AdaptiveButton, '完成'));
+    await tester.pumpAndSettle();
+    await addSegment(tester);
+    await tapKey(tester, 'n1-rules');
+    await tester.tap(find.byKey(const ValueKey('form-header-leading')).last);
+    await tester.pumpAndSettle();
+    await tapKey(tester, 'spot-kind-lot');
+    await scrollTo(tester, nameField);
+    await tester.enterText(nameField, '松壽地下停車場');
+    await tester.pump();
+    await pressSend(tester);
+    expect(find.textContaining('有規定沒有選管哪幾區'), findsNothing);
+    final spot = store.submissions.single['spot'] as Map<String, dynamic>;
+    final zones = (spot['parking_zones'] as List).cast<Map<String, Object?>>();
+    expect(zones.map((z) => z['name']), ['B2 機車區', 'B3 機車區']);
+    expect(
+      ((zones[0]['condition'] as Map)['limits'] as List).single['kind'],
+      'time_limit',
+    );
+    expect((zones[1]['condition'] as Map)['limits'], anyOf(isNull, isEmpty));
+  });
+
   testWidgets('新增模式改回沿用全場：有確認卡，完成後回 F0，該區不帶費率（C14、F1b）', (tester) async {
     final store = await openForm(tester);
     await addZone(tester);

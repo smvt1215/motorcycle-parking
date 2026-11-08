@@ -278,6 +278,56 @@ const _ownSegment = ParkingSpot(
   ],
 );
 
+/// 路邊、沒有路段、自己有限時（#365 Codex）。
+const _timedStreet = ParkingSpot(
+  id: 'official:timed',
+  name: '忠孝東路',
+  lat: 25.04,
+  lng: 121.55,
+  city: '臺北市',
+  spaceType: SpaceType.paidMotorcycle,
+  source: 'official',
+  fee: Fee(scooter: _plain, heavy: _na, car: _na),
+  condition: ParkingCondition(
+    bay: Bay.motorcycle,
+    use: BayUse.usual,
+    charge: Charge.toll,
+    limits: [
+      ParkingLimit(
+        LimitKind.timeLimit,
+        periods: [LimitPeriod(days: 'all', maxMinutes: 120)],
+      ),
+    ],
+    allow: ZoneAllow(scooter: true, heavy: false),
+  ),
+);
+
+/// 只有普通機車的舊全場費率，跨日規則沒選（#365 Codex）。
+const _partialLot = ParkingSpot(
+  id: 'official:partial',
+  name: '部分費率停車場',
+  lat: 25.03,
+  lng: 121.56,
+  city: '臺北市',
+  spaceType: SpaceType.offStreet,
+  source: 'official',
+  fee: Fee(
+    scooter: Rate(FeeMode.perVisit, amount: 30),
+    heavy: Rate(FeeMode.perVisit, amount: 30),
+  ),
+  zones: [
+    ParkingZone(
+      id: 'b1',
+      name: 'B1',
+      condition: ParkingCondition(
+        bay: Bay.motorcycle,
+        use: BayUse.usual,
+        allow: ZoneAllow(scooter: true, heavy: true),
+      ),
+    ),
+  ],
+);
+
 void main() {
   late _Store store;
 
@@ -1001,6 +1051,51 @@ void main() {
       });
       expect(proposed['fee_note'], isA<String>());
       expect(find.textContaining('建議沒有實際送出'), findsOneWidget);
+    });
+
+    testWidgets('改全場費率只要求改到的車種完整，沒改的不必補（#365 Codex）', (tester) async {
+      await pump(tester, _partialLot);
+      await tapKey(tester, 'suggest-fee');
+      await tapText(tester, '全場費率');
+      await chooseFeeMode(tester, 'scooter', 'free');
+      await tester.tap(submit('送出 1 項建議'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('的收費方式'), findsNothing);
+      expect(find.textContaining('還有規則沒選'), findsNothing);
+      final proposed = store.sent.single['proposed'] as Map;
+      expect(proposed['fee'], {
+        'scooter': {'mode': 'free'},
+      });
+    });
+
+    testWidgets('改到的車種規則沒選仍擋下（#365 Codex）', (tester) async {
+      await pump(tester, _partialLot);
+      await tapKey(tester, 'suggest-fee');
+      await tapText(tester, '全場費率');
+      await chooseFeeMode(tester, 'car', 'per_visit');
+      await tester.enterText(feeField('amount', 'car'), '20');
+      await tester.pumpAndSettle();
+      await tester.tap(submit('送出 1 項建議'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('汽車還有規則沒選'), findsOneWidget);
+      expect(store.sent, isEmpty);
+    });
+
+    testWidgets('沒有路段的路邊點：首次 0 元依點位自己的限時判斷（#365 Codex）', (tester) async {
+      await pump(tester, _timedStreet);
+      await tapKey(tester, 'suggest-fee');
+      if (find.text('整條路費率').evaluate().isNotEmpty) {
+        await tapText(tester, '整條路費率');
+      }
+      await chooseFeeMode(tester, 'scooter', 'per_visit');
+      await tester.enterText(feeField('amount', 'scooter'), '0');
+      await tester.pumpAndSettle();
+      await tapKey(tester, 'fee-renew-scooter-none');
+      await tester.tap(submit('送出 1 項建議'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('計次 0 元等於免費'), findsNothing);
+      final proposed = store.sent.single['proposed'] as Map;
+      expect((proposed['fee'] as Map)['scooter'], containsPair('amount', 0));
     });
 
     testWidgets('分區費率送 {id, fee}，三種車都有', (tester) async {

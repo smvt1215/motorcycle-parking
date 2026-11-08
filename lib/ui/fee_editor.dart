@@ -80,6 +80,7 @@ class FeeFormStyle {
     this.summary,
     this.addButton,
     this.now,
+    this.patch = false,
   });
 
   /// The rates a suggestion starts from; a vehicle that differs reads 修改中.
@@ -101,6 +102,11 @@ class FeeFormStyle {
 
   /// The preview's 現在 (tests); null is the clock.
   final DateTime? now;
+
+  /// A suggestion that sends only the vehicles it changes (全場、整條路,
+  /// merged per vehicle): only those must be complete, the others stay as
+  /// stored. Needs [original].
+  final bool patch;
 
   bool changed(Fee fee, FeeVehicle v) =>
       original != null && _rateOf(fee, v) != _rateOf(original!, v);
@@ -212,17 +218,22 @@ class _FeeEditorState extends State<FeeEditor> {
     // (#188 layer 2, fee.write; PM_ANS_20261101_55): 不適用 for one without
     // bays here.
     if (widget.requireComplete && !fee.isEmpty) {
+      final form = widget.form;
+      final patch = form != null && form.patch && form.original != null;
+      // A patch leaves the vehicles it does not change, and clears with null.
       final missing = [
-        for (final v in FeeVehicle.values)
-          if (_rateOf(fee, v) == null) v.label,
+        if (!patch)
+          for (final v in FeeVehicle.values)
+            if (_rateOf(fee, v) == null) v.label,
       ];
       if (missing.isNotEmpty) {
         return '請選${missing.join('、')}的收費方式；這裡沒有這種車的格位就選「不適用」';
       }
       final open = [
         for (final v in FeeVehicle.values)
-          if (_rateOf(fee, v) case final rate? when !rate.writeComplete)
-            v.label,
+          if (!patch || form.changed(fee, v))
+            if (_rateOf(fee, v) case final rate? when !rate.writeComplete)
+              v.label,
       ];
       if (open.isNotEmpty) {
         final reset = widget.form == null ? '上限何時重新計算' : '何時重算';
