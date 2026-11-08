@@ -510,7 +510,10 @@ FourSign fourSign(
     vehicle: vehicle,
     street: street,
     verdict: verdict,
-    seat: verdict.status == EligibilityStatus.notAllowed
+    // Riders' closure leaves the data's counts standing (A7d ②).
+    seat:
+        verdict.status == EligibilityStatus.notAllowed &&
+            verdict.riderClosed == null
         ? const SeatAnswer(kind: SeatKind.unknown)
         : _seat(spot, vehicle, whole, counted, availability, riders, now),
     fee: _fee(spot, vehicle, counted, street, now, calendar),
@@ -604,7 +607,14 @@ _areasOf(
       ? plain
       : [
           for (final a in plain)
-            switch (a.whole ? spotClosure : byArea[a.id?.toLowerCase()]) {
+            // The whole spot confirmed closed closes every place in it, so
+            // a chosen segment reads closed too.
+            switch (a.whole ||
+                    spotClosure != null &&
+                        spotClosure.confirmed &&
+                        !(byArea[a.id?.toLowerCase()]?.confirmed ?? false)
+                ? spotClosure
+                : byArea[a.id?.toLowerCase()]) {
               final c? => a._withClosure(c),
               null => a,
             },

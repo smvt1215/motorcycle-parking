@@ -74,8 +74,9 @@ class _MapPageState extends ConsumerState<MapPage> {
   bool parkableNowOnly = false;
 
   /// [_parkableNow]'s answers per spot, for [_parkableNowKey]: the vehicle,
-  /// the rules and the minute they were read for. The filter reads every
-  /// spot in view on each build, so each is judged once a minute.
+  /// the rules, riders' closures and the minute they were read for. The
+  /// filter reads every spot in view on each build, so each is judged once
+  /// a minute, or again when closures are read.
   final _parkableNowCache = Map<ParkingSpot, bool>.identity();
   Object? _parkableNowKey;
 
@@ -106,6 +107,8 @@ class _MapPageState extends ConsumerState<MapPage> {
     final key = (
       store.vehicle,
       store.rules,
+      // A read of riders' closures (A7d) replaces the map: judge again.
+      store.closures,
       now.millisecondsSinceEpoch ~/ Duration.millisecondsPerMinute,
     );
     if (key != _parkableNowKey) {

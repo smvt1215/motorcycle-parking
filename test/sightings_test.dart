@@ -2017,6 +2017,38 @@ void main() {
       expect(lines(s, detailNight), ['3 位車友回報無法停車・15 分鐘前。非官方資訊']);
     });
 
+    test('2 位整點：官方空位照常顯示，不變成空位未知', () {
+      final s = fourSign(
+        lot,
+        VehicleType.heavy,
+        const [],
+        now: detailDay,
+        availability: SpotAvailability([
+          count(
+            AvailabilityVehicle.heavy,
+            available: 4,
+            at: detailDay.subtract(const Duration(minutes: 1)),
+          ),
+        ]),
+        closures: [rc(riders: 2)],
+      );
+      expect(s.verdict.riderClosed, isNotNull);
+      expect(s.seat.kind, SeatKind.live);
+      expect(s.seat.available, 4);
+    });
+
+    test('2 位整點、路段沒有自己的列：選定的路段也寫不能停', () {
+      final s = signOf(street, [rc(riders: 2)]);
+      expect(s.verdict.riderClosed, isNotNull);
+      final open = s.areas.firstWhere((a) => a.open && a.window.now);
+      expect(open.riderClosed, isTrue);
+      expect(selectedVerdictPlate(s, open).main, '不能停');
+      expect(verdictHeadline(s, selected: open), '大型重機現在不能停');
+      // One rider about the whole spot closes no segment.
+      final unsure = signOf(street, [rc()]);
+      expect(unsure.areas.where((a) => a.riderClosed), isEmpty);
+    });
+
     test('關閉不分車種：B1 只有普通機車能停，大型重機不受影響', () {
       final closed = [rc(area: 'b1', riders: 2)];
       final heavy = signOf(lot, closed);
