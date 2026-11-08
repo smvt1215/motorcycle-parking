@@ -66,7 +66,7 @@ export function reportNoticeMail(id: string, adminUrl: string) {
   return {
     subject: `【機車停車指南】新的內容不當檢舉 ${id.slice(0, 8)}`,
     text: [
-      '有一筆新的內容不當檢舉，請在 24 小時內確認並處理。',
+      '有一筆新的內容不當檢舉，請在 5 個工作天內確認並處理。',
       '',
       `檢舉編號：${id}`,
       `處理：${adminUrl}`,
