@@ -31,26 +31,29 @@ class SignInButtons extends StatelessWidget {
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      for (final (i, provider) in providers.indexed) ...[
-        if (i > 0) const SizedBox(height: 12),
-        // One node: the button's label plus what signing in agrees to.
-        MergeSemantics(
-          child: Semantics(
-            hint: consentHint,
-            child: ProviderSignInButton(
-              key: ValueKey('sign-in-${provider.name}'),
-              apple: provider == OAuthProvider.apple,
-              label: provider == OAuthProvider.google
-                  ? '使用 Google 登入'
-                  : '使用 Apple 登入',
-              onPressed: () {
-                FocusManager.instance.primaryFocus?.unfocus();
-                runAction(context, () => store.signIn(provider));
-              },
+      // One height for every provider, even when one title wraps (P11).
+      BrandSignInButtonColumn(
+        children: [
+          for (final provider in providers)
+            // One node: the button's label plus what signing in agrees to.
+            MergeSemantics(
+              child: Semantics(
+                hint: consentHint,
+                child: ProviderSignInButton(
+                  key: ValueKey('sign-in-${provider.name}'),
+                  apple: provider == OAuthProvider.apple,
+                  label: provider == OAuthProvider.google
+                      ? '使用 Google 登入'
+                      : '使用 Apple 登入',
+                  onPressed: () {
+                    FocusManager.instance.primaryFocus?.unfocus();
+                    runAction(context, () => store.signIn(provider));
+                  },
+                ),
+              ),
             ),
-          ),
-        ),
-      ],
+        ],
+      ),
       const SizedBox(height: 12),
       const SignInConsent(),
     ],
@@ -81,7 +84,8 @@ class ProviderSignInButton extends StatelessWidget {
 /// The links are separate text buttons in a [Wrap], not tappable spans, so
 /// each keeps a full touch target and 〈隱私權政策〉 wraps when space runs out.
 /// Without both URLs (a development build) the sentence is plain text with
-/// a 僅開發用 badge; a release build fails its config check instead (#262).
+/// a 僅開發用 badge; CD builds always carry both, and tool/cd_config.py
+/// fails the build before writing its config without them (#262).
 class SignInConsent extends StatelessWidget {
   const SignInConsent({super.key});
 

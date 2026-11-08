@@ -16,3 +16,6 @@ const profileNameClearedHelper = '留空就不公開名稱，你新增的停車�
 /// P10 account card when there is no saved public name.
 const settingsNameUnset = '尚未設定名稱';
 const settingsSetName = '設定名稱';
+
+/// Read out after 登出 in 帳號與設定, which stays open signed out.
+const settingsSignedOut = '已登出';

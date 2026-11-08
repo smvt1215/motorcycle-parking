@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -43,6 +44,7 @@ class ProfileFixture {
   late final ProfileStore store;
   final updates = <Map<String, dynamic>>[];
   bool failUpdate = false;
+  int logouts = 0;
 
   Map<String, dynamic> get user => {
     'id': userId,
@@ -65,6 +67,9 @@ class ProfileFixture {
         metadata = {...metadata, ...data};
       }
       response = user;
+    } else if (request.url.path == '/auth/v1/logout') {
+      logouts++;
+      return http.Response('', 204);
     } else {
       throw StateError('Unexpected ${request.method} ${request.url.path}');
     }
@@ -687,6 +692,77 @@ void main() {
           expect(state(tester), profileNameUnset);
         },
       );
+    }
+
+    // User request (2026-11-08): 登出 keeps 帳號與設定 open, signed out.
+    for (final platform in [TargetPlatform.iOS, TargetPlatform.android]) {
+      for (final size in const [Size(390, 844), Size(820, 1180)]) {
+        final where =
+            '${platform.name} ${size.width.toInt()}×${size.height.toInt()}';
+        testWidgets(
+          'P10 登出後留在帳號與設定，顯示尚未登入與登入按鈕（$where）',
+          variant: TargetPlatformVariant.only(platform),
+          (tester) async {
+            final announced = <String>[];
+            tester.binding.defaultBinaryMessenger.setMockDecodedMessageHandler<
+              dynamic
+            >(SystemChannels.accessibility, (message) async {
+              final map = message as Map<Object?, Object?>;
+              if (map['type'] == 'announce') {
+                announced.add(
+                  (map['data']! as Map<Object?, Object?>)['message']! as String,
+                );
+              }
+            });
+            addTearDown(
+              () => tester.binding.defaultBinaryMessenger
+                  .setMockDecodedMessageHandler<dynamic>(
+                    SystemChannels.accessibility,
+                    null,
+                  ),
+            );
+            final fixture = await p12(
+              tester,
+              platform,
+              size,
+              settings: true,
+              metadata: {'display_name': '阿哲'},
+            );
+            final signOut = find.widgetWithText(TextButton, '登出');
+            await tester.ensureVisible(signOut);
+            await tester.tap(signOut);
+            await tester.runAsync(
+              () async =>
+                  await Future<void>.delayed(const Duration(milliseconds: 20)),
+            );
+            await tester.pumpAndSettle();
+
+            expect(fixture.logouts, 1);
+            expect(fixture.client.auth.currentUser, isNull);
+            // Still open: the sheet was not popped back to the opener.
+            expect(find.byType(ContentPage), findsOneWidget);
+            expect(
+              tester
+                  .widget<Text>(find.byKey(const ValueKey('account-title')))
+                  .data,
+              '尚未登入',
+            );
+            expect(find.byKey(const ValueKey('sign-in-apple')), findsOneWidget);
+            expect(
+              find.byKey(const ValueKey('sign-in-google')),
+              findsOneWidget,
+            );
+            // Signed-in-only parts are gone.
+            expect(find.text('登出'), findsNothing);
+            expect(find.byTooltip('編輯個人資料'), findsNothing);
+            expect(find.byType(ProfileAvatar), findsNothing);
+            expect(announced, [settingsSignedOut]);
+            // The removed button holds no focus: only a scope does.
+            expect(FocusManager.instance.primaryFocus, isA<FocusScopeNode>());
+            expect(tester.takeException(), isNull);
+          },
+        );
+      }
     }
 
     testWidgets(

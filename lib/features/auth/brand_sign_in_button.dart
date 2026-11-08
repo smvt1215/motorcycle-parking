@@ -1,3 +1,5 @@
+import 'package:flutter/rendering.dart';
+
 import '../../ui/adaptive/adaptive.dart';
 
 /// Sign-in buttons drawn to each provider's own brand rules, the same on
@@ -13,6 +15,21 @@ import '../../ui/adaptive/adaptive.dart';
 /// Minimum heights: the platform touch target (iOS 44pt, Android 48dp),
 /// equal for both providers so Apple is never smaller than Google (HIG).
 double brandButtonHeight() => isCupertino ? 44 : 48;
+
+/// The height both providers' buttons share at [textScaler]: the base
+/// height, or more when larger text grows Apple's title (43% of the height)
+/// past it. Apple's logo and title keep that proportion; Google keeps its
+/// own type size and only takes the same height, so the two buttons line up
+/// at every text size (P11; the user's call on 2026-11-08 keeps each
+/// brand's type and logo as their guidelines set them).
+double brandButtonScaledHeight(TextScaler textScaler) {
+  final base = brandButtonHeight();
+  final grown = textScaler.scale(base * _appleTitleRatio) / _appleTitleRatio;
+  return grown > base ? grown : base;
+}
+
+/// Apple's title is 43% of the button's height (HIG).
+const _appleTitleRatio = .43;
 
 /// Google's fill, stroke and label colours for the light and dark themes.
 @visibleForTesting
@@ -50,6 +67,7 @@ class BrandSignInButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final height = brandButtonHeight();
+    final shared = brandButtonScaledHeight(MediaQuery.textScalerOf(context));
     final Color fill, foreground;
     final BorderSide side;
     if (apple) {
@@ -61,7 +79,12 @@ class BrandSignInButton extends StatelessWidget {
       side = BorderSide(color: c.stroke);
     }
     final content = apple
-        ? _AppleContent(label: label, color: foreground, height: height)
+        ? _AppleContent(
+            label: label,
+            color: foreground,
+            height: height,
+            logoHeight: shared,
+          )
         : _GoogleContent(label: label, color: foreground);
     final button = Material(
       key: const ValueKey('brand-sign-in-surface'),
@@ -74,7 +97,7 @@ class BrandSignInButton extends StatelessWidget {
         highlightColor: foreground.withValues(alpha: .12),
         splashColor: foreground.withValues(alpha: .12),
         child: ConstrainedBox(
-          constraints: BoxConstraints(minHeight: height),
+          constraints: BoxConstraints(minHeight: shared),
           child: Center(child: content),
         ),
       ),
@@ -125,23 +148,24 @@ class _GoogleContent extends StatelessWidget {
 
 /// The Apple logo file sits at the button's height (its built-in padding
 /// keeps the logo, title and button in proportion) and the title is 43% of
-/// that height. Larger text grows the button in the same proportion; when
-/// the title wraps, the logo stays centred at the single-line height.
+/// that height. Larger text grows the button in the same proportion
+/// ([brandButtonScaledHeight], [logoHeight]); when the title wraps, the
+/// logo stays centred at the single-line height.
 class _AppleContent extends StatelessWidget {
   const _AppleContent({
     required this.label,
     required this.color,
     required this.height,
+    required this.logoHeight,
   });
   final String label;
   final Color color;
   final double height;
+  final double logoHeight;
 
   @override
   Widget build(BuildContext context) {
-    final fontSize = height * .43;
-    final scaled = MediaQuery.textScalerOf(context).scale(fontSize);
-    final logoHeight = scaled / .43 > height ? scaled / .43 : height;
+    final fontSize = height * _appleTitleRatio;
     // 8% of the width on each side keeps the title at least that far from
     // the trailing edge; the logo and title are centred in between.
     return Row(
@@ -176,6 +200,152 @@ class _AppleContent extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Sign-in buttons stacked full width, [spacing] apart, all as tall as the
+/// tallest one. [brandButtonScaledHeight] already gives both providers one
+/// height; this also holds when large text wraps one title and not the
+/// other, so Apple is never shorter than Google (HIG) and the pair lines up.
+class BrandSignInButtonColumn extends MultiChildRenderObjectWidget {
+  const BrandSignInButtonColumn({
+    super.key,
+    this.spacing = 12,
+    required super.children,
+  });
+  final double spacing;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderEqualHeightColumn(spacing);
+
+  @override
+  void updateRenderObject(BuildContext context, RenderObject renderObject) =>
+      (renderObject as _RenderEqualHeightColumn).spacing = spacing;
+}
+
+class _EqualHeightParentData extends ContainerBoxParentData<RenderBox> {}
+
+class _RenderEqualHeightColumn extends RenderBox
+    with
+        ContainerRenderObjectMixin<RenderBox, _EqualHeightParentData>,
+        RenderBoxContainerDefaultsMixin<RenderBox, _EqualHeightParentData> {
+  _RenderEqualHeightColumn(this._spacing);
+
+  double _spacing;
+  set spacing(double value) {
+    if (value == _spacing) return;
+    _spacing = value;
+    markNeedsLayout();
+  }
+
+  @override
+  void setupParentData(RenderBox child) {
+    if (child.parentData is! _EqualHeightParentData) {
+      child.parentData = _EqualHeightParentData();
+    }
+  }
+
+  List<RenderBox> get _children {
+    final list = <RenderBox>[];
+    var child = firstChild;
+    while (child != null) {
+      list.add(child);
+      child = childAfter(child);
+    }
+    return list;
+  }
+
+  double _gaps(int count) => count > 1 ? _spacing * (count - 1) : 0;
+
+  /// The tallest child at [width], measured without laying it out.
+  double _rowHeight(List<RenderBox> children, double width) {
+    var tallest = 0.0;
+    for (final child in children) {
+      final height = child
+          .getDryLayout(BoxConstraints.tightFor(width: width))
+          .height;
+      if (height > tallest) tallest = height;
+    }
+    return tallest;
+  }
+
+  double _intrinsicHeight(double width, bool max) {
+    final children = _children;
+    var tallest = 0.0;
+    for (final child in children) {
+      final height = max
+          ? child.getMaxIntrinsicHeight(width)
+          : child.getMinIntrinsicHeight(width);
+      if (height > tallest) tallest = height;
+    }
+    return tallest * children.length + _gaps(children.length);
+  }
+
+  double _widest(double Function(RenderBox child) measure) {
+    var widest = 0.0;
+    for (final child in _children) {
+      final width = measure(child);
+      if (width > widest) widest = width;
+    }
+    return widest;
+  }
+
+  @override
+  double computeMinIntrinsicWidth(double height) =>
+      _widest((c) => c.getMinIntrinsicWidth(double.infinity));
+
+  @override
+  double computeMaxIntrinsicWidth(double height) =>
+      _widest((c) => c.getMaxIntrinsicWidth(double.infinity));
+
+  /// Full width when bounded (the buttons stretch), else the widest child.
+  double _width(BoxConstraints constraints) => constraints.hasBoundedWidth
+      ? constraints.maxWidth
+      : constraints.constrainWidth(computeMaxIntrinsicWidth(double.infinity));
+
+  @override
+  double computeMinIntrinsicHeight(double width) =>
+      _intrinsicHeight(width, false);
+
+  @override
+  double computeMaxIntrinsicHeight(double width) =>
+      _intrinsicHeight(width, true);
+
+  @override
+  Size computeDryLayout(BoxConstraints constraints) {
+    final children = _children;
+    final width = _width(constraints);
+    final height =
+        _rowHeight(children, width) * children.length + _gaps(children.length);
+    return constraints.constrain(Size(width, height));
+  }
+
+  @override
+  void performLayout() {
+    final children = _children;
+    final width = _width(constraints);
+    final tallest = _rowHeight(children, width);
+    var y = 0.0;
+    for (final child in children) {
+      child.layout(
+        BoxConstraints.tightFor(width: width, height: tallest),
+        parentUsesSize: true,
+      );
+      (child.parentData! as _EqualHeightParentData).offset = Offset(0, y);
+      y += tallest + _spacing;
+    }
+    size = constraints.constrain(
+      Size(width, tallest * children.length + _gaps(children.length)),
+    );
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) =>
+      defaultPaint(context, offset);
+
+  @override
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) =>
+      defaultHitTestChildren(result, position: position);
 }
 
 /// The four-colour Google G, from the approved P11 board
