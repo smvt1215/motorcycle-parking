@@ -199,6 +199,26 @@ class _ContentReportSheetState extends State<ContentReportSheet> {
     listenable: widget.store,
     builder: (context, _) {
       final result = outcome;
+      final header = [
+        _Header(spotName: widget.spot.name, cancel: result == null),
+        const Divider(height: 1),
+      ];
+      final bar = result == null
+          ? SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+                child: AdaptiveButton(
+                  key: const ValueKey('content-report-submit'),
+                  label: contentReportSubmit,
+                  onPressed:
+                      target == null || sending || !widget.store.canReport
+                      ? null
+                      : () => unawaited(_send()),
+                ),
+              ),
+            )
+          : null;
       // The sheet keeps its height; the keyboard takes its bottom, so 送出檢舉
       // sits right above it and the form scrolls the focused field into view
       // (like FormPage).
@@ -206,34 +226,31 @@ class _ContentReportSheetState extends State<ContentReportSheet> {
         padding: EdgeInsets.only(
           bottom: MediaQuery.viewInsetsOf(context).bottom,
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _Header(spotName: widget.spot.name, cancel: result == null),
-            const Divider(height: 1),
-            Expanded(
-              child: result == null ? _form(context) : _result(context, result),
-            ),
-            if (result == null)
-              SafeArea(
-                top: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-                  child: AdaptiveButton(
-                    key: const ValueKey('content-report-submit'),
-                    label: contentReportSubmit,
-                    onPressed:
-                        target == null || sending || !widget.store.canReport
-                        ? null
-                        : () => unawaited(_send()),
-                  ),
-                ),
+        child: LayoutBuilder(
+          // Too short to keep the title above the form as well (a phone on
+          // its side with the keyboard up): the title steps aside until the
+          // keyboard goes, so the note and 送出檢舉 keep their room. Only the
+          // title comes and goes, so the form keeps its state and focus.
+          builder: (context, box) => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (result != null || box.maxHeight >= _titleMinHeight) ...header,
+              Expanded(
+                key: const ValueKey('content-report-body'),
+                child: result == null
+                    ? _form(context)
+                    : _result(context, result),
               ),
-          ],
+              ?bar,
+            ],
+          ),
         ),
       );
     },
   );
+
+  /// Below this height the form drops its title while the keyboard is up.
+  static const _titleMinHeight = 300.0;
 
   Widget _form(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
