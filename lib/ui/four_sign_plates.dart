@@ -195,14 +195,21 @@ class _Plate extends StatelessWidget {
     final dark = dense && Theme.of(context).brightness == Brightness.dark;
     if (dark && (border != null || plate.tone == PlateTone.rider)) {
       // A4: outlined plates sit on the dark page, not on white paper.
+      // The question reads in the answer's ink on outlined plates (A4).
       (fill, fg, label, border) = switch (plate.tone) {
         PlateTone.dashed => (
           Colors.transparent,
           PlateColors.darkInk,
-          PlateColors.darkMuted,
+          PlateColors.darkInk,
           PlateColors.darkMuted,
         ),
         PlateTone.delayed => (fill, fg, label, border),
+        PlateTone.line => (
+          Colors.transparent,
+          PlateColors.darkInk,
+          PlateColors.darkInk,
+          PlateColors.darkLine,
+        ),
         _ => (
           Colors.transparent,
           PlateColors.darkInk,
@@ -214,10 +221,15 @@ class _Plate extends StatelessWidget {
     if (dense && !dark) {
       // A2: the table of contents' outlined plates sit on the page, no white
       // card; a known answer is outlined lightly.
-      (fill, border) = switch (plate.tone) {
-        PlateTone.dashed => (Colors.transparent, border),
-        PlateTone.line => (Colors.transparent, PlateColors.line),
-        _ => (fill, border),
+      // The question reads in ink, like the answer.
+      (fill, label, border) = switch (plate.tone) {
+        PlateTone.dashed => (Colors.transparent, PlateColors.ink, border),
+        PlateTone.line => (
+          Colors.transparent,
+          PlateColors.ink,
+          PlateColors.line,
+        ),
+        _ => (fill, label, border),
       };
     }
     final solid = border == null && plate.tone != PlateTone.rider;

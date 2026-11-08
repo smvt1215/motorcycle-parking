@@ -112,6 +112,22 @@ void main() {
                   reason: '$tone',
                 );
               }
+              if (tone == PlateTone.line || tone == PlateTone.dashed) {
+                // The question (A2, A4): ink in the table of contents.
+                final question = tester.widget<Text>(
+                  find.descendant(
+                    of: plate,
+                    matching: find.text(_plates[face.index].question),
+                  ),
+                );
+                expect(
+                  question.style!.color,
+                  dense
+                      ? (dark ? PlateColors.darkInk : PlateColors.ink)
+                      : PlateColors.muted,
+                  reason: '$tone',
+                );
+              }
               if (tone == PlateTone.line) {
                 final side = (decoration.border! as Border).top;
                 expect(
