@@ -5,6 +5,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:motorcycle_parking/core/address_search.dart';
+import 'package:motorcycle_parking/ui/adaptive/adaptive.dart'
+    show ContentPage, SheetTitle, showAdaptiveSheet;
 import 'package:motorcycle_parking/ui/address_search_field.dart';
 import 'package:motorcycle_parking/ui/location_picker.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
@@ -372,5 +374,119 @@ void main() {
       matching: find.byType(PointerInterceptor),
     );
     expect(tester.widget<PointerInterceptor>(guard).intercepting, isFalse);
+  });
+
+  // iPhone report (2026-11-08): with the keyboard up, the search panel's
+  // title showed under the page's search button, and after it closed the
+  // page left blank space below the map. The map (a native view on iOS)
+  // is not drawn while the search covers it, and the page lays out again.
+  group('搜尋面板與鍵盤', () {
+    for (final platform in [TargetPlatform.iOS, TargetPlatform.android]) {
+      for (final size in const [Size(390, 844), Size(820, 1180)]) {
+        final where =
+            '${platform.name} ${size.width.toInt()}×${size.height.toInt()}';
+        testWidgets('鍵盤 300 時面板標題完整可見、地圖不畫；收起後頁面恢復（$where）', (tester) async {
+          tester.view.devicePixelRatio = 1;
+          tester.view.physicalSize = size;
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          addTearDown(tester.view.resetViewInsets);
+          const mapKey = ValueKey('test-map');
+          await tester.pumpWidget(
+            MaterialApp(
+              builder: (context, child) =>
+                  // ignore: deprecated_member_use
+                  MaterialUiCompatibilityBridge(child: child!),
+              home: Scaffold(
+                body: Builder(
+                  builder: (context) => TextButton(
+                    onPressed: () => showAdaptiveSheet<void>(
+                      context,
+                      // As the suggestion form: it makes room for the
+                      // keyboard itself.
+                      (ctx) => Padding(
+                        padding: EdgeInsets.only(
+                          bottom: MediaQuery.viewInsetsOf(ctx).bottom,
+                        ),
+                        child: ContentPage(
+                          children: [
+                            SheetTitle('停車點位置'),
+                            const SizedBox(height: 8),
+                            LocationPicker(
+                              lat: 25.0,
+                              lng: 121.5,
+                              height: 260,
+                              mapBuilder: (context, view) => const ColoredBox(
+                                key: mapKey,
+                                color: Colors.green,
+                              ),
+                              onChanged: (a, b) {},
+                              onSearch: (context) => showAddressSearch(
+                                context,
+                                search: (q, {lat, lng}) async => [_door],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                        ),
+                      ),
+                    ),
+                    child: const Text('開啟'),
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.tap(find.text('開啟'));
+          await tester.pumpAndSettle();
+          bool mapDrawn() => tester
+              .widget<Visibility>(
+                find.byKey(const ValueKey('location-map-slot')),
+              )
+              .visible;
+          final coords = find.text('25.000000, 121.500000');
+          Rect at(Finder f) => tester.getRect(f);
+          final before = (
+            title: at(find.text('停車點位置')),
+            map: at(find.byKey(mapKey)),
+            coords: at(coords),
+          );
+          expect(mapDrawn(), isTrue);
+
+          await tester.tap(find.byKey(const ValueKey('location-search')));
+          await tester.pumpAndSettle();
+          tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          final keyboardTop = size.height - 300;
+          final title = at(find.text('搜尋位置'));
+          expect(title.top, greaterThanOrEqualTo(0), reason: '$title');
+          expect(
+            title.bottom,
+            lessThanOrEqualTo(keyboardTop),
+            reason: '$title',
+          );
+          expect(find.text('搜尋位置').hitTestable(), findsOneWidget);
+          expect(find.byTooltip('關閉搜尋').hitTestable(), findsOneWidget);
+          expect(mapDrawn(), isFalse);
+
+          // Closed with the keyboard still going down: the map waits.
+          await tester.tap(find.byTooltip('關閉搜尋'));
+          await tester.pumpAndSettle();
+          expect(find.text('搜尋位置'), findsNothing);
+          expect(mapDrawn(), isFalse);
+          tester.view.viewInsets = FakeViewPadding.zero;
+          await tester.pumpAndSettle();
+          expect(mapDrawn(), isTrue);
+          // The page is back as it was: title, map and the coordinates
+          // right under the map, no gap.
+          expect(at(find.text('停車點位置')), before.title);
+          expect(at(find.byKey(mapKey)), before.map);
+          expect(at(coords), before.coords);
+          expect(at(coords).top - at(find.byKey(mapKey)).bottom, lessThan(16));
+          expect(tester.takeException(), isNull);
+        }, variant: TargetPlatformVariant({platform}));
+      }
+    }
   });
 }
