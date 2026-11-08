@@ -74,7 +74,7 @@ describe('the web flow says what the App says', () => {
   });
 
   it("adds to the App's Apple note when the rider has only just signed in here", () => {
-    expect(t.reauthNoteApple).toBe(`如果不是剛才在這個頁面登入，${dartString('deletionReauthNoteApple')}`);
+    expect(t.reauthNoteApple).toBe(`如果剛才不是在這個頁面登入，${dartString('deletionReauthNoteApple')}`);
   });
 
   it('only the footnote of the choice differs: there is no App to go on to', () => {

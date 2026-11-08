@@ -24,7 +24,7 @@ export const reauthNote = '如果超過 10 分鐘沒登入，送出前會請你�
  * 「送出前會請你再用 Apple 登入一次」 holds unless they just signed in here.
  */
 export const reauthNoteApple =
-  '如果不是剛才在這個頁面登入，送出前會請你再用 Apple 登入一次，以便撤銷「使用 Apple 登入」的授權。';
+  '如果剛才不是在這個頁面登入，送出前會請你再用 Apple 登入一次，以便撤銷「使用 Apple 登入」的授權。';
 export const signOut = '登出';
 /** Web only: while the page reads the account's deletion status. */
 export const checking = '正在確認帳號…';
