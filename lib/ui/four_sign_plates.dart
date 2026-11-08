@@ -264,21 +264,21 @@ class _Plate extends StatelessWidget {
         ],
       ),
     );
-    Widget box = Container(
-      constraints: BoxConstraints(minHeight: compact ? 64 : 74),
-      decoration: BoxDecoration(
-        color: fill,
-        borderRadius: radius,
-        border: border != null && !dashed
-            ? Border.all(color: border, width: 1.5)
-            : null,
+    // As the dense plate: the dashes trace the plate's own edge.
+    Widget box = CustomPaint(
+      key: const ValueKey('four-sign-plate-box'),
+      foregroundPainter: dashed ? DashedBorder(color: border!) : null,
+      child: Container(
+        constraints: BoxConstraints(minHeight: compact ? 64 : 74),
+        decoration: BoxDecoration(
+          color: fill,
+          borderRadius: radius,
+          border: border != null && !dashed
+              ? Border.all(color: border, width: 1.5)
+              : null,
+        ),
+        child: content,
       ),
-      child: dashed
-          ? CustomPaint(
-              painter: DashedBorder(color: border!),
-              child: content,
-            )
-          : content,
     );
     if (current == true) {
       box = DecoratedBox(
@@ -332,22 +332,25 @@ extension on _Plate {
         ],
       ),
     );
-    final box = Container(
-      constraints: BoxConstraints(minHeight: isCupertino ? 44 : 48),
-      alignment: AlignmentDirectional.centerStart,
-      decoration: BoxDecoration(
-        color: fill,
-        borderRadius: radius,
-        border: border != null && !dashed
-            ? Border.all(color: border, width: 1.5)
-            : null,
+    // The dashes go round the whole plate, outside the Container: inside,
+    // its alignment would size them to the text (a frame inside the card).
+    final box = CustomPaint(
+      key: const ValueKey('four-sign-plate-box'),
+      foregroundPainter: dashed
+          ? DashedBorder(color: border!, radius: 8)
+          : null,
+      child: Container(
+        constraints: BoxConstraints(minHeight: isCupertino ? 44 : 48),
+        alignment: AlignmentDirectional.centerStart,
+        decoration: BoxDecoration(
+          color: fill,
+          borderRadius: radius,
+          border: border != null && !dashed
+              ? Border.all(color: border, width: 1.5)
+              : null,
+        ),
+        child: content,
       ),
-      child: dashed
-          ? CustomPaint(
-              painter: DashedBorder(color: border!, radius: 8),
-              child: content,
-            )
-          : content,
     );
     final dark = Theme.of(context).brightness == Brightness.dark;
     final tile = Column(

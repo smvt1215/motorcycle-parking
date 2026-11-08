@@ -207,10 +207,7 @@ void main() {
       await tester.pumpAndSettle();
       final sheet = find.byKey(const ValueKey('parking-spot-sheet'));
       final before = tester.element(sheet);
-      expect(
-        summaryText(tester),
-        startsWith('有沒有位｜12 剩餘 ／ 共 80 格（普通機車）｜17:02 更新'),
-      );
+      expect(summaryText(tester), startsWith('12 剩餘 ／ 共 80 格（普通機車）｜17:02 更新'));
       counts[0] = count(
         'fresh',
         AvailabilityVehicle.scooter,
@@ -225,10 +222,7 @@ void main() {
         isTrue,
         reason: '沒有重建整個面板',
       );
-      expect(
-        summaryText(tester),
-        startsWith('有沒有位｜9 剩餘 ／ 共 80 格（普通機車）｜17:04 更新'),
-      );
+      expect(summaryText(tester), startsWith('9 剩餘 ／ 共 80 格（普通機車）｜17:04 更新'));
       expect(capsule('剩 9'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
     });
@@ -464,7 +458,24 @@ void main() {
         final store = await detailStore(tester, lot, counts);
         await openDetails(tester, store, lot);
         expect(summaryText(tester), contains(expected));
-        expect(summaryText(tester), startsWith('有沒有位'));
+        // The section's header says 有沒有位; the fact does not again
+        // (iPhone report, 2026-11-08), while a reader still hears it.
+        expect(summaryText(tester), isNot(startsWith('有沒有位')));
+        expect(
+          find.descendant(
+            of: find.byKey(
+              const ValueKey('availability-summary'),
+              skipOffstage: false,
+            ),
+            matching: find.text('有沒有位', skipOffstage: false),
+            skipOffstage: false,
+          ),
+          findsNothing,
+        );
+        expect(
+          find.bySemanticsLabel(RegExp('^有沒有位，'), skipOffstage: false),
+          findsOneWidget,
+        );
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
       });
@@ -477,7 +488,7 @@ void main() {
         count('h', AvailabilityVehicle.scooter, minutes: 14),
       ], vehicle: VehicleType.heavy);
       await openDetails(tester, store, heavyLot);
-      expect(summaryText(tester), startsWith('有沒有位｜空位未知'));
+      expect(summaryText(tester), startsWith('空位未知'));
       expect(summaryText(tester), contains('普通機車區剩 12 格，更新延遲 14 分鐘'));
       expect(summaryText(tester), contains('不代表重機可用格數'));
       await tester.pumpWidget(const SizedBox.shrink());

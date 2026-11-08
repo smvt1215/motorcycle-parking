@@ -650,6 +650,9 @@ class _SpotSheetState extends State<SpotSheet> {
             line: riderLineOf(report, now),
           )
         : null;
+    final seatTitle = rows.isEmpty || (spot.isFacility && !live)
+        ? '有沒有位'
+        : '有沒有位（${vehicle.label}能停的$unit）';
     final Widget seat;
     if (spot.isFacility && !live) {
       // A lot's own legacy count, where no snapshot exists for it.
@@ -682,6 +685,7 @@ class _SpotSheetState extends State<SpotSheet> {
     } else if (live) {
       seat = SpotSeatSection(
         fact: availabilityFact(spot, availability, vehicle, decision, now),
+        sectionTitle: seatTitle,
         betaCities: inAvailabilityBeta(spot.city, store.availabilityBetaCities)
             ? store.availabilityBetaCities
             : null,
@@ -776,9 +780,7 @@ class _SpotSheetState extends State<SpotSheet> {
       if (!notParkable || unfolded) ...[
         DetailSection(
           key: sections[FourSignFace.seat],
-          title: rows.isEmpty || (spot.isFacility && !live)
-              ? '有沒有位'
-              : '有沒有位（${vehicle.label}能停的$unit）',
+          title: seatTitle,
           gap: 8,
           children: [
             seat,
