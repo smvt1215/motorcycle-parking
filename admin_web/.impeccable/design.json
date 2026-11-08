@@ -484,7 +484,7 @@
       "refersTo": "chip",
       "description": "單選篩選；選取時黑底白字，計數用 Barlow 數字。",
       "html": "<div style=\"display:flex;gap:8px\"><button class=\"ds-chip on\" aria-pressed=\"true\">待審 <span class=\"ds-n\">12</span></button><button class=\"ds-chip\" aria-pressed=\"false\">已刪除 <span class=\"ds-n\">4</span></button></div>",
-      "css": ".ds-chip{min-height:44px;padding:0 14px;border-radius:20px;border:1px solid #9AA0A6;background:#FAFAF6;color:#16181A;font:15px 'Noto Sans TC',sans-serif;cursor:pointer}.ds-chip:hover{border-color:#16181A}.ds-chip.on{background:#16181A;border-color:#16181A;color:#fff}.ds-chip:focus-visible{outline:3px solid #1F5FA8;outline-offset:2px}.ds-n{font-family:'Barlow Condensed',sans-serif;font-variant-numeric:tabular-nums;font-weight:600}"
+      "css": ".ds-chip{min-height:48px;padding:0 14px;border-radius:24px;border:1px solid #9AA0A6;background:#FAFAF6;color:#16181A;font:15px 'Noto Sans TC',sans-serif;cursor:pointer}.ds-chip:hover{border-color:#16181A}.ds-chip.on{background:#16181A;border-color:#16181A;color:#fff}.ds-chip:focus-visible{outline:3px solid #1F5FA8;outline-offset:2px}.ds-n{font-family:'Barlow Condensed',sans-serif;font-variant-numeric:tabular-nums;font-weight:600}"
     },
     {
       "name": "Text Input",
@@ -537,7 +537,7 @@
   ],
   "narrative": {
     "northStar": "The Plate Bench",
-    "overview": "管理站是審核者的工作台，不是報表後台。每一個點位的資格，都用 App 的兩面疊牌回答：左邊普通機車、右邊大型重機。審核者打開一筆回報，第一眼看到的是「這筆會改變哪一種車能不能停」：目前的大車牌 → 建議的大車牌，然後按 A／E／R 套用、修改後套用或駁回，處理完自動跳下一筆，5 秒內可復原。\n\n材質來自路邊：壓印黑的導覽欄像車牌的壓印底框，頁面底是鋁板灰，欄位與面板是牌面白。顏色紀律很嚴：車牌的綠、白、紅、黃只出現在車牌本身；操作藍只給按得下去的東西；反光黃只標「已修改」。層級靠字重（400／700／900）與黑白反轉，不靠放大字級。密度偏高但每個可點的東西都夠大（篩選 44px、按鈕 48px），因為審核者也會用平板與手機。\n\n刻意拒絕的樣子：灰卡片堆疊的通用後台模板、彩色統計卡、把狀態只用顏色表達。",
+    "overview": "管理站是審核者的工作台，不是報表後台。每一個點位的資格，都用 App 的兩面疊牌回答：左邊普通機車、右邊大型重機。審核者打開一筆回報，第一眼看到的是「這筆會改變哪一種車能不能停」：目前的大車牌 → 建議的大車牌，然後按 A／E／R 套用、修改後套用或駁回，處理完自動跳下一筆，5 秒內可復原。\n\n材質來自路邊：壓印黑的導覽欄像車牌的壓印底框，頁面底是鋁板灰，欄位與面板是牌面白。顏色紀律很嚴：車牌的綠、白、紅、黃只出現在車牌本身；操作藍只給按得下去的東西；反光黃只標「已修改」。層級靠字重（400／700／900）與黑白反轉，不靠放大字級。密度偏高但每個可點的東西都夠大（篩選與按鈕都是 48px），因為審核者也會用平板與手機。\n\n刻意拒絕的樣子：灰卡片堆疊的通用後台模板、彩色統計卡、把狀態只用顏色表達。",
     "keyCharacteristics": [
       "資格永遠成對出現：普通機車在左、大型重機在右，順序固定。",
       "狀態用車牌的「處理方式」表達（全彩、缺角、灰框加 X、虛線加問號、純虛線），文字一定同時寫出來。",
@@ -580,7 +580,7 @@
     "dos": [
       "**Do** 每個資格都成對顯示兩面車牌，普通機車在左、大型重機在右，並在 `aria-label` 與可見文字中寫出狀態。",
       "**Do** 用車牌處理方式區分五種狀態（全彩／缺角／灰框加 X／虛線加「?」／純虛線），不要只換顏色。",
-      "**Do** 讓所有按鈕至少 48px 高、篩選與分段按鈕至少 44px 高。",
+      "**Do** 讓所有按鈕、篩選與分段按鈕至少 48px 高。",
       "**Do** 選取狀態用 2px 黑色 inset 框或黑底反白。",
       "**Do** 改過的值用反光黃底加「已修改」標籤，差異表預設收起沒改的欄位。",
       "**Do** 數字一律用 Barlow Condensed 等寬數字。",
