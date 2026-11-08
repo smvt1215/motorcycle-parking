@@ -314,7 +314,7 @@
       "post": {
         "operationId": "api_v1_spot_sightings",
         "summary": "依 id 讀騎士回報的彙整（地圖、詳情）",
-        "description": "一次最多 600 個 id：社群點用 uuid，官方點用 official:<uuid>。依點位、分區或路段、車種各回一列，只有時間窗內有車友回報的才回傳；格式不符或沒有回報的 id 不回傳，重複的 id 只回一次。無法停車／施工中的回報不列入。不需要登入。錯誤：400 request.too_many_ids（超過 600 個）、400 request.invalid（p_window_minutes 不是 15 或 30）。",
+        "description": "一次最多 600 個 id：社群點用 uuid，官方點用 official:<uuid>。依點位、分區或路段、車種各回一列，只有時間窗內有車友回報的才回傳；格式不符或沒有回報的 id 不回傳，重複的 id 只回一次。無法停車／施工中的回報不列入 sightings，放在 closures：只看最近 2 小時，不受 p_window_minutes 影響。不需要登入。錯誤：400 request.too_many_ids（超過 600 個）、400 request.invalid（p_window_minutes 不是 15 或 30）。",
         "requestBody": {
           "required": true,
           "content": {
@@ -1197,10 +1197,62 @@
           }
         }
       },
+      "SpotClosure": {
+        "type": "object",
+        "required": [
+          "spot_id",
+          "zone_id",
+          "segment_id",
+          "riders",
+          "confirmed",
+          "latest_at",
+          "derived"
+        ],
+        "additionalProperties": false,
+        "description": "車友回報無法停車／施工中的分區、路段或整點（#189）。zone_id、segment_id 都是 null 表示整點。分區或路段不在點位現有清單時不回傳",
+        "properties": {
+          "spot_id": {
+            "type": "string",
+            "description": "停車點 id"
+          },
+          "zone_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "分區 id；不是分區的列為 null"
+          },
+          "segment_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "路段 id；不是路段的列為 null"
+          },
+          "riders": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "回報關閉的獨立車友人數（帳號與裝置取較小者），不含停權與可信度不足者；分區、路段的列也算整點的回報；整點在所有分區或路段都確認時算全部回報"
+          },
+          "confirmed": {
+            "type": "boolean",
+            "description": "回報人數達 2。true 才影響能不能停，false 只顯示有車友回報"
+          },
+          "latest_at": {
+            "type": "string",
+            "description": "ISO 8601 時間。列入的最新一筆回報"
+          },
+          "derived": {
+            "type": "boolean",
+            "description": "整點列才可能是 true：沒有人直接回報整點，由所有分區或路段都確認而來"
+          }
+        }
+      },
       "SpotSightings": {
         "type": "object",
         "required": [
-          "sightings"
+          "sightings",
+          "closures"
         ],
         "additionalProperties": false,
         "properties": {
@@ -1210,6 +1262,13 @@
               "$ref": "#/components/schemas/SpotSighting"
             },
             "description": "依 spot_id、zone_id、segment_id、vehicle 排序"
+          },
+          "closures": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpotClosure"
+            },
+            "description": "依 spot_id、zone_id、segment_id 排序；同一個分區、路段或整點只有一列"
           }
         }
       },

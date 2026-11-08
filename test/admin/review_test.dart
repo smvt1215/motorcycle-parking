@@ -579,6 +579,31 @@ void main() {
       });
     });
 
+    for (final width in [390.0, 820.0, 1280.0]) {
+      testWidgets('第一個路段的建議提醒其他路段要另外補（${width.toInt()} px）', (tester) async {
+        gateway.reports = [
+          ReviewReport(
+            id: 'r-seg',
+            sourceId: communityId,
+            reason: '路邊分段：新增',
+            field: 'segments',
+            proposed: const {
+              'parking_segments': [
+                {'name': '整段', 'access': 'scooterOnly'},
+              ],
+            },
+            createdAt: reportTime,
+          ),
+        ];
+        await show(tester, path: '/review/r-seg', size: Size(width, 900));
+        expect(
+          find.text('這筆通過後會建立這條路的第一個路段；之後判斷改走路段，其他路段要另外補上。'),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      });
+    }
+
     for (final width in [390.0, 700.0]) {
       testWidgets('位置建議沒有縣市時提醒，修改後套用可加入縣市（${width.toInt()} px）', (
         tester,

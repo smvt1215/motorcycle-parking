@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -375,9 +376,20 @@ class _AccountCard extends StatelessWidget {
               Align(
                 alignment: AlignmentDirectional.centerEnd,
                 child: TextButton(
+                  // Stays open and turns into the signed-out card with the
+                  // sign-in buttons (user request, 2026-11-08). The button
+                  // goes away, so drop its focus and say what happened.
                   onPressed: () => runAction(context, () async {
                     await store.signOut();
-                    if (context.mounted) Navigator.pop(context);
+                    FocusManager.instance.primaryFocus?.unfocus();
+                    if (!context.mounted) return;
+                    unawaited(
+                      SemanticsService.sendAnnouncement(
+                        View.of(context),
+                        settingsSignedOut,
+                        Directionality.of(context),
+                      ),
+                    );
                   }),
                   child: const Text('登出'),
                 ),

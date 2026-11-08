@@ -30,18 +30,21 @@ Future<void> _pump(
         child: Scaffold(
           body: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
+            // As SignInButtons lays them out.
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                for (final apple in [true, false]) ...[
-                  ProviderSignInButton(
-                    key: ValueKey(apple ? 'apple' : 'google'),
-                    apple: apple,
-                    label: apple ? '使用 Apple 登入' : '使用 Google 登入',
-                    onPressed: disabled ? null : (onPressed ?? () {}),
-                  ),
-                  const SizedBox(height: 12),
-                ],
+                BrandSignInButtonColumn(
+                  children: [
+                    for (final apple in [true, false])
+                      ProviderSignInButton(
+                        key: ValueKey(apple ? 'apple' : 'google'),
+                        apple: apple,
+                        label: apple ? '使用 Apple 登入' : '使用 Google 登入',
+                        onPressed: disabled ? null : (onPressed ?? () {}),
+                      ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -159,6 +162,40 @@ void main() {
         }
         debugDefaultTargetPlatformOverride = null;
       });
+    }
+
+    // Larger system text grows both buttons to one height (P11): Apple's
+    // logo and title keep the HIG proportion, Google keeps its type size.
+    for (final width in const [390.0, 820.0]) {
+      for (final scale in const [1.0, 1.15, 1.5, 2.0]) {
+        testWidgets('兩家按鈕同高（${platform.name} ${width.toInt()} 寬，字級 $scale）', (
+          tester,
+        ) async {
+          debugDefaultTargetPlatformOverride = platform;
+          await _pump(tester, dark: false, scale: scale, width: width);
+          expect(tester.takeException(), isNull);
+          final apple = tester.getSize(find.byKey(const ValueKey('apple')));
+          final google = tester.getSize(find.byKey(const ValueKey('google')));
+          expect(apple.height, moreOrLessEquals(google.height));
+          // The logo file is drawn at the height the text scale sets
+          // (HIG proportion); a wrapped title may make the button taller.
+          final base = ios ? 44.0 : 48.0;
+          final shared = scale * base > base ? scale * base : base;
+          expect(
+            tester.getSize(find.byType(AppleLogo)).height,
+            moreOrLessEquals(shared),
+          );
+          expect(apple.height, greaterThanOrEqualTo(shared - .01));
+          final title = tester.widget<Text>(find.text('使用 Apple 登入'));
+          expect(title.style!.fontSize, moreOrLessEquals(base * .43));
+          // Google's type size is its own, not scaled to the height.
+          expect(
+            tester.widget<Text>(find.text('使用 Google 登入')).style!.fontSize,
+            ios ? 17 : 15,
+          );
+          debugDefaultTargetPlatformOverride = null;
+        });
+      }
     }
 
     testWidgets('點按回呼與停用狀態（${platform.name}）', (tester) async {

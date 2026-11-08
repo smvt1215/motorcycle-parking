@@ -127,6 +127,9 @@ class _LocationPickerState extends State<LocationPicker>
 
   /// An address search is open.
   bool _searching = false;
+
+  /// The keyboard the search brought up is still going away.
+  bool _searchKeyboard = false;
   final _noteKey = GlobalKey(debugLabel: 'location-found-note');
 
   /// A list that scrolls the picker away (a keyboard shrinking the page
@@ -161,7 +164,7 @@ class _LocationPickerState extends State<LocationPicker>
   }
 
   Future<void> search() async {
-    setState(() => _searching = true);
+    setState(() => _searching = _searchKeyboard = true);
     updateKeepAlive();
     final AddressCandidate? picked;
     try {
@@ -190,6 +193,39 @@ class _LocationPickerState extends State<LocationPicker>
         alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
       );
     });
+  }
+
+  /// Rounded corners for the map, except over the native Google map on
+  /// iOS: there the rounded clip of the native view left everything after
+  /// the map in this form undrawn (blank, though still tappable) on iPhone
+  /// while Android showed it (reports, 2026-11-08). Square corners there.
+  Widget _clip(Widget map) => isCupertino && widget.mapBuilder == null
+      ? map
+      : ClipRRect(borderRadius: BorderRadius.circular(10), child: map);
+
+  /// The map, kept but not drawn while the address search is open over it.
+  /// On iOS the Google map is a native view; with a sheet and the keyboard
+  /// over it, iOS drew parts of this page over the search panel and left
+  /// blank space here after the keyboard closed (iPhone report,
+  /// 2026-11-08). Not drawing it while covered keeps only Flutter content
+  /// on screen; its state stays, so the camera is where it was. It comes
+  /// back once the search's keyboard has gone down as well.
+  Widget _map(BuildContext context, LocationMapView view) {
+    // Back once the search is closed and its keyboard has gone down.
+    if (!_searching && MediaQuery.viewInsetsOf(context).bottom == 0) {
+      _searchKeyboard = false;
+    }
+    return ColoredBox(
+      color: Theme.of(context).colorScheme.surfaceContainerHigh,
+      child: Visibility(
+        key: const ValueKey('location-map-slot'),
+        visible: !_searching && !_searchKeyboard,
+        maintainState: true,
+        maintainAnimation: true,
+        maintainSize: true,
+        child: (widget.mapBuilder ?? googleLocationMap)(context, view),
+      ),
+    );
   }
 
   /// The full-screen map behind「開地圖調整」; moves go to [onChanged] as
@@ -452,23 +488,17 @@ class _LocationPickerState extends State<LocationPicker>
         ],
         Semantics(
           label: '位置地圖：拖曳標記選擇位置，拖曳地圖空白處可平移',
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: SizedBox(
+          child: _clip(
+            SizedBox(
               height: widget.height,
               child: overlay
                   ? Stack(
                       children: [
-                        Positioned.fill(
-                          child: (widget.mapBuilder ?? googleLocationMap)(
-                            context,
-                            view,
-                          ),
-                        ),
+                        Positioned.fill(child: _map(context, view)),
                         ..._overlayButtons(context),
                       ],
                     )
-                  : (widget.mapBuilder ?? googleLocationMap)(context, view),
+                  : _map(context, view),
             ),
           ),
         ),

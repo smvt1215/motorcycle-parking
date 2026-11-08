@@ -269,7 +269,16 @@ class _AccountDeletionPageState extends State<AccountDeletionPage> {
             onPressed: sending ? null : () => unawaited(_start()),
           ),
           const SizedBox(height: 8),
-          Text(deletionReauthNote, style: muted, textAlign: TextAlign.center),
+          // Apple always signs in again (needsReauth); Google only after
+          // 10 minutes.
+          Text(
+            widget.deletion.gateway?.current?.apple ?? false
+                ? deletionReauthNoteApple
+                : deletionReauthNote,
+            key: const ValueKey('deletion-reauth-note'),
+            style: muted,
+            textAlign: TextAlign.center,
+          ),
         ] else
           _Notice(
             key: const ValueKey('deletion-admin-note'),

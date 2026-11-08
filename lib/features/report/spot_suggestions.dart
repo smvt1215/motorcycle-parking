@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 
-import 'package:flutter/foundation.dart' show setEquals;
+import 'package:flutter/foundation.dart' show setEquals, visibleForTesting;
 
 import '../../core/geo.dart';
 import '../../core/town_lookup.dart';
@@ -22,15 +22,15 @@ import '../map/space_type_sheet.dart';
 import '../../ui/option_pill.dart';
 import '../../ui/address_search_field.dart';
 import '../../ui/adaptive/adaptive.dart';
-import '../../ui/fee_editor.dart';
 import '../../ui/location_picker.dart';
 import '../../models/condition_text.dart' show scheduleSlotText;
 import 'condition_fields.dart';
 import 'entry_drafts.dart';
 import 'entry_pages.dart';
-import 'fee_suggestion.dart';
+import 'fee_forms.dart';
 import 'form_parts.dart';
 import 'report_sheet.dart';
+import 'time_rules_page.dart';
 
 String _yesNo(bool? value) => switch (value) {
   true => '可停',
@@ -130,6 +130,16 @@ String entranceHead(String note) {
 /// What the spot's limits say today (S1, S3), or 未填.
 String limitSummary(ParkingSpot spot) {
   if (spot.segments.length > 1) return '各段不同';
+  if (spot.zones.length > 1) {
+    final read = {
+      for (final z in spot.zones)
+        [
+          for (final l in z.condition?.limits ?? const <ParkingLimit>[])
+            limitText(l),
+        ].join(),
+    };
+    if (read.length > 1) return '各區不同';
+  }
   final c =
       spot.segments.firstOrNull?.condition ??
       spot.condition ??
@@ -148,7 +158,7 @@ String limitSummary(ParkingSpot spot) {
 /// read as a range (依路段 20–30/時), mixed ones as 依路段
 /// (PM_ANS_20261101_56).
 String feeSummary(ParkingSpot spot) {
-  final whole = noFeeText(spot.feeNote) ? '未提供' : spot.feeNote;
+  final whole = wholeFeeText(null, spot.feeNote);
   if (!spot.segments.any((s) => s.fee != null)) return whole;
   final rates = [
     for (final s in spot.segments) (s.fee ?? spot.fee)?.toJson()['scooter'],
@@ -192,6 +202,36 @@ class SuggestionListPage extends StatelessWidget {
     inFlow: true,
   );
 
+  EntryListArgs _listArgs(EntryType type) => EntryListArgs(
+    store: store,
+    type: type,
+    subtitle: spot.name,
+    city: spot.city.isEmpty ? null : spot.city,
+    district: spot.district,
+    spot: spot,
+    fee: () => spot.fee ?? const Fee(),
+    onSpotFee: (context) async => _fee(context, type),
+    onEntryFee: (context, draft) async =>
+        _fee(context, type, draft.wholeSpot ? null : draft),
+  );
+
+  /// F1 for the whole spot or for [draft].
+  Future<void> _fee(
+    BuildContext context,
+    EntryType type, [
+    EntryDraft? draft,
+  ]) => openFeePage(
+    context,
+    store: store,
+    spotName: spot.name,
+    type: type,
+    drafts: draftsOf(spot, type),
+    spotFee: spot.fee ?? const Fee(),
+    draft: draft,
+    spot: spot,
+    district: spot.district,
+  );
+
   void _openEntries(BuildContext context) {
     final type = street ? EntryType.segment : EntryType.zone;
     if (!_hasEntries(spot)) {
@@ -201,19 +241,55 @@ class SuggestionListPage extends StatelessWidget {
     Navigator.of(context).push<void>(
       formRoute(
         EntryListPage(
-          args: EntryListArgs(
-            store: store,
-            type: type,
-            subtitle: spot.name,
-            city: spot.city.isEmpty ? null : spot.city,
-            district: spot.district,
-            spot: spot,
-            fee: () => spot.fee ?? const Fee(),
-            onSpotFee: (context) async => _feeForm(context),
-          ),
+          args: _listArgs(type),
           onEntrance: street
               ? null
               : () => _form(context, 'guide', '入口與停車指引', guideSummary(spot)),
+        ),
+      ),
+    );
+  }
+
+  /// F0 for a lot; a street's rates are by segment, on S3b.
+  void _openFee(BuildContext context) {
+    if (!street) {
+      Navigator.of(context).push<void>(
+        formRoute(
+          FeeZonesPage(
+            store: store,
+            spotName: spot.name,
+            drafts: _hasEntries(spot) ? draftsOf(spot, EntryType.zone) : [],
+            spotFee: () => spot.fee ?? const Fee(),
+            wholeText: () => wholeFeeText(spot.fee, spot.feeNote),
+            spot: spot,
+            district: spot.district,
+          ),
+        ),
+      );
+    } else if (_hasEntries(spot)) {
+      Navigator.of(context).push<void>(
+        formRoute(EntryListPage(args: _listArgs(EntryType.segment))),
+      );
+    } else {
+      _fee(context, EntryType.segment);
+    }
+  }
+
+  /// A lot's rules live in its zones; without one nothing can hold them.
+  bool get _rulesOpen => street || (_hasEntries(spot) && spot.zones.isNotEmpty);
+
+  /// S5 or S5b.
+  void _openRules(BuildContext context) {
+    final type = street ? EntryType.segment : EntryType.zone;
+    Navigator.of(context).push<void>(
+      formRoute(
+        TimeRulesPage(
+          store: store,
+          type: type,
+          subtitle: spot.name,
+          drafts: draftsOf(spot, type),
+          rules: null,
+          spot: spot,
         ),
       ),
     );
@@ -223,10 +299,6 @@ class SuggestionListPage extends StatelessWidget {
   /// among them.
   void _kindForm(BuildContext context, [String label = '格位類型']) =>
       _form(context, 'space_type', label, spot.spaceType.label);
-
-  /// The present fee form, until PR10's F0 and F1.
-  void _feeForm(BuildContext context) =>
-      _form(context, 'fee_note', '收費資訊', spot.feeNote);
 
   @override
   Widget build(BuildContext context) {
@@ -308,10 +380,8 @@ class SuggestionListPage extends StatelessWidget {
                 leading: const Icon(Icons.schedule),
                 title: '限時／禁停／共用時段',
                 subtitle: street ? '現場標誌寫的' : null,
-                value: street ? limitSummary(spot) : '即將開放',
-                // A street keeps the present form until PR10's S5b; a lot's
-                // limits are its zones', so its row waits for S5.
-                onTap: street ? () => _kindForm(context) : null,
+                value: _rulesOpen ? limitSummary(spot) : '先新增分區',
+                onTap: _rulesOpen ? () => _openRules(context) : null,
               ),
             ],
           ),
@@ -325,7 +395,7 @@ class SuggestionListPage extends StatelessWidget {
                 title: '費率',
                 subtitle: street ? '每一段各自一組' : null,
                 value: feeSummary(spot),
-                onTap: () => _feeForm(context),
+                onTap: () => _openFee(context),
               ),
             ],
           ),
@@ -417,6 +487,22 @@ class SuggestionListPage extends StatelessWidget {
 extension on String {
   String ifEmpty(String other) => isEmpty ? other : this;
 }
+
+/// The form of a bay's kind and conditions, which S1's 場站型式 opens; a
+/// street spot's limits and bays have their own pages now (S4, S5b).
+@visibleForTesting
+Future<void> showKindSuggestion(
+  BuildContext context,
+  AppStore store,
+  ParkingSpot spot,
+) => _showSuggestionForm(
+  context,
+  store,
+  spot,
+  fieldKey: 'space_type',
+  label: '格位類型',
+  current: spot.spaceType.label,
+);
 
 /// The 這裡已經不能停車 report, from a lapsed closure's 還是不能停.
 Future<void> showGoneReport(
@@ -521,10 +607,6 @@ class _SuggestionFormState extends State<_SuggestionForm> {
   /// The space type sent: the one the suggested condition converts to.
   SpaceType get type => condition.typeFor(kind);
 
-  /// The spot's rates today; a suggestion names only the vehicles it
-  /// changes (design §5.4), so the others keep theirs.
-  Fee get currentFee => widget.spot.fee ?? const Fee();
-
   /// The spot's eligibility today; null is old data's 未確認, which a
   /// suggestion never sends back (#201).
   late final Eligible? currentScooter = Eligible.of(
@@ -542,9 +624,6 @@ class _SuggestionFormState extends State<_SuggestionForm> {
   /// notice may leave a vehicle out; a street bay is 可停 or 不可停.
   bool get lotSpot =>
       isOffStreet(widget.spot.spaceType, widget.spot.facilityType);
-
-  /// The vehicles the rider changes: a new rate, or null for 改成未確認.
-  FeeEdits feeEdits = {};
 
   /// The bay's condition as the rider corrects it with the kind.
   late final condition = ConditionDraft.of(
@@ -608,7 +687,6 @@ class _SuggestionFormState extends State<_SuggestionForm> {
   bool get unavailable => fieldKey == 'gone';
   bool get typeField => fieldKey == 'space_type';
   bool get eligibilityField => fieldKey == 'eligibility';
-  bool get feeField => fieldKey == 'fee_note';
   bool get guideField => fieldKey == 'guide';
   bool get locationField => fieldKey == 'location';
 
@@ -664,7 +742,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
 
   /// Structured fields submit the chosen value; the note becomes optional.
   bool get structured =>
-      typeField || eligibilityField || feeField || guideField || locationField;
+      typeField || eligibilityField || guideField || locationField;
 
   /// The longest text the spot column takes, so an applied value fits.
   int get maxLength => fieldKey == 'name' ? 100 : 450;
@@ -692,8 +770,6 @@ class _SuggestionFormState extends State<_SuggestionForm> {
     if (!structured) return '${widget.label}：$text';
     final value = typeField
         ? '${kind.label}${shareHeavyChanged ? '，大型重機${_yesNo(shareHeavy)}' : ''}'
-        : feeField
-        ? feeNoteOf(feeAfter(currentFee, feeEdits))
         : _eligibility(scooter, heavy);
     return '${widget.label}：建議「$value」${text.isEmpty ? '' : '；說明：$text'}';
   }
@@ -765,23 +841,6 @@ class _SuggestionFormState extends State<_SuggestionForm> {
           'city': town.city,
           'district': town.district,
         },
-      };
-    }
-    // The text beside the fee is built from it, so the two never disagree.
-    // Suggestions merge per vehicle (design §5.4): a vehicle the rider
-    // cleared goes as null, one never known is left out.
-    if (feeField) {
-      final fee = proposedFee(currentFee, feeEdits);
-      final after = feeNoteOf(feeAfter(currentFee, feeEdits));
-      return {
-        'fee': fee,
-        // The spot's text after the change; past 200 characters the server
-        // takes only the text of the rates sent (the review recomputes it).
-        'fee_note': after.length <= 200
-            ? after
-            : feeNoteOfJson({
-                for (final MapEntry(:key, :value) in fee.entries) key: ?value,
-              }),
       };
     }
     if (eligibilityField) {
@@ -882,7 +941,6 @@ class _SuggestionFormState extends State<_SuggestionForm> {
           line('大型重機', _word(currentHeavy), _word(heavy)),
       ];
     }
-    if (feeField) return feeChangeLines(currentFee, feeEdits);
     if (unavailable || text.isEmpty) return const [];
     return [line(widget.label, widget.current ?? '', text)];
   }
@@ -949,8 +1007,8 @@ class _SuggestionFormState extends State<_SuggestionForm> {
       'proposed': ?value,
       // The text is the value itself for name and fee suggestions.
       if (value == null || structured || unavailable) 'note': note.text.trim(),
-      if ((feeField || typeField) && evidence.text.trim().isNotEmpty)
-        'evidence_url': evidence.text.trim(),
+      if (typeField && evidence.text.trim().isNotEmpty)
+        'evidence_url': evidenceUrlOf(evidence.text),
     };
   }
 
@@ -1046,16 +1104,14 @@ class _SuggestionFormState extends State<_SuggestionForm> {
         key: form,
         child: ContentPage(
           children: [
-            // Canvas SuggestFee names the whole sheet.
-            SheetTitle(feeField ? '修改建議：收費' : widget.label),
+            SheetTitle(widget.label),
             const SizedBox(height: 8),
             Text(
               widget.spot.name,
               style: TextStyle(color: colors.onSurfaceVariant),
             ),
             const SizedBox(height: 16),
-            // The fee cards show each vehicle's rate today themselves.
-            if (widget.current != null && !sent && !feeField) ...[
+            if (widget.current != null && !sent) ...[
               Material(
                 color: colors.surfaceContainerLow,
                 borderRadius: BorderRadius.circular(16),
@@ -1334,48 +1390,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                 ),
                 const SizedBox(height: 20),
               ],
-              if (feeField) ...[
-                FormField<FeeEdits>(
-                  autovalidateMode: AutovalidateMode.onUserInteraction,
-                  validator: (_) {
-                    final missing = incompleteEdits(feeEdits);
-                    if (missing.isNotEmpty) {
-                      return '${missing.map((v) => v.label).join('、')}的費率還沒填完，'
-                          '請填好或按「維持目前」';
-                    }
-                    return effectiveEdits(currentFee, feeEdits).isEmpty
-                        ? '請至少修改一個車種，和目前不同才能送出'
-                        : null;
-                  },
-                  builder: (state) => Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        '現場收費牌怎麼寫？只改你看到不一樣的車種，其他維持目前。',
-                        style: TextStyle(color: colors.onSurfaceVariant),
-                      ),
-                      const SizedBox(height: 12),
-                      FeeSuggestionEditor(
-                        current: currentFee,
-                        edits: feeEdits,
-                        // Under each vehicle, including a stored
-                        // contradiction the merged fee still holds (#155).
-                        errors: {
-                          for (final v in FeeVehicle.values)
-                            v: ?precheckHint(found, 'proposed.fee.${v.wire}'),
-                        },
-                        onChanged: (v) {
-                          setState(() => feeEdits = v);
-                          state.didChange(v);
-                        },
-                      ),
-                      fieldError(context, state.errorText),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 10),
-              ],
-              if (feeField || typeField) ...[
+              if (typeField) ...[
                 EvidenceUrlField(
                   controller: evidence,
                   onChanged: (_) => setState(() {}),
@@ -1500,18 +1515,6 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                               color: colors.onSecondaryContainer,
                             ),
                           ),
-                        // Canvas SuggestFee: the vehicles left as they are.
-                        if (feeField)
-                          if (feeKeptLine(currentFee, feeEdits)
-                              case final kept?) ...[
-                            const SizedBox(height: 2),
-                            Text(
-                              kept,
-                              style: text.bodySmall?.copyWith(
-                                color: colors.onSecondaryContainer,
-                              ),
-                            ),
-                          ],
                       ],
                     ),
                   ),

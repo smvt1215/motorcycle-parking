@@ -26,6 +26,56 @@ void main() {
     'created_at': '2026-10-31T00:00:00Z',
   });
 
+  group('createsFirstSegment', () {
+    ReviewSpot road(List<Object?> segments) => ReviewSpot(
+      sourceId: spot.sourceId,
+      official: false,
+      values: {'parking_segments': segments},
+    );
+    ReviewReport suggestion(Object? segments, {String field = 'segments'}) =>
+        ReviewReport.fromJson({
+          'id': 'r1',
+          'source_id': spot.sourceId,
+          'reason': '路邊分段：新增',
+          'field': field,
+          'proposed': {'parking_segments': segments},
+          'created_at': '2026-10-31T00:00:00Z',
+        });
+    const added = [
+      {'name': '整段', 'access': 'scooterOnly'},
+    ];
+
+    test('a new segment on a road without segments is the first one', () {
+      expect(createsFirstSegment(suggestion(added), road(const [])), isTrue);
+    });
+
+    test('the column may be missing on the spot', () {
+      expect(createsFirstSegment(suggestion(added), spot), isTrue);
+    });
+
+    test('a road that has segments keeps them', () {
+      final current = road(const [
+        {'id': 's1', 'name': '東側'},
+      ]);
+      expect(createsFirstSegment(suggestion(added), current), isFalse);
+    });
+
+    test('a patch of an existing entry adds nothing', () {
+      final patch = [
+        {'id': 's1', 'access': 'heavyOnly'},
+      ];
+      expect(createsFirstSegment(suggestion(patch), road(const [])), isFalse);
+    });
+
+    test('another field or a missing spot says nothing', () {
+      expect(
+        createsFirstSegment(suggestion(added, field: 'zones'), road(const [])),
+        isFalse,
+      );
+      expect(createsFirstSegment(suggestion(added), null), isFalse);
+    });
+  });
+
   test('entriesPatch changes, removes and adds by id', () {
     expect(
       entriesPatch(zones, [
@@ -173,6 +223,28 @@ void main() {
     expect(wirePatch(applicablePatch(proposal, spot), spot: spot), isEmpty);
   });
 
+  test('一區改回沿用全場時顯示沿用，不是未填（F1b）', () {
+    final stored = [
+      {
+        'id': 'b1',
+        'name': 'B1',
+        'fee': {
+          'scooter': {'mode': 'free'},
+          'heavy': {'mode': 'free'},
+          'car': {'mode': 'free'},
+        },
+      },
+    ];
+    final next = entriesPatch(stored, [
+      {'id': 'b1', 'fee': null},
+    ])!;
+    expect(entriesChangeLines(stored, next).single, endsWith('→沿用全場'));
+    expect(
+      entriesChangeLines(stored, next, whole: '整條路').single,
+      endsWith('→沿用整條路'),
+    );
+  });
+
   test('the review lists what each change does, not only the names', () {
     final next = entriesPatch(zones, [
       {'id': 'b1', 'guide': '走右側坡道', 'access': 'scooterHeavy'},
@@ -223,12 +295,12 @@ void main() {
       (
         {'id': 'b1', 'fee': fee, 'fee_note': null},
         {'id': 'b1', 'name': 'B1', 'access': 'scooterOnly', 'fee': fee},
-        '費率原文 舊文字→未填',
+        '費率原文 舊文字→已移除',
       ),
       (
         {'id': 'b1', 'fee': null, 'fee_note': null},
         {'id': 'b1', 'name': 'B1', 'access': 'scooterOnly'},
-        '費率原文 舊文字→未填',
+        '費率原文 舊文字→已移除',
       ),
     ]) {
       final proposal = initialProposal(

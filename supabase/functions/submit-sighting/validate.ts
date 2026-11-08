@@ -5,7 +5,7 @@
  */
 export interface Sighting {
   spot_id: string;
-  /** A level of the scale, or closed (the whole spot). */
+  /** A level of the scale, or closed: of the zone or segment, else the spot. */
   kind: 'level' | 'closed';
   /** 0 很多空位, 1 還有一些, 2 快滿了, 3 已停滿; null when closed. */
   level: 0 | 1 | 2 | 3 | null;
@@ -57,9 +57,8 @@ export function validate(body: Record<string, unknown>): Sighting | string {
       return 'invalid level';
     }
   } else {
-    // Closed is the whole spot: no level, no zone or segment.
+    // Closed has no level; like a level it may name a zone or segment.
     if (level !== undefined && level !== null) return 'invalid level';
-    if (zone_id !== null || segment_id !== null) return 'invalid area';
   }
   if (typeof vehicle !== 'string' || !vehicles.has(vehicle)) {
     return 'invalid vehicle';

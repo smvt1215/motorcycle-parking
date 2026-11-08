@@ -114,6 +114,17 @@ bool submitEnabled(WidgetTester tester) {
 
 Future<void> pick(WidgetTester tester, ContentReportTarget target) async {
   final tile = find.byKey(ValueKey('content-report-${target.wire}'));
+  // Built lazily: on a short sheet the tile may not exist until scrolled to.
+  await tester.scrollUntilVisible(
+    tile,
+    100,
+    scrollable: find
+        .descendant(
+          of: find.byKey(const ValueKey('content-report-form')),
+          matching: find.byType(Scrollable),
+        )
+        .first,
+  );
   await centre(tester, tile);
   await tester.tap(tile);
   await tester.pumpAndSettle();
@@ -328,6 +339,139 @@ void main() {
           expect(find.byType(ContentReportSheet), findsNothing);
         });
       }
+
+      // iPhone report (2026-11-08): the keyboard covered the note and
+      // 送出檢舉 after picking 其他. A phone on its side (Codex #379) leaves
+      // only ~170 pt above its keyboard.
+      for (final (name, size, inset) in [
+        for (final (name, size) in layouts) (name, size, 300.0),
+        ('phone landscape', const Size(844, 390), 216.0),
+      ]) {
+        testWidgetsOn('${platform.name} $name：鍵盤出現時附註欄與送出檢舉在鍵盤上方', (
+          tester,
+        ) async {
+          setUpView(tester, platform, size);
+          final store = (await tester.runAsync(reportStore))!;
+          await openReport(tester, store, riderSpot);
+          await pick(tester, ContentReportTarget.other);
+          final noteField = find.byKey(const ValueKey('content-report-note'));
+          await tester.showKeyboard(noteField);
+          tester.view.viewInsets = FakeViewPadding(bottom: inset);
+          addTearDown(tester.view.resetViewInsets);
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+
+          final keyboardTop = size.height - inset;
+          // The focused field scrolled clear of the keyboard.
+          final field = tester.getRect(find.byType(EditableText));
+          expect(field.top, greaterThanOrEqualTo(0), reason: '$field');
+          expect(
+            field.bottom,
+            lessThanOrEqualTo(keyboardTop),
+            reason: '$field',
+          );
+          if (size.height > size.width) {
+            // Pinned right above the keyboard, under the field.
+            final submit = tester.getRect(submitButton);
+            expect(
+              submit.bottom,
+              lessThanOrEqualTo(keyboardTop),
+              reason: '$submit',
+            );
+            expect(field.bottom, lessThanOrEqualTo(submit.top));
+          }
+          // A phone on its side: too short to pin, so it scrolls to it.
+          await tester.ensureVisible(submitButton);
+          await tester.pumpAndSettle();
+          expect(
+            tester.getRect(submitButton).bottom,
+            lessThanOrEqualTo(keyboardTop),
+          );
+          expect(submitButton.hitTestable(), findsOneWidget);
+          await tester.ensureVisible(noteField);
+          await tester.pumpAndSettle();
+          await tester.enterText(noteField, '其他原因');
+          await tester.pumpAndSettle();
+
+          // No dismiss key on Zhuyin: a tap on the form's blank part puts
+          // the keyboard away, and 送出檢舉 still sends.
+          bool focused() => tester
+              .widget<EditableText>(find.byType(EditableText))
+              .focusNode
+              .hasFocus;
+          expect(focused(), isTrue);
+          // The form's margin beside the field.
+          final beside = tester.getRect(noteField);
+          await tester.tapAt(Offset(beside.left - 10, beside.center.dy));
+          await tester.pumpAndSettle();
+          expect(focused(), isFalse);
+          await send(tester);
+          expect(store.sent.single['note'], '其他原因');
+        });
+      }
+
+      // iPhone report (2026-11-08): picking a reason while typing the
+      // note left the keyboard up.
+      for (final (name, size) in layouts) {
+        testWidgetsOn('${platform.name} $name：打字中點檢舉項目會收起鍵盤並選取', (
+          tester,
+        ) async {
+          setUpView(tester, platform, size);
+          final store = (await tester.runAsync(reportStore))!;
+          await openReport(tester, store, riderSpot);
+          final noteField = find.byKey(const ValueKey('content-report-note'));
+          await tester.showKeyboard(noteField);
+          bool focused() => tester
+              .widget<EditableText>(find.byType(EditableText))
+              .focusNode
+              .hasFocus;
+          expect(focused(), isTrue);
+          await pick(tester, ContentReportTarget.spotName);
+          expect(focused(), isFalse);
+          expect(submitEnabled(tester), isTrue);
+          await tester.showKeyboard(noteField);
+          expect(focused(), isTrue);
+          await pick(tester, ContentReportTarget.other);
+          expect(focused(), isFalse);
+          expect(
+            find.text(contentReportNoteLabel(required: true)),
+            findsOneWidget,
+          );
+          expect(tester.takeException(), isNull);
+        });
+      }
+
+      // iPhone report (2026-11-08): closing the keyboard dropped the form
+      // and bounced it back. Each frame of the keyboard going down moves
+      // 送出檢舉 down with it, never past it and never back up.
+      testWidgetsOn('${platform.name} 收鍵盤時送出檢舉跟著鍵盤上緣往下，不跳動', (tester) async {
+        const size = Size(390, 844);
+        setUpView(tester, platform, size);
+        final store = (await tester.runAsync(reportStore))!;
+        await openReport(tester, store, riderSpot);
+        await pick(tester, ContentReportTarget.other);
+        final noteField = find.byKey(const ValueKey('content-report-note'));
+        await tester.showKeyboard(noteField);
+        tester.view.viewInsets = const FakeViewPadding(bottom: 336);
+        addTearDown(tester.view.resetViewInsets);
+        await tester.pumpAndSettle();
+        final title = tester.getRect(find.text(contentReportTitle));
+        var last = tester.getRect(submitButton).bottom;
+        for (var inset = 336.0; inset >= 0; inset -= 24) {
+          tester.view.viewInsets = FakeViewPadding(bottom: inset);
+          await tester.pump(const Duration(milliseconds: 16));
+          final bottom = tester.getRect(submitButton).bottom;
+          expect(bottom, greaterThanOrEqualTo(last), reason: 'inset $inset');
+          expect(bottom, lessThanOrEqualTo(size.height - inset));
+          // The title stays where it was.
+          expect(tester.getRect(find.text(contentReportTitle)), title);
+          last = bottom;
+        }
+        tester.view.viewInsets = FakeViewPadding.zero;
+        await tester.pumpAndSettle();
+        expect(tester.getRect(submitButton).bottom, greaterThanOrEqualTo(last));
+        expect(tester.takeException(), isNull);
+      });
 
       testWidgetsOn('${platform.name} 選「其他」但附註空白：顯示錯誤、不送出', (tester) async {
         setUpView(tester, platform, const Size(390, 844));

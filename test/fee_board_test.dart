@@ -303,11 +303,17 @@ void main() {
       final note = c['note'] as String;
       final boards = feeBoardOf(fee);
       if (note == defaultFeeNote) {
-        expect(boards, isEmpty, reason: name);
+        // Nothing known; 不適用 is still stated, never read as unconfirmed.
+        expect(
+          boards.every((b) => b.headline?.text == '不適用'),
+          isTrue,
+          reason: name,
+        );
         continue;
       }
       for (final b in boards) {
         final sentence = fee.textOf(b.vehicle.wire);
+        if (b.headline?.text == '不適用') continue;
         if (sentence == null) {
           expect(linesOf(b).single.tone, FeeTone.unconfirmed, reason: name);
           continue;

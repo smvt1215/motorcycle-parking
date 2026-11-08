@@ -3,6 +3,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+
+import 'fee_editor_steps.dart';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:motorcycle_parking/core/town_lookup.dart';
@@ -640,10 +643,6 @@ void main() {
   testWidgets('未填的三列顯示未填；路邊怎麼算錢走路段頁，整條路費率寫回 N1', (tester) async {
     await openForm(tester);
     await tapKey(tester, 'spot-kind-street');
-    expect(
-      tester.widget<EntryRow>(find.byKey(const ValueKey('n1-rules'))).onTap,
-      isNull,
-    );
     await tapKey(tester, 'n1-fee');
     expect(find.text('路段與格位'), findsOneWidget);
     expect(find.text('整條路費率'), findsOneWidget);
@@ -654,11 +653,155 @@ void main() {
     await tapKey(tester, 'spot-kind-lot');
     await tapKey(tester, 'n1-fee');
     expect(find.text('費率'), findsOneWidget);
+    expect(find.text('全場費率'), findsOneWidget);
+    await tester.tap(find.text('全場費率'));
+    await tester.pumpAndSettle();
     expect(find.byType(FeeEditor), findsOneWidget);
+    // C14: nothing is being changed in a spot not yet sent.
+    expect(find.text('修改中'), findsNothing);
+    expect(find.text('你要改的內容'), findsNothing);
     await tester.tap(find.widgetWithText(AdaptiveButton, '完成'));
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('form-header-leading')).last);
+    await tester.pumpAndSettle();
     expect(find.text('怎麼算錢'), findsOneWidget);
-    expect(find.text('未填'), findsNWidgets(2));
+    expect(find.text('未填'), findsNWidgets(3));
+  });
+
+  testWidgets('能不能停完成回 N1 顯示已填，送出時規定寫進各區（C14）', (tester) async {
+    final store = await openForm(tester);
+    await addZone(tester);
+    await tapKey(tester, 'n1-rules');
+    expect(find.text('限時／禁停／共用時段'), findsOneWidget);
+    await tester.tap(find.text('新增一條規定'));
+    await tester.pumpAndSettle();
+    expect(find.text('修改中'), findsNothing);
+    expect(find.text('你要改的內容'), findsNothing);
+    await tapKey(tester, 'rule-all-day');
+    await tester.tap(find.widgetWithText(AdaptiveButton, '完成'));
+    await tester.pumpAndSettle();
+    expect(find.text('已填'), findsOneWidget);
+    await scrollTo(tester, nameField);
+    await tester.enterText(nameField, '松壽地下停車場');
+    await tester.pump();
+    await pressSend(tester);
+    final spot = store.submissions.single['spot'] as Map<String, dynamic>;
+    final zone = (spot['parking_zones'] as List).single as Map;
+    final limits = (zone['condition'] as Map)['limits'] as List;
+    expect(limits.single['kind'], 'time_limit');
+    expect(limits.single['periods'], [
+      {'days': 'all', 'max_minutes': 120, 'extensions': 0},
+    ]);
+    expect(validZoneList(spot['parking_zones']), isTrue);
+  });
+
+  testWidgets('切到路邊再看能不能停，切回路外時分區的規定範圍還在（#365 Codex）', (tester) async {
+    final store = await openForm(tester);
+    await addZone(tester);
+    await addZone(tester, name: 'B3 機車區');
+    await tapKey(tester, 'n1-rules');
+    await tester.tap(find.text('新增一條規定'));
+    await tester.pumpAndSettle();
+    await tapKey(tester, 'rule-all-day');
+    await tapKey(tester, 'rule-scope-all');
+    await tapKey(tester, 'rule-scope-0');
+    await tester.tap(find.widgetWithText(AdaptiveButton, '完成'));
+    await tester.pumpAndSettle();
+    await addSegment(tester);
+    await tapKey(tester, 'n1-rules');
+    await tester.tap(find.byKey(const ValueKey('form-header-leading')).last);
+    await tester.pumpAndSettle();
+    await tapKey(tester, 'spot-kind-lot');
+    await scrollTo(tester, nameField);
+    await tester.enterText(nameField, '松壽地下停車場');
+    await tester.pump();
+    await pressSend(tester);
+    expect(find.textContaining('有規定沒有選管哪幾區'), findsNothing);
+    final spot = store.submissions.single['spot'] as Map<String, dynamic>;
+    final zones = (spot['parking_zones'] as List).cast<Map<String, Object?>>();
+    expect(zones.map((z) => z['name']), ['B2 機車區', 'B3 機車區']);
+    expect(
+      ((zones[0]['condition'] as Map)['limits'] as List).single['kind'],
+      'time_limit',
+    );
+    expect((zones[1]['condition'] as Map)['limits'], anyOf(isNull, isEmpty));
+  });
+
+  testWidgets('新增模式改回沿用全場：有確認卡，完成後回 F0，該區不帶費率（C14、F1b）', (tester) async {
+    final store = await openForm(tester);
+    await addZone(tester);
+    await tapKey(tester, 'n1-fee');
+    await tester.tap(find.text('B2 機車區'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('fee-revert')), findsNothing);
+    await chooseFeeMode(tester, 'scooter', 'free');
+    await tester.tap(find.widgetWithText(AdaptiveButton, '完成'));
+    await tester.pumpAndSettle();
+    expect(find.text('普機 免費'), findsOneWidget);
+    await tester.tap(find.text('B2 機車區'));
+    await tester.pumpAndSettle();
+    await tapKey(tester, 'fee-revert');
+    expect(find.text('將改回沿用全場'), findsOneWidget);
+    expect(find.text('全場未提供'), findsOneWidget);
+    expect(find.text('回到清單，這一區不帶費率'), findsOneWidget);
+    expect(find.text('你要改的內容'), findsNothing);
+    await tester.tap(find.widgetWithText(AdaptiveButton, '完成'));
+    await tester.pumpAndSettle();
+    expect(find.text('未提供'), findsWidgets);
+    expect(find.text('普機 免費'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('form-header-leading')).last);
+    await tester.pumpAndSettle();
+    await scrollTo(tester, nameField);
+    await tester.enterText(nameField, '松壽地下停車場');
+    await tester.pump();
+    await pressSend(tester);
+    final spot = store.submissions.single['spot'] as Map<String, dynamic>;
+    final zone = (spot['parking_zones'] as List).single as Map;
+    expect(zone.containsKey('fee'), isFalse);
+  });
+
+  testWidgets('新增模式只看一下 F1 按完成，分區仍沿用全場（不帶費率）', (tester) async {
+    final store = await openForm(tester);
+    await addZone(tester);
+    await tapKey(tester, 'n1-fee');
+    await tester.tap(find.text('B2 機車區'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(AdaptiveButton, '完成'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('form-header-leading')).last);
+    await tester.pumpAndSettle();
+    expect(find.text('依分區'), findsNothing);
+    await scrollTo(tester, nameField);
+    await tester.enterText(nameField, '松壽地下停車場');
+    await tester.pump();
+    await pressSend(tester);
+    final spot = store.submissions.single['spot'] as Map<String, dynamic>;
+    final zone = (spot['parking_zones'] as List).single as Map;
+    expect(zone.containsKey('fee'), isFalse);
+  });
+
+  testWidgets('路邊新增：路段費率走 F1，完成後寫進該段', (tester) async {
+    final store = await openForm(tester);
+    await addSegment(tester);
+    await tapKey(tester, 'n1-where');
+    await tester.tap(find.text('費率').last);
+    await tester.pumpAndSettle();
+    expect(find.byType(FeeEditor), findsOneWidget);
+    await chooseFeeMode(tester, 'scooter', 'free');
+    await chooseFeeMode(tester, 'heavy', 'not_applicable');
+    await tester.tap(find.widgetWithText(AdaptiveButton, '完成'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('form-header-leading')).last);
+    await tester.pumpAndSettle();
+    expect(find.text('依路段'), findsOneWidget);
+    await scrollTo(tester, nameField);
+    await tester.enterText(nameField, '測試點');
+    await tester.pump();
+    await pressSend(tester);
+    final spot = store.submissions.single['spot'] as Map<String, dynamic>;
+    final segment = (spot['parking_segments'] as List).single as Map;
+    expect((segment['fee'] as Map)['scooter'], {'mode': 'free'});
+    expect((segment['fee'] as Map)['car'], {'mode': 'not_applicable'});
   });
 
   testWidgets('N1 沒有停用的照片格，只留公告連結', (tester) async {

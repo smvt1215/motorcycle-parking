@@ -39,6 +39,10 @@ const deletionButton = '刪除帳號';
 const deletionSending = '正在送出…';
 const deletionReauthNote = '如果超過 10 分鐘沒登入，送出前會請你再登入一次。';
 
+/// Apple accounts always sign in again before sending, however recent the
+/// last sign-in: the revoke needs that sign-in (user-approved, 2026-11-08).
+const deletionReauthNoteApple = '送出前會請你再用 Apple 登入一次，以便撤銷「使用 Apple 登入」的授權。';
+
 const deletionConfirmTitle = '要刪除帳號嗎？';
 const deletionConfirmBody = '帳號會在 7 天後刪除。這段期間登入時可以選擇取消；之後就無法復原。';
 const deletionConfirmCancel = '取消';

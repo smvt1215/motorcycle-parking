@@ -393,6 +393,18 @@ bool _applicable(String key, Object? value, ReviewSpot spot) =>
 /// The fields that hold a list of zones or segments by id (#188).
 const entryKeys = ['parking_zones', 'parking_segments'];
 
+/// Whether accepting [report] adds the first segment of a roadside [spot]
+/// (#190): from then on the spot is judged by its segments, so the rest of
+/// the road has to be added separately. An entry without an id is new
+/// ([entriesPatch]).
+bool createsFirstSegment(ReviewReport report, ReviewSpot? spot) {
+  if (report.field != 'segments' || spot == null) return false;
+  final proposed = report.proposed?['parking_segments'];
+  return proposed is List &&
+      proposed.any((e) => e is Map && !e.containsKey('id')) &&
+      jsonList(spot.values['parking_segments']).isEmpty;
+}
+
 /// A zone or segment suggestion that names an entry the spot no longer has
 /// (removed or replaced since the report): it cannot be applied, and is
 /// shown among the suggestions set aside.
@@ -414,13 +426,16 @@ const _entryKeyLabels = {
   'fee_note': '費率原文',
   'fee_plan': '計費規則',
   'condition': '格位',
-  'evidence_url': '照片連結',
+  'evidence_url': '公告連結',
   'side': '哪一側',
   'range': '範圍',
   'total': '格數',
 };
 
-String _entryValue(String key, Object? v) => switch ((key, v)) {
+String _entryValue(String key, Object? v, String whole) => switch ((key, v)) {
+  // An entry without rates pays the spot's (F1b).
+  ('fee', null) => '沿用$whole',
+  ('fee_note', null) => '已移除',
   (_, null) => '未填',
   ('access', final String a) => ParkingAccess.values.asNameMap()[a]?.label ?? a,
   ('fee', _) => reviewFee(v)?.summary ?? '未設定',
@@ -435,8 +450,13 @@ String _entryValue(String key, Object? v) => switch ((key, v)) {
 };
 
 /// What [next] changes in [current] (a zone or segment list), one line per
-/// change: 新增, 撤除, or each changed key of an entry, 舊→新.
-List<String> entriesChangeLines(Object? current, Object? next) {
+/// change: 新增, 撤除, or each changed key of an entry, 舊→新. [whole] names
+/// the rates an entry without its own follows: 全場, or a street's 整條路.
+List<String> entriesChangeLines(
+  Object? current,
+  Object? next, {
+  String whole = '全場',
+}) {
   if (next is! List) return const [];
   final now = jsonList(current);
   String nameOf(Map<Object?, Object?> e) =>
@@ -454,7 +474,7 @@ List<String> entriesChangeLines(Object? current, Object? next) {
       else
         '${nameOf(byId[change['id']]!)}：${[for (final k in change.keys)
           if (k != 'id') '${_entryKeyLabels[k] ?? k} '
-                '${_entryValue(k, byId[change['id']]![k])}→${_entryValue(k, change[k])}'].join('；')}',
+                '${_entryValue(k, byId[change['id']]![k], whole)}→${_entryValue(k, change[k], whole)}'].join('；')}',
   ];
 }
 

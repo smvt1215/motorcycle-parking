@@ -104,6 +104,12 @@ Deno.test('the mail has only the id and the admin link', () => {
   eq(mail.subject.includes(id.slice(0, 8)), true, 'subject names the report');
   eq(mail.text.includes(`https://admin.test/review/${id}`), true, 'link');
   eq(mail.text.split('\n').length, 6, 'nothing else');
+  // Same deadline the app states (#316 contentReportIntro).
+  eq(
+    mail.text.split('\n')[0],
+    '有一筆新的內容不當檢舉，請在 5 個工作天內確認並處理。',
+    'deadline',
+  );
 });
 
 Deno.test('the fuse mail says later reports wait, with no personal data', () => {
