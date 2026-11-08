@@ -20,6 +20,10 @@ abstract final class PlateColors {
   static const delayedNote = Color(0xff6b4500);
   static const riderPaper = Color(0xffeef2f3);
 
+  /// The outline of a known answer in the light details' table of
+  /// contents (A2).
+  static const line = Color(0xffc9d3d6);
+
   /// Outlined plates on the dark details page (A4).
   static const darkInk = Color(0xffe6eef0);
   static const darkMuted = Color(0xffa3b4ba);
@@ -205,6 +209,15 @@ class _Plate extends StatelessWidget {
           PlateColors.darkMuted,
           PlateColors.darkLine,
         ),
+      };
+    }
+    if (dense && !dark) {
+      // A2: the table of contents' outlined plates sit on the page, no white
+      // card; a known answer is outlined lightly.
+      (fill, border) = switch (plate.tone) {
+        PlateTone.dashed => (Colors.transparent, border),
+        PlateTone.line => (Colors.transparent, PlateColors.line),
+        _ => (fill, border),
       };
     }
     final solid = border == null && plate.tone != PlateTone.rider;

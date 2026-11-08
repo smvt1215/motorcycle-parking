@@ -92,6 +92,42 @@ void main() {
                 boxRect.height,
                 greaterThanOrEqualTo(dense ? (isCupertino ? 44 : 48) : 64),
               );
+              // Colours (A2 light, A4 dark): the table of contents' outlined
+              // plates have no card; a known answer's outline is light.
+              final tone = _plates[face.index].tone;
+              final decoration =
+                  tester
+                          .widget<Container>(
+                            find.descendant(
+                              of: box,
+                              matching: find.byType(Container),
+                            ),
+                          )
+                          .decoration!
+                      as BoxDecoration;
+              if (tone == PlateTone.line || tone == PlateTone.dashed) {
+                expect(
+                  decoration.color,
+                  dense ? Colors.transparent : PlateColors.paper,
+                  reason: '$tone',
+                );
+              }
+              if (tone == PlateTone.line) {
+                final side = (decoration.border! as Border).top;
+                expect(
+                  side.color,
+                  dense
+                      ? (dark ? PlateColors.darkLine : PlateColors.line)
+                      : PlateColors.ink,
+                );
+                expect(side.width, 1.5);
+              }
+              if (tone == PlateTone.dashed) {
+                expect(
+                  (paint.foregroundPainter! as DashedBorder).color,
+                  dense && dark ? PlateColors.darkMuted : PlateColors.muted,
+                );
+              }
             }
           }, variant: TargetPlatformVariant({platform}));
         }
