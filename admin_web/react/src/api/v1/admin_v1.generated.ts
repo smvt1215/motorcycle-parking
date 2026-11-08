@@ -249,6 +249,10 @@ export type SupportMessage = {
   dkim:
     | ('pass' | 'fail' | 'softfail' | 'neutral' | 'none' | 'temperror' | 'permerror' | 'policy' | null)
     | ('pass' | 'fail' | 'softfail' | 'neutral' | 'none' | 'temperror' | 'permerror' | 'policy' | null);
+  /** Authentication-Results 的 DMARC 結果（channel email） */
+  dmarc:
+    | ('pass' | 'fail' | 'softfail' | 'neutral' | 'none' | 'temperror' | 'permerror' | 'policy' | null)
+    | ('pass' | 'fail' | 'softfail' | 'neutral' | 'none' | 'temperror' | 'permerror' | 'policy' | null);
   /** 附件檔名；內容不收 */
   attachments: string[];
   /** 收件人（out） */

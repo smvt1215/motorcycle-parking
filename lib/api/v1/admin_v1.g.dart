@@ -554,6 +554,7 @@ class SupportMessage {
     required this.suspicious,
     this.spf,
     this.dkim,
+    this.dmarc,
     required this.attachments,
     this.toEmail,
     this.deliveryStatus,
@@ -573,6 +574,7 @@ class SupportMessage {
     suspicious: json['suspicious'] as bool,
     spf: json['spf'] == null ? null : json['spf'] as String,
     dkim: json['dkim'] == null ? null : json['dkim'] as String,
+    dmarc: json['dmarc'] == null ? null : json['dmarc'] as String,
     attachments: [for (final e in json['attachments'] as List) e as String],
     toEmail: json['to_email'] == null ? null : json['to_email'] as String,
     deliveryStatus: json['delivery_status'] == null
@@ -611,6 +613,9 @@ class SupportMessage {
   /// Authentication-Results 的 DKIM 結果（channel email）
   final String? dkim;
 
+  /// Authentication-Results 的 DMARC 結果（channel email）
+  final String? dmarc;
+
   /// 附件檔名；內容不收
   final List<String> attachments;
 
@@ -640,6 +645,7 @@ class SupportMessage {
     'suspicious': suspicious,
     'spf': spf,
     'dkim': dkim,
+    'dmarc': dmarc,
     'attachments': attachments,
     'to_email': toEmail,
     'delivery_status': deliveryStatus,
@@ -661,6 +667,7 @@ class SupportMessage {
       other.suspicious == suspicious &&
       other.spf == spf &&
       other.dkim == dkim &&
+      other.dmarc == dmarc &&
       _equal(other.attachments, attachments) &&
       other.toEmail == toEmail &&
       other.deliveryStatus == deliveryStatus &&
@@ -680,6 +687,7 @@ class SupportMessage {
     suspicious,
     spf,
     dkim,
+    dmarc,
     _hash(attachments),
     toEmail,
     deliveryStatus,

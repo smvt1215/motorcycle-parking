@@ -766,6 +766,7 @@
           "suspicious",
           "spf",
           "dkim",
+          "dmarc",
           "attachments",
           "to_email",
           "delivery_status",
@@ -857,6 +858,24 @@
               null
             ],
             "description": "Authentication-Results 的 DKIM 結果（channel email）"
+          },
+          "dmarc": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "pass",
+              "fail",
+              "softfail",
+              "neutral",
+              "none",
+              "temperror",
+              "permerror",
+              "policy",
+              null
+            ],
+            "description": "Authentication-Results 的 DMARC 結果（channel email）"
           },
           "attachments": {
             "type": "array",

@@ -235,6 +235,10 @@ enum FeeKind {
 
   /// No source states it (官方未標示).
   unknown,
+
+  /// Every place counted is marked 不適用 for this vehicle: a known answer,
+  /// never read as [unknown].
+  notApplicable,
 }
 
 /// A rate as the plate reads it, at this moment: a by_time rate's current
@@ -894,6 +898,18 @@ Rate? _resolved(Fee fee, VehicleType vehicle) {
   return rate.mode == FeeMode.sameAsScooter ? fee.scooter : fee.car;
 }
 
+/// Whether [fee] marks [vehicle] 不適用, directly or by following a rate
+/// that is. A vehicle with no rate is unconfirmed, not this.
+bool feeNotApplicable(Fee fee, VehicleType vehicle) {
+  final rate = vehicle == VehicleType.heavy ? fee.heavy : fee.scooter;
+  final read = switch (rate?.mode) {
+    FeeMode.sameAsScooter => fee.scooter,
+    FeeMode.sameAsCar => fee.car,
+    _ => rate,
+  };
+  return read?.mode == FeeMode.notApplicable;
+}
+
 /// The period of [condition]'s time limit that holds at [now], as
 /// decideParking reads it (an old all-day `max_minutes` as one period);
 /// null when there is none, or none holds now.
@@ -985,7 +1001,7 @@ PlateRate? _plateRate(
   }
 }
 
-/// A place's price: a structured rate, legacy text, or nothing.
+/// A place's price: a structured rate, legacy text, 不適用, or nothing.
 sealed class _Price {
   const _Price();
 }
@@ -1008,6 +1024,10 @@ class _NoPrice extends _Price {
   const _NoPrice();
 }
 
+class _NotApplicablePrice extends _Price {
+  const _NotApplicablePrice();
+}
+
 bool _placeholder(String text) =>
     const {'', '依現場公告', '請依現場公告', '費率未確認'}.contains(text.trim());
 
@@ -1020,6 +1040,7 @@ _Price _priceOf(
   HolidayCalendar calendar,
 ) {
   if (fee != null) {
+    if (feeNotApplicable(fee, vehicle)) return const _NotApplicablePrice();
     final resolved = _resolved(fee, vehicle);
     if (resolved == null) return const _NoPrice();
     final rate = _plateRate(resolved, condition, now, calendar);
@@ -1118,11 +1139,14 @@ FeeAnswer _fee(
   if (prices.every((p) => p is _NoPrice)) {
     return const FeeAnswer(kind: FeeKind.unknown);
   }
+  if (prices.every((p) => p is _NotApplicablePrice)) {
+    return const FeeAnswer(kind: FeeKind.notApplicable);
+  }
   final texts = {
     for (final p in prices)
       if (p is _TextPrice) p.text,
   };
-  if (texts.length == 1 && rates.isEmpty && !prices.any((p) => p is _NoPrice)) {
+  if (texts.length == 1 && prices.every((p) => p is _TextPrice)) {
     return FeeAnswer(kind: FeeKind.text, text: texts.single);
   }
   return FeeAnswer(kind: FeeKind.varies, rates: rates, places: prices.length);

@@ -64,6 +64,36 @@ export function authResults(
   };
 }
 
+/**
+ * TEMP(#295): what the Authentication-Results headers say, to find why
+ * Gmail reads spf=none: every header's authserv-id, then Cloudflare's
+ * methods and results with the property names each is about, in order. No
+ * value of a property, so no address or domain, and nothing of the mail.
+ * Remove once explained.
+ */
+export function authTrace(
+  headers: Header[],
+  authservId = defaultAuthservId,
+): string {
+  const all = headers.filter((h) =>
+    h.key.toLowerCase() === 'authentication-results'
+  );
+  const id = (h: Header) => h.value.split(';')[0].trim().split(/\s+/)[0];
+  const ids = all.map((h) => id(h).replace(/[^a-z0-9.-]/gi, '').slice(0, 40));
+  const ours = all.find((h) =>
+    id(h).toLowerCase() === authservId.toLowerCase()
+  );
+  const parts = (ours?.value ?? '').replace(/"(?:[^"\\]|\\.)*"/g, '""')
+    .replace(/\((?:[^()\\]|\\.)*\)/g, '').split(';').slice(1).flatMap((p) => {
+      const m = /^\s*([a-z-]+)\s*=\s*([a-z]+)/i.exec(p);
+      if (!m) return [];
+      const names = [...p.matchAll(/\s([a-z]+\.[a-z-]+)\s*=/gi)]
+        .map((n) => n[1].toLowerCase());
+      return [`${m[1]}=${m[2]}(${names.join(',')})`.toLowerCase()];
+    });
+  return `${ids.join(',')} | ${parts.join(';')}`.slice(0, 500);
+}
+
 export type Parsed = {
   headers: Header[];
   from?: { address?: string };
@@ -102,6 +132,7 @@ export function payload(
     attachments: parsed.attachments.slice(0, 20).map((a) =>
       clip(a.filename ?? '', 200)
     ).filter((name) => name !== ''),
+    auth_trace: authTrace(parsed.headers, authservId),
     message_id: parsed.messageId ?? null,
     // The same mail delivered again has the same digest, so a mail without
     // a Message-ID is still filed once (Codex review, PR #306).

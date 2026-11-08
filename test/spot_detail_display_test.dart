@@ -52,6 +52,154 @@ void main() {
     expect(cards.single.header, contains('B2 重機專區'));
   });
 
+  group('費率不適用（騎士端不寫成未提供）', () {
+    const na = {'mode': 'not_applicable'};
+    const hourly = {'mode': 'hourly', 'amount': 20, 'per_minutes': 60};
+    Map<String, dynamic> zone(
+      String id, {
+      Map<String, dynamic>? fee,
+      Map<String, dynamic>? condition,
+    }) => {'id': id, 'name': '$id 區', 'fee': ?fee, 'condition': ?condition};
+    FeeSection section(ParkingSpot spot) =>
+        feeSection(sign(spot, VehicleType.heavy, detailDay), spot, detailDay);
+    ParkingSpot zoned(List<Map<String, dynamic>> zones) =>
+        ParkingSpot.fromJson({...lot(zones), 'fee': null, 'fee_note': ''});
+
+    test('單區：標成不適用寫不適用，用淡色；另一車種照常', () {
+      final spot = ParkingSpot.fromJson({
+        ...lot(const []),
+        'fee': {'scooter': hourly, 'heavy': na},
+      });
+      final card = section(spot).cards.single;
+      expect((card.main, card.unknown), ('不適用', true));
+      final scooter = feeSection(
+        sign(spot, VehicleType.scooter, detailDay),
+        spot,
+        detailDay,
+      );
+      expect(scooter.cards.single.main, '每小時 20 元');
+    });
+
+    test('比照到不適用：比照機車、比照汽車都寫不適用', () {
+      for (final fee in const [
+        {
+          'scooter': na,
+          'heavy': {'mode': 'same_as_scooter'},
+        },
+        {
+          'scooter': hourly,
+          'heavy': {'mode': 'same_as_car'},
+          'car': na,
+        },
+      ]) {
+        final spot = ParkingSpot.fromJson({...lot(const []), 'fee': fee});
+        expect(section(spot).cards.single.main, '不適用');
+      }
+    });
+
+    test('沒有資料維持未提供，比照到沒有資料也是', () {
+      final none = ParkingSpot.fromJson({
+        ...lot(const []),
+        'fee': {'scooter': hourly},
+      });
+      final follow = ParkingSpot.fromJson({
+        ...lot(const []),
+        'fee': {
+          'heavy': {'mode': 'same_as_scooter'},
+        },
+      });
+      for (final spot in [none, follow]) {
+        final card = section(spot).cards.single;
+        expect((card.main, card.unknown), ('未提供', true));
+      }
+    });
+
+    test('多區全部不適用：合成一張不適用', () {
+      final spot = zoned([
+        zone('A', fee: {'heavy': na}),
+        zone(
+          'B',
+          fee: {
+            'scooter': na,
+            'heavy': {'mode': 'same_as_scooter'},
+          },
+        ),
+      ]);
+      final fees = section(spot);
+      expect(fees.cards.map((c) => c.main), ['不適用']);
+      expect(fees.cards.single.note, '', reason: '不適用不是同價');
+    });
+
+    test('只有一區開放、全場費率不適用：不寫全場同價', () {
+      Map<String, dynamic> allow(bool heavy) => {
+        'bay': 'motorcycle',
+        'use': 'usual',
+        'allow': {'scooter': true, 'heavy': heavy},
+      };
+      final spot = ParkingSpot.fromJson({
+        ...lot([
+          zone('A', condition: allow(true)),
+          zone('B', condition: allow(false)),
+        ]),
+        'fee': {'scooter': hourly, 'heavy': na},
+      });
+      final fees = section(spot);
+      expect(fees.cards.map((c) => c.main), ['不適用']);
+      expect(fees.sameNote, '');
+    });
+
+    test('多區混合：不適用與未提供、費率各自成卡，不算同價', () {
+      final missing = zoned([
+        zone('A', fee: {'heavy': na}),
+        zone('B', fee: {'scooter': hourly}),
+      ]);
+      final cards = section(missing).cards;
+      expect(cards.map((c) => c.main), ['不適用', '未提供']);
+      expect(cards.every((c) => c.note.isEmpty), isTrue);
+      final priced = zoned([
+        zone('A', fee: {'heavy': na}),
+        zone('B', fee: {'heavy': hourly}),
+      ]);
+      expect(section(priced).cards.map((c) => c.main), ['不適用', '每小時 20 元']);
+    });
+
+    test('稍後開放的分區不適用：寫不適用，不寫費率未提供、也不說同樣', () {
+      const open = {
+        'bay': 'motorcycle',
+        'use': 'usual',
+        'allow': {'heavy': true},
+      };
+      final spot = zoned([
+        zone('A', fee: {'heavy': hourly}, condition: open),
+        zone(
+          'B',
+          fee: {'heavy': na},
+          condition: {
+            ...open,
+            'schedule': [
+              {
+                'days': 'all',
+                'from': '20:00',
+                'to': '23:00',
+                'vehicles': ['heavy'],
+              },
+            ],
+          },
+        ),
+      ]);
+      final later = section(spot).later.single;
+      expect(later, endsWith('，不適用'));
+      expect(later, isNot(contains('費率未提供')));
+    });
+
+    test('DetailPrice：不適用不等於未提供', () {
+      const na = DetailPrice(notApplicable: true);
+      expect(na.none, isFalse);
+      expect(na, isNot(const DetailPrice()));
+      expect(const DetailPrice().none, isTrue);
+    });
+  });
+
   test('同類別的分區共用一個官方數字：合成一列，不各列一次（Codex P2）', () {
     Map<String, dynamic> heavyZone(String id, String name) => {
       'id': id,
