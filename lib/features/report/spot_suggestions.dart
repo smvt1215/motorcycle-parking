@@ -50,12 +50,28 @@ String _word(Eligible? value) => value?.label ?? '未確認';
 String _eligibility(Eligible? scooter, Eligible? heavy) =>
     '普通機車${_word(scooter)} · 大型重機${_word(heavy)}';
 
-/// Where the spot is as shown today: its address or road, else coordinates.
-String locationSummary(ParkingSpot spot) => spot.address.isNotEmpty
-    ? spot.address
-    : spot.roadSegment.isNotEmpty
-    ? spot.roadSegment
-    : '${spot.lat.toStringAsFixed(5)}, ${spot.lng.toStringAsFixed(5)}';
+/// Where the spot is as shown today, as N1 names a place: the county, the
+/// district and the address (or road), never the coordinates; without an
+/// address, 「目前位置：臺北市中山區」.
+String locationSummary(ParkingSpot spot) {
+  final place = '${spot.city.trim()}${spot.district.trim()}';
+  final address = spot.address.trim().isNotEmpty
+      ? spot.address.trim()
+      : spot.roadSegment.trim();
+  if (address.isEmpty) {
+    return place.isEmpty ? '目前位置：縣市與區未提供' : '目前位置：$place';
+  }
+  // Many addresses already start with their county (and district).
+  if (place.isEmpty ||
+      (spot.city.trim().isNotEmpty && address.startsWith(spot.city.trim()))) {
+    return address;
+  }
+  if (spot.district.trim().isNotEmpty &&
+      address.startsWith(spot.district.trim())) {
+    return '${spot.city.trim()}$address';
+  }
+  return '$place $address';
+}
 
 /// [metres] as riders read a distance.
 String _metres(double metres) =>
@@ -1351,6 +1367,9 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                         onLocate: widget.store.currentFix,
                         height: pickerHeight(context),
                         mapBuilder: appLocationMap,
+                        // Search, 放大地圖 and 移到我的位置 float on the map,
+                        // as N1's; no coordinates or buttons under it.
+                        overlayControls: true,
                         // Without a backend (demo) there is nothing to search.
                         onSearch: widget.store.client == null
                             ? null
