@@ -110,6 +110,32 @@ class BuildConfigurationTest(unittest.TestCase):
                     configure_build("staging", "ios")
                 self.assertEqual(list(root.iterdir()), [])
 
+    def test_mobile_builds_link_the_public_policies(self):
+        for environment in ("staging", "production"):
+            for platform in ("ios", "android"):
+                with self.subTest(environment=environment, platform=platform), \
+                        tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    env = self.mobile_env(RUNNER_TEMP=directory, GITHUB_ENV=str(root / "github_env"),
+                                          ANDROID_KEYSTORE_BASE64="AAAA", ANDROID_KEY_ALIAS="a",
+                                          ANDROID_KEY_PASSWORD="p", ANDROID_STORE_PASSWORD="s")
+                    with patch.dict(os.environ, env, clear=True), patch("cd_config.ROOT", root):
+                        configure_build(environment, platform)
+                    data = json.loads((root / f"config/{environment}.json").read_text())
+                    self.assertEqual(data["PRIVACY_POLICY_URL"], "https://motoparking.smvtstudio.com/privacy")
+                    self.assertEqual(data["TERMS_URL"], "https://motoparking.smvtstudio.com/terms")
+
+    def test_missing_policy_url_is_rejected_before_any_write(self):
+        for broken in ({"PRIVACY_POLICY_URL": "", "TERMS_URL": "https://motoparking.smvtstudio.com/terms"},
+                       {"PRIVACY_POLICY_URL": "https://motoparking.smvtstudio.com/privacy",
+                        "TERMS_URL": "http://motoparking.smvtstudio.com/terms"}):
+            with self.subTest(broken=broken), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                with patch.dict(os.environ, self.mobile_env(), clear=True), patch("cd_config.ROOT", root), \
+                        patch("cd_config.POLICY_URLS", broken), self.assertRaises(ValueError):
+                    configure_build("staging", "ios")
+                self.assertEqual(list(root.iterdir()), [])
+
 
 if __name__ == "__main__":
     unittest.main()

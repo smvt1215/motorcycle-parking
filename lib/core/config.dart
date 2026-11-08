@@ -17,6 +17,7 @@ class AppConfig {
   static const offlineMap = bool.fromEnvironment('OFFLINE_MAP');
 
   /// 隱私權政策與服務條款（#275）的網址；空字串時設定頁不顯示該列。
+  /// CD 建置由 tool/cd_config.py 寫入公開網站的 /privacy 與 /terms。
   static const privacyPolicyUrl = String.fromEnvironment('PRIVACY_POLICY_URL');
   static const termsUrl = String.fromEnvironment('TERMS_URL');
 

@@ -10,6 +10,14 @@ from configure_maps import configure
 
 ROOT = Path(__file__).resolve().parent.parent
 
+# The public site (public_web/, Firebase Hosting with its custom domain)
+# serves the privacy policy and terms for every environment: it is the same
+# address in staging and production (docs/CICD.md). Mobile builds carry both
+# links, so the sign-in consent (P16a) and settings (P10) are never left with
+# the 僅開發用 placeholder (#262).
+PUBLIC_SITE = "https://motoparking.smvtstudio.com"
+POLICY_URLS = {"PRIVACY_POLICY_URL": f"{PUBLIC_SITE}/privacy", "TERMS_URL": f"{PUBLIC_SITE}/terms"}
+
 
 def required(name):
     value = os.environ.get(name, "")
@@ -49,6 +57,13 @@ def firebase_options(platform):
             "FIREBASE_MESSAGING_SENDER_ID": match.group(1), "FIREBASE_PROJECT_ID": project}
 
 
+def check_policy_urls(values):
+    """A mobile build must link the policies over https (P16a, #262)."""
+    for name in POLICY_URLS:
+        if not re.fullmatch(r"https://[a-z0-9.-]+/[a-z]+", values.get(name, "")):
+            raise ValueError(f"{name} must be an https address")
+
+
 def configure_build(environment, platform):
     ref = required("SUPABASE_PROJECT_REF")
     url = required("SUPABASE_URL")
@@ -67,11 +82,13 @@ def configure_build(environment, platform):
         return
     # Validate before writing anything, like the backend check above.
     firebase = firebase_options(platform)
+    check_policy_urls(POLICY_URLS)
     maps = ROOT / "config/maps.local.json"
     private_file(maps, json.dumps({platform: required("GOOGLE_MAPS_API_KEY")}))
     configure(maps, ROOT)
     values.update(json.loads((ROOT / "config/maps.generated.json").read_text()))
     values.update(firebase)
+    values.update(POLICY_URLS)
     private_file(ROOT / f"config/{environment}.json", json.dumps(values))
     if platform == "android":
         keystore = Path(os.environ["RUNNER_TEMP"]) / "upload.jks"
