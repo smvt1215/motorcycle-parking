@@ -462,6 +462,26 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   /// Numbers each read of the followed spot: only the newest may land.
   int _followRead = 0;
 
+  /// Numbers every read of [sightings] and [closures] as it starts, and
+  /// the read each spot's answer came from: an older read that lands late
+  /// (a poll waiting on counts) never replaces a newer one (the details'
+  /// read after a report).
+  int _sightingsSeq = 0;
+  final _sightedSeq = <String, int>{};
+
+  /// The spots of [ids] a read later than [seq] already answered.
+  Set<String> _sightedSince(int seq, Iterable<String> ids) => {
+    for (final id in ids)
+      if ((_sightedSeq[id] ?? 0) > seq) id,
+  };
+
+  /// Records [seq] as the read that answered [ids].
+  void _sighted(int seq, Iterable<String> ids) {
+    for (final id in ids) {
+      _sightedSeq[id] = seq;
+    }
+  }
+
   /// What this rider sent, shown at once (A7c) wherever no summary covers
   /// the place yet: a summary leaves out a rider of low credibility, and
   /// the read may lag or fail. They age out like any report.
@@ -518,7 +538,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> readFollowedSightings() async {
     final spot = _followed;
     if (spot == null || !sightingsSource.enabled || _disposed) return;
-    final read = ++_followRead;
+    final read = ++_followRead, seq = ++_sightingsSeq;
     try {
       final (nearRead, wide) = await (
         sightingsSource.read([spot], windowMinutes: sightingMapWindow),
@@ -531,6 +551,11 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
       // The map's window too: closing the sheet keeps the newest answer
       // instead of going back to the viewport's older one.
       final id = spot.id.toLowerCase();
+      if (_sightedSince(seq, [id]).isNotEmpty) {
+        notifyListeners();
+        return;
+      }
+      _sighted(seq, [id]);
       sightings = {
         for (final MapEntry(:key, :value) in sightings.entries)
           if (key != id) key: value,
@@ -858,6 +883,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     final reading = _watched(_mapShown ? current : const []);
     if (_disposed || !availabilitySource.enabled || reading.isEmpty) return;
     final request = _request, read = ++_availabilityRead;
+    final seq = ++_sightingsSeq;
     unawaited(readFollowedSightings());
     final (counts, sighted) = await (
       _readAvailability(reading),
@@ -873,20 +899,29 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     // comes back.
     final readIds = {for (final spot in reading) spot.id};
     final sightedIds = {for (final id in readIds) id.toLowerCase()};
+    // Spots a later read answered keep that answer.
+    final newer = _sightedSince(seq, sightedIds);
+    if (sighted != null) _sighted(seq, sightedIds.difference(newer));
     availability = {
       for (final MapEntry(:key, :value) in _keptAvailability(current).entries)
         if (counts == null || !readIds.contains(key)) key: value,
       ...?counts,
     };
+    bool keep(String key) =>
+        sighted == null || !sightedIds.contains(key) || newer.contains(key);
     sightings = {
       for (final MapEntry(:key, :value) in _keptSightings(current).entries)
-        if (sighted == null || !sightedIds.contains(key)) key: value,
-      ...?sighted?.sightings,
+        if (keep(key)) key: value,
+      if (sighted != null)
+        for (final MapEntry(:key, :value) in sighted.sightings.entries)
+          if (!newer.contains(key)) key: value,
     };
     closures = {
       for (final MapEntry(:key, :value) in _keptClosures(current).entries)
-        if (sighted == null || !sightedIds.contains(key)) key: value,
-      ...?sighted?.closures,
+        if (keep(key)) key: value,
+      if (sighted != null)
+        for (final MapEntry(:key, :value) in sighted.closures.entries)
+          if (!newer.contains(key)) key: value,
     };
     // Also on failure: the ages shown move on.
     notifyListeners();
@@ -1006,7 +1041,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
       _loadedOnce = true;
       // A failed count read keeps the last counts of the spots still in
       // view (they age by source time) and never empties the map.
-      final read = ++_availabilityRead;
+      final read = ++_availabilityRead, seq = ++_sightingsSeq;
       final (counts, sighted) = await (
         _readAvailability(_watched(result.spots)),
         _readSightings(_watched(result.spots)),
@@ -1017,12 +1052,29 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
       availability = read == _availabilityRead
           ? counts ?? _keptAvailability(result.spots)
           : _keptAvailability(result.spots);
-      sightings = read == _availabilityRead
-          ? sighted?.sightings ?? _keptSightings(result.spots)
-          : _keptSightings(result.spots);
-      closures = read == _availabilityRead
-          ? sighted?.closures ?? _keptClosures(result.spots)
-          : _keptClosures(result.spots);
+      final kept = _keptSightings(result.spots);
+      final keptClosures = _keptClosures(result.spots);
+      if (read == _availabilityRead && sighted != null) {
+        // Spots a later read answered (the details') keep that answer.
+        final ids = {
+          for (final spot in _watched(result.spots)) spot.id.toLowerCase(),
+        };
+        final newer = _sightedSince(seq, ids);
+        _sighted(seq, ids.difference(newer));
+        sightings = {
+          for (final id in newer) id: ?kept[id],
+          for (final MapEntry(:key, :value) in sighted.sightings.entries)
+            if (!newer.contains(key)) key: value,
+        };
+        closures = {
+          for (final id in newer) id: ?keptClosures[id],
+          for (final MapEntry(:key, :value) in sighted.closures.entries)
+            if (!newer.contains(key)) key: value,
+        };
+      } else {
+        sightings = kept;
+        closures = keptClosures;
+      }
       _scheduleAvailability();
       error = result.warning ?? rulesWarning ?? favoritesWarning;
       truncated = result.truncated;

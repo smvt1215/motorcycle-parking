@@ -203,6 +203,20 @@ class RecordingCounts extends AvailabilitySource {
   }
 }
 
+/// Counts that answer (with none), once [gate] completes while it is set.
+class GatedCounts extends AvailabilitySource {
+  Completer<void>? gate;
+  @override
+  bool get enabled => true;
+  @override
+  Future<Map<String, SpotAvailability>> forSpots(
+    List<ParkingSpot> spots,
+  ) async {
+    await gate?.future;
+    return const {};
+  }
+}
+
 /// Once [stalled], reads never answer, as on a stalled connection.
 class StalledReads extends FakeSightings {
   StalledReads(super.rows);
@@ -2106,6 +2120,39 @@ void main() {
       now = ago.add(const Duration(hours: 2, minutes: 1));
       expect(store.riderClosures(lot), isEmpty);
       expect(store.eligible(lot).status, isNot(EligibilityStatus.notAllowed));
+    });
+
+    testWidgets('較早開始的輪詢晚到：不覆蓋詳情剛讀到的關閉', (tester) async {
+      final counts = GatedCounts();
+      final source = FakeSightings(const []);
+      final store = (await tester.runAsync(() async {
+        SharedPreferences.setMockInitialValues({'vehicle': 'heavy'});
+        final s = AppStore(
+          LocalRepository(await SharedPreferences.getInstance()),
+          null,
+          sightingsSource: source,
+          availabilitySource: counts,
+          clock: () => detailDay,
+        );
+        await s.init();
+        return s;
+      }))!;
+      addTearDown(store.dispose);
+      store.vehicle = VehicleType.heavy;
+      store.spots = [lot];
+      await tester.runAsync(() async {
+        // The poll reads no closure, then waits on the counts.
+        final gate = counts.gate = Completer<void>();
+        final poll = store.pollAvailability();
+        await Future<void>.delayed(Duration.zero);
+        source.closures = [closure(lotId, riders: 2, at: ago)];
+        await store.followSightings(lot);
+        expect(store.riderClosures(lot).single.confirmed, isTrue);
+        gate.complete();
+        await poll;
+      });
+      expect(store.riderClosures(lot).single.confirmed, isTrue);
+      expect(store.eligible(lot).status, EligibilityStatus.notAllowed);
     });
 
     for (final platform in platforms) {
