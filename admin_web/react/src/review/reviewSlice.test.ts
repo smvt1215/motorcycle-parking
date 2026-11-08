@@ -82,6 +82,15 @@ describe('undo window', () => {
     expect(review.resolvedCount).toBe(0);
   });
 
+  it('a failed write keeps the draft for the retry (#245)', async () => {
+    const { source, store } = await setup();
+    const draft = { mode: 'edit' as const, values: { heavy_allowed: false }, touched: ['heavy_allowed'] };
+    source.failNextResolve('network');
+    store.dispatch(decisionQueued({ request: request('r-ximen'), name: '西門', draft }));
+    await vi.advanceTimersByTimeAsync(UNDO_MS);
+    expect(store.getState().review.failures['r-ximen']?.draft).toEqual(draft);
+  });
+
   it('a report another admin resolved just leaves the queue', async () => {
     const { source, store } = await setup();
     source.failNextResolve('alreadyResolved');

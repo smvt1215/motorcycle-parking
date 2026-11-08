@@ -416,6 +416,13 @@ SignPlate _feePlate(FourSign s) {
         tone: PlateTone.dashed,
         semantics: '怎麼算錢：未提供',
       );
+    case FeeKind.notApplicable:
+      return const SignPlate(
+        face: FourSignFace.fee,
+        main: '不適用',
+        tone: PlateTone.line,
+        semantics: '怎麼算錢：不適用',
+      );
   }
 }
 

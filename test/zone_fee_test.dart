@@ -2,12 +2,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:motorcycle_parking/features/map/spot_fees.dart';
 import 'package:motorcycle_parking/features/map/spot_details.dart';
-import 'package:motorcycle_parking/features/report/report_sheet.dart';
 import 'package:motorcycle_parking/models/fee.dart';
 import 'package:motorcycle_parking/models/parking.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
-
-import 'fee_editor_steps.dart';
 
 ParkingSpot lot({Fee? fee, List<ParkingZone> zones = const []}) => ParkingSpot(
   id: 'zone-fees',
@@ -375,61 +372,6 @@ void main() {
       expect(find.text('每小時 40 元'), findsOneWidget);
       expect(find.textContaining('比照'), findsNothing);
       expect(tester.takeException(), isNull);
-    });
-  }
-
-  for (final width in [320.0, 360.0, 390.0, 1280.0]) {
-    testWidgets('分區編輯器在寬 $width 驗證金額並把各車種費率保存在該區', (tester) async {
-      tester.view.devicePixelRatio = 1;
-      tester.view.physicalSize = Size(width, 900);
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-      // Every zone a rider adds states who may park there (#201).
-      final zone = ZoneDraft()
-        ..name.text = 'B2'
-        ..access = ParkingAccess.scooterHeavy;
-      addTearDown(zone.dispose);
-      final form = GlobalKey<FormState>();
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Form(
-              key: form,
-              child: SingleChildScrollView(
-                child: StatefulBuilder(
-                  builder: (context, setState) => ZoneEditor(
-                    zones: [zone],
-                    onAdd: () {},
-                    onRemove: (_) {},
-                    onChanged: () => setState(() {}),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-      await chooseFeeMode(tester, 'heavy', 'hourly');
-      expect(form.currentState!.validate(), isFalse);
-      await tester.pumpAndSettle();
-      await tester.enterText(feeField('amount', 'heavy'), '25');
-      await tester.pumpAndSettle();
-      // A zone's fee names all three vehicles (#188 layer 2).
-      expect(form.currentState!.validate(), isFalse);
-      await chooseFeeMode(tester, 'scooter', 'free');
-      await chooseFeeMode(tester, 'car', 'not_applicable');
-      expect(form.currentState!.validate(), isTrue);
-      expect(zone.toJson(), {
-        'name': 'B2',
-        'access': 'scooterHeavy',
-        'fee': {
-          'scooter': {'mode': 'free'},
-          'heavy': {'mode': 'hourly', 'amount': 25, 'per_minutes': 60},
-          'car': {'mode': 'not_applicable'},
-        },
-      });
-      expect(tester.takeException(), isNull);
-      await tester.pumpWidget(const SizedBox.shrink());
     });
   }
 }

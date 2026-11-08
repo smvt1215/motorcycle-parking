@@ -230,6 +230,68 @@ void main() {
       });
     });
 
+    group('iOS 原生 Apple', () {
+      test('順序：重新登入 → 用新授權碼撤銷 → 申請', () async {
+        final gateway = FakeDeletionGateway(
+          current: nativeApple(signedInAt: now, code: 'sign-in-code'),
+        )..reauths.add(nativeApple(signedInAt: now, code: 'fresh-code'));
+        final attempt = DeletionAttempt(gateway, clock: () => now);
+        expect(attempt.needsReauth, isTrue);
+        await attempt.reauthenticate();
+        await attempt.submit();
+        expect(gateway.calls, [
+          'reauth:apple',
+          'revoke-code:fresh-code',
+          'request',
+        ]);
+      });
+
+      test('撤銷失敗不擋申請，記下撤銷失敗', () async {
+        final gateway = FakeDeletionGateway(
+          current: nativeApple(signedInAt: now),
+        )..revokes.add(Exception('apple.code_exchange_failed'));
+        final attempt = DeletionAttempt(gateway, clock: () => now);
+        await attempt.reauthenticate();
+        await attempt.submit();
+        expect(gateway.calls.last, 'request');
+        expect(attempt.appleRevokeFailed, isTrue);
+      });
+
+      test('關掉面板：不撤銷、不申請', () async {
+        final gateway = FakeDeletionGateway(
+          current: nativeApple(signedInAt: now),
+        )..reauthFailures.add(const ReauthCancelled());
+        final attempt = DeletionAttempt(gateway, clock: () => now);
+        await expectLater(
+          attempt.reauthenticate(),
+          throwsA(isA<ReauthCancelled>()),
+        );
+        expect(gateway.calls, ['reauth:apple']);
+        expect(attempt.needsReauth, isTrue);
+      });
+
+      test('登入成別的帳號：還原原帳號，不撤銷', () async {
+        final gateway =
+            FakeDeletionGateway(current: nativeApple(signedInAt: now))
+              ..reauths.add(
+                AccountIdentity(
+                  id: 'other',
+                  email: 'other@icloud.com',
+                  apple: true,
+                  signedInAt: now,
+                  appleCode: 'other-code',
+                ),
+              );
+        final attempt = DeletionAttempt(gateway, clock: () => now);
+        await expectLater(
+          attempt.reauthenticate(),
+          throwsA(isA<WrongAccount>()),
+        );
+        expect(gateway.calls, ['reauth:apple', 'restore']);
+        expect(gateway.current?.id, 'rider');
+      });
+    });
+
     test('apple-revoke 回管理員時停止，不申請', () async {
       final gateway = FakeDeletionGateway(current: apple(signedInAt: now))
         ..revokes.add(const AdminCannotDelete());
@@ -295,6 +357,15 @@ void main() {
       expect(gateway.calls, ['status', 'signOut']);
       expect(controller.pending, isNull);
       expect(controller.notice?.scheduledAt, pendingScheduledAt);
+    });
+
+    test('繼續刪除：用登入時拿到的授權碼撤銷，再登出', () async {
+      final gateway = FakeDeletionGateway(current: nativeApple(signedInAt: now))
+        ..statuses.add(pendingState());
+      final controller = AccountDeletionController(gateway, clock: () => now);
+      await controller.check();
+      await controller.continuePending();
+      expect(gateway.calls, ['status', 'revoke-code:apple-code', 'signOut']);
     });
 
     test('冷靜期內新登入：顯示確認頁', () async {

@@ -342,6 +342,53 @@ describe('ReviewPage', () => {
     ]);
   });
 
+  it('undoing a retried 修改後套用 still reopens the editor with the edited values (#245)', async () => {
+    const { user, source, router } = setup('/review/r-fuxing');
+    await detailTitle();
+    source.failNextResolve('network');
+    await user.keyboard('e');
+    await user.click(
+      within(screen.getByRole('region', { name: '資格' })).getByRole('radio', { name: /不可停/ }),
+    );
+    await user.keyboard('{Control>}{Enter}{/Control}');
+    await act(() => vi.advanceTimersByTimeAsync(UNDO_MS));
+    await user.click(within(screen.getByRole('list', { name: '待審回報' })).getByText('沒有套用，打開處理'));
+    const alert = await screen.findByRole('alert');
+    await user.click(within(alert).getByRole('button', { name: '再試一次' }));
+    await user.click(within(screen.getByRole('status')).getByRole('button', { name: '復原' }));
+    expect(router.state.location.pathname).toBe('/review/r-fuxing');
+    expect(screen.getByRole('toolbar', { name: '修改後套用' })).toHaveTextContent('你改了騎士建議的 1 處');
+    expect(
+      within(screen.getByRole('region', { name: '資格' })).getByRole('radio', { name: /不可停/ }),
+    ).toBeChecked();
+    await user.keyboard('{Control>}{Enter}{/Control}');
+    await act(() => vi.advanceTimersByTimeAsync(UNDO_MS));
+    expect(source.resolved).toMatchObject([
+      { reportId: 'r-fuxing', edited: true, patch: { heavy_allowed: false, space_type: 'heavyOnly' } },
+    ]);
+  });
+
+  it('undoing a retried 駁回 still reopens the reasons with the chosen one and the note (#245)', async () => {
+    const { user, source, router } = setup('/review/r-fuxing');
+    await detailTitle();
+    source.failNextResolve('network');
+    await user.click(screen.getByRole('button', { name: /駁回/ }));
+    await user.click(screen.getByRole('radio', { name: /其他原因/ }));
+    fireEvent.change(screen.getByRole('textbox', { name: /處理說明/ }), { target: { value: '現場已拆除' } });
+    await user.click(screen.getByRole('button', { name: /確定駁回/ }));
+    await act(() => vi.advanceTimersByTimeAsync(UNDO_MS));
+    await user.click(within(screen.getByRole('list', { name: '待審回報' })).getByText('沒有套用，打開處理'));
+    const alert = await screen.findByRole('alert');
+    await user.click(within(alert).getByRole('button', { name: '再試一次' }));
+    await user.click(within(screen.getByRole('status')).getByRole('button', { name: '復原' }));
+    expect(router.state.location.pathname).toBe('/review/r-fuxing');
+    const panel = screen.getByRole('region', { name: '駁回原因' });
+    expect(within(panel).getByRole('radio', { name: /其他原因/ })).toBeChecked();
+    expect(screen.getByRole('textbox', { name: /處理說明/ })).toHaveValue('現場已拆除');
+    await act(() => vi.advanceTimersByTimeAsync(UNDO_MS * 2));
+    expect(source.resolved).toEqual([]);
+  });
+
   it('undoing from the report itself reopens the editor there (Codex review, PR #238)', async () => {
     const { user, source, router } = setup('/review/r-fuxing');
     await detailTitle();

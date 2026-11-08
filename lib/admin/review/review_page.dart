@@ -780,6 +780,13 @@ class _ReviewDetail extends StatelessWidget {
                   const SizedBox(height: 10),
                   _HoldNotice(report: report),
                 ],
+                if (createsFirstSegment(report, spot)) ...[
+                  const SizedBox(height: 10),
+                  const AdminNotice(
+                    '這筆通過後會建立這條路的第一個路段；之後判斷改走路段，其他路段要另外補上。',
+                    key: ValueKey('first-segment-note'),
+                  ),
+                ],
                 if (report.evidenceUrl case final url?) ...[
                   const SizedBox(height: 10),
                   _Evidence(url: url),

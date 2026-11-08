@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:motorcycle_parking/features/report/entry_pages.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
@@ -149,7 +150,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('提出修改建議'), findsOneWidget);
     expect(find.byTooltip('關閉詳情').hitTestable(), findsNothing);
-    await tester.tap(find.text('停車點名稱'));
+    await tester.tap(find.text('名稱'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('送出修改建議'));
     await tester.pumpAndSettle();
@@ -496,7 +497,7 @@ void main() {
     expect(find.byTooltip('檢舉錯誤'), findsNothing);
     await tester.tap(find.byKey(const ValueKey('contribute-new-spot')));
     await tester.pumpAndSettle();
-    expect(find.text('拖曳標記對準停車格，或點地圖選位置'), findsOneWidget);
+    expect(find.textContaining('拖曳標記對準停車格，或點地圖選位置'), findsOneWidget);
     await tester.tap(find.byTooltip('關閉').last);
     await tester.pumpAndSettle();
     // A spot in the list goes straight to the edit and "gone" reports.
@@ -504,14 +505,16 @@ void main() {
     await tester.pumpAndSettle();
     final suggestions = find.text('提出修改建議');
     expect(suggestions, findsOneWidget);
-    final ctx = tester.element(suggestions);
+    final ctx = tester.element(find.byType(FormFlow));
     expect(Navigator.of(ctx), same(Navigator.of(ctx, rootNavigator: true)));
     // The "gone" report sits below the editable fields; the list itself is
     // kept by element because its title scrolls away.
-    final listElement = tester.element(
-      find.ancestor(of: suggestions, matching: find.byType(Scrollable)).first,
-    );
-    final list = find.byElementPredicate((e) => e == listElement);
+    final list = find
+        .descendant(
+          of: find.byType(FormFlow),
+          matching: find.byType(Scrollable),
+        )
+        .first;
     await tester.scrollUntilVisible(
       find.text('這裡已經不能停車'),
       200,

@@ -26,6 +26,56 @@ void main() {
     'created_at': '2026-10-31T00:00:00Z',
   });
 
+  group('createsFirstSegment', () {
+    ReviewSpot road(List<Object?> segments) => ReviewSpot(
+      sourceId: spot.sourceId,
+      official: false,
+      values: {'parking_segments': segments},
+    );
+    ReviewReport suggestion(Object? segments, {String field = 'segments'}) =>
+        ReviewReport.fromJson({
+          'id': 'r1',
+          'source_id': spot.sourceId,
+          'reason': '路邊分段：新增',
+          'field': field,
+          'proposed': {'parking_segments': segments},
+          'created_at': '2026-10-31T00:00:00Z',
+        });
+    const added = [
+      {'name': '整段', 'access': 'scooterOnly'},
+    ];
+
+    test('a new segment on a road without segments is the first one', () {
+      expect(createsFirstSegment(suggestion(added), road(const [])), isTrue);
+    });
+
+    test('the column may be missing on the spot', () {
+      expect(createsFirstSegment(suggestion(added), spot), isTrue);
+    });
+
+    test('a road that has segments keeps them', () {
+      final current = road(const [
+        {'id': 's1', 'name': '東側'},
+      ]);
+      expect(createsFirstSegment(suggestion(added), current), isFalse);
+    });
+
+    test('a patch of an existing entry adds nothing', () {
+      final patch = [
+        {'id': 's1', 'access': 'heavyOnly'},
+      ];
+      expect(createsFirstSegment(suggestion(patch), road(const [])), isFalse);
+    });
+
+    test('another field or a missing spot says nothing', () {
+      expect(
+        createsFirstSegment(suggestion(added, field: 'zones'), road(const [])),
+        isFalse,
+      );
+      expect(createsFirstSegment(suggestion(added), null), isFalse);
+    });
+  });
+
   test('entriesPatch changes, removes and adds by id', () {
     expect(
       entriesPatch(zones, [
@@ -195,6 +245,64 @@ void main() {
       ),
       ['「北側」：格數 18 格→20 格；哪一側 未填→北側'],
     );
+  });
+
+  test('a fee change clears the zone\'s old fee_note, as in SQL (F1d)', () {
+    final spot = ReviewSpot(
+      sourceId: '10000000-0000-4000-8000-000000000002',
+      official: false,
+      values: {
+        'name': '松壽地下停車場',
+        'parking_zones': [
+          {
+            'id': 'b1',
+            'name': 'B1',
+            'access': 'scooterOnly',
+            'fee_note': '舊文字',
+            'fee': {
+              'scooter': {'mode': 'free'},
+            },
+          },
+        ],
+      },
+    );
+    const fee = {
+      'scooter': {'mode': 'hourly', 'amount': 20, 'per_minutes': 60},
+    };
+    for (final (sent, expected, line) in [
+      (
+        {'id': 'b1', 'fee': fee, 'fee_note': null},
+        {'id': 'b1', 'name': 'B1', 'access': 'scooterOnly', 'fee': fee},
+        '費率原文 舊文字→未填',
+      ),
+      (
+        {'id': 'b1', 'fee': null, 'fee_note': null},
+        {'id': 'b1', 'name': 'B1', 'access': 'scooterOnly'},
+        '費率原文 舊文字→未填',
+      ),
+    ]) {
+      final proposal = initialProposal(
+        report({
+          'parking_zones': [sent],
+        }),
+        spot,
+      );
+      expect(proposal['parking_zones'], [expected]);
+      expect(
+        entriesChangeLines(
+          spot.values['parking_zones'],
+          proposal['parking_zones'],
+        ).single,
+        contains(line),
+      );
+      final wire = wirePatch(applicablePatch(proposal, spot), spot: spot);
+      final patch = (wire['parking_zones'] as List).single as Map;
+      expect(patch.containsKey('fee_note'), isTrue);
+      expect(patch['fee_note'], isNull);
+      expect(entriesPatch(spot.values['parking_zones'] as List, [patch]), [
+        expected,
+      ]);
+    }
   });
 
   test(

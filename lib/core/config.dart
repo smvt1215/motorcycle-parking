@@ -7,6 +7,13 @@ class AppConfig {
     'OAUTH_REDIRECT_URL',
     defaultValue: 'tw.motopark.motorcycleparking://login-callback',
   );
+
+  /// The web OAuth client: the audience of native Google ID tokens. Staging
+  /// and production share it; a build may override it.
+  static const googleServerClientId = String.fromEnvironment(
+    'GOOGLE_SERVER_CLIENT_ID',
+    defaultValue: '815509193159-ov6pl4uler43hqnpgd31ict71mpmmqe4.apps.googleusercontent.com',
+  );
   static const offlineMap = bool.fromEnvironment('OFFLINE_MAP');
 
   /// 隱私權政策與服務條款（#275）的網址；空字串時設定頁不顯示該列。

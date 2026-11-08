@@ -25,6 +25,19 @@ select ok(not has_function_privilege('anon','public.support_inbound(text,text,te
 select ok(not has_table_privilege('service_role','private.support_inbound_keys','select'),'the keys are internal');
 
 set local role service_role;
+-- ===== DMARC 存下來（#295）=====
+select pg_temp.mail('auth1',null,'auth1@example.test','內容','none','pass','pass');
+reset role;
+select is((select mail_dmarc from private.support_requests where id=pg_temp.id('auth1')),'pass','the case keeps the DMARC result');
+select is((select mail_spf||'/'||mail_dkim from private.support_requests where id=pg_temp.id('auth1')),'none/pass','the case keeps SPF and DKIM as they came');
+select ok((select suspicious from private.support_requests where id=pg_temp.id('auth1')),'the rule is unchanged: SPF none is still suspicious');
+set local role service_role;
+select pg_temp.mail('auth2',null,'auth2@example.test','內容','pass','pass','bogus');
+reset role;
+select is((select mail_dmarc from private.support_requests where id=pg_temp.id('auth2')),null,'an unknown DMARC result is not stored');
+select is((select count(*)::int from got where k in ('auth1','auth2') and r->>'result'='created'),2,'both were filed');
+set local role service_role;
+
 -- ===== support@：新案件 =====
 select is(pg_temp.mail('new',null,' Writer@Example.TEST ')->>'result','created','support@ opens a case');
 reset role;

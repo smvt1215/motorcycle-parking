@@ -39,7 +39,7 @@ interface ChipProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'onCha
   count?: number;
 }
 
-/** 44px pill filters. Single-select filters invert; layer toggles get a frame. */
+/** 48px pill filters. Single-select filters invert; layer toggles get a frame. */
 export function Chip({ selected, kind = 'filter', count, className, children, ...rest }: ChipProps) {
   return (
     <button

@@ -484,4 +484,49 @@ void main() {
     await tester.pump();
     expect(find.textContaining('已移到'), findsNothing);
   });
+
+  for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
+    testWidgets('overlayControls：搜尋、放大、定位都在地圖上，地圖不留自己的縮放鈕', (tester) async {
+      LocationMapView? view;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: LocationPicker(
+              lat: 25.03,
+              lng: 121.56,
+              height: 180,
+              expandButton: true,
+              overlayControls: true,
+              onLocate: () async => const LocationFix(25.03, 121.56, 5),
+              onSearch: (_) async => null,
+              mapBuilder: (context, v) {
+                view = v;
+                return const SizedBox.expand(key: ValueKey('map'));
+              },
+              onChanged: (_, _) {},
+            ),
+          ),
+        ),
+      );
+      expect(view!.zoomControls, isFalse);
+      final map = tester.getRect(find.byKey(const ValueKey('map')));
+      final min = platform == TargetPlatform.iOS ? 44.0 : 48.0;
+      final rects = [
+        for (final key in [
+          'location-search',
+          'location-expand',
+          'location-locate',
+        ])
+          tester.getRect(find.byKey(ValueKey(key))),
+      ];
+      for (final rect in rects) {
+        expect(map.contains(rect.topLeft), isTrue);
+        expect(map.contains(rect.bottomRight), isTrue);
+        expect(rect.height, greaterThanOrEqualTo(min));
+      }
+      expect(rects[0].overlaps(rects[1]), isFalse);
+      expect(rects[1].overlaps(rects[2]), isFalse);
+      expect(find.text('放大地圖調整'), findsNothing);
+    }, variant: TargetPlatformVariant({platform}));
+  }
 }

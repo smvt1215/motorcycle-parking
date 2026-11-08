@@ -87,12 +87,12 @@ for (const viewport of VIEWPORTS) {
       const visible = [...nav.querySelectorAll('a')].filter((a) => a.getClientRects().length > 0);
       const small = visible
         .map((a) => a.getBoundingClientRect())
-        .filter((r) => r.height < 44 || r.width < 44)
+        .filter((r) => r.height < 48 || r.width < 48)
         .map((r) => `${Math.round(r.width)}×${Math.round(r.height)}`);
       const buttons = [...document.querySelectorAll('main button, main a.btn')]
         .filter((b) => b.getClientRects().length > 0)
         .map((b) => [b.textContent.trim(), b.getBoundingClientRect()])
-        .filter(([, r]) => r.height < 44)
+        .filter(([, r]) => r.height < 48)
         .map(([name, r]) => `${name} ${Math.round(r.height)}`);
       const current = visible
         .filter((a) => a.getAttribute('aria-current') === 'page')
@@ -109,8 +109,8 @@ for (const viewport of VIEWPORTS) {
     const tabs = expectedTabs(viewport, path);
     if (result.overflow > 0) failures.push(`${where}: scrolls sideways by ${result.overflow}px`);
     if (result.tabs !== tabs) failures.push(`${where}: ${result.tabs} tabs, want ${tabs}`);
-    if (result.small.length) failures.push(`${where}: nav targets under 44px: ${result.small.join(', ')}`);
-    if (result.buttons.length) failures.push(`${where}: buttons under 44px: ${result.buttons.join(', ')}`);
+    if (result.small.length) failures.push(`${where}: nav targets under 48px: ${result.small.join(', ')}`);
+    if (result.buttons.length) failures.push(`${where}: buttons under 48px: ${result.buttons.join(', ')}`);
     if (tabs > 0 && ['/review', '/spots', '/import'].includes(path) && result.current.length !== 1) {
       failures.push(`${where}: ${result.current.length} current tabs (${result.current.join(', ')})`);
     }
@@ -162,9 +162,9 @@ for (const viewport of VIEWPORTS) {
   const small = await page.evaluate(() =>
     [...document.querySelectorAll('.edit-field__value input, .edit-field__value select, .plate-pick__option')]
       .map((el) => el.getBoundingClientRect().height)
-      .filter((h) => h < 44),
+      .filter((h) => h < 48),
   );
-  if (small.length) failures.push(`${viewport.name}: edit controls under 44px: ${small.join(', ')}`);
+  if (small.length) failures.push(`${viewport.name}: edit controls under 48px: ${small.join(', ')}`);
   await page.screenshot({ path: join(output, `${viewport.name}_review_edit.png`), fullPage: true });
   await page.keyboard.press('Escape');
 

@@ -393,6 +393,18 @@ bool _applicable(String key, Object? value, ReviewSpot spot) =>
 /// The fields that hold a list of zones or segments by id (#188).
 const entryKeys = ['parking_zones', 'parking_segments'];
 
+/// Whether accepting [report] adds the first segment of a roadside [spot]
+/// (#190): from then on the spot is judged by its segments, so the rest of
+/// the road has to be added separately. An entry without an id is new
+/// ([entriesPatch]).
+bool createsFirstSegment(ReviewReport report, ReviewSpot? spot) {
+  if (report.field != 'segments' || spot == null) return false;
+  final proposed = report.proposed?['parking_segments'];
+  return proposed is List &&
+      proposed.any((e) => e is Map && !e.containsKey('id')) &&
+      jsonList(spot.values['parking_segments']).isEmpty;
+}
+
 /// A zone or segment suggestion that names an entry the spot no longer has
 /// (removed or replaced since the report): it cannot be applied, and is
 /// shown among the suggestions set aside.
@@ -411,6 +423,7 @@ const _entryKeyLabels = {
   'area': '區域',
   'guide': '指引',
   'fee': '費率',
+  'fee_note': '費率原文',
   'fee_plan': '計費規則',
   'condition': '格位',
   'evidence_url': '照片連結',

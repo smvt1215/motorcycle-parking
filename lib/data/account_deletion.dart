@@ -1,15 +1,15 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/legacy.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../api/v1/api_v1.g.dart';
 import '../core/app_check.dart';
-import '../core/config.dart';
 import 'app_store.dart';
+import 'auth_flow.dart';
 import 'profile_repository.dart';
 
 export '../api/v1/api_v1.g.dart' show AccountDeletionState;
@@ -71,6 +71,7 @@ class AccountIdentity {
     this.signedInAt,
     this.appleToken,
     this.appleTokenHint,
+    this.appleCode,
   });
   final String id;
   final String? email;
@@ -86,6 +87,10 @@ class AccountIdentity {
   /// with its `token_type_hint`; a restored session may have none.
   final String? appleToken;
   final String? appleTokenHint;
+
+  /// iOS native sign-in has no provider token: Apple's one-time code from
+  /// the latest sign-in stands in for it.
+  final String? appleCode;
 }
 
 /// Why a deletion step stopped (P15c).
@@ -101,6 +106,11 @@ class ReauthRequired extends DeletionFailure {
 /// The rider closed the Google or Apple page, or it failed (P15c ③).
 class ReauthIncomplete extends DeletionFailure {
   const ReauthIncomplete();
+}
+
+/// The rider closed a native sign-in panel: they stay where they were.
+class ReauthCancelled extends DeletionFailure {
+  const ReauthCancelled();
 }
 
 /// Another account signed in (P15c ④); the original session was restored.
@@ -163,12 +173,17 @@ abstract interface class AccountDeletionGateway {
   Future<AccountDeletionState> request();
   Future<AccountDeletionState> cancel();
 
-  /// `apple-revoke`; throws [AdminCannotDelete] on 403, anything else on
-  /// other failures (which never block the request).
+  /// `apple-revoke` with a provider token; throws [AdminCannotDelete] on 403,
+  /// anything else on other failures (which never block the request).
   Future<void> revokeApple(String token, String hint);
 
+  /// `apple-revoke` with a native sign-in's one-time code, otherwise as
+  /// [revokeApple].
+  Future<void> revokeAppleCode(String code);
+
   /// Signs in again with the rider's provider and returns who signed in;
-  /// throws [ReauthIncomplete] when that does not finish.
+  /// throws [ReauthCancelled] when they close a native panel and
+  /// [ReauthIncomplete] when it does not finish otherwise.
   Future<AccountIdentity> reauthenticate({required bool apple});
 
   /// Puts back the session from before [reauthenticate].
@@ -195,7 +210,8 @@ class DeletionAttempt {
   bool appleRevokeFailed = false;
 
   /// Whether [submit] needs [reauthenticate] first. Apple accounts always
-  /// sign in again once: the revoke needs that sign-in's provider token.
+  /// sign in again once: the revoke needs that sign-in's provider token or
+  /// one-time code.
   bool get needsReauth {
     final me = gateway.current;
     if (me == null) return true;
@@ -246,10 +262,15 @@ Future<bool> revokeApple(
   AccountDeletionGateway gateway,
   AccountIdentity me,
 ) async {
-  final token = me.appleToken, hint = me.appleTokenHint;
-  if (token == null || hint == null) return false;
+  final code = me.appleCode, token = me.appleToken, hint = me.appleTokenHint;
   try {
-    await gateway.revokeApple(token, hint);
+    if (code != null) {
+      await gateway.revokeAppleCode(code);
+    } else if (token != null && hint != null) {
+      await gateway.revokeApple(token, hint);
+    } else {
+      return false;
+    }
     return true;
   } on AdminCannotDelete {
     rethrow;
@@ -284,7 +305,9 @@ final accountDeletionProvider =
       final store = ref.read(storeProvider);
       final client = store.client;
       return AccountDeletionController(
-        client == null ? null : SupabaseAccountGateway(client),
+        client == null
+            ? null
+            : SupabaseAccountGateway(client, auth: store.authFlow),
         clearLocalData: store.clearParking,
       );
     });
@@ -524,14 +547,18 @@ class AccountDeletionController extends ChangeNotifier
 }
 
 /// [AccountDeletionGateway] over Supabase: `api_v1` RPCs, the `apple-revoke`
-/// Edge Function and OAuth re-sign-in. Every call carries the App Check
-/// header when there is a token (#203).
+/// Edge Function and the same re-sign-in as the sign-in buttons. Every call
+/// carries the App Check header when there is a token (#203).
 class SupabaseAccountGateway implements AccountDeletionGateway {
   SupabaseAccountGateway(
     this.client, {
+    AuthFlow? auth,
     this.signInGrace = const Duration(seconds: 10),
-  });
+  }) : auth = auth ?? AuthFlow(client);
   final SupabaseClient client;
+
+  /// Shared with the store: a native Apple sign-in's code is used here.
+  final AuthFlow auth;
 
   /// How long after returning from the browser a sign-in may still arrive
   /// (the code exchange) before it counts as closed.
@@ -566,6 +593,7 @@ class SupabaseAccountGateway implements AccountDeletionGateway {
           : access != null
           ? 'access_token'
           : null,
+      appleCode: auth.appleCode,
     );
   }
 
@@ -589,11 +617,22 @@ class SupabaseAccountGateway implements AccountDeletionGateway {
   Future<AccountDeletionState> cancel() => _api.cancelAccountDeletion();
 
   @override
-  Future<void> revokeApple(String token, String hint) async {
+  Future<void> revokeApple(String token, String hint) =>
+      _revoke({'token': token, 'token_type_hint': hint});
+
+  @override
+  Future<void> revokeAppleCode(String code) async {
+    // A code works once, whatever Apple answers.
+    auth.clearAppleCode();
+    final bundleId = (await PackageInfo.fromPlatform()).packageName;
+    await _revoke({'authorization_code': code, 'bundle_id': bundleId});
+  }
+
+  Future<void> _revoke(Map<String, String> body) async {
     try {
       await client.functions.invoke(
         'apple-revoke',
-        body: {'token': token, 'token_type_hint': hint},
+        body: body,
         headers: await _headers(),
       );
     } on FunctionException catch (e) {
@@ -609,8 +648,26 @@ class SupabaseAccountGateway implements AccountDeletionGateway {
 
   @override
   Future<AccountIdentity> reauthenticate({required bool apple}) async {
+    final provider = apple ? OAuthProvider.apple : OAuthProvider.google;
+    _previousRefreshToken = client.auth.currentSession?.refreshToken;
+    if (signInRoute(provider) == SignInRoute.browser) {
+      await _reauthenticateInBrowser(provider);
+    } else {
+      try {
+        await auth.signIn(provider);
+      } on SignInCancelled {
+        throw const ReauthCancelled();
+      } catch (_) {
+        throw const ReauthIncomplete();
+      }
+    }
+    final me = current;
+    if (me == null) throw const ReauthIncomplete();
+    return me;
+  }
+
+  Future<void> _reauthenticateInBrowser(OAuthProvider provider) async {
     final before = client.auth.currentSession;
-    _previousRefreshToken = before?.refreshToken;
     final done = Completer<void>();
     // The auth stream replays its history: only a new session counts.
     final sub = client.auth.onAuthStateChange.listen((s) {
@@ -625,15 +682,7 @@ class SupabaseAccountGateway implements AccountDeletionGateway {
       if (!done.isCompleted) done.completeError(const ReauthIncomplete());
     });
     try {
-      final opened = await client.auth.signInWithOAuth(
-        apple ? OAuthProvider.apple : OAuthProvider.google,
-        redirectTo: kIsWeb
-            ? Uri.base.replace(fragment: '', query: '').toString()
-            : AppConfig.redirectUrl,
-        authScreenLaunchMode: kIsWeb
-            ? LaunchMode.platformDefault
-            : LaunchMode.externalApplication,
-      );
+      final opened = await auth.openBrowser(provider);
       if (!opened) throw const ReauthIncomplete();
       await done.future.timeout(
         const Duration(minutes: 5),
@@ -647,13 +696,12 @@ class SupabaseAccountGateway implements AccountDeletionGateway {
       returned.dispose();
       unawaited(sub.cancel());
     }
-    final me = current;
-    if (me == null) throw const ReauthIncomplete();
-    return me;
   }
 
   @override
   Future<void> restorePrevious() async {
+    // Any code is the other account's.
+    auth.clearAppleCode();
     final token = _previousRefreshToken;
     _previousRefreshToken = null;
     if (token == null) {
