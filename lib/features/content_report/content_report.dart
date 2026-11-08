@@ -199,30 +199,38 @@ class _ContentReportSheetState extends State<ContentReportSheet> {
     listenable: widget.store,
     builder: (context, _) {
       final result = outcome;
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _Header(spotName: widget.spot.name, cancel: result == null),
-          const Divider(height: 1),
-          Expanded(
-            child: result == null ? _form(context) : _result(context, result),
-          ),
-          if (result == null)
-            SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-                child: AdaptiveButton(
-                  key: const ValueKey('content-report-submit'),
-                  label: contentReportSubmit,
-                  onPressed:
-                      target == null || sending || !widget.store.canReport
-                      ? null
-                      : () => unawaited(_send()),
+      // The sheet keeps its height; the keyboard takes its bottom, so 送出檢舉
+      // sits right above it and the form scrolls the focused field into view
+      // (like FormPage).
+      return Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _Header(spotName: widget.spot.name, cancel: result == null),
+            const Divider(height: 1),
+            Expanded(
+              child: result == null ? _form(context) : _result(context, result),
+            ),
+            if (result == null)
+              SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+                  child: AdaptiveButton(
+                    key: const ValueKey('content-report-submit'),
+                    label: contentReportSubmit,
+                    onPressed:
+                        target == null || sending || !widget.store.canReport
+                        ? null
+                        : () => unawaited(_send()),
+                  ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       );
     },
   );

@@ -404,6 +404,10 @@ Future<T?> showAdaptiveSheet<T>(
   WidgetBuilder builder, {
   bool detail = false,
 }) {
+  // Form sheets put the keyboard away; details (no fields) stay as built,
+  // so taps through their transparent parts still reach the map.
+  Widget content(BuildContext ctx) =>
+      detail ? builder(ctx) : SheetKeyboardDismissal(child: builder(ctx));
   if (isCupertino) {
     // Overlay the map: Cupertino's stacked-card route scales the page below.
     return CNBottomSheet.show<T>(
@@ -417,10 +421,10 @@ Future<T?> showAdaptiveSheet<T>(
       useSafeArea: true,
       backgroundColor: detail ? Colors.transparent : null,
       builder: (ctx) => detail
-          ? builder(ctx)
+          ? content(ctx)
           : Material(
               color: Theme.of(ctx).colorScheme.surface,
-              child: SafeArea(child: builder(ctx)),
+              child: SafeArea(child: content(ctx)),
             ),
     );
   }
@@ -433,7 +437,31 @@ Future<T?> showAdaptiveSheet<T>(
     useSafeArea: true,
     showDragHandle: !detail,
     backgroundColor: detail ? Colors.transparent : null,
-    builder: builder,
+    builder: content,
+  );
+}
+
+/// Puts the keyboard away inside a sheet: a tap outside the text fields or
+/// a drag of the sheet's lists. iOS's Zhuyin keyboard has no dismiss key
+/// and Return in a multi-line field only adds a line, so without this a
+/// keyboard over a form's 送出 could not be closed (iPhone report,
+/// 2026-11-08).
+class SheetKeyboardDismissal extends StatelessWidget {
+  const SheetKeyboardDismissal({super.key, required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    // Translucent and on tap only: buttons, fields and scrolling below
+    // still win their own gestures.
+    behavior: HitTestBehavior.translucent,
+    onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+    child: ScrollConfiguration(
+      behavior: ScrollConfiguration.of(context).copyWith(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      ),
+      child: child,
+    ),
   );
 }
 

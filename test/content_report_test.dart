@@ -329,6 +329,53 @@ void main() {
         });
       }
 
+      // iPhone report (2026-11-08): the keyboard covered the note and
+      // 送出檢舉 after picking 其他.
+      for (final (name, size) in layouts) {
+        testWidgetsOn('${platform.name} $name：鍵盤出現時附註欄與送出檢舉在鍵盤上方', (
+          tester,
+        ) async {
+          setUpView(tester, platform, size);
+          final store = (await tester.runAsync(reportStore))!;
+          await openReport(tester, store, riderSpot);
+          await pick(tester, ContentReportTarget.other);
+          final noteField = find.byKey(const ValueKey('content-report-note'));
+          await tester.showKeyboard(noteField);
+          tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+          addTearDown(tester.view.resetViewInsets);
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+
+          final keyboardTop = size.height - 300;
+          final submit = tester.getRect(submitButton);
+          expect(
+            submit.bottom,
+            lessThanOrEqualTo(keyboardTop),
+            reason: '$submit',
+          );
+          expect(submitButton.hitTestable(), findsOneWidget);
+          // The focused field scrolled clear of the keyboard and the bar.
+          final field = tester.getRect(find.byType(EditableText));
+          expect(field.bottom, lessThanOrEqualTo(submit.top), reason: '$field');
+          expect(field.top, greaterThanOrEqualTo(0));
+          await tester.enterText(noteField, '其他原因');
+          await tester.pumpAndSettle();
+
+          // No dismiss key on Zhuyin: a tap on the form's blank part puts
+          // the keyboard away, and 送出檢舉 still sends.
+          bool focused() => tester
+              .widget<EditableText>(find.byType(EditableText))
+              .focusNode
+              .hasFocus;
+          expect(focused(), isTrue);
+          await tester.tap(find.text(contentReportNoteLabel(required: true)));
+          await tester.pumpAndSettle();
+          expect(focused(), isFalse);
+          await send(tester);
+          expect(store.sent.single['note'], '其他原因');
+        });
+      }
+
       testWidgetsOn('${platform.name} 選「其他」但附註空白：顯示錯誤、不送出', (tester) async {
         setUpView(tester, platform, const Size(390, 844));
         final store = (await tester.runAsync(reportStore))!;
