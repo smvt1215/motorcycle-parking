@@ -529,4 +529,54 @@ void main() {
       expect(find.text('放大地圖調整'), findsNothing);
     }, variant: TargetPlatformVariant({platform}));
   }
+
+  // iPhone reports (2026-11-08): with the native Google map clipped to
+  // rounded corners, nothing after the map in the form was drawn on iOS.
+  // There the map keeps square corners; elsewhere they stay rounded.
+  for (final platform in [TargetPlatform.iOS, TargetPlatform.android]) {
+    for (final width in const [390.0, 820.0]) {
+      for (final native in [true, false]) {
+        testWidgets(
+          '地圖圓角：${platform.name} ${width.toInt()} 寬 ${native ? 'Google 地圖' : '預覽地圖'}',
+          (tester) async {
+            tester.view.devicePixelRatio = 1;
+            tester.view.physicalSize = Size(width, 900);
+            addTearDown(tester.view.resetPhysicalSize);
+            addTearDown(tester.view.resetDevicePixelRatio);
+            await tester.pumpWidget(
+              MaterialApp(
+                home: Scaffold(
+                  body: ListView(
+                    children: [
+                      LocationPicker(
+                        lat: 25.0,
+                        lng: 121.5,
+                        height: 240,
+                        mapBuilder: native
+                            ? null
+                            : (context, view) =>
+                                  const ColoredBox(color: Colors.green),
+                        onChanged: (a, b) {},
+                      ),
+                      const Text('地圖下方的內容'),
+                    ],
+                  ),
+                ),
+              ),
+            );
+            await tester.pump();
+            final clipped = find.ancestor(
+              of: find.byKey(const ValueKey('location-map-slot')),
+              matching: find.byType(ClipRRect),
+            );
+            final square = native && platform == TargetPlatform.iOS;
+            expect(clipped, square ? findsNothing : findsOneWidget);
+            expect(find.text('地圖下方的內容'), findsOneWidget);
+            await tester.pumpWidget(const SizedBox.shrink());
+          },
+          variant: TargetPlatformVariant({platform}),
+        );
+      }
+    }
+  }
 }
