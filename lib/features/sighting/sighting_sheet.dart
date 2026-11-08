@@ -38,9 +38,9 @@ Future<void> showSightingSheet(
 typedef _Choice = ({RiderLevel? level});
 
 /// 回報現場狀況 (A7 a segment, A7b a zone): the place, then the state, then
-/// 送出回報, off until both are chosen. A closed spot has no place to choose
-/// (the backend records it for the whole spot). A failure keeps what was
-/// chosen.
+/// 送出回報, off until both are chosen; 無法停車／施工中 too is about the
+/// one place chosen (A7d: one at a time, never all at once). A failure
+/// keeps what was chosen.
 class SightingSheet extends StatefulWidget {
   const SightingSheet({
     super.key,
@@ -78,13 +78,20 @@ class _SightingSheetState extends State<SightingSheet> {
 
   bool get ready =>
       choice != null &&
-      (closed || whole || place != null) &&
+      (whole || place != null) &&
       !sending &&
       widget.store.canReport;
 
   SightingReport get report {
     final spot = widget.spot, vehicle = widget.store.vehicle;
-    if (closed) return SightingReport.closed(spotId: spot.id, vehicle: vehicle);
+    if (closed) {
+      return SightingReport.closed(
+        spotId: spot.id,
+        vehicle: vehicle,
+        zoneId: street ? null : place?.id,
+        segmentId: street ? place?.id : null,
+      );
+    }
     return SightingReport.level(
       spotId: spot.id,
       vehicle: vehicle,

@@ -384,6 +384,7 @@ class _SpotSheetState extends State<SpotSheet> {
     final vehicle = store.vehicle;
     final decision = store.decide(spot);
     final availability = store.availabilityOf(spot);
+    final closures = store.riderClosures(spot);
     FourSign signOver(int window) => fourSign(
       spot,
       vehicle,
@@ -391,6 +392,7 @@ class _SpotSheetState extends State<SpotSheet> {
       now: now,
       availability: availability,
       riders: store.riderSeats(window),
+      closures: closures,
       decision: decision,
     );
     // The details read riders' reports of 30 minutes, the preview's plates
@@ -561,6 +563,7 @@ class _SpotSheetState extends State<SpotSheet> {
                         onClose: () => close(ctx),
                         onPlate: showSection,
                         besideRow: seatBesideRow(sign, now),
+                        closureLines: closureLines(sign, now, details: false),
                         disagrees: sign.seat.disagrees,
                       ),
                       const SizedBox(height: 14),
@@ -630,7 +633,7 @@ class _SpotSheetState extends State<SpotSheet> {
     final rules = detailRules(sign, spot);
     final rows = seatRows(sign, availability, now);
     final fees = feeSection(sign, spot, now);
-    final cards = whereCards(sign, spot);
+    final cards = whereCards(sign, spot, now);
     final (address, coordinates) = addressAndCoordinates(spot);
     final unit = detailUnit(sign);
     final seatPlate = plates
@@ -734,9 +737,18 @@ class _SpotSheetState extends State<SpotSheet> {
               basis: display.basis,
               notices: display.notices,
             )
+          else if (selected == null && sign.verdict.riderClosed != null)
+            // Riders closed it (A7d ④): for every vehicle, by their word.
+            VerdictCard(
+              status: EligibilityStatus.notAllowed,
+              headline: verdictHeadline(sign)!,
+              explanation: riderClosedNote(sign.verdict.riderClosed!, now),
+            )
           else
             VerdictCard(
-              status: selected?.status ?? sign.verdict.status,
+              status: selected?.riderClosed ?? false
+                  ? EligibilityStatus.notAllowed
+                  : selected?.status ?? sign.verdict.status,
               headline:
                   verdictHeadline(sign, selected: selected) ??
                   undecidedHeadline(vehicle, display.label),
@@ -756,6 +768,13 @@ class _SpotSheetState extends State<SpotSheet> {
               reported: display.reported && !display.lapsed,
               banned: selected == null && sign.verdict.noParkingNow,
             ),
+          if (!notParkable)
+            for (final (i, line) in closureLines(
+              sign,
+              now,
+              details: true,
+            ).indexed)
+              ClosureLineView(key: ValueKey('detail-closure-$i'), line: line),
           if (notParkable)
             DetailRulesView(
               rules: notParkableRules(sign, spot, decision.eligibility.reason),

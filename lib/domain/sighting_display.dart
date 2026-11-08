@@ -3,6 +3,8 @@ library;
 
 import '../models/sighting.dart' show SightingRefusal;
 import 'four_sign.dart';
+import 'four_sign_display.dart';
+import 'spot_detail_display.dart' show detailPlaceName;
 
 const sightingTitle = '回報現場狀況';
 const sightingSubmit = '送出回報';
@@ -71,5 +73,59 @@ List<SignArea>? sightingPlaces(FourSign s) {
   return [
     for (final a in now)
       if (a.id != null) a,
+  ];
+}
+
+// 車友回報無法停車 (A7d) ---------------------------------------------------
+
+enum ClosureLineTone {
+  /// Amber: riders said so, but 能不能停 still reads from the data or the
+  /// other places (A7d ①③⑤⑥).
+  report,
+
+  /// Red: riders closed the spot (A7d ②).
+  closed,
+
+  /// Grey: how a closure ends (A7d ④).
+  info,
+}
+
+/// A line under 能不能停 about riders' reports that nobody can park.
+class ClosureLine {
+  const ClosureLine(this.text, this.tone);
+  final String text;
+  final ClosureLineTone tone;
+
+  /// Read out with pauses, not the dot (A7d 朗讀).
+  String get semantics => text.replaceAll('・', '，');
+}
+
+/// The lines under 能不能停 (A7d): once riders closed the spot, the
+/// preview says by whom and the details how it ends (their verdict card
+/// says by whom); otherwise one line for a report about the whole spot
+/// and one for each place open to the vehicle that riders reported.
+List<ClosureLine> closureLines(
+  FourSign s,
+  DateTime now, {
+  required bool details,
+}) {
+  if (s.verdict.riderClosed case final c?) {
+    return [
+      details
+          ? const ClosureLine(riderClosedLift, ClosureLineTone.info)
+          : ClosureLine(riderClosedNote(c, now), ClosureLineTone.closed),
+    ];
+  }
+  if (s.denied) return const [];
+  return [
+    if (s.closure case final c? when !c.confirmed)
+      ClosureLine(riderClosedUnsure(c, now), ClosureLineTone.report),
+    for (final a in s.areas)
+      if (!a.whole && a.open)
+        if (a.riderClosure case final c?)
+          ClosureLine(
+            '${detailPlaceName(a)}：${c.confirmed ? riderClosedCount(c, now) : riderClosedUnsure(c, now)}',
+            ClosureLineTone.report,
+          ),
   ];
 }

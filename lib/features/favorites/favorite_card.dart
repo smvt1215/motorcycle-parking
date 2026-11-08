@@ -152,6 +152,7 @@ class FavoriteCard extends StatelessWidget {
               now: now,
               availability: store.availabilityOf(spot),
               riders: store.riderSeats(sightingMapWindow),
+              closures: store.riderClosures(spot),
               decision: store.decide(spot),
             ),
             now,

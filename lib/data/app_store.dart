@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/legacy.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../api/v1/api_v1.g.dart' as v1 show SpotClosure;
 import '../api/v1/api_v1.g.dart' show ApiV1Client, SpotSighting;
 import '../core/config.dart';
 import '../core/notifications.dart';
@@ -434,6 +435,22 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   /// lower-case spot id; read and polled with [availability].
   Map<String, List<SpotSighting>> sightings = const {};
 
+  /// What riders reported closed (A7d) at the same spots, read with
+  /// [sightings]; the followed spot's newest read lands here too.
+  Map<String, List<v1.SpotClosure>> closures = const {};
+
+  /// Riders' closures of [spot] still holding: each lasts
+  /// [RiderClosure.holds] after its newest report, also between reads.
+  List<RiderClosure> riderClosures(ParkingSpot spot) {
+    final rows = closures[spot.id.toLowerCase()];
+    if (rows == null) return const [];
+    final oldest = clock().subtract(RiderClosure.holds);
+    return [
+      for (final row in rows)
+        if (riderClosureOf(row) case final c? when c.at.isAfter(oldest)) c,
+    ];
+  }
+
   /// The spots open sheets show, the top one last, and its summaries over
   /// both windows: the details list a longer window, and it may be a spot
   /// out of view. A sheet opened over another hands it back on closing.
@@ -468,6 +485,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
       now: clock(),
       availability: availabilityOf(spot),
       riders: riders,
+      closures: riderClosures(spot),
       decision: decide(spot),
     ).seat;
     return seat.rider == null ? null : riderMeterOf(seat.rider!);
@@ -502,11 +520,12 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     if (spot == null || !sightingsSource.enabled || _disposed) return;
     final read = ++_followRead;
     try {
-      final (near, wide) = await (
-        sightingsSource.forSpots([spot], windowMinutes: sightingMapWindow),
+      final (nearRead, wide) = await (
+        sightingsSource.read([spot], windowMinutes: sightingMapWindow),
         sightingsSource.forSpots([spot], windowMinutes: sightingDetailWindow),
       ).wait;
       if (_disposed || read != _followRead) return;
+      final near = nearRead.sightings;
       _followedNear = near;
       _followedWide = wide;
       // The map's window too: closing the sheet keeps the newest answer
@@ -516,6 +535,11 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
         for (final MapEntry(:key, :value) in sightings.entries)
           if (key != id) key: value,
         id: ?near[id],
+      };
+      closures = {
+        for (final MapEntry(:key, :value) in closures.entries)
+          if (key != id) key: value,
+        id: ?nearRead.closures[id],
       };
       notifyListeners();
     } catch (_) {}
@@ -541,12 +565,10 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   /// The summaries of [spots], or null when the read fails.
-  Future<Map<String, List<SpotSighting>>?> _readSightings(
-    List<ParkingSpot> spots,
-  ) async {
-    if (!sightingsSource.enabled) return const {};
+  Future<SightingsRead?> _readSightings(List<ParkingSpot> spots) async {
+    if (!sightingsSource.enabled) return const SightingsRead({});
     try {
-      return await sightingsSource.forSpots(
+      return await sightingsSource.read(
         spots,
         windowMinutes: sightingMapWindow,
       );
@@ -556,10 +578,17 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   /// The last summaries of the spots still watched, for when a read fails.
-  Map<String, List<SpotSighting>> _keptSightings(List<ParkingSpot> spots) {
+  Map<String, List<SpotSighting>> _keptSightings(List<ParkingSpot> spots) =>
+      _kept(sightings, spots);
+
+  /// [_keptSightings] for [closures].
+  Map<String, List<v1.SpotClosure>> _keptClosures(List<ParkingSpot> spots) =>
+      _kept(closures, spots);
+
+  Map<String, T> _kept<T>(Map<String, T> bySpot, List<ParkingSpot> spots) {
     final ids = {for (final spot in _watched(spots)) spot.id.toLowerCase()};
     return {
-      for (final MapEntry(:key, :value) in sightings.entries)
+      for (final MapEntry(:key, :value) in bySpot.entries)
         if (ids.contains(key)) key: value,
     };
   }
@@ -802,7 +831,10 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     _availabilityTimer = Timer(delay, () => unawaited(pollAvailability()));
     _availabilityClock ??= Timer.periodic(const Duration(minutes: 1), (_) {
       // The pills' ages move on, and riders' reports age out.
-      if (!_disposed && (availability.isNotEmpty || sightings.isNotEmpty)) {
+      if (!_disposed &&
+          (availability.isNotEmpty ||
+              sightings.isNotEmpty ||
+              closures.isNotEmpty)) {
         notifyListeners();
       }
     });
@@ -849,7 +881,12 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     sightings = {
       for (final MapEntry(:key, :value) in _keptSightings(current).entries)
         if (sighted == null || !sightedIds.contains(key)) key: value,
-      ...?sighted,
+      ...?sighted?.sightings,
+    };
+    closures = {
+      for (final MapEntry(:key, :value) in _keptClosures(current).entries)
+        if (sighted == null || !sightedIds.contains(key)) key: value,
+      ...?sighted?.closures,
     };
     // Also on failure: the ages shown move on.
     notifyListeners();
@@ -981,8 +1018,11 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
           ? counts ?? _keptAvailability(result.spots)
           : _keptAvailability(result.spots);
       sightings = read == _availabilityRead
-          ? sighted ?? _keptSightings(result.spots)
+          ? sighted?.sightings ?? _keptSightings(result.spots)
           : _keptSightings(result.spots);
+      closures = read == _availabilityRead
+          ? sighted?.closures ?? _keptClosures(result.spots)
+          : _keptClosures(result.spots);
       _scheduleAvailability();
       error = result.warning ?? rulesWarning ?? favoritesWarning;
       truncated = result.truncated;
@@ -991,6 +1031,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
       spots = [];
       availability = const {};
       sightings = const {};
+      closures = const {};
       error = '停車資料讀取失敗，請確認連線後重試';
     } finally {
       if (!_disposed && request == _request) {
@@ -1013,7 +1054,25 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
 
   /// The map marker's judgement; the details banner reads the same one
   /// ([decide]), so they never disagree.
-  Eligibility eligible(ParkingSpot spot) => decide(spot).eligibility;
+  ///
+  /// Riders who closed the spot (A7d ②) make it 不能停 here too, so the
+  /// marker and the lists say what the sheet says.
+  Eligibility eligible(ParkingSpot spot) {
+    final decision = decide(spot);
+    final closed = riderClosures(spot);
+    if (!closed.any((c) => c.confirmed)) return decision.eligibility;
+    final verdict = fourSignVerdict(
+      spot,
+      vehicle,
+      rules,
+      now: clock(),
+      closures: closed,
+      decision: decision,
+    );
+    return verdict.riderClosed == null
+        ? decision.eligibility
+        : const Eligibility(EligibilityStatus.notAllowed, '車友回報無法停車');
+  }
 
   /// [eligible] with its basis, zones and prices, for the details sheet;
   /// the same clock as [eligible], so the banner and the marker agree.

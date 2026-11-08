@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../api/v1/api_v1.g.dart' as v1 show SpotClosure;
 import '../api/v1/api_v1.g.dart' show ApiV1Client, SpotSighting;
 import '../core/app_check.dart';
 import '../domain/four_sign.dart';
@@ -18,12 +19,29 @@ class SightingRefused implements Exception {
   String toString() => 'SightingRefused($reason)';
 }
 
+/// One read of `spot_sightings`: the summaries of a time window, and what
+/// riders reported closed (A7d, always the last 2 hours), both by
+/// lower-case spot id.
+class SightingsRead {
+  const SightingsRead(this.sightings, [this.closures = const {}]);
+  final Map<String, List<SpotSighting>> sightings;
+  final Map<String, List<v1.SpotClosure>> closures;
+}
+
 /// Where riders' sightings come from and go.
 abstract class SightingsSource {
   const SightingsSource();
 
   /// Whether sightings can be read at all.
   bool get enabled;
+
+  /// [forSpots] with what riders reported closed; a source without
+  /// closures has none.
+  Future<SightingsRead> read(
+    List<ParkingSpot> spots, {
+    required int windowMinutes,
+  }) async =>
+      SightingsRead(await forSpots(spots, windowMinutes: windowMinutes));
 
   /// The summaries of [spots] over the last [windowMinutes], by lower-case
   /// spot id. Spots without sightings are left out.
@@ -70,6 +88,12 @@ class SupabaseSightingsSource extends SightingsSource {
   Future<Map<String, List<SpotSighting>>> forSpots(
     List<ParkingSpot> spots, {
     required int windowMinutes,
+  }) async => (await read(spots, windowMinutes: windowMinutes)).sightings;
+
+  @override
+  Future<SightingsRead> read(
+    List<ParkingSpot> spots, {
+    required int windowMinutes,
   }) async {
     final ids = {
       for (final spot in spots)
@@ -82,7 +106,10 @@ class SupabaseSightingsSource extends SightingsSource {
           pWindowMinutes: windowMinutes,
         ),
     ]);
-    return sightingsBySpot([for (final p in pages) ...p.sightings]);
+    return SightingsRead(
+      sightingsBySpot([for (final p in pages) ...p.sightings]),
+      closuresBySpot([for (final p in pages) ...p.closures]),
+    );
   }
 
   @override
@@ -145,5 +172,28 @@ RiderSeat? riderSeatOf(SpotSighting row) {
     riders: row.count,
     at: at,
     areaId: row.zoneId ?? row.segmentId,
+  );
+}
+
+Map<String, List<v1.SpotClosure>> closuresBySpot(List<v1.SpotClosure> rows) {
+  final bySpot = <String, List<v1.SpotClosure>>{};
+  for (final row in rows) {
+    (bySpot[row.spotId.toLowerCase()] ??= []).add(row);
+  }
+  return bySpot;
+}
+
+/// [row] as the four signs read it, or null when its time does not parse
+/// or it names both a zone and a segment.
+RiderClosure? riderClosureOf(v1.SpotClosure row) {
+  final at = DateTime.tryParse(row.latestAt);
+  if (at == null || row.riders < 1) return null;
+  if (row.zoneId != null && row.segmentId != null) return null;
+  return RiderClosure(
+    areaId: row.zoneId ?? row.segmentId,
+    riders: row.riders,
+    confirmed: row.confirmed,
+    at: at,
+    derived: row.derived,
   );
 }

@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:motorcycle_parking/api/v1/api_v1.g.dart' as v1 show SpotClosure;
 import 'package:motorcycle_parking/api/v1/api_v1.g.dart' show SpotSighting;
 import 'package:motorcycle_parking/core/app_check.dart';
 import 'package:motorcycle_parking/data/account_suspended.dart';
@@ -74,9 +75,30 @@ SpotSighting row(
   conflicting: conflicting,
 );
 
+v1.SpotClosure closure(
+  String spot, {
+  String? zone,
+  String? segment,
+  int riders = 1,
+  bool? confirmed,
+  bool derived = false,
+  required DateTime at,
+}) => v1.SpotClosure(
+  spotId: spot,
+  zoneId: zone,
+  segmentId: segment,
+  riders: riders,
+  confirmed: confirmed ?? riders >= 2,
+  latestAt: at.toIso8601String(),
+  derived: derived,
+);
+
 class FakeSightings extends SightingsSource {
   FakeSightings(this.rows);
   List<SpotSighting> rows;
+
+  /// What riders reported closed (A7d), returned with every read.
+  List<v1.SpotClosure> closures = const [];
   final windows = <int>[];
   final sent = <SightingReport>[];
   Object? failure;
@@ -95,6 +117,22 @@ class FakeSightings extends SightingsSource {
       for (final r in rows)
         if (ids.contains(r.spotId)) r,
     ]);
+  }
+
+  @override
+  Future<SightingsRead> read(
+    List<ParkingSpot> spots, {
+    required int windowMinutes,
+  }) async {
+    final sightings = await forSpots(spots, windowMinutes: windowMinutes);
+    final ids = {for (final s in spots) s.id.toLowerCase()};
+    return SightingsRead(
+      sightings,
+      closuresBySpot([
+        for (final c in closures)
+          if (ids.contains(c.spotId)) c,
+      ]),
+    );
   }
 
   @override
@@ -376,7 +414,7 @@ void main() {
         client((request) {
           expect(request.url.path, endsWith('/rpc/spot_sightings'));
           sent.add(jsonDecode(request.body) as Map<String, dynamic>);
-          return http.Response('{"sightings":[]}', 200);
+          return http.Response('{"sightings":[],"closures":[]}', 200);
         }),
       );
       await source.forSpots([
@@ -400,6 +438,13 @@ void main() {
           return http.Response(
             jsonEncode({
               'sightings': [row(lotId, at: DateTime.utc(2026, 11, 3)).toJson()],
+              'closures': [
+                closure(
+                  lotId.toUpperCase(),
+                  zone: 'b2',
+                  at: detailDay,
+                ).toJson(),
+              ],
             }),
             200,
           );
@@ -414,6 +459,9 @@ void main() {
         lot,
       ], windowMinutes: sightingDetailWindow);
       expect(read[lotId], hasLength(1));
+      final both = await source.read([lot], windowMinutes: sightingMapWindow);
+      expect(both.sightings[lotId], hasLength(1));
+      expect(both.closures[lotId]!.single.zoneId, 'b2');
     });
 
     group('寫入', () {
@@ -1135,7 +1183,7 @@ void main() {
       expect(source.sent.single.level, 0);
     });
 
-    testWidgetsOn('無法停車／施工中：不用選區，送整點', (tester) async {
+    testWidgetsOn('無法停車／施工中：一次選一區，送 zone_id（A7d）', (tester) async {
       final source = FakeSightings(const []);
       final store = await sightedStore(tester, source, now: detailNight);
       await openPanel(tester, store, lot);
@@ -1144,9 +1192,36 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('sighting-closed')));
       await tester.pumpAndSettle();
       expect(find.text('整區都停不了，例如施工、封閉'), findsOneWidget);
+      // B2 and B3 are both open at night: no place, no report.
+      expect(submit(tester).onPressed, isNull);
+      await tester.tap(find.byKey(const ValueKey('sighting-place-1')));
+      await tester.pumpAndSettle();
       await send(tester);
       expect(source.sent.single.closed, isTrue);
-      expect(source.sent.single.toJson()['zone_id'], isNull);
+      expect(source.sent.single.toJson(), {
+        'spot_id': lotId,
+        'kind': 'closed',
+        'level': null,
+        'zone_id': 'b3',
+        'segment_id': null,
+        'vehicle': 'heavy',
+      });
+    });
+
+    testWidgetsOn('無法停車／施工中：路邊送 segment_id', (tester) async {
+      final source = FakeSightings(const []);
+      final store = await sightedStore(tester, source);
+      await openPanel(tester, store, street);
+      await tester.tap(find.byKey(const ValueKey('sighting-place-0')));
+      await tester.ensureVisible(find.byKey(const ValueKey('sighting-closed')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('sighting-closed')));
+      await tester.pumpAndSettle();
+      expect(find.text('整段都停不了，例如施工、封路'), findsOneWidget);
+      await send(tester);
+      expect(source.sent.single.closed, isTrue);
+      expect(source.sent.single.segmentId, isNotNull);
+      expect(source.sent.single.zoneId, isNull);
     });
 
     testWidgetsOn('失敗：留在面板、內容還在、可以再送', (tester) async {
@@ -1778,5 +1853,291 @@ void main() {
       expect(note, findsOneWidget);
       expect(find.byType(SeatRiderBox), findsWidgets);
     });
+  });
+
+  group('車友回報無法停車（A7d）', () {
+    final ago = detailDay.subtract(const Duration(minutes: 20));
+    final nightAgo = detailNight.subtract(const Duration(minutes: 20));
+
+    RiderClosure rc({
+      String? area,
+      int riders = 1,
+      bool? confirmed,
+      DateTime? at,
+    }) => RiderClosure(
+      areaId: area,
+      riders: riders,
+      confirmed: confirmed ?? riders >= 2,
+      at: at ?? ago,
+    );
+
+    FourSign signOf(
+      ParkingSpot spot,
+      List<RiderClosure> closures, {
+      VehicleType vehicle = VehicleType.heavy,
+      DateTime? now,
+    }) => fourSign(
+      spot,
+      vehicle,
+      const [],
+      now: now ?? detailDay,
+      closures: closures,
+    );
+
+    List<String> lines(FourSign s, DateTime now, {bool details = false}) => [
+      for (final l in closureLines(s, now, details: details)) l.text,
+    ];
+
+    test('riderClosureOf：區或段、整點；時間讀不懂、區段都帶的不顯示', () {
+      final c = riderClosureOf(
+        closure(lotId, zone: 'b2', riders: 3, at: ago, derived: false),
+      )!;
+      expect(c.areaId, 'b2');
+      expect(c.riders, 3);
+      expect(c.confirmed, isTrue);
+      expect(c.at, ago);
+      expect(
+        riderClosureOf(closure(lotId, segment: 'n1', at: ago))!.areaId,
+        'n1',
+      );
+      expect(riderClosureOf(closure(lotId, at: ago))!.areaId, isNull);
+      expect(
+        riderClosureOf(closure(lotId, zone: 'b2', segment: 'n1', at: ago)),
+        isNull,
+      );
+      expect(
+        riderClosureOf(
+          const v1.SpotClosure(
+            spotId: lotId,
+            riders: 1,
+            confirmed: false,
+            latestAt: 'not a time',
+            derived: false,
+          ),
+        ),
+        isNull,
+      );
+    });
+
+    test('1 位，整點：能不能停不變，下方一行到場請再確認（①③）', () {
+      final plain = signOf(lot, const []);
+      final s = signOf(lot, [rc()]);
+      expect(s.verdict.status, plain.verdict.status);
+      expect(s.verdict.riderClosed, isNull);
+      expect(
+        fourSignPlates(s, detailDay).first.main,
+        fourSignPlates(plain, detailDay).first.main,
+      );
+      final l = closureLines(s, detailDay, details: false).single;
+      expect(l.text, '有車友回報無法停車・20 分鐘前，到場請再確認');
+      expect(l.tone, ClosureLineTone.report);
+      expect(l.semantics, '有車友回報無法停車，20 分鐘前，到場請再確認');
+      expect(lines(s, detailDay, details: true), [l.text]);
+      expect([
+        for (final c in whereCards(s, lot, detailDay)) c.riderClosed,
+      ], everyElement(''));
+    });
+
+    test('2 位，整點：現在不能停，其他路牌照常；停哪裡每區寫車友回報（②④）', () {
+      final plain = signOf(lot, const []);
+      final s = signOf(lot, [rc(riders: 2)]);
+      expect(s.verdict.status, EligibilityStatus.notAllowed);
+      expect(s.verdict.riderClosed!.riders, 2);
+      // Not the data's 不能停: the plates stay, and riders may report it
+      // open again.
+      expect(s.denied, isFalse);
+      expect(sightingPlaces(s), isNotNull);
+      final plates = fourSignPlates(s, detailDay);
+      expect(plates, hasLength(4));
+      expect(plates.first.main, '不能停');
+      expect(plates.first.note, '車友回報');
+      expect(plates.first.tone, PlateTone.denied);
+      expect(plates.first.semantics, '能不能停：現在不能停，2 位車友回報，非官方資訊');
+      expect(plates[2].main, fourSignPlates(plain, detailDay)[2].main);
+      expect(plates[3].main, fourSignPlates(plain, detailDay)[3].main);
+      expect(verdictHeadline(s), '現在不能停');
+      final preview = closureLines(s, detailDay, details: false).single;
+      expect(preview.text, '2 位車友回報無法停車・20 分鐘前。非官方資訊');
+      expect(preview.tone, ClosureLineTone.closed);
+      final details = closureLines(s, detailDay, details: true).single;
+      expect(details.text, riderClosedLift);
+      expect(details.tone, ClosureLineTone.info);
+      final cards = whereCards(s, lot, detailDay);
+      expect(cards, isNotEmpty);
+      expect([for (final c in cards) c.riderClosed], everyElement('車友回報無法停車'));
+      expect(
+        fourSignVerdict(
+          lot,
+          VehicleType.heavy,
+          const [],
+          now: detailDay,
+          closures: [rc(riders: 2)],
+        ).openNow,
+        isFalse,
+      );
+    });
+
+    test('2 位，一區：能不能停看其他區，該區紅字、不算可停的區（⑤）', () {
+      final s = signOf(lot, [
+        rc(area: 'b2', riders: 2, at: nightAgo),
+      ], now: detailNight);
+      expect(s.verdict.riderClosed, isNull);
+      expect(s.verdict.openNow, isTrue);
+      expect([for (final a in s.where.areas) a.id], ['b3']);
+      final cards = {
+        for (final c in whereCards(s, lot, detailNight))
+          c.area.id: c.riderClosed,
+      };
+      expect(cards['b2'], '2 位車友回報無法停車・20 分鐘前。非官方資訊');
+      expect(cards['b3'], '');
+      expect(lines(s, detailNight), ['B2 重機專區：2 位車友回報無法停車・20 分鐘前']);
+      expect(lines(s, detailNight, details: true), [
+        'B2 重機專區：2 位車友回報無法停車・20 分鐘前',
+      ]);
+      // Still offered, so a rider on site can report it open again.
+      expect([for (final a in sightingPlaces(s)!) a.id], ['b2', 'b3']);
+    });
+
+    test('1 位，一區：只寫一行，該區照常算', () {
+      final s = signOf(lot, [rc(area: 'b2', at: nightAgo)], now: detailNight);
+      expect([for (final a in s.where.areas) a.id], ['b2', 'b3']);
+      expect(lines(s, detailNight), ['B2 重機專區：有車友回報無法停車・20 分鐘前，到場請再確認']);
+      expect([
+        for (final c in whereCards(s, lot, detailNight)) c.riderClosed,
+      ], everyElement(''));
+    });
+
+    test('目前車種能停的區全被關閉：等同整點（伺服器沒有合成整點列也一樣）', () {
+      final s = signOf(lot, [
+        rc(area: 'b2', riders: 2, at: nightAgo),
+        rc(area: 'b3', riders: 3, at: nightAgo.add(const Duration(minutes: 5))),
+      ], now: detailNight);
+      expect(s.verdict.status, EligibilityStatus.notAllowed);
+      expect(s.verdict.riderClosed!.riders, 3);
+      expect(lines(s, detailNight), ['3 位車友回報無法停車・15 分鐘前。非官方資訊']);
+    });
+
+    test('關閉不分車種：B1 只有普通機車能停，大型重機不受影響', () {
+      final closed = [rc(area: 'b1', riders: 2)];
+      final heavy = signOf(lot, closed);
+      expect(heavy.verdict.riderClosed, isNull);
+      expect(lines(heavy, detailDay), isEmpty);
+      final scooter = signOf(lot, closed, vehicle: VehicleType.scooter);
+      expect(scooter.verdict.riderClosed, isNotNull);
+      expect(scooter.verdict.status, EligibilityStatus.notAllowed);
+    });
+
+    test('資料本來就不能停：維持原本的不能停，不寫車友回報', () {
+      final s = signOf(detailCarLot, [rc(riders: 2)]);
+      expect(s.denied, isTrue);
+      expect(s.verdict.riderClosed, isNull);
+      expect(lines(s, detailDay), isEmpty);
+    });
+
+    test('選定的路段被關閉（A10）：路牌與標題都寫不能停', () {
+      final plain = signOf(street, const []);
+      final open = plain.areas.firstWhere((a) => a.open && a.window.now);
+      final s = signOf(street, [rc(area: open.id, riders: 2)]);
+      final selected = s.areas.firstWhere((a) => a.id == open.id);
+      expect(selected.riderClosed, isTrue);
+      expect(selectedVerdictPlate(s, selected).main, '不能停');
+      expect(verdictHeadline(s, selected: selected), '大型重機現在不能停');
+      expect(selectedNote(s, selected), startsWith('選定的'));
+      expect(selectedNote(s, selected), contains('車友回報無法停車'));
+    });
+
+    testWidgets('AppStore：讀到 closures，2 小時後消失；2 位才改地圖標記', (tester) async {
+      var now = detailDay;
+      final source = FakeSightings(const [])
+        ..closures = [closure(lotId, at: ago)];
+      final store = (await tester.runAsync(() async {
+        SharedPreferences.setMockInitialValues({'vehicle': 'heavy'});
+        final s = AppStore(
+          LocalRepository(await SharedPreferences.getInstance()),
+          null,
+          sightingsSource: source,
+          clock: () => now,
+        );
+        await s.init();
+        return s;
+      }))!;
+      store.vehicle = VehicleType.heavy;
+      addTearDown(store.dispose);
+      final plain = store.eligible(lot).status;
+      await tester.runAsync(() => store.followSightings(lot));
+      expect(store.riderClosures(lot).single.riders, 1);
+      expect(store.eligible(lot).status, plain);
+      source.closures = [closure(lotId, riders: 2, at: ago)];
+      await tester.runAsync(store.readFollowedSightings);
+      expect(store.eligible(lot).status, EligibilityStatus.notAllowed);
+      expect(store.eligible(lot).reason, '車友回報無法停車');
+      now = ago.add(const Duration(hours: 2, minutes: 1));
+      expect(store.riderClosures(lot), isEmpty);
+      expect(store.eligible(lot).status, isNot(EligibilityStatus.notAllowed));
+    });
+
+    for (final platform in platforms) {
+      for (final (name, size) in layouts) {
+        for (final dark in [false, true]) {
+          testWidgetsOn(
+            '${platform.name} $name ${dark ? '深色' : '淺色'}：預覽與詳情（②④）',
+            (tester) async {
+              setUpView(tester, platform, size);
+              final source = FakeSightings(const [])
+                ..closures = [closure(lotId, riders: 2, at: ago)];
+              final store = await sightedStore(tester, source);
+              await openDetail(
+                tester,
+                store,
+                lot,
+                size: size,
+                dark: dark,
+                full: false,
+              );
+              expect(tester.takeException(), isNull);
+              // The preview's line; the details below say it in the card.
+              expect(
+                find.descendant(
+                  of: find.byKey(const ValueKey('closure-line-0')),
+                  matching: find.text('2 位車友回報無法停車・20 分鐘前。非官方資訊'),
+                ),
+                findsOneWidget,
+              );
+              expect(
+                find.byKey(const ValueKey('spot-decision-explanation')),
+                findsOneWidget,
+              );
+              expect(
+                find.bySemanticsLabel('能不能停：現在不能停，2 位車友回報，非官方資訊'),
+                findsOneWidget,
+              );
+              expect(find.byKey(const ValueKey('spot-report')), findsOneWidget);
+              await pullUp(tester);
+              expect(tester.takeException(), isNull);
+              expect(find.text('現在不能停'), findsOneWidget);
+              expect(find.text(riderClosedLift), findsOneWidget);
+              expect(find.text('車友回報無法停車'), findsNWidgets(2));
+            },
+          );
+          testWidgetsOn(
+            '${platform.name} $name ${dark ? '深色' : '淺色'}：1 位只加一行（①③）',
+            (tester) async {
+              setUpView(tester, platform, size);
+              final source = FakeSightings(const [])
+                ..closures = [closure(lotId, at: ago)];
+              final store = await sightedStore(tester, source);
+              await openDetail(tester, store, lot, size: size, dark: dark);
+              expect(tester.takeException(), isNull);
+              expect(find.text('有車友回報無法停車・20 分鐘前，到場請再確認'), findsOneWidget);
+              expect(
+                find.bySemanticsLabel('有車友回報無法停車，20 分鐘前，到場請再確認'),
+                findsOneWidget,
+              );
+              expect(find.text('現在不能停'), findsNothing);
+            },
+          );
+        }
+      }
+    }
   });
 }

@@ -117,6 +117,7 @@ class _MapPageState extends ConsumerState<MapPage> {
       store.vehicle,
       store.rules,
       now: now,
+      closures: store.riderClosures(spot),
       // The marker's and the sheet's decision, so the three agree.
       decision: store.decide(spot),
     ).openNow;

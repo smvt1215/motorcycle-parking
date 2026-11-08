@@ -43,6 +43,7 @@ class SignArea {
     this.zone,
     this.segment,
     this.condition,
+    this.riderClosure,
   });
 
   /// The zone's or segment's stable id; null for the whole spot.
@@ -78,10 +79,66 @@ class SignArea {
   /// stay and extensions. Null when unconfirmed.
   final ParkingCondition? condition;
 
+  /// Riders' report that nobody can park here (A7d); null when none.
+  /// [status] stays the data's: a report never changes what the place is.
+  final RiderClosure? riderClosure;
+
   bool get whole => id == null && name.isEmpty;
   bool get open =>
       status == EligibilityStatus.allowed ||
       status == EligibilityStatus.conditional;
+
+  /// Two riders say nobody can park here now (A7d): it no longer counts
+  /// as a place open to the vehicle.
+  bool get riderClosed => riderClosure?.confirmed ?? false;
+
+  SignArea _withClosure(RiderClosure closure) => SignArea(
+    name: name,
+    status: status,
+    window: window,
+    id: id,
+    restriction: restriction,
+    bayKind: bayKind,
+    side: side,
+    total: total,
+    countClass: countClass,
+    zone: zone,
+    segment: segment,
+    condition: condition,
+    riderClosure: closure,
+  );
+}
+
+/// Riders' report that nobody can park in a place (A7d, 無法停車／施工中):
+/// a site's state, the same for every vehicle. One rider only says so;
+/// two different riders ([confirmed]) change 能不能停. It holds 2 hours
+/// at most, and a credible 有位 report takes it back (the server's).
+class RiderClosure {
+  const RiderClosure({
+    required this.riders,
+    required this.confirmed,
+    required this.at,
+    this.areaId,
+    this.derived = false,
+  });
+
+  /// The zone or segment it is about; null for the whole spot.
+  final String? areaId;
+
+  /// How many riders reported it.
+  final int riders;
+
+  /// Enough riders said so to change 能不能停.
+  final bool confirmed;
+
+  /// The newest report.
+  final DateTime at;
+
+  /// The whole spot's, summed up from every zone or segment closed.
+  final bool derived;
+
+  /// How long a report holds (`sighting_closed_window()`).
+  static const holds = Duration(hours: 2);
 }
 
 /// 能不能停.
@@ -97,6 +154,7 @@ class VerdictAnswer {
     this.notStated = false,
     this.noParkingNow = false,
     this.parkableAt,
+    this.riderClosed,
   });
 
   /// The four signs' status: [decideParking]'s, except that only places
@@ -129,6 +187,11 @@ class VerdictAnswer {
   /// UTC (shown in Taipei time); null when no time within the week is
   /// known.
   final DateTime? parkableAt;
+
+  /// Riders' report that closed every place open to the vehicle, or the
+  /// whole spot (A7d ②④): [status] is then not allowed, yet the other
+  /// signs still read, since the data have not changed.
+  final RiderClosure? riderClosed;
 }
 
 enum SeatKind {
@@ -379,8 +442,13 @@ class FourSign {
     required this.fee,
     required this.where,
     this.areas = const [],
+    this.closure,
   });
   final VehicleType vehicle;
+
+  /// Riders' report about the whole spot (A7d), confirmed or not; the
+  /// places' own are on [areas].
+  final RiderClosure? closure;
 
   /// Every place of the spot as judged for [vehicle], open or not, in the
   /// spot's order: the full-page details list the ones closed to it
@@ -394,8 +462,12 @@ class FourSign {
   final FeeAnswer fee;
   final WhereAnswer where;
 
-  /// The vehicle may not park here: the signs collapse to one.
-  bool get denied => verdict.status == EligibilityStatus.notAllowed;
+  /// The vehicle may not park here: the signs collapse to one. Not when
+  /// riders closed it (A7d): the data still say it may, and a rider on
+  /// site may report it open again.
+  bool get denied =>
+      verdict.status == EligibilityStatus.notAllowed &&
+      verdict.riderClosed == null;
 
   /// Whether 停哪裡 already names the one place, so 有沒有位 need not.
   bool get singlePlace => where.areas.length == 1 && !where.areas.single.whole;
@@ -403,7 +475,8 @@ class FourSign {
 
 /// The four signs of [spot] for [vehicle] at [now]. [decision] is the
 /// spot's [decideParking] result when the caller has it; [availability]
-/// its official counts; [riders] the reports the caller lets it show.
+/// its official counts; [riders] the reports the caller lets it show;
+/// [closures] riders' reports that nobody can park (A7d), still holding.
 FourSign fourSign(
   ParkingSpot spot,
   VehicleType vehicle,
@@ -411,6 +484,7 @@ FourSign fourSign(
   required DateTime now,
   SpotAvailability availability = SpotAvailability.none,
   RiderSeats riders = noRiderSeats,
+  List<RiderClosure> closures = const [],
   ParkingDecision? decision,
   HolidayCalendar? calendar,
 }) {
@@ -418,16 +492,20 @@ FourSign fourSign(
       decision ??
       decideParking(spot, vehicle, rules, now: now, calendar: calendar);
   final street = !spot.isFacility;
-  final (:areas, :openNow, :open) = _areasOf(
+  final (:areas, :openNow, :open, :closure, :closedAll) = _areasOf(
     spot,
     vehicle,
     rules,
     whole,
     now,
     calendar,
+    closures,
   );
   final counted = openNow.isNotEmpty ? openNow : open;
-  final verdict = _verdict(spot, now, whole, areas, openNow, open, street);
+  final verdict = _riderVerdict(
+    _verdict(spot, now, whole, areas, openNow, open, street),
+    closedAll,
+  );
   return FourSign(
     vehicle: vehicle,
     street: street,
@@ -447,6 +525,7 @@ FourSign fourSign(
           : null,
     ),
     areas: areas,
+    closure: closure,
   );
 }
 
@@ -458,46 +537,111 @@ VerdictAnswer fourSignVerdict(
   VehicleType vehicle,
   Iterable<CityRule> rules, {
   required DateTime now,
+  List<RiderClosure> closures = const [],
   ParkingDecision? decision,
   HolidayCalendar? calendar,
 }) {
   final whole =
       decision ??
       decideParking(spot, vehicle, rules, now: now, calendar: calendar);
-  final (:areas, :openNow, :open) = _areasOf(
+  final (:areas, :openNow, :open, closure: _, :closedAll) = _areasOf(
     spot,
     vehicle,
     rules,
     whole,
     now,
     calendar,
+    closures,
   );
-  return _verdict(spot, now, whole, areas, openNow, open, !spot.isFacility);
+  return _riderVerdict(
+    _verdict(spot, now, whole, areas, openNow, open, !spot.isFacility),
+    closedAll,
+  );
 }
 
-/// The places of [spot] for [vehicle], those open now, and those open at
-/// all.
-({List<SignArea> areas, List<SignArea> openNow, List<SignArea> open}) _areasOf(
+/// [verdict], unless riders closed the spot ([closedAll]): then 不能停 by
+/// their report. A spot the vehicle may not park in anyway stays as it is.
+VerdictAnswer _riderVerdict(VerdictAnswer verdict, RiderClosure? closedAll) =>
+    closedAll == null || verdict.status == EligibilityStatus.notAllowed
+    ? verdict
+    : VerdictAnswer(
+        status: EligibilityStatus.notAllowed,
+        basis: BasisKind.communityReport,
+        riderClosed: closedAll,
+      );
+
+/// The places of [spot] for [vehicle] with riders' [closures] on them,
+/// those open now, and those open at all; the whole spot's closure; and
+/// the closure that shuts it (A7d): the whole spot's confirmed, or every
+/// place open to the vehicle confirmed closed. Places riders closed no
+/// longer count as open, unless the spot is shut: then they still say
+/// what it charges and where, as the data have it.
+({
+  List<SignArea> areas,
+  List<SignArea> openNow,
+  List<SignArea> open,
+  RiderClosure? closure,
+  RiderClosure? closedAll,
+})
+_areasOf(
   ParkingSpot spot,
   VehicleType vehicle,
   Iterable<CityRule> rules,
   ParkingDecision whole,
   DateTime now,
   HolidayCalendar? calendar,
+  List<RiderClosure> closures,
 ) {
-  final areas = spot.isFacility
+  final plain = spot.isFacility
       ? _lotAreas(spot, vehicle, whole, now, calendar)
       : _streetAreas(spot, vehicle, rules, whole, now, calendar);
+  final spotClosure = closures.where((c) => c.areaId == null).firstOrNull;
+  final byArea = {
+    for (final c in closures)
+      if (c.areaId case final id?) id.toLowerCase(): c,
+  };
+  final areas = closures.isEmpty
+      ? plain
+      : [
+          for (final a in plain)
+            switch (a.whole ? spotClosure : byArea[a.id?.toLowerCase()]) {
+              final c? => a._withClosure(c),
+              null => a,
+            },
+        ];
+  final open = [
+    for (final a in areas)
+      if (a.open) a,
+  ];
+  final closed = [
+    for (final a in open)
+      if (a.riderClosed) a.riderClosure!,
+  ];
+  final closedAll = spotClosure != null && spotClosure.confirmed
+      ? spotClosure
+      : open.isNotEmpty && closed.length == open.length
+      ? closed.reduce(
+          (a, b) => RiderClosure(
+            riders: math.max(a.riders, b.riders),
+            confirmed: true,
+            at: b.at.isAfter(a.at) ? b.at : a.at,
+            derived: true,
+          ),
+        )
+      : null;
+  bool counts(SignArea a) => closedAll != null || !a.riderClosed;
   return (
     areas: areas,
     openNow: [
       for (final a in areas)
-        if (a.window.now) a,
+        if (a.window.now && counts(a)) a,
     ],
     open: [
-      for (final a in areas)
-        if (a.open) a,
+      for (final a in open)
+        if (counts(a)) a,
     ],
+    closure: spotClosure,
+    closedAll: closedAll,
   );
 }
 

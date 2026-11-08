@@ -1224,6 +1224,12 @@ class WhereView extends StatelessWidget {
                 ],
               ),
               if (card.sub.isNotEmpty) small(card.sub),
+              if (card.riderClosed.isNotEmpty)
+                Text(
+                  card.riderClosed,
+                  key: ValueKey('detail-where-closure-$i'),
+                  style: TextStyle(fontSize: 13, color: c.denied, height: 1.4),
+                ),
               if (card.state.isNotEmpty)
                 Text(
                   card.state,

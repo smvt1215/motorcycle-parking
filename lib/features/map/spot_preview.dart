@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import '../../domain/four_sign.dart';
 import '../../domain/four_sign_display.dart';
+import '../../domain/sighting_display.dart' show ClosureLine, ClosureLineTone;
 import '../../models/parking.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../../ui/detail_tokens.dart';
@@ -39,8 +40,12 @@ class SpotPreview extends StatelessWidget {
     this.titleNote,
     this.besideRow,
     this.disagrees = false,
+    this.closureLines = const [],
   });
   final ParkingSpot spot;
+
+  /// Riders' reports that nobody can park (A7d ①②), under the plates.
+  final List<ClosureLine> closureLines;
 
   /// The report beside an official count, or the lapsed count beside a
   /// report (A11).
@@ -130,6 +135,10 @@ class SpotPreview extends StatelessWidget {
           plates: plates,
           onTap: onPlate,
         ),
+        for (final (i, line) in closureLines.indexed) ...[
+          const SizedBox(height: 8),
+          ClosureLineView(key: ValueKey('closure-line-$i'), line: line),
+        ],
         if (besideRow case final row?) ...[
           const SizedBox(height: 8),
           SeatBesideLine(row: row),
@@ -187,6 +196,49 @@ class SeatBesideLine extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// A line about riders' reports that nobody can park (A7d): the works
+/// sign amber while 能不能停 still stands, red once riders closed the
+/// spot; an info sign for how it ends.
+class ClosureLineView extends StatelessWidget {
+  const ClosureLineView({super.key, required this.line});
+  final ClosureLine line;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = DetailColors.of(context);
+    final (icon, color) = switch (line.tone) {
+      ClosureLineTone.report => (Icons.construction, c.conditional),
+      ClosureLineTone.closed => (Icons.construction, c.denied),
+      ClosureLineTone.info => (Icons.info_outline, c.muted),
+    };
+    return Semantics(
+      container: true,
+      label: line.semantics,
+      excludeSemantics: true,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 20, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 1),
+              child: Text(
+                line.text,
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.5,
+                  color: line.tone == ClosureLineTone.info ? c.muted : c.ink,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

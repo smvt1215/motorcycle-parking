@@ -187,6 +187,30 @@ String agoText(DateTime at, DateTime now) {
   return '${minutes ~/ 60} 小時前';
 }
 
+// 車友回報無法停車 (A7d) ---------------------------------------------------
+
+/// 「2 位車友回報無法停車・20 分鐘前」.
+String riderClosedCount(RiderClosure c, DateTime now) =>
+    '${c.riders} 位車友回報無法停車・${agoText(c.at, now)}';
+
+/// One rider's report (A7d ①③): it changes nothing yet.
+String riderClosedUnsure(RiderClosure c, DateTime now) =>
+    '有車友回報無法停車・${agoText(c.at, now)}，到場請再確認';
+
+/// Two riders' (A7d ②④⑤⑥): 「2 位車友回報無法停車・20 分鐘前。非官方資訊」.
+String riderClosedNote(RiderClosure c, DateTime now) =>
+    '${riderClosedCount(c, now)}。非官方資訊';
+
+/// Under the details' verdict once riders closed the spot (A7d ④).
+const riderClosedLift = '現場恢復後，車友回報有位就會解除。';
+
+/// A place of 停哪裡 when riders closed the whole spot (A7d ④).
+const riderClosedShort = '車友回報無法停車';
+
+/// What 能不能停 says aloud when riders closed the spot (A7d 朗讀).
+String riderClosedSpoken(RiderClosure c) =>
+    '能不能停：現在不能停，${c.riders} 位車友回報，非官方資訊';
+
 String _basisNote(VerdictAnswer v) => switch (v.basis) {
   BasisKind.official => '政府資料',
   BasisKind.adminVerified => '管理員確認',
@@ -282,6 +306,16 @@ String parkableAtText(DateTime at, DateTime now) {
 SignPlate _verdictPlate(FourSign s, DateTime now) {
   final v = s.verdict;
   final basis = _basisNote(v);
+  // Riders closed it (A7d ②): 不能停 for every vehicle, said to be theirs.
+  if (v.riderClosed case final closure?) {
+    return SignPlate(
+      face: FourSignFace.verdict,
+      main: '不能停',
+      note: '車友回報',
+      tone: PlateTone.denied,
+      semantics: riderClosedSpoken(closure),
+    );
+  }
   // 現在禁停 (#244): painted amber as 有條件 (the status stays
   // conditional), titled apart, with when parking opens again.
   if (v.status == EligibilityStatus.conditional && v.noParkingNow) {

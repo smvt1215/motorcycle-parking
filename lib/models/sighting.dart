@@ -33,9 +33,9 @@ int riderLevelFromBackend(int level) => 3 - level;
 /// [riderLevelFromBackend] the other way, for what is sent.
 int backendLevelFromRider(int level) => 3 - level;
 
-/// What a rider sends: a level of the scale for one place, or that nobody
-/// can park here (the whole spot: submit-sighting takes no zone or segment
-/// for it).
+/// What a rider sends for one place (a zone, a segment, or the whole spot
+/// when it has neither): a level of the scale, or that nobody can park
+/// there (A7d).
 class SightingReport {
   const SightingReport.level({
     required this.spotId,
@@ -46,11 +46,14 @@ class SightingReport {
   }) : closed = false,
        assert(zoneId == null || segmentId == null);
 
-  const SightingReport.closed({required this.spotId, required this.vehicle})
-    : level = null,
-      closed = true,
-      zoneId = null,
-      segmentId = null;
+  const SightingReport.closed({
+    required this.spotId,
+    required this.vehicle,
+    this.zoneId,
+    this.segmentId,
+  }) : level = null,
+       closed = true,
+       assert(zoneId == null || segmentId == null);
 
   final String spotId;
   final VehicleType vehicle;
