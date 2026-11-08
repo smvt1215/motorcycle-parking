@@ -143,8 +143,11 @@ begin
   end if;
   if p_cursor is not null then
     begin
-      if jsonb_typeof(p_cursor)<>'object' or jsonb_typeof(p_cursor->'rank')<>'number'
-         or jsonb_typeof(p_cursor->'due_at')<>'string' or jsonb_typeof(p_cursor->'id')<>'string' then
+      -- A missing key reads null: is distinct from, not <>.
+      if jsonb_typeof(p_cursor) is distinct from 'object'
+         or jsonb_typeof(p_cursor->'rank') is distinct from 'number'
+         or jsonb_typeof(p_cursor->'due_at') is distinct from 'string'
+         or jsonb_typeof(p_cursor->'id') is distinct from 'string' then
         raise sqlstate '22023';
       end if;
       v_rank:=(p_cursor->>'rank')::integer;
