@@ -112,4 +112,4 @@
 
 1. 本條款任一條款無效時，不影響其他條款的效力。
 2. Apple 相關（App Store 標準 EULA 的補充）：本條款是你與 小哲資訊工作室（負責人：H.C. CHEN） 之間的約定，Apple 不是本條款的當事人，不負責本服務及其內容的維護與支援。
-3. 聯絡方式：小哲資訊工作室（負責人：H.C. CHEN）；客服表單 <https://motoparking.smvtstudio.com/support> ；聯絡信箱 ops@motoparking.smvtstudio.com
+3. 聯絡方式：小哲資訊工作室（負責人：H.C. CHEN）；客服表單 <https://motoparking.smvtstudio.com/support>
