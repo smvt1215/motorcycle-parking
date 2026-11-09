@@ -630,61 +630,71 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  for (final field in ['facility_types', 'parking_access']) {
-    testWidgets('既有路外場站只修改 $field 也能送出，還原後恢復未變更提示', (tester) async {
-      final lot = ParkingSpot.fromJson({
-        ...spot.toJson(),
-        'space_type': 'offStreet',
-        'facility_type': 'underground',
-        'parking_access': 'scooterHeavy',
-      });
-      final store = await openSuggestion(tester, '格位類型', selectedSpot: lot);
-      await submitSuggestion(tester, '送出修改建議');
-      const error = '請至少修改格位類型、場站型式或停放分類其中一項';
-      expect(find.text(error), findsOneWidget);
-      expect(store.submissions, isEmpty);
-
-      final control = field == 'facility_types'
-          ? find.byType(FacilityField)
-          : find.byType(ChoiceField<ParkingAccess?>);
-      Future<void> choose(String label) async {
-        await tester.scrollUntilVisible(
-          control,
-          -200,
-          scrollable: find
-              .descendant(
-                of: find.byType(Form).last,
-                matching: find.byType(Scrollable),
-              )
-              .first,
+  // Who may park is each zone's (as the new-spot form N1): this form no
+  // longer asks it or sends the spot's parking_access, on phone and tablet,
+  // on both platforms.
+  for (final width in [390.0, 680.0, 1040.0]) {
+    testWidgets(
+      '既有路外場站只修改場站型式也能送出，還原後恢復未變更提示（寬 $width）',
+      (tester) async {
+        final lot = ParkingSpot.fromJson({
+          ...spot.toJson(),
+          'space_type': 'offStreet',
+          'facility_type': 'underground',
+          'parking_access': 'scooterHeavy',
+        });
+        final store = await openSuggestion(
+          tester,
+          '格位類型',
+          selectedSpot: lot,
+          size: Size(width, 844),
         );
-        await tester.ensureVisible(control);
-        await tester.pumpAndSettle();
-        await tester.tap(
-          find.descendant(of: control, matching: find.text(label)),
-        );
-        await tester.pumpAndSettle();
-      }
+        expect(find.text('停放分類'), findsNothing);
+        await submitSuggestion(tester, '送出修改建議');
+        const error = '請至少修改格位類型或場站型式其中一項';
+        expect(find.text(error), findsOneWidget);
+        expect(store.submissions, isEmpty);
 
-      // A second lot type for the facility; ticking it off restores it.
-      await choose(field == 'facility_types' ? '路外平面停車場' : '大型重機專用');
-      expect(find.text(error), findsNothing);
-      if (field == 'facility_types') {
+        final control = find.byType(FacilityField);
+        Future<void> choose(String label) async {
+          await tester.scrollUntilVisible(
+            control,
+            -200,
+            scrollable: find
+                .descendant(
+                  of: find.byType(Form).last,
+                  matching: find.byType(Scrollable),
+                )
+                .first,
+          );
+          await tester.ensureVisible(control);
+          await tester.pumpAndSettle();
+          await tester.tap(
+            find.descendant(of: control, matching: find.text(label)),
+          );
+          await tester.pumpAndSettle();
+        }
+
+        // A second lot type for the facility; ticking it off restores it.
+        await choose('路外平面停車場');
+        expect(find.text(error), findsNothing);
         expect(find.text('場站型式從「地下停車場」改成「地下、平面停車場」'), findsOneWidget);
-      }
-      await choose(field == 'facility_types' ? '路外平面停車場' : '普通機車與大型重機共用');
-      expect(find.text(error), findsOneWidget);
-      await choose(field == 'facility_types' ? '路外平面停車場' : '大型重機專用');
-      await submitSuggestion(tester, '送出修改建議');
-      expect(store.submissions.single['proposed'], {
-        'space_type': 'offStreet',
-        field: field == 'facility_types'
-            ? ['underground', 'surface']
-            : 'heavyOnly',
-      });
-      expect(tester.takeException(), isNull);
-      await tester.pumpWidget(const SizedBox.shrink());
-    });
+        await choose('路外平面停車場');
+        expect(find.text(error), findsOneWidget);
+        await choose('路外平面停車場');
+        await submitSuggestion(tester, '送出修改建議');
+        expect(store.submissions.single['proposed'], {
+          'space_type': 'offStreet',
+          'facility_types': ['underground', 'surface'],
+        });
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      variant: TargetPlatformVariant({
+        TargetPlatform.iOS,
+        TargetPlatform.android,
+      }),
+    );
   }
 
   testWidgets('格位建議帶停放條件：限時格的收費與限停分鐘', (tester) async {
@@ -737,7 +747,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('路外停車場改成路邊格時清除場站型式與停放分類', (tester) async {
+  testWidgets('路外停車場改成路邊格時清除場站型式與場站的 parking_access', (tester) async {
     final lot = ParkingSpot.fromJson({
       ...spot.toJson(),
       'space_type': 'offStreet',

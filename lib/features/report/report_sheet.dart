@@ -278,29 +278,6 @@ Map<String, Object?> facilityPayload(Set<FacilityType> types) {
   };
 }
 
-/// Who may park in a lot or zone, by the posted vehicle classes.
-class AccessField extends StatelessWidget {
-  const AccessField({
-    super.key,
-    required this.value,
-    required this.onChanged,
-    this.label = '停放分類',
-  });
-  final ParkingAccess? value;
-  final ValueChanged<ParkingAccess?> onChanged;
-  final String label;
-  @override
-  Widget build(BuildContext context) => ChoiceField<ParkingAccess?>(
-    label: label,
-    value: value,
-    options: [
-      (null, '未確認'),
-      for (final access in ParkingAccess.values) (access, access.description),
-    ],
-    onChanged: onChanged,
-  );
-}
-
 /// The notice link a rider may attach (design §1.4, §4.2): https only,
 /// kept with the report for the reviewer, never shown on the map.
 String? evidenceUrlHint(String? value) =>
