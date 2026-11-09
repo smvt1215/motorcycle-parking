@@ -112,7 +112,7 @@ describe('the kinds', () => {
     await opened();
     const user = userEvent.setup();
     await user.type(contact(), 'me@example.com');
-    await user.click(screen.getByRole('link', { name: '聯絡我們' }));
+    await user.click(within(screen.getByRole('contentinfo')).getByRole('link', { name: '聯絡我們' }));
     await waitFor(() => expect(kindRadio('一般問題')).toBeChecked());
     expect(contact()).toHaveValue('me@example.com');
   });
@@ -250,7 +250,7 @@ describe('the general kinds', () => {
     const user = await fillCase();
     await user.click(sendCase());
     await heading('已收到你的一般問題，案件編號 S-1A2B3C4D');
-    await user.click(screen.getByRole('link', { name: '聯絡我們' }));
+    await user.click(within(screen.getByRole('contentinfo')).getByRole('link', { name: '聯絡我們' }));
     await opened();
     expect(contact()).toHaveValue('');
   });

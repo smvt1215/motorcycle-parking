@@ -4,5 +4,6 @@ import { afterEach, vi } from 'vitest';
 
 // jsdom has no layout to scroll.
 window.scrollTo = vi.fn();
+Element.prototype.scrollIntoView = vi.fn();
 
 afterEach(() => cleanup());

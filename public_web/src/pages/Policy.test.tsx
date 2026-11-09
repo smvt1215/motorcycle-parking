@@ -61,9 +61,9 @@ describe('/privacy', () => {
     bare.forEach((a) => expect(a.textContent).toMatch(/^https:\/\/[a-z0-9./-]+$/));
   });
 
-  it('keeps the header to the brand; deletion is in the footer and in 「你的權利」', () => {
+  it('has the site navigation on top; deletion is in the footer and in 「你的權利」', () => {
     open();
-    expect(within(screen.getByRole('banner')).getAllByRole('link')).toHaveLength(1);
+    expect(within(screen.getByRole('banner')).getByRole('navigation', { name: '主要' })).toBeInTheDocument();
     const footer = screen.getByRole('contentinfo');
     expect(within(footer).getByRole('link', { name: '隱私權政策' })).toHaveAttribute('aria-current', 'page');
     expect(within(footer).getByRole('link', { name: '刪除帳號' })).toHaveAttribute(
