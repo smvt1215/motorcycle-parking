@@ -310,11 +310,24 @@ Deno.test('a new case is marked notified once its notice goes', async () => {
   equal(silent.marked, [], 'nothing sent, nothing marked');
 });
 
-Deno.test('the auth trace keeps only its safe characters', () => {
-  equal(
-    parse({ ...mail, auth_trace: 'a.test | spf=none(smtp.helo)<b>"x@y"' })
-      ?.auth_trace,
-    'a.test | spf=none(smtp.helo)bxy',
-    'filtered',
-  );
+Deno.test('an older Worker’s auth_trace is taken and not logged', async () => {
+  const { deps, calls, settle } = fake(created);
+  const logged: unknown[] = [], log = console.log;
+  console.log = (...args: unknown[]) => logged.push(args);
+  try {
+    equal(
+      await call(
+        deps,
+        await post({ ...mail, auth_trace: 'mx.test | spf=none(smtp.helo)' }),
+      ),
+      { status: 200, body: { result: 'created' } },
+      'filed',
+    );
+    await settle();
+  } finally {
+    console.log = log;
+  }
+  equal(calls.length, 1, 'filed once');
+  equal(calls[0].includes('auth_trace'), false, 'not carried along');
+  equal(logged, [], 'nothing logged');
 });
