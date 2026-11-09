@@ -473,6 +473,61 @@ void main() {
         expect(tester.takeException(), isNull);
       });
 
+      // iPhone report (build 277, #413): the title sat ~34 pt lower while
+      // the keyboard was up, because the home indicator's space went away.
+      for (final (name, size, safe) in const [
+        ('phone', Size(402, 874), 34.0),
+        ('tablet', Size(820, 1180), 20.0),
+      ]) {
+        testWidgetsOn('${platform.name} $name：有底部安全區時鍵盤開關標題不動，送出檢舉貼齊鍵盤', (
+          tester,
+        ) async {
+          setUpView(tester, platform, size);
+          addTearDown(tester.view.resetPadding);
+          addTearDown(tester.view.resetViewPadding);
+          addTearDown(tester.view.resetViewInsets);
+          void keyboard(double inset) {
+            tester.view.viewPadding = FakeViewPadding(top: 47, bottom: safe);
+            tester.view.padding = FakeViewPadding(
+              top: 47,
+              bottom: inset >= safe ? 0 : safe - inset,
+            );
+            tester.view.viewInsets = FakeViewPadding(bottom: inset);
+          }
+
+          keyboard(0);
+          final store = (await tester.runAsync(reportStore))!;
+          await openReport(tester, store, riderSpot);
+          await pick(tester, ContentReportTarget.other);
+          final title = tester.getRect(find.text(contentReportTitle));
+          await tester.showKeyboard(
+            find.byKey(const ValueKey('content-report-note')),
+          );
+          const height = 336.0;
+          for (final inset in [
+            for (var i = 0.0; i <= height; i += 24) i,
+            for (var i = height; i >= 0; i -= 24) i,
+          ]) {
+            keyboard(inset);
+            await tester.pump(const Duration(milliseconds: 16));
+            expect(
+              tester.getRect(find.text(contentReportTitle)),
+              title,
+              reason: 'inset $inset',
+            );
+          }
+          keyboard(height);
+          await tester.pumpAndSettle();
+          expect(tester.getRect(find.text(contentReportTitle)), title);
+          // The bar's own 12 below the button, and no safe area on top.
+          expect(
+            tester.getRect(submitButton).bottom,
+            size.height - height - 12,
+          );
+          expect(tester.takeException(), isNull);
+        });
+      }
+
       testWidgetsOn('${platform.name} 選「其他」但附註空白：顯示錯誤、不送出', (tester) async {
         setUpView(tester, platform, const Size(390, 844));
         final store = (await tester.runAsync(reportStore))!;
