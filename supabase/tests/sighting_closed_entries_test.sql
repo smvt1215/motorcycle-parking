@@ -273,6 +273,20 @@ select pg_temp.past(235,'w5','60 minutes',zone=>'b1');
 select pg_temp.past(236,'w5','55 minutes',zone=>'b1');
 select pg_temp.past(237,'w5','50 minutes','1');
 select is(pg_temp.closures('w5'),'b1:2:c','the two since the last level confirm b1, and the next level leaves it');
+-- 以全區回報當時的人數判斷：之後超過 2 小時的回報不追溯解除。
+select pg_temp.lot('w10');
+select pg_temp.past(231,'w10','125 minutes',zone=>'b1');
+select pg_temp.past(232,'w10','115 minutes',zone=>'b1');
+select pg_temp.past(233,'w10','105 minutes','1');
+select pg_temp.past(234,'w10','25 minutes',zone=>'b1');
+select is(pg_temp.closures('w10'),'b1:2:c','confirmed when the level was said: the first sighting ageing out later does not undo that');
+-- 全區回報當時已超過 2 小時的回報不算人數。
+select pg_temp.lot('w11');
+select pg_temp.past(231,'w11','235 minutes',zone=>'b1');
+select pg_temp.past(232,'w11','230 minutes',zone=>'b1');
+select pg_temp.past(233,'w11','110 minutes',zone=>'b1');
+select pg_temp.past(234,'w11','100 minutes','1');
+select is(pg_temp.closures('w11'),'none','sightings already expired when the level was said do not confirm');
 -- 全區與各區都確認：每區有自己的 2 位，全區算全部回報。
 select pg_temp.lot('w6');
 select pg_temp.past(231,'w6','90 minutes');

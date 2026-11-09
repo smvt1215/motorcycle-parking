@@ -1470,6 +1470,12 @@ class _EntryCardState extends State<_EntryCard> {
                     district: widget.district,
                   );
                 }
+                // A bay that cannot take 全區 as it stands shows its own
+                // choices, so nothing wrong is left hidden.
+                if (widget.whole case final whole? when !setApart) {
+                  whole.applyTo(d);
+                  setApart = !whole.matches(d);
+                }
               }),
             ),
             if (errors['kind'] case final error?)

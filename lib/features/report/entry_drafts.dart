@@ -580,7 +580,11 @@ class EntryWhole {
   /// (`validCondition`).
   void applyTo(EntryDraft d) {
     final heavyBay = d.kind == SpaceKind.heavy && scooter == Eligible.allowed;
-    d.scooter = heavyBay ? (d.scooter ?? Eligible.notAllowed) : scooter;
+    d.scooter = !heavyBay
+        ? scooter
+        : d.scooter == null || d.scooter == Eligible.allowed
+        ? Eligible.notAllowed
+        : d.scooter;
     d.heavy = heavy;
     d.vehiclesEdited = true;
   }

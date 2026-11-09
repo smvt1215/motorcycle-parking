@@ -826,6 +826,12 @@ void main() {
       expect(d.scooter, Eligible.notAllowed);
       expect(d.heavy, Eligible.allowed);
       expect(d.vehiclesEdited, isTrue);
+      d.scooter = Eligible.allowed;
+      const EntryWhole(Eligible.allowed, Eligible.allowed).applyTo(d);
+      expect(d.scooter, Eligible.notAllowed, reason: '選了重機格的舊值也要修正');
+      d.scooter = Eligible.notStated;
+      const EntryWhole(Eligible.allowed, Eligible.allowed).applyTo(d);
+      expect(d.scooter, Eligible.notStated, reason: '已是不開放的值就不動');
     });
 
     Future<void> tapSend(WidgetTester tester, String label) async {
@@ -1016,6 +1022,11 @@ void main() {
       await tester.tap(find.text('新增一區'));
       await tester.pumpAndSettle();
       expect(find.text('沿用全區：普機 可停，重機 不可停'), findsOneWidget);
+      // A heavy bay cannot take 普機 可停: the vehicles show, already right.
+      await tapKey(tester, 'bay-heavy');
+      expect(find.byKey(const ValueKey('entry-follows-whole')), findsNothing);
+      expect(find.text('另設中，和全區不同'), findsOneWidget);
+      expect(find.byKey(const ValueKey('entry-bay-problem')), findsNothing);
       expect(tester.takeException(), isNull);
     });
   });

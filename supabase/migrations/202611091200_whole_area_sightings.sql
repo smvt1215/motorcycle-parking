@@ -300,12 +300,16 @@ returns table(spot_id text,zone_id text,segment_id text,riders integer,confirmed
 language sql stable security definer set search_path='' as $$
   with recursive ids as (
     select distinct lower(i) i from unnest(p_spot_ids) i where i is not null
-  ), said as (
+  ), history as (
+    -- Two windows back: what a level in the window found standing when it
+    -- was said may be older than the window is now.
     select s.id,s.spot_id,s.kind,s.zone_id,s.segment_id,s.user_id,s.device_hash,s.created_at
     from public.rider_sightings s join ids on ids.i=s.spot_id
-    where s.created_at>now()-private.sighting_closed_window() and s.created_at<=now()
+    where s.created_at>now()-2*private.sighting_closed_window() and s.created_at<=now()
       and not public.rider_suspended(s.user_id)
       and public.rider_credibility(s.user_id)>=public.rider_min_credibility()
+  ), said as (
+    select h.* from history h where h.created_at>now()-private.sighting_closed_window()
   ), spots as (
     select p.spot_id,e.zones,e.segments,private.sighting_spot_has_places(e.zones,e.segments) many
     from (select distinct d.spot_id from said d where d.kind='closed') p
@@ -322,13 +326,15 @@ language sql stable security definer set search_path='' as $$
   ), whole_levels as (
     -- Levels of the whole of a spot with places of its own, in order.
     select l.spot_id,l.created_at,row_number() over (partition by l.spot_id order by l.created_at,l.id) ord
-    from said l join spots p on p.spot_id=l.spot_id and p.many
+    from history l join spots p on p.spot_id=l.spot_id and p.many
     where l.kind='level' and l.zone_id is null and l.segment_id is null
   ), resets as (
     -- For each zone or segment, walking its spot's whole-spot levels in
     -- order: since when its closed sightings stand. A level finding fewer
     -- riders than confirm it takes back what was said before it; a level
-    -- finding them confirmed leaves them.
+    -- finding them confirmed leaves them. Each level is judged by what
+    -- held when it was said (the window back from it), not by what is left
+    -- in the window now.
     select t.spot_id,t.zone_id,t.segment_id,0::bigint ord,'-infinity'::timestamptz since
     from places t where t.many and (t.zone_id is not null or t.segment_id is not null)
     union all
@@ -336,12 +342,13 @@ language sql stable security definer set search_path='' as $$
       case when n.riders<private.sighting_closed_min_riders() then w.created_at else f.since end
     from resets f join whole_levels w on w.spot_id=f.spot_id and w.ord=f.ord+1
     cross join lateral (
-      select least(count(distinct c.user_id),count(distinct c.device_hash)) riders from said c
+      select least(count(distinct c.user_id),count(distinct c.device_hash)) riders from history c
       where c.spot_id=f.spot_id and c.kind='closed'
         and c.zone_id is not distinct from f.zone_id and c.segment_id is not distinct from f.segment_id
         and c.created_at>f.since and c.created_at<w.created_at
+        and c.created_at>w.created_at-private.sighting_closed_window()
         -- Taken back by a level of its own place before this one.
-        and not exists(select 1 from said l where l.spot_id=c.spot_id and l.kind='level'
+        and not exists(select 1 from history l where l.spot_id=c.spot_id and l.kind='level'
           and l.created_at>c.created_at and l.created_at<w.created_at
           and l.zone_id is not distinct from f.zone_id and l.segment_id is not distinct from f.segment_id)
     ) n
