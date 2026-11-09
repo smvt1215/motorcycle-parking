@@ -88,7 +88,9 @@ select pg_temp.act('admin');
 
 -- 排程：一般 5 秒。
 select pg_temp.keep('a1',pg_temp.reply('a','第一則'));
-select is(((select j from r where k='a1')->>'run_at')::timestamptz,now()+interval '5 seconds','a reply waits 5 seconds');
+select is(((select j from r where k='a1')->>'run_at')::timestamptz,(select run_at from private.case_actions where id=pg_temp.aid('a1')::uuid),'the receipt has the run time');
+select ok((select run_at between created_at+interval '4.9 seconds' and created_at+interval '5.1 seconds' from private.case_actions where id=pg_temp.aid('a1')::uuid),'a reply waits 5 seconds');
+select ok((select run_at>now()+interval '5 seconds' from private.case_actions where id=pg_temp.aid('a1')::uuid),'counted from when it was written, not from the start of the transaction');
 select is((select j from r where k='a1')->'irreversible','false'::jsonb,'mail is not irreversible');
 select is((select j from r where k='a1')->'duplicate','false'::jsonb,'a new action');
 select is(pg_temp.st(pg_temp.aid('a1')),'scheduled','scheduled');
@@ -308,7 +310,7 @@ select throws_ok(format('select admin_v1.hold_case_action(%L,null)',pg_temp.aid(
 select pg_temp.keep('t1',admin_v1.schedule_case_action((select id from reports where k='text'),'report_keep','{"note":"移除"}',
   pg_temp.spot_ver('7e000000-0000-4000-8000-000000000001')));
 select is((select j->'irreversible' from r where k='t1'),'true'::jsonb,'removing text is irreversible');
-select is(((select j from r where k='t1')->>'run_at')::timestamptz,now()+interval '10 seconds','10 seconds');
+select ok((select run_at between created_at+interval '9.9 seconds' and created_at+interval '10.1 seconds' from private.case_actions where id=pg_temp.aid('t1')::uuid),'10 seconds');
 select is((select (x->>'state') from jsonb_array_elements(admin_v1.timed_cases(p_kind=>'report')->'items') x where x->>'id'=(select id from reports where k='text')),
   'scheduled','the list counts down');
 select is((select bucket from private.timed_case_rows() where id=(select id from reports where k='text')),

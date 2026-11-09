@@ -341,9 +341,10 @@ begin
     cardinality(private.content_hold_parts((select q.proposed->>'target' from public.moderation_queue q where q.id=v_case::uuid)))>0
     or coalesce(v_payload->'patch','{}'::jsonb)<>'{}'::jsonb));
 
+  -- 實際時間，不是交易開始的 now()：試跑等鎖不能吃掉可以取消的秒數。
   insert into private.case_actions(case_type,case_id,action,payload,expected_version,actor,run_at,irreversible,dedupe_key)
     values(v_type,v_case,p_action,v_payload,p_expected_version,auth.uid(),
-      now()+private.case_action_delay(v_irreversible),v_irreversible,v_key)
+      clock_timestamp()+private.case_action_delay(v_irreversible),v_irreversible,v_key)
     on conflict (dedupe_key) do nothing
     returning * into a;
   if not found then
