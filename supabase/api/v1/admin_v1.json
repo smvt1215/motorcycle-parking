@@ -560,6 +560,218 @@
           }
         }
       }
+    },
+    "/rpc/schedule_case_action": {
+      "post": {
+        "operationId": "admin_v1_schedule_case_action",
+        "summary": "排程一個動作（5／10 秒內可取消）",
+        "description": "伺服器決定 run_at：檢舉成立（report_keep）10 秒，之後不能復原；其餘 5 秒。倒數不會暫停。排程時與執行時各比一次版本。錯誤：400 request.invalid（detail 的 field）與各動作的 400；403 auth.aal2_required；404 support.not_found、content_report.not_found；409 case.stale（details 的 version、by：other_admin、user_reply、spot_edited）、support.already_resolved、content_report.already_resolved、support.reply_not_allowed；429 support.reply_limited。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "p_case",
+                  "p_action",
+                  "p_payload",
+                  "p_expected_version"
+                ],
+                "properties": {
+                  "p_case": {
+                    "type": "string",
+                    "description": "timed_cases 的 id"
+                  },
+                  "p_action": {
+                    "type": "string",
+                    "enum": [
+                      "reply",
+                      "resolve_support",
+                      "report_restore",
+                      "report_keep",
+                      "report_edit"
+                    ]
+                  },
+                  "p_payload": {
+                    "type": "object",
+                    "description": "reply：{body}；resolve_support：{status: done|rejected, note}；report_restore：{reason, note}；report_keep：{patch, note}；report_edit：{patch, note}"
+                  },
+                  "p_expected_version": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "timed_cases 的 version（點位已不存在的檢舉是 null）"
+                  }
+                },
+                "example": {
+                  "p_case": "00000000-0000-4000-8000-000000000000",
+                  "p_action": "reply",
+                  "p_payload": {
+                    "body": "您好"
+                  },
+                  "p_expected_version": "2026-11-09T10:00:00+08:00"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "已排程",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseActionReceipt"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/rpc/cancel_case_action": {
+      "post": {
+        "operationId": "admin_v1_cancel_case_action",
+        "summary": "取消還沒開始的動作",
+        "description": "已取消的再取消一次也成功。錯誤：403 auth.aal2_required；404 case_action.not_found；409 case_action.started（已開始執行，來不及取消）。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "p_action_id"
+                ],
+                "properties": {
+                  "p_action_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "example": {
+                  "p_action_id": "00000000-0000-4000-8000-000000000000"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "已取消",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseActionCancelled"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/rpc/retry_case_action": {
+      "post": {
+        "operationId": "admin_v1_retry_case_action",
+        "summary": "再寄一次（等 5 秒，倒數內可取消）",
+        "description": "只限失敗的回覆：信寄不出去，或動作本身失敗。和其他動作一樣等 5 秒，可用 cancel_case_action 取消；寄送上限不重算。錯誤：403 auth.aal2_required；404 case_action.not_found、support.not_found；409 case_action.not_retryable、case_action.retry_limit、case.stale、support.already_resolved。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "p_action_id"
+                ],
+                "properties": {
+                  "p_action_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "example": {
+                  "p_action_id": "00000000-0000-4000-8000-000000000000"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "已重新排入",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseActionRetried"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/rpc/case_actions": {
+      "post": {
+        "operationId": "admin_v1_case_actions",
+        "summary": "案件的等待中、失敗與 stale 動作",
+        "description": "新的在前，最多 50 筆。重新整理後用來補回倒數與草稿。錯誤：400 request.invalid、403 auth.aal2_required。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "p_case"
+                ],
+                "properties": {
+                  "p_case": {
+                    "type": "string",
+                    "description": "timed_cases 的 id"
+                  }
+                },
+                "example": {
+                  "p_case": "00000000-0000-4000-8000-000000000000"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "動作清單",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CaseAction"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1391,7 +1603,8 @@
           "suspicious",
           "report_count",
           "hidden_parts",
-          "spot_id"
+          "spot_id",
+          "pending_action"
         ],
         "properties": {
           "id": {
@@ -1418,9 +1631,10 @@
               "awaiting_user",
               "spot_deleted",
               "held",
-              "open"
+              "open",
+              "scheduled"
             ],
-            "description": "客服：send_failed 最後一則回覆寄送失敗且不再自動重試；system 不能回覆（刪除帳號、個資請求未確認本人），由系統處理；awaiting_admin 等客服回覆；awaiting_user 等對方。檢舉：spot_deleted 點位已被刪除；held 被檢舉的部分遮蔽中；open 沒有遮蔽（other，或命中不立即隱藏的規則）"
+            "description": "客服：send_failed 最後一則回覆寄送失敗且不再自動重試，或最新的排程動作失敗；system 不能回覆（刪除帳號、個資請求未確認本人），由系統處理；awaiting_admin 等客服回覆；awaiting_user 等對方。檢舉：spot_deleted 點位已被刪除；held 被檢舉的部分遮蔽中；open 沒有遮蔽（other，或命中不立即隱藏的規則）；send_failed 最新的排程動作失敗。兩者：scheduled 有排程動作在倒數（bucket 不變）"
           },
           "due_at": {
             "type": "string",
@@ -1488,6 +1702,257 @@
               "null"
             ],
             "description": "檢舉的點位；客服 null"
+          },
+          "pending_action": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TimedCasePendingAction"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "這個案件最新的排程動作還需要注意時（倒數中、失敗或 stale）；否則 null"
+          }
+        }
+      },
+      "TimedCasePendingAction": {
+        "type": "object",
+        "required": [
+          "id",
+          "action",
+          "run_at",
+          "irreversible",
+          "status"
+        ],
+        "description": "不含內文；草稿與細節用 case_actions 取得",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "reply",
+              "resolve_support",
+              "report_restore",
+              "report_keep",
+              "report_edit"
+            ]
+          },
+          "run_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "irreversible": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "scheduled",
+              "running",
+              "failed",
+              "stale"
+            ],
+            "description": "failed 含回覆的信寄不出去（不再自動重試）；stale 是執行時案件已變，草稿在 case_actions 的 payload"
+          }
+        }
+      },
+      "CaseActionReceipt": {
+        "type": "object",
+        "required": [
+          "action_id",
+          "run_at",
+          "irreversible",
+          "duplicate"
+        ],
+        "properties": {
+          "action_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "run_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "伺服器決定的執行時間：檢舉成立 10 秒，其餘 5 秒"
+          },
+          "irreversible": {
+            "type": "boolean"
+          },
+          "duplicate": {
+            "type": "boolean",
+            "description": "同一動作重送：沒有新排，回原本那一筆"
+          }
+        }
+      },
+      "CaseActionCancelled": {
+        "type": "object",
+        "required": [
+          "cancelled"
+        ],
+        "properties": {
+          "cancelled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CaseActionRetried": {
+        "type": "object",
+        "required": [
+          "action_id",
+          "run_at"
+        ],
+        "properties": {
+          "action_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "run_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "等 5 秒；倒數內可用 cancel_case_action 取消"
+          }
+        }
+      },
+      "CaseAction": {
+        "type": "object",
+        "required": [
+          "id",
+          "case_type",
+          "case_id",
+          "action",
+          "status",
+          "run_at",
+          "irreversible",
+          "attempts",
+          "error",
+          "actor",
+          "expected_version",
+          "payload",
+          "created_at",
+          "started_at",
+          "finished_at",
+          "message_id",
+          "delivery_status",
+          "send_error",
+          "address_editable"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "case_type": {
+            "type": "string",
+            "enum": [
+              "support",
+              "report"
+            ]
+          },
+          "case_id": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "reply",
+              "resolve_support",
+              "report_restore",
+              "report_keep",
+              "report_edit"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "scheduled",
+              "running",
+              "done",
+              "cancelled",
+              "failed",
+              "stale"
+            ],
+            "description": "done、cancelled 只在回覆的信寄不出去時列出（可再寄一次）"
+          },
+          "run_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "irreversible": {
+            "type": "boolean"
+          },
+          "attempts": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 5
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200,
+            "description": "穩定錯誤碼或 SQLSTATE"
+          },
+          "actor": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "expected_version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "payload": {
+            "type": "object",
+            "description": "排程時帶的內容，用來還原草稿；done 是空物件"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "started_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "finished_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "message_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "delivery_status": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "回覆的寄送狀態：queued、sending、sent、failed；沒有回覆時 null"
+          },
+          "send_error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200
+          },
+          "address_editable": {
+            "type": "boolean",
+            "description": "目前一律 false：後端沒有改地址的 API"
           }
         }
       },
