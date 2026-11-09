@@ -235,6 +235,85 @@ class AdminV1Client {
 
   /// [timedCaseCounts] as served, for callers that keep the JSON (#202).
   Future<Object?> timedCaseCountsRaw() => _call('timed_case_counts', {});
+
+  /// 排程一個動作（5／10 秒內可取消）
+  Future<CaseActionReceipt> scheduleCaseAction({
+    required String pCase,
+    required String pAction,
+    required Map<String, Object?> pPayload,
+    required String? pExpectedVersion,
+  }) async {
+    final raw = await scheduleCaseActionRaw(
+      pCase: pCase,
+      pAction: pAction,
+      pPayload: pPayload,
+      pExpectedVersion: pExpectedVersion,
+    );
+    return CaseActionReceipt.fromJson(raw as Map<String, Object?>);
+  }
+
+  /// [scheduleCaseAction] as served, for callers that keep the JSON (#202).
+  Future<Object?> scheduleCaseActionRaw({
+    required String pCase,
+    required String pAction,
+    required Map<String, Object?> pPayload,
+    required String? pExpectedVersion,
+  }) => _call('schedule_case_action', {
+    'p_case': pCase,
+    'p_action': pAction,
+    'p_payload': pPayload,
+    'p_expected_version': pExpectedVersion,
+  });
+
+  /// 取消還沒開始的動作
+  Future<CaseActionCancelled> cancelCaseAction({
+    required String pActionId,
+  }) async {
+    final raw = await cancelCaseActionRaw(pActionId: pActionId);
+    return CaseActionCancelled.fromJson(raw as Map<String, Object?>);
+  }
+
+  /// [cancelCaseAction] as served, for callers that keep the JSON (#202).
+  Future<Object?> cancelCaseActionRaw({required String pActionId}) =>
+      _call('cancel_case_action', {'p_action_id': pActionId});
+
+  /// 暫停或重新開始倒數（鍵盤焦點、朗讀）
+  Future<CaseActionHeld> holdCaseAction({
+    required String pActionId,
+    required bool pHold,
+  }) async {
+    final raw = await holdCaseActionRaw(pActionId: pActionId, pHold: pHold);
+    return CaseActionHeld.fromJson(raw as Map<String, Object?>);
+  }
+
+  /// [holdCaseAction] as served, for callers that keep the JSON (#202).
+  Future<Object?> holdCaseActionRaw({
+    required String pActionId,
+    required bool pHold,
+  }) => _call('hold_case_action', {'p_action_id': pActionId, 'p_hold': pHold});
+
+  /// 再寄一次（立即寄出，不重新等 5 秒）
+  Future<CaseActionRetried> retryCaseAction({required String pActionId}) async {
+    final raw = await retryCaseActionRaw(pActionId: pActionId);
+    return CaseActionRetried.fromJson(raw as Map<String, Object?>);
+  }
+
+  /// [retryCaseAction] as served, for callers that keep the JSON (#202).
+  Future<Object?> retryCaseActionRaw({required String pActionId}) =>
+      _call('retry_case_action', {'p_action_id': pActionId});
+
+  /// 案件的等待中、失敗與 stale 動作
+  Future<List<CaseAction>> caseActions({required String pCase}) async {
+    final raw = await caseActionsRaw(pCase: pCase);
+    return [
+      for (final e in raw as List)
+        CaseAction.fromJson(e as Map<String, Object?>),
+    ];
+  }
+
+  /// [caseActions] as served, for callers that keep the JSON (#202).
+  Future<Object?> caseActionsRaw({required String pCase}) =>
+      _call('case_actions', {'p_case': pCase});
 }
 
 class MinAppVersion {
@@ -1260,6 +1339,7 @@ class TimedCase {
     this.reportCount,
     this.hiddenParts,
     this.spotId,
+    this.pendingAction,
   });
 
   factory TimedCase.fromJson(Map<String, Object?> json) => TimedCase(
@@ -1280,6 +1360,7 @@ class TimedCase {
         ? null
         : [for (final e in json['hidden_parts'] as List) e as String],
     spotId: json['spot_id'] == null ? null : json['spot_id'] as String,
+    pendingAction: json['pending_action'],
   );
 
   /// 客服＝案件 id（admin_v1.support_request 的 p_id）；檢舉＝組內最早一則的 id（admin_v1.content_report 的 p_id）
@@ -1290,7 +1371,7 @@ class TimedCase {
   /// 客服＝案件類型（general、data_issue、complaint、privacy、account_deletion）；檢舉＝target（rider_name、spot_name、text、impersonation、other）
   final String kind;
 
-  /// 客服：send_failed 最後一則回覆寄送失敗且不再自動重試；system 不能回覆（刪除帳號、個資請求未確認本人），由系統處理；awaiting_admin 等客服回覆；awaiting_user 等對方。檢舉：spot_deleted 點位已被刪除；held 被檢舉的部分遮蔽中；open 沒有遮蔽（other，或命中不立即隱藏的規則）
+  /// 客服：send_failed 最後一則回覆寄送失敗且不再自動重試，或最新的排程動作失敗；system 不能回覆（刪除帳號、個資請求未確認本人），由系統處理；awaiting_admin 等客服回覆；awaiting_user 等對方。檢舉：spot_deleted 點位已被刪除；held 被檢舉的部分遮蔽中；open 沒有遮蔽（other，或命中不立即隱藏的規則）；send_failed 最新的排程動作失敗。兩者：scheduled 有排程動作在倒數（bucket 不變）
   final String state;
 
   /// 期限：5 個工作天結束（台灣時間，依 public.holidays；補班日算工作日）。客服從送出或重新開啟起算，檢舉從組內最早一則起算
@@ -1319,6 +1400,9 @@ class TimedCase {
   /// 檢舉的點位；客服 null
   final String? spotId;
 
+  /// 這個案件最新的排程動作還需要注意時（倒數中、失敗或 stale）；否則 null
+  final Object? pendingAction;
+
   Map<String, Object?> toJson() => {
     'id': id,
     'type': type,
@@ -1333,6 +1417,7 @@ class TimedCase {
     'report_count': reportCount,
     'hidden_parts': hiddenParts,
     'spot_id': spotId,
+    'pending_action': pendingAction,
   };
 
   @override
@@ -1350,7 +1435,8 @@ class TimedCase {
       other.suspicious == suspicious &&
       other.reportCount == reportCount &&
       _equal(other.hiddenParts, hiddenParts) &&
-      other.spotId == spotId;
+      other.spotId == spotId &&
+      _equal(other.pendingAction, pendingAction);
 
   @override
   int get hashCode => Object.hashAll([
@@ -1367,6 +1453,346 @@ class TimedCase {
     reportCount,
     _hash(hiddenParts),
     spotId,
+    _hash(pendingAction),
+  ]);
+}
+
+/// 不含內文；草稿與細節用 case_actions 取得
+class TimedCasePendingAction {
+  const TimedCasePendingAction({
+    required this.id,
+    required this.action,
+    required this.runAt,
+    required this.irreversible,
+    required this.status,
+  });
+
+  factory TimedCasePendingAction.fromJson(Map<String, Object?> json) =>
+      TimedCasePendingAction(
+        id: json['id'] as String,
+        action: json['action'] as String,
+        runAt: json['run_at'] as String,
+        irreversible: json['irreversible'] as bool,
+        status: json['status'] as String,
+      );
+
+  final String id;
+
+  final String action;
+
+  final String runAt;
+
+  final bool irreversible;
+
+  /// failed 含回覆的信寄不出去（不再自動重試）；stale 是執行時案件已變，草稿在 case_actions 的 payload
+  final String status;
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'action': action,
+    'run_at': runAt,
+    'irreversible': irreversible,
+    'status': status,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is TimedCasePendingAction &&
+      other.id == id &&
+      other.action == action &&
+      other.runAt == runAt &&
+      other.irreversible == irreversible &&
+      other.status == status;
+
+  @override
+  int get hashCode => Object.hashAll([id, action, runAt, irreversible, status]);
+}
+
+class CaseActionReceipt {
+  const CaseActionReceipt({
+    required this.actionId,
+    required this.runAt,
+    required this.irreversible,
+    required this.duplicate,
+  });
+
+  factory CaseActionReceipt.fromJson(Map<String, Object?> json) =>
+      CaseActionReceipt(
+        actionId: json['action_id'] as String,
+        runAt: json['run_at'] as String,
+        irreversible: json['irreversible'] as bool,
+        duplicate: json['duplicate'] as bool,
+      );
+
+  final String actionId;
+
+  /// 伺服器決定的執行時間：一般 5 秒、不可逆 10 秒
+  final String runAt;
+
+  final bool irreversible;
+
+  /// 同一動作重送：沒有新排，回原本那一筆
+  final bool duplicate;
+
+  Map<String, Object?> toJson() => {
+    'action_id': actionId,
+    'run_at': runAt,
+    'irreversible': irreversible,
+    'duplicate': duplicate,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is CaseActionReceipt &&
+      other.actionId == actionId &&
+      other.runAt == runAt &&
+      other.irreversible == irreversible &&
+      other.duplicate == duplicate;
+
+  @override
+  int get hashCode =>
+      Object.hashAll([actionId, runAt, irreversible, duplicate]);
+}
+
+class CaseActionCancelled {
+  const CaseActionCancelled({required this.cancelled});
+
+  factory CaseActionCancelled.fromJson(Map<String, Object?> json) =>
+      CaseActionCancelled(cancelled: json['cancelled'] as bool);
+
+  final bool cancelled;
+
+  Map<String, Object?> toJson() => {'cancelled': cancelled};
+
+  @override
+  bool operator ==(Object other) =>
+      other is CaseActionCancelled && other.cancelled == cancelled;
+
+  @override
+  int get hashCode => Object.hashAll([cancelled]);
+}
+
+class CaseActionHeld {
+  const CaseActionHeld({
+    required this.actionId,
+    required this.runAt,
+    required this.capped,
+  });
+
+  factory CaseActionHeld.fromJson(Map<String, Object?> json) => CaseActionHeld(
+    actionId: json['action_id'] as String,
+    runAt: json['run_at'] as String,
+    capped: json['capped'] as bool,
+  );
+
+  final String actionId;
+
+  final String runAt;
+
+  /// 已碰到累計 5 分鐘的上限，不會再延後
+  final bool capped;
+
+  Map<String, Object?> toJson() => {
+    'action_id': actionId,
+    'run_at': runAt,
+    'capped': capped,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is CaseActionHeld &&
+      other.actionId == actionId &&
+      other.runAt == runAt &&
+      other.capped == capped;
+
+  @override
+  int get hashCode => Object.hashAll([actionId, runAt, capped]);
+}
+
+class CaseActionRetried {
+  const CaseActionRetried({required this.actionId, required this.runAt});
+
+  factory CaseActionRetried.fromJson(Map<String, Object?> json) =>
+      CaseActionRetried(
+        actionId: json['action_id'] as String,
+        runAt: json['run_at'] as String,
+      );
+
+  final String actionId;
+
+  final String runAt;
+
+  Map<String, Object?> toJson() => {'action_id': actionId, 'run_at': runAt};
+
+  @override
+  bool operator ==(Object other) =>
+      other is CaseActionRetried &&
+      other.actionId == actionId &&
+      other.runAt == runAt;
+
+  @override
+  int get hashCode => Object.hashAll([actionId, runAt]);
+}
+
+class CaseAction {
+  const CaseAction({
+    required this.id,
+    required this.caseType,
+    required this.caseId,
+    required this.action,
+    required this.status,
+    required this.runAt,
+    required this.irreversible,
+    required this.attempts,
+    this.error,
+    required this.actor,
+    this.expectedVersion,
+    required this.payload,
+    required this.createdAt,
+    this.startedAt,
+    this.finishedAt,
+    this.messageId,
+    this.deliveryStatus,
+    this.sendError,
+    required this.addressEditable,
+  });
+
+  factory CaseAction.fromJson(Map<String, Object?> json) => CaseAction(
+    id: json['id'] as String,
+    caseType: json['case_type'] as String,
+    caseId: json['case_id'] as String,
+    action: json['action'] as String,
+    status: json['status'] as String,
+    runAt: json['run_at'] as String,
+    irreversible: json['irreversible'] as bool,
+    attempts: (json['attempts'] as num).toInt(),
+    error: json['error'] == null ? null : json['error'] as String,
+    actor: json['actor'] as String,
+    expectedVersion: json['expected_version'] == null
+        ? null
+        : json['expected_version'] as String,
+    payload: Map<String, Object?>.from(json['payload'] as Map),
+    createdAt: json['created_at'] as String,
+    startedAt: json['started_at'] == null ? null : json['started_at'] as String,
+    finishedAt: json['finished_at'] == null
+        ? null
+        : json['finished_at'] as String,
+    messageId: json['message_id'] == null ? null : json['message_id'] as String,
+    deliveryStatus: json['delivery_status'] == null
+        ? null
+        : json['delivery_status'] as String,
+    sendError: json['send_error'] == null ? null : json['send_error'] as String,
+    addressEditable: json['address_editable'] as bool,
+  );
+
+  final String id;
+
+  final String caseType;
+
+  final String caseId;
+
+  final String action;
+
+  /// done 只在回覆的信寄不出去時列出（可再寄一次）
+  final String status;
+
+  final String runAt;
+
+  final bool irreversible;
+
+  final int attempts;
+
+  /// 穩定錯誤碼或 SQLSTATE
+  final String? error;
+
+  final String actor;
+
+  final String? expectedVersion;
+
+  /// 排程時帶的內容，用來還原草稿；done 是空物件
+  final Map<String, Object?> payload;
+
+  final String createdAt;
+
+  final String? startedAt;
+
+  final String? finishedAt;
+
+  final String? messageId;
+
+  final String? deliveryStatus;
+
+  final String? sendError;
+
+  /// 目前一律 false：後端沒有改地址的 API
+  final bool addressEditable;
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'case_type': caseType,
+    'case_id': caseId,
+    'action': action,
+    'status': status,
+    'run_at': runAt,
+    'irreversible': irreversible,
+    'attempts': attempts,
+    'error': error,
+    'actor': actor,
+    'expected_version': expectedVersion,
+    'payload': payload,
+    'created_at': createdAt,
+    'started_at': startedAt,
+    'finished_at': finishedAt,
+    'message_id': messageId,
+    'delivery_status': deliveryStatus,
+    'send_error': sendError,
+    'address_editable': addressEditable,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is CaseAction &&
+      other.id == id &&
+      other.caseType == caseType &&
+      other.caseId == caseId &&
+      other.action == action &&
+      other.status == status &&
+      other.runAt == runAt &&
+      other.irreversible == irreversible &&
+      other.attempts == attempts &&
+      other.error == error &&
+      other.actor == actor &&
+      other.expectedVersion == expectedVersion &&
+      _equal(other.payload, payload) &&
+      other.createdAt == createdAt &&
+      other.startedAt == startedAt &&
+      other.finishedAt == finishedAt &&
+      other.messageId == messageId &&
+      other.deliveryStatus == deliveryStatus &&
+      other.sendError == sendError &&
+      other.addressEditable == addressEditable;
+
+  @override
+  int get hashCode => Object.hashAll([
+    id,
+    caseType,
+    caseId,
+    action,
+    status,
+    runAt,
+    irreversible,
+    attempts,
+    error,
+    actor,
+    expectedVersion,
+    _hash(payload),
+    createdAt,
+    startedAt,
+    finishedAt,
+    messageId,
+    deliveryStatus,
+    sendError,
+    addressEditable,
   ]);
 }
 

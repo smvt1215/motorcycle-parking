@@ -76,6 +76,47 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.body,
       }),
     }),
+    adminV1ScheduleCaseAction: build.mutation<
+      AdminV1ScheduleCaseActionApiResponse,
+      AdminV1ScheduleCaseActionApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/rpc/schedule_case_action`,
+        method: 'POST',
+        body: queryArg.body,
+      }),
+    }),
+    adminV1CancelCaseAction: build.mutation<
+      AdminV1CancelCaseActionApiResponse,
+      AdminV1CancelCaseActionApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/rpc/cancel_case_action`,
+        method: 'POST',
+        body: queryArg.body,
+      }),
+    }),
+    adminV1HoldCaseAction: build.mutation<AdminV1HoldCaseActionApiResponse, AdminV1HoldCaseActionApiArg>({
+      query: (queryArg) => ({
+        url: `/rpc/hold_case_action`,
+        method: 'POST',
+        body: queryArg.body,
+      }),
+    }),
+    adminV1RetryCaseAction: build.mutation<AdminV1RetryCaseActionApiResponse, AdminV1RetryCaseActionApiArg>({
+      query: (queryArg) => ({
+        url: `/rpc/retry_case_action`,
+        method: 'POST',
+        body: queryArg.body,
+      }),
+    }),
+    adminV1CaseActions: build.query<AdminV1CaseActionsApiResponse, AdminV1CaseActionsApiArg>({
+      query: (queryArg) => ({
+        url: `/rpc/case_actions`,
+        method: 'POST',
+        body: queryArg.body,
+      }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -170,6 +211,44 @@ export type AdminV1TimedCasesApiArg = {
 export type AdminV1TimedCaseCountsApiResponse = /** status 200 計數 */ TimedCaseCounts;
 export type AdminV1TimedCaseCountsApiArg = {
   body: {};
+};
+export type AdminV1ScheduleCaseActionApiResponse = /** status 200 已排程 */ CaseActionReceipt;
+export type AdminV1ScheduleCaseActionApiArg = {
+  body: {
+    /** timed_cases 的 id */
+    p_case: string;
+    p_action: 'reply' | 'resolve_support' | 'report_restore' | 'report_keep' | 'report_edit';
+    /** reply：{body}；resolve_support：{status: done|rejected, note}；report_restore：{reason, note}；report_keep：{patch, note}；report_edit：{patch, note} */
+    p_payload: object;
+    /** timed_cases 的 version（點位已不存在的檢舉是 null） */
+    p_expected_version: string | null;
+  };
+};
+export type AdminV1CancelCaseActionApiResponse = /** status 200 已取消 */ CaseActionCancelled;
+export type AdminV1CancelCaseActionApiArg = {
+  body: {
+    p_action_id: string;
+  };
+};
+export type AdminV1HoldCaseActionApiResponse = /** status 200 新的執行時間 */ CaseActionHeld;
+export type AdminV1HoldCaseActionApiArg = {
+  body: {
+    p_action_id: string;
+    p_hold: boolean;
+  };
+};
+export type AdminV1RetryCaseActionApiResponse = /** status 200 已重新排入 */ CaseActionRetried;
+export type AdminV1RetryCaseActionApiArg = {
+  body: {
+    p_action_id: string;
+  };
+};
+export type AdminV1CaseActionsApiResponse = /** status 200 動作清單 */ CaseAction[];
+export type AdminV1CaseActionsApiArg = {
+  body: {
+    /** timed_cases 的 id */
+    p_case: string;
+  };
 };
 export type MinAppVersion = {
   /** 目前生效的最低版本 */
@@ -369,14 +448,30 @@ export type ContentReportPatch = {
   parking_guide?: string;
   special_rules?: string;
 };
+export type TimedCasePendingAction = {
+  id: string;
+  action: 'reply' | 'resolve_support' | 'report_restore' | 'report_keep' | 'report_edit';
+  run_at: string;
+  irreversible: boolean;
+  /** failed 含回覆的信寄不出去（不再自動重試）；stale 是執行時案件已變，草稿在 case_actions 的 payload */
+  status: 'scheduled' | 'running' | 'failed' | 'stale';
+};
 export type TimedCase = {
   /** 客服＝案件 id（admin_v1.support_request 的 p_id）；檢舉＝組內最早一則的 id（admin_v1.content_report 的 p_id） */
   id: string;
   type: 'support' | 'report';
   /** 客服＝案件類型（general、data_issue、complaint、privacy、account_deletion）；檢舉＝target（rider_name、spot_name、text、impersonation、other） */
   kind: string;
-  /** 客服：send_failed 最後一則回覆寄送失敗且不再自動重試；system 不能回覆（刪除帳號、個資請求未確認本人），由系統處理；awaiting_admin 等客服回覆；awaiting_user 等對方。檢舉：spot_deleted 點位已被刪除；held 被檢舉的部分遮蔽中；open 沒有遮蔽（other，或命中不立即隱藏的規則） */
-  state: 'send_failed' | 'system' | 'awaiting_admin' | 'awaiting_user' | 'spot_deleted' | 'held' | 'open';
+  /** 客服：send_failed 最後一則回覆寄送失敗且不再自動重試，或最新的排程動作失敗；system 不能回覆（刪除帳號、個資請求未確認本人），由系統處理；awaiting_admin 等客服回覆；awaiting_user 等對方。檢舉：spot_deleted 點位已被刪除；held 被檢舉的部分遮蔽中；open 沒有遮蔽（other，或命中不立即隱藏的規則）；send_failed 最新的排程動作失敗。兩者：scheduled 有排程動作在倒數（bucket 不變） */
+  state:
+    | 'send_failed'
+    | 'system'
+    | 'awaiting_admin'
+    | 'awaiting_user'
+    | 'spot_deleted'
+    | 'held'
+    | 'open'
+    | 'scheduled';
   /** 期限：5 個工作天結束（台灣時間，依 public.holidays；補班日算工作日）。客服從送出或重新開啟起算，檢舉從組內最早一則起算 */
   due_at: string;
   /** waiting＝awaiting_user、system；其餘依期限（today＝今天結束前到期，台灣時間） */
@@ -394,6 +489,8 @@ export type TimedCase = {
   hidden_parts: ('rider_name' | 'spot_name' | 'text')[] | null;
   /** 檢舉的點位；客服 null */
   spot_id: string | null;
+  /** 這個案件最新的排程動作還需要注意時（倒數中、失敗或 stale）；否則 null */
+  pending_action: TimedCasePendingAction | null;
 };
 export type TimedCaseCursor = {
   rank: number;
@@ -418,6 +515,53 @@ export type TimedCaseCounts = {
   };
   as_of: string;
 };
+export type CaseActionReceipt = {
+  action_id: string;
+  /** 伺服器決定的執行時間：一般 5 秒、不可逆 10 秒 */
+  run_at: string;
+  irreversible: boolean;
+  /** 同一動作重送：沒有新排，回原本那一筆 */
+  duplicate: boolean;
+};
+export type CaseActionCancelled = {
+  cancelled: boolean;
+};
+export type CaseActionHeld = {
+  action_id: string;
+  run_at: string;
+  /** 已碰到累計 5 分鐘的上限，不會再延後 */
+  capped: boolean;
+};
+export type CaseActionRetried = {
+  action_id: string;
+  run_at: string;
+};
+export type CaseAction = {
+  id: string;
+  case_type: 'support' | 'report';
+  case_id: string;
+  action: 'reply' | 'resolve_support' | 'report_restore' | 'report_keep' | 'report_edit';
+  /** done 只在回覆的信寄不出去時列出（可再寄一次） */
+  status: 'scheduled' | 'running' | 'done' | 'failed' | 'stale';
+  run_at: string;
+  irreversible: boolean;
+  attempts: number;
+  /** 穩定錯誤碼或 SQLSTATE */
+  error: string | null;
+  actor: string;
+  expected_version: string | null;
+  /** 排程時帶的內容，用來還原草稿；done 是空物件 */
+  payload: object;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  message_id: string | null;
+  delivery_status:
+    ('queued' | 'sending' | 'sent' | 'failed' | null) | ('queued' | 'sending' | 'sent' | 'failed' | null);
+  send_error: string | null;
+  /** 目前一律 false：後端沒有改地址的 API */
+  address_editable: boolean;
+};
 export const {
   useAdminV1SetMinSupportedAppVersionMutation,
   useAdminV1SupportRequestsQuery,
@@ -428,4 +572,9 @@ export const {
   useAdminV1ResolveContentReportMutation,
   useAdminV1TimedCasesQuery,
   useAdminV1TimedCaseCountsQuery,
+  useAdminV1ScheduleCaseActionMutation,
+  useAdminV1CancelCaseActionMutation,
+  useAdminV1HoldCaseActionMutation,
+  useAdminV1RetryCaseActionMutation,
+  useAdminV1CaseActionsQuery,
 } = injectedRtkApi;

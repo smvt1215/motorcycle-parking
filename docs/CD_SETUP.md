@@ -96,6 +96,17 @@ migration `202610310600_cron_history_prune.sql` 建立每日排程 `cron-history
 
 客服回覆信的 Reply-To 是 `reply+<token>@motoparking.smvtstudio.com`（token 只存雜湊）；收信由 Cloudflare Email Routing＋Email Worker 轉進 `support-inbound`（#295 第 2 層）。確認寄送：`select delivery_status,attempts,send_error from private.support_messages where direction='out' order by created_at desc limit 5;`。
 
+### 管理站排程動作（`case-actions`）
+
+管理站的回覆、結案與檢舉處理先排 5／10 秒（可取消）。`admin_v1.schedule_case_action` 以 pg_net 叫 Edge Function `case-actions`，等到時間再執行；沒設定或沒叫成時由 pg_cron 每分鐘的 `private.run_due_case_actions()` 兜底（最多晚 1 分鐘，不會不執行）。
+
+| 設定 | 值 | 用途 |
+|---|---|---|
+| Edge Function secret `CASE_ACTIONS_SECRET` | 隨機字串（`openssl rand -hex 32`） | pg_net 呼叫 `case-actions` 的共用密鑰 |
+| Vault `case_actions_secret` | 同上 | `private.case_action_tick()` 讀取；`project_url` 沿用既有的 Vault 項目 |
+
+確認執行：`select action,status,attempts,error,run_at,finished_at from private.case_actions order by created_at desc limit 5;`。
+
 ### 收信：Cloudflare Email Routing＋Email Worker（`support-inbound`，#295）
 
 `support@` 與 `reply+<token>@motoparking.smvtstudio.com` 的信由 Cloudflare Email Routing 交給 Email Worker（原始碼 `workers/support-inbound/`），Worker 在記憶體解析後只把寄件人、收件人、主旨、純文字內文、Cloudflare 的 Authentication-Results 中的 SPF／DKIM／DMARC 結果與附件檔名，以 HMAC-SHA256 簽章 POST 給 Edge Function `support-inbound`。原始信件不儲存、不轉寄。`ops@` 只是 Email Routing 的轉寄規則，不經 Worker。
