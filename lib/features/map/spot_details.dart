@@ -53,15 +53,6 @@ bool spotFeeIsVehicleRate(ParkingSpot spot) => hasZoneFees(spot)
     : spot.fee != null ||
           (spot.zones.length == 1 && spot.zones.single.hasVehicleFees);
 
-/// 政府資料開放授權條款: the license official data is used under, linked from
-/// 帳號與設定's 資料來源與授權.
-final openDataLicenseUri = Uri.https('data.gov.tw', '/license');
-
-/// The license link for a spot's data: official spots only, never imported
-/// community maps.
-Uri? licenseLinkUri(ParkingSpot spot) =>
-    spot.isOfficial ? openDataLicenseUri : null;
-
 String regionSummary(ParkingSpot spot) =>
     '${spot.city.trim()}${spot.district.trim()}';
 

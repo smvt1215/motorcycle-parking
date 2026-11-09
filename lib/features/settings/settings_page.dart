@@ -20,7 +20,6 @@ import '../auth/profile_avatar.dart';
 import '../auth/profile_editor.dart';
 import '../auth/sign_in.dart';
 import '../hidden_riders/hidden_riders_page.dart';
-import '../map/spot_details.dart' show openDataLicenseUri;
 import 'account_deletion_page.dart';
 
 // An empty policy URL hides its row; tests replace [policyUrls].
@@ -105,13 +104,14 @@ Future<void> showSettings(BuildContext context, AppStore store) {
             );
           }),
         ),
-        _LinkTile(
-          key: const ValueKey('settings-data-license'),
-          icon: Icons.verified_outlined,
-          title: settingsDataLicense,
-          subtitle: settingsDataLicenseDetail,
-          uri: openDataLicenseUri,
-        ),
+        if (termsDataSourcesUri() case final uri?)
+          _LinkTile(
+            key: const ValueKey('settings-data-license'),
+            icon: Icons.verified_outlined,
+            title: settingsDataLicense,
+            subtitle: settingsDataLicenseDetail,
+            uri: uri,
+          ),
         if (policyUri(policyUrls.privacy) case final uri?)
           _LinkTile(
             key: const ValueKey('settings-privacy'),

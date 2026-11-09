@@ -231,10 +231,6 @@ void main() {
       await tester.pumpAndSettle();
       // The license link lives in 帳號與設定 (資料來源與授權), not on spots.
       expect(find.text('查看政府資料授權'), findsNothing, reason: source);
-      expect(
-        licenseLinkUri(spot),
-        spot.isOfficial ? Uri.parse('https://data.gov.tw/license') : null,
-      );
       expect(find.text('查看停車點資料來源'), findsNothing);
       expect(find.text('授權說明'), findsNothing);
       expect(find.textContaining('Alan'), findsNothing);
