@@ -337,6 +337,14 @@
   box-shadow: 0 -8px 24px rgba(22, 24, 26, 0.25);
 }
 
+/* DESIGN.md: blue only on what can be pressed. */
+.case .btn--primary:disabled {
+  border-color: var(--color-rivet);
+  background: var(--color-paper-white);
+  --btn-fg: var(--color-graphite);
+  color: var(--color-graphite);
+}
+
 /* Countdown lines: above the action bar, never covering it. */
 .case-dock {
   position: fixed;
@@ -472,7 +480,7 @@
 
 @media (max-width: 679.98px) {
   .case {
-    min-height: 0;
+    min-height: 100dvh;
     padding-bottom: var(--case-actions-height, 0px);
   }
 
@@ -510,6 +518,16 @@
   /* Keyboard open: the bar shrinks and the actions ride the keyboard (t7). */
   .pending--keyboard .case-bar {
     height: 48px;
+  }
+
+  /* Room to scroll the box above both, so the exchange stays reachable. */
+  .pending--keyboard .case {
+    padding-bottom: calc(var(--case-actions-height, 0px) + var(--kb, 0px));
+  }
+
+  .pending--keyboard textarea,
+  .pending--keyboard input {
+    scroll-margin-bottom: calc(var(--case-actions-height, 0px) + var(--kb, 0px) + 12px);
   }
 
   .case__body {

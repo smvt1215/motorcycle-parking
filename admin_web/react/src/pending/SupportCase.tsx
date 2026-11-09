@@ -228,5 +228,6 @@ export function pendingReplies(
         line: action.phase === 'counting' ? `${seconds} 秒後寄到 ${to}` : `寄送中，寄到 ${to}`,
         onCancel: action.phase === 'counting' ? () => cancel(action.id) : null,
       };
-    });
+    })
+    .filter((reply) => reply.body !== ''); // 再寄一次: the original message is already listed.
 }

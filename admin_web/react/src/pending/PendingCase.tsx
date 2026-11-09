@@ -216,7 +216,12 @@ function CaseView({ item, support, report, serverActions, reload, remaining }: C
           id: action.id,
           caseId: item.id,
           action: action.action,
-          labels: describeAction({ action: action.action, item, replyTo }),
+          labels: describeAction({
+            action: action.action,
+            item,
+            replyTo,
+            resolveStatus: (action.payload as { status?: 'done' | 'rejected' }).status,
+          }),
           deadline: localDeadline(store.getState(), action.run_at),
           irreversible: action.irreversible,
           draft: draftFromPayload(action.action, action.payload as Record<string, unknown>),

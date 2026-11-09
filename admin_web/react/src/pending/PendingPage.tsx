@@ -41,6 +41,8 @@ export function PendingPage() {
 
   useEffect(() => {
     root.current?.style.setProperty('--kb', `${keyboard}px`);
+    // The keyboard just opened: keep what is being typed clear of the bar.
+    if (keyboard > 0) (document.activeElement as HTMLElement | null)?.scrollIntoView?.({ block: 'nearest' });
   }, [keyboard]);
 
   if (connection === 'none') {

@@ -273,6 +273,10 @@ for (const viewport of VIEWPORTS) {
     if (Math.abs(bar.y + bar.height - keyboardTop) > 2) {
       failures.push(`${viewport.name}: action bar at ${bar.y + bar.height}, keyboard top ${keyboardTop}`);
     }
+    const box = await page.getByRole('textbox', { name: '回覆' }).boundingBox();
+    if (box.y + box.height > bar.y + 1) {
+      failures.push(`${viewport.name}: the reply box is under the action bar`);
+    }
     const header = await page.locator('.case-bar').boundingBox();
     if (header.height !== 48)
       failures.push(`${viewport.name}: top bar is ${header.height}px with the keyboard open`);
