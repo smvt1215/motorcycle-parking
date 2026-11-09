@@ -14,7 +14,7 @@ import type { PostgrestConnection } from '../api/v1/base';
 import { DataConnectionContext } from '../app/connection';
 import { routes } from '../app/routes';
 import { makeStore } from '../app/store';
-import { actionSettled, actionsReset, pendingActionsSlice } from './actionsSlice';
+import { actionSettled, actionsReset, pendingActionsSlice, SLOW_AFTER_MS } from './actionsSlice';
 import { describeAction } from './caseCopy';
 
 const UUID = (n: number) => `0000000${n}-0000-4000-8000-000000000000`;
@@ -410,6 +410,27 @@ describe('案件詳情的處理', () => {
     const after = slice.reducer(done, actionSettled({ id: 'a', outcome: 'cancelled', now: 2100 }));
     expect(after.actions[0]?.phase).toBe('done');
     expect(after.drafts).toEqual({});
+  });
+
+  it('lets the server restore the draft once it stops following a slow action', () => {
+    const slice = pendingActionsSlice;
+    const base = slice.reducer(
+      undefined,
+      slice.actions.actionTracked({
+        id: 'a',
+        caseId: 'c',
+        action: 'reply',
+        labels: describeAction({ action: 'reply', item: row(1) }),
+        deadline: 1000,
+        irreversible: false,
+        draft: { reply: '內文' },
+        now: 0,
+      }),
+    );
+    const sending = slice.reducer(base, slice.actions.ticked(1000));
+    const slow = slice.reducer(sending, slice.actions.ticked(1000 + SLOW_AFTER_MS));
+    expect(slow.actions[0]?.phase).toBe('slow');
+    expect(slow.seen).toEqual([]);
   });
 
   it('keeps the draft and stays put when someone else handled the case', async () => {

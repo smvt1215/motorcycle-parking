@@ -153,7 +153,7 @@ const dateTimeFormat = new Intl.DateTimeFormat('en-GB', {
   day: '2-digit',
   hour: '2-digit',
   minute: '2-digit',
-  hour12: false,
+  hourCycle: 'h23',
 });
 
 /** 「11/03 09:41」 Taiwan time, with the year only when it is not this one (t7). */

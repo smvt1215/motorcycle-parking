@@ -135,7 +135,7 @@ export function CountdownDock() {
     if (!anyCounting || !online) return undefined;
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'z' && event.key !== 'Z') return;
-      if (event.ctrlKey || event.metaKey || event.altKey || event.isComposing) return;
+      if (event.repeat || event.ctrlKey || event.metaKey || event.altKey || event.isComposing) return;
       const target = event.target as HTMLElement | null;
       if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
       event.preventDefault();

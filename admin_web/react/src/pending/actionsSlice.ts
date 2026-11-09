@@ -159,11 +159,19 @@ export const pendingActionsSlice = createSlice({
           item.phase = 'slow';
           item.settledAt = now;
           item.draft = null;
+          // No longer followed: if it still fails, the case page may restore
+          // the draft from the server's payload.
+          state.seen = state.seen.filter((id) => id !== item.id);
         }
       }
-      state.actions = state.actions.filter(
-        (item) => item.settledAt === null || now - item.settledAt < RESULT_MS[item.phase],
-      );
+      // Only when something expired: a new array re-renders every subscriber.
+      if (
+        state.actions.some((item) => item.settledAt !== null && now - item.settledAt >= RESULT_MS[item.phase])
+      ) {
+        state.actions = state.actions.filter(
+          (item) => item.settledAt === null || now - item.settledAt < RESULT_MS[item.phase],
+        );
+      }
     },
     cancelStarted(state, { payload: id }: PayloadAction<string>) {
       const item = state.actions.find((a) => a.id === id);
