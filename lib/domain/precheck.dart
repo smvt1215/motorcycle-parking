@@ -6,7 +6,7 @@
 /// precheck_cases.json (test/precheck_test.dart).
 library;
 
-import '../models/fee.dart' show mergeFeeJson;
+import '../models/fee.dart' show chargeOfFeeJson, mergeFeeJson;
 import '../models/parking.dart' show ParkingAccess;
 import '../models/parking_condition.dart' show conditionByAccess;
 import '../models/zone_entries.dart' show entriesPatch;
@@ -702,6 +702,57 @@ List<Object?> patchedEntries(Object? current, List<Object?> patch) =>
         if (e is! Map || e['removed'] != true) e,
     ];
 
+/// [list] as approval leaves it (#369, `segments_charge_follow_fee()` in
+/// SQL): a segment [patch] gives new rates, and no condition of its own,
+/// takes its charge from them, or from [spotFee] when it has none; no charge
+/// when they say neither. Only 一般機車格 and 普大共用格 ask it.
+List<Object?> segmentsChargeFollowFee(
+  List<Object?> list,
+  List<Object?> patch,
+  Object? spotFee,
+) {
+  final follows = {
+    for (final e in patch)
+      if (e is Map && e.containsKey('fee') && !e.containsKey('condition'))
+        e['id'],
+  }..remove(null);
+  bool asks(Map<Object?, Object?> c) {
+    final limits = c['limits'];
+    return c['bay'] == 'motorcycle' &&
+        !(limits is List &&
+            limits.any(
+              (l) =>
+                  l is Map &&
+                  (l['kind'] == 'special_vehicle' || l['kind'] == 'ev_only'),
+            ));
+  }
+
+  Map<Object?, Object?> charged(Map<Object?, Object?> c, Object? fee) => {
+    for (final e in c.entries)
+      if (e.key != 'charge') e.key: e.value,
+    'charge': ?chargeOfFeeJson(fee),
+  };
+
+  return [
+    for (final z in list)
+      if (z is Map &&
+          follows.contains(z['id']) &&
+          z['condition'] is Map &&
+          asks(z['condition'] as Map))
+        {
+          ...z,
+          'condition': charged(
+            z['condition'] as Map,
+            z['fee'] is Map && (z['fee'] as Map).isNotEmpty
+                ? z['fee']
+                : spotFee,
+          ),
+        }
+      else
+        z,
+  ];
+}
+
 /// Every stage 0 rule [body], a submit-report request, breaks. A fee
 /// suggestion changes only the vehicles it names (design §5.4), so its rules
 /// run on the fee it leaves: [current] (the spot's stored values, when
@@ -744,6 +795,14 @@ List<PrecheckIssue> precheck(
         if (proposed[key] is List)
           key: patchedEntries(current?[key], proposed[key]! as List<Object?>),
     };
+    // Judged with the charge approval will write, not the stale one (#369).
+    if (proposed['parking_segments'] case final List<Object?> patch) {
+      merged['parking_segments'] = segmentsChargeFollowFee(
+        merged['parking_segments']! as List<Object?>,
+        patch,
+        merged.containsKey('fee') ? merged['fee'] : current?['fee'],
+      );
+    }
     // Their own rules run on the entries they change (#155 item 40).
     final touched = {
       for (final key in const ['parking_zones', 'parking_segments'])

@@ -30,7 +30,9 @@ insert into revoked values
   -- 202611010200: helpers added by #201 and #200.
   ('admin_import_pair(text)'), ('eligibility_stated(jsonb)'), ('eligibility_values_ok(jsonb)'),
   ('spot_delete_grace()'), ('sync_not_stated()'), ('zone_eligibility_stated(jsonb)'),
-  ('zone_patch_stated(jsonb,jsonb)');
+  ('zone_patch_stated(jsonb,jsonb)'),
+  -- 202611091000: helpers added by #369.
+  ('charge_of_fee(jsonb)'), ('segments_charge_follow_fee(jsonb,jsonb,jsonb)');
 
 -- Every revoked helper exists (a renamed function would silently keep its grant).
 select ok(to_regprocedure('public.'||sig) is not null, sig||' exists') from revoked;
