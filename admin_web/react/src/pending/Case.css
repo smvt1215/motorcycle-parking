@@ -1,0 +1,559 @@
+/* 案件內容 (TimedCase, TimedReport, TimedPhoneCase, TimedCountdown boards). */
+.case {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.case-bar {
+  display: none;
+}
+
+.case__body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--space-20);
+  padding: 24px 32px;
+}
+
+.case-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.case-head__title:focus {
+  outline: none;
+}
+
+.case-head__title:focus-visible {
+  outline: 3px solid var(--color-action-blue);
+  outline-offset: 2px;
+}
+
+.case-head__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.pending-tag--solid {
+  background: var(--color-rail-black);
+  color: var(--color-plate-white);
+}
+
+.case-facts {
+  display: grid;
+  gap: var(--space-8);
+  margin: 0;
+}
+
+.case-facts__row {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: var(--space-16);
+  align-items: baseline;
+}
+
+.case-facts dt {
+  color: var(--color-graphite);
+}
+
+.case-facts dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.case-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.case-log,
+.case-reports {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.case-log {
+  gap: var(--space-8);
+}
+
+.case-message {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: 12px 14px;
+  border-radius: var(--radius-panel);
+}
+
+.case-message--in {
+  border: 1px solid var(--color-rivet);
+  background: var(--color-plate-white);
+}
+
+.case-message--out {
+  border: 1px solid var(--color-aluminium);
+  background: var(--color-aluminium);
+}
+
+.case-message__head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-12);
+}
+
+.case-message__body {
+  max-width: 64ch;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.case-message__tag {
+  align-self: flex-start;
+}
+
+.case-message__cancel {
+  align-self: flex-start;
+}
+
+.case-delivery--failed {
+  color: var(--color-destructive);
+  font-size: var(--text-caption);
+}
+
+.case-reports li {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.case-reports__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.case-table-wrap {
+  overflow: hidden;
+  border: 1px solid var(--color-rivet);
+  border-radius: var(--radius-panel);
+  background: var(--color-plate-white);
+}
+
+.case-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.case-table thead th {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-rivet);
+  color: var(--color-graphite);
+  font-size: var(--text-caption);
+  font-weight: 500;
+  text-align: left;
+}
+
+.case-table tbody th {
+  padding: 12px;
+  font-size: var(--text-caption);
+  font-weight: 700;
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.case-table td {
+  padding: 12px;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+
+.case-table td.is-changed {
+  background: var(--color-reflective-yellow);
+}
+
+.case-table__tag {
+  display: block;
+  margin-top: var(--space-4);
+}
+
+.case-notice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: 12px 14px;
+  border: 1px solid var(--color-rivet);
+  border-radius: var(--radius-control);
+}
+
+.case-notice--alert {
+  border: 1.5px solid var(--color-destructive);
+}
+
+.case-notice--alert .t-title {
+  color: var(--color-destructive);
+}
+
+.case-conflict {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+}
+
+.case-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.case-field input,
+.case-field textarea {
+  width: 100%;
+  min-height: 48px;
+  padding: 0 12px;
+  border: 1px solid var(--color-steel);
+  border-radius: var(--radius-control);
+  background: var(--color-paper-white);
+}
+
+.case-field textarea {
+  padding: 12px;
+  resize: vertical;
+}
+
+.case-field input.is-changed {
+  border-color: var(--color-rail-black);
+  background: var(--color-reflective-yellow);
+}
+
+.case-field__tag {
+  align-self: flex-start;
+}
+
+.case-field-error {
+  color: var(--color-destructive);
+  font-size: var(--text-caption);
+}
+
+.case__actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8);
+  padding: 12px 32px;
+  border-top: 1px solid var(--color-rivet);
+  background: var(--color-plate-white);
+}
+
+.case__hint {
+  margin-left: auto;
+}
+
+.case-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  padding: 20px;
+  border: 1px solid var(--color-rivet);
+  border-radius: var(--radius-panel);
+  background: var(--color-plate-white);
+}
+
+.case-panel__title:focus {
+  outline: none;
+}
+
+.case-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+}
+
+.case-reasons {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.case-reason {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 48px;
+  padding: 12px;
+  border: 1px solid var(--color-steel);
+  border-radius: var(--radius-control);
+  background: var(--color-paper-white);
+}
+
+.case-reason input {
+  margin: 4px 0 0;
+  accent-color: var(--color-action-blue);
+}
+
+.case-reason__label {
+  font-weight: 500;
+}
+
+.case-reason__note {
+  display: block;
+}
+
+.case-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: flex-end;
+  padding-bottom: var(--kb, 0px);
+  background: rgba(22, 24, 26, 0.55);
+}
+
+.case-panel--sheet {
+  width: 100%;
+  max-height: calc(100dvh - 24px - var(--kb, 0px));
+  overflow-y: auto;
+  padding: 20px 16px 12px;
+  border: 0;
+  border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
+  box-shadow: 0 -8px 24px rgba(22, 24, 26, 0.25);
+}
+
+/* Countdown lines: above the action bar, never covering it. */
+.case-dock {
+  position: fixed;
+  right: 32px;
+  bottom: calc(var(--case-actions-height, 88px) + var(--kb, 0px));
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  width: 440px;
+  max-width: calc(100vw - 32px);
+}
+
+.dock-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-rail-black);
+  border-radius: var(--radius-panel);
+  background: var(--color-paper-white);
+  box-shadow: 0 6px 24px rgba(22, 24, 26, 0.18);
+}
+
+.dock-bar--alert {
+  border: 1.5px solid var(--color-destructive);
+}
+
+.dock-bar--alert .dock-bar__title {
+  color: var(--color-destructive);
+}
+
+.dock-bar__digit {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-control);
+  background: var(--color-rail-black);
+  color: var(--color-plate-white);
+  font-family: var(--font-numeral);
+  font-size: var(--text-figure);
+  font-weight: 700;
+}
+
+.dock-bar__text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.dock-bar__title {
+  font-weight: 700;
+}
+
+.dock-bar__body {
+  overflow-wrap: anywhere;
+}
+
+.dock-bar__cancel {
+  flex: none;
+  padding: 0 12px;
+}
+
+.dock-more {
+  align-self: flex-end;
+  min-height: 48px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-action-blue);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+@media (max-width: 1039.98px) {
+  .case {
+    min-height: calc(100dvh - var(--tabs-height));
+  }
+
+  .case__body {
+    padding: 20px 24px;
+  }
+
+  .case__actions {
+    padding: 12px 24px;
+  }
+
+  .case-dock {
+    right: 24px;
+    width: 380px;
+  }
+
+  /* Two-pane and phone: each field stacks, the labels come back per cell. */
+  .case-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+
+  .case-table,
+  .case-table tbody,
+  .case-table tr,
+  .case-table th,
+  .case-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .case-table tbody th {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--color-rivet);
+    white-space: normal;
+  }
+
+  .case-table td {
+    padding: 10px 12px;
+  }
+
+  .case-table td::before {
+    display: block;
+    color: var(--color-graphite);
+    content: attr(data-label);
+    font-size: var(--text-caption);
+  }
+}
+
+@media (max-width: 679.98px) {
+  .case {
+    min-height: 0;
+    padding-bottom: var(--case-actions-height, 0px);
+  }
+
+  .shell--case .shell-bar {
+    display: none;
+  }
+
+  .case-bar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    height: var(--topbar-height);
+    padding: 0 8px;
+    background: var(--color-rail-black);
+    color: var(--color-plate-white);
+    font-weight: 700;
+  }
+
+  .case-bar__back {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    color: inherit;
+  }
+
+  .case-bar__back:hover {
+    color: inherit;
+  }
+
+  /* Keyboard open: the bar shrinks and the actions ride the keyboard (t7). */
+  .pending--keyboard .case-bar {
+    height: 48px;
+  }
+
+  .case__body {
+    padding: 16px;
+    gap: var(--space-16);
+  }
+
+  .case__actions {
+    position: fixed;
+    right: 0;
+    bottom: var(--kb, 0px);
+    left: 0;
+    padding: 8px 16px calc(8px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .pending--keyboard .case__actions {
+    padding-bottom: 8px;
+  }
+
+  .case__actions .btn {
+    flex: 1 1 auto;
+    padding: 0 8px;
+  }
+
+  .case__hint {
+    flex: 1 1 100%;
+    margin-left: 0;
+    text-align: center;
+  }
+
+  .case-facts__row {
+    grid-template-columns: 96px minmax(0, 1fr);
+    gap: var(--space-8);
+  }
+
+  .case-dock {
+    right: 16px;
+    bottom: calc(var(--case-actions-height, 0px) + var(--kb, 0px) + 8px);
+    left: 16px;
+    width: auto;
+    max-width: none;
+  }
+
+  .pending--list .case-dock {
+    bottom: calc(var(--bottom-tabs-height) + env(safe-area-inset-bottom, 0px) + 8px);
+  }
+}

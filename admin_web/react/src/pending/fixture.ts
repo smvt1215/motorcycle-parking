@@ -1,7 +1,8 @@
-import type { TimedCase, TimedCaseCounts, TimedCaseCursor } from '../api/v1/admin_v1.generated';
+import type { CaseAction, TimedCase, TimedCaseCounts, TimedCaseCursor } from '../api/v1/admin_v1.generated';
 import type { PostgrestConnection } from '../api/v1/base';
 import { SIGNED_OUT, type AdminAccess, type AdminAuthGateway, type AdminFactor } from '../auth/gateway';
 import { FIXTURE_MARKER } from '../review/fixtureSource';
+import { failedReplyAction, reportDetail, supportDetail } from './fixtureCases';
 
 /*
  * Sample cases for `--mode fixture` only (main.tsx imports this behind that
@@ -9,6 +10,7 @@ import { FIXTURE_MARKER } from '../review/fixtureSource';
  * generated types are exercised. `?scenario=` and `?auth=` pick the states
  * the smoke screenshots:
  *   scenario: empty | waiting-empty | list-failed | counts-failed | second-factor | many
+ *     (case actions) stale-admin | stale-spot | run-stale | cancel-late
  *   auth: signedOut | denied | mfa | enroll | unavailable
  */
 
@@ -52,6 +54,7 @@ function sample(
     hidden_parts: type === 'report' ? [] : null,
     spot_id: type === 'report' ? 'fixture-spot' : null,
     pending_action: null,
+    has_exchange: false,
     ...extra,
   };
 }
@@ -59,12 +62,16 @@ function sample(
 /** The same six plus three as the TimedCase and TimedPhoneList boards. */
 const BOARD: TimedCase[] = [
   sample('61a2d7e0-0000-4000-8000-000000000001', 'support', 'privacy', 'awaiting_admin', -1),
-  sample('630f13c7-0000-4000-8000-000000000002', 'support', 'data_issue', 'awaiting_admin', 0),
+  sample('630f13c7-0000-4000-8000-000000000002', 'support', 'data_issue', 'awaiting_admin', 0, {
+    has_exchange: true,
+  }),
   sample('8f21c04a-0000-4000-8000-000000000003', 'report', 'spot_name', 'held', 0, {
     report_count: 3,
     hidden_parts: ['spot_name'],
   }),
-  sample('5d19a0b3-0000-4000-8000-000000000004', 'support', 'general', 'awaiting_admin', 1),
+  sample('5d19a0b3-0000-4000-8000-000000000004', 'support', 'general', 'awaiting_admin', 1, {
+    has_exchange: true,
+  }),
   sample('2c77b1e9-0000-4000-8000-000000000005', 'report', 'text', 'held', 2, { hidden_parts: ['text'] }),
   sample('4b08f6c2-0000-4000-8000-000000000006', 'support', 'complaint', 'awaiting_admin', 3, {
     suspicious: true,
@@ -106,7 +113,59 @@ function manyCases(): TimedCase[] {
 
 const scenario = () => new URLSearchParams(window.location.search).get('scenario');
 
+interface FixtureAction {
+  id: string;
+  caseId: string;
+  action: CaseAction['action'];
+  payload: Record<string, unknown>;
+  runAt: number;
+  irreversible: boolean;
+  status: CaseAction['status'];
+}
+
+const fixtureActions: FixtureAction[] = [];
+const closedCases = new Set<string>();
+/** Each conflict scenario refuses once, like a version that has since been read. */
+const conflicted = new Set<string>();
+let nextActionId = 1;
+
+/** Plays the server: what is due has now run. */
+function settleDue() {
+  for (const action of fixtureActions) {
+    if (action.status !== 'scheduled' || action.runAt > Date.now()) continue;
+    if (scenario() === 'run-stale') {
+      action.status = 'stale';
+    } else {
+      action.status = 'done';
+      closedCases.add(action.caseId);
+    }
+  }
+}
+
+function withActions(item: TimedCase): TimedCase {
+  const latest = fixtureActions.filter((action) => action.caseId === item.id).at(-1);
+  if (!latest || latest.status === 'cancelled') return item;
+  const pending_action =
+    latest.status === 'done'
+      ? null
+      : {
+          id: latest.id,
+          action: latest.action,
+          run_at: new Date(latest.runAt).toISOString(),
+          irreversible: latest.irreversible,
+          status: latest.status as 'scheduled' | 'failed' | 'stale',
+        };
+  return { ...item, state: latest.status === 'scheduled' ? 'scheduled' : item.state, pending_action };
+}
+
 function casesNow(): TimedCase[] {
+  settleDue();
+  return baseCases()
+    .filter((item) => !closedCases.has(item.id))
+    .map(withActions);
+}
+
+function baseCases(): TimedCase[] {
   switch (scenario()) {
     case 'empty':
       return BOARD.filter((item) => item.bucket === 'waiting');
@@ -180,7 +239,111 @@ function timedCases(body: {
   };
 }
 
-/** A pretend PostgREST for admin_v1's two read functions. */
+const NOT_FOUND = { code: 'PT404', message: 'case.not_found', details: null };
+
+function caseActionsOf(caseId: string): CaseAction[] {
+  settleDue();
+  const item = baseCases().find((row) => row.id === caseId);
+  const failed = item?.state === 'send_failed' ? [failedReplyAction(caseId)] : [];
+  const listed = fixtureActions
+    .filter(
+      (action) =>
+        action.caseId === caseId && ['scheduled', 'running', 'failed', 'stale'].includes(action.status),
+    )
+    .reverse()
+    .map((action): CaseAction => ({
+      id: action.id,
+      case_type: item?.type ?? 'support',
+      case_id: caseId,
+      action: action.action,
+      status: action.status,
+      run_at: new Date(action.runAt).toISOString(),
+      irreversible: action.irreversible,
+      attempts: 0,
+      error: null,
+      actor: 'u',
+      expected_version: null,
+      payload: action.payload,
+      created_at: new Date().toISOString(),
+      started_at: null,
+      finished_at: null,
+      message_id: null,
+      delivery_status: null,
+      send_error: null,
+      address_editable: false,
+    }));
+  return [...listed, ...failed];
+}
+
+function schedule(body: {
+  p_case: string;
+  p_action: FixtureAction['action'];
+  p_payload: Record<string, unknown>;
+}): Response {
+  const current = scenario();
+  if ((current === 'stale-admin' || current === 'stale-spot') && !conflicted.has(body.p_case)) {
+    conflicted.add(body.p_case);
+    const details = JSON.stringify({
+      version: new Date().toISOString(),
+      by: current === 'stale-admin' ? 'other_admin' : 'spot_edited',
+    });
+    return answer({ code: 'PT409', message: 'case.stale', details }, 409);
+  }
+  const irreversible = body.p_action === 'report_keep';
+  const action: FixtureAction = {
+    id: `fixture-action-${nextActionId++}`,
+    caseId: body.p_case,
+    action: body.p_action,
+    payload: body.p_payload,
+    runAt: Date.now() + (irreversible ? 10_000 : 5_000),
+    irreversible,
+    status: 'scheduled',
+  };
+  fixtureActions.push(action);
+  return answer({
+    action_id: action.id,
+    run_at: new Date(action.runAt).toISOString(),
+    irreversible,
+    duplicate: false,
+  });
+}
+
+/** Answers the case page's calls; null when `url` is not one of them. */
+function caseRoute(url: string, init: RequestInit | undefined): Response | null {
+  const body = JSON.parse(String(init?.body ?? '{}')) as Parameters<typeof schedule>[0] & {
+    p_id: string;
+    p_action_id: string;
+  };
+  if (url.endsWith('/rpc/timed_case')) {
+    const item = casesNow().find((row) => row.id === body.p_id);
+    return item ? answer(item) : answer(NOT_FOUND, 404);
+  }
+  if (url.endsWith('/rpc/support_request') || url.endsWith('/rpc/content_report')) {
+    const item = baseCases().find((row) => row.id === body.p_id);
+    if (!item) return answer(NOT_FOUND, 404);
+    return answer(item.type === 'support' ? supportDetail(item) : reportDetail(item));
+  }
+  if (url.endsWith('/rpc/case_actions')) return answer(caseActionsOf(body.p_case));
+  if (url.endsWith('/rpc/schedule_case_action')) return schedule(body);
+  if (url.endsWith('/rpc/cancel_case_action')) {
+    const action = fixtureActions.find((row) => row.id === body.p_action_id);
+    settleDue();
+    if (scenario() === 'cancel-late' || !action || action.status !== 'scheduled') {
+      return answer({ code: 'PT409', message: 'case_action.started', details: null }, 409);
+    }
+    action.status = 'cancelled';
+    return answer({ cancelled: true });
+  }
+  if (url.endsWith('/rpc/retry_case_action')) {
+    const caseId = String(body.p_action_id).slice(0, 8);
+    const item = baseCases().find((row) => row.id.startsWith(caseId));
+    if (!item) return answer(NOT_FOUND, 404);
+    return schedule({ p_case: item.id, p_action: 'reply', p_payload: {} });
+  }
+  return null;
+}
+
+/** A pretend PostgREST for admin_v1's functions the pending page calls. */
 export function fixturePostgrest(): PostgrestConnection {
   return {
     url: 'https://fixture.invalid',
@@ -199,7 +362,7 @@ export function fixturePostgrest(): PostgrestConnection {
         if (current === 'list-failed') return answer(BROKEN, 500);
         return answer(timedCases(JSON.parse(String(init?.body ?? '{}'))));
       }
-      return answer({ code: 'PT404', message: 'not_found', details: null }, 404);
+      return caseRoute(url, init) ?? answer({ code: 'PT404', message: 'not_found', details: null }, 404);
     },
   };
 }

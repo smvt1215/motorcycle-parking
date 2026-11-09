@@ -1,5 +1,6 @@
 import { AuthClient } from '@supabase/auth-js';
 import { SIGNED_OUT, type AdminAuthGateway, type AdminFactor, type FactorKind } from './gateway';
+import { saveReturnPath } from './returnPath';
 
 /**
  * Not the default `sb-<ref>-auth-token`: the Flutter admin on this origin
@@ -62,6 +63,7 @@ export function supabaseGateway(url: string, anonKey: string, origin: string): A
       return failed;
     },
     async signIn() {
+      saveReturnPath(window.location);
       unwrap(
         await client.signInWithOAuth({
           provider: 'google',

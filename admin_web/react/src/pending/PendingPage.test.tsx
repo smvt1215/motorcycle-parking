@@ -24,6 +24,7 @@ const row = (id: string, extra: Partial<TimedCase> = {}): TimedCase => ({
   hidden_parts: null,
   spot_id: null,
   pending_action: null,
+  has_exchange: false,
   ...extra,
 });
 
@@ -246,6 +247,18 @@ describe('待處理清單', () => {
     expect(await screen.findByText('請重新完成第二步驗證')).toBeInTheDocument();
   });
 
+  it('goes back to the case the sign-in started from', async () => {
+    sessionStorage.setItem('motopark-admin-return-path', '/pending/a?tab=support');
+    const { postgrest } = backend({
+      list: () => ({ body: { items: [row('a')], next_cursor: null } }),
+      counts: () => ({ body: COUNTS }),
+    });
+    const router = renderPending(postgrest);
+    await waitFor(() => expect(router.state.location.pathname).toBe('/pending/a'));
+    expect(router.state.location.search).toBe('?tab=support');
+    expect(sessionStorage.getItem('motopark-admin-return-path')).toBeNull();
+  });
+
   it('marks the opened case and keeps the filter in its address', async () => {
     const { postgrest } = backend({
       list: () => ({ body: { items: [row('a')], next_cursor: null } }),
@@ -257,6 +270,6 @@ describe('待處理清單', () => {
     expect(router.state.location.pathname).toBe('/pending/a');
     expect(router.state.location.search).toBe('?tab=support');
     expect(await screen.findByRole('link', { name: /一般問題/ })).toHaveAttribute('aria-current', 'true');
-    expect(screen.getByRole('region', { name: '案件內容還沒接上' })).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: '正在讀取案件' })).toBeInTheDocument();
   });
 });

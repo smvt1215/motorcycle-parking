@@ -1,6 +1,7 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { useDispatch } from 'react-redux';
 import { adminV1Base } from '../api/v1/base';
+import { actionsReset } from '../pending/actionsSlice';
 import { Button } from '../ui/controls';
 import { AuthContext, useAuthState } from './AuthContext';
 import type { AuthController } from './controller';
@@ -101,6 +102,16 @@ export function AuthGate({ controller, children }: { controller: AuthController;
   useEffect(() => {
     if (!ready) dispatch(adminV1Base.util.resetApiState());
   }, [ready, state.access.userId, dispatch]);
+
+  // Only someone else signing in (or signing out) drops drafts: a lapsed
+  // second factor comes back to the same person's work.
+  const userId = state.access.userId;
+  const lastUser = useRef(userId);
+  useEffect(() => {
+    if (state.stage === 'loading') return;
+    if (lastUser.current !== null && lastUser.current !== userId) dispatch(actionsReset());
+    lastUser.current = userId;
+  }, [userId, state.stage, dispatch]);
 
   if (ready) return <AuthContext.Provider value={controller}>{children}</AuthContext.Provider>;
 

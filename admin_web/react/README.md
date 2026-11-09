@@ -70,6 +70,15 @@ CI 會確認 `dist/` 裡沒有示範資料（`MOTOPARK_ADMIN_FIXTURE_DATA` 標�
 - 含費率、停放條件、暫時封閉、分區或路邊分段的建議，這裡**不套用**：Flutter 版送出前會把費率依車種與現有費率合併並重算收費文字，原樣送出可能清掉另一種車的費率。這部分等 #195 的共用核心接上後再開放。
 - 寫入失敗時，那筆回到佇列並標示「沒有套用」，處理說明保留；版本衝突時要先重新讀取最新資料，才能選「仍然套用」。
 
+## 待處理的資料規則
+
+- 伺服器排程，前端只跟著：`actionsSlice` 記下動作的本機到期時間（`run_at` 用導覽計數的 `as_of` 換算伺服器時鐘差），`useActionWatcher` 到期後問 `case_actions` 結果。每筆獨立，互不影響，不會因滑鼠或焦點暫停。
+- `cancel_case_action` 回傳不含內文：取消後的草稿是前端自己留的（`actionTracked` 的 `draft: 'take'`）。stale／failed 的草稿優先用記憶體裡的，重新整理後才用 `case_actions` 的 payload。
+- 草稿放在 Redux（不放在頁面）：切換案件保留、`auth.aal2_required` 重新驗證後還在。只有換人登入或登出才清掉。
+- 案件頁的版本與檢舉期限來自 `admin_v1.timed_case`（清單列的資料），不靠清單目前載入的那幾頁，深連結才打得開。登入 redirect 固定回 `/pending`，深連結先存 sessionStorage（`auth/returnPath.ts`）。
+- 別人已處理：伺服器回 `case.stale`，不執行、不跳下一筆、草稿不動。點位被改時先「重新讀取最新資料」，才能「仍然套用」。
+- 手機鍵盤用 `visualViewport` 量（`useKeyboardInset`）：動作列貼著鍵盤、頂欄收成 48px，只在文字欄位有焦點時生效，縮放不會誤判。
+
 ## 規則
 
 - 只用 DESIGN.md 的 token；車牌的綠、白、紅、黃只出現在車牌上，操作藍只給按得下去的東西，反光黃只表示「已修改」。

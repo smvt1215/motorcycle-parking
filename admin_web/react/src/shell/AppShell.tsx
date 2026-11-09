@@ -98,7 +98,9 @@ export function AppShell() {
   usePendingGuard();
 
   return (
-    <div className={`shell${reviewDetail || caseDetail ? ' shell--focus' : ''}`}>
+    <div
+      className={`shell${reviewDetail || caseDetail ? ' shell--focus' : ''}${caseDetail ? ' shell--case' : ''}`}
+    >
       <header className="shell-bar">
         <span className="shell-logo" role="img" aria-label="機車停車指南管理">
           <span aria-hidden="true">P</span>
