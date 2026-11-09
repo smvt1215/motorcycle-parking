@@ -277,22 +277,7 @@ class AdminV1Client {
   Future<Object?> cancelCaseActionRaw({required String pActionId}) =>
       _call('cancel_case_action', {'p_action_id': pActionId});
 
-  /// 暫停或重新開始倒數（鍵盤焦點、朗讀）
-  Future<CaseActionHeld> holdCaseAction({
-    required String pActionId,
-    required bool pHold,
-  }) async {
-    final raw = await holdCaseActionRaw(pActionId: pActionId, pHold: pHold);
-    return CaseActionHeld.fromJson(raw as Map<String, Object?>);
-  }
-
-  /// [holdCaseAction] as served, for callers that keep the JSON (#202).
-  Future<Object?> holdCaseActionRaw({
-    required String pActionId,
-    required bool pHold,
-  }) => _call('hold_case_action', {'p_action_id': pActionId, 'p_hold': pHold});
-
-  /// 再寄一次（立即寄出，不重新等 5 秒）
+  /// 再寄一次（等 5 秒，倒數內可取消）
   Future<CaseActionRetried> retryCaseAction({required String pActionId}) async {
     final raw = await retryCaseActionRaw(pActionId: pActionId);
     return CaseActionRetried.fromJson(raw as Map<String, Object?>);
@@ -1526,7 +1511,7 @@ class CaseActionReceipt {
 
   final String actionId;
 
-  /// 伺服器決定的執行時間：一般 5 秒、不可逆 10 秒
+  /// 伺服器決定的執行時間：檢舉成立 10 秒，其餘 5 秒
   final String runAt;
 
   final bool irreversible;
@@ -1572,43 +1557,6 @@ class CaseActionCancelled {
   int get hashCode => Object.hashAll([cancelled]);
 }
 
-class CaseActionHeld {
-  const CaseActionHeld({
-    required this.actionId,
-    required this.runAt,
-    required this.capped,
-  });
-
-  factory CaseActionHeld.fromJson(Map<String, Object?> json) => CaseActionHeld(
-    actionId: json['action_id'] as String,
-    runAt: json['run_at'] as String,
-    capped: json['capped'] as bool,
-  );
-
-  final String actionId;
-
-  final String runAt;
-
-  /// 已碰到累計 5 分鐘的上限，不會再延後
-  final bool capped;
-
-  Map<String, Object?> toJson() => {
-    'action_id': actionId,
-    'run_at': runAt,
-    'capped': capped,
-  };
-
-  @override
-  bool operator ==(Object other) =>
-      other is CaseActionHeld &&
-      other.actionId == actionId &&
-      other.runAt == runAt &&
-      other.capped == capped;
-
-  @override
-  int get hashCode => Object.hashAll([actionId, runAt, capped]);
-}
-
 class CaseActionRetried {
   const CaseActionRetried({required this.actionId, required this.runAt});
 
@@ -1620,6 +1568,7 @@ class CaseActionRetried {
 
   final String actionId;
 
+  /// 等 5 秒；倒數內可用 cancel_case_action 取消
   final String runAt;
 
   Map<String, Object?> toJson() => {'action_id': actionId, 'run_at': runAt};
@@ -1693,7 +1642,7 @@ class CaseAction {
 
   final String action;
 
-  /// done 只在回覆的信寄不出去時列出（可再寄一次）
+  /// done、cancelled 只在回覆的信寄不出去時列出（可再寄一次）
   final String status;
 
   final String runAt;

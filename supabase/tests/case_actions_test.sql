@@ -232,8 +232,10 @@ select is((select (admin_v1.timed_case_counts()->>'send_failed')::integer),1,'an
 update private.case_actions set payload='{"body":"這次會過"}' where id=pg_temp.aid('e2')::uuid;
 select is((select admin_v1.retry_case_action(pg_temp.aid('e2')::uuid)->>'action_id'),pg_temp.aid('e2'),'retried');
 select is(pg_temp.st(pg_temp.aid('e2')),'scheduled','back in the queue');
-select ok((select run_at<=now() from private.case_actions where id=pg_temp.aid('e2')::uuid),'at once, no second wait');
+select ok((select run_at>now()+interval '5 seconds' from private.case_actions where id=pg_temp.aid('e2')::uuid),'it waits 5 seconds too');
+select is((select public.run_due_case_actions()->'claimed'),'0'::jsonb,'so nothing runs yet');
 select throws_ok(format('select admin_v1.retry_case_action(%L)',pg_temp.aid('e2')),'PT409','case_action.not_retryable','only failed ones');
+select pg_temp.due(pg_temp.aid('e2'));
 select is((select public.run_due_case_actions()->'done'),'1'::jsonb,'and it runs');
 select is(pg_temp.st(pg_temp.aid('e2')),'done','done');
 
@@ -258,9 +260,23 @@ select is((select x->>'state' from jsonb_array_elements(admin_v1.timed_cases()->
 select is((select admin_v1.case_actions(pg_temp.c('f'))->0->>'send_error'),'resend 500','the detail says why');
 select is((select admin_v1.case_actions(pg_temp.c('f'))->0->'address_editable'),'false'::jsonb,'no address change yet');
 select is((select admin_v1.retry_case_action(pg_temp.aid('f2')::uuid)->>'action_id'),pg_temp.aid('f2'),'sent again');
+select is(pg_temp.st(pg_temp.aid('f2')),'scheduled','counting down');
+select ok((select run_at>now()+interval '5 seconds' from private.case_actions where id=pg_temp.aid('f2')::uuid),'for 5 seconds');
+select is((select delivery_status from private.support_messages where request_id=pg_temp.c('f')::uuid and direction='out'),'failed','not queued yet');
+select is((select x->>'state' from jsonb_array_elements(admin_v1.timed_cases()->'items') x where x->>'id'=pg_temp.c('f')),'scheduled','the list counts down');
+-- 倒數內可以取消，取消後還是寄送失敗、還能再按一次。
+select is(admin_v1.cancel_case_action(pg_temp.aid('f2')::uuid),'{"cancelled":true}'::jsonb,'a resend can be cancelled');
+select is((select delivery_status from private.support_messages where request_id=pg_temp.c('f')::uuid and direction='out'),'failed','the mail is still failed');
+select is((select (x->'pending_action')->>'status' from jsonb_array_elements(admin_v1.timed_cases()->'items') x where x->>'id'=pg_temp.c('f')),
+  'failed','still shown as failed');
+select is((select x->>'state' from jsonb_array_elements(admin_v1.timed_cases()->'items') x where x->>'id'=pg_temp.c('f')),'send_failed','and on top');
+select is((select admin_v1.case_actions(pg_temp.c('f'))->0->>'id'),pg_temp.aid('f2'),'the detail still lists it');
+select is((select admin_v1.retry_case_action(pg_temp.aid('f2')::uuid)->>'action_id'),pg_temp.aid('f2'),'it can be sent again');
+select pg_temp.due(pg_temp.aid('f2'));
+select is((select public.run_due_case_actions()->'done'),'1'::jsonb,'runs at the end of the countdown');
 select is((select delivery_status||'|'||attempts||'|'||coalesce(send_error,'-') from private.support_messages
   where request_id=pg_temp.c('f')::uuid and direction='out'),'queued|0|-','queued, attempts reset');
-select is((select count(*)::integer from admin_audit_log where action='retry_case_action' and target_id=pg_temp.c('f')),1,'audited');
+select is((select count(*)::integer from admin_audit_log where action='retry_case_action' and target_id=pg_temp.c('f')),1,'audited once');
 select throws_ok(format('select admin_v1.retry_case_action(%L)',pg_temp.aid('f2')),'PT409','case_action.not_retryable','only while failed');
 update private.support_messages set delivery_status='failed',attempts=5 where request_id=pg_temp.c('f')::uuid and direction='out';
 insert into private.support_messages(request_id,direction,channel,body) values(pg_temp.c('f')::uuid,'in','case_link','又補充');
@@ -288,28 +304,14 @@ update private.case_actions set status='running',attempts=5,leased_until=now()-i
 select is((select public.run_due_case_actions()->'failed'),'1'::jsonb,'at most 5 attempts');
 select is((select error from private.case_actions where id=pg_temp.aid('l1')::uuid),'case_action.attempts_exhausted','and says why');
 
--- ===== 倒數暫停與上限 =====
-update private.support_requests set status='open',resolved_at=null where id=pg_temp.c('f')::uuid;
-select pg_temp.keep('h1',admin_v1.schedule_case_action(pg_temp.c('f'),'reply','{"body":"暫停"}',pg_temp.ver('f')));
-select is(((select admin_v1.hold_case_action(pg_temp.aid('h1')::uuid,true))->>'run_at')::timestamptz,now()+interval '60 seconds','hold: 60 seconds');
-select is((select admin_v1.hold_case_action(pg_temp.aid('h1')::uuid,true))->'capped','false'::jsonb,'not capped yet');
-select is(((select admin_v1.hold_case_action(pg_temp.aid('h1')::uuid,false))->>'run_at')::timestamptz,now()+interval '5 seconds','release: 5 seconds again');
-select is(pg_temp.st(pg_temp.aid('h1')),'scheduled','still scheduled');
--- 5 秒＋5 分鐘的累計上限。
-update private.case_actions set created_at=now()-interval '5 minutes' where id=pg_temp.aid('h1')::uuid;
-select is(((select admin_v1.hold_case_action(pg_temp.aid('h1')::uuid,true))->>'run_at')::timestamptz,now()+interval '5 seconds','capped at 5 minutes in all');
-select is((select admin_v1.hold_case_action(pg_temp.aid('h1')::uuid,true))->'capped','true'::jsonb,'and says so');
-update private.case_actions set created_at=now()-interval '2 hours' where id=pg_temp.aid('h1')::uuid;
-select ok(((select admin_v1.hold_case_action(pg_temp.aid('h1')::uuid,true))->>'run_at')::timestamptz<=now(),'past the cap it runs at once');
-select is((select public.run_due_case_actions()->'done'),'1'::jsonb,'so a hold cannot stall it forever');
-select throws_ok(format('select admin_v1.hold_case_action(%L,true)',pg_temp.aid('h1')),'PT409','case_action.started','too late to hold');
-select throws_ok(format('select admin_v1.hold_case_action(%L,true)',pg_temp.aid('a2')),'PT409','case_action.cancelled','cancelled');
-select throws_ok(format('select admin_v1.hold_case_action(%L,null)',pg_temp.aid('a2')),'PT400','request.invalid','hold or release');
+-- ===== 倒數不暫停 =====
+select ok(not exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+  where n.nspname='admin_v1' and p.proname='hold_case_action'),'a countdown cannot be paused');
 
 -- ===== 檢舉 =====
 select pg_temp.keep('t1',admin_v1.schedule_case_action((select id from reports where k='text'),'report_keep','{"note":"移除"}',
   pg_temp.spot_ver('7e000000-0000-4000-8000-000000000001')));
-select is((select j->'irreversible' from r where k='t1'),'true'::jsonb,'removing text is irreversible');
+select is((select j->'irreversible' from r where k='t1'),'true'::jsonb,'upholding a report is irreversible');
 select ok((select run_at between created_at+interval '9.9 seconds' and created_at+interval '10.1 seconds' from private.case_actions where id=pg_temp.aid('t1')::uuid),'10 seconds');
 select is((select (x->>'state') from jsonb_array_elements(admin_v1.timed_cases(p_kind=>'report')->'items') x where x->>'id'=(select id from reports where k='text')),
   'scheduled','the list counts down');
@@ -324,11 +326,13 @@ select is((select resolved_by from moderation_queue where id=(select id::uuid fr
 
 select pg_temp.keep('o1',admin_v1.schedule_case_action((select id from reports where k='other'),'report_keep','{}',
   pg_temp.spot_ver('7e000000-0000-4000-8000-000000000002')));
-select is((select j->'irreversible' from r where k='o1'),'false'::jsonb,'keeping an other report changes nothing: 5 seconds');
+select is((select j->'irreversible' from r where k='o1'),'true'::jsonb,'upholding an other report too');
+select ok((select run_at between created_at+interval '9.9 seconds' and created_at+interval '10.1 seconds' from private.case_actions where id=pg_temp.aid('o1')::uuid),'10 seconds');
 select is(admin_v1.cancel_case_action(pg_temp.aid('o1')::uuid),'{"cancelled":true}'::jsonb,'cancel');
 select pg_temp.keep('o2',admin_v1.schedule_case_action((select id from reports where k='other'),'report_edit','{"patch":{"note":"改"},"note":""}',
   pg_temp.spot_ver('7e000000-0000-4000-8000-000000000002')));
-select is((select j->'irreversible' from r where k='o2'),'true'::jsonb,'an edit overwrites: 10 seconds');
+select is((select j->'irreversible' from r where k='o2'),'false'::jsonb,'an edit is a normal action');
+select ok((select run_at between created_at+interval '4.9 seconds' and created_at+interval '5.1 seconds' from private.case_actions where id=pg_temp.aid('o2')::uuid),'5 seconds');
 select is(admin_v1.cancel_case_action(pg_temp.aid('o2')::uuid),'{"cancelled":true}'::jsonb,'cancel');
 select throws_ok(format('select admin_v1.schedule_case_action(%L,''report_edit'',''{}'',%L)',(select id from reports where k='other'),
   pg_temp.spot_ver('7e000000-0000-4000-8000-000000000002')),'PT400','content_report.invalid_patch','checked by the same rules');

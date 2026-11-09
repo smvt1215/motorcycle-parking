@@ -1,8 +1,9 @@
--- 管理站「待處理」的伺服器排程動作（使用者 2026-11-08 決定 Q-timed-01＝A：
--- 一般動作 5 秒、不可逆動作 10 秒；計畫見 scratch/timed-cases-plan-20261108.md
--- 第 1.3、2、3、4、5 節與第 9 節 PR-B）。既有的 reply_support_request、
--- resolve_support_request、resolve_content_report 不改；這裡只決定「何時」呼叫
--- 它們。
+-- 管理站「待處理」的伺服器排程動作（使用者 2026-11-08 決定 Q-timed-01＝A；
+-- 計畫見 scratch/timed-cases-plan-20261108.md 第 9 節 PR-B，與使用者 2026-11-09
+-- 核准的畫布衝突處以畫布為準）。寄出回覆、再寄一次、結案、檢舉不成立、改內容
+-- 5 秒；檢舉成立 10 秒，之後不能復原。倒數內可以取消，不會因滑鼠或焦點停留而
+-- 暫停。既有的 reply_support_request、resolve_support_request、
+-- resolve_content_report 不改；這裡只決定「何時」呼叫它們。
 --
 -- 1. 佇列（private.case_actions）：每個動作一列、各自倒數。通用佇列的形狀
 --    （使用者 2026-11-09 決定，#390）：日後換成自架 Worker 時只換執行者。
@@ -73,11 +74,6 @@ language sql immutable set search_path='' as $$
 $$;
 create function private.case_action_lease() returns interval
 language sql immutable set search_path='' as $$ select interval '60 seconds' $$;
--- hold 每次最多延 60 秒、累計最多 5 分鐘，避免永遠不執行。
-create function private.case_action_hold_step() returns interval
-language sql immutable set search_path='' as $$ select interval '60 seconds' $$;
-create function private.case_action_hold_cap() returns interval
-language sql immutable set search_path='' as $$ select interval '5 minutes' $$;
 
 create function private.case_action_type(p_action text) returns text
 language sql immutable set search_path='' as $$
@@ -128,14 +124,37 @@ begin
   end if;
 end $$;
 
+-- 再寄一次（倒數結束時）：回覆回到 queued、attempts 歸零，寄送上限不重算。
+-- 倒數時已被自動重試接手（不再是 failed）就不用再做。
+create function private.case_action_resend(a private.case_actions) returns jsonb
+language plpgsql volatile security definer set search_path='' as $$
+begin
+  update private.support_messages x
+    set delivery_status='queued',attempts=0,send_error=null,claimed_at=null
+    where x.id=a.message_id and x.delivery_status='failed';
+  if found then
+    insert into public.admin_audit_log(actor,action,target_table,target_id,before,after,note)
+      values(auth.uid(),'retry_case_action','support_requests',a.case_id,null,
+        jsonb_build_object('action_id',a.id,'message_id',a.message_id),'');
+    begin
+      perform public.support_mail_tick();
+    exception when others then
+      null;
+    end;
+  end if;
+  return jsonb_build_object('id',a.message_id);
+end $$;
+
 -- 以動作建立者的身分呼叫既有函式：唯一的一份規則。request.jwt.claims 只在
--- 這個交易內有效，由呼叫端還原。
+-- 這個交易內有效，由呼叫端還原。已經有回覆的 reply 是「再寄一次」。
 create function private.case_action_apply(a private.case_actions) returns jsonb
 language plpgsql volatile security definer set search_path='' as $$
 begin
   perform set_config('request.jwt.claims',jsonb_build_object('sub',a.actor,'role','authenticated','aal','aal2',
     'app_metadata',jsonb_build_object('role','admin'))::text,true);
-  if a.action='reply' then
+  if a.action='reply' and a.message_id is not null then
+    return private.case_action_resend(a);
+  elsif a.action='reply' then
     return admin_v1.reply_support_request(a.case_id::uuid,a.payload->>'body');
   elsif a.action='resolve_support' then
     return admin_v1.resolve_support_request(a.case_id::uuid,a.payload->>'status',coalesce(a.payload->>'note',''));
@@ -268,8 +287,8 @@ language sql volatile security definer set search_path='' as $$
 $$;
 
 revoke execute on function private.case_action_delay(boolean),private.case_action_lease(),
-  private.case_action_hold_step(),private.case_action_hold_cap(),private.case_action_type(text),
-  private.is_uuid(text),private.case_current(text,text),private.case_lock(text,text),
+  private.case_action_type(text),private.is_uuid(text),private.case_current(text,text),private.case_lock(text,text),
+  private.case_action_resend(private.case_actions),
   private.case_action_apply(private.case_actions),private.case_action_tick(timestamptz),
   private.case_action_receipt(private.case_actions,boolean),private.run_due_case_actions(integer),
   private.case_actions_prune()
@@ -335,11 +354,8 @@ begin
     null;
   end;
 
-  -- 不可逆：永久清除車友名稱、移除文字、換點名、覆寫內容。寄信與 other 的
-  -- 結案（什麼都沒遮蔽、也沒改內容）是一般動作。
-  v_irreversible:=p_action='report_edit' or (p_action='report_keep' and (
-    cardinality(private.content_hold_parts((select q.proposed->>'target' from public.moderation_queue q where q.id=v_case::uuid)))>0
-    or coalesce(v_payload->'patch','{}'::jsonb)<>'{}'::jsonb));
+  -- 檢舉成立之後不能復原（包含 other）：10 秒。其餘都是 5 秒。
+  v_irreversible:=p_action='report_keep';
 
   -- 實際時間，不是交易開始的 now()：試跑等鎖不能吃掉可以取消的秒數。
   insert into private.case_actions(case_type,case_id,action,payload,expected_version,actor,run_at,irreversible,dedupe_key)
@@ -385,46 +401,11 @@ end $$;
 revoke execute on function admin_v1.cancel_case_action(uuid) from public;
 grant execute on function admin_v1.cancel_case_action(uuid) to authenticated;
 
--- 暫停倒數（鍵盤焦點、朗讀；v43 #21）。p_hold true：run_at 延到 now()+60 秒，
--- 要繼續暫停就再呼叫；false：重新倒數 5／10 秒。累計上限是原本的時間＋5 分鐘
--- （capped true＝已碰到上限）。
-create function admin_v1.hold_case_action(p_action_id uuid,p_hold boolean)
-returns jsonb language plpgsql volatile security definer set search_path='' as $$
-declare
-  a private.case_actions;
-  v_delay interval;
-  v_cap timestamptz;
-  v_target timestamptz;
-begin
-  perform private.require_admin();
-  if p_action_id is null or p_hold is null then
-    raise sqlstate 'PT400' using message='request.invalid';
-  end if;
-  select * into a from private.case_actions c where c.id=p_action_id for update;
-  if not found then raise sqlstate 'PT404' using message='case_action.not_found'; end if;
-  if a.status='cancelled' then raise sqlstate 'PT409' using message='case_action.cancelled'; end if;
-  if a.status<>'scheduled' then raise sqlstate 'PT409' using message='case_action.started'; end if;
-  v_delay:=private.case_action_delay(a.irreversible);
-  v_cap:=a.created_at+v_delay+private.case_action_hold_cap();
-  v_target:=now()+case when p_hold then private.case_action_hold_step() else v_delay end;
-  update private.case_actions c set run_at=least(v_target,v_cap) where c.id=p_action_id
-    returning * into a;
-  if not p_hold then
-    begin
-      perform private.case_action_tick(a.run_at);
-    exception when others then
-      null;
-    end;
-  end if;
-  return jsonb_build_object('action_id',a.id,'run_at',a.run_at,'capped',v_target>v_cap);
-end $$;
-revoke execute on function admin_v1.hold_case_action(uuid,boolean) from public;
-grant execute on function admin_v1.hold_case_action(uuid,boolean) to authenticated;
-
--- 再寄一次（只限 reply，立即、不重新等 5 秒，寄送上限不重算）：
--- 寄信失敗（動作 done、回覆 failed）→ 回覆回到 queued、attempts 歸零；
--- 動作本身失敗（還沒有回覆）→ 回到 scheduled、馬上執行。
--- 重寄前比對版本：已結案 support.already_resolved；之後又有往來 case.stale。
+-- 再寄一次（只限 reply）：和其他動作一樣等 5 秒、倒數內可以取消，由呼叫的
+-- 管理員具名；寄送上限不重算。
+-- 寄信失敗（已有回覆且 failed）→ 倒數結束時回覆回到 queued；這個倒數取消後
+-- 還能再按一次。動作本身失敗（還沒有回覆）→ 倒數結束時重新執行。
+-- 比對版本：已結案 support.already_resolved；之後又有往來 case.stale。
 create function admin_v1.retry_case_action(p_action_id uuid)
 returns jsonb language plpgsql volatile security definer set search_path='' as $$
 declare
@@ -439,12 +420,12 @@ begin
   end if;
   select * into a from private.case_actions c where c.id=p_action_id for update;
   if not found then raise sqlstate 'PT404' using message='case_action.not_found'; end if;
-  if a.action<>'reply' or a.status not in ('failed','done') then
+  if a.action<>'reply' or a.status not in ('failed','done','cancelled')
+     or (a.message_id is null and a.status<>'failed') then
     raise sqlstate 'PT409' using message='case_action.not_retryable';
   end if;
   perform private.case_lock(a.case_type,a.case_id);
-  v_expected:=a.expected_version;
-  if a.status='done' then
+  if a.message_id is not null then
     select * into m from private.support_messages x where x.id=a.message_id for update;
     if m.id is null or m.delivery_status<>'failed' then
       raise sqlstate 'PT409' using message='case_action.not_retryable';
@@ -453,6 +434,8 @@ begin
     v_expected:=m.created_at;
   elsif a.attempts>=5 then
     raise sqlstate 'PT409' using message='case_action.retry_limit';
+  else
+    v_expected:=a.expected_version;
   end if;
   select * into v_cur from private.case_current(a.case_type,a.case_id);
   if not v_cur.case_found then raise sqlstate 'PT404' using message='support.not_found'; end if;
@@ -461,29 +444,20 @@ begin
     raise sqlstate 'PT409' using message='case.stale',
       detail=jsonb_build_object('version',v_cur.version,'by',v_cur.changed_by)::text;
   end if;
-  if a.status='done' then
-    update private.support_messages x
-      set delivery_status='queued',attempts=0,send_error=null,claimed_at=null
-      where x.id=m.id;
-  else
-    update private.case_actions c
-      set status='scheduled',run_at=now(),error=null,started_at=null,finished_at=null,leased_until=null
-      where c.id=a.id
-      returning * into a;
-  end if;
-  insert into public.admin_audit_log(actor,action,target_table,target_id,before,after,note)
-    values(auth.uid(),'retry_case_action','support_requests',a.case_id,null,
-      jsonb_build_object('action_id',a.id,'message_id',a.message_id),'');
+  -- 重新排入算這個案件最新的一筆（created_at）；attempts 只有寄信重送才歸零，
+  -- 動作本身失敗的上限照算。
+  update private.case_actions c
+    set status='scheduled',run_at=clock_timestamp()+private.case_action_delay(c.irreversible),actor=auth.uid(),
+      expected_version=v_expected,created_at=clock_timestamp(),error=null,started_at=null,finished_at=null,leased_until=null,
+      attempts=case when c.message_id is null then c.attempts else 0 end
+    where c.id=a.id
+    returning * into a;
   begin
-    if m.id is not null then
-      perform public.support_mail_tick();
-    else
-      perform private.case_action_tick(a.run_at);
-    end if;
+    perform private.case_action_tick(a.run_at);
   exception when others then
     null;
   end;
-  return jsonb_build_object('action_id',a.id,'run_at',now());
+  return jsonb_build_object('action_id',a.id,'run_at',a.run_at);
 end $$;
 revoke execute on function admin_v1.retry_case_action(uuid) from public;
 grant execute on function admin_v1.retry_case_action(uuid) to authenticated;
@@ -518,14 +492,14 @@ grant execute on function admin_v1.case_actions(text) to authenticated;
 
 -- ===== 4. 待處理清單 =====
 -- 每案最新一個動作：等待中顯示倒數；失敗或 stale 要處理；後來成功或取消就不
--- 顯示。寄信失敗（done 但回覆 failed 且不再重試）也算失敗。不含內文（清單列
--- 沒有使用者文字）。
+-- 顯示。寄信失敗（done，或再寄一次被取消，回覆 failed 且不再重試）也算失敗。
+-- 不含內文（清單列沒有使用者文字）。
 create function private.case_pending_action(p_type text,p_id text) returns jsonb
 language sql stable security definer set search_path='' as $$
   select case when a.status in ('scheduled','running','failed','stale')
-      or (a.status='done' and m.delivery_status='failed' and m.attempts>=5) then
+      or (a.status in ('done','cancelled') and m.delivery_status='failed' and m.attempts>=5) then
     jsonb_build_object('id',a.id,'action',a.action,'run_at',a.run_at,'irreversible',a.irreversible,
-      'status',case when a.status='done' then 'failed' else a.status end) end
+      'status',case when a.status in ('done','cancelled') then 'failed' else a.status end) end
   from (select * from private.case_actions c where c.case_type=p_type and c.case_id=p_id
     order by c.created_at desc,c.id desc limit 1) a
   left join private.support_messages m on m.id=a.message_id;

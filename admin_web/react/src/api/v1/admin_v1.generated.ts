@@ -96,13 +96,6 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.body,
       }),
     }),
-    adminV1HoldCaseAction: build.mutation<AdminV1HoldCaseActionApiResponse, AdminV1HoldCaseActionApiArg>({
-      query: (queryArg) => ({
-        url: `/rpc/hold_case_action`,
-        method: 'POST',
-        body: queryArg.body,
-      }),
-    }),
     adminV1RetryCaseAction: build.mutation<AdminV1RetryCaseActionApiResponse, AdminV1RetryCaseActionApiArg>({
       query: (queryArg) => ({
         url: `/rpc/retry_case_action`,
@@ -228,13 +221,6 @@ export type AdminV1CancelCaseActionApiResponse = /** status 200 已取消 */ Cas
 export type AdminV1CancelCaseActionApiArg = {
   body: {
     p_action_id: string;
-  };
-};
-export type AdminV1HoldCaseActionApiResponse = /** status 200 新的執行時間 */ CaseActionHeld;
-export type AdminV1HoldCaseActionApiArg = {
-  body: {
-    p_action_id: string;
-    p_hold: boolean;
   };
 };
 export type AdminV1RetryCaseActionApiResponse = /** status 200 已重新排入 */ CaseActionRetried;
@@ -517,7 +503,7 @@ export type TimedCaseCounts = {
 };
 export type CaseActionReceipt = {
   action_id: string;
-  /** 伺服器決定的執行時間：一般 5 秒、不可逆 10 秒 */
+  /** 伺服器決定的執行時間：檢舉成立 10 秒，其餘 5 秒 */
   run_at: string;
   irreversible: boolean;
   /** 同一動作重送：沒有新排，回原本那一筆 */
@@ -526,14 +512,9 @@ export type CaseActionReceipt = {
 export type CaseActionCancelled = {
   cancelled: boolean;
 };
-export type CaseActionHeld = {
-  action_id: string;
-  run_at: string;
-  /** 已碰到累計 5 分鐘的上限，不會再延後 */
-  capped: boolean;
-};
 export type CaseActionRetried = {
   action_id: string;
+  /** 等 5 秒；倒數內可用 cancel_case_action 取消 */
   run_at: string;
 };
 export type CaseAction = {
@@ -541,8 +522,8 @@ export type CaseAction = {
   case_type: 'support' | 'report';
   case_id: string;
   action: 'reply' | 'resolve_support' | 'report_restore' | 'report_keep' | 'report_edit';
-  /** done 只在回覆的信寄不出去時列出（可再寄一次） */
-  status: 'scheduled' | 'running' | 'done' | 'failed' | 'stale';
+  /** done、cancelled 只在回覆的信寄不出去時列出（可再寄一次） */
+  status: 'scheduled' | 'running' | 'done' | 'cancelled' | 'failed' | 'stale';
   run_at: string;
   irreversible: boolean;
   attempts: number;
@@ -574,7 +555,6 @@ export const {
   useAdminV1TimedCaseCountsQuery,
   useAdminV1ScheduleCaseActionMutation,
   useAdminV1CancelCaseActionMutation,
-  useAdminV1HoldCaseActionMutation,
   useAdminV1RetryCaseActionMutation,
   useAdminV1CaseActionsQuery,
 } = injectedRtkApi;
