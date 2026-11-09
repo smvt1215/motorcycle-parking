@@ -12,6 +12,8 @@ export interface PostgrestConnection {
   anonKey: string;
   /** The signed-in user's access token, or null to call as anon. */
   accessToken: () => string | null | Promise<string | null>;
+  /** Replaces the network: `--mode fixture` and tests only. */
+  fetch?: typeof fetch;
 }
 
 /** What the generated endpoints hand the base query (codegen output). */
@@ -51,7 +53,8 @@ export function postgrestBaseQuery(profile: V1Profile): BaseQueryFn<PostgrestArg
     const token = (await connection.accessToken()) ?? connection.anonKey;
     let response: Response;
     try {
-      response = await fetch(`${connection.url.replace(/\/$/, '')}/rest/v1${args.url}`, {
+      const send = connection.fetch ?? fetch;
+      response = await send(`${connection.url.replace(/\/$/, '')}/rest/v1${args.url}`, {
         method: args.method ?? 'POST',
         headers: {
           apikey: connection.anonKey,

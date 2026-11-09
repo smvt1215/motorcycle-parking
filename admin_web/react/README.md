@@ -9,7 +9,11 @@ Flutter 管理站（`lib/admin/`）的改寫版本，依 [`../DESIGN.md`](../DES
   - 駁回：六種原因必選（`1`–`6` 直接選、Enter 確定、Esc 取消），「其他原因」要寫處理說明；手機是底部 sheet。點位不會改變。
   - 修改後套用：車牌選可停或不可停，其他欄位在「套用值」欄編輯，每格下方寫騎士原本的建議；Ctrl Enter 儲存並套用、Esc 取消。只寫入和目前點位不同的欄位；沒有不同就不能儲存。
 
-正式建置還沒有資料來源，各頁顯示「這一頁還沒接上資料」，等 `admin_v1`（#195）完成後再接上。開發時用 `--mode fixture` 載入記憶體內的示範資料（`src/review/fixtureSource.ts`），頁面會標示「示範資料，不會寫入伺服器」。
+- 待處理（#295 第一層）：唯讀清單、分頁與計數、期限分組、keyset 分頁，載入、失敗、空清單與離線狀態。案件內容（回覆、結案、檢舉處理、倒數）在第二層。
+
+正式建置只有「待處理」接上真實資料：部署在既有 admin Hosting 的 `/pending`，和 Flutter 管理站並存，導覽的其他項目整頁換到 Flutter。登入走 Supabase（Google ＋ AAL2），沒有管理權限或第二步驗證就不會顯示內容，也不會向 `admin_v1` 取資料。工作階段存在自己的 `motopark-admin-react-auth`，不用 Flutter 管理站的 `sb-<ref>-auth-token`：兩個 client 之間沒有共用的鎖，各自更新同一顆會輪替的 refresh token，可能觸發重複使用偵測，讓兩邊一起被登出。代價是第一次進 `/pending` 要再登入一次。
+
+開發時用 `--mode fixture` 載入記憶體內的示範資料（`src/review/fixtureSource.ts`、`src/pending/fixture.ts`），審核頁會標示「示範資料，不會寫入伺服器」。fixture 可用 `?scenario=`（`empty`、`waiting-empty`、`list-failed`、`counts-failed`、`second-factor`、`many`）與 `?auth=`（`signedOut`、`denied`、`mfa`、`enroll`、`unavailable`）切換狀態。
 
 ## 指令
 
@@ -17,7 +21,7 @@ Flutter 管理站（`lib/admin/`）的改寫版本，依 [`../DESIGN.md`](../DES
 
 ```sh
 npm ci
-npm run dev                 # 開發伺服器（沒有資料來源）
+npm run dev                 # 開發伺服器（要連資料需設 VITE_SUPABASE_URL、VITE_SUPABASE_ANON_KEY）
 npm run dev -- --mode fixture  # 開發伺服器＋示範資料
 npm test                    # Vitest（含 tokens.css 與 DESIGN.md 的比對）
 npm run lint                # ESLint
@@ -30,10 +34,10 @@ npm run smoke               # 先 build:fixture；Chromium 檢查 RWD 與互動�
 `npm run smoke` 需要 Playwright 的 Chromium（`npx playwright install chromium-headless-shell`），只在本機跑，不在 CI 跑。它會在 320／390／402（iPhone 16 Pro）／700／820、1180（iPad Air）／1024（13 吋）／1440 寬度檢查：
 
 - 不能橫向捲動。
-- 分頁數：手機 4 個（手機的審核詳情 0 個），其他 5 個。
+- 分頁數：手機 4 個（手機的審核與案件詳情 0 個），其他 6 個。
 - 導覽、按鈕與篩選的觸控目標至少 48px。
 - 每頁只有一個目前分頁。
-- 實際操作：輸入中文處理說明、按 A 套用後跳下一筆並出現復原、按復原回到原本那筆且說明還在；手機清單列就地展開。
+- 實際操作：輸入中文處理說明、按 A 套用後跳下一筆並出現復原、按復原回到原本那筆且說明還在；手機清單列就地展開；待處理載入更多、開案件與返回清單；登入與第二步驗證各狀態不會顯示管理外框。
 
 CI 會確認 `dist/` 裡沒有示範資料（`MOTOPARK_ADMIN_FIXTURE_DATA` 標記與示範點位名稱）。
 
@@ -48,14 +52,16 @@ CI 會確認 `dist/` 裡沒有示範資料（`MOTOPARK_ADMIN_FIXTURE_DATA` 標�
 
 ## 目錄
 
-| 路徑                    | 內容                                                                                                  |
-| ----------------------- | ----------------------------------------------------------------------------------------------------- |
-| `src/design/tokens.css` | DESIGN.md frontmatter 的 token；名稱一一對應（`colors.x` → `--color-x`）。改 token 時先改 DESIGN.md   |
-| `src/ui/`               | 疊牌 `PlateStack`／`EligibilityPair`、A0 `MapMarker`、按鈕、篩選 chip、分段控制、狀態標籤、空狀態     |
-| `src/shell/`            | 導覽外框：≥1040px 96px 導覽欄、680–1039px 上方分頁、<680px 頂欄＋底部分頁（匯入、使用者收在「更多」） |
-| `src/app/`              | Redux store、RTK Query `adminApi`（資料來源由 store 的 extra 參數注入）、路由                         |
-| `src/review/`           | 審核頁：資料模型（照 Flutter `review_models.dart`）、資料來源介面、示範資料、延後送出與復原、元件     |
-| `src/pages/`            | 其他功能頁與 `/design` 樣式頁                                                                         |
+| 路徑                    | 內容                                                                                                        |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `src/design/tokens.css` | DESIGN.md frontmatter 的 token；名稱一一對應（`colors.x` → `--color-x`）。改 token 時先改 DESIGN.md         |
+| `src/ui/`               | 疊牌 `PlateStack`／`EligibilityPair`、A0 `MapMarker`、按鈕、篩選 chip、分段控制、狀態標籤、空狀態           |
+| `src/shell/`            | 導覽外框：≥1040px 96px 導覽欄、680–1039px 上方分頁、<680px 頂欄＋底部分頁（規則、匯入、使用者收在「更多」） |
+| `src/auth/`             | Supabase 登入與第二步驗證：gateway 介面、狀態機（照 Flutter `admin_controller.dart`）、登入閘門             |
+| `src/pending/`          | 待處理：清單、分頁、計數、分組規則與 fixture；`/pending/:caseId` 的案件內容由第二層接上                     |
+| `src/app/`              | Redux store、RTK Query `adminApi`（資料來源由 store 的 extra 參數注入）、路由                               |
+| `src/review/`           | 審核頁：資料模型（照 Flutter `review_models.dart`）、資料來源介面、示範資料、延後送出與復原、元件           |
+| `src/pages/`            | 其他功能頁與 `/design` 樣式頁                                                                               |
 
 ## 審核頁的資料規則
 

@@ -61,6 +61,12 @@ export function MorePage() {
     <Page title="更多">
       <ul className="link-list panel" aria-label="其他功能">
         <li>
+          <Link to="/rules">
+            <LineIcon name="rules" />
+            規則
+          </Link>
+        </li>
+        <li>
           <Link to="/import">
             <LineIcon name="import" />
             匯入

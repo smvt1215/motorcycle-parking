@@ -30,7 +30,7 @@ describe('AppShell', () => {
     const names = within(nav())
       .getAllByRole('link', { hidden: true })
       .map((link) => link.textContent);
-    expect(names).toEqual(['審核', '點位', '規則', '匯入', '使用者', '更多']);
+    expect(names).toEqual(['審核', '待處理', '點位', '規則', '匯入', '使用者', '更多']);
   });
 
   it('keeps 更多 current on the pages it leads to', async () => {

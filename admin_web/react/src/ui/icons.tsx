@@ -33,6 +33,12 @@ const LINE_ICONS = {
       <path d="M16 5.5a3 3 0 0 1 0 5.6M17.5 14.6c1.6.6 2.6 2 3 4.4" />
     </>
   ),
+  pending: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 7v5.5l3.5 2" />
+    </>
+  ),
   more: (
     <>
       <circle cx="5.5" cy="12" r="1.3" />

@@ -13,6 +13,19 @@ typedef AdminTab = ({
   String description,
 });
 
+/// Served by the React admin on this same Hosting site (firebase.json), so
+/// reaching it is a full page load rather than a go_router push. Leaving
+/// that way ends this app, so [AdminShell.onOpenPending] settles work first.
+const adminPendingPath = '/pending';
+
+void openAdminTab(BuildContext context, AdminTab tab) {
+  if (tab.path == adminPendingPath) {
+    context.findAncestorWidgetOfExactType<AdminShell>()!.onOpenPending(context);
+  } else {
+    context.go(tab.path);
+  }
+}
+
 const List<AdminTab> adminTabs = [
   (
     path: '/review',
@@ -20,6 +33,13 @@ const List<AdminTab> adminTabs = [
     icon: Icons.fact_check_outlined,
     title: '待審回報',
     description: '騎士送出的修改建議與現場回報，會集中在這裡確認。',
+  ),
+  (
+    path: adminPendingPath,
+    label: '待處理',
+    icon: Icons.schedule_outlined,
+    title: '待處理',
+    description: '有期限的客服案件與內容檢舉。',
   ),
   (
     path: '/spots',
@@ -65,11 +85,13 @@ class AdminShell extends StatefulWidget {
     required this.controller,
     required this.path,
     required this.onSignOut,
+    required this.onOpenPending,
     required this.child,
   });
   final AdminController controller;
   final String path;
   final VoidCallback onSignOut;
+  final void Function(BuildContext context) onOpenPending;
   final Widget child;
 
   @override
@@ -185,7 +207,7 @@ class _DesktopBar extends StatelessWidget {
                       selected: section == tab.path,
                       child: TextButton(
                         key: ValueKey('nav${tab.path}'),
-                        onPressed: () => context.go(tab.path),
+                        onPressed: () => openAdminTab(context, tab),
                         style: TextButton.styleFrom(
                           foregroundColor: section == tab.path
                               ? colors.onSurface
@@ -412,7 +434,7 @@ class _TopTab extends StatelessWidget {
     excludeSemantics: true,
     child: InkWell(
       key: ValueKey('nav${tab.path}'),
-      onTap: () => context.go(tab.path),
+      onTap: () => openAdminTab(context, tab),
       child: Container(
         height: height,
         constraints: const BoxConstraints(minWidth: 48),
@@ -644,7 +666,7 @@ class _BottomTab extends StatelessWidget {
       excludeSemantics: true,
       child: InkWell(
         key: ValueKey('nav${tab.path}'),
-        onTap: () => context.go(tab.path),
+        onTap: () => openAdminTab(context, tab),
         child: Stack(
           children: [
             if (selected)

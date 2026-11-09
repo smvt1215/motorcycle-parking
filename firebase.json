@@ -10,6 +10,14 @@
       ],
       "rewrites": [
         {
+          "source": "/pending",
+          "destination": "/pending/index.html"
+        },
+        {
+          "source": "/pending/**",
+          "destination": "/pending/index.html"
+        },
+        {
           "source": "**",
           "destination": "/index.html"
         }
