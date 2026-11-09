@@ -2011,13 +2011,7 @@
               "string",
               "null"
             ],
-            "enum": [
-              "queued",
-              "sending",
-              "sent",
-              "failed",
-              null
-            ]
+            "description": "回覆的寄送狀態：queued、sending、sent、failed；沒有回覆時 null"
           },
           "send_error": {
             "type": [

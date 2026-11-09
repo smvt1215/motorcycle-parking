@@ -556,8 +556,8 @@ export type CaseAction = {
   started_at: string | null;
   finished_at: string | null;
   message_id: string | null;
-  delivery_status:
-    ('queued' | 'sending' | 'sent' | 'failed' | null) | ('queued' | 'sending' | 'sent' | 'failed' | null);
+  /** 回覆的寄送狀態：queued、sending、sent、failed；沒有回覆時 null */
+  delivery_status: string | null;
   send_error: string | null;
   /** 目前一律 false：後端沒有改地址的 API */
   address_editable: boolean;

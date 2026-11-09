@@ -1720,6 +1720,7 @@ class CaseAction {
 
   final String? messageId;
 
+  /// 回覆的寄送狀態：queued、sending、sent、failed；沒有回覆時 null
   final String? deliveryStatus;
 
   final String? sendError;
