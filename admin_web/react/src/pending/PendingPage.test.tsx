@@ -143,6 +143,20 @@ describe('待處理清單', () => {
     vi.useRealTimers();
   });
 
+  it('reads a tab again when returning to it', async () => {
+    const { postgrest, calls } = backend({
+      list: () => ({ body: { items: [row('a')], next_cursor: null } }),
+      counts: () => ({ body: COUNTS }),
+    });
+    renderPending(postgrest);
+    await screen.findByText('一般問題');
+    await userEvent.click(filter(/客服/));
+    await waitFor(() => expect(calls).toHaveLength(2));
+    await userEvent.click(filter(/全部/));
+    await waitFor(() => expect(calls).toHaveLength(3));
+    expect(calls.at(-1)).toMatchObject({ p_kind: 'all', p_bucket: 'all' });
+  });
+
   it('does not present an empty result that failed to refresh as current', async () => {
     vi.useFakeTimers({ now: Date.parse('2026-11-09T15:59:30Z'), shouldAdvanceTime: true });
     let healthy = true;

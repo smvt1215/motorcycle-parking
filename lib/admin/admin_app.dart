@@ -3,6 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart'
 import 'package:cupertino_ui/cupertino_ui.dart' as cu;
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/parking.dart';
 import 'admin_auth_page.dart';
@@ -40,6 +41,7 @@ class AdminApp extends StatefulWidget {
     this.review,
     this.pickFile = pickJsonFile,
     this.bundledRules,
+    this.leaveToPending = _loadPendingPage,
   });
   final AdminController controller;
   final String? initialLocation;
@@ -61,8 +63,18 @@ class AdminApp extends StatefulWidget {
   /// Tests replace the app's bundled rule file.
   final Future<List<dynamic>> Function()? bundledRules;
 
+  /// Tests replace the full page load to the React 待處理 page.
+  final Future<void> Function() leaveToPending;
+
   @override
   State<AdminApp> createState() => _AdminAppState();
+}
+
+Future<void> _loadPendingPage() async {
+  await launchUrl(
+    Uri.base.resolve(adminPendingPath),
+    webOnlyWindowName: '_self',
+  );
 }
 
 class _AdminAppState extends State<AdminApp> {
@@ -151,6 +163,37 @@ class _AdminAppState extends State<AdminApp> {
     await widget.controller.signOut();
   }
 
+  /// Switching tabs keeps every controller alive; this full page load does
+  /// not. Unsaved forms ask first, and a decision still in its undo window
+  /// is written before leaving. If it fails, stay and show it in the queue.
+  Future<void> _openPending(BuildContext context) async {
+    if (_spots.dirty || _rules.dirty || _review.editingId != null) {
+      final leave = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('放棄未儲存的修改？'),
+          content: const Text('這裡有尚未儲存的修改，前往待處理後會遺失。'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('繼續編輯'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('放棄修改'),
+            ),
+          ],
+        ),
+      );
+      if (leave != true) return;
+    }
+    if (await _review.settle()) {
+      await widget.leaveToPending();
+    } else if (mounted) {
+      _router.go('/review');
+    }
+  }
+
   Widget _watch(Widget Function() build) => ListenableBuilder(
     listenable: widget.controller,
     builder: (context, _) => build(),
@@ -179,6 +222,7 @@ class _AdminAppState extends State<AdminApp> {
             controller: widget.controller,
             path: state.uri.path,
             onSignOut: _signOut,
+            onOpenPending: _openPending,
             child: child,
           ),
         ),

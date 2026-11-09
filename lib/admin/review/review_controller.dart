@@ -97,6 +97,7 @@ class ReviewController extends ChangeNotifier {
 
   /// Reports resolved this session; a slower load must not list them again.
   final Set<String> _resolved = {};
+  Completer<void>? _write;
 
   /// Edited values of decisions that failed to write, by report id.
   final Map<String, Map<String, dynamic>> savedDrafts = {};
@@ -494,6 +495,8 @@ class ReviewController extends ChangeNotifier {
     _timer?.cancel();
     final generation = _generation;
     writing = true;
+    final done = Completer<void>();
+    _write = done;
     _notify();
     try {
       await gateway!.resolveReport(
@@ -558,8 +561,20 @@ class ReviewController extends ChangeNotifier {
         writing = false;
         if (identical(pending, held)) pending = null;
       }
+      done.complete();
       _notify();
     }
+  }
+
+  /// Before a full page load, which would drop it: writes the held-back
+  /// decision, waiting out a write already under way. False if it did not
+  /// land, so the caller can stay and let the admin see why.
+  Future<bool> settle() async {
+    final held = pending;
+    if (held == null) return true;
+    await flush();
+    await _write?.future;
+    return _resolved.contains(held.report.id);
   }
 
   @override

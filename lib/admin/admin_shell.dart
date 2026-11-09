@@ -1,6 +1,5 @@
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'admin_controller.dart';
 import 'admin_layout.dart';
@@ -15,12 +14,13 @@ typedef AdminTab = ({
 });
 
 /// Served by the React admin on this same Hosting site (firebase.json), so
-/// reaching it is a full page load rather than a go_router push.
+/// reaching it is a full page load rather than a go_router push. Leaving
+/// that way ends this app, so [AdminShell.onOpenPending] settles work first.
 const adminPendingPath = '/pending';
 
 void openAdminTab(BuildContext context, AdminTab tab) {
   if (tab.path == adminPendingPath) {
-    launchUrl(Uri.base.resolve(tab.path), webOnlyWindowName: '_self');
+    context.findAncestorWidgetOfExactType<AdminShell>()!.onOpenPending(context);
   } else {
     context.go(tab.path);
   }
@@ -85,11 +85,13 @@ class AdminShell extends StatefulWidget {
     required this.controller,
     required this.path,
     required this.onSignOut,
+    required this.onOpenPending,
     required this.child,
   });
   final AdminController controller;
   final String path;
   final VoidCallback onSignOut;
+  final void Function(BuildContext context) onOpenPending;
   final Widget child;
 
   @override

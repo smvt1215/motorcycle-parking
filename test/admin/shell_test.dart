@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:motorcycle_parking/admin/admin_app.dart';
 import 'package:motorcycle_parking/admin/admin_controller.dart';
+import 'package:motorcycle_parking/admin/review/review_controller.dart';
 import 'package:motorcycle_parking/admin/review/review_models.dart';
 import 'package:motorcycle_parking/admin/review/review_page.dart';
 import 'package:motorcycle_parking/admin/rules/rules_page.dart';
@@ -27,6 +28,8 @@ void main() {
     WidgetTester tester, {
     String path = '/review',
     Size size = const Size(402, 874),
+    ReviewController? review,
+    Future<void> Function()? leaveToPending,
   }) async {
     controller = AdminController(gateway);
     tester.view.physicalSize = size;
@@ -41,6 +44,8 @@ void main() {
         reviewMapBuilder: (_, _) => const SizedBox(),
         spotMapBuilder: (_, view) => FakeSpotMap(view: view),
         locationMapBuilder: (_, _) => const SizedBox(key: ValueKey('mini-map')),
+        review: review,
+        leaveToPending: leaveToPending ?? () async {},
         bundledRules: () async => [
           for (final r in sampleRules())
             {'city': r['city'], 'vehicle': r['vehicle'], 'version': 1},
@@ -78,6 +83,61 @@ void main() {
         createdAt: reportTime.add(Duration(minutes: 10 + i)),
       ),
   ];
+
+  group('前往 React 待處理頁（整頁換頁）', () {
+    final pendingTab = find.byKey(const ValueKey('nav/pending'));
+
+    testWidgets('復原期間的審核決定先寫入才離開', (tester) async {
+      var left = 0;
+      final review = ReviewController(gateway);
+      await show(tester, review: review, leaveToPending: () async => left++);
+      await review.decide(review.queue.first, ReviewDecision.accept, '比對街景');
+      await tester.pump();
+      expect(gateway.resolved, isEmpty);
+      await tester.tap(pendingTab);
+      await tester.pumpAndSettle();
+      expect(gateway.resolved, hasLength(1));
+      expect(left, 1);
+    });
+
+    testWidgets('寫入失敗就不離開，回到審核頁', (tester) async {
+      var left = 0;
+      gateway.resolveError = StateError('offline');
+      final review = ReviewController(gateway);
+      await show(
+        tester,
+        path: '/spots',
+        review: review,
+        leaveToPending: () async => left++,
+      );
+      await review.load();
+      final report = review.queue.first;
+      await review.decide(report, ReviewDecision.accept, '比對街景');
+      await tester.pump();
+      await tester.tap(pendingTab);
+      await tester.pumpAndSettle();
+      expect(left, 0);
+      expect(find.byType(ReviewPage), findsOneWidget);
+      expect(review.queue.map((r) => r.id), contains(report.id));
+    });
+
+    testWidgets('有未儲存的修改時先確認', (tester) async {
+      var left = 0;
+      final review = ReviewController(gateway);
+      await show(tester, review: review, leaveToPending: () async => left++);
+      review.editingId = review.queue.first.id;
+      await tester.tap(pendingTab);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('繼續編輯'));
+      await tester.pumpAndSettle();
+      expect(left, 0);
+      await tester.tap(pendingTab);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('放棄修改'));
+      await tester.pumpAndSettle();
+      expect(left, 1);
+    });
+  });
 
   group('手機（iPhone 16 Pro 402×874）', () {
     testWidgets('單列頂欄寫頁名，底部導覽五個分頁，審核顯示待審數', (tester) async {

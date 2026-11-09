@@ -108,7 +108,13 @@ export function PendingList({ selectedId, onOpen }: PendingListProps) {
   const now = useNow();
   const online = useOnline();
   const counts = usePendingCounts();
-  const list = useTimedCasePagesInfiniteQuery(tab, { refetchOnFocus: true, refetchOnReconnect: true });
+  // Each tab is its own cache entry and may be from before midnight: read
+  // again on every switch, showing the cached rows until the answer lands.
+  const list = useTimedCasePagesInfiniteQuery(tab, {
+    refetchOnMountOrArgChange: true,
+    refetchOnFocus: true,
+    refetchOnReconnect: true,
+  });
   const { refetch: refetchList } = list;
   const { refetch: refetchCounts } = counts;
 
