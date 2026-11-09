@@ -1,9 +1,8 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
-
 import '../../core/address_search.dart';
 import '../../core/geo.dart';
+import '../../ui/adaptive/adaptive.dart';
 
 /// What the door row under the picker says (N1b, S6).
 enum ApproxStatus {
