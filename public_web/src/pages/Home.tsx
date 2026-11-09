@@ -95,9 +95,11 @@ export function Home() {
           </li>
           <li className="home-step">
             <span className="home-step-title">看結論</span>
+            <span className="home-step-body">點開停車點，能不能停、有沒有位、怎麼算錢，一次看完。</span>
           </li>
           <li className="home-step">
             <span className="home-step-title">記位置</span>
+            <span className="home-step-body">停好就記下來，樓層和備註都在，回來時不用找。</span>
           </li>
         </ol>
       </section>

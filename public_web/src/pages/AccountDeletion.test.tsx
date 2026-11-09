@@ -95,9 +95,6 @@ describe('other paths', () => {
   it('an unknown path says so and leads back', () => {
     open('/nope');
     expect(screen.getByRole('heading', { name: '找不到這個頁面' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '前往刪除帳號說明' })).toHaveAttribute(
-      'href',
-      '/account-deletion',
-    );
+    expect(screen.getByRole('link', { name: '回首頁' })).toHaveAttribute('href', '/');
   });
 });

@@ -32,6 +32,12 @@ describe('/', () => {
     expect(main).not.toHaveTextContent('管理員');
   });
 
+  it('explains each of the three steps', () => {
+    openSite('/', null);
+    expect(screen.getByText('點開停車點，能不能停、有沒有位、怎麼算錢，一次看完。')).toBeInTheDocument();
+    expect(screen.getByText('停好就記下來，樓層和備註都在，回來時不用找。')).toBeInTheDocument();
+  });
+
   it('keeps the pictures to drawn ones', () => {
     openSite('/', null);
     expect(document.querySelector('img')).toBeNull();
