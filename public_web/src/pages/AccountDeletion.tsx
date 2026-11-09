@@ -186,6 +186,8 @@ function Explanation({ signIn }: { signIn: ExplanationSignIn | null }) {
               </ul>
             </section>
           </div>
+
+          <p className="deletion-note">{c.keepAccountNote}</p>
         </div>
       </div>
     </Site>

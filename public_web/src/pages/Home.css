@@ -1,0 +1,538 @@
+/* The home page (canvas boards Home, PhoneHome; note t4). Phone first; 680–1039
+   is two columns with the steps stacked; from 1040px as on the desktop board. */
+
+.street {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.street--wide {
+  display: none;
+}
+
+/* Dark backgrounds: the site's brand-coloured focus ring would not show. */
+.home-hero :focus-visible,
+.home-band :focus-visible {
+  outline-color: var(--paper);
+}
+
+.home-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  padding: 0 28px;
+  border-radius: 26px;
+  font-size: 16px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.home-cta--yellow,
+.home-cta--yellow:hover {
+  background: var(--lane-yellow);
+  color: var(--ink);
+}
+.home-cta--ghost,
+.home-cta--ghost:hover {
+  border: 1.5px solid var(--paper);
+  color: var(--paper);
+}
+
+.home-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.home-hero {
+  position: relative;
+  min-height: 620px;
+  display: flex;
+  overflow: hidden;
+  background: var(--brand-deep);
+  color: var(--paper);
+}
+.home-hero-shade {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse 90% 58% at 50% 54%,
+    rgba(13, 48, 58, 0.96) 40%,
+    rgba(13, 48, 58, 0.4) 100%
+  );
+}
+.home-hero-body {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 72px 16px 0;
+  text-align: center;
+}
+.home-hero h1 {
+  margin: 0;
+  /* Eight characters on the first line, whole down to 320px. */
+  font-size: clamp(32px, 10.25vw, 40px);
+  line-height: 1.3;
+  font-weight: 900;
+}
+.home-hero-lead {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.75;
+  color: var(--on-dark-soft);
+}
+.home-hero-note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--on-dark-soft);
+}
+
+.home-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 80px 16px 0;
+  /* A section link lands on the heading, not on the space above it. */
+  scroll-margin-top: -48px;
+}
+.home-section h2 {
+  margin: 0;
+  font-size: 30px;
+  line-height: 1.5;
+  font-weight: 900;
+}
+.home-features {
+  gap: 28px;
+}
+.home-lane-pill {
+  display: inline-block;
+  position: relative;
+  overflow: hidden;
+  width: 52px;
+  height: 26px;
+  margin: 0 6px;
+  border-radius: 13px;
+  background: var(--brand-deep);
+  vertical-align: -5px;
+}
+.home-lane-pill > span {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  border-top: 3px dashed var(--lane-yellow);
+}
+
+.home-bento {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+.home-card {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--paper);
+}
+.home-card h3 {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.35;
+  font-weight: 900;
+}
+.home-card p {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.75;
+  color: var(--ink-soft);
+}
+.home-card-text {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.home-card--mist {
+  border: 0;
+  background: var(--brand-mist);
+}
+.home-card--mist p {
+  color: var(--ink);
+}
+.home-card--dark {
+  border: 0;
+  background: var(--ink);
+  color: var(--paper);
+}
+.home-card--dark p {
+  color: var(--on-dark-soft);
+}
+.home-card--deep {
+  border: 0;
+  background: var(--brand-deep);
+  color: var(--paper);
+}
+.home-card--deep p {
+  color: var(--paper);
+}
+.home-card--map {
+  height: 300px;
+  justify-content: flex-end;
+  border: 0;
+  color: var(--paper);
+}
+.home-card--map p {
+  color: var(--paper);
+}
+.home-card-shade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(13, 48, 58, 0.92) 25%, rgba(13, 48, 58, 0) 70%);
+}
+.home-card-lane {
+  display: none;
+  flex: none;
+}
+
+.home-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.home-step {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 20px;
+  border-radius: 16px;
+  background: var(--surface-sunk);
+  color: var(--ink);
+}
+.home-step--current {
+  background: var(--brand-deep);
+  color: var(--paper);
+}
+.home-step-title {
+  font-size: 20px;
+  font-weight: 900;
+}
+.home-step-body {
+  font-size: 15px;
+  line-height: 1.75;
+}
+
+.home-rules-lead p {
+  margin: 12px 0 0;
+  font-size: 15px;
+  line-height: 1.8;
+  color: var(--ink-soft);
+}
+.home-stack {
+  display: flex;
+  flex-direction: column;
+}
+.home-stack-card {
+  min-height: 170px;
+  box-shadow: 0 -6px 18px rgba(21, 75, 88, 0.16);
+}
+.home-stack-card + .home-stack-card {
+  margin-top: -28px;
+}
+.home-stack-card h3 {
+  font-size: 24px;
+}
+.home-card--plain.home-stack-card p {
+  color: var(--ink);
+}
+
+.home-band {
+  margin-top: 80px;
+  background: var(--brand-deep);
+  color: var(--paper);
+}
+.home-band-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 56px 16px;
+}
+.home-band-text {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.home-band h2 {
+  margin: 0;
+  font-size: 38px;
+  line-height: 1.3;
+  font-weight: 900;
+}
+.home-band p {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.75;
+  color: var(--on-dark-soft);
+}
+
+@media (min-width: 680px) {
+  .street--wide {
+    display: block;
+  }
+  .street--narrow {
+    display: none;
+  }
+  .home-actions {
+    flex-direction: row;
+    justify-content: center;
+    gap: 14px;
+    width: auto;
+  }
+  .home-hero {
+    min-height: 680px;
+  }
+  .home-hero-shade {
+    background: radial-gradient(
+      ellipse 60% 62% at 50% 50%,
+      rgba(13, 48, 58, 0.95) 30%,
+      rgba(13, 48, 58, 0.35) 100%
+    );
+  }
+  .home-hero-body {
+    gap: 24px;
+    padding: 72px 48px 0;
+  }
+  .home-hero h1 {
+    font-size: clamp(56px, 6.1vw, 78px);
+    line-height: 1.25;
+  }
+  .home-hero-lead {
+    font-size: 20px;
+  }
+  .home-hero-note {
+    font-size: 14px;
+  }
+  .home-section {
+    gap: 32px;
+    padding: 104px 48px 0;
+    scroll-margin-top: -72px;
+  }
+  .home-section h2 {
+    font-size: 36px;
+    line-height: 1.4;
+  }
+  .home-lane-pill {
+    width: 64px;
+    height: 30px;
+    border-radius: 15px;
+  }
+  .home-bento {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+  }
+  .home-card {
+    padding: 28px;
+  }
+  .home-card-text {
+    gap: 8px;
+  }
+  .home-card--map {
+    grid-column: span 2;
+    height: 360px;
+  }
+  .home-card-shade {
+    background: linear-gradient(to top, rgba(13, 48, 58, 0.92) 18%, rgba(13, 48, 58, 0) 62%);
+  }
+  .home-steps {
+    gap: 12px;
+  }
+  .home-step {
+    padding: 24px 28px;
+    border-radius: 20px;
+  }
+  .home-step-title {
+    font-size: 24px;
+  }
+  .home-step-body {
+    font-size: 16px;
+  }
+  .home-band-inner {
+    gap: 24px;
+    padding: 72px 48px;
+  }
+  .home-band {
+    margin-top: 104px;
+  }
+  .home-band h2 {
+    font-size: 48px;
+  }
+  .home-band p {
+    font-size: 18px;
+  }
+  .home-actions--band {
+    justify-content: flex-start;
+  }
+}
+
+@media (min-width: 1040px) {
+  .home-hero {
+    min-height: 760px;
+  }
+  .home-hero-body {
+    padding: 72px 80px 0;
+  }
+  .home-section {
+    padding: 136px 80px 0;
+    scroll-margin-top: -88px;
+  }
+  .home-section h2 {
+    font-size: 46px;
+  }
+  .home-features {
+    gap: 48px;
+  }
+  .home-section .home-features-title {
+    font-size: 42px;
+  }
+  .home-lane-pill {
+    width: 74px;
+    height: 34px;
+    border-radius: 17px;
+  }
+  .home-bento {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(230px, auto)) minmax(200px, auto) minmax(170px, auto);
+  }
+  .home-card--map {
+    grid-row: span 2;
+    height: auto;
+  }
+  .home-card--map h3 {
+    font-size: 30px;
+  }
+  .home-card--map p {
+    font-size: 16px;
+  }
+  .home-card--dark {
+    grid-column: span 3;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .home-card-lane {
+    display: block;
+  }
+  .home-steps {
+    flex-direction: row;
+  }
+  .home-step {
+    flex: 1;
+    min-width: 0;
+    height: 300px;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 28px;
+  }
+  .home-step--current {
+    flex: 4;
+  }
+  .home-step-body {
+    max-width: 420px;
+  }
+  .home-rules {
+    display: grid;
+    grid-template-columns: 460px minmax(0, 1fr);
+    column-gap: 72px;
+    align-items: start;
+  }
+  .home-rules-lead p {
+    margin-top: 20px;
+    font-size: 17px;
+  }
+  .home-stack-card {
+    min-height: 240px;
+    box-shadow: 0 -8px 24px rgba(21, 75, 88, 0.16);
+  }
+  .home-stack-card + .home-stack-card {
+    margin-top: -44px;
+  }
+  .home-stack-card h3 {
+    font-size: 30px;
+  }
+  .home-stack-card p {
+    font-size: 17px;
+  }
+  .home-band {
+    margin-top: 136px;
+  }
+  .home-band-inner {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 48px;
+    padding: 96px 80px;
+  }
+  .home-band h2 {
+    font-size: 56px;
+  }
+  .home-actions--band {
+    flex: none;
+    margin-top: 0;
+  }
+}
+
+/* The heading holds while the cards slide over each other; anything less
+   capable, or asking for less motion, keeps the overlapped cards above. */
+@media (min-width: 1040px) and (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .home-rules-lead {
+      position: sticky;
+      top: 96px;
+    }
+    .home-stack-card {
+      position: sticky;
+      top: 96px;
+      animation: home-stack-in linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 100%;
+    }
+    .home-stack-card + .home-stack-card {
+      margin-top: 96px;
+    }
+    .home-stack-card:nth-child(2) {
+      top: 124px;
+    }
+    .home-stack-card:nth-child(3) {
+      top: 152px;
+    }
+  }
+}
+
+@keyframes home-stack-in {
+  from {
+    transform: translateY(40px) scale(0.97);
+  }
+  to {
+    transform: none;
+  }
+}

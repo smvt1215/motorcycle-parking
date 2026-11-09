@@ -58,4 +58,4 @@ export const supportFormLink = '填寫客服表單';
 /** The support form with 刪除帳號 chosen, for riders on the deletion pages. */
 export const deletionSupportPath = '/support?kind=account_deletion';
 
-export const footerNote = '只想改收藏或登出？在 App 的「帳號與設定」裡就能處理，不必刪除帳號。';
+export const keepAccountNote = '只想改收藏或登出？在 App 的「帳號與設定」裡就能處理，不必刪除帳號。';

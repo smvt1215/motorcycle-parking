@@ -8,9 +8,10 @@
 
 | 路徑                          | 內容                                   | 狀態   |
 | ----------------------------- | -------------------------------------- | ------ |
+| `/`                           | 首頁（#269）                           | 已完成 |
+| `/roadmap`                    | 接下來的計畫（#269）                   | 已完成 |
 | `/account-deletion`           | 刪除帳號說明（Google Play 連結的頁面） | 已完成 |
 | `/account-deletion`（登入後） | 確認、送出、冷靜期內登入的選擇（#270） | 已完成 |
-| `/`                           | 轉到 `/account-deletion`               | 已完成 |
 | `/support`                    | 聯絡我們：五種類型的客服表單（#295）   | 已完成 |
 | `/support?kind=…`             | 同上，先選好類型（不認得的值會忽略）   | 已完成 |
 | `/support/verify#token=…`     | 確認信的一次性連結（#285、#295）       | 已完成 |
@@ -72,8 +73,8 @@ npm ci
 npm run dev
 npm test
 npm run lint && npm run format:check && npm run build
-# 版面檢查：每個畫面在 320／390／700／1024／1440／1920 寬各開一次，
-# 不可以橫向捲動，截圖存在 artifacts/smoke/
+# 版面檢查：每個畫面在 320／390／700／1024／1440／1920 寬各開一次（首頁、
+# 未來計畫與選單另加 680／820／1040），不可以橫向捲動，截圖存在 artifacts/smoke/
 npm run build:smoke && npm run smoke
 ```
 

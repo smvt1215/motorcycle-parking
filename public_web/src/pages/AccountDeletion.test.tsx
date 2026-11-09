@@ -64,10 +64,17 @@ describe('/account-deletion', () => {
     expect(within(footer).getByRole('link', { name: '聯絡我們' })).toHaveAttribute('href', '/support');
     expect(document.querySelector('a[href^="mailto:"]')).toBeNull();
   });
+
+  it('still says the account can stay, now that the footer is the same everywhere', () => {
+    open('/account-deletion');
+    expect(within(screen.getByRole('main')).getByText(c.keepAccountNote)).toBeInTheDocument();
+  });
 });
 
 describe('the title in the browser tab', () => {
   it.each([
+    ['/', '機車停車指南'],
+    ['/roadmap', '接下來｜機車停車指南'],
     ['/account-deletion', '刪除帳號｜機車停車指南'],
     ['/privacy', '隱私權政策｜機車停車指南'],
     ['/terms', '服務條款｜機車停車指南'],
@@ -85,11 +92,6 @@ describe('the title in the browser tab', () => {
 });
 
 describe('other paths', () => {
-  it('/ goes to the deletion page', () => {
-    const router = open('/');
-    expect(router.state.location.pathname).toBe('/account-deletion');
-  });
-
   it('an unknown path says so and leads back', () => {
     open('/nope');
     expect(screen.getByRole('heading', { name: '找不到這個頁面' })).toBeInTheDocument();

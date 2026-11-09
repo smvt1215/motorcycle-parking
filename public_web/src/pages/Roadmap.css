@@ -1,0 +1,135 @@
+/* /roadmap (canvas boards Roadmap, PhoneRoadmap): the stages stacked until
+   three columns fit, from 1040px. */
+.roadmap {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 32px 16px;
+}
+.roadmap-head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.roadmap-head h1 {
+  margin: 0;
+  font-size: 36px;
+  line-height: 1.3;
+  font-weight: 900;
+}
+.roadmap-head p {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.75;
+  color: var(--ink-soft);
+}
+
+.roadmap-stages {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 16px;
+}
+.roadmap-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px 20px;
+}
+.roadmap-stage:not(:last-child) {
+  border-bottom: 3px dashed var(--lane-yellow);
+}
+.roadmap-stage--deep {
+  background: var(--brand-deep);
+  color: var(--paper);
+}
+.roadmap-stage--dark {
+  background: var(--ink);
+  color: var(--paper);
+}
+.roadmap-stage--light {
+  background: var(--surface-sunk);
+  color: var(--ink);
+}
+.roadmap-stage-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.roadmap-stage h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 900;
+}
+.roadmap-stage-head span {
+  font-size: 14px;
+  opacity: 0.85;
+}
+.roadmap-stage ul {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding-left: 20px;
+}
+.roadmap-stage li {
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+@media (min-width: 680px) {
+  .roadmap {
+    gap: 28px;
+    padding: 48px 48px 64px;
+  }
+  .roadmap-head h1 {
+    font-size: 48px;
+    line-height: 1.25;
+  }
+  .roadmap-head p {
+    font-size: 18px;
+  }
+  .roadmap-stages {
+    border-radius: 20px;
+  }
+  .roadmap-stage {
+    padding: 32px;
+    gap: 18px;
+  }
+  .roadmap-stage h2 {
+    font-size: 30px;
+  }
+  .roadmap-stage-head span {
+    font-size: 15px;
+  }
+  .roadmap-stage ul {
+    gap: 10px;
+  }
+  .roadmap-stage li {
+    font-size: 17px;
+  }
+}
+
+@media (min-width: 1040px) {
+  .roadmap {
+    gap: 32px;
+    padding: 64px 80px;
+  }
+  .roadmap-head h1 {
+    font-size: 56px;
+  }
+  .roadmap-stages {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .roadmap-stage {
+    min-height: 420px;
+    padding: 36px 32px;
+  }
+  .roadmap-stage:not(:last-child) {
+    border-bottom: 0;
+    border-right: 3px dashed var(--lane-yellow);
+  }
+}

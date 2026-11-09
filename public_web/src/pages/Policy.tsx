@@ -64,7 +64,7 @@ export function PolicyPage({ policy }: { policy: Policy }) {
   );
 
   return (
-    <Site current={policy.title}>
+    <Site>
       <div className="policy">
         <nav className="policy-toc policy-toc--side" aria-label="目錄">
           <span className="policy-toc-title">目錄</span>

@@ -21,6 +21,10 @@ const VIEWPORTS = [
   { name: 'ipad-1024', width: 1024, height: 1366 },
   { name: 'desktop-1440', width: 1440, height: 960 },
   { name: 'wide-1920', width: 1920, height: 1080 },
+  // The home page's own edges (the bento's columns, the bar against the menu).
+  { name: 'edge-680', width: 680, height: 900, only: 'site' },
+  { name: 'tablet-820', width: 820, height: 1180, only: 'site' },
+  { name: 'edge-1040', width: 1040, height: 800, only: 'site' },
 ];
 
 const none = {
@@ -96,6 +100,25 @@ const caseAnswer = (overrides = {}) => ({
  * get there, and the heading that proves it arrived.
  */
 const SCREENS = [
+  { name: 'home', group: 'site', path: '/', signedIn: false, heading: '騎到之前' },
+  {
+    name: 'home-reduced-motion',
+    group: 'site',
+    path: '/',
+    signedIn: false,
+    reducedMotion: 'reduce',
+    heading: '騎到之前',
+  },
+  { name: 'roadmap', group: 'site', path: '/roadmap', signedIn: false, heading: '接下來' },
+  {
+    name: 'menu',
+    group: 'site',
+    path: '/',
+    signedIn: false,
+    menu: true,
+    steps: ['openMenu'],
+    heading: '騎到之前',
+  },
   { name: 'explanation', signedIn: false, heading: '刪除你的帳號' },
   { name: 'privacy', path: '/privacy', signedIn: false, heading: '隱私權政策' },
   { name: 'terms', path: '/terms', signedIn: false, heading: '服務條款' },
@@ -464,7 +487,14 @@ const browser = await chromium.launch();
 const failures = [];
 for (const viewport of VIEWPORTS) {
   for (const screen of SCREENS) {
-    const context = await browser.newContext({ viewport, locale: 'zh-TW' });
+    if (viewport.only && screen.group !== viewport.only) continue;
+    // The menu exists below 680px; from there the links are in the bar.
+    if (screen.menu && viewport.width >= 680) continue;
+    const context = await browser.newContext({
+      viewport,
+      locale: 'zh-TW',
+      reducedMotion: screen.reducedMotion ?? 'no-preference',
+    });
     // The smoke build signs in with src/smoke/smokeAuth.ts, which reads these.
     await context.addInitScript(
       ([user, signIn, appleRevoke]) => {
@@ -511,6 +541,13 @@ for (const viewport of VIEWPORTS) {
     try {
       await page.goto(`${base}${screen.path ?? '/account-deletion'}`);
       for (const step of screen.steps ?? []) {
+        if (step === 'openMenu') {
+          await page.getByRole('button', { name: '選單' }).click();
+          const rows = await page
+            .locator('#site-menu a')
+            .evaluateAll((links) => links.map((link) => link.getBoundingClientRect().height));
+          if (rows.some((row) => row < 52)) failures.push(`${viewport.name}/menu: rows ${rows.join(', ')}`);
+        }
         if (step === 'check') await page.getByRole('checkbox').check();
         if (step === 'delete') await page.getByRole('button', { name: '刪除帳號' }).click();
         if (step === 'cancelDeletion') await page.getByRole('button', { name: /取消刪除/ }).click();
@@ -559,4 +596,4 @@ if (failures.length) {
   console.error(failures.join('\n'));
   process.exit(1);
 }
-console.log(`smoke ok: ${VIEWPORTS.length} widths × ${SCREENS.length} screens → ${output}`);
+console.log(`smoke ok: ${VIEWPORTS.length} widths, ${SCREENS.length} screens → ${output}`);
