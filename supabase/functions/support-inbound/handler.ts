@@ -57,8 +57,6 @@ export type Inbound = {
   dkim: string | null;
   /** DMARC: the authenticated domain matches From (Codex review, PR #306). */
   dmarc: string | null;
-  /** TEMP(#295): see parse(). */
-  auth_trace: string;
   attachments: string[];
   /** The Message-ID header, for filing a mail once. */
   message_id: string | null;
@@ -189,9 +187,6 @@ export function parse(body: unknown): Inbound | null {
         a !== ''
       )
       : [],
-    // TEMP(#295): the Worker's summary of Authentication-Results, to find
-    // why Gmail reads spf=none. Methods and property names only, no address.
-    auth_trace: str(b.auth_trace, 500).replace(/[^a-z0-9=.;:,()| _-]/gi, ''),
     message_id: str(b.message_id, 998).trim() || null,
     raw_sha256: typeof b.raw_sha256 === 'string' &&
         /^[0-9a-f]{64}$/.test(b.raw_sha256)
@@ -247,11 +242,6 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     const message = (error as { message?: unknown })?.message;
     if (message === 'request.invalid') return fail('request.invalid', 400);
     return fail('server.unavailable', 503);
-  }
-
-  // TEMP(#295): removed once spf=none is explained.
-  if (mail.auth_trace) {
-    console.log(`support-inbound auth: ${mail.auth_trace}`);
   }
 
   if (filed.result === 'created' || filed.result === 'appended') {

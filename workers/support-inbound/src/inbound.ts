@@ -35,6 +35,13 @@ export type AuthResults = {
  * gives nulls (suspicious). SPF and DKIM can pass for the sender's own
  * domain while the From header names someone else; only DMARC checks that
  * the authenticated domain matches From (Codex review, PR #306).
+ *
+ * Cloudflare gives SPF twice, for the HELO name and for the envelope sender,
+ * and the envelope sender's is the one DMARC and receipts are about: a Gmail
+ * server's HELO name has no SPF record, so spf=none came first on mail that
+ * passed. Only a smtp.mailfrom right after its result counts, so text in a
+ * comment or after another property cannot claim it. Results that disagree
+ * do not pass; with no smtp.mailfrom at all, the first SPF result stands.
  */
 export function authResults(
   headers: Header[],
@@ -52,46 +59,26 @@ export function authResults(
   // PR #306).
   const value = header.value.replace(/"(?:[^"\\]|\\.)*"/g, '""')
     .replace(/\((?:[^()\\]|\\.)*\)/g, '');
+  const mailfrom: string[] = [];
   for (const part of value.split(';').slice(1)) {
     const m = /^\s*(spf|dkim|dmarc)\s*=\s*([a-z]+)/i.exec(part);
-    if (m) found[m[1].toLowerCase()].push(m[2].toLowerCase());
+    if (!m) continue;
+    const method = m[1].toLowerCase(), result = m[2].toLowerCase();
+    found[method].push(result);
+    if (
+      method === 'spf' &&
+      /^(?:\s+reason\s*=\s*\S+)?\s+smtp\.mailfrom\s*=/i.test(
+        part.slice(m[0].length),
+      )
+    ) mailfrom.push(result);
   }
   return {
-    spf: found.spf[0] ?? null,
+    spf: mailfrom.find((r) => r !== 'pass') ?? mailfrom[0] ?? found.spf[0] ??
+      null,
     // One passing signature is enough.
     dkim: found.dkim.includes('pass') ? 'pass' : found.dkim[0] ?? null,
     dmarc: found.dmarc[0] ?? null,
   };
-}
-
-/**
- * TEMP(#295): what the Authentication-Results headers say, to find why
- * Gmail reads spf=none: every header's authserv-id, then Cloudflare's
- * methods and results with the property names each is about, in order. No
- * value of a property, so no address or domain, and nothing of the mail.
- * Remove once explained.
- */
-export function authTrace(
-  headers: Header[],
-  authservId = defaultAuthservId,
-): string {
-  const all = headers.filter((h) =>
-    h.key.toLowerCase() === 'authentication-results'
-  );
-  const id = (h: Header) => h.value.split(';')[0].trim().split(/\s+/)[0];
-  const ids = all.map((h) => id(h).replace(/[^a-z0-9.-]/gi, '').slice(0, 40));
-  const ours = all.find((h) =>
-    id(h).toLowerCase() === authservId.toLowerCase()
-  );
-  const parts = (ours?.value ?? '').replace(/"(?:[^"\\]|\\.)*"/g, '""')
-    .replace(/\((?:[^()\\]|\\.)*\)/g, '').split(';').slice(1).flatMap((p) => {
-      const m = /^\s*([a-z-]+)\s*=\s*([a-z]+)/i.exec(p);
-      if (!m) return [];
-      const names = [...p.matchAll(/\s([a-z]+\.[a-z-]+)\s*=/gi)]
-        .map((n) => n[1].toLowerCase());
-      return [`${m[1]}=${m[2]}(${names.join(',')})`.toLowerCase()];
-    });
-  return `${ids.join(',')} | ${parts.join(';')}`.slice(0, 500);
 }
 
 export type Parsed = {
@@ -132,7 +119,6 @@ export function payload(
     attachments: parsed.attachments.slice(0, 20).map((a) =>
       clip(a.filename ?? '', 200)
     ).filter((name) => name !== ''),
-    auth_trace: authTrace(parsed.headers, authservId),
     message_id: parsed.messageId ?? null,
     // The same mail delivered again has the same digest, so a mail without
     // a Message-ID is still filed once (Codex review, PR #306).

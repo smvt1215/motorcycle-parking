@@ -1,14 +1,18 @@
 import {
   accepts,
   authResults,
-  authTrace,
   clip,
   payload,
   rawDigest,
   sign,
   signedRequest,
 } from './inbound.ts';
-import { sign as checked } from '../../../supabase/functions/support-inbound/handler.ts';
+import {
+  type Deps,
+  handle,
+  type Inbound,
+  sign as checked,
+} from '../../../supabase/functions/support-inbound/handler.ts';
 
 function equal(actual: unknown, expected: unknown, message: string) {
   const a = JSON.stringify(actual), e = JSON.stringify(expected);
@@ -106,7 +110,6 @@ Deno.test('the payload carries no raw mail and attachments by name', () => {
       dkim: 'pass',
       dmarc: 'fail',
       attachments: ['a.pdf'],
-      auth_trace: 'mx.cloudflare.net | spf=pass();dkim=pass();dmarc=fail()',
       message_id: '<m1@example.test>',
       raw_sha256: 'd'.repeat(64),
     },
@@ -174,22 +177,160 @@ Deno.test('cuts long fields at code points, never inside an emoji', () => {
   equal(clip('短', 200), '短', 'short text is unchanged');
 });
 
-Deno.test('the auth trace has methods and property names, no address', () => {
-  const trace = authTrace([
-    { key: 'Authentication-Results', value: 'other.test; spf=pass' },
-    {
-      key: 'authentication-results',
-      value: 'mx.cloudflare.net; spf=none (no record) smtp.helo=mail.a.test; ' +
-        'spf=pass smtp.mailfrom=writer@a.test; dkim=pass header.d=a.test; ' +
-        'dmarc=pass header.from=a.test',
-    },
-  ]);
+const spf = (value: string, authservId?: string) =>
+  authResults(
+    [{ key: 'Authentication-Results', value }],
+    authservId,
+  ).spf;
+
+Deno.test('SPF is the envelope sender’s, not the HELO name’s', () => {
+  const helo = (r: string) =>
+    `spf=${r} (mx.cloudflare.net: no record) smtp.helo=mail.a.test`;
+  const from = (r: string) =>
+    `spf=${r} (mx.cloudflare.net: domain of a sender) smtp.mailfrom=w@a.test`;
+  const header = (...parts: string[]) =>
+    `mx.cloudflare.net;\n ${parts.join(';\n ')}`;
   equal(
-    trace,
-    'other.test,mx.cloudflare.net | spf=none(smtp.helo);' +
-      'spf=pass(smtp.mailfrom);dkim=pass(header.d);dmarc=pass(header.from)',
-    'trace',
+    authResults([{
+      key: 'authentication-results',
+      value: header(
+        'dkim=pass header.d=a.test header.s=s header.b=b',
+        'dmarc=pass header.from=a.test policy.dmarc=none',
+        helo('none'),
+        from('pass'),
+        'arc=pass smtp.remote-ip=192.0.2.1',
+      ),
+    }]),
+    { spf: 'pass', dkim: 'pass', dmarc: 'pass' },
+    'what Cloudflare writes for Gmail',
   );
-  equal(trace.includes('writer'), false, 'no address');
-  equal(trace.includes('a.test'), false, 'no domain');
+  equal(spf(header(helo('none'), from('pass'))), 'pass', 'HELO none first');
+  equal(spf(header(from('pass'), helo('none'))), 'pass', 'HELO none last');
+  equal(spf(header(helo('none'))), 'none', 'only HELO');
+  equal(spf(header(helo('pass'))), 'pass', 'only HELO, passing');
+  equal(spf(header('spf=fail')), 'fail', 'no property');
+  equal(spf(header('spf=pass', 'spf=fail')), 'pass', 'the first without one');
+  equal(spf(header(helo('pass'), from('fail'))), 'fail', 'HELO cannot pass it');
+  equal(spf(header(from('fail'), helo('pass'))), 'fail', 'in either order');
+  equal(
+    spf(header('spf=pass reason="ok" smtp.mailfrom=w@a.test')),
+    'pass',
+    'a reason before the property',
+  );
+  equal(
+    spf(header('SPF=Pass SMTP.MailFrom=w@a.test')),
+    'pass',
+    'any case',
+  );
+  equal(
+    spf(header(from('pass'), from('softfail'))),
+    'softfail',
+    'results that disagree do not pass',
+  );
+  equal(
+    spf(header(from('fail'), from('pass'))),
+    'fail',
+    'in either order, the first that is not a pass',
+  );
+  equal(
+    spf(`other.test; ${from('pass')}`),
+    null,
+    'another authserv-id',
+  );
+  equal(
+    spf(`other.test; ${helo('none')}; ${from('pass')}`, 'other.test'),
+    'pass',
+    'a configured authserv-id',
+  );
+});
+
+Deno.test('support-inbound files what this Worker posts, unlogged', async () => {
+  const now = 1_800_000_000, filed: Inbound[] = [];
+  const deps: Deps = {
+    secret: 's3cret',
+    now: () => now,
+    newSecret: () => Promise.resolve({ secret: 's', hash: 'h' }),
+    newReplyToken: () => Promise.resolve({ secret: 'r', hash: 'q' }),
+    file: (mail) => {
+      filed.push(mail);
+      return Promise.resolve({ result: 'duplicate' });
+    },
+    notified: () => Promise.resolve(),
+    receipt: () => Promise.resolve(true),
+    caseLink: () => null,
+    replyAddress: () => '',
+    notifier: { notify: () => Promise.resolve(true) },
+    adminUrl: () => '',
+    background: () => {},
+  };
+  const body = payload(
+    'support@motoparking.smvtstudio.com',
+    'w@example.test',
+    {
+      headers: [{
+        key: 'authentication-results',
+        value: 'mx.cloudflare.net; dkim=pass header.d=example.test; ' +
+          'dmarc=pass header.from=example.test; ' +
+          'spf=none smtp.helo=m.example.test; ' +
+          'spf=pass smtp.mailfrom=w@example.test',
+      }],
+      from: { address: 'w@example.test' },
+      messageId: '<m@example.test>',
+      attachments: [],
+    },
+  );
+  equal('auth_trace' in body, false, 'no trace is sent');
+  const logged: unknown[] = [], log = console.log;
+  console.log = (...args: unknown[]) => logged.push(args);
+  try {
+    const res = await handle(
+      await signedRequest('https://x.test/f', 's3cret', body, now),
+      deps,
+    );
+    equal(res.status, 200, 'accepted');
+  } finally {
+    console.log = log;
+  }
+  equal(filed.length, 1, 'filed');
+  equal(filed[0].spf, 'pass', 'the envelope sender passed');
+  equal(logged, [], 'nothing logged');
+});
+
+Deno.test('text a sender writes cannot claim smtp.mailfrom', () => {
+  const mx = 'mx.cloudflare.net;';
+  equal(
+    spf(`${mx} spf=none (smtp.mailfrom=x) smtp.helo=m.a.test`),
+    'none',
+    'in a comment',
+  );
+  equal(
+    spf(`${mx} spf=none (a (b) smtp.mailfrom=x) smtp.helo=m.a.test`),
+    'none',
+    'in a nested comment',
+  );
+  equal(
+    spf(`${mx} spf=fail smtp.helo="x smtp.mailfrom=y" ; spf=none`),
+    'fail',
+    'in quotes',
+  );
+  equal(
+    spf(`${mx} spf=none smtp.helo=m.a.test smtp.mailfrom=x`),
+    'none',
+    'after another property',
+  );
+  equal(
+    spf(`${mx} spf=fail smtp.mailfrom="x; spf=pass smtp.mailfrom=y"@a.test`),
+    'fail',
+    'a result inside quotes',
+  );
+  equal(
+    spf(`${mx} spf=fail smtp.mailfrom=x (a (b); spf=pass smtp.mailfrom=y)`),
+    'fail',
+    'a result inside a nested comment cannot outvote a failure',
+  );
+  equal(
+    spf(`${mx} spf=none smtp.helo=m.a.test; spf=fail reason="x" smtp.helo=y`),
+    'none',
+    'a reason does not make it the envelope sender',
+  );
 });
