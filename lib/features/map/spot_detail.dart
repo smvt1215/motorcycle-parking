@@ -491,15 +491,64 @@ class SeatWholeView extends StatelessWidget {
   }
 }
 
-/// ②'s rows, place by place (A10, A12): the name, its bay and state, the
-/// official count or total, then room for riders' reports. [riderRow] is
-/// where #189 adds 車友回報 under each place; null shows none.
+/// 車友回報 (A10, A12): the grey box beside the official one, also alone
+/// under an answer that stands as one.
+class SeatRiderBox extends StatelessWidget {
+  const SeatRiderBox({super.key, required this.line});
+  final SeatRiderLine line;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = DetailColors.of(context);
+    return Semantics(
+      container: true,
+      label: line.semantics,
+      excludeSemantics: true,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: c.chip,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('車友回報', style: TextStyle(fontSize: 11, color: c.muted)),
+            const SizedBox(height: 4),
+            Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 6,
+              children: [
+                if (line.meters.isNotEmpty)
+                  RiderMeters(levels: line.meters, ink: c.ink, paper: c.chip),
+                Text(
+                  line.main,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: line.meters.isEmpty ? c.muted : c.ink,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(line.note, style: TextStyle(fontSize: 11, color: c.muted)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// ②'s rows, place by place (A10, A12): a card with the name, its bay and
+/// state, the official box and, beside it, 車友回報 ([riderLine]; null shows
+/// none). Large text stacks the two boxes.
 class SeatRowsView extends StatelessWidget {
   const SeatRowsView({
     super.key,
     required this.rows,
     required this.note,
-    this.riderRow,
+    this.riderLine,
     this.betaCities,
   });
   final List<SeatRow> rows;
@@ -508,46 +557,45 @@ class SeatRowsView extends StatelessWidget {
   /// The Beta cities, when the spot is in one; null otherwise. Shown, as
   /// the whole lot's 有沒有位 does, once any row reads an official count.
   final List<String>? betaCities;
-  final Widget? Function(SignArea area)? riderRow;
+  final SeatRiderLine Function(SeatRow row)? riderLine;
 
   @override
   Widget build(BuildContext context) {
     final c = DetailColors.of(context);
+    final stacked = MediaQuery.textScalerOf(context).scale(10) > 15;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (final (i, row) in rows.indexed) ...[
-          if (i > 0) Divider(height: 20, color: c.divider),
-          Column(
+          if (i > 0) const SizedBox(height: 10),
+          Container(
             key: ValueKey('detail-seat-row-$i'),
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                row.name,
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: c.ink,
-                  height: 1.4,
-                ),
-              ),
-              if (row.sub.isNotEmpty)
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              border: Border.all(color: c.border),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
                 Text(
-                  row.sub,
-                  style: TextStyle(fontSize: 13, color: c.muted, height: 1.4),
+                  row.name,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: c.ink,
+                    height: 1.4,
+                  ),
                 ),
-              const SizedBox(height: 6),
-              MergeSemantics(
-                child: _line(
-                  c,
-                  '官方',
-                  row.official,
-                  row.officialNote,
-                  key: ValueKey('detail-seat-official-$i'),
-                ),
-              ),
-              ?riderRow?.call(row.area),
-            ],
+                if (row.sub.isNotEmpty)
+                  Text(
+                    row.sub,
+                    style: TextStyle(fontSize: 12, color: c.muted, height: 1.4),
+                  ),
+                const SizedBox(height: 10),
+                _boxes(i, row, stacked: stacked),
+              ],
+            ),
           ),
         ],
         if (betaCities case final beta? when rows.any((r) => r.counted)) ...[
@@ -580,53 +628,118 @@ class SeatRowsView extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 12),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(top: 1),
-              child: Icon(Icons.info_outline, size: 16, color: c.muted),
-            ),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                note,
-                style: TextStyle(fontSize: 12, color: c.muted, height: 1.5),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: c.chip,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.info_outline, size: 18, color: c.muted),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  note,
+                  style: TextStyle(fontSize: 13, color: c.ink, height: 1.5),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ],
     );
   }
 
-  Widget _line(
-    DetailColors c,
-    String label,
-    String value,
-    String note, {
-    Key? key,
-  }) => Wrap(
-    key: key,
-    crossAxisAlignment: WrapCrossAlignment.center,
-    spacing: 8,
-    children: [
-      SizedBox(
-        width: 60,
-        child: Text(label, style: TextStyle(fontSize: 13, color: c.muted)),
+  Widget _boxes(int i, SeatRow row, {required bool stacked}) {
+    final official = _OfficialBox(
+      key: ValueKey('detail-seat-official-$i'),
+      row: row,
+    );
+    final rider = riderLine?.call(row);
+    if (rider == null) return official;
+    final box = SeatRiderBox(
+      key: ValueKey('detail-seat-rider-$i'),
+      line: rider,
+    );
+    if (stacked) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [official, const SizedBox(height: 8), box],
+      );
+    }
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(child: official),
+          const SizedBox(width: 8),
+          Expanded(child: box),
+        ],
       ),
-      Text(
-        value,
-        style: TextStyle(
-          fontSize: 15,
-          fontWeight: FontWeight.w700,
-          color: c.ink,
-        ),
+    );
+  }
+}
+
+/// The official half of a row (A10, A12): an ink outline for a count, amber
+/// past its window, dashed for a total or nothing.
+class _OfficialBox extends StatelessWidget {
+  const _OfficialBox({super.key, required this.row});
+  final SeatRow row;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = DetailColors.of(context);
+    final dashed = !row.counted;
+    final amber = row.delayed;
+    final content = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('官方', style: TextStyle(fontSize: 11, color: c.muted)),
+          const SizedBox(height: 4),
+          Text(
+            row.official,
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: c.ink,
+            ),
+          ),
+          if (row.officialNote.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              row.officialNote,
+              style: TextStyle(
+                fontSize: 11,
+                color: amber ? c.conditional : c.muted,
+              ),
+            ),
+          ],
+        ],
       ),
-      if (note.isNotEmpty)
-        Text(note, style: TextStyle(fontSize: 12, color: c.muted)),
-    ],
-  );
+    );
+    return MergeSemantics(
+      child: dashed
+          ? CustomPaint(
+              foregroundPainter: DashedBorder(color: c.muted),
+              child: content,
+            )
+          : DecoratedBox(
+              decoration: BoxDecoration(
+                color: amber ? c.conditionalTint : null,
+                border: Border.all(
+                  color: amber ? c.conditional : c.ink,
+                  width: 1.5,
+                ),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: content,
+            ),
+    );
+  }
 }
 
 /// ③ (A2, A8, A10): a white notice card per place open now, or one for
@@ -1111,6 +1224,12 @@ class WhereView extends StatelessWidget {
                 ],
               ),
               if (card.sub.isNotEmpty) small(card.sub),
+              if (card.riderClosed.isNotEmpty)
+                Text(
+                  card.riderClosed,
+                  key: ValueKey('detail-where-closure-$i'),
+                  style: TextStyle(fontSize: 13, color: c.denied, height: 1.4),
+                ),
               if (card.state.isNotEmpty)
                 Text(
                   card.state,

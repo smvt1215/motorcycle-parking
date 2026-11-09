@@ -1,10 +1,7 @@
 /// The rider-report map badge (design canvas Ver.154 A0, P3): a light grey
 /// pill with a 3-bar meter, two meters side by side when reports disagree.
-/// Display only; the reports reach the map in a later change (PR-E). Pure
-/// Dart.
+/// Pure Dart.
 library;
-
-import 'availability_display.dart';
 
 /// How much space riders report, by the bars the meter fills.
 enum RiderLevel {
@@ -51,7 +48,3 @@ class RiderMeter {
   @override
   int get hashCode => Object.hash(level, other);
 }
-
-/// Whether a rider badge may show beside [capsules]: never next to an
-/// official pill, which rider reports do not override.
-bool riderMeterShown(List<AvailabilityCapsule> capsules) => capsules.isEmpty;

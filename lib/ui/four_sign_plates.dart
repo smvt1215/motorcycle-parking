@@ -20,6 +20,10 @@ abstract final class PlateColors {
   static const delayedNote = Color(0xff6b4500);
   static const riderPaper = Color(0xffeef2f3);
 
+  /// The outline of a known answer in the light details' table of
+  /// contents (A2).
+  static const line = Color(0xffc9d3d6);
+
   /// Outlined plates on the dark details page (A4).
   static const darkInk = Color(0xffe6eef0);
   static const darkMuted = Color(0xffa3b4ba);
@@ -191,20 +195,41 @@ class _Plate extends StatelessWidget {
     final dark = dense && Theme.of(context).brightness == Brightness.dark;
     if (dark && (border != null || plate.tone == PlateTone.rider)) {
       // A4: outlined plates sit on the dark page, not on white paper.
+      // The question reads in the answer's ink on outlined plates (A4).
       (fill, fg, label, border) = switch (plate.tone) {
         PlateTone.dashed => (
           Colors.transparent,
           PlateColors.darkInk,
-          PlateColors.darkMuted,
+          PlateColors.darkInk,
           PlateColors.darkMuted,
         ),
         PlateTone.delayed => (fill, fg, label, border),
+        PlateTone.line => (
+          Colors.transparent,
+          PlateColors.darkInk,
+          PlateColors.darkInk,
+          PlateColors.darkLine,
+        ),
         _ => (
           Colors.transparent,
           PlateColors.darkInk,
           PlateColors.darkMuted,
           PlateColors.darkLine,
         ),
+      };
+    }
+    if (dense && !dark) {
+      // A2: the table of contents' outlined plates sit on the page, no white
+      // card; a known answer is outlined lightly.
+      // The question reads in ink, like the answer.
+      (fill, label, border) = switch (plate.tone) {
+        PlateTone.dashed => (Colors.transparent, PlateColors.ink, border),
+        PlateTone.line => (
+          Colors.transparent,
+          PlateColors.ink,
+          PlateColors.line,
+        ),
+        _ => (fill, label, border),
       };
     }
     final solid = border == null && plate.tone != PlateTone.rider;
@@ -233,7 +258,7 @@ class _Plate extends StatelessWidget {
           Text(plate.question, style: small),
           const SizedBox(height: 4),
           if (plate.meters.isNotEmpty) ...[
-            _Meters(levels: plate.meters),
+            RiderMeters(levels: plate.meters, compact: compact),
             const SizedBox(height: 4),
           ],
           Text(plate.main, style: big),
@@ -264,21 +289,21 @@ class _Plate extends StatelessWidget {
         ],
       ),
     );
-    Widget box = Container(
-      constraints: BoxConstraints(minHeight: compact ? 64 : 74),
-      decoration: BoxDecoration(
-        color: fill,
-        borderRadius: radius,
-        border: border != null && !dashed
-            ? Border.all(color: border, width: 1.5)
-            : null,
+    // As the dense plate: the dashes trace the plate's own edge.
+    Widget box = CustomPaint(
+      key: const ValueKey('four-sign-plate-box'),
+      foregroundPainter: dashed ? DashedBorder(color: border!) : null,
+      child: Container(
+        constraints: BoxConstraints(minHeight: compact ? 64 : 74),
+        decoration: BoxDecoration(
+          color: fill,
+          borderRadius: radius,
+          border: border != null && !dashed
+              ? Border.all(color: border, width: 1.5)
+              : null,
+        ),
+        child: content,
       ),
-      child: dashed
-          ? CustomPaint(
-              painter: _DashedBorder(color: border!),
-              child: content,
-            )
-          : content,
     );
     if (current == true) {
       box = DecoratedBox(
@@ -332,22 +357,25 @@ extension on _Plate {
         ],
       ),
     );
-    final box = Container(
-      constraints: BoxConstraints(minHeight: isCupertino ? 44 : 48),
-      alignment: AlignmentDirectional.centerStart,
-      decoration: BoxDecoration(
-        color: fill,
-        borderRadius: radius,
-        border: border != null && !dashed
-            ? Border.all(color: border, width: 1.5)
-            : null,
+    // The dashes go round the whole plate, outside the Container: inside,
+    // its alignment would size them to the text (a frame inside the card).
+    final box = CustomPaint(
+      key: const ValueKey('four-sign-plate-box'),
+      foregroundPainter: dashed
+          ? DashedBorder(color: border!, radius: 8)
+          : null,
+      child: Container(
+        constraints: BoxConstraints(minHeight: isCupertino ? 44 : 48),
+        alignment: AlignmentDirectional.centerStart,
+        decoration: BoxDecoration(
+          color: fill,
+          borderRadius: radius,
+          border: border != null && !dashed
+              ? Border.all(color: border, width: 1.5)
+              : null,
+        ),
+        child: content,
       ),
-      child: dashed
-          ? CustomPaint(
-              painter: _DashedBorder(color: border!, radius: 8),
-              child: content,
-            )
-          : content,
     );
     final dark = Theme.of(context).brightness == Brightness.dark;
     final tile = Column(
@@ -421,58 +449,73 @@ class _PressOpacityState extends State<_PressOpacity> {
 }
 
 /// Riders' levels as 3-bar meters (A6); two side by side, slashed, when
-/// reports disagree.
-class _Meters extends StatelessWidget {
-  const _Meters({required this.levels});
+/// reports disagree. [ink] and [paper] default to the plates' fixed colours,
+/// which sit on a light ground in both themes. [compact] is the favourite
+/// cards' smaller meter (P4, P6).
+class RiderMeters extends StatelessWidget {
+  const RiderMeters({
+    super.key,
+    required this.levels,
+    this.ink = PlateColors.ink,
+    this.paper = PlateColors.paper,
+    this.compact = false,
+  });
   final List<int> levels;
+  final Color ink, paper;
+  final bool compact;
 
   Widget _meter(int level, double width) => Row(
     mainAxisSize: MainAxisSize.min,
     crossAxisAlignment: CrossAxisAlignment.end,
     children: [
-      for (final (i, h) in const [6.0, 10.0, 14.0].indexed) ...[
+      for (final (i, h) in (compact ? _smallBars : _bars).indexed) ...[
         if (i > 0) SizedBox(width: width < 8 ? 2 : 3),
         Container(
           width: width,
           height: h,
           decoration: BoxDecoration(
-            color: i < level ? PlateColors.ink : PlateColors.paper,
-            borderRadius: const BorderRadius.all(Radius.circular(2)),
-            border: Border.all(color: PlateColors.ink, width: 1.5),
+            color: i < level ? ink : paper,
+            borderRadius: BorderRadius.all(Radius.circular(compact ? 1 : 2)),
+            border: Border.all(color: ink, width: compact ? 1.25 : 1.5),
           ),
         ),
       ],
     ],
   );
 
+  static const _bars = [6.0, 10.0, 14.0], _smallBars = [5.0, 8.0, 11.0];
+
   @override
-  Widget build(BuildContext context) => SizedBox(
-    height: 14,
-    child: levels.length == 1
-        ? _meter(levels.single, 8)
-        : Row(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              _meter(levels.first, 6),
-              const SizedBox(width: 5),
-              Transform.rotate(
-                angle: .35,
-                child: Container(
-                  width: 1.5,
-                  height: 14,
-                  color: PlateColors.muted,
+  Widget build(BuildContext context) {
+    final height = compact ? _smallBars.last : _bars.last;
+    return SizedBox(
+      height: height,
+      child: levels.length == 1
+          ? _meter(levels.single, compact ? 5 : 8)
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                _meter(levels.first, compact ? 4 : 6),
+                const SizedBox(width: 5),
+                Transform.rotate(
+                  angle: .35,
+                  child: Container(
+                    width: 1.5,
+                    height: height,
+                    color: PlateColors.muted,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 5),
-              _meter(levels.last, 6),
-            ],
-          ),
-  );
+                const SizedBox(width: 5),
+                _meter(levels.last, compact ? 4 : 6),
+              ],
+            ),
+    );
+  }
 }
 
-class _DashedBorder extends CustomPainter {
-  const _DashedBorder({required this.color, this.radius = 10});
+class DashedBorder extends CustomPainter {
+  const DashedBorder({required this.color, this.radius = 10});
   final Color color;
   final double radius;
 
@@ -496,6 +539,6 @@ class _DashedBorder extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_DashedBorder old) =>
+  bool shouldRepaint(DashedBorder old) =>
       old.color != color || old.radius != radius;
 }

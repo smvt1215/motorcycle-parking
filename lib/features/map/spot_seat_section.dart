@@ -10,8 +10,18 @@ import 'beta_tag.dart';
 /// city ends with a Beta line. Its own widget so PR-D's full-page details
 /// can move it whole.
 class SpotSeatSection extends StatelessWidget {
-  const SpotSeatSection({super.key, required this.fact, this.betaCities});
+  const SpotSeatSection({
+    super.key,
+    required this.fact,
+    this.betaCities,
+    this.sectionTitle,
+  });
   final AvailabilityFact fact;
+
+  /// The details section it sits in; when that already says the fact's
+  /// title (「有沒有位」), the title is not repeated (iPhone report,
+  /// 2026-11-08).
+  final String? sectionTitle;
 
   /// The Beta cities, when the spot is in one; null otherwise.
   final List<String>? betaCities;
@@ -24,9 +34,11 @@ class SpotSeatSection extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     final muted = text.labelSmall?.copyWith(color: colors.onSurfaceVariant);
     const figures = [FontFeature.tabularFigures()];
+    final titled = sectionTitle != fact.title;
     return Semantics(
       key: const ValueKey('availability-summary'),
       label: [
+        // Read in full: the summary is one node, reached on its own.
         fact.semantics,
         if (beta != null) '$betaTagLabel，${betaDetailNote(beta)}',
       ].join('，'),
@@ -34,8 +46,10 @@ class SpotSeatSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(fact.title, style: muted),
-          const SizedBox(height: 4),
+          if (titled) ...[
+            Text(fact.title, style: muted),
+            const SizedBox(height: 4),
+          ],
           if (fact.count case final count?)
             Text.rich(
               TextSpan(

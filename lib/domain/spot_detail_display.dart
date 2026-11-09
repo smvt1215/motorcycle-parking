@@ -272,6 +272,7 @@ String laterWords(SignArea a, VehicleType vehicle) {
 String? verdictHeadline(FourSign s, {SignArea? selected}) {
   final v = s.vehicle.label;
   if (selected != null) {
+    if (selected.riderClosed) return '$v現在不能停';
     return switch (selected.status) {
       EligibilityStatus.allowed when selected.window.now => '$v現在可停',
       EligibilityStatus.conditional when selected.window.now => '$v現在有條件',
@@ -281,6 +282,8 @@ String? verdictHeadline(FourSign s, {SignArea? selected}) {
     };
   }
   final verdict = s.verdict;
+  // Riders closed it (A7d ④): for every vehicle, so none is named.
+  if (verdict.riderClosed != null) return '現在不能停';
   return switch (verdict.status) {
     EligibilityStatus.allowed => '$v現在可停',
     EligibilityStatus.conditional when verdict.noParkingNow => '$v現在禁停',
@@ -301,21 +304,24 @@ String undecidedHeadline(VehicleType vehicle, String label) =>
 /// then the other segments open now.
 String selectedNote(FourSign s, SignArea selected) {
   final name = detailPlaceName(selected);
-  final own = switch (selected.status) {
-    EligibilityStatus.allowed when selected.window.now => '現在可停',
-    EligibilityStatus.conditional when selected.window.now =>
-      _limitTexts(selected.condition).firstOrNull ??
-          (selected.window.until == null
-              ? '有條件'
-              : '可停到 ${selected.window.until}'),
-    EligibilityStatus.allowed ||
-    EligibilityStatus.conditional => laterWords(selected, s.vehicle),
-    EligibilityStatus.notAllowed => '${s.vehicle.label}不能停',
-    EligibilityStatus.unverified => '待確認',
-  };
+  final own = selected.riderClosed
+      ? riderClosedShort
+      : switch (selected.status) {
+          EligibilityStatus.allowed when selected.window.now => '現在可停',
+          EligibilityStatus.conditional when selected.window.now =>
+            _limitTexts(selected.condition).firstOrNull ??
+                (selected.window.until == null
+                    ? '有條件'
+                    : '可停到 ${selected.window.until}'),
+          EligibilityStatus.allowed ||
+          EligibilityStatus.conditional => laterWords(selected, s.vehicle),
+          EligibilityStatus.notAllowed => '${s.vehicle.label}不能停',
+          EligibilityStatus.unverified => '待確認',
+        };
   final others = [
     for (final a in s.areas)
-      if (a != selected && a.open && a.window.now) detailPlaceName(a),
+      if (a != selected && a.open && a.window.now && !a.riderClosed)
+        detailPlaceName(a),
   ];
   return [
     '選定的$name$own',
@@ -327,6 +333,15 @@ String selectedNote(FourSign s, SignArea selected) {
 /// the segment's side and what limits it under it.
 SignPlate selectedVerdictPlate(FourSign s, SignArea a) {
   final short = a.side?.label ?? detailPlaceName(a);
+  if (a.riderClosed) {
+    return SignPlate(
+      face: FourSignFace.verdict,
+      main: '不能停',
+      note: short,
+      tone: PlateTone.denied,
+      semantics: '能不能停：不能停，車友回報無法停車，非官方資訊，目前選定的${detailPlaceName(a)}',
+    );
+  }
   final (tone, main, note) = switch (a.status) {
     EligibilityStatus.allowed when a.window.now => (
       PlateTone.allowed,
@@ -415,8 +430,8 @@ const notParkableFoldHint = '點一下展開，看這裡的空位與費率（資
 
 // ② 有沒有位 ---------------------------------------------------------------
 
-/// One place's row (A10, A12): the official count or total, and room for
-/// riders' reports below it (#189).
+/// One place's row (A10, A12): the official count or total; riders' reports
+/// sit beside it ([seatRiderLine]).
 class SeatRow {
   const SeatRow({
     required this.area,
@@ -426,7 +441,11 @@ class SeatRow {
     this.officialNote = '',
     this.areas = const [],
     this.counted = false,
+    this.delayed = false,
   });
+
+  /// [official] is the count past its window (amber, A12).
+  final bool delayed;
 
   /// Whether [official] is an official count (剩 N 格, 已滿), which a
   /// Beta city's note goes with.
@@ -515,6 +534,7 @@ List<SeatRow> seatRows(
         official: row.official,
         officialNote: row.officialNote,
         counted: row.counted,
+        delayed: row.delayed,
       ),
     );
   }
@@ -552,6 +572,7 @@ SeatRow _seatRow(
       sub: sub,
       official: snapshot.available == 0 ? '已滿' : '剩 ${snapshot.available} 格',
       counted: true,
+      delayed: delayed,
       officialNote: [
         if (delayed) '更新延遲',
         if (at != null) agoText(at, now),
@@ -568,14 +589,78 @@ SeatRow _seatRow(
   );
 }
 
+/// 車友回報 in the details (A10, A12): the meter and level, and how old and
+/// from how many.
+class SeatRiderLine {
+  const SeatRiderLine({
+    required this.main,
+    required this.note,
+    required this.semantics,
+    this.meters = const [],
+  });
+  final String main, note, semantics;
+
+  /// Empty for 沒有回報.
+  final List<int> meters;
+}
+
+/// A place with no report in the details' window.
+const seatNoRiderLine = SeatRiderLine(
+  main: '沒有回報',
+  note: '近 30 分鐘沒有人回報',
+  semantics: '車友回報：沒有回報，近 30 分鐘沒有人回報',
+);
+
+/// [report] as [SeatRiderLine]; [name] leads the note where a row stands
+/// for several places.
+SeatRiderLine riderLineOf(RiderSeat report, DateTime now, {String name = ''}) {
+  final split = riderSplit(report);
+  final ago = agoText(report.at, now);
+  final note = [
+    if (name.isNotEmpty) name,
+    ago,
+    split ?? '${report.riders} 人',
+  ].join('・');
+  return SeatRiderLine(
+    main: riderLabel(report),
+    note: note,
+    meters: riderMeters(report),
+    semantics: '車友回報：${riderLabel(report)}，${note.replaceAll('・', '，')}',
+  );
+}
+
+/// 車友回報 of [row], from the details' [reports]. A row of several places
+/// reads the one with the most space and names it, as the plate does.
+SeatRiderLine seatRiderLine(
+  SeatRow row,
+  List<RiderSeat> reports,
+  DateTime now,
+) {
+  final places = row.areas.isEmpty ? [row.area] : row.areas;
+  final held = [
+    for (final r in reports)
+      for (final a in places)
+        if (a.id == r.areaId) (a, r),
+  ];
+  if (held.isEmpty) return seatNoRiderLine;
+  held.sort(
+    (a, b) => b.$2.least != a.$2.least
+        ? b.$2.least.compareTo(a.$2.least)
+        : b.$2.at.compareTo(a.$2.at),
+  );
+  final (place, report) = held.first;
+  return riderLineOf(
+    report,
+    now,
+    name: places.length > 1 ? detailPlaceName(place) : '',
+  );
+}
+
 /// The words under 有沒有位's answer when the spot stands as one.
-String seatExplanation(FourSign s, {bool riders = false}) {
+String seatExplanation(FourSign s) {
   switch (s.seat.kind) {
     case SeatKind.unknown:
-      return [
-        '官方沒有提供即時數字；空位未知不代表已滿。',
-        riders ? '可以看車友回報（列出 30 分鐘內的）或到場再找車位。' : '可以到場再找車位。',
-      ].join();
+      return '官方沒有提供即時數字；空位未知不代表已滿。可以看車友回報（列出 30 分鐘內的）或到場再找車位。';
     case SeatKind.total:
       return '「共幾格」是總數，不是剩餘；官方沒有提供即時空位。';
     case SeatKind.live || SeatKind.delayed || SeatKind.suspended:
@@ -585,8 +670,9 @@ String seatExplanation(FourSign s, {bool riders = false}) {
 }
 
 /// The note under the rows (A10): what the counts mean.
-String seatRowsNote(FourSign s) =>
-    s.street ? '路邊格沒有官方即時空位，「共幾格」是總數，不是剩餘。' : '官方是停管處公開的剩餘格數；沒有數字的區，空位未知不代表已滿。';
+String seatRowsNote(FourSign s) => s.street
+    ? '路邊格沒有官方即時空位，「共幾格」是總數，不是剩餘。車友回報是騎士回報的大概狀況，這裡列出 30 分鐘內的，30 分鐘後消失；地圖角標只看 15 分鐘內。'
+    : '官方是停管處公開的剩餘格數；沒有數字的區，空位未知不代表已滿。車友回報是騎士回報的大概狀況，30 分鐘後消失，不代表現在一定有位。';
 
 // ③ 怎麼算錢 ---------------------------------------------------------------
 
@@ -1103,6 +1189,7 @@ class WhereCard {
     this.limit = '',
     this.guide = '',
     this.later = false,
+    this.riderClosed = '',
   });
   final SignArea area;
   final String name;
@@ -1117,6 +1204,9 @@ class WhereCard {
   /// What limits it now (平日 07:00–20:00 每次限停 2 小時).
   final String limit;
   final String guide;
+
+  /// Riders closed it (A7d ④⑤⑥, red); empty when they did not.
+  final String riderClosed;
 }
 
 String _charge(ParkingCondition? c) => switch (c?.charge) {
@@ -1127,12 +1217,13 @@ String _charge(ParkingCondition? c) => switch (c?.charge) {
 
 /// The cards of 停哪裡: each place open to the vehicle (now or later); a
 /// street without segments as one card; a lot standing as one has none.
-List<WhereCard> whereCards(FourSign s, ParkingSpot spot) => [
+/// A place riders closed stays, saying so ([WhereCard.riderClosed]).
+List<WhereCard> whereCards(FourSign s, ParkingSpot spot, DateTime now) => [
   for (final a in listedPlaces(s))
-    if (a.open || (a.whole && s.street)) _whereCard(s, spot, a),
+    if (a.open || (a.whole && s.street)) _whereCard(s, spot, a, now),
 ];
 
-WhereCard _whereCard(FourSign s, ParkingSpot spot, SignArea a) {
+WhereCard _whereCard(FourSign s, ParkingSpot spot, SignArea a, DateTime now) {
   final segment = a.segment;
   final range = segment?.range.trim() ?? '';
   final sub = s.street
@@ -1162,6 +1253,11 @@ WhereCard _whereCard(FourSign s, ParkingSpot spot, SignArea a) {
         ? (_limitTexts(a.condition).firstOrNull ?? '')
         : '',
     guide: guide,
+    riderClosed: s.verdict.riderClosed != null
+        ? riderClosedShort
+        : a.riderClosed
+        ? riderClosedNote(a.riderClosure!, now)
+        : '',
   );
 }
 

@@ -4,13 +4,17 @@
 /// FIX-DECISIONS: 不能停, 空位未知, 官方未標示, 車友回報. Pure Dart.
 library;
 
+import 'dart:math' as math;
+
 import '../models/fee.dart';
 import '../models/holiday_calendar.dart' show taipeiDateMinute;
 import '../models/parking.dart';
 import '../models/space_kind.dart';
+import 'availability_display.dart' show availabilityClock;
 import 'eligibility.dart';
 import 'four_sign.dart';
 import 'parking_decision.dart';
+import 'rider_meter_display.dart';
 
 /// How a plate is painted; the colours are fixed (A4: never the dynamic
 /// scheme), so the widget maps each tone to one look.
@@ -92,6 +96,89 @@ String _riderLevelShort(int level) => switch (level) {
   _ => '滿',
 };
 
+/// A report's answer: its level, or 說法不一.
+String riderLabel(RiderSeat r) =>
+    r.conflict ? riderConflictLabel : riderLevelLabel(r.level);
+
+/// The meters of a report: one, or the emptier and the fuller end.
+List<int> riderMeters(RiderSeat r) => r.conflict
+    ? [math.max(r.level, r.otherLevel!), math.min(r.level, r.otherLevel!)]
+    : [r.level];
+
+/// 「2 人說很多・1 人說滿」, when reports disagree.
+String? riderSplit(RiderSeat r) {
+  if (!r.conflict) return null;
+  final [high, low] = riderMeters(r);
+  return '${r.highCount ?? 1} 人說${_riderLevelShort(high)}・'
+      '${r.lowCount ?? 1} 人說${_riderLevelShort(low)}';
+}
+
+/// [r]'s map badge: its level, or the emptier and the fuller end when
+/// reports disagree.
+RiderMeter riderMeterOf(RiderSeat r) {
+  final meters = riderMeters(r);
+  return r.conflict
+      ? RiderMeter.conflict(
+          RiderLevel.values[meters.first],
+          RiderLevel.values[meters.last],
+        )
+      : RiderMeter(RiderLevel.values[r.level]);
+}
+
+/// The line under a preview's plates (A11): what stands beside the answer.
+class SeatBesideRow {
+  const SeatBesideRow({
+    required this.text,
+    required this.tag,
+    required this.semantics,
+    this.meters = const [],
+  });
+
+  /// Riders' levels, as on the plate; empty for the lapsed official count.
+  final List<int> meters;
+  final String text;
+
+  /// Whose it is: 車友回報 or 官方.
+  final String tag;
+  final String semantics;
+  bool get official => meters.isEmpty;
+}
+
+/// A report beside an official count, or the count past its window beside a
+/// report (A11); null when neither is there.
+SeatBesideRow? seatBesideRow(FourSign s, DateTime now) {
+  final seat = s.seat;
+  if (seat.lapsed case final old?) {
+    final count = old.available == 0 ? '已滿' : '剩 ${old.available} 格';
+    final text =
+        '官方資料過期，最後一筆 ${availabilityClock(old.sourceUpdatedAt!)} $count';
+    return SeatBesideRow(text: text, tag: '官方', semantics: text);
+  }
+  final r = seat.beside;
+  if (r == null) return null;
+  // The zone's name only among several (A11 card 1).
+  final area = seat.besideArea;
+  final name = area == null || s.singlePlace ? '' : '${signAreaName(area)}　';
+  final ago = agoText(r.at, now);
+  final said = [
+    riderLabel(r),
+    if (riderSplit(r) case final split?)
+      '（$split）'
+    else if (r.riders > 1)
+      '（${r.riders} 人）',
+  ].join();
+  return SeatBesideRow(
+    meters: riderMeters(r),
+    text: '$name車友 $ago：$said',
+    tag: '車友回報',
+    semantics: '$name車友回報，$ago：$said',
+  );
+}
+
+/// Under an official count a report says otherwise of (A11 card 4). Neither
+/// is judged right.
+const riderDisagreesNote = '車友回報和官方不同，請以現場為準。';
+
 /// 「剛剛」, 「8 分鐘前」, 「2 小時前」.
 String agoText(DateTime at, DateTime now) {
   final minutes = now.difference(at).inMinutes;
@@ -99,6 +186,30 @@ String agoText(DateTime at, DateTime now) {
   if (minutes < 60) return '$minutes 分鐘前';
   return '${minutes ~/ 60} 小時前';
 }
+
+// 車友回報無法停車 (A7d) ---------------------------------------------------
+
+/// 「2 位車友回報無法停車・20 分鐘前」.
+String riderClosedCount(RiderClosure c, DateTime now) =>
+    '${c.riders} 位車友回報無法停車・${agoText(c.at, now)}';
+
+/// One rider's report (A7d ①③): it changes nothing yet.
+String riderClosedUnsure(RiderClosure c, DateTime now) =>
+    '有車友回報無法停車・${agoText(c.at, now)}，到場請再確認';
+
+/// Two riders' (A7d ②④⑤⑥): 「2 位車友回報無法停車・20 分鐘前。非官方資訊」.
+String riderClosedNote(RiderClosure c, DateTime now) =>
+    '${riderClosedCount(c, now)}。非官方資訊';
+
+/// Under the details' verdict once riders closed the spot (A7d ④).
+const riderClosedLift = '現場恢復後，車友回報有位就會解除。';
+
+/// A place of 停哪裡 when riders closed the whole spot (A7d ④).
+const riderClosedShort = '車友回報無法停車';
+
+/// What 能不能停 says aloud when riders closed the spot (A7d 朗讀).
+String riderClosedSpoken(RiderClosure c) =>
+    '能不能停：現在不能停，${c.riders} 位車友回報，非官方資訊';
 
 String _basisNote(VerdictAnswer v) => switch (v.basis) {
   BasisKind.official => '政府資料',
@@ -195,6 +306,16 @@ String parkableAtText(DateTime at, DateTime now) {
 SignPlate _verdictPlate(FourSign s, DateTime now) {
   final v = s.verdict;
   final basis = _basisNote(v);
+  // Riders closed it (A7d ②): 不能停 for every vehicle, said to be theirs.
+  if (v.riderClosed case final closure?) {
+    return SignPlate(
+      face: FourSignFace.verdict,
+      main: '不能停',
+      note: '車友回報',
+      tone: PlateTone.denied,
+      semantics: riderClosedSpoken(closure),
+    );
+  }
   // 現在禁停 (#244): painted amber as 有條件 (the status stays
   // conditional), titled apart, with when parking opens again.
   if (v.status == EligibilityStatus.conditional && v.noParkingNow) {
@@ -312,24 +433,17 @@ SignPlate _seatPlate(FourSign s, DateTime now) {
     case SeatKind.rider:
       final r = seat.rider!;
       final ago = agoText(r.at, now);
-      final main = r.conflict ? '說法不一' : riderLevelLabel(r.level);
-      final high = r.conflict && r.otherLevel! > r.level
-          ? r.otherLevel!
-          : r.level;
-      final low = r.conflict && r.otherLevel! > r.level
-          ? r.level
-          : r.otherLevel;
-      final split = r.conflict
-          ? '${r.highCount ?? 1} 人說${_riderLevelShort(high)}・'
-                '${r.lowCount ?? 1} 人說${_riderLevelShort(low!)}'
-          : null;
+      final main = riderLabel(r);
+      final split = riderSplit(r);
       return SignPlate(
         face: FourSignFace.seat,
         main: main,
-        note: shown.isNotEmpty ? '$shown\n車友回報・$ago' : '車友回報\n${split ?? ago}',
+        note: shown.isNotEmpty
+            ? '$shown\n車友・${split ?? ago}'
+            : '車友回報\n${split ?? ago}',
         tone: PlateTone.rider,
         tag: more,
-        meters: r.conflict ? [high, low!] : [r.level],
+        meters: riderMeters(r),
         semantics: spoken([
           r.conflict
               ? '車友回報說法不一，${split!.replaceAll('・', '，')}'

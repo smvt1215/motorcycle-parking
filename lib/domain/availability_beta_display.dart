@@ -30,9 +30,8 @@ String betaIntroTitle(String city) => '$city可以看即時空位了';
 String betaIntroSource(String provider) =>
     '停車場上方的數字是$provider提供的剩餘車位，大約每 5 分鐘更新。';
 
-/// Its second row. The board's 「看到不一樣，可以在詳情按『回報現場狀況』」
-/// waits for that action (#189 PR-E).
-const betaIntroCaution = '還在試點，數字可能和現場不一樣，抵達時請以現場為準。';
+/// Its second row.
+const betaIntroCaution = '還在試點，數字可能和現場不一樣，抵達時請以現場為準；看到不一樣，可以在詳情按「回報現場狀況」。';
 
 /// Its third row.
 const betaIntroEligibility = '能不能停仍看圖示的顏色和形狀；有空位不代表你的車種可以停。';
@@ -47,10 +46,9 @@ String betaOnlyCities(List<String> cities) =>
 /// The empty result's line under [betaOnlyCities].
 const betaOnlyCitiesDetail = '這個範圍的停車點都還在，只是沒有官方即時空位資料。';
 
-/// The last line of 有沒有位 in the details (A14). The board's 「請按下方
-/// 『回報現場狀況』」 waits for that action (#189 PR-E).
+/// The last line of 有沒有位 in the details (A14).
 String betaDetailNote(List<String> cities) =>
-    '${betaOnlyCities(cities)}，還在試點，抵達時請以現場為準。';
+    '${betaOnlyCities(cities)}，還在試點，抵達時請以現場為準。數字跟現場不一樣，請按下方「回報現場狀況」。';
 
 /// Who counts in each Beta city, for the legend, which has no spot whose
 /// count names its provider.

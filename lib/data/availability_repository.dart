@@ -35,11 +35,10 @@ class SupabaseAvailabilitySource extends AvailabilitySource {
   const SupabaseAvailabilitySource(this.client);
   final SupabaseClient client;
 
-  /// The function reads at most this many ids; a viewport holds fewer.
-  static const maxIds = 600;
-
-  /// Ids per call: up to three rows each (scooter, heavy, car) must stay
-  /// under the API's 1,000-row limit, or the last lots would lose counts.
+  /// Ids per call, every id being read: up to three rows each (scooter,
+  /// heavy, car) must stay under the API's 1,000-row limit, or the last lots
+  /// would lose counts. Favourites come after a viewport's spots, so nothing
+  /// is cut off.
   static const batch = 300;
 
   @override
@@ -49,11 +48,11 @@ class SupabaseAvailabilitySource extends AvailabilitySource {
   Future<Map<String, SpotAvailability>> forSpots(
     List<ParkingSpot> spots,
   ) async {
-    final ids = [
+    final ids = {
       for (final spot in spots)
         if (spot.source == 'official' && spot.id.startsWith('official:'))
           spot.id,
-    ].take(maxIds).toList();
+    }.toList();
     if (ids.isEmpty) return const {};
     final pages = await Future.wait([
       for (var i = 0; i < ids.length; i += batch)

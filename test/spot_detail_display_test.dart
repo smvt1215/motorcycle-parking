@@ -415,7 +415,7 @@ void main() {
       expect(b3.window.opensAt, isNull);
       expect(laterWords(b3, VehicleType.heavy), '');
       expect(placeState(b3, VehicleType.heavy), '');
-      for (final card in whereCards(s, expiring)) {
+      for (final card in whereCards(s, expiring, detailDay)) {
         expect(card.state, '');
       }
     });

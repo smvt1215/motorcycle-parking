@@ -6,7 +6,8 @@ import 'package:flutter_riverpod/legacy.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../api/v1/api_v1.g.dart' show ApiV1Client;
+import '../api/v1/api_v1.g.dart' as v1 show SpotClosure;
+import '../api/v1/api_v1.g.dart' show ApiV1Client, SpotSighting;
 import '../core/config.dart';
 import '../core/notifications.dart';
 import '../core/geo.dart';
@@ -15,15 +16,19 @@ import '../core/navigation.dart' as navigation;
 import '../core/town_lookup.dart';
 import '../domain/availability_beta_display.dart';
 import '../domain/eligibility.dart';
+import '../domain/four_sign.dart';
 import '../domain/parking_decision.dart';
 import '../domain/eligibility_display.dart';
 import '../domain/location_check.dart';
 import '../domain/map_viewport.dart';
+import '../domain/four_sign_display.dart' show riderMeterOf;
+import '../domain/rider_meter_display.dart' show RiderMeter;
 import '../domain/rules_display.dart';
 import '../domain/spot_contributor.dart';
 import '../models/availability.dart';
 import '../models/holiday_calendar.dart';
 import '../models/parking.dart';
+import '../models/sighting.dart';
 import 'auth_flow.dart';
 import 'availability_repository.dart';
 import 'contributions_repository.dart';
@@ -32,6 +37,7 @@ import 'favorite_handles.dart';
 import 'hidden_riders.dart';
 import 'repositories.dart';
 import 'rules_cache.dart';
+import 'sightings_repository.dart';
 import 'profile_repository.dart';
 
 /// Sources stored in `community_spots`: user reports and authorized imports
@@ -77,6 +83,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     ContributionsRepository? contributionsRepository,
     DataUpdates? dataUpdates,
     AvailabilitySource? availabilitySource,
+    SightingsSource? sightingsSource,
     Duration? availabilityPoll,
     Future<List<String>> Function()? availabilityBetaCities,
     DateTime Function()? clock,
@@ -96,6 +103,11 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
            (client == null
                ? demoAvailabilitySource(clock: clock)
                : SupabaseAvailabilitySource(client)),
+       sightingsSource =
+           sightingsSource ??
+           (client == null
+               ? const NoSightingsSource()
+               : SupabaseSightingsSource(client)),
        // The example build's counts never change: no polling.
        availabilityPoll =
            availabilityPoll ??
@@ -161,6 +173,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   final ContributionsRepository contributions;
   final DataUpdates updates;
   final AvailabilitySource availabilitySource;
+  final SightingsSource sightingsSource;
 
   /// Riders hidden on this device (#280); their spots leave [spots].
   late final HiddenRiders hiddenRiders;
@@ -396,6 +409,220 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   SpotAvailability availabilityOf(ParkingSpot spot) =>
       availability[spot.id] ?? SpotAvailability.none;
 
+  /// The loaded [spots], then the favourites and open sheets' spots out of
+  /// view: the cards and details read the same answers as the map, official
+  /// counts first (P4, P6).
+  List<ParkingSpot> _watched(List<ParkingSpot> spots) {
+    final ids = {for (final spot in spots) spot.id};
+    return [
+      ...spots,
+      for (final spot in [...favorites, ..._following])
+        if (ids.add(spot.id)) spot,
+    ];
+  }
+
+  /// With the map covered, what is left to keep up to date: the favourite
+  /// cards and any open sheet, which polling reads on its own.
+  bool get _readsWanted =>
+      _mapShown || favorites.isNotEmpty || _following.isNotEmpty;
+
+  /// The map is covered and there may be new favourites to keep up to date.
+  void _favoritesChanged() {
+    if (!_mapShown) _resumeAvailability();
+  }
+
+  /// Riders' summaries of the [_watched] spots over [sightingMapWindow], by
+  /// lower-case spot id; read and polled with [availability].
+  Map<String, List<SpotSighting>> sightings = const {};
+
+  /// What riders reported closed (A7d) at the same spots, read with
+  /// [sightings]; the followed spot's newest read lands here too.
+  Map<String, List<v1.SpotClosure>> closures = const {};
+
+  /// Riders' closures of [spot] still holding: each lasts
+  /// [RiderClosure.holds] after its newest report, also between reads.
+  List<RiderClosure> riderClosures(ParkingSpot spot) {
+    final rows = closures[spot.id.toLowerCase()];
+    if (rows == null) return const [];
+    final oldest = clock().subtract(RiderClosure.holds);
+    return [
+      for (final row in rows)
+        if (riderClosureOf(row) case final c? when c.at.isAfter(oldest)) c,
+    ];
+  }
+
+  /// The spots open sheets show, the top one last, and its summaries over
+  /// both windows: the details list a longer window, and it may be a spot
+  /// out of view. A sheet opened over another hands it back on closing.
+  final _following = <ParkingSpot>[];
+  ParkingSpot? get _followed => _following.lastOrNull;
+  Map<String, List<SpotSighting>> _followedNear = const {},
+      _followedWide = const {};
+
+  /// Numbers each read of the followed spot: only the newest may land.
+  int _followRead = 0;
+
+  /// Numbers every read of [sightings] and [closures] as it starts, and
+  /// the read each spot's answer came from: an older read that lands late
+  /// (a poll waiting on counts) never replaces a newer one (the details'
+  /// read after a report).
+  int _sightingsSeq = 0;
+  final _sightedSeq = <String, int>{};
+
+  /// The spots of [ids] a read later than [seq] already answered.
+  Set<String> _sightedSince(int seq, Iterable<String> ids) => {
+    for (final id in ids)
+      if ((_sightedSeq[id] ?? 0) > seq) id,
+  };
+
+  /// Records [seq] as the read that answered [ids].
+  void _sighted(int seq, Iterable<String> ids) {
+    for (final id in ids) {
+      _sightedSeq[id] = seq;
+    }
+  }
+
+  /// [_sighted] for a viewport read. The followed spot's near rows predate
+  /// its answer and, preferred as they are on screen, would hide it.
+  void _sightedInView(int seq, Set<String> ids) {
+    _sighted(seq, ids);
+    if (ids.contains(_followed?.id.toLowerCase())) _followedNear = const {};
+  }
+
+  /// What this rider sent, shown at once (A7c) wherever no summary covers
+  /// the place yet: a summary leaves out a rider of low credibility, and
+  /// the read may lag or fail. They age out like any report.
+  final _sent = <_SentSighting>[];
+
+  /// The reports of the last [windowMinutes] for the chosen vehicle: the
+  /// map and the preview read [sightingMapWindow], the details
+  /// [sightingDetailWindow]. They age out on screen by their own time.
+  RiderSeats riderSeats(int windowMinutes) =>
+      _StoreRiderSeats(this, windowMinutes);
+
+  /// The map's badge for [spot]: the place 有沒有位 picks, none while an
+  /// official count stands there (A0).
+  RiderMeter? riderMeter(ParkingSpot spot) {
+    final riders = riderSeats(sightingMapWindow);
+    if (riders.of(spot.id).isEmpty) return null;
+    final seat = fourSign(
+      spot,
+      vehicle,
+      rules,
+      now: clock(),
+      availability: availabilityOf(spot),
+      riders: riders,
+      closures: riderClosures(spot),
+      decision: decide(spot),
+    ).seat;
+    return seat.rider == null ? null : riderMeterOf(seat.rider!);
+  }
+
+  /// Follows [spot], an open sheet's, until [unfollowSightings].
+  Future<void> followSightings(ParkingSpot spot) {
+    if (_followed?.id != spot.id) {
+      _followedNear = _followedWide = const {};
+    }
+    _following.add(spot);
+    // A sheet opened over a covered map still has to stay up to date.
+    if (!_mapShown) _resumeAvailability();
+    return readFollowedSightings();
+  }
+
+  void unfollowSightings(ParkingSpot spot) {
+    final at = _following.lastIndexWhere((s) => s.id == spot.id);
+    if (at < 0) return;
+    final top = at == _following.length - 1;
+    _following.removeAt(at);
+    if (!top || _followed?.id == spot.id) return;
+    _followRead++;
+    _followedNear = _followedWide = const {};
+    unawaited(readFollowedSightings());
+  }
+
+  /// Reads the followed spot again; a failed read keeps what it had, which
+  /// ages out on screen.
+  Future<void> readFollowedSightings() async {
+    final spot = _followed;
+    if (spot == null || !sightingsSource.enabled || _disposed) return;
+    final read = ++_followRead, seq = ++_sightingsSeq;
+    try {
+      final (nearRead, wide) = await (
+        sightingsSource.read([spot], windowMinutes: sightingMapWindow),
+        sightingsSource.forSpots([spot], windowMinutes: sightingDetailWindow),
+      ).wait;
+      if (_disposed || read != _followRead) return;
+      // A later viewport read answered this spot while this one waited.
+      final id = spot.id.toLowerCase();
+      if (_sightedSince(seq, [id]).isNotEmpty) return;
+      final near = nearRead.sightings;
+      _followedNear = near;
+      _followedWide = wide;
+      // The map's window too: closing the sheet keeps the newest answer
+      // instead of going back to the viewport's older one.
+      _sighted(seq, [id]);
+      sightings = {
+        for (final MapEntry(:key, :value) in sightings.entries)
+          if (key != id) key: value,
+        id: ?near[id],
+      };
+      closures = {
+        for (final MapEntry(:key, :value) in closures.entries)
+          if (key != id) key: value,
+        id: ?nearRead.closures[id],
+      };
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  /// Sends a rider's sighting; it shows at once, and the spot is read
+  /// again for what other riders say.
+  Future<void> submitSighting(SightingReport report) async {
+    await sightingsSource.submit(report);
+    if (!report.closed) {
+      _sent
+        ..removeWhere(
+          (s) =>
+              s.report.spotId == report.spotId &&
+              s.report.vehicle == report.vehicle &&
+              s.report.areaId == report.areaId,
+        )
+        ..add(_SentSighting(report, clock(), riderId));
+    }
+    notifyListeners();
+    // What others say follows on its own: it never holds up the sent report.
+    unawaited(readFollowedSightings());
+  }
+
+  /// The summaries of [spots], or null when the read fails.
+  Future<SightingsRead?> _readSightings(List<ParkingSpot> spots) async {
+    if (!sightingsSource.enabled) return const SightingsRead({});
+    try {
+      return await sightingsSource.read(
+        spots,
+        windowMinutes: sightingMapWindow,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// The last summaries of the spots still watched, for when a read fails.
+  Map<String, List<SpotSighting>> _keptSightings(List<ParkingSpot> spots) =>
+      _kept(sightings, spots);
+
+  /// [_keptSightings] for [closures].
+  Map<String, List<v1.SpotClosure>> _keptClosures(List<ParkingSpot> spots) =>
+      _kept(closures, spots);
+
+  Map<String, T> _kept<T>(Map<String, T> bySpot, List<ParkingSpot> spots) {
+    final ids = {for (final spot in _watched(spots)) spot.id.toLowerCase()};
+    return {
+      for (final MapEntry(:key, :value) in bySpot.entries)
+        if (ids.contains(key)) key: value,
+    };
+  }
+
   /// Counts reports sent this session, so "我送出的建議" reloads after one.
   int reportsSent = 0;
   final notifications = ParkingNotifications();
@@ -589,23 +816,20 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  /// Whether the map is on screen (another tab covers it otherwise); counts
-  /// are only polled while it is.
+  /// Whether the map is on screen (another tab covers it otherwise). While
+  /// it is not, polling keeps only favourites and open sheets up to date.
   void setMapShown(bool shown) {
     if (_mapShown == shown) return;
     _mapShown = shown;
-    if (shown) {
-      _resumeAvailability();
-    } else {
-      _stopAvailability();
-    }
+    _stopAvailability();
+    _resumeAvailability();
   }
 
   /// Back on screen: reads at once when the last read is a poll interval
   /// old, otherwise waits out the rest of it.
   void _resumeAvailability() {
     final poll = availabilityPoll;
-    if (poll == null || !_foreground || !_mapShown) return;
+    if (poll == null || !_foreground || !_readsWanted) return;
     final at = _availabilityReadAt;
     final since = at == null ? null : DateTime.now().difference(at);
     if (since == null || since >= poll) {
@@ -630,13 +854,19 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     if (delay == null ||
         _disposed ||
         !_foreground ||
-        !_mapShown ||
+        !_readsWanted ||
         !availabilitySource.enabled) {
       return;
     }
     _availabilityTimer = Timer(delay, () => unawaited(pollAvailability()));
     _availabilityClock ??= Timer.periodic(const Duration(minutes: 1), (_) {
-      if (!_disposed && availability.isNotEmpty) notifyListeners();
+      // The pills' ages move on, and riders' reports age out.
+      if (!_disposed &&
+          (availability.isNotEmpty ||
+              sightings.isNotEmpty ||
+              closures.isNotEmpty)) {
+        notifyListeners();
+      }
     });
   }
 
@@ -653,17 +883,51 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   /// stale), and backs off.
   Future<void> pollAvailability() async {
     _availabilityTimer?.cancel();
-    if (_disposed || !availabilitySource.enabled || spots.isEmpty) return;
-    final request = _request, read = ++_availabilityRead;
     final current = spots;
-    final counts = await _readAvailability(current);
+    // With the map covered, only what is still on screen.
+    final reading = _watched(_mapShown ? current : const []);
+    if (_disposed || !availabilitySource.enabled || reading.isEmpty) return;
+    final request = _request, read = ++_availabilityRead;
+    final seq = ++_sightingsSeq;
+    unawaited(readFollowedSightings());
+    final (counts, sighted) = await (
+      _readAvailability(reading),
+      _readSightings(reading),
+    ).wait;
     if (_disposed ||
         request != _request ||
         read != _availabilityRead ||
         !identical(current, spots)) {
       return;
     }
-    availability = counts ?? _keptAvailability(current);
+    // A read replaces what it covered; the rest stays for when the map
+    // comes back.
+    final readIds = {for (final spot in reading) spot.id};
+    final sightedIds = {for (final id in readIds) id.toLowerCase()};
+    // Spots a later read answered keep that answer.
+    final newer = _sightedSince(seq, sightedIds);
+    if (sighted != null) _sightedInView(seq, sightedIds.difference(newer));
+    availability = {
+      for (final MapEntry(:key, :value) in _keptAvailability(current).entries)
+        if (counts == null || !readIds.contains(key)) key: value,
+      ...?counts,
+    };
+    bool keep(String key) =>
+        sighted == null || !sightedIds.contains(key) || newer.contains(key);
+    sightings = {
+      for (final MapEntry(:key, :value) in _keptSightings(current).entries)
+        if (keep(key)) key: value,
+      if (sighted != null)
+        for (final MapEntry(:key, :value) in sighted.sightings.entries)
+          if (!newer.contains(key)) key: value,
+    };
+    closures = {
+      for (final MapEntry(:key, :value) in _keptClosures(current).entries)
+        if (keep(key)) key: value,
+      if (sighted != null)
+        for (final MapEntry(:key, :value) in sighted.closures.entries)
+          if (!newer.contains(key)) key: value,
+    };
     // Also on failure: the ages shown move on.
     notifyListeners();
     _scheduleAvailability();
@@ -684,9 +948,9 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  /// The last counts of the spots still loaded, for when a read fails.
+  /// The last counts of the spots still watched, for when a read fails.
   Map<String, SpotAvailability> _keptAvailability(List<ParkingSpot> spots) {
-    final ids = {for (final spot in spots) spot.id};
+    final ids = {for (final spot in _watched(spots)) spot.id};
     return {
       for (final MapEntry(:key, :value) in availability.entries)
         if (ids.contains(key)) key: value,
@@ -782,14 +1046,40 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
       _loadedOnce = true;
       // A failed count read keeps the last counts of the spots still in
       // view (they age by source time) and never empties the map.
-      final read = ++_availabilityRead;
-      final counts = await _readAvailability(result.spots);
+      final read = ++_availabilityRead, seq = ++_sightingsSeq;
+      final (counts, sighted) = await (
+        _readAvailability(_watched(result.spots)),
+        _readSightings(_watched(result.spots)),
+      ).wait;
       if (_disposed || request != _request) return;
       // A poll started since read these same spots later: its result wins,
       // so this older one only drops counts of spots out of view.
       availability = read == _availabilityRead
           ? counts ?? _keptAvailability(result.spots)
           : _keptAvailability(result.spots);
+      final kept = _keptSightings(result.spots);
+      final keptClosures = _keptClosures(result.spots);
+      if (read == _availabilityRead && sighted != null) {
+        // Spots a later read answered (the details') keep that answer.
+        final ids = {
+          for (final spot in _watched(result.spots)) spot.id.toLowerCase(),
+        };
+        final newer = _sightedSince(seq, ids);
+        _sightedInView(seq, ids.difference(newer));
+        sightings = {
+          for (final id in newer) id: ?kept[id],
+          for (final MapEntry(:key, :value) in sighted.sightings.entries)
+            if (!newer.contains(key)) key: value,
+        };
+        closures = {
+          for (final id in newer) id: ?keptClosures[id],
+          for (final MapEntry(:key, :value) in sighted.closures.entries)
+            if (!newer.contains(key)) key: value,
+        };
+      } else {
+        sightings = kept;
+        closures = keptClosures;
+      }
       _scheduleAvailability();
       error = result.warning ?? rulesWarning ?? favoritesWarning;
       truncated = result.truncated;
@@ -797,6 +1087,8 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
       if (_disposed || request != _request) return;
       spots = [];
       availability = const {};
+      sightings = const {};
+      closures = const {};
       error = '停車資料讀取失敗，請確認連線後重試';
     } finally {
       if (!_disposed && request == _request) {
@@ -819,7 +1111,25 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
 
   /// The map marker's judgement; the details banner reads the same one
   /// ([decide]), so they never disagree.
-  Eligibility eligible(ParkingSpot spot) => decide(spot).eligibility;
+  ///
+  /// Riders who closed the spot (A7d ②) make it 不能停 here too, so the
+  /// marker and the lists say what the sheet says.
+  Eligibility eligible(ParkingSpot spot) {
+    final decision = decide(spot);
+    final closed = riderClosures(spot);
+    if (!closed.any((c) => c.confirmed)) return decision.eligibility;
+    final verdict = fourSignVerdict(
+      spot,
+      vehicle,
+      rules,
+      now: clock(),
+      closures: closed,
+      decision: decision,
+    );
+    return verdict.riderClosed == null
+        ? decision.eligibility
+        : const Eligibility(EligibilityStatus.notAllowed, '車友回報無法停車');
+  }
 
   /// [eligible] with its basis, zones and prices, for the details sheet;
   /// the same clock as [eligible], so the banner and the marker agree.
@@ -973,6 +1283,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     // Retired snapshots are dropped before anything is shown or awaited.
     final saved = local.favorites(key);
     favorites = withoutRetiredFavorites(saved);
+    _favoritesChanged();
     if (favorites.length != saved.length) {
       await local.setFavorites(key, favorites);
     }
@@ -986,6 +1297,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
         final loaded = withoutRetiredFavorites(all);
         if (key != favoritesKey) return;
         favorites = loaded;
+        _favoritesChanged();
         favoritesWarning = null;
         await local.setFavorites(key, loaded);
         final retired = [
@@ -1069,6 +1381,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
         favoriteHandles = {...favoriteHandles, spot.id: handle};
       }
       if (ownSpot(spot)) favoriteOwn = {...favoriteOwn, spot.id};
+      _favoritesChanged();
     }
     await local.setFavorites(favoritesKey, favorites);
     notifyListeners();
@@ -1128,6 +1441,14 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     await client?.auth.signOut();
   }
 
+  /// Drops a session the backend no longer accepts, so signing in can start
+  /// over (A7c). A failure leaves it as it was.
+  Future<void> endExpiredSession() async {
+    try {
+      await client?.auth.signOut(scope: SignOutScope.local);
+    } catch (_) {}
+  }
+
   Future<void> updateProfile({required String displayName}) async {
     final backend = client;
     if (backend == null) throw StateError('請先登入再編輯個人資料');
@@ -1154,3 +1475,55 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
 
 Future<void> navigateTo(double lat, double lng) =>
     navigation.launchNavigation(lat, lng);
+
+/// [AppStore]'s reports for one window, read when asked: the vehicle and
+/// the clock are the store's at that moment.
+class _StoreRiderSeats implements RiderSeats {
+  const _StoreRiderSeats(this.store, this.windowMinutes);
+  final AppStore store;
+  final int windowMinutes;
+
+  @override
+  List<RiderSeat> of(String spotId) {
+    final id = spotId.toLowerCase();
+    final followed = store._followed?.id.toLowerCase() == id;
+    // Until a followed read lands, or when it fails, the viewport's rows
+    // still say what riders reported.
+    final rows = !followed
+        ? store.sightings[id]
+        : (windowMinutes == sightingDetailWindow
+                  ? store._followedWide[id]
+                  : store._followedNear[id]) ??
+              store.sightings[id];
+    final oldest = store.clock().subtract(Duration(minutes: windowMinutes));
+    final seats = [
+      for (final row in rows ?? const <SpotSighting>[])
+        if (row.vehicle == store.vehicle.name)
+          if (riderSeatOf(row) case final seat? when seat.at.isAfter(oldest))
+            seat,
+    ];
+    final covered = {for (final seat in seats) seat.areaId};
+    return [
+      ...seats,
+      for (final sent in store._sent)
+        if (sent.report.spotId.toLowerCase() == id &&
+            sent.report.vehicle == store.vehicle &&
+            sent.rider == store.riderId &&
+            sent.at.isAfter(oldest) &&
+            !covered.contains(sent.report.areaId))
+          RiderSeat(
+            level: sent.report.level!,
+            at: sent.at,
+            areaId: sent.report.areaId,
+          ),
+    ];
+  }
+}
+
+/// A report this rider sent, and who was signed in.
+class _SentSighting {
+  const _SentSighting(this.report, this.at, this.rider);
+  final SightingReport report;
+  final DateTime at;
+  final String? rider;
+}
