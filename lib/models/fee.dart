@@ -468,6 +468,36 @@ Map<String, Object?> feeSuggestion(Fee? current, Fee edited) {
   };
 }
 
+/// What [fee], as JSON, says a motorcycle bay charges: `toll` or `free` when
+/// the vehicles parking there agree, a rate by time being toll if any period
+/// is; null when it says neither or they differ. As `charge_of_fee()` in SQL.
+String? chargeOfFeeJson(Object? fee) {
+  if (fee is! Map) return null;
+  Object? followed(Object? rate) => switch (rate) {
+    {'mode': 'same_as_scooter'} => fee['scooter'],
+    {'mode': 'same_as_car'} => fee['car'],
+    _ => rate,
+  };
+  String? of(Object? rate) => switch (rate) {
+    {'mode': 'free'} => 'free',
+    {'mode': 'hourly' || 'per_visit'} => 'toll',
+    {'mode': 'by_time', 'periods': final List<Object?> periods} => () {
+      final modes = [
+        for (final p in periods)
+          if (p case {'rate': {'mode': final Object? mode}}) mode,
+      ];
+      return modes.any((m) => m == 'hourly' || m == 'per_visit')
+          ? 'toll'
+          : modes.contains('free')
+          ? 'free'
+          : null;
+    }(),
+    _ => null,
+  };
+  final charges = {?of(followed(fee['scooter'])), ?of(followed(fee['heavy']))};
+  return charges.length == 1 ? charges.single : null;
+}
+
 /// The `fee_note` text stored beside [fee] (§2.5): the known vehicles as
 /// 機車…；大型重機…；汽車…, then 大型重機費率未提供 when the heavy rate is
 /// unknown (PM_ANS_20261101_55); a vehicle that is not_applicable is left

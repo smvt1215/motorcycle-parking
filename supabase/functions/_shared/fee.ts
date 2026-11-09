@@ -15,6 +15,39 @@ const has = (o: Json, k: string) => Object.hasOwn(o, k);
 const whole = (v: unknown, min: number, max: number) =>
   typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max;
 
+/**
+ * What [fee] says a motorcycle bay charges: `toll` or `free` when the
+ * vehicles parking there agree, a rate by time being toll if any period is;
+ * null when it says neither or they differ. As `charge_of_fee()` in SQL and
+ * `chargeOfFeeJson` in Dart (#369).
+ */
+export function chargeOfFee(fee: unknown): 'toll' | 'free' | null {
+  if (!isObject(fee)) return null;
+  const followed = (rate: unknown) =>
+    isObject(rate) && rate.mode === 'same_as_scooter'
+      ? fee.scooter
+      : isObject(rate) && rate.mode === 'same_as_car'
+      ? fee.car
+      : rate;
+  const of = (rate: unknown): 'toll' | 'free' | null => {
+    if (!isObject(rate)) return null;
+    if (rate.mode === 'free') return 'free';
+    if (rate.mode === 'hourly' || rate.mode === 'per_visit') return 'toll';
+    if (rate.mode !== 'by_time' || !Array.isArray(rate.periods)) return null;
+    const modes = rate.periods.map((p) =>
+      isObject(p) && isObject(p.rate) ? p.rate.mode : undefined
+    );
+    if (modes.includes('hourly') || modes.includes('per_visit')) return 'toll';
+    return modes.includes('free') ? 'free' : null;
+  };
+  const charges = new Set(
+    [of(followed(fee.scooter)), of(followed(fee.heavy))].filter((c) =>
+      c !== null
+    ),
+  );
+  return charges.size === 1 ? [...charges][0] : null;
+}
+
 /** A non-empty list of distinct strings drawn from `values`. */
 export const subset = (v: unknown, values: string[]) =>
   Array.isArray(v) && v.length > 0 &&

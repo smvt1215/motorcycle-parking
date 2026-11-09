@@ -139,26 +139,8 @@ ParkingLimit? writableLimit(ParkingLimit limit) {
 /// What [fee] says a motorcycle bay charges: toll or free when the vehicles
 /// parking there agree, a rate by time being toll if any period is. Null when
 /// it says neither or they differ; that stays unconfirmed (`ruleKindsOf`).
-Charge? chargeOfFee(Fee fee) {
-  Charge? of(Rate? rate) => switch (rate?.mode) {
-    null || FeeMode.notApplicable => null,
-    FeeMode.free => Charge.free,
-    FeeMode.hourly || FeeMode.perVisit => Charge.toll,
-    FeeMode.byTime => _chargeOfPeriods([
-      for (final p in rate!.periods ?? const <FeePeriod>[]) of(p.rate),
-    ]),
-    FeeMode.sameAsScooter => of(fee.scooter),
-    FeeMode.sameAsCar => of(fee.car),
-  };
-  final charges = {?of(fee.scooter), ?of(fee.heavy)};
-  return charges.length == 1 ? charges.single : null;
-}
-
-Charge? _chargeOfPeriods(List<Charge?> periods) => periods.contains(Charge.toll)
-    ? Charge.toll
-    : periods.contains(Charge.free)
-    ? Charge.free
-    : null;
+Charge? chargeOfFee(Fee fee) =>
+    Charge.values.asNameMap()[chargeOfFeeJson(fee.toJson())];
 
 /// One zone or segment as a form holds it.
 class EntryDraft {

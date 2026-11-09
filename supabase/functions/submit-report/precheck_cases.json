@@ -2113,6 +2113,122 @@
       "blocking": false
     },
     {
+      "name": "a segment's new rates are judged with the charge approval will write (#369)",
+      "body": {
+        "action": "flag",
+        "source_id": "10000000-0000-4000-8000-000000000002",
+        "reason": "費率：修改",
+        "field": "segments",
+        "proposed": {
+          "parking_segments": [
+            {
+              "id": "s1",
+              "fee": {
+                "scooter": { "mode": "free" },
+                "heavy": { "mode": "free" },
+                "car": { "mode": "not_applicable" }
+              }
+            }
+          ]
+        }
+      },
+      "current": {
+        "parking_segments": [
+          {
+            "id": "s1",
+            "name": "北側",
+            "condition": {
+              "bay": "motorcycle",
+              "use": "usual",
+              "charge": "toll",
+              "allow": { "scooter": true, "heavy": true }
+            }
+          }
+        ]
+      },
+      "expect": []
+    },
+    {
+      "name": "a segment back on the road's rates is judged with those (#369)",
+      "body": {
+        "action": "flag",
+        "source_id": "10000000-0000-4000-8000-000000000002",
+        "reason": "費率：修改",
+        "field": "segments",
+        "proposed": {
+          "parking_segments": [
+            { "id": "s1", "fee": null }
+          ]
+        }
+      },
+      "current": {
+        "fee": {
+          "scooter": { "mode": "free" },
+          "heavy": { "mode": "free" },
+          "car": { "mode": "not_applicable" }
+        },
+        "parking_segments": [
+          {
+            "id": "s1",
+            "name": "北側",
+            "condition": {
+              "bay": "motorcycle",
+              "use": "share",
+              "share": "scooter_heavy",
+              "charge": "toll",
+              "allow": { "scooter": true, "heavy": true }
+            },
+            "fee": {
+              "scooter": { "mode": "hourly", "amount": 20, "per_minutes": 60 },
+              "heavy": { "mode": "hourly", "amount": 20, "per_minutes": 60 },
+              "car": { "mode": "not_applicable" }
+            }
+          }
+        ]
+      },
+      "expect": [
+        "share_free_needs_basis@proposed.parking_segments.0.condition.charge"
+      ],
+      "blocking": false
+    },
+    {
+      "name": "a segment that also sends its condition keeps that charge (#369)",
+      "body": {
+        "action": "flag",
+        "source_id": "10000000-0000-4000-8000-000000000002",
+        "reason": "費率：修改",
+        "field": "segments",
+        "proposed": {
+          "parking_segments": [
+            {
+              "id": "s1",
+              "condition": {
+                "bay": "motorcycle",
+                "use": "usual",
+                "charge": "toll",
+                "allow": { "scooter": true, "heavy": true }
+              },
+              "fee": {
+                "scooter": { "mode": "free" },
+                "heavy": { "mode": "free" },
+                "car": { "mode": "not_applicable" }
+              }
+            }
+          ]
+        }
+      },
+      "current": {
+        "parking_segments": [
+          { "id": "s1", "name": "北側" }
+        ]
+      },
+      "expect": [
+        "charge_toll_free_rate@proposed.parking_segments.0.fee.scooter",
+        "charge_toll_free_rate@proposed.parking_segments.0.fee.heavy"
+      ],
+      "blocking": false
+    },
+    {
       "name": "a zone suggestion is not refused for another zone's stored rate (#155 item 40)",
       "body": {
         "action": "flag",

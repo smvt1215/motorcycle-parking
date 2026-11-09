@@ -7,7 +7,7 @@
 // contradiction still meets review, a wrong block loses a report.
 import data from './precheck_rules.json' with { type: 'json' };
 import contract from '../_shared/parking_contract.json' with { type: 'json' };
-import { mergeFee } from '../_shared/fee.ts';
+import { chargeOfFee, mergeFee } from '../_shared/fee.ts';
 
 /** `hold` lets the request through, flagged for stricter review (design
  * §4.3; feasibility §5.8): the Edge Function never refuses it. */
@@ -152,6 +152,40 @@ export function patchedEntries(current: unknown, patch: unknown[]): unknown[] {
 export function touchedEntries(list: unknown[], patch: unknown[]): boolean[] {
   const ids = new Set(patch.filter(object).map((e) => e.id).filter(Boolean));
   return list.map((e) => !object(e) || !('id' in e) || ids.has(e.id));
+}
+
+/**
+ * [list] as approval leaves it (#369, `segments_charge_follow_fee()` in SQL):
+ * a segment [patch] gives new rates, and no condition of its own, takes its
+ * charge from them, or from [spotFee] when it has none; no charge when they
+ * say neither. Only 一般機車格 and 普大共用格 ask it. The same as
+ * `segmentsChargeFollowFee` in Dart.
+ */
+function segmentsChargeFollowFee(
+  list: unknown[],
+  patch: unknown[],
+  spotFee: unknown,
+): unknown[] {
+  const follows = new Set(
+    patch.filter((e): e is Json =>
+      object(e) && 'fee' in e && !('condition' in e)
+    ).map((e) => e.id).filter(Boolean),
+  );
+  const asks = (c: Json) =>
+    c.bay === 'motorcycle' &&
+    !(Array.isArray(c.limits) &&
+      c.limits.some((l) =>
+        object(l) && (l.kind === 'special_vehicle' || l.kind === 'ev_only')
+      ));
+  return list.map((z) => {
+    if (!object(z) || !follows.has(z.id)) return z;
+    const c = z.condition;
+    if (!object(c) || !asks(c)) return z;
+    const own = object(z.fee) && Object.keys(z.fee).length > 0;
+    const charge = chargeOfFee(own ? z.fee : spotFee);
+    const { charge: _, ...rest } = c;
+    return { ...z, condition: charge ? { ...rest, charge } : rest };
+  });
 }
 
 const fromAccess = contract.conversion.from_access as Record<
@@ -497,7 +531,18 @@ export function precheck(body: Json, current?: Json): PrecheckIssue[] {
         if (!entryKeys.includes(k) || !Array.isArray(v)) return [k, v];
         const list = patchedEntries(current?.[k], v);
         touched[k] = touchedEntries(list, v);
-        return [k, list];
+        // Judged with the charge approval will write, not the stale one
+        // (#369).
+        return [
+          k,
+          k === 'parking_segments'
+            ? segmentsChargeFollowFee(
+              list,
+              v,
+              'fee' in judged ? judged.fee : current?.fee,
+            )
+            : list,
+        ];
       }),
     )
     : judged;
