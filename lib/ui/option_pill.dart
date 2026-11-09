@@ -2,6 +2,11 @@ import 'package:material_ui/material_ui.dart';
 
 import '../models/parking.dart';
 
+/// A pick puts away a keyboard a field above left open: iOS Zhuyin has no
+/// key for it (iPhone report, 2026-11-08; #383 did the report sheet and the
+/// space kinds).
+void _hideKeyboard() => FocusManager.instance.primaryFocus?.unfocus();
+
 /// A pill choice shared by the app's forms and the admin site (closure
 /// canvas, decision 41): selecting one changes only its fill, its outline
 /// and the outline's weight — no check mark and no bolder text — so it
@@ -39,7 +44,12 @@ class OptionPill extends StatelessWidget {
       label: tooltip,
       excludeSemantics: tooltip != null,
       child: InkWell(
-        onTap: onTap,
+        onTap: onTap == null
+            ? null
+            : () {
+                _hideKeyboard();
+                onTap!();
+              },
         borderRadius: BorderRadius.circular(24),
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
@@ -258,7 +268,10 @@ class VehicleSegments<T> extends StatelessWidget {
                             : ValueKey('$keyPrefix-${v is Enum ? v.name : v}'),
                         onTap: onChanged == null || disabled.contains(v)
                             ? null
-                            : () => onChanged!(v),
+                            : () {
+                                _hideKeyboard();
+                                onChanged!(v);
+                              },
                         child: Container(
                           constraints: const BoxConstraints(
                             minHeight: 48,
@@ -319,7 +332,12 @@ class OptionCheck extends StatelessWidget {
     final enabled = onChanged != null;
     return MergeSemantics(
       child: InkWell(
-        onTap: enabled ? () => onChanged!(!value) : null,
+        onTap: enabled
+            ? () {
+                _hideKeyboard();
+                onChanged!(!value);
+              }
+            : null,
         borderRadius: BorderRadius.circular(8),
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 48),
@@ -327,7 +345,12 @@ class OptionCheck extends StatelessWidget {
             children: [
               Checkbox(
                 value: value,
-                onChanged: enabled ? (v) => onChanged!(v ?? false) : null,
+                onChanged: enabled
+                    ? (v) {
+                        _hideKeyboard();
+                        onChanged!(v ?? false);
+                      }
+                    : null,
               ),
               const SizedBox(width: 4),
               Expanded(

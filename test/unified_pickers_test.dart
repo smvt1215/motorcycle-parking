@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:motorcycle_parking/features/report/report_sheet.dart';
 import 'package:motorcycle_parking/features/map/space_type_sheet.dart';
 import 'package:motorcycle_parking/models/space_kind.dart';
 import 'package:motorcycle_parking/models/zone_entries.dart';
@@ -180,6 +181,66 @@ void main() {
         expect(picked, kind);
         expect(focused(), isFalse);
       }, variant: TargetPlatformVariant({platform}));
+    }
+  }
+
+  // The same for the other choices (ChoiceField, the suggestion's pills,
+  // segments and check rows): a pick puts the keyboard away.
+  final choices = <String, (Widget, Finder)>{
+    'ChoiceField': (
+      ChoiceField<int>(
+        label: '選一個',
+        value: 0,
+        options: const [(0, '甲'), (1, '乙')],
+        onChanged: (_) {},
+      ),
+      find.text('乙'),
+    ),
+    'OptionPill': (
+      OptionPill(label: '施工中', selected: false, onTap: () {}),
+      find.text('施工中'),
+    ),
+    'VehicleSegments': (
+      EligibilityChoice(
+        label: '大型重機',
+        value: null,
+        onChanged: (_) {},
+        keyPrefix: 'seg',
+      ),
+      find.byKey(const ValueKey('seg-allowed')),
+    ),
+    'OptionCheck': (
+      OptionCheck(label: '地下', value: false, onChanged: (_) {}),
+      find.text('地下'),
+    ),
+  };
+  for (final MapEntry(key: name, value: (widget, target)) in choices.entries) {
+    for (final platform in [TargetPlatform.iOS, TargetPlatform.android]) {
+      for (final width in const [390.0, 820.0]) {
+        testWidgets('$name：打字中點選項會收起鍵盤（${platform.name} ${width.toInt()} 寬）', (
+          tester,
+        ) async {
+          await pump(
+            tester,
+            Column(
+              children: [
+                const TextField(key: ValueKey('field'), maxLines: 3),
+                widget,
+              ],
+            ),
+            width: width,
+          );
+          await tester.showKeyboard(find.byKey(const ValueKey('field')));
+          bool focused() => tester
+              .widget<EditableText>(find.byType(EditableText))
+              .focusNode
+              .hasFocus;
+          expect(focused(), isTrue);
+          await tester.tap(target);
+          await tester.pumpAndSettle();
+          expect(focused(), isFalse);
+        }, variant: TargetPlatformVariant({platform}));
+      }
     }
   }
 }
