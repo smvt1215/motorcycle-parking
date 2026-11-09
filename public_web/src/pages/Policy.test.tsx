@@ -147,6 +147,36 @@ describe('the published text', () => {
     expect(privacy.markdown).not.toContain('不收信');
   });
 
+  it('says what is kept of mail to support@, and that the raw mail is not (#295)', () => {
+    const text = privacy.markdown;
+    expect(text).toContain('寄件人 email、主旨（最多 200 字）、純文字內文（最多 4,000 字');
+    expect(text).toContain('附件只記錄檔名（最多 20 個，每個最多 200 字），不保存附件內容');
+    expect(text).toContain('SPF、DKIM、DMARC 驗證結果');
+    expect(text).toContain('我們的處理程式只在記憶體中解析原始信件');
+    expect(text).toContain('寄到 support@ 的 email。');
+  });
+
+  it('keeps the real limits of the form, not one 1,000 for every kind', () => {
+    expect(privacy.markdown).toContain('說明（刪除帳號申請最多 1,000 字，其他類型最多 4,000 字）');
+    expect(privacy.markdown).toContain('主旨（最多 120 字）');
+    expect(privacy.markdown).not.toContain('說明（最多 1,000 字）');
+  });
+
+  it('gives mail a retention, names Cloudflare and offers support@ to reach us', () => {
+    const text = privacy.markdown;
+    expect(text).toContain('客服表單與 email 來信');
+    expect(text).toContain('避免來信重複登錄的雜湊值');
+    expect(text).toContain('Cloudflare, Inc.：Email Routing 與 Email Worker');
+    expect(text).toContain('Cloudflare（Email Routing、Email Worker）：Cloudflare 的全球資料中心');
+    expect(text).toContain('客服表單（主要管道）');
+    expect(text).toContain('Email：support@motoparking.smvtstudio.com');
+  });
+
+  it('does not promise TLS for mail on its way to us', () => {
+    expect(privacy.markdown).not.toContain('所有傳輸都經 HTTPS');
+    expect(privacy.markdown).toContain('取決於寄件端的郵件伺服器');
+  });
+
   it('says what the mail service handles, and when Apple is not revoked', () => {
     expect(privacy.markdown).toContain('寄到帳號登入 email 的確認信、刪除帳號通知與取消連結');
     expect(privacy.markdown).toContain('透過客服表單申請時，我們無法代為撤銷');
