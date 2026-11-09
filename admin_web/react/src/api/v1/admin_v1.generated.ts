@@ -383,7 +383,7 @@ export type TimedCase = {
   bucket: 'overdue' | 'today' | 'later' | 'waiting';
   /** 排序第一鍵：send_failed 0、overdue 1、today／later 2、waiting 3 */
   rank: number;
-  /** 之後的寫入帶回比對（不符回 409）。客服＝案件狀態與最後一則往來紀錄的時間；檢舉＝點位 updated_at（點位已刪除時 null） */
+  /** 之後的寫入帶回比對（不符回 409）。客服＝案件狀態與最後一則往來紀錄的時間；檢舉＝點位 updated_at（點位已不存在時 null） */
   version: string | null;
   last_activity_at: string;
   /** 客服：寄件人未通過驗證的信；檢舉一律 false */
