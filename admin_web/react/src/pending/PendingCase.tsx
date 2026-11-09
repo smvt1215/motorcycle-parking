@@ -39,6 +39,8 @@ import { failedReply, pendingReplies, SupportBody, SupportNotices } from './Supp
 import { useTick } from './useCaseEffects';
 import './Case.css';
 
+const FOREIGN_POLL_MS = 2_000;
+
 type PanelName = 'resolve' | 'confirm-resolve' | 'restore' | 'keep' | 'edit' | null;
 
 interface Conflict {
@@ -225,6 +227,7 @@ function CaseView({ item, support, report, serverActions, reload, remaining }: C
           deadline: localDeadline(store.getState(), action.run_at),
           irreversible: action.irreversible,
           draft: draftFromPayload(action.action, action.payload as Record<string, unknown>),
+          expectedVersion: action.message_id ? undefined : action.expected_version,
           quiet: true,
           now: Date.now(),
         }),
@@ -304,7 +307,7 @@ function CaseView({ item, support, report, serverActions, reload, remaining }: C
     );
   };
 
-  const failedAction = failedReply(serverActions);
+  const failedAction = failedReply(serverActions, support?.messages ?? []);
   const failedSend =
     item.state === 'send_failed' && isSupport && (failedAction !== undefined || item.pending_action === null);
   const canReply = request?.can_reply === true && !failedAction;
@@ -628,7 +631,18 @@ function CaseLoader({ caseId }: { caseId: string }) {
     { body: { p_id: caseId } },
     { ...options, skip: item?.type !== 'report' },
   );
-  const actions = useAdminV1CaseActionsQuery({ body: { p_case: caseId } }, { ...options, skip: !item });
+  // Someone else's countdown is on no watcher: keep reading until it ends.
+  const foreign = useAppSelector((state) => {
+    const tracked = new Set(state.pendingActions.actions.map((a) => a.id));
+    const listed = adminV1.endpoints.adminV1CaseActions.select({ body: { p_case: caseId } })(state).data;
+    return (listed ?? []).filter(
+      (a) => (a.status === 'scheduled' || a.status === 'running') && !tracked.has(a.id),
+    ).length;
+  });
+  const actions = useAdminV1CaseActionsQuery(
+    { body: { p_case: caseId } },
+    { ...options, skip: !item, pollingInterval: foreign > 0 ? FOREIGN_POLL_MS : 0 },
+  );
 
   const reload = async () => {
     await row.refetch();
@@ -638,10 +652,10 @@ function CaseLoader({ caseId }: { caseId: string }) {
   };
 
   // A live action on this case just ended: everything about it changed.
-  const lastLive = useRef(live);
+  const lastBusy = useRef(live + foreign);
   useEffect(() => {
-    if (lastLive.current > live) void reload();
-    lastLive.current = live;
+    if (lastBusy.current > live + foreign) void reload();
+    lastBusy.current = live + foreign;
   });
 
   const error = (row.error ?? support.error ?? report.error ?? actions.error) as V1Error | undefined;
@@ -658,7 +672,7 @@ function CaseLoader({ caseId }: { caseId: string }) {
   }
   const loading =
     !item || (item.type === 'support' ? !support.currentData : !report.currentData) || !actions.currentData;
-  if (error && !item) {
+  if (error && loading) {
     return (
       <div className="pending-pane">
         <div className="pending-state">

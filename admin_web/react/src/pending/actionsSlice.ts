@@ -38,6 +38,12 @@ export interface TrackedAction {
   cancelError: boolean;
   /** Put back when the action does not happen; null once it has. */
   draft: CaseDraft | null;
+  /**
+   * The case version it was scheduled against. `case_actions` lists neither
+   * done nor cancelled actions, so this tells them apart afterwards. Undefined
+   * for a re-send, which keeps a listed row when cancelled.
+   */
+  expectedVersion?: string | null;
   sendingSince: number | null;
   settledAt: number | null;
 }
@@ -87,6 +93,12 @@ const remember = (state: PendingActionsState, id: string) => {
 
 const isFinished = (phase: Phase) => phase !== 'counting' && phase !== 'sending';
 
+/** 結案 consumes its own fields only: a reply it did not send stays with the case. */
+function keepUnsentReply(state: PendingActionsState, item: TrackedAction) {
+  if (item.action === 'reply' || !item.draft?.reply) return;
+  state.drafts[item.caseId] = { ...state.drafts[item.caseId], reply: item.draft.reply };
+}
+
 const OUTCOME_LINE: Partial<Record<Phase, (labels: ActionLabels) => string>> = {
   done: (l) => `${l.doneTitle}，${l.doneBody}`,
   cancelled: (l) => `${l.cancelledTitle}，${l.cancelledBody}`,
@@ -106,6 +118,7 @@ export interface TrackPayload {
   draft: CaseDraft | null | 'take';
   /** Not started from this page: no announcement. */
   quiet?: boolean;
+  expectedVersion?: string | null;
   now: number;
 }
 
@@ -118,7 +131,10 @@ export const pendingActionsSlice = createSlice({
       state.drafts[caseId] = { ...state.drafts[caseId], ...patch };
     },
     actionTracked(state, { payload }: PayloadAction<TrackPayload>) {
-      if (state.actions.some((a) => a.id === payload.id)) return;
+      const existing = state.actions.find((a) => a.id === payload.id);
+      if (existing && !isFinished(existing.phase)) return;
+      // 再寄一次 re-schedules the same row: a new countdown, not a repeat.
+      if (existing) state.actions = state.actions.filter((a) => a.id !== payload.id);
       remember(state, payload.id);
       const draft = payload.draft === 'take' ? (state.drafts[payload.caseId] ?? null) : payload.draft;
       if (payload.draft === 'take') delete state.drafts[payload.caseId];
@@ -136,6 +152,7 @@ export const pendingActionsSlice = createSlice({
         cancelling: false,
         cancelError: false,
         draft,
+        expectedVersion: payload.expectedVersion,
         sendingSince: payload.deadline <= payload.now ? payload.now : null,
         settledAt: null,
       });
@@ -158,6 +175,7 @@ export const pendingActionsSlice = createSlice({
         ) {
           item.phase = 'slow';
           item.settledAt = now;
+          keepUnsentReply(state, item);
           item.draft = null;
           // No longer followed: if it still fails, the case page may restore
           // the draft from the server's payload.
@@ -210,6 +228,8 @@ export const pendingActionsSlice = createSlice({
       item.cancelling = false;
       if (payload.outcome !== 'done' && item.draft) {
         state.drafts[item.caseId] = { ...state.drafts[item.caseId], ...item.draft };
+      } else if (payload.outcome === 'done') {
+        keepUnsentReply(state, item);
       }
       item.draft = null;
       state.revision += 1;
@@ -287,6 +307,7 @@ export function scheduleAction(
         deadline: localDeadline(getState(), result.data.run_at),
         irreversible: result.data.irreversible,
         draft: 'take',
+        expectedVersion: item.version,
         now: Date.now(),
       }),
     );

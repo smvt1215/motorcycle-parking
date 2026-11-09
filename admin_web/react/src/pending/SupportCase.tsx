@@ -205,9 +205,18 @@ export function SupportBody({
   );
 }
 
-/** Which action can 再寄一次, if any: only a reply whose mail failed for good. */
-export const failedReply = (actions: readonly CaseAction[]) =>
-  actions.find((a) => a.action === 'reply' && a.message_id !== null && a.delivery_status === 'failed');
+/**
+ * Which action can 再寄一次, if any. Only the case's last message qualifies:
+ * retry_case_action compares it to the case version, so after a newer message
+ * an old failure can only be answered with a new reply.
+ */
+export const failedReply = (actions: readonly CaseAction[], messages: readonly SupportMessage[]) => {
+  const last = messages.at(-1);
+  if (last?.direction !== 'out' || last.delivery_status !== 'failed') return undefined;
+  return actions.find(
+    (a) => a.action === 'reply' && a.message_id === last.id && a.delivery_status === 'failed',
+  );
+};
 
 /** The reply bubbles shown while waiting: this tab's and ones already running. */
 export function pendingReplies(

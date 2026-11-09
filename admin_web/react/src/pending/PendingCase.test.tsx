@@ -12,6 +12,8 @@ import type {
 } from '../api/v1/admin_v1.generated';
 import type { PostgrestConnection } from '../api/v1/base';
 import { DataConnectionContext } from '../app/connection';
+import { AuthContext } from '../auth/AuthContext';
+import type { AuthController } from '../auth/controller';
 import { routes } from '../app/routes';
 import { makeStore } from '../app/store';
 import { actionSettled, actionsReset, pendingActionsSlice, SLOW_AFTER_MS } from './actionsSlice';
@@ -154,6 +156,9 @@ type Reply = { status?: number; body: unknown };
 
 interface Setup {
   items: TimedCase[];
+  /** Replaces the messages of `support_request`. */
+  messages?: SupportRequestDetail['messages'];
+  failing?: string[];
   actions?: Record<string, CaseAction[]>;
   schedule?: (body: Record<string, unknown>) => Reply;
   cancel?: () => Reply;
@@ -177,6 +182,11 @@ function backend(setup: Setup) {
     const body = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
     calls.push({ url, body });
     let reply: Reply;
+    if (setup.failing?.includes(url)) {
+      return new Response(JSON.stringify({ code: 'XX000', message: 'internal', details: null }), {
+        status: 500,
+      });
+    }
     switch (url) {
       case 'timed_cases':
         reply = { body: { items: setup.items, next_cursor: null } };
@@ -192,7 +202,12 @@ function backend(setup: Setup) {
         break;
       }
       case 'support_request':
-        reply = { body: supportDetail(setup.items.find((i) => i.id === body.p_id)!) };
+        reply = {
+          body: {
+            ...supportDetail(setup.items.find((i) => i.id === body.p_id)!),
+            ...(setup.messages ? { messages: setup.messages } : {}),
+          },
+        };
         break;
       case 'content_report':
         reply = { body: reportDetail(setup.items.find((i) => i.id === body.p_id)!) };
@@ -225,14 +240,22 @@ function backend(setup: Setup) {
   return { postgrest, calls };
 }
 
-function open(postgrest: PostgrestConnection, path: string) {
+/** One state object: useSyncExternalStore compares snapshots by identity. */
+function signedInAs(userId: string) {
+  const state = { access: { userId } };
+  return { getState: () => state, subscribe: () => () => undefined } as unknown as AuthController;
+}
+
+function open(postgrest: PostgrestConnection, path: string, auth: AuthController | null = null) {
   const router = createMemoryRouter(routes, { initialEntries: [path] });
   const store = makeStore({ postgrest });
   render(
     <DataConnectionContext.Provider value="live">
-      <Provider store={store}>
-        <RouterProvider router={router} />
-      </Provider>
+      <AuthContext.Provider value={auth}>
+        <Provider store={store}>
+          <RouterProvider router={router} />
+        </Provider>
+      </AuthContext.Provider>
     </DataConnectionContext.Provider>,
   );
   return { router, store };
@@ -433,6 +456,159 @@ describe('案件詳情的處理', () => {
     expect(slow.seen).toEqual([]);
   });
 
+  it('reads an action cancelled in another tab as cancelled, and gives the draft back', async () => {
+    const { postgrest } = backend({ items: [row(1), row(2)], schedule: () => receipt('other-tab', 1) });
+    const { router } = open(postgrest, `/pending/${UUID(1)}`);
+    await typeReply('另一個分頁取消了');
+    await sendReply();
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/pending/${UUID(2)}`));
+    await tick(3000);
+    expect(await within(dock()).findByText('已取消寄出')).toBeInTheDocument();
+    await user.click(within(dock()).getByRole('button', { name: '打開案件' }));
+    expect(await screen.findByRole('textbox', { name: '回覆' })).toHaveValue('另一個分頁取消了');
+  });
+
+  it('reads an unlisted action as done once the case has moved on', async () => {
+    const items = [row(1), row(2)];
+    const { postgrest } = backend({ items, schedule: () => receipt('ran', 1) });
+    const { router } = open(postgrest, `/pending/${UUID(1)}`);
+    await typeReply('寄出去了');
+    await sendReply();
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/pending/${UUID(2)}`));
+    items[0] = row(1, { version: '2026-11-09T02:00:00.000000+00:00', state: 'awaiting_user' });
+    await tick(3000);
+    expect(await within(dock()).findByText('已寄出')).toBeInTheDocument();
+  });
+
+  it('starts a new countdown when a cancelled re-send is sent again under the same id', () => {
+    const slice = pendingActionsSlice;
+    const track = (deadline: number, now: number) =>
+      slice.actions.actionTracked({
+        id: 'a',
+        caseId: 'c',
+        action: 'reply',
+        labels: describeAction({ action: 'reply', item: row(1) }),
+        deadline,
+        irreversible: false,
+        draft: null,
+        now,
+      });
+    const first = slice.reducer(undefined, track(1000, 0));
+    const cancelled = slice.reducer(first, actionSettled({ id: 'a', outcome: 'cancelled', now: 500 }));
+    const again = slice.reducer(cancelled, track(6000, 1000));
+    expect(again.actions).toHaveLength(1);
+    expect(again.actions[0]).toMatchObject({ phase: 'counting', deadline: 6000, settledAt: null });
+    // A repeat while it is still counting changes nothing.
+    expect(slice.reducer(again, track(9000, 1100)).actions[0]?.deadline).toBe(6000);
+  });
+
+  it('keeps a reply that closing the case did not send', () => {
+    const slice = pendingActionsSlice;
+    const tracked = slice.reducer(
+      undefined,
+      slice.actions.actionTracked({
+        id: 'a',
+        caseId: 'c',
+        action: 'resolve_support',
+        labels: describeAction({ action: 'resolve_support', item: row(1) }),
+        deadline: 1000,
+        irreversible: false,
+        draft: { reply: '沒寄的', resolveStatus: 'done', resolveNote: '備註' },
+        now: 0,
+      }),
+    );
+    const done = slice.reducer(tracked, actionSettled({ id: 'a', outcome: 'done', now: 2000 }));
+    expect(done.drafts.c).toEqual({ reply: '沒寄的' });
+  });
+
+  it('offers a retry when the case content fails to load', async () => {
+    const setup: Setup = { items: [row(1)], failing: ['support_request'] };
+    const { postgrest } = backend(setup);
+    open(postgrest, `/pending/${UUID(1)}`);
+    expect(await screen.findByText('讀不到這筆案件')).toBeInTheDocument();
+    setup.failing = [];
+    await user.click(screen.getByRole('button', { name: '重試' }));
+    expect(await screen.findByRole('textbox', { name: '回覆' })).toBeInTheDocument();
+  });
+
+  it("follows another admin's action until it ends, then unlocks", async () => {
+    const theirs: CaseAction = {
+      id: 'theirs',
+      case_type: 'support',
+      case_id: UUID(1),
+      action: 'resolve_support',
+      status: 'scheduled',
+      run_at: new Date(Date.now() + 3000).toISOString(),
+      irreversible: false,
+      attempts: 0,
+      error: null,
+      actor: 'someone-else',
+      expected_version: null,
+      payload: {},
+      created_at: new Date().toISOString(),
+      started_at: null,
+      finished_at: null,
+      message_id: null,
+      delivery_status: null,
+      send_error: null,
+      address_editable: false,
+    };
+    const actions: Record<string, CaseAction[]> = { [UUID(1)]: [theirs] };
+    const { postgrest } = backend({ items: [row(1)], actions });
+    open(postgrest, `/pending/${UUID(1)}`, signedInAs('me'));
+    expect(await screen.findByText('這筆有排定的處理')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '結案' })).toBeDisabled();
+    actions[UUID(1)] = [];
+    await tick(2500);
+    await waitFor(() => expect(screen.queryByText('這筆有排定的處理')).not.toBeInTheDocument());
+    expect(screen.getByRole('button', { name: '結案' })).toBeEnabled();
+  });
+
+  it('lets a new message be answered despite an older failed reply', async () => {
+    const base = supportDetail(row(1)).messages[0]!;
+    const failed: CaseAction = {
+      id: 'old-failure',
+      case_type: 'support',
+      case_id: UUID(1),
+      action: 'reply',
+      status: 'done',
+      run_at: new Date().toISOString(),
+      irreversible: false,
+      attempts: 1,
+      error: null,
+      actor: 'me',
+      expected_version: null,
+      payload: {},
+      created_at: new Date().toISOString(),
+      started_at: null,
+      finished_at: null,
+      message_id: 'failed-message',
+      delivery_status: 'failed',
+      send_error: null,
+      address_editable: false,
+    };
+    const { postgrest } = backend({
+      items: [row(1, { has_exchange: true })],
+      actions: { [UUID(1)]: [failed] },
+      messages: [
+        base,
+        {
+          ...base,
+          id: 'failed-message',
+          direction: 'out',
+          channel: 'admin',
+          delivery_status: 'failed',
+          attempts: 5,
+        },
+        { ...base, id: 'newer', channel: 'case_link', body: '對方又補充' },
+      ],
+    });
+    open(postgrest, `/pending/${UUID(1)}`);
+    expect(await screen.findByRole('textbox', { name: '回覆' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '寄出回覆' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '再寄一次' })).not.toBeInTheDocument();
+  });
+
   it('keeps the draft and stays put when someone else handled the case', async () => {
     const stale = {
       status: 409,
@@ -544,9 +720,14 @@ describe('案件詳情的處理', () => {
       send_error: null,
       address_editable: false,
     };
+    const first = supportDetail(row(1)).messages[0]!;
     const { postgrest, calls } = backend({
       items: [row(1, { state: 'send_failed', rank: 0 }), row(2)],
       actions: { [UUID(1)]: [failed] },
+      messages: [
+        first,
+        { ...first, id: 'm1', direction: 'out', channel: 'admin', delivery_status: 'failed', attempts: 5 },
+      ],
     });
     open(postgrest, `/pending/${UUID(1)}`);
     await user.click(await screen.findByRole('button', { name: '再寄一次' }));

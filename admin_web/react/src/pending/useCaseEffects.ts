@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { adminV1 } from '../api/v1/admin_v1.generated';
 import { useAppDispatch, useAppSelector, useAppStore } from '../app/hooks';
 import { useIsPhone } from '../review/hooks';
+import type { V1Error } from '../api/v1/base';
 import { actionSettled, ticked, type TrackedAction } from './actionsSlice';
 
 const TICK_MS = 500;
@@ -22,16 +23,34 @@ export function useActionWatcher() {
   useEffect(() => {
     if (!active) return undefined;
 
-    const poll = async (caseId: string) => {
-      inFlight.current.add(caseId);
+    /**
+     * Neither done nor cancelled actions are listed. A case still open at the
+     * version it was scheduled against was left alone, so it was cancelled
+     * (another tab); every action that ran closes the case or adds a message.
+     */
+    const settleUnlisted = async (caseId: string, unlisted: TrackedAction[]) => {
+      const row = await dispatch(
+        adminV1.endpoints.adminV1TimedCase.initiate(
+          { body: { p_id: caseId } },
+          { subscribe: false, forceRefetch: true },
+        ),
+      );
+      if (row.error && (row.error as V1Error).message !== 'case.not_found') return;
+      for (const action of unlisted) {
+        const untouched = row.data !== undefined && row.data.version === action.expectedVersion;
+        dispatch(
+          actionSettled({ id: action.id, outcome: untouched ? 'cancelled' : 'done', now: Date.now() }),
+        );
+      }
+    };
+
+    const check = async (caseId: string) => {
       const result = await dispatch(
         adminV1.endpoints.adminV1CaseActions.initiate(
           { body: { p_case: caseId } },
           { subscribe: false, forceRefetch: true },
         ),
       );
-      inFlight.current.delete(caseId);
-      lastPoll.current.set(caseId, Date.now());
       // Not answered (offline, a 5xx): ask again next tick.
       if (!result.data) return;
       const listed = result.data;
@@ -40,15 +59,25 @@ export function useActionWatcher() {
         .pendingActions.actions.filter(
           (a: TrackedAction) => a.caseId === caseId && a.phase === 'sending' && !a.cancelling,
         );
+      const unlisted: TrackedAction[] = [];
       for (const action of waiting) {
         const server = listed.find((row) => row.id === action.id);
-        // Only unfinished, failed and stale actions are listed: done ones drop out.
-        if (!server || server.status === 'done') {
+        if (!server && action.expectedVersion !== undefined) {
+          unlisted.push(action);
+        } else if (!server || server.status === 'done') {
           dispatch(actionSettled({ id: action.id, outcome: 'done', now: Date.now() }));
         } else if (server.status === 'failed' || server.status === 'stale' || server.status === 'cancelled') {
           dispatch(actionSettled({ id: action.id, outcome: server.status, now: Date.now() }));
         }
       }
+      if (unlisted.length > 0) await settleUnlisted(caseId, unlisted);
+    };
+
+    const poll = async (caseId: string) => {
+      inFlight.current.add(caseId);
+      await check(caseId);
+      inFlight.current.delete(caseId);
+      lastPoll.current.set(caseId, Date.now());
     };
 
     const timer = setInterval(() => {
