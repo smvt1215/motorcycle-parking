@@ -17,6 +17,8 @@ import 'package:motorcycle_parking/models/parking.dart';
 import 'package:motorcycle_parking/models/space_kind.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
 
+import 'spot_detail_fixtures.dart' show pullUp;
+
 const spot = ParkingSpot(
   id: '00000000-0000-4000-8000-000000000123',
   name: '尚未收到不存在回報的機車停車點',
@@ -72,6 +74,14 @@ Future<void> tapCentered(WidgetTester tester, Finder target) async {
 }
 
 /// Taps the bay kind [kind] in the list.
+/// Slides the action bar to its end, where 修改建議 does not fit (#414).
+Future<void> revealSuggest(WidgetTester tester) async {
+  final rail = find.byKey(const ValueKey('spot-actions-rail'));
+  if (rail.evaluate().isEmpty) return;
+  await tester.drag(rail, const Offset(-600, 0));
+  await tester.pumpAndSettle();
+}
+
 Future<void> pickKind(WidgetTester tester, SpaceKind kind) =>
     tapCentered(tester, find.byKey(ValueKey('report-space-${kind.name}')));
 
@@ -911,22 +921,8 @@ void main() {
     final store = (await tester.runAsync(createStore))!;
     addTearDown(store.dispose);
     await openDetails(tester, store, scale: 1.6, brightness: Brightness.dark);
-    await tester.drag(
-      find.byKey(const ValueKey('parking-spot-sheet')),
-      const Offset(0, -500),
-    );
-    await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.text('修改建議').hitTestable(),
-      180,
-      scrollable: find
-          .descendant(
-            of: find.byKey(const ValueKey('parking-spot-sheet')),
-            matching: find.byType(Scrollable),
-          )
-          .first,
-    );
-    await tester.pumpAndSettle();
+    await pullUp(tester);
+    await revealSuggest(tester);
     await tester.tap(find.text('修改建議'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
@@ -954,10 +950,9 @@ void main() {
       final store = (await tester.runAsync(createStore))!;
       addTearDown(store.dispose);
       await openDetails(tester, store, scale: scale, brightness: brightness);
-      // At this size a resting sheet keeps the three actions (three rows)
-      // at the end of its list; opened to full height it pins them.
       await tester.tap(find.byKey(const ValueKey('four-sign-verdict')));
       await tester.pumpAndSettle();
+      await revealSuggest(tester);
       await tester.tap(find.text('修改建議'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('名稱'));
@@ -1219,22 +1214,8 @@ void main() {
     final store = (await tester.runAsync(createStore))!;
     addTearDown(store.dispose);
     await openDetails(tester, store, scale: 1.6, brightness: Brightness.dark);
-    await tester.drag(
-      find.byKey(const ValueKey('parking-spot-sheet')),
-      const Offset(0, -500),
-    );
-    await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.text('修改建議').hitTestable(),
-      180,
-      scrollable: find
-          .descendant(
-            of: find.byKey(const ValueKey('parking-spot-sheet')),
-            matching: find.byType(Scrollable),
-          )
-          .first,
-    );
-    await tester.pumpAndSettle();
+    await pullUp(tester);
+    await revealSuggest(tester);
     await tester.tap(find.text('修改建議'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(

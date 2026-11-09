@@ -420,7 +420,11 @@ class _SpotSheetState extends State<SpotSheet> {
     return NotificationListener<DraggableScrollableNotification>(
       onNotification: (n) {
         final pulled = n.extent >= .999;
-        if (pulled != full) setState(() => full = pulled);
+        if (pulled != full) {
+          // The full page scrolls as a whole; nothing stays offset in here.
+          if (pulled && previewScroll.hasClients) previewScroll.jumpTo(0);
+          setState(() => full = pulled);
+        }
         return false;
       },
       child: LayoutBuilder(
