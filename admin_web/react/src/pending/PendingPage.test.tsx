@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider } from 'react-redux';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -124,6 +124,23 @@ describe('待處理清單', () => {
     await userEvent.click(filter(/等對方/));
     expect(await screen.findByText('讀不到待處理清單')).toBeInTheDocument();
     expect(screen.queryByText('一般問題')).not.toBeInTheDocument();
+  });
+
+  it('reads the list again when Taiwan passes midnight', async () => {
+    // 23:59:30 on 11/09 in Taiwan.
+    vi.useFakeTimers({ now: Date.parse('2026-11-09T15:59:30Z'), shouldAdvanceTime: true });
+    const { postgrest, calls } = backend({
+      list: () => ({ body: { items: [row('a')], next_cursor: null } }),
+      counts: () => ({ body: COUNTS }),
+    });
+    renderPending(postgrest);
+    await screen.findByText('一般問題');
+    expect(calls).toHaveLength(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(61_000);
+    });
+    await waitFor(() => expect(calls).toHaveLength(2));
+    vi.useRealTimers();
   });
 
   it('shows 未知, not 0, when the counts fail', async () => {

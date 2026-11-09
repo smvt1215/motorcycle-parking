@@ -71,6 +71,9 @@ function taipeiDate(time: number): [number, number, number] {
   return taipei.format(new Date(time)).split('-').map(Number) as [number, number, number];
 }
 
+/** 「2026-11-09」: changes when Taiwan's day does. */
+export const taipeiDay = (time: number): string => taipei.format(new Date(time));
+
 /**
  * due_at is the instant the last working day ends, which is 00:00 of the day
  * after: step back inside the day the deadline actually names.

@@ -1,10 +1,10 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useLocation, useSearchParams } from 'react-router';
 import type { TimedCaseCounts } from '../api/v1/admin_v1.generated';
 import { useAuthController } from '../auth/AuthContext';
 import { Button, Chip } from '../ui/controls';
 import { needsSecondFactor, usePendingCounts, useTimedCasePagesInfiniteQuery } from './api';
-import { groupCases, parseTab, PENDING_TABS, tabCount, type PendingTab } from './model';
+import { groupCases, parseTab, PENDING_TABS, tabCount, taipeiDay, type PendingTab } from './model';
 import { PendingRow } from './PendingRow';
 
 const subscribeOnline = (listener: () => void) => {
@@ -18,7 +18,7 @@ const subscribeOnline = (listener: () => void) => {
 
 const useOnline = () => useSyncExternalStore(subscribeOnline, () => navigator.onLine);
 
-/** Re-reads the clock each minute, so 「今天」 turns over at Taiwan's midnight. */
+/** Re-reads the clock each minute, so the page notices Taiwan's midnight. */
 function useNow() {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -109,6 +109,19 @@ export function PendingList({ selectedId, onOpen }: PendingListProps) {
   const online = useOnline();
   const counts = usePendingCounts();
   const list = useTimedCasePagesInfiniteQuery(tab, { refetchOnFocus: true, refetchOnReconnect: true });
+  const { refetch: refetchList } = list;
+  const { refetch: refetchCounts } = counts;
+
+  // bucket and rank are the server's, as of the last read: a page left open
+  // past midnight must ask again, or yesterday's 今天 stays 今天.
+  const day = taipeiDay(now);
+  const lastDay = useRef(day);
+  useEffect(() => {
+    if (lastDay.current === day) return;
+    lastDay.current = day;
+    void refetchList();
+    void refetchCounts();
+  }, [day, refetchList, refetchCounts]);
 
   const show = (next: PendingTab) => setParams(next === 'all' ? {} : { tab: next });
   // currentData, not data: data keeps the previous tab's rows after a switch.
