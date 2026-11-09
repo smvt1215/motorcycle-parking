@@ -15,8 +15,7 @@
 ## 一、蒐集者
 
 - 名稱：小哲資訊工作室（負責人：H.C. CHEN）
-- 聯絡信箱：ops@motoparking.smvtstudio.com
-- 個資聯絡窗口：客服表單 <https://motoparking.smvtstudio.com/support>（我們會回覆到你填寫的 email；寄件信箱 support@motoparking.smvtstudio.com 只寄信、不收信）
+- 個資聯絡窗口：客服表單 <https://motoparking.smvtstudio.com/support>（我們會回覆到你填寫的 email）；或寄信到 support@motoparking.smvtstudio.com，來信會登錄為客服案件。查閱、更正、取得複製本或刪除帳號的請求，寄信無法確認你是帳號本人，請用客服表單申請。
 
 ## 二、蒐集的目的
 
@@ -208,4 +207,3 @@ App 不使用廣告追蹤或分析 SDK。
 小哲資訊工作室（負責人：H.C. CHEN）
 
 - 客服表單：<https://motoparking.smvtstudio.com/support>
-- 聯絡信箱：ops@motoparking.smvtstudio.com

@@ -21,7 +21,8 @@ describe('/privacy', () => {
     open();
     const main = screen.getByRole('main');
     expect(main).toHaveTextContent('小哲資訊工作室（負責人：H.C. CHEN）');
-    expect(main).toHaveTextContent('ops@motoparking.smvtstudio.com');
+    expect(main).toHaveTextContent('support@motoparking.smvtstudio.com');
+    expect(main).not.toHaveTextContent('ops@');
   });
 
   it('lists every section, and each contents link reaches its heading', () => {
@@ -109,7 +110,7 @@ describe('/terms', () => {
     expect(terms.markdown).toContain('停權期間仍可登入、管理和刪除帳號');
     expect(terms.markdown).toContain('你可以在停車點詳情檢舉不當內容');
     expect(terms.markdown).toContain('類型選「檢舉與申訴」');
-    expect(terms.markdown).toContain('ops@motoparking.smvtstudio.com');
+    expect(terms.markdown).not.toContain('ops@');
     expect(terms.markdown).toContain('臺灣臺北地方法院');
     expect(terms.markdown).toContain('前兩項不適用');
     expect(terms.markdown).not.toContain('新臺幣');
@@ -138,6 +139,12 @@ describe('the published text', () => {
       expect(privacy.markdown).not.toContain(mark);
     }
     expect(privacy.markdown).not.toMatch(/#\d{2,}/);
+  });
+
+  it('says support@ takes mail as a case, and that mail does not prove who owns an account', () => {
+    expect(privacy.markdown).toContain('來信會登錄為客服案件');
+    expect(privacy.markdown).toContain('寄信無法確認你是帳號本人，請用客服表單申請');
+    expect(privacy.markdown).not.toContain('不收信');
   });
 
   it('says what the mail service handles, and when Apple is not revoked', () => {
