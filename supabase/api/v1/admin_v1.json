@@ -436,6 +436,130 @@
           }
         }
       }
+    },
+    "/rpc/timed_cases": {
+      "post": {
+        "operationId": "admin_v1_timed_cases",
+        "summary": "待處理：有期限的客服案件與內容檢舉（v43）",
+        "description": "依 rank、due_at、id 排序；寄送失敗固定在最上面。p_bucket all＝overdue＋today＋later，不含 waiting（等對方、系統處理中）。分頁用 next_cursor（keyset），不用 offset。錯誤：400 request.invalid（detail 的 field）、403 auth.aal2_required。",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "p_kind": {
+                    "type": "string",
+                    "enum": [
+                      "all",
+                      "support",
+                      "report",
+                      "support:general",
+                      "support:data_issue",
+                      "support:complaint",
+                      "support:privacy",
+                      "support:account_deletion",
+                      "report:rider_name",
+                      "report:spot_name",
+                      "report:text",
+                      "report:impersonation",
+                      "report:other"
+                    ],
+                    "default": "all",
+                    "description": "all、support、report，或 `support:<類型>`、`report:<target>`"
+                  },
+                  "p_bucket": {
+                    "type": "string",
+                    "enum": [
+                      "all",
+                      "overdue",
+                      "today",
+                      "later",
+                      "waiting"
+                    ],
+                    "default": "all"
+                  },
+                  "p_cursor": {
+                    "oneOf": [
+                      {
+                        "$ref": "#/components/schemas/TimedCaseCursor"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "p_limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 200,
+                    "default": 50
+                  }
+                },
+                "example": {
+                  "p_kind": "all",
+                  "p_bucket": "all",
+                  "p_cursor": null,
+                  "p_limit": 50
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "一頁待處理",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimedCasePage"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/rpc/timed_case_counts": {
+      "post": {
+        "operationId": "admin_v1_timed_case_counts",
+        "summary": "待處理的計數（導覽徽章、分頁）",
+        "description": "和 timed_cases 同一套規則，一次取回。錯誤：403 auth.aal2_required。",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {},
+                "example": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "計數",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimedCaseCounts"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1226,6 +1350,224 @@
           }
         },
         "description": "restore 不可給；edit 必填；keep 選填（target 含 spot_name 時要有 name）"
+      },
+      "TimedCaseCursor": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "rank",
+          "due_at",
+          "id"
+        ],
+        "description": "keyset 游標：上一頁的 next_cursor 原樣帶回",
+        "properties": {
+          "rank": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3
+          },
+          "due_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string"
+          }
+        }
+      },
+      "TimedCase": {
+        "type": "object",
+        "description": "一件有期限、要處理的事（客服案件或一組內容檢舉）；不含使用者文字與 email",
+        "required": [
+          "id",
+          "type",
+          "kind",
+          "state",
+          "due_at",
+          "bucket",
+          "rank",
+          "version",
+          "last_activity_at",
+          "suspicious",
+          "report_count",
+          "hidden_parts",
+          "spot_id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "客服＝案件 id（admin_v1.support_request 的 p_id）；檢舉＝組內最早一則的 id（admin_v1.content_report 的 p_id）"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "support",
+              "report"
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "description": "客服＝案件類型（general、data_issue、complaint、privacy、account_deletion）；檢舉＝target（rider_name、spot_name、text、impersonation、other）"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "send_failed",
+              "system",
+              "awaiting_admin",
+              "awaiting_user",
+              "spot_deleted",
+              "held",
+              "open"
+            ],
+            "description": "客服：send_failed 最後一則回覆寄送失敗且不再自動重試；system 不能回覆（刪除帳號、個資請求未確認本人），由系統處理；awaiting_admin 等客服回覆；awaiting_user 等對方。檢舉：spot_deleted 點位已被刪除；held 被檢舉的部分遮蔽中；open 沒有遮蔽（other，或命中不立即隱藏的規則）"
+          },
+          "due_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "期限：5 個工作天結束（台灣時間，依 public.holidays；補班日算工作日）。客服從送出或重新開啟起算，檢舉從組內最早一則起算"
+          },
+          "bucket": {
+            "type": "string",
+            "enum": [
+              "overdue",
+              "today",
+              "later",
+              "waiting"
+            ],
+            "description": "waiting＝awaiting_user、system；其餘依期限（today＝今天結束前到期，台灣時間）"
+          },
+          "rank": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3,
+            "description": "排序第一鍵：send_failed 0、overdue 1、today／later 2、waiting 3"
+          },
+          "version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "之後的寫入帶回比對（不符回 409）。客服＝案件狀態與最後一則往來紀錄的時間；檢舉＝點位 updated_at（點位已不存在時 null）"
+          },
+          "last_activity_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "suspicious": {
+            "type": "boolean",
+            "description": "客服：寄件人未通過驗證的信；檢舉一律 false"
+          },
+          "report_count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "檢舉：組內處理中的檢舉數；客服 null"
+          },
+          "hidden_parts": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "enum": [
+                "rider_name",
+                "spot_name",
+                "text"
+              ]
+            },
+            "description": "檢舉：目前遮蔽中的部分（空陣列＝沒有遮蔽，不要顯示「放回 App」）；客服 null"
+          },
+          "spot_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "檢舉的點位；客服 null"
+          }
+        }
+      },
+      "TimedCasePage": {
+        "type": "object",
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TimedCase"
+            }
+          },
+          "next_cursor": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TimedCaseCursor"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "還有下一頁時的游標；沒有時 null"
+          }
+        }
+      },
+      "TimedCaseCounts": {
+        "type": "object",
+        "required": [
+          "all",
+          "overdue",
+          "today",
+          "later",
+          "waiting",
+          "send_failed",
+          "by_kind",
+          "as_of"
+        ],
+        "description": "all＝overdue＋today＋later（waiting 另計）；send_failed 也算在 all 與它的 bucket 裡。取不到時用戶端顯示未知，不要顯示 0",
+        "properties": {
+          "all": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "overdue": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "today": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "later": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "waiting": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "send_failed": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "by_kind": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "只算 all 的列；鍵是 support、report、`support:<類型>`、`report:<target>`，0 筆的鍵不出現"
+          },
+          "as_of": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
       }
     },
     "responses": {

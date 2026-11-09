@@ -62,6 +62,20 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.body,
       }),
     }),
+    adminV1TimedCases: build.query<AdminV1TimedCasesApiResponse, AdminV1TimedCasesApiArg>({
+      query: (queryArg) => ({
+        url: `/rpc/timed_cases`,
+        method: 'POST',
+        body: queryArg.body,
+      }),
+    }),
+    adminV1TimedCaseCounts: build.query<AdminV1TimedCaseCountsApiResponse, AdminV1TimedCaseCountsApiArg>({
+      query: (queryArg) => ({
+        url: `/rpc/timed_case_counts`,
+        method: 'POST',
+        body: queryArg.body,
+      }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -129,6 +143,33 @@ export type AdminV1ResolveContentReportApiArg = {
     p_reason?: 'wrong' | 'duplicate' | 'insufficient' | 'outdated' | 'abuse' | 'other';
     p_note?: string;
   };
+};
+export type AdminV1TimedCasesApiResponse = /** status 200 一頁待處理 */ TimedCasePage;
+export type AdminV1TimedCasesApiArg = {
+  body: {
+    /** all、support、report，或 `support:<類型>`、`report:<target>` */
+    p_kind?:
+      | 'all'
+      | 'support'
+      | 'report'
+      | 'support:general'
+      | 'support:data_issue'
+      | 'support:complaint'
+      | 'support:privacy'
+      | 'support:account_deletion'
+      | 'report:rider_name'
+      | 'report:spot_name'
+      | 'report:text'
+      | 'report:impersonation'
+      | 'report:other';
+    p_bucket?: 'all' | 'overdue' | 'today' | 'later' | 'waiting';
+    p_cursor?: TimedCaseCursor | null;
+    p_limit?: number;
+  };
+};
+export type AdminV1TimedCaseCountsApiResponse = /** status 200 計數 */ TimedCaseCounts;
+export type AdminV1TimedCaseCountsApiArg = {
+  body: {};
 };
 export type MinAppVersion = {
   /** 目前生效的最低版本 */
@@ -328,6 +369,55 @@ export type ContentReportPatch = {
   parking_guide?: string;
   special_rules?: string;
 };
+export type TimedCase = {
+  /** 客服＝案件 id（admin_v1.support_request 的 p_id）；檢舉＝組內最早一則的 id（admin_v1.content_report 的 p_id） */
+  id: string;
+  type: 'support' | 'report';
+  /** 客服＝案件類型（general、data_issue、complaint、privacy、account_deletion）；檢舉＝target（rider_name、spot_name、text、impersonation、other） */
+  kind: string;
+  /** 客服：send_failed 最後一則回覆寄送失敗且不再自動重試；system 不能回覆（刪除帳號、個資請求未確認本人），由系統處理；awaiting_admin 等客服回覆；awaiting_user 等對方。檢舉：spot_deleted 點位已被刪除；held 被檢舉的部分遮蔽中；open 沒有遮蔽（other，或命中不立即隱藏的規則） */
+  state: 'send_failed' | 'system' | 'awaiting_admin' | 'awaiting_user' | 'spot_deleted' | 'held' | 'open';
+  /** 期限：5 個工作天結束（台灣時間，依 public.holidays；補班日算工作日）。客服從送出或重新開啟起算，檢舉從組內最早一則起算 */
+  due_at: string;
+  /** waiting＝awaiting_user、system；其餘依期限（today＝今天結束前到期，台灣時間） */
+  bucket: 'overdue' | 'today' | 'later' | 'waiting';
+  /** 排序第一鍵：send_failed 0、overdue 1、today／later 2、waiting 3 */
+  rank: number;
+  /** 之後的寫入帶回比對（不符回 409）。客服＝案件狀態與最後一則往來紀錄的時間；檢舉＝點位 updated_at（點位已不存在時 null） */
+  version: string | null;
+  last_activity_at: string;
+  /** 客服：寄件人未通過驗證的信；檢舉一律 false */
+  suspicious: boolean;
+  /** 檢舉：組內處理中的檢舉數；客服 null */
+  report_count: number | null;
+  /** 檢舉：目前遮蔽中的部分（空陣列＝沒有遮蔽，不要顯示「放回 App」）；客服 null */
+  hidden_parts: ('rider_name' | 'spot_name' | 'text')[] | null;
+  /** 檢舉的點位；客服 null */
+  spot_id: string | null;
+};
+export type TimedCaseCursor = {
+  rank: number;
+  due_at: string;
+  id: string;
+};
+export type TimedCasePage = {
+  items: TimedCase[];
+  /** 還有下一頁時的游標；沒有時 null */
+  next_cursor: TimedCaseCursor | null;
+};
+export type TimedCaseCounts = {
+  all: number;
+  overdue: number;
+  today: number;
+  later: number;
+  waiting: number;
+  send_failed: number;
+  /** 只算 all 的列；鍵是 support、report、`support:<類型>`、`report:<target>`，0 筆的鍵不出現 */
+  by_kind: {
+    [key: string]: number;
+  };
+  as_of: string;
+};
 export const {
   useAdminV1SetMinSupportedAppVersionMutation,
   useAdminV1SupportRequestsQuery,
@@ -336,4 +426,6 @@ export const {
   useAdminV1ReplySupportRequestMutation,
   useAdminV1ContentReportQuery,
   useAdminV1ResolveContentReportMutation,
+  useAdminV1TimedCasesQuery,
+  useAdminV1TimedCaseCountsQuery,
 } = injectedRtkApi;
