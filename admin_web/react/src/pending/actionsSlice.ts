@@ -18,7 +18,7 @@ import {
  * unmounts the whole app (AuthGate).
  */
 
-export type Phase = 'counting' | 'sending' | 'done' | 'cancelled' | 'failed' | 'stale' | 'slow';
+export type Phase = 'counting' | 'sending' | 'done' | 'cancelled' | 'failed' | 'stale';
 
 export interface TrackedAction {
   id: string;
@@ -45,6 +45,8 @@ export interface TrackedAction {
    */
   expectedVersion?: string | null;
   sendingSince: number | null;
+  /** Past the usual wait. Still followed: the draft stays until the outcome is known. */
+  slow: boolean;
   settledAt: number | null;
 }
 
@@ -58,6 +60,8 @@ export interface PendingActionsState {
   revision: number;
   /** The one sentence a screen reader hears; only at the start and the end. */
   announcement: string;
+  /** Raised by every reset: an answer to a request from before it is dropped. */
+  generation: number;
 }
 
 const initialState: PendingActionsState = {
@@ -67,6 +71,7 @@ const initialState: PendingActionsState = {
   seen: [],
   revision: 0,
   announcement: '',
+  generation: 0,
 };
 
 /** How long a finished line stays. Failures and conflicts stay longest. */
@@ -75,7 +80,6 @@ export const RESULT_MS: Record<Phase, number> = {
   sending: Infinity,
   done: 3_000,
   cancelled: 8_000,
-  slow: 10_000,
   failed: 15_000,
   stale: 15_000,
 };
@@ -104,7 +108,6 @@ const OUTCOME_LINE: Partial<Record<Phase, (labels: ActionLabels) => string>> = {
   cancelled: (l) => `${l.cancelledTitle}，${l.cancelledBody}`,
   failed: (l) => `${l.failedTitle}，${l.failedBody}`,
   stale: (l) => `${l.staleTitle}，${l.staleBody}`,
-  slow: (l) => `${l.sendingTitle}，結果會顯示在清單`,
 };
 
 export interface TrackPayload {
@@ -154,6 +157,7 @@ export const pendingActionsSlice = createSlice({
         draft,
         expectedVersion: payload.expectedVersion,
         sendingSince: payload.deadline <= payload.now ? payload.now : null,
+        slow: false,
         settledAt: null,
       });
       state.revision += 1;
@@ -173,13 +177,7 @@ export const pendingActionsSlice = createSlice({
           item.sendingSince !== null &&
           now - item.sendingSince >= SLOW_AFTER_MS
         ) {
-          item.phase = 'slow';
-          item.settledAt = now;
-          keepUnsentReply(state, item);
-          item.draft = null;
-          // No longer followed: if it still fails, the case page may restore
-          // the draft from the server's payload.
-          state.seen = state.seen.filter((id) => id !== item.id);
+          item.slow = true;
         }
       }
       // Only when something expired: a new array re-renders every subscriber.
@@ -243,7 +241,7 @@ export const pendingActionsSlice = createSlice({
       remember(state, payload.actionId);
       state.drafts[payload.caseId] = { ...payload.draft, ...state.drafts[payload.caseId] };
     },
-    actionsReset: () => initialState,
+    actionsReset: (state) => ({ ...initialState, generation: state.generation + 1 }),
   },
 });
 
@@ -279,6 +277,12 @@ export type RunResult = { ok: true } | { ok: false; error: V1Error };
 
 const failure = (error: unknown): RunResult => ({ ok: false, error: error as V1Error });
 
+/** Signed out or switched while the request was out: nothing of it may come back. */
+const SUPERSEDED: RunResult = {
+  ok: false,
+  error: { status: 0, code: 'client.superseded', message: 'client.superseded', details: null },
+};
+
 /** Writes the action, then follows it. The draft moves only after the server has accepted. */
 export function scheduleAction(
   item: Pick<TimedCase, 'id' | 'type' | 'kind' | 'hidden_parts' | 'version'>,
@@ -287,6 +291,7 @@ export function scheduleAction(
   context: Pick<ActionContext, 'replyTo' | 'resolveStatus'> = {},
 ): Thunk<Promise<RunResult>> {
   return async (dispatch, getState) => {
+    const generation = getState().pendingActions.generation;
     const result = await dispatch(
       adminV1.endpoints.adminV1ScheduleCaseAction.initiate({
         body: {
@@ -297,6 +302,7 @@ export function scheduleAction(
         },
       }),
     );
+    if (getState().pendingActions.generation !== generation) return SUPERSEDED;
     if ('error' in result) return failure(result.error);
     dispatch(
       actionTracked({
@@ -322,9 +328,11 @@ export function retryReply(
   replyTo: string | null,
 ): Thunk<Promise<RunResult>> {
   return async (dispatch, getState) => {
+    const generation = getState().pendingActions.generation;
     const result = await dispatch(
       adminV1.endpoints.adminV1RetryCaseAction.initiate({ body: { p_action_id: actionId } }),
     );
+    if (getState().pendingActions.generation !== generation) return SUPERSEDED;
     if ('error' in result) return failure(result.error);
     dispatch(
       actionTracked({

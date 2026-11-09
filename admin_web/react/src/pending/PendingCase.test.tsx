@@ -438,7 +438,7 @@ describe('案件詳情的處理', () => {
     expect(after.drafts).toEqual({});
   });
 
-  it('lets the server restore the draft once it stops following a slow action', () => {
+  it('keeps following a slow action, draft included, until its outcome is known', () => {
     const slice = pendingActionsSlice;
     const base = slice.reducer(
       undefined,
@@ -455,8 +455,27 @@ describe('案件詳情的處理', () => {
     );
     const sending = slice.reducer(base, slice.actions.ticked(1000));
     const slow = slice.reducer(sending, slice.actions.ticked(1000 + SLOW_AFTER_MS));
-    expect(slow.actions[0]?.phase).toBe('slow');
-    expect(slow.seen).toEqual([]);
+    expect(slow.actions[0]).toMatchObject({ phase: 'sending', slow: true, draft: { reply: '內文' } });
+    const cancelled = slice.reducer(slow, actionSettled({ id: 'a', outcome: 'cancelled', now: 200_000 }));
+    expect(cancelled.drafts.c).toEqual({ reply: '內文' });
+  });
+
+  it('drops the answer to a request sent before signing out', async () => {
+    let release = () => undefined as void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { postgrest } = backend({ items: [row(1), row(2)], gate });
+    const { store } = open(postgrest, `/pending/${UUID(1)}`);
+    await typeReply('送出中登出');
+    await sendReply();
+    await waitFor(() => expect(screen.getByRole('textbox', { name: '回覆' })).toHaveAttribute('readonly'));
+    act(() => {
+      store.dispatch(actionsReset());
+    });
+    release();
+    await tick(100);
+    expect(store.getState().pendingActions.actions).toEqual([]);
   });
 
   it('reads an action cancelled in another tab as cancelled, and gives the draft back', async () => {

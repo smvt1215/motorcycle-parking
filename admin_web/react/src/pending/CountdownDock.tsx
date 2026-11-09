@@ -68,18 +68,17 @@ function Counting({
 }
 
 function Result({ action, onOpen }: { action: TrackedAction; onOpen: () => void }) {
-  const { labels, phase, late } = action;
+  const { labels, phase, late, slow } = action;
   if (phase === 'sending') {
-    return late ? (
-      <Bar tone="alert" title="來不及取消" body={labels.lateBody} />
-    ) : (
-      <Bar title={labels.sendingTitle} body={labels.sendingBody} />
+    if (late) return <Bar tone="alert" title="來不及取消" body={labels.lateBody} />;
+    return (
+      <Bar
+        title={labels.sendingTitle}
+        body={slow ? '伺服器比平常慢，結果出來前內容都會保留' : labels.sendingBody}
+      />
     );
   }
   if (phase === 'done') return <Bar title={labels.doneTitle} body={labels.doneBody} />;
-  if (phase === 'slow') {
-    return <Bar title={labels.sendingTitle} body="伺服器比平常慢，結果會顯示在清單" />;
-  }
   const open = (
     <Button className="dock-bar__cancel" onClick={onOpen}>
       打開案件
