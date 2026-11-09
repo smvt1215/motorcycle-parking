@@ -225,6 +225,14 @@ class ParkingRepository {
     }
     return geocodeSearch(client!.functions, query, lat: lat, lng: lng);
   }
+
+  /// The door nearest a point, for the row under the picker (#407).
+  Future<ApproxAddress?> approxAddress(double lat, double lng) async {
+    if (client == null) {
+      throw const AddressSearchException('not_configured');
+    }
+    return geocodeReverse(client!.functions, lat, lng);
+  }
 }
 
 /// This install's id, sent with every report and sighting; the server only

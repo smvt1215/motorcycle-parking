@@ -117,18 +117,22 @@ Future<List<AddressCandidate>> geocodeSearch(
   String query, {
   double? lat,
   double? lng,
-}) async {
-  final FunctionResponse res;
+}) async => parseCandidates(
+  await _invokeGeocode(functions, {
+    'query': query,
+    if (lat != null && lng != null) 'near': {'lat': lat, 'lng': lng},
+  }),
+);
+
+Future<Object?> _invokeGeocode(
+  FunctionsClient functions,
+  Map<String, Object?> body,
+) async {
   try {
-    res = await functions
-        .invoke(
-          'geocode',
-          body: {
-            'query': query,
-            if (lat != null && lng != null) 'near': {'lat': lat, 'lng': lng},
-          },
-        )
+    final res = await functions
+        .invoke('geocode', body: body)
         .timeout(const Duration(seconds: 15));
+    return res.data;
   } on FunctionException catch (e) {
     final details = e.details;
     final code = details is Map ? details['error'] : null;
@@ -138,7 +142,46 @@ Future<List<AddressCandidate>> geocodeSearch(
   } catch (_) {
     throw const AddressSearchException('network');
   }
-  return parseCandidates(res.data);
+}
+
+/// The door nearest a point (#407): only shown beside a Google map, never
+/// stored or sent with a report.
+class ApproxAddress {
+  const ApproxAddress(this.road, [this.number]);
+  final String road;
+
+  /// The house number without 號; null when only the road is known.
+  final String? number;
+
+  @override
+  bool operator ==(Object other) =>
+      other is ApproxAddress && other.road == road && other.number == number;
+  @override
+  int get hashCode => Object.hash(road, number);
+}
+
+/// The `geocode` function's reverse lookup; null when it found nothing to
+/// show. Throws [AddressSearchException].
+Future<ApproxAddress?> geocodeReverse(
+  FunctionsClient functions,
+  double lat,
+  double lng,
+) async => parseApproxAddress(
+  await _invokeGeocode(functions, {
+    'reverse': {'lat': lat, 'lng': lng},
+  }),
+);
+
+ApproxAddress? parseApproxAddress(Object? data) {
+  if (data is! Map || !data.containsKey('road')) {
+    throw const AddressSearchException('unavailable');
+  }
+  final road = data['road'], number = data['number'];
+  if (road is! String || road.isEmpty) return null;
+  return ApproxAddress(
+    road,
+    number is String && number.isNotEmpty ? number : null,
+  );
 }
 
 List<AddressCandidate> parseCandidates(Object? data) {
