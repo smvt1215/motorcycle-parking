@@ -355,7 +355,7 @@ select dblink_exec('cx',$$insert into private.case_actions(id,case_type,case_id,
   values('6a000000-0000-4000-8000-000000000001','support','6a000000-0000-4000-8000-0000000000ff','reply','{}',
     '10000000-0000-4000-8000-000000000005',now()-interval '1 minute',false)$$);
 select dblink_exec('cx','begin');
-select dblink_exec('cx',$$select 1 from private.case_actions where id='6a000000-0000-4000-8000-000000000001' for update$$);
+select * from dblink('cx',$$select 1 from private.case_actions where id='6a000000-0000-4000-8000-000000000001' for update$$) as t(x integer);
 select is((select status from private.case_actions where id='6a000000-0000-4000-8000-000000000001'),'scheduled','the other session''s row is visible');
 select is((select public.run_due_case_actions()->'claimed'),'0'::jsonb,'a locked row is skipped, not waited for');
 select is((select status from private.case_actions where id='6a000000-0000-4000-8000-000000000001'),'scheduled','and left alone');
