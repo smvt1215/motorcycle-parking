@@ -496,7 +496,7 @@ function Confirm({
           {t.confirmCheckHint}
         </p>
       )}
-      <p className="flow-note">{t.reauthNote}</p>
+      <p className="flow-note">{user.provider === 'apple' ? t.reauthNoteApple : t.reauthNote}</p>
     </FlowPanel>
   );
 }

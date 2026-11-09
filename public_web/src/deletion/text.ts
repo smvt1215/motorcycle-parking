@@ -18,6 +18,13 @@ export const confirmAction = '刪除帳號';
 export const confirmCancel = '取消';
 export const sending = '正在送出…';
 export const reauthNote = '如果超過 10 分鐘沒登入，送出前會請你再登入一次。';
+/**
+ * Apple riders: the revoke needs the authorization code of an Apple sign-in
+ * on this page, used once and only for about 4.5 minutes, so the App's
+ * 「送出前會請你再用 Apple 登入一次」 holds unless they just signed in here.
+ */
+export const reauthNoteApple =
+  '如果剛才不是在這個頁面登入，送出前會請你再用 Apple 登入一次，以便撤銷「使用 Apple 登入」的授權。';
 export const signOut = '登出';
 /** Web only: while the page reads the account's deletion status. */
 export const checking = '正在確認帳號…';

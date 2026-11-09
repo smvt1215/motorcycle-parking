@@ -37,6 +37,8 @@ describe('signed out', () => {
     expect(auth.signIn).toHaveBeenCalledWith('apple');
     await heading(t.confirmTitle);
     expect(screen.getByText('以 Apple 登入：rider@gmail.com')).toBeInTheDocument();
+    expect(screen.getByText(t.reauthNoteApple)).toBeInTheDocument();
+    expect(screen.queryByText(t.reauthNote)).toBeNull();
   });
 
   it('offers no sign-in when the build has none', () => {
@@ -80,6 +82,8 @@ describe('confirming the request (PhoneConfirm)', () => {
     openSite('/account-deletion', fakeAuth(rider));
     await heading(t.confirmTitle);
     expect(screen.getByText('以 Google 登入：rider@gmail.com')).toBeInTheDocument();
+    expect(screen.getByText(t.reauthNote)).toBeInTheDocument();
+    expect(screen.queryByText(t.reauthNoteApple)).toBeNull();
     t.confirmPoints.forEach((point) => expect(screen.getByText(point)).toBeInTheDocument());
 
     const action = screen.getByRole('button', { name: t.confirmAction });

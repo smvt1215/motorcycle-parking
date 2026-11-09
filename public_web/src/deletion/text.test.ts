@@ -73,6 +73,10 @@ describe('the web flow says what the App says', () => {
     expect(t.pendingContinueDetail('11 月 12 日')).toBe('維持申請並登出，11 月 12 日後刪除。');
   });
 
+  it("adds to the App's Apple note when the rider has only just signed in here", () => {
+    expect(t.reauthNoteApple).toBe(`如果剛才不是在這個頁面登入，${dartString('deletionReauthNoteApple')}`);
+  });
+
   it('only the footnote of the choice differs: there is no App to go on to', () => {
     expect(dartString('pendingFootnote')).toBe('要先選一個，才能繼續使用 App。');
     expect(t.pendingFootnote).toBe('要先選一個，才能繼續。');
