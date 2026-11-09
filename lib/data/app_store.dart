@@ -482,6 +482,13 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  /// [_sighted] for a viewport read. The followed spot's near rows predate
+  /// its answer and, preferred as they are on screen, would hide it.
+  void _sightedInView(int seq, Set<String> ids) {
+    _sighted(seq, ids);
+    if (ids.contains(_followed?.id.toLowerCase())) _followedNear = const {};
+  }
+
   /// What this rider sent, shown at once (A7c) wherever no summary covers
   /// the place yet: a summary leaves out a rider of low credibility, and
   /// the read may lag or fail. They age out like any report.
@@ -545,16 +552,14 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
         sightingsSource.forSpots([spot], windowMinutes: sightingDetailWindow),
       ).wait;
       if (_disposed || read != _followRead) return;
+      // A later viewport read answered this spot while this one waited.
+      final id = spot.id.toLowerCase();
+      if (_sightedSince(seq, [id]).isNotEmpty) return;
       final near = nearRead.sightings;
       _followedNear = near;
       _followedWide = wide;
       // The map's window too: closing the sheet keeps the newest answer
       // instead of going back to the viewport's older one.
-      final id = spot.id.toLowerCase();
-      if (_sightedSince(seq, [id]).isNotEmpty) {
-        notifyListeners();
-        return;
-      }
       _sighted(seq, [id]);
       sightings = {
         for (final MapEntry(:key, :value) in sightings.entries)
@@ -901,7 +906,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     final sightedIds = {for (final id in readIds) id.toLowerCase()};
     // Spots a later read answered keep that answer.
     final newer = _sightedSince(seq, sightedIds);
-    if (sighted != null) _sighted(seq, sightedIds.difference(newer));
+    if (sighted != null) _sightedInView(seq, sightedIds.difference(newer));
     availability = {
       for (final MapEntry(:key, :value) in _keptAvailability(current).entries)
         if (counts == null || !readIds.contains(key)) key: value,
@@ -1060,7 +1065,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
           for (final spot in _watched(result.spots)) spot.id.toLowerCase(),
         };
         final newer = _sightedSince(seq, ids);
-        _sighted(seq, ids.difference(newer));
+        _sightedInView(seq, ids.difference(newer));
         sightings = {
           for (final id in newer) id: ?kept[id],
           for (final MapEntry(:key, :value) in sighted.sightings.entries)

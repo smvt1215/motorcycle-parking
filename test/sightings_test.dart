@@ -217,6 +217,22 @@ class GatedCounts extends AvailabilitySource {
   }
 }
 
+/// The details' longer window answers once [gate] completes while it is set;
+/// what it answers was read when it started.
+class GatedDetailReads extends FakeSightings {
+  GatedDetailReads(super.rows);
+  Completer<void>? gate;
+  @override
+  Future<Map<String, List<SpotSighting>>> forSpots(
+    List<ParkingSpot> spots, {
+    required int windowMinutes,
+  }) async {
+    final answer = await super.forSpots(spots, windowMinutes: windowMinutes);
+    if (windowMinutes == sightingDetailWindow) await gate?.future;
+    return answer;
+  }
+}
+
 /// Once [stalled], reads never answer, as on a stalled connection.
 class StalledReads extends FakeSightings {
   StalledReads(super.rows);
@@ -2154,6 +2170,62 @@ void main() {
       expect(store.riderClosures(lot).single.confirmed, isTrue);
       expect(store.eligible(lot).status, EligibilityStatus.notAllowed);
     });
+
+    group('詳情讀取與 viewport 重新整理的先後（地圖視窗的列）', () {
+      final recent = detailDay.subtract(const Duration(minutes: 5));
+      // On screen a row's level reads the other way round.
+      const older = 2, newer = 0;
+
+      int? nearLevel(AppStore store) =>
+          store.riderSeats(sightingMapWindow).of(lotId).single.level;
+
+      testWidgets('詳情的讀取晚到：不蓋過較新的重新整理', (tester) async {
+        final source = GatedDetailReads([row(lotId, level: 1, at: recent)]);
+        final store = await sightedStore(tester, source);
+        store.favorites = [lot];
+        await tester.runAsync(() async {
+          final gate = source.gate = Completer<void>();
+          final follow = store.followSightings(lot);
+          await Future<void>.delayed(Duration.zero);
+          source.rows = [row(lotId, level: 3, at: recent)];
+          await store.refresh();
+          gate.complete();
+          await follow;
+        });
+        expect(nearLevel(store), newer);
+      });
+
+      testWidgets('重新整理較新：清掉詳情先前讀到的列', (tester) async {
+        final source = FakeSightings([row(lotId, level: 1, at: recent)]);
+        final store = await sightedStore(tester, source);
+        store.favorites = [lot];
+        await tester.runAsync(() => store.followSightings(lot));
+        expect(nearLevel(store), older);
+        source.rows = [row(lotId, level: 3, at: recent)];
+        await tester.runAsync(store.refresh);
+        expect(nearLevel(store), newer);
+      });
+    });
+
+    for (final closed in [false, true]) {
+      test('回報面板的說明：${closed ? '關閉回報寫 2 小時與 2 位' : '空位回報寫 15／30 分鐘'}', () {
+        for (final (street, whole, place) in [
+          (true, false, '這一段'),
+          (false, false, '這一區'),
+          (false, true, '這裡'),
+        ]) {
+          final note = sightingNote(
+            street: street,
+            whole: whole,
+            closed: closed,
+          );
+          expect(note, startsWith('只記$place'));
+          expect(note, closed ? contains('2 位車友回報才改成不能停') : contains('15 分鐘'));
+          expect(note.contains('2 小時後或有人回報有位就解除'), closed);
+          expect(note.contains('30 分鐘'), !closed);
+        }
+      });
+    }
 
     for (final platform in platforms) {
       for (final (name, size) in layouts) {

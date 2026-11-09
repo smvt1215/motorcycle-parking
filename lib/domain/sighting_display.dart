@@ -28,12 +28,19 @@ String sightingClosedNote({required bool street}) =>
 
 /// The note above the button. A spot standing as one has no 段 or 區 to
 /// name.
-String sightingNote({required bool street, required bool whole}) {
+String sightingNote({
+  required bool street,
+  required bool whole,
+  bool closed = false,
+}) {
   final place = whole
       ? '這裡'
       : street
       ? '這一段'
       : '這一區';
+  if (closed) {
+    return '只記$place。2 位車友回報才改成不能停，2 小時後或有人回報有位就解除。需登入。';
+  }
   return street
       ? '只記$place，標成「車友回報」：地圖顯示 15 分鐘，詳情 30 分鐘後消失。需登入。'
       : '只記$place。官方剩餘照常顯示；你的回報標成「車友回報」，地圖顯示 15 分鐘、詳情 30 分鐘後消失。需登入。';

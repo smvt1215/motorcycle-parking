@@ -231,7 +231,7 @@ class _SightingSheetState extends State<SightingSheet> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  sightingNote(street: street, whole: whole),
+                  sightingNote(street: street, whole: whole, closed: closed),
                   style: TextStyle(fontSize: 12, color: c.muted, height: 1.5),
                 ),
               ],
