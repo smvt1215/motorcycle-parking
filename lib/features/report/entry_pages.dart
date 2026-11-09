@@ -260,6 +260,8 @@ class EntryListArgs {
     required this.fee,
     this.onSpotFee,
     this.onEntryFee,
+    this.whole,
+    this.onWhole,
   }) : assert((spot == null) != (drafts == null));
   final AppStore store;
   final EntryType type;
@@ -284,8 +286,16 @@ class EntryListArgs {
   final Future<void> Function(BuildContext context, EntryDraft draft)?
   onEntryFee;
 
+  /// A new spot's 全區 or 整條路, kept with its draft; a suggestion's is
+  /// judged from its entries' values ([entryWholeOf]).
+  final EntryWhole? Function()? whole;
+  final ValueChanged<EntryWhole>? onWhole;
+
   bool get adding => spot == null;
 }
+
+/// 全區 or 整條路, as a list and its pages call it.
+String entryWholeName(EntryType type) => type == EntryType.zone ? '全區' : '整條路';
 
 /// The drafts of [spot]'s entries; a street spot without segments reads as
 /// one (GAP risk 7).
@@ -316,9 +326,95 @@ class _EntryListPageState extends State<EntryListPage> {
   late final List<EntryDraft> drafts =
       args.drafts ?? draftsOf(args.spot!, type);
 
+  /// A new spot's as set, a suggestion's as its entries read (Z1).
+  EntryWhole? get whole =>
+      args.adding ? args.whole?.call() : entryWholeOf(drafts);
+
+  /// 全區 is for a list of entries; a street without segments is one.
+  bool get showsWhole =>
+      args.adding || (drafts.length >= 2 && !drafts.any((d) => d.wholeSpot));
+
+  /// Whether [d] already says something 全區 would not.
+  bool _setApart(EntryDraft d) =>
+      whole != null && d.stated && !whole!.matches(d);
+
+  /// Z1 ④: 沿用全區, or how a set-apart entry differs.
+  EntryTag? _wholeTag(EntryDraft d) {
+    final w = whole;
+    if (w == null || !d.stated || !showsWhole) return null;
+    if (w.matches(d)) return EntryTag('沿用${entryWholeName(type)}');
+    final name = entryWholeName(type);
+    final String differs;
+    if (d.scooter != w.scooter && d.heavy == w.heavy) {
+      differs = '有差異：$name普機${w.scooter.label}';
+    } else if (d.heavy != w.heavy && d.scooter == w.scooter) {
+      differs = '有差異：$name重機${w.heavy.label}';
+    } else {
+      differs = '有差異';
+    }
+    return EntryTag(differs, tone: EntryTagTone.conditional);
+  }
+
+  /// 全區 or 整條路 (Z1): nothing goes until its page sends each entry its
+  /// value.
+  Future<void> _openWhole() async {
+    final name = entryWholeName(type);
+    final current = args.adding ? drafts : draftsOf(args.spot!, type);
+    final set = await Navigator.of(context).push<EntryWhole>(
+      formRoute(
+        EntryWholePage(
+          store: args.store,
+          type: type,
+          name: name,
+          subtitle: args.subtitle,
+          spot: args.spot,
+          drafts: current,
+          whole: args.adding ? args.whole?.call() : entryWholeOf(current),
+          notStated: args.spot?.source == 'official',
+        ),
+      ),
+    );
+    if (set == null || !mounted) return;
+    setState(() => args.onWhole?.call(set));
+    args.onChanged?.call();
+  }
+
+  Widget _wholeRow() {
+    final name = entryWholeName(type);
+    final w = whole;
+    final unit = type.unit;
+    final apart = [
+      for (final d in drafts)
+        if (!d.removed && _setApart(d)) d,
+    ].length;
+    final String subtitle;
+    if (w == null) {
+      subtitle = '尚未設定，各$unit各自填\n一次設定普機、重機能不能停';
+    } else if (drafts.isEmpty) {
+      subtitle = '${w.summary}\n新增的$unit沿用這裡，也可以在該$unit另設';
+    } else {
+      final unitName = zones ? '分區' : '路段';
+      subtitle =
+          '${w.summary}\n沒有另設的$unitName沿用$name'
+          '${apart == 0 ? '' : '；另設的 $apart $unit有差異'}';
+    }
+    return EntryDashedCard(
+      child: EntryRow(
+        key: const ValueKey('entry-whole-row'),
+        leading: EntryIconTile(zones ? Icons.domain : Icons.add_road),
+        title: name,
+        subtitle: subtitle,
+        onTap: _openWhole,
+      ),
+    );
+  }
+
   Future<void> open(EntryDraft? draft) async {
     if (args.adding) {
       final edit = draft?.copy() ?? EntryDraft.create(type);
+      if (draft == null) {
+        args.whole?.call()?.applyTo(edit);
+      }
       final result = await Navigator.of(context).push<EntryEditResult>(
         formRoute(
           EntryEditPage(
@@ -330,6 +426,7 @@ class _EntryListPageState extends State<EntryListPage> {
             drafts: [edit],
             adding: true,
             canDelete: draft != null,
+            whole: args.whole?.call(),
           ),
         ),
       );
@@ -376,6 +473,7 @@ class _EntryListPageState extends State<EntryListPage> {
     tags: [
       vehicleTag('普機', d.scooter, d.stored, SlotVehicle.scooter),
       vehicleTag('重機', d.heavy, d.stored, SlotVehicle.heavy),
+      ?_wholeTag(d),
     ],
     onTap: d.editable ? () => open(d) : null,
   );
@@ -405,7 +503,7 @@ class _EntryListPageState extends State<EntryListPage> {
               : range.isEmpty
               ? null
               : range,
-          tags: segmentTags(d),
+          tags: [...segmentTags(d), ?_wholeTag(d)],
           onTap: d.editable ? () => open(d) : null,
         ),
         Material(
@@ -486,8 +584,14 @@ class _EntryListPageState extends State<EntryListPage> {
       children: [
         Text(
           zones
-              ? (args.adding ? '每區各自有格位、可停車種和指引。' : '要改哪一區？每區各自有格位、可停車種和指引。')
-              : '同一側可能有不同格位、不同費率，一段一段分開記。點路段改格位、格數和可停車種，'
+              ? (args.adding
+                    ? '每區各自有格位、可停車種和指引。全區先設好，新增的分區會沿用。'
+                    : showsWhole
+                    ? '要改哪一區？每區各自有格位、可停車種和指引；一起改就按「全區」。'
+                    : '要改哪一區？每區各自有格位、可停車種和指引。')
+              : '同一側可能有不同格位、不同費率，一段一段分開記。'
+                    '${showsWhole ? '整條路一起改就按「整條路」。' : ''}'
+                    '點路段改格位、格數和可停車種，'
                     '點下方「費率」另設那段的費率；沒另設的段用整條路費率。',
           style: TextStyle(color: colors.onSurface),
         ),
@@ -512,7 +616,10 @@ class _EntryListPageState extends State<EntryListPage> {
             EntrySection(rows: [_zoneRow(d)]),
             const SizedBox(height: 8),
           ],
+          if (showsWhole) ...[_wholeRow(), const SizedBox(height: 8)],
         ] else ...[
+          // Above the road's rates (Z1 ⑦).
+          if (showsWhole) ...[_wholeRow(), const SizedBox(height: 8)],
           Semantics(
             label: '改整條路費率，目前 $whole',
             child: EntrySection(
@@ -565,6 +672,268 @@ class EntryEditResult {
   final bool delete;
 }
 
+/// The suggestion of [drafts] for [spot] (C6): one line per change, and the
+/// patch of the entries changed.
+Map<String, Object?> entriesSuggestionBody(
+  EntryType type,
+  ParkingSpot spot,
+  List<EntryDraft> drafts,
+) {
+  final lines = [
+    for (final d in drafts)
+      if (entrySent(d, drafts))
+        for (final l in entryLines(d, drafts))
+          '${d.displayName} ${l.label}：${l.from} → ${l.to}',
+  ];
+  return {
+    'action': 'flag',
+    'source_id': spot.id,
+    'reason': reportSummary(
+      '${type == EntryType.zone ? '分區與格位' : '路段與格位'}：${lines.join('；')}',
+    ),
+    'field': type.field,
+    'proposed': {type.key: entriesPatchOf(drafts, spotFee: spot.fee)},
+  };
+}
+
+/// Z1 ②③⑧ 全區 or 整條路: who may park, set once for every entry not set
+/// apart; entries set apart change only with the 開關 on. Nothing about
+/// 全區 is stored: a suggestion sends each changed entry's own value, a new
+/// spot's page writes into its drafts (#408).
+class EntryWholePage extends StatefulWidget {
+  const EntryWholePage({
+    super.key,
+    required this.store,
+    required this.type,
+    required this.name,
+    required this.subtitle,
+    required this.drafts,
+    required this.whole,
+    required this.notStated,
+    this.spot,
+  });
+  final AppStore store;
+  final EntryType type;
+
+  /// 全區 or 整條路.
+  final String name;
+  final String subtitle;
+
+  /// A suggestion's fresh copies, or a new spot's drafts.
+  final List<EntryDraft> drafts;
+
+  /// The value before this edit; null when it is not set.
+  final EntryWhole? whole;
+
+  /// Whether 官方未標示 is offered: an official spot's (#408).
+  final bool notStated;
+
+  /// The spot a suggestion is about; null in a new spot.
+  final ParkingSpot? spot;
+
+  @override
+  State<EntryWholePage> createState() => _EntryWholePageState();
+}
+
+class _EntryWholePageState extends State<EntryWholePage> {
+  late Eligible? scooter = _offered(widget.whole?.scooter);
+  late Eligible? heavy = _offered(widget.whole?.heavy);
+
+  /// 另設的 N 區也一起改: off unless the rider says.
+  bool overwrite = false;
+  bool sending = false;
+  String? refusal;
+
+  Eligible? _offered(Eligible? value) =>
+      value == Eligible.notStated && !widget.notStated ? null : value;
+
+  bool get adding => widget.spot == null;
+  String get unit => widget.type.unit;
+
+  /// The entries this page may change.
+  List<EntryDraft> get _entries => [
+    for (final d in widget.drafts)
+      if (!d.removed && d.editable) d,
+  ];
+
+  /// Those set apart: changed only with the 開關 on.
+  List<EntryDraft> get _apart => [
+    for (final d in _entries)
+      if (!entryFollows(d, widget.whole)) d,
+  ];
+
+  EntryWhole? get _chosen =>
+      scooter != null && heavy != null ? EntryWhole(scooter!, heavy!) : null;
+
+  bool _willChange(EntryDraft d) => entryFollows(d, widget.whole) || overwrite;
+
+  /// The drafts with the value applied: copies, or [EntryWholePage.drafts]
+  /// themselves when a new spot's page is done.
+  List<EntryDraft> _applied({bool inPlace = false}) {
+    final chosen = _chosen!;
+    final all = inPlace
+        ? widget.drafts
+        : [for (final d in widget.drafts) d.copy()];
+    for (final (i, d) in all.indexed) {
+      final original = widget.drafts[i];
+      if (original.removed || !original.editable) continue;
+      if (_willChange(original)) chosen.applyTo(d);
+    }
+    return all;
+  }
+
+  /// How many entries the suggestion changes.
+  int get _changes {
+    if (_chosen == null) return 0;
+    final drafts = _applied();
+    return [
+      for (final d in drafts)
+        if (entrySent(d, drafts)) d,
+    ].length;
+  }
+
+  Future<void> _submit() async {
+    if (adding) {
+      _applied(inPlace: true);
+      Navigator.of(context).pop(_chosen);
+      return;
+    }
+    final drafts = _applied();
+    final payload = entriesSuggestionBody(widget.type, widget.spot!, drafts);
+    final blocking = precheckBlocking(
+      precheck(
+        payload,
+        current: {
+          widget.type.key: [for (final d in drafts) ?d.original],
+        },
+      ),
+    );
+    if (blocking.firstOrNull case final issue?) {
+      setState(() => refusal = issue.message);
+      return;
+    }
+    setState(() => sending = true);
+    final sent = await sendSuggestion(context, widget.store, payload);
+    if (!mounted) return;
+    setState(() => sending = false);
+    if (!sent) return;
+    closeFlow(context);
+    showMessage(
+      context,
+      widget.store.demo ? '範例模式：建議沒有實際送出，只用來測試流程。' : '建議已送出。管理員審核通過後會更新地圖。',
+    );
+  }
+
+  /// What 這次會影響 says of [d]: 沿用, 另設, or a heavy bay's limit.
+  String _effect(EntryDraft d) {
+    final chosen = _chosen;
+    final kept =
+        chosen != null &&
+        d.kind == SpaceKind.heavy &&
+        chosen.scooter == Eligible.allowed;
+    if (entryFollows(d, widget.whole)) {
+      return kept ? '重機專用格，普機不會改' : '沿用${widget.name}';
+    }
+    if (!overwrite) return '已另設，不會改';
+    return kept ? '會一起改，重機專用格普機不會改' : '會一起改成${widget.name}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final name = widget.name;
+    final entries = _entries;
+    final apart = _apart;
+    final count = _changes;
+    final parent = widget.type == EntryType.zone ? '停哪裡' : '路段與格位';
+    final unitName = widget.type == EntryType.zone ? '分區' : '路段';
+    return FormPage(
+      header: FormHeader(
+        title: name,
+        subtitle: '$parent・${widget.subtitle}',
+        leading: FormHeaderLeading.back,
+      ),
+      footer: SubmitBar(
+        label: adding ? '完成' : '送出 $count 項建議',
+        note: adding ? null : '管理員審核後才會更新地圖',
+        sending: sending,
+        onPressed: adding
+            ? (_chosen == null ? null : _submit)
+            : count == 0
+            ? null
+            : _submit,
+      ),
+      children: [
+        Text('一次設定普通機車、大型重機能不能停。沒有另設的$unitName沿用這裡。'),
+        const SizedBox(height: 12),
+        EligibilitySegments(
+          vehicle: VehicleType.scooter,
+          value: scooter,
+          notStated: widget.notStated,
+          keyPrefix: 'whole-scooter',
+          onChanged: (v) => setState(() {
+            scooter = v;
+            refusal = null;
+          }),
+        ),
+        const SizedBox(height: 10),
+        EligibilitySegments(
+          vehicle: VehicleType.heavy,
+          value: heavy,
+          notStated: widget.notStated,
+          keyPrefix: 'whole-heavy',
+          onChanged: (v) => setState(() {
+            heavy = v;
+            refusal = null;
+          }),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          '現場有告示牌或地面標字時，才選「可停」。',
+          style: TextStyle(fontSize: 13, color: colors.onSurfaceVariant),
+        ),
+        if (entries.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          const FormLabel('這次會影響'),
+          const SizedBox(height: 6),
+          EntrySection(
+            rows: [
+              for (final d in entries)
+                EntryRow(
+                  key: ObjectKey(d),
+                  title: d.displayName,
+                  value: _effect(d),
+                ),
+            ],
+          ),
+        ],
+        if (apart.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          SwitchListTile.adaptive(
+            key: const ValueKey('whole-overwrite'),
+            contentPadding: EdgeInsets.zero,
+            value: overwrite,
+            title: Text('另設的 ${apart.length} $unit也一起改成$name'),
+            subtitle: const Text('打開後，已另設的內容也會改成這裡的設定。'),
+            onChanged: (v) => setState(() {
+              overwrite = v;
+              refusal = null;
+            }),
+          ),
+        ],
+        if (refusal != null) ...[
+          const SizedBox(height: 12),
+          FormInfoNote(
+            icon: Icons.error_outline,
+            text: refusal!,
+            tone: FormNoteTone.error,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
 /// Why [draft] cannot go as it stands, by field; empty when it can.
 Map<String, String> entryProblems(EntryDraft draft) {
   final zone = draft.type == EntryType.zone;
@@ -614,6 +983,7 @@ class EntryEditPage extends StatefulWidget {
     this.openIndex = 0,
     this.adding = false,
     this.canDelete = false,
+    this.whole,
   });
   final AppStore store;
   final EntryType type;
@@ -624,6 +994,9 @@ class EntryEditPage extends StatefulWidget {
 
   /// The spot a suggestion is about.
   final ParkingSpot? spot;
+
+  /// A new spot's 全區 or 整條路; a suggestion's reads from [drafts].
+  final EntryWhole? whole;
 
   /// Which entry opens; negative starts a new one.
   final int openIndex;
@@ -647,11 +1020,20 @@ class _EntryEditPageState extends State<EntryEditPage> {
   bool get zones => widget.type == EntryType.zone;
   String get unit => widget.type.unit;
 
+  /// 全區 or 整條路: a new spot's as set, a suggestion's as its entries read
+  /// when the page opened, so it stays put while one of them is edited.
+  late final EntryWhole? whole =
+      widget.whole ??
+      (adding || drafts.length < 2 || drafts.any((d) => d.wholeSpot)
+          ? null
+          : entryWholeOf(drafts));
+
   @override
   void initState() {
     super.initState();
     if (widget.openIndex < 0) {
       current = EntryDraft.create(widget.type);
+      whole?.applyTo(current);
       drafts.add(current);
     } else {
       current = drafts[widget.openIndex];
@@ -665,6 +1047,7 @@ class _EntryEditPageState extends State<EntryEditPage> {
 
   void add() => update(() {
     current = EntryDraft.create(widget.type);
+    whole?.applyTo(current);
     drafts.add(current);
     showErrors = false;
   });
@@ -691,24 +1074,8 @@ class _EntryEditPageState extends State<EntryEditPage> {
 
   int get items => changed.fold(0, (n, d) => n + entryLines(d, drafts).length);
 
-  Map<String, Object?> body() {
-    final lines = [
-      for (final d in changed)
-        for (final l in entryLines(d, drafts))
-          '${d.displayName} ${l.label}：${l.from} → ${l.to}',
-    ];
-    return {
-      'action': 'flag',
-      'source_id': widget.spot!.id,
-      'reason': reportSummary(
-        '${zones ? '分區與格位' : '路段與格位'}：${lines.join('；')}',
-      ),
-      'field': widget.type.field,
-      'proposed': {
-        widget.type.key: entriesPatchOf(drafts, spotFee: widget.spot!.fee),
-      },
-    };
-  }
+  Map<String, Object?> body() =>
+      entriesSuggestionBody(widget.type, widget.spot!, drafts);
 
   /// Opens the first changed entry that cannot go and says why.
   bool check() {
@@ -825,6 +1192,8 @@ class _EntryEditPageState extends State<EntryEditPage> {
           linkForm: linkForm,
           onChanged: update,
           onDelete: delete,
+          whole: whole,
+          wholeName: entryWholeName(widget.type),
         ),
         for (final d in others) ...[
           const SizedBox(height: 8),
@@ -895,6 +1264,8 @@ class _EntryCard extends StatefulWidget {
     required this.linkForm,
     required this.onChanged,
     required this.onDelete,
+    this.whole,
+    this.wholeName = '全區',
   });
   final GlobalKey<FormState> linkForm;
   final EntryDraft draft;
@@ -905,6 +1276,10 @@ class _EntryCard extends StatefulWidget {
   final ValueChanged<VoidCallback> onChanged;
   final VoidCallback onDelete;
 
+  /// 全區 or 整條路, when there is one (Z1 ⑤⑥).
+  final EntryWhole? whole;
+  final String wholeName;
+
   @override
   State<_EntryCard> createState() => _EntryCardState();
 }
@@ -912,6 +1287,9 @@ class _EntryCard extends StatefulWidget {
 class _EntryCardState extends State<_EntryCard> {
   EntryDraft get d => widget.draft;
   bool get zone => d.type == EntryType.zone;
+
+  /// The vehicles are this entry's own, not 全區's (Z1 ⑥).
+  late bool setApart = widget.whole == null || !widget.whole!.matches(d);
   late final name = TextEditingController(text: d.name);
   late final from = TextEditingController(text: d.from);
   late final to = TextEditingController(text: d.to);
@@ -1125,60 +1503,122 @@ class _EntryCardState extends State<_EntryCard> {
               ),
               gap(8),
             ],
-            LayoutBuilder(
-              builder: (context, box) {
-                final scooter = EligibilitySegments(
-                  vehicle: VehicleType.scooter,
-                  value: d.scooter,
-                  notStated: zone,
-                  error: errors['scooter'],
-                  keyPrefix: 'entry-scooter',
-                  onChanged: (v) => widget.onChanged(() {
-                    d.scooter = v;
-                    d.vehiclesEdited = true;
-                  }),
-                );
-                final heavy = EligibilitySegments(
-                  vehicle: VehicleType.heavy,
-                  value: d.heavy,
-                  notStated: zone,
-                  error: errors['heavy'],
-                  keyPrefix: 'entry-heavy',
-                  onChanged: (v) => widget.onChanged(() {
-                    d.heavy = v;
-                    d.vehiclesEdited = true;
-                  }),
-                );
-                // A street bay's two choices fit side by side (S4); a lot's
-                // three, narrow screens and large text do not.
-                final wide =
-                    !zone &&
-                    box.maxWidth >= 300 &&
-                    MediaQuery.textScalerOf(context).scale(16) <= 20;
-                return wide
-                    ? Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(child: scooter),
-                          const SizedBox(width: 10),
-                          Expanded(child: heavy),
-                        ],
-                      )
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [scooter, gap(10), heavy],
-                      );
-              },
-            ),
-            // Before sending too: the pick cannot go as it stands.
-            if (bayAllowProblem(d.kind, d.scooter) case final error?) ...[
-              gap(8),
+            if (widget.whole case final whole? when !setApart) ...[
+              // Z1 ⑤: follows 全區 until the rider sets it apart here.
               FormInfoNote(
-                key: const ValueKey('entry-bay-problem'),
-                icon: Icons.error_outline,
-                text: error,
-                tone: FormNoteTone.error,
+                key: const ValueKey('entry-follows-whole'),
+                icon: Icons.link,
+                text: '沿用${widget.wholeName}：${whole.summary}',
               ),
+              gap(8),
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: OutlinedButton(
+                  key: const ValueKey('entry-set-apart'),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(48, 48),
+                  ),
+                  onPressed: () => setState(() => setApart = true),
+                  child: Text('在這一$unit另設'),
+                ),
+              ),
+              gap(8),
+              Text(
+                '格位、指引等其他項目不受${widget.wholeName}影響。',
+                style: TextStyle(fontSize: 13, color: colors.onSurfaceVariant),
+              ),
+            ] else ...[
+              if (widget.whole != null &&
+                  d.stated &&
+                  !widget.whole!.matches(d)) ...[
+                FormInfoNote(
+                  key: const ValueKey('entry-set-apart-note'),
+                  icon: Icons.tune,
+                  text: '另設中，和${widget.wholeName}不同',
+                  tone: FormNoteTone.warning,
+                ),
+                gap(8),
+              ],
+              LayoutBuilder(
+                builder: (context, box) {
+                  final scooter = EligibilitySegments(
+                    vehicle: VehicleType.scooter,
+                    value: d.scooter,
+                    notStated: zone,
+                    error: errors['scooter'],
+                    keyPrefix: 'entry-scooter',
+                    onChanged: (v) => widget.onChanged(() {
+                      d.scooter = v;
+                      d.vehiclesEdited = true;
+                    }),
+                  );
+                  final heavy = EligibilitySegments(
+                    vehicle: VehicleType.heavy,
+                    value: d.heavy,
+                    notStated: zone,
+                    error: errors['heavy'],
+                    keyPrefix: 'entry-heavy',
+                    onChanged: (v) => widget.onChanged(() {
+                      d.heavy = v;
+                      d.vehiclesEdited = true;
+                    }),
+                  );
+                  // A street bay's two choices fit side by side (S4); a lot's
+                  // three, narrow screens and large text do not.
+                  final wide =
+                      !zone &&
+                      box.maxWidth >= 300 &&
+                      MediaQuery.textScalerOf(context).scale(16) <= 20;
+                  return wide
+                      ? Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(child: scooter),
+                            const SizedBox(width: 10),
+                            Expanded(child: heavy),
+                          ],
+                        )
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [scooter, gap(10), heavy],
+                        );
+                },
+              ),
+              // Before sending too: the pick cannot go as it stands.
+              if (bayAllowProblem(d.kind, d.scooter) case final error?) ...[
+                gap(8),
+                FormInfoNote(
+                  key: const ValueKey('entry-bay-problem'),
+                  icon: Icons.error_outline,
+                  text: error,
+                  tone: FormNoteTone.error,
+                ),
+              ],
+              if (widget.whole case final whole?) ...[
+                gap(8),
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: TextButton(
+                    key: const ValueKey('entry-back-to-whole'),
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(48, 48),
+                    ),
+                    onPressed: () => widget.onChanged(() {
+                      whole.applyTo(d);
+                      setApart = false;
+                    }),
+                    child: Text('改回沿用${widget.wholeName}'),
+                  ),
+                ),
+                gap(4),
+                Text(
+                  '${widget.wholeName}目前：${whole.summary}。這一$unit的內容不會因為改${widget.wholeName}而變。',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+              ],
             ],
             gap(8),
             if (zone)

@@ -421,6 +421,10 @@ class _ReportFormState extends State<ReportForm> {
   final zones = <EntryDraft>[], segments = <EntryDraft>[];
   List<EntryDraft> get entries => lot ? zones : segments;
 
+  /// 全區 (zones) and 整條路 (segments), kept per kind like the entries;
+  /// entries never store them (Z1 ⑨, #408).
+  EntryWhole? zoneWhole, segmentWhole;
+
   /// 能不能停 (S5, S5b), copied into the entries when sent. Kept per kind
   /// like the entries, so a change of mind leaves the other kind's scopes.
   List<TimeRule> zoneRules = [], segmentRules = [];
@@ -855,6 +859,14 @@ class _ReportFormState extends State<ReportForm> {
     onChanged: () => setState(() => whereProblem = null),
     onSpotFee: lot ? null : (context) => editFee(context),
     onEntryFee: lot ? null : editFee,
+    whole: () => lot ? zoneWhole : segmentWhole,
+    onWhole: (v) => setState(() {
+      if (lot) {
+        zoneWhole = v;
+      } else {
+        segmentWhole = v;
+      }
+    }),
   );
 
   /// 全場費率 or 整條路費率, or an entry's own rates, on F1 (C14).

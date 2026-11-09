@@ -23,16 +23,33 @@ String sightingPlaceQuestion({required bool street}) =>
 String sightingPlaceHint({required bool street}) =>
     street ? '只列你現在能停的段' : '只列你現在能停的區';
 
-String sightingClosedNote({required bool street}) =>
-    street ? '整段都停不了，例如施工、封路' : '整區都停不了，例如施工、封閉';
+/// The choice about all of it, last in the list (A7e): 全區, a road's 整條路.
+String sightingAllPlacesLabel({required bool street}) => street ? '整條路' : '全區';
+
+String sightingClosedNote({required bool street, bool allPlaces = false}) =>
+    allPlaces
+    ? (street ? '整條路都停不了，例如施工、封路' : '整個停車場都停不了，例如施工、封閉')
+    : street
+    ? '整段都停不了，例如施工、封路'
+    : '整區都停不了，例如施工、封閉';
 
 /// The note above the button. A spot standing as one has no 段 or 區 to
-/// name.
+/// name; [allPlaces] is the rider's 全區 or 整條路 (A7e).
 String sightingNote({
   required bool street,
   required bool whole,
+  bool allPlaces = false,
   bool closed = false,
 }) {
+  if (allPlaces) {
+    final target = street ? '整條路' : '整個停車場';
+    if (closed) {
+      return '記$target。3 位車友回報才改成不能停，2 小時後或有人回報有位就解除。需登入。';
+    }
+    return street
+        ? '記整條路，不分哪一段，標成「車友回報」：地圖顯示 15 分鐘，詳情 30 分鐘後消失。已有 2 位車友回報無法停車的段，不會因此解除。需登入。'
+        : '記整個停車場，不分哪一區。官方剩餘照常顯示；你的回報標成「車友回報」，地圖顯示 15 分鐘、詳情 30 分鐘後消失。已有 2 位車友回報無法停車的區，不會因此解除。需登入。';
+  }
   final place = whole
       ? '這裡'
       : street

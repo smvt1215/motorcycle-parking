@@ -781,6 +781,245 @@ void main() {
     });
   });
 
+  group('全區與整條路（Z1）', () {
+    const sameCond = ParkingCondition(
+      bay: Bay.motorcycle,
+      use: BayUse.usual,
+      allow: ZoneAllow(scooter: true, heavy: false),
+    );
+    ParkingSpot lotOf(String source) => ParkingSpot(
+      id: source == 'official' ? 'official:same' : 'same',
+      name: '松壽地下停車場',
+      lat: 25.03,
+      lng: 121.56,
+      city: '臺北市',
+      spaceType: SpaceType.offStreet,
+      source: source,
+      zones: [
+        _zone('b1', 'B1 機車區', null, condition: sameCond),
+        _zone('b2', 'B2 機車區', null, condition: sameCond),
+      ],
+    );
+
+    test('全區依各區的值是否相同判斷：相同讀出、不同或都沒寫就沒有', () {
+      final same = draftsOf(lotOf('official'), EntryType.zone);
+      final whole = entryWholeOf(same)!;
+      expect(whole, const EntryWhole(Eligible.allowed, Eligible.notAllowed));
+      expect(whole.summary, '普機 可停，重機 不可停');
+      expect(entryFollows(same.first, whole), isTrue);
+      expect(entryWholeOf(draftsOf(_lot, EntryType.zone)), isNull);
+      expect(entryWholeOf(const []), isNull);
+      // A zone not stating anything takes 全區 and does not change it.
+      final drafts = draftsOf(lotOf('official'), EntryType.zone)
+        ..add(EntryDraft.ofZone(_zone('b3', '空白區', null)));
+      expect(entryWholeOf(drafts), whole);
+      expect(entryFollows(drafts.last, whole), isTrue);
+      // An edit keeps the 全區 that was loaded.
+      drafts.first.heavy = Eligible.allowed;
+      expect(entryWholeOf(drafts), whole);
+      expect(entryFollows(drafts.first, whole), isFalse);
+    });
+
+    test('全區套到重機專用格時，普機維持不可開放（validCondition）', () {
+      final d = EntryDraft.create(EntryType.zone)..kind = SpaceKind.heavy;
+      const EntryWhole(Eligible.allowed, Eligible.allowed).applyTo(d);
+      expect(d.scooter, Eligible.notAllowed);
+      expect(d.heavy, Eligible.allowed);
+      expect(d.vehiclesEdited, isTrue);
+    });
+
+    Future<void> tapSend(WidgetTester tester, String label) async {
+      final button = find.widgetWithText(AdaptiveButton, label);
+      await tester.ensureVisible(button);
+      await tester.pumpAndSettle();
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+    }
+
+    for (final (name, size) in const [
+      ('手機', Size(390, 844)),
+      ('平板', Size(820, 1180)),
+    ]) {
+      testWidgets('$name：全區列與編輯頁，展開成各區的值送出', (tester) async {
+        final store = await open(tester, lotOf('official'), size: size);
+        await tapKey(tester, 'suggest-where');
+        expect(find.text('普機 可停，重機 不可停\n沒有另設的分區沿用全區'), findsOneWidget);
+        expect(find.text('沿用全區'), findsNWidgets(2));
+        await tapKey(tester, 'entry-whole-row');
+        expect(find.text('全區'), findsOneWidget);
+        expect(find.text('官方未標示'), findsNWidgets(2));
+        expect(find.text('這次會影響'), findsOneWidget);
+        expect(find.byKey(const ValueKey('whole-overwrite')), findsNothing);
+        await tapKey(tester, 'whole-heavy-allowed');
+        expect(find.text('沿用全區'), findsNWidgets(2));
+        await tapSend(tester, '送出 2 項建議');
+        final body = store.sent.single;
+        expect(body['field'], 'zones');
+        final patch = ((body['proposed'] as Map)['parking_zones'] as List);
+        expect([for (final p in patch) p['id']], ['b1', 'b2']);
+        for (final p in patch) {
+          expect(
+            (p as Map)['condition'],
+            containsPair('allow', {'scooter': true, 'heavy': true}),
+          );
+        }
+        expect(tester.takeException(), isNull);
+      }, variant: TargetPlatformVariant.mobile());
+    }
+
+    testWidgets('社群點只有可停、不可停；官方未標示不出現', (tester) async {
+      await open(tester, lotOf('community'));
+      await tapKey(tester, 'suggest-where');
+      await tapKey(tester, 'entry-whole-row');
+      expect(find.text('官方未標示'), findsNothing);
+    });
+
+    testWidgets('各區不同：全區尚未設定，另設的區靠開關才改', (tester) async {
+      final store = await open(tester, _lot);
+      await tapKey(tester, 'suggest-where');
+      expect(find.text('尚未設定，各區各自填\n一次設定普機、重機能不能停'), findsOneWidget);
+      expect(find.text('沿用全區'), findsNothing);
+      await tapKey(tester, 'entry-whole-row');
+      await tapKey(tester, 'whole-scooter-allowed');
+      await tapKey(tester, 'whole-heavy-allowed');
+      expect(find.text('已另設，不會改'), findsNWidgets(2));
+      expect(
+        tester
+            .widget<AdaptiveButton>(
+              find.widgetWithText(AdaptiveButton, '送出 0 項建議'),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(find.text('另設的 2 區也一起改成全區'), findsOneWidget);
+      await tapKey(tester, 'whole-overwrite');
+      expect(find.text('會一起改成全區'), findsOneWidget);
+      // B2 is a heavy bay: scooters stay out.
+      expect(find.text('會一起改，重機專用格普機不會改'), findsOneWidget);
+      // B2 keeps scooters out and already says heavy: nothing changes there.
+      await tapSend(tester, '送出 1 項建議');
+      final patch =
+          ((store.sent.single['proposed'] as Map)['parking_zones'] as List)
+              .single;
+      expect(patch['id'], 'b1');
+      expect((patch['condition'] as Map)['allow'], {
+        'scooter': true,
+        'heavy': true,
+      });
+    });
+
+    testWidgets('一區打開：沿用全區→另設→改回沿用', (tester) async {
+      await open(tester, lotOf('official'));
+      await tapKey(tester, 'suggest-where');
+      await tapText(tester, 'B1 機車區');
+      expect(find.byKey(const ValueKey('entry-follows-whole')), findsOneWidget);
+      expect(find.text('沿用全區：普機 可停，重機 不可停'), findsOneWidget);
+      expect(find.byKey(const ValueKey('entry-heavy-allowed')), findsNothing);
+      await tapKey(tester, 'entry-set-apart');
+      expect(find.byKey(const ValueKey('entry-heavy-allowed')), findsOneWidget);
+      await tapKey(tester, 'entry-heavy-allowed');
+      expect(find.text('另設中，和全區不同'), findsOneWidget);
+      await tapKey(tester, 'entry-back-to-whole');
+      expect(find.byKey(const ValueKey('entry-follows-whole')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('路段用「整條路」，排在整條路費率上方', (tester) async {
+      final store = await open(
+        tester,
+        const ParkingSpot(
+          id: 'official:road',
+          name: '路',
+          lat: 25.05,
+          lng: 121.54,
+          city: '臺北市',
+          spaceType: SpaceType.paidMotorcycle,
+          source: 'official',
+          segments: [
+            ParkingSegment(
+              id: 's1',
+              name: '北側',
+              condition: ParkingCondition(
+                bay: Bay.motorcycle,
+                use: BayUse.usual,
+                allow: ZoneAllow(scooter: true, heavy: true),
+              ),
+            ),
+            ParkingSegment(
+              id: 's2',
+              name: '南側',
+              condition: ParkingCondition(
+                bay: Bay.motorcycle,
+                use: BayUse.usual,
+                allow: ZoneAllow(scooter: true, heavy: true),
+              ),
+            ),
+          ],
+        ),
+      );
+      await tapKey(tester, 'suggest-where');
+      expect(
+        tester.getTopLeft(find.byKey(const ValueKey('entry-whole-row'))).dy,
+        lessThan(tester.getTopLeft(find.text('整條路費率')).dy),
+      );
+      await tapKey(tester, 'entry-whole-row');
+      expect(find.text('另設的 0 段也一起改成整條路'), findsNothing);
+      await tapKey(tester, 'whole-heavy-notAllowed');
+      await tapSend(tester, '送出 2 項建議');
+      expect(store.sent.single['field'], 'segments');
+    });
+
+    testWidgets('N1 還沒有分區：先設全區，新增的分區帶入', (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(390, 844);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final store = (await tester.runAsync(() async {
+        SharedPreferences.setMockInitialValues({});
+        return _Store(LocalRepository(await SharedPreferences.getInstance()));
+      }))!;
+      addTearDown(store.dispose);
+      final drafts = <EntryDraft>[];
+      EntryWhole? whole;
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: (context, child) =>
+              // ignore: deprecated_member_use
+              MaterialUiCompatibilityBridge(child: child!),
+          home: Scaffold(
+            body: FormFlow(
+              child: EntryListPage(
+                args: EntryListArgs(
+                  store: store,
+                  type: EntryType.zone,
+                  subtitle: '新增停車點',
+                  city: '臺北市',
+                  drafts: drafts,
+                  fee: () => const Fee(),
+                  whole: () => whole,
+                  onWhole: (v) => whole = v,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('entry-whole-row')), findsOneWidget);
+      await tapKey(tester, 'entry-whole-row');
+      await tapKey(tester, 'whole-scooter-allowed');
+      await tapKey(tester, 'whole-heavy-notAllowed');
+      await tester.tap(find.widgetWithText(AdaptiveButton, '完成'));
+      await tester.pumpAndSettle();
+      expect(whole, const EntryWhole(Eligible.allowed, Eligible.notAllowed));
+      expect(find.text('普機 可停，重機 不可停\n新增的區沿用這裡，也可以在該區另設'), findsOneWidget);
+      await tester.tap(find.text('新增一區'));
+      await tester.pumpAndSettle();
+      expect(find.text('沿用全區：普機 可停，重機 不可停'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  });
+
   group('S1b、S2', () {
     Future<void> openZone(WidgetTester tester, String name) async {
       await tapKey(tester, 'suggest-where');
