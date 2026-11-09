@@ -562,6 +562,62 @@ class EntryDraft {
   }
 }
 
+/// 全區 or 整條路 (Z1): who may park, set once for the entries not set apart.
+/// It lives only while a form is open: sending expands it into each entry's
+/// own value, so stored data never holds it (#408).
+class EntryWhole {
+  const EntryWhole(this.scooter, this.heavy);
+  final Eligible scooter, heavy;
+
+  /// 普機 可停，重機 不可停.
+  String get summary => '普機 ${scooter.label}，重機 ${heavy.label}';
+
+  /// [d] holds this value already.
+  bool matches(EntryDraft d) => d.scooter == scooter && d.heavy == heavy;
+
+  /// [d] takes this value, unless its own was set apart ([matches] false
+  /// and stated): the caller decides. A heavy bay keeps scooters out
+  /// (`validCondition`).
+  void applyTo(EntryDraft d) {
+    final heavyBay = d.kind == SpaceKind.heavy && scooter == Eligible.allowed;
+    d.scooter = !heavyBay
+        ? scooter
+        : d.scooter == null || d.scooter == Eligible.allowed
+        ? Eligible.notAllowed
+        : d.scooter;
+    d.heavy = heavy;
+    d.vehiclesEdited = true;
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is EntryWhole && other.scooter == scooter && other.heavy == heavy;
+
+  @override
+  int get hashCode => Object.hash(scooter, heavy);
+}
+
+/// What the stored [drafts] read as a 全區: the value every entry stating
+/// who may park shares, null when they differ or none states it (#408:
+/// nothing stores a 全區, so it is judged from whether the values agree).
+/// Taken from what was loaded, so it holds while the rider edits a copy.
+EntryWhole? entryWholeOf(Iterable<EntryDraft> drafts) {
+  final seen = <EntryWhole>{};
+  for (final d in drafts) {
+    if (d.removed || d.isNew) continue;
+    final scooter = d._loadedScooter, heavy = d._loadedHeavy;
+    if (scooter == null || heavy == null) continue;
+    seen.add(EntryWhole(scooter, heavy));
+    if (seen.length > 1) return null;
+  }
+  return seen.singleOrNull;
+}
+
+/// Whether [d] takes a change of 全區 ([whole], the value before it) with
+/// nothing set apart: it follows that value, or says nothing yet.
+bool entryFollows(EntryDraft d, EntryWhole? whole) =>
+    !d.stated || (whole?.matches(d) ?? false);
+
 /// Why [d] cannot take a change from a page that does not ask who may park.
 String unstatedEntryNote(EntryDraft d) =>
     '「${d.displayName}」還沒寫哪些車種可停，請先到「停哪裡」補上，再改這裡。';

@@ -306,6 +306,21 @@ class _DashedBorder extends CustomPainter {
       old.color != color || old.radius != radius;
 }
 
+/// [child] in a dashed card: a list's 全區 or 整條路 row (Z1, F0's 全場費率).
+class EntryDashedCard extends StatelessWidget {
+  const EntryDashedCard({super.key, required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+    foregroundPainter: _DashedBorder(
+      color: Theme.of(context).colorScheme.outline,
+      radius: 16,
+    ),
+    child: ClipRRect(borderRadius: BorderRadius.circular(16), child: child),
+  );
+}
+
 /// A dashed row that adds something: ＋ 新增一區.
 class AddEntryButton extends StatelessWidget {
   const AddEntryButton({

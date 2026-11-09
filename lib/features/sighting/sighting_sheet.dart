@@ -11,6 +11,7 @@ import '../../models/parking.dart';
 import '../../models/sighting.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../../ui/detail_tokens.dart';
+import '../../ui/four_sign_plates.dart' show DashedBorder;
 import '../account/suspended_sheet.dart';
 import '../auth/sign_in.dart';
 import '../report/report_sheet.dart' show SignInPrompt;
@@ -38,9 +39,9 @@ Future<void> showSightingSheet(
 typedef _Choice = ({RiderLevel? level});
 
 /// 回報現場狀況 (A7 a segment, A7b a zone): the place, then the state, then
-/// 送出回報, off until both are chosen; 無法停車／施工中 too is about the
-/// one place chosen (A7d: one at a time, never all at once). A failure
-/// keeps what was chosen.
+/// 送出回報, off until both are chosen. With two or more places open 全區
+/// (a road's 整條路) comes last, never preselected (A7e). A failure keeps
+/// what was chosen.
 class SightingSheet extends StatefulWidget {
   const SightingSheet({
     super.key,
@@ -64,6 +65,9 @@ class _SightingSheetState extends State<SightingSheet> {
   late SignArea? place = widget.places.length == 1
       ? widget.places.single
       : null;
+
+  /// The rider chose 全區 or 整條路 instead of [place] (A7e).
+  bool allPlaces = false;
   _Choice? choice;
   bool sending = false;
   String? error;
@@ -76,11 +80,18 @@ class _SightingSheetState extends State<SightingSheet> {
   bool get whole => widget.places.isEmpty;
   bool get closed => choice != null && choice!.level == null;
 
+  /// 全區 is offered from two places open now (#408 decision 11).
+  bool get offersAllPlaces => widget.places.length >= 2;
+
   bool get ready =>
       choice != null &&
-      (whole || place != null) &&
+      (whole || allPlaces || place != null) &&
       !sending &&
       widget.store.canReport;
+
+  /// The zone or segment reported; both null for the whole spot.
+  String? get _zoneId => street || allPlaces ? null : place?.id;
+  String? get _segmentId => street && !allPlaces ? place?.id : null;
 
   SightingReport get report {
     final spot = widget.spot, vehicle = widget.store.vehicle;
@@ -88,16 +99,16 @@ class _SightingSheetState extends State<SightingSheet> {
       return SightingReport.closed(
         spotId: spot.id,
         vehicle: vehicle,
-        zoneId: street ? null : place?.id,
-        segmentId: street ? place?.id : null,
+        zoneId: _zoneId,
+        segmentId: _segmentId,
       );
     }
     return SightingReport.level(
       spotId: spot.id,
       vehicle: vehicle,
       level: choice!.level!.bars,
-      zoneId: street ? null : place?.id,
-      segmentId: street ? place?.id : null,
+      zoneId: _zoneId,
+      segmentId: _segmentId,
     );
   }
 
@@ -121,7 +132,11 @@ class _SightingSheetState extends State<SightingSheet> {
         setState(() {
           expired = e is SightingRefused && e.reason == SightingRefusal.signIn;
           error = e is SightingRefused
-              ? sightingRefusalText(e.reason, street: street, whole: whole)
+              ? sightingRefusalText(
+                  e.reason,
+                  street: street,
+                  whole: whole || allPlaces,
+                )
               : sightingFailed;
         });
       }
@@ -192,10 +207,26 @@ class _SightingSheetState extends State<SightingSheet> {
                         _PlaceChip(
                           key: ValueKey('sighting-place-$i'),
                           label: detailPlaceName(a),
-                          selected: identical(a, place),
+                          selected: !allPlaces && identical(a, place),
                           onTap: sending
                               ? null
-                              : () => setState(() => place = a),
+                              : () => setState(() {
+                                  place = a;
+                                  allPlaces = false;
+                                }),
+                        ),
+                      if (offersAllPlaces)
+                        _PlaceChip(
+                          key: const ValueKey('sighting-place-all'),
+                          label: sightingAllPlacesLabel(street: street),
+                          selected: allPlaces,
+                          dashed: true,
+                          onTap: sending
+                              ? null
+                              : () => setState(() {
+                                  allPlaces = true;
+                                  place = null;
+                                }),
                         ),
                     ],
                   ),
@@ -218,7 +249,10 @@ class _SightingSheetState extends State<SightingSheet> {
                 _Option(
                   key: const ValueKey('sighting-closed'),
                   label: sightingClosedLabel,
-                  note: sightingClosedNote(street: street),
+                  note: sightingClosedNote(
+                    street: street,
+                    allPlaces: allPlaces,
+                  ),
                   leading: Icon(
                     Icons.construction,
                     size: 24,
@@ -231,7 +265,12 @@ class _SightingSheetState extends State<SightingSheet> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  sightingNote(street: street, whole: whole, closed: closed),
+                  sightingNote(
+                    street: street,
+                    whole: whole,
+                    allPlaces: allPlaces,
+                    closed: closed,
+                  ),
                   style: TextStyle(fontSize: 12, color: c.muted, height: 1.5),
                 ),
               ],
@@ -363,16 +402,18 @@ class _Alert extends StatelessWidget {
   }
 }
 
-/// A place: pill, ink when chosen.
+/// A place: pill, ink when chosen; [dashed] for the 全區 at the end of the
+/// list (A7e).
 class _PlaceChip extends StatelessWidget {
   const _PlaceChip({
     super.key,
     required this.label,
     required this.selected,
     required this.onTap,
+    this.dashed = false,
   });
   final String label;
-  final bool selected;
+  final bool selected, dashed;
   final VoidCallback? onTap;
 
   @override
@@ -380,6 +421,44 @@ class _PlaceChip extends StatelessWidget {
     final c = DetailColors.of(context);
     final height = isCupertino ? 44.0 : 48.0;
     final surface = Theme.of(context).colorScheme.surface;
+    final showDash = dashed && !selected;
+    final chip = Material(
+      color: selected ? c.ink : Colors.transparent,
+      shape: StadiumBorder(
+        side: selected || showDash
+            ? BorderSide.none
+            : BorderSide(color: c.muted),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: height),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (selected) ...[
+                  Icon(Icons.check, size: 18, color: surface),
+                  const SizedBox(width: 4),
+                ],
+                Flexible(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                      color: selected ? surface : c.ink,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
     return Semantics(
       inMutuallyExclusiveGroup: true,
       checked: selected,
@@ -387,43 +466,15 @@ class _PlaceChip extends StatelessWidget {
       label: label,
       excludeSemantics: true,
       onTap: onTap,
-      child: Material(
-        color: selected ? c.ink : Colors.transparent,
-        shape: StadiumBorder(
-          side: selected ? BorderSide.none : BorderSide(color: c.muted),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: height),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (selected) ...[
-                    Icon(Icons.check, size: 18, color: surface),
-                    const SizedBox(width: 4),
-                  ],
-                  Flexible(
-                    child: Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: selected
-                            ? FontWeight.w600
-                            : FontWeight.w400,
-                        color: selected ? surface : c.ink,
-                      ),
-                    ),
-                  ),
-                ],
+      child: showDash
+          ? CustomPaint(
+              foregroundPainter: DashedBorder(
+                color: c.muted,
+                radius: height / 2,
               ),
-            ),
-          ),
-        ),
-      ),
+              child: chip,
+            )
+          : chip,
     );
   }
 }
