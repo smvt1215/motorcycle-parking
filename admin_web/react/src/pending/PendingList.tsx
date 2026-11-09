@@ -129,7 +129,9 @@ export function PendingList({ selectedId, onOpen }: PendingListProps) {
   const items = pages?.flatMap((page) => page.items) ?? [];
   const groups = groupCases(items);
   const countsKnown = counts.data !== undefined && !counts.isError;
-  const firstLoadFailed = list.isError && pages === undefined;
+  // No rows to fall back on, including a cached empty result that failed to
+  // refresh: a failed read must never pass for 「沒有案件」.
+  const loadFailed = list.isError && items.length === 0;
   const secondFactor = needsSecondFactor(list.error) || needsSecondFactor(counts.error);
   const retry = () => {
     void list.refetch();
@@ -165,7 +167,7 @@ export function PendingList({ selectedId, onOpen }: PendingListProps) {
 
       {secondFactor ? (
         <SecondFactorNeeded onRetry={retry} />
-      ) : firstLoadFailed ? (
+      ) : loadFailed ? (
         <div className="pending-state">
           <Alert title="讀不到待處理清單">
             {counts.isError

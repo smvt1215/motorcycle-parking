@@ -143,6 +143,27 @@ describe('待處理清單', () => {
     vi.useRealTimers();
   });
 
+  it('does not present an empty result that failed to refresh as current', async () => {
+    vi.useFakeTimers({ now: Date.parse('2026-11-09T15:59:30Z'), shouldAdvanceTime: true });
+    let healthy = true;
+    const { postgrest } = backend({
+      list: () =>
+        healthy
+          ? { body: { items: [], next_cursor: null } }
+          : { status: 500, body: { code: 'XX000', message: 'internal', details: null } },
+      counts: () => ({ body: COUNTS }),
+    });
+    renderPending(postgrest);
+    await screen.findByText('現在沒有待處理的案件。');
+    healthy = false;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(61_000);
+    });
+    expect(await screen.findByText('讀不到待處理清單')).toBeInTheDocument();
+    expect(screen.queryByText('現在沒有待處理的案件。')).not.toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
   it('shows 未知, not 0, when the counts fail', async () => {
     const { postgrest } = backend({
       list: () => ({ body: { items: [row('a')], next_cursor: null } }),
