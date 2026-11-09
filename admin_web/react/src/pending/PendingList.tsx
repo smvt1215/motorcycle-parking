@@ -111,10 +111,12 @@ export function PendingList({ selectedId, onOpen }: PendingListProps) {
   const list = useTimedCasePagesInfiniteQuery(tab, { refetchOnFocus: true, refetchOnReconnect: true });
 
   const show = (next: PendingTab) => setParams(next === 'all' ? {} : { tab: next });
-  const items = list.data?.pages.flatMap((page) => page.items) ?? [];
+  // currentData, not data: data keeps the previous tab's rows after a switch.
+  const pages = list.currentData?.pages;
+  const items = pages?.flatMap((page) => page.items) ?? [];
   const groups = groupCases(items);
   const countsKnown = counts.data !== undefined && !counts.isError;
-  const firstLoadFailed = list.isError && list.data === undefined;
+  const firstLoadFailed = list.isError && pages === undefined;
   const secondFactor = needsSecondFactor(list.error) || needsSecondFactor(counts.error);
   const retry = () => {
     void list.refetch();
@@ -163,7 +165,7 @@ export function PendingList({ selectedId, onOpen }: PendingListProps) {
             </Button>
           </div>
         </div>
-      ) : list.isLoading ? (
+      ) : pages === undefined ? (
         <div role="status" aria-label="正在讀取待處理清單" className="pending-skeleton">
           <div aria-hidden="true" />
           <div aria-hidden="true" />

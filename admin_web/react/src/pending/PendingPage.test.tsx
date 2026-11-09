@@ -111,6 +111,21 @@ describe('待處理清單', () => {
     await waitFor(() => expect(calls.at(-1)).toMatchObject({ p_kind: 'support', p_bucket: 'all' }));
   });
 
+  it('never shows the previous tab under a tab that failed', async () => {
+    const { postgrest } = backend({
+      list: (body) =>
+        body.p_bucket === 'waiting'
+          ? { status: 500, body: { code: 'XX000', message: 'internal', details: null } }
+          : { body: { items: [row('a')], next_cursor: null } },
+      counts: () => ({ body: COUNTS }),
+    });
+    renderPending(postgrest);
+    await screen.findByText('一般問題');
+    await userEvent.click(filter(/等對方/));
+    expect(await screen.findByText('讀不到待處理清單')).toBeInTheDocument();
+    expect(screen.queryByText('一般問題')).not.toBeInTheDocument();
+  });
+
   it('shows 未知, not 0, when the counts fail', async () => {
     const { postgrest } = backend({
       list: () => ({ body: { items: [row('a')], next_cursor: null } }),

@@ -42,7 +42,13 @@ const COUNTS_POLL_MS = 60_000;
 export function usePendingCounts(skip = false) {
   return useAdminV1TimedCaseCountsQuery(
     { body: {} },
-    { skip, pollingInterval: COUNTS_POLL_MS, refetchOnFocus: true, refetchOnReconnect: true },
+    {
+      skip,
+      pollingInterval: COUNTS_POLL_MS,
+      skipPollingIfUnfocused: true,
+      refetchOnFocus: true,
+      refetchOnReconnect: true,
+    },
   );
 }
 
