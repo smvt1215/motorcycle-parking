@@ -347,7 +347,8 @@ select ok(exists(select 1 from private.case_actions where id=pg_temp.aid('a1')::
 
 -- ===== skip locked：另一個連線鎖著的列不領 =====
 create extension if not exists dblink with schema extensions;
-select dblink_connect('cx','host=127.0.0.1 port=5432 dbname=postgres user=postgres password=postgres');
+-- 連到自己的網路位址：127.0.0.1 是 trust，不會要密碼，非 superuser 的 dblink 不准。
+select dblink_connect('cx',format('host=%s port=5432 dbname=postgres user=postgres password=postgres',host(inet_server_addr())));
 select dblink_exec('cx','set lock_timeout=''2s''');
 -- 另一個連線已提交的到期動作，再開交易鎖住（別的執行者正在處理）。
 select dblink_exec('cx',$$insert into private.case_actions(id,case_type,case_id,action,payload,actor,run_at,irreversible)
