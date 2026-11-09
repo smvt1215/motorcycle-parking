@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import { appName } from '../content';
 import { Mark } from './Mark';
@@ -33,28 +33,26 @@ export function SiteNav() {
   const path = routePath(location.pathname);
 
   // Without preventScroll, focus would pull a section link back up to the bar.
-  const focusToggle = () => toggle.current?.focus({ preventScroll: true });
-  const collapse = () => {
+  const focusToggle = useCallback(() => toggle.current?.focus({ preventScroll: true }), []);
+  const collapse = useCallback(() => {
     setOpen(false);
     focusToggle();
-  };
+  }, [focusToggle]);
 
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      setOpen(false);
-      toggle.current?.focus({ preventScroll: true });
+      if (event.key === 'Escape') collapse();
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [open]);
+  }, [open, collapse]);
 
   // A link can open another page, whose bar is a new one: the focus follows there.
   const arrivedFromMenu = (location.state as FromMenu | null)?.fromMenu === true;
   useEffect(() => {
-    if (arrivedFromMenu) toggle.current?.focus({ preventScroll: true });
-  }, [arrivedFromMenu, location.key]);
+    if (arrivedFromMenu) focusToggle();
+  }, [arrivedFromMenu, location.key, focusToggle]);
 
   return (
     <>
@@ -70,7 +68,8 @@ export function SiteNav() {
           className="site-menu-toggle"
           aria-expanded={open}
           aria-controls="site-menu"
-          onClick={() => setOpen((was) => !was)}
+          // Closing moves the focus itself: Safari does not focus a pressed button.
+          onClick={() => (open ? collapse() : setOpen(true))}
         >
           <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
             <path

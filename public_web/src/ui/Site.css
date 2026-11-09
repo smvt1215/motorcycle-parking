@@ -212,7 +212,7 @@
     flex-direction: row;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0 24px;
+    gap: 0 16px;
     padding: 12px 48px;
   }
   .site-footer-inner > span {
@@ -225,6 +225,7 @@
     padding: 24px 80px 0;
   }
   .site-footer-inner {
+    gap: 0 24px;
     padding: 12px 80px;
   }
 }
