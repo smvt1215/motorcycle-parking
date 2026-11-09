@@ -361,6 +361,20 @@ void main() {
       expect(find.text('查不到縣市與行政區，請在上方確認縣市。'), findsOneWidget);
       expect(find.text('未選'), findsOneWidget);
       expect(find.text('先選縣市'), findsOneWidget);
+
+      await tester.tap(find.text('未選'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('新北市').last);
+      await tester.pumpAndSettle();
+      expect(find.text('查不到縣市與行政區，請在上方確認縣市。'), findsNothing);
+
+      await _reveal(tester, find.text('送出修改建議'));
+      await tester.tap(find.text('送出修改建議'));
+      await tester.pumpAndSettle();
+      final proposed =
+          store.submissions.single['proposed'] as Map<String, Object?>;
+      expect(proposed['city'], '新北市');
+      expect(proposed['district'], '');
       await _close(tester);
     });
   });
