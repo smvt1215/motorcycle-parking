@@ -98,22 +98,23 @@ const Map<String, PrecheckRule> precheckRules = {
   ),
   'access_no_motorcycle': (
     action: PrecheckAction.fix,
-    message: '停放分類是「機車不可停」，{vehicle}就不能選可停。請改停放分類，或把{vehicle}改成不可停或未確認。',
+    message: '這裡標示為「機車不可停」，{vehicle}就不能選可停。請把{vehicle}改成不可停或未確認。',
     patterns: [],
   ),
   'access_heavy_only_scooter': (
     action: PrecheckAction.fix,
-    message: '停放分類是「大型重機專用」，普通機車就不能選可停。請改停放分類，或把普通機車改成不可停或未確認。',
+    message: '這裡標示為「大型重機專用」，普通機車就不能選可停。請把普通機車改成不可停或未確認。',
     patterns: [],
   ),
   'access_scooter_only_heavy': (
     action: PrecheckAction.fix,
-    message: '停放分類是「普通機車專用」，大型重機就不能選可停。請改停放分類，或把大型重機改成不可停或未確認。',
+    message: '這裡標示為「普通機車專用」，大型重機就不能選可停。請把大型重機改成不可停或未確認。',
     patterns: [],
   ),
   'zones_no_motorcycle': (
     action: PrecheckAction.fix,
-    message: '每個分區都標成「機車不可停」，{vehicle}就不能選可停。請改分區的停放分類，或把{vehicle}改成不可停或未確認。',
+    message:
+        '每個分區都標成機車不可停，{vehicle}就不能選可停。請改分區的普通機車／大型重機可不可停，或把{vehicle}改成不可停或未確認。',
     patterns: [],
   ),
   'fee_follows_missing_scooter': (

@@ -678,7 +678,6 @@ class _SuggestionFormState extends State<_SuggestionForm> {
   /// Whether the suggested facility types differ from the spot's.
   bool get facilitiesChanged =>
       !setEquals(facilities, widget.spot.facilities.toSet());
-  late ParkingAccess? access = widget.spot.access;
   late final entrance = TextEditingController(text: widget.spot.entranceNote);
   late final guide = TextEditingController(text: widget.spot.parkingGuide);
   GoneCause? cause;
@@ -748,7 +747,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
     });
   }
 
-  /// Lots also say how they are built and who parks there.
+  /// Lots also say how they are built; who parks there is each zone's.
   bool get lotType => typeField && kind == SpaceKind.offStreet;
 
   /// Entrances belong to lots; a street bay only has a guide.
@@ -829,7 +828,6 @@ class _SuggestionFormState extends State<_SuggestionForm> {
           // as its first.
           if (facilitiesChanged)
             'facility_types': facilityPayload(facilities)['facility_types'],
-          if (access != spot.access) 'parking_access': access?.name,
         },
         if (shareHeavyChanged) 'heavy_allowed': shareHeavy,
       };
@@ -918,12 +916,6 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                     for (final t in FacilityType.values)
                       if (facilities.contains(t)) t,
                   ]),
-          ),
-        if (lotType && access != spot.access)
-          line(
-            '停放分類',
-            spot.access?.description ?? '未提供',
-            access?.description ?? '未確認',
           ),
         if (shareHeavyChanged)
           line('大型重機', _yesNo(spot.heavyAllowed), _yesNo(shareHeavy)),
@@ -1170,7 +1162,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                   validator: (_) => changes().isNotEmpty
                       ? null
                       : lotType
-                      ? '請至少修改格位類型、場站型式或停放分類其中一項'
+                      ? '請至少修改格位類型或場站型式其中一項'
                       : '這和目前的格位類型相同，請選擇另一種',
                   builder: (state) => Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1221,7 +1213,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                           }),
                         ),
                       ],
-                      // These controls form one proposal with the space type.
+                      // This control forms one proposal with the space type.
                       // Mark the field changed so its error updates immediately.
                       if (lotType) ...[
                         const SizedBox(height: 20),
@@ -1229,13 +1221,6 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                           value: facilities,
                           onChanged: (v) => setState(() {
                             facilities = v;
-                            state.didChange(type);
-                          }),
-                        ),
-                        AccessField(
-                          value: access,
-                          onChanged: (v) => setState(() {
-                            access = v;
                             state.didChange(type);
                           }),
                         ),
