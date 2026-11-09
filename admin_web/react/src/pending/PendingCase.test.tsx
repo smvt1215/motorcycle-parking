@@ -159,6 +159,8 @@ interface Setup {
   /** Replaces the messages of `support_request`. */
   messages?: SupportRequestDetail['messages'];
   failing?: string[];
+  /** Holds `schedule_case_action` until it resolves. */
+  gate?: Promise<void>;
   actions?: Record<string, CaseAction[]>;
   schedule?: (body: Record<string, unknown>) => Reply;
   cancel?: () => Reply;
@@ -216,6 +218,7 @@ function backend(setup: Setup) {
         reply = { body: setup.actions?.[String(body.p_case)] ?? [] };
         break;
       case 'schedule_case_action':
+        await setup.gate;
         reply = setup.schedule?.(body) ?? receipt(`action-${++actionSeq}`);
         break;
       case 'cancel_case_action':
@@ -477,7 +480,61 @@ describe('案件詳情的處理', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe(`/pending/${UUID(2)}`));
     items[0] = row(1, { version: '2026-11-09T02:00:00.000000+00:00', state: 'awaiting_user' });
     await tick(3000);
-    expect(await within(dock()).findByText('已寄出')).toBeInTheDocument();
+    expect(await within(dock()).findByText('已排入寄送')).toBeInTheDocument();
+  });
+
+  it('does not call a reply delivered when its mail failed', async () => {
+    const failedMail: CaseAction = {
+      id: 'retry-1',
+      case_type: 'support',
+      case_id: UUID(1),
+      action: 'reply',
+      status: 'done',
+      run_at: new Date().toISOString(),
+      irreversible: false,
+      attempts: 1,
+      error: null,
+      actor: 'me',
+      expected_version: null,
+      payload: {},
+      created_at: new Date().toISOString(),
+      started_at: null,
+      finished_at: null,
+      message_id: 'm1',
+      delivery_status: 'failed',
+      send_error: null,
+      address_editable: false,
+    };
+    const first = supportDetail(row(1)).messages[0]!;
+    const actions: Record<string, CaseAction[]> = { [UUID(1)]: [failedMail] };
+    const { postgrest } = backend({
+      items: [row(1, { state: 'send_failed', rank: 0 }), row(2)],
+      actions,
+      retry: () => ({ body: { action_id: 'retry-1', run_at: new Date(Date.now() + 1000).toISOString() } }),
+      messages: [
+        first,
+        { ...first, id: 'm1', direction: 'out', channel: 'admin', delivery_status: 'failed', attempts: 5 },
+      ],
+    });
+    open(postgrest, `/pending/${UUID(1)}`);
+    await user.click(await screen.findByRole('button', { name: '再寄一次' }));
+    await within(dock()).findByText(/秒後寄出/);
+    await tick(3000);
+    expect(await within(dock()).findByText('回覆沒有寄出')).toBeInTheDocument();
+  });
+
+  it('freezes the reply while it is being scheduled', async () => {
+    let release = () => undefined as void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { postgrest } = backend({ items: [row(1), row(2)], gate });
+    open(postgrest, `/pending/${UUID(1)}`);
+    const box = await typeReply('送出的內容');
+    await sendReply();
+    await waitFor(() => expect(box).toHaveAttribute('readonly'));
+    release();
+    await within(await waitFor(dock)).findByText(/秒後寄出/);
   });
 
   it('starts a new countdown when a cancelled re-send is sent again under the same id', () => {

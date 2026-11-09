@@ -79,8 +79,9 @@ export function describeAction({ action, item, replyTo, resolveStatus }: ActionC
       cancel: '取消寄出',
       sendingTitle: '寄送中',
       sendingBody: `回覆 ${number}，已經來不及取消`,
-      doneTitle: '已寄出',
-      doneBody: replyTo ? `回覆 ${number} 寄往 ${replyTo}` : `回覆 ${number}`,
+      // The action ending only queues the mail; 往來紀錄 shows when it was delivered.
+      doneTitle: '已排入寄送',
+      doneBody: replyTo ? `回覆 ${number} 會寄到 ${replyTo}` : `回覆 ${number}`,
       cancelledTitle: '已取消寄出',
       cancelledBody: `回覆回到 ${number} 的回覆框，內容還在`,
       lateBody: `回覆 ${number} 已經開始寄送`,

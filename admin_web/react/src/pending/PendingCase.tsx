@@ -465,14 +465,14 @@ function CaseView({ item, support, report, serverActions, reload, remaining }: C
               maxLength={4000}
               placeholder="寫給對方的回覆"
               value={draft.reply ?? ''}
-              readOnly={live.length > 0}
+              readOnly={busy || live.length > 0}
               onChange={(event) => onDraft({ reply: event.target.value })}
             />
             <span className="t-caption">會寄到 {replyTo}。回覆裡不要提到這個 email 有沒有帳號。</span>
           </div>
         )}
 
-        {!isPhone && panelNode}
+        {!isPhone && panelNode && <div inert={busy}>{panelNode}</div>}
       </div>
 
       <ActionBar
@@ -504,7 +504,7 @@ function CaseView({ item, support, report, serverActions, reload, remaining }: C
         }
       />
 
-      {isPhone && panelNode}
+      {isPhone && panelNode && <div inert={busy}>{panelNode}</div>}
     </article>
   );
 }

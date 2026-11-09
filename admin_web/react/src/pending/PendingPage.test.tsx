@@ -50,6 +50,8 @@ function backend(handlers: { list: (body: Record<string, unknown>) => Reply; cou
     if (url.endsWith('/rpc/timed_cases')) {
       calls.push(body);
       reply = handlers.list(body);
+    } else if (url.endsWith('/rpc/case_actions')) {
+      reply = { body: [] };
     } else {
       reply = handlers.counts();
     }
@@ -270,6 +272,6 @@ describe('待處理清單', () => {
     expect(router.state.location.pathname).toBe('/pending/a');
     expect(router.state.location.search).toBe('?tab=support');
     expect(await screen.findByRole('link', { name: /一般問題/ })).toHaveAttribute('aria-current', 'true');
-    expect(screen.getByRole('status', { name: '正在讀取案件' })).toBeInTheDocument();
+    expect(await screen.findByRole('status', { name: '正在讀取案件' })).toBeInTheDocument();
   });
 });

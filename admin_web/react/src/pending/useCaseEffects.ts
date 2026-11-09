@@ -64,6 +64,9 @@ export function useActionWatcher() {
         const server = listed.find((row) => row.id === action.id);
         if (!server && action.expectedVersion !== undefined) {
           unlisted.push(action);
+        } else if (server?.status === 'done' && server.delivery_status === 'failed') {
+          // Listed only because the mail failed: the action ran, the reply did not arrive.
+          dispatch(actionSettled({ id: action.id, outcome: 'failed', now: Date.now() }));
         } else if (!server || server.status === 'done') {
           dispatch(actionSettled({ id: action.id, outcome: 'done', now: Date.now() }));
         } else if (server.status === 'failed' || server.status === 'stale' || server.status === 'cancelled') {
