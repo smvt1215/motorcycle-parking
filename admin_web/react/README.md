@@ -11,7 +11,7 @@ Flutter 管理站（`lib/admin/`）的改寫版本，依 [`../DESIGN.md`](../DES
 
 - 待處理（#295 第一層）：唯讀清單、分頁與計數、期限分組、keyset 分頁，載入、失敗、空清單與離線狀態。案件內容（回覆、結案、檢舉處理、倒數）在第二層。
 
-正式建置只有「待處理」接上真實資料：部署在既有 admin Hosting 的 `/pending`，和 Flutter 管理站並存，導覽的其他項目整頁換到 Flutter。登入走 Supabase（Google ＋ AAL2），沒有管理權限或第二步驗證就不會顯示內容，也不會向 `admin_v1` 取資料。工作階段存在自己的 `motopark-admin-react-auth`，因為 Flutter 管理站用 `sb-<ref>-auth-token`，內容格式 auth-js 不接受，共用會把 Flutter 的登入清掉；所以第一次進 `/pending` 要再登入一次。
+正式建置只有「待處理」接上真實資料：部署在既有 admin Hosting 的 `/pending`，和 Flutter 管理站並存，導覽的其他項目整頁換到 Flutter。登入走 Supabase（Google ＋ AAL2），沒有管理權限或第二步驗證就不會顯示內容，也不會向 `admin_v1` 取資料。工作階段存在自己的 `motopark-admin-react-auth`，不用 Flutter 管理站的 `sb-<ref>-auth-token`：兩個 client 之間沒有共用的鎖，各自更新同一顆會輪替的 refresh token，可能觸發重複使用偵測，讓兩邊一起被登出。代價是第一次進 `/pending` 要再登入一次。
 
 開發時用 `--mode fixture` 載入記憶體內的示範資料（`src/review/fixtureSource.ts`、`src/pending/fixture.ts`），審核頁會標示「示範資料，不會寫入伺服器」。fixture 可用 `?scenario=`（`empty`、`waiting-empty`、`list-failed`、`counts-failed`、`second-factor`、`many`）與 `?auth=`（`signedOut`、`denied`、`mfa`、`enroll`、`unavailable`）切換狀態。
 

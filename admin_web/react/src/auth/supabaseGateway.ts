@@ -3,8 +3,9 @@ import { SIGNED_OUT, type AdminAuthGateway, type AdminFactor, type FactorKind } 
 
 /**
  * Not the default `sb-<ref>-auth-token`: the Flutter admin on this origin
- * stores its session under that key, in a shape auth-js rejects and removes.
- * Sharing it would sign the Flutter admin out, so this page has its own.
+ * stores its session under that key. Two clients refreshing one rotating
+ * refresh token, with no lock between them, can trip reuse detection and end
+ * the session for both, so this page has its own.
  */
 export const REACT_ADMIN_STORAGE_KEY = 'motopark-admin-react-auth';
 
