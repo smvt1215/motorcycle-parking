@@ -1,0 +1,263 @@
+/* 待處理 (TimedCase, TimedTablet, TimedPhoneList, TimedBasics boards). */
+.pending {
+  display: flex;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.pending-list {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex: 0 0 400px;
+  flex-direction: column;
+  min-width: 0;
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
+  border-right: 1px solid var(--color-rivet);
+  background: var(--color-plate-white);
+}
+
+.pending-list__header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  padding: 20px 16px 4px;
+}
+
+.pending-list__title {
+  display: flex;
+  flex-direction: column;
+}
+
+.pending-list__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+}
+
+.pending-unknown {
+  color: inherit;
+  font-weight: 700;
+}
+
+.pending-group {
+  padding: 12px 16px 6px;
+}
+
+.pending-group.is-alert {
+  color: var(--color-destructive);
+}
+
+.pending-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pending-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-divider);
+  color: inherit;
+  text-decoration: none;
+}
+
+.pending-row:hover {
+  background: var(--color-paper-white);
+  color: inherit;
+}
+
+/* The rail's own focus ring would be cut off by the list's scroll box. */
+.pending-row:focus-visible {
+  outline-offset: -3px;
+}
+
+.pending-row.is-selected {
+  border-bottom-color: transparent;
+  background: var(--color-paper-white);
+  box-shadow: inset 0 0 0 2px var(--color-rail-black);
+}
+
+.pending-row__top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-12);
+}
+
+.pending-row__title {
+  min-width: 0;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.pending-row__due {
+  display: flex;
+  flex: none;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.pending-row__date {
+  font-size: 17px;
+}
+
+.pending-row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.pending-row__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pending-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: var(--radius-tag);
+  font-size: var(--text-caption);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.pending-tag--danger {
+  border: 1.5px solid var(--color-destructive);
+  color: var(--color-destructive);
+}
+
+.pending-tag--dashed {
+  border: 1.5px dashed var(--color-graphite);
+  color: var(--color-graphite);
+}
+
+.pending-tag--outline {
+  border: 1.5px solid var(--color-rail-black);
+}
+
+.pending-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: 16px;
+}
+
+.pending-skeleton > div {
+  height: 56px;
+  border-radius: var(--radius-control);
+  background: var(--color-aluminium);
+}
+
+.pending-state {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  padding: 16px;
+}
+
+.pending-state__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+}
+
+.pending-alert {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: 12px 14px;
+  border: 1.5px solid var(--color-destructive);
+  border-radius: var(--radius-control);
+}
+
+.pending-alert__title {
+  color: var(--color-destructive);
+}
+
+.pending-more {
+  display: flex;
+  justify-content: center;
+  padding: 16px;
+}
+
+.pending-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: var(--color-paper-white);
+}
+
+.pending-pane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+  padding: 24px 32px;
+}
+
+.pending-back {
+  display: none;
+}
+
+/* Tablet: the shell bar is on top, so the list starts below it. */
+@media (max-width: 1039.98px) {
+  .pending {
+    min-height: calc(100dvh - var(--tabs-height));
+  }
+
+  .pending-list {
+    top: var(--tabs-height);
+    flex-basis: 320px;
+    height: calc(100dvh - var(--tabs-height));
+  }
+
+  .pending-pane {
+    padding: 20px 24px;
+  }
+}
+
+/* Phone: the list and the case take turns (TimedPhoneList). */
+@media (max-width: 679.98px) {
+  .pending {
+    display: block;
+    min-height: 0;
+  }
+
+  .pending-list {
+    position: static;
+    height: auto;
+    overflow: visible;
+    border-right: 0;
+  }
+
+  .pending-list__header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--color-rivet);
+  }
+
+  /* The bar names the page; the caption goes with the hidden headline. */
+  .pending-list__title {
+    display: none;
+  }
+
+  .pending--detail .pending-list,
+  .pending--list .pending-main {
+    display: none;
+  }
+
+  .pending-pane {
+    padding: 8px 16px 24px;
+  }
+
+  .pending-back {
+    display: block;
+    margin-left: -12px;
+  }
+}

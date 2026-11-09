@@ -24,9 +24,9 @@ export function supabaseGateway(url: string, anonKey: string, origin: string): A
     signInError = error !== null;
   });
 
-  const unwrap = <T>(result: { data: T; error: unknown }): NonNullable<T> => {
+  const unwrap = <R extends { data: unknown; error: unknown }>(result: R) => {
     if (result.error) throw result.error;
-    return result.data as NonNullable<T>;
+    return result.data as Extract<R, { error: null }>['data'];
   };
 
   return {
@@ -77,14 +77,12 @@ export function supabaseGateway(url: string, anonKey: string, origin: string): A
       const { all } = unwrap(await client.mfa.listFactors());
       return all
         .filter((factor) => factor.factor_type === 'totp' || factor.factor_type === 'phone')
-        .map(
-          (factor): AdminFactor => ({
-            id: factor.id,
-            name: factor.friendly_name ?? null,
-            type: factor.factor_type as FactorKind,
-            verified: factor.status === 'verified',
-          }),
-        );
+        .map((factor): AdminFactor => ({
+          id: factor.id,
+          name: factor.friendly_name ?? null,
+          type: factor.factor_type as FactorKind,
+          verified: factor.status === 'verified',
+        }));
     },
     async enroll(type, name, phone) {
       if (type === 'phone') {

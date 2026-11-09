@@ -1,4 +1,5 @@
 import { Navigate, type RouteObject } from 'react-router';
+import { pendingRoute } from '../pending/routes';
 import { DesignPage } from '../pages/DesignPage';
 import { ImportPage, MorePage, NotFoundPage, RulesPage, SpotsPage, UsersPage } from '../pages/SectionPages';
 import { ReviewDetail } from '../review/ReviewDetail';
@@ -21,6 +22,7 @@ export const routes: RouteObject[] = [
           { path: ':reportId', Component: ReviewDetail },
         ],
       },
+      pendingRoute,
       { path: 'spots', Component: SpotsPage },
       { path: 'rules', Component: RulesPage },
       { path: 'import', Component: ImportPage },

@@ -56,6 +56,7 @@
 }
 
 .shell-nav__item {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -88,6 +89,45 @@
   display: none;
 }
 
+/* Black plate on the selected white item, white plate on the black rail. */
+.shell-nav__badge {
+  position: absolute;
+  top: 4px;
+  right: 12px;
+  padding: 0 5px;
+  border-radius: var(--radius-tag);
+  background: var(--color-plate-white);
+  color: var(--color-rail-black);
+  font-family: var(--font-numeral);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.shell-nav__item.is-active .shell-nav__badge {
+  background: var(--color-rail-black);
+  color: var(--color-plate-white);
+}
+
+.shell-signout {
+  flex: none;
+  min-width: 48px;
+  min-height: 48px;
+  margin-top: auto;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-rivet);
+  font-size: var(--text-caption);
+  cursor: pointer;
+}
+
+.shell-signout:hover {
+  background: var(--color-rail-hover);
+  color: var(--color-paper-white);
+}
+
 .shell-main {
   flex: 1 1 auto;
   min-width: 0;
@@ -113,10 +153,20 @@
   }
 
   .shell-nav {
+    flex: 1 1 auto;
     flex-direction: row;
     gap: 4px;
     min-width: 0;
     overflow-x: auto;
+  }
+
+  .shell-signout {
+    margin: 0;
+  }
+
+  /* Text-only tabs: the count sits beside the name. */
+  .shell-nav__badge {
+    position: static;
   }
 
   .shell-nav__item {
@@ -136,7 +186,7 @@
 
 /*
  * Phone (< 680px): 56px top bar naming the page, 72px bottom tabs with
- * 審核、點位、規則、更多; 匯入 and 使用者 move under 更多.
+ * 審核、待處理、點位、更多; 規則、匯入 and 使用者 move under 更多.
  */
 @media (max-width: 679.98px) {
   .shell-bar {
@@ -152,6 +202,7 @@
 
   .shell-bar__title {
     display: block;
+    flex: 1 1 auto;
     color: var(--color-paper-white);
     font-weight: 900;
   }
@@ -161,6 +212,7 @@
     right: 0;
     bottom: 0;
     left: 0;
+    flex: none;
     gap: 4px;
     height: calc(var(--bottom-tabs-height) + env(safe-area-inset-bottom, 0px));
     padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px));
@@ -181,6 +233,10 @@
 
   .shell-nav__icon {
     display: block;
+  }
+
+  .shell-nav__badge {
+    position: absolute;
   }
 
   .shell-nav__item--wide {

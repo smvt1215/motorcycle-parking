@@ -74,7 +74,9 @@ function SignInPanel({ controller }: { controller: AuthController }) {
       >
         {busy ? '開啟 Google 登入中…' : '使用 Google 帳號登入'}
       </Button>
-      {!controller.connected && <p className="auth-error">此管理站尚未連接登入服務，請聯絡專案擁有者完成設定。</p>}
+      {!controller.connected && (
+        <p className="auth-error">此管理站尚未連接登入服務，請聯絡專案擁有者完成設定。</p>
+      )}
       {error && <p className="auth-error">{error}</p>}
       <p className="t-caption">第二步驗證可使用驗證器 App 或已登記的手機簡訊。</p>
     </>
@@ -106,7 +108,11 @@ export function AuthGate({ controller, children }: { controller: AuthController;
     <main className="auth-page">
       <Brand />
       <section className="panel auth-panel">
-        {state.stage === 'mfa' ? <MfaPanel controller={controller} /> : <SignInPanel controller={controller} />}
+        {state.stage === 'mfa' ? (
+          <MfaPanel controller={controller} />
+        ) : (
+          <SignInPanel controller={controller} />
+        )}
       </section>
       <p className="t-caption">台灣機車停車指南 · 管理者專用</p>
     </main>

@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { Button } from '../ui/controls';
 import { useAuthState } from './AuthContext';
 import { activeFactor, unfinishedFactors, verifiedFactors, type AuthController } from './controller';
@@ -7,18 +7,12 @@ import type { AdminFactor, FactorKind } from './gateway';
 const factorName = (factor: AdminFactor) =>
   factor.name ?? (factor.type === 'phone' ? '手機簡訊' : '驗證器 App');
 
+/** Keyed by factor: a code typed for one must not carry over to another. */
 function CodeForm({ controller }: { controller: AuthController }) {
   const state = useAuthState(controller);
   const active = activeFactor(state);
   const [code, setCode] = useState('');
   const [invalid, setInvalid] = useState(false);
-  const activeId = active?.id;
-
-  // A code belongs to one factor; switching must not carry it over.
-  useEffect(() => {
-    setCode('');
-    setInvalid(false);
-  }, [activeId]);
 
   const phone = active?.type === 'phone';
   const submit = (event: FormEvent) => {
@@ -140,10 +134,21 @@ function EnrollmentSteps({ controller }: { controller: AuthController }) {
       {enrollment.qrCode && (
         <>
           <p>使用驗證器 App 掃描 QR code，或手動輸入設定密鑰。</p>
-          <img className="auth-qr" src={enrollment.qrCode} width={200} height={200} alt="新驗證器的登記 QR code" />
+          <img
+            className="auth-qr"
+            src={enrollment.qrCode}
+            width={200}
+            height={200}
+            alt="新驗證器的登記 QR code"
+          />
           <label className="auth-field">
             <span className="t-label">設定密鑰</span>
-            <input readOnly type={showSecret ? 'text' : 'password'} autoComplete="off" value={enrollment.secret} />
+            <input
+              readOnly
+              type={showSecret ? 'text' : 'password'}
+              autoComplete="off"
+              value={enrollment.secret}
+            />
           </label>
           <Button variant="quiet" onClick={() => setShowSecret((shown) => !shown)}>
             {showSecret ? '隱藏密鑰' : '顯示密鑰'}
@@ -151,7 +156,7 @@ function EnrollmentSteps({ controller }: { controller: AuthController }) {
         </>
       )}
       {enrollment.phone && <p>傳送驗證碼至 {enrollment.phone}，完成手機登記。</p>}
-      <CodeForm controller={controller} />
+      <CodeForm key={enrollment.id} controller={controller} />
       <Button variant="quiet" disabled={state.busy} onClick={() => void controller.cancelEnrollment()}>
         取消這次登記
       </Button>
@@ -192,7 +197,7 @@ export function MfaPanel({ controller }: { controller: AuthController }) {
             ))}
           </select>
         </label>
-        <CodeForm controller={controller} />
+        <CodeForm key={state.selectedFactorId} controller={controller} />
       </>
     );
   } else {
@@ -204,7 +209,9 @@ export function MfaPanel({ controller }: { controller: AuthController }) {
       <h1 className="t-headline">請先完成第二步驗證</h1>
       <p className="muted">{state.access.email ?? '管理者帳號'}</p>
       {authenticators < 2 && (
-        <p className="auth-note">請至少登記兩個驗證器 App，例如手機與密碼管理器，互為備援。每個驗證器請分別登記。</p>
+        <p className="auth-note">
+          請至少登記兩個驗證器 App，例如手機與密碼管理器，互為備援。每個驗證器請分別登記。
+        </p>
       )}
       {!state.refreshing && !state.enrollment && unfinished.length > 0 && (
         <div className="auth-form">

@@ -64,6 +64,7 @@ export class AuthController {
   private unsubscribe: (() => void) | null = null;
   /** Raised when the signed-in identity is replaced; older work is dropped. */
   private generation = 0;
+  private refreshRun = 0;
   private stopped = false;
 
   constructor(private readonly gateway: AdminAuthGateway | null) {}
@@ -100,6 +101,10 @@ export class AuthController {
   stop() {
     this.stopped = true;
     this.generation += 1;
+    // StrictMode stops and restarts at once: an abandoned refresh must not
+    // keep the next start() from running its own.
+    this.refreshRun += 1;
+    this.state = { ...this.state, refreshing: false };
     this.unsubscribe?.();
     this.unsubscribe = null;
   }
@@ -135,6 +140,8 @@ export class AuthController {
     if (this.stopped || this.state.refreshing || !gateway) return;
     this.set({ refreshing: true, error: null });
     const generation = this.generation;
+    this.refreshRun += 1;
+    const run = this.refreshRun;
     try {
       const access = await gateway.access();
       if (generation !== this.generation) return;
@@ -170,7 +177,11 @@ export class AuthController {
         this.set({ stage: 'unavailable', error: '無法讀取驗證方式，請檢查連線後重試。' });
       }
     } finally {
-      this.set({ refreshing: false });
+      if (run === this.refreshRun) {
+        this.set({ refreshing: false });
+        // The identity changed mid-check: load what the new one needs.
+        if (generation !== this.generation && !this.stopped) void this.refresh();
+      }
     }
   };
 

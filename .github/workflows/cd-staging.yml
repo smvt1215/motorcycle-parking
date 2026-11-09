@@ -161,12 +161,29 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/mobile-setup
         if: steps.setup.outputs.enabled == 'true'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        if: steps.setup.outputs.enabled == 'true'
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: admin_web/react/package-lock.json
+      # The React 待處理 page, served at /pending next to the Flutter admin.
+      - name: Build React pending page
+        if: steps.setup.outputs.enabled == 'true'
+        working-directory: admin_web/react
+        env:
+          VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+        run: |
+          test -n "$VITE_SUPABASE_URL" && test -n "$VITE_SUPABASE_ANON_KEY"
+          npm ci
+          npm run build
       - name: Build admin site
         if: steps.setup.outputs.enabled == 'true'
         run: |
           python3 tool/cd_config.py staging web
           flutter build web -t lib/main_admin.dart -o build/admin --no-web-resources-cdn --no-wasm-dry-run --dart-define-from-file=config/staging.json
-          python3 tool/prepare_admin_web.py
+          python3 tool/prepare_admin_web.py --react-pending
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         if: steps.setup.outputs.enabled == 'true'
         with:

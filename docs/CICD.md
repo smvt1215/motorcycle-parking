@@ -86,9 +86,12 @@ Workflow 依平台分工：跨平台檢查放 `ci.yml`，各平台的建置與�
 ```bash
 python3 tool/cd_config.py staging web
 flutter build web -t lib/main_admin.dart -o build/admin --no-web-resources-cdn --no-wasm-dry-run --dart-define-from-file=config/staging.json
-python3 tool/prepare_admin_web.py
+(cd admin_web/react && npm ci && VITE_SUPABASE_URL=... VITE_SUPABASE_ANON_KEY=... npm run build)
+python3 tool/prepare_admin_web.py --react-pending
 firebase deploy --only hosting:admin-staging --project staging --non-interactive
 ```
+
+React 的「待處理」頁（#295）放在同一個 Hosting site 的 `/pending`：`--react-pending` 把 `admin_web/react/dist` 複製到 `build/admin/pending`（不含 source map，含示範資料標記時中止），`firebase.json` 的 `/pending`、`/pending/**` rewrite 排在 Flutter 的 `**` 之前。CD 用 staging Environment 既有的 `SUPABASE_URL`、`SUPABASE_ANON_KEY`，不需要新的 secret。OAuth 回到 `/pending`，已涵蓋在下表的 Redirect URLs（`/**`）內。
 
 `firebase.json` 僅服務 `build/admin`，設定 SPA rewrite、CSP、`X-Frame-Options: DENY`、`X-Robots-Tag: noindex, nofollow`、`nosniff` 與重新驗證快取。CanvasKit 從同站載入；CSP 允許 Supabase HTTPS／WebSocket 與 Maps／Fonts 所需來源。管理站的 `index.html` 也含 `noindex`，不引用 App 的 manifest。
 

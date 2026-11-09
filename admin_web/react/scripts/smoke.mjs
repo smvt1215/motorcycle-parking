@@ -28,6 +28,12 @@ const PAGES = [
   '/review/r-fuxing',
   '/review/r-daan',
   '/review/r-cks?kind=location',
+  '/pending',
+  '/pending?tab=waiting',
+  '/pending?scenario=many',
+  '/pending?scenario=list-failed',
+  '/pending?scenario=empty',
+  '/pending/630f13c7-0000-4000-8000-000000000002',
   '/spots',
   '/more',
   '/design',
@@ -35,8 +41,9 @@ const PAGES = [
   '/nope',
 ];
 
-/** Tabs a page shows: none on a phone's report detail, else 4 on phones and 5 wider. */
-const expectedTabs = (viewport, path) => (viewport.phone ? (/^\/review\/[^/?]+/.test(path) ? 0 : 4) : 5);
+/** Tabs a page shows: none on a phone's report or case detail, else 4 on phones and 6 wider. */
+const expectedTabs = (viewport, path) =>
+  viewport.phone ? (/^\/(review|pending)\/[^/?]+/.test(path) ? 0 : 4) : 6;
 
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml' };
 
@@ -73,6 +80,10 @@ async function open(page, path) {
     await page.waitForSelector('.review-detail, .review-done', { state: 'attached' });
   } else if (path.startsWith('/review')) {
     await page.waitForSelector('.queue__list, .review-detail, .review-done', { state: 'attached' });
+  } else if (path.startsWith('/pending')) {
+    // Past the skeleton: rows, an empty state or a failure.
+    await page.waitForSelector('.pending-rows, .pending-state, .pending-back', { state: 'attached' });
+    await page.waitForSelector('.pending-skeleton', { state: 'detached' });
   }
 }
 
@@ -111,7 +122,11 @@ for (const viewport of VIEWPORTS) {
     if (result.tabs !== tabs) failures.push(`${where}: ${result.tabs} tabs, want ${tabs}`);
     if (result.small.length) failures.push(`${where}: nav targets under 48px: ${result.small.join(', ')}`);
     if (result.buttons.length) failures.push(`${where}: buttons under 48px: ${result.buttons.join(', ')}`);
-    if (tabs > 0 && ['/review', '/spots', '/import'].includes(path) && result.current.length !== 1) {
+    if (
+      tabs > 0 &&
+      ['/review', '/pending', '/spots', '/import'].includes(path) &&
+      result.current.length !== 1
+    ) {
       failures.push(`${where}: ${result.current.length} current tabs (${result.current.join(', ')})`);
     }
     await page.screenshot({
@@ -167,6 +182,48 @@ for (const viewport of VIEWPORTS) {
   if (small.length) failures.push(`${viewport.name}: edit controls under 48px: ${small.join(', ')}`);
   await page.screenshot({ path: join(output, `${viewport.name}_review_edit.png`), fullPage: true });
   await page.keyboard.press('Escape');
+
+  // 待處理: rows at least 48px, a row opens only the right pane, pagination.
+  await open(page, '/pending?scenario=many');
+  await page.getByRole('button', { name: '載入更多' }).click();
+  await page.waitForFunction(() => document.querySelectorAll('.pending-row').length > 50);
+  const shortRows = await page.evaluate(
+    () =>
+      [...document.querySelectorAll('.pending-row')].filter((row) => row.getBoundingClientRect().height < 48)
+        .length,
+  );
+  if (shortRows) failures.push(`${viewport.name}: ${shortRows} pending rows under 48px`);
+  if ((await sideways()) > 0) failures.push(`${viewport.name}: pending list scrolls sideways`);
+  await page.screenshot({ path: join(output, `${viewport.name}_pending_more.png`), fullPage: true });
+
+  await open(page, '/pending');
+  await page.locator('.pending-row').first().click();
+  await page.waitForURL(/\/pending\/61a2d7e0/);
+  await page.getByRole('region', { name: '案件內容還沒接上' }).waitFor();
+  const listShown = await page.locator('.pending-list').isVisible();
+  if (listShown === viewport.phone) failures.push(`${viewport.name}: list shown=${listShown} on a case`);
+  if (viewport.phone) {
+    await page.getByRole('link', { name: /返回清單/ }).click();
+    await page.waitForURL(/\/pending$/);
+  }
+
+  // Sign-in steps come before the shell, at every width.
+  for (const mode of ['signedOut', 'denied', 'mfa', 'enroll', 'unavailable']) {
+    await page.goto(`${base}/pending?auth=${mode}`);
+    await page.waitForSelector('.auth-panel h1');
+    await page.waitForFunction(() => !document.querySelector('.auth-panel [role="status"]'));
+    if ((await sideways()) > 0) failures.push(`${viewport.name} auth=${mode}: scrolls sideways`);
+    const smallAuth = await page.evaluate(() =>
+      [...document.querySelectorAll('.auth-page button, .auth-page input, .auth-page select')]
+        .map((el) => el.getBoundingClientRect().height)
+        .filter((h) => h < 48),
+    );
+    if (smallAuth.length) failures.push(`${viewport.name} auth=${mode}: controls under 48px`);
+    if (await page.locator('nav[aria-label="管理功能"]').count()) {
+      failures.push(`${viewport.name} auth=${mode}: the admin shell is showing`);
+    }
+    await page.screenshot({ path: join(output, `${viewport.name}_auth_${mode}.png`), fullPage: true });
+  }
 
   if (viewport.phone) {
     // The phone list expands a row in place before opening the detail.

@@ -55,6 +55,17 @@ describe('AuthController', () => {
     expect(controller.connected).toBe(false);
   });
 
+  it('finishes the check when StrictMode stops and restarts it', async () => {
+    const { gateway } = fakeGateway(ADMIN_AAL2);
+    const controller = new AuthController(gateway);
+    controller.start();
+    controller.stop();
+    controller.start();
+    await settled();
+    expect(controller.getState().stage).toBe('ready');
+    expect(controller.getState().refreshing).toBe(false);
+  });
+
   it('asks for a second factor before an admin gets in', async () => {
     const { gateway } = fakeGateway(ADMIN_AAL1);
     const controller = await started(gateway);
