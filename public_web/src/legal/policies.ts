@@ -30,7 +30,7 @@ export const privacy: Policy = {
 /** The privacy policy's layout and the same notice (PM 2026-11-07). */
 export const terms: Policy = {
   title: '服務條款',
-  version: '1.1',
+  version: '1.2',
   effective: '2026-11-09',
   updated: '2026-11-09',
   markdown: termsText,

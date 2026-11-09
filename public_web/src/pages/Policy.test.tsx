@@ -116,9 +116,41 @@ describe('/terms', () => {
     expect(terms.markdown).not.toContain('新臺幣');
     expect(terms.markdown).not.toContain('地址：');
   });
+
+  it('states the data sources in article 5, the anchor the App links to', () => {
+    // lib/core/policy_links.dart links here: moving the article moves the App's link.
+    expect(sectionId(sections(terms.markdown).indexOf('第 5 條　資料來源與智慧財產權'))).toBe('section-5');
+    openSite('/terms', null);
+    const article = screen.getByRole('heading', { level: 2, name: /^第 5 條/ });
+    expect(article).toHaveAttribute('id', 'section-5');
+    expect(terms.markdown).toContain(
+      '政府開放資料、交通部運輸資料流通服務平臺（TDX）、各縣市政府資料，以及社群協力資料',
+    );
+    expect(terms.markdown).toContain('社群協力資料經核驗後只收錄事實');
+    expect(terms.markdown).toContain('官方點與社群點在 App 中分開標示');
+    expect(
+      within(screen.getByRole('main')).getByRole('link', { name: '政府資料開放授權條款－第 1 版' }),
+    ).toHaveAttribute('href', 'https://data.gov.tw/license');
+    expect(terms.markdown).not.toContain('詳見 App');
+  });
+
+  it('leaves out what is not confirmed for publication', () => {
+    for (const mark of ['OpenStreetMap', 'IconScout', '著作權法', 'spot_details', 'docs/', '草稿']) {
+      expect(terms.markdown).not.toContain(mark);
+    }
+    expect(terms.markdown).not.toMatch(/data\.gov\.tw\/dataset/);
+  });
 });
 
 describe('arriving at the policy', () => {
+  it('goes to the linked section when the page opens on one', () => {
+    const scrollIntoView = vi.mocked(Element.prototype.scrollIntoView);
+    scrollIntoView.mockClear();
+    openSite('/terms#section-5', null);
+    expect(scrollIntoView).toHaveBeenCalledOnce();
+    expect(scrollIntoView.mock.contexts[0]).toBe(document.getElementById('section-5'));
+  });
+
   it('opens at its top from another page, and a section link keeps its place', async () => {
     const scrollTo = vi.mocked(window.scrollTo);
     const { router } = openSite('/account-deletion', null);

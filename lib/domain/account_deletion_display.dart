@@ -5,7 +5,7 @@ library;
 const settingsDeleteAccount = '刪除帳號';
 const settingsDeleteFootnote = '申請後有 7 天冷靜期，期間登入時可以選擇取消。';
 const settingsDataLicense = '資料來源與授權';
-const settingsDataLicenseDetail = '官方停車資料依「政府資料開放授權條款」使用';
+const settingsDataLicenseDetail = '停車資訊的來源與授權，見服務條款第 5 條';
 const settingsPrivacyPolicy = '隱私權政策';
 const settingsTerms = '服務條款';
 

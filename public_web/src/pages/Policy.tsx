@@ -1,6 +1,6 @@
-import { Children, isValidElement, type ReactNode } from 'react';
+import { Children, isValidElement, useEffect, type ReactNode } from 'react';
 import Markdown, { type Components } from 'react-markdown';
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import remarkGfm from 'remark-gfm';
 import { dateLabel, sectionId, sections, type Policy } from '../legal/policies';
 import { Site } from '../ui/Site';
@@ -25,6 +25,12 @@ function textOf(node: ReactNode): string {
  */
 export function PolicyPage({ policy }: { policy: Policy }) {
   const toc = sections(policy.markdown);
+  // The page renders after sign-in loads, too late for the browser's own jump
+  // to a link's section (the App links to one).
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (hash) document.getElementById(hash.slice(1))?.scrollIntoView();
+  }, [hash]);
   const components: Components = {
     h2({ children }) {
       const index = toc.indexOf(textOf(children).trim());

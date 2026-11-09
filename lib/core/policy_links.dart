@@ -15,3 +15,9 @@ Uri? policyUri(String url) {
   if (uri == null || !uri.hasScheme || uri.host.isEmpty) return null;
   return uri.scheme == 'https' || uri.scheme == 'http' ? uri : null;
 }
+
+/// The terms' 第 5 條 (資料來源與智慧財產權), where 資料來源與授權 leads, or null
+/// without a terms URL. The site numbers its anchors by article; its
+/// Policy.test.tsx pins this one.
+Uri? termsDataSourcesUri() =>
+    policyUri(policyUrls.terms)?.replace(fragment: 'section-5');

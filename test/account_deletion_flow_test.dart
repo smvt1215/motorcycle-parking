@@ -257,7 +257,48 @@ void main() {
     expect(tester.takeException(), isNull);
   }, variant: platforms);
 
-  testWidgets('P10：網址沒設定時不顯示隱私權政策與服務條款', (tester) async {
+  for (final size in sizes) {
+    testWidgets('P10 ${size.width.toInt()}×${size.height.toInt()}：'
+        '資料來源與授權開啟服務條款第 5 條', (tester) async {
+      policyUrls = (privacy: '', terms: 'https://example.com/terms');
+      final app = await _mount(
+        tester,
+        FakeDeletionGateway(current: google(signedInAt: now)),
+        size: size,
+      );
+      final launched = <Object?>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+            const MethodChannel('plugins.flutter.io/url_launcher'),
+            (call) async {
+              if (call.method == 'launch') {
+                launched.add((call.arguments as Map)['url']);
+              }
+              return true;
+            },
+          );
+      showSettings(_appContext(tester), app.store);
+      await tester.pumpAndSettle();
+      final row = find.byKey(const ValueKey('settings-data-license'));
+      await tester.scrollUntilVisible(
+        row,
+        200,
+        scrollable: find
+            .descendant(
+              of: find.byType(ListView).last,
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+      expect(launched, ['https://example.com/terms#section-5']);
+      expect(tester.takeException(), isNull);
+    }, variant: platforms);
+  }
+
+  testWidgets('P10：網址沒設定時不顯示隱私權政策、服務條款與資料來源列', (tester) async {
     final app = await _mount(
       tester,
       FakeDeletionGateway(current: google(signedInAt: now)),
@@ -266,6 +307,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('服務條款'), findsNothing);
     expect(find.text('隱私權政策'), findsNothing);
+    expect(find.text('資料來源與授權'), findsNothing);
   });
 
   testWidgets('P10：網址不是 http(s) 時也不顯示，和登入頁同一套判斷', (tester) async {
