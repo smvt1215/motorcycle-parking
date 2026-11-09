@@ -284,9 +284,10 @@ select pg_temp.past(236,'w6','60 minutes',zone=>'b2');
 select pg_temp.past(237,'w6','55 minutes',zone=>'b2');
 select is(pg_temp.closures('w6'),'b1:2:c,b2:2:c,-:7:c','both counted: a whole-spot row with everyone, each zone its own');
 -- 路段一樣。
-select pg_temp.fresh('w7','[]');
-update community_spots set parking_zones='[]',parking_segments='[{"id":"north","name":"北側"},{"id":"south","name":"南側"}]',
-  space_type='paidMotorcycle' where id=pg_temp.spot('w7')::uuid;
+with s as (insert into community_spots(user_id,name,lat,lng,city,space_type,status,parking_segments)
+  values('10000000-0000-4000-8000-000000000001','w7',25.056,121.522,'臺北市','paidMotorcycle','confirmed',
+    '[{"id":"north","name":"北側"},{"id":"south","name":"南側"}]') returning id,name)
+insert into fx select name,id::text from s;
 select pg_temp.past(231,'w7','90 minutes');
 select pg_temp.past(232,'w7','85 minutes');
 select is(pg_temp.closures('w7'),'-:2:u','two segments: the whole road takes three');

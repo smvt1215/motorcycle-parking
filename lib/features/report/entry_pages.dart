@@ -383,6 +383,7 @@ class _EntryListPageState extends State<EntryListPage> {
     final name = entryWholeName(type);
     final w = whole;
     final unit = type.unit;
+    final unitName = zones ? '分區' : '路段';
     final apart = [
       for (final d in drafts)
         if (!d.removed && _setApart(d)) d,
@@ -391,9 +392,8 @@ class _EntryListPageState extends State<EntryListPage> {
     if (w == null) {
       subtitle = '尚未設定，各$unit各自填\n一次設定普機、重機能不能停';
     } else if (drafts.isEmpty) {
-      subtitle = '${w.summary}\n新增的$unit沿用這裡，也可以在該$unit另設';
+      subtitle = '${w.summary}\n新增的$unitName沿用這裡，也可以在該$unit另設';
     } else {
-      final unitName = zones ? '分區' : '路段';
       subtitle =
           '${w.summary}\n沒有另設的$unitName沿用$name'
           '${apart == 0 ? '' : '；另設的 $apart $unit有差異'}';
@@ -1289,7 +1289,13 @@ class _EntryCardState extends State<_EntryCard> {
   bool get zone => d.type == EntryType.zone;
 
   /// The vehicles are this entry's own, not 全區's (Z1 ⑥).
-  late bool setApart = widget.whole == null || !widget.whole!.matches(d);
+  late bool setApart =
+      widget.whole == null ||
+      !widget.whole!.matches(d) ||
+      // A segment cannot show 官方未標示 read-only: it asks 可停 or 不可停.
+      (!zone &&
+          (widget.whole!.scooter == Eligible.notStated ||
+              widget.whole!.heavy == Eligible.notStated));
   late final name = TextEditingController(text: d.name);
   late final from = TextEditingController(text: d.from);
   late final to = TextEditingController(text: d.to);

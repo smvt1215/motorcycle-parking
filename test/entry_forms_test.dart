@@ -1012,7 +1012,7 @@ void main() {
       await tester.tap(find.widgetWithText(AdaptiveButton, '完成'));
       await tester.pumpAndSettle();
       expect(whole, const EntryWhole(Eligible.allowed, Eligible.notAllowed));
-      expect(find.text('普機 可停，重機 不可停\n新增的區沿用這裡，也可以在該區另設'), findsOneWidget);
+      expect(find.text('普機 可停，重機 不可停\n新增的分區沿用這裡，也可以在該區另設'), findsOneWidget);
       await tester.tap(find.text('新增一區'));
       await tester.pumpAndSettle();
       expect(find.text('沿用全區：普機 可停，重機 不可停'), findsOneWidget);
