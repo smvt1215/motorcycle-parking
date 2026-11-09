@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../api/v1/api_v1.g.dart' as v1 show SpotClosure;
 import '../api/v1/api_v1.g.dart' show ApiV1Client, SpotSighting;
+import '../core/address_search.dart';
 import '../core/config.dart';
 import '../core/notifications.dart';
 import '../core/geo.dart';
@@ -1222,6 +1223,16 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   /// The county or city and district at a position (國土測繪中心); tests
   /// override it to stay offline.
   Future<Town?> townAt(double lat, double lng) => lookupTown(lat, lng);
+
+  /// Whether the forms may show an approximate door: Google's results may
+  /// only sit beside a Google map (Service Specific Terms 6.2), so never on
+  /// the OpenStreetMap or empty map, and a demo has no backend to ask.
+  bool get approxAddressEnabled => !demo && AppConfig.useGoogleMaps;
+
+  /// The door nearest a position (Google, through `geocode`); tests override
+  /// it. Throws [AddressSearchException].
+  Future<ApproxAddress?> approxAddressAt(double lat, double lng) =>
+      parking.approxAddress(lat, lng);
 
   Future<void> locate() async {
     if (demo && AppConfig.offlineMap) return;

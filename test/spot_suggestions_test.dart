@@ -1077,11 +1077,13 @@ void main() {
         final store = (await tester.runAsync(createStore))!;
         addTearDown(store.dispose);
         await openLocation(tester, store, size: size);
+        // Read first: the list builds lazily, and revealing the map's lower
+        // controls can scroll this card out of it.
+        expect(find.text('目前位置：臺北市'), findsOneWidget);
         for (final key in ['location-expand', 'location-locate']) {
           await reveal(tester, find.byKey(ValueKey(key)));
           expect(find.byKey(ValueKey(key)).hitTestable(), findsOneWidget);
         }
-        expect(find.text('目前位置：臺北市'), findsOneWidget);
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
       },

@@ -1,4 +1,10 @@
-import { type Caller, type Deps, handle, LimitReached } from './handler.ts';
+import {
+  type Caller,
+  type Deps,
+  handle,
+  LimitReached,
+  reverseCountKey,
+} from './handler.ts';
 import {
   cacheKey,
   type Candidate,
@@ -102,6 +108,7 @@ function deps(over: Partial<Deps> = {}): Deps & { stored: string[] } {
       return Promise.resolve();
     },
     provider: () => Promise.resolve([at('臺北市中正區忠孝西路一段49號')]),
+    reverse: () => Promise.resolve({ road: '松壽路', number: '45' }),
     ...over,
   };
 }
@@ -194,6 +201,104 @@ Deno.test('快取寫入失敗仍回傳結果', async () => {
   const d = deps({ store: () => Promise.reject(new Error('db down')) });
   const r = await call(d, post({ query: '中山北路' }));
   assertEquals(r.status, 200);
+});
+
+const here = { reverse: { lat: 25.03, lng: 121.56 } };
+
+Deno.test('反向查詢：計入每人額度、回傳門牌、不讀也不寫快取', async () => {
+  const keys: string[] = [];
+  const d = deps({
+    begin: (_, key) => {
+      keys.push(key);
+      // Even an entry under this key must not become the answer.
+      return Promise.resolve([at('別人的快取')]);
+    },
+  });
+  const r = await call(d, post(here));
+  assertEquals([r.status, r.body], [200, { road: '松壽路', number: '45' }]);
+  assertEquals(keys, [reverseCountKey]);
+  assertEquals(d.stored, []);
+});
+
+Deno.test('反向查詢的額度鍵不會撞到搜尋的快取鍵', () => {
+  assertEquals(
+    cacheKey(parseQuery(reverseCountKey)) === reverseCountKey,
+    false,
+  );
+});
+
+Deno.test('反向查詢：未登入、額度、服務錯誤與座標', async () => {
+  let asked = false;
+  const counting = (over: Partial<Deps> = {}) =>
+    deps({
+      reverse: () => {
+        asked = true;
+        return Promise.resolve({ road: null, number: null });
+      },
+      ...over,
+    });
+  const refused: [Deps, Request, number, string][] = [
+    [counting(), post(here, 'bad'), 401, 'sign_in_required'],
+    [
+      counting({ begin: () => Promise.reject(new LimitReached()) }),
+      post(here),
+      429,
+      'daily_limit',
+    ],
+    [
+      counting(),
+      post({ reverse: { lat: 35, lng: 121 } }),
+      400,
+      'invalid_query',
+    ],
+    [
+      counting(),
+      post({ reverse: { lat: '25', lng: 121 } }),
+      400,
+      'invalid_query',
+    ],
+    [counting(), post({ reverse: 'x' }), 400, 'invalid_query'],
+    [counting({ reverse: null }), post(here), 503, 'not_configured'],
+  ];
+  for (const [d, req, status, error] of refused) {
+    const r = await call(d, req);
+    assertEquals([r.status, r.body.error], [status, error], error);
+    assertEquals(asked, false, error);
+    assertEquals((d as Deps & { stored: string[] }).stored, [], error);
+  }
+  const failed: [Deps, number, string][] = [
+    [
+      deps({ reverse: () => Promise.reject(new ProviderError('quota')) }),
+      503,
+      'service_limit',
+    ],
+    [
+      deps({ reverse: () => Promise.reject(new ProviderError('unavailable')) }),
+      502,
+      'unavailable',
+    ],
+    [
+      deps({ begin: () => Promise.reject(new Error('db')) }),
+      503,
+      'unavailable',
+    ],
+  ];
+  for (const [d, status, error] of failed) {
+    const r = await call(d, post(here));
+    assertEquals([r.status, r.body.error], [status, error], error);
+  }
+});
+
+Deno.test('座標不合理的查詢不扣額度', async () => {
+  let counted = 0;
+  const d = deps({
+    begin: () => {
+      counted++;
+      return Promise.resolve(null);
+    },
+  });
+  await call(d, post({ reverse: { lat: 35, lng: 121 } }));
+  assertEquals(counted, 0);
 });
 
 // Structural equality through JSON is enough for these plain values.
