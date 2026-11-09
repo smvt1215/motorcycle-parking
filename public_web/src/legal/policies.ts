@@ -19,7 +19,7 @@ export interface Policy {
 /** User decisions 2026-11-07 (PM_ANS Q_PRIVACY_PAGE): version 1.0, dated the day it goes live. */
 export const privacy: Policy = {
   title: '隱私權政策',
-  version: '1.2',
+  version: '1.3',
   effective: '2026-11-09',
   updated: '2026-11-09',
   markdown: privacyText,
