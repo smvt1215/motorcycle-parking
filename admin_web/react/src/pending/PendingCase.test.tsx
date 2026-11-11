@@ -112,7 +112,7 @@ const supportDetail = (item: TimedCase): SupportRequestDetail =>
 const reportDetail = (item: TimedCase): ContentReport => ({
   id: item.id,
   status: 'pending',
-  spot_id: 'spot-1',
+  spot_id: item.spot_id ?? 'spot-1',
   target: item.kind as ContentReport['target'],
   created_at: '2026-11-03T01:41:00Z',
   spot_updated_at: item.version,
@@ -593,6 +593,23 @@ describe('案件詳情的處理', () => {
     release();
     await tick(100);
     expect(store.getState().pendingActions.actions).toEqual([]);
+  });
+
+  it('closes a report whose spot left the community table, such as one promoted to official', async () => {
+    const item = reportRow(1, { state: 'spot_deleted', spot_id: 'official:abc', hidden_parts: [] });
+    const { postgrest, calls } = backend({ items: [item, row(2)] });
+    open(postgrest, `/pending/${UUID(1)}`);
+    expect(await screen.findByText('內容已不存在')).toBeInTheDocument();
+    expect(screen.getByText('點位已刪除', { selector: 'dd, dd *' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '開啟這個點位' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '檢舉成立' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '結案' }));
+    await waitFor(() =>
+      expect(calls.find((c) => c.url === 'schedule_case_action')?.body).toMatchObject({
+        p_case: UUID(1),
+        p_action: 'report_restore',
+      }),
+    );
   });
 
   it('freezes the reply while it is being scheduled', async () => {
