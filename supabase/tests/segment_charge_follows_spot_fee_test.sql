@@ -20,6 +20,9 @@ insert into fees values
   ('mixed','{"scooter":{"mode":"free"},"heavy":{"mode":"hourly","amount":20,"per_minutes":60},"car":{"mode":"not_applicable"}}'),
   ('visit','{"scooter":{"mode":"per_visit","amount":30},"heavy":{"mode":"per_visit","amount":30},"car":{"mode":"not_applicable"}}');
 create function pg_temp.fee(n text) returns jsonb language sql as $$ select fee from fees where name=n $$;
+-- Without the spot's condition (202611111700 added it, #399).
+create function pg_temp.follow(p_old jsonb,p_new jsonb,p_old_fee jsonb,p_new_fee jsonb) returns jsonb language sql as $$
+  select public.segments_charge_follow_spot_fee(p_old,p_new,p_old_fee,p_new_fee,null) $$;
 
 -- ===== segment_fee_of() =====
 select is(segment_fee_of('{"fee":{"scooter":{"mode":"free"}}}','{"scooter":{"mode":"daily","amount":50}}'),
@@ -28,47 +31,47 @@ select is(segment_fee_of('{"fee":{}}','{"scooter":{"mode":"free"}}'),'{"scooter"
   'empty rates read the road''s');
 select is(segment_fee_of('{"fee":null}',null),null,'and neither is none');
 
--- ===== segments_charge_follow_spot_fee() =====
-select is(segments_charge_follow_spot_fee(
+-- ===== segments_charge_follow_spot_fee()（不帶點位條件） =====
+select is(pg_temp.follow(
   '[{"id":"a","name":"北","condition":{"bay":"motorcycle","charge":"free"}}]',
   '[{"id":"a","name":"北","condition":{"bay":"motorcycle","charge":"free"}}]',pg_temp.fee('free'),pg_temp.fee('toll'))->0->'condition',
   '{"bay":"motorcycle","charge":"toll"}'::jsonb,'a segment on the road''s rates follows a new road fee');
-select is(segments_charge_follow_spot_fee(
+select is(pg_temp.follow(
   '[{"id":"a","condition":{"bay":"motorcycle","charge":"free"},"fee":{"scooter":{"mode":"free"}}}]',
   '[{"id":"a","condition":{"bay":"motorcycle","charge":"free"},"fee":{"scooter":{"mode":"free"}}}]',pg_temp.fee('free'),pg_temp.fee('toll'))->0->'condition'->>'charge',
   'free','one with its own rates does not');
-select is(segments_charge_follow_spot_fee(
+select is(pg_temp.follow(
   '[{"id":"a","condition":{"bay":"motorcycle","charge":"free"}}]',
   '[{"id":"a","condition":{"bay":"motorcycle","charge":"free"}}]',pg_temp.fee('free'),pg_temp.fee('mixed'))->0->'condition',
   '{"bay":"motorcycle"}'::jsonb,'vehicles that differ leave no charge');
-select is(segments_charge_follow_spot_fee(
+select is(pg_temp.follow(
   '[{"id":"a","condition":{"bay":"motorcycle","charge":"free"}}]',
   '[{"id":"a","condition":{"bay":"motorcycle","charge":"free"}}]',pg_temp.fee('free'),null)->0->'condition',
   '{"bay":"motorcycle"}'::jsonb,'nor do rates taken away');
-select is(segments_charge_follow_spot_fee(
+select is(pg_temp.follow(
   '[{"id":"a","condition":{"bay":"motorcycle","charge":"toll"},"fee":{"scooter":{"mode":"hourly","amount":20,"per_minutes":60}}}]',
   '[{"id":"a","condition":{"bay":"motorcycle","charge":"toll"},"fee":{"scooter":{"mode":"free"}}}]',null,null)->0->'condition'->>'charge',
   'free','a segment''s own new rates count too');
-select is(segments_charge_follow_spot_fee(
+select is(pg_temp.follow(
   '[{"id":"a","condition":{"bay":"motorcycle","charge":"free"}}]',
   '[{"id":"a","condition":{"bay":"motorcycle","charge":"free","limits":[{"kind":"time_limit"}]}}]',pg_temp.fee('free'),pg_temp.fee('toll'))->0->'condition'->>'charge',
   'free','a write that changes the condition itself is the writer''s');
-select is(segments_charge_follow_spot_fee(
+select is(pg_temp.follow(
   '[]','[{"id":"a","condition":{"bay":"motorcycle","charge":"free"}}]',pg_temp.fee('free'),pg_temp.fee('toll'))->0->'condition'->>'charge',
   'free','a new segment keeps what it was given');
-select is(segments_charge_follow_spot_fee(
+select is(pg_temp.follow(
   '[{"id":"a","condition":{"bay":"motorcycle","charge":"toll"}}]',
   '[{"id":"a","condition":{"bay":"motorcycle","charge":"toll"}}]',pg_temp.fee('free'),pg_temp.fee('free'))->0->'condition'->>'charge',
   'toll','rates that did not change are not read');
-select is(segments_charge_follow_spot_fee(
+select is(pg_temp.follow(
   '[{"id":"a","condition":{"charge":"free"}}]',
   '[{"id":"a","condition":{"charge":"free"}}]',pg_temp.fee('free'),pg_temp.fee('toll'))->0->'condition'->>'charge',
-  'free','a segment without its own bay is left to the spot (#399, to be decided)');
-select is(segments_charge_follow_spot_fee(
+  'free','without the spot''s condition, a segment without its own bay is left alone');
+select is(pg_temp.follow(
   '[{"id":"a","condition":{"bay":"car","use":"share","share":"car_motorcycle"}}]',
   '[{"id":"a","condition":{"bay":"car","use":"share","share":"car_motorcycle"}}]',pg_temp.fee('free'),pg_temp.fee('toll'))->0->'condition' ? 'charge',
   false,'a car bay is not asked');
-select is(segments_charge_follow_spot_fee(
+select is(pg_temp.follow(
   '[{"id":"a","condition":{"bay":"motorcycle","charge":"free","basis":{"source_url":"https://x.tw"}}},{"id":"b","condition":{"bay":"motorcycle","charge":"free"}}]',
   '[{"id":"b","condition":{"bay":"motorcycle","charge":"free"}},{"id":"a","condition":{"bay":"motorcycle","charge":"free","basis":{"source_url":"https://x.tw"}}}]',
   pg_temp.fee('free'),pg_temp.fee('toll')),
@@ -111,8 +114,8 @@ select lives_ok($$select admin_resolve_report((select id from fx where name='rep
 reset role;
 select is((select parking_segments->0->'condition'->>'charge' from community_spots where id=(select id from fx where name='review')),'toll',
   'a segment on the road''s rates turned toll');
-select is((select parking_segments->1->'condition'->>'charge' from community_spots where id=(select id from fx where name='review')),'free',
-  'a segment without its own bay is not touched');
+select is((select parking_segments->1->'condition'->>'charge' from community_spots where id=(select id from fx where name='review')),'toll',
+  'so does one without its own bay on a motorcycle spot (202611111700)');
 select is((select parking_segments->2->'condition'->>'charge' from community_spots where id=(select id from fx where name='review')),'toll',
   'one with its own rates keeps them');
 
@@ -174,7 +177,7 @@ select is((select parking_segments->0->'condition'->>'charge' from community_spo
   'an edit that leaves the rates alone changes nothing');
 
 -- 內部 helper 不開放呼叫。
-select ok(not has_function_privilege('authenticated','public.segments_charge_follow_spot_fee(jsonb,jsonb,jsonb,jsonb)','execute'),
+select ok(not has_function_privilege('authenticated','public.segments_charge_follow_spot_fee(jsonb,jsonb,jsonb,jsonb,jsonb)','execute'),
   'segments_charge_follow_spot_fee is not an API');
 
 select * from finish();

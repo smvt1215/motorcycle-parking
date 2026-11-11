@@ -158,25 +158,30 @@ export function touchedEntries(list: unknown[], patch: unknown[]): boolean[] {
  * [list] as approval leaves it (#369, `segments_charge_follow_fee()` in SQL):
  * a segment [patch] gives new rates, and no condition of its own, takes its
  * charge from them, or from [spotFee] when it has none; no charge when they
- * say neither. Only 一般機車格 and 普大共用格 ask it. The same as
- * `segmentsChargeFollowFee` in Dart.
+ * say neither. Only 一般機車格 and 普大共用格 ask it: a segment's own bay,
+ * else the spot's [whole] condition (#399, `segment_charge_of()` in SQL); a
+ * condition left empty goes. The same as `segmentsChargeFollowFee` in Dart.
  */
 function segmentsChargeFollowFee(
   list: unknown[],
   patch: unknown[],
   spotFee: unknown,
+  whole?: Json,
 ): unknown[] {
   const follows = new Set(
     patch.filter((e): e is Json =>
       object(e) && 'fee' in e && !('condition' in e)
     ).map((e) => e.id).filter(Boolean),
   );
+  const special = (c: Json | undefined) =>
+    !!c && Array.isArray(c.limits) &&
+    c.limits.some((l) =>
+      object(l) && (l.kind === 'special_vehicle' || l.kind === 'ev_only')
+    );
   const asks = (c: Json) =>
-    c.bay === 'motorcycle' &&
-    !(Array.isArray(c.limits) &&
-      c.limits.some((l) =>
-        object(l) && (l.kind === 'special_vehicle' || l.kind === 'ev_only')
-      ));
+    'bay' in c
+      ? c.bay === 'motorcycle' && !special(c)
+      : whole?.bay === 'motorcycle' && !special(c) && !special(whole);
   return list.map((z) => {
     if (!object(z) || !follows.has(z.id)) return z;
     const c = z.condition;
@@ -184,8 +189,31 @@ function segmentsChargeFollowFee(
     const own = object(z.fee) && Object.keys(z.fee).length > 0;
     const charge = chargeOfFee(own ? z.fee : spotFee);
     const { charge: _, ...rest } = c;
+    if (!charge && Object.keys(rest).length === 0) {
+      const { condition: _c, ...bare } = z;
+      return bare;
+    }
     return { ...z, condition: charge ? { ...rest, charge } : rest };
   });
+}
+
+const fromSpaceType = contract.conversion.from_space_type as Record<
+  string,
+  Json | null
+>;
+/**
+ * A spot's whole condition: its own, else the one its space type stands for
+ * (`spot.condition ?? conditionOf(spaceType)`, `spot_whole_condition()`).
+ */
+function wholeCondition(
+  condition: unknown,
+  spaceType: unknown,
+): Json | undefined {
+  if (object(condition)) return condition;
+  return typeof spaceType === 'string' &&
+      Object.hasOwn(fromSpaceType, spaceType)
+    ? fromSpaceType[spaceType] ?? undefined
+    : undefined;
 }
 
 const fromAccess = contract.conversion.from_access as Record<
@@ -540,6 +568,10 @@ export function precheck(body: Json, current?: Json): PrecheckIssue[] {
               list,
               v,
               'fee' in judged ? judged.fee : current?.fee,
+              wholeCondition(
+                judged.condition ?? current?.condition,
+                current?.space_type,
+              ),
             )
             : list,
         ];
