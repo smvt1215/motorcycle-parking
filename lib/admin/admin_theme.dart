@@ -125,7 +125,7 @@ class AdminBrand extends StatelessWidget {
       const SizedBox(width: 10),
       const Flexible(
         child: Text(
-          '停車指南管理',
+          '機車停車指南管理',
           style: TextStyle(
             fontSize: 17,
             fontWeight: FontWeight.w700,
