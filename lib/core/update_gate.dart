@@ -120,8 +120,13 @@ class UpdateGate extends ChangeNotifier {
   factory UpdateGate.forClient(SupabaseClient? client) => client == null
       ? UpdateGate.off()
       : UpdateGate(
+          // Only the minimum is read, from the raw answer: parsing the whole
+          // ClientConfig would fail on a backend that lacks a newer field
+          // (availability_beta_cities, #251) and skip this check with it.
           minimum: () async =>
-              (await ApiV1Client(client).clientConfig()).minSupportedAppVersion,
+              (await ApiV1Client(client).clientConfigRaw()
+                      as Map<String, Object?>)['min_supported_app_version']
+                  as String,
           installed: installedFromPlatform,
         );
 
@@ -163,7 +168,7 @@ class UpdateGate extends ChangeNotifier {
             )
           : null;
     } catch (_) {
-      // Offline, an error from the backend, or an older backend without the
+      // Offline, an error from the backend, or an answer without the
       // field, whose cast fails with a TypeError (an Error, not an
       // Exception): all of them let the app in.
       return;

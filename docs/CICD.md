@@ -411,6 +411,7 @@ Play Integrity 只認得從 Google Play 安裝的 APP。staging 的 APK 經 Fire
 - 舊版 APP 會在使用者手機上留存一段時間，所以 production migration 必須**向下相容**（先擴充、後收斂）：
   - 新增欄位要有預設值。
   - 刪除或改名欄位分兩次發版，等舊版 APP 不再使用後才移除。
+- **發版順序：後端 migration 先於 App 發布。** 新版 App 依賴的欄位（例如 `client_config` 的 `availability_beta_cities`）必須先在該環境的後端上線，再讓 App 送審或放量。App 讀不到新欄位時不可以連累其他功能：最低版本檢查只讀 `min_supported_app_version`，Beta 縣市解析失敗則沿用上次的設定。
 - migration 只能往前，不寫 down migration；出錯時用新的 migration 修正。
 - 每個 migration 都必須能在 CI 從零套用成功（`supabase start`）。
 
