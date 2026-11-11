@@ -145,7 +145,7 @@ class AdminAuthPage extends StatelessWidget {
                   ),
                 const SizedBox(height: 24),
                 Text(
-                  '台灣機車停車指南 · 管理者專用',
+                  '機車停車指南 · 管理者專用',
                   style: text.bodySmall?.copyWith(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),

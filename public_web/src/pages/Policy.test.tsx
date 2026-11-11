@@ -12,7 +12,7 @@ describe('/privacy', () => {
   it('shows the title, version, dates and the review notice', () => {
     open();
     expect(screen.getByRole('heading', { level: 1, name: '隱私權政策' })).toBeInTheDocument();
-    expect(screen.getByText(privacy.version)).toBeInTheDocument();
+    expect(screen.getAllByText(privacy.version).length).toBeGreaterThan(0);
     expect(screen.getAllByText(dateLabel(privacy.effective)).length).toBeGreaterThan(0);
     expect(screen.getByRole('note')).toHaveTextContent(privacy.notice);
   });
@@ -41,8 +41,16 @@ describe('/privacy', () => {
 
   it('renders the tables', () => {
     open();
-    expect(screen.getAllByRole('table').length).toBe(2);
+    expect(screen.getAllByRole('table').length).toBe(3);
     expect(screen.getByRole('cell', { name: '不登入也能用' })).toBeInTheDocument();
+  });
+
+  it('lists the current version first in the change log', () => {
+    open();
+    const log = screen.getAllByRole('table').at(-1)!;
+    const first = within(log).getAllByRole('row')[1]!;
+    expect(within(first).getAllByRole('cell')[0]).toHaveTextContent(privacy.version);
+    expect(within(first).getAllByRole('cell')[1]).toHaveTextContent(privacy.updated);
   });
 
   it('keeps addresses as text and links the site within the app (#295)', () => {

@@ -47,10 +47,11 @@ Deno.serve((req) => {
         admin: data.user.app_metadata?.role === 'admin' && c.aal === 'aal2',
       };
     },
-    async count(caller) {
+    async count(caller, quota) {
       const { error } = await admin.rpc('geocode_count', {
         p_user: caller.id,
         p_admin: caller.admin,
+        p_kind: quota,
       });
       if (error) throw error.code === 'P0001' ? new LimitReached() : error;
     },

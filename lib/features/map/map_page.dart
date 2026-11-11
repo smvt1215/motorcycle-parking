@@ -134,6 +134,14 @@ class _MapPageState extends ConsumerState<MapPage> {
   /// page, not a route, so the map stays movable and other spots tappable.
   ParkingSpot? selected;
 
+  /// The open preview's resting height, as a share of the space above the
+  /// tab bar (A15): the camera centres the spot above it.
+  double sheetPeek = spotSheetPeek;
+
+  /// The spot was just opened: its preview's first measured height may
+  /// centre it once more.
+  bool recenterOnPeek = false;
+
   /// The spot sheet sits on the root overlay, over the tab bar as in map
   /// apps, while the rest of the map still takes gestures.
   final sheetPortal = OverlayPortalController()..show();
@@ -396,6 +404,12 @@ class _MapPageState extends ConsumerState<MapPage> {
   /// Centers the selected point above the panel once. Closing the panel
   /// preserves the resulting camera position, as in Google Maps.
   void _showSpot(ParkingSpot spot, {double? zoom}) {
+    // The same spot keeps its sheet, which reports no height again: the
+    // measured one still holds.
+    if (selected?.id != spot.id) {
+      sheetPeek = spotSheetPeek;
+      recenterOnPeek = true;
+    }
     setState(() => selected = spot);
     unawaited(
       runAction(
@@ -403,6 +417,24 @@ class _MapPageState extends ConsumerState<MapPage> {
         () => _moveCamera(LatLng(spot.lat, spot.lng), zoom, above: true),
       ),
     );
+  }
+
+  /// The opened preview's measured height (A15): a taller one than the
+  /// default centres the spot once more, above it.
+  void _sheetPeekChanged(double peek) {
+    final differs = (peek - sheetPeek).abs() > .001;
+    sheetPeek = peek;
+    if (!recenterOnPeek) return;
+    recenterOnPeek = false;
+    final spot = selected;
+    if (differs && spot != null && mounted) {
+      unawaited(
+        runAction(
+          context,
+          () => _moveCamera(LatLng(spot.lat, spot.lng), null, above: true),
+        ),
+      );
+    }
   }
 
   void _closeSpot() {
@@ -462,8 +494,7 @@ class _MapPageState extends ConsumerState<MapPage> {
       final bar = gap + MediaQuery.paddingOf(context).bottom;
       final panel =
           bar +
-          (screen.height - MediaQuery.paddingOf(context).top - bar) *
-              spotSheetPeek;
+          (screen.height - MediaQuery.paddingOf(context).top - bar) * sheetPeek;
       final mapPadding = AppConfig.useGoogleMaps
           ? 8 + MediaQuery.paddingOf(context).bottom
           : 0;
@@ -666,6 +697,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                         store: store,
                         spot: open,
                         onClose: _closeSpot,
+                        onPeek: _sheetPeekChanged,
                       ),
                     ),
                   ),

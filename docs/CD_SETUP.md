@@ -43,6 +43,18 @@ APP 識別碼：
 | OAuth callback | `tw.motopark.motorcycleparking://login-callback` | `tw.motopark.motorcycleparking.staging://login-callback` |
 | 手機 APP 名稱 | 機車停車指南 | 機車停車指南 α |
 
+### 登入畫面顯示名稱的來源
+
+登入畫面上的名稱不由 repo 控制，改名要到各主控台修改（品牌統一用「機車停車指南」）。
+
+| 登入畫面 | 名稱來源 | 目前值 | 修改日期 |
+|---|---|---|---|
+| iOS 原生 Apple 登入彈窗 | Apple Developer 的 Primary App ID（`tw.motopark.motorcycleParking`）的 Description。依第三方資料，Apple 官方文件未明講；修改後需實機驗證 | | |
+| 網頁與 Android 的 Apple 登入 | Services ID `tw.motopark.motorcycleParking.web` 的 Description | | |
+| Google 同意畫面 | Google Auth Platform → 品牌 → App name。改名會產生草稿，可能需要重新驗證；首頁名稱需與 App name 一致 | | |
+
+「目前值」與「修改日期」待使用者到主控台確認後填寫。
+
 在各自 Supabase Auth 的 Redirect URLs 加入對應的 callback。兩個 APP 的 callback 分開，避免同時安裝時登入回到另一環境。production 的 Google Maps Android 限制使用 **Google Play App Signing 發布憑證**指紋；直接測試已簽署的 AAB／APK 時另加入 upload key 指紋。staging 使用 staging keystore 指紋。
 
 後端部署只套用 migrations 與 functions，**不推送 local seed**；TDX／Turnstile 等後端秘密仍只設定在各自 Supabase 專案。首次部署後確認 migration、RLS、Auth provider 與函式秘密齊備。

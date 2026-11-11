@@ -1,4 +1,10 @@
-import { type Caller, type Deps, handle, LimitReached } from './handler.ts';
+import {
+  type Caller,
+  type Deps,
+  handle,
+  LimitReached,
+  type Quota,
+} from './handler.ts';
 import {
   type Candidate,
   parseQuery,
@@ -81,13 +87,14 @@ Deno.test('候選：去掉台灣以外、重複與空白，最多 5 筆', () => 
 });
 
 const rider: Caller = { id: 'u1', admin: false };
-function deps(over: Partial<Deps> = {}): Deps & { counted: Caller[] } {
-  const counted: Caller[] = [];
+type Counted = [Caller, Quota][];
+function deps(over: Partial<Deps> = {}): Deps & { counted: Counted } {
+  const counted: Counted = [];
   return {
     counted,
     caller: (token) => Promise.resolve(token === 'good' ? rider : null),
-    count: (caller) => {
-      counted.push(caller);
+    count: (caller, quota) => {
+      counted.push([caller, quota]);
       return Promise.resolve();
     },
     provider: () => Promise.resolve([at('臺北市中正區忠孝西路一段49號')]),
@@ -112,7 +119,7 @@ Deno.test('查到後回傳候選並計入一次額度', async () => {
   assertEquals(r.status, 200);
   assertEquals(r.body.kind, 'text');
   assertEquals(r.body.candidates[0].label, '臺北市中正區忠孝西路一段49號');
-  assertEquals(d.counted, [rider]);
+  assertEquals(d.counted, [[rider, 'search']]);
 });
 
 // #411: Service Specific Terms 6.3.2 forbids answering from a cache in
@@ -183,11 +190,11 @@ Deno.test('錯誤代碼', async () => {
 
 const here = { reverse: { lat: 25.03, lng: 121.56 } };
 
-Deno.test('反向查詢：計入每人額度、回傳門牌', async () => {
+Deno.test('反向查詢：計入每人的門牌額度、回傳門牌', async () => {
   const d = deps();
   const r = await call(d, post(here));
   assertEquals([r.status, r.body], [200, { road: '松壽路', number: '45' }]);
-  assertEquals(d.counted, [rider]);
+  assertEquals(d.counted, [[rider, 'reverse']]);
 });
 
 Deno.test('反向查詢：未登入、額度、服務錯誤與座標', async () => {
@@ -227,7 +234,7 @@ Deno.test('反向查詢：未登入、額度、服務錯誤與座標', async () 
     const r = await call(d, req);
     assertEquals([r.status, r.body.error], [status, error], error);
     assertEquals(asked, false, error);
-    assertEquals((d as Deps & { counted: Caller[] }).counted, [], error);
+    assertEquals((d as Deps & { counted: Counted }).counted, [], error);
   }
   const failed: [Deps, number, string][] = [
     [
@@ -250,6 +257,23 @@ Deno.test('反向查詢：未登入、額度、服務錯誤與座標', async () 
     const r = await call(d, post(here));
     assertEquals([r.status, r.body.error], [status, error], error);
   }
+});
+
+// #434: one limit running out leaves the other alone.
+Deno.test('搜尋與反向查詢各自計數，一邊用完不擋另一邊', async () => {
+  const used = new Set<Quota>();
+  const d = deps({
+    count: (_caller, quota) =>
+      used.has(quota)
+        ? Promise.reject(new LimitReached())
+        : Promise.resolve(void used.add(quota)),
+  });
+  const search = () => call(d, post({ query: '中山北路' }));
+  const door = () => call(d, post(here));
+  assertEquals((await search()).status, 200);
+  assertEquals([(await search()).body.error], ['daily_limit']);
+  assertEquals((await door()).status, 200);
+  assertEquals([(await door()).body.error], ['daily_limit']);
 });
 
 Deno.test('座標不合理的查詢不扣額度', async () => {

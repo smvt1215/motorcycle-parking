@@ -114,7 +114,7 @@ export function AuthGate({ controller, children }: { controller: AuthController;
           <SignInPanel controller={controller} />
         )}
       </section>
-      <p className="t-caption">台灣機車停車指南 · 管理者專用</p>
+      <p className="t-caption">機車停車指南 · 管理者專用</p>
     </main>
   );
 }
