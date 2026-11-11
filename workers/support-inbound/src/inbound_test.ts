@@ -334,3 +334,57 @@ Deno.test('text a sender writes cannot claim smtp.mailfrom', () => {
     'a reason does not make it the envelope sender',
   );
 });
+
+Deno.test('comments nest and cannot hide or forge results (#393)', () => {
+  const mx = 'mx.cloudflare.net;';
+  const all = (value: string) =>
+    authResults([{ key: 'Authentication-Results', value }]);
+  const none = { spf: null, dkim: null, dmarc: null };
+  equal(
+    all(`${mx} dkim=fail (a (b) ; dkim=pass) ; dmarc=none`).dkim,
+    'fail',
+    'text after an inner comment closes is still inside',
+  );
+  equal(
+    all(`${mx} dkim=fail (a (b (c) ; dkim=pass) ; dkim=pass) ; dmarc=fail`),
+    { spf: null, dkim: 'fail', dmarc: 'fail' },
+    'several levels',
+  );
+  equal(
+    all(`${mx} dmarc=fail (a (b) ; dmarc=pass) (c) ; dkim=none`).dmarc,
+    'fail',
+    'dmarc in a nested comment',
+  );
+  equal(
+    all(`${mx} spf=fail smtp.mailfrom=x (a (b) ; spf=pass smtp.mailfrom=y) (c)`)
+      .spf,
+    'fail',
+    'sibling comments',
+  );
+  equal(
+    all(`${mx} dkim=fail (x \\) ; dkim=pass) ; dmarc=fail`).dkim,
+    'fail',
+    'an escaped parenthesis does not close',
+  );
+  equal(
+    all(`${mx} dkim=fail (a " ; dkim=pass) ; dmarc=fail`).dkim,
+    'fail',
+    'a quote inside a comment is plain text',
+  );
+  equal(
+    all(`${mx} spf=fail smtp.mailfrom="a)(b"@x.test ; dkim=pass`),
+    { spf: 'fail', dkim: 'pass', dmarc: null },
+    'parentheses inside a quoted string are not comments',
+  );
+  equal(all(`${mx} dkim=fail (a (b) ; dkim=pass`), none, 'unclosed comment');
+  equal(all(`${mx} dkim=fail ) ; dkim=pass`), none, 'stray close');
+  equal(all(`${mx} dkim=fail "x ; dkim=pass`), none, 'unclosed quote');
+  equal(all(`${mx} dkim=pass \\`), none, 'trailing backslash');
+  equal(
+    all(
+      `${mx} dkim=pass (ok) header.d=a.test; spf=pass (ok) smtp.mailfrom=a.test; dmarc=pass`,
+    ),
+    { spf: 'pass', dkim: 'pass', dmarc: 'pass' },
+    'ordinary comments still work',
+  );
+});
