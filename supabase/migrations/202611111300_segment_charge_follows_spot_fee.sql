@@ -8,8 +8,8 @@
 --   2. 管理站直接編輯（admin_upsert_spot 送整份 fee 與 parking_segments）；
 --   3. 計費規則（fee_plans）改內容時，spot_fee_plans_sync() 在 trigger 內改寫的
 --      整條路與路段費率。
--- 所以改在資料表的 BEFORE UPDATE trigger 處理，排在 …_fee_plans（費率在此定案）
--- 之後。
+-- 所以改在資料表的 BEFORE UPDATE trigger 處理，排在所有 BEFORE trigger 最後：
+-- …_fee_plans 定案費率、…_zone_ids 補回沒帶 id 的既有路段 id 之後。
 --
 -- 規則與 #369 相同（charge_of_fee()，App 的 chargeOfFee()）；什麼時候重算則以
 -- 「這次寫入改了路段實際適用的費率、沒動它的 condition」判斷，也就是 #369 的
@@ -90,9 +90,11 @@ end;
 $$;
 revoke execute on function public.spot_segments_charge_follow_fee() from public, anon, authenticated;
 
--- 名稱排在 …_fee_plans（spot_fee_plans_sync() 定案整條路與路段的費率）與
--- …_flags_from_entries 之後；charge 不影響其他 trigger 推導的欄位。
-create trigger community_spots_segment_charge before update on public.community_spots
+-- 名稱以 zz_ 排在最後：…_fee_plans（spot_fee_plans_sync() 定案整條路與路段的
+-- 費率）之後，也在 …_zone_ids（assign_entry_ids() 依 name、side 補回寫入者沒帶
+-- 的既有路段 id）之後，沒帶 id 的既有路段才比得到舊值。charge 不影響其他
+-- trigger 推導的欄位。
+create trigger community_spots_zz_segment_charge before update on public.community_spots
   for each row execute function public.spot_segments_charge_follow_fee();
-create trigger official_heavy_spots_segment_charge before update on public.official_heavy_spots
+create trigger official_heavy_spots_zz_segment_charge before update on public.official_heavy_spots
   for each row execute function public.spot_segments_charge_follow_fee();

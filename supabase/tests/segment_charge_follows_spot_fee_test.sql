@@ -95,6 +95,7 @@ $$;
 select pg_temp.street('整條路費率審核','review');
 select pg_temp.street('整條路費率編輯','edit');
 select pg_temp.street('整條路費率與條件','both');
+select pg_temp.street('整條路費率不帶 id','noid');
 
 -- ===== 1. 審核整條路的費率（admin_resolve_report 的頂層 fee） =====
 insert into moderation_queue(source_id,reporter_id,reason,field,proposed)
@@ -143,6 +144,25 @@ select lives_ok($$select admin_upsert_spot((select id::text from fx where name='
 reset role;
 select is((select parking_segments->0->'condition'->>'charge' from community_spots where id=(select id from fx where name='both')),'free',
   'the condition the admin wrote stays as written');
+
+-- Segments sent back without their ids (older writers): matched after
+-- assign_entry_ids() restores them by name and side.
+create temporary table noid_edit as select
+  jsonb_build_object('fee',pg_temp.fee('toll'),'fee_note',fee_note_of(pg_temp.fee('toll')),
+    'parking_segments',(select jsonb_agg(e-'id' order by n) from jsonb_array_elements(c.parking_segments) with ordinality x(e,n))) v,
+  c.updated_at at from community_spots c where c.id=(select id from fx where name='noid');
+grant select on noid_edit to authenticated;
+set local role authenticated;
+select pg_temp.act('admin');
+select lives_ok($$select admin_upsert_spot((select id::text from fx where name='noid'),(select v from noid_edit),(select at from noid_edit))$$,
+  'an admin edits the road''s rates, sending the segments without ids');
+reset role;
+select is((select parking_segments->0->>'id' from community_spots where id=(select id from fx where name='noid')),'s1',
+  'the segment keeps its id');
+select is((select parking_segments->0->'condition'->>'charge' from community_spots where id=(select id from fx where name='noid')),'toll',
+  'and still follows the road''s new rates');
+select is((select parking_segments->2->'condition'->>'charge' from community_spots where id=(select id from fx where name='noid')),'toll',
+  'the one with its own rates keeps them');
 
 -- ===== Any other update: the trigger itself =====
 update community_spots set fee=pg_temp.fee('free'),fee_note=fee_note_of(pg_temp.fee('free'))
