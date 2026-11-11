@@ -218,6 +218,7 @@ OpenStreetMap Nominatim 免金鑰，但實測台灣門牌與路口都查不到�
 - 查詢：全形轉半形、合併空白；「與」、`&`、`/` 或兩個路名之間的空格視為路口（「和」不算，避免和平東路），去掉結尾「路口」；含「號」的不當路口。送 Google 時加 `language=zh-TW`、`region=tw`、`components=country:TW`，並以地圖位置約 10 km 為偏好範圍（不是限制）。
 - 名稱（實測）：Google 的路名與路口常回英文，所以路口與路段的 `label` 用騎士輸入的路名（去掉開頭的縣市；行政區只在 Google 結果列出該名稱時才去掉，例如「前鎮區鎮中路」不會被當成「前鎮區鎮」＋「中路」），縣市與行政區另放 `place`；門牌由縣市、行政區、路名、號組成，不含里與郵遞區號；「台」改「臺」。問兩條不相交的路時 Google 會回某條巷子與另一條路的交會點，或問不存在的門牌時只回英文路名，這些都略過，畫面顯示找不到。
 - 呼叫者：App 需 Google／Apple 登入（匿名拒絕），管理站以 admin＋aal2 身分。每人每台北日 30 次、管理者 200 次（含快取命中），超過回 429 `daily_limit`；Google 配額用完回 503 `service_limit`。其他錯誤：`sign_in_required`、`invalid_query`（2–100 字）、`unavailable`。
+- 反向查詢（#407，N1 與修改建議的約略門牌）：`POST {reverse: {lat, lng}}` → `{road, number}`，查不到時兩者都是 `null`；路名是英文或結果不在臺灣也算查不到。只在 Google 地圖版發出，每次都計入同一份額度；地址文字不得跨使用者快取（Service Specific Terms 6.3.2），所以不讀也不寫 `geocode_cache`，只在同一張表單內沿用，標記移動不到約 10 公尺不重查。座標超出臺灣範圍回 `invalid_query`，不扣額度。
 - migration `202610260230_geocode.sql`：`geocode_events`（只計數，不混用回報的 `rate_limit_events`）、`geocode_cache`（以查詢＋約 5 km 偏好位置為鍵，30 天內才使用，寫入時刪除過期資料與 30 天前的計數），兩者只有 service role 可用。
 
 **畫面**（`lib/ui/address_search_field.dart`，由位置選擇元件的 `onSearch` 入口「搜尋門牌、路段或路口」開啟）

@@ -550,9 +550,15 @@ class SeatRowsView extends StatelessWidget {
     required this.note,
     this.riderLine,
     this.betaCities,
+    this.wholeLine,
+    this.wholeTitle = '',
   });
   final List<SeatRow> rows;
   final String note;
+
+  /// 車友回報 about the whole spot, first and apart from the rows (A7e ⑦).
+  final SeatRiderLine? wholeLine;
+  final String wholeTitle;
 
   /// The Beta cities, when the spot is in one; null otherwise. Shown, as
   /// the whole lot's 有沒有位 does, once any row reads an official count.
@@ -566,6 +572,10 @@ class SeatRowsView extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (wholeLine case final line?) ...[
+          _WholeRiderLine(title: wholeTitle, line: line),
+          const SizedBox(height: 10),
+        ],
         for (final (i, row) in rows.indexed) ...[
           if (i > 0) const SizedBox(height: 10),
           Container(
@@ -677,6 +687,70 @@ class SeatRowsView extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(child: box),
         ],
+      ),
+    );
+  }
+}
+
+/// 車友回報（全區）(A7e ⑦): a line of its own at the head of ②. Wide text
+/// wraps its note under the level.
+class _WholeRiderLine extends StatelessWidget {
+  const _WholeRiderLine({required this.title, required this.line});
+  final String title;
+  final SeatRiderLine line;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = DetailColors.of(context);
+    return Semantics(
+      container: true,
+      label: '$title：${line.main}，${line.note.replaceAll('・', '，')}',
+      excludeSemantics: true,
+      child: Container(
+        key: const ValueKey('detail-seat-rider-whole'),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: c.chip,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.end,
+          spacing: 10,
+          runSpacing: 2,
+          children: [
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: TextStyle(fontSize: 12, color: c.muted)),
+                const SizedBox(height: 2),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (line.meters.isNotEmpty) ...[
+                      RiderMeters(
+                        levels: line.meters,
+                        ink: c.ink,
+                        paper: c.chip,
+                      ),
+                      const SizedBox(width: 6),
+                    ],
+                    Text(
+                      line.main,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: c.ink,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            Text(line.note, style: TextStyle(fontSize: 11, color: c.muted)),
+          ],
+        ),
       ),
     );
   }

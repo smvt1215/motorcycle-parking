@@ -656,6 +656,23 @@ SeatRiderLine seatRiderLine(
   );
 }
 
+/// 車友回報 about the whole of a spot that has places (A7e ⑦): its own line
+/// above the rows, since a row reads only reports naming its place. The
+/// newest of [reports]; null without one.
+SeatRiderLine? wholeRiderLine(List<RiderSeat> reports, DateTime now) {
+  final held = [
+    for (final r in reports)
+      if (r.areaId == null) r,
+  ];
+  if (held.isEmpty) return null;
+  held.sort((a, b) => b.at.compareTo(a.at));
+  return riderLineOf(held.first, now);
+}
+
+/// The heading of [wholeRiderLine].
+String wholeRiderTitle({required bool street}) =>
+    street ? '車友回報（整條路）' : '車友回報（全區）';
+
 /// The words under 有沒有位's answer when the spot stands as one.
 String seatExplanation(FourSign s) {
   switch (s.seat.kind) {

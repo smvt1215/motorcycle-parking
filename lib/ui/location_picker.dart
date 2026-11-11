@@ -25,9 +25,13 @@ class LocationMapView {
     this.originLng,
     this.touchMarker = false,
     this.zoomControls = true,
+    this.onDragChanged,
   });
   final double lat, lng;
   final double? originLat, originLng;
+
+  /// See [LocationPicker.onDragChanged].
+  final ValueChanged<bool>? onDragChanged;
 
   /// The map's own zoom buttons; off where controls float on the map, as
   /// Android's sit in the same corner. Pinching still zooms.
@@ -72,9 +76,14 @@ class LocationPicker extends StatefulWidget {
     this.collapsed = false,
     this.expandButton = false,
     this.overlayControls = false,
+    this.onDragChanged,
   });
 
   final double lat, lng;
+
+  /// The touch marker was lifted (true) or put down (false). When it is
+  /// dropped on a new point, false comes just before [onChanged].
+  final ValueChanged<bool>? onDragChanged;
 
   /// Where the spot was before this edit; null for a new spot.
   final double? originLat, originLng;
@@ -267,6 +276,7 @@ class _LocationPickerState extends State<LocationPicker>
                     originLng: widget.originLng,
                     nudgeButtons: widget.nudgeButtons,
                     touchMarker: widget.touchMarker,
+                    onDragChanged: widget.onDragChanged,
                     mapBuilder: widget.mapBuilder,
                     fills: widget.fills,
                     // The address search lives here while the form is
@@ -462,6 +472,7 @@ class _LocationPickerState extends State<LocationPicker>
       onMove: widget.onChanged,
       touchMarker: widget.touchMarker,
       zoomControls: !overlay,
+      onDragChanged: widget.onDragChanged,
     );
     void step({int north = 0, int east = 0}) {
       final (a, b) = nudge(lat, lng, north: north, east: east);
@@ -716,12 +727,16 @@ class TouchMarkerLayer extends StatefulWidget {
     required this.lat,
     required this.lng,
     required this.onMove,
+    this.onDragChanged,
   });
 
   /// Updated as the map moves, so the pin stays on its point.
   final ValueListenable<MapCenter> camera;
   final double lat, lng;
   final void Function(double lat, double lng) onMove;
+
+  /// See [LocationPicker.onDragChanged].
+  final ValueChanged<bool>? onDragChanged;
 
   static const size = Size(56, 68);
 
@@ -796,6 +811,7 @@ class _TouchMarkerLayerState extends State<TouchMarkerLayer> {
                   if (tip == null && (finger - start).distance <= kTouchSlop) {
                     return;
                   }
+                  if (tip == null) widget.onDragChanged?.call(true);
                   setState(() {
                     tip = Offset(
                       (finger.dx + grabX).clamp(0, area.width),
@@ -808,6 +824,7 @@ class _TouchMarkerLayerState extends State<TouchMarkerLayer> {
                   final dropped = tip;
                   reset();
                   if (dropped == null) return;
+                  widget.onDragChanged?.call(false);
                   final off = dropped - area.center(Offset.zero);
                   final (lat, lng) = pointAtOffset(
                     centerLat: camera.lat,
@@ -819,7 +836,10 @@ class _TouchMarkerLayerState extends State<TouchMarkerLayer> {
                   widget.onMove(lat, lng);
                 },
                 onPointerCancel: (e) {
-                  if (e.pointer == pointer) reset();
+                  if (e.pointer != pointer) return;
+                  final lifted = tip != null;
+                  reset();
+                  if (lifted) widget.onDragChanged?.call(false);
                 },
                 child: CustomPaint(
                   size: size,
@@ -1053,6 +1073,7 @@ class _GoogleLocationMapState extends State<_GoogleLocationMap> {
                 lat: v.lat,
                 lng: v.lng,
                 onMove: v.onMove,
+                onDragChanged: v.onDragChanged,
               ),
             ),
           ],
@@ -1174,6 +1195,7 @@ class _OsmLocationMapState extends State<_OsmLocationMap> {
             lat: v.lat,
             lng: v.lng,
             onMove: v.onMove,
+            onDragChanged: v.onDragChanged,
           ),
         ),
       ],

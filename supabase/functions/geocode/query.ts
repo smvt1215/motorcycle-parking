@@ -132,6 +132,33 @@ export function readRequest(body: Record<string, unknown>): Request | string {
   return { query: parseQuery(text), near };
 }
 
+// The bounds the spot tables accept (see [inTaiwan]): outside them there is
+// no door worth a request. Undefined when the body asks for a search instead.
+export function readReverse(
+  body: Record<string, unknown>,
+): LatLng | string | undefined {
+  if (body.reverse === undefined || body.reverse === null) return undefined;
+  const at = body.reverse as Record<string, unknown>;
+  if (
+    typeof at !== 'object' || Array.isArray(at) ||
+    typeof at.lat !== 'number' || typeof at.lng !== 'number' ||
+    !Number.isFinite(at.lat) || !Number.isFinite(at.lng) ||
+    at.lat < 20 || at.lat > 27 || at.lng < 118 || at.lng > 123
+  ) {
+    return 'invalid_query';
+  }
+  return { lat: at.lat, lng: at.lng };
+}
+
+// The door nearest a point, only for showing beside the map: the road, and
+// its number when one was found. Both null when nothing fits.
+export interface NearestDoor {
+  road: string | null;
+  number: string | null;
+}
+
+export type ReverseProvider = (at: LatLng) => Promise<NearestDoor>;
+
 // What a provider throws: the service refused for quota, or is unreachable.
 export class ProviderError extends Error {
   constructor(readonly reason: 'quota' | 'unavailable') {

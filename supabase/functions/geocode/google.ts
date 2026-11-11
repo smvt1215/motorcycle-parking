@@ -5,14 +5,17 @@ import {
   type Candidate,
   type CandidateKind,
   type LatLng,
+  type NearestDoor,
   type ParsedQuery,
   type Precision,
   type Provider,
   ProviderError,
+  type ReverseProvider,
 } from './query.ts';
 
 interface Component {
   long_name: string;
+  short_name?: string;
   types: string[];
 }
 interface Result {
@@ -181,6 +184,80 @@ export function toCandidate(r: Result, q: ParsedQuery): Candidate | null {
   };
 }
 
+// The road and number of the results for one point: the first with both,
+// else the first with a road. The bounds the request allows also hold parts
+// of Fujian and Yonaguni, so results outside Taiwan do not count, and an
+// English road name counts as nothing found: only zh-TW names are shown.
+export function nearestDoor(results: Result[]): NearestDoor {
+  const doors = results.flatMap((r) => {
+    const components = r.address_components ?? [];
+    const named = (type: string) =>
+      components.find((c) => c.types.includes(type));
+    const road = named('route')?.long_name.trim() ?? '';
+    if (
+      named('country')?.short_name !== 'TW' || !road || latin.test(road)
+    ) return [];
+    const number = (named('street_number')?.long_name ?? '').trim()
+      .replace(/號$/, '');
+    return [{
+      road: official(road),
+      number: number && !latin.test(number) ? number : null,
+    }];
+  });
+  return doors.find((d) => d.number) ?? doors[0] ??
+    { road: null, number: null };
+}
+
+async function callGoogle(
+  params: URLSearchParams,
+  fetcher: typeof fetch,
+): Promise<Result[]> {
+  let body: { status?: string; results?: Result[] };
+  try {
+    // The URL holds the key; it never reaches a log or an error message.
+    const res = await fetcher(
+      `https://maps.googleapis.com/maps/api/geocode/json?${params}`,
+      { signal: AbortSignal.timeout(8000) },
+    );
+    if (!res.ok) throw new ProviderError('unavailable');
+    body = await res.json();
+  } catch (e) {
+    if (e instanceof ProviderError) throw e;
+    throw new ProviderError('unavailable');
+  }
+  switch (body.status) {
+    case 'OK':
+      return body.results ?? [];
+    case 'ZERO_RESULTS':
+      return [];
+    case 'OVER_QUERY_LIMIT':
+    case 'OVER_DAILY_LIMIT':
+      throw new ProviderError('quota');
+    default:
+      throw new ProviderError('unavailable');
+  }
+}
+
+// Reverse geocoding for the door shown beside a Google map. The answer is an
+// address, so it is never cached across riders (Service Specific Terms
+// 6.3.2): the handler returns it and nothing stores it.
+export function googleReverse(
+  key: string,
+  fetcher: typeof fetch = fetch,
+): ReverseProvider {
+  return async (at) =>
+    nearestDoor(
+      await callGoogle(
+        new URLSearchParams({
+          latlng: `${at.lat},${at.lng}`,
+          language: 'zh-TW',
+          key,
+        }),
+        fetcher,
+      ),
+    );
+}
+
 export function googleProvider(
   key: string,
   fetcher: typeof fetch = fetch,
@@ -202,30 +279,8 @@ export function googleProvider(
         }`,
       );
     }
-    let body: { status?: string; results?: Result[] };
-    try {
-      // The URL holds the key; it never reaches a log or an error message.
-      const res = await fetcher(
-        `https://maps.googleapis.com/maps/api/geocode/json?${params}`,
-        { signal: AbortSignal.timeout(8000) },
-      );
-      if (!res.ok) throw new ProviderError('unavailable');
-      body = await res.json();
-    } catch (e) {
-      if (e instanceof ProviderError) throw e;
-      throw new ProviderError('unavailable');
-    }
-    switch (body.status) {
-      case 'OK':
-        return (body.results ?? []).map((r) => toCandidate(r, q))
-          .filter((c): c is Candidate => c !== null);
-      case 'ZERO_RESULTS':
-        return [];
-      case 'OVER_QUERY_LIMIT':
-      case 'OVER_DAILY_LIMIT':
-        throw new ProviderError('quota');
-      default:
-        throw new ProviderError('unavailable');
-    }
+    return (await callGoogle(params, fetcher))
+      .map((r) => toCandidate(r, q))
+      .filter((c): c is Candidate => c !== null);
   };
 }

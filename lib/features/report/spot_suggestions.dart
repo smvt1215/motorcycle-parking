@@ -24,6 +24,7 @@ import '../../ui/address_search_field.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../../ui/location_picker.dart';
 import '../../models/condition_text.dart' show scheduleSlotText;
+import 'approx_address.dart';
 import 'condition_fields.dart';
 import 'entry_drafts.dart';
 import 'entry_pages.dart';
@@ -690,13 +691,20 @@ class _SuggestionFormState extends State<_SuggestionForm> {
   /// The suggested position, starting where the map shows the spot.
   late double lat = widget.spot.lat, lng = widget.spot.lng;
 
-  /// The county or city and district at [lat], [lng] once looked up; null
-  /// until then or when the lookup failed.
-  Town? newTown;
-
-  String? get newCity => newTown?.city;
+  /// The county or city and district of the position (S6): today's until
+  /// the marker moves, then the lookup's or the rider's pick. Unset while
+  /// unknown, so a move never sends the old position's.
+  late String? newCity = taiwanCities.contains(widget.spot.city)
+      ? widget.spot.city
+      : null;
+  late String newDistrict = widget.spot.district;
+  bool lookingUp = false;
+  String? lookupProblem;
   Timer? lookupTimer;
   int lookupRound = 0;
+
+  /// The door shown under the map; null where none may be shown.
+  ApproxAddressController? approx;
 
   String get fieldKey => widget.fieldKey;
   bool get unavailable => fieldKey == 'gone';
@@ -722,8 +730,12 @@ class _SuggestionFormState extends State<_SuggestionForm> {
     setState(() {
       lat = a;
       lng = b;
-      newTown = null;
+      newCity = null;
+      newDistrict = '';
+      lookingUp = true;
+      lookupProblem = null;
     });
+    approx?.moved(a, b);
     lookupTimer?.cancel();
     // Counted now, not when the timer fires: an answer still in flight for
     // the previous position must not land on this one.
@@ -733,18 +745,44 @@ class _SuggestionFormState extends State<_SuggestionForm> {
       try {
         town = await widget.store.townAt(a, b);
       } catch (_) {
-        // The admin checks the county when applying; nothing to warn about.
+        // Reported below; the rider can still pick by hand.
       }
       if (mounted && round == lookupRound) {
-        // Only a county the app knows; the sea or abroad sends coordinates
-        // alone and the admin checks.
-        setState(
-          () => newTown = town != null && taiwanCities.contains(town.city)
-              ? town
-              : null,
-        );
+        setState(() {
+          lookingUp = false;
+          // Only a county the app knows; the sea or abroad sends coordinates
+          // alone unless the rider picks, and the admin checks.
+          if (town != null && taiwanCities.contains(town.city)) {
+            newCity = town.city;
+            newDistrict = town.district;
+          } else {
+            lookupProblem = '查不到縣市與行政區，請在上方確認縣市。';
+          }
+        });
       }
     });
+  }
+
+  /// A pick by hand ends any lookup still running, which would replace it.
+  void _stopLookup() {
+    lookupTimer?.cancel();
+    lookupRound++;
+    lookingUp = false;
+    lookupProblem = null;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    if (locationField && widget.store.approxAddressEnabled) {
+      approx = ApproxAddressController(
+        lookup: widget.store.approxAddressAt,
+        auth: widget.store,
+        signedIn: () => widget.store.canReport,
+        lat: lat,
+        lng: lng,
+      );
+    }
   }
 
   /// Lots also say how they are built; who parks there is each zone's.
@@ -851,9 +889,9 @@ class _SuggestionFormState extends State<_SuggestionForm> {
       return {
         'lat': _round(lat),
         'lng': _round(lng),
-        if (newTown case final town?) ...{
-          'city': town.city,
-          'district': town.district,
+        if (newCity case final city?) ...{
+          'city': city,
+          'district': newDistrict,
         },
       };
     }
@@ -926,9 +964,8 @@ class _SuggestionFormState extends State<_SuggestionForm> {
       return [
         '位置往${_bearing()}移動約 ${_metres(moved)}',
         if (cityChanged) '縣市從「${spot.city}」改成「$newCity」',
-        if (newTown case final town?
-            when town.district.isNotEmpty && town.district != spot.district)
-          '行政區從「${spot.district.isEmpty ? '未提供' : spot.district}」改成「${town.district}」',
+        if (newDistrict.isNotEmpty && newDistrict != spot.district)
+          '行政區從「${spot.district.isEmpty ? '未提供' : spot.district}」改成「$newDistrict」',
       ];
     }
     if (guideField) {
@@ -995,6 +1032,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
   @override
   void dispose() {
     lookupTimer?.cancel();
+    approx?.dispose();
     note.dispose();
     evidence.dispose();
     condition.dispose();
@@ -1355,6 +1393,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                         // Search, 放大地圖 and 移到我的位置 float on the map,
                         // as N1's; no coordinates or buttons under it.
                         overlayControls: true,
+                        onDragChanged: approx?.dragging,
                         // Without a backend (demo) there is nothing to search.
                         onSearch: widget.store.client == null
                             ? null
@@ -1374,6 +1413,45 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                           icon: Icons.error_outline,
                           text: state.errorText!,
                           tone: NoteTone.error,
+                        ),
+                      if (approx case final approx?) ...[
+                        const SizedBox(height: 8),
+                        ApproxAddressRow(controller: approx),
+                      ],
+                      const SizedBox(height: 12),
+                      TownFields(
+                        keyPrefix: 'suggestion',
+                        city: newCity,
+                        district: newDistrict,
+                        onCity: (v) => setState(() {
+                          _stopLookup();
+                          // The district belonged to the old city.
+                          if (v != newCity) newDistrict = '';
+                          newCity = v;
+                        }),
+                        onDistrict: (v) => setState(() {
+                          _stopLookup();
+                          newDistrict = v ?? '';
+                        }),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '依地圖位置自動帶入，可以改。',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: colors.onSurfaceVariant,
+                        ),
+                      ),
+                      if (lookingUp)
+                        const LocationNote(
+                          icon: Icons.travel_explore,
+                          text: '正在查詢所在縣市與行政區…',
+                        )
+                      else if (lookupProblem != null)
+                        LocationNote(
+                          icon: Icons.help_outline,
+                          text: lookupProblem!,
+                          tone: NoteTone.caution,
                         ),
                       if (cityChanged)
                         LocationNote(

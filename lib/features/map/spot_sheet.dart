@@ -867,6 +867,11 @@ class _SpotSheetState extends State<SpotSheet> {
           store.riderSeats(sightingDetailWindow).of(spot.id),
           now,
         ),
+        wholeLine: wholeRiderLine(
+          store.riderSeats(sightingDetailWindow).of(spot.id),
+          now,
+        ),
+        wholeTitle: wholeRiderTitle(street: sign.street),
         betaCities: inAvailabilityBeta(spot.city, store.availabilityBetaCities)
             ? store.availabilityBetaCities
             : null,
