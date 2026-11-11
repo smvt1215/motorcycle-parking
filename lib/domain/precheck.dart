@@ -7,8 +7,8 @@
 library;
 
 import '../models/fee.dart' show chargeOfFeeJson, mergeFeeJson;
-import '../models/parking.dart' show ParkingAccess;
-import '../models/parking_condition.dart' show conditionByAccess;
+import '../models/parking.dart' show ParkingAccess, SpaceType;
+import '../models/parking_condition.dart' show conditionByAccess, conditionOf;
 import '../models/zone_entries.dart' show entriesPatch;
 
 /// [hold] lets the request through, flagged for stricter review (design
@@ -705,33 +705,46 @@ List<Object?> patchedEntries(Object? current, List<Object?> patch) =>
 /// [list] as approval leaves it (#369, `segments_charge_follow_fee()` in
 /// SQL): a segment [patch] gives new rates, and no condition of its own,
 /// takes its charge from them, or from [spotFee] when it has none; no charge
-/// when they say neither. Only 一般機車格 and 普大共用格 ask it.
+/// when they say neither. Only 一般機車格 and 普大共用格 ask it: a segment's
+/// own bay, else the spot's [whole] condition (#399, `segment_charge_of()`
+/// in SQL); a condition left empty goes.
 List<Object?> segmentsChargeFollowFee(
   List<Object?> list,
   List<Object?> patch,
-  Object? spotFee,
-) {
+  Object? spotFee, {
+  Map<Object?, Object?>? whole,
+}) {
   final follows = {
     for (final e in patch)
       if (e is Map && e.containsKey('fee') && !e.containsKey('condition'))
         e['id'],
   }..remove(null);
-  bool asks(Map<Object?, Object?> c) {
-    final limits = c['limits'];
-    return c['bay'] == 'motorcycle' &&
-        !(limits is List &&
-            limits.any(
-              (l) =>
-                  l is Map &&
-                  (l['kind'] == 'special_vehicle' || l['kind'] == 'ev_only'),
-            ));
+  bool special(Map<Object?, Object?>? c) {
+    final limits = c?['limits'];
+    return limits is List &&
+        limits.any(
+          (l) =>
+              l is Map &&
+              (l['kind'] == 'special_vehicle' || l['kind'] == 'ev_only'),
+        );
   }
 
-  Map<Object?, Object?> charged(Map<Object?, Object?> c, Object? fee) => {
-    for (final e in c.entries)
-      if (e.key != 'charge') e.key: e.value,
-    'charge': ?chargeOfFeeJson(fee),
-  };
+  bool asks(Map<Object?, Object?> c) => c.containsKey('bay')
+      ? c['bay'] == 'motorcycle' && !special(c)
+      : whole?['bay'] == 'motorcycle' && !special(c) && !special(whole);
+
+  Map<Object?, Object?> charged(Map<Object?, Object?> z, Object? fee) {
+    final condition = {
+      for (final e in (z['condition'] as Map).entries)
+        if (e.key != 'charge') e.key: e.value,
+      'charge': ?chargeOfFeeJson(fee),
+    };
+    return {
+      for (final e in z.entries)
+        if (e.key != 'condition') e.key: e.value,
+      if (condition.isNotEmpty) 'condition': condition,
+    };
+  }
 
   return [
     for (final z in list)
@@ -739,18 +752,25 @@ List<Object?> segmentsChargeFollowFee(
           follows.contains(z['id']) &&
           z['condition'] is Map &&
           asks(z['condition'] as Map))
-        {
-          ...z,
-          'condition': charged(
-            z['condition'] as Map,
-            z['fee'] is Map && (z['fee'] as Map).isNotEmpty
-                ? z['fee']
-                : spotFee,
-          ),
-        }
+        charged(
+          z,
+          z['fee'] is Map && (z['fee'] as Map).isNotEmpty ? z['fee'] : spotFee,
+        )
       else
         z,
   ];
+}
+
+/// A spot's whole condition as JSON: its own, else the one its space type
+/// stands for (`spot.condition ?? conditionOf(spaceType)`,
+/// `spot_whole_condition()` in SQL).
+Map<Object?, Object?>? wholeConditionJson(
+  Object? condition,
+  Object? spaceType,
+) {
+  if (condition is Map) return condition;
+  final type = SpaceType.values.asNameMap()[spaceType];
+  return type == null ? null : conditionOf(type)?.toJson();
 }
 
 /// Every stage 0 rule [body], a submit-report request, breaks. A fee
@@ -801,6 +821,10 @@ List<PrecheckIssue> precheck(
         merged['parking_segments']! as List<Object?>,
         patch,
         merged.containsKey('fee') ? merged['fee'] : current?['fee'],
+        whole: wholeConditionJson(
+          proposed['condition'] ?? current?['condition'],
+          current?['space_type'],
+        ),
       );
     }
     // Their own rules run on the entries they change (#155 item 40).

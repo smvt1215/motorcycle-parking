@@ -4,7 +4,8 @@ const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * The stored fee, condition, zones and segments of the spot a fee,
+ * The stored fee, condition (with the space type it falls back on, #399),
+ * zones and segments of the spot a fee,
  * condition, zone or segment suggestion names, so its rules run on what it
  * leaves (design §4.3, §5.4; #188); undefined
  * for anything else or a spot not found, where the suggestion stands alone.
@@ -27,7 +28,7 @@ export async function currentSpot(
   const { data } = await admin
     .from(official ? 'official_heavy_spots' : 'community_spots')
     .select(
-      'fee,condition,parking_zones,parking_segments,scooter_allowed,heavy_allowed',
+      'fee,condition,space_type,parking_zones,parking_segments,scooter_allowed,heavy_allowed',
     )
     .eq('id', id)
     .maybeSingle();

@@ -115,7 +115,7 @@ void main() {
       expect(notified, 2);
     });
 
-    test('經 api_v1.client_config 讀取；舊後端缺欄位不擋', () async {
+    test('經 api_v1.client_config 讀取；舊後端缺 Beta 欄位仍檢查；缺最低版本不擋', () async {
       UpdateGate served(Object body, {int status = 200}) {
         final client = SupabaseClient(
           'https://example.supabase.co',
@@ -144,6 +144,16 @@ void main() {
       final blocked = served({...config, 'min_supported_app_version': '2.0.0'});
       await blocked.check();
       expect(blocked.required?.minimum, '2.0.0');
+
+      // A backend older than the App, without availability_beta_cities (#251),
+      // still has its minimum enforced.
+      final older = served({
+        'rules_version': 1,
+        'spots_version': 1,
+        'min_supported_app_version': '2.0.0',
+      });
+      await older.check();
+      expect(older.required?.minimum, '2.0.0');
 
       for (final updates in [
         served(config),

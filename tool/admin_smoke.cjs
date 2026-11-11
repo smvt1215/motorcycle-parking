@@ -357,7 +357,7 @@ function session(role, aal, factors = [factor]) {
         await page.evaluate(() => document.querySelector('flt-semantics-placeholder')?.click());
         const heading = scenario === 'login' ? '登入管理介面' : scenario === 'denied' ? '這個帳號沒有管理權限' : scenario === 'mfa' || scenario === 'unfinished' ? '請先完成第二步驗證' : '待審回報';
         await waitText(heading);
-        assert.equal(await page.title(), '停車指南管理');
+        assert.equal(await page.title(), '機車停車指南管理');
         assert.match(await page.locator('meta[name=robots]').getAttribute('content'), /noindex/);
         if (scenario === 'shell') {
           if (mobile) {
