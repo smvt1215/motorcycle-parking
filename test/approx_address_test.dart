@@ -169,8 +169,8 @@ final _both = TargetPlatformVariant({
 const _sizes = [Size(390, 844), Size(820, 1180)];
 
 const _states = <(String, Object?, String, String?)>[
-  ('查到門牌', _door, _found, '由地圖位置推估，只給你對照，不會存進資料。'),
-  ('只查到路名', ApproxAddress('松壽路'), '約在 松壽路 上', '查不到門牌號碼，只查到路名。這是推估，不會存進資料。'),
+  ('查到門牌', _door, _found, '已查詢到附近門牌，查詢結果僅供畫面參考，不會提交。'),
+  ('只查到路名', ApproxAddress('松壽路'), '約在 松壽路 上', '門牌號碼無法查詢，查詢結果僅供畫面參考，不會提交。'),
   ('查不到', null, '這個位置查不到門牌', '拖曳標記對準停車格就好，不影響送出。'),
   ('連線失敗', AddressSearchException('network'), '暫時查不到門牌', '移動標記會再查一次，不影響送出。'),
   (

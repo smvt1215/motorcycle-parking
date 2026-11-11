@@ -322,7 +322,7 @@ class _CompactBar extends StatelessWidget {
     final height = short ? 48.0 : (phone ? 56.0 : 64.0);
     final title =
         adminTabs.where((t) => t.path == section).firstOrNull?.title ??
-        (section == '/security' ? '帳號安全' : '停車指南管理');
+        (section == '/security' ? '帳號安全' : '機車停車指南管理');
     return Material(
       color: AdminColors.asphalt,
       child: SizedBox(
@@ -387,7 +387,7 @@ class _BrandMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Semantics(
-    label: '停車指南管理',
+    label: '機車停車指南管理',
     image: true,
     child: Container(
       width: 24,

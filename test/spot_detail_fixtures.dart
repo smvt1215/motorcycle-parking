@@ -357,10 +357,14 @@ Future<void> openDetail(
   if (full) await pullUp(tester);
 }
 
-/// Drags the preview up to the full page.
+/// Drags the preview up to the full page: by its handle where the plates
+/// scroll inside the card (A15b ③), else anywhere on it.
 Future<void> pullUp(WidgetTester tester) async {
+  final handle = find.byKey(const ValueKey('spot-sheet-handle'));
   await tester.drag(
-    find.byKey(const ValueKey('parking-spot-sheet')),
+    handle.evaluate().isNotEmpty
+        ? handle
+        : find.byKey(const ValueKey('parking-spot-sheet')),
     const Offset(0, -900),
   );
   await tester.pumpAndSettle();

@@ -16,6 +16,7 @@ import 'package:motorcycle_parking/domain/location_check.dart';
 import 'package:motorcycle_parking/domain/map_viewport.dart';
 import 'package:motorcycle_parking/models/parking.dart' show Eligible;
 import 'package:motorcycle_parking/models/space_kind.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
 import 'fake_admin_gateway.dart';
 import 'fold_helpers.dart';
@@ -314,6 +315,23 @@ void main() {
       );
       expect(gateway.spotRows[id]!['heavy_allowed'], isNull);
       expect(gateway.spotRows[communityId]!['status'], 'hidden');
+    });
+
+    test('有未處理的內容檢舉時不能改為官方點，提示先處理檢舉（#326）', () async {
+      gateway.promoteError = const PostgrestException(
+        message: 'open content reports block promotion',
+        code: '55000',
+      );
+      await spots.open(communityId);
+      final id = await spots.promote({
+        'source_name': '臺北市政府',
+        'source_url': 'https://example.test/lot',
+        'effective_date': '2026-10-25',
+      }, '');
+      expect(id, isNull);
+      expect(spots.saveError, '這個點有內容檢舉還沒處理完，請先處理檢舉再改為官方點。');
+      expect(spots.stale, isFalse);
+      expect(gateway.promotions, isEmpty);
     });
   });
 
