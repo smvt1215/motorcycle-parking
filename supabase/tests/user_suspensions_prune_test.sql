@@ -1,4 +1,4 @@
--- 過期超過 90 天的停權列定期清除（#338；202611111100_prune_expired_suspensions.sql）。
+-- 過期超過 90 天的停權列定期清除（#338；202611111500_prune_expired_suspensions.sql）。
 begin;
 create extension if not exists pgtap with schema extensions;
 set search_path=public,extensions;
