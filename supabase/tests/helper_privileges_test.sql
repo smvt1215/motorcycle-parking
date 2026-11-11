@@ -32,7 +32,10 @@ insert into revoked values
   ('spot_delete_grace()'), ('sync_not_stated()'), ('zone_eligibility_stated(jsonb)'),
   ('zone_patch_stated(jsonb,jsonb)'),
   -- 202611091000: helpers added by #369.
-  ('charge_of_fee(jsonb)'), ('segments_charge_follow_fee(jsonb,jsonb,jsonb)');
+  ('charge_of_fee(jsonb)'), ('segments_charge_follow_fee(jsonb,jsonb,jsonb)'),
+  -- 202611111000: helpers added by #399.
+  ('segment_charge_of(jsonb,jsonb)'), ('segment_fee_of(jsonb,jsonb)'),
+  ('segments_charge_follow_spot_fee(jsonb,jsonb,jsonb,jsonb)'), ('spot_segments_charge_follow_fee()');
 
 -- Every revoked helper exists (a renamed function would silently keep its grant).
 select ok(to_regprocedure('public.'||sig) is not null, sig||' exists') from revoked;
