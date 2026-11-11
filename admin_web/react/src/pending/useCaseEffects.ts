@@ -51,8 +51,9 @@ export function useActionWatcher() {
           { subscribe: false, forceRefetch: true },
         ),
       );
-      // Not answered (offline, a 5xx): ask again next tick.
-      if (!result.data) return;
+      // Not answered (offline, a 5xx): ask again next tick. The error comes
+      // with the last cached list, whose outcomes belong to earlier attempts.
+      if (result.error || !result.data) return;
       const listed = result.data;
       const waiting = store
         .getState()

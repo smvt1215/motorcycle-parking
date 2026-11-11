@@ -84,7 +84,7 @@ export function ReportNotices({ item, report }: { item: TimedCase; report: Conte
     <>
       {report.spot_deleted && (
         <Notice title="內容已不存在">
-          被檢舉的內容隨點位一起刪除了，App 上已看不到。按結案關閉這{' '}
+          這個點已不在車友回報的資料裡，被檢舉的內容無法再顯示。按結案關閉這{' '}
           <span className="num">{report.reports.length}</span> 則檢舉。
         </Notice>
       )}

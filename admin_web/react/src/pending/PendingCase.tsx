@@ -8,6 +8,7 @@ import {
   useAdminV1TimedCaseQuery,
   type CaseAction,
   type ContentReport,
+  type SupportMessage,
   type SupportRequestDetail,
   type TimedCase,
 } from '../api/v1/admin_v1.generated';
@@ -40,6 +41,8 @@ import { useTick } from './useCaseEffects';
 import './Case.css';
 
 const FOREIGN_POLL_MS = 2_000;
+/** support_outbound_result lands after the action is done: follow the mail too. */
+const DELIVERY_POLL_MS = 5_000;
 
 type PanelName = 'resolve' | 'confirm-resolve' | 'restore' | 'keep' | 'edit' | null;
 
@@ -170,8 +173,15 @@ interface CaseViewProps {
   support: SupportRequestDetail | undefined;
   report: ContentReport | undefined;
   serverActions: CaseAction[];
-  reload: () => Promise<void>;
+  reload: () => Promise<boolean>;
   remaining: number | undefined;
+}
+
+/** A reply that went out after this action ended: the failure is no longer the case's last word. */
+function supersededByReply(action: CaseAction, messages: readonly SupportMessage[]) {
+  if (action.status !== 'stale' && action.status !== 'failed') return false;
+  const ended = Date.parse(action.finished_at ?? action.run_at);
+  return messages.some((m) => m.direction === 'out' && Date.parse(m.created_at) > ended);
 }
 
 function CaseView({ item, support, report, serverActions, reload, remaining }: CaseViewProps) {
@@ -235,8 +245,11 @@ function CaseView({ item, support, report, serverActions, reload, remaining }: C
     }
   }, [serverActions, seen, me, item, replyTo, dispatch, store]);
 
-  // After a reload the only copy of an unsent reply is the server's.
-  const latest = serverActions[0];
+  // After a reload the only copy of an unsent reply is the server's. Done
+  // actions are not listed, so a reply sent since the failure makes it history.
+  const listedLatest = serverActions[0];
+  const latest =
+    listedLatest && supersededByReply(listedLatest, support?.messages ?? []) ? undefined : listedLatest;
   useEffect(() => {
     if (!latest || (latest.status !== 'stale' && latest.status !== 'failed')) return;
     const payload = latest.payload as Record<string, unknown>;
@@ -297,7 +310,9 @@ function CaseView({ item, support, report, serverActions, reload, remaining }: C
   };
 
   const reloadAndNote = async () => {
-    await reload();
+    // A failed read keeps the conflict as it was: 仍然套用 stays off until
+    // the newest content is on screen.
+    if (!(await reload())) return;
     setConflict((current) =>
       current?.kind === 'force'
         ? { ...current, reloaded: true }
@@ -623,9 +638,22 @@ function CaseLoader({ caseId }: { caseId: string }) {
   } as const;
   const row = useAdminV1TimedCaseQuery({ body: { p_id: caseId } }, options);
   const item = row.currentData;
+  // A reply handed to the mail service: read until it is sent or has failed.
+  const deliveringNow = useAppSelector(
+    (state) =>
+      adminV1.endpoints.adminV1SupportRequest
+        .select({ body: { p_id: caseId } })(state)
+        .data?.messages.some(
+          (m) => m.direction === 'out' && (m.delivery_status === 'queued' || m.delivery_status === 'sending'),
+        ) === true,
+  );
   const support = useAdminV1SupportRequestQuery(
     { body: { p_id: caseId } },
-    { ...options, skip: item?.type !== 'support' },
+    {
+      ...options,
+      skip: item?.type !== 'support',
+      pollingInterval: deliveringNow ? DELIVERY_POLL_MS : 0,
+    },
   );
   const report = useAdminV1ContentReportQuery(
     { body: { p_id: caseId } },
@@ -641,14 +669,20 @@ function CaseLoader({ caseId }: { caseId: string }) {
   });
   const actions = useAdminV1CaseActionsQuery(
     { body: { p_case: caseId } },
-    { ...options, skip: !item, pollingInterval: foreign > 0 ? FOREIGN_POLL_MS : 0 },
+    {
+      ...options,
+      skip: !item,
+      pollingInterval: foreign > 0 ? FOREIGN_POLL_MS : deliveringNow ? DELIVERY_POLL_MS : 0,
+    },
   );
 
+  /** True only when every part read again: a conflict may rely on what is on screen. */
   const reload = async () => {
-    await row.refetch();
-    if (item?.type === 'support') await support.refetch();
-    else if (item?.type === 'report') await report.refetch();
-    if (item) await actions.refetch();
+    const failed: boolean[] = [(await row.refetch()).isError];
+    if (item?.type === 'support') failed.push((await support.refetch()).isError);
+    else if (item?.type === 'report') failed.push((await report.refetch()).isError);
+    if (item) failed.push((await actions.refetch()).isError);
+    return !failed.includes(true);
   };
 
   // A live action on this case just ended: everything about it changed.

@@ -154,6 +154,29 @@ const COUNTS: TimedCaseCounts = {
 
 type Reply = { status?: number; body: unknown };
 
+const caseAction = (extra: Partial<CaseAction>): CaseAction => ({
+  id: 'action-1',
+  case_type: 'support',
+  case_id: UUID(1),
+  action: 'reply',
+  status: 'done',
+  run_at: new Date().toISOString(),
+  irreversible: false,
+  attempts: 1,
+  error: null,
+  actor: 'me',
+  expected_version: null,
+  payload: {},
+  created_at: new Date().toISOString(),
+  started_at: null,
+  finished_at: null,
+  message_id: null,
+  delivery_status: null,
+  send_error: null,
+  address_editable: false,
+  ...extra,
+});
+
 interface Setup {
   items: TimedCase[];
   /** Replaces the messages of `support_request`. */
@@ -600,6 +623,7 @@ describe('案件詳情的處理', () => {
     const { postgrest, calls } = backend({ items: [item, row(2)] });
     open(postgrest, `/pending/${UUID(1)}`);
     expect(await screen.findByText('內容已不存在')).toBeInTheDocument();
+    expect(screen.getByText(/這個點已不在車友回報的資料裡，被檢舉的內容無法再顯示。/)).toBeInTheDocument();
     expect(screen.getByText('點位已刪除', { selector: 'dd, dd *' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '開啟這個點位' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '檢舉成立' })).not.toBeInTheDocument();
@@ -610,6 +634,86 @@ describe('案件詳情的處理', () => {
         p_action: 'report_restore',
       }),
     );
+  });
+
+  it('follows a queued reply until the mail service answers, then offers 再寄一次', async () => {
+    const first = supportDetail(row(1)).messages[0]!;
+    const out = {
+      ...first,
+      id: 'm1',
+      direction: 'out' as const,
+      channel: 'admin' as const,
+      delivery_status: 'queued' as const,
+      to_email: 'rider@example.com',
+    };
+    const setup: Setup = { items: [row(1)], messages: [first, out] };
+    const { postgrest } = backend(setup);
+    open(postgrest, `/pending/${UUID(1)}`);
+    expect(await screen.findByText('寄送中，寄到 rider@example.com')).toBeInTheDocument();
+    setup.messages = [first, { ...out, delivery_status: 'failed', attempts: 5 }];
+    setup.actions = {
+      [UUID(1)]: [caseAction({ id: 'failed-1', message_id: 'm1', delivery_status: 'failed' })],
+    };
+    await tick(6000);
+    expect(await screen.findByText(/沒有寄出，系統已試了/)).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: '再寄一次' })).toBeInTheDocument();
+  });
+
+  it('does not bring back a stale reply that a later reply replaced', async () => {
+    const first = supportDetail(row(1)).messages[0]!;
+    const { postgrest } = backend({
+      items: [row(1)],
+      actions: {
+        [UUID(1)]: [
+          caseAction({
+            status: 'stale',
+            payload: { body: '舊的回覆' },
+            run_at: '2026-11-09T01:00:00Z',
+            finished_at: '2026-11-09T01:00:05Z',
+          }),
+        ],
+      },
+      messages: [
+        first,
+        {
+          ...first,
+          id: 'm2',
+          direction: 'out',
+          channel: 'admin',
+          body: '新的回覆',
+          created_at: '2026-11-09T01:05:00Z',
+          delivery_status: 'sent',
+        },
+      ],
+    });
+    open(postgrest, `/pending/${UUID(1)}`);
+    expect(await screen.findByText('新的回覆')).toBeInTheDocument();
+    await tick(100);
+    expect(screen.getByRole('textbox', { name: '回覆' })).toHaveValue('');
+    expect(screen.queryByText('這筆案件有新的變動')).not.toBeInTheDocument();
+  });
+
+  it('does not read a failed poll as the outcome of a 再寄一次', async () => {
+    const first = supportDetail(row(1)).messages[0]!;
+    const setup: Setup = {
+      items: [row(1, { state: 'send_failed', rank: 0 }), row(2)],
+      actions: {
+        [UUID(1)]: [caseAction({ id: 'failed-1', message_id: 'm1', delivery_status: 'failed' })],
+      },
+      retry: () => ({ body: { action_id: 'failed-1', run_at: new Date(Date.now() + 1000).toISOString() } }),
+      messages: [
+        first,
+        { ...first, id: 'm1', direction: 'out', channel: 'admin', delivery_status: 'failed', attempts: 5 },
+      ],
+    };
+    const { postgrest } = backend(setup);
+    open(postgrest, `/pending/${UUID(1)}`);
+    await user.click(await screen.findByRole('button', { name: '再寄一次' }));
+    await within(dock()).findByText(/秒後寄出/);
+    setup.failing = ['case_actions'];
+    await tick(4000);
+    expect(within(dock()).queryByText('回覆沒有寄出')).not.toBeInTheDocument();
+    expect(within(dock()).getByText(/寄送中/)).toBeInTheDocument();
   });
 
   it('freezes the reply while it is being scheduled', async () => {
@@ -937,6 +1041,32 @@ describe('案件詳情的處理', () => {
         }),
       );
       expect(await within(dock()).findByText(/秒後換掉停車點名稱/)).toBeInTheDocument();
+    });
+
+    it('keeps 仍然套用 off until the newest content has been read', async () => {
+      const setup: Setup = {
+        items: [reportRow(1), row(2)],
+        schedule: () => ({
+          status: 409,
+          body: { code: 'PT409', message: 'content_report.stale', details: null },
+        }),
+      };
+      const { postgrest } = backend(setup);
+      open(postgrest, `/pending/${UUID(1)}`);
+      await user.click(await screen.findByRole('button', { name: '改內容' }));
+      const name = screen.getByRole('textbox', { name: '停車點名稱' });
+      await user.clear(name);
+      await user.type(name, '改好');
+      await user.click(screen.getByRole('button', { name: '儲存並放回' }));
+      const reload = await screen.findByRole('button', { name: '重新讀取最新資料' });
+      setup.failing = ['content_report'];
+      await user.click(reload);
+      await tick(100);
+      expect(screen.getByRole('button', { name: '仍然套用' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: '重新讀取最新資料' })).toBeEnabled();
+      setup.failing = [];
+      await user.click(screen.getByRole('button', { name: '重新讀取最新資料' }));
+      await waitFor(() => expect(screen.getByRole('button', { name: '仍然套用' })).toBeEnabled());
     });
 
     it('sends only changed fields when editing', async () => {
