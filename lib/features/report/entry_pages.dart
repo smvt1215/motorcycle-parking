@@ -3,10 +3,13 @@
 // sends its own patch (C6); from a new spot (N1) it hands its one entry back
 // and N1 sends everything together (C14).
 import 'package:flutter/services.dart' show FilteringTextInputFormatter;
+import 'package:supabase_flutter/supabase_flutter.dart'
+    show FunctionsFetchException;
 
 import '../../data/account_suspended.dart';
 import '../../data/app_store.dart';
 import '../../domain/precheck.dart';
+import '../../domain/suggestion_display.dart';
 import '../../models/condition_text.dart';
 import '../../models/fee.dart';
 import '../../models/parking.dart';
@@ -144,32 +147,126 @@ class FormPage extends StatelessWidget {
   );
 }
 
-/// Sends a suggestion: true when it went. A refusal keeps the form as it
-/// is; a suspended account gets the shared panel (#331), a signed-out rider
-/// 登入 (C2).
-Future<bool> sendSuggestion(
+/// What went from one opening of 提出修改建議 (S6, #403): the rows whose
+/// suggestions were sent, in the order they went. Kept only while the sheet
+/// is open; never stored on the device and never asked of the backend.
+class SuggestionSession extends ChangeNotifier {
+  /// The row whose pages are open; what they send counts as its.
+  SuggestionItem? editing;
+
+  final _sent = <SuggestionItem>{};
+  List<SuggestionItem> get sent => List.unmodifiable(_sent);
+
+  /// The open row's suggestion went.
+  void markSent() {
+    final item = editing;
+    if (item == null) return;
+    _sent.add(item);
+    notifyListeners();
+  }
+}
+
+/// Hands the list's [SuggestionSession] to every page of its [FormFlow].
+class SuggestionScope extends InheritedNotifier<SuggestionSession> {
+  const SuggestionScope({
+    super.key,
+    required SuggestionSession session,
+    required super.child,
+  }) : super(notifier: session);
+
+  /// The session of the list above [context]; null for a form opened on
+  /// its own. With [listen], [context] rebuilds when a suggestion goes.
+  static SuggestionSession? maybeOf(
+    BuildContext context, {
+    bool listen = false,
+  }) =>
+      (listen
+              ? context.dependOnInheritedWidgetOfExactType<SuggestionScope>()
+              : context.getInheritedWidgetOfExactType<SuggestionScope>())
+          ?.notifier;
+}
+
+/// After a page of the flow sent its suggestion: back to the list, which
+/// says what went and asks what else to change (S6). A page opened without
+/// a list has nowhere to go back to, so its sheet closes with a message.
+void suggestionSent(BuildContext context, AppStore store) {
+  final session = SuggestionScope.maybeOf(context);
+  if (session == null) {
+    closeFlow(context);
+    showMessage(
+      context,
+      store.demo ? suggestionDemoNote : '建議已送出。$suggestionReviewNote',
+    );
+    return;
+  }
+  session.markSent();
+  Navigator.of(context).popUntil((route) => route.isFirst);
+}
+
+/// Why a suggestion did not go, as the note above the send button says it
+/// (S6b ②③). The form stays as filled in.
+class SendProblem {
+  /// The request failed; trying again later may work.
+  const SendProblem.failed() : offline = false, refusal = null;
+
+  /// No answer reached the app: the phone is offline, or the server cannot
+  /// be reached.
+  const SendProblem.offline() : offline = true, refusal = null;
+
+  /// The server read the suggestion and said what is wrong with it.
+  const SendProblem.refused(String this.refusal) : offline = false;
+
+  /// [error] from sending. A request that never got an answer is a
+  /// [FunctionsFetchException] (status 0), which is how being offline
+  /// shows; the app has no other way to tell.
+  factory SendProblem.of(Object error) => switch (error) {
+    StateError(:final message) => SendProblem.refused(message.toString()),
+    FunctionsFetchException() => const SendProblem.offline(),
+    _ => const SendProblem.failed(),
+  };
+
+  final bool offline;
+  final String? refusal;
+
+  String get title => offline ? sendOfflineTitle : sendFailedTitle;
+
+  /// What to do next; [button] is the send button's label.
+  String body(String button) =>
+      refusal ?? (offline ? sendOfflineBody(button) : sendFailedBody(button));
+}
+
+/// How sending went. Not [sent] comes with the [problem] to show above the
+/// button, unless the rider was already told another way (登入, the
+/// suspended panel).
+class SendResult {
+  const SendResult.sent() : sent = true, problem = null;
+  const SendResult.notSent([this.problem]) : sent = false;
+  final bool sent;
+  final SendProblem? problem;
+}
+
+/// Sends a suggestion. A refusal keeps the form as it is; a suspended
+/// account gets the shared panel (#331), a signed-out rider 登入 (C2).
+Future<SendResult> sendSuggestion(
   BuildContext context,
   AppStore store,
   Map<String, Object?> body,
 ) async {
   if (!store.canReport) {
     await showSignIn(context, store);
-    return false;
+    return const SendResult.notSent();
   }
   try {
     await store.submit(body);
-    return true;
+    return const SendResult.sent();
   } catch (e) {
-    if (!context.mounted) return false;
     if (accountSuspendedFrom(e) case final s?) {
-      await showSuspendedSheet(context, s.until, untilKnown: s.untilKnown);
-    } else {
-      showMessage(
-        context,
-        e is StateError ? e.message.toString() : '建議沒有送出，內容還在，請確認網路後再送一次。',
-      );
+      if (context.mounted) {
+        await showSuspendedSheet(context, s.until, untilKnown: s.untilKnown);
+      }
+      return const SendResult.notSent();
     }
-    return false;
+    return SendResult.notSent(SendProblem.of(e));
   }
 }
 
@@ -744,6 +841,9 @@ class _EntryWholePageState extends State<EntryWholePage> {
   bool sending = false;
   String? refusal;
 
+  /// Why the last send failed, above the send button (S6b).
+  SendProblem? sendProblem;
+
   Eligible? _offered(Eligible? value) =>
       value == Eligible.notStated && !widget.notStated ? null : value;
 
@@ -812,16 +912,18 @@ class _EntryWholePageState extends State<EntryWholePage> {
       setState(() => refusal = issue.message);
       return;
     }
-    setState(() => sending = true);
-    final sent = await sendSuggestion(context, widget.store, payload);
+    setState(() {
+      sending = true;
+      sendProblem = null;
+    });
+    final result = await sendSuggestion(context, widget.store, payload);
     if (!mounted) return;
-    setState(() => sending = false);
-    if (!sent) return;
-    closeFlow(context);
-    showMessage(
-      context,
-      widget.store.demo ? '範例模式：建議沒有實際送出，只用來測試流程。' : '建議已送出。管理員審核通過後會更新地圖。',
-    );
+    setState(() {
+      sending = false;
+      sendProblem = result.problem;
+    });
+    if (!result.sent) return;
+    suggestionSent(context, widget.store);
   }
 
   /// What 這次會影響 says of [d]: 沿用, 另設, or a heavy bay's limit.
@@ -855,6 +957,10 @@ class _EntryWholePageState extends State<EntryWholePage> {
       ),
       footer: SubmitBar(
         label: adding ? '完成' : '送出 $count 項建議',
+        above: switch (sendProblem) {
+          final problem? => SendProblemNote(problem, button: '送出 $count 項建議'),
+          null => null,
+        },
         note: adding ? null : '管理員審核後才會更新地圖',
         sending: sending,
         onPressed: adding
@@ -1014,6 +1120,9 @@ class _EntryEditPageState extends State<EntryEditPage> {
   late EntryDraft current;
   bool showErrors = false, sending = false;
   String? refusal;
+
+  /// Why the last send failed, above the send button (S6b).
+  SendProblem? sendProblem;
   final linkForm = GlobalKey<FormState>();
 
   bool get adding => widget.adding;
@@ -1117,16 +1226,18 @@ class _EntryEditPageState extends State<EntryEditPage> {
       setState(() => refusal = issue.message);
       return;
     }
-    setState(() => sending = true);
-    final sent = await sendSuggestion(context, widget.store, payload);
+    setState(() {
+      sending = true;
+      sendProblem = null;
+    });
+    final result = await sendSuggestion(context, widget.store, payload);
     if (!mounted) return;
-    setState(() => sending = false);
-    if (!sent) return;
-    closeFlow(context);
-    showMessage(
-      context,
-      widget.store.demo ? '範例模式：建議沒有實際送出，只用來測試流程。' : '建議已送出。管理員審核通過後會更新地圖。',
-    );
+    setState(() {
+      sending = false;
+      sendProblem = result.problem;
+    });
+    if (!result.sent) return;
+    suggestionSent(context, widget.store);
   }
 
   /// 地圖上目前寫的, from what was loaded: it stays put while the rider
@@ -1163,6 +1274,10 @@ class _EntryEditPageState extends State<EntryEditPage> {
       ),
       footer: SubmitBar(
         label: adding ? '完成' : '送出 $count 項建議',
+        above: switch (sendProblem) {
+          final problem? => SendProblemNote(problem, button: '送出 $count 項建議'),
+          null => null,
+        },
         note: adding ? null : '管理員審核後才會更新地圖',
         sending: sending,
         onPressed: adding

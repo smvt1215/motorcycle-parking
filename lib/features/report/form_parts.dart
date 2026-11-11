@@ -4,12 +4,14 @@
 // pieces every form shares are in lib/ui/adaptive/form_components.dart.
 import 'dart:ui' show PathMetric;
 
+import '../../domain/suggestion_display.dart';
 import '../../models/parking.dart';
 import '../../models/space_kind.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../../ui/vehicle_marks.dart';
 import '../map/space_type_sheet.dart';
 import 'entry_drafts.dart';
+import 'entry_pages.dart' show SendProblem;
 
 /// iOS rows are 44 tall at least, Android's 48.
 double get _touch => isCupertino ? 44 : 48;
@@ -84,8 +86,14 @@ class EntryRow extends StatelessWidget {
     this.destructive = false,
     this.problem,
     this.quote,
+    this.sent = false,
     this.onTap,
   });
+
+  /// A suggestion for this row went while the list was open (S6): the
+  /// 「已送出，審核中」 mark under the title. The value beside it is still
+  /// the map's, which changes only after review.
+  final bool sent;
 
   /// A stored text with what it is: (這區寫, the text). At most two lines
   /// on screen; a screen reader hears all of it.
@@ -108,51 +116,58 @@ class EntryRow extends StatelessWidget {
     style: style,
   );
 
-  Widget _column(TextStyle muted, ColorScheme colors) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(
-        title,
-        style: TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w600,
-          color: destructive ? colors.error : colors.onSurface,
-        ),
-      ),
-      if (subtitle != null) ...[
-        const SizedBox(height: 2),
-        Text(subtitle!, style: muted),
-      ],
-      if (tags.isNotEmpty) ...[
-        const SizedBox(height: 6),
-        Wrap(spacing: 6, runSpacing: 4, children: tags),
-      ],
-      if (quote case (final label, final text)?) ...[
-        const SizedBox(height: 2),
-        Semantics(
-          label: '$label，$text',
-          excludeSemantics: true,
-          child: Text.rich(
-            TextSpan(
-              children: [
-                TextSpan(text: '$label：', style: muted),
-                TextSpan(
-                  text: text,
-                  style: TextStyle(fontSize: 13, color: colors.onSurface),
-                ),
-              ],
+  /// [stacked] puts the value under the title, for large text (S6d ②).
+  Widget _column(TextStyle muted, ColorScheme colors, {bool stacked = false}) =>
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: destructive ? colors.error : colors.onSurface,
             ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
           ),
-        ),
-      ],
-      if (problem != null) ...[
-        const SizedBox(height: 4),
-        Text(problem!, style: TextStyle(fontSize: 13, color: colors.error)),
-      ],
-    ],
-  );
+          if (subtitle != null) ...[
+            const SizedBox(height: 2),
+            Text(subtitle!, style: muted),
+          ],
+          if (stacked && value != null) ...[
+            const SizedBox(height: 2),
+            Text(value!, style: muted),
+          ],
+          if (sent) ...[const SizedBox(height: 5), const SentTag()],
+          if (tags.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Wrap(spacing: 6, runSpacing: 4, children: tags),
+          ],
+          if (quote case (final label, final text)?) ...[
+            const SizedBox(height: 2),
+            Semantics(
+              label: '$label，$text',
+              excludeSemantics: true,
+              child: Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(text: '$label：', style: muted),
+                    TextSpan(
+                      text: text,
+                      style: TextStyle(fontSize: 13, color: colors.onSurface),
+                    ),
+                  ],
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+          if (problem != null) ...[
+            const SizedBox(height: 4),
+            Text(problem!, style: TextStyle(fontSize: 13, color: colors.error)),
+          ],
+        ],
+      );
 
   /// A short title hugs its text and leaves the row to the value, which is
   /// often a whole sentence of rates.
@@ -174,6 +189,9 @@ class EntryRow extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final muted = TextStyle(fontSize: 13, color: colors.onSurfaceVariant);
     final enabled = onTap != null;
+    // A sent row in large text reads title, value, mark from top to bottom,
+    // so the mark is never squeezed beside a long value (S6d ②).
+    final stacked = sent && MediaQuery.textScalerOf(context).scale(16) > 20;
     return Semantics(
       button: enabled,
       enabled: enabled,
@@ -190,7 +208,9 @@ class EntryRow extends StatelessWidget {
                   const SizedBox(width: 12),
                 ],
                 Expanded(
-                  child: value != null && subtitle == null && tags.isEmpty
+                  child: stacked
+                      ? _column(muted, colors, stacked: true)
+                      : value != null && subtitle == null && tags.isEmpty
                       ? _titleAndValue(muted, colors)
                       : Row(
                           children: [
@@ -213,6 +233,180 @@ class EntryRow extends StatelessWidget {
                   ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The tints of 審核中 (P9's plate), light and dark (S6d ①): what was sent
+/// waits for review, so never the green of 可停.
+(Color, Color) reviewingTint(BuildContext context) =>
+    Theme.of(context).brightness == Brightness.dark
+    ? (const Color(0xff16343c), const Color(0xff9fe0ec))
+    : (const Color(0xffe3f0f2), const Color(0xff0f4e5c));
+
+/// 「✓ 已送出，審核中」 on a row whose suggestion went (S6).
+class SentTag extends StatelessWidget {
+  const SentTag({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final (back, ink) = reviewingTint(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: back,
+        borderRadius: BorderRadius.circular(isCupertino ? 6 : 8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(6, 3, 8, 3),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.check, size: 14, color: ink),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                suggestionSentTag,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  height: 1.35,
+                  color: ink,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The confirmation at the top of the list once a suggestion went (S6):
+/// what was sent and that the map waits for review. Announced when it
+/// appears or changes.
+class SentBanner extends StatelessWidget {
+  const SentBanner({super.key, required this.title, required this.body});
+  final String title, body;
+
+  @override
+  Widget build(BuildContext context) {
+    final (back, ink) = reviewingTint(context);
+    return Semantics(
+      liveRegion: true,
+      container: true,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: back,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ExcludeSemantics(
+                child: Icon(Icons.check_circle, size: 24, color: ink),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        height: 1.35,
+                        color: ink,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      body,
+                      style: TextStyle(fontSize: 13, height: 1.5, color: ink),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Why the suggestion did not go, fixed above the send button (S6b ②③)
+/// and announced: a title, what to do next, and an icon that tells no
+/// network from other failures without relying on colour.
+class SendProblemNote extends StatelessWidget {
+  const SendProblemNote(this.problem, {super.key, required this.button});
+  final SendProblem problem;
+
+  /// The send button's label, as the note names it.
+  final String button;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final dark = colors.brightness == Brightness.dark;
+    // P9's 未採納 tint in light; in dark the theme's error on its own wash,
+    // as FormInfoNote paints an error.
+    final ink = dark ? colors.error : const Color(0xff7a1f2e);
+    final back = dark
+        ? Color.alphaBlend(colors.error.withValues(alpha: .16), colors.surface)
+        : const Color(0xfffbecee);
+    return Semantics(
+      liveRegion: true,
+      container: true,
+      child: DecoratedBox(
+        key: const ValueKey('send-problem'),
+        decoration: BoxDecoration(
+          color: back,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ExcludeSemantics(
+                child: Icon(
+                  problem.offline ? Icons.wifi_off : Icons.error_outline,
+                  key: ValueKey(
+                    problem.offline ? 'send-offline' : 'send-failed',
+                  ),
+                  size: 22,
+                  color: ink,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      problem.title,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        height: 1.4,
+                        color: ink,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      problem.body(button),
+                      style: TextStyle(fontSize: 13, height: 1.5, color: ink),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       ),

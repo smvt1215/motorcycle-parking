@@ -183,7 +183,7 @@ void main() {
   });
 
   for (final dismissal in ['完成', '關閉', '返回', '下滑']) {
-    testWidgets('建議成功後以$dismissal離開，同時關閉父面板', (tester) async {
+    testWidgets('建議成功後回到清單，以$dismissal離開清單回到詳情（#403）', (tester) async {
       tester.view.devicePixelRatio = 1;
       tester.view.physicalSize = const Size(390, 844);
       addTearDown(tester.view.resetPhysicalSize);
@@ -202,6 +202,10 @@ void main() {
       );
       await tester.tap(find.text('送出修改建議'));
       await tester.pumpAndSettle();
+      // Back on the list, which says what went; its 完成 closes it.
+      expect(find.text('提出修改建議'), findsOneWidget);
+      expect(find.text('「名稱」的建議已送出'), findsOneWidget);
+      expect(find.byKey(const ValueKey('suggestion-input')), findsNothing);
       expect(find.text('完成'), findsOneWidget);
       switch (dismissal) {
         case '完成':
@@ -224,6 +228,12 @@ void main() {
       // Return to the spot details, without accidentally popping that route.
       expect(find.byKey(const ValueKey('parking-spot-sheet')), findsOneWidget);
       expect(store.submissions, hasLength(1));
+      // Said once on the page under it (S6b ④); this store has no backend.
+      expect(
+        find.byKey(const ValueKey('suggestions-sent-toast')),
+        findsOneWidget,
+      );
+      expect(find.text('範例模式：建議沒有實際送出，只用來測試流程。'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     });

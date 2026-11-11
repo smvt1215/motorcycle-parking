@@ -7,11 +7,12 @@ import 'package:cupertino_ui/cupertino_ui.dart' as cu;
 import '../../domain/form_display.dart';
 import 'adaptive.dart';
 
-/// What the top bar's leading button does: close the whole form, or step
-/// back to the screen before it.
-enum FormHeaderLeading { cancel, back }
+/// What the top bar's leading button does: close the whole form (cancel
+/// while nothing has gone, close once something has, S6), or step back to
+/// the screen before it.
+enum FormHeaderLeading { cancel, close, back }
 
-/// A form's top bar. iOS: a 「取消」 text button or 「‹ 返回」 on the left
+/// A form's top bar. iOS: a 「取消」 or 「關閉」 text button or 「‹ 返回」 on the left
 /// and the title centred with an optional small subtitle. Android: a close
 /// or arrow_back icon button (48) and the title on the left.
 ///
@@ -72,14 +73,12 @@ class FormHeader extends StatelessWidget {
           children: [
             IconButton(
               key: const ValueKey('form-header-leading'),
-              tooltip: leading == FormHeaderLeading.cancel
-                  ? formClose
-                  : formBack,
+              tooltip: leading == FormHeaderLeading.back ? formBack : formClose,
               onPressed: onTap,
               icon: Icon(
-                leading == FormHeaderLeading.cancel
-                    ? Icons.close
-                    : Icons.arrow_back,
+                leading == FormHeaderLeading.back
+                    ? Icons.arrow_back
+                    : Icons.close,
               ),
             ),
             const SizedBox(width: 8),
@@ -131,9 +130,10 @@ class _CupertinoLeading extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = Theme.of(context).colorScheme.primary;
     final back = leading == FormHeaderLeading.back;
+    final word = leading == FormHeaderLeading.close ? formClose : formCancel;
     return Semantics(
       button: true,
-      label: back ? formBack : formCancel,
+      label: back ? formBack : word,
       excludeSemantics: true,
       onTap: onPressed,
       child: cu.CupertinoButton(
@@ -149,7 +149,7 @@ class _CupertinoLeading extends StatelessWidget {
                   Text(formBack, style: TextStyle(fontSize: 17, color: color)),
                 ],
               )
-            : Text(formCancel, style: TextStyle(fontSize: 16, color: color)),
+            : Text(word, style: TextStyle(fontSize: 16, color: color)),
       ),
     );
   }
@@ -158,17 +158,21 @@ class _CupertinoLeading extends StatelessWidget {
 /// The send button pinned to a form's bottom edge, with an optional small
 /// [note] under it (「管理員審核後才會更新地圖」). While [sending] it reads
 /// 「送出中…」 and cannot be pressed; a null [onPressed] also disables it.
+/// [above] sits over the button inside the bar: why the last send failed
+/// (S6b), which stays in view however far the form is scrolled.
 class SubmitBar extends StatelessWidget {
   const SubmitBar({
     super.key,
     required this.label,
     required this.onPressed,
     this.note,
+    this.above,
     this.sending = false,
   });
   final String label;
   final VoidCallback? onPressed;
   final String? note;
+  final Widget? above;
   final bool sending;
 
   @override
@@ -187,6 +191,10 @@ class SubmitBar extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (above case final above?) ...[
+                above,
+                const SizedBox(height: 8),
+              ],
               ConstrainedBox(
                 constraints: const BoxConstraints(minHeight: 52),
                 // Cupertino buttons do not report enabled state themselves.
