@@ -21,7 +21,8 @@ import '../../ui/adaptive/adaptive.dart';
 import '../../ui/detail_tokens.dart';
 import '../../ui/four_sign_plates.dart';
 
-import 'package:flutter/rendering.dart' show RenderAbstractViewport;
+import 'package:flutter/rendering.dart'
+    show RenderAbstractViewport, RenderProxyBox;
 
 import '../auth/sign_in.dart';
 import '../hidden_riders/spot_more_menu.dart';
@@ -43,8 +44,48 @@ import 'spot_seat_section.dart';
 
 /// Peek height: the preview (name, the four signs and the actions), with
 /// the map left visible above, the way map apps open a place.
-/// The sheet's resting height, as a fraction of the space it opens in.
+/// The sheet's resting height, as a fraction of the space it opens in: at
+/// least this much, more when the plates need it (A15).
 const spotSheetPeek = .42;
+
+/// The tallest the resting preview grows: past it the plates scroll inside
+/// the card (A15b ③).
+const spotSheetPeekMax = .62;
+
+/// The space below the plates, and above the handle, in the preview.
+const _previewMargins = 10.0 + 8.0;
+
+/// A size-reporting wrapper: tells [onHeight] its child's height after
+/// layout.
+class _MeasuredHeight extends SingleChildRenderObjectWidget {
+  const _MeasuredHeight({required this.onHeight, required super.child});
+  final ValueChanged<double> onHeight;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderMeasuredHeight(onHeight);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderMeasuredHeight renderObject,
+  ) => renderObject.onHeight = onHeight;
+}
+
+class _RenderMeasuredHeight extends RenderProxyBox {
+  _RenderMeasuredHeight(this.onHeight);
+  ValueChanged<double> onHeight;
+  double? _reported;
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    final height = size.height;
+    if (height == _reported) return;
+    _reported = height;
+    WidgetsBinding.instance.addPostFrameCallback((_) => onHeight(height));
+  }
+}
 
 /// Opens a spot's details over another page. The map embeds [SpotSheet]
 /// instead, so it stays movable and other spots stay tappable.
@@ -62,6 +103,7 @@ class SpotSheet extends StatefulWidget {
     required this.spot,
     this.onClose,
     this.sourceActions,
+    this.onPeek,
   });
   final AppStore store;
   final ParkingSpot spot;
@@ -72,6 +114,10 @@ class SpotSheet extends StatefulWidget {
   /// Actions on the spot's source, at the foot of 資料與查核 (where #280's
   /// ⋯ menu goes); null shows none.
   final Widget? sourceActions;
+
+  /// The resting preview's height as a share of the sheet's space (A15),
+  /// whenever it changes.
+  final ValueChanged<double>? onPeek;
   @override
   State<SpotSheet> createState() => _SpotSheetState();
 }
@@ -81,6 +127,73 @@ class _SpotSheetState extends State<SpotSheet> {
       (widget.onClose ?? () => Navigator.pop(context))();
 
   final extent = DraggableScrollableController();
+
+  /// The preview's own scroll, for plates past the card's 62% limit (A15b
+  /// ③): a sheet resting at its minimum would otherwise take every drag.
+  final previewScroll = ScrollController();
+
+  /// The preview's measured height (handle, name, plates), once laid out;
+  /// the sheet stays invisible until then so it opens at its final height.
+  double? previewHeight;
+
+  /// The resting height (A15): enough for the plates, within 42–62%.
+  double peek = spotSheetPeek;
+
+  /// The plates need more than the card's limit, so they scroll within it.
+  bool overflowing = false;
+
+  double? _reportedPeek;
+
+  void _measuredPreview(double height) {
+    if (!mounted || height == previewHeight) return;
+    setState(() => previewHeight = height);
+  }
+
+  /// [peek] for the space the sheet opens in; a resting sheet follows it.
+  void _layoutPeek(BuildContext context, double available) {
+    final height = previewHeight;
+    final was = peek;
+    if (height == null || !available.isFinite || available <= 0) return;
+    final need = height + _previewMargins + _footerHeight(context);
+    peek = (need / available).clamp(spotSheetPeek, spotSheetPeekMax);
+    overflowing = need > spotSheetPeekMax * available + .5;
+    if (peek < was && extent.isAttached && extent.size <= was + .001) {
+      // Only a smaller peek can leave a dragged sheet above it; a larger
+      // one the sheet clamps to itself.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && extent.isAttached) extent.jumpTo(peek);
+      });
+    }
+    if (peek != _reportedPeek) {
+      _reportedPeek = peek;
+      final value = peek;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.onPeek?.call(value);
+      });
+    }
+  }
+
+  /// A drag on the handle, where the plates scroll and the sheet no longer
+  /// takes drags from them (A15b ③).
+  void _dragHandle(DragUpdateDetails details) {
+    if (!extent.isAttached) return;
+    final delta = extent.pixelsToSize(details.delta.dy);
+    extent.jumpTo((extent.size - delta).clamp(peek, 1.0));
+  }
+
+  void _endHandleDrag(DragEndDetails details) {
+    if (!extent.isAttached) return;
+    final velocity = details.primaryVelocity ?? 0;
+    final up =
+        velocity < -300 || (velocity <= 300 && extent.size > (peek + 1) / 2);
+    unawaited(
+      extent.animateTo(
+        up ? 1 : peek,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOutCubic,
+      ),
+    );
+  }
 
   /// Each plate's section in the details (A2, decision 10).
   final sections = {for (final face in FourSignFace.values) face: GlobalKey()};
@@ -269,6 +382,7 @@ class _SpotSheetState extends State<SpotSheet> {
     spied?.removeListener(spy);
     copiedTimer?.cancel();
     extent.dispose();
+    previewScroll.dispose();
     super.dispose();
   }
 
@@ -306,48 +420,70 @@ class _SpotSheetState extends State<SpotSheet> {
     return NotificationListener<DraggableScrollableNotification>(
       onNotification: (n) {
         final pulled = n.extent >= .999;
-        if (pulled != full) setState(() => full = pulled);
+        if (pulled != full) {
+          // The full page scrolls as a whole; nothing stays offset in here.
+          if (pulled && previewScroll.hasClients) previewScroll.jumpTo(0);
+          setState(() => full = pulled);
+        }
         return false;
       },
-      child: DraggableScrollableSheet(
-        key: const ValueKey('parking-spot-sheet'),
-        controller: extent,
-        initialChildSize: spotSheetPeek,
-        minChildSize: spotSheetPeek,
-        maxChildSize: 1,
-        snap: true,
-        shouldCloseOnMinExtent: false,
-        expand: false,
-        builder: (ctx, scroll) {
-          if (!identical(spied, scroll)) {
-            spied?.removeListener(spy);
-            spied = scroll..addListener(spy);
-          }
-          return Listener(
-            onPointerDown: (event) {
-              start = event.position;
-              dismissGesture =
-                  extent.isAttached &&
-                  extent.size <= spotSheetPeek + .001 &&
-                  scroll.hasClients &&
-                  scroll.offset <= 0;
-            },
-            onPointerMove: (event) {
-              if (start == null || !dismissGesture || closing) return;
-              final delta = event.position - start!;
-              if (delta.dy > 80 && delta.dy > delta.dx.abs() * 1.2) {
-                closing = true;
-                close(ctx);
-              }
-            },
-            onPointerUp: (_) {
-              start = null;
-              dismissGesture = false;
-            },
-            onPointerCancel: (_) {
-              start = null;
-              dismissGesture = false;
-            },
+      child: LayoutBuilder(
+        builder: (context, box) {
+          _layoutPeek(context, box.maxHeight);
+          return _draggable(context, store, spot, photos);
+        },
+      ),
+    );
+  }
+
+  Widget _draggable(
+    BuildContext context,
+    AppStore store,
+    ParkingSpot spot,
+    List<String> photos,
+  ) {
+    return DraggableScrollableSheet(
+      key: const ValueKey('parking-spot-sheet'),
+      controller: extent,
+      initialChildSize: peek,
+      minChildSize: peek,
+      maxChildSize: 1,
+      snap: true,
+      shouldCloseOnMinExtent: false,
+      expand: false,
+      builder: (ctx, scroll) {
+        if (!identical(spied, scroll)) {
+          spied?.removeListener(spy);
+          spied = scroll..addListener(spy);
+        }
+        return Listener(
+          onPointerDown: (event) {
+            start = event.position;
+            dismissGesture =
+                extent.isAttached &&
+                extent.size <= peek + .001 &&
+                scroll.hasClients &&
+                scroll.offset <= 0 &&
+                (!previewScroll.hasClients || previewScroll.offset <= 0);
+          },
+          onPointerMove: (event) {
+            if (start == null || !dismissGesture || closing) return;
+            final delta = event.position - start!;
+            if (delta.dy > 80 && delta.dy > delta.dx.abs() * 1.2) {
+              closing = true;
+              close(ctx);
+            }
+          },
+          onPointerUp: (_) {
+            start = null;
+            dismissGesture = false;
+          },
+          onPointerCancel: (_) {
+            start = null;
+            dismissGesture = false;
+          },
+          child: Opacity(
+            opacity: previewHeight == null ? 0 : 1,
             child: Material(
               color: Theme.of(ctx).colorScheme.surface,
               // The full page is square; the preview floats over the map.
@@ -366,9 +502,9 @@ class _SpotSheetState extends State<SpotSheet> {
                 ),
               ),
             ),
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -431,9 +567,12 @@ class _SpotSheetState extends State<SpotSheet> {
     ];
     // Only where it has a place to go (A7, A7b); see [sightingPlaces].
     final reportable = sightableSpot(spot.id) && sightingPlaces(detail) != null;
-    final actions = SpotPreviewActions(
+    // Keyed by spot: another spot's bar starts at its left end (A15a ②).
+    SpotPreviewActions actionsAt(double edge) => SpotPreviewActions(
+      key: ValueKey(spot.id),
       street: !spot.isFacility,
       navigateSecondary: notParkable,
+      edge: edge,
       onNavigate: () => runAction(ctx, () => navigateTo(spot.lat, spot.lng)),
       onReport: reportable
           ? () => runAction(
@@ -473,13 +612,8 @@ class _SpotSheetState extends State<SpotSheet> {
     return LayoutBuilder(
       builder: (ctx, constraints) {
         final width = constraints.maxWidth - (full ? 32 : 40);
-        final footer = _footerHeight(
-          ctx,
-          width,
-          street: !spot.isFacility,
-          report: reportable,
-        );
-        // A short sheet (landscape, large text) keeps the actions in the
+        final footer = _footerHeight(ctx);
+        // A short sheet (a phone in landscape) keeps the actions in the
         // scrolling list so the header is never squeezed out.
         final pinned = constraints.maxHeight - footer >= _minDetailHeight;
         // Likewise the full page's header: pinned while the page keeps
@@ -528,58 +662,62 @@ class _SpotSheetState extends State<SpotSheet> {
                 ),
               ),
             Expanded(
-              // Not lazy: a plate can open any section at once, however
-              // far down it sits.
-              child: SingleChildScrollView(
-                controller: scroll,
-                padding: full
-                    ? const EdgeInsets.fromLTRB(16, 0, 16, 24)
-                    : const EdgeInsets.fromLTRB(20, 10, 20, 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (!full) ...[
-                      Center(
-                        child: Container(
-                          width: 40,
-                          height: 4,
-                          margin: const EdgeInsets.only(bottom: 16),
-                          decoration: BoxDecoration(
-                            color: colors.outline,
-                            borderRadius: BorderRadius.circular(2),
+              child: LayoutBuilder(
+                builder: (ctx, viewport) => _detailScroll(
+                  scroll,
+                  height: viewport.maxHeight,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (!full) ...[
+                        _MeasuredHeight(
+                          onHeight: _measuredPreview,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _handle(colors),
+                              // A hidden rider's spot opened from a list
+                              // (P17d).
+                              HiddenSpotBanner(store: store, spot: spot),
+                              SpotPreview(
+                                spot: spot,
+                                titleNote: titleNote,
+                                plates: plates,
+                                subtitle: subtitle,
+                                favorite: favorite,
+                                onFavorite: toggleFavorite,
+                                onShare: share,
+                                onClose: () => close(ctx),
+                                onPlate: showSection,
+                                besideRow: seatBesideRow(sign, now),
+                                closureLines: closureLines(
+                                  sign,
+                                  now,
+                                  details: false,
+                                ),
+                                disagrees: sign.seat.disagrees,
+                              ),
+                            ],
                           ),
                         ),
-                      ),
-                      // A hidden rider's spot opened from a list (P17d).
-                      HiddenSpotBanner(store: store, spot: spot),
-                      SpotPreview(
-                        spot: spot,
-                        titleNote: titleNote,
-                        plates: plates,
-                        subtitle: subtitle,
-                        favorite: favorite,
-                        onFavorite: toggleFavorite,
-                        onShare: share,
-                        onClose: () => close(ctx),
-                        onPlate: showSection,
-                        besideRow: seatBesideRow(sign, now),
-                        closureLines: closureLines(sign, now, details: false),
-                        disagrees: sign.seat.disagrees,
-                      ),
-                      const SizedBox(height: 14),
-                      Divider(height: 1, color: colors.outlineVariant),
-                    ] else if (!headerPinned) ...[
-                      const SizedBox(height: 6),
-                      header,
-                      Divider(height: 1, color: DetailColors.of(ctx).divider),
+                        const SizedBox(height: 14),
+                        Divider(height: 1, color: colors.outlineVariant),
+                      ] else if (!headerPinned) ...[
+                        const SizedBox(height: 6),
+                        header,
+                        Divider(height: 1, color: DetailColors.of(ctx).divider),
+                      ],
+                      if (full) ...[
+                        const SizedBox(height: 12),
+                        HiddenSpotBanner(store: store, spot: spot),
+                      ],
+                      ...body,
+                      if (!pinned) ...[
+                        const SizedBox(height: 16),
+                        actionsAt(0),
+                      ],
                     ],
-                    if (full) ...[
-                      const SizedBox(height: 12),
-                      HiddenSpotBanner(store: store, spot: spot),
-                    ],
-                    ...body,
-                    if (!pinned) ...[const SizedBox(height: 16), actions],
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -592,19 +730,69 @@ class _SpotSheetState extends State<SpotSheet> {
                 child: SafeArea(
                   top: false,
                   child: Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      full ? 16 : 20,
-                      10,
-                      full ? 16 : 20,
-                      10,
-                    ),
-                    child: actions,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: actionsAt(full ? 16 : 20),
                   ),
                 ),
               ),
           ],
         );
       },
+    );
+  }
+
+  /// The details' scroll. Two nested scroll views, so the same tree serves
+  /// both ways of moving: normally the sheet's own [scroll] takes every
+  /// drag (and grows the sheet from rest); with the plates past the card's
+  /// limit it stands still and [previewScroll] moves them within the card
+  /// (A15b ③): it fills the card, so it wins every drag there. The sheet's
+  /// own scroll keeps its physics throughout — switching them off would
+  /// cancel a drag pulling the full page down, and the sheet would spring
+  /// back. Not lazy: a plate can open any section at once, however far
+  /// down it sits.
+  Widget _detailScroll(
+    ScrollController scroll, {
+    required double height,
+    required Widget child,
+  }) {
+    final inCard = overflowing && !full;
+    return SingleChildScrollView(
+      controller: scroll,
+      child: SizedBox(
+        height: inCard ? height : null,
+        child: SingleChildScrollView(
+          controller: previewScroll,
+          physics: inCard ? null : const NeverScrollableScrollPhysics(),
+          padding: full
+              ? const EdgeInsets.fromLTRB(16, 0, 16, 24)
+              : const EdgeInsets.fromLTRB(20, 10, 20, 24),
+          child: child,
+        ),
+      ),
+    );
+  }
+
+  /// The preview's drag handle; it moves the sheet itself while the plates
+  /// scroll in the card (A15b ③).
+  Widget _handle(ColorScheme colors) {
+    final handle = Center(
+      child: Container(
+        width: 40,
+        height: 4,
+        margin: const EdgeInsets.only(bottom: 16),
+        decoration: BoxDecoration(
+          color: colors.outline,
+          borderRadius: BorderRadius.circular(2),
+        ),
+      ),
+    );
+    if (!overflowing) return handle;
+    return GestureDetector(
+      key: const ValueKey('spot-sheet-handle'),
+      behavior: HitTestBehavior.opaque,
+      onVerticalDragUpdate: _dragHandle,
+      onVerticalDragEnd: _endHandleDrag,
+      child: handle,
     );
   }
 
@@ -1300,19 +1488,9 @@ double _headerHeight(BuildContext context, ParkingSpot spot, double width) {
   return 6 + top + 10 + rows * plate + (rows - 1) * 8 + 6;
 }
 
-/// Upper estimate of the pinned footer: border, 24 padding, the safe area and
-/// one or two rows of buttons at the current text size.
-double _footerHeight(
-  BuildContext context,
-  double width, {
-  required bool street,
-  required bool report,
-}) =>
-    25 +
+/// The pinned footer: border, 20 padding, the safe area and the row of
+/// buttons at the current text size.
+double _footerHeight(BuildContext context) =>
+    21 +
     MediaQuery.paddingOf(context).bottom +
-    SpotPreviewActions.heightFor(
-      context,
-      width,
-      street: street,
-      report: report,
-    );
+    SpotPreviewActions.heightFor(context);

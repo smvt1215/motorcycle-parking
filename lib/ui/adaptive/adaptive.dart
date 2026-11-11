@@ -34,21 +34,38 @@ class AdaptiveButton extends StatelessWidget {
     required this.onPressed,
     this.icon,
     this.secondary = false,
+    this.sidePadding,
+    this.labelSize,
   });
   final String label;
   final VoidCallback? onPressed;
   final IconData? icon;
   final bool secondary;
+
+  /// Space on either side of the label, and the label's size before text
+  /// scaling, for a row that measures its own buttons (#414). Null keeps
+  /// each platform's default.
+  final double? sidePadding, labelSize;
   @override
   Widget build(BuildContext context) {
+    final side = sidePadding, size = labelSize;
     // Large text wraps the label instead of overflowing the button.
     final child = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         if (icon != null) ...[Icon(icon), const SizedBox(width: 8)],
-        Flexible(child: Text(label, textAlign: TextAlign.center)),
+        Flexible(
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: size == null ? null : TextStyle(fontSize: size),
+          ),
+        ),
       ],
     );
+    final cupertinoPadding = side == null
+        ? null
+        : EdgeInsets.symmetric(horizontal: side, vertical: 14);
     return ConstrainedBox(
       constraints: const BoxConstraints(minHeight: 48),
       child: nativeGlass
@@ -61,15 +78,35 @@ class AdaptiveButton extends StatelessWidget {
                 style: secondary
                     ? CNButtonStyle.glass
                     : CNButtonStyle.prominentGlass,
+                padding: side == null
+                    ? null
+                    : EdgeInsets.symmetric(horizontal: side),
+                // The native label ignores Flutter's text scaling.
+                labelFontSize: size == null
+                    ? null
+                    : MediaQuery.textScalerOf(context).scale(size),
               ),
             )
           : isCupertino
           ? secondary
-                ? cu.CupertinoButton.tinted(onPressed: onPressed, child: child)
-                : cu.CupertinoButton.filled(onPressed: onPressed, child: child)
+                ? cu.CupertinoButton.tinted(
+                    onPressed: onPressed,
+                    padding: cupertinoPadding,
+                    child: child,
+                  )
+                : cu.CupertinoButton.filled(
+                    onPressed: onPressed,
+                    padding: cupertinoPadding,
+                    child: child,
+                  )
           : M3EButton(
               onPressed: onPressed,
               style: secondary ? M3EButtonStyle.tonal : M3EButtonStyle.filled,
+              decoration: side == null
+                  ? null
+                  : M3EButtonDecoration(
+                      padding: EdgeInsets.symmetric(horizontal: side),
+                    ),
               child: child,
             ),
     );

@@ -274,12 +274,15 @@ class _DisagreesNote extends StatelessWidget {
   }
 }
 
-/// The preview's action bar (Main, A5, A6): 導航到入口 (a street spot:
-/// 導航) first, then 回報現場狀況 and 修改建議. One row when it fits,
-/// else the first on its own row and the others side by side (A5), else
-/// one per row. A null [onReport] leaves 回報現場狀況 out, where the rider has
-/// nothing to report on (see `sightingPlaces`).
-class SpotPreviewActions extends StatelessWidget {
+/// The action bar of the preview and the full page (A15a–d): 導航到入口 (a
+/// street spot: 導航), then 回報現場狀況 and 修改建議, always one row. It
+/// stands still when it fits, 導航 taking the width left over; a row a
+/// little too wide tightens its buttons' sides rather than scroll a few
+/// points. Wider than that the three slide together, 導航 first and not
+/// held in place, the cut button at the right edge fading out as the hint.
+/// A null [onReport] leaves 回報現場狀況 out, where the rider has nothing
+/// to report on (see `sightingPlaces`).
+class SpotPreviewActions extends StatefulWidget {
   const SpotPreviewActions({
     super.key,
     required this.street,
@@ -287,6 +290,7 @@ class SpotPreviewActions extends StatelessWidget {
     this.onReport,
     this.onSuggest,
     this.navigateSecondary = false,
+    this.edge = 0,
   });
   final bool street;
 
@@ -296,129 +300,194 @@ class SpotPreviewActions extends StatelessWidget {
   final VoidCallback onNavigate;
   final VoidCallback? onReport, onSuggest;
 
+  /// The page margin the row keeps; it slides out to the screen's edge
+  /// through this margin.
+  final double edge;
+
+  static const _gap = 8.0, _side = 24.0, _tightSide = 16.0, _labelSize = 16.0;
+
   static String navigateLabel({required bool street}) =>
       street ? '導航' : '導航到入口';
 
-  /// The secondary labels shown: 回報現場狀況 only with [report].
-  static List<String> _secondary({required bool report}) => [
-    if (report) '回報現場狀況',
-    '修改建議',
-  ];
+  /// The bar's height at the current text size.
+  static double heightFor(BuildContext context) =>
+      math.max(48.0, MediaQuery.textScalerOf(context).scale(20) + 28);
 
-  /// The room a button needs at the current text size: its label and 24
-  /// on either side.
-  static double _need(BuildContext context, String label) {
-    final painter = TextPainter(
-      text: TextSpan(
-        text: label,
-        style: TextStyle(fontSize: MediaQuery.textScalerOf(context).scale(16)),
-      ),
-      textDirection: TextDirection.ltr,
-      maxLines: 1,
-    )..layout();
-    final width = painter.width;
-    painter.dispose();
-    return width + 48;
+  /// The labels' width together at the current text size.
+  static double _labelsWidth(BuildContext context, List<String> labels) {
+    final size = MediaQuery.textScalerOf(context).scale(_labelSize);
+    var total = 0.0;
+    for (final label in labels) {
+      final painter = TextPainter(
+        text: TextSpan(
+          text: label,
+          style: TextStyle(fontSize: size, fontWeight: FontWeight.w600),
+        ),
+        textDirection: TextDirection.ltr,
+        maxLines: 1,
+      )..layout();
+      total += painter.width.ceilToDouble();
+      painter.dispose();
+    }
+    return total;
   }
 
-  /// Whether every button fits one row of [width].
-  static bool fitsRow(
+  /// The buttons' side padding for a row that fits [room], or null when it
+  /// has to slide.
+  static double? fittedSide(
     BuildContext context,
-    double width, {
-    required bool street,
-    required bool report,
-  }) {
-    final labels = [
-      navigateLabel(street: street),
-      ..._secondary(report: report),
-    ];
-    final need = labels.fold<double>(0, (a, l) => a + _need(context, l));
-    return need + 8 * (labels.length - 1) <= width;
+    double room,
+    List<String> labels,
+  ) {
+    final free =
+        room - _labelsWidth(context, labels) - _gap * (labels.length - 1);
+    final each = free / (labels.length * 2);
+    if (each >= _side) return _side;
+    return each >= _tightSide ? each.floorToDouble() : null;
   }
 
-  /// Whether the secondary buttons fit side by side under the first.
-  static bool fitsPair(
-    BuildContext context,
-    double width, {
-    required bool report,
-  }) {
-    final labels = _secondary(report: report);
-    final each = (width - 8 * (labels.length - 1)) / labels.length;
-    return labels.every((l) => _need(context, l) <= each);
+  @override
+  State<SpotPreviewActions> createState() => _SpotPreviewActionsState();
+}
+
+class _SpotPreviewActionsState extends State<SpotPreviewActions> {
+  final rail = ScrollController();
+
+  @override
+  void dispose() {
+    rail.dispose();
+    super.dispose();
   }
 
-  /// Upper estimate of the bar's height at [width].
-  static double heightFor(
-    BuildContext context,
-    double width, {
-    required bool street,
-    required bool report,
-  }) {
-    final button = math.max(
-      48.0,
-      MediaQuery.textScalerOf(context).scale(20) + 28,
-    );
-    if (fitsRow(context, width, street: street, report: report)) return button;
-    if (fitsPair(context, width, report: report)) return button * 2 + 8;
-    final rows = 1 + _secondary(report: report).length;
-    return button * rows + 8 * (rows - 1);
-  }
+  AdaptiveButton _button(
+    String key,
+    String label,
+    VoidCallback? onPressed,
+    double side, {
+    required bool secondary,
+  }) => AdaptiveButton(
+    key: ValueKey(key),
+    label: label,
+    secondary: secondary,
+    sidePadding: side,
+    labelSize: SpotPreviewActions._labelSize,
+    onPressed: onPressed,
+  );
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      final width = constraints.maxWidth;
-      final report = onReport != null;
-      final navigate = AdaptiveButton(
-        key: const ValueKey('spot-navigate'),
-        label: navigateLabel(street: street),
-        secondary: navigateSecondary,
-        onPressed: onNavigate,
+      final edge = widget.edge;
+      final navigateLabel = SpotPreviewActions.navigateLabel(
+        street: widget.street,
       );
-      final secondary = [
+      final report = widget.onReport != null;
+      final fitted = SpotPreviewActions.fittedSide(
+        context,
+        constraints.maxWidth - edge * 2,
+        [navigateLabel, if (report) '回報現場狀況', '修改建議'],
+      );
+      final side = fitted ?? SpotPreviewActions._side;
+      final navigate = _button(
+        'spot-navigate',
+        navigateLabel,
+        widget.onNavigate,
+        side,
+        secondary: widget.navigateSecondary,
+      );
+      final others = [
         if (report)
-          AdaptiveButton(
-            key: const ValueKey('spot-report'),
-            label: '回報現場狀況',
+          _button(
+            'spot-report',
+            '回報現場狀況',
+            widget.onReport,
+            side,
             secondary: true,
-            onPressed: onReport,
           ),
-        AdaptiveButton(
-          key: const ValueKey('spot-suggest'),
-          label: '修改建議',
+        _button(
+          'spot-suggest',
+          '修改建議',
+          widget.onSuggest,
+          side,
           secondary: true,
-          onPressed: onSuggest,
         ),
       ];
-      List<Widget> spaced(List<Widget> items, Widget gap) => [
-        for (final (i, w) in items.indexed) ...[if (i > 0) gap, w],
+      List<Widget> row(Widget first) => [
+        first,
+        for (final button in others) ...[
+          const SizedBox(width: SpotPreviewActions._gap),
+          button,
+        ],
       ];
-      if (fitsRow(context, width, street: street, report: report)) {
-        return Row(
-          children: spaced([
-            Expanded(child: navigate),
-            ...secondary,
-          ], const SizedBox(width: 8)),
+      if (fitted != null) {
+        return Padding(
+          padding: EdgeInsets.symmetric(horizontal: edge),
+          child: Row(children: row(Expanded(child: navigate))),
         );
       }
-      if (fitsPair(context, width, report: report)) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            navigate,
-            const SizedBox(height: 8),
-            Row(
-              children: spaced([
-                for (final b in secondary) Expanded(child: b),
-              ], const SizedBox(width: 8)),
+      return Stack(
+        children: [
+          Semantics(
+            container: true,
+            explicitChildNodes: true,
+            label: '更多動作，可左右滑動',
+            child: SingleChildScrollView(
+              key: const ValueKey('spot-actions-rail'),
+              controller: rail,
+              scrollDirection: Axis.horizontal,
+              padding: EdgeInsets.symmetric(horizontal: edge),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: row(navigate),
+              ),
             ),
-          ],
-        );
-      }
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: spaced([navigate, ...secondary], const SizedBox(height: 8)),
+          ),
+          Positioned.fill(child: _RailFades(rail: rail)),
+        ],
       );
     },
   );
+}
+
+/// The fades at the ends of the sliding bar, in the sheet's own colour: a
+/// side fades only while there is more to reveal on it.
+class _RailFades extends StatelessWidget {
+  const _RailFades({required this.rail});
+  final ScrollController rail;
+
+  @override
+  Widget build(BuildContext context) {
+    final surface = Theme.of(context).colorScheme.surface;
+    Widget fade(String key, double width, Alignment from) => Container(
+      key: ValueKey(key),
+      width: width,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: from,
+          end: Alignment(-from.x, 0),
+          colors: [surface, surface.withValues(alpha: 0)],
+        ),
+      ),
+    );
+    return IgnorePointer(
+      child: ListenableBuilder(
+        listenable: rail,
+        builder: (context, _) {
+          final ready = rail.hasClients && rail.position.hasContentDimensions;
+          final more = ready ? rail.position.maxScrollExtent : 1.0;
+          final at = ready ? rail.position.pixels : 0.0;
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (at > .5)
+                fade('spot-actions-fade-start', 24, Alignment.centerLeft),
+              const Spacer(),
+              if (at < more - .5)
+                fade('spot-actions-fade-end', 36, Alignment.centerRight),
+            ],
+          );
+        },
+      ),
+    );
+  }
 }
