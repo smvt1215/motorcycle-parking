@@ -104,6 +104,7 @@ class SpotSheet extends StatefulWidget {
     this.onClose,
     this.sourceActions,
     this.onPeek,
+    this.panel = false,
   });
   final AppStore store;
   final ParkingSpot spot;
@@ -118,6 +119,12 @@ class SpotSheet extends StatefulWidget {
   /// The resting preview's height as a share of the sheet's space (A15),
   /// whenever it changes.
   final ValueChanged<double>? onPeek;
+
+  /// The tablet's side panel (T1, T2) in place of the sheet: the name and
+  /// the plates stay at the top, the details scroll under them and the
+  /// actions hold the foot. It has no resting height, so it never calls
+  /// [onPeek]; whoever shows it places it.
+  final bool panel;
   @override
   State<SpotSheet> createState() => _SpotSheetState();
 }
@@ -131,6 +138,9 @@ class _SpotSheetState extends State<SpotSheet> {
   /// The preview's own scroll, for plates past the card's 62% limit (A15b
   /// ③): a sheet resting at its minimum would otherwise take every drag.
   final previewScroll = ScrollController();
+
+  /// The side panel's scroll (T1, T2).
+  final panelScroll = ScrollController();
 
   /// The preview's measured height (handle, name, plates), once laid out;
   /// the sheet stays invisible until then so it opens at its final height.
@@ -250,7 +260,10 @@ class _SpotSheetState extends State<SpotSheet> {
   /// Marks the section at the top of the page as the rider scrolls.
   void spy() {
     final scroll = spied;
-    if (jumping != null || !full || scroll == null || !scroll.hasClients) {
+    if (jumping != null ||
+        !(full || widget.panel) ||
+        scroll == null ||
+        !scroll.hasClients) {
       return;
     }
     final position = scroll.position;
@@ -338,6 +351,9 @@ class _SpotSheetState extends State<SpotSheet> {
   @override
   void didUpdateWidget(SpotSheet old) {
     super.didUpdateWidget(old);
+    // The window crossed the tablet width (a rotation, Split View): the
+    // sheet opens at rest again, the panel at its top.
+    if (old.panel != widget.panel) full = false;
     if (old.spot.id != widget.spot.id) {
       reread = null;
       unawaited(_reread());
@@ -383,6 +399,7 @@ class _SpotSheetState extends State<SpotSheet> {
     copiedTimer?.cancel();
     extent.dispose();
     previewScroll.dispose();
+    panelScroll.dispose();
     super.dispose();
   }
 
@@ -396,7 +413,13 @@ class _SpotSheetState extends State<SpotSheet> {
     final store = widget.store, spot = shown;
     final colors = Theme.of(context).colorScheme;
     final photos = SpotPhotos.usable(spot.photoUrls);
-    // Tablets keep a phone-width sheet instead of spanning the screen.
+    if (widget.panel) {
+      return PointerInterceptor(
+        intercepting: kIsWeb,
+        child: _panel(context, store, spot, photos),
+      );
+    }
+    // A wide window without the tablet layout keeps a phone-width sheet.
     return Align(
       alignment: Alignment.bottomCenter,
       child: ConstrainedBox(
@@ -405,6 +428,30 @@ class _SpotSheetState extends State<SpotSheet> {
         child: PointerInterceptor(
           intercepting: kIsWeb,
           child: _sheet(context, store, spot, colors, photos),
+        ),
+      ),
+    );
+  }
+
+  /// The details in the tablet's side panel (T1, T2).
+  Widget _panel(
+    BuildContext context,
+    AppStore store,
+    ParkingSpot spot,
+    List<String> photos,
+  ) {
+    if (!identical(spied, panelScroll)) {
+      spied?.removeListener(spy);
+      spied = panelScroll..addListener(spy);
+    }
+    return SidePanel(
+      semanticLabel: '停車點詳情',
+      child: AnimatedBuilder(
+        animation: store,
+        builder: (ctx, _) => MinuteTicker(
+          clock: store.clock,
+          builder: (ctx, now) =>
+              _content(ctx, panelScroll, store, spot, photos, now),
         ),
       ),
     );
@@ -534,7 +581,8 @@ class _SpotSheetState extends State<SpotSheet> {
     // The details read riders' reports of 30 minutes, the preview's plates
     // those of 15 (A6, A10).
     final detail = signOver(sightingDetailWindow);
-    final sign = full ? detail : signOver(sightingMapWindow);
+    // The panel shows the details at once, so its plates read them too.
+    final sign = full || widget.panel ? detail : signOver(sightingMapWindow);
     // A chosen segment (A10) decides 能不能停; the other plates stay the
     // street's overview (user decision 2026-10-31).
     final selected = sign.street
@@ -609,6 +657,31 @@ class _SpotSheetState extends State<SpotSheet> {
       now,
       notParkable: notParkable,
     );
+    // The spot's own name held for review (P17b ⑪): under the title.
+    final heldName = store.heldForOwner(spot, 'spot_name')
+        ? const ContentHeldNote()
+        : null;
+    if (widget.panel) {
+      return _panelContent(
+        ctx,
+        scroll,
+        store,
+        spot,
+        preview: SpotPreview(
+          spot: spot,
+          titleNote: heldName,
+          plates: plates,
+          subtitle: subtitle,
+          favorite: favorite,
+          onFavorite: toggleFavorite,
+          onShare: share,
+          onClose: () => close(ctx),
+          onPlate: showSection,
+        ),
+        body: body,
+        actionsAt: actionsAt,
+      );
+    }
     return LayoutBuilder(
       builder: (ctx, constraints) {
         final width = constraints.maxWidth - (full ? 32 : 40);
@@ -623,10 +696,7 @@ class _SpotSheetState extends State<SpotSheet> {
             pinned &&
             constraints.maxHeight - footer - _headerHeight(ctx, spot, width) >=
                 _minDetailHeight;
-        // The spot's own name held for review (P17b ⑪): under the title.
-        final titleNote = store.heldForOwner(spot, 'spot_name')
-            ? const ContentHeldNote()
-            : null;
+        final titleNote = heldName;
         final header = SpotDetailHeader(
           spot: spot,
           titleNote: titleNote,
@@ -732,6 +802,99 @@ class _SpotSheetState extends State<SpotSheet> {
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 10),
                     child: actionsAt(full ? 16 : 20),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// The side panel (T1, T2): the grabber, the name and the plates stay at
+  /// the top, the four sections scroll under them, the actions hold the
+  /// foot above whatever the window keeps there (the iPad's tab bar). A
+  /// panel too short for all three lets the top, then the actions, scroll
+  /// with the rest.
+  Widget _panelContent(
+    BuildContext ctx,
+    ScrollController scroll,
+    AppStore store,
+    ParkingSpot spot, {
+    required Widget preview,
+    required List<Widget> body,
+    required Widget Function(double edge) actionsAt,
+  }) {
+    final colors = Theme.of(ctx).colorScheme;
+    final divider = DetailColors.of(ctx).divider;
+    final bottom = MediaQuery.paddingOf(ctx).bottom;
+    final head = Column(
+      key: const ValueKey('spot-panel-header'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [const SidePanelGrabber(), preview, const SizedBox(height: 12)],
+    );
+    return LayoutBuilder(
+      builder: (ctx, constraints) {
+        final footer = _footerHeight(ctx);
+        final pinned = constraints.maxHeight - footer >= _minDetailHeight;
+        final headPinned =
+            pinned &&
+            constraints.maxHeight -
+                    footer -
+                    _panelHeaderHeight(ctx, spot, constraints.maxWidth - 32) >=
+                _minDetailHeight;
+        return Column(
+          children: [
+            if (headPinned)
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: colors.surface,
+                  border: Border(bottom: BorderSide(color: divider)),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: head,
+                ),
+              ),
+            Expanded(
+              // Not lazy: a plate can open any section at once.
+              child: SingleChildScrollView(
+                key: const ValueKey('spot-panel-scroll'),
+                controller: scroll,
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  0,
+                  16,
+                  24 + (pinned ? 0 : bottom),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (!headPinned) ...[
+                      head,
+                      Divider(height: 1, color: divider),
+                    ],
+                    const SizedBox(height: 12),
+                    HiddenSpotBanner(store: store, spot: spot),
+                    ...body,
+                    if (!pinned) ...[const SizedBox(height: 16), actionsAt(0)],
+                  ],
+                ),
+              ),
+            ),
+            if (pinned)
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: colors.surface,
+                  border: Border(top: BorderSide(color: divider)),
+                ),
+                child: SafeArea(
+                  top: false,
+                  left: false,
+                  right: false,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: actionsAt(16),
                   ),
                 ),
               ),
@@ -1486,6 +1649,32 @@ double _headerHeight(BuildContext context, ParkingSpot spot, double width) {
   final plate =
       math.max(target, scale.scale(11) * 1.3 + scale.scale(14) * 1.25 + 8) + 8;
   return 6 + top + 10 + rows * plate + (rows - 1) * 8 + 6;
+}
+
+/// Upper estimate of the side panel's top at [width]: the grabber, the
+/// name beside its three buttons, the subtitle and the plates.
+double _panelHeaderHeight(
+  BuildContext context,
+  ParkingSpot spot,
+  double width,
+) {
+  final scale = MediaQuery.textScalerOf(context);
+  final painter = TextPainter(
+    text: TextSpan(
+      text: spot.name,
+      style: TextStyle(fontSize: scale.scale(20), height: 1.3),
+    ),
+    textDirection: TextDirection.ltr,
+  )..layout(maxWidth: (width - 48 * 3).clamp(1, double.infinity));
+  final name = painter.height;
+  painter.dispose();
+  final title = math.max(48.0, 6 + name + 2 + scale.scale(13) * 1.4 * 2);
+  final rows = FourSignPlates.gridFor(context, width) ? 2 : 1;
+  final plate = math.max(
+    64.0,
+    scale.scale(11) * 1.3 * 2 + scale.scale(16) * 1.3 + 16,
+  );
+  return 19 + title + 12 + rows * plate + (rows - 1) * 8 + 12;
 }
 
 /// The pinned footer: border, 20 padding, the safe area and the row of

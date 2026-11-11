@@ -31,6 +31,8 @@ Future<void> showSightingSheet(
       spot: spot,
       places: sightingPlaces(sign) ?? const [],
     ),
+    // A7c ⑦⑧: on a tablet in the side panel's place, over the details.
+    sidePanel: true,
   );
   if (sent == true && context.mounted) showMessage(context, sightingSent);
 }

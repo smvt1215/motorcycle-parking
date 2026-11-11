@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
@@ -46,9 +47,10 @@ bool mapInteractive({
 /// Whether the map paints the sheet's ground behind the tab bar while a
 /// sheet is open (A1b): only where the map runs behind a floating bar
 /// ([tabBarInset] above 0: iOS; Android's opaque bar ends the page above
-/// it), and not on a tablet (T1, T2: the details are a side panel).
+/// it), and not in the tablet layout (T1, T2: the details are a side panel
+/// that runs to the bottom itself).
 bool sheetBarBacking({required double tabBarInset, required Size screen}) =>
-    tabBarInset > 0 && screen.shortestSide < 600;
+    tabBarInset > 0 && !isTabletSize(screen);
 
 class MapPage extends ConsumerStatefulWidget {
   const MapPage({super.key, this.showControls = true, this.covered = false});
@@ -145,6 +147,12 @@ class _MapPageState extends ConsumerState<MapPage> {
   /// The spot sheet sits on the root overlay, over the tab bar as in map
   /// apps, while the rest of the map still takes gestures.
   final sheetPortal = OverlayPortalController()..show();
+
+  /// The open spot's sheet, one key per spot: the same state moves between
+  /// the phone's overlay and the tablet's side panel when the window
+  /// crosses the tablet width (a rotation, Split View) and keeps its
+  /// scroll and the chosen segment.
+  GlobalKey sheetKey = GlobalKey(debugLabel: 'spot-sheet');
 
   /// Kept for dispose, where `ref` can no longer be read.
   late final launchStore = ref.read(storeProvider);
@@ -409,6 +417,7 @@ class _MapPageState extends ConsumerState<MapPage> {
     if (selected?.id != spot.id) {
       sheetPeek = spotSheetPeek;
       recenterOnPeek = true;
+      sheetKey = GlobalKey(debugLabel: 'spot-sheet');
     }
     setState(() => selected = spot);
     unawaited(
@@ -484,8 +493,19 @@ class _MapPageState extends ConsumerState<MapPage> {
     double? zoom, {
     bool above = false,
   }) async {
-    var inset = 0.0;
-    if (above) {
+    var inset = 0.0, right = 0.0;
+    if (isTabletLayout(context)) {
+      // The panel column covers the map's leading side while a spot is
+      // open (T1, T2): the point centres in the map left in view, beside
+      // the panel instead of above a sheet.
+      if (above || selected != null) {
+        final box = context.findRenderObject() as RenderBox;
+        right = sidePanelCenterShift(
+          mapWidth: box.size.width,
+          covered: sidePanelGutter + sidePanelWidth,
+        );
+      }
+    } else if (above) {
       final screen = MediaQuery.sizeOf(context);
       final box = context.findRenderObject() as RenderBox;
       final gap =
@@ -501,12 +521,17 @@ class _MapPageState extends ConsumerState<MapPage> {
       inset = (panel - gap - mapPadding).clamp(0, double.infinity) / 2;
     }
     if (AppConfig.useGoogleMaps) {
-      await googleMap.currentState?.moveTo(point, zoom, abovePanel: inset);
+      await googleMap.currentState?.moveTo(
+        point,
+        zoom,
+        abovePanel: inset,
+        leftOfCenter: -right,
+      );
     } else {
       controller.move(
         point,
         zoom ?? controller.camera.zoom,
-        offset: Offset(0, -inset),
+        offset: Offset(right, -inset),
       );
     }
   }
@@ -600,7 +625,7 @@ class _MapPageState extends ConsumerState<MapPage> {
         kinds.isNotEmpty ||
         parkableNowOnly ||
         liveFilter != AvailabilityFilter.off;
-    final searchHeight = 32 + MediaQuery.textScalerOf(context).scale(20);
+    final searchHeight = mapSearchHeight(context);
     // 44pt on iOS, 48dp on Android (Main boards), taller with larger text.
     final filterHeight = (16 + MediaQuery.textScalerOf(context).scale(14))
         .clamp(filterChipHeight, double.infinity);
@@ -674,7 +699,10 @@ class _MapPageState extends ConsumerState<MapPage> {
       child: OverlayPortal(
         controller: sheetPortal,
         overlayLocation: OverlayChildLocation.rootOverlay,
-        overlayChildBuilder: (overlay) => open == null
+        // The tablet's side panel is part of the page (see [_layers]), under
+        // the tab bar the iPad keeps at its foot.
+        overlayChildBuilder: (overlay) =>
+            open == null || isTabletLayout(overlay)
             ? const SizedBox.shrink()
             : Positioned(
                 left: 0,
@@ -693,7 +721,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                       context: overlay,
                       removeBottom: barInset > 0,
                       child: SpotSheet(
-                        key: ValueKey(open.id),
+                        key: sheetKey,
                         store: store,
                         spot: open,
                         onClose: _closeSpot,
@@ -770,6 +798,161 @@ class _MapPageState extends ConsumerState<MapPage> {
     final openCapsules = open == null
         ? const <AvailabilityCapsule>[]
         : _capsulesOf(store, open, now);
+    final tablet = isTabletLayout(context);
+    // The tablet's top row and the map's own column, right of the panel's.
+    final top = mapSearchTop(context);
+    final legendSize = isCupertino ? 44.0 : 48.0;
+    const mapLeft = sidePanelGutter + sidePanelWidth + sidePanelGutter;
+    final window = MediaQuery.sizeOf(context);
+    final legendBeside = isCupertino || window.width > window.height;
+    final rowBottom = top + math.max(searchHeight, filterHeight);
+    // The tablet's map actions sit at the window's foot (T1, T2: 28), not
+    // above the tab bar: that is in the panel column or on the rail.
+    final actionsBottom = math.max(
+      28.0,
+      MediaQuery.viewPaddingOf(context).bottom + 16,
+    );
+    final searchField = Material(
+      color: colors.surface,
+      elevation: 4,
+      shadowColor: const Color(0x44000000),
+      borderRadius: BorderRadius.circular(34),
+      child: SizedBox(
+        height: searchHeight,
+        child: Row(
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(left: 16, right: 10),
+              child: Icon(
+                Icons.local_parking_rounded,
+                color: colors.primary,
+                size: 26,
+              ),
+            ),
+            Expanded(
+              child: TextField(
+                key: const ValueKey('parking-search'),
+                controller: searchController,
+                focusNode: searchFocus,
+                textInputAction: TextInputAction.search,
+                style: const TextStyle(fontSize: 18),
+                onTap: () => setState(() => searchResultsSuppressed = false),
+                onChanged: (_) =>
+                    setState(() => searchResultsSuppressed = false),
+                onTapOutside: (_) => searchFocus.unfocus(),
+                onSubmitted: (_) => _submitSearch(store, matches),
+                decoration: InputDecoration(
+                  hintText: '搜尋此範圍停車點',
+                  border: InputBorder.none,
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                  suffixIcon: searchController.text.isEmpty
+                      ? null
+                      : IconButton(
+                          tooltip: '清除搜尋',
+                          onPressed: searchController.clear,
+                          icon: const Icon(Icons.close, size: 20),
+                        ),
+                ),
+              ),
+            ),
+            TextFieldTapRegion(
+              child: Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: IconButton.filledTonal(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: '搜尋停車點',
+                  onPressed: query.isEmpty
+                      ? null
+                      : () => _submitSearch(store, matches),
+                  icon: const Icon(Icons.search),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    Widget filters(EdgeInsets padding) => SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: padding,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Main: 車種, 現在可停, 有即時空位; the space
+          // kinds (P1) and clearing follow.
+          MapFilterChip(
+            key: const ValueKey('vehicle-filter'),
+            label: store.vehicle.label,
+            vehicle: store.vehicle,
+            selected: true,
+            toggle: false,
+            onTap: () => openVehicleSelector(store),
+          ),
+          MapFilterChip(
+            key: const ValueKey('parkable-filter'),
+            label: parkableNowLabel,
+            selected: parkableNowOnly,
+            onTap: () => setState(() {
+              parkableNowOnly = !parkableNowOnly;
+              if (!parkableNowOnly) _stopParkableNow();
+            }),
+          ),
+          if (store.availabilitySource.enabled)
+            MapFilterChip(
+              key: const ValueKey('availability-filter'),
+              label: availabilityFilterLabel(
+                liveFilter == AvailabilityFilter.off
+                    ? AvailabilityFilter.available
+                    : liveFilter,
+              ),
+              selected: liveFilter != AvailabilityFilter.off,
+              beta: store.availabilityBetaCities.isNotEmpty,
+              onTap: () => setState(
+                () => availabilityFilter = liveFilter == AvailabilityFilter.off
+                    ? AvailabilityFilter.available
+                    : AvailabilityFilter.off,
+              ),
+            ),
+          MapFilterChip(
+            key: const ValueKey('space-filter'),
+            label: spaceKindChipLabel(kinds),
+            selected: kinds.isNotEmpty,
+            toggle: false,
+            onTap: () => _openSpaceSelector(store),
+          ),
+          if (filtered)
+            MapFilterChip(
+              key: const ValueKey('clear-filters'),
+              label: clearFiltersLabel,
+              toggle: false,
+              onTap: _clearFilters,
+            ),
+        ],
+      ),
+    );
+    final legend = SizedBox.square(
+      dimension: isCupertino ? 44 : 48,
+      child: _MapIconPill(
+        key: const ValueKey('map-legend-button'),
+        tooltip: '地圖怎麼看',
+        icon: Icons.help_outline,
+        iconSize: 24,
+        onTap: () => openMapLegend(context, fromMap: true),
+      ),
+    );
+    Widget errorCard() => Material(
+      color: colors.errorContainer,
+      borderRadius: BorderRadius.circular(16),
+      child: ListTile(
+        title: Text(store.error!),
+        trailing: IconButton(
+          tooltip: '重新整理',
+          onPressed: store.reload,
+          icon: const Icon(Icons.refresh),
+        ),
+      ),
+    );
     return Stack(
       children: [
         if (AppConfig.useGoogleMaps)
@@ -985,200 +1168,89 @@ class _MapPageState extends ConsumerState<MapPage> {
           ),
         if (widget.showControls) ...[
           for (final overlay in <Widget>[
-            SafeArea(
-              bottom: false,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
-                    child: Material(
-                      color: colors.surface,
-                      elevation: 4,
-                      shadowColor: const Color(0x44000000),
-                      borderRadius: BorderRadius.circular(34),
-                      child: SizedBox(
-                        height: searchHeight,
-                        child: Row(
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.only(
-                                left: 16,
-                                right: 10,
-                              ),
-                              child: Icon(
-                                Icons.local_parking_rounded,
-                                color: colors.primary,
-                                size: 26,
-                              ),
-                            ),
-                            Expanded(
-                              child: TextField(
-                                key: const ValueKey('parking-search'),
-                                controller: searchController,
-                                focusNode: searchFocus,
-                                textInputAction: TextInputAction.search,
-                                style: const TextStyle(fontSize: 18),
-                                onTap: () => setState(
-                                  () => searchResultsSuppressed = false,
-                                ),
-                                onChanged: (_) => setState(
-                                  () => searchResultsSuppressed = false,
-                                ),
-                                onTapOutside: (_) => searchFocus.unfocus(),
-                                onSubmitted: (_) =>
-                                    _submitSearch(store, matches),
-                                decoration: InputDecoration(
-                                  hintText: '搜尋此範圍停車點',
-                                  border: InputBorder.none,
-                                  isDense: true,
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    vertical: 10,
-                                  ),
-                                  suffixIcon: searchController.text.isEmpty
-                                      ? null
-                                      : IconButton(
-                                          tooltip: '清除搜尋',
-                                          onPressed: searchController.clear,
-                                          icon: const Icon(
-                                            Icons.close,
-                                            size: 20,
-                                          ),
-                                        ),
-                                ),
-                              ),
-                            ),
-                            TextFieldTapRegion(
-                              child: Padding(
-                                padding: const EdgeInsets.only(right: 6),
-                                child: IconButton.filledTonal(
-                                  visualDensity: VisualDensity.compact,
-                                  tooltip: '搜尋停車點',
-                                  onPressed: query.isEmpty
-                                      ? null
-                                      : () => _submitSearch(store, matches),
-                                  icon: const Icon(Icons.search),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  SizedBox(
-                    height: filterHeight,
-                    // Few pills: build all of them so none is skipped lazily.
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          // Main: 車種, 現在可停, 有即時空位; the space
-                          // kinds (P1) and clearing follow.
-                          MapFilterChip(
-                            key: const ValueKey('vehicle-filter'),
-                            label: store.vehicle.label,
-                            vehicle: store.vehicle,
-                            selected: true,
-                            toggle: false,
-                            onTap: () => openVehicleSelector(store),
-                          ),
-                          MapFilterChip(
-                            key: const ValueKey('parkable-filter'),
-                            label: parkableNowLabel,
-                            selected: parkableNowOnly,
-                            onTap: () => setState(() {
-                              parkableNowOnly = !parkableNowOnly;
-                              if (!parkableNowOnly) _stopParkableNow();
-                            }),
-                          ),
-                          if (store.availabilitySource.enabled)
-                            MapFilterChip(
-                              key: const ValueKey('availability-filter'),
-                              label: availabilityFilterLabel(
-                                liveFilter == AvailabilityFilter.off
-                                    ? AvailabilityFilter.available
-                                    : liveFilter,
-                              ),
-                              selected: liveFilter != AvailabilityFilter.off,
-                              beta: store.availabilityBetaCities.isNotEmpty,
-                              onTap: () => setState(
-                                () => availabilityFilter =
-                                    liveFilter == AvailabilityFilter.off
-                                    ? AvailabilityFilter.available
-                                    : AvailabilityFilter.off,
-                              ),
-                            ),
-                          MapFilterChip(
-                            key: const ValueKey('space-filter'),
-                            label: spaceKindChipLabel(kinds),
-                            selected: kinds.isNotEmpty,
-                            toggle: false,
-                            onTap: () => _openSpaceSelector(store),
-                          ),
-                          if (filtered)
-                            MapFilterChip(
-                              key: const ValueKey('clear-filters'),
-                              label: clearFiltersLabel,
-                              toggle: false,
-                              onTap: _clearFilters,
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  // Reference, not a filter: a corner button under the
-                  // filters on the trailing edge (Main board: 44pt on iOS
-                  // 4 below the filters, 48dp on Android 8 below).
-                  Align(
-                    alignment: AlignmentDirectional.centerEnd,
-                    child: Padding(
-                      padding: EdgeInsetsDirectional.only(
-                        top: isCupertino ? 4 : 8,
-                        end: 16,
-                      ),
-                      child: SizedBox.square(
-                        dimension: isCupertino ? 44 : 48,
-                        child: _MapIconPill(
-                          key: const ValueKey('map-legend-button'),
-                          tooltip: '地圖怎麼看',
-                          icon: Icons.help_outline,
-                          iconSize: 24,
-                          onTap: () => openMapLegend(context, fromMap: true),
-                        ),
-                      ),
-                    ),
-                  ),
-                  if (store.error != null)
+            if (!tablet)
+              SafeArea(
+                bottom: false,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                      child: Material(
-                        color: colors.errorContainer,
-                        borderRadius: BorderRadius.circular(16),
-                        child: ListTile(
-                          title: Text(store.error!),
-                          trailing: IconButton(
-                            tooltip: '重新整理',
-                            onPressed: store.reload,
-                            icon: const Icon(Icons.refresh),
-                          ),
-                        ),
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
+                      child: searchField,
+                    ),
+                    SizedBox(
+                      height: filterHeight,
+                      child: filters(
+                        const EdgeInsets.symmetric(horizontal: 16),
                       ),
                     ),
-                ],
+                    // Reference, not a filter: a corner button under the
+                    // filters on the trailing edge (Main board: 44pt on iOS
+                    // 4 below the filters, 48dp on Android 8 below).
+                    Align(
+                      alignment: AlignmentDirectional.centerEnd,
+                      child: Padding(
+                        padding: EdgeInsetsDirectional.only(
+                          top: isCupertino ? 4 : 8,
+                          end: 16,
+                        ),
+                        child: legend,
+                      ),
+                    ),
+                    if (store.error != null)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                        child: errorCard(),
+                      ),
+                  ],
+                ),
+              )
+            else ...[
+              // T1, T2: the search field heads the panel column, the
+              // filters run beside it over the map.
+              Positioned(
+                key: const ValueKey('tablet-search'),
+                top: top,
+                left: sidePanelGutter,
+                width: sidePanelWidth,
+                height: searchHeight,
+                child: searchField,
               ),
-            ),
+              Positioned(
+                key: const ValueKey('tablet-filters'),
+                top: top + math.max(0, (searchHeight - filterHeight) / 2),
+                left: mapLeft,
+                right: legendBeside ? 16 + legendSize + 12 : 0,
+                height: filterHeight,
+                child: filters(EdgeInsets.only(right: legendBeside ? 4 : 16)),
+              ),
+              // Beside the filters, or under them where an Android tablet
+              // held upright leaves them the whole width (T1 Android).
+              Positioned(
+                top: legendBeside
+                    ? top + (searchHeight - legendSize) / 2
+                    : rowBottom + 8,
+                right: 16,
+                child: legend,
+              ),
+              if (store.error != null)
+                Positioned(
+                  top: rowBottom + 12,
+                  left: mapLeft,
+                  right: legendBeside ? 16 : 16 + legendSize + 12,
+                  child: errorCard(),
+                ),
+            ],
             if (store.mapNotice != null)
               Positioned(
-                top:
-                    MediaQuery.paddingOf(context).top +
-                    searchHeight +
-                    filterHeight +
-                    22,
+                top: tablet
+                    ? rowBottom + 12
+                    : MediaQuery.paddingOf(context).top +
+                          searchHeight +
+                          filterHeight +
+                          22,
                 // Clear of the legend button on the trailing edge.
-                left: 68,
+                left: tablet ? mapLeft : 68,
                 right: 68,
                 child: Center(
                   child: Material(
@@ -1203,16 +1275,21 @@ class _MapPageState extends ConsumerState<MapPage> {
                 excluded.isNotEmpty &&
                 !store.loading)
               Positioned(
-                top:
-                    MediaQuery.paddingOf(context).top +
-                    searchHeight +
-                    filterHeight +
-                    72,
-                left: 16,
+                top: tablet
+                    ? rowBottom + 64
+                    : MediaQuery.paddingOf(context).top +
+                          searchHeight +
+                          filterHeight +
+                          72,
+                left: tablet ? mapLeft : 16,
                 right: 16,
                 // Above the two stacked map actions, so the card never
                 // covers them; a tall card scrolls instead.
-                bottom: tabBarInset + 16 + MapActions.width * 2 + 12 + 16,
+                bottom:
+                    (tablet ? actionsBottom : tabBarInset + 16) +
+                    MapActions.width * 2 +
+                    12 +
+                    16,
                 child: Align(
                   alignment: Alignment.topCenter,
                   child: ConstrainedBox(
@@ -1238,10 +1315,12 @@ class _MapPageState extends ConsumerState<MapPage> {
                   ),
                 ),
               ),
-            if (open == null)
+            // A phone's sheet covers them; the tablet's panel leaves the
+            // map, and them, in view (T1, T2).
+            if (open == null || tablet)
               Positioned(
                 right: 16,
-                bottom: tabBarInset + 16,
+                bottom: tablet ? actionsBottom : tabBarInset + 16,
                 child: MapActions(
                   onLocate: () => runAction(context, () async {
                     await store.locate();
@@ -1253,9 +1332,13 @@ class _MapPageState extends ConsumerState<MapPage> {
             // Notice and OSM credit share one column so they never overlap,
             // and stay clear of the record button and the iOS tab bar.
             Positioned(
-              left: 16,
+              // On a tablet beside the panel column, which holds the iPad's
+              // tab bar at its foot.
+              left: tablet ? mapLeft : 16,
               right: 32 + MapActions.width,
-              bottom: tabBarInset + (AppConfig.useGoogleMaps ? 76 : 8),
+              bottom: tablet
+                  ? actionsBottom - 16 + 8
+                  : tabBarInset + (AppConfig.useGoogleMaps ? 76 : 8),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1302,11 +1385,25 @@ class _MapPageState extends ConsumerState<MapPage> {
                 ],
               ),
             ),
+            // The open spot's details in the panel column (T1, T2), under
+            // the search results.
+            if (tablet && open != null)
+              SidePanelSlot(
+                key: const ValueKey('spot-side-panel'),
+                child: SpotSheet(
+                  key: sheetKey,
+                  store: store,
+                  spot: open,
+                  onClose: _closeSpot,
+                  panel: true,
+                ),
+              ),
             if (searchFocus.hasFocus && !searchResultsSuppressed)
               Positioned(
                 top: MediaQuery.paddingOf(context).top + searchHeight + 12,
                 left: 16,
-                right: 16,
+                right: tablet ? null : 16,
+                width: tablet ? sidePanelWidth : null,
                 child: TextFieldTapRegion(
                   child: Material(
                     color: colors.surface,
