@@ -177,13 +177,13 @@ class ApproxAddressRow extends StatelessWidget {
       ApproxStatus.found => (
         Icons.pin_drop,
         '約 ${door?.road} ${door?.number} 號附近',
-        '由地圖位置推估，只給你對照，不會存進資料。',
+        '已查詢到附近門牌，查詢結果僅供畫面參考，不會提交。',
         true,
       ),
       ApproxStatus.roadOnly => (
         Icons.add_road,
         '約在 ${door?.road} 上',
-        '查不到門牌號碼，只查到路名。這是推估，不會存進資料。',
+        '門牌號碼無法查詢，查詢結果僅供畫面參考，不會提交。',
         true,
       ),
       ApproxStatus.none => (
