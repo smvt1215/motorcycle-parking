@@ -33,7 +33,7 @@ insert into revoked values
   ('zone_patch_stated(jsonb,jsonb)'),
   -- 202611091000: helpers added by #369.
   ('charge_of_fee(jsonb)'), ('segments_charge_follow_fee(jsonb,jsonb,jsonb)'),
-  -- 202611111000: helpers added by #399.
+  -- 202611111300: helpers added by #399.
   ('segment_charge_of(jsonb,jsonb)'), ('segment_fee_of(jsonb,jsonb)'),
   ('segments_charge_follow_spot_fee(jsonb,jsonb,jsonb,jsonb)'), ('spot_segments_charge_follow_fee()');
 

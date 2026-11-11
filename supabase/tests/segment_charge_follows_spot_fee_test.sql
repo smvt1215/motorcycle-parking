@@ -1,5 +1,5 @@
 -- A segment's condition.charge follows the rates it actually pays, whichever
--- write changes them (202611111000_segment_charge_follows_spot_fee.sql, #399).
+-- write changes them (202611111300_segment_charge_follows_spot_fee.sql, #399).
 begin;
 create extension if not exists pgtap with schema extensions;
 set search_path=public,extensions;
