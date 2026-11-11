@@ -404,8 +404,12 @@ class _MapPageState extends ConsumerState<MapPage> {
   /// Centers the selected point above the panel once. Closing the panel
   /// preserves the resulting camera position, as in Google Maps.
   void _showSpot(ParkingSpot spot, {double? zoom}) {
-    sheetPeek = spotSheetPeek;
-    recenterOnPeek = true;
+    // The same spot keeps its sheet, which reports no height again: the
+    // measured one still holds.
+    if (selected?.id != spot.id) {
+      sheetPeek = spotSheetPeek;
+      recenterOnPeek = true;
+    }
     setState(() => selected = spot);
     unawaited(
       runAction(

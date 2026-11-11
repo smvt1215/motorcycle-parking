@@ -745,7 +745,10 @@ class _SpotSheetState extends State<SpotSheet> {
   /// both ways of moving: normally the sheet's own [scroll] takes every
   /// drag (and grows the sheet from rest); with the plates past the card's
   /// limit it stands still and [previewScroll] moves them within the card
-  /// (A15b ③). Not lazy: a plate can open any section at once, however far
+  /// (A15b ③): it fills the card, so it wins every drag there. The sheet's
+  /// own scroll keeps its physics throughout — switching them off would
+  /// cancel a drag pulling the full page down, and the sheet would spring
+  /// back. Not lazy: a plate can open any section at once, however far
   /// down it sits.
   Widget _detailScroll(
     ScrollController scroll, {
@@ -755,7 +758,6 @@ class _SpotSheetState extends State<SpotSheet> {
     final inCard = overflowing && !full;
     return SingleChildScrollView(
       controller: scroll,
-      physics: inCard ? const NeverScrollableScrollPhysics() : null,
       child: SizedBox(
         height: inCard ? height : null,
         child: SingleChildScrollView(

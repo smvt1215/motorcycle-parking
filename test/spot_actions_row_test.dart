@@ -384,6 +384,41 @@ void main() {
     });
   });
 
+  testWidgets('卡片到上限：整頁慢慢往下拉，回到預覽卡', variant: _platforms, (tester) async {
+    final store = await detailStore(tester, VehicleType.heavy);
+    await openDetail(
+      tester,
+      store,
+      detailLot,
+      size: const Size(375, 667),
+      scale: 2,
+    );
+    const header = ValueKey('spot-detail-header');
+    expect(find.byKey(header), findsOneWidget);
+    // Slowly: the sheet leaves the full page many frames before the finger
+    // lifts, and the drag has to outlive that change.
+    final gesture = await tester.startGesture(const Offset(187, 420));
+    for (var i = 0; i < 40; i++) {
+      await gesture.moveBy(const Offset(0, 10));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(find.byKey(header), findsNothing);
+    expect(find.byKey(const ValueKey('spot-sheet-handle')), findsOneWidget);
+    // At rest the plates scroll inside the card again, the card stays put.
+    final top = tester.getRect(find.byKey(_navigate)).top;
+    await tester.dragFrom(
+      tester.getCenter(find.text(detailLot.name)),
+      const Offset(0, -200),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(header), findsNothing);
+    expect(tester.getRect(find.byKey(_navigate)).top, top);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('地圖置中跟著卡片實際高度', (tester) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
     addTearDown(() => debugDefaultTargetPlatformOverride = null);
@@ -410,6 +445,26 @@ void main() {
     // At the default 42% it would sit about 60 points lower, under the card.
     expect(marker.center.dy, lessThan(card.top));
     expect(marker.center.dy, closeTo(card.top / 2, 30));
+
+    // Tapping the marker already selected centres it above the same card,
+    // not above the default 42% one: the open sheet reports no new height.
+    // The marker's own tap, called directly: a test tap at its centre does
+    // not reach it on this screen.
+    tester
+        .widget<GestureDetector>(
+          find
+              .ancestor(
+                of: find.byKey(const ValueKey('selected-spot-marker')),
+                matching: find.byType(GestureDetector),
+              )
+              .first,
+        )
+        .onTap!();
+    await tester.pumpAndSettle();
+    final again = tester.getRect(
+      find.byWidgetPredicate((w) => w is SpotMarker && w.selected),
+    );
+    expect(again.center.dy, closeTo(marker.center.dy, 1));
     debugDefaultTargetPlatformOverride = null;
     await tester.pumpWidget(const SizedBox.shrink());
   });
