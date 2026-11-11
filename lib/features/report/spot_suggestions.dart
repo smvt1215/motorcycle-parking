@@ -124,8 +124,8 @@ String reportSummary(String reason) {
 const goneLabel = '這裡已經不能停車';
 
 /// Opens 提出修改建議 for [spot]. Each suggestion sent comes back to the
-/// list (S6, #403); once the sheet closes, the page under it says how many
-/// went (S6b ④).
+/// list (S6, #403); once the sheet closes, a toast says how many went
+/// (S6b ④).
 Future<void> showSpotSuggestions(
   BuildContext context,
   AppStore store,
@@ -133,13 +133,10 @@ Future<void> showSpotSuggestions(
 ) async {
   final session = SuggestionSession();
   // Read before the sheet opens; the page under it may be gone afterwards.
-  final messenger = ScaffoldMessenger.maybeOf(context);
-  final media = MediaQuery.maybeOf(context);
-  // Details shown as a sheet of their own (over 收藏 or 我送出的建議) stay
-  // open afterwards and would cover the page's snack bar.
-  final overSheet = _overRootSheet(context);
   final overlay = Navigator.of(context, rootNavigator: true).overlay;
-  final view = overSheet ? null : _contributionsOpener(context);
+  // Details shown as a sheet of their own (over 收藏 or 我送出的建議) would
+  // stay on top of the page 查看 opens, so there it is left out.
+  final view = _overRootSheet(context) ? null : _contributionsOpener(context);
   await showAdaptiveSheet<void>(
     context,
     (ctx) => SuggestionScope(
@@ -151,18 +148,11 @@ Future<void> showSpotSuggestions(
   );
   final count = session.sent.length;
   session.dispose();
-  if (count == 0) return;
+  if (count == 0 || overlay == null || !overlay.mounted) return;
   // 範例模式 sent nothing, and has no 我送出的建議 to look at.
-  final text = store.demo ? suggestionDemoNote : suggestionSentToast(count);
-  if (overSheet) {
-    if (overlay != null && overlay.mounted) _showSheetToast(overlay, text);
-    return;
-  }
-  if (messenger == null || !messenger.mounted) return;
   _showSentToast(
-    messenger,
-    media,
-    text: text,
+    overlay,
+    text: store.demo ? suggestionDemoNote : suggestionSentToast(count),
     onView: store.demo ? null : view,
   );
 }
@@ -182,38 +172,63 @@ bool _overRootSheet(BuildContext context) {
   return !(ModalRoute.of(inner)?.isFirst ?? true);
 }
 
-/// The toast over details shown as a sheet: drawn above every route, since
-/// the page's own snack bar would sit behind the sheet. No 查看: the sheet
-/// would stay on top of the page it opens.
-void _showSheetToast(OverlayState overlay, String text) {
+/// Opens 貢獻 › 我送出的建議, or null without the app's router. The list
+/// cannot be opened at one spot, so 查看 opens all of it.
+VoidCallback? _contributionsOpener(BuildContext context) {
+  final router = GoRouter.maybeOf(context);
+  if (router == null) return null;
+  return () => router.go(myContributionsPath);
+}
+
+/// 「已送出 N 項建議，審核通過後會更新地圖」 with 查看 (S6b ④), as an entry
+/// of the root overlay. A snack bar would not do: the details the rider
+/// comes back to are drawn over the page's scaffold, as a sheet of their
+/// own or, on the map, through a portal into the root overlay, and would
+/// cover it.
+void _showSentToast(
+  OverlayState overlay, {
+  required String text,
+  VoidCallback? onView,
+}) {
   late final OverlayEntry entry;
+  void close() {
+    if (entry.mounted) entry.remove();
+  }
+
   entry = OverlayEntry(
-    builder: (_) => _SheetToast(
+    builder: (_) => _SentToast(
       text: text,
-      onDone: () {
-        if (entry.mounted) entry.remove();
-      },
+      onDone: close,
+      onView: onView == null
+          ? null
+          : () {
+              close();
+              onView();
+            },
     ),
   );
   overlay.insert(entry);
 }
 
-class _SheetToast extends StatefulWidget {
-  const _SheetToast({required this.text, required this.onDone});
+/// The toast itself: about 8 seconds, kept while a screen reader runs, put
+/// away by a tap; clear of the bar at the foot of the page or details, and
+/// within the details' width on a tablet.
+class _SentToast extends StatefulWidget {
+  const _SentToast({required this.text, required this.onDone, this.onView});
   final String text;
   final VoidCallback onDone;
+  final VoidCallback? onView;
 
   @override
-  State<_SheetToast> createState() => _SheetToastState();
+  State<_SentToast> createState() => _SentToastState();
 }
 
-class _SheetToastState extends State<_SheetToast> {
+class _SentToastState extends State<_SentToast> {
   Timer? timer;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Kept while a screen reader runs, as the snack bar is; a tap closes it.
     timer?.cancel();
     timer = MediaQuery.accessibleNavigationOf(context)
         ? null
@@ -229,16 +244,17 @@ class _SheetToastState extends State<_SheetToast> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final media = MediaQuery.of(context);
+    final touch = isCupertino ? 44.0 : 48.0;
     return Positioned(
       left: 0,
       right: 0,
-      bottom: media.viewPadding.bottom + 12,
+      // Above the tab bar or the details' buttons (S6b ④).
+      bottom: MediaQuery.viewPaddingOf(context).bottom + 96,
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 560),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Semantics(
               liveRegion: true,
               container: true,
@@ -251,10 +267,7 @@ class _SheetToastState extends State<_SheetToast> {
                 child: InkWell(
                   onTap: widget.onDone,
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 14,
-                    ),
+                    padding: const EdgeInsets.fromLTRB(16, 4, 6, 4),
                     child: Row(
                       children: [
                         Icon(
@@ -264,11 +277,26 @@ class _SheetToastState extends State<_SheetToast> {
                         ),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: Text(
-                            text,
-                            style: TextStyle(color: colors.onInverseSurface),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            child: Text(
+                              widget.text,
+                              style: TextStyle(color: colors.onInverseSurface),
+                            ),
                           ),
                         ),
+                        if (widget.onView case final onView?)
+                          TextButton(
+                            key: const ValueKey('suggestions-sent-view'),
+                            onPressed: onView,
+                            style: TextButton.styleFrom(
+                              foregroundColor: colors.inversePrimary,
+                              minimumSize: Size(touch, touch),
+                            ),
+                            child: const Text(suggestionToastView),
+                          )
+                        else
+                          const SizedBox(width: 10),
                       ],
                     ),
                   ),
@@ -280,57 +308,6 @@ class _SheetToastState extends State<_SheetToast> {
       ),
     );
   }
-
-  String get text => widget.text;
-}
-
-/// Opens 貢獻 › 我送出的建議, or null without the app's router. The list
-/// cannot be opened at one spot, so 查看 opens all of it.
-VoidCallback? _contributionsOpener(BuildContext context) {
-  final router = GoRouter.maybeOf(context);
-  if (router == null) return null;
-  return () => router.go(myContributionsPath);
-}
-
-/// 「已送出 N 項建議，審核通過後會更新地圖」 with 查看 (S6b ④): floating,
-/// about 8 seconds, kept while a screen reader runs; within the details'
-/// width on a tablet.
-void _showSentToast(
-  ScaffoldMessengerState messenger,
-  MediaQueryData? media, {
-  required String text,
-  VoidCallback? onView,
-}) {
-  messenger
-    ..hideCurrentSnackBar()
-    ..showSnackBar(
-      SnackBar(
-        key: const ValueKey('suggestions-sent-toast'),
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 8),
-        persist: media?.accessibleNavigation ?? false,
-        width: (media?.size.width ?? 0) >= 680 ? 560 : null,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(isCupertino ? 22 : 8),
-        ),
-        content: Builder(
-          builder: (context) => Row(
-            children: [
-              Icon(
-                Icons.check_circle,
-                size: 20,
-                color: DefaultTextStyle.of(context).style.color,
-              ),
-              const SizedBox(width: 8),
-              Expanded(child: Text(text)),
-            ],
-          ),
-        ),
-        action: onView == null
-            ? null
-            : SnackBarAction(label: suggestionToastView, onPressed: onView),
-      ),
-    );
 }
 
 /// Whether suggestions can name [spot]'s zones and segments: TDX spots have

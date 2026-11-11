@@ -201,7 +201,7 @@ class ApproxAddressRow extends StatelessWidget {
       ApproxStatus.dailyLimit => (
         Icons.hourglass_empty,
         '今天的地址查詢次數已用完，明天會恢復',
-        '和「搜尋地址」共用次數。不顯示門牌，不影響送出。',
+        '不顯示門牌，不影響送出。',
         false,
       ),
       ApproxStatus.serviceLimit => (

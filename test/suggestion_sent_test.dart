@@ -76,6 +76,7 @@ Future<_Store> _open(
   double scale = 1,
   Brightness brightness = Brightness.light,
   bool router = false,
+  bool portal = false,
 }) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = size;
@@ -91,13 +92,16 @@ Future<_Store> _open(
     // ignore: deprecated_member_use
     child: MaterialUiCompatibilityBridge(child: child!),
   );
-  final home = Scaffold(
-    body: Builder(
-      builder: (context) => TextButton(
-        onPressed: () => showSpotSuggestions(context, store, spot),
-        child: const Text('開啟'),
-      ),
+  final opener = Builder(
+    builder: (context) => TextButton(
+      onPressed: () => showSpotSuggestions(context, store, spot),
+      child: const Text('開啟'),
     ),
+  );
+  final home = Scaffold(
+    // The map's details: a portal into the root overlay, over the scaffold
+    // and down to the foot of the page.
+    body: portal ? _Details(child: opener) : opener,
   );
   final theme = ThemeData(brightness: brightness);
   if (router) {
@@ -149,6 +153,57 @@ Future<void> _send(WidgetTester tester, [String label = '送出修改建議']) a
         .first,
   );
   await _tap(tester, button);
+}
+
+final _toast = find.byKey(const ValueKey('suggestions-sent-toast'));
+
+/// The toast is on screen, over whatever else is, and fits it.
+void _expectToast(WidgetTester tester, Size size) {
+  expect(_toast.hitTestable(), findsOneWidget);
+  final rect = tester.getRect(_toast);
+  expect(rect.left, greaterThanOrEqualTo(0));
+  expect(rect.right, lessThanOrEqualTo(size.width));
+  expect(rect.bottom, lessThanOrEqualTo(size.height));
+  expect(rect.width, lessThanOrEqualTo(560));
+}
+
+/// Puts the toast away, as a tap does, so its timer does not outlive the
+/// test.
+Future<void> _closeToast(WidgetTester tester) async {
+  await tester.tapAt(tester.getTopLeft(_toast) + const Offset(24, 12));
+  await tester.pump();
+  expect(_toast, findsNothing);
+}
+
+/// Stands in for the map's details, which stay open under the list: drawn
+/// in the root overlay, over the page's scaffold.
+class _Details extends StatefulWidget {
+  const _Details({required this.child});
+  final Widget child;
+
+  @override
+  State<_Details> createState() => _DetailsState();
+}
+
+class _DetailsState extends State<_Details> {
+  final portal = OverlayPortalController()..show();
+
+  @override
+  Widget build(BuildContext context) => OverlayPortal(
+    controller: portal,
+    overlayLocation: OverlayChildLocation.rootOverlay,
+    overlayChildBuilder: (_) => Positioned(
+      left: 0,
+      right: 0,
+      bottom: 0,
+      height: 420,
+      child: Material(
+        key: const ValueKey('details'),
+        child: Center(child: widget.child),
+      ),
+    ),
+    child: const SizedBox.expand(),
+  );
 }
 
 Future<void> _tapKey(WidgetTester tester, String key) =>
@@ -300,7 +355,7 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('form-header-leading')));
         await tester.pumpAndSettle();
         expect(find.byType(FormFlow), findsNothing);
-        expect(find.byType(SnackBar), findsNothing);
+        expect(_toast, findsNothing);
 
         await tester.tap(find.text('開啟'));
         await tester.pumpAndSettle();
@@ -312,8 +367,12 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.byType(FormFlow), findsNothing);
         expect(find.text('已送出 2 項建議，審核通過後會更新地圖'), findsOneWidget);
+        _expectToast(tester, const Size(390, 844));
         // Without the app's router there is nowhere for 查看 to go.
         expect(find.text('查看'), findsNothing);
+        // It goes by itself.
+        await tester.pump(const Duration(seconds: 8));
+        expect(_toast, findsNothing);
 
         // The marks were only that opening's.
         await tester.tap(find.text('開啟'));
@@ -332,8 +391,52 @@ void main() {
         await tester.tap(find.text('查看'));
         await tester.pumpAndSettle();
         expect(find.text('我送出的建議頁'), findsOneWidget);
+        expect(_toast, findsNothing);
         expect(tester.takeException(), isNull);
       }, variant: TargetPlatformVariant({platform}));
+
+      for (final (size, scale, brightness) in const [
+        (Size(390, 844), 1.0, Brightness.light),
+        (Size(390, 844), 2.0, Brightness.dark),
+        (Size(820, 1180), 1.0, Brightness.dark),
+        (Size(820, 1180), 2.0, Brightness.light),
+      ]) {
+        final label =
+            '${size.width.toInt()}×${size.height.toInt()}、$scale 倍、${brightness.name}';
+        testWidgets('地圖詳情蓋在頁面上時，提示條與「查看」仍在最上層：$label', (tester) async {
+          await _open(
+            tester,
+            _lot,
+            size: size,
+            scale: scale,
+            brightness: brightness,
+            router: true,
+            portal: true,
+          );
+          await _sendName(tester);
+          await _tap(tester, find.widgetWithText(AdaptiveButton, '完成'));
+          // The details are still there, over the scaffold, and the toast
+          // is over them.
+          expect(find.byKey(const ValueKey('details')), findsOneWidget);
+          expect(find.byType(SnackBar), findsNothing);
+          _expectToast(tester, size);
+          final toast = tester.widget<Material>(_toast);
+          final colors = Theme.of(tester.element(_toast)).colorScheme;
+          expect(toast.color, colors.inverseSurface);
+          final view = find.byKey(const ValueKey('suggestions-sent-view'));
+          expect(view.hitTestable(), findsOneWidget);
+          expect(
+            tester.getSize(view).height,
+            greaterThanOrEqualTo(platform == TargetPlatform.iOS ? 44 : 48),
+          );
+          expect(tester.takeException(), isNull);
+          await tester.tap(view);
+          await tester.pumpAndSettle();
+          expect(find.text('我送出的建議頁'), findsOneWidget);
+          expect(_toast, findsNothing);
+          expect(tester.takeException(), isNull);
+        }, variant: TargetPlatformVariant({platform}));
+      }
 
       testWidgets('「這裡已經不能停車」送出後不詢問，完成即關閉修改建議', (tester) async {
         final store = await _open(tester, _lot);
@@ -462,6 +565,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text(suggestionDemoNote), findsOneWidget);
         expect(find.textContaining('審核通過後會更新地圖'), findsNothing);
+        await _closeToast(tester);
       }, variant: TargetPlatformVariant({platform}));
 
       for (final (size, scale, brightness) in const [
@@ -549,8 +653,9 @@ void main() {
 
           await _tap(tester, done);
           expect(find.byType(FormFlow), findsNothing);
-          expect(find.byType(SnackBar), findsOneWidget);
+          _expectToast(tester, size);
           expect(tester.takeException(), isNull);
+          await _closeToast(tester);
         }, variant: TargetPlatformVariant({platform}));
       }
     });
