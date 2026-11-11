@@ -165,6 +165,8 @@ interface Setup {
   schedule?: (body: Record<string, unknown>) => Reply;
   cancel?: () => Reply;
   retry?: () => Reply;
+  /** Holds `retry_case_action` until it resolves. */
+  retryGate?: Promise<void>;
 }
 
 const receipt = (id: string, seconds = 5) => ({
@@ -225,6 +227,7 @@ function backend(setup: Setup) {
         reply = setup.cancel?.() ?? { body: { cancelled: true } };
         break;
       case 'retry_case_action':
+        await setup.retryGate;
         reply = setup.retry?.() ?? {
           body: { action_id: 'retry-1', run_at: new Date(Date.now() + 5000).toISOString() },
         };
@@ -540,6 +543,56 @@ describe('案件詳情的處理', () => {
     await within(dock()).findByText(/秒後寄出/);
     await tick(3000);
     expect(await within(dock()).findByText('回覆沒有寄出')).toBeInTheDocument();
+  });
+
+  it('drops the answer to a 再寄一次 sent before signing out', async () => {
+    let release = () => undefined as void;
+    const retryGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const first = supportDetail(row(1)).messages[0]!;
+    const { postgrest, calls } = backend({
+      items: [row(1, { state: 'send_failed', rank: 0 }), row(2)],
+      actions: {
+        [UUID(1)]: [
+          {
+            id: 'failed-1',
+            case_type: 'support',
+            case_id: UUID(1),
+            action: 'reply',
+            status: 'done',
+            run_at: new Date().toISOString(),
+            irreversible: false,
+            attempts: 1,
+            error: null,
+            actor: 'me',
+            expected_version: null,
+            payload: {},
+            created_at: new Date().toISOString(),
+            started_at: null,
+            finished_at: null,
+            message_id: 'm1',
+            delivery_status: 'failed',
+            send_error: null,
+            address_editable: false,
+          },
+        ],
+      },
+      retryGate,
+      messages: [
+        first,
+        { ...first, id: 'm1', direction: 'out', channel: 'admin', delivery_status: 'failed', attempts: 5 },
+      ],
+    });
+    const { store } = open(postgrest, `/pending/${UUID(1)}`);
+    await user.click(await screen.findByRole('button', { name: '再寄一次' }));
+    await waitFor(() => expect(calls.some((c) => c.url === 'retry_case_action')).toBe(true));
+    act(() => {
+      store.dispatch(actionsReset());
+    });
+    release();
+    await tick(100);
+    expect(store.getState().pendingActions.actions).toEqual([]);
   });
 
   it('freezes the reply while it is being scheduled', async () => {
