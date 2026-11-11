@@ -2,7 +2,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2.108.1';
 import { response } from '../_shared/http.ts';
 import { googleProvider, googleReverse } from './google.ts';
 import { handle, LimitReached } from './handler.ts';
-import type { Candidate, Provider, ReverseProvider } from './query.ts';
+import type { Provider, ReverseProvider } from './query.ts';
 
 // Google Geocoding (docs/ADMIN_WEB.md 後端變更 7). Without the secret every
 // search answers `not_configured`; the key never leaves this function.
@@ -47,21 +47,12 @@ Deno.serve((req) => {
         admin: data.user.app_metadata?.role === 'admin' && c.aal === 'aal2',
       };
     },
-    async begin(caller, cacheKey) {
-      const { data, error } = await admin.rpc('geocode_begin', {
+    async count(caller) {
+      const { error } = await admin.rpc('geocode_count', {
         p_user: caller.id,
         p_admin: caller.admin,
-        p_key: cacheKey,
       });
       if (error) throw error.code === 'P0001' ? new LimitReached() : error;
-      return (data as Candidate[] | null) ?? null;
-    },
-    async store(cacheKey, candidates) {
-      const { error } = await admin.rpc('geocode_store', {
-        p_key: cacheKey,
-        p_candidates: candidates,
-      });
-      if (error) throw error;
     },
   });
 });

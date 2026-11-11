@@ -1,6 +1,8 @@
 // Google Geocoding API (docs/ADMIN_WEB.md 後端變更 7, chosen 2026-10-25).
-// Results are shown only on Google maps (Service Specific Terms 6.2), and
-// the shared cache keeps them at most 30 days (6.3.1, see the migration).
+// Results are shown only on Google maps (Service Specific Terms 6.2) and
+// are never cached: 6.3.1 covers only latitude and longitude, and 6.3.2
+// keeps address text to the rider who asked and never in place of another
+// call (#411, migration 202611111000).
 import {
   type Candidate,
   type CandidateKind,
@@ -238,9 +240,9 @@ async function callGoogle(
   }
 }
 
-// Reverse geocoding for the door shown beside a Google map. The answer is an
-// address, so it is never cached across riders (Service Specific Terms
-// 6.3.2): the handler returns it and nothing stores it.
+// Reverse geocoding for the door shown beside a Google map. Like a search,
+// the handler returns the answer and nothing stores it (Service Specific
+// Terms 6.3.2).
 export function googleReverse(
   key: string,
   fetcher: typeof fetch = fetch,

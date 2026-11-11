@@ -70,17 +70,6 @@ export function parseQuery(input: string): ParsedQuery {
   return { kind: 'text', text };
 }
 
-// Cache entries are shared between riders, so the key holds only what the
-// provider saw: the query and the bias point rounded to about 5 km.
-export function cacheKey(q: ParsedQuery, near?: LatLng): string {
-  const bias = near
-    ? `${(Math.round(near.lat * 20) / 20).toFixed(2)},${
-      (Math.round(near.lng * 20) / 20).toFixed(2)
-    }`
-    : '-';
-  return `${q.kind}|${q.text}|${bias}`;
-}
-
 // The spot tables accept latitude 20–27 and longitude 118–123.
 const inTaiwan = (c: Candidate) =>
   c.lat >= 20 && c.lat <= 27 && c.lng >= 118 && c.lng <= 123;
