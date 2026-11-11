@@ -19,9 +19,9 @@ export interface Policy {
 /** User decisions 2026-11-07 (PM_ANS Q_PRIVACY_PAGE): version 1.0, dated the day it goes live. */
 export const privacy: Policy = {
   title: '隱私權政策',
-  version: '1.3',
-  effective: '2026-11-09',
-  updated: '2026-11-09',
+  version: '1.4',
+  effective: '2026-11-11',
+  updated: '2026-11-11',
   markdown: privacyText,
   notice:
     '這份政策尚待專業人士審閱，之後可能調整。調整時會更新版本與生效日期，並在「十二、政策修改」說明改了什麼。',
