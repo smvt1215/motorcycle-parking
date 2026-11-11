@@ -112,6 +112,12 @@ def to_json(expr, kind, nullable):
     return f"{expr}?.toJson()" if nullable else f"{expr}.toJson()"
 
 
+def doc_comment(text, indent=""):
+    """`///` lines for a description: every line of a multi-line text gets
+    the prefix (#246); an empty text writes no comment."""
+    return [f"{indent}/// {line}".rstrip() for line in (text or "").splitlines()]
+
+
 def model(name, schema):
     if schema.get("type") != "object" or "properties" not in schema:
         raise GenError(f"{name}: only object schemas become classes")
@@ -122,8 +128,7 @@ def model(name, schema):
         nullable = nullable or key not in required
         fields.append((key, camel(key), kind, nullable, prop.get("description")))
     lines = []
-    if schema.get("description"):
-        lines.append(f"/// {schema['description']}")
+    lines.extend(doc_comment(schema.get("description")))
     lines.append(f"class {name} {{")
     lines.append(f"  const {name}({{")
     for _, field, _, nullable, _ in fields:
@@ -136,8 +141,7 @@ def model(name, schema):
     lines.append("      );")
     for key, field, kind, nullable, description in fields:
         lines.append("")
-        if description:
-            lines.append(f"  /// {description}")
+        lines.extend(doc_comment(description, "  "))
         lines.append(f"  final {kind}{'?' if nullable else ''} {field};")
     lines.append("")
     lines.append("  Map<String, Object?> toJson() => {")
@@ -189,11 +193,10 @@ def operation(name, op):
         return f"{key!r}: ?{f}" if value == f else f"if ({f} != null) {key!r}: {value}"
 
     body_map = ", ".join(entry(*param) for param in params)
-    doc = op.get("summary", "")
+    doc = "".join(f"\n{line}" for line in doc_comment(op.get("summary"), "  "))
     # The raw answer is awaited once and then converted: converting the
     # awaited call itself would repeat the RPC for a nullable type.
-    return f"""
-  /// {doc}
+    return f"""{doc}
   Future<{returns}> {method}({sig}) async {{
     final raw = await {method}Raw({call_args});
     return {from_json('raw', kind, nullable)};
@@ -330,7 +333,12 @@ def main(argv=None):
             for path in build(OUT):
                 print(f"wrote {path.relative_to(ROOT)}")
             return 0
-        with tempfile.TemporaryDirectory() as tmp:
+        # Inside the project, so `dart format` finds the same pubspec language
+        # version and analysis_options as the real output (#246); .dart_tool/
+        # is git-ignored.
+        scratch = ROOT / ".dart_tool"
+        scratch.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=scratch, prefix="gen_api_dart_") as tmp:
             fresh = {p.name: p.read_text() for p in build(Path(tmp))}
         current = {p.name: p.read_text() for p in OUT.glob("*.g.dart")} if OUT.exists() else {}
         if fresh != current:

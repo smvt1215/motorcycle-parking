@@ -77,6 +77,26 @@ class GenApiDartTest(unittest.TestCase):
         self.assertIn(
             "{'p_id': pId, 'p_note': pNote, 'p_limit': ?pLimit}", text)
 
+    def test_multi_line_docs_prefix_every_line(self):
+        self.assertEqual(gen.doc_comment("a\nb\n\nc", "  "),
+                         ["  /// a", "  /// b", "  ///", "  /// c"])
+        self.assertEqual(gen.doc_comment(""), [])
+        self.assertEqual(gen.doc_comment(None), [])
+        text = gen.model("Row", {"type": "object", "description": "one\ntwo", "properties": {
+            "a": {"type": "integer", "description": "x\ny"}}})
+        self.assertTrue(text.startswith("/// one\n/// two\nclass Row {"))
+        self.assertIn("  /// x\n  /// y\n  final int? a;", text)
+        op = {"summary": "first\nsecond", "responses": {"200": {"content": {
+            "application/json": {"schema": {"type": "boolean"}}}}}}
+        self.assertIn("\n  /// first\n  /// second\n  Future<bool> ping()",
+                      gen.operation("ping", op))
+
+    def test_empty_summary_writes_no_doc_comment(self):
+        op = {"summary": "", "responses": {"200": {"content": {
+            "application/json": {"schema": {"type": "boolean"}}}}}}
+        text = gen.operation("ping", op)
+        self.assertTrue(text.startswith("\n  Future<bool> ping()"))
+
     def test_the_api_v1_document_generates_its_client(self):
         text = gen.generate("api_v1")
         self.assertIn("class ApiV1Client {", text)
