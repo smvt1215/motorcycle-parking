@@ -29,6 +29,36 @@ export type AuthResults = {
 };
 
 /**
+ * [value] without comments (which nest, RFC 5322) and with each quoted string
+ * emptied to `""`; a backslash escapes the next character in both. Null when
+ * a comment or string is not closed or a `)` has no `(`. Removing only the
+ * innermost parentheses with a regex left the rest of a nested comment
+ * behind as if it were a result (#393).
+ */
+function stripQuotedAndComments(value: string): string | null {
+  let out = '', depth = 0, quoted = false;
+  for (let i = 0; i < value.length; i++) {
+    const c = value[i];
+    if (c === '\\') {
+      i++;
+      if (i >= value.length) return null;
+      if (depth === 0 && !quoted) out += c + value[i];
+    } else if (quoted) {
+      if (c === '"') quoted = false;
+    } else if (depth > 0) {
+      if (c === '(') depth++;
+      else if (c === ')') depth--;
+    } else if (c === '(') depth++;
+    else if (c === ')') return null;
+    else if (c === '"') {
+      quoted = true;
+      out += '""';
+    } else out += c;
+  }
+  return depth === 0 && !quoted ? out : null;
+}
+
+/**
  * SPF, DKIM and DMARC from the topmost Authentication-Results whose
  * authserv-id is Cloudflare's. A sender can write its own
  * Authentication-Results below it, so any other is ignored; none at all
@@ -57,8 +87,9 @@ export function authResults(
   // Quoted strings and comments carry sender-chosen text (smtp.mailfrom can
   // be "x;dkim=pass"@evil.test): dropped before splitting (cross review,
   // PR #306).
-  const value = header.value.replace(/"(?:[^"\\]|\\.)*"/g, '""')
-    .replace(/\((?:[^()\\]|\\.)*\)/g, '');
+  const value = stripQuotedAndComments(header.value);
+  // Malformed (unbalanced) text cannot be trusted to say what is a result.
+  if (value === null) return { spf: null, dkim: null, dmarc: null };
   const mailfrom: string[] = [];
   for (const part of value.split(';').slice(1)) {
     const m = /^\s*(spf|dkim|dmarc)\s*=\s*([a-z]+)/i.exec(part);
