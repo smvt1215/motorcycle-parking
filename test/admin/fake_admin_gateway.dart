@@ -451,6 +451,10 @@ class FakeAdminGateway implements AdminGateway {
 
   /// Thrown by the next updateSpot, e.g. 'fee plan in use'.
   Object? spotUpdateError;
+
+  /// Thrown by the next promoteSpot, e.g. 'open content reports block
+  /// promotion'.
+  Object? promoteError;
   final List<(String, Map<String, dynamic>, String)> promotions = [];
   bool failSearch = false;
   int searchRequests = 0;
@@ -556,6 +560,7 @@ class FakeAdminGateway implements AdminGateway {
         message: 'spot changed since it was opened',
       );
     }
+    if (promoteError case final error?) throw error;
     promotions.add((sourceId, values, note));
     const id = 'official:99999999-9999-4999-8999-999999999999';
     spotRows[id] = {
