@@ -858,6 +858,11 @@ class SpotsController extends ChangeNotifier {
     if (message.contains('invalid closure')) {
       return '暫時無法停車的資料不正確，尚未儲存。請確認預計恢復日期不早於開始日期。';
     }
+    // 202611111600 (#326): a spot with an open content report stays a
+    // community spot until the report is resolved.
+    if (message.contains('open content reports block promotion')) {
+      return '這個點有內容檢舉還沒處理完，請先處理檢舉再改為官方點。';
+    }
     if (message.contains('invalid parking_zones')) {
       return '區域與格位的資料不正確，尚未儲存。請檢查每個格位的可停車種。';
     }
