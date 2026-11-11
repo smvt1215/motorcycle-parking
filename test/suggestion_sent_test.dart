@@ -252,6 +252,12 @@ void main() {
       suggestionSentBody(['名稱', '費率', '分區與格位']),
       '名稱、費率、分區與格位。管理員審核通過後才會更新地圖。',
     );
+    expect(suggestionSentTitle(['費率'], demo: true), '範例：已模擬送出「費率」的建議');
+    expect(suggestionSentTitle(['名稱', '費率'], demo: true), '範例：已模擬送出 2 項建議');
+    expect(
+      suggestionSentBody(['名稱', '費率'], demo: true),
+      '名稱、費率。範例模式：建議沒有實際送出，只用來測試流程。',
+    );
     expect(SuggestionItem.where.label(street: true), '路段與格位');
     expect(SuggestionItem.where.label(street: false), '分區與格位');
   });
@@ -555,18 +561,44 @@ void main() {
         expect(tester.takeException(), isNull);
       }, variant: TargetPlatformVariant({platform}));
 
-      testWidgets('範例模式：確認區與提示條說明沒有實際送出', (tester) async {
-        final store = await _open(tester, _lot);
-        store.example = true;
-        await _sendName(tester);
-        expect(find.text(suggestionDemoNote), findsOneWidget);
-        expect(find.text(suggestionDoneNote), findsNothing);
-        await tester.tap(find.widgetWithText(AdaptiveButton, '完成'));
-        await tester.pumpAndSettle();
-        expect(find.text(suggestionDemoNote), findsOneWidget);
-        expect(find.textContaining('審核通過後會更新地圖'), findsNothing);
-        await _closeToast(tester);
-      }, variant: TargetPlatformVariant({platform}));
+      for (final (size, scale) in const [
+        (Size(390, 844), 1.0),
+        (Size(390, 844), 2.0),
+        (Size(320, 640), 2.0),
+        (Size(820, 1180), 2.0),
+      ]) {
+        final label = '${size.width.toInt()}×${size.height.toInt()}、$scale 倍';
+        testWidgets('範例模式：寫「已模擬送出」與「範例，未實際送出」，不寫已送出（$label）', (tester) async {
+          final store = await _open(tester, _lot, size: size, scale: scale);
+          store.example = true;
+          await _sendName(tester);
+          expect(find.text('範例：已模擬送出「名稱」的建議'), findsOneWidget);
+          expect(find.text(suggestionDemoNote), findsOneWidget);
+          expect(
+            find.descendant(of: _row('名稱'), matching: find.text('範例，未實際送出')),
+            findsOneWidget,
+          );
+          expect(find.textContaining('的建議已送出'), findsNothing);
+          expect(find.text('已送出，審核中'), findsNothing);
+          expect(find.text(suggestionDoneNote), findsNothing);
+          expect(tester.takeException(), isNull);
+
+          await _sendZone(tester);
+          expect(find.text('範例：已模擬送出 2 項建議'), findsOneWidget);
+          expect(find.text('名稱、分區與格位。$suggestionDemoNote'), findsOneWidget);
+          expect(find.text('範例，未實際送出'), findsNWidgets(2));
+          expect(find.textContaining('已送出 2 項建議'), findsNothing);
+          expect(tester.takeException(), isNull);
+
+          await _tap(tester, find.widgetWithText(AdaptiveButton, '完成'));
+          expect(find.text(suggestionDemoNote), findsOneWidget);
+          expect(find.textContaining('審核通過後會更新地圖'), findsNothing);
+          expect(find.text('查看'), findsNothing);
+          _expectToast(tester, size);
+          expect(tester.takeException(), isNull);
+          await _closeToast(tester);
+        }, variant: TargetPlatformVariant({platform}));
+      }
 
       for (final (size, scale, brightness) in const [
         (Size(320, 640), 1.0, Brightness.light),

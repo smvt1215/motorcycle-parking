@@ -548,6 +548,12 @@ class _SuggestionListPageState extends State<SuggestionListPage> {
         SuggestionScope.maybeOf(context, listen: true)?.sent ??
         const <SuggestionItem>[];
     final names = [for (final item in sent) item.label(street: street)];
+    // 範例模式 sends nothing, and its marks say so.
+    String? mark(SuggestionItem item) => !sent.contains(item)
+        ? null
+        : store.demo
+        ? suggestionDemoTag
+        : suggestionSentTag;
     return ListenableBuilder(
       listenable: store,
       builder: (context, _) => FormPage(
@@ -577,7 +583,7 @@ class _SuggestionListPageState extends State<SuggestionListPage> {
           else ...[
             SentBanner(
               key: const ValueKey('suggestions-sent'),
-              title: suggestionSentTitle(names),
+              title: suggestionSentTitle(names, demo: store.demo),
               body: suggestionSentBody(names, demo: store.demo),
             ),
             const SizedBox(height: 14),
@@ -591,7 +597,7 @@ class _SuggestionListPageState extends State<SuggestionListPage> {
                 leading: const Icon(Icons.label_outline),
                 title: '名稱',
                 value: spot.name,
-                sent: sent.contains(SuggestionItem.name),
+                sentTag: mark(SuggestionItem.name),
                 onTap: () => _open(
                   SuggestionItem.name,
                   () => _form(context, 'name', '停車點名稱', spot.name),
@@ -601,7 +607,7 @@ class _SuggestionListPageState extends State<SuggestionListPage> {
                 leading: const Icon(Icons.pin_drop_outlined),
                 title: '位置',
                 value: '拖曳標記',
-                sent: sent.contains(SuggestionItem.location),
+                sentTag: mark(SuggestionItem.location),
                 onTap: () => _open(
                   SuggestionItem.location,
                   () => _form(
@@ -620,7 +626,7 @@ class _SuggestionListPageState extends State<SuggestionListPage> {
                   value: spot.facilities.isEmpty
                       ? '未填'
                       : facilityTypesLabel(spot.facilities),
-                  sent: sent.contains(SuggestionItem.facility),
+                  sentTag: mark(SuggestionItem.facility),
                   onTap: () => _open(
                     SuggestionItem.facility,
                     () => _kindForm(context, '場站型式'),
@@ -640,7 +646,7 @@ class _SuggestionListPageState extends State<SuggestionListPage> {
                   leading: const Icon(Icons.fact_check_outlined),
                   title: '可停車種',
                   value: eligibilitySummary(spot),
-                  sent: sent.contains(SuggestionItem.vehicles),
+                  sentTag: mark(SuggestionItem.vehicles),
                   onTap: () => _open(
                     SuggestionItem.vehicles,
                     () => _form(
@@ -659,7 +665,7 @@ class _SuggestionListPageState extends State<SuggestionListPage> {
                   subtitle:
                       '依${spot.city.isEmpty ? '縣市' : spot.city}規則帶入建議，可在各路段裡改',
                   value: hasSegments ? '各段不同' : eligibilitySummary(spot),
-                  sent: sent.contains(SuggestionItem.vehicles),
+                  sentTag: mark(SuggestionItem.vehicles),
                   onTap: () => _open(
                     SuggestionItem.vehicles,
                     () => _openEntries(context),
@@ -671,7 +677,7 @@ class _SuggestionListPageState extends State<SuggestionListPage> {
                 title: '限時／禁停／共用時段',
                 subtitle: street ? '現場標誌寫的' : null,
                 value: _rulesOpen ? limitSummary(spot) : '先新增分區',
-                sent: sent.contains(SuggestionItem.limits),
+                sentTag: mark(SuggestionItem.limits),
                 onTap: _rulesOpen
                     ? () => _open(
                         SuggestionItem.limits,
@@ -691,7 +697,7 @@ class _SuggestionListPageState extends State<SuggestionListPage> {
                 title: '費率',
                 subtitle: street ? '每一段各自一組' : null,
                 value: feeSummary(spot),
-                sent: sent.contains(SuggestionItem.fee),
+                sentTag: mark(SuggestionItem.fee),
                 onTap: () => _open(SuggestionItem.fee, () => _openFee(context)),
               ),
             ],
@@ -713,7 +719,7 @@ class _SuggestionListPageState extends State<SuggestionListPage> {
                         if (entrance.isNotEmpty) entrance,
                         if (zones > 0) '$zones 區',
                       ].join('・').ifEmpty('未填'),
-                sent: sent.contains(SuggestionItem.where),
+                sentTag: mark(SuggestionItem.where),
                 onTap: () =>
                     _open(SuggestionItem.where, () => _openEntries(context)),
               ),
@@ -766,7 +772,7 @@ class _SuggestionListPageState extends State<SuggestionListPage> {
                 leading: const Icon(Icons.notes_outlined),
                 title: '其他備註',
                 value: spot.note.isEmpty ? '未提供' : spot.note,
-                sent: sent.contains(SuggestionItem.note),
+                sentTag: mark(SuggestionItem.note),
                 onTap: () => _open(
                   SuggestionItem.note,
                   () => _form(

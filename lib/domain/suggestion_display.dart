@@ -34,9 +34,18 @@ const suggestionReviewNote = '管理員審核通過後才會更新地圖。';
 /// 範例模式沒有後端，建議不會真的送出。
 const suggestionDemoNote = '範例模式：建議沒有實際送出，只用來測試流程。';
 
-/// 確認區的標題：一項寫出項目，多項寫件數。
-String suggestionSentTitle(List<String> items) =>
-    items.length == 1 ? '「${items.single}」的建議已送出' : '已送出 ${items.length} 項建議';
+/// 確認區的標題：一項寫出項目，多項寫件數。範例模式沒有真的送出，所以
+/// 寫「已模擬送出」。
+String suggestionSentTitle(List<String> items, {bool demo = false}) {
+  if (demo) {
+    return items.length == 1
+        ? '範例：已模擬送出「${items.single}」的建議'
+        : '範例：已模擬送出 ${items.length} 項建議';
+  }
+  return items.length == 1
+      ? '「${items.single}」的建議已送出'
+      : '已送出 ${items.length} 項建議';
+}
 
 /// 確認區的內文：多項時先列出項目。
 String suggestionSentBody(List<String> items, {bool demo = false}) {
@@ -47,8 +56,9 @@ String suggestionSentBody(List<String> items, {bool demo = false}) {
 /// 送出後取代清單開頭引導句的問句。
 const suggestionAskMore = '還要改這個點的其他項目嗎？點進去繼續改；都改完了就按「完成」。';
 
-/// 剛送出的那一列的標記，與朗讀。
+/// 剛送出的那一列的標記，與朗讀；範例模式另有說法。
 const suggestionSentTag = '已送出，審核中';
+const suggestionDemoTag = '範例，未實際送出';
 
 /// 清單底部的主按鈕與說明。
 const suggestionDone = '完成';

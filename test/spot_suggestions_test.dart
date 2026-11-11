@@ -214,7 +214,8 @@ void main() {
       await tester.pumpAndSettle();
       // Back on the list, which says what went; its 完成 closes it.
       expect(find.text('提出修改建議'), findsOneWidget);
-      expect(find.text('「名稱」的建議已送出'), findsOneWidget);
+      // This store has no backend: 範例模式's wording.
+      expect(find.text('範例：已模擬送出「名稱」的建議'), findsOneWidget);
       expect(find.byKey(const ValueKey('suggestion-input')), findsNothing);
       expect(find.text('完成'), findsOneWidget);
       switch (dismissal) {

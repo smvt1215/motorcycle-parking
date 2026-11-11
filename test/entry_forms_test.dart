@@ -1113,7 +1113,8 @@ void main() {
       // #403: back to the list, which says what went.
       expect(find.byType(FormFlow), findsOneWidget);
       expect(find.text('提出修改建議'), findsOneWidget);
-      expect(find.text('「分區與格位」的建議已送出'), findsOneWidget);
+      expect(find.text('範例：已模擬送出「分區與格位」的建議'), findsOneWidget);
+      expect(find.text('範例，未實際送出'), findsOneWidget);
       expect(find.text('範例模式：建議沒有實際送出，只用來測試流程。'), findsOneWidget);
     });
 

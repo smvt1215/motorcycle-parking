@@ -4,7 +4,6 @@
 // pieces every form shares are in lib/ui/adaptive/form_components.dart.
 import 'dart:ui' show PathMetric;
 
-import '../../domain/suggestion_display.dart';
 import '../../models/parking.dart';
 import '../../models/space_kind.dart';
 import '../../ui/adaptive/adaptive.dart';
@@ -86,14 +85,16 @@ class EntryRow extends StatelessWidget {
     this.destructive = false,
     this.problem,
     this.quote,
-    this.sent = false,
+    this.sentTag,
     this.onTap,
   });
 
   /// A suggestion for this row went while the list was open (S6): the
-  /// 「已送出，審核中」 mark under the title. The value beside it is still
-  /// the map's, which changes only after review.
-  final bool sent;
+  /// mark under the title, 「已送出，審核中」 or 範例模式's. The value
+  /// beside it is still the map's, which changes only after review.
+  final String? sentTag;
+
+  bool get sent => sentTag != null;
 
   /// A stored text with what it is: (這區寫, the text). At most two lines
   /// on screen; a screen reader hears all of it.
@@ -117,57 +118,60 @@ class EntryRow extends StatelessWidget {
   );
 
   /// [stacked] puts the value under the title, for large text (S6d ②).
-  Widget _column(TextStyle muted, ColorScheme colors, {bool stacked = false}) =>
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: destructive ? colors.error : colors.onSurface,
-            ),
-          ),
-          if (subtitle != null) ...[
-            const SizedBox(height: 2),
-            Text(subtitle!, style: muted),
-          ],
-          if (stacked && value != null) ...[
-            const SizedBox(height: 2),
-            Text(value!, style: muted),
-          ],
-          if (sent) ...[const SizedBox(height: 5), const SentTag()],
-          if (tags.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Wrap(spacing: 6, runSpacing: 4, children: tags),
-          ],
-          if (quote case (final label, final text)?) ...[
-            const SizedBox(height: 2),
-            Semantics(
-              label: '$label，$text',
-              excludeSemantics: true,
-              child: Text.rich(
+  Widget _column(
+    TextStyle muted,
+    ColorScheme colors, {
+    bool stacked = false,
+  }) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        title,
+        style: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+          color: destructive ? colors.error : colors.onSurface,
+        ),
+      ),
+      if (subtitle != null) ...[
+        const SizedBox(height: 2),
+        Text(subtitle!, style: muted),
+      ],
+      if (stacked && value != null) ...[
+        const SizedBox(height: 2),
+        Text(value!, style: muted),
+      ],
+      if (sentTag case final tag?) ...[const SizedBox(height: 5), SentTag(tag)],
+      if (tags.isNotEmpty) ...[
+        const SizedBox(height: 6),
+        Wrap(spacing: 6, runSpacing: 4, children: tags),
+      ],
+      if (quote case (final label, final text)?) ...[
+        const SizedBox(height: 2),
+        Semantics(
+          label: '$label，$text',
+          excludeSemantics: true,
+          child: Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(text: '$label：', style: muted),
                 TextSpan(
-                  children: [
-                    TextSpan(text: '$label：', style: muted),
-                    TextSpan(
-                      text: text,
-                      style: TextStyle(fontSize: 13, color: colors.onSurface),
-                    ),
-                  ],
+                  text: text,
+                  style: TextStyle(fontSize: 13, color: colors.onSurface),
                 ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
+              ],
             ),
-          ],
-          if (problem != null) ...[
-            const SizedBox(height: 4),
-            Text(problem!, style: TextStyle(fontSize: 13, color: colors.error)),
-          ],
-        ],
-      );
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+      if (problem != null) ...[
+        const SizedBox(height: 4),
+        Text(problem!, style: TextStyle(fontSize: 13, color: colors.error)),
+      ],
+    ],
+  );
 
   /// A short title hugs its text and leaves the row to the value, which is
   /// often a whole sentence of rates.
@@ -247,9 +251,11 @@ class EntryRow extends StatelessWidget {
     ? (const Color(0xff16343c), const Color(0xff9fe0ec))
     : (const Color(0xffe3f0f2), const Color(0xff0f4e5c));
 
-/// 「✓ 已送出，審核中」 on a row whose suggestion went (S6).
+/// 「✓ 已送出，審核中」 on a row whose suggestion went (S6); [text] is
+/// 範例模式's wording where nothing was really sent.
 class SentTag extends StatelessWidget {
-  const SentTag({super.key});
+  const SentTag(this.text, {super.key});
+  final String text;
 
   @override
   Widget build(BuildContext context) {
@@ -268,7 +274,7 @@ class SentTag extends StatelessWidget {
             const SizedBox(width: 4),
             Flexible(
               child: Text(
-                suggestionSentTag,
+                text,
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
