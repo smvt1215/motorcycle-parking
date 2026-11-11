@@ -62,6 +62,11 @@ select 'test_beta', 'x', 'https://example.test/feed', array['臺北市', '新北
 from public.availability_sources where key = 'taipei_tcmsv';
 select is((select api_v1.client_config()->'availability_beta_cities'), '["新北市", "臺北市"]'::jsonb,
   'Beta cities are listed once each, by name');
+-- Order is by code point whatever the database collation (#251): a default
+-- (language) collation would put b before B.
+update public.availability_sources set cities = array['b', 'B', '臺北市', '新北市'] where key = 'test_beta';
+select is((select api_v1.client_config()->'availability_beta_cities'), '["B", "b", "新北市", "臺北市"]'::jsonb,
+  'Beta cities are ordered by Unicode code point');
 update public.availability_sources set enabled = false where key = 'test_beta';
 update public.availability_sources set beta = false where key = 'taipei_tcmsv';
 select is((select api_v1.client_config()->'availability_beta_cities'), '[]'::jsonb,
