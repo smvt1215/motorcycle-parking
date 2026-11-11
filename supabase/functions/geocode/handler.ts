@@ -20,17 +20,22 @@ export interface Caller {
 export interface Deps {
   // The signed-in, non-anonymous caller of a valid token; null otherwise.
   caller(token: string): Promise<Caller | null>;
-  // Counts the request against the caller's daily limit. Throws
-  // [LimitReached] when the day's limit is used. Nothing is cached: Google
+  // Counts the request against the caller's daily limit for [quota]: a
+  // search and a reverse lookup each have their own (#434). Throws
+  // [LimitReached] when that day's limit is used. Nothing is cached: Google
   // allows address text in a cache only for the rider who asked, and never
   // in place of another call (Service Specific Terms 6.3.2, #411).
-  count(caller: Caller): Promise<void>;
+  count(caller: Caller, quota: Quota): Promise<void>;
   // Null until a provider is configured (docs/ADMIN_WEB.md 後端變更 7).
   provider: Provider | null;
   // Same key as [provider]; null until it is configured.
   reverse: ReverseProvider | null;
 }
 
+// Which daily limit a request counts against (public.geocode_count).
+export type Quota = 'search' | 'reverse';
+
+// Either limit answers `daily_limit`: each endpoint only reports its own.
 export class LimitReached extends Error {}
 
 const fail = (error: string, status: number) => response({ error }, status);
@@ -42,7 +47,7 @@ async function reverse(
 ): Promise<Response> {
   if (!deps.reverse) return fail('not_configured', 503);
   try {
-    await deps.count(caller);
+    await deps.count(caller, 'reverse');
   } catch (e) {
     if (e instanceof LimitReached) return fail('daily_limit', 429);
     return fail('unavailable', 503);
@@ -84,7 +89,7 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
   const request = readRequest(body);
   if (typeof request === 'string') return fail(request, 400);
   try {
-    await deps.count(caller);
+    await deps.count(caller, 'search');
   } catch (e) {
     if (e instanceof LimitReached) return fail('daily_limit', 429);
     return fail('unavailable', 503);
