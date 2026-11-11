@@ -45,8 +45,10 @@ select is(pg_temp.road('{"id":"a","condition":{"charge":"free"}}','free','mixed'
 select is(pg_temp.road('{"id":"a","condition":{"charge":"toll"}}','free','toll',
     '{"bay":"motorcycle","use":"share","share":"scooter_heavy","charge":"free"}')->'condition'->>'charge',
   'toll','a 普大共用格 is asked too');
-select is(pg_temp.road('{"id":"a","condition":{"charge":"free"}}','free','toll',null)->'condition'->>'charge',
+select is(pg_temp.road('{"id":"a","condition":{"charge":"free"}}','free','toll',spot_whole_condition(null,'paidMotorcycle'))->'condition'->>'charge',
   'toll','a spot without its own condition reads its space type''s');
+select is(pg_temp.road('{"id":"a","condition":{"charge":"free"}}','free','toll',null)->'condition'->>'charge',
+  'free','a spot whose condition is unknown leaves it');
 select is(pg_temp.road('{"id":"a","condition":{"charge":"free"}}','free','toll',
     '{"bay":"car","use":"share","share":"car_motorcycle"}')->'condition'->>'charge',
   'free','a car bay is not asked');
