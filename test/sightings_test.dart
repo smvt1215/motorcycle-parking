@@ -1254,6 +1254,121 @@ void main() {
       expect(source.sent.single.zoneId, isNull);
     });
 
+    group('全區（A7e）', () {
+      Future<void> choose(WidgetTester tester, String key) async {
+        final finder = find.byKey(ValueKey(key));
+        await tester.ensureVisible(finder);
+        await tester.pumpAndSettle();
+        await tester.tap(finder);
+        await tester.pumpAndSettle();
+      }
+
+      for (final platform in platforms) {
+        for (final (name, size) in layouts) {
+          testWidgetsOn('${platform.name} $name：兩區以上才出現、不預選，送整點', (
+            tester,
+          ) async {
+            setUpView(tester, platform, size);
+            final source = FakeSightings(const []);
+            final store = await sightedStore(tester, source, now: detailNight);
+            await openPanel(tester, store, lot, size: size);
+            final all = find.byKey(const ValueKey('sighting-place-all'));
+            expect(all, findsOneWidget);
+            expect(
+              find.descendant(of: all, matching: find.text('全區')),
+              findsOneWidget,
+            );
+            expect(
+              tester.getSize(all).height,
+              greaterThanOrEqualTo(platform == TargetPlatform.iOS ? 44 : 48),
+            );
+            await choose(tester, 'sighting-level-some');
+            expect(submit(tester).onPressed, isNull, reason: '全區不預選');
+            await choose(tester, 'sighting-place-all');
+            expect(submit(tester).onPressed, isNotNull);
+            expect(find.textContaining('記整個停車場，不分哪一區'), findsOneWidget);
+            expect(
+              find.textContaining('已有 2 位車友回報無法停車的區，不會因此解除'),
+              findsOneWidget,
+            );
+            await choose(tester, 'sighting-closed');
+            expect(find.text('整個停車場都停不了，例如施工、封閉'), findsOneWidget);
+            expect(
+              find.text(
+                sightingNote(
+                  street: false,
+                  whole: false,
+                  allPlaces: true,
+                  closed: true,
+                ),
+              ),
+              findsOneWidget,
+            );
+            await send(tester);
+            expect(source.sent.single.toJson(), {
+              'spot_id': lotId,
+              'kind': 'closed',
+              'level': null,
+              'zone_id': null,
+              'segment_id': null,
+              'vehicle': 'heavy',
+            });
+            expect(tester.takeException(), isNull);
+          });
+        }
+      }
+
+      testWidgetsOn('現在能停的只有一區：沒有全區，維持自動選定', (tester) async {
+        final source = FakeSightings(const []);
+        final store = await sightedStore(tester, source);
+        await openPanel(tester, store, lot);
+        expect(find.byKey(const ValueKey('sighting-place-all')), findsNothing);
+      });
+
+      testWidgetsOn('選區段會取消全區，選全區會取消區段', (tester) async {
+        final source = FakeSightings(const []);
+        final store = await sightedStore(tester, source, now: detailNight);
+        await openPanel(tester, store, lot);
+        await choose(tester, 'sighting-place-all');
+        await choose(tester, 'sighting-place-1');
+        await choose(tester, 'sighting-level-some');
+        await send(tester);
+        expect(source.sent.single.zoneId, 'b3');
+      });
+
+      testWidgetsOn('路邊：整條路，文案與送出', (tester) async {
+        final source = FakeSightings(const []);
+        final store = await sightedStore(tester, source);
+        Map<String, Object?> segment(String id, String name) => {
+          'id': id,
+          'name': name,
+          'condition': {
+            'bay': 'motorcycle',
+            'use': 'usual',
+            'charge': 'toll',
+            'allow': {'scooter': true, 'heavy': true},
+          },
+        };
+        await openPanel(
+          tester,
+          store,
+          ParkingSpot.fromJson({
+            ...detailStreetJson,
+            'id': streetId,
+            'parking_segments': [segment('n1', '北側'), segment('s1', '南側')],
+          }),
+        );
+        await choose(tester, 'sighting-place-all');
+        expect(find.text('整條路'), findsOneWidget);
+        await choose(tester, 'sighting-level-full');
+        expect(find.textContaining('記整條路，不分哪一段'), findsOneWidget);
+        await send(tester);
+        final sent = source.sent.single;
+        expect(sent.segmentId, isNull);
+        expect(sent.zoneId, isNull);
+      });
+    });
+
     testWidgetsOn('失敗：留在面板、內容還在、可以再送', (tester) async {
       final source = FakeSightings(const [])..failure = Exception('offline');
       final store = await sightedStore(tester, source);
@@ -1837,6 +1952,59 @@ void main() {
       expect(line.main, '還有一些');
       expect(line.note, startsWith('B3'));
     });
+
+    test('車友回報（全區）另列一行，不混進各區（A7e ⑦）', () {
+      final at = detailNight.subtract(const Duration(minutes: 10));
+      final line = wholeRiderLine([
+        RiderSeat(level: 2, at: at, riders: 1),
+        RiderSeat(level: 1, at: at, areaId: 'b2', riders: 2),
+      ], detailNight)!;
+      expect(line.main, '還有一些');
+      expect(line.note, '10 分鐘前・1 人');
+      expect(wholeRiderTitle(street: false), '車友回報（全區）');
+      expect(wholeRiderTitle(street: true), '車友回報（整條路）');
+      expect(
+        wholeRiderLine([
+          RiderSeat(level: 1, at: at, areaId: 'b2'),
+        ], detailNight),
+        isNull,
+      );
+      final sign = fourSign(lot, VehicleType.heavy, const [], now: detailNight);
+      final [b2, ...] = sign.where.areas;
+      final row = SeatRow(area: b2, name: 'x', sub: '', official: '剩 3 格');
+      expect(
+        seatRiderLine(row, [
+          RiderSeat(level: 2, at: at, riders: 1),
+        ], detailNight),
+        seatNoRiderLine,
+      );
+    });
+
+    for (final platform in platforms) {
+      for (final (name, size) in layouts) {
+        testWidgetsOn('${platform.name} $name：詳情有「車友回報（全區）」', (tester) async {
+          setUpView(tester, platform, size);
+          final source = FakeSightings([
+            row(
+              lotId,
+              level: 1,
+              count: 1,
+              at: detailNight.subtract(const Duration(minutes: 10)),
+            ),
+          ]);
+          final store = await sightedStore(tester, source, now: detailNight);
+          await openDetail(tester, store, lot, size: size);
+          final finder = find.byKey(const ValueKey('detail-seat-rider-whole'));
+          await tester.ensureVisible(finder);
+          await tester.pumpAndSettle();
+          expect(
+            find.descendant(of: finder, matching: find.text('車友回報（全區）')),
+            findsOneWidget,
+          );
+          expect(tester.takeException(), isNull);
+        });
+      }
+    }
 
     test('Beta 文案指向回報按鈕（A13、A14）', () {
       expect(betaIntroCaution, endsWith('看到不一樣，可以在詳情按「回報現場狀況」。'));

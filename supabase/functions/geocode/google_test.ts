@@ -1,4 +1,9 @@
-import { googleProvider, toCandidate } from './google.ts';
+import {
+  googleProvider,
+  googleReverse,
+  nearestDoor,
+  toCandidate,
+} from './google.ts';
 import { parseQuery, ProviderError } from './query.ts';
 
 function assertEquals(actual: unknown, expected: unknown, message = '') {
@@ -191,6 +196,84 @@ Deno.test('請求帶語言、地區、國家限制與偏好範圍', async () => 
   assertEquals(url.searchParams.get('language'), 'zh-TW');
   assertEquals(url.searchParams.get('components'), 'country:TW');
   assertEquals(url.searchParams.get('bounds'), '24.9,121.4|25.1,121.6');
+});
+
+const taiwan = {
+  long_name: '台灣',
+  short_name: 'TW',
+  types: ['country', 'political'],
+};
+const located = (...parts: [string, string][]) => ({
+  address_components: [
+    ...parts.map(([long_name, type]) => ({ long_name, types: [type] })),
+    taiwan,
+  ],
+});
+
+Deno.test('反向查詢：門牌優先，號字拿掉，台改臺', () => {
+  assertEquals(
+    nearestDoor([
+      located(['松壽路', 'route']),
+      located(['45號', 'street_number'], ['台灣大道三段', 'route']),
+    ]),
+    { road: '臺灣大道三段', number: '45' },
+  );
+  assertEquals(
+    nearestDoor([located(['10', 'street_number'], ['光明六路', 'route'])]),
+    { road: '光明六路', number: '10' },
+  );
+});
+
+Deno.test('反向查詢：只有路名、英文路名與沒有路', () => {
+  const nothing = { road: null, number: null };
+  assertEquals(nearestDoor([located(['松壽路', 'route'])]), {
+    road: '松壽路',
+    number: null,
+  });
+  assertEquals(
+    nearestDoor([
+      located(['45', 'street_number'], ['Songshou Road', 'route']),
+    ]),
+    nothing,
+  );
+  assertEquals(nearestDoor([located(['信義區', 'political'])]), nothing);
+  assertEquals(nearestDoor([]), nothing);
+});
+
+Deno.test('反向查詢：臺灣以外的結果不算', () => {
+  assertEquals(
+    nearestDoor([{
+      address_components: [
+        { long_name: '45', types: ['street_number'] },
+        { long_name: '湖濱南路', types: ['route'] },
+        { long_name: '中国', short_name: 'CN', types: ['country'] },
+      ],
+    }]),
+    { road: null, number: null },
+  );
+});
+
+Deno.test('反向查詢的請求帶座標與語言，查無結果與配額分開', async () => {
+  const seen: string[] = [];
+  const find = googleReverse('k', fake(200, { status: 'ZERO_RESULTS' }, seen));
+  assertEquals(await find({ lat: 25.03, lng: 121.56 }), {
+    road: null,
+    number: null,
+  });
+  const url = new URL(seen[0]);
+  assertEquals(url.searchParams.get('latlng'), '25.03,121.56');
+  assertEquals(url.searchParams.get('language'), 'zh-TW');
+  assertEquals(url.searchParams.has('address'), false);
+  let reason = 'none';
+  try {
+    await googleReverse('k', fake(200, { status: 'OVER_QUERY_LIMIT' }))({
+      lat: 25,
+      lng: 121,
+    });
+  } catch (e) {
+    reason = e instanceof ProviderError ? e.reason : 'other';
+  }
+  assertEquals(reason, 'quota');
 });
 
 Deno.test('配額用完與服務錯誤分開回報', async () => {

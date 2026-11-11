@@ -424,7 +424,7 @@ Future<T?> showAdaptiveSheet<T>(
           ? content(ctx)
           : Material(
               color: Theme.of(ctx).colorScheme.surface,
-              child: SafeArea(child: content(ctx)),
+              child: _SheetSafeArea(child: content(ctx)),
             ),
     );
   }
@@ -439,6 +439,34 @@ Future<T?> showAdaptiveSheet<T>(
     backgroundColor: detail ? Colors.transparent : null,
     builder: content,
   );
+}
+
+/// The safe area of an iOS form sheet, the same with the keyboard up or down.
+///
+/// `padding.bottom` reads 0 once the keyboard covers the home indicator, so
+/// a plain [SafeArea] made the sheet that much shorter and, anchored at the
+/// bottom, dropped its top while the keyboard was up (iPhone report, #413).
+/// The space stays here instead, and the forms below, which give way by
+/// `viewInsets`, are told only about the part of the keyboard above it.
+class _SheetSafeArea extends StatelessWidget {
+  const _SheetSafeArea({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final bottom = media.viewPadding.bottom;
+    final keyboard = media.viewInsets.bottom;
+    return MediaQuery(
+      data: media.copyWith(
+        padding: media.padding.copyWith(bottom: bottom),
+        viewInsets: media.viewInsets.copyWith(
+          bottom: keyboard > bottom ? keyboard - bottom : 0,
+        ),
+      ),
+      child: SafeArea(child: child),
+    );
+  }
 }
 
 /// Puts the keyboard away inside a sheet: a tap outside the text fields or

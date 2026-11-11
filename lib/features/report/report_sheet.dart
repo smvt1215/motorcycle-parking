@@ -20,6 +20,7 @@ import '../../ui/address_search_field.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../../ui/location_picker.dart';
 import '../map/vehicle_sheet.dart';
+import 'approx_address.dart';
 import 'entry_drafts.dart';
 import 'fee_forms.dart';
 import 'entry_pages.dart';
@@ -108,6 +109,75 @@ Future<void> showReport(
     child: ReportForm(store: store, lat: lat, lng: lng, mapCenter: mapCenter),
   ),
 );
+
+/// The county or city and district under the picker, side by side, stacked
+/// when too narrow; each new position replaces them, and the rider may too.
+class TownFields extends StatelessWidget {
+  const TownFields({
+    super.key,
+    required this.keyPrefix,
+    required this.city,
+    required this.district,
+    required this.onCity,
+    required this.onDistrict,
+    this.cityValidator,
+  });
+  final String keyPrefix;
+  final String? city;
+  final String district;
+  final ValueChanged<String?> onCity, onDistrict;
+  final FormFieldValidator<String>? cityValidator;
+
+  @override
+  Widget build(BuildContext context) {
+    final districts = [
+      ...?taiwanDistricts[city],
+      if (district.isNotEmpty &&
+          !(taiwanDistricts[city]?.contains(district) ?? false))
+        district,
+    ];
+    final cityField = DropdownButtonFormField<String>(
+      // The lookup replaces the value; a new key shows it.
+      key: ValueKey('$keyPrefix-city-$city'),
+      initialValue: city,
+      isExpanded: true,
+      decoration: const InputDecoration(labelText: '縣市'),
+      hint: const Text('未選'),
+      items: [
+        for (final c in taiwanCities)
+          DropdownMenuItem(value: c, child: Text(c)),
+      ],
+      validator: cityValidator,
+      onChanged: onCity,
+    );
+    final districtField = DropdownButtonFormField<String>(
+      key: ValueKey('$keyPrefix-district-$city-$district'),
+      initialValue: district.isEmpty ? null : district,
+      isExpanded: true,
+      decoration: const InputDecoration(labelText: '區'),
+      hint: Text(city == null ? '先選縣市' : '未選'),
+      items: [
+        for (final d in districts) DropdownMenuItem(value: d, child: Text(d)),
+      ],
+      onChanged: city == null ? null : onDistrict,
+    );
+    return LayoutBuilder(
+      builder: (context, box) => box.maxWidth < 280
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [cityField, const SizedBox(height: 12), districtField],
+            )
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: cityField),
+                const SizedBox(width: 10),
+                Expanded(child: districtField),
+              ],
+            ),
+    );
+  }
+}
 
 /// A titled group of form fields.
 class FormSection extends StatelessWidget {
@@ -421,6 +491,10 @@ class _ReportFormState extends State<ReportForm> {
   final zones = <EntryDraft>[], segments = <EntryDraft>[];
   List<EntryDraft> get entries => lot ? zones : segments;
 
+  /// 全區 (zones) and 整條路 (segments), kept per kind like the entries;
+  /// entries never store them (Z1 ⑨, #408).
+  EntryWhole? zoneWhole, segmentWhole;
+
   /// 能不能停 (S5, S5b), copied into the entries when sent. Kept per kind
   /// like the entries, so a change of mind leaves the other kind's scopes.
   List<TimeRule> zoneRules = [], segmentRules = [];
@@ -537,17 +611,31 @@ class _ReportFormState extends State<ReportForm> {
     // The district belonged to the old position; never send it stale.
     district = '';
     scheduleLookup();
+    approx?.moved(a, b);
   });
+
+  /// The door shown under the map; null where none may be shown.
+  ApproxAddressController? approx;
 
   @override
   void initState() {
     super.initState();
     scheduleLookup(delay: Duration.zero);
+    if (widget.store.approxAddressEnabled) {
+      approx = ApproxAddressController(
+        lookup: widget.store.approxAddressAt,
+        auth: widget.store,
+        signedIn: () => widget.store.canReport,
+        lat: lat,
+        lng: lng,
+      );
+    }
   }
 
   @override
   void dispose() {
     lookupTimer?.cancel();
+    approx?.dispose();
     name.dispose();
     entrance.dispose();
     evidence.dispose();
@@ -701,46 +789,6 @@ class _ReportFormState extends State<ReportForm> {
       ).duplicates,
       null => const <NearbySpot>[],
     };
-    final districts = [
-      ...?taiwanDistricts[city],
-      if (district.isNotEmpty &&
-          !(taiwanDistricts[city]?.contains(district) ?? false))
-        district,
-    ];
-    final cityField = DropdownButtonFormField<String>(
-      // The lookup replaces the value; a new key shows it.
-      key: ValueKey('report-city-$city'),
-      initialValue: city,
-      isExpanded: true,
-      decoration: const InputDecoration(labelText: '縣市'),
-      items: [
-        for (final c in taiwanCities)
-          DropdownMenuItem(value: c, child: Text(c)),
-      ],
-      validator: (v) => v == null ? '請選擇停車點所在縣市' : null,
-      onChanged: (v) => setState(() {
-        if (v != city) {
-          // The district belonged to the old city.
-          district = '';
-          movedFromCity = null;
-        }
-        city = v;
-        applyDefaults();
-      }),
-    );
-    final districtField = DropdownButtonFormField<String>(
-      key: ValueKey('report-district-$city-$district'),
-      initialValue: district.isEmpty ? null : district,
-      isExpanded: true,
-      decoration: const InputDecoration(labelText: '區'),
-      hint: Text(city == null ? '先選縣市' : '未選'),
-      items: [
-        for (final d in districts) DropdownMenuItem(value: d, child: Text(d)),
-      ],
-      onChanged: city == null
-          ? null
-          : (v) => setState(() => district = v ?? ''),
-    );
     return [
       FormLabel('位置', key: anchors['location']),
       const SizedBox(height: 4),
@@ -765,6 +813,7 @@ class _ReportFormState extends State<ReportForm> {
               mapBuilder: widget.mapBuilder ?? appLocationMap,
               expandButton: true,
               overlayControls: true,
+              onDragChanged: approx?.dragging,
               // Without a backend (demo) there is nothing to search.
               onSearch: widget.store.client == null
                   ? null
@@ -788,25 +837,26 @@ class _ReportFormState extends State<ReportForm> {
           ],
         ),
       ),
+      if (approx case final approx?) ...[
+        const SizedBox(height: 8),
+        ApproxAddressRow(controller: approx),
+      ],
       const SizedBox(height: 12),
-      LayoutBuilder(
-        builder: (context, box) => box.maxWidth < 280
-            ? Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  cityField,
-                  const SizedBox(height: 12),
-                  districtField,
-                ],
-              )
-            : Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: cityField),
-                  const SizedBox(width: 10),
-                  Expanded(child: districtField),
-                ],
-              ),
+      TownFields(
+        keyPrefix: 'report',
+        city: city,
+        district: district,
+        cityValidator: (v) => v == null ? '請選擇停車點所在縣市' : null,
+        onCity: (v) => setState(() {
+          if (v != city) {
+            // The district belonged to the old city.
+            district = '';
+            movedFromCity = null;
+          }
+          city = v;
+          applyDefaults();
+        }),
+        onDistrict: (v) => setState(() => district = v ?? ''),
       ),
       const SizedBox(height: 6),
       Text(
@@ -855,6 +905,14 @@ class _ReportFormState extends State<ReportForm> {
     onChanged: () => setState(() => whereProblem = null),
     onSpotFee: lot ? null : (context) => editFee(context),
     onEntryFee: lot ? null : editFee,
+    whole: () => lot ? zoneWhole : segmentWhole,
+    onWhole: (v) => setState(() {
+      if (lot) {
+        zoneWhole = v;
+      } else {
+        segmentWhole = v;
+      }
+    }),
   );
 
   /// 全場費率 or 整條路費率, or an entry's own rates, on F1 (C14).

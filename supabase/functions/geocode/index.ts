@@ -1,13 +1,16 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.108.1';
 import { response } from '../_shared/http.ts';
-import { googleProvider } from './google.ts';
+import { googleProvider, googleReverse } from './google.ts';
 import { handle, LimitReached } from './handler.ts';
-import type { Candidate, Provider } from './query.ts';
+import type { Candidate, Provider, ReverseProvider } from './query.ts';
 
 // Google Geocoding (docs/ADMIN_WEB.md 後端變更 7). Without the secret every
 // search answers `not_configured`; the key never leaves this function.
 const googleKey = Deno.env.get('GOOGLE_GEOCODING_API_KEY');
 const provider: Provider | null = googleKey ? googleProvider(googleKey) : null;
+const reverse: ReverseProvider | null = googleKey
+  ? googleReverse(googleKey)
+  : null;
 
 // The payload of a token the Auth server has just accepted.
 function claims(token: string): Record<string, unknown> {
@@ -33,6 +36,7 @@ Deno.serve((req) => {
   });
   return handle(req, {
     provider,
+    reverse,
     async caller(token) {
       const { data, error } = await admin.auth.getUser(token);
       if (error || !data.user || data.user.is_anonymous) return null;
