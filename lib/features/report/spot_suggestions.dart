@@ -135,7 +135,11 @@ Future<void> showSpotSuggestions(
   // Read before the sheet opens; the page under it may be gone afterwards.
   final messenger = ScaffoldMessenger.maybeOf(context);
   final media = MediaQuery.maybeOf(context);
-  final view = _contributionsOpener(context);
+  // Details shown as a sheet of their own (over 收藏 or 我送出的建議) stay
+  // open afterwards and would cover the page's snack bar.
+  final overSheet = _overRootSheet(context);
+  final overlay = Navigator.of(context, rootNavigator: true).overlay;
+  final view = overSheet ? null : _contributionsOpener(context);
   await showAdaptiveSheet<void>(
     context,
     (ctx) => SuggestionScope(
@@ -147,24 +151,25 @@ Future<void> showSpotSuggestions(
   );
   final count = session.sent.length;
   session.dispose();
-  if (count == 0 || messenger == null || !messenger.mounted) return;
+  if (count == 0) return;
   // 範例模式 sent nothing, and has no 我送出的建議 to look at.
+  final text = store.demo ? suggestionDemoNote : suggestionSentToast(count);
+  if (overSheet) {
+    if (overlay != null && overlay.mounted) _showSheetToast(overlay, text);
+    return;
+  }
+  if (messenger == null || !messenger.mounted) return;
   _showSentToast(
     messenger,
     media,
-    text: store.demo ? suggestionDemoNote : suggestionSentToast(count),
+    text: text,
     onView: store.demo ? null : view,
   );
 }
 
-/// Opens 貢獻 › 我送出的建議, or null where that cannot be done from
-/// [context]: without the app's router, or from details shown as a sheet of
-/// their own (over 收藏 or 我送出的建議), which would stay on top of the
-/// page. The list cannot be opened at one spot, so 查看 opens all of it.
-VoidCallback? _contributionsOpener(BuildContext context) {
-  final router = GoRouter.maybeOf(context);
-  if (router == null) return null;
-  // The route [context] is in, of those the root navigator holds.
+/// Whether [context] is in a route above the root navigator's first: the
+/// details opened as a sheet of their own, not the page itself.
+bool _overRootSheet(BuildContext context) {
   final root = Navigator.of(context, rootNavigator: true);
   var inner = context;
   var navigator = Navigator.of(context);
@@ -174,7 +179,116 @@ VoidCallback? _contributionsOpener(BuildContext context) {
     if (outer == null) break;
     navigator = outer;
   }
-  if (!(ModalRoute.of(inner)?.isFirst ?? true)) return null;
+  return !(ModalRoute.of(inner)?.isFirst ?? true);
+}
+
+/// The toast over details shown as a sheet: drawn above every route, since
+/// the page's own snack bar would sit behind the sheet. No 查看: the sheet
+/// would stay on top of the page it opens.
+void _showSheetToast(OverlayState overlay, String text) {
+  late final OverlayEntry entry;
+  entry = OverlayEntry(
+    builder: (_) => _SheetToast(
+      text: text,
+      onDone: () {
+        if (entry.mounted) entry.remove();
+      },
+    ),
+  );
+  overlay.insert(entry);
+}
+
+class _SheetToast extends StatefulWidget {
+  const _SheetToast({required this.text, required this.onDone});
+  final String text;
+  final VoidCallback onDone;
+
+  @override
+  State<_SheetToast> createState() => _SheetToastState();
+}
+
+class _SheetToastState extends State<_SheetToast> {
+  Timer? timer;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Kept while a screen reader runs, as the snack bar is; a tap closes it.
+    timer?.cancel();
+    timer = MediaQuery.accessibleNavigationOf(context)
+        ? null
+        : Timer(const Duration(seconds: 8), widget.onDone);
+  }
+
+  @override
+  void dispose() {
+    timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final media = MediaQuery.of(context);
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: media.viewPadding.bottom + 12,
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Semantics(
+              liveRegion: true,
+              container: true,
+              child: Material(
+                key: const ValueKey('suggestions-sent-toast'),
+                color: colors.inverseSurface,
+                elevation: 6,
+                borderRadius: BorderRadius.circular(isCupertino ? 22 : 8),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: widget.onDone,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.check_circle,
+                          size: 20,
+                          color: colors.onInverseSurface,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            text,
+                            style: TextStyle(color: colors.onInverseSurface),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String get text => widget.text;
+}
+
+/// Opens 貢獻 › 我送出的建議, or null without the app's router. The list
+/// cannot be opened at one spot, so 查看 opens all of it.
+VoidCallback? _contributionsOpener(BuildContext context) {
+  final router = GoRouter.maybeOf(context);
+  if (router == null) return null;
   return () => router.go(myContributionsPath);
 }
 

@@ -228,13 +228,18 @@ void main() {
       // Return to the spot details, without accidentally popping that route.
       expect(find.byKey(const ValueKey('parking-spot-sheet')), findsOneWidget);
       expect(store.submissions, hasLength(1));
-      // Said once on the page under it (S6b ④); this store has no backend.
-      expect(
-        find.byKey(const ValueKey('suggestions-sent-toast')),
-        findsOneWidget,
-      );
+      // Said once (S6b ④), above the details, which are a sheet here and
+      // would cover the page's snack bar; this store has no backend.
+      final toast = find.byKey(const ValueKey('suggestions-sent-toast'));
+      expect(toast, findsOneWidget);
+      expect(find.byType(SnackBar), findsNothing);
+      expect(toast.hitTestable(), findsOneWidget);
       expect(find.text('範例模式：建議沒有實際送出，只用來測試流程。'), findsOneWidget);
       expect(tester.takeException(), isNull);
+      // A tap puts it away.
+      await tester.tap(toast);
+      await tester.pump();
+      expect(toast, findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
     });
   }
