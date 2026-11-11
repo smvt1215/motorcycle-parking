@@ -344,7 +344,7 @@ class _AdminAppState extends State<AdminApp> {
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: widget.controller,
     builder: (context, _) => MaterialApp.router(
-      title: '停車指南管理',
+      title: '機車停車指南管理',
       debugShowCheckedModeBanner: false,
       routerConfig: _router,
       locale: const Locale('zh', 'TW'),
