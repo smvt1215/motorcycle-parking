@@ -21,6 +21,7 @@ import '../auth/profile_editor.dart';
 import '../auth/sign_in.dart';
 import '../hidden_riders/hidden_riders_page.dart';
 import 'account_deletion_page.dart';
+import 'linked_sign_ins.dart';
 
 // An empty policy URL hides its row; tests replace [policyUrls].
 export '../../core/policy_links.dart' show policyUrls;
@@ -54,6 +55,19 @@ Future<void> showSettings(BuildContext context, AppStore store) {
           builder: (ctx, _) => _AccountCard(store: store, status: status),
         ),
         const SizedBox(height: 28),
+        // P19a (#382): signed in only, read only; it adds its own gap below.
+        AnimatedBuilder(
+          animation: store,
+          builder: (ctx, _) => switch (store.client) {
+            final client? when store.riderId != null && !store.demo =>
+              LinkedSignInsGroup(
+                key: ValueKey(store.riderId),
+                client: client,
+                title: const _GroupTitle(linkedSignInsTitle),
+              ),
+            _ => const SizedBox.shrink(),
+          },
+        ),
         // Shown signed in or not: a guest list stays on the device (P10).
         _GroupTitle(settingsPrivacyGroup),
         const SizedBox(height: 4),
@@ -258,8 +272,18 @@ class _DeleteAccountGroup extends StatelessWidget {
           const SizedBox(height: 6),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              settingsDeleteFootnote,
+            child: Text.rich(
+              key: const ValueKey('settings-delete-footnote'),
+              TextSpan(
+                text: settingsDeleteFootnote,
+                children: const [
+                  // P19b ① (#382), in bold.
+                  TextSpan(
+                    text: settingsDeleteLinkedNote,
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
               style: Theme.of(context).textTheme.bodySmall
                   ?.copyWith(color: colors.onSurfaceVariant),
             ),
@@ -285,7 +309,8 @@ class _AccountCard extends StatelessWidget {
     // Only the name the rider saved is public (#319); a Google name alone
     // is not, so the card says 尚未設定名稱 and offers 設定名稱.
     final name = profilePublicName(user);
-    final email = user?.email;
+    // An Apple relay address reads 隱藏的電子郵件 (P19a ③, #382).
+    final email = accountEmailLine(user?.email);
     final (title, detail) = store.demo
         ? ('範例模式', '目前使用範例資料。回報只用於功能測試，請勿依範例資料停車。')
         : !signedIn

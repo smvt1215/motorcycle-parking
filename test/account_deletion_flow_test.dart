@@ -188,7 +188,7 @@ void main() {
   // User-approved words (2026-11-08): Apple always signs in again.
   for (final (account, identity, note) in [
     ('Google', google(signedInAt: now), deletionReauthNote),
-    ('Apple', apple(signedInAt: now), deletionReauthNoteApple),
+    ('Apple', apple(signedInAt: now), '這個帳號連結了 Apple，$deletionReauthNoteApple'),
   ]) {
     testWidgets('P15a：送出按鈕下的再登入說明依帳號（$account）', (tester) async {
       final app = await _mount(tester, FakeDeletionGateway(current: identity));
@@ -242,7 +242,11 @@ void main() {
     expect(find.text('服務條款'), findsOneWidget);
     expect(find.text('隱私權政策'), findsOneWidget);
     expect(find.text('資料來源與授權'), findsOneWidget);
-    expect(find.text('申請後有 7 天冷靜期，期間登入時可以選擇取消。'), findsOneWidget);
+    // P19b ① (#382): the linked sign-ins go too, in bold.
+    expect(
+      find.text('申請後有 7 天冷靜期，期間登入時可以選擇取消。所有已連結的登入方式會一起刪除。'),
+      findsOneWidget,
+    );
     expect(
       tester
           .getSize(find.byKey(const ValueKey('settings-delete-account')))
@@ -508,7 +512,7 @@ void main() {
         await _tapSubmit(tester);
         await _confirm(tester);
         // The sheet's own words; the page note under it also names the revoke.
-        expect(find.text(reauthBodyApple), findsOneWidget);
+        expect(find.text(reauthBodyFor(apple: true)), findsOneWidget);
         expect(find.text('Apple ID・隱藏的電子郵件'), findsOneWidget);
         final button = find.byKey(const ValueKey('reauth-sign-in'));
         await tester.ensureVisible(button);

@@ -26,6 +26,10 @@ describe('the web says what the App says about deletion', () => {
     app.forEach((item, i) => expect(content.deleted[i]!.startsWith(item)).toBe(true));
   });
 
+  it('deletes every linked sign-in with the account (#382)', () => {
+    expect(content.deleted[0]).toBe('帳號與所有已連結的登入方式（Google、Apple）');
+  });
+
   it('keeps the same contributions, anonymised', () => {
     expect([...content.kept]).toEqual(dartList('deletionKept'));
     expect(content.keptNote).toBe(dartString('deletionKeptNote'));

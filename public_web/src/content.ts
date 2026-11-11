@@ -23,7 +23,7 @@ export const deletedHeading = '會刪除';
  * says when it goes.
  */
 export const deleted = [
-  '帳號與登入資訊',
+  '帳號與所有已連結的登入方式（Google、Apple）',
   '顯示名稱',
   '收藏',
   '可信度分數',
