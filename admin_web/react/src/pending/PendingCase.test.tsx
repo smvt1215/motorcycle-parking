@@ -670,19 +670,69 @@ describe('案件詳情的處理', () => {
       attempts: 1,
       to_email: 'rider@example.com',
     };
-    const setup: Setup = { items: [row(1)], messages: [first, out] };
+    const setup: Setup = {
+      items: [row(1, { state: 'awaiting_user' })],
+      messages: [first, out],
+      // case_actions lists a reply whose mail failed, retried or not.
+      actions: { [UUID(1)]: [caseAction({ id: 'failed-1', message_id: 'm1', delivery_status: 'failed' })] },
+    };
     const { postgrest, calls } = backend(setup);
     open(postgrest, `/pending/${UUID(1)}`);
-    expect(await screen.findByText(/沒有寄出，系統已試了/)).toBeInTheDocument();
+    expect(await screen.findByText(/還沒寄出，系統已試了/)).toBeInTheDocument();
     const reads = () => calls.filter((c) => c.url === 'support_request').length;
     // The server's automatic retry succeeds while the case is open.
     setup.messages = [first, { ...out, delivery_status: 'sent', attempts: 2 }];
     await tick(61_000);
     expect(await screen.findByText(/已寄到 rider@example.com/)).toBeInTheDocument();
+    expect(screen.queryByText('系統正在自動重試')).not.toBeInTheDocument();
     // Sent is final: no more reads.
     const settled = reads();
     await tick(61_000);
     expect(reads()).toBe(settled);
+  });
+
+  it('says the server will retry, without 再寄一次, until it gives up (#447)', async () => {
+    const first = supportDetail(row(1)).messages[0]!;
+    const out = {
+      ...first,
+      id: 'm1',
+      direction: 'out' as const,
+      channel: 'admin' as const,
+      delivery_status: 'failed' as const,
+      attempts: 2,
+      to_email: 'rider@example.com',
+    };
+    const setup: Setup = {
+      items: [row(1, { state: 'awaiting_user' })],
+      messages: [first, out],
+      actions: { [UUID(1)]: [caseAction({ id: 'failed-1', message_id: 'm1', delivery_status: 'failed' })] },
+    };
+    const { postgrest, calls } = backend(setup);
+    open(postgrest, `/pending/${UUID(1)}`);
+    const status = await screen.findByText(/還沒寄出，系統已試了/);
+    expect(status).toHaveTextContent('還沒寄出，系統已試了 2 次，15 到 30 分鐘內會自動再試。');
+    expect(status).not.toHaveClass('case-delivery--failed');
+    expect(screen.getByText('系統正在自動重試').parentElement).not.toHaveClass('case-notice--alert');
+    expect(screen.getByText(/最多試/)).toHaveTextContent(
+      '最多試 5 次。不用重寄，寄到或全部失敗時這裡會更新。',
+    );
+    expect(screen.queryByText('回覆沒有寄出')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '再寄一次' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '寄出回覆' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '結案' })).toBeInTheDocument();
+
+    // The fifth try fails too: the server stops, and the case row says so.
+    setup.items = [row(1, { state: 'send_failed', rank: 0 })];
+    setup.messages = [first, { ...out, attempts: 5 }];
+    await tick(61_000);
+    expect(await screen.findByRole('button', { name: '再寄一次' })).toBeInTheDocument();
+    expect(await screen.findByText('回覆沒有寄出')).toBeInTheDocument();
+    expect(screen.getByText(/沒有寄出，系統已試了/)).toHaveClass('case-delivery--failed');
+    expect(screen.queryByText('系統正在自動重試')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '再寄一次' }));
+    await waitFor(() =>
+      expect(calls.find((c) => c.url === 'retry_case_action')?.body).toEqual({ p_action_id: 'failed-1' }),
+    );
   });
 
   it('does not keep reading a send that has used up its retries', async () => {
@@ -1024,6 +1074,8 @@ describe('案件詳情的處理', () => {
       ],
     });
     open(postgrest, `/pending/${UUID(1)}`);
+    expect(await screen.findByText('回覆沒有寄出')).toBeInTheDocument();
+    expect(screen.queryByText('系統正在自動重試')).not.toBeInTheDocument();
     await user.click(await screen.findByRole('button', { name: '再寄一次' }));
     await waitFor(() =>
       expect(calls.find((c) => c.url === 'retry_case_action')?.body).toEqual({ p_action_id: 'failed-1' }),

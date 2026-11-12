@@ -76,6 +76,7 @@ CI 會確認 `dist/` 裡沒有示範資料（`MOTOPARK_ADMIN_FIXTURE_DATA` 標�
 - `cancel_case_action` 回傳不含內文：取消後的草稿是前端自己留的（`actionTracked` 的 `draft: 'take'`）。stale／failed 的草稿優先用記憶體裡的，重新整理後才用 `case_actions` 的 payload。
 - 草稿放在 Redux（不放在頁面）：切換案件保留、`auth.aal2_required` 重新驗證後還在。只有換人登入或登出才清掉。
 - 案件頁的版本與檢舉期限來自 `admin_v1.timed_case`（清單列的資料），不靠清單目前載入的那幾頁，深連結才打得開。登入 redirect 固定回 `/pending`，深連結先存 sessionStorage（`auth/returnPath.ts`）。
+- 回覆寄送失敗但還沒試滿 5 次（`delivery_status='failed'` 且 `attempts` 未滿 `DELIVERY_MAX_ATTEMPTS`）：伺服器會自動再試，案件頁寫「還沒寄出，系統已試了 N 次，15 到 30 分鐘內會自動再試。」並顯示「系統正在自動重試」，處理列不放「再寄一次」（手動重送會把次數歸零，#447）。期間每 60 秒讀一次；寄到或 5 次都失敗時重新讀清單列，失敗就換成紅色的「回覆沒有寄出」與「再寄一次」。
 - 別人已處理：伺服器回 `case.stale`，不執行、不跳下一筆、草稿不動。點位被改時先「重新讀取最新資料」，才能「仍然套用」。
 - 手機鍵盤用 `visualViewport` 量（`useKeyboardInset`）：動作列貼著鍵盤、頂欄收成 48px，只在文字欄位有焦點時生效，縮放不會誤判。
 
