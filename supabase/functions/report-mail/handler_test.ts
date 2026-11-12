@@ -1,8 +1,12 @@
+import { ResendError } from '../support-request/resend.ts';
 import {
+  alreadySent,
   batchSize,
+  caseLink,
   type Deps,
   fuseNoticeMail,
   handle,
+  pendingBase,
   reportNoticeMail,
 } from './handler.ts';
 
@@ -100,9 +104,9 @@ Deno.test('a database failure is a 503', async () => {
 });
 
 Deno.test('the mail has only the id and the admin link', () => {
-  const mail = reportNoticeMail(id, `https://admin.test/review/${id}`);
+  const mail = reportNoticeMail(id, `https://admin.test/pending/${id}`);
   eq(mail.subject.includes(id.slice(0, 8)), true, 'subject names the report');
-  eq(mail.text.includes(`https://admin.test/review/${id}`), true, 'link');
+  eq(mail.text.includes(`https://admin.test/pending/${id}`), true, 'link');
   eq(mail.text.split('\n').length, 6, 'nothing else');
   // Same deadline the app states (#316 contentReportIntro).
   eq(
@@ -113,7 +117,107 @@ Deno.test('the mail has only the id and the admin link', () => {
 });
 
 Deno.test('the fuse mail says later reports wait, with no personal data', () => {
-  const mail = fuseNoticeMail(id, `https://admin.test/review/${id}`);
-  eq(mail.text.includes(`https://admin.test/review/${id}`), true, 'link');
+  const mail = fuseNoticeMail(id, `https://admin.test/pending/${id}`);
+  eq(mail.text.includes(`https://admin.test/pending/${id}`), true, 'link');
   eq(mail.text.includes('只進審核'), true, 'what changed');
+});
+
+Deno.test('the link opens the case on 待處理, not the report id', () => {
+  const caseId = '00000000-0000-4000-8000-0000000000c1';
+  eq(
+    caseLink('https://admin.test/pending', {
+      id,
+      kind: 'new',
+      case_id: caseId,
+    }),
+    `https://admin.test/pending/${caseId}`,
+    'a later report on the same spot opens the case it joined',
+  );
+  eq(
+    caseLink('https://admin.test/pending', { id, kind: 'fuse', case_id: id }),
+    `https://admin.test/pending/${id}`,
+    'the first report is its own case',
+  );
+  eq(
+    caseLink('https://admin.test/pending', { id, kind: 'new', case_id: null }),
+    'https://admin.test/pending',
+    'already resolved: the list',
+  );
+  eq(
+    caseLink('https://admin.test/pending', { id, kind: 'new' }),
+    'https://admin.test/pending',
+    'before the migration: the list',
+  );
+});
+
+Deno.test("ADMIN_PENDING_URL, else the review site's /pending", () => {
+  const env = (vars: Record<string, string>) => (name: string) => vars[name];
+  eq(
+    pendingBase(env({ ADMIN_PENDING_URL: ' https://admin.test/pending/ ' })),
+    'https://admin.test/pending',
+    'set',
+  );
+  eq(
+    pendingBase(env({
+      ADMIN_PENDING_URL: 'https://admin.test/pending',
+      ADMIN_REVIEW_URL: 'https://old.test/review',
+    })),
+    'https://admin.test/pending',
+    'the new name wins',
+  );
+  eq(
+    pendingBase(env({ ADMIN_REVIEW_URL: 'https://admin.test/review/' })),
+    'https://admin.test/pending',
+    'only the old secret: no secret change needed',
+  );
+  eq(pendingBase(env({})), null, 'unset: nothing is sent');
+  eq(pendingBase(env({ ADMIN_REVIEW_URL: 'admin/review' })), null, 'not a URL');
+  eq(
+    pendingBase(env({ ADMIN_REVIEW_URL: 'javascript:alert(1)' })),
+    null,
+    'not a web link',
+  );
+});
+
+Deno.test('a bad ADMIN_PENDING_URL sends nothing, as with none set', () => {
+  const env = (vars: Record<string, string>) => (name: string) => vars[name];
+  for (
+    const bad of [
+      'admin.test/pending',
+      'ftp://admin.test/pending',
+      'https://admin.test/pending?a=1',
+      'https://admin.test/pending?',
+      'https://admin.test/pending#x',
+    ]
+  ) {
+    eq(
+      pendingBase(env({
+        ADMIN_PENDING_URL: bad,
+        ADMIN_REVIEW_URL: 'https://admin.test/review',
+      })),
+      null,
+      bad,
+    );
+  }
+  eq(
+    pendingBase(env({ ADMIN_PENDING_URL: 'https://Admin.test/pending//' })),
+    'https://admin.test/pending',
+    'normalised',
+  );
+});
+
+Deno.test('a key already used with other text counts as sent', () => {
+  eq(
+    alreadySent(new ResendError(409, 'invalid_idempotent_request')),
+    true,
+    'the mail went out before',
+  );
+  eq(
+    alreadySent(new ResendError(409, 'concurrent_idempotent_requests')),
+    false,
+    'still running: retried',
+  );
+  eq(alreadySent(new ResendError(409)), false, 'unknown 409');
+  eq(alreadySent(new ResendError(500)), false, 'server error');
+  eq(alreadySent(new Error('invalid_idempotent_request')), false, 'other');
 });
