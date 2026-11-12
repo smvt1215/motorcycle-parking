@@ -230,6 +230,16 @@ for (const viewport of VIEWPORTS) {
     if (resend !== (retrying ? 0 : 1) || notice !== (retrying ? 1 : 0)) {
       failures.push(`${viewport.name} ${id}: 再寄一次 ${resend}, retry notice ${notice}`);
     }
+    if (retrying) {
+      // The status line wraps inside its bubble, never past it.
+      const line = page.getByText(/15 到 30 分鐘內會自動再試/);
+      const spill = await line.evaluate((el) => {
+        const bubble = el.closest('.case-message').getBoundingClientRect();
+        const box = el.getBoundingClientRect();
+        return Math.max(0, box.right - bubble.right, bubble.left - box.left, el.scrollWidth - el.clientWidth);
+      });
+      if (spill > 0) failures.push(`${viewport.name} ${id}: retry line spills by ${spill}px`);
+    }
   }
 
   // 案件處理: send, the countdown, cancel, and the reply comes back.

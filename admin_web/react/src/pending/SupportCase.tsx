@@ -49,7 +49,7 @@ function Delivery({ message, now }: { message: SupportMessage; now: number }) {
   if (autoRetrying(message)) {
     return (
       <span className="t-caption">
-        還沒寄出，系統已試了 <span className="num">{message.attempts}</span> 次，約 15 分鐘後會自動再試。
+        還沒寄出，系統已試了 <span className="num">{message.attempts}</span> 次，15 到 30 分鐘內會自動再試。
       </span>
     );
   }

@@ -710,7 +710,7 @@ describe('案件詳情的處理', () => {
     const { postgrest, calls } = backend(setup);
     open(postgrest, `/pending/${UUID(1)}`);
     const status = await screen.findByText(/還沒寄出，系統已試了/);
-    expect(status).toHaveTextContent('還沒寄出，系統已試了 2 次，約 15 分鐘後會自動再試。');
+    expect(status).toHaveTextContent('還沒寄出，系統已試了 2 次，15 到 30 分鐘內會自動再試。');
     expect(status).not.toHaveClass('case-delivery--failed');
     expect(screen.getByText('系統正在自動重試').parentElement).not.toHaveClass('case-notice--alert');
     expect(screen.getByText(/最多試/)).toHaveTextContent(
