@@ -38,6 +38,10 @@ const _tablets = [
 /// Windows an iPad's Split View leaves: half and a third of the screen.
 const _splits = [Size(590, 820), Size(507, 1180), Size(320, 1180)];
 
+/// The display a window of [size] is on in these cases: a phone's own, or
+/// an iPad's for a Split View window.
+Size _deviceOf(Size size) => _splits.contains(size) ? _iPad : size;
+
 final _platforms = TargetPlatformVariant({
   TargetPlatform.iOS,
   TargetPlatform.android,
@@ -66,10 +70,24 @@ Future<AppStore> _store(WidgetTester tester, {bool failing = false}) async =>
       return s;
     }))!;
 
-void _size(WidgetTester tester, Size size) {
+/// Displays, in logical pixels: what the device is, apart from the window
+/// the app gets on it.
+const _iPad = Size(1024, 1366);
+const _iPhone = Size(430, 932);
+
+/// A foldable open (Galaxy Z Fold's inner display) and shut (its cover).
+const _foldOpen = Size(673, 841);
+const _foldShut = Size(360, 800);
+
+/// The two dimensions of every case: the [device]'s display and the
+/// window's [size]. Without a device the window fills a display of its own
+/// size, as an app does full screen.
+void _size(WidgetTester tester, Size size, {Size? device}) {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = size;
+  tester.view.display.size = device ?? size;
   addTearDown(tester.view.reset);
+  addTearDown(tester.view.display.reset);
 }
 
 /// The map alone, as the shell's body: [inset] stands for the iPad's tab
@@ -78,11 +96,12 @@ Future<void> _pumpMap(
   WidgetTester tester,
   AppStore store, {
   required Size size,
+  Size? device,
   double inset = 0,
   double scale = 1,
   Brightness brightness = Brightness.light,
 }) async {
-  _size(tester, size);
+  _size(tester, size, device: device ?? _deviceOf(size));
   await tester.pumpWidget(
     ProviderScope(
       overrides: [storeProvider.overrideWith((ref) => store)],
@@ -107,10 +126,11 @@ Future<void> _pumpApp(
   WidgetTester tester,
   AppStore store, {
   required Size size,
+  Size? device,
   double scale = 1,
   Brightness brightness = Brightness.light,
 }) async {
-  _size(tester, size);
+  _size(tester, size, device: device ?? _deviceOf(size));
   tester.platformDispatcher.textScaleFactorTestValue = scale;
   addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
   await tester.pumpWidget(
@@ -136,18 +156,139 @@ String _openName(WidgetTester tester) =>
     tester.widget<SpotSheet>(find.byType(SpotSheet)).spot.name;
 
 void main() {
-  test('680 寬、600 高以上才是平板版面；手機橫放與分割畫面的窄視窗不是', () {
+  test('裝置：顯示器短邊 600 以上才是平板，手機怎麼拿都不是', () {
+    for (final display in [
+      _iPad,
+      const Size(744, 1133),
+      const Size(800, 1280),
+    ]) {
+      expect(isTabletDisplay(display), isTrue, reason: '$display');
+      expect(isTabletDisplay(display.flipped), isTrue, reason: '$display');
+    }
+    for (final display in [
+      _iPhone,
+      const Size(390, 844),
+      const Size(440, 956),
+    ]) {
+      expect(isTabletDisplay(display), isFalse, reason: '$display');
+      expect(isTabletDisplay(display.flipped), isFalse, reason: '$display');
+    }
+    // A foldable: a tablet while open, a phone while shut.
+    expect(isTabletDisplay(_foldOpen), isTrue);
+    expect(isTabletDisplay(_foldShut), isFalse);
+    expect(isTabletDisplay(const Size(600, 960)), isTrue);
+    expect(isTabletDisplay(const Size(599, 960)), isFalse);
+  });
+
+  testWidgets('視窗：放得下面板欄與 248 寬的地圖才用平板版面，Android 多算導覽軌', (tester) async {
+    final least = isCupertino ? 680.0 : 760.0;
+    expect(tabletWindowMinWidth, least);
     for (final size in _tablets) {
-      expect(isTabletSize(size), isTrue, reason: '$size');
+      expect(isTabletWindow(size), isTrue, reason: '$size');
     }
     for (final size in [..._phones, ..._splits]) {
-      expect(isTabletSize(size), isFalse, reason: '$size');
+      expect(isTabletWindow(size), isFalse, reason: '$size');
     }
-    expect(isTabletSize(const Size(680, 600)), isTrue);
-    expect(isTabletSize(const Size(679, 1024)), isFalse);
-    expect(isTabletSize(const Size(960, 599)), isFalse);
+    expect(isTabletWindow(Size(least, 600)), isTrue);
+    expect(isTabletWindow(Size(least - 1, 1024)), isFalse);
+    expect(isTabletWindow(const Size(960, 599)), isFalse);
     // Two thirds of an 11-inch iPad on its side.
-    expect(isTabletSize(const Size(780, 820)), isTrue);
+    expect(isTabletWindow(const Size(780, 820)), isTrue);
+    // The map's column beside the rail and the panel column.
+    final rail = isCupertino ? 0 : tabletRailWidth;
+    final gap = isCupertino ? 16 : 12;
+    expect(least - rail - 16 - sidePanelWidth - gap, greaterThanOrEqualTo(248));
+  }, variant: _platforms);
+
+  group('裝置與視窗', () {
+    Future<bool> tablet(WidgetTester tester, Size device, Size window) async {
+      final store = await _store(tester);
+      await _pumpApp(tester, store, size: window, device: device);
+      expect(tester.takeException(), isNull);
+      final rail = find.byType(M3ENavigationRail).evaluate().isNotEmpty;
+      final capsule = find
+          .byKey(const ValueKey('tablet-tab-bar'))
+          .evaluate()
+          .isNotEmpty;
+      final filters = find.byKey(_filters).evaluate().isNotEmpty;
+      await _openFirst(tester);
+      expect(tester.takeException(), isNull);
+      final panel = find.byKey(_panel).evaluate().isNotEmpty;
+      final card = find.byKey(_overlay).evaluate().isNotEmpty;
+      // Every part of the screen agrees.
+      expect(panel, filters);
+      expect(card, !panel);
+      expect(isCupertino ? capsule : rail, panel);
+      return panel;
+    }
+
+    // (what, display, window, iPad or iPhone, Android)
+    const cases = <(String, Size, Size, bool, bool)>[
+      ('平板全螢幕直放', Size(820, 1180), Size(820, 1180), true, true),
+      ('平板全螢幕橫放', Size(820, 1180), Size(1180, 820), true, true),
+      ('小平板 744 直放', Size(744, 1133), Size(744, 1133), true, false),
+      ('小平板 744 橫放', Size(744, 1133), Size(1133, 744), true, true),
+      ('平板分割畫面一半', Size(820, 1180), Size(590, 820), false, false),
+      ('平板分割畫面三分之二', Size(820, 1180), Size(780, 820), true, true),
+      ('平板 Slide Over', _iPad, Size(375, 1300), false, false),
+      ('平板的矮視窗', _iPad, Size(1024, 560), false, false),
+      ('平板視窗 680 寬', _iPad, Size(680, 900), true, false),
+      ('平板視窗 759 寬', _iPad, Size(759, 900), true, false),
+      ('平板視窗 760 寬', _iPad, Size(760, 900), true, true),
+      ('平板視窗 679 寬', _iPad, Size(679, 900), false, false),
+      ('手機直放', _iPhone, Size(430, 932), false, false),
+      ('手機橫放', _iPhone, Size(932, 430), false, false),
+      ('手機接上大視窗', _iPhone, Size(1180, 820), false, false),
+      ('摺疊機摺起', _foldShut, Size(360, 800), false, false),
+      ('摺疊機展開直放', _foldOpen, Size(673, 841), false, false),
+      ('摺疊機展開橫放', _foldOpen, Size(841, 673), true, true),
+    ];
+    for (final (what, device, window, onApple, onAndroid) in cases) {
+      testWidgets('$what（顯示器 ${device.width.toInt()}×${device.height.toInt()}，'
+          '視窗 ${window.width.toInt()}×${window.height.toInt()}）', (
+        tester,
+      ) async {
+        expect(
+          await tablet(tester, device, window),
+          isCupertino ? onApple : onAndroid,
+        );
+      }, variant: _platforms);
+    }
+
+    testWidgets('Android 平板版面最窄 760：篩選列至少露出兩顆', (tester) async {
+      final store = await _store(tester);
+      await _pumpApp(tester, store, size: const Size(760, 900), device: _iPad);
+      final filters = tester.getRect(find.byKey(_filters));
+      expect(filters.width, greaterThanOrEqualTo(248));
+      for (final key in ['vehicle-filter', 'parkable-filter']) {
+        final chip = tester.getRect(find.byKey(ValueKey(key)));
+        expect(chip.left, greaterThanOrEqualTo(filters.left), reason: key);
+        expect(chip.right, lessThanOrEqualTo(760), reason: key);
+        expect(find.byKey(ValueKey(key)).hitTestable(), findsOneWidget);
+      }
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+    testWidgets('摺疊機展開時開著點再摺起：換到外螢幕，面板變卡片，同一個點留著', (tester) async {
+      final store = await _store(tester);
+      await _pumpApp(
+        tester,
+        store,
+        size: const Size(841, 673),
+        device: _foldOpen,
+      );
+      await _openFirst(tester);
+      expect(find.byKey(_panel), findsOneWidget);
+      final name = _openName(tester);
+      final page = tester.state(find.byType(MapPage));
+      tester.view.display.size = _foldShut;
+      tester.view.physicalSize = const Size(360, 800);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(_panel), findsNothing);
+      expect(find.byKey(_overlay), findsOneWidget);
+      expect(_openName(tester), name);
+      expect(tester.state(find.byType(MapPage)), same(page));
+    }, variant: _platforms);
   });
 
   for (final size in _tablets) {
@@ -399,6 +540,32 @@ void main() {
       moreOrLessEquals((16 + sidePanelWidth + map.right) / 2, epsilon: 1),
     );
     expect(marker.dy, moreOrLessEquals(map.center.dy, epsilon: 1));
+  }, variant: _platforms);
+
+  testWidgets('平板開著點再縮成高而窄的視窗：卡片是預設高度，選取的點仍回到卡片上方', (tester) async {
+    // On a window this tall the card rests at the default share, so it
+    // reports no other height and nothing but the layout change itself
+    // moves the camera (review of #443, P3).
+    final store = await _store(tester);
+    await _pumpMap(tester, store, size: _iPad);
+    await _openFirst(tester);
+    expect(find.byKey(_panel), findsOneWidget);
+    tester.view.physicalSize = const Size(590, 1366);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(_overlay), findsOneWidget);
+    final overlay = tester.getRect(find.byKey(_overlay));
+    final card = tester.getRect(
+      find
+          .descendant(of: find.byKey(_overlay), matching: find.byType(Material))
+          .first,
+    );
+    expect(card.height / overlay.height, moreOrLessEquals(spotSheetPeek));
+    final map = tester.getRect(find.byType(FlutterMap));
+    final marker = tester.getCenter(find.byKey(_selectedMarker));
+    expect(marker.dx, moreOrLessEquals(map.center.dx, epsilon: 1));
+    expect(marker.dy, lessThan(map.center.dy));
+    expect(marker.dy, lessThan(card.top));
   }, variant: _platforms);
 
   testWidgets('窄視窗開著點再放大成平板：選取的點移到面板旁邊', (tester) async {

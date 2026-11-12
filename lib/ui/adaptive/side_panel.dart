@@ -8,10 +8,19 @@ import 'package:material_ui/material_ui.dart';
 /// beside them. Details, tab panels and sheets that opt in all take the
 /// same place, so the map never jumps between them.
 ///
-/// The boards draw 820×1180 and 1180×820 and name no width to switch at:
-/// the layout starts at the app's 680 two-pane width, on a window at least
-/// 600 high. A phone on its side (844×390) and a narrow Split View window
-/// keep the phone layout.
+/// Two things decide it (user decision 2026-11-12): the device is a tablet,
+/// and the app's window has room for the panel column beside a usable map.
+///
+/// The device: its display's shorter side is 600 or more, Android's own
+/// line between phones and tablets (sw600dp). Every iPad is over it (744 at
+/// the least), every phone under it however it is held (440 at the most),
+/// and a foldable is a tablet while open and a phone while shut, since its
+/// cover is another display.
+const tabletMinShortSide = 600.0;
+
+/// The window: the panel column (16 + 400 + 16) and 248 of map beside it,
+/// on a window at least 600 high. Split View, Slide Over, a split screen
+/// and a free-form window under that keep the phone layout on any device.
 const tabletMinWidth = 680.0;
 const tabletMinHeight = 600.0;
 
@@ -28,14 +37,36 @@ const tabletRailWidth = 80.0;
 
 bool get _cupertino => !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
 
-/// Whether a window of [size] gets the tablet layout.
-bool isTabletSize(Size size) =>
-    size.width >= tabletMinWidth && size.height >= tabletMinHeight;
+/// The narrowest window with the tablet layout: Android's adds its rail, so
+/// the map keeps the same share and the filters more than one pill.
+double get tabletWindowMinWidth =>
+    tabletMinWidth + (_cupertino ? 0 : tabletRailWidth);
 
-/// Whether the app's window gets the tablet layout. Read from the window,
-/// not the widget's own box, so every part of a screen agrees.
+/// Whether a display of [size] (logical pixels) is a tablet's.
+bool isTabletDisplay(Size size) => size.shortestSide >= tabletMinShortSide;
+
+/// Whether a window of [size] has room for the tablet layout.
+bool isTabletWindow(Size size) =>
+    size.width >= tabletWindowMinWidth && size.height >= tabletMinHeight;
+
+/// Whether the app runs on a tablet. A display that cannot be read (an
+/// embedder that reports none, a size of zero) leaves the window to decide.
+bool isTabletDevice(BuildContext context) {
+  try {
+    final display = View.of(context).display;
+    final size = display.size / display.devicePixelRatio;
+    if (size.isEmpty || !size.isFinite) return true;
+    return isTabletDisplay(size);
+  } on Object {
+    return true;
+  }
+}
+
+/// Whether the app gets the tablet layout: on a tablet, in a window with
+/// room for it. Read from the window, not the widget's own box, so every
+/// part of a screen agrees.
 bool isTabletLayout(BuildContext context) =>
-    isTabletSize(MediaQuery.sizeOf(context));
+    isTabletWindow(MediaQuery.sizeOf(context)) && isTabletDevice(context);
 
 /// The map's search field at the current text size.
 double mapSearchHeight(BuildContext context) =>

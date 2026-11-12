@@ -71,7 +71,7 @@ void main() {
 
   test('只有手機、地圖跑到分頁列後面時才需要', () {
     bool on(double inset, Size size) =>
-        sheetBarBacking(tabBarInset: inset, screen: size);
+        sheetBarBacking(tabBarInset: inset, tablet: isTabletWindow(size));
     expect(on(barInset, const Size(390, 844)), isTrue);
     expect(on(barInset, const Size(844, 390)), isTrue);
     expect(on(0, const Size(390, 844)), isFalse);

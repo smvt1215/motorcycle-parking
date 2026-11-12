@@ -49,8 +49,8 @@ bool mapInteractive({
 /// ([tabBarInset] above 0: iOS; Android's opaque bar ends the page above
 /// it), and not in the tablet layout (T1, T2: the details are a side panel
 /// that runs to the bottom itself).
-bool sheetBarBacking({required double tabBarInset, required Size screen}) =>
-    tabBarInset > 0 && !isTabletSize(screen);
+bool sheetBarBacking({required double tabBarInset, required bool tablet}) =>
+    tabBarInset > 0 && !tablet;
 
 /// The least room the tablet's filters keep beside the legend button
 /// before the button moves under them.
@@ -784,7 +784,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                 !covered &&
                 sheetBarBacking(
                   tabBarInset: tabBarInset,
-                  screen: MediaQuery.sizeOf(context),
+                  tablet: isTabletLayout(context),
                 ))
               Positioned(
                 left: 0,
