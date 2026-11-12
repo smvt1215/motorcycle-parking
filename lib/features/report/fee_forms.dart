@@ -430,6 +430,9 @@ class _FeeEditPageState extends State<FeeEditPage> {
   bool sending = false;
   String? refusal;
 
+  /// Why the last send failed, above the send button (S6b).
+  SendProblem? sendProblem;
+
   /// F1c: blank each time, kept while the summary comes and goes.
   final link = TextEditingController();
   final linkForm = GlobalKey<FormState>();
@@ -635,16 +638,18 @@ class _FeeEditPageState extends State<FeeEditPage> {
       Navigator.of(context).pop(reverting ? const Fee() : fee);
       return;
     }
-    setState(() => sending = true);
-    final sent = await sendSuggestion(context, widget.store, body());
+    setState(() {
+      sending = true;
+      sendProblem = null;
+    });
+    final result = await sendSuggestion(context, widget.store, body());
     if (!mounted) return;
-    setState(() => sending = false);
-    if (!sent) return;
-    closeFlow(context);
-    showMessage(
-      context,
-      widget.store.demo ? '範例模式：建議沒有實際送出，只用來測試流程。' : '建議已送出。管理員審核通過後會更新地圖。',
-    );
+    setState(() {
+      sending = false;
+      sendProblem = result.problem;
+    });
+    if (!result.sent) return;
+    suggestionSent(context, widget.store);
   }
 
   Widget _addButton(String label, VoidCallback? onPressed) => isCupertino
@@ -801,6 +806,13 @@ class _FeeEditPageState extends State<FeeEditPage> {
                 ),
               SubmitBar(
                 label: adding ? '完成' : '送出 $count 項建議',
+                above: switch (sendProblem) {
+                  final problem? => SendProblemNote(
+                    problem,
+                    button: '送出 $count 項建議',
+                  ),
+                  null => null,
+                },
                 note: !adding
                     ? '管理員審核後才會更新地圖'
                     : reverting

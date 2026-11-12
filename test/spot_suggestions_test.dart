@@ -193,7 +193,7 @@ void main() {
   });
 
   for (final dismissal in ['完成', '關閉', '返回', '下滑']) {
-    testWidgets('建議成功後以$dismissal離開，同時關閉父面板', (tester) async {
+    testWidgets('建議成功後回到清單，以$dismissal離開清單回到詳情（#403）', (tester) async {
       tester.view.devicePixelRatio = 1;
       tester.view.physicalSize = const Size(390, 844);
       addTearDown(tester.view.resetPhysicalSize);
@@ -212,6 +212,11 @@ void main() {
       );
       await tester.tap(find.text('送出修改建議'));
       await tester.pumpAndSettle();
+      // Back on the list, which says what went; its 完成 closes it.
+      expect(find.text('提出修改建議'), findsOneWidget);
+      // This store has no backend: 範例模式's wording.
+      expect(find.text('範例：已模擬送出「名稱」的建議'), findsOneWidget);
+      expect(find.byKey(const ValueKey('suggestion-input')), findsNothing);
       expect(find.text('完成'), findsOneWidget);
       switch (dismissal) {
         case '完成':
@@ -234,7 +239,18 @@ void main() {
       // Return to the spot details, without accidentally popping that route.
       expect(find.byKey(const ValueKey('parking-spot-sheet')), findsOneWidget);
       expect(store.submissions, hasLength(1));
+      // Said once (S6b ④), above the details, which are a sheet here and
+      // would cover the page's snack bar; this store has no backend.
+      final toast = find.byKey(const ValueKey('suggestions-sent-toast'));
+      expect(toast, findsOneWidget);
+      expect(find.byType(SnackBar), findsNothing);
+      expect(toast.hitTestable(), findsOneWidget);
+      expect(find.text('範例模式：建議沒有實際送出，只用來測試流程。'), findsOneWidget);
       expect(tester.takeException(), isNull);
+      // A tap puts it away.
+      await tester.tap(toast);
+      await tester.pump();
+      expect(toast, findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
     });
   }

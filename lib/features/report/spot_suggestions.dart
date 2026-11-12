@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart' show setEquals, visibleForTesting;
+import 'package:go_router/go_router.dart';
 
 import '../../core/geo.dart';
 import '../../core/town_lookup.dart';
@@ -10,6 +11,7 @@ import '../../data/app_store.dart';
 import '../../domain/location_check.dart';
 import '../../domain/content_report_display.dart';
 import '../../domain/precheck.dart';
+import '../../domain/suggestion_display.dart';
 import '../../models/closure.dart';
 import '../../models/fee.dart';
 import '../../models/parking.dart';
@@ -18,6 +20,7 @@ import '../../models/space_kind.dart';
 import '../account/suspended_sheet.dart';
 import '../auth/sign_in.dart';
 import '../content_report/content_report.dart';
+import '../contribute/my_contributions_page.dart' show myContributionsPath;
 import '../map/space_type_sheet.dart';
 import '../../ui/option_pill.dart';
 import '../../ui/address_search_field.dart';
@@ -120,16 +123,192 @@ String reportSummary(String reason) {
 /// The report that the spot can no longer be parked at.
 const goneLabel = '這裡已經不能停車';
 
+/// Opens 提出修改建議 for [spot]. Each suggestion sent comes back to the
+/// list (S6, #403); once the sheet closes, a toast says how many went
+/// (S6b ④).
 Future<void> showSpotSuggestions(
   BuildContext context,
   AppStore store,
   ParkingSpot spot,
-) => showAdaptiveSheet<void>(
-  context,
-  (ctx) => FormFlow(
-    child: SuggestionListPage(store: store, spot: spot),
-  ),
-);
+) async {
+  final session = SuggestionSession();
+  // Read before the sheet opens; the page under it may be gone afterwards.
+  final overlay = Navigator.of(context, rootNavigator: true).overlay;
+  // Details shown as a sheet of their own (over 收藏 or 我送出的建議) would
+  // stay on top of the page 查看 opens, so there it is left out.
+  final view = _overRootSheet(context) ? null : _contributionsOpener(context);
+  await showAdaptiveSheet<void>(
+    context,
+    (ctx) => SuggestionScope(
+      session: session,
+      child: FormFlow(
+        child: SuggestionListPage(store: store, spot: spot),
+      ),
+    ),
+  );
+  final count = session.sent.length;
+  session.dispose();
+  if (count == 0 || overlay == null || !overlay.mounted) return;
+  // 範例模式 sent nothing, and has no 我送出的建議 to look at.
+  _showSentToast(
+    overlay,
+    text: store.demo ? suggestionDemoNote : suggestionSentToast(count),
+    onView: store.demo ? null : view,
+  );
+}
+
+/// Whether [context] is in a route above the root navigator's first: the
+/// details opened as a sheet of their own, not the page itself.
+bool _overRootSheet(BuildContext context) {
+  final root = Navigator.of(context, rootNavigator: true);
+  var inner = context;
+  var navigator = Navigator.of(context);
+  while (navigator != root) {
+    inner = navigator.context;
+    final outer = inner.findAncestorStateOfType<NavigatorState>();
+    if (outer == null) break;
+    navigator = outer;
+  }
+  return !(ModalRoute.of(inner)?.isFirst ?? true);
+}
+
+/// Opens 貢獻 › 我送出的建議, or null without the app's router. The list
+/// cannot be opened at one spot, so 查看 opens all of it.
+VoidCallback? _contributionsOpener(BuildContext context) {
+  final router = GoRouter.maybeOf(context);
+  if (router == null) return null;
+  return () => router.go(myContributionsPath);
+}
+
+/// 「已送出 N 項建議，審核通過後會更新地圖」 with 查看 (S6b ④), as an entry
+/// of the root overlay. A snack bar would not do: the details the rider
+/// comes back to are drawn over the page's scaffold, as a sheet of their
+/// own or, on the map, through a portal into the root overlay, and would
+/// cover it.
+void _showSentToast(
+  OverlayState overlay, {
+  required String text,
+  VoidCallback? onView,
+}) {
+  late final OverlayEntry entry;
+  void close() {
+    if (entry.mounted) entry.remove();
+  }
+
+  entry = OverlayEntry(
+    builder: (_) => _SentToast(
+      text: text,
+      onDone: close,
+      onView: onView == null
+          ? null
+          : () {
+              close();
+              onView();
+            },
+    ),
+  );
+  overlay.insert(entry);
+}
+
+/// The toast itself: about 8 seconds, kept while a screen reader runs, put
+/// away by a tap; clear of the bar at the foot of the page or details, and
+/// within the details' width on a tablet.
+class _SentToast extends StatefulWidget {
+  const _SentToast({required this.text, required this.onDone, this.onView});
+  final String text;
+  final VoidCallback onDone;
+  final VoidCallback? onView;
+
+  @override
+  State<_SentToast> createState() => _SentToastState();
+}
+
+class _SentToastState extends State<_SentToast> {
+  Timer? timer;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    timer?.cancel();
+    timer = MediaQuery.accessibleNavigationOf(context)
+        ? null
+        : Timer(const Duration(seconds: 8), widget.onDone);
+  }
+
+  @override
+  void dispose() {
+    timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final touch = isCupertino ? 44.0 : 48.0;
+    return Positioned(
+      left: 0,
+      right: 0,
+      // Above the tab bar or the details' buttons (S6b ④).
+      bottom: MediaQuery.viewPaddingOf(context).bottom + 96,
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Semantics(
+              liveRegion: true,
+              container: true,
+              child: Material(
+                key: const ValueKey('suggestions-sent-toast'),
+                color: colors.inverseSurface,
+                elevation: 6,
+                borderRadius: BorderRadius.circular(isCupertino ? 22 : 8),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: widget.onDone,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 6, 4),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.check_circle,
+                          size: 20,
+                          color: colors.onInverseSurface,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            child: Text(
+                              widget.text,
+                              style: TextStyle(color: colors.onInverseSurface),
+                            ),
+                          ),
+                        ),
+                        if (widget.onView case final onView?)
+                          TextButton(
+                            key: const ValueKey('suggestions-sent-view'),
+                            onPressed: onView,
+                            style: TextButton.styleFrom(
+                              foregroundColor: colors.inversePrimary,
+                              minimumSize: Size(touch, touch),
+                            ),
+                            child: const Text(suggestionToastView),
+                          )
+                        else
+                          const SizedBox(width: 10),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 /// Whether suggestions can name [spot]'s zones and segments: TDX spots have
 /// no row to patch.
@@ -192,8 +371,11 @@ String feeSummary(ParkingSpot spot) {
 
 /// 提出修改建議 for [spot] (S1, S3): what the map says, grouped as the four
 /// signs read. Each row opens its own page, which sends its own suggestion
-/// (C6). Lots and streets differ only in the rows of 停哪裡.
-class SuggestionListPage extends StatelessWidget {
+/// (C6) and comes back here: the top then says what went and asks what else
+/// to change, the row is marked 已送出，審核中, and 完成 closes (S6, #403).
+/// The marks last while the sheet is open. Lots and streets differ only in
+/// the rows of 停哪裡.
+class SuggestionListPage extends StatefulWidget {
   const SuggestionListPage({
     super.key,
     required this.store,
@@ -202,7 +384,46 @@ class SuggestionListPage extends StatelessWidget {
   final AppStore store;
   final ParkingSpot spot;
 
+  @override
+  State<SuggestionListPage> createState() => _SuggestionListPageState();
+}
+
+class _SuggestionListPageState extends State<SuggestionListPage> {
+  AppStore get store => widget.store;
+  ParkingSpot get spot => widget.spot;
+
+  final scroll = ScrollController();
+
+  /// How many sends the top of the list has confirmed. Every send counts,
+  /// a row sent again too, so each one brings the confirmation into view.
+  int confirmed = 0;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final sends = SuggestionScope.maybeOf(context, listen: true)?.sends ?? 0;
+    if (sends == confirmed) return;
+    confirmed = sends;
+    // Back from a row further down: the confirmation is at the top.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (scroll.hasClients) scroll.jumpTo(0);
+    });
+  }
+
+  @override
+  void dispose() {
+    scroll.dispose();
+    super.dispose();
+  }
+
   bool get street => !isOffStreet(spot.spaceType, spot.facilityType);
+
+  /// Opens a row; what its pages send is marked as [item]'s. Null for the
+  /// rows that end the sheet instead (不能停車, 內容檢舉).
+  void _open(SuggestionItem? item, VoidCallback open) {
+    SuggestionScope.maybeOf(context)?.editing = item;
+    open();
+  }
 
   void _form(
     BuildContext context,
@@ -323,17 +544,51 @@ class SuggestionListPage extends StatelessWidget {
     final zones = spot.zones.length;
     final entrance = entranceHead(spot.entranceNote);
     final hasSegments = spot.segments.length > 1;
+    final sent =
+        SuggestionScope.maybeOf(context, listen: true)?.sent ??
+        const <SuggestionItem>[];
+    final names = [for (final item in sent) item.label(street: street)];
+    // 範例模式 sends nothing, and its marks say so.
+    String? mark(SuggestionItem item) => !sent.contains(item)
+        ? null
+        : store.demo
+        ? suggestionDemoTag
+        : suggestionSentTag;
     return ListenableBuilder(
       listenable: store,
       builder: (context, _) => FormPage(
+        controller: scroll,
         header: FormHeader(
           title: '提出修改建議',
           subtitle: spot.name,
-          leading: FormHeaderLeading.cancel,
+          // Nothing is left to cancel once a suggestion went.
+          leading: sent.isEmpty
+              ? FormHeaderLeading.cancel
+              : FormHeaderLeading.close,
           onLeading: () => closeFlow(context),
         ),
+        footer: sent.isEmpty
+            ? null
+            : SubmitBar(
+                key: const ValueKey('suggestions-done'),
+                label: suggestionDone,
+                note: store.demo ? null : suggestionDoneNote,
+                onPressed: () => closeFlow(context),
+              ),
         children: [
-          Text(street ? '哪一項跟現場不一樣？右邊是地圖上目前寫的。' : '哪一項跟現場不一樣？點進去改，右邊是地圖上目前寫的。'),
+          if (sent.isEmpty)
+            Text(
+              street ? '哪一項跟現場不一樣？右邊是地圖上目前寫的。' : '哪一項跟現場不一樣？點進去改，右邊是地圖上目前寫的。',
+            )
+          else ...[
+            SentBanner(
+              key: const ValueKey('suggestions-sent'),
+              title: suggestionSentTitle(names, demo: store.demo),
+              body: suggestionSentBody(names, demo: store.demo),
+            ),
+            const SizedBox(height: 14),
+            const Text(suggestionAskMore),
+          ],
           const SizedBox(height: 14),
           EntrySection(
             header: '基本資料',
@@ -342,14 +597,26 @@ class SuggestionListPage extends StatelessWidget {
                 leading: const Icon(Icons.label_outline),
                 title: '名稱',
                 value: spot.name,
-                onTap: () => _form(context, 'name', '停車點名稱', spot.name),
+                sentTag: mark(SuggestionItem.name),
+                onTap: () => _open(
+                  SuggestionItem.name,
+                  () => _form(context, 'name', '停車點名稱', spot.name),
+                ),
               ),
               EntryRow(
                 leading: const Icon(Icons.pin_drop_outlined),
                 title: '位置',
                 value: '拖曳標記',
-                onTap: () =>
-                    _form(context, 'location', '停車點位置', locationSummary(spot)),
+                sentTag: mark(SuggestionItem.location),
+                onTap: () => _open(
+                  SuggestionItem.location,
+                  () => _form(
+                    context,
+                    'location',
+                    '停車點位置',
+                    locationSummary(spot),
+                  ),
+                ),
               ),
               if (!street)
                 EntryRow(
@@ -359,7 +626,11 @@ class SuggestionListPage extends StatelessWidget {
                   value: spot.facilities.isEmpty
                       ? '未填'
                       : facilityTypesLabel(spot.facilities),
-                  onTap: () => _kindForm(context, '場站型式'),
+                  sentTag: mark(SuggestionItem.facility),
+                  onTap: () => _open(
+                    SuggestionItem.facility,
+                    () => _kindForm(context, '場站型式'),
+                  ),
                 ),
             ],
           ),
@@ -375,11 +646,15 @@ class SuggestionListPage extends StatelessWidget {
                   leading: const Icon(Icons.fact_check_outlined),
                   title: '可停車種',
                   value: eligibilitySummary(spot),
-                  onTap: () => _form(
-                    context,
-                    'eligibility',
-                    '可停車種',
-                    eligibilitySummary(spot),
+                  sentTag: mark(SuggestionItem.vehicles),
+                  onTap: () => _open(
+                    SuggestionItem.vehicles,
+                    () => _form(
+                      context,
+                      'eligibility',
+                      '可停車種',
+                      eligibilitySummary(spot),
+                    ),
                   ),
                 )
               else if (street)
@@ -390,7 +665,11 @@ class SuggestionListPage extends StatelessWidget {
                   subtitle:
                       '依${spot.city.isEmpty ? '縣市' : spot.city}規則帶入建議，可在各路段裡改',
                   value: hasSegments ? '各段不同' : eligibilitySummary(spot),
-                  onTap: () => _openEntries(context),
+                  sentTag: mark(SuggestionItem.vehicles),
+                  onTap: () => _open(
+                    SuggestionItem.vehicles,
+                    () => _openEntries(context),
+                  ),
                 ),
               EntryRow(
                 key: const ValueKey('suggest-limits'),
@@ -398,7 +677,13 @@ class SuggestionListPage extends StatelessWidget {
                 title: '限時／禁停／共用時段',
                 subtitle: street ? '現場標誌寫的' : null,
                 value: _rulesOpen ? limitSummary(spot) : '先新增分區',
-                onTap: _rulesOpen ? () => _openRules(context) : null,
+                sentTag: mark(SuggestionItem.limits),
+                onTap: _rulesOpen
+                    ? () => _open(
+                        SuggestionItem.limits,
+                        () => _openRules(context),
+                      )
+                    : null,
               ),
             ],
           ),
@@ -412,7 +697,8 @@ class SuggestionListPage extends StatelessWidget {
                 title: '費率',
                 subtitle: street ? '每一段各自一組' : null,
                 value: feeSummary(spot),
-                onTap: () => _openFee(context),
+                sentTag: mark(SuggestionItem.fee),
+                onTap: () => _open(SuggestionItem.fee, () => _openFee(context)),
               ),
             ],
           ),
@@ -433,7 +719,9 @@ class SuggestionListPage extends StatelessWidget {
                         if (entrance.isNotEmpty) entrance,
                         if (zones > 0) '$zones 區',
                       ].join('・').ifEmpty('未填'),
-                onTap: () => _openEntries(context),
+                sentTag: mark(SuggestionItem.where),
+                onTap: () =>
+                    _open(SuggestionItem.where, () => _openEntries(context)),
               ),
             ],
           ),
@@ -446,7 +734,9 @@ class SuggestionListPage extends StatelessWidget {
                 leading: Icon(Icons.block, color: colors.error),
                 title: goneLabel,
                 subtitle: '格線撤除、改為其他用途、施工或封閉',
-                onTap: () => _form(context, 'gone', goneLabel),
+                // Ends the sheet once sent, with nothing more asked (S6b ⑤).
+                onTap: () =>
+                    _open(null, () => _form(context, 'gone', goneLabel)),
               ),
             ],
           ),
@@ -463,12 +753,12 @@ class SuggestionListPage extends StatelessWidget {
                   subtitle: contentProblemDetail,
                   // Hidden from the result: this list closes, and the
                   // details behind it close as they see the rider hidden.
-                  onTap: () async {
+                  onTap: () => _open(null, () async {
                     if (await showContentReport(context, store, spot) &&
                         context.mounted) {
                       closeFlow(context);
                     }
-                  },
+                  }),
                 ),
               ],
             ),
@@ -482,11 +772,15 @@ class SuggestionListPage extends StatelessWidget {
                 leading: const Icon(Icons.notes_outlined),
                 title: '其他備註',
                 value: spot.note.isEmpty ? '未提供' : spot.note,
-                onTap: () => _form(
-                  context,
-                  'note',
-                  '其他備註',
-                  spot.note.isEmpty ? '未提供' : spot.note,
+                sentTag: mark(SuggestionItem.note),
+                onTap: () => _open(
+                  SuggestionItem.note,
+                  () => _form(
+                    context,
+                    'note',
+                    '其他備註',
+                    spot.note.isEmpty ? '未提供' : spot.note,
+                  ),
                 ),
               ),
             ],
@@ -566,6 +860,11 @@ Future<void> _showSuggestionForm(
   String? current,
   bool inFlow = false,
 }) async {
+  // From the list, a sent suggestion goes back to it (S6). 不能停車 does
+  // not: the whole spot is reported, so nothing more is asked (S6b ⑤).
+  final session = inFlow && fieldKey != 'gone'
+      ? SuggestionScope.maybeOf(context)
+      : null;
   var submitted = false;
   await showAdaptiveSheet<void>(
     context,
@@ -575,14 +874,21 @@ Future<void> _showSuggestionForm(
       fieldKey: fieldKey,
       label: label,
       current: current,
+      closeWhenSent: session != null,
       onSubmitted: () => submitted = true,
     ),
   );
-  // Any dismissal after success (Done, close, back or drag) closes the picker
-  // too. Cancelling or a failed request keeps it available for another edit.
-  if (submitted && context.mounted) {
-    inFlow ? closeFlow(context) : Navigator.pop(context);
+  // Cancelling or a failed request keeps the list as it was.
+  if (!submitted || !context.mounted) return;
+  if (session != null) {
+    session.markSent();
+    // The form may have been opened from a page of the list (入口, on S1b).
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    return;
   }
+  // Any dismissal of the success page (Done, close, back or drag) closes
+  // the picker too.
+  inFlow ? closeFlow(context) : Navigator.pop(context);
 }
 
 class _SuggestionForm extends StatefulWidget {
@@ -592,6 +898,7 @@ class _SuggestionForm extends StatefulWidget {
     required this.fieldKey,
     required this.label,
     required this.onSubmitted,
+    this.closeWhenSent = false,
     this.current,
   });
   final AppStore store;
@@ -601,6 +908,10 @@ class _SuggestionForm extends StatefulWidget {
   final String fieldKey;
   final String label;
   final VoidCallback onSubmitted;
+
+  /// The list says what went (S6), so the form closes once sent instead of
+  /// showing its own success page.
+  final bool closeWhenSent;
 
   /// The value shown today; null for the "can no longer park here" report.
   final String? current;
@@ -613,6 +924,11 @@ class _SuggestionFormState extends State<_SuggestionForm> {
   final note = TextEditingController();
   bool sending = false, sent = false;
   String? error;
+
+  /// Why the last send failed, above the send button (S6b).
+  SendProblem? problem;
+
+  String get sendLabel => unavailable ? '送出回報' : '送出修改建議';
 
   /// The kind the spot is today, and the one the rider suggests.
   late final SpaceKind currentKind = SpaceKind.of(
@@ -1088,12 +1404,17 @@ class _SuggestionFormState extends State<_SuggestionForm> {
     setState(() {
       sending = true;
       error = null;
+      problem = null;
     });
     try {
       await widget.store.submit(body());
       if (mounted) {
         widget.onSubmitted();
-        setState(() => sent = true);
+        if (widget.closeWhenSent) {
+          Navigator.pop(context);
+        } else {
+          setState(() => sent = true);
+        }
       }
     } catch (e) {
       if (accountSuspendedFrom(e) case final s?) {
@@ -1102,13 +1423,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
         }
         return;
       }
-      if (mounted) {
-        setState(
-          () => error = e is StateError
-              ? e.message.toString()
-              : '建議沒有送出，內容還在，請確認網路後再送一次。',
-        );
-      }
+      if (mounted) setState(() => problem = SendProblem.of(e));
     } finally {
       if (mounted) setState(() => sending = false);
     }
@@ -1608,12 +1923,12 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                   child: Text(error!, style: TextStyle(color: colors.error)),
                 ),
               const SizedBox(height: 20),
+              if (problem case final problem?) ...[
+                SendProblemNote(problem, button: sendLabel),
+                const SizedBox(height: 8),
+              ],
               AdaptiveButton(
-                label: sending
-                    ? '送出中…'
-                    : unavailable
-                    ? '送出回報'
-                    : '送出修改建議',
+                label: sending ? '送出中…' : sendLabel,
                 onPressed: sending
                     ? null
                     : widget.store.canReport
