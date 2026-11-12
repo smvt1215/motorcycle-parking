@@ -214,6 +214,9 @@ export function openSite(
   support: SupportPort | null = testSupport(),
 ) {
   const store = makeStore({
+    // The default queues a 100 ms fallback timer that can fire after jsdom is
+    // torn down, where cancelAnimationFrame no longer exists (#441).
+    autoBatch: 'tick',
     postgrest: auth
       ? { url: 'https://api.test', anonKey: 'anon', accessToken: () => auth.accessToken() }
       : null,
