@@ -1,5 +1,6 @@
 import type { RouteObject } from 'react-router';
-import { PendingCase, PendingIndex, PendingPage } from './PendingPage';
+import { PendingCase } from './PendingCase';
+import { PendingIndex, PendingPage } from './PendingPage';
 
 /** Shared by the deployed page and the full fixture app. */
 export const pendingRoute: RouteObject = {

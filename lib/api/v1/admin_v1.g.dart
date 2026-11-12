@@ -227,6 +227,16 @@ class AdminV1Client {
     'p_limit': ?pLimit,
   });
 
+  /// 用 id 讀一件待處理（案件頁、深連結）
+  Future<TimedCase> timedCase({required String pId}) async {
+    final raw = await timedCaseRaw(pId: pId);
+    return TimedCase.fromJson(raw as Map<String, Object?>);
+  }
+
+  /// [timedCase] as served, for callers that keep the JSON (#202).
+  Future<Object?> timedCaseRaw({required String pId}) =>
+      _call('timed_case', {'p_id': pId});
+
   /// 待處理的計數（導覽徽章、分頁）
   Future<TimedCaseCounts> timedCaseCounts() async {
     final raw = await timedCaseCountsRaw();
@@ -1325,6 +1335,7 @@ class TimedCase {
     this.hiddenParts,
     this.spotId,
     this.pendingAction,
+    required this.hasExchange,
   });
 
   factory TimedCase.fromJson(Map<String, Object?> json) => TimedCase(
@@ -1346,6 +1357,7 @@ class TimedCase {
         : [for (final e in json['hidden_parts'] as List) e as String],
     spotId: json['spot_id'] == null ? null : json['spot_id'] as String,
     pendingAction: json['pending_action'],
+    hasExchange: json['has_exchange'] as bool,
   );
 
   /// 客服＝案件 id（admin_v1.support_request 的 p_id）；檢舉＝組內最早一則的 id（admin_v1.content_report 的 p_id）
@@ -1388,6 +1400,9 @@ class TimedCase {
   /// 這個案件最新的排程動作還需要注意時（倒數中、失敗或 stale）；否則 null
   final Object? pendingAction;
 
+  /// 客服：原始內容之後已有往來（awaiting_admin 時分辨「等你回覆」和「對方補充了」）；檢舉一律 false
+  final bool hasExchange;
+
   Map<String, Object?> toJson() => {
     'id': id,
     'type': type,
@@ -1403,6 +1418,7 @@ class TimedCase {
     'hidden_parts': hiddenParts,
     'spot_id': spotId,
     'pending_action': pendingAction,
+    'has_exchange': hasExchange,
   };
 
   @override
@@ -1421,7 +1437,8 @@ class TimedCase {
       other.reportCount == reportCount &&
       _equal(other.hiddenParts, hiddenParts) &&
       other.spotId == spotId &&
-      _equal(other.pendingAction, pendingAction);
+      _equal(other.pendingAction, pendingAction) &&
+      other.hasExchange == hasExchange;
 
   @override
   int get hashCode => Object.hashAll([
@@ -1439,6 +1456,7 @@ class TimedCase {
     _hash(hiddenParts),
     spotId,
     _hash(pendingAction),
+    hasExchange,
   ]);
 }
 

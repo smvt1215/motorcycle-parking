@@ -367,6 +367,13 @@ class ReviewController extends ChangeNotifier {
     ResolutionKind? resolutionKind,
     Map<String, dynamic> Function(Map<String, dynamic>)? adjust,
   }) async {
+    // Resolving a content report here would put the hidden text back; the
+    // server refuses it as well (#326).
+    if (report.contentReport) {
+      error = contentReportElsewhere;
+      _notify();
+      return report.id;
+    }
     final (wired, problem) = patchFor(report, decision);
     // How a fee reaches a shared plan, as the admin chose (design §2.6).
     final patch = problem == null && adjust != null ? adjust(wired) : wired;
@@ -553,6 +560,11 @@ class ReviewController extends ChangeNotifier {
         _resolved.add(held.report.id);
         error = '「${held.report.title}」已由其他人處理，已從佇列移除。';
         onResolved?.call();
+      } else if (message.contains(
+        'content reports are resolved on the pending cases page',
+      )) {
+        // 202611111900 (#326): the report stays open for the cases page.
+        error = '「${held.report.title}」沒有處理：$contentReportElsewhere';
       } else {
         error = '「${held.report.title}」尚未處理成功，已放回佇列。請檢查後重試。';
       }

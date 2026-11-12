@@ -156,6 +156,9 @@ ReviewField? reviewField(String key) =>
 /// Votes hide a community spot themselves and queue this reason.
 const autoHiddenReason = '加權負向回報達門檻';
 
+/// Shown for a content report, which this page cannot close (#326).
+const contentReportElsewhere = '這是內容檢舉，請到「待處理」案件頁處理。';
+
 /// Stable `field` keys the app sends, with their labels. Builds before the
 /// keys sent the label itself, so both forms are read.
 const suggestionFieldLabels = {
@@ -241,6 +244,10 @@ class ReviewReport {
 
   bool get official => sourceId.startsWith('official:');
   bool get autoHidden => reason == autoHiddenReason;
+
+  /// A content report (#280): closed only on the pending cases page, where
+  /// the hidden text is kept, restored or edited; this page cannot (#326).
+  bool get contentReport => field == 'inappropriate';
 
   /// What the report is about: the structured field, else the prefix older
   /// builds wrote before "：".

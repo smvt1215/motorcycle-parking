@@ -24,6 +24,7 @@ const row = (id: string, extra: Partial<TimedCase> = {}): TimedCase => ({
   hidden_parts: null,
   spot_id: null,
   pending_action: null,
+  has_exchange: false,
   ...extra,
 });
 
@@ -49,6 +50,8 @@ function backend(handlers: { list: (body: Record<string, unknown>) => Reply; cou
     if (url.endsWith('/rpc/timed_cases')) {
       calls.push(body);
       reply = handlers.list(body);
+    } else if (url.endsWith('/rpc/case_actions')) {
+      reply = { body: [] };
     } else {
       reply = handlers.counts();
     }
@@ -140,6 +143,40 @@ describe('待處理清單', () => {
       await vi.advanceTimersByTimeAsync(61_000);
     });
     await waitFor(() => expect(calls).toHaveLength(2));
+    vi.useRealTimers();
+  });
+
+  it('reads the list again when the counts change, such as a reply whose mail failed', async () => {
+    // Noon in Taiwan: only the counts poll can move the list.
+    vi.useFakeTimers({ now: Date.parse('2026-11-09T04:00:00Z'), shouldAdvanceTime: true });
+    let failed = false;
+    const { postgrest, calls } = backend({
+      list: () => ({
+        body: {
+          items: failed ? [row('a', { state: 'send_failed', bucket: 'today', rank: 0 })] : [],
+          next_cursor: null,
+        },
+      }),
+      counts: () => ({
+        body: failed
+          ? { ...COUNTS, all: 1, later: 0, send_failed: 1, waiting: 0, by_kind: { support: 1 } }
+          : { ...COUNTS, all: 0, later: 0, waiting: 0, by_kind: {}, as_of: new Date().toISOString() },
+      }),
+    });
+    renderPending(postgrest);
+    await screen.findByText('現在沒有待處理的案件。');
+    // A poll with the same counts (only as_of moves) does not read the list.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(61_000);
+    });
+    expect(calls).toHaveLength(1);
+    failed = true;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(61_000);
+    });
+    await waitFor(() => expect(calls).toHaveLength(2));
+    expect(await screen.findByText('一般問題')).toBeInTheDocument();
+    expect(screen.queryByText('現在沒有待處理的案件。')).not.toBeInTheDocument();
     vi.useRealTimers();
   });
 
@@ -246,6 +283,18 @@ describe('待處理清單', () => {
     expect(await screen.findByText('請重新完成第二步驗證')).toBeInTheDocument();
   });
 
+  it('goes back to the case the sign-in started from', async () => {
+    sessionStorage.setItem('motopark-admin-return-path', '/pending/a?tab=support');
+    const { postgrest } = backend({
+      list: () => ({ body: { items: [row('a')], next_cursor: null } }),
+      counts: () => ({ body: COUNTS }),
+    });
+    const router = renderPending(postgrest);
+    await waitFor(() => expect(router.state.location.pathname).toBe('/pending/a'));
+    expect(router.state.location.search).toBe('?tab=support');
+    expect(sessionStorage.getItem('motopark-admin-return-path')).toBeNull();
+  });
+
   it('marks the opened case and keeps the filter in its address', async () => {
     const { postgrest } = backend({
       list: () => ({ body: { items: [row('a')], next_cursor: null } }),
@@ -257,6 +306,6 @@ describe('待處理清單', () => {
     expect(router.state.location.pathname).toBe('/pending/a');
     expect(router.state.location.search).toBe('?tab=support');
     expect(await screen.findByRole('link', { name: /一般問題/ })).toHaveAttribute('aria-current', 'true');
-    expect(screen.getByRole('region', { name: '案件內容還沒接上' })).toBeInTheDocument();
+    expect(await screen.findByRole('status', { name: '正在讀取案件' })).toBeInTheDocument();
   });
 });

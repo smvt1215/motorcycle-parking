@@ -99,6 +99,17 @@ const officialId = 'official:22222222-2222-4222-8222-222222222222';
 
 final reportTime = DateTime.utc(2026, 10, 24, 9);
 
+/// A content report (#280), which the review page cannot close (#326).
+final contentReport = ReviewReport(
+  id: 'r-content',
+  sourceId: communityId,
+  reason: '內容不當',
+  field: 'inappropriate',
+  proposed: const {'target': 'text'},
+  note: '備註有辱罵',
+  createdAt: reportTime.add(const Duration(minutes: 30)),
+);
+
 List<ReviewReport> sampleReports() => [
   ReviewReport(
     id: 'r-type',

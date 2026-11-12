@@ -1,10 +1,12 @@
-import { useLayoutEffect, useRef } from 'react';
-import { Link, Outlet, useLocation, useParams } from 'react-router';
+import { useEffect, useLayoutEffect, useRef } from 'react';
+import { Outlet, useLocation, useNavigate, useParams } from 'react-router';
 import { useDataConnection } from '../app/connection';
+import { takeReturnPath } from '../auth/returnPath';
 import { Page } from '../pages/Page';
 import { EmptyState } from '../ui/EmptyState';
-import { usePendingCounts } from './api';
+import { CountdownDock } from './CountdownDock';
 import { PendingList } from './PendingList';
+import { useActionWatcher, useKeyboardInset } from './useCaseEffects';
 import './Pending.css';
 
 /**
@@ -16,11 +18,32 @@ export function PendingPage() {
   const connection = useDataConnection();
   const { caseId } = useParams();
   const listScroll = useRef(0);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const root = useRef<HTMLDivElement>(null);
+  const keyboard = useKeyboardInset();
+  useActionWatcher();
 
   useLayoutEffect(() => {
     const target = caseId ? 0 : listScroll.current;
     if (window.scrollY !== target) window.scrollTo(0, target);
   }, [caseId]);
+
+  // Back from Google at /pending: go where the sign-in started.
+  useEffect(() => {
+    const path = takeReturnPath();
+    if (path && path !== `${location.pathname}${location.search}`) {
+      void navigate(path, { replace: true });
+    }
+    // Once, on arrival.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    root.current?.style.setProperty('--kb', `${keyboard}px`);
+    // The keyboard just opened: keep what is being typed clear of the bar.
+    if (keyboard > 0) (document.activeElement as HTMLElement | null)?.scrollIntoView?.({ block: 'nearest' });
+  }, [keyboard]);
 
   if (connection === 'none') {
     return (
@@ -33,7 +56,10 @@ export function PendingPage() {
   }
 
   return (
-    <div className={`pending ${caseId ? 'pending--detail' : 'pending--list'}`}>
+    <div
+      ref={root}
+      className={`pending ${caseId ? 'pending--detail' : 'pending--list'}${keyboard > 0 ? ' pending--keyboard' : ''}`}
+    >
       <PendingList
         selectedId={caseId ?? null}
         onOpen={() => {
@@ -43,6 +69,7 @@ export function PendingPage() {
       <div className="pending-main">
         <Outlet />
       </div>
+      <CountdownDock />
     </div>
   );
 }
@@ -53,33 +80,6 @@ export function PendingIndex() {
     <div className="pending-pane">
       <EmptyState title="從清單選一筆案件">
         <p>案件的內容會顯示在這裡。</p>
-      </EmptyState>
-    </div>
-  );
-}
-
-/**
- * The case pane. Replies, closing and report handling come with the next
- * layer of #295, which replaces this component and keeps the route.
- */
-export function PendingCase() {
-  const { search } = useLocation();
-  const counts = usePendingCounts();
-  const remaining = counts.isError ? undefined : counts.data?.all;
-  return (
-    <div className="pending-pane">
-      <div className="pending-back">
-        <Link className="btn btn--quiet" to={`/pending${search}`}>
-          返回清單
-          {remaining !== undefined && (
-            <>
-              （剩 <span className="num">{remaining}</span> 筆）
-            </>
-          )}
-        </Link>
-      </div>
-      <EmptyState title="案件內容還沒接上">
-        <p>這一版只有待處理清單。回覆、結案和檢舉處理會在下一版加入。</p>
       </EmptyState>
     </div>
   );

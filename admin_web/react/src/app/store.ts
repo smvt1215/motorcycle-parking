@@ -2,6 +2,7 @@ import { combineReducers, configureStore, createListenerMiddleware } from '@redu
 import { adminV1Base, type PostgrestConnection } from '../api/v1/base';
 import { apiV1 } from '../api/v1/api_v1.generated';
 import type { AdminDataSource } from '../review/source';
+import { pendingActionsSlice } from '../pending/actionsSlice';
 import { reviewSlice, startReviewListeners } from '../review/reviewSlice';
 import { adminApi, type AppExtra } from './adminApi';
 import { prefsSlice } from './prefsSlice';
@@ -9,6 +10,7 @@ import { prefsSlice } from './prefsSlice';
 const rootReducer = combineReducers({
   [prefsSlice.name]: prefsSlice.reducer,
   [reviewSlice.name]: reviewSlice.reducer,
+  [pendingActionsSlice.name]: pendingActionsSlice.reducer,
   [adminApi.reducerPath]: adminApi.reducer,
   [apiV1.reducerPath]: apiV1.reducer,
   [adminV1Base.reducerPath]: adminV1Base.reducer,

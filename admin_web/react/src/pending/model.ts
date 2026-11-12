@@ -106,11 +106,7 @@ const SCHEDULED_LABEL: Record<string, string> = {
 
 const scheduledLabel = (item: TimedCase) => SCHEDULED_LABEL[item.pending_action?.action ?? ''] ?? '等待處理';
 
-/**
- * The row's second line. A report counts its reports, whatever its state.
- * `awaiting_admin` cannot say 「對方補充了」 yet: the list has no field telling
- * a first message from a follow-up.
- */
+/** The row's second line. A report counts its reports, whatever its state. */
 export function caseStatus(item: TimedCase): string {
   if (item.type === 'report') return `${item.report_count ?? 1} 則檢舉`;
   switch (item.state) {
@@ -123,11 +119,11 @@ export function caseStatus(item: TimedCase): string {
     case 'system':
       return item.kind === 'privacy' ? '等對方確認' : '系統處理中';
     default:
-      return '等你回覆';
+      return item.has_exchange ? '對方補充了' : '等你回覆';
   }
 }
 
-export type TagTone = 'danger' | 'dashed' | 'outline';
+export type TagTone = 'danger' | 'dashed' | 'outline' | 'solid';
 
 export interface CaseTag {
   label: string;
@@ -149,6 +145,51 @@ export function caseTags(item: TimedCase): CaseTag[] {
   }
   if (item.suspicious) tags.push({ label: '寄件人未驗證', tone: 'danger' });
   return tags;
+}
+
+const dateTimeFormat = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Asia/Taipei',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
+
+/** 「11/03 09:41」 Taiwan time, with the year only when it is not this one (t7). */
+export function dateTime(iso: string, now: number): string {
+  const time = Date.parse(iso);
+  const parts = Object.fromEntries(dateTimeFormat.formatToParts(time).map((p) => [p.type, p.value]));
+  const short = `${parts.month}/${parts.day} ${parts.hour}:${parts.minute}`;
+  const year = taipeiDate(time)[0];
+  return year === taipeiDate(now)[0] ? short : `${year}/${short}`;
+}
+
+/** The case header's tags: lateness first, then where it stands. */
+export function caseHeadTags(item: TimedCase, now: number, confirmed: boolean): CaseTag[] {
+  const tags: CaseTag[] = [];
+  if (item.bucket === 'overdue')
+    tags.push({ label: `逾期 ${overdueDays(item.due_at, now)} 天`, tone: 'danger' });
+  if (item.type === 'report') return [...tags, ...caseTags(item)];
+  switch (item.state) {
+    case 'scheduled':
+      tags.push({ label: scheduledLabel(item), tone: 'dashed' });
+      break;
+    case 'awaiting_user':
+      tags.push({ label: '等對方回覆', tone: 'outline' });
+      break;
+    case 'system':
+      tags.push({
+        label: item.kind === 'account_deletion' && confirmed ? '系統處理中' : '等對方確認',
+        tone: 'dashed',
+      });
+      break;
+    case 'send_failed':
+      break;
+    default:
+      tags.push({ label: item.has_exchange ? '對方補充了' : '等你回覆', tone: 'solid' });
+  }
+  return [...tags, ...caseTags(item)];
 }
 
 export type CaseGroupKey = 'failed' | TimedCase['bucket'];

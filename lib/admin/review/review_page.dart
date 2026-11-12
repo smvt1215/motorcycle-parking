@@ -694,6 +694,7 @@ class _ReviewDetail extends StatelessWidget {
         hasSpot: spot != null,
         hasPatch: patch.isNotEmpty,
         busy: review.writing,
+        blocked: report.contentReport,
         conflict: conflict,
         stale: conflict && stale,
         onRefresh: () => review.refreshSpot(report),
@@ -818,7 +819,9 @@ class _ReviewDetail extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 10),
-                if (spot == null)
+                if (report.contentReport)
+                  const AdminNotice(contentReportElsewhere)
+                else if (spot == null)
                   const AdminNotice('找不到這個點位，可能已刪除或不是官方／社群點，只能駁回。')
                 else if (rows.isEmpty && !editing)
                   const AdminNotice('這筆回報沒有可直接套用的建議。請依騎士的說明「修改後套用」，或結案、駁回。')
@@ -1636,6 +1639,7 @@ class _ActionBar extends StatelessWidget {
     required this.hasSpot,
     required this.hasPatch,
     required this.busy,
+    this.blocked = false,
     required this.conflict,
     required this.stale,
     required this.onRefresh,
@@ -1645,6 +1649,10 @@ class _ActionBar extends StatelessWidget {
     required this.onCancelEdit,
   });
   final bool compact, editing, hasSpot, hasPatch, busy, conflict;
+
+  /// A content report (#326): every decision is off, the notice says where
+  /// it is handled.
+  final bool blocked;
 
   /// A conflict whose current values failed to reload: only retry or reject.
   final bool stale;
@@ -1656,6 +1664,8 @@ class _ActionBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final busy = this.busy || blocked;
+    final notice = error ?? (blocked ? contentReportElsewhere : null);
     final primary = !hasSpot
         ? null
         : stale
@@ -1716,8 +1726,8 @@ class _ActionBar extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (error != null) ...[
-            AdminNotice(error!, error: true),
+          if (notice != null) ...[
+            AdminNotice(notice, error: error != null),
             const SizedBox(height: 10),
           ],
           if (compact) ...[
