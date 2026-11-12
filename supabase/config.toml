@@ -218,12 +218,18 @@ web3 = 30
 # secret = ""
 
 [auth.email]
-# Allow/disallow new user signups via email to your project.
-enable_signup = true
+# Email provider switch (#430). The App and the websites only sign in with Google and Apple ID
+# tokens, so the Email provider is off: false means nobody can sign up or sign in with an email
+# (password, magic link or OTP). It does not touch Google or Apple sign-in, which stay governed by
+# [auth] enable_signup and [auth.external.*]. Newer CLIs spell it `enabled`; `enable_signup` is the
+# same switch. Keep it off on staging and production (docs/CD_SETUP.md, Email provider).
+enable_signup = false
 # If enabled, a user will be required to confirm any email change on both the old, and new email
 # addresses. If disabled, only the new email is required to confirm.
 double_confirm_changes = true
 # If enabled, users need to confirm their email address before signing in.
+# Local only: false treats every email as verified. Do not copy it to production; it is moot while
+# the Email provider above is off, but turning that provider on needs this set to true first.
 enable_confirmations = false
 # If enabled, users will need to reauthenticate or have logged in recently to change their password.
 secure_password_change = false
