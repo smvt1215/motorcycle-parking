@@ -19,6 +19,16 @@ function useNow() {
   return now;
 }
 
+/** What the counts say about the rows, without as_of (which changes every read). */
+function countsSignature(counts: TimedCaseCounts | undefined): string | null {
+  if (counts === undefined) return null;
+  const { all, overdue, today, later, waiting, send_failed, by_kind } = counts;
+  const kinds = Object.keys(by_kind)
+    .sort()
+    .map((key) => [key, by_kind[key]]);
+  return JSON.stringify([all, overdue, today, later, waiting, send_failed, kinds]);
+}
+
 const EMPTY_TEXT: Record<Exclude<PendingTab, 'all'>, string> = {
   support: '沒有要回覆的客服案件。',
   report: '沒有要處理的內容檢舉。',
@@ -96,6 +106,18 @@ export function PendingList({ selectedId, onOpen }: PendingListProps) {
     void refetchList();
     void refetchCounts();
   }, [revision, refetchList, refetchCounts]);
+
+  // Rows can move with nothing on this page starting or ending: a reply's
+  // mail failing after the action settled puts its case back as send_failed.
+  // The counts poll sees that, so a change in the counts reads the list again.
+  const countsKey = countsSignature(counts.data);
+  const lastCountsKey = useRef(countsKey);
+  useEffect(() => {
+    if (lastCountsKey.current === countsKey) return;
+    const first = lastCountsKey.current === null;
+    lastCountsKey.current = countsKey;
+    if (!first) void refetchList();
+  }, [countsKey, refetchList]);
 
   // After the last case in the queue, focus comes here (t8).
   useEffect(() => {

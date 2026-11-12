@@ -146,6 +146,40 @@ describe('待處理清單', () => {
     vi.useRealTimers();
   });
 
+  it('reads the list again when the counts change, such as a reply whose mail failed', async () => {
+    // Noon in Taiwan: only the counts poll can move the list.
+    vi.useFakeTimers({ now: Date.parse('2026-11-09T04:00:00Z'), shouldAdvanceTime: true });
+    let failed = false;
+    const { postgrest, calls } = backend({
+      list: () => ({
+        body: {
+          items: failed ? [row('a', { state: 'send_failed', bucket: 'today', rank: 0 })] : [],
+          next_cursor: null,
+        },
+      }),
+      counts: () => ({
+        body: failed
+          ? { ...COUNTS, all: 1, later: 0, send_failed: 1, waiting: 0, by_kind: { support: 1 } }
+          : { ...COUNTS, all: 0, later: 0, waiting: 0, by_kind: {}, as_of: new Date().toISOString() },
+      }),
+    });
+    renderPending(postgrest);
+    await screen.findByText('現在沒有待處理的案件。');
+    // A poll with the same counts (only as_of moves) does not read the list.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(61_000);
+    });
+    expect(calls).toHaveLength(1);
+    failed = true;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(61_000);
+    });
+    await waitFor(() => expect(calls).toHaveLength(2));
+    expect(await screen.findByText('一般問題')).toBeInTheDocument();
+    expect(screen.queryByText('現在沒有待處理的案件。')).not.toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
   it('reads a tab again when returning to it', async () => {
     const { postgrest, calls } = backend({
       list: () => ({ body: { items: [row('a')], next_cursor: null } }),
