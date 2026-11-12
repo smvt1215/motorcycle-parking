@@ -148,6 +148,10 @@ class _MapPageState extends ConsumerState<MapPage> {
   /// centre it once more.
   bool recenterOnPeek = false;
 
+  /// The layout the last build drew, to notice the window crossing the
+  /// tablet width.
+  bool? wasTablet;
+
   /// The spot sheet sits on the root overlay, over the tab bar as in map
   /// apps, while the rest of the map still takes gestures.
   final sheetPortal = OverlayPortalController()..show();
@@ -582,6 +586,26 @@ class _MapPageState extends ConsumerState<MapPage> {
     );
     final now = store.clock();
     if (parkableNowOnly) _tickParkableNow(now);
+    // The window crossed the tablet width with a spot open (split screen,
+    // a foldable): the point centres again in what the new layout leaves
+    // of the map, beside the panel or above the card.
+    final tabletNow = isTabletLayout(context);
+    if (wasTablet != null && wasTablet != tabletNow && selected != null) {
+      // The card opens afresh and reports its height.
+      sheetPeek = spotSheetPeek;
+      recenterOnPeek = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final spot = selected;
+        if (!mounted || spot == null) return;
+        unawaited(
+          runAction(
+            context,
+            () => _moveCamera(LatLng(spot.lat, spot.lng), null, above: true),
+          ),
+        );
+      });
+    }
+    wasTablet = tabletNow;
     final spots = visible
         .where(
           (s) =>

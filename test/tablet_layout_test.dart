@@ -377,6 +377,11 @@ void main() {
     expect(find.byType(SpotSheet), findsOneWidget);
     expect(_openName(tester), name);
     expect(find.byType(MapActions), findsNothing);
+    // The point centres above the card again, not where the panel left it.
+    var map = tester.getRect(find.byType(FlutterMap));
+    var marker = tester.getCenter(find.byKey(_selectedMarker));
+    expect(marker.dx, moreOrLessEquals(map.center.dx, epsilon: 1));
+    expect(marker.dy, lessThan(map.center.dy));
     // And back to the full screen.
     tester.view.physicalSize = const Size(1180, 820);
     await tester.pumpAndSettle();
@@ -386,6 +391,33 @@ void main() {
     expect(find.byType(SpotSheet), findsOneWidget);
     expect(_openName(tester), name);
     expect(find.byType(MapActions), findsOneWidget);
+    // And beside the panel, not behind it.
+    map = tester.getRect(find.byType(FlutterMap));
+    marker = tester.getCenter(find.byKey(_selectedMarker));
+    expect(
+      marker.dx,
+      moreOrLessEquals((16 + sidePanelWidth + map.right) / 2, epsilon: 1),
+    );
+    expect(marker.dy, moreOrLessEquals(map.center.dy, epsilon: 1));
+  }, variant: _platforms);
+
+  testWidgets('窄視窗開著點再放大成平板：選取的點移到面板旁邊', (tester) async {
+    final store = await _store(tester);
+    await _pumpMap(tester, store, size: const Size(590, 820));
+    await _openFirst(tester);
+    expect(find.byKey(_overlay), findsOneWidget);
+    tester.view.physicalSize = const Size(820, 1180);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    final panel = tester.getRect(find.byKey(_panel));
+    final map = tester.getRect(find.byType(FlutterMap));
+    final marker = tester.getCenter(find.byKey(_selectedMarker));
+    expect(marker.dx, greaterThan(panel.right));
+    expect(
+      marker.dx,
+      moreOrLessEquals((16 + sidePanelWidth + map.right) / 2, epsilon: 1),
+    );
+    expect(marker.dy, moreOrLessEquals(map.center.dy, epsilon: 1));
   }, variant: _platforms);
 
   testWidgets('整個 App 跨過平板寬度：地圖頁不重建，開著的點、篩選與搜尋文字都留著', (tester) async {
