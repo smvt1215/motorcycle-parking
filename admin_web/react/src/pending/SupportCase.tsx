@@ -17,6 +17,15 @@ const SOURCE_NAME: Record<string, string> = { web: '客服表單', email: 'Email
 
 const OUTBOUND_MINE = '你的回覆';
 
+/** support_outbound_claim stops retrying at this many attempts. */
+export const DELIVERY_MAX_ATTEMPTS = 5;
+
+/** A failed send under the attempt limit: the server tries it again by itself. */
+export const autoRetrying = (message: SupportMessage) =>
+  message.direction === 'out' &&
+  message.delivery_status === 'failed' &&
+  message.attempts < DELIVERY_MAX_ATTEMPTS;
+
 function messageLabel(message: SupportMessage, index: number, mine: boolean): string {
   if (message.direction === 'out') return mine ? OUTBOUND_MINE : '其他管理員的回覆';
   if (index === 0) return `對方的原始內容（${SOURCE_NAME[message.channel] ?? '客服表單'}）`;
@@ -34,6 +43,13 @@ function Delivery({ message, now }: { message: SupportMessage; now: number }) {
             ，<span className="num">{dateTime(message.sent_at, now)}</span>
           </>
         )}
+      </span>
+    );
+  }
+  if (autoRetrying(message)) {
+    return (
+      <span className="t-caption">
+        還沒寄出，系統已試了 <span className="num">{message.attempts}</span> 次，15 到 30 分鐘內會自動再試。
       </span>
     );
   }
@@ -122,10 +138,13 @@ export function SupportNotices({
   item,
   request,
   failedSend,
+  retrying,
 }: {
   item: TimedCase;
   request: SupportRequestDetail['request'];
   failedSend: boolean;
+  /** A reply the server is still retrying: 再寄一次 would only start over. */
+  retrying: boolean;
 }) {
   const replyTo = request.reply_to ?? request.contact_email;
   return (
@@ -151,9 +170,15 @@ export function SupportNotices({
       {request.can_reply && item.kind === 'privacy' && (
         <Notice title="只寄到登入 email">回覆會寄到 {replyTo}，不會寄到對方填的聯絡 email。</Notice>
       )}
+      {retrying && (
+        <Notice title="系統正在自動重試">
+          最多試 <span className="num">{DELIVERY_MAX_ATTEMPTS}</span>{' '}
+          次。不用重寄，寄到或全部失敗時這裡會更新。
+        </Notice>
+      )}
       {failedSend && (
         <Notice tone="alert" title="回覆沒有寄出">
-          系統已試了 <span className="num">5</span>{' '}
+          系統已試了 <span className="num">{DELIVERY_MAX_ATTEMPTS}</span>{' '}
           次，對方沒有收到。地址是對方填的，這裡不能改；地址有誤就結案。
           {item.kind === 'privacy' && '個資權利請求只寄到登入 email。'}
         </Notice>

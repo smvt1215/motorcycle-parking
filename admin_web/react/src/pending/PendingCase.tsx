@@ -36,7 +36,7 @@ import { Alert, Notice, SecondFactorNeeded, Tag } from './CaseParts';
 import { ConfirmResolvePanel, EditPanel, KeepPanel, ResolvePanel, RestorePanel } from './CasePanels';
 import { caseHeadTags, caseNumber, caseTitle, dueDate, parseTab } from './model';
 import { ReportBody, ReportNotices } from './ReportCase';
-import { failedReply, pendingReplies, SupportBody, SupportNotices } from './SupportCase';
+import { autoRetrying, failedReply, pendingReplies, SupportBody, SupportNotices } from './SupportCase';
 import { useTick } from './useCaseEffects';
 import './Case.css';
 
@@ -45,8 +45,6 @@ const FOREIGN_POLL_MS = 2_000;
 const DELIVERY_POLL_MS = 5_000;
 /** A failed send under 5 attempts is tried again by the server after 15 minutes. */
 const DELIVERY_RETRY_POLL_MS = 60_000;
-/** support_outbound_claim stops retrying at this many attempts. */
-const DELIVERY_MAX_ATTEMPTS = 5;
 
 type PanelName = 'resolve' | 'confirm-resolve' | 'restore' | 'keep' | 'edit' | null;
 
@@ -327,6 +325,10 @@ function CaseView({ item, support, report, serverActions, reload, remaining }: C
   };
 
   const failedAction = failedReply(serverActions, support?.messages ?? []);
+  // The server still retries this send: 再寄一次 waits until it gives up.
+  const retrying = isSupport && (support?.messages ?? []).some(autoRetrying);
+  const lastMessage = support?.messages.at(-1);
+  const retryable = lastMessage && autoRetrying(lastMessage) ? undefined : failedAction;
   const failedSend =
     item.state === 'send_failed' && isSupport && (failedAction !== undefined || item.pending_action === null);
   const canReply = request?.can_reply === true && !failedAction;
@@ -466,7 +468,7 @@ function CaseView({ item, support, report, serverActions, reload, remaining }: C
         )}
 
         {isSupport && support && (
-          <SupportNotices item={item} request={support.request} failedSend={failedSend} />
+          <SupportNotices item={item} request={support.request} failedSend={failedSend} retrying={retrying} />
         )}
         {!isSupport && report && <ReportNotices item={item} report={report} />}
 
@@ -498,14 +500,14 @@ function CaseView({ item, support, report, serverActions, reload, remaining }: C
         item={item}
         report={report}
         canReply={canReply}
-        retryable={failedAction}
+        retryable={retryable}
         isSupport={isSupport}
         systemHandled={isSupport && request !== undefined && !request.can_reply}
         locked={locked}
         hasReply={trimmedReply.length > 0}
         onSendReply={() => run('reply', { body: trimmedReply })}
         onRetry={() => {
-          const action = failedAction;
+          const action = retryable;
           if (!action) return;
           const send = () => attempt('reply', () => dispatch(retryReply(item, action.id, replyTo)));
           lastAttempt.current = send;
@@ -651,7 +653,7 @@ function CaseLoader({ caseId }: { caseId: string }) {
     if (out.some((m) => m.delivery_status === 'queued' || m.delivery_status === 'sending')) {
       return DELIVERY_POLL_MS;
     }
-    if (out.some((m) => m.delivery_status === 'failed' && m.attempts < DELIVERY_MAX_ATTEMPTS)) {
+    if (out.some(autoRetrying)) {
       return DELIVERY_RETRY_POLL_MS;
     }
     return 0;
@@ -693,6 +695,13 @@ function CaseLoader({ caseId }: { caseId: string }) {
     if (item) failed.push((await actions.refetch()).isError);
     return !failed.includes(true);
   };
+
+  // The mail settled (sent, or the server gave up): the row's state follows it.
+  const lastDeliveryPoll = useRef(deliveryPoll);
+  useEffect(() => {
+    if (lastDeliveryPoll.current > 0 && deliveryPoll === 0) void row.refetch();
+    lastDeliveryPoll.current = deliveryPoll;
+  });
 
   // A live action on this case just ended: everything about it changed.
   const lastBusy = useRef(live + foreign);

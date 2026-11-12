@@ -2,7 +2,7 @@ import type { CaseAction, TimedCase, TimedCaseCounts, TimedCaseCursor } from '..
 import type { PostgrestConnection } from '../api/v1/base';
 import { SIGNED_OUT, type AdminAccess, type AdminAuthGateway, type AdminFactor } from '../auth/gateway';
 import { FIXTURE_MARKER } from '../review/fixtureSource';
-import { failedReplyAction, reportDetail, supportDetail } from './fixtureCases';
+import { failedReplyAction, reportDetail, RETRYING_CASE_ID, supportDetail } from './fixtureCases';
 
 /*
  * Sample cases for `--mode fixture` only (main.tsx imports this behind that
@@ -108,7 +108,8 @@ function manyCases(): TimedCase[] {
       2 + (index % 9),
     ),
   );
-  return [failed, scheduled, open, deleted, ...fill];
+  const retrying = sample(RETRYING_CASE_ID, 'support', 'data_issue', 'awaiting_user', 0);
+  return [failed, scheduled, open, deleted, retrying, ...fill];
 }
 
 const scenario = () => new URLSearchParams(window.location.search).get('scenario');
@@ -244,7 +245,9 @@ const NOT_FOUND = { code: 'PT404', message: 'case.not_found', details: null };
 function caseActionsOf(caseId: string): CaseAction[] {
   settleDue();
   const item = baseCases().find((row) => row.id === caseId);
-  const failed = item?.state === 'send_failed' ? [failedReplyAction(caseId)] : [];
+  // Like case_actions: a reply whose mail failed is listed, retried or not.
+  const failed =
+    item?.state === 'send_failed' || caseId === RETRYING_CASE_ID ? [failedReplyAction(caseId)] : [];
   const listed = fixtureActions
     .filter(
       (action) =>
