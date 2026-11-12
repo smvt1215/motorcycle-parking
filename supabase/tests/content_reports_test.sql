@@ -111,7 +111,7 @@ select is((select array_agg(p.id order by p.id) from public.report_mail_pending(
   (select array_agg(p.id order by p.id) from public.report_mail_pending(200) p where p.id<>(select id from first_report)),
   'each open report links to the 待處理 case it is in');
 select ok((select count(*)::int from public.report_mail_pending(200) p join moderation_queue q on q.id=p.id
-  where p.case_id is distinct from p.id)>=1,'a later report links to the case, not to its own id');
+  where p.case_id is not null and p.case_id<>p.id)>=1,'a later report links to the case, not to its own id');
 select is((select p.case_id from public.report_mail_pending(200) p where p.id=(select id from first_report)),null,
   'a resolved report links to the list');
 set local role service_role;
