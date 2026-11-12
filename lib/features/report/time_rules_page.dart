@@ -164,6 +164,7 @@ class _TimeRulesPageState extends State<TimeRulesPage> {
         current: {
           'fee': ?spot.fee?.toJson(),
           'condition': ?spot.condition?.toJson(),
+          'space_type': spot.spaceType.name,
           'scooter_allowed': ?spot.scooterAllowed,
           'heavy_allowed': ?spot.heavyAllowed,
           widget.type.key: [for (final d in drafts) ?d.original],

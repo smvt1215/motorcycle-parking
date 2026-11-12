@@ -799,6 +799,24 @@ Map<String, Object?> entriesSuggestionBody(
   };
 }
 
+/// The stored values of [spot] that precheck judges [drafts]' suggestion
+/// with, as the server reads them (`current_spot.ts`): the entries as
+/// loaded, and the spot's rates, condition and space type, so a segment
+/// without its own bay or rates takes the charge approval will write
+/// (#399, `segmentsChargeFollowFee`).
+Map<String, Object?> entriesPrecheckCurrent(
+  EntryType type,
+  ParkingSpot spot,
+  List<EntryDraft> drafts,
+) => {
+  'fee': ?spot.fee?.toJson(),
+  'condition': ?spot.condition?.toJson(),
+  'space_type': spot.spaceType.name,
+  'scooter_allowed': ?spot.scooterAllowed,
+  'heavy_allowed': ?spot.heavyAllowed,
+  type.key: [for (final d in drafts) ?d.original],
+};
+
 /// Z1 ②③⑧ 全區 or 整條路: who may park, set once for every entry not set
 /// apart; entries set apart change only with the 開關 on. Nothing about
 /// 全區 is stored: a suggestion sends each changed entry's own value, a new
@@ -909,9 +927,7 @@ class _EntryWholePageState extends State<EntryWholePage> {
     final blocking = precheckBlocking(
       precheck(
         payload,
-        current: {
-          widget.type.key: [for (final d in drafts) ?d.original],
-        },
+        current: entriesPrecheckCurrent(widget.type, widget.spot!, drafts),
       ),
     );
     if (blocking.firstOrNull case final issue?) {
@@ -1223,9 +1239,7 @@ class _EntryEditPageState extends State<EntryEditPage> {
     final blocking = precheckBlocking(
       precheck(
         payload,
-        current: {
-          widget.type.key: [for (final d in drafts) ?d.original],
-        },
+        current: entriesPrecheckCurrent(widget.type, widget.spot!, drafts),
       ),
     );
     if (blocking.firstOrNull case final issue?) {

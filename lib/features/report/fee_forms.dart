@@ -608,6 +608,7 @@ class _FeeEditPageState extends State<FeeEditPage> {
           'fee': ?spot.fee?.toJson(),
           if (spot.spaceType != SpaceType.offStreet)
             'condition': ?spot.condition?.toJson(),
+          'space_type': spot.spaceType.name,
           'scooter_allowed': ?spot.scooterAllowed,
           'heavy_allowed': ?spot.heavyAllowed,
           widget.type.key: [for (final e in widget.drafts) ?e.original],

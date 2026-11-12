@@ -719,6 +719,70 @@ List<Object?> segmentsChargeFollowFee(
       if (e is Map && e.containsKey('fee') && !e.containsKey('condition'))
         e['id'],
   }..remove(null);
+  return [
+    for (final z in list)
+      if (z is Map && follows.contains(z['id']))
+        _segmentChargeOf(z, _segmentFeeOf(z, spotFee), whole)
+      else
+        z,
+  ];
+}
+
+/// [list] as the table trigger leaves it (#399, #431,
+/// `segments_charge_follow_spot_fee()` in SQL): a segment [old] has by id,
+/// with the same condition, whose rates in force (its own, else the spot's)
+/// go from [oldFee] to something else under [newFee], takes its charge from
+/// them as [segmentsChargeFollowFee] does. So a change to the whole road's
+/// rates reaches the segments that follow it.
+List<Object?> segmentsChargeFollowSpotFee(
+  List<Object?> old,
+  List<Object?> list,
+  Object? oldFee,
+  Object? newFee, {
+  Map<Object?, Object?>? whole,
+}) {
+  Map<Object?, Object?>? before(Object? id) {
+    for (final e in old) {
+      if (e is Map && e['id'] == id) return e;
+    }
+    return null;
+  }
+
+  return [
+    for (final z in list)
+      if (z is Map && z.containsKey('id'))
+        switch (before(z['id'])) {
+          final o?
+              when _sameJson(z['condition'], o['condition']) &&
+                  !_sameJson(
+                    _segmentFeeOf(z, newFee),
+                    _segmentFeeOf(o, oldFee),
+                  ) =>
+            _segmentChargeOf(z, _segmentFeeOf(z, newFee), whole),
+          _ => z,
+        }
+      else
+        z,
+  ];
+}
+
+/// The rates in force on [segment]: its own, else [spotFee]; null when
+/// neither is a non-empty object (`segment_fee_of()` in SQL).
+Object? _segmentFeeOf(Map<Object?, Object?> segment, Object? spotFee) {
+  bool given(Object? fee) => fee is Map && fee.isNotEmpty;
+  final own = segment['fee'];
+  return given(own) ? own : (given(spotFee) ? spotFee : null);
+}
+
+/// [z] with the charge [fee] gives (`segment_charge_of()` in SQL). Only
+/// 一般機車格 and 普大共用格 ask it: a segment's own bay, else the spot's
+/// [whole] condition; no charge when the rates say neither, and a condition
+/// left empty goes. Other segments come back as they are.
+Map<Object?, Object?> _segmentChargeOf(
+  Map<Object?, Object?> z,
+  Object? fee,
+  Map<Object?, Object?>? whole,
+) {
   bool special(Map<Object?, Object?>? c) {
     final limits = c?['limits'];
     return limits is List &&
@@ -729,37 +793,36 @@ List<Object?> segmentsChargeFollowFee(
         );
   }
 
-  bool asks(Map<Object?, Object?> c) => c.containsKey('bay')
+  final c = z['condition'];
+  if (c is! Map) return z;
+  final asks = c.containsKey('bay')
       ? c['bay'] == 'motorcycle' && !special(c)
       : whole?['bay'] == 'motorcycle' && !special(c) && !special(whole);
-
-  Map<Object?, Object?> charged(Map<Object?, Object?> z, Object? fee) {
-    final condition = {
-      for (final e in (z['condition'] as Map).entries)
-        if (e.key != 'charge') e.key: e.value,
-      'charge': ?chargeOfFeeJson(fee),
-    };
-    return {
-      for (final e in z.entries)
-        if (e.key != 'condition') e.key: e.value,
-      if (condition.isNotEmpty) 'condition': condition,
-    };
-  }
-
-  return [
-    for (final z in list)
-      if (z is Map &&
-          follows.contains(z['id']) &&
-          z['condition'] is Map &&
-          asks(z['condition'] as Map))
-        charged(
-          z,
-          z['fee'] is Map && (z['fee'] as Map).isNotEmpty ? z['fee'] : spotFee,
-        )
-      else
-        z,
-  ];
+  if (!asks) return z;
+  final condition = {
+    for (final e in c.entries)
+      if (e.key != 'charge') e.key: e.value,
+    'charge': ?chargeOfFeeJson(fee),
+  };
+  return {
+    for (final e in z.entries)
+      if (e.key != 'condition') e.key: e.value,
+    if (condition.isNotEmpty) 'condition': condition,
+  };
 }
+
+/// jsonb equality: the same values, map keys in any order.
+bool _sameJson(Object? a, Object? b) => switch ((a, b)) {
+  (final List<Object?> x, final List<Object?> y) =>
+    x.length == y.length &&
+        [for (var i = 0; i < x.length; i++) i]
+            .every((i) => _sameJson(x[i], y[i])),
+  (final Map<Object?, Object?> x, final Map<Object?, Object?> y) =>
+    x.length == y.length &&
+        x.keys.every((k) => y.containsKey(k) && _sameJson(x[k], y[k])),
+  (List() || Map(), _) || (_, List() || Map()) => false,
+  _ => a == b,
+};
 
 /// A spot's whole condition as JSON: its own, else the one its space type
 /// stands for (`spot.condition ?? conditionOf(spaceType)`,
@@ -815,17 +878,36 @@ List<PrecheckIssue> precheck(
         if (proposed[key] is List)
           key: patchedEntries(current?[key], proposed[key]! as List<Object?>),
     };
-    // Judged with the charge approval will write, not the stale one (#369).
-    if (proposed['parking_segments'] case final List<Object?> patch) {
-      merged['parking_segments'] = segmentsChargeFollowFee(
+    // Judged with the charge approval will write, not the stale one (#369):
+    // the segments the patch gives new rates, then those whose rates in
+    // force change with the whole road's (#431, the table trigger).
+    final spotFee = merged.containsKey('fee') ? merged['fee'] : current?['fee'];
+    final whole = wholeConditionJson(
+      proposed['condition'] ?? current?['condition'],
+      current?['space_type'],
+    );
+    final stored = switch (current?['parking_segments']) {
+      final List<Object?> list => list,
+      _ => const <Object?>[],
+    };
+    final patched = switch (proposed['parking_segments']) {
+      final List<Object?> patch => segmentsChargeFollowFee(
         merged['parking_segments']! as List<Object?>,
         patch,
-        merged.containsKey('fee') ? merged['fee'] : current?['fee'],
-        whole: wholeConditionJson(
-          proposed['condition'] ?? current?['condition'],
-          current?['space_type'],
-        ),
-      );
+        spotFee,
+        whole: whole,
+      ),
+      _ => stored,
+    };
+    final followed = segmentsChargeFollowSpotFee(
+      stored,
+      patched,
+      current?['fee'],
+      spotFee,
+      whole: whole,
+    );
+    if (proposed['parking_segments'] is List) {
+      merged['parking_segments'] = followed;
     }
     // Their own rules run on the entries they change (#155 item 40).
     final touched = {
@@ -833,6 +915,18 @@ List<PrecheckIssue> precheck(
         if (proposed[key] case final List<Object?> patch)
           key: touchedEntries(merged[key]! as List<Object?>, patch),
     };
+    // A segment the suggestion leaves alone but whose charge follows its
+    // new rates to a free 普大共用 bay: the request writes that too (#431).
+    for (final (i, z) in followed.indexed) {
+      if (touched['parking_segments']?[i] ?? false) continue;
+      if (z is! Map || _sameJson(z, patched[i])) continue;
+      out.addAll(
+        _shareFree(
+          z['condition'],
+          'proposed.parking_segments.$i.condition.charge',
+        ),
+      );
+    }
     // Whether the suggestion's condition or fee is the spot's stored one.
     final storedPair =
         proposed['fee'] is! Map || !proposed.containsKey('condition');

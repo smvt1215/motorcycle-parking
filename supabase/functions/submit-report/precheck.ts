@@ -7,7 +7,7 @@
 // contradiction still meets review, a wrong block loses a report.
 import data from './precheck_rules.json' with { type: 'json' };
 import contract from '../_shared/parking_contract.json' with { type: 'json' };
-import { chargeOfFee, mergeFee } from '../_shared/fee.ts';
+import { chargeOfFee, mergeFee, sameJson } from '../_shared/fee.ts';
 
 /** `hold` lets the request through, flagged for stricter review (design
  * §4.3; feasibility §5.8): the Edge Function never refuses it. */
@@ -173,28 +173,73 @@ function segmentsChargeFollowFee(
       object(e) && 'fee' in e && !('condition' in e)
     ).map((e) => e.id).filter(Boolean),
   );
+  return list.map((z) =>
+    object(z) && follows.has(z.id)
+      ? segmentChargeOf(z, segmentFeeOf(z, spotFee), whole)
+      : z
+  );
+}
+
+/**
+ * [list] as the table trigger leaves it (#399, #431,
+ * `segments_charge_follow_spot_fee()` in SQL): a segment [old] has by id,
+ * with the same condition, whose rates in force (its own, else the spot's)
+ * go from [oldFee] to something else under [newFee], takes its charge from
+ * them as `segmentsChargeFollowFee` does. So a change to the whole road's
+ * rates reaches the segments that follow it. The same as
+ * `segmentsChargeFollowSpotFee` in Dart.
+ */
+function segmentsChargeFollowSpotFee(
+  old: unknown[],
+  list: unknown[],
+  oldFee: unknown,
+  newFee: unknown,
+  whole?: Json,
+): unknown[] {
+  return list.map((z) => {
+    if (!object(z) || !('id' in z)) return z;
+    const o = old.find((e): e is Json => object(e) && e.id === z.id);
+    return o && sameJson(z.condition, o.condition) &&
+        !sameJson(segmentFeeOf(z, newFee), segmentFeeOf(o, oldFee))
+      ? segmentChargeOf(z, segmentFeeOf(z, newFee), whole)
+      : z;
+  });
+}
+
+/**
+ * The rates in force on [segment]: its own, else [spotFee]; null when
+ * neither is a non-empty object (`segment_fee_of()` in SQL).
+ */
+function segmentFeeOf(segment: Json, spotFee: unknown): unknown {
+  const given = (fee: unknown) => object(fee) && Object.keys(fee).length > 0;
+  return given(segment.fee) ? segment.fee : given(spotFee) ? spotFee : null;
+}
+
+/**
+ * [z] with the charge [fee] gives (`segment_charge_of()` in SQL). Only
+ * 一般機車格 and 普大共用格 ask it: a segment's own bay, else the spot's
+ * [whole] condition; no charge when the rates say neither, and a condition
+ * left empty goes. Other segments come back as they are.
+ */
+function segmentChargeOf(z: Json, fee: unknown, whole?: Json): Json {
   const special = (c: Json | undefined) =>
     !!c && Array.isArray(c.limits) &&
     c.limits.some((l) =>
       object(l) && (l.kind === 'special_vehicle' || l.kind === 'ev_only')
     );
-  const asks = (c: Json) =>
-    'bay' in c
-      ? c.bay === 'motorcycle' && !special(c)
-      : whole?.bay === 'motorcycle' && !special(c) && !special(whole);
-  return list.map((z) => {
-    if (!object(z) || !follows.has(z.id)) return z;
-    const c = z.condition;
-    if (!object(c) || !asks(c)) return z;
-    const own = object(z.fee) && Object.keys(z.fee).length > 0;
-    const charge = chargeOfFee(own ? z.fee : spotFee);
-    const { charge: _, ...rest } = c;
-    if (!charge && Object.keys(rest).length === 0) {
-      const { condition: _c, ...bare } = z;
-      return bare;
-    }
-    return { ...z, condition: charge ? { ...rest, charge } : rest };
-  });
+  const c = z.condition;
+  if (!object(c)) return z;
+  const asks = 'bay' in c
+    ? c.bay === 'motorcycle' && !special(c)
+    : whole?.bay === 'motorcycle' && !special(c) && !special(whole);
+  if (!asks) return z;
+  const charge = chargeOfFee(fee);
+  const { charge: _, ...rest } = c;
+  if (!charge && Object.keys(rest).length === 0) {
+    const { condition: _c, ...bare } = z;
+    return bare;
+  }
+  return { ...z, condition: charge ? { ...rest, charge } : rest };
 }
 
 const fromSpaceType = contract.conversion.from_space_type as Record<
@@ -550,6 +595,35 @@ export function precheck(body: Json, current?: Json): PrecheckIssue[] {
         ),
       }
       : proposed;
+  // Judged with the charge approval will write, not the stale one (#369):
+  // the segments a patch gives new rates, then those whose rates in force
+  // change with the whole road's (#431, the table trigger).
+  const spotFee = judged && 'fee' in judged ? judged.fee : current?.fee;
+  const whole = wholeCondition(
+    judged?.condition ?? current?.condition,
+    current?.space_type,
+  );
+  const stored = Array.isArray(current?.parking_segments)
+    ? current.parking_segments
+    : [];
+  const segmentPatch = Array.isArray(proposed?.parking_segments)
+    ? proposed.parking_segments
+    : undefined;
+  const patched = segmentPatch
+    ? segmentsChargeFollowFee(
+      patchedEntries(current?.parking_segments, segmentPatch),
+      segmentPatch,
+      spotFee,
+      whole,
+    )
+    : stored;
+  const followed = segmentsChargeFollowSpotFee(
+    stored,
+    patched,
+    current?.fee,
+    spotFee,
+    whole,
+  );
   // Zone and segment patches (#188) are judged as the lists they leave,
   // their own rules on the entries they change (#155 item 40).
   const touched: Record<string, boolean[]> = {};
@@ -559,25 +633,20 @@ export function precheck(body: Json, current?: Json): PrecheckIssue[] {
         if (!entryKeys.includes(k) || !Array.isArray(v)) return [k, v];
         const list = patchedEntries(current?.[k], v);
         touched[k] = touchedEntries(list, v);
-        // Judged with the charge approval will write, not the stale one
-        // (#369).
-        return [
-          k,
-          k === 'parking_segments'
-            ? segmentsChargeFollowFee(
-              list,
-              v,
-              'fee' in judged ? judged.fee : current?.fee,
-              wholeCondition(
-                judged.condition ?? current?.condition,
-                current?.space_type,
-              ),
-            )
-            : list,
-        ];
+        return [k, k === 'parking_segments' ? followed : list];
       }),
     )
     : judged;
+  // A segment the suggestion leaves alone but whose charge follows its new
+  // rates to a free 普大共用 bay: the request writes that too (#431).
+  const followedFree = followed.flatMap((z, i) =>
+    touched.parking_segments?.[i] || !object(z) || sameJson(z, patched[i])
+      ? []
+      : shareFree(
+        z.condition,
+        `proposed.parking_segments.${i}.condition.charge`,
+      )
+  );
   // Whether a suggestion's condition or fee is the spot's stored one.
   const storedPair = !!proposed &&
     (!object(proposed.fee) || !('condition' in proposed));
@@ -597,6 +666,7 @@ export function precheck(body: Json, current?: Json): PrecheckIssue[] {
         field: `proposed.${i.field}`,
       })),
       ...shareFree(proposed.condition, 'proposed.condition.charge'),
+      ...followedFree,
     );
     if (
       goneFields.includes(String(body.field)) &&
