@@ -5,7 +5,8 @@
 // constant says so.
 
 export const confirmTitle = '要刪除帳號嗎？';
-export const confirmBody = '帳號會在 7 天後刪除。這段期間登入時可以選擇取消；之後就無法復原。';
+export const confirmBody =
+  '帳號和所有已連結的登入方式會在 7 天後一起刪除。這段期間登入時可以選擇取消；之後就無法復原。';
 /** The board's three points, in its order. */
 export const confirmPoints = [
   '名稱立刻隱藏，停車點上不再顯示你的名稱。',

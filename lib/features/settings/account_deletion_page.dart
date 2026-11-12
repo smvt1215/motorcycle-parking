@@ -5,8 +5,10 @@ import 'package:cupertino_ui/cupertino_ui.dart' as cu;
 import '../../data/account_deletion.dart';
 import '../../data/app_store.dart';
 import '../../domain/account_deletion_display.dart';
+import '../../domain/account_display.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../auth/sign_in.dart';
+import 'linked_sign_ins.dart';
 
 /// The platform's destructive color: iOS system red (accessible variant),
 /// the theme's error color elsewhere.
@@ -54,11 +56,25 @@ class _AccountDeletionPageState extends State<AccountDeletionPage> {
   /// refused for admins.
   bool canSelfDelete = true;
 
+  /// The account's linked sign-ins (#382), for the notes that name them:
+  /// the same list the settings group shows, also when it answers later.
+  List<LinkedSignIn> get linked =>
+      linkedSignInsOf(widget.store.client?.auth.currentUser);
+
   @override
   void initState() {
     super.initState();
+    refreshedIdentities.addListener(_identitiesChanged);
     unawaited(_loadStatus());
   }
+
+  @override
+  void dispose() {
+    refreshedIdentities.removeListener(_identitiesChanged);
+    super.dispose();
+  }
+
+  void _identitiesChanged() => setState(() {});
 
   Future<void> _loadStatus() async {
     final AccountDeletionState state;
@@ -132,7 +148,15 @@ class _AccountDeletionPageState extends State<AccountDeletionPage> {
     }
     final result = await showAdaptiveSheet<_ReauthResult>(
       context,
-      (_) => _ReauthSheet(attempt: attempt, identity: me),
+      (_) => _ReauthSheet(
+        attempt: attempt,
+        identity: me,
+        // P19b ④: the Apple sign-in's own address, else the account's.
+        appleEmail: linked
+            .where((r) => r.provider == SignInProvider.apple)
+            .firstOrNull
+            ?.email,
+      ),
     );
     if (result == _ReauthResult.signInRequired) await _toSignIn();
     return result == _ReauthResult.signedIn;
@@ -242,6 +266,10 @@ class _AccountDeletionPageState extends State<AccountDeletionPage> {
             for (final item in deletionDeleted)
               _Row(icon: Icons.delete_outline, title: item),
           ],
+          // P19b ② (#382).
+          note: deletionDeletedNote(
+            googleAndApple: linksGoogleAndApple(linked),
+          ),
         ),
         _Section(
           title: deletionKeptHeading,
@@ -269,12 +297,13 @@ class _AccountDeletionPageState extends State<AccountDeletionPage> {
             onPressed: sending ? null : () => unawaited(_start()),
           ),
           const SizedBox(height: 8),
-          // Apple always signs in again (needsReauth); Google only after
-          // 10 minutes.
+          // Apple always signs in again (needsReauth), also for a Google
+          // sign-in with Apple linked (P19b ②); Google only after 10 minutes.
           Text(
-            widget.deletion.gateway?.current?.apple ?? false
-                ? deletionReauthNoteApple
-                : deletionReauthNote,
+            deletionReauthNoteFor(
+              apple: widget.deletion.gateway?.current?.apple ?? false,
+              google: linked.any((r) => r.provider == SignInProvider.google),
+            ),
             key: const ValueKey('deletion-reauth-note'),
             style: muted,
             textAlign: TextAlign.center,
@@ -569,9 +598,16 @@ enum _ReauthResult { signedIn, signInRequired }
 /// 再登入一次 (P15a ④⑤, P15c ③④): the rider's own provider only; the
 /// request goes out as soon as the same rider is back.
 class _ReauthSheet extends StatefulWidget {
-  const _ReauthSheet({required this.attempt, required this.identity});
+  const _ReauthSheet({
+    required this.attempt,
+    required this.identity,
+    this.appleEmail,
+  });
   final DeletionAttempt attempt;
   final AccountIdentity identity;
+
+  /// The linked Apple sign-in's address (#382), when known.
+  final String? appleEmail;
   @override
   State<_ReauthSheet> createState() => _ReauthSheetState();
 }
@@ -611,7 +647,11 @@ class _ReauthSheetState extends State<_ReauthSheet> {
     return ContentPage(
       children: [
         SheetTitle(reauthTitle),
-        Text(me.apple ? reauthBodyApple : reauthBody, style: text.bodyMedium),
+        Text(
+          reauthBodyFor(apple: me.apple),
+          key: const ValueKey('reauth-body'),
+          style: text.bodyMedium,
+        ),
         if (error != null) ...[
           const SizedBox(height: 12),
           Semantics(
@@ -669,7 +709,12 @@ class _ReauthSheetState extends State<_ReauthSheet> {
                         ),
                       ),
                     Text(
-                      reauthAccountLine(email: me.email, apple: me.apple),
+                      reauthAccountLine(
+                        email: me.apple
+                            ? widget.appleEmail ?? me.email
+                            : me.email,
+                        apple: me.apple,
+                      ),
                       style: text.bodySmall?.copyWith(
                         color: colors.onSurfaceVariant,
                       ),

@@ -4,6 +4,9 @@ library;
 // P10 帳號與設定
 const settingsDeleteAccount = '刪除帳號';
 const settingsDeleteFootnote = '申請後有 7 天冷靜期，期間登入時可以選擇取消。';
+
+/// In bold after [settingsDeleteFootnote] (P19b ①, #382).
+const settingsDeleteLinkedNote = '所有已連結的登入方式會一起刪除。';
 const settingsDataLicense = '資料來源與授權';
 const settingsDataLicenseDetail = '停車資訊的來源與授權，見服務條款第 5 條';
 const settingsPrivacyPolicy = '隱私權政策';
@@ -19,13 +22,27 @@ const deletionCoolingOff = [
 ];
 const deletionDeletedHeading = '會刪除';
 const deletionDeleted = [
-  '帳號與登入資訊',
+  '帳號與所有已連結的登入方式（Google、Apple）',
   '顯示名稱',
   '收藏',
   '可信度分數',
   '使用紀錄（地址查詢、次數限制）',
   '這支手機上的停車紀錄',
 ];
+
+/// Under 會刪除 (P19b ②, #382), only with both Google and Apple linked.
+const deletionBothLinkedNote =
+    '你的帳號同時連結了 Google 和 Apple，兩種登入方式會一起刪除。之後再用任一種登入，都會是新的帳號。';
+
+/// Under 會刪除 always: a relay address made a separate account.
+const deletionRelayAccountNote = '如果你另外用 Apple 的「隱藏我的電子郵件」登入過，那是另一個帳號，不會跟著刪除。';
+
+/// The note under 會刪除.
+String deletionDeletedNote({required bool googleAndApple}) => [
+  if (googleAndApple) deletionBothLinkedNote,
+  deletionRelayAccountNote,
+].join('\n');
+
 const deletionKeptHeading = '會保留，但改為匿名';
 const deletionKept = ['你新增的停車點', '修改建議與回報（審核中的照常審核）', '投票與現場回報'];
 const deletionKeptNote = '這些內容不會再連到你，也不顯示你的名稱。';
@@ -43,8 +60,21 @@ const deletionReauthNote = '如果超過 10 分鐘沒登入，送出前會請你
 /// last sign-in: the revoke needs that sign-in (user-approved, 2026-11-08).
 const deletionReauthNoteApple = '送出前會請你再用 Apple 登入一次，以便撤銷「使用 Apple 登入」的授權。';
 
+/// Before [deletionReauthNoteApple] in the App (P19b ②, #382): with Apple
+/// linked, a rider who signs in with Google also signs in with Apple.
+const deletionAppleLinked = '這個帳號連結了 Apple，';
+const deletionReauthNoteGoogleToo = '平常用 Google 登入也一樣。';
+
+/// The note under the 刪除帳號 button; [google] adds the Google sentence
+/// when Google is linked beside Apple.
+String deletionReauthNoteFor({required bool apple, required bool google}) =>
+    apple
+    ? '$deletionAppleLinked$deletionReauthNoteApple'
+          '${google ? deletionReauthNoteGoogleToo : ''}'
+    : deletionReauthNote;
+
 const deletionConfirmTitle = '要刪除帳號嗎？';
-const deletionConfirmBody = '帳號會在 7 天後刪除。這段期間登入時可以選擇取消；之後就無法復原。';
+const deletionConfirmBody = '帳號和所有已連結的登入方式會在 7 天後一起刪除。這段期間登入時可以選擇取消；之後就無法復原。';
 const deletionConfirmCancel = '取消';
 const deletionConfirmAction = '刪除帳號';
 
@@ -52,6 +82,13 @@ const deletionConfirmAction = '刪除帳號';
 const reauthTitle = '再登入一次';
 const reauthBody = '為了確認是你本人，請用目前的帳號再登入一次。';
 const reauthBodyApple = '為了確認是你本人，並撤銷「使用 Apple 登入」的授權，請再用 Apple 登入一次。';
+
+/// Before [reauthBodyApple] on the App's panel (P19b ④, #382).
+const reauthAppleLinked = '這個帳號連結了 Apple。';
+
+/// The re-sign-in panel's body.
+String reauthBodyFor({required bool apple}) =>
+    apple ? '$reauthAppleLinked$reauthBodyApple' : reauthBody;
 const reauthFootnote = '登入後會直接送出刪除申請。';
 const reauthCancel = '取消';
 String reauthButton({required bool apple}) =>
@@ -134,12 +171,20 @@ String maskEmail(String email) {
   return '${email[0]}••••${email.substring(at)}';
 }
 
+/// Shown instead of an Apple relay address (#382).
+const appleHiddenEmail = '隱藏的電子郵件';
+
+/// An address from Apple's 隱藏我的電子郵件 (`…@privaterelay.appleid.com`);
+/// `is_private_email` is not relied on (#382).
+bool isAppleRelayEmail(String email) =>
+    email.toLowerCase().endsWith('privaterelay.appleid.com');
+
 /// The account line under the name on the re-sign-in panel.
 String reauthAccountLine({required String? email, required bool apple}) {
   final provider = apple ? 'Apple' : 'Google';
   if (email == null || email.isEmpty) return '$provider 帳號';
-  if (apple && email.endsWith('privaterelay.appleid.com')) {
-    return 'Apple ID・隱藏的電子郵件';
+  if (apple && isAppleRelayEmail(email)) {
+    return 'Apple ID・$appleHiddenEmail';
   }
   return '${maskEmail(email)}・$provider';
 }
