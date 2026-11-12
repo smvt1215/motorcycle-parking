@@ -54,7 +54,7 @@ APP 識別碼：
 | 網頁與 Android 的 Apple 登入 | Services ID `tw.motopark.motorcycleParking.web` 的 Description | `MotoParking Guide Taiwan WEB` | 2026-11-12 |
 | Google 同意畫面 | Google Auth Platform → 品牌 → App name。改名會產生草稿，可能需要重新驗證；首頁名稱需與 App name 一致 | `機車停車指南`（2026-11-12 確認，未修改；應用程式處於測試狀態，不需要驗證） | — |
 
-實際顯示的名稱待下一版 build 實機確認（iOS 彈窗、網頁與 Android 的 Apple 登入頁）；Google 品牌頁的「應用程式首頁」與「服務條款連結」目前是空的，正式發布（離開測試狀態）前要補上。
+實際顯示的名稱待下一版 build 實機確認（iOS 彈窗、網頁與 Android 的 Apple 登入頁）。Google 品牌頁其他欄位（2026-11-12 確認）：應用程式首頁 `https://motoparking.smvtstudio.com`、隱私權政策 `https://motoparking.smvtstudio.com/privacy`、服務條款 `https://motoparking.smvtstudio.com/terms`；首頁名稱需與 App name 一致。production 建立後，授權網域要加入 production 的 Supabase 網域。
 
 在各自 Supabase Auth 的 Redirect URLs 加入對應的 callback。兩個 APP 的 callback 分開，避免同時安裝時登入回到另一環境。production 的 Google Maps Android 限制使用 **Google Play App Signing 發布憑證**指紋；直接測試已簽署的 AAB／APK 時另加入 upload key 指紋。staging 使用 staging keystore 指紋。
 
