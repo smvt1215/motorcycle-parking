@@ -414,6 +414,42 @@ void main() {
     expect(find.byType(SnackBar), findsNothing);
   });
 
+  for (final (name, size) in [
+    ('手機', const Size(360, 640)),
+    ('平板', const Size(1024, 768)),
+  ]) {
+    for (final issue in LocationIssue.values) {
+      testWidgets('定位提醒 ${issue.name} 在$name寬度、字級 2.0 不溢位且含回報用途', (
+        tester,
+      ) async {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context)
+                  .copyWith(textScaler: const TextScaler.linear(2.0)),
+              child: child!,
+            ),
+            home: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => showLocationPrompt(context, issue),
+                child: const Text('開'),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.text('開'));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('location-prompt')), findsOneWidget);
+        expect(find.text(issue.message), findsOneWidget);
+        expect(issue.message, contains('回報時也才能把標記移到你所在的地方'));
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+
   testWidgets('定位失敗時維持預設中心並進入地圖', (tester) async {
     final store = (await tester.runAsync(freshStore))!;
     final started = await startReal(
