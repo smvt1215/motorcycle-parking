@@ -1110,8 +1110,12 @@ void main() {
       expect(patch['id'], 'b2');
       expect(patch['guide'], '電梯旁，地面標「重機」');
       expect(patch['access'], 'heavyOnly');
+      // #403: back to the list, which says what went.
+      expect(find.byType(FormFlow), findsOneWidget);
+      expect(find.text('提出修改建議'), findsOneWidget);
+      expect(find.text('範例：已模擬送出「分區與格位」的建議'), findsOneWidget);
+      expect(find.text('範例，未實際送出'), findsOneWidget);
       expect(find.text('範例模式：建議沒有實際送出，只用來測試流程。'), findsOneWidget);
-      expect(find.byType(FormFlow), findsNothing);
     });
 
     testWidgets('重機專用格開放普機時行內說明並擋下', (tester) async {
@@ -1192,8 +1196,11 @@ void main() {
       await tapKey(tester, 'entry-heavy-allowed');
       await tester.tap(find.widgetWithText(AdaptiveButton, '送出 1 項建議'));
       await tester.pumpAndSettle();
-      expect(find.text('建議沒有送出，內容還在，請確認網路後再送一次。'), findsOneWidget);
-      expect(find.text('送出 1 項建議'), findsOneWidget);
+      // #403: fixed above the button, not a message that goes away.
+      expect(find.byType(SnackBar), findsNothing);
+      expect(find.text('建議沒有送出'), findsOneWidget);
+      expect(find.text('你填的內容還在。請稍後再按一次「送出 1 項建議」。'), findsOneWidget);
+      expect(find.widgetWithText(AdaptiveButton, '送出 1 項建議'), findsOneWidget);
     });
   });
 

@@ -64,6 +64,9 @@ class _TimeRulesPageState extends State<TimeRulesPage> {
   bool showErrors = false, sending = false;
   String? refusal;
 
+  /// Why the last send failed, above the send button (S6b).
+  SendProblem? sendProblem;
+
   /// F1c: blank each time, kept while the summary comes and goes.
   final link = TextEditingController();
   final linkForm = GlobalKey<FormState>();
@@ -171,16 +174,18 @@ class _TimeRulesPageState extends State<TimeRulesPage> {
       setState(() => refusal = issue.message);
       return;
     }
-    setState(() => sending = true);
-    final sent = await sendSuggestion(context, widget.store, payload);
+    setState(() {
+      sending = true;
+      sendProblem = null;
+    });
+    final result = await sendSuggestion(context, widget.store, payload);
     if (!mounted) return;
-    setState(() => sending = false);
-    if (!sent) return;
-    closeFlow(context);
-    showMessage(
-      context,
-      widget.store.demo ? '範例模式：建議沒有實際送出，只用來測試流程。' : '建議已送出。管理員審核通過後會更新地圖。',
-    );
+    setState(() {
+      sending = false;
+      sendProblem = result.problem;
+    });
+    if (!result.sent) return;
+    suggestionSent(context, widget.store);
   }
 
   Widget _card(int i, TimeRule rule) {
@@ -248,6 +253,10 @@ class _TimeRulesPageState extends State<TimeRulesPage> {
       ),
       footer: SubmitBar(
         label: adding ? '完成' : '送出 $count 項建議',
+        above: switch (sendProblem) {
+          final problem? => SendProblemNote(problem, button: '送出 $count 項建議'),
+          null => null,
+        },
         note: adding ? null : '管理員審核後才會更新地圖',
         sending: sending,
         onPressed: adding
