@@ -21,18 +21,19 @@ describe('makeStore autoBatch (#441)', () => {
     expect(vi.getTimerCount()).toBe(1);
   });
 
-  it("with 'tick' queues neither a frame nor a timer, so nothing fires after teardown", async () => {
+  it("with 'tick' queues the notification as a microtask, with no frame and no timer", () => {
     vi.useFakeTimers();
     const raf = vi.fn(() => 1);
+    const microtask = vi.fn();
     vi.stubGlobal('requestAnimationFrame', raf);
+    // RTK picks its queue function when the store is made, so stub it first.
+    vi.stubGlobal('queueMicrotask', microtask);
     const store = makeStore({ postgrest: null, autoBatch: 'tick' });
-    const listener = vi.fn();
-    store.subscribe(listener);
     store.dispatch(lowPriority);
+    // Fails if the tick setting is dropped: the notification would then go
+    // through requestAnimationFrame and a timer, or not be batched at all.
+    expect(microtask).toHaveBeenCalledTimes(1);
     expect(raf).not.toHaveBeenCalled();
     expect(vi.getTimerCount()).toBe(0);
-    await Promise.resolve();
-    // Subscribers are still told, by a microtask instead of a timer.
-    expect(listener).toHaveBeenCalled();
   });
 });
