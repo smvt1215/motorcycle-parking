@@ -45,15 +45,16 @@ APP 識別碼：
 
 ### 登入畫面顯示名稱的來源
 
-登入畫面上的名稱不由 repo 控制，改名要到各主控台修改（品牌統一用「機車停車指南」）。
+登入畫面上的名稱不由 repo 控制，改名要到各主控台修改。Google 同意畫面用「機車停車指南」；Apple 的 Identifier Description 不接受中文（填入中文會顯示 Invalid description.），統一用英文名稱。
 
 | 登入畫面 | 名稱來源 | 目前值 | 修改日期 |
 |---|---|---|---|
-| iOS 原生 Apple 登入彈窗 | Apple Developer 的 Primary App ID（`tw.motopark.motorcycleParking`）的 Description。依第三方資料，Apple 官方文件未明講；修改後需實機驗證 | | |
-| 網頁與 Android 的 Apple 登入 | Services ID `tw.motopark.motorcycleParking.web` 的 Description | | |
-| Google 同意畫面 | Google Auth Platform → 品牌 → App name。改名會產生草稿，可能需要重新驗證；首頁名稱需與 App name 一致 | | |
+| iOS 原生 Apple 登入彈窗 | Apple Developer 的 Primary App ID（`tw.motopark.motorcycleParking`）的 Description。依第三方資料，Apple 官方文件未明講；修改後需實機驗證 | `MotoParking Guide Taiwan APP` | 2026-11-12 |
+| staging 的 iOS 原生 Apple 登入彈窗 | App ID `tw.motopark.motorcycleParking.staging` 的 Description | `MotoParking Guide Taiwan APP Staging` | 2026-11-12 |
+| 網頁與 Android 的 Apple 登入 | Services ID `tw.motopark.motorcycleParking.web` 的 Description | `MotoParking Guide Taiwan WEB` | 2026-11-12 |
+| Google 同意畫面 | Google Auth Platform → 品牌 → App name。改名會產生草稿，可能需要重新驗證；首頁名稱需與 App name 一致 | `機車停車指南`（2026-11-12 確認，未修改；應用程式處於測試狀態，不需要驗證） | — |
 
-「目前值」與「修改日期」待使用者到主控台確認後填寫。
+實際顯示的名稱待下一版 build 實機確認（iOS 彈窗、網頁與 Android 的 Apple 登入頁）；Google 品牌頁的「應用程式首頁」與「服務條款連結」目前是空的，正式發布（離開測試狀態）前要補上。
 
 在各自 Supabase Auth 的 Redirect URLs 加入對應的 callback。兩個 APP 的 callback 分開，避免同時安裝時登入回到另一環境。production 的 Google Maps Android 限制使用 **Google Play App Signing 發布憑證**指紋；直接測試已簽署的 AAB／APK 時另加入 upload key 指紋。staging 使用 staging keystore 指紋。
 
