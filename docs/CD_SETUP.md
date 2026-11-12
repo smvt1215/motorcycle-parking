@@ -45,15 +45,16 @@ APP 識別碼：
 
 ### 登入畫面顯示名稱的來源
 
-登入畫面上的名稱不由 repo 控制，改名要到各主控台修改（品牌統一用「機車停車指南」）。
+登入畫面上的名稱不由 repo 控制，改名要到各主控台修改。Google 同意畫面用「機車停車指南」；Apple 的 Identifier Description 不接受中文（填入中文會顯示 Invalid description.），統一用英文名稱。
 
 | 登入畫面 | 名稱來源 | 目前值 | 修改日期 |
 |---|---|---|---|
-| iOS 原生 Apple 登入彈窗 | Apple Developer 的 Primary App ID（`tw.motopark.motorcycleParking`）的 Description。依第三方資料，Apple 官方文件未明講；修改後需實機驗證 | | |
-| 網頁與 Android 的 Apple 登入 | Services ID `tw.motopark.motorcycleParking.web` 的 Description | | |
-| Google 同意畫面 | Google Auth Platform → 品牌 → App name。改名會產生草稿，可能需要重新驗證；首頁名稱需與 App name 一致 | | |
+| iOS 原生 Apple 登入彈窗 | Apple Developer 的 Primary App ID（`tw.motopark.motorcycleParking`）的 Description。依第三方資料，Apple 官方文件未明講；修改後需實機驗證 | `MotoParking Guide Taiwan APP` | 2026-11-12 |
+| staging 的 iOS 原生 Apple 登入彈窗 | App ID `tw.motopark.motorcycleParking.staging` 的 Description | `MotoParking Guide Taiwan APP Staging` | 2026-11-12 |
+| 網頁與 Android 的 Apple 登入 | Services ID `tw.motopark.motorcycleParking.web` 的 Description | `MotoParking Guide Taiwan WEB` | 2026-11-12 |
+| Google 同意畫面 | Google Auth Platform → 品牌 → App name。改名會產生草稿，可能需要重新驗證；首頁名稱需與 App name 一致 | `機車停車指南`（2026-11-12 確認，未修改；應用程式處於測試狀態，不需要驗證） | — |
 
-「目前值」與「修改日期」待使用者到主控台確認後填寫。
+實際顯示的名稱待下一版 build 實機確認（iOS 彈窗、網頁與 Android 的 Apple 登入頁）。Google 品牌頁其他欄位（2026-11-12 確認）：應用程式首頁 `https://motoparking.smvtstudio.com`、隱私權政策 `https://motoparking.smvtstudio.com/privacy`、服務條款 `https://motoparking.smvtstudio.com/terms`；首頁名稱需與 App name 一致。production 建立後，授權網域要加入 production 的 Supabase 網域。
 
 在各自 Supabase Auth 的 Redirect URLs 加入對應的 callback。兩個 APP 的 callback 分開，避免同時安裝時登入回到另一環境。production 的 Google Maps Android 限制使用 **Google Play App Signing 發布憑證**指紋；直接測試已簽署的 AAB／APK 時另加入 upload key 指紋。staging 使用 staging keystore 指紋。
 
@@ -192,7 +193,7 @@ App 與網站只用 Google／Apple 的 ID token 登入（`signInWithIdToken`）�
 1. 先唯讀確認沒有人靠 email 登入：`select provider, count(*) from auth.identities group by provider;` 應只有 `google`、`apple`；有 `email` 的帳號（含資料匯入用的 bot 帳號）關閉後就不能再用 email 登入，先與專案擁有者確認。
 2. Authentication → Sign In / Providers → Email → 關閉 Enable Email provider → Save。production 建立專案時就先關，再開放任何登入。**只關 Email provider**，頂層的「Allow new users to sign up」必須維持開啟，否則 Google／Apple 新註冊也會被擋。
 3. 驗證關閉：
-   - `POST <SUPABASE_URL>/auth/v1/signup`（header `apikey: <publishable key>`，body `{"email":"probe@example.com","password":"Probe-12345"}`）應回 4xx，且 `error_code` 必須是 `email_provider_disabled`（依 Supabase Auth〔GoTrue〕原始碼，Email provider 關閉時 signup 回 400；狀態碼可能隨版本不同，以 `error_code` 判斷）。**若回 `signup_disabled`，代表關到頂層的註冊開關，要立刻把它開回來**，再確認 Google／Apple 新註冊正常。
+   - `POST <SUPABASE_URL>/auth/v1/signup`（header `apikey: <publishable key>`，body `{"email":"probe@example.com","password":"Probe-12345"}`）應回 4xx，且 `error_code` 必須是 `email_provider_disabled`（依 Supabase Auth〔GoTrue〕原始碼，Email provider 關閉時 signup 回 400；狀態碼可能隨版本不同，以 `error_code` 判斷）。**若回 `signup_disabled`，代表關到頂層的註冊開關，要立刻把它開回來**，再確認 Google／Apple 新註冊正常。開回後要**重跑本項 signup 測試，直到回 `email_provider_disabled`**（GoTrue 先檢查頂層註冊開關，此時看不出 Email provider 本身有沒有關）。
    - 這個 signup 測試在 provider 其實沒關時會真的在遠端建立 `probe@example.com` 帳號；發生時到 Authentication → Users 刪除該帳號，再回頭重做步驟 2。完成後也確認 Users 裡沒有 probe 帳號。
    - `POST <SUPABASE_URL>/auth/v1/token?grant_type=password` 以任意 email 與密碼應回 4xx（GoTrue 為 422），`error_code` 為 `email_provider_disabled`。
    - 用 Google 與 Apple 各完成一次**新帳號註冊**與一次既有帳號登入（App 與網站），確認不受影響；ID token 登入與 refresh token 更新都不屬於 Email provider。
