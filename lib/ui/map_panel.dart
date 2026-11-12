@@ -50,6 +50,47 @@ class _MapPanelState extends State<MapPanel> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final title = widget.title, trailing = widget.trailing;
+    if (isTabletLayout(context)) {
+      // T1, T2: the tab's panel takes the details' place beside the map,
+      // and stays put; the tabs lead back to the map.
+      return Stack(
+        children: [
+          SidePanelSlot(
+            child: SidePanel(
+              semanticLabel: title,
+              child: ListView(
+                key: const ValueKey('map-panel-list'),
+                // Keep the last rows above the iPad's tab bar.
+                padding: EdgeInsets.fromLTRB(
+                  24,
+                  0,
+                  24,
+                  24 + MediaQuery.paddingOf(context).bottom,
+                ),
+                children: [
+                  const SidePanelGrabber(),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: Theme.of(context).textTheme.headlineMedium
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      ?trailing,
+                    ],
+                  ),
+                  const SizedBox(height: 28),
+                  ...widget.children,
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
+    }
     return SafeArea(
       bottom: false,
       child: DraggableScrollableSheet(

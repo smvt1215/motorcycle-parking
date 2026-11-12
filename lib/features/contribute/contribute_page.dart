@@ -195,22 +195,35 @@ class ContributePage extends ConsumerWidget {
       ],
     );
     if (isCupertino) return panel;
+    final fab = SafeArea(
+      top: false,
+      child: M3EExtendedFab(
+        key: const ValueKey('contribute-new-spot'),
+        label: contributeNewSpot,
+        icon: const Icon(Icons.add_location_alt_outlined),
+        onPressed: () => _newSpot(context, store),
+      ),
+    );
     return Stack(
       children: [
         panel,
-        PositionedDirectional(
-          end: 16,
-          bottom: 16,
-          child: SafeArea(
-            top: false,
-            child: M3EExtendedFab(
-              key: const ValueKey('contribute-new-spot'),
-              label: contributeNewSpot,
-              icon: const Icon(Icons.add_location_alt_outlined),
-              onPressed: () => _newSpot(context, store),
+        if (isTabletLayout(context))
+          // The tablet's panel holds it (T1, T2), not the map's far corner.
+          PositionedDirectional(
+            start: sidePanelGutter,
+            width: sidePanelWidth,
+            bottom: 16,
+            child: Align(
+              alignment: AlignmentDirectional.centerEnd,
+              heightFactor: 1,
+              child: Padding(
+                padding: const EdgeInsetsDirectional.only(end: 16),
+                child: fab,
+              ),
             ),
-          ),
-        ),
+          )
+        else
+          PositionedDirectional(end: 16, bottom: 16, child: fab),
       ],
     );
   }

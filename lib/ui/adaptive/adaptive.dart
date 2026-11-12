@@ -11,12 +11,14 @@ import '../../core/location_access.dart';
 import '../../data/account_suspended.dart';
 import '../../features/account/suspended_sheet.dart';
 import '../../models/parking.dart';
+import 'side_panel.dart';
 
 export 'package:material_ui/material_ui.dart';
 export 'package:cupertino_native_better/cupertino_native_better.dart'
     show CNTabBarRouteObserver;
 
 export 'form_components.dart';
+export 'side_panel.dart';
 
 bool get isCupertino => !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
 bool get nativeGlass => isCupertino && PlatformVersion.isIOS26OrLater;
@@ -223,7 +225,14 @@ class AdaptiveScaffold extends StatelessWidget {
       Icons.bookmark_outline,
       Icons.add_circle_outline,
     ];
-    final bar = nativeGlass
+    final tablet = isTabletLayout(context);
+    final colors = Theme.of(context).colorScheme;
+    // Android tablets move the tabs to a rail on the leading edge (T1, T2
+    // Android); the page starts after it.
+    final rail = tablet && !isCupertino;
+    final bar = rail
+        ? null
+        : nativeGlass
         ? CNTabBar(
             items: const [
               CNTabBarItem(
@@ -267,7 +276,7 @@ class AdaptiveScaffold extends StatelessWidget {
         ? '我的收藏'
         : '個人中心';
     final back = index == 1 || index == 3;
-    return Scaffold(
+    final scaffold = Scaffold(
       extendBody: isCupertino,
       // The keyboard overlays the map instead of resizing it: a resized
       // native map view lags behind and shows blank bands while it catches
@@ -284,13 +293,12 @@ class AdaptiveScaffold extends StatelessWidget {
                       onPressed: () => onTab(2),
                     )
                   : null,
-              backgroundColor: Theme.of(context).colorScheme.surface
-                  .withValues(alpha: .9),
+              backgroundColor: colors.surface.withValues(alpha: .9),
               trailing: nativeGlass
                   ? CNButton.icon(
                       icon: const CNSymbol('gearshape'),
                       onPressed: onSettings,
-                      tint: Theme.of(context).colorScheme.primary,
+                      tint: colors.primary,
                     )
                   : cu.CupertinoButton(
                       padding: EdgeInsets.zero,
@@ -316,7 +324,117 @@ class AdaptiveScaffold extends StatelessWidget {
               ],
             ),
       body: child,
-      bottomNavigationBar: bar,
+      bottomNavigationBar: bar == null
+          ? null
+          : tablet
+          ? _PanelTabBar(bar: bar)
+          : bar,
+    );
+    // One shape with or without the rail: the page keeps its place in the
+    // tree, and with it the map's open spot, search and filters, when the
+    // window crosses the tablet width (split screen, a foldable).
+    return ColoredBox(
+      color: rail ? colors.surfaceContainer : Colors.transparent,
+      child: Row(
+        children: [
+          if (rail)
+            SafeArea(
+              key: const ValueKey('tablet-rail-area'),
+              right: false,
+              child: M3ETheme(
+                data: M3ETheme.of(context).copyWith(
+                  navigationRailTheme: M3ETheme.of(context).navigationRailTheme
+                      .copyWith(collapsedWidth: tabletRailWidth),
+                ),
+                child: M3ENavigationRail(
+                  key: const ValueKey('tablet-rail'),
+                  type: M3ENavigationRailType.alwaysCollapse,
+                  background: colors.surfaceContainer,
+                  selectedIndex: selected,
+                  onDestinationSelected: select,
+                  sections: [
+                    M3ENavigationRailSection(
+                      destinations: [
+                        for (var i = 0; i < 3; i++)
+                          M3ENavigationRailDestination(
+                            icon: Icon(icons[i]),
+                            label: labels[i],
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          // The rail holds the display's leading inset.
+          Expanded(
+            key: const ValueKey('shell-page'),
+            child: MediaQuery.removePadding(
+              context: context,
+              removeLeft: rail,
+              child: scaffold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The iPad tab bar (T1, T2): a capsule at the foot of the panel column,
+/// the panel's own ground behind it while a panel is open. The page still
+/// runs under it and reads its height as bottom padding, as on a phone.
+class _PanelTabBar extends StatelessWidget {
+  const _PanelTabBar({required this.bar});
+  final Widget bar;
+
+  @override
+  Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final colors = Theme.of(context).colorScheme;
+    return Align(
+      alignment: Alignment.bottomLeft,
+      heightFactor: 1,
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: media.padding.left + sidePanelGutter * 2,
+          bottom: media.padding.bottom < sidePanelGutter
+              ? sidePanelGutter
+              : media.padding.bottom,
+        ),
+        child: SizedBox(
+          key: const ValueKey('tablet-tab-bar'),
+          width: sidePanelWidth - sidePanelGutter * 2,
+          // The capsule floats clear of the home indicator already.
+          child: MediaQuery.removePadding(
+            context: context,
+            removeBottom: true,
+            removeLeft: true,
+            removeRight: true,
+            child: nativeGlass
+                ? bar
+                : DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(28),
+                      border: Border.all(
+                        color: colors.outlineVariant.withValues(alpha: .5),
+                      ),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x2916313a),
+                          blurRadius: 24,
+                          offset: Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(28),
+                      child: bar,
+                    ),
+                  ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -440,11 +558,20 @@ Future<T?> showAdaptiveSheet<T>(
   BuildContext context,
   WidgetBuilder builder, {
   bool detail = false,
+  bool sidePanel = false,
 }) {
   // Form sheets put the keyboard away; details (no fields) stay as built,
   // so taps through their transparent parts still reach the map.
   Widget content(BuildContext ctx) =>
       detail ? builder(ctx) : SheetKeyboardDismissal(child: builder(ctx));
+  // On a tablet a sheet that asks for it takes the side panel's place
+  // (A7c ⑦⑧) instead of rising across the whole window.
+  if (sidePanel && !detail && isTabletLayout(context)) {
+    return Navigator.of(
+      context,
+      rootNavigator: true,
+    ).push<T>(SidePanelRoute<T>(builder: content));
+  }
   if (isCupertino) {
     // Overlay the map: Cupertino's stacked-card route scales the page below.
     return CNBottomSheet.show<T>(

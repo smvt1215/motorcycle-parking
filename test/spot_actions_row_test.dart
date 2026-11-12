@@ -234,8 +234,10 @@ void main() {
       '402×874': (Size(402, 874), 97.0),
       'iPhone SE 375×667': (Size(375, 667), 63.0),
       '360×800': (Size(360, 800), 0.0),
-      '平板直式': (Size(820, 1180), 74.0),
-      '平板橫式': (Size(1180, 820), 74.0),
+      // A wide window short of the tablet layout (Split View) keeps the
+      // card, 640 at most; a tablet shows the details in its side panel
+      // instead (tablet_layout_test).
+      '寬視窗 679×1180': (Size(679, 1180), 74.0),
     };
 
     for (final platform in [TargetPlatform.iOS, TargetPlatform.android]) {
