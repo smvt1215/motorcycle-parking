@@ -16,7 +16,7 @@
 	<key>CFBundleDisplayName</key>
 	<string>$(APP_DISPLAY_NAME)</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>尋找附近停車點，以及在你記錄停車時保存位置。</string>
+	<string>你的位置會用來顯示附近的停車點和記錄停車位置；回報停車點時按「移到我的位置」，這個位置會傳出去查詢所在縣市與門牌，送出後成為停車點的位置。</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict><key>CFBundleURLSchemes</key><array><string>$(OAUTH_SCHEME)</string></array></dict>
