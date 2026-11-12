@@ -34,6 +34,13 @@ const PAGES = [
   '/pending?scenario=list-failed',
   '/pending?scenario=empty',
   '/pending/630f13c7-0000-4000-8000-000000000002',
+  '/pending/8f21c04a-0000-4000-8000-000000000003',
+  '/pending/4b08f6c2-0000-4000-8000-000000000006',
+  '/pending/72d1bb21-0000-4000-8000-000000000008',
+  '/pending/61a2d7e0-0000-4000-8000-000000000001',
+  '/pending/7a000000-0000-4000-8000-000000000000?scenario=many',
+  '/pending/7d000000-0000-4000-8000-000000000000?scenario=many',
+  '/pending/7e000000-0000-4000-8000-000000000000?scenario=many',
   '/spots',
   '/more',
   '/design',
@@ -80,9 +87,12 @@ async function open(page, path) {
     await page.waitForSelector('.review-detail, .review-done', { state: 'attached' });
   } else if (path.startsWith('/review')) {
     await page.waitForSelector('.queue__list, .review-detail, .review-done', { state: 'attached' });
+  } else if (/^\/pending\/[^/?]+/.test(path)) {
+    // A case's URL: its own content, not just the list next to it.
+    await page.waitForSelector('article.case, .pending-pane .pending-state', { state: 'attached' });
   } else if (path.startsWith('/pending')) {
     // Past the skeleton: rows, an empty state or a failure.
-    await page.waitForSelector('.pending-rows, .pending-state, .pending-back', { state: 'attached' });
+    await page.waitForSelector('.pending-rows, .pending-state', { state: 'attached' });
     await page.waitForSelector('.pending-skeleton', { state: 'detached' });
   }
 }
@@ -199,12 +209,78 @@ for (const viewport of VIEWPORTS) {
   await open(page, '/pending');
   await page.locator('.pending-row').first().click();
   await page.waitForURL(/\/pending\/61a2d7e0/);
-  await page.getByRole('region', { name: '案件內容還沒接上' }).waitFor();
+  await page.getByRole('article', { name: '案件內容' }).waitFor();
   const listShown = await page.locator('.pending-list').isVisible();
   if (listShown === viewport.phone) failures.push(`${viewport.name}: list shown=${listShown} on a case`);
   if (viewport.phone) {
-    await page.getByRole('link', { name: /返回清單/ }).click();
+    await page.getByRole('link', { name: /返回待處理/ }).click();
     await page.waitForURL(/\/pending$/);
+  }
+
+  // 案件處理: send, the countdown, cancel, and the reply comes back.
+  await open(page, '/pending/630f13c7-0000-4000-8000-000000000002');
+  await page.getByRole('textbox', { name: '回覆' }).fill('已更正收費，謝謝回報。');
+  await page.getByRole('button', { name: '寄出回覆' }).click();
+  await page.waitForURL(/\/pending\/8f21c04a/);
+  await page.locator('.dock-bar', { hasText: '秒後寄出' }).waitFor();
+  await page.waitForFunction(() => document.activeElement?.classList.contains('case-head__title'));
+  await page.screenshot({
+    path: join(output, `${viewport.name}_pending_countdown.png`),
+    fullPage: !viewport.phone,
+  });
+  if ((await sideways()) > 0) failures.push(`${viewport.name}: countdown scrolls sideways`);
+  await page.getByRole('button', { name: /取消寄出/ }).click();
+  await page.getByText('已取消寄出', { exact: true }).waitFor();
+  await page.getByRole('button', { name: '打開案件' }).click();
+  await page.waitForURL(/\/pending\/630f13c7/);
+  await page.getByRole('textbox', { name: '回覆' }).waitFor();
+  const restored = await page.getByRole('textbox', { name: '回覆' }).inputValue();
+  if (restored !== '已更正收費，謝謝回報。')
+    failures.push(`${viewport.name}: reply not restored: 「${restored}」`);
+
+  // 檢舉的處理面板: in the case on wide screens, a sheet on phones.
+  await open(page, '/pending/8f21c04a-0000-4000-8000-000000000003');
+  await page.getByRole('button', { name: '檢舉成立' }).click();
+  await page.getByRole('heading', { name: '檢舉成立', level: 2 }).waitFor();
+  if ((await sideways()) > 0) failures.push(`${viewport.name}: report panel scrolls sideways`);
+  await page.screenshot({
+    path: join(output, `${viewport.name}_pending_keep.png`),
+    fullPage: !viewport.phone,
+  });
+  await page.getByRole('button', { name: '返回' }).click();
+
+  // 別人已處理：stays on the case with the reply intact.
+  await open(page, '/pending/5d19a0b3-0000-4000-8000-000000000004?scenario=stale-admin');
+  await page.getByRole('textbox', { name: '回覆' }).fill('沒寄出');
+  await page.getByRole('button', { name: '寄出回覆' }).click();
+  await page.getByText('這筆已由其他管理員處理').waitFor();
+  await page.screenshot({ path: join(output, `${viewport.name}_pending_stale.png`), fullPage: true });
+
+  if (viewport.phone) {
+    // 手機開鍵盤 (TimedPhoneReply): pretend the on-screen keyboard took 300px.
+    await open(page, '/pending/630f13c7-0000-4000-8000-000000000002');
+    await page.getByRole('textbox', { name: '回覆' }).focus();
+    await page.evaluate(() => {
+      Object.defineProperty(window.visualViewport, 'height', {
+        configurable: true,
+        get: () => window.innerHeight - 300,
+      });
+      window.visualViewport.dispatchEvent(new Event('resize'));
+    });
+    await page.waitForFunction(() => document.querySelector('.pending--keyboard'));
+    const bar = await page.locator('.case__actions').boundingBox();
+    const keyboardTop = viewport.height - 300;
+    if (Math.abs(bar.y + bar.height - keyboardTop) > 2) {
+      failures.push(`${viewport.name}: action bar at ${bar.y + bar.height}, keyboard top ${keyboardTop}`);
+    }
+    const box = await page.getByRole('textbox', { name: '回覆' }).boundingBox();
+    if (box.y + box.height > bar.y + 1) {
+      failures.push(`${viewport.name}: the reply box is under the action bar`);
+    }
+    const header = await page.locator('.case-bar').boundingBox();
+    if (header.height !== 48)
+      failures.push(`${viewport.name}: top bar is ${header.height}px with the keyboard open`);
+    await page.screenshot({ path: join(output, `${viewport.name}_pending_keyboard.png`) });
   }
 
   // Sign-in steps come before the shell, at every width.

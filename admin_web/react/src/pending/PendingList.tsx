@@ -1,22 +1,13 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router';
 import type { TimedCaseCounts } from '../api/v1/admin_v1.generated';
-import { useAuthController } from '../auth/AuthContext';
+import { useAppSelector } from '../app/hooks';
 import { Button, Chip } from '../ui/controls';
 import { needsSecondFactor, usePendingCounts, useTimedCasePagesInfiniteQuery } from './api';
+import { Alert, SecondFactorNeeded } from './CaseParts';
 import { groupCases, parseTab, PENDING_TABS, tabCount, taipeiDay, type PendingTab } from './model';
 import { PendingRow } from './PendingRow';
-
-const subscribeOnline = (listener: () => void) => {
-  window.addEventListener('online', listener);
-  window.addEventListener('offline', listener);
-  return () => {
-    window.removeEventListener('online', listener);
-    window.removeEventListener('offline', listener);
-  };
-};
-
-const useOnline = () => useSyncExternalStore(subscribeOnline, () => navigator.onLine);
+import { useOnline } from './useCaseEffects';
 
 /** Re-reads the clock each minute, so the page notices Taiwan's midnight. */
 function useNow() {
@@ -28,35 +19,21 @@ function useNow() {
   return now;
 }
 
+/** What the counts say about the rows, without as_of (which changes every read). */
+function countsSignature(counts: TimedCaseCounts | undefined): string | null {
+  if (counts === undefined) return null;
+  const { all, overdue, today, later, waiting, send_failed, by_kind } = counts;
+  const kinds = Object.keys(by_kind)
+    .sort()
+    .map((key) => [key, by_kind[key]]);
+  return JSON.stringify([all, overdue, today, later, waiting, send_failed, kinds]);
+}
+
 const EMPTY_TEXT: Record<Exclude<PendingTab, 'all'>, string> = {
   support: '沒有要回覆的客服案件。',
   report: '沒有要處理的內容檢舉。',
   waiting: '沒有在等對方的案件。',
 };
-
-function Alert({ title, children }: { title: string; children: string }) {
-  return (
-    <div className="pending-alert">
-      <span className="t-title pending-alert__title">{title}</span>
-      <span>{children}</span>
-    </div>
-  );
-}
-
-function SecondFactorNeeded({ onRetry }: { onRetry: () => void }) {
-  const auth = useAuthController();
-  return (
-    <div className="pending-state">
-      <Alert title="請重新完成第二步驗證">處理案件需要第二步驗證。驗證後會回到這裡，填的內容還在。</Alert>
-      <div className="pending-state__actions">
-        <Button variant="primary" onClick={() => void auth?.refresh().then(onRetry)}>
-          前往驗證
-        </Button>
-        <Button onClick={() => void auth?.signOut()}>切換帳號</Button>
-      </div>
-    </div>
-  );
-}
 
 function Empty({
   tab,
@@ -103,7 +80,10 @@ interface PendingListProps {
 /** 左欄 (TimedCase, TimedTablet, TimedPhoneList, TimedBasics boards). */
 export function PendingList({ selectedId, onOpen }: PendingListProps) {
   const [params, setParams] = useSearchParams();
-  const { search } = useLocation();
+  const location = useLocation();
+  const { search } = location;
+  const section = useRef<HTMLElement>(null);
+  const revision = useAppSelector((state) => state.pendingActions.revision);
   const tab = parseTab(params.get('tab'));
   const now = useNow();
   const online = useOnline();
@@ -117,6 +97,32 @@ export function PendingList({ selectedId, onOpen }: PendingListProps) {
   });
   const { refetch: refetchList } = list;
   const { refetch: refetchCounts } = counts;
+
+  // Every action starting or ending moves rows and counts: ask again.
+  const lastRevision = useRef(revision);
+  useEffect(() => {
+    if (lastRevision.current === revision) return;
+    lastRevision.current = revision;
+    void refetchList();
+    void refetchCounts();
+  }, [revision, refetchList, refetchCounts]);
+
+  // Rows can move with nothing on this page starting or ending: a reply's
+  // mail failing after the action settled puts its case back as send_failed.
+  // The counts poll sees that, so a change in the counts reads the list again.
+  const countsKey = countsSignature(counts.data);
+  const lastCountsKey = useRef(countsKey);
+  useEffect(() => {
+    if (lastCountsKey.current === countsKey) return;
+    const first = lastCountsKey.current === null;
+    lastCountsKey.current = countsKey;
+    if (!first) void refetchList();
+  }, [countsKey, refetchList]);
+
+  // After the last case in the queue, focus comes here (t8).
+  useEffect(() => {
+    if ((location.state as { focus?: string } | null)?.focus === 'list') section.current?.focus();
+  }, [location.state]);
 
   // bucket and rank are the server's, as of the last read: a page left open
   // past midnight must ask again, or yesterday's 今天 stays 今天.
@@ -145,7 +151,7 @@ export function PendingList({ selectedId, onOpen }: PendingListProps) {
   };
 
   return (
-    <section className="pending-list" aria-label="待處理清單">
+    <section ref={section} tabIndex={-1} className="pending-list" aria-label="待處理清單">
       <div className="pending-list__header">
         <div className="pending-list__title">
           <h1 className="t-headline page-headline">待處理</h1>

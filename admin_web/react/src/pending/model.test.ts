@@ -27,6 +27,7 @@ const base: TimedCase = {
   hidden_parts: null,
   spot_id: null,
   pending_action: null,
+  has_exchange: false,
 };
 const report: TimedCase = {
   ...base,
@@ -77,6 +78,7 @@ describe('row text', () => {
 
   it('says what each support state is waiting for', () => {
     expect(caseStatus(base)).toBe('等你回覆');
+    expect(caseStatus({ ...base, has_exchange: true })).toBe('對方補充了');
     expect(caseStatus({ ...base, state: 'send_failed' })).toBe('回覆沒有寄出');
     expect(caseStatus({ ...base, state: 'awaiting_user' })).toBe('等對方回覆');
     expect(caseStatus({ ...base, kind: 'privacy', state: 'system' })).toBe('等對方確認');

@@ -209,7 +209,7 @@ node tool/admin_smoke.cjs
 OpenStreetMap Nominatim 免金鑰，但實測台灣門牌與路口都查不到，不採用。
 
 **設定**
-- staging 金鑰「Motopark staging geocoding」只開 Geocoding API；Geocoding 每日配額硬上限 300 次（約每月 9,000，留在免費額度內），另設帳單預算警示。production 需另建金鑰與配額。
+- staging 金鑰「Motopark staging geocoding」只開 Geocoding API；Geocoding 每日配額覆寫值 staging = 830 次（約每月 25,000 次，超過上表的每月免費 10,000 次），另設帳單預算警示。production 需另建金鑰與配額，每日上限待使用者決定。
 - Supabase secret `GOOGLE_GEOCODING_API_KEY`；未設定時 function 回 `not_configured`，畫面提示直接拖曳標記。
 - 條款（Google Maps Platform Service Specific Terms §6）：結果只能配 Google 地圖（App 與管理站都是）。快取（2026-10-28 版 6.3）：6.3.1 只允許經緯度快取 30 天；地址文字（formatted_address 與結構化地址）依 6.3.2 只能存給發出請求的那位使用者，且不得用來取代再次呼叫。搜尋結果的名稱就是地址文字，只留經緯度無法組成結果清單，所以伺服器不快取任何搜尋或反向查詢結果（#411，`202611111000` 刪除 `geocode_cache`）。
 

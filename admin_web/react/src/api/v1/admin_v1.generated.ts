@@ -69,6 +69,13 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.body,
       }),
     }),
+    adminV1TimedCase: build.query<AdminV1TimedCaseApiResponse, AdminV1TimedCaseApiArg>({
+      query: (queryArg) => ({
+        url: `/rpc/timed_case`,
+        method: 'POST',
+        body: queryArg.body,
+      }),
+    }),
     adminV1TimedCaseCounts: build.query<AdminV1TimedCaseCountsApiResponse, AdminV1TimedCaseCountsApiArg>({
       query: (queryArg) => ({
         url: `/rpc/timed_case_counts`,
@@ -199,6 +206,13 @@ export type AdminV1TimedCasesApiArg = {
     p_bucket?: 'all' | 'overdue' | 'today' | 'later' | 'waiting';
     p_cursor?: TimedCaseCursor | null;
     p_limit?: number;
+  };
+};
+export type AdminV1TimedCaseApiResponse = /** status 200 一件待處理 */ TimedCase;
+export type AdminV1TimedCaseApiArg = {
+  body: {
+    /** timed_cases 的 id */
+    p_id: string;
   };
 };
 export type AdminV1TimedCaseCountsApiResponse = /** status 200 計數 */ TimedCaseCounts;
@@ -477,6 +491,8 @@ export type TimedCase = {
   spot_id: string | null;
   /** 這個案件最新的排程動作還需要注意時（倒數中、失敗或 stale）；否則 null */
   pending_action: TimedCasePendingAction | null;
+  /** 客服：原始內容之後已有往來（awaiting_admin 時分辨「等你回覆」和「對方補充了」）；檢舉一律 false */
+  has_exchange: boolean;
 };
 export type TimedCaseCursor = {
   rank: number;
@@ -552,6 +568,7 @@ export const {
   useAdminV1ContentReportQuery,
   useAdminV1ResolveContentReportMutation,
   useAdminV1TimedCasesQuery,
+  useAdminV1TimedCaseQuery,
   useAdminV1TimedCaseCountsQuery,
   useAdminV1ScheduleCaseActionMutation,
   useAdminV1CancelCaseActionMutation,

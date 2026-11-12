@@ -526,6 +526,51 @@
         }
       }
     },
+    "/rpc/timed_case": {
+      "post": {
+        "operationId": "admin_v1_timed_case",
+        "summary": "用 id 讀一件待處理（案件頁、深連結）",
+        "description": "timed_cases 的同一份資料。寫入帶回的 version 和檢舉的期限在這裡。錯誤：400 request.invalid、403 auth.aal2_required、404 case.not_found（已結束或不是待處理的 id；檢舉要用組內最早一則的 id）。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "p_id"
+                ],
+                "properties": {
+                  "p_id": {
+                    "type": "string",
+                    "description": "timed_cases 的 id"
+                  }
+                },
+                "example": {
+                  "p_id": "00000000-0000-0000-0000-000000000000"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "一件待處理",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimedCase"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/rpc/timed_case_counts": {
       "post": {
         "operationId": "admin_v1_timed_case_counts",
@@ -1604,7 +1649,8 @@
           "report_count",
           "hidden_parts",
           "spot_id",
-          "pending_action"
+          "pending_action",
+          "has_exchange"
         ],
         "properties": {
           "id": {
@@ -1713,6 +1759,10 @@
               }
             ],
             "description": "這個案件最新的排程動作還需要注意時（倒數中、失敗或 stale）；否則 null"
+          },
+          "has_exchange": {
+            "type": "boolean",
+            "description": "客服：原始內容之後已有往來（awaiting_admin 時分辨「等你回覆」和「對方補充了」）；檢舉一律 false"
           }
         }
       },

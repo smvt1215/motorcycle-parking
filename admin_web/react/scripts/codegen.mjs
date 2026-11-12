@@ -31,6 +31,7 @@ const READS = {
     'adminV1SupportRequest',
     'adminV1ContentReport',
     'adminV1TimedCases',
+    'adminV1TimedCase',
     'adminV1TimedCaseCounts',
     'adminV1CaseActions',
   ],

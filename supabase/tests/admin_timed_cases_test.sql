@@ -107,6 +107,30 @@ select is((select admin_v1.timed_cases(p_kind=>'support:complaint')->'items'->0-
 select ok(not exists(select 1 from jsonb_array_elements(admin_v1.timed_cases()->'items') x
   where x ?| array['message','subject','contact_email','note','body']),'no rider text, no email');
 
+-- has_exchange：a 還沒有往來，c 有一則回覆；檢舉一律 false。
+select is((select x->'has_exchange' from jsonb_array_elements(admin_v1.timed_cases()->'items') x
+  where x->>'id'='5a000000-0000-4000-8000-00000000000a'),'false'::jsonb,'no exchange yet');
+select is((select x->'has_exchange' from jsonb_array_elements(admin_v1.timed_cases()->'items') x
+  where x->>'id'='5a000000-0000-4000-8000-00000000000c'),'true'::jsonb,'a reply is an exchange');
+select is((select bool_or((x->>'has_exchange')::boolean) from jsonb_array_elements(admin_v1.timed_cases(p_kind=>'report')->'items') x),
+  false,'a report never has one');
+
+-- ===== 用 id 讀一列 =====
+select ok(not has_function_privilege('anon','admin_v1.timed_case(text)','execute'),'anon cannot read one');
+select ok(has_function_privilege('authenticated','admin_v1.timed_case(text)','execute'),'admins read one through PostgREST');
+select is((select admin_v1.timed_case('5a000000-0000-4000-8000-00000000000a')-'pending_action'),
+  (select x-'pending_action' from jsonb_array_elements(admin_v1.timed_cases()->'items') x
+    where x->>'id'='5a000000-0000-4000-8000-00000000000a'),'the same row as the list');
+select is((select admin_v1.timed_case((select id from first_text))->>'type'),'report','a report by its first id');
+select is((select admin_v1.timed_case('5A000000-0000-4000-8000-00000000000A')->>'id'),'5a000000-0000-4000-8000-00000000000a',
+  'upper-case ids read the same case');
+select is((select admin_v1.timed_case('5a000000-0000-4000-8000-00000000000b')->>'bucket'),'waiting','waiting cases too');
+select throws_ok($$select admin_v1.timed_case('5a000000-0000-4000-8000-0000000000ff')$$,'PT404','case.not_found','an unknown case');
+select throws_ok($$select admin_v1.timed_case('nope')$$,'PT400','request.invalid','not an id');
+select pg_temp.act('user');
+select throws_ok($$select admin_v1.timed_case('5a000000-0000-4000-8000-00000000000a')$$,'PT403','auth.aal2_required','a rider cannot');
+select pg_temp.act('admin');
+
 -- 分頁：每頁 2 筆，三頁不重複、不漏。
 create temporary table pages(n integer,r jsonb);
 insert into pages values(1,admin_v1.timed_cases(p_limit=>2));
